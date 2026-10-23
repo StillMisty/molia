@@ -12,7 +12,7 @@ class LocalEndpoint {
   /// IP 字面量（IPv4 或全局 / ULA IPv6；不含 zone）。
   final String address;
 
-  /// 是否 IPv6：配对码按地址族取对应的探测端口（v4 / v6 可独立降级）。
+  /// 是否 IPv6：手动地址按地址族取对应的探测端口（v4 / v6 可独立降级）。
   bool get isIpv6 =>
       InternetAddress.tryParse(address)?.type == InternetAddressType.IPv6;
 
@@ -20,8 +20,8 @@ class LocalEndpoint {
   String toString() => '$address ($interfaceName)';
 }
 
-/// 枚举本机可路由地址的入口：设置页地址列表、配对码与局域网探测的 `addrs`
-/// 候选三处共用（口径一致才不会「界面显示的地址连不上」）。
+/// 枚举本机可路由地址的入口：设置页地址列表、附近设备探测与局域网探测的
+/// `addrs` 候选共用（口径一致才不会「界面显示的地址连不上」）。
 ///
 /// 过滤判定与传输侧共用 [isRoutablePeerAddress]（非回环、非 link-local、
 /// 非 `%zone`、IP 字面量），本类只负责枚举与去重 / 排序：RFC1918 私网 IPv4

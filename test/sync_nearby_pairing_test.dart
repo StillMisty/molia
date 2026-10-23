@@ -24,13 +24,12 @@ import 'package:molia/services/language_service.dart';
 import 'package:molia/services/local_endpoints_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
-import 'package:molia/widgets/sync_pairing_scanner.dart';
 
 import 'support/notification_recorder.dart';
 import 'support/sync_test_support.dart';
 
-/// 附近设备一键配对（Phase 2b-i）：附近卡片 / 发起方确认码 / 接收方确认窗 /
-/// 手动地址兜底。旧配对码路径本阶段仍保留，不在这些用例里断言删除。
+/// 附近设备一键配对：附近卡片 / 发起方确认码 / 接收方确认窗 / 手动地址兜底。
+/// 旧配对码（复制 / 粘贴 / 扫码）路径已删除，这里只覆盖现行入口。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -102,17 +101,6 @@ void main() {
     provider.dispose();
     control.dispose();
     engine.dispose();
-  });
-
-  /// 旧配对码扫码入口的平台探测会挂 2s 超时计时器；本文件不验证扫码，
-  /// 固定为不可用（与 `sync_settings_page_test.dart` 同一做法）。
-  setUp(() {
-    SyncPairingScanner.debugAvailabilityOverride = () async => false;
-  });
-
-  tearDown(() {
-    SyncPairingScanner.debugAvailabilityOverride = null;
-    SyncPairingScanner.debugPlatformOverride = null;
   });
 
   Future<void> pumpPage(WidgetTester tester) async {

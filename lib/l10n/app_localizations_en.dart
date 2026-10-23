@@ -2535,14 +2535,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Playlists, sources, settings and keys';
 
   @override
-  String get syncPairingSection => 'Pair with a device';
-
-  @override
   String get syncLocalSection => 'This device';
 
   @override
   String get syncLocalSectionHint =>
-      'Other devices need this information to reach this device; the address is shared in the pairing code.';
+      'Other devices need this information to reach this device; these addresses are also used for nearby pairing.';
 
   @override
   String get syncDeviceNameTitle => 'Device name';
@@ -2833,7 +2830,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncPeersEmptySubtitle =>
-      'Tap a device under Nearby devices, or use the pairing code above';
+      'Tap a device under Nearby devices, or add an address in Advanced settings';
 
   @override
   String get syncNearbySection => 'Nearby devices';
@@ -3155,85 +3152,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'not connected yet · tap to view or remove';
 
   @override
-  String get syncPairingShareTitle => 'Share pairing info';
-
-  @override
-  String get syncPairingShareSubtitle =>
-      'Copy the pairing code (contains the passphrase)';
-
-  @override
-  String get syncPairingPasteTitle => 'Paste pairing code';
-
-  @override
-  String get syncPairingPasteSubtitle =>
-      'Copy it on the other device, then tap here';
-
-  @override
-  String get syncPairingScanSubtitle =>
-      'Point the camera at the QR code on the other device';
-
-  @override
-  String get syncPairingCopied =>
-      'Pairing info copied (contains the passphrase)';
-
-  @override
-  String get syncPairingShowQr => 'Show QR code';
-
-  @override
-  String get syncPairingNeedsPassphrase => 'Set a sync passphrase first';
-
-  @override
-  String get syncPairingWarning =>
-      'This content contains your sync passphrase — sharing it authorizes the other device to read all synced data.';
-
-  @override
-  String get syncPairingCopy => 'Copy text';
-
-  @override
-  String get syncPairingInvalidCode =>
-      'Invalid pairing code — copy it again on the other device';
-
-  @override
-  String get syncClipboardNoPairingCode =>
-      'No pairing code in the clipboard — copy it on the other device first';
-
-  @override
-  String get syncPairingNoAddress =>
-      'The pairing code has no usable network address';
-
-  @override
-  String get syncPairingPassphraseConflictTitle => 'Passphrase already set';
-
-  @override
-  String get syncPairingPassphraseConflictBody =>
-      'This device already has a different sync passphrase. Replace it (other devices will need the new passphrase), or import the addresses only.';
-
-  @override
-  String get syncPairingAddressOnly => 'Addresses only';
-
-  @override
-  String get syncPairingReplacePassphrase =>
-      'Replace passphrase (affects other devices)';
-
-  @override
-  String get syncPairingScanTitle => 'Scan pairing code';
-
-  @override
-  String get syncPairingCameraDenied =>
-      'Camera permission denied. Open system settings, or go back and paste the code instead.';
-
-  @override
-  String get syncPairingCameraUnavailable =>
-      'Camera unavailable on this device — paste the code instead.';
-
-  @override
-  String get syncPairingModelUnavailable =>
-      'The scanner needs to download its recognition model first (requires access to Google services)';
-
-  @override
-  String get syncPairingUsePaste => 'Paste instead';
-
-  @override
   String get syncLocalAddressCopied => 'Address copied';
 
   @override
@@ -3241,7 +3159,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncLocalAddressesHint =>
-      'These addresses are shared with other devices in the pairing code.';
+      'These addresses are used by other devices to reach this one.';
 
   @override
   String get syncLocalAddressesEmpty =>

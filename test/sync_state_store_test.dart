@@ -259,48 +259,6 @@ void main() {
     expect(store.enabled, isFalse);
   });
 
-  test('地址收敛：导入配对码时同一设备的旧地址退役、命名迁移、双栈保留', () async {
-    final store = await freshStore();
-    await store.addManualPeer(const ManualPeer(
-      host: '192.168.1.23',
-      deviceId: 'devB',
-      name: '书房',
-      httpPort: 40000,
-    ));
-    // 另一台设备的地址不受影响。
-    await store
-        .addManualPeer(const ManualPeer(host: '10.0.0.9', deviceId: 'devC'));
-
-    await store.adoptPeerAddresses('devB', const [
-      ManualPeer(
-        host: '192.168.1.77',
-        probePort: 47825,
-        httpPort: 40000,
-        deviceId: 'devB',
-        name: 'Device B',
-      ),
-      ManualPeer(
-        host: '2409:8a55::9',
-        probePort: 51234,
-        httpPort: 40000,
-        deviceId: 'devB',
-        name: 'Device B',
-      ),
-    ]);
-
-    expect(
-      store.manualPeers.map((entry) => entry.host).toSet(),
-      {'192.168.1.77', '2409:8a55::9', '10.0.0.9'},
-      reason: '旧 IP 条目退役；双栈候选都写入；其它设备不动',
-    );
-    // 用户命名优先于对端自报名（与名册展示同一策略）。
-    final adopted = [
-      for (final entry in store.manualPeers)
-        if (entry.deviceId == 'devB') entry,
-    ];
-    expect(adopted.map((entry) => entry.name), ['书房', '书房']);
-  });
-
   test('更新地址：身份与已学端口保留；目标地址已有条目时并入', () async {
     final store = await freshStore();
     await store.addManualPeer(const ManualPeer(

@@ -1,21 +1,17 @@
-/// 配对与名册相关弹层与流程：分享配对信息（二维码 / 复制）、导入配对码
-/// （粘贴 / 扫码的共用出口）、手动连接、对端详情与地址清单。
+/// 已配对设备与手动地址相关弹层：对端详情、地址清单、未认领候选与手动连接。
 ///
 /// 与 `sync_dialogs.dart` 分开：那边是传输配置 / 失败动作 / 口令、改名与本机
-/// 网络地址的通用弹层，这边只服务配对工作台，两类改动原因不同（Divergent
-/// Change）。
+/// 网络地址的通用弹层，这边只服务设备区，两类改动原因不同（Divergent
+/// Change）。附近设备的一键配对弹层在 `sync_nearby_pairing_dialogs.dart`。
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../data/sync/sync_passphrase.dart';
 import '../domain/models/device_sync.dart';
-import '../domain/models/sync_pairing.dart';
 import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
@@ -25,174 +21,8 @@ import '../utils/device_id.dart';
 import '../utils/peer_address.dart';
 import '../utils/sync_format.dart';
 import '../widgets/settings/settings_tiles.dart';
-import '../widgets/sync_pairing_qr.dart';
 import 'sync_labels.dart';
 import 'sync_notices.dart';
-
-/// 配对信息分享弹层：二维码 + 可复制文本 + 口令授权警告。
-///
-/// [code] 由设置页组装（含口令）；本弹层不做二次确认——警告文案已明确
-/// 「等同授权对方读取全部同步数据」。
-Future<void> showSyncPairingShareDialog(
-  BuildContext context, {
-  required SyncPairingCode code,
-  required AppLocalizations l10n,
-}) async {
-  final navigator = Navigator.of(context, rootNavigator: true);
-  final text = code.encode();
-  await M3EDialog.show<void>(
-    context,
-    dialog: M3EDialog(
-      title: l10n.syncPairingShareTitle,
-      content: SizedBox(
-        width: settingsDialogWidth(context),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: SizedBox(
-                  // 尺寸随弹层宽度（留出边距），上限 240：再大也没有扫码收益。
-                  width: math.min(settingsDialogWidth(context) * 0.7, 240),
-                  child: SyncPairingQr(data: text),
-                ),
-              ),
-              const SizedBox(height: kSettingsElementSpacing),
-              SelectableText(
-                text,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: kSettingsSmallSpacing),
-              Text(
-                l10n.syncPairingWarning,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: AppSemanticColors.of(context).warning,
-                    ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        M3EButton.text(
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: text));
-            showSyncNotice(context, l10n.syncPairingCopied);
-          },
-          child: Text(l10n.syncPairingCopy),
-        ),
-        M3EButton.text(
-          onPressed: () => navigator.pop(),
-          child: Text(l10n.cancelButton),
-        ),
-      ],
-    ),
-  );
-}
-
-/// 导入一段配对码文本（「粘贴配对码」与「扫码」的共用出口）。
-///
-/// 配对码是加入同步的唯一入口：口令随码传递、地址按码收敛（同设备的旧地址
-/// 被替换，内网 IP 变动后重新粘贴即可换地址）。全过程不走弹层——口令冲突
-/// 需要用户明确选择时才弹一次确认；结果用底栏提示分级反馈。首轮就连上时
-/// 不提示：「已连通」通知（引擎事件）会单独出现，同一出口不重复弹两条。
-Future<void> importSyncPairingText(
-  BuildContext context, {
-  required SyncProvider provider,
-  required AppLocalizations l10n,
-  required String raw,
-}) async {
-  final text = raw.trim();
-  if (text.isEmpty) {
-    showSyncNotice(context, l10n.syncClipboardNoPairingCode, isError: true);
-    return;
-  }
-  final code = SyncPairingCode.tryParse(text);
-  if (code == null) {
-    showSyncNotice(
-      context,
-      // 前缀对但解析失败 = 码本身坏了；完全不是码 = 让用户先去复制。
-      SyncPairingCode.looksLikeCode(text)
-          ? l10n.syncPairingInvalidCode
-          : l10n.syncClipboardNoPairingCode,
-      isError: true,
-    );
-    return;
-  }
-  if (code.addresses.isEmpty) {
-    showSyncNotice(context, l10n.syncPairingNoAddress, isError: true);
-    return;
-  }
-
-  // 口令冲突：本机已有别的口令时让用户明确选择（换口令会影响已配对设备）。
-  final current = provider.passphrase;
-  var applyPassphrase = current == null || current.trim().isEmpty;
-  if (!applyPassphrase && !SyncPassphrase.matches(code.passphrase, current)) {
-    final choice = await _confirmPassphraseConflict(context, l10n);
-    if (choice == null) return;
-    applyPassphrase = choice == _PassphraseConflictChoice.replace;
-  }
-  if (applyPassphrase) {
-    try {
-      await provider.joinWithPassphrase(code.passphrase);
-    } on ArgumentError {
-      if (!context.mounted) return;
-      showSyncNotice(context, l10n.syncPassphraseInvalid, isError: true);
-      return;
-    }
-  }
-
-  final primary = await provider.importPairingAddresses(code);
-  if (!context.mounted) return;
-  if (primary == null) {
-    showSyncNotice(context, l10n.syncPairingNoAddress, isError: true);
-    return;
-  }
-  final contacted = await provider.contactManualPeer(primary);
-  if (!context.mounted) return;
-  if (contacted == true) return;
-  if (contacted == null) {
-    showSyncNotice(context, l10n.syncPeerContactQueued);
-    return;
-  }
-  final name = code.deviceName.trim().isNotEmpty
-      ? code.deviceName.trim()
-      : shortDeviceId(code.deviceId);
-  showSyncNotice(context, l10n.syncPeerAddedOffline(name));
-}
-
-/// 配对码口令冲突时的处置（信任模型：换口令会影响全部已配对设备）。
-enum _PassphraseConflictChoice { replace, addressOnly }
-
-Future<_PassphraseConflictChoice?> _confirmPassphraseConflict(
-  BuildContext context,
-  AppLocalizations l10n,
-) async {
-  final navigator = Navigator.of(context, rootNavigator: true);
-  return M3EDialog.show<_PassphraseConflictChoice>(
-    context,
-    dialog: M3EDialog(
-      title: l10n.syncPairingPassphraseConflictTitle,
-      content: SizedBox(
-        width: settingsDialogWidth(context),
-        child: Text(l10n.syncPairingPassphraseConflictBody),
-      ),
-      actions: [
-        M3EButton.text(
-          onPressed: () => navigator.pop(
-            _PassphraseConflictChoice.addressOnly,
-          ),
-          child: Text(l10n.syncPairingAddressOnly),
-        ),
-        M3EButton.filled(
-          onPressed: () => navigator.pop(_PassphraseConflictChoice.replace),
-          child: Text(l10n.syncPairingReplacePassphrase),
-        ),
-      ],
-    ),
-  );
-}
 
 /// 对端展示名：用户命名优先，对端自报名仅兜底，都没有用短设备 id。
 String syncPeerDisplayName(SyncPeerState peer, ManualPeer? manual) {

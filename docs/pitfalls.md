@@ -374,33 +374,46 @@
       WebDAV，或把两端都放在同一侧跑。`lo` 上的 `10.255.255.254` 一类宿主
       地址只在 mirrored 模式有意义，不要当成通用兜底；
     - 跨 NAT / 不同子网：内网地址怎么填都不通，直接用 WebDAV。
-    手动配对步骤：① 一端复制「分享配对信息」（或手抄地址 + 探测端口）；② 在
-    另一端「添加设备」粘贴 / 填写，接触成功才关弹层（失败留在弹层内可改）；
-    ③ 接触成功后名册出现设备行，点开可看端点端口 / 设备 id / 删除；④ 配对码
-    里带多个地址时，未认领的条目在名册折叠成一行「候选地址 N 个」，点开可
-    逐个查看与删除——「尚未接触」只是还没碰上，对端上线后会自动重试。
-48. **扫码走 unbundled ML Kit：无 GMS 隐藏入口，模型下载失败给「改用粘贴」**：
-    `mobile_scanner` 在 Android 上按 `android/gradle.properties` 的
-    `dev.steenbakker.mobile_scanner.useUnbundled=true` 选
-    `com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1`
-    （AAR 0.5MB），而不是 bundled 的
-    `com.google.mlkit:barcode-scanning:17.3.0`（AAR 9.9MB，arm64 `.so` 4.72MB）
-    ——扫码只是可选的配对入口，不值得让所有安装包变胖；iOS 不受影响（darwin
-    实现走系统 Vision/AVFoundation）。代价与处置：
-    - **无 GMS 设备**（AOSP / 部分国产 ROM）不显示扫码入口：
-      `PlayServicesAvailability` 经自有通道 `top.stillmisty.molia/play_services`
-      （原生 `GoogleApiAvailability.isGooglePlayServicesAvailable == SUCCESS`）
-      门控；探测中与不可用都不构建按钮（不给死胡同、也不做 loading 占位）。
-      false **不缓存**（用户会话中装了 Play 服务，重开弹层应出现入口），
-      true 会话内缓存；
-    - **有 GMS 但模型首次下载失败**（无网络 / 访问不了 Google 服务）：扫码页
-      按 `scanErrorKind` 识别为 `modelUnavailable`，给「重试 / 改用粘贴」；
-    - 排查「没有扫码按钮」先查 GMS，再查平台判定（`SyncPairingScanner`）；
-      改回 bundled 只需删掉那行 gradle 属性（包体 +9.4MB 量级）。
-    另：`PlayServicesChannelHandler` 用的 `play-services-base` 由
-    `play-services-mlkit-barcode-scanning` 传递带入；若某天 Gradle 解析不到
-    `GoogleApiAvailability`，在 `android/app/build.gradle*` 显式补
-    `implementation("com.google.android.gms:play-services-base:18.11.1")`。
+    配对步骤：① 优先用一键配对——两端都打开 Molia、开启局域网同步，A 打开
+    同步页后在「附近设备」里点 B；② 两端核对同一个 6 位确认码，B 点接受
+    （接受 = 加入同步组并交出 / 获得口令，见 #48）；③ 回到设备区看到「已连接」
+    后，点开可看端点端口 / 设备 id / 删除。自动发现失败（AP 隔离 / 多网段 /
+    VPN）才动手动地址：一端在「高级设置」查本机地址与发现端口，另一端在
+    「高级设置 → 手动连接」填 **两台设备真正互通的那条链路的地址**；提交会向
+    该地址单播附近设备探测，未配对设备随后出现在「附近设备」，仍按 ① 的确认码
+    流程配对。已同口令的设备则直接走原有探测 / 直连。地址簿里未认领的候选
+    多个时折叠成一行「候选地址 N 个」，点开可逐个查看与删除——「尚未接触」
+    只是还没碰上，对端上线后会自动重试。
+48. **附近设备一键配对：`MSP/1` 只是未认证候选发现，接受 = 交出口令**：
+    `MSP/1`（`lib/data/sync/transport/lan_pairing_packet.dart`）与 `MSD/1`
+    刻意分开：magic `MSP` + version + type（1=probe / 2=announce）+ bodyLen +
+    JSON，**没有 MAC / 签名**，body ≤512B。它只回答「附近有谁」，不能当成
+    身份认证、presence 或名册：候选按 deviceId 去重、15 秒 TTL、上限 32，
+    每来源 10 包/10s、全局 50 包/10s；「听到公告」不写 `lastSeenAt`、不触发
+    同步轮次，设备行状态仍以实际同步轮次是否接触成功为准。
+    - **发现时机是硬约束**：只在局域网传输运行、App 前台、非蜂窝时响应
+      probe；同步页打开时按 100 / 500 / 1500ms 发三轮探测。退后台会停 sweep、
+      清候选并把待确认请求按过期处理（不会在后台弹接受窗）；蜂窝下 0 广播。
+    - **配对请求**（`lib/data/sync/pairing/lan_pairing_service.dart`）走
+      `POST /molia-sync/v2/pair/request`、`GET /pair/status`、
+      `POST /pair/complete`（invite 方向）：pending 上限 8、TTL 60 秒、同一
+      时间只允许一个待确认弹窗、每来源限流；requestId 是随机 128-bit，状态
+      轮询必须带同一个 id。双方都有不同同步组时返回 conflict，不静默换组；
+      口令相同则用 discovery key 的 group proof 识别为同组、直接补端点。
+    - **6 位确认码**由双方临时公钥、nonce 与 requestId 派生，两边显示同一个
+      码；用户核对不一致必须拒绝。确认码不经过口令，也不是后续认证凭据。
+    - **接受 = 加入同步组 = 完全授权**：对方拿到本机口令，能解密全部同步
+      数据（含音源脚本与 API Key 等密钥）。弹窗必须保留这句警告；不要把它
+      简化成「连接设备」这类看不出后果的文案。
+    - 口令只在临时 ECDH（P-256）+ HKDF-SHA256 + AES-256-GCM 密封后传输，
+      AAD 绑定 requestId / intent / 双方 deviceId；**口令、密封明文、临时
+      私钥都不进日志 / 错误详情 / 分析事件**，pending 密钥与载荷在接受 /
+      拒绝 / 过期 / 停止时立即清。排查时只记录路径与异常类型。
+    - 手动地址兜底也先向该地址单播 `MSP` probe，收到 announce 后走同一套
+      `/pair/*` 流程；手动地址本身**不携带口令**。填错地址可能探到另一台
+      设备，仍以确认码核对为准。
+    - 旧 `molia-pair:*` / 二维码 / 粘贴 / 扫码已删除：旧文本按普通文本处理，
+      不要为了「兼容」补解析器或迁移。
 49. **桌面歌词：横滚必须在切行前收尾，重建后要等整列布局完成再摆位**：
     两个同源缺陷都来自「滚动只看词轴、摆位只看主行」：
     ① 进度只看词轴：词轴越界（末词时间晚于下一行时间戳）时进度永远到不了 1，
@@ -629,20 +642,23 @@
 66. **局域网同步已硬断代：旧包静默、旧状态不读、旧文件是幽灵**：
     内部迭代期显式不兼容历史数据，四层命名空间一起切开——状态
     `sync_state_v2` / 身份 `sync_device_id_v2` / 口令 `sync_passphrase_v2` /
-    WebDAV 密码 `sync_webdav_password_v2`，配对码 `molia-pair:2:`，局域网 HTTP
-    `/molia-sync/v2/*`，WebDAV 文件名 `<deviceId>.p2.*.msync`。旧 key 不读、
+    WebDAV 密码 `sync_webdav_password_v2`，局域网 HTTP `/molia-sync/v2/*`，
+    WebDAV 文件名 `<deviceId>.p2.*.msync`。旧配对码 `molia-pair:2:` 与
+    二维码 / 粘贴 / 扫码入口已在 v4 删除（旧文本按普通文本处理，不解析、
+    不迁移）。旧 key 不读、
     不删、不迁移：新 key 缺失就按全新安装处理（新设备 id / 新口令 / 传输开关
     为空），升级后必须重新开启同步并重新配对。首次用新 key 初始化会清空
     派生状态 `sync_journal` / `sync_journal_state` / `sync_known`，只有两者都
     reset 成功才写 `sync_derived_reset_v2`（中途被杀下次重试）；**用户数据表
     与墓碑不动**，所以歌单 / 历史 / 统计不丢，但各对端首轮只能收全量
     bootstrap。旧 JSON 探测包（首字节 `{`）与旧 HTTP 路径分别被 `Msd1.decode`
-    静默丢弃、返回 404；旧配对码解析失败；旧 WebDAV 文件不被
+    静默丢弃、返回 404；旧 WebDAV 文件不被
     `PeerJournalNames.parse` 识别，**不列出、不读取、也不被 `deleteRemote`
     删除**（云端会一直留着）。不要为了「兼容」补迁移 / 双协议分支：混版本
     本来就不互相发现，补一条旧路径反而会把旧数据重新放进新协议的语义里。
-    回归：`test/sync_state_store_test.dart`、`test/sync_pairing_code_test.dart`、
-    `test/lan_sync_transport_test.dart` 的旧码 / 旧路径 / 旧状态用例。
+    回归：`test/sync_state_store_test.dart`、`test/sync_nearby_pairing_test.dart`、
+    `test/lan_pairing_transport_test.dart`、`test/lan_sync_transport_test.dart`
+    的旧路径 / 旧状态 / 一键配对用例。
 67. **`MSD/1` 发现认证有固定顺序：先来源限流 → 验 MAC → 再解析 JSON**：
     `LanDiscovery._onDatagram` 的顺序是安全边界，不能为了「先看看包内容」调换：
     ① 先按来源 IP 记限流（每来源 20 包/10s、全局 100 包/10s，来源记账表上限
@@ -690,15 +706,16 @@
     **不能用 `255.255.255.255` 推断所有接口都收到了**，也不要因为广播 /
     组播零应答就判定对端离线。排查顺序：
     ① 先看已同步设备的 `lanEndpoints` 单播是否成功（HTTP 拉取 / 解密成功
-    才算接触），再看配对码 / 手动地址能否直连；
+    才算接触），再看附近设备探测 / 手动地址能否直连；
     ② 用 `LocalEndpointsService` 的 `ifname|address` 指纹确认换网检测到的
     是预期接口，看同步日志与 `lanDiscoveryPorts`；
     ③ 再查 VPN 是否全隧道、接口 metric / 绑定顺序、防火墙是否只放行默认
-    接口。配对码里的地址候选与探测端口是当前最可靠的跨接口入口。
+    接口。手动地址（可指定地址族的探测端口）是当前最可靠的跨接口入口。
     另：UDP 端口降级到系统分配端口后，发往固定 47825 的广播同样到不了它
-    （见 #46），此时只能靠配对码 / 手动地址 / 已有端点单播；不要把这当成
-    「发现协议坏了」。若将来要真正按接口发现，需要为每个接口绑定 socket
-    或切换 `multicastInterface`，并处理接口上下线。
+    （见 #46），此时只能靠手动地址 / 已有端点单播；未配对设备用「手动连接」
+    单播 `MSP` 探测后仍可一键配对。不要把这当成「发现协议坏了」。若将来要
+    真正按接口发现，需要为每个接口绑定 socket 或切换 `multicastInterface`，
+    并处理接口上下线。
 71. **移动端息屏 / 后台不要写 `AppPresence` 来省电**：`AppPresence` 是桌面
     窗口可见性的事实源，`PlaybackObserver` / `ImagePreloadManager` /
     `ArtworkThemeSync` 据此停产封面预取、下一首歌词预取与取色。移动端退后台

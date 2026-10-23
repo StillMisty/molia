@@ -1,8 +1,8 @@
 /// 附近设备一键配对的发起方 / 接收方弹层。
 ///
-/// 与 `sync_pairing_dialogs.dart` 分开：那边仍是旧的配对码（复制 / 粘贴 /
-/// 二维码）路径，这里只服务 `MSP/1` 发现 + `/pair/*` 请求 + 6 位确认码。
-/// 旧路径整体移除后把设备详情与手动地址弹层迁走即可，不需要再改本文件。
+/// 与 `sync_peer_dialogs.dart` 分开：那边是设备详情 / 地址清单 / 手动地址，
+/// 这里只服务 `MSP/1` 发现 + `/pair/*` 请求 + 6 位确认码。旧配对码（复制 /
+/// 粘贴 / 二维码）路径已整体删除，不在这里保留任何兼容入口。
 library;
 
 import 'dart:async';
@@ -33,7 +33,7 @@ String _nearbyDisplayName(String name, String deviceId) {
 /// 发起方弹层：点附近设备后立即打开，等待期间显示确认码。
 ///
 /// 结果在弹层内直接用底栏提示收口：成功 = 已加入 / 已在同一组并跑一轮；
-/// 失败 = 一句原因 + 下一步（不展示协议细节，也不暗示配对码 / 粘贴）。
+/// 失败 = 一句原因 + 下一步（不展示协议细节，也不指向已删除的配对码入口）。
 Future<void> showSyncNearbyPairingDialog(
   BuildContext context, {
   required SyncProvider provider,

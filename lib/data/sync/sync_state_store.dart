@@ -623,41 +623,6 @@ class SyncStateStore {
     await save();
   }
 
-  /// 用配对码里的地址集合收敛该设备的条目。
-  ///
-  /// 码是**当时的权威地址集合**（同一设备的多条地址 = 双栈 / 多网卡候选，
-  /// 全部写入）：该设备在码外的旧条目移除——内网 IP 变动后「重新粘贴配对码」
-  /// 即完成换地址，不会留下永远探不通的旧 IP。用户命名随条目迁移；码里没有
-  /// 的其它设备条目不受影响。
-  Future<void> adoptPeerAddresses(
-    String deviceId,
-    List<ManualPeer> addresses,
-  ) async {
-    if (deviceId.isEmpty || addresses.isEmpty) return;
-    // 重新配对 = 明确的重新加入意图：解掉上一次移除留下的一次性压制。
-    _forgottenPeers.remove(deviceId);
-    final hosts = {for (final entry in addresses) entry.host};
-    var carriedName = '';
-    for (final entry in _manualPeers) {
-      if (entry.deviceId == deviceId && entry.name.trim().isNotEmpty) {
-        carriedName = entry.name;
-        break;
-      }
-    }
-    _manualPeers.removeWhere(
-      (entry) => entry.deviceId == deviceId && !hosts.contains(entry.host),
-    );
-    // 用户命名优先：旧条目上的命名跟到码里的每条地址（同一台设备，
-    // 对端自报名只是兜底），否则用码里带的设备名。
-    for (final address in addresses) {
-      await _upsertManualPeer(
-        carriedName.isEmpty ? address : address.copyWith(name: carriedName),
-        overwriteName: false,
-      );
-    }
-    await save();
-  }
-
   /// 更新某条手动地址的 host / 探测端口 / 命名（设备详情里的「更新地址」）。
   ///
   /// 身份（deviceId）与已学到的端点端口保留：改的是「设备在哪」，不是「是谁」。

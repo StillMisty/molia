@@ -4664,12 +4664,6 @@ abstract class AppLocalizations {
   /// **'Playlists, sources, settings and keys'**
   String get settingsSyncItemSubtitle;
 
-  /// No description provided for @syncPairingSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Pair with a device'**
-  String get syncPairingSection;
-
   /// No description provided for @syncLocalSection.
   ///
   /// In en, this message translates to:
@@ -4679,7 +4673,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncLocalSectionHint.
   ///
   /// In en, this message translates to:
-  /// **'Other devices need this information to reach this device; the address is shared in the pairing code.'**
+  /// **'Other devices need this information to reach this device; these addresses are also used for nearby pairing.'**
   String get syncLocalSectionHint;
 
   /// No description provided for @syncDeviceNameTitle.
@@ -5196,7 +5190,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncPeersEmptySubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Tap a device under Nearby devices, or use the pairing code above'**
+  /// **'Tap a device under Nearby devices, or add an address in Advanced settings'**
   String get syncPeersEmptySubtitle;
 
   /// No description provided for @syncNearbySection.
@@ -5709,138 +5703,6 @@ abstract class AppLocalizations {
   /// **'not connected yet · tap to view or remove'**
   String get syncPeerCandidatesSubtitle;
 
-  /// No description provided for @syncPairingShareTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Share pairing info'**
-  String get syncPairingShareTitle;
-
-  /// No description provided for @syncPairingShareSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy the pairing code (contains the passphrase)'**
-  String get syncPairingShareSubtitle;
-
-  /// No description provided for @syncPairingPasteTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Paste pairing code'**
-  String get syncPairingPasteTitle;
-
-  /// No description provided for @syncPairingPasteSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy it on the other device, then tap here'**
-  String get syncPairingPasteSubtitle;
-
-  /// No description provided for @syncPairingScanSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Point the camera at the QR code on the other device'**
-  String get syncPairingScanSubtitle;
-
-  /// No description provided for @syncPairingCopied.
-  ///
-  /// In en, this message translates to:
-  /// **'Pairing info copied (contains the passphrase)'**
-  String get syncPairingCopied;
-
-  /// No description provided for @syncPairingShowQr.
-  ///
-  /// In en, this message translates to:
-  /// **'Show QR code'**
-  String get syncPairingShowQr;
-
-  /// No description provided for @syncPairingNeedsPassphrase.
-  ///
-  /// In en, this message translates to:
-  /// **'Set a sync passphrase first'**
-  String get syncPairingNeedsPassphrase;
-
-  /// No description provided for @syncPairingWarning.
-  ///
-  /// In en, this message translates to:
-  /// **'This content contains your sync passphrase — sharing it authorizes the other device to read all synced data.'**
-  String get syncPairingWarning;
-
-  /// No description provided for @syncPairingCopy.
-  ///
-  /// In en, this message translates to:
-  /// **'Copy text'**
-  String get syncPairingCopy;
-
-  /// No description provided for @syncPairingInvalidCode.
-  ///
-  /// In en, this message translates to:
-  /// **'Invalid pairing code — copy it again on the other device'**
-  String get syncPairingInvalidCode;
-
-  /// No description provided for @syncClipboardNoPairingCode.
-  ///
-  /// In en, this message translates to:
-  /// **'No pairing code in the clipboard — copy it on the other device first'**
-  String get syncClipboardNoPairingCode;
-
-  /// No description provided for @syncPairingNoAddress.
-  ///
-  /// In en, this message translates to:
-  /// **'The pairing code has no usable network address'**
-  String get syncPairingNoAddress;
-
-  /// No description provided for @syncPairingPassphraseConflictTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Passphrase already set'**
-  String get syncPairingPassphraseConflictTitle;
-
-  /// No description provided for @syncPairingPassphraseConflictBody.
-  ///
-  /// In en, this message translates to:
-  /// **'This device already has a different sync passphrase. Replace it (other devices will need the new passphrase), or import the addresses only.'**
-  String get syncPairingPassphraseConflictBody;
-
-  /// No description provided for @syncPairingAddressOnly.
-  ///
-  /// In en, this message translates to:
-  /// **'Addresses only'**
-  String get syncPairingAddressOnly;
-
-  /// No description provided for @syncPairingReplacePassphrase.
-  ///
-  /// In en, this message translates to:
-  /// **'Replace passphrase (affects other devices)'**
-  String get syncPairingReplacePassphrase;
-
-  /// No description provided for @syncPairingScanTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Scan pairing code'**
-  String get syncPairingScanTitle;
-
-  /// No description provided for @syncPairingCameraDenied.
-  ///
-  /// In en, this message translates to:
-  /// **'Camera permission denied. Open system settings, or go back and paste the code instead.'**
-  String get syncPairingCameraDenied;
-
-  /// No description provided for @syncPairingCameraUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'Camera unavailable on this device — paste the code instead.'**
-  String get syncPairingCameraUnavailable;
-
-  /// No description provided for @syncPairingModelUnavailable.
-  ///
-  /// In en, this message translates to:
-  /// **'The scanner needs to download its recognition model first (requires access to Google services)'**
-  String get syncPairingModelUnavailable;
-
-  /// No description provided for @syncPairingUsePaste.
-  ///
-  /// In en, this message translates to:
-  /// **'Paste instead'**
-  String get syncPairingUsePaste;
-
   /// No description provided for @syncLocalAddressCopied.
   ///
   /// In en, this message translates to:
@@ -5856,7 +5718,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncLocalAddressesHint.
   ///
   /// In en, this message translates to:
-  /// **'These addresses are shared with other devices in the pairing code.'**
+  /// **'These addresses are used by other devices to reach this one.'**
   String get syncLocalAddressesHint;
 
   /// No description provided for @syncLocalAddressesEmpty.

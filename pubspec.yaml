@@ -82,11 +82,6 @@ dependencies:
   tray_manager: ^0.8.0
   system_hotkeys: ^0.2.0
   system_hotkeys_linux: ^0.2.1
-  # 配对码二维码是纯 Dart 生成（qrcode 算法 + CustomPaint 自绘），无原生依赖。
-  qr: ^4.0.0
-  # 只用于 Android / iOS 扫码（桌面不构建扫码入口；权限由插件自管，
-  # 不要再引入 permission_handler，见 docs/pitfalls.md 40）。
-  mobile_scanner: ^7.4.2
   # 全局热键（系统级，窗口失焦也生效）：桌面三平台走系统注册 API
   # （Windows RegisterHotKey / macOS RegisterEventHotKey / Linux
   # org.freedesktop.portal.GlobalShortcuts 桌面门户）。Linux 实现是纯 Dart +

@@ -13,12 +13,10 @@ import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_backup.dart';
 import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
-import 'package:molia/data/sync/sync_passphrase.dart';
 import 'package:molia/data/sync/sync_scheduler.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/transport/local_network_permission.dart';
 import 'package:molia/domain/models/device_sync.dart';
-import 'package:molia/domain/models/sync_pairing.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/sync_content_page.dart';
@@ -31,15 +29,13 @@ import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/local_endpoints_service.dart';
 import 'package:molia/theme/app_semantic_colors.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
-import 'package:molia/widgets/sync_pairing_qr.dart';
-import 'package:molia/widgets/sync_pairing_scanner.dart';
 
 import 'support/notification_recorder.dart';
 import 'support/sync_test_support.dart';
 
-/// 同步设置页（配对工作台）：首屏 = 传输方式（局域网 / WebDAV，开关即总闸）/
-/// 配对 / 设备 / 内容 · 日志 · 高级；设备名、口令、地址与端口在「高级设置」
-/// 子页（`SyncAdvancedPage`）。
+/// 同步设置页：首屏 = 传输方式（局域网 / WebDAV，开关即总闸）/ 已配对设备 /
+/// 附近设备 / 内容 · 日志 · 高级；设备名、口令、地址与端口在「高级设置」子页
+/// （`SyncAdvancedPage`）。旧配对码（复制 / 粘贴 / 扫码）入口已删除。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -54,7 +50,7 @@ void main() {
   late RecordingNotificationService notifications;
   var nowMs = 7000;
 
-  /// 假接口数据：地址列表 / 配对码用例断言具体地址。
+  /// 假接口数据：地址列表用例断言具体地址。
   LocalEndpointsService fakeEndpoints() => LocalEndpointsService(
         enumerate: () async => const [
           LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10'),
@@ -113,18 +109,6 @@ void main() {
     engine.dispose();
   });
 
-  /// 扫码入口可用性：默认不可用（widget 测试不触达平台通道；探测的 2s
-  /// 超时计时器会让「widget 树已销毁但定时器未走完」断言失败）。
-  /// 具体用例（平台 × GMS 矩阵）在测试内按需覆盖。
-  setUp(() {
-    SyncPairingScanner.debugAvailabilityOverride = () async => false;
-  });
-
-  tearDown(() {
-    SyncPairingScanner.debugAvailabilityOverride = null;
-    SyncPairingScanner.debugPlatformOverride = null;
-  });
-
   Future<void> pumpPage(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -159,27 +143,6 @@ void main() {
   Future<void> openSubPage(WidgetTester tester, String key) async {
     await tester.tap(find.byKey(Key(key)));
     await tester.pumpAndSettle();
-  }
-
-  /// 点首屏「粘贴配对码」（剪贴板内容先由 [mockClipboardRead] 备好）。
-  Future<void> pastePairingCode(WidgetTester tester) async {
-    await tester.tap(find.byKey(const Key('settingsSyncPasteCodeItem')));
-    await tester.pumpAndSettle();
-  }
-
-  /// 剪贴板读取 mock：`Clipboard.getData` 返回给定文本。
-  void mockClipboardRead(WidgetTester tester, String text) {
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method == 'Clipboard.getData') {
-          return <String, dynamic>{'text': text};
-        }
-        return null;
-      },
-    );
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
   }
 
   /// 进入「高级设置」子页（设备名 / 口令 / 地址与端口 / 地址簿）。
@@ -266,7 +229,7 @@ void main() {
     expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncWebdavSwitch')), findsOneWidget);
     expect(provider.enabled, isFalse);
-    // 口令在初始化时就绪：配对码随时可分享，不等任何开关。
+    // 口令在初始化时就绪：附近设备配对随时可用，不等任何开关。
     expect(provider.passphrase, isNotNull);
     expect(find.text('turned off'), findsOneWidget, reason: '局域网默认关');
     expect(
@@ -275,11 +238,12 @@ void main() {
       reason: 'footer 说明「同步不会运行」，免得把没同步误读成故障',
     );
 
-    // 配对 / 设备 / 内容入口不依赖总开关：始终可见。
-    expect(find.byKey(const Key('settingsSyncPasteCodeItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncScanCodeItem')), findsNothing,
-        reason: '默认平台不支持扫码：只留粘贴');
+    // 设备 / 附近设备 / 内容入口不依赖总开关：始终可见。
     expect(find.byKey(const Key('settingsSyncPeersEmpty')), findsOneWidget);
+    expect(find.text('Nearby devices'), findsOneWidget);
+    // 旧配对码入口（复制 / 粘贴 / 扫码）已删除。
+    expect(find.byKey(const Key('settingsSyncPasteCodeItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncScanCodeItem')), findsNothing);
     expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
     // 底层信息仍在高级子页，不暴露在首屏。
     expect(find.text('This device'), findsNothing);
@@ -295,18 +259,17 @@ void main() {
 
     expect(provider.enabled, isTrue);
     expect(provider.enabledTransports, contains(SyncTransportKind.lan));
-    // 口令在初始化时就绪：开启同步不打断（口令随配对码交给对端）。
+    // 口令在初始化时就绪：开启同步不打断（附近设备配对直接使用口令）。
     expect(find.text('Copy passphrase'), findsNothing);
     expect(provider.passphrase, isNotNull);
 
-    // ② 配对：分享（复制 / 二维码）+ 加入（粘贴 / 扫码）。
-    expect(find.text('Pair with a device'), findsOneWidget);
-    expect(
-        find.byKey(const Key('settingsSyncPairingShareItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncPairingQrItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncPasteCodeItem')), findsOneWidget);
-    // ③ 设备：空名册给一句引导。
+    // ② 设备：空名册给一句引导；③ 附近设备：局域网开启后显示候选区。
     expect(find.byKey(const Key('settingsSyncPeersEmpty')), findsOneWidget);
+    expect(find.text('Nearby devices'), findsOneWidget);
+    // 旧配对码入口不再存在（复制 / 粘贴 / 扫码）。
+    expect(find.byKey(const Key('settingsSyncPairingShareItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncPasteCodeItem')), findsNothing);
+    expect(find.byKey(const Key('settingsSyncScanCodeItem')), findsNothing);
     // ④ 内容 / 日志 / 高级设置入口。
     expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
     expect(find.byKey(const Key('settingsSyncLogItem')), findsOneWidget);
@@ -418,22 +381,6 @@ void main() {
     expect(probe.subtitle, '47825 (IPv4) / 51234 (IPv6)');
   });
 
-  testWidgets('配对码按地址族取探测端口：v6 候选带 v6 的端口', (tester) async {
-    transport.discoveryPortsOverride = (v4: 47825, v6: 51234);
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await pumpPage(tester);
-
-    final code = (await provider.pairingCode())!;
-    final byHost = {
-      for (final address in code.addresses) address.host: address.probePort,
-    };
-    expect(byHost['192.168.1.10'], 47825);
-    expect(byHost['2409:8a55::5'], 51234,
-        reason: 'v6 独立降级到 51234：不能拿 v4 的 47825');
-    // 分享弹层里的码文本同样是分族端口。
-    expect(code.encode(), contains('molia-pair:2:'));
-  });
-
   testWidgets('本机设备 id：短号可读，点按复制完整 id', (tester) async {
     final clipboard = mockClipboard(tester);
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
@@ -461,7 +408,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    // 口令只随配对码传递：手感路径（手输口令）已删除。
+    // 口令由附近设备配对自动传递：手输口令 / 粘贴配对码路径已删除。
     expect(
       find.byKey(const Key('settingsSyncPassphraseJoinItem')),
       findsNothing,
@@ -478,230 +425,6 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
     expect(provider.deviceName, '书房');
-  });
-
-  testWidgets('分享配对信息：点行复制配对码，行尾二维码弹层展示二维码与警告', (tester) async {
-    final clipboard = mockClipboard(tester);
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await pumpPage(tester);
-
-    await tester.tap(find.byKey(const Key('settingsSyncPairingShareItem')));
-    await tester.pumpAndSettle();
-    expect(clipboard.single, startsWith('molia-pair:2:'));
-    expect(find.text('Pairing info copied (contains the passphrase)'),
-        findsOneWidget);
-    final decoded = SyncPairingCode.tryParse(clipboard.single)!;
-    expect(decoded.passphrase, provider.passphrase);
-    expect(decoded.deviceId, provider.deviceId);
-    expect(
-      decoded.addresses.map((address) => address.host),
-      containsAll(<String>['192.168.1.10', '2409:8a55::5']),
-    );
-
-    await tester.tap(find.byKey(const Key('settingsSyncPairingQrItem')));
-    await tester.pumpAndSettle();
-    expect(find.byType(SyncPairingQr), findsOneWidget);
-    expect(
-      find.textContaining('contains your sync passphrase'),
-      findsOneWidget,
-    );
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('粘贴配对码：地址入簿并立即接触；连上时不弹提交提示', (tester) async {
-    transport.onPull = () async {
-      await state.learnManualPeer(const ManualPeer(
-        host: '192.168.1.23',
-        deviceId: 'devB',
-        httpPort: 40000,
-      ));
-    };
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 5000,
-      records: const {},
-    ));
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    final code = SyncPairingCode(
-      deviceName: 'Device B',
-      deviceId: 'devB',
-      passphrase: provider.passphrase!,
-      addresses: const [
-        SyncPairingAddress(host: '192.168.1.23', probePort: 47825),
-      ],
-      httpPort: 40000,
-    );
-    await pumpPage(tester);
-    mockClipboardRead(tester, code.encode());
-    await pastePairingCode(tester);
-
-    expect(provider.manualPeers.single.deviceId, 'devB');
-    expect(provider.manualPeers.single.httpPort, 40000);
-    expect(provider.manualPeers.single.name, 'Device B');
-    // 首轮就连上：提交不弹提示——「已与『设备』连通」由连通通知负责，
-    // 同一出口不叠两条。
-    expect(notifications.isEmpty, isTrue, reason: '连上时提交不弹提示');
-    expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
-  });
-
-  testWidgets('粘贴配对码：剪贴板里没有码 → 提示先去复制，地址簿不变', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await pumpPage(tester);
-    mockClipboardRead(tester, '午饭吃什么');
-    await pastePairingCode(tester);
-
-    expect(
-      notifications.last,
-      contains('No pairing code in the clipboard'),
-    );
-    expect(provider.manualPeers, isEmpty, reason: '不是码就不落成地址');
-  });
-
-  testWidgets('粘贴配对码：码损坏 / 没有可用地址 → 各自的错误提示', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await pumpPage(tester);
-
-    // 前缀对但解析失败：报「配对码无效」，不当普通地址处理。
-    mockClipboardRead(tester, 'molia-pair:2:not-base64!!');
-    await pastePairingCode(tester);
-    expect(notifications.last, contains('Invalid pairing code'));
-    expect(provider.manualPeers, isEmpty);
-
-    // 结构合法但没有地址候选。
-    final empty = SyncPairingCode(
-      deviceName: 'Device B',
-      deviceId: 'devB',
-      passphrase: provider.passphrase!,
-      addresses: const [],
-      httpPort: 40000,
-    );
-    mockClipboardRead(tester, empty.encode());
-    await pastePairingCode(tester);
-    expect(notifications.last, contains('no usable network address'));
-    expect(provider.manualPeers, isEmpty);
-  });
-
-  testWidgets('粘贴配对码：没有路由时提示已添加并会重试', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    final code = SyncPairingCode(
-      deviceName: 'Device B',
-      deviceId: 'devB',
-      passphrase: provider.passphrase!,
-      addresses: const [
-        SyncPairingAddress(host: '192.168.1.23', probePort: 47825),
-      ],
-      httpPort: 40000,
-    );
-    await pumpPage(tester);
-    mockClipboardRead(tester, code.encode());
-    await pastePairingCode(tester);
-
-    // 对端不应答：地址仍入簿，提示「稍后自动重试」。
-    expect(provider.manualPeers.single.host, '192.168.1.23');
-    expect(notifications.last, contains('Device B added'));
-    expect(notifications.last, contains('it will retry'));
-  });
-
-  testWidgets('粘贴配对码：同设备的旧地址被码里的地址替换（换 IP 场景）', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await provider.addManualPeer(
-      '192.168.1.23',
-      name: '书房',
-      deviceId: 'devB',
-      httpPort: 40000,
-    );
-    await pumpPage(tester);
-
-    final code = SyncPairingCode(
-      deviceName: 'Device B',
-      deviceId: 'devB',
-      passphrase: provider.passphrase!,
-      addresses: const [
-        SyncPairingAddress(host: '192.168.1.77', probePort: 47825),
-        SyncPairingAddress(host: '2409:8a55::9', probePort: 51234),
-      ],
-      httpPort: 40000,
-    );
-    mockClipboardRead(tester, code.encode());
-    await pastePairingCode(tester);
-
-    final hosts = provider.manualPeers.map((entry) => entry.host).toList();
-    expect(hosts, containsAll(<String>['192.168.1.77', '2409:8a55::9']));
-    expect(hosts, isNot(contains('192.168.1.23')), reason: '旧 IP 退役');
-    expect(provider.manualPeers, hasLength(2), reason: '双栈候选都保留');
-    expect(provider.manualPeers.first.name, '书房', reason: '命名跟着设备迁移');
-  });
-
-  testWidgets('粘贴配对码：本机已有别的口令 → 替换 / 仅导入地址两分支', (tester) async {
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    final original = provider.passphrase!;
-    await pumpPage(tester);
-
-    const incoming = 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ';
-    final code = SyncPairingCode(
-      deviceName: 'Device B',
-      deviceId: 'devB',
-      passphrase: incoming,
-      addresses: const [SyncPairingAddress(host: '192.168.1.23')],
-      httpPort: 40000,
-    );
-
-    // 仅导入地址：本机口令不变，地址照常入簿。
-    mockClipboardRead(tester, code.encode());
-    await pastePairingCode(tester);
-    expect(find.text('Passphrase already set'), findsOneWidget);
-    await tester.tap(find.text('Addresses only'));
-    await tester.pumpAndSettle();
-    expect(provider.passphrase, original);
-    expect(provider.manualPeers.single.host, '192.168.1.23');
-
-    // 替换本机口令：口令换成码里的（归一化后保存）。
-    mockClipboardRead(tester, code.encode());
-    await pastePairingCode(tester);
-    await tester.tap(find.textContaining('Replace passphrase'));
-    await tester.pumpAndSettle();
-    expect(provider.passphrase, SyncPassphrase.normalize(incoming));
-  });
-
-  testWidgets('扫码入口 = 平台 × GMS（无 GMS / 桌面隐藏，只给粘贴）', (tester) async {
-    addTearDown(() {
-      SyncPairingScanner.debugPlatformOverride = null;
-      SyncPairingScanner.debugAvailabilityOverride = null;
-    });
-    Future<void> pumpAndCheck({required bool expected}) async {
-      // 先卸掉上一棵树：同型 widget 会复用 State，initState 里的可用性探测
-      // 不会重跑，平台矩阵就测不出来。
-      await tester.pumpWidget(const SizedBox.shrink());
-      await pumpPage(tester);
-      expect(
-        find.byKey(const Key('settingsSyncScanCodeItem')),
-        expected ? findsOneWidget : findsNothing,
-        reason: '平台=${SyncPairingScanner.debugPlatformOverride} '
-            '可用=${SyncPairingScanner.debugAvailabilityOverride != null}',
-      );
-    }
-
-    await provider.setTransportEnabled(SyncTransportKind.lan, true);
-
-    // Android + GMS：显示。
-    SyncPairingScanner.debugPlatformOverride = TargetPlatform.android;
-    SyncPairingScanner.debugAvailabilityOverride = () async => true;
-    await pumpAndCheck(expected: true);
-
-    // Android 无 GMS（AOSP / 无 Play 服务）：隐藏入口，不给死胡同。
-    SyncPairingScanner.debugAvailabilityOverride = () async => false;
-    await pumpAndCheck(expected: false);
-
-    // iOS：系统 Vision，不依赖 GMS，恒显示。
-    SyncPairingScanner.debugPlatformOverride = TargetPlatform.iOS;
-    SyncPairingScanner.debugAvailabilityOverride = null;
-    await pumpAndCheck(expected: true);
-
-    // Linux：平台不支持，隐藏。
-    SyncPairingScanner.debugPlatformOverride = TargetPlatform.linux;
-    await pumpAndCheck(expected: false);
   });
 
   testWidgets('手动连接：写入地址簿并立即接触；没连上留在弹层可改地址', (tester) async {
@@ -870,7 +593,7 @@ void main() {
     expect(clipboard, isEmpty, reason: '本用例不涉及复制');
   });
 
-  testWidgets('多地址导入后：未认领候选折叠为一行，点开可查看 / 删除', (tester) async {
+  testWidgets('多个未认领地址：折叠为一行，点开可查看 / 删除', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.addManualPeer('192.168.1.23');
     await provider.addManualPeer('192.168.1.24');
@@ -1503,9 +1226,6 @@ void main() {
   });
 
   testWidgets('探测端口不可用：动作同样给手动地址出路', (tester) async {
-    // 桌面不构建扫码入口（弹层里只有粘贴）。
-    SyncPairingScanner.debugPlatformOverride = TargetPlatform.linux;
-    addTearDown(() => SyncPairingScanner.debugPlatformOverride = null);
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.pullError =
         const SyncIssue(code: SyncIssueCode.probePortUnavailable);

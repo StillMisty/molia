@@ -13,7 +13,7 @@ import '../services/local_endpoints_service.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_labels.dart';
 import 'sync_notices.dart';
-import 'sync_pairing_dialogs.dart';
+import 'sync_peer_dialogs.dart';
 
 /// WebDAV 配置弹层（设置页与日志子页共用；密码单独走安全存储）。
 Future<void> showWebdavConfigDialog(
@@ -480,7 +480,8 @@ Future<void> _showTextDialog(
 /// 端口，整行点击复制）。
 ///
 /// 地址是排障明细：卡片上只留一行入口，双栈 + 多网卡时也不会把「本机」卡片
-/// 撑长。这里的地址与配对码同口径（同一枚举与过滤，见 `LocalEndpointsService`），
+/// 撑长。这里的地址与附近设备探测同口径（同一枚举与过滤，见
+/// `LocalEndpointsService`），
 /// 逐个复制时按行取，不必回看卡片。
 Future<void> showSyncLocalAddressesDialog(
   BuildContext context, {

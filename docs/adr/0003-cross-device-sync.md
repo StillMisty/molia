@@ -5,9 +5,10 @@
 - 相关：`lib/domain/models/device_sync.dart`、`lib/domain/ports/sync_transport.dart`、
   `lib/data/sync/**`、`lib/providers/sync_provider.dart`、`lib/pages/sync_settings_page.dart`
 
-> **2026-10-21 起**：状态键 / 配对码 / 局域网发现与 HTTP 路径 / WebDAV 命名已
-> 硬断代，现行口径见文末「v3 修订」；前文中的 `*_v1`、`molia-pair:1:`
-> 与 `/molia-sync/v1/*` 只作历史记录，不代表当前实现。
+> **2026-10-21 起**：状态键 / 局域网发现与 HTTP 路径 / WebDAV 命名已硬断代，
+> 配对码在 v4（2026-10-23）整体删除；现行口径见文末「v3 修订」与「v4 修订」。
+> 前文中的 `*_v1`、`molia-pair:*` 与 `/molia-sync/v1/*` 只作历史记录，
+> 不代表当前实现。
 
 ## 背景
 
@@ -250,6 +251,9 @@
   `addrs`（本机可路由候选地址：IPv4 + 全局 / ULA IPv6，排除回环与 link-local，
   上限 8 条），对端连接按**候选地址优先、观测源地址兜底**的顺序尝试；收到
   非回复探测也把发送方登记为对端（主动探测方也在线，不必等它应答）。
+  > **2026-10-23 v4 修订（历史标注）**：本段描述的首屏配对卡片 / 配对码 /
+  > 二维码 / 扫码入口已整体删除，仅作历史记录；现行口径见文末「v4 修订」。
+
 - **设置页口径修订（配对闭环一页）**：首版「首屏信息预算 ≤ 9 行、明细下沉
   子页」在实测配对流程里制造了来回跳页——用户在本机看不到自己的地址 / 端口，
   在「设备」子页看不到自己的口令，配对只能靠手抄设备 id 与端点端口。现在
@@ -425,7 +429,7 @@ bootstrap）小于维护两套协议的成本，也避免「旧数据被误当�
 | 局域网发现 | JSON `molia-sync.probe` | 二进制 `MSD` + version 1 + HMAC |
 | 局域网 HTTP | `/molia-sync/v1/*` | `/molia-sync/v2/*` |
 | WebDAV 文件 | `<deviceId>*.msync` | `<deviceId>.p2.*.msync` |
-| 配对码 | `molia-pair:1:` | `molia-pair:2:` |
+| 配对码（v4 已删除） | `molia-pair:1:` | `molia-pair:2:`（历史） |
 | 载荷帧 | `MSY`/3 | `MSY`/3 不变 |
 
 - 新 key 缺失 = 全新安装行为：新设备 id、新口令、传输开关关闭；旧 key
@@ -437,6 +441,7 @@ bootstrap）小于维护两套协议的成本，也避免「旧数据被误当�
 - **不动**用户数据：`playlists` / `playlist_tracks` / `play_history` /
   `play_events` / `sync_tombstones` 与版本三列都保留；派生状态只是索引。
 - 旧配对码 `molia-pair:1:` 解析失败（按无效码处理）；旧 HTTP 路径 404；
+  （v4 起 `molia-pair:2:` 与整个配对码路径也已删除，文本按普通文本处理。）
   旧 WebDAV 文件名不被 `PeerJournalNames.parse` 识别（幽灵文件，不读不删）。
 
 ### 3. 发现协议 `MSD/1`
@@ -540,7 +545,8 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
   第一次接触只能收全量快照；用户数据（歌单 / 历史 / 统计）不丢，两端合并后
   一致。
 - **不支持混版本**：旧客户端发出的 JSON 公告被静默丢弃、旧 HTTP 路径 404、
-  旧配对码解析失败——新旧版本不会互相发现，也不会误同步。
+  旧配对码不再有解析器（v4 起按普通文本处理）——新旧版本不会互相发现，
+  也不会误同步。
 - **旧 WebDAV 文件是幽灵文件**：旧命名空间的文件不出现在列表、不被读取、
   不被 `deleteRemote` 删除；云端会一直留着，需要时由用户自己清理。
 - 广播被 AP 隔离 / iOS 无 multicast entitlement 时，已同步过的设备靠
@@ -553,15 +559,85 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
    LocalSend 那样为每个接口绑定 socket，也没有固定 `multicastInterface`。
    多网卡 / 全隧道 VPN / WSL 等场景下，广播可能只走默认接口（或直接被
    VPN 黑洞），首次发现因而失败。当前兜底是「v4 广播 + v4/v6 组播 +
-   `lanEndpoints` 单播 + 配对码里的地址候选 / 手动地址」；已同步过的设备
-   可靠单播收敛，未配对设备需要配对码或手动地址。若将来要按接口发现，
+   `lanEndpoints` 单播 + 附近设备一键配对 / 手动地址」；已同步过的设备
+   可靠单播收敛，未配对设备用附近设备探测或手动地址（v4 起配对码已删除）。
+   若将来要按接口发现，
    得为每个接口绑定独立 socket，或在加入组播 / 发送前切换
    `multicastInterface`，并处理接口上下线。
 2. **探测端口降级后广播到不了它**：标准端口 47825 绑定失败（Windows 宿主
    保留端口块 / 端口被占用）时 UDP 会改绑系统分配端口（见已知坑 46），而
    广播 / 组播仍发往固定的 47825——该设备收不到无目标广播。此时只能靠
-   配对码（携带实际 `probe` 端口）/ 手动地址 / 已学到的端点单播。这是既有
-   约束，不是本次发现改造引入的回归；HTTP 端点与数据通道不受影响。
+   手动地址（可指定实际发现端口）/ 附近设备单播探测 / 已学到的端点单播
+   （v4 起配对码已删除）。这是既有约束，不是本次发现改造引入的回归；
+   HTTP 端点与数据通道不受影响。
 3. **移动端后台仍不承诺收敛**：Doze / 挂起下定时器与 socket 都不可靠，
    后台不发公告、不排重连阶梯；回到前台才重绑 UDP、探活 HTTP 并补一轮。
    产品语义仍是「前台与充电时收敛」，不引入前台服务 / wake lock。
+
+
+---
+
+## v4 修订（2026-10-23）：删除配对码，收敛为一键附近配对
+
+> 本节取代前文所有配对码 / 二维码 / 粘贴 / 扫码描述。旧的
+> `molia-pair:*` 文本、二维码、剪贴板导入与相机权限全部删除：**不识别、
+> 不迁移、不保留兼容分支**；旧文本按普通文本处理。已配对的设备不受影响，
+> 继续使用 `MSD/1` 发现与 `MSY/3` 载荷协议，不需要重新配对。
+
+### 1. 单一路径
+
+- **发现**：`MSP/1`（`lib/data/sync/transport/lan_pairing_packet.dart`）复用
+  现有 UDP 端口，独立 magic `MSP` + version 1 + type（1 = probe，2 = announce）
+  + bodyLen + JSON，**无 MAC**；body ≤512B（`id` / `name` / `http` / `probe` /
+  `addrs` / `group` / `boot` / `nonce`）。只做候选发现：不写名册
+  `lastSeenAt`、不写 presence、不触发同步轮次；候选按 deviceId 去重、15 秒
+  TTL、上限 32，每来源 10 包/10s、全局 50 包/10s。只在局域网传输运行、
+  App 前台、非蜂窝时响应 probe；同步页打开时按 100 / 500 / 1500ms 发 probe。
+- **请求**：`POST /molia-sync/v2/pair/request`、
+  `GET /molia-sync/v2/pair/status?id=…`、`POST /molia-sync/v2/pair/complete`
+  （invite 方向），实现在 `lib/data/sync/pairing/lan_pairing_service.dart`。
+  JSON body ≤8KB、每来源限流、pending 上限 8、同一时间只允许一个待确认弹窗、
+  TTL 60 秒；只在 App 前台可弹窗，后台直接返回不可用。requestId 随机
+  128-bit，状态轮询必须带同一个 id。
+- **加密**：临时 ECDH（PointyCastle P-256）+ HKDF-SHA256 + AES-256-GCM
+  （`lib/data/sync/pairing/pairing_crypto.dart`）；校验公钥在曲线上。AAD 绑定
+  requestId / intent / 双方 deviceId，防替换。口令只进安全存储，不进日志、
+  错误详情、分析事件；pending 密钥与载荷过期即清。
+- **确认码**：6 位数字由双方公钥、nonce、requestId 派生，发起方与接收方显示
+  同一个码；用户核对，不一致必须拒绝。
+- **同组 / 冲突**：request 带基于 discovery key 的 group proof（HMAC，随机
+  requestId），双方口令相同则返回同组、不弹接受窗并直接补端点；双方都有组
+  且口令不同则返回 conflict，不传口令、不静默换组。
+- **加入 / 邀请方向**：A 无组、B 有组 → B 加密返回口令，A 加入 B 的组；
+  A 有组、B 无组 → B 接受后 A 加密发送口令，B 加入 A 的组；双方都无组 →
+  B 生成（或使用已有）口令，A 加入。
+- **接受 = 加入同步组 = 完全授权**：对方获得本机同步口令，可解密全部同步
+  数据（含音源脚本与 API Key 等密钥）；接受弹窗必须明示。模型（
+  `lib/domain/models/sync_nearby_pairing.dart`）承载附近设备、请求、尝试与
+  join / invite / conflict / same-group 状态；UI 在
+  `lib/pages/sync_nearby_pairing_dialogs.dart`。
+- **手动地址兜底**：高级设置保留「手动连接」，填 host + 探测端口；未配对时
+  向该地址发 `MSP` 单播 probe，收到 announce 后走同一 `/pair/*` 流程；不提供
+  口令输入、不提供配对码文本。已有同口令的设备仍沿用现有探测 / 直连逻辑。
+
+### 2. 状态与删除项
+
+- 已配对设备继续走现有 `MSD/1` 发现与 `MSY/3` 载荷；删除的是配对码入口，
+  不是已有同步组。
+- 删除：`SyncPairingCode` / `SyncPairingAddress`、`sync_pairing_qr.dart`、
+  `sync_pairing_scanner.dart`、`qr` / `mobile_scanner` 依赖、Android
+  `CAMERA` 权限与 camera feature、iOS `NSCameraUsageDescription`、
+  `SyncProvider.pairingCode()` / `importPairingAddresses()`、
+  `SyncControlPlane` / `SyncStateStore.adoptPeerAddresses`，以及旧的
+  `syncPairing*` 文案与 `PlayServicesChannelHandler`（GMS 门控只服务扫码）。
+- `lib/pages/sync_pairing_dialogs.dart` 的配对码部分删除，设备详情 / 地址
+  清单 / 手动连接迁到 `lib/pages/sync_peer_dialogs.dart`。
+
+### 后果（v4）
+
+- 升级后不再有任何配对码入口；旧的 `molia-pair:*` 文本、二维码、剪贴板内容
+  都不会被识别，也没有「导入失败」提示（按普通文本处理）。
+- 未配对设备只能通过附近设备一键配对或手动地址进入；手动地址仍要求两台设备
+  网络可达。
+- 相机权限、扫码依赖与 GMS 探测通道一并移除；安装包不再包含二维码 / 扫码
+  相关原生依赖。

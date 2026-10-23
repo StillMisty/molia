@@ -9,7 +9,7 @@ import 'dart:io';
 /// 地址是否是可路由的 IP 字面量：回环、link-local、带 zone 与非字面量
 /// （域名等）都返回 false。
 ///
-/// 「候选地址」三处共用这一判定：设置页地址列表 / 配对码
+/// 「候选地址」三处共用这一判定：设置页地址列表 / 附近设备探测候选
 /// （`LocalEndpointsService`）与局域网探测 `addrs`（传输）——候选地址要交给
 /// 对端做连接，回环只在同机有意义、link-local 需要 zone 且通常跨不了网段。
 bool isRoutablePeerAddress(String value) {

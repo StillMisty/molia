@@ -37,7 +37,7 @@ class SyncControlPlane extends ChangeNotifier {
   final SyncTransportRuntime _runtime;
   final Logger _logger = Logger('molia.sync');
 
-  /// 口令缓存：设置页 / 配对码要同步读取，不能每次都碰安全存储。写入路径
+  /// 口令缓存：设置页 / 附近设备配对要同步读取，不能每次都碰安全存储。写入路径
   /// 与安全存储保持一致（[readPassphrase] 是唯一的重新加载入口）。
   String? _passphrase;
 
@@ -187,15 +187,6 @@ class SyncControlPlane extends ChangeNotifier {
 
   Future<void> removeManualPeer(String host) async {
     await _state.removeManualPeer(host);
-    notifyListeners();
-  }
-
-  /// 用配对码里的地址集合收敛该设备的条目（码外旧地址退役）。
-  Future<void> adoptPeerAddresses(
-    String deviceId,
-    List<ManualPeer> addresses,
-  ) async {
-    await _state.adoptPeerAddresses(deviceId, addresses);
     notifyListeners();
   }
 

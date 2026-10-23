@@ -796,14 +796,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.1.0"
-  mobile_scanner:
-    dependency: "direct main"
-    description:
-      name: mobile_scanner
-      sha256: "5a51ea79f0cf8293f616a5d08baae185b59b5e6bb24df01f2a63037ade0bade0"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "7.4.2"
   motor:
     dependency: "direct main"
     description:
@@ -1028,14 +1020,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.6.0"
-  qr:
-    dependency: "direct main"
-    description:
-      name: qr
-      sha256: "5adccca7f0274326125fcdbf97328f5d6b1b2d7fb8a52a01cef9f40d96a759d9"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "4.0.0"
   quickjs_engine:
     dependency: "direct main"
     description:

@@ -70,7 +70,7 @@ Future<SyncStack> buildSyncStack({
   // 编解码在 worker isolate 里跑（载荷编码 / 压缩 / PBKDF2 / AES 都是纯计算，
   // 放主 isolate 会让 UI 在首轮与整库快照时卡住数秒）。
   final syncCodec = IsolateSyncCodecPort();
-  // 本机地址枚举（设置页地址列表 / 配对码 / 探测 addrs 三处共用同一口径）。
+  // 本机地址枚举（设置页地址列表 / 附近设备探测 / 探测 addrs 共用同一口径）。
   final localEndpoints = LocalEndpointsService();
   // 脚本同步的保留键：音源类别的设置键（避免脚本墓碑与设置键同名冲突）。
   final sourceCategoryKeys = {

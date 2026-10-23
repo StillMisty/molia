@@ -12,7 +12,7 @@ import '../services/local_endpoints_service.dart';
 import '../utils/device_id.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_dialogs.dart';
-import 'sync_pairing_dialogs.dart';
+import 'sync_peer_dialogs.dart';
 
 /// 同步高级设置子页：设备身份 / 口令 / 网络地址与端口 / 地址簿。
 ///
@@ -151,8 +151,8 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
   /// 地址簿：手动连接入口 + 已认领但未进名册的条目（点开可看详情 / 删除）
   /// + 未认领候选。
   ///
-  /// 配对码一次可导 8 个地址，全展开会把名册撑成「还没连上」墙；未认领候选
-  /// 多个折叠成一行，N=1 直列（比「候选地址 1 个」更可读）。
+  /// 地址簿可能来自多次手动添加，全展开会把名册撑成「还没连上」墙；未认领
+  /// 候选多个折叠成一行，N=1 直列（比「候选地址 1 个」更可读）。
   Widget _peersSection(
     BuildContext context,
     SyncProvider provider,
@@ -226,7 +226,7 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
     );
   }
 
-  /// 地址簿里尚未进名册的未认领条目（手填地址 / 配对码里没带身份的）：
+  /// 地址簿里尚未进名册的未认领条目（手填地址、还没认领到设备身份）：
   /// 点开可看详情 / 删除。
   Widget _pendingManualRow(
     BuildContext context,

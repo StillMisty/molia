@@ -202,7 +202,7 @@ class _SettingsRowContent extends StatelessWidget {
 /// 复制行：图标 + 标题/副标题 + M3E 复制按钮；点行或按钮都复制并轻反馈
 /// （SnackBar 文案由调用方给，内容语义各页不同）。
 ///
-/// [trailing] 追加在复制按钮之前的附属动作（如配对信息的「显示二维码」）。
+/// [trailing] 追加在复制按钮之前的附属动作（如地址行的展开 / 详情入口）。
 /// 整行不可点时传 [enabled] = false（只读信息行用 [SettingsInfoTile]）。
 class SettingsCopyTile extends StatelessWidget {
   const SettingsCopyTile({

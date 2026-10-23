@@ -177,7 +177,7 @@ void main() {
     expect(control.lanDiscoveryPorts, (v4: 47825, v6: 47826));
   });
 
-  test('手动地址簿：添加 / 更新 / 删除 / 配对码收敛', () async {
+  test('手动地址簿：添加 / 更新 / 删除', () async {
     expect(
       await control.addManualPeer(const ManualPeer(host: '192.168.1.23')),
       isTrue,
@@ -194,17 +194,8 @@ void main() {
     await control.moveManualPeer('192.168.1.23', toHost: '192.168.1.24');
     expect(control.manualPeers.single.host, '192.168.1.24');
 
-    await control.adoptPeerAddresses('devB', const [
-      ManualPeer(host: '10.0.0.9', deviceId: 'devB'),
-      ManualPeer(host: '2409:8a55::9', deviceId: 'devB'),
-    ]);
-    expect(
-      control.manualPeers.where((peer) => peer.deviceId == 'devB'),
-      hasLength(2),
-    );
-
     await control.removeManualPeer('192.168.1.24');
-    expect(control.manualPeers, hasLength(2));
+    expect(control.manualPeers, isEmpty);
   });
 
   test('移除设备与远端清理：只经启用传输动作', () async {

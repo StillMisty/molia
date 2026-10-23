@@ -31,13 +31,6 @@ ColorScheme resolveSurfaceScheme(
         ? (artworkScheme ?? appScheme)
         : appScheme;
 
-/// 二维码等**机器可读表面**的固定配色。
-///
-/// 必须保持高对比黑白且**不随主题反转**（深色主题下白底黑码的相机解码率
-/// 明显更高）；只给二维码渲染用，不参与任何 UI 取色。
-const Color qrSurfaceColor = Color(0xFFFFFFFF);
-const Color qrModuleColor = Color(0xFF000000);
-
 /// 纯黑表面覆盖：仅深色模式生效，surface 系列全部覆盖为纯黑。
 ///
 /// 与取色来源正交：任何来源（壁纸 / 封面 / 自定义 / 莫奈）都可叠加。

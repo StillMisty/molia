@@ -194,13 +194,6 @@ class MainActivity : FlutterActivity() {
             messenger = flutterEngine.dartExecutor.binaryMessenger,
         )
 
-        // Play 服务可用性通道：扫码入口门控（unbundled ML Kit 需要 GMS）。
-        // 只做只读探测，无生命周期需求：通道自己持有 handler 引用。
-        top.stillmisty.molia.sync.PlayServicesChannelHandler(
-            context = this,
-            messenger = flutterEngine.dartExecutor.binaryMessenger,
-        )
-
         // 定时关闭：原生 Handler 到点唤醒 Dart，补熄屏 / Doze 下 Dart timer
         // 被冻结的缺口（真正的暂停仍由 Dart 控制器执行）。
         sleepTimerChannel?.dispose()

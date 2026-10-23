@@ -8,13 +8,11 @@ import '../data/sync/sync_backup.dart';
 import '../data/sync/sync_codec_port.dart';
 import '../data/sync/sync_control_plane.dart';
 import '../data/sync/sync_engine.dart';
-import '../data/sync/sync_passphrase.dart';
 import '../data/sync/sync_scheduler.dart';
 import '../data/sync/sync_state_store.dart';
 import '../data/sync/transport/local_network_permission.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_nearby_pairing.dart';
-import '../domain/models/sync_pairing.dart';
 import '../domain/ports/sync_pairing.dart';
 import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
@@ -57,10 +55,10 @@ class SyncProvider extends ChangeNotifier {
   /// 载荷编解码端口（生产 = worker isolate）：随 provider 释放。
   final SyncCodecPort? _codec;
 
-  /// 局域网附近设备配对（Phase 2a 只暴露后端能力，UI 尚未接线）。
+  /// 局域网附近设备配对（`MSP/1` 发现 + `/pair/*` 请求）。
   final SyncPairingPort? _pairing;
 
-  /// 本机地址枚举（设置页列表 / 配对码 / 探测候选三处共用；内部有缓存）。
+  /// 本机地址枚举（设置页列表 / 附近设备探测候选共用；内部有缓存）。
   final LocalEndpointsService _endpoints;
 
   bool get enabled => _controlPlane.enabled;
@@ -91,8 +89,8 @@ class SyncProvider extends ChangeNotifier {
 
   /// 本机局域网探测端口（分族 v4 / v6；0 = 该族未运行 / 不可用）。
   ///
-  /// 设置页展示与配对码用：两族可独立降级（端口降级 / 单族不可用），
-  /// 配对码里的每个候选地址按其地址族取对应端口。
+  /// 设置页展示用：两族可独立降级（端口降级 / 单族不可用），
+  /// 每个候选地址按其地址族取对应端口。
   ({int v4, int v6}) get lanDiscoveryPorts => _controlPlane.lanDiscoveryPorts;
 
   /// 本机局域网直连端点端口（持久化的 HTTP 端口；0 = 尚未绑定过）。
@@ -164,8 +162,8 @@ class SyncProvider extends ChangeNotifier {
   /// 添加手动对端（非空地址；UI 已做格式校验，这里再兜一层）。
   ///
   /// 返回 false 表示该地址已存在（UI 据此提示「已更新」）。地址先归一
-  /// （去方括号 / 空白），同一地址的不同文本写法不会落成两条。配对码导入
-  /// 会一并带上设备身份与端点端口（[httpPort] / [deviceId]）。
+  /// （去方括号 / 空白），同一地址的不同文本写法不会落成两条。广播 / 单播
+  /// 探测学到身份与端点端口后会回写（[httpPort] / [deviceId]）。
   Future<bool> addManualPeer(
     String host, {
     String name = '',
@@ -184,28 +182,6 @@ class SyncProvider extends ChangeNotifier {
     ));
   }
 
-  /// 配对码里的地址逐个入簿，返回首个地址（供立即接触）。
-  ///
-  /// 码是**当时的权威地址集合**（同一设备的多条地址 = 双栈 / 多网卡候选，
-  /// 全部保留）：该设备的旧地址条目被替换——内网 IP 变动后重新粘贴配对码
-  /// 即完成换地址。一轮探测会覆盖全部地址簿条目，所以「立即接触」只需对
-  /// 首个地址做一次；无可用地址返回 null（调用方给「码里没有地址」的提示）。
-  Future<String?> importPairingAddresses(SyncPairingCode code) async {
-    final addresses = [
-      for (final address in code.addresses)
-        ManualPeer(
-          host: normalizePeerHost(address.host),
-          probePort: address.probePort,
-          httpPort: code.httpPort,
-          deviceId: code.deviceId,
-          name: code.deviceName,
-        ),
-    ].where((entry) => entry.host.isNotEmpty).toList();
-    if (addresses.isEmpty) return null;
-    await _controlPlane.adoptPeerAddresses(code.deviceId, addresses);
-    return addresses.first.host;
-  }
-
   /// 更新某条手动地址（设备详情里的「更新地址」）。
   ///
   /// 身份（deviceId）与已学到的端点端口保留：改的是「设备在哪」，不是「是谁」。
@@ -221,31 +197,6 @@ class SyncProvider extends ChangeNotifier {
         probePort: probePort,
         name: name,
       );
-
-  /// 组装本机配对信息（含口令）；未设置口令时返回 null。
-  ///
-  /// 地址候选 = 可路由本机地址 + **按地址族对应的**探测端口（v4 / v6 可独立
-  /// 降级到不同端口，拿错族的端口对端打不通）；HTTP 端口来自持久化状态
-  /// （对端拿到它就能纯 HTTP 直连，不依赖 UDP 发现）。
-  Future<SyncPairingCode?> pairingCode() async {
-    final passphrase = _controlPlane.passphrase;
-    if (passphrase == null || passphrase.trim().isEmpty) return null;
-    final endpoints = await _endpoints.list();
-    final ports = lanDiscoveryPorts;
-    return SyncPairingCode(
-      deviceName: deviceName,
-      deviceId: deviceId,
-      passphrase: passphrase,
-      addresses: [
-        for (final endpoint in endpoints)
-          SyncPairingAddress(
-            host: endpoint.address,
-            probePort: endpoint.isIpv6 ? ports.v6 : ports.v4,
-          ),
-      ],
-      httpPort: lanHttpPort,
-    );
-  }
 
   /// 本机可路由地址（设置页地址列表展示用；服务内部缓存枚举结果）。
   Future<List<LocalEndpoint>> localEndpoints() => _endpoints.list();
@@ -363,9 +314,9 @@ class SyncProvider extends ChangeNotifier {
   Future<void> init() async {
     await _controlPlane.init();
     await _engine.init();
-    // 口令即设备身份：初始化就绪，配对码 / 配对信息随时可分享。生成口令没有
-    // 网络副作用，不依赖任何传输开关——没有总开关后，不能等「首次开启同步」
-    // 才生成（否则配对卡片会指向一个不存在的口令）。
+    // 口令即设备身份：初始化就绪，附近设备配对随时可用。生成口令没有网络
+    // 副作用，不依赖任何传输开关——没有总开关后，不能等「首次开启同步」
+    // 才生成（否则配对请求会指向一个不存在的口令）。
     //
     // 无钥匙串的环境（WSLg / 容器）写入会抛：按「未设置」降级继续，可选子
     // 系统的故障不允许阻断启动（与 `SecureSettingsSecretStore.read` 的容错
@@ -385,7 +336,7 @@ class SyncProvider extends ChangeNotifier {
   /// 开 / 关一路传输（开关即总闸：两路都关 = 同步完全停）。
   ///
   /// 开传输即启用同步：口令在这里兜一层（正常已由 [init] 生成；init 异常降级
-  /// 的路径也能补上），保证「开传输 → 配对 → 分享码」的链路不缺口令。
+  /// 的路径也能补上），保证「开传输 → 附近设备配对」的链路不缺口令。
   Future<void> setTransportEnabled(String kind, bool value) async {
     if (value) await _controlPlane.ensurePassphrase();
     await _controlPlane.setTransportEnabled(kind, value);
@@ -404,15 +355,6 @@ class SyncProvider extends ChangeNotifier {
       _controlPlane.writeWebdavPassword(password);
 
   Future<String?> readWebdavPassword() => _controlPlane.readWebdavPassword();
-
-  /// 输入已有口令加入同步（归一化后保存；无效输入抛 [ArgumentError]）。
-  Future<void> joinWithPassphrase(String raw) async {
-    final normalized = SyncPassphrase.normalize(raw);
-    if (normalized.length < 16) {
-      throw ArgumentError('口令过短');
-    }
-    await _controlPlane.setPassphrase(normalized);
-  }
 
   /// 重置口令：所有设备需重新输入新口令。
   Future<String> resetPassphrase() => _controlPlane.resetPassphrase();

@@ -665,9 +665,9 @@
   （拉取 / 推送 / 失败数 / 字节 / 耗时 / 不可用原因）+ 每对端名册 + 本轮落地
   变更量（不是全库规模）。
 - **Device identity（设备身份）** — `sync_device_id_v2`：独立的 prefs 小键 +
-  安全存储备份，用来标识「本机是哪台设备」（版本戳 / 探测 / 配对码 / WebDAV
-  文件名）。**不跟着 `sync_state_v2` 一起重生成**：大状态损坏时从小键 / 安全
-  存储恢复，避免手机重启或换 IP 后被对端当成一台新设备。
+  安全存储备份，用来标识「本机是哪台设备」（版本戳 / 探测 / 附近设备配对 /
+  WebDAV 文件名）。**不跟着 `sync_state_v2` 一起重生成**：大状态损坏时从小键 /
+  安全存储恢复，避免手机重启或换 IP 后被对端当成一台新设备。
 - **Sync peer roster（同步名册）** — `SyncPeerState`：每台对端的最近接触观测
   （名称 / 传输 / 最后拉取·推送 / 时钟偏移 / 落后条数 / 最近失败），持久化在
   `sync_state_v2`，UI 在同步设置页首屏的「设备」区呈现（名册内联）；
@@ -675,37 +675,41 @@
   「高级设置」子页；「落后条数」由增量协议填充。**移除设备只清本机名册与
   该设备的地址簿条目，不撤销授权**：对方仍持有口令并在线时会重新出现；真正
   撤销需更换口令。没有「本地忽略 / 屏蔽」这一层。
-- **Pairing workbench（配对工作台）** — `lib/pages/sync_settings_page.dart`：
-  同步设置页的首屏信息架构（传输方式：局域网 / WebDAV 两路开关 + 最近一轮结论
-  / 配对：分享配对码（复制 · 二维码）+ 加入设备（粘贴 · 扫码）/ 已配对设备
-  名册 / 同步内容与日志 · 高级设置入口）；设备名、口令、网络地址（一行入口，
-  明细进弹窗）、端口与地址簿在 `lib/pages/sync_advanced_page.dart`（首屏只留
-  用户真正要做的传输、配对与设备，底层细节进子页，但传输状态必须留在首屏）。
-  没有独立总开关：传输开关就是总闸，任一开启即启用同步、两路都关 = 完全停；
-  口令在初始化即生成（信任根，不依赖开关），首次开启同步不再弹口令窗：
-  口令随配对码交给对端。**加入设备没有输入弹层**：粘贴 / 扫码共用
-  `importSyncPairingText`（坏码 / 口令冲突 / 导入结果各给一条底栏提示；
-  首轮就连上时交给「首次连通」提示，不叠两条）。
+- **Nearby devices（附近设备）** — `lib/pages/sync_settings_page.dart`：同步设置页
+  首屏顺序固定为「传输方式 → 已配对设备 → 附近设备 → 同步内容 / 日志 / 高级
+  设置」，设备名、口令、网络地址、端口与地址簿在 `sync_advanced_page.dart`。
+  附近设备来自 `MSP/1` 探测 / 应答（`transport/lan_pairing_packet.dart`）：
+  只做候选发现（独立 magic、无 MAC、15 秒 TTL、上限 32），不写名册
+  `lastSeenAt`、不触发同步轮次；局域网开启且 App 前台时，点候选即发起配对
+  （一次性 P-256 密钥 + 6 位确认码）。自动发现失败时，高级设置里的手动地址会
+  向该地址单播 `MSP` 探测，收到应答后走同一套配对请求；手动地址不携带口令。
+- **Pairing request（配对请求）** — `lib/data/sync/pairing/lan_pairing_service.dart`：
+  `POST /molia-sync/v2/pair/request`、`GET /pair/status`、`POST /pair/complete`
+  （invite 方向）。请求体 ≤8KB；pending 上限 8、TTL 60 秒、同一时间只展示一个
+  待确认弹窗，每来源限流；只在局域网传输运行、App 前台、非蜂窝时可探测 / 应答。
+  requestId 为随机 128-bit；口令只在临时 ECDH（P-256）+ HKDF-SHA256 +
+  AES-256-GCM 密封后传输，AAD 绑定 requestId / intent / 双方 deviceId；同组用
+  discovery key 的 HMAC 证明识别（直接补端点、不弹窗），双方都有不同同步组则
+  返回冲突、不交换口令。
+- **Confirmation code（确认码）** — 由双方临时公钥、nonce 与 requestId 派生的
+  6 位数字（展示为 `482 193`）：发起方与接收方显示同一个码，由用户口述核对；
+  码不一致必须拒绝。确认码不经过口令，也不作为后续认证凭据。
+- **Sync group（同步组）** — 持有同一同步口令的设备集合。**接受配对请求 =
+  加入同步组 = 对方获得本机同步口令**，能解密全部同步数据（含音源脚本与 API
+  Key 等密钥），接受弹窗必须明示；口令只进安全存储，不进日志 / 错误详情 /
+  分析事件。已配对的设备继续走 `MSD/1` 发现与 `MSY/3` 载荷协议；旧
+  `molia-pair:*` / 二维码 / 粘贴配对码已删除，不识别、不迁移、不兼容。
 - **首次连通提示（peer connected notice）** — 某设备第一次真正交换过数据
   （`lastPullAt` / `lastPushAt`，入站推送同样计；只探测应答不算）时，由引擎发
   一次性事件（`SyncEngine.peerConnectedNotices`），应用壳（`MyThemedApp`）订阅
   后经 `NotificationService` 弹「已与『设备』连通」：双方各自触发一次，与用户
   在哪个页面无关。已提示的 deviceId 持久化在 `sync_state_v2.notifiedPeers`，
   重启不重发；设备从本机移除（名册 + 地址簿条目）时标记清掉。
-- **Pairing code（配对码）** — `lib/domain/models/sync_pairing.dart`：
-  `molia-pair:2:<base64url(utf8(json))>`，字段短名 `n` 设备名 / `i` 设备 id /
-  `p` 口令 / `a` 地址候选 `[[host, probePort], …]` / `h` HTTP 端点端口；
-  `probePort` 按候选地址的族取（v4 / v6 可独立降级到不同端口，拿错族的端口
-  打不通）。可复制、可出二维码（`qr` 纯 Dart 自绘）、移动端可扫
-  （`mobile_scanner`）；扫码入口 = Android / iOS × GMS 可用性——Android 走
-  **unbundled** ML Kit（模型由 Play 服务按需下载，无 GMS 不显示入口），
-  模型下载失败给「重试 / 改用粘贴」。**口令随码传递 = 等同授权**（信任模型
-  就是口令即信任根），分享弹层明确警告。
 - **Local endpoints（本机地址列表）** — `local_endpoints_service.dart`：
   枚举本机可路由地址（排除回环 / link-local / zone）并私网优先排序；过滤
   判定 `isRoutablePeerAddress`（`lib/utils/peer_address.dart`）与服务 / 传输
   共用，传输侧经注入的 `hosts()` 复用同一枚举（未注入时按同一判定现算），
-  因此设置页地址列表、配对码与局域网探测 `addrs` 候选是同一口径。
+  因此设置页地址列表、附近设备探测与局域网探测 `addrs` 候选是同一口径。
 - **Sync transport status（传输状态）** — `SyncTransport.unavailableReason`
   （`not_configured` / `start_failed` / `permission_denied`）：传输启动失败、
   未配置或缺权限时必须显式可见，不能只留在日志里（开关显示「已打开」而实际
@@ -720,12 +724,10 @@
   name}`：**发现失败**（AP 隔离 / 多网段 / 防火墙 / VPN）时的兜底，与广播发现
   合并进同一名册；首次单播探测后认领 `deviceId` 与端点端口并回写，学到端口后
   不再依赖广播。本机端点端口持久化（`lanHttpPort`），否则对端记不住本机。
-  配对码导入会预填 `deviceId` / 端点端口 / 探测端口（地址逐个入簿），因此
-  「还没连上」的条目也能被按设备认领。**地址以 deviceId 关联、以码为权威
-  集合**：导入时（`adoptPeerAddresses`）同一设备的码外旧地址退役、命名跟着
-  设备走、双栈 / 多网卡候选全部保留——内网 IP 变动后重新粘贴配对码即换地址；
-  学习路径只更新身份与端口（不动地址集合）；设备详情里可逐条更新
-  （`moveManualPeer`，身份与已学端口保留）或删除。
+  未配对设备通过单播 `MSP` 探测出现在「附近设备」，点击后走同一套配对请求；
+  学习路径只更新身份与端口（不动地址集合）。地址簿可能累积多条地址（双栈 /
+  多网卡 / 换过 IP），设备详情里可逐条更新（`moveManualPeer`，身份与已学端口
+  保留）或删除；地址以 deviceId 关联。
 - **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
   五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
   计数一律是本轮变更量（不随数据量增长）。

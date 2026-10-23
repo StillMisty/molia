@@ -2440,13 +2440,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSyncItemSubtitle => '歌单、音源、设置与密钥';
 
   @override
-  String get syncPairingSection => '配对设备';
-
-  @override
   String get syncLocalSection => '本机';
 
   @override
-  String get syncLocalSectionHint => '其它设备需要这些信息才能连上本机；地址会随配对码一起分享。';
+  String get syncLocalSectionHint => '其它设备需要这些信息才能连上本机；这些地址也用于附近设备配对。';
 
   @override
   String get syncDeviceNameTitle => '设备名称';
@@ -2729,7 +2726,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeersEmptyTitle => '还没有配对设备';
 
   @override
-  String get syncPeersEmptySubtitle => '在「附近设备」里点击配对，或用上方的配对码加入';
+  String get syncPeersEmptySubtitle => '在「附近设备」里点击配对，或在高级设置里手动添加地址';
 
   @override
   String get syncNearbySection => '附近设备';
@@ -3032,80 +3029,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncPeerCandidatesSubtitle => '还没连上 · 点开可查看或删除';
 
   @override
-  String get syncPairingShareTitle => '分享配对信息';
-
-  @override
-  String get syncPairingShareSubtitle => '复制配对码（含同步口令）';
-
-  @override
-  String get syncPairingPasteTitle => '粘贴配对码';
-
-  @override
-  String get syncPairingPasteSubtitle => '在另一台设备点「分享配对信息」复制，再回到这里';
-
-  @override
-  String get syncPairingScanSubtitle => '对准另一台设备上的二维码';
-
-  @override
-  String get syncPairingCopied => '已复制配对信息（含口令）';
-
-  @override
-  String get syncPairingShowQr => '显示二维码';
-
-  @override
-  String get syncPairingNeedsPassphrase => '先设置同步口令';
-
-  @override
-  String get syncPairingWarning => '这段内容包含同步口令，等同授权对方读取全部同步数据。';
-
-  @override
-  String get syncPairingCopy => '复制文本';
-
-  @override
-  String get syncPairingInvalidCode => '配对码无效，请在另一台设备重新复制';
-
-  @override
-  String get syncClipboardNoPairingCode => '剪贴板里没有配对码：先在另一台设备点「分享配对信息」复制';
-
-  @override
-  String get syncPairingNoAddress => '配对码里没有可用的网络地址';
-
-  @override
-  String get syncPairingPassphraseConflictTitle => '本机已有口令';
-
-  @override
-  String get syncPairingPassphraseConflictBody =>
-      '本机已有不同的同步口令。替换本机口令（会影响其它设备），还是只导入地址？';
-
-  @override
-  String get syncPairingAddressOnly => '仅导入地址';
-
-  @override
-  String get syncPairingReplacePassphrase => '替换本机口令（影响其它设备）';
-
-  @override
-  String get syncPairingScanTitle => '扫一扫配对码';
-
-  @override
-  String get syncPairingCameraDenied => '相机权限被拒。可去系统设置开启，或返回上一页改用粘贴。';
-
-  @override
-  String get syncPairingCameraUnavailable => '本机相机不可用，请改用粘贴配对码。';
-
-  @override
-  String get syncPairingModelUnavailable => '首次扫码需要下载识别模型（需可访问 Google 服务）';
-
-  @override
-  String get syncPairingUsePaste => '改用粘贴';
-
-  @override
   String get syncLocalAddressCopied => '已复制地址';
 
   @override
   String get syncLocalAddressesEmptyTitle => '没有可用的网络地址';
 
   @override
-  String get syncLocalAddressesHint => '这些地址会随配对码一起分享给其它设备。';
+  String get syncLocalAddressesHint => '这些地址用于附近设备连接本机。';
 
   @override
   String get syncLocalAddressesEmpty => '没有找到可用的局域网地址，请检查网络连接。';
