@@ -32,7 +32,12 @@ abstract interface class LibraryStore {
   Future<void> deletePlaylist(int id);
 
   // ── 列表曲目 ─────────────────────────────────────────────
-  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId);
+
+  /// 列表内曲目，保持展示顺序。
+  ///
+  /// [limit] 非空时只在存储层取前 N 行（AI 画像等只需少量样本的调用方
+  /// 用，避免把整表读进内存）；null = 全部。
+  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId, {int? limit});
   Future<bool> addTrackToPlaylist(
     int playlistId,
     PlaylistTrack track, {

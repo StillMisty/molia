@@ -167,17 +167,23 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   Future<void> deletePlaylist(int id) => _writeEngine.deletePlaylist(id);
 
   /// 列表内曲目（sortOrder 升序，其次加入时间）。
+  ///
+  /// [limit] 非空时下推到 SQL（`LIMIT`），排序不变；null = 全部。
   @override
-  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId) async {
+  Future<List<PlaylistTrack>> listPlaylistTracks(
+    int playlistId, {
+    int? limit,
+  }) async {
     final db = _db;
-    final rows = await (db.select(db.playlistTracks)
-          ..where((t) => t.playlistId.equals(playlistId))
-          ..orderBy([
-            (t) => OrderingTerm.asc(t.sortOrder),
-            (t) => OrderingTerm.asc(t.addedAt),
-            (t) => OrderingTerm.asc(t.id),
-          ]))
-        .get();
+    final query = db.select(db.playlistTracks)
+      ..where((t) => t.playlistId.equals(playlistId))
+      ..orderBy([
+        (t) => OrderingTerm.asc(t.sortOrder),
+        (t) => OrderingTerm.asc(t.addedAt),
+        (t) => OrderingTerm.asc(t.id),
+      ]);
+    if (limit != null) query.limit(limit);
+    final rows = await query.get();
     return [for (final row in rows) _trackFromRow(row)];
   }
 

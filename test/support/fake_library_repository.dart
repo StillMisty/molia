@@ -146,8 +146,13 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
-  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId) async =>
-      List.of(_tracks[playlistId] ?? const []);
+  Future<List<PlaylistTrack>> listPlaylistTracks(
+    int playlistId, {
+    int? limit,
+  }) async {
+    final tracks = _tracks[playlistId] ?? const <PlaylistTrack>[];
+    return List.of(limit == null ? tracks : tracks.take(limit));
+  }
 
   @override
   Future<bool> addTrackToPlaylist(

@@ -69,14 +69,17 @@ class _CountingLibraryRepository extends LibraryRepository {
   }
 
   @override
-  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId) {
+  Future<List<PlaylistTrack>> listPlaylistTracks(
+    int playlistId, {
+    int? limit,
+  }) {
     playlistTracksListCalls++;
     final gate = nextPlaylistTracksSnapshot;
     if (gate != null) {
       nextPlaylistTracksSnapshot = null;
       return gate.future;
     }
-    return super.listPlaylistTracks(playlistId);
+    return super.listPlaylistTracks(playlistId, limit: limit);
   }
 }
 

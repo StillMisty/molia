@@ -101,7 +101,7 @@ class TasteProfileBuilder {
       if (includeRecent)
         _repository.listEventsForExport(limit: recentEventLimit),
       if (preferences.onlyUnheard || includeExclusions)
-        _repository.listPlayedTrackNames(),
+        _repository.listPlayedTrackNames(limit: exclusionLimit),
     ]);
     var cursor = 0;
     PlayStatisticsSummary summary = PlayStatisticsSummary.empty;
@@ -209,10 +209,13 @@ class TasteProfileBuilder {
         }
       }
       if (favorites == null) return const [];
-      final tracks = await store.listPlaylistTracks(favorites.id);
+      // 上限下推到存储层，避免为了 100 首把整张收藏表读进内存。
+      final tracks = await store.listPlaylistTracks(
+        favorites.id,
+        limit: favoritesLimit,
+      );
       return [
-        for (final track in tracks.take(favoritesLimit))
-          (title: track.title, artist: track.artist),
+        for (final track in tracks) (title: track.title, artist: track.artist),
       ];
     } catch (e) {
       _logger.warning('AI 推歌：读取收藏失败，按空处理 $e');
@@ -228,33 +231,53 @@ class TasteProfileBuilder {
           })>> _readPlaylists() async {
     final store = _libraryStore;
     if (store == null) return const [];
+    final List<PlaylistInfo> custom;
     try {
       final all = await store.listPlaylists();
-      final custom = [
+      custom = [
         for (final playlist in all)
           if (!playlist.isFavorites) playlist,
-      ].take(playlistLimit);
-      final result = <({
-        String name,
-        List<({String title, String artist})> tracks,
-      })>[];
-      var total = 0;
-      for (final playlist in custom) {
-        if (total >= playlistTotalTrackLimit) break;
-        final room = playlistTotalTrackLimit - total;
-        final limit = playlistTrackLimit < room ? playlistTrackLimit : room;
-        final tracks = await store.listPlaylistTracks(playlist.id);
-        final entries = [
-          for (final track in tracks.take(limit))
-            (title: track.title, artist: track.artist),
-        ];
-        if (entries.isEmpty) continue;
-        total += entries.length;
-        result.add((name: playlist.name, tracks: entries));
-      }
-      return result;
+      ].take(playlistLimit).toList();
     } catch (e) {
       _logger.warning('AI 推歌：读取自建歌单失败，按空处理 $e');
+      return const [];
+    }
+    // 歌单之间互不依赖：并发读取，每个只取前 [playlistTrackLimit] 首；
+    // 单个歌单失败只丢这一段（_readPlaylistTracks 内部降级），不拖垮整份画像。
+    final tracksByPlaylist = await Future.wait([
+      for (final playlist in custom) _readPlaylistTracks(store, playlist),
+    ]);
+    final result = <({
+      String name,
+      List<({String title, String artist})> tracks,
+    })>[];
+    var total = 0;
+    for (var i = 0; i < custom.length; i++) {
+      if (total >= playlistTotalTrackLimit) break;
+      final room = playlistTotalTrackLimit - total;
+      final limit = playlistTrackLimit < room ? playlistTrackLimit : room;
+      final entries = [
+        for (final track in tracksByPlaylist[i].take(limit))
+          (title: track.title, artist: track.artist),
+      ];
+      if (entries.isEmpty) continue;
+      total += entries.length;
+      result.add((name: custom[i].name, tracks: entries));
+    }
+    return result;
+  }
+
+  Future<List<PlaylistTrack>> _readPlaylistTracks(
+    LibraryStore store,
+    PlaylistInfo playlist,
+  ) async {
+    try {
+      return await store.listPlaylistTracks(
+        playlist.id,
+        limit: playlistTrackLimit,
+      );
+    } catch (e) {
+      _logger.warning('AI 推歌：读取歌单「${playlist.name}」失败，按空处理 $e');
       return const [];
     }
   }

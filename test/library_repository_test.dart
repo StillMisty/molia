@@ -219,6 +219,34 @@ void main() {
       expect(await repository.listPlaylistTracks(id), hasLength(1));
     });
 
+    test('limit 只取既有顺序的前 N 首（下推到查询）', () async {
+      final id = await repository.createPlaylist('L');
+      for (var i = 1; i <= 5; i++) {
+        await repository.addTrackToPlaylist(
+          id,
+          PlaylistTrack(
+            playlistId: id,
+            sourceKey: 'wy',
+            songId: '$i',
+            title: 'T$i',
+            addedAt: 1,
+          ),
+        );
+      }
+
+      final all = await repository.listPlaylistTracks(id);
+      final limited = await repository.listPlaylistTracks(id, limit: 2);
+
+      expect(all, hasLength(5));
+      expect(limited, hasLength(2));
+      expect(
+        limited.map((track) => track.songId),
+        all.take(2).map((track) => track.songId),
+        reason: 'limit 不改变排序，只截断尾部',
+      );
+      expect(await repository.listPlaylistTracks(id, limit: 99), hasLength(5));
+    });
+
     test('移除曲目', () async {
       final id = await repository.createPlaylist('L');
       await repository.addTrackToPlaylist(
