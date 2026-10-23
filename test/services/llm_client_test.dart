@@ -11,10 +11,16 @@ import '../support/mock_dio.dart';
 /// LLM 客户端测试：地址归一、请求形状、错误归一化、超时、key 不泄露。
 void main() {
   LlmConfig config({String baseUrl = 'https://api.example.com/v1'}) =>
-      LlmConfig(baseUrl: baseUrl, apiKey: 'sk-test-123456', model: 'test-model');
+      LlmConfig(
+          baseUrl: baseUrl, apiKey: 'sk-test-123456', model: 'test-model');
 
-  String okBody(String content) =>
-      jsonEncode({'choices': [{'message': {'content': content}}]});
+  String okBody(String content) => jsonEncode({
+        'choices': [
+          {
+            'message': {'content': content}
+          }
+        ]
+      });
 
   /// 统一走 UTF-8 字节（响应体自行解码，不受响应头 charset 影响）。
   ResponseBody ok(String content, [int status = 200]) =>
@@ -69,8 +75,8 @@ void main() {
     );
 
     expect(content, '推荐结果');
-    expect(captured.uri.toString(),
-        'https://api.example.com/v1/chat/completions');
+    expect(
+        captured.uri.toString(), 'https://api.example.com/v1/chat/completions');
     expect(captured.headers['Authorization'], 'Bearer sk-test-123456');
     final body = jsonDecode(requestBodyText(captured)) as Map<String, dynamic>;
     expect(body['model'], 'test-model');
@@ -78,6 +84,70 @@ void main() {
     final messages = body['messages'] as List;
     expect(messages, hasLength(2));
     expect(messages.first['role'], 'system');
+  });
+
+  test('response_format 400 后记住不支持，下次不再先发带参请求', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final llm = LlmClient(
+      dio: mockDio((request) async {
+        final body =
+            jsonDecode(requestBodyText(request)) as Map<String, dynamic>;
+        bodies.add(body);
+        if (body.containsKey('response_format')) {
+          return textResponse('unsupported', statusCode: 400);
+        }
+        return ok('{"songs":[]}');
+      }),
+    );
+
+    await llm.complete(
+      config: config(),
+      systemPrompt: 's',
+      userPrompt: 'u',
+      jsonMode: true,
+    );
+    await llm.complete(
+      config: config(),
+      systemPrompt: 's',
+      userPrompt: 'u',
+      jsonMode: true,
+    );
+
+    expect(bodies, hasLength(3));
+    expect(bodies[0].containsKey('response_format'), isTrue);
+    expect(bodies[1].containsKey('response_format'), isFalse);
+    expect(bodies[2].containsKey('response_format'), isFalse);
+  });
+
+  test('400 且退回请求也失败时不记住不支持（避免误判其它 400）', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final llm = LlmClient(
+      dio: mockDio((request) async {
+        bodies.add(
+          jsonDecode(requestBodyText(request)) as Map<String, dynamic>,
+        );
+        return textResponse('bad', statusCode: 400);
+      }),
+    );
+
+    for (var i = 0; i < 2; i++) {
+      await expectLater(
+        llm.complete(
+          config: config(),
+          systemPrompt: 's',
+          userPrompt: 'u',
+          jsonMode: true,
+        ),
+        throwsA(isA<SourceFailure>()),
+      );
+    }
+
+    expect(bodies, hasLength(4));
+    expect(
+      bodies.where((body) => body.containsKey('response_format')),
+      hasLength(2),
+      reason: '每次都先尝试 JSON 模式；失败不缓存',
+    );
   });
 
   test('401 → unauthorized，且 message 不包含 key', () async {
@@ -117,19 +187,19 @@ void main() {
 
     expect(
       (await failureOf(() => serverError.complete(
-            config: config(),
-            systemPrompt: 's',
-            userPrompt: 'u',
-          )))
+                config: config(),
+                systemPrompt: 's',
+                userPrompt: 'u',
+              )))
           .retryable,
       isTrue,
     );
     expect(
       (await failureOf(() => clientError.complete(
-            config: config(),
-            systemPrompt: 's',
-            userPrompt: 'u',
-          )))
+                config: config(),
+                systemPrompt: 's',
+                userPrompt: 'u',
+              )))
           .retryable,
       isFalse,
     );
@@ -145,19 +215,19 @@ void main() {
 
     expect(
       (await failureOf(() => malformed.complete(
-            config: config(),
-            systemPrompt: 's',
-            userPrompt: 'u',
-          )))
+                config: config(),
+                systemPrompt: 's',
+                userPrompt: 'u',
+              )))
           .kind,
       FailureKind.unknown,
     );
     expect(
       (await failureOf(() => empty.complete(
-            config: config(),
-            systemPrompt: 's',
-            userPrompt: 'u',
-          )))
+                config: config(),
+                systemPrompt: 's',
+                userPrompt: 'u',
+              )))
           .kind,
       FailureKind.unknown,
     );
@@ -187,8 +257,8 @@ void main() {
     );
 
     await expectLater(llm.testConnection(config()), completes);
-    expect(captured.uri.toString(),
-        'https://api.example.com/v1/chat/completions');
+    expect(
+        captured.uri.toString(), 'https://api.example.com/v1/chat/completions');
     expect(captured.headers['Authorization'], 'Bearer sk-test-123456');
 
     // 推理模型只回思维链、正文为空：2xx 且带 choices 即视为连通。
@@ -279,7 +349,9 @@ void main() {
     test('testConnection：响应不含对话结果 → unknown', () async {
       final llm = LlmClient(
         dio: mockDio(
-          (_) async => raw(jsonEncode({'error': {'message': 'nope'}})),
+          (_) async => raw(jsonEncode({
+            'error': {'message': 'nope'}
+          })),
         ),
       );
 

@@ -12,7 +12,8 @@
 /// - 卡片流下方是推荐理由信息区：只显示焦点卡（carousel 最大槽位）的理由，
 ///   歌名 / 歌手由卡片承担、不在信息区重复；理由为空或焦点越界（「换一批」卡、
 ///   换批后的过期索引）时整区不渲染——留一个空块比不显示更突兀；
-/// - 尾部「换一批」卡替换列表（推歌中只换"下一批来源"，不打断播放）；
+/// - 尾部「换一批」卡只留刷新图标、不写字（读屏靠语义标签），整卡仍是
+///   可点按钮（推歌中只换"下一批来源"，不打断播放）；
 /// - 未配置/未启用 → 整块（卡片流 + 信息区）不渲染（不额外做引导）；搜索
 ///   激活时由宿主页不挂载本组件（让位给结果区），本组件不感知搜索态；
 /// - 列表为空 → 显式「生成推荐」引导卡；生成中 → 骨架；失败 → 重试卡；
@@ -372,8 +373,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               ),
             ),
           ),
-          title: Text(l10n.aiDjRefreshBatch, style: type.titleSmall),
-          applyDynamicTextContentTransform: false,
+          // 只留图标：卡片上不再写「换一批」，读屏名靠语义标签。
           semanticLabel: l10n.aiDjRefreshBatch,
           onTap: () => unawaited(provider.refreshRecommendations()),
         ),

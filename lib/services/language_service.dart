@@ -27,6 +27,19 @@ class LanguageService {
     Locale('zh'),
   ];
 
+  /// 当前生效的界面语言：用户选择优先，否则跟随系统；不支持的语言回退
+  /// 支持列表首个（与媒体通知/托盘同一解析口径）。
+  static Locale get effectiveLocale {
+    final selected = localeNotifier.value;
+    final effective =
+        selected ?? WidgetsBinding.instance.platformDispatcher.locale;
+    return supportedLocales.any(
+      (supported) => supported.languageCode == effective.languageCode,
+    )
+        ? effective
+        : supportedLocales.first;
+  }
+
   /// 获取当前保存的语言设置
   static Future<Locale?> getSavedLocale() async {
     try {

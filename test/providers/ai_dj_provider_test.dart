@@ -739,7 +739,11 @@ void main() {
 
     expect(provider.recommendations?.items[0].track.id.id, '7');
     expect(generator.lastCount, 1);
-    expect(generator.lastExcluded, hasLength(3), reason: '排除列表内已有曲目');
+    expect(
+      generator.lastExcluded,
+      hasLength(4),
+      reason: '排除当前列表 3 首 + 未解析项 1 首',
+    );
     expect(backend.calls, contains('replaceQueueTrack:wy:0'));
   });
 
@@ -805,6 +809,21 @@ void main() {
 
     expect(generator.lastLiked, ['Song 0 - Artist', 'Song 1 - Artist']);
     expect(provider.lastSentPrompt!.userPrompt, preview!.userPrompt);
+  });
+
+  test('上一批与未解析项进入 [本批排除]，预览与实际请求一致', () async {
+    await enableWithList();
+    final preview = await provider.previewPrompt();
+
+    expect(preview, isNotNull);
+    expect(generator.lastPreviewExcluded, contains('Song 0 - Artist'));
+    expect(generator.lastPreviewExcluded, contains('Ghost - X'));
+
+    generator.batchFactory = () => _batch(9, 3);
+    await provider.refreshRecommendations();
+
+    expect(generator.lastExcluded, containsAll(generator.lastPreviewExcluded));
+    expect(generator.lastExcludedKeys, isNotEmpty);
   });
 
   test('喜欢回流并跨重启保留', () async {

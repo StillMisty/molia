@@ -95,6 +95,17 @@ void main() {
     expect(catalog.artistService, isNotNull);
   });
 
+  test('LanguageService.effectiveLocale：用户选择优先，不支持回退英文', () {
+    final original = LanguageService.localeNotifier.value;
+    addTearDown(() => LanguageService.localeNotifier.value = original);
+
+    LanguageService.localeNotifier.value = const Locale('zh');
+    expect(LanguageService.effectiveLocale.languageCode, 'zh');
+
+    LanguageService.localeNotifier.value = const Locale('fr');
+    expect(LanguageService.effectiveLocale.languageCode, 'en');
+  });
+
   test('localDataStack：歌词服务 → 下载服务的构建顺序，本地离线歌词可取', () async {
     final local = await buildLocalDataStack(catalog: catalog);
 

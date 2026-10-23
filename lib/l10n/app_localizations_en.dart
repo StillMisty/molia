@@ -1938,7 +1938,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjConsentBody =>
-      'When enabled, your listening profile (stats summary, the latest 200 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.';
+      'When enabled, your listening profile (stats summary, the latest 50 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.';
 
   @override
   String get aiDjAgree => 'Agree & start';

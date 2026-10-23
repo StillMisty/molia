@@ -158,7 +158,7 @@ void main() {
     expect(backend.lastRequest?.startIndex, 1);
   });
 
-  testWidgets('滑到末尾显示「换一批」卡，点击触发重新生成', (tester) async {
+  testWidgets('滑到末尾只剩「换一批」图标（无文字），点击触发重新生成', (tester) async {
     await pumpProvider();
     await provider.grantConsent();
     await provider.setEnabled(true);
@@ -167,7 +167,8 @@ void main() {
     await pumpCarousel(tester);
     final callsBefore = generator.calls;
 
-    for (var i = 0; i < 6 && find.text('New batch').evaluate().isEmpty; i++) {
+    // 末尾卡只有刷新图标：先滑到末尾让它进入视口，再点图标本身。
+    for (var i = 0; i < 6; i++) {
       await tester.fling(
         find.byKey(const Key('aiDjCarousel')),
         const Offset(-400, 0),
@@ -175,9 +176,10 @@ void main() {
       );
       await tester.pumpAndSettle();
     }
-    expect(find.text('New batch'), findsOneWidget);
+    expect(find.text('New batch'), findsNothing);
+    expect(find.byIcon(Icons.refresh_rounded), findsOneWidget);
 
-    await tester.tap(find.text('New batch'));
+    await tester.tap(find.byIcon(Icons.refresh_rounded));
     await tester.pumpAndSettle();
 
     expect(generator.calls, greaterThan(callsBefore));

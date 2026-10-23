@@ -1,7 +1,8 @@
 /// AI 推歌生成服务：画像 → 提示词 → LLM → 解析 → 本地搜索解析成可播放曲目。
 ///
 /// 链路（「闭卷生成 + 本地解析」）：
-/// 1. [TasteProfileBuilder] 按发送范围构建画像（收藏/歌单 opt-in）；
+/// 1. [TasteProfileBuilder] 按发送范围构建画像（收藏/歌单 opt-in），
+///    提示词用紧凑行格式、按应用语言切换文案；
 /// 2. [LlmClient] 单轮补全，要求纯 JSON；
 /// 3. 容错解析（首 `{`…末 `}`，兼容数组/字符串条目）；
 /// 4. 与已听排除清单、批内规范化去重；
@@ -23,6 +24,7 @@ import '../../domain/models/play_statistics.dart';
 import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/source_registry.dart';
+import 'ai_prompt_text.dart';
 import 'ai_text.dart';
 import 'llm_client.dart';
 import 'taste_profile_builder.dart';
@@ -32,8 +34,9 @@ abstract interface class AiRecommendationGenerator {
   /// 生成一批推荐（[count] 首上限）。
   ///
   /// [skippedLabels] / [likedLabels] 是本轮反馈（provider 已合并持久化记忆）；
-  /// [excludeLabels] 是本次生成额外排除（如「换一首」时排除列表内已有曲目），
-  /// 不进入反馈回流。[onProgress] 只在显式生成时传入；静默补歌不传。
+  /// [excludeLabels] 是本次生成额外排除（如「换一首」/上一批已有曲目），
+  /// [excludeKeys] 是同一批排除项的规范化键，用于本地兜底过滤，不进入
+  /// 反馈回流。[onProgress] 只在显式生成时传入；静默补歌不传。
   Future<AiDjBatch> generate({
     required LlmConfig config,
     required int count,
@@ -41,6 +44,7 @@ abstract interface class AiRecommendationGenerator {
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
+    List<String> excludeKeys = const [],
     AiGenerationCancelToken? cancelToken,
     void Function(AiDjProgress progress)? onProgress,
   });
@@ -77,18 +81,23 @@ class AiRecommendationService implements AiRecommendationGenerator {
     required CatalogService catalog,
     required SourceRegistry registry,
     required TasteProfileBuilder profileBuilder,
+    AiPromptLanguage Function()? promptLanguage,
     this.resolveConcurrency = 3,
     this.resolveHedgeDelay = const Duration(milliseconds: 250),
   })  : assert(!resolveHedgeDelay.isNegative),
         _llm = llm,
         _catalog = catalog,
         _registry = registry,
-        _profileBuilder = profileBuilder;
+        _profileBuilder = profileBuilder,
+        _promptLanguage = promptLanguage ?? (() => AiPromptLanguage.zh);
 
   final LlmClient _llm;
   final CatalogService _catalog;
   final SourceRegistry _registry;
   final TasteProfileBuilder _profileBuilder;
+
+  /// 每次生成/预览时现取应用语言；设置页切换语言后下一次立即生效。
+  final AiPromptLanguage Function() _promptLanguage;
 
   /// 解析并发（同时搜索的曲目数）。
   final int resolveConcurrency;
@@ -100,15 +109,16 @@ class AiRecommendationService implements AiRecommendationGenerator {
   /// 结果直接丢弃）。
   final Duration resolveHedgeDelay;
 
-  static const String systemPrompt =
-      '你是一名中文音乐推荐助手。只输出 JSON，不要输出解释或 Markdown 代码块。'
-      'JSON 格式：{"songs":[{"title":"歌名","artist":"歌手","reason":"一句话理由"}]}。'
-      '要求：推荐用户没听过、且在中国大陆主流音乐平台（QQ音乐/网易云音乐/酷狗/酷我/咪咕）'
-      '能搜索到的歌曲；理由用中文、不超过 20 字；不要推荐排除清单中的歌曲。';
-
   /// 连接测试（地址/Key/模型），失败抛 [SourceFailure]。
   @override
-  Future<void> testConnection(LlmConfig config) => _llm.testConnection(config);
+  Future<void> testConnection(LlmConfig config) {
+    final copy = AiPromptCopy.of(_promptLanguage());
+    return _llm.testConnection(
+      config,
+      systemPrompt: copy.testConnectionSystemPrompt,
+      userPrompt: copy.testConnectionUserPrompt,
+    );
+  }
 
   /// 上行数据摘要：只统计条数，不发往任何服务。
   @override
@@ -150,6 +160,11 @@ class AiRecommendationService implements AiRecommendationGenerator {
       skippedLabels: skippedLabels,
       likedLabels: likedLabels,
       excludeLabels: excludeLabels,
+      sourceNames: [
+        for (final source in _searchableSources())
+          _text(source.displayName, maxLength: _promptSourceNameLimit),
+      ],
+      language: _promptLanguage(),
     );
   }
 
@@ -162,6 +177,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
+    List<String> excludeKeys = const [],
     AiGenerationCancelToken? cancelToken,
     void Function(AiDjProgress progress)? onProgress,
   }) async {
@@ -187,6 +203,11 @@ class AiRecommendationService implements AiRecommendationGenerator {
       skippedLabels: skippedLabels,
       likedLabels: likedLabels,
       excludeLabels: excludeLabels,
+      sourceNames: [
+        for (final source in _searchableSources())
+          _text(source.displayName, maxLength: _promptSourceNameLimit),
+      ],
+      language: _promptLanguage(),
     );
 
     progress(AiDjPhase.model);
@@ -208,8 +229,10 @@ class AiRecommendationService implements AiRecommendationGenerator {
       );
     }
 
-    // 排除已听 / 收藏 / 歌单（provider 偏好 opened）+ 批内去重（规范化键）。
-    final seen = Set<String>.of(profile.exclusionKeys);
+    // 排除已听 / 收藏 / 歌单（provider 偏好 opened）+ 上一批/队列（provider
+    // 传入的规范化键）+ 批内去重。提示词里的 [本批排除] 只负责让模型主动
+    // 避开；本地兜底保证模型忽略时也不会重复。
+    final seen = Set<String>.of(profile.exclusionKeys)..addAll(excludeKeys);
     final candidates = <AiRecommendation>[];
     for (final recommendation in parsed) {
       final key = aiTrackKey(recommendation.title, recommendation.artist);
@@ -276,7 +299,24 @@ class AiRecommendationService implements AiRecommendationGenerator {
     );
   }
 
-  /// 提示词：按发送范围裁剪的画像 JSON + 偏好 + 种子 + 本轮反馈 + 额外排除。
+  /// 提示词里时段/来源/反馈/本批排除的展示上限（token 预算）。
+  static const int promptTimeSlotLimit = 12;
+  static const int promptSourceLimit = 8;
+  static const int promptFeedbackLimit = 20;
+  static const int promptExcludeLimit = 50;
+
+  /// 单条文本的长度上限：防止异常长的歌名/歌手破坏提示词结构。
+  static const int _promptTitleLimit = 80;
+  static const int _promptArtistLimit = 60;
+  static const int _promptLabelLimit = 100;
+  static const int _promptPlaylistNameLimit = 40;
+  static const int _promptSourceNameLimit = 40;
+
+  /// 提示词：按发送范围裁剪的紧凑行画像 + 偏好 + 种子 + 本轮反馈 + 额外排除。
+  ///
+  /// 格式选择紧凑行而不是逐条 JSON：同样的信息少大量重复 key，透明度弹窗仍
+  /// 可直接阅读。system 只放角色定位，质量约束/输出样例放在 user 末尾：
+  /// DeepSeek/OpenAI 的 JSON Output 都要求 prompt 含 json 字样与格式样例。
   static AiPrompt buildPrompt({
     required TasteProfile profile,
     required AiPreferences preferences,
@@ -284,136 +324,291 @@ class AiRecommendationService implements AiRecommendationGenerator {
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
+    List<String> sourceNames = const [],
+    AiPromptLanguage language = AiPromptLanguage.zh,
   }) {
+    final copy = AiPromptCopy.of(language);
     final sections = preferences.sections;
-    final data = <String, dynamic>{};
+    final buffer = StringBuffer();
+
     if (sections.contains(AiUpstreamSection.summary)) {
       final summary = profile.summary;
-      data['summary'] = {
-        'playCount': summary.playCount,
-        'qualifiedPlayCount': summary.qualifiedPlayCount,
-        'totalListenedMinutes': summary.totalListenedMs ~/ 60000,
-        'uniqueTrackCount': summary.uniqueTrackCount,
-        'completionRate': summary.completionRate,
-        'skipRate': summary.skipRate,
-      };
-    }
-    if (sections.contains(AiUpstreamSection.topArtists)) {
-      data['topArtists'] = [
-        for (final entry in profile.topArtists)
-          {'artist': entry.artist, 'plays': entry.playCount},
-      ];
-    }
-    if (sections.contains(AiUpstreamSection.topTracks)) {
-      data['topTracks'] = [
-        for (final entry in profile.topTracks)
-          {
-            'title': entry.title,
-            'artist': entry.artist,
-            'plays': entry.playCount
-          },
-      ];
-    }
-    if (sections.contains(AiUpstreamSection.timeAndSource)) {
-      data['listeningByWeekdayHour'] = [
-        for (final entry in profile.byWeekdayHour)
-          {
-            'weekday': entry.weekday,
-            'hour': entry.hour,
-            'minutes': entry.listenedMs ~/ 60000,
-          },
-      ];
-      data['sources'] = [
-        for (final entry in profile.sources)
-          {'source': entry.sourceKey, 'minutes': entry.listenedMs ~/ 60000},
-      ];
-    }
-    if (sections.contains(AiUpstreamSection.recentEvents)) {
-      data['recentEvents'] = [
-        for (final event in profile.recentEvents)
-          {
-            'title': event.title,
-            'artist': event.artist,
-            'listenedSeconds': event.listenedMs ~/ 1000,
-            'completed': event.endReason == PlayEventEndReason.completed,
-          },
-      ];
-    }
-    if (sections.contains(AiUpstreamSection.listenedExclusions)) {
-      data['alreadyListened'] = profile.exclusionLabels;
-    }
-    if (sections.contains(AiUpstreamSection.favorites)) {
-      data['favorites'] = [
-        for (final entry in profile.favorites)
-          {'title': entry.title, 'artist': entry.artist},
-      ];
-    }
-    if (sections.contains(AiUpstreamSection.playlists)) {
-      data['playlists'] = [
-        for (final playlist in profile.playlists)
-          {
-            'name': playlist.name,
-            'tracks': [
-              for (final track in playlist.tracks)
-                {'title': track.title, 'artist': track.artist},
-            ],
-          },
-      ];
+      if (summary.playCount == 0) {
+        buffer.writeln('${copy.summaryLabel} ${copy.noListeningData}');
+      } else {
+        buffer.writeln('${copy.summaryLabel} ${[
+          '${copy.summaryPlays} ${summary.playCount}',
+          '${copy.summaryQualified} ${summary.qualifiedPlayCount}',
+          '${copy.summaryCompletion} ${_percent(summary.completionRate)}',
+          '${copy.summarySkip} ${_percent(summary.skipRate)}',
+          '${copy.summaryDuration} ${copy.durationText(summary.totalListenedMs)}',
+          '${copy.summaryTracks} ${summary.uniqueTrackCount}',
+        ].join(copy.fieldSeparator)}');
+      }
     }
 
-    final preferenceJson = <String, dynamic>{};
+    final preferenceParts = <String>[];
     if (preferences.styles.isNotEmpty) {
-      preferenceJson['styles'] = [
-        for (final style in preferences.styles) _styleText(style),
-      ];
+      preferenceParts.add(
+        '${copy.preferencesStyles} '
+        '${[
+          for (final style in preferences.styles) copy.styleText(style)
+        ].join('/')}',
+      );
     }
     if (preferences.scenes.isNotEmpty) {
-      preferenceJson['scenes'] = [
-        for (final scene in preferences.scenes) _sceneText(scene),
-      ];
+      preferenceParts.add(
+        '${copy.preferencesScenes} '
+        '${[
+          for (final scene in preferences.scenes) copy.sceneText(scene)
+        ].join('/')}',
+      );
     }
     if (preferences.languages.isNotEmpty) {
-      preferenceJson['languages'] = [
-        for (final language in preferences.languages) _languageText(language),
-      ];
+      preferenceParts.add(
+        '${copy.preferencesLanguages} '
+        '${[
+          for (final language in preferences.languages)
+            copy.languageText(language)
+        ].join('/')}',
+      );
     }
     if (preferences.era != kAiEraAny) {
-      preferenceJson['era'] = _eraText(preferences.era);
+      preferenceParts.add(
+        '${copy.preferencesEra} ${copy.eraText(preferences.era)}',
+      );
     }
-    preferenceJson['exploration'] = _explorationText(preferences.exploration);
-    preferenceJson['onlyUnheard'] = preferences.onlyUnheard;
-    if (preferences.extraPrompt.trim().isNotEmpty) {
-      preferenceJson['extra'] = preferences.extraPrompt.trim();
-    }
-    data['preferences'] = preferenceJson;
+    preferenceParts.add(
+      '${copy.preferencesExploration} '
+      '${copy.explorationText(preferences.exploration)}',
+    );
+    preferenceParts.add(copy.onlyUnheardText(preferences.onlyUnheard));
+    buffer.writeln(
+      '${copy.preferencesLabel} ${preferenceParts.join(copy.fieldSeparator)}',
+    );
 
-    final feedback = StringBuffer('本轮反馈：');
-    if (skippedLabels.isEmpty &&
-        likedLabels.isEmpty &&
-        preferences.seeds.isEmpty) {
-      feedback.write('无');
-    } else {
-      if (skippedLabels.isNotEmpty) {
-        feedback.write('跳过了「${skippedLabels.take(20).join('、')}」');
+    if (sections.contains(AiUpstreamSection.topArtists)) {
+      _writeSection(
+        buffer,
+        copy.topArtistsLabel,
+        [
+          for (final entry in profile.topArtists)
+            _artistCount(entry.artist, entry.playCount),
+        ],
+        copy.itemSeparator,
+      );
+    }
+    if (sections.contains(AiUpstreamSection.topTracks)) {
+      _writeSection(
+        buffer,
+        copy.topTracksLabel,
+        [
+          for (final entry in profile.topTracks)
+            _song(entry.title, entry.artist, detail: '${entry.playCount}'),
+        ],
+        copy.itemSeparator,
+      );
+    }
+    if (sections.contains(AiUpstreamSection.timeAndSource)) {
+      if (profile.byWeekdayHour.isNotEmpty) {
+        final topSlots = [...profile.byWeekdayHour]..sort((a, b) {
+            final byMinutes = b.listenedMs.compareTo(a.listenedMs);
+            if (byMinutes != 0) return byMinutes;
+            final byDay = a.weekday.compareTo(b.weekday);
+            return byDay != 0 ? byDay : a.hour.compareTo(b.hour);
+          });
+        final slots = topSlots.take(promptTimeSlotLimit).toList()
+          ..sort((a, b) {
+            final byDay = a.weekday.compareTo(b.weekday);
+            return byDay != 0 ? byDay : a.hour.compareTo(b.hour);
+          });
+        _writeSection(
+          buffer,
+          copy.listeningHoursLabel,
+          [
+            for (final slot in slots)
+              copy.timeSlot(
+                slot.weekday,
+                slot.hour,
+                slot.listenedMs ~/ 60000,
+              ),
+          ],
+          copy.itemSeparator,
+        );
       }
-      if (likedLabels.isNotEmpty) {
-        if (skippedLabels.isNotEmpty) feedback.write('；');
-        feedback.write('收藏了「${likedLabels.take(20).join('、')}」');
+      final sourceItems = <String>[];
+      for (final entry in profile.sources.take(promptSourceLimit)) {
+        final key = _text(entry.sourceKey, maxLength: _promptSourceNameLimit);
+        if (key.isEmpty) continue;
+        sourceItems.add('$key(${copy.minutesText(entry.listenedMs ~/ 60000)})');
       }
-      if (preferences.seeds.isNotEmpty) {
-        if (skippedLabels.isNotEmpty || likedLabels.isNotEmpty) {
-          feedback.write('；');
-        }
-        feedback.write('多来点这种「${preferences.seeds.take(20).join('、')}」');
+      _writeSection(
+        buffer,
+        copy.sourcesLabel,
+        sourceItems,
+        copy.itemSeparator,
+      );
+    }
+    if (sections.contains(AiUpstreamSection.favorites)) {
+      _writeSection(
+        buffer,
+        copy.favoritesLabel,
+        [
+          for (final entry in profile.favorites)
+            _song(entry.title, entry.artist),
+        ],
+        copy.itemSeparator,
+      );
+    }
+    if (sections.contains(AiUpstreamSection.playlists)) {
+      final playlistItems = <String>[];
+      for (final playlist in profile.playlists) {
+        final name = _text(
+          playlist.name,
+          maxLength: _promptPlaylistNameLimit,
+        );
+        if (name.isEmpty) continue;
+        final tracks = [
+          for (final track in playlist.tracks) _song(track.title, track.artist),
+        ].where((track) => track.isNotEmpty).toList();
+        if (tracks.isEmpty) continue;
+        playlistItems.add('$name: ${tracks.join(copy.itemSeparator)}');
       }
+      _writeSection(
+        buffer,
+        copy.playlistsLabel,
+        playlistItems,
+        copy.playlistSeparator,
+      );
+    }
+    if (sections.contains(AiUpstreamSection.recentEvents)) {
+      _writeSection(
+        buffer,
+        copy.recentPlaysLabel,
+        [
+          for (final event in profile.recentEvents
+              .take(TasteProfileBuilder.recentEventLimit))
+            _song(
+              event.title,
+              event.artist,
+              detail: copy.recentDetail(
+                event.listenedMs ~/ 1000,
+                event.endReason == PlayEventEndReason.completed,
+              ),
+            ),
+        ],
+        copy.itemSeparator,
+      );
+    }
+    if (sections.contains(AiUpstreamSection.listenedExclusions)) {
+      _writeSection(
+        buffer,
+        copy.alreadyHeardLabel,
+        _cleanLabels(
+          profile.exclusionLabels
+              .take(TasteProfileBuilder.exclusionPromptLimit),
+        ),
+        copy.itemSeparator,
+      );
     }
 
-    final userPrompt = '以下是我的听歌数据（JSON）：\n${jsonEncode(data)}\n\n'
-        '$feedback\n'
-        '${excludeLabels.isEmpty ? '' : '这些不要再推荐：${excludeLabels.take(50).join('、')}。\n'}'
-        '请推荐 $count 首我可能喜欢的新歌（只输出 JSON）。';
-    return AiPrompt(systemPrompt: systemPrompt, userPrompt: userPrompt);
+    _writeSection(
+      buffer,
+      copy.skippedLabel,
+      _cleanLabels(skippedLabels.take(promptFeedbackLimit)),
+      copy.itemSeparator,
+    );
+    _writeSection(
+      buffer,
+      copy.likedLabel,
+      _cleanLabels(likedLabels.take(promptFeedbackLimit)),
+      copy.itemSeparator,
+    );
+    _writeSection(
+      buffer,
+      copy.moreLikeThisLabel,
+      _cleanLabels(preferences.seeds.take(promptFeedbackLimit)),
+      copy.itemSeparator,
+    );
+    _writeSection(
+      buffer,
+      copy.excludeBatchLabel,
+      _cleanLabels(excludeLabels.take(promptExcludeLimit)),
+      copy.itemSeparator,
+    );
+
+    final extra = _text(
+      preferences.extraPrompt,
+      maxLength: AiPreferences.extraPromptLimit,
+    );
+    if (extra.isNotEmpty) {
+      buffer.writeln('${copy.extraRequestLabel} $extra');
+    }
+
+    buffer.writeln();
+    buffer.writeln(copy.requirementsLine(sourceNames: sourceNames));
+    buffer.writeln(copy.outputLine);
+    buffer.writeln(copy.request(count));
+    return AiPrompt(
+      systemPrompt: copy.systemPrompt,
+      userPrompt: buffer.toString().trim(),
+    );
   }
+
+  static void _writeSection(
+    StringBuffer buffer,
+    String label,
+    Iterable<String> items,
+    String separator,
+  ) {
+    final values = <String>[];
+    for (final item in items) {
+      if (item.isNotEmpty) values.add(item);
+    }
+    if (values.isEmpty) return;
+    buffer.writeln('$label ${values.join(separator)}');
+  }
+
+  static String _artistCount(String artist, int playCount) {
+    final name = _text(artist, maxLength: _promptArtistLimit);
+    return name.isEmpty ? '' : '$name($playCount)';
+  }
+
+  static String _song(
+    String title,
+    String artist, {
+    String detail = '',
+  }) {
+    final cleanTitle = _text(title, maxLength: _promptTitleLimit);
+    if (cleanTitle.isEmpty) return '';
+    final cleanArtist = _text(artist, maxLength: _promptArtistLimit);
+    final base =
+        cleanArtist.isEmpty ? cleanTitle : '$cleanTitle - $cleanArtist';
+    return detail.isEmpty ? base : '$base($detail)';
+  }
+
+  static List<String> _cleanLabels(Iterable<String> labels) {
+    final seen = <String>{};
+    final result = <String>[];
+    for (final label in labels) {
+      final text = _text(label, maxLength: _promptLabelLimit);
+      if (text.isEmpty || !seen.add(text)) continue;
+      result.add(text);
+    }
+    return result;
+  }
+
+  /// 压成单行并限长：歌名/歌手里的换行会破坏「一段一行」的结构。
+  static String _text(String value, {required int maxLength}) {
+    final collapsed = value
+        .replaceAll(RegExp(r'[\r\n\t]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (collapsed.length <= maxLength) return collapsed;
+    return '${collapsed.substring(0, maxLength)}…';
+  }
+
+  static String _percent(double value) => '${(value * 100).round()}%';
 
   /// 容错解析：优先与文本更靠前的 `{`/`[` 配对（`{"songs":[...]}` 或裸数组）。
   static List<AiRecommendation> parseRecommendations(
@@ -432,7 +627,18 @@ class AiRecommendationService implements AiRecommendationGenerator {
     if (decoded == null && listStart >= 0) {
       decoded = _tryDecode(content, listStart, ']');
     }
-    final entries = decoded is Map ? decoded['songs'] : decoded;
+    // 提示词只要求 {"songs":[...]}；兼容常见包装键，避免模型换一个键名就
+    // 整批失败（JSON Output 保证语法，不保证字段名）。
+    var entries = decoded is Map
+        ? (decoded['songs'] ??
+            decoded['recommendations'] ??
+            decoded['tracks'] ??
+            decoded['items'] ??
+            decoded['data'])
+        : decoded;
+    if (entries is Map) {
+      entries = entries['songs'] ?? entries['items'] ?? entries;
+    }
     if (entries is! List) return const [];
 
     String textOf(dynamic value) => value?.toString().trim() ?? '';
@@ -710,54 +916,4 @@ class AiRecommendationService implements AiRecommendationGenerator {
       );
     }
   }
-
-  static String _styleText(String token) => switch (token) {
-        'pop' => '流行',
-        'rock' => '摇滚',
-        'electronic' => '电子',
-        'folk' => '民谣',
-        'rap' => '说唱',
-        'rnb' => 'R&B',
-        'jazz' => '爵士',
-        'classical' => '古典',
-        'metal' => '金属',
-        'acg' => 'ACG',
-        'instrumental' => '纯音乐',
-        'chineseStyle' => '国风',
-        _ => token,
-      };
-
-  static String _sceneText(String token) => switch (token) {
-        'commute' => '通勤',
-        'focus' => '专注',
-        'relax' => '放松',
-        'workout' => '运动',
-        'sleep' => '睡前',
-        'weekend' => '周末',
-        _ => token,
-      };
-
-  static String _languageText(String token) => switch (token) {
-        'mandarin' => '华语',
-        'cantonese' => '粤语',
-        'english' => '英语',
-        'japanese' => '日语',
-        'korean' => '韩语',
-        'instrumental' => '纯音乐',
-        _ => token,
-      };
-
-  static String _eraText(String token) => switch (token) {
-        kAiEraRecent3 => '近三年',
-        kAiEra2010s => '2010s',
-        kAiEra2000s => '2000s',
-        kAiEraBefore90 => '90 年代及更早',
-        _ => '不限',
-      };
-
-  static String _explorationText(String token) => switch (token) {
-        kAiExplorationSafe => '稳妥（贴近常听风格）',
-        kAiExplorationSurprise => '惊喜（大胆探索新风格）',
-        _ => '均衡',
-      };
 }
