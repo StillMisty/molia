@@ -123,7 +123,9 @@
   自动退化为纯 Dart timer。「播完当前歌曲」不靠进度通道判定曲末：
   `LocalPlaybackService` 在 `ProcessingState.completed` 时先发
   `trackCompletions`，并通过 `setStopAfterCurrentTrack` 在自动切歌前停住；
-  熄屏时位置 tick 被节流也不会把自然播完误判成手动切歌。
+  熄屏时位置 tick 被节流也不会把自然播完误判成手动切歌。Windows/Linux 的
+  media_kit 自然 EOF 可能不上报 completed，桌面后端另以曲末位置采样兜底
+  （见已知坑 77）。
 - **移动端后台功耗策略**：`PlaybackPowerPolicy`
   （`lib/playback/playback_power_policy.dart`）只回答「播放链路要不要按前台
   节拍工作」，与 `AppPresence`（桌面窗口可见性 → 封面预取 / 取色停产）**完全
