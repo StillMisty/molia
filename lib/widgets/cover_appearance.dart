@@ -23,6 +23,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
+import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';
 
 /// 曲目封面 URL（空串视同无封面；领域 Track 自带可靠 id/artwork）。
@@ -350,9 +351,15 @@ class MorphCover extends StatefulWidget {
 class _MorphCoverState extends State<MorphCover> {
   ImageProvider? _provider;
 
+  /// 当前解析用的有界解码边长；DPR / 窗口尺寸变化时重算。
+  int? _decodeEdge;
+
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final edge = playbackCoverDecodeEdge(context);
+    if (edge == _decodeEdge) return;
+    _decodeEdge = edge;
     _resolveProvider();
   }
 
@@ -361,6 +368,7 @@ class _MorphCoverState extends State<MorphCover> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url ||
         oldWidget.artworkCache != widget.artworkCache) {
+      _decodeEdge = playbackCoverDecodeEdge(context);
       _resolveProvider();
     }
   }
@@ -368,13 +376,18 @@ class _MorphCoverState extends State<MorphCover> {
   void _resolveProvider() {
     final url = widget.url;
     final cache = widget.artworkCache ?? ArtworkCache.instance;
-    _provider = (url == null || url.isEmpty)
-        ? null
-        : CachedNetworkImageProvider(
-            url,
-            headers: ArtworkCache.headersFor(url),
-            cacheManager: cache.managerSync,
-          );
+    if (url == null || url.isEmpty) {
+      _provider = null;
+      return;
+    }
+    final provider = CachedNetworkImageProvider(
+      url,
+      headers: ArtworkCache.headersFor(url),
+      cacheManager: cache.managerSync,
+    );
+    // 与 AppNetworkImage / 预取共用同一个有界解码键：飞行副本命中同一张
+    // 已解码图，才不会退回原图尺寸（2000×2000 = 15MB）。
+    _provider = ResizeImage.resizeIfNeeded(_decodeEdge, null, provider);
   }
 
   @override

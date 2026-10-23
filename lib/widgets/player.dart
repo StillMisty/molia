@@ -14,6 +14,7 @@ import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
+import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
@@ -259,10 +260,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     if (context.read<DataSaverService?>()?.blockNetworkArtwork ?? false) {
       return;
     }
-    // 与封面显示完全同键（共享 CacheManager、无缩放）：预取才能命中
-    // 后续 AppNetworkImage / 飞行副本的 ImageCache 查询，避免无效下载。
-    final provider = await artworkImageProvider(imageUrl);
+    // 与封面显示完全同键（共享 CacheManager、同一个有界解码边长）：
+    // 预取才能命中后续 AppNetworkImage / 飞行副本的 ImageCache 查询。
+    final coverEdge = playbackCoverDecodeEdge(context);
+    final rawProvider = await artworkImageProvider(imageUrl);
     if (!mounted) return;
+    final provider = ResizeImage.resizeIfNeeded(coverEdge, null, rawProvider);
     await precacheImage(provider, context);
   }
 
@@ -332,7 +335,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       return RepaintBoundary(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
+            constraints: const BoxConstraints(
+              maxWidth: playbackCoverMaxLogicalEdge,
+            ),
             child: _buildLargeScreenPlayerLayout(displayTrack, playbackProvider),
           ),
         ),
@@ -955,19 +960,22 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildMiniAlbumArt(Track? track, double iconSize) {
     final displayTrack = track ?? _lastTrack;
     final String? currentImageUrl = artworkUrlOf(displayTrack);
+    final coverEdge = playbackCoverDecodeEdge(context);
 
-    // 不缩放：与顶栏/播放页/预加载共用同一 ImageCache 键，
-    // 迷你 ⇄ 完整飞行与切歌动画才能复用同一张已解码图。
+    // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
+    // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
     return AppNetworkImage(
       key: ValueKey(currentImageUrl),
       url: currentImageUrl,
       fit: BoxFit.cover,
       fallbackIconSize: iconSize,
+      memCacheWidth: coverEdge,
       placeholder: _lastTrack != null && _lastImageUrl != null
           ? AppNetworkImage(
               url: _lastImageUrl,
               fit: BoxFit.cover,
               fallbackIconSize: iconSize,
+              memCacheWidth: coverEdge,
             )
           : buildDefaultArtwork(context),
       errorWidget: buildDefaultArtwork(context),

@@ -41,12 +41,15 @@ class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
   }
 }
 
-/// 生成 8x8 纯色 PNG 字节：驱动「本地缓存字节」启动预解析路径。
-Future<Uint8List> _pngBytes(Color color) async {
+/// 生成 [size]×[size] 纯色 PNG 字节：驱动「本地缓存字节」启动预解析路径。
+Future<Uint8List> _pngBytes(Color color, {int size = 8}) async {
   final recorder = ui.PictureRecorder();
   final canvas = Canvas(recorder);
-  canvas.drawRect(const Rect.fromLTWH(0, 0, 8, 8), Paint()..color = color);
-  final image = await recorder.endRecording().toImage(8, 8);
+  canvas.drawRect(
+    Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+    Paint()..color = color,
+  );
+  final image = await recorder.endRecording().toImage(size, size);
   final data = await image.toByteData(format: ui.ImageByteFormat.png);
   return data!.buffer.asUint8List();
 }
@@ -81,6 +84,39 @@ void main() {
           await tester.runAsync(() => service.load('https://example.com/a.jpg'));
       expect(identical(second, first), isTrue);
       expect(providerCalls, 1);
+    });
+
+    testWidgets('取色只缓存 100px 采样图，不把原图留在图片缓存', (tester) async {
+      final dir = (await tester.runAsync(
+          () => Directory.systemTemp.createTemp('molia_palette_probe')))!;
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/large-cover.png');
+      await tester.runAsync(() async {
+        await file.writeAsBytes(
+          await _pngBytes(const Color(0xFF00BB00), size: 512),
+        );
+      });
+
+      final cache = PaintingBinding.instance.imageCache;
+      cache.clear();
+      cache.clearLiveImages();
+
+      final service = ArtworkPaletteService(
+        providerFor: (url) async => FileImage(file),
+      );
+      final before = cache.currentSizeBytes;
+      final palette =
+          await tester.runAsync(() => service.load(file.uri.toString()));
+      final after = cache.currentSizeBytes;
+
+      expect(palette, isNotNull);
+      // 512×512 原图约 1MB；缩到采样边长 100px 后只应留下约 40KB。
+      expect(
+        after - before,
+        lessThan(256 * 1024),
+        reason: '取色不应把原图按 512px 留在共享图片缓存',
+      );
+      cache.clear();
     });
 
     testWidgets('同 URL 并发请求合并为一次提取', (tester) async {

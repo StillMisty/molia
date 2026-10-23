@@ -47,7 +47,8 @@ class ArtworkPalette {
 /// 海报「跟随封面」全部查本服务，禁止任何模块自行提取像素。
 ///
 /// - 封面走共享封面缓存（`artworkImageProvider`）：与封面显示同一份磁盘缓存
-///   与请求头，不二次下载；不加缩放参数，命中显示路径的同一条目；
+///   与请求头，不二次下载；解码统一缩到采样边长（100px），不把原图留在
+///   Flutter 图片缓存里（显示面会按自己的有界尺寸单独解码）；
 /// - 系统壁纸走 [loadLocalFile]（读盘字节 → 同一缩略解码路径，不解码全图）；
 /// - 省流模式（`ArtworkCache` 网关只读本地缓存）下未命中会抛错：这里吞掉
 ///   并返回 null，调用方保持现色（不回退、不闪变）；
@@ -152,7 +153,15 @@ class ArtworkPaletteService {
   Future<ArtworkPalette?> _extract(String url) async {
     try {
       final imageProvider = await _providerFor(url);
-      final pixels = await _extractPixels(imageProvider);
+      // 取色只需要 100px 的色调信息：把显示路径的原图解码降到采样尺寸。
+      // 不缩放时一张 2000×2000 封面会在图片缓存里留 15MB，而取色结果只有
+      // 几百字节；独立的小缓存键（约 40KB）也不会挤掉正在显示的封面。
+      final sampleProvider = ResizeImage.resizeIfNeeded(
+        _sampleTargetSize,
+        null,
+        imageProvider,
+      );
+      final pixels = await _extractPixels(sampleProvider);
       return await _paletteFromPixels(url, pixels);
     } catch (e) {
       // 省流未命中（ArtworkNetworkBlockedException）/ 网络失败 / 解码失败：

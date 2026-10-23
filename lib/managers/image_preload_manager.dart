@@ -6,7 +6,11 @@ import 'package:logging/logging.dart';
 
 import '../domain/models/track.dart';
 import '../services/app_presence.dart';
+import '../utils/playback_cover_decode.dart';
 import 'artwork_cache.dart';
+
+/// 预取去重键：同一 URL 的不同解码宽度是两条 ImageCache 条目。
+typedef _PreloadKey = ({String url, int? memCacheWidth});
 
 /// 图片预加载管理器：优先级队列、并发控制与 LRU 去重。
 class ImagePreloadManager {
@@ -20,10 +24,13 @@ class ImagePreloadManager {
   /// 后台期解码的图只会白占内存，恢复后由调用方补一次。
   final AppPresence _presence = AppPresence.instance;
 
-  /// 已缓存的图片 URL（LRU 缓存）
-  final LinkedHashMap<String, DateTime> _cachedUrls = LinkedHashMap();
+  /// 已缓存的图片键（LRU 缓存）。
+  ///
+  /// 键必须带解码宽度：同一 URL 的 44dp 队列缩略图与播放页大图是两条
+  /// ImageCache 条目，只按 URL 去重会让后到的一方拿不到预取。
+  final LinkedHashMap<_PreloadKey, DateTime> _cachedUrls = LinkedHashMap();
 
-  final Set<String> _loadingUrls = {};
+  final Set<_PreloadKey> _loadingUrls = {};
 
   final List<_PreloadTask> _queue = [];
 
@@ -48,14 +55,14 @@ class ImagePreloadManager {
     int? memCacheWidth,
   }) {
     if (url == null || url.isEmpty) return;
-    if (_cachedUrls.containsKey(url)) return;
-    if (_loadingUrls.contains(url)) return;
+    final key = (url: url, memCacheWidth: memCacheWidth);
+    if (_cachedUrls.containsKey(key)) return;
+    if (_loadingUrls.contains(key)) return;
 
     _queue.add(_PreloadTask(
-      url: url,
+      key: key,
       priority: priority,
       context: context,
-      memCacheWidth: memCacheWidth,
     ));
     _queue.sort((a, b) => b.priority.compareTo(a.priority));
 
@@ -79,16 +86,24 @@ class ImagePreloadManager {
     // 先收集任务再统一入队：避免在 async gap 之后使用 context。
     final tasks = <({String url, int priority, int? memCacheWidth})>[];
 
+    // 播放页三封面 / 顶栏 / 迷你条 / 飞行副本共用一个有界解码键。
+    // 按原图预取会让每首 2000×2000 封面占 15MB，切十几首就打满缓存。
+    final coverEdge = playbackCoverDecodeEdge(context);
+
     if (currentAlbumArt != null) {
-      tasks.add((url: currentAlbumArt, priority: 100, memCacheWidth: null));
+      tasks.add((url: currentAlbumArt, priority: 100, memCacheWidth: coverEdge));
     }
 
     if (nextAlbumArt != null) {
-      tasks.add((url: nextAlbumArt, priority: 90, memCacheWidth: null));
+      tasks.add((url: nextAlbumArt, priority: 90, memCacheWidth: coverEdge));
     }
 
     if (previousAlbumArt != null) {
-      tasks.add((url: previousAlbumArt, priority: 80, memCacheWidth: null));
+      tasks.add((
+        url: previousAlbumArt,
+        priority: 80,
+        memCacheWidth: coverEdge,
+      ));
     }
 
     if (queueAlbumArts != null) {
@@ -127,22 +142,22 @@ class ImagePreloadManager {
     while (_currentConcurrent < _maxConcurrent && _queue.isNotEmpty) {
       final task = _queue.removeAt(0);
 
-      if (_cachedUrls.containsKey(task.url) ||
-          _loadingUrls.contains(task.url)) {
+      if (_cachedUrls.containsKey(task.key) ||
+          _loadingUrls.contains(task.key)) {
         continue;
       }
 
       _currentConcurrent++;
-      _loadingUrls.add(task.url);
+      _loadingUrls.add(task.key);
 
       _loadImage(task).then((_) {
         _currentConcurrent--;
-        _loadingUrls.remove(task.url);
+        _loadingUrls.remove(task.key);
         _processQueue();
       }).catchError((e) {
         _currentConcurrent--;
-        _loadingUrls.remove(task.url);
-        _logger.warning('预加载图片失败: ${task.url}, 错误: $e');
+        _loadingUrls.remove(task.key);
+        _logger.warning('预加载图片失败: ${task.key.url}, 错误: $e');
         _processQueue();
       });
     }
@@ -151,10 +166,10 @@ class ImagePreloadManager {
   Future<void> _loadImage(_PreloadTask task) async {
     if (!task.context.mounted) return;
 
-    final imageProvider = await artworkImageProvider(task.url);
+    final imageProvider = await artworkImageProvider(task.key.url);
     if (!task.context.mounted) return;
     final provider = ResizeImage.resizeIfNeeded(
-      task.memCacheWidth,
+      task.key.memCacheWidth,
       null,
       imageProvider,
     );
@@ -166,14 +181,14 @@ class ImagePreloadManager {
       await provider.evict();
       return;
     }
-    _addToCache(task.url);
+    _addToCache(task.key);
   }
 
-  void _addToCache(String url) {
+  void _addToCache(_PreloadKey key) {
     // 如果已存在，先移除（为了更新 LRU 顺序）
-    _cachedUrls.remove(url);
+    _cachedUrls.remove(key);
 
-    _cachedUrls[url] = DateTime.now();
+    _cachedUrls[key] = DateTime.now();
 
     while (_cachedUrls.length > _maxCacheSize) {
       _cachedUrls.remove(_cachedUrls.keys.first);
@@ -182,16 +197,14 @@ class ImagePreloadManager {
 }
 
 class _PreloadTask {
-  final String url;
+  final _PreloadKey key;
   final int priority;
   final BuildContext context;
-  final int? memCacheWidth;
 
   _PreloadTask({
-    required this.url,
+    required this.key,
     required this.priority,
     required this.context,
-    this.memCacheWidth,
   });
 }
 

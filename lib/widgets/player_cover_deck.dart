@@ -51,6 +51,7 @@ import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
+import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'molia_mark.dart';
@@ -100,6 +101,7 @@ Widget buildDefaultArtwork(
       url: lastPlayedImageUrl,
       fit: fit,
       fallbackIconSize: iconSize,
+      memCacheWidth: playbackCoverDecodeEdge(context),
       errorWidget: buildFallbackArtwork(context, key: key, iconSize: iconSize),
     );
   }
@@ -1420,11 +1422,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       size: size,
       appearance: CoverAppearance.page,
       content: (context, clip, iconSize) {
+        final coverEdge = playbackCoverDecodeEdge(context);
         final placeholder = placeholderUrl != null && placeholderUrl != url
             ? AppNetworkImage(
                 url: placeholderUrl,
                 fit: BoxFit.cover,
                 fallbackIconSize: iconSize,
+                memCacheWidth: coverEdge,
               )
             : fallback;
         return AppNetworkImage(
@@ -1432,6 +1436,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           fit: BoxFit.cover,
           // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
           fallbackIconSize: iconSize,
+          memCacheWidth: coverEdge,
           placeholder: placeholder,
           errorWidget: fallback,
         );

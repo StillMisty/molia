@@ -19,6 +19,7 @@ import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/haptics.dart';
+import '../../utils/playback_cover_decode.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/cover_appearance.dart';
 import '../../widgets/icon_swap.dart';
@@ -159,6 +160,7 @@ class _TrackSection extends StatelessWidget {
                             url: artworkUrlOf(track),
                             borderRadius: clip,
                             fallbackIconSize: iconSize,
+                            memCacheWidth: playbackCoverDecodeEdge(context),
                           ),
                         ),
                       ),

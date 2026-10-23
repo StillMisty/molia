@@ -38,6 +38,7 @@ import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
+import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_appearance.dart';
@@ -1046,6 +1047,9 @@ class _BarCover extends StatelessWidget {
         borderRadius: clip,
         // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
         fallbackIconSize: iconSize,
+        // 与播放页 / 迷你条共用同一个有界解码键：飞行副本命中同一张图，
+        // 不会在 40dp 顶栏里留一张原图。
+        memCacheWidth: playbackCoverDecodeEdge(context),
       ),
     );
   }
