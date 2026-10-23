@@ -924,7 +924,7 @@
   宿主自实现预览：宿主自己当手势观察者，guard（`onDismissRequest`）非空时也接管
   （material_3_expressive ≥ 1.1.7），提交后交给 guard 裁决——guard 拒绝则预览回弹、
   表面留在原位；1.1.6 及以下宿主在 guard 非空时直接放弃手势，那条链路会静默退化成
-  「无预览」的普通返回，故依赖下限 1.1.7（原因见 `pubspec.yaml` 注释）。本仓库大屏的
+  「无预览」的普通返回，故依赖下限 1.1.7（当前 1.2.0；原因见 `pubspec.yaml` 注释）。本仓库大屏的
   侧边弹层（`showGeneralDialog`）与居中对话框（`showDialog`）不是 M3E 组件、不参与
   页面过渡、无预览（侧边弹层的手势支持待补）。嵌套 Navigator（设置弹层内层）由
   `SettingsPage._SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
@@ -994,7 +994,7 @@
     气泡只是噪音，桌面鼠标扫过尤其明显；`tooltip` 只留给图标表达不了的文本：
     热力图数据值、页圆点隐藏标题；护栏 `test/architecture/tooltip_usage_test.dart`）。
     纯图标动作需要中性色时用 `style: text` +
-    组级 `decoration.foregroundColor`（`material_3_expressive ≥ 1.1.8`）；
+    组级 `decoration.foregroundColor`（`material_3_expressive ≥ 1.2.0`）；
   - 「主操作 + 变体 / 次要出口」→ `M3ESplitButton`（播放全部 ▾ 随机播放全部·加入列表、
     下载并安装 ▾ 打开发布页、复制 ▾ 复制全部）；纯文本样式不支持（包内断言
     `style != text`）；「随机播放全部」先 `setPlayMode(shuffle)` 再装载队列、
