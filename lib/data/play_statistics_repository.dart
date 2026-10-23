@@ -95,15 +95,6 @@ class PlayStatisticsRepository {
   static const String _countablePredicate =
       "endedAt IS NOT NULL AND COALESCE(endReason, '') <> 'error'";
 
-  /// DSL 查询用的公共过滤（复用 [_countablePredicate] 的同一份 SQL 文本）。
-  Expression<bool> get _countable =>
-      CustomExpression<bool>(_countablePredicate);
-
-  /// 公共过滤 + 可选起始时间（[since] 为 null 表示全部历史）。
-  Expression<bool> _countableSince(int? since) => since == null
-      ? _countable
-      : _countable & _db.playEvents.startedAt.isBiggerOrEqualValue(since);
-
   // 写入（采集服务调用；所有写操作由调用方保证顺序）
 
   /// 开始一次播放事件，返回行 id（`endedAt` 为 null = 进行中）。
@@ -343,26 +334,35 @@ class PlayStatisticsRepository {
   }
 
   /// Top 歌手（artist 串按分隔符拆分，各计一次有效播放）。
+  ///
+  /// 逐事件的有效判定与求和下沉到 SQL（按原始 artist 串分组）：20k 事件
+  /// 保留窗口下避免把整张事件表读进 Dart 再逐行聚合。Dart 只做拆分合并与
+  /// 排序——同一原始串拆出的歌手各得一份该组的计数 / 时长。
   Future<List<PlayStatArtistEntry>> topArtists({
     int? since,
     int limit = 10,
   }) async {
-    final events = _db.playEvents;
-    final tracks = _db.playTracks;
-    final rows = await (_db.selectOnly(events)
-          ..addColumns([tracks.artist, tracks.durationMs, events.listenedMs])
-          ..join([
-            innerJoin(tracks, tracks.id.equalsExp(events.trackId)),
-          ])
-          ..where(_countableSince(since)))
-        .get();
+    final rows = await _db.customSelect('''
+      SELECT
+        pt.artist AS artist,
+        SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount,
+        COALESCE(SUM(CASE WHEN ($_qualifiedPredicate) THEN e.listenedMs ELSE 0 END), 0)
+            AS listenedMs
+      FROM play_events e
+      JOIN play_tracks pt ON pt.id = e.trackId
+      WHERE $_countablePredicate${since != null ? ' AND e.startedAt >= ?' : ''}
+      GROUP BY pt.artist
+      HAVING playCount > 0
+    ''', variables: [if (since != null) Variable.withInt(since)]).get();
     final counts = <String, int>{};
     final listened = <String, int>{};
     for (final row in rows) {
-      final listenedMs = row.read(events.listenedMs) ?? 0;
-      if (!_isQualified(listenedMs, row.read(tracks.durationMs))) continue;
-      for (final name in splitArtistNames(row.read(tracks.artist) ?? '')) {
-        counts[name] = (counts[name] ?? 0) + 1;
+      final playCount = _intOf(row.data['playCount']);
+      final listenedMs = _intOf(row.data['listenedMs']);
+      // 空串拆不出名字（自然无贡献），与逐事件过滤等价。
+      for (final name
+          in splitArtistNames(row.data['artist'] as String? ?? '')) {
+        counts[name] = (counts[name] ?? 0) + playCount;
         listened[name] = (listened[name] ?? 0) + listenedMs;
       }
     }
