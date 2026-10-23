@@ -32,7 +32,9 @@ export 'cache_storage.dart'
 ///   文件系统解耦；
 /// - **音频缓存磁盘约定**（文件名 / 完整判据 / 索引 / 命中 / 清扫 / 迁移）
 ///   唯一实现在 [AudioCacheStore]：本服务只做策略与通知，避免写入侧与读取侧
-///   再次分叉（见 ADR-0008）。
+///   再次分叉（见 ADR-0008）；
+/// - **歌词缓存**：默认实例是 prefs-only；生产组合根启动时经
+///   [attachLyricsCache] 接入文件后端，取词与缓存页统计共享同一实例。
 class CacheService {
   CacheService({
     SharedPreferences? prefs,
@@ -52,6 +54,16 @@ class CacheService {
 
   /// 全局单例（main.dart 注册前的默认入口）。
   static final CacheService instance = CacheService();
+
+  /// 由组合根接入生产歌词缓存（文件后端）。
+  ///
+  /// [instance] 在静态初始化时创建，此时还没有 `path_provider` / 文件系统
+  /// 上下文，因此默认实例保持 prefs-only。组合根在启动早期用
+  /// `LyricsCache.appSupport()` 替换，让取词与缓存页统计共享同一实例。
+  /// 不要在运行期反复替换（会丢掉已持有的引用）。
+  void attachLyricsCache(LyricsCache cache) {
+    _lyricsCache = cache;
+  }
 
   /// 缓存内容版本号：写入 / 清理 / 淘汰后递增，供「占用展示」跨页刷新。
   ///
@@ -95,7 +107,7 @@ class CacheService {
   static const int _mbBytes = 1024 * 1024;
 
   final CacheStorage _storage;
-  final LyricsCache _lyricsCache;
+  LyricsCache _lyricsCache;
   final Duration _audioProtectAge;
   late final AudioCacheStore _audioStore;
   SharedPreferences? _prefs;

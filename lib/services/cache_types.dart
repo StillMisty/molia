@@ -10,7 +10,8 @@ enum CachePartition {
   /// 音频边播边缓存（持久目录，LRU 按文件 mtime 淘汰）。
   audio,
 
-  /// 歌词缓存（SharedPreferences JSON，TTL 从策略读取）。
+  /// 歌词缓存（生产组合根启用文件后端：单条 JSON 文件 + 旧版 prefs 懒迁移；
+  /// 默认实例仍走 prefs；TTL 从策略读取）。
   lyrics,
 
   /// 封面缓存（flutter_cache_manager 持久文件 + 策略 sweep）。
@@ -32,10 +33,10 @@ const String audioCacheMimeSuffix = '.mime';
 class CacheUsage {
   const CacheUsage({required this.bytes, required this.count});
 
-  /// 占用字节数（歌词为 JSON 文本 UTF-8 字节数）。
+  /// 占用字节数（歌词为 JSON 文件字节数；旧版 prefs 条目按 UTF-8 计）。
   final int bytes;
 
-  /// 条目数（音频/封面为文件数，歌词为缓存键数）。
+  /// 条目数（音频/封面为文件数；歌词为文件数 + 未迁移的旧版 prefs 键数）。
   final int count;
 
   static const CacheUsage zero = CacheUsage(bytes: 0, count: 0);

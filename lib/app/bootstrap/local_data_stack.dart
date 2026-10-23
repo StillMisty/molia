@@ -25,6 +25,7 @@ import '../../services/cache_service.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
+import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
 import 'catalog_stack.dart';
 import 'startup_trace.dart';
@@ -43,6 +44,13 @@ Future<LocalDataStack> buildLocalDataStack({
   required CatalogStack catalog,
 }) async {
   final sourceManager = catalog.sourceManager;
+
+  // 歌词缓存的文件后端只在生产组合根显式启用：默认 `LyricsCache()` 保持
+  // prefs-only，避免 widget 测试 / 降级平台在 fake async 下等待平台通道与文件
+  // Future。`appSupport()` 只登记惰性 resolver，不在这里解析目录，首帧不受影响。
+  // 取词服务与缓存页统计必须共享同一实例，否则一边写文件、一边读/清 prefs。
+  final lyricsCache = LyricsCache.appSupport();
+  CacheService.instance.attachLyricsCache(lyricsCache);
 
   // 省流模式（仅移动数据生效）：必须在解析/播放/封面链路创建前就绪，
   // 供取链回调、封面网关与播放 provider 共享同一实例。
@@ -68,6 +76,8 @@ Future<LocalDataStack> buildLocalDataStack({
   // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
   // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg，精确平台 ID）。
   final lyricsService = LyricsService(
+    // 与 `CacheService.instance` 共享同一个文件后端实例（见上）。
+    lyricsCache: lyricsCache,
     // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
     networkFallbackAllowed: (track) => track.id.sourceKey != kLocalSourceKey,
     trackLyricLoader: (track) async {
