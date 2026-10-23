@@ -248,8 +248,9 @@
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
   与 `play_history`（最近播放，500 条上限）是两套数据。
 - **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
-  网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 最近 200 条明细 +
-  可选收藏/歌单，上限集中）、`LlmClient`（OpenAI-compatible，请求带
+  网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 最近 50 条明细 +
+  可选收藏/歌单，上限集中；提示词用紧凑行格式并按应用语言切换文案）、
+  `LlmClient`（OpenAI-compatible，请求带
   `response_format: json_object`（不支持时自动退回），错误归一化
   `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
   容错 JSON → 规范化去重 → `CatalogService.search` 按音源页顺序遍历全部可搜索

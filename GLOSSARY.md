@@ -496,8 +496,9 @@
   （`SyncCategory.settings`）。偏好页即时保存（没有保存按钮），改动只影响
   下一次生成，不自动消耗额度。
 - **发送范围（upstream scope）** — `TasteProfileBuilder` 按 `AiPreferences.sections`
-  裁剪上行 JSON：汇总统计 / 常听歌手 / 常听歌曲 / 时段与来源分布 / 最近播放明细
-  / 已听排除清单（默认开），收藏歌曲与自建歌单（默认关，opt-in）。
+  裁剪上行数据（紧凑行格式）：汇总统计 / 常听歌手 / 常听歌曲 / 时段与来源分布 /
+  最近播放明细 / 已听排除清单（默认开），收藏歌曲与自建歌单（默认关，opt-in）。
+  最近播放最多 50 条；已听清单发送最近 100 首，本地去重仍读最近 500 首；
   收藏最多 100 首；自建歌单最多 10 个、每单 20 首、总计 100 首；只发歌名、
   歌手与歌单名，不含 raw payload / 封面 / 播放链接；开启时曲目进入本地排除集合。
 - **找歌渠道（source channels）** — 不在用户界面暴露：解析统一按音源页渠道
@@ -514,9 +515,10 @@
   `kAiDjFeedbackMemory`（`SyncCategory.settings`）。生成时合并长期记忆与本轮
   反馈；种子在下一批成功生成后消费；「清空 AI 记忆」删除长期记忆与本轮反馈。
 - **Taste profile（听歌画像）** — `lib/services/ai/taste_profile_builder.dart`：
-  上行 LLM 的唯一数据出口（按发送范围读聚合统计 + 最近 200 条明细 + 已听排除
-  清单 + 可选收藏/歌单，上限集中在此）；不含 raw payload / 设备信息；首次
-  开启需隐私确认（`AiSettingsStore.consentKey`）。
+  上行 LLM 的唯一数据出口（按发送范围读聚合统计 + 最近 50 条明细 + 已听排除
+  清单前 100 首 + 可选收藏/歌单，上限集中在此）；不含 raw payload / 设备信息；
+  首次开启需隐私确认（`AiSettingsStore.consentKey`）。提示词文案（system、
+  段名、偏好值、reason 语言）由 `ai_prompt_text.dart` 按应用语言切换。
 - **Closed-book + local resolve（闭卷生成 + 本地解析）** —
   `lib/services/ai/ai_recommendation_service.dart`：LLM 只输出
   `{title, artist, reason}` JSON（容错解析 + 规范化去重），本地
