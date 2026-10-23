@@ -268,15 +268,30 @@ class SyncProvider extends ChangeNotifier {
   bool get lanPermissionPermanentlyDenied =>
       _lanPermission?.permanentlyDenied ?? false;
 
-  /// 显式申请局域网权限（用户点「授予权限」）；授予后重启局域网传输。
+  /// 局域网权限需要用户处理：设置页据此显示常驻警告行（桌面歌词同款）。
   ///
-  /// 先 `refresh` 再申请：用户可能刚在系统设置里开过权限，缓存状态会过时。
+  /// 除了权限门自己的状态，还兼容「状态尚未复查、但传输已因权限不可用」：
+  /// 启动时局域网已开启的路径由后台传输过门，页面等一次状态刷新即可看到。
+  bool get lanPermissionNeedsAttention {
+    final permission = _lanPermission;
+    if (permission == null || !permission.needsPermission) return false;
+    if (permission.needsUserAction) return true;
+    return enabledTransports.contains(SyncTransportKind.lan) &&
+        transportStatus(SyncTransportKind.lan)?.unavailableReason ==
+            SyncUnavailableReason.permissionDenied;
+  }
+
+  /// 显式申请局域网权限（用户点「去授权」）；授予后启用局域网传输。
   Future<bool> requestLanPermission() async {
     final permission = _lanPermission;
     if (permission == null) return true;
-    if (!await permission.refresh()) await permission.ensure(retry: true);
-    final granted = permission.granted;
-    if (granted) await setTransportEnabled(SyncTransportKind.lan, true);
+    var granted = false;
+    try {
+      granted = await permission.ensure(retry: true);
+    } catch (e) {
+      debugPrint('[Molia] 申请局域网权限失败: $e');
+    }
+    if (granted) await _applyTransportEnabled(SyncTransportKind.lan, true);
     notifyListeners();
     return granted;
   }
@@ -337,7 +352,32 @@ class SyncProvider extends ChangeNotifier {
   ///
   /// 开传输即启用同步：口令在这里兜一层（正常已由 [init] 生成；init 异常降级
   /// 的路径也能补上），保证「开传输 → 附近设备配对」的链路不缺口令。
-  Future<void> setTransportEnabled(String kind, bool value) async {
+  ///
+  /// 返回 false 只表示本次「打开」被局域网权限拦下（开关应保持关闭）；
+  /// 权限已授予但传输启动失败仍返回 true，失败由开关副文案与日志呈现。
+  Future<bool> setTransportEnabled(String kind, bool value) async {
+    if (value && kind == SyncTransportKind.lan) {
+      final permission = _lanPermission;
+      if (permission != null && permission.needsPermission) {
+        var granted = false;
+        try {
+          granted = await permission.ensure(retry: true);
+        } catch (e) {
+          debugPrint('[Molia] 申请局域网权限失败: $e');
+        }
+        if (!granted) {
+          // 未授权不假装开启：立刻回到关闭，UI 用底栏 + 常驻警告行引导授权。
+          await _applyTransportEnabled(kind, false);
+          return false;
+        }
+      }
+    }
+    await _applyTransportEnabled(kind, value);
+    return true;
+  }
+
+  /// 控制面写入 + 口令兜底（不经过权限门，供授权成功后的启用路径复用）。
+  Future<void> _applyTransportEnabled(String kind, bool value) async {
     if (value) await _controlPlane.ensurePassphrase();
     await _controlPlane.setTransportEnabled(kind, value);
   }
@@ -432,11 +472,38 @@ class SyncProvider extends ChangeNotifier {
   /// 用户交互（界面操作）。
   void notifyInteraction() => _scheduler?.notifyInteraction();
 
-  /// 回到前台：先让已启用的局域网传输恢复（重绑 / 公告），再拉一次
-  /// （有本地变更时一并推送）。
+  /// 回到前台：先让已启用的局域网传输恢复（重绑 / 公告），复查权限，
+  /// 再拉一次（有本地变更时一并推送）。
   Future<void> onAppResumed() async {
     await _controlPlane.onAppResumed();
+    await _refreshLanPermissionIfKnown();
     _scheduler?.onAppVisible();
+  }
+
+  /// 回前台复查权限（不弹窗）。
+  ///
+  /// 只在局域网已开启或本会话已申请过时查询：避免首次启动就把「未申请」
+  /// 误判成「被拒」并常驻警告行。授权后立刻启动已启用的局域网传输；
+  /// 警告行 / 权限状态由 [notifyListeners] 更新。
+  Future<void> _refreshLanPermissionIfKnown() async {
+    final permission = _lanPermission;
+    if (permission == null || !permission.needsPermission) return;
+    final lanEnabled = enabledTransports.contains(SyncTransportKind.lan);
+    if (!lanEnabled && !permission.needsUserAction) return;
+    try {
+      await permission.refresh();
+    } catch (e) {
+      debugPrint('[Molia] 复查局域网权限失败: $e');
+      return;
+    }
+    if (permission.granted && lanEnabled) {
+      try {
+        await startTransports();
+      } catch (e) {
+        debugPrint('[Molia] 授权后启动局域网传输失败: $e');
+      }
+    }
+    notifyListeners();
   }
 
   /// 退后台 / 锁屏：先让传输停止发现（公告 / 重连计时器），再取消调度器

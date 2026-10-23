@@ -263,6 +263,22 @@ void main() {
     expect(pairing.stopScanCalls, greaterThan(0));
   });
 
+  testWidgets('附近设备：局域网已开但传输未运行，授权后变为运行会补扫', (tester) async {
+    // 直接写状态不启动传输：模拟启动时权限缺失（开关已开、传输不可用）。
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
+    transport.unavailableReason = SyncUnavailableReason.permissionDenied;
+    await pumpPage(tester);
+    expect(pairing.startScanCalls, 1);
+
+    // 授权后传输恢复运行：即使开关没有 false → true，也要重新扫描候选。
+    transport.unavailableReason = null;
+    await transport.start();
+    await control.setDeviceName('授权后的设备');
+    await tester.pumpAndSettle();
+
+    expect(pairing.startScanCalls, greaterThan(1));
+  });
+
   testWidgets('附近设备：开局域网即扫描；空态可重新查找并落到「没有发现设备」', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);

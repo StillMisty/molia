@@ -138,7 +138,16 @@ Future<SyncStack> buildSyncStack({
     // 探测应答携带最近一轮快照的内容指纹与日志头部：对端据此跳过未变的 GET。
     snapshotIdProvider: () => engineRef?.lastEnvelope?.snapshotId ?? '',
     journalHeadProvider: () => engineRef?.lastEnvelope?.journalHead ?? 0,
-    permissionGate: () => lanPermission.ensure(),
+    // 启动 / 每轮同步只查询权限，不弹窗；权限窗只由用户打开局域网开关
+    // 或点「去授权」触发（见 SyncProvider.setTransportEnabled）。
+    permissionGate: () async {
+      try {
+        return await lanPermission.refresh();
+      } catch (e) {
+        debugPrint('[Molia] 查询局域网权限失败: $e');
+        return false;
+      }
+    },
     manualPeersProvider: () => syncState.manualPeers,
     onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
     httpPortProvider: () => syncState.lanHttpPort,

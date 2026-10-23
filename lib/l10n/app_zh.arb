@@ -1332,6 +1332,8 @@
   "syncLanPermissionTitle": "授予局域网权限",
   "syncLanPermissionSubtitle": "Android 17 起访问局域网设备需要「附近设备」权限",
   "syncLanPermissionDenied": "未获得权限：局域网同步不可用（手动填地址同样无效），可改用 WebDAV",
+  "syncLanPermissionNeeded": "需要局域网权限",
+  "syncLanPermissionGrant": "去授权",
   "syncOpenSystemSettings": "去系统设置",
   "syncPeerHostLabel": "地址",
   "syncPeerHostHint": "例如 192.168.1.23 或 2409:8a55::5",

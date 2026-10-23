@@ -721,7 +721,10 @@
 - **Local network permission（局域网权限门）** —
   `transport/local_network_permission.dart`：Android 17 / API 37 起局域网访问
   默认阻断，LAN 传输启动前先过门；**权限被拒时手动对端地址同样无效**
-  （网关级阻断），只能授权或转 WebDAV。申请 / 查询 / 跳系统设置可注入，单测不触发平台通道。
+  （网关级阻断），只能授权或转 WebDAV。申请时机只跟用户动作走：打开局域网
+  开关 / 点「去授权」时 `ensure(retry: true)`（先复查再申请），被拒开关回退
+  关闭并给底栏 + 常驻警告行；启动与轮次只 `refresh()`，冷启动不弹窗。
+  申请 / 查询 / 跳系统设置可注入，单测不触发平台通道。
 - **Manual peer（手动对端）** — `ManualPeer{host, probePort?, httpPort, deviceId,
   name}`：**发现失败**（AP 隔离 / 多网段 / 防火墙 / VPN）时的兜底，与广播发现
   合并进同一名册；首次单播探测后认领 `deviceId` 与端点端口并回写，学到端口后

@@ -55,6 +55,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   bool _nearbySearchSettled = false;
   bool _lanEnabled = false;
 
+  /// 局域网传输是否真正运行：授权前开关可能已开启但传输不可用，
+  /// 授权成功后由 false → true 触发一次附近设备扫描。
+  bool _lanRunning = false;
+
   @override
   void initState() {
     super.initState();
@@ -63,6 +67,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     final provider = context.read<SyncProvider>();
     _provider = provider;
     _lanEnabled = _isLanEnabled(provider);
+    _lanRunning = _isLanRunning(provider);
     provider.refreshLocalEndpoints();
     // 打开同步页自动检查一轮：设备行显示的是「最近一轮是否真的接触成功」，
     // 不跑一轮就只能是旧状态。首帧后再触发，避免在构建期通知 provider；
@@ -80,13 +85,16 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // provider 通知会触发 didChangeDependencies：只有局域网开关变化才重扫
-    // 附近设备（端口 / 地址变化由扫描端自己处理）。
+    // provider 通知会触发 didChangeDependencies：局域网开关变化时重扫
+    // 附近设备（端口 / 地址变化由扫描端自己处理）。开关原本已开、只是
+    // 传输从不可用变为运行（例如刚授权）时也要补一次扫描。
     final provider = context.watch<SyncProvider>();
     _provider = provider;
     final lanEnabled = _isLanEnabled(provider);
+    final lanRunning = _isLanRunning(provider);
     if (_lanEnabled != lanEnabled) {
       _lanEnabled = lanEnabled;
+      _lanRunning = lanRunning;
       if (lanEnabled) {
         _scheduleNearbyScan();
       } else {
@@ -94,7 +102,11 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         _nearbySearchSettled = false;
         provider.stopNearbyScan();
       }
+      return;
     }
+    final becameRunning = lanRunning && !_lanRunning;
+    _lanRunning = lanRunning;
+    if (becameRunning) _scheduleNearbyScan();
   }
 
   @override
@@ -108,6 +120,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
 
   static bool _isLanEnabled(SyncProvider provider) =>
       provider.enabledTransports.contains(SyncTransportKind.lan);
+
+  static bool _isLanRunning(SyncProvider provider) =>
+      _isLanEnabled(provider) &&
+      (provider.transportStatus(SyncTransportKind.lan)?.running ?? false);
 
   /// 传输开关在事件里变化：等本帧结束再探测，避免在 build / didChangeDependencies
   /// 期间同步推流触发重入。
@@ -201,26 +217,13 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           subtitle: lanState.text,
           subtitleColor: lanState.color,
           value: provider.enabledTransports.contains(SyncTransportKind.lan),
-          onChanged: (value) => unawaited(
-              provider.setTransportEnabled(SyncTransportKind.lan, value)),
+          onChanged: (value) =>
+              unawaited(_setLanEnabled(context, provider, l10n, value)),
         ),
-        // 权限被拒时给可行动入口（手动地址救不了权限，只能授权或转 WebDAV）。
-        if (_needsLanPermission(provider))
-          SettingsNavTile(
-            key: const Key('settingsSyncLanPermissionItem'),
-            icon: provider.lanPermissionPermanentlyDenied
-                ? Icons.settings_rounded
-                : Icons.lock_open_rounded,
-            title: provider.lanPermissionPermanentlyDenied
-                ? l10n.syncOpenSystemSettings
-                : l10n.syncLanPermissionTitle,
-            subtitle: provider.lanPermissionPermanentlyDenied
-                ? l10n.syncLanPermissionPermanentSubtitle
-                : l10n.syncLanPermissionSubtitle,
-            onTap: () => unawaited(provider.lanPermissionPermanentlyDenied
-                ? provider.openSystemSettings()
-                : _requestLanPermission(context, provider, l10n)),
-          ),
+        // 权限未授予时给常驻、可行动的入口（与桌面歌词未授权提示同款）：
+        // 拒绝后开关会回到关闭，但警告行保留「去授权」，不用再开一次开关。
+        if (provider.lanPermissionNeedsAttention)
+          _lanPermissionNotice(context, provider, l10n),
         SettingsSwitchTile(
           switchKey: const Key('settingsSyncWebdavSwitch'),
           icon: Icons.cloud_rounded,
@@ -547,27 +550,83 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     );
   }
 
-  /// 局域网因缺少权限而不可用（Android 17+：手动地址也无效，只能授权或转 WebDAV）。
-  static bool _needsLanPermission(SyncProvider provider) =>
-      provider.lanPermissionNeeded &&
-      provider.enabledTransports.contains(SyncTransportKind.lan) &&
-      provider.transportStatus(SyncTransportKind.lan)?.unavailableReason ==
-          SyncUnavailableReason.permissionDenied;
-
-  /// 用户显式申请权限；仍被拒时给「去系统设置」的下一步动作。
-  static Future<void> _requestLanPermission(
+  /// 开 / 关局域网：未授权时不假装开启，回退到关闭并提示授权。
+  Future<void> _setLanEnabled(
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
+    bool value,
   ) async {
-    final granted = await provider.requestLanPermission();
-    if (granted || !context.mounted) return;
+    final enabled =
+        await provider.setTransportEnabled(SyncTransportKind.lan, value);
+    if (enabled || !value || !context.mounted) return;
+    _showLanPermissionNotice(context, provider, l10n);
+  }
+
+  /// 底栏权限提示：文案 / 动作与桌面歌词未授权提示保持一致。
+  void _showLanPermissionNotice(
+    BuildContext context,
+    SyncProvider provider,
+    AppLocalizations l10n,
+  ) {
+    final permanent = provider.lanPermissionPermanentlyDenied;
     showSyncNotice(
       context,
-      l10n.syncLanPermissionDenied,
+      l10n.syncLanPermissionNeeded,
       isError: true,
-      actionLabel: l10n.syncOpenSystemSettings,
-      onAction: () => unawaited(provider.openSystemSettings()),
+      actionLabel:
+          permanent ? l10n.syncOpenSystemSettings : l10n.syncLanPermissionGrant,
+      onAction: () => unawaited(permanent
+          ? provider.openSystemSettings()
+          : _setLanEnabled(context, provider, l10n, true)),
+    );
+  }
+
+  /// 常驻警告行（与桌面歌词未授权的 `⚠ 需要悬浮窗权限 + 去授权` 同款）。
+  ///
+  /// 拒绝后开关已经关闭，这一行仍保留入口：不必再开一次开关就能重试授权，
+  /// 永久拒绝时动作改为「去系统设置」。
+  Widget _lanPermissionNotice(
+    BuildContext context,
+    SyncProvider provider,
+    AppLocalizations l10n,
+  ) {
+    final permanent = provider.lanPermissionPermanentlyDenied;
+    final theme = Theme.of(context);
+    return Padding(
+      key: const Key('settingsSyncLanPermissionItem'),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.warning_amber_rounded,
+            size: 18,
+            color: AppSemanticColors.of(context).warning,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              l10n.syncLanPermissionNeeded,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          M3EButton.icon(
+            key: const Key('settingsSyncLanPermissionGrant'),
+            style: M3EButtonStyle.text,
+            onPressed: () => unawaited(permanent
+                ? provider.openSystemSettings()
+                : _setLanEnabled(context, provider, l10n, true)),
+            icon: const Icon(Icons.lock_open_rounded, size: 18),
+            label: Text(
+              permanent
+                  ? l10n.syncOpenSystemSettings
+                  : l10n.syncLanPermissionGrant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
