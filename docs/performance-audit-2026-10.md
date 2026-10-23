@@ -256,6 +256,23 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 验证：`flutter analyze --no-pub` 无问题；`flutter test --no-pub` 全量通过。
 查询次数由测试断言钉住；绝对耗时待同口径 release 采样后补充。
 
+### 3.3.3 IO 扫描与大文件解码（2026-10-23）
+
+同一轮把两处会直接阻塞 UI isolate 的纯 IO / CPU 工作移出主线程：
+
+- `.lxmc` 导入（gzip + UTF-8 + JSON + 逐曲映射）在压缩字节 ≥ 64KB 时走
+  `Isolate.run`，小文件仍走同步快路径；`LxmcDecodeException.reason` 在
+  isolate 边界两侧保持一致，未知异常保留消息与栈。导入后的落库与
+  `PlaylistTrack` 构造仍在主 isolate。
+- `IoCacheStorage.usage()` / `listFiles()` 的递归目录列举与逐文件
+  `File.length()` 移到短命 isolate；缓存管理页与本地歌曲列表不再因大缓存
+  目录卡住。`clear()` / `deleteWhere()` 仍留在主 isolate（后者带回调）。
+- 目录缺失 / 不可读 / 单文件 stat 失败的降级语义与原实现一致；嵌套文件、
+  并发 audio/artwork 统计均有测试覆盖。
+
+验证：相关 cache / `.lxmc` / 仓库测试通过；`flutter analyze --no-pub` 无问题；
+全量 `flutter test --no-pub` 通过。
+
 ### 3.4 内存（Windows，本机实测）
 
 | 状态 | 专用工作集 | 提交 |
@@ -307,8 +324,9 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
   失败取链 / 历史与收藏 / 统计页）；搜索、取链、取词、DB 写入的端到端时延
   矩阵仍未做，下一步用 `molia.perf` 埋点补同口径 release 数据；
 - 歌词缓存仍在 SharedPreferences（写入会整文件重写、占用统计要重新
-  `utf8.encode`），缓存管理页的目录扫描也仍在 UI isolate；
-- `.lxmc` 导入的 gzip / JSON 解码、AI DJ 的串行取源仍会阻塞或拉长等待；
+  `utf8.encode`，目前仍在 UI isolate）；
+- AI DJ 的串行取源、搜索/取链的端到端时延仍会拉长等待；`.lxmc` 大文件
+  解码与缓存目录扫描已由 §3.3.3 移出 UI isolate；
 - 若目标是降低「触摸到呈现」的延迟，再评估 shader 缓存 / 帧调度；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。
