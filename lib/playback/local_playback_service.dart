@@ -59,6 +59,12 @@ class LocalPlaybackService extends ChangeNotifier {
   final SourceUrlResolver _resolver;
   final AudioPlayer _player;
 
+  /// 播放器是否已在退出收尾里释放。
+  ///
+  /// 退出路径不经过 provider dispose：`shutdownAudioForQuit()` 与 [dispose]
+  /// 可能先后到达，靠这个标记保证 `AudioPlayer.dispose()` 只调用一次。
+  bool _playerDisposed = false;
+
   /// 当前偏好音质（composition root 注入；省流模式由注入方压低上限）。
   ///
   /// 播放前用它选出本次实际音质：解析器与音频缓存键共用同一值，
@@ -814,6 +820,30 @@ class LocalPlaybackService extends ChangeNotifier {
     });
   }
 
+  /// 退出前的音频收尾：先暂停让设备停止出数据，再释放播放器
+  /// （media_kit 的 `dispose()` 内部会先 stop，关闭音频输出）。
+  ///
+  /// 为什么需要：进程直接退出时 libmpv / WASAPI 仍在出数据，Windows 上听感是
+  /// 「突然断掉 / 爆一声」；强杀不经过收尾反而听不出来。100ms 是留给已排队的
+  /// 设备缓冲排空的时间，不参与任何 UI 交互。
+  ///
+  /// 幂等；失败只记日志：退出流程不能卡在音频设备上（调用方另有超时兜底）。
+  Future<void> shutdownAudioForQuit() async {
+    if (_playerDisposed) return;
+    _playerDisposed = true;
+    try {
+      await _player.pause();
+    } catch (e) {
+      debugPrint('[LocalPlayback] 退出前暂停失败: $e');
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    try {
+      await _player.dispose();
+    } catch (e) {
+      debugPrint('[LocalPlayback] 退出前释放播放器失败: $e');
+    }
+  }
+
   @override
   void dispose() {
     _playRequestId++;
@@ -827,7 +857,10 @@ class LocalPlaybackService extends ChangeNotifier {
     unawaited(_trackCompletions.close());
     final guard = _focusGuard;
     if (guard != null) unawaited(guard.detach());
-    _player.dispose();
+    if (!_playerDisposed) {
+      _playerDisposed = true;
+      _player.dispose();
+    }
     super.dispose();
   }
 }

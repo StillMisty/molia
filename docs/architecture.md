@@ -103,7 +103,10 @@
   语义），live seek 强制整份落盘；系统媒体 handler 不自建串行链，只 await
   注入的提交；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
-  继续退出）。系统媒体控制与恢复态切歌键由组合根接到会话模块（不再直连
+  继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
+  500ms）→ 统计落盘 → 销毁窗口」：会话必须先把最后一段进度取下来，音频收尾
+  要在销毁窗口前停掉设备，否则 Windows 上进程在 libmpv 仍出数据时结束会爆音。
+  系统媒体控制与恢复态切歌键由组合根接到会话模块（不再直连
   provider）。跨设备同步只经 `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
   应用 / 删除与本地保存 / 清除共用同一个 `PlaybackSessionStore` 与同一条
