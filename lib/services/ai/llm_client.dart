@@ -31,6 +31,13 @@ class LlmClient {
   final Duration _timeout;
   final Logger _logger = Logger('molia.llm_client');
 
+  /// 已确认不支持 `response_format` 的 `baseUrl|model`。
+  ///
+  /// 不支持的服务商每次都会先吃一个 400；记住后直接走纯提示词约束，避免
+  /// 每批把同一份 prompt 发两遍。只有「去掉参数后成功」才记录，避免把其它
+  /// 400（模型名/参数错误）误判成不支持 JSON 模式。
+  String? _jsonModeUnsupportedKey;
+
   /// 请求地址归一：
   /// - 已以 `/chat/completions` 结尾 → 原样；
   /// - 已以 `/v1` 结尾 → 追加 `/chat/completions`；
@@ -53,7 +60,8 @@ class LlmClient {
   ///
   /// [jsonMode] 为 true 时请求 `response_format: {"type":"json_object"}`；
   /// 若服务商不认该参数（HTTP 400），自动退回一次不带参数的请求（提示词
-  /// 本身已要求纯 JSON，解析侧也容错）。
+  /// 本身已要求纯 JSON，解析侧也容错），并按 `baseUrl|model` 记住该服务商，
+  /// 后续不再重复发送带参数的探测请求。
   Future<String> complete({
     required LlmConfig config,
     required String systemPrompt,
@@ -92,11 +100,15 @@ class LlmClient {
   /// 判据刻意放宽为「2xx + 对话结果（`choices` 非空）」：正文是否为空不代表
   /// 连接不可用（推理模型可能只回思维链、兼容实现可能返回特殊结构），连接
   /// 测试只关心地址、凭证、模型名能否走通。
-  Future<void> testConnection(LlmConfig config) async {
+  Future<void> testConnection(
+    LlmConfig config, {
+    String systemPrompt = '你是连接测试助手。',
+    String userPrompt = '只回复两个字：可用',
+  }) async {
     final decoded = await _chatCompletions(
       config: config,
-      systemPrompt: '你是连接测试助手。',
-      userPrompt: '只回复两个字：可用',
+      systemPrompt: systemPrompt,
+      userPrompt: userPrompt,
       temperature: 0,
       maxTokens: 64,
     );
@@ -139,20 +151,27 @@ class LlmClient {
       'Authorization': 'Bearer ${config.apiKey.trim()}',
     };
 
+    final configKey = '${config.baseUrl.trim()}|${config.model.trim()}';
+    final tryJsonMode = jsonMode && _jsonModeUnsupportedKey != configKey;
     Response<dynamic> response;
     try {
       response = await _dio
           .postUri(uri,
-              data: jsonEncode(requestBody(json: jsonMode)),
+              data: jsonEncode(requestBody(json: tryJsonMode)),
               options: Options(headers: headers))
           .timeout(_timeout);
-      if (jsonMode && response.httpStatus == 400) {
-        // 服务商不支持 response_format：退回一次纯提示词约束。
-        response = await _dio
+      if (tryJsonMode && response.httpStatus == 400) {
+        // 服务商不支持 response_format：退回一次纯提示词约束；成功才记住，
+        // 下次同配置不再先发带参数的请求。
+        final retry = await _dio
             .postUri(uri,
                 data: jsonEncode(requestBody(json: false)),
                 options: Options(headers: headers))
             .timeout(_timeout);
+        if (retry.httpStatus < 400) {
+          _jsonModeUnsupportedKey = configKey;
+        }
+        response = retry;
       }
     } on TimeoutException {
       throw const SourceFailure(

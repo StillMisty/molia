@@ -25,6 +25,7 @@ import '../domain/models/track.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/ai/ai_radio_queue.dart';
 import '../services/ai/ai_recommendation_service.dart';
+import '../services/ai/ai_text.dart';
 import '../services/ai/ai_recommendation_store.dart';
 import '../services/ai/ai_settings_store.dart';
 import 'ai_dj_history_controller.dart';
@@ -35,12 +36,16 @@ import 'playback_provider.dart';
 class _SessionTrack {
   _SessionTrack({
     required this.label,
+    required this.promptKey,
     required this.sourceKey,
     required this.songId,
     required this.durationMs,
   });
 
   final String label;
+
+  /// 提示词/本地去重用的规范化键（模型原始 title+artist）。
+  final String promptKey;
   final String sourceKey;
   final String songId;
   int durationMs;
@@ -211,6 +216,49 @@ class AiDjProvider extends ChangeNotifier {
   List<String> get mergedLikedLabels =>
       _unique([..._likedLabels, ..._feedback.liked]);
 
+  /// 上一批 + 未解析 + 会话队列的排除快照。
+  ///
+  /// 预览与实际请求共用同一顺序；标签进提示词让模型主动避开，规范化键同时
+  /// 进本地去重兜底，模型忽略排除清单时也不会把同一首再塞进下一批。
+  ({List<String> labels, List<String> keys}) _recentRecommendationExcludes() {
+    const limit = 50;
+    final labels = <String>[];
+    final keys = <String>[];
+    final seenLabels = <String>{};
+    final seenKeys = <String>{};
+
+    void add(String label, String key) {
+      final cleanLabel = label.trim();
+      if (cleanLabel.isNotEmpty && seenLabels.add(cleanLabel)) {
+        labels.add(cleanLabel);
+      }
+      final cleanKey = key.trim();
+      if (cleanKey.isNotEmpty && cleanKey != '|' && seenKeys.add(cleanKey)) {
+        keys.add(cleanKey);
+      }
+    }
+
+    final active = recommendations;
+    if (active != null) {
+      for (final item in active.items) {
+        add(
+          item.source.label,
+          aiTrackKey(item.source.title, item.source.artist),
+        );
+      }
+      for (final item in active.unresolved) {
+        add(item.label, aiTrackKey(item.title, item.artist));
+      }
+    }
+    for (final entry in _sessionTracks.values) {
+      add(entry.label, entry.promptKey);
+    }
+    return (
+      labels: labels.take(limit).toList(),
+      keys: keys.take(limit).toList(),
+    );
+  }
+
   /// 手动「不感兴趣」项（可撤销）。
   List<ResolvedRecommendation> get notInterestedItems =>
       List.unmodifiable([for (final entry in _notInterested) entry.item]);
@@ -263,6 +311,7 @@ class AiDjProvider extends ChangeNotifier {
       final artist = track.artistLabel;
       _sessionTracks[track.id.uri] = _SessionTrack(
         label: artist.isEmpty ? track.title : '${track.title} - $artist',
+        promptKey: aiTrackKey(track.title, artist),
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
         durationMs: track.duration?.inMilliseconds ?? 0,
@@ -335,12 +384,13 @@ class AiDjProvider extends ChangeNotifier {
   Future<AiPrompt?> previewPrompt() async {
     if (!hasConfig) return null;
     try {
+      final excludes = _recentRecommendationExcludes();
       return await _recommendationService.buildPromptPreview(
         count: _preferences.batchSize,
         preferences: _snapshotPreferences(),
         skippedLabels: mergedSkippedLabels,
         likedLabels: _likedLabelsForPrompt(commit: false),
-        excludeLabels: const [],
+        excludeLabels: excludes.labels,
       );
     } catch (e) {
       _logger.warning('AI 推歌：提示词预览失败 $e');
@@ -527,6 +577,7 @@ class AiDjProvider extends ChangeNotifier {
     final targetUri = target.track.id.uri;
     final preferences = _snapshotPreferences();
     final likedLabels = _likedLabelsForPrompt(commit: true);
+    final excludes = _recentRecommendationExcludes();
     _lastError = null;
 
     await _generation.run<void>(
@@ -542,7 +593,8 @@ class AiDjProvider extends ChangeNotifier {
         preferences: preferences,
         skippedLabels: mergedSkippedLabels,
         likedLabels: likedLabels,
-        excludeLabels: [for (final item in batch.items) item.source.label],
+        excludeLabels: excludes.labels,
+        excludeKeys: excludes.keys,
         cancelToken: token,
       ),
       commit: (generated) async {
@@ -828,6 +880,7 @@ class AiDjProvider extends ChangeNotifier {
     }
     final likedLabels = _likedLabelsForPrompt(commit: true);
     final preferences = _snapshotPreferences();
+    final excludes = _recentRecommendationExcludes();
     _lastError = null;
     return _generation.run<AiDjBatch>(
       intent: AiGenerationIntent(
@@ -841,7 +894,8 @@ class AiDjProvider extends ChangeNotifier {
         preferences: preferences,
         skippedLabels: mergedSkippedLabels,
         likedLabels: likedLabels,
-        excludeLabels: const [],
+        excludeLabels: excludes.labels,
+        excludeKeys: excludes.keys,
         cancelToken: token,
         onProgress: onProgress,
       ),
@@ -889,6 +943,7 @@ class AiDjProvider extends ChangeNotifier {
     final before = _playbackProvider.snapshot;
     final likedLabels = _likedLabelsForPrompt(commit: true);
     final preferences = _snapshotPreferences();
+    final excludes = _recentRecommendationExcludes();
     await _generation.run<AiDjBatch>(
       intent: AiGenerationIntent(
         origin: AiDjOrigin.autoFeed,
@@ -901,7 +956,8 @@ class AiDjProvider extends ChangeNotifier {
         preferences: preferences,
         skippedLabels: mergedSkippedLabels,
         likedLabels: likedLabels,
-        excludeLabels: const [],
+        excludeLabels: excludes.labels,
+        excludeKeys: excludes.keys,
         cancelToken: token,
       ),
       commit: (batch) async {
@@ -1095,6 +1151,7 @@ class AiDjProvider extends ChangeNotifier {
       final uri = item.track.id.uri;
       _sessionTracks[uri] = _SessionTrack(
         label: item.source.label,
+        promptKey: aiTrackKey(item.source.title, item.source.artist),
         sourceKey: item.track.id.sourceKey,
         songId: item.track.id.id,
         durationMs: item.track.duration?.inMilliseconds ?? 0,

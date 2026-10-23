@@ -4,6 +4,10 @@
 /// 时段/来源分布 + 最近事件明细 + 已听排除清单，可选收藏歌曲与自建歌单。
 /// **不含 raw payload、封面、播放链接、设备信息**；数量上限集中在这里
 /// （token 预算），资料库读取失败降级为空、不阻塞生成。
+///
+/// 已听清单拆成两个上限：本地去重仍读 [exclusionLookupLimit] 首，提示词只
+/// 发送最近 [exclusionPromptLimit] 首。本地过滤保证不会重复推荐，发送清单
+/// 只用于让模型主动避开高频重复。
 library;
 
 import 'package:logging/logging.dart';
@@ -34,10 +38,10 @@ class TasteProfile {
         List<({String title, String artist})> tracks,
       })> playlists;
 
-  /// 已听排除清单（`title - artist` 原始标签，规范化去重、最近优先）。
+  /// 发送给 LLM 的已听清单（`title - artist`，最多 [TasteProfileBuilder.exclusionPromptLimit]）。
   final List<String> exclusionLabels;
 
-  /// 排除清单的规范化键（批内去重/跨批去重用）。
+  /// 本地去重键（最多 [TasteProfileBuilder.exclusionLookupLimit]，不受发送上限影响）。
   final Set<String> exclusionKeys;
 
   const TasteProfile({
@@ -68,8 +72,15 @@ class TasteProfileBuilder {
   /// token 预算上限（上行「聚合 + 明细」各段的数量约束）。
   static const int topArtistsLimit = 50;
   static const int topTracksLimit = 50;
-  static const int recentEventLimit = 200;
-  static const int exclusionLimit = 500;
+
+  /// 最近播放明细只发 50 条：Top 榜单与排除清单已覆盖长期/重复口味。
+  static const int recentEventLimit = 50;
+
+  /// 本地去重读取上限（不随提示词裁剪）。
+  static const int exclusionLookupLimit = 500;
+
+  /// 提示词里发送的已听清单上限。
+  static const int exclusionPromptLimit = 100;
 
   /// 收藏歌曲上限。
   static const int favoritesLimit = 100;
@@ -101,7 +112,7 @@ class TasteProfileBuilder {
       if (includeRecent)
         _repository.listEventsForExport(limit: recentEventLimit),
       if (preferences.onlyUnheard || includeExclusions)
-        _repository.listPlayedTrackNames(limit: exclusionLimit),
+        _repository.listPlayedTrackNames(limit: exclusionLookupLimit),
     ]);
     var cursor = 0;
     PlayStatisticsSummary summary = PlayStatisticsSummary.empty;
@@ -143,6 +154,7 @@ class TasteProfileBuilder {
       final key = aiTrackKey(title, artist);
       if (key == '|' || key.isEmpty) return;
       if (excludeLocally) keys.add(key);
+      if (labels.length >= exclusionPromptLimit) return;
       final label = artist.isEmpty ? title : '$title - $artist';
       if (!labels.contains(label)) labels.add(label);
     }
@@ -151,7 +163,6 @@ class TasteProfileBuilder {
     // 「只推荐没听过的」单独决定（两个开关语义独立）。
     if (includeExclusions || preferences.onlyUnheard) {
       for (final entry in played) {
-        if (labels.length >= exclusionLimit) break;
         addExclusion(
           entry.title,
           entry.artist,

@@ -11,10 +11,12 @@ import '../../data/settings/settings_keys.dart';
 import '../../providers/ai_dj_provider.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
+import '../../services/ai/ai_prompt_text.dart';
 import '../../services/ai/ai_recommendation_service.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/ai/llm_client.dart';
 import '../../services/ai/taste_profile_builder.dart';
+import '../../services/language_service.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
 
@@ -51,6 +53,8 @@ AiStack buildAiStack({
     catalog: catalog.catalogService,
     registry: catalog.sourceRegistry,
     profileBuilder: tasteProfileBuilder,
+    promptLanguage: () =>
+        aiPromptLanguageFor(LanguageService.effectiveLocale.languageCode),
   );
   final aiDjProvider = AiDjProvider(
     playbackProvider: playback,

@@ -31,6 +31,8 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
   List<String> lastSkipped = const [];
   List<String> lastLiked = const [];
   List<String> lastExcluded = const [];
+  List<String> lastExcludedKeys = const [];
+  List<String> lastPreviewExcluded = const [];
   List<String> lastPreviewLiked = const [];
   AiPreferences? lastPreviewPreferences;
   AiUpstreamSummary summary = AiUpstreamSummary.empty;
@@ -51,6 +53,7 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     List<String> skippedLabels = const [],
     List<String> likedLabels = const [],
     List<String> excludeLabels = const [],
+    List<String> excludeKeys = const [],
     AiGenerationCancelToken? cancelToken,
     void Function(AiDjProgress progress)? onProgress,
   }) async {
@@ -60,6 +63,7 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     lastSkipped = skippedLabels;
     lastLiked = likedLabels;
     lastExcluded = excludeLabels;
+    lastExcludedKeys = excludeKeys;
     lastActualPrompt = promptForLiked == null
         ? null
         : AiPrompt(
@@ -106,6 +110,7 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     List<String> excludeLabels = const [],
   }) async {
     lastPreviewLiked = likedLabels;
+    lastPreviewExcluded = excludeLabels;
     lastPreviewPreferences = preferences;
     return AiPrompt(
       systemPrompt: preview.systemPrompt,

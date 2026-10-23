@@ -13,6 +13,7 @@ import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/domain/ports/source_registry.dart';
+import 'package:molia/services/ai/ai_prompt_text.dart';
 import 'package:molia/services/ai/ai_recommendation_service.dart';
 import 'package:molia/services/ai/llm_client.dart';
 import 'package:molia/services/ai/taste_profile_builder.dart';
@@ -154,6 +155,10 @@ Track _track(
       payload: raw,
     );
 
+/// 提示词里是否存在某个数据段（避免把 [要求] 里引用的段名误判成数据）。
+bool _hasSection(String prompt, String label) =>
+    prompt.split('\n').any((line) => line.startsWith('$label '));
+
 /// 轮询等待条件成立（真实计时器场景用；超时直接失败，避免挂住测试）。
 Future<void> _waitUntil(
   bool Function() condition, {
@@ -184,7 +189,11 @@ void main() {
     model: 'm',
   );
 
-  Future<void> insertPlayed(String title, String artist) async {
+  Future<void> insertPlayed(
+    String title,
+    String artist, {
+    int startedAt = 1000,
+  }) async {
     await insertPlayEvent(
       db,
       songId: '$title-$artist',
@@ -192,8 +201,8 @@ void main() {
       artist: artist,
       durationMs: 200000,
       raw: const {},
-      startedAt: 1000,
-      endedAt: 200000,
+      startedAt: startedAt,
+      endedAt: startedAt + 200000,
       listenedMs: 150000,
       maxPositionMs: 190000,
       endReason: 'completed',
@@ -205,6 +214,7 @@ void main() {
     Map<String, ({int order, bool enabled})> config = const {},
     int resolveConcurrency = 3,
     Duration resolveHedgeDelay = const Duration(milliseconds: 250),
+    AiPromptLanguage Function()? promptLanguage,
   }) {
     final registry = _FakeRegistry([
       for (final source in sources)
@@ -224,6 +234,7 @@ void main() {
       ),
       resolveConcurrency: resolveConcurrency,
       resolveHedgeDelay: resolveHedgeDelay,
+      promptLanguage: promptLanguage,
     );
   }
 
@@ -388,7 +399,7 @@ void main() {
       );
 
       expect(llm.lastJsonMode, isTrue);
-      expect(llm.lastUserPrompt, contains('这些不要再推荐'));
+      expect(llm.lastUserPrompt, contains('[本批排除]'));
       expect(llm.lastUserPrompt, contains('已在该列表'));
     });
 
@@ -426,8 +437,8 @@ void main() {
       final previewDefault = await service.buildPromptPreview(
         count: 20,
       );
-      expect(previewDefault.userPrompt, isNot(contains('favorites')));
-      expect(previewDefault.userPrompt, isNot(contains('playlists')));
+      expect(_hasSection(previewDefault.userPrompt, '[收藏]'), isFalse);
+      expect(_hasSection(previewDefault.userPrompt, '[歌单]'), isFalse);
       expect(previewDefault.userPrompt, isNot(contains('收藏歌')));
 
       const preferences = AiPreferences(
@@ -448,10 +459,10 @@ void main() {
         count: 20,
         preferences: preferences,
       );
-      expect(preview.userPrompt, contains('"favorites"'));
+      expect(_hasSection(preview.userPrompt, '[收藏]'), isTrue);
       expect(preview.userPrompt, contains('收藏歌'));
       expect(preview.userPrompt, contains('收藏人'));
-      expect(preview.userPrompt, contains('"playlists"'));
+      expect(_hasSection(preview.userPrompt, '[歌单]'), isTrue);
       expect(preview.userPrompt, contains('通勤'));
       expect(preview.userPrompt, contains('歌单一'));
       expect(preview.userPrompt, isNot(contains('secret-raw')));
@@ -474,17 +485,22 @@ void main() {
         preferences: preferences,
       );
 
-      for (final field in [
-        '"summary"',
-        '"topArtists"',
-        '"topTracks"',
-        '"listeningByWeekdayHour"',
-        '"recentEvents"',
-        '"alreadyListened"',
-        '"favorites"',
-        '"playlists"',
+      for (final label in [
+        '[摘要]',
+        '[常听歌手]',
+        '[常听歌曲]',
+        '[常听时段]',
+        '[收听来源]',
+        '[最近播放]',
+        '[已听过]',
+        '[收藏]',
+        '[歌单]',
       ]) {
-        expect(prompt.userPrompt, isNot(contains(field)));
+        expect(
+          _hasSection(prompt.userPrompt, label),
+          isFalse,
+          reason: '关闭的范围不应发送 $label 数据段',
+        );
       }
       expect(prompt.userPrompt, contains('流行'));
       expect(prompt.userPrompt, contains('通勤'));
@@ -493,7 +509,7 @@ void main() {
       expect(prompt.userPrompt, contains('惊喜'));
       expect(prompt.userPrompt, contains('女声优先'));
       expect(prompt.userPrompt, contains('请推荐 30 首'));
-      expect(prompt.userPrompt, contains('"preferences"'));
+      expect(prompt.userPrompt, contains('[偏好]'));
     });
 
     test('只推荐没听过的关闭、排除清单开启：仍发送已听清单但不本地强制过滤', () async {
@@ -519,7 +535,7 @@ void main() {
         preferences: preferences,
       );
 
-      expect(preview.userPrompt, contains('"alreadyListened"'));
+      expect(_hasSection(preview.userPrompt, '[已听过]'), isTrue);
       expect(preview.userPrompt, contains('旧歌 - 老歌手'));
       expect(batch.items, hasLength(1), reason: '关闭后不本地强制排除');
     });
@@ -551,7 +567,7 @@ void main() {
         preferences: preferences,
       );
 
-      expect(preview.userPrompt, isNot(contains('"alreadyListened"')));
+      expect(_hasSection(preview.userPrompt, '[已听过]'), isFalse);
       expect(batch.items, isEmpty, reason: '本地仍排除已听曲目');
     });
 
@@ -621,6 +637,112 @@ void main() {
       );
       expect(prompt.userPrompt, contains('多来点这种'));
       expect(prompt.userPrompt, contains('晴天 - 周杰伦'));
+    });
+
+    test('最近播放只发 50 条；已听清单只发 100 但本地仍排除全部', () async {
+      for (var i = 0; i < 150; i++) {
+        await insertPlayed('旧歌$i', '歌手$i', startedAt: 1000 + i);
+      }
+
+      final preview = await service.buildPromptPreview(count: 10);
+      String lineOf(String label) => preview.userPrompt.split('\n').firstWhere(
+            (line) => line.startsWith('$label '),
+            orElse: () => '',
+          );
+      final recentLine = lineOf('[最近播放]');
+      final heardLine = lineOf('[已听过]');
+      expect(RegExp(' - ').allMatches(recentLine).length, 50);
+      expect(RegExp(' - ').allMatches(heardLine).length, 100);
+      expect(preview.userPrompt, contains('旧歌149 - 歌手149'));
+      expect(preview.userPrompt, isNot(contains('旧歌0 - 歌手0')));
+
+      final summary = await service.summarizeUpstream();
+      expect(summary.exclusions, 100);
+
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '旧歌0', 'artist': '歌手0'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '旧歌0', '歌手0')]),
+      ]);
+      final batch = await service.generate(config: config, count: 10);
+      expect(batch.items, isEmpty, reason: '本地 500 键仍排除旧歌0');
+    });
+
+    test('提示词跟随应用语言：英文模式切换整段文案', () async {
+      service = buildService(
+        [_FakeSource('wy', const [])],
+        promptLanguage: () => AiPromptLanguage.en,
+      );
+      final prompt = await service.buildPromptPreview(
+        count: 7,
+        preferences: const AiPreferences(
+          styles: ['pop'],
+          onlyUnheard: false,
+        ),
+      );
+
+      expect(prompt.systemPrompt, contains('music recommendation assistant'));
+      expect(prompt.userPrompt, contains('[Preferences]'));
+      expect(prompt.userPrompt, contains('styles pop'));
+      expect(prompt.userPrompt, contains('repeats allowed'));
+      expect(prompt.userPrompt, contains('[Requirements]'));
+      expect(prompt.userPrompt, contains('[Output JSON]'));
+      expect(prompt.userPrompt, contains('max 60 characters'));
+      expect(prompt.userPrompt, contains('Recommend 7 songs.'));
+      expect(prompt.userPrompt, isNot(contains('[偏好]')));
+      expect(prompt.userPrompt, isNot(contains('请推荐')));
+    });
+
+    test('system 极简；user 末尾保留 JSON 样例与要求', () async {
+      final prompt = await service.buildPromptPreview(count: 10);
+
+      expect(
+        prompt.systemPrompt,
+        '你是音乐推荐助手。根据用户提供的听歌数据，推荐其可能喜欢的歌曲。',
+      );
+      expect(prompt.userPrompt, contains('[要求]'));
+      expect(prompt.userPrompt, contains('[输出 JSON]'));
+      expect(prompt.userPrompt, contains('{"songs"'));
+      expect(prompt.userPrompt, isNot(contains('Markdown')));
+    });
+
+    test('可用渠道写入要求行，减少本地搜不到的推荐', () async {
+      service = buildService([
+        _FakeSource('wy', const [], displayName: '网易云音乐'),
+        _FakeSource('tx', const [], displayName: 'QQ音乐'),
+      ]);
+
+      final prompt = await service.buildPromptPreview(count: 10);
+
+      expect(prompt.userPrompt, contains('可用渠道：网易云音乐/QQ音乐'));
+    });
+
+    test('额外排除键在本地兜底过滤（即使模型返回同一首）', () async {
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+          {'title': '新歌', 'artist': '新人'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [
+          _track('a', '晴天', '周杰伦'),
+          _track('b', '新歌', '新人'),
+        ]),
+      ]);
+
+      final batch = await service.generate(
+        config: config,
+        count: 10,
+        excludeLabels: const ['晴天 - 周杰伦'],
+        excludeKeys: const ['晴天|周杰伦'],
+      );
+
+      expect(batch.items.map((item) => item.track.title), ['新歌']);
+      expect(batch.unresolved, isEmpty);
     });
   });
 
@@ -914,6 +1036,18 @@ void main() {
         limit: 2,
       );
       expect(parsed.map((r) => r.title), ['a', 'b']);
+    });
+
+    test('兼容 recommendations / data 包装与嵌套 items', () {
+      final recommendations = AiRecommendationService.parseRecommendations(
+        '{"recommendations":[{"title":"A","artist":"B"}]}',
+      );
+      expect(recommendations.single.title, 'A');
+
+      final nested = AiRecommendationService.parseRecommendations(
+        '{"data":{"items":[{"title":"C","artist":"D"}]}}',
+      );
+      expect(nested.single.title, 'C');
     });
   });
 
