@@ -618,7 +618,7 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  /// 播放失败恢复：按 sourceKey 失效取链缓存，自动重试一次；
+  /// 播放失败恢复：失效失败曲目的取链缓存，自动重试一次；
   /// 重试仍失败（或重试成功后再次失败）→ 尝试自动换源。
   ///
   /// 同一曲目 key 只做一次同源重试（`_retriedTrackKey` 守卫），失败不缓存，
@@ -631,8 +631,9 @@ class PlaybackProvider extends ChangeNotifier {
     if (failure == null || track == null) return;
     if (state.currentIndex < 0) return;
 
-    // 失败即失效该音源取链缓存（失败本身不入缓存，下次播放重新取链）。
-    _catalogService?.invalidateResolvePrefix(track.id.sourceKey);
+    // 失败即失效该曲目的取链缓存（失败本身不入缓存，下次播放重新取链）。
+    // 只清这一首：一条过期 URL 不应让同音源其它曲目全部重新取链。
+    _catalogService?.invalidateResolveForTrack(track);
 
     final key = track.id.uri;
     if (_retriedTrackKey != key) {

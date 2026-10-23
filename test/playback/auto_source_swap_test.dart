@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -7,6 +8,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
@@ -47,12 +49,14 @@ void main() {
 
   (PlaybackProvider, List<({String uri, Set<String> exclude})>) buildProvider({
     Future<Track?> Function(Track seed, Set<String> exclude)? resolver,
+    CatalogService? catalogService,
   }) {
     final calls = <({String uri, Set<String> exclude})>[];
     final provider = PlaybackProvider(
       settings: testSettingsRegistry(),
       facade: facade,
       messenger: FakeMessenger(),
+      catalogService: catalogService,
       autoSwapSettings: settings,
       autoSwapResolver: (t, {required excludeSourceKeys}) {
         calls.add((uri: t.id.uri, exclude: excludeSourceKeys));
@@ -91,6 +95,37 @@ void main() {
     expect(backend.lastReplacedTrackUri, 'fake:a');
     expect(backend.lastReplacedTrack, same(replacement));
     expect(provider.snapshot.current?.id.uri, 'kg:a');
+  });
+
+  test('失败只失效失败曲目的取链缓存，保留同音源其它曲目缓存', () async {
+    final source = FakeMusicSource('fake')
+      ..resolveUrl = 'https://cdn.example.com/fake.mp3';
+    final catalog = CatalogService(
+      registry: FakeSourceRegistry({'fake': source}),
+    );
+    final failing = track('fake', 'a');
+    final other = track('fake', 'b');
+    await catalog.resolve(failing);
+    await catalog.resolve(other);
+    expect(catalog.resolveCacheCountForTrack(failing), 1);
+    expect(catalog.resolveCacheCountForTrack(other), 1);
+
+    final (provider, _) = buildProvider(catalogService: catalog);
+    addTearDown(provider.dispose);
+
+    emitError(failing);
+    await pumpEventQueue();
+
+    expect(
+      catalog.resolveCacheCountForTrack(failing),
+      0,
+      reason: '失败曲目重试要走新取链',
+    );
+    expect(
+      catalog.resolveCacheCountForTrack(other),
+      1,
+      reason: '同音源其它曲目的缓存不应被连带失效',
+    );
   });
 
   test('无匹配：保持原错误与曲目，不替换', () async {

@@ -153,7 +153,7 @@ void main() {
     expect(lyrics.translation, '[00:01]译文');
   });
 
-  test('进度广播：累计 32KB 通知一次；完成后状态清空', () async {
+  test('进度广播：首个进度可见；完成后状态清空', () async {
     final controller = StreamController<Uint8List>();
     final dio = mockDio(
       (options) => ResponseBody(
@@ -177,7 +177,7 @@ void main() {
     });
 
     final future = service.download(track);
-    // 第一块 64KB：越过 32KB 节流阈值，进度可见。
+    // 第一块 64KB：首个进度不受时间窗口限制，立即可见。
     controller.add(Uint8List(64 * 1024));
     final midway = await progressSeen.future;
     expect(midway.receivedBytes, 64 * 1024);
@@ -189,6 +189,83 @@ void main() {
     await future;
     expect(service.progressForTrack(track), isNull);
     expect(service.recordFor('kw', '1'), isNotNull);
+  });
+
+  test('进度广播：快速分片按时间合并，首个与收尾 100% 仍立即送达', () async {
+    final controller = StreamController<Uint8List>();
+    var now = 1000;
+    final dio = mockDio(
+      (options) => ResponseBody(
+        controller.stream,
+        200,
+        headers: {'content-length': ['400']},
+      ),
+    );
+    final service = makeService(dio: dio, clock: () => now);
+    await service.init();
+
+    final track = makeTrack();
+    final notified = <int>[];
+    service.addListener(() {
+      final progress = service.progressForTrack(track);
+      if (progress != null) notified.add(progress.receivedBytes);
+    });
+
+    final future = service.download(track);
+    // 四个分片在同一毫秒内到达：中间进度合并，只保留首个与终态。
+    controller.add(Uint8List(100));
+    controller.add(Uint8List(100));
+    controller.add(Uint8List(100));
+    controller.add(Uint8List(100));
+    await controller.close();
+    await future;
+
+    expect(notified, [0, 100, 400], reason: '100ms 内合并，100% 不被节流吞掉');
+    expect(service.progressForTrack(track), isNull);
+  });
+
+  test('进度广播：超过 100ms 窗口的中间进度照常送达', () async {
+    final controller = StreamController<Uint8List>();
+    var now = 1000;
+    final dio = mockDio(
+      (options) => ResponseBody(
+        controller.stream,
+        200,
+        headers: {'content-length': ['400']},
+      ),
+    );
+    final service = makeService(dio: dio, clock: () => now);
+    await service.init();
+
+    final track = makeTrack();
+    final notified = <int>[];
+    service.addListener(() {
+      final progress = service.progressForTrack(track);
+      if (progress != null) notified.add(progress.receivedBytes);
+    });
+
+    /// 等分片被写流消费后再推进时钟（时钟读数与分片处理顺序一一对应）。
+    Future<void> waitForChunk(int received) async {
+      while (storage.lastProgressReceived != received) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    final future = service.download(track);
+    controller.add(Uint8List(100)); // 1000：首个进度（立即送达）
+    await waitForChunk(100);
+    now += 40;
+    controller.add(Uint8List(100)); // 1040：窗口内（合并）
+    await waitForChunk(200);
+    now += 120;
+    controller.add(Uint8List(100)); // 1160：距上次通知 160ms（送达）
+    await waitForChunk(300);
+    controller.add(Uint8List(100)); // 1160：已收满（立即送达）
+    await waitForChunk(400);
+    await controller.close();
+    await future;
+
+    expect(notified, [0, 100, 300, 400]);
   });
 
   test('取消：清理半成品、不落记录、抛 cancelled 失败', () async {
@@ -868,13 +945,20 @@ void main() {
       service.removeListener(listener);
     }
 
+    /// 等分片被写流消费：UI 进度另有 100ms 时间节流，不能用它判断处理进度。
+    Future<void> waitForChunk(int received) async {
+      while (storage.lastProgressReceived != received) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
     // 首个分片无条件推送。
     controller.add(Uint8List(32 * 1024));
     await waitForProgress(32 * 1024);
     expect(await updatePayloads(), [(32 * 1024, 131072)]);
     // 500ms 窗口内不再推送。
     controller.add(Uint8List(32 * 1024));
-    await waitForProgress(64 * 1024);
+    await waitForChunk(64 * 1024);
     expect(await updatePayloads(), [(32 * 1024, 131072)]);
     // 窗口过后推送新进度。
     now += 600;

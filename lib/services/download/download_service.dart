@@ -170,6 +170,7 @@ class DownloadService extends ChangeNotifier {
         _settings = settings,
         _publisher = publisher ?? const NoopDownloadsPublisher(),
         _preferredQuality = preferredQuality,
+        _clock = clock,
         _layout = DownloadFileLayout(storage: storage, settings: settings),
         _assembler = DownloadRecordAssembler(clock: clock),
         _notifications = DownloadNotificationPresenter(
@@ -193,6 +194,11 @@ class DownloadService extends ChangeNotifier {
   final DownloadsPublisher _publisher;
 
   final String Function()? _preferredQuality;
+
+  /// UI 进度节流用的毫秒时间源（测试注入；缺省墙钟）。
+  ///
+  /// 只服务 `notifyListeners` 的频率，不参与下载时间 / 记录时间。
+  final int Function()? _clock;
 
   /// 文件名 / 放置模块：命名、去重与 sidecar 路径约定的唯一实现（见
   /// `download_file_layout.dart`）。
@@ -701,7 +707,7 @@ class DownloadService extends ChangeNotifier {
       _active.remove(key);
       _tokens.remove(key);
       _activeTracks.remove(key);
-      _lastProgressNotified.remove(key);
+      _lastProgressNotifiedAt.remove(key);
       _notifications.stopTask(key);
       notifyListeners();
     }
@@ -1157,23 +1163,39 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  /// 进度节流：每累计 32KB 或任务收尾时通知一次（避免逐分片刷 UI）。
-  static const int _progressNotifyStep = 32 * 1024;
-  final Map<String, int> _lastProgressNotified = {};
+  /// UI 进度节流：同一任务最多每 [_progressNotifyIntervalMs] 通知一次。
+  ///
+  /// 快速下载（尤其命中本地缓存后的直拷）分片间隔远小于 100ms，按字节阈值
+  /// 通知会让监听页每秒重建几十次；这里按时间合并，但首个进度与终态
+  /// （已收满 / 完成 / 失败 / 取消）始终立即送达——结束状态不能等窗口。
+  /// 系统通知有自己的 500ms 节流，每个分片仍照常上报（见
+  /// `DownloadNotificationPresenter.reportProgress`）。
+  static const int _progressNotifyIntervalMs = 100;
+
+  /// 任务键 → 最近一次 UI 进度通知的毫秒时间（只服务节流）。
+  ///
+  /// 条目在任务收尾的 `finally` 清理，与 [_active] 等任务态同生命周期。
+  final Map<String, int> _lastProgressNotifiedAt = {};
+
+  int _nowMs() => _clock?.call() ?? DateTime.now().millisecondsSinceEpoch;
 
   void _updateProgress(String key, int received, int? total) {
     _notifications.reportProgress(key, received, total);
-    final last = _lastProgressNotified[key] ?? 0;
-    if (received - last < _progressNotifyStep &&
-        (total == null || received < total)) {
+    final now = _nowMs();
+    final lastAt = _lastProgressNotifiedAt[key];
+    final complete = total != null && total > 0 && received >= total;
+    // 首个进度（无历史时间）与终态无条件通知；其余按时间窗口合并。
+    if (lastAt != null &&
+        !complete &&
+        now - lastAt < _progressNotifyIntervalMs) {
       return;
     }
-    _lastProgressNotified[key] = received;
     final progress = DownloadProgress(
       receivedBytes: received,
       totalBytes: total,
     );
     if (_active[key] == progress) return;
+    _lastProgressNotifiedAt[key] = now;
     _active[key] = progress;
     notifyListeners();
   }

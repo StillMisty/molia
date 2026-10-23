@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/album_service.dart';
 import 'package:molia/data/catalog/artist_service.dart';
@@ -80,20 +82,33 @@ class _FakeLocalDataService extends TrackLocalDataService {
       const LocalCacheClearResult(part: LocalCachePart.audio);
   final List<(LocalCachePart, String)> clearCalls = [];
 
+  /// load 调用次数与曲目（防抖 / 单飞断言用）。
+  int loadCalls = 0;
+  final List<TrackId> loadedTracks = [];
+
+  /// 非空时 load 挂起，直到测试放行（单飞测试用）。
+  Completer<void>? loadGate;
+
   @override
   TrackLocalData downloadState(Track track) =>
       TrackLocalData(download: downloads.record);
 
   @override
-  Future<TrackLocalData> load(Track track) async => TrackLocalData(
-        download: downloads.record,
-        audioCache: audioCacheByTrack[track.id.uri] ?? CacheUsage.zero,
-        audioWriting: audioWritingByTrack[track.id.uri] ?? CacheUsage.zero,
-        lyricsCache: lyricsCacheByTrack[track.id.uri] ?? CacheUsage.zero,
-        artworkCache: artworkCacheByTrack[track.id.uri] ?? CacheUsage.zero,
-        cachedQualities: cachedQualitiesByTrack[track.id.uri] ?? const [],
-        resolveEntries: resolveByTrack[track.id.uri] ?? 0,
-      );
+  Future<TrackLocalData> load(Track track) async {
+    loadCalls++;
+    loadedTracks.add(track.id);
+    final gate = loadGate;
+    if (gate != null) await gate.future;
+    return TrackLocalData(
+      download: downloads.record,
+      audioCache: audioCacheByTrack[track.id.uri] ?? CacheUsage.zero,
+      audioWriting: audioWritingByTrack[track.id.uri] ?? CacheUsage.zero,
+      lyricsCache: lyricsCacheByTrack[track.id.uri] ?? CacheUsage.zero,
+      artworkCache: artworkCacheByTrack[track.id.uri] ?? CacheUsage.zero,
+      cachedQualities: cachedQualitiesByTrack[track.id.uri] ?? const [],
+      resolveEntries: resolveByTrack[track.id.uri] ?? 0,
+    );
+  }
 
   @override
   Future<LocalCacheClearResult> clear(
@@ -140,6 +155,12 @@ class _FakeDownloadService extends DownloadService {
     bool includeCover = true,
   }) async {
     downloadCalls++;
+  }
+
+  /// 模拟一次下载进度通知（与真实服务一样走 notifyListeners）。
+  void emitProgress(DownloadProgress next) {
+    progress = next;
+    notifyListeners();
   }
 
   @override
@@ -710,6 +731,108 @@ void main() {
     await tester.tap(find.byKey(const Key('localDataCancel')));
     await tester.pump();
     expect(downloadService.cancelCalls, 1);
+  });
+
+  testWidgets('下载进度：快速通知合并为一次防抖重载，切歌立即重载', (tester) async {
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    final initialLoads = localDataService.loadCalls;
+
+    // 连续进度通知（真实服务按时间节流后仍可能约 10Hz）。
+    for (var i = 0; i < 10; i++) {
+      downloadService.emitProgress(
+        DownloadProgress(receivedBytes: i * 10, totalBytes: 1000),
+      );
+    }
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(localDataService.loadCalls, initialLoads, reason: '防抖窗口内不重载');
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(
+      localDataService.loadCalls,
+      initialLoads + 1,
+      reason: '窗口结束只补一次',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(localDataService.loadCalls, initialLoads + 1, reason: '不重复重载');
+
+    // 防抖未到期时切歌：取消待执行重载，新曲目立即重算。
+    downloadService.emitProgress(
+      const DownloadProgress(receivedBytes: 1, totalBytes: 1000),
+    );
+    const next = Track(
+      id: TrackId('kw', 'b'),
+      title: 'Title b',
+      origin: TrackOrigin.lx,
+      payload: {'id': 'b'},
+    );
+    backend.emit(const BackendSnapshot(
+      current: next,
+      queue: [next],
+      currentIndex: 0,
+      duration: Duration(seconds: 100),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      localDataService.loadCalls,
+      initialLoads + 2,
+      reason: '切歌立即重载',
+    );
+    expect(localDataService.loadedTracks.last, const TrackId('kw', 'b'));
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      localDataService.loadCalls,
+      initialLoads + 2,
+      reason: '切歌已取消防抖重载',
+    );
+  });
+
+  testWidgets('本地数据加载单飞：进行中再触发只补一次尾随重载（取最新曲目）', (tester) async {
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    final initialLoads = localDataService.loadCalls;
+    final gate = Completer<void>();
+    localDataService.loadGate = gate;
+
+    // 防抖到期进入加载（挂起，模拟慢磁盘扫描）。
+    downloadService.emitProgress(
+      const DownloadProgress(receivedBytes: 1, totalBytes: 1000),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(localDataService.loadCalls, initialLoads + 1);
+
+    // 加载中再触发多次 + 切歌：不并发，只记一次尾随。
+    for (var i = 0; i < 5; i++) {
+      downloadService.emitProgress(
+        DownloadProgress(receivedBytes: 10 + i, totalBytes: 1000),
+      );
+    }
+    const next = Track(
+      id: TrackId('kw', 'b'),
+      title: 'Title b',
+      origin: TrackOrigin.lx,
+      payload: {'id': 'b'},
+    );
+    backend.emit(const BackendSnapshot(
+      current: next,
+      queue: [next],
+      currentIndex: 0,
+      duration: Duration(seconds: 100),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      localDataService.loadCalls,
+      initialLoads + 1,
+      reason: '加载中不并发扫描',
+    );
+
+    // 放行后恰好补跑一次，且用的是最新当前曲目。
+    localDataService.loadGate = null;
+    gate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(localDataService.loadCalls, initialLoads + 2, reason: '只补一次');
+    expect(localDataService.loadedTracks.last, const TrackId('kw', 'b'));
   });
 
   testWidgets('本地数据页：已下载显示大小 + 删除需确认', (tester) async {

@@ -72,6 +72,17 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   TrackLocalData? _localData;
   bool _listening = false;
 
+  /// 下载进度触发的本地数据重算防抖。
+  ///
+  /// 进度通知每秒可达数十次，而一次重算要递归列音频缓存目录并统计每个
+  /// 文件；300ms 窗口把同一批进度合并成一次扫描。
+  static const Duration _reloadDebounce = Duration(milliseconds: 300);
+  Timer? _reloadTimer;
+
+  /// 本地数据加载单飞：加载中再收到请求只补跑一次（用最新当前曲目）。
+  bool _loadInFlight = false;
+  bool _loadQueued = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -80,9 +91,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
         context.read<CacheService?>() ?? CacheService.instance;
     final downloads = context.read<DownloadService?>();
     if (!identical(_downloads, downloads)) {
-      _downloads?.removeListener(_onLocalDataChanged);
+      _downloads?.removeListener(_onDownloadProgress);
       _downloads = downloads;
-      downloads?.addListener(_onLocalDataChanged);
+      downloads?.addListener(_onDownloadProgress);
     }
     if (!_listening) {
       _listening = true;
@@ -99,16 +110,57 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   @override
   void dispose() {
     _playback?.removeListener(_syncTrack);
-    _downloads?.removeListener(_onLocalDataChanged);
+    _downloads?.removeListener(_onDownloadProgress);
     if (_listening) {
       _cacheServiceRevision?.revision.removeListener(_onLocalDataChanged);
     }
+    _cancelReloadTimer();
+    _loadQueued = false;
     super.dispose();
   }
 
+  /// 下载进度 / 完成 / 删除：防抖后重算，避免逐分片扫缓存目录。
+  void _onDownloadProgress() {
+    if (!mounted) return;
+    _reloadTimer?.cancel();
+    _reloadTimer = Timer(_reloadDebounce, () {
+      _reloadTimer = null;
+      unawaited(_requestLocalDataReload());
+    });
+  }
+
+  /// 缓存修订等即时变化：丢弃待执行的防抖，立即重算。
   void _onLocalDataChanged() {
     if (!mounted) return;
-    unawaited(_loadLocalData(_playback?.snapshot.current));
+    _cancelReloadTimer();
+    unawaited(_requestLocalDataReload());
+  }
+
+  void _cancelReloadTimer() {
+    _reloadTimer?.cancel();
+    _reloadTimer = null;
+  }
+
+  /// 本地数据加载单飞 + 尾随一次：并发触发不叠加磁盘扫描。
+  ///
+  /// 加载期间收到的请求只记一个标记；当前加载结束后按最新当前曲目补跑
+  /// 一次。切歌时在途结果由 [_loadLocalData] 的过期守卫丢弃。
+  Future<void> _requestLocalDataReload() async {
+    if (_loadInFlight) {
+      _loadQueued = true;
+      return;
+    }
+    _loadInFlight = true;
+    try {
+      do {
+        _loadQueued = false;
+        if (!mounted) return;
+        final track = _playback?.snapshot.current;
+        if (track != null) await _loadLocalData(track);
+      } while (_loadQueued && mounted);
+    } finally {
+      _loadInFlight = false;
+    }
   }
 
   /// 切歌（含自动连播）时重载本地数据；封面补取回写（同 id、换封面）也重算。
@@ -116,11 +168,13 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     final track = _playback?.snapshot.current;
     final artwork = track?.artwork?.uri.toString();
     if (track?.id == _dataForTrack && artwork == _dataArtwork) return;
+    // 切歌 / 封面变化要立即看到新曲目的本地数据：丢弃进度触发的防抖。
+    _cancelReloadTimer();
     _dataForTrack = track?.id;
     _dataArtwork = artwork;
     // 下载档同步种子：避免首帧把「已下载」闪成「未下载」。
     _localData = track == null ? null : _localDataService?.downloadState(track);
-    if (track != null) unawaited(_loadLocalData(track));
+    if (track != null) unawaited(_requestLocalDataReload());
   }
 
   Future<void> _loadLocalData(Track? track) async {

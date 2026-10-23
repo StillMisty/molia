@@ -17,6 +17,9 @@ class FakeDownloadStorage implements DownloadStorage {
   /// 已删除过的路径（含重复删除尝试）。
   final List<String> deleted = [];
 
+  /// 最近一次写流进度回调的累计字节数（测试等待分片被消费用）。
+  int? lastProgressReceived;
+
   /// 旧位置（迁移测试用）：非空且与 [root] 不同时生效。
   String? legacyRoot;
 
@@ -73,6 +76,8 @@ class FakeDownloadStorage implements DownloadStorage {
     await for (final chunk in stream) {
       bytes.addAll(chunk);
       onProgress?.call(bytes.length, total);
+      // 回调之后再记录：测试看到该值时，服务的进度处理已经完成。
+      lastProgressReceived = bytes.length;
     }
     files[path] = bytes;
   }
