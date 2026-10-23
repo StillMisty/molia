@@ -611,7 +611,9 @@
   HLC-lite 的 `max(本地墙上时钟, 已观测最大值)`，不再是「最后的墙上时间」。
 - **Sync passphrase（同步口令）** — 信任根：PBKDF2 派生 AES-256-GCM 密钥，
   能解密快照的设备即已授权；生成/归一化在 `sync_passphrase.dart`，加密帧在
-  `sync_crypto.dart`；重置口令 = 撤销全部设备。
+  `sync_crypto.dart`；重置口令 = 撤销全部设备，并清空本机对旧组的观测（名册 /
+  已验证端点 / 首连提示 / 传输成功时间），所有设备必须重新配对；地址簿
+  （host / 端口）作为用户配置保留。
 - **Sync transport（同步传输）** — `lib/domain/ports/sync_transport.dart`：
   `pull` / `push` / `incoming` 三动作；实现为局域网直连
   （`transport/lan_sync_transport.dart`）与用户自备 WebDAV

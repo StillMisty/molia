@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
@@ -182,6 +183,63 @@ void main() {
       hasLength(1),
       reason: '其它设备不受影响',
     );
+  });
+
+  test('重置旧组状态：清空观测并持久化，地址簿保留、移除标记不再压制', () async {
+    final store = await freshStore();
+    store.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 5,
+      outcome: SyncOutcome.ok,
+      peers: const [SyncPeerState(deviceId: 'devB', name: 'B')],
+      transports: const [
+        SyncTransportReport(
+          kind: SyncTransportKind.lan,
+          running: true,
+          enabled: true,
+          pulled: 1,
+        ),
+      ],
+    ));
+    await store.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      verifiedAt: 4,
+    ));
+    await store.markPeerConnectNotified('devB');
+    await store.addManualPeer(
+      const ManualPeer(host: '192.168.1.23', deviceId: 'devB'),
+    );
+    // 留下「刚移除」标记（另一台设备）：重置后不应再压制重新发现。
+    await store.removePeer('devX');
+
+    await store.resetGroupState();
+
+    expect(store.peers, isEmpty);
+    expect(store.lanEndpoints, isEmpty);
+    expect(store.transportLastSuccessAt(SyncTransportKind.lan), 0);
+    expect(store.isPeerConnectNotified('devB'), isFalse);
+    expect(store.manualPeers.single.host, '192.168.1.23');
+
+    store.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 6,
+      finishedAt: 7,
+      outcome: SyncOutcome.ok,
+      peers: const [SyncPeerState(deviceId: 'devX')],
+    ));
+    expect(store.peers.single.deviceId, 'devX',
+        reason: '移除标记随旧组一并清空，重新发现立即入册');
+
+    await store.save();
+    final reloaded = await freshStore();
+    expect(reloaded.peers, hasLength(1));
+    expect(reloaded.lanEndpoints, isEmpty, reason: '清空结果已持久化');
+    expect(reloaded.transportLastSuccessAt(SyncTransportKind.lan), 0);
+    expect(reloaded.isPeerConnectNotified('devB'), isFalse);
+    expect(reloaded.manualPeers.single.host, '192.168.1.23');
   });
 
   test('名册 lastSuccessAt：持久化往返；旧状态缺字段按 0 兼容兜底', () async {

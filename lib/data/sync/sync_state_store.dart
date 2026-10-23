@@ -623,6 +623,22 @@ class SyncStateStore {
     await save();
   }
 
+  /// 清空本机对**旧同步组**的全部观测（换口令时调用）。
+  ///
+  /// 名册、已验证局域网端点、首次连通提示、传输成功时间与「刚移除」暂存都
+  /// 只描述旧组；口令即信任根，换口令后这些设备已不再被授权。留着会让
+  /// `SyncControlPlane.hasEstablishedGroup` 继续声称「已有组」，把新设备误判
+  /// 成邀请方 / 冲突，旧端点也仍会被当作可信的单播目标。手动地址簿
+  /// （host / 端口）是用户配置而非组观察，保留。
+  Future<void> resetGroupState() async {
+    _peers.clear();
+    _lanEndpoints.clear();
+    _notifiedPeers.clear();
+    _transportLastSuccess.clear();
+    _forgottenPeers.clear();
+    await save();
+  }
+
   /// 更新某条手动地址的 host / 探测端口 / 命名（设备详情里的「更新地址」）。
   ///
   /// 身份（deviceId）与已学到的端点端口保留：改的是「设备在哪」，不是「是谁」。

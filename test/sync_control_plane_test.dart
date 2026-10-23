@@ -272,6 +272,55 @@ void main() {
     );
   });
 
+  test('重置口令：清空旧组观测、保留地址簿，设备必须重新配对', () async {
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.manual,
+      startedAt: 1,
+      finishedAt: 2,
+      outcome: SyncOutcome.ok,
+      peers: [SyncPeerState(deviceId: 'devB', name: '书房')],
+      transports: [
+        SyncTransportReport(
+          kind: SyncTransportKind.lan,
+          running: true,
+          enabled: true,
+          pulled: 1,
+        ),
+      ],
+    ));
+    await state.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      verifiedAt: 3,
+    ));
+    await state.markPeerConnectNotified('devB');
+    await control.addManualPeer(
+      const ManualPeer(host: '192.168.1.23', name: '书房'),
+    );
+
+    expect(control.hasEstablishedGroup, isTrue);
+    expect(control.peers, hasLength(1));
+    expect(state.lanEndpoints, hasLength(1));
+    expect(control.transportLastSuccessAt(SyncTransportKind.lan), 2);
+    expect(state.isPeerConnectNotified('devB'), isTrue);
+
+    final reset = await control.resetPassphrase();
+
+    expect(control.passphrase, reset);
+    expect(await state.readPassphrase(), reset);
+    expect(control.peers, isEmpty, reason: '旧组名册不能留到新口令下');
+    expect(state.lanEndpoints, isEmpty, reason: '旧端点不再可信');
+    expect(control.transportLastSuccessAt(SyncTransportKind.lan), 0);
+    expect(state.isPeerConnectNotified('devB'), isFalse);
+    expect(control.hasEstablishedGroup, isFalse,
+        reason: '撤销后必须回到「没有组」，新设备才能加入');
+    expect(control.manualPeers.single.host, '192.168.1.23',
+        reason: '地址簿是用户配置，不是旧组观测');
+    expect(control.manualPeers.single.name, '书房');
+  });
+
   test('ensurePassphrase：已有口令不重新生成，缺失时生成并通知', () async {
     final existing = await control.ensurePassphrase();
     expect(

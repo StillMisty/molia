@@ -301,9 +301,13 @@ class SyncControlPlane extends ChangeNotifier {
   }
 
   /// 重置口令：全部设备需重新输入（口令即信任根）。
+  ///
+  /// 同时清空旧组观测：否则名册 / 已验证端点 / 传输成功时间会让
+  /// [hasEstablishedGroup] 在撤销后仍为真，新设备被误判成邀请方或冲突。
   Future<String> resetPassphrase() async {
     final generated = SyncPassphrase.generate();
     await _state.writePassphrase(generated);
+    await _state.resetGroupState();
     _passphrase = generated;
     notifyListeners();
     return generated;
