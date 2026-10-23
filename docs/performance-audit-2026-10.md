@@ -287,6 +287,9 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
   原子写；旧 `lyrics_cache_*` prefs 条目首次读取懒迁移，`usage` 目录扫描
   走短命 isolate。默认 `LyricsCache()` 仍走 prefs，避免 widget 测试的
   fake async 等待文件 Future。
+- **统计榜**：Top 歌手把逐事件有效判定与计数 / 时长求和下沉到 SQL
+  `GROUP BY pt.artist`，Dart 只做多歌手拆分、合并排序与 `limit`；不再把
+  `play_events` 全量读进 Dart。
 
 验证：AI / 歌词 / 全量测试通过；`flutter analyze --no-pub` 无问题。
 
