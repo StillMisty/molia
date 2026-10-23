@@ -15,6 +15,7 @@ import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../app/perf/data_path_trace.dart';
 import '../data/play_statistics_repository.dart';
 import '../domain/models/play_statistics.dart';
 import '../services/play_statistics_export.dart';
@@ -29,6 +30,14 @@ class PlayStatisticsProvider extends ChangeNotifier {
   final PlayStatisticsRepository _repository;
   final Logger _logger = Logger('molia.play_statistics_provider');
   StreamSubscription<void>? _subscription;
+
+  /// 页面打开期间的变更重载防抖窗口：一次播放收尾会连续广播多条变更，
+  /// 全部查询（汇总 / 榜单 / 热力图）不应跟着每条变更各跑一遍。
+  static const Duration watchDebounce = Duration(seconds: 1);
+
+  Timer? _watchTimer;
+  bool _watchReloadRunning = false;
+  bool _watchReloadQueued = false;
 
   PlayStatisticsRange _range = PlayStatisticsRange.month;
   PlayStatisticsValueMode _valueMode = PlayStatisticsValueMode.duration;
@@ -60,27 +69,38 @@ class PlayStatisticsProvider extends ChangeNotifier {
   /// 首次打开页面时调用（已加载过则跳过）。
   Future<void> ensureLoaded() async {
     if (_loaded) return;
-    await _load();
+    await _loadNow();
   }
 
   /// 页面打开时订阅仓库变更（收尾/清空后静默重载）。
+  ///
+  /// 变更先攒一个防抖窗口再查：收尾链路会连续广播多条事件，逐条查询会把
+  /// 同一份快照重复算多次；窗口内的新事件继续顺延，页面关闭即取消。
   void startWatching() {
     _subscription ??= _repository.changes.listen((_) {
-      if (_loaded) unawaited(_load(silent: true));
+      if (!_loaded) return;
+      _watchTimer?.cancel();
+      _watchTimer = Timer(watchDebounce, () {
+        _watchTimer = null;
+        unawaited(_reloadAfterChange());
+      });
     });
   }
 
-  /// 页面关闭时取消订阅。
+  /// 页面关闭时取消订阅，并丢掉还没触发的防抖重载。
   void stopWatching() {
     _subscription?.cancel();
     _subscription = null;
+    _watchTimer?.cancel();
+    _watchTimer = null;
+    _watchReloadQueued = false;
   }
 
   Future<void> setRange(PlayStatisticsRange value) async {
     if (_range == value) return;
     _range = value;
     notifyListeners();
-    await _load();
+    await _loadNow();
   }
 
   void setValueMode(PlayStatisticsValueMode value) {
@@ -89,8 +109,8 @@ class PlayStatisticsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 手动刷新（下拉/重试）。
-  Future<void> refresh() => _load();
+  /// 手动刷新（下拉/重试）：不走防抖，立即查询。
+  Future<void> refresh() => _loadNow();
 
   /// 某一天的播放明细（热力图点按弹层按需加载）。
   Future<DayPlayEvents> loadDay(DateTime day) => _repository.dayEvents(day);
@@ -98,7 +118,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
   /// 清空全部统计事件（不可撤销；调用方负责二次确认）。
   Future<void> clearAll() async {
     await _repository.clearAll();
-    await _load();
+    await _loadNow();
   }
 
   /// 导出**全量**听歌数据 JSON 并分享（汇总 + 榜单 + 最近明细）。
@@ -141,30 +161,63 @@ class PlayStatisticsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _load({bool silent = false}) async {
-    final token = ++_loadToken;
-    if (!silent) {
-      _loading = true;
-      notifyListeners();
+  /// 立即加载：取消防抖窗口（手动刷新 / 范围切换 / 清空后的数据必须立刻可见）。
+  Future<void> _loadNow() {
+    _watchTimer?.cancel();
+    _watchTimer = null;
+    // 手动加载已经拿到最新快照，排队中的自动重载没有意义。
+    _watchReloadQueued = false;
+    return _load();
+  }
+
+  /// 防抖后的自动重载：单飞 + 排队一次。
+  ///
+  /// 查询未完成时又来变更，只记一个 queued 标记，当前查询结束后再补一次，
+  /// 避免并发跑整份聚合；多次变更最终收敛成一次（或两次）查询。
+  Future<void> _reloadAfterChange() async {
+    if (_watchReloadRunning) {
+      _watchReloadQueued = true;
+      return;
     }
+    _watchReloadRunning = true;
     try {
-      // 一次快照：查询集合与范围语义都由领域层与仓库承担。
-      final snapshot = await _repository.snapshot(since: _since);
-      if (token != _loadToken) return; // 范围已切换：丢弃过期结果。
-      _snapshot = snapshot;
-      _loaded = true;
-      _failed = false;
-    } catch (e) {
-      if (token != _loadToken) return;
-      _failed = true;
-      _logger.severe('加载听歌统计失败', e);
+      do {
+        _watchReloadQueued = false;
+        await _load(silent: true);
+      } while (_watchReloadQueued);
     } finally {
-      if (token == _loadToken) {
-        _loading = false;
-        notifyListeners();
-      }
+      _watchReloadRunning = false;
     }
   }
+
+  Future<void> _load({bool silent = false}) => DataPathTrace.async(
+        'play_statistics.load',
+        () async {
+          final token = ++_loadToken;
+          if (!silent) {
+            _loading = true;
+            notifyListeners();
+          }
+          try {
+            // 一次快照：查询集合与范围语义都由领域层与仓库承担。
+            final snapshot = await _repository.snapshot(since: _since);
+            if (token != _loadToken) return; // 范围已切换：丢弃过期结果。
+            _snapshot = snapshot;
+            _loaded = true;
+            _failed = false;
+          } catch (e) {
+            if (token != _loadToken) return;
+            _failed = true;
+            _logger.severe('加载听歌统计失败', e);
+          } finally {
+            if (token == _loadToken) {
+              _loading = false;
+              notifyListeners();
+            }
+          }
+        },
+        fields: () => {'silent': silent ? 1 : 0},
+      );
 
   @override
   void dispose() {

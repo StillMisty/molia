@@ -7,10 +7,26 @@ import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
+/// 计数仓库：验证防抖窗口内没有查询、窗口结束后只查一次。
+class _CountingPlayStatisticsRepository extends PlayStatisticsRepository {
+  _CountingPlayStatisticsRepository({
+    required super.databaseProvider,
+    required super.statisticsSync,
+  });
+
+  int snapshotCalls = 0;
+
+  @override
+  Future<ListeningStatisticsSnapshot> snapshot({int? since}) {
+    snapshotCalls++;
+    return super.snapshot(since: since);
+  }
+}
+
 /// 听歌统计 Provider 测试：范围过滤、日历全量、清空与维度切换。
 void main() {
   late MoliaDatabase db;
-  late PlayStatisticsRepository repository;
+  late _CountingPlayStatisticsRepository repository;
   late PlayStatisticsProvider provider;
 
   /// 直接插入已收尾事件（查询测试用，绕开采集服务）。
@@ -52,7 +68,7 @@ void main() {
 
   setUp(() async {
     db = openMemoryDatabase();
-    repository = PlayStatisticsRepository(
+    repository = _CountingPlayStatisticsRepository(
       databaseProvider: () => db,
       statisticsSync: testStatisticsSyncStore(() => db),
     );
@@ -148,5 +164,39 @@ void main() {
     expect(detail.events.single.songId, 'a');
     expect(detail.events.single.raw, {'id': 'a'});
     expect(detail.listenedMs, 60000);
+  });
+
+  test('仓库变更防抖：连续变更只重载一次；手动刷新立即加载', () async {
+    await provider.ensureLoaded();
+    expect(repository.snapshotCalls, 1);
+
+    provider.startWatching();
+    await repository.clearAll();
+    await repository.clearAll();
+    await repository.clearAll();
+
+    // 防抖窗口内不查库。
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(repository.snapshotCalls, 1);
+
+    await Future<void>.delayed(
+      PlayStatisticsProvider.watchDebounce + const Duration(milliseconds: 200),
+    );
+    expect(repository.snapshotCalls, 2, reason: '一串变更只收敛成一次静默重载');
+
+    await provider.refresh();
+    expect(repository.snapshotCalls, 3, reason: '手动刷新不走防抖');
+  });
+
+  test('停止监听 / dispose 取消尚未触发的防抖重载', () async {
+    await provider.ensureLoaded();
+    provider.startWatching();
+    await repository.clearAll();
+    provider.stopWatching();
+
+    await Future<void>.delayed(
+      PlayStatisticsProvider.watchDebounce + const Duration(milliseconds: 200),
+    );
+    expect(repository.snapshotCalls, 1);
   });
 }

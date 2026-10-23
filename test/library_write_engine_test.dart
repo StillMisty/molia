@@ -110,7 +110,9 @@ void main() {
   test('历史写入 / 删除：行版本 = 日志版本，墓碑按注入时钟，各广播一次', () async {
     await engine.addHistoryEntry(history('1', playedAt: 100));
     await flush();
-    expect(events, [const LibraryHistoryChange()]);
+    final change = events.single as LibraryHistoryChange;
+    expect(change.entry?.songId, '1');
+    expect(change.entry?.playedAt, 100);
 
     final row = (await db.select(db.playHistory).get()).single;
     expect(row.playedAt, 100);
@@ -342,7 +344,13 @@ void main() {
     final favorites = (await db.select(db.playlists).get()).single;
     expect(favorites.name, favoritesPlaylistRowName);
     expect(favorites.syncId, SyncRecordKeys.favoritesPlaylistSyncId);
-    expect(events.last, isA<LibraryFavoritesChange>());
+    final added = events.last as LibraryFavoritesChange;
+    expect(added.toggle?.favorite, isTrue);
+    expect(added.toggle?.sourceKey, 'wy');
+    expect(added.toggle?.songId, '1');
+    // 增量载荷带实际排序位与加入时间，provider 可直接插入缓存列表。
+    expect(added.toggle?.track?.sortOrder, 0);
+    expect(added.toggle?.track?.addedAt, clockMs);
     // 加入时间是内容时间：经注入时钟（曾经走 DateTime.now()，无法钉住）。
     expect((await db.select(db.playlistTracks).get()).single.addedAt, clockMs);
 
@@ -352,7 +360,9 @@ void main() {
       isFalse,
     );
     await flush();
-    expect(events.single, isA<LibraryFavoritesChange>());
+    final removed = events.single as LibraryFavoritesChange;
+    expect(removed.toggle?.favorite, isFalse);
+    expect(removed.toggle?.track, isNull);
     expect(await db.select(db.playlistTracks).get(), isEmpty);
     final tombstone = (await db.select(db.syncTombstones).get()).single;
     expect(tombstone.category, SyncCategory.playlistTracks.name);

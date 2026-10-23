@@ -146,7 +146,7 @@ class LibraryWriteEngine {
       );
       await trimHistory(db);
     });
-    notifyChanged(const LibraryChange.history());
+    notifyChanged(LibraryChange.history(entry: entry));
   }
 
   /// 批量写入播放历史（唯一键 upsert + 裁剪上限；单次广播）。
@@ -517,7 +517,12 @@ class LibraryWriteEngine {
     });
     if (inserted == 0) return false;
     notifyChanged(favoriteChange
-        ? const LibraryChange.favorites()
+        ? LibraryChange.favorites(
+            toggle: FavoriteToggle.add(
+              _trackAtPosition(track,
+                  playlistId: playlistId, sortOrder: nextOrder),
+            ),
+          )
         : LibraryChange.playlistTracks(playlistId));
     return true;
   }
@@ -651,7 +656,12 @@ class LibraryWriteEngine {
     });
     if (removed > 0) {
       notifyChanged(favoriteChange
-          ? const LibraryChange.favorites()
+          ? LibraryChange.favorites(
+              toggle: FavoriteToggle.remove(
+                sourceKey: sourceKey,
+                songId: songId,
+              ),
+            )
           : LibraryChange.playlistTracks(playlistId));
     }
     return removed;
@@ -1280,6 +1290,27 @@ class LibraryWriteEngine {
       [kHistoryLimit],
     );
   }
+
+  /// 收藏增量载荷里的列表行：位置字段以实际写入值为准（调用方传入的
+  /// `playlistId` / `sortOrder` 可能还是占位值）。
+  static PlaylistTrack _trackAtPosition(
+    PlaylistTrack track, {
+    required int playlistId,
+    required int sortOrder,
+  }) =>
+      PlaylistTrack(
+        playlistId: playlistId,
+        sourceKey: track.sourceKey,
+        songId: track.songId,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        coverUrl: track.coverUrl,
+        durationMs: track.durationMs,
+        raw: track.raw,
+        addedAt: track.addedAt,
+        sortOrder: sortOrder,
+      );
 
   /// 位置偏好（设置页；未接线按追加到末尾）。
   bool get _insertAtTop => _addToTop?.call() ?? false;

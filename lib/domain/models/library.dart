@@ -160,6 +160,49 @@ class PlaylistTrack {
   String toString() => 'PlaylistTrack($key, $title)';
 }
 
+/// 单次收藏切换的增量载荷：provider 据此只改缓存里的一行，不重查整表。
+///
+/// 加入收藏时携带写入行的完整 [track]（含真实 `sortOrder` / `addedAt`）；
+/// 取消收藏只需要键。[track] 在 `favorite == true` 时必须有值。
+final class FavoriteToggle {
+  const FavoriteToggle({
+    required this.sourceKey,
+    required this.songId,
+    required this.favorite,
+    this.track,
+  }) : assert(!favorite || track != null, '加入收藏必须带写入行');
+
+  /// 加入收藏（[track] 是实际落库的列表行，位置字段已由写路径填好）。
+  factory FavoriteToggle.add(PlaylistTrack track) => FavoriteToggle(
+        sourceKey: track.sourceKey,
+        songId: track.songId,
+        favorite: true,
+        track: track,
+      );
+
+  /// 取消收藏。
+  factory FavoriteToggle.remove({
+    required String sourceKey,
+    required String songId,
+  }) =>
+      FavoriteToggle(
+        sourceKey: sourceKey,
+        songId: songId,
+        favorite: false,
+      );
+
+  final String sourceKey;
+  final String songId;
+
+  /// 切换后的收藏状态（true = 已收藏）。
+  final bool favorite;
+
+  /// 仅加入收藏时有值：可直接插入缓存收藏列表的列表行。
+  final PlaylistTrack? track;
+
+  String get key => '$sourceKey:$songId';
+}
+
 /// 资料库变更事件：`LibraryStore.changes` 广播的载荷，类型即失效范围。
 ///
 /// 收藏切换只做局部刷新（避免列表闪动 / 滚动位置丢失），所以事件必须携带
@@ -170,7 +213,12 @@ sealed class LibraryChange {
   const LibraryChange();
 
   /// 播放历史变化。
-  const factory LibraryChange.history() = LibraryHistoryChange;
+  ///
+  /// [entry] 非空表示「单条写入」：消费方可以直接把这条记录合并进内存
+  /// （重播原位替换、新条目置前），不必回查数据库。批量写入 / 删除 / 清空 /
+  /// 同步落地等无法用单条表达的变化仍传 null，由消费方整表重载。
+  const factory LibraryChange.history({PlayHistoryEntry? entry}) =
+      LibraryHistoryChange;
 
   /// 列表集合（新建 / 重命名 / 删除）变化。
   const factory LibraryChange.playlists() = LibraryPlaylistsChange;
@@ -180,14 +228,21 @@ sealed class LibraryChange {
       LibraryPlaylistTracksChange;
 
   /// 收藏状态变化。
-  const factory LibraryChange.favorites() = LibraryFavoritesChange;
+  ///
+  /// [toggle] 非空表示「单曲收藏切换」：消费方可以就地增删收藏列表的一行并
+  /// 校准计数；批量收藏 / 换源 / 同步 / 导入等传 null，走整表校准。
+  const factory LibraryChange.favorites({FavoriteToggle? toggle}) =
+      LibraryFavoritesChange;
 
   /// `.lxmc` 批量导入（历史 / 列表 / 收藏都可能变化）。
   const factory LibraryChange.import() = LibraryImportChange;
 }
 
 final class LibraryHistoryChange extends LibraryChange {
-  const LibraryHistoryChange();
+  const LibraryHistoryChange({this.entry});
+
+  /// 单条写入的完整记录（null = 无法增量表达，需要整表重载）。
+  final PlayHistoryEntry? entry;
 }
 
 final class LibraryPlaylistsChange extends LibraryChange {
@@ -201,7 +256,10 @@ final class LibraryPlaylistTracksChange extends LibraryChange {
 }
 
 final class LibraryFavoritesChange extends LibraryChange {
-  const LibraryFavoritesChange();
+  const LibraryFavoritesChange({this.toggle});
+
+  /// 单曲收藏切换的增量载荷（null = 需要整表校准）。
+  final FavoriteToggle? toggle;
 }
 
 /// 资料库变更 → 受影响的同步类别（组合根据此标记待外发；蜂窝小类别轮

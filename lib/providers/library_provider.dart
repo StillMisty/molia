@@ -13,6 +13,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/perf/data_path_trace.dart';
 import '../domain/ports/library_store.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/download.dart' show kLocalSourceKey;
@@ -45,8 +46,31 @@ class LibraryProvider extends ChangeNotifier {
   bool _historyLoaded = false;
   bool _playlistsLoaded = false;
   bool _favoritesLoaded = false;
+
+  /// `_favoriteKeys` 是否来自仓库整表（而非只有一次乐观 toggle）。
+  /// 只有整表可信时才能用它的长度校准收藏计数。
+  bool _favoriteKeysAuthoritative = false;
+
   bool _isHistoryLoading = false;
   bool _isPlaylistsLoading = false;
+
+  /// 历史查询进行中的数量（静默重载与显式刷新共用）。
+  ///
+  /// 查询期间到达的单条写入不能直接丢掉：快照可能取自写入之前。这里只记录
+  /// 进行中数量，等最后一个查询落地后再把缓冲条目补进去。
+  int _historyLoadsInFlight = 0;
+
+  /// 查询期间到达、尚未合并进内存的单条历史写入（按到达顺序）。
+  List<PlayHistoryEntry> _pendingHistoryEntries = const [];
+
+  /// 收藏全量校准进行中的数量。
+  ///
+  /// 校准的 `favoriteKeys` / 列表 / 计数来自多个 await，期间的本地 toggle
+  /// 可能落在旧快照之外。计数器归零后重放队列，保证最终状态包含本地写入。
+  int _favoritesCalibrationsInFlight = 0;
+
+  /// 校准期间到达的收藏切换（立即打补丁，同时排队等待重放）。
+  final List<FavoriteToggle> _pendingFavoriteToggles = [];
 
   bool _disposed = false;
   Future<void>? _pendingReload;
@@ -111,16 +135,25 @@ class LibraryProvider extends ChangeNotifier {
   void _onRepositoryChanged(LibraryChange change) {
     if (_disposed) return;
     switch (change) {
-      case LibraryHistoryChange():
-        // 只有历史变化：不清列表/收藏缓存；静默回载（不闪 loading）。
-        _historyLoaded = false;
-        _pendingReload = _reloadHistoryQuietly();
-        unawaited(_pendingReload!);
-      case LibraryFavoritesChange():
-        // 收藏切换：收藏键已由 toggleFavorite 乐观更新；这里只做
-        // 收藏列表曲目与计数的后台校准（旧列表保持可见，不闪 loading）。
-        _pendingReload = _refreshFavoritesQuietly();
-        unawaited(_pendingReload!);
+      case LibraryHistoryChange(:final entry):
+        if (entry != null) {
+          // 单条写入直接打补丁：播放 / 收藏都不必等待一次全表查询。
+          _applyHistoryEntry(entry);
+        } else {
+          // 删除 / 清空 / 同步等无法增量表达：保持现有整表重载。
+          _historyLoaded = false;
+          _pendingReload = _reloadHistoryQuietly();
+          unawaited(_pendingReload!);
+        }
+      case LibraryFavoritesChange(:final toggle):
+        if (toggle != null) {
+          // 单曲收藏切换：只改缓存里的一行与计数，不闪列表、不重查。
+          _applyFavoriteToggle(toggle);
+        } else {
+          // 批量 / 换源 / 同步 / 导入：收藏键与列表都按库校准。
+          _pendingReload = _refreshFavoritesQuietly();
+          unawaited(_pendingReload!);
+        }
       case LibraryPlaylistTracksChange(:final playlistId):
         _pendingReload = Future.wait([
           _reloadPlaylistTracksQuietly(playlistId),
@@ -133,6 +166,171 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
+  /// 单条历史写入的内存补丁（不查库）。
+  ///
+  /// 与 [_mergeHistoryOrder] 同一顺序口径：已有条目原位替换内容（重播不打断
+  /// 浏览），新条目插到最前；超出上限时裁掉尾部最旧记录。
+  void _applyHistoryEntry(PlayHistoryEntry entry) {
+    // 查询进行中：结果可能还没包含这次写入，先缓冲，等查询落地后再合并。
+    if (_historyLoadsInFlight > 0) {
+      _pendingHistoryEntries = [..._pendingHistoryEntries, entry];
+      return;
+    }
+    // 历史尚未加载过：缓存本来就没有可补的基线，保持 dirty 等首次
+    // refreshHistory。这里刻意不回查——首屏可能根本没打开历史页。
+    if (!_historyLoaded) return;
+    _mergeHistoryEntry(entry);
+    _notify();
+  }
+
+  /// 把 [entry] 合并进当前历史（不通知）；调用方负责一次性通知。
+  void _mergeHistoryEntry(PlayHistoryEntry entry) {
+    final key = _historyKey(entry);
+    final index = _history.indexWhere((item) => _historyKey(item) == key);
+    final next = List<PlayHistoryEntry>.of(_history);
+    if (index >= 0) {
+      next[index] = entry;
+    } else {
+      next.insert(0, entry);
+    }
+    if (next.length > kHistoryLimit) {
+      next.removeRange(kHistoryLimit, next.length);
+    }
+    _history = next;
+  }
+
+  /// 查询结束时补入期间缓冲的单条写入。
+  ///
+  /// 只有最后一个查询落地、且已有可合并的基线时才消费缓冲；失败且从未
+  /// 加载成功时保留缓冲，等下一次 refreshHistory 再合并（DB 也有这次写入，
+  /// 不会永久丢失）。
+  void _drainPendingHistoryEntries() {
+    if (_historyLoadsInFlight > 0 || _pendingHistoryEntries.isEmpty) return;
+    if (!_historyLoaded) return;
+    for (final entry in _pendingHistoryEntries) {
+      _mergeHistoryEntry(entry);
+    }
+    _pendingHistoryEntries = const [];
+  }
+
+  /// 一个历史查询结束：递减进行中计数，最后一个查询负责补入缓冲。
+  void _finishHistoryLoad({required bool success}) {
+    if (_historyLoadsInFlight > 0) _historyLoadsInFlight--;
+    if (_historyLoadsInFlight > 0) return;
+    // 失败但旧缓存仍在：把缓冲合并进旧缓存；失败且从未加载成功则留到下次。
+    if (success || _historyLoaded) _drainPendingHistoryEntries();
+  }
+
+  /// 单曲收藏切换的内存补丁（不查库）。
+  ///
+  /// [toggle] 来自写入侧，必定对应一次真实落库。校准进行中时先排队：校准的
+  /// 多个快照可能早于这次写入，立即打补丁后仍会被旧结果覆盖；等最后一个校准
+  /// 结束再重放一次同样的幂等补丁。重放期间计数不再排队（计数器已归零）。
+  void _applyFavoriteToggle(FavoriteToggle toggle) {
+    if (_favoritesCalibrationsInFlight > 0) {
+      _pendingFavoriteToggles.add(toggle);
+    }
+    _patchFavoriteToggle(toggle);
+    _notify();
+  }
+
+  /// 收藏补丁的实际实现（不通知）：立即应用与校准后重放共用，必须幂等。
+  void _patchFavoriteToggle(FavoriteToggle toggle) {
+    final hadKey = _favoriteKeys.contains(toggle.key);
+    final keys = Set<String>.from(_favoriteKeys);
+    if (toggle.favorite) {
+      keys.add(toggle.key);
+    } else {
+      keys.remove(toggle.key);
+    }
+    _favoriteKeys = keys;
+    // 只有全量键集合可信时才标记「已加载」；否则一次 toggle 会把部分集合
+    // 当成全量，后续 ensureFavoritesLoaded 不再补查其它曲目的收藏状态。
+    if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
+    if (hadKey != toggle.favorite) _favoritesRevision++;
+
+    final favoritesId = _favoritesPlaylistId;
+    if (favoritesId == null) return;
+    final cached = _tracksByPlaylist[favoritesId];
+    if (cached != null) {
+      final hasRow = cached.any((track) =>
+          track.sourceKey == toggle.sourceKey && track.songId == toggle.songId);
+      if (toggle.favorite && !hasRow) {
+        final track = toggle.track;
+        if (track != null) {
+          final next = List<PlaylistTrack>.of(cached);
+          final index =
+              next.indexWhere((item) => item.sortOrder > track.sortOrder);
+          next.insert(index < 0 ? next.length : index, track);
+          _tracksByPlaylist[favoritesId] = next;
+        }
+      } else if (!toggle.favorite && hasRow) {
+        _tracksByPlaylist[favoritesId] = [
+          for (final track in cached)
+            if (!(track.sourceKey == toggle.sourceKey &&
+                track.songId == toggle.songId))
+              track,
+        ];
+      }
+    }
+
+    PlaylistInfo? favorites;
+    for (final playlist in _playlists) {
+      if (playlist.id == favoritesId) {
+        favorites = playlist;
+        break;
+      }
+    }
+    if (favorites == null) return;
+    // 计数优先级：整表收藏键 > 已加载列表长度 > ±1。
+    // 前两者都是权威快照，重放时不会把校准已包含的 toggle 再算一次。
+    final favoriteTracks = _tracksByPlaylist[favoritesId];
+    final trackCount = _favoriteKeysAuthoritative
+        ? _favoriteKeys.length
+        : favoriteTracks != null
+            ? favoriteTracks.length
+            : _adjustTrackCount(
+                favorites.trackCount,
+                toggle.favorite ? 1 : -1,
+              );
+    if (trackCount == favorites.trackCount) return;
+    _playlists = [
+      for (final playlist in _playlists)
+        if (playlist.id == favoritesId)
+          PlaylistInfo(
+            id: playlist.id,
+            name: playlist.name,
+            createdAt: playlist.createdAt,
+            trackCount: trackCount,
+            isFavorites: playlist.isFavorites,
+          )
+        else
+          playlist,
+    ];
+    _playlistsRevision++;
+  }
+
+  /// 校准结束时重放期间排队的 toggle；只在最后一个校准落地后调用。
+  void _finishFavoritesCalibration() {
+    if (_favoritesCalibrationsInFlight > 0) _favoritesCalibrationsInFlight--;
+    if (_favoritesCalibrationsInFlight > 0) return;
+    if (_pendingFavoriteToggles.isEmpty) return;
+    final queued = List<FavoriteToggle>.of(_pendingFavoriteToggles);
+    _pendingFavoriteToggles.clear();
+    // 重放走补丁本体而不是 _applyFavoriteToggle：不会再次入队。
+    for (final toggle in queued) {
+      _patchFavoriteToggle(toggle);
+    }
+  }
+
+  static int _adjustTrackCount(int count, int delta) {
+    if (delta > 0) return count + 1;
+    if (delta < 0) return _dec(count);
+    return count;
+  }
+
+  static int _dec(int value) => value > 0 ? value - 1 : 0;
+
   void _invalidateAll() {
     // 立即失效缓存并通知（同步），后台静默重载；不做事件去重——
     // 去重标志会在微任务未执行时吞掉后续变更，导致 UI 永久陈旧。
@@ -140,6 +338,9 @@ class LibraryProvider extends ChangeNotifier {
     _historyLoaded = false;
     _playlistsLoaded = false;
     _favoritesLoaded = false;
+    // 导入等变化可能新增收藏，旧键集合不再是全量：校准完成前不能再用它
+    // 反推计数，也不能让一次 toggle 把它重新标成「已加载」。
+    _favoriteKeysAuthoritative = false;
     _favoritesRevision++;
     _playlistsRevision++;
     _tracksByPlaylist.clear();
@@ -158,16 +359,28 @@ class LibraryProvider extends ChangeNotifier {
   /// 为什么：播放历史 / 本地歌曲列表在浏览期间不该因重播而即时重排（刚点的
   /// 歌跳到列表顶部会打断浏览）；要按最新播放顺序刷新时，由收藏页在重新进入
   /// 合集 / 页面重新可见时调用 [resortHistoryByRecency]。
-  Future<void> _reloadHistoryQuietly() async {
-    try {
-      final fresh = await _repository.listHistory();
-      _history = _mergeHistoryOrder(current: _history, fresh: fresh);
-      _historyLoaded = true;
-    } catch (e) {
-      debugPrint('[Library] 重载播放历史失败: $e');
-    }
-    _notify();
-  }
+  Future<void> _reloadHistoryQuietly() => DataPathTrace.async(
+        'library.history.reload',
+        () async {
+          // 新一次整表查询覆盖此前的本地写入（它们都已落库）：丢弃旧缓冲，
+          // 避免查询后又把随后被删除的条目“复活”。查询期间的新写入会重新入队。
+          _pendingHistoryEntries = const [];
+          _historyLoadsInFlight++;
+          var success = false;
+          try {
+            final fresh = await _repository.listHistory();
+            _history = _mergeHistoryOrder(current: _history, fresh: fresh);
+            _historyLoaded = true;
+            success = true;
+          } catch (e) {
+            debugPrint('[Library] 重载播放历史失败: $e');
+          } finally {
+            _finishHistoryLoad(success: success);
+          }
+          _notify();
+        },
+        fields: () => {'rows': _history.length},
+      );
 
   /// 稳定合并：已存在条目保持 [current] 的相对顺序（内容用最新值），全新条目
   /// 按最近优先插到最前（[fresh] 本身即最近优先）。
@@ -200,8 +413,7 @@ class LibraryProvider extends ChangeNotifier {
   void resortHistoryByRecency() {
     if (_history.length < 2) return;
     final decorated = [
-      for (var i = 0; i < _history.length; i++)
-        (entry: _history[i], index: i),
+      for (var i = 0; i < _history.length; i++) (entry: _history[i], index: i),
     ]..sort((a, b) {
         final byTime = b.entry.playedAt.compareTo(a.entry.playedAt);
         return byTime != 0 ? byTime : a.index.compareTo(b.index);
@@ -219,30 +431,54 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 收藏变化的后台校准：列表保持可见，不翻转 loading。
-  Future<void> _refreshFavoritesQuietly() async {
-    _favoritesRevision++;
-    try {
-      _favoriteKeys = await _repository.favoriteKeys();
-      _favoritesLoaded = true;
-    } catch (e) {
-      debugPrint('[Library] 刷新收藏状态失败: $e');
-    }
-    final favoritesId = _favoritesPlaylistId;
-    if (favoritesId != null && _tracksByPlaylist.containsKey(favoritesId)) {
-      try {
-        _tracksByPlaylist[favoritesId] =
-            await _repository.listPlaylistTracks(favoritesId);
-      } catch (e) {
-        debugPrint('[Library] 刷新收藏列表失败: $e');
-      }
-    }
-    // _refreshPlaylistsQuietly 内部会通知，且此时收藏状态已全部更新：
-    // 这里不再追加一次尾部通知（一次收藏操作的通知次数因此收敛）。
-    await _refreshPlaylistsQuietly();
-  }
+  Future<void> _refreshFavoritesQuietly() => DataPathTrace.async(
+        'library.favorites.refresh',
+        () async {
+          _favoritesRevision++;
+          // 新一次整表校准覆盖此前的本地 toggle（都已落库）：旧队列丢弃，
+          // 避免校准后重放已被后续删除的 toggle。校准期间的新 toggle 会重新入队。
+          _pendingFavoriteToggles.clear();
+          _favoritesCalibrationsInFlight++;
+          try {
+            try {
+              _favoriteKeys = await _repository.favoriteKeys();
+              _favoriteKeysAuthoritative = true;
+              _favoritesLoaded = true;
+            } catch (e) {
+              debugPrint('[Library] 刷新收藏状态失败: $e');
+            }
+            final favoritesId = _favoritesPlaylistId;
+            if (favoritesId != null &&
+                _tracksByPlaylist.containsKey(favoritesId)) {
+              try {
+                _tracksByPlaylist[favoritesId] =
+                    await _repository.listPlaylistTracks(favoritesId);
+              } catch (e) {
+                debugPrint('[Library] 刷新收藏列表失败: $e');
+              }
+            }
+            // 通知推迟到 finally：重放完校准期间的本地 toggle 后只通知一次。
+            await _refreshPlaylistsQuietly(notify: false);
+          } finally {
+            _finishFavoritesCalibration();
+            _notify();
+          }
+        },
+        fields: () {
+          final favoritesId = _favoritesPlaylistId;
+          return {
+            'favorites': _favoriteKeys.length,
+            'tracks': favoritesId == null
+                ? 0
+                : (_tracksByPlaylist[favoritesId]?.length ?? 0),
+          };
+        },
+      );
 
   /// 列表集合/计数后台刷新（不清曲目缓存、不闪 loading）。
-  Future<void> _refreshPlaylistsQuietly() async {
+  ///
+  /// [notify] 为 false 时由调用方在所有状态（含排队重放）更新完后统一通知。
+  Future<void> _refreshPlaylistsQuietly({bool notify = true}) async {
     _playlistsRevision++;
     try {
       _playlists = await _repository.listPlaylists();
@@ -250,7 +486,7 @@ class LibraryProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[Library] 刷新列表失败: $e');
     }
-    _notify();
+    if (notify) _notify();
   }
 
   /// 单个列表曲目的后台重载：已缓存时原地替换（滚动位置/列表实例稳定）。
@@ -281,15 +517,21 @@ class LibraryProvider extends ChangeNotifier {
   /// 不走停留期间的稳定合并。
   Future<void> refreshHistory({bool force = false}) async {
     if (_historyLoaded && !force) return;
+    // 整表查询会包含此前的本地写入，旧缓冲不再需要（见 _reloadHistoryQuietly）。
+    _pendingHistoryEntries = const [];
+    _historyLoadsInFlight++;
     _isHistoryLoading = true;
     _notify();
+    var success = false;
     try {
       _history = await _repository.listHistory();
       _historyLoaded = true;
+      success = true;
     } catch (e) {
       // 查询失败保持旧缓存（首次为空列表），避免 UI 崩溃。
       debugPrint('[Library] 加载播放历史失败: $e');
     } finally {
+      _finishHistoryLoad(success: success);
       _isHistoryLoading = false;
       _notify();
     }
@@ -316,6 +558,7 @@ class LibraryProvider extends ChangeNotifier {
     _favoritesRevision++;
     try {
       _favoriteKeys = await _repository.favoriteKeys();
+      _favoriteKeysAuthoritative = true;
       _favoritesLoaded = true;
       _notify();
     } catch (e) {
@@ -544,7 +787,7 @@ class LibraryProvider extends ChangeNotifier {
         keys.add('${track.sourceKey}:${track.songId}');
       }
       _favoriteKeys = keys;
-      _favoritesLoaded = true;
+      if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
       _favoritesRevision++;
       _notify();
     }
@@ -562,7 +805,7 @@ class LibraryProvider extends ChangeNotifier {
         for (final key in _favoriteKeys)
           if (!dropped.contains(key)) key,
       };
-      _favoritesLoaded = true;
+      if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
       _favoritesRevision++;
       _notify();
     }
@@ -602,30 +845,37 @@ class LibraryProvider extends ChangeNotifier {
     String? coverUrl,
     int? durationMs,
     Map<String, dynamic> raw = const {},
-  }) async {
-    final favorite = await _repository.toggleFavorite(
-      sourceKey: sourceKey,
-      songId: songId,
-      title: title,
-      artist: artist,
-      album: album,
-      coverUrl: coverUrl,
-      durationMs: durationMs,
-      raw: raw,
+  }) {
+    var favorite = false;
+    return DataPathTrace.async(
+      'library.favorite.toggle',
+      () async {
+        favorite = await _repository.toggleFavorite(
+          sourceKey: sourceKey,
+          songId: songId,
+          title: title,
+          artist: artist,
+          album: album,
+          coverUrl: coverUrl,
+          durationMs: durationMs,
+          raw: raw,
+        );
+        // 立即更新本地键集合，UI 无需等待 changes 流的下一次重载。
+        final keys = Set<String>.from(_favoriteKeys);
+        final key = '$sourceKey:$songId';
+        if (favorite) {
+          keys.add(key);
+        } else {
+          keys.remove(key);
+        }
+        _favoriteKeys = keys;
+        if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
+        _favoritesRevision++;
+        _notify();
+        return favorite;
+      },
+      fields: () => {'favorite': favorite ? 1 : 0},
     );
-    // 立即更新本地键集合，UI 无需等待 changes 流的下一次重载。
-    final keys = Set<String>.from(_favoriteKeys);
-    final key = '$sourceKey:$songId';
-    if (favorite) {
-      keys.add(key);
-    } else {
-      keys.remove(key);
-    }
-    _favoriteKeys = keys;
-    _favoritesLoaded = true;
-    _favoritesRevision++;
-    _notify();
-    return favorite;
   }
 
   /// 收藏/取消收藏领域曲目（播放页/UI 的收藏唯一入口）。
@@ -701,8 +951,7 @@ class LibraryProvider extends ChangeNotifier {
     Uint8List bytes, {
     String? fileName,
   }) async {
-    final result =
-        await _repository.importLxmcBytes(bytes, fileName: fileName);
+    final result = await _repository.importLxmcBytes(bytes, fileName: fileName);
     await Future.wait([
       refreshHistory(force: true),
       refreshPlaylists(force: true),
