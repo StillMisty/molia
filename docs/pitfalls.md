@@ -782,3 +782,12 @@
     `frozen` 分支必须用 `PowerManager.isInteractive` 兜底：设备已经交互就清
     `frozen` + `pending` 并立即 `render`；`setFrozen(false)` 也先
     `finishPendingRoll()`。不要用「屏幕广播一定到达」作为解冻前提。
+76. **Windows/Linux 的 media_kit 在「暂停于 EOF」时不会上报 completed，播放键
+    必须先暂停再回零**：用户暂停在最后一秒、mpv 已经停在 EOF 时，media_kit 的
+    `pause()` 会关闭播放态广播（`isPlayingStateChangeAllowed=false`），
+    `completed` 事件不会发出；此时 `processingState` 仍是 ready，只有位置停在
+    曲末。直接 `play()` 在 EOF 不会重新出声，表现为「最后一秒暂停后再点播放没
+    反应」；另外 just_audio 播完后 `playing` 仍为 true，`play()` 会被它自己
+    直接返回。`LocalPlaybackService.toggle()` 因此同时用 `completed` 与
+    「位置 ≥ 时长 - 250ms」判定曲末，并在 `_restartFromStart()` 里先 `pause()`
+    再 `seek(0)`；回归用例见 `test/playback/local_playback_service_test.dart`。

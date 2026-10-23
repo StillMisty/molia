@@ -124,6 +124,12 @@ class LocalPlaybackService extends ChangeNotifier {
 
   bool _isPlaying = false;
   bool _isLoading = false;
+
+  /// 上一次播放器处理状态：完成处理只在「进入 completed」时触发一次。
+  ///
+  /// 播完后 playing 仍可能为 true，暂停 / seek 会再次上报 completed；按
+  /// 状态跳变去重，避免重复发完成事件（定时关闭 / 自动切歌被触发两次）。
+  ProcessingState _lastProcessingState = ProcessingState.idle;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   String? _lastError;
@@ -354,6 +360,24 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 当前曲目时长（优先使用播放器解析出的时长）。
   Duration get duration => _duration;
+
+  /// 曲末判定容差：播放器位置与时长有采样 / 浮点误差，留出极小余量；
+  /// 不能放大到「还剩半秒也算播完」，否则会误把正常的末尾续播当成重播。
+  static const Duration _trackEndTolerance = Duration(milliseconds: 250);
+
+  /// 是否已到曲末（可安全地从头重播）。
+  ///
+  /// 不能只看 [ProcessingState.completed]：Windows/Linux 的
+  /// just_audio_media_kit 在暂停中途到达 EOF 时，media_kit 的 pause 会关闭
+  /// 播放态广播，`completed` 事件不会上报；此时 processingState 仍是 ready，
+  /// 只有位置停在曲末。直接 play() 在 EOF 不会重新出声，表现为最后一秒
+  /// 暂停后再点播放没反应。
+  bool get _isAtTrackEnd {
+    if (_player.processingState == ProcessingState.completed) return true;
+    final duration = _player.duration ?? _duration;
+    if (duration <= Duration.zero) return false;
+    return _player.position >= duration - _trackEndTolerance;
+  }
 
   /// 当前队列与下标（用于系统媒体会话的队列展示与跳转）。
   List<SourceTrack> get queueTracks => List.unmodifiable(_queue);
@@ -589,18 +613,23 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> toggle() async {
     if (_currentTrack == null) return;
-    if (_player.playing) {
+    // 以对外播放态（completed 视为暂停）判断，而不是 just_audio 原始的
+    // `playing`：自然播完后 playing 仍会保持 true，按它判断会把「继续播放」
+    // 错走成暂停（第一次点没反应，第二次才重启）。
+    if (_isPlaying) {
       await pause();
-    } else {
-      if (_player.processingState == ProcessingState.completed) {
-        await _seekPlayer(Duration.zero);
-      }
-      unawaited(_player.play().catchError((Object e) {
-        _lastError = e.toString();
-        _isPlaying = false;
-        notifyListeners();
-      }));
+      return;
     }
+    // 已到曲末（含 media_kit 暂停在 EOF、processingState 仍为 ready 的情况）
+    // 先回零：直接 play() 在结尾不会重新出声。
+    if (_isAtTrackEnd) {
+      await _restartFromStart();
+    }
+    unawaited(_player.play().catchError((Object e) {
+      _lastError = e.toString();
+      _isPlaying = false;
+      notifyListeners();
+    }));
   }
 
   Future<void> seek(Duration position) async {
@@ -618,6 +647,19 @@ class LocalPlaybackService extends ChangeNotifier {
     _seekRevision++;
     _position = position;
     _scheduleNotify();
+  }
+
+  /// 从曲末重启当前曲目：先把底层真正置为暂停，再回零。
+  ///
+  /// just_audio 播完后 `playing` 仍可能为 true，此时 `play()` 会直接返回；
+  /// media_kit（Windows/Linux）在 EOF 也停在暂停态。只 seek + play 时，部分
+  /// 后端会「静默地从 0 开始但不出声」。先 pause 一次能保证随后的 play 一定
+  /// 下发到平台，再配合 [_seekPlayer] 从 0 起播。
+  Future<void> _restartFromStart() async {
+    if (_player.playing) {
+      await _player.pause();
+    }
+    await _seekPlayer(Duration.zero);
   }
 
   /// 应用内音量（0..1；直接读播放器，构造默认 1.0）。
@@ -738,10 +780,14 @@ class LocalPlaybackService extends ChangeNotifier {
   void _onPlayerState(PlayerState state) {
     _isPlaying =
         state.playing && state.processingState != ProcessingState.completed;
+    final enteredCompleted =
+        state.processingState == ProcessingState.completed &&
+            _lastProcessingState != ProcessingState.completed;
+    _lastProcessingState = state.processingState;
     // 播放态变化可能改变采样档位（后台暂停 → 停采样；后台续播 → 1s Timer；
     // 前台始终高频流，这里是无操作）。
     _syncPositionSampling();
-    if (state.processingState == ProcessingState.completed) {
+    if (enteredCompleted) {
       _handleTrackCompleted();
     }
     notifyListeners();
@@ -764,27 +810,21 @@ class LocalPlaybackService extends ChangeNotifier {
       if (stopAfterCurrent) {
         // 曲末停在当前曲目，不自动切歌；位置流可能停在半途，这里对齐到
         // 曲末，通知栏 / 播放页不会显示一个半截进度。
-        if (_duration > Duration.zero) _position = _duration;
-        try {
-          await _player.pause();
-        } catch (e) {
-          debugPrint('[LocalPlayback] 播完当前曲目后暂停失败: $e');
-        }
-        _isPlaying = false;
-        notifyListeners();
+        await _pauseAtTrackEnd();
         return;
       }
       if (_mode == PlayMode.singleRepeat) {
-        await _seekPlayer(Duration.zero);
+        await _restartFromStart();
         _resumeCurrentTrack();
       } else {
         final index = _commitNextIndex(auto: true);
         if (index < 0) {
-          _isPlaying = false;
-          notifyListeners();
+          // 顺序播放到队尾：不自动切歌，显式停在曲末（见
+          // [_pauseAtTrackEnd]：just_audio 播完后 playing 仍可能为 true）。
+          await _pauseAtTrackEnd();
         } else if (index == _currentIndex) {
           // 列表循环 / 随机只有一首歌：下一首就是自己，按重播处理。
-          await _seekPlayer(Duration.zero);
+          await _restartFromStart();
           _resumeCurrentTrack();
         } else {
           await _playIndex(index);
@@ -793,6 +833,22 @@ class LocalPlaybackService extends ChangeNotifier {
     } finally {
       _handlingCompletion = false;
     }
+  }
+
+  /// 停在曲末：位置对齐到结尾，并显式暂停底层播放器。
+  ///
+  /// 定时关闭「播完当前曲」与顺序播放队尾共用。只把 `_isPlaying` 置 false
+  /// 不够——just_audio 自然播完后 playing 仍为 true，底层与 UI 状态会分叉，
+  /// 下一次点播放会被当成暂停。
+  Future<void> _pauseAtTrackEnd() async {
+    if (_duration > Duration.zero) _position = _duration;
+    try {
+      await _player.pause();
+    } catch (e) {
+      debugPrint('[LocalPlayback] 曲末暂停失败: $e');
+    }
+    _isPlaying = false;
+    notifyListeners();
   }
 
   /// 续播当前曲目（单曲循环重播）：与 `_playIndex` 一致，不等待整曲播完。
