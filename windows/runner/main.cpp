@@ -45,20 +45,26 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
-  FlutterWindow window(project);
-  Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 800);
-  if (!window.Create(L"molia", origin, size)) {
-    return EXIT_FAILURE;
-  }
-  window.SetQuitOnClose(true);
+  int exit_code = EXIT_SUCCESS;
+  {
+    // `FlutterWindow` 析构会销毁 Flutter 引擎；引擎与插件（window_manager /
+    // nativeapi / 任务栏）收尾时仍可能用到 COM，必须显式在 `CoUninitialize()`
+    // 之前结束这个作用域。原来的写法把反初始化排在栈对象析构之前，顺序是反的。
+    FlutterWindow window(project);
+    Win32Window::Point origin(10, 10);
+    Win32Window::Size size(1280, 800);
+    if (!window.Create(L"molia", origin, size)) {
+      exit_code = EXIT_FAILURE;
+    } else {
+      window.SetQuitOnClose(true);
 
-  ::MSG msg;
-  while (::GetMessage(&msg, nullptr, 0, 0)) {
-    ::TranslateMessage(&msg);
-    ::DispatchMessage(&msg);
+      ::MSG msg;
+      while (::GetMessage(&msg, nullptr, 0, 0)) {
+        ::TranslateMessage(&msg);
+        ::DispatchMessage(&msg);
+      }
+    }
   }
-
   ::CoUninitialize();
-  return EXIT_SUCCESS;
+  return exit_code;
 }

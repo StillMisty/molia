@@ -203,6 +203,8 @@ void main() async {
     playback: playback.playbackProvider,
     libraryProvider: libraryProvider,
     playStatisticsService: library.playStatisticsService,
+    // 退出前先让音频设备停下来，再销毁窗口（Windows 上避免爆音）。
+    shutdownAudio: playback.localPlaybackService?.shutdownAudioForQuit,
   ).whenComplete(() => markStartupStep('sub.desktop.build', desktopWatch));
   final ai = buildAiStack(
     catalog: catalog,

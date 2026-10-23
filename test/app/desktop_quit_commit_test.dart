@@ -64,4 +64,76 @@ void main() {
 
     expect(log, ['session', 'stats', 'quit']);
   });
+
+  test('退出前提交：顺序为会话 → 音频 → 统计 → quit，会话在途时音频不能先跑', () async {
+    final gate = Completer<void>();
+    final log = <String>[];
+
+    final quit = commitBeforeQuit(
+      commitSession: () async {
+        log.add('session-start');
+        await gate.future;
+        log.add('session-end');
+      },
+      shutdownAudio: () async {
+        log.add('audio-start');
+        log.add('audio-end');
+      },
+      flushStatistics: () => log.add('stats'),
+      quitWindow: () async => log.add('quit'),
+    );
+
+    // 会话提交在途：音频收尾、统计与销毁窗口都不能先跑（进度还没取完）。
+    await Future<void>.delayed(Duration.zero);
+    expect(log, ['session-start']);
+
+    gate.complete();
+    await quit;
+    expect(log, [
+      'session-start',
+      'session-end',
+      'audio-start',
+      'audio-end',
+      'stats',
+      'quit',
+    ]);
+  });
+
+  test('退出前提交：音频收尾抛异常仍继续统计并退出', () async {
+    final log = <String>[];
+
+    await commitBeforeQuit(
+      commitSession: () async {
+        log.add('session');
+      },
+      shutdownAudio: () async {
+        log.add('audio');
+        throw StateError('audio device failed');
+      },
+      flushStatistics: () => log.add('stats'),
+      quitWindow: () async => log.add('quit'),
+    );
+
+    expect(log, ['session', 'audio', 'stats', 'quit']);
+  });
+
+  test('退出前提交：音频收尾超时有界，随后仍统计并退出', () async {
+    final log = <String>[];
+    final never = Completer<void>();
+
+    await commitBeforeQuit(
+      commitSession: () async {
+        log.add('session');
+      },
+      shutdownAudio: () {
+        log.add('audio');
+        return never.future;
+      },
+      flushStatistics: () => log.add('stats'),
+      quitWindow: () async => log.add('quit'),
+      audioTimeout: const Duration(milliseconds: 20),
+    );
+
+    expect(log, ['session', 'audio', 'stats', 'quit']);
+  });
 }

@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:logging/logging.dart';
 
 import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
@@ -23,6 +24,8 @@ import '../../services/window/app_tray.dart';
 import '../../services/window/taskbar_thumb_bar.dart';
 import '../../services/window/tray_settings.dart';
 import '../../services/window/window_chrome.dart';
+
+final Logger _quitLog = Logger('molia.quit');
 
 /// 桌面壳栈产物。
 typedef DesktopStack = ({
@@ -41,6 +44,9 @@ Future<DesktopStack> buildDesktopStack({
   required PlaybackProvider playback,
   required LibraryProvider libraryProvider,
   required PlayStatisticsService playStatisticsService,
+
+  /// 退出前的音频收尾（暂停 + 释放播放器）；无真实播放后端 / 测试时为空。
+  Future<void> Function()? shutdownAudio,
 }) async {
   // 托盘与关闭行为（设备本地偏好，不登记设置注册表）：关闭窗口时默认
   // 最小化到托盘（播放不中断）；偏好可在设置 › 通用 › 桌面 切换为直接退出。
@@ -63,12 +69,14 @@ Future<DesktopStack> buildDesktopStack({
   }
 
   // 统一退出路径（托盘「退出」/ 更新安装后的重启替换）：先 await 播放会话
-  // 提交（与壳层 paused 同一个挂起入口，最多等 2s），再触发统计落盘，最后
-  // 销毁窗口。会话提交不 await 就销毁窗口，进程会在写请求落盘前退出——恢复态
-  // 丢掉最后一段进度；平台通道挂起则超时继续退出（见 commitBeforeQuit）。
+  // 提交（与壳层 paused 同一个挂起入口，最多等 2s），再收尾音频设备，然后
+  // 触发统计落盘，最后销毁窗口。会话提交不 await 就销毁窗口，进程会在写请求
+  // 落盘前退出——恢复态丢掉最后一段进度；平台通道挂起则超时继续退出（见
+  // commitBeforeQuit）。
   Future<void> quitApp() async {
     await commitBeforeQuit(
       commitSession: playback.suspendPlaybackSession,
+      shutdownAudio: shutdownAudio,
       flushStatistics: playStatisticsService.flush,
       quitWindow: WindowChrome.quit,
     );
@@ -162,19 +170,28 @@ Future<DesktopStack> buildDesktopStack({
   );
 }
 
-/// 退出前提交的唯一顺序：先 await 会话提交，再触发统计落盘，最后退出窗口。
+/// 退出前提交的唯一顺序：先 await 会话提交，再收尾音频设备，然后触发统计
+/// 落盘，最后退出窗口。
+///
+/// 音频放在会话落盘之后，是因为进度快照仍要读当前播放状态；反过来先释放
+/// 播放器会让最后一段进度丢失。音频收尾停止的是设备输出（暂停 + 释放），
+/// 不清空会话——清会话是壳层暂停 / 停止的语义，不是退出语义。
 ///
 /// 拆成注入面是为了让「会话提交没完成不销毁窗口」可以被测试用 fake 钉住；
-/// 生产调用点只有 [buildDesktopStack] 的 `quitApp`。会话提交有界等待
-/// （[sessionTimeout]，默认 2s）：平台通道挂起时不能把退出流程无限拖住。
-/// 超时 / 落盘失败都继续退出：用户已经点了退出，卡在保存上比丢一次进度更糟。
+/// 生产调用点只有 [buildDesktopStack] 的 `quitApp`。会话提交与音频收尾都有界
+/// 等待（[sessionTimeout] 默认 2s、[audioTimeout] 默认 500ms）：平台通道或
+/// 音频设备挂起时不能把退出流程无限拖住。超时 / 失败都继续退出：用户已经点了
+/// 退出，卡在保存或音频设备上比丢一次进度更糟。
 @visibleForTesting
 Future<void> commitBeforeQuit({
   required Future<void> Function() commitSession,
   required void Function() flushStatistics,
   required Future<void> Function() quitWindow,
+  Future<void> Function()? shutdownAudio,
   Duration sessionTimeout = const Duration(seconds: 2),
+  Duration audioTimeout = const Duration(milliseconds: 500),
 }) async {
+  final sessionWatch = Stopwatch()..start();
   try {
     await commitSession().timeout(sessionTimeout);
   } on TimeoutException {
@@ -184,11 +201,36 @@ Future<void> commitBeforeQuit({
   } catch (e) {
     debugPrint('[Molia] 退出前落盘播放会话失败（继续退出）: $e');
   }
+  sessionWatch.stop();
+
+  final audioWatch = Stopwatch()..start();
+  final audioShutdown = shutdownAudio;
+  if (audioShutdown != null) {
+    try {
+      await audioShutdown().timeout(audioTimeout);
+    } on TimeoutException {
+      debugPrint(
+        '[Molia] 退出前音频收尾超时（${audioTimeout.inMilliseconds}ms，继续退出）',
+      );
+    } catch (e) {
+      debugPrint('[Molia] 退出前音频收尾失败（继续退出）: $e');
+    }
+  }
+  audioWatch.stop();
+
+  final statsWatch = Stopwatch()..start();
   try {
     flushStatistics();
   } catch (e) {
     debugPrint('[Molia] 退出前落盘统计失败（继续退出）: $e');
   }
+  statsWatch.stop();
+
+  _quitLog.info(
+    '退出收尾：会话 ${sessionWatch.elapsedMilliseconds}ms，'
+    '音频 ${audioWatch.elapsedMilliseconds}ms，'
+    '统计 ${statsWatch.elapsedMilliseconds}ms',
+  );
   await quitWindow();
 }
 

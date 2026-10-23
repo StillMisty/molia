@@ -782,3 +782,12 @@
     `frozen` 分支必须用 `PowerManager.isInteractive` 兜底：设备已经交互就清
     `frozen` + `pending` 并立即 `render`；`setFrozen(false)` 也先
     `finishPendingRoll()`。不要用「屏幕广播一定到达」作为解冻前提。
+76. **`window_manager.destroy()` 在 Windows 上只调用 `PostQuitMessage(0)`**：
+    它不销毁窗口、也不清理插件 / 引擎资源，真正的销毁发生在 `wWinMain` 返回、
+    栈上 `FlutterWindow` 析构时。因此退出流程不能只 `destroy()`：必须先自己
+    停音频（暂停 + 释放播放器，留一点时间让设备缓冲排空）、把会话进度与统计
+    落盘，再 `destroy()`；否则进程在 libmpv / WASAPI 还在出数据时结束，Windows
+    上会听到「突然断掉 / 爆一声」。任务栏「结束任务」是系统强杀、不执行应用
+    退出代码，所以那条路径反而听不到，不能拿它当「没问题」的对照。另外
+    `windows/runner/main.cpp` 的 `CoUninitialize()` 必须排在窗口析构之后（用
+    作用域包住 `FlutterWindow`），否则引擎 / 插件收尾时 COM 已不可用。
