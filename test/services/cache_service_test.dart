@@ -171,14 +171,16 @@ void main() {
   });
 
   group('usage / clear', () {
-    test('音频/封面按目录统计字节与文件数', () async {
+    test('音频/封面按目录递归统计字节与文件数', () async {
       await writeFile('${tempRoot.path}/audio_cache', 'a.part', 100);
       await writeFile('${tempRoot.path}/audio_cache', 'b', 250);
+      // 缓存目录可能分桶（封面常见）：嵌套文件同样计入。
+      await writeFile('${tempRoot.path}/audio_cache/nested', 'c', 50);
       await writeFile('${tempRoot.path}/artwork_cache', 'c.jpg', 300);
 
       final audio = await service.usage(CachePartition.audio);
-      expect(audio.bytes, 350);
-      expect(audio.count, 2);
+      expect(audio.bytes, 400);
+      expect(audio.count, 3);
 
       final artwork = await service.usage(CachePartition.artwork);
       expect(artwork.bytes, 300);

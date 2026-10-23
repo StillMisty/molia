@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -90,30 +91,21 @@ class IoCacheStorage implements CacheStorage {
 
   @override
   Future<CacheUsage> usage(String dirPath) async {
-    final files = await _listFiles(dirPath);
-    var bytes = 0;
-    for (final file in files) {
-      try {
-        bytes += await file.length();
-      } catch (_) {
-        // 文件可能正被删除/替换：忽略单个文件错误。
-      }
-    }
-    return CacheUsage(bytes: bytes, count: files.length);
+    // 大缓存目录的递归列举 + 逐文件取大小是 O(文件数) 的串行 IO；留在主
+    // isolate 会在打开缓存设置页时卡帧，因此整体丢给短命 isolate，主 isolate
+    // 只等结果。这里只捕获目录路径，不把存储对象带进子 isolate。
+    final scan = await Isolate.run(
+      () => _scanCacheDir(dirPath, withFiles: false),
+    );
+    return CacheUsage(bytes: scan.bytes, count: scan.count);
   }
 
   @override
   Future<Map<String, int>> listFiles(String dirPath) async {
-    final files = await _listFiles(dirPath);
-    final result = <String, int>{};
-    for (final file in files) {
-      try {
-        result[file.uri.pathSegments.last] = await file.length();
-      } catch (_) {
-        // 文件可能正被删除/替换：忽略单个文件错误。
-      }
-    }
-    return result;
+    // 与 usage 同理：本地歌曲 / 缓存列表一次列举上千个文件，扫描放在子
+    // isolate；回传的只有「文件名 → 字节数」基础类型。
+    final scan = await Isolate.run(() => _scanCacheDir(dirPath));
+    return scan.files;
   }
 
   @override
@@ -292,6 +284,61 @@ class IoCacheStorage implements CacheStorage {
     }
     return files;
   }
+}
+
+/// 目录扫描结果：字节数 / 文件数 / 文件名 → 字节数。
+///
+/// 只含可跨 isolate 发送的基础类型（`int` + `Map<String, int>`），不在子 isolate
+/// 里回传 `File` 等平台对象。
+typedef _CacheDirScan = ({int bytes, int count, Map<String, int> files});
+
+/// 递归扫描缓存目录（在短命 isolate 中执行，必须是顶层函数）。
+///
+/// 为什么不能做成实例方法：`Isolate.run` 的闭包只应捕获目录路径这类可发送
+/// 值。捕获 `this` 会连同 method channel / `path_provider` 状态一起带进子
+/// isolate，而子 isolate 没有平台通道，调用会直接失败。
+///
+/// 失败语义与原先主 isolate 上的串行实现一致：
+/// - 目录不存在或不可读：按空结果处理；
+/// - 单个文件取大小失败（正被删除 / 替换）：跳过该文件；
+/// - 某个子目录不可读：跳过它，保留其它已扫描到的文件。
+_CacheDirScan _scanCacheDir(String dirPath, {bool withFiles = true}) {
+  final root = Directory(dirPath);
+  if (!root.existsSync()) {
+    return (bytes: 0, count: 0, files: const <String, int>{});
+  }
+
+  final files = <File>[];
+  // 逐目录列举而不是 `listSync(recursive: true)`：子目录不可读时前者能保留
+  // 其它已扫描到的文件，与原异步流「返回已扫描部分」的语义一致。
+  final pending = <Directory>[root];
+  while (pending.isNotEmpty) {
+    final dir = pending.removeLast();
+    try {
+      for (final entity in dir.listSync(followLinks: false)) {
+        if (entity is File) {
+          files.add(entity);
+        } else if (entity is Directory) {
+          pending.add(entity);
+        }
+      }
+    } catch (_) {
+      // 权限 / 并发删除等问题：跳过该目录，继续扫描其它目录。
+    }
+  }
+
+  var bytes = 0;
+  final sizes = <String, int>{};
+  for (final file in files) {
+    try {
+      final length = file.lengthSync();
+      bytes += length;
+      if (withFiles) sizes[file.uri.pathSegments.last] = length;
+    } catch (_) {
+      // 文件可能正被删除/替换：忽略单个文件错误（仍计入 count，沿用旧口径）。
+    }
+  }
+  return (bytes: bytes, count: files.length, files: sizes);
 }
 
 class _FileEntry {
