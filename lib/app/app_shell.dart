@@ -1535,8 +1535,10 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                     // material_ui 透传：既有组件通过 Theme.of 读到的外观保持现状。
                     theme: themedData,
                     darkTheme: themedData,
-                    // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData 实例缓存）。
-                    data: M3EThemeData.fromMaterial(themedData),
+                    // M3E 侧数据：颜色/字体从 themedData 映射（按 ThemeData
+                    // 实例缓存）；字体同时同步到 emphasized 角色，见
+                    // `buildM3EThemeData`。
+                    data: buildM3EThemeData(themedData),
                     // 方案色过渡已由 AnimatedSchemeBuilder 逐帧插值完成，
                     // 关掉 MaterialApp 内置主题动画，避免二次缓动造成两套主题不同步。
                     themeAnimationStyle: AnimationStyle.noAnimation,

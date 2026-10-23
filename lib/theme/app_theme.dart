@@ -1,5 +1,6 @@
 import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_semantic_colors.dart';
@@ -51,9 +52,34 @@ ThemeData buildAppThemeData(
   );
 }
 
+/// 从 Material [ThemeData] 派生 M3E 主题数据：应用内唯一 M3E 主题出口。
+///
+/// `M3EThemeData.fromMaterial` 只把 `textTheme` 映射进 baseline typeScale，
+/// emphasized 用的是包内默认字体（没有字体族）。用户自定义「应用字体」后，
+/// baseline 角色跟随、emphasized 角色（按钮 / 强调标题）却掉回引擎默认字体。
+/// 这里把 [ThemeData.textTheme] `bodyMedium` 的字体族与回退链同步到两套
+/// typeScale；颜色与组件主题仍然只来自 [ThemeData]，不引入第二个主题源。
+/// （`ThemeData` 的平台排版通常已给出字体族，例如 Linux/Windows 的 Roboto，
+/// 所以 emphasized 会拿到与 baseline 相同的族名，而不是包内默认的 null。）
+M3EThemeData buildM3EThemeData(ThemeData theme) {
+  final data = M3EThemeData.fromMaterial(theme);
+  final body = theme.textTheme.bodyMedium;
+  final fontFamily = body?.fontFamily;
+  final fontFamilyFallback = body?.fontFamilyFallback;
+  if (fontFamily == null &&
+      (fontFamilyFallback == null || fontFamilyFallback.isEmpty)) {
+    return data;
+  }
+  return data.copyWith(
+    typography: data.typography.apply(
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
+    ),
+  );
+}
+
 /// 系统栏样式：透明系统栏 + 按方案亮度选择图标明暗（edge-to-edge）。
-SystemUiOverlayStyle buildSystemUiOverlayStyle(ColorScheme scheme) {
-  final brightness = scheme.brightness;
+SystemUiOverlayStyle buildSystemUiOverlayStyle(ColorScheme scheme) {  final brightness = scheme.brightness;
   return SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     systemNavigationBarColor: Colors.transparent,

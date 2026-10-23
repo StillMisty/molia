@@ -94,6 +94,50 @@ void main() {
       );
     });
 
+    test('buildM3EThemeData 把应用字体同步到 baseline 与 emphasized', () {
+      // M3EThemeData.fromMaterial 只映射 baseline：emphasized 会掉回包内
+      // 默认字体。buildM3EThemeData 必须两套都带应用字体（按钮 / 强调标题
+      // 也跟着用户选择走）。
+      final custom = buildAppThemeData(light, fontFamily: 'Noto Sans CJK SC');
+      final m3e = buildM3EThemeData(custom);
+      expect(m3e.typeScale.bodyMedium.fontFamily, 'Noto Sans CJK SC');
+      expect(
+        m3e.typography.emphasized.bodyLarge.fontFamily,
+        'Noto Sans CJK SC',
+      );
+      expect(m3e.typography.emphasized.labelLarge.fontFamily,
+          'Noto Sans CJK SC');
+
+      // 颜色 / 组件主题仍然只来自 ThemeData（不引入第二个主题源）。
+      final mapped = M3EThemeData.fromMaterial(custom);
+      expect(m3e.colorScheme.primary, mapped.colorScheme.primary);
+      expect(m3e.colorScheme.surface, mapped.colorScheme.surface);
+
+      // 系统默认字体的缺字回退链同样要覆盖 emphasized。
+      final system = buildAppThemeData(
+        light,
+        platformDefaultFontFamily: 'Microsoft YaHei UI',
+        platformDefaultFontFallbacks: const ['Segoe UI', 'Microsoft YaHei'],
+      );
+      final systemM3E = buildM3EThemeData(system);
+      expect(
+        systemM3E.typography.emphasized.bodyMedium.fontFamily,
+        'Microsoft YaHei UI',
+      );
+      expect(
+        systemM3E.typography.emphasized.bodyMedium.fontFamilyFallback,
+        const ['Segoe UI', 'Microsoft YaHei'],
+      );
+
+      // 没有显式字体覆盖时，基线字体仍是 ThemeData 的平台排版字体
+      // （Linux/Windows 默认 Roboto），两套 scale 保持一致即可。
+      final plain = buildAppThemeData(light);
+      final plainFamily = plain.textTheme.bodyMedium?.fontFamily;
+      final plainM3E = buildM3EThemeData(plain);
+      expect(plainM3E.typeScale.bodyMedium.fontFamily, plainFamily);
+      expect(plainM3E.typography.emphasized.bodyMedium.fontFamily, plainFamily);
+    });
+
     test('系统默认字体优先于平台排版，自定义字体优先于系统字体', () {
       // 未注入系统字体时仍走 ThemeData 的平台默认排版（Windows = Segoe UI）；
       // Windows 的真实系统字体由启动时读取 MessageFont 后显式注入。
