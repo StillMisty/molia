@@ -57,7 +57,7 @@ typedef SourceUrlResolver = Future<String> Function(
 /// 无需感知播放后端差异。
 class LocalPlaybackService extends ChangeNotifier {
   final SourceUrlResolver _resolver;
-  final AudioPlayer _player = AudioPlayer();
+  final AudioPlayer _player;
 
   /// 当前偏好音质（composition root 注入；省流模式由注入方压低上限）。
   ///
@@ -106,8 +106,13 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 队列内容版本号：任何队列变更（装载 / 追加 / 原地替换 / 补图 / 清空）
   /// 自增。O(1) 的「队列是否真的变了」判定（位置 tick 不算变更）；
-  /// 系统媒体会话不再消费整份队列，保留给外部观察者与测试。
+  /// `LocalPlaybackBackend` 用它判断能否复用队列的领域 `Track` 映射。
   int _queueRevision = 0;
+
+  /// 队列内容版本号（每次队列内容变更自增；位置 / 播放态变化不变）。
+  ///
+  /// 快照重建可能由位置 tick 触发而队列未变，消费方（播放后端）据此
+  /// 复用上一份队列映射，避免每次通知都重跑全队列转换。
   int get queueRevision => _queueRevision;
 
   /// 已播放顺序（最近一首在后，栈顶供 previous 弹出）；存队列下标，
@@ -155,7 +160,10 @@ class LocalPlaybackService extends ChangeNotifier {
     PlayingTrackCacheWriter? audioCacheWriter,
     Stream<AudioInterruptionEvent>? audioInterruptions,
     PlaybackPowerPolicy? powerPolicy,
+    // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
+    @visibleForTesting AudioPlayer? player,
   })  : _resolver = resolver,
+        _player = player ?? AudioPlayer(),
         _cacheService = cacheService ?? CacheService.instance,
         _preferredQuality = preferredQuality,
         _nextTrackPreloader = nextTrackPreloader,

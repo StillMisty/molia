@@ -7,6 +7,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/queue_projection.dart';
 import 'package:molia/sources/source_track.dart';
 
 /// 覆写状态的假服务：不触碰 just_audio 平台通道，只验证 backend 的映射/委托。
@@ -25,6 +26,18 @@ class _FakeService extends LocalPlaybackService {
   String? _error;
   PlayMode _mode = PlayMode.sequential;
   String? _contextName;
+
+  /// 队列内容版本号：与真实服务同口径，只在队列内容变更时自增。
+  int _queueRevision = 0;
+
+  /// 当前洗牌排列（仅在 shuffle 模式下参与投影）。
+  List<int>? _shuffleIndices;
+
+  /// 播放顺序栈的最近一首（投影 previous 优先读它）。
+  int? _previousIndex;
+
+  /// `queueProjection` 的求值次数：用来钉住「一次快照只求一次投影」。
+  int projectionBuilds = 0;
 
   int playTracksCalls = 0;
   int playQueueIndexCalls = 0;
@@ -62,25 +75,26 @@ class _FakeService extends LocalPlaybackService {
   int get currentIndex => _index;
 
   @override
+  int get queueRevision => _queueRevision;
+
+  @override
   String? get contextName => _contextName;
 
+  /// 与真实服务同源（`projectQueue`）；旧实现覆写三个 getter 各自算一份，
+  /// 生产侧改用一次性投影后由本 getter 统一供数。
   @override
-  SourceTrack? get nextSourceTrack {
-    if (!hasTrack) return null;
-    final next = _index + 1;
-    return next < _queue.length ? _queue[next] : null;
-  }
-
-  @override
-  SourceTrack? get previousSourceTrack {
-    if (!hasTrack || _index <= 0) return null;
-    return _queue[_index - 1];
-  }
-
-  @override
-  List<SourceTrack> get upNextTracks {
-    if (!hasTrack) return const [];
-    return List.unmodifiable(_queue.sublist(_index + 1));
+  QueueProjection<SourceTrack> get queueProjection {
+    projectionBuilds++;
+    return projectQueue(
+      _queue,
+      currentIndex: _index,
+      mode: _mode,
+      order: QueueOrder(
+        shuffleIndices: _mode == PlayMode.shuffle ? _shuffleIndices : null,
+        previousIndex: _previousIndex,
+      ),
+      idOf: (track) => track.id,
+    );
   }
 
   void seed(
@@ -91,16 +105,23 @@ class _FakeService extends LocalPlaybackService {
     Duration duration = Duration.zero,
     Duration position = Duration.zero,
     String? error,
+    PlayMode? mode,
+    List<int>? shuffleIndices,
+    int? previousIndex,
   }) {
     _queue
       ..clear()
       ..addAll(tracks);
+    _queueRevision++;
     _index = index;
     _contextName = contextName;
     _playing = playing;
     _duration = duration;
     _position = position;
     _error = error;
+    if (mode != null) _mode = mode;
+    _shuffleIndices = shuffleIndices;
+    _previousIndex = previousIndex;
     notifyListeners();
   }
 
@@ -141,6 +162,7 @@ class _FakeService extends LocalPlaybackService {
     calls.add('enqueueTracks');
     enqueued.add(List.of(tracks));
     _queue.addAll(tracks);
+    _queueRevision++;
     notifyListeners();
   }
 
@@ -185,6 +207,7 @@ class _FakeService extends LocalPlaybackService {
     calls.add('stop');
     _index = -1;
     _queue.clear();
+    _queueRevision++;
     _playing = false;
     notifyListeners();
   }
@@ -196,9 +219,28 @@ class _FakeService extends LocalPlaybackService {
   Future<void> replaceQueueTrack(String trackId, SourceTrack track) async {
     calls.add('replaceQueueTrack');
     replacedTracks[trackId] = track;
+    var hit = false;
     for (var i = 0; i < _queue.length; i++) {
-      if (_queue[i].id == trackId) _queue[i] = track;
+      if (_queue[i].id == trackId) {
+        _queue[i] = track;
+        hit = true;
+      }
     }
+    if (!hit) return;
+    _queueRevision++;
+    notifyListeners();
+  }
+
+  /// 补图：与真实服务同口径，封面真变了才替换并自增版本号。
+  @override
+  void updateTrackArtwork(String trackId, String? coverUrl) {
+    final index = _queue.indexWhere((track) => track.id == trackId);
+    if (index < 0) return;
+    final old = _queue[index];
+    final next = (coverUrl == null || coverUrl.isEmpty) ? null : coverUrl;
+    if (old.coverUrl == next) return;
+    _queue[index] = old.copyWith(coverUrl: next);
+    _queueRevision++;
     notifyListeners();
   }
 }
@@ -297,6 +339,128 @@ void main() {
     // position 变化属于后端快照（facade 负责拆分高频通道）。
     service.change(position: const Duration(seconds: 1));
     expect(notifies, 2);
+  });
+
+  test('next/previous/upNext 与投影一致：线性模式', () {
+    service.seed(
+      [_source('a'), _source('b'), _source('c')],
+      index: 1,
+      mode: PlayMode.sequential,
+    );
+
+    var snapshot = backend.state.value;
+    expect(snapshot.next?.id.id, 'c');
+    expect(snapshot.previous?.id.id, 'a');
+    expect(snapshot.upNext.map((t) => t.id.id), ['c']);
+
+    // 列表循环队尾：下一首回绕队首，upNext 补上队首到当前之前。
+    service.seed(
+      [_source('a'), _source('b'), _source('c')],
+      index: 2,
+      mode: PlayMode.listLoop,
+    );
+    snapshot = backend.state.value;
+    expect(snapshot.next?.id.id, 'a');
+    expect(snapshot.previous?.id.id, 'b');
+    expect(snapshot.upNext.map((t) => t.id.id), ['a', 'b']);
+  });
+
+  test('next/previous/upNext 与投影一致：shuffle 排列与轮末', () {
+    final a = _source('a');
+    final b = _source('b');
+    final c = _source('c');
+
+    // 排列 [c, a, b]，当前 a：下一首 b，队列前一位不是「上一首」。
+    service.seed(
+      [a, b, c],
+      index: 0,
+      mode: PlayMode.shuffle,
+      shuffleIndices: const [2, 0, 1],
+    );
+    var snapshot = backend.state.value;
+    expect(snapshot.next?.id.id, 'b');
+    expect(snapshot.previous, isNull);
+    expect(snapshot.upNext.map((t) => t.id.id), ['b']);
+
+    // 轮末：peek 不重洗，next / upNext 为空。
+    service.seed(
+      [a, b, c],
+      index: 1,
+      mode: PlayMode.shuffle,
+      shuffleIndices: const [2, 0, 1],
+    );
+    snapshot = backend.state.value;
+    expect(snapshot.next, isNull);
+    expect(snapshot.previous?.id.id, 'a');
+    expect(snapshot.upNext, isEmpty);
+
+    // 播放顺序栈优先于队列前一位。
+    service.seed(
+      [a, b, c],
+      index: 1,
+      mode: PlayMode.sequential,
+      previousIndex: 2,
+    );
+    expect(backend.state.value.previous?.id.id, 'c');
+  });
+
+  test('一次快照只求一次队列投影', () {
+    service.seed([_source('a'), _source('b'), _source('c')], index: 1);
+
+    service.projectionBuilds = 0;
+    service.change(position: const Duration(seconds: 2));
+
+    expect(service.projectionBuilds, 1);
+    expect(backend.state.value.position, const Duration(seconds: 2));
+  });
+
+  test('队列映射按 queueRevision 复用：位置 / 播放态变化不重建', () {
+    service.seed([_source('a'), _source('b')], index: 0);
+
+    final initial = backend.state.value.queue;
+    expect(initial, hasLength(2));
+
+    service.change(playing: false, position: const Duration(seconds: 1));
+
+    final afterTick = backend.state.value;
+    expect(afterTick.isPlaying, isFalse);
+    expect(afterTick.position, const Duration(seconds: 1));
+    expect(identical(afterTick.queue, initial), isTrue, reason: '队列未变应复用');
+    expect(identical(afterTick.queue[0], initial[0]), isTrue);
+  });
+
+  test('queueRevision 变更使队列映射失效', () async {
+    service.seed([_source('a'), _source('b')], index: 0);
+    final initial = backend.state.value.queue;
+
+    // 追加：队列内容变化 → 重新映射。
+    await backend.enqueueTracks([trackFromSourceTrack(_source('c'))]);
+    final appended = backend.state.value.queue;
+    expect(appended.map((t) => t.id.id), ['a', 'b', 'c']);
+    expect(identical(appended, initial), isFalse);
+
+    // 补图：原地替换同样自增版本号 → 新映射，封面更新。
+    await backend.updateTrackArtwork(
+      'fake:b',
+      Uri.parse('https://img.example/b-new.jpg'),
+    );
+    final artwork = backend.state.value.queue;
+    expect(identical(artwork, appended), isFalse);
+    expect(artwork[1].artwork?.uri.toString(), 'https://img.example/b-new.jpg');
+
+    // 换源：命中队列 → 失效并反映新曲目。
+    await backend.replaceQueueTrack(
+      'fake:b',
+      trackFromSourceTrack(_source('b', title: '新版本')),
+    );
+    final replaced = backend.state.value.queue;
+    expect(identical(replaced, artwork), isFalse);
+    expect(replaced[1].title, '新版本');
+
+    // 清空：停止后队列为空且不复用旧映射。
+    await backend.stop();
+    expect(backend.state.value.queue, isEmpty);
+    expect(identical(backend.state.value.queue, replaced), isFalse);
   });
 
   test('load 委托 playTracks 且 raw 原样回传', () async {

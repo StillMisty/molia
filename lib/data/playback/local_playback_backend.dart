@@ -48,6 +48,14 @@ class LocalPlaybackBackend implements PlaybackBackend {
   /// 保证快照 `==` 去重稳定、避免每次通知重建领域对象。
   final Map<SourceTrack, Track> _trackCache = Map<SourceTrack, Track>.identity();
 
+  /// 队列到领域 [Track] 的映射缓存，按 [LocalPlaybackService.queueRevision]
+  /// 失效。
+  ///
+  /// 位置 tick / 播放态变化同样会重建快照，但队列内容没变：复用同一份
+  /// List 省掉 O(N) 的映射与包装，也让快照 `==` 的深比较走对象相等的快路径。
+  List<Track>? _cachedQueue;
+  int? _cachedQueueRevision;
+
   String? _cachedErrorRaw;
   SourceFailure? _cachedError;
 
@@ -217,13 +225,14 @@ class LocalPlaybackBackend implements PlaybackBackend {
     final currentSource = _service.currentSourceTrack;
     final index = _service.currentIndex;
 
-    final queue = <Track>[
-      for (final source in _service.queueTracks) _toTrack(source),
-    ];
+    // 一次投影复用 next / previous / upNext：三个 getter 各自都会重算整份
+    // 投影（shuffle 下含 O(N) 的排列查找与 upNext 列表），位置 tick 触发
+    // 的快照重建里连算三次纯属浪费。
+    final projection = _service.queueProjection;
     final current = currentSource == null ? null : _toTrack(currentSource);
 
     final upNext = <Track>[
-      for (final source in _service.upNextTracks) _toTrack(source),
+      for (final source in projection.upNext) _toTrack(source),
     ];
 
     final duration = current == null
@@ -232,15 +241,12 @@ class LocalPlaybackBackend implements PlaybackBackend {
             ? _service.duration
             : (current.duration ?? Duration.zero));
 
-    final nextSource = _service.nextSourceTrack;
-    final previousSource = _service.previousSourceTrack;
-
     return BackendSnapshot(
       current: current,
-      queue: List<Track>.unmodifiable(queue),
+      queue: _queueTracks(),
       currentIndex: index,
-      next: nextSource == null ? null : _toTrack(nextSource),
-      previous: previousSource == null ? null : _toTrack(previousSource),
+      next: _toTrackOrNull(projection.next),
+      previous: _toTrackOrNull(projection.previous),
       upNext: List<Track>.unmodifiable(upNext),
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,
@@ -251,6 +257,22 @@ class LocalPlaybackBackend implements PlaybackBackend {
       error: _readError(),
     );
   }
+
+  /// 队列内容未变时复用上一份领域映射（判定依据见 `queueRevision`）。
+  List<Track> _queueTracks() {
+    final revision = _service.queueRevision;
+    final cached = _cachedQueue;
+    if (cached != null && revision == _cachedQueueRevision) return cached;
+    final queue = List<Track>.unmodifiable([
+      for (final source in _service.queueTracks) _toTrack(source),
+    ]);
+    _cachedQueue = queue;
+    _cachedQueueRevision = revision;
+    return queue;
+  }
+
+  Track? _toTrackOrNull(SourceTrack? source) =>
+      source == null ? null : _toTrack(source);
 
   Track _toTrack(SourceTrack source) =>
       _trackCache.putIfAbsent(source, () => trackFromSourceTrack(source));

@@ -22,6 +22,7 @@ import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
+import 'package:molia/playback/queue_projection.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:molia/services/playback_session_store.dart';
@@ -57,6 +58,9 @@ class _FakeService extends LocalPlaybackService {
   Duration _position = Duration.zero;
   PlayMode _mode = PlayMode.sequential;
   String? _contextName;
+
+  /// 队列内容版本号：与真实服务同口径，只在队列内容变更时自增。
+  int _queueRevision = 0;
 
   int toggleCalls = 0;
   int toggleModeCalls = 0;
@@ -96,17 +100,16 @@ class _FakeService extends LocalPlaybackService {
   String? get contextName => _contextName;
 
   @override
-  SourceTrack? get nextSourceTrack {
-    if (!hasTrack) return null;
-    final next = _index + 1;
-    return next < _queue.length ? _queue[next] : null;
-  }
+  int get queueRevision => _queueRevision;
 
+  /// 与真实服务同源（`projectQueue`）；后端一次快照只求一次投影。
   @override
-  List<SourceTrack> get upNextTracks {
-    if (!hasTrack) return const [];
-    return List.unmodifiable(_queue.sublist(_index + 1));
-  }
+  QueueProjection<SourceTrack> get queueProjection => projectQueue(
+        _queue,
+        currentIndex: _index,
+        mode: _mode,
+        idOf: (track) => track.id,
+      );
 
   /// 起播（等价 `playTracks` 装载完成后的状态）。
   void seed(
@@ -120,6 +123,7 @@ class _FakeService extends LocalPlaybackService {
     _queue
       ..clear()
       ..addAll(tracks);
+    _queueRevision++;
     _index = index;
     _contextName = contextName;
     _playing = playing;
@@ -162,6 +166,7 @@ class _FakeService extends LocalPlaybackService {
     _playing = false;
     if (clear) {
       _queue.clear();
+      _queueRevision++;
       _index = -1;
       _position = Duration.zero;
       _contextName = null;
