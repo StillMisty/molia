@@ -136,6 +136,15 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 播完后 playing 仍可能为 true，暂停 / seek 会再次上报 completed；按
   /// 状态跳变去重，避免重复发完成事件（定时关闭 / 自动切歌被触发两次）。
   ProcessingState _lastProcessingState = ProcessingState.idle;
+
+  /// 上一次可用于「曲末兜底」的位置采样（仅桌面 media_kit）。
+  ///
+  /// Windows/Linux 的 media_kit 自然播完时可能不上报 completed：mpv 停在
+  /// EOF、processingState 仍是 ready、just_audio 的 playing 也还是 true，
+  /// 位置被插值钳在时长上。位置流每 ~200ms 采样一次，连续两次都停在同一个
+  /// 末位即视为播完（见已知坑 78）；正常播放位置一直前进，不会命中。
+  Duration? _lastEndPositionSample;
+
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   String? _lastError;
@@ -247,15 +256,56 @@ class LocalPlaybackService extends ChangeNotifier {
 
   void _onPlayerPosition(Duration position) {
     _position = position;
+    _maybeCompleteFromPosition(position);
     _scheduleNotify();
   }
 
   /// 后台 1s 轮询：值没变不发通知（暂停 / 缓冲时避免空转唤醒 UI）。
   void _pollPlayerPosition() {
     final position = _player.position;
+    // 曲末兜底要先于「值没变」短路：播完后位置本来就不再变化。
+    _maybeCompleteFromPosition(position);
     if (position == _position) return;
     _position = position;
     _scheduleNotify();
+  }
+
+  /// 是否走桌面 media_kit 后端（just_audio_media_kit 只在 Windows/Linux 接管）。
+  static bool get _usesMediaKitBackend =>
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
+  /// 曲末兜底：桌面 media_kit 自然播完可能不上报 completed。
+  ///
+  /// 现象（Windows）：mpv 到达 EOF 后停在 keep-open 状态，
+  /// `just_audio_media_kit` 没有把 EOF 变成 `ProcessingState.completed`；
+  /// just_audio 的 playing 请求态仍是 true，位置被插值钳在时长上——界面停在
+  /// 旧歌末尾、也不会自动切歌。位置流连续两次采样都停在同一个末位即判定
+  /// 播完，复用同一条完成链路（`trackCompletions` / 定时关闭 / 自动下一首）。
+  ///
+  /// 只对桌面后端生效：Android/iOS 的 completed 可靠，不靠位置猜测。用户主动
+  /// 暂停时 `playing == false`，不会命中；seek 会清空采样（[_seekPlayer]）。
+  void _maybeCompleteFromPosition(Duration position) {
+    if (!_usesMediaKitBackend) return;
+    if (!_player.playing || _player.processingState != ProcessingState.ready) {
+      _lastEndPositionSample = null;
+      return;
+    }
+    if (_handlingCompletion || _isLoading || _currentTrack == null) {
+      _lastEndPositionSample = null;
+      return;
+    }
+    final duration = _player.duration ?? _duration;
+    if (duration <= _trackEndTolerance) return;
+    final previous = _lastEndPositionSample;
+    _lastEndPositionSample = position;
+    if (position < duration - _trackEndTolerance) return;
+    // 必须是「位置停在同一个末位」而不是「两次都落在最后 250ms」：正常播放
+    // 末尾两次采样仍会前进，按容差判会提前切掉最后半秒。
+    if (previous == null || previous != position) return;
+    _lastEndPositionSample = null;
+    debugPrint('[LocalPlayback] 媒体库未上报 completed，按曲末位置兜底切歌');
+    _handleTrackCompleted();
   }
 
   /// 音乐会话配置：在 [AudioSessionConfiguration.music] 上声明
@@ -499,6 +549,8 @@ class LocalPlaybackService extends ChangeNotifier {
     _lastError = null;
     _position = Duration.zero;
     _duration = track.duration ?? Duration.zero;
+    // 换曲即重新计时：上一首的末位采样不能参与新曲目的曲末判定。
+    _lastEndPositionSample = null;
     notifyListeners();
 
     try {
@@ -649,6 +701,9 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 内部回跳（单曲循环 / 队列只有一首的重播 / 无下一首归零）也走这里：
   /// 它们同样是位置不连续；只靠后台 1s 轮询会让通知按旧锚点插值一整首。
   Future<void> _seekPlayer(Duration position) async {
+    // 跳转是主动的位置不连续：曲末兜底不能把「从末尾拖回开头」当成播完。
+    // 必须在 await 之前清空——播放器的位置事件可能在 seek 返回前就到达。
+    _lastEndPositionSample = null;
     await _player.seek(position);
     _seekRevision++;
     _position = position;
@@ -833,11 +888,29 @@ class LocalPlaybackService extends ChangeNotifier {
           await _restartFromStart();
           _resumeCurrentTrack();
         } else {
+          // 自然播完后 just_audio 的 playing 仍为 true；直接 play() 会被它
+          // 返回，桌面 media_kit 的 load(play:) 也不保证真正起播（已知坑
+          // 77/78）。先显式暂停，让下一首的 play() 一定下发到平台。
+          await _pauseBeforeTrackSwitch();
           await _playIndex(index);
         }
       }
     } finally {
       _handlingCompletion = false;
+    }
+  }
+
+  /// 自动切歌前显式暂停（仅桌面 media_kit）。
+  ///
+  /// 自然播完后 just_audio 的 playing 仍是 true，`play()` 会直接返回；下一首
+  /// 能否起播取决于 media_kit 内部 `open(play:)` 的标志。先暂停一次，保证
+  /// 随后 `_playIndex` 末尾的 play() 是一次真实的平台请求（已知坑 77/78）。
+  Future<void> _pauseBeforeTrackSwitch() async {
+    if (!_usesMediaKitBackend || !_player.playing) return;
+    try {
+      await _player.pause();
+    } catch (e) {
+      debugPrint('[LocalPlayback] 自动切歌前暂停失败: $e');
     }
   }
 

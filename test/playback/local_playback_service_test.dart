@@ -116,6 +116,13 @@ class _FakeAudioPlayer extends AudioPlayer {
     emitState(false, ProcessingState.ready);
   }
 
+  /// 模拟 just_audio 在曲末重复采样：playing 仍为 true、状态 ready，
+  /// 位置被插值钳在时长上（Windows/Linux media_kit 不上报 completed 的场景）。
+  void emitPosition(Duration position) {
+    _position = position;
+    _positions.add(position);
+  }
+
   /// 模拟 just_audio 在 completed 后仍保持 playing=true 的内部请求态
   /// （不产生平台事件）。
   void forcePlayingFlag(bool playing) => _playing = playing;
@@ -127,14 +134,14 @@ class _FakeAudioPlayer extends AudioPlayer {
   }
 }
 
-SourceTrack _track() => const SourceTrack(
+SourceTrack _track({int index = 0}) => SourceTrack(
       sourceKey: 'test',
       origin: 'builtin',
-      title: '测试曲目',
+      title: '测试曲目$index',
       artist: '测试歌手',
       album: '',
-      duration: Duration(seconds: 30),
-      raw: {'id': 'a'},
+      duration: const Duration(seconds: 30),
+      raw: {'id': 'a$index'},
     );
 
 void main() {
@@ -151,6 +158,7 @@ void main() {
 
   Future<({LocalPlaybackService service, _FakeAudioPlayer player})> start({
     PlayMode mode = PlayMode.listLoop,
+    int trackCount = 1,
   }) async {
     final player = _FakeAudioPlayer();
     final service = LocalPlaybackService(
@@ -160,7 +168,10 @@ void main() {
     );
     addTearDown(service.dispose);
     await service.setMode(mode);
-    await service.playTracks([_track()], 0);
+    await service.playTracks(
+      [for (var i = 0; i < trackCount; i++) _track(index: i)],
+      0,
+    );
     await pumpEventQueue();
     expect(service.isPlaying, isTrue);
     return (service: service, player: player);
@@ -275,5 +286,111 @@ void main() {
 
     expect(completions, hasLength(1));
     expect(player.calls, isEmpty);
+  });
+
+  test('media_kit 未上报 completed 时，曲末位置兜底自动切到下一首', () async {
+    final (:service, :player) = await start(trackCount: 2);
+    final completions = <String>[];
+    final subscription = service.trackCompletions.listen(
+      (track) => completions.add(track.id),
+    );
+    addTearDown(subscription.cancel);
+    player.calls.clear();
+    final playsBefore = player.platformPlays;
+
+    // 自然播完：playing 仍为 true、状态 ready，位置钳在时长上。
+    player.emitPosition(const Duration(seconds: 30));
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+
+    expect(completions, hasLength(1), reason: '兜底只上报一次完成事件');
+    expect(service.currentIndex, 1);
+    expect(service.isPlaying, isTrue);
+    expect(service.position, Duration.zero);
+    expect(
+      player.calls,
+      ['pause', 'setAudioSource', 'play'],
+      reason: '自动切歌前先暂停，下一首的 play 必须真正下发到平台',
+    );
+    expect(player.platformPlays, playsBefore + 1);
+  });
+
+  test('曲末前 250ms 内位置仍在前进时不会提前切歌', () async {
+    final (:service, :player) = await start(trackCount: 2);
+
+    player.emitPosition(
+      const Duration(seconds: 30) - const Duration(milliseconds: 200),
+    );
+    player.emitPosition(
+      const Duration(seconds: 30) - const Duration(milliseconds: 100),
+    );
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isTrue);
+  });
+
+  test('曲末兜底按曲目重新武装，不会连跳两首', () async {
+    final (:service, :player) = await start(trackCount: 3);
+
+    player.emitPosition(const Duration(seconds: 30));
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+    expect(service.currentIndex, 1);
+
+    player.emitPosition(const Duration(seconds: 30));
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+    expect(service.currentIndex, 2);
+  });
+
+  test('用户暂停在曲末不会被曲末兜底误判成播完', () async {
+    final (:service, :player) = await start(trackCount: 2);
+
+    player.pauseAtEnd();
+    await pumpEventQueue();
+    player.emitPosition(const Duration(seconds: 30));
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isFalse);
+  });
+
+  test('用户从曲末拖回开头不会被曲末兜底误判成播完', () async {
+    final (:service, :player) = await start(trackCount: 2);
+
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+    await service.seek(Duration.zero);
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isTrue);
+  });
+
+  test('顺序播放队尾曲末兜底只停在曲末，不自动切歌', () async {
+    final (:service, :player) = await start(mode: PlayMode.sequential);
+
+    player.emitPosition(const Duration(seconds: 30));
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isFalse);
+    expect(player.playing, isFalse);
+    expect(service.position, const Duration(seconds: 30));
+  });
+
+  test('Android 不使用桌面曲末兜底', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final (:service, :player) = await start(trackCount: 2);
+
+    player.emitPosition(const Duration(seconds: 30));
+    player.emitPosition(const Duration(seconds: 30));
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isTrue);
   });
 }

@@ -800,3 +800,17 @@
     直接返回。`LocalPlaybackService.toggle()` 因此同时用 `completed` 与
     「位置 ≥ 时长 - 250ms」判定曲末，并在 `_restartFromStart()` 里先 `pause()`
     再 `seek(0)`；回归用例见 `test/playback/local_playback_service_test.dart`。
+78. **Windows/Linux 的 media_kit 自然播完可能整条 completed 不上报，自动切歌
+    必须另有曲末位置兜底**：mpv 到 EOF 后停在 keep-open 状态，
+    `just_audio_media_kit` 是否把事件变成 `ProcessingState.completed` 取决于
+    内部播放列表下标 / `playlistMode` 条件；Windows 上实际出现过整条链路不
+    触发：`processingState` 仍是 ready、just_audio 的 `playing` 仍是 true、
+    位置被插值钳在时长上。表现为「播到最后一秒停住、界面停在旧歌末尾、不自动
+    下一首」（安卓 ExoPlayer 正常，release/debug 一致）。
+    `LocalPlaybackService` 因此只对 Windows/Linux 增加位置兜底：位置流连续两次
+    采样都停在同一个末位（时长 - 250ms 之后且不再前进）即视为播完，走同一条
+    `_handleTrackCompleted` 链路（`trackCompletions` / 定时关闭 / 自动切歌语义
+    不变）；用户主动暂停时 `playing == false`、seek 会在 `_seekPlayer` 里清空
+    采样，都不会误判。自动切歌前还会显式 `pause()`：自然播完后 just_audio 的
+    `playing` 仍为 true，不先暂停的话下一首的 `play()` 会被直接返回（与 #77
+    同源）。回归用例见 `test/playback/local_playback_service_test.dart`。
