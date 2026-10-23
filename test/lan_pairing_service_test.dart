@@ -118,6 +118,27 @@ void main() {
     expect(b.passphrase, passA);
     expect(b.endpoints.map((e) => e.deviceId), contains('devA'));
     expect(a.endpoints.map((e) => e.deviceId), contains('devB'));
+
+    // invite 转移的是发起方口令：接收方拿到的口令必须能解开真实同步载荷。
+    final codec = SyncCodec(iterations: 1000);
+    final envelope = SyncEnvelope(
+      deviceId: 'devA',
+      producedAt: 1,
+      records: {
+        SyncCategory.settings: [
+          SyncRecord(
+            key: 'theme_mode',
+            version: const SyncVersion(physical: 1, deviceId: 'devA'),
+            data: const {'v': 'light'},
+          ),
+        ],
+      },
+    );
+    final decrypted = codec.decrypt(
+      codec.encrypt(envelope, a.passphrase!),
+      b.passphrase!,
+    );
+    expect(decrypted.deviceId, 'devA');
   });
 
   test('invite 接受后等待 complete：complete 成功才返回 accepted', () async {

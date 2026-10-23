@@ -1183,7 +1183,7 @@
   "syncPeersEmptySubtitle": "在「附近设备」里点击配对，或在高级设置里手动添加地址",
   "syncNearbySection": "附近设备",
   "syncNearbyTapToPair": "点击配对",
-  "syncNearbyHasGroup": "对方已有同步组",
+  "syncNearbyHasGroup": "对方已在同步组中",
   "syncNearbyLanOffTitle": "局域网同步未开启",
   "syncNearbyLanOffHint": "打开上方的「局域网」开关后，附近设备会显示在这里。",
   "syncNearbySearching": "正在查找附近设备…",
@@ -1202,7 +1202,7 @@
   },
   "syncNearbyContacting": "正在联系对方…",
   "syncNearbyCodeLabel": "确认码",
-  "syncNearbyCheckCode": "请核对对方屏幕上的数字一致",
+  "syncNearbyCheckCode": "请核对对方屏幕上的数字是否一致",
   "syncNearbyWaiting": "等待对方接受…",
   "syncNearbyJoined": "已加入同步组",
   "syncNearbySameGroup": "已在同一同步组",
@@ -1243,10 +1243,6 @@
   "syncPeerThisDeviceTitle": "本机设备 ID",
   "syncPeerNever": "还没连上",
   "syncSyncing": "正在同步…",
-  "syncPeerStatusConnected": "已连接",
-  "syncPeerStatusDisconnected": "未连接",
-  "syncPeerStatusCloudSynced": "云端已同步",
-  "syncPeerStatusCloudNotSynced": "云端未同步",
   "syncPeerConnectedSince": "已连接 · 上次同步 {time}",
   "@syncPeerConnectedSince": {
     "placeholders": {

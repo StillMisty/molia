@@ -163,6 +163,9 @@ class FakeSyncTransport implements SyncTransport {
   /// push 失败时报告的对端 id（走名册失败路径）。
   List<String> pushFailedIds = const [];
 
+  /// push 成功时报告的对端 id（走名册成功接触路径）。
+  List<String> pushSucceededIds = const [];
+
   /// pull 前执行的钩子（模拟传输侧学到手动对端身份等）。
   Future<void> Function()? onPull;
 
@@ -240,7 +243,10 @@ class FakeSyncTransport implements SyncTransport {
             code: SyncIssueCode.pushFailed, detail: '推送失败（测试注入）'),
       );
     }
-    return const SyncPushResult(succeededPeers: 1);
+    return SyncPushResult(
+      succeededPeers: 1,
+      succeededIds: List.of(pushSucceededIds),
+    );
   }
 
   /// deleteRemote 的结果（默认 false：没有可清理的远端文件）。
@@ -410,6 +416,7 @@ class FakeSyncPairingPort implements SyncPairingPort {
   /// requestPairing 的调用记录与可注入结局。
   final List<SyncNearbyDevice> requestedDevices = [];
   SyncPairingResult? requestResult;
+  Object? requestError;
   Completer<SyncPairingResult>? _requestCompleter;
 
   /// respond 的返回值 / 挂起门（busy 态用例）。
@@ -455,6 +462,8 @@ class FakeSyncPairingPort implements SyncPairingPort {
   @override
   Future<SyncPairingResult> requestPairing(SyncNearbyDevice device) {
     requestedDevices.add(device);
+    final error = requestError;
+    if (error != null) return Future.error(error);
     final immediate = requestResult;
     if (immediate != null) return Future.value(immediate);
     return (_requestCompleter ??= Completer<SyncPairingResult>()).future;

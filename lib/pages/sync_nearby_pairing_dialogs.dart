@@ -39,16 +39,28 @@ Future<void> showSyncNearbyPairingDialog(
   required SyncProvider provider,
   required SyncNearbyDevice device,
 }) {
+  final key = GlobalKey<_NearbyPairingDialogState>();
   return M3EDialog.show<void>(
     context,
     // 关闭只走「取消」：点空白误关会让后台配对请求继续占着唯一的发起方槽位。
     barrierDismissible: false,
-    dialog: _NearbyPairingDialog(provider: provider, device: device),
+    // 返回键 / Esc 同样不能静默关窗：等待期间必须由用户显式取消，流程收口
+    // （成功 / 失败已提示）后才允许关闭。
+    onDismissRequest: () async => key.currentState?.dismissible ?? false,
+    dialog: _NearbyPairingDialog(
+      key: key,
+      provider: provider,
+      device: device,
+    ),
   );
 }
 
 class _NearbyPairingDialog extends StatefulWidget {
-  const _NearbyPairingDialog({required this.provider, required this.device});
+  const _NearbyPairingDialog({
+    super.key,
+    required this.provider,
+    required this.device,
+  });
 
   final SyncProvider provider;
   final SyncNearbyDevice device;
@@ -64,6 +76,10 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
   /// 这条独立订阅等 id 到达后替用户取消，避免后台继续占用唯一的发起方槽位。
   StreamSubscription<SyncPairingAttempt>? _pendingCancel;
 
+  /// `_pendingCancel` 已移交给关闭后的流收口：dispose 不能再取消它，否则
+  /// 用户取消前没拿到 id 的请求会一直挂在后台。
+  bool _pendingCancelHandedOff = false;
+
   String? _requestId;
   String _code = '';
   bool _finished = false;
@@ -71,6 +87,9 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
 
   String get _peerName =>
       _nearbyDisplayName(widget.device.name, widget.device.deviceId);
+
+  /// 返回键 / Esc 是否允许关窗：只有流程已经收口（即将自动关闭）时才允许。
+  bool get dismissible => _finished;
 
   @override
   void initState() {
@@ -84,13 +103,28 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     _disposed = true;
     unawaited(_attempts?.cancel());
     _attempts = null;
+    // 一般路径下取消订阅；只有「关窗后等 requestId 再取消」的移交订阅
+    // 例外——它必须活到 id 到达（回调自己取消），否则后台请求会继续占用
+    // 发起方槽位。
+    if (!_pendingCancelHandedOff) {
+      unawaited(_pendingCancel?.cancel());
+      _pendingCancel = null;
+    }
     super.dispose();
   }
 
   Future<void> _start() async {
-    final result = await widget.provider.requestPairing(widget.device);
+    SyncPairingResult result;
+    try {
+      result = await widget.provider.requestPairing(widget.device);
+    } catch (_) {
+      // 配对是可选子系统：请求抛异常也要给用户一个结论并收口弹层，
+      // 不能停在「正在联系对方」让后台请求悬着。
+      result = const SyncPairingResult(outcome: SyncPairingOutcome.unavailable);
+    }
     unawaited(_pendingCancel?.cancel());
     _pendingCancel = null;
+    _pendingCancelHandedOff = false;
     if (_finished || _disposed || !mounted) return;
     _finished = true;
     final l10n = AppLocalizations.of(context)!;
@@ -121,6 +155,8 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     } else {
       _pendingCancel =
           widget.provider.pairingAttempts.listen(_cancelWhenIdArrives);
+      // 弹层马上关闭；把这条订阅移交给流收口，dispose 不再取消它。
+      _pendingCancelHandedOff = true;
     }
     if (!mounted) return;
     final l10n = AppLocalizations.of(context)!;
@@ -133,6 +169,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     unawaited(widget.provider.cancelPairing(attempt.requestId));
     unawaited(_pendingCancel?.cancel());
     _pendingCancel = null;
+    _pendingCancelHandedOff = false;
   }
 
   static String _resultMessage(
@@ -239,6 +276,7 @@ Future<void> showSyncIncomingPairingDialog(
     hostContext,
     // 这是一次授权决定：点空白 / 返回键都不应静默忽略，必须明确拒绝或接受。
     barrierDismissible: false,
+    onDismissRequest: () async => false,
     dialog: _IncomingPairingDialog(
       provider: provider,
       request: request,
@@ -279,7 +317,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
     final remaining = _request.expiresAt - widget.provider.nowMs;
     _expiry = Timer(
       Duration(milliseconds: remaining > 0 ? remaining : 0),
-      _onExpired,
+      () => unawaited(_onExpired()),
     );
   }
 
@@ -289,9 +327,18 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
     super.dispose();
   }
 
-  void _onExpired() {
+  Future<void> _onExpired() async {
     if (_finished || _busy || !mounted) return;
     _finished = true;
+    // 本地计时器与服务 sweep 有毫秒级偏差：本地先到也要主动拒绝一次，
+    // 释放服务里的 active prompt（对已过期条目是幂等的），否则服务端可能
+    // 仍占着唯一的待确认槽位，后续请求要等它自己的定时器才推进。
+    try {
+      await widget.provider.respondPairing(_request.requestId, accept: false);
+    } catch (_) {
+      // 过期收口不因服务异常卡住弹层。
+    }
+    if (!mounted) return;
     showSyncNoticeAndClose(context, widget.l10n.syncNearbyIncomingExpired);
   }
 

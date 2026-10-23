@@ -5,6 +5,7 @@ import 'package:molia/data/sync/sync_round.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/sync_transport_runtime.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/models/sync_peer_status.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -157,6 +158,52 @@ void main() {
     expect(transport.pullCount, 0, reason: '入站轮不联系任何对端');
     expect(round.pulledEntries, hasLength(1));
     expect(round.pulledEntries.single.$1, '', reason: '入站载荷没有传输归属');
+  });
+
+  test('同一轮拉取失败 + 推送成功：保留失败原因，不冒充成功接触', () async {
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: [SyncPeerState(deviceId: 'devB')],
+    ));
+    transport
+      ..pullFailures = 1
+      ..peersSeenOverride = 1
+      ..seenIdsOverride = const []
+      ..pullFailedIssues = const {
+        'devB': SyncIssue(code: SyncIssueCode.peerReadFailed),
+      }
+      ..pushSucceededIds = const ['devB'];
+
+    final round = context();
+    await runner.collectStage(round);
+    await runner.pullStage(round);
+    await runner.consumeStage(round);
+    await runner.applyStage(round);
+    await runner.publishStage(round);
+
+    expect(transport.pushed, isNotEmpty, reason: '本轮确实推送成功');
+    final peer = runner.peerOf('devB');
+    expect(peer.lastError?.code, SyncIssueCode.peerReadFailed,
+        reason: '推送成功不能清掉同一轮的拉取失败');
+    expect(peer.lastSuccessAt, 0, reason: '拉取失败不算成功接触');
+    expect(peer.lastPushAt, 0, reason: '旧名册会把 lastPushAt 当成功证据，失败轮不推进');
+    expect(peer.lastSeenAt, 7000, reason: '本轮尝试时间仍应刷新');
+    expect(
+      resolveSyncPeerConnection(
+        peer,
+        report: SyncRoundReport(
+          trigger: round.trigger,
+          startedAt: round.startedAt,
+          finishedAt: 7000,
+          outcome: SyncOutcome.partial,
+        ),
+        nowMs: 7000,
+      ),
+      SyncPeerConnectionStatus.unreachable,
+    );
   });
 }
 

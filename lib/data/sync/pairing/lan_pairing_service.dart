@@ -456,8 +456,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   void _cancelScanTimers() {
-    // 用 Timer.isActive 一并清掉已经触发的死条目 + 取消仍在等待的条目；
-    // 新扫描开始时调用，列表不会跨扫描累积。
+    // 列表本身就是「待取消的扫描定时器」集合：已触发的条目虽无可取消，
+    // 也要从列表移除（removeWhere 恒真），新扫描开始时不会跨扫描累积。
     _scanTimers.removeWhere((timer) {
       if (timer.isActive) timer.cancel();
       return true;
@@ -1037,6 +1037,11 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (request.method != 'POST') {
       return const PairingHttpResponse(statusCode: 405, body: '');
     }
+    // `/pair/complete` 刻意不要求前台（不检查 `_canUsePairing`）：用户点
+    // 「接受」时确认窗只会在前台出现，授权已经发生；从接受走到发起方下一次
+    // 轮询之间，接收方可能刚好锁屏 / 切到后台。这里若按后台拒绝，就会留下
+    // 「已接受但口令永远写不进来」的半完成状态。complete 仍受已接受 entry、
+    // requestId、临时密钥与 request TTL 约束，后台进程不能凭空发起一次写入。
     if (!_rateLimiter.allow(request.sourceHost, _nowMs())) {
       return PairingHttpResponse.json(
         {'v': 1, 'status': SyncPairingStatus.busy.name},

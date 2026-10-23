@@ -1252,6 +1252,47 @@ final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
 /// 展示 M3ESnackbar（ScaffoldMessenger 的 context 在 Overlay 之上不可用）。
 final GlobalKey appRootKey = GlobalKey(debugLabel: 'appRoot');
 
+/// 应用壳接收方配对请求的串行队列。
+///
+/// 服务在一条请求被应答后会立刻推出下一条（`_presentNext`），而应用壳的
+/// 确认窗这时可能还在关闭动画里：旧实现看到 `_incomingPairingOpen` 仍为真，
+/// 会把第二条直接拒绝。现在先入队，等当前窗真正关闭（`present` 返回）后
+/// 再逐条展示；宿主 context 已不存在时由 [reject] 统一给出拒绝结论。
+@visibleForTesting
+class IncomingPairingQueue {
+  final List<SyncPairingRequest> _pending = [];
+  bool _draining = false;
+
+  bool get isDraining => _draining;
+  bool get isEmpty => _pending.isEmpty;
+
+  void add(SyncPairingRequest request) => _pending.add(request);
+
+  /// 逐条展示队列；[present] 返回 false 表示宿主已不可用，剩余请求（含当前）
+  /// 全部交给 [reject] 收口。
+  Future<void> drain({
+    required Future<bool> Function(SyncPairingRequest request) present,
+    required Future<void> Function(SyncPairingRequest request) reject,
+  }) async {
+    if (_draining) return;
+    _draining = true;
+    try {
+      while (_pending.isNotEmpty) {
+        final request = _pending.first;
+        if (!await present(request)) {
+          while (_pending.isNotEmpty) {
+            await reject(_pending.removeAt(0));
+          }
+          return;
+        }
+        _pending.removeAt(0);
+      }
+    } finally {
+      _draining = false;
+    }
+  }
+}
+
 class MyThemedApp extends StatefulWidget {
   const MyThemedApp({super.key, this.onUserInteraction});
 
@@ -1272,6 +1313,13 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   /// 同一条请求只允许一个确认窗（服务本身已串行；这里防流重放 / 重入）。
   bool _incomingPairingOpen = false;
 
+  /// 确认窗关闭动画期间到达的请求：排队等当前窗收口，不能直接拒绝。
+  final IncomingPairingQueue _incomingPairingQueue = IncomingPairingQueue();
+
+  /// 应用壳在 MaterialApp 之上，配对回执不依赖宿主 context（后者只用于
+  /// 展示弹层）；提前持有 provider，宿主 context 消失后仍能拒绝排队请求。
+  late final SyncProvider _sync;
+
   @override
   void initState() {
     super.initState();
@@ -1283,6 +1331,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     // 震动反馈开关（设备本地偏好）：载入后全应用触感立即按它判定。
     HapticsService.load();
     final sync = context.read<SyncProvider>();
+    _sync = sync;
     _peerConnected = sync.peerConnectedNotices.listen(_onPeerConnected);
     _incomingPairing = sync.incomingPairingRequests.listen(_onIncomingPairing);
   }
@@ -1302,32 +1351,48 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
 
   /// 收到配对请求：弹接收方确认窗（含确认码与授权警告）。
   ///
-  /// 没有宿主 context 或已有确认窗时不排队：直接拒绝，让发起方立刻拿到
-  /// 结论，而不是等满 60 秒 TTL。
+  /// 当前窗尚未彻底关闭时先入队，等 `finally` 后再逐条展示；没有宿主
+  /// context 时把排队请求统一拒绝，让发起方立刻拿到结论，而不是等满 TTL。
   Future<void> _onIncomingPairing(SyncPairingRequest request) async {
-    if (!mounted) return;
-    final provider = context.read<SyncProvider>();
-    if (_incomingPairingOpen) {
-      await provider.respondPairing(request.requestId, accept: false);
+    if (!mounted) {
+      await _rejectIncomingPairing(request);
       return;
     }
+    _incomingPairingQueue.add(request);
+    if (_incomingPairingOpen) return;
+    await _drainIncomingPairings();
+  }
+
+  Future<void> _drainIncomingPairings() => _incomingPairingQueue.drain(
+        present: _presentIncomingPairing,
+        reject: _rejectIncomingPairing,
+      );
+
+  /// 展示一条确认窗；false = 宿主 context 已不可用，交给队列统一拒绝。
+  Future<bool> _presentIncomingPairing(SyncPairingRequest request) async {
     final hostContext = navigatorKey.currentContext;
-    if (hostContext == null) {
-      await provider.respondPairing(request.requestId, accept: false);
-      return;
-    }
+    if (hostContext == null) return false;
     _incomingPairingOpen = true;
     try {
       await showSyncIncomingPairingDialog(
         hostContext,
-        provider: provider,
+        provider: _sync,
         request: request,
       );
     } catch (_) {
       // 弹窗本身失败（主题 / 路由异常）也要给发起方结论，不能让请求悬着。
-      await provider.respondPairing(request.requestId, accept: false);
+      await _rejectIncomingPairing(request);
     } finally {
       _incomingPairingOpen = false;
+    }
+    return true;
+  }
+
+  Future<void> _rejectIncomingPairing(SyncPairingRequest request) async {
+    try {
+      await _sync.respondPairing(request.requestId, accept: false);
+    } catch (_) {
+      // 可选子系统：拒绝回执失败只影响对方等待，不打断应用壳。
     }
   }
 

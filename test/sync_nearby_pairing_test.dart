@@ -310,7 +310,10 @@ void main() {
     );
     final tile = tester.widget<SettingsNavTile>(row);
     expect(tile.title, 'Pixel 9');
-    expect(tile.subtitle, 'Tap to pair · Has a sync group');
+    expect(
+      tile.subtitle,
+      'Tap to pair · The other device is already in a sync group',
+    );
   });
 
   testWidgets('发起方：点候选即开确认码弹窗；接受后关闭、提示并跑一轮', (tester) async {
@@ -416,6 +419,40 @@ void main() {
     expect(pairing.cancelledRequests, contains('r1'));
   });
 
+  testWidgets('发起方：等待期间返回键不会静默关窗，取消仍是唯一出口', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await pumpPage(tester);
+    await emitCandidate(tester);
+    await openCandidateDialog(tester);
+    pairing.emitAttempt(attempt(SyncPairingStatus.pending));
+    await tester.pump();
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('482 193'), findsOneWidget, reason: '返回键必须被否决');
+    expect(pairing.cancelledRequests, isEmpty);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(pairing.cancelledRequests, contains('r1'));
+    expect(find.text('482 193'), findsNothing);
+  });
+
+  testWidgets('发起方：请求抛异常也收口弹层并给不可用提示', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    pairing.requestError = StateError('boom');
+    await pumpPage(tester);
+    await emitCandidate(tester);
+    await openCandidateDialog(tester);
+    await tester.pumpAndSettle();
+
+    expect(
+      notifications.last,
+      'Pairing is unavailable. Make sure both devices have LAN sync on and try again.',
+    );
+    expect(find.text('Pair with “Pixel 9”'), findsNothing);
+  });
+
   testWidgets('接收方（加入组）：标题 / 确认码 / 警告；接受后提示并跑一轮', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await openReceiverDialog(
@@ -478,6 +515,60 @@ void main() {
 
     expect(pairing.responses.single.accept, isFalse);
     expect(notifications.last, 'Pairing request rejected');
+  });
+
+  testWidgets('接收方：返回键不会静默关窗，必须明确接受或拒绝', (tester) async {
+    await openReceiverDialog(
+      tester,
+      notifications: notifications,
+      provider: provider,
+      request: SyncPairingRequest(
+        requestId: 'in-back',
+        peerDeviceId: 'devA',
+        peerName: 'Pixel 9',
+        intent: SyncPairingIntent.join,
+        code: '999888',
+        expiresAt: provider.nowMs + 60000,
+      ),
+    );
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(find.text('999 888'), findsOneWidget, reason: '返回键必须被否决');
+    expect(pairing.responses, isEmpty);
+
+    pairing.respondResult = SyncPairingOutcome.rejected;
+    await tester.tap(find.text('Reject'));
+    await tester.pumpAndSettle();
+    expect(pairing.responses.single.requestId, 'in-back');
+    expect(find.text('999 888'), findsNothing);
+  });
+
+  testWidgets('接收方：确认窗到期主动拒绝，释放服务里的待确认槽位', (tester) async {
+    final expiresAt = provider.nowMs + 80;
+    await openReceiverDialog(
+      tester,
+      notifications: notifications,
+      provider: provider,
+      request: SyncPairingRequest(
+        requestId: 'in-expired',
+        peerDeviceId: 'devA',
+        peerName: 'Pixel 9',
+        intent: SyncPairingIntent.join,
+        code: '777666',
+        expiresAt: expiresAt,
+      ),
+    );
+
+    pairing.respondResult = SyncPairingOutcome.expired;
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump();
+
+    expect(pairing.responses.single.requestId, 'in-expired');
+    expect(pairing.responses.single.accept, isFalse,
+        reason: '本地计时器先到也要主动拒绝，不能等 service sweep');
+    expect(notifications.last, 'The pairing request expired');
+    expect(find.text('777 666'), findsNothing);
   });
 
   testWidgets('接收方（邀请）：文案说明改口令；接受等待时按钮禁用并显示进度', (tester) async {

@@ -5208,7 +5208,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyHasGroup.
   ///
   /// In en, this message translates to:
-  /// **'Has a sync group'**
+  /// **'The other device is already in a sync group'**
   String get syncNearbyHasGroup;
 
   /// No description provided for @syncNearbyLanOffTitle.
@@ -5438,30 +5438,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Syncing…'**
   String get syncSyncing;
-
-  /// No description provided for @syncPeerStatusConnected.
-  ///
-  /// In en, this message translates to:
-  /// **'Connected'**
-  String get syncPeerStatusConnected;
-
-  /// No description provided for @syncPeerStatusDisconnected.
-  ///
-  /// In en, this message translates to:
-  /// **'Not connected'**
-  String get syncPeerStatusDisconnected;
-
-  /// No description provided for @syncPeerStatusCloudSynced.
-  ///
-  /// In en, this message translates to:
-  /// **'Synced to cloud'**
-  String get syncPeerStatusCloudSynced;
-
-  /// No description provided for @syncPeerStatusCloudNotSynced.
-  ///
-  /// In en, this message translates to:
-  /// **'Not synced to cloud'**
-  String get syncPeerStatusCloudNotSynced;
 
   /// No description provided for @syncPeerConnectedSince.
   ///

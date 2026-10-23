@@ -1485,7 +1485,7 @@
   "syncPeersEmptySubtitle": "Tap a device under Nearby devices, or add an address in Advanced settings",
   "syncNearbySection": "Nearby devices",
   "syncNearbyTapToPair": "Tap to pair",
-  "syncNearbyHasGroup": "Has a sync group",
+  "syncNearbyHasGroup": "The other device is already in a sync group",
   "syncNearbyLanOffTitle": "LAN sync is off",
   "syncNearbyLanOffHint": "Turn on LAN sync above and nearby devices will appear here.",
   "syncNearbySearching": "Looking for nearby devices…",
@@ -1552,10 +1552,6 @@
   "syncPeerThisDeviceTitle": "This device ID",
   "syncPeerNever": "Not connected yet",
   "syncSyncing": "Syncing…",
-  "syncPeerStatusConnected": "Connected",
-  "syncPeerStatusDisconnected": "Not connected",
-  "syncPeerStatusCloudSynced": "Synced to cloud",
-  "syncPeerStatusCloudNotSynced": "Not synced to cloud",
   "syncPeerConnectedSince": "Connected · last synced {time}",
   "@syncPeerConnectedSince": {
     "placeholders": {

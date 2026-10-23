@@ -2839,7 +2839,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNearbyTapToPair => 'Tap to pair';
 
   @override
-  String get syncNearbyHasGroup => 'Has a sync group';
+  String get syncNearbyHasGroup =>
+      'The other device is already in a sync group';
 
   @override
   String get syncNearbyLanOffTitle => 'LAN sync is off';
@@ -2980,18 +2981,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncSyncing => 'Syncing…';
-
-  @override
-  String get syncPeerStatusConnected => 'Connected';
-
-  @override
-  String get syncPeerStatusDisconnected => 'Not connected';
-
-  @override
-  String get syncPeerStatusCloudSynced => 'Synced to cloud';
-
-  @override
-  String get syncPeerStatusCloudNotSynced => 'Not synced to cloud';
 
   @override
   String syncPeerConnectedSince(String time) {

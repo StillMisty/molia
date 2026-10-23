@@ -739,3 +739,19 @@
     无障碍不可见。另外结构比较必须含 `isCurrent`（以及 `isExtended` /
     `isPlaceholder`）：前奏首句预览与它变为当前行时文本完全相同，只比文本
     会误判结构未变，漏建 `CurrentLineView`（第一句不高亮、不绑词轴）。
+73. **一键配对的「已授权」与「已完成」跨前后台，判组不能只看名册 / 传输成功**：
+    用户点「接受」时确认窗只在前台出现，但发起方拿到结果后还要再发
+    `/pair/complete`（invite 方向）交出口令；从接受到下一次状态轮询之间接收方
+    可能已经锁屏 / 切后台。因此 `LanPairingService._handleCompleteRequest`
+    **故意不检查 `_canUsePairing`**：后台拒绝会留下「已接受但口令永远写不进来」
+    的半完成状态。安全性仍由已接受 entry + requestId + 临时密钥 + request TTL
+    约束，后台进程不能凭空发起一次写入；确认窗本身仍只在前台弹。
+    同源的判组窗口：配对接受后先落**已验证** `lanEndpoints`，名册 / 传输成功
+    时间要等首轮同步才更新，所以 `SyncControlPlane.hasEstablishedGroup` 必须
+    把 `lanEndpoints.isNotEmpty` 也算作已有组，否则这段空窗里本机会对外宣称
+    「没有组」，另一台已成组的设备可能借此覆盖口令（显式 `resetPassphrase`
+    仍是用户主动换组的唯一入口，不在此列）。
+    应用壳侧还有一条时序：服务在一条请求应答后立刻推出下一条，而确认窗可能
+    还在关闭动画里；接收方请求必须排队（`IncomingPairingQueue`）等当前窗
+    真正关闭后再逐条展示，不能因为 `_incomingPairingOpen` 仍为真就把下一条
+    直接拒绝。

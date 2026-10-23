@@ -90,6 +90,23 @@ void main() {
     expect(control.hasEstablishedGroup, isTrue);
   });
 
+  test('hasEstablishedGroup：配对刚完成、只有已验证端点也成立', () async {
+    expect(control.hasEstablishedGroup, isFalse);
+    expect(control.peers, isEmpty);
+    expect(control.transportLastSuccessAt(SyncTransportKind.lan), 0);
+
+    await state.rememberLanEndpoint(const LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 41000,
+      probePort: 47825,
+      verifiedAt: 77,
+    ));
+
+    expect(control.hasEstablishedGroup, isTrue,
+        reason: '配对落端点后、首轮同步前也必须算已有同步组');
+  });
+
   test('init 幂等；写入类操作改状态并通知一次', () async {
     var notifications = 0;
     control.addListener(() => notifications++);

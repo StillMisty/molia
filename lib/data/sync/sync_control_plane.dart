@@ -66,12 +66,18 @@ class SyncControlPlane extends ChangeNotifier {
   int transportLastSuccessAt(String kind) =>
       _state.transportLastSuccessAt(kind);
 
-  /// 本机是否已有同步组：名册非空，或任一路传输真正成功接触过对端。
+  /// 本机是否已有同步组：名册非空、任一路传输真正成功接触过对端，或已保存
+  /// 一个**已验证**的局域网端点。
   ///
   /// 这是配对服务、`SyncProvider.hasGroup` 与组合根共用的**唯一**判据。
   /// 只有自动生成、从未同步过的口令不算组——否则首次配对被误判成双方不同组。
+  /// 端点也计入：一键配对完成（join / invite / 同组）会先落已验证端点再返回
+  /// 结果，此时名册与传输成功时间要等首轮同步才更新；不把端点算进来，配对刚
+  /// 接受后的空窗里仍会对外宣称「没有组」，另一台已成组的设备可能借此覆盖
+  /// 本机口令。
   bool get hasEstablishedGroup =>
       peers.isNotEmpty ||
+      _state.lanEndpoints.isNotEmpty ||
       transportLastSuccessAt(SyncTransportKind.lan) > 0 ||
       transportLastSuccessAt(SyncTransportKind.webdav) > 0;
 

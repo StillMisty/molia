@@ -2735,7 +2735,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyTapToPair => '点击配对';
 
   @override
-  String get syncNearbyHasGroup => '对方已有同步组';
+  String get syncNearbyHasGroup => '对方已在同步组中';
 
   @override
   String get syncNearbyLanOffTitle => '局域网同步未开启';
@@ -2774,7 +2774,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyCodeLabel => '确认码';
 
   @override
-  String get syncNearbyCheckCode => '请核对对方屏幕上的数字一致';
+  String get syncNearbyCheckCode => '请核对对方屏幕上的数字是否一致';
 
   @override
   String get syncNearbyWaiting => '等待对方接受…';
@@ -2862,18 +2862,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncSyncing => '正在同步…';
-
-  @override
-  String get syncPeerStatusConnected => '已连接';
-
-  @override
-  String get syncPeerStatusDisconnected => '未连接';
-
-  @override
-  String get syncPeerStatusCloudSynced => '云端已同步';
-
-  @override
-  String get syncPeerStatusCloudNotSynced => '云端未同步';
 
   @override
   String syncPeerConnectedSince(String time) {
