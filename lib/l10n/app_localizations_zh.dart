@@ -1858,7 +1858,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjConsentBody =>
-      '开启后会把听歌画像（统计汇总、最近 200 条播放、已听曲目）发送给你配置的 AI 服务用于生成推荐；数据直达该服务，不经过本应用，应用不含内置 Key。\n关闭后停止推荐；清除配置即断开连接。';
+      '开启后会把听歌画像（统计汇总、最近 50 条播放、已听曲目）发送给你配置的 AI 服务用于生成推荐；数据直达该服务，不经过本应用，应用不含内置 Key。\n关闭后停止推荐；清除配置即断开连接。';
 
   @override
   String get aiDjAgree => '同意并开启';

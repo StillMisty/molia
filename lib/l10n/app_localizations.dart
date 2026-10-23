@@ -3587,7 +3587,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjConsentBody.
   ///
   /// In en, this message translates to:
-  /// **'When enabled, your listening profile (stats summary, the latest 200 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.'**
+  /// **'When enabled, your listening profile (stats summary, the latest 50 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.'**
   String get aiDjConsentBody;
 
   /// No description provided for @aiDjAgree.

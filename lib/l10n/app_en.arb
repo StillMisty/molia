@@ -964,7 +964,7 @@
   "aiDjStopClearQueue": "Clear queue & stop",
   "aiDjStopDialogTitle": "Exit AI DJ?",
   "aiDjConsentTitle": "Before you start",
-  "aiDjConsentBody": "When enabled, your listening profile (stats summary, the latest 200 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.",
+  "aiDjConsentBody": "When enabled, your listening profile (stats summary, the latest 50 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.",
   "aiDjAgree": "Agree & start",
   "aiDjConfigTitle": "AI service",
   "aiDjBaseUrl": "Base URL",
