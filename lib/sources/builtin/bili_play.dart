@@ -44,7 +44,12 @@ class BiliPlay {
 
     try {
       var session = await BiliApi.session();
-      final cid = await _cidFor(session, raw, bvid: bvid, aid: aid);
+      final cid = await _cidFor(
+        session.apiHeaders,
+        raw,
+        bvid: bvid,
+        aid: aid,
+      );
 
       var response = await _playUrl(
         session,
@@ -108,10 +113,18 @@ class BiliPlay {
   /// 取链与 CC 字幕歌词共用这一入口：同一视频只查一次分 P；分 P 缓存
   /// 由 [_cidCache] 承担，歌词失败不影响下一次取链。
   static Future<int> cidOf(Map<String, dynamic> raw) async {
+    final fromRaw = parseSourceCount(raw['cid']);
+    if (fromRaw != null && fromRaw > 0) return fromRaw;
     final ids = _idsOf(raw);
     _requireIds(ids.bvid, ids.aid);
-    final session = await BiliApi.session();
-    return _cidFor(session, raw, bvid: ids.bvid, aid: ids.aid);
+    // 分 P 接口不需要 WBI / Cookie：字幕歌词即使拿不到会话也能查 cid，
+    // 不让 nav 失败拖垮歌词。
+    return _cidFor(
+      BiliApi.anonymousHeaders,
+      raw,
+      bvid: ids.bvid,
+      aid: ids.aid,
+    );
   }
 
   static ({String bvid, String aid}) _idsOf(Map<String, dynamic> raw) => (
@@ -130,7 +143,7 @@ class BiliPlay {
 
   /// 分 P 列表 → 首个 cid（raw 已带 cid 时直接复用）。
   static Future<int> _cidFor(
-    BiliSession session,
+    Map<String, String> headers,
     Map<String, dynamic> raw, {
     required String bvid,
     required String aid,
@@ -147,7 +160,7 @@ class BiliPlay {
         : 'aid=${Uri.encodeComponent(aid)}';
     final response = await BuiltinSearch.transport.getJson(
       '${BiliApi.baseUrl}/x/player/pagelist?$query',
-      headers: session.apiHeaders,
+      headers: headers,
     );
     _throwForCode(BiliApi.codeOf(response));
 

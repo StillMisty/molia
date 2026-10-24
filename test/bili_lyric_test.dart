@@ -134,14 +134,15 @@ void main() {
     expect(player.uri.queryParameters['cid'], '12345');
     expect(player.headers['Referer'], 'https://www.bilibili.com/');
     expect(player.headers['User-Agent'], contains('Chrome/'));
-    expect(player.headers['Cookie'], contains('buvid3=buvid3-test'));
+    expect(player.headers.containsKey('Cookie'), isFalse,
+        reason: '字幕接口不需要 buvid，也不应为了歌词先拉会话');
 
     final subtitle = options.firstWhere(
       (o) => o.uri.path == '/bfs/subtitle/zh.json',
     );
     expect(subtitle.uri.scheme, 'https', reason: '// 开头必须补 https');
     expect(subtitle.uri.host, 'aisubtitle.hdslb.com');
-    expect(subtitle.headers['Cookie'], contains('buvid3=buvid3-test'));
+    expect(subtitle.headers.containsKey('Cookie'), isFalse);
     expect(
       options.any((o) => o.uri.path == '/bfs/subtitle/en.json'),
       isFalse,
