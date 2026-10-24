@@ -217,11 +217,29 @@ class _MyAppState extends State<MyApp>
   /// 文本与按钮是两个兄弟子树，弹簧必须由共同祖先持有，不能各建一根。
   late final _BarHeaderReveal _barReveal;
 
-  /// tab 淡入淡出（fade-through）控制器。
-  late final AnimationController _tabTransition = AnimationController(
+  /// tab 淡入淡出（fade-through）控制器：M3E expressive spatial 弹簧。
+  ///
+  /// 弹簧只负责时间曲线（快出、缓落定）；透明度 / 缩放的形状仍由
+  /// `shellPageLayerPresentation` 内的 Curves 决定，两者不重复缓动。
+  ///
+  /// 用 bounded 控制器：`forward(from: 0)` 的语义与旧的 320ms 控制器一致，
+  /// 显式设值被夹在 0..1。字段类型必须写具体的 bounded 类：工厂
+  /// `SingleMotionController.bounded` 的静态返回类型是基类，拿不到 `forward`。
+  ///
+  /// `snapToEnd` 不能省：`shellPageLayerPresentation` 用 `progress < 1.0`
+  /// 判定出场层是否仍在过渡，弹簧自然收敛会停在 0.999…，出场页就会一直
+  /// 残留 0.97 缩放（顶栏⇄播放页飞行抓锚点时真身跳变）。
+  late final BoundedSingleMotionController _tabTransition =
+      BoundedSingleMotionController(
+    motion: SpringMotion(
+      M3EMotion.expressiveSpatialDefault.toDescription(),
+      snapToEnd: true,
+    ),
     vsync: this,
-    duration: const Duration(milliseconds: 320),
-  )..value = 1.0;
+    initialValue: 1,
+    lowerBound: 0,
+    upperBound: 1,
+  );
 
   /// 共享元素飞行控制器。
   ///
@@ -822,7 +840,10 @@ class _ShellPageLayer extends StatelessWidget {
         final presentation = shellPageLayerPresentation(
           selected: selected,
           outgoing: outgoing,
-          progress: animation.value,
+          // expressive spatial 弹簧阻尼 0.8 会轻微过冲（bounded 只夹显式设值，
+          // 模拟器逐帧输出不夹）；Curves 断言输入在 0..1，且过冲对透明度 /
+          // 缩放没有意义，先夹住再交给形状函数。
+          progress: animation.value.clamp(0.0, 1.0),
         );
         // 可见性门控：隐藏页面的组件放弃 provider 订阅（见 ShellPageVisibility），
         // TickerMode 只静音动画，挡不住 ChangeNotifier 触发的整页重建。
