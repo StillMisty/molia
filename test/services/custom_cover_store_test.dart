@@ -205,6 +205,36 @@ void main() {
     expect(await store.readTrackCover(const TrackId('kw', 'none')), isNull);
   });
 
+  test('同步接缝：远端应用刷新 revision，但不触发本地变更回调', () async {
+    const id = TrackId('wy', 'sync');
+    final localChanges = <CustomCoverChange>[];
+    final observed = <CustomCoverChange>[];
+    store.onLocalChange = localChanges.add;
+    final remove = store.addChangeListener(observed.add);
+    addTearDown(remove);
+
+    await store.setTrackCover(id, _bytes(11));
+    expect(localChanges, hasLength(1), reason: '本地写入触发同步标脏');
+
+    final revision = store.revision.value;
+    await store.applySyncedTrackCover('wy:sync', _bytes(12));
+    expect(await store.readTrackCover(id), _bytes(12));
+    expect(localChanges, hasLength(1), reason: '远端应用不得形成同步回环');
+    expect(observed, hasLength(2), reason: '展示面仍收到刷新');
+    expect(store.revision.value, revision + 1);
+
+    await store.applySyncedTrackDelete('wy:sync');
+    expect(store.trackCoverPath(id), isNull);
+    expect(localChanges, hasLength(1));
+
+    await store.setDefaultCover(_bytes(13));
+    await store.applySyncedDefaultCover(_bytes(14));
+    expect(localChanges, hasLength(2));
+    await store.applySyncedDefaultDelete();
+    expect(store.defaultCoverUrl, isNull);
+    expect(localChanges, hasLength(2));
+  });
+
   test('损坏索引：按空索引启动，不抛异常', () async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(CustomCoverStore.prefsKey, '{not json');

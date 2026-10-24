@@ -49,7 +49,7 @@ class SyncBackup {
 
   int _nowMs() => _clock().millisecondsSinceEpoch;
 
-  /// 导出完整备份 JSON 文本（歌单 / 历史 / 音源 / 设置 / 统计 / 会话）。
+  /// 导出完整备份 JSON 文本（歌单 / 历史 / 音源 / 设置 / 统计 / 会话 / 自定义封面）。
   Future<String> exportBackupJson({bool includeCredentials = false}) async {
     final categories = _backupCategories(includeCredentials);
     final records = await _collect(categories);

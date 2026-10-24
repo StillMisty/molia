@@ -44,7 +44,14 @@ void main() {
     expect(control.enabled, isFalse);
     expect(control.deviceId, 'devA');
     expect(control.deviceName, isNotEmpty);
-    expect(control.categories.values.every((on) => on), isTrue);
+    expect(control.categories[SyncCategory.covers], isFalse,
+        reason: '自定义封面默认关闭');
+    expect(
+      control.categories.entries
+          .where((entry) => entry.key != SyncCategory.covers)
+          .every((entry) => entry.value),
+      isTrue,
+    );
     expect(control.enabledTransports, isEmpty);
     expect(control.webdav.isConfigured, isFalse);
     expect(control.manualPeers, isEmpty);

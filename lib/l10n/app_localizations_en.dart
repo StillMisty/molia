@@ -176,6 +176,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get coverDefaultUpdated => 'Default cover updated';
 
   @override
+  String get settingsSyncCustomCovers => 'Sync custom covers';
+
+  @override
+  String get settingsSyncCustomCoversSubtitle =>
+      'Off by default; sent with sync when enabled';
+
+  @override
   String get coverLabel => 'Cover';
 
   @override
@@ -2815,6 +2822,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncCategorySettings => 'App settings';
+
+  @override
+  String get syncCategoryCovers => 'Custom covers';
 
   @override
   String get syncCategoryStatistics => 'Play statistics';

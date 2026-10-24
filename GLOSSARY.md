@@ -188,7 +188,9 @@
   文件在应用支持目录 `custom_covers/`）。启动只读索引并剔除丢失文件；每次替换写
   新文件名，保证 Flutter ImageCache 与取色 LRU 不会继续显示旧图。查询同步，
   UI 经 `ValueNotifier<int> revision` 刷新，组合根另接 change listener 刷新当前
-  播放 / 主题 / 系统媒体。
+  播放 / 主题 / 系统媒体。同步面经 `trackEntries` / `defaultEntry` 枚举、经
+  `applySynced*` 应用远端结果；`onLocalChange` 只在本机写入时触发（远端应用
+  不标脏，避免同步回环）。
 - **Cover key（封面键）** — 曲目键 `sourceKey:songId`；`sourceKey == local` 的下载
   副本剥掉一层 `local:` 前缀（`local:wy:123` → `wy:123`），让下载前设置的封面
   继续作用于本地副本；本地导入保持 `local:<path>` 记录键。
@@ -685,7 +687,13 @@
   只做结构校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
-  `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
+  `history` / `session` / `covers`；关闭的类别既不推送也不应用（本机仍持续
+  登记本地变化）。`covers`（自定义封面）默认关闭，且不进蜂窝小类别。
+- **Cover sync adapter（封面同步适配器）** — `lib/data/sync/adapters/cover_sync_adapter.dart`：
+  `covers` 类别的记录桥：每曲封面 + 默认封面保留键 `__default_cover__`；版本
+  由 `SyncStampIssuer` 按内容哈希发放，首次登记不写增量日志，真实变化 / 删除
+  才追加；远端应用经 `CustomCoverStore.applySynced*`（不触发本地变更回调）。
+  单张 > 500KB 或损坏只跳过同步，本地封面保留。
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
   本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /

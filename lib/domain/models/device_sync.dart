@@ -31,7 +31,16 @@ enum SyncCategory {
   history,
 
   /// 上次播放会话（队列/下标/进度/模式，用于换设备接着听）。
-  session;
+  session,
+
+  /// 自定义封面（每曲 + 全局默认封面图片，体积大）。
+  ///
+  /// 默认关闭：封面字节只在用户显式开启后才会进入同步载荷；关闭期间本地
+  /// 修改仍会登记，重新开启后由全量快照 / 后续变更外发。
+  covers;
+
+  /// 类别默认开关（新装 / 旧状态缺失该类别时使用）。
+  bool get defaultEnabled => this != SyncCategory.covers;
 
   static SyncCategory? tryParse(String? name) {
     for (final value in SyncCategory.values) {
@@ -51,6 +60,9 @@ abstract final class SyncRecordKeys {
 
   /// 上次播放会话的单例记录。
   static const String sessionKey = '__playback_session__';
+
+  /// 全局默认封面的单例记录键（`covers` 类别）。
+  static const String defaultCoverKey = '__default_cover__';
 
   static const String _separator = '\u0001';
 

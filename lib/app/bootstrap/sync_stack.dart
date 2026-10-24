@@ -16,6 +16,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/molia_database.dart';
+import '../../data/sync/adapters/cover_sync_adapter.dart';
 import '../../data/sync/adapters/history_sync_adapter.dart';
 import '../../data/sync/adapters/playlist_sync_adapter.dart';
 import '../../data/sync/adapters/prefs_sync_adapter.dart';
@@ -38,6 +39,7 @@ import '../../domain/models/device_sync.dart';
 import '../../domain/models/library.dart';
 import '../../domain/ports/sync_transport.dart';
 import '../../providers/sync_provider.dart';
+import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/local_endpoints_service.dart';
 import 'catalog_stack.dart';
@@ -61,12 +63,16 @@ Future<SyncStack> buildSyncStack({
   required PlaybackStack playback,
   required DataSaverService dataSaver,
 
+  /// 自定义封面存储（生产 = local stack 的已加载实例；测试可省略）。
+  CustomCoverStore? customCovers,
+
   /// 前台判定由组合根提供（`WidgetsBinding.instance.lifecycleState`）；
   /// 数据层不直接依赖 Flutter 生命周期。
   bool Function()? isForeground,
 }) async {
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
+  final covers = customCovers ?? CustomCoverStore.instance;
   // 编解码在 worker isolate 里跑（载荷编码 / 压缩 / PBKDF2 / AES 都是纯计算，
   // 放主 isolate 会让 UI 在首轮与整库快照时卡住数秒）。
   final syncCodec = IsolateSyncCodecPort();
@@ -105,6 +111,13 @@ Future<SyncStack> buildSyncStack({
     state: syncState,
     journal: library.syncJournal,
     onChanged: playback.playbackProvider.reloadRestoredSessionFromStore,
+  );
+  final coverSyncAdapter = CoverSyncAdapter(
+    store: covers,
+    state: syncState,
+    journal: library.syncJournal,
+    // 默认关闭：关闭期间只登记本地变化，不把封面字节写进增量窗口。
+    enabled: () => syncState.isCategoryEnabled(SyncCategory.covers),
   );
 
   // 引擎与局域网传输互为依赖：传输的快照提供者要读引擎最近一轮快照。
@@ -182,6 +195,7 @@ Future<SyncStack> buildSyncStack({
     prefsSyncAdapter,
     statisticsSyncAdapter,
     sessionSyncAdapter,
+    coverSyncAdapter,
   ];
   final syncTransports = <String, SyncTransport>{
     SyncTransportKind.lan: lanSyncTransport,
@@ -277,6 +291,10 @@ Future<SyncStack> buildSyncStack({
     codec: syncCodec,
     pairing: pairing,
   );
+  // 仅本地封面写入标脏（远端应用到 store 时走 local=false，不会回环）。
+  covers.onLocalChange = (_) => syncProvider.notifyLocalChange(
+        categories: const {SyncCategory.covers},
+      );
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何
   // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。

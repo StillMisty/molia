@@ -11,7 +11,10 @@
 ///   让下载前设置的自定义封面继续作用于本地副本（本地导入行的记录键是
 ///   `local:<path>`，同样保持不动）；
 /// - 查询是同步的（[load] 之后），UI 通过 [revision] 感知变化；组合根另可
-///   注册 [addChangeListener] 刷新当前播放 / 主题 / 系统媒体。
+///   注册 [addChangeListener] 刷新当前播放 / 主题 / 系统媒体；
+/// - 同步面（`CoverSyncAdapter`）经 [trackEntries] / [defaultEntry] 枚举，
+///   经 [applySyncedTrackCover] 等写入远端结果；远端写入**不**触发
+///   [onLocalChange]，避免同步回环。
 library;
 
 import 'dart:async';
@@ -113,12 +116,23 @@ class CustomCoverStore {
   static const String prefsKey = 'custom_cover_index_v1';
   static const String directoryName = 'custom_covers';
 
+  /// 单张封面可进入同步记录的字节上限（Phase 1 归一化产物通常远小于此）。
+  ///
+  /// base64 后约 667KB，仍远低于增量日志 4MB 窗口；超限只跳过同步，本地
+  /// 封面继续可用。接收侧用同一上限拒绝异常远端记录。
+  static const int maxSyncBytes = 500 * 1024;
+
   final Future<SharedPreferences> Function() _preferences;
   final Future<Directory> Function() _supportDirectory;
   final DateTime Function() _clock;
 
   /// UI 订阅通道：任何替换 / 重置都会自增。
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  /// 仅本地写入（替换 / 重置 / 换源复制）时回调；远端同步应用不触发。
+  ///
+  /// 组合根用它给 `SyncCategory.covers` 标脏，保证远端落地不会形成同步回环。
+  void Function(CustomCoverChange change)? onLocalChange;
 
   final List<void Function(CustomCoverChange)> _changeListeners = [];
   final Map<String, CustomCoverEntry> _tracks = {};
@@ -259,21 +273,138 @@ class CustomCoverStore {
       resolveTrackCoverForKey(coverKey, originalUrl: originalUrl) ??
       defaultCoverUrl;
 
+  /// 当前曲目封面索引（键 = 规范化封面键；只读快照）。
+  Map<String, CustomCoverEntry> get trackEntries => Map.unmodifiable(_tracks);
+
+  /// 指定封面键的索引条目（未设置为 null）。
+  CustomCoverEntry? trackEntry(String key) => _tracks[key];
+
+  /// 全局默认封面索引条目（未设置为 null）。
+  CustomCoverEntry? get defaultEntry => _defaultCover;
+
   /// 读取曲目自定义封面字节（不存在 / 不可读返回 null）。
   Future<Uint8List?> readTrackCover(TrackId id) =>
       _readFile(trackCoverPath(id));
 
+  /// 按封面键读取曲目封面字节（同步适配器读取已枚举条目）。
+  Future<Uint8List?> readTrackCoverByKey(String key) =>
+      _readFile(_tracks[key]?.path);
+
   /// 读取全局默认封面字节（不存在 / 不可读返回 null）。
   Future<Uint8List?> readDefaultCover() => _readFile(_defaultCover?.path);
+
+  /// 图片字节是否可进入同步记录（大小 + 魔数；不在这里解码整图）。
+  static bool canSyncImageBytes(Uint8List bytes) =>
+      bytes.isNotEmpty &&
+      bytes.length <= maxSyncBytes &&
+      hasSupportedImageMagic(bytes);
+
+  /// 常见图片容器魔数（JPEG / PNG / GIF / WebP）：挡住损坏 / 非图片载荷。
+  static bool hasSupportedImageMagic(Uint8List bytes) {
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xFF &&
+        bytes[1] == 0xD8 &&
+        bytes[2] == 0xFF) {
+      return true;
+    }
+    const png = [0x89, 0x50, 0x4E, 0x47];
+    if (bytes.length >= png.length) {
+      var matches = true;
+      for (var i = 0; i < png.length; i++) {
+        if (bytes[i] != png[i]) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) return true;
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0x47 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46) {
+      return true;
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57 &&
+        bytes[9] == 0x45 &&
+        bytes[10] == 0x42 &&
+        bytes[11] == 0x50) {
+      return true;
+    }
+    return false;
+  }
 
   /// 保存曲目封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
   Future<void> setTrackCover(TrackId id, Uint8List bytes) async {
     final key = coverKeyOf(id);
-    final old = _tracks[key];
     final entry = await _writeEntry(
       filePrefix: 'track_${_shortHash(key)}',
       bytes: bytes,
     );
+    await _commitTrackEntry(
+      key,
+      entry,
+      trackId: id,
+      local: true,
+    );
+  }
+
+  /// 恢复曲目原始封面（没有自定义封面时为空操作）。
+  Future<void> resetTrackCover(TrackId id) async {
+    final key = coverKeyOf(id);
+    await _removeTrackEntry(key, trackId: id, local: true);
+  }
+
+  /// 保存全局默认封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
+  Future<void> setDefaultCover(Uint8List bytes) async {
+    final entry = await _writeEntry(filePrefix: 'default', bytes: bytes);
+    await _commitDefaultEntry(entry, local: true);
+  }
+
+  /// 恢复默认封面为 Molia 标志（没有自定义默认封面时为空操作）。
+  Future<void> resetDefaultCover() => _removeDefaultEntry(local: true);
+
+  /// 应用远端曲目封面（同步 / 备份导入）：写文件 + 索引，不触发本地变更回调。
+  Future<void> applySyncedTrackCover(String key, Uint8List bytes) async {
+    if (key.isEmpty || bytes.isEmpty) return;
+    final entry = await _writeEntry(
+      filePrefix: 'track_${_shortHash(key)}',
+      bytes: bytes,
+    );
+    await _commitTrackEntry(
+      key,
+      entry,
+      trackId: _trackIdForKey(key),
+      local: false,
+    );
+  }
+
+  /// 应用远端曲目封面删除（同步 / 备份导入）；不存在时为空操作。
+  Future<void> applySyncedTrackDelete(String key) =>
+      _removeTrackEntry(key, trackId: _trackIdForKey(key), local: false);
+
+  /// 应用远端默认封面（同步 / 备份导入），不触发本地变更回调。
+  Future<void> applySyncedDefaultCover(Uint8List bytes) async {
+    if (bytes.isEmpty) return;
+    final entry = await _writeEntry(filePrefix: 'default', bytes: bytes);
+    await _commitDefaultEntry(entry, local: false);
+  }
+
+  /// 应用远端默认封面删除（同步 / 备份导入）。
+  Future<void> applySyncedDefaultDelete() => _removeDefaultEntry(local: false);
+
+  /// 写入曲目索引并持久化；失败回滚内存与文件。
+  Future<void> _commitTrackEntry(
+    String key,
+    CustomCoverEntry entry, {
+    required TrackId? trackId,
+    required bool local,
+  }) async {
+    final old = _tracks[key];
     _tracks[key] = entry;
     try {
       await _persist();
@@ -293,15 +424,19 @@ class CustomCoverStore {
     _notify(
       CustomCoverChange(
         kind: CustomCoverChangeKind.track,
-        trackId: id,
+        trackId: trackId,
         path: entry.path,
       ),
+      local: local,
     );
   }
 
-  /// 恢复曲目原始封面（没有自定义封面时为空操作）。
-  Future<void> resetTrackCover(TrackId id) async {
-    final key = coverKeyOf(id);
+  /// 删除曲目索引 / 文件并持久化；失败回滚内存。
+  Future<void> _removeTrackEntry(
+    String key, {
+    required TrackId? trackId,
+    required bool local,
+  }) async {
     final old = _tracks.remove(key);
     if (old == null) return;
     try {
@@ -311,13 +446,18 @@ class CustomCoverStore {
       rethrow;
     }
     await _deleteQuietly(old.path);
-    _notify(CustomCoverChange(kind: CustomCoverChangeKind.track, trackId: id));
+    _notify(
+      CustomCoverChange(kind: CustomCoverChangeKind.track, trackId: trackId),
+      local: local,
+    );
   }
 
-  /// 保存全局默认封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
-  Future<void> setDefaultCover(Uint8List bytes) async {
+  /// 写入默认封面索引并持久化；失败回滚内存与文件。
+  Future<void> _commitDefaultEntry(
+    CustomCoverEntry entry, {
+    required bool local,
+  }) async {
     final old = _defaultCover;
-    final entry = await _writeEntry(filePrefix: 'default', bytes: bytes);
     _defaultCover = entry;
     try {
       await _persist();
@@ -334,11 +474,12 @@ class CustomCoverStore {
         kind: CustomCoverChangeKind.defaultCover,
         path: entry.path,
       ),
+      local: local,
     );
   }
 
-  /// 恢复默认封面为 Molia 标志（没有自定义默认封面时为空操作）。
-  Future<void> resetDefaultCover() async {
+  /// 删除默认封面索引 / 文件并持久化；失败回滚内存。
+  Future<void> _removeDefaultEntry({required bool local}) async {
     final old = _defaultCover;
     if (old == null) return;
     _defaultCover = null;
@@ -349,7 +490,10 @@ class CustomCoverStore {
       rethrow;
     }
     await _deleteQuietly(old.path);
-    _notify(const CustomCoverChange(kind: CustomCoverChangeKind.defaultCover));
+    _notify(
+      const CustomCoverChange(kind: CustomCoverChangeKind.defaultCover),
+      local: local,
+    );
   }
 
   /// 换源时把旧曲目的自定义封面复制到新曲目键（非破坏性，旧封面保留）。
@@ -447,13 +591,21 @@ class CustomCoverStore {
     revision.value = revision.value + 1;
   }
 
-  void _notify(CustomCoverChange change) {
+  void _notify(CustomCoverChange change, {required bool local}) {
     _bumpRevision();
+    if (local) onLocalChange?.call(change);
     for (final listener in List<void Function(CustomCoverChange)>.of(
       _changeListeners,
     )) {
       listener(change);
     }
+  }
+
+  /// 远端封面键 → TrackId（只服务展示面刷新；解析失败时为 null）。
+  static TrackId? _trackIdForKey(String key) {
+    final index = key.indexOf(':');
+    if (index <= 0 || index >= key.length - 1) return null;
+    return TrackId(key.substring(0, index), key.substring(index + 1));
   }
 
   static String _shortHash(String value) =>

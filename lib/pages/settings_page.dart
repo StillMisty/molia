@@ -5,6 +5,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/lyrics_display_provider.dart';
@@ -488,7 +489,11 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               SettingsSectionGrid(
                 twoColumn: twoColumn,
                 children: [
-                  _appearanceSection(context, l10n),
+                  _appearanceSection(
+                    context,
+                    l10n,
+                    syncProvider: syncProvider,
+                  ),
                   _playbackSection(
                     context,
                     l10n,
@@ -520,8 +525,12 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
   }
 
   /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 /
-  /// 默认封面 / 纯黑 / 字体。
-  Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+  /// 默认封面（+ 同步快捷键） / 纯黑 / 字体。
+  Widget _appearanceSection(
+    BuildContext context,
+    AppLocalizations l10n, {
+    SyncProvider? syncProvider,
+  }) {
     final covers =
         context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
     return SettingsSectionCard(
@@ -649,6 +658,20 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                     onTap: () => unawaited(showCoverPickerSheet(context)),
                   ),
                 ),
+                // 同步快捷键：与同步设置 › 内容共用同一类别状态（不是第二份
+                // 开关）；没有同步栈（测试 / 精简组合根）时整行隐藏。
+                if (syncProvider != null)
+                  SettingsSwitchTile(
+                    switchKey: const Key('settingsSyncCustomCoversSwitch'),
+                    icon: Icons.sync_rounded,
+                    title: l10n.settingsSyncCustomCovers,
+                    subtitle: l10n.settingsSyncCustomCoversSubtitle,
+                    value: syncProvider.categories[SyncCategory.covers] ??
+                        SyncCategory.covers.defaultEnabled,
+                    onChanged: (value) => unawaited(
+                      syncProvider.setCategory(SyncCategory.covers, value),
+                    ),
+                  ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsPureBlackSwitch'),
                   icon: Icons.dark_mode_rounded,

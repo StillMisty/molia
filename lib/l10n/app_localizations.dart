@@ -410,6 +410,18 @@ abstract class AppLocalizations {
   /// **'Default cover updated'**
   String get coverDefaultUpdated;
 
+  /// No description provided for @settingsSyncCustomCovers.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync custom covers'**
+  String get settingsSyncCustomCovers;
+
+  /// No description provided for @settingsSyncCustomCoversSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default; sent with sync when enabled'**
+  String get settingsSyncCustomCoversSubtitle;
+
   /// No description provided for @coverLabel.
   ///
   /// In en, this message translates to:
@@ -5156,6 +5168,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'App settings'**
   String get syncCategorySettings;
+
+  /// No description provided for @syncCategoryCovers.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom covers'**
+  String get syncCategoryCovers;
 
   /// No description provided for @syncCategoryStatistics.
   ///

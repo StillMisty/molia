@@ -14,6 +14,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/data/play_statistics_repository.dart';
+import 'package:molia/data/sync/sync_backup.dart';
+import 'package:molia/data/sync/sync_control_plane.dart';
+import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_state_store.dart';
+import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/general_settings_page.dart';
 import 'package:molia/pages/settings_page.dart';
@@ -22,6 +27,7 @@ import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
+import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/audio_focus_settings.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
@@ -1436,6 +1442,55 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('coverPickerChooseButton')), findsOneWidget);
     expect(find.byKey(const Key('coverPickerResetButton')), findsOneWidget);
+  });
+
+  testWidgets('外观：同步自定义封面开关默认关闭，切换写入同一类别状态', (tester) async {
+    final prefs = await SharedPreferences.getInstance();
+    final state = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+      clock: () => 1000,
+    );
+    await state.init();
+    final transport = FakeSyncTransport();
+    final engine = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: const [],
+      transports: {'lan': transport},
+      clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
+    );
+    final control =
+        SyncControlPlane(state: state, transports: {'lan': transport});
+    final provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: SyncBackup(
+        state: state,
+        adapters: const [],
+        stamps: state.stampIssuer,
+        collect: engine.collectRecords,
+      ),
+    );
+    await provider.init();
+    addTearDown(() {
+      provider.dispose();
+      control.dispose();
+      engine.dispose();
+    });
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<SyncProvider>.value(value: provider),
+      ],
+    );
+    expect(find.text('Sync custom covers'), findsOneWidget);
+    expect(provider.categories[SyncCategory.covers], isFalse);
+
+    await tester.tap(find.byKey(const Key('settingsSyncCustomCoversSwitch')));
+    await tester.pumpAndSettle();
+    expect(provider.categories[SyncCategory.covers], isTrue);
   });
 
   testWidgets('首屏：歌词分区三条直达入口（能力就绪时全显示并进入子页）', (tester) async {

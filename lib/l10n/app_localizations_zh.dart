@@ -173,6 +173,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coverDefaultUpdated => '默认封面已更新';
 
   @override
+  String get settingsSyncCustomCovers => '同步自定义封面';
+
+  @override
+  String get settingsSyncCustomCoversSubtitle => '默认关闭；开启后随同步发送';
+
+  @override
   String get coverLabel => '封面';
 
   @override
@@ -2715,6 +2721,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCategorySettings => '应用设置';
+
+  @override
+  String get syncCategoryCovers => '自定义封面';
 
   @override
   String get syncCategoryStatistics => '听歌统计';
