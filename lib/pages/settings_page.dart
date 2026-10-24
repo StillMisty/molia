@@ -13,6 +13,7 @@ import '../providers/sources_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
+import '../services/audio_focus_settings.dart';
 import '../services/data_saver_service.dart';
 import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
@@ -454,6 +455,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     final updateProvider = context.watch<UpdateProvider?>();
     final sourceSwapSettings = context.watch<SourceSwapSettings?>();
     final libraryAddSettings = context.watch<LibraryAddSettings?>();
+    final audioFocusSettings = context.watch<AudioFocusSettings?>();
     final sources = context.read<SourcesProvider?>();
     final lyricsDisplay = context.watch<LyricsDisplayProvider?>();
     // 两列流式需要比单列舒适行宽（`maxWidth`）更宽的画布：上限取设置弹层
@@ -490,6 +492,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                     dataSaver: dataSaver,
                     sourceSwapSettings: sourceSwapSettings,
                     libraryAddSettings: libraryAddSettings,
+                    audioFocusSettings: audioFocusSettings,
                     sources: sources,
                   ),
                   _lyricsSection(context, l10n, lyricsDisplay),
@@ -662,6 +665,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     required DataSaverService? dataSaver,
     required SourceSwapSettings? sourceSwapSettings,
     required LibraryAddSettings? libraryAddSettings,
+    required AudioFocusSettings? audioFocusSettings,
     required SourcesProvider? sources,
   }) {
     return SettingsSectionCard(
@@ -699,6 +703,19 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                 .setRestoreSessionEnabled(value),
           ),
         ),
+        // 其他应用播放声音时是否继续播放：桌面没有音频焦点实现，不显示。
+        if (audioFocusSettings != null && !isDesktopPlatform())
+          Selector<AudioFocusSettings, bool>(
+            selector: (context, settings) => settings.playWithOtherApps,
+            builder: (context, playWithOtherApps, _) => SettingsSwitchTile(
+              switchKey: const Key('settingsPlayWithOtherAppsSwitch'),
+              icon: Icons.multitrack_audio_rounded,
+              title: l10n.settingsPlayWithOtherApps,
+              subtitle: l10n.settingsPlayWithOtherAppsSubtitle,
+              value: playWithOtherApps,
+              onChanged: audioFocusSettings.setPlayWithOtherApps,
+            ),
+          ),
         // 加入收藏 / 列表的位置：新曲目放开头还是末尾（默认开头）。
         if (libraryAddSettings != null)
           Selector<LibraryAddSettings, LibraryAddPosition>(

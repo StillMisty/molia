@@ -90,6 +90,8 @@
   "settingsDefaultPlayModeSubtitle": "Used the next time playback starts; current playback is unaffected",
   "settingsRestoreSessionTitle": "Resume last playback",
   "settingsRestoreSessionSubtitle": "Remembers track, queue and position",
+  "settingsPlayWithOtherApps": "Play with other apps",
+  "settingsPlayWithOtherAppsSubtitle": "Navigation and videos won't interrupt music",
   "settingsLibraryAddPosition": "Position of added songs",
   "settingsLibraryAddPositionSubtitle": "Top or bottom of favorites and playlists",
   "settingsLibraryAddPositionTop": "Top",

@@ -21,6 +21,7 @@ import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/services/audio_focus_settings.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/haptics.dart';
 import 'package:molia/services/library/library_add_settings.dart';
@@ -54,6 +55,7 @@ void main() {
   late ThemeProvider themeProvider;
   late PlaybackProvider playbackProvider;
   late DataSaverService dataSaver;
+  late AudioFocusSettings audioFocusSettings;
   late PlayStatisticsService playStatisticsService;
 
   setUp(() {
@@ -75,11 +77,14 @@ void main() {
       cellularChanges: const Stream<bool>.empty(),
     );
     await dataSaver.init();
+    audioFocusSettings = AudioFocusSettings(settings: testSettingsRegistry());
+    await audioFocusSettings.init();
     await themeProvider.preferencesReady;
     await playbackProvider.preferencesReady;
     addTearDown(themeProvider.dispose);
     addTearDown(playbackProvider.dispose);
     addTearDown(dataSaver.dispose);
+    addTearDown(audioFocusSettings.dispose);
 
     // 底部导航定制：纯本地偏好，测试直接构造。
     final navProvider = NavProvider(settings: testSettingsRegistry());
@@ -119,6 +124,9 @@ void main() {
             value: NotificationService(scaffoldMessengerKey),
           ),
           ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
+          ChangeNotifierProvider<AudioFocusSettings>.value(
+            value: audioFocusSettings,
+          ),
           Provider<PlayStatisticsService>.value(value: playStatisticsService),
           ...extraProviders,
         ],
@@ -243,6 +251,7 @@ void main() {
     expect(find.text('App font'), findsOneWidget);
     expect(find.text('Default play mode'), findsOneWidget);
     expect(find.text('Resume last playback'), findsOneWidget);
+    expect(find.text('Play with other apps'), findsOneWidget);
     // 省流并回播放分区：默认关闭时只有开关行（无子项）。
     expect(find.text('Data saver'), findsOneWidget);
     expect(find.text('Lyrics & outputs'), findsOneWidget);
@@ -490,6 +499,32 @@ void main() {
     expect(prefs.getBool(kRestoreSessionEnabled.name), isFalse);
   });
 
+  testWidgets('与其他应用同时播放：默认开，关闭后状态与持久化生效', (tester) async {
+    await pumpSettingsPage(tester);
+    expect(audioFocusSettings.playWithOtherApps, isTrue);
+
+    await tester.tap(
+      find.byKey(const Key('settingsPlayWithOtherAppsSwitch')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(audioFocusSettings.playWithOtherApps, isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(kPlayWithOtherApps.name), isFalse);
+  });
+
+  testWidgets(
+    '与其他应用同时播放：桌面没有音频焦点实现，不显示',
+    (tester) async {
+      await pumpSettingsPage(tester);
+      expect(
+        find.byKey(const Key('settingsPlayWithOtherAppsSwitch')),
+        findsNothing,
+      );
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.linux),
+  );
+
   testWidgets('外观分区行高统一：副标题 2 行封顶，行高不随文案漂移', (tester) async {
     await pumpSettingsPage(tester);
 
@@ -520,6 +555,10 @@ void main() {
     expect(followArtwork, lessThanOrEqualTo(item.twoLineHeight + 4));
     expect(rowHeight(const Key('settingsPureBlackSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsRestoreSessionSwitch')), followArtwork);
+    expect(
+      rowHeight(const Key('settingsPlayWithOtherAppsSwitch')),
+      followArtwork,
+    );
     expect(rowHeight(const Key('settingsDataSaverSwitch')), followArtwork);
     expect(rowHeight(const Key('settingsLyricsContentItem')), followArtwork);
 

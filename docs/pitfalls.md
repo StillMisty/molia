@@ -814,3 +814,11 @@
     采样，都不会误判。自动切歌前还会显式 `pause()`：自然播完后 just_audio 的
     `playing` 仍为 true，不先暂停的话下一首的 `play()` 会被直接返回（与 #77
     同源）。回归用例见 `test/playback/local_playback_service_test.dart`。
+79. **只关 `AudioFocusGuard` 不能实现「其他应用出声时继续播放」**：
+    `AudioPlayer()` 默认 `handleInterruptions: true`，just_audio 自己也会订阅
+    `AudioSession.interruptionEventStream`，焦点丢失时直接 `pause()`。要让设置
+    「与其他应用同时播放」即时生效，生产必须构造
+    `AudioPlayer(handleInterruptions: false)`，由 `LocalPlaybackService` 统一处理
+    焦点事件与耳机拔出（`becomingNoisyEventStream`），并自己补上
+    「系统发回可续播结束事件 → 续播」的记账；否则开关看着生效、实际仍被
+    just_audio 暂停。回归用例见 `test/playback/audio_focus_guard_test.dart`。

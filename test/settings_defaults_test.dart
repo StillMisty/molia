@@ -10,6 +10,7 @@ import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/services/audio_focus_settings.dart';
 import 'package:molia/services/library/library_add_settings.dart';
 import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/shortcut_settings.dart';
@@ -123,5 +124,27 @@ void main() {
     expect(settings.addToTop, isTrue, reason: '新曲目默认放列表开头');
     await settings.init();
     expect(settings.position.name, kLibraryAddPosition.defaultValue);
+  });
+
+  test('AudioFocusSettings 默认与其他应用同时播放，关闭后可持久化并重载', () async {
+    final registry = testSettingsRegistry();
+    final settings = AudioFocusSettings(settings: registry);
+    addTearDown(settings.dispose);
+
+    expect(settings.playWithOtherApps, kPlayWithOtherApps.defaultValue);
+    expect(settings.playWithOtherApps, isTrue);
+    await settings.init();
+    expect(settings.playWithOtherApps, isTrue);
+
+    await settings.setPlayWithOtherApps(false);
+    expect(settings.playWithOtherApps, isFalse);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool(kPlayWithOtherApps.name), isFalse);
+
+    final reloaded = AudioFocusSettings(settings: registry);
+    addTearDown(reloaded.dispose);
+    await reloaded.init();
+    expect(reloaded.playWithOtherApps, isFalse);
   });
 }
