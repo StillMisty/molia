@@ -96,7 +96,8 @@
   （facade `compat*` / service `currentTrackMap` 等）已删除。
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
-  分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
+  分叉，只按 `PlaybackCommandOutcome` 的变化域决定通知类别）；恢复态快照与进度
+  覆盖值在这里构造；落盘
   口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
   可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。改变会话的命令
   （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
@@ -208,8 +209,11 @@
   （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
   「专辑」行（payload 专辑 id + 能力位双判定，`platformAlbumId`；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS/Windows/Linux）：`LocalAudioHandler`
-  把服务状态映射为统一模型（`flutter_media_session` 的 `MediaMetadata` /
-  `PlaybackState` / `MediaAction`），后端可注入（见 ADR-0010）：
+  经读取面 `MediaSessionReadModel`（生产实现 `LocalPlaybackMediaSessionReadModel`
+  投影 `LocalPlaybackService`；测试注入普通值假实现）把状态映射为统一模型
+  （`flutter_media_session` 的 `MediaMetadata` / `PlaybackState` / `MediaAction`），
+  文案经注入的 `MediaSessionCopy`（不读全局 locale，歌手回退走 l10n `unknownArtist`），
+  后端可注入（见 ADR-0010）：
   Android/iOS/macOS/Windows 走 `FlutterMediaSessionBackend`
   （`FlutterMediaSessionPlatform`，不调用会主动请求通知权限的
   `FlutterMediaSession().activate()`），Linux 走 `MprisMediaSessionBackend`
