@@ -33,6 +33,7 @@ import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/source.dart';
+import '../domain/ports/music_source.dart' show PlayableStream;
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
 // 返回/异常类型随管理器一起导出，避免扩大分层豁免。
@@ -520,14 +521,20 @@ class SourceManager extends ChangeNotifier {
     return parseLxSearchResult(sourceKey, data, page: page, limit: limit);
   }
 
-  /// 解析播放地址。requestedQuality 为空时使用默认音质偏好。
-  Future<String> resolveUrl(SourceTrack track,
+  /// 解析播放流。requestedQuality 为空时使用默认音质偏好。
+  ///
+  /// 返回 [PlayableStream] 而不是 URL 字符串：B 站等平台的音频直链需要
+  /// `Referer` / `User-Agent`，这些请求头必须一路透传到播放器、边播边缓存
+  /// 与后台缓存写入；提前降级成 String 就会丢掉头部。any-listen / LX 脚本
+  /// 目前只返回 URL（headers 为空），后续原生解析器可直接返回带头的流。
+  Future<PlayableStream> resolveStream(SourceTrack track,
       {String? requestedQuality}) async {
     // any-listen 曲目走远程服务器取链；其余曲目走 LX 脚本取链。
     if (AnyListenSource.isAnyListenTrack(track)) {
       try {
-        return await _anyListenSource.resolveUrl(track,
+        final url = await _anyListenSource.resolveUrl(track,
             requestedQuality: requestedQuality);
+        return PlayableStream(Uri.parse(url));
       } on AnyListenException catch (e) {
         throw e.toSourceFailure();
       }
@@ -542,11 +549,20 @@ class SourceManager extends ChangeNotifier {
     final picked =
         track.pickQuality(requestedQuality ?? _preferences.preferredQuality);
     final musicInfo = _withPickedHash(track, picked);
-    return _engine.getMusicUrl(
+    final url = await _engine.getMusicUrl(
       source: track.sourceKey,
       musicInfo: musicInfo,
       quality: picked,
     );
+    return PlayableStream(Uri.parse(url));
+  }
+
+  /// 只取直链字符串的兼容包装（旧调用方 / 不需要请求头的场景）。
+  Future<String> resolveUrl(SourceTrack track,
+      {String? requestedQuality}) async {
+    final stream =
+        await resolveStream(track, requestedQuality: requestedQuality);
+    return stream.uri.toString();
   }
 
   /// 酷狗等平台不同音质对应不同 hash，取链前替换为所选音质的 hash。

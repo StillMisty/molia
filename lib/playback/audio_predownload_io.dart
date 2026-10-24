@@ -14,9 +14,12 @@ Dio? _sharedDio;
 Dio _dio() => _sharedDio ??= createAppDio();
 
 /// 启动预取；目标已缓存时返回 null。
+///
+/// [headers] 为 null / 空时不设置请求头（Dio 默认 UA 即可）。
 AudioPredownloadTask? startAudioPredownload({
   required Uri uri,
   required String targetPath,
+  Map<String, String>? headers,
 }) {
   // 已有完整缓存文件：边播边缓存会直接命中，无需重复下载。
   if (File(targetPath).existsSync()) return null;
@@ -35,7 +38,11 @@ AudioPredownloadTask? startAudioPredownload({
       final response = await dio.requestUri<dynamic>(
         uri,
         cancelToken: cancelToken,
-        options: Options(method: 'GET', responseType: ResponseType.stream),
+        options: Options(
+          method: 'GET',
+          responseType: ResponseType.stream,
+          headers: (headers == null || headers.isEmpty) ? null : headers,
+        ),
       );
       final status = response.statusCode ?? 0;
       if (status < 200 || status >= 300) {

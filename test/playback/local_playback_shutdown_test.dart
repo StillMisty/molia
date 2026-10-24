@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/playback/local_playback_service.dart';
 
 /// 最小播放器替身：只覆写服务构造与退出收尾用到的成员，不触碰平台通道。
@@ -70,7 +71,8 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.linux;
     player = _FakeAudioPlayer();
     service = LocalPlaybackService(
-      resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
       player: player,
     );
   });

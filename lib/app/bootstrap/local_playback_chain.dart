@@ -48,14 +48,20 @@ class LocalPlaybackChain {
     return catalog.catalogService.resolve(track, quality: quality);
   }
 
-  /// `SourceTrack` 直链适配：服务解析回调 / 下一首预载共用
+  /// `SourceTrack` 取链适配：服务解析回调 / 下一首预载共用
   /// （等价于原 `backend.resolveLegacyUrl` 的唯一实现）。
-  Future<String> resolveUrl(SourceTrack track, {String? quality}) async {
-    final stream = await resolveStream(
+  ///
+  /// 返回完整 [PlayableStream]（含 headers）而不是 URL 字符串：B 站等平台
+  /// 的直链离开 `Referer` / `UA` 会 403，播放、边播边缓存与字节预取必须
+  /// 拿到同一份请求头；只传 URL 会在这一层静默丢掉鉴权信息。
+  Future<PlayableStream> resolveSourceStream(
+    SourceTrack track, {
+    String? quality,
+  }) {
+    return resolveStream(
       trackFromSourceTrack(track),
       (quality == null || quality.isEmpty) ? null : AudioQuality(type: quality),
     );
-    return stream.uri.toString();
   }
 
   /// 服务按实际选择的音质调用解析器（同一音质也用于音频缓存键）。
@@ -69,12 +75,12 @@ class LocalPlaybackChain {
   }) =>
       LocalPlaybackService(
         preferredQuality: preferredQuality,
-        resolver: resolveUrl,
+        resolver: resolveSourceStream,
         powerPolicy: powerPolicy,
         playWithOtherApps: playWithOtherApps,
         // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
         nextTrackPreloader: NextTrackPreloader(
-          resolver: resolveUrl,
+          resolver: resolveSourceStream,
           preferredQuality: preferredQuality,
           predownloader: local.audioCacheWriter,
         ),

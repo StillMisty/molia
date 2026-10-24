@@ -5,6 +5,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 
@@ -113,7 +114,8 @@ void main() {
       final policy = PlaybackPowerPolicy();
       addTearDown(policy.dispose);
       final service = LocalPlaybackService(
-        resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
         powerPolicy: policy,
       );
       addTearDown(service.dispose);

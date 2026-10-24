@@ -1,3 +1,4 @@
+import '../domain/ports/music_source.dart' show PlayableStream;
 import '../sources/source_track.dart';
 import 'audio_predownload.dart';
 import 'audio_predownloader.dart';
@@ -11,7 +12,8 @@ import 'audio_predownloader.dart';
 /// 失败静默：预载只是优化，真正播放时会走同一取链路径重试。
 class NextTrackPreloader {
   NextTrackPreloader({
-    required Future<String> Function(SourceTrack track, {String? quality})
+    required Future<PlayableStream> Function(SourceTrack track,
+            {String? quality})
         resolver,
     String Function()? preferredQuality,
     AudioPredownloader? predownloader,
@@ -19,7 +21,10 @@ class NextTrackPreloader {
         _preferredQuality = preferredQuality,
         _predownloader = predownloader;
 
-  final Future<String> Function(SourceTrack track, {String? quality}) _resolver;
+  /// 必须返回完整 [PlayableStream]：预取要带上与播放相同的请求头（B 站
+  /// 直链离开 `Referer` 会 403），只留 URL 会让预取必然失败。
+  final Future<PlayableStream> Function(SourceTrack track, {String? quality})
+      _resolver;
 
   /// 与播放完全同源的音质选择（省流上限由组合根在闭包里套用）。
   final String Function()? _preferredQuality;
@@ -41,12 +46,13 @@ class NextTrackPreloader {
     final preferred = _preferredQuality?.call();
     final quality = preferred == null ? null : next.pickQuality(preferred);
     try {
-      final url = await _resolver(next, quality: quality);
+      final stream = await _resolver(next, quality: quality);
       if (generation != _generation) return;
       _pending = await _predownloader?.predownload(
         track: next,
-        url: url,
+        url: stream.uri.toString(),
         quality: quality,
+        headers: stream.headers,
       );
       if (generation != _generation) _cancelPendingTask();
     } catch (_) {

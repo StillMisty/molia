@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../app/perf/playback_start_trace.dart';
+import '../domain/ports/music_source.dart' show PlayableStream;
 import '../models/play_mode.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/audio_cache_store.dart';
@@ -65,8 +66,11 @@ class _AlwaysPlayWithOtherApps implements ValueListenable<bool> {
 const ValueListenable<bool> _alwaysPlayWithOtherApps =
     _AlwaysPlayWithOtherApps();
 
-/// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
-typedef SourceUrlResolver = Future<String> Function(
+/// 将音源曲目解析为可播放流的回调（由 SourceManager 提供）。
+///
+/// 返回 [PlayableStream] 而不是 URL：B 站等平台的直链需要 `Referer` / `UA`，
+/// 请求头要透传到播放器、边播边缓存与后台缓存写入。
+typedef SourceUrlResolver = Future<PlayableStream> Function(
   SourceTrack track, {
   String? quality,
 });
@@ -695,11 +699,16 @@ class LocalPlaybackService extends ChangeNotifier {
     try {
       final preferred = _preferredQuality?.call();
       final quality = preferred == null ? null : track.pickQuality(preferred);
-      final url = await _resolver(track, quality: quality);
+      final stream = await _resolver(track, quality: quality);
       if (requestId != _playRequestId) return;
       startTrace?.markResolved();
 
-      await _setAudioSourceWithCache(Uri.parse(url), track, quality: quality);
+      await _setAudioSourceWithCache(
+        stream.uri,
+        track,
+        quality: quality,
+        headers: stream.headers,
+      );
       if (requestId != _playRequestId) return;
       startTrace?.markSourceSet();
 
@@ -708,7 +717,12 @@ class LocalPlaybackService extends ChangeNotifier {
       if (!_platformSupportsAudioCaching || _audioCacheUnsupported) {
         final writer = _cacheWriter;
         if (writer != null) {
-          unawaited(writer.start(track, url: url, quality: quality));
+          unawaited(writer.start(
+            track,
+            url: stream.uri.toString(),
+            quality: quality,
+            headers: stream.headers,
+          ));
         }
       }
 
@@ -744,10 +758,14 @@ class LocalPlaybackService extends ChangeNotifier {
   ///
   /// 缓存不能影响播放可用性：平台不支持、目录解析失败、网络异常都会
   /// 回退到 `AudioSource.uri`，仅记录日志。
+  ///
+  /// [headers] 来自取链结果，必须同时交给缓存源与直接流播源（B 站等平台
+  /// 要求 `Referer`）；为空时传 null，避免给 just_audio 挂空代理。
   Future<void> _setAudioSourceWithCache(
     Uri uri,
     SourceTrack track, {
     String? quality,
+    Map<String, String> headers = const {},
   }) async {
     final cache = _cacheService;
     final cacheable = _platformSupportsAudioCaching &&
@@ -768,6 +786,7 @@ class LocalPlaybackService extends ChangeNotifier {
             final source = createCachingAudioSource(
               uri,
               audioCacheFilePath(directory, fileName),
+              headers: headers,
             );
             if (source != null) {
               try {
@@ -793,7 +812,10 @@ class LocalPlaybackService extends ChangeNotifier {
     }
 
     await _player
-        .setAudioSource(AudioSource.uri(uri))
+        .setAudioSource(AudioSource.uri(
+          uri,
+          headers: headers.isEmpty ? null : headers,
+        ))
         .timeout(const Duration(seconds: 30));
   }
 

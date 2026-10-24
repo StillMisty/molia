@@ -90,11 +90,10 @@ class LocalPlaybackBackend implements PlaybackBackend {
   Future<PlayableStream> resolveStream(Track track, [AudioQuality? quality]) =>
       _resolver(track, quality);
 
-  /// 服务解析器适配（`LocalPlaybackService` 的 `SourceUrlResolver`）：
-  /// SourceTrack → Track → PlayableStream → URL 字符串。
+  /// 只取直链字符串的兼容包装（不需要请求头的旧调用方 / 测试）。
   ///
-  /// main.dart 用 late 绑定把服务的解析回调接到本方法上，
-  /// 保证取链统一走领域解析器端口。
+  /// 播放服务现在直接消费 `PlayableStream`（见 `LocalPlaybackService` 的
+  /// `SourceUrlResolver`），不要把本方法接回播放链路——它会丢掉 headers。
   Future<String> resolveLegacyUrl(SourceTrack track, {String? quality}) async {
     final stream = await _resolver(
       _toTrack(track),

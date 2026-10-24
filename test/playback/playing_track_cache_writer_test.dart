@@ -13,7 +13,8 @@ class _RecordingPredownloader implements AudioPredownloader {
   /// true = 模拟「跳过」（已缓存 / 省流 / 非法直链）：不产生任务。
   final bool skip;
 
-  final List<(SourceTrack track, String url, String? quality)> calls = [];
+  final List<(SourceTrack track, String url, String? quality,
+      Map<String, String> headers)> calls = [];
   final List<int> cancelled = [];
   int _nextId = 0;
 
@@ -22,8 +23,9 @@ class _RecordingPredownloader implements AudioPredownloader {
     required SourceTrack track,
     required String url,
     String? quality,
+    Map<String, String> headers = const {},
   }) async {
-    calls.add((track, url, quality));
+    calls.add((track, url, quality, headers));
     if (skip) return null;
     final id = _nextId++;
     return AudioPredownloadTask(
@@ -57,6 +59,21 @@ void main() {
     expect(predownloader.calls.single.$2, 'https://cdn.example/1.mp3');
     expect(predownloader.calls.single.$3, '320k');
     expect(predownloader.cancelled, isEmpty);
+  });
+
+  test('取链 headers 原样交给预下载器', () async {
+    final predownloader = _RecordingPredownloader();
+    final writer = PlayingTrackCacheWriter(predownloader: predownloader);
+
+    await writer.start(
+      _track('1'),
+      url: 'https://cdn.example/1.m4a',
+      headers: const {'Referer': 'https://www.bilibili.com/'},
+    );
+
+    expect(predownloader.calls.single.$4, {
+      'Referer': 'https://www.bilibili.com/',
+    });
   });
 
   test('切歌：新写入启动前先取消上一首未完成的任务', () async {

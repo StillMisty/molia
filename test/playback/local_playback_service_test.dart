@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_playback_service.dart';
 import 'package:molia/sources/source_track.dart';
@@ -19,6 +20,9 @@ class _FakeAudioPlayer extends AudioPlayer {
 
   /// 播放器收到的控制调用（断言顺序 / 是否被误暂停）。
   final List<String> calls = [];
+
+  /// 最近一次设置的音频源：用来断言取链 headers 是否真的传到了播放器。
+  AudioSource? lastAudioSource;
 
   /// 真正下发到平台的 play 次数。
   ///
@@ -60,6 +64,7 @@ class _FakeAudioPlayer extends AudioPlayer {
     Duration? initialPosition,
   }) async {
     calls.add('setAudioSource');
+    lastAudioSource = audioSource;
     _processingState = ProcessingState.ready;
     _position = Duration.zero;
     _duration ??= const Duration(seconds: 30);
@@ -174,7 +179,7 @@ void main() {
     final player = _FakeAudioPlayer();
     final service = LocalPlaybackService(
       resolver: (track, {String? quality}) async =>
-          'file:///tmp/molia-test.mp3',
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
       player: player,
     );
     addTearDown(service.dispose);
@@ -464,5 +469,28 @@ void main() {
     expect(service.currentIndex, 0);
     expect(service.isPlaying, isFalse);
     expect(service.lastError, contains('Error decoding audio'));
+  });
+
+  test('取链 headers 透传到 AudioSource（B 站直链依赖 Referer）', () async {
+    const headers = {
+      'Referer': 'https://www.bilibili.com/',
+      'User-Agent': 'Mozilla/5.0',
+    };
+    final player = _FakeAudioPlayer();
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async => PlayableStream(
+        Uri.parse('https://cdn.example/a.m4a'),
+        headers: headers,
+      ),
+      player: player,
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks([_track()], 0);
+    await pumpEventQueue();
+
+    final source = player.lastAudioSource;
+    expect(source, isA<UriAudioSource>());
+    expect((source! as UriAudioSource).headers, headers);
   });
 }

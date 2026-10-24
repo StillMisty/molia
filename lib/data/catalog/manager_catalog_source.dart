@@ -153,13 +153,13 @@ class SourceManagerMusicSource implements MusicSource {
     Track track, {
     AudioQuality? preferredQuality,
   }) async {
-    final String url;
     try {
-      url = await _manager.resolveUrl(
+      // 直接返回 PlayableStream：headers（B 站 Referer/UA 等）不能在这一层
+      // 被拆成 URL 字符串，否则播放与缓存写入都会丢请求头。
+      return await _manager.resolveStream(
         sourceTrackFromTrack(track),
         requestedQuality: preferredQuality?.type,
       );
-      return PlayableStream(Uri.parse(url));
     } catch (e) {
       // 边界错误归一化（幂等：CatalogService 再包一层也不会重复包装）。
       throw SourceFailure.from(e);

@@ -27,12 +27,14 @@ class PlayingTrackCacheWriter {
 
   /// 开始写 [track]（自动取消上一首未完成的写入）。
   ///
+  /// [headers] 来自取链结果，原样交给预取请求（B 站需要 `Referer`）；
   /// 不触网条件（非法直链 / 省流 / 平台 / 开关 / 已有完整缓存）由
   /// [AudioPredownloader] 内部判定，命中时静默跳过。
   Future<void> start(
     SourceTrack track, {
     required String url,
     String? quality,
+    Map<String, String> headers = const {},
   }) async {
     cancel();
     final predownloader = _predownloader;
@@ -42,6 +44,7 @@ class PlayingTrackCacheWriter {
         track: track,
         url: url,
         quality: quality,
+        headers: headers,
       );
     } catch (e) {
       // 缓存写入不能影响播放：失败只记录。

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/playback/audio_focus_guard.dart';
 import 'package:molia/playback/local_playback_service.dart';
 
@@ -40,7 +41,7 @@ class _RecordingService extends LocalPlaybackService {
     Stream<AudioDevicesChangedEvent>? devicesChanged,
   }) : super(
           resolver: (track, {String? quality}) async =>
-              'http://127.0.0.1/a.wav',
+              PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
           // 注入假流：走 `_configureAudioSession` 的守卫装配，不初始化插件会话。
           audioInterruptions: interruptions,
           audioBecomingNoisy: becomingNoisy,
@@ -299,7 +300,8 @@ void main() {
 
     test('未注入中断流时构造不抛（无插件实现路径）', () async {
       final service = LocalPlaybackService(
-        resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
       );
       await pumpEventQueue();
       // 测试环境没有 audio_session 插件：配置失败只记日志，不影响服务可用。

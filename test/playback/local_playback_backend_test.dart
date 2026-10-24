@@ -14,7 +14,8 @@ import 'package:molia/sources/source_track.dart';
 class _FakeService extends LocalPlaybackService {
   _FakeService()
       : super(
-          resolver: (track, {String? quality}) async => 'http://127.0.0.1/a.wav',
+          resolver: (track, {String? quality}) async =>
+              PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
         );
 
   final List<SourceTrack> _queue = [];

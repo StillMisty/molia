@@ -21,4 +21,5 @@ class AudioPredownloadTask {
 typedef AudioPredownloadStarter = AudioPredownloadTask? Function({
   required Uri uri,
   required String targetPath,
+  Map<String, String>? headers,
 });

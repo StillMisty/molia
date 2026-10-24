@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/playback/audio_predownload.dart';
 import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/next_track_preloader.dart';
@@ -28,15 +29,17 @@ class _RecordingPredownloader implements AudioPredownloader {
   _RecordingPredownloader({this.onCall});
 
   final AudioPredownloadTask? Function(SourceTrack track, String url)? onCall;
-  final List<(String trackId, String url, String? quality)> calls = [];
+  final List<(String trackId, String url, String? quality,
+      Map<String, String> headers)> calls = [];
 
   @override
   Future<AudioPredownloadTask?> predownload({
     required SourceTrack track,
     required String url,
     String? quality,
+    Map<String, String> headers = const {},
   }) async {
-    calls.add((track.id, url, quality));
+    calls.add((track.id, url, quality, headers));
     return onCall?.call(track, url);
   }
 }
@@ -111,7 +114,9 @@ void main() {
       final preloader = NextTrackPreloader(
         resolver: (track, {quality}) async {
           calls.add((track.id, quality));
-          return 'https://cdn.example/${track.id}.mp3';
+          return PlayableStream(
+            Uri.parse('https://cdn.example/${track.id}.mp3'),
+          );
         },
         preferredQuality: () => '128k',
       );
@@ -128,7 +133,9 @@ void main() {
     test('解析成功后把直链交给预下载器（同音质）', () async {
       final downloader = _RecordingPredownloader();
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => 'https://cdn.example/x.mp3',
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/x.mp3'),
+        ),
         preferredQuality: () => '320k',
         predownloader: downloader,
       );
@@ -142,6 +149,25 @@ void main() {
       expect(downloader.calls.single.$3, '320k');
     });
 
+    test('headers 原样交给预下载器（B 站直链依赖 Referer）', () async {
+      const headers = {
+        'Referer': 'https://www.bilibili.com/',
+        'User-Agent': 'Mozilla/5.0',
+      };
+      final downloader = _RecordingPredownloader();
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/x.m4a'),
+          headers: headers,
+        ),
+        predownloader: downloader,
+      );
+
+      await preloader.preload(_track('b'));
+
+      expect(downloader.calls.single.$4, headers);
+    });
+
     test('解析失败静默（不抛出）', () async {
       final preloader = NextTrackPreloader(
         resolver: (track, {quality}) async => throw StateError('boom'),
@@ -151,7 +177,7 @@ void main() {
     });
 
     test('取消后的在途解析不再启动预取', () async {
-      final completer = Completer<String>();
+      final completer = Completer<PlayableStream>();
       final downloader = _RecordingPredownloader();
       final preloader = NextTrackPreloader(
         resolver: (track, {quality}) => completer.future,
@@ -160,7 +186,9 @@ void main() {
 
       final loading = preloader.preload(_track('b'));
       preloader.cancelPending();
-      completer.complete('https://cdn.example/x.mp3');
+      completer.complete(
+        PlayableStream(Uri.parse('https://cdn.example/x.mp3')),
+      );
       await loading;
 
       expect(downloader.calls, isEmpty);
@@ -175,7 +203,9 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => 'https://cdn.example/x.mp3',
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/x.mp3'),
+        ),
         predownloader: downloader,
       );
 
@@ -192,7 +222,7 @@ void main() {
       final downloader = CacheAudioPredownloader(
         cacheService: CacheService(storage: _FakeCacheStorage()),
         platformSupported: () => true,
-        starter: ({required uri, required targetPath}) {
+        starter: ({required uri, required targetPath, headers}) {
           started.add(targetPath);
           return AudioPredownloadTask(
             done: Completer<void>().future,
@@ -224,6 +254,7 @@ void main() {
       AudioPredownloadTask? starter({
         required Uri uri,
         required String targetPath,
+        Map<String, String>? headers,
       }) {
         started.add(targetPath);
         return AudioPredownloadTask(
@@ -284,7 +315,7 @@ void main() {
       final downloader = CacheAudioPredownloader(
         cacheService: CacheService(storage: storage),
         platformSupported: () => true,
-        starter: ({required uri, required targetPath}) {
+        starter: ({required uri, required targetPath, headers}) {
           started.add(targetPath);
           return AudioPredownloadTask(
             done: completer.future,
@@ -314,6 +345,37 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(storage.enforceCalls, 1);
     });
+
+    test('headers 透传给预取启动器；空 headers 归为 null', () async {
+      final storage = _FakeCacheStorage(audioDir: '/tmp/molia_audio');
+      final captured = <Map<String, String>?>[];
+      final downloader = CacheAudioPredownloader(
+        cacheService: CacheService(storage: storage),
+        platformSupported: () => true,
+        starter: ({required uri, required targetPath, headers}) {
+          captured.add(headers);
+          return AudioPredownloadTask(
+            done: Completer<void>().future,
+            onCancel: () {},
+          );
+        },
+      );
+
+      await downloader.predownload(
+        track: _track('a'),
+        url: 'https://cdn.example/a.m4a',
+        headers: const {'Referer': 'https://www.bilibili.com/'},
+      );
+      await downloader.predownload(
+        track: _track('b'),
+        url: 'https://cdn.example/b.m4a',
+      );
+
+      expect(captured, [
+        {'Referer': 'https://www.bilibili.com/'},
+        null,
+      ]);
+    });
   });
 
   group('startAudioPredownload（IO）', () {
@@ -342,6 +404,37 @@ void main() {
 
       // 已缓存：不再启动下载。
       expect(startAudioPredownload(uri: uri, targetPath: target), isNull);
+    });
+
+    test('请求头带到预取请求（B 站 Referer 不能丢）', () async {
+      final dir = await Directory.systemTemp.createTemp('molia_predownload');
+      addTearDown(() => dir.delete(recursive: true));
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(() => server.close(force: true));
+      final received = Completer<HttpHeaders>();
+      server.listen((request) {
+        received.complete(request.headers);
+        request.response
+          ..headers.contentType = ContentType.binary
+          ..add(const [1]);
+        request.response.close();
+      });
+
+      final target = p.join(dir.path, 'headers.m4a');
+      final task = startAudioPredownload(
+        uri: Uri.parse('http://127.0.0.1:${server.port}/headers.m4a'),
+        targetPath: target,
+        headers: const {
+          'Referer': 'https://www.bilibili.com/',
+          'User-Agent': 'Mozilla/5.0',
+        },
+      );
+      expect(task, isNotNull);
+      await task!.done;
+
+      final headers = await received.future;
+      expect(headers.value('referer'), 'https://www.bilibili.com/');
+      expect(headers.value('user-agent'), 'Mozilla/5.0');
     });
 
     test('HTTP 失败静默清理半成品', () async {
