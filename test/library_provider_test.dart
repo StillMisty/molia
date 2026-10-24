@@ -34,6 +34,7 @@ class _CountingLibraryRepository extends LibraryRepository {
   bool failWrites = false;
   bool failHistoryWrites = false;
   bool failPlaylistWrites = false;
+  bool failTrackWrites = false;
 
   /// 一次性闸门：非空时该次查询返回测试控制的快照（用于制造旧快照）。
   Completer<List<PlayHistoryEntry>>? nextHistorySnapshot;
@@ -96,6 +97,22 @@ class _CountingLibraryRepository extends LibraryRepository {
   Future<int> addFavorites(List<PlaylistTrack> tracks) {
     if (failWrites) return Future.error(StateError('favorites write failed'));
     return super.addFavorites(tracks);
+  }
+
+  @override
+  Future<int> addTracksToPlaylist(
+    int playlistId,
+    List<PlaylistTrack> tracks, {
+    bool favoriteChange = false,
+  }) {
+    if (failTrackWrites) {
+      return Future.error(StateError('playlist tracks write failed'));
+    }
+    return super.addTracksToPlaylist(
+      playlistId,
+      tracks,
+      favoriteChange: favoriteChange,
+    );
   }
 
   @override
@@ -706,8 +723,14 @@ void main() {
         await provider.loadPlaylistTracks(result.playlistId, force: true);
 
     // 复制到 target；重复复制幂等。
-    expect(await provider.addTracksToPlaylist(target, sourceTracks), 2);
-    expect(await provider.addTracksToPlaylist(target, sourceTracks), 0);
+    expect(
+      (await provider.addTracksToPlaylist(target, sourceTracks)).changed,
+      2,
+    );
+    expect(
+      (await provider.addTracksToPlaylist(target, sourceTracks)).changed,
+      0,
+    );
     var targetTracks = await provider.loadPlaylistTracks(target, force: true);
     expect(targetTracks.map((t) => t.songId), ['1', '2']);
 
@@ -746,10 +769,11 @@ void main() {
     ));
     await settle();
     expect(
-      await provider.addTracksToPlaylist(target, [
+      (await provider.addTracksToPlaylist(target, [
         for (final entry in provider.history)
           PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
-      ]),
+      ]))
+          .changed,
       2,
     );
     expect((await provider.deleteHistoryEntries(provider.history)).changed, 2);
@@ -954,6 +978,35 @@ void main() {
       repository.failPlaylistWrites = false;
       expect((await provider.renamePlaylist(id, 'R')).isSuccess, isTrue);
       expect((await provider.deletePlaylist(id)).isSuccess, isTrue);
+    });
+
+    test('批量加入列表失败 → failed 且不更新缓存', () async {
+      final id = await provider.createPlaylist('L');
+      await settle();
+      await provider.loadPlaylistTracks(id, force: true);
+      expect(provider.playlistTracksView(id).tracks, isEmpty);
+
+      final item = PlaylistTrack(
+        playlistId: id,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        addedAt: 0,
+      );
+      repository.failTrackWrites = true;
+      final failed = await provider.addTracksToPlaylist(id, [item]);
+      expect(failed.isFailure, isTrue);
+      expect(
+        provider.playlistTracksView(id).tracks,
+        isEmpty,
+        reason: '失败不更新本地缓存',
+      );
+      expect(await repository.listPlaylistTracks(id), isEmpty);
+
+      repository.failTrackWrites = false;
+      final applied = await provider.addTracksToPlaylist(id, [item]);
+      expect(applied.isSuccess, isTrue);
+      expect(applied.changed, 1);
     });
   });
 }

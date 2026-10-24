@@ -102,17 +102,19 @@ void main() {
 
     // 「加入列表」统一流程的数据面：DiscoverTrack → PlaylistTrack → 写入。
     expect(
-      await library.addTracksToPlaylist(
+      (await library.addTracksToPlaylist(
         playlistId,
         [discover.toPlaylistTrack(track)],
-      ),
+      ))
+          .changed,
       1,
     );
     expect(
-      await library.addTracksToPlaylist(
+      (await library.addTracksToPlaylist(
         playlistId,
         [discover.toPlaylistTrack(track)],
-      ),
+      ))
+          .changed,
       0,
     );
 

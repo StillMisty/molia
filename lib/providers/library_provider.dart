@@ -793,12 +793,25 @@ class LibraryProvider extends ChangeNotifier {
     }
   }
 
-  /// 批量复制曲目到目标列表（跳过重复；返回实际新增数）。
-  Future<int> addTracksToPlaylist(
+  /// 批量复制曲目到目标列表（跳过重复）。
+  ///
+  /// 写失败在边界收口成 failed：调用方据此提示，不再让异常逃进
+  /// `unawaited`；成功时 `changed` 是实际新增数。
+  Future<LibraryMutationOutcome> addTracksToPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks,
-  ) {
-    return _repository.addTracksToPlaylist(playlistId, tracks);
+  ) async {
+    if (tracks.isEmpty) return const LibraryMutationOutcome.unchanged();
+    final int added;
+    try {
+      added = await _repository.addTracksToPlaylist(playlistId, tracks);
+    } catch (e) {
+      debugPrint('[Library] 批量加入列表失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+    return added > 0
+        ? LibraryMutationOutcome.applied(added)
+        : const LibraryMutationOutcome.unchanged();
   }
 
   /// 新建列表（收藏页合集弹层 / 「加入列表」弹层使用）。
