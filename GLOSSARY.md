@@ -592,6 +592,14 @@
   `SyncStateCodec.encode` / `decode` 是键名、条件字段、容错默认值与保留上限的
   唯一实现；`SyncStateStore` 只负责内存状态、身份恢复与提交时机，不再持有
   JSON 形状（见 `sync_book.dart`）。
+- **Sync roster（名册状态）** — `lib/data/sync/sync_roster.dart`：设备名册 /
+  已验证局域网端点 / 手动地址簿 / 首连提示 / 单轮移除抑制的唯一持有者；
+  `onChanged` 只让状态存储标脏，落盘仍由 `commit()` 决定。端点校验与 180 天
+  淘汰、名册按最近接触截断、地址簿合并都在这里；换口令清空旧组观测但保留
+  用户配置的地址簿。
+- **Sync activity log（轮次流水）** — `lib/data/sync/sync_activity_log.dart`：
+  展示日志 / 近 24 小时活动 / 传输成功时间 / 快照发布位置的唯一持有者，追加
+  顺序与各自上限在这里；换口令只清传输成功时间，历史日志与活动记录保留。
 - **Sync round window（轮次窗口）** — `SyncRoundWindow`（定义在
   `lib/domain/ports/sync_transport.dart`）：一轮的 `pull` 与 `push` 显式共享
   同一个窗口，删除局域网私有的 `_roundStartedAt` 隐式耦合。
