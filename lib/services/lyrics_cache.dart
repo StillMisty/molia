@@ -283,7 +283,11 @@ class LyricsCache {
         '${DateTime.now().microsecondsSinceEpoch}.tmp');
     try {
       await directory.create(recursive: true);
-      await temp.writeAsString(raw, flush: true);
+      // 不 fsync：歌词是「可再取」的派生数据，掉电 / 强杀丢一条缓存远好过
+      // 让每次取词都等一次落盘。实测 WSL2（ext4）单次 flush 会把
+      // lyrics.fetch 从数毫秒推到 200–350ms，正好卡在切歌展示路径上。
+      // 临时文件 + rename 仍保证读者只会看到完整文件。
+      await temp.writeAsString(raw, flush: false);
       await temp.rename(target.path);
       return true;
     } catch (_) {
