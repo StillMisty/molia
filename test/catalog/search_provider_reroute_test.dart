@@ -4,7 +4,6 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
@@ -16,14 +15,13 @@ import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
-import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/sources/source_manager.dart' show SourceKind;
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../support/settings_test_support.dart';
+import '../support/fakes.dart';
 
 class _TestListenable<T> extends ValueNotifier<T>
     implements StateListenable<T> {
@@ -99,14 +97,6 @@ class _FakeBackend implements PlaybackBackend {
 
   @override
   Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {}
-}
-
-class _FakeMessenger implements UiMessenger {
-  @override
-  void showMessage(String message) {}
-
-  @override
-  void showFailure(SourceFailure failure) {}
 }
 
 class _FakeMusicSource implements MusicSource {
@@ -311,11 +301,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = _FakeBackend();
-    playbackProvider = PlaybackProvider(
-      settings: testSettingsRegistry(),
-      facade: DefaultPlaybackFacade(backend: backend),
-      messenger: _FakeMessenger(),
-    );
+    playbackProvider = buildTestPlaybackProvider(backend: backend);
   });
 
   tearDown(() {

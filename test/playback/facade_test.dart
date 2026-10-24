@@ -10,9 +10,8 @@ import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
-import 'package:molia/providers/playback_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../support/settings_test_support.dart';
+import '../support/fakes.dart';
 
 /// 领域端口的 ValueNotifier 实现（与数据层实现同构）。
 class _TestListenable<T> extends ValueNotifier<T>
@@ -421,10 +420,10 @@ void main() {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
       final messenger = FakeMessenger();
-      final provider = PlaybackProvider(
-          settings: testSettingsRegistry(),
-          facade: facade,
-          messenger: messenger);
+      final provider = buildTestPlaybackProvider(
+        facade: facade,
+        messenger: messenger,
+      );
       addTearDown(provider.dispose);
 
       final track = _track('a');
@@ -459,10 +458,7 @@ void main() {
     test('playLocalQueueItemById 基于 facade 队列实现', () async {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
-      final provider = PlaybackProvider(
-          settings: testSettingsRegistry(),
-          facade: facade,
-          messenger: FakeMessenger());
+      final provider = buildTestPlaybackProvider(facade: facade);
       addTearDown(provider.dispose);
 
       final trackA = _track('a');

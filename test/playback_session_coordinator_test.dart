@@ -307,22 +307,22 @@ void main() {
     expect(await session.load(), isTrue);
 
     // 队尾：越界 no-op。
-    expect(await session.skipToNext(), PlaybackCommandRoute.none);
+    expect(await session.skipToNext(), PlaybackCommandOutcome.none);
     expect(backend.calls, isEmpty);
     expect(session.phase, PlaybackSessionPhase.restored);
 
     // 点恢复队列里的第一首：从该下标恢复播放（不 seek 回旧曲进度）。
     expect(
       await session.playQueueItemById(const TrackId('fake', 'a').uri),
-      PlaybackCommandRoute.restored,
+      PlaybackCommandOutcome.trackAndQueue,
     );
     expect(backend.calls, ['setMode', 'load']);
     expect(backend.lastRequest?.startIndex, 0);
     expect(session.hasRestoredSession, isFalse);
 
     // 未命中（恢复队列里没有）：空操作。
-    expect(
-        await session.playQueueItemById('fake:zzz'), PlaybackCommandRoute.none);
+    expect(await session.playQueueItemById('fake:zzz'),
+        PlaybackCommandOutcome.none);
   });
 
   test('恢复态：模式 / 换源改写保存的会话并落盘；未命中不算失败', () async {
@@ -365,7 +365,7 @@ void main() {
     ));
     expect(await session.load(), isTrue);
 
-    expect(await session.resume(), PlaybackCommandRoute.restored);
+    expect(await session.resume(), PlaybackCommandOutcome.trackAndQueue);
     expect(backend.calls, ['setMode', 'load', 'seek']);
     expect(backend.lastRequest?.startIndex, 0);
     // 装载时的强制保存记的是 0；恢复流程末尾把恢复进度写回会话。
@@ -376,7 +376,7 @@ void main() {
     expect(session.position.value, const Duration(seconds: 20));
 
     // 重复触发：恢复流程不在跑时也没得恢复（数据已丢弃）。
-    expect(await session.resume(), PlaybackCommandRoute.none);
+    expect(await session.resume(), PlaybackCommandOutcome.none);
   });
 
   test('恢复装载：进度不闪回 0、用户 seek 优先、末尾写回用户目标', () async {
@@ -402,7 +402,7 @@ void main() {
     // 装载期间用户拖到 60s：恢复流程末尾以它为准。
     await session.seekToPosition(const Duration(seconds: 60));
     gate.complete();
-    expect(await resume, PlaybackCommandRoute.restored);
+    expect(await resume, PlaybackCommandOutcome.trackAndQueue);
 
     expect(
         (backend as _LoadingBackend).seeks.last, const Duration(seconds: 60));
@@ -415,8 +415,8 @@ void main() {
     build(persistStore: true);
 
     // idle：没有可作用的对象，空操作。
-    expect(await session.play(), PlaybackCommandRoute.none);
-    expect(await session.pause(), PlaybackCommandRoute.none);
+    expect(await session.play(), PlaybackCommandOutcome.none);
+    expect(await session.pause(), PlaybackCommandOutcome.none);
     expect(backend.calls, isEmpty);
 
     final a = _track('a');
@@ -425,18 +425,20 @@ void main() {
 
     // 暂停态收到播放键：下发 play，不改变可持久化会话。
     now = now.add(const Duration(milliseconds: 300));
-    expect(await session.play(), PlaybackCommandRoute.live);
+    expect(await session.play(), PlaybackCommandOutcome.trackOnly);
     expect(backend.calls, ['play']);
     expect(store.saves, hasLength(1), reason: '播放不改变会话内容（不存 isPlaying）');
 
     // 已在播：幂等，不再下发（旧 handler 的 hasTrack && !isPlaying 口径）。
     backend.emit(_live(a, playing: true, position: const Duration(seconds: 1)));
-    expect(await session.play(), PlaybackCommandRoute.live);
+    expect(await session.play(), PlaybackCommandOutcome.none);
     expect(backend.calls, ['play']);
 
     // 暂停：快照监听会强制落盘；这里假后端不推暂停态，命令面补一次。
     final savesBeforePause = store.saves.length;
-    expect(await session.pause(), PlaybackCommandRoute.live);
+    final paused = await session.pause();
+    expect(paused, PlaybackCommandOutcome.trackOnly);
+    expect(paused.committed, isTrue, reason: '命令返回即已提交（ADR-0010）');
     expect(backend.calls, ['play', 'pause']);
     expect(store.saves, hasLength(savesBeforePause + 1));
     // 返回即已落盘（persistStore 写的是真实存储）。
@@ -454,11 +456,11 @@ void main() {
     expect(await session.load(), isTrue);
 
     // 恢复态没有真实播放：暂停是空操作，不能把 resume 当成 toggle。
-    expect(await session.pause(), PlaybackCommandRoute.none);
+    expect(await session.pause(), PlaybackCommandOutcome.none);
     expect(backend.calls, isEmpty);
     expect(session.phase, PlaybackSessionPhase.restored);
 
-    expect(await session.play(), PlaybackCommandRoute.restored);
+    expect(await session.play(), PlaybackCommandOutcome.trackAndQueue);
     expect(backend.calls, ['setMode', 'load', 'seek']);
     expect(session.hasRestoredSession, isFalse);
   });
@@ -499,21 +501,21 @@ void main() {
     ));
     expect(await session.load(), isTrue);
 
-    expect(await session.playQueueIndex(5), PlaybackCommandRoute.none);
+    expect(await session.playQueueIndex(5), PlaybackCommandOutcome.none);
     expect(backend.calls, isEmpty);
 
     expect(
       await session.playQueueIndex(1),
-      PlaybackCommandRoute.restored,
+      PlaybackCommandOutcome.trackAndQueue,
     );
     expect(backend.calls, ['setMode', 'load']);
     expect((backend as _LoadingBackend).lastRequest?.startIndex, 1);
     expect(session.hasRestoredSession, isFalse);
 
     // 恢复后进入 live：同一命令转发给后端队列跳转。
-    expect(await session.playQueueIndex(0), PlaybackCommandRoute.live);
+    expect(await session.playQueueIndex(0), PlaybackCommandOutcome.trackOnly);
     expect(backend.calls.last, 'playQueueIndex:0');
-    expect(await session.playQueueIndex(9), PlaybackCommandRoute.none);
+    expect(await session.playQueueIndex(9), PlaybackCommandOutcome.none);
     expect(backend.calls.last, 'playQueueIndex:0');
   });
 
@@ -647,7 +649,7 @@ void main() {
     expect(await session.load(), isTrue);
     expect(
       await session.replaceQueueTrack('fake:a', _track('a2')),
-      PlaybackCommandRoute.none,
+      PlaybackCommandOutcome.none,
     );
     expect(backend.calls, isEmpty);
     expect(session.resolve(facade.snapshot.value).current?.id.id, 'a');
@@ -657,7 +659,7 @@ void main() {
     expect(store.calls, ['save']);
     expect(
       await session.replaceQueueTrack('fake:zzz', _track('zzz2')),
-      PlaybackCommandRoute.none,
+      PlaybackCommandOutcome.none,
     );
     expect(backend.calls, isEmpty);
     expect(store.calls, ['save']);
@@ -665,7 +667,7 @@ void main() {
     // 当前曲目换源：新 id 由快照监听整份落盘，命令面不再重复写。
     expect(
       await session.replaceQueueTrack('fake:a', _track('a2')),
-      PlaybackCommandRoute.live,
+      PlaybackCommandOutcome.trackAndQueue,
     );
     expect(backend.calls, ['replaceQueueTrack:fake:a']);
     expect(store.calls, ['save', 'save']);
@@ -685,7 +687,7 @@ void main() {
     );
     expect(
       await session.replaceQueueTrack('fake:a2', renamed),
-      PlaybackCommandRoute.live,
+      PlaybackCommandOutcome.trackAndQueue,
     );
     expect(store.calls, ['save', 'save', 'save']);
     expect(store.saves.last.tracks.single.title, 'Renamed');

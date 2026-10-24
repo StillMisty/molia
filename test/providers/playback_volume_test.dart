@@ -4,7 +4,6 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
-import '../support/settings_test_support.dart';
 
 /// 应用内音量链路：provider 状态 → facade → 后端，以及设备本地持久化。
 void main() {
@@ -169,10 +168,7 @@ void main() {
   test('音量变化不进低频快照（快照契约不新增字段）', () async {
     final backend = FakePlaybackBackend();
     final facade = DefaultPlaybackFacade(backend: backend);
-    final provider = PlaybackProvider(
-        settings: testSettingsRegistry(),
-        facade: facade,
-        messenger: FakeMessenger());
+    final provider = buildTestPlaybackProvider(facade: facade);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 

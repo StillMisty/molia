@@ -179,77 +179,81 @@ class _FakeService extends LocalPlaybackService {
 class _FakeCommands implements PlaybackCommandPort {
   final List<String> calls = [];
 
-  /// 命令返回的路由（handler 不消费，测试可用来模拟恢复态）。
-  PlaybackCommandRoute route = PlaybackCommandRoute.live;
+  /// 命令返回的结果（handler 不消费，测试可用来模拟恢复态）。
+  PlaybackCommandOutcome outcome = PlaybackCommandOutcome.trackOnly;
 
   /// seek 完成闸门：验证 handler 等命令（及命令里的提交）返回才返回。
   Completer<void>? seekGate;
 
   @override
-  Future<PlaybackCommandRoute> play() async {
+  Future<PlaybackCommandOutcome> play() async {
     calls.add('play');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> pause() async {
+  Future<PlaybackCommandOutcome> pause() async {
     calls.add('pause');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> togglePlayPause() async {
+  Future<PlaybackCommandOutcome> togglePlayPause() async {
     calls.add('togglePlayPause');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> skipToNext() async {
+  Future<PlaybackCommandOutcome> skipToNext() async {
     calls.add('skipToNext');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> skipToPrevious() async {
+  Future<PlaybackCommandOutcome> skipToPrevious() async {
     calls.add('skipToPrevious');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> playQueueIndex(int index) async {
+  Future<PlaybackCommandOutcome> playQueueIndex(int index) async {
     calls.add('playQueueIndex:$index');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> replaceQueueTrack(
+  Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
   ) async {
     calls.add('replaceQueueTrack:$trackUri');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<void> seekToPosition(Duration position) async {
+  Future<PlaybackCommandOutcome> seekToPosition(Duration position) async {
     calls.add('seek:${position.inMilliseconds}');
     final gate = seekGate;
     if (gate != null) await gate.future;
+    return outcome;
   }
 
   @override
-  Future<void> setPlayMode(PlayMode mode) async {
+  Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode) async {
     calls.add('setPlayMode:${mode.name}');
+    return outcome;
   }
 
   @override
-  Future<void> togglePlayMode() async {
+  Future<PlaybackCommandOutcome> togglePlayMode() async {
     calls.add('togglePlayMode');
+    return outcome;
   }
 
   @override
-  Future<void> stop() async {
+  Future<PlaybackCommandOutcome> stop() async {
     calls.add('stop');
+    return outcome;
   }
 }
 
@@ -947,7 +951,8 @@ void main() {
     test('服务无曲目（冷启动恢复态）：仍走命令面，由它按阶段恢复', () async {
       final service = _FakeService();
       addTearDown(service.dispose);
-      final commands = _FakeCommands()..route = PlaybackCommandRoute.restored;
+      final commands = _FakeCommands()
+        ..outcome = PlaybackCommandOutcome.trackAndQueue;
       final (handler, _) = await _handler(service, commands: commands);
 
       await handler.skipToNext();

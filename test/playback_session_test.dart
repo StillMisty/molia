@@ -536,6 +536,18 @@ void main() {
     expect(store.saves, hasLength(1));
     expect(store.saves.single.position, const Duration(seconds: 7));
 
+    // 播放推进到 8s（仍在 1s 整份落盘节流窗口内）：到点暂停必须提交最新进度，
+    // 而不是停在切歌时的 7s。
+    backend.emit(BackendSnapshot(
+      current: a,
+      queue: [a],
+      currentIndex: 0,
+      isPlaying: true,
+      position: const Duration(seconds: 8),
+      duration: const Duration(seconds: 30),
+    ));
+    expect(store.saves, hasLength(1), reason: '进度 tick 不重写整份会话');
+
     // 极短倒计时：ticker 周期固定 1s，第一次 tick 即越过 deadline 到点。
     provider.sleepTimer.startCountdown(const Duration(milliseconds: 10));
     // 留 200ms 给命令面暂停 + 写队列排空（真实时间，无法注入时钟）。
@@ -543,8 +555,8 @@ void main() {
 
     expect(provider.sleepTimer.value.mode, SleepTimerMode.off);
     expect(backend.calls, contains('pause'));
-    // 命令面暂停在返回前强制落盘；旧实现直写 facade.pause 不会有这次写入。
+    // 命令面暂停在返回前提交最新进度（内容没变时不会重复写）。
     expect(store.saves, hasLength(2));
-    expect(store.saves.last.position, const Duration(seconds: 7));
+    expect(store.saves.last.position, const Duration(seconds: 8));
   });
 }
