@@ -139,11 +139,12 @@
   `rectAt` / `appearanceAt` / `iconSizeAt`，外观按「播放页端进度」插值，反向飞行
   起飞不跳）+ `CoverFlightLayer`（副本渲染，返回 `Positioned.fromRect`，挂 Stack
   下）；顶栏↔播放页（`PlayerMorphFlight`）与迷你⇄完整（`player.dart` 页内）都是
-  它的薄壳。锚点几何读取唯一实现 `player_morph.dart::anchorRectOf(key,
+  它的薄壳。迷你⇄完整在阈值收尾后还有弹簧容差拖尾（状态仍是 `forward`），拖尾内
+  反向必须由进度监听重新起飞行。锚点几何读取唯一实现 `player_morph.dart::anchorRectOf(key,
   {container})`（容器为空 = 全局坐标；含祖先缩放的两角映射）。
 - **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（实际播放顺序最近一首 →
   队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
-  中 = 当前（拖动/提交等待期间为预览目标）、右 = `PlaybackSnapshot.next`；
+  中 = 当前（拖动/提交等待/回退期间为预览目标）、右 = `PlaybackSnapshot.next`；
   左右槽只要展示了身份即可点击切歌，为空时不渲染卡片。
 - **Swap session（切歌会话）** — `CoverSwapSession`：一次拖动/切歌从开始到落位的
   唯一状态机（起止身份/方向/旧邻位/阶段/方向提示/6 秒兜底），只决定「什么时候」；
@@ -161,7 +162,8 @@
   widget 树断言。
 - **Swap phase（会话阶段）** — `idle`（稳态）→ `preview`（拖动跟手）→
   `committed`（提交等待对账）→ `settling`（即时切歌完成中）/ `correcting`
-  （对账不匹配校正）；提交等待与校正期间忽略新手势。
+  （对账不匹配校正）/ `returning`（松手回弹中，预览目标保持到落位）；
+  提交等待与校正期间忽略新手势。
 - **Reconcile（对账）** — 提交后等待快照 current 变为会话目标：匹配无缝落位；
   不匹配（随机目标 / 失败恢复 / 列表变化）走 `correcting`（220ms 中心原位交叉
   淡化校正到实际曲目）；`CoverSwapSession.commitTimeout`（6 秒）无对账回弹。

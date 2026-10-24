@@ -113,6 +113,13 @@ void main() {
       tester.getCenter(finder).dx -
       tester.getCenter(coverSwipeHost()).dx;
 
+  /// 拖动行程：deck 的换场行程是封面边长的 0.6（`_coverSwapRange`），
+  /// 硬编码像素会随版式缩放漂移。
+  double dragFor(WidgetTester tester, double fraction) =>
+      tester.getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey)).width *
+      0.6 *
+      fraction;
+
   testWidgets('逐帧横滑提交切歌：左滑下一首、右滑上一首，后端到位后落位新曲目', (tester) async {
     emitFor('b');
     await pumpPlayer(tester);
@@ -183,6 +190,52 @@ void main() {
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 400));
 
+    expect(nextCalls(), 0);
+    expect(previousCalls(), 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('拖动到下一首再滑回：回弹期间目标槽位不得闪成当前封面', (tester) async {
+    emitFor('b'); // 队列 a,b,c：右槽 = 下一首 c
+    await pumpPlayer(tester);
+
+    final double range = dragFor(tester, 1.0);
+    final gesture =
+        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    // 先移动一段确认横滑，再走到下一首预览，最后拖回当前附近（p≈0.15）。
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(-(range * 0.7 - 30), 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(range * 0.55, 0));
+    await tester.pump();
+    // 停一拍再松手：速度估计清零，确保按「未达阈值」回弹而不是甩动提交。
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget,
+        reason: '拖动预览的中心位应是下一首');
+
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget,
+        reason: '回弹期间中心卡仍是预览目标（不是当前曲目）');
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsNothing,
+        reason: '目标槽位不得在回弹半途显示当前封面');
+
+    // 回弹落位：中心回当前、右槽恢复下一首，全程没有提交切歌。
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsNothing);
+    expect(
+      find.byKey(PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id)),
+      findsOneWidget,
+      reason: '回弹落位后右槽应恢复下一首',
+    );
     expect(nextCalls(), 0);
     expect(previousCalls(), 0);
     expect(tester.takeException(), isNull);
@@ -306,15 +359,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400)); // 提交过渡走完，预览保持
 
     final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
-    expect(cardDx(tester, center), closeTo(0, 1),
-        reason: '提交等待期间预览应保持落位（不回落）');
+    expect(cardDx(tester, center), closeTo(0, 1), reason: '提交等待期间预览应保持落位（不回落）');
 
     // 后端迟迟不推快照：6 秒兜底计时器触发回弹。
     await tester.pump(const Duration(milliseconds: 6500));
     // expressive spatial 弹簧回弹到 0（含容差拖尾）约 0.5s。
     await tester.pump(const Duration(milliseconds: 700));
 
-    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget,
+    expect(
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget,
         reason: '兜底回弹后中心应回到实际曲目 b');
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing,
         reason: '回弹后滑出卡应撤下');

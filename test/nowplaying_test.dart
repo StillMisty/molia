@@ -13,6 +13,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/notification_service.dart';
+import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
@@ -344,6 +345,43 @@ void main() {
 
     // 通知节流计时器跑完，避免 pending timer 报错。
     await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  testWidgets('快速连点底栏「播放」：拖尾内反向仍重新起封面飞行', (tester) async {
+    final reselect = ShellReselectSignal();
+    addTearDown(reselect.dispose);
+    await pumpNowPlaying(tester, reselect: reselect);
+
+    final Animation<double> expand =
+        tester.widget<Player>(find.byType(Player)).expandAnimation!;
+    expect(expand.value, 1.0);
+    expect(find.byType(MorphCover), findsNothing);
+
+    // 收起：推进到「视觉落定」（副本已按阈值撤下），但弹簧仍在 forward
+    // 容差拖尾里——此时再点会在 motor 中保持同一状态，没有新的 status 事件。
+    reselect.trigger();
+    await tester.pump();
+    for (var i = 0; i < 200 && expand.value > 0.005; i++) {
+      await tester.pump(const Duration(milliseconds: 8));
+    }
+    expect(expand.value, lessThanOrEqualTo(0.005));
+    expect(
+      expand.status,
+      AnimationStatus.forward,
+      reason: '应仍处在弹簧容差拖尾内（落定状态晚于视觉落定）',
+    );
+    expect(find.byType(MorphCover), findsNothing, reason: '视觉落定后副本已撤下');
+
+    // 拖尾内反向展开：必须由值监听补起新飞行，不能只靠 status 变化。
+    reselect.trigger();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump();
+    expect(find.byType(MorphCover), findsOneWidget, reason: '拖尾内反向切换必须重新起飞行副本');
+
+    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('底栏重复点击：大屏（两栏）忽略，不进入迷你态', (tester) async {

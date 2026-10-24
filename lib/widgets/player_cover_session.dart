@@ -29,11 +29,17 @@ export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
 /// 注意：是否「正在演出动画」仍由宿主的进度控制器判定（拖动回弹、快速连切
 /// 共用同一根控制器）；本阶段只描述切歌机械所处的状态。
 enum CoverSwapPhase {
-  /// 无活动会话：稳态；拖动回弹动画期间也回到本阶段。
+  /// 无活动会话：稳态；回退弹簧落位后才回到本阶段。
   idle,
 
   /// 拖动跟手中：进度由手指位移反解曲线写入，中心位显示会话目标。
   preview,
+
+  /// 回退中：松手未达标 / 手势取消 / 提交超时，进度弹簧从当前位置退回 0。
+  ///
+  /// 预览目标身份保留到落位（[CoverSwapSession.showingPreviewTarget]）：
+  /// 否则中心卡会在回弹半途换回当前曲目，目标槽位短暂显示当前封面。
+  returning,
 
   /// 已提交：松手达标，进度续走到落位，等待后端把 current 换成目标；
   /// 期间忽略新的拖动，收到曲目变化（或兜底超时）后对账复位。
@@ -183,6 +189,13 @@ class CoverSwapSession extends ChangeNotifier {
   bool get previewActive =>
       _phase == CoverSwapPhase.preview || _phase == CoverSwapPhase.committed;
 
+  /// 预览视觉是否仍在演出：拖动跟手、提交等待与回退中。
+  ///
+  /// 回退期间中心位仍是预览目标（[to] 保留到 [returnCompleted]）：一松手就
+  /// 换回当前曲目会让目标槽位在回弹半途闪成当前封面。
+  bool get showingPreviewTarget =>
+      previewActive || _phase == CoverSwapPhase.returning;
+
   /// 是否已提交切歌、等待后端对账。
   bool get awaitingReconcile => _phase == CoverSwapPhase.committed;
 
@@ -323,14 +336,29 @@ class CoverSwapSession extends ChangeNotifier {
     _host.requestSkip(_direction);
   }
 
-  /// 撤下拖动/提交预览并回弹到稳态（不切歌）。
+  /// 撤下拖动/提交预览并反向回弹到稳态（不切歌）。
+  ///
+  /// 只切阶段、保留预览目标：视觉由宿主控制器反向播完，落位后宿主回调
+  /// [returnCompleted] 才真正撤下（见 [CoverSwapPhase.returning]）。
   void releasePreview({double progressVelocity = 0}) {
     if (!previewActive) return;
-    _phase = CoverSwapPhase.idle;
-    _to = null;
+    _phase = CoverSwapPhase.returning;
     notifyListeners();
     _host.disarmTimeout();
     _host.releasePreview(progressVelocity: progressVelocity);
+  }
+
+  /// 回退弹簧自然落位（宿主在进度回到 0 完成时回调）：撤下预览视觉回稳态。
+  ///
+  /// 只接受 [CoverSwapPhase.returning]：回弹被新拖动/切歌取消时宿主不会
+  /// 收到完成回调；阶段已被接管的重复回调在这里也是无副作用的。
+  void returnCompleted() {
+    if (_phase != CoverSwapPhase.returning) return;
+    _phase = CoverSwapPhase.idle;
+    _to = null;
+    _from = null;
+    notifyListeners();
+    _host.adoptSteadySlots();
   }
 
   /// 提交兜底超时（宿主计时器回调）：撤下预览回弹。
@@ -525,9 +553,8 @@ class CoverSwapSession extends ChangeNotifier {
   /// 两个方向都直接读快照解析好的身份（服务侧已保证与实际的
   /// `skipToNext` / `skipToPrevious` 同源，且上一首已排除与当前同 id）。
   Track? _previewTargetFor(int dir, PlaybackSnapshot snapshot) {
-    final Track? target = dir == 1
-        ? snapshot.next
-        : (dir == -1 ? snapshot.previous : null);
+    final Track? target =
+        dir == 1 ? snapshot.next : (dir == -1 ? snapshot.previous : null);
     return target;
   }
 }

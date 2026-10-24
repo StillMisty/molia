@@ -215,30 +215,55 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     switch (status) {
       case AnimationStatus.forward:
       case AnimationStatus.reverse:
-        // 同一份锚点几何实现（含祖先缩放的两角映射）；这里取页内 Stack 本地坐标。
-        final from = anchorRectOf(_miniCoverKey, container: _playerStackKey);
-        final to = anchorRectOf(_fullCoverKey, container: _playerStackKey);
-        if (from == null || to == null) return;
-        setState(() {
-          _coverFlightFrom = from;
-          _coverFlightTo = to;
-          _coverFlightActive = true;
-          // 起点进度决定结束端：从完整态出发 = 收起，从迷你态出发 = 展开。
-          _coverFlightToMini = (widget.expandAnimation?.value ?? 0) >= 0.5;
-        });
+        _startCoverFlight();
       case AnimationStatus.completed:
       case AnimationStatus.dismissed:
         _endCoverFlight();
     }
   }
 
-  /// 进度到达终端阈值（~0.5%）即结束飞行。
+  /// 开始一段页内封面飞行：抓两端锚点并隐藏真身。
+  ///
+  /// [toMini] 为空时按当前进度决定结束端（状态迁移入口）；从值监听补起
+  /// 飞行时进度已经在目标端附近，必须由调用方给出新的方向。
+  void _startCoverFlight({bool? toMini}) {
+    // 同一份锚点几何实现（含祖先缩放的两角映射）；这里取页内 Stack 本地坐标。
+    final from = anchorRectOf(_miniCoverKey, container: _playerStackKey);
+    final to = anchorRectOf(_fullCoverKey, container: _playerStackKey);
+    if (from == null || to == null) return;
+    setState(() {
+      _coverFlightFrom = from;
+      _coverFlightTo = to;
+      _coverFlightActive = true;
+      // 起点进度决定结束端：从完整态出发 = 收起，从迷你态出发 = 展开。
+      _coverFlightToMini =
+          toMini ?? (widget.expandAnimation?.value ?? 0) >= 0.5;
+    });
+  }
+
+  /// 进度到达终端阈值（~0.5%）即结束飞行；容差拖尾内反向则重新起一段。
   ///
   /// 弹簧的容差拖尾让落定状态晚于视觉落定（~0.35s），不能让真身封面
   /// 一直被副本顶替（期间点击封面会落空）。
   void _handleExpandValue() {
-    if (!_coverFlightActive) return;
-    final double value = widget.expandAnimation?.value ?? 0;
+    final animation = widget.expandAnimation;
+    if (animation == null) return;
+    final double value = animation.value;
+
+    if (!_coverFlightActive) {
+      // 容差拖尾内再切换：motor 的 animateTo 永远把状态置为 forward，反向
+      // 不会产生新的 status 事件，只靠 [_handleExpandStatus] 会让飞行副本
+      // 一直缺席（看起来「飞行消失」）。弹簧驱动的进度重新离开端点时补一段
+      // 新飞行；拖动手势直接写 value 会把状态置为 completed/dismissed，不会
+      // 误触发（拖动仍是交叉淡化、松手才起飞行）。
+      if (animation.status == AnimationStatus.forward &&
+          value > 0.0 &&
+          value < 1.0) {
+        _startCoverFlight(toMini: value >= 0.5);
+      }
+      return;
+    }
+
     if (_coverFlightToMini ? value <= 0.005 : value >= 0.995) {
       _endCoverFlight();
     }
