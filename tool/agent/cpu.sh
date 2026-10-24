@@ -63,7 +63,10 @@ mkdir -p "$RUN_DIR"
 # ---- Linux -----------------------------------------------------------------
 sample_linux() {
   if [[ -z "$pid" ]]; then
-    pid="$(pgrep -f "$PROJECT_DIR/build/linux/x64/release/bundle/$APP_BINARY" | head -1 || true)"
+    pid="$(pgrep -f "$PROJECT_DIR/build/linux/x64/release/bundle/$APP_BINARY" |
+      head -1 || true)"
+    # 进程可能以相对路径（tool/agent/perf.sh 的 "./build/..."）启动。
+    [[ -n "$pid" ]] || pid="$(pgrep -x "$APP_BINARY" | head -1 || true)"
   fi
   [[ -n "$pid" ]] || die "找不到进程（--pid 指定，或先启动 release 产物）"
   kill -0 "$pid" 2>/dev/null || die "进程 $pid 不存在"
@@ -131,8 +134,8 @@ lines.append('按角色汇总（WSLg / Xvfb 的 platform 线程包含窗口呈�
 # 同名线程上。两者都叫 molia，必须用 TID 区分，否则会把 WSLg 的呈现拷贝算成
 # 应用逻辑 CPU。
 roles = [
-    ('平台/GTK', lambda c, tid: tid == pid),
-    ('Dart UI', lambda c, tid: tid != pid and (c.startswith('molia') or c.endswith('.ui'))),
+    ('平台/GTK', lambda c, tid: str(tid) == str(pid)),
+    ('Dart UI', lambda c, tid: str(tid) != str(pid) and (c.startswith('molia') or c.endswith('.ui'))),
     ('raster', lambda c, tid: 'raster' in c),
     ('IO', lambda c, tid: c.startswith('io.flutter') or c == 'io'),
     ('DartWorker', lambda c, tid: 'DartWorker' in c),
@@ -150,7 +153,7 @@ if used:
     lines.append(f'  {"其它":<18}{sum(p for p, c, _ in rows if c in used):>8.2f}'
                  f'  ({", ".join(sorted(used))})')
 dart_total = sum(p for p, c, tid in rows
-                 if tid != pid and (c.startswith('molia') or c.endswith('.ui')
+                 if str(tid) != str(pid) and (c.startswith('molia') or c.endswith('.ui')
                                     or c.startswith('io.flutter') or c == 'io'
                                     or 'DartWorker' in c))
 lines.append('')
