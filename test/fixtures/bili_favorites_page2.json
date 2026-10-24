@@ -1,0 +1,125 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "info": {
+      "id": 123456,
+      "fid": 123456,
+      "mid": 336,
+      "title": "我的收藏夹",
+      "cover": "//i0.hdslb.com/bfs/archive/fav-cover.jpg",
+      "media_count": 26,
+      "intro": "收藏简介 &amp; 说明",
+      "ctime": 1700000000,
+      "upper": {
+        "mid": 336,
+        "name": "周杰伦"
+      }
+    },
+    "medias": [
+      {
+        "id": 4021,
+        "bvid": "BV1fav021",
+        "title": "收藏曲21",
+        "cover": "//i1.hdslb.com/bfs/archive/fav21.jpg",
+        "duration": 141,
+        "upper": {
+          "mid": 336,
+          "name": "周杰伦"
+        },
+        "type": 2,
+        "attr": 0,
+        "cnt_info": {
+          "play": 210
+        },
+        "pubtime": 1700000021
+      },
+      {
+        "id": 4022,
+        "bvid": "BV1fav022",
+        "title": "收藏曲22",
+        "cover": "https://i2.hdslb.com/bfs/archive/fav22.jpg",
+        "duration": 142,
+        "upper": {
+          "mid": 336,
+          "name": "周杰伦"
+        },
+        "type": 2,
+        "attr": 0,
+        "cnt_info": {
+          "play": 220
+        },
+        "pubtime": 1700000022
+      },
+      {
+        "id": 4023,
+        "bvid": "BV1fav023",
+        "title": "收藏曲23",
+        "cover": "//i1.hdslb.com/bfs/archive/fav23.jpg",
+        "duration": 143,
+        "upper": {
+          "mid": 336,
+          "name": "周杰伦"
+        },
+        "type": 2,
+        "attr": 0,
+        "cnt_info": {
+          "play": 230
+        },
+        "pubtime": 1700000023
+      },
+      {
+        "id": 4024,
+        "bvid": "BV1fav024",
+        "title": "收藏曲24",
+        "cover": "https://i2.hdslb.com/bfs/archive/fav24.jpg",
+        "duration": 144,
+        "upper": {
+          "mid": 336,
+          "name": "周杰伦"
+        },
+        "type": 2,
+        "attr": 0,
+        "cnt_info": {
+          "play": 240
+        },
+        "pubtime": 1700000024
+      },
+      {
+        "id": 4025,
+        "bvid": "BV1fav025",
+        "title": "收藏曲25",
+        "cover": "//i1.hdslb.com/bfs/archive/fav25.jpg",
+        "duration": 145,
+        "upper": {
+          "mid": 336,
+          "name": "周杰伦"
+        },
+        "type": 2,
+        "attr": 0,
+        "cnt_info": {
+          "play": 250
+        },
+        "pubtime": 1700000025
+      },
+      {
+        "id": 4998,
+        "bvid": "BV1favinvalid",
+        "title": "失效条目应被过滤",
+        "cover": "//i1.hdslb.com/bfs/archive/invalid.jpg",
+        "duration": 60,
+        "upper": {
+          "mid": 336,
+          "name": "周杰伦"
+        },
+        "type": 2,
+        "attr": 1,
+        "cnt_info": {
+          "play": 88888
+        }
+      }
+    ],
+    "has_more": false
+  }
+}

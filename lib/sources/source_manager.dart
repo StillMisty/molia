@@ -196,7 +196,7 @@ class SourceManager extends ChangeNotifier {
           if (option.enabled && option.canSearch) option,
       ];
 
-  /// 未排序的可搜索候选：脚本扩展搜索源 → 内置平台（需脚本支持取链）→
+  /// 未排序的可搜索候选：脚本扩展搜索源 → 内置平台（原生取链或脚本可取链）→
   /// any-listen（仅「已配置且启用」时出现）。
   List<SourceOption> get _searchableCandidates {
     final candidates = <SourceOption>[];
@@ -262,8 +262,8 @@ class SourceManager extends ChangeNotifier {
       );
     }
     final decl = _activeSources[key];
-    // 内置平台（tx/wy/kg/kw/mg）的搜索/分页由 Dart 移植实现（BuiltinSearch），
-    // 能力跟随「脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
+    // 内置平台的搜索/分页由 Dart 实现（五平台走 BuiltinSearch，bili 原生），
+    // 能力跟随「原生取链或脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
     // 社区搜索 action（见 [_isBuiltinSearchable]）。评论同样只由内置实现提供。
     final platform = BuiltinPlatforms.maybeOf(key);
     final builtin = platform != null;
@@ -687,7 +687,7 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  /// 获取歌手详情 + 一页歌手歌曲（内置五平台；脚本扩展源 / any-listen 无歌手能力）。
+  /// 获取歌手详情 + 一页歌手歌曲（内置平台；脚本扩展源 / any-listen 无歌手能力）。
   ///
   /// [artistId] 为平台内歌手 id（与曲目 payload 的歌手引用同体系；取自
   /// `_artists` 字段）。失败统一归一化为 [SourceFailure]；分页与缓存由
@@ -716,7 +716,7 @@ class SourceManager extends ChangeNotifier {
     }
   }
 
-  /// 歌手搜索（内置五平台；搜索页「歌手」类型）。
+  /// 歌手搜索（内置平台；搜索页「歌手」类型）。
   ///
   /// 可搜索性与单曲搜索同门（[_isBuiltinSearchable]：脚本可取链才有歌手
   /// 搜索入口）；失败归一化为 [SourceFailure]，不静默吞成空结果。

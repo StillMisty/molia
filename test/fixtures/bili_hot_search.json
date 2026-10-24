@@ -1,0 +1,30 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "trending": {
+      "title": "热搜",
+      "list": [
+        {
+          "keyword": "起风了",
+          "show_name": "起风了",
+          "icon": ""
+        },
+        {
+          "keyword": "周杰伦"
+        },
+        {
+          "keyword": ""
+        },
+        {
+          "keyword": 123
+        },
+        {
+          "keyword": "起风了"
+        },
+        "不是对象的条目"
+      ]
+    }
+  }
+}

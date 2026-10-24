@@ -3,13 +3,13 @@ import 'builtin_platforms.dart';
 
 /// 内置平台「发现」能力抽象：热榜 / 歌单（标签浏览、搜索、详情）/ 热搜词。
 ///
-/// 每个平台一个实现（与 `builtin_search.dart` 的平台注册一致：wy/tx/kg/kw/mg），
+/// 每个平台一个实现（与 `builtin_search.dart` 的平台注册一致：wy/tx/kg/kw/mg/bili），
 /// 由 [BuiltinDiscover] 统一注册；能力差异通过 `supports*` 暴露给 UI 做降级
 /// （隐藏入口而不是展示报错）。
 abstract class DiscoverSource {
   const DiscoverSource();
 
-  /// 平台键（`wy` / `tx` / `kg` / `kw` / `mg`）。
+  /// 平台键（`wy` / `tx` / `kg` / `kw` / `mg` / `bili`）。
   String get sourceKey;
 
   /// 静态榜单表（无网络）。
@@ -50,8 +50,8 @@ class BuiltinDiscover {
   static Map<String, DiscoverSource> get sources =>
       BuiltinPlatforms.discoverSources;
 
-  /// 只列真正有发现适配器的平台：平台键全集里存在「可搜索但还没有发现页」
-  /// 的条目（当前是 bili），不能把发现入口挂到它上面。
+  /// 只列真正有发现适配器的平台：能力矩阵以 [BuiltinPlatforms] 的注册表为准，
+  /// 不存在「可搜索但还没有发现页」的隐式例外。
   static List<String> get sourceKeys =>
       List.unmodifiable(BuiltinPlatforms.discoverSources.keys);
 

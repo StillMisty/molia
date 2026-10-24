@@ -218,6 +218,10 @@ void main() {
   });
 
   group('BuiltinArtists 调度', () {
+    test('B 站 UP 也注册为歌手能力', () {
+      expect(BuiltinArtists.isSupported('bili'), isTrue);
+    });
+
     test('未知音源：搜索与详情都抛 unsupported', () async {
       expect(
         () => BuiltinArtists.fetch('unknown', '1'),

@@ -1,8 +1,8 @@
 /// 内置平台的唯一注册表：平台键 / 显示名 / 各能力族适配器的声明处。
 ///
-/// 之前同一份「五平台 × 六能力族」矩阵散落在
+/// 之前同一份「平台 × 能力族」矩阵散落在
 /// `album_source` / `artist_source` / `comment_source` / `lyric_search` /
-/// `builtin_search` / `discover_source` 的 `supportedKeys` 与五路 switch 里，
+/// `builtin_search` / `discover_source` 的 `supportedKeys` 与各路 switch 里，
 /// 每加一个平台要改七处，且 `SourceManager.capabilitiesFor` 无法与路由门
 /// 保持同一事实。现在只在这里新增/删除平台条目；各 facade 只做参数校验与
 /// 错误语义转换。
@@ -20,7 +20,9 @@ import '../../domain/models/comment.dart';
 import '../../domain/ports/music_source.dart' show PlayableStream;
 import '../source_search_result.dart';
 import 'artist_source.dart';
+import 'bili_artist.dart';
 import 'bili_comment.dart';
+import 'bili_discover.dart';
 import 'bili_play.dart';
 import 'bili_search.dart';
 import 'discover_source.dart';
@@ -264,6 +266,11 @@ class BuiltinPlatforms {
         rawIdKeys: const ['aid', 'id'],
         fetch: BiliComment.fetch,
       ),
+      artist: BuiltinArtistAdapter(
+        search: BiliArtist.search,
+        fetch: BiliArtist.fetch,
+      ),
+      discover: const BiliDiscoverSource(),
     ),
   });
 

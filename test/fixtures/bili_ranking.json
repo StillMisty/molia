@@ -1,0 +1,34 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "note": "三日音乐榜",
+    "list": [
+      {
+        "bvid": "BV1rank001",
+        "aid": 2001,
+        "cid": 3001,
+        "title": "榜单曲一",
+        "pic": "//i1.hdslb.com/bfs/archive/rank1.jpg",
+        "author": "UP主一",
+        "mid": 501,
+        "duration": "03:20",
+        "play": 4321,
+        "typename": "音乐"
+      },
+      {
+        "bvid": "BV1rank002",
+        "aid": 2002,
+        "cid": 3002,
+        "title": "榜单曲二",
+        "pic": "https://i2.hdslb.com/bfs/archive/rank2.jpg",
+        "author": "UP主二",
+        "mid": 502,
+        "duration": "04:00",
+        "play": 1234,
+        "typename": "音乐"
+      }
+    ]
+  }
+}

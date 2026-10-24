@@ -15,14 +15,22 @@ import 'package:molia/sources/source_track.dart';
 /// 多平台「发现」模块单测：注册表 + 各平台解析器（离线夹具）。
 void main() {
   group('BuiltinDiscover 注册表', () {
-    test('五平台注册且静态榜单表非空', () {
-      expect(BuiltinDiscover.sourceKeys, ['tx', 'wy', 'kg', 'kw', 'mg']);
+    test('六平台注册且静态榜单表非空', () {
+      expect(
+          BuiltinDiscover.sourceKeys, ['tx', 'wy', 'kg', 'kw', 'mg', 'bili']);
       for (final key in BuiltinDiscover.sourceKeys) {
         final source = BuiltinDiscover.of(key);
         expect(source.sourceKey, key);
         expect(source.supportsLeaderboards, isTrue, reason: key);
         expect(source.leaderboards, isNotEmpty, reason: key);
       }
+
+      // B 站只有音乐榜 + 热搜：歌单搜索 / 浏览关闭，收藏夹只走导入详情。
+      final bili = BuiltinDiscover.of('bili');
+      expect(bili.leaderboards.single.id, 'bili__music_3d');
+      expect(bili.supportsPlaylists, isFalse);
+      expect(bili.supportsPlaylistSearch, isFalse);
+      expect(bili.supportsHotSearch, isTrue);
     });
 
     test('未知平台抛 UnsupportedError', () {

@@ -669,7 +669,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (discover != null) await _importFromLink(discover);
   }
 
-  /// 五平台歌单链接导入：选平台 + 粘贴链接/ID → 拉取并存入本地列表。
+  /// 内置平台歌单 / 收藏夹链接导入：选平台 + 粘贴链接/ID → 拉取并存入本地列表。
   Future<void> _importFromLink(DiscoverProvider discover) async {
     final l10n = _l10n(context);
     final channels = [

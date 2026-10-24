@@ -1,0 +1,46 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "list": {
+      "tlist": {
+        "1": {
+          "tid": 1,
+          "count": 2,
+          "name": "音乐"
+        }
+      },
+      "vlist": [
+        {
+          "bvid": "BV1space001",
+          "aid": 1001,
+          "title": "投稿一：夜曲",
+          "pic": "//i1.hdslb.com/bfs/archive/space1.jpg",
+          "author": "周杰伦",
+          "mid": 336,
+          "length": "04:05",
+          "created": 1700000000,
+          "description": "投稿简介一",
+          "cid": 111
+        },
+        {
+          "bvid": "BV1space002",
+          "aid": 1002,
+          "title": "投稿二：晴天",
+          "pic": "https://i2.hdslb.com/bfs/archive/space2.jpg",
+          "author": "周杰伦",
+          "mid": 336,
+          "length": "1:00:00",
+          "created": 1690000000,
+          "description": "投稿简介二"
+        }
+      ]
+    },
+    "page": {
+      "pn": 1,
+      "ps": 30,
+      "count": 35
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "seid": "1234567890",
+    "page": 1,
+    "pagesize": 20,
+    "numResults": 42,
+    "numPages": 3,
+    "result": [
+      {
+        "type": "bili_user",
+        "mid": 336,
+        "uname": "周杰伦",
+        "upic": "//i0.hdslb.com/bfs/face/jay.jpg",
+        "fans": 123456,
+        "videos": 100,
+        "usign": "华语流行歌手"
+      },
+      {
+        "type": "bili_user",
+        "mid": 777,
+        "uname": "无头像UP &amp; 测试",
+        "upic": "",
+        "fans": 0,
+        "videos": 3,
+        "usign": ""
+      }
+    ]
+  }
+}

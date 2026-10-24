@@ -180,7 +180,7 @@ void main() {
     expect(find.text('歌单'), findsOneWidget);
     expect(find.text('搜索'), findsNothing); // 当前 wy 无脚本不可搜索 → 隐藏
 
-    // 渠道并集：bili 有原生搜索/播放但没有发现页，不能出现发现 tab。
+    // 渠道并集：bili 有原生搜索/播放与发现页（音乐榜 / 热搜），可进发现渠道。
     expect(
       sources.channels.map((option) => option.key),
       contains('bili'),
@@ -189,7 +189,7 @@ void main() {
       sources.channels
           .firstWhere((option) => option.key == 'bili')
           .discoverable,
-      isFalse,
+      isTrue,
     );
     expect(
       sources.searchableSources.map((option) => option.key),

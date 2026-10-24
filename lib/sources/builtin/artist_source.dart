@@ -1,4 +1,4 @@
-/// 内置平台歌手获取的调度入口（五平台：kw / kg / tx / wy / mg）。
+/// 内置平台歌手获取的调度入口（kw / kg / tx / wy / mg / bili）。
 ///
 /// 与专辑同构：歌手只由内置实现提供（LX 脚本 / any-listen 没有稳定的歌手
 /// id），解析直接产出领域模型 `ArtistDetail` / `ArtistSummary`，不再经

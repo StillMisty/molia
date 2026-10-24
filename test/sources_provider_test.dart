@@ -110,10 +110,10 @@ void main() {
       f.provider.channels.map((o) => o.key).toList(),
       ['a', 'b', 'bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
     );
-    // bili 有原生搜索/播放但还没有发现页（Phase 4），不能出现在发现渠道里。
+    // bili 原生搜索 + 发现（音乐榜 / 热搜）都可用，与其它发现平台同列。
     expect(
       f.provider.channels.where((o) => o.discoverable).map((o) => o.key),
-      ['tx', 'wy', 'kg', 'kw', 'mg'],
+      ['bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
     );
     expect(
       f.provider.searchableSources.map((o) => o.key).toList(),

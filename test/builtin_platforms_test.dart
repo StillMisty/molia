@@ -41,11 +41,11 @@ void main() {
     expect(BuiltinPlatforms.isSupported('any_listen'), isFalse);
 
     // 既有 facade 的别名必须指向同一份注册表，而不是各自复制键表。
-    // 发现页只列真正有发现适配器的平台（bili 在 Phase 4 接入）。
+    // 发现页与歌手页都包含 bili（Phase 4 接入）。
     expect(BuiltinSearch.platforms.keys, expectedKeys);
-    expect(BuiltinDiscover.sourceKeys, musicKeys);
-    expect(BuiltinDiscover.sources.keys, musicKeys);
-    expect(BuiltinDiscover.isSupported('bili'), isFalse);
+    expect(BuiltinDiscover.sourceKeys, expectedKeys);
+    expect(BuiltinDiscover.sources.keys, expectedKeys);
+    expect(BuiltinDiscover.isSupported('bili'), isTrue);
   });
 
   test('六族支持矩阵与注册表一致（每族都有自己的类型化适配器）', () {
@@ -53,12 +53,16 @@ void main() {
     expect(BuiltinPlatforms.lyricSearchKeys, musicKeys.toSet());
     expect(BuiltinPlatforms.commentKeys, expectedKeys.toSet());
     expect(BuiltinPlatforms.albumKeys, musicKeys.toSet());
-    expect(BuiltinPlatforms.artistKeys, musicKeys.toSet());
-    expect(BuiltinPlatforms.discoverKeys, musicKeys.toSet());
+    expect(BuiltinPlatforms.artistKeys, expectedKeys.toSet());
+    expect(BuiltinPlatforms.discoverKeys, expectedKeys.toSet());
 
-    // B 站是首个原生取链平台（不需要脚本），歌词/评论也已接入。
+    // B 站是首个原生取链平台（不需要脚本），歌词/评论/UP/发现也已接入。
     expect(BuiltinPlatforms.resolveFor('bili'), isNotNull);
     expect(BuiltinPlatforms.commentsFor('bili'), isNotNull);
+    expect(BuiltinPlatforms.artistFor('bili'), isNotNull);
+    expect(BuiltinPlatforms.discoverFor('bili'), isNotNull);
+    expect(BuiltinPlatforms.albumFor('bili'), isNull);
+    expect(BuiltinPlatforms.lyricSearchFor('bili'), isNull);
     expect(BuiltinPlatforms.maybeOf('bili')!.nativeLyrics, isTrue);
     for (final key in musicKeys) {
       expect(BuiltinPlatforms.resolveFor(key), isNull, reason: key);
@@ -115,7 +119,8 @@ void main() {
       expect(capabilities.lyricSearch, isFalse, reason: key);
     }
 
-    // bili 不依赖脚本：搜索 / 播放 / 歌词 / 评论原生可用；专辑/歌手/发现尚未接入。
+    // bili 不依赖脚本：搜索 / 播放 / 歌词 / 评论 / UP / 发现原生可用；
+    // 专辑与按歌词搜歌仍未接入。
     final bili = manager.capabilitiesFor('bili');
     expect(bili.search, isTrue);
     expect(bili.pagination, isTrue);
@@ -124,7 +129,7 @@ void main() {
     expect(bili.lyrics, isTrue);
     expect(bili.comment, isTrue);
     expect(bili.collection, isFalse);
-    expect(bili.artist, isFalse);
+    expect(bili.artist, isTrue);
     expect(bili.lyricSearch, isFalse);
 
     // 非内置平台不应从注册表获得任何内置能力。
