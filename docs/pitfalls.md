@@ -800,20 +800,30 @@
     直接返回。`LocalPlaybackService.toggle()` 因此同时用 `completed` 与
     「位置 ≥ 时长 - 250ms」判定曲末，并在 `_restartFromStart()` 里先 `pause()`
     再 `seek(0)`；回归用例见 `test/playback/local_playback_service_test.dart`。
-78. **Windows/Linux 的 media_kit 自然播完可能整条 completed 不上报，自动切歌
-    必须另有曲末位置兜底**：mpv 到 EOF 后停在 keep-open 状态，
-    `just_audio_media_kit` 是否把事件变成 `ProcessingState.completed` 取决于
-    内部播放列表下标 / `playlistMode` 条件；Windows 上实际出现过整条链路不
-    触发：`processingState` 仍是 ready、just_audio 的 `playing` 仍是 true、
-    位置被插值钳在时长上。表现为「播到最后一秒停住、界面停在旧歌末尾、不自动
-    下一首」（安卓 ExoPlayer 正常，release/debug 一致）。
-    `LocalPlaybackService` 因此只对 Windows/Linux 增加位置兜底：位置流连续两次
-    采样都停在同一个末位（时长 - 250ms 之后且不再前进）即视为播完，走同一条
-    `_handleTrackCompleted` 链路（`trackCompletions` / 定时关闭 / 自动切歌语义
-    不变）；用户主动暂停时 `playing == false`、seek 会在 `_seekPlayer` 里清空
-    采样，都不会误判。自动切歌前还会显式 `pause()`：自然播完后 just_audio 的
-    `playing` 仍为 true，不先暂停的话下一首的 `play()` 会被直接返回（与 #77
-    同源）。回归用例见 `test/playback/local_playback_service_test.dart`。
+78. **Windows/Linux 的 media_kit 播完可能不上报 completed（自然 EOF 或曲末
+    解码错误），自动切歌必须另有兜底**：两种实测形态：
+    ① mpv 到 EOF 后停在 keep-open 状态，`just_audio_media_kit` 是否把事件变成
+    `ProcessingState.completed` 取决于内部播放列表下标 / `playlistMode` 条件；
+    不满足时 `processingState` 仍是 ready、just_audio 的 `playing` 仍为 true、
+    位置被插值钳在时长上。
+    ② **tx / kw 的 FLAC 源文件最后一帧本身损坏**：独立 curl 下载与 App 缓存
+    字节完全一致（`cmp` 无差异），MD5 与 CDN 返回的 `X-COS-META-MD5` 相同，
+    `Content-Length` 也对得上，但 `flac -t` 在结尾报 `LOST_SYNC`——mpv 报
+    `Error decoding audio` 并释放播放器（`processingState` 直接 idle），
+    `completed` 永远不会到达。两种形态的用户表现都是「播到最后一秒停住、
+    界面停在旧歌末尾、不自动下一首」（安卓 ExoPlayer 未表现为停播）。
+    `LocalPlaybackService` 因此只对 Windows/Linux 增加两层兜底：
+    - 位置兜底：位置流连续两次采样都停在同一个末位（时长 - 250ms 之后且不再
+      前进）即视为播完；用户主动暂停时 `playing == false`、seek 会在
+      `_seekPlayer` 里清空采样，都不会误判；
+    - 错误兜底：订阅 `errorStream`，错误发生在「时长 - 3s」之内按自然播完处理
+      （完成事件 / 单曲循环 / 自动下一首 / 定时关闭同一口径），更早的错误仍
+      按播放失败上报。
+    两层都走 `_handleTrackCompleted`。自动切歌前还会显式 `pause()`：自然播完
+    后 just_audio 的 `playing` 仍为 true，不先暂停的话下一首的 `play()` 会被
+    直接返回（与 #77 同源）。**源文件尾部损坏是上游 CDN 的文件问题，不是
+    下载 / 缓存软件写坏**（缓存与独立下载 MD5 一致）；回归用例见
+    `test/playback/local_playback_service_test.dart`。
 79. **只关 `AudioFocusGuard` 不能实现「其他应用出声时继续播放」**：
     `AudioPlayer()` 默认 `handleInterruptions: true`，just_audio 自己也会订阅
     `AudioSession.interruptionEventStream`，焦点丢失时直接 `pause()`。要让设置

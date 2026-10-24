@@ -14,6 +14,8 @@ class _FakeAudioPlayer extends AudioPlayer {
       StreamController<PlayerState>.broadcast();
   final StreamController<Duration> _positions =
       StreamController<Duration>.broadcast();
+  final StreamController<PlayerException> _errors =
+      StreamController<PlayerException>.broadcast();
 
   /// 播放器收到的控制调用（断言顺序 / 是否被误暂停）。
   final List<String> calls = [];
@@ -46,6 +48,9 @@ class _FakeAudioPlayer extends AudioPlayer {
 
   @override
   Stream<Duration> get positionStream => _positions.stream;
+
+  @override
+  Stream<PlayerException> get errorStream => _errors.stream;
 
   @override
   Future<Duration?> setAudioSource(
@@ -101,6 +106,7 @@ class _FakeAudioPlayer extends AudioPlayer {
   Future<void> dispose() async {
     await _playerStates.close();
     await _positions.close();
+    await _errors.close();
   }
 
   /// 模拟自然播完：just_audio 的 playing 在 completed 后仍保持 true。
@@ -114,6 +120,11 @@ class _FakeAudioPlayer extends AudioPlayer {
   void pauseAtEnd() {
     _position = _duration ?? Duration.zero;
     emitState(false, ProcessingState.ready);
+  }
+
+  /// 模拟播放中错误（如曲末 FLAC 尾帧损坏时的 `Error decoding audio`）。
+  void fail(String message) {
+    _errors.add(PlayerException(1, message, null));
   }
 
   /// 模拟 just_audio 在曲末重复采样：playing 仍为 true、状态 ready，
@@ -392,5 +403,66 @@ void main() {
 
     expect(service.currentIndex, 0);
     expect(service.isPlaying, isTrue);
+  });
+
+  test('曲末解码失败按自然播完处理并自动切歌', () async {
+    final (:service, :player) = await start(trackCount: 2);
+    final completions = <String>[];
+    final subscription = service.trackCompletions.listen(
+      (track) => completions.add(track.id),
+    );
+    addTearDown(subscription.cancel);
+
+    // tx / kw 的 FLAC 尾帧损坏：mpv 在距曲末几百毫秒处报解码错误，
+    // processingState 直接 idle，completed 不会到达。
+    player.emitPosition(const Duration(seconds: 29, milliseconds: 700));
+    await pumpEventQueue();
+    player.fail('Error decoding audio');
+    await pumpEventQueue();
+
+    expect(completions, hasLength(1));
+    expect(service.currentIndex, 1);
+    expect(service.isPlaying, isTrue);
+    expect(service.lastError, isNull, reason: '曲末错误按播完处理，不展示为播放失败');
+  });
+
+  test('非曲末的播放错误仍上报失败，不自动切歌', () async {
+    final (:service, :player) = await start(trackCount: 2);
+
+    player.emitPosition(const Duration(seconds: 5));
+    await pumpEventQueue();
+    player.fail('Error decoding audio');
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isFalse);
+    expect(service.lastError, contains('Error decoding audio'));
+  });
+
+  test('顺序播放队尾曲末解码失败停在曲末', () async {
+    final (:service, :player) = await start(mode: PlayMode.sequential);
+
+    player.emitPosition(const Duration(seconds: 29, milliseconds: 800));
+    await pumpEventQueue();
+    player.fail('Error decoding audio');
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isFalse);
+    expect(service.position, const Duration(seconds: 30));
+  });
+
+  test('Android 曲末解码错误仍按错误上报，不做桌面兜底', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final (:service, :player) = await start(trackCount: 2);
+
+    player.emitPosition(const Duration(seconds: 29, milliseconds: 800));
+    await pumpEventQueue();
+    player.fail('Error decoding audio');
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 0);
+    expect(service.isPlaying, isFalse);
+    expect(service.lastError, contains('Error decoding audio'));
   });
 }
