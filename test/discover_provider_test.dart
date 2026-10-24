@@ -126,8 +126,8 @@ void main() {
     final track = (await discover.loadLeaderboardTracks('3778678')).single;
     final playlistTrack = discover.toPlaylistTrack(track);
 
-    expect(await library.addTracksToFavorites([playlistTrack]), 1);
-    expect(await library.addTracksToFavorites([playlistTrack]), 0);
+    expect((await library.addTracksToFavorites([playlistTrack])).changed, 1);
+    expect((await library.addTracksToFavorites([playlistTrack])).changed, 0);
     expect(await repository.favoriteKeys(), contains('wy:111'));
 
     await library.addTracksToHistory([playlistTrack]);

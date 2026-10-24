@@ -193,6 +193,7 @@
   "libraryTabPlaylists": "Playlists",
   "libraryChannelSelect": "Select channel",
   "libraryNoChannels": "All channels are disabled. Enable channels in Source Management.",
+  "libraryLoadFailed": "Couldn't load your library",
   "languageEnglish": "English",
   "languageSimplifiedChinese": "简体中文",
     "noItemsFound": "No items found",

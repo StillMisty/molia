@@ -20,6 +20,7 @@ import '../utils/collection_row_query.dart';
 import '../utils/collection_selection.dart';
 import 'collection_presenter.dart';
 import 'library_collections.dart';
+import 'library_outcome.dart';
 import 'library_provider.dart';
 import 'local_songs_collection.dart';
 
@@ -34,7 +35,11 @@ abstract interface class CollectionLibrary {
   bool get isPlaylistsLoading;
   bool get isHistoryLoading;
 
-  /// 列表曲目的读取视图（未加载 / 加载中 / 已缓存）。
+  /// 列表读取阶段（failed 时页面给重试态）。
+  LibraryReadState get playlistsState;
+  LibraryReadState get historyState;
+
+  /// 列表曲目的读取视图（未加载 / 加载中 / 已缓存 / 失败）。
   PlaylistTracksView playlistTracks(int playlistId);
 
   /// build 期请求加载（provider 内部把通知推迟到微任务）。
@@ -70,6 +75,12 @@ class LibraryCollectionReader implements CollectionLibrary {
 
   @override
   bool get isHistoryLoading => _provider.isHistoryLoading;
+
+  @override
+  LibraryReadState get playlistsState => _provider.playlistsState;
+
+  @override
+  LibraryReadState get historyState => _provider.historyState;
 
   @override
   PlaylistTracksView playlistTracks(int playlistId) =>
@@ -171,7 +182,7 @@ class CollectionSessionInput {
 }
 
 /// 合集视图的加载阶段。
-enum CollectionViewPhase { loading, ready }
+enum CollectionViewPhase { loading, ready, failed }
 
 /// 会话每帧交给页面的一个值：视图 + 加载态 + 排序态。
 class CollectionSessionView {
@@ -180,6 +191,7 @@ class CollectionSessionView {
     required this.phase,
     required this.reorderActive,
     required this.searchOpen,
+    this.error,
   });
 
   final CollectionView view;
@@ -187,7 +199,11 @@ class CollectionSessionView {
   final bool reorderActive;
   final bool searchOpen;
 
+  /// 读取失败的原始异常（只用于诊断；UI 展示 l10n 文案 + 重试）。
+  final Object? error;
+
   bool get isLoading => phase == CollectionViewPhase.loading;
+  bool get hasFailed => phase == CollectionViewPhase.failed;
 }
 
 /// 把「当前合集」的状态机从页面里拿出来：恢复 / 校准 / 模式 / 选择 / 加载
@@ -244,6 +260,9 @@ class CollectionSession extends ChangeNotifier {
   /// 当前滚动键与是否已为它调度过恢复（同一合集只恢复一次）。
   String? _scrollKey;
   bool _scrollReady = false;
+
+  /// 最近一次 sync 解析出的列表 id（失败重试用）。
+  int? _lastPlaylistId;
 
   Future<void>? _restoreFuture;
 
@@ -304,6 +323,7 @@ class CollectionSession extends ChangeNotifier {
     final tracksView = selectedPlaylistId == null
         ? null
         : library.playlistTracks(selectedPlaylistId);
+    _lastPlaylistId = selectedPlaylistId;
 
     if (identity.isLocalSongs) {
       unawaited(_localSongs.sync(_localSongsInput(input)));
@@ -338,9 +358,19 @@ class CollectionSession extends ChangeNotifier {
     final localSongsLoading = identity.isLocalSongs && _localSongs.loading;
     final loading =
         initialLoading || tracksLoading || historyLoading || localSongsLoading;
-
-    final phase =
-        loading ? CollectionViewPhase.loading : CollectionViewPhase.ready;
+    final failure = loading
+        ? null
+        : _readFailure(
+            library: library,
+            identity: identity,
+            selectedPlaylistId: selectedPlaylistId,
+            tracksView: tracksView,
+          );
+    final phase = loading
+        ? CollectionViewPhase.loading
+        : failure != null
+            ? CollectionViewPhase.failed
+            : CollectionViewPhase.ready;
     final reorderActive =
         _reordering && view.isCustom && !_searching && view.visibleCount >= 2;
 
@@ -355,14 +385,91 @@ class CollectionSession extends ChangeNotifier {
       phase: phase,
       reorderActive: reorderActive,
       searchOpen: _searching,
+      error: failure,
     );
   }
 
+  /// 当前合集「没有可显示数据」的读取失败；有旧缓存时仍按 ready 展示
+  /// 旧值（provider 的读取阶段已按此口径收口）。
+  Object? _readFailure({
+    required CollectionLibrary library,
+    required CollectionIdentity identity,
+    required int? selectedPlaylistId,
+    required PlaylistTracksView? tracksView,
+  }) {
+    if (identity.isHistory) {
+      return library.history.isEmpty && library.historyState.isFailed
+          ? library.historyState.error
+          : null;
+    }
+    if (identity.isLocalSongs) {
+      // 本地歌曲以下载 / 导入记录为准，历史缓存行失败不影响列表可用。
+      return null;
+    }
+    // 收藏 / 自建列表都要落库 id 才读得到曲目：取不到说明列表清单本身
+    // 没加载成功（或选中的列表已不存在）。
+    if (selectedPlaylistId == null) {
+      return library.playlistsState.isFailed
+          ? library.playlistsState.error
+          : null;
+    }
+    if (tracksView != null && tracksView.failed) return tracksView.state.error;
+    if (library.playlists.isEmpty && library.playlistsState.isFailed) {
+      return library.playlistsState.error;
+    }
+    return null;
+  }
+
   /// 合集弹层打开前把缓存行重算到当前输入（计数与列表行数同源）。
-  Future<void> ensureLocalSongsReady() {
+  ///
+  /// [downloads] / [cacheRevision] 可传当前帧之外的最新快照：弹层从别的合集
+  /// 打开时页面不一定因下载记录变化重建，计数仍要按最新记录算。
+  Future<void> ensureLocalSongsReady({
+    CollectionDownloads? downloads,
+    int? cacheRevision,
+  }) {
     final input = _lastInput;
     if (input == null) return Future<void>.value();
-    return _localSongs.sync(_localSongsInput(input));
+    final fresh = downloads == null && cacheRevision == null
+        ? input
+        : CollectionSessionInput(
+            library: input.library,
+            names: input.names,
+            query: input.query,
+            downloads: downloads ?? input.downloads,
+            cacheRevision: cacheRevision ?? input.cacheRevision,
+          );
+    return _localSongs.sync(_localSongsInput(fresh));
+  }
+
+  /// 读取失败后的重试：合集清单 / 历史 / 当前列表曲目全部按 force 重查，
+  /// 本地歌曲联结也按当前输入重跑。成功路径由 provider / local songs 的
+  /// 通知驱动页面重建，这里不额外改状态。
+  void retry() {
+    final library = _library;
+    final input = _lastInput;
+    if (_disposed || library == null || input == null) return;
+    library.refreshPlaylists(force: true);
+    library.ensureFavoritesLoaded(force: true);
+    library.refreshHistory(force: true);
+    final playlistId = _lastPlaylistId;
+    if (playlistId != null) {
+      library.ensurePlaylistTracks(playlistId, force: true);
+    }
+    unawaited(_localSongs.sync(_localSongsInput(input)));
+  }
+
+  /// 多选批量写入：成功（含无变化）才清空选择；失败保留选择，交给页面
+  /// 提示并把结果原样返回。
+  Future<LibraryMutationOutcome> applySelection(
+    CollectionView view,
+    Future<LibraryMutationOutcome> Function(List<CollectionRow> rows) write,
+  ) async {
+    final rows = selectedRows(view);
+    if (rows.isEmpty) return const LibraryMutationOutcome.unchanged();
+    final outcome = await write(rows);
+    if (outcome.isSuccess) _selection.clear();
+    return outcome;
   }
 
   /// 切换到指定合集：落盘旧合集滚动位置 → 选集 → 退出搜索/排序编辑态 →
@@ -508,6 +615,9 @@ class CollectionSession extends ChangeNotifier {
   ) {
     if (_calibrated || !_restored) return;
     if (playlists.isEmpty && input.library.isPlaylistsLoading) return;
+    // 列表清单都没读成功：此时「选中列表不存在」是失败造成的假象，
+    // 不能把恢复的选集覆盖成默认值（重试成功后还要按原选集恢复）。
+    if (input.library.playlistsState.isFailed) return;
     if (!input.downloads.initialized) return;
     _calibrated = true;
 

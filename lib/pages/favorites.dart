@@ -15,6 +15,7 @@ import '../providers/collection_presenter.dart';
 import '../providers/collection_session.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_collections.dart';
+import '../providers/library_outcome.dart';
 import '../providers/library_provider.dart';
 import '../providers/local_songs_collection.dart';
 import '../providers/lyrics_provider.dart';
@@ -489,7 +490,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
   ) async {
     final provider = context.read<LibraryProvider>();
     final downloadService = context.read<DownloadService?>();
-    await _session.ensureLocalSongsReady();
+    await _session.ensureLocalSongsReady(
+      downloads: _downloadsSnapshot,
+      cacheRevision: _cacheService?.revision.value ?? -1,
+    );
     if (!mounted) return;
     final outcome = await M3EBottomSheet.show<_PickerOutcome>(
       context,
@@ -601,9 +605,10 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final moved = reordered.removeAt(from);
     reordered.insert(to, moved);
     HapticsService.lightImpact();
-    await context
-        .read<LibraryProvider>()
-        .reorderPlaylistTracks(playlistId, reordered);
+    final provider = context.read<LibraryProvider>();
+    _reportMutation(
+      await provider.reorderPlaylistTracks(playlistId, reordered),
+    );
   }
 
   /// 复制曲目/历史到所选目标（我的收藏 / 播放历史 / 自建列表）。
@@ -748,61 +753,80 @@ class _FavoritesPageState extends State<FavoritesPage> {
       ),
     );
     if (confirmed == true) {
-      await provider.clearHistory();
+      _reportMutation(await provider.clearHistory());
     }
   }
 
   List<CollectionRow> _selectedRows(CollectionView view) =>
       _session.selectedRows(view);
 
+  /// 多选写入的统一收口：会话只在成功时清空选择，失败保留选择并提示。
+  Future<void> _applySelection(
+    CollectionView view,
+    Future<LibraryMutationOutcome> Function(List<CollectionRow> rows) write,
+  ) async {
+    final outcome = await _session.applySelection(view, write);
+    _reportMutation(outcome);
+  }
+
+  /// 写失败提示（原始异常只进日志，界面只说「操作失败」）。
+  void _reportMutation(LibraryMutationOutcome outcome) {
+    if (!outcome.isFailure || !mounted) return;
+    M3ESnackbar.show(context, message: _l10n(context).operationFailed);
+  }
+
+  Future<void> _mutate(Future<LibraryMutationOutcome> Function() write) async {
+    _reportMutation(await write());
+  }
+
   /// 多选收藏 / 取消收藏：三种行统一走行联合的曲目快照与收藏键。
   Future<void> _setSelectedFavorite(
     CollectionView view, {
     required bool favorited,
   }) async {
-    final selected = _selectedRows(view);
-    _session.selection.clear();
-    if (selected.isEmpty) return;
     final provider = context.read<LibraryProvider>();
-    if (favorited) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      await provider.addTracksToFavorites([
-        for (final row in selected) row.toPlaylistTrack(addedAt: now),
+    await _applySelection(view, (rows) {
+      if (favorited) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        return provider.addTracksToFavorites([
+          for (final row in rows) row.toPlaylistTrack(addedAt: now),
+        ]);
+      }
+      return provider.removeTracksFromFavorites([
+        for (final row in rows) row.favoriteKey,
       ]);
-    } else {
-      await provider.removeTracksFromFavorites([
-        for (final row in selected) row.favoriteKey,
-      ]);
-    }
+    });
   }
 
   Future<void> _removeSelectedFromPlaylist(CollectionView view) async {
     final playlistId = view.playlistId;
-    final selected = _selectedRows(view);
-    _session.selection.clear();
-    if (playlistId == null || selected.isEmpty) return;
-    await context.read<LibraryProvider>().removeTracksFromPlaylist(playlistId, [
-      for (final row in selected) (row as TrackCollectionRow).track,
-    ]);
+    if (playlistId == null) return;
+    final provider = context.read<LibraryProvider>();
+    await _applySelection(
+      view,
+      (rows) => provider.removeTracksFromPlaylist(playlistId, [
+        for (final row in rows) (row as TrackCollectionRow).track,
+      ]),
+    );
   }
 
   Future<void> _deleteSelectedHistory(CollectionView view) async {
-    final selected = _selectedRows(view);
-    _session.selection.clear();
-    if (selected.isEmpty) return;
-    await context.read<LibraryProvider>().deleteHistoryEntries([
-      for (final row in selected) (row as HistoryCollectionRow).entry,
-    ]);
+    final provider = context.read<LibraryProvider>();
+    await _applySelection(
+      view,
+      (rows) => provider.deleteHistoryEntries([
+        for (final row in rows) (row as HistoryCollectionRow).entry,
+      ]),
+    );
   }
 
   /// 本地歌曲多选删除：下载副本删文件、导入项只移除记录、缓存行清缓存
-  /// （统一确认一次）。
+  /// （统一确认一次；全部处理完才清空选择）。
   Future<void> _deleteSelectedLocalSongs(CollectionView view) async {
     final selected = [
       for (final row in _selectedRows(view))
         (row as LocalSongCollectionRow).song,
     ];
-    _session.selection.clear();
     if (selected.isEmpty) return;
     final service = context.read<DownloadService?>();
     if (service == null) return;
@@ -815,6 +839,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         await service.delete(song.record!);
       }
     }
+    if (mounted) _session.selection.clear();
   }
 
   /// 删除确认：按选中项构成给文案（全导入 = 只移出列表；全缓存 = 清缓存；
@@ -932,13 +957,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
         Expanded(
           child: sessionView.isLoading
               ? const Center(child: M3ELoadingIndicator())
-              : _buildBody(
-                  context,
-                  l10n,
-                  provider,
-                  view,
-                  reorderActive: reorderActive,
-                ),
+              : sessionView.hasFailed
+                  ? _buildReadFailed(context, l10n)
+                  : _buildBody(
+                      context,
+                      l10n,
+                      provider,
+                      view,
+                      reorderActive: reorderActive,
+                    ),
         ),
       ],
     );
@@ -961,6 +988,23 @@ class _FavoritesPageState extends State<FavoritesPage> {
         pageType: ResponsivePageType.browse,
         alignment: Alignment.topCenter,
         child: listColumn,
+      ),
+    );
+  }
+
+  /// 资料库读取失败：给出错误 + 重试，而不是把失败伪装成空资料库。
+  Widget _buildReadFailed(BuildContext context, AppLocalizations l10n) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.libraryLoadFailed, style: context.typeScale.bodyLarge),
+          const SizedBox(height: 12),
+          M3EButton.filled(
+            onPressed: _session.retry,
+            child: Text(l10n.retryButton),
+          ),
+        ],
       ),
     );
   }
@@ -1536,12 +1580,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
             lyricsProvider: context.read<LyricsProvider>(),
             playlistId: view.playlistId,
           ),
-          onRemoveFromPlaylist: () => provider.removeTracksFromPlaylist(
-            view.playlistId!,
-            [track],
+          onRemoveFromPlaylist: () => _mutate(
+            () => provider.removeTracksFromPlaylist(view.playlistId!, [track]),
           ),
-          onRemoveFromFavorites: () =>
-              provider.removeTracksFromFavorites([row.favoriteKey]),
+          onRemoveFromFavorites: () => _mutate(
+            () => provider.removeTracksFromFavorites([row.favoriteKey]),
+          ),
         );
       case HistoryCollectionRow(:final entry):
         return CollectionRowActionWiring(
@@ -1553,7 +1597,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
             lyricsProvider: context.read<LyricsProvider>(),
             historyKey: (sourceKey: entry.sourceKey, songId: entry.songId),
           ),
-          onDeleteHistory: () => provider.deleteHistoryEntry(entry),
+          onDeleteHistory: () =>
+              _mutate(() => provider.deleteHistoryEntry(entry)),
         );
       case LocalSongCollectionRow(:final song):
         final favorite = song.favoriteKey;
@@ -1564,9 +1609,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
             );
         return CollectionRowActionWiring(
           onCopy: () => _copyToPlaylist(tracks: [playable()]),
-          onToggleFavorite: () => isFavorite
-              ? provider.removeTracksFromFavorites([favorite])
-              : provider.addTracksToFavorites([playable()]),
+          onToggleFavorite: () => _mutate(
+            () => isFavorite
+                ? provider.removeTracksFromFavorites([favorite])
+                : provider.addTracksToFavorites([playable()]),
+          ),
           onDeleteLocalSong: () async {
             final service = context.read<DownloadService?>();
             if (service == null) return;

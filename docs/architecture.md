@@ -562,8 +562,10 @@
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
   每帧只把资料库窄端口 + 下载 / 缓存快照交给会话，消费一个
-  `CollectionSessionView`（视图 + loading / ready），不在 build 里做 post-frame
-  校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。
+  `CollectionSessionView`（视图 + loading / ready / failed），不在 build 里做
+  post-frame 校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。资料库读取
+  阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
+  读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
 
 ### 本地下载（downloads）
 

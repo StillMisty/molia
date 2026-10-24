@@ -1,8 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/collection_session.dart';
 import 'package:molia/providers/library_collections.dart';
+import 'package:molia/providers/library_outcome.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/utils/collection_row_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,8 +23,13 @@ class _FakeLibrary implements CollectionLibrary {
   List<PlayHistoryEntry> history;
   final Map<int, List<PlaylistTrack>> tracks;
   final Set<int> loadingTracks = {};
+  final Set<int> failedTracks = {};
   bool playlistsLoading = false;
   bool historyLoading = false;
+  @override
+  LibraryReadState playlistsState = const LibraryReadState.ready();
+  @override
+  LibraryReadState historyState = const LibraryReadState.ready();
 
   int refreshPlaylistsCalls = 0;
   int ensureFavoritesCalls = 0;
@@ -39,7 +46,12 @@ class _FakeLibrary implements CollectionLibrary {
   @override
   PlaylistTracksView playlistTracks(int playlistId) => PlaylistTracksView(
         tracks: tracks[playlistId],
-        loading: loadingTracks.contains(playlistId),
+        state: failedTracks.contains(playlistId)
+            ? LibraryReadState.failed(StateError('tracks read failed'))
+            : loadingTracks.contains(playlistId) ||
+                    !tracks.containsKey(playlistId)
+                ? const LibraryReadState.loading()
+                : const LibraryReadState.ready(),
       );
 
   @override
@@ -454,6 +466,31 @@ void main() {
       expect(view.phase, CollectionViewPhase.ready);
     });
 
+    test('本地歌曲：弹层计数可按最新下载快照重算', () async {
+      final library = _FakeLibrary(playlists: [favorites()]);
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+      session.sync(inputFor(library));
+      expect(session.localSongsCount, 0);
+
+      final downloads = CollectionDownloads(
+        records: [
+          DownloadedTrack(
+            originSourceKey: 'wy',
+            originSongId: '1',
+            title: '下载 1',
+            filePath: '/downloads/1.mp3',
+            downloadedAt: 1,
+          ),
+        ],
+        supported: true,
+        initialized: true,
+      );
+      await session.ensureLocalSongsReady(downloads: downloads);
+      expect(session.localSongsCount, 1);
+    });
+
     test('本地歌曲：能力未初始化 / 缓存联结在途时 loading，落定后 ready', () async {
       final library = _FakeLibrary(playlists: [favorites()]);
       final session = buildSession();
@@ -547,6 +584,138 @@ void main() {
         LibraryCollections.playlistOrderKey(2),
       ]);
       expect(queue.restores.last, LibraryCollections.playlistOrderKey(2));
+    });
+  });
+
+  group('读取失败与重试', () {
+    test('列表清单读取失败 → failed；重试成功后 ready 且沿用原选集', () async {
+      SharedPreferences.setMockInitialValues({
+        LibraryCollections.selectionKey: 2,
+      });
+      final library = _FakeLibrary(
+        playlists: const [],
+        tracks: {},
+      )..playlistsState = LibraryReadState.failed(StateError('read'));
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+
+      var view = session.sync(inputFor(library));
+      expect(view.phase, CollectionViewPhase.failed);
+      expect(view.error, isNotNull);
+      expect(
+        view.view.selectedId,
+        LibraryCollections.favoritesSentinel,
+        reason: '读不到列表时不把恢复的选集覆盖成默认值',
+      );
+
+      // 重试成功：列表到位，恢复的选集仍指向 2。
+      library
+        ..playlistsState = const LibraryReadState.ready()
+        ..playlists = [favorites(), playlist(2, trackCount: 1)]
+        ..tracks[2] = [track('b')];
+      session.retry();
+      view = session.sync(inputFor(library));
+      expect(view.phase, CollectionViewPhase.ready);
+      expect(view.view.selectedId, 2);
+      expect(view.view.visibleRows.single.key, 'wy:b');
+    });
+
+    test('列表曲目读取失败 → failed；force 重试后 ready', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 1)],
+        tracks: {
+          1: [track('a')],
+        },
+      )..failedTracks.add(1);
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+
+      var view = session.sync(inputFor(library));
+      expect(view.phase, CollectionViewPhase.failed);
+
+      library.failedTracks.remove(1);
+      session.retry();
+      view = session.sync(inputFor(library));
+      expect(view.phase, CollectionViewPhase.ready);
+      expect(view.view.visibleRows.single.key, 'wy:a');
+    });
+
+    test('历史读取失败且无缓存 → failed；重试后 ready', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites()],
+      )..historyState = LibraryReadState.failed(StateError('read'));
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+      session.sync(inputFor(library));
+      session.selectCollection(LibraryCollections.historySentinel);
+
+      var view = session.sync(inputFor(library));
+      expect(view.phase, CollectionViewPhase.failed);
+
+      library
+        ..historyState = const LibraryReadState.ready()
+        ..history = [history('1')];
+      session.retry();
+      view = session.sync(inputFor(library));
+      expect(view.phase, CollectionViewPhase.ready);
+      expect(view.view.visibleCount, 1);
+    });
+  });
+
+  group('批量写入结果', () {
+    test('失败保留选择，成功才清空', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 2)],
+        tracks: {
+          1: [track('a'), track('b')],
+        },
+      );
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+      final view = session.sync(inputFor(library)).view;
+      session.selection.selectAll(['wy:a', 'wy:b']);
+
+      var received = const <String>[];
+      final failed = await session.applySelection(view, (rows) async {
+        received = [for (final row in rows) row.key];
+        return LibraryMutationOutcome.failed(StateError('write'));
+      });
+      expect(failed.isFailure, isTrue);
+      expect(received, ['wy:a', 'wy:b']);
+      expect(session.selection.selectedCount, 2, reason: '写失败不能清选择');
+
+      final applied = await session.applySelection(
+        view,
+        (rows) async => LibraryMutationOutcome.applied(rows.length),
+      );
+      expect(applied.isSuccess, isTrue);
+      expect(applied.changed, 2);
+      expect(session.selection.isSelecting, isFalse);
+    });
+
+    test('空选择不触发写入', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 1)],
+        tracks: {
+          1: [track('a')],
+        },
+      );
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+      final view = session.sync(inputFor(library)).view;
+
+      var called = false;
+      final outcome = await session.applySelection(view, (rows) async {
+        called = true;
+        return LibraryMutationOutcome.applied(rows.length);
+      });
+      expect(outcome.status, LibraryMutationStatus.unchanged);
+      expect(called, isFalse);
     });
   });
 

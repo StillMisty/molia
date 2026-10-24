@@ -447,6 +447,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryNoChannels => '所有渠道都已停用，请在「音源管理」中启用渠道。';
 
   @override
+  String get libraryLoadFailed => '资料库加载失败';
+
+  @override
   String get languageEnglish => 'English';
 
   @override

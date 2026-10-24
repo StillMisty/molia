@@ -16,9 +16,13 @@ import 'package:molia/domain/ports/library_store.dart';
 /// 只实现 UI 面窄 port（[LibraryStore]）而不是继承真类：同步面（墓碑 / 列名）
 /// 与本假实现无关，新方法也不会静默走真实 SQL。
 class FakeLibraryRepository implements LibraryStore {
-
   /// 与实现一致的收藏保留行名（假实现自持，不依赖实现私有常量）。
   static const String _favoritesName = '__favorites__';
+
+  /// 读取 / 收藏写入失败注入（收藏页失败态与批量写失败用例）。
+  /// 默认关闭：其余用例行为不变。
+  bool failReads = false;
+  bool failFavoriteWrites = false;
 
   /// sync: true —— 变更事件在写入调用栈内同步派发，provider 的重载
   /// Future 在 widget 测试的 fake-async 区内正常完成（否则跨 zone 挂起）。
@@ -50,13 +54,14 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<List<PlayHistoryEntry>> listHistory(
-          {int limit = kHistoryLimit}) async =>
-      _history.take(limit).toList();
+      {int limit = kHistoryLimit}) async {
+    if (failReads) throw StateError('history read failed');
+    return _history.take(limit).toList();
+  }
 
   @override
   Future<void> deleteHistoryEntry(String sourceKey, String songId) async {
-    _history
-        .removeWhere((e) => e.sourceKey == sourceKey && e.songId == songId);
+    _history.removeWhere((e) => e.sourceKey == sourceKey && e.songId == songId);
     _changed(const LibraryChange.history());
   }
 
@@ -121,8 +126,10 @@ class FakeLibraryRepository implements LibraryStore {
   Future<PlaylistInfo?> playlistById(int id) async => _playlists[id];
 
   @override
-  Future<List<PlaylistInfo>> listPlaylists() async =>
-      _playlists.values.toList();
+  Future<List<PlaylistInfo>> listPlaylists() async {
+    if (failReads) throw StateError('playlists read failed');
+    return _playlists.values.toList();
+  }
 
   @override
   Future<void> renamePlaylist(int id, String name) async {
@@ -150,6 +157,7 @@ class FakeLibraryRepository implements LibraryStore {
     int playlistId, {
     int? limit,
   }) async {
+    if (failReads) throw StateError('tracks read failed');
     final tracks = _tracks[playlistId] ?? const <PlaylistTrack>[];
     return List.of(limit == null ? tracks : tracks.take(limit));
   }
@@ -161,8 +169,8 @@ class FakeLibraryRepository implements LibraryStore {
     bool favoriteChange = false,
   }) async {
     final list = _tracks.putIfAbsent(playlistId, () => []);
-    final exists = list.any(
-        (t) => t.sourceKey == track.sourceKey && t.songId == track.songId);
+    final exists = list
+        .any((t) => t.sourceKey == track.sourceKey && t.songId == track.songId);
     if (exists) return false;
     list.add(track);
     _syncTrackCount(playlistId);
@@ -379,7 +387,10 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
-  Future<Set<String>> favoriteKeys() async => Set.of(_favorites);
+  Future<Set<String>> favoriteKeys() async {
+    if (failReads) throw StateError('favorites read failed');
+    return Set.of(_favorites);
+  }
 
   @override
   Future<bool> toggleFavorite({
@@ -431,6 +442,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<int> addFavorites(List<PlaylistTrack> tracks) async {
+    if (failFavoriteWrites) throw StateError('favorites write failed');
     if (tracks.isEmpty) return 0;
     final favoritesId = await _ensureFavoritesPlaylist();
     for (final track in tracks) {
@@ -445,6 +457,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<int> removeFavorites(List<TrackKey> keys) async {
+    if (failFavoriteWrites) throw StateError('favorites write failed');
     if (keys.isEmpty) return 0;
     final favorites = await findPlaylistByName(_favoritesName);
     if (favorites == null) return 0;
