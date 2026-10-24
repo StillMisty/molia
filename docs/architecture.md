@@ -56,6 +56,8 @@
 - **模型**（不可变 + 可靠 `==`）：
   - `Track` / `TrackId(sourceKey,id)` / `Artist` / `Artwork` / `AudioQuality`；
     `Track.payload` 承载源脚本原始对象（原 `SourceTrack.raw`），**只在 data/sources 传递、必须原样回传**；
+    raw 的平台 id 取键（含 B 站 `bvid` 优先、`aid` 兜底）统一在
+    `lib/sources/raw_track.dart`；
   - `PlaybackSnapshot` / `BackendSnapshot` / `PlaybackRequest` / `PlaybackContext`；
     `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定，
     列表循环队尾回绕），`previous` 是实际播放顺序最近一首（无则队列前一位，
@@ -67,7 +69,8 @@
   - `ArtistSummary` / `ArtistDetail`（歌手搜索条目 / 歌手页数据：头像、简介、曲目、分页）；
   - `LyricHit`（按歌词搜歌命中：领域 `Track` + 命中片段）；`SearchKind`（song / artist / lyric）；
   - `SourceDescriptor` / `SourceCapabilities`。
-- **端口**：`MusicSource`（search/resolve/lyrics/artwork/comments/collection/searchArtists/searchLyrics）、`SourceRegistry`
+- **端口**：`MusicSource`（search / `resolve`（返回 `PlayableStream`：uri + 请求头 +
+  有效期）/ lyrics / artwork / comments / collection / searchArtists / searchLyrics）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackBackend`（state ValueListenable +
   load/play/pause/seek/next/previous/setMode/stop）、`PlaybackFacade`（snapshot + position +
   控制方法）、`UiMessenger`（showMessage/showFailure）、`StateListenable<T>`。
@@ -79,7 +82,9 @@
   `CatalogService` 提供 `search`（缓存 5min）、`searchArtists` / `searchLyrics`
   （同一 5min 缓存实例，key=`search:{source}:artist|lyric:{keyword}:{page}:{limit}`，
   前缀失效与单曲搜索共用）与 `resolve`（缓存 10min，key=`url:{source}:{md5(canonical payload)}:{quality}`，
-  失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`。
+  失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`；
+  `resolve` 返回 `PlayableStream`（uri + headers + expiresIn），B 站等需要
+  `Referer` / UA 的平台由这一层原样保留请求头。
 - **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照；
   播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供快照 `previous`）；
   `DefaultPlaybackFacade` 合并快照通知（`==` 去重）、把进度拆到独立 `position`
@@ -166,7 +171,8 @@
   `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
   （兼容 1–3 位分钟与行内多标签）。
   **取词顺序**：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 `lyric` action →
-  any-listen → 内置五平台原生实现，用曲目 raw 的精确平台 ID）→ 跨平台名字搜索回退
+  any-listen → 内置平台原生实现（五个音乐平台 + B 站 CC 字幕），用曲目 raw 的
+  精确平台 ID）→ 跨平台名字搜索回退
   （netease / qq / kugou / kuwo / migu / lrclib 并行，**首个非空即返回**，并经
   时长 ±5s + 歌名/歌手/版本词相似度挑选）。`lxlyric` 的 `<相对ms,时长ms>` 经
   `attachWordTimings` 对齐到主行（`LyricLine.words`），歌词页当前行用
@@ -188,17 +194,19 @@
 - **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
   唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
   失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`
-  （能力位 `capabilities.comment`：仅内置五平台）→ `SourceManager.fetchComments`
-  → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart`（移植 LX：热门 / 最新、分页、
-  表情还原、引用 / 楼中楼归一化）。页面状态在 `CommentsProvider`（热门 / 最新两个 tab
+  （能力位 `capabilities.comment`：五个音乐平台 + B 站视频）→ `SourceManager.fetchComments`
+  → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart` + `bili_comment.dart`
+  （移植 LX：热门 / 最新、分页、表情还原、引用 / 楼中楼归一化；B 站用
+  `pagination_str` 游标，缺 `is_end` 时按下一页游标决定 `hasMore`）。
+  页面状态在 `CommentsProvider`（热门 / 最新两个 tab
   懒加载 + 分页 + 错误归一化），UI 为 `lib/pages/song_comments_page.dart` +
   `lib/widgets/comment_list_view.dart`；入口：歌曲信息页「评论」行（能力位判定唯一
   来源 `CommentsProvider.supports`，不支持时行内说明；展开态播放器进度排不再放入口）。
 - **专辑**：`AlbumService`（`lib/data/catalog/album_service.dart`）是专辑分页的唯一取数
   入口（single-flight + LRU + TTL 10min，key=`album:{source}:{id}:{page}:{limit}`，
   失败不缓存，`invalidateAlbum` 供重试）；取数函数由组合根注入
-  `SourceManager.fetchAlbum`（能力位 `capabilities.collection`：仅内置五平台置真，
-  LX 脚本 / any-listen / local 为假）→ `lib/sources/builtin/{wy,tx,kg,kw,mg}_album.dart`
+  `SourceManager.fetchAlbum`（能力位 `capabilities.collection`：仅内置音乐五平台置真，
+  B 站无专辑、LX 脚本 / any-listen / local 为假）→ `lib/sources/builtin/{wy,tx,kg,kw,mg}_album.dart`
   按专辑 id 精确拉取（wy `api/v1/album`、tx `music.musichallAlbum.AlbumSongList` 模块、
   kg `album/song` + `album/info`、kw `r.s stype=albuminfo`、mg `queryAlbumSong` +
   `MIGUM3.0/resource/album`），解析直接产出领域 `Album`（曲目 payload 经 track_mapper
@@ -236,6 +244,11 @@
   在返回前 await `PlaybackSessionStore.pendingWrite`；不再由 handler 回填落盘回调；
   停止先落盘再清空队列），保证
   「系统暂停 → 冷启动」能恢复上一首 + 队列 + 模式 + 进度且不自动起播。
+- **流请求头（PlayableStream.headers）**：`SourceManagerMusicSource.resolve` 把取链结果
+  （uri + headers + expiresIn）原样返回；`LocalPlaybackService` 同时传给
+  `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` /
+  `AudioPredownloader` / 桌面 `PlayingTrackCacheWriter` / 下载复用同一份 headers。
+  B 站直链缺 `Referer` + 浏览器 UA 会直接 403；这是全路径契约，不能在中间层只留 URL。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
   封面省流」策略与 connectivity_plus 网络探测；仅在移动数据（`active`）时生效：
@@ -458,20 +471,35 @@
 - **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
   注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
   处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
+- **内置发现**：`lib/sources/builtin/discover_source.dart` 的渠道与能力位从
+  `BuiltinPlatforms.discoverSources` 派生（六平台同一份注册表）。B 站
+  （`bili_discover.dart`）只有音乐榜（`bili__music_3d` / bangid `3:3`）+ 热搜 +
+  收藏夹详情：`supportsPlaylists` / `supportsPlaylistSearch` 恒为 false（UI 隐藏
+  歌单 tab），`playlistDetail` 接受收藏夹链接 / ID 并按 `media_count` 拉全。
 - **Mapping**：`track_mapper`（`SourceTrack` ↔ `Track`，payload 同一引用往返）。
 - **内置平台**：搜索/发现共用 `BuiltinSearch.transport`
   （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时、
   响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
   TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
-  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图的内置派发（五平台 switch
+  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图的内置派发（内置平台 switch
   + 结果缓存）同样收在同目录 `builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`；渠道偏好（音质 / 顺序 / 停用）在
   `lib/sources/source_preferences.dart`，`SourceManager` 同名方法为其委托。
 - **内置平台注册表**：`lib/sources/builtin/builtin_platforms.dart` 的
-  `BuiltinPlatforms` 是五平台 × 能力族的唯一声明（规范键、展示名、搜索候选
-  排序位、类型化适配器：搜索 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）；能力位
-  由适配器是否存在推导，各 facade 与 `SourceManager.capabilitiesFor` 消费同一条目，
-  新增平台只改这一处（不再维护七份 `supportedKeys` 与 switch）。
+  `BuiltinPlatforms` 是六平台 × 能力族的唯一声明（规范键 `wy / tx / kg / kw / mg / bili`、
+  展示名、搜索候选排序位、类型化适配器：搜索 / 原生取链 / 歌词搜索 / 评论 / 专辑 /
+  歌手 / 发现）；能力位由适配器是否存在推导，各 facade 与
+  `SourceManager.capabilitiesFor` 消费同一条目，新增平台只改这一处（不再维护七份
+  `supportedKeys` 与 switch）。B 站只注册搜索 / 原生取链 / 评论 / 歌手 / 发现
+  （无专辑、无按歌词搜歌）；`SourceManager._isBuiltinSearchable` 对「有原生取链
+  适配器」的平台（目前只有 bili）不再要求脚本。
+- **B 站音源（bili）**：`bili_api.dart` 是匿名会话唯一入口（buvid3/4 + WBI
+  mixinKey，1 小时缓存 + single-flight，`-403/-412` 刷新重试）；`bili_search` /
+  `bili_play` / `bili_lyric` / `bili_comment` / `bili_artist` / `bili_ranking` /
+  `bili_favorites` / `bili_discover` 分别覆盖全站视频搜索、原生取链（dash 192k/128k/64k
+  + `durl` 回退）、CC 字幕歌词、游标评论、UP 主页、音乐榜 / 热搜与公开收藏夹导入。
+  取链返回 `PlayableStream(headers: UA + Referer, expiresIn: deadline)`；
+  收藏夹按 `media_count` 拉全（上限 50 页 / 1000 条）。决策与边界见 ADR-0014。
 - **内置尝试循环 / 发现执行器**：`builtin_transport.dart::runBuiltinAttempts` 是
   「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
   `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名
@@ -479,23 +507,26 @@
   `discover_runner.dart::runDiscoverCall` 是发现端点的唯一执行入口：`DiscoverCall`
   描述缓存键 / 预算 / 请求 / 无效判定 / 解析（或多步尝试），有 key 走
   `cachedRetry`、无 key 走共享尝试循环；平台文件只保留 URL / 参数 / parser。
-- **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个平台
-  搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一各写一次；
+- **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是内置平台
+  搜索的执行骨架（`runBuiltinSearch`，五个音乐平台 + B 站原生搜索共用）：
+  重试预算、分页推断与失败归一各写一次；
   平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）
   收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：
   **平台返回空** → 正常结果（`tracks` 为空、`failure` 空）；**业务拒绝 / 传输失败**
   → `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常；UI 收口前
   只读 `tracks`）。内置平台「可搜索」的判定唯一来源是
   `SourceManager._isBuiltinSearchable`（channels 候选、能力位与搜索路由共用）。
-- **内置歌手 / 歌词检索**：歌手（`builtin/artist_source.dart` + `*_artist.dart`）与
-  按歌词搜歌（`builtin/lyric_search.dart` + `*_lyric_search.dart`）与专辑同构——
+- **内置歌手 / 歌词检索**：歌手（`builtin/artist_source.dart` + `*_artist.dart`，
+  含 B 站 UP：`bili_artist.dart`）与按歌词搜歌
+  （`builtin/lyric_search.dart` + `*_lyric_search.dart`；B 站没有该能力）与专辑同构——
   平台适配器只留 URL / 签名与 parser，解析直接产出领域模型；失败语义为
   **业务拒绝抛 `SourceFailure`**（`builtinPlatformFailure`，与 `SourceSearchResult.failed`
   的「静默空结果」区分），在 `SourceManager` / data 层边界归一化。
   歌手 id 与曲目 payload 同体系：解析时把 `_artists`（项目内部字段）写进 raw，
   `track_mapper` 填 `Track.artists[].id`，UI 只读领域模型即可跳歌手页。
   平台降级（写进各实现注释）：kg 歌手搜索无分页、tx 歌手歌曲单页、
-  mg 歌手详情无简介、kw 歌词搜索为模糊匹配、mg 歌词排序偏翻唱。
+  mg 歌手详情无简介、kw 歌词搜索为模糊匹配、mg 歌词排序偏翻唱；
+  B 站空间投稿风控（`-352` / 空 `vlist` + `count>0`）回退全站视频搜索并按 mid 过滤。
 - **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
   入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；
@@ -588,6 +619,12 @@
   直接按它重算本地歌曲，不再依赖「先 sync 一次」的隐藏调用顺序。资料库读取
   阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
   读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
+- **链接导入**：收藏页合集弹层的「导入收藏」有文件 / 链接两条路径；链接路径
+  `showLinkImportDialog` 的平台列表来自 `BuiltinPlatforms.discoverSources`
+  （六平台），`DiscoverProvider.playlistDetail` 拉详情后写入本地列表。
+  B 站收藏夹由 `bili_favorites.dart` 解析数字 / `fid` / `media_id` / `ml<id>` /
+  `space...favlist` / `b23.tv` 短链并按 `media_count` 全量拉取（上限 50 页 /
+  1000 条），只收公开视频；私密 / 失效收藏夹归一为 `notFound`。
 
 ### 本地下载（downloads）
 
@@ -600,7 +637,7 @@
   `lib/services/download/download_file_layout.dart`（命名 / 放置：文件名模板 →
   基名 → sanitize → 磁盘与记录双重查重的 ` (2)` 去重 → 音频 / `.part` /
   `lyrics/` + `.t.lrc` 翻译边车 / `covers/` 路径约定与 sidecar 写入回滚 →
-  扩展名推断 → 记录引用文件集，删除 / 失败清理 / 孤儿判定共用）、
+  扩展名推断（B 站 `.m4s` 音频归一为 `.m4a`） → 记录引用文件集，删除 / 失败清理 / 孤儿判定共用）、
   `lib/services/download/download_record_assembler.dart`（记录装配：部分状态 →
   `DownloadedTrack` 16 字段的唯一装配点，五种形态各一个意图方法）、
   `lib/services/download/download_notification_presenter.dart`（通知 presenter：
@@ -684,10 +721,10 @@
   装饰（`DownloadService.localUriFor`：下载记录 → 完整缓存 → `file://`），
   未命中回落 `CatalogService.resolve`，取链缓存策略不变；
 - **缓存写入分平台**（ADR-0008）：移动端由 just_audio 的
-  `LockCachingAudioSource` 边播边写（`platformSupportsAudioCaching`）；桌面
-  media_kit 后端不能走 `StreamAudioSource`，改由 `PlayingTrackCacheWriter`
-  起播后后台下载当前曲目字节（`.predl` → 原子改名 → LRU，
-  `platformSupportsAudioPrefetch`），重播即命中 `file://`；两者互斥
+  `LockCachingAudioSource` 边播边写（`platformSupportsAudioCaching`，写入请求带
+  取链 headers）；桌面 media_kit 后端不能走 `StreamAudioSource`，改由
+  `PlayingTrackCacheWriter` 起播后带 headers 后台下载当前曲目字节（`.predl` →
+  原子改名 → LRU，`platformSupportsAudioPrefetch`），重播即命中 `file://`；两者互斥
   （同一文件不双写），切歌 / 停止 / 销毁取消；省流生效时两侧都跳过；
 - **离线播放**：封面走本地文件（`AppNetworkImage` / `ArtworkCache` 对
   `file://` 走 `FileImage`）；歌词由组合根的歌词加载器读

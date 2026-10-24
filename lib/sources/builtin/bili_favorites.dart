@@ -109,16 +109,19 @@ class BiliFavorites {
           message: 'bili: 收藏夹响应结构不符',
         );
       }
+      // 私密 / 已删除收藏夹没有 info（平台仍回 code=0）。真实响应通常每页
+      // 都带 info，但没有必要依赖：第一页拿到后就够构造详情，后续页缺 info
+      // 不应让整份导入失败。
       final rawInfo = data['info'];
-      // 私密 / 已删除收藏夹没有 info（平台仍回 code=0）。
-      if (rawInfo is! Map) {
+      if (rawInfo is Map) {
+        info ??= rawInfo;
+      } else if (info == null) {
         throw const SourceFailure(
           kind: FailureKind.notFound,
           message: 'bili: 收藏夹不存在或不可见',
           retryable: false,
         );
       }
-      info ??= rawInfo;
 
       final medias = data['medias'];
       if (medias is List) {
@@ -297,6 +300,11 @@ class BiliFavorites {
 
   /// 跟随 b23 短链。真实 adapter 会自己跟随并给出 `realUri`；测试替身
   /// 只回 302 时再按 Location 手动跟一跳。
+  ///
+  /// 短链目标是普通 HTML 页（体积不小），这里只关心状态码 / Location，
+  /// 用 `bytes` 让 dio 读完即释放，避免 `stream` 响应体无人关闭泄漏连接。
+  /// 请求头与 B 站 API 一致：浏览器 UA + Referer，短链服务对匿名脚本 UA 会
+  /// 返回验证页而不是跳转。
   static Future<Uri?> _resolveShortLink(Uri uri) async {
     var current = uri;
     try {
@@ -306,10 +314,14 @@ class BiliFavorites {
               current,
               options: Options(
                 method: 'GET',
-                headers: BuiltinSearch.defaultHeaders,
+                headers: const {
+                  'User-Agent': BiliApi.browserUserAgent,
+                  'Referer': BiliApi.referer,
+                  'Accept': 'text/html,application/xhtml+xml',
+                },
                 followRedirects: true,
                 maxRedirects: 5,
-                responseType: ResponseType.stream,
+                responseType: ResponseType.bytes,
               ),
             )
             .timeout(BuiltinSearch.defaultTimeout);

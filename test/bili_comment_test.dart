@@ -210,6 +210,30 @@ void main() {
     expect(page.total, 1);
   });
 
+  test('成功响应缺少 cursor / is_end：默认无下一页，避免分页死循环', () async {
+    install((options) async {
+      return textResponse(
+        jsonEncode({
+          'code': 0,
+          'data': {
+            'replies': [
+              {
+                'rpid': 6,
+                'content': {'message': '没有游标'},
+                'member': {'uname': 'A'},
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    final page = await BiliComment.fetch('1', kind: CommentKind.hot);
+    expect(page.items.single.text, '没有游标');
+    expect(page.hasMore, isFalse);
+    expect(BiliComment.cursorStore.read('bili:1:hot', 2), isNull);
+  });
+
   test('code 12002 → SourceFailure(unknown, retryable)', () async {
     install((options) async {
       return textResponse(jsonEncode({'code': 12002, 'message': '禁止'}));

@@ -40,7 +40,7 @@ Molia 当前只有在播放页内渲染的滚动歌词。桌面悬浮歌词、�
 | 播放进度 | `PlaybackProvider.position`（`ValueListenable<Duration>`，≤4Hz，独立通道） | 输出调度订阅它；无输出启用时不订阅。 |
 | 播放状态 | `PlaybackProvider.snapshot`（`PlaybackSnapshot`，低频通知） | 用于曲目变化、播放/暂停、seek 后重算。 |
 | 歌词会话 | `LyricsProvider`（`LyricsState`：`trackId/status/lines/isSynced/providerName`） | 新增翻译/罗马音字段；曲目变化统一由组合根调 `ensureForTrack`（页面是否打开、输出是否启用都加载），空结果允许一次自动重试。 |
-| 取词 | `LyricsService`：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 / any-listen / 内置五平台）→ 名字搜索（netease/qq/kugou/kuwo/migu/lrclib，首个非空即返回） | 结构化返回（原文 + 翻译 + 罗马音 + 逐字），缓存兼容；v2 起平台原生优先。 |
+| 取词 | `LyricsService`：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 / any-listen / 内置平台（五个音乐平台 + B 站 CC 字幕））→ 名字搜索（netease/qq/kugou/kuwo/migu/lrclib，首个非空即返回） | 结构化返回（原文 + 翻译 + 罗马音 + 逐字），缓存兼容；v2 起平台原生优先。 |
 | 系统媒体会话 | `LocalAudioHandler`（flutter_media_session / Linux MPRIS，Android/iOS/macOS/Windows/Linux） | 增加元数据覆盖（歌词行），不改 `LocalPlaybackService`；后端可注入（见 ADR-0010）。 |
 | 设置持久化 | `DataSaverService`（SharedPreferences + ChangeNotifier）为范本 | 新 `LyricsDisplaySettings` 同模式，单 JSON 键 + 版本号。 |
 | 分层约束 | `test/architecture/layering_test.dart` R1–R5 | 新代码放 `lib/services/`、`lib/providers/`，不新增违规。 |

@@ -1,6 +1,7 @@
 # AGENTS.md
 
-**Molia** 是 Flutter 音乐播放器：LX 音源脚本 + 五平台内置搜索/发现、本地与网络播放
+**Molia** 是 Flutter 音乐播放器：LX 音源脚本 + 六平台内置搜索/发现（五个音乐平台 +
+哔哩哔哩）、本地与网络播放
 （桌面 media_kit/libmpv）、歌词（含桌面歌词与海报）、省流模式、AI 推歌（可选）、跨设备同步
 （WebDAV / 局域网，可选）。目前处于内部快速迭代状态，明确不兼容任何历史数据与协议。
 完整术语与能力地图见 `GLOSSARY.md`。
@@ -54,6 +55,8 @@ sources/playback。
 关键不变量（改相关代码前确认）：
 
 - `SourceTrack.raw` / `Track.payload` 原样回传脚本（`songmid`/`hash`/`copyrightId` 等被脚本依赖），payload UI 禁读；
+- `PlayableStream.headers` 必须一路透传给播放器（`AudioSource.uri` / `LockCachingAudioSource`）、
+  下一首预取、桌面缓存写入与下载：B 站直链缺 `Referer` / 浏览器 UA 会直接 403；
 - 进度只走 `PlaybackProvider.position`（`ValueListenable`，≤4Hz），不进 `notifyListeners`；快照值变才通知；
 - UI 只消费类型化 `PlaybackSnapshot`，不感知播放后端实现；
 - 错误在边界统一为 `SourceFailure`（kind/l10nKey/retryable），UI 不直接展示 `$e`；

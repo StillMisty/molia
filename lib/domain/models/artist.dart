@@ -6,9 +6,10 @@ const int kArtistPageSize = 50;
 
 /// 歌手搜索条目（搜索页「歌手」类型的一行）。
 ///
-/// 五平台字段差异在 `lib/sources/builtin/*_artist.dart` 内归一化：
+/// 内置平台（五个音乐平台 + B 站 UP）字段差异在
+/// `lib/sources/builtin/*_artist.dart` 内归一化：
 /// [id] 与曲目 payload 的歌手 id 同体系（kw/kg/wy 数字 id、tx singerMID、
-/// mg 字符串 id），可直接作为歌手页入口，无需映射表。
+/// mg 字符串 id、bili UP mid），可直接作为歌手页入口，无需映射表。
 class ArtistSummary {
   /// 平台内歌手 id。
   final String id;

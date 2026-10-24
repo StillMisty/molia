@@ -911,7 +911,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryImportFavoritesSubtitle =>
-      'Import a favorites list exported from LX Music (.lxmc)';
+      'Import from an .lxmc file or a platform playlist/favorites link';
 
   @override
   String libraryImportSuccess(int count) {
@@ -1165,13 +1165,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistImportFromFile => 'Import from .lxmc file';
 
   @override
-  String get playlistImportFromLink => 'Import from playlist link';
+  String get playlistImportFromLink => 'Import from playlist or favorites link';
 
   @override
   String get playlistImportChannel => 'Platform';
 
   @override
-  String get playlistImportEmpty => 'Playlist has no importable tracks';
+  String get playlistImportEmpty =>
+      'Playlist or favorites has no importable tracks';
 
   @override
   String get playlistImportedName => 'Imported playlist';
@@ -1192,7 +1193,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discoverOpenPlaylist => 'Open playlist';
 
   @override
-  String get discoverOpenPlaylistHint => 'Paste a playlist link or ID';
+  String get discoverOpenPlaylistHint =>
+      'Paste a playlist or favorites link or ID';
 
   @override
   String get discoverOpen => 'Open';

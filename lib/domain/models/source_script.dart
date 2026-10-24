@@ -95,7 +95,8 @@ class SourceEntry {
   final SourceKind kind;
   final bool canSearch;
 
-  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：wy/tx/kg/kw/mg）。
+  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
+  /// B 站没有歌单浏览）。
   final bool discoverable;
 
   /// 是否启用（停用后不出现在资料页渠道选择与搜索结果中）。

@@ -245,6 +245,18 @@ void main() {
       );
     });
 
+    test('后续页缺 info：沿用第一页详情继续拉全', () async {
+      pages[2] = {...pages[2]!}..remove('info');
+      install();
+
+      final detail = await BiliFavorites.detail('123456', 1);
+
+      expect(requestedPages, ['1', '2']);
+      expect(detail.tracks, hasLength(25));
+      expect(detail.info.name, '我的收藏夹');
+      expect(detail.info.trackCount, 26);
+    });
+
     test('info 为空：按不可见收藏夹失败', () async {
       infoNull = true;
       install();

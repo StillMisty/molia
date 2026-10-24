@@ -8,8 +8,9 @@ const int kCommentPageSize = 20;
 
 /// 领域层统一评论模型（不可变 + 值相等，UI 只读）。
 ///
-/// 五平台（wy/tx/kg/kw/mg）字段差异在 `lib/sources/builtin/*_comment.dart`
-/// 内归一化：文本已做表情还原与转义解码，时间统一为 [createdAt]。
+/// 内置平台（五个音乐平台 + B 站视频）字段差异在
+/// `lib/sources/builtin/*_comment.dart` 内归一化：文本已做表情还原与转义解码，
+/// 时间统一为 [createdAt]。
 class Comment {
   final String id;
 

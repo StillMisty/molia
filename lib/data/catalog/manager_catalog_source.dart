@@ -22,7 +22,7 @@ import '../mapping/track_mapper.dart';
 class SourceManagerMusicSource implements MusicSource {
   SourceManagerMusicSource(this.key, this._manager);
 
-  /// 音源 key：kw/kg/tx/wy/mg、脚本自定义 key 或 any_listen。
+  /// 音源 key：kw/kg/tx/wy/mg/bili、脚本自定义 key 或 any_listen。
   @override
   final String key;
 
@@ -88,7 +88,9 @@ class SourceManagerMusicSource implements MusicSource {
         message: '音源 $key 不支持歌手搜索',
       );
     }
-    if (cancel?.isCancelled ?? false) return SearchResult.empty<ArtistSummary>();
+    if (cancel?.isCancelled ?? false) {
+      return SearchResult.empty<ArtistSummary>();
+    }
     final ArtistSearchPage page;
     try {
       page = await _manager.searchArtists(
@@ -102,7 +104,9 @@ class SourceManagerMusicSource implements MusicSource {
       throw SourceFailure.from(e);
     }
     // 协议层不支持取消：以“丢弃结果”等价实现。
-    if (cancel?.isCancelled ?? false) return SearchResult.empty<ArtistSummary>();
+    if (cancel?.isCancelled ?? false) {
+      return SearchResult.empty<ArtistSummary>();
+    }
     return SearchResult<ArtistSummary>(
       items: page.items,
       hasMore: page.hasMore,

@@ -157,9 +157,9 @@ Future<LyricsSearchSelection?> openTrackSourceSwap(
 
 /// 曲目在原生平台上的网页地址（分享 / 打开用）；无法构造时返回 null。
 ///
-/// 仅内置五平台有稳定的页面形态；LX 脚本 / any-listen / 本地曲目没有
-/// 可推导的页面地址（脚本 payload 不保证包含平台 id），返回 null 由 UI
-/// 隐藏对应动作。参数取 payload 原样字段（脚本依赖同一批字段）。
+/// 仅内置平台（五个音乐平台 + B 站）有稳定的页面形态；LX 脚本 / any-listen /
+/// 本地曲目没有可推导的页面地址（脚本 payload 不保证包含平台 id），返回 null
+/// 由 UI 隐藏对应动作。参数取 payload 原样字段（脚本依赖同一批字段）。
 String? platformTrackPageUrl(Track track) {
   String payloadString(String key) => track.payload[key]?.toString() ?? '';
   switch (track.id.sourceKey) {

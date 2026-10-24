@@ -1,6 +1,6 @@
-/// 内置平台原生取图的派发入口（五平台：wy / tx / kg / kw / mg）。
+/// 内置平台原生取图的派发入口（五个音乐平台 + B 站：wy / tx / kg / kw / mg / bili）。
 ///
-/// 从 `SourceManager` 拆出：5 路 switch（曲目 raw 字段 → 各 `*_pic.dart` /
+/// 从 `SourceManager` 拆出：6 路 switch（曲目 raw 字段 → 各 `*_pic.dart` /
 /// 歌曲详情接口）、结果归一化与 5 分钟 TTL 缓存（key `{track.id}:pic`）
 /// 在这里只有一处实现；`SourceManager.fetchPic` 的脚本回退只调用 [fetch]。
 ///

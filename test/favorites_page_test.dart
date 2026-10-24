@@ -1343,7 +1343,7 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('合集弹层：五平台链接导入（注入 DiscoverProvider）', (tester) async {
+  testWidgets('合集弹层：平台歌单 / 收藏夹链接导入（注入 DiscoverProvider）', (tester) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -1379,14 +1379,14 @@ void main() {
     await openCollectionPicker(tester);
     await tester.tap(pickerAction(Icons.library_add_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('从歌单链接导入'), findsOneWidget);
-    await tester.tap(find.text('从歌单链接导入'));
+    expect(find.text('从歌单 / 收藏夹链接导入'), findsOneWidget);
+    await tester.tap(find.text('从歌单 / 收藏夹链接导入'));
     await tester.pumpAndSettle();
 
     // 空链接：停留并提示。
     await tester.tap(find.text('打开'));
     await tester.pumpAndSettle();
-    expect(find.text('粘贴歌单链接或 ID'), findsWidgets);
+    expect(find.text('粘贴歌单 / 收藏夹链接或 ID'), findsWidgets);
 
     // 输入链接 → 拉取详情并导入，随后切换到导入的列表。
     await tester.enterText(find.byType(M3ETextField), 'abc');

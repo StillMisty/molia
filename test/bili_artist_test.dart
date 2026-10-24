@@ -263,6 +263,88 @@ void main() {
     expect(fallback.uri.queryParameters['order'], 'pubdate');
   });
 
+  test('空间返回空 vlist 但 count>0：按风控回退视频搜索', () async {
+    final adapter = install((options) async {
+      switch (options.uri.path) {
+        case '/x/web-interface/card':
+          return textResponse(jsonEncode(cardFixture()));
+        case '/x/space/wbi/arc/search':
+          return textResponse(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'list': {'vlist': <dynamic>[]},
+                'page': {'count': 35},
+              },
+            }),
+          );
+        case '/x/web-interface/wbi/search/type':
+          return textResponse(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'numPages': 1,
+                'result': [
+                  {
+                    'mid': 336,
+                    'author': '周杰伦',
+                    'bvid': 'BV1riskfree',
+                    'aid': 9101,
+                    'title': '兜底投稿',
+                    'duration': '02:30',
+                  },
+                ],
+              },
+            }),
+          );
+        default:
+          return textResponse('{}', statusCode: 500);
+      }
+    });
+
+    final detail = await BiliArtist.fetch('336');
+
+    expect(detail.tracks, hasLength(1));
+    expect(detail.tracks.single.title, '兜底投稿');
+    expect(
+      adapter.requests
+          .where((r) => r.uri.path == '/x/web-interface/wbi/search/type'),
+      hasLength(1),
+      reason: '空 vlist + count>0 视为风控，不返回空页',
+    );
+  });
+
+  test('空间返回空 vlist 且 count==0：真实空主页，不触发搜索', () async {
+    final adapter = install((options) async {
+      switch (options.uri.path) {
+        case '/x/web-interface/card':
+          return textResponse(jsonEncode(cardFixture()));
+        case '/x/space/wbi/arc/search':
+          return textResponse(
+            jsonEncode({
+              'code': 0,
+              'data': {
+                'list': {'vlist': <dynamic>[]},
+                'page': {'count': 0},
+              },
+            }),
+          );
+        default:
+          return textResponse('{}', statusCode: 500);
+      }
+    });
+
+    final detail = await BiliArtist.fetch('336');
+
+    expect(detail.tracks, isEmpty);
+    expect(detail.hasMore, isFalse);
+    expect(
+      adapter.requests
+          .where((r) => r.uri.path == '/x/web-interface/wbi/search/type'),
+      isEmpty,
+    );
+  });
+
   test('回退搜索无结果：返回资料 + 空列表，不失败整页', () async {
     install((options) async {
       switch (options.uri.path) {

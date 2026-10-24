@@ -876,7 +876,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryImportFavorites => '导入收藏';
 
   @override
-  String get libraryImportFavoritesSubtitle => '从 LX Music 导出的收藏夹文件（.lxmc）导入';
+  String get libraryImportFavoritesSubtitle => '从 .lxmc 文件或平台歌单 / 收藏夹链接导入';
 
   @override
   String libraryImportSuccess(int count) {
@@ -1124,13 +1124,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playlistImportFromFile => '从 .lxmc 文件导入';
 
   @override
-  String get playlistImportFromLink => '从歌单链接导入';
+  String get playlistImportFromLink => '从歌单 / 收藏夹链接导入';
 
   @override
   String get playlistImportChannel => '平台';
 
   @override
-  String get playlistImportEmpty => '歌单没有可导入的曲目';
+  String get playlistImportEmpty => '歌单 / 收藏夹没有可导入的曲目';
 
   @override
   String get playlistImportedName => '导入的歌单';
@@ -1151,7 +1151,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get discoverOpenPlaylist => '打开歌单';
 
   @override
-  String get discoverOpenPlaylistHint => '粘贴歌单链接或 ID';
+  String get discoverOpenPlaylistHint => '粘贴歌单 / 收藏夹链接或 ID';
 
   @override
   String get discoverOpen => '打开';

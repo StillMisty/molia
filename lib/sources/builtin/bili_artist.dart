@@ -241,6 +241,9 @@ class BiliArtist {
 
     final pageMap = data?['page'];
     final total = pageMap is Map ? parseSourceCount(pageMap['count']) : null;
+    // 有投稿总数却给空 vlist 不是「这个 UP 没有投稿」，而是空间接口的风控 /
+    // 降级响应（code 仍是 0）；交给搜索兜底，避免把空页当成真实结果。
+    if (vlist.isEmpty && (total ?? 0) > 0) return null;
     final bool hasMore;
     if (total != null) {
       hasMore = page * spacePageSize < total;

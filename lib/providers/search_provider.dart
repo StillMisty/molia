@@ -42,7 +42,7 @@ class SearchProvider extends ChangeNotifier {
   /// 已加载的单曲搜索结果（分页追加、pager 去重后的稳定列表）。
   List<SearchRow> _searchRows = const [];
 
-  /// 当前搜索音源：音源 key（kw/kg/tx/wy/mg/脚本自定义源）。
+  /// 当前搜索音源：音源 key（kw/kg/tx/wy/mg/bili/脚本自定义源）。
   /// 无可用音源时为空字符串（搜索结果页展示空态引导）。
   String _sourceKey = '';
 

@@ -1733,7 +1733,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryImportFavoritesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Import a favorites list exported from LX Music (.lxmc)'**
+  /// **'Import from an .lxmc file or a platform playlist/favorites link'**
   String get libraryImportFavoritesSubtitle;
 
   /// No description provided for @libraryImportSuccess.
@@ -2201,7 +2201,7 @@ abstract class AppLocalizations {
   /// No description provided for @playlistImportFromLink.
   ///
   /// In en, this message translates to:
-  /// **'Import from playlist link'**
+  /// **'Import from playlist or favorites link'**
   String get playlistImportFromLink;
 
   /// No description provided for @playlistImportChannel.
@@ -2213,7 +2213,7 @@ abstract class AppLocalizations {
   /// No description provided for @playlistImportEmpty.
   ///
   /// In en, this message translates to:
-  /// **'Playlist has no importable tracks'**
+  /// **'Playlist or favorites has no importable tracks'**
   String get playlistImportEmpty;
 
   /// No description provided for @playlistImportedName.
@@ -2255,7 +2255,7 @@ abstract class AppLocalizations {
   /// No description provided for @discoverOpenPlaylistHint.
   ///
   /// In en, this message translates to:
-  /// **'Paste a playlist link or ID'**
+  /// **'Paste a playlist or favorites link or ID'**
   String get discoverOpenPlaylistHint;
 
   /// No description provided for @discoverOpen.

@@ -76,8 +76,18 @@ class BiliComment {
       limit: limit,
       total: commentIntOf(cursorData['all_count']),
       // B 站直接给出末页标记，比按 total 推断更可靠（热评顺序不稳定）。
-      hasMore: cursorData['is_end'] != true,
+      // 缺少 is_end 时按「有没有下一页游标」判定：空 / 未知游标若继续翻页
+      // 会让 pager 请求同一页空数据，形成死循环。
+      hasMore: _hasMoreOf(cursorData, nextOffset),
     );
+  }
+
+  static bool _hasMoreOf(Map cursorData, String? nextOffset) {
+    final isEnd = cursorData['is_end'];
+    // is_end 存在时沿用旧语义（`!= true` 即还有下一页）；缺失（null / 无字段）
+    // 才看下一页游标。
+    if (isEnd != null) return isEnd != true;
+    return nextOffset != null && nextOffset.isNotEmpty;
   }
 
   /// `data.replies[]` → 评论；热评接口个别版本把热门条目放在 `data.hots`。

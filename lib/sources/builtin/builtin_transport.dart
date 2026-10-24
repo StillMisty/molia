@@ -22,7 +22,8 @@ class BuiltinHttpException implements Exception {
 
 /// 内置平台 HTTP 传输：客户端注入、统一请求头/超时、响应级重试与解码。
 ///
-/// 五个平台搜索与发现适配器共用同一条传输路径；测试通过注入 `Dio`
+/// 内置平台（五个音乐平台 + B 站）搜索 / 发现 / 评论 / 取链适配器共用同一条
+/// 传输路径；测试通过注入 `Dio`
 /// （`BuiltinSearch.transport = BuiltinTransport(dio: appDioWith(MockDioAdapter(...)))`）
 /// 覆盖 fetch 路径。
 class BuiltinTransport {

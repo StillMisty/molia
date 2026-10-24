@@ -11,11 +11,13 @@
 - **Artist label（歌手标签）** — `Track.artistLabel` / `primaryArtistName`（`lib/domain/models/track.dart`）：展示与持久化的唯一歌手文本口径（过滤空名后 `, ` 连接、全空返回空串；领域层不放英文兜底，UI 兜底走 l10n `unknownArtist`）。脚本回传 `SourceTrack.artist` 的 `/` 拼接是 track_mapper 的搜索键口径，不属此列。
 - **Platform id（平台 id）** — 不带平台前缀的单曲标识；[`SourceTrack.id`] 为其加上 `sourceKey:` 前缀。`rawIdOf`（通用优先级）与 `platformRawIdOf`（`.lxmc` 导出的平台优先顺序）是它的两个取键入口。
 - **Source preferences（渠道偏好模块）** — `lib/sources/source_preferences.dart`：渠道偏好（音质 / 顺序 / 停用）的状态与持久化唯一实现（写失败吞错收拢为统一策略），`settings_registry` 的 reload 由模块自绑；`SourceManager` 保留同名方法委托并向 UI 转发通知。
-- **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：五个平台搜索/发现共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；HTTP 重试预算统一为 `BuiltinTransport.defaultRetries`（发现端点的业务级预算见 Builtin retry attempts），结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
-- **Builtin platform registry（内置平台注册表）** — `lib/sources/builtin/builtin_platforms.dart`：内置五平台的唯一注册表：规范键 `wy / tx / kg / kw / mg`、展示名、搜索候选排序位，以及类型化能力族适配器（搜索 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）。能力位由适配器是否存在推导，各 facade 与 `SourceManager.capabilitiesFor` 读同一条目；新增平台只改这里，不再同步七份 `supportedKeys` 与 switch。
+- **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：内置平台（五个音乐平台 + B 站）搜索 / 发现 / 评论 / 取链共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；HTTP 重试预算统一为 `BuiltinTransport.defaultRetries`（发现端点的业务级预算见 Builtin retry attempts），结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
+- **Builtin platform registry（内置平台注册表）** — `lib/sources/builtin/builtin_platforms.dart`：内置六平台（五个音乐平台 + 哔哩哔哩）的唯一注册表：规范键 `wy / tx / kg / kw / mg / bili`、展示名、搜索候选排序位，以及类型化能力族适配器（搜索 / 原生取链 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）。能力位由适配器是否存在推导，各 facade 与 `SourceManager.capabilitiesFor` 读同一条目；新增平台只改这里，不再同步七份 `supportedKeys` 与 switch。B 站只注册搜索 / 原生取链 / 评论 / 歌手 / 发现，没有专辑与按歌词搜歌。
 - **Builtin retry attempts（内置尝试循环）** — `builtin_transport.dart::runBuiltinAttempts` + `BuiltinRetryBudget`：`attempt` 返回 null 表示本次失败、未达上限继续；抛异常直接上抛，耗尽抛 `StateError`；退避与传输层同一条策略。`cachedRetry` 与无缓存的发现端点共用这一循环，`discover` / `leaderboard` / `wyLeaderboard` 预算集中命名，平台文件不再各写 3/4/6。
 - **Discover call runner（发现端点执行器）** — `lib/sources/builtin/discover_runner.dart`：`DiscoverCall`（`DiscoverRequestCall` 一次请求 + 无效判定 + 解析 / `DiscoverAttemptCall` 多步尝试）与 `runDiscoverCall` 是发现端点的唯一执行入口；有稳定 key 走 `BuiltinTransport.cachedRetry`（single-flight，成功才缓存），没有 key 走 `runBuiltinAttempts`。平台文件只保留 URL / 参数 / parser 与端点自己的缓存键，不再各自拼 `cachedRetry` 形状。
-- **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：五个平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源：`SourceManager._isBuiltinSearchable`（channels 候选 / 能力位 / 搜索路由共用）。
+- **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：内置平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；五个音乐平台与 B 站原生搜索都走它，平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源：`SourceManager._isBuiltinSearchable`（channels 候选 / 能力位 / 搜索路由共用）。
+- **Bilibili source（B 站音源 `bili`）** — `lib/sources/builtin/bili_*.dart`：第六个内置平台（展示名「哔哩哔哩」，默认启用）。`bili_api.dart` 维护匿名会话：`/x/frontend/finger/spi` 取 buvid3/4、`nav` 取 WBI 密钥（1 小时缓存 + single-flight），WBI 签名与请求头只此一份；风控 `-403/-412` 刷新会话后重试一次。能力：全站视频搜索、原生取链（分 P cid → WBI playurl → dash 音频 192k/128k/64k）、CC 字幕歌词、视频评论、UP 主页、B 站音乐榜 / 热搜、公开收藏夹导入。边界：无专辑、无按歌词搜歌、无登录 / 大会员高音质、不浏览 / 搜索歌单、私密收藏夹不可导入（见 ADR-0014）。
+- **Bilibili raw id（B 站取链 id）** — `bvid`（`BV...`）优先、`aid`（av 号）兜底：`raw_track.dart` 的通用 id 优先级把 `bvid` 放在最前，`_platformIdFields['bili'] = ['bvid','aid','id']`，且不登记 `_canonicalIdFields['bili']`（B 站不靠 LX 脚本取链）。raw 原样保留 `cid`（首个分 P，取链与字幕共用）与 `source:'bili'`；`bvid` / `aid` 都缺失的条目不可播放（收藏夹里的番剧 / 课程在映射时过滤）。
 - **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
 
 ## 错误模型
@@ -32,6 +34,7 @@
   （`current/previous/next/upNext/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
   是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSessionCoordinator`
   构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
+- **Playback stream headers（流请求头契约）** — `lib/domain/ports/music_source.dart::PlayableStream`：取链返回 `uri + headers + expiresIn`，`headers` 是**全路径契约**，不是取链层的局部细节。`SourceManagerMusicSource.resolve` / `CatalogService.resolve` 原样保留，`LocalPlaybackService` 同时传给 `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` / `AudioPredownloader` / 桌面 `PlayingTrackCacheWriter` / 下载复用同一份；任一处丢掉 headers（B 站直链需要 `Referer` + 浏览器 UA）都会变成 403 / 播放失败。新增取链实现时先看这条。
 - **Play mode（播放模式）** — `lib/models/play_mode.dart`：列表循环（队尾回队首）、
   顺序播放（播完即停）、单曲循环、随机播放；`PlayMode.next` 是按钮与系统媒体动作
   的循环切换顺序，持久化按枚举 `name`。`lib/playback/queue_navigation.dart` 统一
@@ -263,11 +266,12 @@
   分隔与行内多标签）；不再允许「检测用一个正则、解析用另一个」的漂移。
 - **Track-native lyric/pic（曲目原生取词 / 取图）** — `SourceManager.fetchLyric` /
   `fetchPic`：按曲目 raw 的平台精确 ID 取词取图，顺序为脚本 `lyric`/`pic` action →
-  any-listen → 内置五平台原生实现（wy eapi + yrc、tx PlayLyricInfo + QRC、
-  kg KRC、kw LRCX、mg MRC；封面 wy 歌曲详情 / tx 专辑 mid / kg `get_res_privilege`
-  / kw `pic.web` / mg 资源封面）。解码器在 `lib/sources/builtin/*_lyric.dart` +
-  `tx_qrc.dart`（zlib 走 FFI 原生实现）。内置派发的唯一实现（五平台
-  switch + 结果缓存）在 `lib/sources/builtin/builtin_lyric_dispatch.dart` /
+  any-listen → 内置平台原生实现（五个音乐平台：wy eapi + yrc、tx PlayLyricInfo + QRC、
+  kg KRC、kw LRCX、mg MRC；B 站取 CC 字幕转 LRC；封面 wy 歌曲详情 / tx 专辑 mid /
+  kg `get_res_privilege` / kw `pic.web` / mg 资源封面 / bili raw `pic`）。解码器在
+  `lib/sources/builtin/*_lyric.dart` + `tx_qrc.dart`（zlib 走 FFI 原生实现）。
+  内置派发的唯一实现（内置平台 switch + 结果缓存）在
+  `lib/sources/builtin/builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`，与平台适配器同门。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
@@ -292,10 +296,13 @@
 ## 评论
 
 - **Builtin comments（内置评论取数）** — `lib/sources/builtin/comment_source.dart` +
-  `{wy,tx,kg,kw,mg}_comment.dart`：五平台「热门 / 最新」分页取数的唯一实现，
+  `{wy,tx,kg,kw,mg}_comment.dart` + `bili_comment.dart`：内置平台（五个音乐平台 +
+  B 站视频）「热门 / 最新」分页取数的唯一实现，
   直接产出领域 `CommentPage`（不经 sources→data 映射层：评论没有脚本回传需求）。
   文本表情还原（wy `[名称]` / tx `[em]eXXXX[/em]`）、IP 归属、点赞、引用
   （wy `beReplied` / kg `pcontent`）与随列表返回的楼中楼（tx / kw / mg）在此归一化。
+  B 站走 `pagination_str` 游标（热门 / 最新各一套），缺 `is_end` 时按下一页游标是否存在
+  决定 `hasMore`，避免空游标让分页器死循环。
 - **Comment cursor store（评论游标存储）** — `lib/sources/builtin/comment_utils.dart`：
   游标分页会话状态（wy 最新评论的 `cursor`、mg 最新评论的 `commentId`），
   按「曲目 + 页码」保存平台游标（取第 N 页读 key N，第 N-1 页写入），
@@ -313,18 +320,19 @@
   封面 / 年份 / 曲目（领域 `Track`）/ `hasMore`，不可变 + 值相等；年份从平台
   发行时间派生（解析失败为 null，UI 不展示）。
 - **Builtin albums（内置专辑取数）** — `lib/sources/builtin/album_source.dart` +
-  `{wy,tx,kg,kw,mg}_album.dart`：五平台按专辑 id **精确拉取**（不再用专辑名搜索
+  `{wy,tx,kg,kw,mg}_album.dart`：五个音乐平台按专辑 id **精确拉取**（不再用专辑名搜索
   兜底）的唯一实现，解析直接产出领域 `Album`（曲目经 `track_mapper` 原样透传
   payload）；真实响应快照在 `test/fixtures/albums/`（抓取脚本
-  `tool/gen_album_fixtures.mjs`），端点均需真机复验。
+  `tool/gen_album_fixtures.mjs`），端点均需真机复验。B 站没有专辑实体，不注册
+  `album` 适配器（`capabilities.collection` 为 false）。
 - **Album service（专辑服务）** — `lib/data/catalog/album_service.dart`：专辑分页的
   唯一取数入口（single-flight + LRU + TTL 10min + `SourceFailure` 归一化），
   key 为 `album:{source}:{id}:{page}:{limit}`；取数函数由组合根注入
   `SourceManager.fetchAlbum`（服务不依赖 sources 层）。
 - **Collection routing（集合路由）** — `MusicSource.collection(CollectionRef)` 在
-  能力位 `capabilities.collection`（仅内置五平台）为真时转发 `SourceManager.fetchAlbum`
-  并映射为 `CollectionPage`；目前只支持 `album` 类型，playlist / artist 与
-  LX 脚本 / any-listen / local 一律 `SourceFailure(unsupported)`。
+  能力位 `capabilities.collection`（仅内置音乐五平台；B 站 `collection=false`）为真时
+  转发 `SourceManager.fetchAlbum` 并映射为 `CollectionPage`；目前只支持 `album` 类型，
+  playlist / artist 与 LX 脚本 / any-listen / local 一律 `SourceFailure(unsupported)`。
 - **Album entry（专辑入口）** — 歌曲信息页「专辑」行：payload 专辑 id
   （`platformAlbumId`：wy/kg/kw/mg `albumId`、tx `albumMid`）与能力位双判定为真时
   变为可点行（副标题「查看专辑」），否则保持只读信息行。专辑页曲目行与搜索结果 /
@@ -346,17 +354,21 @@
   `showArtistPageByName` 的页面加载内完成（加载态 / 未找到文案 `artistNotFound`）；
   名字取首个歌手名的首段（历史数据多歌手被拼成 `、` / `, ` / `&` 分隔的一串）。
 - **Builtin artists（内置歌手取数）** — `lib/sources/builtin/artist_source.dart`
-  （`BuiltinArtists` 调度）+ `{kw,kg,tx,wy,mg}_artist.dart`：五平台歌手搜索与
-  「详情 + 歌曲」的唯一实现（解析直接产出领域 `ArtistSummary` / `ArtistDetail`）；
+  （`BuiltinArtists` 调度）+ `{kw,kg,tx,wy,mg}_artist.dart` + `bili_artist.dart`：
+  五个音乐平台的歌手搜索与「详情 + 歌曲」以及 B 站 UP 搜索 / 资料 / 投稿的唯一实现
+  （解析直接产出领域 `ArtistSummary` / `ArtistDetail`）；
   真实响应快照在 `test/fixtures/artists/`（抓取脚本 `tool/gen_artist_fixtures.mjs`）。
   平台降级口径：kg 歌手搜索无总数（单页 10 条）、tx 歌手歌曲 `begin` 无效（单页约 60 首，
-  `hasMore=false`）、mg 歌手详情无简介（`description` 空串）。
+  `hasMore=false`）、mg 歌手详情无简介（`description` 空串）；B 站空间投稿风控
+  （`-352` / 空 `vlist` + `count>0`）回退全站视频搜索并按 mid 过滤。
 - **Artist capability（歌手能力位）** — `SourceCapabilities.artist`：歌手搜索 +
-  歌手详情统一切换；内置五平台与 `search` 同门（`BuiltinArtists.isSupported` 且
-  脚本可取链），脚本源 / any-listen 为 false → 搜索分段与歌手行入口自动降级为只读
+  歌手详情统一切换；内置平台（五个音乐平台 + B 站 UP）与 `search` 同门
+  （`BuiltinArtists.isSupported` 且取数可用），脚本源 / any-listen 为 false →
+  搜索分段与歌手行入口自动降级为只读
   （不与路由撒谎：能力位为真 ⇔ `searchArtists` 不会必然失败）。
   **Lyric capability（歌词能力位）** `SourceCapabilities.lyricSearch` 同门
-  （`BuiltinLyricSearch.isSupported` + 脚本可取链）。
+  （`BuiltinLyricSearch.isSupported` + 脚本可取链）；B 站没有按歌词搜歌，
+  `lyricSearch=false`。
 - **Lyric search（按歌词搜歌）** — `lib/sources/builtin/lyric_search.dart`
   （`BuiltinLyricSearch` 调度 + `SourceLyricHit{track, snippet}` / `LyricSearchPage`）
   + `{kw,kg,tx,wy,mg}_lyric_search.dart`（kw `stype=lyric` 模糊匹配 / kg `lyric_search` /

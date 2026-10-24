@@ -74,7 +74,7 @@ Future<LocalDataStack> buildLocalDataStack({
 
   // 歌词服务提前创建（见文件头：与下载服务互为依赖的构建顺序）。
   // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
-  // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg，精确平台 ID）。
+  // any-listen → 内置平台原生实现（wy/tx/kg/kw/mg/bili，精确平台 ID）。
   final lyricsService = LyricsService(
     // 与 `CacheService.instance` 共享同一个文件后端实例（见上）。
     lyricsCache: lyricsCache,

@@ -50,7 +50,8 @@ class SourceOption {
   final SourceKind kind;
   final bool canSearch;
 
-  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：wy/tx/kg/kw/mg）。
+  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
+  /// B 站没有歌单浏览）。
   final bool discoverable;
 
   /// 是否启用（停用后不出现在资料页渠道选择与搜索结果中）。
@@ -262,7 +263,7 @@ class SourceManager extends ChangeNotifier {
       );
     }
     final decl = _activeSources[key];
-    // 内置平台的搜索/分页由 Dart 实现（五平台走 BuiltinSearch，bili 原生），
+    // 内置平台的搜索/分页由 Dart 实现（五个音乐平台走 BuiltinSearch，bili 原生），
     // 能力跟随「原生取链或脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
     // 社区搜索 action（见 [_isBuiltinSearchable]）。评论同样只由内置实现提供。
     final platform = BuiltinPlatforms.maybeOf(key);

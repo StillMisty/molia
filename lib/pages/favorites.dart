@@ -65,7 +65,7 @@ TrackRowColumnSpec _columnSpec(CollectionColumnLayout layout) =>
 /// 统一管理入口。
 ///
 /// - 标题行即合集切换器（弹层内可新建/重命名/删除列表、拖动排序合集，
-///   并提供「导入收藏」：.lxmc 文件 / 五平台歌单链接）；
+///   并提供「导入收藏」：.lxmc 文件 / 平台歌单 / 收藏夹链接）；
 ///   默认落在有曲目的收藏，收藏为空时回退到第一个非空列表；
 /// - 宽屏表格列：内容宽（窗口宽 − 栏宽）够时曲目 / 历史 / 本地歌曲列表
 ///   显示表头与列（播放历史多一列「播放时间」），窄窗口回落单列；
@@ -616,7 +616,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 合集弹层的「导入收藏」：.lxmc 文件 或 五平台歌单链接。
+  /// 合集弹层的「导入收藏」：.lxmc 文件 或 平台歌单 / 收藏夹链接。
   Future<void> _importCollection() async {
     final l10n = _l10n(context);
     final discover = context.read<DiscoverProvider?>();
