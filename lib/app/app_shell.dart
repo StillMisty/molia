@@ -38,15 +38,12 @@ import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
-import '../theme/m3e_context.dart';
-import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
-import '../widgets/app_network_image.dart';
-import '../widgets/cover_appearance.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search_overlay.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/now_playing_controller.dart';
+import '../widgets/now_playing_summary.dart';
 import '../widgets/playback_selectors.dart';
 import '../widgets/player_morph.dart';
 import '../widgets/shell_reselect.dart';
@@ -54,10 +51,6 @@ import '../widgets/shell_page_visibility.dart';
 import 'desktop/desktop_shell.dart';
 import 'shell_chrome.dart';
 import 'tray_dormant_gate.dart';
-
-/// 当前曲目的封面 URL（空串视同无封面）：顶栏真身与共享飞行副本同一份取值。
-String? _coverUrlOf(PlaybackProvider provider) =>
-    artworkUrlOf(provider.snapshot.current);
 
 /// 移动端（Android / iOS）是否由组合根把生命周期喂给播放功耗策略。
 ///
@@ -552,7 +545,7 @@ class _MyAppState extends State<MyApp>
     _morph.setBarHeaderHidden(true);
     if (geometry.toPage) _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
-    final url = _coverUrlOf(context.read<PlaybackProvider>());
+    final url = nowPlayingCoverUrl(context.read<PlaybackProvider>());
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
       builder: (context) => PlayerMorphFlight(
@@ -908,57 +901,44 @@ class _ShellBarHeader extends StatelessWidget {
       animation: morph,
       builder: (context, _) {
         final showTrack = !morph.barHeaderHidden;
-        // 刻意不用 M3ETappable：它点击时会请求焦点，搜索页输入中点击顶栏
-        // 会打断输入；GestureDetector 与播放页封面的手势实现保持一致。
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        // 封面与歌名+作者两行文本等高（titleMedium 24 + labelSmall 16）。
+        // 点击语义与 12dp 间距由摘要模块收口，这里只给封面槽叠加品牌标志。
+        return NowPlayingSummary(
           onTap: showTrack ? onOpenPlayer : null,
-          child: Row(
-            children: [
-              // 封面与歌名+作者两行文本等高（titleMedium 24 + labelSmall 16）。
-              SizedBox(
-                width: 40,
-                height: 40,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    AnimatedOpacity(
-                      // 顶栏⇄播放页飞行落位时，真身封面必须与副本移除同帧亮出
-                      // （duration 0 = 同步跳变）；收起方向的淡出保持 160ms。
-                      duration: showTrack
-                          ? Duration.zero
-                          : const Duration(milliseconds: 160),
-                      opacity: showTrack ? 1 : 0,
-                      child: _BarCover(key: morph.barCoverKey),
-                    ),
-                    AnimatedOpacity(
-                      duration: showTrack
-                          ? Duration.zero
-                          : const Duration(milliseconds: 160),
-                      opacity: showTrack ? 0 : 1,
-                      child: ColorFiltered(
-                        // 同 MoliaMark：Image.color 在 Impeller 下会引入
-                        // 1px 边缘杂线（见已知坑 19），用 ColorFiltered 着色。
-                        colorFilter: ColorFilter.mode(
-                          Theme.of(context).colorScheme.onSurface,
-                          BlendMode.srcIn,
-                        ),
-                        child: Image.asset(
-                          'assets/icons/adaptive_icon_monochrome.png',
-                        ),
-                      ),
-                    ),
-                  ],
+          cover: SizedBox(
+            width: 40,
+            height: 40,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                NowPlayingCover.current(
+                  size: 40,
+                  flightKey: morph.barCoverKey,
+                  hidden: !showTrack,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: hasTrackTitle
-                    ? _BarHeaderTransition(reveal: reveal, showTrack: showTrack)
-                    : const _AppTitleText(),
-              ),
-            ],
+                AnimatedOpacity(
+                  duration: showTrack
+                      ? Duration.zero
+                      : const Duration(milliseconds: 160),
+                  opacity: showTrack ? 0 : 1,
+                  child: ColorFiltered(
+                    // 同 MoliaMark：Image.color 在 Impeller 下会引入
+                    // 1px 边缘杂线（见已知坑 19），用 ColorFiltered 着色。
+                    colorFilter: ColorFilter.mode(
+                      Theme.of(context).colorScheme.onSurface,
+                      BlendMode.srcIn,
+                    ),
+                    child: Image.asset(
+                      'assets/icons/adaptive_icon_monochrome.png',
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
+          info: hasTrackTitle
+              ? _BarHeaderTransition(reveal: reveal, showTrack: showTrack)
+              : const NowPlayingAppTitle(),
         );
       },
     );
@@ -1029,7 +1009,7 @@ class _BarHeaderTransition extends StatelessWidget {
               offset: Offset(-_offsetX * (1 - t), 0),
               child: Opacity(
                 opacity: t,
-                child: const _BarTrackInfo(),
+                child: const NowPlayingTrackText.bar(),
               ),
             ),
             AnimatedOpacity(
@@ -1037,40 +1017,11 @@ class _BarHeaderTransition extends StatelessWidget {
               duration: Duration(milliseconds: showTrack ? 90 : 160),
               curve: showTrack ? Curves.easeIn : Curves.easeOut,
               opacity: showTrack ? 0 : 1,
-              child: const _AppTitleText(),
+              child: const NowPlayingAppTitle(),
             ),
           ],
         );
       },
-    );
-  }
-}
-
-/// 顶栏封面：跟随当前曲目；无封面时音符图标兜底。
-///
-/// 点击进入播放页的手势由 [_ShellBarHeader] 整条承接（封面 40×40
-/// 仍小于 48dp 触控目标），本组件只负责展示，避免手势与展示耦合。
-class _BarCover extends StatelessWidget {
-  const _BarCover({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final coverUrl = context.select<PlaybackProvider, String?>(
-      _coverUrlOf,
-    );
-    // 卡片外观（r8、无描边阴影、回退图标 22）由 CoverAppearance.bar 统一给出。
-    return CoverCard(
-      size: 40,
-      appearance: CoverAppearance.bar,
-      content: (context, clip, iconSize) => AppNetworkImage(
-        url: coverUrl,
-        borderRadius: clip,
-        // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
-        fallbackIconSize: iconSize,
-        // 与播放页 / 迷你条共用同一个有界解码键：飞行副本命中同一张图，
-        // 不会在 40dp 顶栏里留一张原图。
-        memCacheWidth: playbackCoverDecodeEdge(context),
-      ),
     );
   }
 }
@@ -1172,64 +1123,6 @@ class _BarRevealTransition extends StatelessWidget {
       child: Opacity(
         opacity: t,
         child: Transform.scale(scale: 0.92 + 0.08 * t, child: child),
-      ),
-    );
-  }
-}
-
-/// 顶栏歌名/作者锚点；无曲目时回退到自定义应用名。
-class _BarTrackInfo extends StatelessWidget {
-  const _BarTrackInfo();
-
-  @override
-  Widget build(BuildContext context) {
-    final info = context.select<PlaybackProvider, (String?, String?)>(
-      (provider) {
-        final track = provider.snapshot.current;
-        return (track?.title, track?.artistLabel);
-      },
-    );
-    final (name, artists) = info;
-    if (name == null || name.isEmpty) {
-      return const _AppTitleText();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          name,
-          style: context.typeScale.titleMedium,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-        if (artists != null && artists.isNotEmpty)
-          Text(
-            artists,
-            style: context.typeScale.labelSmall,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 1,
-          ),
-      ],
-    );
-  }
-}
-
-/// 自定义应用名（设置页可改，未自定义时为 Molia）。
-class _AppTitleText extends StatelessWidget {
-  const _AppTitleText();
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<String>(
-      valueListenable: AppBrandingService.titleNotifier,
-      builder: (context, title, _) => Text(
-        title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        // 应用名是品牌位：用强调字阶，不再手写字重。
-        style: context.emphasizedTypeScale.titleMedium,
       ),
     );
   }
