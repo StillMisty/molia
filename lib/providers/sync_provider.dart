@@ -231,22 +231,15 @@ class SyncProvider extends ChangeNotifier {
   /// 立刻跑一轮并判断该手动地址是否接触成功。
   ///
   /// 判据：地址簿条目在本轮学到了设备身份，且名册里该设备是本轮接触的
-  /// （`lastSeenAt` 不早于本轮开始）——只有本轮真正握手过才算成功。
+  /// （`lastSeenAt` 不早于**本轮**开始）——只有本轮真正握手过才算成功。
   ///
-  /// 返回 null = 本轮没有真正跑（进行中的轮次把请求排队 / 同步未启用）：
-  /// 此时不下结论，调用方按「稍后」处理，等后续轮次给出结果。
+  /// 结果直接取自 [syncNow] 返回的本轮报告：排队请求等到补跑轮，报告就是
+  /// 补跑轮的，不再用「对象是否相同 / 时间戳是否更早」猜有没有真正跑。
+  /// 返回 null = 没有一轮真正跑（调度器忙 / 同步未启用）：此时不下结论，
+  /// 调用方按「稍后」处理，等后续轮次给出结果。
   Future<bool?> contactManualPeer(String host) async {
-    final startedAt = _controlPlane.nowMs();
-    final previous = _engine.lastReport;
-    await syncNow(manual: true);
-    final report = _engine.lastReport;
-    // 本轮没有真正跑：请求被排队时引擎原样返回上一轮报告（同一对象），
-    // 轮次开始早于本次调用也同样不是本轮结果——两种情况都不下结论。
-    if (report == null ||
-        identical(report, previous) ||
-        report.startedAt < startedAt) {
-      return null;
-    }
+    final report = await syncNow(manual: true);
+    if (report == null) return null;
     ManualPeer? entry;
     for (final peer in manualPeers) {
       if (peer.host == host) {
@@ -257,7 +250,8 @@ class SyncProvider extends ChangeNotifier {
     final deviceId = entry?.deviceId ?? '';
     if (deviceId.isEmpty) return false;
     return report.peers.any(
-      (peer) => peer.deviceId == deviceId && peer.lastSeenAt >= startedAt,
+      (peer) =>
+          peer.deviceId == deviceId && peer.lastSeenAt >= report.startedAt,
     );
   }
 
@@ -402,13 +396,14 @@ class SyncProvider extends ChangeNotifier {
   /// 跑一轮同步。
   ///
   /// 首屏不再暴露手动主操作；[manual] 只服务恢复动作（添加手动对端、
-  /// 日志失败弹层的重试）。引擎自带排队：进行中的轮次结束后会补跑。
+  /// 日志失败弹层的重试）。返回**本次请求所加入的那一轮**报告：引擎在
+  /// 在途轮次上排队并等补跑轮；经调度器的手动轮由调度器回落该轮报告。
+  /// null = 没有一轮真正跑（调度器忙 / 同步关闭）。
   Future<SyncRoundReport?> syncNow({bool manual = false}) async {
     final scheduler = _scheduler;
     if (manual && scheduler != null) {
       // 手动触发经调度器（不受省电 / 蜂窝暂停策略限制）。
-      await scheduler.syncNow();
-      return _engine.lastReport;
+      return await scheduler.syncNow();
     }
     return await _engine.syncNow(
       trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,

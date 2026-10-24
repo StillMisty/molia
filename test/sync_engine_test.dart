@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -710,6 +712,75 @@ void main() {
     expect(state.log.first.trigger, SyncTrigger.manual);
     // 内容未变：只有首轮真正推送（本机未变不推）。
     expect(transport.pushed, hasLength(1));
+  });
+
+  test('在途轮次期间发起的请求：返回补跑轮报告，而不是上一轮', () async {
+    transport.available.add(remoteTheme('dark'));
+    // 先完成一轮，留下一份「上一轮报告」（旧实现排队时原样返回它）。
+    final previous = await engine.syncNow(trigger: SyncTrigger.timer);
+    expect(previous, isNotNull);
+
+    final gate = Completer<void>();
+    transport.onPull = () => gate.future;
+
+    final inFlight = engine.syncNow(trigger: SyncTrigger.timer);
+    final queuedFuture = engine.syncNow(trigger: SyncTrigger.manual);
+
+    var queuedCompleted = false;
+    unawaited(queuedFuture.then((_) => queuedCompleted = true));
+    await pumpEventQueue();
+    expect(engine.syncing, isTrue);
+    expect(queuedCompleted, isFalse, reason: '排队请求等补跑轮，不拿上一轮报告立即完成');
+
+    // 在途轮放行：补跑轮随后跑完，排队请求拿到补跑轮报告。
+    transport.onPull = null;
+    gate.complete();
+    await inFlight;
+    final queued = await queuedFuture;
+
+    expect(queued, isNotNull);
+    expect(identical(queued, previous), isFalse, reason: '不得把上一轮报告当成本轮结果');
+    expect(queued!.trigger, SyncTrigger.manual, reason: '补跑轮用排队时合并的触发原因');
+    expect(queued.startedAt, greaterThanOrEqualTo(previous!.finishedAt));
+    expect(engine.lastReport, same(queued), reason: 'lastReport 是最近完成的一轮');
+    expect(state.log, hasLength(3), reason: '上一轮 + 在途轮 + 一次补跑');
+    expect(state.log.first.trigger, SyncTrigger.manual);
+  });
+
+  test('同一在途轮的多个请求只补跑一轮，全部拿到同一份补跑报告', () async {
+    final previous = await engine.syncNow(trigger: SyncTrigger.timer);
+    expect(previous, isNotNull);
+
+    final gate = Completer<void>();
+    transport.onPull = () => gate.future;
+
+    final inFlight = engine.syncNow(trigger: SyncTrigger.timer);
+    final second = engine.syncNow(trigger: SyncTrigger.discovery);
+    final third = engine.syncNow(trigger: SyncTrigger.manual);
+    await pumpEventQueue();
+
+    transport.onPull = null;
+    gate.complete();
+    await inFlight;
+    final reports = await Future.wait([second, third]);
+
+    expect(state.log, hasLength(3), reason: '上一轮 + 在途轮 + 一次补跑，不按排队请求数叠加');
+    expect(reports[0], isNotNull);
+    expect(reports[0], same(reports[1]), reason: '同一在途轮排队的请求共享同一份补跑报告');
+    expect(identical(reports[0], previous), isFalse, reason: '不得把上一轮报告当成本轮结果');
+    expect(reports[1]!.trigger, SyncTrigger.manual, reason: '触发原因按「手动优先」合并');
+    expect(reports[1]!.startedAt, greaterThanOrEqualTo(previous!.finishedAt));
+  });
+
+  test('同步关闭：syncNow 返回 null，不把上一轮报告当成本轮结果', () async {
+    expect(await engine.syncNow(), isNotNull);
+    final previous = engine.lastReport;
+    expect(previous, isNotNull);
+
+    await control.setTransportEnabled('lan', false);
+    expect(await engine.syncNow(), isNull);
+    expect(engine.lastReport, same(previous),
+        reason: 'lastReport 仍供 UI 展示最近一轮');
   });
 
   test('本机未变不推：内容指纹未变时第二轮跳过加密与上传', () async {

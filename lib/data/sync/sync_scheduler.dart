@@ -29,6 +29,7 @@ class SyncRunOutcome {
     required this.delivered,
     this.contacted = true,
     this.contactedLan = false,
+    this.report,
   });
 
   /// 本轮实际外发的类别（蜂窝小类别轮不含历史 / 统计）。
@@ -45,6 +46,12 @@ class SyncRunOutcome {
 
   /// 本轮是否接触到了局域网对端（重连阶梯据此立即取消）。
   final bool contactedLan;
+
+  /// 本轮完整报告（宿主能提供时；未真正跑一轮为 null）。
+  ///
+  /// 调度器把手动轮的结论原样交给调用方（[SyncScheduler.syncNow]），
+  /// 调用方不必再去读引擎的「最近一轮」快照来猜这一轮算不算数。
+  final SyncRoundReport? report;
 
   static const SyncRunOutcome none =
       SyncRunOutcome(categories: {}, delivered: false);
@@ -358,9 +365,13 @@ class SyncScheduler {
   }
 
   /// 手动触发（不受等级、省电与蜂窝暂停策略限制）。
-  Future<void> syncNow() async {
-    if (!_host.syncEnabled) return;
-    await _runAndMark(SyncTrigger.manual, push: true);
+  ///
+  /// 返回本次真正跑的那一轮报告；null = 同步关闭 / 已有一轮在跑（调度器
+  /// 在途守卫不排队）——调用方据此按「没有结论」处理，不拿上一轮冒充。
+  Future<SyncRoundReport?> syncNow() async {
+    if (!_host.syncEnabled) return null;
+    final outcome = await _runAndMark(SyncTrigger.manual, push: true);
+    return outcome?.report;
   }
 
   /// 打开同步页时检查连接状态。
