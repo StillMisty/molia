@@ -40,7 +40,8 @@ Future<bool> addTracksToLibraryTarget(
   switch (selection.kind) {
     case AddToPlaylistTargetKind.favorites:
       name = l10n.favoritesPlaylistName;
-      added = await provider.addTracksToFavorites(tracks);
+      final outcome = await provider.addTracksToFavorites(tracks);
+      added = outcome.changed;
     case AddToPlaylistTargetKind.history:
       name = l10n.libraryHistory;
       added = await provider.addTracksToHistory(tracks);

@@ -380,15 +380,19 @@
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
   收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
   （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，
-  `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。
+  `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。收藏页批量 / 行写入统一返回
+  `LibraryMutationOutcome`（applied / unchanged / failed）：失败在 provider 边界
+  收口成 failed（原始异常只进日志），乐观更新回滚，选择只在成功后才清空。
 - **Add-to-library flow（加入列表流程）** — `lib/widgets/add_to_library.dart`：
   选择目标 → 写入 → 解析新建列表名 → 反馈的唯一实现；收藏页与发现页共用。
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是渠道状态的唯一持有者；
   渠道变化经注入的 `onChannelChanged`（组合根）触发搜索源跟随（可搜索渠道才跟随），
   资料页不再在两个 provider 之间仲裁同步，只处理「渠道被停用」的 UI 回退。
 - **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
-  `ensurePlaylistTracks`：页面只读「已缓存/加载中」视图并请求加载，不再探测
-  `cachedTracksOf`/`isPlaylistLoading` 之类的缓存内部。
+  `ensurePlaylistTracks`：页面只读 `PlaylistTracksView`（`tracks` + `LibraryReadState`
+  的 loading / ready / failed）并请求加载，不再探测 `cachedTracksOf` /
+  `isPlaylistLoading` 之类的缓存内部。列表清单 / 历史同样暴露 `playlistsState` /
+  `historyState`：首次读取失败是 failed（可重试），已有旧缓存则保持 ready 展示旧值。
 
 ## 换源
 
@@ -804,7 +808,8 @@
 - **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
 - **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
 
-- **Collection selection（合集多选状态机）** — `lib/widgets/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（可见行下标选择集、Ctrl 切换、Shift 区间与锚点移动、全选三态、越界提取忽略、`clear` / `clearAnchor`）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
+- **Collection session（合集会话）** — `lib/providers/collection_session.dart`：收藏页「当前合集」的唯一状态机：恢复（合集顺序 / 选集 / 滚动偏移，一次）、选中合集校准（合集列表首次加载完成、下载能力就绪后校准一次；失效 / 未选的选集回退到默认解析并落盘）、模式（搜索 / 排序 / 调整顺序）、按行 key 的多选与失效、加载组合（首帧列表 / 列表曲目 / 历史首载 / 本地歌曲联结合成为一个 `loading` / `ready` / `failed` 阶段，failed 提供重试）、合集切换与选择 / 顺序持久化、滚动键与恢复时机（同一合集只激活 / 恢复一次）。页面每帧只交一份 `CollectionSessionInput`（资料库窄端口 `CollectionLibrary` + 展示名 + 搜索词 + 下载 / 缓存快照）、消费一个 `CollectionSessionView`；不再在 build 里做 post-frame setState 校准或 `ensure*` 编排。本地歌曲联结与展示名以外的合集投影仍由 Collection presenter 提供。
+- **Collection selection（合集多选状态机）** — `lib/utils/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（选择集按**行稳定 key** 而不是可见行下标，Ctrl 切换、Shift 区间与锚点移动、全选三态、`retainKeys` 随视图收缩；插入 / 过滤后选择仍指向原行）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端左滑胶囊 / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.cachedAudioTrackIds`（播放历史 × 完整音频缓存命中且无音频下载，一次目录列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。合集弹层打开前先把缓存行重算到当前输入，弹层计数与列表行数同源。
