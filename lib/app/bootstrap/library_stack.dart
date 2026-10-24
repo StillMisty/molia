@@ -182,7 +182,7 @@ void wirePlayStatistics({
 /// 系统媒体会话「收藏」动作接线：通知点击 → 曲库改写，曲库变化 → 通知图标。
 ///
 /// handler 在播放栈里创建、曲库 provider 之后才建好，所以用 attach 晚绑定
-/// （与 `attachSessionPersister` 同一个原因）。没有媒体会话（平台不支持 /
+/// （与媒体会话本身一样的时序约束）。没有媒体会话（平台不支持 /
 /// 初始化失败时 `audioHandler == null`）时是空操作。
 void wireNotificationFavorite({
   required LocalAudioHandler? audioHandler,

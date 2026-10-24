@@ -57,8 +57,11 @@
   落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
   （`savePosition`，前台 1s / 后台 15s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
   `pendingWrite` 承担。改变会话的命令（暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前
-  等 `pendingWrite`（「已提交」语义），live seek 强制整份落盘；系统媒体 handler 只
-  await 注入的提交（不自建串行链）；壳层 paused 与桌面退出共用
+  等 `pendingWrite`（「已提交」语义），live seek 强制整份落盘。系统媒体会话与 UI
+  共用 `PlaybackCommandPort`（`lib/playback/playback_commands.dart`，唯一实现是协调者）：
+  handler 只把通知 / 耳机键动作翻译成命令，恢复态回落（切歌 / 队列跳转）、阶段路由与
+  落盘时机都在命令面，handler 不再直写服务、也不再持有第二个落盘回调。壳层 paused
+  与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`，桌面 `quitApp` 有界等待（2s）后继续退出。
   系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
   经组合根接线进来（不再直连 provider）；「启动时恢复上次播放」开关的跨设备重载钩子
@@ -73,6 +76,9 @@
 - **System media session（系统媒体会话）** — `lib/playback/local_audio_handler.dart` +
   `lib/playback/media_session_backend*.dart`：通知栏 / 锁屏 / 耳机键的会话层
   （Android/iOS/macOS/Windows 走 `flutter_media_session`，Linux 走 MPRIS，见 ADR-0010）。
+  handler 只负责读路径（当前曲目 / 状态 / 进度 / seek 版本 → 元数据与通知）与动作翻译：
+  播放 / 暂停 / 停止 / 切歌 / seek / 队列跳转 / 切模式都走 `PlaybackCommandPort`，
+  恢复态回落与「返回前已提交」由 `PlaybackSessionCoordinator` 负责。
   Android 通知里的两个自定义动作是「收藏」(`lx.favorite`，写路径复用
   `LibraryProvider.toggleFavoriteSourceTrack`）与「播放顺序」(`lx.playMode`)；
   **按钮的最终位置由 Media3 provider 与系统 UI 决定**，Dart 侧只能控制自定义动作

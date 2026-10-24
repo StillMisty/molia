@@ -100,8 +100,9 @@
   口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
   可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。改变会话的命令
   （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
-  语义），live seek 强制整份落盘；系统媒体 handler 不自建串行链，只 await
-  注入的提交；壳层 paused 与桌面退出共用
+  语义），live seek 强制整份落盘；系统媒体 handler 与 UI 共用
+  `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
+  落盘时机只在协调者实现一次，handler 不直写服务；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
   500ms）→ 统计落盘 → 销毁窗口」：会话必须先把最后一段进度取下来，音频收尾
@@ -222,10 +223,10 @@
   单曲 / 随机，
   图标与文案随当前模式，App 内改模式双向一致；`MediaAction.custom('lx.playMode')`，
   Android drawable 名沿用 `audio_service_*`，`keep.xml` 防 shrinkResources 删除）；
-  系统控制路径（暂停 / 停止 / 切顺序 / seek）**显式 await 会话落盘**
-  （`LocalAudioHandler` 只 await 注入的
-  `PlaybackSessionCoordinator.flushSession`，不自建串行链；写请求统一在
-  `PlaybackSessionStore.pendingWrite` 串行化；停止先落盘再清空队列），保证
+  系统控制路径（暂停 / 停止 / 切顺序 / seek）**经播放命令面提交**
+  （`LocalAudioHandler` 只翻译成 `PlaybackCommandPort` 命令，协调者按阶段路由并
+  在返回前 await `PlaybackSessionStore.pendingWrite`；不再由 handler 回填落盘回调；
+  停止先落盘再清空队列），保证
   「系统暂停 → 冷启动」能恢复上一首 + 队列 + 模式 + 进度且不自动起播。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
