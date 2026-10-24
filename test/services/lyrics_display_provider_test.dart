@@ -33,27 +33,20 @@ void main() {
         ],
       );
 
-  test('启用时取词一次、行变化去重、关闭时 clear', () async {
+  test('启用时输出启用、行变化去重、关闭时 clear', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     final output = _FakeOutput(LyricsOutputIds.desktop);
-    final requested = <String>[];
     final provider = LyricsDisplayProvider(
       settings: settings,
       outputs: [output],
-      ensureLyrics: (t) async => requested.add(t.id.uri),
     );
     await pumpEventQueue();
     expect(output.starts, 1);
 
     provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
     await pumpEventQueue();
-    expect(requested, ['fake:1']);
-    // 同一曲目再次通知不重复取词。
-    provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
-    await pumpEventQueue();
-    expect(requested, ['fake:1']);
 
     provider.syncLyrics(readyState());
     await pumpEventQueue();
@@ -86,19 +79,23 @@ void main() {
     expect(output.stopped, isTrue);
   });
 
-  test('关闭全部输出时不主动取词', () async {
+  test('全部输出关闭时不下发；打开后按当前状态补发', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
-    final requested = <String>[];
+    final output = _FakeOutput(LyricsOutputIds.desktop);
     final provider = LyricsDisplayProvider(
       settings: settings,
-      outputs: [_FakeOutput(LyricsOutputIds.desktop)],
-      ensureLyrics: (t) async => requested.add(t.id.uri),
+      outputs: [output],
     );
     await pumpEventQueue();
     provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
+    provider.syncLyrics(readyState());
     await pumpEventQueue();
-    expect(requested, isEmpty);
+    expect(output.applied, isEmpty);
+
+    await settings.setDesktopEnabled(true);
+    await pumpEventQueue();
+    expect(output.applied.last.line, 'A');
     provider.dispose();
   });
 

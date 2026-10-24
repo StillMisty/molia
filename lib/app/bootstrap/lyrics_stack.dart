@@ -50,3 +50,20 @@ void wireNextTrackLyricsPreload({
   playback.addListener(syncNextTrackLyricsPreload);
   syncNextTrackLyricsPreload();
 }
+
+/// 曲目变化 → 歌词会话的唯一加载入口。
+///
+/// 挂在播放快照上而不是歌词页 build：歌词页未挂载（或从未打开）时也按
+/// 当前曲目加载；页面只渲染会话状态。去重 / 过期响应 / 空结果重试都由
+/// [LyricsProvider.ensureForTrack] 承担。
+void wireLyricsSession({
+  required PlaybackProvider playback,
+  required LyricsProvider lyricsProvider,
+}) {
+  void syncCurrentTrack() {
+    unawaited(lyricsProvider.ensureForTrack(playback.snapshot.current));
+  }
+
+  playback.addListener(syncCurrentTrack);
+  syncCurrentTrack();
+}

@@ -69,22 +69,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 锚点作用于「主行文本块顶边」（整项还含翻译/罗马音，不参与锚定）。
   static const double _activeLineUpwardBias = 0.14;
 
-  /// 歌词会话模块：会话真相的唯一来源（本组件只消费，不维护镜像字段）。
+  /// 歌词会话模块：会话真相的唯一来源（本组件只消费，不维护加载镜像）。
   LyricsProvider? _lyricsProvider;
 
-  /// 本组件已请求加载的曲目 id（`null` = 尚未请求；渲染侧簿记，非会话状态）。
-  String? _lastTrackId;
-
-  /// 上一次已渲染的会话状态（用于「内容变了才重置滚动簿记」）。
+  /// 上一次已应用的会话状态（渲染侧簿记：内容变了才重置滚动 / 行 key）。
   LyricsState _lastState = LyricsState.idle;
 
-  /// 当前曲目的会话状态：尚未请求加载、或 provider 持有的是别的曲目时为空态。
-  LyricsState get _session {
-    final trackId = _lastTrackId;
-    if (trackId == null) return LyricsState.idle;
-    final state = _lyricsProvider?.state ?? LyricsState.idle;
-    return state.trackId == trackId ? state : LyricsState.idle;
-  }
+  /// 当前曲目的会话状态（曲目变化由组合根经 `ensureForTrack` 推进）。
+  LyricsState get _session => _lyricsProvider?.state ?? LyricsState.idle;
 
   /// 会话是否正在加载（渲染侧读取，不再维护标志位）。
   bool get _isLoading => _session.status == LyricsStatus.loading;
@@ -108,7 +100,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 未布局重试次数：目标行始终构建不出来时停止重试，避免每帧空转。
   int _pendingScrollRetries = 0;
-  int? _currentTrackDurationMs;
   bool _temporarilyIgnoreUserScroll = false;
   Timer? _userScrollSuppressionTimer;
 
@@ -149,12 +140,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
       vsync: this,
       initialValue: _quickActionsExpanded ? 1 : 0,
     );
-    // 能取到当前曲目就立即加载歌词
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadLyrics();
-      }
-    });
   }
 
   @override
@@ -167,14 +152,27 @@ class _LyricsWidgetState extends State<LyricsWidget>
     provider.addListener(_onLyricsProviderChanged);
   }
 
-  /// 会话状态变化（自己的加载落地 / 换源页手动保存等外部替换）：
+  /// 会话状态变化（组合根按曲目推进 / 换源页手动保存等外部替换）：
   /// 状态值没变就直接跳过，避免无谓 setState。
   void _onLyricsProviderChanged() {
     if (!mounted) return;
     final state = _session;
     if (state == _lastState) return;
+    final trackChanged = state.trackId != _lastState.trackId;
     _lastState = state;
     _applySessionChange(state);
+    if (!trackChanged) return;
+    // 换曲 / 清空：取消待恢复的自动跟随，回到列表顶部（同步歌词随后
+    // 由自动跟随滚到当前行）。
+    _cancelUserScrollResume();
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    // 复制模式锁定单曲循环：跨曲目保留会改变新曲的播放行为，换曲即退出。
+    // 放到微任务里：本回调由会话通知触发，避免在通知链内重入播放命令。
+    if (_isCopyLyricsMode) {
+      Future.microtask(_toggleCopyLyricsMode);
+    }
   }
 
   @override
@@ -192,96 +190,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
     super.dispose();
   }
 
-  Future<void> _loadLyrics() async {
-    if (!mounted) return;
-
-    // 换曲/清空时取消待恢复的自动跟随（下方状态复位会重新建立）。
-    _cancelUserScrollResume();
-
-    final provider = Provider.of<PlaybackProvider>(context, listen: false);
-    final lyricsProvider = Provider.of<LyricsProvider>(context, listen: false);
-    final currentTrack = provider.snapshot.current;
-    if (currentTrack == null) {
-      lyricsProvider.reset();
-      // 无曲目：清空歌词并复位状态
-      if (_session.lines.isNotEmpty || _lastTrackId != null) {
-        _quickActionsHideTimer?.cancel();
-        setState(() {
-          _lastTrackId = null; // 会话状态经 _session 归空
-          _lastState = LyricsState.idle;
-          _autoScroll = true;
-          _previousLineIndex = -1;
-          _syncLineKeys(0);
-          _currentTrackDurationMs = null;
-          _manualQuickActionsVisible = false;
-        });
-        if (_scrollController.hasClients) {
-          _scrollController.jumpTo(0);
-        }
-      }
-      return;
-    }
-
-    final trackId = currentTrack.id.uri;
-    final trackDurationMs = currentTrack.duration?.inMilliseconds;
-    // 仅当曲目 id 有效且变化时重新加载
-    if (trackId.isEmpty || trackId == _lastTrackId) return;
-
-    _lastTrackId = trackId;
-
-    if (_scrollController.hasClients) {
-      _scrollController.jumpTo(0);
-    }
-    _quickActionsHideTimer?.cancel();
-    setState(() {
-      _lastState = LyricsState.idle; // 会话状态经 _session 归空
-      _autoScroll = true;
-      _previousLineIndex = -1;
-      _syncLineKeys(0);
-      _currentTrackDurationMs = trackDurationMs;
-      _manualQuickActionsVisible = false;
-    });
-
-    // 取词/缓存/解析统一走歌词会话模块；本组件只消费 LyricsState。
-    await lyricsProvider.load(currentTrack);
-
-    if (!mounted) return;
-
-    final latestTrackId = Provider.of<PlaybackProvider>(context, listen: false)
-        .snapshot
-        .current
-        ?.id
-        .uri;
-    // 更新状态前确认歌词仍属于当前曲目
-    if (latestTrackId != trackId) {
-      return;
-    }
-
-    final lyricsState = lyricsProvider.state;
-    if (lyricsState.trackId != trackId ||
-        lyricsState.status == LyricsStatus.loading) {
-      return; // 另一轮加载已接管
-    }
-
-    if (lyricsState.status == LyricsStatus.ready) {
-      _lastState = lyricsState;
-      _applySessionChange(lyricsState, trackDurationMs: trackDurationMs);
-      // 下一首歌词预载在组合根统一处理（不依赖本组件是否挂载）。
-    } else {
-      // 取词失败 / 空歌词：会话状态已归空（_session 返回空态），只重置簿记。
-      _lastState = LyricsState.idle;
-      _applySessionChange(LyricsState.idle);
-    }
-  }
-
   /// 会话内容变化后的渲染侧簿记：滚动簿记 / 行 key / 跟随开关统一在这里重置。
-  void _applySessionChange(LyricsState state, {int? trackDurationMs}) {
+  void _applySessionChange(LyricsState state) {
     _quickActionsHideTimer?.cancel();
     setState(() {
       _autoScroll = state.isSynced;
       _previousLineIndex = -1;
       _syncLineKeys(state.lines.length);
-      if (trackDurationMs != null) _currentTrackDurationMs = trackDurationMs;
       _pendingScrollIndex = null;
       _pendingScrollRetries = 0;
       _manualQuickActionsVisible = false;
@@ -616,7 +531,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (lines.isEmpty || currentLineIndex >= lines.length) return;
 
     double ratio;
-    final durationMs = _currentTrackDurationMs;
+    // 曲目时长直接从播放快照读：会话状态只描述歌词，不复制播放元数据。
+    final durationMs = Provider.of<PlaybackProvider>(context, listen: false)
+        .snapshot
+        .current
+        ?.duration
+        ?.inMilliseconds;
     if (durationMs != null && durationMs > 0) {
       ratio = lines[currentLineIndex].timestamp.inMilliseconds / durationMs;
     } else if (lines.length <= 1) {
@@ -752,19 +672,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
     String? currentTrackId,
     int currentLineIndex,
   ) {
-    final bool trackJustChanged = (currentTrackId != _lastTrackId);
-
-    // 曲目变化：按新 id 加载歌词
-    if (trackJustChanged) {
-      // 换曲时退出复制模式
-      if (_isCopyLyricsMode && mounted) {
-        Future.microtask(() => _toggleCopyLyricsMode());
-      }
-      Future.microtask(() async {
-        await _loadLyrics();
-      });
-    }
-
     _syncLineKeys(_session.lines.length);
     _scheduleScrollabilityCheck();
 
@@ -1336,7 +1243,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
       setState(() {
         // 会话状态已由 saveManual 更新（唯一真相），这里只重置渲染侧簿记。
         _lastState = lyricsState;
-        _lastTrackId = trackId;
         _previousLineIndex = -1;
         _syncLineKeys(lyricsState.lines.length);
         _manualQuickActionsVisible = false;
