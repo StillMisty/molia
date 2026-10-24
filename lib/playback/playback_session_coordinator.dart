@@ -28,8 +28,12 @@ import '../domain/ports/playback_session_sync.dart';
 import '../domain/ports/state_listenable.dart';
 import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
+import 'playback_commands.dart';
 import 'playback_power_policy.dart';
 import 'queue_projection.dart';
+
+// provider 仍只 import 协调者：路由枚举与命令面同源，避免再添一个 import。
+export 'playback_commands.dart' show PlaybackCommandRoute;
 
 final _logger = Logger('molia.playback_session');
 
@@ -53,27 +57,14 @@ enum PlaybackSessionPhase {
 /// 恢复曲目并未真正起播：只把信息交给展示面，不写历史、不落盘。
 typedef RestoredTrackReporter = void Function(Track track);
 
-/// 命令路由结果：命令由哪个阶段处理（调用方据此决定 UI 通知口径）。
-///
-/// provider 不再自己分叉恢复/真实，而是读这个结果——恢复态两处状态都要刷新
-/// （曲目与队列都可能变），live 只有曲目/播放态变化，空操作不必通知。
-enum PlaybackCommandRoute {
-  /// 空操作（无会话 / 越界 / 未命中）：没有状态变化。
-  none,
-
-  /// 恢复态处理：命令作用于保存的会话，或借此完成恢复装载（交接到 live）。
-  restored,
-
-  /// live：命令转发给真实播放。
-  live,
-}
-
 /// 播放会话模块：队列 + 下标 + 进度 + 模式 + 上下文的一次完整生命周期。
 ///
 /// 输入是 facade（真实播放的事实来源与命令出口），输出是 [resolve]（UI 快照）+
 /// [position]（进度通道）；持久化对上层透明（[flushSession] 只承诺「写完了」）。
-/// 组合根创建它并注入 provider / 系统媒体会话（handler 的落盘回调）。
-class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
+/// 组合根创建它并注入 provider / 系统媒体会话——两边都只经 [PlaybackCommandPort]
+/// 写入，phase 路由、恢复态回落与「返回即已提交」只在这里实现一份。
+class PlaybackSessionCoordinator
+    implements PlaybackSessionSyncPort, PlaybackCommandPort {
   PlaybackSessionCoordinator({
     required PlaybackFacade facade,
     required PlaybackSessionStore store,
@@ -148,6 +139,10 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
 
   /// 上次整份落盘时间：进度 tick 节流与强制落盘共用同一口径。
   DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 已入队的整份落盘次数：命令据此判断「快照监听是否已经替我提交」，
+  /// 避免同一动作写两遍（暂停 / 停止的已提交契约只保留一个写入口）。
+  int _sessionWrites = 0;
 
   /// 上一帧是否在播放（播放中→暂停/停止时强制保存一次进度）。
   bool _wasPlaying = false;
@@ -275,26 +270,64 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
     return true;
   }
 
-  // ── 命令（按阶段路由，provider 不再分叉） ────────────────
+  // ── 命令（按阶段路由；UI 与系统媒体会话共用） ────────────
 
-  /// 播放 / 暂停：恢复态 = 用保存的队列 / 下标重新取链并跳回保存进度；
-  /// live = 转发给 facade，等会话落盘后才返回。
+  /// 播放：恢复态 = 用保存的队列 / 下标重新取链并跳回保存进度；
+  /// live = 暂停时才起播（幂等，不会把系统「播放」键变成暂停）。
   ///
-  /// 暂停是会话内容变化（进度 / isPlaying 语义）：快照监听已强制整份落盘，
-  /// 这里再等 `pendingWrite` 排空，让「点通知暂停」与系统媒体路径共享同一个
-  /// 「动作返回时会话已提交」契约。
-  Future<PlaybackCommandRoute> togglePlayPause() async {
+  /// 播放不改变持久化会话的内容（会话不存 isPlaying），不需要落盘；恢复态
+  /// 的恢复流程自己会在末尾提交恢复进度。
+  @override
+  Future<PlaybackCommandRoute> play() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
-    await _facade.toggle();
-    // 暂停的整份落盘由快照监听（playing → paused）强制触发；这里只等它
-    // 排空。不再额外写一次——同一动作只留一个落盘入口。
+    final live = _facade.snapshot.value;
+    // 无曲目 / 已在播：与旧 handler 的 `hasTrack && !isPlaying` 判定同语义。
+    if (live.current == null || live.isPlaying) {
+      return live.current == null
+          ? PlaybackCommandRoute.none
+          : PlaybackCommandRoute.live;
+    }
+    await _facade.play();
+    return PlaybackCommandRoute.live;
+  }
+
+  /// 暂停：恢复态没有真实播放（空操作）；live 转发 facade，返回前等会话提交。
+  ///
+  /// 「暂停 → 重开应用恢复暂停态」依赖进度与暂停时刻的队列：快照监听
+  /// （playing → paused）会强制整份落盘，这里只等写队列排空；只有它没触发
+  /// （本来就没在播 / 后端没推状态）时才补一次强制保存——同一动作只写一次。
+  @override
+  Future<PlaybackCommandRoute> pause() async {
+    if (phase == PlaybackSessionPhase.restored) {
+      return PlaybackCommandRoute.none;
+    }
+    final live = _facade.snapshot.value;
+    if (live.current == null) return PlaybackCommandRoute.none;
+    final writesBefore = _sessionWrites;
+    await _facade.pause();
+    if (_sessionWrites == writesBefore) _maybeSaveSession(force: true);
     await _store.pendingWrite;
     return PlaybackCommandRoute.live;
+  }
+
+  /// 播放 / 暂停切换（UI 按钮语义）：按当前播放态走 [play] / [pause]，
+  /// 两端因此共享同一条落盘规则，而不是各自再写一遍。
+  @override
+  Future<PlaybackCommandRoute> togglePlayPause() async {
+    if (phase == PlaybackSessionPhase.restored) return resume();
+    final live = _facade.snapshot.value;
+    if (live.current == null) {
+      // 无曲目时保留 UI 既有语义：toggle 仍下发（后端空操作），不是错误。
+      await _facade.toggle();
+      return PlaybackCommandRoute.live;
+    }
+    return live.isPlaying ? pause() : play();
   }
 
   /// 下一首：恢复态 = 从下一下标立即恢复播放（越界 no-op）。
   ///
   /// 恢复态切歌语义上「切歌」包含起播——只移动下标会与队列条目点击不一致。
+  @override
   Future<PlaybackCommandRoute> skipToNext() async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
@@ -309,6 +342,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   }
 
   /// 上一首：恢复态 = 从上一下标立即恢复播放（越界 no-op）。
+  @override
   Future<PlaybackCommandRoute> skipToPrevious() async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
@@ -317,6 +351,26 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
       return resume(startIndex: previous);
     }
     await _facade.previous();
+    await _store.pendingWrite;
+    return PlaybackCommandRoute.live;
+  }
+
+  /// 播放队列中指定下标的曲目（系统媒体队列跳转）；越界返回
+  /// [PlaybackCommandRoute.none]。
+  ///
+  /// 恢复态下 facade 队列为空：下标指向保存的会话队列，从该曲目恢复播放。
+  @override
+  Future<PlaybackCommandRoute> playQueueIndex(int index) async {
+    if (phase == PlaybackSessionPhase.restored) {
+      final session = _restoredSession!;
+      if (index < 0 || index >= session.tracks.length) {
+        return PlaybackCommandRoute.none;
+      }
+      return resume(startIndex: index);
+    }
+    final queue = _facade.snapshot.value.queue;
+    if (index < 0 || index >= queue.length) return PlaybackCommandRoute.none;
+    await _facade.playQueueIndex(index);
     await _store.pendingWrite;
     return PlaybackCommandRoute.live;
   }
@@ -347,6 +401,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   /// live 与系统 seek 同一口径：拖动 / 点歌词行也是一次会话内容变化，
   /// 不依赖 1s 节流（进程紧接着被杀时重开要落在新位置）。返回的 Future 在
   /// 写队列排空后结束。
+  @override
   Future<void> seekToPosition(Duration position) async {
     if (_resumeRestoring) {
       _resumeSeekTarget = position;
@@ -411,6 +466,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   /// 恢复态必须同步改写保存的会话（否则模式按钮看起来「点不动」），恢复
   /// 播放时会把该模式带给后端；live 立即整份落盘并等它写完（重开应用恢复的
   /// 是改后的模式）。
+  @override
   Future<void> setPlayMode(PlayMode mode) async {
     await _facade.setMode(mode);
     final session = _restoredSession;
@@ -424,7 +480,27 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
     await _store.pendingWrite;
   }
 
-  /// 停止播放并清空持久化会话（本次会话结束，避免下次启动又出现）。
+  /// 循环到下一个播放模式：以当前展示的模式为基准（恢复态读会话，live 读
+  /// facade），系统通知与 App 内按钮因此不会各切各的。
+  @override
+  Future<void> togglePlayMode() {
+    final current = resolve(_facade.snapshot.value).mode;
+    return setPlayMode(current.next);
+  }
+
+  /// 系统媒体「停止」：先提交会话再停，保留下次启动可恢复的会话。
+  ///
+  /// 必须赶在 `facade.stop()` 清空服务队列之前落盘——停止后快照为空，再也
+  /// 拼不出「上一首 / 队列 / 模式 / 进度」。与 [stopPlayback] 的区别是语义
+  /// 而不是写入方式：那个是 UI 的「本次会话结束」，会清空持久化。
+  @override
+  Future<void> stop() async {
+    await flushSession();
+    await _facade.stop();
+    await _store.pendingWrite;
+  }
+
+  /// 停止播放并清空持久化会话（UI 的「本次会话结束」，避免下次启动又出现）。
   ///
   /// 清除等写队列排空后返回：在途的旧保存不会在清除之后把会话复活。
   Future<void> stopPlayback() async {
@@ -579,6 +655,7 @@ class PlaybackSessionCoordinator implements PlaybackSessionSyncPort {
   /// 整份落盘：重写会话 JSON（`savedAt` 随 [now] 刷新）并触发 `onSaved`。
   void _writeSession(PlaybackSnapshot live, DateTime now) {
     _lastSessionSave = now;
+    _sessionWrites++;
     unawaited(_store.save(PlaybackSession(
       tracks: live.queue,
       index: live.currentIndex,

@@ -1,15 +1,15 @@
 /// 系统媒体控制（通知 / 锁屏 / 耳机键）的会话落盘与冷启动恢复。
 ///
 /// 复现路径：系统控制暂停 → 冷启动；断言「存储」与「恢复」两端：
-/// - 暂停 / 停止 / 切播放顺序这些**直接落到 LocalPlaybackService** 的控制动作，
-///   返回时会话必须已经写回本地（`pendingWrite` 收口在会话协调者的
-///   `flushSession`）；
+/// - 暂停 / 停止 / 切播放顺序这些控制动作走同一个播放命令面（handler →
+///   `PlaybackSessionCoordinator`），返回时会话必须已经写回本地，且一个动作
+///   只写一次（命令面内 await `pendingWrite`，handler 不再额外 flush）；
 /// - 冷启动（新 provider / 新后端，同一存储）恢复上一首 + 队列 + 模式 + 进度，
 ///   且 `isPlaying=false`（不自动起播）。
 ///
 /// 装配与组合根 `buildPlaybackStack` 同构：真实 facade / 观察者 / 会话协调者 /
-/// provider + 假服务（不触碰 just_audio），`LocalAudioHandler` 按组合根方式
-/// 回填会话落盘。
+/// provider + 假服务（不触碰 just_audio），`LocalAudioHandler` 直接注入协调者
+/// 作为命令面。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -175,6 +175,24 @@ class _FakeService extends LocalPlaybackService {
   }
 }
 
+/// 统计整份落盘次数：验证「一个控制动作只写一次」。
+class _RecordingStore extends PlaybackSessionStore {
+  int fullSaves = 0;
+  int clears = 0;
+
+  @override
+  Future<void> save(PlaybackSession session) {
+    fullSaves++;
+    return super.save(session);
+  }
+
+  @override
+  Future<void> clear() {
+    clears++;
+    return super.clear();
+  }
+}
+
 /// 组合根同构装配：假服务 ← 真实后端 / facade / 观察者 / provider + handler。
 class _Harness {
   _Harness() {
@@ -184,7 +202,7 @@ class _Harness {
           PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
     );
     facade = DefaultPlaybackFacade(backend: backend);
-    store = PlaybackSessionStore();
+    store = _RecordingStore();
     observer = PlaybackObserver(facade: facade);
     final settings = testSettingsRegistry();
     session = PlaybackSessionCoordinator(
@@ -200,16 +218,16 @@ class _Harness {
       observer: observer,
       sessionCoordinator: session,
     );
-    handler = LocalAudioHandler(service, backend: mediaBackend);
-    // 与 `buildPlaybackStack` 同一接线：handler 建好后回填会话落盘。
-    handler.attachSessionPersister(session.flushSession);
+    // 与 `buildPlaybackStack` 同一接线：系统动作经命令面写入会话。
+    handler =
+        LocalAudioHandler(service, commands: session, backend: mediaBackend);
     observer.attach();
   }
 
   final _FakeService service = _FakeService();
   final FakeMediaSessionBackend mediaBackend = FakeMediaSessionBackend();
   late final DefaultPlaybackFacade facade;
-  late final PlaybackSessionStore store;
+  late final _RecordingStore store;
   late final PlaybackObserver observer;
   late final PlaybackSessionCoordinator session;
   late final PlaybackProvider provider;
@@ -245,11 +263,17 @@ void main() {
 
     // 播放推进到 6s（在观察者的 1s 节流窗口内，不会被自动落盘）。
     harness.service.advance(position: const Duration(seconds: 6));
+    final savesBeforePause = harness.store.fullSaves;
 
-    // 系统控制路径：通知 / 锁屏 / 耳机键的暂停直接落到服务。
+    // 系统控制路径：通知 / 锁屏 / 耳机键的暂停走会话命令面。
     await harness.handler.pause();
     expect(harness.service.toggleCalls, 1);
     expect(harness.provider.isPlaying, isFalse);
+    expect(
+      harness.store.fullSaves,
+      savesBeforePause + 1,
+      reason: '暂停只写一次：快照监听提交，命令面只等队列排空；handler 不再额外 flush',
+    );
 
     // 存储：暂停动作返回时会话已在本地（含暂停时的进度）。
     final stored = await PlaybackSessionStore().load();
@@ -287,9 +311,16 @@ void main() {
     await harness.provider.preferencesReady;
     // 播放推进到 20s：仍落在观察者的节流窗口内（只有停止时的落盘能带上它）。
     harness.service.advance(position: const Duration(seconds: 20));
+    final savesBeforeStop = harness.store.fullSaves;
 
     await harness.handler.stop();
     expect(harness.service.stopCalls, 1);
+    expect(
+      harness.store.fullSaves,
+      savesBeforeStop + 1,
+      reason: '停止只提交一次：先落盘再让 facade 清空服务队列',
+    );
+    expect(harness.store.clears, 0, reason: '系统停止保留可恢复会话');
     // 停止后服务队列已清空（快照取不到会话）：恢复只能靠停止前的落盘。
     expect(harness.service.hasTrack, isFalse);
     expect(harness.provider.hasTrack, isFalse);
@@ -319,9 +350,15 @@ void main() {
       mode: PlayMode.sequential,
     );
     await harness.provider.preferencesReady;
+    final savesBeforeMode = harness.store.fullSaves;
 
     await harness.handler.customAction(playModeActionId);
-    expect(harness.service.toggleModeCalls, 1);
+    expect(harness.service.toggleModeCalls, 0);
+    expect(
+      harness.store.fullSaves,
+      savesBeforeMode + 1,
+      reason: '模式是会话的一部分：命令面写入一次',
+    );
     // App 内 UI 读的是同一份快照：通知改模式，界面同步跟随。
     expect(harness.provider.currentMode, PlayMode.singleRepeat,
         reason: '顺序 → 单曲（与 PlaybackProvider.togglePlayMode 同一顺序）');
@@ -339,6 +376,58 @@ void main() {
     await harness.provider.setPlayMode(PlayMode.shuffle);
     final stored = await PlaybackSessionStore().load();
     expect(stored?.mode, PlayMode.shuffle);
+  });
+
+  test('同一提交口径：通知暂停与 UI 暂停写出的会话一致，且都只写一次', () async {
+    // 系统媒体入口（handler → 命令面）。
+    final media = _Harness();
+    addTearDown(media.dispose);
+    media.service.seed(
+      [_source('a'), _source('b'), _source('c')],
+      index: 1,
+      playing: true,
+      position: const Duration(seconds: 5),
+      mode: PlayMode.shuffle,
+      contextName: '收藏',
+    );
+    await media.provider.preferencesReady;
+    media.service.advance(position: const Duration(seconds: 6));
+    final mediaSaves = media.store.fullSaves;
+
+    await media.handler.pause();
+    expect(media.store.fullSaves, mediaSaves + 1);
+    final mediaSession = await PlaybackSessionStore().load();
+
+    // UI 入口（provider → 同一个协调者）。清空上一段存储，避免被装载成恢复态。
+    await PlaybackSessionStore().clear();
+    final ui = _Harness();
+    addTearDown(ui.dispose);
+    ui.service.seed(
+      [_source('a'), _source('b'), _source('c')],
+      index: 1,
+      playing: true,
+      position: const Duration(seconds: 5),
+      mode: PlayMode.shuffle,
+      contextName: '收藏',
+    );
+    await ui.provider.preferencesReady;
+    ui.service.advance(position: const Duration(seconds: 6));
+    final uiSaves = ui.store.fullSaves;
+
+    await ui.provider.togglePlayPause();
+    expect(ui.store.fullSaves, uiSaves + 1);
+    final uiSession = await PlaybackSessionStore().load();
+
+    expect(mediaSession, isNotNull);
+    expect(uiSession, isNotNull);
+    expect(
+      uiSession!.tracks.map((track) => track.id.uri),
+      mediaSession!.tracks.map((track) => track.id.uri),
+    );
+    expect(uiSession.index, mediaSession.index);
+    expect(uiSession.position, mediaSession.position);
+    expect(uiSession.mode, mediaSession.mode);
+    expect(uiSession.context?.name, mediaSession.context?.name);
   });
 
   test('suspendPlaybackSession：返回时会话已落盘（可 await 的落盘契约）', () async {

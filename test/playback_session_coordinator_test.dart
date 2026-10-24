@@ -411,6 +411,133 @@ void main() {
     expect(observed, isNot(contains(Duration.zero)));
   });
 
+  test('命令面 play / pause：按阶段路由，暂停只补写一次、播放不重写会话', () async {
+    build(persistStore: true);
+
+    // idle：没有可作用的对象，空操作。
+    expect(await session.play(), PlaybackCommandRoute.none);
+    expect(await session.pause(), PlaybackCommandRoute.none);
+    expect(backend.calls, isEmpty);
+
+    final a = _track('a');
+    backend.emit(_live(a, playing: false));
+    expect(store.calls, ['save']);
+
+    // 暂停态收到播放键：下发 play，不改变可持久化会话。
+    now = now.add(const Duration(milliseconds: 300));
+    expect(await session.play(), PlaybackCommandRoute.live);
+    expect(backend.calls, ['play']);
+    expect(store.saves, hasLength(1), reason: '播放不改变会话内容（不存 isPlaying）');
+
+    // 已在播：幂等，不再下发（旧 handler 的 hasTrack && !isPlaying 口径）。
+    backend.emit(_live(a, playing: true, position: const Duration(seconds: 1)));
+    expect(await session.play(), PlaybackCommandRoute.live);
+    expect(backend.calls, ['play']);
+
+    // 暂停：快照监听会强制落盘；这里假后端不推暂停态，命令面补一次。
+    final savesBeforePause = store.saves.length;
+    expect(await session.pause(), PlaybackCommandRoute.live);
+    expect(backend.calls, ['play', 'pause']);
+    expect(store.saves, hasLength(savesBeforePause + 1));
+    // 返回即已落盘（persistStore 写的是真实存储）。
+    expect((await PlaybackSessionStore().load())?.position,
+        const Duration(seconds: 1));
+  });
+
+  test('命令面 play / pause：恢复态点播放走恢复流程，暂停不误触发起播', () async {
+    build();
+    await seedSession(PlaybackSession(
+      tracks: [_track('a'), _track('b')],
+      index: 1,
+      position: const Duration(seconds: 10),
+    ));
+    expect(await session.load(), isTrue);
+
+    // 恢复态没有真实播放：暂停是空操作，不能把 resume 当成 toggle。
+    expect(await session.pause(), PlaybackCommandRoute.none);
+    expect(backend.calls, isEmpty);
+    expect(session.phase, PlaybackSessionPhase.restored);
+
+    expect(await session.play(), PlaybackCommandRoute.restored);
+    expect(backend.calls, ['setMode', 'load', 'seek']);
+    expect(session.hasRestoredSession, isFalse);
+  });
+
+  test('命令面切模式：live 写当前模式并立即落盘', () async {
+    build();
+    backend.emit(_live(_track('a'), mode: PlayMode.sequential));
+
+    await session.togglePlayMode();
+
+    expect(backend.calls.last, 'setMode');
+    expect(facade.snapshot.value.mode, PlayMode.singleRepeat);
+    expect(store.saves.last.mode, PlayMode.singleRepeat);
+  });
+
+  test('恢复态切模式：按保存会话的模式循环并落盘', () async {
+    build();
+    await seedSession(PlaybackSession(
+      tracks: [_track('a')],
+      index: 0,
+      mode: PlayMode.sequential,
+    ));
+    expect(await session.load(), isTrue);
+
+    await session.togglePlayMode();
+
+    expect(backend.calls, ['setMode']);
+    expect(session.resolve(facade.snapshot.value).mode, PlayMode.singleRepeat);
+    expect(store.saves.last.mode, PlayMode.singleRepeat);
+  });
+
+  test('命令面队列跳转：恢复态按下标恢复播放，live 直达后端，越界空操作', () async {
+    build(backendOverride: _LoadingBackend());
+    await seedSession(PlaybackSession(
+      tracks: [_track('a'), _track('b')],
+      index: 0,
+      position: const Duration(seconds: 10),
+    ));
+    expect(await session.load(), isTrue);
+
+    expect(await session.playQueueIndex(5), PlaybackCommandRoute.none);
+    expect(backend.calls, isEmpty);
+
+    expect(
+      await session.playQueueIndex(1),
+      PlaybackCommandRoute.restored,
+    );
+    expect(backend.calls, ['setMode', 'load']);
+    expect((backend as _LoadingBackend).lastRequest?.startIndex, 1);
+    expect(session.hasRestoredSession, isFalse);
+
+    // 恢复后进入 live：同一命令转发给后端队列跳转。
+    expect(await session.playQueueIndex(0), PlaybackCommandRoute.live);
+    expect(backend.calls.last, 'playQueueIndex:0');
+    expect(await session.playQueueIndex(9), PlaybackCommandRoute.none);
+    expect(backend.calls.last, 'playQueueIndex:0');
+  });
+
+  test('系统停止命令：先提交当前会话再停，保留可恢复会话', () async {
+    build(persistStore: true);
+    final a = _track('a');
+    backend.emit(_live(a, position: const Duration(seconds: 5)));
+    expect(store.saves, hasLength(1));
+
+    // 节流窗口内的最新进度：只有停止前的强制提交能带上它。
+    now = now.add(const Duration(milliseconds: 100));
+    backend.emit(_live(a, position: const Duration(seconds: 7)));
+    expect(store.saves, hasLength(1));
+
+    await session.stop();
+
+    expect(store.saves, hasLength(2));
+    expect(store.saves.last.position, const Duration(seconds: 7));
+    expect(store.calls, isNot(contains('clear')),
+        reason: '系统停止是「停在此处，可恢复」，不是 UI 的结束会话');
+    expect(backend.calls.last, 'stop');
+    expect(await PlaybackSessionStore().load(), isNotNull);
+  });
+
   test('单写者：切歌整份落盘 → 暂停强制落盘 → 停止清除，写请求按序', () async {
     build(persistStore: true);
     final a = _track('a');

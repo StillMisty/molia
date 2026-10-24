@@ -592,7 +592,7 @@ class PlaybackProvider extends ChangeNotifier {
   /// 返回的 Future 在会话落盘后结束（协调者 `flushSession` → store 的
   /// `pendingWrite`）：退出路径必须 await 它再销毁窗口；生命周期回调无法
   /// await，用 `unawaited` 触发同一个提交。系统媒体控制（通知暂停 / 停止 /
-  /// 切播放顺序）走注入的 `flushSession`，与这里汇入同一条写队列。
+  /// 切播放顺序）走同一个协调者的命令面，与这里汇入同一条写队列。
   Future<void> suspendPlaybackSession() => _session.flushSession();
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。

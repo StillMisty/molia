@@ -155,3 +155,11 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
 - **iOS / macOS**：锁屏 Now Playing、远程控制、封面；
 - **Android 真机**：Media3 通知外观、耳机键、自定义动作图标在
   release（shrinkResources）下的存在性。
+
+## 后续（2026-10-24：播放命令面）
+
+`LocalAudioHandler` 的类名与媒体控制方法名不变；内部改为只读状态映射 +
+`PlaybackCommandPort`（`lib/playback/playback_commands.dart`，唯一实现是
+`PlaybackSessionCoordinator`）。系统动作的恢复态回落、阶段路由与「返回前已
+提交」由命令面负责，handler 不再直写 `LocalPlaybackService`，也不再通过
+`attachSessionPersister` 持有第二个落盘回调。
