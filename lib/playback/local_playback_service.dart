@@ -13,6 +13,7 @@ import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
 import 'audio_focus_guard.dart';
 import 'audio_focus_policy.dart';
+import 'audio_output_policy.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'playback_power_policy.dart';
@@ -125,6 +126,14 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 这个原本由它负责的「拔耳机即暂停」必须在服务里补上。
   final Stream<void>? _becomingNoisyOverride;
 
+  /// 输出设备增删事件流（audio_session 的 `devicesChangedEventStream`）。
+  ///
+  /// 为什么需要它：audio_session 的 noisy receiver 只在持有音频焦点时注册，
+  /// 永久失焦（开了「与其他应用同时播放」后很常见）会被插件反注册，此后
+  /// 拔线 / 蓝牙断链收不到 `becomingNoisyEventStream`。设备回调不依赖焦点，
+  /// 作为「换输出路由必须暂停」的兜底；测试注入假流，生产从会话取。
+  final Stream<AudioDevicesChangedEvent>? _audioDevicesOverride;
+
   /// 「与其他应用同时播放」偏好（设置 › 播放，默认开）。
   ///
   /// 事件到达时读当前值，开关切换即时生效；同时作为会话配置的变更信号
@@ -135,6 +144,7 @@ class LocalPlaybackService extends ChangeNotifier {
   AudioFocusGuard? _focusGuard;
 
   StreamSubscription<void>? _becomingNoisySubscription;
+  StreamSubscription<AudioDevicesChangedEvent>? _audioDevicesSubscription;
 
   final List<SourceTrack> _queue = [];
   int _currentIndex = -1;
@@ -214,6 +224,7 @@ class LocalPlaybackService extends ChangeNotifier {
     PlayingTrackCacheWriter? audioCacheWriter,
     Stream<AudioInterruptionEvent>? audioInterruptions,
     Stream<void>? audioBecomingNoisy,
+    Stream<AudioDevicesChangedEvent>? audioDevicesChanged,
     ValueListenable<bool>? playWithOtherApps,
     PlaybackPowerPolicy? powerPolicy,
     // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
@@ -228,6 +239,7 @@ class LocalPlaybackService extends ChangeNotifier {
         _cacheWriter = audioCacheWriter,
         _interruptionsOverride = audioInterruptions,
         _becomingNoisyOverride = audioBecomingNoisy,
+        _audioDevicesOverride = audioDevicesChanged,
         _playWithOtherApps = playWithOtherApps ?? _alwaysPlayWithOtherApps,
         _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
@@ -241,8 +253,8 @@ class LocalPlaybackService extends ChangeNotifier {
     _powerPolicy.addListener(_syncPositionSampling);
     _syncPositionSampling();
     // 配置系统音频会话（音乐类型）：iOS 后台播放、Android 音频焦点/duck，
-    // 并按「与其他应用同时播放」接入中断 / 耳机拔出。不阻塞构造；不支持的
-    // 平台内部跳过。
+    // 并按「与其他应用同时播放」接入中断 / 耳机拔出 / 输出设备变化。不阻塞
+    // 构造；不支持的平台内部跳过。
     unawaited(_configureAudioSession());
   }
 
@@ -365,19 +377,25 @@ class LocalPlaybackService extends ChangeNotifier {
         platform: defaultTargetPlatform,
       );
 
-  /// 配置 audio_session + 装配音频焦点 / 耳机拔出监听。
+  /// 配置 audio_session + 装配音频焦点 / 耳机拔出 / 输出设备监听。
   ///
   /// 注入假流（测试）时只走守卫接线，不触碰插件通道；Linux/Windows 没有
   /// audio_session 实现，按平台跳过，保持桌面端现状。
   Future<void> _configureAudioSession() async {
     final injectedInterruptions = _interruptionsOverride;
     final injectedNoisy = _becomingNoisyOverride;
-    if (injectedInterruptions != null || injectedNoisy != null) {
+    final injectedDevices = _audioDevicesOverride;
+    if (injectedInterruptions != null ||
+        injectedNoisy != null ||
+        injectedDevices != null) {
       if (injectedInterruptions != null) {
         _attachFocusGuard(injectedInterruptions);
       }
       if (injectedNoisy != null) {
         _attachBecomingNoisy(injectedNoisy);
+      }
+      if (injectedDevices != null) {
+        _attachDeviceChanges(injectedDevices);
       }
       return;
     }
@@ -387,6 +405,7 @@ class LocalPlaybackService extends ChangeNotifier {
       await session.configure(_sessionConfiguration);
       _attachFocusGuard(session.interruptionEventStream);
       _attachBecomingNoisy(session.becomingNoisyEventStream);
+      _attachDeviceChanges(session.devicesChangedEventStream);
     } catch (e) {
       debugPrint('[LocalPlayback] 音频会话配置失败: $e');
     }
@@ -394,7 +413,9 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 设置切换后重新应用会话配置（iOS / macOS 的 `mixWithOthers`）。
   Future<void> _reconfigureAudioSession() async {
-    if (_interruptionsOverride != null || _becomingNoisyOverride != null) {
+    if (_interruptionsOverride != null ||
+        _becomingNoisyOverride != null ||
+        _audioDevicesOverride != null) {
       return;
     }
     if (!_usesAudioSession) return;
@@ -431,6 +452,21 @@ class LocalPlaybackService extends ChangeNotifier {
     _becomingNoisySubscription = events.listen(
       (_) => unawaited(pause()),
       onError: (Object e) => debugPrint('[LocalPlayback] 耳机拔出事件失败: $e'),
+    );
+  }
+
+  /// 输出设备断开始终暂停（与「与其他应用同时播放」无关）。
+  ///
+  /// 与 becoming noisy 互补：接收器可能因失焦被反注册，而设备回调没有这个
+  /// 生命周期限制。判定规则见 [shouldPauseForDeviceRemoval]。
+  void _attachDeviceChanges(Stream<AudioDevicesChangedEvent> events) {
+    unawaited(_audioDevicesSubscription?.cancel());
+    _audioDevicesSubscription = events.listen(
+      (event) {
+        if (!shouldPauseForDeviceRemoval(event.devicesRemoved)) return;
+        unawaited(pause());
+      },
+      onError: (Object e) => debugPrint('[LocalPlayback] 音频设备变化失败: $e'),
     );
   }
 
@@ -1121,6 +1157,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _cacheWriter?.cancel();
     _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
     unawaited(_becomingNoisySubscription?.cancel());
+    unawaited(_audioDevicesSubscription?.cancel());
     unawaited(_trackCompletions.close());
     final guard = _focusGuard;
     if (guard != null) unawaited(guard.detach());

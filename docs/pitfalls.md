@@ -832,3 +832,15 @@
     焦点事件与耳机拔出（`becomingNoisyEventStream`），并自己补上
     「系统发回可续播结束事件 → 续播」的记账；否则开关看着生效、实际仍被
     just_audio 暂停。回归用例见 `test/playback/audio_focus_guard_test.dart`。
+80. **audio_session 的 noisy receiver 只在持有音频焦点时注册**：插件在
+    `requestAudioFocus` 成功后才注册 `ACTION_AUDIO_BECOMING_NOISY`，收到
+    `AUDIOFOCUS_LOSS` 时内部 `abandonAudioFocus()` 会一并反注册。开启
+    「与其他应用同时播放」后，焦点被别的应用拿走很常见（我们不暂停，插件
+    仍会放弃焦点），此时再拔耳机 / 蓝牙断链就收不到
+    `becomingNoisyEventStream`。`LocalPlaybackService` 因此额外订阅
+    `devicesChangedEventStream`（Android `AudioDeviceCallback` / iOS 路由变化，
+    均不依赖焦点），按 `audio_output_policy.dart::shouldPauseForDeviceRemoval`
+    只对「非内置输出设备被移除」暂停：内置扬声器 / 听筒的移除通常意味着刚
+    插上耳机，不能误停。两条路都走 `pause()`，重入无副作用；回归用例见
+    `test/playback/audio_focus_guard_test.dart` 与
+    `test/playback/audio_output_policy_test.dart`。

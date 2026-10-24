@@ -1,3 +1,6 @@
+// 构造测试设备要引用 audio_session 里标记为 experimental 的设备类型枚举。
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
@@ -34,12 +37,14 @@ class _RecordingService extends LocalPlaybackService {
     required Stream<AudioInterruptionEvent> interruptions,
     super.playWithOtherApps,
     Stream<void>? becomingNoisy,
+    Stream<AudioDevicesChangedEvent>? devicesChanged,
   }) : super(
           resolver: (track, {String? quality}) async =>
               'http://127.0.0.1/a.wav',
           // 注入假流：走 `_configureAudioSession` 的守卫装配，不初始化插件会话。
           audioInterruptions: interruptions,
           audioBecomingNoisy: becomingNoisy,
+          audioDevicesChanged: devicesChanged,
         );
 
   int pauseCalls = 0;
@@ -50,6 +55,14 @@ class _RecordingService extends LocalPlaybackService {
     return true;
   }
 }
+
+AudioDevice _device(String id, AudioDeviceType type) => AudioDevice(
+      id: id,
+      name: id,
+      isInput: false,
+      isOutput: true,
+      type: type,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -238,6 +251,50 @@ void main() {
       noisy.add(null);
       await pumpEventQueue();
       expect(service.pauseCalls, 1);
+    });
+
+    test('蓝牙输出断开 → 暂停（设备回调不依赖音频焦点）', () async {
+      final events = StreamController<AudioInterruptionEvent>();
+      final devices = StreamController<AudioDevicesChangedEvent>();
+      addTearDown(events.close);
+      addTearDown(devices.close);
+      final service = _RecordingService(
+        interruptions: events.stream,
+        devicesChanged: devices.stream,
+      );
+      await pumpEventQueue();
+
+      devices.add(
+        AudioDevicesChangedEvent(
+          devicesRemoved: {
+            _device('bt', AudioDeviceType.bluetoothA2dp),
+          },
+        ),
+      );
+      await pumpEventQueue();
+      expect(service.pauseCalls, 1);
+    });
+
+    test('内置扬声器被移除（路由切到耳机）→ 不暂停', () async {
+      final events = StreamController<AudioInterruptionEvent>();
+      final devices = StreamController<AudioDevicesChangedEvent>();
+      addTearDown(events.close);
+      addTearDown(devices.close);
+      final service = _RecordingService(
+        interruptions: events.stream,
+        devicesChanged: devices.stream,
+      );
+      await pumpEventQueue();
+
+      devices.add(
+        AudioDevicesChangedEvent(
+          devicesRemoved: {
+            _device('speaker', AudioDeviceType.builtInSpeaker),
+          },
+        ),
+      );
+      await pumpEventQueue();
+      expect(service.pauseCalls, 0);
     });
 
     test('未注入中断流时构造不抛（无插件实现路径）', () async {
