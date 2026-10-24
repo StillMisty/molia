@@ -19,10 +19,12 @@ class FakeLibraryRepository implements LibraryStore {
   /// 与实现一致的收藏保留行名（假实现自持，不依赖实现私有常量）。
   static const String _favoritesName = '__favorites__';
 
-  /// 读取 / 收藏写入失败注入（收藏页失败态与批量写失败用例）。
-  /// 默认关闭：其余用例行为不变。
+  /// 读取 / 收藏写入 / 历史写入 / 列表 CRUD 失败注入
+  /// （收藏页失败态、批量写失败与合集弹层用例）。默认关闭。
   bool failReads = false;
   bool failFavoriteWrites = false;
+  bool failHistoryWrites = false;
+  bool failPlaylistWrites = false;
 
   /// sync: true —— 变更事件在写入调用栈内同步派发，provider 的重载
   /// Future 在 widget 测试的 fake-async 区内正常完成（否则跨 zone 挂起）。
@@ -80,6 +82,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) async {
+    if (failHistoryWrites) throw StateError('history write failed');
     if (entries.isEmpty) return 0;
     for (final entry in entries) {
       _history.removeWhere(
@@ -102,6 +105,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<int> createPlaylist(String name) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
     final id = _nextPlaylistId++;
     _playlists[id] = PlaylistInfo(
       id: id,
@@ -133,6 +137,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<void> renamePlaylist(int id, String name) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
     final playlist = _playlists[id];
     if (playlist == null) return;
     _playlists[id] = PlaylistInfo(
@@ -147,6 +152,7 @@ class FakeLibraryRepository implements LibraryStore {
 
   @override
   Future<void> deletePlaylist(int id) async {
+    if (failPlaylistWrites) throw StateError('playlist write failed');
     _playlists.remove(id);
     _tracks.remove(id);
     _changed(const LibraryChange.playlists());

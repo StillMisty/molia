@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/library_outcome.dart';
 import '../providers/library_provider.dart';
 import 'add_to_playlist_sheet.dart';
 
@@ -13,7 +14,8 @@ AppLocalizations _l10n(BuildContext context) =>
 ///
 /// 收藏页（曲目/历史行、多选）与发现页共用这一份实现——选择目标、写入、
 /// 解析新建列表名、反馈提示都在这里；调用方只提供规范化的 [PlaylistTrack]
-/// 列表与是否展示收藏/历史选项。返回是否真正选择了目标（取消为 false）。
+/// 列表与是否展示收藏/历史选项。返回是否真正选择了目标并写入成功
+/// （取消 / 写入失败为 false）。
 Future<bool> addTracksToLibraryTarget(
   BuildContext context, {
   required LibraryProvider provider,
@@ -37,14 +39,16 @@ Future<bool> addTracksToLibraryTarget(
 
   int added;
   String name;
+  LibraryMutationOutcome? favoriteOrHistoryOutcome;
   switch (selection.kind) {
     case AddToPlaylistTargetKind.favorites:
       name = l10n.favoritesPlaylistName;
-      final outcome = await provider.addTracksToFavorites(tracks);
-      added = outcome.changed;
+      favoriteOrHistoryOutcome = await provider.addTracksToFavorites(tracks);
+      added = favoriteOrHistoryOutcome.changed;
     case AddToPlaylistTargetKind.history:
       name = l10n.libraryHistory;
-      added = await provider.addTracksToHistory(tracks);
+      favoriteOrHistoryOutcome = await provider.addTracksToHistory(tracks);
+      added = favoriteOrHistoryOutcome.changed;
     case AddToPlaylistTargetKind.playlist:
       final playlistId = selection.playlistId!;
       added = await provider.addTracksToPlaylist(playlistId, tracks);
@@ -60,6 +64,11 @@ Future<bool> addTracksToLibraryTarget(
       }
   }
   if (!context.mounted) return false;
+  // 写失败不能报「已加入 / 已存在」：目标选择过但没写进去。
+  if (favoriteOrHistoryOutcome?.isFailure ?? false) {
+    M3ESnackbar.show(context, message: l10n.operationFailed);
+    return false;
+  }
   M3ESnackbar.show(
     context,
     message:

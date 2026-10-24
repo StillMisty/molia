@@ -818,27 +818,40 @@ class LibraryProvider extends ChangeNotifier {
     return result;
   }
 
-  /// 批量把列表曲目加入播放历史（最近播放置顶）；返回写入条数。
+  /// 批量把列表曲目加入播放历史（最近播放置顶）。
   ///
   /// 只落库：内存顺序按停留期间冻结的口径合并（新条目置前、已有条目不重排），
   /// 播放历史列表下次进入时由 [resortHistoryByRecency] 刷新到最新顺序。
-  Future<int> addTracksToHistory(List<PlaylistTrack> tracks) {
+  /// 写失败在边界收口成 failed，调用方据此提示而不是抛出。
+  Future<LibraryMutationOutcome> addTracksToHistory(
+    List<PlaylistTrack> tracks,
+  ) async {
+    if (tracks.isEmpty) return const LibraryMutationOutcome.unchanged();
     final now = DateTime.now().millisecondsSinceEpoch;
     var offset = 0;
-    return _repository.addHistoryEntries([
-      for (final track in tracks)
-        PlayHistoryEntry(
-          sourceKey: track.sourceKey,
-          songId: track.songId,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          coverUrl: track.coverUrl,
-          durationMs: track.durationMs,
-          raw: track.raw,
-          playedAt: now + offset++,
-        ),
-    ]);
+    final int added;
+    try {
+      added = await _repository.addHistoryEntries([
+        for (final track in tracks)
+          PlayHistoryEntry(
+            sourceKey: track.sourceKey,
+            songId: track.songId,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            coverUrl: track.coverUrl,
+            durationMs: track.durationMs,
+            raw: track.raw,
+            playedAt: now + offset++,
+          ),
+      ]);
+    } catch (e) {
+      debugPrint('[Library] 批量加入播放历史失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+    return added > 0
+        ? LibraryMutationOutcome.applied(added)
+        : const LibraryMutationOutcome.unchanged();
   }
 
   /// 按给定顺序重排列表曲目（`sortOrder` 事务重写）。
@@ -952,11 +965,30 @@ class LibraryProvider extends ChangeNotifier {
         : const LibraryMutationOutcome.unchanged();
   }
 
-  Future<void> deletePlaylist(int playlistId) =>
-      _repository.deletePlaylist(playlistId);
+  /// 删除列表；写失败收口成 failed（合集弹层保留该行并提示）。
+  Future<LibraryMutationOutcome> deletePlaylist(int playlistId) async {
+    try {
+      await _repository.deletePlaylist(playlistId);
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 删除列表失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+  }
 
-  Future<void> renamePlaylist(int playlistId, String name) =>
-      _repository.renamePlaylist(playlistId, name);
+  /// 重命名列表；写失败收口成 failed（合集弹层保留旧名并提示）。
+  Future<LibraryMutationOutcome> renamePlaylist(
+    int playlistId,
+    String name,
+  ) async {
+    try {
+      await _repository.renamePlaylist(playlistId, name);
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 重命名列表失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+  }
 
   /// 收藏/取消收藏（当前播放曲目 / 搜索结果 / 列表曲目通用入口）。
   Future<bool> toggleFavorite({

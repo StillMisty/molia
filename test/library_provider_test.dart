@@ -32,6 +32,8 @@ class _CountingLibraryRepository extends LibraryRepository {
   /// 读取 / 写入失败开关：失败结果的验收标准（阶段 / outcome）用。
   bool failReads = false;
   bool failWrites = false;
+  bool failHistoryWrites = false;
+  bool failPlaylistWrites = false;
 
   /// 一次性闸门：非空时该次查询返回测试控制的快照（用于制造旧快照）。
   Completer<List<PlayHistoryEntry>>? nextHistorySnapshot;
@@ -100,6 +102,30 @@ class _CountingLibraryRepository extends LibraryRepository {
   Future<int> deleteHistoryEntries(List<TrackKey> keys) {
     if (failWrites) return Future.error(StateError('history write failed'));
     return super.deleteHistoryEntries(keys);
+  }
+
+  @override
+  Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) {
+    if (failHistoryWrites) {
+      return Future.error(StateError('history add failed'));
+    }
+    return super.addHistoryEntries(entries);
+  }
+
+  @override
+  Future<void> renamePlaylist(int id, String name) {
+    if (failPlaylistWrites) {
+      return Future.error(StateError('playlist rename failed'));
+    }
+    return super.renamePlaylist(id, name);
+  }
+
+  @override
+  Future<void> deletePlaylist(int id) {
+    if (failPlaylistWrites) {
+      return Future.error(StateError('playlist delete failed'));
+    }
+    return super.deletePlaylist(id);
   }
 }
 
@@ -754,7 +780,7 @@ void main() {
     expect(again.added, 0);
 
     // 曲目加入播放历史。
-    expect(await provider.addTracksToHistory(tracks), 1);
+    expect((await provider.addTracksToHistory(tracks)).changed, 1);
     await settle();
     expect(provider.history.single.songId, '1');
 
@@ -894,6 +920,40 @@ void main() {
       final outcome = await provider.deleteHistoryEntries(provider.history);
       expect(outcome.isFailure, isTrue);
       expect(provider.history, hasLength(1), reason: '失败后回滚乐观删除');
+    });
+
+    test('加入播放历史失败 → failed；重试成功 → applied', () async {
+      final track = PlaylistTrack(
+        playlistId: 0,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        addedAt: 0,
+      );
+      repository.failHistoryWrites = true;
+      final failed = await provider.addTracksToHistory([track]);
+      expect(failed.isFailure, isTrue);
+      expect(provider.history, isEmpty);
+
+      repository.failHistoryWrites = false;
+      final applied = await provider.addTracksToHistory([track]);
+      expect(applied.isSuccess, isTrue);
+      expect(applied.changed, 1);
+      await settle();
+      expect(provider.history.single.songId, '1');
+    });
+
+    test('列表重命名 / 删除失败 → failed；成功 → applied', () async {
+      final id = await provider.createPlaylist('L');
+      await settle();
+
+      repository.failPlaylistWrites = true;
+      expect((await provider.renamePlaylist(id, 'R')).isFailure, isTrue);
+      expect((await provider.deletePlaylist(id)).isFailure, isTrue);
+
+      repository.failPlaylistWrites = false;
+      expect((await provider.renamePlaylist(id, 'R')).isSuccess, isTrue);
+      expect((await provider.deletePlaylist(id)).isSuccess, isTrue);
     });
   });
 }
