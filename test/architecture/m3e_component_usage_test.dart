@@ -23,9 +23,6 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   // 壳层底栏容器：容器色（surfaceContainer）+ 布局约束，不是可点表面；
   // 等 Phase 6 排版迁移时再评估等价的 M3E 容器。
   'lib/app/desktop/now_playing_bar.dart': {'Material'},
-  // 壳层顶栏（Phase 5 迁移到 M3E AppBar；AppBar.bottom 的约束语义见
-  // app_shell 顶部注释）。
-  'lib/app/shell_chrome.dart': {'AppBar'},
   // 收藏页可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。
   'lib/pages/favorites.dart': {'ReorderableListView'},
   // 同步口令 / 设备 id 需要「可选中复制」；M3E 没有 SelectableText 等价件。

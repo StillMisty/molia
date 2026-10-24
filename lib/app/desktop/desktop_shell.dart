@@ -96,7 +96,6 @@ class DesktopShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appBar = chrome.appBar(
-      context: context,
       title: _buildTitleBar(context),
     );
 
@@ -177,7 +176,7 @@ class DesktopShell extends StatelessWidget {
   /// 顶栏：最左品牌区（图标 + 应用名，点击打开搜索遮罩）+ 右侧空白拖动区
   /// （双击最大化）。
   ///
-  /// 品牌块贴窗口左缘（AppBar `titleSpacing` 处），不再与内容左缘对齐：
+  /// 品牌块贴窗口左缘（顶栏标题槽的 titleInset 处），不再与内容左缘对齐：
   /// 应用左上角就是标志本身，与侧栏折叠宽 / 页面留白解耦。
   Widget _buildTitleBar(BuildContext context) {
     return Row(
@@ -186,7 +185,7 @@ class DesktopShell extends StatelessWidget {
           key: DesktopShell.searchEntryKey,
           onTap: onOpenSearch,
         ),
-        // 空白拖动区：窗口拖动由 AppBar 外层的 WindowDragArea 承担，这里
+        // 空白拖动区：窗口拖动由顶栏外层的 WindowDragArea 承担，这里
         // 只补「双击最大化」。高度取工具行那一档（与品牌区同一条工具行上
         // 的可点区域等高）；只包空白区 —— 双击品牌区或按钮不该顺带改窗口
         // 状态。

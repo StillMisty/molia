@@ -2,19 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart' as shell;
+import 'package:molia/app/shell_app_bar.dart';
 
-/// 顶栏（`AppBar.bottom`）进度条几何不变量。
+/// 顶栏（`ShellAppBar` 底部槽）进度条几何不变量。
 ///
-/// 回归：AppBar 把 bottom 放进 `Column(spaceBetween)` 且 `PreferredSize`
-/// 不给子级收紧约束——不钉槽高时，暂停用的平直进度条（自身 4dp）会底对齐、
-/// 比播放中的波浪进度条（自身 10dp）低 3dp，点 play/pause 整条跳变。
+/// 回归：槽高不钉住时，暂停用的平直进度条（自身 4dp）会底对齐，比播放中的
+/// 波浪进度条（自身 10dp）低 3dp，点 play/pause 整条跳变。`ShellAppBar` 的
+/// 底部槽按 `preferredSize` 钉住高度，`ProgressIndicator` 自身再声明一次。
 void main() {
-  /// 复现真实宿主约束：AppBar + `PreferredSize(10)` 的 bottom 槽。
+  /// 复现真实宿主约束：`ShellAppBar` + `PreferredSize(10)` 的底部槽。
   Future<Rect> pumpBar(WidgetTester tester, {required bool isPlaying}) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          appBar: AppBar(
+          appBar: ShellAppBar(
+            title: const SizedBox.shrink(),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(10),
               child: shell.ProgressIndicator(

@@ -2,7 +2,8 @@
 ///
 /// 骨架不合并（顶栏标题、侧栏类型、底栏形态各自适配），但共享同一份 chrome：
 /// 目的地 → 图标 / 标签映射、索引 → 目的地回调、设置按钮 / 窗口控件 /
-/// titleSpacing / 拖动区。这些只此一份，避免改一处漏一处。
+/// 左侧留白。这些只此一份，避免改一处漏一处。顶栏本体（M3E 工具行 / 底部槽 /
+/// 拖动区 / 状态栏）统一由 `ShellAppBar` 装配，本文件只负责往里塞内容。
 library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -13,6 +14,7 @@ import '../providers/nav_provider.dart';
 import '../services/window/window_chrome.dart';
 import '../widgets/nav_destination_style.dart';
 import 'desktop/window_controls.dart';
+import 'shell_app_bar.dart';
 
 /// 壳层导航 / 顶栏 spec：目的地 + 标签 + 选择 + 顶栏槽位。
 class ShellChrome {
@@ -71,34 +73,21 @@ class ShellChrome {
           ),
       ];
 
-  /// 顶栏槽：titleSpacing / 无返回键 / 拖动区包装（两套骨架同一份）。
+  /// 顶栏槽：工具行（M3E compact，56dp）+ 骨架自己的前置动作 / 底部槽。
   ///
   /// [actions] 是骨架自己的前置动作（移动骨架的迷你播放 / 下一首）；
-  /// [bottom] 是骨架自己的底部槽（移动骨架的波浪进度条）。
+  /// [bottom] 是骨架自己的底部槽（移动骨架的波浪进度条）。标题留白 / 拖动区 /
+  /// 状态栏明暗由 [ShellAppBar] 统一处理，两套骨架不再各配自己的一份。
   PreferredSizeWidget appBar({
-    required BuildContext context,
     required Widget title,
     List<Widget> actions = const [],
     PreferredSizeWidget? bottom,
-  }) {
-    final bar = AppBar(
-      titleSpacing: appBarTitleSpacing,
-      // 壳层是根页面，永远不需要返回键；且路由内的局部历史条目（如 M3E 下拉
-      // 菜单打开时）会让 ModalRoute.canPop 变真，默认的
-      // automaticallyImplyLeading 会在此刻冒出返回箭头。
-      automaticallyImplyLeading: false,
-      title: title,
-      actions: [...actions, ..._trailingActions()],
-      bottom: bottom,
-    );
-    // 顶栏整体是窗口拖动区（隐藏标题栏后唯一的拖动入口）：外层用 AppBar
-    // 自报高度；非桌面平台 WindowDragArea 是纯透传。
-    return PreferredSize(
-      preferredSize: Size.fromHeight(
-          AppBar.preferredHeightFor(context, bar.preferredSize)),
-      child: WindowDragArea(child: bar),
-    );
-  }
+  }) =>
+      ShellAppBar(
+        title: title,
+        actions: [...actions, ..._trailingActions()],
+        bottom: bottom,
+      );
 
   /// 顶栏尾部动作：设置 + 窗口控件 + 右侧留白（两套骨架同一份）。
   List<Widget> _trailingActions() => [
@@ -114,6 +103,9 @@ class ShellChrome {
         const SizedBox(width: 8),
       ];
 
-  /// 顶栏统一左右留白。
-  static const double appBarTitleSpacing = 12;
+  /// 顶栏标题区左缘（= `M3EAppBarTheme.titleInset`，品牌区左缘对齐它）。
+  ///
+  /// M3E 的标题槽从 titleInset 起排，这里跟随包内默认值而不是自定一个数：
+  /// 一旦包内对齐调整，壳层与二级页顶栏一起移动。
+  static const double appBarTitleSpacing = 16;
 }

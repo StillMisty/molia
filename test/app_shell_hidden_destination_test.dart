@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/app_shell.dart';
+import 'package:molia/app/shell_app_bar.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -304,7 +305,7 @@ void main() {
             find
                 .ancestor(
                   of: find.descendant(
-                    of: find.byType(AppBar),
+                    of: find.byType(ShellAppBar),
                     matching: find.byType(M3EProgressIndicator),
                   ),
                   matching: find.byType(AnimatedOpacity),
@@ -328,7 +329,7 @@ void main() {
             find
                 .ancestor(
                   of: find.descendant(
-                    of: find.byType(AppBar),
+                    of: find.byType(ShellAppBar),
                     matching: find.byType(M3EProgressIndicator),
                   ),
                   matching: find.byType(AnimatedOpacity),

@@ -69,16 +69,15 @@ bool get _mobileLifecycleOwnsPlaybackCommit =>
 
 /// 顶栏进度条槽高（= M3E 波浪进度条容器高 `wavyContainerHeight`，振幅有空间）。
 ///
-/// 高度必须由消费面钉死：`AppBar.bottom` 只声明 `preferredSize`、**不给子级
-/// 收紧约束**，AppBar 内部又把 bottom 放进 `Column(spaceBetween)` —— 子级拿到
-/// 松约束并底对齐。平直态（暂停）自身只有 4dp 高，不钉住时其中心比波浪态
-/// （10dp）低 3dp，play/pause 切换整条跳变。
+/// 高度必须由消费面钉死：`ShellAppBar` 的底部槽只按 `preferredSize` 分配高度，
+/// 子级自己再声明一次槽高，平直态（暂停）与波浪态（10dp）才同槽心；否则
+/// 平直态自身只有 4dp 高、中心比波浪态低 3dp，play/pause 切换整条跳变。
 const double _shellBarProgressHeight = 10;
 
 /// 顶栏底部进度条：播放中波浪、暂停平直（波浪动画不会停，会像还在播放）。
 ///
 /// 槽高固定为 [_shellBarProgressHeight]：两种形态同槽心，play/pause 切换
-/// 不跳（AppBar.bottom 给子级的是松约束，见常量注释）。
+/// 不跳（底部槽的高度语义见常量注释）。
 class ProgressIndicator extends StatefulWidget {
   /// 当前进度（来自 provider.position 单一时钟，无自外推）。
   final Duration position;
@@ -688,11 +687,10 @@ class _MyAppState extends State<MyApp>
       );
     }
 
-    // 顶栏由 ShellChrome 统一构造（titleSpacing / 无返回键 / 拖动区包装）：
-    // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度走 AppBar
-    // 自报（56 工具栏 + 10 波浪进度），非桌面平台 WindowDragArea 是纯透传。
+    // 顶栏由 ShellChrome 统一构造（标题 / 动作 / 拖动区装配在 ShellAppBar）：
+    // 整条顶栏是窗口拖动区（隐藏标题栏后唯一的拖动入口），高度 = 56 工具行
+    // + 10 波浪进度，非桌面平台 WindowDragArea 是纯透传。
     final appBar = chrome.appBar(
-      context: context,
       title: WindowDoubleTapMaximize(
         // 双击顶栏标题区（拖动区的非按钮部分）= 最大化 / 还原（桌面肌肉记忆）；
         // 按钮区不参与，避免双击按钮顺带改窗口状态。

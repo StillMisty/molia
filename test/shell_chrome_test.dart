@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/app/desktop/window_controls.dart';
+import 'package:molia/app/shell_app_bar.dart';
 import 'package:molia/app/shell_chrome.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/nav_provider.dart';
@@ -70,45 +72,62 @@ void main() {
     expect(selected, [ShellDestination.library, ShellDestination.favorites]);
   });
 
-  testWidgets(
-    '顶栏槽：统一 titleSpacing / 无返回键 / 拖动区 + 共享尾部动作',
-    (tester) async {
-    var settingsOpened = 0;
-    final chrome = build(onOpenSettings: () => settingsOpened++);
+  test('顶栏尺寸契约 = M3E compact 档 / titleInset', () {
+    // 工具行高度是壳层对外承诺：56dp（= 旧 kToolbarHeight）来自 M3E
+    // compact 档，档位或包内高度变了这里先红。
+    expect(
+      ShellAppBar.toolbarHeight,
+      M3EAppBarTheme.defaults.metrics(M3EAppBarDensity.compact).smallHeight,
+    );
+    // 品牌区左缘与 M3E 标题槽对齐（不自定一个数）。
+    expect(
+      ShellChrome.appBarTitleSpacing,
+      M3EAppBarTheme.defaults.titleInset,
+    );
+  });
 
-    await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        home: Builder(
-          builder: (context) => Scaffold(
-            appBar: chrome.appBar(
-              context: context,
-              title: const Text('页面标题'),
-              actions: const [Text('骨架自己的动作')],
+  testWidgets(
+    '顶栏槽：M3E 工具行 / 无返回键 / 拖动区 + 共享尾部动作',
+    (tester) async {
+      var settingsOpened = 0;
+      final chrome = build(onOpenSettings: () => settingsOpened++);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Builder(
+            builder: (context) => Scaffold(
+              appBar: chrome.appBar(
+                title: const Text('页面标题'),
+                actions: const [Text('骨架自己的动作')],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    final bar = tester.widget<AppBar>(find.byType(AppBar));
-    expect(bar.titleSpacing, ShellChrome.appBarTitleSpacing);
-    expect(bar.automaticallyImplyLeading, isFalse, reason: '壳层是根页面，不出返回键');
-    expect(find.text('页面标题'), findsOneWidget);
-    expect(find.text('骨架自己的动作'), findsOneWidget, reason: '前置动作不丢');
-    expect(find.byType(WindowDragArea), findsOneWidget, reason: '顶栏整体是拖动区');
+      expect(find.byType(M3EAppBar), findsOneWidget);
+      expect(find.text('页面标题'), findsOneWidget);
+      expect(find.text('骨架自己的动作'), findsOneWidget, reason: '前置动作不丢');
+      expect(find.byType(WindowDragArea), findsOneWidget, reason: '顶栏整体是拖动区');
+      expect(
+        find.byIcon(Icons.arrow_back_rounded),
+        findsNothing,
+        reason: '壳层是根页面，不出返回键',
+      );
 
-    // 尾部动作：设置按钮（走壳层回调）+ 平台支持的窗口控件。
-    await tester.tap(find.byIcon(Icons.settings_rounded));
-    expect(settingsOpened, 1);
-    expect(
-      find.byType(WindowControls),
-      WindowChrome.isSupported ? findsOneWidget : findsNothing,
-    );
-  });
+      // 尾部动作：设置按钮（走壳层回调）+ 平台支持的窗口控件。
+      await tester.tap(find.byIcon(Icons.settings_rounded));
+      expect(settingsOpened, 1);
+      expect(
+        find.byType(WindowControls),
+        WindowChrome.isSupported ? findsOneWidget : findsNothing,
+      );
+    },
+  );
 }

@@ -67,10 +67,10 @@ void main() {
 
   test('壳层顶栏关闭自动返回键（路由局部历史不应冒出返回箭头）', () {
     // 回归：M3E 下拉菜单打开时会往当前路由加一条 LocalHistoryEntry
-    // （系统返回先关菜单），ModalRoute.canPop 因此变真，AppBar 默认的
+    // （系统返回先关菜单），ModalRoute.canPop 因此变真，默认的
     // automaticallyImplyLeading 会在顶栏画出一个返回箭头。
-    // 两套骨架的顶栏构造已收进 ShellChrome（唯一显式配置处）。
-    final source = File('lib/app/shell_chrome.dart').readAsStringSync();
+    // 两套骨架的顶栏本体已收进 ShellAppBar（唯一显式配置处）。
+    final source = File('lib/app/shell_app_bar.dart').readAsStringSync();
     expect(
       source,
       contains('automaticallyImplyLeading: false'),

@@ -330,7 +330,7 @@ void main() {
   testWidgets('顶栏：纯工具条（无标题 / 无播放控制 / 无进度线）', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    final appBar = find.byType(AppBar);
+    final appBar = find.byType(M3EAppBar);
     // 顶栏不含当前页标题（导航语义只在侧栏 / 底栏）。
     expect(
       find.descendant(of: appBar, matching: find.text(l10n.nowPlayingLabel)),
@@ -606,12 +606,12 @@ void main() {
       findsOneWidget,
       reason: '品牌标志在应用名左侧',
     );
-    // 品牌块贴窗口左缘（AppBar `titleSpacing` 处），不再与内容左缘对齐：
+    // 品牌块贴窗口左缘（顶栏标题槽的 titleInset 处），不再与内容左缘对齐：
     // 应用左上角就是标志本身。
     expect(
       tester.getRect(brand).left,
       ShellChrome.appBarTitleSpacing,
-      reason: '品牌区左缘 = 顶栏 titleSpacing，与侧栏 / 页面留白解耦',
+      reason: '品牌区左缘 = 顶栏标题留白，与侧栏 / 页面留白解耦',
     );
     expect(
       find.descendant(of: brand, matching: find.byType(Tooltip)),
@@ -630,7 +630,7 @@ void main() {
     // 搜索遮罩宿主挂在页面栈上（隐形锚点，Ctrl+F / 品牌区打开）。
     expect(
       find.descendant(
-        of: find.byType(AppBar),
+        of: find.byType(M3EAppBar),
         matching: find.byType(M3ESearchBar),
       ),
       findsNothing,
