@@ -411,6 +411,7 @@ class FakeLibraryRepository implements LibraryStore {
     int? durationMs,
     Map<String, dynamic> raw = const {},
   }) async {
+    if (failFavoriteWrites) throw StateError('favorites write failed');
     final key = '$sourceKey:$songId';
     final added = _favorites.add(key);
     if (!added) {

@@ -312,11 +312,16 @@ class _AlbumPageState extends State<AlbumPage> {
   ) async {
     final library = context.read<LibraryProvider?>();
     if (library == null) return;
-    final favorite = await library.toggleFavoriteTrack(track);
+    final outcome = await library.toggleFavoriteTrack(track);
     if (!context.mounted) return;
+    // 写失败不能报「已收藏 / 已取消」：图标由 provider 缓存保持原样。
     M3ESnackbar.show(
       context,
-      message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
+      message: outcome.isFailure
+          ? l10n.operationFailed
+          : outcome.isFavorite
+              ? l10n.favoriteAdd
+              : l10n.favoriteRemove,
     );
   }
 

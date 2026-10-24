@@ -331,7 +331,14 @@ class LocalAudioHandler {
     final track = _service.currentSourceTrack;
     final toggle = _toggleFavorite;
     if (track == null || toggle == null) return;
-    await toggle(track);
+    try {
+      await toggle(track);
+    } catch (e) {
+      // 通知动作没有提示位：写失败只记日志，图标保持原状态，不能把异常
+      // 抛回平台通道（会变成未处理异步错误）。
+      debugPrint('[AudioHandler] 切换收藏失败: $e');
+      return;
+    }
     refreshFavoriteState();
   }
 

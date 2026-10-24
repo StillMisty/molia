@@ -100,6 +100,30 @@ class _CountingLibraryRepository extends LibraryRepository {
   }
 
   @override
+  Future<bool> toggleFavorite({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    String artist = '',
+    String album = '',
+    String? coverUrl,
+    int? durationMs,
+    Map<String, dynamic> raw = const {},
+  }) {
+    if (failWrites) return Future.error(StateError('favorite toggle failed'));
+    return super.toggleFavorite(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title,
+      artist: artist,
+      album: album,
+      coverUrl: coverUrl,
+      durationMs: durationMs,
+      raw: raw,
+    );
+  }
+
+  @override
   Future<int> addTracksToPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks, {
@@ -469,7 +493,8 @@ void main() {
       title: 'Song 1',
       raw: {'songId': 1},
     );
-    expect(added, isTrue);
+    expect(added.isFailure, isFalse);
+    expect(added.isFavorite, isTrue);
     expect(provider.isFavorite('wy', '1'), isTrue);
     expect(await repository.favoriteKeys(), {'wy:1'});
 
@@ -478,7 +503,8 @@ void main() {
       songId: '1',
       title: 'Song 1',
     );
-    expect(removed, isFalse);
+    expect(removed.isFailure, isFalse);
+    expect(removed.isFavorite, isFalse);
     expect(provider.isFavorite('wy', '1'), isFalse);
   });
 
@@ -500,15 +526,14 @@ void main() {
     repository.playlistsListCalls = 0;
     repository.playlistTracksListCalls = 0;
 
-    expect(
-      await provider.toggleFavorite(
-        sourceKey: 'wy',
-        songId: '2',
-        title: 'Song 2',
-        raw: {'songId': 2},
-      ),
-      isTrue,
+    final second = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '2',
+      title: 'Song 2',
+      raw: {'songId': 2},
     );
+    expect(second.isFailure, isFalse);
+    expect(second.isFavorite, isTrue);
     await settle();
     expect(provider.isFavorite('wy', '2'), isTrue);
     expect(repository.favoriteKeysCalls, 0, reason: '不应重查收藏键');
@@ -520,14 +545,13 @@ void main() {
       ['1', '2'],
     );
 
-    expect(
-      await provider.toggleFavorite(
-        sourceKey: 'wy',
-        songId: '2',
-        title: 'Song 2',
-      ),
-      isFalse,
+    final removedSecond = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '2',
+      title: 'Song 2',
     );
+    expect(removedSecond.isFailure, isFalse);
+    expect(removedSecond.isFavorite, isFalse);
     await settle();
     expect(provider.isFavorite('wy', '2'), isFalse);
     expect(repository.favoriteKeysCalls, 0);
@@ -627,15 +651,14 @@ void main() {
     expect(repository.favoriteKeysCalls, 1);
 
     // 校准未完成时收藏新曲目：立即打补丁并进入重放队列。
-    expect(
-      await provider.toggleFavorite(
-        sourceKey: 'wy',
-        songId: '2',
-        title: 'Song 2',
-        raw: {'songId': 2},
-      ),
-      isTrue,
+    final addedDuringCalibration = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '2',
+      title: 'Song 2',
+      raw: {'songId': 2},
     );
+    expect(addedDuringCalibration.isFailure, isFalse);
+    expect(addedDuringCalibration.isFavorite, isTrue);
     await Future<void>.delayed(Duration.zero);
     expect(repository.favoriteKeysCalls, 1, reason: '不能因 toggle 再查一次');
 
@@ -671,7 +694,9 @@ void main() {
       ),
     };
     expect(provider.isFavoriteSearchItem(item), isFalse);
-    expect(await provider.toggleFavoriteSearchItem(item), isTrue);
+    final added = await provider.toggleFavoriteSearchItem(item);
+    expect(added?.isFailure, isFalse);
+    expect(added?.isFavorite, isTrue);
     expect(provider.isFavoriteSearchItem(item), isTrue);
     expect(await provider.toggleFavoriteSearchItem({'no': 'track'}), isNull);
   });
@@ -841,7 +866,9 @@ void main() {
     );
 
     expect(provider.isFavorite('wy', '1'), isFalse);
-    expect(await provider.toggleFavoriteTrack(domainTrack), isTrue);
+    final added = await provider.toggleFavoriteTrack(domainTrack);
+    expect(added.isFailure, isFalse);
+    expect(added.isFavorite, isTrue);
     expect(provider.isFavorite('wy', '1'), isTrue);
 
     final stored = await repository.listPlaylistTracks(
@@ -933,6 +960,64 @@ void main() {
       expect(applied.isSuccess, isTrue);
       expect(applied.changed, 1);
       expect(provider.isFavorite('wy', '2'), isTrue);
+    });
+
+    test('收藏切换失败 → failed 带回切换前状态，缓存与计数不变', () async {
+      // 先把默认收藏列表与曲目缓存加载好，失败时任何计数变化都能看出来。
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'seed',
+        title: 'Seed',
+        raw: {'songId': 'seed'},
+      );
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+      final favorites = provider.playlists.singleWhere((p) => p.isFavorites);
+      await provider.loadPlaylistTracks(favorites.id, force: true);
+      final revision = provider.favoritesRevision;
+
+      repository.failWrites = true;
+      final failed = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+        raw: {'songId': 2},
+      );
+      expect(failed.isFailure, isTrue);
+      expect(failed.isFavorite, isFalse, reason: '失败带回切换前状态');
+      expect(failed.error, isNotNull);
+      expect(provider.isFavorite('wy', '2'), isFalse);
+      expect(provider.favoritesRevision, revision, reason: '失败不改缓存版本');
+      expect(provider.playlists.single.trackCount, 1, reason: '失败不复制计数');
+      expect(
+        provider.playlistTracksView(favorites.id).tracks!.map((t) => t.songId),
+        ['seed'],
+      );
+      expect(await repository.favoriteKeys(), {'wy:seed'});
+
+      // 已收藏后取消失败：结果仍是「已收藏」，图标不翻转。
+      repository.failWrites = false;
+      final seeded = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+      );
+      expect(seeded.isFailure, isFalse);
+      expect(seeded.isFavorite, isTrue);
+      final revisionAfterAdd = provider.favoritesRevision;
+
+      repository.failWrites = true;
+      final removeFailed = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+      );
+      expect(removeFailed.isFailure, isTrue);
+      expect(removeFailed.isFavorite, isTrue, reason: '失败保持已收藏');
+      expect(provider.isFavorite('wy', '2'), isTrue);
+      expect(provider.favoritesRevision, revisionAfterAdd);
+      expect(await repository.favoriteKeys(), {'wy:seed', 'wy:2'});
     });
 
     test('批量删历史失败 → failed 且回滚内存列表', () async {

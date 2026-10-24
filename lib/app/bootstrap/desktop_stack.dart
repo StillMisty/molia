@@ -64,6 +64,7 @@ Future<DesktopStack> buildDesktopStack({
   void toggleFavorite() {
     final track = playback.snapshot.current;
     if (track != null) {
+      // 托盘 / 任务栏没有提示位：失败由 provider 记日志，成功靠图标与菜单文案。
       unawaited(libraryProvider.toggleFavoriteTrack(track));
     }
   }

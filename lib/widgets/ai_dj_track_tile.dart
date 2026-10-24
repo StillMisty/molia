@@ -202,7 +202,9 @@ List<RowAction> _aiDjActionMenu(
     RowAction(
       icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
       label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-      onPressed: () => unawaited(library.toggleFavoriteTrack(track)),
+      onPressed: () => unawaited(
+        _toggleFavorite(context, library, track, l10n),
+      ),
     ),
     RowAction(
       icon: Icons.refresh_rounded,
@@ -220,4 +222,16 @@ List<RowAction> _aiDjActionMenu(
       onPressed: onNotInterested,
     ),
   ];
+}
+
+/// AI 推荐行收藏：菜单点完即关，行内没有错误位，失败只能靠 snackbar 说明。
+Future<void> _toggleFavorite(
+  BuildContext context,
+  LibraryProvider library,
+  Track track,
+  AppLocalizations l10n,
+) async {
+  final outcome = await library.toggleFavoriteTrack(track);
+  if (!context.mounted || !outcome.isFailure) return;
+  M3ESnackbar.show(context, message: l10n.operationFailed);
 }
