@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
+import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_provider.dart';
@@ -73,6 +74,7 @@ class DiscoverTrackTile extends StatelessWidget {
       artist: track.artist,
       coverUrl: track.coverUrl,
       columns: columns,
+      trackId: TrackId(track.sourceKey, track.songId),
       position: position,
       onTap: onTap,
       favorite: favorite,

@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
+import 'playback_selectors.dart';
 import 'row_actions.dart';
 import 'track_row.dart';
 
@@ -174,6 +175,7 @@ class TrackMenuTile extends StatelessWidget {
     this.coverUrl,
     this.columns,
     this.trailingText,
+    this.trackId,
     required this.position,
     required this.onTap,
     required this.favorite,
@@ -195,6 +197,10 @@ class TrackMenuTile extends StatelessWidget {
 
   /// 行尾元信息（时长）；未知传 null 不占位。
   final String? trailingText;
+
+  /// 行身份（收藏域 / 发现域适配层传入）：用于逐行订阅「是否当前曲目」。
+  /// null = 不订阅（独立测试 / 没有曲目身份的通用行）。
+  final TrackId? trackId;
 
   /// 列表内位置（首末行外侧圆角）。
   final M3ECardPosition position;
@@ -219,6 +225,10 @@ class TrackMenuTile extends StatelessWidget {
       onToggleFavorite: onToggleFavorite,
       onAddToPlaylist: onAddToPlaylist,
     );
+    final TrackId? trackId = this.trackId;
+    final CurrentTrackState current = trackId == null
+        ? (isCurrent: false, isPlaying: false)
+        : selectCurrentTrackState(context, trackId);
     return TrackRow(
       title: title,
       artist: artist,
@@ -226,6 +236,8 @@ class TrackMenuTile extends StatelessWidget {
       coverUrl: coverUrl,
       columns: columns,
       trailingText: trailingText,
+      isCurrent: current.isCurrent,
+      isPlaying: current.isPlaying,
       position: position,
       onTap: onTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),

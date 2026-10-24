@@ -2,11 +2,35 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 
 /// 播放状态 Provider 选择器集合
 ///
 /// 使用 Selector 替代 Consumer 可以显著减少不必要的 Widget 重建。
+
+/// 一行曲目的当前播放状态：[isCurrent] 为「这一行就是当前曲目」，
+/// [isPlaying] 只在 [isCurrent] 为真时有意义。
+typedef CurrentTrackState = ({bool isCurrent, bool isPlaying});
+
+/// 行级订阅当前曲目状态（在该行自己的 build 里调用）。
+///
+/// 用 `PlaybackProvider?`：组件测试 / 独立预览没有播放栈时按「非当前曲目」
+/// 处理，不抛 ProviderNotFoundException。非当前行在播放 / 暂停切换时返回的
+/// `(false, false)` 不变，因此不会跟着整张列表重建。
+CurrentTrackState selectCurrentTrackState(
+  BuildContext context,
+  TrackId trackId,
+) {
+  return context.select<PlaybackProvider?, CurrentTrackState>((provider) {
+    final current = provider?.snapshot.current;
+    final isCurrent = current?.id == trackId;
+    return (
+      isCurrent: isCurrent,
+      isPlaying: isCurrent && (provider?.snapshot.isPlaying ?? false),
+    );
+  });
+}
 
 /// 选择进度条所需的数据
 ///
@@ -114,5 +138,6 @@ class _PositionLineIndexBuilderState extends State<PositionLineIndexBuilder> {
   }
 
   @override
-  Widget build(BuildContext context) => widget.builder(context, _currentLineIndex);
+  Widget build(BuildContext context) =>
+      widget.builder(context, _currentLineIndex);
 }

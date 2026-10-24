@@ -37,6 +37,7 @@ class FavoriteTrackTile extends StatelessWidget {
       artist: track.artistLabel,
       coverUrl: track.artwork?.uri.toString() ?? fallbackCoverUrl,
       trailingText: durationText(track.duration?.inMilliseconds),
+      trackId: track.id,
       position: position,
       onTap: onTap,
       favoriteOf: (context) => favoriteOfTrack(context, track),
@@ -53,6 +54,7 @@ class FavoriteTrackTile extends StatelessWidget {
     this.artists,
     this.coverUrl,
     this.trailingText,
+    this.trackId,
     required this.position,
     this.onTap,
     required this.favoriteOf,
@@ -70,6 +72,9 @@ class FavoriteTrackTile extends StatelessWidget {
 
   /// 行尾元信息（时长）；未知传 null 不占位。
   final String? trailingText;
+
+  /// 行身份：传入后逐行订阅当前曲目状态（领域曲目构造固定传 [Track.id]）。
+  final TrackId? trackId;
 
   /// 列表内位置（首末行外侧圆角）。
   final M3ECardPosition position;
@@ -94,6 +99,7 @@ class FavoriteTrackTile extends StatelessWidget {
       artists: artists,
       coverUrl: coverUrl,
       trailingText: trailingText,
+      trackId: trackId,
       position: position,
       onTap: onTap,
       favorite: favoriteOf(context),

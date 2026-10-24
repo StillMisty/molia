@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/library_provider.dart';
@@ -98,6 +99,45 @@ void main() {
     expect(find.text('Title a'), findsOneWidget);
     expect(find.text('A, B'), findsOneWidget);
     expect(find.text('4:05'), findsOneWidget);
+  });
+
+  testWidgets('当前曲目订阅：播放 / 暂停角标跟随，切到别的歌后消失', (tester) async {
+    await pumpTile(tester);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+
+    backend.emit(const BackendSnapshot(
+      current: track,
+      queue: [track],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+
+    // 同一首暂停：仍标记当前曲目，只换暂停图形。
+    backend.emit(const BackendSnapshot(
+      current: track,
+      queue: [track],
+      currentIndex: 0,
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+
+    const other = Track(
+      id: TrackId('kw', 'b'),
+      title: 'Title b',
+      origin: TrackOrigin.builtin,
+    );
+    backend.emit(const BackendSnapshot(
+      current: other,
+      queue: [other],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byIcon(Icons.pause_rounded), findsNothing);
   });
 
   testWidgets('收藏态订阅：菜单动作写库后，重开菜单文案跟随（取消收藏）', (tester) async {

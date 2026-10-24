@@ -18,6 +18,8 @@ void main() {
     WidgetTester tester, {
     M3ECardPosition position = M3ECardPosition.middle,
     bool selected = false,
+    bool isCurrent = false,
+    bool isPlaying = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -28,6 +30,8 @@ void main() {
               artist: 'Artist',
               position: position,
               selected: selected,
+              isCurrent: isCurrent,
+              isPlaying: isPlaying,
               onTap: () {},
             ),
           ),
@@ -43,6 +47,37 @@ void main() {
           matching: find.byType(M3ECard),
         ),
       );
+
+  testWidgets('当前曲目：封面状态角标 + 标题主色，选中时让位给勾选', (tester) async {
+    await pumpRow(tester, isCurrent: true, isPlaying: true);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+    final scheme =
+        M3ETheme.of(tester.element(find.byType(TrackRow))).colorScheme;
+    expect(
+      tester.widget<Text>(find.text('Title')).style?.color,
+      scheme.primary,
+    );
+
+    await pumpRow(tester, isCurrent: true);
+    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+
+    await pumpRow(tester);
+    expect(find.byIcon(Icons.pause_rounded), findsNothing);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(
+      tester.widget<Text>(find.text('Title')).style?.color,
+      scheme.onSurface,
+    );
+
+    await pumpRow(tester, isCurrent: true, selected: true);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(
+      tester.widget<Text>(find.text('Title')).style?.color,
+      scheme.onSecondaryContainer,
+    );
+  });
 
   testWidgets('静止形状按位置：内行 4dp，首/末行外侧 16dp，单行 16dp', (tester) async {
     await pumpRow(tester, position: M3ECardPosition.middle);

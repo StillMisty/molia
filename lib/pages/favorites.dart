@@ -1528,6 +1528,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             )
           : cachedTag,
+      // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
+      // local 源键，缓存行 / 历史行保留原曲键。
+      trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
       position: calculateCardPosition(index, view.visibleCount),
       selected: _session.selection.isSelected(row.key),
       onTap: reorderActive ? null : () => _onRowTap(view, index),

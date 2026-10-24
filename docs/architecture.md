@@ -924,6 +924,10 @@
   容器配 `on*Container`；状态色走 `AppSemanticColors`（错误用 `scheme.error`）。
   禁止 `Colors.*`/`Color(0x...)` 字面量、`withAlpha/withOpacity`、
   `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/color_usage_test.dart` 扫描强制）。
+- 当前曲目（曲目列表）：标题 `primary` + 封面右下角 `primary` 圆形状态角标
+  （播放中 `graphic_eq` / 暂停 `pause`，见 `widgets/current_track_cover.dart`）；
+  `selected`（多选勾选）优先，选中时只显示勾选、不叠角标。队列的「正在播放」
+  小节保留既有高亮，不叠角标。
 - 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`
   （M3E 必需依赖，不要试图移除）；禁止 import `package:flutter/material.dart`，
   组件 import 用 `package:material_3_expressive/material_3_expressive.dart`。

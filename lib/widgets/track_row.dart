@@ -2,8 +2,10 @@ import 'package:flutter/gestures.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../l10n/app_localizations.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
+import 'current_track_cover.dart';
 import 'library_cover.dart';
 
 /// 曲目行里的歌手链接（名字 + 点击回调；回调为空 = 纯文本）。
@@ -146,6 +148,8 @@ class TrackRow extends StatelessWidget {
     this.columns,
     this.trailingText,
     this.trailing,
+    this.isCurrent = false,
+    this.isPlaying = false,
     this.selected = false,
     this.showCheckWhenSelected = true,
     this.position = M3ECardPosition.single,
@@ -197,6 +201,15 @@ class TrackRow extends StatelessWidget {
   /// 行尾插槽（排序把手、菜单按钮等）。
   final Widget? trailing;
 
+  /// 本行是当前曲目：标题走 primary 强调，封面右下角叠状态角标。
+  ///
+  /// 与 [selected] 正交且 [selected] 优先：多选勾选态只显示勾选，不叠角标。
+  final bool isCurrent;
+
+  /// 当前曲目是否正在播放（仅 [isCurrent] 为真时有效）：
+  /// 播放中显示均衡器图形，暂停显示暂停图形。
+  final bool isPlaying;
+
   final bool selected;
 
   /// 多选态下把封面翻转为勾选图标；播放队列的选中行不需要。
@@ -228,10 +241,23 @@ class TrackRow extends StatelessWidget {
     // 12 / 16），`track_table_header.dart` 用同一批值复刻留白结构。
     final M3EListItemTheme itemTheme = m3e.listTheme.item;
     final double gap = itemTheme.gap;
-    final Color contentColor =
-        selected ? scheme.onSecondaryContainer : scheme.onSurface;
+    final Color contentColor = selected
+        ? scheme.onSecondaryContainer
+        : isCurrent
+            ? scheme.primary
+            : scheme.onSurface;
     final Color supportingColor =
         selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
+    // 当前曲目的状态进整行语义：角标图形本身被排除语义，读屏仍能听到
+    // 「正在播放 / 已暂停」。没有 l10n delegate 的组件测试省略状态词。
+    final l10n = AppLocalizations.of(context);
+    final stateLabel = isCurrent
+        ? (isPlaying ? l10n?.nowPlayingSection : l10n?.nowPlayingPaused)
+        : null;
+    final semanticLabel = [
+      artist.isEmpty ? title : '$title, $artist',
+      if (stateLabel != null) stateLabel,
+    ].join(', ');
     final artistLinks = artists;
     final tableColumns = columns;
 
@@ -240,7 +266,7 @@ class TrackRow extends StatelessWidget {
       selected: selected,
       onPressed: onTap,
       onLongPress: onLongPress,
-      semanticLabel: artist.isEmpty ? title : '$title, $artist',
+      semanticLabel: semanticLabel,
       padding: EdgeInsets.symmetric(horizontal: itemTheme.horizontalPadding),
       child: SizedBox(
         height: TrackRow.extentOf(context, tableColumns: tableColumns != null),
@@ -410,8 +436,18 @@ class TrackRow extends StatelessWidget {
   }
 
   /// 缩略图 / 多选勾选翻转（M3E 列表的 selectedIcon 语义）。
+  ///
+  /// 当前曲目角标只在封面可见时叠加：多选勾选占住前导槽时让位给勾选图标，
+  /// 标题主色仍表达当前曲目。
   Widget _buildLeading(BuildContext context, M3EColorScheme scheme) {
-    final Widget cover = LibraryCoverThumb(url: coverUrl, size: coverSize);
+    final bool showsCheck = selected && showCheckWhenSelected;
+    final Widget cover = isCurrent && !showsCheck
+        ? CurrentTrackCover(
+            url: coverUrl,
+            size: coverSize,
+            isPlaying: isPlaying,
+          )
+        : LibraryCoverThumb(url: coverUrl, size: coverSize);
     if (!showCheckWhenSelected) return cover;
     // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
     // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与

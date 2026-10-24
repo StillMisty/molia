@@ -11,6 +11,7 @@ import '../providers/library_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
+import 'current_track_cover.dart';
 import 'library_cover.dart';
 import 'row_actions.dart';
 
@@ -35,6 +36,7 @@ class AiDjTrackTile extends StatelessWidget {
     required this.onNotInterested,
     required this.onMoreLikeThis,
     this.isCurrent = false,
+    this.isPlaying = false,
     this.busy = false,
     this.replacing = false,
   });
@@ -57,8 +59,11 @@ class AiDjTrackTile extends StatelessWidget {
   /// 「多来点这种」：加入下一批种子。
   final VoidCallback onMoreLikeThis;
 
-  /// 当前播放曲目（标题走 primary 强调）。
+  /// 当前播放曲目（标题走 primary 强调 + 封面状态角标）。
   final bool isCurrent;
+
+  /// 当前曲目是否正在播放（仅 [isCurrent] 为真时有效）。
+  final bool isPlaying;
 
   /// 生成中：行内操作禁用。
   final bool busy;
@@ -73,6 +78,11 @@ class AiDjTrackTile extends StatelessWidget {
     final track = item.track;
     final artist = track.artistLabel;
     final reason = item.source.reason;
+    final coverUrl = track.artwork?.uri.toString();
+    final l10n = AppLocalizations.of(context);
+    final stateLabel = isCurrent
+        ? (isPlaying ? l10n?.nowPlayingSection : l10n?.nowPlayingPaused)
+        : null;
     final actions = _aiDjActionMenu(
       context,
       item: item,
@@ -85,13 +95,22 @@ class AiDjTrackTile extends StatelessWidget {
       position: calculateCardPosition(index, count),
       onPressed: busy ? null : onPlay,
       padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-      semanticLabel: [track.title, artist, reason]
-          .where((part) => part.isNotEmpty)
-          .join(', '),
+      semanticLabel: [
+        track.title,
+        artist,
+        reason,
+        if (stateLabel != null) stateLabel,
+      ].where((part) => part.isNotEmpty).join(', '),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          LibraryCoverThumb(url: track.artwork?.uri.toString(), size: 44),
+          isCurrent
+              ? CurrentTrackCover(
+                  url: coverUrl,
+                  size: 44,
+                  isPlaying: isPlaying,
+                )
+              : LibraryCoverThumb(url: coverUrl, size: 44),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
