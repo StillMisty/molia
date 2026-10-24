@@ -470,6 +470,18 @@ abstract class AppLocalizations {
   /// **'Remembers track, queue and position'**
   String get settingsRestoreSessionSubtitle;
 
+  /// No description provided for @settingsPlayWithOtherApps.
+  ///
+  /// In en, this message translates to:
+  /// **'Play with other apps'**
+  String get settingsPlayWithOtherApps;
+
+  /// No description provided for @settingsPlayWithOtherAppsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigation and videos won\'t interrupt music'**
+  String get settingsPlayWithOtherAppsSubtitle;
+
   /// No description provided for @settingsLibraryAddPosition.
   ///
   /// In en, this message translates to:

@@ -12,6 +12,7 @@ import '../services/cache_service.dart';
 import '../sources/source_track.dart';
 import 'audio_cache_source.dart';
 import 'audio_focus_guard.dart';
+import 'audio_focus_policy.dart';
 import 'next_track_preloader.dart';
 import 'playback_order.dart';
 import 'playback_power_policy.dart';
@@ -44,6 +45,23 @@ PositionSamplingMode positionSamplingModeFor({
   if (keepHighFrequency) return PositionSamplingMode.highFrequency;
   return playing ? PositionSamplingMode.periodic : PositionSamplingMode.none;
 }
+
+/// 未注入设置时的默认策略：与其他应用同时播放（新默认行为）。
+class _AlwaysPlayWithOtherApps implements ValueListenable<bool> {
+  const _AlwaysPlayWithOtherApps();
+
+  @override
+  bool get value => true;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
+}
+
+const ValueListenable<bool> _alwaysPlayWithOtherApps =
+    _AlwaysPlayWithOtherApps();
 
 /// 将音源曲目解析为可播放 URL 的回调（由 SourceManager 提供）。
 typedef SourceUrlResolver = Future<String> Function(
@@ -101,8 +119,22 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 不触碰插件通道即可验证「焦点丢失 → 暂停」接线。
   final Stream<AudioInterruptionEvent>? _interruptionsOverride;
 
+  /// 耳机拔出事件流（audio_session 的 `becomingNoisyEventStream`）。
+  ///
+  /// 同样只给测试注入；生产从会话取。just_audio 的内建中断处理被关闭后，
+  /// 这个原本由它负责的「拔耳机即暂停」必须在服务里补上。
+  final Stream<void>? _becomingNoisyOverride;
+
+  /// 「与其他应用同时播放」偏好（设置 › 播放，默认开）。
+  ///
+  /// 事件到达时读当前值，开关切换即时生效；同时作为会话配置的变更信号
+  /// （iOS / macOS 需要切换 `mixWithOthers`）。
+  final ValueListenable<bool> _playWithOtherApps;
+
   /// 音频焦点守卫（其他应用出声 → [pause]），[_configureAudioSession] 内装配。
   AudioFocusGuard? _focusGuard;
+
+  StreamSubscription<void>? _becomingNoisySubscription;
 
   final List<SourceTrack> _queue = [];
   int _currentIndex = -1;
@@ -180,25 +212,33 @@ class LocalPlaybackService extends ChangeNotifier {
     NextTrackPreloader? nextTrackPreloader,
     PlayingTrackCacheWriter? audioCacheWriter,
     Stream<AudioInterruptionEvent>? audioInterruptions,
+    Stream<void>? audioBecomingNoisy,
+    ValueListenable<bool>? playWithOtherApps,
     PlaybackPowerPolicy? powerPolicy,
     // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
     @visibleForTesting AudioPlayer? player,
   })  : _resolver = resolver,
-        _player = player ?? AudioPlayer(),
+        // 中断 / 耳机拔出由本服务统一处理（见 AudioFocusGuard）：just_audio
+        // 自带的处理会无条件暂停，绕过「与其他应用同时播放」开关。
+        _player = player ?? AudioPlayer(handleInterruptions: false),
         _cacheService = cacheService ?? CacheService.instance,
         _preferredQuality = preferredQuality,
         _nextTrackPreloader = nextTrackPreloader,
         _cacheWriter = audioCacheWriter,
         _interruptionsOverride = audioInterruptions,
+        _becomingNoisyOverride = audioBecomingNoisy,
+        _playWithOtherApps = playWithOtherApps ?? _alwaysPlayWithOtherApps,
         _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
+    _playWithOtherApps.addListener(_onPlayWithOtherAppsChanged);
     // 位置采样按前后台策略选择（前台 / 桌面歌词 = 高频流；后台播放 = 1s
     // 轮询；后台暂停 = 不采样），切换时先取消旧订阅 / Timer。
     _powerPolicy.addListener(_syncPositionSampling);
     _syncPositionSampling();
     // 配置系统音频会话（音乐类型）：iOS 后台播放、Android 音频焦点/duck，
-    // 并接入中断事件（其他应用出声 → 暂停）。不阻塞构造；不支持的平台内部跳过。
+    // 并按「与其他应用同时播放」接入中断 / 耳机拔出。不阻塞构造；不支持的
+    // 平台内部跳过。
     unawaited(_configureAudioSession());
   }
 
@@ -308,45 +348,92 @@ class LocalPlaybackService extends ChangeNotifier {
     _handleTrackCompleted();
   }
 
-  /// 音乐会话配置：在 [AudioSessionConfiguration.music] 上声明
-  /// 「被 duck 请求打断时按暂停处理」。
-  ///
-  /// 为什么不用默认的 `music()`（`androidWillPauseWhenDucked` 缺省 false）：
-  /// just_audio 对 `usage=media` 的 duck 事件没有任何处理（只有 `usage=game`
-  /// 压半音量），保持缺省会让导航提示 / 语音消息与音乐「叠着播」；声明后系统
-  /// 把其他应用的 may-duck 请求升级为 transient 满音量，本应用收到
-  /// LOSS_TRANSIENT → 暂停，焦点归还时由 just_audio 的中断续播记账接上。
-  static final AudioSessionConfiguration _sessionConfiguration =
-      const AudioSessionConfiguration.music()
-          .copyWith(androidWillPauseWhenDucked: true);
+  /// 是否有 audio_session 插件实现（Linux/Windows 没有）。
+  bool get _usesAudioSession =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.macOS;
 
-  /// 配置 audio_session（仅移动端/桌面原生支持平台）+ 装配音频焦点守卫。
+  /// 当前偏好对应的音乐会话配置（平台差异见 `audio_focus_policy.dart`）。
+  AudioSessionConfiguration get _sessionConfiguration =>
+      audioSessionConfigurationFor(
+        playWithOtherApps: _playWithOtherApps.value,
+        platform: defaultTargetPlatform,
+      );
+
+  /// 配置 audio_session + 装配音频焦点 / 耳机拔出监听。
   ///
-  /// Linux/Windows 没有 audio_session 插件实现，调用会抛 MissingPluginException，
-  /// 因此按平台跳过，保持桌面端现有行为（没有焦点事件，不因其他应用出声暂停）。
+  /// 注入假流（测试）时只走守卫接线，不触碰插件通道；Linux/Windows 没有
+  /// audio_session 实现，按平台跳过，保持桌面端现状。
   Future<void> _configureAudioSession() async {
-    final injected = _interruptionsOverride;
-    if (injected != null) {
-      _attachFocusGuard(injected);
+    final injectedInterruptions = _interruptionsOverride;
+    final injectedNoisy = _becomingNoisyOverride;
+    if (injectedInterruptions != null || injectedNoisy != null) {
+      if (injectedInterruptions != null) {
+        _attachFocusGuard(injectedInterruptions);
+      }
+      if (injectedNoisy != null) {
+        _attachBecomingNoisy(injectedNoisy);
+      }
       return;
     }
-    if (defaultTargetPlatform != TargetPlatform.android &&
-        defaultTargetPlatform != TargetPlatform.iOS &&
-        defaultTargetPlatform != TargetPlatform.macOS) {
-      return;
-    }
+    if (!_usesAudioSession) return;
     try {
       final session = await AudioSession.instance;
       await session.configure(_sessionConfiguration);
       _attachFocusGuard(session.interruptionEventStream);
+      _attachBecomingNoisy(session.becomingNoisyEventStream);
     } catch (e) {
       debugPrint('[LocalPlayback] 音频会话配置失败: $e');
     }
   }
 
-  /// 装配音频焦点守卫：其他应用夺走焦点时暂停（语义见 [AudioFocusGuard]）。
+  /// 设置切换后重新应用会话配置（iOS / macOS 的 `mixWithOthers`）。
+  Future<void> _reconfigureAudioSession() async {
+    if (_interruptionsOverride != null || _becomingNoisyOverride != null) {
+      return;
+    }
+    if (!_usesAudioSession) return;
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(_sessionConfiguration);
+    } catch (e) {
+      debugPrint('[LocalPlayback] 音频会话重新配置失败: $e');
+    }
+  }
+
+  void _onPlayWithOtherAppsChanged() {
+    unawaited(_reconfigureAudioSession());
+  }
+
+  /// 装配音频焦点守卫：其他应用夺走焦点时按设置暂停（语义见 [AudioFocusGuard]）。
   void _attachFocusGuard(Stream<AudioInterruptionEvent> interruptions) {
-    (_focusGuard ??= AudioFocusGuard(onFocusLoss: pause)).attach(interruptions);
+    final guard = _focusGuard ??= AudioFocusGuard(
+      shouldPause: () => shouldPauseForAudioFocus(
+        playWithOtherApps: _playWithOtherApps.value,
+        platform: defaultTargetPlatform,
+      ),
+      // fromInterruption 不取消自身登记的「待续播」。
+      onFocusLoss: () => pause(fromInterruption: true),
+      onFocusGain: _resumeAfterAudioFocus,
+    );
+    guard.attach(interruptions);
+  }
+
+  /// 耳机拔出（becoming noisy）始终暂停：just_audio 的内建处理已关闭，
+  /// 不补这一条会让外放突然出声。
+  void _attachBecomingNoisy(Stream<void> events) {
+    unawaited(_becomingNoisySubscription?.cancel());
+    _becomingNoisySubscription = events.listen(
+      (_) => unawaited(pause()),
+      onError: (Object e) => debugPrint('[LocalPlayback] 耳机拔出事件失败: $e'),
+    );
+  }
+
+  /// 焦点归还后的续播（只在守卫确认「本次中断由它暂停」时调用）。
+  Future<void> _resumeAfterAudioFocus() async {
+    if (_playerDisposed || _currentTrack == null || _player.playing) return;
+    _resumeCurrentTrack();
   }
 
   bool get hasTrack => _currentTrack != null;
@@ -532,6 +619,8 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> _playIndex(int index, {bool recordHistory = true}) async {
     if (index < 0 || index >= _queue.length) return;
+    // 新曲目 = 用户主动选择，撤销音频中断的待续播。
+    _focusGuard?.cancelPendingResume();
     // 预取与边播边缓存不能双写同一缓存文件：起播前取消未完成的预取。
     _nextTrackPreloader?.cancelPending();
     // 上一首的后台缓存写入（桌面）同理：切歌即停，避免与新曲目抢带宽。
@@ -660,13 +749,20 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 暂停播放（音频焦点被其他应用夺走等外部触发）。
   ///
+  /// 返回是否真的暂停了：音频焦点守卫据此判断「中断结束要不要续播」
+  /// （本来就没在播 / 无曲目 → false）。
+  ///
+  /// [fromInterruption] 为 true 时不取消守卫登记的待续播；手动暂停（用户 /
+  /// 定时关闭 / 系统媒体键）走默认值，焦点归还后不会被强行续播。
+  ///
   /// 与 [toggle] 的暂停分支同语义：无曲目 / 已暂停时无操作（幂等——中断事件
   /// 可能连续到达，重复调用不叠加副作用）。
-  Future<void> pause() async {
-    if (_currentTrack == null) return;
-    if (_player.playing) {
-      await _player.pause();
-    }
+  Future<bool> pause({bool fromInterruption = false}) async {
+    if (!fromInterruption) _focusGuard?.cancelPendingResume();
+    if (_playerDisposed || _currentTrack == null) return false;
+    if (!_player.playing) return false;
+    await _player.pause();
+    return true;
   }
 
   Future<void> toggle() async {
@@ -678,6 +774,8 @@ class LocalPlaybackService extends ChangeNotifier {
       await pause();
       return;
     }
+    // 用户主动续播：撤销任何中断待续播，避免焦点归还时重复动播放器。
+    _focusGuard?.cancelPendingResume();
     // 已到曲末（含 media_kit 暂停在 EOF、processingState 仍为 ready 的情况）
     // 先回零：直接 play() 在结尾不会重新出声。
     if (_isAtTrackEnd) {
@@ -983,6 +1081,8 @@ class LocalPlaybackService extends ChangeNotifier {
     _playerStateSubscription?.cancel();
     _cancelPositionSubscription();
     _cacheWriter?.cancel();
+    _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
+    unawaited(_becomingNoisySubscription?.cancel());
     unawaited(_trackCompletions.close());
     final guard = _focusGuard;
     if (guard != null) unawaited(guard.detach());

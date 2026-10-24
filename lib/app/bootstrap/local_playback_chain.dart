@@ -7,6 +7,8 @@
 /// （见 `test/app/bootstrap_smoke_test.dart`）。
 library;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
+
 import '../../data/mapping/track_mapper.dart';
 import '../../data/playback/local_playback_backend.dart';
 import '../../domain/models/track.dart';
@@ -62,10 +64,14 @@ class LocalPlaybackChain {
   String preferredQuality() =>
       local.dataSaver.effectiveQuality(catalog.sourceManager.preferredQuality);
 
-  LocalPlaybackService buildService() => LocalPlaybackService(
+  LocalPlaybackService buildService({
+    required ValueListenable<bool> playWithOtherApps,
+  }) =>
+      LocalPlaybackService(
         preferredQuality: preferredQuality,
         resolver: resolveUrl,
         powerPolicy: powerPolicy,
+        playWithOtherApps: playWithOtherApps,
         // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
         nextTrackPreloader: NextTrackPreloader(
           resolver: resolveUrl,

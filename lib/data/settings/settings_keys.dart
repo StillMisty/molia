@@ -114,6 +114,16 @@ const kRestoreSessionEnabled = SettingsKey<bool>(
   true,
   category: SyncCategory.settings,
 );
+
+/// 其他应用播放声音时继续播放（设置 › 播放，默认开）。
+///
+/// 开启后 Android 忽略音频焦点丢失、iOS / macOS 用 `mixWithOthers` 混播；
+/// 关闭后恢复「焦点丢失即暂停」（具体语义见 `playback/audio_focus_guard.dart`）。
+const kPlayWithOtherApps = SettingsKey<bool>(
+  'play_with_other_apps',
+  true,
+  category: SyncCategory.settings,
+);
 const kPlayStatisticsEnabled = SettingsKey<bool>(
   'play_statistics_enabled',
   true,
@@ -238,6 +248,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kGlobalShortcutBindings,
   kDefaultPlayMode,
   kRestoreSessionEnabled,
+  kPlayWithOtherApps,
   kPlayStatisticsEnabled,
   kLyricsDisplaySettings,
   kAiDjEnabled,

@@ -208,6 +208,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Remembers track, queue and position';
 
   @override
+  String get settingsPlayWithOtherApps => 'Play with other apps';
+
+  @override
+  String get settingsPlayWithOtherAppsSubtitle =>
+      'Navigation and videos won\'t interrupt music';
+
+  @override
   String get settingsLibraryAddPosition => 'Position of added songs';
 
   @override

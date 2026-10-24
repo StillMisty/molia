@@ -117,8 +117,11 @@
   节流通知（避免合并窗口丢中间曲目副作用）；睡眠定时仍属 `PlaybackProvider`。
   与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
 - **音频焦点与定时关闭**：`AudioFocusGuard`（`lib/playback/audio_focus_guard.dart`，
-  其他应用出声 → 暂停，默认开；`androidWillPauseWhenDucked` 把 duck 升级为暂停语义）
-  由 `LocalPlaybackService` 持有；倒计时定时关闭为**绝对 deadline**
+  受设置「与其他应用同时播放」控制，默认开：Android 忽略焦点丢失、iOS / macOS 用
+  `mixWithOthers` 混播；关闭后其他应用出声 → 暂停，系统可续播时自动补播；
+  `androidWillPauseWhenDucked` 把 duck 升级为暂停语义）由 `LocalPlaybackService`
+  持有。just_audio 的内建中断处理已关闭（`handleInterruptions: false`），耳机拔出
+  由服务自己订阅 `becomingNoisyEventStream`；倒计时定时关闭为**绝对 deadline**
   （tick / 快照变化 / 回前台三路补触发），并按平台挂 `SleepTimerAlarm`
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或

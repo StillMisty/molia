@@ -95,11 +95,12 @@
   （组合根注入 `facade.pause`）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
   不持久化，`stopLocalPlayback` 一并撤销。
 - **Audio focus guard（音频焦点守卫）** — `lib/playback/audio_focus_guard.dart`：
-  「其他应用出声 → 本应用暂停」的唯一实现（默认开）。会话开启
-  `androidWillPauseWhenDucked`（just_audio 对 `usage=media` 的 duck 既不压音量也不
-  暂停，必须声明成暂停语义）；中断 `begin == true`（含 duck / 永久丢失）→ 暂停，
-  暂停延后一个 microtask 以兼容 just_audio 的打断记账；恢复焦点不抢播（transient
-  的续播由 just_audio 负责）。桌面无插件实现时 no-op。
+  「其他应用出声时暂停 / 继续播放」的唯一实现，受设置「与其他应用同时播放」
+  （默认开）控制。just_audio 的内建中断处理已关闭（`AudioPlayer(handleInterruptions:
+  false)`），焦点事件与耳机拔出全部由本模块 / 播放服务处理。开启时 Android 忽略
+  焦点丢失、iOS / macOS 用 `mixWithOthers` 混播；关闭后中断 `begin == true`
+  （含 duck / 永久丢失）→ 暂停，系统发回可续播的结束事件（`type == pause`）时
+  自动补播，但用户手动暂停过则不抢播。桌面无插件实现时 no-op。
 
 - **Seek preview（进度预览模块）** — `lib/widgets/seek_preview.dart` +
   `lib/widgets/seek_bar.dart`：进度拖动预览的唯一实现（拖动期显示本地值；
