@@ -1791,9 +1791,10 @@ class _CollectionPickerSheet extends StatefulWidget {
   final String title;
   final List<_CollectionEntry> entries;
   final ValueChanged<List<String>> onOrderChanged;
-  final Future<void> Function(int playlistId) onDelete;
+  final Future<LibraryMutationOutcome> Function(int playlistId) onDelete;
   final Future<int> Function(String name) onCreate;
-  final Future<void> Function(int playlistId, String name) onRename;
+  final Future<LibraryMutationOutcome> Function(int playlistId, String name)
+      onRename;
 
   @override
   State<_CollectionPickerSheet> createState() => _CollectionPickerSheetState();
@@ -1816,6 +1817,11 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
     widget.onOrderChanged([for (final entry in _entries) entry.key]);
   }
 
+  void _showFailure() {
+    if (!mounted) return;
+    M3ESnackbar.show(context, message: _l10n(context).operationFailed);
+  }
+
   Future<void> _createPlaylist() async {
     final l10n = _l10n(context);
     final name = await showPlaylistNameDialog(
@@ -1825,7 +1831,14 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
       existingNames: _existingNames,
     );
     if (name == null || !mounted) return;
-    final id = await widget.onCreate(name);
+    final int id;
+    try {
+      id = await widget.onCreate(name);
+    } catch (_) {
+      // 新建失败：留在弹层里提示，不切到一个不存在的合集。
+      _showFailure();
+      return;
+    }
     if (!mounted) return;
     // 新建后直接切换到新列表，便于立即添加曲目。
     Navigator.of(context).pop(_PickerOutcome.select(id));
@@ -1841,8 +1854,13 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
       initialValue: entry.name,
     );
     if (name == null || !mounted || name == entry.name) return;
-    await widget.onRename(entry.playlistId!, name);
+    final outcome = await widget.onRename(entry.playlistId!, name);
     if (!mounted) return;
+    if (outcome.isFailure) {
+      // 写失败：本地乐观副本保持旧名，提示后用户可重试。
+      _showFailure();
+      return;
+    }
     setState(() {
       final index = _entries.indexWhere((item) => item.key == entry.key);
       if (index >= 0) _entries[index] = _entries[index].copyWithName(name);
@@ -1873,8 +1891,13 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
     );
     if (confirmed != true) return;
     HapticsService.lightImpact();
-    await widget.onDelete(entry.playlistId!);
+    final outcome = await widget.onDelete(entry.playlistId!);
     if (!mounted) return;
+    if (outcome.isFailure) {
+      // 写失败：弹层保留该行（本地副本不做乐观删除）。
+      _showFailure();
+      return;
+    }
     setState(() => _entries.removeWhere((item) => item.key == entry.key));
   }
 

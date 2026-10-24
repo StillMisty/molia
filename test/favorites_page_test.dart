@@ -1099,6 +1099,63 @@ void main() {
     expect(find.text('我的收藏'), findsOneWidget);
   });
 
+  testWidgets('合集弹层：重命名失败保留旧名并提示', (tester) async {
+    await importLove(tester);
+    await pumpFavorites(tester);
+    await openCollectionPicker(tester);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重命名列表'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(M3ETextField), '跑步');
+
+    repository.failPlaylistWrites = true;
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(pickerRow('跑步'), findsNothing, reason: '失败不改本地副本');
+    expect(pickerRow('love'), findsOneWidget, reason: '旧名仍在');
+  });
+
+  testWidgets('合集弹层：删除失败保留列表行并提示', (tester) async {
+    await importLove(tester);
+    await pumpFavorites(tester);
+    await openCollectionPicker(tester);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除列表'));
+    await tester.pumpAndSettle();
+
+    repository.failPlaylistWrites = true;
+    await tester.tap(find.widgetWithText(M3EButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(pickerRow('love'), findsOneWidget, reason: '失败不做乐观删除');
+    expect(await repository.listPlaylists(), isNotEmpty);
+  });
+
+  testWidgets('合集弹层：新建失败留在弹层并提示', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+    await openCollectionPicker(tester);
+
+    await tester.tap(pickerAction(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(M3ETextField), '路上听');
+
+    repository.failPlaylistWrites = true;
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(pickerRow('路上听'), findsNothing);
+    expect(pickerRow('我的收藏'), findsOneWidget, reason: '仍停在合集弹层');
+  });
+
   testWidgets('自建列表：左滑从列表移除', (tester) async {
     await importLove(tester);
     await pumpFavorites(tester);
@@ -1136,6 +1193,24 @@ void main() {
     final copied = await repository.listPlaylistTracks(loveId);
     expect(copied.map((track) => track.songId), contains('Song A'));
     expect(find.text('已加入「love」'), findsOneWidget);
+  });
+
+  testWidgets('我的收藏：左滑「加入列表 → 播放历史」失败时不报已加入', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    await tester.drag(find.text('Song A'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.playlist_add_rounded));
+    await tester.pumpAndSettle();
+
+    repository.failHistoryWrites = true;
+    await tester.tap(find.text('播放历史'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(find.text('已加入「播放历史」'), findsNothing);
+    expect(await repository.listHistory(), isEmpty);
   });
 
   testWidgets('左滑动作：M3E 胶囊按钮（tonal + filled）与动作名 tooltip', (tester) async {
