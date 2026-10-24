@@ -893,7 +893,7 @@
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
   内容版式（阈值与宽度来源的选择唯一在 `DesktopLayout`，判据一律「窗口宽 /
-  窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowColumns` /
+  窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowModel` / `TrackRowSurface` /
   `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，阈值 = 内容宽 ≥ 720
   （播放历史档 812），使用点：搜索 / 收藏 / 发现详情；行高两档走
   `TrackRow.extentOf`（表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver

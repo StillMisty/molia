@@ -19,7 +19,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 与行内列的左缘对齐依赖行内网格的几段留白，全部按行的实际结构复刻：
 /// 行表面内边距（`M3EListItemTheme.horizontalPadding`）、封面位
 /// （[TrackRow.defaultCoverSize] + 列表 token 的槽间距）、列间距（同一
-/// 槽间距 token）、行尾固定槽宽（`TrackRowColumns.trailingSlotWidth`）。
+/// 槽间距 token）、行尾固定槽宽（`TrackRowColumnSpec.trailingSlotWidth`）。
 /// 调用方负责与行列表相同的横向页边距。
 class TrackTableHeader extends StatelessWidget {
   const TrackTableHeader({
@@ -27,7 +27,7 @@ class TrackTableHeader extends StatelessWidget {
     this.spec = TrackRowColumnSpec.standard,
   });
 
-  /// 列宽 / 列构成：与行内 [TrackRowColumns.spec] 传同一份（行与表头必须
+  /// 列宽 / 列构成：与行内 [TrackRowSurface.tableSpec] 传同一份（行与表头必须
   /// 用同一个 spec —— 表头只看规范，不看单行内容）。
   final TrackRowColumnSpec spec;
 
@@ -83,7 +83,7 @@ class TrackTableHeader extends StatelessWidget {
           SizedBox(width: gap),
           // 行尾槽宽与行内同源：表头没有动作，但不留出这段宽度，列会整体
           // 右移、与行内列错位。
-          const SizedBox(width: TrackRowColumns.trailingSlotWidth),
+          const SizedBox(width: TrackRowColumnSpec.trailingSlotWidth),
         ],
       ),
     );

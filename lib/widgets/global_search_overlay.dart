@@ -41,10 +41,8 @@ import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
-import '../utils/duration_text.dart';
 import 'app_search_bar.dart';
 import 'artist_row.dart';
-import 'playback_selectors.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -572,25 +570,19 @@ class _GlobalSearchResults extends StatelessWidget {
     final snippet = row.lyricSnippet ?? '';
     return Padding(
       padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
-      // 逐行订阅放在独立 widget 的 build 里：外层 State 的 build 不是
-      // provider 认可的调用位置（结果面板可能在别的 builder 中构建）。
-      child: Builder(
-        builder: (context) {
-          final current = selectCurrentTrackState(context, row.id);
-          return TrackRow(
-            key: ValueKey(row.id.uri),
-            title: row.title,
-            artist: snippet.isNotEmpty ? snippet : row.primaryArtistName,
-            coverUrl: row.coverUrl,
-            trailingText: durationText(row.duration?.inMilliseconds),
-            isCurrent: current.isCurrent,
-            isPlaying: current.isPlaying,
-            position: calculateCardPosition(index, count),
-            onTap: () {
-              HapticsService.lightImpact();
-              onPlayItem(row);
-            },
-          );
+      child: TrackRow(
+        key: ValueKey(row.id.uri),
+        model: TrackRowModel(
+          title: row.title,
+          artist: snippet.isNotEmpty ? snippet : row.primaryArtistName,
+          coverUrl: row.coverUrl,
+          durationMs: row.duration?.inMilliseconds,
+          trackId: row.id,
+        ),
+        position: calculateCardPosition(index, count),
+        onTap: () {
+          HapticsService.lightImpact();
+          onPlayItem(row);
         },
       ),
     );

@@ -48,7 +48,7 @@ void main() {
       // 815 − 96 = 719；816 − 96 = 720。
       expect(layout(windowWidth: 815).tableColumns, isFalse);
       expect(layout(windowWidth: 816).tableColumns, isTrue);
-      expect(TrackRowColumns.minWidth, 720, reason: '阈值常量是唯一来源');
+      expect(TrackRowColumnSpec.minWidth, 720, reason: '阈值常量是唯一来源');
       // 栏宽变宽 = 内容宽变窄：同一窗口宽下判定跟着栏宽走。
       expect(layout(windowWidth: 815, railWidth: 200).tableColumns, isFalse);
       expect(layout(windowWidth: 919, railWidth: 200).tableColumns, isFalse);

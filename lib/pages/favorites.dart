@@ -27,7 +27,6 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
-import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/scroll_to_top.dart';
@@ -53,26 +52,6 @@ import '../widgets/track_table_header.dart';
 /// 此时回退到简体中文（与 lxmc_import / 其他页面同一约定）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
-
-/// 行内表格列：三处合集行（曲目 / 历史 / 本地歌曲）共用同一映射，
-/// 时长统一走 `durationText`。
-///
-/// [spec]（列宽与列构成）由调用方与表头传**同一份**：行尾只补文案，不看
-/// 单行内容决定列的有无（否则同表内行与行、行与表头会左右错位）。
-TrackRowColumns _rowColumns(
-  TrackRowColumnSpec spec, {
-  String artist = '',
-  String album = '',
-  String time = '',
-  int? durationMs,
-}) =>
-    TrackRowColumns(
-      spec: spec,
-      artist: artist,
-      album: album,
-      time: time,
-      duration: durationText(durationMs) ?? '',
-    );
 
 /// 当前合集的表格列规范：播放历史多一列「播放时间」，收藏 / 本地歌曲与
 /// 搜索结果同档（唯一来源，表头与行都从这里取）。
@@ -1450,9 +1429,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onReorder: reorderActive
           ? (from, to) => unawaited(_reorderTracks(view, from, to))
           : null,
-      // 行高与行渲染同档（表格 56 / 单列 72）：差一档滚动条拇指与
-      // 拖动定位就落在错误位置上。
-      tableColumns: tableColumns,
+      // 行高与行渲染同档（表格 56 / 双行 72）：同一份 surface 同时决定
+      // itemExtent 与行内版式，差一档滚动条拇指与拖动定位就落在错误位置上。
+      surface: TrackRowSurface(tableSpec: columnSpec),
       itemBuilder: (context, row, index) => _buildRow(
         context,
         l10n,
@@ -1507,32 +1486,27 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _ => null,
     };
     return CollectionTrackRow(
-      title: row.title,
-      artist: row.artist,
-      coverUrl: row.artworkUrl,
-      columns: columnSpec == null
-          ? null
-          : _rowColumns(
-              columnSpec,
-              artist: row.artist,
-              album: row.album,
-              // 播放时间 = 毫秒时间戳的紧凑文案（与同步日志同一格式）。
-              time:
-                  row is HistoryCollectionRow ? syncTimeText(row.playedAt) : '',
-              durationMs: row.durationMs,
-            ),
-      trailingText: durationText(row.durationMs),
+      row: TrackRowModel(
+        title: row.title,
+        artist: row.artist,
+        coverUrl: row.artworkUrl,
+        album: row.album,
+        // 播放时间 = 毫秒时间戳的紧凑文案（与同步日志同一格式）。
+        time: row is HistoryCollectionRow ? syncTimeText(row.playedAt) : '',
+        durationMs: row.durationMs,
+        // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
+        // local 源键，缓存行 / 历史行保留原曲键。
+        trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
+        selected: _session.selection.isSelected(row.key),
+      ),
+      surface: TrackRowSurface(tableSpec: columnSpec),
       trailing: reorderActive
           ? Icon(
               Icons.drag_handle_rounded,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             )
           : cachedTag,
-      // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
-      // local 源键，缓存行 / 历史行保留原曲键。
-      trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
       position: calculateCardPosition(index, view.visibleCount),
-      selected: _session.selection.isSelected(row.key),
       onTap: reorderActive ? null : () => _onRowTap(view, index),
       onTapWithModifiers: (reorderActive || !isDesktopPlatform())
           ? null

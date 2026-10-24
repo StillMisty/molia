@@ -506,7 +506,7 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 把歌手分页状态机的结果映射为兼容状态（结果 / 失败）。
+  /// 把歌手分页状态机的结果映射为搜索状态（结果 / 失败）。
   void _applyArtistPagerState() {
     final error = _artistPager.error;
     if (error != null) {

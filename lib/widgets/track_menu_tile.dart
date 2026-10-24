@@ -10,7 +10,6 @@ import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
-import 'playback_selectors.dart';
 import 'row_actions.dart';
 import 'track_row.dart';
 
@@ -111,47 +110,29 @@ Future<void> _addTrackToPlaylist(BuildContext context, Track track) async {
 /// 差异只在领域对象上，因此收藏态与写入流程都由调用方注入：
 /// - 收藏态用 `select` 订阅后传入（组件不认具体 provider，避免把
 ///   DiscoverProvider / LibraryProvider 焊进共享件，也避免整表重建）；
-/// - 行尾元信息（时长）由调用方按数据可得性传入，未知传 null 不占位。
+/// - 行内容走 [TrackRowModel]（时长由 [TrackRow] 统一格式化）。
 ///
 /// 动作定义见 [trackRowActionMenu]。
 class TrackMenuTile extends StatelessWidget {
   const TrackMenuTile({
     super.key,
-    required this.title,
-    required this.artist,
-    this.artists,
-    this.coverUrl,
-    this.columns,
-    this.trailingText,
-    this.trackId,
+    required this.row,
     required this.position,
+    this.surface = const TrackRowSurface(),
     required this.onTap,
     required this.favorite,
     required this.onToggleFavorite,
     required this.onAddToPlaylist,
   });
 
-  final String title;
-  final String artist;
-
-  /// 逐名可点的歌手（搜索结果行传入；空则退化为纯文本 [artist]）。
-  final List<TrackRowArtist>? artists;
-
-  final String? coverUrl;
-
-  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
-  /// null = 单列布局（逐像素不变）。
-  final TrackRowColumns? columns;
-
-  /// 行尾元信息（时长）；未知传 null 不占位。
-  final String? trailingText;
-
-  /// 行身份（收藏域 / 发现域适配层传入）：用于逐行订阅「是否当前曲目」。
-  /// null = 不订阅（独立测试 / 没有曲目身份的通用行）。
-  final TrackId? trackId;
+  /// 行数据（标题 / 歌手 / 封面 / 时长 / 当前曲目身份）。
+  final TrackRowModel row;
 
   /// 列表内位置（首末行外侧圆角）。
   final M3ECardPosition position;
+
+  /// 列表表面的呈现口径（表格规范 / 封面尺寸 / 勾选策略）。
+  final TrackRowSurface surface;
 
   /// 点击整行；null 为不可点（如缺少可播放曲目的结果项）。
   final VoidCallback? onTap;
@@ -173,19 +154,9 @@ class TrackMenuTile extends StatelessWidget {
       onToggleFavorite: onToggleFavorite,
       onAddToPlaylist: onAddToPlaylist,
     );
-    final TrackId? trackId = this.trackId;
-    final CurrentTrackState current = trackId == null
-        ? (isCurrent: false, isPlaying: false)
-        : selectCurrentTrackState(context, trackId);
     return TrackRow(
-      title: title,
-      artist: artist,
-      artists: artists,
-      coverUrl: coverUrl,
-      columns: columns,
-      trailingText: trailingText,
-      isCurrent: current.isCurrent,
-      isPlaying: current.isPlaying,
+      model: row,
+      surface: surface,
       position: position,
       onTap: onTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),

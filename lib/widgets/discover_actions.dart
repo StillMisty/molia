@@ -52,16 +52,16 @@ class DiscoverTrackTile extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
-  /// null = 单列布局（逐像素不变）。
-  final TrackRowColumns? columns;
+  /// 宽屏表格列规范（桌面宽内容列表传入）：非空 = 表格档，与表头同源；
+  /// null = 双行档（逐像素不变）。
+  final TrackRowColumnSpec? tableSpec;
 
   const DiscoverTrackTile({
     super.key,
     required this.track,
     required this.position,
     required this.onTap,
-    this.columns,
+    this.tableSpec,
   });
 
   @override
@@ -70,11 +70,15 @@ class DiscoverTrackTile extends StatelessWidget {
       (provider) => provider.isFavorite(track),
     );
     return TrackMenuTile(
-      title: track.title,
-      artist: track.artist,
-      coverUrl: track.coverUrl,
-      columns: columns,
-      trackId: TrackId(track.sourceKey, track.songId),
+      row: TrackRowModel(
+        title: track.title,
+        artist: track.artist,
+        coverUrl: track.coverUrl,
+        durationMs: track.durationMs,
+        album: track.album,
+        trackId: TrackId(track.sourceKey, track.songId),
+      ),
+      surface: TrackRowSurface(tableSpec: tableSpec),
       position: position,
       onTap: onTap,
       favorite: favorite,

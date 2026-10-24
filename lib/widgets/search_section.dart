@@ -12,11 +12,9 @@ import '../pages/artist_page.dart';
 import '../providers/search_provider.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
-import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
 import 'desktop_layout.dart';
-import 'playback_selectors.dart';
 import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
@@ -144,10 +142,14 @@ class _SearchSectionState extends State<SearchSection> {
                         padding:
                             EdgeInsets.symmetric(horizontal: horizontalPadding),
                         sliver: _SearchResultsList(
-                          // 歌词类型：条目带 `lyric_snippet`（行副标题显示命中片段）。
+                          // 歌词类型：行的 [SearchRow.lyricSnippet] 做副标题（命中片段）。
                           items: isLyricKind ? lyricResults : results,
                           onItemTap: (item) => searchProvider.playItem(item),
-                          tableColumns: tableColumns,
+                          surface: TrackRowSurface(
+                            tableSpec: tableColumns
+                                ? TrackRowColumnSpec.standard
+                                : null,
+                          ),
                         ),
                       ),
 
@@ -410,13 +412,13 @@ class _SearchResultsList extends StatelessWidget {
   final List<SearchRow> items;
   final void Function(SearchRow)? onItemTap;
 
-  /// 宽屏表格列（桌面宽屏的单曲段）：行内改表格布局，与表头列同源。
-  final bool tableColumns;
+  /// 行呈现口径（桌面宽屏的单曲段给表格规范，与表头列同源）。
+  final TrackRowSurface surface;
 
   const _SearchResultsList({
     required this.items,
     this.onItemTap,
-    this.tableColumns = false,
+    this.surface = const TrackRowSurface(),
   });
 
   @override
@@ -436,7 +438,7 @@ class _SearchResultsList extends StatelessWidget {
     final gap = TrackRow.gapOf(context);
     // 行高按档取 token（表格单行 56 / 非表格双行 72），列表固定 extent。
     final itemExtent =
-        TrackRow.extentOf(context, tableColumns: tableColumns) + gap;
+        TrackRow.extentOf(context, tableColumns: surface.isTable) + gap;
     return SliverFixedExtentList.builder(
       // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
       itemExtent: itemExtent,
@@ -450,7 +452,7 @@ class _SearchResultsList extends StatelessWidget {
             row: row,
             index: index,
             count: items.length,
-            tableColumns: tableColumns,
+            surface: surface,
             onTap: onItemTap == null ? null : () => onItemTap!(row),
           ),
         );
@@ -473,7 +475,7 @@ class _SearchResultTile extends StatelessWidget {
     required this.index,
     required this.count,
     required this.onTap,
-    this.tableColumns = false,
+    this.surface = const TrackRowSurface(),
   });
 
   final SearchRow row;
@@ -481,8 +483,8 @@ class _SearchResultTile extends StatelessWidget {
   final int count;
   final VoidCallback? onTap;
 
-  /// 宽屏表格列（见 `DesktopLayout.tableColumns`）。
-  final bool tableColumns;
+  /// 行呈现口径（见 `DesktopLayout.tableColumns`）。
+  final TrackRowSurface surface;
 
   @override
   Widget build(BuildContext context) {
@@ -494,34 +496,6 @@ class _SearchResultTile extends StatelessWidget {
             onTap();
           };
     final actions = trackRowActionMenuForTrack(context, row.track);
-    final current = _currentTrackStateOf(context);
-    if (tableColumns) {
-      return _buildTableRow(
-        context,
-        rowTap: rowTap,
-        actions: actions,
-        current: current,
-      );
-    }
-    return _buildSingleColumnRow(
-      context,
-      rowTap: rowTap,
-      actions: actions,
-      current: current,
-    );
-  }
-
-  /// 当前曲目状态：行身份就是领域 `TrackId`（与播放队列同源）。
-  CurrentTrackState _currentTrackStateOf(BuildContext context) =>
-      selectCurrentTrackState(context, row.id);
-
-  /// 单列行（非宽屏 / 触摸端）：封面 + 标题 + 歌手 / 歌词片段副标题。
-  Widget _buildSingleColumnRow(
-    BuildContext context, {
-    required VoidCallback? rowTap,
-    required List<RowAction> actions,
-    required CurrentTrackState current,
-  }) {
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = row.id.sourceKey;
     final artistTapsEnabled = sourceKey.isNotEmpty &&
@@ -535,40 +509,20 @@ class _SearchResultTile extends StatelessWidget {
         ? _artistLinksOf(context, tapsEnabled: artistTapsEnabled)
         : null;
     return TrackRow(
-      title: row.title,
-      artist: snippet.isEmpty ? _singleArtistOf(context) : snippet,
-      artists: artistLinks,
-      coverUrl: row.coverUrl,
-      trailingText: durationText(row.duration?.inMilliseconds),
-      isCurrent: current.isCurrent,
-      isPlaying: current.isPlaying,
-      position: calculateCardPosition(index, count),
-      onTap: rowTap,
-      onSecondaryTap: rowActionsAtPointer(context, actions),
-      trailing: _trailing(context, actions),
-    );
-  }
-
-  /// 宽屏表格行：标题 + 艺术家 / 专辑 / 时长列（列宽走默认规范，与表头同源）。
-  Widget _buildTableRow(
-    BuildContext context, {
-    required VoidCallback? rowTap,
-    required List<RowAction> actions,
-    required CurrentTrackState current,
-  }) {
-    final artist = _tableArtistOf(context);
-    return TrackRow(
-      title: row.title,
-      // 表格模式标题格不渲染副标题，artist 只用于行的无障碍文案。
-      artist: artist,
-      coverUrl: row.coverUrl,
-      columns: TrackRowColumns(
-        artist: artist,
+      model: TrackRowModel(
+        title: row.title,
+        artist: snippet.isEmpty ? _singleArtistOf(context) : snippet,
+        artists: artistLinks,
+        artistNames: [
+          for (final artist in row.track.artists)
+            if (artist.name.isNotEmpty) artist.name,
+        ],
+        coverUrl: row.coverUrl,
+        durationMs: row.duration?.inMilliseconds,
         album: row.albumName,
-        duration: durationText(row.duration?.inMilliseconds) ?? '',
+        trackId: row.id,
       ),
-      isCurrent: current.isCurrent,
-      isPlaying: current.isPlaying,
+      surface: surface,
       position: calculateCardPosition(index, count),
       onTap: rowTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),
@@ -589,15 +543,6 @@ class _SearchResultTile extends StatelessWidget {
   String _singleArtistOf(BuildContext context) {
     final name = row.primaryArtistName;
     return name.isEmpty ? _l10n(context).unknownArtist : name;
-  }
-
-  /// 表格歌手列：全部歌手名以「、」连接；全空时用「未知歌手」兜底。
-  String _tableArtistOf(BuildContext context) {
-    final names = [
-      for (final artist in row.track.artists)
-        if (artist.name.isNotEmpty) artist.name,
-    ];
-    return names.isEmpty ? _l10n(context).unknownArtist : names.join('、');
   }
 
   /// 逐名可点的歌手链接：条目带平台内 id 且渠道能力位为真时返回；
