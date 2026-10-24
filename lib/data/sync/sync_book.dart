@@ -7,7 +7,8 @@
 /// 测试不必再从整份状态里挑字段。
 ///
 /// 这里只收窄**依赖形状**：实现仍是唯一的 `SyncStateStore`，状态 JSON 的
-/// 键、形状与写入顺序都不变；持久化只有一个出口 [SyncCommitter.commit]。
+/// 键、形状与写入顺序都不变（形状定义在 `sync_state_codec.dart`）；持久化
+/// 只有一个出口 [SyncCommitter.commit]。
 library;
 
 import '../../domain/models/device_sync.dart';
