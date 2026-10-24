@@ -17,6 +17,7 @@ import '../pages/source_swap_page.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
+import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
@@ -53,14 +54,6 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 目标行未布局时的重试上限：按帧重试，超过后放弃（行号再变化会重新触发）。
   static const int _maxPendingScrollRetries = 8;
-
-  /// 歌词视觉提前量：正值 = 比真实进度早。
-  ///
-  /// 切行有 450ms 的淡入 / 字重 / 内边距过渡，位置通道又只有 ≤4Hz——按精确
-  /// 时间戳切行时，高亮要等唱到该行之后才开始变化。统一提前 200ms：行首时
-  /// 过渡已走完大半；逐字渐染的采样间补间（慢一拍）也抵消到视听同步范围内。
-  /// 只作用于应用内歌词页；输出侧仍用 `LyricsDisplaySettings.offsetMs`。
-  static const Duration _displayLead = Duration(milliseconds: 200);
 
   /// 快捷操作栏：M3EFabMenu 浮动 FAB 的屏边距。
   static const double _quickActionsScreenOffset = 16;
@@ -206,8 +199,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _cancelUserScrollResume();
 
     final provider = Provider.of<PlaybackProvider>(context, listen: false);
-    final lyricsProvider =
-        Provider.of<LyricsProvider>(context, listen: false);
+    final lyricsProvider = Provider.of<LyricsProvider>(context, listen: false);
     final currentTrack = provider.snapshot.current;
     if (currentTrack == null) {
       lyricsProvider.reset();
@@ -256,7 +248,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     if (!mounted) return;
 
     final latestTrackId = Provider.of<PlaybackProvider>(context, listen: false)
-        .snapshot.current?.id.uri;
+        .snapshot
+        .current
+        ?.id
+        .uri;
     // 更新状态前确认歌词仍属于当前曲目
     if (latestTrackId != trackId) {
       return;
@@ -316,7 +311,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   bool get _requiresManualQuickActions =>
-      _session.lines.isNotEmpty && (!_session.isSynced || !_lyricsContentScrollable);
+      _session.lines.isNotEmpty &&
+      (!_session.isSynced || !_lyricsContentScrollable);
 
   /// 当前是否有曲目（无曲目时 FAB 隐藏：换歌词 / 显示设置都没有对象）。
   bool get _hasTrack =>
@@ -417,7 +413,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   /// 顶栏遮挡：渐隐带 + 系统状态栏。
-  double _topOverlay() => kTopFadeBandHeight + MediaQuery.of(context).padding.top;
+  double _topOverlay() =>
+      kTopFadeBandHeight + MediaQuery.of(context).padding.top;
 
   /// 底栏遮挡：快捷操作栏（FAB menu 的 FAB）可见时 = 屏边距 + FAB 尺寸
   /// + 底部安全区；隐藏时为 0。
@@ -484,13 +481,12 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 用 listen:false 读取：本方法在 PositionLineIndexBuilder 的 build 内被
     // 调用，context.select 在该阶段会触发 provider 断言；曲目变化时外层
     // Selector（按 track uri）会重建整个歌词内容，取值仍是最新。
-    final isLocalTrack =
-        Provider.of<PlaybackProvider>(context, listen: false)
-                .snapshot
-                .current
-                ?.id
-                .sourceKey ==
-            kLocalSourceKey;
+    final isLocalTrack = Provider.of<PlaybackProvider>(context, listen: false)
+            .snapshot
+            .current
+            ?.id
+            .sourceKey ==
+        kLocalSourceKey;
     return <M3EFabMenuItem>[
       // 换歌词：歌词页的快捷入口（信息页歌词来源行是数据面入口）。
       if (!isLocalTrack)
@@ -588,7 +584,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     try {
       final viewport = RenderAbstractViewport.of(renderObject);
       // 顶边对齐视口顶边时的偏移；再减去锚点距离得到目标偏移。
-      final leadingOffset = viewport.getOffsetToReveal(renderObject, 0.0).offset;
+      final leadingOffset =
+          viewport.getOffsetToReveal(renderObject, 0.0).offset;
       final target = anchoredLineOffset(
         leadingOffset: leadingOffset,
         viewport: position.viewportDimension,
@@ -893,14 +890,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
               key: _listViewKey,
               controller: _scrollController,
               physics: const BouncingScrollPhysics(),
-              scrollCacheExtent: const ScrollCacheExtent.pixels(
-                  1000.0), // 预建附近行，减少兜底跳转
+              scrollCacheExtent:
+                  const ScrollCacheExtent.pixels(1000.0), // 预建附近行，减少兜底跳转
               padding: EdgeInsets.only(
                 top: 80 + MediaQuery.of(context).padding.top,
-                bottom: 40 +
-                    MediaQuery.of(context)
-                        .padding
-                        .bottom,
+                bottom: 40 + MediaQuery.of(context).padding.bottom,
               ),
               itemCount: _session.lines.length + 1,
               itemBuilder: (context, index) {
@@ -908,9 +902,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   return SizedBox(height: _tailSpace());
                 }
                 final theme = Theme.of(context);
-                final bool isWideLyricLayout = context
-                    .layoutType(ResponsivePageType.detail)
-                    .preferTwoPane;
+                final bool isWideLyricLayout =
+                    context.layoutType(ResponsivePageType.detail).preferTwoPane;
                 final line = _session.lines[index];
                 final bool lyricsSynced = _session.isSynced;
                 final bool isCurrentLine =
@@ -929,10 +922,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 } else {
                   baseTextColor = theme.colorScheme.onSurface;
                 }
-                final double lyricFontSize =
-                    isWideLyricLayout ? 24.0 : 22.0;
+                final double lyricFontSize = isWideLyricLayout ? 24.0 : 22.0;
                 final String lineTranslation =
-                    index < _session.translations.length ? _session.translations[index] : '';
+                    index < _session.translations.length
+                        ? _session.translations[index]
+                        : '';
                 final String lineRoma =
                     index < _session.romas.length ? _session.romas[index] : '';
                 // 扩展行逐行渲染：有数据且歌词页开关打开就显示，空文本不占位
@@ -1017,18 +1011,16 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         fontSize: lyricFontSize,
                         // M3E 没有 w600 档：当前行 w700、其余 w500，
                         // 保留「高亮行更重」的两级对照（原来 w700/w600）。
-                        fontWeight: isCurrentLine
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                        fontWeight:
+                            isCurrentLine ? FontWeight.w700 : FontWeight.w500,
                         color: baseTextColor,
                         height: 1.1,
                       ),
                       child: AnimatedOpacity(
                         duration: const Duration(milliseconds: 450),
                         curve: Curves.easeOutCubic,
-                        opacity: lyricsSynced
-                            ? (isCurrentLine ? 1.0 : 0.8)
-                            : 1.0,
+                        opacity:
+                            lyricsSynced ? (isCurrentLine ? 1.0 : 0.8) : 1.0,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
@@ -1038,7 +1030,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                                 key: _lineTextKeys[index],
                                 words: lineWords,
                                 position: playbackProvider.position,
-                                lead: _displayLead,
+                                lead: kLyricDisplayLead,
                                 playedColor: theme.colorScheme.primary,
                                 unplayedColor: theme.colorScheme.onSurface,
                               )
@@ -1154,11 +1146,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }
 
   int _getCurrentLineIndex(Duration currentPosition) {
-    if (!_session.isSynced) return -1;
-    // 提前量语义见 [_displayLead]：行高亮 / 自动滚动 / 居中跟随共用同一判定。
-    return lyricLineIndexAt(
+    // 行高亮 / 自动滚动 / 居中跟随共用同一时间策略（含 200ms 视觉提前量）。
+    return LyricTimingPolicy.page.lineIndexAt(
       _session.lines,
-      currentPosition + _displayLead,
+      currentPosition,
+      isSynced: _session.isSynced,
     );
   }
 
@@ -1317,8 +1309,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
       });
     }
 
-    final lyricsProvider =
-        Provider.of<LyricsProvider>(context, listen: false);
+    final lyricsProvider = Provider.of<LyricsProvider>(context, listen: false);
     final result = await showSourceSwapPage(
       context,
       seed: currentTrack,
@@ -1454,6 +1445,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         lyrics: _session.lines,
         translations: _session.translations,
         romas: _session.romas,
+        isSynced: _session.isSynced,
         showTranslation: lyricsDisplaySettings.pageTranslationEnabled,
         showRoma: lyricsDisplaySettings.pageRomaEnabled,
         trackTitle: trackName,

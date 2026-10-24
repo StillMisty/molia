@@ -468,6 +468,35 @@ void main() {
     expect(find.byType(KaraokeLyricText), findsNothing);
   });
 
+  testWidgets('行切换边界精确提前 200ms（64.799s / 64.800s）', (tester) async {
+    await pumpLyrics(tester);
+
+    TextStyle lineStyle(String text) => tester
+        .widget<AnimatedDefaultTextStyle>(
+          find
+              .ancestor(
+                of: find.text(text),
+                matching: find.byType(AnimatedDefaultTextStyle),
+              )
+              .first,
+        )
+        .style;
+
+    // 64.799s + 200ms = 64.999s：仍在第 12 行（60s）。
+    backend.emit(_snapshot(position: const Duration(milliseconds: 64799)));
+    await tester.pump();
+    expect(lineStyle('Line 12').fontWeight, FontWeight.w700);
+    expect(lineStyle('Line 13').fontWeight, FontWeight.w500);
+
+    // 64.800s + 200ms = 65.000s：第 13 行（65s）成为当前行。
+    // 走 seek：位置通道对同曲目 <250ms 的变化不补发（≤4Hz），1ms 的边界
+    // 步进只能经显式 seek 落到通道上。
+    await playback.seekToPosition(64800);
+    await tester.pump();
+    expect(lineStyle('Line 13').fontWeight, FontWeight.w700);
+    expect(lineStyle('Line 12').fontWeight, FontWeight.w500);
+  });
+
   testWidgets('罗马音按歌词页开关独立门控', (tester) async {
     final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await pumpLyrics(
