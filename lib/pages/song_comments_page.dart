@@ -24,17 +24,24 @@ Future<void> showSongCommentsPage(
 }) {
   return ResponsiveNavigation.showSecondaryPage<void>(
     context: context,
-    // 大屏侧边弹层：页面自带 AppBar（含返回），不再叠一层关闭行。
-    showCloseButton: false,
-    child: SongCommentsPage(track: track),
+    title: AppLocalizations.of(context)!.commentsTitle,
+    body: SongCommentsPage(track: track, embedded: true),
   );
 }
 
 @visibleForTesting
 class SongCommentsPage extends StatefulWidget {
-  const SongCommentsPage({super.key, required this.track});
+  const SongCommentsPage({
+    super.key,
+    required this.track,
+    this.embedded = false,
+  });
 
   final Track track;
+
+  /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
+  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  final bool embedded;
 
   @override
   State<SongCommentsPage> createState() => _SongCommentsPageState();
@@ -86,65 +93,58 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
     final provider = context.watch<CommentsProvider>();
     final selectedIndex = _tabs.indexOf(_kind);
 
+    final body = Column(
+      children: [
+        _buildTrackHeader(context, l10n, provider),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: M3ETabs(
+            // 次 tab：图标在文案左侧同一行、行高 48（详情页内的分组切换）。
+            variant: M3ETabsVariant.secondary,
+            tabs: [
+              M3ETab(
+                icon: const Icon(Icons.local_fire_department_rounded),
+                label: _tabLabel(
+                  l10n,
+                  CommentKind.hot,
+                  provider.stateOf(CommentKind.hot).total,
+                ),
+              ),
+              M3ETab(
+                icon: const Icon(Icons.schedule_rounded),
+                label: _tabLabel(
+                  l10n,
+                  CommentKind.latest,
+                  provider.stateOf(CommentKind.latest).total,
+                ),
+              ),
+            ],
+            selectedIndex: selectedIndex,
+            onTabSelected: _selectTab,
+          ),
+        ),
+        Expanded(
+          child: M3ETabsView(
+            selectedIndex: selectedIndex,
+            onTabSelected: _selectTab,
+            children: [
+              for (final kind in _tabs)
+                if (_visited.contains(kind))
+                  CommentListView(kind: kind)
+                else
+                  const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.commentsTitle),
         automaticallyImplyLeading: true,
-        actions: [
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            semanticLabel: l10n.commentsRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed:
-                provider.isSupported ? () => unawaited(provider.refresh()) : null,
-          ),
-        ],
       ),
-      body: Column(
-        children: [
-          _buildTrackHeader(context, l10n),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: M3ETabs(
-              // 次 tab：图标在文案左侧同一行、行高 48（详情页内的分组切换）。
-              variant: M3ETabsVariant.secondary,
-              tabs: [
-                M3ETab(
-                  icon: const Icon(Icons.local_fire_department_rounded),
-                  label: _tabLabel(
-                    l10n,
-                    CommentKind.hot,
-                    provider.stateOf(CommentKind.hot).total,
-                  ),
-                ),
-                M3ETab(
-                  icon: const Icon(Icons.schedule_rounded),
-                  label: _tabLabel(
-                    l10n,
-                    CommentKind.latest,
-                    provider.stateOf(CommentKind.latest).total,
-                  ),
-                ),
-              ],
-              selectedIndex: selectedIndex,
-              onTabSelected: _selectTab,
-            ),
-          ),
-          Expanded(
-            child: M3ETabsView(
-              selectedIndex: selectedIndex,
-              onTabSelected: _selectTab,
-              children: [
-                for (final kind in _tabs)
-                  if (_visited.contains(kind))
-                    CommentListView(kind: kind)
-                  else
-                    const SizedBox.shrink(),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: body,
     );
   }
 
@@ -160,8 +160,13 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
         : l10n.commentsTabLatestCount(total);
   }
 
-  /// 头部：歌名 · 歌手（与换源页同构，明确评论对象）。
-  Widget _buildTrackHeader(BuildContext context, AppLocalizations l10n) {
+  /// 头部：歌名 · 歌手（与换源页同构，明确评论对象）+ 刷新（窄屏与侧边
+  /// 弹层共用同一入口，不再占 AppBar action）。
+  Widget _buildTrackHeader(
+    BuildContext context,
+    AppLocalizations l10n,
+    CommentsProvider provider,
+  ) {
     final theme = Theme.of(context);
     final seed = widget.track;
     final artist = seed.artistLabel;
@@ -183,6 +188,15 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+          ),
+          const SizedBox(width: 8),
+          M3EIconButton(
+            variant: M3EIconButtonVariant.standard,
+            semanticLabel: l10n.commentsRefresh,
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: provider.isSupported
+                ? () => unawaited(provider.refresh())
+                : null,
           ),
         ],
       ),

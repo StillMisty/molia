@@ -530,12 +530,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   /// 歌词显示设置（歌词页 + 输出共享项）：无歌词时的 FAB menu 入口。
   Future<void> _showLyricsDisplaySettings() {
+    final l10n = AppLocalizations.of(context)!;
     return ResponsiveNavigation.showSecondaryPage<void>(
       context: context,
-      child: const LyricsContentSettingsPage(),
+      title: l10n.lyricsContentTitle,
+      body: const LyricsContentSettingsPage(embedded: true),
       preferredMode: SecondaryPageMode.sideSheet,
       maxWidth: 520,
-      showCloseButton: false,
     );
   }
 
@@ -1433,7 +1434,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     await ResponsiveNavigation.showSecondaryPage<void>(
       context: context,
-      child: LyricsSelectionPage(
+      title: l10n.selectLyrics,
+      body: LyricsSelectionPage(
         lyrics: _session.lines,
         translations: _session.translations,
         romas: _session.romas,
@@ -1442,10 +1444,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
         trackTitle: trackName,
         artistName: artistName,
         albumCoverUrl: albumCoverUrl,
+        embedded: true,
       ),
       preferredMode: SecondaryPageMode.sideSheet,
       maxWidth: 520,
-      showCloseButton: false,
       barrierDismissible: false,
     );
 

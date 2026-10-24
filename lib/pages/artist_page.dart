@@ -45,11 +45,11 @@ Future<void> showArtistPage(
   if (service == null) return Future.value();
   return ResponsiveNavigation.showSecondaryPage<void>(
     context: context,
-    // 大屏侧边弹层：页面自带 AppBar（含返回），不再叠一层关闭行。
-    showCloseButton: false,
-    child: ArtistPage(
+    title: _l10n(context).trackInfoArtist,
+    body: ArtistPage(
       fallbackName: fallbackName,
       loader: (page) => service.load(sourceKey, artistId, page: page),
+      embedded: true,
     ),
   );
 }
@@ -68,8 +68,8 @@ Future<void> showArtistPageByName(
   String? resolvedId;
   return ResponsiveNavigation.showSecondaryPage<void>(
     context: context,
-    showCloseButton: false,
-    child: ArtistPage(
+    title: _l10n(context).trackInfoArtist,
+    body: ArtistPage(
       fallbackName: name,
       loader: (page) async {
         resolvedId ??= (await service.resolveByName(sourceKey, name))?.id;
@@ -83,6 +83,7 @@ Future<void> showArtistPageByName(
         }
         return service.load(sourceKey, id, page: page);
       },
+      embedded: true,
     ),
   );
 }
@@ -92,12 +93,21 @@ typedef ArtistPageLoader = Future<ArtistDetail> Function(int page);
 
 @visibleForTesting
 class ArtistPage extends StatefulWidget {
-  const ArtistPage({super.key, required this.loader, this.fallbackName});
+  const ArtistPage({
+    super.key,
+    required this.loader,
+    this.fallbackName,
+    this.embedded = false,
+  });
 
   final ArtistPageLoader loader;
 
   /// 入口已知的歌手名（加载完成前 / 平台未返回名称时的标题回退）。
   final String? fallbackName;
+
+  /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
+  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  final bool embedded;
 
   @override
   State<ArtistPage> createState() => _ArtistPageState();
@@ -215,16 +225,18 @@ class _ArtistPageState extends State<ArtistPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
+    final body = ValueListenableBuilder<PagedListState<Track>>(
+      valueListenable: _paged,
+      // 分页状态是不可变值：整块 body 按最新快照重建。
+      builder: (context, state, _) => _buildBody(context, l10n, state),
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.trackInfoArtist),
         automaticallyImplyLeading: true,
       ),
-      body: ValueListenableBuilder<PagedListState<Track>>(
-        valueListenable: _paged,
-        // 分页状态是不可变值：整块 body 按最新快照重建。
-        builder: (context, state, _) => _buildBody(context, l10n, state),
-      ),
+      body: body,
     );
   }
 

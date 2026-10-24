@@ -30,13 +30,12 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   'lib/pages/favorites.dart': {'ReorderableListView'},
   // 同步口令 / 设备 id 需要「可选中复制」；M3E 没有 SelectableText 等价件。
   'lib/pages/sync_dialogs.dart': {'SelectableText'},
-  // Phase 2 侧边弹层 / Phase 3 居中页面弹窗；两个 Material 分别给侧边面板
-  // 容器与弹层内容的 ink 祖先。
+  // Phase 3 的居中页面弹窗仍走 Dialog + showDialog；Material 是 M3E 底部
+  // 弹层 / 侧边弹层的透明 ink 祖先（弹层宿主不提供 Material）。
   'lib/utils/responsive.dart': {
     'Dialog',
     'Material',
     'showDialog',
-    'showGeneralDialog',
   },
   // AI 提示词预览需要可选中复制。
   'lib/widgets/ai_dj_prompt_dialog.dart': {'SelectableText'},

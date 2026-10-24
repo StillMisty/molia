@@ -48,12 +48,12 @@ Future<LyricsSearchSelection?> showSourceSwapPage(
   );
   return ResponsiveNavigation.showSecondaryPage<LyricsSearchSelection>(
     context: context,
-    // 大屏侧边弹层：页面自带 AppBar（含返回），不再叠一层关闭行。
-    showCloseButton: false,
-    child: SourceSwapPage(
+    title: AppLocalizations.of(context)!.sourceSwap,
+    body: SourceSwapPage(
       request: request,
       lyricsProvider: lyricsProvider,
       initialTab: initialTab,
+      embedded: true,
     ),
   );
 }
@@ -65,11 +65,16 @@ class SourceSwapPage extends StatefulWidget {
     required this.request,
     required this.lyricsProvider,
     this.initialTab = SourceSwapTab.audio,
+    this.embedded = false,
   });
 
   final SourceSwapRequest request;
   final LyricsProvider lyricsProvider;
   final SourceSwapTab initialTab;
+
+  /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
+  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  final bool embedded;
 
   @override
   State<SourceSwapPage> createState() => _SourceSwapPageState();
@@ -100,59 +105,60 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     final artist = seed.artistLabel;
     final selectedIndex = _tabs.indexOf(_tab);
 
+    final body = Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: M3ETabs(
+            // 次 tab：图标在文案左侧同一行、行高 48（换源页内的分组切换）。
+            variant: M3ETabsVariant.secondary,
+            tabs: [
+              M3ETab(
+                icon: const Icon(Icons.lyrics_rounded),
+                label: l10n.sourceSwapTabLyrics,
+              ),
+              M3ETab(
+                icon: const Icon(Icons.music_note_rounded),
+                label: l10n.sourceSwapTabAudio,
+              ),
+            ],
+            selectedIndex: selectedIndex,
+            onTabSelected: _selectTab,
+          ),
+        ),
+        Expanded(
+          child: M3ETabsView(
+            selectedIndex: selectedIndex,
+            onTabSelected: _selectTab,
+            children: [
+              if (_visited.contains(SourceSwapTab.lyrics))
+                LyricsSourceSearchView(
+                  initialTrackTitle: seed.title,
+                  initialArtistName: artist,
+                  trackId: seed.id.uri,
+                  lyricsProvider: widget.lyricsProvider,
+                  preferredSourceKey: seed.id.sourceKey,
+                  // 仅默认 tab 为歌词时自动聚焦：音频入口不抢键盘。
+                  autofocusSearch: widget.initialTab == SourceSwapTab.lyrics,
+                )
+              else
+                const SizedBox.shrink(),
+              if (_visited.contains(SourceSwapTab.audio))
+                SourceSwapView(request: widget.request)
+              else
+                const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.sourceSwap),
         automaticallyImplyLeading: true,
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: M3ETabs(
-              // 次 tab：图标在文案左侧同一行、行高 48（换源页内的分组切换）。
-              variant: M3ETabsVariant.secondary,
-              tabs: [
-                M3ETab(
-                  icon: const Icon(Icons.lyrics_rounded),
-                  label: l10n.sourceSwapTabLyrics,
-                ),
-                M3ETab(
-                  icon: const Icon(Icons.music_note_rounded),
-                  label: l10n.sourceSwapTabAudio,
-                ),
-              ],
-              selectedIndex: selectedIndex,
-              onTabSelected: _selectTab,
-            ),
-          ),
-          Expanded(
-            child: M3ETabsView(
-              selectedIndex: selectedIndex,
-              onTabSelected: _selectTab,
-              children: [
-                if (_visited.contains(SourceSwapTab.lyrics))
-                  LyricsSourceSearchView(
-                    initialTrackTitle: seed.title,
-                    initialArtistName: artist,
-                    trackId: seed.id.uri,
-                    lyricsProvider: widget.lyricsProvider,
-                    preferredSourceKey: seed.id.sourceKey,
-                    // 仅默认 tab 为歌词时自动聚焦：音频入口不抢键盘。
-                    autofocusSearch:
-                        widget.initialTab == SourceSwapTab.lyrics,
-                  )
-                else
-                  const SizedBox.shrink(),
-                if (_visited.contains(SourceSwapTab.audio))
-                  SourceSwapView(request: widget.request)
-                else
-                  const SizedBox.shrink(),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: body,
     );
   }
 }

@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:motor/motor.dart';
 
 import '../l10n/app_localizations.dart';
 
@@ -214,7 +213,8 @@ extension ResponsiveExtension on BuildContext {
             mobile: 420,
             tablet: 520,
             // 桌面档二级页（专辑 / 歌手 / 评论等侧滑）加宽：行内信息更长，
-            // 宽一档减少横向拥挤；屏宽 0.82 的夹取仍在（见 _showSideSheet）。
+            // 宽一档减少横向拥挤；M3E 侧边弹层会按主题 maxWidth 与本屏
+            // 可用宽度夹取（见 `ResponsiveNavigation._showM3ESideSheet`）。
             desktop: 720,
           ),
           modalMaxHeightFactor: isLargeScreen ? 0.9 : 0.94,
@@ -426,69 +426,44 @@ class ResponsivePadding {
 }
 
 class ResponsiveNavigation {
+  /// 打开二级页：窄屏全屏（标题进 [M3EAppBar]），宽屏 [M3ESideSheet] 侧滑。
+  ///
+  /// [body] 必须是**已 embedded** 的页面正文（不带 Scaffold / AppBar）：两种
+  /// chrome 都由本方法提供，页面再叠一层就会出现双层标题栏。
   static Future<T?> showSecondaryPage<T>({
     required BuildContext context,
-    required Widget child,
+    required String title,
+    required Widget body,
     SecondaryPageMode preferredMode = SecondaryPageMode.sideSheet,
-    String? title,
     double? maxWidth,
-    bool showCloseButton = true,
     bool barrierDismissible = true,
   }) {
     final spec = context.layoutType(ResponsivePageType.detail);
     final resolvedMaxWidth = maxWidth ?? spec.modalWidth;
-    final isLarge = spec.preferTwoPane;
 
-    if (!isLarge) {
-      if (preferredMode == SecondaryPageMode.bottomSheet) {
-        return _showBottomSheet<T>(
-          context: context,
-          child: child,
-          title: title,
-          showCloseButton: showCloseButton,
-          pageType: ResponsivePageType.detail,
-        );
-      }
+    if (!spec.preferTwoPane || preferredMode == SecondaryPageMode.fullScreen) {
       return _showFullScreen<T>(
         context: context,
-        child: child,
+        child: body,
         title: title,
       );
     }
 
-    return switch (preferredMode) {
-      SecondaryPageMode.fullScreen => _showFullScreen<T>(
-          context: context,
-          child: child,
-          title: title,
-        ),
-      SecondaryPageMode.sideSheet => _showSideSheet<T>(
-          context: context,
-          child: child,
-          title: title,
-          maxWidth: resolvedMaxWidth,
-          showCloseButton: showCloseButton,
-          barrierDismissible: barrierDismissible,
-          pageType: ResponsivePageType.detail,
-        ),
-      SecondaryPageMode.centerDialog => _showCenterDialog<T>(
-          context: context,
-          child: child,
-          title: title,
-          maxWidth: resolvedMaxWidth,
-          showCloseButton: showCloseButton,
-          barrierDismissible: barrierDismissible,
-          pageType: ResponsivePageType.detail,
-        ),
-      SecondaryPageMode.bottomSheet => _showBottomSheet<T>(
-          context: context,
-          child: child,
-          title: title,
-          showCloseButton: showCloseButton,
-          pageType: ResponsivePageType.detail,
-        ),
-    };
+    return _showM3ESideSheet<T>(
+      context: context,
+      title: title,
+      child: body,
+      maxWidth: resolvedMaxWidth,
+      barrierDismissible: barrierDismissible,
+    );
   }
+
+  /// 全屏页面（页面自带 Scaffold / AppBar，不属于二级页）：如海报预览。
+  static Future<T?> showFullScreenPage<T>({
+    required BuildContext context,
+    required Widget child,
+  }) =>
+      _showFullScreen<T>(context: context, child: child);
 
   /// [onDismissRequest] 仅对底部弹层（compact/medium 宽）生效：系统返回 /
   /// 蒙层点击 / 下滑关闭前先询问，返回 false 保持弹层打开（用于弹层内部
@@ -530,15 +505,14 @@ class ResponsiveNavigation {
     }
 
     if (largeScreenMode == SecondaryPageMode.sideSheet) {
-      return _showSideSheet<T>(
+      // M3E 侧边弹层始终带标题栏；调用方需要侧滑档时必须给 title。
+      return _showM3ESideSheet<T>(
         context: context,
+        title: title ?? '',
         child: child,
-        title: title,
         maxWidth: resolvedMaxWidth,
-        showCloseButton: showCloseButton,
         barrierDismissible: barrierDismissible,
         contentLayout: contentLayout,
-        pageType: ResponsivePageType.modal,
       );
     }
 
@@ -574,65 +548,53 @@ class ResponsiveNavigation {
     );
   }
 
-  static Future<T?> _showSideSheet<T>({
+  /// 用 M3E 侧边弹层承载页面正文。
+  ///
+  /// M3E 的侧边弹层自带 header（标题 + 关闭）与 `Expanded` body，因此
+  /// [child] 只能是正文；页面自己的 Scaffold / AppBar 由调用方在窄屏分支提供。
+  /// 主题宽度覆盖到调用方解析出的档位（详情页平板 520 / 桌面 720）：包内
+  /// 默认 maxWidth 只有 400，会把列表行挤窄。
+  static Future<T?> _showM3ESideSheet<T>({
     required BuildContext context,
+    required String title,
     required Widget child,
-    required ResponsivePageType pageType,
-    String? title,
     required double maxWidth,
-    bool showCloseButton = true,
     bool barrierDismissible = true,
     AdaptiveModalContentLayout contentLayout =
         AdaptiveModalContentLayout.fillHeight,
   }) {
-    return showGeneralDialog<T>(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-      // 遮罩走主题 scrim（随亮度/纯黑变化）。
-      barrierColor: Theme.of(context).colorScheme.scrim.withValues(alpha: 0.54),
-      // 路由时长 = 入场弹簧的落定时间（见 transitionBuilder 注释）。
-      transitionDuration: const Duration(milliseconds: 400),
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            elevation: 16,
-            color: Theme.of(context).colorScheme.surface,
-            child: SizedBox(
-              width:
-                  math.min(maxWidth, MediaQuery.sizeOf(context).width * 0.82),
-              child: _buildSheetContent(
-                context: context,
-                child: child,
-                title: title,
-                showCloseButton: showCloseButton,
-                contentLayout: contentLayout,
+    final baseTheme = M3ETheme.of(context).sideSheetTheme;
+    return M3ESideSheet.show<T>(
+      context,
+      title: title,
+      // M3E 弹层不提供 Material 祖先，InkWell 等水波组件会直接崩溃；
+      // 透明 Material 只补齐 ink 绘制层，不改变观感。
+      body: Material(
+        type: MaterialType.transparency,
+        child: Builder(
+          builder: (sheetContext) => MediaQuery.removePadding(
+            context: sheetContext,
+            // 包内已按系统栏 inset 给整个弹层留过底部（M3ESafeArea），正文
+            // 再按 MediaQuery 补一次会双重留白。
+            removeBottom: true,
+            child: Padding(
+              // 包内 M3ESafeArea 在键盘弹出时把 bottom 归零（只处理系统栏
+              // inset），这里补键盘高度，输入区不会被键盘压住。
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
               ),
+              // 侧边弹层 body 是 Expanded：wrapContent 内容顶部对齐，避免
+              // 拉伸成整屏高。
+              child: contentLayout == AdaptiveModalContentLayout.wrapContent
+                  ? Align(alignment: Alignment.topCenter, child: child)
+                  : child,
             ),
           ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(
-            CurvedAnimation(
-              parent: animation,
-              // M3E 侧滑弹层入场：spatial default 弹簧（700/0.9，
-              // 对齐包内 `M3ESideSheetMotion.enterSpring`）。`MotionCurve`
-              // 把弹簧按秒采样，因此路由时长取落定时间 400ms（末尾误差
-              // <0.1%，不会收尾跳变）。
-              curve: MotionCurve(
-                motion: SpringMotion(M3EMotion.spatialDefault.toDescription()),
-              ),
-            ),
-          ),
-          child: child,
-        );
-      },
+        ),
+      ),
+      theme: baseTheme.copyWith(width: maxWidth, maxWidth: maxWidth),
+      // 遮罩点击 / 返回 / Esc 的关闭开关（对应旧 barrierDismissible）。
+      isDismissible: barrierDismissible,
     );
   }
 

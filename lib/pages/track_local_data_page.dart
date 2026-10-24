@@ -44,18 +44,26 @@ Future<void> showTrackLocalDataPage(
 }) {
   return ResponsiveNavigation.showSecondaryPage<void>(
     context: context,
-    child: TrackLocalDataPage(track: track),
+    title: AppLocalizations.of(context)!.localDataTitle,
+    body: TrackLocalDataPage(track: track, embedded: true),
     preferredMode: SecondaryPageMode.sideSheet,
     maxWidth: 520,
-    showCloseButton: false,
   );
 }
 
 @visibleForTesting
 class TrackLocalDataPage extends StatefulWidget {
-  const TrackLocalDataPage({super.key, required this.track});
+  const TrackLocalDataPage({
+    super.key,
+    required this.track,
+    this.embedded = false,
+  });
 
   final Track track;
+
+  /// 作为二级页正文挂进外层 chrome（侧边弹层 / 全屏路由的 AppBar）时为
+  /// true：不再自带 Scaffold + AppBar，避免双层标题栏。
+  final bool embedded;
 
   @override
   State<TrackLocalDataPage> createState() => _TrackLocalDataPageState();
@@ -368,31 +376,33 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final progress = context.select<DownloadService?, DownloadProgress?>(
       (service) => service?.progressForTrack(widget.track),
     );
+    final body = ListView(
+      padding: const EdgeInsets.all(kSettingsPadding),
+      children: [
+        SettingsSectionCard(
+          children: [
+            SettingsInfoTile(
+              icon: Icons.music_note_rounded,
+              title: widget.track.title,
+              subtitle: widget.track.artistLabel,
+            ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        ..._buildAudioSection(l10n, data, progress),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _buildExtrasSection(l10n, data),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _buildCacheSection(l10n, data),
+      ],
+    );
+    if (widget.embedded) return body;
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.localDataTitle),
         automaticallyImplyLeading: true,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          SettingsSectionCard(
-            children: [
-              SettingsInfoTile(
-                icon: Icons.music_note_rounded,
-                title: widget.track.title,
-                subtitle: widget.track.artistLabel,
-              ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          ..._buildAudioSection(l10n, data, progress),
-          const SizedBox(height: kSettingsSectionSpacing),
-          _buildExtrasSection(l10n, data),
-          const SizedBox(height: kSettingsSectionSpacing),
-          _buildCacheSection(l10n, data),
-        ],
-      ),
+      body: body,
     );
   }
 

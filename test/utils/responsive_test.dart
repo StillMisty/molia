@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -186,5 +187,66 @@ void main() {
 
     expect(find.byType(Dialog), findsOneWidget);
     expect(find.text('modal-child'), findsOneWidget);
+  });
+
+  testWidgets('secondary page uses M3ESideSheet on large screens',
+      (tester) async {
+    await pumpResponsiveHarness(
+      tester,
+      width: 1280,
+      child: Builder(
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () {
+              ResponsiveNavigation.showSecondaryPage<void>(
+                context: context,
+                title: 'secondary-title',
+                body: const Text('secondary-body'),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(M3ESideSheet), findsOneWidget);
+    // 标题进弹层自带 header，正文只构建一次（没有页面自带的第二层 AppBar）。
+    expect(find.text('secondary-title'), findsOneWidget);
+    expect(find.text('secondary-body'), findsOneWidget);
+    expect(find.byType(M3EAppBar), findsNothing);
+  });
+
+  testWidgets('secondary page stays full screen on mobile', (tester) async {
+    await pumpResponsiveHarness(
+      tester,
+      width: 390,
+      child: Builder(
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () {
+              ResponsiveNavigation.showSecondaryPage<void>(
+                context: context,
+                title: 'secondary-title',
+                body: const Text('secondary-body'),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // 窄屏仍是全屏路由 + M3E AppBar，不出现侧边弹层。
+    expect(find.byType(M3EAppBar), findsOneWidget);
+    expect(find.byType(M3ESideSheet), findsNothing);
+    expect(find.text('secondary-title'), findsOneWidget);
+    expect(find.text('secondary-body'), findsOneWidget);
   });
 }
