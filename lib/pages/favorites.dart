@@ -1178,9 +1178,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
-              child: InkWell(
+              // 透明底 M3ECard 只借它的交互层：hover / press 状态、焦点环与
+              // Enter/Space 激活（裸 InkWell 没有键盘语义）。
+              child: M3ECard(
+                variant: M3ECardVariant.filled,
+                color: Colors.transparent,
+                elevation: 0,
                 borderRadius: BorderRadius.circular(12),
-                onTap: () {
+                padding: EdgeInsets.zero,
+                onPressed: () {
                   HapticsService.lightImpact();
                   _showCollectionPicker(
                     l10n,

@@ -105,8 +105,8 @@ void main() {
         m3e.typography.emphasized.bodyLarge.fontFamily,
         'Noto Sans CJK SC',
       );
-      expect(m3e.typography.emphasized.labelLarge.fontFamily,
-          'Noto Sans CJK SC');
+      expect(
+          m3e.typography.emphasized.labelLarge.fontFamily, 'Noto Sans CJK SC');
 
       // 颜色 / 组件主题仍然只来自 ThemeData（不引入第二个主题源）。
       final mapped = M3EThemeData.fromMaterial(custom);

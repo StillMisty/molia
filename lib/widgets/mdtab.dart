@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 
@@ -72,7 +73,7 @@ class _LyricsQueueDotsState extends State<LyricsQueueDots> {
       children: [
         for (var index = 0; index < widget.pages.length; index++)
           // 标题仅作为 tooltip/无障碍描述保留（不占视觉空间）。
-          Tooltip(
+          M3ETooltip(
             message: widget.pages[index].title,
             child: GestureDetector(
               // translucent：圆点浮在内容上，点击选中响应、同时让横向滑动

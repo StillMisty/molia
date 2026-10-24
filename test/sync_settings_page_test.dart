@@ -357,7 +357,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(clipboard.last, '192.168.1.10');
-    expect(find.text('Address copied'), findsOneWidget);
+    expect(notifications.last, 'Address copied');
 
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
@@ -393,7 +393,7 @@ void main() {
     await tester.tap(find.byKey(const Key('settingsSyncPeerSelfItem')));
     await tester.pumpAndSettle();
     expect(clipboard.single, provider.deviceId);
-    expect(find.text('Full device ID copied'), findsOneWidget);
+    expect(notifications.last, 'Full device ID copied');
   });
 
   testWidgets('口令行可查看完整口令；不再有「输入已有口令加入」入口', (tester) async {

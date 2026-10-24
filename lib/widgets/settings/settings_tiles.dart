@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 import '../../services/haptics.dart';
+import '../../services/notification_service.dart';
 import '../../utils/color_hex.dart';
 import '../../utils/responsive.dart';
 import '../card_list_surface.dart';
@@ -232,8 +234,16 @@ class SettingsCopyTile extends StatelessWidget {
   void _copy(BuildContext context) {
     HapticsService.lightImpact();
     Clipboard.setData(ClipboardData(text: copyText));
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(copiedMessage)));
+    // 统一走全局提示出口：M3ESnackbar 挂在根 Overlay 上，关闭设置弹层不会
+    // 把提示一起带走；观感也与全应用一致（局部 ScaffoldMessenger 会换成
+    // 另一套 SnackBar）。
+    final notifications = context.read<NotificationService?>();
+    if (notifications != null) {
+      notifications.showSuccessSnackBar(copiedMessage);
+      return;
+    }
+    // 独立挂载（单页预览 / 未注入 provider 的测试）的兜底。
+    M3ESnackbar.show(context, message: copiedMessage);
   }
 
   @override

@@ -664,7 +664,7 @@ class _AiDjPageState extends State<AiDjPage> {
       const SizedBox(height: 8),
       if (_editingConfig) _configForm(l10n) else _configSummary(l10n, provider),
       const SizedBox(height: 12),
-      Divider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
+      M3EDivider(color: scheme.outlineVariant.withValues(alpha: 0.5)),
       const SizedBox(height: 4),
       // 两个配置动作（测试连接 / 清除配置）平级，收进同一组：tonal 统一语气，
       // 按下即分发命令（selectedIndex 恒空、不留选中态）。

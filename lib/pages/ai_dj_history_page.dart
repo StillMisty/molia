@@ -300,37 +300,40 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
               )
             else if (batch != null)
               for (final item in batch.items) ...[
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
+                M3ETappable(
                   onTap: provider.isBusy
                       ? null
                       : () => unawaited(provider.playHistoryBatch(entry.id)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.track.title,
-                            style: theme.textTheme.bodyMedium),
-                        Text(
-                          [
-                            if (item.track.artistLabel.isNotEmpty)
-                              item.track.artistLabel,
-                          ].join(' · '),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        if (item.source.reason.isNotEmpty)
-                          Text(
-                            item.source.reason,
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
+                  enabled: !provider.isBusy,
+                  mouseCursor: SystemMouseCursors.click,
+                  semanticButton: true,
+                  builder: (BuildContext context, M3EInteractionState state) =>
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.track.title,
+                                style: theme.textTheme.bodyMedium),
+                            Text(
+                              [
+                                if (item.track.artistLabel.isNotEmpty)
+                                  item.track.artistLabel,
+                              ].join(' · '),
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
+                            if (item.source.reason.isNotEmpty)
+                              Text(
+                                item.source.reason,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                 ),
               ],
           ],

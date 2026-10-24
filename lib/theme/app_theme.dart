@@ -79,7 +79,8 @@ M3EThemeData buildM3EThemeData(ThemeData theme) {
 }
 
 /// 系统栏样式：透明系统栏 + 按方案亮度选择图标明暗（edge-to-edge）。
-SystemUiOverlayStyle buildSystemUiOverlayStyle(ColorScheme scheme) {  final brightness = scheme.brightness;
+SystemUiOverlayStyle buildSystemUiOverlayStyle(ColorScheme scheme) {
+  final brightness = scheme.brightness;
   return SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     systemNavigationBarColor: Colors.transparent,

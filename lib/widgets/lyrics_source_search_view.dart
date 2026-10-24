@@ -489,19 +489,11 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              providerDisplayName,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onPrimaryContainer,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+          // 来源名是静态元数据：M3E assist chip（无 onPressed）统一胶囊
+          // 观感，不再自绘圆角 Container。
+          M3EChip(
+            type: M3EChipType.assist,
+            label: providerDisplayName,
           ),
           const SizedBox(width: 8),
           if (state == ProviderSearchState.loading)
@@ -539,19 +531,11 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
       headline: result.match.title,
       supportingText: result.match.artist,
       trailing: isBest
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                l10n.lyricsBestMatch,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          // 「最佳匹配」是静态徽章（不可点）：用 assist chip 的胶囊语言，
+          // 文案不变、不新增 l10n。
+          ? M3EChip(
+              type: M3EChipType.assist,
+              label: l10n.lyricsBestMatch,
             )
           : Icon(
               Icons.chevron_right_rounded,

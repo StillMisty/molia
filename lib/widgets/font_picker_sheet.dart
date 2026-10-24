@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../l10n/app_localizations.dart';
 import '../services/system_fonts_service.dart';
 import 'app_search_bar.dart';
+import 'card_list_surface.dart';
 
 /// AppLocalizations 查找：与收藏页同一约定，测试未注册 delegate 时回退中文。
 AppLocalizations _l10n(BuildContext context) =>
@@ -149,40 +150,64 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
                     ),
                   ),
                 ),
-              final list => ListView(
-                  shrinkWrap: true,
-                  children: [
-                    if (widget.includeInherit)
-                      _FontOptionTile(
-                        label: widget.inheritLabel ?? l10n.posterFontFollowApp,
-                        selected: _isSelected(const FontChoice.inherit()),
-                        onTap: () => _pop(const FontChoice.inherit()),
-                      ),
-                    _FontOptionTile(
-                      label: l10n.fontSystemDefault,
-                      // 预览必须是真正的系统默认字体，而不是当前主题里
-                      // 已选中的「应用字体」——否则选了自定义字体后，用户
-                      // 会误以为「系统默认」也是这个字体。
-                      family: SystemFontsService.platformDefaultFamily,
-                      selected: _isSelected(const FontChoice.system()),
-                      onTap: () => _pop(const FontChoice.system()),
-                    ),
-                    for (final family in list)
-                      if (_query.isEmpty ||
-                          family.toLowerCase().contains(_query))
-                        _FontOptionTile(
-                          label: family,
-                          family: family,
-                          selected: _isSelected(FontChoice.family(family)),
-                          onTap: () => _pop(FontChoice.family(family)),
-                        ),
-                  ],
-                ),
+              final list => _buildFamilyList(context, l10n, list),
             },
           ),
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+
+  /// 设备字体列表：分段卡片行 + M3E 行距，形状随首末行变化。
+  ///
+  /// 用 `ListView.separated` 而不是手写 `children`：行距取主题
+  /// `cardList.gap`，且行位置（首/中/末）要按过滤后的实际数量计算——
+  /// 先构造选项表，再在 itemBuilder 里算位置，搜索过滤后形状仍然正确。
+  Widget _buildFamilyList(
+    BuildContext context,
+    AppLocalizations l10n,
+    List<String> families,
+  ) {
+    final options = <({String label, String? family, FontChoice choice})>[
+      if (widget.includeInherit)
+        (
+          label: widget.inheritLabel ?? l10n.posterFontFollowApp,
+          family: null,
+          choice: const FontChoice.inherit(),
+        ),
+      (
+        label: l10n.fontSystemDefault,
+        // 预览必须是真正的系统默认字体，而不是当前主题里已选中的「应用
+        // 字体」——否则选了自定义字体后，用户会误以为「系统默认」也是
+        // 这个字体。
+        family: SystemFontsService.platformDefaultFamily,
+        choice: const FontChoice.system(),
+      ),
+      for (final family in families)
+        if (_query.isEmpty || family.toLowerCase().contains(_query))
+          (
+            label: family,
+            family: family,
+            choice: FontChoice.family(family),
+          ),
+    ];
+    final gap = M3ETheme.of(context).listTheme.cardList.gap;
+    return ListView.separated(
+      shrinkWrap: true,
+      itemCount: options.length,
+      separatorBuilder: (BuildContext context, int index) =>
+          SizedBox(height: gap),
+      itemBuilder: (BuildContext context, int index) {
+        final option = options[index];
+        return _FontOptionTile(
+          label: option.label,
+          family: option.family,
+          selected: _isSelected(option.choice),
+          position: calculateCardPosition(index, options.length),
+          onTap: () => _pop(option.choice),
+        );
+      },
     );
   }
 }
@@ -193,44 +218,45 @@ class _FontOptionTile extends StatelessWidget {
     required this.label,
     this.family,
     required this.selected,
+    required this.position,
     required this.onTap,
   });
 
   final String label;
   final String? family;
   final bool selected;
+  final M3ECardPosition position;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 16,
-                    // 预览：系统字体族名可直接被引擎解析；缺失时按默认字体渲染。
-                    fontFamily: family,
-                    color: selected ? scheme.primary : scheme.onSurface,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  ),
-                ),
-              ),
-              if (selected)
-                Icon(Icons.check_rounded, color: scheme.primary, size: 20),
-            ],
+    final m3e = M3ETheme.of(context);
+    final scheme = m3e.colorScheme;
+    // 排版走 M3E typeScale（不写死字号）；字体预览只覆盖 fontFamily。
+    // 选中态用 primary + w500，不写死 w600（M3E 的选中强调是颜色 + 一档
+    // 字重，不是跳两级）。
+    final style = m3e.typeScale.bodyLarge.copyWith(
+      fontFamily: family,
+      color: selected ? scheme.primary : scheme.onSurface,
+      fontWeight: selected ? FontWeight.w500 : null,
+    );
+    return CardListSurface(
+      position: position,
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style,
+            ),
           ),
-        ),
+          if (selected)
+            Icon(Icons.check_rounded, color: scheme.primary, size: 20),
+        ],
       ),
     );
   }

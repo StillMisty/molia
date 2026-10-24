@@ -129,7 +129,11 @@ void main() {
   Future<void> selectQueuePage(WidgetTester tester) async {
     final dots = find.descendant(
       of: find.byType(LyricsQueueDots),
-      matching: find.byType(GestureDetector),
+      // M3ETooltip 自身也包一层 GestureDetector（长按提示），只认圆点自己的
+      // 点击手势，避免把提示层的 detector 算进序号。
+      matching: find.byWidgetPredicate(
+        (widget) => widget is GestureDetector && widget.onTap != null,
+      ),
     );
     await tester.tap(dots.first);
     await tester.pump();
@@ -239,7 +243,11 @@ void main() {
 
     final dots = find.descendant(
       of: find.byType(LyricsQueueDots),
-      matching: find.byType(GestureDetector),
+      // M3ETooltip 自身也包一层 GestureDetector（长按提示），只认圆点自己的
+      // 点击手势，避免把提示层的 detector 算进序号。
+      matching: find.byWidgetPredicate(
+        (widget) => widget is GestureDetector && widget.onTap != null,
+      ),
     );
     // 默认激活歌词圆点（第二个）：再点一次 = 收起。
     await tester.tap(dots.at(1));
@@ -610,7 +618,9 @@ void main() {
 
     final dots = find.descendant(
       of: find.byType(LyricsQueueDots),
-      matching: find.byType(GestureDetector),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is GestureDetector && widget.onTap != null,
+      ),
     );
     expect(dots, findsNWidgets(3), reason: '队列 / 歌词 / 歌曲信息三页');
 

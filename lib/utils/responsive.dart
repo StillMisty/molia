@@ -554,25 +554,6 @@ class ResponsiveNavigation {
     );
   }
 
-  static Future<T?> showAdaptiveDialog<T>({
-    required BuildContext context,
-    required Widget child,
-    String? title,
-    double? maxWidth,
-    bool showCloseButton = false,
-    bool barrierDismissible = true,
-  }) {
-    return showAdaptiveModalPage<T>(
-      context: context,
-      child: child,
-      title: title,
-      maxWidth: maxWidth,
-      showCloseButton: showCloseButton,
-      barrierDismissible: barrierDismissible,
-      largeScreenMode: SecondaryPageMode.centerDialog,
-    );
-  }
-
   static Future<T?> _showFullScreen<T>({
     required BuildContext context,
     required Widget child,

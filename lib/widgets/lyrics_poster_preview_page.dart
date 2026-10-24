@@ -537,7 +537,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                       ),
                     ],
                     const SizedBox(height: 12),
-                    Divider(color: theme.colorScheme.outlineVariant),
+                    M3EDivider(color: theme.colorScheme.outlineVariant),
                     const SizedBox(height: 12),
                     Row(
                       children: [

@@ -11,8 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 /// 开洞，否则口径会一处一处地回潮。
 ///
 /// 白名单是**存量清单**，不是永久豁免：
-/// - Phase 2（侧滑 / 居中弹层）、Phase 3（排版）、Phase 5（Shell AppBar）
-///   完成后要删掉对应条目；
+/// - Phase 2（二级页侧边弹层）、Phase 3（页面型弹窗）、Phase 5（Shell
+///   AppBar）、Phase 6（排版 / 字重）完成后要删掉对应条目；
 /// - `ReorderableListView` 是长期例外：M3E 1.2.0 未导出 reorder host，
 ///   收藏页 / 设置页 / 通用分段列表只能继续用框架实现。
 ///
@@ -21,19 +21,17 @@ import 'package:flutter_test/flutter_test.dart';
 /// 每个例外都在下面的表里写清理由；替换一项就删一条。
 const Map<String, Set<String>> _rawComponentAllowlist = {
   // 壳层底栏容器：容器色（surfaceContainer）+ 布局约束，不是可点表面；
-  // 等 Phase 3 排版迁移时再评估等价的 M3E 容器。
+  // 等 Phase 6 排版迁移时再评估等价的 M3E 容器。
   'lib/app/desktop/now_playing_bar.dart': {'Material'},
-  // Phase 1 起改为 M3EDivider。
-  'lib/pages/ai_dj_page.dart': {'Divider'},
   // 壳层顶栏（Phase 5 迁移到 M3E AppBar；AppBar.bottom 的约束语义见
   // app_shell 顶部注释）。
   'lib/app/shell_chrome.dart': {'AppBar'},
-  // 收藏页合集标题行：Phase 1 起改为透明底 M3ECard（键盘可激活）。
-  'lib/pages/favorites.dart': {'InkWell', 'ReorderableListView'},
+  // 收藏页可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。
+  'lib/pages/favorites.dart': {'ReorderableListView'},
   // 同步口令 / 设备 id 需要「可选中复制」；M3E 没有 SelectableText 等价件。
   'lib/pages/sync_dialogs.dart': {'SelectableText'},
-  // Phase 2 大屏侧边弹层 / 居中对话框；两个 Material 分别给侧边面板容器
-  // 与弹层内容的 ink 祖先。
+  // Phase 2 侧边弹层 / Phase 3 居中页面弹窗；两个 Material 分别给侧边面板
+  // 容器与弹层内容的 ink 祖先。
   'lib/utils/responsive.dart': {
     'Dialog',
     'Material',
@@ -44,30 +42,21 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   'lib/widgets/ai_dj_prompt_dialog.dart': {'SelectableText'},
   // M3E 1.2.0 未导出 reorder host，长期例外（收藏页 / 设置页 / 通用列表）。
   'lib/widgets/collection_track_list.dart': {'ReorderableListView'},
-  // Phase 1 起改为 CardListSurface（M3ECard 自带键盘激活与 focus ring）。
-  'lib/widgets/font_picker_sheet.dart': {'InkWell', 'Material'},
   // 自建全屏搜索遮罩（docs/pitfalls.md #57）：路由与透明 ink 祖先都是
   // 有意保留，不换 M3ESearchAnchor。
   'lib/widgets/global_search_overlay.dart': {'Material', 'showGeneralDialog'},
   // 歌词滚动区：透明 Material 只补 ink 绘制层（滚动容器本身不是 M3E 组件）。
   'lib/widgets/lyrics.dart': {'Material'},
-  // Phase 1 起改为 M3EDivider。
-  'lib/widgets/lyrics_poster_preview_page.dart': {'Divider'},
-  // Phase 1 起改为 M3ETooltip。
-  'lib/widgets/mdtab.dart': {'Tooltip'},
   // 设置页可重排分段列表：M3E 1.2.0 未导出 reorder host，长期例外。
   'lib/widgets/settings/settings_reorderable_rows.dart': {
     'ReorderableListView',
   },
-  // Phase 1 起改走 NotificationService（M3ESnackbar）。
-  'lib/widgets/settings/settings_tiles.dart': {'ScaffoldMessenger', 'SnackBar'},
   // 热力图格子的值提示：需要 400ms wait，M3ETooltip 没有 wait API。
   'lib/widgets/statistics/listening_heatmap.dart': {'Tooltip'},
   // 音量面板容器：surfaceContainerHigh + elevation 的浮层表面，
-  // Phase 1 只删外层 MouseRegion，容器迁移待 Phase 3。
+  // Phase 1 已删外层 MouseRegion，容器迁移待 Phase 6。
   'lib/widgets/volume_control.dart': {'Material'},
 };
-
 
 /// 需要拦截的裸 Material 组件标识符。
 const Set<String> _rawComponents = {
@@ -230,9 +219,10 @@ void main() {
 
   test('裸 Material 组件只允许登记在案的文件 / 标识符', () {
     final stripped = <String, String>{
-      for (final path in files) path: _stripCommentsAndStrings(
-        File(path).readAsStringSync(),
-      ),
+      for (final path in files)
+        path: _stripCommentsAndStrings(
+          File(path).readAsStringSync(),
+        ),
     };
 
     final offenders = <String>[];
@@ -263,8 +253,7 @@ void main() {
         stale.add('$path（文件不存在）');
         continue;
       }
-      final source =
-          _stripCommentsAndStrings(File(path).readAsStringSync());
+      final source = _stripCommentsAndStrings(File(path).readAsStringSync());
       for (final identifier in entry.value) {
         if (_occurrences(source, identifier).isEmpty) {
           stale.add('$path → $identifier（已不再出现）');

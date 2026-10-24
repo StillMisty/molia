@@ -94,21 +94,18 @@ class _VolumeControlState extends State<VolumeControl> {
       },
       child: TapRegion(
         groupId: _tapGroup,
-        child: MouseRegion(
-          // 桌面鼠标习惯：可点元素给手型（M3E 按钮自身不设鼠标指针）。
-          cursor: SystemMouseCursors.click,
-          child: M3EIconButton(
-            key: widget.buttonKey,
-            variant: M3EIconButtonVariant.standard,
-            semanticLabel: l10n.playerBarVolume,
-            icon: IconSwap<bool>(
-              value: off,
-              builder: (context, off) => Icon(
-                off ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-              ),
+        // M3EIconButton 默认已是手型光标，不再叠一层 MouseRegion。
+        child: M3EIconButton(
+          key: widget.buttonKey,
+          variant: M3EIconButtonVariant.standard,
+          semanticLabel: l10n.playerBarVolume,
+          icon: IconSwap<bool>(
+            value: off,
+            builder: (context, off) => Icon(
+              off ? Icons.volume_off_rounded : Icons.volume_up_rounded,
             ),
-            onPressed: _controller.toggle,
           ),
+          onPressed: _controller.toggle,
         ),
       ),
     );

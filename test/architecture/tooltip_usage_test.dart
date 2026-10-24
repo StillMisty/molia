@@ -9,8 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 /// 提示只留给「图标表达不了的文本」，且例外必须在本文件登记——别在调用点
 /// 就地开洞，否则口径会一处一处地回潮。
 const Set<String> _rawTooltipAllowlist = {
-  'lib/widgets/mdtab.dart', // 页圆点：分页标题没有别的出口。
-  'lib/widgets/statistics/listening_heatmap.dart', // 格子是数据值，不是动作。
+  // 格子是数据值，不是动作；且 400ms wait 是热力图刚需，M3ETooltip 没有
+  // wait API。
+  'lib/widgets/statistics/listening_heatmap.dart',
 };
 
 /// 免给 `semanticLabel` 的 M3EIconButton：图标本身带名（由调用方给的
