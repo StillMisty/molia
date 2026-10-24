@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站收藏夹：链接形态解析、全部分页、视频过滤、私密失败与详情字段。
 void main() {
@@ -29,7 +30,6 @@ void main() {
 
   setUp(() {
     BiliApi.reset();
-    BiliFavorites.redirectDioForTest = null;
     pages = {
       1: fixture('bili_favorites_page1.json'),
       2: fixture('bili_favorites_page2.json'),
@@ -41,33 +41,13 @@ void main() {
 
   tearDown(() {
     BuiltinSearch.transport = originalTransport;
-    BiliFavorites.redirectDioForTest = null;
   });
 
   MockDioAdapter install() {
     final adapter = MockDioAdapter((options) async {
+      final sessionResponse = biliSessionResponse(options);
+      if (sessionResponse != null) return sessionResponse;
       switch (options.uri.path) {
-        case '/x/frontend/finger/spi':
-          return textResponse(
-            jsonEncode({
-              'code': 0,
-              'data': {'b_3': 'buvid3-test', 'b_4': 'buvid4-test'},
-            }),
-          );
-        case '/x/web-interface/nav':
-          return textResponse(
-            jsonEncode({
-              'code': -101,
-              'data': {
-                'wbi_img': {
-                  'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '7cd084941338484aae1ad9425b84077c.png',
-                  'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '4932caff0ff746eab6f01bf08b70ac45.png',
-                },
-              },
-            }),
-          );
         case '/x/v3/fav/folder/created/list-all':
           return textResponse(
             jsonEncode({
@@ -159,7 +139,7 @@ void main() {
 
     test('b23 短链：跟随 302 后解析目标地址', () async {
       final redirects = <Uri>[];
-      BiliFavorites.redirectDioForTest = mockDio((request) async {
+      final adapter = MockDioAdapter((request) async {
         redirects.add(request.uri);
         if (request.uri.host == 'b23.tv') {
           return textResponse(
@@ -174,6 +154,8 @@ void main() {
         }
         return textResponse('');
       });
+      BuiltinSearch.transport =
+          BuiltinTransport(dio: createAppDio(adapter: adapter));
 
       expect(await BiliFavorites.parseMediaId('https://b23.tv/abcdef'), '321');
       expect(redirects.first.host, 'b23.tv');

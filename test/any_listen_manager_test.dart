@@ -73,7 +73,7 @@ void main() {
         raw: const {'id': 'any-1'},
       );
       await expectLater(
-        manager.resolveUrl(track),
+        manager.resolveStream(track),
         throwsA(isA<SourceFailure>()
             .having((e) => e.kind, 'kind', FailureKind.unsupported)),
       );
@@ -190,8 +190,8 @@ void main() {
       expect(result.tracks.single.title, '测试曲目');
       expect(result.tracks.single.raw['id'], 'any-9');
 
-      final url = await manager.resolveUrl(result.tracks.single);
-      expect(url, 'http://127.0.0.1:1/stream.mp3');
+      final stream = await manager.resolveStream(result.tracks.single);
+      expect(stream.uri.toString(), 'http://127.0.0.1:1/stream.mp3');
       expect(
         requests,
         containsAll(['/api/music/search', '/api/music/url']),

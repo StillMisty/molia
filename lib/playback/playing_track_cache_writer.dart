@@ -12,6 +12,7 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+import '../domain/ports/music_source.dart' show PlayableStream;
 import '../sources/source_track.dart';
 import 'audio_predownload.dart';
 import 'audio_predownloader.dart';
@@ -27,14 +28,13 @@ class PlayingTrackCacheWriter {
 
   /// 开始写 [track]（自动取消上一首未完成的写入）。
   ///
-  /// [headers] 来自取链结果，原样交给预取请求（B 站需要 `Referer`）；
-  /// 不触网条件（非法直链 / 省流 / 平台 / 开关 / 已有完整缓存）由
-  /// [AudioPredownloader] 内部判定，命中时静默跳过。
+  /// [stream] 是取链结果（URL + headers 不可分离）；不触网条件（非法直链 /
+  /// 省流 / 平台 / 开关 / 已有完整缓存）由 [AudioPredownloader] 内部判定，
+  /// 命中时静默跳过。
   Future<void> start(
     SourceTrack track, {
-    required String url,
+    required PlayableStream stream,
     String? quality,
-    Map<String, String> headers = const {},
   }) async {
     cancel();
     final predownloader = _predownloader;
@@ -42,9 +42,8 @@ class PlayingTrackCacheWriter {
     try {
       _task = await predownloader.predownload(
         track: track,
-        url: url,
+        stream: stream,
         quality: quality,
-        headers: headers,
       );
     } catch (e) {
       // 缓存写入不能影响播放：失败只记录。

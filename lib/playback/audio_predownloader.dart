@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../domain/ports/music_source.dart' show PlayableStream;
 import '../services/audio_cache_store.dart';
 import '../services/cache_service.dart';
 import '../sources/source_track.dart';
@@ -8,14 +9,14 @@ import 'audio_predownload.dart';
 
 /// 音频字节预取端口：把直链预取到本地音频缓存（测试可注入 fake）。
 abstract interface class AudioPredownloader {
-  /// 预取 [track] 的直链 [url]；返回任务，跳过（策略/平台/已缓存）时 null。
+  /// 预取 [track] 的播放流；返回任务，跳过（策略/平台/已缓存）时 null。
   ///
-  /// [headers] 是取链结果里的请求头（B 站需要 `Referer`）；为空表示不加。
+  /// 传 [PlayableStream] 而不是 URL + headers：两者是不可分离的一对
+  /// （B 站缺 `Referer` 就 403），拆开传容易在调用链里丢一半。
   Future<AudioPredownloadTask?> predownload({
     required SourceTrack track,
-    required String url,
+    required PlayableStream stream,
     String? quality,
-    Map<String, String> headers = const {},
   });
 }
 
@@ -47,12 +48,11 @@ class CacheAudioPredownloader implements AudioPredownloader {
   @override
   Future<AudioPredownloadTask?> predownload({
     required SourceTrack track,
-    required String url,
+    required PlayableStream stream,
     String? quality,
-    Map<String, String> headers = const {},
   }) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) {
+    final uri = stream.uri;
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
       return null;
     }
     if (uri.path.toLowerCase().endsWith('.m3u8')) return null;
@@ -69,7 +69,7 @@ class CacheAudioPredownloader implements AudioPredownloader {
     final task = _starter(
       uri: uri,
       targetPath: audioCacheFilePath(directory, fileName),
-      headers: headers.isEmpty ? null : headers,
+      headers: stream.headers.isEmpty ? null : stream.headers,
     );
     if (task == null) return null;
     // 预取写入后执行一次 LRU 淘汰（与边播边缓存的策略一致）。

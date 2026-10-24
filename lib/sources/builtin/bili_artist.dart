@@ -22,95 +22,9 @@ import 'builtin_search.dart';
 class BiliArtist {
   BiliArtist._();
 
-  /// 用户搜索与搜索兜底都是固定 20 条/页；投稿接口用 30 条/页。
-  static const int searchPageSize = 20;
+  /// 投稿接口固定 30 条/页；搜索兜底按平台 20 条/页。
   static const int spacePageSize = 30;
   static const int maxPage = 50;
-
-  /// 投稿接口的风控指纹参数（B 站前端真实请求里的常量）。
-  ///
-  /// 缺任意一个都会让空间接口更容易返回 `-352`；值与浏览器版本无关，
-  /// 平台只校验「像浏览器请求」，不需要跟真实版本同步。
-  static const Map<String, String> _dmParams = {
-    'dm_img_list': '[]',
-    'dm_img_str': 'V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ',
-    'dm_cover_img_str': 'QU5HTEUgKEludGVsLCBJbnRlbChSKSBVSEQgR3JhcGhpY3MgNjMw'
-        'ICgweDAwMDAzRTlCKSBEaXJlY3QzRDExIHZzXzVfMCBwc181XzAsIEQzRDExKUdvb2ds'
-        'ZSBJbmMuIChJbnRlbCk',
-    'dm_img_inter': '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}',
-  };
-
-  /// 用户搜索（搜索页「歌手」类型）。
-  ///
-  /// [limit] 只为适配器签名保留：平台固定 20 条/页，改不了本页条数。
-  static Future<ArtistSearchPage> search(
-    String keyword, {
-    int page = 1,
-    int limit = 30,
-  }) async {
-    final normalizedPage = page.clamp(1, maxPage);
-    try {
-      final response = await _getWbi(
-        '/x/web-interface/wbi/search/type',
-        {
-          'search_type': 'bili_user',
-          'keyword': keyword,
-          'page': normalizedPage,
-        },
-      );
-      return parseSearch(response, page: normalizedPage);
-    } on SourceFailure {
-      rethrow;
-    } catch (e) {
-      throw SourceFailure.from(e);
-    }
-  }
-
-  /// 用户搜索响应 → 结果页（供单测复用）。
-  static ArtistSearchPage parseSearch(
-    dynamic response, {
-    required int page,
-  }) {
-    final code = BiliApi.codeOf(response);
-    if (code != 0) {
-      throw BiliApi.failureForCode(
-        code ?? -1,
-        message: 'bili: 用户搜索失败（code=${code ?? '非 JSON'}）',
-      );
-    }
-    final data = response is Map ? response['data'] : null;
-    if (data is! Map) {
-      throw artistPlatformFailure('bili', '用户搜索响应非法');
-    }
-
-    final items = <ArtistSummary>[];
-    final rawList = data['result'];
-    if (rawList is List) {
-      for (final raw in rawList) {
-        if (raw is! Map) continue;
-        final id = biliRawText(raw['mid']);
-        final name = biliText(raw['uname']);
-        if (id.isEmpty || name.isEmpty) continue;
-        items.add(ArtistSummary(
-          id: id,
-          name: name,
-          avatarUrl: biliCoverUrl(raw['upic']),
-          songCount: parseSourceCount(raw['videos']),
-        ));
-      }
-    }
-
-    final total = parseSourceCount(data['numResults']);
-    final pages = parseSourceCount(data['numPages']);
-    // 没有 numPages 时按固定 20 条/页回退；两者都没有就当作末页，
-    // 避免 hasMore 永远为真、列表反复请求空页。
-    final hasMore = pages != null
-        ? page < pages
-        : (total != null &&
-            total > searchPageSize &&
-            page * searchPageSize < total);
-    return ArtistSearchPage(items: items, total: total, hasMore: hasMore);
-  }
 
   /// UP 资料 + 一页投稿视频。
   ///
@@ -209,7 +123,7 @@ class BiliArtist {
           'pn': page,
           'ps': spacePageSize,
           'order': 'pubdate',
-          ..._dmParams,
+          ...BiliApi.spaceFingerprintParams,
         },
       );
       final parsed = _parseSpace(response, page: page);
@@ -309,29 +223,11 @@ class BiliArtist {
   static Future<dynamic> _getWbi(
     String path,
     Map<String, Object?> params,
-  ) async {
-    var session = await BiliApi.session();
-    final url = session.signUrl('${BiliApi.baseUrl}$path', params);
-    var response = await BuiltinSearch.transport.getJson(
-      url,
-      headers: session.apiHeaders,
-    );
-    if (!_needsRefresh(response)) return response;
-
-    session = await BiliApi.refresh();
-    response = await BuiltinSearch.transport.getJson(
-      session.signUrl('${BiliApi.baseUrl}$path', params),
-      headers: session.apiHeaders,
-    );
-    return response;
-  }
-
-  /// 风控判定：`-403/-412/-352` 或空间接口的 `v_voucher` 挑战。
-  static bool _needsRefresh(dynamic response) {
-    final code = BiliApi.codeOf(response);
-    if (BiliApi.isRiskControl(code) || code == -352) return true;
-    final data = response is Map ? response['data'] : null;
-    return data is Map && data['v_voucher'] != null;
+  ) {
+    return BiliApi.requestWithSessionRetry((session) {
+      final url = session.signUrl('${BiliApi.baseUrl}$path', params);
+      return BuiltinSearch.transport.getJson(url, headers: session.apiHeaders);
+    });
   }
 
   static Map? _mapOf(dynamic response) {

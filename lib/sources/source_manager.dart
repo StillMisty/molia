@@ -73,7 +73,7 @@ class SourceOption {
 /// - 统一对外提供取链 / 歌词 / 封面能力。
 ///
 /// 该抽象与 any-listen 的接入隔离：上层只依赖 [SourceManager] 的
-/// search / resolveUrl / fetchLyric / fetchPic 能力；any-listen 通过
+/// search / resolveStream / fetchLyric / fetchPic 能力；any-listen 通过
 /// [AnyListenSource] 适配为 [SourceKind.anyListen]。仅当「已配置且启用」
 /// 时才出现在 [searchableSources]，未配置/连接失败时对现有功能零影响。
 class SourceManager extends ChangeNotifier {
@@ -571,14 +571,6 @@ class SourceManager extends ChangeNotifier {
       quality: picked,
     );
     return PlayableStream(Uri.parse(url));
-  }
-
-  /// 只取直链字符串的兼容包装（旧调用方 / 不需要请求头的场景）。
-  Future<String> resolveUrl(SourceTrack track,
-      {String? requestedQuality}) async {
-    final stream =
-        await resolveStream(track, requestedQuality: requestedQuality);
-    return stream.uri.toString();
   }
 
   /// 酷狗等平台不同音质对应不同 hash，取链前替换为所选音质的 hash。

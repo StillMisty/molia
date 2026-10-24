@@ -250,10 +250,15 @@ class DownloadFileLayout {
 
   /// 缓存命中（没有直链后缀可推断）时的音频扩展名。
   ///
-  /// B 站音轨是 m4s 容器，按音质推断会落到 mp3；缓存拷贝必须与直链下载
-  /// 用同一扩展名，否则同一首歌两种落盘格式、下载记录无法对齐。
-  static String extensionForTrack(String sourceKey, String quality) =>
-      sourceKey == 'bili' ? 'm4a' : extensionForQuality(quality);
+  /// 优先取音质条目携带的容器（B 站 `m4a`）；没有容器信息时按音质推断。
+  static String extensionForTrack(Track track, String quality) {
+    for (final item in track.qualities) {
+      if (item.type != quality) continue;
+      final container = item.container?.trim() ?? '';
+      if (container.isNotEmpty) return container;
+    }
+    return extensionForQuality(quality);
+  }
 
   /// 音频扩展名：缓存命中无法从 URL 推断时按音质映射
   /// （flac/wav/ape/其余 mp3）。

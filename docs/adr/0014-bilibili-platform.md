@@ -65,7 +65,8 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
    - 收藏夹导入：`/x/v3/fav/resource/list` 按 `media_count` 拉全（上限 50 页 /
      1000 条），只收 `type==2`、`attr==0`、有 `bvid` 的视频；rawId 支持数字、
      `fid=` / `media_id=`、`medialist/detail/ml<id>`、`space.bilibili.com/.../favlist`
-     与 `b23.tv` 短链（跟随跳转后解析）。
+     与 `b23.tv` 短链（统一走 `BuiltinTransport.resolveRedirect` 跟随跳转后解析）；
+     不带 `fid` 的 favlist 链接额外取该 UP 的第一个收藏夹（便利回退，失败按无法识别）。
 5. **边界（明确不做）**：专辑、按歌词搜歌、登录 / 大会员高音质、歌单浏览 /
    搜索（`BiliDiscoverSource.supportsPlaylists=false`，UI 隐藏「歌单」tab）、
    私密收藏夹导入（`info` 缺失 → `notFound`）。

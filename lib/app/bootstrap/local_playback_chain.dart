@@ -49,7 +49,7 @@ class LocalPlaybackChain {
   }
 
   /// `SourceTrack` 取链适配：服务解析回调 / 下一首预载共用
-  /// （等价于原 `backend.resolveLegacyUrl` 的唯一实现）。
+  /// （取链的唯一实现）。
   ///
   /// 返回完整 [PlayableStream]（含 headers）而不是 URL 字符串：B 站等平台
   /// 的直链离开 `Referer` / `UA` 会 403，播放、边播边缓存与字节预取必须

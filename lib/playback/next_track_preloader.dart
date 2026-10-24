@@ -50,9 +50,8 @@ class NextTrackPreloader {
       if (generation != _generation) return;
       _pending = await _predownloader?.predownload(
         track: next,
-        url: stream.uri.toString(),
+        stream: stream,
         quality: quality,
-        headers: stream.headers,
       );
       if (generation != _generation) _cancelPendingTask();
     } catch (_) {

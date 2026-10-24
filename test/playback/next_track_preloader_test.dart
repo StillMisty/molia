@@ -28,19 +28,19 @@ SourceTrack _track(String id, {List<SourceQuality> qualities = const []}) =>
 class _RecordingPredownloader implements AudioPredownloader {
   _RecordingPredownloader({this.onCall});
 
-  final AudioPredownloadTask? Function(SourceTrack track, String url)? onCall;
-  final List<(String trackId, String url, String? quality,
-      Map<String, String> headers)> calls = [];
+  final AudioPredownloadTask? Function(
+      SourceTrack track, PlayableStream stream)? onCall;
+  final List<(String trackId, PlayableStream stream, String? quality)> calls =
+      [];
 
   @override
   Future<AudioPredownloadTask?> predownload({
     required SourceTrack track,
-    required String url,
+    required PlayableStream stream,
     String? quality,
-    Map<String, String> headers = const {},
   }) async {
-    calls.add((track.id, url, quality, headers));
-    return onCall?.call(track, url);
+    calls.add((track.id, stream, quality));
+    return onCall?.call(track, stream);
   }
 }
 
@@ -145,7 +145,8 @@ void main() {
       ]));
 
       expect(downloader.calls, hasLength(1));
-      expect(downloader.calls.single.$2, 'https://cdn.example/x.mp3');
+      expect(downloader.calls.single.$2.uri.toString(),
+          'https://cdn.example/x.mp3');
       expect(downloader.calls.single.$3, '320k');
     });
 
@@ -165,7 +166,7 @@ void main() {
 
       await preloader.preload(_track('b'));
 
-      expect(downloader.calls.single.$4, headers);
+      expect(downloader.calls.single.$2.headers, headers);
     });
 
     test('解析失败静默（不抛出）', () async {
@@ -197,7 +198,7 @@ void main() {
     test('新请求取消旧的预取任务，旧结果作废', () async {
       final cancelled = <String>[];
       final downloader = _RecordingPredownloader(
-        onCall: (track, url) => AudioPredownloadTask(
+        onCall: (track, stream) => AudioPredownloadTask(
           done: Completer<void>().future,
           onCancel: () => cancelled.add(track.id),
         ),
@@ -234,14 +235,14 @@ void main() {
       expect(
         await downloader.predownload(
           track: _track('a'),
-          url: 'file:///tmp/a.mp3',
+          stream: PlayableStream(Uri.parse('file:///tmp/a.mp3')),
         ),
         isNull,
       );
       expect(
         await downloader.predownload(
           track: _track('a'),
-          url: 'https://cdn.example/live.m3u8',
+          stream: PlayableStream(Uri.parse('https://cdn.example/live.m3u8')),
         ),
         isNull,
       );
@@ -272,7 +273,7 @@ void main() {
       expect(
         await blocked.predownload(
           track: _track('a'),
-          url: 'https://cdn.example/a.mp3',
+          stream: PlayableStream(Uri.parse('https://cdn.example/a.mp3')),
         ),
         isNull,
       );
@@ -285,7 +286,7 @@ void main() {
       expect(
         await unsupported.predownload(
           track: _track('a'),
-          url: 'https://cdn.example/a.mp3',
+          stream: PlayableStream(Uri.parse('https://cdn.example/a.mp3')),
         ),
         isNull,
       );
@@ -301,7 +302,7 @@ void main() {
       expect(
         await disabled.predownload(
           track: _track('a'),
-          url: 'https://cdn.example/a.mp3',
+          stream: PlayableStream(Uri.parse('https://cdn.example/a.mp3')),
         ),
         isNull,
       );
@@ -327,7 +328,7 @@ void main() {
       final track = _track('b');
       final task = await downloader.predownload(
         track: track,
-        url: 'https://cdn.example/b.mp3',
+        stream: PlayableStream(Uri.parse('https://cdn.example/b.mp3')),
         quality: '320k',
       );
       expect(task, isNotNull);
@@ -363,12 +364,14 @@ void main() {
 
       await downloader.predownload(
         track: _track('a'),
-        url: 'https://cdn.example/a.m4a',
-        headers: const {'Referer': 'https://www.bilibili.com/'},
+        stream: PlayableStream(
+          Uri.parse('https://cdn.example/a.m4a'),
+          headers: {'Referer': 'https://www.bilibili.com/'},
+        ),
       );
       await downloader.predownload(
         track: _track('b'),
-        url: 'https://cdn.example/b.m4a',
+        stream: PlayableStream(Uri.parse('https://cdn.example/b.m4a')),
       );
 
       expect(captured, [

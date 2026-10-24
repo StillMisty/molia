@@ -5,11 +5,14 @@
 /// 分页信息取 `numResults / numPages`（接口固定 20 条/页、最多 50 页）。
 library;
 
+import '../../domain/models/artist.dart';
 import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
+import 'artist_source.dart';
 import 'bili_api.dart';
 import 'bili_track.dart';
+import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
 
 class BiliSearch {
@@ -31,8 +34,8 @@ class BiliSearch {
   /// 搜索语义一致）；平台返回空保持正常空结果。
   ///
   /// [limit] 只为适配器签名保留：B 站固定 20 条/页，改不了本页条数。
-  /// WBI 会话失效 / 风控（-403/-412）会表现为整次失败：刷新会话后重试一次，
-  /// 仍失败才把失败交给调用方。
+  /// 搜索失败不细分错误码：网络抖动 / WBI 会话失效 / 风控都可能表现为
+  /// failed，刷新会话后重试一次，仍失败才把失败交给调用方。
   static Future<SourceSearchResult> searchWithMeta(
     String keyword, {
     int page = 1,
@@ -84,6 +87,77 @@ class BiliSearch {
     } catch (e) {
       return SourceSearchResult.failed(SourceFailure.from(e));
     }
+  }
+
+  /// UP 用户搜索（搜索页「歌手」类型）。平台固定 20 条/页，[limit] 只保留
+  /// 适配器签名。
+  static Future<ArtistSearchPage> searchUsers(
+    String keyword, {
+    int page = 1,
+    int limit = pageSize,
+  }) async {
+    final normalizedPage = page.clamp(1, maxPage);
+    try {
+      final session = await BiliApi.session();
+      final url = session.signUrl(
+        '${BiliApi.baseUrl}/x/web-interface/wbi/search/type',
+        {
+          'search_type': 'bili_user',
+          'keyword': keyword,
+          'page': normalizedPage,
+        },
+      );
+      final response = await BuiltinSearch.transport.getJson(
+        url,
+        headers: session.apiHeaders,
+      );
+      final code = BiliApi.codeOf(response);
+      if (code != 0) {
+        throw BiliApi.failureForCode(
+          code ?? -1,
+          message: 'bili: 用户搜索失败（code=${code ?? '非 JSON'}）',
+        );
+      }
+      return parseUsers(response, page: normalizedPage);
+    } on SourceFailure {
+      rethrow;
+    } catch (e) {
+      throw SourceFailure.from(e);
+    }
+  }
+
+  /// 用户搜索响应 → 歌手页结果（供单测复用）。
+  static ArtistSearchPage parseUsers(
+    dynamic response, {
+    required int page,
+  }) {
+    final data = response is Map ? response['data'] : null;
+    if (data is! Map) {
+      throw artistPlatformFailure('bili', '用户搜索响应非法');
+    }
+    final items = <ArtistSummary>[];
+    final rawList = data['result'];
+    if (rawList is List) {
+      for (final raw in rawList) {
+        if (raw is! Map) continue;
+        final id = biliRawText(raw['mid']);
+        final name = biliText(raw['uname']);
+        if (id.isEmpty || name.isEmpty) continue;
+        items.add(ArtistSummary(
+          id: id,
+          name: name,
+          avatarUrl: biliCoverUrl(raw['upic']),
+          songCount: parseSourceCount(raw['videos']),
+        ));
+      }
+    }
+
+    final total = parseSourceCount(data['numResults']);
+    final pages = parseSourceCount(data['numPages']);
+    final hasMore = pages != null
+        ? page < pages
+        : (total != null && page * pageSize < total);
+    return ArtistSearchPage(items: items, total: total, hasMore: hasMore);
   }
 
   static bool _isInvalid(dynamic response) =>

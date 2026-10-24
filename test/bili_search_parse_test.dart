@@ -8,6 +8,7 @@ import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站搜索解析：真实响应结构（`test/fixtures/bili_search.json`）→ 曲目 /
 /// 分页信息；搜索请求经注入传输，不访问网络。
@@ -87,28 +88,9 @@ void main() {
     final transport = BuiltinTransport(
       dio: mockDio((request) async {
         requests.add(request.uri);
+        final sessionResponse = biliSessionResponse(request);
+        if (sessionResponse != null) return sessionResponse;
         switch (request.uri.path) {
-          case '/x/frontend/finger/spi':
-            return textResponse(
-              jsonEncode({
-                'code': 0,
-                'data': {'b_3': 'b3', 'b_4': 'b4'},
-              }),
-            );
-          case '/x/web-interface/nav':
-            return textResponse(
-              jsonEncode({
-                'code': -101,
-                'data': {
-                  'wbi_img': {
-                    'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                        '7cd084941338484aae1ad9425b84077c.png',
-                    'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                        '4932caff0ff746eab6f01bf08b70ac45.png',
-                  },
-                },
-              }),
-            );
           case '/x/web-interface/wbi/search/type':
             return textResponse(jsonEncode(fixture));
           default:

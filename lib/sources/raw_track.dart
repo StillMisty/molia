@@ -18,14 +18,28 @@ class SourceQuality {
   final String? size;
   final String? hash; // kg 等平台不同音质对应不同 hash
 
-  const SourceQuality({required this.type, this.size, this.hash});
+  /// 可选容器后缀（B 站 `m4a`）；缺省由音质推断。
+  final String? container;
 
-  Map<String, dynamic> toJson() => {'type': type, 'size': size, 'hash': hash};
+  const SourceQuality({
+    required this.type,
+    this.size,
+    this.hash,
+    this.container,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'type': type,
+        'size': size,
+        'hash': hash,
+        if (container != null) 'container': container,
+      };
 
   factory SourceQuality.fromJson(Map<String, dynamic> json) => SourceQuality(
         type: json['type'] as String? ?? '',
         size: json['size'] as String?,
         hash: json['hash'] as String?,
+        container: json['container'] as String?,
       );
 }
 
@@ -193,19 +207,23 @@ List<SourceQuality> qualitiesFromRaw(Map<String, dynamic> raw) {
   final result = <SourceQuality>[];
   final seen = <String>{};
 
-  void add(String type, Object? size, Object? hash) {
+  void add(String type, Object? size, Object? hash, [Object? container]) {
     if (type.isEmpty || !seen.add(type)) return;
     result.add(SourceQuality(
       type: type,
       size: size?.toString(),
       hash: hash?.toString(),
+      container: container?.toString(),
     ));
   }
 
   final list = raw['qualitys'];
   if (list is List) {
     for (final item in list) {
-      if (item is Map) add(item['type']?.toString() ?? '', item['size'], null);
+      if (item is Map) {
+        add(item['type']?.toString() ?? '', item['size'], null,
+            item['container']);
+      }
     }
   }
   for (final key in const ['_qualitys', '_types']) {
@@ -213,7 +231,7 @@ List<SourceQuality> qualitiesFromRaw(Map<String, dynamic> raw) {
     if (map is Map) {
       map.forEach((type, value) {
         final info = value is Map ? value : const {};
-        add(type.toString(), info['size'], info['hash']);
+        add(type.toString(), info['size'], info['hash'], info['container']);
       });
     }
   }

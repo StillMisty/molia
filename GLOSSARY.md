@@ -334,8 +334,8 @@
   能力位 `capabilities.collection`（仅内置音乐五平台；B 站 `collection=false`）为真时
   转发 `SourceManager.fetchAlbum` 并映射为 `CollectionPage`；目前只支持 `album` 类型，
   playlist / artist 与 LX 脚本 / any-listen / local 一律 `SourceFailure(unsupported)`。
-- **Album entry（专辑入口）** — 歌曲信息页「专辑」行：payload 专辑 id
-  （`platformAlbumId`：wy/kg/kw/mg `albumId`、tx `albumMid`）与能力位双判定为真时
+- **Album entry（专辑入口）** — 歌曲信息页「专辑」行：`track_mapper` 派生的
+  `Track.platformAlbumId`（wy/kg/kw/mg `albumId`、tx `albumMid`）与能力位双判定为真时
   变为可点行（副标题「查看专辑」），否则保持只读信息行。专辑页曲目行与搜索结果 /
   歌手页同款（`TrackMenuTile`：行动作菜单收藏 / 加入列表，触摸端行尾 ⋮ /
   桌面右键菜单），时长展示统一走 `utils/duration_text.dart`（未知时长不占行尾）。

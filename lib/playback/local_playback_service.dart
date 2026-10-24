@@ -719,9 +719,8 @@ class LocalPlaybackService extends ChangeNotifier {
         if (writer != null) {
           unawaited(writer.start(
             track,
-            url: stream.uri.toString(),
+            stream: stream,
             quality: quality,
-            headers: stream.headers,
           ));
         }
       }

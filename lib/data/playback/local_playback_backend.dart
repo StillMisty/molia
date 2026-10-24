@@ -91,18 +91,6 @@ class LocalPlaybackBackend implements PlaybackBackend {
   Future<PlayableStream> resolveStream(Track track, [AudioQuality? quality]) =>
       _resolver(track, quality);
 
-  /// 只取直链字符串的兼容包装（不需要请求头的旧调用方 / 测试）。
-  ///
-  /// 播放服务现在直接消费 `PlayableStream`（见 `LocalPlaybackService` 的
-  /// `SourceStreamResolver`），不要把本方法接回播放链路——它会丢掉 headers。
-  Future<String> resolveLegacyUrl(SourceTrack track, {String? quality}) async {
-    final stream = await _resolver(
-      _toTrack(track),
-      (quality == null || quality.isEmpty) ? null : AudioQuality(type: quality),
-    );
-    return stream.uri.toString();
-  }
-
   @override
   Future<void> load(PlaybackRequest request) async {
     if (request.tracks.isEmpty) return;

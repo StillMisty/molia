@@ -149,6 +149,46 @@ class BuiltinTransport {
     );
   }
 
+  /// 跟随短链跳转并返回最终地址（只读状态码 / Location，不解析 body）。
+  ///
+  /// 供 b23.tv 这类短链使用：Dio 的 `realUri` 在测试 adapter 下不一定更新，
+  /// 因此这里显式按 3xx Location 跟跳，最多 [maxHops] 跳；失败返回 null。
+  Future<Uri?> resolveRedirect(
+    Uri uri, {
+    Map<String, String>? headers,
+    int maxHops = 5,
+  }) async {
+    var current = uri;
+    for (var hop = 0; hop < maxHops; hop++) {
+      try {
+        final response = await _dio
+            .getUri<dynamic>(
+              current,
+              options: Options(
+                headers: _merge(headers),
+                followRedirects: false,
+                validateStatus: (_) => true,
+                responseType: ResponseType.bytes,
+              ),
+            )
+            .timeout(defaultTimeout);
+        final status = response.statusCode ?? 0;
+        final location = response.headers.value('location');
+        if (status >= 300 &&
+            status < 400 &&
+            location != null &&
+            location.isNotEmpty) {
+          current = current.resolve(location);
+          continue;
+        }
+        return response.realUri;
+      } catch (_) {
+        return null;
+      }
+    }
+    return current;
+  }
+
   /// GET + 原始字节（酷我 lrcx 等二进制歌词响应）。
   Future<Uint8List> getBytes(
     String url, {

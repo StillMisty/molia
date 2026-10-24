@@ -9,6 +9,7 @@ import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站取链：分 P → WBI playurl → dash 音频选档；直链 headers / 有效期 /
 /// 业务码映射都用注入传输验证。
@@ -45,28 +46,9 @@ void main() {
       dio: mockDio((request) async {
         requests.add(request.uri);
         options.add(request);
+        final sessionResponse = biliSessionResponse(request);
+        if (sessionResponse != null) return sessionResponse;
         switch (request.uri.path) {
-          case '/x/frontend/finger/spi':
-            return textResponse(
-              jsonEncode({
-                'code': 0,
-                'data': {'b_3': 'buvid3-test', 'b_4': 'buvid4-test'},
-              }),
-            );
-          case '/x/web-interface/nav':
-            return textResponse(
-              jsonEncode({
-                'code': -101,
-                'data': {
-                  'wbi_img': {
-                    'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                        '7cd084941338484aae1ad9425b84077c.png',
-                    'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                        '4932caff0ff746eab6f01bf08b70ac45.png',
-                  },
-                },
-              }),
-            );
           case '/x/player/pagelist':
             return textResponse(
               jsonEncode({

@@ -164,8 +164,8 @@ void main() {
     expect(tracks.last.title, 'Cache Me');
     expect(tracks.last.raw['id'], cacheTrackId);
 
-    final url = await manager.resolveUrl(tracks.first);
-    expect(url, 'http://127.0.0.1:$port/audio.wav');
+    final stream = await manager.resolveStream(tracks.first);
+    expect(stream.uri.toString(), 'http://127.0.0.1:$port/audio.wav');
 
     final lyric = await manager.fetchLyric(tracks.first);
     expect(lyric, isNotNull);

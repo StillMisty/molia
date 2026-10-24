@@ -34,6 +34,7 @@ Track trackFromSourceTrack(SourceTrack source) {
           type: quality.type,
           size: quality.size,
           hash: quality.hash,
+          container: quality.container,
         ),
     ],
     payload: source.raw,
@@ -113,6 +114,7 @@ SourceTrack sourceTrackFromTrack(Track track) {
           type: quality.type,
           size: quality.size,
           hash: quality.hash,
+          container: quality.container,
         ),
     ],
     // 原样回传（不重建 Map），保证取链时脚本收到原始字段。

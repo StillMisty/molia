@@ -263,7 +263,7 @@ class BuiltinPlatforms {
         fetch: BiliComment.fetch,
       ),
       artist: BuiltinArtistAdapter(
-        search: BiliArtist.search,
+        search: BiliSearch.searchUsers,
         fetch: BiliArtist.fetch,
       ),
       discover: const BiliDiscoverSource(),

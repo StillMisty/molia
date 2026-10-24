@@ -18,9 +18,9 @@ const List<String> kBiliQualityTypes = ['192k', '128k', '64k'];
 
 /// raw `_types`：给下载 / 音质选择一条稳定的可选音质表。
 const Map<String, Map<String, dynamic>> _biliTypes = {
-  '192k': <String, dynamic>{},
-  '128k': <String, dynamic>{},
-  '64k': <String, dynamic>{},
+  '192k': <String, dynamic>{'container': 'm4a'},
+  '128k': <String, dynamic>{'container': 'm4a'},
+  '64k': <String, dynamic>{'container': 'm4a'},
 };
 
 /// 标题清洗：搜索接口会用 `<em class="keyword">` 包关键词，必须先剥标签再
@@ -153,7 +153,8 @@ SourceTrack? biliTrackFromItem(
     coverUrl: coverText,
     duration: durationValue,
     qualities: [
-      for (final type in kBiliQualityTypes) SourceQuality(type: type)
+      for (final type in kBiliQualityTypes)
+        SourceQuality(type: type, container: 'm4a'),
     ],
     raw: raw,
   );

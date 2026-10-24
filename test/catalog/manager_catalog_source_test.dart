@@ -354,7 +354,7 @@ void main() {
       expect(late.items, isEmpty);
     });
 
-    test('resolve：返回 PlayableStream（URL 来自 manager.resolveUrl）', () async {
+    test('resolve：返回 PlayableStream（URL 来自 manager.resolveStream）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
       final source =

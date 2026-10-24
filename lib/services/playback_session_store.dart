@@ -249,12 +249,15 @@ Map<String, dynamic> _trackToJson(Track track) => {
       'durationMs': track.duration?.inMilliseconds,
       'artwork': track.artwork?.uri.toString(),
       'origin': track.origin.name,
+      'platformPageUrl': track.platformPageUrl,
+      'platformAlbumId': track.platformAlbumId,
       'qualities': [
         for (final quality in track.qualities)
           {
             'type': quality.type,
             'size': quality.size,
             'hash': quality.hash,
+            if (quality.container != null) 'container': quality.container,
           },
       ],
       'payload': track.payload,
@@ -291,6 +294,8 @@ Track _trackFromJson(Map<String, dynamic> json) {
       (origin) => origin.name == json['origin'],
       orElse: () => TrackOrigin.lx,
     ),
+    platformPageUrl: json['platformPageUrl'] as String?,
+    platformAlbumId: json['platformAlbumId'] as String?,
     qualities: [
       if (qualitiesJson is List)
         for (final quality in qualitiesJson)
@@ -299,6 +304,7 @@ Track _trackFromJson(Map<String, dynamic> json) {
               type: quality['type'] as String? ?? '',
               size: quality['size'] as String?,
               hash: quality['hash'] as String?,
+              container: quality['container'] as String?,
             ),
     ],
     payload: payload is Map ? payload.cast<String, Object?>() : const {},

@@ -10,6 +10,7 @@ import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站音乐榜：唯一榜单表、`rid:day` 解析、cid 透传与 5 分钟缓存。
 void main() {
@@ -35,28 +36,9 @@ void main() {
     bool fail = false,
   }) {
     final adapter = MockDioAdapter((options) async {
+      final sessionResponse = biliSessionResponse(options);
+      if (sessionResponse != null) return sessionResponse;
       switch (options.uri.path) {
-        case '/x/frontend/finger/spi':
-          return textResponse(
-            jsonEncode({
-              'code': 0,
-              'data': {'b_3': 'buvid3-test', 'b_4': 'buvid4-test'},
-            }),
-          );
-        case '/x/web-interface/nav':
-          return textResponse(
-            jsonEncode({
-              'code': -101,
-              'data': {
-                'wbi_img': {
-                  'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '7cd084941338484aae1ad9425b84077c.png',
-                  'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '4932caff0ff746eab6f01bf08b70ac45.png',
-                },
-              },
-            }),
-          );
         case '/x/web-interface/ranking':
           rankingCalls++;
           return textResponse(

@@ -109,11 +109,32 @@ void main() {
       'm4a',
     );
 
-    // 缓存命中没有直链后缀：bili 固定 m4a，其余按音质推断。
-    expect(DownloadFileLayout.extensionForTrack('bili', '192k'), 'm4a');
-    expect(DownloadFileLayout.extensionForTrack('bili', 'flac'), 'm4a');
-    expect(DownloadFileLayout.extensionForTrack('kw', '320k'), 'mp3');
-    expect(DownloadFileLayout.extensionForTrack('wy', 'flac'), 'flac');
+    // 缓存命中没有直链后缀：优先用音质条目携带的容器，否则按音质推断。
+    Track carried(String type, String? container) => Track(
+          id: TrackId('kw', 'a'),
+          title: 'a',
+          origin: TrackOrigin.lx,
+          qualities: [AudioQuality(type: type, container: container)],
+        );
+    expect(
+      DownloadFileLayout.extensionForTrack(
+        carried('192k', 'm4a'),
+        '192k',
+      ),
+      'm4a',
+    );
+    expect(
+      DownloadFileLayout.extensionForTrack(carried('flac', 'm4a'), 'flac'),
+      'm4a',
+    );
+    expect(
+      DownloadFileLayout.extensionForTrack(carried('320k', null), '320k'),
+      'mp3',
+    );
+    expect(
+      DownloadFileLayout.extensionForTrack(carried('flac', null), 'flac'),
+      'flac',
+    );
 
     expect(DownloadFileLayout.extensionForQuality('flac24bit'), 'flac');
     expect(DownloadFileLayout.extensionForQuality('wav'), 'wav');
@@ -186,8 +207,8 @@ void main() {
         );
 
     // 已有音频：sidecar 跟随音频基名（含查重后的 ` (2)` 后缀）。
-    expect(await part(audioPath: '/downloads/歌手 - 测试歌曲 (2).mp3'),
-        '歌手 - 测试歌曲 (2)');
+    expect(
+        await part(audioPath: '/downloads/歌手 - 测试歌曲 (2).mp3'), '歌手 - 测试歌曲 (2)');
     // 音频优先于已有分项路径。
     expect(
       await part(
@@ -277,10 +298,12 @@ void main() {
       isNull,
     );
     expect(half.files, isEmpty);
-    expect(half.deleted, containsAll([
-      '/downloads/lyrics/A.lrc',
-      '/downloads/lyrics/A.t.lrc',
-    ]));
+    expect(
+        half.deleted,
+        containsAll([
+          '/downloads/lyrics/A.lrc',
+          '/downloads/lyrics/A.t.lrc',
+        ]));
   });
 
   test('写封面：covers 子目录；失败清理并返回 null', () async {

@@ -52,34 +52,23 @@ class BiliPlay {
         aid: aid,
       );
 
-      var response = await _playUrl(
-        session,
-        bvid: bvid,
-        aid: aid,
-        cid: cid,
-        fnval: 16,
-      );
-      var code = BiliApi.codeOf(response);
-      if (BiliApi.isRiskControl(code)) {
-        // WBI 密钥过期是匿名访问的常态：刷新会话后原样重试一次。
-        session = await BiliApi.refresh();
-        response = await _playUrl(
+      final response = await BiliApi.requestWithSessionRetry(
+        (session) => _playUrl(
           session,
           bvid: bvid,
           aid: aid,
           cid: cid,
           fnval: 16,
-        );
-        code = BiliApi.codeOf(response);
-      }
-      _throwForCode(code);
+        ),
+      );
+      _throwForCode(BiliApi.codeOf(response));
 
       final data = response is Map ? response['data'] : null;
       var audio = _pickDashAudio(data, quality);
       if (audio == null) {
         // 老视频 / 版权限制可能没有 dash：退回 `fnval=1` 的 durl 单文件。
         final fallback = await _playUrl(
-          session,
+          await BiliApi.session(),
           bvid: bvid,
           aid: aid,
           cid: cid,

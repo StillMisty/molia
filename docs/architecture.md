@@ -215,7 +215,7 @@
   `MusicSource.collection(CollectionRef(type: album))` 在能力位为真时转发
   `fetchAlbum`（playlist / artist 仍 unsupported）。UI 为 `lib/pages/album_page.dart`
   （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
-  「专辑」行（payload 专辑 id + 能力位双判定，`platformAlbumId`；否则保持只读）。
+  「专辑」行（`track_mapper` 派生的 `Track.platformAlbumId` + 能力位双判定；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS/Windows/Linux）：`LocalAudioHandler`
   经读取面 `MediaSessionReadModel`（生产实现 `LocalPlaybackMediaSessionReadModel`
   投影 `LocalPlaybackService`；测试注入普通值假实现）把状态映射为统一模型

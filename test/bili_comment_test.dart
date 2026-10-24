@@ -14,6 +14,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/comment_source.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站评论：热门/最新 mode、游标翻页、嵌套回复、IP 归属地与业务码失败。
 void main() {
@@ -40,28 +41,9 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) onReply,
   ) {
     final adapter = MockDioAdapter((options) async {
+      final sessionResponse = biliSessionResponse(options);
+      if (sessionResponse != null) return sessionResponse;
       switch (options.uri.path) {
-        case '/x/frontend/finger/spi':
-          return textResponse(
-            jsonEncode({
-              'code': 0,
-              'data': {'b_3': 'buvid3-test', 'b_4': 'buvid4-test'},
-            }),
-          );
-        case '/x/web-interface/nav':
-          return textResponse(
-            jsonEncode({
-              'code': -101,
-              'data': {
-                'wbi_img': {
-                  'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '7cd084941338484aae1ad9425b84077c.png',
-                  'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '4932caff0ff746eab6f01bf08b70ac45.png',
-                },
-              },
-            }),
-          );
         case '/x/v2/reply/main':
           return onReply(options);
         default:

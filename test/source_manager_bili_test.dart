@@ -11,6 +11,7 @@ import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 import 'support/settings_test_support.dart';
 
 /// 无脚本环境下的 B 站路由：搜索 / 播放 / 歌词 / 评论 / UP / 发现由原生
@@ -31,28 +32,9 @@ void main() {
     final deadline = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 3600;
     BuiltinSearch.transport = BuiltinTransport(
       dio: mockDio((request) async {
+        final sessionResponse = biliSessionResponse(request);
+        if (sessionResponse != null) return sessionResponse;
         switch (request.uri.path) {
-          case '/x/frontend/finger/spi':
-            return textResponse(
-              jsonEncode({
-                'code': 0,
-                'data': {'b_3': 'b3', 'b_4': 'b4'},
-              }),
-            );
-          case '/x/web-interface/nav':
-            return textResponse(
-              jsonEncode({
-                'code': -101,
-                'data': {
-                  'wbi_img': {
-                    'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                        '7cd084941338484aae1ad9425b84077c.png',
-                    'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                        '4932caff0ff746eab6f01bf08b70ac45.png',
-                  },
-                },
-              }),
-            );
           case '/x/web-interface/wbi/search/type':
             return textResponse(jsonEncode(searchFixture));
           case '/x/player/wbi/playurl':

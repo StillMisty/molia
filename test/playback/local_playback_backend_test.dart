@@ -482,17 +482,19 @@ void main() {
     expect(backend.state.value.context?.name, 'ctx');
   });
 
-  test('解析器端口：SourceTrack → Track → PlayableStream', () async {
-    final stream = await backend.resolveLegacyUrl(_source('a'), quality: '320k');
-    expect(stream, 'http://127.0.0.1/a.wav');
+  test('解析器端口：Track → PlayableStream', () async {
+    final stream = await backend.resolveStream(
+      trackFromSourceTrack(_source('a')),
+      const AudioQuality(type: '320k'),
+    );
+    expect(stream.uri.toString(), 'http://127.0.0.1/a.wav');
     final streamNoQuality = await backend.resolveStream(
       trackFromSourceTrack(_source('b')),
     );
     expect(streamNoQuality.uri.path, '/b.wav');
   });
 
-  test('控制委托：play/pause/seek/next/previous/setMode/stop/queueIndex',
-      () async {
+  test('控制委托：play/pause/seek/next/previous/setMode/stop/queueIndex', () async {
     final a = _source('a');
     final b = _source('b');
     service.seed([a, b], index: 0, playing: false);

@@ -73,17 +73,26 @@ class AudioQuality {
   final String? size;
   final String? hash;
 
-  const AudioQuality({required this.type, this.size, this.hash});
+  /// 可选容器后缀（B 站 `m4a`）；缺省由音质推断。
+  final String? container;
+
+  const AudioQuality({
+    required this.type,
+    this.size,
+    this.hash,
+    this.container,
+  });
 
   @override
   bool operator ==(Object other) =>
       other is AudioQuality &&
       other.type == type &&
       other.size == size &&
-      other.hash == hash;
+      other.hash == hash &&
+      other.container == container;
 
   @override
-  int get hashCode => Object.hash(type, size, hash);
+  int get hashCode => Object.hash(type, size, hash, container);
 
   @override
   String toString() => type;

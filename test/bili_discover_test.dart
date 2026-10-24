@@ -13,6 +13,7 @@ import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站发现能力：榜单 + 热搜；歌单浏览显式不支持，收藏夹只走导入详情。
 void main() {
@@ -36,28 +37,9 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) onRequest,
   ) {
     final adapter = MockDioAdapter((options) async {
+      final sessionResponse = biliSessionResponse(options);
+      if (sessionResponse != null) return sessionResponse;
       switch (options.uri.path) {
-        case '/x/frontend/finger/spi':
-          return textResponse(
-            jsonEncode({
-              'code': 0,
-              'data': {'b_3': 'buvid3-test', 'b_4': 'buvid4-test'},
-            }),
-          );
-        case '/x/web-interface/nav':
-          return textResponse(
-            jsonEncode({
-              'code': -101,
-              'data': {
-                'wbi_img': {
-                  'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '7cd084941338484aae1ad9425b84077c.png',
-                  'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '4932caff0ff746eab6f01bf08b70ac45.png',
-                },
-              },
-            }),
-          );
         default:
           return onRequest(options);
       }

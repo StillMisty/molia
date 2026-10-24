@@ -133,6 +133,19 @@ class BiliApi {
     'Referer': referer,
   };
 
+  /// UP 投稿接口（`space/wbi/arc/search`）的风控指纹参数。
+  ///
+  /// 值与浏览器版本无关，平台只校验「像浏览器请求」；缺任意一个都更容易
+  /// 返回 `-352`。集中在这里，避免业务文件各自维护一份。
+  static const Map<String, String> spaceFingerprintParams = {
+    'dm_img_list': '[]',
+    'dm_img_str': 'V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ',
+    'dm_cover_img_str': 'QU5HTEUgKEludGVsLCBJbnRlbChSKSBVSEQgR3JhcGhpY3MgNjMw'
+        'ICgweDAwMDAzRTlCKSBEaXJlY3QzRDExIHZzXzVfMCBwc181XzAsIEQzRDExKUdvb2ds'
+        'ZSBJbmMuIChJbnRlbCk',
+    'dm_img_inter': '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}',
+  };
+
   /// 会话有效期：WBI 密钥约一天轮换，1 小时刷新足够避开跨天失效。
   static const Duration sessionTtl = Duration(hours: 1);
 
@@ -265,6 +278,28 @@ class BiliApi {
 
   /// 风控码：需要刷新会话后重试。
   static bool isRiskControl(int? code) => code == -403 || code == -412;
+
+  /// 响应是否命中风控（含 UP 空间接口的 `-352` / `v_voucher`）。
+  static bool isRiskResponse(dynamic response) {
+    final code = codeOf(response);
+    if (isRiskControl(code) || code == -352) return true;
+    final data = response is Map ? response['data'] : null;
+    return data is Map && data['v_voucher'] != null;
+  }
+
+  /// 带会话的请求：命中风控时刷新会话并重试一次。
+  ///
+  /// 取搜索 / 播放 / UP 空间接口共用的唯一重试策略，避免各业务文件对
+  /// `-403/-412/-352/v_voucher` 各判一套。
+  static Future<dynamic> requestWithSessionRetry(
+    Future<dynamic> Function(BiliSession session) send,
+  ) async {
+    var active = await session();
+    var response = await send(active);
+    if (!isRiskResponse(response)) return response;
+    active = await refresh();
+    return send(active);
+  }
 
   /// 业务失败 → [SourceFailure]（-404 归 notFound，其余按可重试 unknown）。
   static SourceFailure failureForCode(int code, {String? message}) {

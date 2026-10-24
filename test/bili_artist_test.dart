@@ -8,10 +8,12 @@ import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_artist.dart';
+import 'package:molia/sources/builtin/bili_search.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
+import 'support/bili_session_mock.dart';
 
 /// B 站 UP 主页：用户搜索 / 资料 / 投稿主路径 + 风控回退到视频搜索。
 void main() {
@@ -38,29 +40,10 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) onRequest,
   ) {
     final adapter = MockDioAdapter((options) async {
+      final sessionResponse =
+          biliSessionResponse(options, onNav: () => navCalls++);
+      if (sessionResponse != null) return sessionResponse;
       switch (options.uri.path) {
-        case '/x/frontend/finger/spi':
-          return textResponse(
-            jsonEncode({
-              'code': 0,
-              'data': {'b_3': 'buvid3-test', 'b_4': 'buvid4-test'},
-            }),
-          );
-        case '/x/web-interface/nav':
-          navCalls++;
-          return textResponse(
-            jsonEncode({
-              'code': -101,
-              'data': {
-                'wbi_img': {
-                  'img_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '7cd084941338484aae1ad9425b84077c.png',
-                  'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
-                      '4932caff0ff746eab6f01bf08b70ac45.png',
-                },
-              },
-            }),
-          );
         default:
           return onRequest(options);
       }
@@ -91,7 +74,7 @@ void main() {
       return textResponse('{}', statusCode: 500);
     });
 
-    final page = await BiliArtist.search('周杰伦');
+    final page = await BiliSearch.searchUsers('周杰伦');
 
     expect(page.items, hasLength(2));
     expect(page.items.first.id, '336');

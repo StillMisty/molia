@@ -6,10 +6,6 @@
 /// 导入时只拿到第一页却误以为已经完整。
 library;
 
-import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-
-import '../../data/http/app_dio.dart';
 import '../../domain/models/discover.dart';
 import '../../domain/models/failure.dart';
 import '../source_search_result.dart' show parseSourceBool, parseSourceCount;
@@ -35,15 +31,6 @@ class BiliFavorites {
   static final RegExp _folderLink =
       RegExp(r'(?:space\.)?bilibili\.com/(\d+)/favlist');
   static final RegExp _shortLinkHost = RegExp(r'(^|\.)b23\.tv$');
-
-  static Dio? _redirectDio;
-
-  /// 短链跳转只读状态码 / Location，不读 body；测试注入替身避免真实网络。
-  @visibleForTesting
-  static Dio? redirectDioForTest;
-
-  static Dio get _dio =>
-      redirectDioForTest ?? (_redirectDio ??= createAppDio());
 
   /// 解析收藏夹 ID：纯数字 / `fid` / `media_id` / `ml<id>` / b23 短链。
   ///
@@ -284,51 +271,12 @@ class BiliFavorites {
     return null;
   }
 
-  /// 跟随 b23 短链。真实 adapter 会自己跟随并给出 `realUri`；测试替身
-  /// 只回 302 时再按 Location 手动跟一跳。
-  ///
-  /// 短链目标是普通 HTML 页（体积不小），这里只关心状态码 / Location，
-  /// 用 `bytes` 让 dio 读完即释放，避免 `stream` 响应体无人关闭泄漏连接。
-  /// 请求头与 B 站 API 一致：浏览器 UA + Referer，短链服务对匿名脚本 UA 会
-  /// 返回验证页而不是跳转。
-  static Future<Uri?> _resolveShortLink(Uri uri) async {
-    var current = uri;
-    try {
-      for (var hop = 0; hop < 5; hop++) {
-        final response = await _dio
-            .getUri<dynamic>(
-              current,
-              options: Options(
-                method: 'GET',
-                headers: const {
-                  'User-Agent': BiliApi.browserUserAgent,
-                  'Referer': BiliApi.referer,
-                  'Accept': 'text/html,application/xhtml+xml',
-                },
-                followRedirects: true,
-                maxRedirects: 5,
-                responseType: ResponseType.bytes,
-              ),
-            )
-            .timeout(BuiltinSearch.defaultTimeout);
-        final realUri = response.realUri;
-        if (realUri != current) return realUri;
-
-        final status = response.statusCode ?? 0;
-        final location = response.headers.value('location');
-        if (status >= 300 &&
-            status < 400 &&
-            location != null &&
-            location.isNotEmpty) {
-          current = current.resolve(location);
-          continue;
-        }
-        return current;
-      }
-      return current;
-    } catch (_) {
-      return null;
-    }
+  /// 跟随 b23 短链（走统一传输层，测试可注入 MockDio）。
+  static Future<Uri?> _resolveShortLink(Uri uri) {
+    return BuiltinSearch.transport.resolveRedirect(
+      uri,
+      headers: BiliApi.anonymousHeaders,
+    );
   }
 
   static Uri? _asUri(String text) {
