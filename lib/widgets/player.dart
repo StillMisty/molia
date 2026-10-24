@@ -9,7 +9,6 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
-import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
@@ -21,6 +20,7 @@ import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'cover_deck_metrics.dart';
 import 'icon_swap.dart';
+import 'now_playing_summary.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
 import 'seek_bar.dart';
@@ -216,8 +216,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       case AnimationStatus.forward:
       case AnimationStatus.reverse:
         // 同一份锚点几何实现（含祖先缩放的两角映射）；这里取页内 Stack 本地坐标。
-        final from =
-            anchorRectOf(_miniCoverKey, container: _playerStackKey);
+        final from = anchorRectOf(_miniCoverKey, container: _playerStackKey);
         final to = anchorRectOf(_fullCoverKey, container: _playerStackKey);
         if (from == null || to == null) return;
         setState(() {
@@ -225,8 +224,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           _coverFlightTo = to;
           _coverFlightActive = true;
           // 起点进度决定结束端：从完整态出发 = 收起，从迷你态出发 = 展开。
-          _coverFlightToMini =
-              (widget.expandAnimation?.value ?? 0) >= 0.5;
+          _coverFlightToMini = (widget.expandAnimation?.value ?? 0) >= 0.5;
         });
       case AnimationStatus.completed:
       case AnimationStatus.dismissed:
@@ -339,7 +337,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             constraints: const BoxConstraints(
               maxWidth: playbackCoverMaxLogicalEdge,
             ),
-            child: _buildLargeScreenPlayerLayout(displayTrack, playbackProvider),
+            child:
+                _buildLargeScreenPlayerLayout(displayTrack, playbackProvider),
           ),
         ),
       );
@@ -447,14 +446,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 1 - Curves.easeOutCubic.transform((t / 0.45).clamp(0.0, 1.0));
             final double fullOpacity = Curves.easeInCubic
                 .transform(((t - 0.35) / 0.65).clamp(0.0, 1.0));
-            final Rect? flightRect =
-                (_coverFlightActive && _coverFlightFrom != null && _coverFlightTo != null)
-                    ? Rect.lerp(_coverFlightFrom!, _coverFlightTo!, t)
-                    : null;
+            final Rect? flightRect = (_coverFlightActive &&
+                    _coverFlightFrom != null &&
+                    _coverFlightTo != null)
+                ? Rect.lerp(_coverFlightFrom!, _coverFlightTo!, t)
+                : null;
             // 展开完成才挂 morph 锚点：迷你态下顶栏⇄播放页飞行应走
             // 「跳过」路径，避免飞到不可见的完整封面锚点。
-            final PlayerMorphController? morph =
-                t >= 1.0 ? widget.morph : null;
+            final PlayerMorphController? morph = t >= 1.0 ? widget.morph : null;
             return SizedBox(
               height: height,
               child: ClipRect(
@@ -538,8 +537,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     BuildContext context,
     PlaybackProvider playbackProvider,
   ) {
-    final mode = context.select<PlaybackProvider, PlayMode>(
-        (provider) => provider.currentMode);
+    final mode = context
+        .select<PlaybackProvider, PlayMode>((provider) => provider.currentMode);
     return Padding(
       // 纵向不留内边距：上方 2dp 由外层排布给（小屏 / 大屏两套版式都是
       // `SizedBox(height: 2)`），下方 2dp 由时间行自己的呼吸位承担——进度排
@@ -635,13 +634,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   ///
   /// 标题块不带左侧竖条：它与进度把手同宽、同色、同形，上下相邻时会被读成
   /// 重复元素（用户反馈的「两根竖条」），且形似可拖动的把手却不可交互；
-  /// 强调色只留给可交互控件（波浪进度/把手）。
+  /// 强调色只留给可交互控件（波浪进度/把手）。字阶 / 截断 / 颜色契约由
+  /// `now_playing_summary.dart` 的播放页版式统一。
   Widget _buildTrackInfoText(
     BuildContext context,
     Track? displayTrack,
     PlaybackProvider playbackProvider,
   ) {
-    final scheme = Theme.of(context).colorScheme;
     final header = displayTrack?.title ??
         playbackProvider.lastPlayedTrackName ??
         'No track playing';
@@ -649,47 +648,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         ? _artistsLabel(context, displayTrack)
         : playbackProvider.lastPlayedArtists ?? _l10n(context).unknownArtist;
 
-    // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
-    // 强调色只给可交互控件（进度波浪/把手）。
-    final titleStyle = context.emphasizedTypeScale.titleLarge.copyWith(
-      color: scheme.onSurface,
-    );
-    final artistStyle = context.typeScale.bodyMedium.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
-
-    if (widget.desktopLayout) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            header,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: titleStyle,
-          ),
-          if (artistText.isNotEmpty)
-            Text(
-              artistText,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: artistStyle,
-            ),
-        ],
-      );
-    }
-
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(text: header, style: titleStyle),
-          if (artistText.isNotEmpty)
-            TextSpan(text: '  ·  $artistText', style: artistStyle),
-        ],
-      ),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
+    return NowPlayingTrackText.page(
+      title: header,
+      artist: artistText,
+      stacked: widget.desktopLayout,
     );
   }
 
@@ -707,19 +669,21 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   }
 
   /// 本地收藏按钮：加入/移出默认收藏列表（无当前曲目/资料库时隐藏）。
+  ///
+  /// 尺寸是唯一宿主差异：进度排用 44 视觉格，迷你条按窄屏档位缩放。
   Widget _buildFavoriteButton({
     M3EIconButtonSize size = M3EIconButtonSize.sm,
     Size visualSize = const Size(44, 44),
   }) =>
-      _FavoriteButton(size: size, visualSize: visualSize);
+      NowPlayingFavoriteButton(size: size, visualSize: visualSize);
 
   Widget _buildMiniPlayer(
     BuildContext context,
     Track? track,
     PlaybackProvider playback,
   ) {
-    final isPlaying = context.select<PlaybackProvider, bool>(
-        (provider) => provider.isPlaying);
+    final isPlaying = context
+        .select<PlaybackProvider, bool>((provider) => provider.isPlaying);
 
     return SizedBox(
       height: miniPlayerHeight,
@@ -733,51 +697,53 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.start,
                 children: [
-          // 卡片外观（外边圆角 8、裁剪 8、回退图标 24）由 CoverAppearance.mini
-          // 统一给出；迷你 ⇄ 完整飞行期间真身隐藏，由飞行副本承接。
-          Opacity(
-            opacity: _coverFlightActive ? 0 : 1,
-            child: CoverCard(
-              key: _miniCoverKey,
-              size: 48,
-              appearance: CoverAppearance.mini,
-              content: (context, clip, iconSize) =>
-                  _buildMiniAlbumArt(track, iconSize),
-            ),
-          ),
-          SizedBox(width: context.isCompact ? 8 : 16),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  track?.title ??
-                      playback.lastPlayedTrackName ??
-                      'No track playing',
-                  // 迷你条文本与列表页契约一致：标题 onSurface、
-                  // 作者 onSurfaceVariant，强调色只给控件。
-                  style: context.emphasizedTypeScale.titleMedium.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface,
+                  // 卡片外观（外边圆角 8、裁剪 8、回退图标 24）由 CoverAppearance.mini
+                  // 统一给出；迷你 ⇄ 完整飞行期间真身隐藏，由飞行副本承接。
+                  Opacity(
+                    opacity: _coverFlightActive ? 0 : 1,
+                    child: CoverCard(
+                      key: _miniCoverKey,
+                      size: 48,
+                      appearance: CoverAppearance.mini,
+                      content: (context, clip, iconSize) =>
+                          _buildMiniAlbumArt(track, iconSize),
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  track != null
-                      ? _artistsLabel(context, track)
-                      : playback.lastPlayedArtists ??
-                          _l10n(context).unknownArtist,
-                  style: context.typeScale.bodyMedium.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  SizedBox(width: context.isCompact ? 8 : 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          track?.title ??
+                              playback.lastPlayedTrackName ??
+                              'No track playing',
+                          // 迷你条文本与列表页契约一致：标题 onSurface、
+                          // 作者 onSurfaceVariant，强调色只给控件。
+                          style:
+                              context.emphasizedTypeScale.titleMedium.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          track != null
+                              ? _artistsLabel(context, track)
+                              : playback.lastPlayedArtists ??
+                                  _l10n(context).unknownArtist,
+                          style: context.typeScale.bodyMedium.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          _buildResponsiveControlButtons(context, playback, isPlaying),
+                  _buildResponsiveControlButtons(context, playback, isPlaying),
                 ],
               ),
             ),
@@ -998,8 +964,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         // 封面两侧与文字块共用同一内边距：大屏封面的左右是硬边界
         // （导航轨 / 分栏线），堆叠不能贴上去。
         final metrics = coverDeckMetricsFor(
-          availableWidth:
-              constraints.maxWidth - _contentHorizontalPadding * 2,
+          availableWidth: constraints.maxWidth - _contentHorizontalPadding * 2,
           availableHeight: _largeScreenDeckAvailableHeight(
             constraints.maxHeight,
             textSectionFixedHeight +
@@ -1127,54 +1092,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// 收藏按钮独立成组件：布局在 [LayoutBuilder] 内构建时，
-/// `context.select` 必须发生在组件自身 build 中（State.context 在布局阶段
-/// 使用会被 provider 断言拦截）。
-///
-/// 收藏反馈只靠图标态（实心/空心），不弹 Snackbar。
-/// 写路径唯一：`LibraryProvider.toggleFavoriteTrack`（播放页不直连仓库）。
-class _FavoriteButton extends StatelessWidget {
-  const _FavoriteButton({
-    this.size = M3EIconButtonSize.sm,
-    this.visualSize = const Size(44, 44),
-  });
-
-  final M3EIconButtonSize size;
-  final Size visualSize;
-
-  @override
-  Widget build(BuildContext context) {
-    final library = context.watch<LibraryProvider?>();
-    final track = context.select<PlaybackProvider, Track?>(
-        (provider) => provider.snapshot.current);
-    if (library == null || track == null) return const SizedBox.shrink();
-
-    final l10n = AppLocalizations.of(context) ??
-        lookupAppLocalizations(const Locale('zh'));
-    final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.standard,
-      size: size,
-      visualSize: visualSize,
-      icon: IconSwap<bool>(
-        value: favorite,
-        // 与收藏页行内心形同一契约：已收藏 primary、未收藏 onSurfaceVariant。
-        builder: (context, favorite) => Icon(
-          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          color: favorite
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-      semanticLabel: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-      onPressed: () async {
-        HapticsService.lightImpact();
-        await library.toggleFavoriteTrack(track);
-      },
     );
   }
 }

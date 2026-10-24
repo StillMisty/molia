@@ -12,18 +12,12 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/play_mode.dart';
-import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
-import '../../services/app_branding_service.dart';
 import '../../services/haptics.dart';
-import '../../theme/m3e_context.dart';
-import '../../utils/playback_cover_decode.dart';
-import '../../widgets/app_network_image.dart';
-import '../../widgets/cover_appearance.dart';
 import '../../widgets/icon_swap.dart';
+import '../../widgets/now_playing_summary.dart';
 import '../../widgets/player_morph.dart';
 import '../../widgets/seek_bar.dart';
 import '../../widgets/seek_preview.dart';
@@ -118,6 +112,8 @@ class DesktopNowPlayingBar extends StatelessWidget {
 /// 封面复用顶栏那套隐藏语义（[PlayerMorphController.barHeaderHidden]：
 /// 播放页激活或飞行中淡出，避免与页面大封面重复）；但封面槽**占位宽度
 /// 不变**——收起时整条文字区不跳动，也保证共享飞行的起止锚点稳定。
+/// 摘要内容（封面 / 文本 / 收藏）由 `now_playing_summary.dart` 收口，
+/// 这里只决定底栏的尺寸与尾部位置。
 class _TrackSection extends StatelessWidget {
   const _TrackSection({required this.morph, required this.onOpenPlayer});
 
@@ -126,145 +122,23 @@ class _TrackSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final track = context.select<PlaybackProvider, Track?>(
-      (provider) => provider.snapshot.current,
-    );
     return AnimatedBuilder(
       animation: morph,
       builder: (context, _) {
         final showTrack = !morph.barHeaderHidden;
-        return Row(
-          children: [
-            Expanded(
-              // 刻意不用 M3ETappable：它点击时会请求焦点（与顶栏同款取舍，
-              // 避免打断搜索输入），GestureDetector 与顶栏头部手势一致。
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onOpenPlayer,
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: DesktopNowPlayingBar.coverSize,
-                      height: DesktopNowPlayingBar.coverSize,
-                      child: AnimatedOpacity(
-                        // 飞行落位时真身封面必须与副本移除同帧亮出
-                        // （duration 0 = 同步跳变）；收起方向保持 160ms 淡出。
-                        duration: showTrack
-                            ? Duration.zero
-                            : const Duration(milliseconds: 160),
-                        opacity: showTrack ? 1 : 0,
-                        child: CoverCard(
-                          key: morph.barCoverKey,
-                          size: DesktopNowPlayingBar.coverSize,
-                          appearance: CoverAppearance.bar,
-                          content: (context, clip, iconSize) => AppNetworkImage(
-                            url: artworkUrlOf(track),
-                            borderRadius: clip,
-                            fallbackIconSize: iconSize,
-                            memCacheWidth: playbackCoverDecodeEdge(context),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    const Expanded(child: _BarTrackText()),
-                  ],
-                ),
-              ),
+        return NowPlayingSummary(
+          onTap: onOpenPlayer,
+          cover: SizedBox(
+            width: DesktopNowPlayingBar.coverSize,
+            height: DesktopNowPlayingBar.coverSize,
+            child: NowPlayingCover.current(
+              size: DesktopNowPlayingBar.coverSize,
+              flightKey: morph.barCoverKey,
+              hidden: !showTrack,
             ),
-            const _BarFavoriteButton(),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// 歌名 + 作者两行；无曲目（或空标题）回退自定义应用名。
-///
-/// 排版与顶栏曲目信息区（`app_shell.dart::_BarTrackInfo`）同契约：标题
-/// titleMedium、作者 labelSmall（默认 onSurfaceVariant）。
-class _BarTrackText extends StatelessWidget {
-  const _BarTrackText();
-
-  @override
-  Widget build(BuildContext context) {
-    final info = context.select<PlaybackProvider, (String?, String?)>(
-      (provider) {
-        final track = provider.snapshot.current;
-        return (track?.title, track?.artistLabel);
-      },
-    );
-    final (title, artists) = info;
-    if (title == null || title.isEmpty) {
-      return ValueListenableBuilder<String>(
-        valueListenable: AppBrandingService.titleNotifier,
-        builder: (context, appTitle, _) => Text(
-          appTitle,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          // 无曲目时底栏显示应用名：与顶栏品牌位同一强调口径。
-          style: context.emphasizedTypeScale.titleMedium,
-        ),
-      );
-    }
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          title,
-          style: context.typeScale.titleMedium,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        if (artists != null && artists.isNotEmpty)
-          Text(
-            artists,
-            style: context.typeScale.labelSmall,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-      ],
-    );
-  }
-}
-
-/// 左区收藏按钮：与播放页 `player.dart::_FavoriteButton`（私有）同契约——
-/// 图标态即反馈（已收藏 primary / 未收藏 onSurfaceVariant），不弹提示；
-/// 写路径唯一：`LibraryProvider.toggleFavoriteTrack`。
-///
-/// 为什么内联一份：那份实现是播放页私有类，且布局在播放页进度排里；
-/// 两处宿主不同，导出私有类会污染播放页公开面。改契约时两处必须同步。
-class _BarFavoriteButton extends StatelessWidget {
-  const _BarFavoriteButton();
-
-  @override
-  Widget build(BuildContext context) {
-    final library = context.watch<LibraryProvider?>();
-    final track = context.select<PlaybackProvider, Track?>(
-      (provider) => provider.snapshot.current,
-    );
-    if (library == null || track == null) return const SizedBox.shrink();
-
-    final l10n = AppLocalizations.of(context)!;
-    final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.standard,
-      icon: IconSwap<bool>(
-        value: favorite,
-        builder: (context, favorite) => Icon(
-          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          color: favorite
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-      ),
-      semanticLabel: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-      onPressed: () async {
-        HapticsService.lightImpact();
-        await library.toggleFavoriteTrack(track);
+          trailing: const NowPlayingFavoriteButton(),
+        );
       },
     );
   }
