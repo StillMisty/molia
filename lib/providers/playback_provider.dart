@@ -109,8 +109,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 同一实例稳定持有。
   late final ValueListenable<Duration> _positionChannel;
 
-  /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，暂停动作走
-  /// `facade.pause`；状态经 [SleepTimerController] 的 ValueListenable 暴露。
+  /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，到点暂停经播放命令面
+  /// [PlaybackSessionCoordinator.pause] 落地（与通知 / UI 暂停同一阶段路由与
+  /// 「返回前已提交」口径）；状态经 [SleepTimerController] 的 ValueListenable 暴露。
   late final SleepTimerController sleepTimer;
 
   /// 应用内音量持久化（设备本地键，见 [PlaybackVolumeStore]）。
@@ -186,14 +187,23 @@ class PlaybackProvider extends ChangeNotifier {
       defaultInterval: const Duration(milliseconds: 50),
     );
     _positionChannel = _StateValueListenable<Duration>(_session.position);
-    // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）。
+    // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）；
+    // 到点暂停走命令面——与通知 / UI 暂停共享阶段路由与提交语义，直接写
+    // facade 会绕过「返回前已落盘」，熄屏到点后进程被回收就丢最后进度。
     sleepTimer = SleepTimerController(
       snapshot: _facade.snapshot,
       position: _facade.position,
       trackCompletions: _facade.trackCompletions,
       setStopAfterCurrentTrack: _facade.setStopAfterCurrentTrack,
-      onFire: () => _facade.pause(),
+      // 定时关闭只关心「暂停已落地」，路由结果对倒计时没有 UI 语义。
+      onFire: () async {
+        await _session.pause();
+      },
     );
+    // 「播完当前歌曲」的完成处理保持不变：后端按 stopAfterCurrentTrack 在
+    // 曲末自己停住（`_pauseAtTrackEnd` 推 playing→paused 快照），会话协调者
+    // 的快照监听随之强制整份落盘——那条路径已经提交；这里共用 onFire 的
+    // pause 对已在曲末停住的后端是幂等的，不改变完成语义。
     _facade.snapshot.addListener(_onFacadeSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
     // 只重建进度条/歌词行，不触发整 Provider 重建（节流落盘在会话模块里）。
