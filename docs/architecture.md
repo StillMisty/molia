@@ -121,7 +121,9 @@
   `mixWithOthers` 混播；关闭后其他应用出声 → 暂停，系统可续播时自动补播；
   `androidWillPauseWhenDucked` 把 duck 升级为暂停语义）由 `LocalPlaybackService`
   持有。just_audio 的内建中断处理已关闭（`handleInterruptions: false`），耳机拔出
-  由服务自己订阅 `becomingNoisyEventStream`；倒计时定时关闭为**绝对 deadline**
+  由服务自己订阅 `becomingNoisyEventStream`；该流在丢失音频焦点后可能被
+  audio_session 反注册，另以 `devicesChangedEventStream` 兜底（只对非内置输出
+  设备被移除暂停，规则见 `audio_output_policy.dart`）；倒计时定时关闭为**绝对 deadline**
   （tick / 快照变化 / 回前台三路补触发），并按平台挂 `SleepTimerAlarm`
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或

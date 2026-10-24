@@ -832,33 +832,45 @@
     焦点事件与耳机拔出（`becomingNoisyEventStream`），并自己补上
     「系统发回可续播结束事件 → 续播」的记账；否则开关看着生效、实际仍被
     just_audio 暂停。回归用例见 `test/playback/audio_focus_guard_test.dart`。
-80. **`M3ESideSheet` 不能直接包整页**：包内 header（标题 + 关闭）与 `Expanded`
+80. **audio_session 的 noisy receiver 只在持有音频焦点时注册**：插件在
+    `requestAudioFocus` 成功后才注册 `ACTION_AUDIO_BECOMING_NOISY`，收到
+    `AUDIOFOCUS_LOSS` 时内部 `abandonAudioFocus()` 会一并反注册。开启
+    「与其他应用同时播放」后，焦点被别的应用拿走很常见（我们不暂停，插件
+    仍会放弃焦点），此时再拔耳机 / 蓝牙断链就收不到
+    `becomingNoisyEventStream`。`LocalPlaybackService` 因此额外订阅
+    `devicesChangedEventStream`（Android `AudioDeviceCallback` / iOS 路由变化，
+    均不依赖焦点），按 `audio_output_policy.dart::shouldPauseForDeviceRemoval`
+    只对「非内置输出设备被移除」暂停：内置扬声器 / 听筒的移除通常意味着刚
+    插上耳机，不能误停。两条路都走 `pause()`，重入无副作用；回归用例见
+    `test/playback/audio_focus_guard_test.dart` 与
+    `test/playback/audio_output_policy_test.dart`。
+81. **`M3ESideSheet` 不能直接包整页**：包内 header（标题 + 关闭）与 `Expanded`
     body 是固定的，页面再带 `Scaffold + M3EAppBar` 就是双层 chrome。二级页要
     提供 `embedded: true` 的正文；宽度用 `M3ESideSheetTheme.copyWith(width/maxWidth)`
     覆盖（包内 `resolveWidth` 会把宽度夹到主题 `maxWidth`，默认 400）；body 外包
     透明 `Material` 补 ink 祖先，键盘 bottom inset 由调用方补（M3E 宿主只处理
     系统栏）。
-81. **`M3EDialog` 本体放不了页面型弹窗**：content 在 `SingleChildScrollView` 里，
+82. **`M3EDialog` 本体放不了页面型弹窗**：content 在 `SingleChildScrollView` 里，
     `SettingsPage` 的内部 `Navigator` / AI DJ 的 `ListView` 会被拉成一条长滚动。
     用 `M3EDialog.show(dialog: ...)` 只借路由（scrim / 弹簧 / `M3EDialogInset` 的
     键盘 + 系统栏处理），内容用 `PageModalCard`；`M3EDialogInset` 已对子树
     `removePadding` + `removeViewInsets`，页面 AppBar 不需要再改 safeArea。卡片
     底色用 `surface`（页面自带 Scaffold 的底色），不要用 `surfaceContainerHigh`。
-82. **`M3EListReorderHost` 在 material_3_expressive 1.2.0 没有公开导出**：
+83. **`M3EListReorderHost` 在 material_3_expressive 1.2.0 没有公开导出**：
     `M3EList(reorder: true)` 会二次包裹行并把行尾 `trailing` 换成拖拽把手。三处
     排序列表继续用 `ReorderableListView`（显式手柄 + `itemExtent`），已登记
     白名单；升级包版本时先复查导出列表再考虑迁移。
-83. **`M3ETooltip` 没有 wait-duration API**：热力图格子需要 400ms 延迟（鼠标扫过
+84. **`M3ETooltip` 没有 wait-duration API**：热力图格子需要 400ms 延迟（鼠标扫过
     不弹提示），继续用框架 `Tooltip` 并登记白名单；其余提示走 `M3ETooltip`。
-84. **`M3EAppBar` 没有 `bottom:` 槽、actions 按 48dp/个预留、且不设置系统栏明暗**：
+85. **`M3EAppBar` 没有 `bottom:` 槽、actions 按 48dp/个预留、且不设置系统栏明暗**：
     壳层用 `ShellAppBar` 自拼 `Column`（M3EAppBar + 底部进度槽）并补
     `AnnotatedRegion<SystemUiOverlayStyle>`；整条工具条放进 title 槽，避免桌面
     可变宽窗口控件与 actions 预留宽度重叠。
-85. **`M3EThemeData.fromMaterial` 不会把应用字体同步到 emphasized 字阶**：
+86. **`M3EThemeData.fromMaterial` 不会把应用字体同步到 emphasized 字阶**：
     emphasized 是包内默认字体。必须走 `buildM3EThemeData`（`typography.apply(fontFamily...)`
     同时应用到 baseline / emphasized）；否则用户换字体后品牌名 / 播放页标题会
     掉回引擎默认字体。
-86. **`BoundedSingleMotionController` 的输出会过冲，且 `forward` 只在对具体 bounded
+87. **`BoundedSingleMotionController` 的输出会过冲，且 `forward` 只在对具体 bounded
     类型上可用**：`SingleMotionController.bounded(...)` 的静态返回类型是基类，拿不到
     `forward(from:)`；字段要写 `BoundedSingleMotionController`。弹簧逐帧模拟输出
     不 clamp，交给 `Curves` 前先 `clamp(0,1)`；收敛判定要用 `snapToEnd`（否则

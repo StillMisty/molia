@@ -444,7 +444,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tapToSelectLyrics => 'Tap lyric line to select';
 
   @override
-  String get nowPlayingLabel => 'Now Playing';
+  String get nowPlayingLabel => 'Playing';
 
   @override
   String get libraryLabel => 'Discover';
@@ -493,7 +493,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get currentQueueEmpty => 'Current queue is empty';
 
   @override
-  String get nowPlayingSection => 'Now Playing';
+  String get nowPlayingSection => 'Playing';
 
   @override
   String get searchLyrics => 'Search Lyrics';
@@ -998,7 +998,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerBarQueue => 'Queue';
 
   @override
-  String get queuePanelNowPlaying => 'Now playing';
+  String get queuePanelNowPlaying => 'Playing';
 
   @override
   String get windowMinimize => 'Minimize';

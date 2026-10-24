@@ -905,7 +905,7 @@ abstract class AppLocalizations {
   /// No description provided for @nowPlayingLabel.
   ///
   /// In en, this message translates to:
-  /// **'Now Playing'**
+  /// **'Playing'**
   String get nowPlayingLabel;
 
   /// No description provided for @libraryLabel.
@@ -1001,7 +1001,7 @@ abstract class AppLocalizations {
   /// No description provided for @nowPlayingSection.
   ///
   /// In en, this message translates to:
-  /// **'Now Playing'**
+  /// **'Playing'**
   String get nowPlayingSection;
 
   /// No description provided for @searchLyrics.
@@ -1907,7 +1907,7 @@ abstract class AppLocalizations {
   /// No description provided for @queuePanelNowPlaying.
   ///
   /// In en, this message translates to:
-  /// **'Now playing'**
+  /// **'Playing'**
   String get queuePanelNowPlaying;
 
   /// No description provided for @windowMinimize.
