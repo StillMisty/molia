@@ -40,7 +40,7 @@ String sleepTimerStatusLabel(AppLocalizations l10n, SleepTimerState state) {
 /// 打开定时关闭弹层（歌曲信息页唯一入口）。
 Future<void> showSleepTimerSheet(BuildContext context) {
   final playback = context.read<PlaybackProvider>();
-  return ResponsiveNavigation.showAdaptiveModalPage<void>(
+  return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.sleepTimerTitle,
     child: _SleepTimerSheet(playback: playback),

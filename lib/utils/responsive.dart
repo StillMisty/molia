@@ -466,78 +466,15 @@ class ResponsiveNavigation {
   }) =>
       _showFullScreen<T>(context: context, child: child);
 
-  /// [onDismissRequest] 仅对底部弹层（compact/medium 宽）生效：系统返回 /
-  /// 蒙层点击 / 下滑关闭前先询问，返回 false 保持弹层打开（用于弹层内部
-  /// 导航先退子页）；中心对话框（large 宽）无对应 guard，由内容侧 PopScope 处理。
-  /// guard 不影响预测返回预览：M3E 弹层宿主（≥1.1.7）在 guard 非空时照样接管
-  /// 手势，提交后按 guard 结果决定关闭还是回弹。
-  ///
-  /// [sheetThemeBuilder] 只在 compact/medium 的底部弹层分支生效：调用方可基于
-  /// 解析后的主题返回带动态字段的子类（如按手势归属把预测缩放置 0）。
-  static Future<T?> showAdaptiveModalPage<T>({
-    required BuildContext context,
-    required Widget child,
-    String? title,
-    double? maxWidth,
-    bool showCloseButton = true,
-    bool showDragHandle = true,
-    bool barrierDismissible = true,
-    Future<bool> Function()? onDismissRequest,
-    M3EBottomSheetTheme Function(M3EBottomSheetTheme)? sheetThemeBuilder,
-    SecondaryPageMode largeScreenMode = SecondaryPageMode.centerDialog,
-    AdaptiveModalContentLayout contentLayout =
-        AdaptiveModalContentLayout.wrapContent,
-  }) {
-    final spec = context.layoutType(ResponsivePageType.modal);
-    final resolvedMaxWidth = maxWidth ?? spec.modalWidth;
-
-    if (!context.isLargeScreen) {
-      return _showBottomSheet<T>(
-        context: context,
-        child: child,
-        title: title,
-        showCloseButton: showCloseButton,
-        showDragHandle: showDragHandle,
-        onDismissRequest: onDismissRequest,
-        sheetThemeBuilder: sheetThemeBuilder,
-        contentLayout: contentLayout,
-        pageType: ResponsivePageType.modal,
-      );
-    }
-
-    if (largeScreenMode == SecondaryPageMode.sideSheet) {
-      // M3E 侧边弹层始终带标题栏；调用方需要侧滑档时必须给 title。
-      return _showM3ESideSheet<T>(
-        context: context,
-        title: title ?? '',
-        child: child,
-        maxWidth: resolvedMaxWidth,
-        barrierDismissible: barrierDismissible,
-        contentLayout: contentLayout,
-      );
-    }
-
-    return _showCenterDialog<T>(
-      context: context,
-      child: child,
-      title: title,
-      maxWidth: resolvedMaxWidth,
-      showCloseButton: showCloseButton,
-      barrierDismissible: barrierDismissible,
-      contentLayout: contentLayout,
-      pageType: ResponsivePageType.modal,
-    );
-  }
-
   /// 页面型弹层：窄屏 M3E 底部弹层，宽屏 M3EDialog 路由 + [PageModalCard]。
   ///
   /// 页面自带 Scaffold / AppBar（与 [showSecondaryPage] 的 embedded 正文
   /// 不同），所以卡片只提供容器，不再叠标题栏；标题、返回与滚动都由页面
   /// 自己负责。
   ///
-  /// [onDismissRequest] 只在窄屏底部弹层分支生效。宽屏刻意保持旧
-  /// `_showCenterDialog` 的行为：居中弹窗没有宿主 guard，设置页由页面自己的
-  /// `NavigatorPopHandler` 先退子页、回到首屏后再关闭弹层。
+  /// [onDismissRequest] 只在窄屏底部弹层分支生效。宽屏居中弹窗没有宿主
+  /// guard，设置页由页面自己的 `NavigatorPopHandler` 先退子页、回到首屏后
+  /// 再关闭弹层。
   static Future<T?> showPageModal<T>({
     required BuildContext context,
     required Widget child,
@@ -571,6 +508,40 @@ class ResponsiveNavigation {
       barrierDismissible: barrierDismissible,
       // 页面型弹窗不抢焦点：设置首页 / AI DJ 列表不该一打开就出现焦点环。
       autofocusFirst: false,
+    );
+  }
+
+  /// 简单弹层（定时关闭 / 来源分享）：窄屏 M3E 底部弹层，宽屏 M3EDialog。
+  ///
+  /// [child] 是弹窗正文（自带内边距与滚动内容）；宽屏由 M3EDialog 负责
+  /// 标题栏与滚动、窄屏由 [_buildSheetContent] 提供标题栏。
+  static Future<T?> showSimpleModal<T>({
+    required BuildContext context,
+    required String title,
+    required Widget child,
+    bool barrierDismissible = true,
+  }) {
+    if (context.isLargeScreen) {
+      return M3EDialog.show<T>(
+        context,
+        dialog: Builder(
+          builder: (context) => M3EDialog(
+            title: title,
+            content: child,
+            // 正文自己带左右内边距（与底部弹层共用），避免再叠 24。
+            contentPadding: const EdgeInsets.only(bottom: 8),
+          ),
+        ),
+        barrierDismissible: barrierDismissible,
+      );
+    }
+    return _showBottomSheet<T>(
+      context: context,
+      child: child,
+      title: title,
+      // 正文自带滚动：按内容展开（页面型弹层才用 fillHeight），不要撑满整屏。
+      contentLayout: AdaptiveModalContentLayout.wrapContent,
+      pageType: ResponsivePageType.modal,
     );
   }
 
@@ -644,43 +615,6 @@ class ResponsiveNavigation {
     );
   }
 
-  static Future<T?> _showCenterDialog<T>({
-    required BuildContext context,
-    required Widget child,
-    required ResponsivePageType pageType,
-    String? title,
-    required double maxWidth,
-    bool showCloseButton = true,
-    bool barrierDismissible = true,
-    AdaptiveModalContentLayout contentLayout =
-        AdaptiveModalContentLayout.fillHeight,
-  }) {
-    final spec = context.layoutType(pageType);
-    return showDialog<T>(
-      context: context,
-      barrierDismissible: barrierDismissible,
-      builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: SizedBox(
-          width: math.min(maxWidth, MediaQuery.sizeOf(context).width * 0.9),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight:
-                  MediaQuery.sizeOf(context).height * spec.modalMaxHeightFactor,
-            ),
-            child: _buildSheetContent(
-              context: context,
-              child: child,
-              title: title,
-              showCloseButton: showCloseButton,
-              contentLayout: contentLayout,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   static Future<T?> _showBottomSheet<T>({
     required BuildContext context,
     required Widget child,
@@ -747,6 +681,7 @@ class ResponsiveNavigation {
         Flexible(fit: FlexFit.loose, child: child),
       AdaptiveModalContentLayout.fillHeight => Expanded(child: child),
     };
+    final theme = M3ETheme.of(context);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -763,43 +698,47 @@ class ResponsiveNavigation {
               ),
             ),
           ),
-        if (title != null || showCloseButton)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  // 分隔线统一 outlineVariant（与其余边框同源），
-                  // 不用 legacy 的 ThemeData.dividerColor。
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                  width: 0.5,
-                ),
+        if (title != null || showCloseButton) ...[
+          // M3EBottomSheetHeader 在 material_3_expressive 1.2.0 未公开导出，
+          // 这里按同一套 token 自绘：高度取 bottomSheetTheme 的
+          // fullScreenHeaderHeight（默认 64）、标题用 typeScale.titleLarge，
+          // 换包版本时跟着主题一起变，不再依赖写死的 48 高标题行。
+          SizedBox(
+            height: theme.bottomSheetTheme.fullScreenHeaderHeight,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  if (showCloseButton)
+                    M3EIconButton(
+                      variant: M3EIconButtonVariant.standard,
+                      icon: const Icon(Icons.close_rounded),
+                      // 弹层头部是通用件，l10n 可能未注册（测试 / 独立挂载）。
+                      semanticLabel: (AppLocalizations.of(context) ??
+                              lookupAppLocalizations(const Locale('zh')))
+                          .close,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  if (title != null)
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.typeScale.titleLarge.copyWith(
+                          color: theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  if (title == null) const Spacer(),
+                ],
               ),
             ),
-            child: Row(
-              children: [
-                if (showCloseButton)
-                  M3EIconButton(
-                    variant: M3EIconButtonVariant.standard,
-                    icon: const Icon(Icons.close_rounded),
-                    // 弹层头部是通用件，l10n 可能未注册（测试 / 独立挂载）。
-                    semanticLabel: (AppLocalizations.of(context) ??
-                            lookupAppLocalizations(const Locale('zh')))
-                        .close,
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                if (title != null)
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                if (title == null) const Spacer(),
-              ],
-            ),
           ),
+          // 分隔线单独一条：header 高度固定后不再用 Container 的 bottom
+          // border（border 会算进盒高，把标题行压窄）。
+          const M3EDivider(),
+        ],
         body,
       ],
     );

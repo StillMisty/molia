@@ -176,8 +176,8 @@ void main() {
   /// 用第一个分区标题判断首屏在不在。
   Finder settingsHome() => find.text('Appearance');
 
-  /// 桌面宽屏打开真实设置弹层（顶栏入口路径：`showAdaptiveModalPage` 的
-  /// 居中对话框分支，屏宽 0.9 夹取不触发）。
+  /// 桌面宽屏打开真实设置弹层（顶栏入口路径：`showPageModal` 的宽屏分支，
+  /// 屏宽 0.9 夹取不触发）。
   Future<void> openWideSettingsSheet(
     WidgetTester tester, {
     Size size = const Size(1200, 900),
@@ -1088,7 +1088,7 @@ void main() {
   });
 
   testWidgets('底部弹层 guard：子页打开时系统返回先退子页、不退弹层', (tester) async {
-    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支（large 宽走对话框）。
+    // 移动端视口 → showPageModal 走底部弹层分支（宽屏走 M3E 页面弹窗）。
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -1141,7 +1141,7 @@ void main() {
   });
 
   testWidgets('底部弹层：预测返回提交先退子页、再关弹层（guard 接管手势）', (tester) async {
-    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    // 移动端视口 → showPageModal 走底部弹层分支。
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -1217,7 +1217,7 @@ void main() {
   }
 
   testWidgets('底部弹层：子页预测返回由页面接管（弹层不缩放，提交只退子页）', (tester) async {
-    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    // 移动端视口 → showPageModal 走底部弹层分支。
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -1330,7 +1330,7 @@ void main() {
   });
 
   testWidgets('底部弹层：根导航器上方 dialog 打开时，返回手势不得退内层子页', (tester) async {
-    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    // 移动端视口 → showPageModal 走底部弹层分支。
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -1479,7 +1479,7 @@ void main() {
   });
 
   testWidgets('底部弹层：列表滑到顶后继续下滑可关闭（M3E 弹层滚动控制器接线）', (tester) async {
-    // 移动端视口 → showAdaptiveModalPage 走底部弹层分支。
+    // 移动端视口 → showPageModal 走底部弹层分支。
     tester.view.physicalSize = const Size(500, 1400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {

@@ -31,7 +31,7 @@ Future<void> showTrackShareSheet(
   BuildContext context, {
   required Track track,
 }) {
-  return ResponsiveNavigation.showAdaptiveModalPage<void>(
+  return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.trackInfoSource,
     child: _TrackShareSheet(track: track),

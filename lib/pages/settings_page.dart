@@ -49,7 +49,7 @@ import 'update_settings_page.dart';
 ///   关闭）；子页手势由内层路由接管（跟手播放 FadeForwards 页面退场，提交只
 ///   退子页），此时弹层宿主的缩放置 0，不会出现「子页手势却是 sheet 收缩」。
 ///   归属由 [SettingsSheetBackCoordinator] 在每次手势开始时判定。
-/// 大屏（居中对话框）忽略 guard，返回由 [SettingsPage] 页内处理。
+/// 大屏（M3E 页面弹窗）忽略 guard，返回由 [SettingsPage] 页内处理。
 Future<void> showSettingsSheet(BuildContext context) {
   final navigatorKey = GlobalKey<NavigatorState>();
   final backCoordinator = SettingsSheetBackCoordinator();

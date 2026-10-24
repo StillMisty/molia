@@ -95,7 +95,7 @@ void main() {
     expect(size.width, 1080);
   });
 
-  testWidgets('adaptive modal uses bottom sheet on mobile', (tester) async {
+  testWidgets('simple modal uses bottom sheet on mobile', (tester) async {
     await pumpResponsiveHarness(
       tester,
       width: 390,
@@ -103,9 +103,9 @@ void main() {
         builder: (context) => Center(
           child: FilledButton(
             onPressed: () {
-              ResponsiveNavigation.showAdaptiveModalPage<void>(
+              ResponsiveNavigation.showSimpleModal<void>(
                 context: context,
-                showCloseButton: false,
+                title: 'simple-title',
                 child: const SizedBox(
                   height: 120,
                   child: Center(child: Text('modal-child')),
@@ -124,43 +124,13 @@ void main() {
     final sheetSize = tester.getSize(find.byType(M3EBottomSheetSurface));
     expect(find.byType(M3EBottomSheetSurface), findsOneWidget);
     expect(find.text('modal-child'), findsOneWidget);
-    expect(sheetSize.height, lessThan(280));
+    // 标题进自绘 header（M3E token 对齐后仍只有一份）。
+    expect(find.text('simple-title'), findsOneWidget);
+    // 内容按需展开，不占满整屏（fill-height 语义留给 showPageModal）。
+    expect(sheetSize.height, lessThan(600));
   });
 
-  testWidgets('adaptive modal can opt into fill-height on mobile',
-      (tester) async {
-    await pumpResponsiveHarness(
-      tester,
-      width: 390,
-      child: Builder(
-        builder: (context) => Center(
-          child: FilledButton(
-            onPressed: () {
-              ResponsiveNavigation.showAdaptiveModalPage<void>(
-                context: context,
-                showCloseButton: false,
-                contentLayout: AdaptiveModalContentLayout.fillHeight,
-                child: const SizedBox(
-                  height: 120,
-                  child: Center(child: Text('full-height-modal')),
-                ),
-              );
-            },
-            child: const Text('open'),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
-
-    final sheetSize = tester.getSize(find.byType(M3EBottomSheetSurface));
-    expect(find.text('full-height-modal'), findsOneWidget);
-    expect(sheetSize.height, greaterThan(700));
-  });
-
-  testWidgets('adaptive modal uses dialog on large screens', (tester) async {
+  testWidgets('simple modal uses M3EDialog on large screens', (tester) async {
     await pumpResponsiveHarness(
       tester,
       width: 1280,
@@ -168,9 +138,9 @@ void main() {
         builder: (context) => Center(
           child: FilledButton(
             onPressed: () {
-              ResponsiveNavigation.showAdaptiveModalPage<void>(
+              ResponsiveNavigation.showSimpleModal<void>(
                 context: context,
-                showCloseButton: false,
+                title: 'simple-title',
                 child: const SizedBox(
                   height: 120,
                   child: Center(child: Text('modal-child')),
@@ -186,8 +156,11 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(Dialog), findsOneWidget);
+    // 宽屏走 M3EDialog 本体：标题栏与滚动由它负责，不再是裸 Dialog 外壳。
+    expect(find.byType(M3EDialog), findsOneWidget);
+    expect(find.byType(Dialog), findsNothing);
     expect(find.text('modal-child'), findsOneWidget);
+    expect(find.text('simple-title'), findsOneWidget);
   });
 
   testWidgets('secondary page uses M3ESideSheet on large screens',
