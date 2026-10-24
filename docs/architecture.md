@@ -552,15 +552,18 @@
   `PlaylistTrackSyncRecord` / `PlayHistorySyncRecord` / `SyncTombstoneRecord`）；
   同步适配器不再逐字段读列名，记录形状（含 JSON 键）由 record 类承担；
 - **测试假实现**只实现 UI 面窄 port（不再继承真类）：新方法不会静默走真实 SQL。
-- **收藏页合集状态**：`LocalSongsCollection`
+- **收藏页合集状态**：`CollectionSession`（`lib/providers/collection_session.dart`）
+  拥有「当前合集」的恢复 / 校准 / 模式 / 按行 key 的多选 / 加载组合 / 滚动键
+  激活与切换持久化；`LocalSongsCollection`
   （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的历史 × 下载 /
   导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期丢弃与
   加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
   拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）、可见行投影（过滤 /
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
-  不再用四个布尔值 + 三份可见列表，也不按 kind 分支拼行或挑动作，只在 build 里
-  重算联结之外消费 `CollectionView` 与 `LocalSongsCollection.rows`。
+  每帧只把资料库窄端口 + 下载 / 缓存快照交给会话，消费一个
+  `CollectionSessionView`（视图 + loading / ready），不在 build 里做 post-frame
+  校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。
 
 ### 本地下载（downloads）
 

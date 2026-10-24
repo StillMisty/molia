@@ -24,6 +24,17 @@ import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
 import 'playback_provider.dart';
 
+/// 列表曲目读取视图：页面只读「已缓存 / 加载中」，不探测缓存内部。
+class PlaylistTracksView {
+  const PlaylistTracksView({required this.tracks, required this.loading});
+
+  /// null = 尚未加载成功过（首次加载 / 加载失败且无旧缓存）。
+  final List<PlaylistTrack>? tracks;
+
+  /// 是否有一轮查询在途（旧缓存可能同时可见）。
+  final bool loading;
+}
+
 class LibraryProvider extends ChangeNotifier {
   LibraryProvider({
     required LibraryStore repository,
@@ -98,19 +109,19 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 列表曲目视图：`tracks == null` 表示尚未加载；`loading` 表示加载中。
   /// 页面只读视图并用 [ensurePlaylistTracks] 触发加载，不直接探测缓存内部。
-  ({List<PlaylistTrack>? tracks, bool loading}) playlistTracksView(
-          int playlistId) =>
-      (
+  PlaylistTracksView playlistTracksView(int playlistId) => PlaylistTracksView(
         tracks: _tracksByPlaylist[playlistId],
         loading: _loadingPlaylistIds.contains(playlistId),
       );
 
   /// 请求加载列表曲目（未缓存且未在加载中时发起；可在 build 内调用）。
-  void ensurePlaylistTracks(int playlistId) {
-    if (_tracksByPlaylist.containsKey(playlistId) ||
-        !_loadingPlaylistIds.add(playlistId)) {
-      return;
-    }
+  ///
+  /// [force] 由「加载失败后重试」使用：丢掉旧缓存重新查询。
+  void ensurePlaylistTracks(int playlistId, {bool force = false}) {
+    if (!force && _tracksByPlaylist.containsKey(playlistId)) return;
+    // 已有请求在途：不并发；force 等它落地后由调用方再次重试。
+    if (!_loadingPlaylistIds.add(playlistId)) return;
+    if (force) _tracksByPlaylist.remove(playlistId);
     // build 期调用：同步标记 loading（本帧即可显示加载态），通知推迟到
     // 微任务，避免 setState during build。
     unawaited(Future<void>.microtask(() async {
