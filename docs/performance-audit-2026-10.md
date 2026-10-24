@@ -342,10 +342,11 @@ mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / �
 
 结论 / 否证：
 
-- **CPU 被呈现层主导，未发现 Dart 热点**：Linux 播放时平台线程 ~96%
-  （`perf` 归因 libc `rep movsb`，即窗口呈现拷贝），Dart UI 0.25%；
-  Android 播放时 raster 92.5%、主线程 16.9%、音频 12.2%，Dart worker
-  合计 <1%；Android 空闲进程 ~0.7%。不为数字做盲改。
+- **CPU 被呈现层主导，未发现 Dart 热点**：Linux 播放时平台线程
+  60–96%（`perf` 归因 libc `rep movsb`，即 WSLg 窗口呈现拷贝，随窗口
+  遮挡 / 帧率波动），Dart UI 0.25–0.75%、空闲进程 ~1%；Android 播放时
+  raster 92.5%、主线程 16.9%、音频 12.2%，Dart worker 合计 <1%，空闲
+  进程 ~0.7%。不为数字做盲改。
 - **起播大头是 `setAudioSource`**（Linux 364–878ms 随音频设备冷热波动，
   Android 77–322ms），不是取链（5–39ms）。继续压需要播放器级预打开 /
   预加载，属于播放后端改造。
