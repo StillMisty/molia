@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -9,6 +11,8 @@ import '../providers/local_database_provider.dart';
 import '../providers/sync_provider.dart';
 import '../services/notification_service.dart';
 import '../services/play_statistics_service.dart';
+import '../services/save_as.dart';
+import '../utils/save_as_label.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/settings/settings_tiles.dart';
 import 'cache_management_page.dart';
@@ -124,24 +128,31 @@ class DataSettingsPage extends StatelessWidget {
   ) async {
     final localDbProvider =
         Provider.of<LocalDatabaseProvider>(context, listen: false);
+    final saveAs = Provider.of<SaveAs?>(context, listen: false);
     final notificationService =
         Provider.of<NotificationService>(context, listen: false);
     final currentContext = context;
 
     try {
-      final bool success;
+      final String json;
       if (syncProvider != null) {
         // 完整备份：同步备份模块收集全部类别（凭证类默认不含）。
-        final json = await syncProvider.exportBackupJson();
-        success = await localDbProvider.shareJsonBackup(json);
+        json = await syncProvider.exportBackupJson();
       } else {
-        success = await localDbProvider.exportDataToJson();
+        // 测试 / 同步引擎未挂载：退回最近播放上下文的旧导出数据。
+        json = await localDbProvider.exportDataJson();
       }
+      if (saveAs == null) throw StateError('SaveAs 未装配');
+      final result = await saveAs.saveBytes(
+        fileName: 'molia_backup_${_fileTimestamp()}.json',
+        bytes: Uint8List.fromList(utf8.encode(json)),
+        mimeType: 'application/json',
+        relativeDir: saveAsExportsDirName,
+        dialogTitle: l10n.exportDataTitle,
+        allowedExtensions: ['json'],
+      );
       if (!currentContext.mounted) return;
-      // 成功时系统文件选择器本身即反馈，失败才提示。
-      if (!success) {
-        notificationService.showErrorSnackBar(l10n.exportFailed);
-      }
+      _showSaveResult(l10n, notificationService, result);
     } catch (e) {
       if (currentContext.mounted) {
         notificationService.showErrorSnackBar(l10n.exportFailed);
@@ -206,5 +217,27 @@ class DataSettingsPage extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 导出文件名里的时间戳（冒号在 Windows 文件名里非法）。
+String _fileTimestamp() =>
+    DateTime.now().toIso8601String().replaceAll(':', '-');
+
+/// 另存结果统一提示：保存成功给出位置，取消静默，失败提示重试。
+void _showSaveResult(
+  AppLocalizations l10n,
+  NotificationService notifications,
+  SaveAsResult result,
+) {
+  switch (result) {
+    case SaveAsSaved(:final displayPath, :final kind):
+      notifications.showSuccessSnackBar(
+        savedLocationMessage(l10n, kind, displayPath),
+      );
+    case SaveAsCancelled():
+      return;
+    case SaveAsFailed():
+      notifications.showErrorSnackBar(l10n.saveFailed);
   }
 }

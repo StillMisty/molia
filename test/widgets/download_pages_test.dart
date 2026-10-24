@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
@@ -7,6 +8,7 @@ import 'package:molia/pages/downloads_manage_page.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
+import 'package:molia/services/save_as.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -16,6 +18,7 @@ import '../support/fake_download_notifications.dart';
 import '../support/fake_download_storage.dart';
 import '../support/fake_downloads_publisher.dart';
 import '../support/fake_music_source.dart';
+import '../support/fake_save_as.dart';
 import '../support/fakes.dart';
 
 /// 下载设置页 / 下载管理页 smoke：段落与开关接线（动作细节由服务测试覆盖）。
@@ -53,13 +56,18 @@ void main() {
     settings.dispose();
   });
 
-  Future<void> pumpPage(WidgetTester tester, Widget page) async {
+  Future<void> pumpPage(
+    WidgetTester tester,
+    Widget page, {
+    SaveAs? saveAs,
+  }) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
           ChangeNotifierProvider<DownloadService>.value(value: downloads),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          if (saveAs != null) Provider<SaveAs>.value(value: saveAs),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -77,41 +85,69 @@ void main() {
   }
 
   testWidgets('下载设置页：保存位置 / 文件名格式 / 标签嵌入与下载目录', (tester) async {
-    await pumpPage(tester, const DownloadSettingsPage());
+    // widget 测试默认平台是 Android；这里显式跑桌面口径（自选目录）。
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpPage(tester, const DownloadSettingsPage());
 
-    expect(find.text('下载设置'), findsOneWidget);
-    expect(find.text('保存位置'), findsOneWidget);
-    expect(find.text('默认（系统下载目录）'), findsOneWidget);
-    expect(find.text('文件名格式'), findsOneWidget);
-    expect(find.text('{artist} - {title}'), findsOneWidget);
-    expect(find.text('嵌入歌词与封面标签'), findsOneWidget);
-    expect(find.text('下载目录'), findsOneWidget);
-    // 发布器支持（Android）：公共目录发布开关可见，默认开。
-    expect(find.byKey(const Key('downloadPublishPublicSwitch')), findsOneWidget);
-    expect(find.text('发布到公共下载目录'), findsOneWidget);
-    // 通知支持（Android）：下载通知开关可见，默认开。
-    expect(
-        find.byKey(const Key('downloadNotificationsSwitch')), findsOneWidget);
-    expect(find.text('下载通知'), findsOneWidget);
+      expect(find.text('下载设置'), findsOneWidget);
+      expect(find.text('保存位置'), findsOneWidget);
+      expect(find.text('默认（系统「下载」目录）'), findsOneWidget);
+      expect(find.text('文件名格式'), findsOneWidget);
+      expect(find.text('{artist} - {title}'), findsOneWidget);
+      expect(find.text('嵌入歌词与封面标签'), findsOneWidget);
+      expect(find.text('下载目录'), findsOneWidget);
+      // 发布器支持（Android）：公共目录发布开关可见，默认开。
+      expect(
+          find.byKey(const Key('downloadPublishPublicSwitch')), findsOneWidget);
+      expect(find.text('发布到公共下载目录'), findsOneWidget);
+      // 通知支持（Android）：下载通知开关可见，默认开。
+      expect(
+          find.byKey(const Key('downloadNotificationsSwitch')), findsOneWidget);
+      expect(find.text('下载通知'), findsOneWidget);
 
-    // 关闭标签嵌入：持久化。
-    await tester.tap(find.byKey(const Key('downloadEmbedTagsSwitch')));
-    await tester.pumpAndSettle();
-    expect(settings.embedTags, isFalse);
+      // 关闭标签嵌入：持久化。
+      await tester.tap(find.byKey(const Key('downloadEmbedTagsSwitch')));
+      await tester.pumpAndSettle();
+      expect(settings.embedTags, isFalse);
 
-    // 关闭公共目录发布：持久化。
-    await tester.tap(find.byKey(const Key('downloadPublishPublicSwitch')));
-    await tester.pumpAndSettle();
-    expect(settings.publishToPublicDir, isFalse);
+      // 关闭公共目录发布：持久化。
+      await tester.tap(find.byKey(const Key('downloadPublishPublicSwitch')));
+      await tester.pumpAndSettle();
+      expect(settings.publishToPublicDir, isFalse);
 
-    // 关闭下载通知：持久化。
-    await tester.tap(find.byKey(const Key('downloadNotificationsSwitch')));
-    await tester.pumpAndSettle();
-    expect(settings.notifications, isFalse);
+      // 关闭下载通知：持久化。
+      await tester.tap(find.byKey(const Key('downloadNotificationsSwitch')));
+      await tester.pumpAndSettle();
+      expect(settings.notifications, isFalse);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
-  testWidgets('下载设置页：发布器不支持（非 Android）时隐藏公共目录开关',
-      (tester) async {
+  testWidgets('下载设置页（Android）：显示播放副本与另存目录', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    try {
+      await pumpPage(
+        tester,
+        const DownloadSettingsPage(),
+        saveAs: FakeSaveAs(root: '/storage/emulated/0/Download/Molia'),
+      );
+
+      expect(find.text('系统「下载」› Molia'), findsWidgets);
+      expect(find.text('播放副本'), findsOneWidget);
+      expect(find.text('另存目录'), findsOneWidget);
+      expect(
+        find.byKey(const Key('downloadPublicLocationInfoItem')),
+        findsOneWidget,
+      );
+      expect(find.text('/storage/emulated/0/Download/Molia'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('下载设置页：发布器不支持（非 Android）时隐藏公共目录开关', (tester) async {
     final nonAndroid = DownloadService(
       catalog: CatalogService(registry: FakeSourceRegistry(const {})),
       repository: DownloadsRepository(
@@ -176,7 +212,8 @@ void main() {
     expect(find.byKey(const Key('downloadsBatchPlaylistItem')), findsOneWidget);
     expect(find.text('文件维护'), findsOneWidget);
     expect(find.byKey(const Key('downloadsCleanupPartsItem')), findsOneWidget);
-    expect(find.byKey(const Key('downloadsCleanupOrphansItem')), findsOneWidget);
+    expect(
+        find.byKey(const Key('downloadsCleanupOrphansItem')), findsOneWidget);
     expect(find.byKey(const Key('downloadsMigrateLegacyItem')), findsOneWidget);
     // 发布器支持（Android）：补发布入口可见。
     expect(find.byKey(const Key('downloadsPublishPublicItem')), findsOneWidget);

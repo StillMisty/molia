@@ -28,6 +28,7 @@ import '../../services/artwork_palette_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
+import '../../services/save_as.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/track_local_data_service.dart';
 import 'ai_stack.dart';
@@ -61,7 +62,13 @@ List<SingleChildWidget> buildAppProviders({
   final catalogService = catalog.catalogService;
   final playbackProvider = playback.playbackProvider;
   final downloadService = local.downloadService;
+  // “另存目录”服务：下载设置里的桌面自选目录同时作用于导出；未设置时用
+  // 各平台公共下载目录。页面经 Provider 读取，测试注入 fake。
+  final saveAs = createSaveAs(
+    customRoot: () => local.downloadSettings.saveDir,
+  );
   return [
+    Provider<SaveAs>.value(value: saveAs),
     ChangeNotifierProvider.value(value: sourceManager),
     // 音源管理 UI 门面：订阅同一个 SourceManager，生命周期与其一致
     // （不负责 dispose manager）。

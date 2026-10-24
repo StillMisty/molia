@@ -800,6 +800,36 @@ abstract class AppLocalizations {
   /// **'Data exported successfully!'**
   String get exportSuccess;
 
+  /// No description provided for @savedToPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to {path}'**
+  String savedToPath(String path);
+
+  /// No description provided for @savedToDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to Downloads: {path}'**
+  String savedToDownloads(String path);
+
+  /// No description provided for @savedToFilesApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to Files: {path}'**
+  String savedToFilesApp(String path);
+
+  /// No description provided for @saveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save. Try again.'**
+  String get saveFailed;
+
+  /// No description provided for @fileInDownloads.
+  ///
+  /// In en, this message translates to:
+  /// **'File is in Downloads: {path}'**
+  String fileInDownloads(String path);
+
   /// No description provided for @clearCacheDialogTitle.
   ///
   /// In en, this message translates to:
@@ -6820,11 +6850,41 @@ abstract class AppLocalizations {
   /// **'Default (system Downloads)'**
   String get downloadSaveLocationDefault;
 
-  /// No description provided for @downloadSaveLocationFixedHint.
+  /// No description provided for @downloadSaveLocationSharedHint.
   ///
   /// In en, this message translates to:
-  /// **'Fixed to the app folder on this platform; files are visible in the Files app'**
-  String get downloadSaveLocationFixedHint;
+  /// **'Used for downloads and exports'**
+  String get downloadSaveLocationSharedHint;
+
+  /// No description provided for @downloadSaveLocationAndroid.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads › Molia'**
+  String get downloadSaveLocationAndroid;
+
+  /// No description provided for @downloadSaveLocationIos.
+  ///
+  /// In en, this message translates to:
+  /// **'Files › On My iPhone › Molia'**
+  String get downloadSaveLocationIos;
+
+  /// No description provided for @downloadSaveLocationFixedHintAndroid.
+  ///
+  /// In en, this message translates to:
+  /// **'The playback copy stays in the app; a copy is also saved to Downloads after each download'**
+  String get downloadSaveLocationFixedHintAndroid;
+
+  /// No description provided for @downloadSaveLocationFixedHintAndroidOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Public copy is off; files stay in the app. Turn on “Publish to system Downloads” below'**
+  String get downloadSaveLocationFixedHintAndroidOff;
+
+  /// No description provided for @downloadSaveLocationFixedHintIos.
+  ///
+  /// In en, this message translates to:
+  /// **'Files are visible in Files › On My iPhone › Molia'**
+  String get downloadSaveLocationFixedHintIos;
 
   /// No description provided for @downloadPickDirectory.
   ///
@@ -6897,6 +6957,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download folder'**
   String get downloadLocationInfo;
+
+  /// No description provided for @downloadPlaybackLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback copy'**
+  String get downloadPlaybackLocation;
+
+  /// No description provided for @downloadPublicCopyLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Also saved to'**
+  String get downloadPublicCopyLocation;
 
   /// No description provided for @downloadLocationUnsupported.
   ///

@@ -13,7 +13,9 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,8 +29,10 @@ import '../providers/library_provider.dart';
 import '../providers/play_statistics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
+import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import '../utils/save_as_label.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
@@ -698,10 +702,33 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   Future<void> _export() async {
     final l10n = AppLocalizations.of(context)!;
     final notifications = context.read<NotificationService?>();
-    final success = await _provider.export();
-    if (!mounted) return;
-    // 成功时系统分享面板本身即反馈（与备份导出同约定），失败才提示。
-    if (!success) notifications?.showErrorSnackBar(l10n.statsExportFailed);
+    final saveAs = context.read<SaveAs?>();
+    try {
+      if (saveAs == null) throw StateError('SaveAs 未装配');
+      final json = await _provider.buildExportJson();
+      final result = await saveAs.saveBytes(
+        fileName:
+            'molia_listening_${DateTime.now().toIso8601String().replaceAll(':', '-')}.json',
+        bytes: Uint8List.fromList(utf8.encode(json)),
+        mimeType: 'application/json',
+        relativeDir: saveAsExportsDirName,
+        dialogTitle: l10n.statsExport,
+        allowedExtensions: ['json'],
+      );
+      if (!mounted) return;
+      switch (result) {
+        case SaveAsSaved(:final displayPath, :final kind):
+          notifications?.showSuccessSnackBar(
+            savedLocationMessage(l10n, kind, displayPath),
+          );
+        case SaveAsCancelled():
+          return;
+        case SaveAsFailed():
+          notifications?.showErrorSnackBar(l10n.statsExportFailed);
+      }
+    } catch (_) {
+      if (mounted) notifications?.showErrorSnackBar(l10n.statsExportFailed);
+    }
   }
 
   Future<void> _confirmClear() async {

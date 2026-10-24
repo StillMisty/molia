@@ -1,7 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:flutter/foundation.dart';
 import '../data/molia_database.dart';
 import 'package:file_picker/file_picker.dart';
@@ -67,32 +65,6 @@ class LocalDatabaseProvider with ChangeNotifier {
     }
   }
 
-  /// 分享一份 JSON 文本为备份文件（跨设备同步的完整备份走这里）。
-  Future<bool> shareJsonBackup(
-    String jsonString, {
-    String prefix = 'molia_backup',
-  }) async {
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final filePath = '${tempDir.path}/${prefix}_$timestamp.json';
-
-      final file = File(filePath);
-      await file.writeAsString(jsonString);
-
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(filePath, mimeType: 'application/json')],
-          subject: 'Molia Data Backup $timestamp',
-        ),
-      );
-      return result.status == ShareResultStatus.success;
-    } catch (e) {
-      logger.fine('Error during data export: $e');
-      return false;
-    }
-  }
-
   /// 选择并读取一份 JSON 备份文件；取消/读取失败返回 null。
   Future<String?> pickJsonBackup() async {
     try {
@@ -109,37 +81,14 @@ class LocalDatabaseProvider with ChangeNotifier {
     }
   }
 
-  /// 导出最近播放上下文为 JSON 并分享。
-  Future<bool> exportDataToJson() async {
-    try {
-      final playContexts = await _db.getAllPlayContexts();
-
-      final exportData = {
-        'play_contexts': [for (final context in playContexts) context.toJson()],
-      };
-
-      const jsonEncoder = JsonEncoder.withIndent('  ');
-      final jsonString = jsonEncoder.convert(exportData);
-
-      final tempDir = await getTemporaryDirectory();
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final filePath = '${tempDir.path}/molia_backup_$timestamp.json';
-
-      final file = File(filePath);
-      await file.writeAsString(jsonString);
-
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(filePath, mimeType: 'application/json')],
-          subject: 'Molia Data Backup $timestamp',
-        ),
-      );
-
-      return result.status == ShareResultStatus.success;
-    } catch (e) {
-      logger.fine('Error during data export: $e');
-      return false;
-    }
+  /// 旧版导出路径（同步引擎不可用时）：只导出最近播放上下文，返回 JSON
+  /// 文本；由调用方用 `SaveAs` 写到另存目录。
+  Future<String> exportDataJson() async {
+    final playContexts = await _db.getAllPlayContexts();
+    const jsonEncoder = JsonEncoder.withIndent('  ');
+    return jsonEncoder.convert({
+      'play_contexts': [for (final context in playContexts) context.toJson()],
+    });
   }
 
   /// 从 JSON 备份恢复最近播放上下文（兼容只含 play_contexts 的旧备份）。

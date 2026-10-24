@@ -7,7 +7,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   dynamic_color
   flutter_media_session
   flutter_secure_storage_windows
-  gal
   media_kit_libs_windows_audio
   quickjs_engine
   screen_retriever_windows

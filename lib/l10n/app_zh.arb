@@ -124,6 +124,39 @@
   "importSuccess": "数据导入成功！",
   "importFailed": "导入数据失败。",
   "exportSuccess": "数据导出成功！",
+  "savedToPath": "已保存到 {path}",
+  "@savedToPath": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "savedToDownloads": "已保存到系统「下载」：{path}",
+  "@savedToDownloads": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "savedToFilesApp": "已保存到「文件」App：{path}",
+  "@savedToFilesApp": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "saveFailed": "保存失败，请重试。",
+  "fileInDownloads": "文件已在下载目录：{path}",
+  "@fileInDownloads": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "clearCacheDialogTitle": "确认清除缓存",
   "clearCacheDialogMessage": "确定要清除歌词缓存吗？此操作无法撤销。",
   "clearCacheButton": "清除缓存",
@@ -1683,8 +1716,13 @@
   "downloadSettingsTitle": "下载设置",
   "downloadSettingsSubtitle": "保存位置、文件名与标签嵌入",
   "downloadSaveLocation": "保存位置",
-  "downloadSaveLocationDefault": "默认（系统下载目录）",
-  "downloadSaveLocationFixedHint": "当前平台固定在应用目录，文件可在系统「文件」应用中访问",
+  "downloadSaveLocationDefault": "默认（系统「下载」目录）",
+  "downloadSaveLocationSharedHint": "下载与导出都保存到这里",
+  "downloadSaveLocationAndroid": "系统「下载」› Molia",
+  "downloadSaveLocationIos": "文件 App › 我的 iPhone › Molia",
+  "downloadSaveLocationFixedHintAndroid": "播放副本在应用内；下载完成后在系统「下载」另存一份",
+  "downloadSaveLocationFixedHintAndroidOff": "公共副本已关闭；文件只在应用内，可在下方打开「发布到公共下载目录」",
+  "downloadSaveLocationFixedHintIos": "文件可在「文件」App › 我的 iPhone › Molia 中找到",
   "downloadPickDirectory": "选择目录",
   "downloadFilenameTemplate": "文件名格式",
   "downloadFilenameTemplateHint": "可用变量：artist（歌手）/ title（歌名）/ album（专辑）",
@@ -1697,6 +1735,8 @@
   "downloadNotifications": "下载通知",
   "downloadNotificationsSubtitle": "在通知栏显示下载进度，退到后台也能继续（Android，需要通知权限）",
   "downloadLocationInfo": "下载目录",
+  "downloadPlaybackLocation": "播放副本",
+  "downloadPublicCopyLocation": "另存目录",
   "downloadLocationUnsupported": "当前平台不支持下载",
   "save": "保存",
   "lyricsEmptyState": "暂时没找到歌词，换个来源试试？",

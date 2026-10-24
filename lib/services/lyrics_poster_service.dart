@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:logging/logging.dart';
 import 'package:dio/dio.dart';
-import 'package:gal/gal.dart';
 import '../data/http/app_dio.dart';
 import '../managers/artwork_cache.dart';
 import '../models/poster_lyric_line.dart';
@@ -432,23 +431,6 @@ class LyricsPosterService {
     final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
 
     return byteData!.buffer.asUint8List();
-  }
-
-  Future<String?> savePosterFromBytes(
-      Uint8List imageBytes, String trackTitle) async {
-    try {
-      final name =
-          "lyrics_poster_${trackTitle.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}";
-      if (!await Gal.hasAccess()) {
-        await Gal.requestAccess();
-      }
-      await Gal.putImageBytes(imageBytes, name: name);
-      logger.fine('Poster saved to gallery: $name');
-      return name;
-    } catch (e) {
-      logger.severe('Error saving poster to gallery: $e');
-      rethrow;
-    }
   }
 
   Future<void> sharePosterFile(String imagePath, String textToShare) async {

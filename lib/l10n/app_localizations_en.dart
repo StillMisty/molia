@@ -387,6 +387,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exportSuccess => 'Data exported successfully!';
 
   @override
+  String savedToPath(String path) {
+    return 'Saved to $path';
+  }
+
+  @override
+  String savedToDownloads(String path) {
+    return 'Saved to Downloads: $path';
+  }
+
+  @override
+  String savedToFilesApp(String path) {
+    return 'Saved to Files: $path';
+  }
+
+  @override
+  String get saveFailed => 'Couldn\'t save. Try again.';
+
+  @override
+  String fileInDownloads(String path) {
+    return 'File is in Downloads: $path';
+  }
+
+  @override
   String get clearCacheDialogTitle => 'Confirm Clear Cache';
 
   @override
@@ -3799,8 +3822,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadSaveLocationDefault => 'Default (system Downloads)';
 
   @override
-  String get downloadSaveLocationFixedHint =>
-      'Fixed to the app folder on this platform; files are visible in the Files app';
+  String get downloadSaveLocationSharedHint => 'Used for downloads and exports';
+
+  @override
+  String get downloadSaveLocationAndroid => 'Downloads › Molia';
+
+  @override
+  String get downloadSaveLocationIos => 'Files › On My iPhone › Molia';
+
+  @override
+  String get downloadSaveLocationFixedHintAndroid =>
+      'The playback copy stays in the app; a copy is also saved to Downloads after each download';
+
+  @override
+  String get downloadSaveLocationFixedHintAndroidOff =>
+      'Public copy is off; files stay in the app. Turn on “Publish to system Downloads” below';
+
+  @override
+  String get downloadSaveLocationFixedHintIos =>
+      'Files are visible in Files › On My iPhone › Molia';
 
   @override
   String get downloadPickDirectory => 'Choose folder';
@@ -3841,6 +3881,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadLocationInfo => 'Download folder';
+
+  @override
+  String get downloadPlaybackLocation => 'Playback copy';
+
+  @override
+  String get downloadPublicCopyLocation => 'Also saved to';
 
   @override
   String get downloadLocationUnsupported =>

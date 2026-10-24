@@ -30,6 +30,7 @@ import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
+import '../services/save_as.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
@@ -284,10 +285,15 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final path = record.filePath;
     if (path == null || path.isEmpty || _busy) return;
     final l10n = AppLocalizations.of(context)!;
+    final saveAs = context.read<SaveAs?>();
     try {
       await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
     } catch (_) {
-      if (mounted) _showMessage(l10n.exportFailed);
+      // Linux 的 share_plus 不支持文件分享：文件本来就在另存目录，直接
+      // 打开所在文件夹并说明位置。
+      await saveAs?.reveal(path);
+      if (!mounted) return;
+      _showMessage(l10n.fileInDownloads(path));
     }
   }
 
