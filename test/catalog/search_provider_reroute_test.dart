@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
@@ -701,6 +702,33 @@ void main() {
     provider.selectSource('script');
     expect(provider.searchKind, SearchKind.song, reason: '换源回退单曲');
     expect(provider.supportedSearchKinds, [SearchKind.song]);
+  });
+
+  test('输入防抖 300ms：连续输入只发最后一次请求', () {
+    final source = _FakeMusicSource('kw');
+    SearchQuery? lastQuery;
+    source.onSearch = (query) async {
+      lastQuery = query;
+      return SearchResult(items: [_track('kw', '1')]);
+    };
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    fakeAsync((async) {
+      provider.updateSearchQuery('a');
+      async.elapse(const Duration(milliseconds: 200));
+      provider.updateSearchQuery('ab');
+
+      async.elapse(const Duration(milliseconds: 299));
+      expect(source.searchCalls, 0, reason: '防抖窗口内不应发请求');
+
+      async.elapse(const Duration(milliseconds: 1));
+      async.flushMicrotasks();
+      expect(source.searchCalls, 1);
+      expect(lastQuery?.keyword, 'ab');
+      expect(provider.searchQuery, 'ab');
+    });
   });
 
   test('无音源（未注入 service/registry）：空态行为不变', () async {

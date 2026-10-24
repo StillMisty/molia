@@ -1,6 +1,7 @@
 import 'package:logging/logging.dart';
 import 'dart:async';
 import 'package:material_ui/material_ui.dart';
+import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/artist.dart';
@@ -77,7 +78,13 @@ class SearchProvider extends ChangeNotifier {
   late final PagedListController<SourceTrack> _lyricPager;
 
   Timer? _debounceTimer;
-  static const _debounceTime = Duration(milliseconds: 500);
+
+  /// 输入防抖：300ms 是「停止输入到发请求」的折中。
+  ///
+  /// 原值 500ms 在 perf 场景里占首屏搜索墙钟的 90%+（mock 本地音源 1.5ms
+  /// 返回，500ms 全是防抖等待）。300ms 仍能跨过中文输入法的组合键停顿，
+  /// 且在途请求由 pager 的 reset 过期丢弃，不会因为请求变多而闪旧结果。
+  static const _debounceTime = Duration(milliseconds: 300);
 
   SearchProvider(
     this._playbackProvider, {
@@ -388,7 +395,17 @@ class SearchProvider extends ChangeNotifier {
     }
 
     // 防抖：只有最后一次输入会触发搜索；在途请求由 pager 的 reset 过期丢弃。
+    // 计时从本次输入到真正发请求，用来判断「感知慢」里防抖占多少。
+    final debounceWatch =
+        DataPathTrace.enabled ? (Stopwatch()..start()) : null;
     _debounceTimer = Timer(_debounceTime, () {
+      if (debounceWatch != null) {
+        DataPathTrace.record(
+          'search.debounce',
+          debounceWatch.elapsed,
+          fields: () => {'keyword_len': query.length},
+        );
+      }
       performSearch(query);
     });
 
@@ -476,12 +493,22 @@ class SearchProvider extends ChangeNotifier {
     if (catalog == null) {
       throw StateError('音源未初始化');
     }
-    final result = await catalog.search(
-      _sourceKey,
-      SearchQuery(keyword: _pagerQuery, page: page, limit: _searchPageSize),
+    final source = _sourceKey;
+    final result = await DataPathTrace.async(
+      'search.page',
+      () => catalog.search(
+        source,
+        SearchQuery(keyword: _pagerQuery, page: page, limit: _searchPageSize),
+      ),
+      fields: () => {'source': source, 'page': page},
+    );
+    final tracks = DataPathTrace.sync(
+      'search.map',
+      () => [for (final track in result.items) sourceTrackFromTrack(track)],
+      fields: () => {'items': result.items.length},
     );
     return PagedResult(
-      items: [for (final track in result.items) sourceTrackFromTrack(track)],
+      items: tracks,
       hasMore: result.hasMore,
       total: result.total,
     );
