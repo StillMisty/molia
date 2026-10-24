@@ -1,4 +1,4 @@
-/// 同步运行状态持久化：设备身份 / 传输开关 / 传输配置 / 变更登记 / 日志。
+/// 同步运行状态持久化：设备身份 / 传输开关 / 传输配置 / 变更登记 / 名册 / 日志。
 ///
 /// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v2`），字段 ↔
 ///   JSON 的映射在 `sync_state_codec.dart`（本类只管内存状态与写入时机）；
@@ -7,6 +7,8 @@
 /// - 变更登记（设置键哈希、脚本墓碑、激活脚本指针）是「变化检测」的基线：
 ///   settings 写入方分散在多个服务，同步层用「上次登记值 vs 当前值」判定
 ///   本地修改，避免改造全部写入方。
+/// - 名册 / 地址簿 / 端点与轮次流水各有自己的容器（`sync_roster.dart` /
+///   `sync_activity_log.dart`）：这里只拼装持久化快照并决定提交时机。
 /// - 持久化只有一个出口 [commit]：所有写入先改内存并标脏，用户命令 / 轮末
 ///   各自提交一次；轮内逐传输 / 逐对端的记账不落盘（见 `sync_book.dart`）。
 library;
@@ -20,10 +22,11 @@ import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models/device_sync.dart';
-import '../../utils/peer_address.dart';
 import '../settings/settings_secret_store.dart';
 import 'sync_activity.dart';
+import 'sync_activity_log.dart';
 import 'sync_book.dart';
+import 'sync_roster.dart';
 import 'sync_state_codec.dart';
 import 'sync_stamp.dart';
 
@@ -90,7 +93,8 @@ class SyncStateStore
   static const int lanEndpointLimit = SyncStateCodec.lanEndpointLimit;
 
   /// 已验证局域网端点的保留期：超过该时长没再验证过随名册淘汰。
-  static const int lanEndpointRetentionMs = 180 * 24 * 60 * 60 * 1000;
+  static const int lanEndpointRetentionMs =
+      SyncRoster.defaultLanEndpointRetentionMs;
 
   final SharedPreferences? _preferences;
   final SettingsSecretStore _secrets;
@@ -127,11 +131,22 @@ class SyncStateStore
   /// 蜂窝网络下的自动同步策略（默认只同步小类别）。
   SyncCellularPolicy _cellularPolicy = SyncCellularPolicy.auto;
 
-  /// 手动添加的对端地址（局域网发现失败时的兜底）。
-  final List<ManualPeer> _manualPeers = [];
+  /// 对端名册 / 地址簿 / 已验证端点；改动经 [_markDirty] 随下一次提交落盘。
+  ///
+  /// late 初始化才能把实例方法作为回调传入（构造列表里不能引用 this）。
+  late final SyncRoster _roster = SyncRoster(
+    onChanged: _markDirty,
+    peerLimit: peerLimit,
+    lanEndpointLimit: lanEndpointLimit,
+    lanEndpointRetentionMs: lanEndpointRetentionMs,
+  );
 
-  /// 已提示过「首次连通」的设备 id（一次性 UI 提示；见 [markPeerConnectNotified]）。
-  final Set<String> _notifiedPeers = {};
+  /// 轮次流水（日志 / 活动 / 传输成功时间 / 快照发布位置）；改动只标脏。
+  late final SyncActivityLog _activityLog = SyncActivityLog(
+    onChanged: _markDirty,
+    logLimit: logLimit,
+    activityLimit: activityLimit,
+  );
 
   /// 本机局域网快照端点端口（0 = 尚未绑定过）。
   int _lanHttpPort = 0;
@@ -170,35 +185,6 @@ class SyncStateStore
     },
   );
 
-  int _lastSyncAt = 0;
-  final List<SyncLogEntry> _log = [];
-
-  /// 近 24 小时活动记录（新在前；展示日志之外单独保留，供观测面汇总）。
-  final List<SyncActivityEntry> _activity = [];
-
-  /// 每传输最近一次成功接触对端的轮次时间（UI「最后成功于」；0 = 尚未成功过）。
-  final Map<String, int> _transportLastSuccess = {};
-
-  /// 各传输最近成功发布的全量快照覆盖位置（kind → seq；-1 = 尚未发布）。
-  ///
-  /// 日志裁剪不会越过**已发布**的快照覆盖：落后 / 新加入的对端要能 bootstrap。
-  /// 读写都只经发布台账（`publish_ledger.dart`，判据唯一处）。
-  final Map<String, int> _snapshotPushSeq = {};
-
-  /// 刚被用户从本机移除的设备 id：只压住下一次 `recordRound`，防止正在
-  /// 收尾的一轮把已删除的行写回。**不是持久化屏蔽**——设备如果仍在线且
-  /// 持有同步口令，下一轮探测会重新发现它。
-  final Set<String> _forgottenPeers = {};
-
-  /// 设备名册（deviceId → 最近一次接触的观测值）。
-  final Map<String, SyncPeerState> _peers = {};
-
-  /// 已验证的局域网端点（deviceId → 最近一次成功连通的地址 / 端口）。
-  ///
-  /// 广播 / 组播被 AP 隔离或 iOS entitlement 挡住时，靠这里的单播兜底；
-  /// 只在 MAC 验证 + HTTP 解密成功后写入（见 `LanSyncTransport`）。
-  final Map<String, LanPeerEndpoint> _lanEndpoints = {};
-
   @override
   String get deviceId => _deviceId;
 
@@ -220,7 +206,7 @@ class SyncStateStore
 
   /// 手动对端地址簿（去重后不可变）。
   @override
-  List<ManualPeer> get manualPeers => List.unmodifiable(_manualPeers);
+  List<ManualPeer> get manualPeers => _roster.manualPeers;
 
   /// 蜂窝网络下的自动同步策略。
   @override
@@ -246,40 +232,36 @@ class SyncStateStore
 
   @override
   SyncStamp? get sessionStamp => _sessionStamp;
-  int get lastSyncAt => _lastSyncAt;
-  List<SyncLogEntry> get log => List.unmodifiable(_log);
+  int get lastSyncAt => _activityLog.lastSyncAt;
+  List<SyncLogEntry> get log => _activityLog.log;
 
   /// 近 24 小时活动记录（新在前；上限 [activityLimit]）。
-  List<SyncActivityEntry> get activity => List.unmodifiable(_activity);
+  List<SyncActivityEntry> get activity => _activityLog.activity;
 
   /// 名册（按最近接触时间倒序；本机不在其中）。
   @override
-  List<SyncPeerState> get peers =>
-      List.unmodifiable(trimPeers(_peers.values, peerLimit));
+  List<SyncPeerState> get peers => _roster.peers;
 
   /// 已验证的局域网端点（不可变；上限 [lanEndpointLimit]）。
   @override
-  List<LanPeerEndpoint> get lanEndpoints =>
-      List.unmodifiable(_lanEndpoints.values);
+  List<LanPeerEndpoint> get lanEndpoints => _roster.lanEndpoints;
 
   /// 传输最近一次成功接触对端的时间（0 = 尚未成功过）。
-  int transportLastSuccessAt(String kind) => _transportLastSuccess[kind] ?? 0;
+  int transportLastSuccessAt(String kind) =>
+      _activityLog.transportLastSuccessAt(kind);
 
   /// 传输最近成功发布的全量快照覆盖位置（-1 = 尚未发布）。
   ///
   /// 判据（谁在什么条件下读它、失败时是否前移）在发布台账里；这里只是
   /// `sync_state_v2` 的键值与形状。
   @override
-  int snapshotPushSeq(String kind) => _snapshotPushSeq[kind] ?? -1;
+  int snapshotPushSeq(String kind) => _activityLog.snapshotPushSeq(kind);
 
   /// 只改内存 + 标脏：发布台账在推送循环里逐载荷记账，由轮末提交统一落盘
   /// （旧实现每次 mark 都写一次整份状态 JSON，多传输 / 多载荷时写放大）。
   @override
-  void setSnapshotPushSeq(String kind, int seq) {
-    if (_snapshotPushSeq[kind] == seq) return;
-    _snapshotPushSeq[kind] = seq;
-    _markDirty();
-  }
+  void setSnapshotPushSeq(String kind, int seq) =>
+      _activityLog.setSnapshotPushSeq(kind, seq);
 
   void _markDirty() {
     _dirty = true;
@@ -532,15 +514,17 @@ class SyncStateStore
   /// 添加手动对端（同一 host 覆盖：地址簿以地址为身份，学到的信息合并保留）。
   ///
   /// 返回 false 表示该地址已存在（本次按用户输入更新名称与端口）。
-  Future<bool> addManualPeer(ManualPeer peer) =>
-      _upsertManualPeer(peer, overwriteName: true, persist: true);
+  Future<bool> addManualPeer(ManualPeer peer) async {
+    // 空 host 不入簿也不落盘（与旧行为一致）；同址合并仍提交一次。
+    if (peer.host.trim().isEmpty) return false;
+    final added = _roster.addManualPeer(peer);
+    await commit();
+    return added;
+  }
 
   /// 移除手动对端（按地址；仅移除地址簿条目，不影响已发现的对端）。
   Future<void> removeManualPeer(String host) async {
-    final index = _manualPeers.indexWhere((entry) => entry.host == host);
-    if (index < 0) return;
-    _manualPeers.removeAt(index);
-    _markDirty();
+    if (!_roster.removeManualPeer(host)) return;
     await commit();
   }
 
@@ -548,16 +532,10 @@ class SyncStateStore
   ///
   /// **只做本机记录清理，不撤销同步授权**：对方如果仍持有同步口令并在线，
   /// 下一轮探测会重新发现它。真正停止与它同步的唯一方式是更换口令（对
-  /// 所有设备生效）。因此这里不写任何屏蔽 / 忽略标记。
+  /// 所有设备生效）。因此这里不写任何屏蔽 / 忽略标记（单轮抑制在名册内）。
   Future<void> removePeer(String deviceId) async {
     if (deviceId.isEmpty) return;
-    _peers.remove(deviceId);
-    _manualPeers.removeWhere((entry) => entry.deviceId == deviceId);
-    _notifiedPeers.remove(deviceId);
-    _lanEndpoints.remove(deviceId);
-    // 正在收尾的一轮可能带着旧名册快照，压住它一次；下一轮重新发现即恢复。
-    _forgottenPeers.add(deviceId);
-    _markDirty();
+    _roster.removePeer(deviceId);
     await commit();
   }
 
@@ -569,12 +547,8 @@ class SyncStateStore
   /// 成邀请方 / 冲突，旧端点也仍会被当作可信的单播目标。手动地址簿
   /// （host / 端口）是用户配置而非组观察，保留。
   Future<void> resetGroupState() async {
-    _peers.clear();
-    _lanEndpoints.clear();
-    _notifiedPeers.clear();
-    _transportLastSuccess.clear();
-    _forgottenPeers.clear();
-    _markDirty();
+    _roster.resetGroupObservations();
+    _activityLog.resetGroupObservations();
     await commit();
   }
 
@@ -588,25 +562,14 @@ class SyncStateStore
     int? probePort,
     String? name,
   }) async {
-    final index = _manualPeers.indexWhere((entry) => entry.host == fromHost);
-    if (index < 0 || toHost.isEmpty || toHost == fromHost) return;
-    final moved = _manualPeers.removeAt(index).copyWith(
-          host: toHost,
-          probePort: probePort,
-          name: name,
-        );
-    final existing = _manualPeers.indexWhere((entry) => entry.host == toHost);
-    if (existing >= 0) {
-      _manualPeers[existing] = _manualPeers[existing].mergeLearned(
-        httpPort: moved.httpPort > 0 ? moved.httpPort : null,
-        deviceId: moved.deviceId.isNotEmpty ? moved.deviceId : null,
-        name: moved.name.isNotEmpty ? moved.name : null,
-      );
-    } else {
-      // 刚配置的地址排前面：地址簿顺序即探测与展示的优先序。
-      _manualPeers.insert(0, moved);
+    if (!_roster.moveManualPeer(
+      fromHost,
+      toHost: toHost,
+      probePort: probePort,
+      name: name,
+    )) {
+      return;
     }
-    _markDirty();
     await commit();
   }
 
@@ -615,18 +578,13 @@ class SyncStateStore
   /// 学到的对端名只在条目尚未命名时填入：手动条目优先保留用户命名。
   /// 这是轮内接触的副产物：只改内存 + 标脏，随轮末提交落盘。
   Future<void> learnManualPeer(ManualPeer learned) async {
-    await _upsertManualPeer(
-      learned,
-      overwriteName: false,
-      promote: true,
-      persist: false,
-    );
+    _roster.learnManualPeer(learned);
   }
 
   /// 该设备是否已提示过「首次连通」（一次性提示，见 [markPeerConnectNotified]）。
   @override
   bool isPeerConnectNotified(String deviceId) =>
-      _notifiedPeers.contains(deviceId);
+      _roster.isPeerConnectNotified(deviceId);
 
   /// 登记「首次连通」已提示：设备第一次真正交换过数据时只提示一次，
   /// 持久化后重启不重复。
@@ -634,53 +592,8 @@ class SyncStateStore
   /// 只改内存 + 标脏：调用点在引擎轮末（与 `recordRound` 同一次提交），
   /// 不在通知路径上单独写整份状态 JSON。
   @override
-  void markPeerConnectNotified(String deviceId) {
-    if (deviceId.isEmpty || !_notifiedPeers.add(deviceId)) return;
-    _markDirty();
-  }
-
-  /// 地址簿写入的唯一入口：按 host 查找合并（重复地址不新增条目）。
-  ///
-  /// [overwriteName] 是命名策略开关：用户提交同一地址是显式改名，学习路径
-  /// 不覆盖已有命名（对端广播的设备名只填空名）。[promote] 把刚更新过的条目
-  /// 提到最前（地址簿顺序即探测与展示的优先序；仅学习路径需要）。
-  /// 返回 false = 地址已存在。[persist] 区分用户提交（立即落盘）与轮内学习
-  /// （随轮末提交），两者共用同一份合并规则。
-  Future<bool> _upsertManualPeer(
-    ManualPeer peer, {
-    required bool overwriteName,
-    bool promote = false,
-    required bool persist,
-  }) async {
-    final host = peer.host.trim();
-    if (host.isEmpty) return false;
-    final index = _manualPeers.indexWhere((entry) => entry.host == host);
-    if (index >= 0) {
-      final name = peer.name.trim();
-      var merged = _manualPeers[index].mergeLearned(
-        httpPort: peer.httpPort > 0 ? peer.httpPort : null,
-        deviceId: peer.deviceId.isNotEmpty ? peer.deviceId : null,
-        // 学习路径才把对端名填进空名；用户提交走下面的显式改名。
-        name: !overwriteName && peer.name.isNotEmpty ? peer.name : null,
-      );
-      if (overwriteName && name.isNotEmpty) {
-        merged = merged.copyWith(name: name);
-      }
-      if (promote) {
-        _manualPeers.removeAt(index);
-        _manualPeers.insert(0, merged);
-      } else {
-        _manualPeers[index] = merged;
-      }
-      _markDirty();
-      if (persist) await commit();
-      return false;
-    }
-    _manualPeers.add(peer.copyWith(host: host));
-    _markDirty();
-    if (persist) await commit();
-    return true;
-  }
+  void markPeerConnectNotified(String deviceId) =>
+      _roster.markPeerConnectNotified(deviceId);
 
   /// 端口只在绑定成功时写一次（生命周期事件，不是轮内逐对端记账）：立即
   /// 提交，避免对端学到的端口在进程被杀后丢失。
@@ -696,45 +609,7 @@ class SyncStateStore
   /// 只更新内存 + 标脏：每轮每对端成功都会回写一次，这里若自己落盘会让
   /// 多对端一轮写多次大状态 JSON。持久化由引擎轮末的 [commit] 统一完成。
   Future<void> rememberLanEndpoint(LanPeerEndpoint endpoint) async {
-    if (!SyncStateCodec.isValidLanEndpoint(endpoint)) return;
-    final existing = _lanEndpoints[endpoint.deviceId];
-    final next = LanPeerEndpoint(
-      deviceId: endpoint.deviceId,
-      host: normalizePeerHost(endpoint.host),
-      httpPort: endpoint.httpPort,
-      // 新观测没带探测端口时保留已有值：来源端口可能因 NAT / 重启变化，
-      // 旧的持久化端口仍是有效的单播目标。
-      probePort: endpoint.probePort > 0
-          ? endpoint.probePort
-          : (existing?.probePort ?? 0),
-      verifiedAt: endpoint.verifiedAt,
-    );
-    final identityChanged = existing == null ||
-        existing.host != next.host ||
-        existing.httpPort != next.httpPort ||
-        existing.probePort != next.probePort;
-    if (!identityChanged && existing.verifiedAt == next.verifiedAt) return;
-    _lanEndpoints[next.deviceId] = next;
-    _trimLanEndpoints();
-    // 端点身份变化会改变名册淘汰 / 单播目标，仅验证时间前进也要跨重启保留：
-    // 都只标脏，等轮末提交（每轮每对端都会回写，绝不能在这里落盘）。
-    _markDirty();
-  }
-
-  /// 超过 [lanEndpointLimit] 时按 `verifiedAt` 淘汰最旧的端点。
-  void _trimLanEndpoints() {
-    while (_lanEndpoints.length > lanEndpointLimit) {
-      String? oldestId;
-      var oldestAt = 1 << 62;
-      for (final entry in _lanEndpoints.entries) {
-        if (entry.value.verifiedAt < oldestAt) {
-          oldestAt = entry.value.verifiedAt;
-          oldestId = entry.key;
-        }
-      }
-      if (oldestId == null) return;
-      _lanEndpoints.remove(oldestId);
-    }
+    _roster.rememberLanEndpoint(endpoint);
   }
 
   @override
@@ -787,73 +662,12 @@ class SyncStateStore
 
   /// 记录一轮同步结果：日志条目（变更语义）+ 设备名册。
   ///
-  /// 名册由引擎合并后传入（每条都是完整状态），这里只负责内存更新与按最近
-  /// 接触时间淘汰，避免长期运行后无界增长；落盘由引擎在轮末提交一次。
+  /// 日志 / 活动 / 传输成功时间与名册各归其模块；两边都只改内存 + 标脏，
+  /// 落盘由引擎在轮末提交一次。
   @override
   void recordRound(SyncRoundReport report) {
-    _markDirty();
-    _lastSyncAt = report.finishedAt;
-    _log.insert(
-      0,
-      SyncLogEntry(
-        at: report.finishedAt,
-        trigger: report.trigger,
-        outcome: report.outcome,
-        durationMs: report.durationMs,
-        applied: report.applied,
-        peersSeen: report.peersSeen,
-        failed: report.failedCount,
-        bytesIn: report.bytesIn,
-        bytesOut: report.bytesOut,
-        // 本轮启用的传输（未启用的传输不参与本轮）。
-        transports: report.transports
-            .where((t) => t.enabled)
-            .map((t) => t.kind)
-            .toList(),
-        error: report.error,
-      ),
-    );
-    while (_log.length > logLimit) {
-      _log.removeLast();
-    }
-    // 活动记录：观测面的「近 24 小时」不受展示保留量截断。
-    _activity.insert(
-      0,
-      SyncActivityEntry(
-        at: report.finishedAt,
-        bytesIn: report.bytesIn,
-        bytesOut: report.bytesOut,
-        applied: report.applied,
-      ),
-    );
-    while (_activity.length > activityLimit) {
-      _activity.removeLast();
-    }
-    for (final transport in report.transports) {
-      if (transport.enabled && transport.succeeded) {
-        _transportLastSuccess[transport.kind] = report.finishedAt;
-      }
-    }
-    // 用户刚移除的设备：压住本轮的在途快照，避免删除动作被收尾中的一轮
-    // 立刻写回。只影响这一次落库；下一轮重新发现（设备仍在线）会照常写入。
-    final forgotten = Set<String>.of(_forgottenPeers);
-    _forgottenPeers.clear();
-    for (final peer in report.peers) {
-      if (forgotten.contains(peer.deviceId)) continue;
-      _peers[peer.deviceId] = peer;
-    }
-    final recent = trimPeers(_peers.values, peerLimit);
-    _peers
-      ..clear()
-      ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
-    // 180 天没再验证过的端点随名册一起淘汰：换网 / DHCP 变更后旧地址多半
-    // 已失效，留着只会让每轮多试几个连不通的地址。
-    final now = report.finishedAt;
-    _lanEndpoints.removeWhere(
-      (_, endpoint) =>
-          endpoint.verifiedAt > 0 &&
-          now - endpoint.verifiedAt > lanEndpointRetentionMs,
-    );
+    _activityLog.recordRound(report);
+    _roster.recordRound(report);
   }
 
   /// 持久化的唯一出口：把当前内存状态写入 `sync_state_v2`。
@@ -883,31 +697,35 @@ class SyncStateStore
   }
 
   /// 当前内存状态的持久化快照（不可变；JSON 形状由 `SyncStateCodec` 维护）。
-  SyncPersistedState _snapshot() => SyncPersistedState(
-        deviceId: _deviceId,
-        deviceName: _deviceName,
-        categories: _categories,
-        transports: _enabledTransports,
-        webdav: _webdav,
-        cellularPolicy: _cellularPolicy,
-        manualPeers: _manualPeers,
-        notifiedPeers: _notifiedPeers,
-        lanHttpPort: _lanHttpPort,
-        stampBaseline: _stampBaseline,
-        settingStamps: _settingStamps,
-        scriptTombstones: _scriptTombstones,
-        scriptStamps: _scriptStamps,
-        knownScriptIds: _knownScriptIds,
-        activeScriptStamp: _activeScriptStamp,
-        sessionStamp: _sessionStamp,
-        lastSyncAt: _lastSyncAt,
-        transportLastSuccess: _transportLastSuccess,
-        snapshotPushSeq: _snapshotPushSeq,
-        log: _log,
-        activity: _activity,
-        peers: _peers.values.toList(),
-        lanEndpoints: _lanEndpoints.values.toList(),
-      );
+  SyncPersistedState _snapshot() {
+    final roster = _roster.snapshot();
+    final activityLog = _activityLog.snapshot();
+    return SyncPersistedState(
+      deviceId: _deviceId,
+      deviceName: _deviceName,
+      categories: _categories,
+      transports: _enabledTransports,
+      webdav: _webdav,
+      cellularPolicy: _cellularPolicy,
+      manualPeers: roster.manualPeers,
+      notifiedPeers: roster.notifiedPeers,
+      lanHttpPort: _lanHttpPort,
+      stampBaseline: _stampBaseline,
+      settingStamps: _settingStamps,
+      scriptTombstones: _scriptTombstones,
+      scriptStamps: _scriptStamps,
+      knownScriptIds: _knownScriptIds,
+      activeScriptStamp: _activeScriptStamp,
+      sessionStamp: _sessionStamp,
+      lastSyncAt: activityLog.lastSyncAt,
+      transportLastSuccess: activityLog.transportLastSuccess,
+      snapshotPushSeq: activityLog.snapshotPushSeq,
+      log: activityLog.log,
+      activity: activityLog.activity,
+      peers: roster.peers,
+      lanEndpoints: roster.lanEndpoints,
+    );
+  }
 
   /// 把解码出的快照写回内存（整体替换：状态 JSON 是完整视图，不是增量）。
   void _applyState(SyncPersistedState state) {
@@ -921,12 +739,6 @@ class SyncStateStore
       ..addAll(state.transports);
     _webdav = state.webdav;
     _cellularPolicy = state.cellularPolicy;
-    _manualPeers
-      ..clear()
-      ..addAll(state.manualPeers);
-    _notifiedPeers
-      ..clear()
-      ..addAll(state.notifiedPeers);
     _lanHttpPort = state.lanHttpPort;
     _stampBaseline = state.stampBaseline;
     _settingStamps
@@ -943,26 +755,19 @@ class SyncStateStore
       ..addAll(state.knownScriptIds);
     _activeScriptStamp = state.activeScriptStamp;
     _sessionStamp = state.sessionStamp;
-    _lastSyncAt = state.lastSyncAt;
-    _transportLastSuccess
-      ..clear()
-      ..addAll(state.transportLastSuccess);
-    _snapshotPushSeq
-      ..clear()
-      ..addAll(state.snapshotPushSeq);
-    _log
-      ..clear()
-      ..addAll(state.log);
-    _activity
-      ..clear()
-      ..addAll(state.activity);
-    _peers
-      ..clear()
-      ..addEntries(state.peers.map((peer) => MapEntry(peer.deviceId, peer)));
-    _lanEndpoints
-      ..clear()
-      ..addEntries(state.lanEndpoints
-          .map((endpoint) => MapEntry(endpoint.deviceId, endpoint)));
+    _roster.applySnapshot(SyncRosterSnapshot(
+      manualPeers: state.manualPeers,
+      notifiedPeers: state.notifiedPeers,
+      peers: state.peers,
+      lanEndpoints: state.lanEndpoints,
+    ));
+    _activityLog.applySnapshot(SyncActivityLogSnapshot(
+      lastSyncAt: state.lastSyncAt,
+      transportLastSuccess: state.transportLastSuccess,
+      snapshotPushSeq: state.snapshotPushSeq,
+      log: state.log,
+      activity: state.activity,
+    ));
   }
 
   String _generateDeviceId() {
