@@ -232,7 +232,7 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 
 ## 9. 运行时体检（2026-10）
 
-启动之外的帧、交互、内存与体积基线见
+启动之外的帧、交互、数据链路、CPU、内存与体积基线见
 `docs/performance-audit-2026-10.md`；复测入口为 `tool/agent/perf.sh`
-（`frames` / `memory` / `size` / `startup`），Windows 真实窗口帧用
-`tool/agent/perf.sh frames windows --real`。
+（`frames` / `memory` / `size` / `startup` / `data` / `cpu`），Windows
+真实窗口帧用 `tool/agent/perf.sh frames windows --real`。

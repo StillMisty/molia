@@ -293,6 +293,63 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
 
 验证：AI / 歌词 / 全量测试通过；`flutter analyze --no-pub` 无问题。
 
+### 3.3.5 数据链路与 CPU（2026-10-24）
+
+补上 §5 缺的「搜索 / 起播 / 取词 / DB」端到端口径，并新增按线程 CPU 采样。
+mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / 播放链路 / Dart
+开销**，不代表真实音源网络时延。
+
+工具（均可复跑）：
+
+- `tool/agent/perf.sh data linux|android`：`seed.sh mock-source` 注入本地
+  LX 脚本 + 隔离 HOME；首帧后自动跑「搜索 → 点首条 → 起播 → 取词」，
+  输出 `molia.perf` 分项 p50/p95 与 scenario 墙钟。
+- `tool/agent/cpu.sh` / `perf.sh cpu`：Linux 读 `/proc/<pid>/task/*/stat`；
+  root 模拟器同样走 `/proc`（Android 16 的 `top -H` 线程 CPU 恒为 0）；
+  按「平台 / Dart UI / raster / IO / 音频」汇总。
+- 生产埋点仍是 `MOLIA_PERF_TRACE` 编译期开关：新增 `play.start`
+  （resolve / setSource / 首声）、`search.*`、`lyrics.*`、`play.queue`；
+  正常包零开销。
+
+数据（release；Linux = WSLg，Android = x86_64 模拟器）：
+
+| 口径 | 改前 | 改后 |
+| --- | ---: | ---: |
+| 搜索端到端（Linux / mock） | 546ms | **401ms** |
+| ├ 防抖 | 501.6ms | **350.1ms** |
+| ├ 音源搜索 | 1.4ms | 1.5ms |
+| Android 搜索端到端 | — | 449ms（防抖 396ms） |
+| 起播 queue→首声（Linux，暖） | — | 416ms（resolve 5.8 / source 410） |
+| 起播（Android） | — | 363ms（resolve 38.8 / source 322.5 / play 1.6） |
+| 歌词解析 | 0.05–0.15ms | — |
+| 歌词缓存读 | 2–18ms（启动期偶发 424ms，被首帧后初始化挤占） | — |
+| 歌词缓存写 | 25–173ms（含 flush，启动期） | 25–76ms（Android，去 fsync 后；样本少，不宣称收益） |
+
+本轮改动：
+
+1. 搜索防抖 **500 → 300ms**（`search_provider.dart`）。mock 下搜索墙钟
+   −145ms；在途请求仍由 pager 的 reset 过期丢弃，不会因请求变多闪旧结果。
+2. 歌词缓存写入去掉 `flush: true`（`lyrics_cache.dart`）：歌词是可再取的
+   派生数据，临时文件 + rename 仍保证读者只看到完整文件。WSL2 单次 fsync
+   中位仅 0.4ms，而启动期写的 25–173ms 主要来自首帧后初始化的事件循环
+   竞争，**本轮不宣称时延收益**；改动只是去掉弱盘上的不必要落盘等待。
+3. `seed.sh` 支持 root 模拟器直接写应用私有目录（release 包不可 `run-as`），
+   `perf.sh data/cpu android` 才能在 release 产物上跑。
+
+结论 / 否证：
+
+- **CPU 被呈现层主导，未发现 Dart 热点**：Linux 播放时平台线程 ~96%
+  （`perf` 归因 libc `rep movsb`，即窗口呈现拷贝），Dart UI 0.25%；
+  Android 播放时 raster 92.5%、主线程 16.9%、音频 12.2%，Dart worker
+  合计 <1%；Android 空闲进程 ~0.7%。不为数字做盲改。
+- **起播大头是 `setAudioSource`**（Linux 364–878ms 随音频设备冷热波动，
+  Android 77–322ms），不是取链（5–39ms）。继续压需要播放器级预打开 /
+  预加载，属于播放后端改造。
+- **Android 首帧 565–572ms 里的 `sub.mediaSession.activate` 33–491ms**
+  与同轮 `dataSaver/downloadSettings` / `syncState.init` 的 450ms 级尖峰
+  同源：仍是「首个平台通道」在并行任务间落点，不是媒体会话本身。把它
+  后移只会换一个阶段承担，勿重试（延续 §7.1 结论）。
+
 ### 3.4 内存（Windows，本机实测）
 
 | 状态 | 专用工作集 | 提交 |
@@ -341,13 +398,16 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
   取色只留 100px 采样图；同 fixture 从 91.6MB 降到 16.7MB；
 - 本地下载封面的真实数据 A/B（`ResizeImage` 路径已有单测）；
 - 数据路径的高频重载已由 §3.3.2 收口（下载进度 / 本地数据扫描 / 播放快照 /
-  失败取链 / 历史与收藏 / 统计页）；搜索、取链、取词、DB 写入的端到端时延
-  矩阵仍未做，下一步用 `molia.perf` 埋点补同口径 release 数据；
+  失败取链 / 历史与收藏 / 统计页）；搜索 / 起播 / 取词的 mock 口径端到端
+  矩阵已由 §3.3.5 补上（防抖 500→300ms 是主要收益），**真实音源网络 / LX
+  脚本时延与 DB 写入矩阵仍待补**；
 - 生产组合根已把歌词缓存迁到按曲目单文件（`LyricsCache.appSupport()` + 旧
   prefs 懒迁移，目录占用扫描走短命 isolate；默认实例仍走 prefs），待补
   release 口径的前后对比；
 - AI DJ 的找歌已做优先级对冲（§3.3.4），搜索/取链的端到端时延矩阵仍待补；
   `.lxmc` 大文件解码与缓存目录扫描已由 §3.3.3 移出 UI isolate；
+- CPU 基线已由 §3.3.5 补上：WSLg / 模拟器都被呈现层主导，Dart 侧没有
+  可修热点；真实 GPU 桌面与真机数据仍待补，届时先看 raster / 主线程占比；
 - 若目标是降低「触摸到呈现」的延迟，再评估 shader 缓存 / 帧调度；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。
