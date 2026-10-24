@@ -19,6 +19,7 @@ void main() {
     int newId = 42,
     bool includeFavorites = true,
     bool includeHistory = true,
+    bool failCreate = false,
   }) async {
     tester.view.physicalSize = const Size(1200, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -48,6 +49,9 @@ void main() {
                     includeHistory: includeHistory,
                     onCreate: (name) async {
                       createdName = name;
+                      if (failCreate) {
+                        throw StateError('playlist create failed');
+                      }
                       return newId;
                     },
                   );
@@ -130,5 +134,21 @@ void main() {
     expect(createdName, '路上听');
     expect(picked?.kind, AddToPlaylistTargetKind.playlist);
     expect(picked?.playlistId, 42);
+  });
+
+  testWidgets('就地新建失败：留在弹层并提示', (tester) async {
+    await pumpHost(tester, failCreate: true);
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('新建列表'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(M3ETextField), '路上听');
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(picked, isNull);
+    expect(find.text('新建列表'), findsOneWidget, reason: '弹层没有关闭');
   });
 }

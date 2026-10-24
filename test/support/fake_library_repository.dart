@@ -25,6 +25,7 @@ class FakeLibraryRepository implements LibraryStore {
   bool failFavoriteWrites = false;
   bool failHistoryWrites = false;
   bool failPlaylistWrites = false;
+  bool failTrackWrites = false;
 
   /// sync: true —— 变更事件在写入调用栈内同步派发，provider 的重载
   /// Future 在 widget 测试的 fake-async 区内正常完成（否则跨 zone 挂起）。
@@ -233,6 +234,7 @@ class FakeLibraryRepository implements LibraryStore {
     List<PlaylistTrack> tracks, {
     bool favoriteChange = false,
   }) async {
+    if (failTrackWrites) throw StateError('playlist tracks write failed');
     if (tracks.isEmpty) return 0;
     final list = _tracks.putIfAbsent(playlistId, () => []);
     var added = 0;

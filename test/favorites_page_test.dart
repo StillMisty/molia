@@ -1213,6 +1213,30 @@ void main() {
     expect(await repository.listHistory(), isEmpty);
   });
 
+  testWidgets('我的收藏：左滑「加入列表 → 自建列表」失败时不报已加入', (tester) async {
+    await seedFavorites(tester);
+    await importLove(tester);
+    await pumpFavorites(tester);
+
+    await tester.drag(find.text('Song A'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.playlist_add_rounded));
+    await tester.pumpAndSettle();
+
+    repository.failTrackWrites = true;
+    await tester.tap(find.text('love'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(find.text('已加入「love」'), findsNothing);
+    final loveId =
+        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    expect(
+      (await repository.listPlaylistTracks(loveId)).map((t) => t.songId),
+      isNot(contains('Song A')),
+    );
+  });
+
   testWidgets('左滑动作：M3E 胶囊按钮（tonal + filled）与动作名 tooltip', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);

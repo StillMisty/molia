@@ -81,7 +81,15 @@ class _AddToPlaylistSheetState extends State<_AddToPlaylistSheet> {
       existingNames: [for (final playlist in _playlists) playlist.name],
     );
     if (name == null || !mounted) return;
-    final id = await widget.onCreate(name);
+    final int id;
+    try {
+      id = await widget.onCreate(name);
+    } catch (_) {
+      // 新建失败：留在弹层里提示，不返回一个不存在的列表 id。
+      if (!mounted) return;
+      M3ESnackbar.show(context, message: _l10n(context).operationFailed);
+      return;
+    }
     if (!mounted) return;
     // 新建后直接返回该列表：调用方随即把曲目写进去。
     Navigator.of(context).pop(AddToPlaylistSelection.playlist(id));

@@ -39,19 +39,20 @@ Future<bool> addTracksToLibraryTarget(
 
   int added;
   String name;
-  LibraryMutationOutcome? favoriteOrHistoryOutcome;
+  final LibraryMutationOutcome outcome;
   switch (selection.kind) {
     case AddToPlaylistTargetKind.favorites:
       name = l10n.favoritesPlaylistName;
-      favoriteOrHistoryOutcome = await provider.addTracksToFavorites(tracks);
-      added = favoriteOrHistoryOutcome.changed;
+      outcome = await provider.addTracksToFavorites(tracks);
+      added = outcome.changed;
     case AddToPlaylistTargetKind.history:
       name = l10n.libraryHistory;
-      favoriteOrHistoryOutcome = await provider.addTracksToHistory(tracks);
-      added = favoriteOrHistoryOutcome.changed;
+      outcome = await provider.addTracksToHistory(tracks);
+      added = outcome.changed;
     case AddToPlaylistTargetKind.playlist:
       final playlistId = selection.playlistId!;
-      added = await provider.addTracksToPlaylist(playlistId, tracks);
+      outcome = await provider.addTracksToPlaylist(playlistId, tracks);
+      added = outcome.changed;
       // 新建的列表可能尚未进入 provider 缓存，强制刷新后再取显示名。
       await provider.refreshPlaylists();
       if (!context.mounted) return false;
@@ -65,7 +66,7 @@ Future<bool> addTracksToLibraryTarget(
   }
   if (!context.mounted) return false;
   // 写失败不能报「已加入 / 已存在」：目标选择过但没写进去。
-  if (favoriteOrHistoryOutcome?.isFailure ?? false) {
+  if (outcome.isFailure) {
     M3ESnackbar.show(context, message: l10n.operationFailed);
     return false;
   }
