@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/cache_service.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 缓存管理页：音频 / 歌词 / 封面三分区的占用、策略与清理。
@@ -413,10 +414,10 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                       l10n.cacheAudioMaxSuggested(
                         _policyValueLabel(l10n, suggestedMb),
                       ),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
+                      style: context.typeScale.bodySmall.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 12),
                   ],

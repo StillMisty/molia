@@ -24,6 +24,7 @@ import '../providers/library_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
@@ -221,7 +222,7 @@ class _AlbumPageState extends State<AlbumPage> {
           children: [
             Text(
               l10n.albumLoadFailed,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: context.typeScale.bodyLarge,
             ),
             const SizedBox(height: 12),
             M3EButton.filled(
@@ -236,9 +237,9 @@ class _AlbumPageState extends State<AlbumPage> {
       return Center(
         child: Text(
           l10n.albumEmpty,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+          style: context.typeScale.bodyMedium.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -417,14 +418,14 @@ class _AlbumPageState extends State<AlbumPage> {
                   children: [
                     Text(
                       _titleOf(album),
-                      style: theme.textTheme.titleLarge,
+                      style: context.typeScale.titleLarge,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Text(
                       subtitleParts.join(' · '),
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: context.typeScale.bodySmall.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),

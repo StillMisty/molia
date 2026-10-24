@@ -19,6 +19,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../providers/nav_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/window/window_chrome.dart';
+import '../../theme/m3e_context.dart';
 import '../../widgets/global_search_overlay.dart';
 import '../../widgets/molia_mark.dart';
 import '../../widgets/player_morph.dart';
@@ -268,10 +269,8 @@ class _BrandSearchEntry extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  // 品牌位与顶栏应用名同一口径：强调字阶，不手写字重。
+                  style: context.emphasizedTypeScale.titleMedium,
                 ),
               ),
             ],

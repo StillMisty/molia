@@ -19,6 +19,7 @@ import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/haptics.dart';
+import '../../theme/m3e_context.dart';
 import '../../utils/playback_cover_decode.dart';
 import '../../widgets/app_network_image.dart';
 import '../../widgets/cover_appearance.dart';
@@ -202,10 +203,8 @@ class _BarTrackText extends StatelessWidget {
           appTitle,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w600),
+          // 无曲目时底栏显示应用名：与顶栏品牌位同一强调口径。
+          style: context.emphasizedTypeScale.titleMedium,
         ),
       );
     }
@@ -216,14 +215,14 @@ class _BarTrackText extends StatelessWidget {
       children: [
         Text(
           title,
-          style: Theme.of(context).textTheme.titleMedium,
+          style: context.typeScale.titleMedium,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         if (artists != null && artists.isNotEmpty)
           Text(
             artists,
-            style: Theme.of(context).textTheme.labelSmall,
+            style: context.typeScale.labelSmall,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

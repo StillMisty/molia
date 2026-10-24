@@ -15,6 +15,7 @@ import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/card_list_surface.dart';
 
@@ -143,12 +144,12 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
               color: scheme.onSurfaceVariant,
             ),
             const SizedBox(height: 12),
-            Text(l10n.aiDjHistoryEmpty, style: theme.textTheme.titleMedium),
+            Text(l10n.aiDjHistoryEmpty, style: context.typeScale.titleMedium),
             const SizedBox(height: 4),
             Text(
               l10n.aiDjHistoryEmptyHint,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             ),
@@ -205,7 +206,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
               Expanded(
                 child: Text(
                   aiDjUpdatedText(l10n, entry.generatedAt),
-                  style: theme.textTheme.titleSmall,
+                  style: context.typeScale.titleSmall,
                 ),
               ),
               if (active)
@@ -226,7 +227,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                 aiDjOriginText(l10n, entry.origin),
               ),
             ].join(' · '),
-            style: theme.textTheme.bodySmall?.copyWith(
+            style: context.typeScale.bodySmall.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
@@ -236,7 +237,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
               aiDjPreferencesSummary(l10n, entry.preferences!),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
+              style: context.typeScale.labelSmall.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             ),
@@ -296,7 +297,9 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
             else if (_failed.contains(entry.id))
               Text(
                 l10n.aiDjHistoryLoadFailed,
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+                style: context.typeScale.bodySmall.copyWith(
+                  color: scheme.error,
+                ),
               )
             else if (batch != null)
               for (final item in batch.items) ...[
@@ -314,20 +317,20 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(item.track.title,
-                                style: theme.textTheme.bodyMedium),
+                                style: context.typeScale.bodyMedium),
                             Text(
                               [
                                 if (item.track.artistLabel.isNotEmpty)
                                   item.track.artistLabel,
                               ].join(' · '),
-                              style: theme.textTheme.bodySmall?.copyWith(
+                              style: context.typeScale.bodySmall.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
                             ),
                             if (item.source.reason.isNotEmpty)
                               Text(
                                 item.source.reason,
-                                style: theme.textTheme.labelSmall?.copyWith(
+                                style: context.typeScale.labelSmall.copyWith(
                                   color: scheme.onSurfaceVariant,
                                 ),
                               ),

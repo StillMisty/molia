@@ -16,6 +16,7 @@ import '../services/download/download_service.dart';
 import '../services/download/download_settings.dart';
 import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -189,16 +190,16 @@ class DownloadSettingsPage extends StatelessWidget {
                   const SizedBox(height: kSettingsSmallSpacing),
                   Text(
                     l10n.downloadFilenameTemplateHint,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                    style: context.typeScale.bodySmall.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${l10n.downloadFilenamePreview}: $preview',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+                    style: context.typeScale.bodySmall.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),

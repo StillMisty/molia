@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../providers/lyrics_display_provider.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../services/notification_permission.dart';
+import '../../theme/m3e_context.dart';
 import '../../widgets/settings/settings_tiles.dart';
 import 'lyrics_settings_common.dart';
 
@@ -145,10 +146,9 @@ class _SystemMediaLyricsSettingsPageState
                       display.a2dpConnected
                           ? l10n.lyricsBluetoothStatusConnected
                           : l10n.lyricsBluetoothStatusDisconnected,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: scheme.onSurfaceVariant),
+                      style: context.typeScale.bodySmall.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),

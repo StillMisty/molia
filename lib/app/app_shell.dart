@@ -38,6 +38,7 @@ import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
+import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
@@ -1178,14 +1179,14 @@ class _BarTrackInfo extends StatelessWidget {
       children: [
         Text(
           name,
-          style: Theme.of(context).textTheme.titleMedium,
+          style: context.typeScale.titleMedium,
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
         ),
         if (artists != null && artists.isNotEmpty)
           Text(
             artists,
-            style: Theme.of(context).textTheme.labelSmall,
+            style: context.typeScale.labelSmall,
             overflow: TextOverflow.ellipsis,
             maxLines: 1,
           ),
@@ -1206,10 +1207,8 @@ class _AppTitleText extends StatelessWidget {
         title,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(fontWeight: FontWeight.w600),
+        // 应用名是品牌位：用强调字阶，不再手写字重。
+        style: context.emphasizedTypeScale.titleMedium,
       ),
     );
   }

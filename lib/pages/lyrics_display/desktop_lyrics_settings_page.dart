@@ -12,6 +12,7 @@ import '../../services/lyrics_display/lyric_color_resolver.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
 import '../../services/lyrics_display/lyrics_output.dart';
 import '../../theme/app_semantic_colors.dart';
+import '../../theme/m3e_context.dart';
 import '../../theme/scheme_builder.dart';
 import '../../utils/color_hex.dart';
 import '../../widgets/app_color_picker.dart';
@@ -80,12 +81,11 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                       Expanded(
                         child: Text(
                           l10n.lyricsDesktopPermissionNeeded,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  ),
+                          style: context.typeScale.bodySmall.copyWith(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
                         ),
                       ),
                       M3EButton.icon(
@@ -213,9 +213,9 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 2, bottom: 4),
                 child: Text(
                   l10n.lyricsDesktopColorThemeHint,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  style: context.typeScale.bodySmall.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],

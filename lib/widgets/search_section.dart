@@ -11,6 +11,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
 import '../providers/search_provider.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
@@ -230,8 +231,9 @@ class _SearchSectionState extends State<SearchSection> {
               Expanded(
                 child: Text(
                   l10n.searchFailed,
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(color: theme.colorScheme.error),
+                  style: context.typeScale.titleSmall.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ),
               M3EButton.icon(
@@ -251,7 +253,7 @@ class _SearchSectionState extends State<SearchSection> {
                 // 归一化失败的 message（平台/边界给出的可读说明），
                 // 不是原始异常字符串（见 SearchProvider.failure 注释）。
                 searchProvider.failure!.message,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: context.typeScale.bodySmall.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -321,7 +323,7 @@ class _SearchSectionState extends State<SearchSection> {
               hasSelectedSource
                   ? l10n.noResultsFound
                   : l10n.searchNoSourcesTitle,
-              style: theme.textTheme.titleMedium,
+              style: context.typeScale.titleMedium,
             ),
             const SizedBox(height: 8),
             Text(
@@ -329,7 +331,7 @@ class _SearchSectionState extends State<SearchSection> {
                   ? l10n.searchNoResultsInSource(selectedSourceName)
                   : l10n.searchNoSourcesHint,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: context.typeScale.bodyMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

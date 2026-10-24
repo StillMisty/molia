@@ -14,6 +14,7 @@ import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
@@ -650,13 +651,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
     // 标题/作者与全 App 文本契约一致：onSurface / onSurfaceVariant；
     // 强调色只给可交互控件（进度波浪/把手）。
-    final titleStyle = Theme.of(context).textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.bold,
-          color: scheme.onSurface,
-        );
-    final artistStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: scheme.onSurfaceVariant,
-        );
+    final titleStyle = context.emphasizedTypeScale.titleLarge.copyWith(
+      color: scheme.onSurface,
+    );
+    final artistStyle = context.typeScale.bodyMedium.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
 
     if (widget.desktopLayout) {
       return Column(
@@ -757,10 +757,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                       'No track playing',
                   // 迷你条文本与列表页契约一致：标题 onSurface、
                   // 作者 onSurfaceVariant，强调色只给控件。
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
+                  style: context.emphasizedTypeScale.titleMedium.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -769,9 +768,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                       ? _artistsLabel(context, track)
                       : playback.lastPlayedArtists ??
                           _l10n(context).unknownArtist,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  style: context.typeScale.bodyMedium.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

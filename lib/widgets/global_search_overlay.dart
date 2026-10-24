@@ -40,6 +40,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
 import '../utils/duration_text.dart';
 import 'app_search_bar.dart';
 import 'artist_row.dart';
@@ -634,8 +635,9 @@ class _GlobalSearchResults extends StatelessWidget {
               l10n.searchFailed,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(color: theme.colorScheme.error),
+              style: context.typeScale.titleSmall.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
           ),
           M3EButton.icon(
@@ -667,8 +669,9 @@ class _GlobalSearchResults extends StatelessWidget {
           search.hasSelectedSource
               ? l10n.noResultsFound
               : l10n.searchNoSourcesTitle,
-          style: theme.textTheme.bodyMedium
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          style: context.typeScale.bodyMedium.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );

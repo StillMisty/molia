@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/library.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/m3e_context.dart';
 
 /// AppLocalizations 查找：与收藏页同一约定，测试未注册 delegate 时回退中文。
 AppLocalizations _l10n(BuildContext context) =>
@@ -93,7 +94,6 @@ class _AddToPlaylistSheetState extends State<_AddToPlaylistSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    final theme = Theme.of(context);
     // 内置目标（收藏 / 历史） + 新建行 + 自建列表。
     final builtinButtons = <Widget>[
       if (widget.includeFavorites)
@@ -116,7 +116,10 @@ class _AddToPlaylistSheetState extends State<_AddToPlaylistSheet> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-            child: Text(l10n.addToPlaylist, style: theme.textTheme.titleMedium),
+            child: Text(
+              l10n.addToPlaylist,
+              style: context.typeScale.titleMedium,
+            ),
           ),
           Flexible(
             child: ListView(

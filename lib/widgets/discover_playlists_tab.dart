@@ -10,6 +10,7 @@ import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
 import 'empty_state.dart';
 import 'library_cover.dart';
@@ -230,7 +231,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
               child: Text(
                 l10n.discoverAllTags,
-                style: Theme.of(sheetContext).textTheme.titleMedium,
+                style: sheetContext.typeScale.titleMedium,
               ),
             ),
             Expanded(
@@ -242,7 +243,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                       padding: const EdgeInsets.only(top: 8, bottom: 4),
                       child: Text(
                         category.name,
-                        style: Theme.of(sheetContext).textTheme.titleSmall,
+                        style: sheetContext.typeScale.titleSmall,
                       ),
                     ),
                     Wrap(
@@ -416,7 +417,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                 Expanded(
                   child: Text(
                     l10n.discoverLoadFailed,
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                    style: context.typeScale.bodyMedium.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -521,7 +522,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                   children: [
                     Text(
                       playlist.name,
-                      style: theme.textTheme.titleSmall,
+                      style: context.typeScale.titleSmall,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -529,7 +530,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                       const SizedBox(height: 2),
                       Text(
                         subtitle,
-                        style: theme.textTheme.bodySmall?.copyWith(
+                        style: context.typeScale.bodySmall.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                         maxLines: 1,

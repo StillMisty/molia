@@ -10,6 +10,7 @@ import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../theme/app_semantic_colors.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'lyrics_poster_preview_page.dart';
@@ -208,11 +209,11 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
               ),
               child: Text(
                 '${_selectedIndices.length}/15',
-                style: theme.textTheme.labelMedium?.copyWith(
+                style: context.typeScale.labelMedium.copyWith(
                   color: _selectedIndices.length > 15
                       ? AppSemanticColors.of(context).onWarningContainer
                       : theme.colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -346,10 +347,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                                 children: [
                                   Text(
                                     widget.trackTitle,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
+                                    style: context.typeScale.titleMedium
+                                        .copyWith(
                                           // 卡片底为 secondaryContainer：
                                           // 前景必须配 onSecondaryContainer。
                                           color: Theme.of(context)
@@ -362,10 +361,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                                   const SizedBox(height: 4),
                                   Text(
                                     widget.artistName,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
+                                    style: context.typeScale.bodyMedium
+                                        .copyWith(
                                           color: Theme.of(context)
                                               .colorScheme
                                               .onSecondaryContainer
@@ -508,7 +505,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                 : Center(
                     child: Text(
                       l10n.tapToSelectLyrics,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      style: context.typeScale.bodyMedium.copyWith(
                         // 操作引导是次要文本，不用强调色。
                         color: theme.colorScheme.onSurfaceVariant,
                         fontWeight: FontWeight.w700,
@@ -596,7 +593,7 @@ class _LyricTile extends StatelessWidget {
           children: [
             Text(
               line.text,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: context.typeScale.bodyMedium.copyWith(
                 fontSize: 18,
                 color: textColor,
                 fontWeight: FontWeight.w700,

@@ -15,6 +15,7 @@ import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -299,15 +300,15 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
             _sectionTitle(l10n.aiDjSeedsTitle),
             Text(
               l10n.aiDjSeedsHint,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: context.typeScale.bodySmall.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             if (_provider.seeds.isEmpty)
               Text(
                 l10n.aiDjSeedsEmpty,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: context.typeScale.bodySmall,
               )
             else
               Wrap(
@@ -385,10 +386,9 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
       };
 
   Widget _sectionTitle(String title) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 8),
-      child: Text(title, style: theme.textTheme.titleMedium),
+      child: Text(title, style: context.typeScale.titleMedium),
     );
   }
 

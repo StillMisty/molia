@@ -17,6 +17,7 @@ import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
+import '../theme/m3e_context.dart';
 import '../utils/device_id.dart';
 import '../utils/peer_address.dart';
 import '../utils/sync_format.dart';
@@ -140,18 +141,16 @@ Future<void> showSyncPeerDialog(
             if (peer?.lastError != null)
               Text(
                 l10n.syncPeerLastError(syncIssueText(l10n, peer!.lastError!)),
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppSemanticColors.of(context).warning),
+                style: context.typeScale.bodySmall.copyWith(
+                  color: AppSemanticColors.of(context).warning,
+                ),
               ),
             if (lost)
               Text(
                 l10n.syncPeerLostHint,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: AppSemanticColors.of(context).warning),
+                style: context.typeScale.bodySmall.copyWith(
+                  color: AppSemanticColors.of(context).warning,
+                ),
               ),
             if (entries.isNotEmpty) ...[
               const SizedBox(height: kSettingsSmallSpacing),
@@ -178,7 +177,7 @@ Future<void> showSyncPeerDialog(
                 deviceId.isEmpty
                     ? l10n.syncPeerAddressDeleteConfirm
                     : l10n.syncPeerDeleteConfirm,
-                style: Theme.of(context).textTheme.bodySmall,
+                style: context.typeScale.bodySmall,
               ),
             ],
             if (deviceId.isNotEmpty) ...[
@@ -611,7 +610,7 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
                 const SizedBox(height: 8),
                 Text(
                   l10n.syncPeerAlreadyAdded,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: context.typeScale.bodySmall,
                 ),
               ],
               if (_contactError != null) ...[
@@ -628,10 +627,9 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
                     Expanded(
                       child: Text(
                         _contactError!,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: semantic.warning),
+                        style: context.typeScale.bodySmall.copyWith(
+                          color: semantic.warning,
+                        ),
                       ),
                     ),
                   ],

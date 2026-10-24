@@ -14,6 +14,7 @@ import '../services/poster_font_store.dart';
 import '../services/system_fonts_service.dart';
 import '../l10n/app_localizations.dart';
 import '../models/poster_lyric_line.dart';
+import '../theme/m3e_context.dart';
 import '../theme/poster_palette.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
@@ -147,8 +148,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     final ({String? family, List<String>? fallback}) uiFont =
         switch (_posterFontOverride) {
       null => (
-          family: Theme.of(context).textTheme.bodyMedium?.fontFamily,
-          fallback: Theme.of(context).textTheme.bodyMedium?.fontFamilyFallback,
+          family: context.typeScale.bodyMedium.fontFamily,
+          fallback: context.typeScale.bodyMedium.fontFamilyFallback,
         ),
       '' => (
           family: SystemFontsService.platformDefaultFamily,
@@ -437,7 +438,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           const SizedBox(width: 8),
           Text(
             _hexOf(_customSeed),
-            style: Theme.of(context).textTheme.bodyMedium,
+            style: context.typeScale.bodyMedium,
           ),
         ],
       ),
@@ -591,7 +592,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                   const SizedBox(height: 8),
                   Text(
                     AppLocalizations.of(context)!.lyricsFailedToLoad,
-                    style: theme.textTheme.bodyMedium,
+                    style: context.typeScale.bodyMedium,
                   ),
                 ],
               ),
@@ -624,7 +625,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           const SizedBox(height: 16),
           Text(
             AppLocalizations.of(context)!.loadingGenerating,
-            style: theme.textTheme.bodyMedium,
+            style: context.typeScale.bodyMedium,
           ),
         ],
       );
@@ -643,7 +644,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           Text(
             AppLocalizations.of(context)!
                 .posterGenerationFailed(_errorMessage!),
-            style: theme.textTheme.bodyMedium,
+            style: context.typeScale.bodyMedium,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),

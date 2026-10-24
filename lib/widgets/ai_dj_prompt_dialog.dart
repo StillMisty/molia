@@ -12,6 +12,7 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../theme/m3e_context.dart';
 import 'ai_dj_shared.dart';
 
 /// 打开「发送给 AI 的内容」弹窗。
@@ -197,7 +198,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
           Row(
             children: [
               Expanded(
-                child: Text(title, style: theme.textTheme.labelMedium),
+                child: Text(title, style: context.typeScale.labelMedium),
               ),
               if (copy)
                 M3EButton.text(
@@ -210,7 +211,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
           const SizedBox(height: 4),
           SelectableText(
             content,
-            style: theme.textTheme.bodySmall?.copyWith(
+            style: context.typeScale.bodySmall.copyWith(
               fontFamily: 'monospace',
             ),
           ),

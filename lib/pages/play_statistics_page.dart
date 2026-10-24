@@ -26,6 +26,7 @@ import '../providers/library_provider.dart';
 import '../providers/play_statistics_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/statistics/listening_heatmap.dart';
@@ -200,13 +201,13 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
             ),
           ),
           const SizedBox(height: 20),
-          Text(l10n.statsEmpty, style: Theme.of(context).textTheme.titleMedium),
+          Text(l10n.statsEmpty, style: context.typeScale.titleMedium),
           const SizedBox(height: 6),
           Text(
             l10n.statsEmptyHint,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+            style: context.typeScale.bodySmall.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -461,7 +462,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         children: [
           Text(
             l10n.statsSources,
-            style: Theme.of(context).textTheme.titleSmall,
+            style: context.typeScale.titleSmall,
           ),
           const SizedBox(height: 12),
           for (var i = 0; i < sources.length; i++) ...[
@@ -474,7 +475,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
                     _sourceName(sources[i].sourceKey),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium,
+                    style: context.typeScale.labelMedium,
                   ),
                 ),
                 Expanded(
@@ -489,9 +490,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
                 const SizedBox(width: 8),
                 Text(
                   _formatListened(l10n, sources[i].listenedMs),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
+                  style: context.typeScale.labelSmall.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -518,7 +519,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l10n.statsTopTracks,
-            style: Theme.of(context).textTheme.titleMedium),
+            style: context.typeScale.titleMedium),
         const SizedBox(height: 12),
         for (var i = 0; i < tracks.length; i++) ...[
           if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
@@ -548,7 +549,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(l10n.statsTopArtists,
-            style: Theme.of(context).textTheme.titleMedium),
+            style: context.typeScale.titleMedium),
         const SizedBox(height: 12),
         M3ECard(
           variant: M3ECardVariant.filled,
@@ -567,15 +568,15 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
                           artists[i].artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyLarge,
+                          style: context.typeScale.bodyLarge,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Text(
                         l10n.statsPlaysCount(artists[i].playCount),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
+                        style: context.typeScale.labelSmall.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -595,9 +596,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         child: Text(
           '${index + 1}',
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+          style: context.typeScale.labelMedium.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -614,9 +615,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       child: Center(
         child: Text(
           '${index + 1}',
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: scheme.onTertiaryContainer,
-              ),
+          style: context.typeScale.labelSmall.copyWith(
+            color: scheme.onTertiaryContainer,
+          ),
         ),
       ),
     );
@@ -747,7 +748,7 @@ class _StatBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final type = Theme.of(context).textTheme;
+    final type = context.typeScale;
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: 84,
@@ -766,9 +767,9 @@ class _StatBlock extends StatelessWidget {
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: type.titleLarge?.copyWith(
+                    style: type.titleLarge.copyWith(
                       color: scheme.onSurface,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -776,7 +777,7 @@ class _StatBlock extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: type.labelSmall?.copyWith(
+                    style: type.labelSmall.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
@@ -809,11 +810,11 @@ class _RateCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          Text(title, style: context.typeScale.titleSmall),
           const SizedBox(height: 8),
           Text(
             '${(value * 100).round()}%',
-            style: Theme.of(context).textTheme.headlineSmall,
+            style: context.typeScale.headlineSmall,
           ),
           const SizedBox(height: 10),
           _ShareBar(
@@ -887,7 +888,7 @@ class _DayDetailSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Text(
               localizations.formatFullDate(day),
-              style: Theme.of(context).textTheme.titleMedium,
+              style: context.typeScale.titleMedium,
             ),
           ),
           Padding(
@@ -897,9 +898,9 @@ class _DayDetailSheet extends StatelessWidget {
                 detail.playCount,
                 _formatListened(l10n, detail.listenedMs),
               ),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+              style: context.typeScale.bodySmall.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
           ),
           Flexible(

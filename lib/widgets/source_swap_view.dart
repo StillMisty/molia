@@ -8,6 +8,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../providers/source_swap_provider.dart';
+import '../theme/m3e_context.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -96,12 +97,12 @@ class _SourceSwapViewState extends State<SourceSwapView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(l10n.sourceSwap, style: theme.textTheme.titleMedium),
+                Text(l10n.sourceSwap, style: context.typeScale.titleMedium),
                 Text(
                   artist.isEmpty ? seed.title : '${seed.title} · $artist',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
+                  style: context.typeScale.bodySmall.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
@@ -219,7 +220,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
                 Expanded(
                   child: Text(
                     l10n.sourceSwapFailedSources(failed.length),
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    style: context.typeScale.bodySmall.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
@@ -256,7 +257,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
             Text(
               text,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: context.typeScale.bodyMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

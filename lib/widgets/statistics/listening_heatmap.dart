@@ -21,6 +21,8 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 
+import '../../theme/m3e_context.dart';
+
 /// 色阶档位数（0 = 无数据 + 4 档有数据）。
 const int heatmapLevelCount = 5;
 
@@ -313,11 +315,11 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-          fontSize: 10,
-          height: 1.0,
-        );
+    final labelStyle = context.typeScale.labelSmall.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontSize: 10,
+      height: 1.0,
+    );
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
     final levels = _HeatLevels.of(widget.values.values);
     final rowHeight = widget.cellSize + widget.cellGap;
@@ -484,11 +486,11 @@ class WeekdayHourHeatmap extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final labelStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant,
-          fontSize: 10,
-          height: 1.0,
-        );
+    final labelStyle = context.typeScale.labelSmall.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontSize: 10,
+      height: 1.0,
+    );
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
     final levels = _HeatLevels.of([for (final row in values) ...row]);
     const labelWidth = 24.0;

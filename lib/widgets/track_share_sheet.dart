@@ -22,6 +22,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
 import '../services/download/download_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
 import 'track_actions.dart';
@@ -70,9 +71,9 @@ class _TrackShareSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
             child: Text(
               trackIdLabel,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: context.typeScale.bodySmall.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
           M3EListItem(

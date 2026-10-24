@@ -14,6 +14,7 @@ import '../domain/models/sync_nearby_pairing.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
+import '../theme/m3e_context.dart';
 import '../utils/device_id.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_notices.dart';
@@ -208,13 +209,13 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
               Text(
                 l10n.syncNearbyContacting,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
+                style: context.typeScale.bodyMedium,
               ),
             ] else ...[
               Text(
                 l10n.syncNearbyCodeLabel,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.labelMedium?.copyWith(
+                style: context.typeScale.labelMedium.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -223,7 +224,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
                 groupedCode,
                 textAlign: TextAlign.center,
                 semanticsLabel: groupedCode,
-                style: theme.textTheme.displaySmall?.copyWith(
+                style: context.typeScale.displaySmall.copyWith(
                   letterSpacing: 4,
                   color: theme.colorScheme.primary,
                 ),
@@ -232,13 +233,13 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
               Text(
                 l10n.syncNearbyWaiting,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium,
+                style: context.typeScale.bodyMedium,
               ),
               const SizedBox(height: kSettingsSmallSpacing),
               Text(
                 l10n.syncNearbyCheckCode,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: context.typeScale.bodySmall.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -398,7 +399,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
             Text(
               l10n.syncNearbyCodeLabel,
               textAlign: TextAlign.center,
-              style: theme.textTheme.labelMedium?.copyWith(
+              style: context.typeScale.labelMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -407,7 +408,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
               groupedCode,
               textAlign: TextAlign.center,
               semanticsLabel: groupedCode,
-              style: theme.textTheme.displaySmall?.copyWith(
+              style: context.typeScale.displaySmall.copyWith(
                 letterSpacing: 4,
                 color: theme.colorScheme.primary,
               ),
@@ -417,7 +418,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
               invitation
                   ? l10n.syncNearbyIncomingInviteWarning
                   : l10n.syncNearbyIncomingJoinWarning,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: AppSemanticColors.of(context).warning,
               ),
             ),

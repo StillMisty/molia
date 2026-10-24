@@ -3,6 +3,8 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../theme/m3e_context.dart';
+
 /// 空态：图标（40，`onSurfaceVariant`）+ 文案（`bodyMedium`，居中）+
 /// 可选行动。
 ///
@@ -43,7 +45,7 @@ class EmptyState extends StatelessWidget {
         Text(
           message,
           textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
+          style: context.typeScale.bodyMedium.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),

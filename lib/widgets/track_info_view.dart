@@ -18,6 +18,7 @@ import '../services/cache_service.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
 import '../services/track_local_data_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/lyrics_provider_label.dart';
 import '../utils/source_label.dart';
 import '../utils/source_quality_label.dart';
@@ -402,9 +403,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
           Text(
             l10n.trackInfoEmpty,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+            style: context.typeScale.bodyMedium.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),

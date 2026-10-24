@@ -14,6 +14,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../services/escape_claims.dart';
+import '../theme/m3e_context.dart';
 import 'icon_swap.dart';
 
 /// 音量图标按钮 + 弹层。
@@ -171,10 +172,10 @@ class _VolumePanelState extends State<_VolumePanel> {
     final double value = volume.clamp(0.0, 1.0);
     final String percent = l10n.playerBarVolumePercent((value * 100).round());
     // tabular figures：等宽数字，0%→100% 变化时读数宽度不跳。
-    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
-          fontFeatures: const [FontFeature.tabularFigures()],
-          color: scheme.onSurfaceVariant,
-        );
+    final style = context.typeScale.labelSmall.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+      color: scheme.onSurfaceVariant,
+    );
     return Material(
       color: scheme.surfaceContainerHigh,
       elevation: M3EElevation.level4,

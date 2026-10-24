@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../providers/search_provider.dart';
+import '../theme/m3e_context.dart';
 import 'ai_dj_carousel.dart';
 import 'app_search_bar.dart';
 import 'search_section.dart';
@@ -131,7 +132,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
             Text(
               l10n.searchIdleHint,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: context.typeScale.bodyMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

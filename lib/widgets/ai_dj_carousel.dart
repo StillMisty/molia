@@ -32,6 +32,7 @@ import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_page.dart';
 import '../providers/ai_dj_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
@@ -120,7 +121,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                       children: [
                         Text(
                           l10n.aiDjTodayTitle,
-                          style: Theme.of(context).textTheme.titleSmall,
+                          style: context.typeScale.titleSmall,
                         ),
                         const SizedBox(height: 2),
                         ValueListenableBuilder<AiGenerationState>(
@@ -129,12 +130,11 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                             _subtitleText(l10n, provider),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style:
-                                Theme.of(context).textTheme.bodySmall?.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                    ),
+                            style: context.typeScale.bodySmall.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
                           ),
                         ),
                       ],
@@ -254,15 +254,15 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: Theme.of(context).textTheme.titleSmall),
+                  Text(title, style: context.typeScale.titleSmall),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                    style: context.typeScale.bodySmall.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -312,7 +312,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     AiDjBatch batch,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final type = Theme.of(context).textTheme;
+    final type = context.typeScale;
     final desktop = isDesktopPlatform();
     final carousel = M3ECarousel(
       key: const Key('aiDjCarousel'),
@@ -432,7 +432,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               reason,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall,
+              style: context.typeScale.bodySmall,
             ),
           ),
         ],

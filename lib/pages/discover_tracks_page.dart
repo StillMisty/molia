@@ -11,6 +11,7 @@ import '../models/play_mode.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
@@ -224,7 +225,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
           children: [
             Text(
               l10n.discoverLoadFailed,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: context.typeScale.bodyLarge,
             ),
             const SizedBox(height: 12),
             M3EButton.filled(
@@ -240,9 +241,9 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       return Center(
         child: Text(
           l10n.discoverNoContent,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+          style: context.typeScale.bodyMedium.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       );
     }
@@ -402,14 +403,14 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                   children: [
                     Text(
                       info.name.isEmpty ? widget.title : info.name,
-                      style: theme.textTheme.titleLarge,
+                      style: context.typeScale.titleLarge,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Text(
                       subtitleParts.join(' · '),
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: context.typeScale.bodySmall.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -422,7 +423,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
             const SizedBox(height: 12),
             Text(
               info.description!.trim(),
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
               maxLines: 3,

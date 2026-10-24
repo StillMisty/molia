@@ -10,6 +10,7 @@ import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../services/local_endpoints_service.dart';
+import '../theme/m3e_context.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_labels.dart';
 import 'sync_notices.dart';
@@ -347,12 +348,12 @@ Future<void> showSyncPassphraseDialog(
           children: [
             SelectableText(
               passphrase,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             Text(
               l10n.syncPassphraseTrustHint,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: context.typeScale.bodySmall,
             ),
           ],
         ),
@@ -520,7 +521,7 @@ Future<void> showSyncLocalAddressesDialog(
               else ...[
                 Text(
                   l10n.syncLocalAddressesHint,
-                  style: Theme.of(context).textTheme.bodySmall,
+                  style: context.typeScale.bodySmall,
                 ),
                 const SizedBox(height: kSettingsSmallSpacing),
                 for (final endpoint in endpoints)

@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/collection_presenter.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'swipe_reveal_row.dart';
 import 'track_actions_menu.dart';
@@ -233,7 +234,7 @@ class CollectionSearchEmpty extends StatelessWidget {
     return Center(
       child: Text(
         message,
-        style: theme.textTheme.bodyMedium?.copyWith(
+        style: context.typeScale.bodyMedium.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../theme/m3e_context.dart';
 import '../utils/duration_text.dart';
 import 'seek_preview.dart';
 
@@ -67,12 +68,12 @@ class SeekBar extends StatelessWidget {
 
   /// tabular figures：等宽数字避免每秒文本宽度变化把滑杆左右推挤。
   TextStyle? _labelStyle(BuildContext context, {required bool faint}) {
-    final TextStyle? base = Theme.of(context).textTheme.labelSmall?.copyWith(
+    final TextStyle base = context.typeScale.labelSmall.copyWith(
       fontFeatures: const [FontFeature.tabularFigures()],
     );
     if (!faint) return base;
     // 读数不该与滑杆抢注意力：比默认 labelSmall 更淡一档。
-    return base?.copyWith(
+    return base.copyWith(
       color: Theme.of(context)
           .colorScheme
           .onSurfaceVariant

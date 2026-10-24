@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/comment.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
+import '../theme/m3e_context.dart';
 import 'app_network_image.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -121,7 +122,7 @@ class CommentListView extends StatelessWidget {
           children: [
             Text(
               l10n.commentsLoadMoreFailed,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -143,7 +144,7 @@ class CommentListView extends StatelessWidget {
         child: Center(
           child: Text(
             l10n.commentsNoMore,
-            style: theme.textTheme.bodySmall?.copyWith(
+            style: context.typeScale.bodySmall.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
@@ -197,8 +198,8 @@ class CommentRow extends StatelessWidget {
                         comment.authorName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
+                        style: context.typeScale.labelLarge.copyWith(
+                          fontWeight: FontWeight.w700,
                           color: scheme.onSurface,
                         ),
                       ),
@@ -218,7 +219,7 @@ class CommentRow extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   comment.text,
-                  style: theme.textTheme.bodyMedium?.copyWith(
+                  style: context.typeScale.bodyMedium.copyWith(
                     color: scheme.onSurface,
                     height: 1.35,
                   ),
@@ -236,7 +237,7 @@ class CommentRow extends StatelessWidget {
   /// 时间 + IP 归属（两者都缺时不占行）。
   Widget _buildMeta(BuildContext context, AppLocalizations l10n) {
     final theme = Theme.of(context);
-    final style = theme.textTheme.bodySmall?.copyWith(
+    final style = context.typeScale.bodySmall.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
     final time = comment.createdAt;
@@ -279,7 +280,10 @@ class _LikedCount extends StatelessWidget {
       children: [
         Icon(Icons.thumb_up_rounded, size: 13, color: color),
         const SizedBox(width: 3),
-        Text('$count', style: theme.textTheme.labelSmall?.copyWith(color: color)),
+        Text(
+          '$count',
+          style: context.typeScale.labelSmall.copyWith(color: color),
+        ),
       ],
     );
   }
@@ -308,14 +312,14 @@ class _QuotedComment extends StatelessWidget {
           children: [
             TextSpan(
               text: l10n.commentsQuotedAuthor(comment.authorName),
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w700,
               ),
             ),
             TextSpan(
               text: comment.text,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             ),
@@ -348,7 +352,7 @@ class _EmptyState extends StatelessWidget {
             Text(
               text,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: context.typeScale.bodyMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -384,7 +388,7 @@ class _ErrorState extends StatelessWidget {
             Text(
               l10n.commentsLoadFailed,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium?.copyWith(
+              style: context.typeScale.bodyMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

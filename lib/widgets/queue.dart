@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'track_actions_menu.dart';
 import 'track_menu_tile.dart';
@@ -173,9 +174,9 @@ class QueueDisplay extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4, bottom: 6),
       child: Text(
         text,
-        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+        style: context.typeScale.labelMedium.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }

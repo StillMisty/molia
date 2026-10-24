@@ -11,6 +11,7 @@ import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
+import '../theme/m3e_context.dart';
 import '../utils/device_id.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_advanced_page.dart';
@@ -607,7 +608,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           Expanded(
             child: Text(
               l10n.syncLanPermissionNeeded,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),

@@ -1007,9 +1007,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       curve: Curves.easeOutCubic,
                       style: lineBaseStyle.copyWith(
                         fontSize: lyricFontSize,
+                        // M3E 没有 w600 档：当前行 w700、其余 w500，
+                        // 保留「高亮行更重」的两级对照（原来 w700/w600）。
                         fontWeight: isCurrentLine
                             ? FontWeight.w700
-                            : FontWeight.w600,
+                            : FontWeight.w500,
                         color: baseTextColor,
                         height: 1.1,
                       ),

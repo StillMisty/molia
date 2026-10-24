@@ -31,6 +31,7 @@ import '../services/download/download_service.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/track_local_data_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
@@ -633,9 +634,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
             padding: const EdgeInsets.only(top: kSettingsSectionSpacing / 2),
             child: Text(
               l10n.trackCacheEmpty,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+              style: context.typeScale.bodySmall.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         Padding(

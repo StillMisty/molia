@@ -4,6 +4,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
+import '../theme/m3e_context.dart';
 
 /// 解析 Hex 颜色（输入框与单测共用）。
 ///
@@ -243,10 +244,9 @@ class _ColorPickerContentState extends State<_ColorPickerContent> {
               Expanded(child: Text(label)),
               Text(
                 valueLabel,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: scheme.onSurfaceVariant),
+                style: context.typeScale.bodyMedium.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),

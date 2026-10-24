@@ -24,6 +24,7 @@ import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/track_local_data_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../utils/collection_row_query.dart';
@@ -737,7 +738,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
               child: Text(
                 l10n.libraryImportFavorites,
-                style: Theme.of(sheetContext).textTheme.titleMedium,
+                style: sheetContext.typeScale.titleMedium,
               ),
             ),
             for (final item in choices)
@@ -1211,10 +1212,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
                       Flexible(
                         child: Text(
                           view.displayName,
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.4,
-                          ),
+                          // 强调字阶自带字重；字距保持合集标题的收紧口径。
+                          style: context.emphasizedTypeScale.headlineSmall
+                              .copyWith(letterSpacing: -0.4),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -1338,10 +1338,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
                     Flexible(
                       child: Text(
                         view.displayName,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.4,
-                        ),
+                        style: context.emphasizedTypeScale.headlineSmall
+                            .copyWith(letterSpacing: -0.4),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1362,7 +1360,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             padding: const EdgeInsets.only(left: 17),
             child: Text(
               l10n.playlistReorderHint,
-              style: theme.textTheme.labelMedium?.copyWith(
+              style: context.typeScale.labelMedium.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -1630,9 +1628,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           softWrap: false,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+          style: context.typeScale.labelSmall.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
       _ => null,
     };
@@ -1983,7 +1981,6 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    final theme = Theme.of(context);
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1995,7 +1992,10 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
             child: Row(
               children: [
                 Expanded(
-                  child: Text(widget.title, style: theme.textTheme.titleMedium),
+                  child: Text(
+                    widget.title,
+                    style: context.typeScale.titleMedium,
+                  ),
                 ),
                 // 这是两个工具动作（新建 / 导入）。docs/architecture.md §6 的
                 // 目标是收成 icon-only 动作组，但当前依赖版本

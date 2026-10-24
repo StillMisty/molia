@@ -25,6 +25,7 @@ import '../providers/ai_dj_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/ai_dj_prompt_dialog.dart';
 import '../widgets/ai_dj_shared.dart';
@@ -132,7 +133,7 @@ class _AiDjPageState extends State<AiDjPage> {
     final scheme = theme.colorScheme;
     return Row(
       children: [
-        Text(title, style: theme.textTheme.titleMedium),
+        Text(title, style: context.typeScale.titleMedium),
         if (caption != null) ...[
           const SizedBox(width: 8),
           Expanded(
@@ -140,7 +141,7 @@ class _AiDjPageState extends State<AiDjPage> {
               caption,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium?.copyWith(
+              style: context.typeScale.labelMedium.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             ),
@@ -176,11 +177,11 @@ class _AiDjPageState extends State<AiDjPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l10n.aiDjToggle, style: theme.textTheme.titleMedium),
+                    Text(l10n.aiDjToggle, style: context.typeScale.titleMedium),
                     const SizedBox(height: 2),
                     Text(
                       l10n.aiDjToggleSubtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: context.typeScale.bodySmall.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
                     ),
@@ -190,7 +191,7 @@ class _AiDjPageState extends State<AiDjPage> {
               const SizedBox(width: 8),
               Text(
                 statusText,
-                style: theme.textTheme.labelMedium?.copyWith(
+                style: context.typeScale.labelMedium.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),
@@ -208,7 +209,7 @@ class _AiDjPageState extends State<AiDjPage> {
           const SizedBox(height: 8),
           Text(
             l10n.aiDjQueued(provider.queuedCount),
-            style: theme.textTheme.labelSmall?.copyWith(
+            style: context.typeScale.labelSmall.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
@@ -222,7 +223,7 @@ class _AiDjPageState extends State<AiDjPage> {
               Expanded(
                 child: Text(
                   aiDjFailureText(l10n, provider.lastError!),
-                  style: theme.textTheme.bodySmall,
+                  style: context.typeScale.bodySmall,
                 ),
               ),
               M3EButton.icon(
@@ -246,7 +247,7 @@ class _AiDjPageState extends State<AiDjPage> {
               Expanded(
                 child: Text(
                   l10n.aiDjAutoFeedFailed,
-                  style: theme.textTheme.bodySmall,
+                  style: context.typeScale.bodySmall,
                 ),
               ),
             ],
@@ -262,7 +263,7 @@ class _AiDjPageState extends State<AiDjPage> {
               Expanded(
                 child: Text(
                   l10n.aiDjAutoFeedHalted(provider.autoFeedFailures),
-                  style: theme.textTheme.bodySmall,
+                  style: context.typeScale.bodySmall,
                 ),
               ),
               M3EButton.text(
@@ -297,14 +298,14 @@ class _AiDjPageState extends State<AiDjPage> {
                 children: [
                   Text(
                     l10n.aiDjPreferencesTitle,
-                    style: theme.textTheme.titleSmall,
+                    style: context.typeScale.titleSmall,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     aiDjPreferencesSummary(l10n, provider.preferences),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    style: context.typeScale.bodySmall.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
@@ -431,7 +432,7 @@ class _AiDjPageState extends State<AiDjPage> {
             Expanded(
               child: Text(
                 l10n.aiDjUnresolved(batch.unresolved.length),
-                style: theme.textTheme.labelMedium?.copyWith(
+                style: context.typeScale.labelMedium.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),
@@ -447,7 +448,7 @@ class _AiDjPageState extends State<AiDjPage> {
         for (final item in batch.unresolved.take(10))
           Text(
             '· ${item.label}',
-            style: theme.textTheme.bodySmall?.copyWith(
+            style: context.typeScale.bodySmall.copyWith(
               color: scheme.onSurfaceVariant,
             ),
           ),
@@ -467,12 +468,12 @@ class _AiDjPageState extends State<AiDjPage> {
       children: [
         Text(
           l10n.aiDjEmptyList,
-          style: theme.textTheme.titleSmall,
+          style: context.typeScale.titleSmall,
         ),
         const SizedBox(height: 4),
         Text(
           l10n.aiDjEmptyListHint,
-          style: theme.textTheme.bodySmall?.copyWith(
+          style: context.typeScale.bodySmall.copyWith(
             color: scheme.onSurfaceVariant,
           ),
         ),
@@ -524,7 +525,7 @@ class _AiDjPageState extends State<AiDjPage> {
         const SizedBox(height: 8),
         Text(
           l10n.aiDjFeedbackMemory,
-          style: Theme.of(context).textTheme.labelMedium,
+          style: context.typeScale.labelMedium,
         ),
         const SizedBox(height: 6),
         Wrap(
@@ -550,7 +551,7 @@ class _AiDjPageState extends State<AiDjPage> {
         const SizedBox(height: 8),
         Text(
           l10n.aiDjFeedbackThisRound,
-          style: Theme.of(context).textTheme.labelMedium,
+          style: context.typeScale.labelMedium,
         ),
         const SizedBox(height: 6),
         Wrap(
@@ -584,7 +585,7 @@ class _AiDjPageState extends State<AiDjPage> {
         const SizedBox(height: 8),
         Text(
           l10n.aiDjSeedsTitle,
-          style: Theme.of(context).textTheme.labelMedium,
+          style: context.typeScale.labelMedium,
         ),
         const SizedBox(height: 6),
         Wrap(
@@ -626,14 +627,14 @@ class _AiDjPageState extends State<AiDjPage> {
                 children: [
                   Text(
                     l10n.aiDjViewPrompt,
-                    style: theme.textTheme.titleSmall,
+                    style: context.typeScale.titleSmall,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     l10n.aiDjPromptPrivacyHint,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    style: context.typeScale.bodySmall.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
@@ -764,21 +765,21 @@ class _AiDjPageState extends State<AiDjPage> {
     if (config == null) {
       return Text(
         l10n.aiDjNotConfigured,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
+        style: context.typeScale.bodySmall.copyWith(
+          color: scheme.onSurfaceVariant,
+        ),
       );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(config.baseUrl, style: Theme.of(context).textTheme.bodyMedium),
+        Text(config.baseUrl, style: context.typeScale.bodyMedium),
         const SizedBox(height: 4),
         Text(
           '${config.model} · ${config.maskedApiKey}',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+          style: context.typeScale.bodySmall.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
         ),
       ],
     );
@@ -1060,7 +1061,7 @@ class _GenerationCardState extends State<_GenerationCard> {
                   children: [
                     Text(
                       l10n.aiDjGenerationStatus,
-                      style: theme.textTheme.titleSmall,
+                      style: context.typeScale.titleSmall,
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -1068,7 +1069,7 @@ class _GenerationCardState extends State<_GenerationCard> {
                         aiDjPhaseText(l10n, progress),
                         l10n.aiDjWaitingSeconds(seconds),
                       ].join(' · '),
-                      style: theme.textTheme.bodySmall?.copyWith(
+                      style: context.typeScale.bodySmall.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
                     ),

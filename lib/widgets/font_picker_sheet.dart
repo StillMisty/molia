@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/system_fonts_service.dart';
+import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
 import 'card_list_surface.dart';
 
@@ -122,7 +123,10 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-            child: Text(widget.title, style: theme.textTheme.titleMedium),
+            child: Text(
+              widget.title,
+              style: context.typeScale.titleMedium,
+            ),
           ),
           // 字体较多时（iOS 等）提供搜索，避免长列表滚动找字体。
           if (families != null && families.length > 15)
@@ -145,7 +149,7 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
                   padding: const EdgeInsets.all(24),
                   child: Text(
                     l10n.fontPickerEmpty,
-                    style: theme.textTheme.bodyMedium?.copyWith(
+                    style: context.typeScale.bodyMedium.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),

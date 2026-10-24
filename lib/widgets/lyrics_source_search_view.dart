@@ -14,6 +14,7 @@ import '../services/lyrics/lrclib_provider.dart';
 import '../services/lyrics/netease_provider.dart';
 import '../services/lyrics/lyrics_match.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
 
 final _logger = Logger('molia.lyrics_source_search_view');
@@ -422,7 +423,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
                     child: Text(
                       l10n.searchHint,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.titleMedium?.copyWith(
+                      style: context.typeScale.titleMedium.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -455,7 +456,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
                     child: Text(
                       l10n.noResultsFound,
                       textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge?.copyWith(
+                      style: context.typeScale.bodyLarge.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
@@ -508,7 +509,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
           else if (state == ProviderSearchState.loaded && results.isEmpty)
             Text(
               l10n.noResultsFound,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: context.typeScale.bodySmall.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             )

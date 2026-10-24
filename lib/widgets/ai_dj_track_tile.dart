@@ -6,6 +6,7 @@ import '../domain/models/ai_dj.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'library_cover.dart';
@@ -99,10 +100,10 @@ class AiDjTrackTile extends StatelessWidget {
                   track.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyLarge?.copyWith(
+                  style: context.typeScale.bodyLarge.copyWith(
                     // 强调色只给「正在播放」这一状态。
                     color: isCurrent ? scheme.primary : scheme.onSurface,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if (artist.isNotEmpty)
@@ -110,14 +111,14 @@ class AiDjTrackTile extends StatelessWidget {
                     artist,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    style: context.typeScale.bodySmall.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),
                 if (replacing)
                   Text(
                     AppLocalizations.of(context)!.aiDjReplacing,
-                    style: theme.textTheme.labelSmall?.copyWith(
+                    style: context.typeScale.labelSmall.copyWith(
                       color: scheme.primary,
                     ),
                   ),
@@ -127,7 +128,7 @@ class AiDjTrackTile extends StatelessWidget {
                     reason,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
+                    style: context.typeScale.bodySmall.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
                   ),

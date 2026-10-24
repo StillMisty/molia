@@ -18,6 +18,7 @@ import '../services/data_saver_service.dart';
 import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
 import '../services/source_swap/source_swap_settings.dart';
+import '../theme/m3e_context.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/color_hex.dart';
 import '../utils/data_saver_subtitle.dart';
@@ -889,9 +890,9 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+        style: context.typeScale.bodyMedium.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
       ),
     );
   }
