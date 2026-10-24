@@ -31,14 +31,14 @@ void main() {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: TrackRow(
-                  title: 'Title',
-                  columns: TrackRowColumns(
-                    spec: spec,
-                    artist: 'Col Artist',
+                  model: const TrackRowModel(
+                    title: 'Title',
+                    artistNames: ['Col Artist'],
                     album: 'Col Album',
                     time: '10-18',
-                    duration: '3:05',
+                    durationMs: 185000,
                   ),
+                  surface: TrackRowSurface(tableSpec: spec),
                   position: M3ECardPosition.first,
                   onTap: () {},
                 ),

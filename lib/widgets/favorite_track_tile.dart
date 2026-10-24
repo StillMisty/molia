@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../providers/library_provider.dart';
-import '../utils/duration_text.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
@@ -15,8 +14,9 @@ import 'track_row.dart';
 /// 专辑页共用 [FavoriteTrackTile.track]：
 /// - [FavoriteTrackTile.track]：领域曲目（歌手页 / 专辑页），标题 / 歌手
 ///   标签（[Track.artistLabel]）/ 封面 / 时长全部取领域值；
-/// - 默认构造：Map 域条目，行内容与收藏源由调用方注入（`favoriteOf` 里做
-///   `context.select`）；搜索结果行因表格列版式自建 [TrackRow]，不走本层。
+/// - 默认构造：行数据（[TrackRowModel]）与收藏源由调用方注入（`favoriteOf`
+///   里做 `context.select`）；搜索结果行因表格列版式自建 [TrackRow]，不走
+///   本层。
 ///
 /// 收藏态一律在本组件 build 里 `select`（每行一个订阅）；不能挪到
 /// SliverList 的 itemBuilder 中直接 select（会整表重建并触发断言）。
@@ -30,14 +30,19 @@ class FavoriteTrackTile extends StatelessWidget {
     required VoidCallback onTap,
     required VoidCallback onToggleFavorite,
     required VoidCallback onAddToPlaylist,
+    TrackRowSurface surface = const TrackRowSurface(),
   }) {
     return FavoriteTrackTile(
       key: key,
-      title: track.title,
-      artist: track.artistLabel,
-      coverUrl: track.artwork?.uri.toString() ?? fallbackCoverUrl,
-      trailingText: durationText(track.duration?.inMilliseconds),
-      trackId: track.id,
+      row: TrackRowModel(
+        title: track.title,
+        artist: track.artistLabel,
+        coverUrl: track.artwork?.uri.toString() ?? fallbackCoverUrl,
+        durationMs: track.duration?.inMilliseconds,
+        album: track.album ?? '',
+        trackId: track.id,
+      ),
+      surface: surface,
       position: position,
       onTap: onTap,
       favoriteOf: (context) => favoriteOfTrack(context, track),
@@ -46,38 +51,26 @@ class FavoriteTrackTile extends StatelessWidget {
     );
   }
 
-  /// 通用构造：行内容与收藏源由调用方注入（搜索结果等 Map 域适配层）。
+  /// 通用构造：行数据与收藏源由调用方注入。
   const FavoriteTrackTile({
     super.key,
-    required this.title,
-    required this.artist,
-    this.artists,
-    this.coverUrl,
-    this.trailingText,
-    this.trackId,
+    required this.row,
     required this.position,
+    this.surface = const TrackRowSurface(),
     this.onTap,
     required this.favoriteOf,
     required this.onToggleFavorite,
     required this.onAddToPlaylist,
   });
 
-  final String title;
-  final String artist;
-
-  /// 逐名可点的歌手（搜索结果行传入；空则退化为纯文本 [artist]）。
-  final List<TrackRowArtist>? artists;
-
-  final String? coverUrl;
-
-  /// 行尾元信息（时长）；未知传 null 不占位。
-  final String? trailingText;
-
-  /// 行身份：传入后逐行订阅当前曲目状态（领域曲目构造固定传 [Track.id]）。
-  final TrackId? trackId;
+  /// 行数据（标题 / 歌手 / 封面 / 时长 / 当前曲目身份）。
+  final TrackRowModel row;
 
   /// 列表内位置（首末行外侧圆角）。
   final M3ECardPosition position;
+
+  /// 列表表面的呈现口径（表格规范 / 封面尺寸 / 勾选策略）。
+  final TrackRowSurface surface;
 
   /// 点击整行；null 为不可点（如缺少可播放曲目的结果项）。
   final VoidCallback? onTap;
@@ -94,12 +87,8 @@ class FavoriteTrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TrackMenuTile(
-      title: title,
-      artist: artist,
-      artists: artists,
-      coverUrl: coverUrl,
-      trailingText: trailingText,
-      trackId: trackId,
+      row: row,
+      surface: surface,
       position: position,
       onTap: onTap,
       favorite: favoriteOf(context),

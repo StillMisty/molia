@@ -29,8 +29,7 @@ void main() {
         home: Scaffold(
           body: Center(
             child: TrackMenuTile(
-              title: 'Title',
-              artist: 'Artist',
+              row: const TrackRowModel(title: 'Title', artist: 'Artist'),
               position: M3ECardPosition.single,
               onTap: () {},
               favorite: false,

@@ -113,10 +113,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
 
-    final item = provider.searchResults['tracks']!.first;
+    final item = provider.searchResults.first;
     final current = Track(
-      id: TrackId(item['source'] as String, item['id'] as String),
-      title: item['name'] as String,
+      id: item.id,
+      title: item.title,
       origin: TrackOrigin.builtin,
     );
     backend.emit(BackendSnapshot(

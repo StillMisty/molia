@@ -63,7 +63,9 @@ Future<void> pumpTrackList(
       keyOf: keyOf ?? (row) => ValueKey<String>('row-$row'),
       empty: empty ?? const Text('空'),
       onReorder: onReorder,
-      tableColumns: tableColumns,
+      surface: TrackRowSurface(
+        tableSpec: tableColumns ? TrackRowColumnSpec.standard : null,
+      ),
       itemBuilder: (context, row, index) => Text('行 $row'),
     ),
   );
@@ -157,17 +159,17 @@ void main() {
         Column(
           children: [
             CollectionTrackRow(
-              title: '无动作',
+              row: const TrackRowModel(title: '无动作'),
               position: M3ECardPosition.first,
               actions: null,
             ),
             CollectionTrackRow(
-              title: '有空列表',
+              row: const TrackRowModel(title: '有空列表'),
               position: M3ECardPosition.middle,
               actions: const [],
             ),
             CollectionTrackRow(
-              title: '有动作',
+              row: const TrackRowModel(title: '有动作'),
               position: M3ECardPosition.last,
               actions: [
                 RowAction(
@@ -191,7 +193,7 @@ void main() {
       await pumpHost(
         tester,
         CollectionTrackRow(
-          title: '有动作',
+          row: const TrackRowModel(title: '有动作'),
           position: M3ECardPosition.single,
           actions: [
             RowAction(
@@ -239,7 +241,7 @@ void main() {
       await pumpHost(
         tester,
         CollectionTrackRow(
-          title: '无动作',
+          row: const TrackRowModel(title: '无动作'),
           position: M3ECardPosition.single,
           onTap: () => taps++,
           actions: const [],
@@ -268,18 +270,20 @@ void main() {
       await pumpHost(
         tester,
         CollectionTrackRow(
-          title: 'Song',
-          artist: 'Artist',
-          trailingText: '3:00',
+          row: const TrackRowModel(
+            title: 'Song',
+            artist: 'Artist',
+            trailingText: '3:00',
+            selected: true,
+          ),
           trailing: const Icon(Icons.drag_handle_rounded),
           position: M3ECardPosition.single,
-          selected: true,
         ),
       );
 
       final row = tester.widget<TrackRow>(find.byType(TrackRow));
-      expect(row.selected, isTrue);
-      expect(row.trailingText, '3:00');
+      expect(row.model.selected, isTrue);
+      expect(row.model.trailingText, '3:00');
       expect(row.trailing, isA<Icon>());
       expect(find.byIcon(Icons.drag_handle_rounded), findsOneWidget);
     });

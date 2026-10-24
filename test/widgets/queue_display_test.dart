@@ -142,15 +142,16 @@ void main() {
     expect(find.text('接下来'), findsNothing);
     final titles = tester
         .widgetList<TrackRow>(find.byType(TrackRow))
-        .map((row) => row.title)
+        .map((row) => row.model.title)
         .toList();
     expect(titles, ['Title a', 'Title b']);
 
     final currentRow = tester
         .widgetList<TrackRow>(find.byType(TrackRow))
-        .firstWhere((row) => row.title == 'Title a');
-    expect(currentRow.selected, isTrue, reason: '当前曲目行高亮');
-    expect(currentRow.showCheckWhenSelected, isFalse, reason: '高亮不翻选中勾');
+        .firstWhere((row) => row.model.title == 'Title a');
+    expect(currentRow.model.selected, isTrue, reason: '当前曲目行高亮');
+    expect(currentRow.surface.showCheckWhenSelected, isFalse,
+        reason: '高亮不翻选中勾');
     expect(currentRow.onTap, isNull, reason: '当前曲目行不可点');
 
     await drainThrottle(tester);
@@ -255,7 +256,7 @@ void main() {
 
     final titles = tester
         .widgetList<TrackRow>(find.byType(TrackRow))
-        .map((row) => row.title)
+        .map((row) => row.model.title)
         .toList();
     expect(titles, ['Title d', 'Title c', 'Title b']);
 
