@@ -28,6 +28,7 @@ import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
 import '../widgets/track_row.dart';
 
@@ -293,35 +294,14 @@ class _AlbumPageState extends State<AlbumPage> {
     List<Track> tracks,
   ) {
     final track = tracks[index];
-    final l10n = _l10n(context);
     return FavoriteTrackTile.track(
       track: track,
       fallbackCoverUrl: album.coverUrl,
       position: calculateCardPosition(index, tracks.length),
       onTap: () => _playFrom(index),
-      onToggleFavorite: () => unawaited(_toggleFavorite(context, track, l10n)),
+      // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
+      onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
       onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
-    );
-  }
-
-  /// 行尾菜单收藏切换：与播放页同一入口（[LibraryProvider.toggleFavoriteTrack]）。
-  Future<void> _toggleFavorite(
-    BuildContext context,
-    Track track,
-    AppLocalizations l10n,
-  ) async {
-    final library = context.read<LibraryProvider?>();
-    if (library == null) return;
-    final outcome = await library.toggleFavoriteTrack(track);
-    if (!context.mounted) return;
-    // 写失败不能报「已收藏 / 已取消」：图标由 provider 缓存保持原样。
-    M3ESnackbar.show(
-      context,
-      message: outcome.isFailure
-          ? l10n.operationFailed
-          : outcome.isFavorite
-              ? l10n.favoriteAdd
-              : l10n.favoriteRemove,
     );
   }
 

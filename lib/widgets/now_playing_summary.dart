@@ -16,6 +16,8 @@
 /// 差异变成参数。
 library;
 
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -30,6 +32,7 @@ import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
+import 'favorite_action.dart';
 import 'icon_swap.dart';
 
 /// 当前曲目封面地址：真身、飞行副本与预取共用的唯一取值。
@@ -270,27 +273,33 @@ class NowPlayingFavoriteButton extends StatelessWidget {
     final l10n = AppLocalizations.of(context) ??
         lookupAppLocalizations(const Locale('zh'));
     final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
+    final heart = FavoriteHeart(favorite: favorite);
     return M3EIconButton(
       variant: M3EIconButtonVariant.standard,
       size: size,
       visualSize: visualSize,
       icon: IconSwap<bool>(
-        value: favorite,
-        // 与收藏页行内心形同一契约：已收藏 primary、未收藏 onSurfaceVariant。
-        builder: (context, favorite) => Icon(
-          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          color: favorite
-              ? Theme.of(context).colorScheme.primary
-              : Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+        value: heart.favorite,
+        // 与收藏页行内心形同一契约（[FavoriteHeart]）。
+        builder: (context, favorite) {
+          final current = FavoriteHeart(favorite: favorite);
+          return Icon(
+            current.icon,
+            color: current.color(Theme.of(context).colorScheme),
+          );
+        },
       ),
-      semanticLabel: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-      onPressed: () async {
+      semanticLabel: heart.label(l10n),
+      onPressed: () {
         HapticsService.lightImpact();
-        final outcome = await library.toggleFavoriteTrack(track);
-        if (!context.mounted || !outcome.isFailure) return;
         // 图标态是成功反馈；失败必须明说，否则按钮看起来「点了没反应」。
-        M3ESnackbar.show(context, message: l10n.operationFailed);
+        unawaited(
+          toggleLibraryFavorite(
+            context,
+            track,
+            feedback: FavoriteFeedback.failureOnly,
+          ),
+        );
       },
     );
   }

@@ -12,6 +12,7 @@ import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'current_track_cover.dart';
+import 'favorite_action.dart';
 import 'library_cover.dart';
 import 'row_actions.dart';
 
@@ -216,13 +217,20 @@ List<RowAction> _aiDjActionMenu(
   final library = context.read<LibraryProvider?>();
   if (library == null) return const [];
   final Track track = item.track;
-  final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
+  final heart = FavoriteHeart(
+    favorite: library.isFavorite(track.id.sourceKey, track.id.id),
+  );
   return [
     RowAction(
-      icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-      label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      icon: heart.icon,
+      label: heart.label(l10n),
+      // 菜单点完即关；成功由下次打开菜单时的收藏态表达，失败只能靠提示说明。
       onPressed: () => unawaited(
-        _toggleFavorite(context, library, track, l10n),
+        toggleLibraryFavorite(
+          context,
+          track,
+          feedback: FavoriteFeedback.failureOnly,
+        ),
       ),
     ),
     RowAction(
@@ -241,16 +249,4 @@ List<RowAction> _aiDjActionMenu(
       onPressed: onNotInterested,
     ),
   ];
-}
-
-/// AI 推荐行收藏：菜单点完即关，行内没有错误位，失败只能靠 snackbar 说明。
-Future<void> _toggleFavorite(
-  BuildContext context,
-  LibraryProvider library,
-  Track track,
-  AppLocalizations l10n,
-) async {
-  final outcome = await library.toggleFavoriteTrack(track);
-  if (!context.mounted || !outcome.isFailure) return;
-  M3ESnackbar.show(context, message: l10n.operationFailed);
 }
