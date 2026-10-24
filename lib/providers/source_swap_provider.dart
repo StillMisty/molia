@@ -327,8 +327,17 @@ class SourceSwapProvider extends ChangeNotifier {
         );
     }
 
-    final followed =
-        await _playbackProvider.replaceQueueTrack(request.seed, selected);
+    // 队列跟随是尽力而为：库内已经写成功，播放队列替换失败不应把整次换源
+    // 变成异常（页面会误以为需要重试）；只记录并报告「未跟随」。
+    var followed = false;
+    try {
+      followed = await _playbackProvider.replaceQueueTrack(
+        request.seed,
+        selected,
+      );
+    } catch (e) {
+      debugPrint('[SourceSwap] 换源后队列跟随失败: $e');
+    }
     return SourceSwapApplyResult(
       SourceSwapApplyStatus.swapped,
       queueFollowed: followed,
