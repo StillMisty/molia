@@ -24,86 +24,134 @@ import 'library_outcome.dart';
 import 'library_provider.dart';
 import 'local_songs_collection.dart';
 
-/// 合集会话读取资料库的窄端口。
+/// 资料库的一帧读取快照。
 ///
-/// 会话只读缓存快照、触发加载与请求按最近播放重排；`LibraryProvider` 的
-/// 其余写入口（收藏 / 列表 CRUD / 播放）不从这里过。测试直接用假实现，
-/// 不必构造真实 provider 与播放器。
-abstract interface class CollectionLibrary {
-  List<PlaylistInfo> get playlists;
-  List<PlayHistoryEntry> get history;
-  bool get isPlaylistsLoading;
-  bool get isHistoryLoading;
+/// 会话只消费值：列表清单、播放历史、两者的读取阶段，以及（给定当前选集时）
+/// 该列表的曲目视图。provider 的其余成员不再逐个映射成语义等价的 getter——
+/// 接口宽度停在「页面当前帧要显示什么」，而不是「provider 暴露什么」。
+class CollectionLibrarySnapshot {
+  const CollectionLibrarySnapshot({
+    this.playlists = const <PlaylistInfo>[],
+    this.history = const <PlayHistoryEntry>[],
+    this.playlistsState = const LibraryReadState.loading(),
+    this.historyState = const LibraryReadState.loading(),
+    this.playlistTracks,
+  });
 
-  /// 列表读取阶段（failed 时页面给重试态）。
-  LibraryReadState get playlistsState;
-  LibraryReadState get historyState;
+  final List<PlaylistInfo> playlists;
+  final List<PlayHistoryEntry> history;
 
-  /// 列表曲目的读取视图（未加载 / 加载中 / 已缓存 / 失败）。
-  PlaylistTracksView playlistTracks(int playlistId);
+  /// 列表清单 / 历史的读取阶段（failed 时页面给重试态）。
+  final LibraryReadState playlistsState;
+  final LibraryReadState historyState;
 
-  /// build 期请求加载（provider 内部把通知推迟到微任务）。
+  /// 当前选集列表的曲目视图；未选列表时为 null。
   ///
-  /// [force] 只在失败重试时使用。
-  void ensurePlaylistTracks(int playlistId, {bool force = false});
+  /// 加载阶段也在这个值里（未加载成功 = `state.loading`），页面不需要再问
+  /// provider「这个 id 到底在不在加载」。
+  final PlaylistTracksView? playlistTracks;
+}
 
-  void refreshPlaylists({bool force = false});
-  void ensureFavoritesLoaded({bool force = false});
-  void refreshHistory({bool force = false});
+/// 资料库加载意图：会话只说「要什么」，具体并发 / 去重 / 通知时机留在
+/// [LibraryProvider]。
+enum CollectionLibraryLoadKind {
+  /// 首帧三件事：列表清单、收藏状态、播放历史。
+  startup,
 
-  /// 重新进入播放历史 / 本地歌曲合集时按最近播放刷新顺序。
-  void resortHistoryByRecency();
+  /// 当前选集的列表曲目。
+  playlistTracks,
 
-  /// 历史条目 → 领域曲目（本地歌曲合集的缓存行判定要用）。
+  /// 读取失败后的整页重试（三件事 + 当前列表曲目，全部 force）。
+  retry,
+
+  /// 重新进入播放历史 / 本地歌曲：按最近播放重排。
+  resortHistory,
+}
+
+/// 一条加载意图。
+///
+/// [force] 只用于失败重试；[playlistId] 只在需要列表曲目的意图上出现。
+class CollectionLibraryLoad {
+  const CollectionLibraryLoad.startup()
+      : kind = CollectionLibraryLoadKind.startup,
+        playlistId = null,
+        force = false;
+
+  const CollectionLibraryLoad.playlistTracks(int this.playlistId)
+      : kind = CollectionLibraryLoadKind.playlistTracks,
+        force = false;
+
+  const CollectionLibraryLoad.retry({this.playlistId})
+      : kind = CollectionLibraryLoadKind.retry,
+        force = true;
+
+  const CollectionLibraryLoad.resortHistory()
+      : kind = CollectionLibraryLoadKind.resortHistory,
+        playlistId = null,
+        force = false;
+
+  final CollectionLibraryLoadKind kind;
+
+  /// 需要读取曲目的列表 id（列表清单类意图为 null）。
+  final int? playlistId;
+
+  /// 是否丢弃旧缓存重查（失败重试）。
+  final bool force;
+}
+
+/// 合集会话读取 / 加载资料库的窄端口。
+///
+/// 只有两件事加一个转换助手：读一帧快照、发一条加载意图、把历史条目还原成
+/// 领域曲目（本地歌曲合集的缓存行判定要用）。`LibraryProvider` 的写入口
+/// （收藏 / 列表 CRUD / 播放）不从这里过；测试直接用假实现，不必构造真实
+/// provider 与播放器。
+abstract interface class CollectionLibrary {
+  /// 读取一帧快照。[playlistId] 非空时同时带上该列表的曲目视图。
+  CollectionLibrarySnapshot snapshot({int? playlistId});
+
+  /// 请求加载 / 刷新；可在 build 内调用（provider 内部把通知推迟到微任务）。
+  void load(CollectionLibraryLoad request);
+
+  /// 历史条目 → 领域曲目。
   Track trackFromHistoryEntry(PlayHistoryEntry entry);
 }
 
-/// [CollectionLibrary] 的生产实现：把窄接口转发给 [LibraryProvider]。
+/// [CollectionLibrary] 的生产实现：把快照 / 意图映射到 [LibraryProvider]。
 class LibraryCollectionReader implements CollectionLibrary {
   LibraryCollectionReader(this._provider);
 
   final LibraryProvider _provider;
 
   @override
-  List<PlaylistInfo> get playlists => _provider.playlists;
+  CollectionLibrarySnapshot snapshot({int? playlistId}) {
+    return CollectionLibrarySnapshot(
+      playlists: _provider.playlists,
+      history: _provider.history,
+      playlistsState: _provider.playlistsState,
+      historyState: _provider.historyState,
+      playlistTracks:
+          playlistId == null ? null : _provider.playlistTracksView(playlistId),
+    );
+  }
 
   @override
-  List<PlayHistoryEntry> get history => _provider.history;
-
-  @override
-  bool get isPlaylistsLoading => _provider.isPlaylistsLoading;
-
-  @override
-  bool get isHistoryLoading => _provider.isHistoryLoading;
-
-  @override
-  LibraryReadState get playlistsState => _provider.playlistsState;
-
-  @override
-  LibraryReadState get historyState => _provider.historyState;
-
-  @override
-  PlaylistTracksView playlistTracks(int playlistId) =>
-      _provider.playlistTracksView(playlistId);
-
-  @override
-  void ensurePlaylistTracks(int playlistId, {bool force = false}) =>
-      _provider.ensurePlaylistTracks(playlistId, force: force);
-
-  @override
-  void refreshPlaylists({bool force = false}) =>
-      _provider.refreshPlaylists(force: force);
-
-  @override
-  void ensureFavoritesLoaded({bool force = false}) =>
-      _provider.ensureFavoritesLoaded(force: force);
-
-  @override
-  void refreshHistory({bool force = false}) =>
-      _provider.refreshHistory(force: force);
-
-  @override
-  void resortHistoryByRecency() => _provider.resortHistoryByRecency();
+  void load(CollectionLibraryLoad request) {
+    switch (request.kind) {
+      case CollectionLibraryLoadKind.startup:
+      case CollectionLibraryLoadKind.retry:
+        _provider.refreshPlaylists(force: request.force);
+        _provider.ensureFavoritesLoaded(force: request.force);
+        _provider.refreshHistory(force: request.force);
+      case CollectionLibraryLoadKind.playlistTracks:
+        break;
+      case CollectionLibraryLoadKind.resortHistory:
+        _provider.resortHistoryByRecency();
+    }
+    final playlistId = request.playlistId;
+    if (playlistId != null) {
+      _provider.ensurePlaylistTracks(playlistId, force: request.force);
+    }
+  }
 
   @override
   Track trackFromHistoryEntry(PlayHistoryEntry entry) =>
@@ -251,11 +299,16 @@ class CollectionSession extends ChangeNotifier {
 
   bool _disposed = false;
 
-  /// 最近一次 sync 的资料库端口：事件意图（切换合集 / 重新可见）用它。
+  /// 最近一次 sync 的资料库端口：事件意图（切换合集 / 重新可见 / 重试）用它。
   CollectionLibrary? _library;
 
-  /// 最近一次 sync 的输入：合集弹层要等本地歌曲缓存行重算完再取计数。
-  CollectionSessionInput? _lastInput;
+  /// 最近一次 sync 消费的资料库快照：弹层计数与重试按它重算本地歌曲，
+  /// 不需要调用方再交一遍 provider 状态。
+  CollectionLibrarySnapshot? _lastSnapshot;
+
+  /// 最近一帧的下载 / 缓存输入（`ensureLocalSongsReady` 未显式给值时的兜底）。
+  CollectionDownloads _lastDownloads = const CollectionDownloads.unavailable();
+  int _lastCacheRevision = -1;
 
   /// 当前滚动键与是否已为它调度过恢复（同一合集只恢复一次）。
   String? _scrollKey;
@@ -305,28 +358,42 @@ class CollectionSession extends ChangeNotifier {
   /// 可在 build 内调用：内部触发的 provider 通知都推迟到微任务
   /// （`ensurePlaylistTracks` 自带微任务；启动加载也走微任务）。
   CollectionSessionView sync(CollectionSessionInput input) {
-    _lastInput = input;
-    _library = input.library;
-    _ensureStartupLoads(input.library);
+    final library = input.library;
+    _library = library;
+    _lastDownloads = input.downloads;
+    _lastCacheRevision = input.cacheRevision;
+    _ensureStartupLoads(library);
     if (!_restoreStarted) unawaited(start());
 
-    final library = input.library;
-    final playlists = library.playlists;
+    // 先读不带曲目的一帧：选集身份要由列表清单解析，解析完才知道该读哪个
+    // 列表的曲目。两次读取都是同一个同步值，不存在等前一帧的顺序依赖。
+    final base = library.snapshot();
+    final playlists = base.playlists;
     final favoritesId = LibraryCollections.favoritesPlaylistId(playlists);
     final identity = _identityFor(input, playlists, favoritesId);
-    _calibrate(input, identity, playlists);
+    _calibrate(input, identity, base);
 
     final selectedPlaylistId = identity.playlistId;
+    var snapshot = base;
+    PlaylistTracksView? tracksView;
     if (selectedPlaylistId != null) {
-      library.ensurePlaylistTracks(selectedPlaylistId);
+      library.load(CollectionLibraryLoad.playlistTracks(selectedPlaylistId));
+      snapshot = library.snapshot(playlistId: selectedPlaylistId);
+      tracksView = snapshot.playlistTracks;
     }
-    final tracksView = selectedPlaylistId == null
-        ? null
-        : library.playlistTracks(selectedPlaylistId);
+    _lastSnapshot = snapshot;
     _lastPlaylistId = selectedPlaylistId;
 
     if (identity.isLocalSongs) {
-      unawaited(_localSongs.sync(_localSongsInput(input)));
+      unawaited(
+        _localSongs.sync(
+          _localSongsInput(
+            snapshot,
+            downloads: input.downloads,
+            cacheRevision: input.cacheRevision,
+          ),
+        ),
+      );
     }
     final localSongs = identity.isLocalSongs
         ? _localSongs.rows
@@ -335,7 +402,7 @@ class CollectionSession extends ChangeNotifier {
     final view = _presenter.viewFor(
       identity: identity,
       tracks: tracks,
-      history: library.history,
+      history: snapshot.history,
       localSongs: localSongs,
       query: input.query,
       sort: _sort,
@@ -347,21 +414,22 @@ class CollectionSession extends ChangeNotifier {
 
     // 加载组合：首帧列表 / 当前列表曲目 / 历史首载 / 本地歌曲联结，
     // 四个来源合成一个阶段，页面只判断 loading 与否。
-    final initialLoading = playlists.isEmpty && library.isPlaylistsLoading;
+    final initialLoading =
+        snapshot.playlists.isEmpty && snapshot.playlistsState.isLoading;
     final tracksLoading = !identity.isHistory &&
         !identity.isLocalSongs &&
         selectedPlaylistId != null &&
         (tracksView?.loading ?? false);
     final historyLoading = identity.isHistory &&
-        library.history.isEmpty &&
-        library.isHistoryLoading;
+        snapshot.history.isEmpty &&
+        snapshot.historyState.isLoading;
     final localSongsLoading = identity.isLocalSongs && _localSongs.loading;
     final loading =
         initialLoading || tracksLoading || historyLoading || localSongsLoading;
     final failure = loading
         ? null
         : _readFailure(
-            library: library,
+            snapshot: snapshot,
             identity: identity,
             selectedPlaylistId: selectedPlaylistId,
             tracksView: tracksView,
@@ -392,14 +460,14 @@ class CollectionSession extends ChangeNotifier {
   /// 当前合集「没有可显示数据」的读取失败；有旧缓存时仍按 ready 展示
   /// 旧值（provider 的读取阶段已按此口径收口）。
   Object? _readFailure({
-    required CollectionLibrary library,
+    required CollectionLibrarySnapshot snapshot,
     required CollectionIdentity identity,
     required int? selectedPlaylistId,
     required PlaylistTracksView? tracksView,
   }) {
     if (identity.isHistory) {
-      return library.history.isEmpty && library.historyState.isFailed
-          ? library.historyState.error
+      return snapshot.history.isEmpty && snapshot.historyState.isFailed
+          ? snapshot.historyState.error
           : null;
     }
     if (identity.isLocalSongs) {
@@ -409,13 +477,13 @@ class CollectionSession extends ChangeNotifier {
     // 收藏 / 自建列表都要落库 id 才读得到曲目：取不到说明列表清单本身
     // 没加载成功（或选中的列表已不存在）。
     if (selectedPlaylistId == null) {
-      return library.playlistsState.isFailed
-          ? library.playlistsState.error
+      return snapshot.playlistsState.isFailed
+          ? snapshot.playlistsState.error
           : null;
     }
     if (tracksView != null && tracksView.failed) return tracksView.state.error;
-    if (library.playlists.isEmpty && library.playlistsState.isFailed) {
-      return library.playlistsState.error;
+    if (snapshot.playlists.isEmpty && snapshot.playlistsState.isFailed) {
+      return snapshot.playlistsState.error;
     }
     return null;
   }
@@ -424,39 +492,47 @@ class CollectionSession extends ChangeNotifier {
   ///
   /// [downloads] / [cacheRevision] 可传当前帧之外的最新快照：弹层从别的合集
   /// 打开时页面不一定因下载记录变化重建，计数仍要按最新记录算。
+  ///
+  /// 读取来源是会话自己持有的最近一帧快照（[sync] 落下的那份），调用方
+  /// 不需要先交一次输入；[downloads] / [cacheRevision] 不给时用同一帧的值。
   Future<void> ensureLocalSongsReady({
     CollectionDownloads? downloads,
     int? cacheRevision,
   }) {
-    final input = _lastInput;
-    if (input == null) return Future<void>.value();
-    final fresh = downloads == null && cacheRevision == null
-        ? input
-        : CollectionSessionInput(
-            library: input.library,
-            names: input.names,
-            query: input.query,
-            downloads: downloads ?? input.downloads,
-            cacheRevision: cacheRevision ?? input.cacheRevision,
-          );
-    return _localSongs.sync(_localSongsInput(fresh));
+    final library = _library;
+    final snapshot = _lastSnapshot;
+    if (library == null || snapshot == null) return Future<void>.value();
+    return _localSongs.sync(
+      _localSongsInput(
+        snapshot,
+        downloads: downloads ?? _lastDownloads,
+        cacheRevision: cacheRevision ?? _lastCacheRevision,
+      ),
+    );
   }
 
   /// 读取失败后的重试：合集清单 / 历史 / 当前列表曲目全部按 force 重查，
-  /// 本地歌曲联结也按当前输入重跑。成功路径由 provider / local songs 的
+  /// 本地歌曲联结也按最近一帧快照重跑。成功路径由 provider / local songs 的
   /// 通知驱动页面重建，这里不额外改状态。
+  ///
+  /// 重试意图只需要端口与上一帧解析出的列表 id；没有快照时本地歌曲联结
+  /// 跳过（此时页面也还没渲染过失败态，不构成正确性条件）。
   void retry() {
     final library = _library;
-    final input = _lastInput;
-    if (_disposed || library == null || input == null) return;
-    library.refreshPlaylists(force: true);
-    library.ensureFavoritesLoaded(force: true);
-    library.refreshHistory(force: true);
-    final playlistId = _lastPlaylistId;
-    if (playlistId != null) {
-      library.ensurePlaylistTracks(playlistId, force: true);
+    if (_disposed || library == null) return;
+    library.load(CollectionLibraryLoad.retry(playlistId: _lastPlaylistId));
+    final snapshot = _lastSnapshot;
+    if (snapshot != null) {
+      unawaited(
+        _localSongs.sync(
+          _localSongsInput(
+            snapshot,
+            downloads: _lastDownloads,
+            cacheRevision: _lastCacheRevision,
+          ),
+        ),
+      );
     }
-    unawaited(_localSongs.sync(_localSongsInput(input)));
   }
 
   /// 多选批量写入：成功（含无变化）才清空选择；失败保留选择，交给页面
@@ -487,7 +563,7 @@ class CollectionSession extends ChangeNotifier {
     // 见 LibraryProvider 的历史合并策略）。
     if (id == LibraryCollections.historySentinel ||
         id == LibraryCollections.downloadsSentinel) {
-      _library?.resortHistoryByRecency();
+      _library?.load(const CollectionLibraryLoad.resortHistory());
     }
     _notify();
     return true;
@@ -546,7 +622,8 @@ class CollectionSession extends ChangeNotifier {
   }
 
   /// 页面重新可见（壳层切回本页）：刷新历史顺序。
-  void onPageVisible() => _library?.resortHistoryByRecency();
+  void onPageVisible() =>
+      _library?.load(const CollectionLibraryLoad.resortHistory());
 
   /// 长按进入多选。
   void selectRow(String key) => _selection.select(key);
@@ -611,13 +688,14 @@ class CollectionSession extends ChangeNotifier {
   void _calibrate(
     CollectionSessionInput input,
     CollectionIdentity identity,
-    List<PlaylistInfo> playlists,
+    CollectionLibrarySnapshot snapshot,
   ) {
     if (_calibrated || !_restored) return;
-    if (playlists.isEmpty && input.library.isPlaylistsLoading) return;
+    final playlists = snapshot.playlists;
+    if (playlists.isEmpty && snapshot.playlistsState.isLoading) return;
     // 列表清单都没读成功：此时「选中列表不存在」是失败造成的假象，
     // 不能把恢复的选集覆盖成默认值（重试成功后还要按原选集恢复）。
-    if (input.library.playlistsState.isFailed) return;
+    if (snapshot.playlistsState.isFailed) return;
     if (!input.downloads.initialized) return;
     _calibrated = true;
 
@@ -643,24 +721,26 @@ class CollectionSession extends ChangeNotifier {
     // 的监听者（provider 的 refresh* 在第一个 await 前就通知）。
     unawaited(Future<void>.microtask(() {
       if (_disposed) return;
-      library.refreshPlaylists();
-      library.ensureFavoritesLoaded();
-      library.refreshHistory();
+      library.load(const CollectionLibraryLoad.startup());
     }));
   }
 
-  LocalSongsInput _localSongsInput(CollectionSessionInput input) {
-    final history = input.library.history;
+  LocalSongsInput _localSongsInput(
+    CollectionLibrarySnapshot snapshot, {
+    required CollectionDownloads downloads,
+    required int cacheRevision,
+  }) {
+    final history = snapshot.history;
     return LocalSongsInput(
       history: history,
       // 惰性转换：签名只读历史键；真正列举缓存时才需要领域曲目。
       historyTracks: () => [
-        for (final entry in history) input.library.trackFromHistoryEntry(entry),
+        for (final entry in history) _library!.trackFromHistoryEntry(entry),
       ],
-      downloads: input.downloads.records,
-      supported: input.downloads.supported,
-      initialized: input.downloads.initialized,
-      cacheRevision: input.cacheRevision,
+      downloads: downloads.records,
+      supported: downloads.supported,
+      initialized: downloads.initialized,
+      cacheRevision: cacheRevision,
     );
   }
 
