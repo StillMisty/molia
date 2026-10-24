@@ -258,6 +258,10 @@
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
   采样间线性补间），桌面歌词同样按词渐染（原生 span），通知 / 蓝牙输出按行。
+- **Lyric display lead（歌词视觉提前量）** — `lib/widgets/lyrics.dart::_displayLead`：
+  应用内歌词页的行号查表与 `KaraokeLyricText` 插值目标统一加 200ms（正 = 提前）。
+  补 450ms 切行淡入 / 字重过渡与 ≤4Hz 位置采样造成的滞后，同时抵消逐字补间
+  恒定慢一拍；只作用于歌词页，输出侧仍走 `offsetMs`。
 - **Desktop lyric clock（桌面歌词位置时钟）** — `android/.../lyrics/LyricClock.kt`：
   位置样本只做纠偏——先按 `positionAtEpochMs`（Dart 侧「该位置生效的墙上时刻」）
   补偿传输延迟，再按误差分档收敛（≤100ms 10% / 100–300ms 20% / >300ms 落位）；

@@ -54,6 +54,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 目标行未布局时的重试上限：按帧重试，超过后放弃（行号再变化会重新触发）。
   static const int _maxPendingScrollRetries = 8;
 
+  /// 歌词视觉提前量：正值 = 比真实进度早。
+  ///
+  /// 切行有 450ms 的淡入 / 字重 / 内边距过渡，位置通道又只有 ≤4Hz——按精确
+  /// 时间戳切行时，高亮要等唱到该行之后才开始变化。统一提前 200ms：行首时
+  /// 过渡已走完大半；逐字渐染的采样间补间（慢一拍）也抵消到视听同步范围内。
+  /// 只作用于应用内歌词页；输出侧仍用 `LyricsDisplaySettings.offsetMs`。
+  static const Duration _displayLead = Duration(milliseconds: 200);
+
   /// 快捷操作栏：M3EFabMenu 浮动 FAB 的屏边距。
   static const double _quickActionsScreenOffset = 16;
 
@@ -1030,6 +1038,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
                                 key: _lineTextKeys[index],
                                 words: lineWords,
                                 position: playbackProvider.position,
+                                lead: _displayLead,
                                 playedColor: theme.colorScheme.primary,
                                 unplayedColor: theme.colorScheme.onSurface,
                               )
@@ -1146,7 +1155,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
   int _getCurrentLineIndex(Duration currentPosition) {
     if (!_session.isSynced) return -1;
-    return lyricLineIndexAt(_session.lines, currentPosition);
+    // 提前量语义见 [_displayLead]：行高亮 / 自动滚动 / 居中跟随共用同一判定。
+    return lyricLineIndexAt(
+      _session.lines,
+      currentPosition + _displayLead,
+    );
   }
 
   /// 翻译 / 罗马音块（挂在主行文本下方，逐行渲染）。

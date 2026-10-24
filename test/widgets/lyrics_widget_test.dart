@@ -91,13 +91,14 @@ Track _track() => Track(
 BackendSnapshot _snapshot({
   bool isPlaying = true,
   int positionSeconds = 60,
+  Duration? position,
 }) =>
     BackendSnapshot(
       current: _track(),
       queue: [_track()],
       currentIndex: 0,
       isPlaying: isPlaying,
-      position: Duration(seconds: positionSeconds),
+      position: position ?? Duration(seconds: positionSeconds),
       duration: const Duration(minutes: 10),
     );
 
@@ -431,6 +432,40 @@ void main() {
     await tester.pump(const Duration(milliseconds: 700));
     expect(find.text('译 12'), findsOneWidget);
     expect(find.text('译 14'), findsOneWidget);
+  });
+
+  testWidgets('行高亮与逐字渐染统一提前 200ms', (tester) async {
+    await pumpLyrics(
+      tester,
+      service: _FakeLyricsService(_buildLrc(), lxlyric: _buildWordLrc()),
+    );
+
+    TextStyle lineStyle(String text) => tester
+        .widget<AnimatedDefaultTextStyle>(
+          find
+              .ancestor(
+                of: find.text(text),
+                matching: find.byType(AnimatedDefaultTextStyle),
+              )
+              .first,
+        )
+        .style;
+
+    // 64.6s + 200ms = 64.8s：仍在第 12 行（60s）；逐字组件拿到同一个提前量。
+    backend.emit(_snapshot(position: const Duration(milliseconds: 64600)));
+    await tester.pump();
+    final karaoke =
+        tester.widget<KaraokeLyricText>(find.byType(KaraokeLyricText));
+    expect(karaoke.lead, const Duration(milliseconds: 200));
+    expect(karaoke.words.first.text, 'Line ');
+    expect(lineStyle('Line 13').fontWeight, FontWeight.w500);
+
+    // 64.9s + 200ms = 65.1s：第 13 行（65s）已是当前行，逐字仍精确跟进度。
+    backend.emit(_snapshot(position: const Duration(milliseconds: 64900)));
+    await tester.pump();
+    expect(lineStyle('Line 13').fontWeight, FontWeight.w700);
+    // 第 12 行已过、第 13 行没有逐字时间轴 → 不再走逐字分支。
+    expect(find.byType(KaraokeLyricText), findsNothing);
   });
 
   testWidgets('罗马音按歌词页开关独立门控', (tester) async {

@@ -10,6 +10,10 @@ import '../models/lyric_line.dart';
 ///
 /// 进度来源为 position 通道（≤4Hz）：为消除 250ms 的跳变，内部用与采样间隔
 /// 等长的线性补间平滑到每个新采样点；暂停 / 回跳 / 大跳（seek）直接落位。
+///
+/// 补间的代价是显示值恒定慢一拍（补到本拍采样值需要一整拍）。需要与真实
+/// 人声对齐的调用方传 [lead]（正 = 提前）抵消这段滞后，见 `lyrics.dart`
+/// 的视觉提前量说明。
 class KaraokeLyricText extends StatefulWidget {
   const KaraokeLyricText({
     super.key,
@@ -17,6 +21,7 @@ class KaraokeLyricText extends StatefulWidget {
     required this.position,
     required this.playedColor,
     required this.unplayedColor,
+    this.lead = Duration.zero,
     this.maxDelta = const Duration(milliseconds: 1500),
   });
 
@@ -31,6 +36,12 @@ class KaraokeLyricText extends StatefulWidget {
 
   /// 未唱词颜色。
   final Color unplayedColor;
+
+  /// 显示提前量：插值目标取 `position + lead`（正 = 提前）。
+  ///
+  /// 只平移显示进度，不改变补间速度；相对速度 / 回跳判定仍由相邻采样点
+  /// 之差决定，因此 seek 与暂停的落位语义不变。
+  final Duration lead;
 
   /// 超过该跨度视为跳转（seek），直接落位不做补间。
   final Duration maxDelta;
@@ -53,7 +64,7 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
   void initState() {
     super.initState();
     _controller = AnimationController(vsync: this);
-    _targetMs = widget.position.value.inMilliseconds.toDouble();
+    _targetMs = _ledMs;
     _beginMs = _targetMs;
     widget.position.addListener(_onPositionChanged);
   }
@@ -61,10 +72,11 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
   @override
   void didUpdateWidget(KaraokeLyricText oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.position != widget.position) {
+    if (oldWidget.position != widget.position ||
+        oldWidget.lead != widget.lead) {
       oldWidget.position.removeListener(_onPositionChanged);
       widget.position.addListener(_onPositionChanged);
-      _targetMs = widget.position.value.inMilliseconds.toDouble();
+      _targetMs = _ledMs;
       _beginMs = _targetMs;
       _controller.stop();
     }
@@ -77,8 +89,12 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
     super.dispose();
   }
 
+  /// 带提前量的显示进度（毫秒）：插值目标以它为准。
+  double get _ledMs =>
+      (widget.position.value + widget.lead).inMilliseconds.toDouble();
+
   void _onPositionChanged() {
-    final target = widget.position.value.inMilliseconds.toDouble();
+    final target = _ledMs;
     final displayed = _currentMs;
     final delta = target - displayed;
     if (delta <= 0 || delta > widget.maxDelta.inMilliseconds) {
