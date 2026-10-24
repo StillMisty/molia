@@ -7,6 +7,7 @@ import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
 import 'sync_adapter.dart';
+import 'sync_book.dart';
 import 'sync_codec_port.dart';
 import 'sync_journal.dart';
 import 'sync_known_store.dart';
@@ -19,7 +20,7 @@ import 'sync_transport_runtime.dart';
 /// 同步引擎：一轮 = 收集本地视图 → 拉取远端快照 → 逐键合并 → 写回本地 →
 /// 推送合并后视图 → 记录可观察的一轮结果（[SyncRoundReport]）。
 ///
-/// 引擎是公共门面：轮次执行在 [SyncRoundRunner]（阶段可单独测试），UI 面的
+/// 引擎是公共门面：轮次执行在 [SyncRoundRunner]（只暴露整轮与服务端动作），UI 面的
 /// 身份 / 开关 / 传输状态 / 口令在 `sync_control_plane.dart`，完整备份在
 /// `sync_backup.dart`；三者共享同一个 `SyncStateStore` 与同一份适配器 /
 /// 传输实例（组合根接线，见 `app/bootstrap/sync_stack.dart`）。
@@ -74,7 +75,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   }
 
   SyncEngine._({
-    required SyncStateStore state,
+    required SyncEngineState state,
     required SyncRoundRunner runner,
     required Duration inboundWindow,
     required DateTime Function() clock,
@@ -104,7 +105,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 推送时丢弃保留期外的墓碑（防止无限膨胀；保留期内复活风险可忽略）。
   static const int tombstoneRetentionMs = SyncRoundRunner.tombstoneRetentionMs;
 
-  final SyncStateStore _state;
+  final SyncEngineState _state;
   final SyncRoundRunner _runner;
 
   /// 入站合流窗口：窗口内到达的多个对端推送合并成一轮。
@@ -397,8 +398,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     );
     _lastReport = report;
     _state.recordRound(report);
-    await _state.save();
+    // 首次连通提示与轮次结果共用同一次提交：一轮只写一份状态 JSON。
     _announceConnectedPeers();
+    await _state.commit();
     notifyListeners();
     return report;
   }
@@ -407,14 +409,15 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   ///
   /// 判据用 `lastPullAt` / `lastPushAt` 而不是 `lastSeenAt`：探测应答只说明
   /// 「在线」，真正交换过（含入站推送，它按拉取计）才代表口令对得上、数据通了。
-  /// 一次性由 [SyncStateStore.markPeerConnectNotified] 持久化保证，重启不重发。
+  /// 一次性由 [SyncStateStore.markPeerConnectNotified] 的登记保证，随本次轮末
+  /// 提交落盘，重启不重发。
   void _announceConnectedPeers() {
     if (_peerConnected.isClosed) return;
     for (final peer in _state.peers) {
       if (peer.deviceId.isEmpty) continue;
       if (peer.lastPullAt <= 0 && peer.lastPushAt <= 0) continue;
       if (_state.isPeerConnectNotified(peer.deviceId)) continue;
-      unawaited(_state.markPeerConnectNotified(peer.deviceId));
+      _state.markPeerConnectNotified(peer.deviceId);
       _peerConnected.add(peer);
     }
   }

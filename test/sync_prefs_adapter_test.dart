@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -264,6 +265,75 @@ void main() {
     expect(changedKeys, {'theme_mode'});
   });
 
+  test('日志追加失败：登记不落盘，重启后仍检测到同一变更', () async {
+    final journal = _FailingJournal();
+    final atomic = PrefsSyncAdapter(
+      state: state,
+      settings: registry,
+      journal: journal,
+    );
+    // 初始登记（默认值零值戳），并模拟轮末提交把旧登记写进持久状态。
+    await atomic.collect();
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.noChanges,
+    ));
+    await state.commit();
+    final persistedStamp = state.settingStamps['theme_mode']!;
+    expect(persistedStamp.version, SyncVersion.zero);
+
+    now = 5000;
+    await prefs.setString('theme_mode', 'dark');
+    journal.fail = true;
+    await expectLater(atomic.collect(), throwsStateError);
+
+    expect(
+      state.settingStamps['theme_mode']!.version,
+      persistedStamp.version,
+      reason: '追加失败不能留下新登记',
+    );
+
+    // 轮末提交：只应写回旧登记；新登记若已写进内存就会在这里被持久化，
+    // 下一轮再也检测不到这次变化。
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 2,
+      finishedAt: 3,
+      outcome: SyncOutcome.noChanges,
+    ));
+    await state.commit();
+
+    final reloaded = SyncStateStore(
+      preferences: prefs,
+      secrets: secrets,
+      clock: () => now,
+      deviceId: 'devA',
+    );
+    await reloaded.init();
+    journal
+      ..fail = false
+      ..changes.clear();
+    final nextAdapter = PrefsSyncAdapter(
+      state: reloaded,
+      settings: registry,
+      journal: journal,
+    );
+
+    final collected = await nextAdapter.collect();
+
+    expect(
+      journal.changes.single.record.data,
+      {'v': 'dark'},
+      reason: '失败的那次变更必须还能被重新检测并追加',
+    );
+    final record = collected[SyncCategory.settings]!
+        .firstWhere((r) => r.key == 'theme_mode');
+    expect(record.version.physical, 5000);
+    expect(reloaded.settingStamps['theme_mode']!.hash, isNot(''));
+  });
+
   test('StringList 类型往返（shell_nav_order 风格）', () async {
     final listAdapter = PrefsSyncAdapter(
       state: state,
@@ -287,4 +357,18 @@ void main() {
     });
     expect(prefs.getStringList('shell_nav_order'), ['c', 'a', 'b']);
   });
+}
+
+/// 可注入追加失败的日志替身（只实现适配器需要的追加面）。
+class _FailingJournal implements SyncJournalAppender {
+  bool fail = false;
+  final List<SyncJournalChange> changes = [];
+
+  @override
+  Future<List<int>> appendAll(Iterable<SyncJournalChange> changes) async {
+    if (fail) throw StateError('日志追加失败（测试注入）');
+    final list = changes.toList();
+    this.changes.addAll(list);
+    return [for (var i = 0; i < list.length; i++) i + 1];
+  }
 }

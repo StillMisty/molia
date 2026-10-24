@@ -295,7 +295,7 @@ void main() {
       probePort: 47825,
       verifiedAt: 3,
     ));
-    await state.markPeerConnectNotified('devB');
+    state.markPeerConnectNotified('devB');
     await control.addManualPeer(
       const ManualPeer(host: '192.168.1.23', name: '书房'),
     );

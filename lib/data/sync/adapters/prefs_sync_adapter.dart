@@ -6,8 +6,9 @@ import '../../../domain/models/device_sync.dart';
 import '../../settings/settings_key.dart';
 import '../../settings/settings_registry.dart';
 import '../sync_adapter.dart';
+import '../sync_book.dart';
 import '../sync_journal.dart';
-import '../sync_state_store.dart';
+import '../sync_stamp.dart';
 
 /// 设置 / 音源配置 / 凭证适配器（键规格与读写都在 [SettingsRegistry]）。
 ///
@@ -17,21 +18,21 @@ import '../sync_state_store.dart';
 /// 变化，重新开启后可直接参与合并）。
 class PrefsSyncAdapter implements SyncAdapter {
   PrefsSyncAdapter({
-    required SyncStateStore state,
+    required SyncStampLedger state,
     required SettingsRegistry settings,
-    SyncJournalRepository? journal,
+    SyncJournalAppender? journal,
     this.onApplied,
   })  : _state = state,
         _settings = settings,
         _journal = journal,
         _byName = {for (final key in settings.keys) key.name: key};
 
-  final SyncStateStore _state;
+  final SyncStampLedger _state;
   final SettingsRegistry _settings;
 
   /// 增量日志（可选）：登记哈希发现本地修改时追加，对端按游标只拉变更。
   /// 首次登记（进程首次见到该键）不算变更——初始视图由全量快照覆盖。
-  final SyncJournalRepository? _journal;
+  final SyncJournalAppender? _journal;
   final Map<String, SettingsKey<Object?>> _byName;
 
   /// 应用远端设置后回调（组合根接线：注册表按键触发 reload 钩子）。
@@ -46,12 +47,18 @@ class PrefsSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect(
+      {bool fresh = false}) async {
     final records = <SyncCategory, List<SyncRecord>>{};
     final changes = <SyncJournalChange>[];
+    // 登记先暂存：日志追加失败时不能留下「已同步」的哈希，否则这次变更
+    // 下一轮会被当成未变化而永久跳过（轮末提交会把旧登记落盘）。
+    final registrations = <String, SyncStamp>{};
     for (final key in _settings.keys) {
       final value = await _settings.readRaw(key);
       final resolved = _resolve(key, value);
+      final stamp = resolved.stamp;
+      if (stamp != null) registrations[key.name] = stamp;
       if (resolved.changed) {
         changes.add((category: key.category, record: resolved.record));
       }
@@ -60,6 +67,9 @@ class PrefsSyncAdapter implements SyncAdapter {
     final journal = _journal;
     if (journal != null && changes.isNotEmpty) {
       await journal.appendAll(changes);
+    }
+    for (final entry in registrations.entries) {
+      _state.putSettingStamp(entry.key, entry.value);
     }
     return records;
   }
@@ -70,13 +80,16 @@ class PrefsSyncAdapter implements SyncAdapter {
   Future<void> noteKeyWritten(SettingsKey<Object?> key) async {
     final value = await _settings.readRaw(key);
     final resolved = _resolve(key, value);
-    if (!resolved.changed) return;
+    final stamp = resolved.stamp;
+    if (stamp == null) return;
     final journal = _journal;
-    if (journal != null) {
+    // 首次登记没有历史记录需要外发：直接登记，不必追加。
+    if (resolved.changed && journal != null) {
       await journal.appendAll([
         (category: key.category, record: resolved.record),
       ]);
     }
+    _state.putSettingStamp(key.name, stamp);
   }
 
   /// 单个键的当前记录 + 是否发生了**本机修改**（登记哈希变化）。
@@ -84,7 +97,9 @@ class PrefsSyncAdapter implements SyncAdapter {
   /// 首次登记（进程首次见到该键）不算变更：初始视图由全量快照覆盖；
   /// 首次登记且仍是默认值时用零值戳（输给任何真实写入，避免把「默认」
   /// 当成本机修改推向全组）。
-  ({SyncRecord record, bool changed}) _resolve(
+  ///
+  /// 只计算登记、不写状态：调用方在日志追加成功后统一写入（见 [collect]）。
+  ({SyncRecord record, bool changed, SyncStamp? stamp}) _resolve(
     SettingsKey<Object?> key,
     Object? value,
   ) {
@@ -98,13 +113,13 @@ class PrefsSyncAdapter implements SyncAdapter {
           data: {'v': value},
         ),
         changed: false,
+        stamp: null,
       );
     }
     final isDefault = _canonical(value) == _canonical(key.defaultValue);
     final first = stamp == null;
     final version =
         first && isDefault ? SyncVersion.zero : _state.stampIssuer.next();
-    _state.putSettingStamp(key.name, SyncStamp(hash: hash, version: version));
     return (
       record: SyncRecord(
         key: key.name,
@@ -112,6 +127,7 @@ class PrefsSyncAdapter implements SyncAdapter {
         data: {'v': value},
       ),
       changed: !first,
+      stamp: SyncStamp(hash: hash, version: version),
     );
   }
 

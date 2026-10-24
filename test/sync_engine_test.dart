@@ -742,7 +742,7 @@ void main() {
   test('名册跨重启恢复', () async {
     transport.available.add(remoteTheme('dark'));
     await engine.syncNow();
-    await state.save();
+    await state.commit();
 
     final reloaded = SyncStateStore(preferences: prefs, secrets: secrets);
     await reloaded.init();
@@ -927,6 +927,63 @@ void main() {
     await pumpEventQueue();
 
     expect(transport.announceCalls, 1);
+  });
+
+  test('一轮多对端 + 快照 / 增量台账记账只提交一次状态', () async {
+    // 先把两台设备写进名册（否则本轮只会记一次「首次接触」，计数不纯粹）。
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.ok,
+      peers: [
+        SyncPeerState(deviceId: 'devB'),
+        SyncPeerState(deviceId: 'devC'),
+      ],
+    ));
+    await state.commit();
+    final writesBefore = state.persistedWrites;
+
+    // 注入日志让本轮同时外发全量快照 + 增量窗口（两次发布台账 mark）。
+    final roundTransport = FakeSightingTransport()
+      ..peersSeenOverride = 2
+      ..seenIdsOverride = const ['devB', 'devC']
+      ..pushSucceededIds = const ['devB', 'devC'];
+    roundTransport.available.add(remoteTheme('dark'));
+    final roundEngine = SyncEngine(
+      state: state,
+      stamps: state.stampIssuer,
+      adapters: [
+        PrefsSyncAdapter(
+          state: state,
+          settings: SettingsRegistry(
+            keys: keys,
+            preferences: prefs,
+            secrets: secrets,
+          ),
+        ),
+      ],
+      transports: {'lan': roundTransport},
+      journal: FakeJournalStore(head: 0),
+      inboundWindow: const Duration(milliseconds: 10),
+    );
+    addTearDown(roundEngine.dispose);
+    await roundEngine.init();
+
+    final report = await roundEngine.syncNow(trigger: SyncTrigger.manual);
+
+    expect(report!.applied, 1);
+    expect(roundTransport.pushed, hasLength(2),
+        reason: '全量快照 + 增量窗口各 mark 一次发布台账');
+    // 台账 mark、名册 + 两个首连提示都只改内存：本轮结束只有一次提交
+    // （写一份 sync_state_v2）。
+    expect(
+      state.persistedWrites - writesBefore,
+      1,
+      reason: '一轮只写一次持久状态',
+    );
+    expect(state.isPeerConnectNotified('devB'), isTrue);
+    expect(state.isPeerConnectNotified('devC'), isTrue);
   });
 }
 

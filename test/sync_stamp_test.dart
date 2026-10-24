@@ -158,7 +158,7 @@ void main() {
       );
       await state.init();
       final before = state.stampIssuer.next();
-      await state.save();
+      await state.commit();
 
       // 重启后时钟回拨：基线从持久化状态恢复，不倒退。
       now = 0;
@@ -269,7 +269,7 @@ void main() {
       final version = state.stampIssuer.next();
       state.putSettingStamp(
           'theme_mode', SyncStamp(hash: 'h', version: version));
-      await state.save();
+      await state.commit();
 
       final rebuilt = SyncStateStore(
         preferences: prefs,

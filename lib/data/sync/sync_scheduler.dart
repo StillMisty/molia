@@ -6,7 +6,7 @@ import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_transport.dart';
 import '../../services/battery_probe.dart';
 import '../../services/data_saver_service.dart';
-import 'sync_state_store.dart';
+import 'sync_book.dart';
 
 /// 调度器驱动一轮同步的宿主（生产 = `SyncEngine`；单测注入假实现）。
 abstract interface class SyncSchedulerHost {
@@ -63,7 +63,7 @@ class SyncRunOutcome {
 class SyncScheduler {
   SyncScheduler({
     required SyncSchedulerHost host,
-    required SyncStateStore state,
+    required SyncSchedulerState state,
     Future<bool> Function()? cellularProbe,
     Future<BatterySnapshot> Function()? batteryProbe,
     bool Function()? isPlaying,
@@ -117,7 +117,7 @@ class SyncScheduler {
   };
 
   final SyncSchedulerHost _host;
-  final SyncStateStore _state;
+  final SyncSchedulerState _state;
   final Future<bool> Function() _cellularProbe;
   final Future<BatterySnapshot> Function() _batteryProbe;
   final bool Function()? _isPlaying;
@@ -628,8 +628,7 @@ class SyncScheduler {
   void _markDelivered(SyncRunOutcome outcome) {
     final enabled = _state.enabledCategories;
     _dirtyCategories.removeWhere((category) => !enabled.contains(category));
-    _immediateCategories
-        .removeWhere((category) => !enabled.contains(category));
+    _immediateCategories.removeWhere((category) => !enabled.contains(category));
     if (!outcome.delivered) return;
     _dirtyCategories.removeAll(outcome.categories);
     _immediateCategories.removeAll(outcome.categories);
