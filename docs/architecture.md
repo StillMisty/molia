@@ -102,7 +102,9 @@
   （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
   语义），live seek 强制整份落盘；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
-  落盘时机只在协调者实现一次，handler 不直写服务；壳层 paused 与桌面退出共用
+  落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
+  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`），不直写
+  facade；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
   500ms）→ 统计落盘 → 销毁窗口」：会话必须先把最后一段进度取下来，音频收尾
@@ -509,7 +511,9 @@
   冷启动恢复会话同步替换并落盘）。
   **自动换源**：播放失败同源重试仍失败后，组合根注入的 `AutoSourceSwapService.findMatch`
   用 `lib/services/song_match.dart`（LX `findMusic` 判定的唯一实现，与歌词搜索
-  回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目；
+  回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目
+  （经 `PlaybackSessionCoordinator.replaceQueueTrack` 命令：live 转发 facade 并
+  返回前提交会话，恢复态 / 未命中 no-op，provider 不直写 facade）；
   provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
   开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
 

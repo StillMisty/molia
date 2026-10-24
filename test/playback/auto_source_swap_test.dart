@@ -4,13 +4,42 @@ import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/playback_session_store.dart';
 import 'package:molia/services/source_swap/source_swap_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
+
+/// 记录命令面调用：验证重试 / 自动换源确实经协调者，而不是直写 facade。
+class _RecordingCoordinator extends PlaybackSessionCoordinator {
+  _RecordingCoordinator({
+    required super.facade,
+    required super.store,
+    required super.settings,
+  });
+
+  final List<int> queueIndexes = [];
+  final List<String> replacedUris = [];
+
+  @override
+  Future<PlaybackCommandRoute> playQueueIndex(int index) {
+    queueIndexes.add(index);
+    return super.playQueueIndex(index);
+  }
+
+  @override
+  Future<PlaybackCommandRoute> replaceQueueTrack(
+    String trackUri,
+    Track newTrack,
+  ) {
+    replacedUris.add(trackUri);
+    return super.replaceQueueTrack(trackUri, newTrack);
+  }
+}
 
 /// 播放失败自动换源：同源重试 → 严格找回 → 队列替换；开关/守卫/级联有界。
 void main() {
@@ -50,6 +79,7 @@ void main() {
   (PlaybackProvider, List<({String uri, Set<String> exclude})>) buildProvider({
     Future<Track?> Function(Track seed, Set<String> exclude)? resolver,
     CatalogService? catalogService,
+    PlaybackSessionCoordinator? sessionCoordinator,
   }) {
     final calls = <({String uri, Set<String> exclude})>[];
     final provider = PlaybackProvider(
@@ -57,6 +87,7 @@ void main() {
       facade: facade,
       messenger: FakeMessenger(),
       catalogService: catalogService,
+      sessionCoordinator: sessionCoordinator,
       autoSwapSettings: settings,
       autoSwapResolver: (t, {required excludeSourceKeys}) {
         calls.add((uri: t.id.uri, exclude: excludeSourceKeys));
@@ -75,6 +106,12 @@ void main() {
       error: failure,
     ));
   }
+
+  _RecordingCoordinator recordingCoordinator() => _RecordingCoordinator(
+        facade: facade,
+        store: PlaybackSessionStore(),
+        settings: testSettingsRegistry(),
+      );
 
   test('失败 → 同源重试 → 仍失败：跨源严格换源并替换队列（静默）', () async {
     final failing = track('fake', 'a');
@@ -126,6 +163,41 @@ void main() {
       1,
       reason: '同音源其它曲目的缓存不应被连带失效',
     );
+  });
+
+  test('同源重试经命令面：playQueueIndex 由协调者路由', () async {
+    final failing = track('fake', 'a');
+    final coordinator = recordingCoordinator();
+    final (provider, _) = buildProvider(sessionCoordinator: coordinator);
+    addTearDown(provider.dispose);
+
+    emitError(failing);
+    await pumpEventQueue();
+
+    // 重试不是「直写 facade」：命令进协调者（live 路由 + 返回前已提交）。
+    expect(coordinator.queueIndexes, [0]);
+    expect(backend.calls, contains('playQueueIndex:0'));
+  });
+
+  test('自动换源经命令面：live 替换由协调者转发并提交会话', () async {
+    final failing = track('fake', 'a');
+    final replacement = track('kg', 'a');
+    final coordinator = recordingCoordinator();
+    final (provider, _) = buildProvider(
+      resolver: (seed, exclude) async => replacement,
+      sessionCoordinator: coordinator,
+    );
+    addTearDown(provider.dispose);
+
+    emitError(failing);
+    await pumpEventQueue();
+
+    expect(coordinator.replacedUris, ['fake:a']);
+    expect(backend.lastReplacedTrackUri, 'fake:a');
+    expect(backend.lastReplacedTrack, same(replacement));
+    // 换源结果已写进会话（返回前提交）：重开应用恢复的是新来源。
+    final saved = await PlaybackSessionStore().load();
+    expect(saved?.tracks.single.id.uri, 'kg:a');
   });
 
   test('无匹配：保持原错误与曲目，不替换', () async {

@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_media_session/flutter_media_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/app/bootstrap/library_stack.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
@@ -217,6 +218,15 @@ class _FakeCommands implements PlaybackCommandPort {
   @override
   Future<PlaybackCommandRoute> playQueueIndex(int index) async {
     calls.add('playQueueIndex:$index');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> replaceQueueTrack(
+    String trackUri,
+    Track newTrack,
+  ) async {
+    calls.add('replaceQueueTrack:$trackUri');
     return route;
   }
 
