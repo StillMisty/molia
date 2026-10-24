@@ -1033,24 +1033,27 @@
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
   收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
   （顺序列表 / 重排模式、搜索空态、行动作形状：触摸端左滑胶囊 `SwipeRevealRow` /
-  桌面右键菜单，动作描述 `CollectionRowAction`）；
+  桌面右键菜单，动作词汇 `RowAction`）；
   空态配方统一在 `lib/widgets/empty_state.dart`（图标 40 + 文案 + 可选行动，
   收藏 / 资料 / 发现共用，居中与页边距由调用方包一层），滚动位置簿记在
   `lib/widgets/collection_scroll_bookkeeping.dart`（调度器可注入，脱离 widget 树可单测），
   页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`。
-- 曲目行操作菜单的呈现面分平台，唯一实现 `lib/widgets/track_actions_menu.dart`：
-  触摸端行尾常显 ⋮（搜索结果 / 发现详情 / 歌手·专辑页 / AI 推歌行；队列行维持
-  无 ⋮；锚点固定 standard 图标按钮且语义走 `semanticLabel`），桌面端行尾无 ⋮、行表面右键在鼠标
-  落点弹同一份菜单（`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay
-  坐标换算，贴边由 M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类
-  开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。菜单定义（收藏 / 加入列表
-  两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`（`trackRowActionMenu` /
-  `…ForTrack` / `…ForSearchItem` 纯数据构造，行组件与自建行共用，领域状态由构造处
+- 曲目行操作动作与入口：动作词汇 / 条目映射 / 两平台入口在
+  `lib/widgets/row_actions.dart`（`RowAction` 回调不可空；`rowMenuEntries` /
+  `rowMenuSelection` 是动作 → 菜单条目的唯一映射；触摸端 `RowActionMenuButton`
+  常显 ⋮，桌面端 `rowActionsAtPointer` 给行表面右键回调）。低层菜单面
+  `lib/widgets/track_actions_menu.dart`：触摸端锚点固定 standard 图标按钮且语义走
+  `semanticLabel`；桌面端行尾无 ⋮、行表面右键在鼠标落点弹同一份菜单
+  （`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay 坐标换算，贴边由
+  M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类开关态用图标 +
+  文案表达（选中即关菜单，不留勾选态）。动作定义（收藏 / 加入列表两条动作 +
+  领域接线）见 `lib/widgets/track_menu_tile.dart`（`trackRowActionMenu` /
+  `…ForTrack` / `…ForSearchItem`，行组件与自建行共用，领域状态由构造处
   `select` 后传入）；收藏域的行适配（歌手页 / 专辑页）走
   `lib/widgets/favorite_track_tile.dart`；收藏页合集的行动作由
-  `lib/widgets/collection_track_list.dart` 的 `collectionTrackRowActions` /
-  `collectionHistoryRowActions` / `localSongRowActions` 工厂产出，触摸端编译成
-  左滑胶囊（`collectionSwipeActions`）、桌面端直接作右键菜单条目。
+  `lib/widgets/collection_track_list.dart` 的 `buildCollectionRowActions` 从
+  投影器的动作声明 + 接线编译（接线缺席的动作不出现），触摸端编译成左滑胶囊
+  （`collectionSwipeActions`）、桌面端经 `rowActionsAtPointer` 作右键菜单。
 - 按钮选型（按作用对象与意图，已按 M3E 实测校正）：
   - 同一批对象的 2–3 个平级动作 → `M3EButtonGroup`（`standard` 间距；命令式动作
     组级统一 `tonal`，把 `selectedIndex` 恒留空、回调里直接分发，避免留下选中态）。
