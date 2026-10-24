@@ -182,6 +182,7 @@ class LocalPlaybackService extends ChangeNotifier {
   String? _lastError;
 
   StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<PlayerException>? _errorSubscription;
   StreamSubscription<Duration>? _positionSubscription;
   Timer? _positionSampleTimer;
   Timer? _notifyThrottle;
@@ -232,6 +233,9 @@ class LocalPlaybackService extends ChangeNotifier {
         _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _playWithOtherApps.addListener(_onPlayWithOtherAppsChanged);
+    // 曲末解码错误也要收：源文件最后一帧损坏时不会走 completed，见
+    // [_onPlayerError] / 已知坑 78。
+    _errorSubscription = _player.errorStream.listen(_onPlayerError);
     // 位置采样按前后台策略选择（前台 / 桌面歌词 = 高频流；后台播放 = 1s
     // 轮询；后台暂停 = 不采样），切换时先取消旧订阅 / Timer。
     _powerPolicy.addListener(_syncPositionSampling);
@@ -507,6 +511,11 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 曲末判定容差：播放器位置与时长有采样 / 浮点误差，留出极小余量；
   /// 不能放大到「还剩半秒也算播完」，否则会误把正常的末尾续播当成重播。
   static const Duration _trackEndTolerance = Duration(milliseconds: 250);
+
+  /// 曲末解码错误的判定窗口：源文件最后一帧损坏时，mpv 会在距曲末不到
+  /// 1s 处报错并释放播放器（processingState → idle），completed 不会到达，
+  /// 位置采样也可能停在错误前。窗口内按「已播完」处理，窗口外才算真故障。
+  static const Duration _trackEndErrorWindow = Duration(seconds: 3);
 
   /// 是否已到曲末（可安全地从头重播）。
   ///
@@ -952,6 +961,34 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 播放中错误：曲末解码失败按自然播完处理，其余才上报错误。
+  ///
+  /// Windows 的 media_kit 播放 tx / kw 的 FLAC 时，源文件最后一帧常损坏：
+  /// mpv 在距曲末不到 1s 处报 `Error decoding audio` 并释放播放器
+  /// （processingState 直接 idle），`completed` 永远不会到达——声音已经放到
+  /// 最后一秒，界面却停在旧歌，表现为「播完不自动切歌」。此时按完成链路
+  /// 处理（完成事件 / 单曲循环 / 自动下一首 / 定时关闭同一口径）。
+  void _onPlayerError(PlayerException error) {
+    if (_currentTrack == null) return;
+    // 只对桌面 media_kit 做曲末兜底：Android/iOS 的 completed / 错误语义可靠，
+    // 不把真实的播放故障吞成「播完」。
+    final atEnd = _usesMediaKitBackend &&
+        _duration > Duration.zero &&
+        _position >= _duration - _trackEndErrorWindow;
+    if (atEnd) {
+      debugPrint('[LocalPlayback] 曲末解码失败，按播完处理并自动切歌');
+      _isPlaying = false;
+      _handleTrackCompleted();
+      return;
+    }
+    debugPrint(
+      '[LocalPlayback] 播放失败（${error.code}）：${error.message}',
+    );
+    _lastError = error.message ?? error.toString();
+    _isPlaying = false;
+    notifyListeners();
+  }
+
   bool _handlingCompletion = false;
 
   Future<void> _handleTrackCompleted() async {
@@ -1079,6 +1116,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _stopPositionSampleTimer();
     _notifyThrottle?.cancel();
     _playerStateSubscription?.cancel();
+    _errorSubscription?.cancel();
     _cancelPositionSubscription();
     _cacheWriter?.cancel();
     _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
