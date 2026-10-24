@@ -23,8 +23,6 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   // 壳层底栏容器：容器色（surfaceContainer）+ 布局约束，不是可点表面；
   // M3E 没有等价的底栏容器，保留。
   'lib/app/desktop/now_playing_bar.dart': {'Material'},
-  // 收藏页可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。
-  'lib/pages/favorites.dart': {'ReorderableListView'},
   // 同步口令 / 设备 id 需要「可选中复制」；M3E 没有 SelectableText 等价件。
   'lib/pages/sync_dialogs.dart': {'SelectableText'},
   // M3E 底部弹层 / 侧边弹层的宿主不提供 Material 祖先，透明 Material 只
@@ -34,6 +32,8 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   },
   // AI 提示词预览需要可选中复制。
   'lib/widgets/ai_dj_prompt_dialog.dart': {'SelectableText'},
+  // 合集弹层可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。
+  'lib/widgets/collection_picker.dart': {'ReorderableListView'},
   // M3E 1.2.0 未导出 reorder host，长期例外（收藏页 / 设置页 / 通用列表）。
   'lib/widgets/collection_track_list.dart': {'ReorderableListView'},
   // 自建全屏搜索遮罩（docs/pitfalls.md #57）：路由与透明 ink 祖先都是

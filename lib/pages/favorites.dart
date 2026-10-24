@@ -33,13 +33,14 @@ import '../utils/collection_row_query.dart';
 import '../utils/scroll_to_top.dart';
 import '../utils/sync_format.dart';
 import '../widgets/add_to_library.dart';
-import '../widgets/add_to_playlist_sheet.dart' show showPlaylistNameDialog;
 import '../widgets/app_search_bar.dart';
+import '../widgets/collection_picker.dart';
 import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_track_list.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/icon_swap.dart';
+import '../widgets/link_import_dialog.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/row_actions.dart';
@@ -401,7 +402,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 下载能力不可用时不出现本地歌曲。
   ///
   /// 合集弹层按这一份解析出顺序 / 图标 / 选中态。
-  List<_CollectionEntry> _collectionEntries(
+  List<CollectionPickerEntry> _collectionEntries(
     AppLocalizations l10n,
     LibraryProvider provider,
     List<PlaylistInfo> playlists,
@@ -417,8 +418,8 @@ class _FavoritesPageState extends State<FavoritesPage> {
       }
     }
     final showLocalSongs = downloadService?.supported ?? false;
-    final available = <String, _CollectionEntry>{
-      LibraryCollections.favoritesOrderKey: _CollectionEntry(
+    final available = <String, CollectionPickerEntry>{
+      LibraryCollections.favoritesOrderKey: CollectionPickerEntry(
         key: LibraryCollections.favoritesOrderKey,
         id: LibraryCollections.favoritesSentinel,
         name: l10n.favoritesPlaylistName,
@@ -426,7 +427,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         trackCount: favoritesCount,
         selected: selected == LibraryCollections.favoritesSentinel,
       ),
-      LibraryCollections.historyOrderKey: _CollectionEntry(
+      LibraryCollections.historyOrderKey: CollectionPickerEntry(
         key: LibraryCollections.historyOrderKey,
         id: LibraryCollections.historySentinel,
         name: l10n.libraryHistory,
@@ -435,7 +436,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         selected: selected == LibraryCollections.historySentinel,
       ),
       if (showLocalSongs)
-        LibraryCollections.downloadsOrderKey: _CollectionEntry(
+        LibraryCollections.downloadsOrderKey: CollectionPickerEntry(
           key: LibraryCollections.downloadsOrderKey,
           id: LibraryCollections.downloadsSentinel,
           name: l10n.libraryLocalSongs,
@@ -447,7 +448,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
       for (final playlist in playlists)
         if (playlist.id != favoritesId)
-          'playlist:${playlist.id}': _CollectionEntry(
+          'playlist:${playlist.id}': CollectionPickerEntry(
             key: 'playlist:${playlist.id}',
             id: playlist.id,
             name: playlist.name,
@@ -464,7 +465,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       for (final playlist in playlists)
         if (playlist.id != favoritesId) 'playlist:${playlist.id}',
     ];
-    final ordered = <_CollectionEntry>[];
+    final ordered = <CollectionPickerEntry>[];
     // 持久化顺序优先，其次自然顺序；模块只返回自然顺序中存在的键
     //（已删除列表的持久化键自动忽略）。
     for (final key in LibraryCollections.applyOrder(
@@ -496,23 +497,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
       cacheRevision: _cacheService?.revision.value ?? -1,
     );
     if (!mounted) return;
-    final outcome = await M3EBottomSheet.show<_PickerOutcome>(
+    final outcome = await showCollectionPicker(
       context,
-      builder: (_) => _CollectionPickerSheet(
-        title: l10n.favoritesSwitchTitle,
-        entries: _collectionEntries(
-          l10n,
-          provider,
-          playlists,
-          favoritesId,
-          selected,
-          downloadService,
-        ),
-        onOrderChanged: _session.reorderCollections,
-        onDelete: provider.deletePlaylist,
-        onCreate: provider.createPlaylist,
-        onRename: provider.renamePlaylist,
+      title: l10n.favoritesSwitchTitle,
+      entries: _collectionEntries(
+        l10n,
+        provider,
+        playlists,
+        favoritesId,
+        selected,
+        downloadService,
       ),
+      onOrderChanged: _session.reorderCollections,
+      onDelete: provider.deletePlaylist,
+      onCreate: provider.createPlaylist,
+      onRename: provider.renamePlaylist,
     );
     if (outcome == null || !mounted) return;
     if (outcome.importRequested) {
@@ -698,10 +697,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       for (final key in discover.sourceKeys)
         (key: key, name: discover.sourceDisplayName(key)),
     ];
-    final input = await M3EDialog.show<_LinkImportInput>(
-      context,
-      dialog: _LinkImportDialog(channels: channels),
-    );
+    final input = await showLinkImportDialog(context, channels: channels);
     if (input == null || !mounted) return;
     try {
       final result = await discover.importPlaylistFromLink(
@@ -1722,402 +1718,4 @@ class _PageScrollPort implements CollectionScrollPort {
 
   @override
   void flush() => _page._bookkeeping.flush();
-}
-
-/// 合集条目：收藏 / 播放历史 / 本地歌曲伪合集（哨兵 id）或一个自建列表。
-///
-/// 只服务本页的合集弹层：顺序、图标、数量与选中态由页面按持久化顺序 +
-/// 自然顺序统一解析。
-class _CollectionEntry {
-  const _CollectionEntry({
-    required this.key,
-    required this.id,
-    required this.name,
-    required this.icon,
-    required this.trackCount,
-    required this.selected,
-    this.playlistId,
-  });
-
-  /// 顺序持久化键：`favorites` / `history` / `downloads` / `playlist:<id>`。
-  final String key;
-
-  /// 选择结果：哨兵值或列表 id。
-  final int id;
-
-  final String name;
-  final IconData icon;
-  final int trackCount;
-
-  /// 当前正在浏览的合集（列表选中态）。
-  final bool selected;
-
-  /// 非空表示自建列表（可重命名 / 删除）。
-  final int? playlistId;
-
-  _CollectionEntry copyWithName(String name) => _CollectionEntry(
-        key: key,
-        id: id,
-        name: name,
-        icon: icon,
-        trackCount: trackCount,
-        selected: selected,
-        playlistId: playlistId,
-      );
-}
-
-/// 合集弹层结果：切换到某合集 / 请求导入收藏。
-class _PickerOutcome {
-  const _PickerOutcome.select(this.selectedId) : importRequested = false;
-
-  const _PickerOutcome.importRequested()
-      : selectedId = null,
-        importRequested = true;
-
-  final int? selectedId;
-  final bool importRequested;
-}
-
-/// 合集切换弹层：点行切换；「新建列表」；「导入收藏」；自建列表行支持
-/// 重命名/删除；行尾把手拖动排序（落位即持久化）。
-class _CollectionPickerSheet extends StatefulWidget {
-  const _CollectionPickerSheet({
-    required this.title,
-    required this.entries,
-    required this.onOrderChanged,
-    required this.onDelete,
-    required this.onCreate,
-    required this.onRename,
-  });
-
-  final String title;
-  final List<_CollectionEntry> entries;
-  final ValueChanged<List<String>> onOrderChanged;
-  final Future<LibraryMutationOutcome> Function(int playlistId) onDelete;
-  final Future<int> Function(String name) onCreate;
-  final Future<LibraryMutationOutcome> Function(int playlistId, String name)
-      onRename;
-
-  @override
-  State<_CollectionPickerSheet> createState() => _CollectionPickerSheetState();
-}
-
-class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
-  late final List<_CollectionEntry> _entries = List.of(widget.entries);
-
-  List<String> get _existingNames => [
-        for (final entry in _entries)
-          if (entry.playlistId != null) entry.name,
-      ];
-
-  void _onReorder(int oldIndex, int newIndex) {
-    // onReorderItem 已按移除后位置调整 newIndex，直接插入即可。
-    setState(() {
-      final moved = _entries.removeAt(oldIndex);
-      _entries.insert(newIndex, moved);
-    });
-    widget.onOrderChanged([for (final entry in _entries) entry.key]);
-  }
-
-  void _showFailure() {
-    if (!mounted) return;
-    M3ESnackbar.show(context, message: _l10n(context).operationFailed);
-  }
-
-  Future<void> _createPlaylist() async {
-    final l10n = _l10n(context);
-    final name = await showPlaylistNameDialog(
-      context,
-      title: l10n.playlistCreate,
-      confirmLabel: l10n.playlistCreateConfirm,
-      existingNames: _existingNames,
-    );
-    if (name == null || !mounted) return;
-    final int id;
-    try {
-      id = await widget.onCreate(name);
-    } catch (_) {
-      // 新建失败：留在弹层里提示，不切到一个不存在的合集。
-      _showFailure();
-      return;
-    }
-    if (!mounted) return;
-    // 新建后直接切换到新列表，便于立即添加曲目。
-    Navigator.of(context).pop(_PickerOutcome.select(id));
-  }
-
-  Future<void> _rename(_CollectionEntry entry) async {
-    final l10n = _l10n(context);
-    final name = await showPlaylistNameDialog(
-      context,
-      title: l10n.playlistRename,
-      confirmLabel: l10n.saveChanges,
-      existingNames: _existingNames,
-      initialValue: entry.name,
-    );
-    if (name == null || !mounted || name == entry.name) return;
-    final outcome = await widget.onRename(entry.playlistId!, name);
-    if (!mounted) return;
-    if (outcome.isFailure) {
-      // 写失败：本地乐观副本保持旧名，提示后用户可重试。
-      _showFailure();
-      return;
-    }
-    setState(() {
-      final index = _entries.indexWhere((item) => item.key == entry.key);
-      if (index >= 0) _entries[index] = _entries[index].copyWithName(name);
-    });
-  }
-
-  Future<void> _confirmDelete(
-    BuildContext context,
-    _CollectionEntry entry,
-  ) async {
-    final l10n = _l10n(context);
-    final confirmed = await M3EDialog.show<bool>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.playlistDelete,
-        content: Text(l10n.playlistDeleteConfirm(entry.name)),
-        actions: [
-          M3EButton.text(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n.cancel),
-          ),
-          M3EButton.filled(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.delete),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    HapticsService.lightImpact();
-    final outcome = await widget.onDelete(entry.playlistId!);
-    if (!mounted) return;
-    if (outcome.isFailure) {
-      // 写失败：弹层保留该行（本地副本不做乐观删除）。
-      _showFailure();
-      return;
-    }
-    setState(() => _entries.removeWhere((item) => item.key == entry.key));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 标题行：合集名 + 右侧两个小按钮（新建 / 导入不再占用列表行）。
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 12, 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    style: context.typeScale.titleMedium,
-                  ),
-                ),
-                // 这是两个工具动作（新建 / 导入）。docs/architecture.md §6 的
-                // 目标是收成 icon-only 动作组，但当前依赖版本
-                // （material_3_expressive 1.1.7）里 M3EButton 仅当 icon 与
-                // label 同时非空才渲染内容，icon-only 动作会退化成空白按钮
-                // （上游修复需 ≥ 1.1.8，尚未发布）；在依赖升级前保持两颗标准
-                // 图标键：可见、可点，纯图标语义走 semanticLabel，key 保留稳定定位。
-                M3EIconButton(
-                  key: const Key('favoritesCreatePlaylist'),
-                  variant: M3EIconButtonVariant.standard,
-                  size: M3EIconButtonSize.sm,
-                  semanticLabel: l10n.playlistCreate,
-                  icon: const Icon(Icons.add_rounded),
-                  onPressed: _createPlaylist,
-                ),
-                M3EIconButton(
-                  key: const Key('favoritesImportCollection'),
-                  variant: M3EIconButtonVariant.standard,
-                  size: M3EIconButtonSize.sm,
-                  semanticLabel: l10n.libraryImportFavorites,
-                  icon: const Icon(Icons.library_add_rounded),
-                  onPressed: () => Navigator.of(context).pop(
-                    const _PickerOutcome.importRequested(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Flexible(
-            child: ReorderableListView.builder(
-              shrinkWrap: true,
-              buildDefaultDragHandles: false,
-              onReorderItem: _onReorder,
-              itemCount: _entries.length,
-              itemBuilder: (context, index) {
-                final entry = _entries[index];
-                return M3EListItem(
-                  key: ValueKey<String>(entry.key),
-                  leading: Icon(entry.icon),
-                  headline: entry.name,
-                  // 数量走 M3E 元文本槽（选中态自带配色）；当前合集只靠
-                  // selected 高亮（选中容器），不叠对号图标。
-                  trailingText: l10n.playlistTrackCount(entry.trackCount),
-                  selected: entry.selected,
-                  onTap: () => Navigator.of(context)
-                      .pop(_PickerOutcome.select(entry.id)),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (entry.playlistId != null)
-                        M3EMenu.entries(
-                          position: M3EMenuAnchorPosition.bottomEnd,
-                          anchorBuilder: (context, open) => M3EIconButton(
-                            variant: M3EIconButtonVariant.standard,
-                            icon: const Icon(Icons.more_vert_rounded),
-                            semanticLabel: l10n.playlistRename,
-                            onPressed: open,
-                          ),
-                          onSelected: (value) {
-                            if (value == 'rename') {
-                              _rename(entry);
-                            } else if (value == 'delete') {
-                              _confirmDelete(context, entry);
-                            }
-                          },
-                          entries: [
-                            M3EMenuEntry(
-                              label: l10n.playlistRename,
-                              value: 'rename',
-                              leading: const Icon(Icons.edit_rounded, size: 20),
-                            ),
-                            M3EMenuEntry(
-                              label: l10n.playlistDelete,
-                              value: 'delete',
-                              isDestructive: true,
-                              leading: const Icon(
-                                Icons.delete_outline_rounded,
-                                size: 20,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ReorderableDragStartListener(
-                        index: index,
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8),
-                          child: Icon(Icons.drag_handle_rounded),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}
-
-/// 链接导入输入（平台 + 链接/ID）。
-class _LinkImportInput {
-  const _LinkImportInput(this.sourceKey, this.rawId);
-
-  final String sourceKey;
-  final String rawId;
-}
-
-/// 五平台歌单链接导入对话框：选择平台并粘贴链接/ID。
-class _LinkImportDialog extends StatefulWidget {
-  const _LinkImportDialog({required this.channels});
-
-  /// 平台列表（key + 展示名，顺序与发现页一致）。
-  final List<({String key, String name})> channels;
-
-  @override
-  State<_LinkImportDialog> createState() => _LinkImportDialogState();
-}
-
-class _LinkImportDialogState extends State<_LinkImportDialog> {
-  late String _sourceKey = widget.channels.first.key;
-  final TextEditingController _controller = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    final l10n = _l10n(context);
-    final rawId = _controller.text.trim();
-    if (rawId.isEmpty) {
-      setState(() => _error = l10n.discoverOpenPlaylistHint);
-      return;
-    }
-    Navigator.of(context).pop(_LinkImportInput(_sourceKey, rawId));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    return M3EDialog(
-      title: l10n.playlistImportFromLink,
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          M3EDropdownMenu<String>(
-            items: [
-              for (final channel in widget.channels)
-                M3EDropdownItem<String>(
-                  label: channel.name,
-                  value: channel.key,
-                  selected: channel.key == _sourceKey,
-                ),
-            ],
-            singleSelect: true,
-            showChipAnimation: false,
-            fieldStyle: M3EDropdownFieldStyle(
-              hintText: l10n.playlistImportChannel,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-            onSelectionChanged: (items) {
-              if (items.isEmpty) return;
-              setState(() => _sourceKey = items.first.value);
-            },
-          ),
-          const SizedBox(height: 12),
-          M3ETextField(
-            controller: _controller,
-            placeholder: l10n.discoverOpenPlaylistHint,
-            autofocus: true,
-            // 弹窗表单与音源配置等其它弹窗一致用 outlined（这不是搜索框）。
-            variant: M3ETextFieldVariant.outlined,
-            errorText: _error,
-            textInputAction: TextInputAction.done,
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-            onSubmitted: (_) => _submit(),
-          ),
-        ],
-      ),
-      actions: [
-        M3EButton.text(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.cancel),
-        ),
-        M3EButton.filled(
-          onPressed: _submit,
-          child: Text(l10n.discoverOpen),
-        ),
-      ],
-    );
-  }
 }
