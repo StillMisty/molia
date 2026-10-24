@@ -16,7 +16,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('无可用源：descriptors 为空；byKey 懒创建（空 key 为 null）', () async {
+  test('无脚本：只有原生的 bili 可搜索；byKey 懒创建（空 key 为 null）', () async {
     final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
@@ -25,7 +25,8 @@ void main() {
       manager.dispose();
     });
 
-    expect(registry.descriptors, isEmpty);
+    // bili 的搜索/取链不依赖 LX 脚本，是唯一无脚本可用源。
+    expect(registry.descriptors.map((d) => d.key), ['bili']);
     expect(registry.byKey(''), isNull);
 
     final source = registry.byKey('kw');
@@ -50,13 +51,23 @@ void main() {
     ));
 
     final descriptors = registry.descriptors;
-    expect(descriptors, hasLength(1));
-    final descriptor = descriptors.single;
+    expect(descriptors.map((d) => d.key), [
+      'bili',
+      AnyListenSource.sourceKey,
+    ]);
+    final bili = descriptors.first;
+    expect(bili.displayName, '哔哩哔哩');
+    expect(bili.capabilities.search, isTrue);
+    expect(bili.capabilities.resolveUrl, isTrue);
+    expect(bili.capabilities.lyrics, isFalse);
+    expect(bili.order, 0);
+
+    final descriptor = descriptors.last;
     expect(descriptor.key, AnyListenSource.sourceKey);
     expect(descriptor.displayName, AnyListenSource.displayName);
     expect(descriptor.kind, domain.SourceKind.anyListen);
     expect(descriptor.enabled, isTrue);
-    expect(descriptor.order, 0);
+    expect(descriptor.order, 1);
     expect(descriptor.capabilities.search, isTrue);
     expect(descriptor.capabilities.resolveUrl, isTrue);
     expect(descriptor.capabilities.collection, isFalse);

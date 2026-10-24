@@ -26,6 +26,7 @@ void main() {
     required bool Function(dynamic response) isInvalid,
     List<SourceTrack>? Function(dynamic response)? parseItems,
     int? Function(dynamic response)? totalOf,
+    bool Function(dynamic response)? isEndOf,
     bool Function(dynamic response)? retryIf,
     int retries = 1,
   }) {
@@ -38,6 +39,7 @@ void main() {
       isInvalid: isInvalid,
       parseItems: parseItems ?? (response) => const [],
       totalOf: totalOf,
+      isEndOf: isEndOf,
     );
   }
 
@@ -118,6 +120,23 @@ void main() {
     );
     expect(result.total, 100);
     expect(result.hasMore, isTrue);
+  });
+
+  test('分页推断：平台明确 isEnd 优先于 total', () async {
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
+    );
+    final result = await runBuiltinSearch(
+      callOf(
+        isInvalid: (_) => false,
+        totalOf: (_) => 100,
+        isEndOf: (_) => true,
+      ),
+      page: 1,
+      limit: 30,
+    );
+    expect(result.total, 100);
+    expect(result.hasMore, isFalse);
   });
 
   test('真平台端到端：酷狗搜索走 runner（含列表路径与结构缺失两条分支）', () async {

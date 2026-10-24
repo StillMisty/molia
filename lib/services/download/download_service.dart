@@ -563,8 +563,10 @@ class DownloadService extends ChangeNotifier {
       final cached = await _completeAudioCachePath(track, resolvedQuality);
       if (cached != null) {
         _logger.info('音频缓存命中，直接拷贝: $cached');
-        final extension =
-            DownloadFileLayout.extensionForQuality(resolvedQuality);
+        final extension = DownloadFileLayout.extensionForTrack(
+          track.id.sourceKey,
+          resolvedQuality,
+        );
         base = await _audioBaseName(root, track, extension);
         filePath = DownloadFileLayout.audioPath(root, base, extension);
         partPath = DownloadFileLayout.partPath(filePath);

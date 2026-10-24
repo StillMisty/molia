@@ -12,6 +12,7 @@ library;
 
 import '../../data/cache/request_cache.dart';
 import '../source_track.dart';
+import 'bili_track.dart';
 import 'builtin_search.dart';
 import 'kg_pic.dart';
 import 'kw_pic.dart';
@@ -72,6 +73,11 @@ class BuiltinPicDispatch {
         final songId = raw['songmid']?.toString();
         if (songId == null || songId.isEmpty) return Future.value(null);
         return MgLyric.coverOf(songId);
+      case 'bili':
+        // 搜索 / 收藏夹自带封面：只做 `//` 补协议，不再发请求。
+        return Future.value(
+          biliCoverUrl(raw['pic'] ?? raw['cover'] ?? raw['img']),
+        );
       default:
         return Future.value(null);
     }

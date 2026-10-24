@@ -170,7 +170,9 @@ class SourceManager extends ChangeNotifier {
     ];
     final existing = candidates.map((o) => o.key).toSet();
     // 未出现在可搜索列表中的内置发现平台（无脚本也可浏览热榜/歌单）。
-    for (final key in BuiltinPlatforms.keys) {
+    // 只遍历真正有发现适配器的平台：平台全集里可能有「可搜索但没有发现页」
+    // 的条目，把它加进来会出现一个点开必然空白的发现入口。
+    for (final key in BuiltinPlatforms.discoverSources.keys) {
       if (existing.contains(key)) continue;
       candidates.add(SourceOption(
         key: key,
@@ -231,18 +233,21 @@ class SourceManager extends ChangeNotifier {
     return candidates;
   }
 
-  /// 内置平台「是否可搜索」的唯一判定：脚本可取链才有搜索入口
-  /// （channels 的候选列表、[capabilitiesFor] 的能力位与 [searchWithMeta]
-  /// 的路由门共用它——三处各算一份会静默漂移）。
-  bool _isBuiltinSearchable(String key) =>
-      BuiltinPlatforms.isSupported(key) &&
-      (_activeSources[key]?.canResolveUrl ?? false);
+  /// 内置平台「是否可搜索」的唯一判定（channels 的候选列表、[capabilitiesFor]
+  /// 的能力位与 [searchWithMeta] 的路由门共用它——三处各算一份会静默漂移）：
+  /// 原生取链的平台（bili）自带搜索与播放，其余平台要脚本可取链。
+  bool _isBuiltinSearchable(String key) {
+    final platform = BuiltinPlatforms.maybeOf(key);
+    if (platform == null) return false;
+    return platform.resolve != null ||
+        (_activeSources[key]?.canResolveUrl ?? false);
+  }
 
   /// 音源能力：与路由的实际 gating 一致（registry / 领域适配器共用）。
   ///
-  /// - builtin：出现在 [searchableSources] 的前提是已有可取链脚本，因此
-  ///   `resolveUrl` 与脚本声明一致；歌词/封面为 Dart 原生实现（脚本未声明
-  ///   `lyric`/`pic` action 时也可用）；
+  /// - builtin：原生取链平台（bili）或已有可取链脚本才可搜索 / 播放；
+  ///   歌词/封面为 Dart 原生实现（`nativeLyrics` 表达歌词是否已接入，
+  ///   未接入的平台不能向 UI 宣称可用）；
   /// - lx：按脚本声明的 action；
   /// - any-listen：已配置且启用时全部可用。
   SourceCapabilities capabilitiesFor(String key) {
@@ -266,8 +271,10 @@ class SourceManager extends ChangeNotifier {
     return SourceCapabilities(
       search: builtinSearchable || (decl?.canSearch ?? false),
       pagination: builtinSearchable || (decl?.canSearch ?? false),
-      resolveUrl: decl?.canResolveUrl ?? false,
-      lyrics: builtin || (decl?.canFetchLyric ?? false),
+      // 原生取链与脚本取链是并列的两条路：任一存在即可播放。
+      resolveUrl: (platform?.resolve != null) || (decl?.canResolveUrl ?? false),
+      lyrics:
+          (platform?.nativeLyrics ?? false) || (decl?.canFetchLyric ?? false),
       artwork: builtin || (decl?.canFetchPic ?? false),
       comment: platform?.comments != null,
       // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
@@ -498,7 +505,7 @@ class SourceManager extends ChangeNotifier {
     if (BuiltinPlatforms.isSupported(sourceKey)) {
       if (!_isBuiltinSearchable(sourceKey)) {
         throw LxEngineException(
-            '当前音源脚本不支持 ${BuiltinPlatforms.displayName(sourceKey)}，无法播放该平台歌曲');
+            '当前环境不支持 ${BuiltinPlatforms.displayName(sourceKey)} 的搜索与播放');
       }
       return BuiltinSearch.searchWithMeta(sourceKey, keyword,
           page: page, limit: limit);
@@ -539,6 +546,18 @@ class SourceManager extends ChangeNotifier {
         throw e.toSourceFailure();
       }
     }
+    final picked =
+        track.pickQuality(requestedQuality ?? _preferences.preferredQuality);
+    // 原生取链优先：B 站等平台的搜索与播放不依赖脚本，走注册表里的解析器
+    // 才能保留直链要求的 headers / 有效期。
+    final nativeResolve = BuiltinPlatforms.resolveFor(track.sourceKey);
+    if (nativeResolve != null) {
+      try {
+        return await nativeResolve(track.raw, quality: picked);
+      } catch (e) {
+        throw SourceFailure.from(e);
+      }
+    }
     final decl = _activeSources[track.sourceKey];
     if (decl == null) {
       throw LxEngineException('音源 ${track.sourceKey} 当前不可用');
@@ -546,8 +565,6 @@ class SourceManager extends ChangeNotifier {
     if (!decl.canResolveUrl) {
       throw LxEngineException('音源「${decl.name}」不支持获取播放地址');
     }
-    final picked =
-        track.pickQuality(requestedQuality ?? _preferences.preferredQuality);
     final musicInfo = _withPickedHash(track, picked);
     final url = await _engine.getMusicUrl(
       source: track.sourceKey,

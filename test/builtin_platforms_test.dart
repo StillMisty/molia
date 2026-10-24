@@ -16,7 +16,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  const expectedKeys = ['tx', 'wy', 'kg', 'kw', 'mg'];
+  const expectedKeys = ['tx', 'wy', 'kg', 'kw', 'mg', 'bili'];
+  const musicKeys = ['tx', 'wy', 'kg', 'kw', 'mg'];
 
   test('平台键只在注册表声明一次：规范顺序 / 显示名 / isSupported', () {
     expect(BuiltinPlatforms.keys, expectedKeys);
@@ -35,31 +36,36 @@ void main() {
       expect(BuiltinSearch.isBuiltin(key), isTrue, reason: key);
       expect(BuiltinSearch.displayName(key), platform.displayName, reason: key);
     }
+    expect(BuiltinPlatforms.displayName('bili'), '哔哩哔哩');
     expect(BuiltinPlatforms.isSupported('lx_custom'), isFalse);
     expect(BuiltinPlatforms.isSupported('any_listen'), isFalse);
 
     // 既有 facade 的别名必须指向同一份注册表，而不是各自复制键表。
+    // 发现页只列真正有发现适配器的平台（bili 在 Phase 4 接入）。
     expect(BuiltinSearch.platforms.keys, expectedKeys);
-    expect(BuiltinDiscover.sourceKeys, expectedKeys);
-    expect(BuiltinDiscover.sources.keys, expectedKeys);
+    expect(BuiltinDiscover.sourceKeys, musicKeys);
+    expect(BuiltinDiscover.sources.keys, musicKeys);
+    expect(BuiltinDiscover.isSupported('bili'), isFalse);
   });
 
   test('六族支持矩阵与注册表一致（每族都有自己的类型化适配器）', () {
     expect(BuiltinPlatforms.searchKeys, expectedKeys.toSet());
-    expect(BuiltinPlatforms.lyricSearchKeys, expectedKeys.toSet());
-    expect(BuiltinPlatforms.commentKeys, expectedKeys.toSet());
-    expect(BuiltinPlatforms.albumKeys, expectedKeys.toSet());
-    expect(BuiltinPlatforms.artistKeys, expectedKeys.toSet());
-    expect(BuiltinPlatforms.discoverKeys, expectedKeys.toSet());
+    expect(BuiltinPlatforms.lyricSearchKeys, musicKeys.toSet());
+    expect(BuiltinPlatforms.commentKeys, musicKeys.toSet());
+    expect(BuiltinPlatforms.albumKeys, musicKeys.toSet());
+    expect(BuiltinPlatforms.artistKeys, musicKeys.toSet());
+    expect(BuiltinPlatforms.discoverKeys, musicKeys.toSet());
+
+    // B 站是首个原生取链平台（不需要脚本），搜索之外的能力按阶段接入。
+    expect(BuiltinPlatforms.resolveFor('bili'), isNotNull);
+    expect(BuiltinPlatforms.maybeOf('bili')!.nativeLyrics, isFalse);
+    for (final key in musicKeys) {
+      expect(BuiltinPlatforms.resolveFor(key), isNull, reason: key);
+      expect(BuiltinPlatforms.maybeOf(key)!.nativeLyrics, isTrue, reason: key);
+    }
 
     for (final key in expectedKeys) {
       expect(BuiltinPlatforms.searchFor(key), isNotNull, reason: key);
-      expect(BuiltinPlatforms.lyricSearchFor(key), isNotNull, reason: key);
-      expect(BuiltinPlatforms.commentsFor(key), isNotNull, reason: key);
-      expect(BuiltinPlatforms.albumFor(key), isNotNull, reason: key);
-      expect(BuiltinPlatforms.artistFor(key), isNotNull, reason: key);
-      expect(BuiltinPlatforms.discoverFor(key), isNotNull, reason: key);
-
       // facade 的能力位不能自己再写一份平台表。
       expect(BuiltinAlbums.isSupported(key),
           BuiltinPlatforms.albumKeys.contains(key),
@@ -77,13 +83,20 @@ void main() {
           BuiltinPlatforms.discoverKeys.contains(key),
           reason: key);
     }
+    for (final key in musicKeys) {
+      expect(BuiltinPlatforms.lyricSearchFor(key), isNotNull, reason: key);
+      expect(BuiltinPlatforms.commentsFor(key), isNotNull, reason: key);
+      expect(BuiltinPlatforms.albumFor(key), isNotNull, reason: key);
+      expect(BuiltinPlatforms.artistFor(key), isNotNull, reason: key);
+      expect(BuiltinPlatforms.discoverFor(key), isNotNull, reason: key);
+    }
   });
 
   test('SourceManager.capabilitiesFor 与注册表 + 可取链门一致（无脚本）', () {
     final manager = SourceManager(settings: testSettingsRegistry());
     addTearDown(manager.dispose);
 
-    for (final key in expectedKeys) {
+    for (final key in musicKeys) {
       final platform = BuiltinPlatforms.maybeOf(key)!;
       final capabilities = manager.capabilitiesFor(key);
 
@@ -100,6 +113,18 @@ void main() {
       expect(capabilities.artist, isFalse, reason: key);
       expect(capabilities.lyricSearch, isFalse, reason: key);
     }
+
+    // bili 不依赖脚本：搜索 / 播放原生可用；歌词与其余能力尚未接入。
+    final bili = manager.capabilitiesFor('bili');
+    expect(bili.search, isTrue);
+    expect(bili.pagination, isTrue);
+    expect(bili.resolveUrl, isTrue);
+    expect(bili.artwork, isTrue);
+    expect(bili.lyrics, isFalse);
+    expect(bili.comment, isFalse);
+    expect(bili.collection, isFalse);
+    expect(bili.artist, isFalse);
+    expect(bili.lyricSearch, isFalse);
 
     // 非内置平台不应从注册表获得任何内置能力。
     final unknown = manager.capabilitiesFor('lx_custom');

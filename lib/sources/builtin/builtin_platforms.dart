@@ -17,8 +17,11 @@ library;
 import '../../domain/models/album.dart';
 import '../../domain/models/artist.dart';
 import '../../domain/models/comment.dart';
+import '../../domain/ports/music_source.dart' show PlayableStream;
 import '../source_search_result.dart';
 import 'artist_source.dart';
+import 'bili_play.dart';
+import 'bili_search.dart';
 import 'discover_source.dart';
 import 'kg_album.dart';
 import 'kg_artist.dart';
@@ -57,6 +60,15 @@ typedef BuiltinSearchAdapter = Future<SourceSearchResult> Function(
   String keyword, {
   int page,
   int limit,
+});
+
+/// 原生取链适配器：平台自己就能从 raw 解析可播流（无需 LX 脚本）。
+///
+/// 返回 [PlayableStream] 而不是 URL：B 站直链必须带 Referer / UA，headers
+/// 必须一路透传到播放器与缓存写入。
+typedef BuiltinResolveAdapter = Future<PlayableStream> Function(
+  Map<String, dynamic> raw, {
+  String? quality,
 });
 
 /// 按歌词搜歌适配器（失败抛 `SourceFailure`，不静默吞成空结果）。
@@ -126,21 +138,28 @@ class BuiltinPlatform {
   final String displayName;
 
   final BuiltinSearchAdapter? search;
+  final BuiltinResolveAdapter? resolve;
   final BuiltinLyricSearchAdapter? lyricSearch;
   final BuiltinCommentAdapter? comments;
   final BuiltinAlbumAdapter? album;
   final BuiltinArtistAdapter? artist;
   final DiscoverSource? discover;
 
+  /// 是否由 Dart 原生实现歌词（五平台为 true；B 站字幕歌词在 Phase 3 接入，
+  /// 在此之前不能向 UI 宣称有歌词能力）。
+  final bool nativeLyrics;
+
   const BuiltinPlatform({
     required this.key,
     required this.displayName,
     this.search,
+    this.resolve,
     this.lyricSearch,
     this.comments,
     this.album,
     this.artist,
     this.discover,
+    this.nativeLyrics = true,
   });
 }
 
@@ -148,10 +167,11 @@ class BuiltinPlatform {
 class BuiltinPlatforms {
   BuiltinPlatforms._();
 
-  /// 规范平台顺序：QQ → 网易 → 酷狗 → 酷我 → 咪咕。
+  /// 规范平台顺序：QQ → 网易 → 酷狗 → 酷我 → 咪咕 → 哔哩哔哩。
   ///
   /// 音源页渠道、搜索/取链解析与发现页共用这一份顺序；用户可在音源页
-  /// 自定义排序，重置后回到这里。
+  /// 自定义排序，重置后回到这里。B 站是首个搜索 + 取链都由原生实现的平台
+  /// （不需要 LX 脚本）；其余平台仍要脚本声明取链。
   static final Map<String, BuiltinPlatform> byKey =
       Map.unmodifiable(<String, BuiltinPlatform>{
     'tx': BuiltinPlatform(
@@ -234,6 +254,14 @@ class BuiltinPlatforms {
       ),
       discover: const MgDiscoverSource(),
     ),
+    'bili': BuiltinPlatform(
+      key: 'bili',
+      displayName: '哔哩哔哩',
+      search: BiliSearch.searchWithMeta,
+      resolve: BiliPlay.resolve,
+      // Phase 3 接入 CC 字幕歌词后再翻成 true。
+      nativeLyrics: false,
+    ),
   });
 
   /// 规范键顺序（发现页 / 默认渠道顺序）。
@@ -300,6 +328,8 @@ class BuiltinPlatforms {
   static String displayName(String key) => byKey[key]?.displayName ?? key;
 
   static BuiltinSearchAdapter? searchFor(String key) => byKey[key]?.search;
+
+  static BuiltinResolveAdapter? resolveFor(String key) => byKey[key]?.resolve;
 
   static BuiltinLyricSearchAdapter? lyricSearchFor(String key) =>
       byKey[key]?.lyricSearch;

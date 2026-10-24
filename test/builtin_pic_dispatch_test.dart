@@ -108,6 +108,14 @@ void main() {
       'https://p2.music.126.net/pE_xbRjFKTza8i7CKfmDuQ==/109951164447654929.jpg',
       reason: 'wy 走歌曲详情 al.picUrl',
     );
+    expect(
+      await dispatch.fetch(track('bili', {
+        'bvid': 'BV1xx411c7mD',
+        'pic': '//i1.hdslb.com/bfs/archive/cover.jpg',
+      })),
+      'https://i1.hdslb.com/bfs/archive/cover.jpg',
+      reason: 'bili 直接用搜索响应封面，只补协议头',
+    );
 
     expect(
       requests.map((uri) => uri.host).toSet(),
@@ -139,6 +147,7 @@ void main() {
     expect(await dispatch.fetch(track('tx', const {})), isNull);
     expect(await dispatch.fetch(track('kw', const {})), isNull);
     expect(await dispatch.fetch(track('mg', const {})), isNull);
+    expect(await dispatch.fetch(track('bili', const {})), isNull);
     expect(
       await dispatch.fetch(track('custom-source', {'songmid': '1'})),
       isNull,

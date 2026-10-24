@@ -30,7 +30,17 @@ class SourceQuality {
 }
 
 /// 通用取键优先级（`SourceTrack.id` / `TrackId` / 发现曲目共用，不含兜底）。
-const List<String> _rawIdFields = ['songmid', 'hash', 'songId', 'id', 'mid'];
+///
+/// `bvid` 在最前：B 站同一视频同时带 bvid / aid，取链与页面地址都以 bvid
+/// 为准；其余平台没有该字段，顺序对它们无影响。
+const List<String> _rawIdFields = [
+  'bvid',
+  'songmid',
+  'hash',
+  'songId',
+  'id',
+  'mid',
+];
 
 /// 从 raw 取平台 id：按 [_rawIdFields] 取第一个非空值；找不到返回 `''`。
 String rawIdOf(Map<String, dynamic> raw) {
@@ -59,6 +69,8 @@ const Map<String, List<String>> _platformIdFields = {
   'kg': ['hash', 'songmid', 'id'],
   'kw': ['songmid', 'musicId', 'id'],
   'mg': ['copyrightId', 'songId', 'songmid', 'id'],
+  // B 站取链优先 bvid；收藏夹条目没有 bvid 时用 aid（导入时已归一为 aid）。
+  'bili': ['bvid', 'aid', 'id'],
 };
 
 /// 未登记平台的取键顺序（`.lxmc` 导入共用此顺序）。

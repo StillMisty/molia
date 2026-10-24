@@ -1,0 +1,64 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "seid": "1234567890",
+    "page": 1,
+    "pagesize": 20,
+    "numResults": 1000,
+    "numPages": 50,
+    "suggestion_keyword": "",
+    "result": [
+      {
+        "type": "video",
+        "id": 987654,
+        "author": "买辣椒也用券",
+        "mid": 123456,
+        "typeid": 31,
+        "typename": "音乐",
+        "arcurl": "http://www.bilibili.com/video/av987654",
+        "aid": 987654,
+        "bvid": "BV1xx411c7mD",
+        "title": "<em class=\"keyword\">起风</em>了 &amp; 翻唱",
+        "description": "测试视频",
+        "pic": "//i1.hdslb.com/bfs/archive/cover1.jpg",
+        "play": 120000,
+        "video_review": 100,
+        "favorites": 2000,
+        "tag": "音乐,翻唱",
+        "review": 50,
+        "pubdate": 1700000000,
+        "senddate": 1700000000,
+        "duration": "5:17",
+        "badgepay": false,
+        "hit_columns": ["title"],
+        "is_pay": 0,
+        "is_union_video": 0
+      },
+      {
+        "type": "video",
+        "id": 555001,
+        "author": "周杰伦",
+        "mid": 336,
+        "typeid": 31,
+        "typename": "音乐",
+        "aid": 555001,
+        "bvid": "BV1ab411c7XY",
+        "title": "<em class=\"keyword\">晴天</em>",
+        "pic": "https://i2.hdslb.com/bfs/archive/cover2.jpg",
+        "duration": "1:02:03",
+        "tag": "音乐",
+        "pubdate": 1690000000
+      },
+      {
+        "type": "video",
+        "author": "无地址条目",
+        "mid": 777,
+        "title": "缺少 bvid / aid，应被过滤",
+        "pic": "//i0.hdslb.com/bfs/archive/cover3.jpg",
+        "duration": "3:00"
+      }
+    ]
+  }
+}

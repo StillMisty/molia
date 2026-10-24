@@ -171,6 +171,10 @@ class ArtworkCache {
     if (host.contains('migu.cn') || host.contains('1073.cn')) {
       return 'https://music.migu.cn/';
     }
+    // B 站封面 CDN 同样校验 Referer（hdslb 图片 / biliimg 用户头像）。
+    if (host.contains('hdslb.com') || host.contains('biliimg.com')) {
+      return 'https://www.bilibili.com/';
+    }
     return null;
   }
 

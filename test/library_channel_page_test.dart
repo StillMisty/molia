@@ -178,7 +178,23 @@ void main() {
     expect(find.text('网易音乐'), findsOneWidget); // 渠道下拉当前值
     expect(find.text('热榜'), findsOneWidget); // 只有 tab 名，无同名分区标题
     expect(find.text('歌单'), findsOneWidget);
-    expect(find.text('搜索'), findsNothing); // 无脚本时不可搜索 → 隐藏
+    expect(find.text('搜索'), findsNothing); // 当前 wy 无脚本不可搜索 → 隐藏
+
+    // 渠道并集：bili 有原生搜索/播放但没有发现页，不能出现发现 tab。
+    expect(
+      sources.channels.map((option) => option.key),
+      contains('bili'),
+    );
+    expect(
+      sources.channels
+          .firstWhere((option) => option.key == 'bili')
+          .discoverable,
+      isFalse,
+    );
+    expect(
+      sources.searchableSources.map((option) => option.key),
+      contains('bili'),
+    );
 
     // 下拉切换渠道 → 歌单 tab 重新加载。
     await tester.tap(find.text('网易音乐'));
@@ -254,7 +270,8 @@ void main() {
     search = buildSearch(const []);
     await pumpLibrary(tester);
 
-    for (final key in ['wy', 'tx', 'kg', 'kw', 'mg']) {
+    // bili 有原生搜索（无脚本也可用），必须一起停用才会进入全停用空态。
+    for (final key in ['wy', 'tx', 'kg', 'kw', 'mg', 'bili']) {
       await manager.setChannelEnabled(key, false);
     }
     await tester.pumpAndSettle();

@@ -50,7 +50,10 @@ class BuiltinDiscover {
   static Map<String, DiscoverSource> get sources =>
       BuiltinPlatforms.discoverSources;
 
-  static List<String> get sourceKeys => BuiltinPlatforms.keys;
+  /// 只列真正有发现适配器的平台：平台键全集里存在「可搜索但还没有发现页」
+  /// 的条目（当前是 bili），不能把发现入口挂到它上面。
+  static List<String> get sourceKeys =>
+      List.unmodifiable(BuiltinPlatforms.discoverSources.keys);
 
   static bool isSupported(String sourceKey) =>
       BuiltinPlatforms.discoverFor(sourceKey) != null;

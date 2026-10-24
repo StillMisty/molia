@@ -23,6 +23,11 @@ void main() {
       expect(rawIdOf(const {}), '');
       expect(rawIdOf({'name': 'x'}), '');
     });
+
+    test('bili：bvid 优先于 aid / id', () {
+      expect(rawIdOf({'bvid': 'BV1', 'aid': 9, 'id': 9}), 'BV1');
+      expect(rawIdOf({'aid': 9, 'id': 9}), '9');
+    });
   });
 
   group('platformRawIdOf', () {
@@ -40,6 +45,12 @@ void main() {
 
     test('未登记平台按默认顺序（songId 优先）', () {
       expect(platformRawIdOf('custom', {'songId': 's', 'songmid': 'm'}), 's');
+    });
+
+    test('bili 按 bvid > aid > id（收藏夹 entry 的 id 是 aid）', () {
+      expect(platformRawIdOf('bili', {'bvid': 'BV1', 'aid': 9, 'id': 9}), 'BV1');
+      expect(platformRawIdOf('bili', {'aid': 9, 'id': 9}), '9');
+      expect(platformRawIdOf('bili', {'id': 9}), '9');
     });
 
     test('找不到返回空串', () {

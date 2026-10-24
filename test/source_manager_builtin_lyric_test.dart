@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/sources/builtin/builtin_platforms.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
@@ -49,13 +48,17 @@ void main() {
         raw: {'songmid': '228908', 'source': 'kw'},
       );
 
-  test('能力位：内置五平台歌词/封面为真（无需脚本声明）', () {
+  test('能力位：音乐平台歌词/封面为真；bili 歌词未接入（封面可用）', () {
     final manager = SourceManager(settings: testSettingsRegistry());
-    for (final key in BuiltinPlatforms.keys) {
+    for (final key in const ['tx', 'wy', 'kg', 'kw', 'mg']) {
       final capabilities = manager.capabilitiesFor(key);
       expect(capabilities.lyrics, isTrue, reason: key);
       expect(capabilities.artwork, isTrue, reason: key);
     }
+    // B 站字幕歌词在 Phase 3 接入；当前不能展示歌词入口。
+    final bili = manager.capabilitiesFor('bili');
+    expect(bili.lyrics, isFalse);
+    expect(bili.artwork, isTrue);
     manager.dispose();
   });
 

@@ -100,6 +100,20 @@ void main() {
       DownloadFileLayout.extensionFor(Uri.parse('https://x/a.oga'), '320k'),
       'ogg',
     );
+    // B 站 dash 音频是 m4s 分片容器，落盘按 m4a（播放器/标签按 M4A 识别）。
+    expect(
+      DownloadFileLayout.extensionFor(
+        Uri.parse('https://x/a.m4s?deadline=1&gen=playurlv3'),
+        '192k',
+      ),
+      'm4a',
+    );
+
+    // 缓存命中没有直链后缀：bili 固定 m4a，其余按音质推断。
+    expect(DownloadFileLayout.extensionForTrack('bili', '192k'), 'm4a');
+    expect(DownloadFileLayout.extensionForTrack('bili', 'flac'), 'm4a');
+    expect(DownloadFileLayout.extensionForTrack('kw', '320k'), 'mp3');
+    expect(DownloadFileLayout.extensionForTrack('wy', 'flac'), 'flac');
 
     expect(DownloadFileLayout.extensionForQuality('flac24bit'), 'flac');
     expect(DownloadFileLayout.extensionForQuality('wav'), 'wav');

@@ -181,6 +181,11 @@ String? platformTrackPageUrl(Track track) {
       return copyrightId.isEmpty
           ? null
           : 'https://music.migu.cn/v3/music/song/$copyrightId';
+    case 'bili':
+      final bvid = payloadString('bvid');
+      if (bvid.isNotEmpty) return 'https://www.bilibili.com/video/$bvid';
+      final aid = payloadString('aid');
+      return aid.isEmpty ? null : 'https://www.bilibili.com/video/av$aid';
     default:
       return null;
   }

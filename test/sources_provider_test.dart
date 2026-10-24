@@ -105,24 +105,38 @@ void main() {
     await f.provider.importScript(_script(), activate: true);
 
     // 渠道 = 脚本搜索源 + 内置发现平台并集。
+    // 可搜索源在前（bili 原生可搜索），发现-only 平台在后。
     expect(
       f.provider.channels.map((o) => o.key).toList(),
-      ['a', 'b', 'tx', 'wy', 'kg', 'kw', 'mg'],
+      ['a', 'b', 'bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
     );
+    // bili 有原生搜索/播放但还没有发现页（Phase 4），不能出现在发现渠道里。
     expect(
       f.provider.channels.where((o) => o.discoverable).map((o) => o.key),
       ['tx', 'wy', 'kg', 'kw', 'mg'],
     );
-    expect(f.provider.searchableSources.map((o) => o.key).toList(), ['a', 'b']);
+    expect(
+      f.provider.searchableSources.map((o) => o.key).toList(),
+      ['a', 'b', 'bili'],
+    );
 
     // 拖拽语义：onReorderItem 的 newIndex 已校正，直接按下标搬移。
     await f.provider.reorderChannel(1, 0);
-    expect(f.provider.sourceOrder, ['b', 'a', 'tx', 'wy', 'kg', 'kw', 'mg']);
-    expect(f.provider.searchableSources.map((o) => o.key).toList(), ['b', 'a']);
+    expect(
+      f.provider.sourceOrder,
+      ['b', 'a', 'bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
+    );
+    expect(
+      f.provider.searchableSources.map((o) => o.key).toList(),
+      ['b', 'a', 'bili'],
+    );
 
     await f.provider.resetChannelOrder();
     expect(f.provider.sourceOrder, isEmpty);
-    expect(f.provider.searchableSources.map((o) => o.key).toList(), ['a', 'b']);
+    expect(
+      f.provider.searchableSources.map((o) => o.key).toList(),
+      ['a', 'b', 'bili'],
+    );
   });
 
   test('capabilitiesFor：内置平台搜索能力跟随脚本可取链，与渠道 canSearch 一致', () async {
@@ -165,13 +179,24 @@ void main() {
     });
     await f.provider.importScript(_script(), activate: true);
 
+    // bili 不依赖脚本，默认在搜索源里；分别停用验证互不影响。
     await f.provider.setChannelEnabled('a', false);
-    expect(f.provider.searchableSources.map((o) => o.key).toList(), isEmpty);
+    expect(
+      f.provider.searchableSources.map((o) => o.key).toList(),
+      ['bili'],
+    );
     final disabled = f.provider.channels.firstWhere((o) => o.key == 'a');
     expect(disabled.enabled, isFalse);
 
+    await f.provider.setChannelEnabled('bili', false);
+    expect(f.provider.searchableSources, isEmpty);
+
     await f.provider.setChannelEnabled('a', true);
-    expect(f.provider.searchableSources.map((o) => o.key).toList(), ['a']);
+    await f.provider.setChannelEnabled('bili', true);
+    expect(
+      f.provider.searchableSources.map((o) => o.key).toList(),
+      ['a', 'bili'],
+    );
   });
 
   test('音质：qualityOptions 值/显示名 + setPreferredQuality 委托', () async {

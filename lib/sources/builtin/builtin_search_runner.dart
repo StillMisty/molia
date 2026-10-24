@@ -118,6 +118,7 @@ class BuiltinSearchCall extends BuiltinCall {
     required super.isInvalid,
     required this.parseItems,
     this.totalOf,
+    this.isEndOf,
   });
 
   /// 响应 → 曲目（含平台各自的列表路径）；返回 null 表示响应合法但没有结果页
@@ -126,6 +127,10 @@ class BuiltinSearchCall extends BuiltinCall {
 
   /// 响应 → 结果总数（平台只在部分页返回时返回 null）。
   final int? Function(dynamic response)? totalOf;
+
+  /// 响应 → 是否已到末页（B 站 `numPages` 这类明确分页信息；未提供时按
+  /// 总数 / 本页是否装满推断）。
+  final bool Function(dynamic response)? isEndOf;
 }
 
 /// 执行一次平台检索：异常与业务拒绝归一为失败结果，「平台返回空」保持正常。
@@ -145,5 +150,6 @@ Future<SourceSearchResult> runBuiltinSearch(
     page: page,
     limit: limit,
     total: call.totalOf?.call(result.response),
+    isEnd: call.isEndOf?.call(result.response),
   );
 }
