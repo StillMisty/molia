@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -10,7 +12,7 @@ import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'library_cover.dart';
-import 'track_actions_menu.dart';
+import 'row_actions.dart';
 
 /// AI 推荐卡（「今日推荐」列表项）：封面 + 歌名/歌手 + AI 理由 + 操作菜单。
 ///
@@ -18,8 +20,8 @@ import 'track_actions_menu.dart';
 /// 表面仍走共享的 [CardListSurface]（M3E 列表规范 + 弹簧 morph），
 /// 与全 App 列表保持同一形状语言。
 ///
-/// 操作入口分平台：触摸端行尾常显 ⋮（[TrackActionsMenu]）；桌面端不渲染
-/// ⋮，行表面右键在落点弹同一份菜单（[showTrackActionsMenuAtPointer]）。
+/// 操作入口分平台：触摸端行尾常显 ⋮（[RowActionMenuButton]）；桌面端不渲染
+/// ⋮，行表面右键在落点弹同一份菜单（[rowActionsAtPointer]）。
 /// 收藏收进菜单（与 `TrackMenuTile` 同一契约）：收藏态用「实心 ♥ +
 /// 取消收藏」图标 + 文案表达。
 class AiDjTrackTile extends StatelessWidget {
@@ -71,7 +73,7 @@ class AiDjTrackTile extends StatelessWidget {
     final track = item.track;
     final artist = track.artistLabel;
     final reason = item.source.reason;
-    final actionMenu = _aiDjActionMenu(
+    final actions = _aiDjActionMenu(
       context,
       item: item,
       onReplace: onReplace,
@@ -137,13 +139,12 @@ class AiDjTrackTile extends StatelessWidget {
             ),
           ),
           // 触摸端行尾 ⋮ 常显；桌面端入口是行表面右键，不再渲染 ⋮。
-          if (!isDesktopPlatform() && actionMenu != null && !replacing)
-            TrackActionsMenu(
+          if (!isDesktopPlatform() && actions.isNotEmpty && !replacing)
+            RowActionMenuButton(
               compact: true,
               enabled: !busy,
               semanticLabel: AppLocalizations.of(context)!.aiDjItemActions,
-              entries: actionMenu.entries,
-              onSelected: actionMenu.onSelected,
+              actions: actions,
             )
           else if (replacing)
             const SizedBox(
@@ -162,17 +163,12 @@ class AiDjTrackTile extends StatelessWidget {
     );
 
     // 桌面：行表面右键在落点弹同一份菜单。生成中（busy）行内操作禁用，
-    // 右键与 ⋮ 一致不可开（[TrackActionsMenu.enabled] 的同一语义）。
-    if (isDesktopPlatform() && !busy && !replacing && actionMenu != null) {
-      final _AiDjActionMenu menu = actionMenu;
+    // 右键与 ⋮ 一致不可开（[RowActionMenuButton.enabled] 的同一语义）。
+    final onSecondaryTap = rowActionsAtPointer(context, actions);
+    if (!busy && !replacing && onSecondaryTap != null) {
       surface = GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onSecondaryTapUp: (details) => showTrackActionsMenuAtPointer(
-          context: context,
-          globalPosition: details.globalPosition,
-          entries: menu.entries,
-          onSelected: menu.onSelected,
-        ),
+        onSecondaryTapUp: (details) => onSecondaryTap(details.globalPosition),
         child: surface,
       );
     }
@@ -180,23 +176,12 @@ class AiDjTrackTile extends StatelessWidget {
   }
 }
 
-/// AI 推荐行的菜单定义（条目 + 选中处理）：触摸端 ⋮ 与桌面右键共用同一份。
-class _AiDjActionMenu {
-  const _AiDjActionMenu({required this.entries, required this.onSelected});
-
-  /// 菜单条目（收藏 / 换一首 / 不感兴趣）。
-  final List<M3EMenuEntry> entries;
-
-  /// 条目选中回调（值与条目的 `value` 对应）。
-  final ValueChanged<Object?> onSelected;
-}
-
-/// 构建 AI 推荐行的菜单定义：收藏（开关态）/ 换一首 / 不感兴趣。
+/// AI 推荐行的动作定义（触摸端 ⋮ 与桌面右键共用同一份）。
 ///
-/// 为什么是函数而不是包装组件：菜单的呈现面分平台（触摸端常显 ⋮ / 桌面
-/// 右键落点），条目与选中处理必须两种入口共用一份。[LibraryProvider] 缺失
-/// 时返回 null（不提供收藏动作，调用方也不渲染入口）。
-_AiDjActionMenu? _aiDjActionMenu(
+/// 为什么是函数而不是包装组件：动作的呈现面分平台（触摸端常显 ⋮ / 桌面
+/// 右键落点），动作与回调必须两种入口共用一份。[LibraryProvider] 缺失时
+/// 返回空列表（不提供收藏动作，调用方也不渲染入口）。
+List<RowAction> _aiDjActionMenu(
   BuildContext context, {
   required ResolvedRecommendation item,
   required VoidCallback onReplace,
@@ -210,45 +195,43 @@ _AiDjActionMenu? _aiDjActionMenu(
     (provider) => provider?.favoritesRevision ?? -1,
   );
   final library = context.read<LibraryProvider?>();
-  if (library == null) return null;
+  if (library == null) return const [];
   final Track track = item.track;
   final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
-  return _AiDjActionMenu(
-    entries: [
-      M3EMenuEntry(
-        label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-        leading: Icon(
-          favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-        ),
-        value: 'favorite',
+  return [
+    RowAction(
+      icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+      label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      onPressed: () => unawaited(
+        _toggleFavorite(context, library, track, l10n),
       ),
-      M3EMenuEntry(
-        label: l10n.aiDjReplaceItem,
-        leading: const Icon(Icons.refresh_rounded),
-        value: 'replace',
-      ),
-      M3EMenuEntry(
-        label: l10n.aiDjMoreLikeThis,
-        leading: const Icon(Icons.auto_awesome_rounded),
-        value: 'moreLikeThis',
-      ),
-      M3EMenuEntry(
-        label: l10n.aiDjNotInterested,
-        leading: const Icon(Icons.visibility_off_rounded),
-        value: 'notInterested',
-      ),
-    ],
-    onSelected: (value) {
-      switch (value) {
-        case 'favorite':
-          library.toggleFavoriteTrack(track);
-        case 'replace':
-          onReplace();
-        case 'moreLikeThis':
-          onMoreLikeThis();
-        case 'notInterested':
-          onNotInterested();
-      }
-    },
-  );
+    ),
+    RowAction(
+      icon: Icons.refresh_rounded,
+      label: l10n.aiDjReplaceItem,
+      onPressed: onReplace,
+    ),
+    RowAction(
+      icon: Icons.auto_awesome_rounded,
+      label: l10n.aiDjMoreLikeThis,
+      onPressed: onMoreLikeThis,
+    ),
+    RowAction(
+      icon: Icons.visibility_off_rounded,
+      label: l10n.aiDjNotInterested,
+      onPressed: onNotInterested,
+    ),
+  ];
+}
+
+/// AI 推荐行收藏：菜单点完即关，行内没有错误位，失败只能靠 snackbar 说明。
+Future<void> _toggleFavorite(
+  BuildContext context,
+  LibraryProvider library,
+  Track track,
+  AppLocalizations l10n,
+) async {
+  final outcome = await library.toggleFavoriteTrack(track);
+  if (!context.mounted || !outcome.isFailure) return;
+  M3ESnackbar.show(context, message: l10n.operationFailed);
 }

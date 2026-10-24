@@ -14,6 +14,7 @@ import 'local_playback_service.dart';
 import 'media_artwork_uri.dart';
 import 'media_session_backend.dart';
 import 'media_session_backend_factory.dart';
+import 'playback_commands.dart';
 
 /// 当前平台是否具备系统级媒体会话实现。
 ///
@@ -82,15 +83,16 @@ AppLocalizations _currentLocalizations() {
 /// 不阻塞启动。调用点应在 `runApp` 之前（Android / Windows 的媒体会话
 /// 需要尽早接管冷启动时的媒体键事件）。
 ///
+/// [commands] 是播放写入口（组合根注入 `PlaybackSessionCoordinator`）：
+/// handler 只把系统动作翻译成命令，恢复态路由与落盘时机都由命令面负责。
 /// [artworkBlocked] 为省流模式封面网关：返回 true 时媒体项不带封面。
 /// 封面不直接交给平台下载（网易云等 CDN 对默认 UA 返回 403）：先复用
 /// [ArtworkCache] 带浏览器 UA + Referer 落到本地文件，再以本地 URI 补发；
 /// 未命中本地缓存时先发远程 URL 兜底。
 Future<LocalAudioHandler?> initSystemMediaSession(
   LocalPlaybackService service, {
+  required PlaybackCommandPort commands,
   bool Function()? artworkBlocked,
-  Future<void> Function()? onRestoredSkipToNext,
-  Future<void> Function()? onRestoredSkipToPrevious,
 }) async {
   if (!isSystemMediaSessionSupported) {
     return null;
@@ -100,10 +102,9 @@ Future<LocalAudioHandler?> initSystemMediaSession(
     if (backend == null) return null;
     final handler = LocalAudioHandler(
       service,
+      commands: commands,
       backend: backend,
       artworkBlocked: artworkBlocked,
-      onRestoredSkipToNext: onRestoredSkipToNext,
-      onRestoredSkipToPrevious: onRestoredSkipToPrevious,
     );
     await handler.activate();
     return handler;
@@ -124,28 +125,28 @@ Future<String?> _artworkUriFromCache(String url) async {
 
 /// 把 [LocalPlaybackService] 的状态映射为系统媒体会话所需的
 /// [MediaMetadata] / [PlaybackState]，并把通知栏 / 锁屏 / 耳机键 / 媒体浮层
-/// 的控制请求委托回 LocalPlaybackService 的现有方法。
+/// 的控制请求翻译成 [PlaybackCommandPort] 命令。
 ///
-/// 这样 UI 侧的 `PlaybackProvider` 仍是唯一状态入口，本地播放公开 API 不变。
+/// 类名与媒体控制方法名保持不变（ADR-0010）；内部只保留读路径——状态映射直读
+/// [LocalPlaybackService]，写入一律经命令面（恢复态与 live 的分叉、落盘时机
+/// 都在 `PlaybackSessionCoordinator`，handler 不再自己判断 phase 或落盘）。
 ///
 /// 不继承 `audio_service` 的 `BaseAudioHandler`，而用「控制器 + 可注入
-/// [MediaSessionBackend]」组合；类名与全部公开方法保持不变。
+/// [MediaSessionBackend]」组合。
 class LocalAudioHandler {
   LocalAudioHandler(
     this._service, {
+    required PlaybackCommandPort commands,
     MediaSessionBackend? backend,
     bool Function()? artworkBlocked,
     Future<String?> Function(String url)? artworkUriResolver,
-    Future<void> Function()? onRestoredSkipToNext,
-    Future<void> Function()? onRestoredSkipToPrevious,
     bool? periodicPositionStateUpdates,
-  })  : _backend = backend ??
+  })  : _commands = commands,
+        _backend = backend ??
             createSystemMediaSessionBackend() ??
             const NoopMediaSessionBackend(),
         _artworkBlocked = artworkBlocked ?? (() => false),
         _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
-        _onRestoredSkipToNext = onRestoredSkipToNext,
-        _onRestoredSkipToPrevious = onRestoredSkipToPrevious,
         _periodicPositionStateUpdates = periodicPositionStateUpdates ??
             defaultTargetPlatform != TargetPlatform.android {
     _service.addListener(_syncFromService);
@@ -155,6 +156,10 @@ class LocalAudioHandler {
   }
 
   final LocalPlaybackService _service;
+
+  /// 播放写入口（组合根注入 `PlaybackSessionCoordinator`）。
+  final PlaybackCommandPort _commands;
+
   final MediaSessionBackend _backend;
 
   /// 省流模式封面网关：返回 true 时媒体项不带封面。
@@ -163,14 +168,6 @@ class LocalAudioHandler {
   /// 封面本地化（返回平台可用的本地地址；失败 / 未命中返回 null）。
   final Future<String?> Function(String url) _artworkUriResolver;
 
-  /// 恢复态（冷启动未起播、服务无曲目）切歌键的回落目标。
-  ///
-  /// 恢复态通常没有通知本体，但耳机 / 系统媒体键仍可能到达 handler；
-  /// 回落给 `PlaybackSessionCoordinator`（组合根在工厂里注入），由它按阶段
-  /// 决定是从保存的会话恢复播放还是转发真实播放，补齐控制链一致性。
-  final Future<void> Function()? _onRestoredSkipToNext;
-  final Future<void> Function()? _onRestoredSkipToPrevious;
-
   /// 正常进度推进时是否周期补发播放态（Android 关闭，其余平台开启）。
   ///
   /// Android 的 `flutter_media_session` 按 `lastPositionMs + elapsed × speed`
@@ -178,22 +175,8 @@ class LocalAudioHandler {
   /// 不插值，需要周期更新。可注入：常规用例可显式注入，平台默认值另有用例覆盖。
   final bool _periodicPositionStateUpdates;
 
-  /// 会话落盘入口（组合根在 handler 建好后回填
-  /// `PlaybackSessionCoordinator.flushSession`）。
-  ///
-  /// 系统控制动作返回前显式落盘，而不是等中间快照被间接观察到——进程随后
-  /// 被系统回收时，「重开应用恢复上一首 / 队列 / 模式 / 进度」才是确定的
-  /// （见 `playback_stack.dart` 的接线）。串行化只在 `PlaybackSessionStore`
-  /// 的 `pendingWrite` 一处：这里直接 await 注入的提交，不自建 Future 链。
-  Future<void> Function()? _persistSession;
-
   StreamSubscription<MediaAction>? _actionSubscription;
   bool _activated = false;
-
-  /// 绑定会话落盘（组合根调用；见 [_persistSession]）。
-  void attachSessionPersister(Future<void> Function() persistSession) {
-    _persistSession = persistSession;
-  }
 
   /// 启动后端并订阅系统控制。
   ///
@@ -239,7 +222,7 @@ class LocalAudioHandler {
   String? _lastArtworkUrl;
 
   /// 收藏能力：读当前曲目的收藏态 + 切换（组合根在 `LibraryProvider` 建好后
-  /// 回填，见 [attachFavoriteActions]；与 [attachSessionPersister] 同样的晚绑定）。
+  /// 回填，见 [attachFavoriteActions]；与媒体会话本身一样的晚绑定）。
   bool Function(SourceTrack track)? _isFavoriteFor;
   Future<void> Function(SourceTrack track)? _toggleFavorite;
 
@@ -282,7 +265,7 @@ class LocalAudioHandler {
 
   /// 绑定「收藏」能力（组合根调用；见 [favoriteActionId]）。
   ///
-  /// 与 [attachSessionPersister] 同样的晚绑定原因：handler 在播放栈里创建，
+  /// 与媒体会话状态同步一样的晚绑定原因：handler 在播放栈里创建，
   /// 而曲库 provider 之后才建好。收藏态的唯一来源是这里的读回调，通知动作只
   /// 消费结果（图标空心 / 实心）。
   void attachFavoriteActions({
@@ -306,26 +289,18 @@ class LocalAudioHandler {
   }
 
   Future<void> play() async {
-    if (_service.hasTrack && !_service.isPlaying) {
-      await _service.toggle();
-    }
+    await _commands.play();
     _syncFromService(force: true);
   }
 
   Future<void> pause() async {
-    if (_service.isPlaying) {
-      await _service.toggle();
-    }
+    await _commands.pause();
     _syncFromService(force: true);
-    // 暂停即落盘（幂等）：暂停后进程随时可能被系统回收，重开应用要能恢复
-    // 上一首 / 队列 / 模式 / 进度（isPlaying=false）。
-    await _persistSessionState();
   }
 
   Future<void> stop() async {
-    // 停止会清空服务队列（快照随后变空、再也取不到会话）：先落盘再停。
-    await _persistSessionState();
-    await _service.stop();
+    // 命令面先落盘再停（停止会清空服务队列，之后再也拼不出会话）。
+    await _commands.stop();
     _syncFromService(force: true);
   }
 
@@ -341,10 +316,10 @@ class LocalAudioHandler {
       return null;
     }
     if (name != playModeActionId) return null;
-    await _service.toggleMode();
+    // 模式是会话的一部分：命令面在返回前完成落盘；恢复态按保存会话的模式
+    // 循环，不会拿服务里的启动默认模式冒充当前模式。
+    await _commands.togglePlayMode();
     _syncFromService(force: true);
-    // 模式是会话的一部分：系统控制改模式后同样立即落盘。
-    await _persistSessionState();
     return null;
   }
 
@@ -356,7 +331,14 @@ class LocalAudioHandler {
     final track = _service.currentSourceTrack;
     final toggle = _toggleFavorite;
     if (track == null || toggle == null) return;
-    await toggle(track);
+    try {
+      await toggle(track);
+    } catch (e) {
+      // 通知动作没有提示位：写失败只记日志，图标保持原状态，不能把异常
+      // 抛回平台通道（会变成未处理异步错误）。
+      debugPrint('[AudioHandler] 切换收藏失败: $e');
+      return;
+    }
     refreshFavoriteState();
   }
 
@@ -367,55 +349,27 @@ class LocalAudioHandler {
     return probe(track);
   }
 
-  /// 落盘当前会话（失败不影响控制链：会话由观察者按节流继续维护）。
-  ///
-  /// 不再自建串行链：注入的提交（协调者 `flushSession`）本身按调用顺序
-  /// 写入 store 的同一个 `pendingWrite`，连续动作（暂停 → 改模式）的先后
-  /// 由它保证。这里只负责等这一次提交完成，并吞掉异常。
-  Future<void> _persistSessionState() async {
-    final persist = _persistSession;
-    if (persist == null) return;
-    try {
-      await persist();
-    } catch (e) {
-      debugPrint('[Molia] 系统控制路径落盘播放会话失败: $e');
-    }
-  }
-
   /// 界面语言切换：重建通知动作文案（播放顺序）。
   void _onLocaleChanged() => _syncFromService(force: true);
 
   Future<void> skipToNext() async {
-    // 恢复态（无真实曲目）：回落给注入的会话模块（保存会话立即恢复播放，
-    // 或按阶段转发真实播放）。
-    if (!_service.hasTrack) {
-      await _onRestoredSkipToNext?.call();
-      _syncFromService(force: true);
-      return;
-    }
-    await _service.skipToNext();
+    // 恢复态回落（服务无真实曲目）也由命令面按阶段处理，handler 不再分叉。
+    await _commands.skipToNext();
     _syncFromService(force: true);
   }
 
   Future<void> skipToPrevious() async {
-    if (!_service.hasTrack) {
-      await _onRestoredSkipToPrevious?.call();
-      _syncFromService(force: true);
-      return;
-    }
-    await _service.skipToPrevious();
+    await _commands.skipToPrevious();
     _syncFromService(force: true);
   }
 
   Future<void> seek(Duration position) async {
-    await _service.seek(position);
+    await _commands.seekToPosition(position);
     _syncFromService(force: true);
-    // seek 也是会话的一部分：系统 seek 后进程被回收，重开应从新位置继续。
-    await _persistSessionState();
   }
 
   Future<void> skipToQueueItem(int index) async {
-    await _service.playQueueIndex(index);
+    await _commands.playQueueIndex(index);
     _syncFromService(force: true);
   }
 

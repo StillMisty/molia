@@ -466,6 +466,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'All channels are disabled. Enable channels in Source Management.';
 
   @override
+  String get libraryLoadFailed => 'Couldn\'t load your library';
+
+  @override
   String get languageEnglish => 'English';
 
   @override

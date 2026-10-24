@@ -39,11 +39,12 @@
    消息类型，控制回调自己映射回统一动作流。
 3. **完全移除 `audio_service`**：依赖、Android service/receiver、`AudioServiceActivity`
    基类、注释与测试 mock 全部清掉。
-4. **应用层入口不变**：保留 `LocalAudioHandler` 类名与公开方法
+4. **应用层入口不变**：保留 `LocalAudioHandler` 类名与媒体控制方法名
    （`play/pause/stop/skipToNext/skipToPrevious/seek/skipToQueueItem/customAction/
-   attachSessionPersister/setLyricMetadataOverride`）以及 `mediaSessionFactory`
-   签名，内部改为「控制器 + 可注入 `MediaSessionBackend`」，
-   组合根 / 歌词栈 / UI 的改动面最小。
+   setLyricMetadataOverride`）以及 `mediaSessionFactory` 签名，内部改为
+   「控制器 + 可注入 `MediaSessionBackend`」，组合根 / 歌词栈 / UI 的改动面最小。
+   会话落盘钩子 `attachSessionPersister` 已退休，写入统一走
+   `PlaybackCommandPort`（见「后续」）。
 
 ## 架构
 
@@ -81,11 +82,11 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
 - 播放模式 → `repeatMode` / `shuffleModeEnabled` + Android 通知自定义动作
   「播放顺序」（列表循环 / 顺序 / 单曲 / 随机，文案随语言切换重发）；
 - 通知/锁屏/耳机键/媒体浮层：play / pause / stop / next / previous / seek；
-- 恢复态无真实曲目时，next/previous 回落到注入的
-  `onRestoredSkipToNext/Previous`；
-- 暂停 / 停止 / 改播放模式 / seek 后显式 `await` 会话落盘
-  （`attachSessionPersister` + `PlaybackSessionStore.pendingWrite` 串行化，
-  停止先落盘再清空队列）；
+- 恢复态无真实曲目时，next/previous 由命令面按阶段从保存的会话恢复播放
+  （handler 不再持有回落回调）；
+- 暂停 / 停止 / 改播放模式 / seek 返回前会话已提交：handler 只把动作翻译成
+  `PlaybackCommandPort` 命令，由 `PlaybackSessionCoordinator` 按阶段落盘
+  （`PlaybackSessionStore.pendingWrite` 串行化，停止先落盘再清空队列）；
 - 歌词元数据覆盖 `setLyricMetadataOverride`：title / artist / album 生效；
   `displaySubtitle` 无对应字段，忽略（原字段只用于 Android 通知副标题，
   `flutter_media_session` 的 `MediaMetadata` 没有该槽位）；
@@ -155,3 +156,11 @@ LocalPlaybackService ──监听──▶ LocalAudioHandler ──▶ MediaSess
 - **iOS / macOS**：锁屏 Now Playing、远程控制、封面；
 - **Android 真机**：Media3 通知外观、耳机键、自定义动作图标在
   release（shrinkResources）下的存在性。
+
+## 后续（2026-10-24：播放命令面）
+
+`LocalAudioHandler` 的类名与媒体控制方法名不变；内部改为只读状态映射 +
+`PlaybackCommandPort`（`lib/playback/playback_commands.dart`，唯一实现是
+`PlaybackSessionCoordinator`）。系统动作的恢复态回落、阶段路由与「返回前已
+提交」由命令面负责，handler 不再直写 `LocalPlaybackService`，也不再通过
+`attachSessionPersister` 持有第二个落盘回调。

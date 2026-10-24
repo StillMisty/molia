@@ -2,8 +2,9 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/download.dart' show kLocalSourceKey;
 import '../../../domain/ports/playback_session_sync.dart';
 import '../sync_adapter.dart';
+import '../sync_book.dart';
 import '../sync_journal.dart';
-import '../sync_state_store.dart';
+import '../sync_stamp.dart';
 
 /// 上次播放会话适配器：把「上次播放的队列 + 下标 + 进度 + 模式」带到其它设备
 /// （换设备接着听的轻量版，非实时控制）。
@@ -16,8 +17,8 @@ import '../sync_state_store.dart';
 class SessionSyncAdapter implements SyncAdapter {
   SessionSyncAdapter({
     required PlaybackSessionSyncPort port,
-    required SyncStateStore state,
-    SyncJournalRepository? journal,
+    required SyncStampLedger state,
+    SyncJournalAppender? journal,
     Future<void> Function()? onChanged,
   })  : _port = port,
         _state = state,
@@ -27,11 +28,11 @@ class SessionSyncAdapter implements SyncAdapter {
   /// 会话读写端口（生产 = `PlaybackSessionCoordinator`，保证远端写入与本地
   /// 保存共用同一个 store 写队列；测试也可直接注入 store）。
   final PlaybackSessionSyncPort _port;
-  final SyncStateStore _state;
+  final SyncStampLedger _state;
 
   /// 增量日志（可选）：`savedAt` 变化（会话内容变化）时追加；首次登记
   /// 不算变更（初始视图由全量快照覆盖）。
-  final SyncJournalRepository? _journal;
+  final SyncJournalAppender? _journal;
   final Future<void> Function()? _onChanged;
 
   /// 写入点即时追加的合并窗口（见 [noteLocalSave]）。
@@ -73,8 +74,8 @@ class SessionSyncAdapter implements SyncAdapter {
       final version =
           savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
       effective = SyncStamp(hash: hash, version: version);
-      _state.setSessionStamp(effective);
       // 首次登记不是变更（初始视图由全量快照覆盖）；真实变化追加日志。
+      // 登记必须在追加成功后才写：追加失败时保留旧登记，下一轮重新检测。
       final journal = _journal;
       if (journal != null && stamp != null) {
         await journal.appendAll([
@@ -88,6 +89,7 @@ class SessionSyncAdapter implements SyncAdapter {
           ),
         ]);
       }
+      _state.setSessionStamp(effective);
     } else {
       effective = stamp;
     }
@@ -126,10 +128,9 @@ class SessionSyncAdapter implements SyncAdapter {
     final hash = '$savedAt';
     if (stamp != null && stamp.hash == hash) return;
     final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
-    _state.setSessionStamp(SyncStamp(hash: hash, version: version));
-    _lastImmediateAppendAt = now;
     final journal = _journal;
     if (journal != null && stamp != null) {
+      // 先追加、后登记：追加失败时不写登记也不推进合并窗口，下次保存重试。
       await journal.appendAll([
         (
           category: SyncCategory.session,
@@ -141,6 +142,8 @@ class SessionSyncAdapter implements SyncAdapter {
         ),
       ]);
     }
+    _state.setSessionStamp(SyncStamp(hash: hash, version: version));
+    _lastImmediateAppendAt = now;
   }
 
   @override

@@ -90,7 +90,8 @@ void main() {
 
     expect(discover.isFavorite(track), isFalse);
     final added = await discover.toggleFavorite(track);
-    expect(added, isTrue);
+    expect(added.isFailure, isFalse);
+    expect(added.isFavorite, isTrue);
     expect(discover.isFavorite(track), isTrue);
     expect(await repository.favoriteKeys(), contains('wy:111'));
   });
@@ -102,17 +103,19 @@ void main() {
 
     // 「加入列表」统一流程的数据面：DiscoverTrack → PlaylistTrack → 写入。
     expect(
-      await library.addTracksToPlaylist(
+      (await library.addTracksToPlaylist(
         playlistId,
         [discover.toPlaylistTrack(track)],
-      ),
+      ))
+          .changed,
       1,
     );
     expect(
-      await library.addTracksToPlaylist(
+      (await library.addTracksToPlaylist(
         playlistId,
         [discover.toPlaylistTrack(track)],
-      ),
+      ))
+          .changed,
       0,
     );
 
@@ -126,8 +129,8 @@ void main() {
     final track = (await discover.loadLeaderboardTracks('3778678')).single;
     final playlistTrack = discover.toPlaylistTrack(track);
 
-    expect(await library.addTracksToFavorites([playlistTrack]), 1);
-    expect(await library.addTracksToFavorites([playlistTrack]), 0);
+    expect((await library.addTracksToFavorites([playlistTrack])).changed, 1);
+    expect((await library.addTracksToFavorites([playlistTrack])).changed, 0);
     expect(await repository.favoriteKeys(), contains('wy:111'));
 
     await library.addTracksToHistory([playlistTrack]);

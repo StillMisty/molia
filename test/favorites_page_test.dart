@@ -90,7 +90,10 @@ class _StubDownloadService extends DownloadService {
   @override
   Future<void> delete(DownloadedTrack record) async {
     deleted.add(record);
-    _seed = [for (final song in _seed) if (song.key != record.key) song];
+    _seed = [
+      for (final song in _seed)
+        if (song.key != record.key) song
+    ];
     notifyListeners();
   }
 }
@@ -243,6 +246,7 @@ void main() {
     Size size = const Size(1200, 2400),
     ShellReselectSignal? reselect,
     TextScaler? textScaler,
+    LibraryProvider? libraryProvider,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -255,7 +259,9 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LibraryProvider>.value(value: provider),
+          ChangeNotifierProvider<LibraryProvider>.value(
+            value: libraryProvider ?? provider,
+          ),
           if (downloads != null)
             ChangeNotifierProvider<DownloadService>.value(value: downloads),
           if (cache != null) ...[
@@ -699,8 +705,7 @@ void main() {
   testWidgets('桌面宽屏：本地歌曲列表同样渲染表格列（缓存行带行尾标签仍对齐）', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-          2048,
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
     });
     final cache = CacheService(storage: cacheStorage);
     await pumpFavorites(
@@ -724,8 +729,7 @@ void main() {
   testWidgets('桌面宽屏大字号：缓存标签单行省略，不溢出固定槽', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-          2048,
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
     });
     await pumpFavorites(
       tester,
@@ -758,8 +762,7 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('桌面窗口：表格判定按「窗口宽 − 栏宽」（719 单列 / 720 表格）',
-      (tester) async {
+  testWidgets('桌面窗口：表格判定按「窗口宽 − 栏宽」（719 单列 / 720 表格）', (tester) async {
     await importLove(tester);
 
     // 815 − 96（导航轨折叠宽）= 719 < 720：单列（时长仍在行尾）。
@@ -790,8 +793,7 @@ void main() {
 
   // 桌面多选：Ctrl 点选切换、Shift 区间选择、Esc 退出。修饰键经真实按键
   // 状态（HardwareKeyboard）注入，行点击时读取；移动端不注入这些回调。
-  testWidgets('桌面多选：Ctrl 点击两行 = 两行选中，不触发播放',
-      (tester) async {
+  testWidgets('桌面多选：Ctrl 点击两行 = 两行选中，不触发播放', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
 
@@ -858,8 +860,7 @@ void main() {
     expect(find.text('3'), findsOneWidget, reason: '选择栏计数 = 3');
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('桌面多选：Esc 退出选择模式（未在选择模式时无副作用）',
-      (tester) async {
+  testWidgets('桌面多选：Esc 退出选择模式（未在选择模式时无副作用）', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
 
@@ -1098,6 +1099,63 @@ void main() {
     expect(find.text('我的收藏'), findsOneWidget);
   });
 
+  testWidgets('合集弹层：重命名失败保留旧名并提示', (tester) async {
+    await importLove(tester);
+    await pumpFavorites(tester);
+    await openCollectionPicker(tester);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重命名列表'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(M3ETextField), '跑步');
+
+    repository.failPlaylistWrites = true;
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(pickerRow('跑步'), findsNothing, reason: '失败不改本地副本');
+    expect(pickerRow('love'), findsOneWidget, reason: '旧名仍在');
+  });
+
+  testWidgets('合集弹层：删除失败保留列表行并提示', (tester) async {
+    await importLove(tester);
+    await pumpFavorites(tester);
+    await openCollectionPicker(tester);
+
+    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除列表'));
+    await tester.pumpAndSettle();
+
+    repository.failPlaylistWrites = true;
+    await tester.tap(find.widgetWithText(M3EButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(pickerRow('love'), findsOneWidget, reason: '失败不做乐观删除');
+    expect(await repository.listPlaylists(), isNotEmpty);
+  });
+
+  testWidgets('合集弹层：新建失败留在弹层并提示', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+    await openCollectionPicker(tester);
+
+    await tester.tap(pickerAction(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(M3ETextField), '路上听');
+
+    repository.failPlaylistWrites = true;
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(pickerRow('路上听'), findsNothing);
+    expect(pickerRow('我的收藏'), findsOneWidget, reason: '仍停在合集弹层');
+  });
+
   testWidgets('自建列表：左滑从列表移除', (tester) async {
     await importLove(tester);
     await pumpFavorites(tester);
@@ -1135,6 +1193,48 @@ void main() {
     final copied = await repository.listPlaylistTracks(loveId);
     expect(copied.map((track) => track.songId), contains('Song A'));
     expect(find.text('已加入「love」'), findsOneWidget);
+  });
+
+  testWidgets('我的收藏：左滑「加入列表 → 播放历史」失败时不报已加入', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    await tester.drag(find.text('Song A'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.playlist_add_rounded));
+    await tester.pumpAndSettle();
+
+    repository.failHistoryWrites = true;
+    await tester.tap(find.text('播放历史'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(find.text('已加入「播放历史」'), findsNothing);
+    expect(await repository.listHistory(), isEmpty);
+  });
+
+  testWidgets('我的收藏：左滑「加入列表 → 自建列表」失败时不报已加入', (tester) async {
+    await seedFavorites(tester);
+    await importLove(tester);
+    await pumpFavorites(tester);
+
+    await tester.drag(find.text('Song A'), const Offset(-260, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.playlist_add_rounded));
+    await tester.pumpAndSettle();
+
+    repository.failTrackWrites = true;
+    await tester.tap(find.text('love'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(find.text('已加入「love」'), findsNothing);
+    final loveId =
+        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    expect(
+      (await repository.listPlaylistTracks(loveId)).map((t) => t.songId),
+      isNot(contains('Song A')),
+    );
   });
 
   testWidgets('左滑动作：M3E 胶囊按钮（tonal + filled）与动作名 tooltip', (tester) async {
@@ -1711,7 +1811,8 @@ void main() {
 
   testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {
     final service = _StubDownloadService(seed: [
-      for (var i = 0; i < 40; i++) _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
+      for (var i = 0; i < 40; i++)
+        _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
     ]);
     await pumpFavorites(tester, downloads: service);
     await selectCollection(tester, '本地歌曲');
@@ -1730,11 +1831,11 @@ void main() {
   testWidgets('本地歌曲：缓存曲目入列（原曲身份）且删除 = 清缓存', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-          2048,
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
     });
     final cache = CacheService(storage: cacheStorage);
-    await pumpFavorites(tester, downloads: _StubDownloadService(), cache: cache);
+    await pumpFavorites(tester,
+        downloads: _StubDownloadService(), cache: cache);
     await selectCollection(tester, '本地歌曲');
     await tester.pump();
 
@@ -1774,8 +1875,7 @@ void main() {
       ),
     ]);
     final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-          2048,
+      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
     });
     final cache = CacheService(storage: cacheStorage);
     await pumpFavorites(tester, downloads: downloads, cache: cache);
@@ -1784,6 +1884,62 @@ void main() {
 
     expect(headlines(tester), ['下载的歌']);
     expect(find.text('缓存'), findsNothing);
+  });
+
+  testWidgets('资料库读取失败：显示可重试错误态，重试成功后回到列表', (tester) async {
+    // 全新 provider + 读失败的资料库：首屏三个读取（列表 / 收藏 / 历史）
+    // 全部失败，页面不能把它伪装成空资料库。
+    final flakyRepository = FakeLibraryRepository()..failReads = true;
+    final flakyBackend = FakePlaybackBackend();
+    final flakyPlayback = buildTestPlaybackProvider(
+      backend: flakyBackend,
+      libraryRepository: flakyRepository,
+    );
+    final flakyProvider = LibraryProvider(
+      repository: flakyRepository,
+      playbackProvider: flakyPlayback,
+    );
+    addTearDown(() async {
+      flakyProvider.dispose();
+      flakyPlayback.dispose();
+      await flakyRepository.dispose();
+    });
+
+    await pumpFavorites(tester, libraryProvider: flakyProvider);
+
+    expect(find.text('资料库加载失败'), findsOneWidget);
+    expect(find.widgetWithText(M3EButton, '重试'), findsOneWidget);
+
+    flakyRepository.failReads = false;
+    await tester.tap(find.widgetWithText(M3EButton, '重试'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('资料库加载失败'), findsNothing);
+    expect(find.text('还没有收藏记录'), findsOneWidget);
+  });
+
+  testWidgets('批量取消收藏失败：保留选择并提示，重试成功后才清空', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(tester);
+
+    await tester.longPress(find.text('Song A'));
+    await tester.pumpAndSettle();
+    expect(find.text('1'), findsOneWidget);
+
+    repository.failFavoriteWrites = true;
+    await tester.tap(find.byIcon(Icons.heart_broken_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget, reason: '失败要有反馈');
+    expect(find.text('1'), findsOneWidget, reason: '写失败不能清空选择');
+
+    repository.failFavoriteWrites = false;
+    await tester.tap(find.byIcon(Icons.heart_broken_rounded));
+    await tester.pumpAndSettle();
+    await flushLibraryReloads(tester);
+
+    expect(find.text('1'), findsNothing, reason: '成功后才退出多选');
+    expect(await repository.favoriteKeys(), hasLength(2));
   });
 }
 

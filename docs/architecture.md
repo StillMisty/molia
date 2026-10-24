@@ -100,8 +100,11 @@
   口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
   可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。改变会话的命令
   （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
-  语义），live seek 强制整份落盘；系统媒体 handler 不自建串行链，只 await
-  注入的提交；壳层 paused 与桌面退出共用
+  语义），live seek 强制整份落盘；系统媒体 handler 与 UI 共用
+  `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
+  落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
+  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`），不直写
+  facade；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
   500ms）→ 统计落盘 → 销毁窗口」：会话必须先把最后一段进度取下来，音频收尾
@@ -222,10 +225,10 @@
   单曲 / 随机，
   图标与文案随当前模式，App 内改模式双向一致；`MediaAction.custom('lx.playMode')`，
   Android drawable 名沿用 `audio_service_*`，`keep.xml` 防 shrinkResources 删除）；
-  系统控制路径（暂停 / 停止 / 切顺序 / seek）**显式 await 会话落盘**
-  （`LocalAudioHandler` 只 await 注入的
-  `PlaybackSessionCoordinator.flushSession`，不自建串行链；写请求统一在
-  `PlaybackSessionStore.pendingWrite` 串行化；停止先落盘再清空队列），保证
+  系统控制路径（暂停 / 停止 / 切顺序 / seek）**经播放命令面提交**
+  （`LocalAudioHandler` 只翻译成 `PlaybackCommandPort` 命令，协调者按阶段路由并
+  在返回前 await `PlaybackSessionStore.pendingWrite`；不再由 handler 回填落盘回调；
+  停止先落盘再清空队列），保证
   「系统暂停 → 冷启动」能恢复上一首 + 队列 + 模式 + 进度且不自动起播。
 - **Cache**：`RequestCache`（single-flight + LRU 64 + TTL + 可注入时钟）。
 - **省流**：`DataSaverService`（services 层，默认关闭）持有「开启 + 音质上限 +
@@ -316,9 +319,14 @@
   引擎（`lib/data/sync/sync_engine.dart`）只保留公共门面：调度器宿主 / 服务端
   语义（`serveSnapshot` / `serveJournal`）/ 入站合流 / 公告过滤。轮次内的阶段
   由**轮次编排器**（`sync_round.dart` 的 `SyncRoundRunner`）线性编排：`runRound`
-  = collect → pull → consume + apply → publish + compact → report，阶段只读写
-  `SyncRoundContext`、可脱离整轮单独测试；应用成功才推进游标、forced delivery、
-  缺口二次拉取、anti-entropy 与入站轮语义都不变。
+  = collect → pull → consume + apply → publish + compact → report；轮次上下文与
+  阶段都是该文件的私有实现，测试只能经 `runRound` + 假传输 / 假适配器驱动整轮
+  （避免绕过顺序直接调阶段）。应用成功才推进游标、forced delivery、缺口二次
+  拉取、anti-entropy 与入站轮语义都不变。同步状态的依赖按用途收窄为
+  `sync_book.dart` 的窄接口（登记 / 发布覆盖 / 轮次 / 引擎 / 运行时 / 调度 /
+  备份），`SyncStateStore` 仍是唯一实现与持久化所有者：所有写入先改内存 +
+  标脏，`commit()` 是唯一落盘出口（轮内台账 / 首连提示 / 端点记账只标脏，
+  引擎轮末提交一次；用户命令仍即时提交）。
   拉取前由 `SyncRoundRunner._pullPlan` 生成一份**拉取计划**（`SyncPullPlan`：逐对端
   `cursor` / `forceFull` + discovery）；局域网与 WebDAV 只提供证据（局域网
   `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部），
@@ -503,7 +511,9 @@
   冷启动恢复会话同步替换并落盘）。
   **自动换源**：播放失败同源重试仍失败后，组合根注入的 `AutoSourceSwapService.findMatch`
   用 `lib/services/song_match.dart`（LX `findMusic` 判定的唯一实现，与歌词搜索
-  回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目；
+  回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目
+  （经 `PlaybackSessionCoordinator.replaceQueueTrack` 命令：live 转发 facade 并
+  返回前提交会话，恢复态 / 未命中 no-op，provider 不直写 facade）；
   provenance（每个曲目的已尝试来源）保证级联每源至多一次、有界；
   开关 `SourceSwapSettings`（`source_swap_auto_enabled`，默认开）在设置 › 播放。
 
@@ -552,15 +562,20 @@
   `PlaylistTrackSyncRecord` / `PlayHistorySyncRecord` / `SyncTombstoneRecord`）；
   同步适配器不再逐字段读列名，记录形状（含 JSON 键）由 record 类承担；
 - **测试假实现**只实现 UI 面窄 port（不再继承真类）：新方法不会静默走真实 SQL。
-- **收藏页合集状态**：`LocalSongsCollection`
+- **收藏页合集状态**：`CollectionSession`（`lib/providers/collection_session.dart`）
+  拥有「当前合集」的恢复 / 校准 / 模式 / 按行 key 的多选 / 加载组合 / 滚动键
+  激活与切换持久化；`LocalSongsCollection`
   （`lib/providers/local_songs_collection.dart`）拥有本地歌曲的历史 × 下载 /
   导入 × 完整音频缓存联结、下载优先去重、输入签名、在途令牌 / 过期丢弃与
   加载态 · 弹层计数；`CollectionPresenter`（`lib/providers/collection_presenter.dart`）
   拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）、可见行投影（过滤 /
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
-  不再用四个布尔值 + 三份可见列表，也不按 kind 分支拼行或挑动作，只在 build 里
-  重算联结之外消费 `CollectionView` 与 `LocalSongsCollection.rows`。
+  每帧只把资料库窄端口 + 下载 / 缓存快照交给会话，消费一个
+  `CollectionSessionView`（视图 + loading / ready / failed），不在 build 里做
+  post-frame 校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。资料库读取
+  阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
+  读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
 
 ### 本地下载（downloads）
 
@@ -1022,24 +1037,27 @@
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
   收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
   （顺序列表 / 重排模式、搜索空态、行动作形状：触摸端左滑胶囊 `SwipeRevealRow` /
-  桌面右键菜单，动作描述 `CollectionRowAction`）；
+  桌面右键菜单，动作词汇 `RowAction`）；
   空态配方统一在 `lib/widgets/empty_state.dart`（图标 40 + 文案 + 可选行动，
   收藏 / 资料 / 发现共用，居中与页边距由调用方包一层），滚动位置簿记在
   `lib/widgets/collection_scroll_bookkeeping.dart`（调度器可注入，脱离 widget 树可单测），
   页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`。
-- 曲目行操作菜单的呈现面分平台，唯一实现 `lib/widgets/track_actions_menu.dart`：
-  触摸端行尾常显 ⋮（搜索结果 / 发现详情 / 歌手·专辑页 / AI 推歌行；队列行维持
-  无 ⋮；锚点固定 standard 图标按钮且语义走 `semanticLabel`），桌面端行尾无 ⋮、行表面右键在鼠标
-  落点弹同一份菜单（`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay
-  坐标换算，贴边由 M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类
-  开关态用图标 + 文案表达（选中即关菜单，不留勾选态）。菜单定义（收藏 / 加入列表
-  两条动作 + 领域接线）见 `lib/widgets/track_menu_tile.dart`（`trackRowActionMenu` /
-  `…ForTrack` / `…ForSearchItem` 纯数据构造，行组件与自建行共用，领域状态由构造处
+- 曲目行操作动作与入口：动作词汇 / 条目映射 / 两平台入口在
+  `lib/widgets/row_actions.dart`（`RowAction` 回调不可空；`rowMenuEntries` /
+  `rowMenuSelection` 是动作 → 菜单条目的唯一映射；触摸端 `RowActionMenuButton`
+  常显 ⋮，桌面端 `rowActionsAtPointer` 给行表面右键回调）。低层菜单面
+  `lib/widgets/track_actions_menu.dart`：触摸端锚点固定 standard 图标按钮且语义走
+  `semanticLabel`；桌面端行尾无 ⋮、行表面右键在鼠标落点弹同一份菜单
+  （`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay 坐标换算，贴边由
+  M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类开关态用图标 +
+  文案表达（选中即关菜单，不留勾选态）。动作定义（收藏 / 加入列表两条动作 +
+  领域接线）见 `lib/widgets/track_menu_tile.dart`（`trackRowActionMenu` /
+  `…ForTrack` / `…ForSearchItem`，行组件与自建行共用，领域状态由构造处
   `select` 后传入）；收藏域的行适配（歌手页 / 专辑页）走
   `lib/widgets/favorite_track_tile.dart`；收藏页合集的行动作由
-  `lib/widgets/collection_track_list.dart` 的 `collectionTrackRowActions` /
-  `collectionHistoryRowActions` / `localSongRowActions` 工厂产出，触摸端编译成
-  左滑胶囊（`collectionSwipeActions`）、桌面端直接作右键菜单条目。
+  `lib/widgets/collection_track_list.dart` 的 `buildCollectionRowActions` 从
+  投影器的动作声明 + 接线编译（接线缺席的动作不出现），触摸端编译成左滑胶囊
+  （`collectionSwipeActions`）、桌面端经 `rowActionsAtPointer` 作右键菜单。
 - 按钮选型（按作用对象与意图，已按 M3E 实测校正）：
   - 同一批对象的 2–3 个平级动作 → `M3EButtonGroup`（`standard` 间距；命令式动作
     组级统一 `tonal`，把 `selectedIndex` 恒留空、回调里直接分发，避免留下选中态）。

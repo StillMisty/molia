@@ -5,9 +5,11 @@ import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_media_session/flutter_media_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/app/bootstrap/library_stack.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/playback_commands.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_display/media_lyric_composer.dart';
@@ -170,23 +172,102 @@ class _FakeService extends LocalPlaybackService {
   }
 }
 
+/// 记录型命令面：handler 只该把系统动作翻译成这些命令。
+///
+/// 不直接改服务状态，测试因此能同时断言「命令被调用」与「handler 没有绕过
+/// 命令面直写服务」；通知映射由测试显式 `emit*` 推进服务状态。
+class _FakeCommands implements PlaybackCommandPort {
+  final List<String> calls = [];
+
+  /// 命令返回的路由（handler 不消费，测试可用来模拟恢复态）。
+  PlaybackCommandRoute route = PlaybackCommandRoute.live;
+
+  /// seek 完成闸门：验证 handler 等命令（及命令里的提交）返回才返回。
+  Completer<void>? seekGate;
+
+  @override
+  Future<PlaybackCommandRoute> play() async {
+    calls.add('play');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> pause() async {
+    calls.add('pause');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> togglePlayPause() async {
+    calls.add('togglePlayPause');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> skipToNext() async {
+    calls.add('skipToNext');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> skipToPrevious() async {
+    calls.add('skipToPrevious');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> playQueueIndex(int index) async {
+    calls.add('playQueueIndex:$index');
+    return route;
+  }
+
+  @override
+  Future<PlaybackCommandRoute> replaceQueueTrack(
+    String trackUri,
+    Track newTrack,
+  ) async {
+    calls.add('replaceQueueTrack:$trackUri');
+    return route;
+  }
+
+  @override
+  Future<void> seekToPosition(Duration position) async {
+    calls.add('seek:${position.inMilliseconds}');
+    final gate = seekGate;
+    if (gate != null) await gate.future;
+  }
+
+  @override
+  Future<void> setPlayMode(PlayMode mode) async {
+    calls.add('setPlayMode:${mode.name}');
+  }
+
+  @override
+  Future<void> togglePlayMode() async {
+    calls.add('togglePlayMode');
+  }
+
+  @override
+  Future<void> stop() async {
+    calls.add('stop');
+  }
+}
+
 /// 创建 handler 并注入记录型后端；默认封面解析返回 null（不触网）。
 Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
   _FakeService service, {
+  PlaybackCommandPort? commands,
   bool Function()? artworkBlocked,
   Future<String?> Function(String url)? artworkUriResolver,
-  Future<void> Function()? onRestoredSkipToNext,
-  Future<void> Function()? onRestoredSkipToPrevious,
   bool? periodicPositionStateUpdates,
 }) async {
   final backend = FakeMediaSessionBackend();
   final handler = LocalAudioHandler(
     service,
+    commands: commands ?? _FakeCommands(),
     backend: backend,
     artworkBlocked: artworkBlocked,
     artworkUriResolver: artworkUriResolver ?? (_) async => null,
-    onRestoredSkipToNext: onRestoredSkipToNext,
-    onRestoredSkipToPrevious: onRestoredSkipToPrevious,
     periodicPositionStateUpdates: periodicPositionStateUpdates,
   );
   await handler.activate();
@@ -657,55 +738,64 @@ void main() {
     });
   });
 
-  group('系统控制回调', () {
-    test('play / pause / stop / next / previous / seek', () async {
+  group('系统控制回调：只翻译成命令', () {
+    test('play / pause / stop / next / previous / seek / 队列跳转', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      final (_, backend) = await _handler(service);
+      final commands = _FakeCommands();
+      final (handler, backend) = await _handler(service, commands: commands);
 
       backend.emit(MediaAction.play);
       await pumpEventQueue();
-      expect(service.calls, ['toggle']);
-      expect(service.playingValue, isTrue);
+      expect(commands.calls, ['play']);
 
       backend.emit(MediaAction.pause);
       await pumpEventQueue();
-      expect(service.calls, ['toggle', 'toggle']);
-      expect(service.playingValue, isFalse);
+      expect(commands.calls, ['play', 'pause']);
 
       backend.emit(MediaAction.skipToNext);
       await pumpEventQueue();
-      expect(service.skipToNextCalls, 1);
+      expect(commands.calls.last, 'skipToNext');
 
       backend.emit(MediaAction.skipToPrevious);
       await pumpEventQueue();
-      expect(service.skipToPreviousCalls, 1);
+      expect(commands.calls.last, 'skipToPrevious');
 
       backend.emit(
         const MediaAction('seekTo', seekPosition: Duration(seconds: 42)),
       );
       await pumpEventQueue();
-      expect(service.seeks, [const Duration(seconds: 42)]);
+      expect(commands.calls.last, 'seek:42000');
+
+      await handler.skipToQueueItem(3);
+      expect(commands.calls.last, 'playQueueIndex:3');
 
       backend.emit(MediaAction.stop);
       await pumpEventQueue();
-      expect(service.stopCalls, 1);
+      expect(commands.calls.last, 'stop');
+
+      // 旧实现直接 toggle / stop / seek 服务；现在这些写路径只经命令面。
+      expect(service.calls, isEmpty);
+      expect(service.stopCalls, 0);
+      expect(service.skipToNextCalls, 0);
+      expect(service.skipToPreviousCalls, 0);
     });
 
-    test('播放顺序自定义动作：循环模式并落盘', () async {
+    test('播放顺序自定义动作：走命令面并刷新通知文案', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      var persisted = 0;
-      final (handler, backend) = await _handler(service);
-      handler.attachSessionPersister(() async => persisted++);
+      final commands = _FakeCommands();
+      final (handler, backend) = await _handler(service, commands: commands);
 
       backend.emit(const MediaAction(playModeActionId));
       await pumpEventQueue();
 
-      expect(service.calls, ['toggleMode']);
-      expect(service.modeValue, PlayMode.singleRepeat);
+      expect(commands.calls, ['togglePlayMode']);
+      expect(service.calls, isEmpty);
+      // 命令面会改后端 → 服务会 emitMode；这里模拟结果，验证通知跟随读路径。
+      service.emitMode(PlayMode.singleRepeat);
+      await pumpEventQueue();
       expect(backend.playModeAction?.customLabel, '单曲循环');
-      expect(persisted, 1);
     });
   });
 
@@ -853,121 +943,75 @@ void main() {
     });
   });
 
-  group('恢复态切歌键回落', () {
-    test('服务无曲目（冷启动恢复态）：回落给注入的会话模块回调', () async {
+  group('切歌 / seek 命令委托', () {
+    test('服务无曲目（冷启动恢复态）：仍走命令面，由它按阶段恢复', () async {
       final service = _FakeService();
       addTearDown(service.dispose);
-      var restoredNext = 0;
-      var restoredPrevious = 0;
-      final (handler, _) = await _handler(
-        service,
-        onRestoredSkipToNext: () async => restoredNext++,
-        onRestoredSkipToPrevious: () async => restoredPrevious++,
-      );
+      final commands = _FakeCommands()..route = PlaybackCommandRoute.restored;
+      final (handler, _) = await _handler(service, commands: commands);
 
       await handler.skipToNext();
       await handler.skipToPrevious();
 
-      expect(restoredNext, 1);
-      expect(restoredPrevious, 1);
+      expect(commands.calls, ['skipToNext', 'skipToPrevious']);
       expect(service.skipToNextCalls, 0);
       expect(service.skipToPreviousCalls, 0);
     });
 
-    test('服务已有真实曲目：走正常切歌，不触发回落', () async {
+    test('服务已有真实曲目：同样只发命令，不在 handler 里判断 phase', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      var restoredCalls = 0;
-      final (handler, _) = await _handler(
-        service,
-        onRestoredSkipToNext: () async => restoredCalls++,
-      );
+      final commands = _FakeCommands();
+      final (handler, _) = await _handler(service, commands: commands);
 
       await handler.skipToNext();
 
-      expect(service.skipToNextCalls, 1);
-      expect(restoredCalls, 0);
-    });
-  });
-
-  group('会话落盘', () {
-    test('暂停 / 停止：动作返回前落盘（停止先落盘再清空队列）', () async {
-      final service = _FakeService()
-        ..trackValue = _track()
-        ..playingValue = true;
-      addTearDown(service.dispose);
-      final log = <String>[];
-      final (handler, _) = await _handler(service);
-      handler.attachSessionPersister(() async => log.add('persist'));
-
-      await handler.pause();
-      expect(service.calls, ['toggle']);
-      expect(service.playingValue, isFalse);
-      expect(log, ['persist']);
-
-      // 停止清空服务队列：必须在清空**之前**落盘，否则会话无从恢复。
-      service.calls.clear();
-      await handler.stop();
-      expect(service.calls, ['stop']);
-      expect(log, ['persist', 'persist']);
+      expect(commands.calls, ['skipToNext']);
+      expect(service.skipToNextCalls, 0);
     });
 
-    test('seek 后立即落盘', () async {
-      final service = _FakeService()..trackValue = _track();
-      addTearDown(service.dispose);
-      var persisted = 0;
-      final (handler, _) = await _handler(service);
-      handler.attachSessionPersister(() async => persisted++);
-
-      await handler.seek(const Duration(seconds: 30));
-
-      expect(persisted, 1);
-      expect(service.seeks, [const Duration(seconds: 30)]);
-    });
-
-    test('等注入的提交完成才返回（不自建串行链，也不提前返回）', () async {
+    test('seek 等命令（含命令内的提交）完成才返回', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
       final gate = Completer<void>();
-      var persisted = 0;
-      final (handler, _) = await _handler(service);
-      handler.attachSessionPersister(() async {
-        persisted++;
-        await gate.future;
-      });
+      final commands = _FakeCommands()..seekGate = gate;
+      final (handler, _) = await _handler(service, commands: commands);
 
-      final seek = handler.seek(const Duration(seconds: 10));
+      var returned = false;
+      final seek = handler.seek(const Duration(seconds: 10)).then((_) {
+        returned = true;
+      });
       await pumpEventQueue();
-      expect(persisted, 1, reason: '提交已开始');
+      expect(commands.calls, ['seek:10000']);
+      expect(returned, isFalse, reason: '命令还没提交完，handler 不能提前返回');
+
       gate.complete();
       await seek;
-      expect(service.seeks, [const Duration(seconds: 10)]);
+      expect(returned, isTrue);
     });
 
-    test('自定义播放顺序动作：模式变化后落盘', () async {
+    test('自定义播放顺序动作：切模式命令，handler 不碰服务', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      var persisted = 0;
-      final (handler, _) = await _handler(service);
-      handler.attachSessionPersister(() async => persisted++);
+      final commands = _FakeCommands();
+      final (handler, _) = await _handler(service, commands: commands);
 
       await handler.customAction(playModeActionId);
 
-      expect(service.calls, ['toggleMode']);
-      expect(persisted, 1);
+      expect(commands.calls, ['togglePlayMode']);
+      expect(service.calls, isEmpty);
     });
 
-    test('其它自定义动作透传且不落盘', () async {
+    test('其它自定义动作透传且不产生命令', () async {
       final service = _FakeService()..trackValue = _track();
       addTearDown(service.dispose);
-      var persisted = 0;
-      final (handler, _) = await _handler(service);
-      handler.attachSessionPersister(() async => persisted++);
+      final commands = _FakeCommands();
+      final (handler, _) = await _handler(service, commands: commands);
 
       await handler.customAction('lx.other');
 
+      expect(commands.calls, isEmpty);
       expect(service.calls, isEmpty);
-      expect(persisted, 0);
     });
   });
 

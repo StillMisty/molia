@@ -163,11 +163,9 @@ void main() async {
     powerPolicy: powerPolicy,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
+      // handler 只翻译动作；恢复态回落、阶段路由与提交都在会话命令面。
+      commands: session,
       artworkBlocked: () => local.dataSaver.blockNetworkArtwork,
-      // 恢复态（冷启动未起播）切歌键落到会话模块：它按阶段决定是恢复播放
-      // 还是转发给真实播放。
-      onRestoredSkipToNext: () => session.skipToNext(),
-      onRestoredSkipToPrevious: () => session.skipToPrevious(),
     ),
   );
   _markStartup('播放栈（含媒体会话）', startup);

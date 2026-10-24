@@ -57,8 +57,14 @@
   落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
   （`savePosition`，前台 1s / 后台 15s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
   `pendingWrite` 承担。改变会话的命令（暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前
-  等 `pendingWrite`（「已提交」语义），live seek 强制整份落盘；系统媒体 handler 只
-  await 注入的提交（不自建串行链）；壳层 paused 与桌面退出共用
+  等 `pendingWrite`（「已提交」语义），live seek 强制整份落盘。系统媒体会话与 UI
+  共用 `PlaybackCommandPort`（`lib/playback/playback_commands.dart`，唯一实现是协调者）：
+  handler 只把通知 / 耳机键动作翻译成命令，恢复态回落（切歌 / 队列跳转）、阶段路由与
+  落盘时机都在命令面，handler 不再直写服务、也不再持有第二个落盘回调。provider
+  的失败恢复写入也走同一条命令面：播放失败的同源重试走 `playQueueIndex`，自动换源写回走
+  `replaceQueueTrack`（只有 live 生效，恢复态 / 未命中 no-op），不直写 facade。
+  壳层 paused
+  与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`，桌面 `quitApp` 有界等待（2s）后继续退出。
   系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
   经组合根接线进来（不再直连 provider）；「启动时恢复上次播放」开关的跨设备重载钩子
@@ -73,6 +79,9 @@
 - **System media session（系统媒体会话）** — `lib/playback/local_audio_handler.dart` +
   `lib/playback/media_session_backend*.dart`：通知栏 / 锁屏 / 耳机键的会话层
   （Android/iOS/macOS/Windows 走 `flutter_media_session`，Linux 走 MPRIS，见 ADR-0010）。
+  handler 只负责读路径（当前曲目 / 状态 / 进度 / seek 版本 → 元数据与通知）与动作翻译：
+  播放 / 暂停 / 停止 / 切歌 / seek / 队列跳转 / 切模式都走 `PlaybackCommandPort`，
+  恢复态回落与「返回前已提交」由 `PlaybackSessionCoordinator` 负责。
   Android 通知里的两个自定义动作是「收藏」(`lx.favorite`，写路径复用
   `LibraryProvider.toggleFavoriteSourceTrack`）与「播放顺序」(`lx.playMode`)；
   **按钮的最终位置由 Media3 provider 与系统 UI 决定**，Dart 侧只能控制自定义动作
@@ -92,7 +101,8 @@
   无定时器；以播放后端的自然完成事件为准，不依赖可能被熄屏节流的进度 tick）。
   判定只读 **facade 原始
   通道**（真实播放），恢复态覆盖值不参与；到点动作经注入的 `onFire` 落地
-  （组合根注入 `facade.pause`）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
+  （组合根注入播放命令面的 `pause`：与通知 / UI 暂停同一阶段路由，返回前
+  已提交会话）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
   不持久化，`stopLocalPlayback` 一并撤销。
 - **Audio focus guard（音频焦点守卫）** — `lib/playback/audio_focus_guard.dart`：
   「其他应用出声时暂停 / 继续播放」的唯一实现，受设置「与其他应用同时播放」
@@ -374,15 +384,24 @@
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
   收藏 / 播放历史 / 列表写入的唯一实现。收藏唯一入口 `toggleFavoriteTrack(Track)`
   （播放页不再直连 `LibraryRepository`）；批量操作按 `PlaylistTrack` 规范形状，
-  `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。
+  `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。收藏页批量 / 行写入统一返回
+  `LibraryMutationOutcome`（applied / unchanged / failed）：失败在 provider 边界
+  收口成 failed（原始异常只进日志），乐观更新回滚，选择只在成功后才清空。
+- **Favorite toggle outcome（收藏切换结果）** — `lib/providers/library_outcome.dart` 的
+  `FavoriteToggleOutcome`：`toggleFavorite` / `toggleFavoriteTrack` /
+  `toggleFavoriteSourceTrack` / `toggleFavoriteSearchItem`（null = 无法识别曲目）
+  的唯一结果类型。成功带切换后的状态，失败带切换前的状态（缓存与图标不翻转）；
+  仓库异常在 provider 边界收口，UI 只按结果提示 `operationFailed`。
 - **Add-to-library flow（加入列表流程）** — `lib/widgets/add_to_library.dart`：
   选择目标 → 写入 → 解析新建列表名 → 反馈的唯一实现；收藏页与发现页共用。
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是渠道状态的唯一持有者；
   渠道变化经注入的 `onChannelChanged`（组合根）触发搜索源跟随（可搜索渠道才跟随），
   资料页不再在两个 provider 之间仲裁同步，只处理「渠道被停用」的 UI 回退。
 - **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
-  `ensurePlaylistTracks`：页面只读「已缓存/加载中」视图并请求加载，不再探测
-  `cachedTracksOf`/`isPlaylistLoading` 之类的缓存内部。
+  `ensurePlaylistTracks`：页面只读 `PlaylistTracksView`（`tracks` + `LibraryReadState`
+  的 loading / ready / failed）并请求加载，不再探测 `cachedTracksOf` /
+  `isPlaylistLoading` 之类的缓存内部。列表清单 / 历史同样暴露 `playlistsState` /
+  `historyState`：首次读取失败是 failed（可重试），已有旧缓存则保持 ready 展示旧值。
 
 ## 换源
 
@@ -402,8 +421,10 @@
   返回 null —— 宁可不换，不换错）。
 - **Auto source swap（自动换源）** — `lib/services/source_swap/auto_source_swap_service.dart`
   + `PlaybackProvider` 的失败恢复链路：同源重试仍失败后跨源严格找回并**静默**
-  替换队列曲目（对齐 LX）；provenance（每个曲目的已尝试来源）保证级联每源
-  至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
+  替换队列曲目（对齐 LX）；替换经 `PlaybackCommandPort.replaceQueueTrack`
+  （live 由协调者转发 facade 并返回前提交会话，恢复态 / 未命中 no-op——自动换源
+  只由真实播放失败触发，不改保存的恢复会话）；provenance（每个曲目的已尝试来源）
+  保证级联每源至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
 
 ## 听歌统计
 - **Listening statistics snapshot（统计快照）** — `ListeningStatisticsSnapshot`：
@@ -561,10 +582,34 @@
   只有这一处实现。
 - **Sync round runner（轮次编排）** — `lib/data/sync/sync_round.dart`：
   `SyncRoundRunner.runRound` 只剩线性编排，阶段 collect / pull /
-  consume + apply / publish + compact / report 只读写 `SyncRoundContext`，
-  可注入假传输 / 假适配器单独测试。语义保留：应用成功才推进游标、forced
-  delivery、缺口二次拉取、anti-entropy、入站轮；`SyncEngine` 只留公共门面
-  （调度器宿主 / 服务端语义 / 入站合流 / 公告过滤）。
+  consume + apply / publish + compact / report 与轮次上下文都是本文件的私有
+  实现；测试经 `runRound` + 假传输 / 假适配器驱动整轮，不能绕过顺序直接调
+  阶段。语义保留：应用成功才推进游标、forced delivery、缺口二次拉取、
+  anti-entropy、入站轮；`SyncEngine` 只留公共门面（调度器宿主 / 服务端语义 /
+  入站合流 / 公告过滤）。
+- **Sync book（同步状态的窄接口与单一提交）** — `lib/data/sync/sync_book.dart`：
+  按用途声明 `SyncStampLedger`（适配器）/ `SyncPublicationState`（发布台账）/
+  `SyncRoundState`（轮次）/ `SyncEngineState`（引擎）/ `SyncTransportState` /
+  `SyncSchedulerState` / `SyncBackupState`，`SyncStateStore` 是唯一实现。
+  状态 JSON 的形状与键不变，持久化只有一个出口 `commit()`：所有写入先改内存
+  并标脏，轮内台账 / 首连提示 / 端点记账不单独落盘（引擎轮末提交一次），
+  用户命令（类别 / 传输 / 名称 / 口令、地址簿）仍即时提交。登记类写入必须
+  在增量日志追加成功之后（`SyncJournalAppender`），追加失败时旧登记保留，
+  下一轮仍能检测到同一变更。
+- **Sync state codec（持久化形状）** — `lib/data/sync/sync_state_codec.dart`：
+  `SyncPersistedState` 是 `sync_state_v2` 的不可变快照（身份 / 类别与传输开关 /
+  WebDAV / 地址簿 / 名册 / 已验证端点 / 登记表 / 指纹 / 日志 / 活动 / 版本基线），
+  `SyncStateCodec.encode` / `decode` 是键名、条件字段、容错默认值与保留上限的
+  唯一实现；`SyncStateStore` 只负责内存状态、身份恢复与提交时机，不再持有
+  JSON 形状（见 `sync_book.dart`）。
+- **Sync roster（名册状态）** — `lib/data/sync/sync_roster.dart`：设备名册 /
+  已验证局域网端点 / 手动地址簿 / 首连提示 / 单轮移除抑制的唯一持有者；
+  `onChanged` 只让状态存储标脏，落盘仍由 `commit()` 决定。端点校验与 180 天
+  淘汰、名册按最近接触截断、地址簿合并都在这里；换口令清空旧组观测但保留
+  用户配置的地址簿。
+- **Sync activity log（轮次流水）** — `lib/data/sync/sync_activity_log.dart`：
+  展示日志 / 近 24 小时活动 / 传输成功时间 / 快照发布位置的唯一持有者，追加
+  顺序与各自上限在这里；换口令只清传输成功时间，历史日志与活动记录保留。
 - **Sync round window（轮次窗口）** — `SyncRoundWindow`（定义在
   `lib/domain/ports/sync_transport.dart`）：一轮的 `pull` 与 `push` 显式共享
   同一个窗口，删除局域网私有的 `_roundStartedAt` 隐式耦合。
@@ -788,7 +833,8 @@
 - **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
 - **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
 
-- **Collection selection（合集多选状态机）** — `lib/widgets/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（可见行下标选择集、Ctrl 切换、Shift 区间与锚点移动、全选三态、越界提取忽略、`clear` / `clearAnchor`）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
+- **Collection session（合集会话）** — `lib/providers/collection_session.dart`：收藏页「当前合集」的唯一状态机：恢复（合集顺序 / 选集 / 滚动偏移，一次）、选中合集校准（合集列表首次加载完成、下载能力就绪后校准一次；失效 / 未选的选集回退到默认解析并落盘）、模式（搜索 / 排序 / 调整顺序）、按行 key 的多选与失效、加载组合（首帧列表 / 列表曲目 / 历史首载 / 本地歌曲联结合成为一个 `loading` / `ready` / `failed` 阶段，failed 提供重试）、合集切换与选择 / 顺序持久化、滚动键与恢复时机（同一合集只激活 / 恢复一次）。页面每帧只交一份 `CollectionSessionInput`（资料库窄端口 `CollectionLibrary` + 展示名 + 搜索词 + 下载 / 缓存快照）、消费一个 `CollectionSessionView`；不再在 build 里做 post-frame setState 校准或 `ensure*` 编排。本地歌曲联结与展示名以外的合集投影仍由 Collection presenter 提供。
+- **Collection selection（合集多选状态机）** — `lib/utils/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（选择集按**行稳定 key** 而不是可见行下标，Ctrl 切换、Shift 区间与锚点移动、全选三态、`retainKeys` 随视图收缩；插入 / 过滤后选择仍指向原行）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端左滑胶囊 / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.cachedAudioTrackIds`（播放历史 × 完整音频缓存命中且无音频下载，一次目录列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。合集弹层打开前先把缓存行重算到当前输入，弹层计数与列表行数同源。

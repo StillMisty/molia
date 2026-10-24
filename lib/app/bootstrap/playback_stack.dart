@@ -180,13 +180,11 @@ Future<PlaybackStack> buildPlaybackStack({
   final factory = mediaSessionFactory;
   if (service != null && factory != null) {
     final mediaSessionWatch = Stopwatch()..start();
+    // 系统控制（通知 / 锁屏 / 耳机键）经 handler 翻译成会话命令：暂停 / 停止 /
+    // 切播放顺序 / seek 的 stage 路由与「返回前已落盘」由协调者负责，这里不再
+    // 回填第二个落盘回调。
     audioHandler = await factory(service, sessionCoordinator);
     markStartupStep('sub.mediaSession.activate', mediaSessionWatch);
-    // 系统控制（通知 / 锁屏 / 耳机键）直接落到播放服务：把暂停 / 停止 /
-    // 切播放顺序的会话提交接到会话模块（handler 由注入的工厂创建，回调随后
-    // 回填）。handler 只 await 这一次提交，串行化由 store 的 pendingWrite 承担，
-    // 保证控制动作返回时会话已在本地、重开应用可恢复暂停态。
-    audioHandler?.attachSessionPersister(sessionCoordinator.flushSession);
   }
 
   return (

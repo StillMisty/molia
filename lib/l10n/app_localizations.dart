@@ -944,6 +944,12 @@ abstract class AppLocalizations {
   /// **'All channels are disabled. Enable channels in Source Management.'**
   String get libraryNoChannels;
 
+  /// No description provided for @libraryLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your library'**
+  String get libraryLoadFailed;
+
   /// No description provided for @languageEnglish.
   ///
   /// In en, this message translates to:

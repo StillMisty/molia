@@ -74,6 +74,11 @@ class _StateValueListenable<T> implements ValueListenable<T> {
 ///   落盘都在那里，本类不再持有恢复态分支）；持久化 / 写库 / 桌面小组件 /
 ///   封面预取与补取 / 历史等副作用由 [PlaybackObserver] 承担（组合根创建并
 ///   挂接），本类只转发 [suspendPlaybackSession] 与最后播放信息读取。
+///
+/// 不经过命令面的写入口（都不是会话命令，见各处注释）：装载队列
+/// `_facade.playTracks`（新播放上下文，由快照监听落盘）、追加队列
+/// `_facade.enqueueTracks`（只编辑队列）、`_facade.setVolume`（设备本地状态）、
+/// 无曲目时应用默认模式（只影响下一次播放的初始模式）。
 class PlaybackProvider extends ChangeNotifier {
   final PlaybackFacade _facade;
   final SettingsAccess _settings;
@@ -109,8 +114,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 同一实例稳定持有。
   late final ValueListenable<Duration> _positionChannel;
 
-  /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，暂停动作走
-  /// `facade.pause`；状态经 [SleepTimerController] 的 ValueListenable 暴露。
+  /// 定时关闭（歌曲信息页入口）：只决定「什么时候暂停」，到点暂停经播放命令面
+  /// [PlaybackSessionCoordinator.pause] 落地（与通知 / UI 暂停同一阶段路由与
+  /// 「返回前已提交」口径）；状态经 [SleepTimerController] 的 ValueListenable 暴露。
   late final SleepTimerController sleepTimer;
 
   /// 应用内音量持久化（设备本地键，见 [PlaybackVolumeStore]）。
@@ -186,14 +192,23 @@ class PlaybackProvider extends ChangeNotifier {
       defaultInterval: const Duration(milliseconds: 50),
     );
     _positionChannel = _StateValueListenable<Duration>(_session.position);
-    // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）。
+    // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）；
+    // 到点暂停走命令面——与通知 / UI 暂停共享阶段路由与提交语义，直接写
+    // facade 会绕过「返回前已落盘」，熄屏到点后进程被回收就丢最后进度。
     sleepTimer = SleepTimerController(
       snapshot: _facade.snapshot,
       position: _facade.position,
       trackCompletions: _facade.trackCompletions,
       setStopAfterCurrentTrack: _facade.setStopAfterCurrentTrack,
-      onFire: () => _facade.pause(),
+      // 定时关闭只关心「暂停已落地」，路由结果对倒计时没有 UI 语义。
+      onFire: () async {
+        await _session.pause();
+      },
     );
+    // 「播完当前歌曲」的完成处理保持不变：后端按 stopAfterCurrentTrack 在
+    // 曲末自己停住（`_pauseAtTrackEnd` 推 playing→paused 快照），会话协调者
+    // 的快照监听随之强制整份落盘——那条路径已经提交；这里共用 onFire 的
+    // pause 对已在曲末停住的后端是幂等的，不改变完成语义。
     _facade.snapshot.addListener(_onFacadeSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
     // 只重建进度条/歌词行，不触发整 Provider 重建（节流落盘在会话模块里）。
@@ -270,6 +285,9 @@ class PlaybackProvider extends ChangeNotifier {
   }) async {
     if (tracks.isEmpty) return;
     try {
+      // 装载新队列不是会话命令：它建立新的播放上下文（不是对当前会话的
+      // 增量修改），恢复态路由与「返回前已提交」都不适用；会话内容由协调者
+      // 的快照监听整份落盘。
       await _facade.playTracks(PlaybackRequest(
         tracks: [for (final track in tracks) trackFromSourceTrack(track)],
         startIndex: index,
@@ -297,6 +315,7 @@ class PlaybackProvider extends ChangeNotifier {
   }) async {
     if (tracks.isEmpty) return;
     try {
+      // 同 playSourceTracks：装载（新上下文）不是会话命令。
       await _facade.playTracks(PlaybackRequest(
         tracks: List.of(tracks),
         startIndex: index,
@@ -320,6 +339,7 @@ class PlaybackProvider extends ChangeNotifier {
   Future<void> enqueueDomainTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
     try {
+      // 追加只编辑队列、不换当前曲目：不是会话命令；队列变化由快照监听落盘。
       await _facade.enqueueTracks(List.of(tracks));
       _notifyCategory('queue');
     } catch (e) {
@@ -468,6 +488,9 @@ class PlaybackProvider extends ChangeNotifier {
   double get _effectiveVolume => _muted ? 0.0 : _volume;
 
   /// 把有效音量下发给后端；失败只记日志（本地状态与持久化照常）。
+  ///
+  /// 音量是设备本地状态（不进会话快照），不是会话命令：不需要阶段路由，
+  /// 也不该为此触发会话落盘。
   Future<void> _applyEffectiveVolume() async {
     try {
       await _facade.setVolume(_effectiveVolume);
@@ -481,6 +504,8 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 设置默认播放模式：持久化；当前无曲目时立即应用到服务，作为
   /// 下一次播放的初始模式（不打断正在播放的会话）。
+  ///
+  /// 与 [_loadDefaultPlayMode] 同理：默认模式不是会话命令。
   Future<void> setDefaultPlayMode(PlayMode mode) async {
     if (_defaultPlayMode != mode) {
       _defaultPlayMode = mode;
@@ -507,6 +532,9 @@ class PlaybackProvider extends ChangeNotifier {
       );
 
   /// 启动加载默认播放模式；无曲目时应用到 facade（有曲目时不打断当前会话）。
+  ///
+  /// 默认模式是「下一次播放的初始模式」而非当前会话内容：不是会话命令，
+  /// 恢复态 / live 的路由不适用（恢复流程自己会先落地会话里的模式）。
   Future<void> _loadDefaultPlayMode() async {
     try {
       final name = await _settings.read(kDefaultPlayMode);
@@ -592,7 +620,7 @@ class PlaybackProvider extends ChangeNotifier {
   /// 返回的 Future 在会话落盘后结束（协调者 `flushSession` → store 的
   /// `pendingWrite`）：退出路径必须 await 它再销毁窗口；生命周期回调无法
   /// await，用 `unawaited` 触发同一个提交。系统媒体控制（通知暂停 / 停止 /
-  /// 切播放顺序）走注入的 `flushSession`，与这里汇入同一条写队列。
+  /// 切播放顺序）走同一个协调者的命令面，与这里汇入同一条写队列。
   Future<void> suspendPlaybackSession() => _session.flushSession();
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
@@ -641,7 +669,9 @@ class PlaybackProvider extends ChangeNotifier {
       final index = state.currentIndex;
       unawaited(Future<void>.microtask(() async {
         try {
-          await _facade.playQueueIndex(index);
+          // 重试也是一次会话命令：阶段路由与「返回前已提交」交给协调者，
+          // 失败恢复链路不再直接写 facade（与 UI / 通知同一写入口）。
+          await _session.playQueueIndex(index);
         } catch (e) {
           _logger.severe('播放失败自动重试失败', e);
         }
@@ -692,9 +722,13 @@ class PlaybackProvider extends ChangeNotifier {
         match.id.uri,
         {...tried, match.id.sourceKey},
       );
-      await _facade.replaceQueueTrack(uri, match);
-      _notifyCategory('track');
-      _notifyCategory('queue');
+      // 队列替换是会话命令：live 转发由协调者完成，返回前已把换源写进会话
+      // （重开应用恢复新来源，而不是等下一分钟整份刷新）。
+      final route = await _session.replaceQueueTrack(uri, match);
+      if (route != PlaybackCommandRoute.none) {
+        _notifyCategory('track');
+        _notifyCategory('queue');
+      }
     } catch (e) {
       _logger.warning('自动换源失败: $e');
     } finally {

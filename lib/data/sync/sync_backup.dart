@@ -4,8 +4,8 @@ import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
 import 'sync_adapter.dart';
+import 'sync_book.dart';
 import 'sync_stamp.dart';
-import 'sync_state_store.dart';
 
 /// 收集函数：按类别返回适配器聚合后的本地视图。
 ///
@@ -23,7 +23,7 @@ typedef SyncRecordCollector = Future<Map<SyncCategory, List<SyncRecord>>>
 /// 轮次；引擎的 interface 也不再为备份留两个方法。
 class SyncBackup {
   SyncBackup({
-    required SyncStateStore state,
+    required SyncBackupState state,
     required List<SyncAdapter> adapters,
     required SyncStampIssuer stamps,
     required SyncRecordCollector collect,
@@ -40,7 +40,7 @@ class SyncBackup {
   /// 备份文件外层格式版本（与同步协议版本相互独立）。
   static const int backupVersion = 1;
 
-  final SyncStateStore _state;
+  final SyncBackupState _state;
   final List<SyncAdapter> _adapters;
   final SyncStampIssuer _stamps;
   final SyncRecordCollector _collect;
@@ -112,7 +112,7 @@ class SyncBackup {
         _logger.warning('导入 ${adapter.runtimeType} 失败', e);
       }
     }
-    await _state.save();
+    await _state.commit();
     return SyncApplyOutcome(applied: applied, skipped: skipped);
   }
 

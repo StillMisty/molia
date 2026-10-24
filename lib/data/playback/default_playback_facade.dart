@@ -92,6 +92,9 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   }
 
   @override
+  Future<void> play() => _backend.play();
+
+  @override
   Future<void> pause() => _backend.pause();
 
   @override

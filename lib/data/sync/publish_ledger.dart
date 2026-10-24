@@ -13,7 +13,7 @@ library;
 
 import '../../domain/models/device_sync.dart';
 import '../../domain/ports/sync_transport.dart';
-import 'sync_state_store.dart';
+import 'sync_book.dart';
 
 /// 每传输发布台账（局域网 / WebDAV 各一份，由 `SyncEngine` 持有）。
 ///
@@ -32,7 +32,7 @@ class PublishLedger {
   /// 引擎建好后假替；[state] 提供持久覆盖的读写。
   PublishLedger({
     required this.kind,
-    required SyncStateStore state,
+    required SyncPublicationState state,
     required bool Function() servesLiveSnapshot,
   })  : _state = state,
         _servesLiveSnapshot = servesLiveSnapshot;
@@ -40,7 +40,7 @@ class PublishLedger {
   /// 传输标识（`sync_state_v2` 的 `snapshotPushSeq` 键）。
   final String kind;
 
-  final SyncStateStore _state;
+  final SyncPublicationState _state;
   final bool Function() _servesLiveSnapshot;
 
   /// 最近一次**成功**外发的全量快照内容指纹；null = 尚未推过 / 上次外发失败。
@@ -101,6 +101,9 @@ class PublishLedger {
   /// 只在「确实有对端收下且没有失败」时记账：零对端（局域网无人在线）不算
   /// 推送成功，否则对端上线后会被误判为「已推过」；失败 / 零对端显式遗忘，
   /// 下一轮重试。全量快照成功时把持久覆盖推进到本轮构建位置（失败不前移）。
+  ///
+  /// 覆盖位置只写内存 + 标脏，由引擎在轮末提交一次：推送循环里每个传输 /
+  /// 每份载荷都会调用这里，逐次落盘会把整份 `sync_state_v2` 写多遍。
   Future<void> mark(SyncPushResult result) async {
     final planned = _planned;
     _planned = null;
@@ -113,7 +116,7 @@ class PublishLedger {
     _pushedSnapshotId = delivered ? planned.key : null;
     final seq = planned.snapshotSeq;
     if (delivered && seq != null) {
-      await _state.setSnapshotPushSeq(kind, seq);
+      _state.setSnapshotPushSeq(kind, seq);
     }
   }
 

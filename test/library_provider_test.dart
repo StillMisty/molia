@@ -29,6 +29,13 @@ class _CountingLibraryRepository extends LibraryRepository {
   int playlistsListCalls = 0;
   int playlistTracksListCalls = 0;
 
+  /// 读取 / 写入失败开关：失败结果的验收标准（阶段 / outcome）用。
+  bool failReads = false;
+  bool failWrites = false;
+  bool failHistoryWrites = false;
+  bool failPlaylistWrites = false;
+  bool failTrackWrites = false;
+
   /// 一次性闸门：非空时该次查询返回测试控制的快照（用于制造旧快照）。
   Completer<List<PlayHistoryEntry>>? nextHistorySnapshot;
   Completer<Set<String>>? nextFavoriteKeysSnapshot;
@@ -37,6 +44,7 @@ class _CountingLibraryRepository extends LibraryRepository {
 
   @override
   Future<List<PlayHistoryEntry>> listHistory({int limit = kHistoryLimit}) {
+    if (failReads) return Future.error(StateError('history read failed'));
     historyListCalls++;
     final gate = nextHistorySnapshot;
     if (gate != null) {
@@ -48,6 +56,7 @@ class _CountingLibraryRepository extends LibraryRepository {
 
   @override
   Future<Set<String>> favoriteKeys() {
+    if (failReads) return Future.error(StateError('favorites read failed'));
     favoriteKeysCalls++;
     final gate = nextFavoriteKeysSnapshot;
     if (gate != null) {
@@ -59,6 +68,7 @@ class _CountingLibraryRepository extends LibraryRepository {
 
   @override
   Future<List<PlaylistInfo>> listPlaylists() {
+    if (failReads) return Future.error(StateError('playlists read failed'));
     playlistsListCalls++;
     final gate = nextPlaylistsSnapshot;
     if (gate != null) {
@@ -73,6 +83,7 @@ class _CountingLibraryRepository extends LibraryRepository {
     int playlistId, {
     int? limit,
   }) {
+    if (failReads) return Future.error(StateError('tracks read failed'));
     playlistTracksListCalls++;
     final gate = nextPlaylistTracksSnapshot;
     if (gate != null) {
@@ -80,6 +91,82 @@ class _CountingLibraryRepository extends LibraryRepository {
       return gate.future;
     }
     return super.listPlaylistTracks(playlistId, limit: limit);
+  }
+
+  @override
+  Future<int> addFavorites(List<PlaylistTrack> tracks) {
+    if (failWrites) return Future.error(StateError('favorites write failed'));
+    return super.addFavorites(tracks);
+  }
+
+  @override
+  Future<bool> toggleFavorite({
+    required String sourceKey,
+    required String songId,
+    required String title,
+    String artist = '',
+    String album = '',
+    String? coverUrl,
+    int? durationMs,
+    Map<String, dynamic> raw = const {},
+  }) {
+    if (failWrites) return Future.error(StateError('favorite toggle failed'));
+    return super.toggleFavorite(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title,
+      artist: artist,
+      album: album,
+      coverUrl: coverUrl,
+      durationMs: durationMs,
+      raw: raw,
+    );
+  }
+
+  @override
+  Future<int> addTracksToPlaylist(
+    int playlistId,
+    List<PlaylistTrack> tracks, {
+    bool favoriteChange = false,
+  }) {
+    if (failTrackWrites) {
+      return Future.error(StateError('playlist tracks write failed'));
+    }
+    return super.addTracksToPlaylist(
+      playlistId,
+      tracks,
+      favoriteChange: favoriteChange,
+    );
+  }
+
+  @override
+  Future<int> deleteHistoryEntries(List<TrackKey> keys) {
+    if (failWrites) return Future.error(StateError('history write failed'));
+    return super.deleteHistoryEntries(keys);
+  }
+
+  @override
+  Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) {
+    if (failHistoryWrites) {
+      return Future.error(StateError('history add failed'));
+    }
+    return super.addHistoryEntries(entries);
+  }
+
+  @override
+  Future<void> renamePlaylist(int id, String name) {
+    if (failPlaylistWrites) {
+      return Future.error(StateError('playlist rename failed'));
+    }
+    return super.renamePlaylist(id, name);
+  }
+
+  @override
+  Future<void> deletePlaylist(int id) {
+    if (failPlaylistWrites) {
+      return Future.error(StateError('playlist delete failed'));
+    }
+    return super.deletePlaylist(id);
   }
 }
 
@@ -406,7 +493,8 @@ void main() {
       title: 'Song 1',
       raw: {'songId': 1},
     );
-    expect(added, isTrue);
+    expect(added.isFailure, isFalse);
+    expect(added.isFavorite, isTrue);
     expect(provider.isFavorite('wy', '1'), isTrue);
     expect(await repository.favoriteKeys(), {'wy:1'});
 
@@ -415,7 +503,8 @@ void main() {
       songId: '1',
       title: 'Song 1',
     );
-    expect(removed, isFalse);
+    expect(removed.isFailure, isFalse);
+    expect(removed.isFavorite, isFalse);
     expect(provider.isFavorite('wy', '1'), isFalse);
   });
 
@@ -437,15 +526,14 @@ void main() {
     repository.playlistsListCalls = 0;
     repository.playlistTracksListCalls = 0;
 
-    expect(
-      await provider.toggleFavorite(
-        sourceKey: 'wy',
-        songId: '2',
-        title: 'Song 2',
-        raw: {'songId': 2},
-      ),
-      isTrue,
+    final second = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '2',
+      title: 'Song 2',
+      raw: {'songId': 2},
     );
+    expect(second.isFailure, isFalse);
+    expect(second.isFavorite, isTrue);
     await settle();
     expect(provider.isFavorite('wy', '2'), isTrue);
     expect(repository.favoriteKeysCalls, 0, reason: '不应重查收藏键');
@@ -457,14 +545,13 @@ void main() {
       ['1', '2'],
     );
 
-    expect(
-      await provider.toggleFavorite(
-        sourceKey: 'wy',
-        songId: '2',
-        title: 'Song 2',
-      ),
-      isFalse,
+    final removedSecond = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '2',
+      title: 'Song 2',
     );
+    expect(removedSecond.isFailure, isFalse);
+    expect(removedSecond.isFavorite, isFalse);
     await settle();
     expect(provider.isFavorite('wy', '2'), isFalse);
     expect(repository.favoriteKeysCalls, 0);
@@ -496,9 +583,10 @@ void main() {
 
     // 批量取消收藏：写入侧只能广播无载荷变化，走整表校准。
     expect(
-      await provider.removeTracksFromFavorites([
+      (await provider.removeTracksFromFavorites([
         (sourceKey: 'wy', songId: '1'),
-      ]),
+      ]))
+          .changed,
       1,
     );
     await settle();
@@ -563,15 +651,14 @@ void main() {
     expect(repository.favoriteKeysCalls, 1);
 
     // 校准未完成时收藏新曲目：立即打补丁并进入重放队列。
-    expect(
-      await provider.toggleFavorite(
-        sourceKey: 'wy',
-        songId: '2',
-        title: 'Song 2',
-        raw: {'songId': 2},
-      ),
-      isTrue,
+    final addedDuringCalibration = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '2',
+      title: 'Song 2',
+      raw: {'songId': 2},
     );
+    expect(addedDuringCalibration.isFailure, isFalse);
+    expect(addedDuringCalibration.isFavorite, isTrue);
     await Future<void>.delayed(Duration.zero);
     expect(repository.favoriteKeysCalls, 1, reason: '不能因 toggle 再查一次');
 
@@ -607,7 +694,9 @@ void main() {
       ),
     };
     expect(provider.isFavoriteSearchItem(item), isFalse);
-    expect(await provider.toggleFavoriteSearchItem(item), isTrue);
+    final added = await provider.toggleFavoriteSearchItem(item);
+    expect(added?.isFailure, isFalse);
+    expect(added?.isFavorite, isTrue);
     expect(provider.isFavoriteSearchItem(item), isTrue);
     expect(await provider.toggleFavoriteSearchItem({'no': 'track'}), isNull);
   });
@@ -659,8 +748,14 @@ void main() {
         await provider.loadPlaylistTracks(result.playlistId, force: true);
 
     // 复制到 target；重复复制幂等。
-    expect(await provider.addTracksToPlaylist(target, sourceTracks), 2);
-    expect(await provider.addTracksToPlaylist(target, sourceTracks), 0);
+    expect(
+      (await provider.addTracksToPlaylist(target, sourceTracks)).changed,
+      2,
+    );
+    expect(
+      (await provider.addTracksToPlaylist(target, sourceTracks)).changed,
+      0,
+    );
     var targetTracks = await provider.loadPlaylistTracks(target, force: true);
     expect(targetTracks.map((t) => t.songId), ['1', '2']);
 
@@ -674,7 +769,8 @@ void main() {
 
     // 批量移除：缓存静默校准。
     expect(
-      await provider.removeTracksFromPlaylist(target, [targetTracks.first]),
+      (await provider.removeTracksFromPlaylist(target, [targetTracks.first]))
+          .changed,
       1,
     );
     await settle();
@@ -698,13 +794,14 @@ void main() {
     ));
     await settle();
     expect(
-      await provider.addTracksToPlaylist(target, [
+      (await provider.addTracksToPlaylist(target, [
         for (final entry in provider.history)
           PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
-      ]),
+      ]))
+          .changed,
       2,
     );
-    expect(await provider.deleteHistoryEntries(provider.history), 2);
+    expect((await provider.deleteHistoryEntries(provider.history)).changed, 2);
     expect(provider.history, isEmpty);
     await settle();
     expect(provider.history, isEmpty);
@@ -732,16 +829,17 @@ void main() {
     expect(again.added, 0);
 
     // 曲目加入播放历史。
-    expect(await provider.addTracksToHistory(tracks), 1);
+    expect((await provider.addTracksToHistory(tracks)).changed, 1);
     await settle();
     expect(provider.history.single.songId, '1');
 
     // 历史条目收藏进默认收藏列表。
     expect(
-      await provider.addTracksToFavorites([
+      (await provider.addTracksToFavorites([
         for (final entry in provider.history)
           PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
-      ]),
+      ]))
+          .changed,
       1,
     );
     expect(provider.isFavorite('wy', '1'), isTrue);
@@ -768,7 +866,9 @@ void main() {
     );
 
     expect(provider.isFavorite('wy', '1'), isFalse);
-    expect(await provider.toggleFavoriteTrack(domainTrack), isTrue);
+    final added = await provider.toggleFavoriteTrack(domainTrack);
+    expect(added.isFailure, isFalse);
+    expect(added.isFavorite, isTrue);
     expect(provider.isFavorite('wy', '1'), isTrue);
 
     final stored = await repository.listPlaylistTracks(
@@ -778,5 +878,220 @@ void main() {
     );
     expect(stored.single.songId, '1');
     expect(stored.single.raw['songId'], 1);
+  });
+
+  group('读取 / 写入结果', () {
+    test('列表首次读取失败 → failed；重试成功 → ready 且有数据', () async {
+      repository.failReads = true;
+      await repository.createPlaylist('测试列表');
+      await settle();
+      expect(provider.playlistsState.isFailed, isTrue);
+
+      repository.failReads = false;
+      await provider.refreshPlaylists(force: true);
+      expect(provider.playlistsState.isReady, isTrue);
+      expect(provider.playlists.map((p) => p.name), ['测试列表']);
+    });
+
+    test('历史首次读取失败 → failed；重试成功 → ready', () async {
+      repository.failReads = true;
+      await provider.refreshHistory();
+      expect(provider.historyState.isFailed, isTrue);
+
+      repository.failReads = false;
+      await provider.refreshHistory(force: true);
+      expect(provider.historyState.isReady, isTrue);
+    });
+
+    test('列表曲目读取失败 → failed 视图；重试成功 → ready', () async {
+      final playlistId = await repository.createPlaylist('测试列表');
+      await repository.addTrackToPlaylist(
+        playlistId,
+        PlaylistTrack(
+          playlistId: playlistId,
+          sourceKey: 'wy',
+          songId: '1',
+          title: 'Song 1',
+          addedAt: 0,
+        ),
+      );
+      await provider.refreshPlaylists();
+      repository.failReads = true;
+
+      provider.ensurePlaylistTracks(playlistId);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      var view = provider.playlistTracksView(playlistId);
+      expect(view.failed, isTrue, reason: '不能把失败伪装成空列表');
+      expect(view.tracks, isNull);
+
+      repository.failReads = false;
+      provider.ensurePlaylistTracks(playlistId, force: true);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      view = provider.playlistTracksView(playlistId);
+      expect(view.ready, isTrue);
+      expect(view.tracks!.single.songId, '1');
+    });
+
+    test('批量收藏失败 → failed 且不污染收藏缓存；重试成功 → applied', () async {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'seed',
+        title: 'Seed',
+        raw: {'songId': 'seed'},
+      );
+      await settle();
+
+      final track = PlaylistTrack(
+        playlistId: 0,
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+        addedAt: 0,
+      );
+      repository.failWrites = true;
+      final failed = await provider.addTracksToFavorites([track]);
+      expect(failed.isFailure, isTrue);
+      expect(provider.isFavorite('wy', '2'), isFalse);
+
+      repository.failWrites = false;
+      final applied = await provider.addTracksToFavorites([track]);
+      expect(applied.isSuccess, isTrue);
+      expect(applied.changed, 1);
+      expect(provider.isFavorite('wy', '2'), isTrue);
+    });
+
+    test('收藏切换失败 → failed 带回切换前状态，缓存与计数不变', () async {
+      // 先把默认收藏列表与曲目缓存加载好，失败时任何计数变化都能看出来。
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'seed',
+        title: 'Seed',
+        raw: {'songId': 'seed'},
+      );
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+      final favorites = provider.playlists.singleWhere((p) => p.isFavorites);
+      await provider.loadPlaylistTracks(favorites.id, force: true);
+      final revision = provider.favoritesRevision;
+
+      repository.failWrites = true;
+      final failed = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+        raw: {'songId': 2},
+      );
+      expect(failed.isFailure, isTrue);
+      expect(failed.isFavorite, isFalse, reason: '失败带回切换前状态');
+      expect(failed.error, isNotNull);
+      expect(provider.isFavorite('wy', '2'), isFalse);
+      expect(provider.favoritesRevision, revision, reason: '失败不改缓存版本');
+      expect(provider.playlists.single.trackCount, 1, reason: '失败不复制计数');
+      expect(
+        provider.playlistTracksView(favorites.id).tracks!.map((t) => t.songId),
+        ['seed'],
+      );
+      expect(await repository.favoriteKeys(), {'wy:seed'});
+
+      // 已收藏后取消失败：结果仍是「已收藏」，图标不翻转。
+      repository.failWrites = false;
+      final seeded = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+      );
+      expect(seeded.isFailure, isFalse);
+      expect(seeded.isFavorite, isTrue);
+      final revisionAfterAdd = provider.favoritesRevision;
+
+      repository.failWrites = true;
+      final removeFailed = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'Song 2',
+      );
+      expect(removeFailed.isFailure, isTrue);
+      expect(removeFailed.isFavorite, isTrue, reason: '失败保持已收藏');
+      expect(provider.isFavorite('wy', '2'), isTrue);
+      expect(provider.favoritesRevision, revisionAfterAdd);
+      expect(await repository.favoriteKeys(), {'wy:seed', 'wy:2'});
+    });
+
+    test('批量删历史失败 → failed 且回滚内存列表', () async {
+      await repository.addHistoryEntry(entry('1', playedAt: 1));
+      await provider.refreshHistory(force: true);
+      expect(provider.history, hasLength(1));
+
+      repository.failWrites = true;
+      final outcome = await provider.deleteHistoryEntries(provider.history);
+      expect(outcome.isFailure, isTrue);
+      expect(provider.history, hasLength(1), reason: '失败后回滚乐观删除');
+    });
+
+    test('加入播放历史失败 → failed；重试成功 → applied', () async {
+      final track = PlaylistTrack(
+        playlistId: 0,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        addedAt: 0,
+      );
+      repository.failHistoryWrites = true;
+      final failed = await provider.addTracksToHistory([track]);
+      expect(failed.isFailure, isTrue);
+      expect(provider.history, isEmpty);
+
+      repository.failHistoryWrites = false;
+      final applied = await provider.addTracksToHistory([track]);
+      expect(applied.isSuccess, isTrue);
+      expect(applied.changed, 1);
+      await settle();
+      expect(provider.history.single.songId, '1');
+    });
+
+    test('列表重命名 / 删除失败 → failed；成功 → applied', () async {
+      final id = await provider.createPlaylist('L');
+      await settle();
+
+      repository.failPlaylistWrites = true;
+      expect((await provider.renamePlaylist(id, 'R')).isFailure, isTrue);
+      expect((await provider.deletePlaylist(id)).isFailure, isTrue);
+
+      repository.failPlaylistWrites = false;
+      expect((await provider.renamePlaylist(id, 'R')).isSuccess, isTrue);
+      expect((await provider.deletePlaylist(id)).isSuccess, isTrue);
+    });
+
+    test('批量加入列表失败 → failed 且不更新缓存', () async {
+      final id = await provider.createPlaylist('L');
+      await settle();
+      await provider.loadPlaylistTracks(id, force: true);
+      expect(provider.playlistTracksView(id).tracks, isEmpty);
+
+      final item = PlaylistTrack(
+        playlistId: id,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        addedAt: 0,
+      );
+      repository.failTrackWrites = true;
+      final failed = await provider.addTracksToPlaylist(id, [item]);
+      expect(failed.isFailure, isTrue);
+      expect(
+        provider.playlistTracksView(id).tracks,
+        isEmpty,
+        reason: '失败不更新本地缓存',
+      );
+      expect(await repository.listPlaylistTracks(id), isEmpty);
+
+      repository.failTrackWrites = false;
+      final applied = await provider.addTracksToPlaylist(id, [item]);
+      expect(applied.isSuccess, isTrue);
+      expect(applied.changed, 1);
+    });
   });
 }

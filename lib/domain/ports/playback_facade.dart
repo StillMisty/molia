@@ -41,6 +41,10 @@ abstract interface class PlaybackFacade {
 
   Future<void> toggle();
 
+  /// 起播（幂等）：命令面用它表达系统媒体「播放」键，避免先查状态再 toggle
+  /// 的竞态（暂停中途到达的播放键不能反而暂停）。
+  Future<void> play();
+
   /// 暂停（幂等）。定时关闭等「必须停下、不能被 toggle 成播放」的路径用它：
   /// 与用户操作竞态时，toggle 语义可能把刚暂停的播放重新拉起。
   Future<void> pause();

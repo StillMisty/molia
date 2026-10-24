@@ -123,7 +123,7 @@ void main() {
 
     expect(state.peers, isEmpty);
     expect(state.manualPeers, isEmpty);
-    await state.save();
+    await state.commit();
 
     final reloaded =
         SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());

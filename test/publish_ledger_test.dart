@@ -148,6 +148,8 @@ void main() {
     final file = ledger(kind: webdav, live: false);
     expect(file.plan(snapshot('s1'), snapshotSeq: 7), isTrue);
     await file.mark(delivered);
+    // 台账只改内存 + 标脏，覆盖位置随轮末提交落盘。
+    await state.commit();
 
     final reloaded = SyncStateStore(
       preferences: prefs,

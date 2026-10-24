@@ -22,7 +22,23 @@ import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
+import 'library_outcome.dart';
 import 'playback_provider.dart';
+
+/// 列表曲目读取视图：页面只读读取阶段，不探测缓存内部。
+class PlaylistTracksView {
+  const PlaylistTracksView({required this.tracks, required this.state});
+
+  /// null = 尚未加载成功过（首次加载 / 加载失败且无旧缓存）。
+  final List<PlaylistTrack>? tracks;
+
+  /// loading / ready / failed（failed 时 [tracks] 为空才表示没有可显示数据）。
+  final LibraryReadState state;
+
+  bool get loading => state.isLoading;
+  bool get failed => state.isFailed;
+  bool get ready => state.isReady;
+}
 
 class LibraryProvider extends ChangeNotifier {
   LibraryProvider({
@@ -47,12 +63,16 @@ class LibraryProvider extends ChangeNotifier {
   bool _playlistsLoaded = false;
   bool _favoritesLoaded = false;
 
+  /// 合集读取阶段：页面据此区分空库与加载失败（failed 可重试）。
+  LibraryReadState _playlistsState = const LibraryReadState.loading();
+  LibraryReadState _historyState = const LibraryReadState.loading();
+
+  /// 各列表曲目最近一次读取失败（有旧缓存时视图仍按 ready 展示旧值）。
+  final Map<int, Object> _playlistTracksErrors = {};
+
   /// `_favoriteKeys` 是否来自仓库整表（而非只有一次乐观 toggle）。
   /// 只有整表可信时才能用它的长度校准收藏计数。
   bool _favoriteKeysAuthoritative = false;
-
-  bool _isHistoryLoading = false;
-  bool _isPlaylistsLoading = false;
 
   /// 历史查询进行中的数量（静默重载与显式刷新共用）。
   ///
@@ -93,24 +113,35 @@ class LibraryProvider extends ChangeNotifier {
           if (!playlist.isFavorites) playlist,
       ];
 
-  bool get isHistoryLoading => _isHistoryLoading;
-  bool get isPlaylistsLoading => _isPlaylistsLoading;
+  /// 历史 / 列表的读取阶段（含失败与重试）。
+  LibraryReadState get historyState => _historyState;
+  LibraryReadState get playlistsState => _playlistsState;
 
-  /// 列表曲目视图：`tracks == null` 表示尚未加载；`loading` 表示加载中。
-  /// 页面只读视图并用 [ensurePlaylistTracks] 触发加载，不直接探测缓存内部。
-  ({List<PlaylistTrack>? tracks, bool loading}) playlistTracksView(
-          int playlistId) =>
-      (
-        tracks: _tracksByPlaylist[playlistId],
-        loading: _loadingPlaylistIds.contains(playlistId),
-      );
+  bool get isHistoryLoading => _historyState.isLoading;
+  bool get isPlaylistsLoading => _playlistsState.isLoading;
+
+  /// 列表曲目读取视图（含 failed 阶段）。
+  PlaylistTracksView playlistTracksView(int playlistId) {
+    final tracks = _tracksByPlaylist[playlistId];
+    final error = _playlistTracksErrors[playlistId];
+    final state = error != null && tracks == null
+        ? LibraryReadState.failed(error)
+        : _loadingPlaylistIds.contains(playlistId) ||
+                (tracks == null && error == null)
+            ? const LibraryReadState.loading()
+            : const LibraryReadState.ready();
+    return PlaylistTracksView(tracks: tracks, state: state);
+  }
 
   /// 请求加载列表曲目（未缓存且未在加载中时发起；可在 build 内调用）。
-  void ensurePlaylistTracks(int playlistId) {
-    if (_tracksByPlaylist.containsKey(playlistId) ||
-        !_loadingPlaylistIds.add(playlistId)) {
-      return;
-    }
+  ///
+  /// [force] 由「加载失败后重试」使用：丢掉旧缓存重新查询。
+  void ensurePlaylistTracks(int playlistId, {bool force = false}) {
+    if (!force && _tracksByPlaylist.containsKey(playlistId)) return;
+    // 已有请求在途：不并发；force 等它落地后由调用方再次重试。
+    if (!_loadingPlaylistIds.add(playlistId)) return;
+    if (force) _tracksByPlaylist.remove(playlistId);
+    _playlistTracksErrors.remove(playlistId);
     // build 期调用：同步标记 loading（本帧即可显示加载态），通知推迟到
     // 微任务，避免 setState during build。
     unawaited(Future<void>.microtask(() async {
@@ -120,8 +151,11 @@ class LibraryProvider extends ChangeNotifier {
         final tracks = await _repository.listPlaylistTracks(playlistId);
         if (_disposed) return;
         _tracksByPlaylist[playlistId] = tracks;
+        _playlistTracksErrors.remove(playlistId);
       } catch (e) {
         debugPrint('[Library] 加载列表曲目失败: $e');
+        if (_disposed) return;
+        _playlistTracksErrors[playlistId] = e;
       } finally {
         _loadingPlaylistIds.remove(playlistId);
         _notify();
@@ -371,9 +405,12 @@ class LibraryProvider extends ChangeNotifier {
             final fresh = await _repository.listHistory();
             _history = _mergeHistoryOrder(current: _history, fresh: fresh);
             _historyLoaded = true;
+            _historyState = const LibraryReadState.ready();
             success = true;
           } catch (e) {
             debugPrint('[Library] 重载播放历史失败: $e');
+            // 有旧缓存就继续展示旧值；从未加载成功才是 failed（可重试）。
+            if (!_historyLoaded) _historyState = LibraryReadState.failed(e);
           } finally {
             _finishHistoryLoad(success: success);
           }
@@ -483,8 +520,10 @@ class LibraryProvider extends ChangeNotifier {
     try {
       _playlists = await _repository.listPlaylists();
       _playlistsLoaded = true;
+      _playlistsState = const LibraryReadState.ready();
     } catch (e) {
       debugPrint('[Library] 刷新列表失败: $e');
+      if (!_playlistsLoaded) _playlistsState = LibraryReadState.failed(e);
     }
     if (notify) _notify();
   }
@@ -495,9 +534,12 @@ class LibraryProvider extends ChangeNotifier {
     try {
       _tracksByPlaylist[playlistId] =
           await _repository.listPlaylistTracks(playlistId);
+      _playlistTracksErrors.remove(playlistId);
       _notify();
     } catch (e) {
       debugPrint('[Library] 重载列表曲目失败: $e');
+      // 有旧缓存时保持 ready；错误留到显式重试时再清。
+      _playlistTracksErrors[playlistId] = e;
     }
   }
 
@@ -513,26 +555,27 @@ class LibraryProvider extends ChangeNotifier {
   @visibleForTesting
   Future<void>? get pendingReload => _pendingReload;
 
-  /// 显式重载历史（首屏 / 导入后）：直接采用仓库顺序（最近播放倒序），
-  /// 不走停留期间的稳定合并。
+  /// 显式重载历史（首屏 / 导入后 / 失败重试）：直接采用仓库顺序（最近播放
+  /// 倒序），不走停留期间的稳定合并。
   Future<void> refreshHistory({bool force = false}) async {
     if (_historyLoaded && !force) return;
     // 整表查询会包含此前的本地写入，旧缓冲不再需要（见 _reloadHistoryQuietly）。
     _pendingHistoryEntries = const [];
     _historyLoadsInFlight++;
-    _isHistoryLoading = true;
+    _historyState = const LibraryReadState.loading();
     _notify();
     var success = false;
     try {
       _history = await _repository.listHistory();
       _historyLoaded = true;
+      _historyState = const LibraryReadState.ready();
       success = true;
     } catch (e) {
-      // 查询失败保持旧缓存（首次为空列表），避免 UI 崩溃。
+      // 查询失败保持旧缓存（首次为空列表），并把失败阶段交给页面重试。
       debugPrint('[Library] 加载播放历史失败: $e');
+      if (!_historyLoaded) _historyState = LibraryReadState.failed(e);
     } finally {
       _finishHistoryLoad(success: success);
-      _isHistoryLoading = false;
       _notify();
     }
   }
@@ -540,15 +583,16 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> refreshPlaylists({bool force = false}) async {
     if (_playlistsLoaded && !force) return;
     _playlistsRevision++;
-    _isPlaylistsLoading = true;
+    _playlistsState = const LibraryReadState.loading();
     _notify();
     try {
       _playlists = await _repository.listPlaylists();
       _playlistsLoaded = true;
+      _playlistsState = const LibraryReadState.ready();
     } catch (e) {
       debugPrint('[Library] 加载列表失败: $e');
+      if (!_playlistsLoaded) _playlistsState = LibraryReadState.failed(e);
     } finally {
-      _isPlaylistsLoading = false;
       _notify();
     }
   }
@@ -567,6 +611,8 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 列表曲目：命中缓存直接返回，否则查询并缓存（可等待入口）。
+  ///
+  /// 失败返回旧缓存（或空列表）并记录 failed 阶段，不向调用方抛异常。
   Future<List<PlaylistTrack>> loadPlaylistTracks(
     int playlistId, {
     bool force = false,
@@ -579,9 +625,11 @@ class LibraryProvider extends ChangeNotifier {
     try {
       final tracks = await _repository.listPlaylistTracks(playlistId);
       _tracksByPlaylist[playlistId] = tracks;
+      _playlistTracksErrors.remove(playlistId);
       return tracks;
     } catch (e) {
       debugPrint('[Library] 加载列表曲目失败: $e');
+      _playlistTracksErrors[playlistId] = e;
       return _tracksByPlaylist[playlistId] ?? const [];
     } finally {
       _loadingPlaylistIds.remove(playlistId);
@@ -635,23 +683,48 @@ class LibraryProvider extends ChangeNotifier {
 
   // 变更操作（仓库写 → changes 流触发缓存失效）
 
-  Future<void> deleteHistoryEntry(PlayHistoryEntry entry) async {
-    // 乐观更新本地缓存（列表即时移除，不等待变更流回载）。
+  Future<LibraryMutationOutcome> deleteHistoryEntry(
+      PlayHistoryEntry entry) async {
+    // 乐观更新本地缓存（列表即时移除，不等待变更流回载）；写失败回滚。
+    final previous = _history;
     _history = [
       for (final item in _history)
         if (!(item.sourceKey == entry.sourceKey && item.songId == entry.songId))
           item,
     ];
     _notify();
-    await _repository.deleteHistoryEntry(entry.sourceKey, entry.songId);
+    try {
+      await _repository.deleteHistoryEntry(entry.sourceKey, entry.songId);
+      return const LibraryMutationOutcome.applied(1);
+    } catch (e) {
+      debugPrint('[Library] 删除历史记录失败: $e');
+      if (!_disposed) {
+        _history = previous;
+        _notify();
+      }
+      return LibraryMutationOutcome.failed(e);
+    }
   }
 
-  Future<void> clearHistory() async {
-    // 乐观清空本地缓存（UI 立即显示空态，不等待变更流回载）。
+  Future<LibraryMutationOutcome> clearHistory() async {
+    // 乐观清空本地缓存（UI 立即显示空态，不等待变更流回载）；写失败回滚。
+    final previous = _history;
+    final wasLoaded = _historyLoaded;
     _history = const [];
     _historyLoaded = true;
     _notify();
-    await _repository.clearHistory();
+    try {
+      await _repository.clearHistory();
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 清空历史失败: $e');
+      if (!_disposed) {
+        _history = previous;
+        _historyLoaded = wasLoaded;
+        _notify();
+      }
+      return LibraryMutationOutcome.failed(e);
+    }
   }
 
   Future<bool> removeTrackFromPlaylist(PlaylistTrack track) async {
@@ -702,22 +775,43 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 批量移除列表曲目（返回实际移除数）。
-  Future<int> removeTracksFromPlaylist(
+  Future<LibraryMutationOutcome> removeTracksFromPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks,
-  ) {
-    return _repository.removeTracksFromPlaylist(playlistId, [
-      for (final track in tracks)
-        (sourceKey: track.sourceKey, songId: track.songId),
-    ]);
+  ) async {
+    try {
+      final removed = await _repository.removeTracksFromPlaylist(playlistId, [
+        for (final track in tracks)
+          (sourceKey: track.sourceKey, songId: track.songId),
+      ]);
+      return removed > 0
+          ? LibraryMutationOutcome.applied(removed)
+          : const LibraryMutationOutcome.unchanged();
+    } catch (e) {
+      debugPrint('[Library] 从列表移除曲目失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
   }
 
-  /// 批量复制曲目到目标列表（跳过重复；返回实际新增数）。
-  Future<int> addTracksToPlaylist(
+  /// 批量复制曲目到目标列表（跳过重复）。
+  ///
+  /// 写失败在边界收口成 failed：调用方据此提示，不再让异常逃进
+  /// `unawaited`；成功时 `changed` 是实际新增数。
+  Future<LibraryMutationOutcome> addTracksToPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks,
-  ) {
-    return _repository.addTracksToPlaylist(playlistId, tracks);
+  ) async {
+    if (tracks.isEmpty) return const LibraryMutationOutcome.unchanged();
+    final int added;
+    try {
+      added = await _repository.addTracksToPlaylist(playlistId, tracks);
+    } catch (e) {
+      debugPrint('[Library] 批量加入列表失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+    return added > 0
+        ? LibraryMutationOutcome.applied(added)
+        : const LibraryMutationOutcome.unchanged();
   }
 
   /// 新建列表（收藏页合集弹层 / 「加入列表」弹层使用）。
@@ -737,38 +831,58 @@ class LibraryProvider extends ChangeNotifier {
     return result;
   }
 
-  /// 批量把列表曲目加入播放历史（最近播放置顶）；返回写入条数。
+  /// 批量把列表曲目加入播放历史（最近播放置顶）。
   ///
   /// 只落库：内存顺序按停留期间冻结的口径合并（新条目置前、已有条目不重排），
   /// 播放历史列表下次进入时由 [resortHistoryByRecency] 刷新到最新顺序。
-  Future<int> addTracksToHistory(List<PlaylistTrack> tracks) {
+  /// 写失败在边界收口成 failed，调用方据此提示而不是抛出。
+  Future<LibraryMutationOutcome> addTracksToHistory(
+    List<PlaylistTrack> tracks,
+  ) async {
+    if (tracks.isEmpty) return const LibraryMutationOutcome.unchanged();
     final now = DateTime.now().millisecondsSinceEpoch;
     var offset = 0;
-    return _repository.addHistoryEntries([
-      for (final track in tracks)
-        PlayHistoryEntry(
-          sourceKey: track.sourceKey,
-          songId: track.songId,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          coverUrl: track.coverUrl,
-          durationMs: track.durationMs,
-          raw: track.raw,
-          playedAt: now + offset++,
-        ),
-    ]);
+    final int added;
+    try {
+      added = await _repository.addHistoryEntries([
+        for (final track in tracks)
+          PlayHistoryEntry(
+            sourceKey: track.sourceKey,
+            songId: track.songId,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            coverUrl: track.coverUrl,
+            durationMs: track.durationMs,
+            raw: track.raw,
+            playedAt: now + offset++,
+          ),
+      ]);
+    } catch (e) {
+      debugPrint('[Library] 批量加入播放历史失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+    return added > 0
+        ? LibraryMutationOutcome.applied(added)
+        : const LibraryMutationOutcome.unchanged();
   }
 
   /// 按给定顺序重排列表曲目（`sortOrder` 事务重写）。
-  Future<void> reorderPlaylistTracks(
+  ///
+  /// 写失败返回 failed，本地缓存保持原顺序（页面据结果提示，不闪回）。
+  Future<LibraryMutationOutcome> reorderPlaylistTracks(
     int playlistId,
     List<PlaylistTrack> ordered,
   ) async {
-    await _repository.reorderPlaylistTracks(playlistId, [
-      for (final track in ordered)
-        (sourceKey: track.sourceKey, songId: track.songId),
-    ]);
+    try {
+      await _repository.reorderPlaylistTracks(playlistId, [
+        for (final track in ordered)
+          (sourceKey: track.sourceKey, songId: track.songId),
+      ]);
+    } catch (e) {
+      debugPrint('[Library] 重排列表曲目失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
     // 本地缓存按同一顺序立即回写：重排落位后列表不闪回旧序；
     // changes 流的静默重载随后用数据库真实顺序二次校准。
     final cached = _tracksByPlaylist[playlistId];
@@ -776,11 +890,19 @@ class LibraryProvider extends ChangeNotifier {
       _tracksByPlaylist[playlistId] = List.of(ordered);
       _notify();
     }
+    return LibraryMutationOutcome.applied(ordered.length);
   }
 
   /// 批量收藏（跳过已收藏；返回新增数），收藏键缓存同步校准。
-  Future<int> addTracksToFavorites(List<PlaylistTrack> tracks) async {
-    final added = await _repository.addFavorites(tracks);
+  Future<LibraryMutationOutcome> addTracksToFavorites(
+      List<PlaylistTrack> tracks) async {
+    final int added;
+    try {
+      added = await _repository.addFavorites(tracks);
+    } catch (e) {
+      debugPrint('[Library] 批量收藏失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
     if (added > 0) {
       final keys = Set<String>.from(_favoriteKeys);
       for (final track in tracks) {
@@ -791,12 +913,21 @@ class LibraryProvider extends ChangeNotifier {
       _favoritesRevision++;
       _notify();
     }
-    return added;
+    return added > 0
+        ? LibraryMutationOutcome.applied(added)
+        : const LibraryMutationOutcome.unchanged();
   }
 
   /// 批量取消收藏（返回移除数），收藏键缓存同步校准。
-  Future<int> removeTracksFromFavorites(List<TrackKey> keys) async {
-    final removed = await _repository.removeFavorites(keys);
+  Future<LibraryMutationOutcome> removeTracksFromFavorites(
+      List<TrackKey> keys) async {
+    final int removed;
+    try {
+      removed = await _repository.removeFavorites(keys);
+    } catch (e) {
+      debugPrint('[Library] 批量取消收藏失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
     if (removed > 0) {
       final dropped = {
         for (final key in keys) '${key.sourceKey}:${key.songId}',
@@ -809,12 +940,17 @@ class LibraryProvider extends ChangeNotifier {
       _favoritesRevision++;
       _notify();
     }
-    return removed;
+    return removed > 0
+        ? LibraryMutationOutcome.applied(removed)
+        : const LibraryMutationOutcome.unchanged();
   }
 
-  /// 批量删除历史记录（乐观更新本地缓存）。
-  Future<int> deleteHistoryEntries(List<PlayHistoryEntry> entries) async {
-    if (entries.isEmpty) return 0;
+  /// 批量删除历史记录（乐观更新本地缓存；写失败回滚并返回 failed）。
+  Future<LibraryMutationOutcome> deleteHistoryEntries(
+    List<PlayHistoryEntry> entries,
+  ) async {
+    if (entries.isEmpty) return const LibraryMutationOutcome.unchanged();
+    final previous = _history;
     final keys = {
       for (final entry in entries) '${entry.sourceKey}:${entry.songId}',
     };
@@ -823,20 +959,55 @@ class LibraryProvider extends ChangeNotifier {
         if (!keys.contains('${item.sourceKey}:${item.songId}')) item,
     ];
     _notify();
-    return _repository.deleteHistoryEntries([
-      for (final entry in entries)
-        (sourceKey: entry.sourceKey, songId: entry.songId),
-    ]);
+    final int removed;
+    try {
+      removed = await _repository.deleteHistoryEntries([
+        for (final entry in entries)
+          (sourceKey: entry.sourceKey, songId: entry.songId),
+      ]);
+    } catch (e) {
+      debugPrint('[Library] 批量删除历史失败: $e');
+      if (!_disposed) {
+        _history = previous;
+        _notify();
+      }
+      return LibraryMutationOutcome.failed(e);
+    }
+    return removed > 0
+        ? LibraryMutationOutcome.applied(removed)
+        : const LibraryMutationOutcome.unchanged();
   }
 
-  Future<void> deletePlaylist(int playlistId) =>
-      _repository.deletePlaylist(playlistId);
+  /// 删除列表；写失败收口成 failed（合集弹层保留该行并提示）。
+  Future<LibraryMutationOutcome> deletePlaylist(int playlistId) async {
+    try {
+      await _repository.deletePlaylist(playlistId);
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 删除列表失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+  }
 
-  Future<void> renamePlaylist(int playlistId, String name) =>
-      _repository.renamePlaylist(playlistId, name);
+  /// 重命名列表；写失败收口成 failed（合集弹层保留旧名并提示）。
+  Future<LibraryMutationOutcome> renamePlaylist(
+    int playlistId,
+    String name,
+  ) async {
+    try {
+      await _repository.renamePlaylist(playlistId, name);
+      return const LibraryMutationOutcome.applied();
+    } catch (e) {
+      debugPrint('[Library] 重命名列表失败: $e');
+      return LibraryMutationOutcome.failed(e);
+    }
+  }
 
   /// 收藏/取消收藏（当前播放曲目 / 搜索结果 / 列表曲目通用入口）。
-  Future<bool> toggleFavorite({
+  ///
+  /// 仓库写失败在边界收口成 failed（带回切换前状态）：调用方据此提示，
+  /// 收藏键缓存与计数保持原样，图标不会因一次失败翻转。
+  Future<FavoriteToggleOutcome> toggleFavorite({
     required String sourceKey,
     required String songId,
     required String title,
@@ -846,20 +1017,28 @@ class LibraryProvider extends ChangeNotifier {
     int? durationMs,
     Map<String, dynamic> raw = const {},
   }) {
-    var favorite = false;
+    // 失败结果要带回切换前状态；成功后再更新，供埋点字段读取最终值。
+    var favorite = isFavorite(sourceKey, songId);
     return DataPathTrace.async(
       'library.favorite.toggle',
       () async {
-        favorite = await _repository.toggleFavorite(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: title,
-          artist: artist,
-          album: album,
-          coverUrl: coverUrl,
-          durationMs: durationMs,
-          raw: raw,
-        );
+        final bool next;
+        try {
+          next = await _repository.toggleFavorite(
+            sourceKey: sourceKey,
+            songId: songId,
+            title: title,
+            artist: artist,
+            album: album,
+            coverUrl: coverUrl,
+            durationMs: durationMs,
+            raw: raw,
+          );
+        } catch (e) {
+          debugPrint('[Library] 切换收藏失败: $e');
+          return FavoriteToggleOutcome.failed(favorite, e);
+        }
+        favorite = next;
         // 立即更新本地键集合，UI 无需等待 changes 流的下一次重载。
         final keys = Set<String>.from(_favoriteKeys);
         final key = '$sourceKey:$songId';
@@ -872,7 +1051,7 @@ class LibraryProvider extends ChangeNotifier {
         if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
         _favoritesRevision++;
         _notify();
-        return favorite;
+        return FavoriteToggleOutcome.success(favorite);
       },
       fields: () => {'favorite': favorite ? 1 : 0},
     );
@@ -881,7 +1060,8 @@ class LibraryProvider extends ChangeNotifier {
   /// 收藏/取消收藏领域曲目（播放页/UI 的收藏唯一入口）。
   ///
   /// raw 取链参数由 `Track.payload` 原样提供；UI 不读取 payload。
-  Future<bool> toggleFavoriteTrack(Track track) => toggleFavorite(
+  Future<FavoriteToggleOutcome> toggleFavoriteTrack(Track track) =>
+      toggleFavorite(
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
         title: track.title,
@@ -892,7 +1072,7 @@ class LibraryProvider extends ChangeNotifier {
         raw: Map<String, dynamic>.from(track.payload),
       );
 
-  Future<bool> toggleFavoriteSourceTrack(SourceTrack track) =>
+  Future<FavoriteToggleOutcome> toggleFavoriteSourceTrack(SourceTrack track) =>
       toggleFavoriteTrack(trackFromSourceTrack(track));
 
   /// 把音源曲目加入指定列表（发现页/搜索等入口使用；重复加入返回 false）。
@@ -933,7 +1113,9 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 搜索结果项收藏切换（item map 由 SearchProvider 生成，含 `_sourceTrack`）。
   /// 无法识别来源曲目时返回 null（调用方忽略）。
-  Future<bool?> toggleFavoriteSearchItem(Map<String, dynamic> item) async {
+  Future<FavoriteToggleOutcome?> toggleFavoriteSearchItem(
+    Map<String, dynamic> item,
+  ) async {
     final sourceTrack = item['_sourceTrack'];
     if (sourceTrack is! SourceTrack) return null;
     return toggleFavoriteSourceTrack(sourceTrack);
