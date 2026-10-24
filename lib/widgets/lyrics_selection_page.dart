@@ -8,6 +8,7 @@ import '../models/lyric_line.dart';
 import '../models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
 import '../services/haptics.dart';
+import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/notification_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
@@ -28,6 +29,9 @@ class LyricsSelectionPage extends StatefulWidget {
   final List<String> translations;
   final List<String> romas;
 
+  /// 是否有时间轴（未同步歌词没有可高亮的当前行）。
+  final bool isSynced;
+
   /// 与歌词页一致的两个展示开关（关闭时扩展行不展示、不进海报）。
   final bool showTranslation;
   final bool showRoma;
@@ -44,6 +48,7 @@ class LyricsSelectionPage extends StatefulWidget {
     this.albumCoverUrl,
     this.translations = const [],
     this.romas = const [],
+    this.isSynced = true,
     this.showTranslation = false,
     this.showRoma = false,
     this.embedded = false,
@@ -84,9 +89,13 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     notificationService.showSnackBar(l10n.copiedToClipboard(l10n.lyricsTitle));
   }
 
-  // 获取当前播放行的索引（与播放页歌词共用同一二分查找）
+  // 获取当前播放行的索引（与播放页歌词共用同一时间策略：同一 200ms 提前量）
   int _getCurrentLineIndex(Duration currentPosition) =>
-      lyricLineIndexAt(_lyricLines, currentPosition);
+      LyricTimingPolicy.page.lineIndexAt(
+        _lyricLines,
+        currentPosition,
+        isSynced: widget.isSynced,
+      );
 
   void _deselectAllLines() {
     HapticsService.lightImpact();
@@ -116,9 +125,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
               text: _lyricLines[i].text,
               // 扩展行与歌词页同一份对齐结果 + 同一对开关：歌词页看到什么，
               // 海报就画什么。
-              translation: widget.showTranslation && i < widget.translations.length
-                  ? widget.translations[i]
-                  : '',
+              translation:
+                  widget.showTranslation && i < widget.translations.length
+                      ? widget.translations[i]
+                      : '',
               roma: widget.showRoma && i < widget.romas.length
                   ? widget.romas[i]
                   : '',
@@ -131,8 +141,9 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         widget.showTranslation && index < widget.translations.length
             ? widget.translations[index]
             : '';
-    final roma =
-        widget.showRoma && index < widget.romas.length ? widget.romas[index] : '';
+    final roma = widget.showRoma && index < widget.romas.length
+        ? widget.romas[index]
+        : '';
     return (translation, roma);
   }
 
@@ -197,8 +208,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
           padding: const EdgeInsets.only(right: 8),
           child: Center(
             child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 // 超过 15 行是「数量超限」提醒，走统一警告语义色；
                 // 未超限为普通选中计数。
@@ -322,9 +332,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                             horizontal: 16, vertical: 8),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .secondaryContainer,
+                          color:
+                              Theme.of(context).colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -334,40 +343,38 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                               width: 60,
                               height: 60,
                               borderRadius: BorderRadius.circular(8),
-                              memCacheWidth: (60 *
-                                      MediaQuery.of(context)
-                                          .devicePixelRatio)
-                                  .round(),
+                              memCacheWidth:
+                                  (60 * MediaQuery.of(context).devicePixelRatio)
+                                      .round(),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
                                     widget.trackTitle,
-                                    style: context.typeScale.titleMedium
-                                        .copyWith(
-                                          // 卡片底为 secondaryContainer：
-                                          // 前景必须配 onSecondaryContainer。
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondaryContainer,
-                                        ),
+                                    style:
+                                        context.typeScale.titleMedium.copyWith(
+                                      // 卡片底为 secondaryContainer：
+                                      // 前景必须配 onSecondaryContainer。
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondaryContainer,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     widget.artistName,
-                                    style: context.typeScale.bodyMedium
-                                        .copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSecondaryContainer
-                                              .withValues(alpha: 0.8),
-                                        ),
+                                    style:
+                                        context.typeScale.bodyMedium.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSecondaryContainer
+                                          .withValues(alpha: 0.8),
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -388,9 +395,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         isFirstInGroup = lyricIndex == 0 ||
                             !_selectedIndices.contains(lyricIndex - 1);
 
-                        isLastInGroup =
-                            lyricIndex == _lyricLines.length - 1 ||
-                                !_selectedIndices.contains(lyricIndex + 1);
+                        isLastInGroup = lyricIndex == _lyricLines.length - 1 ||
+                            !_selectedIndices.contains(lyricIndex + 1);
                       }
 
                       return _LyricTile(
@@ -460,9 +466,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       decoration: BoxDecoration(
         // 嵌入时让背景来自宿主（宽屏是 M3E 弹层容器，窄屏是外层 Scaffold
         // 的 surface）；独立挂载仍用 surface，保持旧观感。
-        color: widget.embedded
-            ? Colors.transparent
-            : theme.colorScheme.surface,
+        color: widget.embedded ? Colors.transparent : theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
             color: theme.colorScheme.outline.withValues(alpha: 0.2),

@@ -159,7 +159,9 @@
     iOS / macOS / Windows 保持原周期判定。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
-  含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
+  含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。曲目变化的加载入口只有
+  `ensureForTrack`（组合根订阅播放快照后调用，页面是否挂载都加载），空结果允许
+  一次自动重试、`retry()` 可显式重来。时间契约统一在
   `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
   （兼容 1–3 位分钟与行内多标签）。
   **取词顺序**：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 `lyric` action →

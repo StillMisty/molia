@@ -67,7 +67,9 @@ class LyricsState {
 
 /// 歌词会话模块：取词 → 缓存 → 解析（统一时间契约）→ 预取的唯一实现。
 ///
-/// UI 只调用 [load] / [preload] / [saveManual] 并渲染 [state]。
+/// 曲目变化的加载入口只有 [ensureForTrack]：组合根订阅播放快照后调用，
+/// 页面只渲染 [state]（不再从 build 触发取词）。输出侧 / 预取 / 手动选择
+/// 分别走 [preload] / [saveManual]；[retry] 供页面或用户显式重试。
 class LyricsProvider extends ChangeNotifier {
   LyricsProvider({LyricsService? service})
       : _service = service ?? LyricsService();
@@ -80,12 +82,21 @@ class LyricsProvider extends ChangeNotifier {
   /// 过期响应守卫：每次发起新加载自增。
   int _requestId = 0;
 
+  /// 会话当前曲目（最近一次 [ensureForTrack] / [load] 的曲目；null = 无曲目）。
+  Track? _currentTrack;
+
+  /// 当前曲目空结果后是否已自动重试过一次。
+  ///
+  /// 播放快照会因播放态 / 队列等变化多次通知；没有这个守卫时，空歌词
+  /// 曲目会在每次通知各取一次词。显式 [retry] 不受它限制。
+  bool _retriedEmpty = false;
+
   /// 已成功预取 / 正在预取的曲目 id（避免重复取词）。
   final Set<String> _preloadedTrackIds = {};
   final Set<String> _preloadingTrackIds = {};
 
-  /// 在途取词（按曲目 id 合并 load / preload）：组合根在起播后立即预取
-  /// 下一首，用户快速切到该曲时 load 会再点一次；没有合并的话两条链路
+  /// 在途取词（按曲目 id 合并 ensure / preload）：组合根在起播后立即预取
+  /// 下一首，用户快速切到该曲时 ensure 会再点一次；没有合并的话两条链路
   /// 各自跑完「原生取词 + 六提供者并发回退」，网络与解析都翻倍。
   final Map<String, Future<LyricsResult?>> _inFlight = {};
 
@@ -111,13 +122,66 @@ class LyricsProvider extends ChangeNotifier {
     return future;
   }
 
-  /// 加载曲目歌词；同一曲目已有结果 / 正在加载时直接复用。
-  Future<void> load(Track track) async {
-    final trackId = track.id.uri;
-    if (_state.trackId == trackId &&
-        _state.status != LyricsStatus.idle) {
+  /// 会话入口：按当前曲目推进加载（组合根在播放快照变化时调用）。
+  ///
+  /// - 曲目变化：立即加载新曲目；
+  /// - 同曲目 ready / loading：直接复用（不重复取词）；
+  /// - 同曲目 empty：允许一次自动重试（网络瞬断 / 平台临时失败），之后由
+  ///   [retry] 显式重来——正常重复调用不会持续打网络；
+  /// - `null`：清空会话。
+  Future<void> ensureForTrack(Track? track) async {
+    final trackId = track?.id.uri ?? '';
+    if (trackId.isEmpty) {
+      if (_currentTrack != null || _state.status != LyricsStatus.idle) {
+        reset();
+      }
       return;
     }
+
+    final sameTrack = trackId == _currentTrack?.id.uri;
+    _currentTrack = track;
+    if (!sameTrack) {
+      _retriedEmpty = false;
+      await _load(track!, trackId);
+      return;
+    }
+    if (_state.trackId != trackId) {
+      // 会话曲目没变但展示状态被清空（例如 reset 之外的显式状态写入）：
+      // 仍按「该曲目需要歌词」处理一次。
+      await _load(track!, trackId);
+      return;
+    }
+    switch (_state.status) {
+      case LyricsStatus.ready || LyricsStatus.loading:
+        return;
+      case LyricsStatus.idle:
+        await _load(track!, trackId);
+      case LyricsStatus.empty:
+        if (_retriedEmpty) return;
+        _retriedEmpty = true;
+        await _load(track!, trackId);
+    }
+  }
+
+  /// 重取当前曲目歌词（页面级重试 / 空结果后的显式重来）。
+  Future<void> retry() async {
+    final track = _currentTrack;
+    if (track == null) return;
+    _retriedEmpty = true;
+    await _load(track, track.id.uri);
+  }
+
+  /// 立即加载曲目歌词（调用方已知需要取词）。
+  ///
+  /// 曲目变化的统一入口是 [ensureForTrack]；本方法不判断「同一曲目已加载」，
+  /// 供性能场景 / 测试直接驱动一次完整取词。
+  Future<void> load(Track track) {
+    _currentTrack = track;
+    _retriedEmpty = false;
+    return _load(track, track.id.uri);
+  }
+
+  Future<void> _load(Track track, String trackId) async {
     final requestId = ++_requestId;
     _setState(LyricsState(trackId: trackId, status: LyricsStatus.loading));
     final result = await _fetch(track);
@@ -179,9 +243,11 @@ class LyricsProvider extends ChangeNotifier {
     }
   }
 
-  /// 清空（无曲目时由 UI 调用）。
+  /// 清空会话（无曲目时由 [ensureForTrack] 调用）。
   void reset() {
     _requestId++;
+    _currentTrack = null;
+    _retriedEmpty = false;
     _setState(LyricsState.idle);
   }
 

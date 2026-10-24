@@ -28,13 +28,11 @@ class LyricsDisplayProvider extends ChangeNotifier {
     required List<LyricsOutput> outputs,
     AudioRouteMonitor? audioRoute,
     Listenable? themeListenable,
-    Future<void> Function(Track track)? ensureLyrics,
     void Function(LyricsPlaybackCommand command)? onPlaybackCommand,
     bool mediaSessionInitFailed = false,
   })  : _outputs = List.unmodifiable(outputs),
         _audioRoute = audioRoute,
         _themeListenable = themeListenable,
-        _ensureLyrics = ensureLyrics,
         _onPlaybackCommand = onPlaybackCommand,
         _mediaSessionInitFailed = mediaSessionInitFailed {
     for (final output in _outputs) {
@@ -53,7 +51,6 @@ class LyricsDisplayProvider extends ChangeNotifier {
   final List<LyricsOutput> _outputs;
   final AudioRouteMonitor? _audioRoute;
   final Listenable? _themeListenable;
-  final Future<void> Function(Track track)? _ensureLyrics;
   final void Function(LyricsPlaybackCommand command)? _onPlaybackCommand;
 
   /// 系统媒体会话初始化失败（Android 等平台支持但 init 返回 null）：
@@ -75,7 +72,6 @@ class LyricsDisplayProvider extends ChangeNotifier {
   Track? _currentTrack;
   bool _isPlaying = false;
   LyricsState _lyricsState = LyricsState.idle;
-  String? _requestedTrackId;
   bool _disposed = false;
 
   bool get a2dpConnected => _audioRoute?.connected ?? false;
@@ -133,9 +129,6 @@ class LyricsDisplayProvider extends ChangeNotifier {
       _dispatch(force: true);
       return;
     }
-    if (trackChanged && anyOutputEnabled) {
-      _ensureTrackLyrics(track);
-    }
     _dispatch(force: trackChanged);
   }
 
@@ -152,15 +145,6 @@ class LyricsDisplayProvider extends ChangeNotifier {
     if (_disposed) return;
     _lyricsState = state;
     _dispatch(force: true);
-  }
-
-  void _ensureTrackLyrics(Track track) {
-    final id = track.id.uri;
-    if (id == _requestedTrackId) return;
-    _requestedTrackId = id;
-    final ensure = _ensureLyrics;
-    if (ensure == null) return;
-    unawaited(ensure(track).catchError((Object _) {}));
   }
 
   LyricsPresentation? _buildPresentation() {
@@ -182,8 +166,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
             translationEnabled: settings.translationEnabled,
             romaEnabled: settings.romaEnabled,
             unsyncedBehavior: settings.unsyncedBehavior,
-            maxLines:
-                settings.desktopMaxLines,
+            maxLines: settings.desktopMaxLines,
           )
         : const TrackedLine();
     final scrollFollowsSinging =
