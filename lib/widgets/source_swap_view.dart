@@ -324,6 +324,9 @@ class _SourceSwapViewState extends State<SourceSwapView> {
         Navigator.of(context).pop();
       case SourceSwapApplyStatus.targetNotFound:
         M3ESnackbar.show(context, message: l10n.sourceSwapNotFound);
+      case SourceSwapApplyStatus.writeFailed:
+        // 库内写失败：队列仍指向原曲，留在弹层让用户重试或改选。
+        M3ESnackbar.show(context, message: l10n.operationFailed);
       case SourceSwapApplyStatus.duplicateConfirmationRequired:
         break; // 已在上面处理后重试；走到这里说明状态异常，保持弹层。
     }

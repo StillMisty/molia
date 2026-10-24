@@ -195,6 +195,87 @@ void main() {
     expect(tracks.single.raw['songmid'], '100');
   });
 
+  test('apply（列表）：仓库写失败 → writeFailed，队列不跟随', () async {
+    final playlistId = await repository.createPlaylist('L');
+    await repository.addTrackToPlaylist(
+      playlistId,
+      PlaylistTrack(
+        playlistId: playlistId,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Title',
+        raw: const {'songmid': 1},
+        addedAt: 1,
+      ),
+    );
+    final seed = track('wy', '1');
+    backend.emit(BackendSnapshot(
+      current: seed,
+      queue: [seed],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+
+    kg.items = [track('kg', '100', title: 'Title（新源）')];
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+    await provider.begin(SourceSwapRequest(
+      seed: seed,
+      placement: SourceSwapPlacement.playlist,
+      playlistId: playlistId,
+    ));
+    provider.select(kg.items.single);
+
+    repository.failTrackWrites = true;
+    final result = await provider.apply();
+
+    expect(result.status, SourceSwapApplyStatus.writeFailed);
+    expect(result.queueFollowed, isFalse);
+    expect(backend.lastReplacedTrackUri, isNull, reason: '库内写失败不能跟队列');
+    final tracks = await repository.listPlaylistTracks(playlistId);
+    expect(tracks.single.sourceKey, 'wy', reason: '列表保持原曲');
+    expect(tracks.single.songId, '1');
+    expect(playback.snapshot.current?.id.uri, 'wy:1', reason: '队列保持原曲');
+  });
+
+  test('apply（历史）：仓库写失败 → writeFailed，队列不跟随', () async {
+    await repository.addHistoryEntry(PlayHistoryEntry(
+      sourceKey: 'wy',
+      songId: '1',
+      title: 'Title',
+      raw: const {'songmid': 1},
+      playedAt: 100,
+    ));
+    final seed = track('wy', '1');
+    backend.emit(BackendSnapshot(
+      current: seed,
+      queue: [seed],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+
+    kg.items = [track('kg', '100')];
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+    await provider.begin(SourceSwapRequest(
+      seed: seed,
+      placement: SourceSwapPlacement.history,
+      historyKey: (sourceKey: 'wy', songId: '1'),
+    ));
+    provider.select(kg.items.single);
+
+    repository.failHistoryWrites = true;
+    final result = await provider.apply();
+
+    expect(result.status, SourceSwapApplyStatus.writeFailed);
+    expect(result.queueFollowed, isFalse);
+    expect(backend.lastReplacedTrackUri, isNull, reason: '库内写失败不能跟队列');
+    final history = await repository.listHistory();
+    expect(history.single.sourceKey, 'wy', reason: '历史保持原曲');
+    expect(history.single.songId, '1');
+    expect(playback.snapshot.current?.id.uri, 'wy:1', reason: '队列保持原曲');
+  });
+
   test('apply（列表）：目标已存在 → 先要重复确认，确认后去重替换', () async {
     final playlistId = await repository.createPlaylist('L');
     for (final songId in ['1', '100']) {
