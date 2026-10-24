@@ -117,7 +117,7 @@ class MgComment {
   /// 头像按「中图 → 大图 → 小图」回退（与 LX 一致）。
   static String? _avatarOf(Map user) {
     for (final key in const ['middleIcon', 'bigIcon', 'smallIcon']) {
-      final value = commentTextOf(user[key]);
+      final value = commentUrlOf(user[key]);
       if (value != null) return value;
     }
     return null;

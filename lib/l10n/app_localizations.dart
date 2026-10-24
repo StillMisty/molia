@@ -6982,6 +6982,12 @@ abstract class AppLocalizations {
   /// **'Failed to load comments'**
   String get commentsLoadFailed;
 
+  /// No description provided for @commentsPullToRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Pull down to retry'**
+  String get commentsPullToRetry;
+
   /// No description provided for @commentsLoadMoreFailed.
   ///
   /// In en, this message translates to:
@@ -6993,12 +6999,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No more comments'**
   String get commentsNoMore;
-
-  /// No description provided for @commentsRefresh.
-  ///
-  /// In en, this message translates to:
-  /// **'Refresh comments'**
-  String get commentsRefresh;
 
   /// No description provided for @commentsIpLocation.
   ///

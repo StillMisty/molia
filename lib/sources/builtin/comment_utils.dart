@@ -23,6 +23,23 @@ String? commentTextOf(Object? value) {
   return (text == null || text.isEmpty) ? null : text;
 }
 
+/// 头像等评论图片地址归一化：trim、协议相对地址补 `https:`、只接受 http(s)。
+///
+/// 平台返回值混有空白、`//host/path` 与空串；直接交给网络组件会让空串
+/// 回退成品牌标志、协议相对地址解析失败。
+String? commentUrlOf(Object? value) {
+  final raw = value?.toString().trim() ?? '';
+  if (raw.isEmpty) return null;
+  final text = raw.startsWith('//') ? 'https:$raw' : raw;
+  final uri = Uri.tryParse(text);
+  if (uri == null ||
+      uri.host.isEmpty ||
+      !(uri.isScheme('http') || uri.isScheme('https'))) {
+    return null;
+  }
+  return text;
+}
+
 /// 整数（平台混用 int / 数字字符串）。
 int? commentIntOf(Object? value) {
   if (value is int) return value;

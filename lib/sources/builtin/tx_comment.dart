@@ -137,7 +137,7 @@ class TxComment {
         createdAt: commentTimeFromEpoch(item['PubTime']),
         location: commentTextOf(item['Location']),
         authorName: item['Nick']?.toString() ?? '',
-        avatarUrl: commentTextOf(item['Avatar']),
+        avatarUrl: commentUrlOf(item['Avatar']),
         likedCount: commentIntOf(item['PraiseNum']),
         replies: _parseHotReplies(item['SubComments'], id),
       ));
@@ -168,7 +168,7 @@ class TxComment {
       createdAt: commentTimeFromEpoch(raw['time']),
       authorName: _nick(raw['rootcommentnick']),
       // 行级头像 / 点赞属于最新一条回复（见类注释）；无回复时归正文。
-      avatarUrl: replies.isEmpty ? commentTextOf(raw['avatarurl']) : null,
+      avatarUrl: replies.isEmpty ? commentUrlOf(raw['avatarurl']) : null,
       likedCount: replies.isEmpty ? commentIntOf(raw['praisenum']) : null,
       replies: replies,
     );
@@ -192,7 +192,7 @@ class TxComment {
         text: _fixText(item['subcommentcontent']),
         createdAt: newest ? commentTimeFromEpoch(raw['time']) : null,
         authorName: _nick(item['replynick']),
-        avatarUrl: newest ? commentTextOf(raw['avatarurl']) : null,
+        avatarUrl: newest ? commentUrlOf(raw['avatarurl']) : null,
         likedCount: newest ? commentIntOf(raw['praisenum']) : null,
       ));
     }
@@ -210,7 +210,7 @@ class TxComment {
         text: _fixText(item['Content']),
         createdAt: commentTimeFromEpoch(item['PubTime']),
         authorName: item['Nick']?.toString() ?? '',
-        avatarUrl: commentTextOf(item['Avatar']),
+        avatarUrl: commentUrlOf(item['Avatar']),
         likedCount: commentIntOf(item['PraiseNum']),
       ));
     }

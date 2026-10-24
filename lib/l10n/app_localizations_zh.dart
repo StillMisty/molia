@@ -3730,13 +3730,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get commentsLoadFailed => '评论加载失败';
 
   @override
+  String get commentsPullToRetry => '下拉刷新重试';
+
+  @override
   String get commentsLoadMoreFailed => '加载更多评论失败';
 
   @override
   String get commentsNoMore => '没有更多评论了';
-
-  @override
-  String get commentsRefresh => '刷新评论';
 
   @override
   String commentsIpLocation(String location) {

@@ -75,7 +75,7 @@ class KwComment {
       text: raw['msg']?.toString() ?? '',
       createdAt: commentTimeFromEpoch(raw['time']),
       authorName: raw['u_name']?.toString() ?? '',
-      avatarUrl: commentTextOf(raw['u_pic']),
+      avatarUrl: commentUrlOf(raw['u_pic']),
       likedCount: commentIntOf(raw['like_num']),
       replies: children is List
           ? [

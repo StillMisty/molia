@@ -14,7 +14,7 @@ import '../domain/models/comment.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
 import '../theme/m3e_context.dart';
-import 'app_network_image.dart';
+import 'comment_avatar.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
 /// 此时回退到简体中文（与换源视图同一约定）。
@@ -54,18 +54,20 @@ class CommentListView extends StatelessWidget {
     if (state.isLoading && state.items.isEmpty) {
       return const Center(child: M3ELoadingIndicator());
     }
+    // 空态 / 错误态也要能下拉刷新：内容不满一屏时包一层可滚动的状态容器。
+    // 错误态只保留下拉手势，不再放「重试」按钮。
+    final Widget content;
     if (state.failed) {
-      return _ErrorState(onRetry: provider.retry);
-    }
-    if (state.isEmpty) {
-      return _EmptyState(
-        icon: Icons.forum_rounded,
-        text: _l10n(context).commentsEmpty,
+      content = const _RefreshableStatus(child: _ErrorState());
+    } else if (state.isEmpty) {
+      content = _RefreshableStatus(
+        child: _EmptyState(
+          icon: Icons.forum_rounded,
+          text: _l10n(context).commentsEmpty,
+        ),
       );
-    }
-    return M3ERefreshIndicator(
-      onRefresh: provider.refresh,
-      child: NotificationListener<ScrollNotification>(
+    } else {
+      content = NotificationListener<ScrollNotification>(
         // 触底 400px 内自动取下一页；失败后不自动重试（底部保留重试按钮，
         // 否则滚动通知会在失败后持续重放请求）。
         onNotification: (notification) {
@@ -96,7 +98,12 @@ class CommentListView extends StatelessWidget {
             );
           },
         ),
-      ),
+      );
+    }
+    return M3ERefreshIndicator(
+      // 首屏失败没有缓存可清，重试直接重新取数；其余状态刷新当前 tab。
+      onRefresh: state.failed ? provider.retry : provider.refresh,
+      child: content,
     );
   }
 
@@ -157,12 +164,26 @@ class CommentListView extends StatelessWidget {
 
 /// 单条评论行：头像 + 昵称 + 时间/IP + 正文 + 点赞数（+ 引用 / 楼中楼）。
 class CommentRow extends StatelessWidget {
-  const CommentRow({super.key, required this.comment, this.depth = 0});
+  const CommentRow({
+    super.key,
+    required this.comment,
+    this.depth = 0,
+    this.indent = 20,
+  });
 
   final Comment comment;
 
-  /// 嵌套层级（0 = 主评论，>0 = 楼中楼；缩进 + 更小头像）。
+  /// 嵌套层级（0 = 主评论，>0 = 楼中楼；更小头像 + 更紧的垂直留白）。
   final int depth;
+
+  /// 行左侧缩进。主评论 20，每层回复 +20；封顶后不再继续缩进。
+  ///
+  /// 回复必须渲染在主行之外的全宽区域：若塞进父评论的内容列，再叠加
+  /// 层级缩进，一级回复就会从屏幕一半处开始，正文被挤成窄条。
+  final double indent;
+
+  /// 楼中楼最多渲染的层级（平台通常只有一层，留一层余量防异常数据递归）。
+  static const int maxDepth = 2;
 
   @override
   Widget build(BuildContext context) {
@@ -173,18 +194,17 @@ class CommentRow extends StatelessWidget {
     final avatarSize = nested ? 24.0 : 36.0;
     final replies = comment.replies.take(CommentListView.maxInlineReplies);
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(nested ? 20.0 + depth * 28 : 20, 12, 20, 12),
+    final row = Padding(
+      padding: EdgeInsets.fromLTRB(
+        indent,
+        nested ? 8 : 12,
+        20,
+        nested ? 8 : 12,
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppNetworkImage(
-            url: comment.avatarUrl,
-            width: avatarSize,
-            height: avatarSize,
-            borderRadius: BorderRadius.circular(avatarSize / 2),
-            fallbackIconSize: nested ? 12 : 18,
-          ),
+          CommentAvatar(url: comment.avatarUrl, size: avatarSize),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -224,13 +244,27 @@ class CommentRow extends StatelessWidget {
                     height: 1.35,
                   ),
                 ),
-                for (final reply in replies)
-                  CommentRow(comment: reply, depth: depth + 1),
               ],
             ),
           ),
         ],
       ),
+    );
+
+    if (replies.isEmpty || depth >= maxDepth) return row;
+
+    final nextIndent = indent + 20 > 80 ? 80.0 : indent + 20;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        row,
+        for (final reply in replies)
+          CommentRow(
+            comment: reply,
+            depth: depth + 1,
+            indent: nextIndent,
+          ),
+      ],
     );
   }
 
@@ -363,16 +397,37 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// 首屏错误态：文案走 l10n（不展示 `$e`），提供重试。
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.onRetry});
+/// 空态 / 错误态的可下拉容器：内容不满一屏时也能触发刷新。
+class _RefreshableStatus extends StatelessWidget {
+  const _RefreshableStatus({required this.child});
 
-  final Future<void> Function() onRetry;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: child,
+        ),
+      ],
+    );
+  }
+}
+
+/// 首屏错误态：文案走 l10n（不展示 `$e`），只保留下拉刷新恢复。
+class _ErrorState extends StatelessWidget {
+  const _ErrorState();
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = _l10n(context);
+    final secondary = context.typeScale.bodySmall.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -392,10 +447,11 @@ class _ErrorState extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const SizedBox(height: 12),
-            M3EButton.filled(
-              onPressed: () => unawaited(onRetry()),
-              child: Text(l10n.retry),
+            const SizedBox(height: 6),
+            Text(
+              l10n.commentsPullToRetry,
+              textAlign: TextAlign.center,
+              style: secondary,
             ),
           ],
         ),

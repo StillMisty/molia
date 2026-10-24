@@ -72,6 +72,12 @@ void main() {
     );
   }
 
+  /// 下拉刷新：M3ERefreshIndicator 需要完整露出后松手才触发。
+  Future<void> pullToRefresh(WidgetTester tester, Finder scrollable) async {
+    await tester.fling(scrollable, const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+  }
+
   Future<void> pumpPage(WidgetTester tester) async {
     await tester.pumpWidget(
       ChangeNotifierProvider<CommentsProvider>.value(
@@ -148,19 +154,18 @@ void main() {
     expect(find.byType(CommentRow), findsWidgets);
   });
 
-  testWidgets('刷新按钮：重新取数（绕过缓存）', (tester) async {
+  testWidgets('下拉刷新：重新取数（绕过缓存）', (tester) async {
     build();
     await pumpPage(tester);
     expect(source.commentCalls, 1);
 
-    await tester.tap(find.byIcon(Icons.refresh_rounded));
-    await tester.pumpAndSettle();
+    await pullToRefresh(tester, find.byType(ListView));
 
     expect(source.commentCalls, 2);
     expect(find.textContaining('hot 第 1 页'), findsWidgets);
   });
 
-  testWidgets('错误态：展示 l10n 文案（不展示原始异常）+ 重试恢复', (tester) async {
+  testWidgets('错误态：展示 l10n 文案（不展示原始异常）+ 下拉恢复', (tester) async {
     var shouldFail = true;
     build(onComments: (kind, page, limit) async {
       if (shouldFail) {
@@ -174,30 +179,38 @@ void main() {
     await pumpPage(tester);
 
     expect(find.text('评论加载失败'), findsOneWidget);
+    expect(find.text('下拉刷新重试'), findsOneWidget);
+    expect(find.text('重试'), findsNothing, reason: '错误态只保留下拉刷新');
     expect(find.textContaining('SocketException'), findsNothing);
 
     shouldFail = false;
-    await tester.tap(find.text('重试'));
-    await tester.pumpAndSettle();
+    await pullToRefresh(tester, find.byType(CustomScrollView));
 
     expect(find.text('评论加载失败'), findsNothing);
     expect(find.textContaining('hot 第 1 页'), findsWidgets);
   });
 
-  testWidgets('空态：无评论时展示提示', (tester) async {
+  testWidgets('空态：无评论时展示提示 + 下拉刷新恢复', (tester) async {
+    var hasComments = false;
     build(
       onComments: (kind, page, limit) async => CommentPage.fromPage(
         kind: kind,
-        items: const [],
+        items: hasComments ? [commentOf('empty-refresh')] : const [],
         page: page,
         limit: CommentsProvider.pageSize,
-        total: 0,
+        total: hasComments ? 1 : 0,
       ),
     );
     await pumpPage(tester);
 
     expect(find.text('还没有评论'), findsOneWidget);
     expect(find.text('没有更多评论了'), findsNothing);
+
+    hasComments = true;
+    await pullToRefresh(tester, find.byType(CustomScrollView));
+
+    expect(find.text('还没有评论'), findsNothing);
+    expect(find.text('正文'), findsOneWidget);
   });
 
   testWidgets('渠道不支持评论：空态提示且不发请求', (tester) async {

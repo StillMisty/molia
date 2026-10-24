@@ -82,7 +82,7 @@ class KgComment {
       createdAt: commentTimeFromText(raw['addtime']),
       location: commentTextOf(raw['location']),
       authorName: raw['user_name']?.toString() ?? '',
-      avatarUrl: commentTextOf(raw['user_pic']),
+      avatarUrl: commentUrlOf(raw['user_pic']),
       likedCount: like is Map ? commentIntOf(like['likenum']) : null,
       quoted: (quotedAuthor != null || quotedText != null)
           ? Comment(

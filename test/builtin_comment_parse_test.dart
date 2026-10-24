@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/comment.dart';
+import 'package:molia/sources/builtin/comment_utils.dart';
 import 'package:molia/sources/builtin/kg_comment.dart';
 import 'package:molia/sources/builtin/kw_comment.dart';
 import 'package:molia/sources/builtin/mg_comment.dart';
@@ -21,6 +22,19 @@ dynamic _fixture(String name) =>
     jsonDecode(File('test/fixtures/comments/$name.json').readAsStringSync());
 
 void main() {
+  group('评论图片地址归一化', () {
+    test('trim / 协议相对 / 非法值', () {
+      expect(commentUrlOf('  http://img/a.jpg '), 'http://img/a.jpg');
+      expect(commentUrlOf('//img/a.jpg'), 'https://img/a.jpg');
+      expect(commentUrlOf(''), isNull);
+      expect(commentUrlOf('   '), isNull);
+      expect(commentUrlOf(null), isNull);
+      expect(commentUrlOf('ftp://img/a.jpg'), isNull);
+      expect(commentUrlOf('not-a-url'), isNull);
+      expect(commentUrlOf('http://'), isNull);
+    });
+  });
+
   group('wy 网易云', () {
     test('最新评论：正文 / 点赞 / 毫秒时间 / 引用评论', () {
       final comments = WyComment.parseLatest(_fixture('wy_new'));

@@ -96,7 +96,7 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
 
     final body = Column(
       children: [
-        _buildTrackHeader(context, l10n, provider),
+        _buildTrackHeader(context, l10n),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           child: M3ETabs(
@@ -161,12 +161,12 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
         : l10n.commentsTabLatestCount(total);
   }
 
-  /// 头部：歌名 · 歌手（与换源页同构，明确评论对象）+ 刷新（窄屏与侧边
-  /// 弹层共用同一入口，不再占 AppBar action）。
+  /// 头部：歌名 · 歌手（与换源页同构，明确评论对象）。
+  ///
+  /// 刷新只走列表下拉手势，头部不再放刷新按钮。
   Widget _buildTrackHeader(
     BuildContext context,
     AppLocalizations l10n,
-    CommentsProvider provider,
   ) {
     final theme = Theme.of(context);
     final seed = widget.track;
@@ -189,15 +189,6 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            semanticLabel: l10n.commentsRefresh,
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: provider.isSupported
-                ? () => unawaited(provider.refresh())
-                : null,
           ),
         ],
       ),

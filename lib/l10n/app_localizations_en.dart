@@ -3891,13 +3891,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commentsLoadFailed => 'Failed to load comments';
 
   @override
+  String get commentsPullToRetry => 'Pull down to retry';
+
+  @override
   String get commentsLoadMoreFailed => 'Failed to load more comments';
 
   @override
   String get commentsNoMore => 'No more comments';
-
-  @override
-  String get commentsRefresh => 'Refresh comments';
 
   @override
   String commentsIpLocation(String location) {

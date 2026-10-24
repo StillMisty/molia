@@ -149,7 +149,7 @@ class WyComment {
       createdAt: commentTimeFromEpoch(raw['time']),
       location: _locationOf(raw['ipLocation']),
       authorName: user['nickname']?.toString() ?? '',
-      avatarUrl: commentTextOf(user['avatarUrl']),
+      avatarUrl: commentUrlOf(user['avatarUrl']),
       likedCount: commentIntOf(raw['likedCount']),
       quoted: _quotedOf(raw['beReplied']),
     );
@@ -166,7 +166,7 @@ class WyComment {
       text: restoreEmoji(first['content']?.toString() ?? ''),
       location: _locationOf(first['ipLocation']),
       authorName: user['nickname']?.toString() ?? '',
-      avatarUrl: commentTextOf(user['avatarUrl']),
+      avatarUrl: commentUrlOf(user['avatarUrl']),
     );
   }
 

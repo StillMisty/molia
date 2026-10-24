@@ -2107,9 +2107,9 @@
   "commentsEmpty": "No comments yet",
   "commentsUnsupported": "Comments are not available for this channel",
   "commentsLoadFailed": "Failed to load comments",
+  "commentsPullToRetry": "Pull down to retry",
   "commentsLoadMoreFailed": "Failed to load more comments",
   "commentsNoMore": "No more comments",
-  "commentsRefresh": "Refresh comments",
   "commentsIpLocation": "IP: {location}",
   "@commentsIpLocation": {
     "placeholders": {

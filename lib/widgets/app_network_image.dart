@@ -32,6 +32,7 @@ class AppNetworkImage extends StatelessWidget {
     this.fallbackIconSize,
     this.fallbackColor,
     this.artworkCache,
+    this.onError,
   });
 
   /// 图片地址；null / 空串直接显示回退图标（不触网）。
@@ -55,6 +56,9 @@ class AppNetworkImage extends StatelessWidget {
 
   /// 测试可注入自定义 ArtworkCache（默认全局单例）。
   final ArtworkCache? artworkCache;
+
+  /// 加载失败回调（错误对象原样传出）；在帧后触发，调用方可在其中重建图片。
+  final void Function(Object error)? onError;
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +86,10 @@ class AppNetworkImage extends StatelessWidget {
           width: width,
           height: height,
           fit: fit,
-          errorBuilder: (_, __, ___) => errorWidget ?? _fallback(context),
+          errorBuilder: (_, error, ___) {
+            _notifyError(error);
+            return errorWidget ?? _fallback(context);
+          },
         ),
       );
     }
@@ -135,8 +142,18 @@ class AppNetworkImage extends StatelessWidget {
       memCacheWidth: cacheWidth,
       memCacheHeight: cacheHeight,
       placeholder: (_, __) => placeholder ?? _placeholder(context),
-      errorWidget: (_, __, ___) => errorWidget ?? _fallback(context),
+      errorWidget: (_, __, error) {
+        _notifyError(error);
+        return errorWidget ?? _fallback(context);
+      },
     );
+  }
+
+  /// 帧后回调，避免 errorWidget 构建期间触发调用方 setState。
+  void _notifyError(Object error) {
+    final callback = onError;
+    if (callback == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => callback(error));
   }
 
   Widget _placeholder(BuildContext context) {

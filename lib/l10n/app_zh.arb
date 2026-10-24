@@ -1725,9 +1725,9 @@
   "commentsEmpty": "还没有评论",
   "commentsUnsupported": "当前渠道不支持评论",
   "commentsLoadFailed": "评论加载失败",
+  "commentsPullToRetry": "下拉刷新重试",
   "commentsLoadMoreFailed": "加载更多评论失败",
   "commentsNoMore": "没有更多评论了",
-  "commentsRefresh": "刷新评论",
   "commentsIpLocation": "IP 属地：{location}",
   "@commentsIpLocation": {
     "placeholders": {
