@@ -15,7 +15,9 @@
 ///   进度（画面=手指位移），松手按速度续跑吸附；
 /// - 目标槽位旧身份与源槽位新身份按进度窗口交叉淡化（仅透明度、原位不动）；
 /// - 两张移动卡（旧中封 → 目标槽位、新中封 ← 源槽位）全程插值，透明度
-///   1.0 ↔ 0.85 连续过渡（进场卡从 85% 起步，消除起手闪跳）。
+///   1.0 ↔ 0.85 连续过渡（进场卡从 85% 起步，消除起手闪跳）；
+/// - 松手未达标/取消/超时反向回退：预览目标身份保持到弹簧落位，回弹是
+///   拖动预览的严格反向（否则目标槽位会闪成当前封面）。
 ///
 /// 对账与会话外槽位更新：
 /// - 提交对账到非预览曲目：进入 `correcting`，中心封面以 220ms 原位交叉淡化
@@ -137,8 +139,8 @@ class PlayerCoverDeck extends StatefulWidget {
   static Key sideCoverCardKey({required bool left, required TrackId id}) =>
       ValueKey('coverSlot${left ? 'Left' : 'Right'}:${id.uri}');
 
-  /// 稳态中心封面按身份（track id）的语义 key：对账校正后中心到底展示
-  /// 哪一首是可观察行为，对外用这个锚点断言（不读私有字段）。
+  /// 中心封面按身份（track id）的语义 key：稳态中心、拖动/提交/回退的
+  /// 预览目标与对账校正后的实际曲目都可观察（不读私有字段）。
   static Key centerCoverTrackKey(TrackId id) =>
       ValueKey('coverSlotCenter:${id.uri}');
 
@@ -465,9 +467,18 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (!_session.visible) {
       // 不可见：直接回位（ticker 被静音，弹簧会冻结在半途）。
       _coverController.value = 0;
+      _session.returnCompleted();
       return;
     }
-    _coverController.animateTo(0, withVelocity: progressVelocity);
+    // 回退期间保留预览目标身份（见 CoverSwapPhase.returning）：等弹簧自然
+    // 走完再撤下预览视觉。只认 ticker 的自然完成——被新拖动/切歌取消时
+    // `then` 不会触发；也不能监听 dismissed：直接写 value 也会发该状态。
+    unawaited(
+      _coverController.animateTo(0, withVelocity: progressVelocity).then((_) {
+        if (!mounted) return;
+        _session.returnCompleted();
+      }),
+    );
   }
 
   @override
@@ -981,9 +992,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 // 稳态渲染，不叠加切歌窗口。
                 final session = _session;
                 final correcting = session.phase == CoverSwapPhase.correcting;
-                final dragging = session.previewActive;
+                // 预览视觉（拖动跟手 / 提交等待 / 回退中）都由会话目标驱动：
+                // 回退中若换回当前曲目，目标槽位会在回弹半途闪成当前封面。
+                final showingPreview = session.showingPreviewTarget;
                 final animating = !correcting &&
-                    (dragging ||
+                    (showingPreview ||
                         _coverController.isAnimating ||
                         session.phase == CoverSwapPhase.settling);
                 // p 是弹簧进度：位移/旋转/缩放直接用 p（spatial 弹簧保留过冲）；
@@ -1014,9 +1027,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
                 if (animating) {
                   // 源槽位新身份：窗口 p∈[0.6, 1] 内 0→0.85 原位淡入（无位移）。
-                  // 拖动预览阶段不预取「再下一首」（UI 只有一位前瞻），留空槽，
-                  // 由对账落位后的 180ms 纯淡入补上。
-                  if (!dragging) {
+                  // 拖动预览/回退阶段不预取「再下一首」（UI 只有一位前瞻），
+                  // 留空槽，由对账落位后的 180ms 纯淡入补上。
+                  if (!showingPreview) {
                     final nextItem = playbackProvider.snapshot.next;
                     final sourceTrack = dir == 1 ? nextItem : session.previous;
                     children.add(_sideCoverLayer(
@@ -1098,7 +1111,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   ));
                 }
 
-                // 中心位：拖动/提交时由预览目标封面顶上（真正的切歌在松手后
+                // 中心位：拖动/提交/回退时由预览目标封面顶上（真正的切歌在松手后
                 // 才发生）；动画/稳态下就是当前曲目。顶栏⇄播放页飞行时只隐藏
                 // 这一张。预览目标在拖动开始时固定，不重读快照（否则提交后
                 // 快照先推新邻位，中心封面会闪成再下一首）。
@@ -1131,7 +1144,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     opacity: correctionFade,
                   ));
                 } else if (animating) {
-                  final Track? centerTrack = dragging
+                  final Track? centerTrack = showingPreview
                       ? (session.to ?? widget.displayTrack)
                       : widget.displayTrack;
                   children.add(_mainCoverLayer(
@@ -1140,15 +1153,19 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     playbackProvider,
                     artDimension: widget.artDimension,
                     slotKey: PlayerCoverDeck.centerCoverCardKey,
+                    trackKey: centerTrack == null
+                        ? null
+                        : PlayerCoverDeck.centerCoverTrackKey(centerTrack.id),
                     x: dir * offset * (1 - t),
                     rotation: sideRotation * dir * (1 - t),
                     scale: 0.78 + 0.22 * t,
                     opacity: 0.85 + 0.15 * pClamped,
-                    interactive: !dragging,
+                    interactive: !showingPreview,
                     coverKey: widget.morph?.pageCoverKey,
                     hidden: widget.morph?.pageHeaderHidden ?? false,
-                    placeholderUrl:
-                        dragging ? currentImageUrl : session.placeholderUrl,
+                    placeholderUrl: showingPreview
+                        ? currentImageUrl
+                        : session.placeholderUrl,
                   ));
                 } else {
                   // 稳态中心：同 id、URL 更新（音源补图）时以约 250ms 交叉

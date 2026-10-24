@@ -254,11 +254,41 @@ void main() {
       expect(session.oldNeighbor, d, reason: '反向时让位的是原右侧邻位');
 
       session.releasePreview(progressVelocity: 0.5);
-      expect(session.phase, CoverSwapPhase.idle);
-      expect(session.to, isNull);
+      expect(session.phase, CoverSwapPhase.returning);
+      expect(session.to, b, reason: '回退期间保留预览目标（否则目标槽位闪成当前封面）');
+      expect(session.showingPreviewTarget, isTrue);
       expect(host.calls, contains('releasePreview(0.50)'));
       expect(host.calls.sublist(host.calls.length - 2),
           ['disarmTimeout', 'releasePreview(0.50)']);
+
+      // 回退弹簧落位（宿主回调）：预览撤下，回 idle。
+      session.returnCompleted();
+      expect(session.phase, CoverSwapPhase.idle);
+      expect(session.to, isNull);
+      expect(session.from, isNull);
+      expect(host.calls.last, 'adoptSteadySlots');
+    });
+
+    test('回退落位只在 returning 生效：阶段被接管后重复回调无副作用', () {
+      settleAt(2);
+      session.dragStart();
+      session.dragUpdate(delta: 20, progress: 0.3);
+      host.clear();
+
+      session.releasePreview();
+      expect(session.phase, CoverSwapPhase.returning);
+      session.returnCompleted();
+      expect(host.calls,
+          ['disarmTimeout', 'releasePreview(0.00)', 'adoptSteadySlots']);
+
+      // 新会话已接管（这里用切歌入场模拟）时，迟到的回退完成回调必须忽略。
+      session.observe(snapshot: snapshotAt(3), displayTrack: d);
+      expect(session.phase, CoverSwapPhase.settling);
+      host.clear();
+      session.returnCompleted();
+      expect(session.phase, CoverSwapPhase.settling,
+          reason: '非 returning 阶段忽略');
+      expect(host.calls, isEmpty);
     });
 
     test('边界拖动（无预览目标）：不进 preview、不提交', () {
@@ -296,6 +326,7 @@ void main() {
       // 回弹收尾到 idle，再验证空闲刷新：同 id 且左槽身份未变 → 静默；
       // 左槽身份（previous 缓存）改变 → 通知一次。
       session.releasePreview();
+      session.returnCompleted();
       final int settled = notifications;
       session.observe(snapshot: snapshotAt(2), displayTrack: c);
       expect(notifications, settled);
@@ -325,7 +356,7 @@ void main() {
       ]);
     });
 
-    test('兜底超时：撤下预览回弹（不切歌）', () {
+    test('兜底超时：撤下预览回退（不切歌）', () {
       settleAt(2);
       session.dragStart();
       session.dragUpdate(delta: -20, progress: 0.2);
@@ -333,8 +364,13 @@ void main() {
       host.clear();
 
       session.timeoutFired();
-      expect(session.phase, CoverSwapPhase.idle);
+      expect(session.phase, CoverSwapPhase.returning);
+      expect(session.showingPreviewTarget, isTrue);
       expect(host.calls, ['disarmTimeout', 'releasePreview(0.00)']);
+
+      session.returnCompleted();
+      expect(session.phase, CoverSwapPhase.idle);
+      expect(session.to, isNull);
     });
 
     test('非提交等待期间超时：无副作用', () {
