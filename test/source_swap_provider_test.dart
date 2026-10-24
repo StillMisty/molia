@@ -58,11 +58,13 @@ void main() {
     repository.dispose();
   });
 
-  SourceSwapProvider buildProvider() => SourceSwapProvider(
+  SourceSwapProvider buildProvider({SourceSwapTrackHook? onTrackSwapped}) =>
+      SourceSwapProvider(
         catalogService: CatalogService(registry: FakeSourceRegistry(sources)),
         sourceRegistry: FakeSourceRegistry(sources),
         libraryProvider: library,
         playbackProvider: playback,
+        onTrackSwapped: onTrackSwapped,
       );
 
   test('begin：其它音源并行检索，按源分组；排除种子源 / 空结果 / 失败隔离', () async {
@@ -380,6 +382,33 @@ void main() {
     provider.select(kg.items.single);
     final miss = await provider.apply();
     expect(miss.status, SourceSwapApplyStatus.targetNotFound);
+  });
+
+  test('apply 成功后回调种子与新曲目（本地封面跟随入口）', () async {
+    final seed = track('wy', '1');
+    backend.emit(BackendSnapshot(
+      current: seed,
+      queue: [seed],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+    kg.items = [track('kg', '100')];
+    final swapped = <(String, String)>[];
+    final provider = buildProvider(
+      onTrackSwapped: (oldTrack, newTrack) async {
+        swapped.add((oldTrack.id.uri, newTrack.id.uri));
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.begin(SourceSwapRequest(
+      seed: seed,
+      placement: SourceSwapPlacement.queue,
+    ));
+    provider.select(kg.items.single);
+
+    final result = await provider.apply();
+    expect(result.status, SourceSwapApplyStatus.swapped);
+    expect(swapped, [('wy:1', 'kg:100')]);
   });
 
   test('apply（列表）：旧行已被移除 → targetNotFound', () async {

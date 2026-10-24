@@ -14,6 +14,7 @@ import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/audio_focus_settings.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/data_saver_service.dart';
 import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
@@ -25,6 +26,8 @@ import '../utils/data_saver_subtitle.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
+import '../widgets/app_network_image.dart';
+import '../widgets/cover_picker_sheet.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_section_grid.dart';
@@ -516,8 +519,11 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 / 纯黑 / 字体。
+  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 /
+  /// 默认封面 / 纯黑 / 字体。
   Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+    final covers =
+        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
       children: [
@@ -620,6 +626,28 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                   onChanged: (value) => context
                       .read<ThemeProvider>()
                       .setFollowArtworkEnabled(value),
+                ),
+                // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
+                // 不参与取色、下载与标签。
+                ValueListenableBuilder<int>(
+                  valueListenable: covers.revision,
+                  builder: (context, _, __) => SettingsNavTile(
+                    key: const Key('settingsDefaultCoverItem'),
+                    icon: Icons.image_rounded,
+                    title: l10n.coverDefaultTitle,
+                    subtitle: l10n.coverDefaultSubtitle,
+                    trailing: AppNetworkImage(
+                      url: covers.defaultCoverUrl,
+                      width: 40,
+                      height: 40,
+                      borderRadius: BorderRadius.circular(10),
+                      memCacheWidth:
+                          (40 * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                      fallbackIconSize: 20,
+                    ),
+                    onTap: () => unawaited(showCoverPickerSheet(context)),
+                  ),
                 ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsPureBlackSwitch'),

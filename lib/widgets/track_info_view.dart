@@ -15,6 +15,7 @@ import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../providers/sources_provider.dart';
 import '../services/cache_service.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
 import '../services/track_local_data_service.dart';
@@ -24,6 +25,8 @@ import '../utils/source_label.dart';
 import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
 import 'settings/settings_tiles.dart';
+import 'app_network_image.dart';
+import 'cover_picker_sheet.dart';
 import 'sleep_timer_sheet.dart';
 import 'track_actions.dart';
 import 'track_share_sheet.dart';
@@ -199,6 +202,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     // 是二者的派生值，改完设置要立即刷新，不等下一次播放通知。
     final sources = context.watch<SourcesProvider?>();
     final dataSaver = context.watch<DataSaverService?>();
+    final covers =
+        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
     final (track, qualityType) =
         context.select<PlaybackProvider, (Track?, String)>(
       (provider) => (provider.snapshot.current, provider.currentQualityType),
@@ -317,9 +322,43 @@ class _TrackInfoViewState extends State<TrackInfoView> {
               ],
             ),
             const SizedBox(height: kSettingsSectionSpacing),
-            // 信息：音质 / 可用音质 / 专辑 / 来源 / 歌词来源。
+            // 信息：封面 / 音质 / 可用音质 / 专辑 / 来源 / 歌词来源。
             SettingsSectionCard(
               children: [
+                ValueListenableBuilder<int>(
+                  valueListenable: covers.revision,
+                  builder: (context, _, __) {
+                    final custom = covers.trackCoverUrl(track.id) != null;
+                    return SettingsNavTile(
+                      key: const Key('trackInfoCoverItem'),
+                      icon: Icons.image_rounded,
+                      title: l10n.coverTitle,
+                      subtitle: custom
+                          ? l10n.coverCustomized
+                          : l10n.coverFollowSong,
+                      trailing: AppNetworkImage(
+                        url: covers.resolveForDisplayById(
+                          track.id,
+                          originalUrl: track.artwork?.uri.toString(),
+                        ),
+                        width: 32,
+                        height: 32,
+                        borderRadius: BorderRadius.circular(8),
+                        memCacheWidth:
+                            (32 * MediaQuery.of(context).devicePixelRatio)
+                                .round(),
+                        fallbackIconSize: 16,
+                      ),
+                      onTap: () => unawaited(
+                        showCoverPickerSheet(
+                          context,
+                          trackId: track.id,
+                          originalCoverUrl: track.artwork?.uri.toString(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 SettingsInfoTile(
                   icon: Icons.graphic_eq_rounded,
                   title: l10n.trackInfoQuality,

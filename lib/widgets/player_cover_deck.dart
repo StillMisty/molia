@@ -52,64 +52,21 @@ import 'package:provider/provider.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
-import 'molia_mark.dart';
+import 'cover_fallback.dart';
 import 'player_cover_session.dart';
 import 'player_morph.dart';
 
 /// 曲目封面 URL / 稳定 key 与卡片外观定义在
 /// `cover_appearance.dart`（会话与渲染共用同一份归一化），这里再导出给
-/// 迷你条 / 飞行副本 / 应用壳。
+/// 迷你条 / 飞行副本 / 应用壳。占位构建器在 `cover_fallback.dart`（同一份
+/// 实现，避免与 `now_playing_summary.dart` 形成循环 import）。
 export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
-
-/// 无封面时的中性占位：主题容器色背景 + Molia 标志。
-///
-/// [iconSize] 供共享元素飞行副本按两端真身插值（默认 64 = 卡片级占位）。
-Widget buildFallbackArtwork(
-  BuildContext context, {
-  Key? key,
-  double iconSize = 64,
-}) {
-  final scheme = Theme.of(context).colorScheme;
-  return Container(
-    key: key,
-    color: scheme.surfaceContainerHighest,
-    alignment: Alignment.center,
-    child: MoliaMark(
-      size: iconSize,
-      color: scheme.onSurfaceVariant,
-    ),
-  );
-}
-
-/// 构建默认/回退封面：优先使用持久化的最后播放封面；没有（或加载失败）时
-/// 用中性占位图标。
-///
-/// [iconSize] 透传给回退图标（飞行副本按进度插值；默认 64 不变）。
-Widget buildDefaultArtwork(
-  BuildContext context, {
-  Key? key,
-  BoxFit fit = BoxFit.cover,
-  double iconSize = 64,
-}) {
-  final lastPlayedImageUrl =
-      context.read<PlaybackProvider>().lastPlayedImageUrl;
-  if (lastPlayedImageUrl != null) {
-    return AppNetworkImage(
-      key: key ?? const ValueKey('last_played_image'),
-      url: lastPlayedImageUrl,
-      fit: fit,
-      fallbackIconSize: iconSize,
-      memCacheWidth: playbackCoverDecodeEdge(context),
-      errorWidget: buildFallbackArtwork(context, key: key, iconSize: iconSize),
-    );
-  }
-  return buildFallbackArtwork(context,
-      key: key ?? const ValueKey('default_image'), iconSize: iconSize);
-}
+export 'cover_fallback.dart' show buildDefaultArtwork, buildFallbackArtwork;
 
 /// 完整播放器封面堆叠：三封面（槽位）渲染 + 横滑切歌手势 + 切歌会话状态。
 ///
@@ -235,6 +192,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 已订阅的播放 Provider（运行时可能被替换，见 [_bindPlaybackIfNeeded]）。
   PlaybackProvider? _playback;
+
+  /// 已订阅的自定义封面存储（换封面时中心 / 邻位立即换图）。
+  CustomCoverStore? _covers;
 
   /// 快照通知已排入微任务（同一批通知只对账一次）。
   bool _trackSyncScheduled = false;
@@ -376,6 +336,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     super.didChangeDependencies();
     // 快照监听：切歌检测完全由通知驱动（build 期间不判定切歌）。
     _bindPlaybackIfNeeded();
+    // 自定义封面索引变化：同 id 换图走既有 250ms 中心淡化。
+    _bindCoversIfNeeded();
     // 页面可见性（tab 切换）：任一方向翻转都立即落位。
     _syncTickerMode();
   }
@@ -417,6 +379,23 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 渲染起点就是当前身份：槽位跟踪对齐，不补身份淡换。
     adoptSteadySlots();
     _syncPlayState(playback);
+  }
+
+  /// 订阅自定义封面存储：当前曲目换图 / 恢复原图后立即刷新中心与邻位。
+  void _bindCoversIfNeeded() {
+    final covers =
+        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+    if (identical(covers, _covers)) return;
+    _covers?.revision.removeListener(_onCustomCoverChanged);
+    _covers = covers..revision.addListener(_onCustomCoverChanged);
+  }
+
+  void _onCustomCoverChanged() {
+    if (!mounted) return;
+    // 先走同 id 换图的淡化路径（transition 与中心身份都由它维护），再
+    // setState 让邻位槽也按新索引重算（自定义封面可作用于上一首 / 下一首）。
+    _syncCenterArtwork(widget.displayTrack);
+    setState(() {});
   }
 
   /// 播放态中心封面缩放同步：播放 → 1.0、暂停 → 0.98。
@@ -828,6 +807,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   @override
   void dispose() {
     _playback?.removeListener(_handlePlaybackChanged);
+    _covers?.revision.removeListener(_onCustomCoverChanged);
     widget.morph?.removeListener(_onMorphChanged);
     disarmTimeout();
     _session.dispose();
@@ -1450,6 +1430,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             : fallback;
         return AppNetworkImage(
           url: url,
+          fallbackUrl:
+              _covers?.defaultCoverUrl ??
+              CustomCoverStore.instance.defaultCoverUrl,
           fit: BoxFit.cover,
           // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
           fallbackIconSize: iconSize,

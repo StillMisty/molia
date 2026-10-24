@@ -11,6 +11,7 @@ import '../providers/library_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
+import 'cover_appearance.dart';
 import 'current_track_cover.dart';
 import 'favorite_action.dart';
 import 'library_cover.dart';
@@ -79,7 +80,7 @@ class AiDjTrackTile extends StatelessWidget {
     final track = item.track;
     final artist = track.artistLabel;
     final reason = item.source.reason;
-    final coverUrl = track.artwork?.uri.toString();
+    final coverUrl = artworkUrlOf(track);
     final l10n = AppLocalizations.of(context);
     final stateLabel = isCurrent
         ? (isPlaying ? l10n?.nowPlayingSection : l10n?.nowPlayingPaused)
@@ -111,7 +112,11 @@ class AiDjTrackTile extends StatelessWidget {
                   size: 44,
                   isPlaying: isPlaying,
                 )
-              : LibraryCoverThumb(url: coverUrl, size: 44),
+              : LibraryCoverThumb(
+                  url: coverUrl,
+                  size: 44,
+                  useDefaultCover: true,
+                ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

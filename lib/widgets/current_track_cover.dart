@@ -14,11 +14,15 @@ class CurrentTrackCover extends StatelessWidget {
     required this.url,
     required this.size,
     required this.isPlaying,
+    this.useDefaultCover = true,
   });
 
   final String? url;
   final double size;
   final bool isPlaying;
+
+  /// 无封面时是否显示全局默认封面（歌曲行打开；头像等其它入口不打开）。
+  final bool useDefaultCover;
 
   /// 角标直径：40 / 44 封面共用同一档，图标再小一圈。
   static const double badgeSize = 18;
@@ -30,7 +34,11 @@ class CurrentTrackCover extends StatelessWidget {
       dimension: size,
       child: Stack(
         children: [
-          LibraryCoverThumb(url: url, size: size),
+          LibraryCoverThumb(
+            url: url,
+            size: size,
+            useDefaultCover: useDefaultCover,
+          ),
           Positioned(
             right: 0,
             bottom: 0,

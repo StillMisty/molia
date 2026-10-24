@@ -5,7 +5,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
+
+import '../domain/models/track.dart';
 import '../services/artwork_palette_service.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
@@ -21,6 +24,8 @@ import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
 import 'app_color_picker.dart';
+import 'app_network_image.dart';
+import 'cover_picker_sheet.dart';
 import 'font_picker_sheet.dart';
 
 class LyricsPosterPreviewPage extends StatefulWidget {
@@ -28,6 +33,7 @@ class LyricsPosterPreviewPage extends StatefulWidget {
   final String trackTitle;
   final String artistName;
   final String? albumCoverUrl;
+  final TrackId? trackId;
   final List<PosterLyricLine>? posterLyricLines;
 
   const LyricsPosterPreviewPage({
@@ -36,6 +42,7 @@ class LyricsPosterPreviewPage extends StatefulWidget {
     required this.trackTitle,
     required this.artistName,
     this.albumCoverUrl,
+    this.trackId,
     this.posterLyricLines,
   });
 
@@ -67,10 +74,26 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 海报字体覆盖：null = 跟随应用字体；'' = 强制系统默认；其它 = 字体族名。
   String? _posterFontOverride;
 
+  /// 自定义封面存储（订阅 revision：换封面后重新生成海报）。
+  CustomCoverStore? _covers;
+  String? _lastCoverSignature;
+
   bool get _isBusy => _isLoading || _isOperating || _isRegenerating;
 
-  /// 当前曲目是否带封面（「跟随封面」来源可用性）。
-  bool get _hasArtwork => (widget.albumCoverUrl ?? '').isNotEmpty;
+  /// 取色 / 「跟随封面」可用性只看真实（原始或自定义）封面；默认封面是
+  /// 占位，不参与取色。
+  String? get _paletteCoverUrl =>
+      CustomCoverStore.instance.resolveTrackCoverForId(
+        widget.trackId,
+        originalUrl: widget.albumCoverUrl,
+      );
+
+  /// 海报头部展示封面：自定义 → 原始 → 默认占位。
+  String? get _displayCoverUrl => CustomCoverStore.instance
+      .resolveForDisplayById(widget.trackId, originalUrl: widget.albumCoverUrl);
+
+  /// 当前曲目是否带真实封面（「跟随封面」来源可用性）。
+  bool get _hasArtwork => (_paletteCoverUrl ?? '').isNotEmpty;
 
   /// 底部设置行里值控件的统一宽度：右值成一列，行与行之间不参差。
   static const double _settingValueWidth = 190;
@@ -84,6 +107,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final covers =
+        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+    if (!identical(covers, _covers)) {
+      _covers?.revision.removeListener(_onCoverChanged);
+      _covers = covers..revision.addListener(_onCoverChanged);
+    }
     final scheme = Theme.of(context).colorScheme;
     final signature = (
       scheme.brightness,
@@ -102,6 +131,25 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _generatePoster();
     });
+  }
+
+  /// 自定义 / 默认封面变化：封面签名变了才重新生成（主题色来源也跟着
+  /// [_paletteCoverUrl] 走同一份共享取色）。
+  void _onCoverChanged() {
+    if (!mounted) return;
+    final signature = '$_displayCoverUrl|$_paletteCoverUrl';
+    if (signature == _lastCoverSignature) return;
+    if (_isBusy) {
+      _schemeDirty = true;
+      return;
+    }
+    _generatePoster();
+  }
+
+  @override
+  void dispose() {
+    _covers?.revision.removeListener(_onCoverChanged);
+    super.dispose();
   }
 
   /// 先恢复海报字体覆盖与取色来源，再在首帧后生成海报（此时才能读取 Theme）。
@@ -130,7 +178,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       case PosterColorSource.custom:
         return buildColorScheme(Color(_customSeed), appScheme.brightness);
       case PosterColorSource.artwork:
-        final url = widget.albumCoverUrl;
+        final url = _paletteCoverUrl;
         final paletteService = context.read<ArtworkPaletteService?>();
         if (url == null || url.isEmpty || paletteService == null) {
           return appScheme;
@@ -142,6 +190,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   Future<void> _generatePoster() async {
     if (!mounted) return;
+    final displayCoverUrl = _displayCoverUrl;
+    // 生成期间再换封面：本轮结束后的补生成要拿到新签名。
+    _lastCoverSignature = '$displayCoverUrl|$_paletteCoverUrl';
     HapticsService.lightImpact();
     final appScheme = Theme.of(context).colorScheme;
     final appName = AppLocalizations.of(context)?.appName ?? 'Molia';
@@ -181,7 +232,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         posterLyricLines: widget.posterLyricLines,
         trackTitle: widget.trackTitle,
         artistName: widget.artistName,
-        albumCoverUrl: widget.albumCoverUrl,
+        albumCoverUrl: displayCoverUrl,
         // 配色由取色来源解析出的单一方案映射
         backgroundColor: palette.background,
         titleColor: palette.title,
@@ -391,6 +442,73 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     return '#${rgb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
   }
 
+  /// 打开共享封面选择弹层（与歌曲信息页 / 设置页默认封面同一实现）。
+  Future<void> _changeCover() async {
+    final trackId = widget.trackId;
+    if (trackId == null || _isLoading || _isOperating) return;
+    HapticsService.selectionClick();
+    await showCoverPickerSheet(
+      context,
+      trackId: trackId,
+      originalCoverUrl: widget.albumCoverUrl,
+    );
+  }
+
+  /// 海报设置行里的封面状态文案（与歌曲信息页同一套词）。
+  String _coverStateLabel(AppLocalizations l10n) {
+    final trackId = widget.trackId;
+    if (trackId != null &&
+        CustomCoverStore.instance.trackCoverUrl(trackId) != null) {
+      return l10n.coverCustomized;
+    }
+    if ((widget.albumCoverUrl ?? '').isNotEmpty) return l10n.coverFollowSong;
+    return l10n.coverDefaultTitle;
+  }
+
+  /// 封面设置行：缩略图 + 状态 + 展开图标，点开同一封面弹层。
+  Widget _buildCoverPicker(AppLocalizations l10n, ColorScheme scheme) {
+    final trackId = widget.trackId;
+    return ValueListenableBuilder<int>(
+      valueListenable: CustomCoverStore.instance.revision,
+      builder: (context, _, __) => M3EButton(
+        key: const Key('posterCoverPickerButton'),
+        style: M3EButtonStyle.text,
+        onPressed: trackId == null ? null : _changeCover,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppNetworkImage(
+              url: CustomCoverStore.instance.resolveForDisplayById(
+                trackId,
+                originalUrl: widget.albumCoverUrl,
+              ),
+              width: 28,
+              height: 28,
+              borderRadius: BorderRadius.circular(6),
+              memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio)
+                  .round(),
+              fallbackIconSize: 16,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                _coverStateLabel(l10n),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.expand_more_rounded,
+              size: 18,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// 设置行：左标签 + 右值控件（值控件同宽 [_settingValueWidth]、右对齐成一列）。
   Widget _settingRow({required String label, required Widget value}) {
     return Row(
@@ -546,6 +664,11 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                     _settingRow(
                       label: l10n.posterColorSource,
                       value: _buildColorSourcePicker(l10n),
+                    ),
+                    const SizedBox(height: 4),
+                    _settingRow(
+                      label: l10n.coverLabel,
+                      value: _buildCoverPicker(l10n, theme.colorScheme),
                     ),
                     if (_colorSource == PosterColorSource.custom) ...[
                       const SizedBox(height: 4),

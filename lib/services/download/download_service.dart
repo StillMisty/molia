@@ -78,6 +78,11 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 /// 下载时封面 URL 解析（组合根注入：`SourceManager.fetchPic` 适配）。
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
 
+/// 下载时自定义封面字节解析（组合根注入本地自定义封面存储）。
+///
+/// 命中时下载封面 / 标签嵌入都用它；全局默认封面不在这里返回。
+typedef DownloadCustomCoverResolver = Future<Uint8List?> Function(Track track);
+
 /// 单条下载任务的实时进度（UI 消费；值相等不重复通知）。
 class DownloadProgress {
   const DownloadProgress({required this.receivedBytes, this.totalBytes});
@@ -152,6 +157,7 @@ class DownloadService extends ChangeNotifier {
     Dio? dio,
     DownloadLyricsResolver? lyricsResolver,
     DownloadArtworkResolver? artworkResolver,
+    DownloadCustomCoverResolver? customCoverResolver,
     CacheService? cacheService,
     ArtworkCache? artworkCache,
     DownloadSettings? settings,
@@ -165,6 +171,7 @@ class DownloadService extends ChangeNotifier {
         _dio = dio ?? createAppDio(),
         _lyricsResolver = lyricsResolver,
         _artworkResolver = artworkResolver,
+        _customCoverResolver = customCoverResolver,
         _cacheService = cacheService,
         _artworkCache = artworkCache,
         _settings = settings,
@@ -185,6 +192,7 @@ class DownloadService extends ChangeNotifier {
   final Dio _dio;
   final DownloadLyricsResolver? _lyricsResolver;
   final DownloadArtworkResolver? _artworkResolver;
+  final DownloadCustomCoverResolver? _customCoverResolver;
   final CacheService? _cacheService;
   final ArtworkCache? _artworkCache;
   final DownloadSettings? _settings;
@@ -1071,8 +1079,24 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  /// 封面字节：曲目主图 + 降级链先查缓存，未命中再取图并回填缓存。
+  /// 封面字节：自定义封面优先；否则曲目主图 + 降级链先查缓存，未命中再
+  /// 取图并回填缓存。全局默认封面不参与下载（它只是展示占位）。
   Future<_ResolvedCover?> _resolveCover(Track track) async {
+    final custom = _customCoverResolver;
+    if (custom != null) {
+      try {
+        final bytes = await custom(track);
+        if (bytes != null && bytes.isNotEmpty) {
+          return _ResolvedCover(
+            bytes: bytes,
+            url: null,
+            mimeType: 'image/jpeg',
+          );
+        }
+      } catch (e) {
+        _logger.warning('读取自定义封面失败: $e');
+      }
+    }
     final artwork = track.artwork;
     final urls = <String>[
       if (artwork != null && artwork.uri.toString().isNotEmpty)

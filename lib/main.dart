@@ -162,11 +162,17 @@ void main() async {
     library: library,
     messenger: AppUiMessenger(notifications),
     powerPolicy: powerPolicy,
+    customCovers: local.customCovers,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       // handler 只翻译动作；恢复态回落、阶段路由与提交都在会话命令面。
       commands: session,
       artworkBlocked: () => local.dataSaver.blockNetworkArtwork,
+      // 自定义 → 原始 → 默认封面；本地文件由 handler 按平台转裸路径 / URI。
+      coverUrlResolver: (track) => local.customCovers.resolveForDisplayForKey(
+        track.id,
+        originalUrl: track.coverUrl,
+      ),
     ),
   );
   _markStartup('播放栈（含媒体会话）', startup);
@@ -221,10 +227,18 @@ void main() async {
     lyricsProvider: lyrics.lyricsProvider,
     audioHandler: playback.audioHandler,
     powerPolicy: powerPolicy,
+    customCovers: local.customCovers,
   );
   final desktop = await desktopFuture;
   final display = await displayFuture;
   markStartupStep('sub.lyricsDisplay.build', displayWatch);
+  // 自定义 / 默认封面变化：系统媒体元数据与桌面小组件立即跟上；主题取色
+  // 由 lyrics_display_stack 自己的 revision 订阅处理，播放页 / 顶栏 / 列表
+  // 各自订阅 revision。
+  local.customCovers.addChangeListener((_) {
+    playback.audioHandler?.refreshArtwork();
+    playback.observer.refreshCoverPresentation();
+  });
   _markStartup('主题/歌词显示', startup);
   // 热键注册与上面的装配并行；runApp 前确保就绪（含冷启动恢复态）。
   await hotkeysFuture;

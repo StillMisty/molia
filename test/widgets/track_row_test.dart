@@ -1,8 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -666,6 +671,106 @@ void main() {
           reason: '阈值低于固定列需求时，表格在阈值处就会溢出',
         );
       }
+    });
+  });
+
+  group('自定义 / 默认封面', () {
+    late Directory tempDir;
+    late CustomCoverStore store;
+
+    Uint8List pngBytes(int shade) {
+      final source = image.Image(width: 2, height: 2);
+      image.fill(source, color: image.ColorRgb8(shade, shade, shade));
+      return Uint8List.fromList(image.encodePng(source));
+    }
+
+    setUp(() {
+      tempDir = Directory.systemTemp.createTempSync('molia_track_row_cover_');
+      store = CustomCoverStore(
+        supportDirectory: () async => tempDir,
+        clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
+      );
+      CustomCoverStore.overrideInstance(store);
+    });
+
+    tearDown(() {
+      CustomCoverStore.overrideInstance(null);
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    String filePathOfCover(WidgetTester tester) {
+      final imageWidget = tester.widget<Image>(
+        find
+            .descendant(of: find.byType(TrackRow), matching: find.byType(Image))
+            .first,
+      );
+      final provider = imageWidget.image;
+      final raw = provider is ResizeImage ? provider.imageProvider : provider;
+      expect(raw, isA<FileImage>());
+      return (raw as FileImage).file.path;
+    }
+
+    testWidgets('命中当前曲目自定义封面，revision 后立即换新文件', (tester) async {
+      await tester.runAsync(() async {
+        await store.load();
+        await store.setTrackCover(currentTrack.id, pngBytes(10));
+      });
+      final first = store.trackCoverPath(currentTrack.id)!;
+
+      await pumpContents(
+        tester,
+        TrackRow(
+          model: TrackRowModel(
+            title: currentTrack.title,
+            trackId: currentTrack.id,
+          ),
+          onTap: () {},
+        ),
+      );
+      expect(filePathOfCover(tester), first);
+
+      await tester.runAsync(
+        () => store.setTrackCover(currentTrack.id, pngBytes(200)),
+      );
+      final second = store.trackCoverPath(currentTrack.id)!;
+      await tester.pumpAndSettle();
+      expect(filePathOfCover(tester), second);
+      expect(second, isNot(first));
+    });
+
+    testWidgets('无封面：显示全局默认封面', (tester) async {
+      await tester.runAsync(() async {
+        await store.load();
+        await store.setDefaultCover(pngBytes(90));
+      });
+      final defaultPath = Uri.parse(store.defaultCoverUrl!).toFilePath();
+
+      await pumpContents(
+        tester,
+        TrackRow(
+          model: const TrackRowModel(title: 'No artwork'),
+          onTap: () {},
+        ),
+      );
+      expect(filePathOfCover(tester), defaultPath);
+    });
+
+    testWidgets('来源键为 local 时沿用原曲封面键', (tester) async {
+      const original = TrackId('wy', 'cover');
+      const local = TrackId('local', 'wy:cover');
+      await tester.runAsync(() async {
+        await store.load();
+        await store.setTrackCover(original, pngBytes(30));
+      });
+
+      await pumpContents(
+        tester,
+        TrackRow(
+          model: const TrackRowModel(title: 'Downloaded', trackId: local),
+          onTap: () {},
+        ),
+      );
+      expect(filePathOfCover(tester), store.trackCoverPath(original));
     });
   });
 }

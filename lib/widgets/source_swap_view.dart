@@ -185,6 +185,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
               artist: track.artistLabel,
               coverUrl: track.artwork?.uri.toString(),
               durationMs: track.duration?.inMilliseconds,
+              trackId: track.id,
               selected: provider.selected?.id == track.id,
             ),
             surface: const TrackRowSurface(coverSize: 40),

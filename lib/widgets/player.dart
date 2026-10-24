@@ -12,6 +12,7 @@ import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
@@ -541,7 +542,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                           toPage: true,
                         ),
                         url: artworkUrlOf(displayTrack),
-                        // 两真身都是主题默认封面（最近播放图/标志）。
+                        fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
+                        // 两真身都是主题默认封面（全局默认封面/最近播放图/标志）。
                         fallback: (context, iconSize) =>
                             buildDefaultArtwork(context, iconSize: iconSize),
                       ),
@@ -949,26 +951,31 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   Widget _buildMiniAlbumArt(Track? track, double iconSize) {
     final displayTrack = track ?? _lastTrack;
-    final String? currentImageUrl = artworkUrlOf(displayTrack);
     final coverEdge = playbackCoverDecodeEdge(context);
-
-    // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
-    // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
-    return AppNetworkImage(
-      key: ValueKey(currentImageUrl),
-      url: currentImageUrl,
-      fit: BoxFit.cover,
-      fallbackIconSize: iconSize,
-      memCacheWidth: coverEdge,
-      placeholder: _lastTrack != null && _lastImageUrl != null
-          ? AppNetworkImage(
-              url: _lastImageUrl,
-              fit: BoxFit.cover,
-              fallbackIconSize: iconSize,
-              memCacheWidth: coverEdge,
-            )
-          : buildDefaultArtwork(context),
-      errorWidget: buildDefaultArtwork(context),
+    return ValueListenableBuilder<int>(
+      valueListenable: CustomCoverStore.instance.revision,
+      builder: (context, _, __) {
+        final String? currentImageUrl = artworkUrlOf(displayTrack);
+        // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
+        // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
+        return AppNetworkImage(
+          key: ValueKey(currentImageUrl),
+          url: currentImageUrl,
+          fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
+          fit: BoxFit.cover,
+          fallbackIconSize: iconSize,
+          memCacheWidth: coverEdge,
+          placeholder: _lastTrack != null && _lastImageUrl != null
+              ? AppNetworkImage(
+                  url: _lastImageUrl,
+                  fit: BoxFit.cover,
+                  fallbackIconSize: iconSize,
+                  memCacheWidth: coverEdge,
+                )
+              : buildDefaultArtwork(context),
+          errorWidget: buildDefaultArtwork(context),
+        );
+      },
     );
   }
 

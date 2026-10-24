@@ -81,6 +81,7 @@ Future<LocalAudioHandler?> initSystemMediaSession(
   required PlaybackCommandPort commands,
   ValueListenable<MediaSessionCopy>? copy,
   bool Function()? artworkBlocked,
+  String? Function(SourceTrack track)? coverUrlResolver,
 }) async {
   if (!isSystemMediaSessionSupported) {
     return null;
@@ -95,6 +96,7 @@ Future<LocalAudioHandler?> initSystemMediaSession(
       copy: copy ?? LocalizedMediaSessionCopy(),
       backend: backend,
       artworkBlocked: artworkBlocked,
+      coverUrlResolver: coverUrlResolver,
     );
     markStartupStep('sub.mediaSession.build', buildWatch);
     final activateWatch = Stopwatch()..start();
@@ -135,6 +137,7 @@ class LocalAudioHandler {
     required ValueListenable<MediaSessionCopy> copy,
     MediaSessionBackend? backend,
     bool Function()? artworkBlocked,
+    String? Function(SourceTrack track)? coverUrlResolver,
     Future<String?> Function(String url)? artworkUriResolver,
     bool? periodicPositionStateUpdates,
   })  : _commands = commands,
@@ -143,6 +146,7 @@ class LocalAudioHandler {
             createSystemMediaSessionBackend() ??
             const NoopMediaSessionBackend(),
         _artworkBlocked = artworkBlocked ?? (() => false),
+        _coverUrlResolver = coverUrlResolver,
         _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
         _periodicPositionStateUpdates = periodicPositionStateUpdates ??
             defaultTargetPlatform != TargetPlatform.android {
@@ -166,6 +170,9 @@ class LocalAudioHandler {
 
   /// 省流模式封面网关：返回 true 时媒体项不带封面。
   final bool Function() _artworkBlocked;
+
+  /// 封面 URL 解析（自定义 → 原始 → 默认占位；组合根注入）。
+  final String? Function(SourceTrack track)? _coverUrlResolver;
 
   /// 封面本地化（返回平台可用的本地地址；失败 / 未命中返回 null）。
   final Future<String?> Function(String url) _artworkUriResolver;
@@ -251,6 +258,15 @@ class LocalAudioHandler {
     if (override == _lyricMetadataOverride) return;
     _lyricMetadataOverride = override;
     _sendMetadataOnly();
+  }
+
+  /// 自定义 / 默认封面变化后刷新当前曲目的系统媒体元数据。
+  ///
+  /// 只补发元数据；播放态与动作不受影响（封面 URI 不是播放事件）。
+  void refreshArtwork() {
+    _localArtworkSourceUrl = null;
+    _localArtworkUri = null;
+    _syncFromService(force: true);
   }
 
   /// 只补发当前曲目的元数据（歌词覆盖 / 封面本地化完成）。
@@ -421,7 +437,7 @@ class LocalAudioHandler {
     // 收藏态只影响动作（空心 / 实心图标），不进元数据 / 播放状态重建。
     final favorite = track == null ? _favorite : _readModel.isFavorite(track);
     final favoriteChanged = favorite != _lastFavorite;
-    final artworkUrl = track?.coverUrl;
+    final artworkUrl = _coverUrlOf(track);
     final artworkChanged = artworkUrl != _lastArtworkUrl;
     // 播放器解析出真实时长后补发一次元数据（通知进度条的时长来源）。
     final durationChanged =
@@ -581,7 +597,11 @@ class LocalAudioHandler {
 
   String? _artworkUriFor(SourceTrack track) {
     if (_artworkBlocked()) return null;
-    final coverUrl = track.coverUrl;
+    final coverUrl = _coverUrlOf(track);
+    if (coverUrl == null || coverUrl.isEmpty) return null;
+    // 本地文件（自定义封面 / 下载封面）：Windows 的 WinRT 实现只认裸路径。
+    final localUri = _localFileUriFor(coverUrl);
+    if (localUri != null) return localUri;
     final parsed = parseArtUri(coverUrl);
     if (parsed == null) return null;
     if (_localArtworkSourceUrl == coverUrl && _localArtworkUri != null) {
@@ -590,13 +610,28 @@ class LocalAudioHandler {
     return parsed.toString();
   }
 
+  /// 本地封面地址 → 平台可用地址（file URI / Windows 裸路径）；非本地返回 null。
+  String? _localFileUriFor(String url) {
+    final parsed = Uri.tryParse(url);
+    if (parsed != null && parsed.scheme == 'file') {
+      return mediaArtworkUriForPath(parsed.toFilePath()) ?? parsed.toString();
+    }
+    // 裸路径（Windows `C:\...` 或 Unix `/...`）：Uri.parse 要么给单字母
+    // scheme，要么没有 scheme，都不能直接交给系统媒体会话。
+    final windowsPath = RegExp(r'^[a-zA-Z]:[\\/]').hasMatch(url);
+    if (windowsPath || url.startsWith('/')) {
+      return mediaArtworkUriForPath(url);
+    }
+    return null;
+  }
+
   /// 元数据先发远程 URL 兜底，异步落到本地文件后补发一次。
   ///
   /// 只有网络封面需要本地化：`data:` / 已是 `file:` 的地址原样使用；
   /// 省流模式直接跳过（媒体元数据不带封面）。
   void _maybeResolveArtwork(SourceTrack track) {
     if (_artworkBlocked()) return;
-    final coverUrl = track.coverUrl;
+    final coverUrl = _coverUrlOf(track);
     if (coverUrl == null || coverUrl.isEmpty) return;
     final parsed = parseArtUri(coverUrl);
     if (parsed == null) return;
@@ -604,6 +639,11 @@ class LocalAudioHandler {
     if (_localArtworkSourceUrl == coverUrl && _localArtworkUri != null) return;
     if (!_resolvingArtwork.add(coverUrl)) return;
     unawaited(_resolveArtwork(coverUrl));
+  }
+
+  String? _coverUrlOf(SourceTrack? track) {
+    if (track == null) return null;
+    return _coverUrlResolver?.call(track) ?? track.coverUrl;
   }
 
   Future<void> _resolveArtwork(String coverUrl) async {
@@ -614,7 +654,7 @@ class LocalAudioHandler {
       _localArtworkUri = localUri;
       // 解析期间可能已切歌：只刷新仍指向同一封面的当前曲目。
       // 封面 URI 只是元数据，不重建播放态 / 动作（避免多一次无谓 IPC）。
-      if (_readModel.currentTrack?.coverUrl == coverUrl) {
+      if (_coverUrlOf(_readModel.currentTrack) == coverUrl) {
         _sendMetadataOnly();
       }
     } catch (e) {

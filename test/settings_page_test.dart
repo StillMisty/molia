@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -22,6 +24,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/audio_focus_settings.dart';
+import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/haptics.dart';
 import 'package:molia/services/library/library_add_settings.dart';
@@ -39,6 +42,7 @@ import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/card_list_surface.dart';
+import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/settings/settings_section_grid.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 
@@ -1391,6 +1395,47 @@ void main() {
 
     expect(find.text('Root dialog'), findsNothing);
     expect(find.text('App Language'), findsOneWidget);
+  });
+
+  testWidgets('外观：默认封面行带缩略图，设置后立即刷新', (tester) async {
+    final tempDir = Directory.systemTemp.createTempSync(
+      'molia_settings_cover_',
+    );
+    final store = CustomCoverStore(
+      supportDirectory: () async => tempDir,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
+    );
+    await tester.runAsync(store.load);
+    CustomCoverStore.overrideInstance(store);
+    addTearDown(() {
+      CustomCoverStore.overrideInstance(null);
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    await pumpSettingsPage(tester);
+    final row = find.byKey(const Key('settingsDefaultCoverItem'));
+    expect(row, findsOneWidget);
+    expect(find.text('Default cover'), findsOneWidget);
+    expect(
+      find.descendant(of: row, matching: find.byType(MoliaMark)),
+      findsOneWidget,
+      reason: '未设置默认封面时缩略图是 Molia 标志',
+    );
+
+    final source = image.Image(width: 2, height: 2);
+    await tester.runAsync(
+      () => store.setDefaultCover(Uint8List.fromList(image.encodePng(source))),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: row, matching: find.byType(MoliaMark)),
+      findsNothing,
+    );
+
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('coverPickerChooseButton')), findsOneWidget);
+    expect(find.byKey(const Key('coverPickerResetButton')), findsOneWidget);
   });
 
   testWidgets('首屏：歌词分区三条直达入口（能力就绪时全显示并进入子页）', (tester) async {

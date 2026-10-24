@@ -134,6 +134,48 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsFollowArtworkSubtitle => '按当前歌曲封面取色，无封面时用基础配色';
 
   @override
+  String get coverTitle => '歌曲封面';
+
+  @override
+  String get coverFollowSong => '跟随歌曲';
+
+  @override
+  String get coverCustomized => '已自定义';
+
+  @override
+  String get coverChooseImage => '选择图片';
+
+  @override
+  String get coverChangeImage => '更换图片';
+
+  @override
+  String get coverResetSong => '恢复歌曲封面';
+
+  @override
+  String get coverUpdated => '封面已更新';
+
+  @override
+  String get coverUpdateFailed => '封面更新失败，请重试';
+
+  @override
+  String get coverUnreadable => '无法读取这张图片，请换一张';
+
+  @override
+  String get coverDefaultTitle => '默认封面';
+
+  @override
+  String get coverDefaultSubtitle => '歌曲没有封面时显示';
+
+  @override
+  String get coverResetDefault => '恢复 Molia 标志';
+
+  @override
+  String get coverDefaultUpdated => '默认封面已更新';
+
+  @override
+  String get coverLabel => '封面';
+
+  @override
   String get settingsAppFont => '应用字体';
 
   @override

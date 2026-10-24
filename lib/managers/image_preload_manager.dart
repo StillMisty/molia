@@ -210,10 +210,17 @@ class _PreloadTask {
 
 /// 专辑封面预加载策略
 class AlbumArtPreloadStrategy {
+  AlbumArtPreloadStrategy({this.coverUrlResolver});
+
   final ImagePreloadManager _manager = ImagePreloadManager();
+
+  /// 封面 URL 解析（自定义封面优先）；null = 只用曲目自带 artwork。
+  final String? Function(Track? track)? coverUrlResolver;
 
   /// 从领域曲目提取封面 URL（无封面返回 null）。
   String? albumArtOf(Track? track) {
+    final resolved = coverUrlResolver?.call(track);
+    if (resolved != null && resolved.isNotEmpty) return resolved;
     final artwork = track?.artwork;
     if (artwork == null) return null;
     final url = artwork.uri.toString();

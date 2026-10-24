@@ -27,6 +27,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/app_branding_service.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
@@ -76,24 +77,32 @@ class NowPlayingCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final coverUrl =
-        context.select<PlaybackProvider, String?>(nowPlayingCoverUrl);
-    return AnimatedOpacity(
-      // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
-      duration: hidden ? _hideDuration : Duration.zero,
-      opacity: hidden ? 0 : 1,
-      child: CoverCard(
-        key: flightKey,
-        size: size,
-        appearance: appearance,
-        content: (context, clip, iconSize) => AppNetworkImage(
-          url: coverUrl,
-          borderRadius: clip,
-          // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
-          fallbackIconSize: iconSize,
-          // 与播放页 / 迷你条 / 预取共用同一个有界解码键：命中同一张已解码
-          // 图，不在 40dp 顶栏里留一张原图。
-          memCacheWidth: playbackCoverDecodeEdge(context),
+    final covers =
+        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+    final track = context.select<PlaybackProvider, Track?>(
+      (provider) => provider.snapshot.current,
+    );
+    return ValueListenableBuilder<int>(
+      valueListenable: covers.revision,
+      builder: (context, _, __) => AnimatedOpacity(
+        // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
+        duration: hidden ? _hideDuration : Duration.zero,
+        opacity: hidden ? 0 : 1,
+        child: CoverCard(
+          key: flightKey,
+          size: size,
+          appearance: appearance,
+          content: (context, clip, iconSize) => AppNetworkImage(
+            url: artworkUrlOf(track),
+            borderRadius: clip,
+            // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
+            fallbackIconSize: iconSize,
+            // 无封面 / 远端失败时先显示设置里的默认封面（Molia 标志兜底）。
+            fallbackUrl: covers.defaultCoverUrl,
+            // 与播放页 / 迷你条 / 预取共用同一个有界解码键：命中同一张已解码
+            // 图，不在 40dp 顶栏里留一张原图。
+            memCacheWidth: playbackCoverDecodeEdge(context),
+          ),
         ),
       ),
     );

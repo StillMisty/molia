@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 // 测试直接用 flutter_cache_manager 的内存实现（传递依赖，不触网）。
 // ignore: depend_on_referenced_packages
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
 import '../support/memory_cache_storage.dart';
@@ -67,6 +69,17 @@ Widget _host(Widget child) => MaterialApp(
       home: Scaffold(body: Center(child: child)),
     );
 
+File _localPng() {
+  final dir = Directory.systemTemp.createTempSync('molia_network_image_');
+  addTearDown(() {
+    if (dir.existsSync()) dir.deleteSync(recursive: true);
+  });
+  final bytes = image.encodePng(image.Image(width: 4, height: 4));
+  final file = File('${dir.path}/cover.png');
+  file.writeAsBytesSync(bytes);
+  return file;
+}
+
 void main() {
   testWidgets('url 为空：直接显示 Molia 标志回退，不创建网络加载', (tester) async {
     await tester.pumpWidget(_host(const AppNetworkImage(
@@ -78,6 +91,67 @@ void main() {
 
     expect(find.byType(MoliaMark), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('url 为空：有 fallbackUrl 时先显示默认封面', (tester) async {
+    final file = _localPng();
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: null,
+          width: 40,
+          height: 40,
+          fallbackUrl: file.uri.toString(),
+          fallbackIconSize: 20,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(MoliaMark), findsNothing);
+  });
+
+  testWidgets('主图加载失败：先落 fallbackUrl，再失败才回退 Molia', (tester) async {
+    final file = _localPng();
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/failing-fallback.jpg',
+          width: 40,
+          height: 40,
+          fallbackUrl: file.uri.toString(),
+          fallbackIconSize: 20,
+          artworkCache: _cacheWith(_FailingCacheManager()),
+        ),
+      ),
+    );
+    for (var i = 0; i < 20 && find.byType(Image).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.byType(Image), findsOneWidget);
+    expect(find.byType(MoliaMark), findsNothing);
+  });
+
+  testWidgets('fallbackUrl 也失败：回到 Molia，不递归', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/failing-fallback-2.jpg',
+          width: 40,
+          height: 40,
+          fallbackUrl: 'https://p1.music.126.net/fallback-also-fails.jpg',
+          fallbackIconSize: 20,
+          artworkCache: _cacheWith(_FailingCacheManager()),
+        ),
+      ),
+    );
+    for (var i = 0; i < 20 && find.byType(MoliaMark).evaluate().isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    expect(find.byType(MoliaMark), findsOneWidget);
   });
 
   testWidgets('加载中：显示占位（不触网）', (tester) async {

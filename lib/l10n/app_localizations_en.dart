@@ -137,6 +137,48 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pick colors from the current song’s artwork; base colors when there is none';
 
   @override
+  String get coverTitle => 'Song cover';
+
+  @override
+  String get coverFollowSong => 'Use song artwork';
+
+  @override
+  String get coverCustomized => 'Customized';
+
+  @override
+  String get coverChooseImage => 'Choose image';
+
+  @override
+  String get coverChangeImage => 'Change image';
+
+  @override
+  String get coverResetSong => 'Restore song artwork';
+
+  @override
+  String get coverUpdated => 'Cover updated';
+
+  @override
+  String get coverUpdateFailed => 'Couldn’t update the cover. Try again';
+
+  @override
+  String get coverUnreadable => 'Couldn’t read this image. Choose another';
+
+  @override
+  String get coverDefaultTitle => 'Default cover';
+
+  @override
+  String get coverDefaultSubtitle => 'Shown when a song has no artwork';
+
+  @override
+  String get coverResetDefault => 'Restore the Molia mark';
+
+  @override
+  String get coverDefaultUpdated => 'Default cover updated';
+
+  @override
+  String get coverLabel => 'Cover';
+
+  @override
   String get settingsAppFont => 'App font';
 
   @override

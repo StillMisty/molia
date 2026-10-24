@@ -185,6 +185,19 @@
   （`SourceManager.fetchPic`：脚本 `pic` action → 内置原生取图；省流模式不发请求）
   取图，经 `PlaybackFacade.updateTrackArtwork` 原地回写队列曲目（新 `Track` 触发
   封面堆叠换图淡化、主题取色与系统媒体通知封面更新）。
+- **自定义封面（custom covers）**：`lib/services/covers/custom_cover_store.dart` 是
+  每曲封面与全局默认封面的唯一存储（设备本地，不登记设置键、不参与同步）。
+  文件写应用支持目录 `custom_covers/`（与封面缓存隔离，清缓存不丢失），每次
+  替换都换新文件名（避免 ImageCache / 取色 LRU 命中旧图）；索引（路径 + 哈希 +
+  更新时间）在 SharedPreferences，启动只读索引并剔除丢失文件。选图经
+  `lib/services/covers/cover_image_codec.dart` 解码、烘焙 EXIF 方向、最长边
+  1024px、JPEG 85 后落盘。曲目键 = `sourceKey:songId`；`local` 下载副本剥掉
+  一层 `local:` 前缀（下载前设置的封面继续作用于本地副本），本地导入保持
+  `local:<path>` 记录键。`artworkUrlOf` / 歌曲信息页 / 顶部与迷你播放器 /
+  列表行 / 歌词选择与海报 / 系统媒体 / 桌面小组件都先查它；`revision` 通知
+  可见行与当前播放立即换图，换源写回（手动 + 自动）把封面复制到新曲目键。
+  全局默认封面只兜底「歌曲没有封面 / 远端加载失败」的展示，不参与取色、
+  下载与标签嵌入；`ArtworkPaletteService` 只消费真实 / 自定义封面。
 - **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
   唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
   失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`

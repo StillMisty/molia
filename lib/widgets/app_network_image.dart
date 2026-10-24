@@ -29,6 +29,7 @@ class AppNetworkImage extends StatelessWidget {
     this.memCacheHeight,
     this.placeholder,
     this.errorWidget,
+    this.fallbackUrl,
     this.fallbackIconSize,
     this.fallbackColor,
     this.artworkCache,
@@ -51,6 +52,12 @@ class AppNetworkImage extends StatelessWidget {
   /// 加载失败回退（默认 Molia 标志）。
   final Widget? errorWidget;
 
+  /// 主图缺失 / 加载失败时先尝试的回退图（如全局默认封面）。
+  ///
+  /// 只有主图不可用才展示；回退图自身失败仍回退 [errorWidget] / Molia
+  /// 标志，且不会再递归尝试 [fallbackUrl]。
+  final String? fallbackUrl;
+
   final double? fallbackIconSize;
   final Color? fallbackColor;
 
@@ -63,34 +70,46 @@ class AppNetworkImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageUrl = url;
+    final fallback = fallbackUrl;
     final radius = borderRadius;
     Widget wrap(Widget child) =>
         radius == null ? child : ClipRRect(borderRadius: radius, child: child);
 
+    // 主图缺失：先显示回退图（全局默认封面），没有回退图才用 Molia 标志。
     if (imageUrl == null || imageUrl.isEmpty) {
+      if (fallback != null && fallback.isNotEmpty) {
+        return wrap(_buildFor(context, fallback, isFallback: true));
+      }
       return wrap(_fallback(context));
     }
 
-    // 本地文件（下载封面）：FileImage 直读，不经过网络缓存与省流网关。
+    return wrap(_buildFor(context, imageUrl, isFallback: false));
+  }
+
+  Widget _buildFor(
+    BuildContext context,
+    String imageUrl, {
+    required bool isFallback,
+  }) {
+    // 本地文件（下载封面 / 自定义封面）：FileImage 直读，不经过网络缓存与
+    // 省流网关。
     final localProvider = localFileImageProvider(imageUrl);
     if (localProvider != null) {
-      return wrap(
-        Image(
-          // FileImage 自身不认 memCacheWidth；不包 ResizeImage 时列表里的
-          // 下载封面会按原图解码（1k 封面 = 数 MB），与远端缩略图路径不一致。
-          image: ResizeImage.resizeIfNeeded(
-            memCacheWidth,
-            memCacheHeight,
-            localProvider,
-          ),
-          width: width,
-          height: height,
-          fit: fit,
-          errorBuilder: (_, error, ___) {
-            _notifyError(error);
-            return errorWidget ?? _fallback(context);
-          },
+      return Image(
+        // FileImage 自身不认 memCacheWidth；不包 ResizeImage 时列表里的
+        // 下载封面会按原图解码（1k 封面 = 数 MB），与远端缩略图路径不一致。
+        image: ResizeImage.resizeIfNeeded(
+          memCacheWidth,
+          memCacheHeight,
+          localProvider,
         ),
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (_, error, ___) {
+          if (!isFallback) _notifyError(error);
+          return _errorFallback(context, isFallback: isFallback);
+        },
       );
     }
 
@@ -100,27 +119,31 @@ class AppNetworkImage extends StatelessWidget {
     // 占位；切歌动画会逐帧重建封面，导致整个动画期间显示深色占位（「切歌黑图」）。
     final manager = cache.managerSync;
     if (manager != null) {
-      return wrap(_buildImage(context, imageUrl, manager));
+      return _buildImage(context, imageUrl, manager, isFallback: isFallback);
     }
-    return wrap(
-      FutureBuilder<CacheManager?>(
-        // future 由 ArtworkCache 缓存、身份稳定，仅启动早期处于 waiting。
-        future: cache.managerOrNull(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return placeholder ?? _placeholder(context);
-          }
-          return _buildImage(context, imageUrl, snapshot.data);
-        },
-      ),
+    return FutureBuilder<CacheManager?>(
+      // future 由 ArtworkCache 缓存、身份稳定，仅启动早期处于 waiting。
+      future: cache.managerOrNull(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return placeholder ?? _placeholder(context);
+        }
+        return _buildImage(
+          context,
+          imageUrl,
+          snapshot.data,
+          isFallback: isFallback,
+        );
+      },
     );
   }
 
   Widget _buildImage(
     BuildContext context,
     String imageUrl,
-    CacheManager? manager,
-  ) {
+    CacheManager? manager, {
+    required bool isFallback,
+  }) {
     // 调用方没显式给尺寸时按布局宽度 / DPR 兜底：96px 的详情页头像、评论区
     // 头像不应该按 1k 原图解码。显式值优先（列表缩略图已按 44/56 传）。
     final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
@@ -143,10 +166,23 @@ class AppNetworkImage extends StatelessWidget {
       memCacheHeight: cacheHeight,
       placeholder: (_, __) => placeholder ?? _placeholder(context),
       errorWidget: (_, __, error) {
-        _notifyError(error);
-        return errorWidget ?? _fallback(context);
+        if (!isFallback) _notifyError(error);
+        return _errorFallback(context, isFallback: isFallback);
       },
     );
+  }
+
+  /// 主图失败时的回退：优先调用方给的 [errorWidget]，否则尝试 [fallbackUrl]，
+  /// 最后才是 Molia 标志。回退图失败不会再递归（[isFallback] 守卫）。
+  Widget _errorFallback(BuildContext context, {required bool isFallback}) {
+    final custom = errorWidget;
+    if (custom != null) return custom;
+    final fallback = fallbackUrl;
+    if (!isFallback && fallback != null && fallback.isNotEmpty) {
+      // 外层已经做过圆角裁剪，这里不再重复 ClipRRect。
+      return _buildFor(context, fallback, isFallback: true);
+    }
+    return _fallback(context);
   }
 
   /// 帧后回调，避免 errorWidget 构建期间触发调用方 setState。
