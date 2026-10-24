@@ -247,8 +247,7 @@ class SourceManager extends ChangeNotifier {
   /// 音源能力：与路由的实际 gating 一致（registry / 领域适配器共用）。
   ///
   /// - builtin：原生取链平台（bili）或已有可取链脚本才可搜索 / 播放；
-  ///   歌词/封面为 Dart 原生实现（`nativeLyrics` 表达歌词是否已接入，
-  ///   未接入的平台不能向 UI 宣称可用）；
+  ///   歌词/封面为 Dart 原生实现；
   /// - lx：按脚本声明的 action；
   /// - any-listen：已配置且启用时全部可用。
   SourceCapabilities capabilitiesFor(String key) {
@@ -274,8 +273,7 @@ class SourceManager extends ChangeNotifier {
       pagination: builtinSearchable || (decl?.canSearch ?? false),
       // 原生取链与脚本取链是并列的两条路：任一存在即可播放。
       resolveUrl: (platform?.resolve != null) || (decl?.canResolveUrl ?? false),
-      lyrics:
-          (platform?.nativeLyrics ?? false) || (decl?.canFetchLyric ?? false),
+      lyrics: builtin || (decl?.canFetchLyric ?? false),
       artwork: builtin || (decl?.canFetchPic ?? false),
       comment: platform?.comments != null,
       // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。

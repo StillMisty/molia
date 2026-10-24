@@ -41,7 +41,7 @@ void main() {
     expect(BuiltinPlatforms.isSupported('any_listen'), isFalse);
 
     // 既有 facade 的别名必须指向同一份注册表，而不是各自复制键表。
-    // 发现页与歌手页都包含 bili（Phase 4 接入）。
+    // 发现页与歌手页都包含 bili。
     expect(BuiltinSearch.platforms.keys, expectedKeys);
     expect(BuiltinDiscover.sourceKeys, expectedKeys);
     expect(BuiltinDiscover.sources.keys, expectedKeys);
@@ -63,10 +63,8 @@ void main() {
     expect(BuiltinPlatforms.discoverFor('bili'), isNotNull);
     expect(BuiltinPlatforms.albumFor('bili'), isNull);
     expect(BuiltinPlatforms.lyricSearchFor('bili'), isNull);
-    expect(BuiltinPlatforms.maybeOf('bili')!.nativeLyrics, isTrue);
     for (final key in musicKeys) {
       expect(BuiltinPlatforms.resolveFor(key), isNull, reason: key);
-      expect(BuiltinPlatforms.maybeOf(key)!.nativeLyrics, isTrue, reason: key);
     }
 
     for (final key in expectedKeys) {

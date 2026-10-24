@@ -148,9 +148,6 @@ class BuiltinPlatform {
   final BuiltinArtistAdapter? artist;
   final DiscoverSource? discover;
 
-  /// 是否由 Dart 原生实现歌词（五个音乐平台与 B 站 CC 字幕均为 true）。
-  final bool nativeLyrics;
-
   const BuiltinPlatform({
     required this.key,
     required this.displayName,
@@ -161,7 +158,6 @@ class BuiltinPlatform {
     this.album,
     this.artist,
     this.discover,
-    this.nativeLyrics = true,
   });
 }
 

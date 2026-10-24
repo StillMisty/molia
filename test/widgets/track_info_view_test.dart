@@ -193,6 +193,7 @@ Track _track({
         AudioQuality(type: 'flac'),
       ],
       payload: {'id': 'a', if (albumId != null) 'albumId': albumId},
+      platformAlbumId: albumId,
     );
 
 void main() {

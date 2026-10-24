@@ -99,7 +99,7 @@ void main() {
     expect(bili.pagination, isTrue);
     expect(bili.resolveUrl, isTrue);
     expect(bili.artwork, isTrue);
-    expect(bili.lyrics, isTrue, reason: 'CC 字幕歌词 Phase 3 已接入');
+    expect(bili.lyrics, isTrue, reason: 'CC 字幕歌词已接入');
     expect(bili.comment, isTrue);
     expect(bili.collection, isFalse);
     expect(bili.artist, isTrue);

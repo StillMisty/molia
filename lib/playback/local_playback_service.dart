@@ -66,11 +66,11 @@ class _AlwaysPlayWithOtherApps implements ValueListenable<bool> {
 const ValueListenable<bool> _alwaysPlayWithOtherApps =
     _AlwaysPlayWithOtherApps();
 
-/// 将音源曲目解析为可播放流的回调（由 SourceManager 提供）。
+/// 将音源曲目解析为可播放流的回调（由播放组合根提供）。
 ///
 /// 返回 [PlayableStream] 而不是 URL：B 站等平台的直链需要 `Referer` / `UA`，
 /// 请求头要透传到播放器、边播边缓存与后台缓存写入。
-typedef SourceUrlResolver = Future<PlayableStream> Function(
+typedef SourceStreamResolver = Future<PlayableStream> Function(
   SourceTrack track, {
   String? quality,
 });
@@ -80,7 +80,7 @@ typedef SourceUrlResolver = Future<PlayableStream> Function(
 /// 对外输出 `SourceTrack` 曲目结构，现有 NowPlaying / 队列 / 歌词等界面
 /// 无需感知播放后端差异。
 class LocalPlaybackService extends ChangeNotifier {
-  final SourceUrlResolver _resolver;
+  final SourceStreamResolver _resolver;
   final AudioPlayer _player;
 
   /// 播放器是否已在退出收尾里释放。
@@ -221,7 +221,7 @@ class LocalPlaybackService extends ChangeNotifier {
   bool _stopAfterCurrentTrack = false;
 
   LocalPlaybackService({
-    required SourceUrlResolver resolver,
+    required SourceStreamResolver resolver,
     CacheService? cacheService,
     String Function()? preferredQuality,
     math.Random? random,

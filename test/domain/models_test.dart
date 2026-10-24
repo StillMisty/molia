@@ -85,8 +85,7 @@ void main() {
       expect(a, isNot(c));
     });
 
-    test('artistLabel：`, ` 连接、过滤空名、全空为空串（唯一展示 / 持久化词表）',
-        () {
+    test('artistLabel：`, ` 连接、过滤空名、全空为空串（唯一展示 / 持久化词表）', () {
       const multi = Track(
         id: TrackId('kw', '1'),
         title: 'Title',
@@ -216,7 +215,8 @@ void main() {
       const b = SourceFailure(kind: FailureKind.network, message: 'm');
       expect(a, b);
       expect(a.hashCode, b.hashCode);
-      expect(a, isNot(const SourceFailure(kind: FailureKind.timeout, message: 'm')));
+      expect(a,
+          isNot(const SourceFailure(kind: FailureKind.timeout, message: 'm')));
     });
   });
 
@@ -297,6 +297,28 @@ void main() {
       expect(track.id.uri, 'lx:T-A');
       expect(sourceTrackFromTrack(track).coverUrl, isNull);
     });
+  });
+
+  test('平台页面地址在映射层派生：bili bvid / av aid，UI 不读 payload', () {
+    final bili = trackFromSourceTrack(const SourceTrack(
+      sourceKey: 'bili',
+      origin: 'builtin',
+      title: '晴天',
+      artist: '周杰伦',
+      album: '',
+      raw: {'bvid': 'BV1xx', 'aid': 9},
+    ));
+    expect(bili.platformPageUrl, 'https://www.bilibili.com/video/BV1xx');
+
+    final fallback = trackFromSourceTrack(const SourceTrack(
+      sourceKey: 'bili',
+      origin: 'builtin',
+      title: '晴天',
+      artist: '周杰伦',
+      album: '',
+      raw: {'aid': 9},
+    ));
+    expect(fallback.platformPageUrl, 'https://www.bilibili.com/video/av9');
   });
 
   group('Playback / Catalog / Source 模型', () {

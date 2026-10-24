@@ -204,32 +204,26 @@ class _TrackInfoViewState extends State<TrackInfoView> {
       (provider) => (provider.snapshot.current, provider.currentQualityType),
     );
     final commentsSupported = context.select<CommentsProvider?, bool>(
-      (provider) => track == null ? false : (provider?.supports(track) ?? false),
+      (provider) =>
+          track == null ? false : (provider?.supports(track) ?? false),
     );
-    // 专辑行：payload 有专辑 id 且渠道能力位为真时可点（否则保持只读信息行）。
+    // 专辑行：映射层派生了专辑 id 且渠道能力位为真时可点（否则保持只读信息行）。
     final sourceRegistry = context.watch<SourceRegistry?>();
     final albumSupported = track != null &&
-        platformAlbumId(track) != null &&
-        (sourceRegistry
-                ?.byKey(track.id.sourceKey)
-                ?.capabilities
-                .collection ??
+        track.platformAlbumId != null &&
+        (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.collection ??
             false);
     // 歌手行：能力位为真且能定位歌手时可点——优先 raw 歌手 id，历史数据
     // （无 id）按歌手名回退解析（见 track_actions.openTrackArtist）。
     final artistNames = track?.artistLabel ?? '';
     final artistSupported = track != null &&
         trackHasArtistEntry(track) &&
-        (sourceRegistry
-                ?.byKey(track.id.sourceKey)
-                ?.capabilities
-                .artist ??
+        (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.artist ??
             false);
     final lyricsProviderName = context.select<LyricsProvider, String?>(
-      (provider) =>
-          track != null && provider.state.trackId == track.id.uri
-              ? provider.state.providerName
-              : null,
+      (provider) => track != null && provider.state.trackId == track.id.uri
+          ? provider.state.providerName
+          : null,
     );
 
     return Scrollbar(
@@ -257,7 +251,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                       ? l10n.trackActionCommentsSubtitle
                       : l10n.commentsUnsupported,
                   onTap: commentsSupported
-                      ? () => unawaited(openTrackComments(context, track: track))
+                      ? () =>
+                          unawaited(openTrackComments(context, track: track))
                       : null,
                 ),
               // 定时关闭：与曲目无关的播放控制（队列播完后仍可取消）。
@@ -341,8 +336,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                           title: l10n.trackInfoArtist,
                           subtitle:
                               '$artistNames · ${l10n.trackInfoArtistOpen}',
-                          onTap: () => unawaited(
-                              openTrackArtist(context, track: track)),
+                          onTap: () =>
+                              unawaited(openTrackArtist(context, track: track)),
                         )
                       : SettingsInfoTile(
                           icon: Icons.person_rounded,
@@ -438,8 +433,6 @@ class _TrackInfoViewState extends State<TrackInfoView> {
               : '${sourceQualityLabel(l10n, quality.type)}'
                   ' (${quality.size})',
     ];
-    return labels.isEmpty
-        ? l10n.trackInfoQualityUnknown
-        : labels.join(' · ');
+    return labels.isEmpty ? l10n.trackInfoQualityUnknown : labels.join(' · ');
   }
 }

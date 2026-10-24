@@ -111,6 +111,13 @@ class Track {
   /// 必须原样回传，UI 禁读。
   final Map<String, Object?> payload;
 
+  /// 平台网页地址（分享 / 打开用）；由 `track_mapper` 在 data 层从 payload
+  /// 派生，UI 只读这个字段，不直接读取 payload。脚本源 / 本地曲目为 null。
+  final String? platformPageUrl;
+
+  /// 平台内专辑 id（专辑页入口用）；同样由 `track_mapper` 派生。
+  final String? platformAlbumId;
+
   const Track({
     required this.id,
     required this.title,
@@ -121,6 +128,8 @@ class Track {
     required this.origin,
     this.qualities = const [],
     this.payload = const {},
+    this.platformPageUrl,
+    this.platformAlbumId,
   });
 
   /// 歌手标签：多歌手按 `, ` 连接的**唯一展示 / 持久化词表**（过滤空名，
@@ -150,6 +159,8 @@ class Track {
     TrackOrigin? origin,
     List<AudioQuality>? qualities,
     Map<String, Object?>? payload,
+    String? platformPageUrl,
+    String? platformAlbumId,
   }) {
     return Track(
       id: id ?? this.id,
@@ -161,6 +172,8 @@ class Track {
       origin: origin ?? this.origin,
       qualities: qualities ?? this.qualities,
       payload: payload ?? this.payload,
+      platformPageUrl: platformPageUrl ?? this.platformPageUrl,
+      platformAlbumId: platformAlbumId ?? this.platformAlbumId,
     );
   }
 
@@ -175,7 +188,9 @@ class Track {
       other.artwork == artwork &&
       other.origin == origin &&
       deepEquals(other.qualities, qualities) &&
-      deepEquals(other.payload, payload);
+      deepEquals(other.payload, payload) &&
+      other.platformPageUrl == platformPageUrl &&
+      other.platformAlbumId == platformAlbumId;
 
   @override
   int get hashCode => Object.hash(
@@ -188,6 +203,8 @@ class Track {
         origin,
         deepHash(qualities),
         deepHash(payload),
+        platformPageUrl,
+        platformAlbumId,
       );
 
   @override

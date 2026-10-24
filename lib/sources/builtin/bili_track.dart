@@ -2,7 +2,7 @@
 ///
 /// 各入口的字段名并不一致（搜索用 `author/mid`，收藏夹用 `upper.mid`，
 /// 榜单用 `aid/cid`），但曲目标题、封面、时长与 raw 约定必须一致；映射只写
-/// 这一份，后续阶段新增入口只需挑字段传进来。
+/// 这一份，后续新增入口只需挑字段传进来。
 library;
 
 import 'package:molia/utils/html_unescape/html_unescape.dart';
@@ -73,11 +73,8 @@ Duration? biliDuration(Object? raw) {
   return total > 0 ? Duration(seconds: total) : null;
 }
 
-/// 搜索条目 → 曲目（`data.result[]`）。
-SourceTrack? biliTrackFromSearchItem(dynamic item) {
-  if (item is! Map) return null;
-  return biliTrackFromItem(item);
-}
+/// 原始 id / 文本字段归一：去首尾空白，null 视为空串。
+String biliRawText(Object? value) => value?.toString().trim() ?? '';
 
 /// 通用条目 → 曲目。
 ///

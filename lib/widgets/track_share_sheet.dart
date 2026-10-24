@@ -25,7 +25,6 @@ import '../services/download/download_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
-import 'track_actions.dart';
 
 /// 打开来源行弹层（歌曲信息页「来源」行唯一入口）。
 Future<void> showTrackShareSheet(
@@ -49,7 +48,7 @@ class _TrackShareSheet extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final notifications = context.read<NotificationService?>();
     final downloads = context.read<DownloadService?>();
-    final pageUrl = platformTrackPageUrl(track);
+    final pageUrl = track.platformPageUrl;
     final record = downloads?.recordForTrack(track);
     final trackIdLabel =
         track.id.uri.isEmpty ? l10n.trackInfoSourceUnknownId : track.id.uri;
@@ -116,7 +115,8 @@ class _TrackShareSheet extends StatelessWidget {
           ),
           M3EListItem(
             leading: const Icon(Icons.ios_share_rounded),
-            headline: record != null ? l10n.shareTrackFile : l10n.downloadAndShare,
+            headline:
+                record != null ? l10n.shareTrackFile : l10n.downloadAndShare,
             onTap: () {
               Navigator.of(context).pop();
               unawaited(

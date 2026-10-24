@@ -88,7 +88,7 @@ class BiliArtist {
     if (rawList is List) {
       for (final raw in rawList) {
         if (raw is! Map) continue;
-        final id = _textOf(raw['mid']);
+        final id = biliRawText(raw['mid']);
         final name = biliText(raw['uname']);
         if (id.isEmpty || name.isEmpty) continue;
         items.add(ArtistSummary(
@@ -145,12 +145,11 @@ class BiliArtist {
   ) async {
     SourceFailure? failure;
     try {
-      final session = await BiliApi.session();
       final uri = Uri.parse('${BiliApi.baseUrl}/x/web-interface/card')
           .replace(queryParameters: {'mid': mid});
       final response = await BuiltinSearch.transport.getJson(
         uri.toString(),
-        headers: session.apiHeaders,
+        headers: BiliApi.anonymousHeaders,
       );
       final card = _mapOf(response);
       if (card != null && BiliApi.codeOf(response) == 0) {
@@ -284,7 +283,7 @@ class BiliArtist {
       final tracks = <Track>[];
       for (final item in result) {
         if (item is! Map) continue;
-        final itemMid = _textOf(item['mid']);
+        final itemMid = biliRawText(item['mid']);
         // 老条目可能没有 mid：同名作者是唯一可用的身份线索。
         final matches = itemMid.isNotEmpty
             ? itemMid == mid
@@ -294,9 +293,11 @@ class BiliArtist {
         if (track != null) tracks.add(trackFromSourceTrack(track));
       }
       final pages = parseSourceCount(data?['numPages']);
+      // 本页命中的视频可能都不属于该 UP（搜索按相关性混入其它作者），
+      // 但只要还有搜索页就允许继续翻，避免第一页恰好 0 命中就提前结束。
       return (
         tracks: tracks,
-        hasMore: tracks.isNotEmpty && pages != null && page < pages,
+        hasMore: pages != null && page < pages,
       );
     } catch (_) {
       // 回退也失败：返回空列表，UP 资料本身仍然可用。
@@ -337,6 +338,4 @@ class BiliArtist {
     final data = response is Map ? response['data'] : null;
     return data is Map ? data : null;
   }
-
-  static String _textOf(Object? value) => value?.toString().trim() ?? '';
 }

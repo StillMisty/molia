@@ -12,6 +12,7 @@ import '../../domain/ports/music_source.dart';
 import '../source_search_result.dart' show parseSourceCount;
 import '../source_track.dart' show pickQualityFor;
 import 'bili_api.dart';
+import 'bili_track.dart' show biliRawText;
 import 'builtin_search.dart';
 
 /// dash.audio[].id → LX 音质标识（B 站匿名只给这三档）。
@@ -128,8 +129,8 @@ class BiliPlay {
   }
 
   static ({String bvid, String aid}) _idsOf(Map<String, dynamic> raw) => (
-        bvid: _textOf(raw['bvid']),
-        aid: _textOf(raw['aid'] ?? raw['avid']),
+        bvid: biliRawText(raw['bvid']),
+        aid: biliRawText(raw['aid'] ?? raw['avid']),
       );
 
   static void _requireIds(String bvid, String aid) {
@@ -236,17 +237,18 @@ class BiliPlay {
   ///
   /// durl（`fnval=1`）文件只有 `url` 字段，和 dash 的 `baseUrl` 不是同一命名。
   static String? _audioUrlOf(Map item) {
-    final base = _textOf(item['baseUrl'] ?? item['base_url'] ?? item['url']);
+    final base =
+        biliRawText(item['baseUrl'] ?? item['base_url'] ?? item['url']);
     if (base.isNotEmpty) return base;
     final backup = item['backupUrl'] ?? item['backup_url'];
     if (backup is List) {
       for (final url in backup) {
-        final text = _textOf(url);
+        final text = biliRawText(url);
         if (text.isNotEmpty) return text;
       }
       return null;
     }
-    final text = _textOf(backup);
+    final text = biliRawText(backup);
     return text.isEmpty ? null : text;
   }
 
@@ -270,8 +272,6 @@ class BiliPlay {
     }
     throw BiliApi.failureForCode(code);
   }
-
-  static String _textOf(Object? value) => value?.toString().trim() ?? '';
 }
 
 class _BiliAudio {

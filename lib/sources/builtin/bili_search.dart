@@ -101,7 +101,7 @@ class BiliSearch {
   static List<SourceTrack> parseItems(List result) {
     final tracks = <SourceTrack>[];
     for (final item in result) {
-      final track = biliTrackFromSearchItem(item);
+      final track = biliTrackFromItem(item);
       if (track != null) tracks.add(track);
     }
     return tracks;

@@ -52,7 +52,7 @@ void main() {
     final track = BiliSearch.parseItems(resultItems()).first;
     final raw = track.raw;
 
-    // 原响应字段一个都不能丢（脚本 / 后续阶段仍读 typename 等）。
+    // 原响应字段一个都不能丢（脚本仍读 typename 等）。
     expect(raw['typename'], '音乐');
     expect(raw['description'], '测试视频');
     expect(raw['pic'], '//i1.hdslb.com/bfs/archive/cover1.jpg');

@@ -32,29 +32,6 @@ Future<void> openTrackComments(
   return showSongCommentsPage(context, track: track);
 }
 
-/// 曲目在原生平台上的专辑 id（payload 原样字段）；无法提取时返回 null。
-///
-/// 仅内置五平台有稳定专辑 id：wy/kg/kw/mg 读 `albumId`，tx 读 `albumMid`
-/// （缺省回退 `albumId`）。与 [platformTrackPageUrl] 同一口径：只读 payload
-/// 的稳定平台字段，不做猜测。
-String? platformAlbumId(Track track) {
-  String payloadString(String key) => track.payload[key]?.toString() ?? '';
-  switch (track.id.sourceKey) {
-    case 'wy':
-    case 'kg':
-    case 'kw':
-    case 'mg':
-      final id = payloadString('albumId');
-      return id.isEmpty ? null : id;
-    case 'tx':
-      final mid = payloadString('albumMid');
-      final id = mid.isEmpty ? payloadString('albumId') : mid;
-      return id.isEmpty ? null : id;
-    default:
-      return null;
-  }
-}
-
 /// 曲目上可点进歌手页的歌手（带平台内 id 的首位）；不可点时返回 null。
 ///
 /// id 来自内置平台解析注入的 raw `_artists` 字段（经 `track_mapper` 填进
@@ -92,7 +69,8 @@ Future<void> openTrackArtist(
   Artist? artist,
 }) {
   final sourceKey = track.id.sourceKey;
-  final id = (artist?.id ?? '').isNotEmpty ? artist!.id! : platformArtistOf(track)?.id;
+  final id =
+      (artist?.id ?? '').isNotEmpty ? artist!.id! : platformArtistOf(track)?.id;
   if (id != null && id.isNotEmpty) {
     final name = (artist?.name ?? '').isNotEmpty
         ? artist!.name
@@ -119,7 +97,7 @@ Future<void> openTrackAlbum(
   required Track track,
   String? fallbackName,
 }) {
-  final albumId = platformAlbumId(track);
+  final albumId = track.platformAlbumId;
   if (albumId == null) return Future.value();
   return showAlbumPage(
     context,
@@ -153,40 +131,4 @@ Future<LyricsSearchSelection?> openTrackSourceSwap(
     lyricsProvider: context.read<LyricsProvider>(),
     initialTab: initialTab,
   );
-}
-
-/// 曲目在原生平台上的网页地址（分享 / 打开用）；无法构造时返回 null。
-///
-/// 仅内置平台（五个音乐平台 + B 站）有稳定的页面形态；LX 脚本 / any-listen /
-/// 本地曲目没有可推导的页面地址（脚本 payload 不保证包含平台 id），返回 null
-/// 由 UI 隐藏对应动作。参数取 payload 原样字段（脚本依赖同一批字段）。
-String? platformTrackPageUrl(Track track) {
-  String payloadString(String key) => track.payload[key]?.toString() ?? '';
-  switch (track.id.sourceKey) {
-    case 'wy':
-      final id = track.id.id;
-      return id.isEmpty ? null : 'https://music.163.com/#/song?id=$id';
-    case 'tx':
-      final mid = payloadString('songmid');
-      return mid.isEmpty ? null : 'https://y.qq.com/n/ryqq/songDetail/$mid';
-    case 'kg':
-      final hash = payloadString('hash');
-      return hash.isEmpty ? null : 'https://www.kugou.com/song/#hash=$hash';
-    case 'kw':
-      final rid =
-          payloadString('songmid').isEmpty ? track.id.id : payloadString('songmid');
-      return rid.isEmpty ? null : 'https://www.kuwo.cn/play_detail/$rid';
-    case 'mg':
-      final copyrightId = payloadString('copyrightId');
-      return copyrightId.isEmpty
-          ? null
-          : 'https://music.migu.cn/v3/music/song/$copyrightId';
-    case 'bili':
-      final bvid = payloadString('bvid');
-      if (bvid.isNotEmpty) return 'https://www.bilibili.com/video/$bvid';
-      final aid = payloadString('aid');
-      return aid.isEmpty ? null : 'https://www.bilibili.com/video/av$aid';
-    default:
-      return null;
-  }
 }

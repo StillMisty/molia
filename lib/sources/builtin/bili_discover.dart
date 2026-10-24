@@ -54,12 +54,11 @@ class BiliDiscoverSource extends DiscoverSource {
   @override
   Future<List<String>> hotSearches() async {
     try {
-      final session = await BiliApi.session();
       final uri = Uri.parse('${BiliApi.baseUrl}/x/web-interface/search/square')
           .replace(queryParameters: {'limit': '10'});
       final response = await BuiltinSearch.transport.getJson(
         uri.toString(),
-        headers: session.apiHeaders,
+        headers: BiliApi.anonymousHeaders,
         retries: BuiltinTransport.defaultRetries,
       );
       final code = BiliApi.codeOf(response);

@@ -92,13 +92,12 @@ class BiliFavorites {
   }
 
   static Future<DiscoverDetail> _fetchAll(String mediaId) async {
-    final session = await BiliApi.session();
     Map? info;
     final tracks = <String, SourceTrack>{};
 
     var pn = 1;
     while (pn <= maxPages && tracks.length < maxItems) {
-      final response = await _fetchPage(session, mediaId, pn);
+      final response = await _fetchPage(mediaId, pn);
       final code = BiliApi.codeOf(response);
       if (code != 0) throw _failureForCode(code);
 
@@ -153,11 +152,7 @@ class BiliFavorites {
     return _detailOf(mediaId, info, tracks.values.toList());
   }
 
-  static Future<dynamic> _fetchPage(
-    BiliSession session,
-    String mediaId,
-    int pn,
-  ) {
+  static Future<dynamic> _fetchPage(String mediaId, int pn) {
     final uri = Uri.parse('${BiliApi.baseUrl}/x/v3/fav/resource/list')
         .replace(queryParameters: {
       'media_id': mediaId,
@@ -169,7 +164,7 @@ class BiliFavorites {
     });
     return BuiltinSearch.transport.getJson(
       uri.toString(),
-      headers: session.apiHeaders,
+      headers: BiliApi.anonymousHeaders,
       retries: BuiltinTransport.defaultRetries,
     );
   }
@@ -187,17 +182,9 @@ class BiliFavorites {
     final title = item['title']?.toString() ?? '';
     if (biliText(title).isEmpty) return null;
 
-    final upper = item['upper'] is Map ? item['upper'] as Map : const {};
-    return biliTrackFromItem(
-      item,
-      title: title,
-      cover: item['cover']?.toString(),
-      author: upper['name']?.toString(),
-      authorMid: upper['mid']?.toString(),
-      duration: item['duration'],
-      aid: item['id'],
-      bvid: bvid,
-    );
+    // 字段映射统一交给 bili_track：收藏夹条目的 title/cover/duration/upper
+    // 与搜索条目同名（id 即 aid），重复传参只会漂移。
+    return biliTrackFromItem(item);
   }
 
   static DiscoverDetail _detailOf(
@@ -275,13 +262,12 @@ class BiliFavorites {
 
   static Future<String?> _firstFolderId(String upMid) async {
     try {
-      final session = await BiliApi.session();
       final uri =
           Uri.parse('${BiliApi.baseUrl}/x/v3/fav/folder/created/list-all')
               .replace(queryParameters: {'up_mid': upMid});
       final response = await BuiltinSearch.transport.getJson(
         uri.toString(),
-        headers: session.apiHeaders,
+        headers: BiliApi.anonymousHeaders,
       );
       if (BiliApi.codeOf(response) != 0) return null;
       final data = response is Map ? response['data'] : null;

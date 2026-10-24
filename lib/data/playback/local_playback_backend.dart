@@ -13,7 +13,7 @@ import '../mapping/track_mapper.dart';
 
 /// 领域解析器端口：把 [Track] 解析为本地可播流。
 ///
-/// composition root（main.dart）注入 `SourceManager.resolveUrl` 的适配实现。
+/// composition root（main.dart）注入 `LocalPlaybackChain.resolveStream` 的适配实现。
 typedef PlaybackStreamResolver = Future<PlayableStream> Function(
   Track track,
   AudioQuality? quality,
@@ -46,7 +46,8 @@ class LocalPlaybackBackend implements PlaybackBackend {
 
   /// `SourceTrack` → `Track` 的身份缓存：队列内同一曲目对象复用同一 Track，
   /// 保证快照 `==` 去重稳定、避免每次通知重建领域对象。
-  final Map<SourceTrack, Track> _trackCache = Map<SourceTrack, Track>.identity();
+  final Map<SourceTrack, Track> _trackCache =
+      Map<SourceTrack, Track>.identity();
 
   /// 队列到领域 [Track] 的映射缓存，按 [LocalPlaybackService.queueRevision]
   /// 失效。
@@ -93,7 +94,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
   /// 只取直链字符串的兼容包装（不需要请求头的旧调用方 / 测试）。
   ///
   /// 播放服务现在直接消费 `PlayableStream`（见 `LocalPlaybackService` 的
-  /// `SourceUrlResolver`），不要把本方法接回播放链路——它会丢掉 headers。
+  /// `SourceStreamResolver`），不要把本方法接回播放链路——它会丢掉 headers。
   Future<String> resolveLegacyUrl(SourceTrack track, {String? quality}) async {
     final stream = await _resolver(
       _toTrack(track),
@@ -106,8 +107,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
   Future<void> load(PlaybackRequest request) async {
     if (request.tracks.isEmpty) return;
     _trackCache.clear();
-    final legacyTracks =
-        [for (final track in request.tracks) sourceTrackFromTrack(track)];
+    final legacyTracks = [
+      for (final track in request.tracks) sourceTrackFromTrack(track)
+    ];
     final index = request.startIndex.clamp(0, legacyTracks.length - 1);
     await _service.playTracks(
       legacyTracks,
@@ -120,8 +122,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   Future<void> enqueueTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
-    final legacyTracks =
-        [for (final track in tracks) sourceTrackFromTrack(track)];
+    final legacyTracks = [
+      for (final track in tracks) sourceTrackFromTrack(track)
+    ];
     await _service.enqueueTracks(legacyTracks);
     _emit();
   }

@@ -33,7 +33,9 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
    取 `buvid3/buvid4`，`/x/web-interface/nav`（code `-101` 也带 `wbi_img`）取
    `img_url/sub_url`，按 64 位混淆表取前 32 位得 mixinKey；请求参数加 `wts`、
    排序、清洗 `!'()*`、URI 编码后 md5 得 `w_rid`。会话 1 小时缓存 + single-flight，
-   风控码 `-403/-412` 刷新会话后重试一次。所有请求统一带浏览器 UA + B 站 Referer。
+   风控码 `-403/-412` 刷新会话后重试一次；搜索失败不细分错误码也刷新重试一次
+   （网络抖动 / 会话失效都可能表现为 failed，多一次请求换可用性）。
+   所有请求统一带浏览器 UA + B 站 Referer。
 3. **原生取链返回 `PlayableStream`，headers 走全路径**：
    `pagelist` 取首个分 P 的 cid（缓存）→ WBI `playurl`（`fnval=16`）→ `dash.audio[]`
    按 `30280/30232/30216` 选 192k/128k/64k，老视频回退 `fnval=1` 的 `durl`。
@@ -52,10 +54,14 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
      该接口**不带 buvid Cookie**（带 Cookie 会退化成 3 条热评 + `is_end=true`）；
    - UP 主页：`card` 资料（失败回退 `space/wbi/acc/info`）+ `space/wbi/arc/search`
      投稿（带 `dm_*` 指纹参数）；`-352` / `v_voucher` 刷新一次仍失败时回退
-     `search_type=video&keyword=<UP名>&order=totalrank` 并按 mid 过滤；空间接口
+     `search_type=video&keyword=<UP名>&order=totalrank` 并按 mid 过滤（spec 原写
+     `pubdate`，实测按发布时间搜 UP 名 0 命中，故改用综合排序）；空间接口
      code 0 但 `vlist` 空、`page.count>0` 同样视为风控走搜索兜底；
    - 发现：单张「B 站音乐榜（三日）」（`ranking?rid=3&day=3`，board id
      `bili__music_3d`，bangid `3:3`）+ 热搜（`search/square?limit=10`）；
+   - 无需 WBI 的接口（评论、字幕、榜单、热搜、收藏夹、UP 资料 card、分 P）只带
+     UA + Referer，不拉 `nav` 会话；评论 / 字幕还刻意不带 buvid Cookie（带 Cookie
+     评论会降级为 3 条热评，字幕无需登录）；
    - 收藏夹导入：`/x/v3/fav/resource/list` 按 `media_count` 拉全（上限 50 页 /
      1000 条），只收 `type==2`、`attr==0`、有 `bvid` 的视频；rawId 支持数字、
      `fid=` / `media_id=`、`medialist/detail/ml<id>`、`space.bilibili.com/.../favlist`

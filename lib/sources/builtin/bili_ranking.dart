@@ -48,7 +48,6 @@ class BiliRanking {
     final key = 'bili:ranking:${parsed.rid}:${parsed.day}';
     try {
       return await BuiltinSearch.transport.cached(key, () async {
-        final session = await BiliApi.session();
         final uri = Uri.parse('${BiliApi.baseUrl}/x/web-interface/ranking')
             .replace(queryParameters: {
           'rid': '${parsed.rid}',
@@ -56,7 +55,7 @@ class BiliRanking {
         });
         final response = await BuiltinSearch.transport.getJson(
           uri.toString(),
-          headers: session.apiHeaders,
+          headers: BiliApi.anonymousHeaders,
           retries: BuiltinTransport.defaultRetries,
         );
         return parseTracks(response);
