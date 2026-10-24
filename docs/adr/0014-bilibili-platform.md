@@ -49,9 +49,10 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
      `from` 秒转 `[mm:ss.mmm]` LRC；无字幕返回 null，继续走其它歌词源；
    - 评论：`/x/v2/reply/main`（`type=1&oid=aid`，热门 `mode=3` / 最新 `mode=2`），
      `pagination_str` 游标按「视频 + tab + 页码」存 `CommentCursorStore`；
+     该接口**不带 buvid Cookie**（带 Cookie 会退化成 3 条热评 + `is_end=true`）；
    - UP 主页：`card` 资料（失败回退 `space/wbi/acc/info`）+ `space/wbi/arc/search`
      投稿（带 `dm_*` 指纹参数）；`-352` / `v_voucher` 刷新一次仍失败时回退
-     `search_type=video&keyword=<UP名>&order=pubdate` 并按 mid 过滤；空间接口
+     `search_type=video&keyword=<UP名>&order=totalrank` 并按 mid 过滤；空间接口
      code 0 但 `vlist` 空、`page.count>0` 同样视为风控走搜索兜底；
    - 发现：单张「B 站音乐榜（三日）」（`ranking?rid=3&day=3`，board id
      `bili__music_3d`，bangid `3:3`）+ 热搜（`search/square?limit=10`）；

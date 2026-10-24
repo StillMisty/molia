@@ -301,7 +301,8 @@
   直接产出领域 `CommentPage`（不经 sources→data 映射层：评论没有脚本回传需求）。
   文本表情还原（wy `[名称]` / tx `[em]eXXXX[/em]`）、IP 归属、点赞、引用
   （wy `beReplied` / kg `pcontent`）与随列表返回的楼中楼（tx / kw / mg）在此归一化。
-  B 站走 `pagination_str` 游标（热门 / 最新各一套），缺 `is_end` 时按下一页游标是否存在
+  B 站走 `pagination_str` 游标（热门 / 最新各一套），且请求不带 buvid Cookie
+  （带 Cookie 会只回 3 条热评并置 `is_end`）；缺 `is_end` 时按下一页游标是否存在
   决定 `hasMore`，避免空游标让分页器死循环。
 - **Comment cursor store（评论游标存储）** — `lib/sources/builtin/comment_utils.dart`：
   游标分页会话状态（wy 最新评论的 `cursor`、mg 最新评论的 `commentId`），

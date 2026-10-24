@@ -260,7 +260,7 @@ void main() {
     expect(fallback.uri.path, '/x/web-interface/wbi/search/type');
     expect(fallback.uri.queryParameters['search_type'], 'video');
     expect(fallback.uri.queryParameters['keyword'], '周杰伦');
-    expect(fallback.uri.queryParameters['order'], 'pubdate');
+    expect(fallback.uri.queryParameters['order'], 'totalrank');
   });
 
   test('空间返回空 vlist 但 count>0：按风控回退视频搜索', () async {

@@ -266,7 +266,9 @@ class BiliArtist {
         {
           'search_type': 'video',
           'keyword': name,
-          'order': 'pubdate',
+          // 不能用 pubdate：按发布时间搜「UP 名」常常一条该 UP 的投稿都不
+          // 返回（实测 0 命中），totalrank 才会把该 UP 的代表作排在前面。
+          'order': 'totalrank',
           'page': page,
         },
       );

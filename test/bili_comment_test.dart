@@ -85,8 +85,14 @@ void main() {
     expect(query.containsKey('pagination_str'), isFalse, reason: '第一页不带游标');
     expect(query.containsKey('limit'), isFalse, reason: '接口固定 20/页');
     expect(adapter.lastRequest.headers['Referer'], 'https://www.bilibili.com/');
+    // 评论接口不能带 buvid Cookie：带 Cookie 时平台只回 3 条热评并置
+    // is_end=true（实测），匿名请求才是完整的 20 条/页。
+    expect(adapter.lastRequest.headers.containsKey('Cookie'), isFalse);
     expect(
-        adapter.lastRequest.headers['Cookie'], contains('buvid3=buvid3-test'));
+      adapter.requests.map((request) => request.uri.path).toSet(),
+      {'/x/v2/reply/main'},
+      reason: '评论接口不需要 WBI / buvid，不应先拉会话',
+    );
 
     expect(page.kind, CommentKind.hot);
     expect(page.page, 1);

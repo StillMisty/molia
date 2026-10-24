@@ -35,6 +35,7 @@ class SourceQuality {
 /// 为准；其余平台没有该字段，顺序对它们无影响。
 const List<String> _rawIdFields = [
   'bvid',
+  'aid',
   'songmid',
   'hash',
   'songId',

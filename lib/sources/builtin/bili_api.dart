@@ -124,6 +124,15 @@ class BiliApi {
     'Referer': referer,
   };
 
+  /// 不依赖 WBI / buvid 的匿名接口请求头（评论、榜单等）。
+  ///
+  /// 评论接口带 buvid Cookie 会返回「3 条热评 + is_end」的降级响应，必须
+  /// 用不带 Cookie 的请求；这类接口也不需要 WBI 会话。
+  static const Map<String, String> anonymousHeaders = {
+    'User-Agent': browserUserAgent,
+    'Referer': referer,
+  };
+
   /// 会话有效期：WBI 密钥约一天轮换，1 小时刷新足够避开跨天失效。
   static const Duration sessionTtl = Duration(hours: 1);
 

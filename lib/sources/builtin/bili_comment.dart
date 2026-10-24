@@ -49,10 +49,12 @@ class BiliComment {
       },
     );
 
-    final session = await BiliApi.session();
+    // 不能带 buvid Cookie：B 站评论接口带 Cookie 时会退回「只给 3 条热评 +
+    // is_end=true」的降级响应，匿名请求反而每页 20 条。该接口也不需要 WBI，
+    // 因此不碰会话接口，避免无谓的 buvid/nav 请求。
     final response = await BuiltinSearch.transport.getJson(
       uri.toString(),
-      headers: session.apiHeaders,
+      headers: BiliApi.anonymousHeaders,
       retries: BuiltinTransport.defaultRetries,
     );
     final code = BiliApi.codeOf(response);
