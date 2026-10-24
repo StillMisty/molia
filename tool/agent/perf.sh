@@ -68,14 +68,10 @@ windows_powershell() { # 传入 PowerShell 命令字符串
 run_frames_linux() {
   require_flutter
   local out_dir="$1"
-  local prefix=()
-  if ! has_display; then
-    command -v xvfb-run >/dev/null 2>&1 || die "缺少 xvfb-run（或用 --window 在真实显示上跑）"
-    prefix=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
-  fi
+  linux_run_prefix
   local out_file="$out_dir/frames.jsonl"
   log "帧场景（Linux / profile）：结果 $out_dir"
-  "${prefix[@]}" timeout --signal=TERM --kill-after=10 "$FRAME_TIMEOUT" \
+  "${LINUX_RUN_PREFIX[@]}" timeout --signal=TERM --kill-after=10 "$FRAME_TIMEOUT" \
     flutter drive \
     --profile \
     --driver="$FRAME_TEST_DRIVER" \
@@ -187,14 +183,16 @@ build_perf_linux() { # out_dir hold_seconds start_delay_seconds
     2>&1 | tee "$out/build.log"
 }
 
+LINUX_RUN_PREFIX=()
 linux_run_prefix() {
+  LINUX_RUN_PREFIX=()
   if has_display; then
     return 0
   fi
   command -v xvfb-run >/dev/null 2>&1 ||
     die "缺少 xvfb-run（--window 可在真实显示上跑）"
   # 只改 DISPLAY 不够：GDK 见到 WAYLAND_DISPLAY 会优先连真实合成器。
-  printf '%s\n' env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a
+  LINUX_RUN_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
 }
 
 run_data_linux() {
@@ -205,9 +203,9 @@ run_data_linux() {
   build_perf_linux "$out" 1 0
   local exe="build/linux/x64/release/bundle/$APP_BINARY"
   [[ -x "$PROJECT_DIR/$exe" ]] || die "找不到 release 产物：$exe"
-  mapfile -t prefix < <(linux_run_prefix)
+  linux_run_prefix
   log "运行数据链路场景（Linux release / Xvfb）"
-  ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${prefix[@]}" \
+  ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${LINUX_RUN_PREFIX[@]}" \
       timeout --signal=TERM --kill-after=5 300 "./$exe" ) \
     >"$out/run.log" 2>&1 || true
   report_data "$out"
@@ -343,9 +341,9 @@ run_cpu_linux() {
   build_perf_linux "$out" 30 12
   local exe="build/linux/x64/release/bundle/$APP_BINARY"
   [[ -x "$PROJECT_DIR/$exe" ]] || die "找不到 release 产物：$exe"
-  mapfile -t prefix < <(linux_run_prefix)
+  linux_run_prefix
   local log="$out/run.log"
-  ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${prefix[@]}" \
+  ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${LINUX_RUN_PREFIX[@]}" \
       timeout --signal=TERM --kill-after=5 180 "./$exe" ) >"$log" 2>&1 &
   local runner=$!
   local deadline=$(( $(date +%s) + 90 ))
