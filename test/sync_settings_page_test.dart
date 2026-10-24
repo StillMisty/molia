@@ -518,6 +518,12 @@ void main() {
     expect(provider.manualPeers, hasLength(1));
   });
 
+  test('contactManualPeer：没有一轮真正跑（同步关闭）时返回 null', () async {
+    expect(provider.enabled, isFalse);
+    expect(await provider.contactManualPeer('192.168.1.23'), isNull);
+    expect(provider.lastReport, isNull, reason: 'null 不冒充任何一轮结论');
+  });
+
   testWidgets('设备地址清单：逐条列出，可更新（保留身份）与删除', (tester) async {
     final clipboard = mockClipboard(tester);
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
@@ -1016,13 +1022,33 @@ void main() {
     expect(find.text('Device B'), findsNothing);
   });
 
-  testWidgets('同步在途时保存设备：不判未连上，提示稍后自动连接', (tester) async {
+  testWidgets('同步在途时保存设备：等补跑轮给出结论，不拿上一轮报告冒充', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    // 先完成一轮，留下历史报告（排队路径拿到的正是这份旧报告）。
+    // 先完成一轮，留下历史报告（旧实现会把这份旧报告当成本轮结果）。
     await provider.syncNow(manual: true);
 
+    var pulls = 0;
     final gate = Completer<void>();
-    transport.onPull = () => gate.future;
+    transport.onPull = () async {
+      pulls++;
+      if (pulls == 1) {
+        // 在途轮：卡住，模拟一轮还没跑完。
+        await gate.future;
+        return;
+      }
+      // 补跑轮：对端应答，地址簿学到身份，本轮算接触成功。
+      await state.learnManualPeer(const ManualPeer(
+        host: '192.168.1.23',
+        deviceId: 'devB',
+        httpPort: 40000,
+      ));
+      transport.available.add(SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 5000,
+        records: const {},
+      ));
+    };
     final inFlight = provider.syncNow(manual: true);
     await pumpPage(tester);
     await openManualConnect(tester);
@@ -1031,14 +1057,20 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    // 本轮被排队、结果未知：不判「没连上」，也不把弹层留在原地。
-    expect(notifications.last, 'Device added — it will connect shortly');
+    // 请求已排队、补跑轮还没跑：等待本轮结论，不判「没连上」也不关弹层。
+    expect(notifications.isEmpty, isTrue);
+    expect(find.text('Connecting…'), findsOneWidget);
     expect(find.textContaining('Not reachable'), findsNothing);
     expect(find.text('Save'), findsNothing);
 
     gate.complete();
     await inFlight;
     await tester.pumpAndSettle();
+
+    // 补跑轮真正接触成功：按该轮报告关闭弹层并提示已添加。
+    expect(notifications.last, 'Device added');
+    expect(find.text('Save'), findsNothing);
+    expect(find.textContaining('Not reachable'), findsNothing);
   });
 
   testWidgets('同步内容子页：类别开关可切、蜂窝暂停在页内，入口副文案跟随', (tester) async {

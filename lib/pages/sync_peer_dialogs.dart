@@ -401,8 +401,8 @@ Future<void> showSyncCandidatesDialog(
 /// 手动连接弹层：手填对端地址（自动发现失败时的兜底路径）。
 ///
 /// [editing] 非空 = 更新这条地址（保留 deviceId 与已学到的端点端口，只改
-/// 「设备在哪」），表单底部多一个「删除该地址」。提交后立即接触：成功 / 排队
-/// 关闭弹层并提示，失败留在弹层里让用户改地址。
+/// 「设备在哪」），表单底部多一个「删除该地址」。提交后立即接触：成功 /
+/// 没有真正跑（null）关闭弹层并提示，本轮没连上留在弹层里让用户改地址。
 Future<void> showSyncManualPeerDialog(
   BuildContext context,
   SyncProvider provider,
@@ -504,8 +504,8 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
     }
     final contacted = await widget.provider.contactManualPeer(host);
     if (!mounted) return;
-    // 接触成功 / 本轮被排队（结果未知）都关闭弹层：地址已入簿，只有失败
-    // 才留在弹层里让用户改地址。重复地址在成功路径也给「已更新」提示。
+    // 接触成功 / 本轮没有真正跑（null = 调度器忙 / 同步关闭）都关闭弹层：
+    // 地址已入簿，只有本轮明确没连上才留在弹层里让用户改地址。
     final message = switch (contacted) {
       null => l10n.syncPeerContactQueued,
       true when editing != null => l10n.syncPeerAddressUpdated,

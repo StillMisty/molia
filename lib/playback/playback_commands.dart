@@ -10,64 +10,112 @@ library;
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 
-/// 命令由哪个阶段处理（调用方据此决定 UI 通知口径）。
+/// 命令真正改变的 UI 领域。
 ///
-/// provider 不再自己分叉恢复 / 真实，而是读这个结果——恢复态两处状态都要刷新
-/// （曲目与队列都可能变），live 只有曲目 / 播放态变化，空操作不必通知。
-enum PlaybackCommandRoute {
-  /// 空操作（无会话 / 越界 / 未命中）：没有状态变化。
-  none,
+/// provider 只按变化域决定通知 / 失效，不再把「命令在哪个阶段处理」翻译成
+/// 通知类别——阶段是协调者的内部事实，调用方只关心结果。
+enum PlaybackDomain {
+  /// 曲目面：当前曲目 / 播放态 / 模式 / 进度（UI 的快照 + position 通道）。
+  track,
 
-  /// 恢复态处理：命令作用于保存的会话，或借此完成恢复装载（交接到 live）。
-  restored,
+  /// 队列面：队列内容 / 下标（恢复态接管时与曲目面一起变化）。
+  queue,
+}
 
-  /// live：命令转发给真实播放。
-  live,
+/// 一条播放命令的落地结果。
+///
+/// [changed] 只包含**真正发生变化**的领域：空操作（越界 / 未命中 / 无会话）
+/// 返回 [none]。provider 据此按类别通知（track 16ms / queue 300ms 节流），
+/// 不需要再理解恢复态与 live 的差别。
+class PlaybackCommandOutcome {
+  const PlaybackCommandOutcome({
+    this.changed = const <PlaybackDomain>{},
+    this.committed = true,
+  });
+
+  /// 空操作：没有状态变化，也没有需要落盘的内容。
+  static const PlaybackCommandOutcome none = PlaybackCommandOutcome();
+
+  /// 只有曲目面变化（播放 / 暂停 / 切歌 / 进度 / 模式）。
+  static const PlaybackCommandOutcome trackOnly =
+      PlaybackCommandOutcome(changed: {PlaybackDomain.track});
+
+  /// 曲目面与队列面都变化（恢复态接管 / 换源）。
+  static const PlaybackCommandOutcome trackAndQueue = PlaybackCommandOutcome(
+    changed: {PlaybackDomain.track, PlaybackDomain.queue},
+  );
+
+  /// 变化的 UI 领域；空集表示空操作。
+  final Set<PlaybackDomain> changed;
+
+  /// 命令返回时会话是否已经提交到本地存储。
+  ///
+  /// 协调者的命令都 await 写队列排空（ADR-0010：系统 / UI 命令返回前已提交），
+  /// 因此生产路径恒为 true。实现若让命令先返回、写仍在途，应返回 false，
+  /// 调用方需要自行等 `pendingWrite`——这是「返回早于提交」的唯一表达方式。
+  final bool committed;
+
+  bool get hasChanges => changed.isNotEmpty;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PlaybackCommandOutcome &&
+      other.committed == committed &&
+      other.changed.length == changed.length &&
+      other.changed.containsAll(changed);
+
+  @override
+  int get hashCode => Object.hash(committed, Object.hashAllUnordered(changed));
+
+  @override
+  String toString() =>
+      'PlaybackCommandOutcome(changed: $changed, committed: $committed)';
 }
 
 /// 播放写入口：所有会改变播放状态的命令都从这里进。
 ///
-/// 读路径不在这里：系统媒体会话仍直接读 `LocalPlaybackService` 的当前曲目 /
-/// 播放态 / 进度 / 模式，UI 仍读 `PlaybackFacade` 快照。
+/// 读路径不在这里：系统媒体会话读 `MediaSessionReadModel`，UI 仍读
+/// `PlaybackFacade` 快照。每条命令返回 [PlaybackCommandOutcome]：调用方按
+/// 变化领域刷新 UI，按 [PlaybackCommandOutcome.committed] 判断返回时机。
 abstract interface class PlaybackCommandPort {
   /// 播放（恢复态 = 重新取链并跳回保存进度；live = 已暂停时才起播）。
-  Future<PlaybackCommandRoute> play();
+  Future<PlaybackCommandOutcome> play();
 
   /// 暂停（恢复态没有真实播放，空操作）。
-  Future<PlaybackCommandRoute> pause();
+  Future<PlaybackCommandOutcome> pause();
 
   /// 播放 / 暂停切换（UI 按钮语义）。
-  Future<PlaybackCommandRoute> togglePlayPause();
+  Future<PlaybackCommandOutcome> togglePlayPause();
 
   /// 下一首（恢复态从下一下标立即恢复播放，越界空操作）。
-  Future<PlaybackCommandRoute> skipToNext();
+  Future<PlaybackCommandOutcome> skipToNext();
 
   /// 上一首（恢复态从上一下标立即恢复播放，越界空操作）。
-  Future<PlaybackCommandRoute> skipToPrevious();
+  Future<PlaybackCommandOutcome> skipToPrevious();
 
   /// 播放队列中的指定下标（系统媒体队列跳转）。
-  Future<PlaybackCommandRoute> playQueueIndex(int index);
+  Future<PlaybackCommandOutcome> playQueueIndex(int index);
 
   /// 把队列中 [trackUri] 的曲目原地替换为 [newTrack]（自动换源写回）。
   ///
   /// 只有 live 处理：自动换源由真实播放失败触发，恢复态没有真实队列可换。
-  /// 恢复态 / 无曲目 / 未命中都返回 [PlaybackCommandRoute.none]；live 返回前
+  /// 恢复态 / 无曲目 / 未命中都返回 [PlaybackCommandOutcome.none]；live 返回前
   /// 保证换源结果已写进会话（重开应用恢复的是新来源，而不是过期直链）。
-  Future<PlaybackCommandRoute> replaceQueueTrack(
+  Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
   );
 
   /// 跳转进度（恢复态只改保存进度并落盘；live 转发并强制落盘）。
-  Future<void> seekToPosition(Duration position);
+  Future<PlaybackCommandOutcome> seekToPosition(Duration position);
 
   /// 设置播放模式（恢复态同步改写保存的会话）。
-  Future<void> setPlayMode(PlayMode mode);
+  Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode);
 
   /// 循环到下一个播放模式（通知 / 锁屏的播放顺序动作）。
-  Future<void> togglePlayMode();
+  Future<PlaybackCommandOutcome> togglePlayMode();
 
   /// 停止播放但保留可恢复的会话（系统媒体停止键；与 UI 的
   /// `stopPlayback` 不同——后者是「本次会话结束」并清空持久化）。
-  Future<void> stop();
+  Future<PlaybackCommandOutcome> stop();
 }

@@ -1084,9 +1084,6 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 音源曲目 → 列表项（加入列表 / 写入列表的唯一规范化处）。
-  ///
-  /// UI 层拿不到 `SourceTrack` 类型（分层约束禁止 widgets import `lib/sources/**`），
-  /// 搜索结果等入口经 [playlistTrackFromSearchItem] 走同一实现。
   PlaylistTrack playlistTrackOfSourceTrack(
     SourceTrack track, {
     int playlistId = 0,
@@ -1103,30 +1100,6 @@ class LibraryProvider extends ChangeNotifier {
         raw: track.raw,
         addedAt: DateTime.now().millisecondsSinceEpoch,
       );
-
-  /// 搜索结果项 → 列表项（`_sourceTrack` 无法识别时返回 null，调用方忽略）。
-  PlaylistTrack? playlistTrackFromSearchItem(Map<String, dynamic> item) {
-    final sourceTrack = item['_sourceTrack'];
-    if (sourceTrack is! SourceTrack) return null;
-    return playlistTrackOfSourceTrack(sourceTrack);
-  }
-
-  /// 搜索结果项收藏切换（item map 由 SearchProvider 生成，含 `_sourceTrack`）。
-  /// 无法识别来源曲目时返回 null（调用方忽略）。
-  Future<FavoriteToggleOutcome?> toggleFavoriteSearchItem(
-    Map<String, dynamic> item,
-  ) async {
-    final sourceTrack = item['_sourceTrack'];
-    if (sourceTrack is! SourceTrack) return null;
-    return toggleFavoriteSourceTrack(sourceTrack);
-  }
-
-  /// 搜索结果项是否已收藏。
-  bool isFavoriteSearchItem(Map<String, dynamic> item) {
-    final sourceTrack = item['_sourceTrack'];
-    if (sourceTrack is! SourceTrack) return false;
-    return isFavorite(sourceTrack.sourceKey, _songIdOfSourceTrack(sourceTrack));
-  }
 
   /// 导入 `.lxmc` 收藏夹；失败抛 [LxmcDecodeException]（由 UI 转 l10n 提示）。
   Future<LxmcImportResult> importLxmcBytes(

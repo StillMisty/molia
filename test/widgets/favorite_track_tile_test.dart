@@ -217,12 +217,14 @@ void main() {
         supportedLocales: const [Locale('zh')],
         home: Scaffold(
           body: FavoriteTrackTile(
-            title: 'Title a',
-            artist: 'A、B',
-            artists: [
-              TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
-              const TrackRowArtist(name: 'B'),
-            ],
+            row: TrackRowModel(
+              title: 'Title a',
+              artist: 'A、B',
+              artists: [
+                TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
+                const TrackRowArtist(name: 'B'),
+              ],
+            ),
             position: M3ECardPosition.single,
             onTap: () => rowTaps++,
             favoriteOf: (_) => false,

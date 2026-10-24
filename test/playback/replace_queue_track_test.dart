@@ -1,15 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
-import '../support/settings_test_support.dart';
 
 /// 换源：`PlaybackProvider.replaceQueueTrack`（真实队列 / 冷启动恢复态）。
 void main() {
@@ -27,11 +24,7 @@ void main() {
 
   test('真实队列命中：facade 替换全部同 id 曲目并更新快照', () async {
     final backend = FakePlaybackBackend();
-    final facade = DefaultPlaybackFacade(backend: backend);
-    final provider = PlaybackProvider(
-        settings: testSettingsRegistry(),
-        facade: facade,
-        messenger: FakeMessenger());
+    final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
 
     final old = track('a');
@@ -55,11 +48,7 @@ void main() {
 
   test('未命中：返回 false 且不调用 facade', () async {
     final backend = FakePlaybackBackend();
-    final facade = DefaultPlaybackFacade(backend: backend);
-    final provider = PlaybackProvider(
-        settings: testSettingsRegistry(),
-        facade: facade,
-        messenger: FakeMessenger());
+    final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
 
     backend.emit(BackendSnapshot(
@@ -97,11 +86,7 @@ void main() {
     });
 
     final backend = FakePlaybackBackend();
-    final facade = DefaultPlaybackFacade(backend: backend);
-    final provider = PlaybackProvider(
-        settings: testSettingsRegistry(),
-        facade: facade,
-        messenger: FakeMessenger());
+    final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
     expect(provider.hasRestoredSession, isTrue);

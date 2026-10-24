@@ -4,12 +4,10 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/collection_presenter.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
-import 'playback_selectors.dart';
 import 'row_actions.dart';
 import 'swipe_reveal_row.dart';
 import 'track_row.dart';
@@ -29,7 +27,7 @@ class CollectionTrackList<T> extends StatelessWidget {
     required this.itemBuilder,
     required this.empty,
     this.onReorder,
-    this.tableColumns = false,
+    this.surface = const TrackRowSurface(),
   });
 
   /// 列表上下内边距（水平走页面响应式留白）。
@@ -55,10 +53,10 @@ class CollectionTrackList<T> extends StatelessWidget {
   /// 「直接移动」语义，曲目落在目标下标）。
   final void Function(int from, int to)? onReorder;
 
-  /// 行内是否给表格列（调用方按行是否传 `TrackRowColumns` 给同一档）：
-  /// `itemExtent` 据此取哪一档行高（表格单行 56 / 单列双行 72，见
+  /// 行呈现口径（与 itemBuilder 里行用的同一份 `TrackRowSurface`）：
+  /// `itemExtent` 据此取哪一档行高（表格单行 56 / 双行 72，见
   /// `TrackRow.extentOf`）；与行渲染差一档会让滚动条拇指与拖动定位失准。
-  final bool tableColumns;
+  final TrackRowSurface surface;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +65,7 @@ class CollectionTrackList<T> extends StatelessWidget {
         context.layoutType(ResponsivePageType.browse).horizontalPadding;
     final gap = TrackRow.gapOf(context);
     final itemExtent =
-        TrackRow.extentOf(context, tableColumns: tableColumns) + gap;
+        TrackRow.extentOf(context, tableColumns: surface.isTable) + gap;
     final padding = EdgeInsets.fromLTRB(
       horizontalPadding,
       verticalPadding,
@@ -124,43 +122,28 @@ class CollectionTrackList<T> extends StatelessWidget {
 class CollectionTrackRow extends StatelessWidget {
   const CollectionTrackRow({
     super.key,
-    required this.title,
-    this.artist = '',
-    this.coverUrl,
-    this.columns,
-    this.trailingText,
-    this.trailing,
-    this.trackId,
+    required this.row,
     required this.position,
-    this.selected = false,
+    this.surface = const TrackRowSurface(),
+    this.trailing,
     this.onTap,
     this.onTapWithModifiers,
     this.onLongPress,
     this.actions,
   });
 
-  final String title;
-  final String artist;
-  final String? coverUrl;
-
-  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
-  /// null = 单列布局（逐像素不变）。
-  final TrackRowColumns? columns;
-
-  /// 行尾元信息（时长等），未知时传 null 不占位。
-  final String? trailingText;
-
-  /// 行尾插槽（排序把手 / 缓存标记等）。
-  final Widget? trailing;
-
-  /// 行身份（`sourceKey:songId`）：传入后逐行订阅「是否当前曲目」。
-  /// null = 不订阅（例如只渲染展示行的独立用法）。
-  final TrackId? trackId;
+  /// 行数据（标题 / 歌手 / 时长 / 当前曲目身份 / 多选态）。
+  final TrackRowModel row;
 
   /// 行在列表中的位置（首末外侧大圆角；由 `calculateCardPosition` 算）。
   final M3ECardPosition position;
 
-  final bool selected;
+  /// 列表表面的呈现口径（表格规范 / 封面尺寸 / 勾选策略）。
+  final TrackRowSurface surface;
+
+  /// 行尾插槽（排序把手 / 缓存标记等）。
+  final Widget? trailing;
+
   final VoidCallback? onTap;
 
   /// 桌面「带修饰键的点击」：Ctrl / Shift 在点击瞬间读取后交给调用方解释；
@@ -178,21 +161,11 @@ class CollectionTrackRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tapWithModifiers = onTapWithModifiers;
     final rowActions = actions ?? const <RowAction>[];
-    final TrackId? trackId = this.trackId;
-    final CurrentTrackState current = trackId == null
-        ? (isCurrent: false, isPlaying: false)
-        : selectCurrentTrackState(context, trackId);
-    final row = TrackRow(
-      title: title,
-      artist: artist,
-      coverUrl: coverUrl,
-      columns: columns,
-      trailingText: trailingText,
-      trailing: trailing,
-      isCurrent: current.isCurrent,
-      isPlaying: current.isPlaying,
-      selected: selected,
+    final rowWidget = TrackRow(
+      model: row,
+      surface: surface,
       position: position,
+      trailing: trailing,
       // 修饰键在点击回调里读：行只在列表数据变化时重建，按下 Ctrl 本身
       // 不会触发重建；build 时读会把「上一次构建」的按键状态固化到点击上。
       onTap: tapWithModifiers == null
@@ -205,12 +178,12 @@ class CollectionTrackRow extends StatelessWidget {
       // 桌面端入口是行表面右键：动作编译成同一份菜单，在落点弹出。
       onSecondaryTap: rowActionsAtPointer(context, rowActions),
     );
-    if (rowActions.isEmpty) return row;
+    if (rowActions.isEmpty) return rowWidget;
     // 桌面不再有鼠标左滑：动作已挂在行表面右键，不装左滑外壳。
-    if (isDesktopPlatform()) return row;
+    if (isDesktopPlatform()) return rowWidget;
     return SwipeRevealRow(
       actions: collectionSwipeActions(context, rowActions),
-      child: row,
+      child: rowWidget,
     );
   }
 }

@@ -36,16 +36,13 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
-import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
-import '../utils/duration_text.dart';
 import 'app_search_bar.dart';
 import 'artist_row.dart';
-import 'playback_selectors.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -357,8 +354,8 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 单曲 / 歌词行点击：与资料库搜索结果同一条播放路径
   /// （[SearchProvider.playItem]），播放后收起遮罩。
-  void _playItem(Map<String, dynamic> item) {
-    _search.playItem(item);
+  void _playItem(SearchRow row) {
+    _search.playItem(row);
     _close();
   }
 
@@ -454,7 +451,7 @@ class _GlobalSearchResults extends StatelessWidget {
   });
 
   final VoidCallback onOpenAllResults;
-  final void Function(Map<String, dynamic> item) onPlayItem;
+  final void Function(SearchRow row) onPlayItem;
 
   @override
   Widget build(BuildContext context) {
@@ -566,36 +563,26 @@ class _GlobalSearchResults extends StatelessWidget {
   /// 歌词命中片段优先做副标题（与资料库搜索结果行同口径）。
   Widget _buildTrackRow(
     BuildContext context,
-    Map<String, dynamic> item,
+    SearchRow row,
     int index,
     int count,
   ) {
-    final snippet = item['lyric_snippet']?.toString() ?? '';
-    final sourceKey = item['source']?.toString() ?? '';
-    final id = item['id']?.toString() ?? '';
+    final snippet = row.lyricSnippet ?? '';
     return Padding(
       padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
-      // 逐行订阅放在独立 widget 的 build 里：外层 State 的 build 不是
-      // provider 认可的调用位置（结果面板可能在别的 builder 中构建）。
-      child: Builder(
-        builder: (context) {
-          final current = sourceKey.isEmpty || id.isEmpty
-              ? (isCurrent: false, isPlaying: false)
-              : selectCurrentTrackState(context, TrackId(sourceKey, id));
-          return TrackRow(
-            key: ValueKey(item['id']),
-            title: _titleOf(item),
-            artist: snippet.isNotEmpty ? snippet : _artistOf(item),
-            coverUrl: _coverUrlOf(item),
-            trailingText: durationText(_durationMsOf(item)),
-            isCurrent: current.isCurrent,
-            isPlaying: current.isPlaying,
-            position: calculateCardPosition(index, count),
-            onTap: () {
-              HapticsService.lightImpact();
-              onPlayItem(item);
-            },
-          );
+      child: TrackRow(
+        key: ValueKey(row.id.uri),
+        model: TrackRowModel(
+          title: row.title,
+          artist: snippet.isNotEmpty ? snippet : row.primaryArtistName,
+          coverUrl: row.coverUrl,
+          durationMs: row.duration?.inMilliseconds,
+          trackId: row.id,
+        ),
+        position: calculateCardPosition(index, count),
+        onTap: () {
+          HapticsService.lightImpact();
+          onPlayItem(row);
         },
       ),
     );
@@ -705,41 +692,4 @@ class _GlobalSearchResults extends StatelessWidget {
           ),
         ),
       );
-}
-
-/// 搜索结果 item（[SearchProvider] 的兼容 map）→ 展示字段。
-///
-/// 只做展示提取，播放语义唯一入口是 [SearchProvider.playItem]；字段口径与
-/// 资料库搜索结果行一致：封面优先曲目图、其次专辑图，时长缺失不占位。
-String _titleOf(Map<String, dynamic> item) => item['name']?.toString() ?? '';
-
-String _artistOf(Map<String, dynamic> item) {
-  final artists = item['artists'];
-  if (artists is List && artists.isNotEmpty && artists[0] is Map) {
-    final name = artists[0]['name'];
-    if (name is String) return name;
-  }
-  return '';
-}
-
-String? _coverUrlOf(Map<String, dynamic> item) {
-  String? firstImageUrl(Object? images) {
-    if (images is List && images.isNotEmpty && images[0] is Map) {
-      final url = images[0]['url'];
-      if (url is String && url.isNotEmpty) return url;
-    }
-    return null;
-  }
-
-  final trackCover = firstImageUrl(item['images']);
-  if (trackCover != null) return trackCover;
-  final album = item['album'];
-  return album is Map ? firstImageUrl(album['images']) : null;
-}
-
-int? _durationMsOf(Map<String, dynamic> item) {
-  final value = item['duration_ms'];
-  if (value is int) return value;
-  if (value is num) return value.toInt();
-  return null;
 }

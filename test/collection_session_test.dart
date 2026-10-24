@@ -9,7 +9,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/utils/collection_row_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 假资料库：会话只需要读快照 / 触发加载 / 重排历史，写入全部由页面负责。
+/// 假资料库：会话只读一帧快照、发一条加载意图；写入全部由页面负责。
 class _FakeLibrary implements CollectionLibrary {
   _FakeLibrary({
     this.playlists = const [],
@@ -17,34 +17,28 @@ class _FakeLibrary implements CollectionLibrary {
     Map<int, List<PlaylistTrack>>? tracks,
   }) : tracks = tracks ?? {};
 
-  @override
   List<PlaylistInfo> playlists;
-  @override
   List<PlayHistoryEntry> history;
   final Map<int, List<PlaylistTrack>> tracks;
   final Set<int> loadingTracks = {};
   final Set<int> failedTracks = {};
-  bool playlistsLoading = false;
-  bool historyLoading = false;
-  @override
   LibraryReadState playlistsState = const LibraryReadState.ready();
-  @override
   LibraryReadState historyState = const LibraryReadState.ready();
 
-  int refreshPlaylistsCalls = 0;
-  int ensureFavoritesCalls = 0;
-  int refreshHistoryCalls = 0;
-  int resortCalls = 0;
-  final List<int> ensureTrackCalls = [];
+  /// 收到的加载意图（顺序即调用顺序）。
+  final List<CollectionLibraryLoad> loads = [];
 
   @override
-  bool get isPlaylistsLoading => playlistsLoading;
+  CollectionLibrarySnapshot snapshot({int? playlistId}) =>
+      CollectionLibrarySnapshot(
+        playlists: playlists,
+        history: history,
+        playlistsState: playlistsState,
+        historyState: historyState,
+        playlistTracks: playlistId == null ? null : _tracksView(playlistId),
+      );
 
-  @override
-  bool get isHistoryLoading => historyLoading;
-
-  @override
-  PlaylistTracksView playlistTracks(int playlistId) => PlaylistTracksView(
+  PlaylistTracksView _tracksView(int playlistId) => PlaylistTracksView(
         tracks: tracks[playlistId],
         state: failedTracks.contains(playlistId)
             ? LibraryReadState.failed(StateError('tracks read failed'))
@@ -55,20 +49,7 @@ class _FakeLibrary implements CollectionLibrary {
       );
 
   @override
-  void ensurePlaylistTracks(int playlistId, {bool force = false}) =>
-      ensureTrackCalls.add(playlistId);
-
-  @override
-  void refreshPlaylists({bool force = false}) => refreshPlaylistsCalls++;
-
-  @override
-  void ensureFavoritesLoaded({bool force = false}) => ensureFavoritesCalls++;
-
-  @override
-  void refreshHistory({bool force = false}) => refreshHistoryCalls++;
-
-  @override
-  void resortHistoryByRecency() => resortCalls++;
+  void load(CollectionLibraryLoad request) => loads.add(request);
 
   @override
   Track trackFromHistoryEntry(PlayHistoryEntry entry) => Track(
@@ -437,12 +418,12 @@ void main() {
       addTearDown(session.dispose);
       await session.start();
 
-      library.playlistsLoading = true;
+      library.playlistsState = const LibraryReadState.loading();
       var view = session.sync(inputFor(library));
       expect(view.phase, CollectionViewPhase.loading);
 
       library
-        ..playlistsLoading = false
+        ..playlistsState = const LibraryReadState.ready()
         ..playlists = [favorites(trackCount: 1)]
         ..tracks[1] = [track('a')]
         ..loadingTracks.add(1);
@@ -455,13 +436,13 @@ void main() {
 
       // 历史首载且为空 → loading。
       library
-        ..historyLoading = true
+        ..historyState = const LibraryReadState.loading()
         ..history = const [];
       session.selectCollection(LibraryCollections.historySentinel);
       view = session.sync(inputFor(library));
       expect(view.phase, CollectionViewPhase.loading);
 
-      library.historyLoading = false;
+      library.historyState = const LibraryReadState.ready();
       view = session.sync(inputFor(library));
       expect(view.phase, CollectionViewPhase.ready);
     });
@@ -518,6 +499,47 @@ void main() {
       view = session.sync(inputFor(library, downloads: ready));
       expect(view.phase, CollectionViewPhase.ready);
       expect(view.view.hasItems, isFalse);
+    });
+
+    test('资料库端口：一帧快照 + 加载意图（首帧 / 当前列表 / 重排 / 重试）', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 1)],
+        tracks: {
+          1: [track('a')],
+        },
+      );
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+      session.sync(inputFor(library));
+      await Future<void>.delayed(Duration.zero);
+
+      expect(
+        library.loads.where(
+          (load) => load.kind == CollectionLibraryLoadKind.startup,
+        ),
+        hasLength(1),
+        reason: '首帧三件事只触发一次',
+      );
+      final tracksLoad = library.loads.firstWhere(
+        (load) => load.kind == CollectionLibraryLoadKind.playlistTracks,
+      );
+      expect(tracksLoad.playlistId, 1);
+      expect(tracksLoad.force, isFalse);
+
+      session.selectCollection(LibraryCollections.historySentinel);
+      expect(
+        library.loads.where(
+          (load) => load.kind == CollectionLibraryLoadKind.resortHistory,
+        ),
+        hasLength(1),
+      );
+
+      session.retry();
+      final retry = library.loads.last;
+      expect(retry.kind, CollectionLibraryLoadKind.retry);
+      expect(retry.playlistId, 1, reason: '按上一帧解析出的列表 id 重试');
+      expect(retry.force, isTrue);
     });
   });
 

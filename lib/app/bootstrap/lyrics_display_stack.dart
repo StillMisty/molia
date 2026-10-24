@@ -119,7 +119,6 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
         isSystemMediaSessionSupported && audioHandler == null,
     audioRoute: audioRouteMonitor,
     themeListenable: themeProvider,
-    ensureLyrics: (track) => lyricsProvider.load(track),
     onPlaybackCommand: (command) {
       switch (command) {
         case LyricsPlaybackCommand.playPause:
@@ -147,6 +146,14 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   );
   lyricsDisplay.syncPlayback(playback.snapshot);
   lyricsDisplay.updatePosition(playback.currentPosition);
+  lyricsDisplay.syncLyrics(lyricsProvider.state);
+
+  // 曲目变化 → 歌词会话唯一加载入口：页面 / 输出都不再各自触发取词，
+  // 是否启用桌面歌词也不影响（会话只负责把当前曲目的状态准备好）。
+  wireLyricsSession(
+    playback: playback,
+    lyricsProvider: lyricsProvider,
+  );
 
   // 下一首歌词预载接线：紧跟歌词显示接线之后、取色接线之前
   // （与原组合根同一顺序：显示 → 预载 → 取色 → 启动预解析）。

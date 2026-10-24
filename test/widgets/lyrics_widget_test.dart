@@ -141,15 +141,23 @@ void main() {
         settings ?? LyricsDisplaySettings(settings: testSettingsRegistry());
     addTearDown(effectiveSettings.dispose);
 
+    // 组合根接线：播放快照变化 → 会话 ensureForTrack（页面不再从 build 触发
+    // 加载）。测试沿用同一所有权，页面只渲染会话状态。
+    final lyricsProvider = LyricsProvider(
+      service: service ?? _FakeLyricsService(_buildLrc()),
+    );
+    addTearDown(lyricsProvider.dispose);
+    void syncCurrentTrack() =>
+        lyricsProvider.ensureForTrack(playback.snapshot.current);
+    playback.addListener(syncCurrentTrack);
+    addTearDown(() => playback.removeListener(syncCurrentTrack));
+    lyricsProvider.ensureForTrack(playback.snapshot.current);
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-          ChangeNotifierProvider<LyricsProvider>.value(
-            value: LyricsProvider(
-              service: service ?? _FakeLyricsService(_buildLrc()),
-            ),
-          ),
+          ChangeNotifierProvider<LyricsProvider>.value(value: lyricsProvider),
           ChangeNotifierProvider<LyricsDisplaySettings>.value(
             value: effectiveSettings,
           ),
@@ -290,6 +298,49 @@ void main() {
     );
     // 复制模式出口保留：菜单项文案变为「退出复制模式」。
     expect(fabItems(tester).map((item) => item.label), contains('退出复制模式'));
+  });
+
+  testWidgets('换曲退出复制模式（会话状态变化驱动）', (tester) async {
+    await pumpLyrics(tester);
+    // 自动跟随中操作栏收起；先手动滚动暂停跟随，露出 FAB。
+    await dragUpSlowly(tester, -300);
+    await tapFabItem(tester, '复制歌词模式');
+    expect(playback.currentMode, PlayMode.singleRepeat);
+
+    const otherTrack = Track(
+      id: TrackId('fake', 'lyrics-other'),
+      title: 'Other',
+      artists: [Artist(name: 'Artist')],
+      album: 'Album',
+      duration: Duration(minutes: 10),
+      origin: TrackOrigin.lx,
+      payload: {'id': 'lyrics-other'},
+    );
+    backend.emit(const BackendSnapshot(
+      current: otherTrack,
+      queue: [otherTrack],
+      currentIndex: 0,
+      isPlaying: true,
+      position: Duration(seconds: 60),
+      duration: Duration(minutes: 10),
+    ));
+    // 播放快照 → 会话 ensure → 页面监听会话状态变化（微任务里退出复制模式）。
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(
+      playback.currentMode,
+      isNot(PlayMode.singleRepeat),
+      reason: '换曲后应恢复进入复制模式前的播放模式',
+    );
+    expect(
+      fabItems(tester).map((item) => item.label),
+      isNot(contains('退出复制模式')),
+    );
+
+    // 播放模式切换的通知节流计时器跑完，避免 pending timer 报错。
+    await tester.pump(const Duration(milliseconds: 300));
   });
 
   testWidgets('暂停中恢复只还原跟随状态，播放后继续跟随', (tester) async {
@@ -466,6 +517,35 @@ void main() {
     expect(lineStyle('Line 13').fontWeight, FontWeight.w700);
     // 第 12 行已过、第 13 行没有逐字时间轴 → 不再走逐字分支。
     expect(find.byType(KaraokeLyricText), findsNothing);
+  });
+
+  testWidgets('行切换边界精确提前 200ms（64.799s / 64.800s）', (tester) async {
+    await pumpLyrics(tester);
+
+    TextStyle lineStyle(String text) => tester
+        .widget<AnimatedDefaultTextStyle>(
+          find
+              .ancestor(
+                of: find.text(text),
+                matching: find.byType(AnimatedDefaultTextStyle),
+              )
+              .first,
+        )
+        .style;
+
+    // 64.799s + 200ms = 64.999s：仍在第 12 行（60s）。
+    backend.emit(_snapshot(position: const Duration(milliseconds: 64799)));
+    await tester.pump();
+    expect(lineStyle('Line 12').fontWeight, FontWeight.w700);
+    expect(lineStyle('Line 13').fontWeight, FontWeight.w500);
+
+    // 64.800s + 200ms = 65.000s：第 13 行（65s）成为当前行。
+    // 走 seek：位置通道对同曲目 <250ms 的变化不补发（≤4Hz），1ms 的边界
+    // 步进只能经显式 seek 落到通道上。
+    await playback.seekToPosition(64800);
+    await tester.pump();
+    expect(lineStyle('Line 13').fontWeight, FontWeight.w700);
+    expect(lineStyle('Line 12').fontWeight, FontWeight.w500);
   });
 
   testWidgets('罗马音按歌词页开关独立门控', (tester) async {

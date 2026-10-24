@@ -96,7 +96,8 @@
   （facade `compat*` / service `currentTrackMap` 等）已删除。
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
-  分叉，只按路由结果决定通知类别）；恢复态快照与进度覆盖值在这里构造；落盘
+  分叉，只按 `PlaybackCommandOutcome` 的变化域决定通知类别）；恢复态快照与进度
+  覆盖值在这里构造；落盘
   口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
   可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。改变会话的命令
   （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
@@ -159,7 +160,9 @@
     iOS / macOS / Windows 保持原周期判定。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
-  含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。时间契约统一在
+  含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。曲目变化的加载入口只有
+  `ensureForTrack`（组合根订阅播放快照后调用，页面是否挂载都加载），空结果允许
+  一次自动重试、`retry()` 可显式重来。时间契约统一在
   `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
   （兼容 1–3 位分钟与行内多标签）。
   **取词顺序**：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 `lyric` action →
@@ -206,8 +209,11 @@
   （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
   「专辑」行（payload 专辑 id + 能力位双判定，`platformAlbumId`；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS/Windows/Linux）：`LocalAudioHandler`
-  把服务状态映射为统一模型（`flutter_media_session` 的 `MediaMetadata` /
-  `PlaybackState` / `MediaAction`），后端可注入（见 ADR-0010）：
+  经读取面 `MediaSessionReadModel`（生产实现 `LocalPlaybackMediaSessionReadModel`
+  投影 `LocalPlaybackService`；测试注入普通值假实现）把状态映射为统一模型
+  （`flutter_media_session` 的 `MediaMetadata` / `PlaybackState` / `MediaAction`），
+  文案经注入的 `MediaSessionCopy`（不读全局 locale，歌手回退走 l10n `unknownArtist`），
+  后端可注入（见 ADR-0010）：
   Android/iOS/macOS/Windows 走 `FlutterMediaSessionBackend`
   （`FlutterMediaSessionPlatform`，不调用会主动请求通知权限的
   `FlutterMediaSession().activate()`），Linux 走 `MprisMediaSessionBackend`
@@ -571,9 +577,15 @@
   拥有合集身份（kind / 落库 id / 展示名 / 合集键 / 列规范）、可见行投影（过滤 /
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
-  每帧只把资料库窄端口 + 下载 / 缓存快照交给会话，消费一个
+  每帧只把资料库读取端口 + 下载 / 缓存快照交给会话，消费一个
   `CollectionSessionView`（视图 + loading / ready / failed），不在 build 里做
-  post-frame 校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。资料库读取
+  post-frame 校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。端口只有
+  「一帧快照 + 一条加载意图」：`CollectionLibrary.snapshot(playlistId:)` 返回
+  `CollectionLibrarySnapshot`（列表清单 / 播放历史 / 两者读取阶段 / 当前选集
+  的 `PlaylistTracksView`），`load(CollectionLibraryLoad)` 表达首帧、当前列表
+  曲目、整页重试与历史重排（playlist id 与 force 在意图里）；`LibraryProvider`
+  的其余成员不再逐个映射成 getter。会话持有最近一帧快照，弹层计数与失败重试
+  直接按它重算本地歌曲，不再依赖「先 sync 一次」的隐藏调用顺序。资料库读取
   阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
   读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
 
@@ -893,7 +905,7 @@
   接 Esc（与登记同源、不依赖焦点位置；收藏页多选与音量弹层都是 `HardwareKeyboard`
   处理器）。
   内容版式（阈值与宽度来源的选择唯一在 `DesktopLayout`，判据一律「窗口宽 /
-  窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowColumns` /
+  窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowModel` / `TrackRowSurface` /
   `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，阈值 = 内容宽 ≥ 720
   （播放历史档 812），使用点：搜索 / 收藏 / 发现详情；行高两档走
   `TrackRow.extentOf`（表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver

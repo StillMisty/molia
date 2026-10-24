@@ -12,7 +12,6 @@ import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
-import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/desktop_layout.dart';
@@ -293,13 +292,8 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                       DiscoverTrackTile(
                         track: track,
                         position: calculateCardPosition(index, tracks.length),
-                        columns: tableColumns
-                            ? TrackRowColumns(
-                                artist: track.artist,
-                                album: track.album,
-                                duration: durationText(track.durationMs) ?? '',
-                              )
-                            : null,
+                        tableSpec:
+                            tableColumns ? TrackRowColumnSpec.standard : null,
                         onTap: () => _playFrom(index),
                       ),
                       if (!isLast) SizedBox(height: cardList.gap),

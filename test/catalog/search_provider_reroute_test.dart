@@ -4,7 +4,6 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
@@ -16,14 +15,12 @@ import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
-import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:molia/sources/source_manager.dart' show SourceKind;
-import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../support/settings_test_support.dart';
+import '../support/fakes.dart';
 
 class _TestListenable<T> extends ValueNotifier<T>
     implements StateListenable<T> {
@@ -99,14 +96,6 @@ class _FakeBackend implements PlaybackBackend {
 
   @override
   Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {}
-}
-
-class _FakeMessenger implements UiMessenger {
-  @override
-  void showMessage(String message) {}
-
-  @override
-  void showFailure(SourceFailure failure) {}
 }
 
 class _FakeMusicSource implements MusicSource {
@@ -311,11 +300,7 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = _FakeBackend();
-    playbackProvider = PlaybackProvider(
-      settings: testSettingsRegistry(),
-      facade: DefaultPlaybackFacade(backend: backend),
-      messenger: _FakeMessenger(),
-    );
+    playbackProvider = buildTestPlaybackProvider(backend: backend);
   });
 
   tearDown(() {
@@ -354,7 +339,7 @@ void main() {
     expect(provider.sourceDisplayName, '酷我');
   });
 
-  test('performSearch：结果兼容 map + _sourceTracks 旁路 + 分页元数据', () async {
+  test('performSearch：typed 行 + 分页元数据', () async {
     final source = _FakeMusicSource('kw')
       ..onSearch = (query) => Future.value(SearchResult(
             items: [_track('kw', 'a'), _track('kw', 'b')],
@@ -376,23 +361,18 @@ void main() {
     expect(provider.hasMore, isTrue);
     expect(provider.totalResults, 100);
 
-    final tracks = provider.searchResults['tracks']!;
+    final tracks = provider.searchResults;
     expect(tracks, hasLength(2));
-    expect(tracks.first['id'], 'kw:a');
-    expect(tracks.first['name'], 'Title a');
-    expect(tracks.first['source'], 'kw');
-    expect(tracks.first['duration_ms'], 30000);
-    expect(tracks.first['images'], [
-      {'url': 'https://img.example/a.jpg'}
-    ]);
-    expect(tracks.first['artists'], [
-      {'name': 'Artist a'}
-    ]);
+    expect(tracks.first.id.uri, 'kw:a');
+    expect(tracks.first.title, 'Title a');
+    expect(tracks.first.duration, const Duration(seconds: 30));
+    expect(tracks.first.coverUrl, 'https://img.example/a.jpg');
+    expect(tracks.first.track.artists.single.name, 'Artist a');
+    expect(tracks.first.lyricSnippet, isNull);
 
     final filtered = provider.filteredResults;
     expect(filtered, hasLength(2));
-    expect(filtered.first['type'], 'track');
-    expect(filtered.first['_sourceTrack'], isA<SourceTrack>());
+    expect(filtered, isNotEmpty);
   });
 
   test('搜索缓存：同 query 重复提交只请求一次', () async {
@@ -410,7 +390,7 @@ void main() {
     await _waitUntil(() => !provider.isSearching);
 
     expect(source.searchCalls, 1, reason: 'CatalogService 缓存命中');
-    expect(provider.searchResults['tracks'], hasLength(1));
+    expect(provider.searchResults, hasLength(1));
   });
 
   test('loadMore：跨页去重、currentPage/hasMore/total 更新', () async {
@@ -440,7 +420,7 @@ void main() {
     expect(provider.currentPage, 2);
     expect(provider.hasMore, isFalse);
     expect(provider.totalResults, 4);
-    final ids = provider.searchResults['tracks']!.map((t) => t['id']).toList();
+    final ids = provider.searchResults.map((row) => row.id.uri).toList();
     expect(ids, ['kw:a', 'kw:b', 'kw:c'], reason: 'b 为跨页重复，应去重');
     expect(source.searchCalls, 2);
   });
@@ -467,7 +447,7 @@ void main() {
     expect(provider.filteredResults, isEmpty);
   });
 
-  test('playItem：_sourceTracks 交给 PlaybackProvider，payload 原样保留', () async {
+  test('playItem：SourceTrack 队列交给 PlaybackProvider，payload 原样保留', () async {
     final source = _FakeMusicSource('kw')
       ..onSearch = (query) => Future.value(SearchResult(
             items: [_track('kw', 'a'), _track('kw', 'b')],
@@ -648,8 +628,8 @@ void main() {
     provider.selectSearchKind(SearchKind.lyric);
     await _waitUntil(() => provider.lyricResults.isNotEmpty);
     expect(source.lyricSearchCalls, 1);
-    expect(provider.lyricResults.single['lyric_snippet'], '雨下整夜');
-    expect(provider.lyricResults.single['name'], 'Title l1');
+    expect(provider.lyricResults.single.lyricSnippet, '雨下整夜');
+    expect(provider.lyricResults.single.title, 'Title l1');
     expect(provider.totalResults, 1, reason: '分页元数据取当前类型');
 
     // 播放：队列取歌词结果（下标与歌词列表一致），payload 原样保留。

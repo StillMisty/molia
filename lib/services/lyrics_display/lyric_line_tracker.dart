@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../models/lyric_line.dart';
+import 'lyric_timing_policy.dart';
 import 'lyrics_display_settings.dart' show UnsyncedBehavior;
 
 /// 行跟踪结果：当前行 + 扩展行（翻译/罗马音）+ 后续行。
@@ -86,6 +87,12 @@ class LyricLineTracker {
   }) {
     if (lines.isEmpty) return const TrackedLine();
 
+    // 时间策略（偏移 / 未同步行号）只有一份实现：这里只决定输出侧
+    // 「歌名 / 隐藏」的内容替换，行号仍由策略给出。
+    final policy = LyricTimingPolicy(
+      offsetMs: offsetMs,
+      unsyncedBehavior: unsyncedBehavior,
+    );
     if (!isSynced) {
       switch (unsyncedBehavior) {
         case UnsyncedBehavior.hide:
@@ -93,25 +100,25 @@ class LyricLineTracker {
         case UnsyncedBehavior.title:
           return TrackedLine(index: -1, line: title);
         case UnsyncedBehavior.firstLine:
+          final index = policy.lineIndexAt(lines, position, isSynced: false);
           return TrackedLine(
-            index: 0,
-            line: lines.first.text,
-            extended: _extendedAt(
-              0,
+            index: index,
+            line: lines[index].text,
+            extended: policy.extendedLinesAt(
+              index,
               translations,
               romas,
               translationEnabled: translationEnabled,
               romaEnabled: romaEnabled,
             ),
-            upcoming: _upcoming(lines, 0, maxLines),
-            words: lines.first.words,
+            upcoming: _upcoming(lines, index, maxLines),
+            words: lines[index].words,
           );
       }
     }
 
     // 正值 = 歌词提前显示：有效进度向后平移后再查表。
-    final effectivePosition = position + Duration(milliseconds: offsetMs);
-    final index = lyricLineIndexAt(lines, effectivePosition);
+    final index = policy.lineIndexAt(lines, position, isSynced: isSynced);
     if (index < 0) {
       // 前奏（还没到第一句）：没有当前行可显示，把最前面的若干句作为
       // 「即将到来」下发——悬浮窗不至于整段空着，第一句开始后回到正常
@@ -122,8 +129,9 @@ class LyricLineTracker {
     // 行时间轴：终点取下一行时间戳；最后一行回退到末词结束；非法值归一为未知。
     final words = lines[index].words;
     final startMs = lines[index].timestamp.inMilliseconds;
-    var endMs =
-        index + 1 < lines.length ? lines[index + 1].timestamp.inMilliseconds : -1;
+    var endMs = index + 1 < lines.length
+        ? lines[index + 1].timestamp.inMilliseconds
+        : -1;
     if (endMs <= startMs && words != null && words.isNotEmpty) {
       endMs = words.last.end.inMilliseconds;
     }
@@ -132,7 +140,7 @@ class LyricLineTracker {
     return TrackedLine(
       index: index,
       line: lines[index].text,
-      extended: _extendedAt(
+      extended: policy.extendedLinesAt(
         index,
         translations,
         romas,
@@ -146,29 +154,13 @@ class LyricLineTracker {
     );
   }
 
-  static List<String> _extendedAt(
-    int index,
-    List<String> translations,
-    List<String> romas, {
-    required bool translationEnabled,
-    required bool romaEnabled,
-  }) {
-    final result = <String>[];
-    if (translationEnabled &&
-        index < translations.length &&
-        translations[index].isNotEmpty) {
-      result.add(translations[index]);
-    }
-    if (romaEnabled && index < romas.length && romas[index].isNotEmpty) {
-      result.add(romas[index]);
-    }
-    return result;
-  }
-
-  static List<String> _upcoming(List<LyricLine> lines, int index, int maxLines) {
+  static List<String> _upcoming(
+      List<LyricLine> lines, int index, int maxLines) {
     if (maxLines <= 1) return const [];
     final result = <String>[];
-    for (var i = index + 1; i < lines.length && result.length < maxLines - 1; i++) {
+    for (var i = index + 1;
+        i < lines.length && result.length < maxLines - 1;
+        i++) {
       result.add(lines[i].text);
     }
     return result;

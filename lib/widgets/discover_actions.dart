@@ -4,25 +4,26 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../domain/models/track.dart';
-import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_provider.dart';
 import 'add_to_library.dart';
+import 'favorite_action.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
-AppLocalizations _l10n(BuildContext context) =>
-    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
-
-/// 收藏 / 取消收藏：成功只靠图标态反馈；失败必须提示，否则按钮看起来
-/// 「点了没反应」（仓库异常已在 provider 边界收口成 outcome）。
+/// 收藏 / 取消收藏：写入仍走 [DiscoverProvider]（它持有发现域曲目形状），
+/// 结果提示复用资料库的收藏反馈（成功只靠图标态，失败必须明说）。
 Future<void> toggleDiscoverFavorite(
   BuildContext context,
   DiscoverTrack track,
 ) async {
   final outcome = await context.read<DiscoverProvider>().toggleFavorite(track);
-  if (!context.mounted || !outcome.isFailure) return;
-  M3ESnackbar.show(context, message: _l10n(context).operationFailed);
+  if (!context.mounted) return;
+  showFavoriteFeedback(
+    context,
+    outcome,
+    feedback: FavoriteFeedback.failureOnly,
+  );
 }
 
 /// 「加入列表」流程：与收藏页共用 [addTracksToLibraryTarget]（选择目标 →
@@ -52,16 +53,16 @@ class DiscoverTrackTile extends StatelessWidget {
 
   final VoidCallback onTap;
 
-  /// 宽屏表格列（桌面宽内容列表传入）：行内改表格布局，列宽与表头同源；
-  /// null = 单列布局（逐像素不变）。
-  final TrackRowColumns? columns;
+  /// 宽屏表格列规范（桌面宽内容列表传入）：非空 = 表格档，与表头同源；
+  /// null = 双行档（逐像素不变）。
+  final TrackRowColumnSpec? tableSpec;
 
   const DiscoverTrackTile({
     super.key,
     required this.track,
     required this.position,
     required this.onTap,
-    this.columns,
+    this.tableSpec,
   });
 
   @override
@@ -70,11 +71,15 @@ class DiscoverTrackTile extends StatelessWidget {
       (provider) => provider.isFavorite(track),
     );
     return TrackMenuTile(
-      title: track.title,
-      artist: track.artist,
-      coverUrl: track.coverUrl,
-      columns: columns,
-      trackId: TrackId(track.sourceKey, track.songId),
+      row: TrackRowModel(
+        title: track.title,
+        artist: track.artist,
+        coverUrl: track.coverUrl,
+        durationMs: track.durationMs,
+        album: track.album,
+        trackId: TrackId(track.sourceKey, track.songId),
+      ),
+      surface: TrackRowSurface(tableSpec: tableSpec),
       position: position,
       onTap: onTap,
       favorite: favorite,

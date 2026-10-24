@@ -180,13 +180,15 @@ class _SourceSwapViewState extends State<SourceSwapView> {
         return Padding(
           padding: EdgeInsets.only(bottom: gap),
           child: TrackRow(
-            title: track.title,
-            artist: track.artistLabel,
-            coverUrl: track.artwork?.uri.toString(),
-            coverSize: 40,
-            trailingText: _durationText(track.duration),
+            model: TrackRowModel(
+              title: track.title,
+              artist: track.artistLabel,
+              coverUrl: track.artwork?.uri.toString(),
+              durationMs: track.duration?.inMilliseconds,
+              selected: provider.selected?.id == track.id,
+            ),
+            surface: const TrackRowSurface(coverSize: 40),
             position: calculateCardPosition(index, items.length),
-            selected: provider.selected?.id == track.id,
             onTap: () => _selectAndPreview(track),
           ),
         );
@@ -272,10 +274,10 @@ class _SourceSwapViewState extends State<SourceSwapView> {
     _provider.select(track);
     unawaited(
       context.read<PlaybackProvider>().playDomainTracks(
-            [track],
-            0,
-            contextName: _l10n(context).sourceSwapPreviewContext,
-          ),
+        [track],
+        0,
+        contextName: _l10n(context).sourceSwapPreviewContext,
+      ),
     );
   }
 
@@ -330,14 +332,5 @@ class _SourceSwapViewState extends State<SourceSwapView> {
       case SourceSwapApplyStatus.duplicateConfirmationRequired:
         break; // 已在上面处理后重试；走到这里说明状态异常，保持弹层。
     }
-  }
-
-  /// 时长 → `m:ss`；未知/非法时长返回 null（不占行尾）。
-  String? _durationText(Duration? duration) {
-    final milliseconds = duration?.inMilliseconds ?? 0;
-    if (milliseconds <= 0) return null;
-    final value = Duration(milliseconds: milliseconds);
-    final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
-    return '${value.inMinutes}:$seconds';
   }
 }

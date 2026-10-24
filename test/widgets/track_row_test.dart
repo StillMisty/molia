@@ -1,8 +1,15 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/playback.dart';
+import 'package:molia/domain/models/track.dart';
+import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../support/fakes.dart';
 
 /// 曲目行表面形状按 M3E 列表规范（Compose `ListTokens`）：
 /// 静止内 4dp / 首末外侧 16dp，hover 12dp（shape medium），press / 选中
@@ -14,6 +21,31 @@ import 'package:material_ui/material_ui.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  const currentTrack = Track(
+    id: TrackId('kw', 'a'),
+    title: 'Title',
+    origin: TrackOrigin.builtin,
+  );
+  late FakePlaybackBackend backend;
+  late PlaybackProvider playback;
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    backend = FakePlaybackBackend();
+    playback = buildTestPlaybackProvider(backend: backend);
+  });
+  tearDown(() => playback.dispose());
+
+  Future<void> pumpContents(WidgetTester tester, Widget child) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider<PlaybackProvider>.value(
+        value: playback,
+        child: MaterialApp(home: Scaffold(body: Center(child: child))),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
   Future<void> pumpRow(
     WidgetTester tester, {
     M3ECardPosition position = M3ECardPosition.middle,
@@ -21,24 +53,29 @@ void main() {
     bool isCurrent = false,
     bool isPlaying = false,
   }) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: TrackRow(
-              title: 'Title',
-              artist: 'Artist',
-              position: position,
-              selected: selected,
-              isCurrent: isCurrent,
+    backend.emit(
+      isCurrent
+          ? BackendSnapshot(
+              current: currentTrack,
+              queue: const [currentTrack],
+              currentIndex: 0,
               isPlaying: isPlaying,
-              onTap: () {},
-            ),
-          ),
+            )
+          : BackendSnapshot.empty,
+    );
+    await pumpContents(
+      tester,
+      TrackRow(
+        model: TrackRowModel(
+          title: 'Title',
+          artist: 'Artist',
+          selected: selected,
+          trackId: currentTrack.id,
         ),
+        position: position,
+        onTap: () {},
       ),
     );
-    await tester.pumpAndSettle();
   }
 
   M3ECard cardOf(WidgetTester tester) => tester.widget<M3ECard>(
@@ -150,25 +187,21 @@ void main() {
 
   testWidgets('多选：封面 ⇄ 勾选切换保持前导槽宽，标题不横移', (tester) async {
     Future<void> pump({required bool selected}) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 360,
-                child: TrackRow(
-                  title: 'Title',
-                  artist: 'Artist',
-                  selected: selected,
-                  position: M3ECardPosition.single,
-                  onTap: () {},
-                ),
-              ),
+      await pumpContents(
+        tester,
+        SizedBox(
+          width: 360,
+          child: TrackRow(
+            model: TrackRowModel(
+              title: 'Title',
+              artist: 'Artist',
+              selected: selected,
             ),
+            position: M3ECardPosition.single,
+            onTap: () {},
           ),
         ),
       );
-      await tester.pumpAndSettle();
     }
 
     final leading = find.descendant(
@@ -204,25 +237,21 @@ void main() {
   });
 
   testWidgets('行尾元信息贴行右缘（回归：Flexible 曾与标题平分剩余宽度）', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 360,
-              child: TrackRow(
-                title: 'A very long track title that should take the space',
-                artist: 'Artist',
-                trailingText: '03:45',
-                position: M3ECardPosition.single,
-                onTap: () {},
-              ),
-            ),
+    await pumpContents(
+      tester,
+      SizedBox(
+        width: 360,
+        child: TrackRow(
+          model: const TrackRowModel(
+            title: 'A very long track title that should take the space',
+            artist: 'Artist',
+            trailingText: '03:45',
           ),
+          position: M3ECardPosition.single,
+          onTap: () {},
         ),
       ),
     );
-    await tester.pumpAndSettle();
 
     // 行尾文本（超时长的自定义文案）右缘 = 行右缘 − CardListSurface 内边距 16dp。
     final double rowRight = tester.getTopRight(find.byType(TrackRow)).dx;
@@ -238,25 +267,21 @@ void main() {
   testWidgets('逐名可点的歌手：点击链接回调，不触发行播放；无回调的名字不可点', (tester) async {
     var rowTaps = 0;
     final tapped = <String>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: TrackRow(
-              title: 'Title',
-              artist: 'A、B',
-              artists: [
-                TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
-                const TrackRowArtist(name: 'B'),
-              ],
-              position: M3ECardPosition.single,
-              onTap: () => rowTaps++,
-            ),
-          ),
+    await pumpContents(
+      tester,
+      TrackRow(
+        model: TrackRowModel(
+          title: 'Title',
+          artist: 'A、B',
+          artists: [
+            TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
+            const TrackRowArtist(name: 'B'),
+          ],
         ),
+        position: M3ECardPosition.single,
+        onTap: () => rowTaps++,
       ),
     );
-    await tester.pumpAndSettle();
 
     await tester.tapOnText(find.textRange.ofSubstring('A'));
     await tester.pump();
@@ -276,29 +301,26 @@ void main() {
   });
 
   testWidgets('宽屏表格列：三列按规范列宽渲染，副标题与歌手链接让位', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: TrackRow(
-              title: 'Title',
-              artist: 'Row Artist',
-              artists: [
-                TrackRowArtist(name: 'Link A', onTap: () {}),
-              ],
-              columns: const TrackRowColumns(
-                artist: 'Col Artist',
-                album: 'Col Album',
-                duration: '3:05',
-              ),
-              position: M3ECardPosition.single,
-              onTap: () {},
-            ),
-          ),
+    await pumpContents(
+      tester,
+      TrackRow(
+        model: TrackRowModel(
+          title: 'Title',
+          artist: 'Row Artist',
+          artists: [
+            TrackRowArtist(name: 'Link A', onTap: () {}),
+          ],
+          artistNames: const ['Col Artist'],
+          album: 'Col Album',
+          durationMs: 185000,
         ),
+        surface: const TrackRowSurface(
+          tableSpec: TrackRowColumnSpec.standard,
+        ),
+        position: M3ECardPosition.single,
+        onTap: () {},
       ),
     );
-    await tester.pumpAndSettle();
 
     // 三列文本各自出现（列宽来自行与表头共用的规范，见 track_table_header.dart）。
     expect(find.text('Col Artist'), findsOneWidget);
@@ -357,29 +379,26 @@ void main() {
 
   testWidgets('表格模式：标题列宽度受规范上限约束，右侧列缘不动', (tester) async {
     Future<void> pump(String title) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 1200,
-                child: TrackRow(
-                  // 长到一定超出上限，短到不触发上限。
-                  title: title,
-                  columns: const TrackRowColumns(
-                    artist: 'Col Artist',
-                    album: 'Col Album',
-                    duration: '3:05',
-                  ),
-                  position: M3ECardPosition.single,
-                  onTap: () {},
-                ),
-              ),
+      await pumpContents(
+        tester,
+        SizedBox(
+          width: 1200,
+          child: TrackRow(
+            model: TrackRowModel(
+              // 长到一定超出上限，短到不触发上限。
+              title: title,
+              artistNames: const ['Col Artist'],
+              album: 'Col Album',
+              durationMs: 185000,
             ),
+            surface: const TrackRowSurface(
+              tableSpec: TrackRowColumnSpec.standard,
+            ),
+            position: M3ECardPosition.single,
+            onTap: () {},
           ),
         ),
       );
-      await tester.pumpAndSettle();
     }
 
     final cap = TrackRowColumnSpec.standard.titleMaxWidth;
@@ -396,27 +415,21 @@ void main() {
 
   testWidgets('播放时间列：规范开启时才渲染，列宽取规范', (tester) async {
     Future<void> pump(TrackRowColumnSpec spec) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: TrackRow(
-                title: 'Title',
-                columns: TrackRowColumns(
-                  spec: spec,
-                  artist: 'Col Artist',
-                  album: 'Col Album',
-                  time: '10-18 21:03',
-                  duration: '3:05',
-                ),
-                position: M3ECardPosition.single,
-                onTap: () {},
-              ),
-            ),
+      await pumpContents(
+        tester,
+        TrackRow(
+          model: const TrackRowModel(
+            title: 'Title',
+            artistNames: ['Col Artist'],
+            album: 'Col Album',
+            time: '10-18 21:03',
+            durationMs: 185000,
           ),
+          surface: TrackRowSurface(tableSpec: spec),
+          position: M3ECardPosition.single,
+          onTap: () {},
         ),
       );
-      await tester.pumpAndSettle();
     }
 
     // 默认档没有这一列：时间文案不渲染，时长列宽不变。
@@ -446,29 +459,26 @@ void main() {
 
   testWidgets('表格模式：行尾槽固定宽，列左缘不随行尾内容漂移', (tester) async {
     Future<void> pump({Widget? trailing}) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 700,
-                child: TrackRow(
-                  title: 'Title',
-                  columns: const TrackRowColumns(
-                    artist: 'Col Artist',
-                    album: 'Col Album',
-                    duration: '3:05',
-                  ),
-                  trailing: trailing,
-                  position: M3ECardPosition.single,
-                  onTap: () {},
-                ),
-              ),
+      await pumpContents(
+        tester,
+        SizedBox(
+          width: 700,
+          child: TrackRow(
+            model: const TrackRowModel(
+              title: 'Title',
+              artistNames: ['Col Artist'],
+              album: 'Col Album',
+              durationMs: 185000,
             ),
+            surface: const TrackRowSurface(
+              tableSpec: TrackRowColumnSpec.standard,
+            ),
+            trailing: trailing,
+            position: M3ECardPosition.single,
+            onTap: () {},
           ),
         ),
       );
-      await tester.pumpAndSettle();
     }
 
     // 无行尾内容：列左缘已按固定槽宽让位。
@@ -491,19 +501,21 @@ void main() {
     var rowTaps = 0;
     var actionTaps = 0;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: TrackRow(
-              title: 'Title',
-              artist: 'Artist',
-              position: M3ECardPosition.single,
-              onTap: () => rowTaps++,
-              trailing: M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                semanticLabel: 'actions',
-                icon: const Icon(Icons.more_vert_rounded),
-                onPressed: () => actionTaps++,
+      ChangeNotifierProvider<PlaybackProvider>.value(
+        value: playback,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: TrackRow(
+                model: const TrackRowModel(title: 'Title', artist: 'Artist'),
+                position: M3ECardPosition.single,
+                onTap: () => rowTaps++,
+                trailing: M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  semanticLabel: 'actions',
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onPressed: () => actionTaps++,
+                ),
               ),
             ),
           ),
@@ -524,19 +536,22 @@ void main() {
     var actionTaps = 0;
     final secondaryTaps = <Offset>[];
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: TrackRow(
-              title: 'Title',
-              position: M3ECardPosition.single,
-              onTap: () {},
-              onSecondaryTap: secondaryTaps.add,
-              trailing: M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                semanticLabel: 'actions',
-                icon: const Icon(Icons.more_vert_rounded),
-                onPressed: () => actionTaps++,
+      ChangeNotifierProvider<PlaybackProvider>.value(
+        value: playback,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: TrackRow(
+                model: const TrackRowModel(title: 'Title'),
+                position: M3ECardPosition.single,
+                onTap: () {},
+                onSecondaryTap: secondaryTaps.add,
+                trailing: M3EIconButton(
+                  variant: M3EIconButtonVariant.standard,
+                  semanticLabel: 'actions',
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onPressed: () => actionTaps++,
+                ),
               ),
             ),
           ),
@@ -561,14 +576,17 @@ void main() {
       var rowTaps = 0;
       final secondaryTaps = <Offset>[];
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: TrackRow(
-                title: 'Title',
-                position: M3ECardPosition.single,
-                onTap: () => rowTaps++,
-                onSecondaryTap: secondaryTaps.add,
+        ChangeNotifierProvider<PlaybackProvider>.value(
+          value: playback,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: TrackRow(
+                  model: const TrackRowModel(title: 'Title'),
+                  position: M3ECardPosition.single,
+                  onTap: () => rowTaps++,
+                  onSecondaryTap: secondaryTaps.add,
+                ),
               ),
             ),
           ),
@@ -608,7 +626,7 @@ void main() {
       expect(standard.albumWidth, 200);
       expect(standard.durationWidth, 64);
       expect(standard.hasTimeColumn, isFalse);
-      expect(standard.minContentWidth, TrackRowColumns.minWidth);
+      expect(standard.minContentWidth, TrackRowColumnSpec.minWidth);
 
       const history = TrackRowColumnSpec.history;
       expect(history.titleMaxWidth, 400);
@@ -619,11 +637,11 @@ void main() {
       expect(history.hasTimeColumn, isTrue);
     });
 
-    test('唯一阈值：默认一档的规范最小值就是 TrackRowColumns.minWidth', () {
-      expect(TrackRowColumns.minWidth, 720);
+    test('唯一阈值：默认一档的规范最小值就是 TrackRowColumnSpec.minWidth', () {
+      expect(TrackRowColumnSpec.minWidth, 720);
       expect(TrackRowColumnSpec.standard.minContentWidth, 720);
       expect(TrackRow.defaultCoverSize, 44);
-      expect(TrackRowColumns.trailingSlotWidth, 56);
+      expect(TrackRowColumnSpec.trailingSlotWidth, 56);
     });
 
     test('最小内容宽容得下自己的固定列（阈值处不横向溢出）', () {
@@ -635,7 +653,7 @@ void main() {
             spec.albumWidth +
             spec.durationWidth +
             (spec.hasTimeColumn ? spec.timeWidth : 0) +
-            TrackRowColumns.trailingSlotWidth;
+            TrackRowColumnSpec.trailingSlotWidth;
         // 行内网格：封面位 + 每个槽前的列间距（表头同源复刻）。
         final grid = TrackRow.defaultCoverSize + cells * item.gap;
         // 判定输入是「内容宽」：行表面内边距 + 桌面页横向留白（32×2，见

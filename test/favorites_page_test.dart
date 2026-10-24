@@ -328,7 +328,7 @@ void main() {
 
   List<String> headlines(WidgetTester tester) => tester
       .widgetList<TrackRow>(find.byType(TrackRow))
-      .map((row) => row.title)
+      .map((row) => row.model.title)
       .toList();
 
   /// 变更流触发的后台重载在 widget 测试的 fake-async 区之外完成：
@@ -640,7 +640,7 @@ void main() {
 
     // 行内列与表头同一份规范（同一实例，不是等值副本）。
     expect(
-      tester.widget<TrackRow>(rowFinder).columns!.spec,
+      tester.widget<TrackRow>(rowFinder).surface.tableSpec,
       same(header.spec),
       reason: '表头与行必须同 spec 来源',
     );
@@ -678,7 +678,7 @@ void main() {
         tester.widget<TrackTableHeader>(find.byType(TrackTableHeader));
     expect(header.spec, same(TrackRowColumnSpec.history));
     expect(
-      tester.widget<TrackRow>(find.byType(TrackRow).first).columns!.spec,
+      tester.widget<TrackRow>(find.byType(TrackRow).first).surface.tableSpec,
       same(header.spec),
       reason: '行与表头同一份列规范（历史档）',
     );
@@ -758,7 +758,7 @@ void main() {
     );
     expect(
       tester.getSize(find.text('缓存')).width,
-      lessThanOrEqualTo(TrackRowColumns.trailingSlotWidth),
+      lessThanOrEqualTo(TrackRowColumnSpec.trailingSlotWidth),
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
@@ -802,6 +802,7 @@ void main() {
           of: find.text(title),
           matching: find.byType(TrackRow),
         ))
+        .model
         .selected;
 
     // Ctrl 按住点第一行：进入选择模式（等价长按）并选中该行。
@@ -840,6 +841,7 @@ void main() {
           of: find.text(title),
           matching: find.byType(TrackRow),
         ))
+        .model
         .selected;
 
     // 普通点击第 2 行（Song A）落锚点，同时照常点播。

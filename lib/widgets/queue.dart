@@ -17,14 +17,6 @@ String? _coverUrlOf(Track track) {
   return url == null || url.isEmpty ? null : url;
 }
 
-/// 时长文案（`m:ss`）；未知按 0 处理（队列行固定行尾口径）。
-String _formatDuration(Duration? duration) {
-  final value = duration ?? Duration.zero;
-  final minutes = value.inMinutes;
-  final seconds = (value.inSeconds % 60).toString().padLeft(2, '0');
-  return '$minutes:$seconds';
-}
-
 /// 播放队列：只列出当前曲目之后的曲目。
 ///
 /// 当前播放曲目由上方播放器承载（封面/标题/进度），列表里不重复这一行；
@@ -99,13 +91,17 @@ class QueueDisplay extends StatelessWidget {
                     // 当前曲目：高亮但不翻选中勾，也不响应点击——它本身就是
                     // 正在播放的进度行，重复装载同一曲目没有意义。
                     TrackRow(
-                      title: current.title,
-                      artist: current.artistLabel,
-                      coverUrl: _coverUrlOf(current),
-                      coverSize: 40,
-                      selected: true,
-                      showCheckWhenSelected: false,
-                      trailingText: _formatDuration(current.duration),
+                      model: TrackRowModel(
+                        title: current.title,
+                        artist: current.artistLabel,
+                        coverUrl: _coverUrlOf(current),
+                        durationMs: current.duration?.inMilliseconds,
+                        selected: true,
+                      ),
+                      surface: const TrackRowSurface(
+                        coverSize: 40,
+                        showCheckWhenSelected: false,
+                      ),
                       // 单行小节 = 四周外圆角（calculateCardPosition(0, 1) 约定）。
                       position: M3ECardPosition.single,
                     ),
@@ -205,12 +201,14 @@ class _QueueTrackRow extends StatelessWidget {
         ? trackRowActionMenuForTrack(context, track)
         : const <RowAction>[];
     return TrackRow(
-      title: track.title,
-      artist: track.artistLabel,
-      coverUrl: _coverUrlOf(track),
-      coverSize: 40,
+      model: TrackRowModel(
+        title: track.title,
+        artist: track.artistLabel,
+        coverUrl: _coverUrlOf(track),
+        durationMs: track.duration?.inMilliseconds,
+      ),
+      surface: const TrackRowSurface(coverSize: 40),
       position: position,
-      trailingText: _formatDuration(track.duration),
       onTap: onTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),
     );

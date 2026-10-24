@@ -2,16 +2,20 @@ import 'package:flutter/gestures.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'current_track_cover.dart';
 import 'library_cover.dart';
+import 'playback_selectors.dart';
 
 /// 曲目行里的歌手链接（名字 + 点击回调；回调为空 = 纯文本）。
 ///
 /// 搜索结果行传入逐名可点的歌手（内置平台曲目带平台内 id 时）；其它入口
-/// 只传整串 [TrackRow.artist]，两者互斥（[TrackRow.artists] 非空即优先）。
+/// 只传整串 [TrackRowModel.artist]，两者互斥（[TrackRowModel.artists] 非空
+/// 即优先）。
 class TrackRowArtist {
   final String name;
   final VoidCallback? onTap;
@@ -39,7 +43,7 @@ class TrackRowColumnSpec {
     this.albumWidth = 200,
     this.timeWidth = 0,
     this.durationWidth = 64,
-    this.minContentWidth = TrackRowColumns.minWidth,
+    this.minContentWidth = minWidth,
   });
 
   /// 标题列宽度上限：超宽内容区里标题不再无限拉长，右侧固定列仍贴行右缘
@@ -86,46 +90,96 @@ class TrackRowColumnSpec {
     timeWidth: 120,
     minContentWidth: 812,
   );
-}
 
-/// 宽屏表格一行的列内容（仅宽屏表格列表传入；null = 现有单列布局）。
-///
-/// 列宽与列构成走 [spec]（与表头同一份）；四个文案的空串 = 该格留空
-/// （不显示占位符）。「这一列有没有」是 [spec] 的整套决定，不看单行文案：
-/// 单行空值若让列消失，同一表内行与行、行与表头都会左右错位。
-class TrackRowColumns {
-  const TrackRowColumns({
-    this.spec = TrackRowColumnSpec.standard,
-    this.artist = '',
-    this.album = '',
-    this.time = '',
-    this.duration = '',
-  });
-
-  /// 列宽规范（行与表头必须传同一份）。
-  final TrackRowColumnSpec spec;
-
-  /// 艺术家列文案。
-  final String artist;
-
-  /// 专辑列文案。
-  final String album;
-
-  /// 播放时间列文案（播放历史；[TrackRowColumnSpec.hasTimeColumn] 为假时
-  /// 不渲染该列）。
-  final String time;
-
-  /// 时长列文案（来自 `durationText`）。
-  final String duration;
-
-  /// 默认一档规范 [TrackRowColumnSpec.standard] 生效的最小内容宽（内容宽 =
-  /// 窗口宽 − 实际栏宽；判据见 `DesktopLayout.tableColumnsFor`）。
+  /// 默认一档规范生效的最小内容宽（内容宽 = 窗口宽 − 实际栏宽；判据见
+  /// `DesktopLayout.tableColumnsFor`）。
   static const double minWidth = 720;
 
   /// 表格模式行尾动作槽宽（⋮ 菜单 / 缓存标签 / 拖动把手都落在槽内）：
   /// 行与表头共用同一宽度，列左缘只由列宽决定，不随行尾内容漂移。
   /// 取值 56 = `TrackActionsMenu` 锚点（`M3EIconButton` md）的宽度。
   static const double trailingSlotWidth = 56;
+}
+
+/// 一行曲目的展示数据（不可变）。
+///
+/// 调用方只填自己有的字段，不再逐个参数拼行；表格 / 双行版式由
+/// [TrackRowSurface.tableSpec] 决定（见 [TrackRow]）。
+class TrackRowModel {
+  const TrackRowModel({
+    required this.title,
+    this.artist = '',
+    this.artists,
+    this.artistNames = const [],
+    this.coverUrl,
+    this.durationMs,
+    this.album = '',
+    this.time = '',
+    this.trailingText,
+    this.trackId,
+    this.selected = false,
+  });
+
+  final String title;
+
+  /// 双行副标题（纯文本）。歌词搜索时是命中片段；空串隐藏副标题。
+  final String artist;
+
+  /// 逐名可点的歌手（搜索结果）：非空时双行副标题按链接渲染。
+  final List<TrackRowArtist>? artists;
+
+  /// 表格歌手列的候选名（搜索行给全部歌手）；空则回退 [artist]。
+  final List<String> artistNames;
+
+  final String? coverUrl;
+
+  /// 时长（毫秒）：双行档行尾 / 表格档时长列都由模块统一格式化。
+  /// 未知传 null，行尾不占位。
+  final int? durationMs;
+
+  /// 专辑列文案（仅表格档渲染；空串 = 该格留空）。
+  final String album;
+
+  /// 播放时间列文案（仅 [TrackRowColumnSpec.hasTimeColumn] 的表格档渲染）。
+  final String time;
+
+  /// 行尾覆盖文案（播放次数等非时长信息）；null = 用 [durationMs] 格式化。
+  /// 表格档不渲染（时长由列承担）。
+  final String? trailingText;
+
+  /// 行身份：传入后由 [TrackRow] 逐行订阅「是否当前曲目」。
+  /// null = 不订阅（如队列行：当前曲目不在队列里）。
+  final TrackId? trackId;
+
+  final bool selected;
+
+  /// 表格歌手列：全部歌手名以「、」连接；没有候选名时回退 [artist]。
+  String get tableArtist =>
+      artistNames.isEmpty ? artist : artistNames.join('、');
+}
+
+/// 一个列表表面的行呈现口径（同一列表的所有行共用）。
+///
+/// 版式只由 [tableSpec] 决定：非空 = 宽屏表格（单行 + 独立列），null =
+/// 双行（标题 + 副标题）。调用方不再自己判断「表格还是双行」以及哪些字段
+/// 该让位（表格档自动忽略副标题 / 歌手链接 / 行尾覆盖文案）。
+class TrackRowSurface {
+  const TrackRowSurface({
+    this.coverSize = TrackRow.defaultCoverSize,
+    this.tableSpec,
+    this.showCheckWhenSelected = true,
+  });
+
+  /// 行内封面边长（队列 / 换源等紧凑列表用 40）。
+  final double coverSize;
+
+  /// 表格列规范：非空 = 表格档；null = 双行档。
+  final TrackRowColumnSpec? tableSpec;
+
+  /// 多选态下把封面翻转为勾选图标；播放队列的选中行不需要。
+  final bool showCheckWhenSelected;
+
+  bool get isTable => tableSpec != null;
 }
 
 /// 固定行高的曲目行（队列 / 收藏 / 历史 / 发现详情 / 搜索结果共用）。
@@ -137,22 +191,17 @@ class TrackRowColumns {
 ///
 /// 表面用共享的 [CardListSurface]（M3E 列表规范 + 弹簧 shape morph）；
 /// 为什么不用 `M3EListItem` / `M3EListRowSurface` 见 docs/pitfalls.md #20。
+///
+/// 调用方只给 [TrackRowModel] + [TrackRowSurface] + 行内回调：当前曲目订阅
+/// （[selectCurrentTrackState]）、时长格式化（[durationText]）、表格 / 双行
+/// 版式与选中 / 当前优先级都在本模块内。
 class TrackRow extends StatelessWidget {
   const TrackRow({
     super.key,
-    required this.title,
-    this.artist = '',
-    this.artists,
-    this.coverUrl,
-    this.coverSize = defaultCoverSize,
-    this.columns,
-    this.trailingText,
-    this.trailing,
-    this.isCurrent = false,
-    this.isPlaying = false,
-    this.selected = false,
-    this.showCheckWhenSelected = true,
+    required this.model,
     this.position = M3ECardPosition.single,
+    this.surface = const TrackRowSurface(),
+    this.trailing,
     this.onTap,
     this.onLongPress,
     this.onSecondaryTap,
@@ -178,46 +227,18 @@ class TrackRow extends StatelessWidget {
   /// 表头（`track_table_header.dart`）按同一常量复刻留白结构。
   static const double defaultCoverSize = 44;
 
-  final String title;
-  final String artist;
-
-  /// 逐名可点的歌手（搜索结果）：非空时副标题按链接渲染（[artist] 仍作为
-  /// 无障碍文案与回退）。仅当歌手带平台内 id（可进歌手页）时才需要。
-  final List<TrackRowArtist>? artists;
-
-  final String? coverUrl;
-  final double coverSize;
-
-  /// 宽屏表格列：非空时行内改为「封面+标题 / 艺术家 / 专辑 /（播放时间）/
-  /// 时长 / 行尾」的表格布局，标题格只显示标题（副标题与逐名歌手链接让位
-  /// 给独立列）；null = 单列布局（[artist] / [artists] / [trailingText]
-  /// 的既有行为）。
-  final TrackRowColumns? columns;
-
-  /// 行尾元信息（时长/计数），未知时传 null 不占位。
-  /// 表格模式下不渲染（时长由 [columns] 的时长列承担）。
-  final String? trailingText;
-
-  /// 行尾插槽（排序把手、菜单按钮等）。
-  final Widget? trailing;
-
-  /// 本行是当前曲目：标题走 primary 强调，封面右下角叠状态角标。
-  ///
-  /// 与 [selected] 正交且 [selected] 优先：多选勾选态只显示勾选，不叠角标。
-  final bool isCurrent;
-
-  /// 当前曲目是否正在播放（仅 [isCurrent] 为真时有效）：
-  /// 播放中显示均衡器图形，暂停显示暂停图形。
-  final bool isPlaying;
-
-  final bool selected;
-
-  /// 多选态下把封面翻转为勾选图标；播放队列的选中行不需要。
-  final bool showCheckWhenSelected;
+  /// 行数据：标题 / 歌手 / 封面 / 时长 / 身份 / 选中态。
+  final TrackRowModel model;
 
   /// 行在列表中的位置：决定静止形状（首/末行外侧 16dp、内行 4dp）。
   /// 由列表用 `calculateCardPosition(index, count)` 计算。
   final M3ECardPosition position;
+
+  /// 列表表面的呈现口径（封面尺寸 / 表格规范 / 勾选策略）。
+  final TrackRowSurface surface;
+
+  /// 行尾插槽（排序把手、菜单按钮等）。
+  final Widget? trailing;
 
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -241,6 +262,14 @@ class TrackRow extends StatelessWidget {
     // 12 / 16），`track_table_header.dart` 用同一批值复刻留白结构。
     final M3EListItemTheme itemTheme = m3e.listTheme.item;
     final double gap = itemTheme.gap;
+    final bool selected = model.selected;
+    final TrackId? trackId = model.trackId;
+    // 当前曲目订阅只有这一份实现：行自己的 build 里逐行 select，只重建本行。
+    final CurrentTrackState current = trackId == null
+        ? (isCurrent: false, isPlaying: false)
+        : selectCurrentTrackState(context, trackId);
+    final bool isCurrent = current.isCurrent;
+    final bool isPlaying = current.isPlaying;
     final Color contentColor = selected
         ? scheme.onSecondaryContainer
         : isCurrent
@@ -254,14 +283,17 @@ class TrackRow extends StatelessWidget {
     final stateLabel = isCurrent
         ? (isPlaying ? l10n?.nowPlayingSection : l10n?.nowPlayingPaused)
         : null;
+    final artistLinks = model.artists;
+    final TrackRowColumnSpec? tableSpec = surface.tableSpec;
+    final semanticArtist = tableSpec == null ? model.artist : model.tableArtist;
     final semanticLabel = [
-      artist.isEmpty ? title : '$title, $artist',
+      semanticArtist.isEmpty ? model.title : '${model.title}, $semanticArtist',
       if (stateLabel != null) stateLabel,
     ].join(', ');
-    final artistLinks = artists;
-    final tableColumns = columns;
+    final String? durationLabel = durationText(model.durationMs);
+    final String? trailingText = model.trailingText ?? durationLabel;
 
-    Widget surface = CardListSurface(
+    Widget row = CardListSurface(
       position: position,
       selected: selected,
       onPressed: onTap,
@@ -269,42 +301,24 @@ class TrackRow extends StatelessWidget {
       semanticLabel: semanticLabel,
       padding: EdgeInsets.symmetric(horizontal: itemTheme.horizontalPadding),
       child: SizedBox(
-        height: TrackRow.extentOf(context, tableColumns: tableColumns != null),
+        height: TrackRow.extentOf(context, tableColumns: tableSpec != null),
         child: LayoutBuilder(
           builder: (context, constraints) => Row(
             children: [
-              _buildLeading(context, scheme),
+              _buildLeading(
+                scheme,
+                isCurrent: isCurrent,
+                isPlaying: isPlaying,
+              ),
               SizedBox(width: gap),
               Expanded(
-                child: tableColumns == null
-                    ? Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: type.bodyLarge.copyWith(color: contentColor),
-                          ),
-                          if (artistLinks != null && artistLinks.isNotEmpty)
-                            _ArtistLinks(
-                              artists: artistLinks,
-                              style: type.bodyMedium
-                                  .copyWith(color: supportingColor),
-                              linkStyle: type.bodyMedium.copyWith(
-                                color: scheme.primary,
-                              ),
-                            )
-                          else if (artist.isNotEmpty)
-                            Text(
-                              artist,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: type.bodyMedium
-                                  .copyWith(color: supportingColor),
-                            ),
-                        ],
+                child: tableSpec == null
+                    ? _buildTwoLineText(
+                        type: type,
+                        contentColor: contentColor,
+                        supportingColor: supportingColor,
+                        scheme: scheme,
+                        artistLinks: artistLinks,
                       )
                     // 标题列上限（[TrackRowColumnSpec.titleMaxWidth]）：
                     // Align 先把 Expanded 的紧约束放松，ConstrainedBox 的上限
@@ -314,10 +328,10 @@ class TrackRow extends StatelessWidget {
                         alignment: Alignment.centerLeft,
                         child: ConstrainedBox(
                           constraints: BoxConstraints(
-                            maxWidth: tableColumns.spec.titleMaxWidth,
+                            maxWidth: tableSpec.titleMaxWidth,
                           ),
                           child: Text(
-                            title,
+                            model.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: type.bodyLarge.copyWith(color: contentColor),
@@ -325,31 +339,31 @@ class TrackRow extends StatelessWidget {
                         ),
                       ),
               ),
-              if (tableColumns != null) ...[
+              if (tableSpec != null) ...[
                 SizedBox(width: gap),
                 _buildColumn(
-                  tableColumns.artist,
-                  tableColumns.spec.artistWidth,
+                  model.tableArtist,
+                  tableSpec.artistWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
                 SizedBox(width: gap),
                 _buildColumn(
-                  tableColumns.album,
-                  tableColumns.spec.albumWidth,
+                  model.album,
+                  tableSpec.albumWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
-                if (tableColumns.spec.hasTimeColumn) ...[
+                if (tableSpec.hasTimeColumn) ...[
                   SizedBox(width: gap),
                   _buildColumn(
-                    tableColumns.time,
-                    tableColumns.spec.timeWidth,
+                    model.time,
+                    tableSpec.timeWidth,
                     type.bodyMedium.copyWith(color: supportingColor),
                   ),
                 ],
                 SizedBox(width: gap),
                 _buildColumn(
-                  tableColumns.duration,
-                  tableColumns.spec.durationWidth,
+                  durationLabel ?? '',
+                  tableSpec.durationWidth,
                   type.bodyMedium.copyWith(color: supportingColor),
                 ),
                 SizedBox(width: gap),
@@ -357,7 +371,7 @@ class TrackRow extends StatelessWidget {
                 // 槽宽布局，列左缘不因内容有无、宽窄而左右移动；表头按同一
                 // 槽宽预留，两侧列缘恒对齐。
                 SizedBox(
-                  width: TrackRowColumns.trailingSlotWidth,
+                  width: TrackRowColumnSpec.trailingSlotWidth,
                   child: trailing == null
                       ? null
                       : Align(
@@ -372,7 +386,7 @@ class TrackRow extends StatelessWidget {
                         ),
                 ),
               ],
-              if (tableColumns == null && trailingText != null) ...[
+              if (tableSpec == null && trailingText != null) ...[
                 SizedBox(width: gap),
                 // 行尾元信息贴行右缘：普通 Text 取自身宽度（不用 Flexible：
                 // loose Flexible 会与标题列平分剩余宽度，时长只有 28dp 却
@@ -382,7 +396,7 @@ class TrackRow extends StatelessWidget {
                   constraints:
                       BoxConstraints(maxWidth: constraints.maxWidth / 2),
                   child: Text(
-                    trailingText!,
+                    trailingText,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
@@ -390,7 +404,7 @@ class TrackRow extends StatelessWidget {
                   ),
                 ),
               ],
-              if (tableColumns == null && trailing != null) ...[
+              if (tableSpec == null && trailing != null) ...[
                 SizedBox(width: gap),
                 IconTheme.merge(
                   data: IconThemeData(color: supportingColor, size: 20),
@@ -403,22 +417,57 @@ class TrackRow extends StatelessWidget {
       ),
     );
 
-    if (!isDesktopPlatform()) return surface;
+    if (!isDesktopPlatform()) return row;
     if (onSecondaryTap != null) {
       // 桌面：右键 = 行操作菜单（在落点弹出，行尾不再有 ⋮ 锚点）。外挂一个
       // 只声明次级手势的 GestureDetector：主键 / 长按仍归 CardListSurface
       // （M3ECard 的 InkWell 不声明次级手势），两边在竞技场里各认各的按钮，
       // 互不抢手势。
-      surface = GestureDetector(
+      row = GestureDetector(
         behavior: HitTestBehavior.opaque,
         onSecondaryTapUp: (details) => onSecondaryTap!(details.globalPosition),
-        child: surface,
+        child: row,
       );
     }
-    return surface;
+    return row;
   }
 
-  /// 表格列单元格：固定列宽 + 单行省略（列宽来自 [TrackRowColumns.spec]，
+  /// 双行档副标题：逐名可点歌手优先，否则整串纯文本（空串隐藏副标题）。
+  Widget _buildTwoLineText({
+    required M3ETypeScale type,
+    required Color contentColor,
+    required Color supportingColor,
+    required M3EColorScheme scheme,
+    required List<TrackRowArtist>? artistLinks,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          model.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: type.bodyLarge.copyWith(color: contentColor),
+        ),
+        if (artistLinks != null && artistLinks.isNotEmpty)
+          _ArtistLinks(
+            artists: artistLinks,
+            style: type.bodyMedium.copyWith(color: supportingColor),
+            linkStyle: type.bodyMedium.copyWith(color: scheme.primary),
+          )
+        else if (model.artist.isNotEmpty)
+          Text(
+            model.artist,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: type.bodyMedium.copyWith(color: supportingColor),
+          ),
+      ],
+    );
+  }
+
+  /// 表格列单元格：固定列宽 + 单行省略（列宽来自 [TrackRowColumnSpec]，
   /// 与表头同源）。
   ///
   /// 空串照常渲染空 [Text]：列位置由列宽占住，不因缺值左右移动。
@@ -439,28 +488,32 @@ class TrackRow extends StatelessWidget {
   ///
   /// 当前曲目角标只在封面可见时叠加：多选勾选占住前导槽时让位给勾选图标，
   /// 标题主色仍表达当前曲目。
-  Widget _buildLeading(BuildContext context, M3EColorScheme scheme) {
-    final bool showsCheck = selected && showCheckWhenSelected;
+  Widget _buildLeading(
+    M3EColorScheme scheme, {
+    required bool isCurrent,
+    required bool isPlaying,
+  }) {
+    final bool showsCheck = model.selected && surface.showCheckWhenSelected;
     final Widget cover = isCurrent && !showsCheck
         ? CurrentTrackCover(
-            url: coverUrl,
-            size: coverSize,
+            url: model.coverUrl,
+            size: surface.coverSize,
             isPlaying: isPlaying,
           )
-        : LibraryCoverThumb(url: coverUrl, size: coverSize);
-    if (!showCheckWhenSelected) return cover;
+        : LibraryCoverThumb(url: model.coverUrl, size: surface.coverSize);
+    if (!surface.showCheckWhenSelected) return cover;
     // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
     // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与
     // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
     return SizedBox.square(
-      dimension: coverSize,
+      dimension: surface.coverSize,
       child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 180),
-        child: selected
+        child: model.selected
             ? Icon(
                 Icons.check_circle_rounded,
                 key: const ValueKey<String>('selected'),
-                size: coverSize * 0.7,
+                size: surface.coverSize * 0.7,
                 color: scheme.onSecondaryContainer,
               )
             : KeyedSubtree(

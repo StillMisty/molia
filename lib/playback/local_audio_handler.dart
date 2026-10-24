@@ -1,20 +1,20 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:flutter_media_session/flutter_media_session.dart';
 
 import '../app/bootstrap/startup_trace.dart';
-import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
 import '../models/play_mode.dart';
-import '../services/language_service.dart';
 import '../services/lyrics_display/media_lyric_composer.dart';
 import '../sources/source_track.dart';
 import 'local_playback_service.dart';
 import 'media_artwork_uri.dart';
 import 'media_session_backend.dart';
 import 'media_session_backend_factory.dart';
+import 'media_session_copy.dart';
+import 'media_session_copy_source.dart';
+import 'media_session_read_model.dart';
 import 'playback_commands.dart';
 
 /// 当前平台是否具备系统级媒体会话实现。
@@ -63,21 +63,6 @@ const Map<bool, String> favoriteActionIcons = {
   true: 'ic_notification_favorite_filled',
 };
 
-/// 当前界面语言的 l10n（通知动作文案）。
-///
-/// 与托盘菜单同一解析口径：用户选择优先、否则跟随系统，不支持的 locale
-/// 回退首个支持语言（`lookupAppLocalizations` 对不支持的语言会抛错）。
-AppLocalizations _currentLocalizations() {
-  final effective = LanguageService.localeNotifier.value ??
-      WidgetsBinding.instance.platformDispatcher.locale;
-  final resolved = LanguageService.supportedLocales.any(
-    (supported) => supported.languageCode == effective.languageCode,
-  )
-      ? effective
-      : LanguageService.supportedLocales.first;
-  return lookupAppLocalizations(resolved);
-}
-
 /// 初始化系统媒体会话（后台播放 + 通知栏/锁屏/耳机键/媒体浮层）。
 ///
 /// 平台不支持或初始化失败时返回 null，播放功能降级为应用内播放，
@@ -86,6 +71,7 @@ AppLocalizations _currentLocalizations() {
 ///
 /// [commands] 是播放写入口（组合根注入 `PlaybackSessionCoordinator`）：
 /// handler 只把系统动作翻译成命令，恢复态路由与落盘时机都由命令面负责。
+/// [copy] 是界面文案来源（默认跟随全局语言）；handler 不读全局 locale。
 /// [artworkBlocked] 为省流模式封面网关：返回 true 时媒体项不带封面。
 /// 封面不直接交给平台下载（网易云等 CDN 对默认 UA 返回 403）：先复用
 /// [ArtworkCache] 带浏览器 UA + Referer 落到本地文件，再以本地 URI 补发；
@@ -93,6 +79,7 @@ AppLocalizations _currentLocalizations() {
 Future<LocalAudioHandler?> initSystemMediaSession(
   LocalPlaybackService service, {
   required PlaybackCommandPort commands,
+  ValueListenable<MediaSessionCopy>? copy,
   bool Function()? artworkBlocked,
 }) async {
   if (!isSystemMediaSessionSupported) {
@@ -103,8 +90,9 @@ Future<LocalAudioHandler?> initSystemMediaSession(
     if (backend == null) return null;
     final buildWatch = Stopwatch()..start();
     final handler = LocalAudioHandler(
-      service,
+      LocalPlaybackMediaSessionReadModel(service),
       commands: commands,
+      copy: copy ?? LocalizedMediaSessionCopy(),
       backend: backend,
       artworkBlocked: artworkBlocked,
     );
@@ -128,25 +116,29 @@ Future<String?> _artworkUriFromCache(String url) async {
   return mediaArtworkUriForPath(path);
 }
 
-/// 把 [LocalPlaybackService] 的状态映射为系统媒体会话所需的
-/// [MediaMetadata] / [PlaybackState]，并把通知栏 / 锁屏 / 耳机键 / 媒体浮层
+/// 把媒体会话读取面（[MediaSessionReadModel]）的状态映射为系统媒体会话所需
+/// 的 [MediaMetadata] / [PlaybackState]，并把通知栏 / 锁屏 / 耳机键 / 媒体浮层
 /// 的控制请求翻译成 [PlaybackCommandPort] 命令。
 ///
-/// 类名与媒体控制方法名保持不变（ADR-0010）；内部只保留读路径——状态映射直读
-/// [LocalPlaybackService]，写入一律经命令面（恢复态与 live 的分叉、落盘时机
-/// 都在 `PlaybackSessionCoordinator`，handler 不再自己判断 phase 或落盘）。
+/// 类名与媒体控制方法名保持不变（ADR-0010）；读取只依赖窄接口（生产实现投影
+/// `LocalPlaybackService`，测试注入普通值假实现），写入一律经命令面（恢复态
+/// 与 live 的分叉、落盘时机都在 `PlaybackSessionCoordinator`，handler 不再
+/// 自己判断 phase 或落盘）。界面文案经 [MediaSessionCopy] 注入，handler 不读
+/// 全局 locale，也不硬编码歌手回退文案。
 ///
 /// 不继承 `audio_service` 的 `BaseAudioHandler`，而用「控制器 + 可注入
 /// [MediaSessionBackend]」组合。
 class LocalAudioHandler {
   LocalAudioHandler(
-    this._service, {
+    this._readModel, {
     required PlaybackCommandPort commands,
+    required ValueListenable<MediaSessionCopy> copy,
     MediaSessionBackend? backend,
     bool Function()? artworkBlocked,
     Future<String?> Function(String url)? artworkUriResolver,
     bool? periodicPositionStateUpdates,
   })  : _commands = commands,
+        _copy = copy,
         _backend = backend ??
             createSystemMediaSessionBackend() ??
             const NoopMediaSessionBackend(),
@@ -154,16 +146,21 @@ class LocalAudioHandler {
         _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
         _periodicPositionStateUpdates = periodicPositionStateUpdates ??
             defaultTargetPlatform != TargetPlatform.android {
-    _service.addListener(_syncFromService);
-    // 界面语言切换后通知动作文案（播放顺序）跟随。
-    LanguageService.localeNotifier.addListener(_onLocaleChanged);
+    _readModel.addListener(_syncFromService);
+    // 界面语言切换后通知动作文案（播放顺序 / 收藏）跟随：来源重算文案后
+    // 通知 handler 重发动作，handler 自己不解析 locale。
+    _copy.addListener(_onCopyChanged);
     _syncFromService(force: true);
   }
 
-  final LocalPlaybackService _service;
+  /// 系统媒体会话读取面（生产：`LocalPlaybackMediaSessionReadModel`）。
+  final MediaSessionReadModel _readModel;
 
   /// 播放写入口（组合根注入 `PlaybackSessionCoordinator`）。
   final PlaybackCommandPort _commands;
+
+  /// 当前界面文案（组合根注入；语言切换时由来源 notifier 通知）。
+  final ValueListenable<MediaSessionCopy> _copy;
 
   final MediaSessionBackend _backend;
 
@@ -201,8 +198,8 @@ class LocalAudioHandler {
 
   /// 解除监听（应用内 handler 与进程同生命周期；测试用于避免串场）。
   void dispose() {
-    _service.removeListener(_syncFromService);
-    LanguageService.localeNotifier.removeListener(_onLocaleChanged);
+    _readModel.removeListener(_syncFromService);
+    _copy.removeListener(_onCopyChanged);
     final subscription = _actionSubscription;
     _actionSubscription = null;
     if (subscription != null) unawaited(subscription.cancel());
@@ -226,12 +223,10 @@ class LocalAudioHandler {
   /// 上次广播的封面 URL（音源补图回写队列后需刷新通知/锁屏封面）。
   String? _lastArtworkUrl;
 
-  /// 收藏能力：读当前曲目的收藏态 + 切换（组合根在 `LibraryProvider` 建好后
-  /// 回填，见 [attachFavoriteActions]；与媒体会话本身一样的晚绑定）。
-  bool Function(SourceTrack track)? _isFavoriteFor;
-  Future<void> Function(SourceTrack track)? _toggleFavorite;
-
   /// 当前曲目的收藏态（决定通知里收藏动作的图标与文案）。
+  ///
+  /// 读取面在曲库 `LibraryProvider` 建好后回填（见 [attachFavoriteActions]；
+  /// 与媒体会话本身一样的晚绑定），handler 只消费结果，不直接持有曲库。
   bool _favorite = false;
 
   /// 上次广播的收藏态：曲库里的收藏变化要重发动作（空心 ↔ 实心）。
@@ -263,7 +258,7 @@ class LocalAudioHandler {
   /// 这两类变化都不影响播放态与动作；位置 / 播放态去重字段也保持不动，
   /// 让下一次真实事件仍按原口径判定。
   void _sendMetadataOnly() {
-    final track = _service.currentSourceTrack;
+    final track = _readModel.currentTrack;
     if (track == null) return;
     _send(() => _backend.updateMetadata(_metadataFor(track)));
   }
@@ -271,23 +266,23 @@ class LocalAudioHandler {
   /// 绑定「收藏」能力（组合根调用；见 [favoriteActionId]）。
   ///
   /// 与媒体会话状态同步一样的晚绑定原因：handler 在播放栈里创建，
-  /// 而曲库 provider 之后才建好。收藏态的唯一来源是这里的读回调，通知动作只
-  /// 消费结果（图标空心 / 实心）。
+  /// 而曲库 provider 之后才建好。收藏读写回填到读取面，通知动作只消费结果
+  /// （图标空心 / 实心）。
   void attachFavoriteActions({
     required bool Function(SourceTrack track) isFavorite,
     required Future<void> Function(SourceTrack track) toggle,
   }) {
-    _isFavoriteFor = isFavorite;
-    _toggleFavorite = toggle;
+    _readModel.bindFavorite(isFavorite: isFavorite, toggle: toggle);
     refreshFavoriteState();
   }
 
   /// 曲库侧收藏态可能变了（组合根监听 `LibraryProvider` 后调用）。
   ///
-  /// 现查当前曲目的收藏态，值变了才重发动作（图标空心 ↔ 实心）；没绑定读回调
-  /// 或没有曲目时沿用已有值，不产生额外广播。
+  /// 现查当前曲目的收藏态，值变了才重发动作（图标空心 ↔ 实心）；没有曲目时
+  /// 沿用已有值，不产生额外广播。
   void refreshFavoriteState() {
-    final favorite = _favoriteFor(_service.currentSourceTrack) ?? _favorite;
+    final track = _readModel.currentTrack;
+    final favorite = track == null ? _favorite : _readModel.isFavorite(track);
     if (favorite == _favorite) return;
     _favorite = favorite;
     _syncFromService();
@@ -328,16 +323,16 @@ class LocalAudioHandler {
     return null;
   }
 
-  /// 收藏动作：走组合根注入的曲库写入回调（唯一写路径），完成后立即刷新图标。
+  /// 收藏动作：走读取面回填的曲库写入回调（唯一写路径），完成后立即刷新图标。
   ///
   /// 曲库通知本身也会触发一次刷新（组合根监听）；这里补一次是为了不依赖接线
-  /// 顺序，也让「点通知 → 图标变实心」在同一次动作里完成。
+  /// 顺序，也让「点通知 → 图标变实心」在同一次动作里完成。未接线时读取面的
+  /// `toggleFavorite` 是 no-op，不会产生广播。
   Future<void> _toggleFavoriteTrack() async {
-    final track = _service.currentSourceTrack;
-    final toggle = _toggleFavorite;
-    if (track == null || toggle == null) return;
+    final track = _readModel.currentTrack;
+    if (track == null) return;
     try {
-      await toggle(track);
+      await _readModel.toggleFavorite(track);
     } catch (e) {
       // 通知动作没有提示位：写失败只记日志，图标保持原状态，不能把异常
       // 抛回平台通道（会变成未处理异步错误）。
@@ -347,15 +342,8 @@ class LocalAudioHandler {
     refreshFavoriteState();
   }
 
-  /// 当前曲目的收藏态；没绑定读回调 / 没曲目时返回 null（调用方沿用已有值）。
-  bool? _favoriteFor(SourceTrack? track) {
-    final probe = _isFavoriteFor;
-    if (probe == null || track == null) return null;
-    return probe(track);
-  }
-
-  /// 界面语言切换：重建通知动作文案（播放顺序）。
-  void _onLocaleChanged() => _syncFromService(force: true);
+  /// 界面语言切换：文案来源重算后重建通知动作文案（收藏 / 播放顺序）。
+  void _onCopyChanged() => _syncFromService(force: true);
 
   Future<void> skipToNext() async {
     // 恢复态回落（服务无真实曲目）也由命令面按阶段处理，handler 不再分叉。
@@ -416,14 +404,14 @@ class LocalAudioHandler {
   }
 
   void _syncFromService({bool force = false}) {
-    final track = _service.currentSourceTrack;
+    final track = _readModel.currentTrack;
     final trackId = track?.id;
-    final playing = _service.isPlaying;
-    final loading = _service.isLoading;
-    final mode = _service.mode;
-    final position = _service.position;
-    final duration = _service.duration;
-    final seekRevision = _service.seekRevision;
+    final playing = _readModel.isPlaying;
+    final loading = _readModel.isLoading;
+    final mode = _readModel.mode;
+    final position = _readModel.position;
+    final duration = _readModel.duration;
+    final seekRevision = _readModel.seekRevision;
 
     final trackChanged = trackId != _lastTrackId;
     final playingChanged = playing != _lastPlaying;
@@ -431,7 +419,7 @@ class LocalAudioHandler {
     // 模式变化要重发状态与动作：图标/文案反映当前模式（App 内切换同样到达这里）。
     final modeChanged = mode != _lastMode;
     // 收藏态只影响动作（空心 / 实心图标），不进元数据 / 播放状态重建。
-    final favorite = _favoriteFor(track) ?? _favorite;
+    final favorite = track == null ? _favorite : _readModel.isFavorite(track);
     final favoriteChanged = favorite != _lastFavorite;
     final artworkUrl = track?.coverUrl;
     final artworkChanged = artworkUrl != _lastArtworkUrl;
@@ -562,36 +550,31 @@ class LocalAudioHandler {
 
   /// 收藏动作：图标与文案反映**当前**收藏态（点按切换）。
   MediaAction _favoriteAction() {
-    final l10n = _currentLocalizations();
     return MediaAction.custom(
       name: favoriteActionId,
-      customLabel: _favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      customLabel: _copy.value.favoriteLabel(favorite: _favorite),
       customIconResource: favoriteActionIcons[_favorite]!,
     );
   }
 
   /// 播放顺序动作：图标与文案反映**当前**模式（点按循环到下一个模式）。
   MediaAction _playModeAction(PlayMode mode) {
-    final l10n = _currentLocalizations();
     return MediaAction.custom(
       name: playModeActionId,
-      customLabel: switch (mode) {
-        PlayMode.listLoop => l10n.playModeListLoop,
-        PlayMode.sequential => l10n.playModeSequential,
-        PlayMode.singleRepeat => l10n.playModeSingleRepeat,
-        PlayMode.shuffle => l10n.playModeShuffle,
-      },
+      customLabel: _copy.value.playModeLabel(mode),
       customIconResource: playModeActionIcons[mode]!,
     );
   }
 
   MediaMetadata _metadataFor(SourceTrack track) {
-    final duration =
-        _service.duration > Duration.zero ? _service.duration : track.duration;
+    final duration = _readModel.duration > Duration.zero
+        ? _readModel.duration
+        : track.duration;
     final metadata = mediaMetadataForTrack(
       track,
       duration: duration,
       artworkUri: _artworkUriFor(track),
+      unknownArtist: _copy.value.unknownArtist,
     );
     return applyLyricMetadataOverride(metadata, _lyricMetadataOverride);
   }
@@ -631,7 +614,7 @@ class LocalAudioHandler {
       _localArtworkUri = localUri;
       // 解析期间可能已切歌：只刷新仍指向同一封面的当前曲目。
       // 封面 URI 只是元数据，不重建播放态 / 动作（避免多一次无谓 IPC）。
-      if (_service.currentSourceTrack?.coverUrl == coverUrl) {
+      if (_readModel.currentTrack?.coverUrl == coverUrl) {
         _sendMetadataOnly();
       }
     } catch (e) {
@@ -665,16 +648,17 @@ MediaMetadata applyLyricMetadataOverride(
 /// 构造系统媒体会话用的 [MediaMetadata]（纯函数，便于单测）。
 ///
 /// [artworkUri] 由调用方决定（远程 URL 兜底或本地文件 URI / Windows 路径）；
-/// 省流模式传 null。
+/// 省流模式传 null。[unknownArtist] 是注入的 l10n 回退文案（不硬编码中文）。
 @visibleForTesting
 MediaMetadata mediaMetadataForTrack(
   SourceTrack track, {
   required Duration? duration,
   required String? artworkUri,
+  required String unknownArtist,
 }) {
   return MediaMetadata(
     title: track.title,
-    artist: track.artist.isEmpty ? '未知歌手' : track.artist,
+    artist: track.artist.isEmpty ? unknownArtist : track.artist,
     album: track.album.isEmpty ? null : track.album,
     duration: duration,
     artworkUri: artworkUri,
