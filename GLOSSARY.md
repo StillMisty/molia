@@ -60,7 +60,10 @@
   等 `pendingWrite`（「已提交」语义），live seek 强制整份落盘。系统媒体会话与 UI
   共用 `PlaybackCommandPort`（`lib/playback/playback_commands.dart`，唯一实现是协调者）：
   handler 只把通知 / 耳机键动作翻译成命令，恢复态回落（切歌 / 队列跳转）、阶段路由与
-  落盘时机都在命令面，handler 不再直写服务、也不再持有第二个落盘回调。壳层 paused
+  落盘时机都在命令面，handler 不再直写服务、也不再持有第二个落盘回调。provider
+  的失败恢复写入也走同一条命令面：播放失败的同源重试走 `playQueueIndex`，自动换源写回走
+  `replaceQueueTrack`（只有 live 生效，恢复态 / 未命中 no-op），不直写 facade。
+  壳层 paused
   与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`，桌面 `quitApp` 有界等待（2s）后继续退出。
   系统媒体控制（暂停 / 停止 / 切顺序 / seek）与恢复态切歌键
@@ -413,8 +416,10 @@
   返回 null —— 宁可不换，不换错）。
 - **Auto source swap（自动换源）** — `lib/services/source_swap/auto_source_swap_service.dart`
   + `PlaybackProvider` 的失败恢复链路：同源重试仍失败后跨源严格找回并**静默**
-  替换队列曲目（对齐 LX）；provenance（每个曲目的已尝试来源）保证级联每源
-  至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
+  替换队列曲目（对齐 LX）；替换经 `PlaybackCommandPort.replaceQueueTrack`
+  （live 由协调者转发 facade 并返回前提交会话，恢复态 / 未命中 no-op——自动换源
+  只由真实播放失败触发，不改保存的恢复会话）；provenance（每个曲目的已尝试来源）
+  保证级联每源至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
 
 ## 听歌统计
 - **Listening statistics snapshot（统计快照）** — `ListeningStatisticsSnapshot`：

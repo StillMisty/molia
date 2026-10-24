@@ -7,6 +7,7 @@
 /// 实现而不用拉起整条播放链路。
 library;
 
+import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 
 /// 命令由哪个阶段处理（调用方据此决定 UI 通知口径）。
@@ -46,6 +47,16 @@ abstract interface class PlaybackCommandPort {
 
   /// 播放队列中的指定下标（系统媒体队列跳转）。
   Future<PlaybackCommandRoute> playQueueIndex(int index);
+
+  /// 把队列中 [trackUri] 的曲目原地替换为 [newTrack]（自动换源写回）。
+  ///
+  /// 只有 live 处理：自动换源由真实播放失败触发，恢复态没有真实队列可换。
+  /// 恢复态 / 无曲目 / 未命中都返回 [PlaybackCommandRoute.none]；live 返回前
+  /// 保证换源结果已写进会话（重开应用恢复的是新来源，而不是过期直链）。
+  Future<PlaybackCommandRoute> replaceQueueTrack(
+    String trackUri,
+    Track newTrack,
+  );
 
   /// 跳转进度（恢复态只改保存进度并落盘；live 转发并强制落盘）。
   Future<void> seekToPosition(Duration position);

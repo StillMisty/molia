@@ -638,6 +638,59 @@ void main() {
     expect(store.saves.last.tracks.map((track) => track.id.id), ['a2', 'b2']);
   });
 
+  test('命令面换源：恢复态 / 未命中 no-op，live 转发并等会话提交', () async {
+    build(persistStore: true);
+    final a = _track('a');
+
+    // 恢复态：自动换源只由真实播放失败触发，不作用于保存的会话。
+    await seedSession(PlaybackSession(tracks: [a], index: 0));
+    expect(await session.load(), isTrue);
+    expect(
+      await session.replaceQueueTrack('fake:a', _track('a2')),
+      PlaybackCommandRoute.none,
+    );
+    expect(backend.calls, isEmpty);
+    expect(session.resolve(facade.snapshot.value).current?.id.id, 'a');
+
+    // live：uri 不在队列 → no-op（不转发、不落盘）。
+    backend.emit(_live(a, position: const Duration(seconds: 1)));
+    expect(store.calls, ['save']);
+    expect(
+      await session.replaceQueueTrack('fake:zzz', _track('zzz2')),
+      PlaybackCommandRoute.none,
+    );
+    expect(backend.calls, isEmpty);
+    expect(store.calls, ['save']);
+
+    // 当前曲目换源：新 id 由快照监听整份落盘，命令面不再重复写。
+    expect(
+      await session.replaceQueueTrack('fake:a', _track('a2')),
+      PlaybackCommandRoute.live,
+    );
+    expect(backend.calls, ['replaceQueueTrack:fake:a']);
+    expect(store.calls, ['save', 'save']);
+    expect(store.saves.last.tracks.single.id.uri, 'fake:a2');
+    // 返回即已写入（persistStore 写真实存储）：重开恢复的是新来源。
+    expect(
+        (await PlaybackSessionStore().load())?.tracks.single.id.uri, 'fake:a2');
+
+    // 同 id 换元数据：current.id 未变、快照监听不触发，命令面补写一次。
+    final renamed = Track(
+      id: const TrackId('fake', 'a2'),
+      title: 'Renamed',
+      artists: [Artist(name: 'Artist')],
+      duration: const Duration(seconds: 30),
+      origin: TrackOrigin.lx,
+      payload: const {'songmid': 'mid_a2'},
+    );
+    expect(
+      await session.replaceQueueTrack('fake:a2', renamed),
+      PlaybackCommandRoute.live,
+    );
+    expect(store.calls, ['save', 'save', 'save']);
+    expect(store.saves.last.tracks.single.title, 'Renamed');
+  });
+
   test('进度 tick：1s 节流只写轻量进度键，满一分钟整份刷新', () async {
     build();
     final a = _track('a');

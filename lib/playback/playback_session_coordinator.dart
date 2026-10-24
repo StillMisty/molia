@@ -9,7 +9,7 @@
 /// - 恢复态展示快照只在这里构造（[_publishRestoredSnapshot]）；
 /// - 落盘（会话 JSON / 轻量进度键 / 清除）全部经本模块，节流口径见
 ///   [_sessionSaveInterval] / [_sessionRefreshInterval]，`pendingWrite` 串行化
-///   随之收进来；改变会话的命令（seek / 暂停 / 切歌 / 模式 / 停止）返回前
+///   随之收进来；改变会话的命令（seek / 暂停 / 切歌 / 模式 / 停止 / 换源）返回前
 ///   等写队列排空（「已提交」语义），系统媒体控制与壳层挂起 / 退出共用
 ///   同一个写队列；
 /// - 「冷启动跳过恢复」的判据（开关关闭 / 无会话 / 已有真实播放）只在这里。
@@ -371,6 +371,36 @@ class PlaybackSessionCoordinator
     final queue = _facade.snapshot.value.queue;
     if (index < 0 || index >= queue.length) return PlaybackCommandRoute.none;
     await _facade.playQueueIndex(index);
+    await _store.pendingWrite;
+    return PlaybackCommandRoute.live;
+  }
+
+  /// 自动换源写回：把队列中 [trackUri] 的曲目原地替换为 [newTrack]。
+  ///
+  /// 只有 live 会处理：自动换源由真实播放失败触发，恢复态没有真实队列可换，
+  /// 改保存的会话只会让 UI 显示一首并未播放的曲目——因此返回
+  /// [PlaybackCommandRoute.none]。未命中（uri 不在队列）同样是 no-op。
+  ///
+  /// live 返回前必须保证换源结果已写进会话，而不是等 1s 节流 / 1min 整份刷新：
+  /// 换源后又指向过期直链，进程此时被杀，重开应用恢复的还是旧来源。当前曲目
+  /// 的 id 变了时快照监听已经整份落盘（[_handleLiveSnapshot]），这里只在它没
+  /// 触发（同 id 换元数据 / 非当前槽位）时补写一次，同一动作只写一遍。
+  @override
+  Future<PlaybackCommandRoute> replaceQueueTrack(
+    String trackUri,
+    Track newTrack,
+  ) async {
+    if (phase == PlaybackSessionPhase.restored) {
+      return PlaybackCommandRoute.none;
+    }
+    final live = _facade.snapshot.value;
+    if (live.current == null) return PlaybackCommandRoute.none;
+    if (!live.queue.any((track) => track.id.uri == trackUri)) {
+      return PlaybackCommandRoute.none;
+    }
+    final writesBefore = _sessionWrites;
+    await _facade.replaceQueueTrack(trackUri, newTrack);
+    if (_sessionWrites == writesBefore) _maybeSaveSession(force: true);
     await _store.pendingWrite;
     return PlaybackCommandRoute.live;
   }
