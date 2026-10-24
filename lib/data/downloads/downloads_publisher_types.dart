@@ -20,14 +20,22 @@ abstract interface class DownloadsPublisher {
   /// 目录），不需要二次发布。
   bool get supported;
 
+  /// 公共 Downloads 的展示根（Android：`.../Download/Molia`；其余平台 null）。
+  ///
+  /// 只用于设置页 / 保存结果展示；Dart 侧不拿它直接写文件（分区存储下
+  /// 必须经 MediaStore）。
+  Future<String?> publicRoot();
+
   /// 把 [sourcePath]（应用私有文件）发布为公共 Downloads 里的 [displayName]。
   ///
-  /// 成功返回 content URI（存进下载记录，供删除时回收），
-  /// 不支持 / 失败返回 null。
+  /// [relativeDir] 是 `Molia/` 下的可选子目录（如 `exports` / `posters`），
+  /// 空串 = 直接放在 `Molia/` 根下。成功返回 content URI（存进下载记录，
+  /// 供删除时回收）；不支持 / 失败返回 null。
   Future<String?> publish({
     required String sourcePath,
     required String displayName,
     required String mimeType,
+    String relativeDir = '',
   });
 
   /// 删除公共副本（幂等：行已不存在也算成功）；失败返回 false。
@@ -42,10 +50,14 @@ class NoopDownloadsPublisher implements DownloadsPublisher {
   bool get supported => false;
 
   @override
+  Future<String?> publicRoot() async => null;
+
+  @override
   Future<String?> publish({
     required String sourcePath,
     required String displayName,
     required String mimeType,
+    String relativeDir = '',
   }) async =>
       null;
 

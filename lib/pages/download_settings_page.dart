@@ -1,12 +1,14 @@
 /// 下载设置子页：保存位置 / 文件名格式 / 标签嵌入 / 下载通知。
 ///
 /// 从设置 › 数据与存储进入（与缓存管理同组）。保存位置在桌面可自选目录
-/// （移动端固定在应用目录：Android 公共目录走 MediaStore，见 #17）。
+/// （默认系统公共下载目录下 `Molia/`，同时作用于导出）；Android 播放副本在
+/// 应用目录、默认另存一份到系统「下载」；iOS 在文件 App 可见。
 library;
 
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -16,12 +18,17 @@ import '../services/download/download_service.dart';
 import '../services/download/download_settings.dart';
 import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
+import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/settings/settings_tiles.dart';
 
-/// 桌面平台支持自选保存目录（dart:io 路径语义；移动端 SAF/沙箱另论）。
+/// 桌面平台支持自选保存目录（dart:io 路径语义；移动端固定平台目录）。
 bool get _supportsCustomSaveDir => isDesktopPlatform();
+
+bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
+
+bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
 
 class DownloadSettingsPage extends StatelessWidget {
   const DownloadSettingsPage({super.key});
@@ -31,6 +38,7 @@ class DownloadSettingsPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final settings = context.watch<DownloadSettings>();
     final downloads = context.watch<DownloadService?>();
+    final saveAs = context.read<SaveAs?>();
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(l10n.downloadSettingsTitle),
@@ -45,17 +53,21 @@ class DownloadSettingsPage extends StatelessWidget {
                 key: const Key('downloadSaveLocationItem'),
                 icon: Icons.folder_rounded,
                 title: l10n.downloadSaveLocation,
-                subtitle: _supportsCustomSaveDir
-                    ? null
-                    : l10n.downloadSaveLocationFixedHint,
-                value: settings.saveDir.isEmpty
-                    ? l10n.downloadSaveLocationDefault
-                    : settings.saveDir,
+                subtitle: switch (defaultTargetPlatform) {
+                  TargetPlatform.android => settings.publishToPublicDir
+                      ? l10n.downloadSaveLocationFixedHintAndroid
+                      : l10n.downloadSaveLocationFixedHintAndroidOff,
+                  TargetPlatform.iOS => l10n.downloadSaveLocationFixedHintIos,
+                  _ => l10n.downloadSaveLocationSharedHint,
+                },
+                value: _saveLocationLabel(l10n, settings),
                 onTap: _supportsCustomSaveDir
-                    ? () => unawaited(_pickDirectory(context, settings))
+                    ? () => unawaited(
+                          _pickDirectory(context, settings, saveAs),
+                        )
                     : () => M3ESnackbar.show(
                           context,
-                          message: l10n.downloadSaveLocationFixedHint,
+                          message: _fixedLocationHint(l10n, settings),
                         ),
               ),
               SettingsValueTile(
@@ -105,26 +117,47 @@ class DownloadSettingsPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: kSettingsSectionSpacing),
-          // 实际下载目录（按平台 / 自定义解析；存储不可用时说明不支持）。
+          // 实际目录：Android 拆成“播放副本（应用目录）+ 另存目录（系统
+          // 「下载」）”；桌面 / iOS 的下载根本身就是另存目录。
           SettingsSectionCard(
             children: [
               if (downloads == null || !downloads.supported)
                 SettingsInfoTile(
                   key: const Key('downloadLocationInfoItem'),
                   icon: Icons.download_rounded,
-                  title: l10n.downloadLocationInfo,
+                  title: _isAndroid
+                      ? l10n.downloadPlaybackLocation
+                      : l10n.downloadLocationInfo,
                   subtitle: l10n.downloadLocationUnsupported,
                 )
-              else
+              else ...[
                 FutureBuilder<String?>(
                   future: downloads.rootPath(),
                   builder: (context, snapshot) => SettingsInfoTile(
                     key: const Key('downloadLocationInfoItem'),
-                    icon: Icons.download_rounded,
-                    title: l10n.downloadLocationInfo,
-                    subtitle: snapshot.data ?? l10n.cacheUsageComputing,
+                    icon: _isAndroid
+                        ? Icons.phone_android_rounded
+                        : Icons.download_rounded,
+                    title: _isAndroid
+                        ? l10n.downloadPlaybackLocation
+                        : l10n.downloadLocationInfo,
+                    subtitle: _isIos
+                        ? l10n.downloadSaveLocationIos
+                        : snapshot.data ?? l10n.cacheUsageComputing,
                   ),
                 ),
+                if (_isAndroid)
+                  FutureBuilder<String?>(
+                    future: saveAs?.rootPath(),
+                    builder: (context, snapshot) => SettingsInfoTile(
+                      key: const Key('downloadPublicLocationInfoItem'),
+                      icon: Icons.public_rounded,
+                      title: l10n.downloadPublicCopyLocation,
+                      subtitle:
+                          snapshot.data ?? l10n.downloadSaveLocationAndroid,
+                    ),
+                  ),
+              ],
             ],
           ),
         ],
@@ -132,10 +165,36 @@ class DownloadSettingsPage extends StatelessWidget {
     );
   }
 
-  /// 选择保存目录（桌面）。
+  /// 保存位置的显示值：桌面显示自定义路径 / 默认；移动端说明实际落点。
+  String _saveLocationLabel(
+    AppLocalizations l10n,
+    DownloadSettings settings,
+  ) {
+    if (_isAndroid) return l10n.downloadSaveLocationAndroid;
+    if (_isIos) return l10n.downloadSaveLocationIos;
+    return settings.saveDir.isEmpty
+        ? l10n.downloadSaveLocationDefault
+        : settings.saveDir;
+  }
+
+  String _fixedLocationHint(
+    AppLocalizations l10n,
+    DownloadSettings settings,
+  ) {
+    if (_isAndroid) {
+      return settings.publishToPublicDir
+          ? l10n.downloadSaveLocationFixedHintAndroid
+          : l10n.downloadSaveLocationFixedHintAndroidOff;
+    }
+    if (_isIos) return l10n.downloadSaveLocationFixedHintIos;
+    return l10n.downloadSaveLocationDefault;
+  }
+
+  /// 选择保存目录（桌面）；选择器默认打开另存目录。
   Future<void> _pickDirectory(
     BuildContext context,
     DownloadSettings settings,
+    SaveAs? saveAs,
   ) async {
     final l10n = AppLocalizations.of(context)!;
     final notifications = context.read<NotificationService?>();
@@ -143,6 +202,7 @@ class DownloadSettingsPage extends StatelessWidget {
     try {
       picked = await FilePicker.getDirectoryPath(
         dialogTitle: l10n.downloadPickDirectory,
+        initialDirectory: await saveAs?.rootPath(),
       );
     } catch (_) {
       picked = null;

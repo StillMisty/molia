@@ -155,6 +155,39 @@
   "importSuccess": "Data imported successfully!",
   "importFailed": "Failed to import data.",
   "exportSuccess": "Data exported successfully!",
+  "savedToPath": "Saved to {path}",
+  "@savedToPath": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "savedToDownloads": "Saved to Downloads: {path}",
+  "@savedToDownloads": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "savedToFilesApp": "Saved to Files: {path}",
+  "@savedToFilesApp": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "saveFailed": "Couldn't save. Try again.",
+  "fileInDownloads": "File is in Downloads: {path}",
+  "@fileInDownloads": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
   "clearCacheDialogTitle": "Confirm Clear Cache",
   "clearCacheDialogMessage": "Are you sure you want to clear the lyrics cache? This cannot be undone.",
   "clearCacheButton": "Clear Cache",
@@ -2066,7 +2099,12 @@
   "downloadSettingsSubtitle": "Save location, file names and tag embedding",
   "downloadSaveLocation": "Save location",
   "downloadSaveLocationDefault": "Default (system Downloads)",
-  "downloadSaveLocationFixedHint": "Fixed to the app folder on this platform; files are visible in the Files app",
+  "downloadSaveLocationSharedHint": "Used for downloads and exports",
+  "downloadSaveLocationAndroid": "Downloads › Molia",
+  "downloadSaveLocationIos": "Files › On My iPhone › Molia",
+  "downloadSaveLocationFixedHintAndroid": "The playback copy stays in the app; a copy is also saved to Downloads after each download",
+  "downloadSaveLocationFixedHintAndroidOff": "Public copy is off; files stay in the app. Turn on “Publish to system Downloads” below",
+  "downloadSaveLocationFixedHintIos": "Files are visible in Files › On My iPhone › Molia",
   "downloadPickDirectory": "Choose folder",
   "downloadFilenameTemplate": "File name format",
   "downloadFilenameTemplateHint": "Variables: artist / title / album",
@@ -2079,6 +2117,8 @@
   "downloadNotifications": "Download notifications",
   "downloadNotificationsSubtitle": "Show download progress in the notification shade and keep downloading in the background (Android; notification permission required)",
   "downloadLocationInfo": "Download folder",
+  "downloadPlaybackLocation": "Playback copy",
+  "downloadPublicCopyLocation": "Also saved to",
   "downloadLocationUnsupported": "Downloading is not supported on this platform",
   "save": "Save",
   "lyricsEmptyState": "No lyrics found — try another source?",

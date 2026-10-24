@@ -608,10 +608,11 @@
   起过的；端口 / 设置 / 时钟可注入）。命名不再有「测试双胞胎」，测试直接打生产
   实现；
 - **目录与位置**：下载根目录按平台解析（`IoDownloadStorage`）——桌面 =
-  系统下载目录下 `Molia/`（Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
-  `~/Downloads`；Windows `%USERPROFILE%\Downloads`），iOS = 应用文档目录
-  `Molia/`（Files app 可见），Android = 应用支持目录 `downloads/`
-  （**公共副本**另经 MediaStore 发布，见下）；设置页可选自定义目录
+  系统公共下载目录下 `Molia/`（Windows 走 Known Folder，OneDrive 重定向时
+  不会写到 `%USERPROFILE%\Downloads`；Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
+  `~/Downloads`），iOS = 应用文档目录 `Molia/`（文件 App 可见），Android =
+  应用支持目录 `downloads/`（**公共副本**另经 MediaStore 发布到
+  `Download/Molia`，见下）；设置页可选自定义目录
   （`DownloadSettings.saveDir`，存储层每次解析读取，改设置无需重启）；
   `lyrics/` + `covers/` 子目录与 `cache/audio_cache` 完全隔离——「清理缓存」
   永不触碰下载，「删除下载」是独立动作；`DownloadStorage` 是平台 seam
@@ -627,6 +628,13 @@
   失败 / 通道缺失一律 no-op 只记日志）；发布开关
   `DownloadSettings.publishToPublicDir`（默认开，仅 Android 显示），管理页
   提供「补发布到公共目录」回收旧记录；
+- **另存目录（导出）**：`lib/services/save_as.dart` 统一所有用户可见的文件
+  导出——桌面 = 系统公共下载目录下 `Molia/`（下载设置的自定义目录同时生效），
+  Android = `Download/Molia/`（临时文件 + `DownloadsPublisher` 进 MediaStore），
+  iOS = 应用文档目录 `Molia/`（文件 App 可见）。桌面弹“另存为”并预填文件名 /
+  默认目录，取消静默；Android / iOS 直接写默认目录并提示位置；对话框不可用时
+  回退直接写。布局：音频在 `Molia/` 根下，备份 / 听歌统计进 `exports/`，海报
+  PNG 进 `posters/`；导出文件不落库、不参与同步；
 - **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKeyForTrack`
   同名且无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`
@@ -696,7 +704,8 @@
   同步到其它设备不可播放；
 - **设置与管理**：`DownloadSettings`（设备本地键，不登记同步：保存位置 /
   文件名模板 `{artist}`/`{title}`/`{album}` / 标签嵌入开关 /
-  Android 公共目录发布开关）；
+  Android 公共目录发布开关）；保存位置在桌面同时作用于导出，Android / iOS
+  的展开位置由 `SaveAs.rootPath()` 展示（播放副本 vs 系统「下载」另存）；
   下载弹层已并入「本地数据」页（`lib/pages/track_local_data_page.dart`，信息页
   唯一入口）：音质选择（命中缓存的音质标「已缓存」并预选）+ 音频两档状态
   （已下载 / 已缓存 · 可离线使用 / 下载中 / 未下载）+ 动作（下载 / 转存到本地

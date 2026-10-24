@@ -14,9 +14,13 @@ class FakeDownloadsPublisher implements DownloadsPublisher {
   /// 发布过的源路径（按调用顺序）。
   final List<String> published = [];
 
-  /// 发布时的显示名 / MIME 类型（与 [published] 同序）。
+  /// 发布时的显示名 / MIME 类型 / 子目录（与 [published] 同序）。
   final List<String> displayNames = [];
   final List<String> mimeTypes = [];
+  final List<String> relativeDirs = [];
+
+  /// `publicRoot` 返回值（模拟 Android 展示路径）。
+  String? publicRootValue;
 
   /// 已删除的公共 URI（按调用顺序）。
   final List<String> removed = [];
@@ -25,15 +29,22 @@ class FakeDownloadsPublisher implements DownloadsPublisher {
   String Function(String displayName)? uriFactory;
 
   @override
+  Future<String?> publicRoot() async => supported
+      ? (publicRootValue ?? '/storage/emulated/0/Download/Molia')
+      : null;
+
+  @override
   Future<String?> publish({
     required String sourcePath,
     required String displayName,
     required String mimeType,
+    String relativeDir = '',
   }) async {
     if (!supported || failPublish) return null;
     published.add(sourcePath);
     displayNames.add(displayName);
     mimeTypes.add(mimeType);
+    relativeDirs.add(relativeDir);
     return uriFactory?.call(displayName) ??
         'content://media/external/downloads/${published.length}';
   }

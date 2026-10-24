@@ -371,6 +371,29 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportSuccess => '数据导出成功！';
 
   @override
+  String savedToPath(String path) {
+    return '已保存到 $path';
+  }
+
+  @override
+  String savedToDownloads(String path) {
+    return '已保存到系统「下载」：$path';
+  }
+
+  @override
+  String savedToFilesApp(String path) {
+    return '已保存到「文件」App：$path';
+  }
+
+  @override
+  String get saveFailed => '保存失败，请重试。';
+
+  @override
+  String fileInDownloads(String path) {
+    return '文件已在下载目录：$path';
+  }
+
+  @override
   String get clearCacheDialogTitle => '确认清除缓存';
 
   @override
@@ -3638,10 +3661,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadSaveLocation => '保存位置';
 
   @override
-  String get downloadSaveLocationDefault => '默认（系统下载目录）';
+  String get downloadSaveLocationDefault => '默认（系统「下载」目录）';
 
   @override
-  String get downloadSaveLocationFixedHint => '当前平台固定在应用目录，文件可在系统「文件」应用中访问';
+  String get downloadSaveLocationSharedHint => '下载与导出都保存到这里';
+
+  @override
+  String get downloadSaveLocationAndroid => '系统「下载」› Molia';
+
+  @override
+  String get downloadSaveLocationIos => '文件 App › 我的 iPhone › Molia';
+
+  @override
+  String get downloadSaveLocationFixedHintAndroid =>
+      '播放副本在应用内；下载完成后在系统「下载」另存一份';
+
+  @override
+  String get downloadSaveLocationFixedHintAndroidOff =>
+      '公共副本已关闭；文件只在应用内，可在下方打开「发布到公共下载目录」';
+
+  @override
+  String get downloadSaveLocationFixedHintIos =>
+      '文件可在「文件」App › 我的 iPhone › Molia 中找到';
 
   @override
   String get downloadPickDirectory => '选择目录';
@@ -3682,6 +3723,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadLocationInfo => '下载目录';
+
+  @override
+  String get downloadPlaybackLocation => '播放副本';
+
+  @override
+  String get downloadPublicCopyLocation => '另存目录';
 
   @override
   String get downloadLocationUnsupported => '当前平台不支持下载';

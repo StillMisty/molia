@@ -304,11 +304,13 @@ void main() {
     final publisher = createDownloadsPublisher();
     if (!Platform.isAndroid) {
       expect(publisher.supported, isFalse);
+      expect(await publisher.publicRoot(), isNull);
       expect(
         await publisher.publish(
           sourcePath: '/nonexistent.mp3',
           displayName: 'x.mp3',
           mimeType: 'audio/mpeg',
+          relativeDir: 'exports',
         ),
         isNull,
       );
@@ -319,6 +321,7 @@ void main() {
     }
 
     expect(publisher.supported, isTrue);
+    expect(await publisher.publicRoot(), endsWith('Download/Molia'));
     // 源文件：应用私有目录里的真实文件（MediaStore 拷贝的输入）。
     final dir = await getApplicationSupportDirectory();
     final source = File('${dir.path}/publish_it_source.mp3');
@@ -331,6 +334,7 @@ void main() {
       sourcePath: source.path,
       displayName: 'molia_integration_test.mp3',
       mimeType: 'audio/mpeg',
+      relativeDir: 'exports',
     );
     expect(uri, isNotNull, reason: '发布应返回 MediaStore content URI');
     expect(uri, startsWith('content://media/'));
@@ -345,6 +349,7 @@ void main() {
         sourcePath: '${dir.path}/missing.mp3',
         displayName: 'missing.mp3',
         mimeType: 'audio/mpeg',
+        relativeDir: 'exports',
       ),
       isNull,
     );

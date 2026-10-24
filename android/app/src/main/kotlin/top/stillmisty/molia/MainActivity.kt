@@ -235,14 +235,25 @@ class MainActivity : FlutterActivity() {
             "top.stillmisty.molia/downloads"
         ).setMethodCallHandler { call, result ->
             when (call.method) {
+                "publicRoot" -> {
+                    result.success(publicDownloadsRootPath())
+                }
                 "publish" -> {
                     val sourcePath = call.argument<String>("sourcePath")
                     val displayName = call.argument<String>("displayName")
                     val mimeType = call.argument<String>("mimeType")
+                    val relativeDir = call.argument<String>("relativeDir")
                     if (sourcePath.isNullOrEmpty() || displayName.isNullOrEmpty()) {
                         result.error("INVALID_ARGUMENT", "sourcePath / displayName is required", null)
                     } else {
-                        result.success(publishToPublicDownloads(sourcePath, displayName, mimeType))
+                        result.success(
+                            publishToPublicDownloads(
+                                sourcePath,
+                                displayName,
+                                mimeType,
+                                relativeDir,
+                            )
+                        )
                     }
                 }
                 "remove" -> {
@@ -338,16 +349,26 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
+    /// 公共 Downloads 的展示根（Dart 只用于设置页 / 保存结果提示）。
+    @Suppress("DEPRECATION")
+    private fun publicDownloadsRootPath(): String =
+        File(
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+            "Molia",
+        ).absolutePath
+
     /// 把应用私有文件发布到公共 Downloads（MediaStore），返回 content URI；
     /// 不支持（API < 29）/ 失败返回 null（Dart 侧 best-effort，只记日志）。
     ///
     /// 公共副本是**发布副本**：播放取链仍只认应用目录里的原文件，删除下载时
     /// 经 `remove` 一并删除。`IS_PENDING` 保证写入期间其它 App 读不到半成品；
     /// 失败时删掉可能已插入的行，避免公共目录残留空文件。
+    /// [relativeDir] 是 `Molia/` 下的可选子目录（导出 / 海报分类），空 = 根下。
     private fun publishToPublicDownloads(
         sourcePath: String,
         displayName: String,
-        mimeType: String?
+        mimeType: String?,
+        relativeDir: String?
     ): String? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
         val source = File(sourcePath)
@@ -357,7 +378,7 @@ class MainActivity : FlutterActivity() {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
                 put(MediaStore.MediaColumns.MIME_TYPE, mimeType ?: "application/octet-stream")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, publicDownloadsRelativePath)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, publicRelativePath(relativeDir))
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
@@ -378,6 +399,20 @@ class MainActivity : FlutterActivity() {
         } catch (e: Exception) {
             inserted?.let { runCatching { contentResolver.delete(it, null, null) } }
             null
+        }
+    }
+
+    /// `Download/Molia[/<relativeDir>]`；拒绝 `..` / 绝对路径，避免越界。
+    private fun publicRelativePath(relativeDir: String?): String {
+        val segments = relativeDir
+            ?.split('/')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() && it != "." && it != ".." }
+            ?: emptyList()
+        return if (segments.isEmpty()) {
+            publicDownloadsRelativePath
+        } else {
+            "$publicDownloadsRelativePath/${segments.joinToString("/")}"
         }
     }
 

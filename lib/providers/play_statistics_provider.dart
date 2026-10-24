@@ -8,12 +8,9 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../data/play_statistics_repository.dart';
@@ -54,6 +51,7 @@ class PlayStatisticsProvider extends ChangeNotifier {
   bool get isLoading => _loading;
   bool get hasLoaded => _loaded;
   bool get hasError => _failed;
+
   /// 聚合快照（汇总 / 榜单 / 日历 / 作息热力图 / 来源分布一次取回）。
   ListeningStatisticsSnapshot? get snapshot => _snapshot;
 
@@ -121,44 +119,32 @@ class PlayStatisticsProvider extends ChangeNotifier {
     await _loadNow();
   }
 
-  /// 导出**全量**听歌数据 JSON 并分享（汇总 + 榜单 + 最近明细）。
-  Future<bool> export() async {
-    try {
-      final results = await Future.wait([
-        _repository.summary(),
-        _repository.topTracks(limit: 20),
-        _repository.topArtists(limit: 20),
-        _repository.listenedByDay(),
-        _repository.listenedByHour(),
-        _repository.sourceDistribution(),
-        _repository.listEventsForExport(),
-      ]);
-      final payload = buildPlayStatisticsExport(
-        summary: results[0] as PlayStatisticsSummary,
-        topTracks: results[1] as List<PlayStatTrackEntry>,
-        topArtists: results[2] as List<PlayStatArtistEntry>,
-        daily: results[3] as List<DayListened>,
-        hourly: results[4] as List<HourListened>,
-        sources: results[5] as List<SourceListened>,
-        recentEvents: results[6] as List<PlayEvent>,
-        exportedAt: DateTime.now(),
-      );
-      const jsonEncoder = JsonEncoder.withIndent('  ');
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final tempDir = await getTemporaryDirectory();
-      final filePath = '${tempDir.path}/molia_listening_$timestamp.json';
-      await File(filePath).writeAsString(jsonEncoder.convert(payload));
-      final result = await SharePlus.instance.share(
-        ShareParams(
-          files: [XFile(filePath, mimeType: 'application/json')],
-          subject: 'Molia Listening Stats $timestamp',
-        ),
-      );
-      return result.status == ShareResultStatus.success;
-    } catch (e) {
-      _logger.fine('导出听歌数据失败: $e');
-      return false;
-    }
+  /// 构建**全量**听歌数据 JSON（汇总 + 榜单 + 最近明细）。
+  ///
+  /// 只负责取数与序列化；写到哪个目录由页面的 `SaveAs` 决定（桌面可弹
+  /// “另存为”，移动端直接写公共下载目录）。
+  Future<String> buildExportJson() async {
+    final results = await Future.wait([
+      _repository.summary(),
+      _repository.topTracks(limit: 20),
+      _repository.topArtists(limit: 20),
+      _repository.listenedByDay(),
+      _repository.listenedByHour(),
+      _repository.sourceDistribution(),
+      _repository.listEventsForExport(),
+    ]);
+    final payload = buildPlayStatisticsExport(
+      summary: results[0] as PlayStatisticsSummary,
+      topTracks: results[1] as List<PlayStatTrackEntry>,
+      topArtists: results[2] as List<PlayStatArtistEntry>,
+      daily: results[3] as List<DayListened>,
+      hourly: results[4] as List<HourListened>,
+      sources: results[5] as List<SourceListened>,
+      recentEvents: results[6] as List<PlayEvent>,
+      exportedAt: DateTime.now(),
+    );
+    const jsonEncoder = JsonEncoder.withIndent('  ');
+    return jsonEncoder.convert(payload);
   }
 
   /// 立即加载：取消防抖窗口（手动刷新 / 范围切换 / 清空后的数据必须立刻可见）。

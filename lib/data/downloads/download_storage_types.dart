@@ -10,7 +10,8 @@ import 'dart:typed_data';
 /// 下载根目录名（应用支持目录下，与 `cache/audio_cache` 完全隔离）。
 const String downloadsDirName = 'downloads';
 
-/// 公共下载目录下的应用子目录名（桌面 / iOS：`<系统下载目录>/Molia`）。
+/// 公共下载目录下的应用子目录名（桌面 / iOS 的 `Molia`；Android 的
+/// `Download/Molia` 同一命名）。
 const String publicDownloadsDirName = 'Molia';
 
 /// 歌词子目录（长期存储，不走 `LyricsCache` 的 TTL 语义）。

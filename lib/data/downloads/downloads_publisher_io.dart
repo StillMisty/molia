@@ -23,10 +23,21 @@ class MethodChannelDownloadsPublisher implements DownloadsPublisher {
   bool get supported => Platform.isAndroid;
 
   @override
+  Future<String?> publicRoot() async {
+    if (!supported) return null;
+    try {
+      return await _channel.invokeMethod<String>('publicRoot');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<String?> publish({
     required String sourcePath,
     required String displayName,
     required String mimeType,
+    String relativeDir = '',
   }) async {
     if (!supported) return null;
     try {
@@ -34,6 +45,7 @@ class MethodChannelDownloadsPublisher implements DownloadsPublisher {
         'sourcePath': sourcePath,
         'displayName': displayName,
         'mimeType': mimeType,
+        'relativeDir': relativeDir,
       });
     } catch (_) {
       // 通道异常 / 原生失败：按发布失败处理（best-effort）。
