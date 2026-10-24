@@ -444,6 +444,9 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   /// embedded 时由页面自身拼到正文底部（没有 Scaffold 的
   /// bottomNavigationBar 槽）；侧边弹层在外层已移除正文的底部系统栏
   /// padding，这里统一按 MediaQuery 补窄屏安全区。
+  ///
+  /// 嵌入时背景必须是透明的：宽屏宿主是 M3E 侧边弹层，其 modal 容器色是
+  /// `surfaceContainerLow`，写死 `surface` 会在弹层底部拉出一条不同色的横带。
   Widget _buildBottomBar(
     BuildContext context,
     AppLocalizations l10n,
@@ -458,7 +461,11 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         bottom: 16 + MediaQuery.of(context).padding.bottom,
       ),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        // 嵌入时让背景来自宿主（宽屏是 M3E 弹层容器，窄屏是外层 Scaffold
+        // 的 surface）；独立挂载仍用 surface，保持旧观感。
+        color: widget.embedded
+            ? Colors.transparent
+            : theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
             color: theme.colorScheme.outline.withValues(alpha: 0.2),
