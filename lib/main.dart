@@ -22,6 +22,7 @@ import 'app/bootstrap/provider_tree.dart';
 import 'app/bootstrap/startup_trace.dart';
 import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
+import 'app/perf/data_path_scenario.dart';
 import 'app/perf/frame_stats.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
@@ -306,5 +307,12 @@ void main() async {
       update: update,
       sync: sync,
     );
+    // 数据链路体检（仅 MOLIA_PERF_SCENARIO_DATA=true 的专用构建；正常包
+    // 在编译期折叠为一次 return）。
+    unawaited(runDataPathScenario(
+      catalog: catalog,
+      playback: playback,
+      lyrics: lyrics,
+    ));
   });
 }

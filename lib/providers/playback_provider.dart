@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show ValueListenable, VoidCallback;
 import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
@@ -288,17 +289,21 @@ class PlaybackProvider extends ChangeNotifier {
       // 装载新队列不是会话命令：它建立新的播放上下文（不是对当前会话的
       // 增量修改），恢复态路由与「返回前已提交」都不适用；会话内容由协调者
       // 的快照监听整份落盘。
-      await _facade.playTracks(PlaybackRequest(
-        tracks: [for (final track in tracks) trackFromSourceTrack(track)],
-        startIndex: index,
-        context: contextName == null
-            ? null
-            : PlaybackContext(
-                name: contextName,
-                type: 'lx',
-                uri: 'lx:$contextName',
-              ),
-      ));
+      await DataPathTrace.async(
+        'play.queue',
+        () => _facade.playTracks(PlaybackRequest(
+          tracks: [for (final track in tracks) trackFromSourceTrack(track)],
+          startIndex: index,
+          context: contextName == null
+              ? null
+              : PlaybackContext(
+                  name: contextName,
+                  type: 'lx',
+                  uri: 'lx:$contextName',
+                ),
+        )),
+        fields: () => {'tracks': tracks.length, 'index': index},
+      );
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
@@ -316,17 +321,21 @@ class PlaybackProvider extends ChangeNotifier {
     if (tracks.isEmpty) return;
     try {
       // 同 playSourceTracks：装载（新上下文）不是会话命令。
-      await _facade.playTracks(PlaybackRequest(
-        tracks: List.of(tracks),
-        startIndex: index,
-        context: contextName == null
-            ? null
-            : PlaybackContext(
-                name: contextName,
-                type: 'lx',
-                uri: 'lx:$contextName',
-              ),
-      ));
+      await DataPathTrace.async(
+        'play.queue',
+        () => _facade.playTracks(PlaybackRequest(
+          tracks: List.of(tracks),
+          startIndex: index,
+          context: contextName == null
+              ? null
+              : PlaybackContext(
+                  name: contextName,
+                  type: 'lx',
+                  uri: 'lx:$contextName',
+                ),
+        )),
+        fields: () => {'tracks': tracks.length, 'index': index},
+      );
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {

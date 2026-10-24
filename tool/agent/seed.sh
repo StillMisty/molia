@@ -101,13 +101,26 @@ force_stop_app() {
 
 # ---------- 通用读写（Android 经 adb，Linux 直接改本机文件） ----------
 
+# 设备 adb 是否为 root（模拟器默认是；真机 / 非 root 走 run-as）。
+# 为什么需要：release 包不是 debuggable，run-as 会被系统拒绝，
+# `seed.sh android mock-source` 在 release 产物上就无法写入音源 / 偏好。
+adb_is_root() {
+  [[ "$platform" == android ]] || return 1
+  [[ "$("$ADB" -s "$DEVICE_ID" shell id -u 2>/dev/null | tr -d '\r')" == "0" ]]
+}
+
 # seed_pull <远端路径> <local 路径>：文件不存在时返回 1。
 # Linux 下远端即本机路径，顺便完成「备份 = 复制到 local」。
 seed_pull() {
   local remote="$1" local="$2"
   if [[ "$platform" == android ]]; then
-    "$ADB" -s "$DEVICE_ID" shell "run-as $APP_ID test -f '$remote'" >/dev/null 2>&1 || return 1
-    "$ADB" -s "$DEVICE_ID" exec-out "run-as $APP_ID cat '$remote'" >"$local" || return 1
+    if adb_is_root; then
+      "$ADB" -s "$DEVICE_ID" shell "test -f '$remote'" >/dev/null 2>&1 || return 1
+      "$ADB" -s "$DEVICE_ID" exec-out "cat '$remote'" >"$local" || return 1
+    else
+      "$ADB" -s "$DEVICE_ID" shell "run-as $APP_ID test -f '$remote'" >/dev/null 2>&1 || return 1
+      "$ADB" -s "$DEVICE_ID" exec-out "run-as $APP_ID cat '$remote'" >"$local" || return 1
+    fi
   else
     [[ -f "$remote" ]] || return 1
     if [[ "$remote" != "$local" ]]; then
@@ -117,14 +130,28 @@ seed_pull() {
   return 0
 }
 
-# seed_push <local 路径> <android 路径>：经 /data/local/tmp + run-as cp 落盘。
+# seed_push <local 路径> <android 路径>：经 /data/local/tmp 落盘。
+# root 设备直接 cp + chown（release 包也能注入）；否则 run-as（debug 包）。
 seed_push() {
   local local="$1" remote="$2"
   if [[ "$platform" == android ]]; then
     "$ADB" -s "$DEVICE_ID" shell "mkdir -p '$ANDROID_TMP'" >/dev/null
     "$ADB" -s "$DEVICE_ID" push "$local" "$ANDROID_TMP/upload" >/dev/null
-    "$ADB" -s "$DEVICE_ID" shell "run-as $APP_ID cp '$ANDROID_TMP/upload' '$remote' \
-      && rm -f '$ANDROID_TMP/upload'" >/dev/null
+    if adb_is_root; then
+      local owner
+      owner="$("$ADB" -s "$DEVICE_ID" shell "stat -c '%u:%g' '$(dirname "$remote")'" | tr -d '\r')"
+      # 目录属主 = 应用 uid；拿不到就只 cp（个别 toybox 无 stat -c）。
+      if [[ -n "$owner" ]]; then
+        "$ADB" -s "$DEVICE_ID" shell "cp '$ANDROID_TMP/upload' '$remote' \
+          && chown '$owner' '$remote' && rm -f '$ANDROID_TMP/upload'" >/dev/null
+      else
+        "$ADB" -s "$DEVICE_ID" shell "cp '$ANDROID_TMP/upload' '$remote' \
+          && rm -f '$ANDROID_TMP/upload'" >/dev/null
+      fi
+    else
+      "$ADB" -s "$DEVICE_ID" shell "run-as $APP_ID cp '$ANDROID_TMP/upload' '$remote' \
+        && rm -f '$ANDROID_TMP/upload'" >/dev/null
+    fi
   else
     cp "$local" "$remote"
   fi

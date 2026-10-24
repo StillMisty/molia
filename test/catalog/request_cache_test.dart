@@ -245,4 +245,27 @@ void main() {
       pending.complete('d');
     });
   });
+
+  group('RequestCache · isFresh（埋点用只读判定）', () {
+    test('缺失 / 在途 / 命中 / 过期四种状态', () async {
+      var now = DateTime(2026, 1, 1);
+      final cache = RequestCache(
+        ttl: const Duration(minutes: 5),
+        clock: () => now,
+      );
+
+      expect(cache.isFresh('k'), isFalse, reason: '缺失');
+
+      final pending = Completer<String>();
+      final inFlight = cache.getOrCreate<String>('k', () => pending.future);
+      expect(cache.isFresh('k'), isTrue, reason: '在途也算命中（single-flight）');
+
+      pending.complete('v');
+      await inFlight;
+      expect(cache.isFresh('k'), isTrue);
+
+      now = now.add(const Duration(minutes: 5));
+      expect(cache.isFresh('k'), isFalse, reason: 'TTL 过期（与 getOrCreate 同口径）');
+    });
+  });
 }

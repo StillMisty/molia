@@ -5,6 +5,8 @@
 #   tool/agent/perf.sh frames linux|android|windows
 #   tool/agent/perf.sh frames windows --real   # release 真实窗口 + 滚轮，raster 可信
 #   tool/agent/perf.sh startup linux|android
+#   tool/agent/perf.sh data linux|android      # 搜索/起播/取词端到端时延（mock 音源）
+#   tool/agent/perf.sh cpu linux|android       # 空闲/播放 CPU（按线程）
 #   tool/agent/perf.sh memory linux|windows
 #   tool/agent/perf.sh size android|linux
 #   tool/agent/perf.sh all linux|android
@@ -144,6 +146,313 @@ run_frames_windows_real() {
   cp "$WIN_TEMP_WSL"/frames-release.log "$out_dir/" 2>/dev/null || true
 }
 
+# ---- 数据链路 / CPU（mock 音源 + 隔离 HOME）--------------------------------
+
+# 隔离的数据目录：调用 seed.sh 与 release 进程时都改 HOME，避免污染本机
+# 正在使用的应用数据（共享偏好 / DB / 音源脚本）。
+PERF_HOME="${MOLIA_PERF_HOME:-$RUN_DIR/perf-home}"
+PERF_DART_DEFINES=(
+  --dart-define=MOLIA_PERF_TRACE=true
+  --dart-define=MOLIA_PERF_SCENARIO_DATA=true
+  --dart-define="MOLIA_PERF_SOURCE=${MOLIA_PERF_SOURCE:-mock}"
+  --dart-define="MOLIA_PERF_KEYWORD=${MOLIA_PERF_KEYWORD:-周杰伦}"
+)
+
+prepare_perf_home() {
+  mkdir -p "$PERF_HOME/.local/share/$APP_ID" "$RUN_DIR"
+}
+
+seed_mock_source() { # platform out_dir [serial]
+  local platform="$1" out="$2" serial="${3:-}"
+  log "注入 mock 音源（$platform，隔离 HOME=$PERF_HOME）"
+  if [[ "$platform" == android ]]; then
+    DEVICE_ID="${serial:-$DEVICE_ID}" \
+      "$PROJECT_DIR/tool/agent/seed.sh" android mock-source \
+      >"$out/seed.log" 2>&1 || die "注入 mock 音源失败（见 $out/seed.log）"
+  else
+    env -u XDG_DATA_HOME HOME="$PERF_HOME" \
+      "$PROJECT_DIR/tool/agent/seed.sh" linux mock-source \
+      >"$out/seed.log" 2>&1 || die "注入 mock 音源失败（见 $out/seed.log）"
+  fi
+}
+
+build_perf_linux() { # out_dir hold_seconds start_delay_seconds
+  local out="$1" hold="$2" delay="$3"
+  log "构建 perf release（Linux，hold=${hold}s delay=${delay}s）"
+  ( cd "$PROJECT_DIR" && flutter build linux --release \
+      "${PERF_DART_DEFINES[@]}" \
+      --dart-define=MOLIA_PERF_HOLD_SECONDS="$hold" \
+      --dart-define=MOLIA_PERF_START_DELAY_SECONDS="$delay" \
+      --dart-define="MOLIA_PERF_OUT=$out/molia-frame.jsonl" ) \
+    2>&1 | tee "$out/build.log"
+}
+
+linux_run_prefix() {
+  if has_display; then
+    return 0
+  fi
+  command -v xvfb-run >/dev/null 2>&1 ||
+    die "缺少 xvfb-run（--window 可在真实显示上跑）"
+  # 只改 DISPLAY 不够：GDK 见到 WAYLAND_DISPLAY 会优先连真实合成器。
+  printf '%s\n' env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a
+}
+
+run_data_linux() {
+  require_flutter
+  local out="$1"
+  prepare_perf_home
+  seed_mock_source linux "$out"
+  build_perf_linux "$out" 1 0
+  local exe="build/linux/x64/release/bundle/$APP_BINARY"
+  [[ -x "$PROJECT_DIR/$exe" ]] || die "找不到 release 产物：$exe"
+  mapfile -t prefix < <(linux_run_prefix)
+  log "运行数据链路场景（Linux release / Xvfb）"
+  ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${prefix[@]}" \
+      timeout --signal=TERM --kill-after=5 300 "./$exe" ) \
+    >"$out/run.log" 2>&1 || true
+  report_data "$out"
+  log "结果目录：$out"
+}
+
+run_data_android() { # out_dir [serial]
+  require_flutter
+  ensure_adb
+  local out="$1" serial="${2:-}"
+  [[ -n "$serial" ]] || serial="$(running_emulator)"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  DEVICE_ID="$serial"
+  adb_dev() { "$ADB" -s "$serial" "$@"; }
+
+  local abi target abi_name
+  abi="$(adb_dev shell getprop ro.product.cpu.abi | tr -d '\r')"
+  case "$abi" in
+    x86_64) target=android-x64; abi_name=x86_64 ;;
+    arm64-v8a) target=android-arm64; abi_name=arm64-v8a ;;
+    armeabi-v7a) target=android-arm; abi_name=armeabi-v7a ;;
+    *) die "未知 ABI：$abi" ;;
+  esac
+  local apk="build/app/outputs/flutter-apk/app-$abi_name-release.apk"
+
+  log "构建 perf release APK（$abi）"
+  ( cd "$PROJECT_DIR" && flutter build apk --release \
+      --target-platform "$target" --split-per-abi \
+      "${PERF_DART_DEFINES[@]}" \
+      --dart-define=MOLIA_PERF_HOLD_SECONDS=1 \
+      --dart-define=MOLIA_PERF_START_DELAY_SECONDS=0 ) \
+    2>&1 | tee "$out/build.log"
+  [[ -f "$PROJECT_DIR/$apk" ]] || die "找不到 APK：$apk"
+  log "安装到 $serial"
+  if ! adb_dev install -r "$apk" >/dev/null 2>&1; then
+    adb_dev uninstall "$APP_ID" >/dev/null 2>&1 || true
+    adb_dev install "$apk" >/dev/null 2>&1 || die "安装失败：$apk"
+  fi
+  # 安装之后再注入：签名不一致触发的重装会清空应用数据。
+  seed_mock_source android "$out" "$serial"
+  adb_dev logcat -c >/dev/null 2>&1 || true
+  log "运行数据链路场景（Android / $serial）"
+  adb_dev shell am start -W -S -n "$APP_ID/.MainActivity" >/dev/null 2>&1 || true
+  local deadline=$(( $(date +%s) + 300 ))
+  while :; do
+    if adb_dev logcat -d 2>/dev/null | grep -q 'molia.perf:.*scenario.done'; then
+      break
+    fi
+    (( $(date +%s) > deadline )) && break
+    sleep 1
+  done
+  adb_dev logcat -d 2>/dev/null | grep -a 'molia.perf' >"$out/data.log" || true
+  adb_dev shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+  report_data "$out"
+  log "结果目录：$out"
+}
+
+report_data() { # 解析 molia.perf JSONL / 日志为 Markdown
+  local dir="$1"
+  python3 - "$dir" <<'PY'
+import json, pathlib, statistics, sys
+from collections import OrderedDict
+
+root = pathlib.Path(sys.argv[1])
+rows = []
+for path in [root / 'run.log', root / 'data.log']:
+    if not path.exists():
+        continue
+    for line in path.read_text(errors='replace').splitlines():
+        if 'molia.perf: ' not in line:
+            continue
+        text = line.split('molia.perf: ', 1)[1].strip()
+        try:
+            rows.append(json.loads(text))
+        except json.JSONDecodeError:
+            pass
+
+if not rows:
+    print(f'没有采到 molia.perf 样本（{root}）', file=sys.stderr)
+    (root / 'summary.md').write_text('# 数据链路体检\n\n没有采到 `molia.perf` 样本。\n')
+    sys.exit(0)
+
+ops = OrderedDict()
+events = OrderedDict()
+for row in rows:
+    op = str(row.get('op', ''))
+    if op.startswith('scenario.'):
+        events[op] = row
+        continue
+    ops.setdefault(op, []).append(float(row.get('ms', 0)))
+
+def qs(values):
+    values = sorted(values)
+    def q(p):
+        rank = max(0, min(len(values) - 1, (p / 100 * len(values) + 0.999999) // 1 - 1))
+        return values[int(rank)]
+    return len(values), q(50), q(95), max(values)
+
+lines = ['# 数据链路体检（mock 音源）', '']
+lines.append('## 端到端（scenario 墙钟）')
+lines.append('')
+lines.append('| 阶段 | ms | 字段 |')
+lines.append('| --- | ---: | --- |')
+for op, row in events.items():
+    fields = {k: v for k, v in row.items() if k not in ('op', 'ms', 'ts')}
+    lines.append(f"| {op} | {row.get('ms', 0)} | {json.dumps(fields, ensure_ascii=False)} |")
+
+lines += ['', '## 分项耗时（ms）', '',
+          '| op | n | p50 | p95 | max |', '| --- | ---: | ---: | ---: | ---: |']
+for op, values in ops.items():
+    n, p50, p95, worst = qs(values)
+    lines.append(f'| {op} | {n} | {p50:.2f} | {p95:.2f} | {worst:.2f} |')
+
+summary = '\n'.join(lines) + '\n'
+(root / 'summary.md').write_text(summary)
+print(summary)
+PY
+}
+
+cpu_sample_linux() { # out_dir label pid
+  local out="$1" label="$2" pid="$3"
+  "$PROJECT_DIR/tool/agent/cpu.sh" linux --pid "$pid" --duration 8 \
+    >"$out/cpu-$label.txt" 2>&1 || true
+  cat "$out/cpu-$label.txt"
+}
+
+run_cpu_linux() {
+  require_flutter
+  local out="$1"
+  prepare_perf_home
+  seed_mock_source linux "$out"
+  # 12s 空闲窗口 + 播放后保持 30s：同一次进程里采两段 CPU。
+  build_perf_linux "$out" 30 12
+  local exe="build/linux/x64/release/bundle/$APP_BINARY"
+  [[ -x "$PROJECT_DIR/$exe" ]] || die "找不到 release 产物：$exe"
+  mapfile -t prefix < <(linux_run_prefix)
+  local log="$out/run.log"
+  ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${prefix[@]}" \
+      timeout --signal=TERM --kill-after=5 180 "./$exe" ) >"$log" 2>&1 &
+  local runner=$!
+  local deadline=$(( $(date +%s) + 90 ))
+  while :; do
+    grep -q 'molia.startup: 首帧：' "$log" 2>/dev/null && break
+    kill -0 "$runner" 2>/dev/null || break
+    (( $(date +%s) > deadline )) && break
+    sleep 0.5
+  done
+  sleep 2
+  local pid; pid="$(pgrep -x "$APP_BINARY" | head -1 || true)"
+  [[ -n "$pid" ]] || die "找不到应用进程（$APP_BINARY）"
+  log "空闲采样（pid=$pid）"
+  cpu_sample_linux "$out" idle "$pid"
+  deadline=$(( $(date +%s) + 90 ))
+  while :; do
+    grep -q 'molia.perf:.*scenario.play.done' "$log" 2>/dev/null && break
+    kill -0 "$runner" 2>/dev/null || break
+    (( $(date +%s) > deadline )) && break
+    sleep 0.5
+  done
+  log "播放采样（pid=$pid）"
+  cpu_sample_linux "$out" playing "$pid"
+  wait "$runner" >/dev/null 2>&1 || true
+  {
+    echo '# CPU 体检（Linux release / Xvfb）'
+    echo
+    echo '## 空闲（首帧后、场景开始前）'
+    echo '```'
+    cat "$out/cpu-idle.txt" 2>/dev/null || true
+    echo '```'
+    echo
+    echo '## 播放中'
+    echo '```'
+    cat "$out/cpu-playing.txt" 2>/dev/null || true
+    echo '```'
+  } >"$out/summary.md"
+  cat "$out/summary.md"
+  log "结果目录：$out"
+}
+
+run_cpu_android() { # out_dir [serial]
+  require_flutter
+  ensure_adb
+  local out="$1" serial="${2:-}"
+  [[ -n "$serial" ]] || serial="$(running_emulator)"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  DEVICE_ID="$serial"
+  adb_dev() { "$ADB" -s "$serial" "$@"; }
+
+  local abi target abi_name
+  abi="$(adb_dev shell getprop ro.product.cpu.abi | tr -d '\r')"
+  case "$abi" in
+    x86_64) target=android-x64; abi_name=x86_64 ;;
+    arm64-v8a) target=android-arm64; abi_name=arm64-v8a ;;
+    armeabi-v7a) target=android-arm; abi_name=armeabi-v7a ;;
+    *) die "未知 ABI：$abi" ;;
+  esac
+  local apk="build/app/outputs/flutter-apk/app-$abi_name-release.apk"
+  log "构建 perf release APK（$abi）"
+  ( cd "$PROJECT_DIR" && flutter build apk --release \
+      --target-platform "$target" --split-per-abi \
+      "${PERF_DART_DEFINES[@]}" \
+      --dart-define=MOLIA_PERF_HOLD_SECONDS=30 \
+      --dart-define=MOLIA_PERF_START_DELAY_SECONDS=12 ) \
+    2>&1 | tee "$out/build.log"
+  adb_dev install -r "$apk" >/dev/null 2>&1 ||
+    { adb_dev uninstall "$APP_ID" >/dev/null 2>&1 || true; adb_dev install "$apk" >/dev/null 2>&1; } ||
+    die "安装失败：$apk"
+  seed_mock_source android "$out" "$serial"
+  adb_dev logcat -c >/dev/null 2>&1 || true
+  adb_dev shell am start -W -S -n "$APP_ID/.MainActivity" >/dev/null 2>&1 || true
+  # 场景有 12s 启动延迟：3s 后采 6s，落在搜索开始前的干净空闲窗口。
+  sleep 3
+  log "空闲采样（Android）"
+  "$PROJECT_DIR/tool/agent/cpu.sh" android "$serial" --duration 6 \
+    >"$out/cpu-idle.txt" 2>&1 || true
+  cat "$out/cpu-idle.txt"
+  local deadline=$(( $(date +%s) + 120 ))
+  while :; do
+    adb_dev logcat -d 2>/dev/null | grep -q 'molia.perf:.*scenario.play.done' && break
+    (( $(date +%s) > deadline )) && break
+    sleep 1
+  done
+  log "播放采样（Android）"
+  "$PROJECT_DIR/tool/agent/cpu.sh" android "$serial" --duration 8 \
+    >"$out/cpu-playing.txt" 2>&1 || true
+  cat "$out/cpu-playing.txt"
+  adb_dev shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+  {
+    echo '# CPU 体检（Android 模拟器）'
+    echo
+    echo '> 模拟器软件渲染，绝对数只做相对比较。'
+    echo
+    echo '## 空闲'
+    echo '```'
+    cat "$out/cpu-idle.txt" 2>/dev/null || true
+    echo '```'
+    echo
+    echo '## 播放中'
+    echo '```'
+    cat "$out/cpu-playing.txt" 2>/dev/null || true
+    echo '```'
+  } >"$out/summary.md"
+  log "结果目录：$out"
+}
+
 report() { # 解析 frames.jsonl / frames.log 输出 Markdown
   local dir="$1"
   local out="$dir/summary.md"
@@ -240,6 +549,24 @@ case "$cmd" in
       *) usage ;;
     esac
     log "结果目录：$out_dir"
+    ;;
+  data)
+    platform="${1:-linux}"
+    out_dir="$(new_out_dir "$platform-data")"
+    case "$platform" in
+      linux) run_data_linux "$out_dir" ;;
+      android) run_data_android "$out_dir" "${2:-}" ;;
+      *) usage ;;
+    esac
+    ;;
+  cpu)
+    platform="${1:-linux}"
+    out_dir="$(new_out_dir "$platform-cpu")"
+    case "$platform" in
+      linux) run_cpu_linux "$out_dir" ;;
+      android) run_cpu_android "$out_dir" "${2:-}" ;;
+      *) usage ;;
+    esac
     ;;
   startup)
     platform="${1:-linux}"

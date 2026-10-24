@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../app/perf/data_path_trace.dart';
 import '../domain/models/track.dart';
 import '../models/lyrics_result.dart';
 import 'cache_service.dart';
@@ -66,7 +67,16 @@ class LyricsService {
     Track? track,
   }) async {
     try {
+      final cacheWatch =
+          DataPathTrace.enabled ? (Stopwatch()..start()) : null;
       final cached = await _lyricsCache.read(trackId);
+      if (cacheWatch != null) {
+        DataPathTrace.record(
+          'lyrics.cache',
+          cacheWatch.elapsed,
+          fields: () => {'hit': cached == null ? 0 : 1},
+        );
+      }
       if (cached != null) {
         final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
         // TTL 从统一缓存策略读取（0 = 永不过期），修改后无需重启。
@@ -89,9 +99,17 @@ class LyricsService {
       final loader = _trackLyricLoader;
       if (track != null && loader != null) {
         try {
-          final native = await loader(track);
+          final native = await DataPathTrace.async(
+            'lyrics.native',
+            () => loader(track),
+            fields: () => {'source': track.id.sourceKey},
+          );
           if (native != null && native.lyric.trim().isNotEmpty) {
-            await _writeCache(trackId, native);
+            await DataPathTrace.async(
+              'lyrics.cacheWrite',
+              () => _writeCache(trackId, native),
+              fields: () => {'chars': native.lyric.length},
+            );
             _logger.info('原生取词成功: $trackId (来源: ${native.provider})');
             return native;
           }
@@ -107,9 +125,16 @@ class LyricsService {
       }
 
       _logger.info('从网络获取歌词: $songName - $artistName');
-      final result = await _getFromProviders(songName, artistName);
+      final result = await DataPathTrace.async(
+        'lyrics.network',
+        () => _getFromProviders(songName, artistName),
+      );
       if (result != null) {
-        await _writeCache(trackId, result);
+        await DataPathTrace.async(
+          'lyrics.cacheWrite',
+          () => _writeCache(trackId, result),
+          fields: () => {'chars': result.lyric.length},
+        );
         _logger.info('歌词已缓存: $trackId (来源: ${result.provider})');
         return result;
       }

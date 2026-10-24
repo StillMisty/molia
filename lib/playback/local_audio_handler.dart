@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:flutter_media_session/flutter_media_session.dart';
 
+import '../app/bootstrap/startup_trace.dart';
 import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
 import '../models/play_mode.dart';
@@ -100,13 +101,17 @@ Future<LocalAudioHandler?> initSystemMediaSession(
   try {
     final backend = createSystemMediaSessionBackend();
     if (backend == null) return null;
+    final buildWatch = Stopwatch()..start();
     final handler = LocalAudioHandler(
       service,
       commands: commands,
       backend: backend,
       artworkBlocked: artworkBlocked,
     );
+    markStartupStep('sub.mediaSession.build', buildWatch);
+    final activateWatch = Stopwatch()..start();
     await handler.activate();
+    markStartupStep('sub.mediaSession.activate（handler）', activateWatch);
     return handler;
   } catch (e) {
     debugPrint('[Molia] 系统媒体会话初始化失败，降级为应用内播放: $e');

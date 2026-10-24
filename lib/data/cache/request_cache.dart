@@ -35,6 +35,18 @@ class RequestCache {
 
   bool containsKey(String key) => _entries.containsKey(key);
 
+  /// key 当前是否会命中（在途请求也算命中）：只读判定，不触发 LRU 触碰。
+  ///
+  /// 供性能埋点区分「缓存命中」与「真实取数」；行为与 [getOrCreate] 一致
+  /// （过期条目算未命中）。
+  bool isFresh(String key) {
+    final entry = _entries[key];
+    if (entry == null) return false;
+    if (entry.pending != null) return true;
+    final expiresAt = entry.expiresAt;
+    return expiresAt != null && _clock().isBefore(expiresAt);
+  }
+
   /// 返回 key 对应的缓存值；不存在/过期时调用 [create] 并缓存结果。
   ///
   /// 注意：同一 key 必须始终使用同一类型 T，否则命中时的类型转换会抛错。

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart' as crypto;
 
+import '../../app/perf/data_path_trace.dart';
 import '../../domain/models/artist.dart';
 import '../../domain/models/catalog.dart';
 import '../../domain/models/failure.dart';
@@ -42,9 +43,24 @@ class CatalogService {
       return Future.error(StateError('未知音源: $sourceKey'));
     }
     final key = searchCacheKey(sourceKey, query);
-    return _searchCache.getOrCreate<SearchResult<Track>>(
-      key,
-      () => _guardSourceCall(() => source.search(query)),
+    // 命中判定要在 getOrCreate 之前取：调用之后条目状态已变，无法区分
+    // 「这次是缓存命中」还是「这次刚创建」。
+    final cached = _searchCache.isFresh(key);
+    return DataPathTrace.async(
+      'search.catalog',
+      () => _searchCache.getOrCreate<SearchResult<Track>>(
+        key,
+        () => DataPathTrace.async(
+          'search.source',
+          () => _guardSourceCall(() => source.search(query)),
+          fields: () => {'source': sourceKey, 'page': query.page},
+        ),
+      ),
+      fields: () => {
+        'source': sourceKey,
+        'page': query.page,
+        'cached': cached ? 1 : 0,
+      },
     );
   }
 
@@ -91,11 +107,27 @@ class CatalogService {
       return Future.error(StateError('未知音源: ${track.id.sourceKey}'));
     }
     final key = resolveCacheKey(track, quality);
-    return _resolveCache.getOrCreate<PlayableStream>(
-      key,
-      () => _guardSourceCall(
-        () => source.resolve(track, preferredQuality: quality),
+    final cached = _resolveCache.isFresh(key);
+    return DataPathTrace.async(
+      'resolve.catalog',
+      () => _resolveCache.getOrCreate<PlayableStream>(
+        key,
+        () => DataPathTrace.async(
+          'resolve.source',
+          () => _guardSourceCall(
+            () => source.resolve(track, preferredQuality: quality),
+          ),
+          fields: () => {
+            'source': track.id.sourceKey,
+            'quality': quality?.type ?? 'auto',
+          },
+        ),
       ),
+      fields: () => {
+        'source': track.id.sourceKey,
+        'quality': quality?.type ?? 'auto',
+        'cached': cached ? 1 : 0,
+      },
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
+import '../app/perf/playback_start_trace.dart';
 import '../models/play_mode.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/audio_cache_store.dart';
@@ -312,6 +313,8 @@ class LocalPlaybackService extends ChangeNotifier {
 
   void _onPlayerPosition(Duration position) {
     _position = position;
+    // 位置首次前进 = 解码时钟真的在走（起播埋点的「首声」代理）。
+    if (position > Duration.zero) PlaybackStartTrace.firstProgress();
     _maybeCompleteFromPosition(position);
     _scheduleNotify();
   }
@@ -323,6 +326,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _maybeCompleteFromPosition(position);
     if (position == _position) return;
     _position = position;
+    if (position > Duration.zero) PlaybackStartTrace.firstProgress();
     _scheduleNotify();
   }
 
@@ -676,6 +680,7 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     final requestId = ++_playRequestId;
     final track = _queue[index];
+    final startTrace = PlaybackStartTrace.begin(track.id.toString());
 
     _currentIndex = index;
     _currentTrack = track;
@@ -692,9 +697,11 @@ class LocalPlaybackService extends ChangeNotifier {
       final quality = preferred == null ? null : track.pickQuality(preferred);
       final url = await _resolver(track, quality: quality);
       if (requestId != _playRequestId) return;
+      startTrace?.markResolved();
 
       await _setAudioSourceWithCache(Uri.parse(url), track, quality: quality);
       if (requestId != _playRequestId) return;
+      startTrace?.markSourceSet();
 
       // 播放侧没有写缓存（平台不支持边播边缓存 / 后端拒绝后退到直接流播）：
       // 由后台字节下载补上缓存——重播经 `localUriFor` 命中 file://。
@@ -721,6 +728,7 @@ class LocalPlaybackService extends ChangeNotifier {
       unawaited(_nextTrackPreloader?.preload(nextSourceTrack));
     } catch (e) {
       if (requestId != _playRequestId) return;
+      PlaybackStartTrace.failCurrent();
       _lastError = e.toString();
       _isPlaying = false;
       debugPrint('[LocalPlayback] 播放失败: $e');

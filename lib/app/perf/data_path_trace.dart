@@ -24,7 +24,7 @@ abstract final class DataPathTrace {
   static T sync<T>(
     String op,
     T Function() body, {
-    Map<String, int> Function()? fields,
+    Map<String, Object?> Function()? fields,
   }) {
     if (!enabled) return body();
     final watch = Stopwatch()..start();
@@ -43,16 +43,35 @@ abstract final class DataPathTrace {
   static Future<T> async<T>(
     String op,
     Future<T> Function() body, {
-    Map<String, int> Function()? fields,
+    Map<String, Object?> Function()? fields,
   }) {
     if (!enabled) return body();
     return _timedAsync(op, body, fields);
   }
 
+  /// 记录一段已测量的耗时（调用方自己持有 Stopwatch）。
+  ///
+  /// 用于「计时起点早于本函数、且中间夹着结果判定」的场景，例如搜索防抖
+  /// （输入到真正发请求）与歌词缓存命中（先读文件才能知道 hit/miss）。
+  static void record(
+    String op,
+    Duration elapsed, {
+    Map<String, Object?> Function()? fields,
+  }) {
+    if (!enabled) return;
+    _log(op, elapsed.inMicroseconds, fields);
+  }
+
+  /// 记录一个没有时长语义的事件（场景标记 / 阶段边界）。
+  static void event(String op, {Map<String, Object?> Function()? fields}) {
+    if (!enabled) return;
+    _log(op, 0, fields);
+  }
+
   static Future<T> _timedAsync<T>(
     String op,
     Future<T> Function() body,
-    Map<String, int> Function()? fields,
+    Map<String, Object?> Function()? fields,
   ) async {
     final watch = Stopwatch()..start();
     try {
@@ -66,13 +85,15 @@ abstract final class DataPathTrace {
   static void _log(
     String op,
     int elapsedMicroseconds,
-    Map<String, int> Function()? fields,
+    Map<String, Object?> Function()? fields,
   ) {
     // 毫秒保留两位小数：与帧统计口径一致，也避免长浮点噪声。
     final ms = (elapsedMicroseconds / 1000 * 100).round() / 100;
     final payload = <String, Object?>{
       'op': op,
       'ms': ms,
+      // 墙上时刻用于把多个 op 串成一条端到端链路；分桶统计不依赖它。
+      'ts': DateTime.now().millisecondsSinceEpoch,
       if (fields != null) ...fields(),
     };
     _logger.info(jsonEncode(payload));

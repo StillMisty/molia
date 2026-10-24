@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../app/perf/data_path_trace.dart';
 import '../domain/models/track.dart';
 import '../models/lyric_line.dart';
 import '../services/lyrics_service.dart';
@@ -93,11 +94,15 @@ class LyricsProvider extends ChangeNotifier {
     final trackId = track.id.uri;
     final pending = _inFlight[trackId];
     if (pending != null) return pending;
-    final future = _service.getLyrics(
-      track.title,
-      track.artistLabel,
-      trackId,
-      track: track,
+    final future = DataPathTrace.async(
+      'lyrics.fetch',
+      () => _service.getLyrics(
+        track.title,
+        track.artistLabel,
+        trackId,
+        track: track,
+      ),
+      fields: () => {'track': trackId},
     );
     _inFlight[trackId] = future;
     unawaited(future.whenComplete(() {
@@ -188,9 +193,17 @@ class LyricsProvider extends ChangeNotifier {
       );
     }
     if (hasLyricTimestamps(result.lyric)) {
-      final parsed = attachWordTimings(
-        parseLyrics(result.lyric),
-        result.lxlyric,
+      final parsed = DataPathTrace.sync(
+        'lyrics.parse',
+        () => attachWordTimings(
+          parseLyrics(result.lyric),
+          result.lxlyric,
+        ),
+        fields: () => {
+          'synced': 1,
+          'chars': result.lyric.length,
+          'words': result.lxlyric?.length ?? 0,
+        },
       );
       if (parsed.isNotEmpty) {
         return LyricsState(
