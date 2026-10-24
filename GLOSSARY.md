@@ -387,6 +387,11 @@
   `PlaylistTrack.fromHistoryEntry` 负责历史条目转换。收藏页批量 / 行写入统一返回
   `LibraryMutationOutcome`（applied / unchanged / failed）：失败在 provider 边界
   收口成 failed（原始异常只进日志），乐观更新回滚，选择只在成功后才清空。
+- **Favorite toggle outcome（收藏切换结果）** — `lib/providers/library_outcome.dart` 的
+  `FavoriteToggleOutcome`：`toggleFavorite` / `toggleFavoriteTrack` /
+  `toggleFavoriteSourceTrack` / `toggleFavoriteSearchItem`（null = 无法识别曲目）
+  的唯一结果类型。成功带切换后的状态，失败带切换前的状态（缓存与图标不翻转）；
+  仓库异常在 provider 边界收口，UI 只按结果提示 `operationFailed`。
 - **Add-to-library flow（加入列表流程）** — `lib/widgets/add_to_library.dart`：
   选择目标 → 写入 → 解析新建列表名 → 反馈的唯一实现；收藏页与发现页共用。
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是渠道状态的唯一持有者；
