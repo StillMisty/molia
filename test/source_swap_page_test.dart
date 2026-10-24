@@ -196,6 +196,29 @@ void main() {
     expect(tracks.single.songId, '100');
   });
 
+  testWidgets('库内写失败：提示操作失败，留在弹层且不跟队列', (tester) async {
+    final playlistId = await seedPlaylist(tester);
+    final seed = library.trackFromPlaylistTrack(
+      (await repository.listPlaylistTracks(playlistId)).single,
+    );
+    kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
+
+    await pumpHost(tester, seed: seed, playlistId: playlistId);
+    await openPage(tester);
+    await tester.tap(find.text('Title（kg）'));
+    await tester.pumpAndSettle();
+
+    repository.failTrackWrites = true;
+    await tester.tap(find.widgetWithText(M3EButton, '换源'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(find.text('已换源'), findsNothing);
+    expect(swap.hasSession, isTrue, reason: '失败留在换源页，可重试或改选');
+    expect(find.text('Title（kg）'), findsOneWidget);
+    expect(backend.lastReplacedTrackUri, isNull, reason: '库内写失败不跟随队列');
+  });
+
   testWidgets('目标已存在：先弹重复确认，确认后去重替换', (tester) async {
     final playlistId = await seedPlaylist(tester, withDuplicate: true);
     final seed = library.trackFromPlaylistTrack(

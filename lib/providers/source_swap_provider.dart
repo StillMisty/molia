@@ -83,6 +83,9 @@ enum SourceSwapApplyStatus {
 
   /// 目标列表已存在所选曲目：确认后以 `removeDuplicate: true` 重试。
   duplicateConfirmationRequired,
+
+  /// 库内写回失败（仓库抛错）：提示后保留弹层，队列不跟随。
+  writeFailed,
 }
 
 class SourceSwapApplyResult {
@@ -226,6 +229,9 @@ class SourceSwapProvider extends ChangeNotifier {
   ///
   /// [removeDuplicate]：目标列表已存在所选曲目时，确认后传 true
   /// （事务内删重复行并把旧行替换为新曲目）。
+  ///
+  /// 仓库写失败在边界收口成 [SourceSwapApplyStatus.writeFailed]：队列保持
+  /// 原样（不跟随），弹层据此提示后可重试，不再把异常抛给调用方。
   Future<SourceSwapApplyResult> apply({bool removeDuplicate = false}) async {
     final request = _request;
     final selected = _selected;
@@ -244,17 +250,28 @@ class SourceSwapProvider extends ChangeNotifier {
             SourceSwapApplyStatus.targetNotFound,
           );
         }
-        if (!removeDuplicate &&
-            await _libraryProvider.playlistContains(playlistId, selectedKey)) {
+        final bool applied;
+        try {
+          if (!removeDuplicate &&
+              await _libraryProvider.playlistContains(
+                playlistId,
+                selectedKey,
+              )) {
+            return const SourceSwapApplyResult(
+              SourceSwapApplyStatus.duplicateConfirmationRequired,
+            );
+          }
+          applied = await _libraryProvider.replacePlaylistTrack(
+            playlistId,
+            seedKey,
+            _toPlaylistTrack(playlistId, selected),
+          );
+        } catch (e) {
+          debugPrint('[SourceSwap] 换源写回列表失败: $e');
           return const SourceSwapApplyResult(
-            SourceSwapApplyStatus.duplicateConfirmationRequired,
+            SourceSwapApplyStatus.writeFailed,
           );
         }
-        final applied = await _libraryProvider.replacePlaylistTrack(
-          playlistId,
-          seedKey,
-          _toPlaylistTrack(playlistId, selected),
-        );
         if (!applied) {
           return const SourceSwapApplyResult(
             SourceSwapApplyStatus.targetNotFound,
@@ -268,10 +285,18 @@ class SourceSwapProvider extends ChangeNotifier {
             SourceSwapApplyStatus.targetNotFound,
           );
         }
-        final applied = await _libraryProvider.replaceHistoryEntry(
-          historyKey,
-          _toHistoryEntry(selected),
-        );
+        final bool applied;
+        try {
+          applied = await _libraryProvider.replaceHistoryEntry(
+            historyKey,
+            _toHistoryEntry(selected),
+          );
+        } catch (e) {
+          debugPrint('[SourceSwap] 换源写回历史失败: $e');
+          return const SourceSwapApplyResult(
+            SourceSwapApplyStatus.writeFailed,
+          );
+        }
         if (!applied) {
           return const SourceSwapApplyResult(
             SourceSwapApplyStatus.targetNotFound,

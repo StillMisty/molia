@@ -322,6 +322,7 @@ class FakeLibraryRepository implements LibraryStore {
     PlaylistTrack replacement, {
     bool favoriteChange = false,
   }) async {
+    if (failTrackWrites) throw StateError('playlist tracks write failed');
     final list = _tracks[playlistId];
     if (list == null) return false;
     final oldIndex = list.indexWhere(
@@ -367,6 +368,7 @@ class FakeLibraryRepository implements LibraryStore {
     TrackKey oldKey,
     PlayHistoryEntry replacement,
   ) async {
+    if (failHistoryWrites) throw StateError('history write failed');
     final oldIndex = _history.indexWhere(
         (e) => e.sourceKey == oldKey.sourceKey && e.songId == oldKey.songId);
     if (oldIndex < 0) return false;
