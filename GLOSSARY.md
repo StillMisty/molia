@@ -585,6 +585,12 @@
   用户命令（类别 / 传输 / 名称 / 口令、地址簿）仍即时提交。登记类写入必须
   在增量日志追加成功之后（`SyncJournalAppender`），追加失败时旧登记保留，
   下一轮仍能检测到同一变更。
+- **Sync state codec（持久化形状）** — `lib/data/sync/sync_state_codec.dart`：
+  `SyncPersistedState` 是 `sync_state_v2` 的不可变快照（身份 / 类别与传输开关 /
+  WebDAV / 地址簿 / 名册 / 已验证端点 / 登记表 / 指纹 / 日志 / 活动 / 版本基线），
+  `SyncStateCodec.encode` / `decode` 是键名、条件字段、容错默认值与保留上限的
+  唯一实现；`SyncStateStore` 只负责内存状态、身份恢复与提交时机，不再持有
+  JSON 形状（见 `sync_book.dart`）。
 - **Sync round window（轮次窗口）** — `SyncRoundWindow`（定义在
   `lib/domain/ports/sync_transport.dart`）：一轮的 `pull` 与 `push` 显式共享
   同一个窗口，删除局域网私有的 `_roundStartedAt` 隐式耦合。

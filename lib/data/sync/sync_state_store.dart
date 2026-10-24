@@ -1,6 +1,7 @@
 /// 同步运行状态持久化：设备身份 / 传输开关 / 传输配置 / 变更登记 / 日志。
 ///
-/// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v2`）；
+/// - 非敏感状态走 SharedPreferences 单 JSON 键（`sync_state_v2`），字段 ↔
+///   JSON 的映射在 `sync_state_codec.dart`（本类只管内存状态与写入时机）；
 /// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
 /// - 变更登记（设置键哈希、脚本墓碑、激活脚本指针）是「变化检测」的基线：
@@ -23,133 +24,16 @@ import '../../utils/peer_address.dart';
 import '../settings/settings_secret_store.dart';
 import 'sync_activity.dart';
 import 'sync_book.dart';
+import 'sync_state_codec.dart';
 import 'sync_stamp.dart';
 
 // 登记项是状态与适配器共用的值类型；定义在 sync_stamp.dart，保持旧 import
 // 路径可用（大量调用方经本文件拿到 SyncStamp）。
 export 'sync_stamp.dart' show SyncStamp;
 
-/// WebDAV 传输配置（密码单独走安全存储，不在此结构内）。
-class WebDavConfig {
-  final String baseUrl;
-  final String username;
-
-  /// 远端目录名（相对 baseUrl，默认 `molia-sync`）。
-  final String remoteDir;
-
-  const WebDavConfig({
-    this.baseUrl = '',
-    this.username = '',
-    this.remoteDir = 'molia-sync',
-  });
-
-  bool get isConfigured => baseUrl.trim().isNotEmpty;
-
-  WebDavConfig copyWith(
-          {String? baseUrl, String? username, String? remoteDir}) =>
-      WebDavConfig(
-        baseUrl: baseUrl ?? this.baseUrl,
-        username: username ?? this.username,
-        remoteDir: remoteDir ?? this.remoteDir,
-      );
-
-  Map<String, dynamic> toJson() => {
-        'baseUrl': baseUrl,
-        'username': username,
-        'remoteDir': remoteDir,
-      };
-
-  static WebDavConfig fromJson(Object? raw) {
-    if (raw is! Map) return const WebDavConfig();
-    return WebDavConfig(
-      baseUrl: raw['baseUrl'] is String ? raw['baseUrl'] as String : '',
-      username: raw['username'] is String ? raw['username'] as String : '',
-      remoteDir: raw['remoteDir'] is String &&
-              (raw['remoteDir'] as String).trim().isNotEmpty
-          ? (raw['remoteDir'] as String).trim()
-          : 'molia-sync',
-    );
-  }
-}
-
-/// 同步日志条目（设置页日志子页展示；不含口令/密钥内容）。
-///
-/// 语义是**本轮变更量**：`applied` 是本轮真正落地的记录数，与库大小无关。
-class SyncLogEntry {
-  const SyncLogEntry({
-    required this.at,
-    required this.trigger,
-    required this.outcome,
-    this.durationMs = 0,
-    this.applied = 0,
-    this.peersSeen = 0,
-    this.failed = 0,
-    this.bytesIn = 0,
-    this.bytesOut = 0,
-    this.transports = const [],
-    this.error,
-  });
-
-  final int at;
-
-  /// 触发原因（用户能看出「为什么现在同步」）。
-  final SyncTrigger trigger;
-
-  final SyncOutcome outcome;
-  final int durationMs;
-
-  /// 本轮落地的记录数（变更量）。
-  final int applied;
-
-  /// 本轮接触到的对端数（0 = 未发现对端）。
-  final int peersSeen;
-
-  /// 失败计数（拉取 + 推送）。
-  final int failed;
-
-  final int bytesIn;
-  final int bytesOut;
-
-  /// 本轮启用的传输标识。
-  final List<String> transports;
-
-  /// 失败原因（类型化；技术细节在 [SyncIssue.detail]，UI 不展示原文）。
-  final SyncIssue? error;
-
-  Map<String, dynamic> toJson() => {
-        'at': at,
-        'trigger': trigger.name,
-        'outcome': outcome.name,
-        if (durationMs > 0) 'durationMs': durationMs,
-        if (applied > 0) 'applied': applied,
-        if (peersSeen > 0) 'peersSeen': peersSeen,
-        if (failed > 0) 'failed': failed,
-        if (bytesIn > 0) 'bytesIn': bytesIn,
-        if (bytesOut > 0) 'bytesOut': bytesOut,
-        if (transports.isNotEmpty) 'transports': transports,
-        if (error != null) 'error': error!.toJson(),
-      };
-
-  static SyncLogEntry? fromJson(Object? raw) {
-    if (raw is! Map) return null;
-    final at = raw['at'];
-    if (at is! num) return null;
-    return SyncLogEntry(
-      at: at.toInt(),
-      trigger: SyncTrigger.parse(raw['trigger'] as String?),
-      outcome: SyncOutcome.parse(raw['outcome'] as String?),
-      durationMs: (raw['durationMs'] as num?)?.toInt() ?? 0,
-      applied: (raw['applied'] as num?)?.toInt() ?? 0,
-      peersSeen: (raw['peersSeen'] as num?)?.toInt() ?? 0,
-      failed: (raw['failed'] as num?)?.toInt() ?? 0,
-      bytesIn: (raw['bytesIn'] as num?)?.toInt() ?? 0,
-      bytesOut: (raw['bytesOut'] as num?)?.toInt() ?? 0,
-      transports: (raw['transports'] as List?)?.whereType<String>().toList() ??
-          const [],
-      error: SyncIssue.fromJson(raw['error']),
-    );
-  }
-}
+// 传输配置 / 日志条目与状态快照同属持久化形状；定义在 codec 里，保持旧
+// import 路径可用（调用方经本文件拿到 WebDavConfig / SyncLogEntry）。
+export 'sync_state_codec.dart' show SyncLogEntry, WebDavConfig;
 
 /// 同步运行状态（内存视图 + SharedPreferences 持久化）。
 class SyncStateStore
@@ -193,17 +77,17 @@ class SyncStateStore
   /// 与 known 都 reset 成功后才写 true（见 [markFreshHandled]）。
   static const String derivedResetKey = 'sync_derived_reset_v2';
 
-  /// 日志保留条数（设置页只展示最近几条）。
-  static const int logLimit = 20;
+  /// 日志保留条数（设置页只展示最近几条；上限值定义在 codec，解码共用）。
+  static const int logLimit = SyncStateCodec.logLimit;
 
   /// 活动记录保留条数（近 24 小时汇总用；展示日志的 20 条不足以支撑窗口）。
-  static const int activityLimit = 240;
+  static const int activityLimit = SyncStateCodec.activityLimit;
 
   /// 名册保留设备数（按最近接触时间淘汰；避免长期运行后无界增长）。
-  static const int peerLimit = syncPeerLimit;
+  static const int peerLimit = SyncStateCodec.peerLimit;
 
   /// 已验证局域网端点保留条数（MAC + HTTP 解密成功才写入）。
-  static const int lanEndpointLimit = 32;
+  static const int lanEndpointLimit = SyncStateCodec.lanEndpointLimit;
 
   /// 已验证局域网端点的保留期：超过该时长没再验证过随名册淘汰。
   static const int lanEndpointRetentionMs = 180 * 24 * 60 * 60 * 1000;
@@ -478,8 +362,14 @@ class SyncStateStore
     var stateCorrupt = false;
     if (raw != null && raw.isNotEmpty) {
       try {
-        final json = jsonDecode(raw);
-        if (json is Map) _applyJson(json.cast<String, dynamic>());
+        final state = SyncStateCodec.decode(jsonDecode(raw));
+        if (state == null) {
+          // 解析成功但不是对象：只能是写坏 / 被改过的载荷，按损坏处理
+          // （状态只会由本类按对象写出）。
+          stateCorrupt = true;
+        } else {
+          _applyState(state);
+        }
       } catch (e) {
         // 损坏状态按默认处理，但**设备身份不能跟着重生成**：先尝试独立键
         // 与安全存储备份，只有全部缺失时才生成新 id（否则对端会多出一台
@@ -806,7 +696,7 @@ class SyncStateStore
   /// 只更新内存 + 标脏：每轮每对端成功都会回写一次，这里若自己落盘会让
   /// 多对端一轮写多次大状态 JSON。持久化由引擎轮末的 [commit] 统一完成。
   Future<void> rememberLanEndpoint(LanPeerEndpoint endpoint) async {
-    if (!_isValidLanEndpoint(endpoint)) return;
+    if (!SyncStateCodec.isValidLanEndpoint(endpoint)) return;
     final existing = _lanEndpoints[endpoint.deviceId];
     final next = LanPeerEndpoint(
       deviceId: endpoint.deviceId,
@@ -829,19 +719,6 @@ class SyncStateStore
     // 端点身份变化会改变名册淘汰 / 单播目标，仅验证时间前进也要跨重启保留：
     // 都只标脏，等轮末提交（每轮每对端都会回写，绝不能在这里落盘）。
     _markDirty();
-  }
-
-  /// 端点合法性：可路由 IP 字面量、非空设备 id、端口在合法范围、有验证时间。
-  ///
-  /// `verifiedAt <= 0` 的端点不能进入表：没有验证时间的条目永远不会被
-  /// 180 天淘汰规则命中，会永久留在状态里。
-  static bool _isValidLanEndpoint(LanPeerEndpoint endpoint) {
-    if (endpoint.deviceId.trim().isEmpty) return false;
-    if (!isRoutablePeerAddress(endpoint.host)) return false;
-    if (endpoint.httpPort <= 0 || endpoint.httpPort > 65535) return false;
-    if (endpoint.probePort < 0 || endpoint.probePort > 65535) return false;
-    if (endpoint.verifiedAt <= 0) return false;
-    return true;
   }
 
   /// 超过 [lanEndpointLimit] 时按 `verifiedAt` 淘汰最旧的端点。
@@ -989,7 +866,8 @@ class SyncStateStore
     _dirty = false;
     try {
       final prefs = _prefs ??= await SharedPreferences.getInstance();
-      if (!await prefs.setString(stateKey, jsonEncode(_toJson()))) {
+      if (!await prefs.setString(
+          stateKey, jsonEncode(SyncStateCodec.encode(_snapshot())))) {
         throw StateError('同步状态写入被平台拒绝（setString 返回 false）');
       }
       _persistedWrites++;
@@ -1004,183 +882,87 @@ class SyncStateStore
     }
   }
 
-  Map<String, dynamic> _toJson() => {
-        'v': 2,
-        'deviceId': _deviceId,
-        'deviceName': _deviceName,
-        'categories': {
-          for (final entry in _categories.entries) entry.key.name: entry.value,
-        },
-        'transports': _enabledTransports.toList(),
-        'webdav': _webdav.toJson(),
-        'cellularPolicy': _cellularPolicy.name,
-        if (_manualPeers.isNotEmpty)
-          'manualPeers': [for (final peer in _manualPeers) peer.toJson()],
-        if (_notifiedPeers.isNotEmpty) 'notifiedPeers': _notifiedPeers.toList(),
-        if (_lanHttpPort > 0) 'lanHttpPort': _lanHttpPort,
-        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份让状态 JSON
-        // 自描述（读取时以独立键 / 状态里的非空值为准）。
-        'stampSeq': _stampBaseline.toJson(),
-        'settings': {
-          for (final entry in _settingStamps.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'scriptTombstones': {
-          for (final entry in _scriptTombstones.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'scriptStamps': {
-          for (final entry in _scriptStamps.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'knownScripts': _knownScriptIds,
-        if (_activeScriptStamp != null)
-          'activeScript': _activeScriptStamp!.toJson(),
-        if (_sessionStamp != null) 'sessionStamp': _sessionStamp!.toJson(),
-        'lastSyncAt': _lastSyncAt,
-        if (_transportLastSuccess.isNotEmpty)
-          'transportLastSuccess': _transportLastSuccess,
-        if (_snapshotPushSeq.isNotEmpty) 'snapshotPush': _snapshotPushSeq,
-        'log': [for (final entry in _log) entry.toJson()],
-        'activity': [for (final entry in _activity) entry.toJson()],
-        'peers': [for (final peer in _peers.values) peer.toJson()],
-        if (_lanEndpoints.isNotEmpty)
-          'lanEndpoints': [
-            for (final endpoint in _lanEndpoints.values) endpoint.toJson(),
-          ],
-      };
+  /// 当前内存状态的持久化快照（不可变；JSON 形状由 `SyncStateCodec` 维护）。
+  SyncPersistedState _snapshot() => SyncPersistedState(
+        deviceId: _deviceId,
+        deviceName: _deviceName,
+        categories: _categories,
+        transports: _enabledTransports,
+        webdav: _webdav,
+        cellularPolicy: _cellularPolicy,
+        manualPeers: _manualPeers,
+        notifiedPeers: _notifiedPeers,
+        lanHttpPort: _lanHttpPort,
+        stampBaseline: _stampBaseline,
+        settingStamps: _settingStamps,
+        scriptTombstones: _scriptTombstones,
+        scriptStamps: _scriptStamps,
+        knownScriptIds: _knownScriptIds,
+        activeScriptStamp: _activeScriptStamp,
+        sessionStamp: _sessionStamp,
+        lastSyncAt: _lastSyncAt,
+        transportLastSuccess: _transportLastSuccess,
+        snapshotPushSeq: _snapshotPushSeq,
+        log: _log,
+        activity: _activity,
+        peers: _peers.values.toList(),
+        lanEndpoints: _lanEndpoints.values.toList(),
+      );
 
-  void _applyJson(Map<String, dynamic> json) {
-    _deviceId = json['deviceId'] is String ? json['deviceId'] as String : '';
-    _deviceName =
-        json['deviceName'] is String ? json['deviceName'] as String : '';
-
-    final categories = json['categories'];
-    if (categories is Map) {
-      for (final category in SyncCategory.values) {
-        final value = categories[category.name];
-        if (value is bool) _categories[category] = value;
-      }
-    }
-    final transports = json['transports'];
-    if (transports is List) {
-      _enabledTransports
-        ..clear()
-        ..addAll(transports.whereType<String>());
-    }
-    _webdav = WebDavConfig.fromJson(json['webdav']);
-    _cellularPolicy =
-        SyncCellularPolicy.parse(json['cellularPolicy'] as String?);
-
-    _manualPeers.clear();
-    final manualPeers = json['manualPeers'];
-    if (manualPeers is List) {
-      for (final item in manualPeers) {
-        final peer = ManualPeer.fromJson(item);
-        if (peer != null) _manualPeers.add(peer);
-      }
-    }
+  /// 把解码出的快照写回内存（整体替换：状态 JSON 是完整视图，不是增量）。
+  void _applyState(SyncPersistedState state) {
+    _deviceId = state.deviceId;
+    _deviceName = state.deviceName;
+    _categories
+      ..clear()
+      ..addAll(state.categories);
+    _enabledTransports
+      ..clear()
+      ..addAll(state.transports);
+    _webdav = state.webdav;
+    _cellularPolicy = state.cellularPolicy;
+    _manualPeers
+      ..clear()
+      ..addAll(state.manualPeers);
     _notifiedPeers
       ..clear()
-      ..addAll(
-          (json['notifiedPeers'] as List?)?.whereType<String>() ?? const []);
-    _lanHttpPort = (json['lanHttpPort'] as num?)?.toInt() ?? 0;
-
-    final stampSeq = json['stampSeq'];
-    if (stampSeq is Map) {
-      final baseline = SyncVersion.fromJson(stampSeq);
-      if (baseline != null) _stampBaseline = baseline;
-    }
-
-    _settingStamps.clear();
-    final settings = json['settings'];
-    if (settings is Map) {
-      for (final entry in settings.entries) {
-        final stamp = SyncStamp.fromJson(entry.value);
-        if (stamp != null) _settingStamps[entry.key.toString()] = stamp;
-      }
-    }
-    _scriptTombstones.clear();
-    final tombstones = json['scriptTombstones'];
-    if (tombstones is Map) {
-      for (final entry in tombstones.entries) {
-        final stamp = SyncStamp.fromJson(entry.value);
-        if (stamp != null) _scriptTombstones[entry.key.toString()] = stamp;
-      }
-    }
-    _scriptStamps.clear();
-    final scriptStamps = json['scriptStamps'];
-    if (scriptStamps is Map) {
-      for (final entry in scriptStamps.entries) {
-        final stamp = SyncStamp.fromJson(entry.value);
-        if (stamp != null) _scriptStamps[entry.key.toString()] = stamp;
-      }
-    }
+      ..addAll(state.notifiedPeers);
+    _lanHttpPort = state.lanHttpPort;
+    _stampBaseline = state.stampBaseline;
+    _settingStamps
+      ..clear()
+      ..addAll(state.settingStamps);
+    _scriptTombstones
+      ..clear()
+      ..addAll(state.scriptTombstones);
+    _scriptStamps
+      ..clear()
+      ..addAll(state.scriptStamps);
     _knownScriptIds
       ..clear()
-      ..addAll(
-          (json['knownScripts'] as List?)?.whereType<String>() ?? const []);
-    _activeScriptStamp = SyncStamp.fromJson(json['activeScript']);
-    _sessionStamp = SyncStamp.fromJson(json['sessionStamp']);
-
-    _lastSyncAt =
-        json['lastSyncAt'] is num ? (json['lastSyncAt'] as num).toInt() : 0;
-    _transportLastSuccess.clear();
-    final transportLastSuccess = json['transportLastSuccess'];
-    if (transportLastSuccess is Map) {
-      for (final entry in transportLastSuccess.entries) {
-        final at = entry.value;
-        if (at is num) _transportLastSuccess[entry.key.toString()] = at.toInt();
-      }
-    }
-    _snapshotPushSeq.clear();
-    final snapshotPush = json['snapshotPush'];
-    if (snapshotPush is Map) {
-      for (final entry in snapshotPush.entries) {
-        final seq = entry.value;
-        if (seq is num) _snapshotPushSeq[entry.key.toString()] = seq.toInt();
-      }
-    }
-    _log.clear();
-    final log = json['log'];
-    if (log is List) {
-      for (final item in log) {
-        final entry = SyncLogEntry.fromJson(item);
-        if (entry != null && _log.length < logLimit) _log.add(entry);
-      }
-    }
-    _activity.clear();
-    final activity = json['activity'];
-    if (activity is List) {
-      for (final item in activity) {
-        final entry = SyncActivityEntry.fromJson(item);
-        if (entry != null && _activity.length < activityLimit) {
-          _activity.add(entry);
-        }
-      }
-    }
-    _peers.clear();
-    final peers = json['peers'];
-    if (peers is List) {
-      for (final item in peers) {
-        final peer = SyncPeerState.fromJson(item);
-        if (peer != null && _peers.length < peerLimit) {
-          _peers[peer.deviceId] = peer;
-        }
-      }
-    }
-    _lanEndpoints.clear();
-    final lanEndpoints = json['lanEndpoints'];
-    if (lanEndpoints is List) {
-      for (final item in lanEndpoints) {
-        final endpoint = LanPeerEndpoint.fromJson(item);
-        // 非法条目（不可路由地址 / 越界端口 / 空 id）直接丢弃，不拖垮整份状态。
-        if (endpoint != null && _isValidLanEndpoint(endpoint)) {
-          _lanEndpoints[endpoint.deviceId] = endpoint;
-        }
-        if (_lanEndpoints.length >= lanEndpointLimit) break;
-      }
-    }
+      ..addAll(state.knownScriptIds);
+    _activeScriptStamp = state.activeScriptStamp;
+    _sessionStamp = state.sessionStamp;
+    _lastSyncAt = state.lastSyncAt;
+    _transportLastSuccess
+      ..clear()
+      ..addAll(state.transportLastSuccess);
+    _snapshotPushSeq
+      ..clear()
+      ..addAll(state.snapshotPushSeq);
+    _log
+      ..clear()
+      ..addAll(state.log);
+    _activity
+      ..clear()
+      ..addAll(state.activity);
+    _peers
+      ..clear()
+      ..addEntries(state.peers.map((peer) => MapEntry(peer.deviceId, peer)));
+    _lanEndpoints
+      ..clear()
+      ..addEntries(state.lanEndpoints
+          .map((endpoint) => MapEntry(endpoint.deviceId, endpoint)));
   }
 
   String _generateDeviceId() {
