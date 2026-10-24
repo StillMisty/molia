@@ -45,28 +45,14 @@ String? nowPlayingCoverUrl(PlaybackProvider provider) =>
 /// 混在一次时长里——飞行落位帧必须与副本移除同帧亮出（亮出 0ms），收起
 /// 方向才走 160ms 淡出，否则结束/开始两帧会看到重影或跳变。
 class NowPlayingCover extends StatelessWidget {
-  /// 显式封面地址（宿主已自行取值时使用）。
-  const NowPlayingCover({
-    super.key,
-    required this.url,
-    required this.size,
-    this.appearance = CoverAppearance.bar,
-    this.flightKey,
-    this.hidden = false,
-  }) : _followsCurrent = false;
-
-  /// 跟随当前曲目（顶栏 / 桌面底栏的常态）。
+  /// 跟随当前曲目（顶栏 / 桌面底栏的封面位）。
   const NowPlayingCover.current({
     super.key,
     required this.size,
     this.appearance = CoverAppearance.bar,
     this.flightKey,
     this.hidden = false,
-  })  : url = null,
-        _followsCurrent = true;
-
-  /// 封面地址；[NowPlayingCover.current] 为 null（改读当前曲目）。
-  final String? url;
+  });
 
   /// 卡片边长（封面卡恒为方形）。
   final double size;
@@ -83,15 +69,12 @@ class NowPlayingCover extends StatelessWidget {
   /// 是否处于隐藏态（播放页激活或飞行中）。
   final bool hidden;
 
-  final bool _followsCurrent;
-
   static const Duration _hideDuration = Duration(milliseconds: 160);
 
   @override
   Widget build(BuildContext context) {
-    final coverUrl = _followsCurrent
-        ? context.select<PlaybackProvider, String?>(nowPlayingCoverUrl)
-        : url;
+    final coverUrl =
+        context.select<PlaybackProvider, String?>(nowPlayingCoverUrl);
     return AnimatedOpacity(
       // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
       duration: hidden ? _hideDuration : Duration.zero,
