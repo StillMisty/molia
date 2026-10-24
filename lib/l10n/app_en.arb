@@ -204,6 +204,7 @@
   "loadingGenerating": "Generating poster...",
   "currentQueueEmpty": "Current queue is empty",
   "nowPlayingSection": "Playing",
+  "nowPlayingPaused": "Paused",
   "searchLyrics": "Search Lyrics",
   "noCurrentTrackPlaying": "No track currently playing",
   "cannotGetTrackInfo": "Cannot get current track information",

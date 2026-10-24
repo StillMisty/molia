@@ -515,25 +515,28 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     PlayStatisticsProvider provider,
   ) {
     final tracks = provider.snapshot?.topTracks ?? const <PlayStatTrackEntry>[];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(l10n.statsTopTracks,
-            style: context.typeScale.titleMedium),
-        const SizedBox(height: 12),
-        for (var i = 0; i < tracks.length; i++) ...[
-          if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
-          TrackRow(
-            title: tracks[i].title,
-            artist: tracks[i].artist,
-            coverUrl: tracks[i].coverUrl,
-            position: calculateCardPosition(i, tracks.length),
-            trailingText: '${l10n.statsPlaysCount(tracks[i].playCount)} · '
-                '${_formatListened(l10n, tracks[i].listenedMs)}',
-            onTap: () => unawaited(_playTopTracks(tracks, i)),
-          ),
+    return _NowPlayingBuilder(
+      builder: (context, nowPlaying) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.statsTopTracks, style: context.typeScale.titleMedium),
+          const SizedBox(height: 12),
+          for (var i = 0; i < tracks.length; i++) ...[
+            if (i > 0) SizedBox(height: TrackRow.gapOf(context)),
+            TrackRow(
+              title: tracks[i].title,
+              artist: tracks[i].artist,
+              coverUrl: tracks[i].coverUrl,
+              isCurrent: tracks[i].key == nowPlaying.uri,
+              isPlaying: nowPlaying.isPlaying,
+              position: calculateCardPosition(i, tracks.length),
+              trailingText: '${l10n.statsPlaysCount(tracks[i].playCount)} · '
+                  '${_formatListened(l10n, tracks[i].listenedMs)}',
+              onTap: () => unawaited(_playTopTracks(tracks, i)),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -548,8 +551,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(l10n.statsTopArtists,
-            style: context.typeScale.titleMedium),
+        Text(l10n.statsTopArtists, style: context.typeScale.titleMedium),
         const SizedBox(height: 12),
         M3ECard(
           variant: M3ECardVariant.filled,
@@ -904,35 +906,68 @@ class _DayDetailSheet extends StatelessWidget {
             ),
           ),
           Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              itemCount: detail.events.length,
-              separatorBuilder: (context, _) =>
-                  SizedBox(height: TrackRow.gapOf(context)),
-              itemBuilder: (context, index) {
-                final event = detail.events[index];
-                final time = localizations.formatTimeOfDay(
-                  TimeOfDay.fromDateTime(
-                    DateTime.fromMillisecondsSinceEpoch(event.startedAt),
-                  ),
-                  alwaysUse24HourFormat:
-                      MediaQuery.alwaysUse24HourFormatOf(context),
-                );
-                return TrackRow(
-                  title: event.title,
-                  artist: event.artist,
-                  coverUrl: event.coverUrl,
-                  position: calculateCardPosition(index, detail.events.length),
-                  trailingText:
-                      '$time · ${_formatListened(l10n, event.listenedMs)}',
-                  onTap: () => onPlay(index),
-                );
-              },
+            child: _NowPlayingBuilder(
+              builder: (context, nowPlaying) => ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                itemCount: detail.events.length,
+                separatorBuilder: (context, _) =>
+                    SizedBox(height: TrackRow.gapOf(context)),
+                itemBuilder: (context, index) {
+                  final event = detail.events[index];
+                  final time = localizations.formatTimeOfDay(
+                    TimeOfDay.fromDateTime(
+                      DateTime.fromMillisecondsSinceEpoch(event.startedAt),
+                    ),
+                    alwaysUse24HourFormat:
+                        MediaQuery.alwaysUse24HourFormatOf(context),
+                  );
+                  return TrackRow(
+                    title: event.title,
+                    artist: event.artist,
+                    coverUrl: event.coverUrl,
+                    isCurrent:
+                        '${event.sourceKey}:${event.songId}' == nowPlaying.uri,
+                    isPlaying: nowPlaying.isPlaying,
+                    position:
+                        calculateCardPosition(index, detail.events.length),
+                    trailingText:
+                        '$time · ${_formatListened(l10n, event.listenedMs)}',
+                    onTap: () => onPlay(index),
+                  );
+                },
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 当前曲目状态（统计页榜单 / 当日明细共用）。
+///
+/// 用 `Selector` 包住子树，而不是在页面方法里 `context.select`：统计页的
+/// 内容在 `Consumer` builder 中构建，那里不是 widget 自己的 build；订阅
+/// 交给独立的 widget 才不会触发 provider 的调用位置断言。
+///
+/// 按 `sourceKey:songId` 对齐行身份；组件测试没有播放栈时视为无当前曲目。
+class _NowPlayingBuilder extends StatelessWidget {
+  const _NowPlayingBuilder({required this.builder});
+
+  final Widget Function(
+    BuildContext context,
+    ({String? uri, bool isPlaying}) nowPlaying,
+  ) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<PlaybackProvider?, ({String? uri, bool isPlaying})>(
+      selector: (_, provider) => (
+        uri: provider?.snapshot.current?.id.uri,
+        isPlaying: provider?.snapshot.isPlaying ?? false,
+      ),
+      builder: (context, nowPlaying, _) => builder(context, nowPlaying),
     );
   }
 }

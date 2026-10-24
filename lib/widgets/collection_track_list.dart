@@ -4,10 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/collection_presenter.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import 'playback_selectors.dart';
 import 'row_actions.dart';
 import 'swipe_reveal_row.dart';
 import 'track_row.dart';
@@ -128,6 +130,7 @@ class CollectionTrackRow extends StatelessWidget {
     this.columns,
     this.trailingText,
     this.trailing,
+    this.trackId,
     required this.position,
     this.selected = false,
     this.onTap,
@@ -150,6 +153,10 @@ class CollectionTrackRow extends StatelessWidget {
   /// 行尾插槽（排序把手 / 缓存标记等）。
   final Widget? trailing;
 
+  /// 行身份（`sourceKey:songId`）：传入后逐行订阅「是否当前曲目」。
+  /// null = 不订阅（例如只渲染展示行的独立用法）。
+  final TrackId? trackId;
+
   /// 行在列表中的位置（首末外侧大圆角；由 `calculateCardPosition` 算）。
   final M3ECardPosition position;
 
@@ -171,6 +178,10 @@ class CollectionTrackRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tapWithModifiers = onTapWithModifiers;
     final rowActions = actions ?? const <RowAction>[];
+    final TrackId? trackId = this.trackId;
+    final CurrentTrackState current = trackId == null
+        ? (isCurrent: false, isPlaying: false)
+        : selectCurrentTrackState(context, trackId);
     final row = TrackRow(
       title: title,
       artist: artist,
@@ -178,6 +189,8 @@ class CollectionTrackRow extends StatelessWidget {
       columns: columns,
       trailingText: trailingText,
       trailing: trailing,
+      isCurrent: current.isCurrent,
+      isPlaying: current.isPlaying,
       selected: selected,
       position: position,
       // 修饰键在点击回调里读：行只在列表数据变化时重建，按下 Ctrl 本身

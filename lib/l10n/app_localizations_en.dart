@@ -499,6 +499,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nowPlayingSection => 'Playing';
 
   @override
+  String get nowPlayingPaused => 'Paused';
+
+  @override
   String get searchLyrics => 'Search Lyrics';
 
   @override

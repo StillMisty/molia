@@ -3,6 +3,7 @@ import 'package:molia/data/catalog/artist_service.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
+import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -54,14 +55,13 @@ void main() {
               hasMore: false,
               total: 1,
             ))
-        ..onSearchArtists =
-            ((query) async => SearchResult(
-                  items: const [
-                    ArtistSummary(id: '336', name: '周杰伦', songCount: 581),
-                  ],
-                  hasMore: false,
-                  total: 1,
-                ));
+        ..onSearchArtists = ((query) async => SearchResult(
+              items: const [
+                ArtistSummary(id: '336', name: '周杰伦', songCount: 581),
+              ],
+              hasMore: false,
+              total: 1,
+            ));
 
   Future<SearchProvider> pumpSection(
     WidgetTester tester, {
@@ -79,6 +79,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<SearchProvider>.value(value: provider),
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           Provider<ArtistService>.value(
             value: artistService ??
                 ArtistService(
@@ -102,6 +103,31 @@ void main() {
     await tester.pumpAndSettle();
     return provider;
   }
+
+  testWidgets('当前曲目：结果行按 source + id 标记封面角标', (tester) async {
+    final provider = await pumpSection(
+      tester,
+      musicSource: source(artist: false),
+    );
+    provider.submitSearch('周杰伦');
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+
+    final item = provider.searchResults['tracks']!.first;
+    final current = Track(
+      id: TrackId(item['source'] as String, item['id'] as String),
+      title: item['name'] as String,
+      origin: TrackOrigin.builtin,
+    );
+    backend.emit(BackendSnapshot(
+      current: current,
+      queue: [current],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+  });
 
   testWidgets('无歌手能力：不显示类型分段，结果仍是单曲行', (tester) async {
     final provider = await pumpSection(

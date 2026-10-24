@@ -328,8 +328,12 @@ class _AiDjPageState extends State<AiDjPage> {
     final scheme = theme.colorScheme;
     final batch = provider.recommendations;
     final items = batch?.items ?? const <ResolvedRecommendation>[];
-    final currentUri = context.select<PlaybackProvider, String?>(
-      (playback) => playback.snapshot.current?.id.uri,
+    final nowPlaying =
+        context.select<PlaybackProvider, ({String? uri, bool isPlaying})>(
+      (playback) => (
+        uri: playback.snapshot.current?.id.uri,
+        isPlaying: playback.snapshot.isPlaying,
+      ),
     );
     final busy = provider.isBusy;
     final radioActive = provider.status == AiDjStatus.playing;
@@ -411,7 +415,8 @@ class _AiDjPageState extends State<AiDjPage> {
             index: i,
             count: items.length,
             item: items[i],
-            isCurrent: items[i].track.id.uri == currentUri,
+            isCurrent: items[i].track.id.uri == nowPlaying.uri,
+            isPlaying: nowPlaying.isPlaying,
             busy: busy,
             replacing: provider.isReplacing(items[i].track.id.uri),
             onPlay: () => unawaited(provider.playRecommendation(i)),

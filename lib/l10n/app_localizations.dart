@@ -1010,6 +1010,12 @@ abstract class AppLocalizations {
   /// **'Playing'**
   String get nowPlayingSection;
 
+  /// No description provided for @nowPlayingPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get nowPlayingPaused;
+
   /// No description provided for @searchLyrics.
   ///
   /// In en, this message translates to:

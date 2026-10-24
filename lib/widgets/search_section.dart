@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
+import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../pages/artist_page.dart';
@@ -16,6 +17,7 @@ import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
 import 'desktop_layout.dart';
+import 'playback_selectors.dart';
 import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
@@ -493,10 +495,34 @@ class _SearchResultTile extends StatelessWidget {
             onTap();
           };
     final actions = trackRowActionMenuForSearchItem(context, item);
+    final current = _currentTrackStateOf(context, item);
     if (tableColumns) {
-      return _buildTableRow(context, rowTap: rowTap, actions: actions);
+      return _buildTableRow(
+        context,
+        rowTap: rowTap,
+        actions: actions,
+        current: current,
+      );
     }
-    return _buildSingleColumnRow(context, rowTap: rowTap, actions: actions);
+    return _buildSingleColumnRow(
+      context,
+      rowTap: rowTap,
+      actions: actions,
+      current: current,
+    );
+  }
+
+  /// 当前曲目状态：搜索结果条目带 `source` + `id`（与播放 TrackId 同源）。
+  CurrentTrackState _currentTrackStateOf(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) {
+    final sourceKey = item['source']?.toString() ?? '';
+    final id = item['id']?.toString() ?? '';
+    if (sourceKey.isEmpty || id.isEmpty) {
+      return (isCurrent: false, isPlaying: false);
+    }
+    return selectCurrentTrackState(context, TrackId(sourceKey, id));
   }
 
   /// 单列行（非宽屏 / 触摸端）：封面 + 标题 + 歌手 / 歌词片段副标题。
@@ -504,6 +530,7 @@ class _SearchResultTile extends StatelessWidget {
     BuildContext context, {
     required VoidCallback? rowTap,
     required List<RowAction> actions,
+    required CurrentTrackState current,
   }) {
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = item['source']?.toString() ?? '';
@@ -523,6 +550,8 @@ class _SearchResultTile extends StatelessWidget {
       artists: artistLinks,
       coverUrl: _coverUrlOf(item),
       trailingText: durationText(_durationMsOf(item)),
+      isCurrent: current.isCurrent,
+      isPlaying: current.isPlaying,
       position: calculateCardPosition(index, count),
       onTap: rowTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),
@@ -535,6 +564,7 @@ class _SearchResultTile extends StatelessWidget {
     BuildContext context, {
     required VoidCallback? rowTap,
     required List<RowAction> actions,
+    required CurrentTrackState current,
   }) {
     final artist = _artistDisplayOf(item);
     return TrackRow(
@@ -547,6 +577,8 @@ class _SearchResultTile extends StatelessWidget {
         album: _albumNameOf(item),
         duration: durationText(_durationMsOf(item)) ?? '',
       ),
+      isCurrent: current.isCurrent,
+      isPlaying: current.isPlaying,
       position: calculateCardPosition(index, count),
       onTap: rowTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),

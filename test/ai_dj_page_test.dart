@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/ai_dj.dart';
+import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/ai_dj_history_page.dart';
@@ -169,6 +170,33 @@ void main() {
     // 行尾只显示歌手，不再暴露命中渠道。
     expect(find.text('Artist'), findsWidgets);
     expect(find.text('Artist · wy'), findsNothing);
+  });
+
+  testWidgets('当前曲目：推荐卡封面角标跟随播放 / 暂停', (tester) async {
+    await pumpProvider();
+    await pumpPage(tester);
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    await tester.pumpAndSettle();
+
+    final track = _batch(0, 3).items.first.track;
+    backend.emit(BackendSnapshot(
+      current: track,
+      queue: [track],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+
+    backend.emit(BackendSnapshot(
+      current: track,
+      queue: [track],
+      currentIndex: 0,
+    ));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
   });
 
   testWidgets('播放全部 / 加入队列 / 换一批 / 历史入口', (tester) async {

@@ -36,6 +36,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
+import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
@@ -44,6 +45,7 @@ import '../theme/m3e_context.dart';
 import '../utils/duration_text.dart';
 import 'app_search_bar.dart';
 import 'artist_row.dart';
+import 'playback_selectors.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -466,7 +468,8 @@ class _GlobalSearchResults extends StatelessWidget {
     final isArtistKind = search.searchKind == SearchKind.artist;
     final isLyricKind = search.searchKind == SearchKind.lyric;
     final results = isLyricKind ? search.lyricResults : search.filteredResults;
-    final artists = isArtistKind ? search.artistResults : const <ArtistSummary>[];
+    final artists =
+        isArtistKind ? search.artistResults : const <ArtistSummary>[];
     final itemCount = isArtistKind ? artists.length : results.length;
     final failure = search.failure;
 
@@ -568,18 +571,31 @@ class _GlobalSearchResults extends StatelessWidget {
     int count,
   ) {
     final snippet = item['lyric_snippet']?.toString() ?? '';
+    final sourceKey = item['source']?.toString() ?? '';
+    final id = item['id']?.toString() ?? '';
     return Padding(
       padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
-      child: TrackRow(
-        key: ValueKey(item['id']),
-        title: _titleOf(item),
-        artist: snippet.isNotEmpty ? snippet : _artistOf(item),
-        coverUrl: _coverUrlOf(item),
-        trailingText: durationText(_durationMsOf(item)),
-        position: calculateCardPosition(index, count),
-        onTap: () {
-          HapticsService.lightImpact();
-          onPlayItem(item);
+      // 逐行订阅放在独立 widget 的 build 里：外层 State 的 build 不是
+      // provider 认可的调用位置（结果面板可能在别的 builder 中构建）。
+      child: Builder(
+        builder: (context) {
+          final current = sourceKey.isEmpty || id.isEmpty
+              ? (isCurrent: false, isPlaying: false)
+              : selectCurrentTrackState(context, TrackId(sourceKey, id));
+          return TrackRow(
+            key: ValueKey(item['id']),
+            title: _titleOf(item),
+            artist: snippet.isNotEmpty ? snippet : _artistOf(item),
+            coverUrl: _coverUrlOf(item),
+            trailingText: durationText(_durationMsOf(item)),
+            isCurrent: current.isCurrent,
+            isPlaying: current.isPlaying,
+            position: calculateCardPosition(index, count),
+            onTap: () {
+              HapticsService.lightImpact();
+              onPlayItem(item);
+            },
+          );
         },
       ),
     );
@@ -642,9 +658,8 @@ class _GlobalSearchResults extends StatelessWidget {
           ),
           M3EButton.icon(
             style: M3EButtonStyle.text,
-            onPressed: query.trim().isEmpty
-                ? null
-                : () => search.submitSearch(query),
+            onPressed:
+                query.trim().isEmpty ? null : () => search.submitSearch(query),
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(l10n.retry),
           ),
