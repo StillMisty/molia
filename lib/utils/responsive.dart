@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
+import '../widgets/page_modal.dart';
 
 /// 响应式设计断点常量
 /// 用于在整个应用中统一响应式行为
@@ -525,6 +526,51 @@ class ResponsiveNavigation {
       barrierDismissible: barrierDismissible,
       contentLayout: contentLayout,
       pageType: ResponsivePageType.modal,
+    );
+  }
+
+  /// 页面型弹层：窄屏 M3E 底部弹层，宽屏 M3EDialog 路由 + [PageModalCard]。
+  ///
+  /// 页面自带 Scaffold / AppBar（与 [showSecondaryPage] 的 embedded 正文
+  /// 不同），所以卡片只提供容器，不再叠标题栏；标题、返回与滚动都由页面
+  /// 自己负责。
+  ///
+  /// [onDismissRequest] 只在窄屏底部弹层分支生效。宽屏刻意保持旧
+  /// `_showCenterDialog` 的行为：居中弹窗没有宿主 guard，设置页由页面自己的
+  /// `NavigatorPopHandler` 先退子页、回到首屏后再关闭弹层。
+  static Future<T?> showPageModal<T>({
+    required BuildContext context,
+    required Widget child,
+    double? maxWidth,
+    double heightFactor = 0.86,
+    bool barrierDismissible = true,
+    bool showDragHandle = true,
+    Future<bool> Function()? onDismissRequest,
+    M3EBottomSheetTheme Function(M3EBottomSheetTheme)? sheetThemeBuilder,
+  }) {
+    if (!context.isLargeScreen) {
+      return _showBottomSheet<T>(
+        context: context,
+        child: child,
+        showCloseButton: false,
+        showDragHandle: showDragHandle,
+        onDismissRequest: onDismissRequest,
+        sheetThemeBuilder: sheetThemeBuilder,
+        pageType: ResponsivePageType.modal,
+      );
+    }
+    return M3EDialog.show<T>(
+      context,
+      dialog: Builder(
+        builder: (context) => PageModalCard(
+          maxWidth: maxWidth,
+          heightFactor: heightFactor,
+          child: child,
+        ),
+      ),
+      barrierDismissible: barrierDismissible,
+      // 页面型弹窗不抢焦点：设置首页 / AI DJ 列表不该一打开就出现焦点环。
+      autofocusFirst: false,
     );
   }
 

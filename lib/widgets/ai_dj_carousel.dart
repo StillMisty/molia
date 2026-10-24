@@ -522,11 +522,10 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   }
 
   void _openPage(BuildContext context) {
-    ResponsiveNavigation.showAdaptiveModalPage(
+    ResponsiveNavigation.showPageModal(
       context: context,
-      // 弹层自带标题栏（含关闭）会和页面自己的标题栏叠成双层 chrome：
-      // 关闭走遮罩 / Esc / 下滑 / 系统返回。
-      showCloseButton: false,
+      // 页面自带 Scaffold / AppBar，弹层只提供卡片容器：关闭走遮罩 /
+      // Esc / 下滑 / 系统返回。
       child: const AiDjPage(),
     );
   }

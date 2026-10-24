@@ -3,6 +3,7 @@ import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bo
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/utils/responsive.dart';
+import 'package:molia/widgets/page_modal.dart';
 
 void main() {
   Future<void> pumpResponsiveHarness(
@@ -248,5 +249,63 @@ void main() {
     expect(find.byType(M3ESideSheet), findsNothing);
     expect(find.text('secondary-title'), findsOneWidget);
     expect(find.text('secondary-body'), findsOneWidget);
+  });
+
+  testWidgets(
+      'page modal uses M3EDialog route with a page card on large screens',
+      (tester) async {
+    await pumpResponsiveHarness(
+      tester,
+      width: 1280,
+      child: Builder(
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () {
+              ResponsiveNavigation.showPageModal<void>(
+                context: context,
+                child: const Center(child: Text('page-modal-body')),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // 页面卡片是自定义外壳，不是 M3EDialog 本体：整页内容不能进它的
+    // SingleChildScrollView。
+    expect(find.byType(M3EDialog), findsNothing);
+    expect(find.byType(Dialog), findsNothing);
+    expect(find.byType(PageModalCard), findsOneWidget);
+    expect(find.text('page-modal-body'), findsOneWidget);
+  });
+
+  testWidgets('page modal uses bottom sheet on mobile', (tester) async {
+    await pumpResponsiveHarness(
+      tester,
+      width: 390,
+      child: Builder(
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () {
+              ResponsiveNavigation.showPageModal<void>(
+                context: context,
+                child: const Center(child: Text('page-modal-body')),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(M3EBottomSheetSurface), findsOneWidget);
+    expect(find.text('page-modal-body'), findsOneWidget);
   });
 }

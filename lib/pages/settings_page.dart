@@ -53,9 +53,8 @@ import 'update_settings_page.dart';
 Future<void> showSettingsSheet(BuildContext context) {
   final navigatorKey = GlobalKey<NavigatorState>();
   final backCoordinator = SettingsSheetBackCoordinator();
-  return ResponsiveNavigation.showAdaptiveModalPage<void>(
+  return ResponsiveNavigation.showPageModal<void>(
     context: context,
-    showCloseButton: false,
     // 宽屏设置弹层单独加宽（首屏两列）：公共 modal 档保持 560，避免定时
     // 关闭 / 来源分享 / AI 推歌这些窄弹层跟着摊宽。
     maxWidth: DesktopLayout.of(context).masterDetail
