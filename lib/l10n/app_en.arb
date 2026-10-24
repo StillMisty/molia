@@ -446,7 +446,7 @@
   "libraryRecentPlays": "Recent Plays",
   "libraryPlaylists": "My Playlists",
   "libraryImportFavorites": "Import Favorites",
-  "libraryImportFavoritesSubtitle": "Import from an .lxmc file or a platform playlist/favorites link",
+  "libraryImportFavoritesSubtitle": "Import a favorites list exported from LX Music (.lxmc)",
   "libraryImportSuccess": "Imported {count} tracks",
   "@libraryImportSuccess": {
     "placeholders": {

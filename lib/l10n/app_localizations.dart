@@ -1733,7 +1733,7 @@ abstract class AppLocalizations {
   /// No description provided for @libraryImportFavoritesSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Import from an .lxmc file or a platform playlist/favorites link'**
+  /// **'Import a favorites list exported from LX Music (.lxmc)'**
   String get libraryImportFavoritesSubtitle;
 
   /// No description provided for @libraryImportSuccess.

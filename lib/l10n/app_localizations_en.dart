@@ -911,7 +911,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryImportFavoritesSubtitle =>
-      'Import from an .lxmc file or a platform playlist/favorites link';
+      'Import a favorites list exported from LX Music (.lxmc)';
 
   @override
   String libraryImportSuccess(int count) {

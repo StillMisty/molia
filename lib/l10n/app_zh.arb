@@ -307,7 +307,7 @@
   "libraryRecentPlays": "最近播放",
   "libraryPlaylists": "我的列表",
   "libraryImportFavorites": "导入收藏",
-  "libraryImportFavoritesSubtitle": "从 .lxmc 文件或平台歌单 / 收藏夹链接导入",
+  "libraryImportFavoritesSubtitle": "从 LX Music 导出的收藏夹文件（.lxmc）导入",
   "libraryImportSuccess": "已导入 {count} 首",
   "libraryImportFailed": "导入失败：{reason}",
   "libraryImportUnsupported": "当前平台不支持导入 .lxmc 收藏夹",
