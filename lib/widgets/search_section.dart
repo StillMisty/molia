@@ -16,7 +16,7 @@ import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
 import 'desktop_layout.dart';
-import 'track_actions_menu.dart';
+import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
@@ -459,10 +459,10 @@ class _SearchResultsList extends StatelessWidget {
 }
 
 /// 搜索结果行：点击播放；操作菜单收藏 / 加入列表（与 `TrackMenuTile` 共用
-/// [trackRowActionMenuForSearchItem]，条目 / 图标 / 语义全 App 一致）。
+/// [trackRowActionMenuForSearchItem]，动作 / 图标 / 语义全 App 一致）。
 ///
 /// 入口分平台：触摸端行尾常显 ⋮；桌面端不渲染 ⋮，行表面右键在落点弹菜单
-/// （[showTrackActionsMenuAtPointer]）。行内容直接在 [TrackRow] 上构建
+/// （[rowActionsAtPointer]）。行内容直接在 [TrackRow] 上构建
 /// （单列 / 表格两种版式共用），不走 `FavoriteTrackTile` 适配层：表格列
 /// 版式适配层不支持。
 class _SearchResultTile extends StatelessWidget {
@@ -492,18 +492,18 @@ class _SearchResultTile extends StatelessWidget {
             HapticsService.lightImpact();
             onTap();
           };
-    final menu = trackRowActionMenuForSearchItem(context, item);
+    final actions = trackRowActionMenuForSearchItem(context, item);
     if (tableColumns) {
-      return _buildTableRow(context, rowTap: rowTap, menu: menu);
+      return _buildTableRow(context, rowTap: rowTap, actions: actions);
     }
-    return _buildSingleColumnRow(context, rowTap: rowTap, menu: menu);
+    return _buildSingleColumnRow(context, rowTap: rowTap, actions: actions);
   }
 
   /// 单列行（非宽屏 / 触摸端）：封面 + 标题 + 歌手 / 歌词片段副标题。
   Widget _buildSingleColumnRow(
     BuildContext context, {
     required VoidCallback? rowTap,
-    required TrackRowActionMenu menu,
+    required List<RowAction> actions,
   }) {
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = item['source']?.toString() ?? '';
@@ -525,8 +525,8 @@ class _SearchResultTile extends StatelessWidget {
       trailingText: durationText(_durationMsOf(item)),
       position: calculateCardPosition(index, count),
       onTap: rowTap,
-      onSecondaryTap: _onSecondaryTap(context, menu),
-      trailing: _trailing(context, menu),
+      onSecondaryTap: rowActionsAtPointer(context, actions),
+      trailing: _trailing(context, actions),
     );
   }
 
@@ -534,7 +534,7 @@ class _SearchResultTile extends StatelessWidget {
   Widget _buildTableRow(
     BuildContext context, {
     required VoidCallback? rowTap,
-    required TrackRowActionMenu menu,
+    required List<RowAction> actions,
   }) {
     final artist = _artistDisplayOf(item);
     return TrackRow(
@@ -549,33 +549,18 @@ class _SearchResultTile extends StatelessWidget {
       ),
       position: calculateCardPosition(index, count),
       onTap: rowTap,
-      onSecondaryTap: _onSecondaryTap(context, menu),
-      trailing: _trailing(context, menu),
+      onSecondaryTap: rowActionsAtPointer(context, actions),
+      trailing: _trailing(context, actions),
     );
   }
 
   /// 行尾插槽：触摸端常显 ⋮；桌面端无 ⋮（入口改为行表面右键）。
-  Widget? _trailing(BuildContext context, TrackRowActionMenu menu) {
+  Widget? _trailing(BuildContext context, List<RowAction> actions) {
     if (isDesktopPlatform()) return null;
-    return TrackActionsMenu(
-      entries: menu.entries,
-      onSelected: menu.onSelected,
+    return RowActionMenuButton(
+      actions: actions,
       semanticLabel: _l10n(context).trackActionsTooltip,
     );
-  }
-
-  /// 桌面行表面右键 = 同一份菜单（在落点弹出）；触摸端不接次级手势。
-  void Function(Offset globalPosition)? _onSecondaryTap(
-    BuildContext context,
-    TrackRowActionMenu menu,
-  ) {
-    if (!isDesktopPlatform()) return null;
-    return (globalPosition) => showTrackActionsMenuAtPointer(
-          context: context,
-          globalPosition: globalPosition,
-          entries: menu.entries,
-          onSelected: menu.onSelected,
-        );
   }
 
   /// 首位艺术家；无艺术家信息返回空串（[TrackRow] 据此隐藏副标题行）。

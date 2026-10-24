@@ -7,7 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
-import 'track_actions_menu.dart';
+import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
@@ -186,7 +186,7 @@ class QueueDisplay extends StatelessWidget {
 /// 与搜索结果行共用 [trackRowActionMenuForTrack]）。
 ///
 /// 入口分平台：桌面端行表面右键在落点弹菜单；触摸端队列行无 ⋮、无右键
-/// （维持现状）。桌面判定挡在菜单定义之前——[trackRowActionMenuForTrack]
+/// （维持现状）。桌面判定挡在动作定义之前——[trackRowActionMenuForTrack]
 /// 含逐行 `select` 订阅，触摸端不需要这份订阅。
 class _QueueTrackRow extends StatelessWidget {
   const _QueueTrackRow({
@@ -201,8 +201,9 @@ class _QueueTrackRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final TrackRowActionMenu? menu =
-        isDesktopPlatform() ? trackRowActionMenuForTrack(context, track) : null;
+    final actions = isDesktopPlatform()
+        ? trackRowActionMenuForTrack(context, track)
+        : const <RowAction>[];
     return TrackRow(
       title: track.title,
       artist: track.artistLabel,
@@ -211,14 +212,7 @@ class _QueueTrackRow extends StatelessWidget {
       position: position,
       trailingText: _formatDuration(track.duration),
       onTap: onTap,
-      onSecondaryTap: menu == null
-          ? null
-          : (tapPosition) => showTrackActionsMenuAtPointer(
-                context: context,
-                globalPosition: tapPosition,
-                entries: menu.entries,
-                onSelected: menu.onSelected,
-              ),
+      onSecondaryTap: rowActionsAtPointer(context, actions),
     );
   }
 }

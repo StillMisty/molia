@@ -12,6 +12,7 @@ import 'package:molia/providers/collection_presenter.dart';
 import 'package:molia/providers/local_songs_collection.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/empty_state.dart';
+import 'package:molia/widgets/row_actions.dart';
 import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -169,7 +170,7 @@ void main() {
               title: '有动作',
               position: M3ECardPosition.last,
               actions: [
-                CollectionRowAction(
+                RowAction(
                   icon: Icons.delete_rounded,
                   label: '删除',
                   onPressed: () {},
@@ -193,12 +194,12 @@ void main() {
           title: '有动作',
           position: M3ECardPosition.single,
           actions: [
-            CollectionRowAction(
+            RowAction(
               icon: Icons.playlist_add_rounded,
               label: '加入列表',
               onPressed: () => copyPressed++,
             ),
-            CollectionRowAction(
+            RowAction(
               icon: Icons.delete_rounded,
               label: '取消收藏',
               destructive: true,
@@ -331,12 +332,12 @@ void main() {
       var destructivePressed = false;
 
       final actions = collectionSwipeActions(context, [
-        CollectionRowAction(
+        RowAction(
           icon: Icons.playlist_add_rounded,
           label: '加入列表',
           onPressed: () => neutralPressed = true,
         ),
-        CollectionRowAction(
+        RowAction(
           icon: Icons.delete_rounded,
           label: '删除',
           destructive: true,
@@ -363,6 +364,52 @@ void main() {
       expect(destructivePressed, isTrue);
     });
 
+    testWidgets('接线缺席 = 动作不出现（不生成点了没反应的条目）', (tester) async {
+      await pumpHost(tester, const SizedBox());
+      final l10n = l10nOf(tester);
+      final presenter = CollectionPresenter();
+      const identity = CollectionIdentity(
+        selectedId: -3,
+        kind: CollectionKind.history,
+        playlistId: null,
+        displayName: '播放历史',
+      );
+      final row = HistoryCollectionRow(
+        PlayHistoryEntry(
+          sourceKey: 'wy',
+          songId: '1',
+          title: 'Song',
+          artist: 'Artist',
+          album: 'Album',
+          durationMs: 180000,
+          raw: const {'songId': '1'},
+          playedAt: 1,
+        ),
+      );
+      final specs = presenter.rowActionsFor(row, identity);
+      expect(specs, hasLength(3), reason: '投影器给出了三条动作');
+
+      // 页面只接了「加入列表」：另两条动作（换源 / 删除）不出现，
+      // 而不是留在菜单里点了没反应。
+      final wired = buildCollectionRowActions(
+        l10n: l10n,
+        specs: specs,
+        wiring: const CollectionRowActionWiring(onCopy: _noop),
+      );
+      expect(wired, hasLength(1));
+      expect(wired.single.label, l10n.addToPlaylist);
+
+      // 一条都没接：不产生任何动作（调用方据此不渲染菜单 / 左滑入口）。
+      expect(
+        buildCollectionRowActions(
+          l10n: l10n,
+          specs: specs,
+          wiring: const CollectionRowActionWiring(),
+        ),
+        isEmpty,
+      );
+    });
+
     testWidgets('曲目行：加入列表 + 换源（非本地）+ 移除类', (tester) async {
       await pumpHost(tester, const SizedBox());
       final l10n = l10nOf(tester);
@@ -385,7 +432,7 @@ void main() {
             displayName: '合集',
           );
 
-      List<CollectionRowAction> actionsFor({
+      List<RowAction> actionsFor({
         required CollectionIdentity identity,
         String sourceKey = 'wy',
       }) {
@@ -455,7 +502,7 @@ void main() {
         onDeleteHistory: _noop,
       );
 
-      List<CollectionRowAction> actionsFor(String sourceKey) {
+      List<RowAction> actionsFor(String sourceKey) {
         final row = HistoryCollectionRow(
           PlayHistoryEntry(
             sourceKey: sourceKey,
@@ -506,7 +553,7 @@ void main() {
         ),
       );
 
-      List<CollectionRowAction> actionsFor({
+      List<RowAction> actionsFor({
         required bool isFavorite,
         required bool isCached,
         required bool isImported,

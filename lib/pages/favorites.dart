@@ -42,6 +42,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/icon_swap.dart';
 import '../widgets/local_audio_import.dart' show importLocalAudioFilesFlow;
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/row_actions.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/track_row.dart';
@@ -1545,8 +1546,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   /// 行动作：投影器决定构成（`CollectionPresenter.rowActionsFor`），这里只把
-  /// 行变体接成具体流程（复制 / 换源 / 移除 / 收藏 / 删除）。
-  List<CollectionRowAction> _rowActions(
+  /// 行变体接成具体流程（复制 / 换源 / 移除 / 收藏 / 删除）；接线缺席的动作
+  /// 不会出现（见 `buildCollectionRowActions`）。
+  List<RowAction> _rowActions(
     BuildContext context,
     AppLocalizations l10n,
     LibraryProvider provider,

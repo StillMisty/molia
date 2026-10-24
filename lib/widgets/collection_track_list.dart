@@ -8,8 +8,8 @@ import '../l10n/app_localizations.dart';
 import '../providers/collection_presenter.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import 'row_actions.dart';
 import 'swipe_reveal_row.dart';
-import 'track_actions_menu.dart';
 import 'track_row.dart';
 
 /// 合集曲目列表脚手架：常显可拖动滚动条 + 固定行高懒加载列表
@@ -165,32 +165,12 @@ class CollectionTrackRow extends StatelessWidget {
 
   /// 行动作描述；null / 空 = 无动作（多选与排序模式：触摸端无左滑、
   /// 桌面端也没有右键菜单）。
-  final List<CollectionRowAction>? actions;
+  final List<RowAction>? actions;
 
   @override
   Widget build(BuildContext context) {
     final tapWithModifiers = onTapWithModifiers;
-    final rowActions = actions ?? const <CollectionRowAction>[];
-    // 桌面端入口是行表面右键：同一组动作编译成菜单条目，`value` 记动作下标，
-    // 选中后回读对应回调。菜单在落点弹出（靠边由 M3E placer 处理）。
-    final onSecondaryTap = isDesktopPlatform() && rowActions.isNotEmpty
-        ? (Offset tapPosition) => showTrackActionsMenuAtPointer(
-              context: context,
-              globalPosition: tapPosition,
-              entries: [
-                for (var index = 0; index < rowActions.length; index++)
-                  M3EMenuEntry(
-                    label: rowActions[index].label,
-                    leading: Icon(rowActions[index].icon),
-                    isDestructive: rowActions[index].destructive,
-                    value: index,
-                  ),
-              ],
-              onSelected: (value) {
-                if (value is int) rowActions[value].onPressed();
-              },
-            )
-        : null;
+    final rowActions = actions ?? const <RowAction>[];
     final row = TrackRow(
       title: title,
       artist: artist,
@@ -209,7 +189,8 @@ class CollectionTrackRow extends StatelessWidget {
                 HardwareKeyboard.instance.isShiftPressed,
               ),
       onLongPress: onLongPress,
-      onSecondaryTap: onSecondaryTap,
+      // 桌面端入口是行表面右键：动作编译成同一份菜单，在落点弹出。
+      onSecondaryTap: rowActionsAtPointer(context, rowActions),
     );
     if (rowActions.isEmpty) return row;
     // 桌面不再有鼠标左滑：动作已挂在行表面右键，不装左滑外壳。
@@ -242,32 +223,16 @@ class CollectionSearchEmpty extends StatelessWidget {
   }
 }
 
-/// 一条行动作的描述（触摸端左滑胶囊 / 桌面右键菜单共用）：图标 + 文案 +
-/// 回调；[destructive] 表达「移除类」（触摸端 filled + error 配色，桌面端
-/// 菜单条目走 error 语义，对齐 M3E 列表示例的删除动作）。
-class CollectionRowAction {
-  const CollectionRowAction({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.destructive = false,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final bool destructive;
-}
-
-/// 把动作描述编译成 [M3EListSwipeAction]（触摸端左滑胶囊，渲染在
-/// [SwipeRevealRow]）；桌面端右键菜单条目直接取动作描述，不经过这里
+/// 把行动作（[RowAction]，触摸端左滑胶囊 / 桌面右键菜单共用）编译成
+/// [M3EListSwipeAction]（触摸端左滑胶囊，渲染在 [SwipeRevealRow]）；桌面端
+/// 右键菜单由 [rowActionsAtPointer] 直接编译同一组动作，不经过这里
 /// （菜单只要图标 + 文案，不需要配色）。
 ///
 /// 图标用 `semanticLabel` 承担无障碍语义：纯图标在窄胶囊里不容易自解释，
 /// 提示气泡则不做（口径见 docs/architecture.md §6「按钮选型」）。
 List<M3EListSwipeAction> collectionSwipeActions(
   BuildContext context,
-  List<CollectionRowAction> actions,
+  List<RowAction> actions,
 ) {
   final scheme = Theme.of(context).colorScheme;
   return [
@@ -315,64 +280,82 @@ class CollectionRowActionWiring {
   final bool localSongImported;
 }
 
-/// 把投影器给出的动作声明编译成 [CollectionRowAction]（触摸端左滑胶囊 /
+/// 把投影器给出的动作声明编译成 [RowAction]（触摸端左滑胶囊 /
 /// 桌面右键菜单共用）：图标 / 文案 / 移除类配色只有这一份实现。
-List<CollectionRowAction> buildCollectionRowActions({
+///
+/// 接线缺席 = 动作不存在：宁可少一条，也不生成点了没反应的条目（行上看得到
+/// 的动作一定可执行，这是 [RowAction.onPressed] 非空的同一条承诺）。
+List<RowAction> buildCollectionRowActions({
   required AppLocalizations l10n,
   required List<CollectionRowActionSpec> specs,
   required CollectionRowActionWiring wiring,
 }) {
-  return [
-    for (final spec in specs)
-      switch (spec.kind) {
-        CollectionRowActionKind.addToPlaylist => CollectionRowAction(
-            icon: Icons.playlist_add_rounded,
-            label: l10n.addToPlaylist,
-            onPressed: _fire(wiring.onCopy),
-          ),
-        CollectionRowActionKind.swapSource => CollectionRowAction(
-            icon: Icons.swap_horiz_rounded,
-            label: l10n.sourceSwap,
-            onPressed: _fire(wiring.onSwap),
-          ),
-        CollectionRowActionKind.removeFromPlaylist => CollectionRowAction(
-            icon: Icons.playlist_remove_rounded,
-            label: l10n.playlistRemoveTrack,
-            destructive: true,
-            onPressed: _fire(wiring.onRemoveFromPlaylist),
-          ),
-        CollectionRowActionKind.removeFromFavorite => CollectionRowAction(
-            icon: Icons.delete_rounded,
-            label: l10n.favoriteRemove,
-            destructive: true,
-            onPressed: _fire(wiring.onRemoveFromFavorites),
-          ),
-        CollectionRowActionKind.toggleFavorite => CollectionRowAction(
-            icon: wiring.isFavorite
-                ? Icons.heart_broken_rounded
-                : Icons.favorite_border_rounded,
-            label: wiring.isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-            onPressed: _fire(wiring.onToggleFavorite),
-          ),
-        CollectionRowActionKind.deleteHistoryEntry => CollectionRowAction(
-            icon: Icons.delete_rounded,
-            label: l10n.historyDeleteEntry,
-            destructive: true,
-            onPressed: _fire(wiring.onDeleteHistory),
-          ),
-        CollectionRowActionKind.deleteLocalSong => CollectionRowAction(
-            icon: Icons.delete_rounded,
-            label: wiring.localSongCached
-                ? l10n.localSongsCachedRemove
-                : wiring.localSongImported
-                    ? l10n.localSongsRemove
-                    : l10n.downloadDelete,
-            destructive: true,
-            onPressed: _fire(wiring.onDeleteLocalSong),
-          ),
-      },
-  ];
+  final actions = <RowAction>[];
+  for (final spec in specs) {
+    final action = switch (spec.kind) {
+      CollectionRowActionKind.addToPlaylist => _action(
+          icon: Icons.playlist_add_rounded,
+          label: l10n.addToPlaylist,
+          onPressed: wiring.onCopy,
+        ),
+      CollectionRowActionKind.swapSource => _action(
+          icon: Icons.swap_horiz_rounded,
+          label: l10n.sourceSwap,
+          onPressed: wiring.onSwap,
+        ),
+      CollectionRowActionKind.removeFromPlaylist => _action(
+          icon: Icons.playlist_remove_rounded,
+          label: l10n.playlistRemoveTrack,
+          destructive: true,
+          onPressed: wiring.onRemoveFromPlaylist,
+        ),
+      CollectionRowActionKind.removeFromFavorite => _action(
+          icon: Icons.delete_rounded,
+          label: l10n.favoriteRemove,
+          destructive: true,
+          onPressed: wiring.onRemoveFromFavorites,
+        ),
+      CollectionRowActionKind.toggleFavorite => _action(
+          icon: wiring.isFavorite
+              ? Icons.heart_broken_rounded
+              : Icons.favorite_border_rounded,
+          label: wiring.isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+          onPressed: wiring.onToggleFavorite,
+        ),
+      CollectionRowActionKind.deleteHistoryEntry => _action(
+          icon: Icons.delete_rounded,
+          label: l10n.historyDeleteEntry,
+          destructive: true,
+          onPressed: wiring.onDeleteHistory,
+        ),
+      CollectionRowActionKind.deleteLocalSong => _action(
+          icon: Icons.delete_rounded,
+          label: wiring.localSongCached
+              ? l10n.localSongsCachedRemove
+              : wiring.localSongImported
+                  ? l10n.localSongsRemove
+                  : l10n.downloadDelete,
+          destructive: true,
+          onPressed: wiring.onDeleteLocalSong,
+        ),
+    };
+    if (action != null) actions.add(action);
+  }
+  return actions;
 }
 
-VoidCallback _fire(Future<void> Function()? callback) =>
-    callback == null ? () {} : () => unawaited(callback());
+/// 单条动作编译：回调缺席返回 null（整条动作不出现）。
+RowAction? _action({
+  required IconData icon,
+  required String label,
+  required Future<void> Function()? onPressed,
+  bool destructive = false,
+}) {
+  if (onPressed == null) return null;
+  return RowAction(
+    icon: icon,
+    label: label,
+    destructive: destructive,
+    onPressed: () => unawaited(onPressed()),
+  );
+}

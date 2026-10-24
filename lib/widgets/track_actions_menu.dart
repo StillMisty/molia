@@ -33,8 +33,11 @@ Future<void> showTrackActionsMenuAtPointer({
   if (selected != null) onSelected(selected);
 }
 
-/// 曲目行尾的 ⋮ 操作菜单（触摸端与 AI 推歌行共用；桌面端无 ⋮，走行表面右键
-/// [showTrackActionsMenuAtPointer]）。
+/// 曲目行尾的 ⋮ 操作菜单（低层菜单面：触摸端 ⋮ 与 AI 推歌行共用；桌面端
+/// 无 ⋮，走行表面右键 [showTrackActionsMenuAtPointer]）。
+///
+/// 行操作请用 `row_actions.dart` 的 `RowActionMenuButton` / `rowActionsAtPointer`：
+/// 它们负责把「一行动作」编译成条目与选中处理，本组件只认条目。
 ///
 /// 统一两件容易各写各的事，保证全 App 同一种菜单观感：
 /// - **锚点**：standard 图标按钮 + `semanticLabel`（只留无障碍名，不做
