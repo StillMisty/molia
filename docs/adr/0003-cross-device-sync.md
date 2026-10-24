@@ -86,8 +86,8 @@
 
    > **2026-10-22 实现说明（不改变上述决策）**：轮次执行从引擎收进独立编排器
    > `lib/data/sync/sync_round.dart`（`SyncRoundRunner`：collect / pull /
-   > consume + apply / publish + compact / report 可单独测试），`SyncEngine`
-   > 只保留公共门面；拉取动作（skip / delta / full）由
+   > consume + apply / publish + compact / report；测试经 `runRound` 驱动整轮），
+   > `SyncEngine` 只保留公共门面；拉取动作（skip / delta / full）由
    > `sync_pull_plan.dart::decideSyncPull` 统一判定，传输只提供证据（局域网
    > `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部）；
    > 传输的 ensure / start / stop / resume / hidden / announce 收进
@@ -524,8 +524,9 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
   `rememberLanEndpoint`）；UDP 听见但 HTTP 解不开、口令不同的对端都不写。
   端点上的 deviceId 可能与解密后的数据主人不同（DHCP 复用 / 旧记录），此时
   以解密载荷的 `deviceId` 为准，不把端点记到旧 id 名下。
-- 只存**端点身份**变化或首次出现的落盘；仅 `verifiedAt` 前进只更新内存，
-  随引擎轮末的 `save()` 持久化。上限 32 条，超出按 `verifiedAt` 淘汰最旧；
+- 端点更新（含仅 `verifiedAt` 前进）只改内存并标脏，随引擎轮末的 `commit()`
+  持久化，不在每对端成功时各写一次整份状态。上限 32 条，超出按 `verifiedAt`
+  淘汰最旧；
   `removePeer` 同时清理该设备的端点；180 天未再验证的端点随名册淘汰。
 - **预期对端 vs 试探性对端**：手动地址与「本轮听到的 presence」是预期对端，
   失败要计数、可把整轮打成 `partial`；只有持久化端点的是试探性对端，连不上

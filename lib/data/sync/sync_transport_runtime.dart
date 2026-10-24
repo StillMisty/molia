@@ -11,16 +11,16 @@ library;
 import 'package:logging/logging.dart';
 
 import '../../domain/ports/sync_transport.dart';
-import 'sync_state_store.dart';
+import 'sync_book.dart';
 
 class SyncTransportRuntime {
   SyncTransportRuntime({
-    required SyncStateStore state,
+    required SyncTransportState state,
     required Map<String, SyncTransport> transports,
   })  : _state = state,
         _transports = transports;
 
-  final SyncStateStore _state;
+  final SyncTransportState _state;
   final Map<String, SyncTransport> _transports;
   final Logger _logger = Logger('molia.sync');
 

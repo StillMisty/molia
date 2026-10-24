@@ -316,9 +316,14 @@
   引擎（`lib/data/sync/sync_engine.dart`）只保留公共门面：调度器宿主 / 服务端
   语义（`serveSnapshot` / `serveJournal`）/ 入站合流 / 公告过滤。轮次内的阶段
   由**轮次编排器**（`sync_round.dart` 的 `SyncRoundRunner`）线性编排：`runRound`
-  = collect → pull → consume + apply → publish + compact → report，阶段只读写
-  `SyncRoundContext`、可脱离整轮单独测试；应用成功才推进游标、forced delivery、
-  缺口二次拉取、anti-entropy 与入站轮语义都不变。
+  = collect → pull → consume + apply → publish + compact → report；轮次上下文与
+  阶段都是该文件的私有实现，测试只能经 `runRound` + 假传输 / 假适配器驱动整轮
+  （避免绕过顺序直接调阶段）。应用成功才推进游标、forced delivery、缺口二次
+  拉取、anti-entropy 与入站轮语义都不变。同步状态的依赖按用途收窄为
+  `sync_book.dart` 的窄接口（登记 / 发布覆盖 / 轮次 / 引擎 / 运行时 / 调度 /
+  备份），`SyncStateStore` 仍是唯一实现与持久化所有者：所有写入先改内存 +
+  标脏，`commit()` 是唯一落盘出口（轮内台账 / 首连提示 / 端点记账只标脏，
+  引擎轮末提交一次；用户命令仍即时提交）。
   拉取前由 `SyncRoundRunner._pullPlan` 生成一份**拉取计划**（`SyncPullPlan`：逐对端
   `cursor` / `forceFull` + discovery）；局域网与 WebDAV 只提供证据（局域网
   `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部），

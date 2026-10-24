@@ -38,7 +38,11 @@ class SyncJournalLimits {
   final int maxEntries;
 
   /// 窗口是否已超过任一硬上限。
-  bool exceeds({required int entries, required int bytes, required int oldestAt, required int nowMs}) =>
+  bool exceeds(
+          {required int entries,
+          required int bytes,
+          required int oldestAt,
+          required int nowMs}) =>
       entries > maxEntries ||
       bytes > maxBytes ||
       (oldestAt > 0 && nowMs - oldestAt > maxAge.inMilliseconds);
@@ -90,6 +94,15 @@ abstract interface class SyncJournalStore {
 /// 一条待追加的本地变更（`seq` 由日志分配）。
 typedef SyncJournalChange = ({SyncCategory category, SyncRecord record});
 
+/// 写入点的追加面：适配器只需要「把本机变更追加进日志」，不读窗口 / 不裁剪。
+///
+/// 收窄成接口是为了让「登记必须在追加成功后才写」可被单测：测试注入一个
+/// 追加失败的实现，验证下一轮仍能检测到同一变更。
+abstract interface class SyncJournalAppender {
+  /// 追加（自开事务）；返回分配到的 seq 列表（与输入同序）。
+  Future<List<int>> appendAll(Iterable<SyncJournalChange> changes);
+}
+
 /// 增量日志窗口的观测值（硬上限判定与诊断用）。
 class SyncJournalStats {
   const SyncJournalStats({
@@ -115,7 +128,7 @@ class SyncJournalStats {
   final int oldestAt;
 }
 
-class SyncJournalRepository implements SyncJournalStore {
+class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
   SyncJournalRepository({
     required MoliaDatabase Function() databaseProvider,
     this.limits = const SyncJournalLimits(),
@@ -156,7 +169,9 @@ class SyncJournalRepository implements SyncJournalStore {
               deviceId: Value(change.record.version.deviceId),
               deleted: Value(change.record.deleted),
               data: Value(
-                change.record.data == null ? null : jsonEncode(change.record.data),
+                change.record.data == null
+                    ? null
+                    : jsonEncode(change.record.data),
               ),
               at: at,
             ),
@@ -167,6 +182,7 @@ class SyncJournalRepository implements SyncJournalStore {
 
   /// 追加本机变更（自开事务；供没有现成 executor 的写入点使用，如设置 /
   /// 脚本 / 会话在各自的变化检测点追加）。
+  @override
   Future<List<int>> appendAll(Iterable<SyncJournalChange> changes) {
     final list = changes.toList();
     if (list.isEmpty) return Future.value(const []);
@@ -281,7 +297,8 @@ class SyncJournalRepository implements SyncJournalStore {
       )) {
         // 硬上限：快照覆盖推进到头部（引擎随后构建并推送新快照），保留最新
         // 的、仍在上限内的条目；更旧的对端下次拉取时走 bootstrap。
-        final keepFrom = await _newestWithinLimits(db, state.baseSeq, head, now);
+        final keepFrom =
+            await _newestWithinLimits(db, state.baseSeq, head, now);
         await _writeState(db, baseSeq: keepFrom, snapshotSeq: head);
         await _trim(db, keepFrom);
         return keepFrom;

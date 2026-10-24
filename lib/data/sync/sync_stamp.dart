@@ -17,11 +17,38 @@ import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
 
+/// 记录级版本登记项（设置键哈希 / 脚本指针 / 会话 / 脚本墓碑共用）。
+///
+/// [version] 是发号器给的版本三元组；[hash] 是内容指纹（设置键 / 脚本 /
+/// 会话用，判定本地是否变化），不需要时为空串。
+class SyncStamp {
+  /// 值哈希（设置键用；脚本指针不需要，为空串）。
+  final String hash;
+  final SyncVersion version;
+
+  const SyncStamp({this.hash = '', this.version = SyncVersion.zero});
+
+  Map<String, dynamic> toJson() => {
+        if (hash.isNotEmpty) 'h': hash,
+        'v': version.toJson(),
+      };
+
+  static SyncStamp? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final version = SyncVersion.fromJson(raw['v']);
+    if (version == null) return null;
+    return SyncStamp(
+      hash: raw['h'] is String ? raw['h'] as String : '',
+      version: version,
+    );
+  }
+}
+
 /// 版本戳发号器：本机所有同步戳的唯一来源。
 ///
 /// 线程/调用约定：纯同步 API（不 await），调用方在自己的事务/写入路径里
 /// 同步取号；`onAdvanced` 回调把新基线写回持久化状态（内存更新同步完成，
-/// 磁盘落盘由状态存储的常规保存点承担）。
+/// 磁盘落盘由状态存储的 `commit()` 提交点承担）。
 class SyncStampIssuer {
   SyncStampIssuer({
     required int Function() clock,
@@ -42,7 +69,8 @@ class SyncStampIssuer {
   int _counter = 0;
 
   /// 当前基线（`deviceId` 不在基线里：它由调用方按记录补上）。
-  SyncVersion get baseline => SyncVersion(physical: _physical, counter: _counter);
+  SyncVersion get baseline =>
+      SyncVersion(physical: _physical, counter: _counter);
 
   /// 本机设备 id（发号器与写路径共用同一来源）。
   String get deviceId => _deviceId();

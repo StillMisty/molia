@@ -5,9 +5,10 @@
 /// 裁日志、构建快照、推送、五态报告）。任何一步的局部变量都要在几百行里
 /// 传递，阶段之间靠大段注释维持顺序，既难改也难单测。
 ///
-/// 现在一轮只剩 [SyncRoundRunner.runRound] 的线性编排；每个阶段只读写
-/// [SyncRoundContext]，可以在不跑整轮的情况下单独调用（注入假传输 / 假
-/// 适配器）。同步语义（应用成功才推进游标、forced delivery、缺口二次拉取、
+/// 现在对外只有 [SyncRoundRunner.runRound] 的线性编排与三个服务端动作；
+/// 阶段与轮次上下文都是本文件的私有实现（[_RoundContext] / [_collectStage]
+/// 等），测试通过假传输 / 假适配器驱动 `runRound`，不能绕过顺序直接调阶段。
+/// 同步语义（应用成功才推进游标、forced delivery、缺口二次拉取、
 /// anti-entropy、入站轮、名册失败记账、报告五态）逐条保留。
 library;
 
@@ -26,12 +27,12 @@ import 'sync_fingerprint.dart';
 import 'sync_journal.dart';
 import 'sync_pull_plan.dart';
 import 'sync_stamp.dart';
-import 'sync_state_store.dart';
+import 'sync_book.dart';
 import 'sync_transport_runtime.dart';
 
 /// 一轮同步的可变上下文：输入 + 各阶段产出。
-class SyncRoundContext {
-  SyncRoundContext({
+class _RoundContext {
+  _RoundContext({
     required this.trigger,
     required this.push,
     required this.antiEntropy,
@@ -55,7 +56,7 @@ class SyncRoundContext {
   Set<SyncCategory> categories = const {};
   Map<SyncCategory, List<SyncRecord>> local = const {};
   bool localChanged = false;
-  Map<String, SyncTransportAccumulator> accumulators = const {};
+  Map<String, _TransportAccumulator> accumulators = const {};
   Set<String> fullFor = const {};
   bool inboundOnly = false;
 
@@ -85,11 +86,11 @@ class SyncRoundContext {
 
 /// 一轮的编排器：拥有名册观测、收集缓存、发布台账与 inbound 队列。
 ///
-/// 引擎（[SyncEngine]）只保留公共门面（调度器宿主 / 服务端语义 / 入站合流 /
-/// 公告过滤）；轮次内的状态全部在这里，阶段方法可单独测试。
+/// 引擎（`SyncEngine`）只保留公共门面（调度器宿主 / 服务端语义 / 入站合流 /
+/// 公告过滤）；轮次内的状态与阶段全部私有，外部只能跑整轮或读服务端动作。
 class SyncRoundRunner {
   SyncRoundRunner({
-    required SyncStateStore state,
+    required SyncRoundState state,
     required List<SyncAdapter> adapters,
     required Map<String, SyncTransport> transports,
     required SyncStampIssuer stamps,
@@ -125,7 +126,7 @@ class SyncRoundRunner {
   /// anti-entropy 全量兜底的节流间隔（同一对端不频繁重拉；分歧仍会被修复）。
   static const int antiEntropyIntervalMs = 10 * 60 * 1000;
 
-  final SyncStateStore _state;
+  final SyncRoundState _state;
   final List<SyncAdapter> _adapters;
   final Map<String, SyncTransport> _transports;
   final SyncStampIssuer _stamps;
@@ -168,7 +169,7 @@ class SyncRoundRunner {
   /// 伪装成成功接触（成功时间不前进、上次失败原因保留）。
   final Set<String> _peersPullFailedThisRound = {};
 
-  /// 内存名册（本轮观测优先；落库状态在 [allPeers] 里合并进来）。
+  /// 内存名册（本轮观测优先；落库状态在 [_allPeers] 里合并进来）。
   final Map<String, SyncPeerState> _peersById = {};
 
   SyncEnvelope? _lastEnvelope;
@@ -191,13 +192,13 @@ class SyncRoundRunner {
 
   void enqueueInbound(SyncEnvelope envelope) => _inbound.add(envelope);
 
-  List<SyncEnvelope> takeInbound() {
+  List<SyncEnvelope> _takeInbound() {
     final snapshot = List<SyncEnvelope>.of(_inbound);
     _inbound.clear();
     return snapshot;
   }
 
-  void restoreInbound(List<SyncEnvelope> envelopes) {
+  void _restoreInbound(List<SyncEnvelope> envelopes) {
     _inbound.insertAll(0, envelopes);
   }
 
@@ -291,18 +292,18 @@ class SyncRoundRunner {
     return SyncPeerState(deviceId: deviceId);
   }
 
-  Iterable<SyncPeerState> allPeers() {
+  Iterable<SyncPeerState> _allPeers() {
     for (final peer in _state.peers) {
       _peersById.putIfAbsent(peer.deviceId, () => peer);
     }
     return _peersById.values;
   }
 
-  Future<List<SyncPeerState>> roster() async {
+  Future<List<SyncPeerState>> _roster() async {
     final journal = _journal;
     final head = journal == null ? 0 : await journal.headSeq();
     final merged = <SyncPeerState>[];
-    for (final peer in allPeers()) {
+    for (final peer in _allPeers()) {
       if (peer.ackedSeq < 0 || head <= peer.ackedSeq) {
         merged.add(peer.copyWith(clearBehind: true));
         continue;
@@ -314,7 +315,7 @@ class SyncRoundRunner {
       }
       merged.add(peer.copyWith(behindBy: behind, behindBytes: behindBytes));
     }
-    final recent = trimPeers(merged, SyncStateStore.peerLimit);
+    final recent = trimPeers(merged, syncPeerLimit);
     _peersById
       ..clear()
       ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
@@ -330,7 +331,7 @@ class SyncRoundRunner {
     Set<SyncCategory>? onlyCategories,
   }) async {
     final startedAt = _nowMs();
-    final context = SyncRoundContext(
+    final context = _RoundContext(
       trigger: trigger,
       push: push,
       antiEntropy: antiEntropy,
@@ -339,12 +340,12 @@ class SyncRoundRunner {
       window: SyncRoundWindow(startedAt: startedAt),
     );
     try {
-      await collectStage(context);
-      await pullStage(context);
-      await consumeStage(context);
-      await applyStage(context);
-      await publishStage(context);
-      context.report = await reportStage(context);
+      await _collectStage(context);
+      await _pullStage(context);
+      await _consumeStage(context);
+      await _applyStage(context);
+      await _publishStage(context);
+      context.report = await _reportStage(context);
       _logger.fine(() => '同步一轮完成：${context.report}');
     } on _RoundAbort catch (abort) {
       // 用户可行动的明确状态（未设置口令）：不按内部异常处理。
@@ -370,7 +371,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 1：口令、传输、本地视图、变更判定、名册登记基线。
-  Future<void> collectStage(SyncRoundContext context) async {
+  Future<void> _collectStage(_RoundContext context) async {
     final passphrase = await _state.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       throw const _RoundAbort(SyncIssue(code: SyncIssueCode.noPassphrase));
@@ -410,7 +411,7 @@ class SyncRoundRunner {
     // 要可见，且「本轮有没有可用传输」的判定不依赖拉取动作。
     context.accumulators = {
       for (final kind in _transports.keys)
-        kind: SyncTransportAccumulator(
+        kind: _TransportAccumulator(
           kind,
           enabled: _state.enabledTransports.contains(kind),
         ),
@@ -431,7 +432,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 2：anti-entropy 名单 + 一次拉取（入站轮不主动拉）。
-  Future<void> pullStage(SyncRoundContext context) async {
+  Future<void> _pullStage(_RoundContext context) async {
     // 入站轮只消费收到的快照：不主动拉取任何对端。
     context.inboundOnly = context.trigger == SyncTrigger.incoming;
     // 强制发现：启动 / 回前台 / 换网 / 手动轮 / 打开同步页的检查轮要
@@ -463,14 +464,14 @@ class SyncRoundRunner {
 
     // 入站轮同样消费收到的快照；窗口缺口只对被推来「不完整窗口」的对端
     // 做定向 bootstrap，不是全量广播。
-    context.inboundSnapshot = takeInbound();
+    context.inboundSnapshot = _takeInbound();
     for (final envelope in context.inboundSnapshot) {
       context.pulledEntries.add(('', envelope));
     }
   }
 
   /// 阶段 3：消费载荷（游标 / ack / 缺口）+ 缺口二次拉取。
-  Future<void> consumeStage(SyncRoundContext context) async {
+  Future<void> _consumeStage(_RoundContext context) async {
     // 待提交的游标（应用成功后才落进名册 / ack）：apply 失败时不推进，
     // 下轮按原游标重取，避免「未落地的变更被永久跳过」。
     var fullPeers = await _consumePayloads(
@@ -510,7 +511,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 4：合并 + 只交付版本变化的胜者 + 应用成功才提交游标。
-  Future<void> applyStage(SyncRoundContext context) async {
+  Future<void> _applyStage(_RoundContext context) async {
     final known = await _ensureKnown();
     try {
       // 强制交付的键：合并时剔除本地同版本记录，让权威视图胜出
@@ -580,22 +581,23 @@ class SyncRoundRunner {
       }
     } catch (e) {
       // 入站快照是对端花网络推过来的：本轮失败不能丢，放回队列下轮消费。
-      restoreInbound(context.inboundSnapshot);
+      _restoreInbound(context.inboundSnapshot);
       context.inboundRestored = true;
       rethrow;
     }
 
     if (context.applyFailures > 0 && !context.inboundRestored) {
-      restoreInbound(context.inboundSnapshot);
+      _restoreInbound(context.inboundSnapshot);
       context.inboundRestored = true;
     }
 
     // 游标只在**全部落地成功**后提交：失败轮不推进也不 ack（对端据此不会
     // 裁掉未落地的条目），下一轮按原游标重取（幂等）。
     //
-    // 这里只改内存名册：落盘统一由引擎在 `runRound` 返回后做一次。旧实现
-    // 每轮在 apply 后与 finally 各保存一次，活跃期 4s 去抖轮会把整份
-    // sync_state_v2 写两遍，属于写放大回归。
+    // 这里只改内存名册：轮内的游标 / 台账 / 名册 / 登记一律不落盘，统一由
+    // 引擎在 `runRound` 返回后提交一次（UI 命令与传输绑定等生命周期事件仍
+    // 可即时提交）。旧实现每轮在 apply 后与 finally 各保存一次，活跃期 4s
+    // 去抖轮会把整份 sync_state_v2 写两遍，属于写放大回归。
     if (context.applyFailures == 0) {
       for (final entry in context.pendingCursors.entries) {
         final peer = _peersById[entry.key];
@@ -606,7 +608,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 5：裁日志 + 构建本轮外发视图 + 推送。
-  Future<void> publishStage(SyncRoundContext context) async {
+  Future<void> _publishStage(_RoundContext context) async {
     final journal = _journal;
     var journalBase = 0;
     int? snapshotSeq;
@@ -739,7 +741,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 6：五态判定与报告（不写状态；引擎在 `runRound` 返回后落报告 / 通知）。
-  Future<SyncRoundReport> reportStage(SyncRoundContext context) async {
+  Future<SyncRoundReport> _reportStage(_RoundContext context) async {
     final transportReports = [
       for (final accumulator in context.accumulators.values)
         accumulator.build(),
@@ -799,7 +801,7 @@ class SyncRoundRunner {
       applied: context.applied,
       applyFailures: context.applyFailures,
       transports: transportReports,
-      peers: await roster(),
+      peers: await _roster(),
       remoteRecords: remoteCount,
       error: error,
     );
@@ -808,7 +810,7 @@ class SyncRoundRunner {
   // ---- 拉取实现 ----
 
   Future<bool> _pullInto(
-    Map<String, SyncTransportAccumulator> accumulators,
+    Map<String, _TransportAccumulator> accumulators,
     SyncPullRequest request,
     List<(String, SyncEnvelope)> out,
   ) async {
@@ -877,7 +879,7 @@ class SyncRoundRunner {
   Future<SyncPushResult> _pushEnvelope(
     SyncTransport transport,
     SyncEnvelope envelope,
-    SyncTransportAccumulator accumulator,
+    _TransportAccumulator accumulator,
     SyncRoundWindow window,
   ) async {
     final watch = Stopwatch()..start();
@@ -1039,7 +1041,7 @@ class SyncRoundRunner {
     bool forceDiscovery = false,
   }) {
     final peers = <String, SyncPeerPullIntent>{};
-    for (final peer in allPeers()) {
+    for (final peer in _allPeers()) {
       if (peer.deviceId.isEmpty) continue;
       peers[peer.deviceId] = SyncPeerPullIntent(
         deviceId: peer.deviceId,
@@ -1066,7 +1068,7 @@ class SyncRoundRunner {
 
   Map<String, int> _acks() {
     final acks = <String, int>{};
-    for (final peer in allPeers()) {
+    for (final peer in _allPeers()) {
       if (peer.cursorSeq >= 0) acks[peer.deviceId] = peer.cursorSeq;
     }
     return acks;
@@ -1105,7 +1107,7 @@ class SyncRoundRunner {
   ) async {
     final now = _nowMs();
     final peers = <String>[];
-    for (final peer in allPeers()) {
+    for (final peer in _allPeers()) {
       if (peer.snapshotId.isEmpty) continue;
       if (now - peer.fullPulledAt < antiEntropyIntervalMs) continue;
       if (await _fingerprintDiffers(
@@ -1122,7 +1124,7 @@ class SyncRoundRunner {
 
   int? _minPeerAck(int nowMs) {
     int? minAck;
-    for (final peer in allPeers()) {
+    for (final peer in _allPeers()) {
       if (peer.ackedSeq < 0) continue;
       if (peer.isLostAt(nowMs)) continue;
       if (minAck == null || peer.ackedSeq < minAck) minAck = peer.ackedSeq;
@@ -1304,8 +1306,8 @@ class SyncRoundRunner {
 }
 
 /// 一轮内可变的传输累计器（构造报告时转成不可变的 [SyncTransportReport]）。
-class SyncTransportAccumulator {
-  SyncTransportAccumulator(this.kind, {required this.enabled});
+class _TransportAccumulator {
+  _TransportAccumulator(this.kind, {required this.enabled});
 
   final String kind;
   final bool enabled;

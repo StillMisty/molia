@@ -561,10 +561,20 @@
   只有这一处实现。
 - **Sync round runner（轮次编排）** — `lib/data/sync/sync_round.dart`：
   `SyncRoundRunner.runRound` 只剩线性编排，阶段 collect / pull /
-  consume + apply / publish + compact / report 只读写 `SyncRoundContext`，
-  可注入假传输 / 假适配器单独测试。语义保留：应用成功才推进游标、forced
-  delivery、缺口二次拉取、anti-entropy、入站轮；`SyncEngine` 只留公共门面
-  （调度器宿主 / 服务端语义 / 入站合流 / 公告过滤）。
+  consume + apply / publish + compact / report 与轮次上下文都是本文件的私有
+  实现；测试经 `runRound` + 假传输 / 假适配器驱动整轮，不能绕过顺序直接调
+  阶段。语义保留：应用成功才推进游标、forced delivery、缺口二次拉取、
+  anti-entropy、入站轮；`SyncEngine` 只留公共门面（调度器宿主 / 服务端语义 /
+  入站合流 / 公告过滤）。
+- **Sync book（同步状态的窄接口与单一提交）** — `lib/data/sync/sync_book.dart`：
+  按用途声明 `SyncStampLedger`（适配器）/ `SyncPublicationState`（发布台账）/
+  `SyncRoundState`（轮次）/ `SyncEngineState`（引擎）/ `SyncTransportState` /
+  `SyncSchedulerState` / `SyncBackupState`，`SyncStateStore` 是唯一实现。
+  状态 JSON 的形状与键不变，持久化只有一个出口 `commit()`：所有写入先改内存
+  并标脏，轮内台账 / 首连提示 / 端点记账不单独落盘（引擎轮末提交一次），
+  用户命令（类别 / 传输 / 名称 / 口令、地址簿）仍即时提交。登记类写入必须
+  在增量日志追加成功之后（`SyncJournalAppender`），追加失败时旧登记保留，
+  下一轮仍能检测到同一变更。
 - **Sync round window（轮次窗口）** — `SyncRoundWindow`（定义在
   `lib/domain/ports/sync_transport.dart`）：一轮的 `pull` 与 `push` 显式共享
   同一个窗口，删除局域网私有的 `_roundStartedAt` 隐式耦合。

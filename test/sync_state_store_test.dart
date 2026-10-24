@@ -78,8 +78,7 @@ void main() {
     await store.init();
     await store.backupDeviceId();
 
-    expect(store.freshInstall, isFalse,
-        reason: '新 key 已存在且派生清理标记已完成 = 不是首次清理');
+    expect(store.freshInstall, isFalse, reason: '新 key 已存在且派生清理标记已完成 = 不是首次清理');
     expect(store.deviceId, 'devA');
     expect(prefs.getString(SyncStateStore.deviceIdKey), 'devA');
     expect(secrets.values[SyncStateStore.deviceIdKey], 'devA');
@@ -208,7 +207,7 @@ void main() {
       httpPort: 40000,
       verifiedAt: 4,
     ));
-    await store.markPeerConnectNotified('devB');
+    store.markPeerConnectNotified('devB');
     await store.addManualPeer(
       const ManualPeer(host: '192.168.1.23', deviceId: 'devB'),
     );
@@ -230,10 +229,9 @@ void main() {
       outcome: SyncOutcome.ok,
       peers: const [SyncPeerState(deviceId: 'devX')],
     ));
-    expect(store.peers.single.deviceId, 'devX',
-        reason: '移除标记随旧组一并清空，重新发现立即入册');
+    expect(store.peers.single.deviceId, 'devX', reason: '移除标记随旧组一并清空，重新发现立即入册');
 
-    await store.save();
+    await store.commit();
     final reloaded = await freshStore();
     expect(reloaded.peers, hasLength(1));
     expect(reloaded.lanEndpoints, isEmpty, reason: '清空结果已持久化');
@@ -258,7 +256,7 @@ void main() {
         ),
       ],
     ));
-    await store.save();
+    await store.commit();
 
     final reloaded = await freshStore();
     expect(reloaded.peers.single.lastSuccessAt, 800);
@@ -351,7 +349,8 @@ void main() {
         const ManualPeer(host: '2409:8a55::9', deviceId: 'devB'));
 
     expect(store.isPeerConnectNotified('devB'), isFalse);
-    await store.markPeerConnectNotified('devB');
+    store.markPeerConnectNotified('devB');
+    await store.commit();
     final reloaded = await freshStore();
     expect(reloaded.isPeerConnectNotified('devB'), isTrue, reason: '跨实例保持');
 
@@ -403,7 +402,7 @@ void main() {
     expect(store.activity, hasLength(25));
     expect(store.activity.first.applied, 24);
 
-    await store.save();
+    await store.commit();
     final reloaded = await freshStore();
     expect(reloaded.activity, hasLength(25));
     expect(reloaded.activity.first.at, 1024);
@@ -433,6 +432,7 @@ void main() {
       probePort: 47825,
       verifiedAt: 1234,
     ));
+    await store.commit();
 
     final reloaded = await freshStore();
     expect(reloaded.lanEndpoints, hasLength(1));
@@ -478,6 +478,7 @@ void main() {
       verifiedAt: 1,
     );
     await store.rememberLanEndpoint(endpoint);
+    await store.commit();
     final rawBefore = prefs.getString(SyncStateStore.stateKey);
     expect(rawBefore, isNotNull);
 
@@ -487,11 +488,11 @@ void main() {
     expect(
       prefs.getString(SyncStateStore.stateKey),
       rawBefore,
-      reason: '仅验证时间前进不触发持久化（依赖引擎轮末 save）',
+      reason: '仅验证时间前进不标脏（依赖引擎轮末 commit）',
     );
 
-    // 轮末持久化后跨实例可见。
-    await store.save();
+    // 轮末提交后跨实例可见。
+    await store.commit();
     final reloaded = await freshStore();
     expect(reloaded.lanEndpoints.single.verifiedAt, 2);
   });
@@ -515,6 +516,7 @@ void main() {
     expect(ids.contains('dev8'), isTrue);
     expect(ids.contains('dev39'), isTrue);
 
+    await store.commit();
     final reloaded = await freshStore();
     expect(reloaded.lanEndpoints, hasLength(SyncStateStore.lanEndpointLimit));
   });
