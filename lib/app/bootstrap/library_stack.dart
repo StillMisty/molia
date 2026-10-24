@@ -196,7 +196,11 @@ void wireNotificationFavorite({
     // false（表现为「点收藏图标不变」）。
     isFavorite: (track) =>
         libraryProvider.isFavorite(track.sourceKey, track.songId),
-    toggle: (track) => libraryProvider.toggleFavoriteSourceTrack(track),
+    // 媒体会话没有 UI 可提示：失败已由 provider 记日志，这里吞掉 outcome，
+    // 也保证异常不抛回通知动作的 handler。
+    toggle: (track) async {
+      await libraryProvider.toggleFavoriteSourceTrack(track);
+    },
   );
   // 收藏变化只影响通知动作的图标：handler 自己现查当前曲目，这里只负责叫醒它。
   libraryProvider.addListener(handler.refreshFavoriteState);

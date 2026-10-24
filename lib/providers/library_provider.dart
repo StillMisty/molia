@@ -1004,7 +1004,10 @@ class LibraryProvider extends ChangeNotifier {
   }
 
   /// 收藏/取消收藏（当前播放曲目 / 搜索结果 / 列表曲目通用入口）。
-  Future<bool> toggleFavorite({
+  ///
+  /// 仓库写失败在边界收口成 failed（带回切换前状态）：调用方据此提示，
+  /// 收藏键缓存与计数保持原样，图标不会因一次失败翻转。
+  Future<FavoriteToggleOutcome> toggleFavorite({
     required String sourceKey,
     required String songId,
     required String title,
@@ -1014,20 +1017,28 @@ class LibraryProvider extends ChangeNotifier {
     int? durationMs,
     Map<String, dynamic> raw = const {},
   }) {
-    var favorite = false;
+    // 失败结果要带回切换前状态；成功后再更新，供埋点字段读取最终值。
+    var favorite = isFavorite(sourceKey, songId);
     return DataPathTrace.async(
       'library.favorite.toggle',
       () async {
-        favorite = await _repository.toggleFavorite(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: title,
-          artist: artist,
-          album: album,
-          coverUrl: coverUrl,
-          durationMs: durationMs,
-          raw: raw,
-        );
+        final bool next;
+        try {
+          next = await _repository.toggleFavorite(
+            sourceKey: sourceKey,
+            songId: songId,
+            title: title,
+            artist: artist,
+            album: album,
+            coverUrl: coverUrl,
+            durationMs: durationMs,
+            raw: raw,
+          );
+        } catch (e) {
+          debugPrint('[Library] 切换收藏失败: $e');
+          return FavoriteToggleOutcome.failed(favorite, e);
+        }
+        favorite = next;
         // 立即更新本地键集合，UI 无需等待 changes 流的下一次重载。
         final keys = Set<String>.from(_favoriteKeys);
         final key = '$sourceKey:$songId';
@@ -1040,7 +1051,7 @@ class LibraryProvider extends ChangeNotifier {
         if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
         _favoritesRevision++;
         _notify();
-        return favorite;
+        return FavoriteToggleOutcome.success(favorite);
       },
       fields: () => {'favorite': favorite ? 1 : 0},
     );
@@ -1049,7 +1060,8 @@ class LibraryProvider extends ChangeNotifier {
   /// 收藏/取消收藏领域曲目（播放页/UI 的收藏唯一入口）。
   ///
   /// raw 取链参数由 `Track.payload` 原样提供；UI 不读取 payload。
-  Future<bool> toggleFavoriteTrack(Track track) => toggleFavorite(
+  Future<FavoriteToggleOutcome> toggleFavoriteTrack(Track track) =>
+      toggleFavorite(
         sourceKey: track.id.sourceKey,
         songId: track.id.id,
         title: track.title,
@@ -1060,7 +1072,7 @@ class LibraryProvider extends ChangeNotifier {
         raw: Map<String, dynamic>.from(track.payload),
       );
 
-  Future<bool> toggleFavoriteSourceTrack(SourceTrack track) =>
+  Future<FavoriteToggleOutcome> toggleFavoriteSourceTrack(SourceTrack track) =>
       toggleFavoriteTrack(trackFromSourceTrack(track));
 
   /// 把音源曲目加入指定列表（发现页/搜索等入口使用；重复加入返回 false）。
@@ -1101,7 +1113,9 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 搜索结果项收藏切换（item map 由 SearchProvider 生成，含 `_sourceTrack`）。
   /// 无法识别来源曲目时返回 null（调用方忽略）。
-  Future<bool?> toggleFavoriteSearchItem(Map<String, dynamic> item) async {
+  Future<FavoriteToggleOutcome?> toggleFavoriteSearchItem(
+    Map<String, dynamic> item,
+  ) async {
     final sourceTrack = item['_sourceTrack'];
     if (sourceTrack is! SourceTrack) return null;
     return toggleFavoriteSourceTrack(sourceTrack);

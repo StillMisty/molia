@@ -8,6 +8,7 @@ import '../sources/builtin/builtin_search.dart';
 import '../sources/builtin/discover_source.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
+import 'library_outcome.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
 
@@ -196,8 +197,8 @@ class DiscoverProvider extends ChangeNotifier {
     );
   }
 
-  /// 收藏 / 取消收藏。
-  Future<bool> toggleFavorite(DiscoverTrack track) =>
+  /// 收藏 / 取消收藏；仓库写失败以 failed 结果返回（图标态保持原样）。
+  Future<FavoriteToggleOutcome> toggleFavorite(DiscoverTrack track) =>
       _library.toggleFavoriteSourceTrack(_toSourceTrack(track));
 
   bool isFavorite(DiscoverTrack track) =>

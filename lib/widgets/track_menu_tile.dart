@@ -86,12 +86,17 @@ List<RowAction> trackRowActionMenuForSearchItem(
 Future<void> _toggleTrackFavorite(BuildContext context, Track track) async {
   final library = context.read<LibraryProvider?>();
   if (library == null) return;
-  final favorite = await library.toggleFavoriteTrack(track);
+  final outcome = await library.toggleFavoriteTrack(track);
   if (!context.mounted) return;
   final l10n = _l10n(context);
+  // 写失败不能报「已收藏 / 已取消」：菜单的下次打开仍按 provider 缓存的真实态渲染。
   M3ESnackbar.show(
     context,
-    message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
+    message: outcome.isFailure
+        ? l10n.operationFailed
+        : outcome.isFavorite
+            ? l10n.favoriteAdd
+            : l10n.favoriteRemove,
   );
 }
 
@@ -118,12 +123,16 @@ Future<void> _toggleSearchItemFavorite(
 ) async {
   final library = context.read<LibraryProvider?>();
   if (library == null) return;
-  final favorite = await library.toggleFavoriteSearchItem(item);
-  if (favorite == null || !context.mounted) return;
+  final outcome = await library.toggleFavoriteSearchItem(item);
+  if (outcome == null || !context.mounted) return;
   final l10n = _l10n(context);
   M3ESnackbar.show(
     context,
-    message: favorite ? l10n.favoriteAdd : l10n.favoriteRemove,
+    message: outcome.isFailure
+        ? l10n.operationFailed
+        : outcome.isFavorite
+            ? l10n.favoriteAdd
+            : l10n.favoriteRemove,
   );
 }
 

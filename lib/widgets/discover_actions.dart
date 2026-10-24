@@ -3,18 +3,25 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
+import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/library_provider.dart';
 import 'add_to_library.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
-/// 收藏 / 取消收藏：图标态本身即反馈，不弹提示。
+AppLocalizations _l10n(BuildContext context) =>
+    AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
+
+/// 收藏 / 取消收藏：成功只靠图标态反馈；失败必须提示，否则按钮看起来
+/// 「点了没反应」（仓库异常已在 provider 边界收口成 outcome）。
 Future<void> toggleDiscoverFavorite(
   BuildContext context,
   DiscoverTrack track,
 ) async {
-  await context.read<DiscoverProvider>().toggleFavorite(track);
+  final outcome = await context.read<DiscoverProvider>().toggleFavorite(track);
+  if (!context.mounted || !outcome.isFailure) return;
+  M3ESnackbar.show(context, message: _l10n(context).operationFailed);
 }
 
 /// 「加入列表」流程：与收藏页共用 [addTracksToLibraryTarget]（选择目标 →

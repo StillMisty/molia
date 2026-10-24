@@ -287,7 +287,10 @@ class NowPlayingFavoriteButton extends StatelessWidget {
       semanticLabel: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
       onPressed: () async {
         HapticsService.lightImpact();
-        await library.toggleFavoriteTrack(track);
+        final outcome = await library.toggleFavoriteTrack(track);
+        if (!context.mounted || !outcome.isFailure) return;
+        // 图标态是成功反馈；失败必须明说，否则按钮看起来「点了没反应」。
+        M3ESnackbar.show(context, message: l10n.operationFailed);
       },
     );
   }

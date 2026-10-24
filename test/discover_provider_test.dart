@@ -90,7 +90,8 @@ void main() {
 
     expect(discover.isFavorite(track), isFalse);
     final added = await discover.toggleFavorite(track);
-    expect(added, isTrue);
+    expect(added.isFailure, isFalse);
+    expect(added.isFavorite, isTrue);
     expect(discover.isFavorite(track), isTrue);
     expect(await repository.favoriteKeys(), contains('wy:111'));
   });

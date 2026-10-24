@@ -16,6 +16,7 @@ import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
+import 'package:molia/widgets/now_playing_summary.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:molia/widgets/queue.dart';
@@ -150,6 +151,64 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  testWidgets('收藏按钮：写失败提示操作失败，图标保持原状态', (tester) async {
+    final repository = FakeLibraryRepository();
+    addTearDown(repository.dispose);
+    final library = LibraryProvider(
+      repository: repository,
+      playbackProvider: playback,
+    );
+    addTearDown(library.dispose);
+
+    final track = _track('fav');
+    backend.emit(BackendSnapshot(
+      current: track,
+      queue: [track],
+      currentIndex: 0,
+      isPlaying: false,
+      position: Duration.zero,
+      duration: const Duration(seconds: 30),
+    ));
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ChangeNotifierProvider<LibraryProvider>.value(value: library),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: const Scaffold(
+            body: Center(child: NowPlayingFavoriteButton()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    repository.failFavoriteWrites = true;
+    await tester.tap(find.byType(M3EIconButton));
+    await tester.pumpAndSettle();
+
+    expect(find.text('操作失败'), findsOneWidget);
+    expect(
+      library.isFavorite(track.id.sourceKey, track.id.id),
+      isFalse,
+      reason: '写失败不改收藏缓存',
+    );
+    expect(
+      find.byIcon(Icons.favorite_border_rounded),
+      findsOneWidget,
+      reason: '图标不因失败翻转',
+    );
+  });
 
   testWidgets('切换行：小圆点常显，无收起/展开按钮', (tester) async {
     await pumpNowPlaying(tester);
