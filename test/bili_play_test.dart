@@ -22,6 +22,7 @@ void main() {
   late bool notFound;
   late bool riskOnce;
   late int deadline;
+  late bool noDash;
 
   setUpAll(() => originalTransport = BuiltinSearch.transport);
 
@@ -34,6 +35,7 @@ void main() {
     notFound = false;
     riskOnce = false;
     deadline = DateTime.now().millisecondsSinceEpoch ~/ 1000 + 7200;
+    noDash = false;
 
     String dashUrl(String name) =>
         'https://upos-sz-mirrorcos.bilivideo.com/bfs/audio/$name.m4s'
@@ -82,6 +84,30 @@ void main() {
             if (riskOnce && playUrlCalls == 1) {
               return textResponse(
                 jsonEncode({'code': -403, 'message': '风控'}),
+              );
+            }
+            if (request.uri.queryParameters['fnval'] == '1') {
+              // 无 dash 的老视频：durl 单文件只有 `url` 字段。
+              return textResponse(
+                jsonEncode({
+                  'code': 0,
+                  'data': {
+                    'durl': [
+                      {
+                        'url': 'https://cdn.example/video.m4s'
+                            '?deadline=$deadline',
+                      },
+                    ],
+                  },
+                }),
+              );
+            }
+            if (noDash) {
+              return textResponse(
+                jsonEncode({
+                  'code': 0,
+                  'data': <String, dynamic>{},
+                }),
               );
             }
             return textResponse(
@@ -197,6 +223,20 @@ void main() {
       ),
     );
     expect(playUrlCalls, 1);
+  });
+
+  test('无 dash 时回退 fnval=1 的 durl（读取 url 字段）', () async {
+    noDash = true;
+    final stream = await BiliPlay.resolve(
+      Map<String, dynamic>.from(raw),
+      quality: '128k',
+    );
+
+    expect(stream.uri.path, endsWith('/video.m4s'));
+    expect(stream.headers['Referer'], 'https://www.bilibili.com/');
+    expect(playUrlCalls, 2);
+    final fallback = options.last;
+    expect(fallback.uri.queryParameters['fnval'], '1');
   });
 
   test('code -403 → 刷新 WBI 会话后重试一次', () async {

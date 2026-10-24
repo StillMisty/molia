@@ -51,14 +51,15 @@ void main() {
   test('六族支持矩阵与注册表一致（每族都有自己的类型化适配器）', () {
     expect(BuiltinPlatforms.searchKeys, expectedKeys.toSet());
     expect(BuiltinPlatforms.lyricSearchKeys, musicKeys.toSet());
-    expect(BuiltinPlatforms.commentKeys, musicKeys.toSet());
+    expect(BuiltinPlatforms.commentKeys, expectedKeys.toSet());
     expect(BuiltinPlatforms.albumKeys, musicKeys.toSet());
     expect(BuiltinPlatforms.artistKeys, musicKeys.toSet());
     expect(BuiltinPlatforms.discoverKeys, musicKeys.toSet());
 
-    // B 站是首个原生取链平台（不需要脚本），搜索之外的能力按阶段接入。
+    // B 站是首个原生取链平台（不需要脚本），歌词/评论也已接入。
     expect(BuiltinPlatforms.resolveFor('bili'), isNotNull);
-    expect(BuiltinPlatforms.maybeOf('bili')!.nativeLyrics, isFalse);
+    expect(BuiltinPlatforms.commentsFor('bili'), isNotNull);
+    expect(BuiltinPlatforms.maybeOf('bili')!.nativeLyrics, isTrue);
     for (final key in musicKeys) {
       expect(BuiltinPlatforms.resolveFor(key), isNull, reason: key);
       expect(BuiltinPlatforms.maybeOf(key)!.nativeLyrics, isTrue, reason: key);
@@ -114,14 +115,14 @@ void main() {
       expect(capabilities.lyricSearch, isFalse, reason: key);
     }
 
-    // bili 不依赖脚本：搜索 / 播放原生可用；歌词与其余能力尚未接入。
+    // bili 不依赖脚本：搜索 / 播放 / 歌词 / 评论原生可用；专辑/歌手/发现尚未接入。
     final bili = manager.capabilitiesFor('bili');
     expect(bili.search, isTrue);
     expect(bili.pagination, isTrue);
     expect(bili.resolveUrl, isTrue);
     expect(bili.artwork, isTrue);
-    expect(bili.lyrics, isFalse);
-    expect(bili.comment, isFalse);
+    expect(bili.lyrics, isTrue);
+    expect(bili.comment, isTrue);
     expect(bili.collection, isFalse);
     expect(bili.artist, isFalse);
     expect(bili.lyricSearch, isFalse);

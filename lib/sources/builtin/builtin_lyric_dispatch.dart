@@ -1,6 +1,6 @@
-/// 内置平台原生取词的派发入口（五平台：wy / tx / kg / kw / mg）。
+/// 内置平台原生取词的派发入口（wy / tx / kg / kw / mg / bili）。
 ///
-/// 从 `SourceManager` 拆出：5 路 switch（曲目 raw 字段 → 各 `*_lyric.dart`
+/// 从 `SourceManager` 拆出：6 路 switch（曲目 raw 字段 → 各 `*_lyric.dart`
 /// 的取词接口）、结果归一化（空歌词 → null）与 5 分钟 TTL 缓存
 /// （key `{track.id}:lyric`）在这里只有一处实现；`SourceManager.fetchLyric`
 /// 的脚本回退只调用 [fetch]。
@@ -14,6 +14,7 @@ library;
 import '../../data/cache/request_cache.dart';
 import '../lx/lx_engine_types.dart';
 import '../source_track.dart';
+import 'bili_lyric.dart';
 import 'builtin_search.dart';
 import 'kg_lyric.dart';
 import 'kw_lyric.dart';
@@ -92,6 +93,8 @@ class BuiltinLyricDispatch {
           lrcUrl: raw['lrcUrl']?.toString(),
           trcUrl: raw['trcUrl']?.toString(),
         );
+      case 'bili':
+        return BiliLyric.fetch(raw);
       default:
         return Future.value(null);
     }

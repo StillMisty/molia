@@ -380,8 +380,8 @@ void main() {
       expect(adapter.requests, isEmpty);
     });
 
-    test('能力位：仅五平台内置支持', () {
-      for (final key in const ['kw', 'kg', 'tx', 'wy', 'mg']) {
+    test('能力位：音乐五平台 + bili 内置支持', () {
+      for (final key in const ['kw', 'kg', 'tx', 'wy', 'mg', 'bili']) {
         expect(BuiltinComments.isSupported(key), isTrue, reason: key);
       }
       expect(BuiltinComments.isSupported('any_listen'), isFalse);

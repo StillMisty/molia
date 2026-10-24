@@ -37,14 +37,10 @@ class BiliPlay {
     Map<String, dynamic> raw, {
     String? quality,
   }) async {
-    final bvid = _textOf(raw['bvid']);
-    final aid = _textOf(raw['aid'] ?? raw['avid']);
-    if (bvid.isEmpty && aid.isEmpty) {
-      throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: 'bili: 缺少 bvid / aid，无法取链',
-      );
-    }
+    final ids = _idsOf(raw);
+    final bvid = ids.bvid;
+    final aid = ids.aid;
+    _requireIds(bvid, aid);
 
     try {
       var session = await BiliApi.session();
@@ -104,6 +100,31 @@ class BiliPlay {
       rethrow;
     } catch (e) {
       throw SourceFailure.from(e);
+    }
+  }
+
+  /// 视频首个分 P 的 cid（raw 带 cid 时直接复用，否则查分 P 并缓存）。
+  ///
+  /// 取链与 CC 字幕歌词共用这一入口：同一视频只查一次分 P；分 P 缓存
+  /// 由 [_cidCache] 承担，歌词失败不影响下一次取链。
+  static Future<int> cidOf(Map<String, dynamic> raw) async {
+    final ids = _idsOf(raw);
+    _requireIds(ids.bvid, ids.aid);
+    final session = await BiliApi.session();
+    return _cidFor(session, raw, bvid: ids.bvid, aid: ids.aid);
+  }
+
+  static ({String bvid, String aid}) _idsOf(Map<String, dynamic> raw) => (
+        bvid: _textOf(raw['bvid']),
+        aid: _textOf(raw['aid'] ?? raw['avid']),
+      );
+
+  static void _requireIds(String bvid, String aid) {
+    if (bvid.isEmpty && aid.isEmpty) {
+      throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: 'bili: 缺少 bvid / aid，无法取链',
+      );
     }
   }
 
@@ -199,8 +220,10 @@ class BiliPlay {
   }
 
   /// 播放地址优先 `baseUrl/base_url`，缺失时取 `backupUrl` 的首个备选。
+  ///
+  /// durl（`fnval=1`）文件只有 `url` 字段，和 dash 的 `baseUrl` 不是同一命名。
   static String? _audioUrlOf(Map item) {
-    final base = _textOf(item['baseUrl'] ?? item['base_url']);
+    final base = _textOf(item['baseUrl'] ?? item['base_url'] ?? item['url']);
     if (base.isNotEmpty) return base;
     final backup = item['backupUrl'] ?? item['backup_url'];
     if (backup is List) {

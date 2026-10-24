@@ -20,6 +20,7 @@ import '../../domain/models/comment.dart';
 import '../../domain/ports/music_source.dart' show PlayableStream;
 import '../source_search_result.dart';
 import 'artist_source.dart';
+import 'bili_comment.dart';
 import 'bili_play.dart';
 import 'bili_search.dart';
 import 'discover_source.dart';
@@ -145,8 +146,7 @@ class BuiltinPlatform {
   final BuiltinArtistAdapter? artist;
   final DiscoverSource? discover;
 
-  /// 是否由 Dart 原生实现歌词（五平台为 true；B 站字幕歌词在 Phase 3 接入，
-  /// 在此之前不能向 UI 宣称有歌词能力）。
+  /// 是否由 Dart 原生实现歌词（五个音乐平台与 B 站 CC 字幕均为 true）。
   final bool nativeLyrics;
 
   const BuiltinPlatform({
@@ -259,8 +259,11 @@ class BuiltinPlatforms {
       displayName: '哔哩哔哩',
       search: BiliSearch.searchWithMeta,
       resolve: BiliPlay.resolve,
-      // Phase 3 接入 CC 字幕歌词后再翻成 true。
-      nativeLyrics: false,
+      comments: BuiltinCommentAdapter(
+        // 评论接口的 oid 只用 aid；部分 raw 只带通用 id 字段时兜底。
+        rawIdKeys: const ['aid', 'id'],
+        fetch: BiliComment.fetch,
+      ),
     ),
   });
 

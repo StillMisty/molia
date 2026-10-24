@@ -1,4 +1,4 @@
-/// 内置平台评论获取的调度入口（五平台：kw / kg / tx / wy / mg）。
+/// 内置平台评论获取的调度入口（音乐五平台 + B 站）。
 ///
 /// 移植自 lx-music-mobile `{wy,tx,kg,kw,mg}/comment.js`：热门 + 最新两类、
 /// 按页取数，统一产出领域模型 [CommentPage]。

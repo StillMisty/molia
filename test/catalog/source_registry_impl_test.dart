@@ -59,7 +59,7 @@ void main() {
     expect(bili.displayName, '哔哩哔哩');
     expect(bili.capabilities.search, isTrue);
     expect(bili.capabilities.resolveUrl, isTrue);
-    expect(bili.capabilities.lyrics, isFalse);
+    expect(bili.capabilities.lyrics, isTrue);
     expect(bili.order, 0);
 
     final descriptor = descriptors.last;

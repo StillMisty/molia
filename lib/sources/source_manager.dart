@@ -629,7 +629,7 @@ class SourceManager extends ChangeNotifier {
     return _builtinLyricFallback.fetch(track);
   }
 
-  /// 获取曲目评论（内置五平台；脚本扩展源 / any-listen 无评论能力）。
+  /// 获取曲目评论（内置平台；脚本扩展源 / any-listen 无评论能力）。
   ///
   /// 失败统一归一化为 [SourceFailure]（业务拒绝 → unknown/retryable，
   /// 传输失败 → network）；分页与缓存由 data 层 `CommentsService` 承担。

@@ -48,17 +48,13 @@ void main() {
         raw: {'songmid': '228908', 'source': 'kw'},
       );
 
-  test('能力位：音乐平台歌词/封面为真；bili 歌词未接入（封面可用）', () {
+  test('能力位：音乐平台与 bili 的歌词/封面均为原生能力', () {
     final manager = SourceManager(settings: testSettingsRegistry());
-    for (final key in const ['tx', 'wy', 'kg', 'kw', 'mg']) {
+    for (final key in const ['tx', 'wy', 'kg', 'kw', 'mg', 'bili']) {
       final capabilities = manager.capabilitiesFor(key);
       expect(capabilities.lyrics, isTrue, reason: key);
       expect(capabilities.artwork, isTrue, reason: key);
     }
-    // B 站字幕歌词在 Phase 3 接入；当前不能展示歌词入口。
-    final bili = manager.capabilitiesFor('bili');
-    expect(bili.lyrics, isFalse);
-    expect(bili.artwork, isTrue);
     manager.dispose();
   });
 

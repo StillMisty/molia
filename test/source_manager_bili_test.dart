@@ -13,8 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/mock_dio.dart';
 import 'support/settings_test_support.dart';
 
-/// 无脚本环境下的 B 站路由：搜索 / 播放由原生实现提供，歌词等未接入能力
-/// 不能向 UI 宣称可用；五个音乐平台仍保持「无脚本不可搜索」。
+/// 无脚本环境下的 B 站路由：搜索 / 播放 / 歌词 / 评论由原生实现提供；专辑、
+/// 歌手与发现尚未接入，不能向 UI 宣称可用；五个音乐平台仍保持「无脚本不可搜索」。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -90,7 +90,7 @@ void main() {
   });
   tearDown(() => BuiltinSearch.transport = originalTransport);
 
-  test('能力位：无脚本时 bili 可搜索/播放；歌词与其余能力未接入', () {
+  test('能力位：无脚本时 bili 可搜索/播放/取歌词/评论；其余能力未接入', () {
     final manager = SourceManager(settings: testSettingsRegistry());
     addTearDown(manager.dispose);
 
@@ -99,8 +99,8 @@ void main() {
     expect(bili.pagination, isTrue);
     expect(bili.resolveUrl, isTrue);
     expect(bili.artwork, isTrue);
-    expect(bili.lyrics, isFalse, reason: '字幕歌词 Phase 3 才接入');
-    expect(bili.comment, isFalse);
+    expect(bili.lyrics, isTrue, reason: 'CC 字幕歌词 Phase 3 已接入');
+    expect(bili.comment, isTrue);
     expect(bili.collection, isFalse);
     expect(bili.artist, isFalse);
     expect(bili.lyricSearch, isFalse);

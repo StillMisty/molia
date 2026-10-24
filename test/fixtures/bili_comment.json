@@ -1,0 +1,68 @@
+{
+  "code": 0,
+  "message": "0",
+  "ttl": 1,
+  "data": {
+    "cursor": {
+      "all_count": 42,
+      "is_begin": true,
+      "is_end": false,
+      "mode": 3,
+      "pagination_reply": {
+        "next_offset": "CURSOR-1"
+      }
+    },
+    "replies": [
+      {
+        "rpid": 111,
+        "rpid_str": "111",
+        "oid": 987654,
+        "type": 1,
+        "like": 12,
+        "ctime": 1700000000,
+        "member": {
+          "mid": "1001",
+          "uname": "甲",
+          "avatar": "//i0.hdslb.com/bfs/face/a.jpg"
+        },
+        "content": {
+          "message": "好听 &amp; 好看 [doge]"
+        },
+        "reply_control": {
+          "location": "IP属地：广东"
+        },
+        "replies": [
+          {
+            "rpid": 112,
+            "rpid_str": "112",
+            "like": 1,
+            "ctime": 1700000100,
+            "member": {
+              "mid": "1002",
+              "uname": "乙",
+              "avatar": "https://i0.hdslb.com/bfs/face/b.jpg"
+            },
+            "content": {
+              "message": "回复"
+            },
+            "reply_control": {
+              "location": "IP属地: 上海"
+            },
+            "replies": [
+              {
+                "rpid": 999,
+                "content": {
+                  "message": "更深一层不解析"
+                },
+                "member": {
+                  "uname": "丙"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "hots": []
+  }
+}
