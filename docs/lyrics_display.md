@@ -288,6 +288,17 @@ abstract class LyricsOutput {
 4. `extended`：`translationEnabled` / `romaEnabled` 独立开关；空文本过滤。
 5. `upcoming`：当前行后最多 `maxLines - 1` 行；未同步 / 无歌词为空。
 
+应用内歌词页不走输出侧的 `offsetMs`，而是用固定的**视觉提前量**
+（`lib/widgets/lyrics.dart::_displayLead`，200ms，正 = 提前）：
+
+- 行号查表取 `position + 200ms`：切行有 450ms 的淡入 / 字重 / 内边距过渡，
+  位置通道又只有 ≤4Hz——按精确时间戳切行会让高亮在唱到该行之后才开始变化；
+  提前 200ms 后，行首时过渡已走完大半，自动滚动也同步提前启动。
+- `KaraokeLyricText` 的插值目标同样加 200ms：采样间线性补间慢一拍（位置
+  通道阈值 ≥250ms），提前量把这个滞后抵消到视听同步范围内；两者一起平移，
+  切行时上一行被截掉的长度与未提前时持平。回跳 / seek 仍按相邻采样差判定，
+  直接落位。
+
 ### 5.4 元数据合成（MediaLyricComposer）
 
 输入：原始 `MediaItem` 字段、`LyricsPresentation`、两 profile 配置、`a2dpConnected`。
@@ -524,6 +535,7 @@ abstract class LyricsOutput {
 |---|---|---|
 | 双语管道 | `lib/services/lyrics/lyric_provider.dart`、`lib/services/lyrics/netease_provider.dart`、`lib/services/lyrics/qq_provider_mobile.dart`、`lib/services/lyrics_service.dart`、`lib/providers/lyrics_provider.dart`、`lib/models/lyric_line.dart` | `LyricsPayload`（原文+翻译+罗马音）、`LyricsState.translations/romas` 时间戳对齐、缓存兼容 |
 | 歌词页扩展行 | `lib/widgets/lyrics.dart` | 每行主文本下方渲染翻译 / 罗马音（主字号 × 0.8、`onSurfaceVariant`、空文本不占位）；`page.translationEnabled` / `page.romaEnabled` 独立于输出侧开关，数据共用 |
+| 歌词页视觉提前量 | `lib/widgets/lyrics.dart::_displayLead`、`lib/widgets/lyric_karaoke_text.dart` | 行号查表与逐字插值目标统一提前 200ms（正 = 提前），补 450ms 切行过渡与 ≤4Hz 采样滞后；不叠加输出侧 `offsetMs` |
 | 配置 | `lib/services/lyrics_display/lyrics_display_settings.dart` | 单 JSON 键 `lyrics_display_settings_v1` |
 | 行跟踪 | `lib/services/lyrics_display/lyric_line_tracker.dart` | 纯逻辑（偏移/未同步/扩展行/后续行） |
 | 输出契约 | `lib/services/lyrics_display/lyrics_output.dart` | `LyricsOutput` / `InteractiveLyricsOutput` / `LyricsPresentation`（含 `positionAtEpochMs` 延迟补偿与 `scrollFollowsSinging`） |
