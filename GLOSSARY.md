@@ -98,7 +98,8 @@
   无定时器；以播放后端的自然完成事件为准，不依赖可能被熄屏节流的进度 tick）。
   判定只读 **facade 原始
   通道**（真实播放），恢复态覆盖值不参与；到点动作经注入的 `onFire` 落地
-  （组合根注入 `facade.pause`）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
+  （组合根注入播放命令面的 `pause`：与通知 / UI 暂停同一阶段路由，返回前
+  已提交会话）。剩余时间每秒走 `ValueListenable`（不进聚合通知），
   不持久化，`stopLocalPlayback` 一并撤销。
 - **Audio focus guard（音频焦点守卫）** — `lib/playback/audio_focus_guard.dart`：
   「其他应用出声时暂停 / 继续播放」的唯一实现，受设置「与其他应用同时播放」

@@ -81,7 +81,8 @@ void main() {
       // 与组合根一致：完成事件 + 停止标志都走 facade。
       trackCompletions: facade.trackCompletions,
       setStopAfterCurrentTrack: facade.setStopAfterCurrentTrack,
-      // 到点动作：与组合根一致（facade.pause），并记录次数便于断言。
+      // 到点动作：本文件只测定时判定，直接用 facade.pause 记录触发次数；
+      // 命令面路由与提交由 playback_session_test 覆盖。
       onFire: () async {
         fired++;
         await facade.pause();

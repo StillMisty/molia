@@ -6,6 +6,7 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +23,18 @@ Track _track(String id, {String? artwork}) => Track(
       origin: TrackOrigin.lx,
       payload: {'id': id, 'songmid': 'mid_$id'},
     );
+
+/// 记录整份落盘的会话存储：区分「命令面暂停（强制提交一次）」与
+/// 「直接 facade.pause（不落盘）」。
+class _RecordingSessionStore extends PlaybackSessionStore {
+  final List<PlaybackSession> saves = [];
+
+  @override
+  Future<void> save(PlaybackSession session) {
+    saves.add(session);
+    return super.save(session);
+  }
+}
 
 /// 模拟真实后端的装载过程：load 时先推送「当前曲目 + 进度 0」的加载态，
 /// 用于复现「恢复播放时进度条先回 0 再跳回恢复进度」；
@@ -498,5 +511,40 @@ void main() {
     expect(session!.tracks, hasLength(2));
     expect(session.index, 0);
     expect(session.tracks[0].payload['songmid'], 'mid_a');
+  });
+
+  test('定时关闭到点：经命令面暂停并在返回前提交会话', () async {
+    final backend = FakePlaybackBackend();
+    final store = _RecordingSessionStore();
+    final provider = buildTestPlaybackProvider(
+      backend: backend,
+      sessionStore: store,
+    );
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    // 起播一帧：切歌快照先整份落盘一次（进度 7s），定时到点时应提交同一进度。
+    final a = _track('a');
+    backend.emit(BackendSnapshot(
+      current: a,
+      queue: [a],
+      currentIndex: 0,
+      isPlaying: true,
+      position: const Duration(seconds: 7),
+      duration: const Duration(seconds: 30),
+    ));
+    expect(store.saves, hasLength(1));
+    expect(store.saves.single.position, const Duration(seconds: 7));
+
+    // 极短倒计时：ticker 周期固定 1s，第一次 tick 即越过 deadline 到点。
+    provider.sleepTimer.startCountdown(const Duration(milliseconds: 10));
+    // 留 200ms 给命令面暂停 + 写队列排空（真实时间，无法注入时钟）。
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+
+    expect(provider.sleepTimer.value.mode, SleepTimerMode.off);
+    expect(backend.calls, contains('pause'));
+    // 命令面暂停在返回前强制落盘；旧实现直写 facade.pause 不会有这次写入。
+    expect(store.saves, hasLength(2));
+    expect(store.saves.last.position, const Duration(seconds: 7));
   });
 }
