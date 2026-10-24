@@ -16,13 +16,16 @@ import '../sync_stamp.dart';
 /// - 记录键 = 封面键（`sourceKey:songId`）+ 全局默认封面的保留键
 ///   [SyncRecordKeys.defaultCoverKey]；
 /// - 版本 = 内容哈希变化时向发号器现取的版本戳（图片字节本身不带版本，
-///   登记在同步状态里跨轮稳定）；首次登记不追加日志，初始视图由全量快照
-///   覆盖；真实变化 / 删除追加日志，让增量对端收到；
+///   登记在同步状态里跨轮稳定）；类别开启时首次登记 / 真实变化 / 删除 /
+///   墓碑后重设都追加日志，让增量对端收到；墓碑后重设必须取新版本，不能
+///   复用旧戳（否则会输给更陈旧的墓碑）；
 /// - 默认关闭（`SyncCategory.covers.defaultEnabled == false`）：关闭期间仍
 ///   登记本地变化（重新开启后由快照 / 后续变更外发），但**不追加日志**，
 ///   避免封面字节经增量窗口离开设备；
-/// - 单张图超过 [CustomCoverStore.maxSyncBytes] 只跳过同步并记一次日志，
-///   本地封面继续可用；接收侧同样拒绝损坏 / 超限记录；
+/// - 只接受本地归一化产出的 JPEG（记录固定 `image/jpeg` / `.jpg`）：
+///   PNG / GIF / WebP 与损坏载荷一律跳过；单张图超过
+///   [CustomCoverStore.maxSyncBytes] 只跳过同步并记一次日志，本地封面继续
+///   可用；接收侧在 base64 解码前先按长度拒绝超限记录；
 /// - 远端应用只写封面存储与登记，不触发本地变更回调（不会形成同步回环）。
 class CoverSyncAdapter implements SyncAdapter {
   CoverSyncAdapter({
@@ -39,6 +42,13 @@ class CoverSyncAdapter implements SyncAdapter {
 
   /// 线上图片 MIME（Phase 1 归一化产物固定是 JPEG）。
   static const String _mime = 'image/jpeg';
+
+  /// [CustomCoverStore.maxSyncBytes] 上限对应的 base64 文本长度。
+  ///
+  /// 接收侧先按字符串长度拒绝再解码：异常远端不能让我们为一张超限图片分配
+  /// 数倍于上限的内存。
+  static const int _maxBase64Length =
+      ((CustomCoverStore.maxSyncBytes + 2) ~/ 3) * 4;
 
   final CustomCoverStore _store;
   final SyncStampLedger _state;
@@ -119,7 +129,10 @@ class CoverSyncAdapter implements SyncAdapter {
         continue;
       }
 
-      final stampUnchanged = stamp != null && stamp.hash == data.hash;
+      // 有墓碑时一律取新版本：即使内容哈希与旧登记相同，也不能复用删除前
+      // 的旧戳去和墓碑比大小（否则重设的封面会被对端当成陈旧记录跳过）。
+      final stampUnchanged =
+          tombstone == null && stamp != null && stamp.hash == data.hash;
       final version =
           stampUnchanged ? stamp.version : _state.stampIssuer.next();
       if (!stampUnchanged) {
@@ -132,12 +145,10 @@ class CoverSyncAdapter implements SyncAdapter {
         data: data.data,
       );
       records.add(record);
-      // 首次登记（无旧戳 / 旧墓碑）不追加日志：初始视图由全量快照覆盖。
-      // 只有真实变化（哈希变化 / 墓碑后重设）才写日志；关闭类别时也不写：
-      // 封面字节不进入增量窗口。
-      final firstRegistration = stamp == null && tombstone == null;
-      final changed = !firstRegistration && !stampUnchanged;
-      if (changed && _enabled()) {
+      // 类别开启时首次登记 / 内容变化 / 墓碑后重设都追加日志：首次登记也要
+      // 让已开启的对端在快照之外收到。关闭类别时不写日志：封面字节不进入
+      // 增量窗口。
+      if (!stampUnchanged && _enabled()) {
         changes.add((category: SyncCategory.covers, record: record));
       }
     }
@@ -341,6 +352,8 @@ class CoverSyncAdapter implements SyncAdapter {
   ({Uint8List bytes, String hash})? _decode(SyncRecord record) {
     final raw = record.data?['image'];
     if (raw is! String || raw.isEmpty) return null;
+    // base64 长度先于解码判定：超过 500KB 字节上限的记录直接拒绝。
+    if (raw.length > _maxBase64Length) return null;
     final Uint8List bytes;
     try {
       bytes = base64Decode(raw);

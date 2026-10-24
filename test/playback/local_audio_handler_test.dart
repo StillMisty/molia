@@ -128,6 +128,7 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
   FakeMediaSessionReadModel readModel, {
   PlaybackCommandPort? commands,
   bool Function()? artworkBlocked,
+  String? Function(SourceTrack track)? coverUrlResolver,
   Future<String?> Function(String url)? artworkUriResolver,
   bool? periodicPositionStateUpdates,
 }) async {
@@ -138,6 +139,7 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
     copy: _copy,
     backend: backend,
     artworkBlocked: artworkBlocked,
+    coverUrlResolver: coverUrlResolver,
     artworkUriResolver: artworkUriResolver ?? (_) async => null,
     periodicPositionStateUpdates: periodicPositionStateUpdates,
   );
@@ -577,7 +579,7 @@ void main() {
       expect(backend.lastMetadata?.artworkUri, cover);
     });
 
-    test('省流模式：元数据不带封面且不触发本地化', () async {
+    test('省流模式：远程封面不带元数据且不触发本地化', () async {
       var resolverCalls = 0;
       final service = FakeMediaSessionReadModel()
         ..currentTrack = _track(coverUrl: 'https://p1.music.126.net/cover.jpg');
@@ -593,6 +595,29 @@ void main() {
 
       expect(backend.lastMetadata?.artworkUri, isNull);
       expect(resolverCalls, 0);
+    });
+
+    test('省流模式：本地自定义 / 默认封面照常展示，不触发网络本地化', () async {
+      const localCover = 'file:///tmp/molia-custom-cover.jpg';
+      var resolverCalls = 0;
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(
+          coverUrl: 'https://p1.music.126.net/original.jpg',
+        );
+      addTearDown(service.dispose);
+      final (_, backend) = await _handler(
+        service,
+        artworkBlocked: () => true,
+        // 与组合根同一口径：自定义封面在解析器里替换原始网络封面。
+        coverUrlResolver: (_) => localCover,
+        artworkUriResolver: (_) async {
+          resolverCalls++;
+          return 'file:///tmp/network-cover.jpg';
+        },
+      );
+
+      expect(backend.lastMetadata?.artworkUri, localCover);
+      expect(resolverCalls, 0, reason: '本地封面不需要走网络缓存');
     });
 
     test('data URL 原样保留、不触发本地化', () async {

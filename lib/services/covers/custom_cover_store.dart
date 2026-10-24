@@ -293,50 +293,17 @@ class CustomCoverStore {
   /// 读取全局默认封面字节（不存在 / 不可读返回 null）。
   Future<Uint8List?> readDefaultCover() => _readFile(_defaultCover?.path);
 
-  /// 图片字节是否可进入同步记录（大小 + 魔数；不在这里解码整图）。
+  /// 图片字节是否可进入同步记录（大小 + JPEG 魔数；不在这里解码整图）。
+  ///
+  /// 同步记录固定声明 `image/jpeg`、落地文件固定 `.jpg`，因此只接受本地
+  /// 归一化（`CoverImageCodec`）产出的 JPEG；PNG / GIF / WebP 一律拒绝，
+  /// 避免远端落地后扩展名与内容不一致。
   static bool canSyncImageBytes(Uint8List bytes) =>
-      bytes.isNotEmpty &&
+      bytes.length >= 3 &&
       bytes.length <= maxSyncBytes &&
-      hasSupportedImageMagic(bytes);
-
-  /// 常见图片容器魔数（JPEG / PNG / GIF / WebP）：挡住损坏 / 非图片载荷。
-  static bool hasSupportedImageMagic(Uint8List bytes) {
-    if (bytes.length >= 3 &&
-        bytes[0] == 0xFF &&
-        bytes[1] == 0xD8 &&
-        bytes[2] == 0xFF) {
-      return true;
-    }
-    const png = [0x89, 0x50, 0x4E, 0x47];
-    if (bytes.length >= png.length) {
-      var matches = true;
-      for (var i = 0; i < png.length; i++) {
-        if (bytes[i] != png[i]) {
-          matches = false;
-          break;
-        }
-      }
-      if (matches) return true;
-    }
-    if (bytes.length >= 3 &&
-        bytes[0] == 0x47 &&
-        bytes[1] == 0x49 &&
-        bytes[2] == 0x46) {
-      return true;
-    }
-    if (bytes.length >= 12 &&
-        bytes[0] == 0x52 &&
-        bytes[1] == 0x49 &&
-        bytes[2] == 0x46 &&
-        bytes[3] == 0x46 &&
-        bytes[8] == 0x57 &&
-        bytes[9] == 0x45 &&
-        bytes[10] == 0x42 &&
-        bytes[11] == 0x50) {
-      return true;
-    }
-    return false;
-  }
+      bytes[0] == 0xFF &&
+      bytes[1] == 0xD8 &&
+      bytes[2] == 0xFF;
 
   /// 保存曲目封面（[bytes] 应已由 `CoverImageCodec` 归一化）。
   Future<void> setTrackCover(TrackId id, Uint8List bytes) async {

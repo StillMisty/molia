@@ -285,7 +285,6 @@ class SourceSwapProvider extends ChangeNotifier {
             SourceSwapApplyStatus.targetNotFound,
           );
         }
-        await _notifyTrackSwapped(request.seed, selected);
         break; // 库内替换成功：继续队列跟随。
       case SourceSwapPlacement.history:
         final historyKey = request.historyKey;
@@ -311,7 +310,6 @@ class SourceSwapProvider extends ChangeNotifier {
             SourceSwapApplyStatus.targetNotFound,
           );
         }
-        await _notifyTrackSwapped(request.seed, selected);
         break; // 同上：继续队列跟随。
       case SourceSwapPlacement.queue:
         final followed = await _playbackProvider.replaceQueueTrack(

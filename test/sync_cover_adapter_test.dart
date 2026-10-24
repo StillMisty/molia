@@ -80,7 +80,7 @@ void main() {
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
-  test('首次登记：产出记录但不追加日志；哈希未变复用版本与缓存', () async {
+  test('首次登记：类别开启时也追加日志；哈希未变复用版本与缓存', () async {
     await store.setTrackCover(trackId, jpeg(1));
 
     final first = (await adapter.collect())[SyncCategory.covers]!;
@@ -95,19 +95,21 @@ void main() {
     );
     expect(record.data!['mime'], 'image/jpeg');
     expect(record.data!['hash'], sha256.convert(jpeg(1)).toString());
-    expect(journal.changes, isEmpty, reason: '首次登记由全量快照覆盖');
+    expect(journal.changes, hasLength(1), reason: '开启类别时首次登记要进增量');
+    expect(journal.changes.single.record.key, 'wy:1');
 
     // 同一内容再收集：版本不变、不重复追加；base64 从按哈希缓存读取
     //（删掉文件也不会重新读盘，证明缓存生效）。
     File(store.trackCoverPath(trackId)!).deleteSync();
     final again = (await adapter.collect())[SyncCategory.covers]!;
     expect(again.single.version, record.version);
-    expect(journal.changes, isEmpty);
+    expect(journal.changes, hasLength(1));
   });
 
   test('内容变化：取新版本并追加日志，旧版本不会继续外发', () async {
     await store.setTrackCover(trackId, jpeg(1));
     final before = (await adapter.collect())[SyncCategory.covers]!.single;
+    journal.changes.clear();
 
     now = 2000;
     await store.setTrackCover(trackId, jpeg(2));
@@ -120,6 +122,30 @@ void main() {
     expect(journal.changes.single.record.key, 'wy:1');
     expect(journal.changes.single.record.data!['hash'], after.data!['hash']);
     expect(state.coverStamps['wy:1']!.hash, after.data!['hash']);
+  });
+
+  test('墓碑后重设：即使内容与删除前相同也取新版本并追加日志', () async {
+    await store.setTrackCover(trackId, jpeg(1));
+    final before = (await adapter.collect())[SyncCategory.covers]!.single;
+
+    now = 2000;
+    await store.resetTrackCover(trackId);
+    final deleted = (await adapter.collect())[SyncCategory.covers]!
+        .singleWhere((record) => record.deleted);
+    expect(state.coverTombstones['wy:1']!.version, deleted.version);
+
+    journal.changes.clear();
+    // 重设成与删除前完全相同的内容：不能复用旧戳（会输给墓碑）。
+    await store.setTrackCover(trackId, jpeg(1));
+    final restored = (await adapter.collect())[SyncCategory.covers]!.single;
+
+    expect(restored.deleted, isFalse);
+    expect(restored.version.isNewerThan(deleted.version), isTrue);
+    expect(restored.version, isNot(before.version));
+    expect(state.coverTombstones.containsKey('wy:1'), isFalse);
+    expect(journal.changes, hasLength(1));
+    expect(journal.changes.single.record.deleted, isFalse);
+    expect(journal.changes.single.record.version, restored.version);
   });
 
   test('本地删除：发新墓碑、清登记并追加日志', () async {
@@ -276,12 +302,33 @@ void main() {
             ),
           },
         ),
+        // 记录固定声明 JPEG / .jpg：合法 PNG 也不能落地。
+        SyncRecord(
+          key: 'wy:png',
+          version: const SyncVersion(physical: 5002, deviceId: 'devB'),
+          data: {
+            'image': base64Encode(
+              Uint8List.fromList([
+                0x89,
+                0x50,
+                0x4E,
+                0x47,
+                0x0D,
+                0x0A,
+                0x1A,
+                0x0A,
+              ]),
+            ),
+            'mime': 'image/jpeg',
+          },
+        ),
       ],
     });
     expect(outcome.applied, 0);
-    expect(outcome.skipped, 2);
+    expect(outcome.skipped, 3);
     expect(await store.readTrackCover(const TrackId('wy', 'bad')), isNull);
     expect(await store.readTrackCover(const TrackId('wy', 'huge')), isNull);
+    expect(await store.readTrackCover(const TrackId('wy', 'png')), isNull);
 
     // 本地超限：本地封面照常保存 / 查询，同步记录直接跳过（不抛）。
     await store.setTrackCover(

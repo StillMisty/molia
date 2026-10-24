@@ -155,6 +155,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get coverResetSong => 'Restore song artwork';
 
   @override
+  String get coverRestored => 'Cover restored';
+
+  @override
   String get coverUpdated => 'Cover updated';
 
   @override
@@ -180,7 +183,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsSyncCustomCoversSubtitle =>
-      'Off by default; sent with sync when enabled';
+      'Sends cover images to your other devices';
 
   @override
   String get coverLabel => 'Cover';

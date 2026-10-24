@@ -331,7 +331,10 @@ class PlaybackObserver {
   void _persistLastPlayedTrackInfo(Track track) {
     final artists = track.artistLabel;
     unawaited(_saveLastPlayedTrackInfo(
-      imageUrl: _displayCoverUrlOf(track),
+      // 只持久化原始封面 URL：展示封面可能指向本地自定义 / 默认封面文件，
+      // 把 file:// 路径写进 prefs 会在文件被替换 / 清理后留下坏地址。本地
+      // 展示由 CustomCoverStore 按曲目键重新解析即可。
+      imageUrl: track.artwork?.uri.toString(),
       trackName: track.title,
       artists: artists.isEmpty ? null : artists,
     ));

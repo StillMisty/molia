@@ -152,6 +152,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coverResetSong => '恢复歌曲封面';
 
   @override
+  String get coverRestored => '封面已恢复';
+
+  @override
   String get coverUpdated => '封面已更新';
 
   @override
@@ -176,7 +179,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSyncCustomCovers => '同步自定义封面';
 
   @override
-  String get settingsSyncCustomCoversSubtitle => '默认关闭；开启后随同步发送';
+  String get settingsSyncCustomCoversSubtitle => '开启后，封面图片随同步发送';
 
   @override
   String get coverLabel => '封面';

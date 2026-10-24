@@ -368,6 +368,12 @@ abstract class AppLocalizations {
   /// **'Restore song artwork'**
   String get coverResetSong;
 
+  /// No description provided for @coverRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover restored'**
+  String get coverRestored;
+
   /// No description provided for @coverUpdated.
   ///
   /// In en, this message translates to:
@@ -419,7 +425,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSyncCustomCoversSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Off by default; sent with sync when enabled'**
+  /// **'Sends cover images to your other devices'**
   String get settingsSyncCustomCoversSubtitle;
 
   /// No description provided for @coverLabel.

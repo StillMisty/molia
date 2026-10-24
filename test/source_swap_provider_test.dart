@@ -411,6 +411,65 @@ void main() {
     expect(swapped, [('wy:1', 'kg:100')]);
   });
 
+  test('apply（列表 / 历史）：成功换源只回调一次（封面跟随不重复）', () async {
+    final playlistId = await repository.createPlaylist('L');
+    await repository.addTrackToPlaylist(
+      playlistId,
+      PlaylistTrack(
+        playlistId: playlistId,
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Title',
+        raw: const {'songmid': 1},
+        addedAt: 1,
+      ),
+    );
+    await repository.addHistoryEntry(PlayHistoryEntry(
+      sourceKey: 'wy',
+      songId: '1',
+      title: 'Title',
+      raw: const {'songmid': 1},
+      playedAt: 100,
+    ));
+    final seed = track('wy', '1');
+    backend.emit(BackendSnapshot(
+      current: seed,
+      queue: [seed],
+      currentIndex: 0,
+      isPlaying: true,
+    ));
+
+    kg.items = [track('kg', '100')];
+    final swapped = <(String, String)>[];
+    final provider = buildProvider(
+      onTrackSwapped: (oldTrack, newTrack) async {
+        swapped.add((oldTrack.id.uri, newTrack.id.uri));
+      },
+    );
+    addTearDown(provider.dispose);
+
+    await provider.begin(SourceSwapRequest(
+      seed: seed,
+      placement: SourceSwapPlacement.playlist,
+      playlistId: playlistId,
+    ));
+    provider.select(kg.items.single);
+    final playlistResult = await provider.apply();
+    expect(playlistResult.status, SourceSwapApplyStatus.swapped);
+    expect(swapped, [('wy:1', 'kg:100')], reason: '列表换源回调只跑一次');
+
+    swapped.clear();
+    await provider.begin(SourceSwapRequest(
+      seed: seed,
+      placement: SourceSwapPlacement.history,
+      historyKey: (sourceKey: 'wy', songId: '1'),
+    ));
+    provider.select(kg.items.single);
+    final historyResult = await provider.apply();
+    expect(historyResult.status, SourceSwapApplyStatus.swapped);
+    expect(swapped, [('wy:1', 'kg:100')], reason: '历史换源回调只跑一次');
+  });
+
   test('apply（列表）：旧行已被移除 → targetNotFound', () async {
     final playlistId = await repository.createPlaylist('L');
     kg.items = [track('kg', '100')];

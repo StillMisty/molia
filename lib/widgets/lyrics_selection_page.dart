@@ -350,18 +350,18 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                                   CustomCoverStore.instance.revision,
                               builder: (context, _, __) => AppNetworkImage(
                                 url: CustomCoverStore.instance
-                                    .resolveForDisplayById(
-                                      widget.trackId,
-                                      originalUrl: widget.albumCoverUrl,
-                                    ),
+                                    .resolveTrackCoverForId(
+                                  widget.trackId,
+                                  originalUrl: widget.albumCoverUrl,
+                                ),
+                                fallbackUrl:
+                                    CustomCoverStore.instance.defaultCoverUrl,
                                 width: 60,
                                 height: 60,
                                 borderRadius: BorderRadius.circular(8),
-                                memCacheWidth:
-                                    (60 *
-                                            MediaQuery.of(context)
-                                                .devicePixelRatio)
-                                        .round(),
+                                memCacheWidth: (60 *
+                                        MediaQuery.of(context).devicePixelRatio)
+                                    .round(),
                               ),
                             ),
                             const SizedBox(width: 16),

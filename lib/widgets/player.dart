@@ -543,9 +543,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                         ),
                         url: artworkUrlOf(displayTrack),
                         fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
-                        // 两真身都是主题默认封面（全局默认封面/最近播放图/标志）。
+                        // 两真身都是回退占位（全局默认封面 / Molia 标志）。
                         fallback: (context, iconSize) =>
-                            buildDefaultArtwork(context, iconSize: iconSize),
+                            buildFallbackArtwork(context, iconSize: iconSize),
                       ),
                   ],
                 ),
@@ -973,7 +973,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                   memCacheWidth: coverEdge,
                 )
               : buildDefaultArtwork(context),
-          errorWidget: buildDefaultArtwork(context),
+          // 加载失败是当前曲目的缺图态：不能用最近播放封面冒充。
+          errorWidget: buildFallbackArtwork(context),
         );
       },
     );

@@ -39,6 +39,7 @@ import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../utils/responsive.dart';
+import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search_overlay.dart';
 import '../widgets/icon_swap.dart';
@@ -552,6 +553,8 @@ class _MyAppState extends State<MyApp>
         animation: _morphAnimation,
         geometry: geometry,
         url: url,
+        fallback: (context, iconSize) =>
+            buildFallbackArtwork(context, iconSize: iconSize),
       ),
     );
     Overlay.of(context, rootOverlay: true).insert(_morphEntry!);

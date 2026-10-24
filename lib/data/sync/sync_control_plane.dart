@@ -144,6 +144,14 @@ class SyncControlPlane extends ChangeNotifier {
   // ---- 设置写入（改状态 + 通知 UI；传输开关额外负责起停） ----
 
   Future<void> setCategory(SyncCategory category, bool value) async {
+    if (value && !_state.isCategoryEnabled(category)) {
+      // 重新开启类别必须强制下一轮全量快照重发：文件型传输（WebDAV）的
+      // 持久发布覆盖可能仍覆盖当前日志位置，不失效就会跳过上传，已有
+      // 封面 / 数据永远到不了对端。只改内存 + 标脏，随下面的状态提交落盘。
+      for (final kind in _transports.keys) {
+        _state.setSnapshotPushSeq(kind, -1);
+      }
+    }
     await _state.setCategory(category, value);
     notifyListeners();
   }

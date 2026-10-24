@@ -193,6 +193,15 @@ Future<PlaybackStack> buildPlaybackStack({
     markStartupStep('sub.mediaSession.activate', mediaSessionWatch);
   }
 
+  // 自定义 / 默认封面变化：系统媒体元数据与桌面小组件立即跟上；主题取色
+  // 由 lyrics_display_stack 自己的 revision 订阅处理，播放页 / 顶栏 / 列表
+  // 各自订阅 revision。远端同步落地的封面也走同一回调（addChangeListener
+  // 不区分本地 / 远端）。
+  covers.addChangeListener((_) {
+    audioHandler?.refreshArtwork();
+    playbackObserver.refreshCoverPresentation();
+  });
+
   return (
     settings: catalog.settings,
     localPlaybackService: localPlaybackService,

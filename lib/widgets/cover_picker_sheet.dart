@@ -23,6 +23,7 @@ import '../services/covers/cover_image_codec.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
+import '../utils/responsive.dart';
 import 'app_network_image.dart';
 
 /// 文件选择（测试可注入；返回未归一的原始字节）。
@@ -42,9 +43,12 @@ Future<void> showCoverPickerSheet(
   CoverImagePicker? pickImage,
   CoverImageNormalizer? normalize,
 }) {
-  return M3EBottomSheet.show<void>(
-    context,
-    builder: (_) => CoverPickerSheet(
+  final l10n = AppLocalizations.of(context) ??
+      lookupAppLocalizations(const Locale('zh'));
+  return ResponsiveNavigation.showSimpleModal<void>(
+    context: context,
+    title: trackId == null ? l10n.coverDefaultTitle : l10n.coverTitle,
+    child: CoverPickerSheet(
       trackId: trackId,
       originalCoverUrl: originalCoverUrl,
       pickImage: pickImage,
@@ -86,11 +90,14 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
 
   String? get _previewUrl {
     if (_isDefault) return _store.defaultCoverUrl;
-    return _store.resolveForDisplayById(
+    return _store.resolveTrackCoverForId(
       widget.trackId,
       originalUrl: widget.originalCoverUrl,
     );
   }
+
+  /// 单曲预览的失败回退：默认封面；默认封面模式本身就是主图，不再回退。
+  String? get _previewFallbackUrl => _isDefault ? null : _store.defaultCoverUrl;
 
   bool get _hasCustom => _isDefault
       ? _store.defaultCoverUrl != null
@@ -145,7 +152,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
       } else {
         await _store.resetTrackCover(widget.trackId!);
       }
-      _showMessage(_isDefault ? l10n.coverDefaultUpdated : l10n.coverUpdated);
+      _showMessage(l10n.coverRestored);
     } catch (_) {
       _showMessage(l10n.coverUpdateFailed);
     } finally {
@@ -163,7 +170,6 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     final l10n = _l10n(context);
     final m3e = M3ETheme.of(context);
     final scheme = m3e.colorScheme;
-    final title = _isDefault ? l10n.coverDefaultTitle : l10n.coverTitle;
     final subtitle = _isDefault
         ? l10n.coverDefaultSubtitle
         : (_hasCustom ? l10n.coverCustomized : l10n.coverFollowSong);
@@ -175,8 +181,6 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(title, style: m3e.typeScale.titleMedium),
-            const SizedBox(height: 4),
             Text(
               subtitle,
               style: m3e.typeScale.bodyMedium.copyWith(
@@ -192,6 +196,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                   child: AppNetworkImage(
                     key: const Key('coverPickerPreview'),
                     url: _previewUrl,
+                    fallbackUrl: _previewFallbackUrl,
                     width: 120,
                     height: 120,
                     memCacheWidth:

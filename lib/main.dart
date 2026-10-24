@@ -232,13 +232,6 @@ void main() async {
   final desktop = await desktopFuture;
   final display = await displayFuture;
   markStartupStep('sub.lyricsDisplay.build', displayWatch);
-  // 自定义 / 默认封面变化：系统媒体元数据与桌面小组件立即跟上；主题取色
-  // 由 lyrics_display_stack 自己的 revision 订阅处理，播放页 / 顶栏 / 列表
-  // 各自订阅 revision。
-  local.customCovers.addChangeListener((_) {
-    playback.audioHandler?.refreshArtwork();
-    playback.observer.refreshCoverPresentation();
-  });
   _markStartup('主题/歌词显示', startup);
   // 热键注册与上面的装配并行；runApp 前确保就绪（含冷启动恢复态）。
   await hotkeysFuture;

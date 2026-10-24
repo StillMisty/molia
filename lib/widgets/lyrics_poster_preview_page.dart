@@ -478,15 +478,18 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             AppNetworkImage(
-              url: CustomCoverStore.instance.resolveForDisplayById(
+              // 缩略图主图只认真实封面；默认封面仅作加载失败回退。海报
+              // 生成仍走 [_displayCoverUrl]（含默认封面占位）。
+              url: CustomCoverStore.instance.resolveTrackCoverForId(
                 trackId,
                 originalUrl: widget.albumCoverUrl,
               ),
+              fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
               width: 28,
               height: 28,
               borderRadius: BorderRadius.circular(6),
-              memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio)
-                  .round(),
+              memCacheWidth:
+                  (28 * MediaQuery.of(context).devicePixelRatio).round(),
               fallbackIconSize: 16,
             ),
             const SizedBox(width: 8),

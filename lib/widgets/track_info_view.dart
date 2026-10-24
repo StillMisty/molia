@@ -337,10 +337,14 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                           ? l10n.coverCustomized
                           : l10n.coverFollowSong,
                       trailing: AppNetworkImage(
-                        url: covers.resolveForDisplayById(
+                        // 主图只认自定义 / 原始封面；默认封面是加载失败时
+                        // 的回退，不能当作这张缩略图的主图（否则远端封面坏
+                        // 了也看起来像「有封面」）。
+                        url: covers.resolveTrackCoverForId(
                           track.id,
                           originalUrl: track.artwork?.uri.toString(),
                         ),
+                        fallbackUrl: covers.defaultCoverUrl,
                         width: 32,
                         height: 32,
                         borderRadius: BorderRadius.circular(8),

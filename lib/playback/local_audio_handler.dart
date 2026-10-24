@@ -596,12 +596,13 @@ class LocalAudioHandler {
   }
 
   String? _artworkUriFor(SourceTrack track) {
-    if (_artworkBlocked()) return null;
     final coverUrl = _coverUrlOf(track);
     if (coverUrl == null || coverUrl.isEmpty) return null;
-    // 本地文件（自定义封面 / 下载封面）：Windows 的 WinRT 实现只认裸路径。
+    // 本地文件（自定义 / 默认 / 下载封面）不经过网络，省流模式下照常展示；
+    // Windows 的 WinRT 实现只认裸路径。
     final localUri = _localFileUriFor(coverUrl);
     if (localUri != null) return localUri;
+    if (_artworkBlocked()) return null;
     final parsed = parseArtUri(coverUrl);
     if (parsed == null) return null;
     if (_localArtworkSourceUrl == coverUrl && _localArtworkUri != null) {
@@ -628,14 +629,15 @@ class LocalAudioHandler {
   /// 元数据先发远程 URL 兜底，异步落到本地文件后补发一次。
   ///
   /// 只有网络封面需要本地化：`data:` / 已是 `file:` 的地址原样使用；
-  /// 省流模式直接跳过（媒体元数据不带封面）。
+  /// 省流模式只挡网络封面（本地自定义 / 默认封面已能直接展示）。
   void _maybeResolveArtwork(SourceTrack track) {
-    if (_artworkBlocked()) return;
     final coverUrl = _coverUrlOf(track);
     if (coverUrl == null || coverUrl.isEmpty) return;
+    if (_localFileUriFor(coverUrl) != null) return;
     final parsed = parseArtUri(coverUrl);
     if (parsed == null) return;
     if (parsed.scheme != 'http' && parsed.scheme != 'https') return;
+    if (_artworkBlocked()) return;
     if (_localArtworkSourceUrl == coverUrl && _localArtworkUri != null) return;
     if (!_resolvingArtwork.add(coverUrl)) return;
     unawaited(_resolveArtwork(coverUrl));

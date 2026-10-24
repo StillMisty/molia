@@ -13,10 +13,11 @@ import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'molia_mark.dart';
 
-/// 无封面 / 回退图也失败时的中性占位：主题容器色背景 + Molia 标志。
+/// 无封面 / 回退图也失败时的最终占位：主题容器色背景 + Molia 标志。
 ///
-/// [iconSize] 供共享元素飞行副本按两端真身插值（默认 64 = 卡片级占位）。
-Widget buildFallbackArtwork(
+/// 默认封面自身的加载失败也落到这里（[buildFallbackArtwork] 只在这里画
+/// 标志），因此不会递归重试默认封面。
+Widget _buildMoliaMark(
   BuildContext context, {
   Key? key,
   double iconSize = 64,
@@ -27,6 +28,33 @@ Widget buildFallbackArtwork(
     color: scheme.surfaceContainerHighest,
     alignment: Alignment.center,
     child: MoliaMark(size: iconSize, color: scheme.onSurfaceVariant),
+  );
+}
+
+/// 构建回退封面：全局默认封面优先，没有（或加载失败）时用 Molia 标志。
+///
+/// [iconSize] 供共享元素飞行副本按两端真身插值（默认 64 = 卡片级占位）。
+/// 默认封面是「歌曲没有封面」的占位；这里刻意不回落最后播放封面——当前
+/// 曲目缺图时显示上一首的封面会被误读成当前曲目的封面。
+Widget buildFallbackArtwork(
+  BuildContext context, {
+  Key? key,
+  double iconSize = 64,
+}) {
+  final defaultCoverUrl = CustomCoverStore.instance.defaultCoverUrl;
+  final mark = _buildMoliaMark(
+    context,
+    key: key ?? const ValueKey('default_image'),
+    iconSize: iconSize,
+  );
+  if (defaultCoverUrl == null) return mark;
+  return AppNetworkImage(
+    key: key ?? const ValueKey('default_cover_image'),
+    url: defaultCoverUrl,
+    fit: BoxFit.cover,
+    fallbackIconSize: iconSize,
+    memCacheWidth: playbackCoverDecodeEdge(context),
+    errorWidget: mark,
   );
 }
 
@@ -41,9 +69,8 @@ Widget buildDefaultArtwork(
   double iconSize = 64,
 }) {
   final defaultCoverUrl = CustomCoverStore.instance.defaultCoverUrl;
-  final lastPlayedImageUrl = context
-      .read<PlaybackProvider?>()
-      ?.lastPlayedImageUrl;
+  final lastPlayedImageUrl =
+      context.read<PlaybackProvider?>()?.lastPlayedImageUrl;
   final fallback = lastPlayedImageUrl != null
       ? AppNetworkImage(
           key: key ?? const ValueKey('last_played_image'),
@@ -51,13 +78,13 @@ Widget buildDefaultArtwork(
           fit: fit,
           fallbackIconSize: iconSize,
           memCacheWidth: playbackCoverDecodeEdge(context),
-          errorWidget: buildFallbackArtwork(
+          errorWidget: _buildMoliaMark(
             context,
             key: key,
             iconSize: iconSize,
           ),
         )
-      : buildFallbackArtwork(
+      : _buildMoliaMark(
           context,
           key: key ?? const ValueKey('default_image'),
           iconSize: iconSize,

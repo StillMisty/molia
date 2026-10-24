@@ -1253,7 +1253,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         // 空串表达「明确无封面」（音源补图前的起点）：传 null 会被当作
         // 「未提供覆盖」而回退到曲目当前（新）URL，旧图卡就变成新图了。
         artworkUrlOverride: _outgoingCenterArtworkUrl ?? '',
-        fallback: buildDefaultArtwork(context),
+        fallback: buildFallbackArtwork(context),
       ));
     }
     layers.add(_mainCoverLayer(
@@ -1438,7 +1438,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           fallbackIconSize: iconSize,
           memCacheWidth: coverEdge,
           placeholder: placeholder,
-          errorWidget: fallback,
+          // 缺图槽位也走同一回退（默认封面 → Molia 标志），不展示
+          // 「最近播放」封面冒充当前曲目。
+          errorWidget:
+              fallback ?? buildFallbackArtwork(context, iconSize: iconSize),
         );
       },
     );
@@ -1495,7 +1498,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     context,
                     track,
                     artDimension,
-                    fallback: buildDefaultArtwork(context),
+                    fallback: buildFallbackArtwork(context),
                     placeholderUrl: placeholderUrl,
                   ),
                 ),

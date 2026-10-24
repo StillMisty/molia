@@ -150,13 +150,13 @@ class TrackRowModel {
   final String? trailingText;
 
   /// 行身份：传入后由 [TrackRow] 逐行订阅「是否当前曲目」。
-  /// null = 不订阅（如队列行：当前曲目不在队列里）。
+  /// null = 不订阅（非曲目行，或不需要高亮当前曲目的场景；队列行也会传）。
   final TrackId? trackId;
 
   /// 自定义封面查询键（默认取 [trackId] 的 `sourceKey:songId`）。
   ///
-  /// 不传 [trackId] 的曲目行（队列 / 换源候选等）要显示自定义封面时显式给
-  /// 它；普通非曲目行留 null，不会去查封面索引。
+  /// 不传 [trackId] 的曲目行（换源候选等）要显示自定义封面时显式给它；
+  /// 普通非曲目行留 null，不会去查封面索引。
   final String? coverKey;
 
   /// 实际查询键：显式 [coverKey] 优先，否则回退 [trackId]。
@@ -508,7 +508,7 @@ class TrackRow extends StatelessWidget {
     required bool isCurrent,
     required bool isPlaying,
   }) {
-    Widget build(String? coverUrl) {
+    Widget buildCover(String? coverUrl) {
       final bool showsCheck = model.selected && surface.showCheckWhenSelected;
       final Widget cover = isCurrent && !showsCheck
           ? CurrentTrackCover(
@@ -545,10 +545,10 @@ class TrackRow extends StatelessWidget {
     }
 
     final key = model.effectiveCoverKey;
-    if (key == null) return build(model.coverUrl);
+    if (key == null) return buildCover(model.coverUrl);
     return ValueListenableBuilder<int>(
       valueListenable: CustomCoverStore.instance.revision,
-      builder: (context, _, __) => build(
+      builder: (context, _, __) => buildCover(
         CustomCoverStore.instance.resolveTrackCoverForKey(
           key,
           originalUrl: model.coverUrl,
