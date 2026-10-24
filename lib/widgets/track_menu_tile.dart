@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../utils/responsive.dart';
 import 'add_to_library.dart';
+import 'favorite_action.dart';
 import 'row_actions.dart';
 import 'track_row.dart';
 
@@ -31,10 +32,11 @@ List<RowAction> trackRowActionMenu(
   required VoidCallback onAddToPlaylist,
 }) {
   final l10n = _l10n(context);
+  final heart = FavoriteHeart(favorite: favorite);
   return [
     RowAction(
-      icon: favorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-      label: favorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+      icon: heart.icon,
+      label: heart.label(l10n),
       onPressed: onToggleFavorite,
     ),
     RowAction(
@@ -61,26 +63,9 @@ List<RowAction> trackRowActionMenuForTrack(
   return trackRowActionMenu(
     context,
     favorite: favorite,
-    onToggleFavorite: () => unawaited(_toggleTrackFavorite(context, track)),
+    // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
+    onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
     onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
-  );
-}
-
-/// 领域曲目收藏切换：菜单文案已表达状态，反馈只留 snackbar 确认。
-Future<void> _toggleTrackFavorite(BuildContext context, Track track) async {
-  final library = context.read<LibraryProvider?>();
-  if (library == null) return;
-  final outcome = await library.toggleFavoriteTrack(track);
-  if (!context.mounted) return;
-  final l10n = _l10n(context);
-  // 写失败不能报「已收藏 / 已取消」：菜单的下次打开仍按 provider 缓存的真实态渲染。
-  M3ESnackbar.show(
-    context,
-    message: outcome.isFailure
-        ? l10n.operationFailed
-        : outcome.isFavorite
-            ? l10n.favoriteAdd
-            : l10n.favoriteRemove,
   );
 }
 
