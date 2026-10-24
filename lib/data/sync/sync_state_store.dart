@@ -989,7 +989,9 @@ class SyncStateStore
     _dirty = false;
     try {
       final prefs = _prefs ??= await SharedPreferences.getInstance();
-      await prefs.setString(stateKey, jsonEncode(_toJson()));
+      if (!await prefs.setString(stateKey, jsonEncode(_toJson()))) {
+        throw StateError('同步状态写入被平台拒绝（setString 返回 false）');
+      }
       _persistedWrites++;
     } catch (e) {
       _dirty = true;
