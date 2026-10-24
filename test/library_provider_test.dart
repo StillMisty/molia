@@ -10,7 +10,6 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
-import 'package:molia/sources/source_track.dart';
 import 'support/sync_test_support.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -680,25 +679,6 @@ void main() {
       provider.playlistTracksView(favorites.id).tracks!.map((t) => t.songId),
       ['1', '2'],
     );
-  });
-
-  test('toggleFavoriteSearchItem：识别 _sourceTrack', () async {
-    final item = {
-      '_sourceTrack': SourceTrack(
-        sourceKey: 'wy',
-        origin: 'lx',
-        title: 'T',
-        artist: 'A',
-        album: '',
-        raw: {'songId': 7},
-      ),
-    };
-    expect(provider.isFavoriteSearchItem(item), isFalse);
-    final added = await provider.toggleFavoriteSearchItem(item);
-    expect(added?.isFailure, isFalse);
-    expect(added?.isFavorite, isTrue);
-    expect(provider.isFavoriteSearchItem(item), isTrue);
-    expect(await provider.toggleFavoriteSearchItem({'no': 'track'}), isNull);
   });
 
   test('导入后列表缓存刷新，重复导入幂等', () async {

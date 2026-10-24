@@ -46,8 +46,8 @@ List<RowAction> trackRowActionMenu(
   ];
 }
 
-/// 领域曲目（队列等自建行）：收藏态订阅与写入流程（收藏切换 + snackbar、
-/// 加入列表走统一目标弹层）收在这里，自建行不再各抄一份。
+/// 领域曲目（队列 / 搜索结果等自建行）：收藏态订阅与写入流程（收藏切换 +
+/// snackbar、加入列表走统一目标弹层）收在这里，自建行不再各抄一份。
 ///
 /// 订阅是逐行的（每行一个 `select`，只影响本行）——调用方按行调用即可，
 /// 不要在列表层调用后透传。
@@ -64,22 +64,6 @@ List<RowAction> trackRowActionMenuForTrack(
     favorite: favorite,
     onToggleFavorite: () => unawaited(_toggleTrackFavorite(context, track)),
     onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
-  );
-}
-
-/// 搜索结果项（Map 域自建行，item 由 SearchProvider 生成、含 `_sourceTrack`）。
-List<RowAction> trackRowActionMenuForSearchItem(
-  BuildContext context,
-  Map<String, dynamic> item,
-) {
-  final favorite = context.select<LibraryProvider?, bool>(
-    (provider) => provider?.isFavoriteSearchItem(item) ?? false,
-  );
-  return trackRowActionMenu(
-    context,
-    favorite: favorite,
-    onToggleFavorite: () => unawaited(_toggleSearchItemFavorite(context, item)),
-    onAddToPlaylist: () => unawaited(_addSearchItemToPlaylist(context, item)),
   );
 }
 
@@ -114,42 +98,6 @@ Future<void> _addTrackToPlaylist(BuildContext context, Track track) async {
         addedAt: DateTime.now().millisecondsSinceEpoch,
       ),
     ],
-  );
-}
-
-/// 搜索结果项收藏切换；无法识别来源曲目时静默忽略。
-Future<void> _toggleSearchItemFavorite(
-  BuildContext context,
-  Map<String, dynamic> item,
-) async {
-  final library = context.read<LibraryProvider?>();
-  if (library == null) return;
-  final outcome = await library.toggleFavoriteSearchItem(item);
-  if (outcome == null || !context.mounted) return;
-  final l10n = _l10n(context);
-  M3ESnackbar.show(
-    context,
-    message: outcome.isFailure
-        ? l10n.operationFailed
-        : outcome.isFavorite
-            ? l10n.favoriteAdd
-            : l10n.favoriteRemove,
-  );
-}
-
-/// 搜索结果项加入列表；无法识别来源曲目时静默忽略。
-Future<void> _addSearchItemToPlaylist(
-  BuildContext context,
-  Map<String, dynamic> item,
-) async {
-  final library = context.read<LibraryProvider?>();
-  if (library == null) return;
-  final track = library.playlistTrackFromSearchItem(item);
-  if (track == null) return;
-  await addTracksToLibraryTarget(
-    context,
-    provider: library,
-    tracks: [track],
   );
 }
 
