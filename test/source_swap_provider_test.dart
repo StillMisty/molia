@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
@@ -15,7 +14,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
-import 'support/settings_test_support.dart';
 
 /// 换源状态机：并行分组检索 / 失败隔离 / 库内原位替换 / 队列跟随。
 void main() {
@@ -44,11 +42,7 @@ void main() {
   setUp(() {
     repository = FakeLibraryRepository();
     backend = FakePlaybackBackend();
-    playback = PlaybackProvider(
-      settings: testSettingsRegistry(),
-      facade: DefaultPlaybackFacade(backend: backend),
-      messenger: FakeMessenger(),
-    );
+    playback = buildTestPlaybackProvider(backend: backend);
     library = LibraryProvider(
       repository: repository,
       playbackProvider: playback,

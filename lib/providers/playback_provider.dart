@@ -19,7 +19,6 @@ import '../models/play_mode.dart';
 import '../playback/playback_session_coordinator.dart';
 import '../services/data_saver_service.dart';
 import '../services/playback_observer.dart';
-import '../services/playback_session_store.dart';
 import '../services/playback_volume_store.dart';
 import '../services/source_swap/source_swap_settings.dart';
 import '../sources/source_manager.dart';
@@ -105,9 +104,12 @@ class PlaybackProvider extends ChangeNotifier {
   // 通知节流器 - 减少不必要的 UI 重建
   late final CategorizedNotifyThrottler _notifyThrottler;
 
-  /// 播放会话模块（组合根创建并注入；未注入时按默认存储 / 设置自建）：
+  /// 播放会话模块（组合根创建并注入，系统媒体会话 / 同步栈共用同一实例）：
   /// 恢复态 ↔ live 交接、恢复态快照构造、会话落盘唯一写者都在它里面。
-  late final PlaybackSessionCoordinator _session;
+  ///
+  /// 必须注入、没有回退：provider 自建 store + 协调者会形成第二个写队列，
+  /// 与组合根 / 同步栈持有的那个互不知情（`pendingWrite` 也无法跨队列排序）。
+  final PlaybackSessionCoordinator _session;
 
   /// 高频进度通道（真实播放转发 facade.position；恢复态显示上次进度）。
   ///
@@ -151,11 +153,11 @@ class PlaybackProvider extends ChangeNotifier {
   PlaybackProvider({
     required PlaybackFacade facade,
     required UiMessenger messenger,
+    required PlaybackSessionCoordinator sessionCoordinator,
     SourceManager? sourceManager,
     CatalogService? catalogService,
     DataSaverService? dataSaver,
     PlaybackObserver? observer,
-    PlaybackSessionCoordinator? sessionCoordinator,
     PlaybackVolumeStore? volumeStore,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
@@ -169,16 +171,8 @@ class PlaybackProvider extends ChangeNotifier {
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
         _settings = settings,
+        _session = sessionCoordinator,
         _volumeStore = volumeStore ?? PlaybackVolumeStore() {
-    // 会话模块：组合根注入（与系统媒体会话 / 同步栈共用同一实例）；
-    // 未注入时自建（测试直建 provider 的路径），恢复曲目展示经观察者接线。
-    _session = sessionCoordinator ??
-        PlaybackSessionCoordinator(
-          facade: facade,
-          store: PlaybackSessionStore(),
-          settings: _settings,
-          onRestoredTrack: _observer?.showRestoredTrack,
-        );
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
     // 启动恢复开关的重载钩子（跨设备同步应用远端值后由组合根触发）：钩子挂在
     // provider 上——协调者只报告「恢复态是否变化」，UI 通知由这里发。
@@ -374,7 +368,7 @@ class PlaybackProvider extends ChangeNotifier {
   ///
   /// 恢复态下 facade 队列为空：命中会话队列则从该曲目恢复播放。
   Future<void> playLocalQueueItemById(String trackId) async {
-    _notifyRouted(await _session.playQueueItemById(trackId));
+    _applyOutcome(await _session.playQueueItemById(trackId));
   }
 
   /// 停止本地播放并清空状态（同时丢弃恢复会话，避免下次启动又出现）。
@@ -388,7 +382,7 @@ class PlaybackProvider extends ChangeNotifier {
 
   Future<void> togglePlayPause() async {
     // 恢复态：点播放 = 用上次队列/下标重新取链，并跳回保存的进度（协调者路由）。
-    _notifyRouted(await _session.togglePlayPause());
+    _applyOutcome(await _session.togglePlayPause());
   }
 
   /// 恢复上次播放：以保存的队列/下标重新加载，再 seek 回保存的进度。
@@ -396,40 +390,43 @@ class PlaybackProvider extends ChangeNotifier {
   /// [startIndex] 指定从队列中另一首开始（恢复态点队列条目）。直链不持久化
   /// （会过期），这里走正常取链路径；失败时保留恢复态可重试。
   Future<void> resumeRestoredSession({int? startIndex}) async {
-    _notifyRouted(await _session.resume(startIndex: startIndex));
+    _applyOutcome(await _session.resume(startIndex: startIndex));
   }
 
   Future<void> seekToPosition(int positionMs) async {
     // 恢复装载期间的 seek / 恢复态只更新保存进度 / live 转发都由协调者路由。
-    await _session.seekToPosition(Duration(milliseconds: positionMs));
-    _notifyCategory('track');
+    _applyOutcome(
+      await _session.seekToPosition(Duration(milliseconds: positionMs)),
+    );
   }
 
   Future<void> skipToNext() async {
-    _notifyRouted(await _session.skipToNext());
+    _applyOutcome(await _session.skipToNext());
   }
 
   Future<void> skipToPrevious() async {
-    _notifyRouted(await _session.skipToPrevious());
+    _applyOutcome(await _session.skipToPrevious());
   }
 
   Future<void> setPlayMode(PlayMode mode) async {
-    await _session.setPlayMode(mode);
-    _notifyCategory('track');
+    _applyOutcome(await _session.setPlayMode(mode));
   }
 
-  /// 按命令路由结果通知 UI：恢复态曲目与队列都可能变（两条通道），
-  /// live 只有曲目 / 播放态变化，空操作不必通知。
-  void _notifyRouted(PlaybackCommandRoute route) {
-    if (route == PlaybackCommandRoute.none) return;
-    _notifyCategory('track');
-    if (route == PlaybackCommandRoute.restored) {
+  /// 按命令结果通知 UI：只失效真正变化的领域（协调者返回的 change set），
+  /// 空操作不必通知。provider 不再解读「命令由恢复态还是 live 处理」。
+  void _applyOutcome(PlaybackCommandOutcome outcome) {
+    if (outcome.changed.contains(PlaybackDomain.track)) {
+      _notifyCategory('track');
+    }
+    if (outcome.changed.contains(PlaybackDomain.queue)) {
       _notifyCategory('queue');
     }
   }
 
+  /// 循环播放模式：交给协调者的阶段感知实现（恢复态读保存会话，live 读
+  /// facade），UI 不再自己从快照推导下一模式。
   Future<void> togglePlayMode() async {
-    await setPlayMode(currentMode.next);
+    _applyOutcome(await _session.togglePlayMode());
   }
 
   /// 应用内音量（0..1，不含静音；静音由 [muted] 表达）。
@@ -733,11 +730,7 @@ class PlaybackProvider extends ChangeNotifier {
       );
       // 队列替换是会话命令：live 转发由协调者完成，返回前已把换源写进会话
       // （重开应用恢复新来源，而不是等下一分钟整份刷新）。
-      final route = await _session.replaceQueueTrack(uri, match);
-      if (route != PlaybackCommandRoute.none) {
-        _notifyCategory('track');
-        _notifyCategory('queue');
-      }
+      _applyOutcome(await _session.replaceQueueTrack(uri, match));
     } catch (e) {
       _logger.warning('自动换源失败: $e');
     } finally {

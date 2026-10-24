@@ -26,13 +26,13 @@ class _RecordingCoordinator extends PlaybackSessionCoordinator {
   final List<String> replacedUris = [];
 
   @override
-  Future<PlaybackCommandRoute> playQueueIndex(int index) {
+  Future<PlaybackCommandOutcome> playQueueIndex(int index) {
     queueIndexes.add(index);
     return super.playQueueIndex(index);
   }
 
   @override
-  Future<PlaybackCommandRoute> replaceQueueTrack(
+  Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
   ) {
@@ -82,12 +82,14 @@ void main() {
     PlaybackSessionCoordinator? sessionCoordinator,
   }) {
     final calls = <({String uri, Set<String> exclude})>[];
+    final registry = testSettingsRegistry();
     final provider = PlaybackProvider(
-      settings: testSettingsRegistry(),
+      settings: registry,
       facade: facade,
       messenger: FakeMessenger(),
       catalogService: catalogService,
-      sessionCoordinator: sessionCoordinator,
+      sessionCoordinator: sessionCoordinator ??
+          buildTestSessionCoordinator(facade: facade, settings: registry),
       autoSwapSettings: settings,
       autoSwapResolver: (t, {required excludeSourceKeys}) {
         calls.add((uri: t.id.uri, exclude: excludeSourceKeys));

@@ -10,9 +10,11 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/ports/library_store.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/playback_backend.dart';
+import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_observer.dart';
@@ -216,33 +218,56 @@ class FakeMessenger implements UiMessenger {
 /// 副作用观察者与组合根同构接线（先建观察者、provider 创建后挂接）；历史 /
 /// 封面补取等经它生效，会话落盘由注入的会话协调者承担（恢复曲目展示接观察者）。
 /// `provider.dispose` 会一并释放它们。
+/// 测试用会话协调者：与 provider 共用同一 facade / 设置注册表（组合根口径）。
+///
+/// 直建 [PlaybackProvider] 的测试一律经它装配，避免每处重复
+/// facade + store + settings 的接线；需要自定义 store / 观察者 / 功耗策略时
+/// 显式传入。
+PlaybackSessionCoordinator buildTestSessionCoordinator({
+  required PlaybackFacade facade,
+  SettingsRegistry? settings,
+  PlaybackSessionStore? sessionStore,
+  PlaybackObserver? observer,
+  PlaybackPowerPolicy? powerPolicy,
+}) {
+  return PlaybackSessionCoordinator(
+    facade: facade,
+    store: sessionStore ?? PlaybackSessionStore(),
+    settings: settings ?? SettingsRegistry(keys: kAllSettingsKeys),
+    onRestoredTrack: observer?.showRestoredTrack,
+    powerPolicy: powerPolicy,
+  );
+}
+
 PlaybackProvider buildTestPlaybackProvider({
-  FakePlaybackBackend? backend,
+  PlaybackBackend? backend,
+  PlaybackFacade? facade,
+  UiMessenger? messenger,
   CatalogService? catalogService,
   LibraryStore? libraryRepository,
   PlaybackSessionStore? sessionStore,
   SettingsRegistry? settings,
   Future<String?> Function(Track track)? artworkResolver,
 }) {
-  final b = backend ?? FakePlaybackBackend();
-  final facade = DefaultPlaybackFacade(backend: b);
-  final store = sessionStore ?? PlaybackSessionStore();
+  // 已持有 facade（要直接观察快照 / 进度通道）时优先用它；否则按 backend 自建。
+  final playbackFacade = facade ??
+      DefaultPlaybackFacade(backend: backend ?? FakePlaybackBackend());
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
   final registry = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
   final observer = PlaybackObserver(
-    facade: facade,
+    facade: playbackFacade,
     libraryRepository: libraryRepository,
     artworkResolver: artworkResolver,
   );
-  final session = PlaybackSessionCoordinator(
-    facade: facade,
-    store: store,
+  final session = buildTestSessionCoordinator(
+    facade: playbackFacade,
+    sessionStore: sessionStore,
     settings: registry,
-    onRestoredTrack: observer.showRestoredTrack,
+    observer: observer,
   );
   final provider = PlaybackProvider(
-    facade: facade,
-    messenger: FakeMessenger(),
+    facade: playbackFacade,
+    messenger: messenger ?? FakeMessenger(),
     catalogService: catalogService,
     observer: observer,
     sessionCoordinator: session,

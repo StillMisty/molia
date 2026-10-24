@@ -6,19 +6,26 @@ import 'package:flutter_media_session/flutter_media_session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/app/bootstrap/library_stack.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
-import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/media_session_copy.dart';
 import 'package:molia/playback/playback_commands.dart';
 import 'package:molia/providers/library_provider.dart';
-import 'package:molia/services/language_service.dart';
 import 'package:molia/services/lyrics_display/media_lyric_composer.dart';
 import 'package:molia/sources/source_track.dart';
 
 import '../support/fake_library_repository.dart';
 import '../support/fake_media_session_backend.dart';
+import '../support/fake_media_session_read_model.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
+
+/// 测试用文案来源：默认中文；语言切换用例直接改 [_copy].value。
+late ValueNotifier<MediaSessionCopy> _copy;
+
+MediaSessionCopy _copyFor(Locale locale) =>
+    MediaSessionCopy.of(lookupAppLocalizations(locale));
 
 SourceTrack _track({String? coverUrl}) => SourceTrack(
       sourceKey: 'wy',
@@ -31,231 +38,94 @@ SourceTrack _track({String? coverUrl}) => SourceTrack(
       raw: const {'songmid': 186016},
     );
 
-/// 只覆写状态的假服务：不触碰 just_audio 平台通道（同
-/// local_playback_backend_test 的模式）。
-class _FakeService extends LocalPlaybackService {
-  _FakeService()
-      : super(
-          resolver: (track, {String? quality}) async =>
-              'http://127.0.0.1/a.wav',
-        );
-
-  bool playingValue = false;
-  bool loadingValue = false;
-  SourceTrack? trackValue;
-  int skipToNextCalls = 0;
-  int skipToPreviousCalls = 0;
-  int stopCalls = 0;
-  PlayMode modeValue = PlayMode.sequential;
-  Duration positionValue = Duration.zero;
-  Duration durationValue = Duration.zero;
-  int queueRevisionValue = 0;
-  int seekRevisionValue = 0;
-
-  /// 控制动作调用台账（断言调用与顺序）。
-  final List<String> calls = [];
-  final List<Duration> seeks = [];
-  final List<int> queueIndexes = [];
-
-  @override
-  bool get hasTrack => trackValue != null;
-
-  @override
-  bool get isPlaying => playingValue;
-
-  @override
-  bool get isLoading => loadingValue;
-
-  @override
-  PlayMode get mode => modeValue;
-
-  @override
-  SourceTrack? get currentSourceTrack => trackValue;
-
-  @override
-  Duration get position => positionValue;
-
-  @override
-  Duration get duration => durationValue;
-
-  @override
-  List<SourceTrack> get queueTracks =>
-      trackValue == null ? const [] : [trackValue!];
-
-  @override
-  int get currentIndex => trackValue == null ? -1 : 0;
-
-  @override
-  int get queueRevision => queueRevisionValue;
-
-  @override
-  int get seekRevision => seekRevisionValue;
-
-  /// 模拟播放推进（位置通道 tick）。
-  void emitPosition(Duration position) {
-    positionValue = position;
-    notifyListeners();
-  }
-
-  /// 模拟真实位置跳转（用户 seek / 内部回跳）：版本号自增。
-  void emitSeek(Duration position) {
-    positionValue = position;
-    seekRevisionValue++;
-    notifyListeners();
-  }
-
-  /// 模拟播放 / 缓冲状态变化。
-  void emitPlaying({bool? playing, bool? loading}) {
-    if (playing != null) playingValue = playing;
-    if (loading != null) loadingValue = loading;
-    notifyListeners();
-  }
-
-  /// 模拟播放器解析出真实时长。
-  void emitDuration(Duration duration) {
-    durationValue = duration;
-    notifyListeners();
-  }
-
-  /// 模拟 App 内切换播放模式（后端 → 服务 → 快照链路）。
-  void emitMode(PlayMode mode) {
-    modeValue = mode;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> skipToNext() async {
-    skipToNextCalls++;
-  }
-
-  @override
-  Future<void> skipToPrevious() async {
-    skipToPreviousCalls++;
-  }
-
-  @override
-  Future<void> toggle() async {
-    calls.add('toggle');
-    playingValue = !playingValue;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> toggleMode() async {
-    calls.add('toggleMode');
-    modeValue = modeValue.next;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> seek(Duration position) async {
-    calls.add('seek');
-    seeks.add(position);
-    positionValue = position;
-    seekRevisionValue++;
-    notifyListeners();
-  }
-
-  @override
-  Future<void> playQueueIndex(int index) async {
-    calls.add('playQueueIndex');
-    queueIndexes.add(index);
-  }
-
-  @override
-  Future<void> stop({bool clear = true}) async {
-    stopCalls++;
-    calls.add('stop');
-    playingValue = false;
-    if (clear) trackValue = null;
-    notifyListeners();
-  }
-}
-
 /// 记录型命令面：handler 只该把系统动作翻译成这些命令。
 ///
-/// 不直接改服务状态，测试因此能同时断言「命令被调用」与「handler 没有绕过
-/// 命令面直写服务」；通知映射由测试显式 `emit*` 推进服务状态。
+/// 不直接改读取面，测试因此能同时断言「命令被调用」与「handler 没有绕过
+/// 命令面改播放状态」；通知映射由测试显式 `emit*` 推进读取面。
 class _FakeCommands implements PlaybackCommandPort {
   final List<String> calls = [];
 
-  /// 命令返回的路由（handler 不消费，测试可用来模拟恢复态）。
-  PlaybackCommandRoute route = PlaybackCommandRoute.live;
+  /// 命令返回的结果（handler 不消费，测试可用来模拟恢复态）。
+  PlaybackCommandOutcome outcome = PlaybackCommandOutcome.trackOnly;
 
   /// seek 完成闸门：验证 handler 等命令（及命令里的提交）返回才返回。
   Completer<void>? seekGate;
 
   @override
-  Future<PlaybackCommandRoute> play() async {
+  Future<PlaybackCommandOutcome> play() async {
     calls.add('play');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> pause() async {
+  Future<PlaybackCommandOutcome> pause() async {
     calls.add('pause');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> togglePlayPause() async {
+  Future<PlaybackCommandOutcome> togglePlayPause() async {
     calls.add('togglePlayPause');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> skipToNext() async {
+  Future<PlaybackCommandOutcome> skipToNext() async {
     calls.add('skipToNext');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> skipToPrevious() async {
+  Future<PlaybackCommandOutcome> skipToPrevious() async {
     calls.add('skipToPrevious');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> playQueueIndex(int index) async {
+  Future<PlaybackCommandOutcome> playQueueIndex(int index) async {
     calls.add('playQueueIndex:$index');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<PlaybackCommandRoute> replaceQueueTrack(
+  Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
   ) async {
     calls.add('replaceQueueTrack:$trackUri');
-    return route;
+    return outcome;
   }
 
   @override
-  Future<void> seekToPosition(Duration position) async {
+  Future<PlaybackCommandOutcome> seekToPosition(Duration position) async {
     calls.add('seek:${position.inMilliseconds}');
     final gate = seekGate;
     if (gate != null) await gate.future;
+    return outcome;
   }
 
   @override
-  Future<void> setPlayMode(PlayMode mode) async {
+  Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode) async {
     calls.add('setPlayMode:${mode.name}');
+    return outcome;
   }
 
   @override
-  Future<void> togglePlayMode() async {
+  Future<PlaybackCommandOutcome> togglePlayMode() async {
     calls.add('togglePlayMode');
+    return outcome;
   }
 
   @override
-  Future<void> stop() async {
+  Future<PlaybackCommandOutcome> stop() async {
     calls.add('stop');
+    return outcome;
   }
 }
 
 /// 创建 handler 并注入记录型后端；默认封面解析返回 null（不触网）。
 Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
-  _FakeService service, {
+  FakeMediaSessionReadModel readModel, {
   PlaybackCommandPort? commands,
   bool Function()? artworkBlocked,
   Future<String?> Function(String url)? artworkUriResolver,
@@ -263,8 +133,9 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
 }) async {
   final backend = FakeMediaSessionBackend();
   final handler = LocalAudioHandler(
-    service,
+    readModel,
     commands: commands ?? _FakeCommands(),
+    copy: _copy,
     backend: backend,
     artworkBlocked: artworkBlocked,
     artworkUriResolver: artworkUriResolver ?? (_) async => null,
@@ -280,10 +151,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
-    LanguageService.localeNotifier.value = const Locale('zh');
-  });
-  tearDown(() {
-    LanguageService.localeNotifier.value = null;
+    _copy = ValueNotifier(_copyFor(const Locale('zh')));
+    addTearDown(_copy.dispose);
   });
 
   group('mediaMetadataForTrack：系统媒体会话元数据', () {
@@ -296,6 +165,7 @@ void main() {
         duration: const Duration(seconds: 269),
         artworkUri:
             'http://p2.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg',
+        unknownArtist: '未知歌手',
       );
 
       expect(metadata.title, '晴天');
@@ -320,6 +190,7 @@ void main() {
         ),
         duration: null,
         artworkUri: null,
+        unknownArtist: '未知歌手',
       );
 
       expect(metadata.artist, '未知歌手');
@@ -345,7 +216,7 @@ void main() {
 
   group('元数据 / 状态 / 动作映射', () {
     test('初始同步：曲目元数据、暂停状态与完整动作集', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
 
@@ -388,7 +259,7 @@ void main() {
     });
 
     test('播放 / 缓冲状态映射', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
 
@@ -406,7 +277,7 @@ void main() {
     });
 
     test('播放模式：repeat / shuffle 与自定义动作文案图标同步', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
 
@@ -446,18 +317,18 @@ void main() {
     });
 
     test('语言切换后重新发布播放顺序动作文案', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
       expect(backend.playModeAction?.customLabel, '顺序播放');
 
-      LanguageService.localeNotifier.value = const Locale('en');
+      _copy.value = _copyFor(const Locale('en'));
       await pumpEventQueue();
       expect(backend.playModeAction?.customLabel, 'Sequential');
     });
 
     test('位置 tick 只更新状态，不重发元数据（非 Android 平台）', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       // Linux MPRIS 的 GetPosition 不插值，非 Android 平台保留按位置差的
       // 周期 state 判定；Android 关闭（见下方「媒体会话更新节流」组）。
@@ -476,19 +347,19 @@ void main() {
     });
 
     test('解析出真实时长后补发元数据', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
       expect(backend.lastMetadata?.duration, const Duration(seconds: 269));
 
-      service.durationValue = Duration.zero;
+      service.duration = Duration.zero;
       service.emitDuration(const Duration(seconds: 272));
       await pumpEventQueue();
       expect(backend.lastMetadata?.duration, const Duration(seconds: 272));
     });
 
     test('无曲目：清空元数据、idle 状态与动作', () async {
-      final service = _FakeService();
+      final service = FakeMediaSessionReadModel();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(service);
 
@@ -504,7 +375,7 @@ void main() {
     });
 
     test('正常进度推进不补发播放态（平台自身插值）', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(
         service,
@@ -524,7 +395,7 @@ void main() {
     });
 
     test('seekRevision 变化补发播放态（显式 seek / 内部回跳）', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (_, backend) = await _handler(
         service,
@@ -544,7 +415,8 @@ void main() {
 
     test('平台默认：Android 关闭周期 state，Linux 保留', () async {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      final androidService = _FakeService()..trackValue = _track();
+      final androidService = FakeMediaSessionReadModel()
+        ..currentTrack = _track();
       addTearDown(androidService.dispose);
       final (_, androidBackend) = await _handler(androidService);
       final androidStateCount = androidBackend.stateUpdates.length;
@@ -557,7 +429,7 @@ void main() {
       );
 
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      final linuxService = _FakeService()..trackValue = _track();
+      final linuxService = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(linuxService.dispose);
       final (_, linuxBackend) = await _handler(linuxService);
       final linuxStateCount = linuxBackend.stateUpdates.length;
@@ -573,7 +445,7 @@ void main() {
 
   group('metadata-only 补发（歌词覆盖 / 封面本地化）', () {
     test('歌词覆盖只发元数据，不重建播放态与动作', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
       final metadataCount = backend.metadataUpdates.length;
@@ -600,7 +472,7 @@ void main() {
     });
 
     test('无曲目时歌词覆盖不发空元数据', () async {
-      final service = _FakeService();
+      final service = FakeMediaSessionReadModel();
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
       final metadataCount = backend.metadataUpdates.length;
@@ -615,7 +487,8 @@ void main() {
 
     test('封面本地化完成只补发元数据', () async {
       const cover = 'https://p1.music.126.net/cover.jpg';
-      final service = _FakeService()..trackValue = _track(coverUrl: cover);
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: cover);
       addTearDown(service.dispose);
       final completer = Completer<String?>();
       final (_, backend) = await _handler(
@@ -641,7 +514,7 @@ void main() {
 
   group('歌词元数据覆盖', () {
     test('title / artist / album 覆盖，清除后还原', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
 
@@ -669,7 +542,8 @@ void main() {
     test('先发远程 URL 兜底，异步补发本地 file URI', () async {
       const cover =
           'http://p2.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg';
-      final service = _FakeService()..trackValue = _track(coverUrl: cover);
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: cover);
       addTearDown(service.dispose);
       final completer = Completer<String?>();
       final (_, backend) = await _handler(
@@ -692,7 +566,8 @@ void main() {
 
     test('本地化失败保留远程 URL（不影响播放）', () async {
       const cover = 'https://p1.music.126.net/cover.jpg';
-      final service = _FakeService()..trackValue = _track(coverUrl: cover);
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: cover);
       addTearDown(service.dispose);
       final (_, backend) = await _handler(
         service,
@@ -704,8 +579,8 @@ void main() {
 
     test('省流模式：元数据不带封面且不触发本地化', () async {
       var resolverCalls = 0;
-      final service = _FakeService()
-        ..trackValue = _track(coverUrl: 'https://p1.music.126.net/cover.jpg');
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: 'https://p1.music.126.net/cover.jpg');
       addTearDown(service.dispose);
       final (_, backend) = await _handler(
         service,
@@ -723,7 +598,8 @@ void main() {
     test('data URL 原样保留、不触发本地化', () async {
       const data = 'data:image/png;base64,AAAA';
       var resolverCalls = 0;
-      final service = _FakeService()..trackValue = _track(coverUrl: data);
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: data);
       addTearDown(service.dispose);
       final (_, backend) = await _handler(
         service,
@@ -740,7 +616,7 @@ void main() {
 
   group('系统控制回调：只翻译成命令', () {
     test('play / pause / stop / next / previous / seek / 队列跳转', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final commands = _FakeCommands();
       final (handler, backend) = await _handler(service, commands: commands);
@@ -774,15 +650,11 @@ void main() {
       await pumpEventQueue();
       expect(commands.calls.last, 'stop');
 
-      // 旧实现直接 toggle / stop / seek 服务；现在这些写路径只经命令面。
-      expect(service.calls, isEmpty);
-      expect(service.stopCalls, 0);
-      expect(service.skipToNextCalls, 0);
-      expect(service.skipToPreviousCalls, 0);
+      // 读取面只提供读事实；播放控制没有可直写的服务方法（唯一写面是命令面）。
     });
 
     test('播放顺序自定义动作：走命令面并刷新通知文案', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final commands = _FakeCommands();
       final (handler, backend) = await _handler(service, commands: commands);
@@ -791,8 +663,7 @@ void main() {
       await pumpEventQueue();
 
       expect(commands.calls, ['togglePlayMode']);
-      expect(service.calls, isEmpty);
-      // 命令面会改后端 → 服务会 emitMode；这里模拟结果，验证通知跟随读路径。
+      // 命令面会改后端 → 读取面会 emitMode；这里模拟结果，验证通知跟随读路径。
       service.emitMode(PlayMode.singleRepeat);
       await pumpEventQueue();
       expect(backend.playModeAction?.customLabel, '单曲循环');
@@ -801,7 +672,7 @@ void main() {
 
   group('收藏动作（通知栏）', () {
     test('收藏态驱动图标与文案：未收藏空心 / 已收藏实心', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       var favorite = false;
       final (handler, backend) = await _handler(service);
@@ -835,7 +706,7 @@ void main() {
     });
 
     test('收藏态没变：不重发动作', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
       handler.attachFavoriteActions(
@@ -852,7 +723,7 @@ void main() {
     });
 
     test('通知点击：落到注入的曲库写入，并立即换图标', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       var favorite = false;
       final toggled = <String>[];
@@ -876,7 +747,7 @@ void main() {
     });
 
     test('没绑定收藏回调（无曲库 / 平台不支持）：点击是空操作', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
       final updatesBefore = backend.actionUpdates.length;
@@ -892,7 +763,7 @@ void main() {
     });
 
     test('语言切换后收藏动作文案跟随', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
       handler.attachFavoriteActions(
@@ -901,7 +772,7 @@ void main() {
       );
       expect(backend.favoriteAction?.customLabel, '收藏');
 
-      LanguageService.localeNotifier.value = const Locale('en');
+      _copy.value = _copyFor(const Locale('en'));
       await pumpEventQueue();
       expect(backend.favoriteAction?.customLabel, 'Add to favorites');
     });
@@ -924,7 +795,7 @@ void main() {
       addTearDown(library.dispose);
 
       final track = _track();
-      final service = _FakeService()..trackValue = track;
+      final service = FakeMediaSessionReadModel()..currentTrack = track;
       addTearDown(service.dispose);
       final (handler, backend) = await _handler(service);
       wireNotificationFavorite(audioHandler: handler, libraryProvider: library);
@@ -944,22 +815,21 @@ void main() {
   });
 
   group('切歌 / seek 命令委托', () {
-    test('服务无曲目（冷启动恢复态）：仍走命令面，由它按阶段恢复', () async {
-      final service = _FakeService();
+    test('读取面无曲目（冷启动恢复态）：仍走命令面，由它按阶段恢复', () async {
+      final service = FakeMediaSessionReadModel();
       addTearDown(service.dispose);
-      final commands = _FakeCommands()..route = PlaybackCommandRoute.restored;
+      final commands = _FakeCommands()
+        ..outcome = PlaybackCommandOutcome.trackAndQueue;
       final (handler, _) = await _handler(service, commands: commands);
 
       await handler.skipToNext();
       await handler.skipToPrevious();
 
       expect(commands.calls, ['skipToNext', 'skipToPrevious']);
-      expect(service.skipToNextCalls, 0);
-      expect(service.skipToPreviousCalls, 0);
     });
 
-    test('服务已有真实曲目：同样只发命令，不在 handler 里判断 phase', () async {
-      final service = _FakeService()..trackValue = _track();
+    test('读取面已有真实曲目：同样只发命令，不在 handler 里判断 phase', () async {
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final commands = _FakeCommands();
       final (handler, _) = await _handler(service, commands: commands);
@@ -967,11 +837,10 @@ void main() {
       await handler.skipToNext();
 
       expect(commands.calls, ['skipToNext']);
-      expect(service.skipToNextCalls, 0);
     });
 
     test('seek 等命令（含命令内的提交）完成才返回', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final gate = Completer<void>();
       final commands = _FakeCommands()..seekGate = gate;
@@ -990,8 +859,8 @@ void main() {
       expect(returned, isTrue);
     });
 
-    test('自定义播放顺序动作：切模式命令，handler 不碰服务', () async {
-      final service = _FakeService()..trackValue = _track();
+    test('自定义播放顺序动作：切模式命令，handler 不碰读取面', () async {
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final commands = _FakeCommands();
       final (handler, _) = await _handler(service, commands: commands);
@@ -999,11 +868,10 @@ void main() {
       await handler.customAction(playModeActionId);
 
       expect(commands.calls, ['togglePlayMode']);
-      expect(service.calls, isEmpty);
     });
 
     test('其它自定义动作透传且不产生命令', () async {
-      final service = _FakeService()..trackValue = _track();
+      final service = FakeMediaSessionReadModel()..currentTrack = _track();
       addTearDown(service.dispose);
       final commands = _FakeCommands();
       final (handler, _) = await _handler(service, commands: commands);
@@ -1011,7 +879,6 @@ void main() {
       await handler.customAction('lx.other');
 
       expect(commands.calls, isEmpty);
-      expect(service.calls, isEmpty);
     });
   });
 

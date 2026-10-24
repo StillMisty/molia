@@ -12,15 +12,20 @@
 /// 作为命令面。
 library;
 
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/data/playback/local_playback_backend.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
+import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/media_session_copy.dart';
+import 'package:molia/playback/media_session_read_model.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/playback/queue_projection.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -218,14 +223,23 @@ class _Harness {
       observer: observer,
       sessionCoordinator: session,
     );
-    // 与 `buildPlaybackStack` 同一接线：系统动作经命令面写入会话。
-    handler =
-        LocalAudioHandler(service, commands: session, backend: mediaBackend);
+    // 与 `buildPlaybackStack` 同一接线：读取面投影真实服务，系统动作经命令面
+    // 写入会话。
+    copy = ValueNotifier(
+      MediaSessionCopy.of(lookupAppLocalizations(const Locale('zh'))),
+    );
+    handler = LocalAudioHandler(
+      LocalPlaybackMediaSessionReadModel(service),
+      commands: session,
+      copy: copy,
+      backend: mediaBackend,
+    );
     observer.attach();
   }
 
   final _FakeService service = _FakeService();
   final FakeMediaSessionBackend mediaBackend = FakeMediaSessionBackend();
+  late final ValueNotifier<MediaSessionCopy> copy;
   late final DefaultPlaybackFacade facade;
   late final _RecordingStore store;
   late final PlaybackObserver observer;
@@ -238,6 +252,7 @@ class _Harness {
     provider.dispose();
     service.dispose();
     mediaBackend.dispose();
+    copy.dispose();
   }
 }
 

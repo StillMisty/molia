@@ -32,8 +32,8 @@ import 'playback_commands.dart';
 import 'playback_power_policy.dart';
 import 'queue_projection.dart';
 
-// provider 仍只 import 协调者：路由枚举与命令面同源，避免再添一个 import。
-export 'playback_commands.dart' show PlaybackCommandRoute;
+// provider 仍只 import 协调者：命令结果与命令面同源，避免再添一个 import。
+export 'playback_commands.dart' show PlaybackCommandOutcome, PlaybackDomain;
 
 final _logger = Logger('molia.playback_session');
 
@@ -140,9 +140,12 @@ class PlaybackSessionCoordinator
   /// 上次整份落盘时间：进度 tick 节流与强制落盘共用同一口径。
   DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
 
-  /// 已入队的整份落盘次数：命令据此判断「快照监听是否已经替我提交」，
-  /// 避免同一动作写两遍（暂停 / 停止的已提交契约只保留一个写入口）。
-  int _sessionWrites = 0;
+  /// 最近一次整份写入的会话内容（命令提交点的去重依据）。
+  ///
+  /// 命令改完 facade 后统一走 [_commitLiveSession]：若快照监听已经写过同一份
+  /// 内容（切歌 / 暂停），这里按内容比较跳过重复写——不再用「写次数是否变化」
+  /// 猜监听有没有替我写。`flushSession` 仍无条件写（刷新 `savedAt` 的抢占语义）。
+  PlaybackSession? _lastWrittenSession;
 
   /// 上一帧是否在播放（播放中→暂停/停止时强制保存一次进度）。
   bool _wasPlaying = false;
@@ -278,48 +281,44 @@ class PlaybackSessionCoordinator
   /// 播放不改变持久化会话的内容（会话不存 isPlaying），不需要落盘；恢复态
   /// 的恢复流程自己会在末尾提交恢复进度。
   @override
-  Future<PlaybackCommandRoute> play() async {
+  Future<PlaybackCommandOutcome> play() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
     final live = _facade.snapshot.value;
     // 无曲目 / 已在播：与旧 handler 的 `hasTrack && !isPlaying` 判定同语义。
     if (live.current == null || live.isPlaying) {
-      return live.current == null
-          ? PlaybackCommandRoute.none
-          : PlaybackCommandRoute.live;
+      return PlaybackCommandOutcome.none;
     }
     await _facade.play();
-    return PlaybackCommandRoute.live;
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 暂停：恢复态没有真实播放（空操作）；live 转发 facade，返回前等会话提交。
   ///
   /// 「暂停 → 重开应用恢复暂停态」依赖进度与暂停时刻的队列：快照监听
-  /// （playing → paused）会强制整份落盘，这里只等写队列排空；只有它没触发
-  /// （本来就没在播 / 后端没推状态）时才补一次强制保存——同一动作只写一次。
+  /// （playing → paused）会强制整份落盘；[_commitLiveSession] 按内容去重，
+  /// 因此同一动作只会产生一次写请求，且返回写入完成之后。
   @override
-  Future<PlaybackCommandRoute> pause() async {
+  Future<PlaybackCommandOutcome> pause() async {
     if (phase == PlaybackSessionPhase.restored) {
-      return PlaybackCommandRoute.none;
+      return PlaybackCommandOutcome.none;
     }
     final live = _facade.snapshot.value;
-    if (live.current == null) return PlaybackCommandRoute.none;
-    final writesBefore = _sessionWrites;
+    if (live.current == null) return PlaybackCommandOutcome.none;
     await _facade.pause();
-    if (_sessionWrites == writesBefore) _maybeSaveSession(force: true);
-    await _store.pendingWrite;
-    return PlaybackCommandRoute.live;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 播放 / 暂停切换（UI 按钮语义）：按当前播放态走 [play] / [pause]，
   /// 两端因此共享同一条落盘规则，而不是各自再写一遍。
   @override
-  Future<PlaybackCommandRoute> togglePlayPause() async {
+  Future<PlaybackCommandOutcome> togglePlayPause() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
     final live = _facade.snapshot.value;
     if (live.current == null) {
       // 无曲目时保留 UI 既有语义：toggle 仍下发（后端空操作），不是错误。
       await _facade.toggle();
-      return PlaybackCommandRoute.live;
+      return PlaybackCommandOutcome.none;
     }
     return live.isPlaying ? pause() : play();
   }
@@ -328,101 +327,101 @@ class PlaybackSessionCoordinator
   ///
   /// 恢复态切歌语义上「切歌」包含起播——只移动下标会与队列条目点击不一致。
   @override
-  Future<PlaybackCommandRoute> skipToNext() async {
+  Future<PlaybackCommandOutcome> skipToNext() async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
       final next = session.index + 1;
-      if (next >= session.tracks.length) return PlaybackCommandRoute.none;
+      if (next >= session.tracks.length) return PlaybackCommandOutcome.none;
       return resume(startIndex: next);
     }
     await _facade.next();
-    // 切歌的整份落盘由快照监听触发；等它排空再返回（已提交语义）。
-    await _store.pendingWrite;
-    return PlaybackCommandRoute.live;
+    // 切歌的整份落盘由快照监听触发；提交点按内容去重并等它排空。
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 上一首：恢复态 = 从上一下标立即恢复播放（越界 no-op）。
   @override
-  Future<PlaybackCommandRoute> skipToPrevious() async {
+  Future<PlaybackCommandOutcome> skipToPrevious() async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
       final previous = session.index - 1;
-      if (previous < 0) return PlaybackCommandRoute.none;
+      if (previous < 0) return PlaybackCommandOutcome.none;
       return resume(startIndex: previous);
     }
     await _facade.previous();
-    await _store.pendingWrite;
-    return PlaybackCommandRoute.live;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 播放队列中指定下标的曲目（系统媒体队列跳转）；越界返回
-  /// [PlaybackCommandRoute.none]。
+  /// [PlaybackCommandOutcome.none]。
   ///
   /// 恢复态下 facade 队列为空：下标指向保存的会话队列，从该曲目恢复播放。
   @override
-  Future<PlaybackCommandRoute> playQueueIndex(int index) async {
+  Future<PlaybackCommandOutcome> playQueueIndex(int index) async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
       if (index < 0 || index >= session.tracks.length) {
-        return PlaybackCommandRoute.none;
+        return PlaybackCommandOutcome.none;
       }
       return resume(startIndex: index);
     }
     final queue = _facade.snapshot.value.queue;
-    if (index < 0 || index >= queue.length) return PlaybackCommandRoute.none;
+    if (index < 0 || index >= queue.length) {
+      return PlaybackCommandOutcome.none;
+    }
     await _facade.playQueueIndex(index);
-    await _store.pendingWrite;
-    return PlaybackCommandRoute.live;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 自动换源写回：把队列中 [trackUri] 的曲目原地替换为 [newTrack]。
   ///
   /// 只有 live 会处理：自动换源由真实播放失败触发，恢复态没有真实队列可换，
   /// 改保存的会话只会让 UI 显示一首并未播放的曲目——因此返回
-  /// [PlaybackCommandRoute.none]。未命中（uri 不在队列）同样是 no-op。
+  /// [PlaybackCommandOutcome.none]。未命中（uri 不在队列）同样是 no-op。
   ///
   /// live 返回前必须保证换源结果已写进会话，而不是等 1s 节流 / 1min 整份刷新：
-  /// 换源后又指向过期直链，进程此时被杀，重开应用恢复的还是旧来源。当前曲目
-  /// 的 id 变了时快照监听已经整份落盘（[_handleLiveSnapshot]），这里只在它没
-  /// 触发（同 id 换元数据 / 非当前槽位）时补写一次，同一动作只写一遍。
+  /// 换源后又指向过期直链，进程此时被杀，重开应用恢复的还是旧来源。提交点
+  /// 按内容去重：当前曲目 id 变了时快照监听已写同一份内容，不再补写；同 id
+  /// 换元数据 / 非当前槽位则由这里补一次。
   @override
-  Future<PlaybackCommandRoute> replaceQueueTrack(
+  Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
   ) async {
     if (phase == PlaybackSessionPhase.restored) {
-      return PlaybackCommandRoute.none;
+      return PlaybackCommandOutcome.none;
     }
     final live = _facade.snapshot.value;
-    if (live.current == null) return PlaybackCommandRoute.none;
+    if (live.current == null) return PlaybackCommandOutcome.none;
     if (!live.queue.any((track) => track.id.uri == trackUri)) {
-      return PlaybackCommandRoute.none;
+      return PlaybackCommandOutcome.none;
     }
-    final writesBefore = _sessionWrites;
     await _facade.replaceQueueTrack(trackUri, newTrack);
-    if (_sessionWrites == writesBefore) _maybeSaveSession(force: true);
-    await _store.pendingWrite;
-    return PlaybackCommandRoute.live;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackAndQueue;
   }
 
   /// 播放队列中指定 id 的曲目（队列面板点击）；未命中返回
-  /// [PlaybackCommandRoute.none]。
+  /// [PlaybackCommandOutcome.none]。
   ///
   /// 恢复态下 facade 队列为空：命中保存的会话队列则从该曲目恢复播放。
-  Future<PlaybackCommandRoute> playQueueItemById(String trackId) async {
+  Future<PlaybackCommandOutcome> playQueueItemById(String trackId) async {
     final queue = _facade.snapshot.value.queue;
     final index = queue.indexWhere((track) => track.id.uri == trackId);
     if (index < 0) {
       final session = _restoredSession;
-      if (session == null) return PlaybackCommandRoute.none;
+      if (session == null) return PlaybackCommandOutcome.none;
       final restoredIndex =
           session.tracks.indexWhere((track) => track.id.uri == trackId);
-      if (restoredIndex < 0) return PlaybackCommandRoute.none;
+      if (restoredIndex < 0) return PlaybackCommandOutcome.none;
       return resume(startIndex: restoredIndex);
     }
     await _facade.playQueueIndex(index);
-    await _store.pendingWrite;
-    return PlaybackCommandRoute.live;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// seek：恢复装载期间记下用户目标（恢复流程末尾以它为准），恢复态只更新
@@ -432,7 +431,7 @@ class PlaybackSessionCoordinator
   /// 不依赖 1s 节流（进程紧接着被杀时重开要落在新位置）。返回的 Future 在
   /// 写队列排空后结束。
   @override
-  Future<void> seekToPosition(Duration position) async {
+  Future<PlaybackCommandOutcome> seekToPosition(Duration position) async {
     if (_resumeRestoring) {
       _resumeSeekTarget = position;
     }
@@ -444,27 +443,23 @@ class PlaybackSessionCoordinator
       _position.setRestored(clamped);
       _publishRestoredSnapshot();
       await _store.save(_restoredSession!);
-      return;
+      return PlaybackCommandOutcome.trackOnly;
     }
     await _facade.seek(position);
-    _maybeSaveSession(force: true);
-    await _store.pendingWrite;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 换源：把队列中的 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
   ///
   /// facade 队列命中走真实替换（命中当前曲目会重新取链）；恢复态（facade 队列
   /// 为空）替换保存的会话队列并落盘。未命中不算失败：库内换源与队列跟随解耦。
-  /// 返回前等写队列排空（命中才可能产生写入）。
+  /// 返回前等写队列排空（命中才可能产生写入）；live 的提交点按内容去重，
+  /// 当前曲目换源（快照监听已写）不会重复写，非当前槽位 / 同 id 换元数据
+  /// 才补一次。
   Future<bool> replaceTrack(Track oldTrack, Track newTrack) async {
     final uri = oldTrack.id.uri;
     final live = _facade.snapshot.value;
-    // 当前曲目换源会改变 current.id，快照监听（_handleLiveSnapshot）已经
-    // 触发整份落盘；只有「非当前槽位命中」不会改变 current.id，才需要在这里
-    // 补写，否则同一次换源会写两遍。当前 id 未变（同源换元数据）时监听同样
-    // 不会触发，也要补写。
-    final currentHit = live.current?.id.uri == uri;
-    final currentIdChanged = currentHit && newTrack.id.uri != uri;
     var hit = false;
     var liveHit = false;
     if (live.queue.any((track) => track.id.uri == uri)) {
@@ -484,10 +479,12 @@ class PlaybackSessionCoordinator
       await _store.save(_restoredSession!);
       hit = true;
     }
-    // 非当前曲目换源不改变曲目 id，快照监听不会触发整份落盘；显式补一次，
-    // 否则重开应用恢复的还是旧队列（换源写回不该等下一分钟刷新）。
-    if (liveHit && !currentIdChanged) _maybeSaveSession(force: true);
-    if (hit) await _store.pendingWrite;
+    // live 的换源结果不能等下一分钟整份刷新：提交点保证返回前已写入。
+    if (liveHit) {
+      await _commitLiveSession();
+    } else if (hit) {
+      await _store.pendingWrite;
+    }
     return hit;
   }
 
@@ -497,23 +494,23 @@ class PlaybackSessionCoordinator
   /// 播放时会把该模式带给后端；live 立即整份落盘并等它写完（重开应用恢复的
   /// 是改后的模式）。
   @override
-  Future<void> setPlayMode(PlayMode mode) async {
+  Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode) async {
     await _facade.setMode(mode);
     final session = _restoredSession;
     if (session != null) {
       _restoredSession = session.copyWith(mode: mode);
       _publishRestoredSnapshot();
       await _store.save(_restoredSession!);
-      return;
+      return PlaybackCommandOutcome.trackOnly;
     }
-    _maybeSaveSession(force: true);
-    await _store.pendingWrite;
+    await _commitLiveSession();
+    return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 循环到下一个播放模式：以当前展示的模式为基准（恢复态读会话，live 读
   /// facade），系统通知与 App 内按钮因此不会各切各的。
   @override
-  Future<void> togglePlayMode() {
+  Future<PlaybackCommandOutcome> togglePlayMode() {
     final current = resolve(_facade.snapshot.value).mode;
     return setPlayMode(current.next);
   }
@@ -524,10 +521,11 @@ class PlaybackSessionCoordinator
   /// 拼不出「上一首 / 队列 / 模式 / 进度」。与 [stopPlayback] 的区别是语义
   /// 而不是写入方式：那个是 UI 的「本次会话结束」，会清空持久化。
   @override
-  Future<void> stop() async {
+  Future<PlaybackCommandOutcome> stop() async {
     await flushSession();
     await _facade.stop();
     await _store.pendingWrite;
+    return PlaybackCommandOutcome.trackAndQueue;
   }
 
   /// 停止播放并清空持久化会话（UI 的「本次会话结束」，避免下次启动又出现）。
@@ -543,14 +541,15 @@ class PlaybackSessionCoordinator
   ///
   /// [startIndex] 指定从队列中另一首开始（恢复态点队列条目）：此时不 seek
   /// 回保存进度（那是另一首曲目的进度）。直链不持久化（会过期），这里走正常
-  /// 取链路径。返回 [PlaybackCommandRoute.restored] 表示已接管（恢复数据丢弃）；
-  /// [PlaybackCommandRoute.none] 表示空操作或失败——失败时保留恢复态可重试。
-  Future<PlaybackCommandRoute> resume({int? startIndex}) async {
+  /// 取链路径。返回 [PlaybackCommandOutcome.trackAndQueue] 表示已接管（恢复
+  /// 数据丢弃，曲目与队列都换成了会话内容）；[PlaybackCommandOutcome.none]
+  /// 表示空操作或失败——失败时保留恢复态可重试。
+  Future<PlaybackCommandOutcome> resume({int? startIndex}) async {
     final session = _restoredSession;
     // 已有恢复流程在跑：忽略重复触发（装载中后端会推送曲目，后续操作走
     // 真实播放路径，不会再次进入本方法）。
     if (session == null || session.current == null || _resumeRestoring) {
-      return PlaybackCommandRoute.none;
+      return PlaybackCommandOutcome.none;
     }
     final index =
         (startIndex ?? session.index).clamp(0, session.tracks.length - 1);
@@ -575,9 +574,8 @@ class PlaybackSessionCoordinator
       _dropRestoredSession();
       // 立刻把恢复进度写回会话：装载时的强制保存记的是 0，
       // 若在节流窗口内被杀进程，下次冷启动会从 0 开始。
-      _maybeSaveSession(force: true);
-      await _store.pendingWrite;
-      return PlaybackCommandRoute.restored;
+      await _commitLiveSession();
+      return PlaybackCommandOutcome.trackAndQueue;
     } catch (e) {
       _logger.severe('恢复上次播放失败', e);
       // 已被真实播放接管（恢复快照已撤下）：交还进度通道，
@@ -585,7 +583,7 @@ class PlaybackSessionCoordinator
       if (_restoredSession == null) {
         _dropRestoredSession();
       }
-      return PlaybackCommandRoute.none;
+      return PlaybackCommandOutcome.none;
     } finally {
       _resumeRestoring = false;
       _resumeSeekTarget = null;
@@ -684,16 +682,37 @@ class PlaybackSessionCoordinator
 
   /// 整份落盘：重写会话 JSON（`savedAt` 随 [now] 刷新）并触发 `onSaved`。
   void _writeSession(PlaybackSnapshot live, DateTime now) {
+    final session = _sessionOf(live);
     _lastSessionSave = now;
-    _sessionWrites++;
-    unawaited(_store.save(PlaybackSession(
-      tracks: live.queue,
-      index: live.currentIndex,
-      position: _facade.position.value,
-      mode: live.mode,
-      context: live.context,
-    )));
+    _lastWrittenSession = session;
+    unawaited(_store.save(session));
   }
+
+  /// 命令的唯一会话提交点：facade 已改完后调用一次。
+  ///
+  /// 快照监听可能已经替同一份内容写过会话（切歌 / 暂停），这里按内容比较
+  /// 跳过重复写——不再用「写次数是否变化」猜监听有没有替我写。末尾等写队列
+  /// 排空，保证命令返回时会话已在本地（ADR-0010 的「返回即已提交」）。
+  Future<void> _commitLiveSession() async {
+    final live = _facade.snapshot.value;
+    if (_hasSavableSession(live)) {
+      final session = _sessionOf(live);
+      final last = _lastWrittenSession;
+      if (last == null || !_sameSession(last, session)) {
+        _maybeSaveSession(force: true);
+      }
+    }
+    await _store.pendingWrite;
+  }
+
+  /// 当前 live 快照对应的持久化会话形状（与 [_writeSession] 同源）。
+  PlaybackSession _sessionOf(PlaybackSnapshot live) => PlaybackSession(
+        tracks: live.queue,
+        index: live.currentIndex,
+        position: _facade.position.value,
+        mode: live.mode,
+        context: live.context,
+      );
 
   // ── 恢复态内部 ─────────────────────────────────────────
 
@@ -749,6 +768,27 @@ class PlaybackSessionCoordinator
     _facade.position.removeListener(_onPositionTick);
     _position.dispose();
   }
+}
+
+/// 两份会话内容是否相同（命令提交点的去重依据）。
+///
+/// 只比较真正会落盘的字段：队列内容（Track 深相等）、下标、进度、模式、上下文。
+/// 队列列表实例优先用 `identical` 快路径（后端按 `queueRevision` 复用同一份
+/// 不可变 List，位置 tick / 播放态变化不会重建它）。
+bool _sameSession(PlaybackSession a, PlaybackSession b) {
+  if (identical(a, b)) return true;
+  if (a.index != b.index ||
+      a.position != b.position ||
+      a.mode != b.mode ||
+      a.context != b.context) {
+    return false;
+  }
+  if (identical(a.tracks, b.tracks)) return true;
+  if (a.tracks.length != b.tracks.length) return false;
+  for (var i = 0; i < a.tracks.length; i++) {
+    if (a.tracks[i] != b.tracks[i]) return false;
+  }
+  return true;
 }
 
 /// 恢复态里的 progress 夹取：有曲目时长时 clamp 到 [0, duration]，否则只兜负值。
