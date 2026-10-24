@@ -797,15 +797,24 @@
 
 ## 6. M3E 设计语言
 
-- 壳：`M3EMaterialApp(data: M3EThemeData.fromMaterial(themedData), theme: themedData, ...)`；
+- 壳：`M3EMaterialApp(data: buildM3EThemeData(themedData), theme: themedData, ...)`；
   `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
+  `buildM3EThemeData` 把应用字体同步到 baseline + emphasized 两套 typeScale
+  （`M3EThemeData.fromMaterial` 只映射 baseline）。
 - 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；移动骨架逐像素不变）：
   两套骨架的导航 / 顶栏共享 spec 在 `lib/app/shell_chrome.dart`（目的地 → 图标 /
-  标签映射、设置按钮、窗口控件、titleSpacing / 拖动区只一份；骨架各自适配渲染），
+  标签映射、设置按钮、窗口控件、标题槽左缘 / 拖动区只一份；骨架各自适配渲染），
   布局阈值在 `lib/widgets/desktop_layout.dart`（壳层解析一次，页面 / 骨架只消费）。
+  顶栏本体是 `lib/app/shell_app_bar.dart::ShellAppBar`：`M3EAppBar.top(density:
+  compact)`（56dp 工具行）+ 可选底部槽（移动骨架的波浪进度）+ `WindowDragArea`
+  + `AnnotatedRegion<SystemUiOverlayStyle>`。**整条工具条（标题 + 按钮）放进
+  M3E 的 title 槽**：桌面窗口控件是一整块可变宽的 Row（约 180dp），而
+  `M3EAppBar.actions` 按 48dp/个预留标题宽度，直接放会重叠；title 槽拿到的是
+  左 16 / 右 4 的整宽，按钮由这一行自己排。
   顶栏是纯工具条（无当前页标题、无播放控制、无进度线）：最左是**品牌区**
-  （`MoliaMark` + 自定义应用名，贴窗口左缘（AppBar `titleSpacing` 处）、不再
-  与内容左缘对齐，整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
+  （`MoliaMark` + 自定义应用名，贴窗口左缘（`ShellChrome.appBarTitleSpacing`，
+  16 = 包内 `M3EAppBarTheme.titleInset`）处、不再与内容左缘对齐，品牌区左缘
+  从 12 变 16 是预期；整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
   设置 › 快捷键）；
   品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
   双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（图标按钮一律不做悬浮提示，
@@ -897,13 +906,44 @@
 - 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`
   （M3E 必需依赖，不要试图移除）；禁止 import `package:flutter/material.dart`，
   组件 import 用 `package:material_3_expressive/material_3_expressive.dart`。
+- **二级页 chrome**：`ResponsiveNavigation.showSecondaryPage(title:, body:)` 收口
+  窄屏全屏（`M3EAppBar.top`）与宽屏 `M3ESideSheet`。页面用 `embedded: true` 只出
+  正文（不带 Scaffold / AppBar），两种 chrome 由宿主提供；宽屏宽度用
+  `M3ESideSheetTheme.copyWith(width/maxWidth)` 覆盖到详情页档位（平板 520 /
+  桌面 720，包内默认上限只有 400），body 外包透明 `Material` 补 ink 祖先并补
+  键盘 bottom inset。
+- **页面型弹窗**：`showPageModal` —— 窄屏 `M3EBottomSheet`，宽屏 `M3EDialog.show`
+  + `PageModalCard`（`M3ECard` 取 `M3EDialogTheme` 的圆角 / elevation / scrim；
+  容器色取 `surface`，与页面自带 Scaffold 的底色一致）。简单弹层（定时关闭 /
+  来源分享）用 `showSimpleModal`：窄屏底部弹层、宽屏 `M3EDialog` 本体。底部弹层
+  header 因 `M3EBottomSheetHeader` 未公开导出，按 `fullScreenHeaderHeight`(64) /
+  `titleLarge` / `M3EDivider` 自绘。
+- **排序**：三处 `ReorderableListView`（`lib/widgets/settings/settings_reorderable_rows.dart`、
+  `lib/pages/favorites.dart`、`lib/widgets/collection_track_list.dart`）是长期例外——
+  material_3_expressive 1.2.0 未公开导出 `M3EListReorderHost` /
+  `M3EListReorderExclude`，公开的 `M3EList(reorder: true)` 会二次包裹行并顶掉行尾
+  操作；保留显式手柄与 `itemExtent`，白名单在
+  `test/architecture/m3e_component_usage_test.dart`。
+- **排版**：UI 一律 `context.typeScale`（`lib/theme/m3e_context.dart`），强调位
+  （品牌名 / 播放页标题 / 收藏合集标题）用 `emphasizedTypeScale`；不直接读
+  `ThemeData.textTheme`、不写 `w600/w800/w900`；护栏
+  `test/architecture/m3e_typography_test.dart`（`lyrics_poster_service.dart` 例外：
+  无 context、固定设计稿排版）。
+- **已知例外**（`m3e_component_usage_test` 白名单）：3 处 `ReorderableListView`；
+  2 处 `SelectableText`（M3E 无可选文本件）；热力图 `Tooltip`（需要 400ms wait，
+  `M3ETooltip` 无 wait API）；M3E 弹层 / 歌词滚动区 / 全局搜索遮罩 / 音量面板 /
+  壳层底栏的透明或容器 `Material`（补 ink 祖先 / 浮层表面，不是可点组件）；
+  全局搜索自建 route（pitfalls #57）。
 - 动效：**spatial（位置/尺寸/形状/缩放）走 motor 弹簧**——token 取
   `M3EMotion.*` / `MaterialSpringMotion.*`，落定统一 `snapToEnd`；
   **effects（透明度/颜色/文本）保持时长+曲线**，与 spatial 同帧耦合的透明度
   从同一份弹簧进度派生并截断 0..1（effects 不过冲）。共享元素飞行（顶栏⇄播放页）
   用 `aospSpatial` 无过冲弹簧并在落定帧零速度交接；不要再用
   `AnimationController` + `Curves`/`SpringSimulation` 手搓 spatial 运动
-  （交互细节见 `docs/pitfalls.md` #21）。
+  （交互细节见 `docs/pitfalls.md` #21）。壳层 tab fade-through 的控制器是
+  `BoundedSingleMotionController` + `M3EMotion.expressiveSpatialDefault`
+  （`snapToEnd`；`shellPageLayerPresentation` 消费处 clamp 0..1），形状配方仍在
+  `shellPageLayerPresentation` 的 Curves 里。
 - 设置页：首屏 6 个语义分区（外观 / 播放 / 歌词与展示 / 内容与来源 / 通用 / 数据），
   分组标题 + 分段卡片行：行表面统一走共享的 `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
@@ -922,9 +962,10 @@
   的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）；省流模式不单开
   子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
   与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
-  再关弹层：底部弹层由 `showAdaptiveModalPage(onDismissRequest:)` guard 读取
+  再关弹层：窄屏底部弹层由 `showPageModal(onDismissRequest:)` guard 读取
   内部 Navigator 的 `canPop()`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
-  并请求关闭，必须由 guard 挡下）；对话框 / 独立挂载由 `NavigatorPopHandler` 承接。
+  并请求关闭，必须由 guard 挡下）；宽屏设置弹窗是 `M3EDialog.show` + `PageModalCard`，
+  返回仍由页面自己的 `NavigatorPopHandler` 先退子页。对话框 / 独立挂载同样由它承接。
   弹层内 dialog 挂在 root navigator（`M3EDialog.show` 语义），关闭须显式
   `rootNavigator: true`。
 - 页面过渡 / 预测返回：Android 侧 `PageTransitionsTheme` 必须保留
@@ -935,9 +976,10 @@
   宿主自实现预览：宿主自己当手势观察者，guard（`onDismissRequest`）非空时也接管
   （material_3_expressive ≥ 1.1.7），提交后交给 guard 裁决——guard 拒绝则预览回弹、
   表面留在原位；1.1.6 及以下宿主在 guard 非空时直接放弃手势，那条链路会静默退化成
-  「无预览」的普通返回，故依赖下限 1.1.7（当前 1.2.0；原因见 `pubspec.yaml` 注释）。本仓库大屏的
-  侧边弹层（`showGeneralDialog`）与居中对话框（`showDialog`）不是 M3E 组件、不参与
-  页面过渡、无预览（侧边弹层的手势支持待补）。嵌套 Navigator（设置弹层内层）由
+  「无预览」的普通返回，故依赖下限 1.1.7（当前 1.2.0；原因见 `pubspec.yaml` 注释）。
+  二级页宽屏侧滑走 `M3ESideSheet.show`、页面型弹窗走 `M3EDialog.show` 路由，scrim /
+  弹簧 / 键盘 inset / 关闭手势都由 M3E 宿主处理；自建 route 只剩全局搜索遮罩。
+  嵌套 Navigator（设置弹层内层）由
   `SettingsPage._SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
   过渡保持 fade-forwards 并附一个预测返回 detector，只在
   `内层路由 isCurrent && popGestureEnabled && 内层 Navigator 还能 pop &&
@@ -955,8 +997,8 @@
   `lib/widgets/icon_swap.dart::IconSwap`（150ms emphasized 交叉淡入 + 0.85→1 轻微缩放、
   减弱动效跳变），不要在调用点裸写 `AnimatedSwitcher`；底部导航 `icon↔selectedIcon`
   由包内 `M3ENavIconScale` 负责，不要再叠。
-- 弹层观感差异（M3E 统一 inverseSurface Snackbar、无红底错误色、Dialog/BottomSheet 圆角与
-  spring 入场）属预期，不是 bug。
+- 弹层观感差异（M3E 统一 inverseSurface Snackbar、无红底错误色、`M3EDialog` /
+  `M3EBottomSheet` / `M3ESideSheet` 圆角与 spring 入场）属预期，不是 bug。
 - 播放页操作按作用对象分三域（见 ADR-0007）：**歌词域**（会话 / 来源 / 展示 / 导出）
   在歌词页，操作收敛为底部右侧 `M3EFabMenu`（换歌词 / 复制模式 / 歌词海报 /
   居中跟随；无歌词时 = 换歌词 + 歌词显示设置；无曲目隐藏）——`position: right`
@@ -1020,8 +1062,8 @@
 - 触感：全应用唯一入口 `lib/services/haptics.dart`（设置 › 通用 › 通用设置 ›
   震动反馈，默认开，设备本地键）；底栏重复点击的轻震由壳层给一次、页面不重复给
   （原「壳层不给触感」的口径已反转）。
-- 已知保留（无法等价替换）：带 `bottom:` 槽的 AppBar（2 处）、`_showCenterDialog`、
-  `ScaffoldMessenger` 兼容代码。
+- 已知保留（无法等价替换）：全局搜索遮罩的自建 route（`showGeneralDialog`）、
+  `ScaffoldMessenger` 兼容代码（M3ESnackbar 宿主）；组件级白名单见上文「已知例外」。
 
 ## 7. 验证与性能
 

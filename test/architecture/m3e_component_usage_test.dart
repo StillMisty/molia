@@ -6,22 +6,22 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// UI 必须走 `M3E*` 组件（`package:material_3_expressive`），裸 Material
 /// 组件会绕过 M3E 的形状 / 状态层 / 动效 / 无障碍约定——最典型的是
-/// `InkWell` 没有键盘激活语义、`SnackBar` 走的是另一套观感。迁移期还有
-/// 未替换的调用点，按「文件 → 标识符」逐条登记在本文件；禁止在调用点就地
-/// 开洞，否则口径会一处一处地回潮。
+/// `InkWell` 没有键盘激活语义、`SnackBar` 走的是另一套观感。迁移已完成，
+/// 剩余未替换的调用点都是长期例外，按「文件 → 标识符」逐条登记在本文件；
+/// 禁止在调用点就地开洞，否则口径会一处一处地回潮。
 ///
-/// 白名单是**存量清单**，不是永久豁免：
-/// - Phase 2（二级页侧边弹层）、Phase 3（页面型弹窗）、Phase 5（Shell
-///   AppBar）、Phase 6（排版 / 字重）完成后要删掉对应条目；
-/// - `ReorderableListView` 是长期例外：M3E 1.2.0 未导出 reorder host，
-///   收藏页 / 设置页 / 通用分段列表只能继续用框架实现。
+/// 白名单里只有长期例外（没有待迁移条目）：
+/// - `ReorderableListView`：M3E 1.2.0 未导出 reorder host，
+///   收藏页 / 设置页 / 通用分段列表只能继续用框架实现；
+/// - `SelectableText` / `Tooltip` / 透明或容器 `Material`：包内没有等价件
+///   （逐条理由见下表）。
 ///
 /// 扫描前去掉注释与字符串，只认精确标识符（`M3EDivider`、`M3ETooltip`
 /// 这类带前缀的写法不会误报；`DividerThemeData` 这类更长标识符同理）。
 /// 每个例外都在下面的表里写清理由；替换一项就删一条。
 const Map<String, Set<String>> _rawComponentAllowlist = {
   // 壳层底栏容器：容器色（surfaceContainer）+ 布局约束，不是可点表面；
-  // 等 Phase 6 排版迁移时再评估等价的 M3E 容器。
+  // M3E 没有等价的底栏容器，保留。
   'lib/app/desktop/now_playing_bar.dart': {'Material'},
   // 收藏页可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。
   'lib/pages/favorites.dart': {'ReorderableListView'},
@@ -47,8 +47,8 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   },
   // 热力图格子的值提示：需要 400ms wait，M3ETooltip 没有 wait API。
   'lib/widgets/statistics/listening_heatmap.dart': {'Tooltip'},
-  // 音量面板容器：surfaceContainerHigh + elevation 的浮层表面，
-  // Phase 1 已删外层 MouseRegion，容器迁移待 Phase 6。
+  // 音量浮层表面（surfaceContainerHigh + elevation）：M3E 没有等价的
+  // popover 容器，保留。
   'lib/widgets/volume_control.dart': {'Material'},
 };
 

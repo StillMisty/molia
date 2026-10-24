@@ -68,6 +68,9 @@ sources/playback。
 - UI 硬约定（`test/architecture/` 强制，细节见 `docs/architecture.md` §6）：`Icons.*_rounded`；
   颜色只走 ColorScheme/`AppSemanticColors`（透明度用 `withValues(alpha:)`）；优先 `M3E*` 组件；
   禁止 import `package:flutter/material.dart`；
+  排版走 `context.typeScale` / `emphasizedTypeScale`（`lib/theme/m3e_context.dart`），
+  `textTheme` 与 `w600/w800/w900` 由 `test/architecture/m3e_typography_test.dart` 拦截；
+  顶栏 / 弹层 / 排序的 M3E 口径见 `docs/architecture.md` §6；
 - 每次改动至少 `flutter analyze --no-pub` + `flutter test --no-pub`（迭代可只跑改动范围，提交前跑全量）；
 - Git：功能分支（主分支 `main`），提交 `type(scope): 描述`；密钥不进仓库。
 
