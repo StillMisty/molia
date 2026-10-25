@@ -88,8 +88,9 @@ void main() async {
   //   创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
   final windowSettingsWatch = Stopwatch()..start();
   final windowSettingsFuture = defaultTargetPlatform == TargetPlatform.linux ||
-          defaultTargetPlatform == TargetPlatform.windows
-      // 窗口几何只属于桌面；Android/iOS/macOS 不读这个设备键，别让首帧
+          defaultTargetPlatform == TargetPlatform.windows ||
+          defaultTargetPlatform == TargetPlatform.macOS
+      // 窗口几何只属于桌面；Android/iOS 不读这个设备键，别让首帧
       // 等一次用不到的 prefs 读取。
       ? WindowSettings.load()
       : Future<void>.value();
@@ -105,9 +106,10 @@ void main() async {
     exit(0);
   }
 
-  // 桌面窗口 chrome（Linux/Windows）：隐藏原生标题栏并恢复几何，**先不显示**
-  // （其余平台是空操作）。窗口在首帧回调里才亮出来——见 `window_chrome_io`
-  // 的 ensureInitialized 注释（先显示会让用户盯空白窗等待装配）。
+  // 桌面窗口 chrome（Linux/Windows/macOS）：隐藏原生标题栏（macOS 保留原生
+  // 标题栏）并恢复几何。Linux/Windows 先建不显、首帧回调里再亮出来（其余平台
+  // 是空操作）；macOS 的窗口随 NIB 显示（隐藏窗口会停帧，首帧回调里再 show
+  // 起来），那里 `show()` 只是幂等重复。
   final chromeWatch = Stopwatch()..start();
   await WindowChrome.ensureInitialized();
   markStartupStep('sub.windowChrome.init', chromeWatch);

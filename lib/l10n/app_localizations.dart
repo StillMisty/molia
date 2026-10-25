@@ -6426,6 +6426,12 @@ abstract class AppLocalizations {
   /// **'iOS updates come from the App Store; in-app install is not available.'**
   String get updateIosHint;
 
+  /// No description provided for @updateMacosHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Download macOS builds from the release page; in-app updates are not available.'**
+  String get updateMacosHint;
+
   /// No description provided for @updateGrantInstallPermission.
   ///
   /// In en, this message translates to:

@@ -45,9 +45,9 @@ class SingleInstance {
   static ServerSocket? _server;
   static File? _lockFile;
 
-  /// 与 [WindowChrome.isSupported] 同一平台面（Linux / Windows）：
+  /// 与 [WindowChrome.isSupported] 同一平台面（Linux / Windows / macOS）：
   /// 单实例的语义是「请主实例把窗口拉到前台」，窗口能力缺失的平台
-  /// （如 macOS 目前走 stub，`show()` 是空操作）上放行第二实例比误退出更安全。
+  /// （Android / iOS）上放行第二实例比误退出更安全。
   static bool get isSupported => WindowChrome.isSupported;
 
   /// 抢占单实例锁。

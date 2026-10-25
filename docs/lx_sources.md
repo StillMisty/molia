@@ -78,7 +78,7 @@ lib/data/catalog/            # SourceManagerMusicSource / SourceRegistryImpl / C
 lib/domain/ports/            # MusicSource / SourceRegistry / PlaybackFacade 等接口
 lib/playback/
   local_playback_service.dart # 本地播放队列（just_audio），输出播放器形状兼容 map
-  desktop_audio_init*.dart    # Windows/Linux media_kit 初始化
+  desktop_audio_init*.dart    # Windows/Linux media_kit 初始化（macOS 走 just_audio 原生 AVPlayer）
 ```
 
 ### 引擎要点

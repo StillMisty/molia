@@ -19,6 +19,7 @@
     molia-<version>-windows-x64.zip        （便携版产物）
     molia-<version>-linux-x64.tar.gz
     molia-<version>-ios-unsigned.zip       （不入清单：iOS 不走应用内更新）
+    molia-<version>-macos-<arch>-unsigned.zip（不入清单：macOS 走手动下载）
 """
 
 from __future__ import annotations

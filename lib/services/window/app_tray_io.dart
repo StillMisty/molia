@@ -2,11 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
+import 'package:nativeapi/nativeapi.dart' show Size;
 import 'package:tray_manager/tray_manager.dart';
 
 import 'tray_menu_labels.dart';
 
-/// Linux / Windows 桌面托盘：tray_manager（nativeapi 后端）实现。
+/// 桌面托盘（Linux / Windows / macOS）：tray_manager（nativeapi 后端）实现。
 ///
 /// 全仓只有本文件 import `tray_manager`（入口见 `app_tray.dart`）。
 ///
@@ -16,12 +17,16 @@ import 'tray_menu_labels.dart';
 class AppTray {
   AppTray._();
 
-  /// 托盘图标资产（64×64，品牌瓦片形式，亮 / 暗面板都可辨识）。
-  static const String _iconAsset = 'assets/icons/tray_icon.png';
+  /// 托盘图标资产：Windows / Linux 用彩色瓦片（64×64，亮 / 暗面板都可辨识）；
+  /// macOS 菜单栏用模板图（单色 + alpha，由系统按菜单栏明暗着色）。
+  static String get _iconAsset => Platform.isMacOS
+      ? 'assets/icons/adaptive_icon_monochrome.png'
+      : 'assets/icons/tray_icon.png';
 
   static final Logger _logger = Logger('molia.app_tray');
 
-  static bool get isSupported => Platform.isLinux || Platform.isWindows;
+  static bool get isSupported =>
+      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
 
   /// Linux 的托盘图标由桌面面板（StatusNotifierItem 宿主）承载：GNOME 需安装
   /// AppIndicator 扩展，否则图标不显示（设置页据此显示提示）。
@@ -57,7 +62,8 @@ class AppTray {
 
   static Future<bool>? _hostProbe;
 
-  /// 系统是否存在托盘宿主（Linux 的 StatusNotifierWatcher / Windows 恒有）。
+  /// 系统是否存在托盘宿主（Linux 的 StatusNotifierWatcher；Windows / macOS
+  /// 的菜单栏恒有）。
   ///
   /// 无宿主的桌面（GNOME 未装 AppIndicator 扩展、无面板的裸 WM）里图标不会
   /// 出现在任何地方：此时「关闭到托盘」会把窗口藏成一个没有找回入口的状态，
@@ -66,7 +72,7 @@ class AppTray {
   static Future<bool> detectHost() => _hostProbe ??= _detectHost();
 
   static Future<bool> _detectHost() async {
-    if (Platform.isWindows) return true;
+    if (Platform.isWindows || Platform.isMacOS) return true;
     // 不引入 D-Bus 客户端依赖：一次性进程查询（dbus-send 随 dbus 本体分发）。
     // 查询不确定（无工具 / 无 session bus）时按「有宿主」处理——保持用户
     // 设置的原意；只有明确回答「没有持有者」才算无宿主。
@@ -151,9 +157,16 @@ class AppTray {
       );
       _applyItemState();
 
+      if (Platform.isMacOS) {
+        // macOS 菜单栏：模板图（系统按明暗着色）+ 18pt 与系统状态项同档。
+        trayIcon
+          ..isIconTemplate = true
+          ..iconSize = const Size(width: 18, height: 18);
+      }
+
       trayIcon
         ..icon = image
-        // 右键弹菜单（Windows 惯例；Linux 由面板决定触发方式，但只有
+        // 右键弹菜单（Windows / macOS 惯例；Linux 由面板决定触发方式，但只有
         // clicked / rightClicked 才会把菜单暴露给面板，不能留默认的 none）。
         ..setContextMenuTrigger(ContextMenuTrigger.rightClicked)
         ..setContextMenu(_menu)

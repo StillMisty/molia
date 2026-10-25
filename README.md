@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/StillMisty/molia/releases"><img alt="Release" src="https://img.shields.io/github/v/release/StillMisty/molia?include_prereleases&color=6A8F7A&label=release"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-6A8F7A"></a>
-  <img alt="Platforms" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20iOS-6A8F7A">
+  <img alt="Platforms" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20Windows%20%C2%B7%20Linux%20%C2%B7%20iOS%20%C2%B7%20macOS-6A8F7A">
   <img alt="Flutter" src="https://img.shields.io/badge/Flutter-3.47-6A8F7A">
   <a href="https://github.com/StillMisty/molia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/StillMisty/molia/actions/workflows/ci.yml/badge.svg"></a>
 </p>
@@ -79,9 +79,9 @@ Molia 是一个用 Flutter 写的音乐播放器：内置 QQ 音乐、网易云�
 ### 桌面端
 
 - Material 3 Expressive 界面，动态取色 / 跟随当前封面取色 / 纯黑背景 / 自定义字体；
-- 常驻托盘、关闭到托盘、托盘菜单控制播放；Windows 任务栏缩略图按钮；
-- Linux MPRIS、Windows 系统媒体会话；全局快捷键；
-- 应用内检查更新与安装（Android / Windows / Linux 便携版）。
+- 常驻托盘（Linux / Windows / macOS 菜单栏）、关闭到托盘、托盘菜单控制播放；Windows 任务栏缩略图按钮；
+- Linux MPRIS、Windows / macOS 系统媒体会话；全局快捷键；
+- 应用内检查更新与安装（Android / Windows / Linux 便携版）；macOS 从发布页手动更新。
 
 <p align="center">
   <img src="docs/images/desktop.webp" width="720" alt="Linux 桌面端正在播放：Portra 400 / Arlo Parks">
@@ -96,9 +96,10 @@ Molia 是一个用 Flutter 写的音乐播放器：内置 QQ 音乐、网易云�
 | Android | Android 15（API 35）及以上 | `molia-<version>-android-arm64.apk`、`armv7`、`x86_64`，或 `.aab` |
 | Windows | Windows 10 / 11 x64 | `molia-<version>-windows-x64.zip`（便携版）或 `setup.exe`（安装版） |
 | Linux | x64，需系统安装 `mpv` / `libmpv2` | `molia-<version>-linux-x64.tar.gz`，解压后可 `./install.sh` 安装桌面入口 |
-| iOS | iOS 15 及以上，需自行签名 / 侧载 | `molia-<version>-ios-unsigned.zip`（无签名，仅供验证） |
+| iOS | iOS 18 及以上，需自行签名 / 侧载 | `molia-<version>-ios-unsigned.zip`（无签名，仅供验证） |
+| macOS | macOS 12 及以上（Apple Silicon / Intel 视构建机架构） | `molia-<version>-macos-<arch>-unsigned.zip`（ad-hoc 签名、未公证，仅供验证） |
 
-> Android 的应用内更新需要允许「安装未知应用」；Linux 的托盘图标需要系统有 StatusNotifier 宿主（GNOME 需 AppIndicator 扩展），缺失时会自动降级为无托盘。
+> Android 的应用内更新需要允许「安装未知应用」；Linux 的托盘图标需要系统有 StatusNotifier 宿主（GNOME 需 AppIndicator 扩展），缺失时会自动降级为无托盘。macOS 不提供应用内更新：在「系统设置 › 隐私与安全性」放行首次打开后，后续版本从发布页手动下载覆盖。
 
 ## 数据与隐私
 

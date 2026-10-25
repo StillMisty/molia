@@ -14,14 +14,26 @@ import 'window_bounds.dart';
 import 'window_bounds_store.dart';
 import 'window_settings.dart';
 
-/// Linux / Windows 桌面：window_manager 实现。
+/// 桌面（Linux / Windows / macOS）：window_manager 实现。
 ///
-/// 插件方法只在 [isSupported] 为真时调用：其余平台（Android / iOS / macOS）
-/// 没有注册插件实现，触达插件 API 会撞 MissingPluginException。
+/// 插件方法只在 [isSupported] 为真时调用：其余平台（Android / iOS）没有注册
+/// 插件实现，触达插件 API 会撞 MissingPluginException。
+///
+/// 标题栏口径按平台分开：Linux / Windows 隐藏原生标题栏、由 UI 自画窗口按钮
+/// （[usesCustomTitleBar]）；macOS 保留原生标题栏与红绿灯（系统习惯），窗口
+/// chrome 只负责几何记忆 / 隐藏 / 恢复 / 退出。
 class WindowChrome {
   WindowChrome._();
 
-  static bool get isSupported => Platform.isLinux || Platform.isWindows;
+  static bool get isSupported =>
+      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+
+  /// 是否由 UI 自画标题栏与窗口按钮（Linux / Windows）。
+  ///
+  /// macOS 走原生标题栏：`WindowControls` 只在 [usesCustomTitleBar] 为真时
+  /// 挂载，避免与系统红绿灯重复。
+  static bool get usesCustomTitleBar =>
+      Platform.isLinux || Platform.isWindows;
 
   static final Logger _logger = Logger('molia.window_chrome');
 
@@ -51,11 +63,15 @@ class WindowChrome {
     _onCloseRequested = handler;
   }
 
-  /// 创建窗口（隐藏原生标题栏 + 恢复几何），**不显示**；由 main 在 runApp
-  /// 前调用一次，首帧就绪后再调 [show] 把窗口亮出来。
+  /// 创建窗口（Linux / Windows 隐藏原生标题栏；macOS 保留原生标题栏）
+  /// 并恢复几何。Linux / Windows 在 `waitUntilReadyToShow` 期间不显示，首帧
+  /// 就绪后再调 [show] 把窗口亮出来；macOS 的窗口随 NIB 显示（隐藏窗口会
+  /// 停帧），[show] 在那里是幂等的重复调用。
   ///
-  /// `titleBarStyle: hidden` 之后系统标题栏与系统按钮都不复存在，
-  /// 窗口拖动全靠 UI 侧的 [WindowDragArea]，不要在别处再隐藏标题栏。
+  /// Linux / Windows 的 `titleBarStyle: hidden` 之后系统标题栏与系统按钮都不
+  /// 复存在，窗口拖动全靠 UI 侧的 [WindowDragArea]，不要在别处再隐藏标题栏。
+  /// macOS 走 `normal`：红绿灯与标题由系统绘制，UI 只保留拖动区（不显示
+  /// [usesCustomTitleBar] 的三键）。
   ///
   /// 同时打开 `preventClose`：原生关闭不再销毁窗口，而是转到
   /// [WindowListener.onWindowClose]，由注入的策略决定「隐藏到托盘」还是
@@ -70,14 +86,17 @@ class WindowChrome {
     if (!isSupported) return;
     await windowManager.ensureInitialized();
     windowManager.addListener(_listener);
+    if (Platform.isMacOS) _installReopenHandler();
     await windowManager.setPreventClose(true);
     await windowManager.waitUntilReadyToShow(
-      const WindowOptions(
-        titleBarStyle: TitleBarStyle.hidden,
+      WindowOptions(
+        titleBarStyle: usesCustomTitleBar
+            ? TitleBarStyle.hidden
+            : TitleBarStyle.normal,
         // 最小尺寸与桌面骨架的折叠阈值配套：再窄时侧栏 + 播放器列 + 队列
         // 面板会把内容区挤成破版式，直接在原生层拦住（初始 1280×800 见
         // 原生 runner 默认值）。
-        minimumSize: Size(900, 600),
+        minimumSize: const Size(900, 600),
       ),
     );
     // 显示前先摆好位置：show() 后再 setBounds 会肉眼可见地跳一下。
@@ -220,8 +239,9 @@ class WindowChrome {
 
   /// 设置窗口标题（任务栏 / 窗口列表 / Alt-Tab 显示）。
   ///
-  /// 隐藏原生标题栏后 UI 里看不到标题，但系统仍以它标识窗口：显示当前曲目
-  /// 让用户在任务栏一眼认出「哪个窗口在放什么」。非桌面平台空操作。
+  /// Linux / Windows 隐藏原生标题栏后 UI 里看不到标题，但系统仍以它标识
+  /// 窗口：显示当前曲目让用户在任务栏一眼认出「哪个窗口在放什么」。macOS
+  /// 的原生标题栏同样跟随这个值。非桌面平台空操作。
   static Future<void> setTitle(String title) async {
     if (!isSupported || title.isEmpty) return;
     try {
@@ -246,6 +266,31 @@ class WindowChrome {
   static const MethodChannel _windowChannel =
       MethodChannel('top.stillmisty.molia/window');
 
+  /// 是否已接管 macOS 的 Dock「重新打开」回调（进程内只需一次）。
+  static bool _reopenHandlerInstalled = false;
+
+  /// macOS：Dock 图标点击时 AppKit 只负责把应用带到前台；窗口在托盘休眠态
+  /// 下是 `orderOut` 的，直接显示会是一扇停在休眠占位的空窗。原生
+  /// `AppDelegate.applicationShouldHandleReopen` 经这条通道回到 Dart，统一走
+  /// [show]（markVisible + 重建界面 + 恢复最大化）。
+  ///
+  /// 与 Windows 的 Dart → 原生 `showAfterFirstFrame` 共用通道名，但方向相反
+  /// （这是原生 → Dart），互不冲突。
+  static void _installReopenHandler() {
+    if (_reopenHandlerInstalled) return;
+    _reopenHandlerInstalled = true;
+    _windowChannel.setMethodCallHandler((call) async {
+      if (call.method != 'reopen') return null;
+      try {
+        await show();
+      } catch (error) {
+        // 恢复失败不影响进程：用户还能从菜单栏托盘再次恢复。
+        _logger.warning('Dock 恢复窗口失败：$error');
+      }
+      return null;
+    });
+  }
+
   static Future<void> show() async {
     if (!isSupported) return;
     // 只有「关闭到托盘后的恢复」才走首帧后显示。启动首帧时 runner 已经挂了
@@ -253,6 +298,9 @@ class WindowChrome {
     // 实测会在首帧后崩（ucrtbase 0xc0000409）。
     final fromTray = AppPresence.instance.isTrayHidden;
     AppPresence.instance.markVisible();
+    // Dock 点击恢复时窗口可能在最小化态：先还原再显示（macOS 的
+    // `makeKeyAndOrderFront` 不会自动把窗口从 Dock 里拉回来）。
+    if (await windowManager.isMinimized()) await windowManager.restore();
     if (fromTray && Platform.isWindows) {
       await _showWindowsAfterFirstFrame();
     } else if (fromTray && Platform.isLinux) {

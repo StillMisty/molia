@@ -866,7 +866,7 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('通用子页：桌面托盘开关切换并持久化（仅桌面端）', (tester) async {
-    // Linux/Windows 才有托盘实现：测试跑在 Linux VM 上 isSupported 为 true
+    // Linux/Windows/macOS 才有托盘实现：测试跑在桌面 VM 上 isSupported 为 true
     // （与 WindowChrome 的既有约束一致，见 docs/pitfalls.md #30）；
     // 其余平台直接通过。
     if (!AppTray.isSupported) return;

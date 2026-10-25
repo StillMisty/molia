@@ -174,8 +174,9 @@
     `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
      UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
      也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
-    另：`flutter test` 跑在 Linux VM，`WindowChrome.isSupported` 为 true 属预期
-    （单测里顶栏会构建出三个窗口按钮，但按钮本身不发起插件调用）；除
+    另：`flutter test` 在 Linux / macOS 本机跑时 `WindowChrome.isSupported` 为 true 属预期
+    （单测里顶栏只在 `usesCustomTitleBar` 为 true 的 Linux / Windows 构建出三个
+    窗口按钮，按钮本身不发起插件调用；macOS 保留原生红绿灯）；除
     `ensureInitialized()`（仅 `main()` 与集成测试调用）外，任何构建期/测试期路径
     都不得调用插件 API，否则撞 `MissingPluginException`。
 31. **Linux 无系统钥匙串时 `flutter_secure_storage` 会抛异常，读取必须容错**：
@@ -297,7 +298,11 @@
     强制单实例（`lib/services/window/single_instance*.dart`）在窗口创建**之前**抢锁，
     第二实例连上主实例的 loopback 端口发 `show` 后 `exit(0)`——因此
     `SingleInstance.isSupported` 必须与 `WindowChrome.isSupported` 同一平台面：
-    窗口能力缺失的平台（如 macOS 走 stub）上若仍拦第二实例，用户会「点了图标什么都不发生」。
+    窗口能力缺失的平台（Android / iOS）上若仍拦第二实例，用户会「点了图标什么都不发生」。
+    macOS 现在有窗口能力（原生标题栏 + `window_manager` 隐藏 / 恢复），单实例一并启用；
+    Dock 图标点击走 `AppDelegate.applicationShouldHandleReopen` → 窗口通道 `reopen`
+    → `WindowChrome.show()`，不能只靠 AppKit 显示窗口：托盘休眠期间界面是占位树，
+    原生直接显示会是一扇空窗。
     开发/测试实例用 `MOLIA_SINGLE_INSTANCE_DISABLED=1` 放行（`tool/agent/_common.sh`
     已默认导出），否则本机开着应用时 `flutter run` / 集成测试会被单实例逻辑静默退出。
 42. **窗口几何记忆里「最大化」与「几何」必须分开读写**：最大化期间
@@ -878,3 +883,13 @@
     `drift_schemas` 快照与 `test/drift/molia` 都已退役。旧库文件保留在磁盘上，
     但不打开、不迁移；不要为它补迁移、兼容分支或「检测旧库」逻辑，需要旧数据
     时走 JSON 备份 / 跨设备同步重建。
+89. **macOS 目标默认开 App Sandbox：网络 / 下载目录 / 自定义目录都靠 entitlements**：
+    `macos/Runner/DebugProfile.entitlements` 与 `Release.entitlements` 必须保留
+    `network.client`（音源 / 歌词 / 更新 / 同步）、`network.server`（局域网同步的
+    入站端口）、`files.downloads.read-write`（默认 `~/Downloads/Molia`）与
+    `files.user-selected.read-write`（另存为 / 选目录）。缺 `network.client` 时
+    搜索与播放全部失败，但不会弹出权限提示（CFNetwork 直接拒绝请求）。
+    已知限制：沙盒下「下载设置 › 自定义保存目录」通过 NSOpenPanel 获得授权，
+    进程重启后授权失效（未做 security-scoped bookmark）；默认下载目录与同一次
+    会话内选择的目录不受影响。macOS 不做应用内更新（ADR-0015），发布产物是
+    ad-hoc 签名的 `-unsigned.zip`，首次打开需在「系统设置 › 隐私与安全性」放行。

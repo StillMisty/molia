@@ -240,13 +240,16 @@ void main() {
   });
 
   testWidgets('桌面窗口 chrome：隐藏标题栏后系统标题栏高度为 0', (tester) async {
-    // 仅 Linux/Windows 有窗口 chrome；Android/iOS 上 isSupported 为 false，
-    // 本用例直接通过（不触碰插件 API，见 docs/pitfalls.md #30）。
+    // 仅桌面（Linux/Windows/macOS）有窗口 chrome；Android/iOS 上 isSupported
+    // 为 false，本用例直接通过（不触碰插件 API，见 docs/pitfalls.md #30）。
     if (!WindowChrome.isSupported) return;
     // 与 lib/main.dart 同一条调用路径：初始化插件 → 隐藏标题栏 → 显示窗口。
     await WindowChrome.ensureInitialized();
-    final height = await WindowChrome.debugTitleBarHeight();
-    expect(height, 0, reason: '隐藏标题栏后系统标题栏高度应为 0，实际 $height');
+    // macOS 保留原生标题栏（红绿灯），只有 Linux / Windows 自画三键。
+    if (WindowChrome.usesCustomTitleBar) {
+      final height = await WindowChrome.debugTitleBarHeight();
+      expect(height, 0, reason: '隐藏标题栏后系统标题栏高度应为 0，实际 $height');
+    }
 
     // 托盘「关闭时最小化」走的隐藏 / 显示往返：隐藏后不可见，显示后恢复。
     await WindowChrome.hide();
@@ -256,7 +259,8 @@ void main() {
   });
 
   testWidgets('桌面托盘：创建 / 更新 / 销毁冒烟（无面板环境不得崩）', (tester) async {
-    // Linux/Windows 才有托盘实现；其余平台 isSupported=false，本用例直接通过。
+    // 桌面（Linux/Windows/macOS）才有托盘实现；其余平台 isSupported=false，
+    // 本用例直接通过。
     if (!AppTray.isSupported) return;
 
     const labels = TrayMenuLabels(

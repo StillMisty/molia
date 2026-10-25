@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:logging/logging.dart';
@@ -24,7 +26,19 @@ class SecureSettingsSecretStore implements SettingsSecretStore {
   static final Logger _logger = Logger('molia.settings_secret_store');
   static bool _readFailureLogged = false;
 
-  FlutterSecureStorage get _storage => const FlutterSecureStorage();
+  FlutterSecureStorage get _storage => _secureStorage;
+
+  /// macOS 走传统 Keychain（`usesDataProtectionKeychain: false`）：
+  /// 数据保护钥匙串需要 `keychain-access-groups` 权限，而该权限要求
+  /// provisioning profile；本仓的 macOS 产物是 ad-hoc 签名、无开发者账号，
+  /// 加上它会让构建产物只能在构建机上启动（见 flutter_secure_storage
+  /// README「macOS: Keychain Sharing requires provisioning」）。
+  static final FlutterSecureStorage _secureStorage =
+      defaultTargetPlatform == TargetPlatform.macOS
+          ? const FlutterSecureStorage(
+              mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+            )
+          : const FlutterSecureStorage();
 
   @override
   Future<String?> read(String key) async {

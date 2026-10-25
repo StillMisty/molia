@@ -87,7 +87,7 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
                 : settings.setGlobalEnabled(value),
           ),
         ),
-        // 显示主窗口依赖窗口能力（macOS 走 stub）：没有实现时不摆死行，
+        // 显示主窗口依赖窗口能力：没有实现的平台（Android / iOS）不摆死行，
         // 注册侧也按同一判定跳过（见 GlobalHotkeys）。
         for (final command in ShortcutBindings.commandsOf(scope)
             .where((command) =>

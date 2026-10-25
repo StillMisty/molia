@@ -2,8 +2,9 @@
 
 > **结论：保持按平台拆分**（`media_kit_libs_linux` + `media_kit_libs_windows_audio`）。
 > 换成官方的 `media_kit_libs_audio` 不改变任何功能，却会让 Android 每个 ABI 的 release APK
-> **+2.98 MB（本机实测）**、iOS 额外 vendor 一份 libmpv xcframework（macOS 本仓库根本没有构建目标，
-> 纯死重量），并在每次 Android 构建时强制从 GitHub 下载 4 个 ABI 的 11.5 MB jar。
+> **+2.98 MB（本机实测）**、iOS / macOS 各额外 vendor 一份 libmpv xcframework（本仓库这两端都走
+> `just_audio` 原生实现，media_kit 后端不激活，纯死重量），并在每次 Android 构建时强制从 GitHub
+> 下载 4 个 ABI 的 11.5 MB jar。
 >
 > 本文数字分三类标注：**【实测】**（本机跑出来的产物/网络数据）、**【源码】**（读 pubspec /
 > Gradle / CMake / Flutter SDK 源码确认）、**【三方】**（别人的说法，带链接）。
@@ -104,7 +105,7 @@ android/ios/macos 列表里**没有任何 media_kit 插件**（本仓库 `.flutt
 |---|---|---|
 | Android | `libmpv-android-audio-build` release `v1.1.8` 的 4 个 jar（`media_kit_libs_android_audio` 1.3.8 固定此版本） | jar 合计 **12,004,734 B（≈11.5 MiB）**，每次 Android 构建都会下载全部 4 个 ABI；jar 内 `libmpv.so` 见下表 **【实测】** |
 | iOS | podspec 里 `system("make")` → 下载 `libmpv-xcframeworks_v0.6.0_ios-universal-audio-default.tar.gz` 并 `s.vendored_frameworks = 'Frameworks/*.xcframework'` | 上游资产 **7.66 MB**（压缩包，v0.6.0，2023-09-24 发布）；`.app` 实际增量**未实测**（本机无 macOS 工具链） **【三方-GitHub API】+【源码】** |
-| macOS | 同上，`libmpv-xcframeworks_v0.6.0_macos-universal-audio-default.tar.gz` | 上游资产 **8.08 MB**；本仓库**没有 `macos/` 目录**，纯死重量 **【三方-GitHub API】+【仓库核对】** |
+| macOS | 同上，`libmpv-xcframeworks_v0.6.0_macos-universal-audio-default.tar.gz` | 上游资产 **8.08 MB**；本仓库有 `macos/` 构建目标，但播放走 `just_audio` 原生 AVPlayer（`desktop_audio_init_io` 只在 Windows/Linux 激活 media_kit），仍是纯死重量 **【三方-GitHub API】+【仓库核对】** |
 | Windows | CMake 下载 `mpv-dev-x86_64-20230924-git-652a1dd.7z`，bundle `libmpv-2.dll` | 与 umbrella 相同（同一包 `media_kit_libs_windows_audio` 1.0.9） **【源码】** |
 | Linux | 不下载 libmpv，用系统 libmpv（只编译静态 mimalloc） | 与 umbrella 相同 **【源码】** |
 
@@ -185,7 +186,8 @@ x86 ≈ +2.95 MB；若构建**不拆分 ABI 的 fat APK**，4 个 ABI 全带上�
    说明构建环境的境外连通性不能假定为稳定。
 3. **iOS 多 vendor 一份 libmpv xcframework**（上游同类资产 7.66 MB 压缩包，安装包增量未实测），
    而 iOS 走的是 `just_audio` 原生实现，media_kit 后端默认关闭。
-4. **macOS 纯死重量**：本仓库连 `macos/` 目录都没有（`ls` 核对），却被 umbrella 拉进依赖图。
+4. **macOS 纯死重量**：本仓库有 `macos/` 构建目标，但 macOS 播放走 `just_audio` 的 AVPlayer
+   实现（`just_audio_media_kit` 默认 `macOS: false`），umbrella 仍只会把它拉进依赖图。
 5. **收益为零**：umbrella 里的 linux/windows 两个包与现状同版本；android/ios/macos 三个包对本应用
    不提供任何功能（`ensureInitialized` 默认不激活这三端）。
 
@@ -213,7 +215,8 @@ x86 ≈ +2.95 MB；若构建**不拆分 ABI 的 fat APK**，4 个 ABI 全带上�
    → 改为引用对应平台的 libs（或 umbrella），并按 §5 的方式实测新 ABI 体积。
 2. **`just_audio_media_kit` 把 `android/iOS/macOS` 默认值改成 `true`**（升级时会从源码 diff 看出）。
    → 需要同步补齐对应 libs，否则移动端起播失败。
-3. **新增 macOS 构建目标并希望在那里用 media_kit**。→ 此时 umbrella 才开始"划算"。
+3. **把 macOS 播放也切到 media_kit**（当前 macOS 走 `just_audio` 原生 AVPlayer）。
+   → 此时要补 `media_kit_libs_macos_audio`，umbrella 才开始"划算"。
 4. **上游废弃按平台包、只剩 umbrella**（pub.dev 版本列表出现 deprecate 公告，或
    `media_kit_libs_linux`/`_windows_audio` 长期停更而 umbrella 仍在发版）。→ 改 umbrella
    并接受 §5 的体积，或用 `dependency_overrides` 只保留桌面两个包。

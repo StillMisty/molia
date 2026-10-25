@@ -1,5 +1,22 @@
 # 本地开发环境
 
+## macOS 桌面运行要求
+
+- **macOS 12 及以上 + Xcode（含 CocoaPods）**：首次 `flutter run` / `flutter build macos`
+  会跑 `pod install`；不需要在 Xcode 里选开发者团队——模板用 ad-hoc 签名
+  （`CODE_SIGN_IDENTITY = "-"`），`flutter build macos --release` 可直接出包。
+- **播放不依赖 libmpv**：macOS 走 `just_audio` 自带的 AVPlayer 实现，
+  `desktop_audio_init_io` 不会初始化 media_kit（见 `docs/media_kit_native_libs.md`）。
+- **App Sandbox 默认开启**：网络、默认下载目录（`~/Downloads/Molia`）与「另存为 /
+  选目录」都靠 `macos/Runner/*.entitlements`；缺 `network.client` 的表现是搜索 /
+  播放静默失败。自定义保存目录在进程重启后可能失去沙盒授权（未做 security-scoped
+  bookmark），默认下载目录不受影响（见 `docs/pitfalls.md` #89）。
+- **托盘 = 菜单栏图标**：关闭窗口默认隐藏到菜单栏（`设置 › 通用 › 桌面` 可改成直接
+  退出）；点 Dock 图标会经窗口通道恢复窗口。
+- **更新走手动**：macOS 没有应用内安装，发布产物是 `-unsigned.zip`；本机调试用
+  `flutter run -d macos`，不需要签名证书。
+- **iOS 最低版本 18.0**：`ios/Podfile` 与 Xcode 工程已同步；真机 / 模拟器需 iOS 18+。
+
 ## Linux 桌面运行要求
 
 - 本地播放需要 `libmpv`：`sudo pacman -S --needed mpv`（Debian/Ubuntu: `libmpv2`）。

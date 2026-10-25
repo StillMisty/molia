@@ -3439,6 +3439,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateIosHint => 'iOS 通过 App Store 更新，应用内不提供安装。';
 
   @override
+  String get updateMacosHint => 'macOS 版本请从发布页手动下载安装，应用内不提供自动更新。';
+
+  @override
   String get updateGrantInstallPermission => '去授权';
 
   @override

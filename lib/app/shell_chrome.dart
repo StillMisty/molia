@@ -99,7 +99,7 @@ class ShellChrome {
           semanticLabel: l10n.settingsTitle,
           icon: const Icon(Icons.settings_rounded),
         ),
-        if (WindowChrome.isSupported) const WindowControls(),
+        if (WindowChrome.usesCustomTitleBar) const WindowControls(),
         const SizedBox(width: 8),
       ];
 
