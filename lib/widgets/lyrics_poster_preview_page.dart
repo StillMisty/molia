@@ -452,6 +452,9 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       context,
       trackId: trackId,
       originalCoverUrl: widget.albumCoverUrl,
+      fileNameBase: widget.artistName.isEmpty
+          ? widget.trackTitle
+          : '${widget.trackTitle} - ${widget.artistName}',
     );
   }
 

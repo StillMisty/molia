@@ -6,7 +6,8 @@
 /// - 设置 › 外观「默认封面」行。
 ///
 /// 选图 → 归一化（`CoverImageCodec`）→ 本地存储（`CustomCoverStore`）→
-/// Snackbar 反馈。失败只显示友好文案，不把异常字符串带给用户。
+/// Snackbar 反馈；有真实封面时可直接进 `CoverViewer` 看原图 / 保存原图。
+/// 失败只显示友好文案，不把异常字符串带给用户。
 library;
 
 import 'dart:async';
@@ -25,6 +26,7 @@ import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
+import 'cover_viewer.dart';
 import 'track_artwork.dart';
 
 /// 文件选择（测试可注入；返回未归一的原始字节）。
@@ -36,11 +38,13 @@ typedef CoverImageNormalizer = Future<Uint8List> Function(Uint8List bytes);
 /// 打开封面选择弹层。
 ///
 /// [trackId] 为空 = 编辑全局默认封面；非空 = 编辑该曲目的自定义封面。
-/// [originalCoverUrl] 仅用于「跟随歌曲」时的预览。
+/// [originalCoverUrl] 仅用于「跟随歌曲」时的预览；[fileNameBase] 是
+/// 「查看原图 → 保存原图」的文件名基名（缺省用弹层标题）。
 Future<void> showCoverPickerSheet(
   BuildContext context, {
   TrackId? trackId,
   String? originalCoverUrl,
+  String? fileNameBase,
   CoverImagePicker? pickImage,
   CoverImageNormalizer? normalize,
 }) {
@@ -52,6 +56,7 @@ Future<void> showCoverPickerSheet(
     child: CoverPickerSheet(
       trackId: trackId,
       originalCoverUrl: originalCoverUrl,
+      fileNameBase: fileNameBase,
       pickImage: pickImage,
       normalize: normalize,
     ),
@@ -64,12 +69,14 @@ class CoverPickerSheet extends StatefulWidget {
     super.key,
     this.trackId,
     this.originalCoverUrl,
+    this.fileNameBase,
     this.pickImage,
     this.normalize,
   });
 
   final TrackId? trackId;
   final String? originalCoverUrl;
+  final String? fileNameBase;
   final CoverImagePicker? pickImage;
   final CoverImageNormalizer? normalize;
 
@@ -96,6 +103,14 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
   bool get _hasCustom => _isDefault
       ? _covers.defaultCoverUrl != null
       : _covers.realForId(widget.trackId).isCustom;
+
+  /// 「查看原图」地址：默认封面模式看默认图；曲目模式只看真实封面
+  /// （自定义 > 原始），没有真实封面时预览里的默认占位不提供原图。
+  String? get _viewerCoverUrl => _isDefault
+      ? _covers.defaultCoverUrl
+      : _covers
+          .realForId(widget.trackId, originalUrl: widget.originalCoverUrl)
+          .url;
 
   Future<void> _pickImage() async {
     if (_busy) return;
@@ -170,6 +185,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
         : _hasCustom
             ? l10n.coverCustomized
             : (_hasOriginal ? l10n.coverFollowSong : l10n.coverDefaultTitle);
+    final viewerUrl = _viewerCoverUrl;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -195,6 +211,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                   originalUrl: widget.originalCoverUrl,
                   width: 120,
                   height: 120,
+                  // 方形预览按 cover 裁切；原图查看走 cover_viewer 的 contain。
+                  fit: BoxFit.cover,
                   borderRadius: BorderRadius.circular(16),
                   memCacheWidth:
                       (120 * MediaQuery.of(context).devicePixelRatio).round(),
@@ -220,6 +238,30 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 _hasCustom ? l10n.coverChangeImage : l10n.coverChooseImage,
               ),
             ),
+            if (viewerUrl != null) ...[
+              const SizedBox(height: 8),
+              M3EButton.outlined(
+                key: const Key('coverPickerViewButton'),
+                size: M3EButtonSize.md,
+                onPressed: _busy
+                    ? null
+                    : () => unawaited(
+                          showCoverViewer(
+                            context,
+                            coverUrl: viewerUrl,
+                            title: _isDefault
+                                ? l10n.coverDefaultTitle
+                                : l10n.coverTitle,
+                            fileNameBase: widget.fileNameBase ??
+                                (_isDefault
+                                    ? l10n.coverDefaultTitle
+                                    : l10n.coverTitle),
+                          ),
+                        ),
+                icon: const Icon(Icons.zoom_out_map_rounded),
+                label: Text(l10n.coverViewOriginal),
+              ),
+            ],
             if (_hasCustom) ...[
               const SizedBox(height: 8),
               M3EButton.outlined(

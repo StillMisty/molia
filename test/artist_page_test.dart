@@ -65,11 +65,12 @@ void main() {
     bool hasMore = true,
     String name = '歌手名',
     String description = '简介文字',
+    String avatarUrl = 'http://img/avatar.jpg',
   }) =>
       ArtistDetail(
         id: '6452',
         name: name,
-        avatarUrl: 'http://img/avatar.jpg',
+        avatarUrl: avatarUrl,
         description: description,
         tracks: [for (var i = 0; i < perPage; i++) trackOf('$page-$i')],
         hasMore: hasMore,
@@ -121,6 +122,20 @@ void main() {
     expect(backend.lastRequest?.startIndex, 0);
     expect(backend.lastRequest?.tracks, hasLength(8));
     expect(backend.lastRequest?.context?.name, '歌手名');
+  });
+
+  testWidgets('头部头像：点击打开原图查看器', (tester) async {
+    await pumpPage(
+      tester,
+      (page) async =>
+          artistOf(page, avatarUrl: 'file:///tmp/artist-avatar.jpg'),
+    );
+
+    await tester.tap(find.byKey(const Key('artistHeaderAvatar')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsOneWidget);
+    expect(find.byKey(const Key('coverViewerEditButton')), findsNothing);
   });
 
   testWidgets('单曲行：点击从该曲开始播放（队列上下文为歌手名）', (tester) async {

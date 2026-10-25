@@ -215,6 +215,12 @@
   换源写回（手动 + 自动）把封面复制到新曲目键。全局默认封面只兜底「歌曲没有
   封面 / 远端加载失败」的展示，不参与取色、下载与标签嵌入；
   `ArtworkPaletteService` 只消费 `RealCover`。
+- **查看 / 保存原图**：`lib/widgets/cover_viewer.dart` 全屏 `contain` 展示
+  真实封面，方形缩略图仍统一 `cover` 裁切；保存经 `SaveAs` 写公共输出的
+  `covers/`（桌面另存为 / Android 系统「下载」/ iOS 文件 App）。网络封面由
+  `CoverImageFetcher` 直取原 URL（统一 UA / Referer、8MB 上限、缓存回填），
+  **不读**可能已被缩略图覆盖的封面缓存；省流生效时先确认。入口为歌曲信息 /
+  封面选择弹层 / 专辑 / 歌手 / 发现详情头图，播放页大封面保持切歌手势。
 - **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
   唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
   失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`
@@ -731,7 +737,7 @@
   iOS = 应用文档目录 `Molia/`（文件 App 可见）。桌面弹“另存为”并预填文件名 /
   默认目录，取消静默；Android / iOS 直接写默认目录并提示位置；对话框不可用时
   回退直接写。布局：音频在 `Molia/` 根下，备份 / 听歌统计进 `exports/`，海报
-  PNG 进 `posters/`；导出文件不落库、不参与同步；
+  PNG 进 `posters/`，封面原图进 `covers/`；导出文件不落库、不参与同步；
 - **缓存优先**：所选音质的完整音频缓存（`CacheService.audioCacheKeyForTrack`
   同名且无 `.part`）命中时直接拷贝不触网；歌词经注入的 `LyricsService`（缓存 →
   原生取词 → 跨平台回退，与播放页同一链路）；封面经 `ArtworkCache.bytesOf`

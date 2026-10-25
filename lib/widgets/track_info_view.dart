@@ -15,6 +15,7 @@ import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../providers/sources_provider.dart';
 import '../services/cache_service.dart';
+import '../services/covers/cover_resolution.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
 import '../services/track_local_data_service.dart';
@@ -25,6 +26,7 @@ import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
 import 'settings/settings_tiles.dart';
 import 'cover_picker_sheet.dart';
+import 'cover_viewer.dart';
 import 'track_artwork.dart';
 import 'sleep_timer_sheet.dart';
 import 'track_actions.dart';
@@ -337,11 +339,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                         fallbackIconSize: 16,
                       ),
                       onTap: () => unawaited(
-                        showCoverPickerSheet(
-                          context,
-                          trackId: track.id,
-                          originalCoverUrl: track.artwork?.uri.toString(),
-                        ),
+                        _openCover(context, track, covers, l10n),
                       ),
                     );
                   },
@@ -415,6 +413,44 @@ class _TrackInfoViewState extends State<TrackInfoView> {
           ],
         ],
       ),
+    );
+  }
+
+  /// 封面行：有真实封面先看原图（查看器内可换封面）；没有真实封面时
+  /// 保持原行为直接进封面选择弹层。
+  Future<void> _openCover(
+    BuildContext context,
+    Track track,
+    CoverResolver covers,
+    AppLocalizations l10n,
+  ) async {
+    final url = covers.realOf(track).url;
+    final fileNameBase = track.artistLabel.isEmpty
+        ? track.title
+        : '${track.title} - ${track.artistLabel}';
+    if (url == null) {
+      await showCoverPickerSheet(
+        context,
+        trackId: track.id,
+        originalCoverUrl: track.artwork?.uri.toString(),
+        fileNameBase: fileNameBase,
+      );
+      return;
+    }
+    final action = await showCoverViewer(
+      context,
+      coverUrl: url,
+      title: l10n.coverLabel,
+      subtitle: track.title,
+      fileNameBase: fileNameBase,
+      allowEdit: true,
+    );
+    if (!context.mounted || action != CoverViewerAction.editCover) return;
+    await showCoverPickerSheet(
+      context,
+      trackId: track.id,
+      originalCoverUrl: track.artwork?.uri.toString(),
+      fileNameBase: fileNameBase,
     );
   }
 

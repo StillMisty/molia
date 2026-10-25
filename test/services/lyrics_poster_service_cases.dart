@@ -33,6 +33,48 @@ void main() {
     );
   }
 
+  test('方形封面按 cover 居中裁切，不拉伸', () {
+    expect(
+      coverCropSourceRect(
+        sourceWidth: 200,
+        sourceHeight: 100,
+        targetWidth: 100,
+        targetHeight: 100,
+      ),
+      const Rect.fromLTWH(50, 0, 100, 100),
+      reason: '16:9 源图：裁掉左右，保留中间正方形',
+    );
+    expect(
+      coverCropSourceRect(
+        sourceWidth: 100,
+        sourceHeight: 200,
+        targetWidth: 100,
+        targetHeight: 100,
+      ),
+      const Rect.fromLTWH(0, 50, 100, 100),
+      reason: '9:16 源图：裁掉上下',
+    );
+    expect(
+      coverCropSourceRect(
+        sourceWidth: 100,
+        sourceHeight: 100,
+        targetWidth: 100,
+        targetHeight: 100,
+      ),
+      const Rect.fromLTWH(0, 0, 100, 100),
+      reason: '方形源图：完整使用',
+    );
+    expect(
+      coverCropSourceRect(
+        sourceWidth: 0,
+        sourceHeight: 100,
+        targetWidth: 100,
+        targetHeight: 100,
+      ),
+      Rect.zero,
+    );
+  });
+
   test('主行 + 翻译/罗马音：渲染成功且比无扩展行更高', () async {
     final plain = await render(const [
       PosterLyricLine(text: 'Hello'),

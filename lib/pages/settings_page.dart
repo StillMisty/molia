@@ -651,7 +651,12 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                               .round(),
                       fallbackIconSize: 20,
                     ),
-                    onTap: () => unawaited(showCoverPickerSheet(context)),
+                    onTap: () => unawaited(
+                      showCoverPickerSheet(
+                        context,
+                        fileNameBase: l10n.coverDefaultTitle,
+                      ),
+                    ),
                   ),
                 ),
                 // 同步快捷键：与同步设置 › 内容共用同一类别状态（不是第二份

@@ -230,8 +230,18 @@
   解码 → 烘焙 EXIF 方向 → 最长边 1024px → JPEG 85 的唯一实现；不可读图片抛
   `CoverImageException`，UI 只显示友好文案。
 - **Cover picker sheet（封面选择弹层）** — `lib/widgets/cover_picker_sheet.dart`：
-  每曲封面 / 默认封面共用的选择、预览与重置交互（歌曲信息页 / 海报预览 /
-  设置外观三个入口，不各写一套）。
+  每曲封面 / 默认封面共用的选择、预览、查看原图与重置交互（歌曲信息页 /
+  海报预览 / 设置外观三个入口，不各写一套）。
+- **Cover viewer（封面原图查看器）** — `lib/widgets/cover_viewer.dart`：全屏
+  `BoxFit.contain` 展示真实封面（方形缩略图仍 `cover` 裁切），底部「保存原图」
+  经 `SaveAs` 落到公共输出的 `covers/`；网络封面直取原 URL（不走缩略图缓存），
+  省流生效时先确认。入口：歌曲信息 / 封面选择弹层 / 专辑 / 歌手 / 发现详情
+  头图；播放页大封面不挂查看器。
+- **Cover image fetcher（封面原图读取）** — `lib/services/covers/cover_image_fetcher.dart`：
+  本地文件 / data URL / 网络直取。网络封面**不读** `ArtworkCache` 缩略图缓存
+  （`flutter_cache_manager` 会把原 URL 缓存键覆盖成缩小图），避免把 96px
+  缩略图当原图保存；下载经 `cover_bytes_downloader.dart`（统一 UA / Referer、
+  8MB 上限、缓存回填）。
 
 ## 应用壳与导航
 

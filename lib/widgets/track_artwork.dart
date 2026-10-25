@@ -8,6 +8,9 @@
 ///
 /// 消费方不再各自 `ValueListenableBuilder(revision)` + `resolve...`：列表行、
 /// 顶栏、播放器、AI DJ、歌曲信息页都通过 [TrackArtwork] 渲染。
+///
+/// 方形缩略图一律按 `BoxFit.cover` 裁切；「查看原图」是独立的全屏
+/// `CoverViewer`（`contain`），不要在这里改成 contain 来兼顾两种语义。
 library;
 
 import 'package:material_ui/material_ui.dart';

@@ -14,6 +14,7 @@ import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/cover_viewer.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/discover_actions.dart';
 import '../widgets/paged_list_auto_load.dart';
@@ -306,6 +307,69 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     );
   }
 
+  /// 头部封面：方形裁切；有图时点击看原图 / 保存原图。
+  Widget _buildHeaderCover(
+    BuildContext context,
+    AppLocalizations l10n,
+    DiscoverPlaylist info,
+    String? cover,
+    ThemeData theme,
+  ) {
+    final image = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        width: 96,
+        height: 96,
+        child: (cover?.isNotEmpty ?? false)
+            ? AppNetworkImage(
+                url: cover,
+                fit: BoxFit.cover,
+                placeholder: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                ),
+                errorWidget: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Icon(
+                    Icons.queue_music_rounded,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            : ColoredBox(
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.queue_music_rounded,
+                  size: 40,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+      ),
+    );
+    if (cover == null || cover.isEmpty) return image;
+    final name = info.name.isEmpty ? widget.title : info.name;
+    return Semantics(
+      button: true,
+      label: l10n.coverLabel,
+      child: GestureDetector(
+        key: const Key('discoverHeaderCover'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticsService.lightImpact();
+          unawaited(
+            showCoverViewer(
+              context,
+              coverUrl: cover,
+              title: l10n.coverLabel,
+              subtitle: name,
+              fileNameBase: name,
+            ),
+          );
+        },
+        child: image,
+      ),
+    );
+  }
+
   Widget _buildHeader(
     BuildContext context,
     DiscoverDetail detail,
@@ -330,36 +394,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: (cover?.isNotEmpty ?? false)
-                      ? AppNetworkImage(
-                          url: cover,
-                          fit: BoxFit.cover,
-                          placeholder: ColoredBox(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                          ),
-                          errorWidget: ColoredBox(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: Icon(
-                              Icons.queue_music_rounded,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ColoredBox(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.queue_music_rounded,
-                            size: 40,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                ),
-              ),
+              _buildHeaderCover(context, l10n, info, cover, theme),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

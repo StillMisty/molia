@@ -371,6 +371,45 @@ void main() {
     );
   });
 
+  testWidgets('封面行：有真实封面时打开原图查看器（contain + 可换封面）', (tester) async {
+    await pumpView(
+      tester,
+      track: _track(artworkUrl: 'file:///tmp/song-cover.jpg'),
+    );
+    await tester.tap(find.byKey(const Key('trackInfoCoverItem')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsOneWidget);
+    final image = tester.widget<AppNetworkImage>(
+      find.byKey(const Key('coverViewerImage')),
+    );
+    expect(image.fit, BoxFit.contain);
+    expect(find.byKey(const Key('coverViewerEditButton')), findsOneWidget);
+  });
+
+  testWidgets('封面行：查看器「更换封面」进入封面选择弹层', (tester) async {
+    await pumpView(
+      tester,
+      track: _track(artworkUrl: 'file:///tmp/song-cover.jpg'),
+    );
+    await tester.tap(find.byKey(const Key('trackInfoCoverItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('coverViewerEditButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsNothing);
+    expect(find.byKey(const Key('coverPickerChooseButton')), findsOneWidget);
+  });
+
+  testWidgets('封面行：没有真实封面时仍打开封面选择弹层', (tester) async {
+    await pumpView(tester, track: _track());
+    await tester.tap(find.byKey(const Key('trackInfoCoverItem')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsNothing);
+    expect(find.byKey(const Key('coverPickerChooseButton')), findsOneWidget);
+  });
+
   testWidgets('专辑行：payload 有专辑 id 且渠道支持时改为可点，进入专辑页', (tester) async {
     final registry = FakeSourceRegistry({
       'kw': FakeMusicSource(

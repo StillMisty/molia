@@ -113,6 +113,33 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('头部封面：点击打开原图查看器', (tester) async {
+    await pumpPage(
+      tester,
+      (page) async => DiscoverDetail(
+        info: const DiscoverPlaylist(
+          id: 'x',
+          name: '歌单',
+          coverUrl: 'file:///tmp/discover-cover.jpg',
+          trackCount: 1,
+        ),
+        tracks: [
+          DiscoverTrack(
+            sourceKey: 'wy',
+            songId: '1',
+            title: 'P1',
+            artist: '歌手',
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('discoverHeaderCover')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsOneWidget);
+  });
+
   testWidgets('随机播放全部：切换 shuffle 模式并从随机曲目起播', (tester) async {
     await pumpPage(tester, (page) async => detailFor(page));
 

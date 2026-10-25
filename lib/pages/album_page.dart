@@ -18,9 +18,11 @@ import '../domain/models/album.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/paged_list_controller.dart';
+import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/cover_viewer.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
 import '../widgets/paged_list_auto_load.dart';
@@ -268,6 +270,70 @@ class _AlbumPageState extends State<AlbumPage> {
     );
   }
 
+  /// 头部封面：方形缩略图按 cover 裁切；有封面时点击看原图。
+  Widget _buildHeaderCover(
+    BuildContext context,
+    AppLocalizations l10n,
+    Album album,
+    String? cover,
+    ThemeData theme,
+  ) {
+    final image = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        width: 96,
+        height: 96,
+        child: (cover?.isNotEmpty ?? false)
+            ? AppNetworkImage(
+                url: cover,
+                fit: BoxFit.cover,
+                placeholder: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                ),
+                errorWidget: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest,
+                  child: Icon(
+                    Icons.album_rounded,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              )
+            : ColoredBox(
+                color: theme.colorScheme.surfaceContainerHighest,
+                child: Icon(
+                  Icons.album_rounded,
+                  size: 40,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+      ),
+    );
+    if (cover == null || cover.isEmpty) return image;
+    return Semantics(
+      button: true,
+      label: l10n.coverLabel,
+      child: GestureDetector(
+        key: const Key('albumHeaderCover'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticsService.lightImpact();
+          unawaited(
+            showCoverViewer(
+              context,
+              coverUrl: cover,
+              title: l10n.coverLabel,
+              subtitle: album.name,
+              fileNameBase: album.artist.isEmpty
+                  ? album.name
+                  : '${album.name} - ${album.artist}',
+            ),
+          );
+        },
+        child: image,
+      ),
+    );
+  }
+
   Widget _buildHeader(
     BuildContext context,
     AppLocalizations l10n,
@@ -289,36 +355,7 @@ class _AlbumPageState extends State<AlbumPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  width: 96,
-                  height: 96,
-                  child: (cover?.isNotEmpty ?? false)
-                      ? AppNetworkImage(
-                          url: cover,
-                          fit: BoxFit.cover,
-                          placeholder: ColoredBox(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                          ),
-                          errorWidget: ColoredBox(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            child: Icon(
-                              Icons.album_rounded,
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ColoredBox(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.album_rounded,
-                            size: 40,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                ),
-              ),
+              _buildHeaderCover(context, l10n, album, cover, theme),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
