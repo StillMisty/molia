@@ -184,6 +184,29 @@
   目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份 p∈[0.6,1] 淡入（无位移/叠影），
   移动卡全程插值；空闲期身份变化另有 180ms 原位交叉淡化。
 
+## 自定义封面（custom covers）
+
+- **Custom cover store（自定义封面存储）** — `lib/services/covers/custom_cover_store.dart`：
+  每曲自定义封面 + 全局默认封面的唯一存储（设备本地；索引在 SharedPreferences，
+  文件在应用支持目录 `custom_covers/`）。启动只读索引并剔除丢失文件；每次替换写
+  新文件名，保证 Flutter ImageCache 与取色 LRU 不会继续显示旧图。查询同步，
+  UI 经 `ValueNotifier<int> revision` 刷新，组合根另接 change listener 刷新当前
+  播放 / 主题 / 系统媒体。同步面经 `trackEntries` / `defaultEntry` 枚举、经
+  `applySynced*` 应用远端结果；`onLocalChange` 只在本机写入时触发（远端应用
+  不标脏，避免同步回环）。
+- **Cover key（封面键）** — 曲目键 `sourceKey:songId`；`sourceKey == local` 的下载
+  副本剥掉一层 `local:` 前缀（`local:wy:123` → `wy:123`），让下载前设置的封面
+  继续作用于本地副本；本地导入保持 `local:<path>` 记录键。
+- **Default cover（默认封面）** — 设置 › 外观里的全局占位封面：只在歌曲没有
+  封面或远端封面加载失败时显示；不参与取色、下载与标签嵌入，也不是一张
+  「每曲封面」。
+- **Cover image codec（封面图片归一化）** — `lib/services/covers/cover_image_codec.dart`：
+  解码 → 烘焙 EXIF 方向 → 最长边 1024px → JPEG 85 的唯一实现；不可读图片抛
+  `CoverImageException`，UI 只显示友好文案。
+- **Cover picker sheet（封面选择弹层）** — `lib/widgets/cover_picker_sheet.dart`：
+  每曲封面 / 默认封面共用的选择、预览与重置交互（歌曲信息页 / 海报预览 /
+  设置外观三个入口，不各写一套）。
+
 ## 应用壳与导航
 
 - **Bootstrap stack（组合根 stack builder）** — `lib/app/bootstrap/**`：接线圈按子系统分组的 module（catalog / 本地数据 / 资料库 / playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾），每个的 interface 是「依赖进、装好的子系统出」；初始化顺序与前向引用（媒体会话、歌词服务、同步引擎）关在 builder 内，`lib/main.dart` 只做顺序调用 + `runApp`（唯一 composition root）。
@@ -677,7 +700,17 @@
   只做结构校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
-  `history` / `session`；关闭的类别既不推送也不应用（本机仍持续登记本地变化）。
+  `history` / `session` / `covers`；关闭的类别既不推送也不应用（多数类别本机
+  仍持续登记本地变化；`covers` 未请求时整轮跳过）。`covers`（自定义封面）默认
+  关闭，且不进蜂窝小类别。
+- **Cover sync adapter（封面同步适配器）** — `lib/data/sync/adapters/cover_sync_adapter.dart`：
+  `covers` 类别的记录桥：每曲封面 + 默认封面保留键 `__default_cover__`；版本
+  由 `SyncStampIssuer` 按内容哈希发放。类别未请求时立即返回空（不读文件、不算
+  哈希 / base64）；开启后的第一次收集只登记已有封面、不逐张追加（全量快照会
+  携带它们），此后首次登记 / 真实变化 / 删除 / 墓碑后重设才写增量；手动完整
+  备份请求全部类别，开关关闭也包含封面。远端应用经
+  `CustomCoverStore.applySynced*`（不触发本地变更回调）。单张 > 500KB 或损坏
+  只跳过同步，本地封面保留。
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
   本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /

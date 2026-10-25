@@ -22,6 +22,7 @@ class SyncContentPage extends StatelessWidget {
     SyncCategory.playlists: (Icons.queue_music_rounded, _playlistsTitle),
     SyncCategory.sources: (Icons.library_music_rounded, _sourcesTitle),
     SyncCategory.settings: (Icons.tune_rounded, _settingsTitle),
+    SyncCategory.covers: (Icons.image_rounded, _coversTitle),
     SyncCategory.statistics: (Icons.insights_rounded, _statisticsTitle),
     SyncCategory.history: (Icons.history_rounded, _historyTitle),
     SyncCategory.session: (Icons.play_circle_outline_rounded, _sessionTitle),
@@ -36,6 +37,8 @@ class SyncContentPage extends StatelessWidget {
 
   static String _settingsTitle(AppLocalizations l10n) =>
       l10n.syncCategorySettings;
+
+  static String _coversTitle(AppLocalizations l10n) => l10n.syncCategoryCovers;
 
   static String _statisticsTitle(AppLocalizations l10n) =>
       l10n.syncCategoryStatistics;
@@ -70,7 +73,8 @@ class SyncContentPage extends StatelessWidget {
                   icon: entry.value.$1,
                   title: entry.value.$2(l10n),
                   subtitle: l10n.syncCategorySubtitle,
-                  value: provider.categories[entry.key] ?? true,
+                  value: provider.categories[entry.key] ??
+                      entry.key.defaultEnabled,
                   onChanged: (value) =>
                       unawaited(provider.setCategory(entry.key, value)),
                 ),

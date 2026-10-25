@@ -163,6 +163,8 @@ class SyncPersistedState {
     List<String> knownScriptIds = const [],
     this.activeScriptStamp,
     this.sessionStamp,
+    Map<String, SyncStamp> coverStamps = const {},
+    Map<String, SyncStamp> coverTombstones = const {},
     this.lastSyncAt = 0,
     Map<String, int> transportLastSuccess = const {},
     Map<String, int> snapshotPushSeq = const {},
@@ -171,13 +173,18 @@ class SyncPersistedState {
     List<SyncPeerState> peers = const [],
     List<LanPeerEndpoint> lanEndpoints = const [],
   })  : categories = Map.unmodifiable(categories ??
-            {for (final category in SyncCategory.values) category: true}),
+            {
+              for (final category in SyncCategory.values)
+                category: category.defaultEnabled,
+            }),
         transports = Set.unmodifiable(transports),
         manualPeers = List.unmodifiable(manualPeers),
         notifiedPeers = Set.unmodifiable(notifiedPeers),
         settingStamps = Map.unmodifiable(settingStamps),
         scriptTombstones = Map.unmodifiable(scriptTombstones),
         scriptStamps = Map.unmodifiable(scriptStamps),
+        coverStamps = Map.unmodifiable(coverStamps),
+        coverTombstones = Map.unmodifiable(coverTombstones),
         knownScriptIds = List.unmodifiable(knownScriptIds),
         transportLastSuccess = Map.unmodifiable(transportLastSuccess),
         snapshotPushSeq = Map.unmodifiable(snapshotPushSeq),
@@ -229,6 +236,12 @@ class SyncPersistedState {
 
   /// 上次播放会话的登记。
   final SyncStamp? sessionStamp;
+
+  /// 自定义封面键 → 内容哈希 + 版本（本地变化检测）。
+  final Map<String, SyncStamp> coverStamps;
+
+  /// 自定义封面键 → 删除墓碑。
+  final Map<String, SyncStamp> coverTombstones;
 
   final int lastSyncAt;
 
@@ -305,6 +318,14 @@ abstract final class SyncStateCodec {
           'activeScript': state.activeScriptStamp!.toJson(),
         if (state.sessionStamp != null)
           'sessionStamp': state.sessionStamp!.toJson(),
+        'coverStamps': {
+          for (final entry in state.coverStamps.entries)
+            entry.key: entry.value.toJson(),
+        },
+        'coverTombstones': {
+          for (final entry in state.coverTombstones.entries)
+            entry.key: entry.value.toJson(),
+        },
         'lastSyncAt': state.lastSyncAt,
         if (state.transportLastSuccess.isNotEmpty)
           'transportLastSuccess': state.transportLastSuccess,
@@ -328,7 +349,8 @@ abstract final class SyncStateCodec {
     if (raw is! Map) return null;
 
     final categories = <SyncCategory, bool>{
-      for (final category in SyncCategory.values) category: true,
+      for (final category in SyncCategory.values)
+        category: category.defaultEnabled,
     };
     final storedCategories = raw['categories'];
     if (storedCategories is Map) {
@@ -413,6 +435,8 @@ abstract final class SyncStateCodec {
       knownScriptIds: knownScriptIds,
       activeScriptStamp: SyncStamp.fromJson(raw['activeScript']),
       sessionStamp: SyncStamp.fromJson(raw['sessionStamp']),
+      coverStamps: _readStamps(raw['coverStamps']),
+      coverTombstones: _readStamps(raw['coverTombstones']),
       lastSyncAt: _readInt(raw['lastSyncAt']),
       transportLastSuccess: _readIntMap(raw['transportLastSuccess']),
       snapshotPushSeq: _readIntMap(raw['snapshotPush']),

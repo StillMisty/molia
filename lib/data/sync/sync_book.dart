@@ -51,6 +51,12 @@ abstract interface class SyncStampLedger {
   /// 上次播放会话的登记。
   SyncStamp? get sessionStamp;
 
+  /// 自定义封面键 → 内容哈希 + 版本（本地变化检测）。
+  Map<String, SyncStamp> get coverStamps;
+
+  /// 自定义封面键 → 删除墓碑。
+  Map<String, SyncStamp> get coverTombstones;
+
   int nowMs();
 
   void putSettingStamp(String key, SyncStamp stamp);
@@ -68,6 +74,14 @@ abstract interface class SyncStampLedger {
   void setActiveScriptStamp(SyncStamp? stamp);
 
   void setSessionStamp(SyncStamp? stamp);
+
+  void putCoverStamp(String key, SyncStamp stamp);
+
+  void removeCoverStamp(String key);
+
+  void putCoverTombstone(String key, SyncStamp stamp);
+
+  void removeCoverTombstone(String key);
 }
 
 /// 发布台账的持久覆盖面（`sync_state_v2` 的 `snapshotPushSeq`）。

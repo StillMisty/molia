@@ -332,6 +332,120 @@ abstract class AppLocalizations {
   /// **'Pick colors from the current song’s artwork; base colors when there is none'**
   String get settingsFollowArtworkSubtitle;
 
+  /// No description provided for @coverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Song cover'**
+  String get coverTitle;
+
+  /// No description provided for @coverFollowSong.
+  ///
+  /// In en, this message translates to:
+  /// **'Song artwork'**
+  String get coverFollowSong;
+
+  /// No description provided for @coverCustomized.
+  ///
+  /// In en, this message translates to:
+  /// **'Customized'**
+  String get coverCustomized;
+
+  /// No description provided for @coverChooseImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image'**
+  String get coverChooseImage;
+
+  /// No description provided for @coverChangeImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Change image'**
+  String get coverChangeImage;
+
+  /// No description provided for @coverResetSong.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore song artwork'**
+  String get coverResetSong;
+
+  /// No description provided for @coverResetToDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Use default cover'**
+  String get coverResetToDefault;
+
+  /// No description provided for @coverRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover restored'**
+  String get coverRestored;
+
+  /// No description provided for @coverDefaultRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Molia mark restored'**
+  String get coverDefaultRestored;
+
+  /// No description provided for @coverUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover updated'**
+  String get coverUpdated;
+
+  /// No description provided for @coverUpdateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t update the cover. Try again'**
+  String get coverUpdateFailed;
+
+  /// No description provided for @coverUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t read this image. Choose another'**
+  String get coverUnreadable;
+
+  /// No description provided for @coverDefaultTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Default cover'**
+  String get coverDefaultTitle;
+
+  /// No description provided for @coverDefaultSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Shown when a song has no artwork'**
+  String get coverDefaultSubtitle;
+
+  /// No description provided for @coverResetDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore the Molia mark'**
+  String get coverResetDefault;
+
+  /// No description provided for @coverDefaultUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Default cover updated'**
+  String get coverDefaultUpdated;
+
+  /// No description provided for @settingsSyncCustomCovers.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync custom covers'**
+  String get settingsSyncCustomCovers;
+
+  /// No description provided for @settingsSyncCustomCoversSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sends cover images to your other devices'**
+  String get settingsSyncCustomCoversSubtitle;
+
+  /// No description provided for @coverLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover'**
+  String get coverLabel;
+
   /// No description provided for @settingsAppFont.
   ///
   /// In en, this message translates to:
@@ -5072,6 +5186,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'App settings'**
   String get syncCategorySettings;
+
+  /// No description provided for @syncCategoryCovers.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom covers'**
+  String get syncCategoryCovers;
 
   /// No description provided for @syncCategoryStatistics.
   ///

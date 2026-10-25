@@ -191,6 +191,20 @@
   （`SourceManager.fetchPic`：脚本 `pic` action → 内置原生取图；省流模式不发请求）
   取图，经 `PlaybackFacade.updateTrackArtwork` 原地回写队列曲目（新 `Track` 触发
   封面堆叠换图淡化、主题取色与系统媒体通知封面更新）。
+- **自定义封面（custom covers）**：`lib/services/covers/custom_cover_store.dart` 是
+  每曲封面与全局默认封面的唯一存储（设备本地，不登记设置键；**可选**随
+  `covers` 同步类别跨设备同步，默认关闭）。
+  文件写应用支持目录 `custom_covers/`（与封面缓存隔离，清缓存不丢失），每次
+  替换都换新文件名（避免 ImageCache / 取色 LRU 命中旧图）；索引（路径 + 哈希 +
+  更新时间）在 SharedPreferences，启动只读索引并剔除丢失文件。选图经
+  `lib/services/covers/cover_image_codec.dart` 解码、烘焙 EXIF 方向、最长边
+  1024px、JPEG 85 后落盘。曲目键 = `sourceKey:songId`；`local` 下载副本剥掉
+  一层 `local:` 前缀（下载前设置的封面继续作用于本地副本），本地导入保持
+  `local:<path>` 记录键。`artworkUrlOf` / 歌曲信息页 / 顶部与迷你播放器 /
+  列表行 / 歌词选择与海报 / 系统媒体 / 桌面小组件都先查它；`revision` 通知
+  可见行与当前播放立即换图，换源写回（手动 + 自动）把封面复制到新曲目键。
+  全局默认封面只兜底「歌曲没有封面 / 远端加载失败」的展示，不参与取色、
+  下载与标签嵌入；`ArtworkPaletteService` 只消费真实 / 自定义封面。
 - **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
   唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
   失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`
@@ -325,7 +339,8 @@
   AI 徽标。首次开启隐私确认；定位与边界见 ADR-0002。启用后搜索 tab 的
   「输入关键词搜索歌曲」空占位让位给推荐流（关闭时保留占位）。
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
-  跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / AI DJ 与凭证。信任模型是
+  跟人走的设置 / 听歌统计 / 播放历史 / 上次播放会话 / 自定义封面（默认关闭）/
+  AI DJ 与凭证。信任模型是
   **同步口令即信任根**（加入即完全互信，无逐项审批），快照整体加密：根密钥 =
   PBKDF2(口令) 会话内一次派生（按口令缓存），帧密钥 = HKDF(根密钥, 帧 nonce)，
   AES-256-GCM 认证；帧 = `magic + 版本 + nonce`，载荷是列式二进制，编解码与
@@ -363,6 +378,18 @@
   `SyncStampIssuer`（`sync_stamp.dart`，HLC-lite：吸收远端超前戳、同毫秒
   counter 递增、基线持久化 + 重启不倒退）发放，内容时间（playedAt / endedAt /
   savedAt / importedAt / 墓碑删除时间）**不参与胜负判定**（见 ADR-0003 v2 §2）。
+  `covers` 类别由 `CoverSyncAdapter`（`lib/data/sync/adapters/cover_sync_adapter.dart`）
+  承担：记录键 = 封面键 + 默认封面保留键，内容 = base64 图片 / mime / 哈希 /
+  updatedAt；本地变化登记 `SyncStamp`，墓碑后重设取新版本（避免输给旧墓碑）。
+  类别未被本轮请求时适配器立即返回空（不读封面文件、不算哈希 / base64），因此
+  默认关闭的封面不会拖慢普通轮次；手动完整备份请求全部类别，仍会导出 / 导入
+  封面。重新开启类别时控制面把各传输的快照发布覆盖置为未发布，下一轮强制重发
+  全量快照补传已有封面——开启后的**第一次**收集只登记这些已有封面、不逐张追加
+  增量；此后的首次登记 / 真实变化 / 删除 / 墓碑后重设才写日志。远端 LWW 落盘走
+  `CustomCoverStore` 的 `applySynced*` 接缝（不触发本地变更回调），只接受归一化
+  JPEG（PNG / GIF / WebP 与损坏载荷跳过）；单张超限（> 500KB）只跳过，接收侧在
+  base64 解码前先按长度拒绝。类别默认关闭、不进蜂窝小类别；封面字节不进入
+  非封面轮次，自动同步按类别开关执行，手动完整备份不受该开关限制。
   协议自始为 v3（帧带版本与 nonce，载荷是列式二进制；见 ADR-0003 §1）：对端快照直接
   合并，备份只做结构性校验（不是 Molia 备份 / 结构无效才拒绝），都没有按版本号
   的分支。全量合并模型天然幂等，推送裁剪 90 天前墓碑（按真实删除时间）；入站
@@ -380,8 +407,8 @@
   **省电**（低电量未充电或系统省电模式
   暂停自动，只保留恢复动作的手动触发）；电量经平台通道读取（Android `BatteryChannelHandler` /
   iOS `AppDelegate`），移动数据下默认只同步小类别
-  （设置 / 音源 / 凭证 / 歌单与曲目 / 会话），可在
-  同步页切换为「暂停自动同步」。
+  （设置 / 音源 / 凭证 / 歌单与曲目 / 会话）；统计 / 历史 / 自定义封面等
+  大类别留到 Wi-Fi，可在同步页切换为「暂停自动同步」。
   **事件驱动重连**：`DataSaverService.networkEvents` →
   `SyncScheduler.onNetworkChanged`（重置空闲退避 → 1.5s 去抖 →
   `SyncTrigger.network` 强制发现）；回前台隐藏 ≥15s 时重绑 UDP + loopback

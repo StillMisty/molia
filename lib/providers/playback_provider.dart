@@ -36,6 +36,12 @@ typedef AutoSourceSwapResolver = Future<Track?> Function(
   required Set<String> excludeSourceKeys,
 });
 
+/// 自动换源成功后同步曲目级本地数据（如自定义封面）。
+typedef AutoSourceSwapTrackHook = Future<void> Function(
+  Track oldTrack,
+  Track newTrack,
+);
+
 /// 领域 [StateListenable] → Flutter [ValueListenable] 适配器。
 ///
 /// `lib/domain/**` 禁止 import Flutter，facade 端口只能暴露纯 Dart 接口；
@@ -101,6 +107,9 @@ class PlaybackProvider extends ChangeNotifier {
   /// 自动换源解析器（组合根注入 `AutoSourceSwapService.findMatch`）。
   final AutoSourceSwapResolver? _autoSwapResolver;
 
+  /// 自动换源成功后的本地数据钩子（自定义封面跟随）。
+  final AutoSourceSwapTrackHook? _onAutoSourceSwapped;
+
   // 通知节流器 - 减少不必要的 UI 重建
   late final CategorizedNotifyThrottler _notifyThrottler;
 
@@ -161,6 +170,7 @@ class PlaybackProvider extends ChangeNotifier {
     PlaybackVolumeStore? volumeStore,
     SourceSwapSettings? autoSwapSettings,
     AutoSourceSwapResolver? autoSwapResolver,
+    AutoSourceSwapTrackHook? onAutoSourceSwapped,
     required SettingsAccess settings,
   })  : _facade = facade,
         _messenger = messenger,
@@ -170,6 +180,7 @@ class PlaybackProvider extends ChangeNotifier {
         _observer = observer,
         _autoSwapSettings = autoSwapSettings,
         _autoSwapResolver = autoSwapResolver,
+        _onAutoSourceSwapped = onAutoSourceSwapped,
         _settings = settings,
         _session = sessionCoordinator,
         _volumeStore = volumeStore ?? PlaybackVolumeStore() {
@@ -730,7 +741,15 @@ class PlaybackProvider extends ChangeNotifier {
       );
       // 队列替换是会话命令：live 转发由协调者完成，返回前已把换源写进会话
       // （重开应用恢复新来源，而不是等下一分钟整份刷新）。
-      _applyOutcome(await _session.replaceQueueTrack(uri, match));
+      final outcome = await _session.replaceQueueTrack(uri, match);
+      if (outcome.hasChanges) {
+        try {
+          await _onAutoSourceSwapped?.call(track, match);
+        } catch (e) {
+          _logger.warning('自动换源后同步本地数据失败: $e');
+        }
+      }
+      _applyOutcome(outcome);
     } catch (e) {
       _logger.warning('自动换源失败: $e');
     } finally {

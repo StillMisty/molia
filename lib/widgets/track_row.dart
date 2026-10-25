@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
@@ -117,6 +118,7 @@ class TrackRowModel {
     this.time = '',
     this.trailingText,
     this.trackId,
+    this.coverKey,
     this.selected = false,
   });
 
@@ -148,8 +150,17 @@ class TrackRowModel {
   final String? trailingText;
 
   /// 行身份：传入后由 [TrackRow] 逐行订阅「是否当前曲目」。
-  /// null = 不订阅（如队列行：当前曲目不在队列里）。
+  /// null = 不订阅（非曲目行，或不需要高亮当前曲目的场景；队列行也会传）。
   final TrackId? trackId;
+
+  /// 自定义封面查询键（默认取 [trackId] 的 `sourceKey:songId`）。
+  ///
+  /// 不传 [trackId] 的曲目行（换源候选等）要显示自定义封面时显式给它；
+  /// 普通非曲目行留 null，不会去查封面索引。
+  final String? coverKey;
+
+  /// 实际查询键：显式 [coverKey] 优先，否则回退 [trackId]。
+  String? get effectiveCoverKey => coverKey ?? trackId?.uri;
 
   final bool selected;
 
@@ -488,38 +499,60 @@ class TrackRow extends StatelessWidget {
   ///
   /// 当前曲目角标只在封面可见时叠加：多选勾选占住前导槽时让位给勾选图标，
   /// 标题主色仍表达当前曲目。
+  ///
+  /// 有 [TrackRowModel.coverKey] 的行订阅自定义封面 revision：选择 / 恢复
+  /// 封面后不换行也要立即换图；没有键的行保持原 URL（全局默认封面由
+  /// [LibraryCoverThumb] 自己订阅）。
   Widget _buildLeading(
     M3EColorScheme scheme, {
     required bool isCurrent,
     required bool isPlaying,
   }) {
-    final bool showsCheck = model.selected && surface.showCheckWhenSelected;
-    final Widget cover = isCurrent && !showsCheck
-        ? CurrentTrackCover(
-            url: model.coverUrl,
-            size: surface.coverSize,
-            isPlaying: isPlaying,
-          )
-        : LibraryCoverThumb(url: model.coverUrl, size: surface.coverSize);
-    if (!surface.showCheckWhenSelected) return cover;
-    // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
-    // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与
-    // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
-    return SizedBox.square(
-      dimension: surface.coverSize,
-      child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 180),
-        child: model.selected
-            ? Icon(
-                Icons.check_circle_rounded,
-                key: const ValueKey<String>('selected'),
-                size: surface.coverSize * 0.7,
-                color: scheme.onSecondaryContainer,
-              )
-            : KeyedSubtree(
-                key: const ValueKey<String>('cover'),
-                child: cover,
-              ),
+    Widget buildCover(String? coverUrl) {
+      final bool showsCheck = model.selected && surface.showCheckWhenSelected;
+      final Widget cover = isCurrent && !showsCheck
+          ? CurrentTrackCover(
+              url: coverUrl,
+              size: surface.coverSize,
+              isPlaying: isPlaying,
+            )
+          : LibraryCoverThumb(
+              url: coverUrl,
+              size: surface.coverSize,
+              useDefaultCover: true,
+            );
+      if (!surface.showCheckWhenSelected) return cover;
+      // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
+      // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与
+      // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
+      return SizedBox.square(
+        dimension: surface.coverSize,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: model.selected
+              ? Icon(
+                  Icons.check_circle_rounded,
+                  key: const ValueKey<String>('selected'),
+                  size: surface.coverSize * 0.7,
+                  color: scheme.onSecondaryContainer,
+                )
+              : KeyedSubtree(
+                  key: const ValueKey<String>('cover'),
+                  child: cover,
+                ),
+        ),
+      );
+    }
+
+    final key = model.effectiveCoverKey;
+    if (key == null) return buildCover(model.coverUrl);
+    return ValueListenableBuilder<int>(
+      valueListenable: CustomCoverStore.instance.revision,
+      builder: (context, _, __) => buildCover(
+        CustomCoverStore.instance.resolveTrackCoverForKey(
+          key,
+          originalUrl: model.coverUrl,
+        ),
       ),
     );
   }

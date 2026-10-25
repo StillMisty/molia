@@ -86,6 +86,27 @@ void main() {
         onlyCategories: onlyCategories,
       );
 
+  test('类别受限适配器：collect 收到本轮请求的类别集合', () async {
+    final scoped = _ScopedAdapter();
+    final scopedRunner = SyncRoundRunner(
+      state: state,
+      adapters: [scoped],
+      transports: const {},
+      stamps: state.stampIssuer,
+      known: InMemorySyncKnownStore(),
+      runtime: SyncTransportRuntime(state: state, transports: const {}),
+      clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
+    );
+    addTearDown(scopedRunner.dispose);
+
+    await scopedRunner.collect({SyncCategory.settings, SyncCategory.covers});
+    expect(scoped.lastCategories, {SyncCategory.settings, SyncCategory.covers});
+
+    // 未请求封面时仍经过 scoped 方法（适配器据此立即返回空）。
+    await scopedRunner.collect({SyncCategory.settings});
+    expect(scoped.lastCategories, {SyncCategory.settings});
+  });
+
   test('collect → pull：计划带名册游标，拉取结果进入本轮', () async {
     state.recordRound(const SyncRoundReport(
       trigger: SyncTrigger.timer,
@@ -302,6 +323,37 @@ class _RecordingJournal implements SyncJournalStore {
     base = 0;
     snapshot = -1;
   }
+}
+
+/// 类别受限适配器：记录引擎实际传进来的类别集合。
+class _ScopedAdapter implements CategoryScopedSyncAdapter {
+  Set<SyncCategory> lastCategories = const {};
+
+  @override
+  Set<SyncCategory> get categories => const {SyncCategory.covers};
+
+  @override
+  bool get ready => true;
+
+  @override
+  Future<Map<SyncCategory, List<SyncRecord>>> collect(
+          {bool fresh = false}) async =>
+      const {};
+
+  @override
+  Future<Map<SyncCategory, List<SyncRecord>>> collectForCategories(
+    Set<SyncCategory> categories, {
+    bool fresh = false,
+  }) async {
+    lastCategories = {...categories};
+    return const {};
+  }
+
+  @override
+  Future<SyncApplyOutcome> apply(
+    Map<SyncCategory, List<SyncRecord>> records,
+  ) async =>
+      SyncApplyOutcome.none;
 }
 
 class _RecordingAdapter implements SyncAdapter {

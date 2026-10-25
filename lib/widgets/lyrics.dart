@@ -1357,6 +1357,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         trackTitle: trackName,
         artistName: artistName,
         albumCoverUrl: albumCoverUrl,
+        trackId: currentTrack.id,
         embedded: true,
       ),
       preferredMode: SecondaryPageMode.sideSheet,

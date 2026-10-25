@@ -60,6 +60,9 @@ typedef PlayContextWriter = Future<void> Function({
 typedef PlaybackWidgetUpdater = Future<void> Function(
     Map<String, Object?> payload);
 
+/// 曲目封面 URL 解析（自定义封面优先；组合根注入本地封面存储）。
+typedef PlaybackCoverResolver = String? Function(Track? track);
+
 /// 默认小组件更新：非 Android 是空操作，失败静默（不影响播放主流程）。
 Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
@@ -84,6 +87,8 @@ class PlaybackObserver {
     PlaybackWidgetUpdater? widgetUpdater,
     AlbumArtPreloadStrategy? albumArtPreloader,
     Future<String?> Function(Track track)? artworkResolver,
+    PlaybackCoverResolver? coverUrlResolver,
+    PlaybackCoverResolver? displayCoverUrlResolver,
     GlobalKey<NavigatorState>? navigatorKey,
     Future<void> Function()? requestNotificationPermission,
     AppPresence? presence,
@@ -92,8 +97,13 @@ class PlaybackObserver {
         _libraryRepository = libraryRepository,
         _playContextWriter = playContextWriter,
         _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
-        _albumArtPreloader = albumArtPreloader ?? AlbumArtPreloadStrategy(),
+        _albumArtPreloader = albumArtPreloader ??
+            AlbumArtPreloadStrategy(
+              coverUrlResolver: displayCoverUrlResolver ?? coverUrlResolver,
+            ),
         _artworkResolver = artworkResolver,
+        _coverUrlResolver = coverUrlResolver,
+        _displayCoverUrlResolver = displayCoverUrlResolver ?? coverUrlResolver,
         _navigatorKey = navigatorKey,
         _requestNotificationPermission = requestNotificationPermission ??
             NotificationPermission.ensureRequested,
@@ -122,6 +132,12 @@ class PlaybackObserver {
   /// 封面补取解析器（组合根注入）：曲目起播且无封面时调用；
   /// 返回空表示无法补取（省流网关由注入侧实现）。
   final Future<String?> Function(Track track)? _artworkResolver;
+
+  /// 曲目封面解析（自定义封面优先，不含默认封面占位）。
+  final PlaybackCoverResolver? _coverUrlResolver;
+
+  /// 展示封面解析（自定义 → 原始 → 全局默认占位）。
+  final PlaybackCoverResolver? _displayCoverUrlResolver;
 
   /// 组合根注入（封面预加载需要 BuildContext）。
   final GlobalKey<NavigatorState>? _navigatorKey;
@@ -194,7 +210,7 @@ class PlaybackObserver {
   void showRestoredTrack(Track track) {
     _lastPlayedTrackName = track.title;
     _lastPlayedArtists = track.artistLabel;
-    _lastPlayedImageUrl = track.artwork?.uri.toString();
+    _lastPlayedImageUrl = _displayCoverUrlOf(track);
   }
 
   /// 曲目切换时：持久化最后播放信息、写入播放上下文（最近播放）、
@@ -212,7 +228,7 @@ class PlaybackObserver {
       unawaited(_updateWidget());
       _triggerImagePreload();
       unawaited(_recordPlayHistory(track));
-      if (track.artwork == null) {
+      if (_coverUrlOf(track) == null) {
         unawaited(_resolveMissingArtwork(track));
       }
     }
@@ -315,6 +331,9 @@ class PlaybackObserver {
   void _persistLastPlayedTrackInfo(Track track) {
     final artists = track.artistLabel;
     unawaited(_saveLastPlayedTrackInfo(
+      // 只持久化原始封面 URL：展示封面可能指向本地自定义 / 默认封面文件，
+      // 把 file:// 路径写进 prefs 会在文件被替换 / 清理后留下坏地址。本地
+      // 展示由 CustomCoverStore 按曲目键重新解析即可。
       imageUrl: track.artwork?.uri.toString(),
       trackName: track.title,
       artists: artists.isEmpty ? null : artists,
@@ -378,18 +397,54 @@ class PlaybackObserver {
     }
   }
 
+  /// 当前曲目的封面展示需要重算（自定义 / 默认封面变化）。
+  ///
+  /// 只刷新展示面（最后播放信息 / 桌面小组件 / 预取），不重写历史 / 会话 /
+  /// 统计——那些必须保留原始封面 URL。
+  void refreshCoverPresentation() {
+    final track = _facade.snapshot.value.current;
+    if (track == null) return;
+    _persistLastPlayedTrackInfo(track);
+    unawaited(_updateWidget());
+    _triggerImagePreload();
+  }
+
   /// 更新桌面小组件：从 facade 快照构造平台无关 payload，平台细节交给
   /// [PlaybackWidgetUpdater]（默认实现仅 Android 发通道消息）。
   Future<void> _updateWidget() async {
     final live = _facade.snapshot.value;
     final track = live.current;
-    // 省流时传空封面地址：MusicWidget 对空串跳过 Glide 加载。
-    final blockArtwork = _dataSaver?.blockNetworkArtwork ?? false;
+    final displayUrl = _displayCoverUrlOf(track);
+    // 省流只挡网络封面：自定义 / 默认封面是本地文件，照常交给小组件。
+    // 远程地址传空串，MusicWidget 对空串跳过 Glide 加载。
+    final blockRemoteArtwork = _dataSaver?.blockNetworkArtwork ?? false;
+    final albumArtUrl = blockRemoteArtwork && !_isLocalArtworkUrl(displayUrl)
+        ? ''
+        : displayUrl ?? '';
     await _widgetUpdater({
       'songName': track?.title ?? '未在播放',
       'artistName': track?.primaryArtistName ?? '',
-      'albumArtUrl': blockArtwork ? '' : track?.artwork?.uri.toString() ?? '',
+      'albumArtUrl': albumArtUrl,
       'isPlaying': live.isPlaying,
     });
   }
+
+  /// 封面地址是否指向本地文件（省流模式无需拦截）。
+  ///
+  /// 协议相对地址（`//host/...`）是网络封面，不能按 Unix 裸路径放行。
+  static bool _isLocalArtworkUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    if (url.startsWith('//')) return false;
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.scheme == 'file') return true;
+    return url.startsWith('/') || _windowsPathPattern.hasMatch(url);
+  }
+
+  static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
+
+  String? _coverUrlOf(Track? track) =>
+      _coverUrlResolver?.call(track) ?? track?.artwork?.uri.toString();
+
+  String? _displayCoverUrlOf(Track? track) =>
+      _displayCoverUrlResolver?.call(track) ?? _coverUrlOf(track);
 }

@@ -22,6 +22,7 @@ import '../../domain/models/track.dart';
 import '../../managers/artwork_cache.dart';
 import '../../playback/audio_predownloader.dart';
 import '../../services/cache_service.dart';
+import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
@@ -37,6 +38,7 @@ typedef LocalDataStack = ({
   DownloadService downloadService,
   LyricsService lyricsService,
   AudioPredownloader audioCacheWriter,
+  CustomCoverStore customCovers,
 });
 
 /// 装配省流模式、下载链路、歌词服务与音频缓存写入器。
@@ -71,6 +73,13 @@ Future<LocalDataStack> buildLocalDataStack({
   final downloadStorage = createDownloadStorage(
     customRoot: () => downloadSettings.saveDir,
   );
+
+  // 自定义封面（每曲 + 默认）：设备本地文件 + prefs 索引。启动只读索引 /
+  // 剔除丢失文件，不解码图片；下载与播放共用同一实例。
+  final customCoversWatch = Stopwatch()..start();
+  final customCovers = CustomCoverStore.instance;
+  await customCovers.load();
+  markStartupStep('sub.customCovers.load', customCoversWatch);
 
   // 歌词服务提前创建（见文件头：与下载服务互为依赖的构建顺序）。
   // 曲目原生取词经 SourceManager 统一路由：脚本 lyric action →
@@ -117,6 +126,7 @@ Future<LocalDataStack> buildLocalDataStack({
     lyricsResolver: (track) => _resolveDownloadLyrics(lyricsService, track),
     artworkResolver: (track) =>
         sourceManager.fetchPic(sourceTrackFromTrack(track)),
+    customCoverResolver: (track) => customCovers.readTrackCover(track.id),
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
   );
@@ -140,6 +150,7 @@ Future<LocalDataStack> buildLocalDataStack({
     downloadService: downloadService,
     lyricsService: lyricsService,
     audioCacheWriter: audioCacheWriter,
+    customCovers: customCovers,
   );
 }
 

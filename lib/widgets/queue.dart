@@ -96,6 +96,7 @@ class QueueDisplay extends StatelessWidget {
                         artist: current.artistLabel,
                         coverUrl: _coverUrlOf(current),
                         durationMs: current.duration?.inMilliseconds,
+                        trackId: current.id,
                         selected: true,
                       ),
                       surface: const TrackRowSurface(
@@ -206,6 +207,7 @@ class _QueueTrackRow extends StatelessWidget {
         artist: track.artistLabel,
         coverUrl: _coverUrlOf(track),
         durationMs: track.duration?.inMilliseconds,
+        trackId: track.id,
       ),
       surface: const TrackRowSurface(coverSize: 40),
       position: position,

@@ -26,6 +26,7 @@ import '../../playback/playback_session_coordinator.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sleep_timer.dart';
 import '../../services/audio_focus_settings.dart';
+import '../../services/covers/custom_cover_store.dart';
 import '../../services/playback_observer.dart';
 import '../../services/playback_session_store.dart';
 import '../app_shell.dart';
@@ -83,10 +84,12 @@ Future<PlaybackStack> buildPlaybackStack({
   MediaSessionFactory? mediaSessionFactory,
   PlaybackBackend? backend,
   PlaybackPowerPolicy? powerPolicy,
+  CustomCoverStore? customCovers,
 }) async {
   final sourceManager = catalog.sourceManager;
   final dataSaver = local.dataSaver;
   final policy = powerPolicy ?? PlaybackPowerPolicy();
+  final covers = customCovers ?? local.customCovers;
 
   // 音频焦点偏好必须在建播放器之前读好：默认开（与其他应用同时播放），
   // 但用户可能已关闭；首次中断不应按错的策略处理。
@@ -133,6 +136,8 @@ Future<PlaybackStack> buildPlaybackStack({
       if (dataSaver.blockNetworkArtwork) return null;
       return sourceManager.fetchPic(sourceTrackFromTrack(track));
     },
+    coverUrlResolver: covers.resolveTrackCover,
+    displayCoverUrlResolver: covers.resolveForDisplay,
   );
   // 播放会话模块：恢复态 ↔ live 交接 + 会话落盘唯一写者。组合根创建共享
   // 存储（同步栈也用同一实例标记「会话待外发」）并注入，恢复曲目的「最后
@@ -163,6 +168,7 @@ Future<PlaybackStack> buildPlaybackStack({
       track,
       excludeSourceKeys: excludeSourceKeys,
     ),
+    onAutoSourceSwapped: covers.carryOver,
   );
   playbackObserver.attach();
 
@@ -186,6 +192,15 @@ Future<PlaybackStack> buildPlaybackStack({
     audioHandler = await factory(service, sessionCoordinator);
     markStartupStep('sub.mediaSession.activate', mediaSessionWatch);
   }
+
+  // 自定义 / 默认封面变化：系统媒体元数据与桌面小组件立即跟上；主题取色
+  // 由 lyrics_display_stack 自己的 revision 订阅处理，播放页 / 顶栏 / 列表
+  // 各自订阅 revision。远端同步落地的封面也走同一回调（addChangeListener
+  // 不区分本地 / 远端）。
+  covers.addChangeListener((_) {
+    audioHandler?.refreshArtwork();
+    playbackObserver.refreshCoverPresentation();
+  });
 
   return (
     settings: catalog.settings,

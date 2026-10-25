@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -447,6 +448,14 @@ class LyricsPosterService {
 
   // 加载网络图片（统一浏览器 UA + 平台 Referer，修 CDN 403）
   Future<ui.Image> _loadNetworkImage(String url) async {
+    // 自定义 / 下载封面是本地文件（file:// 或裸路径）：直接读盘，不触网。
+    final localFile = _localFileFor(url);
+    if (localFile != null) {
+      final bytes = await localFile.readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      return frame.image;
+    }
     final response = await _dio.getUri(
       Uri.parse(url),
       options: Options(headers: ArtworkCache.headersFor(url)),
@@ -459,6 +468,17 @@ class LyricsPosterService {
     } else {
       throw Exception('Failed to load image from $url');
     }
+  }
+
+  /// 本地封面 URL → 文件；非本地地址返回 null。
+  File? _localFileFor(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.scheme == 'file') return File.fromUri(uri);
+    if (uri == null || uri.scheme.isEmpty) {
+      final file = File(url);
+      return file;
+    }
+    return null;
   }
 
   Future<ui.Image> _loadAssetImage(String assetPath) async {

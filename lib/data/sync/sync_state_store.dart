@@ -4,7 +4,8 @@
 ///   JSON 的映射在 `sync_state_codec.dart`（本类只管内存状态与写入时机）；
 /// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
-/// - 变更登记（设置键哈希、脚本墓碑、激活脚本指针）是「变化检测」的基线：
+/// - 变更登记（设置键哈希、脚本 / 自定义封面墓碑、激活脚本指针）是
+///   「变化检测」的基线：
 ///   settings 写入方分散在多个服务，同步层用「上次登记值 vs 当前值」判定
 ///   本地修改，避免改造全部写入方。
 /// - 名册 / 地址簿 / 端点与轮次流水各有自己的容器（`sync_roster.dart` /
@@ -120,7 +121,8 @@ class SyncStateStore
   String _deviceId;
   String _deviceName = '';
   final Map<SyncCategory, bool> _categories = {
-    for (final category in SyncCategory.values) category: true,
+    for (final category in SyncCategory.values)
+      category: category.defaultEnabled,
   };
 
   /// 启用的传输：两路默认关——装机时不启动监听、不广播、不弹局域网权限，
@@ -155,6 +157,8 @@ class SyncStateStore
   final Map<String, SyncStamp> _scriptTombstones = {};
   final Map<String, SyncStamp> _scriptStamps = {};
   final List<String> _knownScriptIds = [];
+  final Map<String, SyncStamp> _coverStamps = {};
+  final Map<String, SyncStamp> _coverTombstones = {};
   SyncStamp? _activeScriptStamp;
   SyncStamp? _sessionStamp;
 
@@ -232,6 +236,13 @@ class SyncStateStore
 
   @override
   SyncStamp? get sessionStamp => _sessionStamp;
+
+  /// 自定义封面键 → 内容哈希 + 版本（本地变化检测）。
+  @override
+  Map<String, SyncStamp> get coverStamps => _coverStamps;
+
+  @override
+  Map<String, SyncStamp> get coverTombstones => _coverTombstones;
   int get lastSyncAt => _activityLog.lastSyncAt;
   List<SyncLogEntry> get log => _activityLog.log;
 
@@ -271,7 +282,7 @@ class SyncStateStore
   int nowMs() => _clock();
 
   bool isCategoryEnabled(SyncCategory category) =>
-      _categories[category] ?? true;
+      _categories[category] ?? category.defaultEnabled;
 
   @override
   Set<SyncCategory> get enabledCategories => {
@@ -660,6 +671,28 @@ class SyncStateStore
     _markDirty();
   }
 
+  @override
+  void putCoverStamp(String key, SyncStamp stamp) {
+    _coverStamps[key] = stamp;
+    _markDirty();
+  }
+
+  @override
+  void removeCoverStamp(String key) {
+    if (_coverStamps.remove(key) != null) _markDirty();
+  }
+
+  @override
+  void putCoverTombstone(String key, SyncStamp stamp) {
+    _coverTombstones[key] = stamp;
+    _markDirty();
+  }
+
+  @override
+  void removeCoverTombstone(String key) {
+    if (_coverTombstones.remove(key) != null) _markDirty();
+  }
+
   /// 记录一轮同步结果：日志条目（变更语义）+ 设备名册。
   ///
   /// 日志 / 活动 / 传输成功时间与名册各归其模块；两边都只改内存 + 标脏，
@@ -717,6 +750,8 @@ class SyncStateStore
       knownScriptIds: _knownScriptIds,
       activeScriptStamp: _activeScriptStamp,
       sessionStamp: _sessionStamp,
+      coverStamps: _coverStamps,
+      coverTombstones: _coverTombstones,
       lastSyncAt: activityLog.lastSyncAt,
       transportLastSuccess: activityLog.transportLastSuccess,
       snapshotPushSeq: activityLog.snapshotPushSeq,
@@ -753,6 +788,12 @@ class SyncStateStore
     _knownScriptIds
       ..clear()
       ..addAll(state.knownScriptIds);
+    _coverStamps
+      ..clear()
+      ..addAll(state.coverStamps);
+    _coverTombstones
+      ..clear()
+      ..addAll(state.coverTombstones);
     _activeScriptStamp = state.activeScriptStamp;
     _sessionStamp = state.sessionStamp;
     _roster.applySnapshot(SyncRosterSnapshot(

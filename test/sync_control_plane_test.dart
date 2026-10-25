@@ -44,7 +44,14 @@ void main() {
     expect(control.enabled, isFalse);
     expect(control.deviceId, 'devA');
     expect(control.deviceName, isNotEmpty);
-    expect(control.categories.values.every((on) => on), isTrue);
+    expect(control.categories[SyncCategory.covers], isFalse,
+        reason: '自定义封面默认关闭');
+    expect(
+      control.categories.entries
+          .where((entry) => entry.key != SyncCategory.covers)
+          .every((entry) => entry.value),
+      isTrue,
+    );
     expect(control.enabledTransports, isEmpty);
     expect(control.webdav.isConfigured, isFalse);
     expect(control.manualPeers, isEmpty);
@@ -133,6 +140,29 @@ void main() {
     expect(state.cellularPolicy, SyncCellularPolicy.pause);
 
     expect(notifications, 5);
+  });
+
+  test('开启类别：各传输快照发布覆盖置为未发布，强制下一轮全量外发', () async {
+    final webdav = FakeSyncTransport(kind: SyncTransportKind.webdav);
+    final multi = SyncControlPlane(
+      state: state,
+      transports: {'lan': lan, 'webdav': webdav},
+    );
+    addTearDown(multi.dispose);
+    state.setSnapshotPushSeq('lan', 42);
+    state.setSnapshotPushSeq('webdav', 42);
+    expect(state.snapshotPushSeq('lan'), 42);
+
+    await multi.setCategory(SyncCategory.covers, true);
+
+    expect(multi.categories[SyncCategory.covers], isTrue);
+    expect(state.snapshotPushSeq('lan'), -1, reason: 'WebDAV 的持久覆盖会跳过上传，必须失效');
+    expect(state.snapshotPushSeq('webdav'), -1);
+
+    // 已开启类别再次写 true 不重复失效：不能把刚发布成功的覆盖又清掉。
+    state.setSnapshotPushSeq('lan', 50);
+    await multi.setCategory(SyncCategory.covers, true);
+    expect(state.snapshotPushSeq('lan'), 50);
   });
 
   test('传输开关：开启启动、重复开启幂等、关闭停止', () async {

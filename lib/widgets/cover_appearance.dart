@@ -23,16 +23,19 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
+import '../services/covers/custom_cover_store.dart';
+import '../utils/local_image_provider.dart';
 import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';
 
 /// 曲目封面 URL（空串视同无封面；领域 Track 自带可靠 id/artwork）。
 ///
 /// 封面词汇的唯一来源：真身渲染、飞行副本、切歌会话的占位 URL 与
-/// 迷你/顶栏取值都走它（`player_cover_deck.dart` 再导出）。
+/// 迷你/顶栏取值都走它（`player_cover_deck.dart` 再导出）。自定义封面优先；
+/// 全局默认封面是占位，不从这里返回（不参与取色 / 下载 / 标签）。
 String? artworkUrlOf(Track? track) {
-  final url = track?.artwork?.uri.toString();
-  return url == null || url.isEmpty ? null : url;
+  final resolved = CustomCoverStore.instance.resolveTrackCover(track);
+  return resolved == null || resolved.isEmpty ? null : resolved;
 }
 
 /// 曲目的稳定 key（领域 id）。
@@ -267,6 +270,7 @@ class CoverFlightLayer extends StatelessWidget {
     required this.animation,
     required this.flight,
     required this.url,
+    this.fallbackUrl,
     this.fallback,
   });
 
@@ -282,6 +286,9 @@ class CoverFlightLayer extends StatelessWidget {
 
   /// 飞行期间展示的封面 URL（由调用方在抓取锚点的同一刻确定）。
   final String? url;
+
+  /// 无封面 / 加载失败时的回退图（全局默认封面）。
+  final String? fallbackUrl;
 
   /// 未命中缓存/无封面时的回退（拿到插值后的图标尺寸）。
   final Widget Function(BuildContext context, double iconSize)? fallback;
@@ -304,6 +311,7 @@ class CoverFlightLayer extends StatelessWidget {
               iconSize: iconSize,
               content: (context, clip, icon) => MorphCover(
                 url: url,
+                fallbackUrl: fallbackUrl,
                 borderRadius: clip,
                 fallbackIconSize: icon,
                 fallback: fallback?.call(context, icon),
@@ -325,6 +333,7 @@ class MorphCover extends StatefulWidget {
   const MorphCover({
     super.key,
     required this.url,
+    this.fallbackUrl,
     required this.borderRadius,
     this.fallback,
     this.fallbackIconSize,
@@ -332,6 +341,10 @@ class MorphCover extends StatefulWidget {
   });
 
   final String? url;
+
+  /// 无封面 / 加载失败时的回退图（如全局默认封面）。
+  final String? fallbackUrl;
+
   final BorderRadius borderRadius;
 
   /// 未命中缓存/加载失败时的回退（默认主题容器色 + 音符图标）。
@@ -354,6 +367,9 @@ class _MorphCoverState extends State<MorphCover> {
   /// 当前解析用的有界解码边长；DPR / 窗口尺寸变化时重算。
   int? _decodeEdge;
 
+  /// 主图缺失、正在展示 [MorphCover.fallbackUrl]：回退图失败后不再递归。
+  bool _usingFallback = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -367,6 +383,7 @@ class _MorphCoverState extends State<MorphCover> {
   void didUpdateWidget(covariant MorphCover oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url ||
+        oldWidget.fallbackUrl != widget.fallbackUrl ||
         oldWidget.artworkCache != widget.artworkCache) {
       _decodeEdge = playbackCoverDecodeEdge(context);
       _resolveProvider();
@@ -374,10 +391,21 @@ class _MorphCoverState extends State<MorphCover> {
   }
 
   void _resolveProvider() {
-    final url = widget.url;
+    final primary = widget.url;
+    final fallback = widget.fallbackUrl;
+    final hasPrimary = primary != null && primary.isNotEmpty;
+    final url = hasPrimary
+        ? primary
+        : (fallback != null && fallback.isNotEmpty ? fallback : null);
+    _usingFallback = !hasPrimary && url != null;
     final cache = widget.artworkCache ?? ArtworkCache.instance;
-    if (url == null || url.isEmpty) {
+    if (url == null) {
       _provider = null;
+      return;
+    }
+    final local = localFileImageProvider(url);
+    if (local != null) {
+      _provider = ResizeImage.resizeIfNeeded(_decodeEdge, null, local);
       return;
     }
     final provider = CachedNetworkImageProvider(
@@ -412,6 +440,20 @@ class _MorphCoverState extends State<MorphCover> {
   }
 
   Widget _fallback(BuildContext context) {
+    final fallbackUrl = widget.fallbackUrl;
+    if (!_usingFallback &&
+        fallbackUrl != null &&
+        fallbackUrl.isNotEmpty &&
+        fallbackUrl != widget.url) {
+      // 主图失败：先落到默认封面（同一个 MorphCover，回退链只走一层）。
+      return MorphCover(
+        url: fallbackUrl,
+        borderRadius: widget.borderRadius,
+        fallback: widget.fallback,
+        fallbackIconSize: widget.fallbackIconSize,
+        artworkCache: widget.artworkCache,
+      );
+    }
     final custom = widget.fallback;
     if (custom != null) return custom;
     final scheme = Theme.of(context).colorScheme;

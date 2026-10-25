@@ -3,10 +3,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../models/lyric_line.dart';
 import '../models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/notification_service.dart';
@@ -23,6 +25,9 @@ class LyricsSelectionPage extends StatefulWidget {
   final String trackTitle;
   final String artistName;
   final String? albumCoverUrl;
+
+  /// 当前曲目身份：页头缩略图与海报取自定义封面用（可空：独立测试挂载）。
+  final TrackId? trackId;
 
   /// 与 [lyrics] 等索引的翻译 / 罗马音（'' = 该行无扩展文本）。
   /// 来自歌词页同一份时间戳对齐结果，选择页与海报都据此展示。
@@ -46,6 +51,7 @@ class LyricsSelectionPage extends StatefulWidget {
     required this.trackTitle,
     required this.artistName,
     this.albumCoverUrl,
+    this.trackId,
     this.translations = const [],
     this.romas = const [],
     this.isSynced = true,
@@ -285,6 +291,7 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
         trackTitle: widget.trackTitle,
         artistName: widget.artistName,
         albumCoverUrl: widget.albumCoverUrl,
+        trackId: widget.trackId,
       ),
     );
   }
@@ -338,14 +345,24 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         ),
                         child: Row(
                           children: [
-                            AppNetworkImage(
-                              url: widget.albumCoverUrl,
-                              width: 60,
-                              height: 60,
-                              borderRadius: BorderRadius.circular(8),
-                              memCacheWidth:
-                                  (60 * MediaQuery.of(context).devicePixelRatio)
-                                      .round(),
+                            ValueListenableBuilder<int>(
+                              valueListenable:
+                                  CustomCoverStore.instance.revision,
+                              builder: (context, _, __) => AppNetworkImage(
+                                url: CustomCoverStore.instance
+                                    .resolveTrackCoverForId(
+                                  widget.trackId,
+                                  originalUrl: widget.albumCoverUrl,
+                                ),
+                                fallbackUrl:
+                                    CustomCoverStore.instance.defaultCoverUrl,
+                                width: 60,
+                                height: 60,
+                                borderRadius: BorderRadius.circular(8),
+                                memCacheWidth: (60 *
+                                        MediaQuery.of(context).devicePixelRatio)
+                                    .round(),
+                              ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(

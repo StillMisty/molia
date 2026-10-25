@@ -376,8 +376,11 @@ class SyncProvider extends ChangeNotifier {
     await _controlPlane.setTransportEnabled(kind, value);
   }
 
-  Future<void> setCategory(SyncCategory category, bool value) =>
-      _controlPlane.setCategory(category, value);
+  Future<void> setCategory(SyncCategory category, bool value) async {
+    await _controlPlane.setCategory(category, value);
+    // 打开类别立即排一轮：已有本地数据（尤其自定义封面）不必等空闲退避。
+    if (value) notifyLocalChange(categories: {category});
+  }
 
   Future<void> setDeviceName(String value) =>
       _controlPlane.setDeviceName(value);

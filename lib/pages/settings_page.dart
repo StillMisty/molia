@@ -5,6 +5,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/lyrics_display_provider.dart';
@@ -14,6 +15,7 @@ import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/audio_focus_settings.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../services/data_saver_service.dart';
 import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
@@ -25,6 +27,8 @@ import '../utils/data_saver_subtitle.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
+import '../widgets/app_network_image.dart';
+import '../widgets/cover_picker_sheet.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_section_grid.dart';
@@ -485,7 +489,11 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               SettingsSectionGrid(
                 twoColumn: twoColumn,
                 children: [
-                  _appearanceSection(context, l10n),
+                  _appearanceSection(
+                    context,
+                    l10n,
+                    syncProvider: syncProvider,
+                  ),
                   _playbackSection(
                     context,
                     l10n,
@@ -516,8 +524,15 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 / 纯黑 / 字体。
-  Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
+  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 /
+  /// 默认封面（+ 同步快捷键） / 纯黑 / 字体。
+  Widget _appearanceSection(
+    BuildContext context,
+    AppLocalizations l10n, {
+    SyncProvider? syncProvider,
+  }) {
+    final covers =
+        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
       children: [
@@ -621,6 +636,42 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                       .read<ThemeProvider>()
                       .setFollowArtworkEnabled(value),
                 ),
+                // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
+                // 不参与取色、下载与标签。
+                ValueListenableBuilder<int>(
+                  valueListenable: covers.revision,
+                  builder: (context, _, __) => SettingsNavTile(
+                    key: const Key('settingsDefaultCoverItem'),
+                    icon: Icons.image_rounded,
+                    title: l10n.coverDefaultTitle,
+                    subtitle: l10n.coverDefaultSubtitle,
+                    trailing: AppNetworkImage(
+                      url: covers.defaultCoverUrl,
+                      width: 40,
+                      height: 40,
+                      borderRadius: BorderRadius.circular(10),
+                      memCacheWidth:
+                          (40 * MediaQuery.of(context).devicePixelRatio)
+                              .round(),
+                      fallbackIconSize: 20,
+                    ),
+                    onTap: () => unawaited(showCoverPickerSheet(context)),
+                  ),
+                ),
+                // 同步快捷键：与同步设置 › 内容共用同一类别状态（不是第二份
+                // 开关）；没有同步栈（测试 / 精简组合根）时整行隐藏。
+                if (syncProvider != null)
+                  SettingsSwitchTile(
+                    switchKey: const Key('settingsSyncCustomCoversSwitch'),
+                    icon: Icons.sync_rounded,
+                    title: l10n.settingsSyncCustomCovers,
+                    subtitle: l10n.settingsSyncCustomCoversSubtitle,
+                    value: syncProvider.categories[SyncCategory.covers] ??
+                        SyncCategory.covers.defaultEnabled,
+                    onChanged: (value) => unawaited(
+                      syncProvider.setCategory(SyncCategory.covers, value),
+                    ),
+                  ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsPureBlackSwitch'),
                   icon: Icons.dark_mode_rounded,

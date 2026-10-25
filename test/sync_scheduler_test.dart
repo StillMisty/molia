@@ -353,6 +353,9 @@ void main() {
 
   test('移动数据（auto）：只同步小类别', () {
     fakeAsync((async) {
+      expect(
+          SyncScheduler.smallCategories, isNot(contains(SyncCategory.covers)),
+          reason: '封面图片体积大，蜂窝下等 Wi-Fi');
       final env = build(async, cellular: true);
       unawaited(env.scheduler.start());
       async.flushMicrotasks();

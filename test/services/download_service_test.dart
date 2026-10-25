@@ -55,6 +55,7 @@ void main() {
     Dio? dio,
     DownloadLyricsResolver? lyrics,
     DownloadArtworkResolver? artwork,
+    DownloadCustomCoverResolver? customCover,
     DownloadSettings? settings,
     DownloadsPublisher? publisher,
     DownloadNotifications? notifications,
@@ -73,6 +74,7 @@ void main() {
           mockDio((options) => textResponse('unexpected', statusCode: 500)),
       lyricsResolver: lyrics,
       artworkResolver: artwork,
+      customCoverResolver: customCover,
       settings: settings,
       publisher: publisher,
       notifications: notifications,
@@ -151,6 +153,33 @@ void main() {
     final lyrics = await service.localLyricsFor(local);
     expect(lyrics!.lyric, '[00:01]原文');
     expect(lyrics.translation, '[00:01]译文');
+  });
+
+  test('自定义封面：下载封面与标签使用它，不再取网络图', () async {
+    var artworkCalls = 0;
+    final service = makeService(
+      dio: mockDio((options) {
+        if (options.uri.path.endsWith('.mp3')) {
+          return bytesResponse([1, 2, 3, 4]);
+        }
+        return textResponse('not found', statusCode: 404);
+      }),
+      customCover: (track) async => Uint8List.fromList([7, 7, 7, 7]),
+      artwork: (track) async {
+        artworkCalls++;
+        return 'https://img.example.com/should-not-be-used.jpg';
+      },
+    );
+    await service.init();
+
+    final track = makeTrack();
+    await service.download(track, includeLyrics: false);
+
+    final record = service.recordFor('kw', '1');
+    expect(record, isNotNull);
+    expect(record!.coverPath, '/downloads/covers/歌手 - 测试歌曲.jpg');
+    expect(storage.files[record.coverPath], [7, 7, 7, 7]);
+    expect(artworkCalls, 0);
   });
 
   test('进度广播：首个进度可见；完成后状态清空', () async {

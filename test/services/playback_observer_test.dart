@@ -5,6 +5,7 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/image_preload_manager.dart';
 import 'package:molia/services/app_presence.dart';
+import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +75,8 @@ void main() {
 
   PlaybackObserver buildObserver({
     Future<String?> Function(Track track)? artworkResolver,
+    PlaybackCoverResolver? displayCoverUrlResolver,
+    DataSaverService? dataSaver,
     GlobalKey<NavigatorState>? navigatorKey,
     AppPresence? presence,
   }) {
@@ -85,6 +88,7 @@ void main() {
     preloader = _RecordingPreloader(log);
     return PlaybackObserver(
       facade: facade,
+      dataSaver: dataSaver,
       libraryRepository: libraryStore,
       playContextWriter: ({
         required contextUri,
@@ -102,6 +106,7 @@ void main() {
       },
       albumArtPreloader: preloader,
       artworkResolver: artworkResolver,
+      displayCoverUrlResolver: displayCoverUrlResolver,
       navigatorKey: navigatorKey,
       requestNotificationPermission: () async {
         log.add('notify');
@@ -162,6 +167,34 @@ void main() {
     // 顺序：context → widget → history 同步发起；通知权限在播放态判定后
     // 发起；预取在微任务中执行（跨 async gap 不用 context），落在最后。
     expect(log, ['context', 'widget', 'history', 'notify', 'preload']);
+  });
+
+  test('省流：本地封面照常传小组件，远程封面置空', () async {
+    final dataSaver = DataSaverService(
+      prefs: await SharedPreferences.getInstance(),
+      cellularProbe: () async => true,
+    );
+    await dataSaver.init(monitor: false);
+    await dataSaver.setEnabled(true);
+    addTearDown(dataSaver.dispose);
+    expect(dataSaver.blockNetworkArtwork, isTrue);
+
+    var displayUrl = 'file:///data/user/0/molia/custom_covers/track_a.jpg';
+    final observer = buildObserver(
+      dataSaver: dataSaver,
+      displayCoverUrlResolver: (_) => displayUrl,
+    );
+    addTearDown(observer.dispose);
+
+    final local = track('a', artwork: 'https://img.example/a.jpg');
+    backend.emit(snapshot(local));
+    expect(widgetPayloads.single['albumArtUrl'], displayUrl,
+        reason: '本地自定义 / 默认封面不需要网络，省流时照常展示');
+
+    displayUrl = 'https://img.example/b.jpg';
+    final remote = track('b', artwork: displayUrl);
+    backend.emit(snapshot(remote));
+    expect(widgetPayloads.last['albumArtUrl'], '', reason: '远程封面在省流时仍置空');
   });
 
   test('切歌：无封面时补取并回写队列（widget 再次刷新封面）', () async {

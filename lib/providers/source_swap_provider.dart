@@ -100,16 +100,21 @@ class SourceSwapApplyResult {
   final bool queueFollowed;
 }
 
+/// 换源成功后把曲目级本地数据（如自定义封面）带到新来源。
+typedef SourceSwapTrackHook = Future<void> Function(Track seed, Track selected);
+
 class SourceSwapProvider extends ChangeNotifier {
   SourceSwapProvider({
     required CatalogService catalogService,
     required SourceRegistry sourceRegistry,
     required LibraryProvider libraryProvider,
     required PlaybackProvider playbackProvider,
+    SourceSwapTrackHook? onTrackSwapped,
   })  : _catalogService = catalogService,
         _sourceRegistry = sourceRegistry,
         _libraryProvider = libraryProvider,
-        _playbackProvider = playbackProvider;
+        _playbackProvider = playbackProvider,
+        _onTrackSwapped = onTrackSwapped;
 
   /// 每个音源的候选上限（对齐 LX 弹窗的 25 条量级）。
   static const int perSourceLimit = 30;
@@ -118,6 +123,9 @@ class SourceSwapProvider extends ChangeNotifier {
   final SourceRegistry _sourceRegistry;
   final LibraryProvider _libraryProvider;
   final PlaybackProvider _playbackProvider;
+
+  /// 写回成功后的曲目级本地数据钩子（自定义封面跟随；失败不影响换源）。
+  final SourceSwapTrackHook? _onTrackSwapped;
 
   /// 会话 id：换源开始/清空时自增，过期搜索结果直接丢弃。
   int _sessionId = 0;
@@ -309,6 +317,7 @@ class SourceSwapProvider extends ChangeNotifier {
           selected,
         );
         if (followed) {
+          await _notifyTrackSwapped(request.seed, selected);
           return const SourceSwapApplyResult(
             SourceSwapApplyStatus.swapped,
             queueFollowed: true,
@@ -317,6 +326,7 @@ class SourceSwapProvider extends ChangeNotifier {
         // 试听已把所选曲目接入播放（单曲试听队列已不含旧曲目）：视为已生效，
         // 否则仅队列入口的「试听 → 确认」会必然报「目标不在队列」。
         if (_playbackProvider.snapshot.current?.id == selected.id) {
+          await _notifyTrackSwapped(request.seed, selected);
           return const SourceSwapApplyResult(
             SourceSwapApplyStatus.swapped,
             queueFollowed: true,
@@ -338,10 +348,20 @@ class SourceSwapProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[SourceSwap] 换源后队列跟随失败: $e');
     }
+    await _notifyTrackSwapped(request.seed, selected);
     return SourceSwapApplyResult(
       SourceSwapApplyStatus.swapped,
       queueFollowed: followed,
     );
+  }
+
+  /// 换源成功后的本地数据跟随：失败只记日志，不把已完成的换源变成异常。
+  Future<void> _notifyTrackSwapped(Track seed, Track selected) async {
+    try {
+      await _onTrackSwapped?.call(seed, selected);
+    } catch (e) {
+      _logger.warning('换源后同步本地数据失败: $e');
+    }
   }
 
   List<SourceDescriptor> _otherSearchableSources(Track seed) => [

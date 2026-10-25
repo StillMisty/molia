@@ -78,6 +78,9 @@ void main() {
     expect(value.activeScriptStamp!.hash, 'h-active');
     expect(value.activeScriptStamp!.version.counter, 3);
     expect(value.sessionStamp!.version.counter, 4);
+    expect(value.coverStamps['wy:1']!.hash, 'h-cover');
+    expect(value.coverStamps['wy:1']!.version.counter, 5);
+    expect(value.coverTombstones['wy:2']!.version.physical, 1770000000450);
     expect(value.lastSyncAt, 1770000000500);
     expect(value.transportLastSuccess, {
       'lan': 1770000000500,
@@ -149,8 +152,10 @@ void main() {
     expect(empty.deviceId, '');
     expect(empty.deviceName, '');
     expect(empty.categories, {
-      for (final category in SyncCategory.values) category: true,
+      for (final category in SyncCategory.values)
+        category: category.defaultEnabled,
     });
+    expect(empty.categories[SyncCategory.covers], isFalse, reason: '自定义封面默认关闭');
     expect(empty.transports, isEmpty);
     expect(empty.webdav.baseUrl, '');
     expect(empty.webdav.username, '');
@@ -166,6 +171,8 @@ void main() {
     expect(empty.knownScriptIds, isEmpty);
     expect(empty.activeScriptStamp, isNull);
     expect(empty.sessionStamp, isNull);
+    expect(empty.coverStamps, isEmpty);
+    expect(empty.coverTombstones, isEmpty);
     expect(empty.lastSyncAt, 0);
     expect(empty.transportLastSuccess, isEmpty);
     expect(empty.snapshotPushSeq, isEmpty);
@@ -187,6 +194,8 @@ void main() {
       'settings',
       'scriptTombstones',
       'scriptStamps',
+      'coverStamps',
+      'coverTombstones',
       'knownScripts',
       'lastSyncAt',
       'log',
@@ -213,7 +222,16 @@ void main() {
     })!;
     expect(legacy.deviceId, 'devA');
     expect(legacy.transports, {'lan'});
-    expect(legacy.categories.values.every((enabled) => enabled), isTrue);
+    expect(legacy.categories[SyncCategory.covers], isFalse,
+        reason: '旧状态缺 covers 时按默认关闭，不能回退成开启');
+    expect(
+      legacy.categories.entries
+          .where((entry) => entry.key != SyncCategory.covers)
+          .every((entry) => entry.value),
+      isTrue,
+    );
+    expect(legacy.coverStamps, isEmpty);
+    expect(legacy.coverTombstones, isEmpty);
     expect(legacy.settingStamps['themeMode']!.hash, 'hash');
     expect(legacy.settingStamps['themeMode']!.version.physical, 10);
     expect(legacy.peers.single.lastSuccessAt, 0);
@@ -249,6 +267,8 @@ void main() {
       'settings': [1, 2],
       'scriptTombstones': 5,
       'scriptStamps': null,
+      'coverStamps': 9,
+      'coverTombstones': 'nope',
       'knownScripts': 7,
       'activeScript': {
         'v': {'counter': 1},
@@ -271,6 +291,8 @@ void main() {
     expect(state.lanHttpPort, 0);
     expect(state.stampBaseline, SyncVersion.zero);
     expect(state.settingStamps, isEmpty);
+    expect(state.coverStamps, isEmpty);
+    expect(state.coverTombstones, isEmpty);
     expect(state.activeScriptStamp, isNull);
     expect(state.sessionStamp, isNull);
     expect(state.lastSyncAt, 0);
@@ -433,6 +455,17 @@ SyncPersistedState _populatedState() => SyncPersistedState(
       sessionStamp: const SyncStamp(
         version: SyncVersion(physical: 1770000000250, counter: 4),
       ),
+      coverStamps: {
+        'wy:1': const SyncStamp(
+          hash: 'h-cover',
+          version: SyncVersion(physical: 1770000000350, counter: 5),
+        ),
+      },
+      coverTombstones: {
+        'wy:2': const SyncStamp(
+          version: SyncVersion(physical: 1770000000450),
+        ),
+      },
       lastSyncAt: 1770000000500,
       transportLastSuccess: {
         'lan': 1770000000500,

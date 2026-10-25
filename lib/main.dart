@@ -162,11 +162,17 @@ void main() async {
     library: library,
     messenger: AppUiMessenger(notifications),
     powerPolicy: powerPolicy,
+    customCovers: local.customCovers,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       // handler 只翻译动作；恢复态回落、阶段路由与提交都在会话命令面。
       commands: session,
       artworkBlocked: () => local.dataSaver.blockNetworkArtwork,
+      // 自定义 → 原始 → 默认封面；本地文件由 handler 按平台转裸路径 / URI。
+      coverUrlResolver: (track) => local.customCovers.resolveForDisplayForKey(
+        track.id,
+        originalUrl: track.coverUrl,
+      ),
     ),
   );
   _markStartup('播放栈（含媒体会话）', startup);
@@ -221,6 +227,7 @@ void main() async {
     lyricsProvider: lyrics.lyricsProvider,
     audioHandler: playback.audioHandler,
     powerPolicy: powerPolicy,
+    customCovers: local.customCovers,
   );
   final desktop = await desktopFuture;
   final display = await displayFuture;
@@ -240,6 +247,7 @@ void main() async {
     library: library,
     playback: playback,
     dataSaver: local.dataSaver,
+    customCovers: local.customCovers,
     // 配对发现只在前台应答：生命周期判定留在组合根，数据层不碰 WidgetsBinding。
     isForeground: () =>
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,

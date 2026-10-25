@@ -32,11 +32,13 @@ import '../l10n/app_localizations.dart';
 import '../pages/ai_dj_page.dart';
 import '../providers/ai_dj_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
+import '../services/covers/custom_cover_store.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
 import 'app_network_image.dart';
+import 'cover_appearance.dart';
 
 class AiDjCarousel extends StatefulWidget {
   const AiDjCarousel({super.key});
@@ -332,7 +334,8 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
             // 封面 + 原生 title/subtitle 槽位：文字由 carousel 按当前槽位
             // 渲染，任何宽度下都保留歌名与歌手。
             image: AppNetworkImage(
-              url: batch.items[i].track.artwork?.uri.toString(),
+              url: artworkUrlOf(batch.items[i].track),
+              fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
               fit: BoxFit.cover,
               fallbackColor: scheme.surfaceContainerHighest,
               fallbackIconSize: 32,

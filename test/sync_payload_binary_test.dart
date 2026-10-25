@@ -31,8 +31,20 @@ void main() {
       journalHead: 42,
       baseSeq: 7,
       acks: {'dev-b': 11},
-      categories: ['settings', 'playlistTracks'],
+      categories: ['settings', 'playlistTracks', 'covers'],
       records: {
+        SyncCategory.covers: [
+          const SyncRecord(
+            key: '__default_cover__',
+            version: SyncVersion(physical: 100, counter: 4, deviceId: 'dev-a'),
+            data: {
+              'image': '/9j/4AAQ',
+              'mime': 'image/jpeg',
+              'hash': 'cover-hash',
+              'updatedAt': 100,
+            },
+          ),
+        ],
         SyncCategory.settings: [
           const SyncRecord(
             key: 'theme_mode',

@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 import 'package:molia/data/catalog/album_service.dart';
 import 'package:molia/data/catalog/artist_service.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
@@ -21,11 +24,13 @@ import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
+import 'package:molia/services/covers/custom_cover_store.dart';
 import '../support/memory_cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/lyrics_provider_label.dart';
+import 'package:molia/widgets/app_network_image.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -180,6 +185,7 @@ Track _track({
   String? albumId,
   String? artistId,
   String artistName = 'Artist a',
+  String? artworkUrl,
 }) =>
     Track(
       id: const TrackId('kw', 'a'),
@@ -188,6 +194,7 @@ Track _track({
       album: 'Album a',
       duration: const Duration(seconds: 245),
       origin: TrackOrigin.lx,
+      artwork: artworkUrl == null ? null : Artwork(uri: Uri.parse(artworkUrl)),
       qualities: const [
         AudioQuality(type: '320k', size: '9.8MB'),
         AudioQuality(type: 'flac'),
@@ -298,6 +305,70 @@ void main() {
     expect(find.text('暂无歌词'), findsOneWidget);
   });
 
+  testWidgets('封面行：跟随歌曲 → 自定义后立即显示已自定义', (tester) async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('molia_track_info_cover_');
+    final store = CustomCoverStore(
+      supportDirectory: () async => tempDir,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
+    );
+    await tester.runAsync(store.load);
+    CustomCoverStore.overrideInstance(store);
+    addTearDown(() {
+      CustomCoverStore.overrideInstance(null);
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    await pumpView(tester, track: _track());
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    expect(find.byKey(const Key('trackInfoCoverItem')), findsOneWidget);
+    expect(find.text(l10n.coverTitle), findsOneWidget);
+    expect(find.text('跟随歌曲'), findsOneWidget);
+
+    final source = image.Image(width: 2, height: 2);
+    await tester.runAsync(
+      () => store.setTrackCover(
+        const TrackId('kw', 'a'),
+        Uint8List.fromList(image.encodePng(source)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('已自定义'), findsOneWidget);
+  });
+
+  testWidgets('封面行：默认封面只作远端封面的加载失败回退', (tester) async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('molia_track_info_fallback_');
+    final store = CustomCoverStore(
+      supportDirectory: () async => tempDir,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
+    );
+    await tester.runAsync(store.load);
+    CustomCoverStore.overrideInstance(store);
+    addTearDown(() {
+      CustomCoverStore.overrideInstance(null);
+      if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+    });
+
+    const remote = 'https://example.com/song-cover.jpg';
+    final source = image.Image(width: 2, height: 2);
+    await tester.runAsync(
+      () => store.setDefaultCover(Uint8List.fromList(image.encodePng(source))),
+    );
+
+    await pumpView(tester, track: _track(artworkUrl: remote));
+
+    final thumbnail = tester.widget<AppNetworkImage>(
+      find.descendant(
+        of: find.byKey(const Key('trackInfoCoverItem')),
+        matching: find.byType(AppNetworkImage),
+      ),
+    );
+    expect(thumbnail.url, remote, reason: '主图是歌曲封面，不是默认封面');
+    expect(thumbnail.fallbackUrl, store.defaultCoverUrl,
+        reason: '远端封面加载失败时落到默认封面');
+  });
+
   testWidgets('专辑行：payload 有专辑 id 且渠道支持时改为可点，进入专辑页', (tester) async {
     final registry = FakeSourceRegistry({
       'kw': FakeMusicSource(
@@ -327,6 +398,8 @@ void main() {
     expect(find.byKey(const Key('trackInfoAlbumItem')), findsOneWidget);
     expect(find.text('Album a · 查看专辑'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('trackInfoAlbumItem')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('trackInfoAlbumItem')));
     await tester.pumpAndSettle();
     expect(find.byType(AlbumPage), findsOneWidget);
@@ -515,6 +588,8 @@ void main() {
     expect(find.text('本地数据'), findsOneWidget);
     expect(find.text('已缓存 · 320K · 3.0 MB · 可离线使用'), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('trackInfoLocalDataItem')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
     expect(find.byType(TrackLocalDataPage), findsOneWidget);
@@ -538,6 +613,8 @@ void main() {
     );
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
+    await tester.ensureVisible(find.byKey(const Key('trackInfoLocalDataItem')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
     await tester.pumpAndSettle();
     await scrollLocalDataPage(tester);

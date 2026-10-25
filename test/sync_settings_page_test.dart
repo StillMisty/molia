@@ -1076,10 +1076,16 @@ void main() {
   testWidgets('同步内容子页：类别开关可切、蜂窝暂停在页内，入口副文案跟随', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
-    expect(find.text('All categories'), findsOneWidget);
+    expect(find.text('1 turned off'), findsOneWidget, reason: '自定义封面默认关闭');
 
     await openSubPage(tester, 'settingsSyncContentItem');
     expect(find.byType(SyncContentPage), findsOneWidget);
+    expect(provider.categories[SyncCategory.covers], isFalse);
+
+    // 自定义封面默认关闭；在内容页打开后与同步设置同源。
+    await tester.tap(find.byKey(const Key('settingsSyncCategory-covers')));
+    await tester.pumpAndSettle();
+    expect(provider.categories[SyncCategory.covers], isTrue);
 
     await tester.tap(find.byKey(const Key('settingsSyncCategory-statistics')));
     await tester.pumpAndSettle();

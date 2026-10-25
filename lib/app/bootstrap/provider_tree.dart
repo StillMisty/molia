@@ -26,6 +26,7 @@ import '../../services/ai/ai_recommendation_service.dart';
 import '../../services/ai/ai_settings_store.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/cache_service.dart';
+import '../../services/covers/custom_cover_store.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/save_as.dart';
@@ -105,6 +106,8 @@ List<SingleChildWidget> buildAppProviders({
     ChangeNotifierProvider.value(value: library.localDatabaseProvider),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
+    // 自定义封面（每曲 + 默认）：歌曲信息页 / 设置页 / 封面选择弹层读取。
+    Provider<CustomCoverStore>.value(value: local.customCovers),
     // 换源：跨音源搜索 + 原位替换 + 队列跟随（收藏页 / 播放页入口）。
     ChangeNotifierProvider(
       create: (context) => SourceSwapProvider(
@@ -112,6 +115,8 @@ List<SingleChildWidget> buildAppProviders({
         sourceRegistry: sourceRegistry,
         libraryProvider: context.read<LibraryProvider>(),
         playbackProvider: context.read<PlaybackProvider>(),
+        // 换源成功后把自定义封面复制到新曲目键（非破坏性）。
+        onTrackSwapped: local.customCovers.carryOver,
       ),
     ),
     // AI 推歌：模式控制器 + 配置存储 + 生成服务。
