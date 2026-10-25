@@ -10,10 +10,8 @@ import '../../domain/models/failure.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'artist_source.dart';
-import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_track.dart';
-import 'builtin_search.dart';
-import 'builtin_search_runner.dart';
 
 class BiliSearch {
   BiliSearch._();
@@ -34,55 +32,36 @@ class BiliSearch {
   /// 搜索语义一致）；平台返回空保持正常空结果。
   ///
   /// [limit] 只为适配器签名保留：B 站固定 20 条/页，改不了本页条数。
-  /// 搜索失败不细分错误码：网络抖动 / WBI 会话失效 / 风控都可能表现为
-  /// failed，刷新会话后重试一次，仍失败才把失败交给调用方。
+  /// 请求生命周期（WBI 签名、风控刷新一次、业务码）全在 [BiliClient]；
+  /// 这里只拼查询参数与解析 `data`。
   static Future<SourceSearchResult> searchWithMeta(
     String keyword, {
     int page = 1,
     int limit = pageSize,
   }) async {
     final normalizedPage = page.clamp(1, maxPage);
-    var result = await _run(keyword, normalizedPage);
-    if (result.failure == null) return result;
     try {
-      await BiliApi.refresh();
-    } catch (_) {
-      return result;
-    }
-    result = await _run(keyword, normalizedPage);
-    return result;
-  }
-
-  static Future<SourceSearchResult> _run(String keyword, int page) async {
-    try {
-      final session = await BiliApi.session();
-      final url = session.signUrl(
-        '${BiliApi.baseUrl}/x/web-interface/wbi/search/type',
-        {
+      final response = await BiliClient.shared.get(
+        '/x/web-interface/wbi/search/type',
+        query: {
           'search_type': 'video',
           'order': 'totalrank',
           'keyword': keyword,
-          'page': page,
+          'page': normalizedPage,
         },
+        auth: BiliAuth.session,
+        // ADR-0014：搜索不细分错误码，任何失败都刷新会话再试一次。
+        refreshPolicy: BiliRefreshPolicy.anyFailure,
       );
-      return await runBuiltinSearch(
-        BuiltinSearchCall(
-          platform: 'bili',
-          url: url,
-          headers: session.apiHeaders,
-          retries: 1,
-          isInvalid: _isInvalid,
-          parseItems: parseItemsOf,
-          totalOf: totalOf,
-          isEndOf: (response) {
-            final pages = numPagesOf(response);
-            // 没有分页字段（含「无结果」）时按末页处理：宁可少翻一页，也不
-            // 让 hasMore 永远为真、UI 反复请求空页。
-            return pages == null || page >= pages;
-          },
-        ),
-        page: page,
+      final pages = numPagesOf(response);
+      return SourceSearchResult.fromPage(
+        tracks: parseItemsOf(response) ?? const [],
+        page: normalizedPage,
         limit: pageSize,
+        total: totalOf(response),
+        // 没有分页字段（含「无结果」）时按末页处理：宁可少翻一页，也不
+        // 让 hasMore 永远为真、UI 反复请求空页。
+        isEnd: pages == null || normalizedPage >= pages,
       );
     } catch (e) {
       return SourceSearchResult.failed(SourceFailure.from(e));
@@ -91,39 +70,27 @@ class BiliSearch {
 
   /// UP 用户搜索（搜索页「歌手」类型）。平台固定 20 条/页，[limit] 只保留
   /// 适配器签名。
+  ///
+  /// 与视频搜索同一套会话 / 风控策略（[BiliClient] 的 session 口径），
+  /// 不再出现「视频搜索会刷新、用户搜索不会」的分叉。
   static Future<ArtistSearchPage> searchUsers(
     String keyword, {
     int page = 1,
     int limit = pageSize,
   }) async {
     final normalizedPage = page.clamp(1, maxPage);
-    try {
-      final session = await BiliApi.session();
-      final url = session.signUrl(
-        '${BiliApi.baseUrl}/x/web-interface/wbi/search/type',
-        {
-          'search_type': 'bili_user',
-          'keyword': keyword,
-          'page': normalizedPage,
-        },
-      );
-      final response = await BuiltinSearch.transport.getJson(
-        url,
-        headers: session.apiHeaders,
-      );
-      final code = BiliApi.codeOf(response);
-      if (code != 0) {
-        throw BiliApi.failureForCode(
-          code ?? -1,
-          message: 'bili: 用户搜索失败（code=${code ?? '非 JSON'}）',
-        );
-      }
-      return parseUsers(response, page: normalizedPage);
-    } on SourceFailure {
-      rethrow;
-    } catch (e) {
-      throw SourceFailure.from(e);
-    }
+    final response = await BiliClient.shared.get(
+      '/x/web-interface/wbi/search/type',
+      query: {
+        'search_type': 'bili_user',
+        'keyword': keyword,
+        'page': normalizedPage,
+      },
+      auth: BiliAuth.session,
+      // 与视频搜索同一套 any-failure 刷新口径。
+      refreshPolicy: BiliRefreshPolicy.anyFailure,
+    );
+    return parseUsers(response, page: normalizedPage);
   }
 
   /// 用户搜索响应 → 歌手页结果（供单测复用）。
@@ -159,9 +126,6 @@ class BiliSearch {
         : (total != null && page * pageSize < total);
     return ArtistSearchPage(items: items, total: total, hasMore: hasMore);
   }
-
-  static bool _isInvalid(dynamic response) =>
-      response is! Map || response['code'] != 0;
 
   /// 完整响应 → 结果列表。
   static List<SourceTrack>? parseItemsOf(dynamic response) {

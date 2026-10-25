@@ -100,6 +100,26 @@ void main() {
     expect(query['w_rid'], isNotEmpty);
   });
 
+  test('用户搜索 -1：与视频搜索同一套 any-failure 刷新策略', () async {
+    var searchCalls = 0;
+    install((options) async {
+      if (options.uri.path == '/x/web-interface/wbi/search/type') {
+        searchCalls++;
+        if (searchCalls == 1) {
+          return textResponse(jsonEncode({'code': -1, 'message': '拒绝'}));
+        }
+        return textResponse(jsonEncode(fixture('bili_user_search.json')));
+      }
+      return textResponse('{}', statusCode: 500);
+    });
+
+    final page = await BiliSearch.searchUsers('周杰伦');
+
+    expect(page.items, hasLength(2));
+    expect(searchCalls, 2);
+    expect(navCalls, 2, reason: '非风控失败也刷新一次');
+  });
+
   test('UP 资料 + 空间投稿：曲目映射与 dm 指纹参数', () async {
     final adapter = install((options) async {
       switch (options.uri.path) {
@@ -185,6 +205,36 @@ void main() {
       (r) => r.uri.path == '/x/space/wbi/acc/info',
     );
     expect(request.uri.queryParameters['w_rid'], isNotEmpty);
+  });
+
+  test('空间资料网络失败：riskOnly 不刷新会话', () async {
+    var spaceCalls = 0;
+    final adapter = install((options) async {
+      switch (options.uri.path) {
+        case '/x/web-interface/card':
+          return textResponse(jsonEncode({'code': -404}));
+        case '/x/space/wbi/acc/info':
+          spaceCalls++;
+          throw StateError('network down');
+        default:
+          return textResponse('{}', statusCode: 500);
+      }
+    });
+
+    await expectLater(
+      BiliArtist.fetch('336'),
+      throwsA(
+        isA<SourceFailure>().having((f) => f.kind, 'kind', FailureKind.network),
+      ),
+    );
+    expect(spaceCalls, 1);
+    expect(navCalls, 1, reason: 'riskOnly 不因网络失败刷新');
+    expect(
+      adapter.requests.where(
+        (r) => r.uri.path == '/x/frontend/finger/spi',
+      ),
+      hasLength(1),
+    );
   });
 
   test('空间风控：刷新会话一次后回退视频搜索并按 mid 过滤', () async {

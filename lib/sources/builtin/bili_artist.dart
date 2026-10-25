@@ -16,8 +16,8 @@ import '../../domain/models/track.dart';
 import '../source_search_result.dart' show parseSourceCount;
 import 'artist_source.dart';
 import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_track.dart';
-import 'builtin_search.dart';
 
 class BiliArtist {
   BiliArtist._();
@@ -59,22 +59,19 @@ class BiliArtist {
   ) async {
     SourceFailure? failure;
     try {
-      final uri = Uri.parse('${BiliApi.baseUrl}/x/web-interface/card')
-          .replace(queryParameters: {'mid': mid});
-      final response = await BuiltinSearch.transport.getJson(
-        uri.toString(),
-        headers: BiliApi.anonymousHeaders,
+      final response = await BiliClient.shared.get(
+        '/x/web-interface/card',
+        query: {'mid': mid},
       );
       final card = _mapOf(response);
-      if (card != null && BiliApi.codeOf(response) == 0) {
+      if (card != null) {
         final info = card['card'];
         final profile = _profileOf(info);
         if (profile != null) return profile;
       }
       failure = artistPlatformFailure('bili', 'UP 资料不存在');
-    } on SourceFailure catch (e) {
-      failure = e;
     } catch (e) {
+      // 业务码失败已在 client 归一；这里两种回退共用同一条失败路径。
       failure = SourceFailure.from(e);
     }
 
@@ -83,13 +80,9 @@ class BiliArtist {
         '/x/space/wbi/acc/info',
         {'mid': mid},
       );
-      if (BiliApi.codeOf(response) == 0) {
-        final profile = _profileOf(_mapOf(response));
-        if (profile != null) return profile;
-      }
+      final profile = _profileOf(_mapOf(response));
+      if (profile != null) return profile;
       failure = artistPlatformFailure('bili', 'UP 资料不存在');
-    } on SourceFailure catch (e) {
-      failure = e;
     } catch (e) {
       failure = SourceFailure.from(e);
     }
@@ -139,7 +132,7 @@ class BiliArtist {
     dynamic response, {
     required int page,
   }) {
-    if (BiliApi.codeOf(response) != 0) return null;
+    // 非 0 业务码由 client 抛出（含刷新一次后仍失败）；这里只处理结构。
     final data = _mapOf(response);
     final list = data?['list'];
     final vlist = list is Map ? list['vlist'] : null;
@@ -185,9 +178,6 @@ class BiliArtist {
           'page': page,
         },
       );
-      if (BiliApi.codeOf(response) != 0) {
-        return (tracks: const <Track>[], hasMore: false);
-      }
       final data = _mapOf(response);
       final result = data?['result'];
       if (result is! List) {
@@ -219,15 +209,16 @@ class BiliArtist {
     }
   }
 
-  /// 带 WBI 签名的 GET；风控时刷新会话重试一次（与搜索 / 取链同一语义）。
+  /// 带 WBI 签名的 GET；风控刷新一次与搜索 / 取链同一语义（client 内唯一实现）。
   static Future<dynamic> _getWbi(
     String path,
     Map<String, Object?> params,
   ) {
-    return BiliApi.requestWithSessionRetry((session) {
-      final url = session.signUrl('${BiliApi.baseUrl}$path', params);
-      return BuiltinSearch.transport.getJson(url, headers: session.apiHeaders);
-    });
+    return BiliClient.shared.get(
+      path,
+      query: params,
+      auth: BiliAuth.session,
+    );
   }
 
   static Map? _mapOf(dynamic response) {

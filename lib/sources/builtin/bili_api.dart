@@ -6,12 +6,16 @@
 /// - [BiliSession] 是一次会话的快照（buvid + mixinKey）；
 /// - [BiliApi.session] 负责 single-flight 拉取与 1 小时缓存；
 /// - [biliSignQuery] 是纯函数，测试用官方文档给出的固定向量钉住算法。
+///
+/// 请求生命周期（业务码映射、匿名 / 会话请求头、风控刷新一次）在
+/// `bili_client.dart`，业务文件不直接碰这两个文件里的重试策略。
 library;
 
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/failure.dart';
 import 'builtin_search.dart';
+import 'builtin_transport.dart';
 import 'crypto_utils.dart';
 
 /// B 站接口错误（继承 [SourceFailure]，边界归一化无需二次转换）。
@@ -31,10 +35,70 @@ class BiliApiException extends SourceFailure {
 /// 64 个下标把 `imgKey + subKey` 重新排列，取前 32 位作为 mixinKey；
 /// 少一位或顺序不同都会让所有 WBI 接口返回 -403。
 const List<int> biliMixinKeyEncTab = [
-  46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35,
-  27, 43, 5, 49, 33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13,
-  37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60, 51, 30, 4,
-  22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+  46,
+  47,
+  18,
+  2,
+  53,
+  8,
+  23,
+  32,
+  15,
+  50,
+  10,
+  31,
+  58,
+  3,
+  45,
+  35,
+  27,
+  43,
+  5,
+  49,
+  33,
+  9,
+  42,
+  19,
+  29,
+  28,
+  14,
+  39,
+  12,
+  38,
+  41,
+  13,
+  37,
+  48,
+  7,
+  16,
+  24,
+  55,
+  40,
+  61,
+  26,
+  17,
+  0,
+  1,
+  60,
+  51,
+  30,
+  4,
+  22,
+  25,
+  54,
+  21,
+  56,
+  59,
+  6,
+  63,
+  57,
+  62,
+  11,
+  36,
+  20,
+  34,
+  44,
+  52,
 ];
 
 /// WBI 要求剔除的字符（这些字符会被服务端按不同编码处理，直接删掉）。
@@ -154,7 +218,10 @@ class BiliApi {
   static Future<BiliSession>? _pending;
 
   /// 当前会话（缓存过期或未拉取时发起一次请求；并发调用共用同一 Future）。
-  static Future<BiliSession> session() {
+  ///
+  /// [transport] 只给测试注入独立传输用；生产走 [BuiltinSearch.transport]
+  /// 这一全局注入点。
+  static Future<BiliSession> session({BuiltinTransport? transport}) {
     final cached = _session;
     final fetchedAt = _fetchedAt;
     if (cached != null &&
@@ -162,14 +229,16 @@ class BiliApi {
         DateTime.now().difference(fetchedAt) < sessionTtl) {
       return Future.value(cached);
     }
-    return _pending ??= _startSessionFetch();
+    return _pending ??=
+        _startSessionFetch(transport ?? BuiltinSearch.transport);
   }
 
-  /// 丢弃缓存并重新拉取（-403/-412 风控后的唯一恢复手段）。
-  static Future<BiliSession> refresh() {
+  /// 丢弃缓存并重新拉取（风控后的唯一恢复手段）。
+  static Future<BiliSession> refresh({BuiltinTransport? transport}) {
     _session = null;
     _fetchedAt = null;
-    return _pending ??= _startSessionFetch();
+    return _pending ??=
+        _startSessionFetch(transport ?? BuiltinSearch.transport);
   }
 
   /// 测试隔离：清空缓存与在途请求。
@@ -180,8 +249,8 @@ class BiliApi {
     _pending = null;
   }
 
-  static Future<BiliSession> _startSessionFetch() {
-    final future = _fetchSession().then((session) {
+  static Future<BiliSession> _startSessionFetch(BuiltinTransport transport) {
+    final future = _fetchSession(transport).then((session) {
       _session = session;
       _fetchedAt = DateTime.now();
       return session;
@@ -199,12 +268,12 @@ class BiliApi {
     return future;
   }
 
-  static Future<BiliSession> _fetchSession() async {
+  static Future<BiliSession> _fetchSession(BuiltinTransport transport) async {
     final baseHeaders = {
       'User-Agent': browserUserAgent,
       'Referer': referer,
     };
-    final spi = await BuiltinSearch.transport.getJson(
+    final spi = await transport.getJson(
       '$baseUrl/x/frontend/finger/spi',
       headers: baseHeaders,
     );
@@ -220,7 +289,7 @@ class BiliApi {
       );
     }
 
-    final nav = await BuiltinSearch.transport.getJson(
+    final nav = await transport.getJson(
       '$baseUrl/x/web-interface/nav',
       headers: {
         ...baseHeaders,
@@ -263,8 +332,9 @@ class BiliApi {
   }
 
   /// 从响应里读业务码（非 Map 返回 null）。
-  static int? codeOf(dynamic response) => _codeOf(response);
-
+  ///
+  /// 只给会话拉取判断 nav 的 `-101` 用；业务码 → 失败的映射在
+  /// `bili_client.dart`（唯一入口）。
   static int? _codeOf(dynamic response) {
     if (response is! Map) return null;
     final code = response['code'];
@@ -275,45 +345,4 @@ class BiliApi {
 
   static dynamic _dataOf(dynamic response) =>
       response is Map ? response['data'] : null;
-
-  /// 风控码：需要刷新会话后重试。
-  static bool isRiskControl(int? code) => code == -403 || code == -412;
-
-  /// 响应是否命中风控（含 UP 空间接口的 `-352` / `v_voucher`）。
-  static bool isRiskResponse(dynamic response) {
-    final code = codeOf(response);
-    if (isRiskControl(code) || code == -352) return true;
-    final data = response is Map ? response['data'] : null;
-    return data is Map && data['v_voucher'] != null;
-  }
-
-  /// 带会话的请求：命中风控时刷新会话并重试一次。
-  ///
-  /// 取搜索 / 播放 / UP 空间接口共用的唯一重试策略，避免各业务文件对
-  /// `-403/-412/-352/v_voucher` 各判一套。
-  static Future<dynamic> requestWithSessionRetry(
-    Future<dynamic> Function(BiliSession session) send,
-  ) async {
-    var active = await session();
-    var response = await send(active);
-    if (!isRiskResponse(response)) return response;
-    active = await refresh();
-    return send(active);
-  }
-
-  /// 业务失败 → [SourceFailure]（-404 归 notFound，其余按可重试 unknown）。
-  static SourceFailure failureForCode(int code, {String? message}) {
-    if (code == -404) {
-      return BiliApiException(
-        kind: FailureKind.notFound,
-        message: message ?? 'bili: 内容不存在（code=-404）',
-        retryable: false,
-      );
-    }
-    return BiliApiException(
-      kind: FailureKind.unknown,
-      message: message ?? 'bili: 接口拒绝（code=$code）',
-      retryable: true,
-    );
-  }
 }

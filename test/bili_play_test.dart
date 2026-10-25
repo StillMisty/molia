@@ -236,6 +236,32 @@ void main() {
     );
   });
 
+  test('网络失败：riskOnly 不刷新会话', () async {
+    var sessionFetches = 0;
+    var playCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        if (request.uri.path == '/x/frontend/finger/spi') sessionFetches++;
+        final sessionResponse = biliSessionResponse(request);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/player/wbi/playurl') {
+          playCalls++;
+          throw StateError('network down');
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    await expectLater(
+      BiliPlay.resolve({'bvid': 'BV1xx411c7mD', 'cid': 999}),
+      throwsA(
+        isA<SourceFailure>().having((f) => f.kind, 'kind', FailureKind.network),
+      ),
+    );
+    expect(playCalls, 1);
+    expect(sessionFetches, 1, reason: 'riskOnly 不因网络失败刷新');
+  });
+
   test('缺少 bvid / aid → unsupported，且不发请求', () async {
     await expectLater(
       BiliPlay.resolve(const {}),

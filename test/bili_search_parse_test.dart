@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_search.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
@@ -117,6 +118,168 @@ void main() {
 
     final lastPage = await BiliSearch.searchWithMeta('起风了', page: 50);
     expect(lastPage.hasMore, isFalse, reason: 'page >= numPages 即末页');
+  });
+
+  test('风控 -403：刷新会话一次后重试，搜索仍成功', () async {
+    var searchCalls = 0;
+    var navCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        final sessionResponse =
+            biliSessionResponse(request, onNav: () => navCalls++);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          searchCalls++;
+          if (searchCalls == 1) {
+            return textResponse(jsonEncode({'code': -403, 'message': '风控'}));
+          }
+          return textResponse(jsonEncode(fixture));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNull);
+    expect(result.tracks, hasLength(2));
+    expect(searchCalls, 2);
+    expect(navCalls, 2, reason: '首次会话 + 风控刷新一次');
+  });
+
+  test('普通业务拒绝 -1：按 ADR-0014 刷新会话一次后重试', () async {
+    var searchCalls = 0;
+    var navCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        final sessionResponse =
+            biliSessionResponse(request, onNav: () => navCalls++);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          searchCalls++;
+          if (searchCalls == 1) {
+            return textResponse(jsonEncode({'code': -1, 'message': '拒绝'}));
+          }
+          return textResponse(jsonEncode(fixture));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNull);
+    expect(result.tracks, hasLength(2));
+    expect(searchCalls, 2);
+    expect(navCalls, 2, reason: '搜索不细分错误码：非风控失败也刷新一次');
+  });
+
+  test('传输失败：刷新会话一次后重试成功', () async {
+    var searchCalls = 0;
+    var navCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        final sessionResponse =
+            biliSessionResponse(request, onNav: () => navCalls++);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          searchCalls++;
+          if (searchCalls == 1) throw StateError('network down');
+          return textResponse(jsonEncode(fixture));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNull);
+    expect(result.tracks, hasLength(2));
+    expect(searchCalls, 2);
+    expect(navCalls, 2, reason: '网络抖动也按搜索口径刷新一次');
+  });
+
+  test('空响应 / 非 JSON：刷新会话一次后重试成功', () async {
+    for (final body in ['', '<html>not json</html>']) {
+      BiliApi.reset();
+      var searchCalls = 0;
+      var navCalls = 0;
+      BuiltinSearch.transport = BuiltinTransport(
+        dio: mockDio((request) async {
+          final sessionResponse =
+              biliSessionResponse(request, onNav: () => navCalls++);
+          if (sessionResponse != null) return sessionResponse;
+          if (request.uri.path == '/x/web-interface/wbi/search/type') {
+            searchCalls++;
+            if (searchCalls == 1) return textResponse(body);
+            return textResponse(jsonEncode(fixture));
+          }
+          return textResponse('{}', statusCode: 500);
+        }),
+      );
+
+      final result = await BiliSearch.searchWithMeta('起风了');
+
+      expect(result.failure, isNull,
+          reason: 'body=${body.isEmpty ? 'empty' : 'html'}');
+      expect(result.tracks, hasLength(2));
+      expect(searchCalls, 2);
+      expect(navCalls, 2, reason: '空 / 非 JSON 也刷新一次');
+    }
+  });
+
+  test('刷新会话失败：返回第一次失败，不把刷新错误当结果', () async {
+    var sessionFetches = 0;
+    var searchCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        if (request.uri.path == '/x/frontend/finger/spi') {
+          sessionFetches++;
+          if (sessionFetches > 1) throw StateError('refresh down');
+        }
+        final sessionResponse = biliSessionResponse(request);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          searchCalls++;
+          return textResponse(jsonEncode({'code': -1, 'message': '拒绝'}));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNotNull);
+    expect(result.failure!.message, contains('code=-1'));
+    expect(searchCalls, 1, reason: '刷新失败后不再发第二次搜索');
+    expect(sessionFetches, 2, reason: '首次会话 + 一次刷新尝试');
+  });
+
+  test('刷新后仍失败：报告第二次失败，不循环', () async {
+    var searchCalls = 0;
+    var navCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        final sessionResponse =
+            biliSessionResponse(request, onNav: () => navCalls++);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          searchCalls++;
+          if (searchCalls == 1) {
+            return textResponse(jsonEncode({'code': -1, 'message': '拒绝'}));
+          }
+          return textResponse(jsonEncode({'code': -404, 'message': '无'}));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNotNull);
+    expect(result.failure!.kind, FailureKind.notFound);
+    expect(searchCalls, 2, reason: '只重试一次');
+    expect(navCalls, 2, reason: '只刷新一次');
   });
 
   test('空结果：正常空结果，不因缺分页字段误报下一页', () async {

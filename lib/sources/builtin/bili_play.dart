@@ -12,8 +12,8 @@ import '../../domain/ports/music_source.dart';
 import '../source_search_result.dart' show parseSourceCount;
 import '../source_track.dart' show pickQualityFor;
 import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_track.dart' show biliRawText;
-import 'builtin_search.dart';
 
 /// dash.audio[].id → LX 音质标识（B 站匿名只给这三档）。
 const Map<int, String> _audioQualityById = {
@@ -43,59 +43,46 @@ class BiliPlay {
     final aid = ids.aid;
     _requireIds(bvid, aid);
 
-    try {
-      var session = await BiliApi.session();
-      final cid = await _cidFor(
-        session.apiHeaders,
-        raw,
+    final cid = await _cidFor(raw, bvid: bvid, aid: aid);
+    final response = await _playUrl(
+      bvid: bvid,
+      aid: aid,
+      cid: cid,
+      fnval: 16,
+    );
+
+    final data = response is Map ? response['data'] : null;
+    var audio = _pickDashAudio(data, quality);
+    if (audio == null) {
+      // 老视频 / 版权限制可能没有 dash：退回 `fnval=1` 的 durl 单文件。
+      final fallback = await _playUrl(
         bvid: bvid,
         aid: aid,
+        cid: cid,
+        fnval: 1,
       );
-
-      final response = await BiliApi.requestWithSessionRetry(
-        (session) => _playUrl(
-          session,
-          bvid: bvid,
-          aid: aid,
-          cid: cid,
-          fnval: 16,
-        ),
-      );
-      _throwForCode(BiliApi.codeOf(response));
-
-      final data = response is Map ? response['data'] : null;
-      var audio = _pickDashAudio(data, quality);
-      if (audio == null) {
-        // 老视频 / 版权限制可能没有 dash：退回 `fnval=1` 的 durl 单文件。
-        final fallback = await _playUrl(
-          await BiliApi.session(),
-          bvid: bvid,
-          aid: aid,
-          cid: cid,
-          fnval: 1,
-        );
-        _throwForCode(BiliApi.codeOf(fallback));
-        final fallbackData = fallback is Map ? fallback['data'] : null;
-        audio = _pickDurlAudio(fallbackData);
-      }
-      if (audio == null) {
-        throw const SourceFailure(
-          kind: FailureKind.unsupported,
-          message: 'bili: 该视频没有可播放的音轨',
-        );
-      }
-
-      final uri = Uri.parse(audio.url);
-      return PlayableStream(
-        uri,
-        headers: BiliApi.streamHeaders,
-        expiresIn: expiresInOf(uri),
-      );
-    } on SourceFailure {
-      rethrow;
-    } catch (e) {
-      throw SourceFailure.from(e);
+      final fallbackData = fallback is Map ? fallback['data'] : null;
+      audio = _pickDurlAudio(fallbackData);
     }
+    if (audio == null) {
+      throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: 'bili: 该视频没有可播放的音轨',
+      );
+    }
+
+    final uri = Uri.tryParse(audio.url);
+    if (uri == null) {
+      throw const SourceFailure(
+        kind: FailureKind.unknown,
+        message: 'bili: 播放地址非法',
+      );
+    }
+    return PlayableStream(
+      uri,
+      headers: BiliApi.streamHeaders,
+      expiresIn: expiresInOf(uri),
+    );
   }
 
   /// 视频首个分 P 的 cid（raw 带 cid 时直接复用，否则查分 P 并缓存）。
@@ -109,12 +96,7 @@ class BiliPlay {
     _requireIds(ids.bvid, ids.aid);
     // 分 P 接口不需要 WBI / Cookie：字幕歌词即使拿不到会话也能查 cid，
     // 不让 nav 失败拖垮歌词。
-    return _cidFor(
-      BiliApi.anonymousHeaders,
-      raw,
-      bvid: ids.bvid,
-      aid: ids.aid,
-    );
+    return _cidFor(raw, bvid: ids.bvid, aid: ids.aid);
   }
 
   static ({String bvid, String aid}) _idsOf(Map<String, dynamic> raw) => (
@@ -133,7 +115,6 @@ class BiliPlay {
 
   /// 分 P 列表 → 首个 cid（raw 已带 cid 时直接复用）。
   static Future<int> _cidFor(
-    Map<String, String> headers,
     Map<String, dynamic> raw, {
     required String bvid,
     required String aid,
@@ -145,14 +126,10 @@ class BiliPlay {
     final cached = _cidCache[cacheKey];
     if (cached != null) return cached;
 
-    final query = bvid.isNotEmpty
-        ? 'bvid=${Uri.encodeComponent(bvid)}'
-        : 'aid=${Uri.encodeComponent(aid)}';
-    final response = await BuiltinSearch.transport.getJson(
-      '${BiliApi.baseUrl}/x/player/pagelist?$query',
-      headers: headers,
+    final response = await BiliClient.shared.get(
+      '/x/player/pagelist',
+      query: bvid.isNotEmpty ? {'bvid': bvid} : {'aid': aid},
     );
-    _throwForCode(BiliApi.codeOf(response));
 
     final data = response is Map ? response['data'] : null;
     final first = data is List && data.isNotEmpty ? data.first : null;
@@ -167,24 +144,23 @@ class BiliPlay {
     return cid;
   }
 
-  static Future<dynamic> _playUrl(
-    BiliSession session, {
+  static Future<dynamic> _playUrl({
     required String bvid,
     required String aid,
     required int cid,
     required int fnval,
   }) {
-    final url = session.signUrl(
-      '${BiliApi.baseUrl}/x/player/wbi/playurl',
-      {
+    return BiliClient.shared.get(
+      '/x/player/wbi/playurl',
+      query: {
         if (bvid.isNotEmpty) 'bvid': bvid else 'avid': aid,
         'cid': cid,
         'fnval': fnval,
         'fnver': 0,
         'fourk': 1,
       },
+      auth: BiliAuth.session,
     );
-    return BuiltinSearch.transport.getJson(url, headers: session.apiHeaders);
   }
 
   /// dash 音频选档：只认三档标准音频流 id，按请求音质回退。
@@ -249,17 +225,6 @@ class BiliPlay {
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final seconds = deadline - now;
     return seconds > 0 ? Duration(seconds: seconds) : Duration.zero;
-  }
-
-  static void _throwForCode(int? code) {
-    if (code == 0) return;
-    if (code == null) {
-      throw const BiliApiException(
-        kind: FailureKind.unknown,
-        message: 'bili: 播放地址响应非法',
-      );
-    }
-    throw BiliApi.failureForCode(code);
   }
 }
 

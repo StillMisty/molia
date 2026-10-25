@@ -7,9 +7,8 @@ library;
 import '../../domain/models/discover.dart';
 import '../../domain/models/failure.dart';
 import '../source_track.dart' show SourceTrack;
-import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_track.dart';
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'discover_track_mapper.dart';
 
@@ -46,36 +45,20 @@ class BiliRanking {
       );
     }
     final key = 'bili:ranking:${parsed.rid}:${parsed.day}';
-    try {
-      return await BuiltinSearch.transport.cached(key, () async {
-        final uri = Uri.parse('${BiliApi.baseUrl}/x/web-interface/ranking')
-            .replace(queryParameters: {
-          'rid': '${parsed.rid}',
-          'day': '${parsed.day}',
-        });
-        final response = await BuiltinSearch.transport.getJson(
-          uri.toString(),
-          headers: BiliApi.anonymousHeaders,
-          retries: BuiltinTransport.defaultRetries,
-        );
-        return parseTracks(response);
-      });
-    } on SourceFailure {
-      rethrow;
-    } catch (e) {
-      throw SourceFailure.from(e);
-    }
+    return BiliClient.shared.cached(key, () async {
+      final response = await BiliClient.shared.get(
+        '/x/web-interface/ranking',
+        query: {'rid': '${parsed.rid}', 'day': '${parsed.day}'},
+        retries: BuiltinTransport.defaultRetries,
+      );
+      return parseTracks(response);
+    });
   }
 
   /// 解析榜单响应（供单测 / 调试复用；不读缓存）。
+  ///
+  /// 业务码已由 client 校验，这里只处理 `data.list` 结构。
   static List<DiscoverTrack> parseTracks(dynamic response) {
-    final code = BiliApi.codeOf(response);
-    if (code != 0) {
-      throw BiliApi.failureForCode(
-        code ?? -1,
-        message: 'bili: 获取音乐榜失败（code=${code ?? '非 JSON'}）',
-      );
-    }
     final data = response is Map ? response['data'] : null;
     final list = data is Map ? data['list'] : null;
     if (list is! List) {

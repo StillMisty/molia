@@ -7,10 +7,9 @@ library;
 
 import '../../domain/models/discover.dart';
 import '../../domain/models/failure.dart';
-import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_favorites.dart';
 import 'bili_ranking.dart';
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'discover_source.dart';
 
@@ -53,27 +52,12 @@ class BiliDiscoverSource extends DiscoverSource {
   /// 热搜：`data.trending.list[].keyword`（只收字符串、去重保序）。
   @override
   Future<List<String>> hotSearches() async {
-    try {
-      final uri = Uri.parse('${BiliApi.baseUrl}/x/web-interface/search/square')
-          .replace(queryParameters: {'limit': '10'});
-      final response = await BuiltinSearch.transport.getJson(
-        uri.toString(),
-        headers: BiliApi.anonymousHeaders,
-        retries: BuiltinTransport.defaultRetries,
-      );
-      final code = BiliApi.codeOf(response);
-      if (code != 0) {
-        throw BiliApi.failureForCode(
-          code ?? -1,
-          message: 'bili: 获取热搜失败（code=${code ?? '非 JSON'}）',
-        );
-      }
-      return parseHotSearches(response);
-    } on SourceFailure {
-      rethrow;
-    } catch (e) {
-      throw SourceFailure.from(e);
-    }
+    final response = await BiliClient.shared.get(
+      '/x/web-interface/search/square',
+      query: {'limit': '10'},
+      retries: BuiltinTransport.defaultRetries,
+    );
+    return parseHotSearches(response);
   }
 
   /// 热搜响应 → 关键词列表（供单测复用）。

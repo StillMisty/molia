@@ -5,13 +5,13 @@
 /// `subtitle_url` 可能是协议相对地址（`//host/...`），统一补 `https:`。
 /// 字幕 JSON 的 `from` 是秒（double），转成 `[mm:ss.mmm]`。
 ///
-/// 字幕接口不需要 WBI / buvid：只带浏览器 UA + Referer（[BiliApi.anonymousHeaders]），
-/// 避免为了歌词先拉一次 nav 会话。任何失败都返回 null，歌词缺失不能阻断播放。
+/// 字幕接口不需要 WBI / buvid：走 [BiliClient] 的匿名口径（UA + Referer，
+/// 不带 Cookie），避免为了歌词先拉一次 nav 会话。任何失败都返回 null，
+/// 歌词缺失不能阻断播放。
 library;
 
-import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_play.dart';
-import 'builtin_search.dart';
 import 'lyric_result.dart';
 
 class BiliLyric {
@@ -31,26 +31,23 @@ class BiliLyric {
 
       // 与取链共用 cid 缓存：raw 有 cid 时连分 P 都不查。
       final cid = await BiliPlay.cidOf(raw);
-      final uri = Uri.parse('${BiliApi.baseUrl}/x/player/v2').replace(
-        queryParameters: <String, String>{
+      final response = await BiliClient.shared.get(
+        '/x/player/v2',
+        query: {
           if (bvid.isNotEmpty) 'bvid': bvid else 'aid': aid,
           'cid': '$cid',
         },
       );
-      final response = await BuiltinSearch.transport.getJson(
-        uri.toString(),
-        headers: BiliApi.anonymousHeaders,
-      );
-      if (BiliApi.codeOf(response) != 0) return null;
 
       final subtitle = _subtitleOf(response);
       if (subtitle == null) return null;
       final url = _subtitleUrlOf(subtitle['subtitle_url']);
       if (url == null) return null;
 
-      final body = await BuiltinSearch.transport.getJson(
+      // 字幕文件是没有业务码的静态 JSON：只复用匿名传输，不校验 code。
+      final body = await BiliClient.shared.get(
         url,
-        headers: BiliApi.anonymousHeaders,
+        codePolicy: BiliCodePolicy.none,
       );
       final lyric = _lrcOf(body);
       return lyric == null ? null : BuiltinLyricResult(lyric: lyric);
