@@ -1,4 +1,4 @@
-/// B 站请求生命周期：URL / WBI 签名 / 请求头 / 业务码 / 风控刷新只在这里决定。
+/// B 站请求生命周期：URL / WBI 签名 / 请求头 / 业务码 / 刷新口径只在这里决定。
 ///
 /// 业务文件（搜索 / 取链 / 评论 / 榜单 / 收藏夹 / UP / 字幕）只负责拼参数与
 /// 解析 `data`。否则每个端点都要重复一遍「带不带 buvid Cookie、业务码怎么
@@ -18,9 +18,21 @@ enum BiliAuth {
   /// 匿名：UA + Referer，不带 buvid Cookie，也不拉 nav 会话。
   anonymous,
 
-  /// 会话 + WBI：buvid Cookie + 签名参数；风控（`-403/-412/-352` /
-  /// `v_voucher`）刷新会话后重试一次。
+  /// 会话 + WBI：buvid Cookie + 签名参数；刷新口径由
+  /// [BiliRefreshPolicy] 决定（默认只对风控刷新一次）。
   session,
+}
+
+/// 会话失败后的刷新口径（只对 [BiliAuth.session] 有意义）。
+enum BiliRefreshPolicy {
+  /// 只有风控响应（`-403/-412/-352` / `v_voucher`）才刷新一次：
+  /// 取链 / UP / 评论 / 榜单等端点的默认口径。
+  riskOnly,
+
+  /// 任何失败（业务码非 0、传输异常、空响应 / 非 JSON）都刷新一次再重试：
+  /// ADR-0014 的搜索语义——网络抖动与会话失效都可能表现为 failed，
+  /// 多一次请求换可用性。第二次失败原样上抛，刷新本身失败时报第一次失败。
+  anyFailure,
 }
 
 /// 业务码口径：由端点显式声明，调用方不再自己解释 `code`。
@@ -59,15 +71,25 @@ class BiliClient {
     Map<String, Object?>? query,
     BiliAuth auth = BiliAuth.anonymous,
     BiliCodePolicy codePolicy = BiliCodePolicy.standard,
+    BiliRefreshPolicy refreshPolicy = BiliRefreshPolicy.riskOnly,
     int retries = 1,
   }) async {
     try {
-      final response = switch (auth) {
-        BiliAuth.session => await _getWithSession(path, query, retries),
-        BiliAuth.anonymous => await _getAnonymous(path, query, retries),
-      };
-      _ensureAccepted(response, codePolicy);
-      return response;
+      switch (auth) {
+        case BiliAuth.anonymous:
+          // 匿名端点没有会话可刷新，refreshPolicy 不适用。
+          final response = await _getAnonymous(path, query, retries);
+          _ensureAccepted(response, codePolicy);
+          return response;
+        case BiliAuth.session:
+          return await _getWithSession(
+            path,
+            query,
+            retries,
+            codePolicy,
+            refreshPolicy,
+          );
+      }
     } on SourceFailure {
       rethrow;
     } catch (error) {
@@ -99,15 +121,84 @@ class BiliClient {
     String path,
     Map<String, Object?>? query,
     int retries,
-  ) async {
-    var session = await BiliApi.session(transport: transport);
-    var response = await _sendWithSession(session, path, query, retries);
-    if (!_isRiskResponse(response)) return response;
+    BiliCodePolicy codePolicy,
+    BiliRefreshPolicy refreshPolicy,
+  ) {
+    return switch (refreshPolicy) {
+      BiliRefreshPolicy.riskOnly => _getRiskOnly(
+          path,
+          query,
+          retries,
+          codePolicy,
+        ),
+      BiliRefreshPolicy.anyFailure => _getAnyFailure(
+          path,
+          query,
+          retries,
+          codePolicy,
+        ),
+    };
+  }
 
-    // 只刷新重试一次：持续风控再刷不会改变平台判定，反而放大请求量、
-    // 让短暂的限流变成更长的封禁。
-    session = await BiliApi.refresh(transport: transport);
-    return _sendWithSession(session, path, query, retries);
+  /// 只有风控响应才刷新（取链 / UP 等端点的既有语义）。
+  Future<dynamic> _getRiskOnly(
+    String path,
+    Map<String, Object?>? query,
+    int retries,
+    BiliCodePolicy codePolicy,
+  ) async {
+    final session = await BiliApi.session(transport: transport);
+    final response = await _sendWithSession(session, path, query, retries);
+    if (!_isRiskResponse(response)) {
+      _ensureAccepted(response, codePolicy);
+      return response;
+    }
+
+    // 刷新只发生一次；刷新本身失败时仍报端点原始失败，不把业务失败
+    // 伪装成获取会话的网络错误。
+    final original = _riskFailure(response, codePolicy);
+    final refreshed = await _refreshOrThrow(original);
+    final retried = await _sendWithSession(refreshed, path, query, retries);
+    _ensureAccepted(retried, codePolicy);
+    return retried;
+  }
+
+  /// ADR-0014 搜索口径：任何失败都刷新一次再重试。
+  ///
+  /// 会话获取也在第一次尝试内：会话接口网络抖动同样是「本次失败」，刷新
+  /// 后仍值得再试。重试只有一次，第二次失败原样上抛，绝不循环。
+  Future<dynamic> _getAnyFailure(
+    String path,
+    Map<String, Object?>? query,
+    int retries,
+    BiliCodePolicy codePolicy,
+  ) async {
+    late final SourceFailure original;
+    try {
+      final session = await BiliApi.session(transport: transport);
+      final response = await _sendWithSession(session, path, query, retries);
+      _ensureAccepted(response, codePolicy);
+      return response;
+    } on SourceFailure catch (error) {
+      original = error;
+    } catch (error) {
+      original = SourceFailure.from(error);
+    }
+
+    // 刷新失败时报第一次的失败（旧搜索行为：refresh 异常不覆盖结果）。
+    final refreshed = await _refreshOrThrow(original);
+    final retried = await _sendWithSession(refreshed, path, query, retries);
+    _ensureAccepted(retried, codePolicy);
+    return retried;
+  }
+
+  Future<BiliSession> _refreshOrThrow(SourceFailure original) async {
+    try {
+      return await BiliApi.refresh(transport: transport);
+    } catch (_) {
+      // 刷新本身失败不应该盖掉原始失败：调用方要看到端点为什么失败。
+      throw original;
+    }
   }
 
   Future<dynamic> _sendWithSession(
@@ -152,6 +243,20 @@ class BiliClient {
     final code = _codeOf(response);
     if (code == 0) return;
     throw _failureFor(code, codePolicy);
+  }
+
+  /// 风控响应对应的原始失败（刷新失败时原样抛给调用方）。
+  SourceFailure _riskFailure(dynamic response, BiliCodePolicy codePolicy) {
+    final code = _codeOf(response);
+    // `v_voucher` 型风控的 code 可能仍是 0，没有业务码可映射。
+    if (code == null || code == 0) {
+      return BiliApiException(
+        kind: FailureKind.unknown,
+        message: 'bili: 风控校验未通过（v_voucher）',
+        retryable: true,
+      );
+    }
+    return _failureFor(code, codePolicy);
   }
 
   /// 业务码 → [SourceFailure]。唯一映射点，端点只选口径。

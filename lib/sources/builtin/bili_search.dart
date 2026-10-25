@@ -50,6 +50,8 @@ class BiliSearch {
           'page': normalizedPage,
         },
         auth: BiliAuth.session,
+        // ADR-0014：搜索不细分错误码，任何失败都刷新会话再试一次。
+        refreshPolicy: BiliRefreshPolicy.anyFailure,
       );
       final pages = numPagesOf(response);
       return SourceSearchResult.fromPage(
@@ -85,6 +87,8 @@ class BiliSearch {
         'page': normalizedPage,
       },
       auth: BiliAuth.session,
+      // 与视频搜索同一套 any-failure 刷新口径。
+      refreshPolicy: BiliRefreshPolicy.anyFailure,
     );
     return parseUsers(response, page: normalizedPage);
   }
