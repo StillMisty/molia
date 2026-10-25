@@ -529,7 +529,9 @@
   仍进 `channels` 但不进 `searchable`；内置 key 的脚本声明只补能力，不生成第二个
   同名 LX 源。
 - **B 站音源（bili）**：`bili_api.dart` 是匿名会话唯一入口（buvid3/4 + WBI
-  mixinKey，1 小时缓存 + single-flight，`-403/-412` 刷新重试）；`bili_search` /
+  mixinKey，1 小时缓存 + single-flight）；`bili_client.dart` 收请求生命周期
+  （WBI 签名 / 匿名 vs 会话头 / 业务码口径 / 风控刷新；搜索与 UP 搜索按
+  ADR-0014 任何失败刷新一次）。`bili_search` /
   `bili_play` / `bili_lyric` / `bili_comment` / `bili_artist` / `bili_ranking` /
   `bili_favorites` / `bili_discover` 分别覆盖全站视频搜索、原生取链（dash 192k/128k/64k
   + `durl` 回退）、CC 字幕歌词、游标评论、UP 主页、音乐榜 / 热搜与公开收藏夹导入。
@@ -542,15 +544,16 @@
   `discover_runner.dart::runDiscoverCall` 是发现端点的唯一执行入口：`DiscoverCall`
   描述缓存键 / 预算 / 请求 / 无效判定 / 解析（或多步尝试），有 key 走
   `cachedRetry`、无 key 走共享尝试循环；平台文件只保留 URL / 参数 / parser。
-- **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是内置平台
-  搜索的执行骨架（`runBuiltinSearch`，五个音乐平台 + B 站原生搜索共用）：
-  重试预算、分页推断与失败归一各写一次；
-  平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）
-  收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。结果语义分界：
-  **平台返回空** → 正常结果（`tracks` 为空、`failure` 空）；**业务拒绝 / 传输失败**
-  → `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常；UI 收口前
-  只读 `tracks`）。内置平台「可搜索」的判定唯一来源是
-  `SourceManager._isBuiltinSearchable`（channels 候选、能力位与搜索路由共用）。
+- **内置检索 runner**：`lib/sources/builtin/builtin_search_runner.dart` 是五个
+  音乐平台搜索的执行骨架（`runBuiltinSearch`）：重试预算、分页推断与失败归一
+  各写一次；平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表
+  路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。B 站
+  搜索走 **Bili client**（会话 / WBI 与 ADR-0014 的 any-failure 刷新），结果仍
+  走 `SourceSearchResult` 的 empty / failed 分界：**平台返回空** → 正常结果
+  （`tracks` 为空、`failure` 空）；**业务拒绝 / 传输失败** → `SourceSearchResult.failed`
+  （`SourceSearchResult.failure`，不抛异常；UI 收口前只读 `tracks`）。内置平台
+  「可搜索」的判定唯一来源是 **Source profile**（channels 候选、能力位与搜索路由
+  共用）。
 - **内置歌手 / 歌词检索**：歌手（`builtin/artist_source.dart` + `*_artist.dart`，
   含 B 站 UP：`bili_artist.dart`）与按歌词搜歌
   （`builtin/lyric_search.dart` + `*_lyric_search.dart`；B 站没有该能力）与专辑同构——
