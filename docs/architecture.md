@@ -508,18 +508,26 @@
   （`lib/sources/builtin/builtin_transport.dart`）——客户端可注入、统一请求头/超时、
   响应级重试（`retryIf`）与结果缓存（`transport.cached`，single-flight + LRU +
   TTL 5min）；平台适配器只保留 URL 构造与解析，不再各自持有静态 `RequestCache`。
-  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图的内置派发（内置平台 switch
-  + 结果缓存）同样收在同目录 `builtin_lyric_dispatch.dart` /
-  `builtin_pic_dispatch.dart`；渠道偏好（音质 / 顺序 / 停用）在
-  `lib/sources/source_preferences.dart`，`SourceManager` 同名方法为其委托。
+  fetch 路径测试通过注入 `MockClient` 覆盖。取词 / 取图适配器登记在
+  `BuiltinPlatforms`，派发（`builtin_lyric_dispatch.dart` /
+  `builtin_pic_dispatch.dart`）只查表 + 结果缓存，不再维护平台 switch；渠道偏好
+  （音质 / 顺序 / 停用）在 `lib/sources/source_preferences.dart`，
+  `SourceManager` 同名方法为其委托。
 - **内置平台注册表**：`lib/sources/builtin/builtin_platforms.dart` 的
   `BuiltinPlatforms` 是六平台 × 能力族的唯一声明（规范键 `wy / tx / kg / kw / mg / bili`、
-  展示名、搜索候选排序位、类型化适配器：搜索 / 原生取链 / 歌词搜索 / 评论 / 专辑 /
-  歌手 / 发现）；能力位由适配器是否存在推导，各 facade 与
-  `SourceManager.capabilitiesFor` 消费同一条目，新增平台只改这一处（不再维护七份
-  `supportedKeys` 与 switch）。B 站只注册搜索 / 原生取链 / 评论 / 歌手 / 发现
-  （无专辑、无按歌词搜歌）；`SourceManager._isBuiltinSearchable` 对「有原生取链
-  适配器」的平台（目前只有 bili）不再要求脚本。
+  展示名、搜索候选排序位、类型化适配器：搜索 / 原生取链 / 原生取词 / 原生取图 /
+  歌词搜索 / 评论 / 专辑 / 歌手 / 发现）；能力位由适配器是否存在推导，新增平台只改
+  这一处（不再维护七份 `supportedKeys` 与 switch）。B 站只注册搜索 / 原生取链 /
+  评论 / 歌手 / 发现（无专辑、无按歌词搜歌）。
+- **音源画像**：`lib/sources/source_profiles.dart` 的 `SourceProfiles.build` 把
+  注册表 × 激活脚本 × any-listen × 渠道偏好合成每个 key 一份不可变
+  `SourceProfile`（身份 / 启用 / 可发现 / `SourceCapabilities`），
+  `channels` / `searchable` / `forKey` 是一轮快照。`SourceManager` 的渠道、能力位
+  与搜索 / 评论 / 专辑 / 歌手 / 歌词搜索路由，`SourceRegistryImpl` 与
+  `SourcesProvider` 读同一份，不再各自推导「能不能」。搜索能力 = 搜索适配器存在
+  且（原生取链或脚本可取链）；歌词 / 封面 = 注册表适配器或脚本 action；停用项
+  仍进 `channels` 但不进 `searchable`；内置 key 的脚本声明只补能力，不生成第二个
+  同名 LX 源。
 - **B 站音源（bili）**：`bili_api.dart` 是匿名会话唯一入口（buvid3/4 + WBI
   mixinKey，1 小时缓存 + single-flight，`-403/-412` 刷新重试）；`bili_search` /
   `bili_play` / `bili_lyric` / `bili_comment` / `bili_artist` / `bili_ranking` /
