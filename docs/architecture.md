@@ -665,6 +665,13 @@
   直接按它重算本地歌曲，不再依赖「先 sync 一次」的隐藏调用顺序。资料库读取
   阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
   读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
+- **合集行动作**：`lib/providers/collection_actions.dart` 是收藏页「选中的行 /
+  当前视图 → 类型化命令」的唯一翻译层（播放 / 收藏 / 移除 / 历史删除 / 本地
+  删除 / 重排 / 复制）；行变体归一与 provider / 下载 / 缓存选择在模块内，页面
+  只留确认 / 提示 / 清选择与布局。播放 / 加入列表接 `track_handoff.dart`
+  （context 适配在 `widgets/collection_handoff.dart`）；本地删除返回
+  `CollectionLocalDeleteOutcome` 逐项状态，失败不再逃进 `unawaited`。收藏页
+  不再出现 `as ...Row` 强转。
 - **链接导入**：收藏页合集弹层的「导入收藏」有文件 / 链接两条路径；链接路径
   `showLinkImportDialog` 的平台列表来自 `BuiltinPlatforms.discoverSources`
   （六平台），`DiscoverProvider.playlistDetail` 拉详情后写入本地列表。
