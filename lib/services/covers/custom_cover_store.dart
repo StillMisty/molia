@@ -345,14 +345,16 @@ class CustomCoverStore {
     await _commitTrackEntry(
       key,
       entry,
-      trackId: _trackIdForKey(key),
+      // 远端记录只有封面键，没有可靠的 TrackId（`local:/path` 会在第一个
+      // `:` 处误拆）；变化的 trackId 没有消费方，统一传 null。
+      trackId: null,
       local: false,
     );
   }
 
   /// 应用远端曲目封面删除（同步 / 备份导入）；不存在时为空操作。
   Future<void> applySyncedTrackDelete(String key) =>
-      _removeTrackEntry(key, trackId: _trackIdForKey(key), local: false);
+      _removeTrackEntry(key, trackId: null, local: false);
 
   /// 应用远端默认封面（同步 / 备份导入），不触发本地变更回调。
   Future<void> applySyncedDefaultCover(Uint8List bytes) async {
@@ -465,12 +467,14 @@ class CustomCoverStore {
 
   /// 换源时把旧曲目的自定义封面复制到新曲目键（非破坏性，旧封面保留）。
   ///
-  /// 返回是否复制成功；源没有自定义封面时为空操作。文件 / 索引错误只记
-  /// 日志——换源本身已经成功，封面跟随是增强项。
+  /// 返回是否复制成功；源没有自定义封面、或新曲目键已有用户封面时为空操作
+  ///（不能拿旧曲目的封面覆盖用户已经给新曲目选好的封面）。文件 / 索引错误
+  /// 只记日志——换源本身已经成功，封面跟随是增强项。
   Future<bool> carryOver(Track oldTrack, Track newTrack) async {
     final oldKey = coverKeyOf(oldTrack.id);
     final newKey = coverKeyOf(newTrack.id);
     if (oldKey == newKey) return false;
+    if (_tracks.containsKey(newKey)) return false;
     final source = _tracks[oldKey];
     if (source == null) return false;
     try {
@@ -566,13 +570,6 @@ class CustomCoverStore {
     )) {
       listener(change);
     }
-  }
-
-  /// 远端封面键 → TrackId（只服务展示面刷新；解析失败时为 null）。
-  static TrackId? _trackIdForKey(String key) {
-    final index = key.indexOf(':');
-    if (index <= 0 || index >= key.length - 1) return null;
-    return TrackId(key.substring(0, index), key.substring(index + 1));
   }
 
   static String _shortHash(String value) =>

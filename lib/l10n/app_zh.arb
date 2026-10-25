@@ -53,6 +53,7 @@
   "coverChangeImage": "更换图片",
   "coverResetSong": "恢复歌曲封面",
   "coverRestored": "封面已恢复",
+  "coverDefaultRestored": "Molia 标志已恢复",
   "coverUpdated": "封面已更新",
   "coverUpdateFailed": "封面更新失败，请重试",
   "coverUnreadable": "无法读取这张图片，请换一张",

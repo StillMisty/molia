@@ -414,15 +414,33 @@ class PlaybackObserver {
   Future<void> _updateWidget() async {
     final live = _facade.snapshot.value;
     final track = live.current;
-    // 省流时传空封面地址：MusicWidget 对空串跳过 Glide 加载。
-    final blockArtwork = _dataSaver?.blockNetworkArtwork ?? false;
+    final displayUrl = _displayCoverUrlOf(track);
+    // 省流只挡网络封面：自定义 / 默认封面是本地文件，照常交给小组件。
+    // 远程地址传空串，MusicWidget 对空串跳过 Glide 加载。
+    final blockRemoteArtwork = _dataSaver?.blockNetworkArtwork ?? false;
+    final albumArtUrl = blockRemoteArtwork && !_isLocalArtworkUrl(displayUrl)
+        ? ''
+        : displayUrl ?? '';
     await _widgetUpdater({
       'songName': track?.title ?? '未在播放',
       'artistName': track?.primaryArtistName ?? '',
-      'albumArtUrl': blockArtwork ? '' : _displayCoverUrlOf(track) ?? '',
+      'albumArtUrl': albumArtUrl,
       'isPlaying': live.isPlaying,
     });
   }
+
+  /// 封面地址是否指向本地文件（省流模式无需拦截）。
+  ///
+  /// 协议相对地址（`//host/...`）是网络封面，不能按 Unix 裸路径放行。
+  static bool _isLocalArtworkUrl(String? url) {
+    if (url == null || url.isEmpty) return false;
+    if (url.startsWith('//')) return false;
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.scheme == 'file') return true;
+    return url.startsWith('/') || _windowsPathPattern.hasMatch(url);
+  }
+
+  static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
   String? _coverUrlOf(Track? track) =>
       _coverUrlResolver?.call(track) ?? track?.artwork?.uri.toString();

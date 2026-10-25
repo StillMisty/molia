@@ -140,7 +140,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get coverTitle => 'Song cover';
 
   @override
-  String get coverFollowSong => 'Use song artwork';
+  String get coverFollowSong => 'Song artwork';
 
   @override
   String get coverCustomized => 'Customized';
@@ -156,6 +156,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coverRestored => 'Cover restored';
+
+  @override
+  String get coverDefaultRestored => 'Molia mark restored';
 
   @override
   String get coverUpdated => 'Cover updated';

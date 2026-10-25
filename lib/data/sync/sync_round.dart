@@ -1242,7 +1242,11 @@ class SyncRoundRunner {
         _lastAdapterCollect.length == _readyAdapterCount;
     for (final adapter in _adapters) {
       if (!adapter.ready) continue;
-      final collected = await adapter.collect(fresh: fresh);
+      // 类别受限适配器（封面）只在类别被请求时读数据；其它适配器保持原
+      // 调用，聚合阶段仍按 [categories] 过滤。
+      final collected = adapter is CategoryScopedSyncAdapter
+          ? await adapter.collectForCategories(categories, fresh: fresh)
+          : await adapter.collect(fresh: fresh);
       results[adapter] = collected;
       if (identicalToLastRound &&
           !identical(_lastAdapterCollect[adapter], collected)) {

@@ -196,6 +196,29 @@ void main() {
         isFalse);
   });
 
+  test('换源跟随：目标曲目已有封面时不覆盖', () async {
+    const oldTrack = Track(
+      id: TrackId('wy', '1'),
+      title: 'T',
+      origin: TrackOrigin.builtin,
+    );
+    const newTrack = Track(
+      id: TrackId('kg', '100'),
+      title: 'T',
+      origin: TrackOrigin.builtin,
+    );
+    await store.setTrackCover(oldTrack.id, _bytes(14));
+    await store.setTrackCover(newTrack.id, _bytes(15));
+    final targetPath = store.trackCoverPath(newTrack.id)!;
+    final before = store.revision.value;
+
+    expect(await store.carryOver(oldTrack, newTrack), isFalse);
+    expect(store.trackCoverPath(newTrack.id), targetPath);
+    expect(await File(targetPath).readAsBytes(), _bytes(15),
+        reason: '用户给新曲目选的封面不能被旧曲目的封面覆盖');
+    expect(store.revision.value, before);
+  });
+
   test('读字节：存在 / 丢失都返回可判定的结果', () async {
     const id = TrackId('kw', 'bytes');
     await store.setTrackCover(id, _bytes(10));
@@ -215,16 +238,19 @@ void main() {
 
     await store.setTrackCover(id, _bytes(11));
     expect(localChanges, hasLength(1), reason: '本地写入触发同步标脏');
+    expect(observed.single.trackId, id, reason: '本地写入带真实 TrackId');
 
     final revision = store.revision.value;
     await store.applySyncedTrackCover('wy:sync', _bytes(12));
     expect(await store.readTrackCover(id), _bytes(12));
     expect(localChanges, hasLength(1), reason: '远端应用不得形成同步回环');
     expect(observed, hasLength(2), reason: '展示面仍收到刷新');
+    expect(observed.last.trackId, isNull, reason: '远端键不可靠，不猜测 TrackId');
     expect(store.revision.value, revision + 1);
 
     await store.applySyncedTrackDelete('wy:sync');
     expect(store.trackCoverPath(id), isNull);
+    expect(observed.last.trackId, isNull);
     expect(localChanges, hasLength(1));
 
     await store.setDefaultCover(_bytes(13));

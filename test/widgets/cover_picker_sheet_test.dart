@@ -130,5 +130,10 @@ void main() {
 
     expect(find.text(l10n.coverDefaultTitle), findsOneWidget);
     expect(find.text(l10n.coverDefaultSubtitle), findsOneWidget);
+    await tester.tap(find.byKey(const Key('coverPickerResetButton')));
+    await tester.pumpAndSettle();
+
+    expect(notifications.last, l10n.coverDefaultRestored);
+    expect(store.defaultUrl, isNull);
   });
 }

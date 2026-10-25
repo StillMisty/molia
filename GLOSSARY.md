@@ -687,13 +687,17 @@
   只做结构校验（不是 Molia 备份 / 内层 envelope 无效才抛 `FormatException`）。
 - **Sync category（同步类别）** — 可开关的数据类别：`playlists` /
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
-  `history` / `session` / `covers`；关闭的类别既不推送也不应用（本机仍持续
-  登记本地变化）。`covers`（自定义封面）默认关闭，且不进蜂窝小类别。
+  `history` / `session` / `covers`；关闭的类别既不推送也不应用（多数类别本机
+  仍持续登记本地变化；`covers` 未请求时整轮跳过）。`covers`（自定义封面）默认
+  关闭，且不进蜂窝小类别。
 - **Cover sync adapter（封面同步适配器）** — `lib/data/sync/adapters/cover_sync_adapter.dart`：
   `covers` 类别的记录桥：每曲封面 + 默认封面保留键 `__default_cover__`；版本
-  由 `SyncStampIssuer` 按内容哈希发放，首次登记不写增量日志，真实变化 / 删除
-  才追加；远端应用经 `CustomCoverStore.applySynced*`（不触发本地变更回调）。
-  单张 > 500KB 或损坏只跳过同步，本地封面保留。
+  由 `SyncStampIssuer` 按内容哈希发放。类别未请求时立即返回空（不读文件、不算
+  哈希 / base64）；开启后的第一次收集只登记已有封面、不逐张追加（全量快照会
+  携带它们），此后首次登记 / 真实变化 / 删除 / 墓碑后重设才写增量；手动完整
+  备份请求全部类别，开关关闭也包含封面。远端应用经
+  `CustomCoverStore.applySynced*`（不触发本地变更回调）。单张 > 500KB 或损坏
+  只跳过同步，本地封面保留。
 - **Playback session record（会话记录）** — `session` 类别的单例记录：会话 JSON
   （队列/下标/进度/模式）+ `savedAt` 时间戳；正在播放的设备持续刷新从而抢占，
   本地停止播放不回传删除（换设备接着听的轻量实现）。系统控制路径（通知暂停 /

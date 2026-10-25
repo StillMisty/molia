@@ -110,9 +110,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     setState(() => _busy = true);
     try {
       final picker = widget.pickImage;
-      final raw = picker != null
-          ? await picker()
-          : await _pickImageFromDevice(l10n);
+      final raw =
+          picker != null ? await picker() : await _pickImageFromDevice(l10n);
       if (raw == null || raw.isEmpty) return;
       final normalized = await (widget.normalize ?? CoverImageCodec.normalize)(
         raw,
@@ -152,7 +151,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
       } else {
         await _store.resetTrackCover(widget.trackId!);
       }
-      _showMessage(l10n.coverRestored);
+      _showMessage(
+        _isDefault ? l10n.coverDefaultRestored : l10n.coverRestored,
+      );
     } catch (_) {
       _showMessage(l10n.coverUpdateFailed);
     } finally {

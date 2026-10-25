@@ -16,7 +16,7 @@ import 'package:molia/services/covers/custom_cover_store.dart';
 import 'support/sync_test_support.dart';
 
 /// 自定义封面同步适配器：首次登记 / 变化 / 删除墓碑 / 远端 LWW /
-/// 默认封面 / 损坏与超限跳过 / 默认关闭时的日志门控。
+/// 默认封面 / 损坏与超限跳过 / 类别未请求时跳过 / 开启切换轮的日志门控。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -349,6 +349,31 @@ void main() {
     expect(journal.changes, isEmpty);
   });
 
+  test('类别未请求：立即返回空，不读封面文件', () async {
+    final counting = _CountingCoverStore(
+      supportDirectory: () async => tempDir,
+      clock: () => DateTime.fromMillisecondsSinceEpoch(now),
+    );
+    await counting.load();
+    await counting.setTrackCover(trackId, jpeg(1));
+    final scoped = CoverSyncAdapter(
+      store: counting,
+      state: state,
+      journal: journal,
+      enabled: () => false,
+    );
+
+    final empty = await scoped.collectForCategories({SyncCategory.settings});
+    expect(empty, isEmpty);
+    expect(counting.reads, 0, reason: '非封面轮不能读盘 / 算哈希 / base64');
+
+    // 手动完整备份请求全部类别（即使开关关闭）仍能看到封面记录。
+    final covers = (await scoped.collectForCategories(
+        SyncCategory.values.toSet()))[SyncCategory.covers]!;
+    expect(covers, hasLength(1));
+    expect(counting.reads, 1);
+  });
+
   test('默认关闭：不写封面日志；开启后变化照常追加', () async {
     expect(state.isCategoryEnabled(SyncCategory.covers), isFalse,
         reason: '状态层默认关闭');
@@ -356,7 +381,7 @@ void main() {
     await store.setTrackCover(trackId, jpeg(1));
 
     final off = (await adapter.collect())[SyncCategory.covers]!;
-    expect(off, hasLength(1), reason: '本地备份仍需看到封面记录');
+    expect(off, hasLength(1), reason: '手动备份仍需看到封面记录');
     expect(journal.changes, isEmpty, reason: '关闭期间封面字节不进增量窗口');
     expect(state.coverStamps['wy:1'], isNotNull, reason: '关闭期间仍登记本地变化');
 
@@ -367,6 +392,29 @@ void main() {
     await adapter.collect();
     expect(journal.changes, hasLength(1));
     expect(journal.changes.single.record.deleted, isFalse);
+  });
+
+  test('开启时已有封面：首轮只登记不追加；之后新封面才追加', () async {
+    enabled = false;
+    // 关闭期间的普通轮次仍会调用 scoped collect（只是不请求封面）。
+    await adapter.collectForCategories({SyncCategory.settings});
+    await store.setTrackCover(trackId, jpeg(1));
+
+    enabled = true;
+    // 开启后先跑一轮小类别（不请求封面）：切换轮规则仍应留给第一次封面轮。
+    await adapter.collectForCategories({SyncCategory.settings});
+    final first = (await adapter.collect())[SyncCategory.covers]!;
+    expect(first, hasLength(1), reason: '快照 / 手动备份仍能看到已有封面');
+    expect(journal.changes, isEmpty, reason: '开启后的首轮由全量快照携带已有封面，不逐张塞进增量');
+    expect(state.coverStamps['wy:1'], isNotNull, reason: '只登记，供后续变化检测');
+
+    // 开启状态下首次登记的新封面仍追加日志。
+    now = 2000;
+    await store.setTrackCover(const TrackId('wy', '2'), jpeg(2));
+    final second = (await adapter.collect())[SyncCategory.covers]!;
+    expect(second, hasLength(2));
+    expect(journal.changes, hasLength(1));
+    expect(journal.changes.single.record.key, 'wy:2');
   });
 
   test('store 未加载时 ready=false，collect 为空', () async {
@@ -385,6 +433,28 @@ void main() {
     await unloaded.load();
     expect(unloadedAdapter.ready, isTrue);
   });
+}
+
+/// 记录读盘次数的封面存储：验证非封面轮不触碰封面文件。
+class _CountingCoverStore extends CustomCoverStore {
+  _CountingCoverStore({
+    required super.supportDirectory,
+    required super.clock,
+  });
+
+  int reads = 0;
+
+  @override
+  Future<Uint8List?> readTrackCoverByKey(String key) {
+    reads++;
+    return super.readTrackCoverByKey(key);
+  }
+
+  @override
+  Future<Uint8List?> readDefaultCover() {
+    reads++;
+    return super.readDefaultCover();
+  }
 }
 
 class _RecordingJournal implements SyncJournalAppender {

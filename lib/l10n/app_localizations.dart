@@ -341,7 +341,7 @@ abstract class AppLocalizations {
   /// No description provided for @coverFollowSong.
   ///
   /// In en, this message translates to:
-  /// **'Use song artwork'**
+  /// **'Song artwork'**
   String get coverFollowSong;
 
   /// No description provided for @coverCustomized.
@@ -373,6 +373,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cover restored'**
   String get coverRestored;
+
+  /// No description provided for @coverDefaultRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Molia mark restored'**
+  String get coverDefaultRestored;
 
   /// No description provided for @coverUpdated.
   ///

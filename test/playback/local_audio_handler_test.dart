@@ -637,6 +637,43 @@ void main() {
       expect(backend.lastMetadata?.artworkUri, data);
       expect(resolverCalls, 0);
     });
+
+    test('协议相对封面补全为 https，不当成本地文件', () async {
+      const cover = '//y.gtimg.cn/music/photo_new/T002R300x300M000.jpg';
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: cover);
+      addTearDown(service.dispose);
+      final (_, backend) = await _handler(service);
+
+      expect(
+        backend.lastMetadata?.artworkUri,
+        'https://y.gtimg.cn/music/photo_new/T002R300x300M000.jpg',
+      );
+      expect(backend.lastMetadata?.artworkUri, isNot(startsWith('file:')));
+    });
+
+    test('封面刷新只补发元数据，不重建播放态与动作', () async {
+      var cover = 'https://p1.music.126.net/original.jpg';
+      final service = FakeMediaSessionReadModel()
+        ..currentTrack = _track(coverUrl: cover);
+      addTearDown(service.dispose);
+      final (handler, backend) = await _handler(
+        service,
+        coverUrlResolver: (_) => cover,
+      );
+      final metadataCount = backend.metadataUpdates.length;
+      final stateCount = backend.stateUpdates.length;
+      final actionCount = backend.actionUpdates.length;
+
+      cover = 'file:///tmp/molia-custom-cover.jpg';
+      handler.refreshArtwork();
+      await pumpEventQueue();
+
+      expect(backend.metadataUpdates.length, metadataCount + 1);
+      expect(backend.lastMetadata?.artworkUri, cover);
+      expect(backend.stateUpdates.length, stateCount);
+      expect(backend.actionUpdates.length, actionCount);
+    });
   });
 
   group('系统控制回调：只翻译成命令', () {

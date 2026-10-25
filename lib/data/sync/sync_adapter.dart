@@ -8,8 +8,9 @@ import '../../domain/models/device_sync.dart';
 ///   上轮记录（指纹未变不读行），并在自己落地了远端记录时让缓存失效；
 /// - [apply] 只处理自己认识的键，遇到未知记录计入 skipped，不抛异常；
 /// - 写入必须幂等：重复应用同一份合并结果不得产生新的本地变更；
-/// - 引擎只把启用类别的记录交给适配器（关闭期间 collect 仍持续登记本地
-///   变化，保证重新开启后可直接参与合并）。
+/// - 引擎只把启用类别的记录交给适配器；普通适配器在关闭期间仍可持续登记
+///   本地变化（重新开启后直接参与合并），代价高的适配器实现
+///   [CategoryScopedSyncAdapter]，类别未请求时整轮跳过。
 abstract interface class SyncAdapter {
   Set<SyncCategory> get categories;
 
@@ -23,6 +24,19 @@ abstract interface class SyncAdapter {
   Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false});
 
   Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records);
+}
+
+/// 类别受限适配器：收集时额外拿到「本轮请求的类别集合」。
+///
+/// 封面这类收集成本高（读文件 + 哈希 + base64）的适配器实现本接口：类别
+/// 不在请求集合里时立即返回空，不读盘、不编码，也不增长缓存。普通适配器
+/// 不需要实现——引擎仍调用 [SyncAdapter.collect] 并在聚合时按类别过滤。
+abstract interface class CategoryScopedSyncAdapter implements SyncAdapter {
+  /// 只收集 [categories] 中的本适配器类别（其余类别忽略）。
+  Future<Map<SyncCategory, List<SyncRecord>>> collectForCategories(
+    Set<SyncCategory> categories, {
+    bool fresh = false,
+  });
 }
 
 /// 适配器应用结果计数。

@@ -155,6 +155,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coverRestored => '封面已恢复';
 
   @override
+  String get coverDefaultRestored => 'Molia 标志已恢复';
+
+  @override
   String get coverUpdated => '封面已更新';
 
   @override

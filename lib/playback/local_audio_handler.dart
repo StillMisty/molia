@@ -262,11 +262,18 @@ class LocalAudioHandler {
 
   /// 自定义 / 默认封面变化后刷新当前曲目的系统媒体元数据。
   ///
-  /// 只补发元数据；播放态与动作不受影响（封面 URI 不是播放事件）。
+  /// 只补发元数据；播放态与动作不受影响（封面 URI 不是播放事件）。同步更新
+  /// [_lastArtworkUrl] 让下一次读取面事件不再把这张封面当成「新变化」重建
+  /// 播放态与动作。
   void refreshArtwork() {
+    final track = _readModel.currentTrack;
     _localArtworkSourceUrl = null;
     _localArtworkUri = null;
-    _syncFromService(force: true);
+    _lastArtworkUrl = _coverUrlOf(track);
+    _sendMetadataOnly();
+    // 重置自定义封面后会回落到原始网络封面：仍按常规补一次本地化，避免
+    // 通知 / 锁屏直接让平台下载（部分 CDN 对默认 UA 返回 403）。
+    if (track != null) _maybeResolveArtwork(track);
   }
 
   /// 只补发当前曲目的元数据（歌词覆盖 / 封面本地化完成）。
@@ -613,6 +620,9 @@ class LocalAudioHandler {
 
   /// 本地封面地址 → 平台可用地址（file URI / Windows 裸路径）；非本地返回 null。
   String? _localFileUriFor(String url) {
+    // 协议相对地址（`//host/path`）是网络封面，不是 Unix 裸路径：交给
+    // Uri.tryParse 会得到无 authority 的路径，不能拼成 `file:////host/...`。
+    if (url.startsWith('//')) return null;
     final parsed = Uri.tryParse(url);
     if (parsed != null && parsed.scheme == 'file') {
       return mediaArtworkUriForPath(parsed.toFilePath()) ?? parsed.toString();
