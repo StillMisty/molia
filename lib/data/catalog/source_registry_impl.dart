@@ -11,8 +11,9 @@ import 'manager_catalog_source.dart';
 /// `SourceManager` → 领域 `SourceRegistry` 适配器。
 ///
 /// 职责：
-/// - `descriptors`：由 `manager.searchableSources` 映射（顺序即用户排序结果，
-///   `order` 为列表下标，0 起）；`lx_source_order` 的读写完全由 manager 承担；
+/// - `descriptors`：由 `manager.sourceProfiles.searchable` 映射（顺序即用户
+///   排序结果，`order` 为列表下标，0 起；能力位直接取画像，不再二次推导）；
+///   `lx_source_order` 的读写完全由 manager 承担；
 /// - `byKey`/`forTrack`：懒创建并缓存 [SourceManagerMusicSource]（按 key 单例）；
 ///   `local` key 特殊路由到 [LocalMusicSource]（本地下载副本，manager 不认识）；
 /// - `changes`：把 manager 的 ChangeNotifier 通知转发为广播流；
@@ -39,14 +40,16 @@ class SourceRegistryImpl implements SourceRegistry {
 
   @override
   List<domain.SourceDescriptor> get descriptors {
-    final options = _manager.searchableSources;
+    // 一次快照同时给出顺序与能力位：避免列表来自 channels、能力又来自
+    // capabilitiesFor 的二次读取在状态切换时对不上。
+    final profiles = _manager.sourceProfiles.searchable;
     return [
-      for (var index = 0; index < options.length; index++)
+      for (var index = 0; index < profiles.length; index++)
         domain.SourceDescriptor(
-          key: options[index].key,
-          displayName: options[index].name,
-          kind: _kindOf(options[index].kind),
-          capabilities: _manager.capabilitiesFor(options[index].key),
+          key: profiles[index].key,
+          displayName: profiles[index].displayName,
+          kind: _kindOf(profiles[index].kind),
+          capabilities: profiles[index].capabilities,
           enabled: true,
           order: index,
         ),

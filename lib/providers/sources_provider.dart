@@ -64,28 +64,24 @@ class SourcesProvider extends ChangeNotifier {
       _manager.scripts.map(_toInfo).toList(growable: false);
 
   /// 可供搜索/播放的音源（仅启用项；按用户自定义顺序排列）。
-  List<SourceEntry> get searchableSources => _manager.searchableSources
-      .map((option) => SourceEntry(
-            key: option.key,
-            name: option.name,
-            kind: _toDomainKind(option.kind),
-            canSearch: option.canSearch,
-            discoverable: option.discoverable,
-            enabled: option.enabled,
-          ))
-      .toList(growable: false);
+  List<SourceEntry> get searchableSources =>
+      _entries(_manager.sourceProfiles.searchable);
 
   /// 全部渠道（可搜索源 + 内置发现平台的并集，含停用项；按用户顺序）。
-  List<SourceEntry> get channels => _manager.channels
-      .map((option) => SourceEntry(
-            key: option.key,
-            name: option.name,
-            kind: _toDomainKind(option.kind),
-            canSearch: option.canSearch,
-            discoverable: option.discoverable,
-            enabled: option.enabled,
-          ))
-      .toList(growable: false);
+  List<SourceEntry> get channels => _entries(_manager.sourceProfiles.channels);
+
+  /// 画像 → 领域视图：canSearch / discoverable / enabled 全部来自同一快照。
+  List<SourceEntry> _entries(Iterable<SourceProfile> profiles) => [
+        for (final profile in profiles)
+          SourceEntry(
+            key: profile.key,
+            name: profile.displayName,
+            kind: _toDomainKind(profile.kind),
+            canSearch: profile.searchable,
+            discoverable: profile.discoverable,
+            enabled: profile.enabled,
+          ),
+      ];
 
   /// 默认音质偏好。
   String get preferredQuality => _manager.preferredQuality;

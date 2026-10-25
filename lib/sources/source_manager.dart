@@ -26,13 +26,14 @@ import 'lx/lx_script_repository.dart';
 import 'lx/lx_script_update.dart';
 import 'lx/lx_search_parse.dart';
 import 'source_preferences.dart';
+import 'source_profiles.dart';
 import 'source_search_result.dart';
 import 'source_track.dart';
 import '../domain/models/album.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
-import '../domain/models/source.dart';
+import '../domain/models/source.dart' show SourceCapabilities;
 import '../domain/ports/music_source.dart' show PlayableStream;
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
@@ -40,9 +41,9 @@ import '../domain/ports/music_source.dart' show PlayableStream;
 export 'lx/lx_engine_types.dart' show LxEngineException;
 export 'lx/lx_script_update.dart'
     show ScriptUpdateCheck, ScriptUpdateError, ScriptUpdateException;
-
-/// 搜索结果来源类型。
-enum SourceKind { builtin, lx, anyListen }
+// SourceKind 搬到 sources/source_profiles.dart（画像模块的唯一事实），
+// 这里 re-export 保持既有 import 路径与调用方不变。
+export 'source_profiles.dart' show SourceKind, SourceProfile, SourceProfiles;
 
 class SourceOption {
   final String key;
@@ -152,158 +153,50 @@ class SourceManager extends ChangeNotifier {
   /// any-listen 是否「已配置且启用」；只有此时才出现在 [searchableSources]。
   bool get anyListenAvailable => _anyListenSource.isUsable;
 
+  /// 当前音源画像快照（渠道 / 能力 / 可见性的唯一事实）。
+  ///
+  /// 每次读取按当前激活脚本、any-listen 配置与渠道偏好重建；个位数条目，
+  /// 不做缓存就没有失效逻辑，也不会出现「能力位更新了、渠道没更新」。
+  SourceProfiles get sourceProfiles => SourceProfiles.build(
+        activeSources: _activeSources,
+        anyListenUsable: _anyListenSource.isUsable,
+        disabledChannels: _preferences.disabledChannels,
+        sourceOrder: _preferences.sourceOrder,
+      );
+
   /// 全部渠道（可搜索源 + 内置发现平台的并集，含停用项；按用户顺序排列）。
   ///
   /// 资料页的渠道选择与「音源管理」的渠道排序都消费该列表；脚本扩展源 /
   /// any-listen 只有搜索能力，内置发现平台无论是否有脚本都保留发现入口。
-  List<SourceOption> get channels {
-    final disabled = _preferences.disabledChannels;
-    final candidates = <SourceOption>[
-      for (final option in _searchableCandidates)
-        SourceOption(
-          key: option.key,
-          name: option.name,
-          kind: option.kind,
-          canSearch: option.canSearch,
-          discoverable: BuiltinPlatforms.discoverFor(option.key) != null,
-          enabled: !disabled.contains(option.key),
-        ),
-    ];
-    final existing = candidates.map((o) => o.key).toSet();
-    // 未出现在可搜索列表中的内置发现平台（无脚本也可浏览热榜/歌单）。
-    // 只遍历真正有发现适配器的平台：平台全集里可能有「可搜索但没有发现页」
-    // 的条目，把它加进来会出现一个点开必然空白的发现入口。
-    for (final key in BuiltinPlatforms.discoverSources.keys) {
-      if (existing.contains(key)) continue;
-      candidates.add(SourceOption(
-        key: key,
-        name: BuiltinPlatforms.displayName(key),
-        kind: SourceKind.builtin,
-        canSearch: false,
-        discoverable: true,
-        enabled: !disabled.contains(key),
-      ));
-    }
-
-    final orderedKeys = applySourceOrder(
-        candidates.map((o) => o.key).toList(), _preferences.sourceOrder);
-    final byKey = {for (final option in candidates) option.key: option};
-    return [for (final key in orderedKeys) byKey[key]!];
-  }
+  List<SourceOption> get channels =>
+      [for (final profile in sourceProfiles.channels) _optionOf(profile)];
 
   /// 可供搜索/播放的音源列表（仅启用项；按用户自定义顺序排列）。
-  List<SourceOption> get searchableSources => [
-        for (final option in channels)
-          if (option.enabled && option.canSearch) option,
-      ];
+  List<SourceOption> get searchableSources =>
+      [for (final profile in sourceProfiles.searchable) _optionOf(profile)];
 
-  /// 未排序的可搜索候选：脚本扩展搜索源 → 内置平台（原生取链或脚本可取链）→
-  /// any-listen（仅「已配置且启用」时出现）。
-  List<SourceOption> get _searchableCandidates {
-    final candidates = <SourceOption>[];
-    for (final decl in _activeSources.values) {
-      if (decl.canSearch) {
-        candidates.add(SourceOption(
-          key: decl.key,
-          name: decl.name,
-          kind: SourceKind.lx,
-          canSearch: true,
-        ));
-      }
-    }
-    for (final platform in BuiltinPlatforms.searchCandidates) {
-      if (_isBuiltinSearchable(platform.key)) {
-        candidates.add(SourceOption(
-          key: platform.key,
-          name: platform.displayName,
-          kind: SourceKind.builtin,
-          canSearch: true,
-        ));
-      }
-    }
-    // any-listen 远程音源：仅当已配置且启用时出现；新 key 未出现在顺序表中
-    // 时自动排在末尾。
-    if (_anyListenSource.isUsable) {
-      candidates.add(const SourceOption(
-        key: AnyListenSource.sourceKey,
-        name: AnyListenSource.displayName,
-        kind: SourceKind.anyListen,
-        canSearch: true,
-      ));
-    }
-    return candidates;
-  }
-
-  /// 内置平台「是否可搜索」的唯一判定（channels 的候选列表、[capabilitiesFor]
-  /// 的能力位与 [searchWithMeta] 的路由门共用它——三处各算一份会静默漂移）：
-  /// 原生取链的平台（bili）自带搜索与播放，其余平台要脚本可取链。
-  bool _isBuiltinSearchable(String key) {
-    final platform = BuiltinPlatforms.maybeOf(key);
-    if (platform == null) return false;
-    return platform.resolve != null ||
-        (_activeSources[key]?.canResolveUrl ?? false);
-  }
-
-  /// 音源能力：与路由的实际 gating 一致（registry / 领域适配器共用）。
-  ///
-  /// - builtin：原生取链平台（bili）或已有可取链脚本才可搜索 / 播放；
-  ///   歌词/封面为 Dart 原生实现；
-  /// - lx：按脚本声明的 action；
-  /// - any-listen：已配置且启用时全部可用。
-  SourceCapabilities capabilitiesFor(String key) {
-    if (key == AnyListenSource.sourceKey) {
-      final usable = _anyListenSource.isUsable;
-      return SourceCapabilities(
-        search: usable,
-        pagination: usable,
-        resolveUrl: usable,
-        lyrics: usable,
-        artwork: usable,
+  /// 画像 → UI 兼容视图（`SourceOption` 保留给既有调用方）。
+  SourceOption _optionOf(SourceProfile profile) => SourceOption(
+        key: profile.key,
+        name: profile.displayName,
+        kind: profile.kind,
+        canSearch: profile.searchable,
+        discoverable: profile.discoverable,
+        enabled: profile.enabled,
       );
-    }
-    final decl = _activeSources[key];
-    // 内置平台的搜索/分页由 Dart 实现（五个音乐平台走 BuiltinSearch，bili 原生），
-    // 能力跟随「原生取链或脚本可取链」；脚本声明的 canSearch 只描述脚本扩展源自身的
-    // 社区搜索 action（见 [_isBuiltinSearchable]）。评论同样只由内置实现提供。
-    final platform = BuiltinPlatforms.maybeOf(key);
-    final builtin = platform != null;
-    final builtinSearchable = _isBuiltinSearchable(key);
-    return SourceCapabilities(
-      search: builtinSearchable || (decl?.canSearch ?? false),
-      pagination: builtinSearchable || (decl?.canSearch ?? false),
-      // 原生取链与脚本取链是并列的两条路：任一存在即可播放。
-      resolveUrl: (platform?.resolve != null) || (decl?.canResolveUrl ?? false),
-      lyrics: builtin || (decl?.canFetchLyric ?? false),
-      artwork: builtin || (decl?.canFetchPic ?? false),
-      comment: platform?.comments != null,
-      // 专辑详情同样只由内置实现提供（LX 脚本 / any-listen 无稳定专辑 id）。
-      collection: platform?.album != null,
-      // 歌手（搜索 + 详情/歌曲）与按歌词搜歌：只由内置实现提供，且与搜索
-      // 路由同门（[_isBuiltinSearchable]：脚本可取链才宣称可用——能力位与
-      // `searchArtists` / `searchLyrics` 的路由门必须一致，不允许 UI 显示
-      // 一个必然失败的入口）。
-      artist: platform?.artist != null && builtinSearchable,
-      lyricSearch: platform?.lyricSearch != null && builtinSearchable,
-    );
-  }
+
+  /// 音源能力：直接读 [SourceProfiles]（registry / 领域适配器共用同一答案）。
+  SourceCapabilities capabilitiesFor(String key) =>
+      sourceProfiles.forKey(key)?.capabilities ?? const SourceCapabilities();
 
   /// 按照 [order] 整理 [keys]，返回完整排序结果：
   /// 在顺序表中出现过的按表排列，未出现的保持原相对顺序追加在末尾。
   ///
-  /// 这样新导入的音源会自动排在末尾，无需迁移已有的持久化数据。
+  /// 实现已搬进 [SourceProfiles.applyOrder]（画像构建也在用），这里保留
+  /// 静态入口兼容既有测试 / 调用方。
   @visibleForTesting
-  static List<String> applySourceOrder(List<String> keys, List<String> order) {
-    final pending = <String>{...keys};
-    final result = <String>[];
-    for (final key in order) {
-      // 忽略顺序表中已不存在或重复的 key
-      if (pending.remove(key)) result.add(key);
-    }
-    for (final key in keys) {
-      if (pending.remove(key)) result.add(key);
-    }
-    return result;
-  }
+  static List<String> applySourceOrder(List<String> keys, List<String> order) =>
+      SourceProfiles.applyOrder(keys, order);
 
   /// supervisor 状态回调：重启成功后用引擎当前声明的源刷新 [activeSources]，
   /// 修复“引擎死了源列表还在”（超时 kill 后脚本重新执行，声明可能变化）。
@@ -502,7 +395,9 @@ class SourceManager extends ChangeNotifier {
     }
     final decl = _activeSources[sourceKey];
     if (BuiltinPlatforms.isSupported(sourceKey)) {
-      if (!_isBuiltinSearchable(sourceKey)) {
+      // 搜索门直接读画像（与能力位同一事实）：能力位为 false 时这里必然
+      // 拒绝，避免 UI 显示可搜索但路由报错。
+      if (sourceProfiles.forKey(sourceKey)?.searchable != true) {
         throw LxEngineException(
             '当前环境不支持 ${BuiltinPlatforms.displayName(sourceKey)} 的搜索与播放');
       }
@@ -630,7 +525,8 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kCommentPageSize,
   }) async {
-    if (BuiltinPlatforms.commentsFor(track.sourceKey) == null) {
+    // 能力位与注册表适配器同源：profile.comment 为真必然有评论适配器。
+    if (!capabilitiesFor(track.sourceKey).comment) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 ${track.sourceKey} 不支持评论',
@@ -660,7 +556,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kAlbumPageSize,
   }) async {
-    if (BuiltinPlatforms.albumFor(sourceKey) == null) {
+    if (!capabilitiesFor(sourceKey).collection) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 $sourceKey 不支持专辑',
@@ -689,6 +585,8 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = kArtistPageSize,
   }) async {
+    // 详情路由只看适配器：画像的 `artist` 还叠了搜索门（UI 入口），但已保存
+    // 曲目的歌手 id 在无激活脚本时仍可直接取详情（与迁移前一致）。
     if (BuiltinPlatforms.artistFor(sourceKey) == null) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
@@ -709,16 +607,15 @@ class SourceManager extends ChangeNotifier {
 
   /// 歌手搜索（内置平台；搜索页「歌手」类型）。
   ///
-  /// 可搜索性与单曲搜索同门（[_isBuiltinSearchable]：脚本可取链才有歌手
-  /// 搜索入口）；失败归一化为 [SourceFailure]，不静默吞成空结果。
+  /// 能力位与单曲搜索同门（画像里的 `artist` 只在搜索路由可用时为真）；
+  /// 失败归一化为 [SourceFailure]，不静默吞成空结果。
   Future<ArtistSearchPage> searchArtists(
     String sourceKey,
     String keyword, {
     int page = 1,
     int limit = 30,
   }) async {
-    if (BuiltinPlatforms.artistFor(sourceKey) == null ||
-        !_isBuiltinSearchable(sourceKey)) {
+    if (sourceProfiles.forKey(sourceKey)?.capabilities.artist != true) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 $sourceKey 不支持歌手搜索',
@@ -746,8 +643,7 @@ class SourceManager extends ChangeNotifier {
     int page = 1,
     int limit = 30,
   }) async {
-    if (BuiltinPlatforms.lyricSearchFor(sourceKey) == null ||
-        !_isBuiltinSearchable(sourceKey)) {
+    if (sourceProfiles.forKey(sourceKey)?.capabilities.lyricSearch != true) {
       throw SourceFailure(
         kind: FailureKind.unsupported,
         message: '音源 $sourceKey 不支持歌词搜索',

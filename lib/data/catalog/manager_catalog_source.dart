@@ -15,8 +15,8 @@ import '../mapping/track_mapper.dart';
 ///
 /// 一个实例对应一个音源 key（builtin 平台 / 脚本自定义源 / any-listen），
 /// 所有操作转发给共享的 [SourceManager]，由后者完成具体路由。
-/// 能力位由 `SourceManager.capabilitiesFor` 派生：脚本源按声明的 action，
-/// 内置平台歌词/封面为 Dart 原生实现（与路由的实际 gating 一致）。
+/// 能力位由 `SourceManager.capabilitiesFor`（`SourceProfiles` 快照）派生：
+/// 脚本源按声明的 action，内置平台按注册表适配器，与路由的实际 gating 一致。
 /// `SourceManager` 的生命周期由 composition root 管理：本适配器的
 /// [init]/[dispose] 为空实现，不触碰 manager。
 class SourceManagerMusicSource implements MusicSource {

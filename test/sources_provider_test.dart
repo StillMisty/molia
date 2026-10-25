@@ -120,6 +120,18 @@ void main() {
       ['a', 'b', 'bili'],
     );
 
+    // provider 视图与 manager 的画像快照逐项一致（canSearch / enabled 不再
+    // 在两层各算一份）。
+    final channelProfiles = f.manager.sourceProfiles.channels;
+    expect(
+      f.provider.channels.map((o) => o.canSearch),
+      channelProfiles.map((p) => p.searchable),
+    );
+    expect(
+      f.provider.channels.map((o) => o.enabled),
+      channelProfiles.map((p) => p.enabled),
+    );
+
     // 拖拽语义：onReorderItem 的 newIndex 已校正，直接按下标搬移。
     await f.provider.reorderChannel(1, 0);
     expect(

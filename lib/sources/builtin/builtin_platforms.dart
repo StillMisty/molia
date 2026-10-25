@@ -12,6 +12,10 @@
 /// - 歌词搜索 / 专辑 / 歌手 / 评论失败抛 `SourceFailure`；
 /// - 发现返回自己的 `DiscoverSource` 类型。
 /// 混成一个通用返回值会把上述差异抹平。
+///
+/// 原生歌词 / 封面也在这里登记（`lyric` / `pic`）：它们是
+/// `SourceCapabilities.lyrics` / `artwork` 的唯一事实来源，派发
+/// （`BuiltinLyricDispatch` / `BuiltinPicDispatch`）只查表，不再维护 switch。
 library;
 
 import '../../domain/models/album.dart';
@@ -25,6 +29,8 @@ import 'bili_comment.dart';
 import 'bili_discover.dart';
 import 'bili_play.dart';
 import 'bili_search.dart';
+import 'builtin_lyric_adapters.dart';
+import 'builtin_pic_adapters.dart';
 import 'discover_source.dart';
 import 'kg_album.dart';
 import 'kg_artist.dart';
@@ -39,6 +45,7 @@ import 'kw_discover.dart';
 import 'kw_lyric_search.dart';
 import 'kw_search.dart';
 import 'lyric_hit.dart';
+import 'lyric_result.dart';
 import 'mg_album.dart';
 import 'mg_artist.dart';
 import 'mg_comment.dart';
@@ -80,6 +87,19 @@ typedef BuiltinLyricSearchAdapter = Future<LyricSearchPage> Function(
   int page,
   int limit,
 });
+
+/// 原生取词适配器：曲目 raw → 统一歌词结果（无字段 / 失败返回 null）。
+///
+/// 能力位 `SourceCapabilities.lyrics` 只认这个适配器（或脚本声明的 lyric
+/// action），不再按「是不是内置平台」一刀切。
+typedef BuiltinLyricAdapter = Future<BuiltinLyricResult?> Function(
+  Map<String, dynamic> raw,
+);
+
+/// 原生取图适配器：曲目 raw → 封面 URL（无字段 / 失败返回 null）。
+typedef BuiltinPicAdapter = Future<String?> Function(
+  Map<String, dynamic> raw,
+);
 
 /// 评论取数适配器（[id] 已由 facade 从 raw 中按平台字段解析）。
 typedef BuiltinCommentFetch = Future<CommentPage> Function(
@@ -143,6 +163,8 @@ class BuiltinPlatform {
   final BuiltinSearchAdapter? search;
   final BuiltinResolveAdapter? resolve;
   final BuiltinLyricSearchAdapter? lyricSearch;
+  final BuiltinLyricAdapter? lyric;
+  final BuiltinPicAdapter? pic;
   final BuiltinCommentAdapter? comments;
   final BuiltinAlbumAdapter? album;
   final BuiltinArtistAdapter? artist;
@@ -154,6 +176,8 @@ class BuiltinPlatform {
     this.search,
     this.resolve,
     this.lyricSearch,
+    this.lyric,
+    this.pic,
     this.comments,
     this.album,
     this.artist,
@@ -177,6 +201,8 @@ class BuiltinPlatforms {
       displayName: 'QQ音乐',
       search: TxSearch.searchWithMeta,
       lyricSearch: TxLyricSearch.search,
+      lyric: txBuiltinLyric,
+      pic: txBuiltinPic,
       comments: BuiltinCommentAdapter(
         rawIdKeys: const ['songId'],
         fetch: TxComment.fetch,
@@ -193,6 +219,8 @@ class BuiltinPlatforms {
       displayName: '网易音乐',
       search: WySearch.searchWithMeta,
       lyricSearch: WyLyricSearch.search,
+      lyric: wyBuiltinLyric,
+      pic: wyBuiltinPic,
       comments: BuiltinCommentAdapter(
         rawIdKeys: const ['songmid', 'id'],
         fetch: WyComment.fetch,
@@ -209,6 +237,8 @@ class BuiltinPlatforms {
       displayName: '酷狗音乐',
       search: KgSearch.searchWithMeta,
       lyricSearch: KgLyricSearch.search,
+      lyric: kgBuiltinLyric,
+      pic: kgBuiltinPic,
       comments: BuiltinCommentAdapter(
         rawIdKeys: const ['hash'],
         fetch: KgComment.fetch,
@@ -225,6 +255,8 @@ class BuiltinPlatforms {
       displayName: '酷我音乐',
       search: KwSearch.searchWithMeta,
       lyricSearch: KwLyricSearch.search,
+      lyric: kwBuiltinLyric,
+      pic: kwBuiltinPic,
       comments: BuiltinCommentAdapter(
         rawIdKeys: const ['songmid'],
         fetch: KwComment.fetch,
@@ -241,6 +273,8 @@ class BuiltinPlatforms {
       displayName: '咪咕音乐',
       search: MgSearch.searchWithMeta,
       lyricSearch: MgLyricSearch.search,
+      lyric: mgBuiltinLyric,
+      pic: mgBuiltinPic,
       comments: BuiltinCommentAdapter(
         rawIdKeys: const ['songmid', 'copyrightId'],
         fetch: MgComment.fetch,
@@ -257,6 +291,8 @@ class BuiltinPlatforms {
       displayName: '哔哩哔哩',
       search: BiliSearch.searchWithMeta,
       resolve: BiliPlay.resolve,
+      lyric: biliBuiltinLyric,
+      pic: biliBuiltinPic,
       comments: BuiltinCommentAdapter(
         // 评论接口的 oid 只用 aid；部分 raw 只带通用 id 字段时兜底。
         rawIdKeys: const ['aid', 'id'],
@@ -287,7 +323,7 @@ class BuiltinPlatforms {
   static final List<BuiltinPlatform> searchCandidates =
       List.unmodifiable(byKey.values);
 
-  /// 某能力族的非空适配器表：`byKey` 是唯一事实来源，六族键表都从这里推导，
+  /// 某能力族的非空适配器表：`byKey` 是唯一事实来源，各族键表都从这里推导，
   /// 选择器为 null 的平台不进表。
   static Map<String, T> _adaptersOf<T extends Object>(
     T? Function(BuiltinPlatform platform) select,
@@ -306,6 +342,12 @@ class BuiltinPlatforms {
   static final Map<String, BuiltinLyricSearchAdapter> lyricSearchAdapters =
       _adaptersOf((platform) => platform.lyricSearch);
 
+  static final Map<String, BuiltinLyricAdapter> lyricAdapters =
+      _adaptersOf((platform) => platform.lyric);
+
+  static final Map<String, BuiltinPicAdapter> picAdapters =
+      _adaptersOf((platform) => platform.pic);
+
   static final Map<String, BuiltinCommentAdapter> commentAdapters =
       _adaptersOf((platform) => platform.comments);
 
@@ -321,6 +363,8 @@ class BuiltinPlatforms {
   static final Set<String> searchKeys = Set.unmodifiable(searchAdapters.keys);
   static final Set<String> lyricSearchKeys =
       Set.unmodifiable(lyricSearchAdapters.keys);
+  static final Set<String> lyricKeys = Set.unmodifiable(lyricAdapters.keys);
+  static final Set<String> picKeys = Set.unmodifiable(picAdapters.keys);
   static final Set<String> commentKeys = Set.unmodifiable(commentAdapters.keys);
   static final Set<String> albumKeys = Set.unmodifiable(albumAdapters.keys);
   static final Set<String> artistKeys = Set.unmodifiable(artistAdapters.keys);
@@ -339,6 +383,10 @@ class BuiltinPlatforms {
 
   static BuiltinLyricSearchAdapter? lyricSearchFor(String key) =>
       byKey[key]?.lyricSearch;
+
+  static BuiltinLyricAdapter? lyricFor(String key) => byKey[key]?.lyric;
+
+  static BuiltinPicAdapter? picFor(String key) => byKey[key]?.pic;
 
   static BuiltinCommentAdapter? commentsFor(String key) => byKey[key]?.comments;
 

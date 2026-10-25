@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/sources/builtin/builtin_platforms.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
@@ -48,12 +49,13 @@ void main() {
         raw: {'songmid': '228908', 'source': 'kw'},
       );
 
-  test('能力位：音乐平台与 bili 的歌词/封面均为原生能力', () {
+  test('能力位：歌词/封面按注册表适配器推导（六个平台都不是一刀切）', () {
     final manager = SourceManager(settings: testSettingsRegistry());
-    for (final key in const ['tx', 'wy', 'kg', 'kw', 'mg', 'bili']) {
+    for (final key in BuiltinPlatforms.keys) {
+      final platform = BuiltinPlatforms.maybeOf(key)!;
       final capabilities = manager.capabilitiesFor(key);
-      expect(capabilities.lyrics, isTrue, reason: key);
-      expect(capabilities.artwork, isTrue, reason: key);
+      expect(capabilities.lyrics, platform.lyric != null, reason: key);
+      expect(capabilities.artwork, platform.pic != null, reason: key);
     }
     manager.dispose();
   });

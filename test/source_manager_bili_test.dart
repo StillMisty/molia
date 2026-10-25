@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
+import 'package:molia/sources/builtin/builtin_platforms.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -93,7 +94,11 @@ void main() {
       expect(capabilities.search, isFalse, reason: key);
       expect(capabilities.pagination, isFalse, reason: key);
       expect(capabilities.resolveUrl, isFalse, reason: key);
-      expect(capabilities.lyrics, isTrue, reason: key);
+      // 歌词 / 封面能力来自注册表适配器，不在测试里写死六份期望。
+      expect(capabilities.lyrics, BuiltinPlatforms.lyricFor(key) != null,
+          reason: key);
+      expect(capabilities.artwork, BuiltinPlatforms.picFor(key) != null,
+          reason: key);
     }
 
     expect(manager.searchableSources.map((o) => o.key), contains('bili'));
