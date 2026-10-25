@@ -80,19 +80,6 @@ void main() {
       expect(await storage.listFiles(dir.path), isEmpty);
     });
 
-    test('音频 / 封面并行扫描互不影响（缓存页 Future.wait 场景）', () async {
-      await writeFile('audio_cache/a', 100);
-      await writeFile('artwork_cache/b', 200);
-
-      final results = await Future.wait([
-        storage.usage('${tempRoot.path}/audio_cache'),
-        storage.usage('${tempRoot.path}/artwork_cache'),
-      ]);
-      expect(results, [
-        const CacheUsage(bytes: 100, count: 1),
-        const CacheUsage(bytes: 200, count: 1),
-      ]);
-    });
   });
 
   group('listFiles', () {

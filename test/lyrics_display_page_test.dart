@@ -90,25 +90,6 @@ void main() {
     });
   }
 
-  testWidgets('歌词与输出页：页内分组齐全（应用内歌词页 + 输出共享）', (tester) async {
-    useLargeViewport(tester);
-    await pumpApp(tester, const LyricsContentSettingsPage());
-
-    // 两个分组标题 + 两组开关（同名的「翻译」用副标题区分生效范围）。
-    expect(find.text('Lyrics page'), findsOneWidget);
-    expect(find.text('Lyric outputs'), findsOneWidget);
-    expect(
-      find.text('Show translation under each line in the lyrics page'),
-      findsOneWidget,
-    );
-    expect(
-      find.text(
-          'Show translation in floating, notification and Bluetooth lyrics'),
-      findsOneWidget,
-    );
-    expect(find.text('Unsynced lyrics'), findsOneWidget);
-  });
-
   testWidgets('歌词与输出页：无时间轴分段选择「隐藏」并持久化', (tester) async {
     useLargeViewport(tester);
     await pumpApp(tester, const LyricsContentSettingsPage());

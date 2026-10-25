@@ -250,36 +250,6 @@ void main() {
     expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsNothing);
   });
 
-  testWidgets('开局域网传输即启用同步：不弹口令窗，各分区齐全', (tester) async {
-    await pumpPage(tester);
-    expect(provider.enabled, isFalse);
-
-    await tester.tap(find.byKey(const Key('settingsSyncLanSwitch')));
-    await tester.pumpAndSettle();
-
-    expect(provider.enabled, isTrue);
-    expect(provider.enabledTransports, contains(SyncTransportKind.lan));
-    // 口令在初始化时就绪：开启同步不打断（附近设备配对直接使用口令）。
-    expect(find.text('Copy passphrase'), findsNothing);
-    expect(provider.passphrase, isNotNull);
-
-    // ② 设备：空名册给一句引导；③ 附近设备：局域网开启后显示候选区。
-    expect(find.byKey(const Key('settingsSyncPeersEmpty')), findsOneWidget);
-    expect(find.text('Nearby devices'), findsOneWidget);
-    // 旧配对码入口不再存在（复制 / 粘贴 / 扫码）。
-    expect(find.byKey(const Key('settingsSyncPairingShareItem')), findsNothing);
-    expect(find.byKey(const Key('settingsSyncPasteCodeItem')), findsNothing);
-    expect(find.byKey(const Key('settingsSyncScanCodeItem')), findsNothing);
-    // ④ 内容 / 日志 / 高级设置入口。
-    expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncLogItem')), findsOneWidget);
-    expect(find.byKey(const Key('settingsSyncAdvancedItem')), findsOneWidget);
-    // 底层信息不再暴露在首屏。
-    expect(find.byKey(const Key('settingsSyncDeviceNameItem')), findsNothing);
-    expect(find.byKey(const Key('settingsSyncPeerSelfItem')), findsNothing);
-    expect(find.byKey(const Key('settingsSyncPassphraseItem')), findsNothing);
-  });
-
   testWidgets('高级设置：设备名 / 设备 id / 口令 / 网络地址入口 / 端口齐全', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);

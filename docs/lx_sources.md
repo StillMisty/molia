@@ -157,9 +157,9 @@ lib/playback/
 
 1. `flutter analyze --no-pub` 0 error / 0 warning；
 2. `flutter test --no-pub`（含 `test/lx_core_test.dart`、`test/lx_supervisor_test.dart`、
-   `test/lx_script_update_test.dart`、`test/builtin_search_parse_test.dart`、
-   `test/builtin_lyric_decode_test.dart`（KRC/LRCX/QRC/MRC 合成数据闭环）、
-   `test/source_manager_builtin_lyric_test.dart`、`test/architecture/layering_test.dart`）；
+   `test/lx_script_update_test.dart`、`test/builtin_misc_test.dart`、
+   `test/builtin_misc_test.dart`（KRC/LRCX/QRC/MRC 合成数据闭环）、
+   `test/sources_misc_test.dart`、`test/architecture/layering_test.dart`）；
 3. `node tool/lx_prelude_harness.mjs` 输出 `PROTOCOL OK`；
 4. `tool/agent/test.sh linux`（等价 `flutter test integration_test/lx_engine_integration_test.dart
    -d linux`）：真实导入→搜索→取链→歌词；不含真实播放（无头环境 libmpv 装载不可靠，

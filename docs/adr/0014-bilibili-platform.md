@@ -8,7 +8,7 @@
   `lib/playback/next_track_preloader.dart`、`lib/playback/audio_predownloader.dart`、
   `lib/playback/playing_track_cache_writer.dart`、`lib/services/download/`、
   `lib/managers/artwork_cache.dart`、`lib/widgets/track_actions.dart`、
-  `test/bili_*_test.dart`、`test/source_manager_bili_test.dart`
+  `test/bili_*_test.dart`、`test/sources_misc_test.dart`
 
 ## 背景
 
@@ -94,9 +94,9 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
   会话重试、UP 空间接口搜索兜底、收藏夹 `info` 容忍后续页缺失；仍可能因平台
   策略变化整体不可用。
 - **WBI / buvid**：密钥轮换与 Cookie 失效靠 1 小时缓存 + 刷新兜底；算法由固定
-  测试向量钉住（`test/bili_wbi_test.dart`）。
+  测试向量钉住（`test/bili_misc_test.dart`）。
 - **请求头**：B 站直链 / 封面 / 短链都校验 UA + Referer；headers 透传由
-  `test/source_manager_bili_test.dart` 与播放链路测试覆盖，真机播放另做手工验证
+  `test/sources_misc_test.dart` 与播放链路测试覆盖，真机播放另做手工验证
   （见「待人工」）。
 - **测试**：fixture + `MockDioAdapter`，不依赖真实网络；`flutter analyze --no-pub`、
   `flutter test --no-pub`、`tool/agent/test.sh linux` 全绿。

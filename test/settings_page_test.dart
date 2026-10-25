@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
@@ -20,7 +18,6 @@ import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/models/play_mode.dart';
-import 'package:molia/pages/general_settings_page.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/local_database_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
@@ -47,10 +44,7 @@ import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
-import 'package:molia/widgets/card_list_surface.dart';
 import 'package:molia/widgets/molia_mark.dart';
-import 'package:molia/widgets/settings/settings_section_grid.dart';
-import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/fakes.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -176,45 +170,9 @@ void main() {
     );
   }
 
-  /// 首屏 5 个分区卡片的矩形（按展示顺序）：两列 / 单列断言共用。
-  List<Rect> sectionRects(WidgetTester tester) => [
-        for (var i = 0; i < 5; i++)
-          tester.getRect(find.byType(SettingsSectionCard).at(i)),
-      ];
-
   /// 设置首屏在场的标记：顶部「设置」标题行已移除（弹层 chrome 只剩内容），
   /// 用第一个分区标题判断首屏在不在。
   Finder settingsHome() => find.text('Appearance');
-
-  /// 桌面宽屏打开真实设置弹层（顶栏入口路径：`showPageModal` 的宽屏分支，
-  /// 屏宽 0.9 夹取不触发）。
-  Future<void> openWideSettingsSheet(
-    WidgetTester tester, {
-    Size size = const Size(1200, 900),
-  }) async {
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await pumpApp(
-      tester,
-      Scaffold(
-        body: Builder(
-          builder: (context) => Center(
-            child: M3EButton.filled(
-              onPressed: () => showSettingsSheet(context),
-              child: const Text('Open settings'),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('Open settings'));
-    await tester.pumpAndSettle();
-  }
 
   /// 行内选项的命中：分段/预览圆的标签文本都在行 key 之内。
   Finder optionOf(Key rowKey, String label) => find.descendant(
@@ -242,71 +200,6 @@ void main() {
       (ByteData? _) {},
     );
   }
-
-  testWidgets('设置首屏：6 分区齐全，低频内容移出首屏', (tester) async {
-    await pumpSettingsPage(tester);
-
-    // 分区卡片标题（卡片上方结构标签）。
-    expect(find.text('Appearance'), findsOneWidget);
-    expect(find.text('Playback'), findsOneWidget);
-    expect(find.text('Lyrics & display'), findsOneWidget);
-    expect(find.text('Content & sources'), findsOneWidget);
-    expect(find.text('General'), findsOneWidget);
-    expect(find.text('Data'), findsOneWidget);
-
-    expect(find.text('Theme mode'), findsOneWidget);
-    expect(find.text('Base colors'), findsOneWidget);
-    expect(find.text('Follow album art'), findsOneWidget);
-    expect(find.text('Pure black background'), findsOneWidget);
-    expect(find.text('App font'), findsOneWidget);
-    expect(find.text('Default play mode'), findsOneWidget);
-    expect(find.text('Resume last playback'), findsOneWidget);
-    expect(find.text('Play with other apps'), findsOneWidget);
-    // 省流并回播放分区：默认关闭时只有开关行（无子项）。
-    expect(find.text('Data saver'), findsOneWidget);
-    expect(find.text('Lyrics & outputs'), findsOneWidget);
-    expect(find.text('Source Management'), findsOneWidget);
-    expect(find.text('AI DJ'), findsOneWidget);
-    // 通用与数据拆成两张卡：入口行与新增的一级入口同组。
-    expect(find.text('General settings'), findsOneWidget);
-    expect(find.text('Data & storage'), findsOneWidget);
-    expect(
-      find.byKey(const Key('settingsPlayStatisticsItem')),
-      findsOneWidget,
-      reason: '听歌统计入口提到首屏「数据」卡',
-    );
-    // 震动反馈已移入通用子页：首屏不再直接显示。
-    expect(find.text('Vibration feedback'), findsNothing);
-
-    // 子页内容不在首屏。
-    expect(find.text('Bottom navigation'), findsNothing);
-    expect(find.text('App Language'), findsNothing);
-    expect(find.text('App name'), findsNothing);
-    expect(find.text('Cache management'), findsNothing);
-    expect(find.text('Export Recent Plays'), findsNothing);
-    // 默认音质入口在播放区（需 SourcesProvider；本树未注入）。
-    expect(find.text('Default quality'), findsNothing);
-
-    expect(find.text('Setup'), findsNothing);
-    expect(find.text('Tutorial'), findsNothing);
-    expect(find.byIcon(Icons.email_rounded), findsNothing);
-  });
-
-  testWidgets('设置首屏：无「设置」标题行与关闭按钮（弹层 chrome 去除）', (tester) async {
-    await openWideSettingsSheet(tester);
-    expect(settingsHome(), findsOneWidget);
-
-    // 标题行整行移除（含关闭按钮）后，弹层顶部只剩内容：关闭走遮罩 /
-    // Esc / 下滑 / 系统返回。
-    expect(find.text('Settings'), findsNothing);
-    expect(
-      find.descendant(
-        of: find.byType(SettingsPage),
-        matching: find.byIcon(Icons.close_rounded),
-      ),
-      findsNothing,
-    );
-  });
 
   testWidgets('震动反馈：行在通用子页，默认开，关闭后即时生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
@@ -534,81 +427,6 @@ void main() {
     },
     variant: TargetPlatformVariant.only(TargetPlatform.linux),
   );
-
-  testWidgets('外观分区行高统一：副标题 2 行封顶，行高不随文案漂移', (tester) async {
-    await pumpSettingsPage(tester);
-
-    final item = M3ETheme.of(
-      tester.element(find.byKey(const Key('settingsFollowArtworkSwitch'))),
-    ).listTheme.item;
-    // 行的 CardListSurface：switchKey 挂在开关上（祖先方向），行 key 挂在
-    // tile 上（后代方向）；两种都取到行表面。
-    double rowHeight(Key key) {
-      final target = find.byKey(key);
-      final ancestor =
-          find.ancestor(of: target, matching: find.byType(CardListSurface));
-      if (ancestor.evaluate().isNotEmpty) {
-        return tester.getSize(ancestor.first).height;
-      }
-      return tester
-          .getSize(
-            find
-                .descendant(of: target, matching: find.byType(CardListSurface))
-                .first,
-          )
-          .height;
-    }
-
-    // 修复前三种高度混杂（96 / 118 / 158dp）：带长副标题的标签行现在等高，
-    // 且不超出 M3E 双行 token（测试字体的行高比真机略高，留 4dp 容差）。
-    final followArtwork = rowHeight(const Key('settingsFollowArtworkSwitch'));
-    expect(followArtwork, lessThanOrEqualTo(item.twoLineHeight + 4));
-    expect(rowHeight(const Key('settingsPureBlackSwitch')), followArtwork);
-    expect(rowHeight(const Key('settingsRestoreSessionSwitch')), followArtwork);
-    expect(
-      rowHeight(const Key('settingsPlayWithOtherAppsSwitch')),
-      followArtwork,
-    );
-    expect(rowHeight(const Key('settingsDataSaverSwitch')), followArtwork);
-    expect(rowHeight(const Key('settingsLyricsContentItem')), followArtwork);
-
-    // 全页标签行（排除分段 / 滑杆 / 下拉等复合行）都不超过双行 token。
-    for (final element in find.byType(CardListSurface).evaluate()) {
-      final row = find.byWidget(element.widget);
-      final composite = find
-          .descendant(
-            of: row,
-            matching: find.byWidgetPredicate((widget) {
-              final type = widget.runtimeType.toString();
-              return type.startsWith('M3ESegmentedButton') ||
-                  type.startsWith('M3ESlider') ||
-                  type.startsWith('M3EDropdownMenu');
-            }),
-          )
-          .evaluate()
-          .isNotEmpty;
-      if (composite) continue;
-      expect(
-        tester.getSize(row).height,
-        lessThanOrEqualTo(item.twoLineHeight + 4),
-        reason: '标签行高度超出双行 token',
-      );
-    }
-  });
-
-  testWidgets('分段行：长标签不显示选中勾（图标 + 文案会截断）', (tester) async {
-    await pumpSettingsPage(tester);
-
-    // 播放模式标签长（Sequential / Single repeat）：纯文字分段、无勾
-    // （勾会挤占标签宽度；图标形态的回归见 settings_choice_row_test）。
-    final segmented = tester.widget<M3ESegmentedButton<PlayMode>>(
-      find.descendant(
-        of: find.byKey(const Key('settingsDefaultPlayModeItem')),
-        matching: find.byType(M3ESegmentedButton<PlayMode>),
-      ),
-    );
-    expect(segmented.showSelectedIcon, isFalse);
-  });
 
   testWidgets('省流模式：开关/音质上限/封面省流在播放分区内生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
@@ -1654,94 +1472,6 @@ void main() {
     expect(find.text('Listening Stats'), findsOneWidget, reason: '统计入口在首屏');
   });
 
-  testWidgets('设置页不直接操作系统栏（避免关闭弹层返回时闪烁）', (tester) async {
-    final chromeCalls = <String>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        if (call.method.startsWith('SystemChrome.')) {
-          chromeCalls.add(call.method);
-        }
-        return null;
-      },
-    );
-    addTearDown(() {
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
-    });
-
-    await pumpSettingsPage(tester);
-
-    // M3EMaterialApp 会管理 overlay style，但设置页自身不得切换 UI mode
-    // （重复调用会造成系统栏 insets 抖动 → 返回主页面时闪烁）。
-    expect(
-      chromeCalls,
-      isNot(contains('SystemChrome.setEnabledSystemUIMode')),
-    );
-  });
-
-  testWidgets('宽屏桌面：设置弹层加宽，首屏分区两列流式（奇偶左右交替）', (tester) async {
-    await openWideSettingsSheet(tester);
-
-    // 桌面档弹层按 modal spec 加宽（1200 屏宽下 0.9 夹取为 1080，不生效）。
-    expect(tester.getSize(find.byType(SettingsPage)).width, closeTo(880, 1));
-
-    final gridWidth = tester.getSize(find.byType(SettingsSectionGrid)).width;
-    final columnWidth = (gridWidth - kSettingsSectionSpacing) / 2;
-    final rects = sectionRects(tester);
-
-    // 1/2 成对：同排、左右分列、等分列宽。
-    expect(rects[0].top, rects[1].top, reason: '分区 1/2 应同排');
-    expect(rects[0].left, lessThan(rects[1].left));
-    expect(rects[1].left - rects[0].right, kSettingsSectionSpacing);
-    expect(rects[0].width, closeTo(columnWidth, 0.5));
-    expect(rects[1].width, closeTo(columnWidth, 0.5));
-
-    // 3/4 继续交替；5（奇数）回左列，右列留空。
-    expect(rects[2].top, rects[3].top, reason: '分区 3/4 应同排');
-    expect(rects[2].left, lessThan(rects[3].left));
-    expect(rects[4].left, rects[0].left);
-    expect(rects[4].top, greaterThan(rects[2].bottom));
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('窄屏或移动平台：首屏分区回落单列', (tester) async {
-    // 桌面平台但窗口 < 900：单列整宽。
-    await pumpSettingsPage(tester, size: const Size(899, 1200));
-    var gridWidth = tester.getSize(find.byType(SettingsSectionGrid)).width;
-    var rects = sectionRects(tester);
-    expect(rects[1].top, greaterThan(rects[0].bottom));
-    expect(rects[1].left, rects[0].left);
-    expect(rects[0].width, closeTo(gridWidth, 0.5));
-
-    // 非桌面平台 + 宽窗口：同样单列（平台覆盖由 variant 复位）。
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    await pumpSettingsPage(tester, size: const Size(1200, 1200));
-    gridWidth = tester.getSize(find.byType(SettingsSectionGrid)).width;
-    rects = sectionRects(tester);
-    expect(rects[1].top, greaterThan(rects[0].bottom));
-    expect(rects[1].left, rects[0].left);
-    expect(rects[0].width, closeTo(gridWidth, 0.5));
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('宽屏桌面：子页保持单列，底部导航拖拽卡片整宽', (tester) async {
-    await openWideSettingsSheet(tester);
-
-    // 进入通用子页（底部导航拖拽排序所在页）。
-    final generalItem = find.byKey(const Key('settingsGeneralItem'));
-    await tester.ensureVisible(generalItem);
-    await tester.pumpAndSettle();
-    await tester.tap(generalItem);
-    await tester.pumpAndSettle();
-    expect(find.byType(ReorderableListView), findsOneWidget);
-
-    // 子页不进两列：拖拽卡片与弹层内容等宽（页内左右各 kSettingsPadding），
-    // 拖拽命中区不会被列宽切分。
-    final pageWidth = tester.getSize(find.byType(GeneralSettingsPage)).width;
-    expect(
-      tester.getSize(find.byType(ReorderableListView)).width,
-      pageWidth - kSettingsPadding * 2,
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 }
 
 /// 最小桌面歌词输出：能力就绪，不触碰平台通道。

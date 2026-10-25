@@ -1,7 +1,7 @@
 /// 歌词页滚动 / 跟随策略：纯函数（输入测量值，输出对齐比例 / 留白 / 目标偏移）。
 ///
 /// 从 `lib/widgets/lyrics.dart` 抽出：这些数学原先埋在 State 里，只能靠
-/// widget pump 验证；现在脱离渲染树，可单测（`test/lyrics_scroll_policy_test.dart`）。
+/// widget pump 验证；现在脱离渲染树，可单测（`test/lyrics_core_test.dart`）。
 /// 组件仍负责测量（ScrollController / RenderAbstractViewport / MediaQuery）与
 /// 执行（jumpTo / animateTo），本文件只决定「滚到哪、要不要动」。
 library;

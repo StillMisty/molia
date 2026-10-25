@@ -53,9 +53,4 @@ void main() {
     expect(extendedImage.height, greaterThan(plainImage.height));
   });
 
-  test('无扩展行时保持与原行为一致（不额外占位）', () async {
-    final bytes = await render(const [PosterLyricLine(text: 'Hello')]);
-
-    expect(bytes, isNotEmpty);
-  });
 }

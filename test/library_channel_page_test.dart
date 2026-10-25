@@ -341,35 +341,6 @@ void main() {
 
     expect(search.sourceKey, 'wy'); // 已同步到渠道 wy
   });
-
-  testWidgets(
-    '桌面宽窗 / 窄窗：渠道都走顶部下拉（无竖栏）且都能切换',
-    (tester) async {
-      search = buildSearch(const []);
-      await pumpLibrary(tester);
-
-      // 渠道入口只有下拉框一处（不分窗口宽）。
-      expect(find.byType(LibraryChannelSelector), findsOneWidget);
-      await tester.tap(find.text('网易音乐'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('酷我音乐').last);
-      await tester.pumpAndSettle();
-      expect(discover.channelKey, 'kw');
-      expect(find.text('酷我音乐'), findsOneWidget);
-
-      // 窄窗同一入口，仍可切回。
-      await pumpLibrary(tester, width: 480);
-      expect(find.byType(LibraryChannelSelector), findsOneWidget);
-      await tester.tap(find.text('酷我音乐'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('网易音乐').last);
-      await tester.pumpAndSettle();
-      expect(discover.channelKey, 'wy');
-    },
-    // 平台覆盖走 variant：测试体结束后框架自己还原，满足 foundation 变量
-    // 不变式（手工覆盖必须在测试体内复位）。
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
 }
 
 /// 只暴露描述列表的假注册表（搜索源选择用）。

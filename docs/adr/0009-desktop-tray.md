@@ -102,7 +102,7 @@ Linux / Windows 桌面端此前只有「关掉窗口 = 进程退出」一条路�
 ## 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿（含 `test/services/tray_settings_test.dart`、
+- `flutter test --no-pub`：全绿（含 `test/services/window_services_test.dart`、
   `test/architecture/tray_import_test.dart`、设置页桌面开关用例）；
 - `tool/agent/test.sh linux`：集成用例全绿，含
   「桌面托盘：创建 / 更新 / 销毁冒烟」与窗口 hide → show 可见性往返

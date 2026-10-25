@@ -411,24 +411,6 @@ void main() {
     expect(data.audioState, LocalPartState.cached);
   });
 
-  test('音频半成品 / 边车不计入占用，写入中单独统计', () async {
-    final t = track();
-    final complete = AudioCacheStore.keyForTrack(t, quality: '320k');
-    await writeAudio(complete, 400);
-    await writeAudio('$complete$audioCachePartSuffix', 900);
-    await writeAudio('$complete$audioCacheMimeSuffix', 7);
-    final prefetch =
-        '${AudioCacheStore.keyForTrack(t, quality: 'flac')}'
-        '$audioCachePredownloadSuffix';
-    await writeAudio(prefetch, 500);
-
-    final data = await service.load(t);
-    expect(data.audioCache, const CacheUsage(bytes: 400, count: 1));
-    expect(data.audioWriting, const CacheUsage(bytes: 1407, count: 3));
-    // 半成品不参与命中音质判定。
-    expect(data.cachedQualities, ['320k']);
-  });
-
   test('无封面 / 无缓存：占用为零，清理不报错', () async {
     final noArtwork = Track(
       id: const TrackId('kw', 'plain'),

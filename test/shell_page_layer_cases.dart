@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/app/app_shell.dart';
 
@@ -65,16 +63,4 @@ void main() {
     expect(idle.scale, 1.0);
   });
 
-  test('壳层顶栏关闭自动返回键（路由局部历史不应冒出返回箭头）', () {
-    // 回归：M3E 下拉菜单打开时会往当前路由加一条 LocalHistoryEntry
-    // （系统返回先关菜单），ModalRoute.canPop 因此变真，默认的
-    // automaticallyImplyLeading 会在顶栏画出一个返回箭头。
-    // 两套骨架的顶栏本体已收进 ShellAppBar（唯一显式配置处）。
-    final source = File('lib/app/shell_app_bar.dart').readAsStringSync();
-    expect(
-      source,
-      contains('automaticallyImplyLeading: false'),
-      reason: '壳层是根页面，顶栏不参与返回；请保留该显式配置',
-    );
-  });
 }

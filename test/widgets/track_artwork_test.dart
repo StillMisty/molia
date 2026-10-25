@@ -1,20 +1,47 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+// 测试用内存 CacheManager，不触网、不落盘、不排清理计时器。
+// ignore: depend_on_referenced_packages
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/widgets/app_network_image.dart';
 import 'package:molia/widgets/track_artwork.dart';
+
+import '../support/memory_cache_storage.dart';
 
 Uint8List _png(int shade) {
   final source = image.Image(width: 2, height: 2);
   image.fill(source, color: image.ColorRgb8(shade, shade, shade));
   return Uint8List.fromList(image.encodePng(source));
+}
+
+class _OfflineCacheManager extends CacheManager {
+  _OfflineCacheManager()
+      : super(Config(
+          'track_artwork_offline',
+          repo: NonStoringObjectProvider(),
+          fileSystem: MemoryCacheSystem(),
+          fileService: HttpFileService(),
+        ));
+
+  @override
+  Stream<FileResponse> getFileStream(
+    String url, {
+    String? key,
+    Map<String, String>? headers,
+    bool withProgress = false,
+  }) async* {
+    throw Exception('offline');
+  }
 }
 
 void main() {
@@ -29,6 +56,7 @@ void main() {
 
   late Directory tempDir;
   late CustomCoverStore store;
+  late ArtworkCache artworkCache;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -38,6 +66,12 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
     CustomCoverStore.overrideInstance(store);
+    // 固定走内存 CacheManager：避免共享单例在未解析时调用 path_provider，
+    // 也避免真实缓存清理计时器留在 fake async 里导致用例顺序相关。
+    artworkCache = ArtworkCache(
+      cacheService: CacheService(storage: MemoryCacheStorage()),
+      managerOverride: _OfflineCacheManager(),
+    );
     await store.load();
   });
 
@@ -49,7 +83,11 @@ void main() {
   Widget host(Track track) => MaterialApp(
         home: Scaffold(
           body: Center(
-            child: TrackArtwork(track: track, size: 44),
+            child: TrackArtwork(
+              track: track,
+              size: 44,
+              artworkCache: artworkCache,
+            ),
           ),
         ),
       );

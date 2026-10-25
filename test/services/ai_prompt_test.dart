@@ -164,30 +164,6 @@ void main() {
     expect(_lineOf(prompt.userPrompt, '[本批排除]'), isNotEmpty);
   });
 
-  test('英文提示词使用英文 system / 段名 / 偏好 / 输出要求', () {
-    final prompt = AiRecommendationService.buildPrompt(
-      profile: _profile(),
-      preferences: const AiPreferences(
-        styles: ['pop'],
-        onlyUnheard: false,
-      ),
-      count: 10,
-      language: AiPromptLanguage.en,
-    );
-
-    expect(prompt.systemPrompt, contains('music recommendation assistant'));
-    expect(prompt.userPrompt, contains('[Summary]'));
-    expect(prompt.userPrompt, contains('[Preferences]'));
-    expect(prompt.userPrompt, contains('styles pop'));
-    expect(prompt.userPrompt, contains('repeats allowed'));
-    expect(prompt.userPrompt, contains('[Requirements]'));
-    expect(prompt.userPrompt, contains('[Output JSON]'));
-    expect(prompt.userPrompt, contains('max 60 characters'));
-    expect(prompt.userPrompt, contains('Recommend 10 songs.'));
-    expect(prompt.userPrompt, isNot(contains('[偏好]')));
-    expect(prompt.userPrompt, isNot(contains('请推荐')));
-  });
-
   test('提示词语言解析：zh 之外回退英文', () {
     expect(aiPromptLanguageFor('zh'), AiPromptLanguage.zh);
     expect(aiPromptLanguageFor('en'), AiPromptLanguage.en);

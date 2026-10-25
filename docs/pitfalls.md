@@ -451,7 +451,7 @@
     之后新增变更的 seq（1、2、3…）全部小于游标——**永久静默跳过**。修复在两侧：
     发送侧 `since > head` → 回全量快照（让对端重新引导）；接收侧全量快照把
     游标**落在快照覆盖位置**（不是取最大），且待提交游标允许回退。回归用例见
-    `test/sync_pipeline_reset_test.dart`。任何将来「清日志 / 换载荷格式」的改动
+    `test/sync_protocol_test.dart`。任何将来「清日志 / 换载荷格式」的改动
     都要带上这条语义。
 52. **游标 -1 与「seq 从 1 开始」：三处 off-by-one 都会让全新对端退化成 bootstrap**：
     日志 seq 从 1 开始、`cursorSeq = -1` 表示「尚未消费任何条目」，两者相减时
@@ -466,7 +466,7 @@
     这三处在旧布局下被掩盖：局域网 `serveJournal(since = -1)` 与单文件 WebDAV
     都会给全新对端**回全量快照**（`since < baseSeq(0)`），增量窗口根本到不了
     全新对端；改成分块文件后增量直接发给全新对端，才全部暴露。回归用例：
-    `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_webdav_e2e_test.dart`。
+    `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_protocol_test.dart`。
 
 53. **统计曲目内容在 `play_tracks`，不在事件行（v5）**：`play_events` 只存
     事件自身字段（时间 / 进度 / 结束原因 / 版本 + `trackId`），曲目元数据与
@@ -843,7 +843,7 @@
     只对「非内置输出设备被移除」暂停：内置扬声器 / 听筒的移除通常意味着刚
     插上耳机，不能误停。两条路都走 `pause()`，重入无副作用；回归用例见
     `test/playback/audio_focus_guard_test.dart` 与
-    `test/playback/audio_output_policy_test.dart`。
+    `test/playback/playback_audio_test.dart`。
 81. **`M3ESideSheet` 不能直接包整页**：包内 header（标题 + 关闭）与 `Expanded`
     body 是固定的，页面再带 `Scaffold + M3EAppBar` 就是双层 chrome。二级页要
     提供 `embedded: true` 的正文；宽度用 `M3ESideSheetTheme.copyWith(width/maxWidth)`

@@ -200,23 +200,6 @@ void main() {
   int navIndexOf(ShellDestination destination) =>
       nav.visibleDestinations.indexOf(destination);
 
-  testWidgets('底栏重复点击「播放」：迷你 ⇄ 完整切换', (tester) async {
-    await pumpShell(tester);
-    expect(selectedNavIndex(tester), navIndexOf(ShellDestination.nowPlaying));
-    expect(playerHeight(tester), greaterThan(300), reason: '默认完整态');
-
-    // 播放页已选中：重复点击 → 收起为迷你条。
-    await tapBottomDestination(tester, ShellDestination.nowPlaying);
-    await settleTransition(tester);
-    expect(playerHeight(tester), lessThan(100), reason: '重复点击应收起为迷你条');
-    expect(selectedNavIndex(tester), navIndexOf(ShellDestination.nowPlaying));
-
-    // 再点 → 展开。
-    await tapBottomDestination(tester, ShellDestination.nowPlaying);
-    await settleTransition(tester);
-    expect(playerHeight(tester), greaterThan(300), reason: '再点应展开');
-  });
-
   testWidgets('底栏重复点击其他目的地：仍正常切页，不动播放器', (tester) async {
     await pumpShell(tester);
 

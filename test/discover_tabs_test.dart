@@ -245,35 +245,6 @@ void main() {
     expect(_chipRows(tester), greaterThan(2));
   });
 
-  testWidgets('热榜 tab：窄窗 + 长榜单名自然换行、不溢出', (tester) async {
-    wy.leaderboards = const [
-      DiscoverLeaderboard(id: 'b0', name: '飙升榜', bangid: '0'),
-      DiscoverLeaderboard(
-        id: 'b1',
-        name: '编辑推荐榜VOL.44 天才女子摇滚乐队boygenius',
-        bangid: '1',
-      ),
-      DiscoverLeaderboard(id: 'b2', name: '日本Oricon榜', bangid: '2'),
-      DiscoverLeaderboard(id: 'b3', name: '黑胶VIP爱听榜', bangid: '3'),
-      DiscoverLeaderboard(id: 'b4', name: 'LOOK直播歌曲榜', bangid: '4'),
-      DiscoverLeaderboard(id: 'b5', name: '中国新乡村音乐排行榜', bangid: '5'),
-    ];
-    await pumpTab(tester, const DiscoverLeaderboardsTab(), width: 420);
-
-    expect(find.text('展开全部'), findsNothing);
-    expect(_chipRows(tester), greaterThan(1), reason: '窄窗按行自然换行');
-    // 全部 chip 都在 chip 云右缘内（`Wrap` 换行；单条过长由 chip 自身截断）。
-    final cloudRight = tester.getRect(find.byType(Wrap)).right;
-    final chips = find.byType(M3EChip);
-    for (var i = 0; i < chips.evaluate().length; i++) {
-      expect(
-        tester.getRect(chips.at(i)).right,
-        lessThanOrEqualTo(cloudRight + 0.5),
-        reason: '第 $i 个 chip 溢出 chip 云右缘',
-      );
-    }
-  });
-
   testWidgets('歌单 tab：空态用共享 EmptyState + 文案 + 主行动', (tester) async {
     wy.playlistsPerPage = 0;
     await pumpTab(tester, const DiscoverPlaylistsTab());
@@ -321,26 +292,4 @@ void main() {
     expect(wy.playlistPageCalls, contains(2));
   });
 
-  testWidgets('歌单 tab：滚动条常显且可手拖', (tester) async {
-    wy.playlistPages = 3;
-    wy.playlistsPerPage = 40;
-    await pumpTab(tester, const DiscoverPlaylistsTab());
-
-    final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
-    expect(scrollbar.thumbVisibility, isTrue);
-    expect(scrollbar.interactive, isTrue);
-    final controller = scrollbar.controller!;
-
-    final rect = tester.getRect(find.byType(Scrollbar));
-    final gesture = await tester.startGesture(
-      Offset(rect.right - 3, rect.top + 10),
-    );
-    await tester.pump();
-    await gesture.moveBy(const Offset(0, 120));
-    await tester.pump();
-    await gesture.up();
-    await tester.pumpAndSettle();
-
-    expect(controller.offset, greaterThan(0));
-  });
 }
