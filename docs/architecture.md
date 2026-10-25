@@ -570,6 +570,10 @@
   批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；
   「加入列表」流程唯一实现在 `lib/widgets/add_to_library.dart`（收藏页与发现页共用）；
   列表曲目读取经 `playlistTracksView` + `ensurePlaylistTracks`（页面不探测缓存内部）。
+- **曲目交接**：`lib/widgets/track_handoff.dart` 是「把一组曲目交给播放 / 资料库」
+  的唯一编排；页面只提供曲目与上下文名。空列表 no-op、洗牌先落模式、起播下标
+  夹取、上下文名归一、批量 `addedAt` 都在这里；`PlaylistTrack.fromTrack` 生产代码
+  只在此调用，加入列表仍复用 `add_to_library.dart` 的目标选择流程。
 - **换源**：`SourceSwapProvider`（`lib/providers/source_swap_provider.dart`）是
   跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在其它可搜索音源
   并行检索（`CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进

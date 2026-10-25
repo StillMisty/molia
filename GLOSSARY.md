@@ -461,6 +461,12 @@
   唯一映射。写路径、乐观更新与回滚仍归 provider，触感留在各宿主。
 - **Add-to-library flow（加入列表流程）** — `lib/widgets/add_to_library.dart`：
   选择目标 → 写入 → 解析新建列表名 → 反馈的唯一实现；收藏页与发现页共用。
+- **Track handoff（曲目交接）** — `lib/widgets/track_handoff.dart`：把「一组曲目」
+  交给播放或资料库的唯一实现。播放意图负责空列表 no-op、触感、洗牌先落模式再
+  装载、起播下标夹取 / 随机、上下文名 trim + 回退与列表快照；加入列表意图用同一
+  `addedAt` 批量转 `PlaylistTrack`，并复用 Add-to-library flow。专辑 / 歌手 /
+  曲目菜单 / 发现单曲只说意图，不再各写 `setPlayMode → playDomainTracks` 与
+  `PlaylistTrack.fromTrack`（生产代码唯一调用点）。
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是渠道状态的唯一持有者；
   渠道变化经注入的 `onChannelChanged`（组合根）触发搜索源跟随（可搜索渠道才跟随），
   资料页不再在两个 provider 之间仲裁同步，只处理「渠道被停用」的 UI 回退。
