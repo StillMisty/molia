@@ -72,7 +72,6 @@ void main() {
         required mimeType,
         initialDirectory,
         dialogTitle,
-        allowedExtensions,
       }) async {
         initialDirectorySeen = initialDirectory;
         await File(target).writeAsBytes(bytes);
@@ -101,7 +100,6 @@ void main() {
         required mimeType,
         initialDirectory,
         dialogTitle,
-        allowedExtensions,
       }) async =>
           null,
     );
@@ -127,7 +125,6 @@ void main() {
         required mimeType,
         initialDirectory,
         dialogTitle,
-        allowedExtensions,
       }) async =>
           throw UnsupportedError('no portal'),
     );

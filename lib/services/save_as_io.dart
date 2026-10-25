@@ -75,7 +75,6 @@ class IoSaveAs implements SaveAs {
     required String mimeType,
     String relativeDir = '',
     String? dialogTitle,
-    List<String>? allowedExtensions,
   }) async {
     final safeName = _safeFileName(fileName);
     final safeDir = _safeRelativeDir(relativeDir);
@@ -97,7 +96,6 @@ class IoSaveAs implements SaveAs {
           mimeType: mimeType,
           initialDirectory: initialDirectory,
           dialogTitle: dialogTitle,
-          allowedExtensions: allowedExtensions,
         );
         if (picked == null) return const SaveAsCancelled();
         return SaveAsSaved(
@@ -341,13 +339,15 @@ class IoSaveAs implements SaveAs {
 }
 
 /// 桌面“另存为”对话框（file_picker）。
+///
+/// 不传 `type` / `allowedExtensions`：file_picker 13.2.0 起两者被标记为
+/// deprecated，且上游明确说明 `saveFile()` 从未使用过它们（原本就不生效）。
 Future<String?> _filePickerSaveDialog({
   required String fileName,
   required Uint8List bytes,
   required String mimeType,
   String? initialDirectory,
   String? dialogTitle,
-  List<String>? allowedExtensions,
 }) async {
   final uri = await FilePicker.saveFile(
     dialogTitle: dialogTitle,
@@ -355,12 +355,6 @@ Future<String?> _filePickerSaveDialog({
     bytes: bytes,
     mimeType: mimeType,
     initialDirectory: initialDirectory,
-    type: allowedExtensions == null || allowedExtensions.isEmpty
-        ? FileType.any
-        : FileType.custom,
-    allowedExtensions: allowedExtensions == null || allowedExtensions.isEmpty
-        ? null
-        : allowedExtensions,
   );
   if (uri == null) return null;
   return uri.toFilePath(windows: Platform.isWindows);

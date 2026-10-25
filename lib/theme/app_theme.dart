@@ -1,4 +1,3 @@
-import 'package:cupertino_ui/cupertino_ui.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -35,16 +34,10 @@ ThemeData buildAppThemeData(
     fontFamily: fontFamily ?? platformDefaultFontFamily,
     fontFamilyFallback: useSystemFont ? platformDefaultFontFallbacks : null,
     appBarTheme: AppBarTheme(systemOverlayStyle: systemUiOverlayStyle),
-    // Android 页面过渡必须选框架的预测返回 builder：跟手预览只由它插入的
-    // 手势 detector 提供，没有观察者接管时 `WidgetsBinding` 会把返回手势
-    // 退化成普通返回（能出栈、全程无预览）。换成任何普通 builder
-    // （共享轴过渡这类纯动画 builder 同样如此）都会静默丢掉这套预览。
-    pageTransitionsTheme: PageTransitionsTheme(
-      builders: <TargetPlatform, PageTransitionsBuilder>{
-        TargetPlatform.android: const PredictiveBackPageTransitionsBuilder(),
-        TargetPlatform.iOS: const CupertinoPageTransitionsBuilder(),
-      },
-    ),
+    // 页面过渡沿用 ThemeData 默认值：Android = 预测返回 builder（跟手预览
+    // 只由它插入的手势 detector 提供），iOS = Cupertino（边缘返回手势），
+    // 桌面 = Zoom。框架默认 map 已覆盖本仓库的四个目标平台；不要再手写一份
+    // 只含 Android/iOS 的 map——其余平台会回退到 Zoom，反而与默认值脱节。
     // 语义色（成功/警告）随方案亮度派生，供全 App 统一取用。
     extensions: <ThemeExtension<dynamic>>[
       AppSemanticColors.fromScheme(scheme),

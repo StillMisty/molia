@@ -526,11 +526,14 @@
     （`kotlin.coroutines.intrinsics.CoroutineSingletons`）——启动读偏好即抛
     `PlatformException(NoSuchMethodError / ClassNotFoundException)`，在 `main()` 的并行
     装配里外层表现为 `ParallelWaitError`；**debug 构建完全正常**，只有 release 复现。
-    处置：钉 `shared_preferences_android: 2.4.28`（JNI 改造前最后一个版本，理由与复评
-    条件写在 `pubspec.yaml` 注释里）。补 keep 规则试过——修完 `Continuation` 又缺
-    `CoroutineSingletons`，是打地鼠且 APK +1.1MB，放弃；上游补 consumer-rules.pro 后再升。
+    处置：曾钉 `shared_preferences_android: 2.4.28`（JNI 改造前最后一个版本）。补 keep
+    规则试过——修完 `Continuation` 又缺 `CoroutineSingletons`，是打地鼠且 APK +1.1MB，放弃。
     2026-10-20 复评：2.5.1 仍无 consumer-rules.pro，release 包启动仍在
     `SharedPreferencesApiRegistrar.getAll` 抛同样的 NoSuchMethodError。
+    2026-10-25 复评：2.5.2 起补上 `android/consumer-rules.pro`（changelog 明确写了修复
+    release 启动的 NoSuchMethodError），本轮删掉直依赖与旧钉版，改由
+    `shared_preferences` 传递解析（当前 lock 2.5.3）；pubspec 只在
+    `shared_preferences` 旁保留「必须 ≥2.5.2」的注释。
     发现路径：Android release APK 装设备启动后 `adb logcat | grep -E
     "NoSuchMethodError|ClassNotFoundException"`；`tool/agent/startup.sh android`
     会构建并安装 release APK 跑采样，顺带当这道冒烟。

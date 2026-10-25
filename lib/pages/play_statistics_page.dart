@@ -713,7 +713,6 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
         mimeType: 'application/json',
         relativeDir: saveAsExportsDirName,
         dialogTitle: l10n.statsExport,
-        allowedExtensions: ['json'],
       );
       if (!mounted) return;
       switch (result) {

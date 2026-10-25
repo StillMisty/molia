@@ -149,7 +149,6 @@ class DataSettingsPage extends StatelessWidget {
         mimeType: 'application/json',
         relativeDir: saveAsExportsDirName,
         dialogTitle: l10n.exportDataTitle,
-        allowedExtensions: ['json'],
       );
       if (!currentContext.mounted) return;
       _showSaveResult(l10n, notificationService, result);

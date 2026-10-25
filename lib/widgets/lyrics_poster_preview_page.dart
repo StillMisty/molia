@@ -315,7 +315,6 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         mimeType: 'image/png',
         relativeDir: saveAsPostersDirName,
         dialogTitle: l10n.save,
-        allowedExtensions: ['png'],
       );
       if (!mounted) return;
       final notifications =

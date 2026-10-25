@@ -66,7 +66,6 @@ typedef SaveFileDialog = Future<String?> Function({
   required String mimeType,
   String? initialDirectory,
   String? dialogTitle,
-  List<String>? allowedExtensions,
 });
 
 /// 另存服务：桌面弹“另存为”（默认目录 = 另存目录），Android / iOS 直接写
@@ -80,15 +79,14 @@ abstract interface class SaveAs {
 
   /// 把 [bytes] 写到另存目录的 [relativeDir] 子目录。
   ///
-  /// [fileName] 只是默认文件名（桌面对话框可改编）；[dialogTitle] /
-  /// [allowedExtensions] 仅桌面对话框使用。
+  /// [fileName] 只是默认文件名（桌面对话框可改编）；[dialogTitle] 仅桌面
+  /// 对话框使用。
   Future<SaveAsResult> saveBytes({
     required String fileName,
     required Uint8List bytes,
     required String mimeType,
     String relativeDir = '',
     String? dialogTitle,
-    List<String>? allowedExtensions,
   });
 
   /// 把一个已有文件复制 / 发布到另存目录（音频导出用）。

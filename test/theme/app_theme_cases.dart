@@ -1,5 +1,3 @@
-import 'package:cupertino_ui/cupertino_ui.dart'
-    show CupertinoPageTransitionsBuilder;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/theme/animated_scheme.dart';
 import 'package:molia/theme/app_semantic_colors.dart';
@@ -65,6 +63,7 @@ void main() {
 
     test('Android 页面过渡保留预测返回 builder', () {
       final data = buildAppThemeData(light);
+      final defaults = const PageTransitionsTheme().builders;
       // 跟手预览只由该 builder 插入的手势 detector 提供（换成普通 builder
       // 会静默退化成「能返回、无预览」，实测见
       // test/theme/theme_test.dart）；
@@ -74,8 +73,8 @@ void main() {
         isA<PredictiveBackPageTransitionsBuilder>(),
       );
       expect(
-        data.pageTransitionsTheme.builders[TargetPlatform.iOS],
-        isA<CupertinoPageTransitionsBuilder>(),
+        data.pageTransitionsTheme.builders[TargetPlatform.iOS]?.runtimeType,
+        defaults[TargetPlatform.iOS]?.runtimeType,
       );
     });
 

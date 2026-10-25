@@ -31,7 +31,6 @@ class FakeSaveAs implements SaveAs {
     required String mimeType,
     String relativeDir = '',
     String? dialogTitle,
-    List<String>? allowedExtensions,
   }) async {
     saves.add(
       FakeSaveAsBytesCall(
@@ -40,7 +39,6 @@ class FakeSaveAs implements SaveAs {
         mimeType: mimeType,
         relativeDir: relativeDir,
         dialogTitle: dialogTitle,
-        allowedExtensions: allowedExtensions,
       ),
     );
     return result ??
@@ -89,7 +87,6 @@ class FakeSaveAsBytesCall {
     required this.mimeType,
     required this.relativeDir,
     required this.dialogTitle,
-    required this.allowedExtensions,
   });
 
   final String fileName;
@@ -97,7 +94,6 @@ class FakeSaveAsBytesCall {
   final String mimeType;
   final String relativeDir;
   final String? dialogTitle;
-  final List<String>? allowedExtensions;
 }
 
 /// 一次 `saveFile` 的入参快照。

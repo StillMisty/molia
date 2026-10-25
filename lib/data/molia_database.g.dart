@@ -9,80 +9,123 @@ class $PlayContextsTable extends PlayContexts
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $PlayContextsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _contextUriMeta =
-      const VerificationMeta('contextUri');
+  static const VerificationMeta _contextUriMeta = const VerificationMeta(
+    'contextUri',
+  );
   @override
   late final GeneratedColumn<String> contextUri = GeneratedColumn<String>(
-      'contextUri', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _contextTypeMeta =
-      const VerificationMeta('contextType');
+    'contextUri',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contextTypeMeta = const VerificationMeta(
+    'contextType',
+  );
   @override
   late final GeneratedColumn<String> contextType = GeneratedColumn<String>(
-      'contextType', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _contextNameMeta =
-      const VerificationMeta('contextName');
+    'contextType',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _contextNameMeta = const VerificationMeta(
+    'contextName',
+  );
   @override
   late final GeneratedColumn<String> contextName = GeneratedColumn<String>(
-      'contextName', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _imageUrlMeta =
-      const VerificationMeta('imageUrl');
+    'contextName',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
   @override
   late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
-      'imageUrl', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _lastPlayedAtMeta =
-      const VerificationMeta('lastPlayedAt');
+    'imageUrl',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastPlayedAtMeta = const VerificationMeta(
+    'lastPlayedAt',
+  );
   @override
   late final GeneratedColumn<int> lastPlayedAt = GeneratedColumn<int>(
-      'lastPlayedAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'lastPlayedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   @override
-  List<GeneratedColumn> get $columns =>
-      [contextUri, contextType, contextName, imageUrl, lastPlayedAt];
+  List<GeneratedColumn> get $columns => [
+    contextUri,
+    contextType,
+    contextName,
+    imageUrl,
+    lastPlayedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'play_contexts';
   @override
-  VerificationContext validateIntegrity(Insertable<PlayContext> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PlayContext> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('contextUri')) {
       context.handle(
-          _contextUriMeta,
-          contextUri.isAcceptableOrUnknown(
-              data['contextUri']!, _contextUriMeta));
+        _contextUriMeta,
+        contextUri.isAcceptableOrUnknown(data['contextUri']!, _contextUriMeta),
+      );
     }
     if (data.containsKey('contextType')) {
       context.handle(
+        _contextTypeMeta,
+        contextType.isAcceptableOrUnknown(
+          data['contextType']!,
           _contextTypeMeta,
-          contextType.isAcceptableOrUnknown(
-              data['contextType']!, _contextTypeMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_contextTypeMeta);
     }
     if (data.containsKey('contextName')) {
       context.handle(
+        _contextNameMeta,
+        contextName.isAcceptableOrUnknown(
+          data['contextName']!,
           _contextNameMeta,
-          contextName.isAcceptableOrUnknown(
-              data['contextName']!, _contextNameMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_contextNameMeta);
     }
     if (data.containsKey('imageUrl')) {
-      context.handle(_imageUrlMeta,
-          imageUrl.isAcceptableOrUnknown(data['imageUrl']!, _imageUrlMeta));
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['imageUrl']!, _imageUrlMeta),
+      );
     }
     if (data.containsKey('lastPlayedAt')) {
       context.handle(
+        _lastPlayedAtMeta,
+        lastPlayedAt.isAcceptableOrUnknown(
+          data['lastPlayedAt']!,
           _lastPlayedAtMeta,
-          lastPlayedAt.isAcceptableOrUnknown(
-              data['lastPlayedAt']!, _lastPlayedAtMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_lastPlayedAtMeta);
     }
@@ -95,16 +138,26 @@ class $PlayContextsTable extends PlayContexts
   PlayContext map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PlayContext(
-      contextUri: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}contextUri']),
-      contextType: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}contextType'])!,
-      contextName: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}contextName'])!,
-      imageUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}imageUrl']),
-      lastPlayedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}lastPlayedAt'])!,
+      contextUri: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contextUri'],
+      ),
+      contextType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contextType'],
+      )!,
+      contextName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contextName'],
+      )!,
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}imageUrl'],
+      ),
+      lastPlayedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}lastPlayedAt'],
+      )!,
     );
   }
 
@@ -120,12 +173,13 @@ class PlayContext extends DataClass implements Insertable<PlayContext> {
   final String contextName;
   final String? imageUrl;
   final int lastPlayedAt;
-  const PlayContext(
-      {this.contextUri,
-      required this.contextType,
-      required this.contextName,
-      this.imageUrl,
-      required this.lastPlayedAt});
+  const PlayContext({
+    this.contextUri,
+    required this.contextType,
+    required this.contextName,
+    this.imageUrl,
+    required this.lastPlayedAt,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -155,8 +209,10 @@ class PlayContext extends DataClass implements Insertable<PlayContext> {
     );
   }
 
-  factory PlayContext.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PlayContext.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PlayContext(
       contextUri: serializer.fromJson<String?>(json['contextUri']),
@@ -178,27 +234,30 @@ class PlayContext extends DataClass implements Insertable<PlayContext> {
     };
   }
 
-  PlayContext copyWith(
-          {Value<String?> contextUri = const Value.absent(),
-          String? contextType,
-          String? contextName,
-          Value<String?> imageUrl = const Value.absent(),
-          int? lastPlayedAt}) =>
-      PlayContext(
-        contextUri: contextUri.present ? contextUri.value : this.contextUri,
-        contextType: contextType ?? this.contextType,
-        contextName: contextName ?? this.contextName,
-        imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
-        lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
-      );
+  PlayContext copyWith({
+    Value<String?> contextUri = const Value.absent(),
+    String? contextType,
+    String? contextName,
+    Value<String?> imageUrl = const Value.absent(),
+    int? lastPlayedAt,
+  }) => PlayContext(
+    contextUri: contextUri.present ? contextUri.value : this.contextUri,
+    contextType: contextType ?? this.contextType,
+    contextName: contextName ?? this.contextName,
+    imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
+  );
   PlayContext copyWithCompanion(PlayContextsCompanion data) {
     return PlayContext(
-      contextUri:
-          data.contextUri.present ? data.contextUri.value : this.contextUri,
-      contextType:
-          data.contextType.present ? data.contextType.value : this.contextType,
-      contextName:
-          data.contextName.present ? data.contextName.value : this.contextName,
+      contextUri: data.contextUri.present
+          ? data.contextUri.value
+          : this.contextUri,
+      contextType: data.contextType.present
+          ? data.contextType.value
+          : this.contextType,
+      contextName: data.contextName.present
+          ? data.contextName.value
+          : this.contextName,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
       lastPlayedAt: data.lastPlayedAt.present
           ? data.lastPlayedAt.value
@@ -254,9 +313,9 @@ class PlayContextsCompanion extends UpdateCompanion<PlayContext> {
     this.imageUrl = const Value.absent(),
     required int lastPlayedAt,
     this.rowid = const Value.absent(),
-  })  : contextType = Value(contextType),
-        contextName = Value(contextName),
-        lastPlayedAt = Value(lastPlayedAt);
+  }) : contextType = Value(contextType),
+       contextName = Value(contextName),
+       lastPlayedAt = Value(lastPlayedAt);
   static Insertable<PlayContext> custom({
     Expression<String>? contextUri,
     Expression<String>? contextType,
@@ -275,13 +334,14 @@ class PlayContextsCompanion extends UpdateCompanion<PlayContext> {
     });
   }
 
-  PlayContextsCompanion copyWith(
-      {Value<String?>? contextUri,
-      Value<String>? contextType,
-      Value<String>? contextName,
-      Value<String?>? imageUrl,
-      Value<int>? lastPlayedAt,
-      Value<int>? rowid}) {
+  PlayContextsCompanion copyWith({
+    Value<String?>? contextUri,
+    Value<String>? contextType,
+    Value<String>? contextName,
+    Value<String?>? imageUrl,
+    Value<int>? lastPlayedAt,
+    Value<int>? rowid,
+  }) {
     return PlayContextsCompanion(
       contextUri: contextUri ?? this.contextUri,
       contextType: contextType ?? this.contextType,
@@ -336,171 +396,246 @@ class $PlayHistoryTable extends PlayHistory
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $PlayHistoryTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _sourceKeyMeta =
-      const VerificationMeta('sourceKey');
+  static const VerificationMeta _sourceKeyMeta = const VerificationMeta(
+    'sourceKey',
+  );
   @override
   late final GeneratedColumn<String> sourceKey = GeneratedColumn<String>(
-      'sourceKey', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'sourceKey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _songIdMeta = const VerificationMeta('songId');
   @override
   late final GeneratedColumn<String> songId = GeneratedColumn<String>(
-      'songId', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'songId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-      'title', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _artistMeta = const VerificationMeta('artist');
   @override
   late final GeneratedColumn<String> artist = GeneratedColumn<String>(
-      'artist', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'artist',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _albumMeta = const VerificationMeta('album');
   @override
   late final GeneratedColumn<String> album = GeneratedColumn<String>(
-      'album', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _coverUrlMeta =
-      const VerificationMeta('coverUrl');
+    'album',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverUrlMeta = const VerificationMeta(
+    'coverUrl',
+  );
   @override
   late final GeneratedColumn<String> coverUrl = GeneratedColumn<String>(
-      'coverUrl', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _durationMsMeta =
-      const VerificationMeta('durationMs');
+    'coverUrl',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
   @override
   late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
-      'durationMs', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'durationMs',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _rawMeta = const VerificationMeta('raw');
   @override
   late final GeneratedColumn<String> raw = GeneratedColumn<String>(
-      'raw', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant('{}'));
-  static const VerificationMeta _playedAtMeta =
-      const VerificationMeta('playedAt');
+    'raw',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _playedAtMeta = const VerificationMeta(
+    'playedAt',
+  );
   @override
   late final GeneratedColumn<int> playedAt = GeneratedColumn<int>(
-      'playedAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'playedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'deviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'deviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        sourceKey,
-        songId,
-        title,
-        artist,
-        album,
-        coverUrl,
-        durationMs,
-        raw,
-        playedAt,
-        versionPhysical,
-        versionCounter,
-        deviceId
-      ];
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    playedAt,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'play_history';
   @override
-  VerificationContext validateIntegrity(Insertable<PlayHistoryData> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PlayHistoryData> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('sourceKey')) {
-      context.handle(_sourceKeyMeta,
-          sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta));
+      context.handle(
+        _sourceKeyMeta,
+        sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta),
+      );
     } else if (isInserting) {
       context.missing(_sourceKeyMeta);
     }
     if (data.containsKey('songId')) {
-      context.handle(_songIdMeta,
-          songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta));
+      context.handle(
+        _songIdMeta,
+        songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_songIdMeta);
     }
     if (data.containsKey('title')) {
       context.handle(
-          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
     } else if (isInserting) {
       context.missing(_titleMeta);
     }
     if (data.containsKey('artist')) {
-      context.handle(_artistMeta,
-          artist.isAcceptableOrUnknown(data['artist']!, _artistMeta));
+      context.handle(
+        _artistMeta,
+        artist.isAcceptableOrUnknown(data['artist']!, _artistMeta),
+      );
     }
     if (data.containsKey('album')) {
       context.handle(
-          _albumMeta, album.isAcceptableOrUnknown(data['album']!, _albumMeta));
+        _albumMeta,
+        album.isAcceptableOrUnknown(data['album']!, _albumMeta),
+      );
     }
     if (data.containsKey('coverUrl')) {
-      context.handle(_coverUrlMeta,
-          coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta));
+      context.handle(
+        _coverUrlMeta,
+        coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta),
+      );
     }
     if (data.containsKey('durationMs')) {
       context.handle(
-          _durationMsMeta,
-          durationMs.isAcceptableOrUnknown(
-              data['durationMs']!, _durationMsMeta));
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['durationMs']!, _durationMsMeta),
+      );
     }
     if (data.containsKey('raw')) {
       context.handle(
-          _rawMeta, raw.isAcceptableOrUnknown(data['raw']!, _rawMeta));
+        _rawMeta,
+        raw.isAcceptableOrUnknown(data['raw']!, _rawMeta),
+      );
     }
     if (data.containsKey('playedAt')) {
-      context.handle(_playedAtMeta,
-          playedAt.isAcceptableOrUnknown(data['playedAt']!, _playedAtMeta));
+      context.handle(
+        _playedAtMeta,
+        playedAt.isAcceptableOrUnknown(data['playedAt']!, _playedAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_playedAtMeta);
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     if (data.containsKey('deviceId')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta),
+      );
     }
     return context;
   }
@@ -511,30 +646,54 @@ class $PlayHistoryTable extends PlayHistory
   PlayHistoryData map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PlayHistoryData(
-      sourceKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}sourceKey'])!,
-      songId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}songId'])!,
-      title: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
-      artist: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
-      album: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
-      coverUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
-      durationMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
-      raw: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}raw'])!,
-      playedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}playedAt'])!,
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
+      sourceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sourceKey'],
+      )!,
+      songId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}songId'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      artist: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artist'],
+      )!,
+      album: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}album'],
+      )!,
+      coverUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverUrl'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}durationMs'],
+      ),
+      raw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw'],
+      )!,
+      playedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}playedAt'],
+      )!,
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
     );
   }
 
@@ -557,19 +716,20 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
   final int versionPhysical;
   final int versionCounter;
   final String deviceId;
-  const PlayHistoryData(
-      {required this.sourceKey,
-      required this.songId,
-      required this.title,
-      required this.artist,
-      required this.album,
-      this.coverUrl,
-      this.durationMs,
-      required this.raw,
-      required this.playedAt,
-      required this.versionPhysical,
-      required this.versionCounter,
-      required this.deviceId});
+  const PlayHistoryData({
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    this.coverUrl,
+    this.durationMs,
+    required this.raw,
+    required this.playedAt,
+    required this.versionPhysical,
+    required this.versionCounter,
+    required this.deviceId,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -613,8 +773,10 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
     );
   }
 
-  factory PlayHistoryData.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PlayHistoryData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PlayHistoryData(
       sourceKey: serializer.fromJson<String>(json['sourceKey']),
@@ -650,33 +812,33 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
     };
   }
 
-  PlayHistoryData copyWith(
-          {String? sourceKey,
-          String? songId,
-          String? title,
-          String? artist,
-          String? album,
-          Value<String?> coverUrl = const Value.absent(),
-          Value<int?> durationMs = const Value.absent(),
-          String? raw,
-          int? playedAt,
-          int? versionPhysical,
-          int? versionCounter,
-          String? deviceId}) =>
-      PlayHistoryData(
-        sourceKey: sourceKey ?? this.sourceKey,
-        songId: songId ?? this.songId,
-        title: title ?? this.title,
-        artist: artist ?? this.artist,
-        album: album ?? this.album,
-        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
-        durationMs: durationMs.present ? durationMs.value : this.durationMs,
-        raw: raw ?? this.raw,
-        playedAt: playedAt ?? this.playedAt,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-        deviceId: deviceId ?? this.deviceId,
-      );
+  PlayHistoryData copyWith({
+    String? sourceKey,
+    String? songId,
+    String? title,
+    String? artist,
+    String? album,
+    Value<String?> coverUrl = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+    String? raw,
+    int? playedAt,
+    int? versionPhysical,
+    int? versionCounter,
+    String? deviceId,
+  }) => PlayHistoryData(
+    sourceKey: sourceKey ?? this.sourceKey,
+    songId: songId ?? this.songId,
+    title: title ?? this.title,
+    artist: artist ?? this.artist,
+    album: album ?? this.album,
+    coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    raw: raw ?? this.raw,
+    playedAt: playedAt ?? this.playedAt,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+    deviceId: deviceId ?? this.deviceId,
+  );
   PlayHistoryData copyWithCompanion(PlayHistoryCompanion data) {
     return PlayHistoryData(
       sourceKey: data.sourceKey.present ? data.sourceKey.value : this.sourceKey,
@@ -685,8 +847,9 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
       artist: data.artist.present ? data.artist.value : this.artist,
       album: data.album.present ? data.album.value : this.album,
       coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
-      durationMs:
-          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
       raw: data.raw.present ? data.raw.value : this.raw,
       playedAt: data.playedAt.present ? data.playedAt.value : this.playedAt,
       versionPhysical: data.versionPhysical.present
@@ -720,18 +883,19 @@ class PlayHistoryData extends DataClass implements Insertable<PlayHistoryData> {
 
   @override
   int get hashCode => Object.hash(
-      sourceKey,
-      songId,
-      title,
-      artist,
-      album,
-      coverUrl,
-      durationMs,
-      raw,
-      playedAt,
-      versionPhysical,
-      versionCounter,
-      deviceId);
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    playedAt,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -793,10 +957,10 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
     this.versionCounter = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.rowid = const Value.absent(),
-  })  : sourceKey = Value(sourceKey),
-        songId = Value(songId),
-        title = Value(title),
-        playedAt = Value(playedAt);
+  }) : sourceKey = Value(sourceKey),
+       songId = Value(songId),
+       title = Value(title),
+       playedAt = Value(playedAt);
   static Insertable<PlayHistoryData> custom({
     Expression<String>? sourceKey,
     Expression<String>? songId,
@@ -829,20 +993,21 @@ class PlayHistoryCompanion extends UpdateCompanion<PlayHistoryData> {
     });
   }
 
-  PlayHistoryCompanion copyWith(
-      {Value<String>? sourceKey,
-      Value<String>? songId,
-      Value<String>? title,
-      Value<String>? artist,
-      Value<String>? album,
-      Value<String?>? coverUrl,
-      Value<int?>? durationMs,
-      Value<String>? raw,
-      Value<int>? playedAt,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter,
-      Value<String>? deviceId,
-      Value<int>? rowid}) {
+  PlayHistoryCompanion copyWith({
+    Value<String>? sourceKey,
+    Value<String>? songId,
+    Value<String>? title,
+    Value<String>? artist,
+    Value<String>? album,
+    Value<String?>? coverUrl,
+    Value<int?>? durationMs,
+    Value<String>? raw,
+    Value<int>? playedAt,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+    Value<String>? deviceId,
+    Value<int>? rowid,
+  }) {
     return PlayHistoryCompanion(
       sourceKey: sourceKey ?? this.sourceKey,
       songId: songId ?? this.songId,
@@ -935,63 +1100,101 @@ class $PlaylistsTable extends Playlists
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
   static const VerificationMeta _nameMeta = const VerificationMeta('name');
   @override
   late final GeneratedColumn<String> name = GeneratedColumn<String>(
-      'name', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _createdAtMeta =
-      const VerificationMeta('createdAt');
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
   @override
   late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
-      'createdAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'createdAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _syncIdMeta = const VerificationMeta('syncId');
   @override
   late final GeneratedColumn<String> syncId = GeneratedColumn<String>(
-      'syncId', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'syncId',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'deviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'deviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, name, createdAt, syncId, versionPhysical, versionCounter, deviceId];
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    createdAt,
+    syncId,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'playlists';
   @override
-  VerificationContext validateIntegrity(Insertable<Playlist> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<Playlist> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -999,35 +1202,49 @@ class $PlaylistsTable extends Playlists
     }
     if (data.containsKey('name')) {
       context.handle(
-          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
     if (data.containsKey('createdAt')) {
-      context.handle(_createdAtMeta,
-          createdAt.isAcceptableOrUnknown(data['createdAt']!, _createdAtMeta));
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['createdAt']!, _createdAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
     if (data.containsKey('syncId')) {
-      context.handle(_syncIdMeta,
-          syncId.isAcceptableOrUnknown(data['syncId']!, _syncIdMeta));
+      context.handle(
+        _syncIdMeta,
+        syncId.isAcceptableOrUnknown(data['syncId']!, _syncIdMeta),
+      );
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     if (data.containsKey('deviceId')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta),
+      );
     }
     return context;
   }
@@ -1038,20 +1255,34 @@ class $PlaylistsTable extends Playlists
   Playlist map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Playlist(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      name: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
-      createdAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}createdAt'])!,
-      syncId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}syncId']),
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}createdAt'],
+      )!,
+      syncId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}syncId'],
+      ),
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
     );
   }
 
@@ -1069,14 +1300,15 @@ class Playlist extends DataClass implements Insertable<Playlist> {
   final int versionPhysical;
   final int versionCounter;
   final String deviceId;
-  const Playlist(
-      {required this.id,
-      required this.name,
-      required this.createdAt,
-      this.syncId,
-      required this.versionPhysical,
-      required this.versionCounter,
-      required this.deviceId});
+  const Playlist({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+    this.syncId,
+    required this.versionPhysical,
+    required this.versionCounter,
+    required this.deviceId,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1097,16 +1329,19 @@ class Playlist extends DataClass implements Insertable<Playlist> {
       id: Value(id),
       name: Value(name),
       createdAt: Value(createdAt),
-      syncId:
-          syncId == null && nullToAbsent ? const Value.absent() : Value(syncId),
+      syncId: syncId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(syncId),
       versionPhysical: Value(versionPhysical),
       versionCounter: Value(versionCounter),
       deviceId: Value(deviceId),
     );
   }
 
-  factory Playlist.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory Playlist.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Playlist(
       id: serializer.fromJson<int>(json['id']),
@@ -1132,23 +1367,23 @@ class Playlist extends DataClass implements Insertable<Playlist> {
     };
   }
 
-  Playlist copyWith(
-          {int? id,
-          String? name,
-          int? createdAt,
-          Value<String?> syncId = const Value.absent(),
-          int? versionPhysical,
-          int? versionCounter,
-          String? deviceId}) =>
-      Playlist(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        createdAt: createdAt ?? this.createdAt,
-        syncId: syncId.present ? syncId.value : this.syncId,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-        deviceId: deviceId ?? this.deviceId,
-      );
+  Playlist copyWith({
+    int? id,
+    String? name,
+    int? createdAt,
+    Value<String?> syncId = const Value.absent(),
+    int? versionPhysical,
+    int? versionCounter,
+    String? deviceId,
+  }) => Playlist(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    createdAt: createdAt ?? this.createdAt,
+    syncId: syncId.present ? syncId.value : this.syncId,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+    deviceId: deviceId ?? this.deviceId,
+  );
   Playlist copyWithCompanion(PlaylistsCompanion data) {
     return Playlist(
       id: data.id.present ? data.id.value : this.id,
@@ -1181,7 +1416,14 @@ class Playlist extends DataClass implements Insertable<Playlist> {
 
   @override
   int get hashCode => Object.hash(
-      id, name, createdAt, syncId, versionPhysical, versionCounter, deviceId);
+    id,
+    name,
+    createdAt,
+    syncId,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1220,8 +1462,8 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
     this.versionPhysical = const Value.absent(),
     this.versionCounter = const Value.absent(),
     this.deviceId = const Value.absent(),
-  })  : name = Value(name),
-        createdAt = Value(createdAt);
+  }) : name = Value(name),
+       createdAt = Value(createdAt);
   static Insertable<Playlist> custom({
     Expression<int>? id,
     Expression<String>? name,
@@ -1242,14 +1484,15 @@ class PlaylistsCompanion extends UpdateCompanion<Playlist> {
     });
   }
 
-  PlaylistsCompanion copyWith(
-      {Value<int>? id,
-      Value<String>? name,
-      Value<int>? createdAt,
-      Value<String?>? syncId,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter,
-      Value<String>? deviceId}) {
+  PlaylistsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<int>? createdAt,
+    Value<String?>? syncId,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+    Value<String>? deviceId,
+  }) {
     return PlaylistsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
@@ -1312,131 +1555,195 @@ class $PlaylistTracksTable extends PlaylistTracks
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _playlistIdMeta =
-      const VerificationMeta('playlistId');
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _playlistIdMeta = const VerificationMeta(
+    'playlistId',
+  );
   @override
   late final GeneratedColumn<int> playlistId = GeneratedColumn<int>(
-      'playlistId', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _sourceKeyMeta =
-      const VerificationMeta('sourceKey');
+    'playlistId',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceKeyMeta = const VerificationMeta(
+    'sourceKey',
+  );
   @override
   late final GeneratedColumn<String> sourceKey = GeneratedColumn<String>(
-      'sourceKey', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'sourceKey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _songIdMeta = const VerificationMeta('songId');
   @override
   late final GeneratedColumn<String> songId = GeneratedColumn<String>(
-      'songId', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'songId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-      'title', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _artistMeta = const VerificationMeta('artist');
   @override
   late final GeneratedColumn<String> artist = GeneratedColumn<String>(
-      'artist', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'artist',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _albumMeta = const VerificationMeta('album');
   @override
   late final GeneratedColumn<String> album = GeneratedColumn<String>(
-      'album', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _coverUrlMeta =
-      const VerificationMeta('coverUrl');
+    'album',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverUrlMeta = const VerificationMeta(
+    'coverUrl',
+  );
   @override
   late final GeneratedColumn<String> coverUrl = GeneratedColumn<String>(
-      'coverUrl', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _durationMsMeta =
-      const VerificationMeta('durationMs');
+    'coverUrl',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
   @override
   late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
-      'durationMs', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'durationMs',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _rawMeta = const VerificationMeta('raw');
   @override
   late final GeneratedColumn<String> raw = GeneratedColumn<String>(
-      'raw', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant('{}'));
-  static const VerificationMeta _addedAtMeta =
-      const VerificationMeta('addedAt');
+    'raw',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _addedAtMeta = const VerificationMeta(
+    'addedAt',
+  );
   @override
   late final GeneratedColumn<int> addedAt = GeneratedColumn<int>(
-      'addedAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _sortOrderMeta =
-      const VerificationMeta('sortOrder');
+    'addedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
   @override
   late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
-      'sortOrder', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'sortOrder',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'deviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'deviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        playlistId,
-        sourceKey,
-        songId,
-        title,
-        artist,
-        album,
-        coverUrl,
-        durationMs,
-        raw,
-        addedAt,
-        sortOrder,
-        versionPhysical,
-        versionCounter,
-        deviceId
-      ];
+    id,
+    playlistId,
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    addedAt,
+    sortOrder,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'playlist_tracks';
   @override
-  VerificationContext validateIntegrity(Insertable<PlaylistTrackRow> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PlaylistTrackRow> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -1444,77 +1751,103 @@ class $PlaylistTracksTable extends PlaylistTracks
     }
     if (data.containsKey('playlistId')) {
       context.handle(
-          _playlistIdMeta,
-          playlistId.isAcceptableOrUnknown(
-              data['playlistId']!, _playlistIdMeta));
+        _playlistIdMeta,
+        playlistId.isAcceptableOrUnknown(data['playlistId']!, _playlistIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_playlistIdMeta);
     }
     if (data.containsKey('sourceKey')) {
-      context.handle(_sourceKeyMeta,
-          sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta));
+      context.handle(
+        _sourceKeyMeta,
+        sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta),
+      );
     } else if (isInserting) {
       context.missing(_sourceKeyMeta);
     }
     if (data.containsKey('songId')) {
-      context.handle(_songIdMeta,
-          songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta));
+      context.handle(
+        _songIdMeta,
+        songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_songIdMeta);
     }
     if (data.containsKey('title')) {
       context.handle(
-          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
     } else if (isInserting) {
       context.missing(_titleMeta);
     }
     if (data.containsKey('artist')) {
-      context.handle(_artistMeta,
-          artist.isAcceptableOrUnknown(data['artist']!, _artistMeta));
+      context.handle(
+        _artistMeta,
+        artist.isAcceptableOrUnknown(data['artist']!, _artistMeta),
+      );
     }
     if (data.containsKey('album')) {
       context.handle(
-          _albumMeta, album.isAcceptableOrUnknown(data['album']!, _albumMeta));
+        _albumMeta,
+        album.isAcceptableOrUnknown(data['album']!, _albumMeta),
+      );
     }
     if (data.containsKey('coverUrl')) {
-      context.handle(_coverUrlMeta,
-          coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta));
+      context.handle(
+        _coverUrlMeta,
+        coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta),
+      );
     }
     if (data.containsKey('durationMs')) {
       context.handle(
-          _durationMsMeta,
-          durationMs.isAcceptableOrUnknown(
-              data['durationMs']!, _durationMsMeta));
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['durationMs']!, _durationMsMeta),
+      );
     }
     if (data.containsKey('raw')) {
       context.handle(
-          _rawMeta, raw.isAcceptableOrUnknown(data['raw']!, _rawMeta));
+        _rawMeta,
+        raw.isAcceptableOrUnknown(data['raw']!, _rawMeta),
+      );
     }
     if (data.containsKey('addedAt')) {
-      context.handle(_addedAtMeta,
-          addedAt.isAcceptableOrUnknown(data['addedAt']!, _addedAtMeta));
+      context.handle(
+        _addedAtMeta,
+        addedAt.isAcceptableOrUnknown(data['addedAt']!, _addedAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_addedAtMeta);
     }
     if (data.containsKey('sortOrder')) {
-      context.handle(_sortOrderMeta,
-          sortOrder.isAcceptableOrUnknown(data['sortOrder']!, _sortOrderMeta));
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sortOrder']!, _sortOrderMeta),
+      );
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     if (data.containsKey('deviceId')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta),
+      );
     }
     return context;
   }
@@ -1525,36 +1858,66 @@ class $PlaylistTracksTable extends PlaylistTracks
   PlaylistTrackRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PlaylistTrackRow(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      playlistId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}playlistId'])!,
-      sourceKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}sourceKey'])!,
-      songId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}songId'])!,
-      title: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
-      artist: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
-      album: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
-      coverUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
-      durationMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
-      raw: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}raw'])!,
-      addedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}addedAt'])!,
-      sortOrder: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}sortOrder'])!,
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      playlistId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}playlistId'],
+      )!,
+      sourceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sourceKey'],
+      )!,
+      songId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}songId'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      artist: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artist'],
+      )!,
+      album: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}album'],
+      )!,
+      coverUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverUrl'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}durationMs'],
+      ),
+      raw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw'],
+      )!,
+      addedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}addedAt'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sortOrder'],
+      )!,
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
     );
   }
 
@@ -1581,22 +1944,23 @@ class PlaylistTrackRow extends DataClass
   final int versionPhysical;
   final int versionCounter;
   final String deviceId;
-  const PlaylistTrackRow(
-      {required this.id,
-      required this.playlistId,
-      required this.sourceKey,
-      required this.songId,
-      required this.title,
-      required this.artist,
-      required this.album,
-      this.coverUrl,
-      this.durationMs,
-      required this.raw,
-      required this.addedAt,
-      required this.sortOrder,
-      required this.versionPhysical,
-      required this.versionCounter,
-      required this.deviceId});
+  const PlaylistTrackRow({
+    required this.id,
+    required this.playlistId,
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    this.coverUrl,
+    this.durationMs,
+    required this.raw,
+    required this.addedAt,
+    required this.sortOrder,
+    required this.versionPhysical,
+    required this.versionCounter,
+    required this.deviceId,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1646,8 +2010,10 @@ class PlaylistTrackRow extends DataClass
     );
   }
 
-  factory PlaylistTrackRow.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PlaylistTrackRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PlaylistTrackRow(
       id: serializer.fromJson<int>(json['id']),
@@ -1689,52 +2055,54 @@ class PlaylistTrackRow extends DataClass
     };
   }
 
-  PlaylistTrackRow copyWith(
-          {int? id,
-          int? playlistId,
-          String? sourceKey,
-          String? songId,
-          String? title,
-          String? artist,
-          String? album,
-          Value<String?> coverUrl = const Value.absent(),
-          Value<int?> durationMs = const Value.absent(),
-          String? raw,
-          int? addedAt,
-          int? sortOrder,
-          int? versionPhysical,
-          int? versionCounter,
-          String? deviceId}) =>
-      PlaylistTrackRow(
-        id: id ?? this.id,
-        playlistId: playlistId ?? this.playlistId,
-        sourceKey: sourceKey ?? this.sourceKey,
-        songId: songId ?? this.songId,
-        title: title ?? this.title,
-        artist: artist ?? this.artist,
-        album: album ?? this.album,
-        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
-        durationMs: durationMs.present ? durationMs.value : this.durationMs,
-        raw: raw ?? this.raw,
-        addedAt: addedAt ?? this.addedAt,
-        sortOrder: sortOrder ?? this.sortOrder,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-        deviceId: deviceId ?? this.deviceId,
-      );
+  PlaylistTrackRow copyWith({
+    int? id,
+    int? playlistId,
+    String? sourceKey,
+    String? songId,
+    String? title,
+    String? artist,
+    String? album,
+    Value<String?> coverUrl = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+    String? raw,
+    int? addedAt,
+    int? sortOrder,
+    int? versionPhysical,
+    int? versionCounter,
+    String? deviceId,
+  }) => PlaylistTrackRow(
+    id: id ?? this.id,
+    playlistId: playlistId ?? this.playlistId,
+    sourceKey: sourceKey ?? this.sourceKey,
+    songId: songId ?? this.songId,
+    title: title ?? this.title,
+    artist: artist ?? this.artist,
+    album: album ?? this.album,
+    coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    raw: raw ?? this.raw,
+    addedAt: addedAt ?? this.addedAt,
+    sortOrder: sortOrder ?? this.sortOrder,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+    deviceId: deviceId ?? this.deviceId,
+  );
   PlaylistTrackRow copyWithCompanion(PlaylistTracksCompanion data) {
     return PlaylistTrackRow(
       id: data.id.present ? data.id.value : this.id,
-      playlistId:
-          data.playlistId.present ? data.playlistId.value : this.playlistId,
+      playlistId: data.playlistId.present
+          ? data.playlistId.value
+          : this.playlistId,
       sourceKey: data.sourceKey.present ? data.sourceKey.value : this.sourceKey,
       songId: data.songId.present ? data.songId.value : this.songId,
       title: data.title.present ? data.title.value : this.title,
       artist: data.artist.present ? data.artist.value : this.artist,
       album: data.album.present ? data.album.value : this.album,
       coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
-      durationMs:
-          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
       raw: data.raw.present ? data.raw.value : this.raw,
       addedAt: data.addedAt.present ? data.addedAt.value : this.addedAt,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
@@ -1772,21 +2140,22 @@ class PlaylistTrackRow extends DataClass
 
   @override
   int get hashCode => Object.hash(
-      id,
-      playlistId,
-      sourceKey,
-      songId,
-      title,
-      artist,
-      album,
-      coverUrl,
-      durationMs,
-      raw,
-      addedAt,
-      sortOrder,
-      versionPhysical,
-      versionCounter,
-      deviceId);
+    id,
+    playlistId,
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    addedAt,
+    sortOrder,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1857,11 +2226,11 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTrackRow> {
     this.versionPhysical = const Value.absent(),
     this.versionCounter = const Value.absent(),
     this.deviceId = const Value.absent(),
-  })  : playlistId = Value(playlistId),
-        sourceKey = Value(sourceKey),
-        songId = Value(songId),
-        title = Value(title),
-        addedAt = Value(addedAt);
+  }) : playlistId = Value(playlistId),
+       sourceKey = Value(sourceKey),
+       songId = Value(songId),
+       title = Value(title),
+       addedAt = Value(addedAt);
   static Insertable<PlaylistTrackRow> custom({
     Expression<int>? id,
     Expression<int>? playlistId,
@@ -1898,22 +2267,23 @@ class PlaylistTracksCompanion extends UpdateCompanion<PlaylistTrackRow> {
     });
   }
 
-  PlaylistTracksCompanion copyWith(
-      {Value<int>? id,
-      Value<int>? playlistId,
-      Value<String>? sourceKey,
-      Value<String>? songId,
-      Value<String>? title,
-      Value<String>? artist,
-      Value<String>? album,
-      Value<String?>? coverUrl,
-      Value<int?>? durationMs,
-      Value<String>? raw,
-      Value<int>? addedAt,
-      Value<int>? sortOrder,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter,
-      Value<String>? deviceId}) {
+  PlaylistTracksCompanion copyWith({
+    Value<int>? id,
+    Value<int>? playlistId,
+    Value<String>? sourceKey,
+    Value<String>? songId,
+    Value<String>? title,
+    Value<String>? artist,
+    Value<String>? album,
+    Value<String?>? coverUrl,
+    Value<int?>? durationMs,
+    Value<String>? raw,
+    Value<int>? addedAt,
+    Value<int>? sortOrder,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+    Value<String>? deviceId,
+  }) {
     return PlaylistTracksCompanion(
       id: id ?? this.id,
       playlistId: playlistId ?? this.playlistId,
@@ -2013,93 +2383,141 @@ class $SyncTombstonesTable extends SyncTombstones
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $SyncTombstonesTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _categoryMeta =
-      const VerificationMeta('category');
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
   @override
   late final GeneratedColumn<String> category = GeneratedColumn<String>(
-      'category', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _keyMeta = const VerificationMeta('key');
   @override
   late final GeneratedColumn<String> key = GeneratedColumn<String>(
-      'key', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'deviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _deletedAtMeta =
-      const VerificationMeta('deletedAt');
+    'deviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
   @override
   late final GeneratedColumn<int> deletedAt = GeneratedColumn<int>(
-      'deletedAt', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
+    'deletedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
-  List<GeneratedColumn> get $columns =>
-      [category, key, versionPhysical, versionCounter, deviceId, deletedAt];
+  List<GeneratedColumn> get $columns => [
+    category,
+    key,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+    deletedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'sync_tombstones';
   @override
-  VerificationContext validateIntegrity(Insertable<SyncTombstone> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<SyncTombstone> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('category')) {
-      context.handle(_categoryMeta,
-          category.isAcceptableOrUnknown(data['category']!, _categoryMeta));
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
     } else if (isInserting) {
       context.missing(_categoryMeta);
     }
     if (data.containsKey('key')) {
       context.handle(
-          _keyMeta, key.isAcceptableOrUnknown(data['key']!, _keyMeta));
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
     } else if (isInserting) {
       context.missing(_keyMeta);
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_versionPhysicalMeta);
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     if (data.containsKey('deviceId')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta),
+      );
     }
     if (data.containsKey('deletedAt')) {
-      context.handle(_deletedAtMeta,
-          deletedAt.isAcceptableOrUnknown(data['deletedAt']!, _deletedAtMeta));
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deletedAt']!, _deletedAtMeta),
+      );
     }
     return context;
   }
@@ -2110,18 +2528,30 @@ class $SyncTombstonesTable extends SyncTombstones
   SyncTombstone map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SyncTombstone(
-      category: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
-      key: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
-      deletedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}deletedAt'])!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}deletedAt'],
+      )!,
     );
   }
 
@@ -2138,13 +2568,14 @@ class SyncTombstone extends DataClass implements Insertable<SyncTombstone> {
   final int versionCounter;
   final String deviceId;
   final int deletedAt;
-  const SyncTombstone(
-      {required this.category,
-      required this.key,
-      required this.versionPhysical,
-      required this.versionCounter,
-      required this.deviceId,
-      required this.deletedAt});
+  const SyncTombstone({
+    required this.category,
+    required this.key,
+    required this.versionPhysical,
+    required this.versionCounter,
+    required this.deviceId,
+    required this.deletedAt,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2168,8 +2599,10 @@ class SyncTombstone extends DataClass implements Insertable<SyncTombstone> {
     );
   }
 
-  factory SyncTombstone.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory SyncTombstone.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncTombstone(
       category: serializer.fromJson<String>(json['category']),
@@ -2193,21 +2626,21 @@ class SyncTombstone extends DataClass implements Insertable<SyncTombstone> {
     };
   }
 
-  SyncTombstone copyWith(
-          {String? category,
-          String? key,
-          int? versionPhysical,
-          int? versionCounter,
-          String? deviceId,
-          int? deletedAt}) =>
-      SyncTombstone(
-        category: category ?? this.category,
-        key: key ?? this.key,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-        deviceId: deviceId ?? this.deviceId,
-        deletedAt: deletedAt ?? this.deletedAt,
-      );
+  SyncTombstone copyWith({
+    String? category,
+    String? key,
+    int? versionPhysical,
+    int? versionCounter,
+    String? deviceId,
+    int? deletedAt,
+  }) => SyncTombstone(
+    category: category ?? this.category,
+    key: key ?? this.key,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+    deviceId: deviceId ?? this.deviceId,
+    deletedAt: deletedAt ?? this.deletedAt,
+  );
   SyncTombstone copyWithCompanion(SyncTombstonesCompanion data) {
     return SyncTombstone(
       category: data.category.present ? data.category.value : this.category,
@@ -2238,7 +2671,13 @@ class SyncTombstone extends DataClass implements Insertable<SyncTombstone> {
 
   @override
   int get hashCode => Object.hash(
-      category, key, versionPhysical, versionCounter, deviceId, deletedAt);
+    category,
+    key,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+    deletedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2276,9 +2715,9 @@ class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstone> {
     this.deviceId = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.rowid = const Value.absent(),
-  })  : category = Value(category),
-        key = Value(key),
-        versionPhysical = Value(versionPhysical);
+  }) : category = Value(category),
+       key = Value(key),
+       versionPhysical = Value(versionPhysical);
   static Insertable<SyncTombstone> custom({
     Expression<String>? category,
     Expression<String>? key,
@@ -2299,14 +2738,15 @@ class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstone> {
     });
   }
 
-  SyncTombstonesCompanion copyWith(
-      {Value<String>? category,
-      Value<String>? key,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter,
-      Value<String>? deviceId,
-      Value<int>? deletedAt,
-      Value<int>? rowid}) {
+  SyncTombstonesCompanion copyWith({
+    Value<String>? category,
+    Value<String>? key,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+    Value<String>? deviceId,
+    Value<int>? deletedAt,
+    Value<int>? rowid,
+  }) {
     return SyncTombstonesCompanion(
       category: category ?? this.category,
       key: key ?? this.key,
@@ -2366,81 +2806,122 @@ class $SyncKnownTable extends SyncKnown
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $SyncKnownTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _categoryMeta =
-      const VerificationMeta('category');
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
   @override
   late final GeneratedColumn<String> category = GeneratedColumn<String>(
-      'category', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _keyMeta = const VerificationMeta('key');
   @override
   late final GeneratedColumn<String> key = GeneratedColumn<String>(
-      'key', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'deviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'deviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
-  List<GeneratedColumn> get $columns =>
-      [category, key, versionPhysical, versionCounter, deviceId];
+  List<GeneratedColumn> get $columns => [
+    category,
+    key,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'sync_known';
   @override
-  VerificationContext validateIntegrity(Insertable<SyncKnownData> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<SyncKnownData> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('category')) {
-      context.handle(_categoryMeta,
-          category.isAcceptableOrUnknown(data['category']!, _categoryMeta));
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
     } else if (isInserting) {
       context.missing(_categoryMeta);
     }
     if (data.containsKey('key')) {
       context.handle(
-          _keyMeta, key.isAcceptableOrUnknown(data['key']!, _keyMeta));
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
     } else if (isInserting) {
       context.missing(_keyMeta);
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_versionPhysicalMeta);
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     if (data.containsKey('deviceId')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta),
+      );
     }
     return context;
   }
@@ -2451,16 +2932,26 @@ class $SyncKnownTable extends SyncKnown
   SyncKnownData map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SyncKnownData(
-      category: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
-      key: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
     );
   }
 
@@ -2476,12 +2967,13 @@ class SyncKnownData extends DataClass implements Insertable<SyncKnownData> {
   final int versionPhysical;
   final int versionCounter;
   final String deviceId;
-  const SyncKnownData(
-      {required this.category,
-      required this.key,
-      required this.versionPhysical,
-      required this.versionCounter,
-      required this.deviceId});
+  const SyncKnownData({
+    required this.category,
+    required this.key,
+    required this.versionPhysical,
+    required this.versionCounter,
+    required this.deviceId,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2503,8 +2995,10 @@ class SyncKnownData extends DataClass implements Insertable<SyncKnownData> {
     );
   }
 
-  factory SyncKnownData.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory SyncKnownData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncKnownData(
       category: serializer.fromJson<String>(json['category']),
@@ -2526,19 +3020,19 @@ class SyncKnownData extends DataClass implements Insertable<SyncKnownData> {
     };
   }
 
-  SyncKnownData copyWith(
-          {String? category,
-          String? key,
-          int? versionPhysical,
-          int? versionCounter,
-          String? deviceId}) =>
-      SyncKnownData(
-        category: category ?? this.category,
-        key: key ?? this.key,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-        deviceId: deviceId ?? this.deviceId,
-      );
+  SyncKnownData copyWith({
+    String? category,
+    String? key,
+    int? versionPhysical,
+    int? versionCounter,
+    String? deviceId,
+  }) => SyncKnownData(
+    category: category ?? this.category,
+    key: key ?? this.key,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+    deviceId: deviceId ?? this.deviceId,
+  );
   SyncKnownData copyWithCompanion(SyncKnownCompanion data) {
     return SyncKnownData(
       category: data.category.present ? data.category.value : this.category,
@@ -2601,9 +3095,9 @@ class SyncKnownCompanion extends UpdateCompanion<SyncKnownData> {
     this.versionCounter = const Value.absent(),
     this.deviceId = const Value.absent(),
     this.rowid = const Value.absent(),
-  })  : category = Value(category),
-        key = Value(key),
-        versionPhysical = Value(versionPhysical);
+  }) : category = Value(category),
+       key = Value(key),
+       versionPhysical = Value(versionPhysical);
   static Insertable<SyncKnownData> custom({
     Expression<String>? category,
     Expression<String>? key,
@@ -2622,13 +3116,14 @@ class SyncKnownCompanion extends UpdateCompanion<SyncKnownData> {
     });
   }
 
-  SyncKnownCompanion copyWith(
-      {Value<String>? category,
-      Value<String>? key,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter,
-      Value<String>? deviceId,
-      Value<int>? rowid}) {
+  SyncKnownCompanion copyWith({
+    Value<String>? category,
+    Value<String>? key,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+    Value<String>? deviceId,
+    Value<int>? rowid,
+  }) {
     return SyncKnownCompanion(
       category: category ?? this.category,
       key: key ?? this.key,
@@ -2686,124 +3181,183 @@ class $SyncJournalTable extends SyncJournal
   static const VerificationMeta _seqMeta = const VerificationMeta('seq');
   @override
   late final GeneratedColumn<int> seq = GeneratedColumn<int>(
-      'seq', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _categoryMeta =
-      const VerificationMeta('category');
+    'seq',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
   @override
   late final GeneratedColumn<String> category = GeneratedColumn<String>(
-      'category', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'category',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _keyMeta = const VerificationMeta('key');
   @override
   late final GeneratedColumn<String> key = GeneratedColumn<String>(
-      'key', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _deviceIdMeta =
-      const VerificationMeta('deviceId');
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deviceIdMeta = const VerificationMeta(
+    'deviceId',
+  );
   @override
   late final GeneratedColumn<String> deviceId = GeneratedColumn<String>(
-      'deviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _deletedMeta =
-      const VerificationMeta('deleted');
+    'deviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _deletedMeta = const VerificationMeta(
+    'deleted',
+  );
   @override
   late final GeneratedColumn<bool> deleted = GeneratedColumn<bool>(
-      'deleted', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("deleted" IN (0, 1))'),
-      defaultValue: const Constant(false));
+    'deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _dataMeta = const VerificationMeta('data');
   @override
   late final GeneratedColumn<String> data = GeneratedColumn<String>(
-      'data', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
+    'data',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _atMeta = const VerificationMeta('at');
   @override
   late final GeneratedColumn<int> at = GeneratedColumn<int>(
-      'at', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        seq,
-        category,
-        key,
-        versionPhysical,
-        versionCounter,
-        deviceId,
-        deleted,
-        data,
-        at
-      ];
+    seq,
+    category,
+    key,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+    deleted,
+    data,
+    at,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'sync_journal';
   @override
-  VerificationContext validateIntegrity(Insertable<SyncJournalData> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<SyncJournalData> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('seq')) {
       context.handle(
-          _seqMeta, seq.isAcceptableOrUnknown(data['seq']!, _seqMeta));
+        _seqMeta,
+        seq.isAcceptableOrUnknown(data['seq']!, _seqMeta),
+      );
     }
     if (data.containsKey('category')) {
-      context.handle(_categoryMeta,
-          category.isAcceptableOrUnknown(data['category']!, _categoryMeta));
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
     } else if (isInserting) {
       context.missing(_categoryMeta);
     }
     if (data.containsKey('key')) {
       context.handle(
-          _keyMeta, key.isAcceptableOrUnknown(data['key']!, _keyMeta));
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
     } else if (isInserting) {
       context.missing(_keyMeta);
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_versionPhysicalMeta);
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     if (data.containsKey('deviceId')) {
-      context.handle(_deviceIdMeta,
-          deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta));
+      context.handle(
+        _deviceIdMeta,
+        deviceId.isAcceptableOrUnknown(data['deviceId']!, _deviceIdMeta),
+      );
     }
     if (data.containsKey('deleted')) {
-      context.handle(_deletedMeta,
-          deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta));
+      context.handle(
+        _deletedMeta,
+        deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta),
+      );
     }
     if (data.containsKey('data')) {
       context.handle(
-          _dataMeta, this.data.isAcceptableOrUnknown(data['data']!, _dataMeta));
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
     }
     if (data.containsKey('at')) {
       context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
@@ -2819,24 +3373,42 @@ class $SyncJournalTable extends SyncJournal
   SyncJournalData map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SyncJournalData(
-      seq: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}seq'])!,
-      category: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
-      key: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}key'])!,
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
-      deviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}deviceId'])!,
-      deleted: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}deleted'])!,
-      data: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}data']),
-      at: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}at'])!,
+      seq: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}seq'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      )!,
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
+      deviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}deviceId'],
+      )!,
+      deleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      ),
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}at'],
+      )!,
     );
   }
 
@@ -2858,16 +3430,17 @@ class SyncJournalData extends DataClass implements Insertable<SyncJournalData> {
 
   /// 追加时间（时间硬上限的判据；与 seq 同序推进）。
   final int at;
-  const SyncJournalData(
-      {required this.seq,
-      required this.category,
-      required this.key,
-      required this.versionPhysical,
-      required this.versionCounter,
-      required this.deviceId,
-      required this.deleted,
-      this.data,
-      required this.at});
+  const SyncJournalData({
+    required this.seq,
+    required this.category,
+    required this.key,
+    required this.versionPhysical,
+    required this.versionCounter,
+    required this.deviceId,
+    required this.deleted,
+    this.data,
+    required this.at,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -2899,8 +3472,10 @@ class SyncJournalData extends DataClass implements Insertable<SyncJournalData> {
     );
   }
 
-  factory SyncJournalData.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory SyncJournalData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncJournalData(
       seq: serializer.fromJson<int>(json['seq']),
@@ -2930,27 +3505,27 @@ class SyncJournalData extends DataClass implements Insertable<SyncJournalData> {
     };
   }
 
-  SyncJournalData copyWith(
-          {int? seq,
-          String? category,
-          String? key,
-          int? versionPhysical,
-          int? versionCounter,
-          String? deviceId,
-          bool? deleted,
-          Value<String?> data = const Value.absent(),
-          int? at}) =>
-      SyncJournalData(
-        seq: seq ?? this.seq,
-        category: category ?? this.category,
-        key: key ?? this.key,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-        deviceId: deviceId ?? this.deviceId,
-        deleted: deleted ?? this.deleted,
-        data: data.present ? data.value : this.data,
-        at: at ?? this.at,
-      );
+  SyncJournalData copyWith({
+    int? seq,
+    String? category,
+    String? key,
+    int? versionPhysical,
+    int? versionCounter,
+    String? deviceId,
+    bool? deleted,
+    Value<String?> data = const Value.absent(),
+    int? at,
+  }) => SyncJournalData(
+    seq: seq ?? this.seq,
+    category: category ?? this.category,
+    key: key ?? this.key,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+    deviceId: deviceId ?? this.deviceId,
+    deleted: deleted ?? this.deleted,
+    data: data.present ? data.value : this.data,
+    at: at ?? this.at,
+  );
   SyncJournalData copyWithCompanion(SyncJournalCompanion data) {
     return SyncJournalData(
       seq: data.seq.present ? data.seq.value : this.seq,
@@ -2986,8 +3561,17 @@ class SyncJournalData extends DataClass implements Insertable<SyncJournalData> {
   }
 
   @override
-  int get hashCode => Object.hash(seq, category, key, versionPhysical,
-      versionCounter, deviceId, deleted, data, at);
+  int get hashCode => Object.hash(
+    seq,
+    category,
+    key,
+    versionPhysical,
+    versionCounter,
+    deviceId,
+    deleted,
+    data,
+    at,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3034,10 +3618,10 @@ class SyncJournalCompanion extends UpdateCompanion<SyncJournalData> {
     this.deleted = const Value.absent(),
     this.data = const Value.absent(),
     required int at,
-  })  : category = Value(category),
-        key = Value(key),
-        versionPhysical = Value(versionPhysical),
-        at = Value(at);
+  }) : category = Value(category),
+       key = Value(key),
+       versionPhysical = Value(versionPhysical),
+       at = Value(at);
   static Insertable<SyncJournalData> custom({
     Expression<int>? seq,
     Expression<String>? category,
@@ -3062,16 +3646,17 @@ class SyncJournalCompanion extends UpdateCompanion<SyncJournalData> {
     });
   }
 
-  SyncJournalCompanion copyWith(
-      {Value<int>? seq,
-      Value<String>? category,
-      Value<String>? key,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter,
-      Value<String>? deviceId,
-      Value<bool>? deleted,
-      Value<String?>? data,
-      Value<int>? at}) {
+  SyncJournalCompanion copyWith({
+    Value<int>? seq,
+    Value<String>? category,
+    Value<String>? key,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+    Value<String>? deviceId,
+    Value<bool>? deleted,
+    Value<String?>? data,
+    Value<int>? at,
+  }) {
     return SyncJournalCompanion(
       seq: seq ?? this.seq,
       category: category ?? this.category,
@@ -3144,24 +3729,36 @@ class $SyncJournalStatesTable extends SyncJournalStates
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _baseSeqMeta =
-      const VerificationMeta('baseSeq');
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _baseSeqMeta = const VerificationMeta(
+    'baseSeq',
+  );
   @override
   late final GeneratedColumn<int> baseSeq = GeneratedColumn<int>(
-      'baseSeq', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _snapshotSeqMeta =
-      const VerificationMeta('snapshotSeq');
+    'baseSeq',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _snapshotSeqMeta = const VerificationMeta(
+    'snapshotSeq',
+  );
   @override
   late final GeneratedColumn<int> snapshotSeq = GeneratedColumn<int>(
-      'snapshotSeq', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(-1));
+    'snapshotSeq',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(-1),
+  );
   @override
   List<GeneratedColumn> get $columns => [id, baseSeq, snapshotSeq];
   @override
@@ -3170,22 +3767,29 @@ class $SyncJournalStatesTable extends SyncJournalStates
   String get actualTableName => $name;
   static const String $name = 'sync_journal_state';
   @override
-  VerificationContext validateIntegrity(Insertable<SyncJournalState> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<SyncJournalState> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
     if (data.containsKey('baseSeq')) {
-      context.handle(_baseSeqMeta,
-          baseSeq.isAcceptableOrUnknown(data['baseSeq']!, _baseSeqMeta));
+      context.handle(
+        _baseSeqMeta,
+        baseSeq.isAcceptableOrUnknown(data['baseSeq']!, _baseSeqMeta),
+      );
     }
     if (data.containsKey('snapshotSeq')) {
       context.handle(
+        _snapshotSeqMeta,
+        snapshotSeq.isAcceptableOrUnknown(
+          data['snapshotSeq']!,
           _snapshotSeqMeta,
-          snapshotSeq.isAcceptableOrUnknown(
-              data['snapshotSeq']!, _snapshotSeqMeta));
+        ),
+      );
     }
     return context;
   }
@@ -3196,12 +3800,18 @@ class $SyncJournalStatesTable extends SyncJournalStates
   SyncJournalState map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return SyncJournalState(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      baseSeq: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}baseSeq'])!,
-      snapshotSeq: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}snapshotSeq'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      baseSeq: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}baseSeq'],
+      )!,
+      snapshotSeq: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}snapshotSeq'],
+      )!,
     );
   }
 
@@ -3216,8 +3826,11 @@ class SyncJournalState extends DataClass
   final int id;
   final int baseSeq;
   final int snapshotSeq;
-  const SyncJournalState(
-      {required this.id, required this.baseSeq, required this.snapshotSeq});
+  const SyncJournalState({
+    required this.id,
+    required this.baseSeq,
+    required this.snapshotSeq,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -3235,8 +3848,10 @@ class SyncJournalState extends DataClass
     );
   }
 
-  factory SyncJournalState.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory SyncJournalState.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return SyncJournalState(
       id: serializer.fromJson<int>(json['id']),
@@ -3264,8 +3879,9 @@ class SyncJournalState extends DataClass
     return SyncJournalState(
       id: data.id.present ? data.id.value : this.id,
       baseSeq: data.baseSeq.present ? data.baseSeq.value : this.baseSeq,
-      snapshotSeq:
-          data.snapshotSeq.present ? data.snapshotSeq.value : this.snapshotSeq,
+      snapshotSeq: data.snapshotSeq.present
+          ? data.snapshotSeq.value
+          : this.snapshotSeq,
     );
   }
 
@@ -3316,8 +3932,11 @@ class SyncJournalStatesCompanion extends UpdateCompanion<SyncJournalState> {
     });
   }
 
-  SyncJournalStatesCompanion copyWith(
-      {Value<int>? id, Value<int>? baseSeq, Value<int>? snapshotSeq}) {
+  SyncJournalStatesCompanion copyWith({
+    Value<int>? id,
+    Value<int>? baseSeq,
+    Value<int>? snapshotSeq,
+  }) {
     return SyncJournalStatesCompanion(
       id: id ?? this.id,
       baseSeq: baseSeq ?? this.baseSeq,
@@ -3360,134 +3979,193 @@ class $PlayTracksTable extends PlayTracks
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _sourceKeyMeta =
-      const VerificationMeta('sourceKey');
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _sourceKeyMeta = const VerificationMeta(
+    'sourceKey',
+  );
   @override
   late final GeneratedColumn<String> sourceKey = GeneratedColumn<String>(
-      'sourceKey', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'sourceKey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _songIdMeta = const VerificationMeta('songId');
   @override
   late final GeneratedColumn<String> songId = GeneratedColumn<String>(
-      'songId', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'songId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-      'title', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _artistMeta = const VerificationMeta('artist');
   @override
   late final GeneratedColumn<String> artist = GeneratedColumn<String>(
-      'artist', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'artist',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _albumMeta = const VerificationMeta('album');
   @override
   late final GeneratedColumn<String> album = GeneratedColumn<String>(
-      'album', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _coverUrlMeta =
-      const VerificationMeta('coverUrl');
+    'album',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverUrlMeta = const VerificationMeta(
+    'coverUrl',
+  );
   @override
   late final GeneratedColumn<String> coverUrl = GeneratedColumn<String>(
-      'coverUrl', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _durationMsMeta =
-      const VerificationMeta('durationMs');
+    'coverUrl',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
   @override
   late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
-      'durationMs', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'durationMs',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _rawMeta = const VerificationMeta('raw');
   @override
   late final GeneratedColumn<Uint8List> raw = GeneratedColumn<Uint8List>(
-      'raw', aliasedName, true,
-      type: DriftSqlType.blob, requiredDuringInsert: false);
-  static const VerificationMeta _updatedAtMeta =
-      const VerificationMeta('updatedAt');
+    'raw',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
   @override
   late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
-      'updatedAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'updatedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        sourceKey,
-        songId,
-        title,
-        artist,
-        album,
-        coverUrl,
-        durationMs,
-        raw,
-        updatedAt
-      ];
+    id,
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    updatedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'play_tracks';
   @override
-  VerificationContext validateIntegrity(Insertable<PlayTrackRow> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PlayTrackRow> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
     if (data.containsKey('sourceKey')) {
-      context.handle(_sourceKeyMeta,
-          sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta));
+      context.handle(
+        _sourceKeyMeta,
+        sourceKey.isAcceptableOrUnknown(data['sourceKey']!, _sourceKeyMeta),
+      );
     } else if (isInserting) {
       context.missing(_sourceKeyMeta);
     }
     if (data.containsKey('songId')) {
-      context.handle(_songIdMeta,
-          songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta));
+      context.handle(
+        _songIdMeta,
+        songId.isAcceptableOrUnknown(data['songId']!, _songIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_songIdMeta);
     }
     if (data.containsKey('title')) {
       context.handle(
-          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
     }
     if (data.containsKey('artist')) {
-      context.handle(_artistMeta,
-          artist.isAcceptableOrUnknown(data['artist']!, _artistMeta));
+      context.handle(
+        _artistMeta,
+        artist.isAcceptableOrUnknown(data['artist']!, _artistMeta),
+      );
     }
     if (data.containsKey('album')) {
       context.handle(
-          _albumMeta, album.isAcceptableOrUnknown(data['album']!, _albumMeta));
+        _albumMeta,
+        album.isAcceptableOrUnknown(data['album']!, _albumMeta),
+      );
     }
     if (data.containsKey('coverUrl')) {
-      context.handle(_coverUrlMeta,
-          coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta));
+      context.handle(
+        _coverUrlMeta,
+        coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta),
+      );
     }
     if (data.containsKey('durationMs')) {
       context.handle(
-          _durationMsMeta,
-          durationMs.isAcceptableOrUnknown(
-              data['durationMs']!, _durationMsMeta));
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['durationMs']!, _durationMsMeta),
+      );
     }
     if (data.containsKey('raw')) {
       context.handle(
-          _rawMeta, raw.isAcceptableOrUnknown(data['raw']!, _rawMeta));
+        _rawMeta,
+        raw.isAcceptableOrUnknown(data['raw']!, _rawMeta),
+      );
     }
     if (data.containsKey('updatedAt')) {
-      context.handle(_updatedAtMeta,
-          updatedAt.isAcceptableOrUnknown(data['updatedAt']!, _updatedAtMeta));
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updatedAt']!, _updatedAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
@@ -3500,26 +4178,46 @@ class $PlayTracksTable extends PlayTracks
   PlayTrackRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PlayTrackRow(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      sourceKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}sourceKey'])!,
-      songId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}songId'])!,
-      title: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
-      artist: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
-      album: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
-      coverUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
-      durationMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
-      raw: attachedDatabase.typeMapping
-          .read(DriftSqlType.blob, data['${effectivePrefix}raw']),
-      updatedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}updatedAt'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      sourceKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sourceKey'],
+      )!,
+      songId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}songId'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      artist: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artist'],
+      )!,
+      album: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}album'],
+      )!,
+      coverUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverUrl'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}durationMs'],
+      ),
+      raw: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}raw'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updatedAt'],
+      )!,
     );
   }
 
@@ -3544,17 +4242,18 @@ class PlayTrackRow extends DataClass implements Insertable<PlayTrackRow> {
 
   /// 最近一次写入的内容时间（事件 `startedAt`）。
   final int updatedAt;
-  const PlayTrackRow(
-      {required this.id,
-      required this.sourceKey,
-      required this.songId,
-      required this.title,
-      required this.artist,
-      required this.album,
-      this.coverUrl,
-      this.durationMs,
-      this.raw,
-      required this.updatedAt});
+  const PlayTrackRow({
+    required this.id,
+    required this.sourceKey,
+    required this.songId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    this.coverUrl,
+    this.durationMs,
+    this.raw,
+    required this.updatedAt,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -3596,8 +4295,10 @@ class PlayTrackRow extends DataClass implements Insertable<PlayTrackRow> {
     );
   }
 
-  factory PlayTrackRow.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PlayTrackRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PlayTrackRow(
       id: serializer.fromJson<int>(json['id']),
@@ -3629,29 +4330,29 @@ class PlayTrackRow extends DataClass implements Insertable<PlayTrackRow> {
     };
   }
 
-  PlayTrackRow copyWith(
-          {int? id,
-          String? sourceKey,
-          String? songId,
-          String? title,
-          String? artist,
-          String? album,
-          Value<String?> coverUrl = const Value.absent(),
-          Value<int?> durationMs = const Value.absent(),
-          Value<Uint8List?> raw = const Value.absent(),
-          int? updatedAt}) =>
-      PlayTrackRow(
-        id: id ?? this.id,
-        sourceKey: sourceKey ?? this.sourceKey,
-        songId: songId ?? this.songId,
-        title: title ?? this.title,
-        artist: artist ?? this.artist,
-        album: album ?? this.album,
-        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
-        durationMs: durationMs.present ? durationMs.value : this.durationMs,
-        raw: raw.present ? raw.value : this.raw,
-        updatedAt: updatedAt ?? this.updatedAt,
-      );
+  PlayTrackRow copyWith({
+    int? id,
+    String? sourceKey,
+    String? songId,
+    String? title,
+    String? artist,
+    String? album,
+    Value<String?> coverUrl = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+    Value<Uint8List?> raw = const Value.absent(),
+    int? updatedAt,
+  }) => PlayTrackRow(
+    id: id ?? this.id,
+    sourceKey: sourceKey ?? this.sourceKey,
+    songId: songId ?? this.songId,
+    title: title ?? this.title,
+    artist: artist ?? this.artist,
+    album: album ?? this.album,
+    coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    raw: raw.present ? raw.value : this.raw,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
   PlayTrackRow copyWithCompanion(PlayTracksCompanion data) {
     return PlayTrackRow(
       id: data.id.present ? data.id.value : this.id,
@@ -3661,8 +4362,9 @@ class PlayTrackRow extends DataClass implements Insertable<PlayTrackRow> {
       artist: data.artist.present ? data.artist.value : this.artist,
       album: data.album.present ? data.album.value : this.album,
       coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
-      durationMs:
-          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
       raw: data.raw.present ? data.raw.value : this.raw,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -3686,8 +4388,18 @@ class PlayTrackRow extends DataClass implements Insertable<PlayTrackRow> {
   }
 
   @override
-  int get hashCode => Object.hash(id, sourceKey, songId, title, artist, album,
-      coverUrl, durationMs, $driftBlobEquality.hash(raw), updatedAt);
+  int get hashCode => Object.hash(
+    id,
+    sourceKey,
+    songId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    $driftBlobEquality.hash(raw),
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -3738,9 +4450,9 @@ class PlayTracksCompanion extends UpdateCompanion<PlayTrackRow> {
     this.durationMs = const Value.absent(),
     this.raw = const Value.absent(),
     required int updatedAt,
-  })  : sourceKey = Value(sourceKey),
-        songId = Value(songId),
-        updatedAt = Value(updatedAt);
+  }) : sourceKey = Value(sourceKey),
+       songId = Value(songId),
+       updatedAt = Value(updatedAt);
   static Insertable<PlayTrackRow> custom({
     Expression<int>? id,
     Expression<String>? sourceKey,
@@ -3767,17 +4479,18 @@ class PlayTracksCompanion extends UpdateCompanion<PlayTrackRow> {
     });
   }
 
-  PlayTracksCompanion copyWith(
-      {Value<int>? id,
-      Value<String>? sourceKey,
-      Value<String>? songId,
-      Value<String>? title,
-      Value<String>? artist,
-      Value<String>? album,
-      Value<String?>? coverUrl,
-      Value<int?>? durationMs,
-      Value<Uint8List?>? raw,
-      Value<int>? updatedAt}) {
+  PlayTracksCompanion copyWith({
+    Value<int>? id,
+    Value<String>? sourceKey,
+    Value<String>? songId,
+    Value<String>? title,
+    Value<String>? artist,
+    Value<String>? album,
+    Value<String?>? coverUrl,
+    Value<int?>? durationMs,
+    Value<Uint8List?>? raw,
+    Value<int>? updatedAt,
+  }) {
     return PlayTracksCompanion(
       id: id ?? this.id,
       sourceKey: sourceKey ?? this.sourceKey,
@@ -3855,165 +4568,238 @@ class $PlayEventsTable extends PlayEvents
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _trackIdMeta =
-      const VerificationMeta('trackId');
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _trackIdMeta = const VerificationMeta(
+    'trackId',
+  );
   @override
   late final GeneratedColumn<int> trackId = GeneratedColumn<int>(
-      'trackId', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: true,
-      defaultConstraints: GeneratedColumn.constraintIsAlways(
-          'REFERENCES play_tracks (id) ON DELETE RESTRICT'));
-  static const VerificationMeta _startedAtMeta =
-      const VerificationMeta('startedAt');
+    'trackId',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES play_tracks (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
   @override
   late final GeneratedColumn<int> startedAt = GeneratedColumn<int>(
-      'startedAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
-  static const VerificationMeta _endedAtMeta =
-      const VerificationMeta('endedAt');
+    'startedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _endedAtMeta = const VerificationMeta(
+    'endedAt',
+  );
   @override
   late final GeneratedColumn<int> endedAt = GeneratedColumn<int>(
-      'endedAt', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
-  static const VerificationMeta _listenedMsMeta =
-      const VerificationMeta('listenedMs');
+    'endedAt',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _listenedMsMeta = const VerificationMeta(
+    'listenedMs',
+  );
   @override
   late final GeneratedColumn<int> listenedMs = GeneratedColumn<int>(
-      'listenedMs', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _maxPositionMsMeta =
-      const VerificationMeta('maxPositionMs');
+    'listenedMs',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _maxPositionMsMeta = const VerificationMeta(
+    'maxPositionMs',
+  );
   @override
   late final GeneratedColumn<int> maxPositionMs = GeneratedColumn<int>(
-      'maxPositionMs', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _endReasonMeta =
-      const VerificationMeta('endReason');
+    'maxPositionMs',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _endReasonMeta = const VerificationMeta(
+    'endReason',
+  );
   @override
   late final GeneratedColumn<String> endReason = GeneratedColumn<String>(
-      'endReason', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _syncKeyMeta =
-      const VerificationMeta('syncKey');
+    'endReason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncKeyMeta = const VerificationMeta(
+    'syncKey',
+  );
   @override
   late final GeneratedColumn<String> syncKey = GeneratedColumn<String>(
-      'syncKey', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _originDeviceIdMeta =
-      const VerificationMeta('originDeviceId');
+    'syncKey',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _originDeviceIdMeta = const VerificationMeta(
+    'originDeviceId',
+  );
   @override
   late final GeneratedColumn<String> originDeviceId = GeneratedColumn<String>(
-      'originDeviceId', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _versionPhysicalMeta =
-      const VerificationMeta('versionPhysical');
+    'originDeviceId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _versionPhysicalMeta = const VerificationMeta(
+    'versionPhysical',
+  );
   @override
   late final GeneratedColumn<int> versionPhysical = GeneratedColumn<int>(
-      'versionPhysical', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _versionCounterMeta =
-      const VerificationMeta('versionCounter');
+    'versionPhysical',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _versionCounterMeta = const VerificationMeta(
+    'versionCounter',
+  );
   @override
   late final GeneratedColumn<int> versionCounter = GeneratedColumn<int>(
-      'versionCounter', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
+    'versionCounter',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        trackId,
-        startedAt,
-        endedAt,
-        listenedMs,
-        maxPositionMs,
-        endReason,
-        syncKey,
-        originDeviceId,
-        versionPhysical,
-        versionCounter
-      ];
+    id,
+    trackId,
+    startedAt,
+    endedAt,
+    listenedMs,
+    maxPositionMs,
+    endReason,
+    syncKey,
+    originDeviceId,
+    versionPhysical,
+    versionCounter,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'play_events';
   @override
-  VerificationContext validateIntegrity(Insertable<PlayEventRow> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<PlayEventRow> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     }
     if (data.containsKey('trackId')) {
-      context.handle(_trackIdMeta,
-          trackId.isAcceptableOrUnknown(data['trackId']!, _trackIdMeta));
+      context.handle(
+        _trackIdMeta,
+        trackId.isAcceptableOrUnknown(data['trackId']!, _trackIdMeta),
+      );
     } else if (isInserting) {
       context.missing(_trackIdMeta);
     }
     if (data.containsKey('startedAt')) {
-      context.handle(_startedAtMeta,
-          startedAt.isAcceptableOrUnknown(data['startedAt']!, _startedAtMeta));
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['startedAt']!, _startedAtMeta),
+      );
     } else if (isInserting) {
       context.missing(_startedAtMeta);
     }
     if (data.containsKey('endedAt')) {
-      context.handle(_endedAtMeta,
-          endedAt.isAcceptableOrUnknown(data['endedAt']!, _endedAtMeta));
+      context.handle(
+        _endedAtMeta,
+        endedAt.isAcceptableOrUnknown(data['endedAt']!, _endedAtMeta),
+      );
     }
     if (data.containsKey('listenedMs')) {
       context.handle(
-          _listenedMsMeta,
-          listenedMs.isAcceptableOrUnknown(
-              data['listenedMs']!, _listenedMsMeta));
+        _listenedMsMeta,
+        listenedMs.isAcceptableOrUnknown(data['listenedMs']!, _listenedMsMeta),
+      );
     }
     if (data.containsKey('maxPositionMs')) {
       context.handle(
+        _maxPositionMsMeta,
+        maxPositionMs.isAcceptableOrUnknown(
+          data['maxPositionMs']!,
           _maxPositionMsMeta,
-          maxPositionMs.isAcceptableOrUnknown(
-              data['maxPositionMs']!, _maxPositionMsMeta));
+        ),
+      );
     }
     if (data.containsKey('endReason')) {
-      context.handle(_endReasonMeta,
-          endReason.isAcceptableOrUnknown(data['endReason']!, _endReasonMeta));
+      context.handle(
+        _endReasonMeta,
+        endReason.isAcceptableOrUnknown(data['endReason']!, _endReasonMeta),
+      );
     }
     if (data.containsKey('syncKey')) {
-      context.handle(_syncKeyMeta,
-          syncKey.isAcceptableOrUnknown(data['syncKey']!, _syncKeyMeta));
+      context.handle(
+        _syncKeyMeta,
+        syncKey.isAcceptableOrUnknown(data['syncKey']!, _syncKeyMeta),
+      );
     }
     if (data.containsKey('originDeviceId')) {
       context.handle(
+        _originDeviceIdMeta,
+        originDeviceId.isAcceptableOrUnknown(
+          data['originDeviceId']!,
           _originDeviceIdMeta,
-          originDeviceId.isAcceptableOrUnknown(
-              data['originDeviceId']!, _originDeviceIdMeta));
+        ),
+      );
     }
     if (data.containsKey('versionPhysical')) {
       context.handle(
+        _versionPhysicalMeta,
+        versionPhysical.isAcceptableOrUnknown(
+          data['versionPhysical']!,
           _versionPhysicalMeta,
-          versionPhysical.isAcceptableOrUnknown(
-              data['versionPhysical']!, _versionPhysicalMeta));
+        ),
+      );
     }
     if (data.containsKey('versionCounter')) {
       context.handle(
+        _versionCounterMeta,
+        versionCounter.isAcceptableOrUnknown(
+          data['versionCounter']!,
           _versionCounterMeta,
-          versionCounter.isAcceptableOrUnknown(
-              data['versionCounter']!, _versionCounterMeta));
+        ),
+      );
     }
     return context;
   }
@@ -4024,28 +4810,50 @@ class $PlayEventsTable extends PlayEvents
   PlayEventRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return PlayEventRow(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
-      trackId: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}trackId'])!,
-      startedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}startedAt'])!,
-      endedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}endedAt']),
-      listenedMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}listenedMs'])!,
-      maxPositionMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}maxPositionMs'])!,
-      endReason: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}endReason']),
-      syncKey: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}syncKey']),
-      originDeviceId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}originDeviceId'])!,
-      versionPhysical: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionPhysical'])!,
-      versionCounter: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}versionCounter'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      trackId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}trackId'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}startedAt'],
+      )!,
+      endedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}endedAt'],
+      ),
+      listenedMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}listenedMs'],
+      )!,
+      maxPositionMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}maxPositionMs'],
+      )!,
+      endReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}endReason'],
+      ),
+      syncKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}syncKey'],
+      ),
+      originDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}originDeviceId'],
+      )!,
+      versionPhysical: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionPhysical'],
+      )!,
+      versionCounter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}versionCounter'],
+      )!,
     );
   }
 
@@ -4067,18 +4875,19 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   final String originDeviceId;
   final int versionPhysical;
   final int versionCounter;
-  const PlayEventRow(
-      {required this.id,
-      required this.trackId,
-      required this.startedAt,
-      this.endedAt,
-      required this.listenedMs,
-      required this.maxPositionMs,
-      this.endReason,
-      this.syncKey,
-      required this.originDeviceId,
-      required this.versionPhysical,
-      required this.versionCounter});
+  const PlayEventRow({
+    required this.id,
+    required this.trackId,
+    required this.startedAt,
+    this.endedAt,
+    required this.listenedMs,
+    required this.maxPositionMs,
+    this.endReason,
+    this.syncKey,
+    required this.originDeviceId,
+    required this.versionPhysical,
+    required this.versionCounter,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4124,8 +4933,10 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     );
   }
 
-  factory PlayEventRow.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory PlayEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return PlayEventRow(
       id: serializer.fromJson<int>(json['id']),
@@ -4159,39 +4970,40 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     };
   }
 
-  PlayEventRow copyWith(
-          {int? id,
-          int? trackId,
-          int? startedAt,
-          Value<int?> endedAt = const Value.absent(),
-          int? listenedMs,
-          int? maxPositionMs,
-          Value<String?> endReason = const Value.absent(),
-          Value<String?> syncKey = const Value.absent(),
-          String? originDeviceId,
-          int? versionPhysical,
-          int? versionCounter}) =>
-      PlayEventRow(
-        id: id ?? this.id,
-        trackId: trackId ?? this.trackId,
-        startedAt: startedAt ?? this.startedAt,
-        endedAt: endedAt.present ? endedAt.value : this.endedAt,
-        listenedMs: listenedMs ?? this.listenedMs,
-        maxPositionMs: maxPositionMs ?? this.maxPositionMs,
-        endReason: endReason.present ? endReason.value : this.endReason,
-        syncKey: syncKey.present ? syncKey.value : this.syncKey,
-        originDeviceId: originDeviceId ?? this.originDeviceId,
-        versionPhysical: versionPhysical ?? this.versionPhysical,
-        versionCounter: versionCounter ?? this.versionCounter,
-      );
+  PlayEventRow copyWith({
+    int? id,
+    int? trackId,
+    int? startedAt,
+    Value<int?> endedAt = const Value.absent(),
+    int? listenedMs,
+    int? maxPositionMs,
+    Value<String?> endReason = const Value.absent(),
+    Value<String?> syncKey = const Value.absent(),
+    String? originDeviceId,
+    int? versionPhysical,
+    int? versionCounter,
+  }) => PlayEventRow(
+    id: id ?? this.id,
+    trackId: trackId ?? this.trackId,
+    startedAt: startedAt ?? this.startedAt,
+    endedAt: endedAt.present ? endedAt.value : this.endedAt,
+    listenedMs: listenedMs ?? this.listenedMs,
+    maxPositionMs: maxPositionMs ?? this.maxPositionMs,
+    endReason: endReason.present ? endReason.value : this.endReason,
+    syncKey: syncKey.present ? syncKey.value : this.syncKey,
+    originDeviceId: originDeviceId ?? this.originDeviceId,
+    versionPhysical: versionPhysical ?? this.versionPhysical,
+    versionCounter: versionCounter ?? this.versionCounter,
+  );
   PlayEventRow copyWithCompanion(PlayEventsCompanion data) {
     return PlayEventRow(
       id: data.id.present ? data.id.value : this.id,
       trackId: data.trackId.present ? data.trackId.value : this.trackId,
       startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
       endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
-      listenedMs:
-          data.listenedMs.present ? data.listenedMs.value : this.listenedMs,
+      listenedMs: data.listenedMs.present
+          ? data.listenedMs.value
+          : this.listenedMs,
       maxPositionMs: data.maxPositionMs.present
           ? data.maxPositionMs.value
           : this.maxPositionMs,
@@ -4229,17 +5041,18 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
 
   @override
   int get hashCode => Object.hash(
-      id,
-      trackId,
-      startedAt,
-      endedAt,
-      listenedMs,
-      maxPositionMs,
-      endReason,
-      syncKey,
-      originDeviceId,
-      versionPhysical,
-      versionCounter);
+    id,
+    trackId,
+    startedAt,
+    endedAt,
+    listenedMs,
+    maxPositionMs,
+    endReason,
+    syncKey,
+    originDeviceId,
+    versionPhysical,
+    versionCounter,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4294,8 +5107,8 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
     this.originDeviceId = const Value.absent(),
     this.versionPhysical = const Value.absent(),
     this.versionCounter = const Value.absent(),
-  })  : trackId = Value(trackId),
-        startedAt = Value(startedAt);
+  }) : trackId = Value(trackId),
+       startedAt = Value(startedAt);
   static Insertable<PlayEventRow> custom({
     Expression<int>? id,
     Expression<int>? trackId,
@@ -4324,18 +5137,19 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
     });
   }
 
-  PlayEventsCompanion copyWith(
-      {Value<int>? id,
-      Value<int>? trackId,
-      Value<int>? startedAt,
-      Value<int?>? endedAt,
-      Value<int>? listenedMs,
-      Value<int>? maxPositionMs,
-      Value<String?>? endReason,
-      Value<String?>? syncKey,
-      Value<String>? originDeviceId,
-      Value<int>? versionPhysical,
-      Value<int>? versionCounter}) {
+  PlayEventsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? trackId,
+    Value<int>? startedAt,
+    Value<int?>? endedAt,
+    Value<int>? listenedMs,
+    Value<int>? maxPositionMs,
+    Value<String?>? endReason,
+    Value<String?>? syncKey,
+    Value<String>? originDeviceId,
+    Value<int>? versionPhysical,
+    Value<int>? versionCounter,
+  }) {
     return PlayEventsCompanion(
       id: id ?? this.id,
       trackId: trackId ?? this.trackId,
@@ -4418,146 +5232,223 @@ class $DownloadsTable extends Downloads
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<int> id = GeneratedColumn<int>(
-      'id', aliasedName, false,
-      hasAutoIncrement: true,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
-  static const VerificationMeta _originSourceKeyMeta =
-      const VerificationMeta('originSourceKey');
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _originSourceKeyMeta = const VerificationMeta(
+    'originSourceKey',
+  );
   @override
   late final GeneratedColumn<String> originSourceKey = GeneratedColumn<String>(
-      'originSourceKey', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
-  static const VerificationMeta _originSongIdMeta =
-      const VerificationMeta('originSongId');
+    'originSourceKey',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originSongIdMeta = const VerificationMeta(
+    'originSongId',
+  );
   @override
   late final GeneratedColumn<String> originSongId = GeneratedColumn<String>(
-      'originSongId', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'originSongId',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
-      'title', aliasedName, false,
-      type: DriftSqlType.string, requiredDuringInsert: true);
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
   static const VerificationMeta _artistMeta = const VerificationMeta('artist');
   @override
   late final GeneratedColumn<String> artist = GeneratedColumn<String>(
-      'artist', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
+    'artist',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _albumMeta = const VerificationMeta('album');
   @override
   late final GeneratedColumn<String> album = GeneratedColumn<String>(
-      'album', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _coverUrlMeta =
-      const VerificationMeta('coverUrl');
+    'album',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _coverUrlMeta = const VerificationMeta(
+    'coverUrl',
+  );
   @override
   late final GeneratedColumn<String> coverUrl = GeneratedColumn<String>(
-      'coverUrl', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _durationMsMeta =
-      const VerificationMeta('durationMs');
+    'coverUrl',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _durationMsMeta = const VerificationMeta(
+    'durationMs',
+  );
   @override
   late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
-      'durationMs', aliasedName, true,
-      type: DriftSqlType.int, requiredDuringInsert: false);
+    'durationMs',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _rawMeta = const VerificationMeta('raw');
   @override
   late final GeneratedColumn<String> raw = GeneratedColumn<String>(
-      'raw', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant('{}'));
-  static const VerificationMeta _qualityMeta =
-      const VerificationMeta('quality');
+    'raw',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _qualityMeta = const VerificationMeta(
+    'quality',
+  );
   @override
   late final GeneratedColumn<String> quality = GeneratedColumn<String>(
-      'quality', aliasedName, false,
-      type: DriftSqlType.string,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(''));
-  static const VerificationMeta _filePathMeta =
-      const VerificationMeta('filePath');
+    'quality',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _filePathMeta = const VerificationMeta(
+    'filePath',
+  );
   @override
   late final GeneratedColumn<String> filePath = GeneratedColumn<String>(
-      'filePath', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _sizeBytesMeta =
-      const VerificationMeta('sizeBytes');
+    'filePath',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sizeBytesMeta = const VerificationMeta(
+    'sizeBytes',
+  );
   @override
   late final GeneratedColumn<int> sizeBytes = GeneratedColumn<int>(
-      'sizeBytes', aliasedName, false,
-      type: DriftSqlType.int,
-      requiredDuringInsert: false,
-      defaultValue: const Constant(0));
-  static const VerificationMeta _lyricPathMeta =
-      const VerificationMeta('lyricPath');
+    'sizeBytes',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lyricPathMeta = const VerificationMeta(
+    'lyricPath',
+  );
   @override
   late final GeneratedColumn<String> lyricPath = GeneratedColumn<String>(
-      'lyricPath', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _coverPathMeta =
-      const VerificationMeta('coverPath');
+    'lyricPath',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _coverPathMeta = const VerificationMeta(
+    'coverPath',
+  );
   @override
   late final GeneratedColumn<String> coverPath = GeneratedColumn<String>(
-      'coverPath', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _publicUriMeta =
-      const VerificationMeta('publicUri');
+    'coverPath',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _publicUriMeta = const VerificationMeta(
+    'publicUri',
+  );
   @override
   late final GeneratedColumn<String> publicUri = GeneratedColumn<String>(
-      'publicUri', aliasedName, true,
-      type: DriftSqlType.string, requiredDuringInsert: false);
-  static const VerificationMeta _importedMeta =
-      const VerificationMeta('imported');
+    'publicUri',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _importedMeta = const VerificationMeta(
+    'imported',
+  );
   @override
   late final GeneratedColumn<bool> imported = GeneratedColumn<bool>(
-      'imported', aliasedName, false,
-      type: DriftSqlType.bool,
-      requiredDuringInsert: false,
-      defaultConstraints:
-          GeneratedColumn.constraintIsAlways('CHECK ("imported" IN (0, 1))'),
-      defaultValue: const Constant(false));
-  static const VerificationMeta _downloadedAtMeta =
-      const VerificationMeta('downloadedAt');
+    'imported',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("imported" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _downloadedAtMeta = const VerificationMeta(
+    'downloadedAt',
+  );
   @override
   late final GeneratedColumn<int> downloadedAt = GeneratedColumn<int>(
-      'downloadedAt', aliasedName, false,
-      type: DriftSqlType.int, requiredDuringInsert: true);
+    'downloadedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
   @override
   List<GeneratedColumn> get $columns => [
-        id,
-        originSourceKey,
-        originSongId,
-        title,
-        artist,
-        album,
-        coverUrl,
-        durationMs,
-        raw,
-        quality,
-        filePath,
-        sizeBytes,
-        lyricPath,
-        coverPath,
-        publicUri,
-        imported,
-        downloadedAt
-      ];
+    id,
+    originSourceKey,
+    originSongId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    quality,
+    filePath,
+    sizeBytes,
+    lyricPath,
+    coverPath,
+    publicUri,
+    imported,
+    downloadedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
   String get actualTableName => $name;
   static const String $name = 'downloads';
   @override
-  VerificationContext validateIntegrity(Insertable<DownloadRow> instance,
-      {bool isInserting = false}) {
+  VerificationContext validateIntegrity(
+    Insertable<DownloadRow> instance, {
+    bool isInserting = false,
+  }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
@@ -4565,81 +5456,114 @@ class $DownloadsTable extends Downloads
     }
     if (data.containsKey('originSourceKey')) {
       context.handle(
+        _originSourceKeyMeta,
+        originSourceKey.isAcceptableOrUnknown(
+          data['originSourceKey']!,
           _originSourceKeyMeta,
-          originSourceKey.isAcceptableOrUnknown(
-              data['originSourceKey']!, _originSourceKeyMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_originSourceKeyMeta);
     }
     if (data.containsKey('originSongId')) {
       context.handle(
+        _originSongIdMeta,
+        originSongId.isAcceptableOrUnknown(
+          data['originSongId']!,
           _originSongIdMeta,
-          originSongId.isAcceptableOrUnknown(
-              data['originSongId']!, _originSongIdMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_originSongIdMeta);
     }
     if (data.containsKey('title')) {
       context.handle(
-          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
     } else if (isInserting) {
       context.missing(_titleMeta);
     }
     if (data.containsKey('artist')) {
-      context.handle(_artistMeta,
-          artist.isAcceptableOrUnknown(data['artist']!, _artistMeta));
+      context.handle(
+        _artistMeta,
+        artist.isAcceptableOrUnknown(data['artist']!, _artistMeta),
+      );
     }
     if (data.containsKey('album')) {
       context.handle(
-          _albumMeta, album.isAcceptableOrUnknown(data['album']!, _albumMeta));
+        _albumMeta,
+        album.isAcceptableOrUnknown(data['album']!, _albumMeta),
+      );
     }
     if (data.containsKey('coverUrl')) {
-      context.handle(_coverUrlMeta,
-          coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta));
+      context.handle(
+        _coverUrlMeta,
+        coverUrl.isAcceptableOrUnknown(data['coverUrl']!, _coverUrlMeta),
+      );
     }
     if (data.containsKey('durationMs')) {
       context.handle(
-          _durationMsMeta,
-          durationMs.isAcceptableOrUnknown(
-              data['durationMs']!, _durationMsMeta));
+        _durationMsMeta,
+        durationMs.isAcceptableOrUnknown(data['durationMs']!, _durationMsMeta),
+      );
     }
     if (data.containsKey('raw')) {
       context.handle(
-          _rawMeta, raw.isAcceptableOrUnknown(data['raw']!, _rawMeta));
+        _rawMeta,
+        raw.isAcceptableOrUnknown(data['raw']!, _rawMeta),
+      );
     }
     if (data.containsKey('quality')) {
-      context.handle(_qualityMeta,
-          quality.isAcceptableOrUnknown(data['quality']!, _qualityMeta));
+      context.handle(
+        _qualityMeta,
+        quality.isAcceptableOrUnknown(data['quality']!, _qualityMeta),
+      );
     }
     if (data.containsKey('filePath')) {
-      context.handle(_filePathMeta,
-          filePath.isAcceptableOrUnknown(data['filePath']!, _filePathMeta));
+      context.handle(
+        _filePathMeta,
+        filePath.isAcceptableOrUnknown(data['filePath']!, _filePathMeta),
+      );
     }
     if (data.containsKey('sizeBytes')) {
-      context.handle(_sizeBytesMeta,
-          sizeBytes.isAcceptableOrUnknown(data['sizeBytes']!, _sizeBytesMeta));
+      context.handle(
+        _sizeBytesMeta,
+        sizeBytes.isAcceptableOrUnknown(data['sizeBytes']!, _sizeBytesMeta),
+      );
     }
     if (data.containsKey('lyricPath')) {
-      context.handle(_lyricPathMeta,
-          lyricPath.isAcceptableOrUnknown(data['lyricPath']!, _lyricPathMeta));
+      context.handle(
+        _lyricPathMeta,
+        lyricPath.isAcceptableOrUnknown(data['lyricPath']!, _lyricPathMeta),
+      );
     }
     if (data.containsKey('coverPath')) {
-      context.handle(_coverPathMeta,
-          coverPath.isAcceptableOrUnknown(data['coverPath']!, _coverPathMeta));
+      context.handle(
+        _coverPathMeta,
+        coverPath.isAcceptableOrUnknown(data['coverPath']!, _coverPathMeta),
+      );
     }
     if (data.containsKey('publicUri')) {
-      context.handle(_publicUriMeta,
-          publicUri.isAcceptableOrUnknown(data['publicUri']!, _publicUriMeta));
+      context.handle(
+        _publicUriMeta,
+        publicUri.isAcceptableOrUnknown(data['publicUri']!, _publicUriMeta),
+      );
     }
     if (data.containsKey('imported')) {
-      context.handle(_importedMeta,
-          imported.isAcceptableOrUnknown(data['imported']!, _importedMeta));
+      context.handle(
+        _importedMeta,
+        imported.isAcceptableOrUnknown(data['imported']!, _importedMeta),
+      );
     }
     if (data.containsKey('downloadedAt')) {
       context.handle(
+        _downloadedAtMeta,
+        downloadedAt.isAcceptableOrUnknown(
+          data['downloadedAt']!,
           _downloadedAtMeta,
-          downloadedAt.isAcceptableOrUnknown(
-              data['downloadedAt']!, _downloadedAtMeta));
+        ),
+      );
     } else if (isInserting) {
       context.missing(_downloadedAtMeta);
     }
@@ -4652,40 +5576,74 @@ class $DownloadsTable extends Downloads
   DownloadRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DownloadRow(
-      id: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
       originSourceKey: attachedDatabase.typeMapping.read(
-          DriftSqlType.string, data['${effectivePrefix}originSourceKey'])!,
-      originSongId: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}originSongId'])!,
-      title: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
-      artist: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}artist'])!,
-      album: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}album'])!,
-      coverUrl: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}coverUrl']),
-      durationMs: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}durationMs']),
-      raw: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}raw'])!,
-      quality: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}quality'])!,
-      filePath: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}filePath']),
-      sizeBytes: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}sizeBytes'])!,
-      lyricPath: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}lyricPath']),
-      coverPath: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}coverPath']),
-      publicUri: attachedDatabase.typeMapping
-          .read(DriftSqlType.string, data['${effectivePrefix}publicUri']),
-      imported: attachedDatabase.typeMapping
-          .read(DriftSqlType.bool, data['${effectivePrefix}imported'])!,
-      downloadedAt: attachedDatabase.typeMapping
-          .read(DriftSqlType.int, data['${effectivePrefix}downloadedAt'])!,
+        DriftSqlType.string,
+        data['${effectivePrefix}originSourceKey'],
+      )!,
+      originSongId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}originSongId'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      artist: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artist'],
+      )!,
+      album: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}album'],
+      )!,
+      coverUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverUrl'],
+      ),
+      durationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}durationMs'],
+      ),
+      raw: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}raw'],
+      )!,
+      quality: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}quality'],
+      )!,
+      filePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}filePath'],
+      ),
+      sizeBytes: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sizeBytes'],
+      )!,
+      lyricPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}lyricPath'],
+      ),
+      coverPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}coverPath'],
+      ),
+      publicUri: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}publicUri'],
+      ),
+      imported: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}imported'],
+      )!,
+      downloadedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}downloadedAt'],
+      )!,
     );
   }
 
@@ -4713,24 +5671,25 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
   final String? publicUri;
   final bool imported;
   final int downloadedAt;
-  const DownloadRow(
-      {required this.id,
-      required this.originSourceKey,
-      required this.originSongId,
-      required this.title,
-      required this.artist,
-      required this.album,
-      this.coverUrl,
-      this.durationMs,
-      required this.raw,
-      required this.quality,
-      this.filePath,
-      required this.sizeBytes,
-      this.lyricPath,
-      this.coverPath,
-      this.publicUri,
-      required this.imported,
-      required this.downloadedAt});
+  const DownloadRow({
+    required this.id,
+    required this.originSourceKey,
+    required this.originSongId,
+    required this.title,
+    required this.artist,
+    required this.album,
+    this.coverUrl,
+    this.durationMs,
+    required this.raw,
+    required this.quality,
+    this.filePath,
+    required this.sizeBytes,
+    this.lyricPath,
+    this.coverPath,
+    this.publicUri,
+    required this.imported,
+    required this.downloadedAt,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -4800,8 +5759,10 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     );
   }
 
-  factory DownloadRow.fromJson(Map<String, dynamic> json,
-      {ValueSerializer? serializer}) {
+  factory DownloadRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return DownloadRow(
       id: serializer.fromJson<int>(json['id']),
@@ -4847,43 +5808,43 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
     };
   }
 
-  DownloadRow copyWith(
-          {int? id,
-          String? originSourceKey,
-          String? originSongId,
-          String? title,
-          String? artist,
-          String? album,
-          Value<String?> coverUrl = const Value.absent(),
-          Value<int?> durationMs = const Value.absent(),
-          String? raw,
-          String? quality,
-          Value<String?> filePath = const Value.absent(),
-          int? sizeBytes,
-          Value<String?> lyricPath = const Value.absent(),
-          Value<String?> coverPath = const Value.absent(),
-          Value<String?> publicUri = const Value.absent(),
-          bool? imported,
-          int? downloadedAt}) =>
-      DownloadRow(
-        id: id ?? this.id,
-        originSourceKey: originSourceKey ?? this.originSourceKey,
-        originSongId: originSongId ?? this.originSongId,
-        title: title ?? this.title,
-        artist: artist ?? this.artist,
-        album: album ?? this.album,
-        coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
-        durationMs: durationMs.present ? durationMs.value : this.durationMs,
-        raw: raw ?? this.raw,
-        quality: quality ?? this.quality,
-        filePath: filePath.present ? filePath.value : this.filePath,
-        sizeBytes: sizeBytes ?? this.sizeBytes,
-        lyricPath: lyricPath.present ? lyricPath.value : this.lyricPath,
-        coverPath: coverPath.present ? coverPath.value : this.coverPath,
-        publicUri: publicUri.present ? publicUri.value : this.publicUri,
-        imported: imported ?? this.imported,
-        downloadedAt: downloadedAt ?? this.downloadedAt,
-      );
+  DownloadRow copyWith({
+    int? id,
+    String? originSourceKey,
+    String? originSongId,
+    String? title,
+    String? artist,
+    String? album,
+    Value<String?> coverUrl = const Value.absent(),
+    Value<int?> durationMs = const Value.absent(),
+    String? raw,
+    String? quality,
+    Value<String?> filePath = const Value.absent(),
+    int? sizeBytes,
+    Value<String?> lyricPath = const Value.absent(),
+    Value<String?> coverPath = const Value.absent(),
+    Value<String?> publicUri = const Value.absent(),
+    bool? imported,
+    int? downloadedAt,
+  }) => DownloadRow(
+    id: id ?? this.id,
+    originSourceKey: originSourceKey ?? this.originSourceKey,
+    originSongId: originSongId ?? this.originSongId,
+    title: title ?? this.title,
+    artist: artist ?? this.artist,
+    album: album ?? this.album,
+    coverUrl: coverUrl.present ? coverUrl.value : this.coverUrl,
+    durationMs: durationMs.present ? durationMs.value : this.durationMs,
+    raw: raw ?? this.raw,
+    quality: quality ?? this.quality,
+    filePath: filePath.present ? filePath.value : this.filePath,
+    sizeBytes: sizeBytes ?? this.sizeBytes,
+    lyricPath: lyricPath.present ? lyricPath.value : this.lyricPath,
+    coverPath: coverPath.present ? coverPath.value : this.coverPath,
+    publicUri: publicUri.present ? publicUri.value : this.publicUri,
+    imported: imported ?? this.imported,
+    downloadedAt: downloadedAt ?? this.downloadedAt,
+  );
   DownloadRow copyWithCompanion(DownloadsCompanion data) {
     return DownloadRow(
       id: data.id.present ? data.id.value : this.id,
@@ -4897,8 +5858,9 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
       artist: data.artist.present ? data.artist.value : this.artist,
       album: data.album.present ? data.album.value : this.album,
       coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
-      durationMs:
-          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      durationMs: data.durationMs.present
+          ? data.durationMs.value
+          : this.durationMs,
       raw: data.raw.present ? data.raw.value : this.raw,
       quality: data.quality.present ? data.quality.value : this.quality,
       filePath: data.filePath.present ? data.filePath.value : this.filePath,
@@ -4939,23 +5901,24 @@ class DownloadRow extends DataClass implements Insertable<DownloadRow> {
 
   @override
   int get hashCode => Object.hash(
-      id,
-      originSourceKey,
-      originSongId,
-      title,
-      artist,
-      album,
-      coverUrl,
-      durationMs,
-      raw,
-      quality,
-      filePath,
-      sizeBytes,
-      lyricPath,
-      coverPath,
-      publicUri,
-      imported,
-      downloadedAt);
+    id,
+    originSourceKey,
+    originSongId,
+    title,
+    artist,
+    album,
+    coverUrl,
+    durationMs,
+    raw,
+    quality,
+    filePath,
+    sizeBytes,
+    lyricPath,
+    coverPath,
+    publicUri,
+    imported,
+    downloadedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -5034,10 +5997,10 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     this.publicUri = const Value.absent(),
     this.imported = const Value.absent(),
     required int downloadedAt,
-  })  : originSourceKey = Value(originSourceKey),
-        originSongId = Value(originSongId),
-        title = Value(title),
-        downloadedAt = Value(downloadedAt);
+  }) : originSourceKey = Value(originSourceKey),
+       originSongId = Value(originSongId),
+       title = Value(title),
+       downloadedAt = Value(downloadedAt);
   static Insertable<DownloadRow> custom({
     Expression<int>? id,
     Expression<String>? originSourceKey,
@@ -5078,24 +6041,25 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
     });
   }
 
-  DownloadsCompanion copyWith(
-      {Value<int>? id,
-      Value<String>? originSourceKey,
-      Value<String>? originSongId,
-      Value<String>? title,
-      Value<String>? artist,
-      Value<String>? album,
-      Value<String?>? coverUrl,
-      Value<int?>? durationMs,
-      Value<String>? raw,
-      Value<String>? quality,
-      Value<String?>? filePath,
-      Value<int>? sizeBytes,
-      Value<String?>? lyricPath,
-      Value<String?>? coverPath,
-      Value<String?>? publicUri,
-      Value<bool>? imported,
-      Value<int>? downloadedAt}) {
+  DownloadsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? originSourceKey,
+    Value<String>? originSongId,
+    Value<String>? title,
+    Value<String>? artist,
+    Value<String>? album,
+    Value<String?>? coverUrl,
+    Value<int?>? durationMs,
+    Value<String>? raw,
+    Value<String>? quality,
+    Value<String?>? filePath,
+    Value<int>? sizeBytes,
+    Value<String?>? lyricPath,
+    Value<String?>? coverPath,
+    Value<String?>? publicUri,
+    Value<bool>? imported,
+    Value<int>? downloadedAt,
+  }) {
     return DownloadsCompanion(
       id: id ?? this.id,
       originSourceKey: originSourceKey ?? this.originSourceKey,
@@ -5215,74 +6179,92 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   late final $PlayEventsTable playEvents = $PlayEventsTable(this);
   late final $DownloadsTable downloads = $DownloadsTable(this);
   late final Index idxPlayContextsLastPlayedAt = Index(
-      'idx_play_contexts_lastPlayedAt',
-      'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt)');
-  late final Index idxPlayHistoryPlayedAt = Index('idx_play_history_playedAt',
-      'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)');
-  late final Index idxPlaylistsSyncId = Index('idx_playlists_syncId',
-      'CREATE UNIQUE INDEX idx_playlists_syncId ON playlists (syncId) WHERE syncId IS NOT NULL');
-  late final Index idxPlaylistTracksOrder = Index('idx_playlist_tracks_order',
-      'CREATE INDEX idx_playlist_tracks_order ON playlist_tracks (playlistId, sortOrder, addedAt)');
-  late final Index idxSyncJournalAt = Index('idx_sync_journal_at',
-      'CREATE INDEX idx_sync_journal_at ON sync_journal (at)');
-  late final Index idxPlayEventsStartedAt = Index('idx_play_events_startedAt',
-      'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)');
-  late final Index idxPlayEventsTrackId = Index('idx_play_events_trackId',
-      'CREATE INDEX idx_play_events_trackId ON play_events (trackId)');
-  late final Index idxPlayEventsEndedAt = Index('idx_play_events_endedAt',
-      'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)');
-  late final Index idxPlayEventsSyncKey = Index('idx_play_events_syncKey',
-      'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL');
+    'idx_play_contexts_lastPlayedAt',
+    'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt)',
+  );
+  late final Index idxPlayHistoryPlayedAt = Index(
+    'idx_play_history_playedAt',
+    'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
+  );
+  late final Index idxPlaylistsSyncId = Index(
+    'idx_playlists_syncId',
+    'CREATE UNIQUE INDEX idx_playlists_syncId ON playlists (syncId) WHERE syncId IS NOT NULL',
+  );
+  late final Index idxPlaylistTracksOrder = Index(
+    'idx_playlist_tracks_order',
+    'CREATE INDEX idx_playlist_tracks_order ON playlist_tracks (playlistId, sortOrder, addedAt)',
+  );
+  late final Index idxSyncJournalAt = Index(
+    'idx_sync_journal_at',
+    'CREATE INDEX idx_sync_journal_at ON sync_journal (at)',
+  );
+  late final Index idxPlayEventsStartedAt = Index(
+    'idx_play_events_startedAt',
+    'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)',
+  );
+  late final Index idxPlayEventsTrackId = Index(
+    'idx_play_events_trackId',
+    'CREATE INDEX idx_play_events_trackId ON play_events (trackId)',
+  );
+  late final Index idxPlayEventsEndedAt = Index(
+    'idx_play_events_endedAt',
+    'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)',
+  );
+  late final Index idxPlayEventsSyncKey = Index(
+    'idx_play_events_syncKey',
+    'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL',
+  );
   late final Index idxDownloadsDownloadedAt = Index(
-      'idx_downloads_downloadedAt',
-      'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)');
+    'idx_downloads_downloadedAt',
+    'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
-        playContexts,
-        playHistory,
-        playlists,
-        playlistTracks,
-        syncTombstones,
-        syncKnown,
-        syncJournal,
-        syncJournalStates,
-        playTracks,
-        playEvents,
-        downloads,
-        idxPlayContextsLastPlayedAt,
-        idxPlayHistoryPlayedAt,
-        idxPlaylistsSyncId,
-        idxPlaylistTracksOrder,
-        idxSyncJournalAt,
-        idxPlayEventsStartedAt,
-        idxPlayEventsTrackId,
-        idxPlayEventsEndedAt,
-        idxPlayEventsSyncKey,
-        idxDownloadsDownloadedAt
-      ];
+    playContexts,
+    playHistory,
+    playlists,
+    playlistTracks,
+    syncTombstones,
+    syncKnown,
+    syncJournal,
+    syncJournalStates,
+    playTracks,
+    playEvents,
+    downloads,
+    idxPlayContextsLastPlayedAt,
+    idxPlayHistoryPlayedAt,
+    idxPlaylistsSyncId,
+    idxPlaylistTracksOrder,
+    idxSyncJournalAt,
+    idxPlayEventsStartedAt,
+    idxPlayEventsTrackId,
+    idxPlayEventsEndedAt,
+    idxPlayEventsSyncKey,
+    idxDownloadsDownloadedAt,
+  ];
 }
 
-typedef $$PlayContextsTableCreateCompanionBuilder = PlayContextsCompanion
-    Function({
-  Value<String?> contextUri,
-  required String contextType,
-  required String contextName,
-  Value<String?> imageUrl,
-  required int lastPlayedAt,
-  Value<int> rowid,
-});
-typedef $$PlayContextsTableUpdateCompanionBuilder = PlayContextsCompanion
-    Function({
-  Value<String?> contextUri,
-  Value<String> contextType,
-  Value<String> contextName,
-  Value<String?> imageUrl,
-  Value<int> lastPlayedAt,
-  Value<int> rowid,
-});
+typedef $$PlayContextsTableCreateCompanionBuilder =
+    PlayContextsCompanion Function({
+      Value<String?> contextUri,
+      required String contextType,
+      required String contextName,
+      Value<String?> imageUrl,
+      required int lastPlayedAt,
+      Value<int> rowid,
+    });
+typedef $$PlayContextsTableUpdateCompanionBuilder =
+    PlayContextsCompanion Function({
+      Value<String?> contextUri,
+      Value<String> contextType,
+      Value<String> contextName,
+      Value<String?> imageUrl,
+      Value<int> lastPlayedAt,
+      Value<int> rowid,
+    });
 
 class $$PlayContextsTableFilterComposer
     extends Composer<_$MoliaDatabase, $PlayContextsTable> {
@@ -5294,19 +6276,29 @@ class $$PlayContextsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get contextUri => $composableBuilder(
-      column: $table.contextUri, builder: (column) => ColumnFilters(column));
+    column: $table.contextUri,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get contextType => $composableBuilder(
-      column: $table.contextType, builder: (column) => ColumnFilters(column));
+    column: $table.contextType,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get contextName => $composableBuilder(
-      column: $table.contextName, builder: (column) => ColumnFilters(column));
+    column: $table.contextName,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get imageUrl => $composableBuilder(
-      column: $table.imageUrl, builder: (column) => ColumnFilters(column));
+    column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get lastPlayedAt => $composableBuilder(
-      column: $table.lastPlayedAt, builder: (column) => ColumnFilters(column));
+    column: $table.lastPlayedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PlayContextsTableOrderingComposer
@@ -5319,20 +6311,29 @@ class $$PlayContextsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get contextUri => $composableBuilder(
-      column: $table.contextUri, builder: (column) => ColumnOrderings(column));
+    column: $table.contextUri,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get contextType => $composableBuilder(
-      column: $table.contextType, builder: (column) => ColumnOrderings(column));
+    column: $table.contextType,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get contextName => $composableBuilder(
-      column: $table.contextName, builder: (column) => ColumnOrderings(column));
+    column: $table.contextName,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get imageUrl => $composableBuilder(
-      column: $table.imageUrl, builder: (column) => ColumnOrderings(column));
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get lastPlayedAt => $composableBuilder(
-      column: $table.lastPlayedAt,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.lastPlayedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PlayContextsTableAnnotationComposer
@@ -5345,38 +6346,50 @@ class $$PlayContextsTableAnnotationComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   GeneratedColumn<String> get contextUri => $composableBuilder(
-      column: $table.contextUri, builder: (column) => column);
+    column: $table.contextUri,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get contextType => $composableBuilder(
-      column: $table.contextType, builder: (column) => column);
+    column: $table.contextType,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get contextName => $composableBuilder(
-      column: $table.contextName, builder: (column) => column);
+    column: $table.contextName,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get imageUrl =>
       $composableBuilder(column: $table.imageUrl, builder: (column) => column);
 
   GeneratedColumn<int> get lastPlayedAt => $composableBuilder(
-      column: $table.lastPlayedAt, builder: (column) => column);
+    column: $table.lastPlayedAt,
+    builder: (column) => column,
+  );
 }
 
-class $$PlayContextsTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $PlayContextsTable,
-    PlayContext,
-    $$PlayContextsTableFilterComposer,
-    $$PlayContextsTableOrderingComposer,
-    $$PlayContextsTableAnnotationComposer,
-    $$PlayContextsTableCreateCompanionBuilder,
-    $$PlayContextsTableUpdateCompanionBuilder,
-    (
-      PlayContext,
-      BaseReferences<_$MoliaDatabase, $PlayContextsTable, PlayContext>
-    ),
-    PlayContext,
-    PrefetchHooks Function()> {
+class $$PlayContextsTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlayContextsTable,
+          PlayContext,
+          $$PlayContextsTableFilterComposer,
+          $$PlayContextsTableOrderingComposer,
+          $$PlayContextsTableAnnotationComposer,
+          $$PlayContextsTableCreateCompanionBuilder,
+          $$PlayContextsTableUpdateCompanionBuilder,
+          (
+            PlayContext,
+            BaseReferences<_$MoliaDatabase, $PlayContextsTable, PlayContext>,
+          ),
+          PlayContext,
+          PrefetchHooks Function()
+        > {
   $$PlayContextsTableTableManager(_$MoliaDatabase db, $PlayContextsTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -5385,96 +6398,104 @@ class $$PlayContextsTableTableManager extends RootTableManager<
               $$PlayContextsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PlayContextsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<String?> contextUri = const Value.absent(),
-            Value<String> contextType = const Value.absent(),
-            Value<String> contextName = const Value.absent(),
-            Value<String?> imageUrl = const Value.absent(),
-            Value<int> lastPlayedAt = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              PlayContextsCompanion(
-            contextUri: contextUri,
-            contextType: contextType,
-            contextName: contextName,
-            imageUrl: imageUrl,
-            lastPlayedAt: lastPlayedAt,
-            rowid: rowid,
-          ),
-          createCompanionCallback: ({
-            Value<String?> contextUri = const Value.absent(),
-            required String contextType,
-            required String contextName,
-            Value<String?> imageUrl = const Value.absent(),
-            required int lastPlayedAt,
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              PlayContextsCompanion.insert(
-            contextUri: contextUri,
-            contextType: contextType,
-            contextName: contextName,
-            imageUrl: imageUrl,
-            lastPlayedAt: lastPlayedAt,
-            rowid: rowid,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<String?> contextUri = const Value.absent(),
+                Value<String> contextType = const Value.absent(),
+                Value<String> contextName = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
+                Value<int> lastPlayedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlayContextsCompanion(
+                contextUri: contextUri,
+                contextType: contextType,
+                contextName: contextName,
+                imageUrl: imageUrl,
+                lastPlayedAt: lastPlayedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                Value<String?> contextUri = const Value.absent(),
+                required String contextType,
+                required String contextName,
+                Value<String?> imageUrl = const Value.absent(),
+                required int lastPlayedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PlayContextsCompanion.insert(
+                contextUri: contextUri,
+                contextType: contextType,
+                contextName: contextName,
+                imageUrl: imageUrl,
+                lastPlayedAt: lastPlayedAt,
+                rowid: rowid,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$PlayContextsTable, PlayContext>(table),
-                    BaseReferences<_$MoliaDatabase, $PlayContextsTable,
-                        PlayContext>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$PlayContextsTable, PlayContext>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $PlayContextsTable,
+                    PlayContext
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PlayContextsTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $PlayContextsTable,
-    PlayContext,
-    $$PlayContextsTableFilterComposer,
-    $$PlayContextsTableOrderingComposer,
-    $$PlayContextsTableAnnotationComposer,
-    $$PlayContextsTableCreateCompanionBuilder,
-    $$PlayContextsTableUpdateCompanionBuilder,
-    (
+typedef $$PlayContextsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlayContextsTable,
       PlayContext,
-      BaseReferences<_$MoliaDatabase, $PlayContextsTable, PlayContext>
-    ),
-    PlayContext,
-    PrefetchHooks Function()>;
-typedef $$PlayHistoryTableCreateCompanionBuilder = PlayHistoryCompanion
-    Function({
-  required String sourceKey,
-  required String songId,
-  required String title,
-  Value<String> artist,
-  Value<String> album,
-  Value<String?> coverUrl,
-  Value<int?> durationMs,
-  Value<String> raw,
-  required int playedAt,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-  Value<int> rowid,
-});
-typedef $$PlayHistoryTableUpdateCompanionBuilder = PlayHistoryCompanion
-    Function({
-  Value<String> sourceKey,
-  Value<String> songId,
-  Value<String> title,
-  Value<String> artist,
-  Value<String> album,
-  Value<String?> coverUrl,
-  Value<int?> durationMs,
-  Value<String> raw,
-  Value<int> playedAt,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-  Value<int> rowid,
-});
+      $$PlayContextsTableFilterComposer,
+      $$PlayContextsTableOrderingComposer,
+      $$PlayContextsTableAnnotationComposer,
+      $$PlayContextsTableCreateCompanionBuilder,
+      $$PlayContextsTableUpdateCompanionBuilder,
+      (
+        PlayContext,
+        BaseReferences<_$MoliaDatabase, $PlayContextsTable, PlayContext>,
+      ),
+      PlayContext,
+      PrefetchHooks Function()
+    >;
+typedef $$PlayHistoryTableCreateCompanionBuilder =
+    PlayHistoryCompanion Function({
+      required String sourceKey,
+      required String songId,
+      required String title,
+      Value<String> artist,
+      Value<String> album,
+      Value<String?> coverUrl,
+      Value<int?> durationMs,
+      Value<String> raw,
+      required int playedAt,
+      Value<int> versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+      Value<int> rowid,
+    });
+typedef $$PlayHistoryTableUpdateCompanionBuilder =
+    PlayHistoryCompanion Function({
+      Value<String> sourceKey,
+      Value<String> songId,
+      Value<String> title,
+      Value<String> artist,
+      Value<String> album,
+      Value<String?> coverUrl,
+      Value<int?> durationMs,
+      Value<String> raw,
+      Value<int> playedAt,
+      Value<int> versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+      Value<int> rowid,
+    });
 
 class $$PlayHistoryTableFilterComposer
     extends Composer<_$MoliaDatabase, $PlayHistoryTable> {
@@ -5486,42 +6507,64 @@ class $$PlayHistoryTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get sourceKey => $composableBuilder(
-      column: $table.sourceKey, builder: (column) => ColumnFilters(column));
+    column: $table.sourceKey,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get songId => $composableBuilder(
-      column: $table.songId, builder: (column) => ColumnFilters(column));
+    column: $table.songId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnFilters(column));
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnFilters(column));
+    column: $table.artist,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnFilters(column));
+    column: $table.album,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnFilters(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnFilters(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnFilters(column));
+    column: $table.raw,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get playedAt => $composableBuilder(
-      column: $table.playedAt, builder: (column) => ColumnFilters(column));
+    column: $table.playedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PlayHistoryTableOrderingComposer
@@ -5534,42 +6577,64 @@ class $$PlayHistoryTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get sourceKey => $composableBuilder(
-      column: $table.sourceKey, builder: (column) => ColumnOrderings(column));
+    column: $table.sourceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get songId => $composableBuilder(
-      column: $table.songId, builder: (column) => ColumnOrderings(column));
+    column: $table.songId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnOrderings(column));
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnOrderings(column));
+    column: $table.artist,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnOrderings(column));
+    column: $table.album,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnOrderings(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnOrderings(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnOrderings(column));
+    column: $table.raw,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get playedAt => $composableBuilder(
-      column: $table.playedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.playedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PlayHistoryTableAnnotationComposer
@@ -5600,7 +6665,9 @@ class $$PlayHistoryTableAnnotationComposer
       $composableBuilder(column: $table.coverUrl, builder: (column) => column);
 
   GeneratedColumn<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => column);
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get raw =>
       $composableBuilder(column: $table.raw, builder: (column) => column);
@@ -5609,32 +6676,40 @@ class $$PlayHistoryTableAnnotationComposer
       $composableBuilder(column: $table.playedAt, builder: (column) => column);
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 }
 
-class $$PlayHistoryTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $PlayHistoryTable,
-    PlayHistoryData,
-    $$PlayHistoryTableFilterComposer,
-    $$PlayHistoryTableOrderingComposer,
-    $$PlayHistoryTableAnnotationComposer,
-    $$PlayHistoryTableCreateCompanionBuilder,
-    $$PlayHistoryTableUpdateCompanionBuilder,
-    (
-      PlayHistoryData,
-      BaseReferences<_$MoliaDatabase, $PlayHistoryTable, PlayHistoryData>
-    ),
-    PlayHistoryData,
-    PrefetchHooks Function()> {
+class $$PlayHistoryTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlayHistoryTable,
+          PlayHistoryData,
+          $$PlayHistoryTableFilterComposer,
+          $$PlayHistoryTableOrderingComposer,
+          $$PlayHistoryTableAnnotationComposer,
+          $$PlayHistoryTableCreateCompanionBuilder,
+          $$PlayHistoryTableUpdateCompanionBuilder,
+          (
+            PlayHistoryData,
+            BaseReferences<_$MoliaDatabase, $PlayHistoryTable, PlayHistoryData>,
+          ),
+          PlayHistoryData,
+          PrefetchHooks Function()
+        > {
   $$PlayHistoryTableTableManager(_$MoliaDatabase db, $PlayHistoryTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -5643,92 +6718,100 @@ class $$PlayHistoryTableTableManager extends RootTableManager<
               $$PlayHistoryTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PlayHistoryTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<String> sourceKey = const Value.absent(),
-            Value<String> songId = const Value.absent(),
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
-            Value<int> playedAt = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              PlayHistoryCompanion(
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            playedAt: playedAt,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            rowid: rowid,
-          ),
-          createCompanionCallback: ({
-            required String sourceKey,
-            required String songId,
-            required String title,
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
-            required int playedAt,
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              PlayHistoryCompanion.insert(
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            playedAt: playedAt,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            rowid: rowid,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<String> sourceKey = const Value.absent(),
+                Value<String> songId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                Value<int> playedAt = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlayHistoryCompanion(
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                playedAt: playedAt,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String sourceKey,
+                required String songId,
+                required String title,
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                required int playedAt,
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PlayHistoryCompanion.insert(
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                playedAt: playedAt,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$PlayHistoryTable, PlayHistoryData>(table),
-                    BaseReferences<_$MoliaDatabase, $PlayHistoryTable,
-                        PlayHistoryData>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$PlayHistoryTable, PlayHistoryData>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $PlayHistoryTable,
+                    PlayHistoryData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PlayHistoryTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $PlayHistoryTable,
-    PlayHistoryData,
-    $$PlayHistoryTableFilterComposer,
-    $$PlayHistoryTableOrderingComposer,
-    $$PlayHistoryTableAnnotationComposer,
-    $$PlayHistoryTableCreateCompanionBuilder,
-    $$PlayHistoryTableUpdateCompanionBuilder,
-    (
+typedef $$PlayHistoryTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlayHistoryTable,
       PlayHistoryData,
-      BaseReferences<_$MoliaDatabase, $PlayHistoryTable, PlayHistoryData>
-    ),
-    PlayHistoryData,
-    PrefetchHooks Function()>;
+      $$PlayHistoryTableFilterComposer,
+      $$PlayHistoryTableOrderingComposer,
+      $$PlayHistoryTableAnnotationComposer,
+      $$PlayHistoryTableCreateCompanionBuilder,
+      $$PlayHistoryTableUpdateCompanionBuilder,
+      (
+        PlayHistoryData,
+        BaseReferences<_$MoliaDatabase, $PlayHistoryTable, PlayHistoryData>,
+      ),
+      PlayHistoryData,
+      PrefetchHooks Function()
+    >;
 typedef $$PlaylistsTableCreateCompanionBuilder = PlaylistsCompanion Function({
   Value<int> id,
   required String name,
@@ -5758,27 +6841,39 @@ class $$PlaylistsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnFilters(column));
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get syncId => $composableBuilder(
-      column: $table.syncId, builder: (column) => ColumnFilters(column));
+    column: $table.syncId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PlaylistsTableOrderingComposer
@@ -5791,27 +6886,39 @@ class $$PlaylistsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get name => $composableBuilder(
-      column: $table.name, builder: (column) => ColumnOrderings(column));
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get createdAt => $composableBuilder(
-      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get syncId => $composableBuilder(
-      column: $table.syncId, builder: (column) => ColumnOrderings(column));
+    column: $table.syncId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PlaylistsTableAnnotationComposer
@@ -5836,29 +6943,40 @@ class $$PlaylistsTableAnnotationComposer
       $composableBuilder(column: $table.syncId, builder: (column) => column);
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 }
 
-class $$PlaylistsTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $PlaylistsTable,
-    Playlist,
-    $$PlaylistsTableFilterComposer,
-    $$PlaylistsTableOrderingComposer,
-    $$PlaylistsTableAnnotationComposer,
-    $$PlaylistsTableCreateCompanionBuilder,
-    $$PlaylistsTableUpdateCompanionBuilder,
-    (Playlist, BaseReferences<_$MoliaDatabase, $PlaylistsTable, Playlist>),
-    Playlist,
-    PrefetchHooks Function()> {
+class $$PlaylistsTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlaylistsTable,
+          Playlist,
+          $$PlaylistsTableFilterComposer,
+          $$PlaylistsTableOrderingComposer,
+          $$PlaylistsTableAnnotationComposer,
+          $$PlaylistsTableCreateCompanionBuilder,
+          $$PlaylistsTableUpdateCompanionBuilder,
+          (
+            Playlist,
+            BaseReferences<_$MoliaDatabase, $PlaylistsTable, Playlist>,
+          ),
+          Playlist,
+          PrefetchHooks Function()
+        > {
   $$PlaylistsTableTableManager(_$MoliaDatabase db, $PlaylistsTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -5867,101 +6985,109 @@ class $$PlaylistsTableTableManager extends RootTableManager<
               $$PlaylistsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PlaylistsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> name = const Value.absent(),
-            Value<int> createdAt = const Value.absent(),
-            Value<String?> syncId = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-          }) =>
-              PlaylistsCompanion(
-            id: id,
-            name: name,
-            createdAt: createdAt,
-            syncId: syncId,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String name,
-            required int createdAt,
-            Value<String?> syncId = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-          }) =>
-              PlaylistsCompanion.insert(
-            id: id,
-            name: name,
-            createdAt: createdAt,
-            syncId: syncId,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
+                Value<String?> syncId = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+              }) => PlaylistsCompanion(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                syncId: syncId,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                required int createdAt,
+                Value<String?> syncId = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+              }) => PlaylistsCompanion.insert(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                syncId: syncId,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$PlaylistsTable, Playlist>(table),
-                    BaseReferences<_$MoliaDatabase, $PlaylistsTable, Playlist>(
-                        db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$PlaylistsTable, Playlist>(table),
+                  BaseReferences<_$MoliaDatabase, $PlaylistsTable, Playlist>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PlaylistsTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $PlaylistsTable,
-    Playlist,
-    $$PlaylistsTableFilterComposer,
-    $$PlaylistsTableOrderingComposer,
-    $$PlaylistsTableAnnotationComposer,
-    $$PlaylistsTableCreateCompanionBuilder,
-    $$PlaylistsTableUpdateCompanionBuilder,
-    (Playlist, BaseReferences<_$MoliaDatabase, $PlaylistsTable, Playlist>),
-    Playlist,
-    PrefetchHooks Function()>;
-typedef $$PlaylistTracksTableCreateCompanionBuilder = PlaylistTracksCompanion
-    Function({
-  Value<int> id,
-  required int playlistId,
-  required String sourceKey,
-  required String songId,
-  required String title,
-  Value<String> artist,
-  Value<String> album,
-  Value<String?> coverUrl,
-  Value<int?> durationMs,
-  Value<String> raw,
-  required int addedAt,
-  Value<int> sortOrder,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-});
-typedef $$PlaylistTracksTableUpdateCompanionBuilder = PlaylistTracksCompanion
-    Function({
-  Value<int> id,
-  Value<int> playlistId,
-  Value<String> sourceKey,
-  Value<String> songId,
-  Value<String> title,
-  Value<String> artist,
-  Value<String> album,
-  Value<String?> coverUrl,
-  Value<int?> durationMs,
-  Value<String> raw,
-  Value<int> addedAt,
-  Value<int> sortOrder,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-});
+typedef $$PlaylistsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlaylistsTable,
+      Playlist,
+      $$PlaylistsTableFilterComposer,
+      $$PlaylistsTableOrderingComposer,
+      $$PlaylistsTableAnnotationComposer,
+      $$PlaylistsTableCreateCompanionBuilder,
+      $$PlaylistsTableUpdateCompanionBuilder,
+      (Playlist, BaseReferences<_$MoliaDatabase, $PlaylistsTable, Playlist>),
+      Playlist,
+      PrefetchHooks Function()
+    >;
+typedef $$PlaylistTracksTableCreateCompanionBuilder =
+    PlaylistTracksCompanion Function({
+      Value<int> id,
+      required int playlistId,
+      required String sourceKey,
+      required String songId,
+      required String title,
+      Value<String> artist,
+      Value<String> album,
+      Value<String?> coverUrl,
+      Value<int?> durationMs,
+      Value<String> raw,
+      required int addedAt,
+      Value<int> sortOrder,
+      Value<int> versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+    });
+typedef $$PlaylistTracksTableUpdateCompanionBuilder =
+    PlaylistTracksCompanion Function({
+      Value<int> id,
+      Value<int> playlistId,
+      Value<String> sourceKey,
+      Value<String> songId,
+      Value<String> title,
+      Value<String> artist,
+      Value<String> album,
+      Value<String?> coverUrl,
+      Value<int?> durationMs,
+      Value<String> raw,
+      Value<int> addedAt,
+      Value<int> sortOrder,
+      Value<int> versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+    });
 
 class $$PlaylistTracksTableFilterComposer
     extends Composer<_$MoliaDatabase, $PlaylistTracksTable> {
@@ -5973,51 +7099,79 @@ class $$PlaylistTracksTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get playlistId => $composableBuilder(
-      column: $table.playlistId, builder: (column) => ColumnFilters(column));
+    column: $table.playlistId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get sourceKey => $composableBuilder(
-      column: $table.sourceKey, builder: (column) => ColumnFilters(column));
+    column: $table.sourceKey,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get songId => $composableBuilder(
-      column: $table.songId, builder: (column) => ColumnFilters(column));
+    column: $table.songId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnFilters(column));
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnFilters(column));
+    column: $table.artist,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnFilters(column));
+    column: $table.album,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnFilters(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnFilters(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnFilters(column));
+    column: $table.raw,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get addedAt => $composableBuilder(
-      column: $table.addedAt, builder: (column) => ColumnFilters(column));
+    column: $table.addedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
-      column: $table.sortOrder, builder: (column) => ColumnFilters(column));
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$PlaylistTracksTableOrderingComposer
@@ -6030,51 +7184,79 @@ class $$PlaylistTracksTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get playlistId => $composableBuilder(
-      column: $table.playlistId, builder: (column) => ColumnOrderings(column));
+    column: $table.playlistId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get sourceKey => $composableBuilder(
-      column: $table.sourceKey, builder: (column) => ColumnOrderings(column));
+    column: $table.sourceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get songId => $composableBuilder(
-      column: $table.songId, builder: (column) => ColumnOrderings(column));
+    column: $table.songId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnOrderings(column));
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnOrderings(column));
+    column: $table.artist,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnOrderings(column));
+    column: $table.album,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnOrderings(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnOrderings(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnOrderings(column));
+    column: $table.raw,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get addedAt => $composableBuilder(
-      column: $table.addedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.addedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get sortOrder => $composableBuilder(
-      column: $table.sortOrder, builder: (column) => ColumnOrderings(column));
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PlaylistTracksTableAnnotationComposer
@@ -6090,7 +7272,9 @@ class $$PlaylistTracksTableAnnotationComposer
       $composableBuilder(column: $table.id, builder: (column) => column);
 
   GeneratedColumn<int> get playlistId => $composableBuilder(
-      column: $table.playlistId, builder: (column) => column);
+    column: $table.playlistId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get sourceKey =>
       $composableBuilder(column: $table.sourceKey, builder: (column) => column);
@@ -6111,7 +7295,9 @@ class $$PlaylistTracksTableAnnotationComposer
       $composableBuilder(column: $table.coverUrl, builder: (column) => column);
 
   GeneratedColumn<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => column);
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get raw =>
       $composableBuilder(column: $table.raw, builder: (column) => column);
@@ -6123,33 +7309,46 @@ class $$PlaylistTracksTableAnnotationComposer
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 }
 
-class $$PlaylistTracksTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $PlaylistTracksTable,
-    PlaylistTrackRow,
-    $$PlaylistTracksTableFilterComposer,
-    $$PlaylistTracksTableOrderingComposer,
-    $$PlaylistTracksTableAnnotationComposer,
-    $$PlaylistTracksTableCreateCompanionBuilder,
-    $$PlaylistTracksTableUpdateCompanionBuilder,
-    (
-      PlaylistTrackRow,
-      BaseReferences<_$MoliaDatabase, $PlaylistTracksTable, PlaylistTrackRow>
-    ),
-    PlaylistTrackRow,
-    PrefetchHooks Function()> {
+class $$PlaylistTracksTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlaylistTracksTable,
+          PlaylistTrackRow,
+          $$PlaylistTracksTableFilterComposer,
+          $$PlaylistTracksTableOrderingComposer,
+          $$PlaylistTracksTableAnnotationComposer,
+          $$PlaylistTracksTableCreateCompanionBuilder,
+          $$PlaylistTracksTableUpdateCompanionBuilder,
+          (
+            PlaylistTrackRow,
+            BaseReferences<
+              _$MoliaDatabase,
+              $PlaylistTracksTable,
+              PlaylistTrackRow
+            >,
+          ),
+          PlaylistTrackRow,
+          PrefetchHooks Function()
+        > {
   $$PlaylistTracksTableTableManager(
-      _$MoliaDatabase db, $PlaylistTracksTable table)
-      : super(TableManagerState(
+    _$MoliaDatabase db,
+    $PlaylistTracksTable table,
+  ) : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -6158,120 +7357,128 @@ class $$PlaylistTracksTableTableManager extends RootTableManager<
               $$PlaylistTracksTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PlaylistTracksTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int> playlistId = const Value.absent(),
-            Value<String> sourceKey = const Value.absent(),
-            Value<String> songId = const Value.absent(),
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
-            Value<int> addedAt = const Value.absent(),
-            Value<int> sortOrder = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-          }) =>
-              PlaylistTracksCompanion(
-            id: id,
-            playlistId: playlistId,
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            addedAt: addedAt,
-            sortOrder: sortOrder,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required int playlistId,
-            required String sourceKey,
-            required String songId,
-            required String title,
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
-            required int addedAt,
-            Value<int> sortOrder = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-          }) =>
-              PlaylistTracksCompanion.insert(
-            id: id,
-            playlistId: playlistId,
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            addedAt: addedAt,
-            sortOrder: sortOrder,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> playlistId = const Value.absent(),
+                Value<String> sourceKey = const Value.absent(),
+                Value<String> songId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                Value<int> addedAt = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+              }) => PlaylistTracksCompanion(
+                id: id,
+                playlistId: playlistId,
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                addedAt: addedAt,
+                sortOrder: sortOrder,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int playlistId,
+                required String sourceKey,
+                required String songId,
+                required String title,
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                required int addedAt,
+                Value<int> sortOrder = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+              }) => PlaylistTracksCompanion.insert(
+                id: id,
+                playlistId: playlistId,
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                addedAt: addedAt,
+                sortOrder: sortOrder,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$PlaylistTracksTable, PlaylistTrackRow>(table),
-                    BaseReferences<_$MoliaDatabase, $PlaylistTracksTable,
-                        PlaylistTrackRow>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$PlaylistTracksTable, PlaylistTrackRow>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $PlaylistTracksTable,
+                    PlaylistTrackRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$PlaylistTracksTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $PlaylistTracksTable,
-    PlaylistTrackRow,
-    $$PlaylistTracksTableFilterComposer,
-    $$PlaylistTracksTableOrderingComposer,
-    $$PlaylistTracksTableAnnotationComposer,
-    $$PlaylistTracksTableCreateCompanionBuilder,
-    $$PlaylistTracksTableUpdateCompanionBuilder,
-    (
+typedef $$PlaylistTracksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlaylistTracksTable,
       PlaylistTrackRow,
-      BaseReferences<_$MoliaDatabase, $PlaylistTracksTable, PlaylistTrackRow>
-    ),
-    PlaylistTrackRow,
-    PrefetchHooks Function()>;
-typedef $$SyncTombstonesTableCreateCompanionBuilder = SyncTombstonesCompanion
-    Function({
-  required String category,
-  required String key,
-  required int versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-  Value<int> deletedAt,
-  Value<int> rowid,
-});
-typedef $$SyncTombstonesTableUpdateCompanionBuilder = SyncTombstonesCompanion
-    Function({
-  Value<String> category,
-  Value<String> key,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-  Value<int> deletedAt,
-  Value<int> rowid,
-});
+      $$PlaylistTracksTableFilterComposer,
+      $$PlaylistTracksTableOrderingComposer,
+      $$PlaylistTracksTableAnnotationComposer,
+      $$PlaylistTracksTableCreateCompanionBuilder,
+      $$PlaylistTracksTableUpdateCompanionBuilder,
+      (
+        PlaylistTrackRow,
+        BaseReferences<_$MoliaDatabase, $PlaylistTracksTable, PlaylistTrackRow>,
+      ),
+      PlaylistTrackRow,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncTombstonesTableCreateCompanionBuilder =
+    SyncTombstonesCompanion Function({
+      required String category,
+      required String key,
+      required int versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+      Value<int> deletedAt,
+      Value<int> rowid,
+    });
+typedef $$SyncTombstonesTableUpdateCompanionBuilder =
+    SyncTombstonesCompanion Function({
+      Value<String> category,
+      Value<String> key,
+      Value<int> versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+      Value<int> deletedAt,
+      Value<int> rowid,
+    });
 
 class $$SyncTombstonesTableFilterComposer
     extends Composer<_$MoliaDatabase, $SyncTombstonesTable> {
@@ -6283,24 +7490,34 @@ class $$SyncTombstonesTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get category => $composableBuilder(
-      column: $table.category, builder: (column) => ColumnFilters(column));
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get key => $composableBuilder(
-      column: $table.key, builder: (column) => ColumnFilters(column));
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get deletedAt => $composableBuilder(
-      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SyncTombstonesTableOrderingComposer
@@ -6313,24 +7530,34 @@ class $$SyncTombstonesTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get category => $composableBuilder(
-      column: $table.category, builder: (column) => ColumnOrderings(column));
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get key => $composableBuilder(
-      column: $table.key, builder: (column) => ColumnOrderings(column));
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get deletedAt => $composableBuilder(
-      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncTombstonesTableAnnotationComposer
@@ -6349,10 +7576,14 @@ class $$SyncTombstonesTableAnnotationComposer
       $composableBuilder(column: $table.key, builder: (column) => column);
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
@@ -6361,24 +7592,33 @@ class $$SyncTombstonesTableAnnotationComposer
       $composableBuilder(column: $table.deletedAt, builder: (column) => column);
 }
 
-class $$SyncTombstonesTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $SyncTombstonesTable,
-    SyncTombstone,
-    $$SyncTombstonesTableFilterComposer,
-    $$SyncTombstonesTableOrderingComposer,
-    $$SyncTombstonesTableAnnotationComposer,
-    $$SyncTombstonesTableCreateCompanionBuilder,
-    $$SyncTombstonesTableUpdateCompanionBuilder,
-    (
-      SyncTombstone,
-      BaseReferences<_$MoliaDatabase, $SyncTombstonesTable, SyncTombstone>
-    ),
-    SyncTombstone,
-    PrefetchHooks Function()> {
+class $$SyncTombstonesTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $SyncTombstonesTable,
+          SyncTombstone,
+          $$SyncTombstonesTableFilterComposer,
+          $$SyncTombstonesTableOrderingComposer,
+          $$SyncTombstonesTableAnnotationComposer,
+          $$SyncTombstonesTableCreateCompanionBuilder,
+          $$SyncTombstonesTableUpdateCompanionBuilder,
+          (
+            SyncTombstone,
+            BaseReferences<
+              _$MoliaDatabase,
+              $SyncTombstonesTable,
+              SyncTombstone
+            >,
+          ),
+          SyncTombstone,
+          PrefetchHooks Function()
+        > {
   $$SyncTombstonesTableTableManager(
-      _$MoliaDatabase db, $SyncTombstonesTable table)
-      : super(TableManagerState(
+    _$MoliaDatabase db,
+    $SyncTombstonesTable table,
+  ) : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -6387,68 +7627,76 @@ class $$SyncTombstonesTableTableManager extends RootTableManager<
               $$SyncTombstonesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$SyncTombstonesTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<String> category = const Value.absent(),
-            Value<String> key = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<int> deletedAt = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              SyncTombstonesCompanion(
-            category: category,
-            key: key,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            deletedAt: deletedAt,
-            rowid: rowid,
-          ),
-          createCompanionCallback: ({
-            required String category,
-            required String key,
-            required int versionPhysical,
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<int> deletedAt = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              SyncTombstonesCompanion.insert(
-            category: category,
-            key: key,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            deletedAt: deletedAt,
-            rowid: rowid,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<String> category = const Value.absent(),
+                Value<String> key = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncTombstonesCompanion(
+                category: category,
+                key: key,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String category,
+                required String key,
+                required int versionPhysical,
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> deletedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncTombstonesCompanion.insert(
+                category: category,
+                key: key,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                deletedAt: deletedAt,
+                rowid: rowid,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$SyncTombstonesTable, SyncTombstone>(table),
-                    BaseReferences<_$MoliaDatabase, $SyncTombstonesTable,
-                        SyncTombstone>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$SyncTombstonesTable, SyncTombstone>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $SyncTombstonesTable,
+                    SyncTombstone
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$SyncTombstonesTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $SyncTombstonesTable,
-    SyncTombstone,
-    $$SyncTombstonesTableFilterComposer,
-    $$SyncTombstonesTableOrderingComposer,
-    $$SyncTombstonesTableAnnotationComposer,
-    $$SyncTombstonesTableCreateCompanionBuilder,
-    $$SyncTombstonesTableUpdateCompanionBuilder,
-    (
+typedef $$SyncTombstonesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $SyncTombstonesTable,
       SyncTombstone,
-      BaseReferences<_$MoliaDatabase, $SyncTombstonesTable, SyncTombstone>
-    ),
-    SyncTombstone,
-    PrefetchHooks Function()>;
+      $$SyncTombstonesTableFilterComposer,
+      $$SyncTombstonesTableOrderingComposer,
+      $$SyncTombstonesTableAnnotationComposer,
+      $$SyncTombstonesTableCreateCompanionBuilder,
+      $$SyncTombstonesTableUpdateCompanionBuilder,
+      (
+        SyncTombstone,
+        BaseReferences<_$MoliaDatabase, $SyncTombstonesTable, SyncTombstone>,
+      ),
+      SyncTombstone,
+      PrefetchHooks Function()
+    >;
 typedef $$SyncKnownTableCreateCompanionBuilder = SyncKnownCompanion Function({
   required String category,
   required String key,
@@ -6476,21 +7724,29 @@ class $$SyncKnownTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<String> get category => $composableBuilder(
-      column: $table.category, builder: (column) => ColumnFilters(column));
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get key => $composableBuilder(
-      column: $table.key, builder: (column) => ColumnFilters(column));
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SyncKnownTableOrderingComposer
@@ -6503,21 +7759,29 @@ class $$SyncKnownTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<String> get category => $composableBuilder(
-      column: $table.category, builder: (column) => ColumnOrderings(column));
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get key => $composableBuilder(
-      column: $table.key, builder: (column) => ColumnOrderings(column));
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncKnownTableAnnotationComposer
@@ -6536,32 +7800,40 @@ class $$SyncKnownTableAnnotationComposer
       $composableBuilder(column: $table.key, builder: (column) => column);
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
 }
 
-class $$SyncKnownTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $SyncKnownTable,
-    SyncKnownData,
-    $$SyncKnownTableFilterComposer,
-    $$SyncKnownTableOrderingComposer,
-    $$SyncKnownTableAnnotationComposer,
-    $$SyncKnownTableCreateCompanionBuilder,
-    $$SyncKnownTableUpdateCompanionBuilder,
-    (
-      SyncKnownData,
-      BaseReferences<_$MoliaDatabase, $SyncKnownTable, SyncKnownData>
-    ),
-    SyncKnownData,
-    PrefetchHooks Function()> {
+class $$SyncKnownTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $SyncKnownTable,
+          SyncKnownData,
+          $$SyncKnownTableFilterComposer,
+          $$SyncKnownTableOrderingComposer,
+          $$SyncKnownTableAnnotationComposer,
+          $$SyncKnownTableCreateCompanionBuilder,
+          $$SyncKnownTableUpdateCompanionBuilder,
+          (
+            SyncKnownData,
+            BaseReferences<_$MoliaDatabase, $SyncKnownTable, SyncKnownData>,
+          ),
+          SyncKnownData,
+          PrefetchHooks Function()
+        > {
   $$SyncKnownTableTableManager(_$MoliaDatabase db, $SyncKnownTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -6570,88 +7842,96 @@ class $$SyncKnownTableTableManager extends RootTableManager<
               $$SyncKnownTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$SyncKnownTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<String> category = const Value.absent(),
-            Value<String> key = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              SyncKnownCompanion(
-            category: category,
-            key: key,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            rowid: rowid,
-          ),
-          createCompanionCallback: ({
-            required String category,
-            required String key,
-            required int versionPhysical,
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<int> rowid = const Value.absent(),
-          }) =>
-              SyncKnownCompanion.insert(
-            category: category,
-            key: key,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            rowid: rowid,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<String> category = const Value.absent(),
+                Value<String> key = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncKnownCompanion(
+                category: category,
+                key: key,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String category,
+                required String key,
+                required int versionPhysical,
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncKnownCompanion.insert(
+                category: category,
+                key: key,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                rowid: rowid,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$SyncKnownTable, SyncKnownData>(table),
-                    BaseReferences<_$MoliaDatabase, $SyncKnownTable,
-                        SyncKnownData>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$SyncKnownTable, SyncKnownData>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $SyncKnownTable,
+                    SyncKnownData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$SyncKnownTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $SyncKnownTable,
-    SyncKnownData,
-    $$SyncKnownTableFilterComposer,
-    $$SyncKnownTableOrderingComposer,
-    $$SyncKnownTableAnnotationComposer,
-    $$SyncKnownTableCreateCompanionBuilder,
-    $$SyncKnownTableUpdateCompanionBuilder,
-    (
+typedef $$SyncKnownTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $SyncKnownTable,
       SyncKnownData,
-      BaseReferences<_$MoliaDatabase, $SyncKnownTable, SyncKnownData>
-    ),
-    SyncKnownData,
-    PrefetchHooks Function()>;
-typedef $$SyncJournalTableCreateCompanionBuilder = SyncJournalCompanion
-    Function({
-  Value<int> seq,
-  required String category,
-  required String key,
-  required int versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-  Value<bool> deleted,
-  Value<String?> data,
-  required int at,
-});
-typedef $$SyncJournalTableUpdateCompanionBuilder = SyncJournalCompanion
-    Function({
-  Value<int> seq,
-  Value<String> category,
-  Value<String> key,
-  Value<int> versionPhysical,
-  Value<int> versionCounter,
-  Value<String> deviceId,
-  Value<bool> deleted,
-  Value<String?> data,
-  Value<int> at,
-});
+      $$SyncKnownTableFilterComposer,
+      $$SyncKnownTableOrderingComposer,
+      $$SyncKnownTableAnnotationComposer,
+      $$SyncKnownTableCreateCompanionBuilder,
+      $$SyncKnownTableUpdateCompanionBuilder,
+      (
+        SyncKnownData,
+        BaseReferences<_$MoliaDatabase, $SyncKnownTable, SyncKnownData>,
+      ),
+      SyncKnownData,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncJournalTableCreateCompanionBuilder =
+    SyncJournalCompanion Function({
+      Value<int> seq,
+      required String category,
+      required String key,
+      required int versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+      Value<bool> deleted,
+      Value<String?> data,
+      required int at,
+    });
+typedef $$SyncJournalTableUpdateCompanionBuilder =
+    SyncJournalCompanion Function({
+      Value<int> seq,
+      Value<String> category,
+      Value<String> key,
+      Value<int> versionPhysical,
+      Value<int> versionCounter,
+      Value<String> deviceId,
+      Value<bool> deleted,
+      Value<String?> data,
+      Value<int> at,
+    });
 
 class $$SyncJournalTableFilterComposer
     extends Composer<_$MoliaDatabase, $SyncJournalTable> {
@@ -6663,33 +7943,49 @@ class $$SyncJournalTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get seq => $composableBuilder(
-      column: $table.seq, builder: (column) => ColumnFilters(column));
+    column: $table.seq,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get category => $composableBuilder(
-      column: $table.category, builder: (column) => ColumnFilters(column));
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get key => $composableBuilder(
-      column: $table.key, builder: (column) => ColumnFilters(column));
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnFilters(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get deleted => $composableBuilder(
-      column: $table.deleted, builder: (column) => ColumnFilters(column));
+    column: $table.deleted,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get data => $composableBuilder(
-      column: $table.data, builder: (column) => ColumnFilters(column));
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get at => $composableBuilder(
-      column: $table.at, builder: (column) => ColumnFilters(column));
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SyncJournalTableOrderingComposer
@@ -6702,33 +7998,49 @@ class $$SyncJournalTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get seq => $composableBuilder(
-      column: $table.seq, builder: (column) => ColumnOrderings(column));
+    column: $table.seq,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get category => $composableBuilder(
-      column: $table.category, builder: (column) => ColumnOrderings(column));
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get key => $composableBuilder(
-      column: $table.key, builder: (column) => ColumnOrderings(column));
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get deviceId => $composableBuilder(
-      column: $table.deviceId, builder: (column) => ColumnOrderings(column));
+    column: $table.deviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get deleted => $composableBuilder(
-      column: $table.deleted, builder: (column) => ColumnOrderings(column));
+    column: $table.deleted,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get data => $composableBuilder(
-      column: $table.data, builder: (column) => ColumnOrderings(column));
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get at => $composableBuilder(
-      column: $table.at, builder: (column) => ColumnOrderings(column));
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncJournalTableAnnotationComposer
@@ -6750,10 +8062,14 @@ class $$SyncJournalTableAnnotationComposer
       $composableBuilder(column: $table.key, builder: (column) => column);
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get deviceId =>
       $composableBuilder(column: $table.deviceId, builder: (column) => column);
@@ -6768,23 +8084,27 @@ class $$SyncJournalTableAnnotationComposer
       $composableBuilder(column: $table.at, builder: (column) => column);
 }
 
-class $$SyncJournalTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $SyncJournalTable,
-    SyncJournalData,
-    $$SyncJournalTableFilterComposer,
-    $$SyncJournalTableOrderingComposer,
-    $$SyncJournalTableAnnotationComposer,
-    $$SyncJournalTableCreateCompanionBuilder,
-    $$SyncJournalTableUpdateCompanionBuilder,
-    (
-      SyncJournalData,
-      BaseReferences<_$MoliaDatabase, $SyncJournalTable, SyncJournalData>
-    ),
-    SyncJournalData,
-    PrefetchHooks Function()> {
+class $$SyncJournalTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $SyncJournalTable,
+          SyncJournalData,
+          $$SyncJournalTableFilterComposer,
+          $$SyncJournalTableOrderingComposer,
+          $$SyncJournalTableAnnotationComposer,
+          $$SyncJournalTableCreateCompanionBuilder,
+          $$SyncJournalTableUpdateCompanionBuilder,
+          (
+            SyncJournalData,
+            BaseReferences<_$MoliaDatabase, $SyncJournalTable, SyncJournalData>,
+          ),
+          SyncJournalData,
+          PrefetchHooks Function()
+        > {
   $$SyncJournalTableTableManager(_$MoliaDatabase db, $SyncJournalTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -6793,88 +8113,96 @@ class $$SyncJournalTableTableManager extends RootTableManager<
               $$SyncJournalTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$SyncJournalTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> seq = const Value.absent(),
-            Value<String> category = const Value.absent(),
-            Value<String> key = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<bool> deleted = const Value.absent(),
-            Value<String?> data = const Value.absent(),
-            Value<int> at = const Value.absent(),
-          }) =>
-              SyncJournalCompanion(
-            seq: seq,
-            category: category,
-            key: key,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            deleted: deleted,
-            data: data,
-            at: at,
-          ),
-          createCompanionCallback: ({
-            Value<int> seq = const Value.absent(),
-            required String category,
-            required String key,
-            required int versionPhysical,
-            Value<int> versionCounter = const Value.absent(),
-            Value<String> deviceId = const Value.absent(),
-            Value<bool> deleted = const Value.absent(),
-            Value<String?> data = const Value.absent(),
-            required int at,
-          }) =>
-              SyncJournalCompanion.insert(
-            seq: seq,
-            category: category,
-            key: key,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-            deviceId: deviceId,
-            deleted: deleted,
-            data: data,
-            at: at,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> seq = const Value.absent(),
+                Value<String> category = const Value.absent(),
+                Value<String> key = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
+                Value<String?> data = const Value.absent(),
+                Value<int> at = const Value.absent(),
+              }) => SyncJournalCompanion(
+                seq: seq,
+                category: category,
+                key: key,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                deleted: deleted,
+                data: data,
+                at: at,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> seq = const Value.absent(),
+                required String category,
+                required String key,
+                required int versionPhysical,
+                Value<int> versionCounter = const Value.absent(),
+                Value<String> deviceId = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
+                Value<String?> data = const Value.absent(),
+                required int at,
+              }) => SyncJournalCompanion.insert(
+                seq: seq,
+                category: category,
+                key: key,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+                deviceId: deviceId,
+                deleted: deleted,
+                data: data,
+                at: at,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$SyncJournalTable, SyncJournalData>(table),
-                    BaseReferences<_$MoliaDatabase, $SyncJournalTable,
-                        SyncJournalData>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$SyncJournalTable, SyncJournalData>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $SyncJournalTable,
+                    SyncJournalData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$SyncJournalTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $SyncJournalTable,
-    SyncJournalData,
-    $$SyncJournalTableFilterComposer,
-    $$SyncJournalTableOrderingComposer,
-    $$SyncJournalTableAnnotationComposer,
-    $$SyncJournalTableCreateCompanionBuilder,
-    $$SyncJournalTableUpdateCompanionBuilder,
-    (
+typedef $$SyncJournalTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $SyncJournalTable,
       SyncJournalData,
-      BaseReferences<_$MoliaDatabase, $SyncJournalTable, SyncJournalData>
-    ),
-    SyncJournalData,
-    PrefetchHooks Function()>;
-typedef $$SyncJournalStatesTableCreateCompanionBuilder
-    = SyncJournalStatesCompanion Function({
-  Value<int> id,
-  Value<int> baseSeq,
-  Value<int> snapshotSeq,
-});
-typedef $$SyncJournalStatesTableUpdateCompanionBuilder
-    = SyncJournalStatesCompanion Function({
-  Value<int> id,
-  Value<int> baseSeq,
-  Value<int> snapshotSeq,
-});
+      $$SyncJournalTableFilterComposer,
+      $$SyncJournalTableOrderingComposer,
+      $$SyncJournalTableAnnotationComposer,
+      $$SyncJournalTableCreateCompanionBuilder,
+      $$SyncJournalTableUpdateCompanionBuilder,
+      (
+        SyncJournalData,
+        BaseReferences<_$MoliaDatabase, $SyncJournalTable, SyncJournalData>,
+      ),
+      SyncJournalData,
+      PrefetchHooks Function()
+    >;
+typedef $$SyncJournalStatesTableCreateCompanionBuilder =
+    SyncJournalStatesCompanion Function({
+      Value<int> id,
+      Value<int> baseSeq,
+      Value<int> snapshotSeq,
+    });
+typedef $$SyncJournalStatesTableUpdateCompanionBuilder =
+    SyncJournalStatesCompanion Function({
+      Value<int> id,
+      Value<int> baseSeq,
+      Value<int> snapshotSeq,
+    });
 
 class $$SyncJournalStatesTableFilterComposer
     extends Composer<_$MoliaDatabase, $SyncJournalStatesTable> {
@@ -6886,13 +8214,19 @@ class $$SyncJournalStatesTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get baseSeq => $composableBuilder(
-      column: $table.baseSeq, builder: (column) => ColumnFilters(column));
+    column: $table.baseSeq,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get snapshotSeq => $composableBuilder(
-      column: $table.snapshotSeq, builder: (column) => ColumnFilters(column));
+    column: $table.snapshotSeq,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$SyncJournalStatesTableOrderingComposer
@@ -6905,13 +8239,19 @@ class $$SyncJournalStatesTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get baseSeq => $composableBuilder(
-      column: $table.baseSeq, builder: (column) => ColumnOrderings(column));
+    column: $table.baseSeq,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get snapshotSeq => $composableBuilder(
-      column: $table.snapshotSeq, builder: (column) => ColumnOrderings(column));
+    column: $table.snapshotSeq,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncJournalStatesTableAnnotationComposer
@@ -6930,27 +8270,38 @@ class $$SyncJournalStatesTableAnnotationComposer
       $composableBuilder(column: $table.baseSeq, builder: (column) => column);
 
   GeneratedColumn<int> get snapshotSeq => $composableBuilder(
-      column: $table.snapshotSeq, builder: (column) => column);
+    column: $table.snapshotSeq,
+    builder: (column) => column,
+  );
 }
 
-class $$SyncJournalStatesTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $SyncJournalStatesTable,
-    SyncJournalState,
-    $$SyncJournalStatesTableFilterComposer,
-    $$SyncJournalStatesTableOrderingComposer,
-    $$SyncJournalStatesTableAnnotationComposer,
-    $$SyncJournalStatesTableCreateCompanionBuilder,
-    $$SyncJournalStatesTableUpdateCompanionBuilder,
-    (
-      SyncJournalState,
-      BaseReferences<_$MoliaDatabase, $SyncJournalStatesTable, SyncJournalState>
-    ),
-    SyncJournalState,
-    PrefetchHooks Function()> {
+class $$SyncJournalStatesTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $SyncJournalStatesTable,
+          SyncJournalState,
+          $$SyncJournalStatesTableFilterComposer,
+          $$SyncJournalStatesTableOrderingComposer,
+          $$SyncJournalStatesTableAnnotationComposer,
+          $$SyncJournalStatesTableCreateCompanionBuilder,
+          $$SyncJournalStatesTableUpdateCompanionBuilder,
+          (
+            SyncJournalState,
+            BaseReferences<
+              _$MoliaDatabase,
+              $SyncJournalStatesTable,
+              SyncJournalState
+            >,
+          ),
+          SyncJournalState,
+          PrefetchHooks Function()
+        > {
   $$SyncJournalStatesTableTableManager(
-      _$MoliaDatabase db, $SyncJournalStatesTable table)
-      : super(TableManagerState(
+    _$MoliaDatabase db,
+    $SyncJournalStatesTable table,
+  ) : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -6959,54 +8310,67 @@ class $$SyncJournalStatesTableTableManager extends RootTableManager<
               $$SyncJournalStatesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$SyncJournalStatesTableAnnotationComposer(
-                  $db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int> baseSeq = const Value.absent(),
-            Value<int> snapshotSeq = const Value.absent(),
-          }) =>
-              SyncJournalStatesCompanion(
-            id: id,
-            baseSeq: baseSeq,
-            snapshotSeq: snapshotSeq,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int> baseSeq = const Value.absent(),
-            Value<int> snapshotSeq = const Value.absent(),
-          }) =>
-              SyncJournalStatesCompanion.insert(
-            id: id,
-            baseSeq: baseSeq,
-            snapshotSeq: snapshotSeq,
-          ),
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> baseSeq = const Value.absent(),
+                Value<int> snapshotSeq = const Value.absent(),
+              }) => SyncJournalStatesCompanion(
+                id: id,
+                baseSeq: baseSeq,
+                snapshotSeq: snapshotSeq,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> baseSeq = const Value.absent(),
+                Value<int> snapshotSeq = const Value.absent(),
+              }) => SyncJournalStatesCompanion.insert(
+                id: id,
+                baseSeq: baseSeq,
+                snapshotSeq: snapshotSeq,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$SyncJournalStatesTable, SyncJournalState>(
-                        table),
-                    BaseReferences<_$MoliaDatabase, $SyncJournalStatesTable,
-                        SyncJournalState>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$SyncJournalStatesTable, SyncJournalState>(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $SyncJournalStatesTable,
+                    SyncJournalState
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$SyncJournalStatesTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $SyncJournalStatesTable,
-    SyncJournalState,
-    $$SyncJournalStatesTableFilterComposer,
-    $$SyncJournalStatesTableOrderingComposer,
-    $$SyncJournalStatesTableAnnotationComposer,
-    $$SyncJournalStatesTableCreateCompanionBuilder,
-    $$SyncJournalStatesTableUpdateCompanionBuilder,
-    (
+typedef $$SyncJournalStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $SyncJournalStatesTable,
       SyncJournalState,
-      BaseReferences<_$MoliaDatabase, $SyncJournalStatesTable, SyncJournalState>
-    ),
-    SyncJournalState,
-    PrefetchHooks Function()>;
+      $$SyncJournalStatesTableFilterComposer,
+      $$SyncJournalStatesTableOrderingComposer,
+      $$SyncJournalStatesTableAnnotationComposer,
+      $$SyncJournalStatesTableCreateCompanionBuilder,
+      $$SyncJournalStatesTableUpdateCompanionBuilder,
+      (
+        SyncJournalState,
+        BaseReferences<
+          _$MoliaDatabase,
+          $SyncJournalStatesTable,
+          SyncJournalState
+        >,
+      ),
+      SyncJournalState,
+      PrefetchHooks Function()
+    >;
 typedef $$PlayTracksTableCreateCompanionBuilder = PlayTracksCompanion Function({
   Value<int> id,
   required String sourceKey,
@@ -7037,17 +8401,21 @@ final class $$PlayTracksTableReferences
   $$PlayTracksTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static MultiTypedResultKey<$PlayEventsTable, List<PlayEventRow>>
-      _playEventsRefsTable(_$MoliaDatabase db) =>
-          MultiTypedResultKey.fromTable(db.playEvents,
-              aliasName: 'play_tracks__id__play_events__trackId');
+  _playEventsRefsTable(_$MoliaDatabase db) => MultiTypedResultKey.fromTable(
+    db.playEvents,
+    aliasName: 'play_tracks__id__play_events__trackId',
+  );
 
   $$PlayEventsTableProcessedTableManager get playEventsRefs {
-    final manager = $$PlayEventsTableTableManager($_db, $_db.playEvents)
-        .filter((f) => f.trackId.id.sqlEquals($_itemColumn<int>('id')!));
+    final manager = $$PlayEventsTableTableManager(
+      $_db,
+      $_db.playEvents,
+    ).filter((f) => f.trackId.id.sqlEquals($_itemColumn<int>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_playEventsRefsTable($_db));
     return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: cache));
+      manager.$state.copyWith(prefetchedData: cache),
+    );
   }
 }
 
@@ -7061,53 +8429,77 @@ class $$PlayTracksTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get sourceKey => $composableBuilder(
-      column: $table.sourceKey, builder: (column) => ColumnFilters(column));
+    column: $table.sourceKey,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get songId => $composableBuilder(
-      column: $table.songId, builder: (column) => ColumnFilters(column));
+    column: $table.songId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnFilters(column));
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnFilters(column));
+    column: $table.artist,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnFilters(column));
+    column: $table.album,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnFilters(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnFilters(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<Uint8List> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnFilters(column));
+    column: $table.raw,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   Expression<bool> playEventsRefs(
-      Expression<bool> Function($$PlayEventsTableFilterComposer f) f) {
+    Expression<bool> Function($$PlayEventsTableFilterComposer f) f,
+  ) {
     final $$PlayEventsTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.playEvents,
-        getReferencedColumn: (t) => t.trackId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$PlayEventsTableFilterComposer(
-              $db: $db,
-              $table: $db.playEvents,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.playEvents,
+      getReferencedColumn: (t) => t.trackId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.playEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 }
@@ -7122,34 +8514,54 @@ class $$PlayTracksTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get sourceKey => $composableBuilder(
-      column: $table.sourceKey, builder: (column) => ColumnOrderings(column));
+    column: $table.sourceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get songId => $composableBuilder(
-      column: $table.songId, builder: (column) => ColumnOrderings(column));
+    column: $table.songId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnOrderings(column));
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnOrderings(column));
+    column: $table.artist,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnOrderings(column));
+    column: $table.album,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnOrderings(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnOrderings(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<Uint8List> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnOrderings(column));
+    column: $table.raw,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get updatedAt => $composableBuilder(
-      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$PlayTracksTableAnnotationComposer
@@ -7183,7 +8595,9 @@ class $$PlayTracksTableAnnotationComposer
       $composableBuilder(column: $table.coverUrl, builder: (column) => column);
 
   GeneratedColumn<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => column);
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<Uint8List> get raw =>
       $composableBuilder(column: $table.raw, builder: (column) => column);
@@ -7192,41 +8606,49 @@ class $$PlayTracksTableAnnotationComposer
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   Expression<T> playEventsRefs<T extends Object>(
-      Expression<T> Function($$PlayEventsTableAnnotationComposer a) f) {
+    Expression<T> Function($$PlayEventsTableAnnotationComposer a) f,
+  ) {
     final $$PlayEventsTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.id,
-        referencedTable: $db.playEvents,
-        getReferencedColumn: (t) => t.trackId,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$PlayEventsTableAnnotationComposer(
-              $db: $db,
-              $table: $db.playEvents,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.playEvents,
+      getReferencedColumn: (t) => t.trackId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayEventsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.playEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 }
 
-class $$PlayTracksTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $PlayTracksTable,
-    PlayTrackRow,
-    $$PlayTracksTableFilterComposer,
-    $$PlayTracksTableOrderingComposer,
-    $$PlayTracksTableAnnotationComposer,
-    $$PlayTracksTableCreateCompanionBuilder,
-    $$PlayTracksTableUpdateCompanionBuilder,
-    (PlayTrackRow, $$PlayTracksTableReferences),
-    PlayTrackRow,
-    PrefetchHooks Function({bool playEventsRefs})> {
+class $$PlayTracksTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlayTracksTable,
+          PlayTrackRow,
+          $$PlayTracksTableFilterComposer,
+          $$PlayTracksTableOrderingComposer,
+          $$PlayTracksTableAnnotationComposer,
+          $$PlayTracksTableCreateCompanionBuilder,
+          $$PlayTracksTableUpdateCompanionBuilder,
+          (PlayTrackRow, $$PlayTracksTableReferences),
+          PlayTrackRow,
+          PrefetchHooks Function({bool playEventsRefs})
+        > {
   $$PlayTracksTableTableManager(_$MoliaDatabase db, $PlayTracksTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -7235,59 +8657,61 @@ class $$PlayTracksTableTableManager extends RootTableManager<
               $$PlayTracksTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PlayTracksTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> sourceKey = const Value.absent(),
-            Value<String> songId = const Value.absent(),
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<Uint8List?> raw = const Value.absent(),
-            Value<int> updatedAt = const Value.absent(),
-          }) =>
-              PlayTracksCompanion(
-            id: id,
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            updatedAt: updatedAt,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String sourceKey,
-            required String songId,
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<Uint8List?> raw = const Value.absent(),
-            required int updatedAt,
-          }) =>
-              PlayTracksCompanion.insert(
-            id: id,
-            sourceKey: sourceKey,
-            songId: songId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            updatedAt: updatedAt,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> sourceKey = const Value.absent(),
+                Value<String> songId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<Uint8List?> raw = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+              }) => PlayTracksCompanion(
+                id: id,
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String sourceKey,
+                required String songId,
+                Value<String> title = const Value.absent(),
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<Uint8List?> raw = const Value.absent(),
+                required int updatedAt,
+              }) => PlayTracksCompanion.insert(
+                id: id,
+                sourceKey: sourceKey,
+                songId: songId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                updatedAt: updatedAt,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$PlayTracksTable, PlayTrackRow>(table),
-                    $$PlayTracksTableReferences(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$PlayTracksTable, PlayTrackRow>(table),
+                  $$PlayTracksTableReferences(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: ({playEventsRefs = false}) {
             return PrefetchHooks(
@@ -7297,37 +8721,47 @@ class $$PlayTracksTableTableManager extends RootTableManager<
               getPrefetchedDataCallback: (items) async {
                 return [
                   if (playEventsRefs)
-                    await $_getPrefetchedData<PlayTrackRow, $PlayTracksTable,
-                            PlayEventRow>(
-                        currentTable: table,
-                        referencedTable: $$PlayTracksTableReferences
-                            ._playEventsRefsTable(db),
-                        managerFromTypedResult: (p0) =>
-                            $$PlayTracksTableReferences(db, table, p0)
-                                .playEventsRefs,
-                        referencedItemsForCurrentItem: (item,
-                                referencedItems) =>
-                            referencedItems.where((e) => e.trackId == item.id),
-                        typedResults: items)
+                    await $_getPrefetchedDataByColumns<
+                      PlayTrackRow,
+                      $PlayTracksTable,
+                      PlayEventRow,
+                      $PlayEventsTable
+                    >(
+                      currentTable: table,
+                      referencedTable: $$PlayTracksTableReferences
+                          ._playEventsRefsTable(db),
+                      managerFromTypedResult: (p0) =>
+                          $$PlayTracksTableReferences(
+                            db,
+                            table,
+                            p0,
+                          ).playEventsRefs,
+                      currentColumn: 'id',
+                      referencedColumn: 'trackId',
+                      typedResults: items,
+                    ),
                 ];
               },
             );
           },
-        ));
+        ),
+      );
 }
 
-typedef $$PlayTracksTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $PlayTracksTable,
-    PlayTrackRow,
-    $$PlayTracksTableFilterComposer,
-    $$PlayTracksTableOrderingComposer,
-    $$PlayTracksTableAnnotationComposer,
-    $$PlayTracksTableCreateCompanionBuilder,
-    $$PlayTracksTableUpdateCompanionBuilder,
-    (PlayTrackRow, $$PlayTracksTableReferences),
-    PlayTrackRow,
-    PrefetchHooks Function({bool playEventsRefs})>;
+typedef $$PlayTracksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlayTracksTable,
+      PlayTrackRow,
+      $$PlayTracksTableFilterComposer,
+      $$PlayTracksTableOrderingComposer,
+      $$PlayTracksTableAnnotationComposer,
+      $$PlayTracksTableCreateCompanionBuilder,
+      $$PlayTracksTableUpdateCompanionBuilder,
+      (PlayTrackRow, $$PlayTracksTableReferences),
+      PlayTrackRow,
+      PrefetchHooks Function({bool playEventsRefs})
+    >;
 typedef $$PlayEventsTableCreateCompanionBuilder = PlayEventsCompanion Function({
   Value<int> id,
   required int trackId,
@@ -7365,12 +8799,15 @@ final class $$PlayEventsTableReferences
   $$PlayTracksTableProcessedTableManager get trackId {
     final $_column = $_itemColumn<int>('trackId')!;
 
-    final manager = $$PlayTracksTableTableManager($_db, $_db.playTracks)
-        .filter((f) => f.id.sqlEquals($_column));
+    final manager = $$PlayTracksTableTableManager(
+      $_db,
+      $_db.playTracks,
+    ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_trackIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
-        manager.$state.copyWith(prefetchedData: [item]));
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
   }
 }
 
@@ -7384,55 +8821,75 @@ class $$PlayEventsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get startedAt => $composableBuilder(
-      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get endedAt => $composableBuilder(
-      column: $table.endedAt, builder: (column) => ColumnFilters(column));
+    column: $table.endedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get listenedMs => $composableBuilder(
-      column: $table.listenedMs, builder: (column) => ColumnFilters(column));
+    column: $table.listenedMs,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get maxPositionMs => $composableBuilder(
-      column: $table.maxPositionMs, builder: (column) => ColumnFilters(column));
+    column: $table.maxPositionMs,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get endReason => $composableBuilder(
-      column: $table.endReason, builder: (column) => ColumnFilters(column));
+    column: $table.endReason,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get syncKey => $composableBuilder(
-      column: $table.syncKey, builder: (column) => ColumnFilters(column));
+    column: $table.syncKey,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get originDeviceId => $composableBuilder(
-      column: $table.originDeviceId,
-      builder: (column) => ColumnFilters(column));
+    column: $table.originDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnFilters(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnFilters(column),
+  );
 
   $$PlayTracksTableFilterComposer get trackId {
     final $$PlayTracksTableFilterComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.trackId,
-        referencedTable: $db.playTracks,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$PlayTracksTableFilterComposer(
-              $db: $db,
-              $table: $db.playTracks,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
+      composer: this,
+      getCurrentColumn: (t) => t.trackId,
+      referencedTable: $db.playTracks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayTracksTableFilterComposer(
+            $db: $db,
+            $table: $db.playTracks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return composer;
   }
 }
@@ -7447,56 +8904,75 @@ class $$PlayEventsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get startedAt => $composableBuilder(
-      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get endedAt => $composableBuilder(
-      column: $table.endedAt, builder: (column) => ColumnOrderings(column));
+    column: $table.endedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get listenedMs => $composableBuilder(
-      column: $table.listenedMs, builder: (column) => ColumnOrderings(column));
+    column: $table.listenedMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get maxPositionMs => $composableBuilder(
-      column: $table.maxPositionMs,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.maxPositionMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get endReason => $composableBuilder(
-      column: $table.endReason, builder: (column) => ColumnOrderings(column));
+    column: $table.endReason,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get syncKey => $composableBuilder(
-      column: $table.syncKey, builder: (column) => ColumnOrderings(column));
+    column: $table.syncKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get originDeviceId => $composableBuilder(
-      column: $table.originDeviceId,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.originDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionPhysical,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.versionCounter,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   $$PlayTracksTableOrderingComposer get trackId {
     final $$PlayTracksTableOrderingComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.trackId,
-        referencedTable: $db.playTracks,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$PlayTracksTableOrderingComposer(
-              $db: $db,
-              $table: $db.playTracks,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
+      composer: this,
+      getCurrentColumn: (t) => t.trackId,
+      referencedTable: $db.playTracks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayTracksTableOrderingComposer(
+            $db: $db,
+            $table: $db.playTracks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return composer;
   }
 }
@@ -7520,10 +8996,14 @@ class $$PlayEventsTableAnnotationComposer
       $composableBuilder(column: $table.endedAt, builder: (column) => column);
 
   GeneratedColumn<int> get listenedMs => $composableBuilder(
-      column: $table.listenedMs, builder: (column) => column);
+    column: $table.listenedMs,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get maxPositionMs => $composableBuilder(
-      column: $table.maxPositionMs, builder: (column) => column);
+    column: $table.maxPositionMs,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get endReason =>
       $composableBuilder(column: $table.endReason, builder: (column) => column);
@@ -7532,49 +9012,62 @@ class $$PlayEventsTableAnnotationComposer
       $composableBuilder(column: $table.syncKey, builder: (column) => column);
 
   GeneratedColumn<String> get originDeviceId => $composableBuilder(
-      column: $table.originDeviceId, builder: (column) => column);
+    column: $table.originDeviceId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionPhysical => $composableBuilder(
-      column: $table.versionPhysical, builder: (column) => column);
+    column: $table.versionPhysical,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<int> get versionCounter => $composableBuilder(
-      column: $table.versionCounter, builder: (column) => column);
+    column: $table.versionCounter,
+    builder: (column) => column,
+  );
 
   $$PlayTracksTableAnnotationComposer get trackId {
     final $$PlayTracksTableAnnotationComposer composer = $composerBuilder(
-        composer: this,
-        getCurrentColumn: (t) => t.trackId,
-        referencedTable: $db.playTracks,
-        getReferencedColumn: (t) => t.id,
-        builder: (joinBuilder,
-                {$addJoinBuilderToRootComposer,
-                $removeJoinBuilderFromRootComposer}) =>
-            $$PlayTracksTableAnnotationComposer(
-              $db: $db,
-              $table: $db.playTracks,
-              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-              joinBuilder: joinBuilder,
-              $removeJoinBuilderFromRootComposer:
-                  $removeJoinBuilderFromRootComposer,
-            ));
+      composer: this,
+      getCurrentColumn: (t) => t.trackId,
+      referencedTable: $db.playTracks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$PlayTracksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.playTracks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return composer;
   }
 }
 
-class $$PlayEventsTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $PlayEventsTable,
-    PlayEventRow,
-    $$PlayEventsTableFilterComposer,
-    $$PlayEventsTableOrderingComposer,
-    $$PlayEventsTableAnnotationComposer,
-    $$PlayEventsTableCreateCompanionBuilder,
-    $$PlayEventsTableUpdateCompanionBuilder,
-    (PlayEventRow, $$PlayEventsTableReferences),
-    PlayEventRow,
-    PrefetchHooks Function({bool trackId})> {
+class $$PlayEventsTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlayEventsTable,
+          PlayEventRow,
+          $$PlayEventsTableFilterComposer,
+          $$PlayEventsTableOrderingComposer,
+          $$PlayEventsTableAnnotationComposer,
+          $$PlayEventsTableCreateCompanionBuilder,
+          $$PlayEventsTableUpdateCompanionBuilder,
+          (PlayEventRow, $$PlayEventsTableReferences),
+          PlayEventRow,
+          PrefetchHooks Function({bool trackId})
+        > {
   $$PlayEventsTableTableManager(_$MoliaDatabase db, $PlayEventsTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -7583,70 +9076,73 @@ class $$PlayEventsTableTableManager extends RootTableManager<
               $$PlayEventsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$PlayEventsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<int> trackId = const Value.absent(),
-            Value<int> startedAt = const Value.absent(),
-            Value<int?> endedAt = const Value.absent(),
-            Value<int> listenedMs = const Value.absent(),
-            Value<int> maxPositionMs = const Value.absent(),
-            Value<String?> endReason = const Value.absent(),
-            Value<String?> syncKey = const Value.absent(),
-            Value<String> originDeviceId = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-          }) =>
-              PlayEventsCompanion(
-            id: id,
-            trackId: trackId,
-            startedAt: startedAt,
-            endedAt: endedAt,
-            listenedMs: listenedMs,
-            maxPositionMs: maxPositionMs,
-            endReason: endReason,
-            syncKey: syncKey,
-            originDeviceId: originDeviceId,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required int trackId,
-            required int startedAt,
-            Value<int?> endedAt = const Value.absent(),
-            Value<int> listenedMs = const Value.absent(),
-            Value<int> maxPositionMs = const Value.absent(),
-            Value<String?> endReason = const Value.absent(),
-            Value<String?> syncKey = const Value.absent(),
-            Value<String> originDeviceId = const Value.absent(),
-            Value<int> versionPhysical = const Value.absent(),
-            Value<int> versionCounter = const Value.absent(),
-          }) =>
-              PlayEventsCompanion.insert(
-            id: id,
-            trackId: trackId,
-            startedAt: startedAt,
-            endedAt: endedAt,
-            listenedMs: listenedMs,
-            maxPositionMs: maxPositionMs,
-            endReason: endReason,
-            syncKey: syncKey,
-            originDeviceId: originDeviceId,
-            versionPhysical: versionPhysical,
-            versionCounter: versionCounter,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> trackId = const Value.absent(),
+                Value<int> startedAt = const Value.absent(),
+                Value<int?> endedAt = const Value.absent(),
+                Value<int> listenedMs = const Value.absent(),
+                Value<int> maxPositionMs = const Value.absent(),
+                Value<String?> endReason = const Value.absent(),
+                Value<String?> syncKey = const Value.absent(),
+                Value<String> originDeviceId = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+              }) => PlayEventsCompanion(
+                id: id,
+                trackId: trackId,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                listenedMs: listenedMs,
+                maxPositionMs: maxPositionMs,
+                endReason: endReason,
+                syncKey: syncKey,
+                originDeviceId: originDeviceId,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int trackId,
+                required int startedAt,
+                Value<int?> endedAt = const Value.absent(),
+                Value<int> listenedMs = const Value.absent(),
+                Value<int> maxPositionMs = const Value.absent(),
+                Value<String?> endReason = const Value.absent(),
+                Value<String?> syncKey = const Value.absent(),
+                Value<String> originDeviceId = const Value.absent(),
+                Value<int> versionPhysical = const Value.absent(),
+                Value<int> versionCounter = const Value.absent(),
+              }) => PlayEventsCompanion.insert(
+                id: id,
+                trackId: trackId,
+                startedAt: startedAt,
+                endedAt: endedAt,
+                listenedMs: listenedMs,
+                maxPositionMs: maxPositionMs,
+                endReason: endReason,
+                syncKey: syncKey,
+                originDeviceId: originDeviceId,
+                versionPhysical: versionPhysical,
+                versionCounter: versionCounter,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$PlayEventsTable, PlayEventRow>(table),
-                    $$PlayEventsTableReferences(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$PlayEventsTable, PlayEventRow>(table),
+                  $$PlayEventsTableReferences(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: ({trackId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
-              addJoins: <
-                  T extends TableManagerState<
+              addJoins:
+                  <
+                    T extends TableManagerState<
                       dynamic,
                       dynamic,
                       dynamic,
@@ -7657,40 +9153,46 @@ class $$PlayEventsTableTableManager extends RootTableManager<
                       dynamic,
                       dynamic,
                       dynamic,
-                      dynamic>>(state) {
-                if (trackId) {
-                  state = state.withJoin(
-                    currentTable: table,
-                    currentColumn: table.trackId,
-                    referencedTable:
-                        $$PlayEventsTableReferences._trackIdTable(db),
-                    referencedColumn:
-                        $$PlayEventsTableReferences._trackIdTable(db).id,
-                  ) as T;
-                }
+                      dynamic
+                    >
+                  >(state) {
+                    if (trackId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.trackId,
+                        referencedTable: $$PlayEventsTableReferences
+                            ._trackIdTable(db),
+                        referencedColumn: $$PlayEventsTableReferences
+                            ._trackIdTable(db)
+                            .id,
+                      ) as T;
+                    }
 
-                return state;
-              },
+                    return state;
+                  },
               getPrefetchedDataCallback: (items) async {
                 return [];
               },
             );
           },
-        ));
+        ),
+      );
 }
 
-typedef $$PlayEventsTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $PlayEventsTable,
-    PlayEventRow,
-    $$PlayEventsTableFilterComposer,
-    $$PlayEventsTableOrderingComposer,
-    $$PlayEventsTableAnnotationComposer,
-    $$PlayEventsTableCreateCompanionBuilder,
-    $$PlayEventsTableUpdateCompanionBuilder,
-    (PlayEventRow, $$PlayEventsTableReferences),
-    PlayEventRow,
-    PrefetchHooks Function({bool trackId})>;
+typedef $$PlayEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlayEventsTable,
+      PlayEventRow,
+      $$PlayEventsTableFilterComposer,
+      $$PlayEventsTableOrderingComposer,
+      $$PlayEventsTableAnnotationComposer,
+      $$PlayEventsTableCreateCompanionBuilder,
+      $$PlayEventsTableUpdateCompanionBuilder,
+      (PlayEventRow, $$PlayEventsTableReferences),
+      PlayEventRow,
+      PrefetchHooks Function({bool trackId})
+    >;
 typedef $$DownloadsTableCreateCompanionBuilder = DownloadsCompanion Function({
   Value<int> id,
   required String originSourceKey,
@@ -7740,56 +9242,89 @@ class $$DownloadsTableFilterComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnFilters<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnFilters(column));
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get originSourceKey => $composableBuilder(
-      column: $table.originSourceKey,
-      builder: (column) => ColumnFilters(column));
+    column: $table.originSourceKey,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get originSongId => $composableBuilder(
-      column: $table.originSongId, builder: (column) => ColumnFilters(column));
+    column: $table.originSongId,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnFilters(column));
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnFilters(column));
+    column: $table.artist,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnFilters(column));
+    column: $table.album,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnFilters(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnFilters(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnFilters(column));
+    column: $table.raw,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get quality => $composableBuilder(
-      column: $table.quality, builder: (column) => ColumnFilters(column));
+    column: $table.quality,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get filePath => $composableBuilder(
-      column: $table.filePath, builder: (column) => ColumnFilters(column));
+    column: $table.filePath,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get sizeBytes => $composableBuilder(
-      column: $table.sizeBytes, builder: (column) => ColumnFilters(column));
+    column: $table.sizeBytes,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get lyricPath => $composableBuilder(
-      column: $table.lyricPath, builder: (column) => ColumnFilters(column));
+    column: $table.lyricPath,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get coverPath => $composableBuilder(
-      column: $table.coverPath, builder: (column) => ColumnFilters(column));
+    column: $table.coverPath,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<String> get publicUri => $composableBuilder(
-      column: $table.publicUri, builder: (column) => ColumnFilters(column));
+    column: $table.publicUri,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<bool> get imported => $composableBuilder(
-      column: $table.imported, builder: (column) => ColumnFilters(column));
+    column: $table.imported,
+    builder: (column) => ColumnFilters(column),
+  );
 
   ColumnFilters<int> get downloadedAt => $composableBuilder(
-      column: $table.downloadedAt, builder: (column) => ColumnFilters(column));
+    column: $table.downloadedAt,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$DownloadsTableOrderingComposer
@@ -7802,58 +9337,89 @@ class $$DownloadsTableOrderingComposer
     super.$removeJoinBuilderFromRootComposer,
   });
   ColumnOrderings<int> get id => $composableBuilder(
-      column: $table.id, builder: (column) => ColumnOrderings(column));
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get originSourceKey => $composableBuilder(
-      column: $table.originSourceKey,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.originSourceKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get originSongId => $composableBuilder(
-      column: $table.originSongId,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.originSongId,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get title => $composableBuilder(
-      column: $table.title, builder: (column) => ColumnOrderings(column));
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get artist => $composableBuilder(
-      column: $table.artist, builder: (column) => ColumnOrderings(column));
+    column: $table.artist,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get album => $composableBuilder(
-      column: $table.album, builder: (column) => ColumnOrderings(column));
+    column: $table.album,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get coverUrl => $composableBuilder(
-      column: $table.coverUrl, builder: (column) => ColumnOrderings(column));
+    column: $table.coverUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => ColumnOrderings(column));
+    column: $table.durationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get raw => $composableBuilder(
-      column: $table.raw, builder: (column) => ColumnOrderings(column));
+    column: $table.raw,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get quality => $composableBuilder(
-      column: $table.quality, builder: (column) => ColumnOrderings(column));
+    column: $table.quality,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get filePath => $composableBuilder(
-      column: $table.filePath, builder: (column) => ColumnOrderings(column));
+    column: $table.filePath,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get sizeBytes => $composableBuilder(
-      column: $table.sizeBytes, builder: (column) => ColumnOrderings(column));
+    column: $table.sizeBytes,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get lyricPath => $composableBuilder(
-      column: $table.lyricPath, builder: (column) => ColumnOrderings(column));
+    column: $table.lyricPath,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get coverPath => $composableBuilder(
-      column: $table.coverPath, builder: (column) => ColumnOrderings(column));
+    column: $table.coverPath,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<String> get publicUri => $composableBuilder(
-      column: $table.publicUri, builder: (column) => ColumnOrderings(column));
+    column: $table.publicUri,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<bool> get imported => $composableBuilder(
-      column: $table.imported, builder: (column) => ColumnOrderings(column));
+    column: $table.imported,
+    builder: (column) => ColumnOrderings(column),
+  );
 
   ColumnOrderings<int> get downloadedAt => $composableBuilder(
-      column: $table.downloadedAt,
-      builder: (column) => ColumnOrderings(column));
+    column: $table.downloadedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DownloadsTableAnnotationComposer
@@ -7869,10 +9435,14 @@ class $$DownloadsTableAnnotationComposer
       $composableBuilder(column: $table.id, builder: (column) => column);
 
   GeneratedColumn<String> get originSourceKey => $composableBuilder(
-      column: $table.originSourceKey, builder: (column) => column);
+    column: $table.originSourceKey,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get originSongId => $composableBuilder(
-      column: $table.originSongId, builder: (column) => column);
+    column: $table.originSongId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
@@ -7887,7 +9457,9 @@ class $$DownloadsTableAnnotationComposer
       $composableBuilder(column: $table.coverUrl, builder: (column) => column);
 
   GeneratedColumn<int> get durationMs => $composableBuilder(
-      column: $table.durationMs, builder: (column) => column);
+    column: $table.durationMs,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get raw =>
       $composableBuilder(column: $table.raw, builder: (column) => column);
@@ -7914,26 +9486,32 @@ class $$DownloadsTableAnnotationComposer
       $composableBuilder(column: $table.imported, builder: (column) => column);
 
   GeneratedColumn<int> get downloadedAt => $composableBuilder(
-      column: $table.downloadedAt, builder: (column) => column);
+    column: $table.downloadedAt,
+    builder: (column) => column,
+  );
 }
 
-class $$DownloadsTableTableManager extends RootTableManager<
-    _$MoliaDatabase,
-    $DownloadsTable,
-    DownloadRow,
-    $$DownloadsTableFilterComposer,
-    $$DownloadsTableOrderingComposer,
-    $$DownloadsTableAnnotationComposer,
-    $$DownloadsTableCreateCompanionBuilder,
-    $$DownloadsTableUpdateCompanionBuilder,
-    (
-      DownloadRow,
-      BaseReferences<_$MoliaDatabase, $DownloadsTable, DownloadRow>
-    ),
-    DownloadRow,
-    PrefetchHooks Function()> {
+class $$DownloadsTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $DownloadsTable,
+          DownloadRow,
+          $$DownloadsTableFilterComposer,
+          $$DownloadsTableOrderingComposer,
+          $$DownloadsTableAnnotationComposer,
+          $$DownloadsTableCreateCompanionBuilder,
+          $$DownloadsTableUpdateCompanionBuilder,
+          (
+            DownloadRow,
+            BaseReferences<_$MoliaDatabase, $DownloadsTable, DownloadRow>,
+          ),
+          DownloadRow,
+          PrefetchHooks Function()
+        > {
   $$DownloadsTableTableManager(_$MoliaDatabase db, $DownloadsTable table)
-      : super(TableManagerState(
+    : super(
+        TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
@@ -7942,108 +9520,116 @@ class $$DownloadsTableTableManager extends RootTableManager<
               $$DownloadsTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
               $$DownloadsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            Value<String> originSourceKey = const Value.absent(),
-            Value<String> originSongId = const Value.absent(),
-            Value<String> title = const Value.absent(),
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
-            Value<String> quality = const Value.absent(),
-            Value<String?> filePath = const Value.absent(),
-            Value<int> sizeBytes = const Value.absent(),
-            Value<String?> lyricPath = const Value.absent(),
-            Value<String?> coverPath = const Value.absent(),
-            Value<String?> publicUri = const Value.absent(),
-            Value<bool> imported = const Value.absent(),
-            Value<int> downloadedAt = const Value.absent(),
-          }) =>
-              DownloadsCompanion(
-            id: id,
-            originSourceKey: originSourceKey,
-            originSongId: originSongId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            quality: quality,
-            filePath: filePath,
-            sizeBytes: sizeBytes,
-            lyricPath: lyricPath,
-            coverPath: coverPath,
-            publicUri: publicUri,
-            imported: imported,
-            downloadedAt: downloadedAt,
-          ),
-          createCompanionCallback: ({
-            Value<int> id = const Value.absent(),
-            required String originSourceKey,
-            required String originSongId,
-            required String title,
-            Value<String> artist = const Value.absent(),
-            Value<String> album = const Value.absent(),
-            Value<String?> coverUrl = const Value.absent(),
-            Value<int?> durationMs = const Value.absent(),
-            Value<String> raw = const Value.absent(),
-            Value<String> quality = const Value.absent(),
-            Value<String?> filePath = const Value.absent(),
-            Value<int> sizeBytes = const Value.absent(),
-            Value<String?> lyricPath = const Value.absent(),
-            Value<String?> coverPath = const Value.absent(),
-            Value<String?> publicUri = const Value.absent(),
-            Value<bool> imported = const Value.absent(),
-            required int downloadedAt,
-          }) =>
-              DownloadsCompanion.insert(
-            id: id,
-            originSourceKey: originSourceKey,
-            originSongId: originSongId,
-            title: title,
-            artist: artist,
-            album: album,
-            coverUrl: coverUrl,
-            durationMs: durationMs,
-            raw: raw,
-            quality: quality,
-            filePath: filePath,
-            sizeBytes: sizeBytes,
-            lyricPath: lyricPath,
-            coverPath: coverPath,
-            publicUri: publicUri,
-            imported: imported,
-            downloadedAt: downloadedAt,
-          ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> originSourceKey = const Value.absent(),
+                Value<String> originSongId = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                Value<String> quality = const Value.absent(),
+                Value<String?> filePath = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<String?> lyricPath = const Value.absent(),
+                Value<String?> coverPath = const Value.absent(),
+                Value<String?> publicUri = const Value.absent(),
+                Value<bool> imported = const Value.absent(),
+                Value<int> downloadedAt = const Value.absent(),
+              }) => DownloadsCompanion(
+                id: id,
+                originSourceKey: originSourceKey,
+                originSongId: originSongId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                quality: quality,
+                filePath: filePath,
+                sizeBytes: sizeBytes,
+                lyricPath: lyricPath,
+                coverPath: coverPath,
+                publicUri: publicUri,
+                imported: imported,
+                downloadedAt: downloadedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String originSourceKey,
+                required String originSongId,
+                required String title,
+                Value<String> artist = const Value.absent(),
+                Value<String> album = const Value.absent(),
+                Value<String?> coverUrl = const Value.absent(),
+                Value<int?> durationMs = const Value.absent(),
+                Value<String> raw = const Value.absent(),
+                Value<String> quality = const Value.absent(),
+                Value<String?> filePath = const Value.absent(),
+                Value<int> sizeBytes = const Value.absent(),
+                Value<String?> lyricPath = const Value.absent(),
+                Value<String?> coverPath = const Value.absent(),
+                Value<String?> publicUri = const Value.absent(),
+                Value<bool> imported = const Value.absent(),
+                required int downloadedAt,
+              }) => DownloadsCompanion.insert(
+                id: id,
+                originSourceKey: originSourceKey,
+                originSongId: originSongId,
+                title: title,
+                artist: artist,
+                album: album,
+                coverUrl: coverUrl,
+                durationMs: durationMs,
+                raw: raw,
+                quality: quality,
+                filePath: filePath,
+                sizeBytes: sizeBytes,
+                lyricPath: lyricPath,
+                coverPath: coverPath,
+                publicUri: publicUri,
+                imported: imported,
+                downloadedAt: downloadedAt,
+              ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (
-                    e.readTable<$DownloadsTable, DownloadRow>(table),
-                    BaseReferences<_$MoliaDatabase, $DownloadsTable,
-                        DownloadRow>(db, table, e)
-                  ))
+              .map(
+                (e) => (
+                  e.readTable<$DownloadsTable, DownloadRow>(table),
+                  BaseReferences<_$MoliaDatabase, $DownloadsTable, DownloadRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
-        ));
+        ),
+      );
 }
 
-typedef $$DownloadsTableProcessedTableManager = ProcessedTableManager<
-    _$MoliaDatabase,
-    $DownloadsTable,
-    DownloadRow,
-    $$DownloadsTableFilterComposer,
-    $$DownloadsTableOrderingComposer,
-    $$DownloadsTableAnnotationComposer,
-    $$DownloadsTableCreateCompanionBuilder,
-    $$DownloadsTableUpdateCompanionBuilder,
-    (
+typedef $$DownloadsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $DownloadsTable,
       DownloadRow,
-      BaseReferences<_$MoliaDatabase, $DownloadsTable, DownloadRow>
-    ),
-    DownloadRow,
-    PrefetchHooks Function()>;
+      $$DownloadsTableFilterComposer,
+      $$DownloadsTableOrderingComposer,
+      $$DownloadsTableAnnotationComposer,
+      $$DownloadsTableCreateCompanionBuilder,
+      $$DownloadsTableUpdateCompanionBuilder,
+      (
+        DownloadRow,
+        BaseReferences<_$MoliaDatabase, $DownloadsTable, DownloadRow>,
+      ),
+      DownloadRow,
+      PrefetchHooks Function()
+    >;
 
 class $MoliaDatabaseManager {
   final _$MoliaDatabase _db;
