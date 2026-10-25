@@ -9,6 +9,8 @@ import 'dart:async';
 
 import '../../providers/lyrics_provider.dart';
 import '../../providers/playback_provider.dart';
+import '../../services/bili_account_service.dart';
+import '../../sources/source_manager.dart';
 import 'local_data_stack.dart';
 
 /// 歌词会话栈产物。
@@ -21,6 +23,21 @@ LyricsStack buildLyricsStack({
   required LocalDataStack local,
 }) {
   return (lyricsProvider: LyricsProvider(service: local.lyricsService),);
+}
+
+/// B 站登录（本地扫码或同步到达）→ 清 B 站原生取词缓存 → 刷新当前歌词。
+///
+/// `BuiltinLyricDispatch` 会把「无字幕」的 null 缓存 5 分钟；不清的话登录后
+/// 当前曲目仍会命中旧结果，继续显示网易云。
+void wireBiliLoginLyricsRefresh({
+  required BiliAccountService account,
+  required SourceManager sourceManager,
+  required LyricsProvider lyricsProvider,
+}) {
+  account.onLoggedIn = () {
+    sourceManager.invalidateLyricCacheFor('bili');
+    unawaited(lyricsProvider.refreshAfterBiliLogin());
+  };
 }
 
 /// 下一首歌词预载：统一挂在这里，不依赖歌词组件是否挂载/展开；

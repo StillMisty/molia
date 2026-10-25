@@ -9,6 +9,7 @@
 library;
 
 import '../../domain/models/failure.dart';
+import 'bili_account.dart';
 import 'bili_api.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
@@ -21,9 +22,15 @@ enum BiliAuth {
   /// 会话 + WBI：buvid Cookie + 签名参数；刷新口径由
   /// [BiliRefreshPolicy] 决定（默认只对风控刷新一次）。
   session,
+
+  /// 账号 Cookie（无 WBI）：账号资料等普通端点；**不用于播放 / 搜索 / 评论**。
+  account,
+
+  /// 账号 Cookie + buvid + WBI 签名：B 站字幕等需要登录态的 WBI 端点。
+  accountSession,
 }
 
-/// 会话失败后的刷新口径（只对 [BiliAuth.session] 有意义）。
+/// 会话失败后的刷新口径（对 [BiliAuth.session] / [BiliAuth.accountSession] 有意义）。
 enum BiliRefreshPolicy {
   /// 只有风控响应（`-403/-412/-352` / `v_voucher`）才刷新一次：
   /// 取链 / UP / 评论 / 榜单等端点的默认口径。
@@ -89,6 +96,19 @@ class BiliClient {
             codePolicy,
             refreshPolicy,
           );
+        case BiliAuth.account:
+          final response = await _getWithAccount(path, query, retries);
+          _ensureAccepted(response, codePolicy);
+          return response;
+        case BiliAuth.accountSession:
+          return await _getWithSession(
+            path,
+            query,
+            retries,
+            codePolicy,
+            refreshPolicy,
+            withAccount: true,
+          );
       }
     } on SourceFailure {
       rethrow;
@@ -117,26 +137,45 @@ class BiliClient {
     );
   }
 
+  /// 账号 Cookie、无 WBI：仅账号资料等普通端点。
+  Future<dynamic> _getWithAccount(
+    String path,
+    Map<String, Object?>? query,
+    int retries,
+  ) {
+    final cookie = BiliAccountStore.instance.cookieHeader;
+    return transport.getJson(
+      _urlOf(path, query),
+      headers: cookie == null || cookie.isEmpty
+          ? BiliApi.anonymousHeaders
+          : BiliApi.accountHeaders(cookie),
+      retries: retries,
+    );
+  }
+
   Future<dynamic> _getWithSession(
     String path,
     Map<String, Object?>? query,
     int retries,
     BiliCodePolicy codePolicy,
-    BiliRefreshPolicy refreshPolicy,
-  ) {
+    BiliRefreshPolicy refreshPolicy, {
+    bool withAccount = false,
+  }) {
     return switch (refreshPolicy) {
       BiliRefreshPolicy.riskOnly => _getRiskOnly(
-          path,
-          query,
-          retries,
-          codePolicy,
-        ),
+        path,
+        query,
+        retries,
+        codePolicy,
+        withAccount: withAccount,
+      ),
       BiliRefreshPolicy.anyFailure => _getAnyFailure(
-          path,
-          query,
-          retries,
-          codePolicy,
-        ),
+        path,
+        query,
+        retries,
+        codePolicy,
+        withAccount: withAccount,
+      ),
     };
   }
 
@@ -145,10 +184,17 @@ class BiliClient {
     String path,
     Map<String, Object?>? query,
     int retries,
-    BiliCodePolicy codePolicy,
-  ) async {
+    BiliCodePolicy codePolicy, {
+    required bool withAccount,
+  }) async {
     final session = await BiliApi.session(transport: transport);
-    final response = await _sendWithSession(session, path, query, retries);
+    final response = await _sendWithSession(
+      session,
+      path,
+      query,
+      retries,
+      withAccount: withAccount,
+    );
     if (!_isRiskResponse(response)) {
       _ensureAccepted(response, codePolicy);
       return response;
@@ -158,7 +204,13 @@ class BiliClient {
     // 伪装成获取会话的网络错误。
     final original = _riskFailure(response, codePolicy);
     final refreshed = await _refreshOrThrow(original);
-    final retried = await _sendWithSession(refreshed, path, query, retries);
+    final retried = await _sendWithSession(
+      refreshed,
+      path,
+      query,
+      retries,
+      withAccount: withAccount,
+    );
     _ensureAccepted(retried, codePolicy);
     return retried;
   }
@@ -171,12 +223,19 @@ class BiliClient {
     String path,
     Map<String, Object?>? query,
     int retries,
-    BiliCodePolicy codePolicy,
-  ) async {
+    BiliCodePolicy codePolicy, {
+    required bool withAccount,
+  }) async {
     late final SourceFailure original;
     try {
       final session = await BiliApi.session(transport: transport);
-      final response = await _sendWithSession(session, path, query, retries);
+      final response = await _sendWithSession(
+        session,
+        path,
+        query,
+        retries,
+        withAccount: withAccount,
+      );
       _ensureAccepted(response, codePolicy);
       return response;
     } on SourceFailure catch (error) {
@@ -187,7 +246,13 @@ class BiliClient {
 
     // 刷新失败时报第一次的失败（旧搜索行为：refresh 异常不覆盖结果）。
     final refreshed = await _refreshOrThrow(original);
-    final retried = await _sendWithSession(refreshed, path, query, retries);
+    final retried = await _sendWithSession(
+      refreshed,
+      path,
+      query,
+      retries,
+      withAccount: withAccount,
+    );
     _ensureAccepted(retried, codePolicy);
     return retried;
   }
@@ -205,11 +270,19 @@ class BiliClient {
     BiliSession session,
     String path,
     Map<String, Object?>? query,
-    int retries,
-  ) {
+    int retries, {
+    required bool withAccount,
+  }) {
+    final headers = Map<String, String>.from(session.apiHeaders);
+    if (withAccount) {
+      final accountCookie = BiliAccountStore.instance.cookieHeader;
+      if (accountCookie != null && accountCookie.isNotEmpty) {
+        headers['Cookie'] = '${headers['Cookie']}; $accountCookie';
+      }
+    }
     return transport.getJson(
       session.signUrl(_absolute(path), query ?? const {}),
-      headers: session.apiHeaders,
+      headers: headers,
       retries: retries,
     );
   }
@@ -218,10 +291,14 @@ class BiliClient {
   String _urlOf(String path, Map<String, Object?>? query) {
     final base = _absolute(path);
     if (query == null || query.isEmpty) return base;
-    return Uri.parse(base).replace(queryParameters: <String, String>{
-      for (final entry in query.entries)
-        if (entry.value != null) entry.key: '${entry.value}',
-    }).toString();
+    return Uri.parse(base)
+        .replace(
+          queryParameters: <String, String>{
+            for (final entry in query.entries)
+              if (entry.value != null) entry.key: '${entry.value}',
+          },
+        )
+        .toString();
   }
 
   String _absolute(String path) {
@@ -261,7 +338,8 @@ class BiliClient {
 
   /// 业务码 → [SourceFailure]。唯一映射点，端点只选口径。
   SourceFailure _failureFor(int? code, BiliCodePolicy codePolicy) {
-    final notFound = code == -404 ||
+    final notFound =
+        code == -404 ||
         (codePolicy == BiliCodePolicy.favorites && code == -403);
     if (notFound) {
       return BiliApiException(

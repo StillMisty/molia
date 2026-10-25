@@ -34,7 +34,7 @@ class SyncProvider extends ChangeNotifier {
     LocalEndpointsService? localEndpoints,
     this._codec,
     this._pairing,
-  })  : _endpoints = localEndpoints ?? LocalEndpointsService() {
+  }) : _endpoints = localEndpoints ?? LocalEndpointsService() {
     _engine.addListener(notifyListeners);
     _controlPlane.addListener(notifyListeners);
   }
@@ -124,9 +124,7 @@ class SyncProvider extends ChangeNotifier {
   Future<SyncPairingResult> requestPairing(SyncNearbyDevice device) async {
     final pairing = _pairing;
     if (pairing == null) {
-      return const SyncPairingResult(
-        outcome: SyncPairingOutcome.unavailable,
-      );
+      return const SyncPairingResult(outcome: SyncPairingOutcome.unavailable);
     }
     return pairing.requestPairing(device);
   }
@@ -166,13 +164,15 @@ class SyncProvider extends ChangeNotifier {
   }) async {
     final normalized = normalizePeerHost(host);
     if (normalized.isEmpty) return false;
-    return _controlPlane.addManualPeer(ManualPeer(
-      host: normalized,
-      name: name.trim(),
-      probePort: probePort,
-      httpPort: httpPort,
-      deviceId: deviceId,
-    ));
+    return _controlPlane.addManualPeer(
+      ManualPeer(
+        host: normalized,
+        name: name.trim(),
+        probePort: probePort,
+        httpPort: httpPort,
+        deviceId: deviceId,
+      ),
+    );
   }
 
   /// 更新某条手动地址（设备详情里的「更新地址」）。
@@ -183,13 +183,12 @@ class SyncProvider extends ChangeNotifier {
     required String toHost,
     int? probePort,
     String? name,
-  }) =>
-      _controlPlane.moveManualPeer(
-        normalizePeerHost(fromHost),
-        toHost: normalizePeerHost(toHost),
-        probePort: probePort,
-        name: name,
-      );
+  }) => _controlPlane.moveManualPeer(
+    normalizePeerHost(fromHost),
+    toHost: normalizePeerHost(toHost),
+    probePort: probePort,
+    name: name,
+  );
 
   /// 本机可路由地址（设置页地址列表展示用；服务内部缓存枚举结果）。
   Future<List<LocalEndpoint>> localEndpoints() => _endpoints.list();
@@ -427,8 +426,8 @@ class SyncProvider extends ChangeNotifier {
     }
   }
 
-  /// 导出完整备份 JSON（数据与存储页使用；凭证类默认排除）。
-  Future<String> exportBackupJson({bool includeCredentials = false}) =>
+  /// 导出完整备份 JSON（数据与存储页使用；默认含全部凭证，保证换机一致）。
+  Future<String> exportBackupJson({bool includeCredentials = true}) =>
       _backup.exportBackupJson(includeCredentials: includeCredentials);
 
   /// 导入完整备份（与本地数据逐键 LWW 合并）。
@@ -436,7 +435,7 @@ class SyncProvider extends ChangeNotifier {
   /// 备份模块不持有 listener：导入落地后由 provider 统一通知 UI。
   Future<SyncApplyOutcome> importBackupJson(
     String json, {
-    bool includeCredentials = false,
+    bool includeCredentials = true,
   }) async {
     final outcome = await _backup.importBackupJson(
       json,
@@ -454,11 +453,10 @@ class SyncProvider extends ChangeNotifier {
   void notifyLocalChange({
     Set<SyncCategory>? categories,
     bool immediate = true,
-  }) =>
-      _scheduler?.notifyLocalChange(
-        categories: categories,
-        immediate: immediate,
-      );
+  }) => _scheduler?.notifyLocalChange(
+    categories: categories,
+    immediate: immediate,
+  );
 
   /// 用户交互（界面操作）。
   void notifyInteraction() => _scheduler?.notifyInteraction();
@@ -509,9 +507,9 @@ class SyncProvider extends ChangeNotifier {
 
   /// 近 24 小时活动汇总（独立于展示日志的 20 条上限）。
   SyncActivitySummary get activity24h => SyncActivitySummary.fromEntries(
-        _controlPlane.activity,
-        nowMs: _controlPlane.nowMs(),
-      );
+    _controlPlane.activity,
+    nowMs: _controlPlane.nowMs(),
+  );
 
   /// 当前是否在移动数据上（观测面展示用）。
   bool get onCellular => _scheduler?.onCellular ?? false;

@@ -521,15 +521,22 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
-  Future<({int playlistId, int added, int total})> importTracks(
+  Future<({int playlistId, int added, int total, bool created})> importTracks(
     String name,
     List<PlaylistTrack> tracks,
   ) async {
-    if (tracks.isEmpty) return (playlistId: -1, added: 0, total: 0);
+    if (tracks.isEmpty) {
+      return (playlistId: -1, added: 0, total: 0, created: false);
+    }
     final existing = await findPlaylistByName(name);
     final playlistId = existing?.id ?? await createPlaylist(name);
     final added = await addTracksToPlaylist(playlistId, tracks);
-    return (playlistId: playlistId, added: added, total: tracks.length);
+    return (
+      playlistId: playlistId,
+      added: added,
+      total: tracks.length,
+      created: existing == null,
+    );
   }
 
   @override

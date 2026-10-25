@@ -103,6 +103,22 @@ class _NoopArtworkCache extends ArtworkCache {
       : super(cacheService: CacheService(storage: MemoryCacheStorage()));
 }
 
+/// 指定列表的曲目读取失败（模拟损坏行 / 数据库读错误）。
+class _FailingTrackReadRepository extends FakeLibraryRepository {
+  final Set<int> failingPlaylistIds = {};
+
+  @override
+  Future<List<PlaylistTrack>> listPlaylistTracks(
+    int playlistId, {
+    int? limit,
+  }) {
+    if (failingPlaylistIds.contains(playlistId)) {
+      return Future.error(StateError('tracks read failed'));
+    }
+    return super.listPlaylistTracks(playlistId, limit: limit);
+  }
+}
+
 /// 假缓存存储：音频缓存索引（缓存 = 已下载识别）与单曲清缓存记录。
 class _FakeCacheStorage implements CacheStorage {
   _FakeCacheStorage({Map<String, int>? files}) : files = files ?? {};
@@ -246,6 +262,7 @@ void main() {
     ShellReselectSignal? reselect,
     TextScaler? textScaler,
     LibraryProvider? libraryProvider,
+    bool settle = true,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -301,7 +318,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
   }
 
   /// 把 3 首曲目收藏进默认收藏列表（内部名 `__favorites__`）。
@@ -1602,6 +1619,46 @@ void main() {
 
     expect(find.text('资料库加载失败'), findsNothing);
     expect(find.text('还没有收藏记录'), findsOneWidget);
+  });
+
+  testWidgets('列表曲目读取失败：显示可重试错误态，不能一直 loading', (tester) async {
+    // 列表曲目读取固定失败：页面每次 build 都会 ensure，清错重试会变成
+    // 「失败 → loading → 再失败」的永久转圈（导入后切到新列表时出现过）。
+    final brokenRepository = _FailingTrackReadRepository();
+    final brokenBackend = FakePlaybackBackend();
+    final brokenPlayback = buildTestPlaybackProvider(
+      backend: brokenBackend,
+      libraryRepository: brokenRepository,
+    );
+    final brokenProvider = LibraryProvider(
+      repository: brokenRepository,
+      playbackProvider: brokenPlayback,
+    );
+    addTearDown(() async {
+      brokenProvider.dispose();
+      brokenPlayback.dispose();
+      await brokenRepository.dispose();
+    });
+
+    // 直接写资料库（不经过 provider 的导入预置）：页面必须真的读一次库。
+    final imported = await brokenRepository.importLxmcBytes(
+      _lxmcBytes([_track(1), _track(2)]),
+    );
+    brokenRepository.failingPlaylistIds.add(imported.playlistId);
+
+    // settle=false：回归时不能让 pumpAndSettle 等十分钟。
+    await pumpFavorites(
+      tester,
+      libraryProvider: brokenProvider,
+      settle: false,
+    );
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    expect(find.byType(M3ELoadingIndicator), findsNothing);
+    expect(find.text('资料库加载失败'), findsOneWidget);
+    expect(find.widgetWithText(M3EButton, '重试'), findsOneWidget);
   });
 
   testWidgets('批量取消收藏失败：保留选择并提示，重试成功后才清空', (tester) async {

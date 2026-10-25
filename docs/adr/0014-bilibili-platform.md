@@ -29,7 +29,7 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
    发现五个适配器；**不注册**专辑与按歌词搜歌。`SourceManager._isBuiltinSearchable`
    的判定改为「平台有原生取链适配器 **或** 已有可取链脚本」——B 站不需要脚本
    即可搜索 / 播放，其余五个音乐平台仍要脚本声明取链。
-2. **匿名访问，不引入登录**：`bili_api.dart` 维护会话——`/x/frontend/finger/spi`
+2. **匿名访问为主，字幕歌词可选登录**：`bili_api.dart` 维护会话——`/x/frontend/finger/spi`
    取 `buvid3/buvid4`，`/x/web-interface/nav`（code `-101` 也带 `wbi_img`）取
    `img_url/sub_url`，按 64 位混淆表取前 32 位得 mixinKey；请求参数加 `wts`、
    排序、清洗 `!'()*`、URI 编码后 md5 得 `w_rid`。会话 1 小时缓存 + single-flight，
@@ -47,8 +47,10 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
    - 搜索：全站视频（`search_type=video`，固定 20/页、最多 50 页）+ UP 搜索
      （`search_type=bili_user`，搜索页「歌手」分段）；
    - 播放：原生音轨（无登录只有三档音频，不含大会员高音质）；
-   - 歌词：`/x/player/v2` 的 CC 字幕轨，中文优先、`subtitle_url` 补协议、
-     `from` 秒转 `[mm:ss.mmm]` LRC；无字幕返回 null，继续走其它歌词源；
+   - 歌词：`/x/player/wbi/v2` / `/x/player/v2` 的 CC/AI 字幕轨（**需要登录
+     Cookie**；匿名 `subtitles` 恒为空，见 ADR-0016），中文优先、`subtitle_url`
+     补协议、`from` 秒转 `[mm:ss.mmm]` LRC；未登录 / 无字幕返回 null，继续走
+     其它歌词源；
    - 评论：`/x/v2/reply/main`（`type=1&oid=aid`，热门 `mode=3` / 最新 `mode=2`），
      `pagination_str` 游标按「视频 + tab + 页码」存 `CommentCursorStore`；
      该接口**不带 buvid Cookie**（带 Cookie 会退化成 3 条热评 + `is_end=true`）；
@@ -59,17 +61,19 @@ B 站没有「歌曲」实体：搜索结果与收藏夹都是视频，播放的
      code 0 但 `vlist` 空、`page.count>0` 同样视为风控走搜索兜底；
    - 发现：单张「B 站音乐榜（三日）」（`ranking?rid=3&day=3`，board id
      `bili__music_3d`，bangid `3:3`）+ 热搜（`search/square?limit=10`）；
-   - 无需 WBI 的接口（评论、字幕、榜单、热搜、收藏夹、UP 资料 card、分 P）只带
+   - 无需 WBI 的接口（评论、榜单、热搜、收藏夹、UP 资料 card、分 P）只带
      UA + Referer，不拉 `nav` 会话；评论 / 字幕还刻意不带 buvid Cookie（带 Cookie
-     评论会降级为 3 条热评，字幕无需登录）；
+     评论会降级为 3 条热评，字幕 CDN 不需要登录）——**字幕列表本身需要账号
+     Cookie，见 ADR-0016**；
    - 收藏夹导入：`/x/v3/fav/resource/list` 按 `media_count` 拉全（上限 50 页 /
      1000 条），只收 `type==2`、`attr==0`、有 `bvid` 的视频；rawId 支持数字、
      `fid=` / `media_id=`、`medialist/detail/ml<id>`、`space.bilibili.com/.../favlist`
      与 `b23.tv` 短链（统一走 `BuiltinTransport.resolveRedirect` 跟随跳转后解析）；
      不带 `fid` 的 favlist 链接额外取该 UP 的第一个收藏夹（便利回退，失败按无法识别）。
-5. **边界（明确不做）**：专辑、按歌词搜歌、登录 / 大会员高音质、歌单浏览 /
+5. **边界（明确不做）**：专辑、按歌词搜歌、大会员高音质、歌单浏览 /
    搜索（`BiliDiscoverSource.supportsPlaylists=false`，UI 隐藏「歌单」tab）、
-   私密收藏夹导入（`info` 缺失 → `notFound`）。
+   私密收藏夹导入（`info` 缺失 → `notFound`）。普通账号登录仅用于字幕，见
+   ADR-0016。
 6. **周边适配**：raw 原样保留 `bvid/aid/cid/source` 并补 `_types['192k','128k','64k']`
    与 `_artists`；通用 id 优先级把 `bvid` 放最前，`.lxmc` 平台优先键为
    `['bvid','aid','id']`，不登记规范字段（不需脚本取链）；下载扩展名 `.m4s` 归一为

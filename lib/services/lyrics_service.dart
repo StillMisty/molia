@@ -1,6 +1,8 @@
 import 'dart:async';
+
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../app/perf/data_path_trace.dart';
 import '../domain/models/track.dart';
 import '../models/lyrics_result.dart';
@@ -35,6 +37,10 @@ class LyricsService {
   /// （「离线播放全程不联网」）；在线曲目行为不变。
   final bool Function(Track track)? _networkFallbackAllowed;
 
+  /// 曲目原生歌词现在是否可用（B 站登录后 true）：缓存来源与曲目不同源时
+  /// 优先重试原生，而不是继续用跨平台缓存。
+  final bool Function(Track track)? _nativeLyricAvailable;
+
   LyricsService({
     List<LyricProvider>? providers,
     SharedPreferences? prefs,
@@ -42,32 +48,38 @@ class LyricsService {
     LyricsCache? lyricsCache,
     this._trackLyricLoader,
     this._networkFallbackAllowed,
-  })  : _providers = providers ??
-            [
-              NetEaseProvider(),
-              QQProvider(),
-              KugouProvider(),
-              KuwoProvider(),
-              MiguProvider(),
-              LRCLibProvider(),
-            ],
-        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
-        _cacheService = cacheService ?? CacheService.instance;
+    this._nativeLyricAvailable,
+  }) : _providers =
+           providers ??
+           [
+             NetEaseProvider(),
+             QQProvider(),
+             KugouProvider(),
+             KuwoProvider(),
+             MiguProvider(),
+             LRCLibProvider(),
+           ],
+       _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
+       _cacheService = cacheService ?? CacheService.instance;
 
   /// 获取歌词（原文 + 可选翻译 / 罗马音 / 逐字）。
   ///
   /// 顺序：缓存 → 曲目原生取词（精确平台 ID，需传入 [track]）→
   /// 跨平台名字搜索回退（并行竞速）。
+  ///
+  /// [ignoreCache] 为 true 时跳过缓存读取（登录 / 手动刷新场景）。
   Future<LyricsResult?> getLyrics(
     String songName,
     String artistName,
     String trackId, {
     Track? track,
+    bool ignoreCache = false,
   }) async {
     try {
-      final cacheWatch =
-          DataPathTrace.enabled ? (Stopwatch()..start()) : null;
-      final cached = await _lyricsCache.read(trackId);
+      final cacheWatch = DataPathTrace.enabled && !ignoreCache
+          ? (Stopwatch()..start())
+          : null;
+      final cached = ignoreCache ? null : await _lyricsCache.read(trackId);
       if (cacheWatch != null) {
         DataPathTrace.record(
           'lyrics.cache',
@@ -76,21 +88,32 @@ class LyricsService {
         );
       }
       if (cached != null) {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        // TTL 从统一缓存策略读取（0 = 永不过期），修改后无需重启。
-        final ttlDays = await _cacheService.lyricsTtlDays();
-        final ttlSeconds = ttlDays * 24 * 60 * 60;
-        if (ttlDays <= 0 || now - cached.timestamp < ttlSeconds) {
-          _logger.info('从缓存获取歌词: $trackId (来源: ${cached.provider})');
-          return LyricsResult(
-            lyric: cached.lyric,
-            translation: cached.translation,
-            roma: cached.roma,
-            lxlyric: cached.lxlyric,
-            provider: cached.provider,
-          );
+        // B 站登录后，缓存里的网易云 / 其它平台结果不再优先：先试一次
+        // 曲目原生字幕。手动选择过的歌词（manual）尊重用户选择。
+        final preferNative =
+            track != null &&
+            !cached.manual &&
+            cached.provider != track.id.sourceKey &&
+            (_nativeLyricAvailable?.call(track) ?? false);
+        if (!preferNative) {
+          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          // TTL 从统一缓存策略读取（0 = 永不过期），修改后无需重启。
+          final ttlDays = await _cacheService.lyricsTtlDays();
+          final ttlSeconds = ttlDays * 24 * 60 * 60;
+          if (ttlDays <= 0 || now - cached.timestamp < ttlSeconds) {
+            _logger.info('从缓存获取歌词: $trackId (来源: ${cached.provider})');
+            return LyricsResult(
+              lyric: cached.lyric,
+              translation: cached.translation,
+              roma: cached.roma,
+              lxlyric: cached.lxlyric,
+              provider: cached.provider,
+            );
+          }
+          _logger.info('缓存已过期: $trackId');
+        } else {
+          _logger.info('缓存来源与曲目不同源，优先原生取词: $trackId');
         }
-        _logger.info('缓存已过期: $trackId');
       }
 
       // 曲目原生取词：平台精确 ID（songmid/hash/mrcUrl…），优先于名字搜索。
@@ -143,6 +166,16 @@ class LyricsService {
     }
   }
 
+  /// 当前缓存是否为用户手动选择的歌词（登录后刷新不应覆盖）。
+  Future<bool> hasManualLyrics(String trackId) async {
+    try {
+      final cached = await _lyricsCache.read(trackId);
+      return cached?.manual ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _writeCache(String trackId, LyricsResult result) {
     return _lyricsCache.write(
       trackId,
@@ -153,6 +186,7 @@ class LyricsService {
         roma: result.roma,
         lxlyric: result.lxlyric,
         timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        manual: false,
       ),
     );
   }
@@ -178,13 +212,17 @@ class LyricsService {
         roma: roma,
         lxlyric: lxlyric,
         timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        manual: true,
       ),
     );
   }
 
   /// 从单个提供者获取结构化歌词
   Future<LyricsResult?> _fetchFromProvider(
-      LyricProvider provider, String title, String artist) async {
+    LyricProvider provider,
+    String title,
+    String artist,
+  ) async {
     final payload = await provider.getLyrics(title, artist);
     if (payload == null) return null;
     return LyricsResult(
@@ -205,18 +243,21 @@ class LyricsService {
     final completer = Completer<LyricsResult?>();
     var remaining = _providers.length;
     for (final provider in _providers) {
-      _fetchFromProvider(provider, title, artist).then((result) {
-        if (result != null && !completer.isCompleted) {
-          completer.complete(result);
-        }
-      }).catchError((Object e) {
-        _logger.warning('从 ${provider.name} 获取歌词失败: $e');
-      }).whenComplete(() {
-        remaining--;
-        if (remaining == 0 && !completer.isCompleted) {
-          completer.complete(null);
-        }
-      });
+      _fetchFromProvider(provider, title, artist)
+          .then((result) {
+            if (result != null && !completer.isCompleted) {
+              completer.complete(result);
+            }
+          })
+          .catchError((Object e) {
+            _logger.warning('从 ${provider.name} 获取歌词失败: $e');
+          })
+          .whenComplete(() {
+            remaining--;
+            if (remaining == 0 && !completer.isCompleted) {
+              completer.complete(null);
+            }
+          });
     }
     return completer.future;
   }

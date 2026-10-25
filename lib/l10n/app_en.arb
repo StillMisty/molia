@@ -163,7 +163,7 @@
   "settingsDataStorageSection": "Storage & stats",
   "settingsDataPortabilitySection": "Import & export",
   "exportDataTitle": "Export data",
-  "exportDataSubtitle": "Full backup: playlists, sources, settings, stats, history (no credentials)",
+  "exportDataSubtitle": "Full backup: playlists, sources, settings, stats, history, sign-in info and keys (keep the file safe)",
   "importDataTitle": "Import data",
   "importDataSubtitle": "Merge a Molia backup into local data",
   "clearCacheTitle": "Clear Lyrics Cache",
@@ -2413,5 +2413,36 @@
   "shortcutActionShowWindow": "Show main window",
   "settingsRememberWindowBounds": "Remember window position and size",
   "settingsRememberWindowBoundsSubtitle": "Reopen at the last position, size and maximized state",
-  "settingsTrayLinuxHint": "GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app"
+  "settingsTrayLinuxHint": "GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app",
+  "sourcesPlatformAccounts": "Platform accounts",
+  "biliAccountTitle": "Bilibili account",
+  "biliAccountTileLoggedOut": "Sign in to prefer Bilibili captions as lyrics",
+  "biliAccountTileLoggedIn": "Signed in · Bilibili captions are preferred for lyrics",
+  "biliAccountLoginIntro": "Playback works without signing in. After signing in, captions on Bilibili videos are used as lyrics first.",
+  "biliAccountLoginAction": "Sign in with QR code",
+  "biliAccountQrHint": "Scan with the Bilibili app",
+  "biliAccountQrScanned": "Scanned. Confirm on your phone.",
+  "biliAccountQrExpired": "QR code expired",
+  "biliAccountQrRefresh": "Refresh QR code",
+  "biliAccountQrFailed": "Sign-in failed. Try again.",
+  "biliAccountLoginSuccess": "Signed in",
+  "biliAccountLoginPersistFailed": "Signed in, but the sign-in info could not be saved. You will need to sign in again after restart.",
+  "biliAccountStatusSection": "Account",
+  "biliAccountLoggedIn": "Signed in",
+  "biliAccountLoggedInAs": "Signed in as {name}",
+  "@biliAccountLoggedInAs": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "biliAccountLoggedOut": "Not signed in",
+  "biliAccountSessionExpired": "Sign-in expired. Please sign in again.",
+  "biliAccountLogoutAction": "Sign out",
+  "biliAccountLogoutConfirm": "After signing out, Bilibili captions will no longer be read. Cached lyrics stay.",
+  "biliAccountLogoutFailed": "Sign-out failed. Try again.",
+  "biliAccountPrivacyHint": "Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.",
+  "biliAccountQrSemantics": "Bilibili sign-in QR code",
+  "providerBilibili": "Bilibili"
 }

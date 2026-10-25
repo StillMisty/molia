@@ -28,6 +28,9 @@ class _CountingLibraryRepository extends LibraryRepository {
   int playlistsListCalls = 0;
   int playlistTracksListCalls = 0;
 
+  /// 列表曲目读取尝试次数（含失败）：验证失败后不会每帧重试。
+  int playlistTracksAttempts = 0;
+
   /// 读取 / 写入失败开关：失败结果的验收标准（阶段 / outcome）用。
   bool failReads = false;
   bool failWrites = false;
@@ -82,6 +85,7 @@ class _CountingLibraryRepository extends LibraryRepository {
     int playlistId, {
     int? limit,
   }) {
+    playlistTracksAttempts++;
     if (failReads) return Future.error(StateError('tracks read failed'));
     playlistTracksListCalls++;
     final gate = nextPlaylistTracksSnapshot;
@@ -883,7 +887,7 @@ void main() {
       expect(provider.historyState.isReady, isTrue);
     });
 
-    test('列表曲目读取失败 → failed 视图；重试成功 → ready', () async {
+    test('列表曲目读取失败 → failed；重复 ensure 不重试；force 才恢复', () async {
       final playlistId = await repository.createPlaylist('测试列表');
       await repository.addTrackToPlaylist(
         playlistId,
@@ -905,6 +909,18 @@ void main() {
       expect(view.failed, isTrue, reason: '不能把失败伪装成空列表');
       expect(view.tracks, isNull);
 
+      // 收藏页每帧都会 sync → ensure。失败的读取不能被清错重试，否则
+      // 「失败 → loading → 再失败」会变成永久转圈（Windows 上出现过）。
+      final attempts = repository.playlistTracksAttempts;
+      expect(attempts, 1);
+      for (var i = 0; i < 5; i++) {
+        provider.ensurePlaylistTracks(playlistId);
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.playlistTracksAttempts, attempts,
+          reason: '失败后不能每帧重试');
+      expect(provider.playlistTracksView(playlistId).failed, isTrue);
+
       repository.failReads = false;
       provider.ensurePlaylistTracks(playlistId, force: true);
       await Future<void>.delayed(Duration.zero);
@@ -912,6 +928,85 @@ void main() {
       view = provider.playlistTracksView(playlistId);
       expect(view.ready, isTrue);
       expect(view.tracks!.single.songId, '1');
+    });
+
+    test('列表曲目读取超时 → failed（不再无限 loading）', () async {
+      final playlistId = await repository.createPlaylist('测试列表');
+      await provider.refreshPlaylists();
+      final slow = LibraryProvider(
+        repository: repository,
+        playbackProvider: playback,
+        readTimeout: const Duration(milliseconds: 20),
+      );
+      addTearDown(slow.dispose);
+      final gate = Completer<List<PlaylistTrack>>();
+      repository.nextPlaylistTracksSnapshot = gate;
+
+      slow.ensurePlaylistTracks(playlistId);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      final view = slow.playlistTracksView(playlistId);
+      expect(view.failed, isTrue, reason: '超时要收敛成可重试的失败态');
+      expect(view.tracks, isNull);
+
+      // 释放挂起的查询，避免测试残留。
+      gate.complete(const []);
+      await Future<void>.delayed(Duration.zero);
+    });
+
+    test('新建列表导入：曲目直接可读，不依赖导入后的读库', () async {
+      final tracks = [
+        PlaylistTrack(
+          playlistId: 0,
+          sourceKey: 'bili',
+          songId: 'BV1',
+          title: 'Bili 1',
+          addedAt: 1,
+        ),
+        PlaylistTrack(
+          playlistId: 0,
+          sourceKey: 'bili',
+          songId: 'BV2',
+          title: 'Bili 2',
+          addedAt: 2,
+        ),
+      ];
+      // 读库全部失败：导入只写库；新列表仍应直接可见（不靠导入后的读）。
+      repository.failReads = true;
+      final result = await provider.importTracksAsPlaylist(
+        name: 'B 站收藏',
+        tracks: tracks,
+      );
+
+      expect(result.added, 2);
+      expect(provider.playlists.any((p) => p.id == result.playlistId), isTrue);
+      final view = provider.playlistTracksView(result.playlistId);
+      expect(view.ready, isTrue, reason: '新建列表直接预置缓存，不等读库');
+      expect(view.tracks!.map((t) => t.songId), ['BV1', 'BV2']);
+      expect(provider.playlistsState.isLoading, isFalse,
+          reason: '刷新失败也要给终态，不能留在 loading');
+      expect(provider.playlists.single.trackCount, 2);
+    });
+
+    test('列表刷新失败：有旧数据保持 ready，空列表才 failed（不留在 loading）',
+        () async {
+      await provider.refreshPlaylists();
+      expect(provider.playlists, isEmpty);
+      repository.failReads = true;
+      await provider.refreshPlaylists(force: true);
+      expect(provider.playlistsState.isLoading, isFalse);
+      expect(provider.playlistsState.isFailed, isTrue);
+
+      repository.failReads = false;
+      await repository.createPlaylist('测试列表');
+      await provider.refreshPlaylists(force: true);
+      expect(provider.playlists, isNotEmpty);
+
+      repository.failReads = true;
+      await provider.refreshPlaylists(force: true);
+      expect(provider.playlistsState.isLoading, isFalse,
+          reason: '曾经成功过也不能把失败留在 loading');
+      expect(provider.playlistsState.isReady, isTrue);
+      expect(provider.playlists, isNotEmpty);
     });
 
     test('批量收藏失败 → failed 且不污染收藏缓存；重试成功 → applied', () async {

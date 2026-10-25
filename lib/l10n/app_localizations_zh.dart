@@ -395,7 +395,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportDataTitle => '导出数据';
 
   @override
-  String get exportDataSubtitle => '完整备份：歌单、音源、设置、统计与历史（不含密钥）';
+  String get exportDataSubtitle => '完整备份：歌单、音源、设置、统计、历史、登录信息与密钥（请妥善保管）';
 
   @override
   String get importDataTitle => '导入数据';
@@ -4228,4 +4228,79 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get settingsTrayLinuxHint =>
       'GNOME 等桌面需安装托盘扩展才能显示图标；没有托盘时，关闭窗口会直接退出应用';
+
+  @override
+  String get sourcesPlatformAccounts => '平台账号';
+
+  @override
+  String get biliAccountTitle => '哔哩哔哩账号';
+
+  @override
+  String get biliAccountTileLoggedOut => '登录后可优先使用 B 站字幕歌词';
+
+  @override
+  String get biliAccountTileLoggedIn => '已登录 · B 站字幕优先作为歌词';
+
+  @override
+  String get biliAccountLoginIntro => '不登录也能正常播放；登录后，B 站视频自带的字幕会优先作为歌词。';
+
+  @override
+  String get biliAccountLoginAction => '扫码登录';
+
+  @override
+  String get biliAccountQrHint => '用哔哩哔哩 App 扫码登录';
+
+  @override
+  String get biliAccountQrScanned => '已扫码，请在手机上确认';
+
+  @override
+  String get biliAccountQrExpired => '二维码已过期';
+
+  @override
+  String get biliAccountQrRefresh => '刷新二维码';
+
+  @override
+  String get biliAccountQrFailed => '登录失败，请重试';
+
+  @override
+  String get biliAccountLoginSuccess => '登录成功';
+
+  @override
+  String get biliAccountLoginPersistFailed => '登录成功，但没能保存登录信息；下次启动需要重新登录。';
+
+  @override
+  String get biliAccountStatusSection => '账号';
+
+  @override
+  String get biliAccountLoggedIn => '已登录';
+
+  @override
+  String biliAccountLoggedInAs(String name) {
+    return '已登录：$name';
+  }
+
+  @override
+  String get biliAccountLoggedOut => '未登录';
+
+  @override
+  String get biliAccountSessionExpired => '登录已过期，请重新登录';
+
+  @override
+  String get biliAccountLogoutAction => '退出登录';
+
+  @override
+  String get biliAccountLogoutConfirm => '退出后不再读取 B 站字幕；已缓存的歌词会保留。';
+
+  @override
+  String get biliAccountLogoutFailed => '退出失败，请重试';
+
+  @override
+  String get biliAccountPrivacyHint =>
+      '登录信息保存在系统安全存储；开启同步后会加密同步到已配对的设备。仅用于读取 B 站字幕。';
+
+  @override
+  String get biliAccountQrSemantics => '哔哩哔哩登录二维码';
+
+  @override
+  String get providerBilibili => '哔哩哔哩';
 }

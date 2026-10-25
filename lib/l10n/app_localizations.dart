@@ -851,7 +851,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportDataSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Full backup: playlists, sources, settings, stats, history (no credentials)'**
+  /// **'Full backup: playlists, sources, settings, stats, history, sign-in info and keys (keep the file safe)'**
   String get exportDataSubtitle;
 
   /// No description provided for @importDataTitle.
@@ -7869,6 +7869,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app'**
   String get settingsTrayLinuxHint;
+
+  /// No description provided for @sourcesPlatformAccounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform accounts'**
+  String get sourcesPlatformAccounts;
+
+  /// No description provided for @biliAccountTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Bilibili account'**
+  String get biliAccountTitle;
+
+  /// No description provided for @biliAccountTileLoggedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to prefer Bilibili captions as lyrics'**
+  String get biliAccountTileLoggedOut;
+
+  /// No description provided for @biliAccountTileLoggedIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in · Bilibili captions are preferred for lyrics'**
+  String get biliAccountTileLoggedIn;
+
+  /// No description provided for @biliAccountLoginIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback works without signing in. After signing in, captions on Bilibili videos are used as lyrics first.'**
+  String get biliAccountLoginIntro;
+
+  /// No description provided for @biliAccountLoginAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with QR code'**
+  String get biliAccountLoginAction;
+
+  /// No description provided for @biliAccountQrHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with the Bilibili app'**
+  String get biliAccountQrHint;
+
+  /// No description provided for @biliAccountQrScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned. Confirm on your phone.'**
+  String get biliAccountQrScanned;
+
+  /// No description provided for @biliAccountQrExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'QR code expired'**
+  String get biliAccountQrExpired;
+
+  /// No description provided for @biliAccountQrRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh QR code'**
+  String get biliAccountQrRefresh;
+
+  /// No description provided for @biliAccountQrFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in failed. Try again.'**
+  String get biliAccountQrFailed;
+
+  /// No description provided for @biliAccountLoginSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in'**
+  String get biliAccountLoginSuccess;
+
+  /// No description provided for @biliAccountLoginPersistFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in, but the sign-in info could not be saved. You will need to sign in again after restart.'**
+  String get biliAccountLoginPersistFailed;
+
+  /// No description provided for @biliAccountStatusSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get biliAccountStatusSection;
+
+  /// No description provided for @biliAccountLoggedIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in'**
+  String get biliAccountLoggedIn;
+
+  /// No description provided for @biliAccountLoggedInAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in as {name}'**
+  String biliAccountLoggedInAs(String name);
+
+  /// No description provided for @biliAccountLoggedOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Not signed in'**
+  String get biliAccountLoggedOut;
+
+  /// No description provided for @biliAccountSessionExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in expired. Please sign in again.'**
+  String get biliAccountSessionExpired;
+
+  /// No description provided for @biliAccountLogoutAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get biliAccountLogoutAction;
+
+  /// No description provided for @biliAccountLogoutConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'After signing out, Bilibili captions will no longer be read. Cached lyrics stay.'**
+  String get biliAccountLogoutConfirm;
+
+  /// No description provided for @biliAccountLogoutFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-out failed. Try again.'**
+  String get biliAccountLogoutFailed;
+
+  /// No description provided for @biliAccountPrivacyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.'**
+  String get biliAccountPrivacyHint;
+
+  /// No description provided for @biliAccountQrSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Bilibili sign-in QR code'**
+  String get biliAccountQrSemantics;
+
+  /// No description provided for @providerBilibili.
+  ///
+  /// In en, this message translates to:
+  /// **'Bilibili'**
+  String get providerBilibili;
 }
 
 class _AppLocalizationsDelegate

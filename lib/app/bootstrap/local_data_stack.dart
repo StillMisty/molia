@@ -28,6 +28,7 @@ import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
 import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
+import '../../sources/builtin/bili_account.dart';
 import 'catalog_stack.dart';
 import 'startup_trace.dart';
 
@@ -89,6 +90,9 @@ Future<LocalDataStack> buildLocalDataStack({
     lyricsCache: lyricsCache,
     // 本地下载曲目：离线歌词缺失时不回退网络（离线播放全程不触网）。
     networkFallbackAllowed: (track) => track.id.sourceKey != kLocalSourceKey,
+    // B 站登录后，缓存里的跨平台歌词不再优先：先试一次曲目原生字幕。
+    nativeLyricAvailable: (track) =>
+        track.id.sourceKey == 'bili' && BiliAccountStore.instance.isLoggedIn,
     trackLyricLoader: (track) async {
       // 本地下载曲目：读 downloads/lyrics/ 的离线歌词（不触网）；
       // 无离线歌词返回 null，交给既有歌词源（在线时仍可补全）。

@@ -149,6 +149,34 @@ class BuiltinTransport {
     );
   }
 
+  /// GET + 原始响应（需要读 `Set-Cookie` 等响应头时使用）。
+  ///
+  /// 不自动解码 body：调用方按需 `bodyText` / `bodyBytes`。`followRedirects`
+  /// 为 false 时用于手动跟跳并逐跳采集 `Set-Cookie`（B 站扫码登录的
+  /// crossDomain ticket 就属于这种场景）。
+  Future<Response<dynamic>> getResponse(
+    String url, {
+    Map<String, String>? headers,
+    Duration timeout = defaultTimeout,
+    int retries = 1,
+    bool followRedirects = true,
+  }) {
+    return _attempt(
+      (_) => _dio.getUri(
+        Uri.parse(url),
+        options: Options(
+          headers: _merge(headers),
+          followRedirects: followRedirects,
+          validateStatus: (_) => true,
+          responseType: ResponseType.bytes,
+        ),
+      ),
+      decode: (response) => response,
+      timeout: timeout,
+      retries: retries,
+    );
+  }
+
   /// 跟随短链跳转并返回最终地址（只读状态码 / Location，不解析 body）。
   ///
   /// 供 b23.tv 这类短链使用：Dio 的 `realUri` 在测试 adapter 下不一定更新，

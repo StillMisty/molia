@@ -893,7 +893,24 @@
     进程重启后授权失效（未做 security-scoped bookmark）；默认下载目录与同一次
     会话内选择的目录不受影响。macOS 不做应用内更新（ADR-0015），发布产物是
     ad-hoc 签名的 `-unsigned.zip`，首次打开需在「系统设置 › 隐私与安全性」放行。
-90. **`Canvas.drawImageRect` 把整张源图铺进正方形会拉伸封面**：海报头图是固定
+90. **列表曲目读取失败后不能在每次 build 清错重试**：`CollectionSession.sync`
+    每帧都会对当前列表调 `LibraryProvider.ensurePlaylistTracks`；如果 `ensure`
+    每次都先删 `_playlistTracksErrors` 再重读，一次读失败就会变成
+    「失败 → 清错 → loading → 再失败」的每帧死循环，页面永远转圈（导入 B 站
+    收藏后切到新列表时出现过，Windows 上读取连接被占住）。错误必须保留到显式
+    重试（`force`）或仓库变更事件；读取本身有 10s 超时兜底。新建列表的导入用
+    `importTracks.created` 直接预置列表头 + 曲目缓存，页面不依赖导入后的读库
+    （晚到的后台重载只做原地校准）。
+91. **B 站 CC/AI 字幕未登录恒为空：buvid 也救不了**：`/x/player/v2` 匿名（带
+    buvid、不带登录 Cookie）返回 `code: 0` 但 `data.subtitle.subtitles` 恒为
+    `[]`；字幕列表必须带 B 站账号 Cookie（`SESSDATA`）。登录后字幕走
+    `/x/player/wbi/v2`（buvid + WBI + 账号 Cookie），失败再退 unsigned
+    `/x/player/v2`（账号 Cookie）；字幕 CDN 保持匿名，绝不带账号 Cookie。
+    登录成功必须清 `BuiltinLyricDispatch` 的 `bili:` 取词缓存（包括缓存过的
+    null），否则 5 分钟内当前曲目仍会回退网易云。完整备份默认导出全部类别与
+    凭证（换机状态一致）；备份文件是明文 JSON，需要妥善保管。同步 / 备份的
+    凭据默认随 `SyncCategory.credentials` 走。见 ADR-0016。
+92. **`Canvas.drawImageRect` 把整张源图铺进正方形会拉伸封面**：海报头图是固定
     100×100（2x）方块，`drawImageRect(src: 全图, dst: 方块)` 会把 16:9 封面压扁。
     方形展示必须按 `BoxFit.cover` 语义先算居中裁切源矩形（`coverCropSourceRect`
     在 `lyrics_poster_service.dart`），不要直接铺满；UI 方形缩略图统一

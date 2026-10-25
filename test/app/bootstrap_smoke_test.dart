@@ -93,6 +93,8 @@ void main() {
     expect(catalog.commentsService, isNotNull);
     expect(catalog.albumService, isNotNull);
     expect(catalog.artistService, isNotNull);
+    expect(catalog.biliAccount, isNotNull);
+    await catalog.biliAccount.init();
   });
 
   test('LanguageService.effectiveLocale：用户选择优先，不支持回退英文', () {

@@ -1003,6 +1003,7 @@ void main() {
     expect(lyricsProviderLabel(l10n, const [], 'wy'), '网易云音乐');
     expect(lyricsProviderLabel(l10n, const [], 'netease'), '网易云音乐');
     expect(lyricsProviderLabel(l10n, const [], 'tx'), 'QQ音乐');
+    expect(lyricsProviderLabel(l10n, const [], 'bili'), '哔哩哔哩');
     expect(lyricsProviderLabel(l10n, const [], 'lrclib'), 'LRCLIB');
     expect(lyricsProviderLabel(l10n, const [], 'local'), '本地下载');
     expect(lyricsProviderLabel(l10n, const [], 'my_script'), 'my_script');

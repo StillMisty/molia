@@ -17,8 +17,9 @@
 - **Builtin retry attempts（内置尝试循环）** — `builtin_transport.dart::runBuiltinAttempts` + `BuiltinRetryBudget`：`attempt` 返回 null 表示本次失败、未达上限继续；抛异常直接上抛，耗尽抛 `StateError`；退避与传输层同一条策略。`cachedRetry` 与无缓存的发现端点共用这一循环，`discover` / `leaderboard` / `wyLeaderboard` 预算集中命名，平台文件不再各写 3/4/6。
 - **Discover call runner（发现端点执行器）** — `lib/sources/builtin/discover_runner.dart`：`DiscoverCall`（`DiscoverRequestCall` 一次请求 + 无效判定 + 解析 / `DiscoverAttemptCall` 多步尝试）与 `runDiscoverCall` 是发现端点的唯一执行入口；有稳定 key 走 `BuiltinTransport.cachedRetry`（single-flight，成功才缓存），没有 key 走 `runBuiltinAttempts`。平台文件只保留 URL / 参数 / parser 与端点自己的缓存键，不再各自拼 `cachedRetry` 形状。
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：内置平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；五个音乐平台走它，平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。B 站搜索走 **Bili client**（会话 / WBI / ADR-0014 的 any-failure 刷新），与 runner 共用 `SourceSearchResult` 的 empty / failed 语义。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源是 **Source profile**（channels 候选 / 能力位 / 搜索路由共用）。
-- **Bilibili source（B 站音源 `bili`）** — `lib/sources/builtin/bili_*.dart`：第六个内置平台（展示名「哔哩哔哩」，默认启用）。`bili_api.dart` 维护匿名会话：`/x/frontend/finger/spi` 取 buvid3/4、`nav` 取 WBI 密钥（1 小时缓存 + single-flight）；`bili_client.dart` 是请求生命周期的唯一实现（WBI 签名、匿名 vs 会话头、业务码口径、风控刷新；搜索按 ADR-0014 任何失败刷新一次）。能力：全站视频搜索、原生取链（分 P cid → WBI playurl → dash 音频 192k/128k/64k）、CC 字幕歌词、视频评论、UP 主页、B 站音乐榜 / 热搜、公开收藏夹导入。边界：无专辑、无按歌词搜歌、无登录 / 大会员高音质、不浏览 / 搜索歌单、私密收藏夹不可导入（见 ADR-0014）。
-- **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是会话（buvid + WBI 密钥）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
+- **Bilibili source（B 站音源 `bili`）** — `lib/sources/builtin/bili_*.dart`：第六个内置平台（展示名「哔哩哔哩」，默认启用）。`bili_api.dart` 维护匿名会话：`/x/frontend/finger/spi` 取 buvid3/4、`nav` 取 WBI 密钥（1 小时缓存 + single-flight）；`bili_client.dart` 是请求生命周期的唯一实现（WBI 签名、匿名 vs 会话头、业务码口径、风控刷新；搜索按 ADR-0014 任何失败刷新一次）。能力：全站视频搜索、原生取链（分 P cid → WBI playurl → dash 音频 192k/128k/64k）、CC/AI 字幕歌词（**需 B 站扫码登录**，见 ADR-0016）、视频评论、UP 主页、B 站音乐榜 / 热搜、公开收藏夹导入。边界：无专辑、无按歌词搜歌、无 Molia 账号系统、无大会员高音质、不浏览 / 搜索歌单、私密收藏夹不可导入（见 ADR-0014 / ADR-0016）。
+- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ `BiliAccountStore`（`lib/sources/builtin/bili_account.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + secure 盒，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。
+- **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 账号 Cookie（仅 `account` / `accountSession` 两种鉴权口径，播放 / 搜索 / 评论绝不带）/ 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是会话（buvid + WBI 密钥）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
 - **Bilibili raw id（B 站取链 id）** — `bvid`（`BV...`）优先、`aid`（av 号）兜底：`raw_track.dart` 的通用 id 优先级把 `bvid` 放在最前，`_platformIdFields['bili'] = ['bvid','aid','id']`，且不登记 `_canonicalIdFields['bili']`（B 站不靠 LX 脚本取链）。raw 原样保留 `cid`（首个分 P，取链与字幕共用）与 `source:'bili'`；`bvid` / `aid` 都缺失的条目不可播放（收藏夹里的番剧 / 课程在映射时过滤）。
 - **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
 
@@ -326,12 +327,18 @@
 - **Track-native lyric/pic（曲目原生取词 / 取图）** — `SourceManager.fetchLyric` /
   `fetchPic`：按曲目 raw 的平台精确 ID 取词取图，顺序为脚本 `lyric`/`pic` action →
   any-listen → 内置平台原生实现（五个音乐平台：wy eapi + yrc、tx PlayLyricInfo + QRC、
-  kg KRC、kw LRCX、mg MRC；B 站取 CC 字幕转 LRC；封面 wy 歌曲详情 / tx 专辑 mid /
-  kg `get_res_privilege` / kw `pic.web` / mg 资源封面 / bili raw `pic`）。解码器在
+  kg KRC、kw LRCX、mg MRC；B 站取 CC/AI 字幕转 LRC，**需扫码登录**，匿名时
+  `subtitles` 恒为空；封面 wy 歌曲详情 / tx 专辑 mid / kg `get_res_privilege` /
+  kw `pic.web` / mg 资源封面 / bili raw `pic`）。解码器在
   `lib/sources/builtin/*_lyric.dart` + `tx_qrc.dart`（zlib 走 FFI 原生实现）。
   内置派发的唯一实现（内置平台 switch + 结果缓存）在
   `lib/sources/builtin/builtin_lyric_dispatch.dart` /
-  `builtin_pic_dispatch.dart`，与平台适配器同门。
+  `builtin_pic_dispatch.dart`，与平台适配器同门。B 站登录后由组合根清
+  `bili:` 缓存并强刷当前歌词；`LyricsService` 对未手动选择的跨平台缓存先试原生。
+- **Lyrics source preference（同源优先）** — 缓存命中前先判断：曲目原生源现在
+  可用（B 站已登录）且缓存来源不是曲目源、非手动选择时，忽略跨平台缓存重试
+  原生；手动选择的 `LyricCacheData.manual` 永远优先。五平台跨平台回退仍保持
+  「并行竞速、首个非空即返回」。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
