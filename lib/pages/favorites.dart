@@ -32,6 +32,7 @@ import '../utils/collection_row_query.dart';
 import '../utils/scroll_to_top.dart';
 import '../utils/sync_format.dart';
 import '../widgets/app_search_bar.dart';
+import '../widgets/collection_handoff.dart';
 import '../widgets/collection_picker.dart';
 import '../widgets/collection_scroll_bookkeeping.dart';
 import '../widgets/collection_track_list.dart';
@@ -44,7 +45,6 @@ import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
 import '../widgets/row_actions.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
-import '../widgets/track_handoff.dart';
 import '../widgets/track_row.dart';
 import '../widgets/track_table_header.dart';
 
@@ -517,7 +517,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         ),
         handoff: TrackHandoffCollectionHandoff(
           context,
-          handoff: TrackHandoff(random: widget.shuffleRandom),
+          random: widget.shuffleRandom,
         ),
         localData: ProviderCollectionLocalData(
           downloads: context.read<DownloadService?>(),

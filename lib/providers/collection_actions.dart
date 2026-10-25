@@ -8,19 +8,16 @@
 /// 仍交给 TrackHandoff（洗牌、上下文名、批量 `addedAt` 只有一份实现）。
 ///
 /// 编排本身不读 BuildContext，也不弹任何 UI：生产端口由页面按 context 组装，
-/// 单测直接用假端口断言命令矩阵（含混合行变体与部分失败）。唯一跨层依赖是
-/// `track_handoff.dart`（播放 / 加入列表的唯一编排）：不把它复制进本模块，
-/// 也不让页面各自拼 `setPlayMode → playDomainTracks`。
+/// 单测直接用假端口断言命令矩阵（含混合行变体与部分失败）。本模块不 import
+/// Flutter / widgets：播放 / 加入列表的 context 适配在
+/// `lib/widgets/collection_handoff.dart`，编排仍然只有 TrackHandoff 一份。
 library;
-
-import 'package:flutter/widgets.dart';
 
 import '../domain/models/download.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../services/download/download_service.dart';
 import '../services/track_local_data_service.dart';
-import '../widgets/track_handoff.dart';
 import 'collection_presenter.dart';
 import 'library_outcome.dart';
 import 'library_provider.dart';
@@ -212,7 +209,8 @@ final class LibraryProviderCollectionActions
 /// 曲目交接端口：播放 / 加入列表都委托给 TrackHandoff。
 ///
 /// 单独定义是为了让命令层可单测：假实现记录「交给播放的曲目 / 下标 / 洗牌 /
-/// 上下文名」，生产实现只做 context 适配，不复制队列编排。
+/// 上下文名」。生产实现需要 BuildContext，放在 widget 层
+/// （`lib/widgets/collection_handoff.dart`），本模块保持 context-free。
 abstract interface class CollectionHandoff {
   Future<void> play(
     List<Track> tracks, {
@@ -226,45 +224,6 @@ abstract interface class CollectionHandoff {
     required bool includeFavorites,
     required bool includeHistory,
   });
-}
-
-/// [CollectionHandoff] 的生产实现：唯一编排仍在 `track_handoff.dart`。
-final class TrackHandoffCollectionHandoff implements CollectionHandoff {
-  TrackHandoffCollectionHandoff(
-    this._context, {
-    TrackHandoff handoff = const TrackHandoff(),
-  }) : _handoff = handoff;
-
-  final BuildContext _context;
-  final TrackHandoff _handoff;
-
-  @override
-  Future<void> play(
-    List<Track> tracks, {
-    required int startIndex,
-    required bool shuffle,
-    required String contextName,
-  }) =>
-      _handoff.play(
-        _context,
-        tracks,
-        startIndex: startIndex,
-        shuffle: shuffle,
-        contextName: contextName,
-      );
-
-  @override
-  Future<bool> addToLibrary(
-    List<PlaylistTrack> tracks, {
-    required bool includeFavorites,
-    required bool includeHistory,
-  }) =>
-      _handoff.addPlaylistTracksToLibrary(
-        _context,
-        tracks,
-        includeFavorites: includeFavorites,
-        includeHistory: includeHistory,
-      );
 }
 
 /// 本地数据删除端口（下载记录 + 音频缓存）。
