@@ -8,7 +8,6 @@
 library;
 
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,20 +16,15 @@ import 'package:provider/provider.dart';
 import '../data/catalog/artist_service.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/failure.dart';
-import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../models/play_mode.dart';
-import '../providers/library_provider.dart';
 import '../providers/paged_list_controller.dart';
-import '../providers/playback_provider.dart';
-import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
-import '../widgets/add_to_library.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
+import '../widgets/track_handoff.dart';
 import '../widgets/track_row.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -124,8 +118,8 @@ class _ArtistPageState extends State<ArtistPage> {
 
   final ScrollController _listController = ScrollController();
 
-  /// 随机播放起点用（与收藏页同一做法：可见列表内随机取一首起播）。
-  final math.Random _shuffleRandom = math.Random();
+  /// 播放 / 加入列表的唯一编排（洗牌、上下文名、addedAt 都在模块内）。
+  final TrackHandoff _handoff = const TrackHandoff();
 
   @override
   void initState() {
@@ -173,56 +167,30 @@ class _ArtistPageState extends State<ArtistPage> {
 
   /// 播放（[index] 为起始下标；队列上下文名为歌手名）。
   void _playFrom(int index) {
-    final tracks = _paged.state.items;
-    if (tracks.isEmpty) return;
-    HapticsService.lightImpact();
-    final name = _titleOf(_artist);
     unawaited(
-      context.read<PlaybackProvider>().playDomainTracks(
-            List<Track>.of(tracks),
-            index,
-            contextName: name.isEmpty ? null : name,
-          ),
+      _handoff.play(
+        context,
+        _paged.state.items,
+        startIndex: index,
+        contextName: _artist?.name,
+        fallbackContextName: widget.fallbackName,
+      ),
     );
   }
 
-  /// 「随机播放全部」：先落 shuffle 模式再装载队列（洗牌顺序依赖装载前模式，
-  /// 与收藏页一致），起点在已加载曲目内随机。
-  Future<void> _playShuffled() async {
-    final tracks = _paged.state.items;
-    if (tracks.isEmpty) return;
-    HapticsService.lightImpact();
-    final name = _titleOf(_artist);
-    final playback = context.read<PlaybackProvider>();
-    await playback.setPlayMode(PlayMode.shuffle);
-    await playback.playDomainTracks(
-      List<Track>.of(tracks),
-      _shuffleRandom.nextInt(tracks.length),
-      contextName: name.isEmpty ? null : name,
-    );
-  }
+  /// 「随机播放全部」：洗牌与起播下标的顺序统一由 handoff 负责。
+  Future<void> _playShuffled() => _handoff.play(
+        context,
+        _paged.state.items,
+        shuffle: true,
+        contextName: _artist?.name,
+        fallbackContextName: widget.fallbackName,
+      );
 
-  /// 「加入列表」：与收藏页 / 发现页共用同一流程（选择目标 → 写入 → 提示）。
-  Future<void> _addToLibrary() async {
-    final tracks = _paged.state.items;
-    if (tracks.isEmpty) return;
-    final library = context.read<LibraryProvider>();
-    final addedAt = DateTime.now().millisecondsSinceEpoch;
-    await addTracksToLibraryTarget(
-      context,
-      provider: library,
-      tracks: [
-        for (final track in tracks)
-          PlaylistTrack.fromTrack(track, addedAt: addedAt),
-      ],
-    );
-  }
-
-  String _titleOf(ArtistDetail? artist) {
-    final name = artist?.name.trim() ?? '';
-    if (name.isNotEmpty) return name;
-    return widget.fallbackName ?? '';
-  }
+  String _titleOf(ArtistDetail? artist) => resolveTrackListName(
+        name: artist?.name,
+        fallbackName: widget.fallbackName,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -340,23 +308,8 @@ class _ArtistPageState extends State<ArtistPage> {
       onTap: () => _playFrom(index),
       // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
       onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
-      onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
-    );
-  }
-
-  /// 行尾菜单「加入列表」：与收藏页 / 发现页共用同一流程。
-  Future<void> _addTrackToPlaylist(BuildContext context, Track track) async {
-    final library = context.read<LibraryProvider?>();
-    if (library == null) return;
-    await addTracksToLibraryTarget(
-      context,
-      provider: library,
-      tracks: [
-        PlaylistTrack.fromTrack(
-          track,
-          addedAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      ],
+      // 行尾菜单「加入列表」：与头部 / 收藏页 / 发现页同一流程。
+      onAddToPlaylist: () => unawaited(_handoff.addToLibrary(context, [track])),
     );
   }
 
@@ -475,7 +428,9 @@ class _ArtistPageState extends State<ArtistPage> {
                 case 'shuffle':
                   unawaited(_playShuffled());
                 case 'addToLibrary':
-                  unawaited(_addToLibrary());
+                  unawaited(
+                    _handoff.addToLibrary(context, _paged.state.items),
+                  );
               }
             },
           ),

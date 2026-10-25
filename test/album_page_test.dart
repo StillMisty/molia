@@ -256,5 +256,10 @@ void main() {
       fallbackName: '入口专辑名',
     );
     expect(find.text('入口专辑名'), findsOneWidget);
+
+    // 队列上下文名与标题同源：平台名缺失时回退入口名，而不是空上下文。
+    await tester.tap(find.byKey(const Key('albumPlayAll')));
+    await tester.pump();
+    expect(backend.lastRequest?.context?.name, '入口专辑名');
   });
 }
