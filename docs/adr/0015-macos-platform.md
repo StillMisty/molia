@@ -20,7 +20,7 @@
 
 ## 决策
 
-1. **新增 `macos/` 目标（macOS 12+，CocoaPods）**，结构取 Flutter 3.47 官方模板
+1. **新增 `macos/` 目标（macOS 12+，Swift Package Manager）**，结构取 Flutter 3.47 官方模板
    （`packages/flutter_tools/templates/app/macos.tmpl`），只改品牌 / 标识 / entitlements：
    - `PRODUCT_NAME = Molia`、`PRODUCT_BUNDLE_IDENTIFIER = top.stillmisty.molia`；
    - AppIcon 由 Android 全彩源图生成（824 / 1024 内容网格）；
@@ -92,3 +92,11 @@
   `docs/architecture.md` / `docs/pitfalls.md` / `docs/media_kit_native_libs.md` /
   `.agents/skills/molia-release/` 同步平台清单；
 - 发布流水线新增 macOS job，`publish` 依赖它；`latest.json` 行为不变。
+
+## 修订
+
+- 2026-10-26：移除 `macos/Podfile`，改用 Swift Package Manager。首次发布 macOS job 时
+  `pod install` 生成零依赖 Pods，`Check Pods Manifest.lock` 反而报
+  「sandbox is not in sync」直接失败；macOS 插件（含 `quickjs_engine`、
+  `window_manager` 等）都已提供 `Package.swift`，Flutter 也提示「All plugins found
+  for macos are Swift Packages」，因此不再保留 CocoaPods 集成。

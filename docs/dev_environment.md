@@ -2,9 +2,10 @@
 
 ## macOS 桌面运行要求
 
-- **macOS 12 及以上 + Xcode（含 CocoaPods）**：首次 `flutter run` / `flutter build macos`
-  会跑 `pod install`；不需要在 Xcode 里选开发者团队——模板用 ad-hoc 签名
-  （`CODE_SIGN_IDENTITY = "-"`），`flutter build macos --release` 可直接出包。
+- **macOS 12 及以上 + Xcode**：macOS 目标只用 Swift Package Manager（不跑 `pod install`，
+  仓库里没有 `macos/Podfile`；插件都提供 `Package.swift`）。不需要在 Xcode 里选开发者
+  团队——模板用 ad-hoc 签名（`CODE_SIGN_IDENTITY = "-"`），
+  `flutter build macos --release` 可直接出包。
 - **播放不依赖 libmpv**：macOS 走 `just_audio` 自带的 AVPlayer 实现，
   `desktop_audio_init_io` 不会初始化 media_kit（见 `docs/media_kit_native_libs.md`）。
 - **App Sandbox 默认开启**：网络、默认下载目录（`~/Downloads/Molia`）与「另存为 /
