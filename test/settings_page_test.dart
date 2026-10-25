@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
@@ -12,18 +14,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/data/play_statistics_repository.dart';
-import 'package:molia/data/sync/sync_backup.dart';
-import 'package:molia/data/sync/sync_control_plane.dart';
-import 'package:molia/data/sync/sync_engine.dart';
-import 'package:molia/data/sync/sync_state_store.dart';
-import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/settings_page.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
-import 'package:molia/providers/sync_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/services/audio_focus_settings.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
@@ -44,6 +40,7 @@ import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/molia_mark.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/fakes.dart';
 
@@ -1242,55 +1239,46 @@ void main() {
     expect(find.byKey(const Key('coverPickerResetButton')), findsOneWidget);
   });
 
-  testWidgets('外观：同步自定义封面开关默认关闭，切换写入同一类别状态', (tester) async {
-    final prefs = await SharedPreferences.getInstance();
-    final state = SyncStateStore(
-      preferences: prefs,
-      secrets: MemorySyncSecretStore(),
-      clock: () => 1000,
+  testWidgets('首屏：封面独立成卡，同步封面开关不再进外观', (tester) async {
+    await pumpSettingsPage(tester);
+
+    final coversSection = find.ancestor(
+      of: find.byKey(const Key('settingsFollowArtworkSwitch')),
+      matching: find.byType(SettingsSectionCard),
     );
-    await state.init();
-    final transport = FakeSyncTransport();
-    final engine = SyncEngine(
-      state: state,
-      stamps: state.stampIssuer,
-      adapters: const [],
-      transports: {'lan': transport},
-      clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
-    );
-    final control = SyncControlPlane(
-      state: state,
-      transports: {'lan': transport},
-    );
-    final provider = SyncProvider(
-      engine: engine,
-      controlPlane: control,
-      backup: SyncBackup(
-        state: state,
-        adapters: const [],
-        stamps: state.stampIssuer,
-        collect: engine.collectRecords,
+    expect(coversSection, findsOneWidget);
+    expect(
+      find.descendant(
+        of: coversSection,
+        matching: find.byKey(const Key('settingsDefaultCoverItem')),
       ),
+      findsOneWidget,
+      reason: '跟随封面与默认封面应在同一张封面卡里',
     );
-    await provider.init();
-    addTearDown(() {
-      provider.dispose();
-      control.dispose();
-      engine.dispose();
-    });
-
-    await pumpSettingsPage(
-      tester,
-      extraProviders: [
-        ChangeNotifierProvider<SyncProvider>.value(value: provider),
-      ],
+    expect(find.text('Covers'), findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsSyncCustomCoversSwitch')),
+      findsNothing,
+      reason: '同步类别只保留「跨设备同步 › 同步内容」一处入口',
     );
-    expect(find.text('Sync custom covers'), findsOneWidget);
-    expect(provider.categories[SyncCategory.covers], isFalse);
+  });
 
-    await tester.tap(find.byKey(const Key('settingsSyncCustomCoversSwitch')));
-    await tester.pumpAndSettle();
-    expect(provider.categories[SyncCategory.covers], isTrue);
+  testWidgets('首屏：宽屏两列瀑布式，短卡回填较矮的左列', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpSettingsPage(tester);
+
+      final appearance = tester.getTopLeft(find.text('Appearance'));
+      final covers = tester.getTopLeft(find.text('Covers'));
+      final playback = tester.getTopLeft(find.text('Playback'));
+
+      expect(covers.dx, appearance.dx, reason: '封面卡应跟在较矮的左列');
+      expect(covers.dy, greaterThan(appearance.dy));
+      expect(playback.dx, greaterThan(appearance.dx));
+      expect(playback.dy, appearance.dy, reason: '播放卡与外观卡顶对齐');
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('首屏：歌词分区三条直达入口（能力就绪时全显示并进入子页）', (tester) async {

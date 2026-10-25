@@ -5,7 +5,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
 import '../models/play_mode.dart';
 import '../providers/lyrics_display_provider.dart';
@@ -487,12 +486,12 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             children: [
               SettingsSectionGrid(
                 twoColumn: twoColumn,
+                // 宽屏按内容量分列：外观 / 封面 / 歌词 / 通用在左，
+                // 播放 / 内容 / 数据在右；左列约 13 行、右列约 13 行。
+                startColumn: const {0, 1, 3, 5},
                 children: [
-                  _appearanceSection(
-                    context,
-                    l10n,
-                    syncProvider: syncProvider,
-                  ),
+                  _appearanceSection(context, l10n),
+                  _coversSection(context, l10n),
                   _playbackSection(
                     context,
                     l10n,
@@ -523,13 +522,8 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
     );
   }
 
-  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 封面覆盖 /
-  /// 默认封面（+ 同步快捷键） / 纯黑 / 字体。
-  Widget _appearanceSection(
-    BuildContext context,
-    AppLocalizations l10n, {
-    SyncProvider? syncProvider,
-  }) {
+  /// 外观：主题模式 / 基础配色 / 自定义色（仅自定义时） / 纯黑 / 字体。
+  Widget _appearanceSection(BuildContext context, AppLocalizations l10n) {
     return SettingsSectionCard(
       title: l10n.settingsAppearanceTitle,
       children: [
@@ -538,7 +532,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             ({
               ThemeMode mode,
               ColorBaseSource base,
-              bool followArtwork,
               SystemBaseColorSource systemColorSource,
               bool pureBlack,
               Color seed,
@@ -547,7 +540,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
           selector: (context, provider) => (
             mode: provider.themeMode,
             base: provider.baseColorSource,
-            followArtwork: provider.followArtworkEnabled,
             systemColorSource: provider.systemBaseColorSource,
             pureBlack: provider.pureBlackEnabled,
             seed: provider.seedColor,
@@ -557,7 +549,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
             final (
               mode: themeMode,
               base: baseColorSource,
-              followArtwork: followArtworkEnabled,
               systemColorSource: systemColorSource,
               pureBlack: pureBlackEnabled,
               seed: seedColor,
@@ -586,7 +577,7 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                         );
                   },
                 ),
-                // 基础配色（单选）：壁纸 / 自定义；封面覆盖见下一项。
+                // 基础配色（单选）：壁纸 / 自定义；封面取色见「封面」分区。
                 SettingsChoiceRow<ColorBaseSource>(
                   key: const Key('settingsBaseColorItem'),
                   icon: Icons.palette_rounded,
@@ -622,57 +613,6 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
                     colorArgb: seedColor.toARGB32(),
                     onTap: () => _pickSeedColor(context),
                   ),
-                // 封面覆盖层：盖过基础配色（含壁纸）；无封面回退。
-                SettingsSwitchTile(
-                  switchKey: const Key('settingsFollowArtworkSwitch'),
-                  icon: Icons.album_rounded,
-                  title: l10n.settingsFollowArtwork,
-                  subtitle: l10n.settingsFollowArtworkSubtitle,
-                  value: followArtworkEnabled,
-                  onChanged: (value) => context
-                      .read<ThemeProvider>()
-                      .setFollowArtworkEnabled(value),
-                ),
-                // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
-                // 不参与取色、下载与标签。
-                CoverChangeBuilder(
-                  builder: (context, _) => SettingsNavTile(
-                    key: const Key('settingsDefaultCoverItem'),
-                    icon: Icons.image_rounded,
-                    title: l10n.coverDefaultTitle,
-                    subtitle: l10n.coverDefaultSubtitle,
-                    trailing: TrackArtwork(
-                      // 只显示全局默认封面（没有曲目身份）；外层已订阅。
-                      listenForChanges: false,
-                      size: 40,
-                      borderRadius: BorderRadius.circular(10),
-                      memCacheWidth:
-                          (40 * MediaQuery.of(context).devicePixelRatio)
-                              .round(),
-                      fallbackIconSize: 20,
-                    ),
-                    onTap: () => unawaited(
-                      showCoverPickerSheet(
-                        context,
-                        fileNameBase: l10n.coverDefaultTitle,
-                      ),
-                    ),
-                  ),
-                ),
-                // 同步快捷键：与同步设置 › 内容共用同一类别状态（不是第二份
-                // 开关）；没有同步栈（测试 / 精简组合根）时整行隐藏。
-                if (syncProvider != null)
-                  SettingsSwitchTile(
-                    switchKey: const Key('settingsSyncCustomCoversSwitch'),
-                    icon: Icons.sync_rounded,
-                    title: l10n.settingsSyncCustomCovers,
-                    subtitle: l10n.settingsSyncCustomCoversSubtitle,
-                    value: syncProvider.categories[SyncCategory.covers] ??
-                        SyncCategory.covers.defaultEnabled,
-                    onChanged: (value) => unawaited(
-                      syncProvider.setCategory(SyncCategory.covers, value),
-                    ),
-                  ),
                 SettingsSwitchTile(
                   switchKey: const Key('settingsPureBlackSwitch'),
                   icon: Icons.dark_mode_rounded,
@@ -701,6 +641,56 @@ class _SettingsHomeViewState extends State<_SettingsHomeView>
               ],
             );
           },
+        ),
+      ],
+    );
+  }
+
+  /// 封面：播放时跟随封面取色 / 默认封面。
+  ///
+  /// 「同步自定义封面」不在这里：同步类别状态只有「跨设备同步 › 同步内容」
+  /// 一处入口，外观页不再放第二份快捷开关。
+  Widget _coversSection(BuildContext context, AppLocalizations l10n) {
+    return SettingsSectionCard(
+      title: l10n.settingsCoversSection,
+      children: [
+        Selector<ThemeProvider, bool>(
+          selector: (context, provider) => provider.followArtworkEnabled,
+          builder: (context, followArtworkEnabled, _) => SettingsSwitchTile(
+            switchKey: const Key('settingsFollowArtworkSwitch'),
+            icon: Icons.album_rounded,
+            title: l10n.settingsFollowArtwork,
+            subtitle: l10n.settingsFollowArtworkSubtitle,
+            value: followArtworkEnabled,
+            onChanged: (value) => context
+                .read<ThemeProvider>()
+                .setFollowArtworkEnabled(value),
+          ),
+        ),
+        // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
+        // 不参与取色、下载与标签。
+        CoverChangeBuilder(
+          builder: (context, _) => SettingsNavTile(
+            key: const Key('settingsDefaultCoverItem'),
+            icon: Icons.image_rounded,
+            title: l10n.coverDefaultTitle,
+            subtitle: l10n.coverDefaultSubtitle,
+            trailing: TrackArtwork(
+              // 只显示全局默认封面（没有曲目身份）；外层已订阅。
+              listenForChanges: false,
+              size: 40,
+              borderRadius: BorderRadius.circular(10),
+              memCacheWidth:
+                  (40 * MediaQuery.of(context).devicePixelRatio).round(),
+              fallbackIconSize: 20,
+            ),
+            onTap: () => unawaited(
+              showCoverPickerSheet(
+                context,
+                fileNameBase: l10n.coverDefaultTitle,
+              ),
+            ),
+          ),
         ),
       ],
     );

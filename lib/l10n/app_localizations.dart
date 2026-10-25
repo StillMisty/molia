@@ -242,6 +242,12 @@ abstract class AppLocalizations {
   /// **'Appearance'**
   String get settingsAppearanceTitle;
 
+  /// No description provided for @settingsCoversSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers'**
+  String get settingsCoversSection;
+
   /// No description provided for @settingsThemeMode.
   ///
   /// In en, this message translates to:
@@ -427,18 +433,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default cover updated'**
   String get coverDefaultUpdated;
-
-  /// No description provided for @settingsSyncCustomCovers.
-  ///
-  /// In en, this message translates to:
-  /// **'Sync custom covers'**
-  String get settingsSyncCustomCovers;
-
-  /// No description provided for @settingsSyncCustomCoversSubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Sends cover images to your other devices'**
-  String get settingsSyncCustomCoversSubtitle;
 
   /// No description provided for @coverLabel.
   ///

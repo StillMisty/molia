@@ -3,6 +3,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:molia/widgets/card_list_surface.dart';
+import 'package:molia/widgets/settings/settings_section_grid.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 
 /// 设置行共享组件的布局回归：
@@ -195,6 +196,106 @@ void main() {
     final segmented =
         tester.widget<M3ESegmentedButton<String>>(find.byType(M3ESegmentedButton<String>));
     expect(segmented.showSelectedIcon, isFalse);
+  });
+
+  testWidgets('分区网格：宽屏按列分配，窄屏保持阅读顺序', (tester) async {
+    Widget child(String key) => SizedBox(key: Key(key), height: 100);
+    await pumpRow(
+      tester,
+      SizedBox(
+        width: 800,
+        child: SettingsSectionGrid(
+          twoColumn: true,
+          startColumn: const {0, 2},
+          children: [child('grid-a'), child('grid-b'), child('grid-c')],
+        ),
+      ),
+    );
+    final a = tester.getTopLeft(find.byKey(const Key('grid-a')));
+    final b = tester.getTopLeft(find.byKey(const Key('grid-b')));
+    final c = tester.getTopLeft(find.byKey(const Key('grid-c')));
+    expect(c.dx, a.dx, reason: '第 3 张应回流到较矮的左列');
+    expect(c.dy, greaterThan(a.dy));
+    expect(b.dx, greaterThan(a.dx));
+
+    // 窄屏仍按 children 顺序单列。
+    await pumpRow(
+      tester,
+      SettingsSectionGrid(
+        twoColumn: false,
+        startColumn: const {0, 2},
+        children: [child('grid-a'), child('grid-b'), child('grid-c')],
+      ),
+    );
+    final narrowA = tester.getTopLeft(find.byKey(const Key('grid-a')));
+    final narrowB = tester.getTopLeft(find.byKey(const Key('grid-b')));
+    final narrowC = tester.getTopLeft(find.byKey(const Key('grid-c')));
+    expect(narrowA.dx, narrowB.dx);
+    expect(narrowB.dy, greaterThan(narrowA.dy));
+    expect(narrowC.dy, greaterThan(narrowB.dy));
+  });
+
+  testWidgets('设置行骨架：行高 token 与行尾图标尺寸统一', (tester) async {
+    await pumpRow(
+      tester,
+      SettingsSectionCard(
+        children: [
+          SettingsInfoTile(
+            key: const Key('row-info'),
+            icon: Icons.info_rounded,
+            title: 'Info',
+            subtitle: '',
+          ),
+          SettingsNavTile(
+            key: const Key('row-nav'),
+            icon: Icons.settings_rounded,
+            title: 'Nav',
+            subtitle: 'Sub',
+            onTap: () {},
+          ),
+          SettingsSwitchTile(
+            key: const Key('row-switch'),
+            icon: Icons.tune_rounded,
+            title: 'Switch',
+            subtitle: 'Sub',
+            value: false,
+            onChanged: (_) {},
+          ),
+          SettingsValueTile(
+            key: const Key('row-value'),
+            icon: Icons.straighten_rounded,
+            title: 'Value',
+            value: '1',
+            onTap: () {},
+          ),
+        ],
+      ),
+    );
+
+    final item = M3ETheme.of(tester.element(find.byKey(const Key('row-info'))))
+        .listTheme
+        .item;
+    expect(tester.getSize(find.byKey(const Key('row-info'))).height,
+        item.minHeight);
+    expect(tester.getSize(find.byKey(const Key('row-nav'))).height,
+        item.twoLineHeight);
+    expect(tester.getSize(find.byKey(const Key('row-switch'))).height,
+        item.twoLineHeight);
+
+    final chevron = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('row-nav')),
+        matching: find.byIcon(Icons.chevron_right_rounded),
+      ),
+    );
+    final edit = tester.widget<Icon>(
+      find.descendant(
+        of: find.byKey(const Key('row-value')),
+        matching: find.byIcon(Icons.edit_rounded),
+      ),
+    );
+    expect(chevron.size, 20);
+    expect(edit.size, 20);
   });
 
   testWidgets('下拉行：未选中显示标题提示，不落英文兜底 Select', (tester) async {

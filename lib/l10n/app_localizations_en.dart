@@ -91,6 +91,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppearanceTitle => 'Appearance';
 
   @override
+  String get settingsCoversSection => 'Covers';
+
+  @override
   String get settingsThemeMode => 'Theme mode';
 
   @override
@@ -184,13 +187,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coverDefaultUpdated => 'Default cover updated';
-
-  @override
-  String get settingsSyncCustomCovers => 'Sync custom covers';
-
-  @override
-  String get settingsSyncCustomCoversSubtitle =>
-      'Sends cover images to your other devices';
 
   @override
   String get coverLabel => 'Cover';

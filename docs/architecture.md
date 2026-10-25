@@ -461,6 +461,8 @@
   地址簿（手动连接 + 未认领候选）在「高级设置」子页
   （`sync_advanced_page.dart`）——底层细节不占首屏，但传输状态必须留在首屏
   （「开关已开而实际没有监听」是排查同步事故的主要来源）。
+  同步内容子页只列类别开关，关闭后果在卡片 footer 说明一次；自定义封面
+  类别（默认关闭）也只在这里出现，外观页不再提供第二份快捷开关。
   **配对只有一条路径**（`data/sync/pairing/**`）：`MSP/1` 局域网附近设备发现
   （probe / announce，只做候选，不写名册、不触发同步轮次）→ 点击候选发起
   `/molia-sync/v2/pair/*` 请求 → 双方核对 6 位确认码 → 对方接受后加入同步组。
@@ -1037,8 +1039,8 @@
   （播放历史档 812），使用点：搜索 / 收藏 / 发现详情；行高两档走
   `TrackRow.extentOf`（表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
   （封面头部滚走后列标题仍在），搜索 / 收藏页表头固定在滚动区之上）、
-  设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900）、设置弹层宽屏 880 +
-  首屏两列
+  设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900；列优先瀑布式，分区按
+  内容量显式分列，短卡不再按行留空）、设置弹层宽屏 880 + 首屏两列
   （`showSettingsSheet` 显式 `maxWidth`，公共 modal 档保持 560）、二级页侧滑桌面档 720。
   页边距：桌面档与平板档同宽（24），内容区宽度由「窗口宽 − 侧栏折叠宽」表达。
   启动首页由 `NavProvider.effectiveHomeDestination` 决定（设置 › 通用 › 启动时打开，
@@ -1108,14 +1110,17 @@
   `BoundedSingleMotionController` + `M3EMotion.expressiveSpatialDefault`
   （`snapToEnd`；`shellPageLayerPresentation` 消费处 clamp 0..1），形状配方仍在
   `shellPageLayerPresentation` 的 Curves 里。
-- 设置页：首屏 6 个语义分区（外观 / 播放 / 歌词与展示 / 内容与来源 / 通用 / 数据），
-  分组标题 + 分段卡片行：行表面统一走共享的 `lib/widgets/card_list_surface.dart`
+- 设置页：首屏 7 个语义分区（外观 / 封面 / 播放 / 歌词与展示 / 内容与来源 /
+  通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
+  `lib/widgets/card_list_surface.dart`
   （`CardListSurface`：静止内 4dp / 首末外侧 16dp、hover 12dp、press 16dp，
   expressive spatial 形状弹簧；`TrackRow`、设置行、AI 推荐卡同一套形状语言），
   行间 `cardList.gap`、位置由 `SettingsSectionCard` 下发（`SettingsRowPosition`），
   排版走 `M3ETypeScale`、不写死字号字重；统一行组件在
   `lib/widgets/settings/settings_tiles.dart`（Nav / Switch / Info / Value /
-  Choice / Dropdown / Slider / ColorValue），按值类型选型：bool → Switch、
+  Choice / Dropdown / Slider / ColorValue），行骨架（图标 / 标题副标题 /
+  行尾间距 / 禁用态）由同一个私有 `_SettingsTileRow` 下发，行尾动作图标统一
+  20dp；按值类型选型：bool → Switch、
   2–5 项短枚举 → Choice（行内分段，显式宽度，防 `M3ESegmentedButton` 零宽溢出；
   短标签行可配逐项图标——选中段的对勾替换图标，M3E 选中形态；长标签行
   （Repeat all / Sequential / Single repeat）保持纯文字分段，图标或勾都会挤断文案）、

@@ -21,6 +21,12 @@ const double kSettingsSmallSpacing = 8.0;
 const EdgeInsets kSettingsRowPadding =
     EdgeInsets.symmetric(horizontal: 12, vertical: 8);
 
+/// 行首图标与标题之间的统一间距。
+const double _settingsTileLeadGap = 12.0;
+
+/// 行尾动作图标（chevron / 编辑）的统一尺寸。
+const double _settingsTileActionSize = 20.0;
+
 /// 下拉字段自适应宽度的上限：选项文案再长也交给省略号，避免把标题挤没。
 const double _maxAutoFieldWidth = 240.0;
 
@@ -201,6 +207,71 @@ class _SettingsRowContent extends StatelessWidget {
   }
 }
 
+/// 设置行公共骨架：图标 + 标题/副标题 + 行尾动作。
+///
+/// Nav / Switch / Info / Value / ColorValue / Copy 只负责各自的 trailing，
+/// 行表面、行高、图标、左右间距与禁用态在这里统一；避免同一页里出现不同
+/// 的图标尺寸、行尾间距或禁用透明度。
+class _SettingsTileRow extends StatelessWidget {
+  const _SettingsTileRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onPressed,
+    this.trailing,
+    this.enabled = true,
+    this.isDestructive = false,
+    this.subtitleColor,
+    this.semanticLabel,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onPressed;
+  final Widget? trailing;
+  final bool enabled;
+  final bool isDestructive;
+  final Color? subtitleColor;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final label =
+        semanticLabel ?? (subtitle.isEmpty ? title : '$title, $subtitle');
+    return CardListSurface(
+      position: SettingsRowPosition.of(context),
+      padding: kSettingsRowPadding,
+      semanticLabel: label,
+      onPressed: enabled ? onPressed : null,
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.45,
+        child: _SettingsRowContent(
+          hasSubtitle: subtitle.isNotEmpty,
+          child: Row(
+            children: [
+              SettingsTileIcon(icon: icon, isDestructive: isDestructive),
+              const SizedBox(width: _settingsTileLeadGap),
+              Expanded(
+                child: SettingsTileLabel(
+                  title: title,
+                  subtitle: subtitle,
+                  isDestructive: isDestructive,
+                  subtitleColor: subtitleColor,
+                ),
+              ),
+              if (trailing != null) ...[
+                const SizedBox(width: kSettingsSmallSpacing),
+                trailing!,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 复制行：图标 + 标题/副标题 + M3E 复制按钮；点行或按钮都复制并轻反馈
 /// （SnackBar 文案由调用方给，内容语义各页不同）。
 ///
@@ -248,33 +319,26 @@ class SettingsCopyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      semanticLabel: '$title, $subtitle',
+    return _SettingsTileRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      enabled: enabled,
       onPressed: enabled ? () => _copy(context) : null,
-      child: _SettingsRowContent(
-        hasSubtitle: subtitle.isNotEmpty,
-        child: Row(
-          children: [
-            SettingsTileIcon(icon: icon, isDestructive: false),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SettingsTileLabel(title: title, subtitle: subtitle),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: kSettingsSmallSpacing),
-              trailing!,
-            ],
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (trailing != null) ...[
+            trailing!,
             const SizedBox(width: kSettingsSmallSpacing),
-            M3EIconButton(
-              icon: const Icon(Icons.content_copy_rounded),
-              variant: M3EIconButtonVariant.tonal,
-              semanticLabel: copiedMessage,
-              onPressed: enabled ? () => _copy(context) : null,
-            ),
           ],
-        ),
+          M3EIconButton(
+            icon: const Icon(Icons.content_copy_rounded),
+            variant: M3EIconButtonVariant.tonal,
+            semanticLabel: copiedMessage,
+            onPressed: enabled ? () => _copy(context) : null,
+          ),
+        ],
       ),
     );
   }
@@ -306,40 +370,30 @@ class SettingsNavTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m3e = M3ETheme.of(context);
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      semanticLabel: '$title, $subtitle',
+    return _SettingsTileRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      isDestructive: isDestructive,
       onPressed: onTap == null
           ? null
           : () {
               HapticsService.lightImpact();
               onTap!();
             },
-      child: _SettingsRowContent(
-        hasSubtitle: subtitle.isNotEmpty,
-        child: Row(
-          children: [
-            SettingsTileIcon(icon: icon, isDestructive: isDestructive),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SettingsTileLabel(
-                title: title,
-                subtitle: subtitle,
-                isDestructive: isDestructive,
-              ),
-            ),
-            if (trailing != null) ...[
-              const SizedBox(width: kSettingsSmallSpacing),
-              trailing!,
-            ],
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: m3e.colorScheme.onSurfaceVariant,
-            ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (trailing != null) ...[
+            trailing!,
+            const SizedBox(width: kSettingsSmallSpacing),
           ],
-        ),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: _settingsTileActionSize,
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
+        ],
       ),
     );
   }
@@ -377,48 +431,36 @@ class SettingsSwitchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
-      semanticLabel: title,
+    return _SettingsTileRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      subtitleColor: subtitleColor,
+      enabled: enabled,
       onPressed: enabled
           ? () {
               HapticsService.lightImpact();
               onChanged(!value);
             }
           : null,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.45,
-        child: _SettingsRowContent(
-          hasSubtitle: subtitle.isNotEmpty,
-          child: Row(
-            children: [
-              SettingsTileIcon(icon: icon, isDestructive: false),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SettingsTileLabel(
-                  title: title,
-                  subtitle: subtitle,
-                  subtitleColor: subtitleColor,
-                ),
-              ),
-              M3ESwitch(
-                key: switchKey,
-                value: value,
-                onChanged: enabled
-                    ? (bool newValue) {
-                        HapticsService.lightImpact();
-                        onChanged(newValue);
-                      }
-                    : null,
-              ),
-              if (trailing != null) ...[
-                const SizedBox(width: kSettingsSmallSpacing),
-                trailing!,
-              ],
-            ],
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          M3ESwitch(
+            key: switchKey,
+            value: value,
+            onChanged: enabled
+                ? (bool newValue) {
+                    HapticsService.lightImpact();
+                    onChanged(newValue);
+                  }
+                : null,
           ),
-        ),
+          if (trailing != null) ...[
+            const SizedBox(width: kSettingsSmallSpacing),
+            trailing!,
+          ],
+        ],
       ),
     );
   }
@@ -439,21 +481,11 @@ class SettingsInfoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
+    return _SettingsTileRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
       onPressed: null,
-      child: _SettingsRowContent(
-        hasSubtitle: subtitle.isNotEmpty,
-        child: Row(
-          children: [
-            SettingsTileIcon(icon: icon, isDestructive: false),
-            const SizedBox(width: 12),
-            Expanded(
-                child: SettingsTileLabel(title: title, subtitle: subtitle)),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -482,42 +514,32 @@ class SettingsValueTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m3e = M3ETheme.of(context);
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
+    return _SettingsTileRow(
+      icon: icon,
+      title: title,
+      subtitle: subtitle ?? '',
       semanticLabel: '$title, $value',
       onPressed: () {
         HapticsService.lightImpact();
         onTap();
       },
-      child: _SettingsRowContent(
-        hasSubtitle: subtitle != null && subtitle!.isNotEmpty,
-        child: Row(
-          children: [
-            SettingsTileIcon(icon: icon, isDestructive: false),
-            const SizedBox(width: 12),
-            Expanded(
-              child: SettingsTileLabel(
-                title: title,
-                subtitle: subtitle ?? '',
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: m3e.typeScale.bodyMedium.copyWith(
-                // 当前值是信息文本，不用强调色。
-                color: m3e.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.edit_rounded,
-              size: 18,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value,
+            style: m3e.typeScale.bodyMedium.copyWith(
+              // 当前值是信息文本，不用强调色。
               color: m3e.colorScheme.onSurfaceVariant,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: kSettingsSmallSpacing),
+          Icon(
+            Icons.edit_rounded,
+            size: _settingsTileActionSize,
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
+        ],
       ),
     );
   }
@@ -874,36 +896,33 @@ class SettingsColorValueTile extends StatelessWidget {
       colorArgb,
       withAlpha: (colorArgb >> 24) & 0xFF != 0xFF,
     );
-    return CardListSurface(
-      position: SettingsRowPosition.of(context),
-      padding: kSettingsRowPadding,
+    return _SettingsTileRow(
+      icon: icon,
+      title: title,
+      subtitle: '',
       semanticLabel: '$title, $hex',
       onPressed: () {
         HapticsService.lightImpact();
         onTap();
       },
-      child: _SettingsRowContent(
-        hasSubtitle: false,
-        child: Row(
-          children: [
-            Expanded(child: SettingsTileLead(icon: icon, title: title)),
-            const SizedBox(width: 8),
-            SettingsColorSwatch(color: Color(colorArgb)),
-            const SizedBox(width: 8),
-            Text(
-              hex,
-              style: m3e.typeScale.bodyMedium.copyWith(
-                color: m3e.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Icon(
-              Icons.edit_rounded,
-              size: 18,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SettingsColorSwatch(color: Color(colorArgb)),
+          const SizedBox(width: kSettingsSmallSpacing),
+          Text(
+            hex,
+            style: m3e.typeScale.bodyMedium.copyWith(
               color: m3e.colorScheme.onSurfaceVariant,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: kSettingsSmallSpacing),
+          Icon(
+            Icons.edit_rounded,
+            size: _settingsTileActionSize,
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
+        ],
       ),
     );
   }
@@ -954,7 +973,7 @@ class SettingsTileLead extends StatelessWidget {
     return Row(
       children: [
         SettingsTileIcon(icon: icon, isDestructive: false),
-        const SizedBox(width: 12),
+        const SizedBox(width: _settingsTileLeadGap),
         Expanded(
           child: SettingsTileLabel(title: title, subtitle: subtitle ?? ''),
         ),

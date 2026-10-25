@@ -12,17 +12,19 @@ import '../widgets/settings/settings_tiles.dart';
 /// 同步内容子页：类别开关 + 移动数据策略。
 ///
 /// 首屏只留「全部类别 / 已关闭 N 项」结论，逐类别取舍放这里（类别是
-/// 「同步什么」的细节，不是首屏决策）。
+/// 「同步什么」的细节，不是首屏决策）。类别行只保留标题和开关：关闭后果
+/// 在卡片 footer 说明一次，避免八行重复同一句副标题把列表撑长。
 class SyncContentPage extends StatelessWidget {
   const SyncContentPage({super.key});
 
-  /// 展示顺序：常用数据在前，凭证与统计靠后。
+  /// 展示顺序：媒体内容在前，设置与记录居中，凭证靠后；自定义封面默认
+  /// 关闭，但入口紧跟在音源之后，避免被后面的类别淹没。
   static const Map<SyncCategory, (IconData, String Function(AppLocalizations))>
       _categoryOrder = {
     SyncCategory.playlists: (Icons.queue_music_rounded, _playlistsTitle),
     SyncCategory.sources: (Icons.library_music_rounded, _sourcesTitle),
-    SyncCategory.settings: (Icons.tune_rounded, _settingsTitle),
     SyncCategory.covers: (Icons.image_rounded, _coversTitle),
+    SyncCategory.settings: (Icons.tune_rounded, _settingsTitle),
     SyncCategory.statistics: (Icons.insights_rounded, _statisticsTitle),
     SyncCategory.history: (Icons.history_rounded, _historyTitle),
     SyncCategory.session: (Icons.play_circle_outline_rounded, _sessionTitle),
@@ -65,14 +67,16 @@ class SyncContentPage extends StatelessWidget {
         padding: const EdgeInsets.all(kSettingsPadding),
         children: [
           SettingsSectionCard(
-            title: l10n.syncContentSection,
+            // 页面标题已经说明这是「同步内容」，卡片不再重复一层标题。
+            footer: SettingsSectionHint(text: l10n.syncCategorySubtitle),
             children: [
               for (final entry in _categoryOrder.entries)
                 SettingsSwitchTile(
                   switchKey: Key('settingsSyncCategory-${entry.key.name}'),
                   icon: entry.value.$1,
                   title: entry.value.$2(l10n),
-                  subtitle: l10n.syncCategorySubtitle,
+                  // 关闭后果集中在 footer；不逐行重复同一句话。
+                  subtitle: '',
                   value: provider.categories[entry.key] ??
                       entry.key.defaultEnabled,
                   onChanged: (value) =>

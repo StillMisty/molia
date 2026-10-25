@@ -90,6 +90,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAppearanceTitle => '外观';
 
   @override
+  String get settingsCoversSection => '封面';
+
+  @override
   String get settingsThemeMode => '主题模式';
 
   @override
@@ -181,12 +184,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get coverDefaultUpdated => '默认封面已更新';
-
-  @override
-  String get settingsSyncCustomCovers => '同步自定义封面';
-
-  @override
-  String get settingsSyncCustomCoversSubtitle => '开启后，封面图片随同步发送';
 
   @override
   String get coverLabel => '封面';
