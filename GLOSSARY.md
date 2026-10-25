@@ -39,7 +39,9 @@
 - **Playback stream headers（流请求头契约）** — `lib/domain/ports/music_source.dart::PlayableStream`：取链返回 `uri + headers + expiresIn`，`headers` 是**全路径契约**，不是取链层的局部细节。`SourceManagerMusicSource.resolve` / `CatalogService.resolve` 原样保留，`LocalPlaybackService` 同时传给 `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` / `AudioPredownloader` / 桌面 `PlayingTrackCacheWriter` / 下载复用同一份；任一处丢掉 headers（B 站直链需要 `Referer` + 浏览器 UA）都会变成 403 / 播放失败。新增取链实现时先看这条。
 - **Play mode（播放模式）** — `lib/models/play_mode.dart`：列表循环（队尾回队首）、
   顺序播放（播完即停）、单曲循环、随机播放；`PlayMode.next` 是按钮与系统媒体动作
-  的循环切换顺序，持久化按枚举 `name`。`lib/playback/queue_navigation.dart` 统一
+  的循环切换顺序，持久化按枚举 `name`。界面图标 / 语义标签的唯一映射是
+  `PlayModeTransportPresentation`（`lib/widgets/playback_transport.dart`）。
+  `lib/playback/queue_navigation.dart` 统一
   线性队列的下一首 / 上一首与列表循环的回绕口径。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
   （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
@@ -131,8 +133,16 @@
   `lib/widgets/seek_bar.dart`：进度拖动预览的唯一实现（拖动期显示本地值；
   松手提交后保留显示直到 position 追上（容差 800ms）或 1.5s 兜底；新拖动 /
   新提交作废旧落点；换曲按身份变化清理；时序常量不给宿主配置面）。
-  `SeekBar` 是它的渲染面（波浪 ⇄ 平直、气泡与侧时间文案），播放页与桌面
-  底栏只是宿主，seek 语义不再各持一份。
+  `SeekBar` 是它的渲染面（波浪 ⇄ 平直、气泡与侧时间文案）；`PlaybackSeekBar`
+  是它的宿主（控制器生命周期与低频 `Selector` 接线），播放页与桌面底栏只选
+  时间标签档位。
+- **Playback transport（播放传输语义）** — `lib/widgets/playback_transport.dart`：
+  四个播放控制面（播放页迷你 / 播放页桌面排 / 桌面底栏 / 壳层顶栏）共用的控制
+  语义。`PlaybackPlayPauseButton` / `PlaybackPreviousButton` / `PlaybackNextButton` /
+  `PlaybackModeButton` 统一 `hasTrack` 启用判据、图标与语义标签、触感与 provider
+  命令；宿主只保留按钮变体（tonal / standard）、尺寸与布局。`PlaybackSeekBar`
+  持有 `SeekPreviewController` 生命周期与低频 `Selector`，宿主只选时间标签档位。
+  无曲目时播放 / 切歌禁用；模式仍可切换（先选模式再起播）。
 
 ## 播放页封面（cover deck）
 
@@ -254,7 +264,7 @@
 
 - **Shell chrome（壳层 chrome spec）** — `lib/app/shell_chrome.dart::ShellChrome`：两套骨架（移动 / 桌面）共用的导航与顶栏 spec（目的地 + 标签 + 选择 + 顶栏槽位）。目的地 → 图标 / 标签映射（`railDestinations` / `barDestinations`）、索引 → 目的地回调（`selectDestinationAt`）、顶栏构造（`appBar`：titleSpacing / 无返回键 / 拖动区包装 / 设置按钮 / 窗口控件）只此一份；骨架不合并——顶栏槽里的内容、侧栏类型与底栏形态仍由各自适配渲染。
 
-- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：传输 + 可拖波浪进度 + 时间；右：播放模式 / 音量弹层 / 队列入口）。只在非播放页出现（播放页沉浸，整条让位）；队列入口 = 跳播放页 + 切队列 tab。进度拖动语义与播放页共用 **Seek preview**，宿主只负责版式。
+- **Now playing bar（底栏播放条）** — `lib/app/desktop/now_playing_bar.dart`：桌面 80dp 播放条（左：封面/歌名/收藏，点击进播放页并复用封面飞行；中：Playback transport 控件 + 可拖波浪进度 + 时间；右：模式按钮 / 音量弹层 / 队列入口）。只在非播放页出现（播放页沉浸，整条让位）；队列入口 = 跳播放页 + 切队列 tab。进度拖动语义与播放页共用 **Seek preview**，传输控件共用 **Playback transport**，宿主只负责版式。
 
 - **NowPlayingController（播放页 tab 请求通道）** — `lib/widgets/now_playing_controller.dart`：壳 → 播放页右栏的唯一请求通道（`showQueueTab` / `showLyricsTab` / `showInfoTab`，页序与默认页索引同源）。请求是动作不是状态：重复请求同一页也通知，页面自行判断是否已到位；底栏队列入口与 Esc 的「关闭队列」都经它落点，壳层不读播放页的界面状态。
 

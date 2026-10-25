@@ -125,6 +125,12 @@
   （Playback observer）：直连 facade 快照通道、由组合根挂接，不经 provider 的
   节流通知（避免合并窗口丢中间曲目副作用）；睡眠定时仍属 `PlaybackProvider`。
   与 `PlayStatisticsService` / `ArtworkThemeSync` 同为观察者形态。
+- **播放传输语义**：`lib/widgets/playback_transport.dart` 是播放页迷你 / 播放页
+  桌面排 / 桌面底栏 / 壳层顶栏共用的控制语义（播放暂停 / 上一首 / 下一首 /
+  模式图标与文案 / seek 宿主）：`hasTrack` 启用判据、图标与语义标签、触感与
+  provider 命令只此一份；各宿主只保留按钮变体 / 尺寸 / 布局。`PlaybackSeekBar`
+  持有 `SeekPreviewController` 生命周期与低频 `Selector`，宿主只选时间标签档位。
+  无曲目时播放 / 切歌禁用，模式仍可切换。
 - **音频焦点与定时关闭**：`AudioFocusGuard`（`lib/playback/audio_focus_guard.dart`，
   受设置「与其他应用同时播放」控制，默认开：Android 忽略焦点丢失、iOS / macOS 用
   `mixWithOthers` 混播；关闭后其他应用出声 → 暂停，系统可续播时自动补播；
