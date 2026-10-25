@@ -220,7 +220,7 @@ class BiliAccountService extends ChangeNotifier {
     try {
       final raw = await _settings
           .read(kBiliAccountCookie)
-          .timeout(const Duration(seconds: 2));
+          .timeout(const Duration(seconds: 5));
       return raw.trim();
     } catch (_) {
       return '';
