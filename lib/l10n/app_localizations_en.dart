@@ -403,7 +403,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get exportDataSubtitle =>
-      'Full backup: playlists, sources, settings, stats, history (no credentials)';
+      'Full backup: playlists, sources, settings, stats, history, sign-in info and keys (keep the file safe)';
 
   @override
   String get importDataTitle => 'Import data';
@@ -4405,4 +4405,85 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsTrayLinuxHint =>
       'GNOME and similar desktops need a tray extension to show the icon; without a tray, closing the window quits the app';
+
+  @override
+  String get sourcesPlatformAccounts => 'Platform accounts';
+
+  @override
+  String get biliAccountTitle => 'Bilibili account';
+
+  @override
+  String get biliAccountTileLoggedOut =>
+      'Sign in to prefer Bilibili captions as lyrics';
+
+  @override
+  String get biliAccountTileLoggedIn =>
+      'Signed in · Bilibili captions are preferred for lyrics';
+
+  @override
+  String get biliAccountLoginIntro =>
+      'Playback works without signing in. After signing in, captions on Bilibili videos are used as lyrics first.';
+
+  @override
+  String get biliAccountLoginAction => 'Sign in with QR code';
+
+  @override
+  String get biliAccountQrHint => 'Scan with the Bilibili app';
+
+  @override
+  String get biliAccountQrScanned => 'Scanned. Confirm on your phone.';
+
+  @override
+  String get biliAccountQrExpired => 'QR code expired';
+
+  @override
+  String get biliAccountQrRefresh => 'Refresh QR code';
+
+  @override
+  String get biliAccountQrFailed => 'Sign-in failed. Try again.';
+
+  @override
+  String get biliAccountLoginSuccess => 'Signed in';
+
+  @override
+  String get biliAccountLoginPersistFailed =>
+      'Signed in, but the sign-in info could not be saved. You will need to sign in again after restart.';
+
+  @override
+  String get biliAccountStatusSection => 'Account';
+
+  @override
+  String get biliAccountLoggedIn => 'Signed in';
+
+  @override
+  String biliAccountLoggedInAs(String name) {
+    return 'Signed in as $name';
+  }
+
+  @override
+  String get biliAccountLoggedOut => 'Not signed in';
+
+  @override
+  String get biliAccountSessionExpired =>
+      'Sign-in expired. Please sign in again.';
+
+  @override
+  String get biliAccountLogoutAction => 'Sign out';
+
+  @override
+  String get biliAccountLogoutConfirm =>
+      'After signing out, Bilibili captions will no longer be read. Cached lyrics stay.';
+
+  @override
+  String get biliAccountLogoutFailed => 'Sign-out failed. Try again.';
+
+  @override
+  String get biliAccountPrivacyHint =>
+      'Sign-in info is kept in secure storage. If sync is on, it is encrypted and synced to paired devices. It is only used to read Bilibili captions.';
+
+  @override
+  String get biliAccountQrSemantics => 'Bilibili sign-in QR code';
+
+  @override
+  String get providerBilibili => 'Bilibili';
 }

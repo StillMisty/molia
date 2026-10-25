@@ -54,6 +54,7 @@ dependencies:
   nativeapi: ^0.5.2
   system_hotkeys: ^0.2.0
   system_hotkeys_linux: ^0.2.1
+  qr_flutter: ^4.1.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

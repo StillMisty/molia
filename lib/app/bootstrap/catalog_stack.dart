@@ -5,6 +5,8 @@
 /// 设置注册表的「模块自绑 reload」也在这里完成装配。
 library;
 
+import 'dart:async';
+
 import '../../data/catalog/album_service.dart';
 import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
@@ -14,6 +16,7 @@ import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_registry.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../services/app_branding_service.dart';
+import '../../services/bili_account_service.dart';
 import '../../services/language_service.dart';
 import '../../services/shortcut_settings.dart';
 import '../../sources/source_manager.dart';
@@ -27,6 +30,7 @@ typedef CatalogStack = ({
   CommentsService commentsService,
   AlbumService albumService,
   ArtistService artistService,
+  BiliAccountService biliAccount,
 });
 
 /// 装配设置注册表与音源/目录服务。
@@ -59,6 +63,17 @@ CatalogStack buildCatalogStack() {
   settingsRegistry.bindReload(kGlobalShortcutsEnabled, ShortcutSettings.reload);
   settingsRegistry.bindReload(kShortcutBindings, ShortcutSettings.reload);
   settingsRegistry.bindReload(kGlobalShortcutBindings, ShortcutSettings.reload);
+
+  // B 站账号：凭据是凭证类别（默认随同步 / 备份），初始化放后台，取词链路
+  // 会 await `BiliAccountStore.ready`，不阻塞首帧。
+  final biliAccount = BiliAccountService(
+    settings: settingsRegistry.scope([kBiliAccountCookie]),
+  );
+  settingsRegistry.bindReload(
+    kBiliAccountCookie,
+    biliAccount.reloadFromSettings,
+  );
+  unawaited(biliAccount.init());
 
   // 音源管理器的按键作用域：any-listen 连接 3 键 + 渠道偏好 3 键
   // （SourcePreferences 在管理器的通知下自绑重载）。
@@ -106,5 +121,6 @@ CatalogStack buildCatalogStack() {
     commentsService: commentsService,
     albumService: albumService,
     artistService: artistService,
+    biliAccount: biliAccount,
   );
 }

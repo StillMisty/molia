@@ -48,6 +48,14 @@ class BuiltinLyricDispatch {
     }
   }
 
+  /// 清掉某个平台的原生取词缓存（登录态变化后由组合根调用）。
+  ///
+  /// 缓存 key 形如 `bili:BVxxx:lyric`；同时清掉缓存过的 null，否则 B 站
+  /// 登录后 5 分钟内仍会命中「无字幕」的旧结果。
+  void invalidateSource(String sourceKey) {
+    _cache.invalidatePrefix('$sourceKey:');
+  }
+
   static String? _nonEmpty(String? value) {
     final trimmed = value?.trim();
     return (trimmed == null || trimmed.isEmpty) ? null : trimmed;

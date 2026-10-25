@@ -104,6 +104,7 @@ class _FakeLyricsService extends LyricsService {
     String artistName,
     String trackId, {
     Track? track,
+    bool ignoreCache = false,
   }) async =>
       result;
 }

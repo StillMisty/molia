@@ -65,6 +65,9 @@ sources/playback。
 - 进度只走 `PlaybackProvider.position`（`ValueListenable`，≤4Hz），不进 `notifyListeners`；快照值变才通知；
 - UI 只消费类型化 `PlaybackSnapshot`，不感知播放后端实现；
 - 错误在边界统一为 `SourceFailure`（kind/l10nKey/retryable），UI 不直接展示 `$e`；
+- B 站账号 Cookie 只随字幕 / 账号资料请求发送（`BiliAuth.account*`）；播放、搜索、
+  评论、字幕 CDN 必须保持匿名；登录信息是凭证类别，默认随同步；完整备份默认
+  包含全部凭证（ADR-0016）；
 - 取色（ADR-0001）：`theme/scheme_builder.dart::buildColorScheme` 是唯一方案工厂，
   `services/artwork_palette_service.dart` 是唯一封面取色入口；消费面（桌面歌词/海报）经
   `resolveSurfaceScheme` 解析，禁止二次提取封面像素。

@@ -12,8 +12,10 @@ import 'sync_stamp.dart';
 /// 由引擎注入（`SyncEngine.collectRecords`）：备份必须与一轮同步使用**同一**
 /// 类别过滤与适配器缓存语义，否则「导出 / 导入」和线上同步对同一份数据给出
 /// 不同视图。只暴露这一个读动作，备份不接触引擎的轮次状态。
-typedef SyncRecordCollector = Future<Map<SyncCategory, List<SyncRecord>>>
-    Function(Set<SyncCategory> categories);
+typedef SyncRecordCollector =
+    Future<Map<SyncCategory, List<SyncRecord>>> Function(
+      Set<SyncCategory> categories,
+    );
 
 /// 完整备份（导出 / 导入）：与同步共用 envelope、适配器与版本戳，但不需要
 /// 启用同步或轮次。
@@ -28,7 +30,7 @@ class SyncBackup {
     required this._stamps,
     required this._collect,
     DateTime Function()? clock,
-  })  : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now;
 
   /// 备份文件外层格式标识（内层 envelope 是同步协议快照）。
   static const String backupKind = 'molia_backup';
@@ -45,8 +47,12 @@ class SyncBackup {
 
   int _nowMs() => _clock().millisecondsSinceEpoch;
 
-  /// 导出完整备份 JSON 文本（歌单 / 历史 / 音源 / 设置 / 统计 / 会话 / 自定义封面）。
-  Future<String> exportBackupJson({bool includeCredentials = false}) async {
+  /// 导出完整备份 JSON 文本（全部类别，含凭证）。
+  ///
+  /// 默认导出完整状态：歌单 / 历史 / 音源 / 设置 / 统计 / 会话 / 自定义封面 /
+  /// 凭据（AI Key、any-listen token、B 站登录）。[includeCredentials] 只作为
+  /// 显式排除凭证的逃生口；备份文件本身为明文 JSON，调用方负责保管。
+  Future<String> exportBackupJson({bool includeCredentials = true}) async {
     final categories = _backupCategories(includeCredentials);
     final records = await _collect(categories);
     final envelope = _envelopeFrom(records);
@@ -61,9 +67,10 @@ class SyncBackup {
   /// 导入完整备份：与本地数据逐键合并（LWW，不做整体覆盖）。
   ///
   /// 先收集本地现状更新登记，保证本地较新的改动不会被旧备份覆盖。
+  /// 默认连同凭证一起恢复，保证换机后的状态与备份时一致。
   Future<SyncApplyOutcome> importBackupJson(
     String json, {
-    bool includeCredentials = false,
+    bool includeCredentials = true,
   }) async {
     final Object? decoded;
     try {
@@ -113,10 +120,9 @@ class SyncBackup {
   }
 
   Set<SyncCategory> _backupCategories(bool includeCredentials) => {
-        for (final category in SyncCategory.values)
-          if (includeCredentials || category != SyncCategory.credentials)
-            category,
-      };
+    for (final category in SyncCategory.values)
+      if (includeCredentials || category != SyncCategory.credentials) category,
+  };
 
   SyncEnvelope _envelopeFrom(Map<SyncCategory, List<SyncRecord>> records) =>
       SyncEnvelope(

@@ -55,14 +55,14 @@ class LyricsState {
 
   @override
   int get hashCode => Object.hash(
-        trackId,
-        status,
-        Object.hashAll(lines),
-        Object.hashAll(translations),
-        Object.hashAll(romas),
-        isSynced,
-        providerName,
-      );
+    trackId,
+    status,
+    Object.hashAll(lines),
+    Object.hashAll(translations),
+    Object.hashAll(romas),
+    isSynced,
+    providerName,
+  );
 }
 
 /// 歌词会话模块：取词 → 缓存 → 解析（统一时间契约）→ 预取的唯一实现。
@@ -72,7 +72,7 @@ class LyricsState {
 /// 分别走 [preload] / [saveManual]；[retry] 供页面或用户显式重试。
 class LyricsProvider extends ChangeNotifier {
   LyricsProvider({LyricsService? service})
-      : _service = service ?? LyricsService();
+    : _service = service ?? LyricsService();
 
   final LyricsService _service;
 
@@ -101,24 +101,32 @@ class LyricsProvider extends ChangeNotifier {
   final Map<String, Future<LyricsResult?>> _inFlight = {};
 
   /// 取词（single-flight）：同曲目的在途请求共用同一个 Future。
-  Future<LyricsResult?> _fetch(Track track) {
+  ///
+  /// [ignoreCache] 用于登录后强制重取：绕过 single-flight 与歌词缓存，避免
+  /// 复用在途的跨平台请求或旧缓存。
+  Future<LyricsResult?> _fetch(Track track, {bool ignoreCache = false}) {
     final trackId = track.id.uri;
-    final pending = _inFlight[trackId];
-    if (pending != null) return pending;
-    final future = DataPathTrace.async(
+    Future<LyricsResult?> fetch() => DataPathTrace.async(
       'lyrics.fetch',
       () => _service.getLyrics(
         track.title,
         track.artistLabel,
         trackId,
         track: track,
+        ignoreCache: ignoreCache,
       ),
       fields: () => {'track': trackId},
     );
+    if (ignoreCache) return fetch();
+    final pending = _inFlight[trackId];
+    if (pending != null) return pending;
+    final future = fetch();
     _inFlight[trackId] = future;
-    unawaited(future.whenComplete(() {
-      if (identical(_inFlight[trackId], future)) _inFlight.remove(trackId);
-    }));
+    unawaited(
+      future.whenComplete(() {
+        if (identical(_inFlight[trackId], future)) _inFlight.remove(trackId);
+      }),
+    );
     return future;
   }
 
@@ -164,11 +172,41 @@ class LyricsProvider extends ChangeNotifier {
   }
 
   /// 重取当前曲目歌词（页面级重试 / 空结果后的显式重来）。
-  Future<void> retry() async {
+  ///
+  /// [ignoreCache] 为 true 时强制绕过歌词缓存（B 站登录后刷新）。
+  Future<void> retry({bool ignoreCache = false}) async {
     final track = _currentTrack;
     if (track == null) return;
     _retriedEmpty = true;
-    await _load(track, track.id.uri);
+    if (ignoreCache) {
+      // 等在途普通请求落盘后再强刷，避免旧结果后写覆盖 B 站字幕。
+      final pending = _inFlight[track.id.uri];
+      if (pending != null) {
+        try {
+          await pending;
+        } catch (_) {
+          // 旧请求失败不影响强刷。
+        }
+      }
+    }
+    await _load(track, track.id.uri, ignoreCache: ignoreCache);
+  }
+
+  /// B 站登录（本地扫码 / 同步到达）后刷新当前歌词。
+  ///
+  /// 当前曲目不是 B 站、已经是 B 站字幕、或用户手动选过歌词时不动。
+  Future<void> refreshAfterBiliLogin() async {
+    final track = _currentTrack;
+    if (track == null || track.id.sourceKey != 'bili') return;
+    if (_state.status == LyricsStatus.ready && _state.providerName == 'bili') {
+      return;
+    }
+    try {
+      if (await _service.hasManualLyrics(track.id.uri)) return;
+    } catch (_) {
+      // 缓存读取失败按「非手动」处理，继续尝试同源刷新。
+    }
+    await retry(ignoreCache: true);
   }
 
   /// 立即加载曲目歌词（调用方已知需要取词）。
@@ -181,10 +219,14 @@ class LyricsProvider extends ChangeNotifier {
     return _load(track, track.id.uri);
   }
 
-  Future<void> _load(Track track, String trackId) async {
+  Future<void> _load(
+    Track track,
+    String trackId, {
+    bool ignoreCache = false,
+  }) async {
     final requestId = ++_requestId;
     _setState(LyricsState(trackId: trackId, status: LyricsStatus.loading));
-    final result = await _fetch(track);
+    final result = await _fetch(track, ignoreCache: ignoreCache);
     if (requestId != _requestId) return; // 过期响应：丢弃
     _setState(_stateFor(trackId, result));
   }
@@ -230,16 +272,18 @@ class LyricsProvider extends ChangeNotifier {
       lxlyric: lxlyric,
     );
     if (_state.trackId == trackId) {
-      _setState(_stateFor(
-        trackId,
-        LyricsResult(
-          lyric: lyric,
-          provider: providerName,
-          translation: translation,
-          roma: roma,
-          lxlyric: lxlyric,
+      _setState(
+        _stateFor(
+          trackId,
+          LyricsResult(
+            lyric: lyric,
+            provider: providerName,
+            translation: translation,
+            roma: roma,
+            lxlyric: lxlyric,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -253,18 +297,12 @@ class LyricsProvider extends ChangeNotifier {
 
   LyricsState _stateFor(String trackId, LyricsResult? result) {
     if (result == null) {
-      return LyricsState(
-        trackId: trackId,
-        status: LyricsStatus.empty,
-      );
+      return LyricsState(trackId: trackId, status: LyricsStatus.empty);
     }
     if (hasLyricTimestamps(result.lyric)) {
       final parsed = DataPathTrace.sync(
         'lyrics.parse',
-        () => attachWordTimings(
-          parseLyrics(result.lyric),
-          result.lxlyric,
-        ),
+        () => attachWordTimings(parseLyrics(result.lyric), result.lxlyric),
         fields: () => {
           'synced': 1,
           'chars': result.lyric.length,

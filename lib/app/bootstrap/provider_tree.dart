@@ -72,6 +72,8 @@ List<SingleChildWidget> buildAppProviders({
     // 音源管理 UI 门面：订阅同一个 SourceManager，生命周期与其一致
     // （不负责 dispose manager）。
     ChangeNotifierProvider(create: (_) => SourcesProvider(sourceManager)),
+    // B 站账号（扫码登录 / 同步凭据 / 字幕登录态）：音源页与账号页读取。
+    ChangeNotifierProvider.value(value: catalog.biliAccount),
     Provider<SourceRegistry>.value(value: sourceRegistry),
     Provider<CatalogService>.value(value: catalogService),
     // 专辑页取数（缓存/错误边界在服务内；页面只消费领域 Album）。
