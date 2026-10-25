@@ -42,6 +42,12 @@ void main() {
         ),
       );
 
+  Widget defaultHost() => MaterialApp(
+        home: Scaffold(
+          body: Builder(builder: (context) => buildDefaultArtwork(context)),
+        ),
+      );
+
   testWidgets('未设置默认封面：回退 Molia 标志', (tester) async {
     await tester.runAsync(store.load);
     await tester.pumpWidget(host());
@@ -57,6 +63,30 @@ void main() {
 
     expect(find.byType(Image), findsOneWidget);
     expect(find.byType(MoliaMark), findsNothing);
+  });
+
+  testWidgets('回退封面：默认封面替换 / 恢复后原地刷新', (tester) async {
+    await tester.runAsync(store.load);
+    await tester.pumpWidget(host());
+    expect(find.byType(MoliaMark), findsOneWidget);
+
+    await tester.runAsync(() => store.setDefaultCover(pngBytes()));
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
+
+    await tester.runAsync(store.resetDefaultCover);
+    await tester.pump();
+    expect(find.byType(MoliaMark), findsOneWidget);
+  });
+
+  testWidgets('默认 / 回退封面：默认封面变化原地刷新', (tester) async {
+    await tester.runAsync(store.load);
+    await tester.pumpWidget(defaultHost());
+    expect(find.byType(MoliaMark), findsOneWidget);
+
+    await tester.runAsync(() => store.setDefaultCover(pngBytes()));
+    await tester.pump();
+    expect(find.byType(Image), findsOneWidget);
   });
 
   testWidgets('默认封面文件失效：回到 Molia 标志，不递归', (tester) async {

@@ -27,21 +27,20 @@ import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
 import '../services/app_branding_service.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
-import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'favorite_action.dart';
 import 'icon_swap.dart';
+import 'track_artwork.dart';
 
-/// 当前曲目封面地址：真身、飞行副本与预取共用的唯一取值。
+/// 当前曲目封面地址（真实封面；默认封面是展示兜底，不参与飞行副本）。
 ///
-/// 顶栏/底栏真身与共享飞行副本必须拿同一份 URL（空串视同无封面），否则
-/// 飞行期间副本可能换成另一张图。
-String? nowPlayingCoverUrl(PlaybackProvider provider) =>
-    artworkUrlOf(provider.snapshot.current);
+/// 顶栏/底栏真身与共享飞行副本必须拿同一份 URL，否则飞行期间副本可能
+/// 换成另一张图。
+String? nowPlayingCoverUrl(BuildContext context, PlaybackProvider provider) =>
+    coverResolverOf(context).realOf(provider.snapshot.current).url;
 
 /// 当前曲目的封面卡：顶栏 / 桌面底栏的“迷你封面”唯一实现。
 ///
@@ -77,32 +76,25 @@ class NowPlayingCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final covers =
-        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
     final track = context.select<PlaybackProvider, Track?>(
       (provider) => provider.snapshot.current,
     );
-    return ValueListenableBuilder<int>(
-      valueListenable: covers.revision,
-      builder: (context, _, __) => AnimatedOpacity(
-        // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
-        duration: hidden ? _hideDuration : Duration.zero,
-        opacity: hidden ? 0 : 1,
-        child: CoverCard(
-          key: flightKey,
-          size: size,
-          appearance: appearance,
-          content: (context, clip, iconSize) => AppNetworkImage(
-            url: artworkUrlOf(track),
-            borderRadius: clip,
-            // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
-            fallbackIconSize: iconSize,
-            // 无封面 / 远端失败时先显示设置里的默认封面（Molia 标志兜底）。
-            fallbackUrl: covers.defaultCoverUrl,
-            // 与播放页 / 迷你条 / 预取共用同一个有界解码键：命中同一张已解码
-            // 图，不在 40dp 顶栏里留一张原图。
-            memCacheWidth: playbackCoverDecodeEdge(context),
-          ),
+    return AnimatedOpacity(
+      // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
+      duration: hidden ? _hideDuration : Duration.zero,
+      opacity: hidden ? 0 : 1,
+      child: CoverCard(
+        key: flightKey,
+        size: size,
+        appearance: appearance,
+        content: (context, clip, iconSize) => TrackArtwork(
+          track: track,
+          borderRadius: clip,
+          // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
+          fallbackIconSize: iconSize,
+          // 与播放页 / 迷你条 / 预取共用同一个有界解码键：命中同一张已解码
+          // 图，不在 40dp 顶栏里留一张原图。
+          memCacheWidth: playbackCoverDecodeEdge(context),
         ),
       ),
     );

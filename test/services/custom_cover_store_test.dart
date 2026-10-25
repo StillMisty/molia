@@ -51,11 +51,13 @@ void main() {
     expect(firstPath, contains('custom_covers'));
     expect(store.trackCoverUrl(id), Uri.file(firstPath).toString());
     expect(
-        store.resolveTrackCover(const Track(
-          id: id,
-          title: 'T',
-          origin: TrackOrigin.builtin,
-        )),
+        store.resolution
+            .realOf(const Track(
+              id: id,
+              title: 'T',
+              origin: TrackOrigin.builtin,
+            ))
+            .url,
         Uri.file(firstPath).toString());
     expect(store.revision.value, revisionBefore + 1);
     expect(changes.single.kind, CustomCoverChangeKind.track);
@@ -99,20 +101,20 @@ void main() {
     expect(defaultUrl, isNotNull);
 
     expect(
-      store.resolveTrackCoverForId(id, originalUrl: 'https://img/a.jpg'),
+      store.resolution.realForId(id, originalUrl: 'https://img/a.jpg').url,
       'https://img/a.jpg',
     );
     expect(
-      store.resolveForDisplayById(id),
+      store.resolution.displayForId(id).url,
       defaultUrl,
       reason: '没有自定义 / 原始封面时展示默认封面',
     );
 
     await store.setTrackCover(id, _bytes(6));
     final customUrl = store.trackCoverUrl(id);
-    expect(store.resolveTrackCoverForId(id), customUrl);
+    expect(store.resolution.realForId(id).url, customUrl);
     expect(
-      store.resolveForDisplayById(id, originalUrl: 'https://img/a.jpg'),
+      store.resolution.displayForId(id, originalUrl: 'https://img/a.jpg').url,
       customUrl,
       reason: '自定义封面优先于原始封面与默认封面',
     );
@@ -120,7 +122,7 @@ void main() {
     await store.resetTrackCover(id);
     expect(store.trackCoverUrl(id), isNull);
     expect(
-      store.resolveTrackCoverForId(id, originalUrl: 'https://img/a.jpg'),
+      store.resolution.realForId(id, originalUrl: 'https://img/a.jpg').url,
       'https://img/a.jpg',
     );
 
@@ -128,7 +130,7 @@ void main() {
     await store.resetDefaultCover();
     expect(store.defaultCoverUrl, isNull);
     expect(File(defaultPath).existsSync(), isFalse);
-    expect(store.resolveForDisplayById(id), isNull);
+    expect(store.resolution.displayForId(id).url, isNull);
   });
 
   test('索引持久化：新实例 load 后仍可查询；丢失文件在 load 时剔除', () async {

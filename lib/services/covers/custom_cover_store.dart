@@ -26,8 +26,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../domain/models/download.dart' show kLocalSourceKey;
 import '../../domain/models/track.dart';
+import 'cover_resolution.dart' as cover_resolution;
 
 /// 自定义封面变化类型（组合根按它决定刷新哪些展示面）。
 enum CustomCoverChangeKind {
@@ -93,7 +93,11 @@ class CustomCoverEntry {
 }
 
 /// 自定义封面存储（单例入口 [instance]；测试可 [overrideInstance]）。
-class CustomCoverStore {
+///
+/// 只负责写入 / 持久化 / 同步落地与只读索引；「哪张封面优先」由
+/// [resolution]（`cover_resolution.dart`）决定，UI / 下载 / 取色不再调用
+/// 存储里的解析方法。
+class CustomCoverStore implements cover_resolution.CoverIndex {
   CustomCoverStore({
     Future<SharedPreferences> Function()? preferences,
     Future<Directory> Function()? supportDirectory,
@@ -106,6 +110,10 @@ class CustomCoverStore {
 
   /// 全应用共享实例（与 `ArtworkCache.instance` 同一模式）。
   static CustomCoverStore get instance => _instance;
+
+  /// 本存储的封面解析器（唯一解析入口；组合根与 widget 适配器共用）。
+  late final cover_resolution.CoverResolver resolution =
+      cover_resolution.CoverResolver(this);
 
   /// 测试替换实例；传 null 恢复默认实例。
   @visibleForTesting
@@ -201,24 +209,33 @@ class CustomCoverStore {
     return () => _changeListeners.remove(listener);
   }
 
-  /// 规范曲目键：`local` 下载副本剥掉一层 `local:` 前缀。
-  ///
-  /// `TrackId(kLocalSourceKey, 'wy:123')` → `wy:123`（下载前的原曲键）；
-  /// 本地导入 `TrackId(kLocalSourceKey, 'local:/path')` → `local:/path`
-  /// （记录键本身，不再二次剥离）。
-  static String coverKeyOf(TrackId id) =>
-      id.sourceKey == kLocalSourceKey ? id.id : id.uri;
+  /// 只订阅 revision（解析模块的变更信号；不区分本地 / 远端写入）。
+  @override
+  void Function() addRevisionListener(void Function() listener) {
+    revision.addListener(listener);
+    return () => revision.removeListener(listener);
+  }
 
-  /// 字符串形态的规范化（只认 `TrackId.uri` 形状）。
+  /// 规范曲目键：委托 `cover_resolution.dart`（规则只此一份）。
+  static String coverKeyOf(TrackId id) => cover_resolution.coverKeyOf(id);
+
+  /// 字符串形态的规范化（委托解析模块）。
   static String normalizeCoverKey(String key) =>
-      key.startsWith('$kLocalSourceKey:')
-          ? key.substring(kLocalSourceKey.length + 1)
-          : key;
+      cover_resolution.normalizeCoverKey(key);
 
   /// 曲目自定义封面文件路径（未设置为 null）。
   String? trackCoverPath(TrackId id) {
     final entry = _tracks[coverKeyOf(id)];
     return entry?.path;
+  }
+
+  /// 规范化封面键 → 自定义封面 `file://` 地址（[resolution.CoverIndex]）。
+  ///
+  /// 传入键必须已规范化；字符串入口的 `local:` 剥离由 [CoverResolver] 做。
+  @override
+  String? customCoverUrlForKey(String key) {
+    final entry = _tracks[key];
+    return entry == null ? null : Uri.file(entry.path).toString();
   }
 
   /// 曲目自定义封面 `file://` 地址（未设置为 null）。
@@ -228,50 +245,50 @@ class CustomCoverStore {
   }
 
   /// 全局默认封面 `file://` 地址；null = 显示 Molia 标志。
+  @override
   String? get defaultCoverUrl {
     final path = _defaultCover?.path;
     return path == null ? null : Uri.file(path).toString();
   }
 
   /// 按原始曲目键查询自定义封面（`TrackRowModel.coverKey` 入口）。
+  ///
+  /// 只是 `resolution.realForKey(...).url` 的旧入口；新代码请走解析器。
   String? trackCoverUrlForKey(String? coverKey) {
     if (coverKey == null || coverKey.isEmpty) return null;
-    final entry = _tracks[normalizeCoverKey(coverKey)];
-    return entry == null ? null : Uri.file(entry.path).toString();
+    return customCoverUrlForKey(normalizeCoverKey(coverKey));
   }
 
-  /// 曲目封面：自定义优先，否则原始封面（不含默认封面）。
+  /// 曲目真实封面（自定义优先，否则原始；不含默认封面）。
   ///
-  /// 取色链路只认这条（默认封面是占位，不参与取色 / 下载 / 标签）。
-  String? resolveTrackCover(Track? track) => resolveTrackCoverForId(
-        track?.id,
-        originalUrl: track?.artwork?.uri.toString(),
-      );
+  /// **旧入口**：新代码用 [resolution] 的 `realOf` / `displayOf`。保留只为
+  /// 兼容旧调用点，仓库内生产代码已无调用。
+  @Deprecated('使用 CustomCoverStore.resolution.realOf / displayOf')
+  String? resolveTrackCover(Track? track) => resolution.realOf(track).url;
 
-  /// 按 [TrackId] 解析曲目封面（自定义优先，否则原始 URL）。
-  String? resolveTrackCoverForId(TrackId? id, {String? originalUrl}) {
-    final custom = id == null ? null : trackCoverUrl(id);
-    return custom ?? _nonEmpty(originalUrl);
-  }
+  /// 按 [TrackId] 解析真实封面（旧入口，见 [resolveTrackCover]）。
+  @Deprecated('使用 CustomCoverStore.resolution.realForId / displayForId')
+  String? resolveTrackCoverForId(TrackId? id, {String? originalUrl}) =>
+      resolution.realForId(id, originalUrl: originalUrl).url;
 
-  /// 按字符串曲目键解析曲目封面（自定义优先，否则原始 URL）。
+  /// 按字符串曲目键解析真实封面（旧入口，见 [resolveTrackCover]）。
+  @Deprecated('使用 CustomCoverStore.resolution.realForKey / displayForKey')
   String? resolveTrackCoverForKey(String? coverKey, {String? originalUrl}) =>
-      trackCoverUrlForKey(coverKey) ?? _nonEmpty(originalUrl);
+      resolution.realForKey(coverKey, originalUrl: originalUrl).url;
 
-  /// 展示封面：自定义 → 原始封面 → 全局默认封面。
-  String? resolveForDisplay(Track? track) => resolveForDisplayById(
-        track?.id,
-        originalUrl: track?.artwork?.uri.toString(),
-      );
+  /// 展示封面（旧入口）：自定义 → 原始 → 默认；新代码用 [resolution]。
+  @Deprecated('使用 CustomCoverStore.resolution.displayOf')
+  String? resolveForDisplay(Track? track) => resolution.displayOf(track).url;
 
-  /// 按 [TrackId] 解析展示封面（见 [resolveForDisplay]）。
+  /// 按 [TrackId] 解析展示封面（旧入口）。
+  @Deprecated('使用 CustomCoverStore.resolution.displayForId')
   String? resolveForDisplayById(TrackId? id, {String? originalUrl}) =>
-      resolveTrackCoverForId(id, originalUrl: originalUrl) ?? defaultCoverUrl;
+      resolution.displayForId(id, originalUrl: originalUrl).url;
 
-  /// 按字符串曲目键解析展示封面（见 [resolveForDisplay]）。
+  /// 按字符串曲目键解析展示封面（旧入口）。
+  @Deprecated('使用 CustomCoverStore.resolution.displayForKey')
   String? resolveForDisplayForKey(String? coverKey, {String? originalUrl}) =>
-      resolveTrackCoverForKey(coverKey, originalUrl: originalUrl) ??
-      defaultCoverUrl;
+      resolution.displayForKey(coverKey, originalUrl: originalUrl).url;
 
   /// 当前曲目封面索引（键 = 规范化封面键；只读快照）。
   Map<String, CustomCoverEntry> get trackEntries => Map.unmodifiable(_tracks);
@@ -286,7 +303,8 @@ class CustomCoverStore {
   Future<Uint8List?> readTrackCover(TrackId id) =>
       _readFile(trackCoverPath(id));
 
-  /// 按封面键读取曲目封面字节（同步适配器读取已枚举条目）。
+  /// 按封面键读取曲目封面字节（同步适配器 / 下载读取已规范化键）。
+  @override
   Future<Uint8List?> readTrackCoverByKey(String key) =>
       _readFile(_tracks[key]?.path);
 
@@ -574,7 +592,4 @@ class CustomCoverStore {
 
   static String _shortHash(String value) =>
       sha256.convert(utf8.encode(value)).toString().substring(0, 12);
-
-  static String? _nonEmpty(String? value) =>
-      value == null || value.isEmpty ? null : value;
 }

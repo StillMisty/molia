@@ -6,10 +6,14 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/artwork_palette_service.dart';
+import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/theme/scheme_builder.dart';
+
+import '../support/fake_cover_index.dart';
 
 /// 4x4 纯色图片 provider：驱动取色路径（不依赖网络/资产）。
 class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
@@ -60,6 +64,30 @@ void main() {
   group('ArtworkPaletteService', () {
     // 取色路径要解码真实 ui.Image：testWidgets + runAsync 才能完成引擎回调，
     // 普通 test 的 fake async 区不会完成。
+    test('loadTrack：只有默认封面时不取色 / 不读图', () async {
+      var providerCalls = 0;
+      final service = ArtworkPaletteService(providerFor: (url) async {
+        providerCalls++;
+        return _SolidColorImageProvider(const Color(0xFF00BB00));
+      });
+      final index = FakeCoverIndex(
+        defaultUrl: 'file:///tmp/default-cover.jpg',
+      );
+      const track = Track(
+        id: TrackId('wy', '1'),
+        title: 'T',
+        origin: TrackOrigin.builtin,
+      );
+
+      final palette = await service.loadTrack(
+        track,
+        covers: CoverResolver(index),
+      );
+
+      expect(palette, isNull);
+      expect(providerCalls, 0, reason: '默认封面是占位，不参与取色');
+    });
+
     testWidgets('提取纯色封面：seed → 双亮度方案，缓存命中不重复取图', (tester) async {
       var providerCalls = 0;
       final service = ArtworkPaletteService(providerFor: (url) async {
@@ -67,8 +95,8 @@ void main() {
         return _SolidColorImageProvider(const Color(0xFF00BB00));
       });
 
-      final first =
-          await tester.runAsync(() => service.load('https://example.com/a.jpg'));
+      final first = await tester
+          .runAsync(() => service.load('https://example.com/a.jpg'));
       expect(first, isNotNull);
       expect(first!.light, buildColorScheme(first.seed, Brightness.light));
       expect(first.dark, buildColorScheme(first.seed, Brightness.dark));
@@ -80,8 +108,8 @@ void main() {
       expect(providerCalls, 1);
 
       // 再次读取命中缓存：同一个 palette 实例，不再取图。
-      final second =
-          await tester.runAsync(() => service.load('https://example.com/a.jpg'));
+      final second = await tester
+          .runAsync(() => service.load('https://example.com/a.jpg'));
       expect(identical(second, first), isTrue);
       expect(providerCalls, 1);
     });
@@ -286,8 +314,7 @@ void main() {
   });
 
   group('ArtworkThemeSync', () {
-    ArtworkPalette paletteOf(Color color) =>
-        ArtworkPalette.fromSeed(color);
+    ArtworkPalette paletteOf(Color color) => ArtworkPalette.fromSeed(color);
 
     test('新封面经稳态延迟后应用；无封面清除回退', () async {
       final applied = <ArtworkPalette>[];

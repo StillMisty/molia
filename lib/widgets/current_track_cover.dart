@@ -1,28 +1,22 @@
 import 'package:material_ui/material_ui.dart';
 
-import 'library_cover.dart';
-
 /// 当前曲目封面：封面右下角叠「播放中 / 暂停」角标。
 ///
-/// 角标落在 [size] 方形槽内，不改变行内网格（封面位宽固定，标题与表格列
-/// 不会因状态切换左右移动）。角标只是状态图形，状态语义由行文本承载
-/// （调用方把「正在播放 / 已暂停」写进行的 semanticLabel），这里排除自身
-/// 语义，避免读屏重复播报。
+/// 封面内容由调用方给出（曲目行走 [TrackArtwork]）；这里只负责角标与固定
+/// 方形槽，保证状态切换不改变行内网格。
 class CurrentTrackCover extends StatelessWidget {
   const CurrentTrackCover({
     super.key,
-    required this.url,
+    required this.cover,
     required this.size,
     required this.isPlaying,
-    this.useDefaultCover = true,
   });
 
-  final String? url;
+  /// 已解析的封面（`TrackArtwork` 或同等尺寸的图片组件）。
+  final Widget cover;
+
   final double size;
   final bool isPlaying;
-
-  /// 无封面时是否显示全局默认封面（歌曲行打开；头像等其它入口不打开）。
-  final bool useDefaultCover;
 
   /// 角标直径：40 / 44 封面共用同一档，图标再小一圈。
   static const double badgeSize = 18;
@@ -33,12 +27,9 @@ class CurrentTrackCover extends StatelessWidget {
     return SizedBox.square(
       dimension: size,
       child: Stack(
+        fit: StackFit.expand,
         children: [
-          LibraryCoverThumb(
-            url: url,
-            size: size,
-            useDefaultCover: useDefaultCover,
-          ),
+          cover,
           Positioned(
             right: 0,
             bottom: 0,

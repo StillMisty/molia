@@ -11,11 +11,10 @@ import '../providers/library_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
-import 'cover_appearance.dart';
 import 'current_track_cover.dart';
 import 'favorite_action.dart';
-import 'library_cover.dart';
 import 'row_actions.dart';
+import 'track_artwork.dart';
 
 /// AI 推荐卡（「今日推荐」列表项）：封面 + 歌名/歌手 + AI 理由 + 操作菜单。
 ///
@@ -80,7 +79,6 @@ class AiDjTrackTile extends StatelessWidget {
     final track = item.track;
     final artist = track.artistLabel;
     final reason = item.source.reason;
-    final coverUrl = artworkUrlOf(track);
     final l10n = AppLocalizations.of(context);
     final stateLabel = isCurrent
         ? (isPlaying ? l10n?.nowPlayingSection : l10n?.nowPlayingPaused)
@@ -106,17 +104,24 @@ class AiDjTrackTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          isCurrent
-              ? CurrentTrackCover(
-                  url: coverUrl,
-                  size: 44,
-                  isPlaying: isPlaying,
-                )
-              : LibraryCoverThumb(
-                  url: coverUrl,
-                  size: 44,
-                  useDefaultCover: true,
-                ),
+          Builder(
+            builder: (context) {
+              final artwork = TrackArtwork(
+                track: track,
+                size: 44,
+                borderRadius: BorderRadius.circular(10),
+                memCacheWidth:
+                    (44 * MediaQuery.of(context).devicePixelRatio).round(),
+              );
+              return isCurrent
+                  ? CurrentTrackCover(
+                      cover: artwork,
+                      size: 44,
+                      isPlaying: isPlaying,
+                    )
+                  : artwork;
+            },
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

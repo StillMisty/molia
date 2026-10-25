@@ -15,7 +15,6 @@ import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../providers/sources_provider.dart';
 import '../services/cache_service.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
 import '../services/track_local_data_service.dart';
@@ -25,8 +24,8 @@ import '../utils/source_label.dart';
 import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
 import 'settings/settings_tiles.dart';
-import 'app_network_image.dart';
 import 'cover_picker_sheet.dart';
+import 'track_artwork.dart';
 import 'sleep_timer_sheet.dart';
 import 'track_actions.dart';
 import 'track_share_sheet.dart';
@@ -202,8 +201,6 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     // 是二者的派生值，改完设置要立即刷新，不等下一次播放通知。
     final sources = context.watch<SourcesProvider?>();
     final dataSaver = context.watch<DataSaverService?>();
-    final covers =
-        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
     final (track, qualityType) =
         context.select<PlaybackProvider, (Track?, String)>(
       (provider) => (provider.snapshot.current, provider.currentQualityType),
@@ -320,28 +317,20 @@ class _TrackInfoViewState extends State<TrackInfoView> {
             // 信息：封面 / 音质 / 可用音质 / 专辑 / 来源 / 歌词来源。
             SettingsSectionCard(
               children: [
-                ValueListenableBuilder<int>(
-                  valueListenable: covers.revision,
-                  builder: (context, _, __) {
-                    final custom = covers.trackCoverUrl(track.id) != null;
+                CoverChangeBuilder(
+                  builder: (context, covers) {
+                    final custom = covers.realOf(track).isCustom;
                     return SettingsNavTile(
                       key: const Key('trackInfoCoverItem'),
                       icon: Icons.image_rounded,
                       title: l10n.coverTitle,
-                      subtitle: custom
-                          ? l10n.coverCustomized
-                          : l10n.coverFollowSong,
-                      trailing: AppNetworkImage(
-                        // 主图只认自定义 / 原始封面；默认封面是加载失败时
-                        // 的回退，不能当作这张缩略图的主图（否则远端封面坏
-                        // 了也看起来像「有封面」）。
-                        url: covers.resolveTrackCoverForId(
-                          track.id,
-                          originalUrl: track.artwork?.uri.toString(),
-                        ),
-                        fallbackUrl: covers.defaultCoverUrl,
-                        width: 32,
-                        height: 32,
+                      subtitle:
+                          custom ? l10n.coverCustomized : l10n.coverFollowSong,
+                      trailing: TrackArtwork(
+                        track: track,
+                        // 外层 CoverChangeBuilder 已经订阅，避免双监听。
+                        listenForChanges: false,
+                        size: 32,
                         borderRadius: BorderRadius.circular(8),
                         memCacheWidth:
                             (32 * MediaQuery.of(context).devicePixelRatio)

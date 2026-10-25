@@ -8,10 +8,12 @@ import 'package:logging/logging.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/local_image_provider.dart';
 import 'app_presence.dart';
+import 'covers/cover_resolution.dart';
 
 /// 单张图像的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
 class ArtworkPalette {
@@ -127,6 +129,28 @@ class ArtworkPaletteService {
         if (bytes == null || bytes.isEmpty) return null;
         return _extractFromBytes(url, bytes);
       });
+
+  /// 曲目取色：只接受解析器的真实封面（默认封面是占位，永不参与取色）。
+  ///
+  /// 返回 null 表示没有可取色的真实封面（调用方回退基础配色 / 保持现色）。
+  Future<ArtworkPalette?> loadTrack(
+    Track? track, {
+    required CoverResolver covers,
+  }) {
+    final url = covers.realOf(track).url;
+    if (url == null) return Future<ArtworkPalette?>.value(null);
+    return load(url);
+  }
+
+  /// 启动预解析的曲目版本：同样只吃真实封面（见 [loadTrack]）。
+  Future<ArtworkPalette?> loadCachedTrack(
+    Track? track, {
+    required CoverResolver covers,
+  }) {
+    final url = covers.realOf(track).url;
+    if (url == null) return Future<ArtworkPalette?>.value(null);
+    return loadCached(url);
+  }
 
   /// LRU 命中 / 并发合并：同一 URL 的进行中提取只做一次。
   Future<ArtworkPalette?> _resolve(

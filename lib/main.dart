@@ -169,10 +169,7 @@ void main() async {
       commands: session,
       artworkBlocked: () => local.dataSaver.blockNetworkArtwork,
       // 自定义 → 原始 → 默认封面；本地文件由 handler 按平台转裸路径 / URI。
-      coverUrlResolver: (track) => local.customCovers.resolveForDisplayForKey(
-        track.id,
-        originalUrl: track.coverUrl,
-      ),
+      coverResolver: local.customCovers.resolution,
     ),
   );
   _markStartup('播放栈（含媒体会话）', startup);

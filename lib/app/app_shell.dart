@@ -546,7 +546,10 @@ class _MyAppState extends State<MyApp>
     _morph.setBarHeaderHidden(true);
     if (geometry.toPage) _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
-    final url = nowPlayingCoverUrl(context.read<PlaybackProvider>());
+    final url = nowPlayingCoverUrl(
+      context,
+      context.read<PlaybackProvider>(),
+    );
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
       builder: (context) => PlayerMorphFlight(
