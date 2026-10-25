@@ -10,9 +10,8 @@ import '../../domain/models/discover.dart';
 import '../../domain/models/failure.dart';
 import '../source_search_result.dart' show parseSourceBool, parseSourceCount;
 import '../source_track.dart';
-import 'bili_api.dart';
+import 'bili_client.dart';
 import 'bili_track.dart';
-import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'discover_track_mapper.dart';
 
@@ -69,13 +68,9 @@ class BiliFavorites {
         retryable: false,
       );
     }
-    try {
-      return await _fetchAll(mediaId);
-    } on SourceFailure {
-      rethrow;
-    } catch (e) {
-      throw SourceFailure.from(e);
-    }
+    // 请求生命周期（业务码 / 空响应 / 非 JSON）在 [BiliClient] 内归一；
+    // 收藏夹的 -403 由 favorites 口径映射成 notFound，不会当成会话风控刷新。
+    return _fetchAll(mediaId);
   }
 
   static Future<DiscoverDetail> _fetchAll(String mediaId) async {
@@ -84,17 +79,7 @@ class BiliFavorites {
 
     var pn = 1;
     while (pn <= maxPages && tracks.length < maxItems) {
-      final response = await _fetchPage(mediaId, pn);
-      final code = BiliApi.codeOf(response);
-      if (code != 0) throw _failureForCode(code);
-
-      final data = response is Map ? response['data'] : null;
-      if (data is! Map) {
-        throw const SourceFailure(
-          kind: FailureKind.unknown,
-          message: 'bili: 收藏夹响应结构不符',
-        );
-      }
+      final data = await _fetchPage(mediaId, pn);
       // 私密 / 已删除收藏夹没有 info（平台仍回 code=0）。真实响应通常每页
       // 都带 info，但没有必要依赖：第一页拿到后就够构造详情，后续页缺 info
       // 不应让整份导入失败。
@@ -139,21 +124,30 @@ class BiliFavorites {
     return _detailOf(mediaId, info, tracks.values.toList());
   }
 
-  static Future<dynamic> _fetchPage(String mediaId, int pn) {
-    final uri = Uri.parse('${BiliApi.baseUrl}/x/v3/fav/resource/list')
-        .replace(queryParameters: {
-      'media_id': mediaId,
-      'pn': '$pn',
-      'ps': '$pageSize',
-      'order': 'mtime',
-      'type': '0',
-      'platform': 'web',
-    });
-    return BuiltinSearch.transport.getJson(
-      uri.toString(),
-      headers: BiliApi.anonymousHeaders,
+  /// 收藏夹资源列表一页 → `data`（结构不符统一按 unknown 失败）。
+  static Future<Map> _fetchPage(String mediaId, int pn) async {
+    final response = await BiliClient.shared.get(
+      '/x/v3/fav/resource/list',
+      query: {
+        'media_id': mediaId,
+        'pn': '$pn',
+        'ps': '$pageSize',
+        'order': 'mtime',
+        'type': '0',
+        'platform': 'web',
+      },
+      // 收藏夹的 -403 表示私密 / 不可见，不是会话风控：不能刷新重试。
+      codePolicy: BiliCodePolicy.favorites,
       retries: BuiltinTransport.defaultRetries,
     );
+    final data = response is Map ? response['data'] : null;
+    if (data is! Map) {
+      throw const SourceFailure(
+        kind: FailureKind.unknown,
+        message: 'bili: 收藏夹响应结构不符',
+      );
+    }
+    return data;
   }
 
   /// 单条收藏 → 曲目；非视频 / 失效条目在这里过滤掉。
@@ -206,21 +200,6 @@ class BiliFavorites {
     );
   }
 
-  static SourceFailure _failureForCode(int? code) {
-    if (code == -403 || code == -404) {
-      return SourceFailure(
-        kind: FailureKind.notFound,
-        message: 'bili: 收藏夹不存在或不可见（code=$code）',
-        retryable: false,
-      );
-    }
-    return SourceFailure(
-      kind: FailureKind.unknown,
-      message: 'bili: 获取收藏夹失败（code=${code ?? '非 JSON'}）',
-      retryable: true,
-    );
-  }
-
   /// 纯文本形态：数字 / query 参数 / ml 路径。
   static String? _parseText(String raw) {
     final text = raw.trim();
@@ -249,14 +228,10 @@ class BiliFavorites {
 
   static Future<String?> _firstFolderId(String upMid) async {
     try {
-      final uri =
-          Uri.parse('${BiliApi.baseUrl}/x/v3/fav/folder/created/list-all')
-              .replace(queryParameters: {'up_mid': upMid});
-      final response = await BuiltinSearch.transport.getJson(
-        uri.toString(),
-        headers: BiliApi.anonymousHeaders,
+      final response = await BiliClient.shared.get(
+        '/x/v3/fav/folder/created/list-all',
+        query: {'up_mid': upMid},
       );
-      if (BiliApi.codeOf(response) != 0) return null;
       final data = response is Map ? response['data'] : null;
       final list = data is Map ? data['list'] : null;
       if (list is! List) return null;
@@ -271,13 +246,9 @@ class BiliFavorites {
     return null;
   }
 
-  /// 跟随 b23 短链（走统一传输层，测试可注入 MockDio）。
-  static Future<Uri?> _resolveShortLink(Uri uri) {
-    return BuiltinSearch.transport.resolveRedirect(
-      uri,
-      headers: BiliApi.anonymousHeaders,
-    );
-  }
+  /// 跟随 b23 短链（走 client 的匿名传输，测试可注入 MockDio）。
+  static Future<Uri?> _resolveShortLink(Uri uri) =>
+      BiliClient.shared.resolveRedirect(uri);
 
   static Uri? _asUri(String text) {
     final direct = Uri.tryParse(text);

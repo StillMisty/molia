@@ -14,8 +14,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import '../../domain/models/comment.dart';
-import 'bili_api.dart';
-import 'builtin_search.dart';
+import 'bili_client.dart';
 import 'builtin_transport.dart';
 import 'comment_utils.dart';
 import 'crypto_utils.dart';
@@ -38,30 +37,20 @@ class BiliComment {
   }) async {
     final storeKey = _storeKeyOf(aid, kind);
     final cursor = page > 1 ? cursorStore.read(storeKey, page) : null;
-    final uri = Uri.parse('${BiliApi.baseUrl}/x/v2/reply/main').replace(
-      queryParameters: <String, String>{
+    // 匿名口径：评论接口不能带 buvid Cookie（带 Cookie 会退回「只给 3 条
+    // 热评 + is_end=true」的降级响应），也不需要 WBI，client 不会拉会话。
+    // JSON 作为 query 值由 Uri 统一编码；平台按 URL 解码后读 offset。
+    final response = await BiliClient.shared.get(
+      '/x/v2/reply/main',
+      query: <String, Object?>{
         'type': '1',
         'oid': aid,
         'mode': kind == CommentKind.hot ? '3' : '2',
-        // JSON 作为 query 值由 Uri 统一编码；平台按 URL 解码后读 offset。
         if (cursor != null && cursor.isNotEmpty)
           'pagination_str': jsonEncode({'offset': cursor}),
       },
-    );
-
-    // 不能带 buvid Cookie：B 站评论接口带 Cookie 时会退回「只给 3 条热评 +
-    // is_end=true」的降级响应，匿名请求反而每页 20 条。该接口也不需要 WBI，
-    // 因此不碰会话接口，避免无谓的 buvid/nav 请求。
-    final response = await BuiltinSearch.transport.getJson(
-      uri.toString(),
-      headers: BiliApi.anonymousHeaders,
       retries: BuiltinTransport.defaultRetries,
     );
-    final code = BiliApi.codeOf(response);
-    if (code != 0) {
-      if (code == -404) throw BiliApi.failureForCode(-404);
-      throw commentPlatformFailure('bili', '获取评论失败（code=${code ?? '非 JSON'}）');
-    }
 
     final data = response is Map ? response['data'] : null;
     if (data is! Map) throw commentPlatformFailure('bili', '评论数据结构不符');

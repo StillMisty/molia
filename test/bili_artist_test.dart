@@ -100,6 +100,26 @@ void main() {
     expect(query['w_rid'], isNotEmpty);
   });
 
+  test('用户搜索 -403：与视频搜索同一套策略，刷新会话一次后重试', () async {
+    var searchCalls = 0;
+    install((options) async {
+      if (options.uri.path == '/x/web-interface/wbi/search/type') {
+        searchCalls++;
+        if (searchCalls == 1) {
+          return textResponse(jsonEncode({'code': -403, 'message': '风控'}));
+        }
+        return textResponse(jsonEncode(fixture('bili_user_search.json')));
+      }
+      return textResponse('{}', statusCode: 500);
+    });
+
+    final page = await BiliSearch.searchUsers('周杰伦');
+
+    expect(page.items, hasLength(2));
+    expect(searchCalls, 2);
+    expect(navCalls, 2, reason: '首次会话 + 风控刷新一次');
+  });
+
   test('UP 资料 + 空间投稿：曲目映射与 dm 指纹参数', () async {
     final adapter = install((options) async {
       switch (options.uri.path) {

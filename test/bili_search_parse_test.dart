@@ -119,6 +119,53 @@ void main() {
     expect(lastPage.hasMore, isFalse, reason: 'page >= numPages 即末页');
   });
 
+  test('风控 -403：刷新会话一次后重试，搜索仍成功', () async {
+    var searchCalls = 0;
+    var navCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        final sessionResponse =
+            biliSessionResponse(request, onNav: () => navCalls++);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          searchCalls++;
+          if (searchCalls == 1) {
+            return textResponse(jsonEncode({'code': -403, 'message': '风控'}));
+          }
+          return textResponse(jsonEncode(fixture));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNull);
+    expect(result.tracks, hasLength(2));
+    expect(searchCalls, 2);
+    expect(navCalls, 2, reason: '首次会话 + 风控刷新一次');
+  });
+
+  test('普通业务拒绝 -1：不刷新会话（只有风控才刷新）', () async {
+    var navCalls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        final sessionResponse =
+            biliSessionResponse(request, onNav: () => navCalls++);
+        if (sessionResponse != null) return sessionResponse;
+        if (request.uri.path == '/x/web-interface/wbi/search/type') {
+          return textResponse(jsonEncode({'code': -1, 'message': '拒绝'}));
+        }
+        return textResponse('{}', statusCode: 500);
+      }),
+    );
+
+    final result = await BiliSearch.searchWithMeta('起风了');
+
+    expect(result.failure, isNotNull);
+    expect(navCalls, 1, reason: '非风控失败不再重拉会话');
+  });
+
   test('空结果：正常空结果，不因缺分页字段误报下一页', () async {
     BuiltinSearch.transport = BuiltinTransport(
       dio: mockDio((request) async {
