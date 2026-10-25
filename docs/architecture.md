@@ -200,11 +200,15 @@
   `lib/services/covers/cover_image_codec.dart` 解码、烘焙 EXIF 方向、最长边
   1024px、JPEG 85 后落盘。曲目键 = `sourceKey:songId`；`local` 下载副本剥掉
   一层 `local:` 前缀（下载前设置的封面继续作用于本地副本），本地导入保持
-  `local:<path>` 记录键。`artworkUrlOf` / 歌曲信息页 / 顶部与迷你播放器 /
-  列表行 / 歌词选择与海报 / 系统媒体 / 桌面小组件都先查它；`revision` 通知
-  可见行与当前播放立即换图，换源写回（手动 + 自动）把封面复制到新曲目键。
-  全局默认封面只兜底「歌曲没有封面 / 远端加载失败」的展示，不参与取色、
-  下载与标签嵌入；`ArtworkPaletteService` 只消费真实 / 自定义封面。
+  `local:<path>` 记录键。**Cover resolution**（`cover_resolution.dart`）是
+  「这一首用哪张封面」的唯一实现：`CoverResolver` 组合 `CoverIndex`（store
+  实现），`RealCover` 只允许 custom / original，`DisplayCover` 才带全局默认
+  兜底；取色 / 下载 / 标签只接受 `RealCover`。widget 层经 `TrackArtwork` /
+  `CoverChangeBuilder` 统一订阅 `revision` 并渲染，歌曲信息页 / 顶部与迷你
+  播放器 / 列表行 / 歌词选择与海报 / 系统媒体 / 桌面小组件不再各自查 store；
+  换源写回（手动 + 自动）把封面复制到新曲目键。全局默认封面只兜底「歌曲没有
+  封面 / 远端加载失败」的展示，不参与取色、下载与标签嵌入；
+  `ArtworkPaletteService` 只消费 `RealCover`。
 - **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
   唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
   失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`

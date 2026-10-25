@@ -147,9 +147,10 @@
 - **Cover appearance（封面外观）** — `lib/widgets/cover_appearance.dart::CoverAppearance`：
   圆角 / 描边 / 阴影 / 回退图标的唯一实现，三个端点是命名值（`bar` / `mini` /
   `page`）；`CoverCard` 按外观渲染卡片（三端真身与飞行副本共用同一渲染），图片
-  内容 widget 的差异留在调用侧（真身 `AppNetworkImage`、副本 `MorphCover`——
-  同步出帧不闪）。两条不变量是代数关系：描边透明度 = 描边宽度、裁剪半径 =
-  外圆角 − 描边宽度；封面 URL / 稳定 key 的归一化（空串视同无封面）也在这里。
+  内容 widget 的差异留在调用侧（真身 `TrackArtwork` / `AppNetworkImage`、副本
+  `MorphCover`——同步出帧不闪）。两条不变量是代数关系：描边透明度 = 描边宽度、
+  裁剪半径 = 外圆角 − 描边宽度；封面 URL 的空串视同无封面在这里，键归一化在
+  Cover resolution。
 - **Cover flight（封面共享元素飞行）** — `CoverFlight`（两端矩形 + 外观 + 方向 →
   `rectAt` / `appearanceAt` / `iconSizeAt`，外观按「播放页端进度」插值，反向飞行
   起飞不跳）+ `CoverFlightLayer`（副本渲染，返回 `Positioned.fromRect`，挂 Stack
@@ -190,15 +191,28 @@
 
 - **Custom cover store（自定义封面存储）** — `lib/services/covers/custom_cover_store.dart`：
   每曲自定义封面 + 全局默认封面的唯一存储（设备本地；索引在 SharedPreferences，
-  文件在应用支持目录 `custom_covers/`）。启动只读索引并剔除丢失文件；每次替换写
-  新文件名，保证 Flutter ImageCache 与取色 LRU 不会继续显示旧图。查询同步，
-  UI 经 `ValueNotifier<int> revision` 刷新，组合根另接 change listener 刷新当前
-  播放 / 主题 / 系统媒体。同步面经 `trackEntries` / `defaultEntry` 枚举、经
-  `applySynced*` 应用远端结果；`onLocalChange` 只在本机写入时触发（远端应用
-  不标脏，避免同步回环）。
+  文件在应用支持目录 `custom_covers/`）。实现 `CoverIndex` 只读端口；写入 / 持久化 /
+  同步落地的所有者，解析与展示策略在 **Cover resolution**。启动只读索引并剔除
+  丢失文件；每次替换写新文件名，保证 Flutter ImageCache 与取色 LRU 不会继续显示
+  旧图。UI 经 **TrackArtwork** / `CoverChangeBuilder` 订阅，组合根另接 change
+  listener 刷新当前播放 / 主题 / 系统媒体。同步面经 `trackEntries` /
+  `defaultEntry` 枚举、经 `applySynced*` 应用远端结果；`onLocalChange` 只在本机
+  写入时触发（远端应用不标脏，避免同步回环）。
+- **Cover resolution（封面解析）** — `lib/services/covers/cover_resolution.dart`：
+  「这一首用哪张封面」的唯一实现（`CoverResolver` + `CoverIndex` 只读端口）。
+  来源优先级 `custom > original > default`，并把**真实封面** `RealCover`
+  （只允许 custom / original）与**展示封面** `DisplayCover`（真实封面 + 默认
+  兜底）做成两个类型：取色 / 下载 / 标签只接受 `RealCover`，默认封面在类型上
+  到不了这些消费面。封面键归一化（`local:` 下载副本剥一层、本地导入保留
+  `local:<path>`）与变更信号也在这里。
+- **TrackArtwork（封面渲染适配器）** — `lib/widgets/track_artwork.dart`：widget 层
+  唯一订阅封面变化并渲染解析结果的地方（`TrackArtwork` / `CoverChangeBuilder` /
+  `coverResolverOf`）。列表行 / 播放器 / 顶栏 / AI DJ / 歌曲信息 / 海报不再各自
+  `ValueListenableBuilder(revision)` + 直接查 store；默认封面只作为主图失败回退。
 - **Cover key（封面键）** — 曲目键 `sourceKey:songId`；`sourceKey == local` 的下载
   副本剥掉一层 `local:` 前缀（`local:wy:123` → `wy:123`），让下载前设置的封面
-  继续作用于本地副本；本地导入保持 `local:<path>` 记录键。
+  继续作用于本地副本；本地导入保持 `local:<path>` 记录键。归一化唯一实现在
+  Cover resolution 的 `coverKeyOf` / `normalizeCoverKey`。
 - **Default cover（默认封面）** — 设置 › 外观里的全局占位封面：只在歌曲没有
   封面或远端封面加载失败时显示；不参与取色、下载与标签嵌入，也不是一张
   「每曲封面」。
@@ -269,7 +283,7 @@
 - **Artwork palette（图像色板）** — `lib/services/artwork_palette_service.dart`：
   按封面 URL / 本地图像路径提取 seed 并派生双亮度方案的唯一入口（LRU + 并发
   合并 + 省流安全；`loadLocalFile` 承载桌面系统壁纸），由组合根监听播放快照
-  触发。任何模块不得二次提取封面像素。
+  触发。只消费 `RealCover`（默认封面不会进入取色）；任何模块不得二次提取封面像素。
 - **Surface color source（消费面取色来源）** — 桌面歌词 / 海报各自的
   「跟随应用主题 / 跟随封面（/ 自定义色）」选择；经 `resolveSurfaceScheme`
   解析，封面方案缺失回退应用主题。
