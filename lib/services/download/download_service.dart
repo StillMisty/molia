@@ -36,7 +36,6 @@
 library;
 
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -58,6 +57,7 @@ import '../../domain/models/track.dart';
 import '../../managers/artwork_cache.dart';
 import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
+import '../covers/cover_bytes_downloader.dart';
 import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
@@ -1061,43 +1061,18 @@ class DownloadService extends ChangeNotifier {
     return _downloadCoverBytes(effective);
   }
 
-  /// 封面大小上限：超过按无封面处理（避免异常大图占用磁盘）。
-  static const int _maxCoverBytes = 8 * 1024 * 1024;
-
   Future<_ResolvedCover?> _downloadCoverBytes(String url) async {
-    try {
-      final response = await _dio
-          .get<ResponseBody>(
-            url,
-            options: Options(
-              responseType: ResponseType.stream,
-              // 与封面显示同一套请求头（浏览器 UA + 平台 Referer）。
-              headers: ArtworkCache.headersFor(url),
-            ),
-          )
-          .timeout(const Duration(seconds: 30));
-      final status = response.statusCode ?? 0;
-      if (status < 200 || status >= 300) return null;
-      final builder = BytesBuilder(copy: false);
-      var total = 0;
-      await for (final chunk in streamBody(response).stream) {
-        total += chunk.length;
-        if (total > _maxCoverBytes) return null;
-        builder.add(chunk);
-      }
-      if (total == 0) return null;
-      final bytes = builder.takeBytes();
-      // 回填封面缓存：后续展示 / 再次下载直接命中。
-      unawaited(_artworkCache?.putBytes(url, bytes));
-      return _ResolvedCover(
-        bytes: bytes,
-        url: url,
-        mimeType: _mimeTypeForPath(url),
-      );
-    } catch (e) {
-      _logger.warning('封面下载失败: $e');
-      return null;
-    }
+    final bytes = await downloadCoverBytes(
+      _dio,
+      url,
+      cache: _artworkCache,
+    );
+    if (bytes == null) return null;
+    return _ResolvedCover(
+      bytes: bytes,
+      url: url,
+      mimeType: _mimeTypeForPath(url),
+    );
   }
 
   // 内部：下载流程

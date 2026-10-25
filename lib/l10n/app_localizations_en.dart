@@ -196,6 +196,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get coverLabel => 'Cover';
 
   @override
+  String get coverViewOriginal => 'View original';
+
+  @override
+  String get coverSaveOriginal => 'Save original';
+
+  @override
+  String get coverLoadFailed => 'Couldn’t load the cover. Try again';
+
+  @override
   String get settingsAppFont => 'App font';
 
   @override

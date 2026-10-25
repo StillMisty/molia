@@ -910,3 +910,10 @@
     null），否则 5 分钟内当前曲目仍会回退网易云。完整备份默认导出全部类别与
     凭证（换机状态一致）；备份文件是明文 JSON，需要妥善保管。同步 / 备份的
     凭据默认随 `SyncCategory.credentials` 走。见 ADR-0016。
+92. **`Canvas.drawImageRect` 把整张源图铺进正方形会拉伸封面**：海报头图是固定
+    100×100（2x）方块，`drawImageRect(src: 全图, dst: 方块)` 会把 16:9 封面压扁。
+    方形展示必须按 `BoxFit.cover` 语义先算居中裁切源矩形（`coverCropSourceRect`
+    在 `lyrics_poster_service.dart`），不要直接铺满；UI 方形缩略图统一
+    `BoxFit.cover`，查看原图走 `CoverViewer` 的 `BoxFit.contain`。另：网络封面
+    「保存原图」不要读 `ArtworkCache` 的缓存字节——缩略图路径会把原 URL 缓存键
+    覆盖成缩小图，必须按原 URL 直连（`cover_bytes_downloader.dart`）。

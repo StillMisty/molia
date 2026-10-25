@@ -62,12 +62,13 @@ void main() {
     int perPage = 8,
     bool hasMore = true,
     String name = '专辑名',
+    String coverUrl = 'http://img/cover.jpg',
   }) =>
       Album(
         id: '32311',
         name: name,
         artist: '歌手',
-        coverUrl: 'http://img/cover.jpg',
+        coverUrl: coverUrl,
         year: 2012,
         tracks: [for (var i = 0; i < perPage; i++) trackOf('$page-$i')],
         hasMore: hasMore,
@@ -118,6 +119,19 @@ void main() {
     expect(backend.lastRequest?.startIndex, 0);
     expect(backend.lastRequest?.tracks, hasLength(8));
     expect(backend.lastRequest?.context?.name, '专辑名');
+  });
+
+  testWidgets('头部封面：点击打开原图查看器', (tester) async {
+    await pumpPage(
+      tester,
+      (page) async => albumOf(page, coverUrl: 'file:///tmp/album-cover.jpg'),
+    );
+
+    await tester.tap(find.byKey(const Key('albumHeaderCover')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsOneWidget);
+    expect(find.byKey(const Key('coverViewerEditButton')), findsNothing);
   });
 
   testWidgets('曲目行：与搜索页同款行尾菜单（收藏 / 加入列表）', (tester) async {

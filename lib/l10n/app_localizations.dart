@@ -446,6 +446,24 @@ abstract class AppLocalizations {
   /// **'Cover'**
   String get coverLabel;
 
+  /// No description provided for @coverViewOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'View original'**
+  String get coverViewOriginal;
+
+  /// No description provided for @coverSaveOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Save original'**
+  String get coverSaveOriginal;
+
+  /// No description provided for @coverLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t load the cover. Try again'**
+  String get coverLoadFailed;
+
   /// No description provided for @settingsAppFont.
   ///
   /// In en, this message translates to:

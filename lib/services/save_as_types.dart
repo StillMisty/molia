@@ -13,6 +13,9 @@ const String saveAsExportsDirName = 'exports';
 /// 海报 PNG 子目录。
 const String saveAsPostersDirName = 'posters';
 
+/// 封面原图子目录。
+const String saveAsCoversDirName = 'covers';
+
 /// 保存结果的位置类型：决定 UI 用哪条文案展示。
 enum SaveLocationKind {
   /// 桌面：可读绝对路径。

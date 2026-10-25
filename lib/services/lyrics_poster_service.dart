@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +17,37 @@ final logger = Logger('molia.lyrics_poster_service');
 /// （同 `AnyListenApi` 的说明）。
 Dio? _sharedDio;
 Dio get _dio => _sharedDio ??= createAppDio();
+
+/// 方形封面在源图中的居中裁切区域（`BoxFit.cover` 语义，不拉伸）。
+///
+/// 海报头图是固定正方形；直接把整张源图铺满会把 16:9 封面压扁。这里按
+/// 目标宽高比取源图中心区域，方形源图仍完整使用，非方形只裁不缩。
+@visibleForTesting
+Rect coverCropSourceRect({
+  required double sourceWidth,
+  required double sourceHeight,
+  required double targetWidth,
+  required double targetHeight,
+}) {
+  if (sourceWidth <= 0 ||
+      sourceHeight <= 0 ||
+      targetWidth <= 0 ||
+      targetHeight <= 0) {
+    return Rect.zero;
+  }
+  final scale = math.max(
+    targetWidth / sourceWidth,
+    targetHeight / sourceHeight,
+  );
+  final cropWidth = targetWidth / scale;
+  final cropHeight = targetHeight / scale;
+  return Rect.fromLTWH(
+    (sourceWidth - cropWidth) / 2,
+    (sourceHeight - cropHeight) / 2,
+    cropWidth,
+    cropHeight,
+  );
+}
 
 class LyricsPosterService {
   Future<Uint8List> generatePosterData({
@@ -319,10 +351,14 @@ class LyricsPosterService {
       canvas.clipRRect(albumRRect);
       canvas.drawImageRect(
         loadedAlbumImage,
-        Rect.fromLTWH(0, 0, loadedAlbumImage.width.toDouble(),
-            loadedAlbumImage.height.toDouble()),
+        coverCropSourceRect(
+          sourceWidth: loadedAlbumImage.width.toDouble(),
+          sourceHeight: loadedAlbumImage.height.toDouble(),
+          targetWidth: albumRect.width,
+          targetHeight: albumRect.height,
+        ),
         albumRect,
-        Paint(),
+        Paint()..filterQuality = FilterQuality.medium,
       );
       canvas.restore();
 

@@ -132,6 +132,35 @@ void main() {
     expect(find.byKey(const Key('coverPickerResetButton')), findsNothing);
   });
 
+  testWidgets('有原始封面：显示「查看原图」并打开原图查看器', (tester) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final store = _FakeCoverStore();
+    final notifications = RecordingNotificationService();
+
+    await pumpHost(
+      tester,
+      store: store,
+      notifications: notifications,
+      open: (context) => showCoverPickerSheet(
+        context,
+        trackId: const TrackId('kw', 'picker'),
+        originalCoverUrl: 'file:///tmp/picker-cover.jpg',
+      ),
+    );
+
+    expect(find.byKey(const Key('coverPickerViewButton')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('coverPickerViewButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsOneWidget);
+  });
+
   testWidgets('默认封面：宽屏弹层标题使用默认封面文案', (tester) async {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1.0;

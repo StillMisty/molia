@@ -192,6 +192,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coverLabel => '封面';
 
   @override
+  String get coverViewOriginal => '查看原图';
+
+  @override
+  String get coverSaveOriginal => '保存原图';
+
+  @override
+  String get coverLoadFailed => '封面加载失败，请稍后重试';
+
+  @override
   String get settingsAppFont => '应用字体';
 
   @override
