@@ -18,7 +18,9 @@ import io.flutter.plugin.common.MethodChannel
  * 部分 OEM 熄屏后会冻结进程），Dart 侧仍负责真正的暂停动作。
  *
  * 协议：
- * - `arm` { millis: Long, token: Int }：覆盖旧定时；
+ * - `arm` { millis: Long, token: Int, keepAwake: Boolean }：覆盖旧定时；
+ *   `keepAwake` 只在应用后台 / 息屏时为 true（前台屏幕亮着，Handler 不会
+ *   被 Doze 冻结，长期持有 partial wake lock 只会白耗电）；
  * - `cancel`：取消；
  * - 到点回调 `fired` { token }（Dart 侧用 token 丢弃过期回调）。
  */
@@ -45,7 +47,8 @@ class SleepTimerChannelHandler(context: Context, messenger: BinaryMessenger) :
             "arm" -> {
                 val millis = call.argument<Number>("millis")?.toLong() ?: 0L
                 token = call.argument<Int>("token") ?: 0
-                schedule(millis)
+                val keepAwake = call.argument<Boolean>("keepAwake") ?: true
+                schedule(millis, keepAwake)
                 result.success(null)
             }
             "cancel" -> {
@@ -56,10 +59,12 @@ class SleepTimerChannelHandler(context: Context, messenger: BinaryMessenger) :
         }
     }
 
-    private fun schedule(millis: Long) {
+    private fun schedule(millis: Long, keepAwake: Boolean) {
         cancel()
         if (millis <= 0L) return
-        acquireWakeLock(millis)
+        // 前台不持锁：屏幕亮着时主线程 Handler 正常调度；退后台 / 息屏由
+        // Dart 的生命周期补检重新 arm 并带上 keepAwake=true。
+        if (keepAwake) acquireWakeLock(millis) else releaseWakeLock()
         val firedToken = token
         val runnable = Runnable {
             pending = null

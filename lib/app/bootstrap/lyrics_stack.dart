@@ -9,6 +9,7 @@ import 'dart:async';
 
 import '../../providers/lyrics_provider.dart';
 import '../../providers/playback_provider.dart';
+import '../../playback/playback_power_policy.dart';
 import '../../services/bili_account_service.dart';
 import '../../sources/source_manager.dart';
 import 'local_data_stack.dart';
@@ -44,12 +45,17 @@ void wireBiliLoginLyricsRefresh({
 /// 去重与缓存写入由 [LyricsProvider.preload] 负责。
 ///
 /// 调用点在歌词显示装配之后（与原组合根同一时机）。
+///
+/// [powerPolicy] 非空时只在「后台仍有歌词输出」或前台才取词；退后台且没有
+/// 任何输出时先记下待预载曲目，回前台 / 打开输出后补一次。
 void wireNextTrackLyricsPreload({
   required PlaybackProvider playback,
   required LyricsProvider lyricsProvider,
+  PlaybackPowerPolicy? powerPolicy,
 }) {
   String? preloadedNextLyricsId;
   void syncNextTrackLyricsPreload() {
+    if (powerPolicy != null && !powerPolicy.shouldLoadLyrics) return;
     final snapshot = playback.snapshot;
     final next = snapshot.next ??
         (snapshot.upNext.isNotEmpty ? snapshot.upNext.first : null);
@@ -65,6 +71,7 @@ void wireNextTrackLyricsPreload({
   }
 
   playback.addListener(syncNextTrackLyricsPreload);
+  powerPolicy?.addListener(syncNextTrackLyricsPreload);
   syncNextTrackLyricsPreload();
 }
 
@@ -73,14 +80,20 @@ void wireNextTrackLyricsPreload({
 /// 挂在播放快照上而不是歌词页 build：歌词页未挂载（或从未打开）时也按
 /// 当前曲目加载；页面只渲染会话状态。去重 / 过期响应 / 空结果重试都由
 /// [LyricsProvider.ensureForTrack] 承担。
+///
+/// [powerPolicy] 非空时后台没有歌词输出就不取词（切歌只为看不见的页面
+/// 拉网络没有意义）；回前台 / 打开输出后由策略通知补一次。
 void wireLyricsSession({
   required PlaybackProvider playback,
   required LyricsProvider lyricsProvider,
+  PlaybackPowerPolicy? powerPolicy,
 }) {
   void syncCurrentTrack() {
+    if (powerPolicy != null && !powerPolicy.shouldLoadLyrics) return;
     unawaited(lyricsProvider.ensureForTrack(playback.snapshot.current));
   }
 
   playback.addListener(syncCurrentTrack);
+  powerPolicy?.addListener(syncCurrentTrack);
   syncCurrentTrack();
 }

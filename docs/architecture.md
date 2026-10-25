@@ -150,12 +150,12 @@
   media_kit 自然 EOF 可能不上报 completed，桌面后端另以曲末位置采样与曲末
   解码错误兜底（见已知坑 78）。
 - **移动端后台功耗策略**：`PlaybackPowerPolicy`
-  （`lib/playback/playback_power_policy.dart`）只回答「播放链路要不要按前台
-  节拍工作」，与 `AppPresence`（桌面窗口可见性 → 封面预取 / 取色停产）**完全
-  独立**：移动端退后台不写入 `AppPresence`，预取 / 取色 / 桌面歌词行为零变化。
-  组合根创建唯一实例并同时注入播放栈与歌词显示栈；`AppLifecycleListener` 只在
-  Android / iOS 接线（`onResume` → 前台，`onPause` / `onHide` → 后台），桌面保持
-  默认前台；启动时若 `lifecycleState` 已是 paused / hidden 先置后台。
+  （`lib/playback/playback_power_policy.dart`）回答「播放链路与后台工作要不要按
+  前台节拍工作」，与 `AppPresence`（桌面窗口可见性）**完全独立**：移动端退后台
+  不写入 `AppPresence`，避免污染托盘语义。组合根创建唯一实例并同时注入播放栈、
+  观察者、歌词显示栈与下一首预载；`AppLifecycleListener` 只在 Android / iOS 接线
+  （`onResume` → 前台，`onPause` / `onHide` → 后台），桌面保持默认前台；启动时若
+  `lifecycleState` 已是 paused / hidden 先置后台。
   - 位置采样（`LocalPlaybackService`）：前台或桌面歌词可能展示
     （`LyricsChannel.isSupportedPlatform && lyricsDisplaySettings.desktopEnabled`，
     未授予悬浮窗权限也算）→ 订阅 `positionStream`（约 5Hz）；后台其余情形 →
@@ -169,6 +169,16 @@
     `LocalPlaybackService.seekRevision` 识别显式 seek / 内部回跳；歌词覆盖与
     封面本地化补发只发 metadata。Linux MPRIS（`GetPosition` 不插值）与
     iOS / macOS / Windows 保持原周期判定。
+  - 后台工作门控（观察者 / 取色 / 歌词 / 预载各自消费同一实例）：
+    封面预取只在应用内可见（前台）执行；封面取色在前台或桌面歌词可能展示时
+    执行（悬浮窗可跟随封面配色，通知锁屏不消费主题色）；当前 / 下一首歌词
+    只在有任一词输出（悬浮窗 / 通知锁屏 / 蓝牙）或前台时加载；下一首直链
+    始终预热（切歌不额外等取链），音频字节预取只在前台进行。恢复前台或打开
+    输出后各消费者自行补一次，去重由各自模块负责。
+  - 定时关闭（`SleepTimerController`）：Android 原生定时器只在后台 / 息屏时
+    持有 partial wake lock；前台屏幕亮着时 Handler 正常调度，不持锁。生命周期
+    `onPause` / `onHide` / `onResume` 都会按新的前后台状态重排原生定时。
+  细节与验收命令见 `docs/mobile-power.md`。
 - **Lyrics**：`LyricsProvider`（`lib/providers/lyrics_provider.dart`）是取词 → 缓存 →
   解析 → 预取的唯一实现，对外只暴露 `LyricsState`（idle/loading/ready/empty + isSynced，
   含按时间戳对齐的翻译 / 罗马音扩展行与逐字时间轴）。曲目变化的加载入口只有

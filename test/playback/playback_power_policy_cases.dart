@@ -57,6 +57,48 @@ void main() {
       expect(policy.keepHighFrequencyPosition, isFalse);
     });
 
+    test('后台工作门控：封面 / 取色 / 歌词 / 字节预取各自按展示面判定', () {
+      final policy = PlaybackPowerPolicy();
+      addTearDown(policy.dispose);
+
+      // 前台：全部允许。
+      expect(policy.canPreloadCovers, isTrue);
+      expect(policy.canExtractArtworkPalette, isTrue);
+      expect(policy.shouldLoadLyrics, isTrue);
+      expect(policy.canPredownloadNextTrackBytes, isTrue);
+
+      // 退后台、没有任何输出：视觉与网络工作全部停掉。
+      policy.markBackground();
+      expect(policy.canPreloadCovers, isFalse);
+      expect(policy.canExtractArtworkPalette, isFalse);
+      expect(policy.shouldLoadLyrics, isFalse);
+      expect(policy.canPredownloadNextTrackBytes, isFalse);
+
+      // 后台开着桌面歌词：悬浮窗要颜色 → 允许取色；但封面预取只为应用内
+      // 界面服务，仍停；歌词输出也算一种消费面。
+      policy.setDesktopLyricsActive(true);
+      expect(policy.canExtractArtworkPalette, isTrue);
+      expect(policy.canPreloadCovers, isFalse);
+      expect(policy.shouldLoadLyrics, isTrue, reason: '桌面歌词本身就是歌词输出');
+      expect(policy.canPredownloadNextTrackBytes, isFalse);
+
+      policy.setDesktopLyricsActive(false);
+
+      // 只有通知 / 蓝牙歌词：后台要取词，但不需要主题取色。
+      policy.setLyricsOutputActive(true);
+      expect(policy.shouldLoadLyrics, isTrue);
+      expect(policy.canExtractArtworkPalette, isFalse);
+      expect(policy.canPreloadCovers, isFalse);
+      expect(policy.canPredownloadNextTrackBytes, isFalse);
+
+      // 回前台：逐项恢复。
+      policy.markForeground();
+      expect(policy.canPreloadCovers, isTrue);
+      expect(policy.canExtractArtworkPalette, isTrue);
+      expect(policy.shouldLoadLyrics, isTrue);
+      expect(policy.canPredownloadNextTrackBytes, isTrue);
+    });
+
     test('重复置位不通知（幂等）', () {
       final policy = PlaybackPowerPolicy();
       addTearDown(policy.dispose);
@@ -78,8 +120,13 @@ void main() {
       policy.setDesktopLyricsActive(true);
       expect(notifications, 2);
 
-      policy.markForeground();
+      policy.setLyricsOutputActive(true);
       expect(notifications, 3);
+      policy.setLyricsOutputActive(true);
+      expect(notifications, 3);
+
+      policy.markForeground();
+      expect(notifications, 4);
     });
   });
 

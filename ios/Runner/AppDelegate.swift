@@ -58,9 +58,9 @@ import UIKit
 
 /// 定时关闭的原生唤醒通道（与 Android `SleepTimerChannelHandler` 同协议）。
 ///
-/// 协议：`arm` { millis: Int, token: Int } / `cancel`；到点回调
-/// `fired` { token }。iOS 由音频后台模式保持进程活跃；若系统仍挂起，Dart
-/// 侧回前台补检兜底。
+/// 协议：`arm` { millis: Int, token: Int, keepAwake: Bool } / `cancel`；到点回调
+/// `fired` { token }。iOS 由音频后台模式保持进程活跃；`keepAwake` 只为与
+/// Android 协议对齐（iOS 没有 partial wake lock），这里忽略。
 final class SleepTimerChannelHandler {
   private let channel: FlutterMethodChannel
   private var pending: DispatchWorkItem?

@@ -105,12 +105,14 @@
   **按钮的最终位置由 Media3 provider 与系统 UI 决定**，Dart 侧只能控制自定义动作
   之间的先后（ADR-0013、已知坑 #61）。
 - **Playback power policy（播放功耗策略）** — `lib/playback/playback_power_policy.dart`：
-  移动端按应用前后台 + 桌面歌词是否可能展示决定播放链路的节拍。**与 `AppPresence`
-  完全独立**：后者是桌面窗口可见性的事实源，驱动封面预取 / 取色停产；移动端退后台
-  不写 `AppPresence`，预取 / 取色 / 桌面歌词行为不变。两种节拍：位置采样（前台或
-  桌面歌词开启 = 高频流，后台播放 = 1s 轮询，后台暂停 = 不采样，见
-  `LocalPlaybackService`）；会话落盘（前台 1s / 后台 15s，进入后台先强制整份落盘
-  一次，见 `PlaybackSessionCoordinator`）。桌面端不接生命周期，恒为前台。
+  移动端按应用前后台 + 歌词输出是否可能展示决定播放链路与后台工作的节拍。
+  **与 `AppPresence` 完全独立**：后者是桌面窗口可见性的事实源；移动端退后台不写
+  `AppPresence`。两类节拍：播放链路（位置采样：前台或桌面歌词开启 = 高频流，
+  后台播放 = 1s 轮询，后台暂停 = 不采样，见 `LocalPlaybackService`；会话落盘：
+  前台 1s / 后台 15s，进入后台先强制整份落盘一次，见 `PlaybackSessionCoordinator`）
+  与后台工作门控（封面预取只在应用内可见时执行；封面取色在前台或桌面歌词可能展示时
+  执行；当前 / 下一首歌词只在有任一词输出时后台加载；下一首直链仍预热，音频字节
+  预取只在前台）。桌面端不接生命周期，恒为前台。
 - **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对

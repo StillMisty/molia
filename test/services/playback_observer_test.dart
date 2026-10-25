@@ -4,6 +4,7 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/image_preload_manager.dart';
+import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/services/data_saver_service.dart';
@@ -80,6 +81,7 @@ void main() {
     DataSaverService? dataSaver,
     GlobalKey<NavigatorState>? navigatorKey,
     AppPresence? presence,
+    PlaybackPowerPolicy? powerPolicy,
   }) {
     log = [];
     widgetPayloads = [];
@@ -103,6 +105,7 @@ void main() {
         notificationRequests++;
       },
       presence: presence,
+      mobilePowerPolicy: powerPolicy,
     )..attach();
   }
 
@@ -262,6 +265,37 @@ void main() {
 
     // 恢复：等休眠后的重建帧落定，补一次预取。
     presence.markVisible();
+    await tester.pump();
+    await tester.pump();
+    expect(preloader.preloaded, hasLength(1));
+    expect(preloader.preloaded.single.current?.id.uri, 'fake:a');
+  });
+
+  testWidgets('移动端退后台不预取封面；回前台补一次', (tester) async {
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final observer = buildObserver(
+      navigatorKey: navigatorKey,
+      powerPolicy: policy,
+    );
+    addTearDown(observer.dispose);
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: navigatorKey, home: const SizedBox.shrink()),
+    );
+    await tester.pump();
+
+    // 息屏 / 切到其他应用：历史与小组件照常，封面预取没有展示面。
+    policy.markBackground();
+    final item = track('a', artwork: 'https://img.example/a.jpg');
+    backend.emit(snapshot(item));
+    await tester.pump();
+    await tester.pump();
+    expect(notificationRequests, 1);
+    expect(preloader.preloaded, isEmpty);
+
+    // 回前台：补上当前曲目的预取。
+    policy.markForeground();
     await tester.pump();
     await tester.pump();
     expect(preloader.preloaded, hasLength(1));

@@ -9,12 +9,17 @@ import 'audio_predownloader.dart';
 /// 顺序约束：只在「当前曲目真正起播后」调用 [preload]——若在取链前预载，
 /// 会与当前曲目的取链在 LX 引擎里抢占，反而拖慢起播。
 ///
+/// 直链预热与字节预取分开门控：移动端后台听歌时仍要拿到下一首地址（切换
+/// 不额外等取链），但**不再**一边播一边下载整首下一曲——那会把网络 / 磁盘
+/// 长期占在后台，是熄屏功耗最重的一块。
+///
 /// 失败静默：预载只是优化，真正播放时会走同一取链路径重试。
 class NextTrackPreloader {
   NextTrackPreloader({
     required this._resolver,
     this._preferredQuality,
     this._predownloader,
+    this._canPredownloadBytes,
   });
 
   /// 必须返回完整 [PlayableStream]：预取要带上与播放相同的请求头（B 站
@@ -26,6 +31,10 @@ class NextTrackPreloader {
   final String Function()? _preferredQuality;
 
   final AudioPredownloader? _predownloader;
+
+  /// 是否允许下载音频字节（null = 允许）。组合根接移动端前后台策略：
+  /// 后台只预热直链，不预取字节。
+  final bool Function()? _canPredownloadBytes;
 
   /// 请求代数：新请求/取消都会自增，令在途解析结果作废。
   int _generation = 0;
@@ -44,7 +53,11 @@ class NextTrackPreloader {
     try {
       final stream = await _resolver(next, quality: quality);
       if (generation != _generation) return;
-      _pending = await _predownloader?.predownload(
+      // 只预热直链也不浪费：真正切到下一首时 CatalogService 已命中。
+      if (_predownloader == null || _canPredownloadBytes?.call() == false) {
+        return;
+      }
+      _pending = await _predownloader.predownload(
         track: next,
         stream: stream,
         quality: quality,

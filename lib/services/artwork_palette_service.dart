@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
+import '../playback/playback_power_policy.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/local_image_provider.dart';
 import 'app_presence.dart';
@@ -302,8 +303,9 @@ class ArtworkPaletteService {
 ///   保持现色；
 /// - 无封面：通知 [onCleared] 回退基础配色（与「有封面才覆盖」语义一致）；
 /// - 结果过期（期间又切歌）直接丢弃；
-/// - 窗口在后台（托盘 / 最小化）：只记 URL 不取色——取色要解码封面，后台
-///   没有任何展示面；恢复后补一次（LRU 命中时等于零成本）。
+/// - 没有展示面（桌面托盘隐藏 / 移动端退后台且没有桌面歌词）时只记 URL
+///   不取色——取色要解码封面，后台没有任何消费面；恢复后补一次
+///   （LRU 命中时等于零成本）。
 class ArtworkThemeSync {
   ArtworkThemeSync({
     required this._load,
@@ -311,8 +313,11 @@ class ArtworkThemeSync {
     required this._onCleared,
     this._settleDelay = const Duration(milliseconds: 500),
     AppPresence? presence,
-  })  : _presence = presence ?? AppPresence.instance {
-    _presence.addListener(_onPresenceChanged);
+    PlaybackPowerPolicy? mobilePowerPolicy,
+  })  : _presence = presence ?? AppPresence.instance,
+        _powerPolicy = mobilePowerPolicy {
+    _presence.addListener(_onSurfaceChanged);
+    _powerPolicy?.addListener(_onSurfaceChanged);
   }
 
   final Future<ArtworkPalette?> Function(String url) _load;
@@ -320,6 +325,9 @@ class ArtworkThemeSync {
   final void Function() _onCleared;
   final Duration _settleDelay;
   final AppPresence _presence;
+
+  /// 移动端前后台 / 桌面歌词策略：后台只有悬浮窗可能跟随封面配色时取色。
+  final PlaybackPowerPolicy? _powerPolicy;
 
   String? _currentUrl;
 
@@ -329,6 +337,16 @@ class ArtworkThemeSync {
 
   Timer? _timer;
   bool _disposed = false;
+
+  /// 当前是否存在任何消费封面色板的面。
+  ///
+  /// 桌面看窗口存在态；移动端窗口态恒可见，改看生命周期——退后台后只有
+  /// 桌面歌词悬浮窗仍需要「跟随封面」的颜色，通知锁屏不消费主题色。
+  bool get _surfaceAvailable {
+    if (_presence.isBackgrounded) return false;
+    final policy = _powerPolicy;
+    return policy == null || policy.canExtractArtworkPalette;
+  }
 
   /// 播放快照里的当前封面地址变化时调用（null/空串 = 当前曲目无封面）。
   void onArtworkChanged(String? url) {
@@ -343,13 +361,13 @@ class ArtworkThemeSync {
       _onCleared();
       return;
     }
-    if (_presence.isBackgrounded) return;
+    if (!_surfaceAvailable) return;
     _timer = Timer(_settleDelay, () => _request(normalized));
   }
 
-  /// 回到可见：对当前封面补一次取色（最后一次切歌可能发生在后台期）。
-  void _onPresenceChanged() {
-    if (_disposed || !_presence.isVisible) return;
+  /// 展示面恢复：对当前封面补一次取色（最后一次切歌可能发生在后台期）。
+  void _onSurfaceChanged() {
+    if (_disposed || !_surfaceAvailable) return;
     final url = _currentUrl;
     if (url == null || url == _appliedUrl) return;
     _timer?.cancel();
@@ -366,7 +384,8 @@ class ArtworkThemeSync {
 
   void dispose() {
     _disposed = true;
-    _presence.removeListener(_onPresenceChanged);
+    _presence.removeListener(_onSurfaceChanged);
+    _powerPolicy?.removeListener(_onSurfaceChanged);
     _timer?.cancel();
     _timer = null;
   }

@@ -5,6 +5,7 @@ import 'package:molia/app/bootstrap/lyrics_stack.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/bili_account_service.dart';
 import 'package:molia/services/lyrics_service.dart';
@@ -45,6 +46,18 @@ void main() {
         duration: const Duration(minutes: 3),
       );
 
+  BackendSnapshot snapshotWithNext(Track current, Track next) =>
+      BackendSnapshot(
+        current: current,
+        queue: [current, next],
+        currentIndex: 0,
+        next: next,
+        upNext: [next],
+        isPlaying: true,
+        position: const Duration(seconds: 10),
+        duration: const Duration(minutes: 3),
+      );
+
   test('播放快照换曲触发会话加载；同曲目快照抖动不重复取词', () async {
     SharedPreferences.setMockInitialValues({});
     final backend = FakePlaybackBackend();
@@ -75,6 +88,89 @@ void main() {
     await pumpEventQueue();
     expect(service.requested, ['fake:a', 'fake:b']);
     expect(lyrics.state.trackId, 'fake:b');
+  });
+
+  test('移动端后台无歌词输出：不取词，回前台补一次', () async {
+    SharedPreferences.setMockInitialValues({});
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+    final service = _RecordingLyricsService();
+    final lyrics = LyricsProvider(service: service);
+    addTearDown(lyrics.dispose);
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+
+    wireLyricsSession(
+      playback: playback,
+      lyricsProvider: lyrics,
+      powerPolicy: policy,
+    );
+    policy.markBackground();
+
+    final a = track('a');
+    backend.emit(snapshot(a));
+    await pumpEventQueue();
+    expect(service.requested, isEmpty,
+        reason: '后台没有任何歌词输出，取词只会白耗网络');
+
+    policy.markForeground();
+    await pumpEventQueue();
+    expect(service.requested, ['fake:a']);
+    expect(lyrics.state.status, LyricsStatus.ready);
+  });
+
+  test('移动端后台有歌词输出：照常取词', () async {
+    SharedPreferences.setMockInitialValues({});
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+    final service = _RecordingLyricsService();
+    final lyrics = LyricsProvider(service: service);
+    addTearDown(lyrics.dispose);
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+
+    wireLyricsSession(
+      playback: playback,
+      lyricsProvider: lyrics,
+      powerPolicy: policy,
+    );
+    policy.markBackground();
+    policy.setLyricsOutputActive(true);
+
+    backend.emit(snapshot(track('a')));
+    await pumpEventQueue();
+    expect(service.requested, ['fake:a']);
+  });
+
+  test('下一首歌词预载：后台无输出先跳过，回前台补上', () async {
+    SharedPreferences.setMockInitialValues({});
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+    final service = _RecordingLyricsService();
+    final lyrics = LyricsProvider(service: service);
+    addTearDown(lyrics.dispose);
+    final policy = PlaybackPowerPolicy();
+    addTearDown(policy.dispose);
+
+    wireNextTrackLyricsPreload(
+      playback: playback,
+      lyricsProvider: lyrics,
+      powerPolicy: policy,
+    );
+    policy.markBackground();
+
+    final a = track('a');
+    final b = track('b');
+    backend.emit(snapshotWithNext(a, b));
+    await pumpEventQueue();
+    expect(service.requested, isEmpty);
+
+    policy.markForeground();
+    await pumpEventQueue();
+    expect(service.requested, ['fake:b']);
   });
 
   test('B 站登录回调：清原生缓存并强刷当前 B 站歌词', () async {

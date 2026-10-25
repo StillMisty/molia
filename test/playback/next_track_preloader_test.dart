@@ -130,6 +130,26 @@ void main() {
       expect(calls.single.$2, '128k');
     });
 
+    test('后台禁止字节预取：直链仍预热，预下载器不启动', () async {
+      final resolved = <String>[];
+      final downloader = _RecordingPredownloader();
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async {
+          resolved.add(track.id);
+          return PlayableStream(
+            Uri.parse('https://cdn.example/x.mp3'),
+          );
+        },
+        predownloader: downloader,
+        canPredownloadBytes: () => false,
+      );
+
+      await preloader.preload(_track('b'));
+
+      expect(resolved, ['wy:b'], reason: '切歌时的取链仍要命中缓存');
+      expect(downloader.calls, isEmpty, reason: '后台不再下载整首下一曲');
+    });
+
     test('解析成功后把直链交给预下载器（同音质）', () async {
       final downloader = _RecordingPredownloader();
       final preloader = NextTrackPreloader(

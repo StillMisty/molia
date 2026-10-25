@@ -126,7 +126,7 @@ void main() async {
   // 移动端播放功耗策略：与 `AppPresence` 完全独立（后者是桌面窗口可见性，
   // 驱动预取 / 取色停产，移动端退后台不能写进去）。桌面不接生命周期事件，
   // 默认一直前台；启动时若系统已把应用放到后台（如从通知恢复的冷启动），
-  // 先按后台节拍采样 / 落盘，首帧后再由生命周期回调纠正。
+  // 先按后台节拍采样 / 落盘 / 停后台工作，首帧后再由生命周期回调纠正。
   final powerPolicy = PlaybackPowerPolicy();
   final mobilePowerPolicy = defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
