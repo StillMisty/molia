@@ -65,17 +65,13 @@ List<SingleChildWidget> buildAppProviders({
   final downloadService = local.downloadService;
   // “另存目录”服务：下载设置里的桌面自选目录同时作用于导出；未设置时用
   // 各平台公共下载目录。页面经 Provider 读取，测试注入 fake。
-  final saveAs = createSaveAs(
-    customRoot: () => local.downloadSettings.saveDir,
-  );
+  final saveAs = createSaveAs(customRoot: () => local.downloadSettings.saveDir);
   return [
     Provider<SaveAs>.value(value: saveAs),
     ChangeNotifierProvider.value(value: sourceManager),
     // 音源管理 UI 门面：订阅同一个 SourceManager，生命周期与其一致
     // （不负责 dispose manager）。
-    ChangeNotifierProvider(
-      create: (_) => SourcesProvider(sourceManager),
-    ),
+    ChangeNotifierProvider(create: (_) => SourcesProvider(sourceManager)),
     Provider<SourceRegistry>.value(value: sourceRegistry),
     Provider<CatalogService>.value(value: catalogService),
     // 专辑页取数（缓存/错误边界在服务内；页面只消费领域 Album）。
@@ -103,7 +99,6 @@ List<SingleChildWidget> buildAppProviders({
         sourceRegistry: sourceRegistry,
       ),
     ),
-    ChangeNotifierProvider.value(value: library.localDatabaseProvider),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
     // 自定义封面（每曲 + 默认）：歌曲信息页 / 设置页 / 封面选择弹层读取。
@@ -127,15 +122,12 @@ List<SingleChildWidget> buildAppProviders({
     Provider<PlayStatisticsRepository>.value(
       value: library.playStatisticsRepository,
     ),
-    Provider<PlayStatisticsService>.value(
-      value: library.playStatisticsService,
-    ),
+    Provider<PlayStatisticsService>.value(value: library.playStatisticsService),
     // 听歌统计页状态（范围 / 加载 / 清空 / 导出）；页面打开期间
     // 自行订阅仓库变更，关闭后取消。
     ChangeNotifierProvider(
-      create: (_) => PlayStatisticsProvider(
-        repository: library.playStatisticsRepository,
-      ),
+      create: (_) =>
+          PlayStatisticsProvider(repository: library.playStatisticsRepository),
     ),
     // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
     // 渠道变化 → 搜索源跟随的唯一规则点（页面不自行同步两个 provider）。
@@ -145,8 +137,9 @@ List<SingleChildWidget> buildAppProviders({
         libraryProvider: context.read<LibraryProvider>(),
         onChannelChanged: (key) {
           final search = context.read<SearchProvider>();
-          if (search.sourceOptions
-              .any((option) => option.key == key && option.canSearch)) {
+          if (search.sourceOptions.any(
+            (option) => option.key == key && option.canSearch,
+          )) {
             search.selectSource(key);
           }
         },

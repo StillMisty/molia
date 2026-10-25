@@ -46,8 +46,9 @@ class SessionSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect(
-      {bool fresh = false}) async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async {
     final loaded = await _port.loadRaw();
     // 本地下载曲目不同步：文件是设备本机的持久副本，其它设备无法播放。
     final raw = loaded == null ? null : _withoutLocalTracks(loaded);
@@ -66,13 +67,13 @@ class SessionSyncAdapter implements SyncAdapter {
     }
 
     final savedAt = (raw[kPlaybackSessionSavedAtKey] as num?)?.toInt() ?? 0;
+    // 没有 savedAt 的会话不是本版写入的（旧数据 / 直改）：不上行、不登记，
+    // 等下一次真实保存带来 savedAt 后再参与同步。
+    if (savedAt <= 0) return const {};
     final hash = '$savedAt';
     final SyncStamp effective;
     if (stamp == null || stamp.hash != hash) {
-      // 没有 savedAt 的存量会话：零值戳（让新会话胜出），
-      // 下次保存带来 savedAt 后自然参与 LWW。
-      final version =
-          savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
+      final version = _state.stampIssuer.next();
       effective = SyncStamp(hash: hash, version: version);
       // 首次登记不是变更（初始视图由全量快照覆盖）；真实变化追加日志。
       // 登记必须在追加成功后才写：追加失败时保留旧登记，下一轮重新检测。
@@ -125,9 +126,11 @@ class SessionSyncAdapter implements SyncAdapter {
       return;
     }
     final savedAt = (raw[kPlaybackSessionSavedAtKey] as num?)?.toInt() ?? 0;
+    // 旧会话 / 缺 savedAt：无法排序也不该外发，等真实保存再来。
+    if (savedAt <= 0) return;
     final hash = '$savedAt';
     if (stamp != null && stamp.hash == hash) return;
-    final version = savedAt > 0 ? _state.stampIssuer.next() : SyncVersion.zero;
+    final version = _state.stampIssuer.next();
     final journal = _journal;
     if (journal != null && stamp != null) {
       // 先追加、后登记：追加失败时不写登记也不推进合并窗口，下次保存重试。
@@ -183,14 +186,14 @@ class SessionSyncAdapter implements SyncAdapter {
       await _port.clearRemote();
       _state.setSessionStamp(SyncStamp(version: record.version));
     } else {
-      if (data == null || data.isEmpty) {
+      if (data == null || data.isEmpty || savedAt <= 0) {
+        // 没有 savedAt 的远端会话无法排序（旧数据 / 损坏载荷）：跳过。
         return const SyncApplyOutcome(applied: 0, skipped: 1);
       }
       await _port.applyRemote(data.map((k, v) => MapEntry(k.toString(), v)));
-      _state.setSessionStamp(SyncStamp(
-        hash: '$savedAt',
-        version: record.version,
-      ));
+      _state.setSessionStamp(
+        SyncStamp(hash: '$savedAt', version: record.version),
+      );
     }
     final changed = _onChanged;
     if (changed != null) await changed();

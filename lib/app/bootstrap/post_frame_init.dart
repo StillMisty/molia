@@ -36,16 +36,19 @@ void initAfterFirstFrame({
   // 首帧后的本地数据尾巴：省流网络探测 / 下载记录加载 / 音频缓存维护。
   // 这几项都要过平台通道或磁盘，继续留在 runApp 前会把首帧整体推后。
   final dataSaverWatch = Stopwatch()..start();
-  unawaited(local.dataSaver.startMonitoring().whenComplete(
-        () => markStartupStep('sub.dataSaver.monitor（首帧后）', dataSaverWatch),
-      ));
+  unawaited(
+    local.dataSaver.startMonitoring().whenComplete(
+          () => markStartupStep('sub.dataSaver.monitor（首帧后）', dataSaverWatch),
+        ),
+  );
   final downloadWatch = Stopwatch()..start();
-  unawaited(local.downloadService.init().whenComplete(
-        () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
-      ));
+  unawaited(
+    local.downloadService.init().whenComplete(
+          () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
+        ),
+  );
   unawaited(() async {
     // 半成品清扫只可能清理本进程启动前的残留；放在首帧后不影响下载语义。
-    await CacheService.instance.migrateAudioCacheNamingIfNeeded();
     await CacheService.instance.cleanupAudioPartials();
   }());
 

@@ -71,6 +71,25 @@
    当前迁移链：`v1` 基线 → `v2` 新增 `sync_known`（同步已知版本登记）
    → `v3` 新增增量日志（`sync_journal` + `sync_journal_state`）。
 
+## 2026-10-25 修订：第二次 fresh 基线（v2 文件）
+
+第一次 drift 基线的迁移链已整体移除，改为第二次 fresh 基线（本节取代决策 2 /
+3 / 8 中的库文件名、表清单与迁移链描述）：
+
+- 新库文件名 `molia_database_v2.sqlite`，`schemaVersion = 1`；版本号从 1 重新开始。
+- v1–v5 迁移链、`lib/data/molia_database.steps.dart`、旧 `drift_schemas/` 快照与
+  `test/drift/molia/` 一并删除，不再保留历史迁移步骤与迁移测试。
+- 旧库 `molia_database.sqlite` 保留在磁盘上，但**不打开、不读取、不迁移**；升级后
+  的数据从新库重新开始（仍可用 JSON 备份 / 跨设备同步重建）。
+- `play_contexts` 表删除，`LocalDatabaseProvider` 与播放上下文写入器一并删除；
+  `play_events.syncKey` 改为 `NOT NULL`，并使用完整唯一索引（不再是部分索引）。
+- 当前 schema 是一次建出的 v1 基线，`drift_schemas/` 只保留新基线快照。
+- 之后改表仍走 `build_runner` + `dart run drift_dev make-migrations`，但起点是
+  新的 v1：从新 v1 生成快照与 `steps.dart`，写增量迁移并保留数据。不要恢复旧迁移链、
+  旧快照，也不要新增读取旧库的分支。
+- 本文头部的 `lib/providers/local_database_provider.dart` 与
+  `test/drift/molia/migration_test.dart` 等路径已随本次清理删除，仅作历史引用。
+
 ## 后果
 
 - 生成物是源码的一部分：`lib/data/molia_database.g.dart` 与 `drift_schemas/`

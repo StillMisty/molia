@@ -176,7 +176,7 @@
 
   > **2026-10-18 成本评估（不做项）**：v3 落地后复核了两项曾被列入候选的优化，
   > 结论都是「收益不抵迁移成本」，记录在此避免重复评估：
-  > - **journal 改存二进制 blob**（`sync_journal.data` TEXT → BLOB + schema v5）：
+  > - **journal 改存二进制 blob**（`sync_journal.data` TEXT → BLOB + schema v5，当时口径）：
   >   单条记录按行二进制化只比 JSON 文本小 ~12%（键名与转义占的比重远小于
   >   先前估计，字典 / 列式收益只存在于跨行的快照载荷），`_buildDelta` 的
   >   `jsonDecode` 也随增量窗口缩小到可忽略；不值得为它做一次 schema 迁移。

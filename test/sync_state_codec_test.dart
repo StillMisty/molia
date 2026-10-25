@@ -203,9 +203,8 @@ void main() {
       'peers',
     });
 
-    // 旧 v2 没有后来新增的字段：缺失按默认值兼容；名册 lastSuccessAt 为 0 时
-    // 由 SyncPeerState.effectiveLastSuccessAt 走旧数据兜底。
-    final legacy = SyncStateCodec.decode(<String, dynamic>{
+    // 没有后来新增的字段：缺失按默认值处理。
+    final sparse = SyncStateCodec.decode(<String, dynamic>{
       'v': 2,
       'deviceId': 'devA',
       'deviceName': '旧设备',
@@ -220,34 +219,30 @@ void main() {
         {'deviceId': 'devB', 'lastSeenAt': 900, 'lastPullAt': 700},
       ],
     })!;
-    expect(legacy.deviceId, 'devA');
-    expect(legacy.transports, {'lan'});
-    expect(legacy.categories[SyncCategory.covers], isFalse,
-        reason: '旧状态缺 covers 时按默认关闭，不能回退成开启');
+    expect(sparse.deviceId, 'devA');
+    expect(sparse.transports, {'lan'});
     expect(
-      legacy.categories.entries
+      sparse.categories[SyncCategory.covers],
+      isFalse,
+      reason: '缺 covers 时按默认关闭，不能回退成开启',
+    );
+    expect(
+      sparse.categories.entries
           .where((entry) => entry.key != SyncCategory.covers)
           .every((entry) => entry.value),
       isTrue,
     );
-    expect(legacy.coverStamps, isEmpty);
-    expect(legacy.coverTombstones, isEmpty);
-    expect(legacy.settingStamps['themeMode']!.hash, 'hash');
-    expect(legacy.settingStamps['themeMode']!.version.physical, 10);
-    expect(legacy.peers.single.lastSuccessAt, 0);
-    expect(legacy.peers.single.effectiveLastSuccessAt, 900);
-    expect(legacy.lanHttpPort, 0);
-    expect(legacy.activeScriptStamp, isNull);
+    expect(sparse.coverStamps, isEmpty);
+    expect(sparse.coverTombstones, isEmpty);
+    expect(sparse.settingStamps['themeMode']!.hash, 'hash');
+    expect(sparse.settingStamps['themeMode']!.version.physical, 10);
+    expect(sparse.peers.single.lastSuccessAt, 0);
+    expect(sparse.lanHttpPort, 0);
+    expect(sparse.activeScriptStamp, isNull);
   });
 
   test('损坏载荷：非对象返回 null，坏字段 / 坏条目不抛异常', () {
-    for (final raw in <Object?>[
-      null,
-      '{"v":2}',
-      42,
-      <Object?>[],
-      true,
-    ]) {
+    for (final raw in <Object?>[null, '{"v":2}', 42, <Object?>[], true]) {
       expect(SyncStateCodec.decode(raw), isNull, reason: '载荷 $raw 不是 JSON 对象');
     }
 
@@ -428,9 +423,8 @@ SyncPersistedState _populatedState() => SyncPersistedState(
           hash: 'h-theme',
           version: SyncVersion(physical: 1770000000200, counter: 1),
         ),
-        'language': const SyncStamp(
-          version: SyncVersion(physical: 1770000000300),
-        ),
+        'language':
+            const SyncStamp(version: SyncVersion(physical: 1770000000300)),
       },
       scriptTombstones: {
         'user_script_1': const SyncStamp(
@@ -462,15 +456,10 @@ SyncPersistedState _populatedState() => SyncPersistedState(
         ),
       },
       coverTombstones: {
-        'wy:2': const SyncStamp(
-          version: SyncVersion(physical: 1770000000450),
-        ),
+        'wy:2': const SyncStamp(version: SyncVersion(physical: 1770000000450)),
       },
       lastSyncAt: 1770000000500,
-      transportLastSuccess: {
-        'lan': 1770000000500,
-        'webdav': 1770000000400,
-      },
+      transportLastSuccess: {'lan': 1770000000500, 'webdav': 1770000000400},
       snapshotPushSeq: {'lan': 12, 'webdav': 5},
       log: const [
         SyncLogEntry(
@@ -498,11 +487,7 @@ SyncPersistedState _populatedState() => SyncPersistedState(
       ],
       activity: const [
         SyncActivityEntry(
-          at: 1770000000500,
-          bytesIn: 1,
-          bytesOut: 2,
-          applied: 3,
-        ),
+            at: 1770000000500, bytesIn: 1, bytesOut: 2, applied: 3),
         SyncActivityEntry(at: 1770000000400),
       ],
       peers: const [

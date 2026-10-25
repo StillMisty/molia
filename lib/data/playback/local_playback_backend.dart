@@ -41,8 +41,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
   final LocalPlaybackService _service;
   final PlaybackStreamResolver _resolver;
 
-  final _BackendStateNotifier _state =
-      _BackendStateNotifier(BackendSnapshot.empty);
+  final _BackendStateNotifier _state = _BackendStateNotifier(
+    BackendSnapshot.empty,
+  );
 
   /// `SourceTrack` → `Track` 的身份缓存：队列内同一曲目对象复用同一 Track，
   /// 保证快照 `==` 去重稳定、避免每次通知重建领域对象。
@@ -95,12 +96,12 @@ class LocalPlaybackBackend implements PlaybackBackend {
   Future<void> load(PlaybackRequest request) async {
     if (request.tracks.isEmpty) return;
     _trackCache.clear();
-    final legacyTracks = [
-      for (final track in request.tracks) sourceTrackFromTrack(track)
+    final sourceTracks = [
+      for (final track in request.tracks) sourceTrackFromTrack(track),
     ];
-    final index = request.startIndex.clamp(0, legacyTracks.length - 1);
+    final index = request.startIndex.clamp(0, sourceTracks.length - 1);
     await _service.playTracks(
-      legacyTracks,
+      sourceTracks,
       index,
       contextName: request.context?.name,
     );
@@ -110,10 +111,10 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   Future<void> enqueueTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
-    final legacyTracks = [
-      for (final track in tracks) sourceTrackFromTrack(track)
+    final sourceTracks = [
+      for (final track in tracks) sourceTrackFromTrack(track),
     ];
-    await _service.enqueueTracks(legacyTracks);
+    await _service.enqueueTracks(sourceTracks);
     _emit();
   }
 

@@ -4,7 +4,7 @@ import '../sync_adapter.dart';
 
 /// 听歌统计适配器：类型化事件 ↔ `SyncRecord` 的薄映射。
 ///
-/// 导出缓存 / 指纹、存量键回填、本地下载曲目过滤与按 `syncKey` 合并都在
+/// 导出缓存 / 指纹、本地下载曲目过滤与按 `syncKey` 合并都在
 /// [StatisticsSyncStore] 里；适配器不再认识 `play_events` 的列，也不再直接
 /// 依赖统计仓库。
 ///

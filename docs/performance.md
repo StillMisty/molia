@@ -210,8 +210,8 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 并不能消掉它。这不是某个模块的成本；不要因为某个阶段偶尔 400ms 就去优化它。
 
 - 本轮实际改了什么：`DownloadService.init`（含 `.part` 清扫）、
-  `LibraryRepository.maxVersion`（含 drift 打开/迁移）、统计收尾/裁剪、
-  音频缓存命名清理、省流网络探测全部移到首帧后；下载取链经 `ready` 等记录，
+  `LibraryRepository.maxVersion`（含 drift 打开）、统计收尾/裁剪、
+  省流网络探测全部移到首帧后；下载取链经 `ready` 等记录，
   资料库写入经 `stampSeedReady` 等最大戳种子（保留 ADR-0003 基线约束）。
 - 原生侧同时移除了无效的 `MoliaApplication` / `DynamicColors` 和
   `EmojiCompatInitializer`（Flutter 自绘文本用不到；原生只有 RemoteViews）。

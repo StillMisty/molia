@@ -199,29 +199,31 @@ void main() {
   });
 
   test('会话里的本地下载曲目导出时过滤，并按删除数校正下标', () async {
-    await store.save(PlaybackSession(
-      tracks: [
-        Track(
-          id: const TrackId('wy', '1'),
-          title: '在线曲目',
-          origin: TrackOrigin.builtin,
-          payload: const {'songId': '1'},
-        ),
-        Track(
-          id: const TrackId('local', 'wy:9'),
-          title: '本地下载',
-          origin: TrackOrigin.localFile,
-          payload: const {'path': '/data/a.mp3', 'songId': 'wy:9'},
-        ),
-        Track(
-          id: const TrackId('wy', '2'),
-          title: '在线曲目 2',
-          origin: TrackOrigin.builtin,
-          payload: const {'songId': '2'},
-        ),
-      ],
-      index: 2,
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: [
+          Track(
+            id: const TrackId('wy', '1'),
+            title: '在线曲目',
+            origin: TrackOrigin.builtin,
+            payload: const {'songId': '1'},
+          ),
+          Track(
+            id: const TrackId('local', 'wy:9'),
+            title: '本地下载',
+            origin: TrackOrigin.localFile,
+            payload: const {'path': '/data/a.mp3', 'songId': 'wy:9'},
+          ),
+          Track(
+            id: const TrackId('wy', '2'),
+            title: '在线曲目 2',
+            origin: TrackOrigin.builtin,
+            payload: const {'songId': '2'},
+          ),
+        ],
+        index: 2,
+      ),
+    );
 
     final collected = await adapter.collect();
     final data = collected[SyncCategory.session]!.single.data!;
@@ -232,20 +234,50 @@ void main() {
   });
 
   test('会话里全是本地曲目：不回传同步记录', () async {
-    await store.save(PlaybackSession(
-      tracks: [
-        Track(
-          id: const TrackId('local', 'wy:9'),
-          title: '本地下载',
-          origin: TrackOrigin.localFile,
-          payload: const {'path': '/data/a.mp3', 'songId': 'wy:9'},
-        ),
-      ],
-      index: 0,
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: [
+          Track(
+            id: const TrackId('local', 'wy:9'),
+            title: '本地下载',
+            origin: TrackOrigin.localFile,
+            payload: const {'path': '/data/a.mp3', 'songId': 'wy:9'},
+          ),
+        ],
+        index: 0,
+      ),
+    );
 
     final collected = await adapter.collect();
     expect(collected, isEmpty);
+  });
+
+  test('没有 savedAt 的会话：本机不外发、远端记录跳过', () async {
+    final port = _RecordingSessionPort()
+      ..raw = {
+        'index': 0,
+        'positionMs': 1,
+        'tracks': [
+          {'sourceKey': 'fake', 'id': 'a', 'title': 'Title a', 'origin': 'lx'},
+        ],
+      };
+    final isolated = SessionSyncAdapter(port: port, state: state);
+
+    expect(await isolated.collect(), isEmpty, reason: '旧会话缺 savedAt 不上行');
+    expect(state.sessionStamp, isNull, reason: '不登记没有 savedAt 的会话');
+    expect(port.calls, ['loadRaw']);
+
+    final remote = SyncRecord(
+      key: SyncRecordKeys.sessionKey,
+      version: const SyncVersion(physical: 20000, deviceId: 'devB'),
+      data: {'index': 0, 'positionMs': 1},
+    );
+    final result = await isolated.apply({
+      SyncCategory.session: [remote],
+    });
+    expect(result.applied, 0);
+    expect(result.skipped, 1);
+    expect(port.calls, ['loadRaw'], reason: '缺 savedAt 的远端会话不写入');
   });
 
   test('远端应用/删除只经注入的会话端口，不直连具体存储', () async {

@@ -10,8 +10,11 @@ abstract class LyricProvider {
   Future<SongMatch?> search(String title, String artist);
 
   /// 搜索歌曲，返回多个匹配结果
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3});
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  });
 
   /// 获取歌词原文 LRC（原始接口，内置歌词搜索页直接消费）。
   ///
@@ -50,11 +53,7 @@ abstract class LyricProvider {
     try {
       final matches = await searchMultiple(title, artist, limit: 5);
       if (matches.isEmpty) return null;
-      final match = pickBestSongMatch(
-            matches,
-            title: title,
-            artist: artist,
-          ) ??
+      final match = pickBestSongMatch(matches, title: title, artist: artist) ??
           matches.first;
 
       final payload = await fetchForMatch(match);
@@ -71,10 +70,6 @@ abstract class LyricProvider {
       return null;
     }
   }
-
-  /// 兼容旧接口：仅返回原文。
-  Future<String?> getLyric(String title, String artist) async =>
-      (await getLyrics(title, artist))?.lyric;
 
   String? _normalizeOptional(String? text) {
     if (text == null) return null;
@@ -128,8 +123,8 @@ class SongMatch {
 
 /// 歌词缓存数据。
 ///
-/// [translation] / [roma] / [lxlyric] 为后续版本新增：旧缓存缺失这些字段时
-/// 按「无」处理，写入时仅在非空时落库，保持与旧版本缓存互读。
+/// [translation] / [roma] / [lxlyric] 为可选扩展字段：缺失时按「无」处理，
+/// 写入时仅在非空时落库。
 class LyricCacheData {
   final String provider;
   final String lyric;

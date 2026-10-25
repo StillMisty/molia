@@ -63,7 +63,7 @@ import 'app_localizations_zh.dart';
 /// property.
 abstract class AppLocalizations {
   AppLocalizations(String locale)
-      : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -86,16 +86,16 @@ abstract class AppLocalizations {
   /// of delegates is preferred or required.
   static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
       <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// No description provided for @settingsTitle.
@@ -2534,12 +2534,6 @@ abstract class AppLocalizations {
   /// **'Molia'**
   String get appName;
 
-  /// No description provided for @libraryRecentContexts.
-  ///
-  /// In en, this message translates to:
-  /// **'Recently Played'**
-  String get libraryRecentContexts;
-
   /// No description provided for @libraryHistory.
   ///
   /// In en, this message translates to:
@@ -4214,12 +4208,6 @@ abstract class AppLocalizations {
   /// **'a manual top-up'**
   String get aiDjOriginManualFeed;
 
-  /// No description provided for @aiDjOriginRestored.
-  ///
-  /// In en, this message translates to:
-  /// **'older picks'**
-  String get aiDjOriginRestored;
-
   /// No description provided for @aiDjHistoryLoadFailed.
   ///
   /// In en, this message translates to:
@@ -5047,7 +5035,10 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{level} · {network} · {powerSave}'**
   String syncActivityEnvironment(
-      String level, String network, String powerSave);
+    String level,
+    String network,
+    String powerSave,
+  );
 
   /// No description provided for @syncLevelActive.
   ///
@@ -6584,7 +6575,10 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloaded {percent}% ({receivedMb} MB, {speedMb} MB/s)'**
   String updateDownloadProgress(
-      String percent, String receivedMb, String speedMb);
+    String percent,
+    String receivedMb,
+    String speedMb,
+  );
 
   /// No description provided for @trackInfoTabTitle.
   ///
@@ -7498,24 +7492,6 @@ abstract class AppLocalizations {
   /// **'Choose a playlist'**
   String get downloadsPickPlaylist;
 
-  /// No description provided for @downloadsMigrateLegacy.
-  ///
-  /// In en, this message translates to:
-  /// **'Move downloads to the new location'**
-  String get downloadsMigrateLegacy;
-
-  /// No description provided for @downloadsMigrateLegacySubtitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Move files from the legacy app folder into the current download folder'**
-  String get downloadsMigrateLegacySubtitle;
-
-  /// No description provided for @downloadsMigrateLegacyDone.
-  ///
-  /// In en, this message translates to:
-  /// **'Moved {moved}, failed {failed}'**
-  String downloadsMigrateLegacyDone(int moved, int failed);
-
   /// No description provided for @downloadsPublishPublic.
   ///
   /// In en, this message translates to:
@@ -7910,8 +7886,9 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   }
 
   throw FlutterError(
-      'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

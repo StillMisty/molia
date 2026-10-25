@@ -1,5 +1,5 @@
-/// 资料库与统计栈：同步状态设备戳 → 资料库仓库 / 听歌统计 → 最近播放上下文
-/// （play_contexts）→ 换源偏好与自动换源解析服务。
+/// 资料库与统计栈：同步状态设备戳 → 资料库仓库 / 听歌统计 → 换源偏好与
+/// 自动换源解析服务。
 ///
 /// 这些对象互相独立，但都被播放栈消费（观察者写历史、provider 读换源偏好），
 /// 且都在 `syncState.init()` 之后才能拿到设备 id，因此合成一个 builder。
@@ -19,7 +19,6 @@ import '../../data/sync/sync_journal.dart';
 import '../../data/sync/sync_state_store.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../providers/library_provider.dart';
-import '../../providers/local_database_provider.dart';
 import '../../providers/playback_provider.dart';
 import '../../services/library/library_add_settings.dart';
 import '../../services/play_statistics_service.dart';
@@ -39,7 +38,6 @@ typedef LibraryStack = ({
   PlayStatisticsRepository playStatisticsRepository,
   SqliteStatisticsSyncStore statisticsSyncStore,
   PlayStatisticsService playStatisticsService,
-  LocalDatabaseProvider localDatabaseProvider,
   SourceSwapSettings sourceSwapSettings,
   LibraryAddSettings libraryAddSettings,
   AutoSourceSwapService autoSourceSwapService,
@@ -124,9 +122,6 @@ Future<LibraryStack> buildLibraryStack({
   ).wait;
   markStartupStep('sub.library.settingsInit', settingsWatch);
   // 统计收尾 / 裁剪同属启动维护，也由首帧后统一触发。
-  // 最近播放上下文（play_contexts）：提前创建，同一实例既进 Provider 树，
-  // 也直接注入 PlaybackProvider / 播放观察者。
-  final localDatabaseProvider = LocalDatabaseProvider();
   final autoSourceSwapService = AutoSourceSwapService(
     catalog: catalog.catalogService,
     registry: catalog.sourceRegistry,
@@ -140,7 +135,6 @@ Future<LibraryStack> buildLibraryStack({
     playStatisticsRepository: playStatisticsRepository,
     statisticsSyncStore: statisticsSyncStore,
     playStatisticsService: playStatisticsService,
-    localDatabaseProvider: localDatabaseProvider,
     sourceSwapSettings: sourceSwapSettings,
     libraryAddSettings: libraryAddSettings,
     autoSourceSwapService: autoSourceSwapService,
@@ -174,8 +168,9 @@ void wirePlayStatistics({
   required PlayStatisticsService service,
 }) {
   playback.addListener(() => service.onSnapshot(playback.snapshot));
-  playback.position
-      .addListener(() => service.onPosition(playback.currentPosition));
+  playback.position.addListener(
+    () => service.onPosition(playback.currentPosition),
+  );
   service.onSnapshot(playback.snapshot);
 }
 

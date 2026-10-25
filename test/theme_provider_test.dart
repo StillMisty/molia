@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/providers/theme_provider.dart';
 import 'package:molia/theme/scheme_builder.dart';
+
 import 'support/settings_test_support.dart';
 
 void main() {
@@ -29,14 +30,15 @@ void main() {
       buildColorScheme(Colors.blue, Brightness.light),
     );
     expect(provider.artworkColorScheme, isNull);
-    // 迁移把缺省键物化（值 = 新默认），下次启动走「已有新键」分支。
+    // 缺键时把新键的默认值物化，下次启动走「已有值」分支。
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('color_base'), 'wallpaper');
   });
 
   test('全局应用字体：持久化、恢复与清除', () async {
-    SharedPreferences.setMockInitialValues(
-        {'app_font_family': 'Noto Sans CJK SC'});
+    SharedPreferences.setMockInitialValues({
+      'app_font_family': 'Noto Sans CJK SC',
+    });
     final provider = ThemeProvider(settings: testSettingsRegistry());
     await provider.preferencesReady;
     expect(provider.appFontFamily, 'Noto Sans CJK SC');
@@ -52,8 +54,9 @@ void main() {
     expect(prefs.getString('app_font_family'), isNull);
   });
 
-  testWidgets('ThemeProvider updates when system brightness changes',
-      (tester) async {
+  testWidgets('ThemeProvider updates when system brightness changes', (
+    tester,
+  ) async {
     final themeProvider = ThemeProvider(settings: testSettingsRegistry());
     await themeProvider.preferencesReady;
 
@@ -71,9 +74,9 @@ void main() {
                     onPressed: () => context
                         .read<ThemeProvider>()
                         .updateThemeFromSystem(context),
-                    child: Text(scheme.brightness == Brightness.dark
-                        ? 'dark'
-                        : 'light'),
+                    child: Text(
+                      scheme.brightness == Brightness.dark ? 'dark' : 'light',
+                    ),
                   );
                 },
               ),
@@ -212,7 +215,9 @@ void main() {
     // 切到自定义：莫奈不生效，回退种子色。
     await provider.setBaseColorSource(ColorBaseSource.custom);
     expect(
-        provider.colorScheme, buildColorScheme(Colors.blue, Brightness.light));
+      provider.colorScheme,
+      buildColorScheme(Colors.blue, Brightness.light),
+    );
 
     await provider.setBaseColorSource(ColorBaseSource.wallpaper);
     expect(provider.colorScheme, monetLight);
@@ -227,7 +232,9 @@ void main() {
     // 封面 seed 覆盖壁纸（含覆盖莫奈）。
     provider.applyArtworkSeed(Colors.green);
     expect(
-        provider.colorScheme, buildColorScheme(Colors.green, Brightness.dark));
+      provider.colorScheme,
+      buildColorScheme(Colors.green, Brightness.dark),
+    );
 
     // 关闭封面覆盖：回到壁纸方案。
     await provider.setFollowArtworkEnabled(false);
@@ -331,7 +338,9 @@ void main() {
     await second.preferencesReady;
     expect(second.seedColor.toARGB32(), Colors.green.toARGB32());
     expect(
-        second.colorScheme, buildColorScheme(Colors.green, Brightness.light));
+      second.colorScheme,
+      buildColorScheme(Colors.green, Brightness.light),
+    );
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getInt('seed_color'), Colors.green.toARGB32());
@@ -351,55 +360,6 @@ void main() {
     expect(second.themeMode, ThemeMode.dark);
     expect(second.colorScheme.brightness, Brightness.dark);
     expect(second.followArtworkEnabled, isFalse);
-  });
-
-  test('旧键一次性迁移：莫奈/动态取色 → 基础配色/封面覆盖', () async {
-    SharedPreferences.setMockInitialValues({
-      'monet_color_enabled': true,
-      'dynamic_color_enabled': false,
-      'seed_color': 0xFF00FF00,
-      'pure_black_enabled': true,
-    });
-    final provider = ThemeProvider(settings: testSettingsRegistry());
-    await provider.preferencesReady;
-    expect(provider.baseColorSource, ColorBaseSource.wallpaper);
-    expect(provider.followArtworkEnabled, isFalse);
-    expect(provider.pureBlackEnabled, isTrue);
-    expect(provider.seedColor.toARGB32(), 0xFF00FF00);
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('color_base'), 'wallpaper');
-    expect(prefs.getBool('follow_artwork_enabled'), isFalse);
-    expect(prefs.getBool('monet_color_enabled'), isNull);
-    expect(prefs.getBool('dynamic_color_enabled'), isNull);
-  });
-
-  test('旧键迁移只在缺新键时执行，已有新键不被覆盖', () async {
-    SharedPreferences.setMockInitialValues({
-      'monet_color_enabled': true,
-      'dynamic_color_enabled': true,
-      'color_base': 'custom',
-      'follow_artwork_enabled': false,
-    });
-    final provider = ThemeProvider(settings: testSettingsRegistry());
-    await provider.preferencesReady;
-    expect(provider.baseColorSource, ColorBaseSource.custom);
-    expect(provider.followArtworkEnabled, isFalse);
-    // 旧键存在但未被采纳，也不清理（保守策略）。
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getBool('monet_color_enabled'), isTrue);
-    expect(prefs.getString('color_base'), 'custom');
-  });
-
-  test('旧键显式关闭莫奈：迁移保持自定义，不吃壁纸默认', () async {
-    SharedPreferences.setMockInitialValues({'monet_color_enabled': false});
-    final provider = ThemeProvider(settings: testSettingsRegistry());
-    await provider.preferencesReady;
-    expect(provider.baseColorSource, ColorBaseSource.custom);
-
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('color_base'), 'custom');
-    expect(prefs.getBool('monet_color_enabled'), isNull);
   });
 
   test('纯黑背景：仅深色模式覆盖 surface，浅色不生效', () async {

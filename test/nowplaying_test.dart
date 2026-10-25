@@ -76,16 +76,18 @@ void main() {
     // 默认单曲；给队列时停在中段，两侧邻位封面都有身份（越界断言需要）。
     final tracks = queue ?? [_track('a')];
     final int index = tracks.length > 1 ? 1 : 0;
-    backend.emit(BackendSnapshot(
-      current: tracks[index],
-      queue: tracks,
-      currentIndex: index,
-      previous: index > 0 ? tracks[index - 1] : null,
-      next: index + 1 < tracks.length ? tracks[index + 1] : null,
-      isPlaying: false,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: tracks[index],
+        queue: tracks,
+        currentIndex: index,
+        previous: index > 0 ? tracks[index - 1] : null,
+        next: index + 1 < tracks.length ? tracks[index + 1] : null,
+        isPlaying: false,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+      ),
+    );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -96,8 +98,9 @@ void main() {
           ChangeNotifierProvider(create: (_) => LyricsProvider()),
           // 歌词页扩展行开关：组合根在 main.dart 提供。
           ChangeNotifierProvider(
-              create: (_) =>
-                  LyricsDisplaySettings(settings: testSettingsRegistry())),
+            create: (_) =>
+                LyricsDisplaySettings(settings: testSettingsRegistry()),
+          ),
           ...extraProviders,
         ],
         child: MaterialApp(
@@ -159,14 +162,16 @@ void main() {
     addTearDown(library.dispose);
 
     final track = _track('fav');
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-      isPlaying: false,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: false,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+      ),
+    );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -181,9 +186,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: const Scaffold(
-            body: Center(child: NowPlayingFavoriteButton()),
-          ),
+          home: const Scaffold(body: Center(child: NowPlayingFavoriteButton())),
         ),
       ),
     );
@@ -431,10 +434,7 @@ void main() {
     // 同一套词表，默认激活歌词。
     final tabs = tester.widget<M3ETabs>(find.byType(M3ETabs));
     expect(tabs.variant, M3ETabsVariant.secondary);
-    expect(
-      tabs.tabs.map((tab) => tab.label).toList(),
-      ['队列', '歌词', '详细'],
-    );
+    expect(tabs.tabs.map((tab) => tab.label).toList(), ['队列', '歌词', '详细']);
     expect(
       tabs.tabs
           .map((tab) => tab.icon)
@@ -560,8 +560,10 @@ void main() {
     expect(panelRect.left, greaterThanOrEqualTo(0));
     expect(panelRect.right, lessThanOrEqualTo(screen.width));
     // 百分比读数（默认音量 1.0 → 100%）。
-    expect(find.descendant(of: panel, matching: find.text('100%')),
-        findsOneWidget);
+    expect(
+      find.descendant(of: panel, matching: find.text('100%')),
+      findsOneWidget,
+    );
 
     // 方向键调音量：面板一出现滑杆就持有焦点。
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
@@ -646,9 +648,7 @@ void main() {
       extraProviders: [
         ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ChangeNotifierProvider<SourceSwapProvider>.value(value: swap),
-        Provider<NotificationService>.value(
-          value: NotificationService(GlobalKey<ScaffoldMessengerState>()),
-        ),
+        Provider<NotificationService>.value(value: NotificationService()),
       ],
     );
 

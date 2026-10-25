@@ -288,9 +288,8 @@ Xvfb 软件光栅的帧耗时不用于结论，只对比图片缓存。Windows 1
   先序源最终命中优先。快速返回时与串行一致，不额外请求后续渠道。
 - **歌词缓存**：生产组合根经 `LyricsCache.appSupport()` 接入
   `<appSupport>/lyrics_cache`，一条歌词一个 md5 文件、临时文件 + rename
-  原子写；旧 `lyrics_cache_*` prefs 条目首次读取懒迁移，`usage` 目录扫描
-  走短命 isolate。默认 `LyricsCache()` 仍走 prefs，避免 widget 测试的
-  fake async 等待文件 Future。
+  原子写；`usage` 目录扫描走短命 isolate。默认 `LyricsCache()` 仍走 prefs，
+  避免 widget 测试的 fake async 等待文件 Future。
 - **统计榜**：Top 歌手把逐事件有效判定与计数 / 时长求和下沉到 SQL
   `GROUP BY pt.artist`，Dart 只做多歌手拆分、合并排序与 `limit`；不再把
   `play_events` 全量读进 Dart。
@@ -406,8 +405,8 @@ mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / �
   失败取链 / 历史与收藏 / 统计页）；搜索 / 起播 / 取词的 mock 口径端到端
   矩阵已由 §3.3.5 补上（防抖 500→300ms 是主要收益），**真实音源网络 / LX
   脚本时延与 DB 写入矩阵仍待补**；
-- 生产组合根已把歌词缓存迁到按曲目单文件（`LyricsCache.appSupport()` + 旧
-  prefs 懒迁移，目录占用扫描走短命 isolate；默认实例仍走 prefs），待补
+- 生产组合根已把歌词缓存迁到按曲目单文件（`LyricsCache.appSupport()`，
+  目录占用扫描走短命 isolate；默认实例仍走 prefs），待补
   release 口径的前后对比；
 - AI DJ 的找歌已做优先级对冲（§3.3.4），搜索/取链的端到端时延矩阵仍待补；
   `.lxmc` 大文件解码与缓存目录扫描已由 §3.3.3 移出 UI isolate；

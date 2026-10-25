@@ -27,9 +27,9 @@
 #   运行中写入会被覆盖）；Linux 请先退出正在运行的应用；
 # - Android 上的 mock 音频 URL 用 127.0.0.1:<port> + `adb reverse`（模拟器→
 #   宿主机 NAT 的 10.0.2.2 在应用进程内实测会超时），Linux 直接用 127.0.0.1;
-# - DB 路径：Android /data/data/$APP_ID/app_flutter/molia_database.sqlite，
+# - DB 路径：Android /data/data/$APP_ID/app_flutter/molia_database_v2.sqlite，
 #   Linux 优先 $HOME/Documents（xdg 文档目录），缺省回退
-#   ~/.local/share/$APP_ID/molia_database.sqlite。
+#   ~/.local/share/$APP_ID/molia_database_v2.sqlite。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
 
 RUN_DIR="${RUN_DIR:-/tmp/opencode/molia}"
@@ -40,7 +40,7 @@ SEED_PORT_DEFAULT=8765
 MOCK_SOURCE_KEY="mock"
 MOCK_SOURCE_NAME="Mock 测试音源"
 MOCK_SOURCE_ID="seed-mock-source"
-ANDROID_DB_PATH="/data/data/$APP_ID/app_flutter/molia_database.sqlite"
+ANDROID_DB_PATH="/data/data/$APP_ID/app_flutter/molia_database_v2.sqlite"
 ANDROID_PREFS_PATH="/data/data/$APP_ID/shared_prefs/FlutterSharedPreferences.xml"
 ANDROID_SCRIPTS_PATH="/data/data/$APP_ID/files/lx_sources.json"
 ANDROID_TMP="/data/local/tmp/molia-seed"
@@ -72,7 +72,7 @@ mkdir -p "$SEED_BACKUP_DIR"
 linux_documents_db() {
   local dir
   dir="$(xdg-user-dir DOCUMENTS 2>/dev/null || true)"
-  [[ -n "$dir" && -f "$dir/molia_database.sqlite" ]] && { echo "$dir/molia_database.sqlite"; return 0; }
+  [[ -n "$dir" && -f "$dir/molia_database_v2.sqlite" ]] && { echo "$dir/molia_database_v2.sqlite"; return 0; }
   return 1
 }
 
@@ -80,8 +80,8 @@ linux_documents_db() {
 linux_db_path() {
   local support="$HOME/.local/share/$APP_ID"
   if linux_documents_db >/dev/null; then linux_documents_db; return; fi
-  if [[ -f "$support/molia_database.sqlite" ]]; then echo "$support/molia_database.sqlite"; return; fi
-  echo "$support/molia_database.sqlite"
+  if [[ -f "$support/molia_database_v2.sqlite" ]]; then echo "$support/molia_database_v2.sqlite"; return; fi
+  echo "$support/molia_database_v2.sqlite"
 }
 linux_prefs_path() { echo "$HOME/.local/share/$APP_ID/shared_preferences.json"; }
 linux_scripts_path() { echo "$HOME/.local/share/$APP_ID/lx_sources.json"; }
@@ -236,7 +236,7 @@ seed_db() {
   fi
   seed_drop_sqlite_sidecars "$remote"
   mkdir -p "$SEED_BACKUP_DIR/latest"
-  backup="$(backup_file "$SEED_BACKUP_DIR/latest" "$remote" "molia_database.sqlite")"
+  backup="$(backup_file "$SEED_BACKUP_DIR/latest" "$remote" "molia_database_v2.sqlite")"
   [[ -n "$backup" ]] && log "已备份数据库 → $backup"
   # 工作副本 = 当前文件（可能已被上一次注入改过）。库由应用首启建出：
   # 缺库时不再自建表——脚本维护的 DDL 会随 schema 演进失配（v5 起
@@ -676,7 +676,7 @@ seed_restore() {
     local name remote
     name="$(basename "$f")"
     case "$name" in
-      molia_database.sqlite)
+      molia_database_v2.sqlite)
         [[ "$platform" == android ]] && remote="$ANDROID_DB_PATH" || remote="$(linux_db_path)" ;;
       FlutterSharedPreferences.xml)
         remote="$ANDROID_PREFS_PATH" ;;

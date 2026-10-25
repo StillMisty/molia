@@ -175,12 +175,14 @@ void main() {
 
   test('拉取成功但推送全败且无落地：结论是 partial 而不是 failed', () async {
     // 拉到一个空快照：探测到对端、拉取成功，但没有可落地的记录。
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'B',
-      producedAt: 5000,
-      records: const {},
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'B',
+        producedAt: 5000,
+        records: const {},
+      ),
+    );
     transport.pushFailures = 1;
     final report = await engine.syncNow();
 
@@ -193,8 +195,9 @@ void main() {
 
   test('noPeers 不吞传输级错误：广播失败仍可见', () async {
     // 传输报告了错误但没有失败对端计数（如局域网广播被网络策略拒绝）。
-    transport.pullError =
-        const SyncIssue(code: SyncIssueCode.broadcastUnavailable);
+    transport.pullError = const SyncIssue(
+      code: SyncIssueCode.broadcastUnavailable,
+    );
     final report = await engine.syncNow();
 
     expect(report!.outcome, SyncOutcome.noPeers);
@@ -258,12 +261,14 @@ void main() {
 
     // 第二轮：devB 读取失败，devC 正常（保证整轮有成功面，结论是 partial）。
     transport.available.clear();
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devC',
-      deviceName: 'C',
-      producedAt: 6000,
-      records: const {},
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devC',
+        deviceName: 'C',
+        producedAt: 6000,
+        records: const {},
+      ),
+    );
     transport.peersSeenOverride = 2;
     transport.pullFailures = 1;
     transport.pullFailedIssues = const {
@@ -461,8 +466,10 @@ void main() {
     ]);
     await journal.markSnapshotBuilt(1);
     await known.putKnownVersions({
-      (category: SyncCategory.settings, key: 'theme_mode'):
-          const SyncVersion(physical: 1, deviceId: 'devA'),
+      (category: SyncCategory.settings, key: 'theme_mode'): const SyncVersion(
+        physical: 1,
+        deviceId: 'devA',
+      ),
     });
     // 真实用户数据与墓碑不是派生状态：清理不能碰。
     await db.into(db.playHistory).insert(
@@ -502,8 +509,11 @@ void main() {
     expect(await journal.headSeq(), 0);
     expect(await journal.snapshotSeq(), -1);
     expect(await known.knownVersions(), isEmpty);
-    expect(prefs.getBool(SyncStateStore.derivedResetKey), isTrue,
-        reason: 'journal / known 清理成功后才写持久标记');
+    expect(
+      prefs.getBool(SyncStateStore.derivedResetKey),
+      isTrue,
+      reason: 'journal / known 清理成功后才写持久标记',
+    );
     expect(await db.select(db.playHistory).get(), hasLength(1));
     expect(await db.select(db.syncTombstones).get(), hasLength(1));
 
@@ -519,8 +529,10 @@ void main() {
       ),
     ]);
     await known.putKnownVersions({
-      (category: SyncCategory.settings, key: 'theme_mode'):
-          const SyncVersion(physical: 2, deviceId: 'devA'),
+      (category: SyncCategory.settings, key: 'theme_mode'): const SyncVersion(
+        physical: 2,
+        deviceId: 'devA',
+      ),
     });
     final restartedState = SyncStateStore(
       preferences: prefs,
@@ -600,8 +612,10 @@ void main() {
       journal: FakeJournalStore(head: 0),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
-    final freshControl =
-        SyncControlPlane(state: state, transports: {'lan': transport});
+    final freshControl = SyncControlPlane(
+      state: state,
+      transports: {'lan': transport},
+    );
     addTearDown(freshControl.dispose);
     addTearDown(fresh.dispose);
 
@@ -618,38 +632,42 @@ void main() {
 
   test('空窗口（只带回执）不算缺口；游标 -1 直接消费增量，不 bootstrap', () async {
     // 回执类载荷：增量 + 空窗口（windowEnd = 0）。
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'B',
-      producedAt: 6000,
-      journalHead: 1,
-      acks: const {'devA': 0},
-      journal: const [],
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'B',
+        producedAt: 6000,
+        journalHead: 1,
+        acks: const {'devA': 0},
+        journal: const [],
+      ),
+    );
     final receiptPullCount = (await engine.syncNow())!;
     expect(transport.pullCount, 1, reason: '空窗口不触发第二轮全量拉取');
     expect(receiptPullCount.applied, 0);
 
     // 真正的增量窗口：游标 -1（全新对端）直接应用，不 bootstrap。
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'B',
-      producedAt: 6000,
-      journalHead: 1,
-      windowStart: 1,
-      windowEnd: 1,
-      journal: [
-        SyncJournalEntry(
-          seq: 1,
-          category: SyncCategory.settings,
-          record: SyncRecord(
-            key: 'theme_mode',
-            version: const SyncVersion(physical: 9000, deviceId: 'devB'),
-            data: const {'v': 'dark'},
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'B',
+        producedAt: 6000,
+        journalHead: 1,
+        windowStart: 1,
+        windowEnd: 1,
+        journal: [
+          SyncJournalEntry(
+            seq: 1,
+            category: SyncCategory.settings,
+            record: SyncRecord(
+              key: 'theme_mode',
+              version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+              data: const {'v': 'dark'},
+            ),
           ),
-        ),
-      ],
-    ));
+        ],
+      ),
+    );
     final report = await engine.syncNow();
     expect(report!.applied, 1);
     expect(transport.pullCount, 2, reason: '没有第二次 bootstrap 拉取');
@@ -657,30 +675,32 @@ void main() {
   });
 
   test('窗口被截断（声明的 windowEnd 大于实到条目）仍触发 bootstrap', () async {
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'B',
-      producedAt: 6000,
-      journalHead: 3,
-      windowStart: 1,
-      // 声明到 3，实际只带 1 条：解析层丢条目 / 载荷被截断 → 必须回全量。
-      windowEnd: 3,
-      journal: [
-        SyncJournalEntry(
-          seq: 1,
-          category: SyncCategory.settings,
-          record: SyncRecord(
-            key: 'theme_mode',
-            version: const SyncVersion(physical: 9000, deviceId: 'devB'),
-            data: const {'v': 'dark'},
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'B',
+        producedAt: 6000,
+        journalHead: 3,
+        windowStart: 1,
+        // 声明到 3，实际只带 1 条：解析层丢条目 / 载荷被截断 → 必须回全量。
+        windowEnd: 3,
+        journal: [
+          SyncJournalEntry(
+            seq: 1,
+            category: SyncCategory.settings,
+            record: SyncRecord(
+              key: 'theme_mode',
+              version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+              data: const {'v': 'dark'},
+            ),
           ),
-        ),
-      ],
-    ));
+        ],
+      ),
+    );
     final report = await engine.syncNow();
     expect(report!.applied, 1);
     expect(transport.pullCount, 2, reason: '缺口 → 本轮内再拉一次全量兜底');
-    expect(transport.lastRequest!.fullPeers, contains('devB'));
+    expect(transport.lastRequest!.plan.forcesFull('devB'), isTrue);
   });
 
   test('传输全关：同步完全停（不启动传输、不跑轮次）', () async {
@@ -779,8 +799,11 @@ void main() {
 
     await control.setTransportEnabled('lan', false);
     expect(await engine.syncNow(), isNull);
-    expect(engine.lastReport, same(previous),
-        reason: 'lastReport 仍供 UI 展示最近一轮');
+    expect(
+      engine.lastReport,
+      same(previous),
+      reason: 'lastReport 仍供 UI 展示最近一轮',
+    );
   });
 
   test('本机未变不推：内容指纹未变时第二轮跳过加密与上传', () async {
@@ -855,8 +878,9 @@ void main() {
 
   test('首次连通：真正交换过数据才通知一次（探测应答不算、重启不重发）', () async {
     final noticed = <String>[];
-    final subscription = engine.peerConnectedNotices
-        .listen((peer) => noticed.add(peer.deviceId));
+    final subscription = engine.peerConnectedNotices.listen(
+      (peer) => noticed.add(peer.deviceId),
+    );
     addTearDown(subscription.cancel);
 
     // 只有探测应答（接触但没有数据流转）：不算连通。
@@ -883,14 +907,18 @@ void main() {
     // 重启（同一份状态）：标记已落盘，不重发。
     final reloaded = SyncStateStore(preferences: prefs, secrets: secrets);
     await reloaded.init();
-    expect(reloaded.isPeerConnectNotified('devB'), isTrue,
-        reason: '一次性提示跨重启生效');
+    expect(
+      reloaded.isPeerConnectNotified('devB'),
+      isTrue,
+      reason: '一次性提示跨重启生效',
+    );
   });
 
   test('首次连通：对端主动推送（入站）同样算连通', () async {
     final noticed = <String>[];
-    final subscription = engine.peerConnectedNotices
-        .listen((peer) => noticed.add(peer.deviceId));
+    final subscription = engine.peerConnectedNotices.listen(
+      (peer) => noticed.add(peer.deviceId),
+    );
     addTearDown(subscription.cancel);
 
     await engine.onIncomingEnvelope(remoteTheme('light'));
@@ -949,8 +977,11 @@ void main() {
     await pumpEventQueue();
 
     expect(engine.sightingStateCount, SyncEngine.maxSightingPeers);
-    expect(events, hasLength(SyncEngine.maxSightingPeers + 20),
-        reason: '每个新设备都值得唤醒一轮');
+    expect(
+      events,
+      hasLength(SyncEngine.maxSightingPeers + 20),
+      reason: '每个新设备都值得唤醒一轮',
+    );
   });
 
   test('contactedLan：LAN 探测到对端才算接触', () async {
@@ -974,7 +1005,7 @@ void main() {
 
   test('forceDiscovery：启动 / 回前台 / 换网 / 手动 / 打开同步页检查为 true，其余为 false', () async {
     await engine.syncNow(trigger: SyncTrigger.timer);
-    expect(transport.lastRequest!.forceDiscovery, isFalse);
+    expect(transport.lastRequest!.plan.forceDiscovery, isFalse);
 
     for (final trigger in [
       SyncTrigger.startup,
@@ -985,7 +1016,7 @@ void main() {
     ]) {
       await engine.syncNow(trigger: trigger);
       expect(
-        transport.lastRequest!.forceDiscovery,
+        transport.lastRequest!.plan.forceDiscovery,
         isTrue,
         reason: '${trigger.name} 轮强制发现',
       );
@@ -1002,16 +1033,18 @@ void main() {
 
   test('一轮多对端 + 快照 / 增量台账记账只提交一次状态', () async {
     // 先把两台设备写进名册（否则本轮只会记一次「首次接触」，计数不纯粹）。
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(deviceId: 'devB'),
-        SyncPeerState(deviceId: 'devC'),
-      ],
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(deviceId: 'devB'),
+          SyncPeerState(deviceId: 'devC'),
+        ],
+      ),
+    );
     await state.commit();
     final writesBefore = state.persistedWrites;
 
@@ -1044,15 +1077,14 @@ void main() {
     final report = await roundEngine.syncNow(trigger: SyncTrigger.manual);
 
     expect(report!.applied, 1);
-    expect(roundTransport.pushed, hasLength(2),
-        reason: '全量快照 + 增量窗口各 mark 一次发布台账');
+    expect(
+      roundTransport.pushed,
+      hasLength(2),
+      reason: '全量快照 + 增量窗口各 mark 一次发布台账',
+    );
     // 台账 mark、名册 + 两个首连提示都只改内存：本轮结束只有一次提交
     // （写一份 sync_state_v2）。
-    expect(
-      state.persistedWrites - writesBefore,
-      1,
-      reason: '一轮只写一次持久状态',
-    );
+    expect(state.persistedWrites - writesBefore, 1, reason: '一轮只写一次持久状态');
     expect(state.isPeerConnectNotified('devB'), isTrue);
     expect(state.isPeerConnectNotified('devC'), isTrue);
   });
@@ -1088,8 +1120,9 @@ class _FlakyAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect(
-          {bool fresh = false}) async =>
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async =>
       const {};
 
   @override

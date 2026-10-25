@@ -117,15 +117,6 @@ class LanSyncTransport
   static const String snapshotPath = '/molia-sync/v2/snapshot';
   static const String journalPath = '/molia-sync/v2/journal';
 
-  /// IPv6 组播发现地址（与发现层常量同源，保留给旧调用方）。
-  static const String probeMulticastHost = Msd1.ipv6MulticastHost;
-
-  /// 单个公告携带的候选地址上限（与 `MSD/1` 协议常量一致）。
-  static const int maxAdvertisedAddresses = Msd1.maxAddresses;
-
-  /// 单对端记住的探测端点上限（兼容旧调用方；发现层按 presence 合并）。
-  static const int maxProbeEndpointsPerPeer = 4;
-
   /// 登记的 presence 上限（与发现层一致）。
   static const int maxRememberedPeers = LanDiscovery.maxPeers;
 
@@ -322,12 +313,9 @@ class LanSyncTransport
       _everDiscoveredPeer = true;
       _resolveManualPeer(sighting);
     });
-    _networkSub = _networkChanges?.listen(
-      (_) {
-        unawaited(onNetworkChanged());
-      },
-      onError: (Object _) {},
-    );
+    _networkSub = _networkChanges?.listen((_) {
+      unawaited(onNetworkChanged());
+    }, onError: (Object _) {});
 
     // 配对服务与传输同生命周期：先订阅 MSP 事件，再绑 UDP，避免启动窗口
     // 内收到探测却没人处理。配对失败只降级配对能力，不阻断同步本体。
@@ -529,8 +517,9 @@ class LanSyncTransport
   }
 
   @override
-  Future<SyncPullResult> pull(
-      [SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull([
+    SyncPullRequest request = SyncPullRequest.none,
+  ]) async {
     if (!_running) {
       return SyncPullResult(
         error: SyncIssue(
@@ -688,11 +677,7 @@ class LanSyncTransport
   ///
   /// 同一设备多条候选地址都失败时保留第一次的原因：先读失败 / 先解密失败
   /// 哪个先发生，就说明卡在哪一步。
-  void _rememberFailure(
-    _PullStats stats,
-    SyncPeerCandidate peer,
-    String code,
-  ) {
+  void _rememberFailure(_PullStats stats, SyncPeerCandidate peer, String code) {
     if (peer.deviceId.isEmpty) return;
     stats.failedIssues.putIfAbsent(
       peer.deviceId,
@@ -805,43 +790,49 @@ class LanSyncTransport
     for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
       if (manual.httpPort <= 0) continue;
       if (manual.deviceId == deviceId) continue;
-      add(SyncPeerCandidate(
-        deviceId: manual.deviceId,
-        name: manual.name,
-        host: normalizePeerHost(manual.host),
-        port: manual.httpPort,
-        probePort: manual.probePort,
-        expected: true,
-      ));
+      add(
+        SyncPeerCandidate(
+          deviceId: manual.deviceId,
+          name: manual.name,
+          host: normalizePeerHost(manual.host),
+          port: manual.httpPort,
+          probePort: manual.probePort,
+          expected: true,
+        ),
+      );
     }
     for (final presence in _discovery.presence) {
       // 本轮没再听到的 presence 只是历史记忆：仍可直连（推送 / 拉取兜底），
       // 但失败不再计入「预期对端」，否则离线设备会把整轮打成 partial。
       final fresh = presence.lastHeardAt >= roundStartedAt;
-      add(SyncPeerCandidate(
-        deviceId: presence.deviceId,
-        name: presence.name,
-        host: presence.host,
-        port: presence.httpPort,
-        probePort: presence.probePort,
-        addresses: presence.addresses,
-        snapshotId: presence.snapshotId,
-        journalHead: presence.journalHead,
-        snapshotFresh: fresh,
-        expected: fresh,
-      ));
+      add(
+        SyncPeerCandidate(
+          deviceId: presence.deviceId,
+          name: presence.name,
+          host: presence.host,
+          port: presence.httpPort,
+          probePort: presence.probePort,
+          addresses: presence.addresses,
+          snapshotId: presence.snapshotId,
+          journalHead: presence.journalHead,
+          snapshotFresh: fresh,
+          expected: fresh,
+        ),
+      );
     }
     for (final endpoint
         in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
       if (endpoint.deviceId == deviceId) continue;
-      add(SyncPeerCandidate(
-        deviceId: endpoint.deviceId,
-        name: '',
-        host: normalizePeerHost(endpoint.host),
-        port: endpoint.httpPort,
-        probePort: endpoint.probePort,
-        expected: false,
-      ));
+      add(
+        SyncPeerCandidate(
+          deviceId: endpoint.deviceId,
+          name: '',
+          host: normalizePeerHost(endpoint.host),
+          port: endpoint.httpPort,
+          probePort: endpoint.probePort,
+          expected: false,
+        ),
+      );
     }
     return peers;
   }
@@ -856,13 +847,15 @@ class LanSyncTransport
     }
     for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
       if (manual.httpPort <= 0 || manual.deviceId == deviceId) continue;
-      endpoints.add(LanPeerEndpoint(
-        deviceId: manual.deviceId,
-        host: normalizePeerHost(manual.host),
-        httpPort: manual.httpPort,
-        probePort: manual.probePort,
-        verifiedAt: 0,
-      ));
+      endpoints.add(
+        LanPeerEndpoint(
+          deviceId: manual.deviceId,
+          host: normalizePeerHost(manual.host),
+          httpPort: manual.httpPort,
+          probePort: manual.probePort,
+          verifiedAt: 0,
+        ),
+      );
     }
     return endpoints;
   }
@@ -913,13 +906,15 @@ class LanSyncTransport
     // 只持久化可路由地址：link-local / 带 zone / 回环是当前链路或同机的
     // 临时观测，写进端点表下次换网必然失效。
     if (!isRoutablePeerAddress(normalized)) return;
-    _onPeerVerified?.call(LanPeerEndpoint(
-      deviceId: peer.deviceId,
-      host: normalized,
-      httpPort: peer.port,
-      probePort: peer.probePort,
-      verifiedAt: _nowMs(),
-    ));
+    _onPeerVerified?.call(
+      LanPeerEndpoint(
+        deviceId: peer.deviceId,
+        host: normalized,
+        httpPort: peer.port,
+        probePort: peer.probePort,
+        verifiedAt: _nowMs(),
+      ),
+    );
   }
 
   /// 手动条目首次接触（或地址 / 端点端口变化）后回写学到的信息。
@@ -935,11 +930,13 @@ class LanSyncTransport
           entry.httpPort == sighting.httpPort) {
         return;
       }
-      _onPeerResolved?.call(entry.mergeLearned(
-        httpPort: sighting.httpPort,
-        deviceId: sighting.deviceId,
-        name: sighting.name,
-      ));
+      _onPeerResolved?.call(
+        entry.mergeLearned(
+          httpPort: sighting.httpPort,
+          deviceId: sighting.deviceId,
+          name: sighting.name,
+        ),
+      );
       return;
     }
   }
@@ -948,7 +945,8 @@ class LanSyncTransport
       InternetAddress.tryParse(host.trim())?.address ?? host.trim();
 
   Future<({Uint8List bytes, String host})?> _fetchSnapshot(
-          SyncPeerCandidate peer) =>
+    SyncPeerCandidate peer,
+  ) =>
       _getPayload(peer, snapshotPath);
 
   /// 拉取增量窗口（带本机游标；对端在游标落后于窗口起点时回全量快照）。
@@ -1112,23 +1110,22 @@ class LanSyncTransport
     }
     Uint8List body = Uint8List(0);
     if (request.method == 'POST') {
-      final read = await _readBody(
-        request,
-        maxBytes: pairingMaxBodyBytes,
-      );
+      final read = await _readBody(request, maxBytes: pairingMaxBodyBytes);
       if (read == null) {
         request.response.statusCode = HttpStatus.requestEntityTooLarge;
         return;
       }
       body = read;
     }
-    final response = await handler.handle(PairingHttpRequest(
-      method: request.method,
-      path: request.uri.path,
-      sourceHost: request.connectionInfo?.remoteAddress.address ?? '',
-      query: request.uri.queryParameters,
-      body: body,
-    ));
+    final response = await handler.handle(
+      PairingHttpRequest(
+        method: request.method,
+        path: request.uri.path,
+        sourceHost: request.connectionInfo?.remoteAddress.address ?? '',
+        query: request.uri.queryParameters,
+        body: body,
+      ),
+    );
     request.response.statusCode = response.statusCode;
     if (response.body.isNotEmpty) {
       request.response.headers.contentType = ContentType.parse(

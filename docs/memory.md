@@ -128,7 +128,7 @@ RSS 曲线一起打印；结束给出 min / 中位 / max。Windows 上 release �
 ### 4.4 Windows（实机，2026-10-19）
 
 环境：Windows 11，2560×1440，release 构建（CI `windows-dev` 的 dev52，含本
-改动）；数据为真实库副本（schema v5，收藏约 1019 首）。方法：对主窗口发
+改动）；数据为真实库副本（当时 schema v5，收藏约 1019 首；现行基线为 v1）。方法：对主窗口发
 `WM_CLOSE` 走真实关闭策略，采样 `WorkingSetPrivate`（任务管理器「内存」）
 与 `PrivateMemorySize64`（「提交大小」）。
 

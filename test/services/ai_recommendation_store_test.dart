@@ -1,11 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// 推荐历史持久化：迁移、索引 / 多批、删除回退、保留策略、损坏降级。
+/// 推荐历史持久化：索引 / 多批、删除回退、保留策略、损坏降级。
 /// 只让索引写入失败的内存 SharedPreferences：验证「先写索引、后删载荷」。
 class _FailingIndexPrefs implements SharedPreferences {
   _FailingIndexPrefs(this.values);
@@ -120,60 +118,15 @@ void main() {
         preferences: preferences,
       );
 
-  test('迁移旧单批键：包装为 restored active，写新格式并删除旧键', () async {
-    final generatedAt = DateTime(2026, 10, 1, 8);
-    await prefs.setString(
-      AiRecommendationStore.legacyStorageKey,
-      jsonEncode({
-        'generatedAt': generatedAt.millisecondsSinceEpoch,
-        'items': [
-          {
-            'sourceKey': 'wy',
-            'songId': 'legacy-1',
-            'title': '旧推荐',
-            'artist': '歌手',
-            'album': '',
-            'reason': '理由',
-            'raw': {'songmid': 'legacy-1'},
-          },
-        ],
-        'unresolved': [
-          {'title': '旧未找到', 'artist': 'X', 'reason': ''},
-        ],
-      }),
-    );
-
-    final index = await store.loadIndex();
-
-    expect(index.entries, hasLength(1));
-    expect(
-        index.activeBatchId, 'restored-${generatedAt.millisecondsSinceEpoch}');
-    expect(index.entries.single.origin, AiDjOrigin.restored);
-    expect(index.entries.single.preferences, isNull);
-    expect(prefs.getString(AiRecommendationStore.legacyStorageKey), isNull);
-    final migrated = await store.loadBatch(index.activeBatchId!);
-    expect(migrated, isNotNull);
-    expect(migrated!.items.single.title, '旧推荐');
-    expect(migrated.unresolved.single.title, '旧未找到');
-  });
-
-  test('旧键损坏：不迁移、保留旧键下次再试', () async {
-    await prefs.setString(
-        AiRecommendationStore.legacyStorageKey, 'not-json{{{');
-
-    final index = await store.loadIndex();
-
-    expect(index.entries, isEmpty);
-    expect(prefs.getString(AiRecommendationStore.legacyStorageKey), isNotNull);
-  });
-
   test('索引 + 每批一键：多批保存；active 切换；详情按需加载', () async {
     await store.saveBatch(batch('a'), makeActive: true);
-    await store.saveBatch(batch(
-      'b',
-      generatedAt: now.add(const Duration(minutes: 1)),
-      origin: AiDjOrigin.autoFeed,
-    ));
+    await store.saveBatch(
+      batch(
+        'b',
+        generatedAt: now.add(const Duration(minutes: 1)),
+        origin: AiDjOrigin.autoFeed,
+      ),
+    );
     await store.saveBatch(
       batch('c', generatedAt: now.add(const Duration(minutes: 2))),
       makeActive: true,
@@ -184,7 +137,9 @@ void main() {
     expect(index.activeBatchId, 'c');
     expect(index.entries[1].origin, AiDjOrigin.autoFeed);
     expect(
-        prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'), isNotNull);
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'),
+      isNotNull,
+    );
     expect((await store.loadBatch('b'))!.items.single.sourceName, '网易云音乐');
   });
 
@@ -241,17 +196,15 @@ void main() {
       for (final key in prefs.getKeys()) key: prefs.get(key)!,
     };
     final failing = _FailingIndexPrefs(values);
-    final failingStore =
-        AiRecommendationStore(preferences: failing, clock: () => now);
+    final failingStore = AiRecommendationStore(
+      preferences: failing,
+      clock: () => now,
+    );
 
     final failed = await failingStore.deleteBatch('a');
 
     expect(failed.ok, isFalse);
-    expect(
-      failingStore.loadBatch('a'),
-      isNotNull,
-      reason: '索引没写成功，批次载荷不能先被删掉',
-    );
+    expect(failingStore.loadBatch('a'), isNotNull, reason: '索引没写成功，批次载荷不能先被删掉');
     expect(
       (await failingStore.loadIndex()).entries.map((entry) => entry.id),
       containsAll(['a', 'b']),
@@ -273,8 +226,10 @@ void main() {
       for (final key in prefs.getKeys()) key: prefs.get(key)!,
     };
     final failing = _FailingIndexPrefs(values);
-    final failingStore =
-        AiRecommendationStore(preferences: failing, clock: () => now);
+    final failingStore = AiRecommendationStore(
+      preferences: failing,
+      clock: () => now,
+    );
 
     final failed = await failingStore.clearHistory();
 
@@ -308,7 +263,9 @@ void main() {
     expect(result.index.entries.map((entry) => entry.id), ['a']);
     expect(result.index.activeBatchId, 'a');
     expect(
-        prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'), isNotNull);
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'),
+      isNotNull,
+    );
     expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);
     expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}c'), isNull);
   });
@@ -319,10 +276,9 @@ void main() {
       makeActive: true,
     );
     for (var i = 0; i < 24; i++) {
-      await store.saveBatch(batch(
-        'b$i',
-        generatedAt: now.add(Duration(minutes: i)),
-      ));
+      await store.saveBatch(
+        batch('b$i', generatedAt: now.add(Duration(minutes: i))),
+      );
     }
 
     final index = await store.loadIndex();
@@ -331,17 +287,15 @@ void main() {
     expect(index.entries.any((entry) => entry.id == 'old-active'), isTrue);
     // 最老的非 active 批次键被同步删除。
     expect(
-        prefs.getString('${AiRecommendationStore.batchKeyPrefix}b0'), isNull);
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}b0'),
+      isNull,
+    );
   });
 
   test('保留策略：最多 400 首', () async {
     for (var i = 0; i < 20; i++) {
       await store.saveBatch(
-        batch(
-          'b$i',
-          count: 30,
-          generatedAt: now.add(Duration(minutes: i)),
-        ),
+        batch('b$i', count: 30, generatedAt: now.add(Duration(minutes: i))),
         makeActive: i == 19,
       );
     }
@@ -368,7 +322,9 @@ void main() {
     final index = await store.loadIndex();
     expect(index.entries.map((entry) => entry.id), ['new']);
     expect(
-        prefs.getString('${AiRecommendationStore.batchKeyPrefix}old'), isNull);
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}old'),
+      isNull,
+    );
   });
 
   test('损坏索引 / 批次降级为空，不抛异常', () async {

@@ -6,7 +6,7 @@ enum TrackOrigin { builtin, lx, anyListen, localFile }
 /// 曲目唯一标识：`sourceKey`（kw / kg / 脚本 key / any_listen）+ 平台内 id。
 ///
 /// `uri` 与 `SourceTrack.id` 的 `'$sourceKey:$id'` 约定保持一致：
-/// 兼容层与持久化数据（历史记录里的 `sourceKey:id`）无需迁移。
+/// 持久化数据（历史记录里的 `sourceKey:id`）使用同一形态。
 class TrackId {
   /// 音源 key：内置平台（kw/kg/tx/wy/mg/bili）、脚本自定义 key 或 any_listen。
   final String sourceKey;

@@ -110,7 +110,7 @@
   桌面歌词开启 = 高频流，后台播放 = 1s 轮询，后台暂停 = 不采样，见
   `LocalPlaybackService`）；会话落盘（前台 1s / 后台 15s，进入后台先强制整份落盘
   一次，见 `PlaybackSessionCoordinator`）。桌面端不接生命周期，恒为前台。
-- **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
+- **Playback observer（播放观察者模块）** — `lib/services/playback_observer.dart`：播放副作用扇出的唯一实现（最后播放 / 桌面小组件 / 播放历史 / 封面预取与补取 / 通知权限），直连 facade 快照通道（不经 provider 的节流通知），由组合根挂接；会话落盘与恢复态属 `PlaybackSessionCoordinator`，睡眠定时属 `PlaybackProvider`（与 `PlayStatisticsService`、`ArtworkThemeSync` 同为观察者形态）。
 - **Sleep timer（定时关闭）** — `lib/providers/sleep_timer.dart`：歌曲信息页入口的
   「到点暂停」。两种模式：倒计时（**仅播放时计时**，暂停冻结；实现为**绝对
   deadline** 而非相对累减——tick / 快照变化 / 回前台三路各自比较 `now >= deadline`，
@@ -398,11 +398,6 @@
   搜索「歌手」类型条目；取数走 **Artist service（歌手服务）**
   `lib/data/catalog/artist_service.dart`（single-flight + LRU + TTL 10min，
   key `artist:{source}:{id}:{page}:{limit}`，注入 `SourceManager.fetchArtist`）。
-- **Artist name fallback（歌手名回退）** — 曲目 raw 没有歌手 id 时（历史收藏 /
-  `.lxmc` 导入 / 部分内置入口）按名字进歌手页：`ArtistService.resolveByName`
-  歌手搜索 + 精确匹配（trim、忽略大小写；正负结果都缓存），id 解析在
-  `showArtistPageByName` 的页面加载内完成（加载态 / 未找到文案 `artistNotFound`）；
-  名字取首个歌手名的首段（历史数据多歌手被拼成 `、` / `, ` / `&` 分隔的一串）。
 - **Builtin artists（内置歌手取数）** — `lib/sources/builtin/artist_source.dart`
   （`BuiltinArtists` 调度）+ `{kw,kg,tx,wy,mg}_artist.dart` + `bili_artist.dart`：
   五个音乐平台的歌手搜索与「详情 + 歌曲」以及 B 站 UP 搜索 / 资料 / 投稿的唯一实现
@@ -538,7 +533,7 @@
 - **Statistics sync store（统计同步存储）** — `lib/domain/ports/statistics_sync_store.dart`
   + `lib/data/sync/statistics_sync_store.dart`：`StatisticsSyncEvent` 是类型化的已收尾
   事件（`syncKey` + 版本三元组；`startedAt` / `endedAt` 只是内容时间）；读面
-  `StatisticsSyncStore` 拥有导出缓存与廉价指纹、存量事件 `syncKey` 回填、本地下载
+  `StatisticsSyncStore` 拥有导出缓存与廉价指纹、本地下载
   曲目过滤与按 `syncKey` 的合并应用。写面 `StatisticsSyncWriter` 把事件行的创建
   （`startEvent`，含 `syncKey` / 来源设备）与收尾取号 / 日志 / 导出缓存维护收进
   store；`PlayStatisticsRepository` 只依赖 writer，不再 import 同步 wire 模型或
@@ -550,7 +545,7 @@
   单曲循环每遍 / 位置回到开头（restart）/ 停止各收尾一行；暂停不切断；
   进程被杀由启动时 `closeStaleEvents()` 收尾为 interrupted。曲目元数据与取链
   参数在 `play_tracks`（每曲一行，`raw` 为 gzip 字节，供统计页点播）；本表只存
-  事件的 `trackId`（v5 起）。与「播放历史」（`play_history`，最近播放 500 条）
+  事件的 `trackId`。与「播放历史」（`play_history`，最近播放 500 条）
   是两套数据。
 - **Statistics capture（统计采集）** — `lib/services/play_statistics_service.dart`：
   纯观察者（组合根接 `PlaybackProvider` 快照 + position 两根监听，零改动
@@ -598,7 +593,7 @@
   保留 20 批 / 400 首 / 30 天，active 永不自动清理；删除 active 回退最近一批，
   清空历史保留 active。索引与批次载荷的写序统一为「先写索引、后删载荷」
   （删除 / 清空 / 保留裁剪都一样），孤儿载荷无害。旧单批键 `ai_dj_pending_batch_v1`
-  首次加载迁移为 `restored` active；迁移成功才删旧键。历史批次只读（可播放 /
+  不再读取、不迁移，`AiDjOrigin.restored` 已删除。历史批次只读（可播放 /
   加队列 / 设为当前 / 删除），不在历史里编辑反馈。
 - **批次（batch）大小** — 10 / 20 / 30 / 50，默认 10，存在
   `AiPreferences.batchSize`；影响 LLM `count`、历史元数据与自动补歌数量，
@@ -932,10 +927,10 @@
 ## 缓存
 - **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（单曲 `load`、列表批量 `loadMany`、只要「已缓存」音频档的批量 `cachedAudioTrackIds`，`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。
 - **转存（Save a copy）** — 把已缓存的一档「固化」成持久下载：拷贝缓存内容到 `downloads/`（不触网）+ 落库，动作文案「转存到本地文件夹」。缓存命中时下载动作本身就是转存；转存后状态从「已缓存」变「已下载」。
-- **Audio cache store（音频缓存约定模块）** — `lib/services/audio_cache_store.dart`：音频缓存目录磁盘约定的唯一实现（写入 / 读取两侧 key 命名、完整文件判据、完整文件索引、命中路径、按曲目的已缓存音质、半成品清扫、旧命名迁移）。`CacheService` 的实例方法（索引 / 占用 / 清理）是策略面的薄委托；键名与完整判据不再有第二处门面（测试同样只经本模块）。文件存在性由调用方注入（命中探测与其后的拷贝必须同一文件系统视图）。见 ADR-0008。
+- **Audio cache store（音频缓存约定模块）** — `lib/services/audio_cache_store.dart`：音频缓存目录磁盘约定的唯一实现（写入 / 读取两侧 key 命名、完整文件判据、完整文件索引、命中路径、按曲目的已缓存音质、半成品清扫）。`CacheService` 的实例方法（索引 / 占用 / 清理）是策略面的薄委托；键名与完整判据不再有第二处门面（测试同样只经本模块）。文件存在性由调用方注入（命中探测与其后的拷贝必须同一文件系统视图）。旧命名文件不再自动迁移或清理，留在磁盘但无法命中（只计入缓存目录总量）。见 ADR-0008。
 - **音频缓存键** — 缓存文件名 `{sourceKey}_{songId}_{quality}`（Audio cache store 的 `keyForSource` / `keyForTrack`）。`songId` 必须与 `TrackId.id` 同源（`SourceTrack.songId`，不带 `sourceKey:` 前缀）——写入侧与读取侧同名是硬约束，否则文件写了也没人找得到。
 - **半成品（partial）** — 音频缓存目录里未落成的文件：just_audio 边下载边写 `*.part`、字节预取写 `*.predl`、MIME 边车 `*.mime`。它们占磁盘但不是可播放缓存：索引 / 占用 / 命中一律排除（判据在 Audio cache store），单独计为「写入中」，启动时清扫（写入者在本进程内，重启后残留必为孤儿）。
-- **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词读写、用量与清理的唯一实现。默认构造 / 未接入实例保持旧的 SharedPreferences 行为（不碰 `path_provider` 与文件 IO，widget 测试与降级平台依赖它）；生产组合根用 `LyricsCache.appSupport()` 显式接入文件后端：`<appSupport>/lyrics_cache/{md5(trackId)}.json`（一条一文件、临时文件 + rename 原子写），旧版 `lyrics_cache_{trackId}` prefs 条目在首次读取时懒迁移，目录不可用时回退 prefs。TTL 策略属于 `CacheService`（取词时读取）。历史 `manual_lyrics_cache_*` 重复键只清不读。
+- **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词读写、用量与清理的唯一实现。默认构造 / 未接入实例保持旧的 SharedPreferences 行为（不碰 `path_provider` 与文件 IO，widget 测试与降级平台依赖它）；生产组合根用 `LyricsCache.appSupport()` 显式接入文件后端：`<appSupport>/lyrics_cache/{md5(trackId)}.json`（一条一文件、临时文件 + rename 原子写）。旧版 prefs 条目不再懒迁移，历史 `manual_lyrics_cache_*` 键也不再特殊处理（不读、不清）；目录不可用时回退 prefs。TTL 策略属于 `CacheService`（取词时读取）。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。消费面：`SearchProvider`（按 `SearchKind` 三会话）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
@@ -948,10 +943,10 @@
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端左滑胶囊 / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
 - **Local songs（本地歌曲合集）** — 收藏页的伪合集（`downloadsSentinel` ↔ `downloadsOrderKey`）：数据来自 `DownloadService.downloads`（下载副本 + 本地导入）与 `TrackLocalDataService.cachedAudioTrackIds`（播放历史 × 完整音频缓存命中且无音频下载，一次目录列举），不落列表表；仅在下载能力可用（`DownloadService.supported`）时出现在合集弹层，排序固定按下载 / 导入时间倒序。合集弹层打开前先把缓存行重算到当前输入，弹层计数与列表行数同源。
-- **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布 / 旧位置迁移都跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
+- **Local import（本地导入）** — `downloads` 表 `imported` 行 = **就地引用**用户自己的音频文件：`originSourceKey = 'local'`、`originSongId` = 文件绝对路径（同路径重复导入幂等），`filePath` 指向原文件；删除记录只移行、不删文件，补发布跳过。写入唯一入口 `DownloadService.importLocalFiles`（标签解析见 `lib/data/downloads/audio_tag_reader.dart`：mp3 ID3v2 / flac Vorbis Comment，其余格式按文件名兜底）。
 - **Save As（另存服务）** — `lib/services/save_as.dart`：所有用户可见文件导出的唯一入口（备份 JSON / 听歌统计 JSON / 歌词海报 PNG / 音频副本）。桌面弹“另存为”并默认指向另存目录，取消不报错；Android 写临时文件后经 `DownloadsPublisher` 进 MediaStore；iOS 直接写应用文档目录。结果分 saved / cancelled / failed，UI 按 `SaveLocationKind` 选提示文案；文件名与子目录在服务内清洗（拒绝 `..` 与路径分隔符）。
 - **Public output root（另存目录 / 公共输出根）** — `lib/data/files/public_downloads_path.dart` + `SaveAs.rootPath`：应用对用户可见的输出根。桌面 = 系统公共下载目录（Windows Known Folder / Linux XDG）下的 `Molia/`，设置页自选目录优先；Android = `Download/Molia`（MediaStore，Dart 不直接写）；iOS = 文件 App 可见的应用文档目录 `Molia/`（没有系统公共 Downloads 概念）。音频在根下，导出 JSON 进 `exports/`，海报进 `posters/`；下载根与另存根共用同一解析（Android 例外：私有播放副本 + 默认公共副本）。
 - **Download notifications（下载通知模块）** — `lib/data/downloads/download_notifications*.dart`（平台 seam：IO=MethodChannel，其它平台 no-op，通道异常只记日志、绝不影响下载本身）+ Android `DownloadNotificationService`（`dataSync` 前台服务）：下载进行中在系统通知显示进度（批量共享一条「N/N」），完成 / 失败 / 取消收尾并移除；API 33+ 未授予通知权限时降级为「无通知但继续下载」；开关 `download_notifications`（设备本地键，默认开）。通知生命周期的编排见 Download notification presenter。
 - **Download file layout（下载文件命名 / 放置模块）** — `lib/services/download/download_file_layout.dart`：文件名模板（`DownloadSettings.filenameTemplate`）→ 基名 → 清洗（`sanitizeFileName`）→ 唯一基名（磁盘与下载记录双重查重，` (2)` 递增）→ 路径约定（音频 / `.part` 半成品 / `lyrics/` + `.t.lrc` 翻译边车 / `covers/`）与 sidecar 写入（失败回滚）的唯一实现；扩展名推断（直链后缀 / 音质映射 / 封面后缀）与「记录引用的文件集」（删除 / 失败清理 / 孤儿判定共用）也在这里。此前命名有两份实现——下载真正走的模板版与只为测试存在的静态双胞胎（无歌手时命名不同），双胞胎已删除、测试直接打生产实现。
-- **Download record assembler（下载记录装配模块）** — `lib/services/download/download_record_assembler.dart`：部分状态 → `DownloadedTrack`（16 字段）的唯一装配点，五种形态各一个意图方法：`forAudioDownload`（完整下载 + 分项合并 / 公共副本回退）、`forPartialDownload`（分项更新保留已有音频与另一分项）、`forLocalImport`（就地引用）、`relocated`（旧根迁移路径重映射）、`republished`（补发布只补定位）。`downloadedAt` 走注入时钟，记录既有时间不重取；`DownloadService` 不再感知记录字段。
+- **Download record assembler（下载记录装配模块）** — `lib/services/download/download_record_assembler.dart`：部分状态 → `DownloadedTrack`（16 字段）的唯一装配点，四种形态各一个意图方法：`forAudioDownload`（完整下载 + 分项合并 / 公共副本回退）、`forPartialDownload`（分项更新保留已有音频与另一分项）、`forLocalImport`（就地引用）、`republished`（补发布只补定位）。`downloadedAt` 走注入时钟，记录既有时间不重取；`DownloadService` 不再感知记录字段。
 - **Download notification presenter（下载通知 presenter 模块）** — `lib/services/download/download_notification_presenter.dart`：下载生命周期 → 系统通知 start / update / stop 的唯一实现（单任务 id `track:{key}`、批量共享 `batch`「N/N」、500ms 系统频率节流「首片 / 窗口 / 完成突破」、收尾只收自己起过的——中途关掉开关也不残留）；端口（`DownloadNotifications`）/ 设置开关 / 时钟都可注入，编排与其测试不依赖 Android。批量并发调用不抢占（同一时刻只有一条批量通知）。

@@ -1169,8 +1169,7 @@ class SyncRoundRunner {
       _peersFailedThisRound.remove(deviceId);
       // 同一轮已经拉取失败：推送成功只说明「对方能收」，不代表「本机能读」。
       // 不能清 lastError / 推进 lastSuccessAt，否则设备详情会把拉取失败
-      // 显示成已连接。lastPushAt 也不推进：旧名册的
-      // `effectiveLastSuccessAt` 会把它当成成功证据，推进后同样会误判。
+      // 显示成已连接。lastPushAt 也不推进：本轮只带回执，不代表数据已拉通。
       if (_peersPullFailedThisRound.contains(deviceId)) {
         _peersById[deviceId] = existing.copyWith(
           transport: kind,

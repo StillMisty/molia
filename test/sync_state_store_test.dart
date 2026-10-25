@@ -158,8 +158,11 @@ void main() {
     expect(reloaded.coverStamps['wy:1']!.hash, 'h-cover');
     expect(reloaded.coverStamps['wy:1']!.version.physical, 2000);
     expect(reloaded.coverTombstones['wy:2']!.version.physical, 2001);
-    expect(reloaded.isCategoryEnabled(SyncCategory.covers), isFalse,
-        reason: '缺失 / 旧状态都按默认关闭');
+    expect(
+      reloaded.isCategoryEnabled(SyncCategory.covers),
+      isFalse,
+      reason: '缺失 / 旧状态都按默认关闭',
+    );
 
     await reloaded.setCategory(SyncCategory.covers, true);
     final enabled = await freshStore();
@@ -189,18 +192,21 @@ void main() {
 
   test('移除设备：名册与地址簿一并清理，不写屏蔽标记', () async {
     final store = await freshStore();
-    store.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: const [SyncPeerState(deviceId: 'devB', name: 'B')],
-    ));
+    store.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: const [SyncPeerState(deviceId: 'devB', name: 'B')],
+      ),
+    );
     await store.addManualPeer(
       const ManualPeer(host: '192.168.1.23', deviceId: 'devB'),
     );
-    await store
-        .addManualPeer(const ManualPeer(host: '10.0.0.9', deviceId: 'devC'));
+    await store.addManualPeer(
+      const ManualPeer(host: '10.0.0.9', deviceId: 'devC'),
+    );
 
     await store.removePeer('devB');
     expect(store.peers.where((peer) => peer.deviceId == 'devB'), isEmpty);
@@ -218,27 +224,31 @@ void main() {
 
   test('重置旧组状态：清空观测并持久化，地址簿保留、移除标记不再压制', () async {
     final store = await freshStore();
-    store.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 5,
-      outcome: SyncOutcome.ok,
-      peers: const [SyncPeerState(deviceId: 'devB', name: 'B')],
-      transports: const [
-        SyncTransportReport(
-          kind: SyncTransportKind.lan,
-          running: true,
-          enabled: true,
-          pulled: 1,
-        ),
-      ],
-    ));
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      verifiedAt: 4,
-    ));
+    store.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 5,
+        outcome: SyncOutcome.ok,
+        peers: const [SyncPeerState(deviceId: 'devB', name: 'B')],
+        transports: const [
+          SyncTransportReport(
+            kind: SyncTransportKind.lan,
+            running: true,
+            enabled: true,
+            pulled: 1,
+          ),
+        ],
+      ),
+    );
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        verifiedAt: 4,
+      ),
+    );
     store.markPeerConnectNotified('devB');
     await store.addManualPeer(
       const ManualPeer(host: '192.168.1.23', deviceId: 'devB'),
@@ -254,13 +264,15 @@ void main() {
     expect(store.isPeerConnectNotified('devB'), isFalse);
     expect(store.manualPeers.single.host, '192.168.1.23');
 
-    store.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 6,
-      finishedAt: 7,
-      outcome: SyncOutcome.ok,
-      peers: const [SyncPeerState(deviceId: 'devX')],
-    ));
+    store.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 6,
+        finishedAt: 7,
+        outcome: SyncOutcome.ok,
+        peers: const [SyncPeerState(deviceId: 'devX')],
+      ),
+    );
     expect(store.peers.single.deviceId, 'devX', reason: '移除标记随旧组一并清空，重新发现立即入册');
 
     await store.commit();
@@ -272,48 +284,36 @@ void main() {
     expect(reloaded.manualPeers.single.host, '192.168.1.23');
   });
 
-  test('名册 lastSuccessAt：持久化往返；旧状态缺字段按 0 兼容兜底', () async {
+  test('名册 lastSuccessAt：持久化往返；缺字段按 0 处理', () async {
     final store = await freshStore();
-    store.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 500,
-      finishedAt: 1000,
-      outcome: SyncOutcome.ok,
-      peers: const [
-        SyncPeerState(
-          deviceId: 'devB',
-          lastSeenAt: 900,
-          lastSuccessAt: 800,
-          lastPullAt: 700,
-        ),
-      ],
-    ));
+    store.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 500,
+        finishedAt: 1000,
+        outcome: SyncOutcome.ok,
+        peers: const [
+          SyncPeerState(
+            deviceId: 'devB',
+            lastSeenAt: 900,
+            lastSuccessAt: 800,
+            lastPullAt: 700,
+          ),
+        ],
+      ),
+    );
     await store.commit();
 
     final reloaded = await freshStore();
     expect(reloaded.peers.single.lastSuccessAt, 800);
 
-    // 旧 JSON 没有 lastSuccessAt：0 = 未知，派生值取数据时间与最后尝试中
-    // 较新者（900 是后来探测成功的证据，不能被 700 的数据时间盖过）。
+    // 缺 lastSuccessAt：按 0 处理，不参与失联判定。
     final old = SyncPeerState.fromJson({
       'deviceId': 'devC',
       'lastSeenAt': 900,
       'lastPullAt': 700,
     })!;
     expect(old.lastSuccessAt, 0);
-    expect(old.effectiveLastSuccessAt, 900);
-    // 只有数据时间（没有尝试记录）：仍按最近数据流转兜底。
-    final dataOnly = SyncPeerState.fromJson({
-      'deviceId': 'devE',
-      'lastPullAt': 700,
-    })!;
-    expect(dataOnly.effectiveLastSuccessAt, 700);
-    // 只有尝试、没有失败记录：旧名册按「最后尝试」兜底，不显示成从未连上。
-    final legacy = SyncPeerState.fromJson({
-      'deviceId': 'devD',
-      'lastSeenAt': 900,
-    })!;
-    expect(legacy.effectiveLastSuccessAt, 900);
   });
 
   test('失联按最后一次成功接触计算，失败尝试不续命', () {
@@ -349,13 +349,15 @@ void main() {
 
   test('更新地址：身份与已学端口保留；目标地址已有条目时并入', () async {
     final store = await freshStore();
-    await store.addManualPeer(const ManualPeer(
-      host: '192.168.1.23',
-      deviceId: 'devB',
-      name: '书房',
-      probePort: 47825,
-      httpPort: 40000,
-    ));
+    await store.addManualPeer(
+      const ManualPeer(
+        host: '192.168.1.23',
+        deviceId: 'devB',
+        name: '书房',
+        probePort: 47825,
+        httpPort: 40000,
+      ),
+    );
     await store.addManualPeer(const ManualPeer(host: '192.168.1.99'));
 
     await store.moveManualPeer(
@@ -376,9 +378,11 @@ void main() {
   test('首次连通标记：登记后持久化；设备从本机移除时清掉', () async {
     final store = await freshStore();
     await store.addManualPeer(
-        const ManualPeer(host: '192.168.1.23', deviceId: 'devB'));
+      const ManualPeer(host: '192.168.1.23', deviceId: 'devB'),
+    );
     await store.addManualPeer(
-        const ManualPeer(host: '2409:8a55::9', deviceId: 'devB'));
+      const ManualPeer(host: '2409:8a55::9', deviceId: 'devB'),
+    );
 
     expect(store.isPeerConnectNotified('devB'), isFalse);
     store.markPeerConnectNotified('devB');
@@ -421,13 +425,15 @@ void main() {
     expect(store.activity, isEmpty);
 
     for (var i = 0; i < 25; i++) {
-      store.recordRound(SyncRoundReport(
-        trigger: SyncTrigger.timer,
-        startedAt: 1000 + i,
-        finishedAt: 1000 + i,
-        outcome: SyncOutcome.ok,
-        applied: i,
-      ));
+      store.recordRound(
+        SyncRoundReport(
+          trigger: SyncTrigger.timer,
+          startedAt: 1000 + i,
+          finishedAt: 1000 + i,
+          outcome: SyncOutcome.ok,
+          applied: i,
+        ),
+      );
     }
     // 展示日志只留 20 条，活动记录保留全部 25 条（观测面窗口不截断）。
     expect(store.log, hasLength(SyncStateStore.logLimit));
@@ -443,12 +449,14 @@ void main() {
   test('活动记录：超过上限时丢弃最旧的', () async {
     final store = await freshStore();
     for (var i = 0; i < SyncStateStore.activityLimit + 5; i++) {
-      store.recordRound(SyncRoundReport(
-        trigger: SyncTrigger.timer,
-        startedAt: i,
-        finishedAt: i,
-        outcome: SyncOutcome.noChanges,
-      ));
+      store.recordRound(
+        SyncRoundReport(
+          trigger: SyncTrigger.timer,
+          startedAt: i,
+          finishedAt: i,
+          outcome: SyncOutcome.noChanges,
+        ),
+      );
     }
     expect(store.activity, hasLength(SyncStateStore.activityLimit));
     expect(store.activity.first.at, SyncStateStore.activityLimit + 4);
@@ -472,41 +480,37 @@ void main() {
     await store.commit();
     final writesBefore = store.persistedWrites;
 
-    store.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 1,
-      finishedAt: 2,
-      outcome: SyncOutcome.noChanges,
-    ));
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.noChanges,
+      ),
+    );
     platform.fail = true;
     await store.commit();
 
-    expect(
-      store.persistedWrites,
-      writesBefore,
-      reason: '平台返回 false 不能算成功写盘',
-    );
+    expect(store.persistedWrites, writesBefore, reason: '平台返回 false 不能算成功写盘');
     expect(platform.failures, greaterThan(0));
 
     platform.fail = false;
     await store.commit();
 
-    expect(
-      store.persistedWrites,
-      writesBefore + 1,
-      reason: '脏标记保留，下一次提交重试成功',
-    );
+    expect(store.persistedWrites, writesBefore + 1, reason: '脏标记保留，下一次提交重试成功');
   });
 
   test('已知端点：持久化往返（host / 端口 / 验证时间）', () async {
     final store = await freshStore();
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      probePort: 47825,
-      verifiedAt: 1234,
-    ));
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        probePort: 47825,
+        verifiedAt: 1234,
+      ),
+    );
     await store.commit();
 
     final reloaded = await freshStore();
@@ -521,19 +525,23 @@ void main() {
 
   test('已知端点：同一设备更新地址与验证时间，保留新观测没带的探测端口', () async {
     final store = await freshStore();
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      probePort: 47825,
-      verifiedAt: 1,
-    ));
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.99',
-      httpPort: 40001,
-      verifiedAt: 2,
-    ));
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        probePort: 47825,
+        verifiedAt: 1,
+      ),
+    );
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.99',
+        httpPort: 40001,
+        verifiedAt: 2,
+      ),
+    );
 
     final endpoint = store.lanEndpoints.single;
     expect(endpoint.host, '192.168.1.99');
@@ -575,13 +583,15 @@ void main() {
   test('已知端点：上限 32，按 verifiedAt 淘汰最旧', () async {
     final store = await freshStore();
     for (var i = 0; i < SyncStateStore.lanEndpointLimit + 8; i++) {
-      await store.rememberLanEndpoint(LanPeerEndpoint(
-        deviceId: 'dev$i',
-        host: '192.168.1.${i + 1}',
-        httpPort: 40000,
-        probePort: 47825,
-        verifiedAt: i + 1,
-      ));
+      await store.rememberLanEndpoint(
+        LanPeerEndpoint(
+          deviceId: 'dev$i',
+          host: '192.168.1.${i + 1}',
+          httpPort: 40000,
+          probePort: 47825,
+          verifiedAt: i + 1,
+        ),
+      );
     }
 
     expect(store.lanEndpoints, hasLength(SyncStateStore.lanEndpointLimit));
@@ -598,37 +608,45 @@ void main() {
 
   test('已知端点：180 天未验证随名册淘汰，近期验证保留', () async {
     final store = await freshStore();
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'old',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      verifiedAt: 1000,
-    ));
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'fresh',
-      host: '192.168.1.24',
-      httpPort: 40000,
-      verifiedAt: 1000 + SyncStateStore.lanEndpointRetentionMs,
-    ));
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'old',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        verifiedAt: 1000,
+      ),
+    );
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'fresh',
+        host: '192.168.1.24',
+        httpPort: 40000,
+        verifiedAt: 1000 + SyncStateStore.lanEndpointRetentionMs,
+      ),
+    );
 
-    store.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1000 + SyncStateStore.lanEndpointRetentionMs + 1,
-      outcome: SyncOutcome.noChanges,
-    ));
+    store.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1000 + SyncStateStore.lanEndpointRetentionMs + 1,
+        outcome: SyncOutcome.noChanges,
+      ),
+    );
 
     expect(store.lanEndpoints.map((endpoint) => endpoint.deviceId), ['fresh']);
   });
 
   test('移除设备：已验证端点一并清理', () async {
     final store = await freshStore();
-    await store.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      verifiedAt: 1,
-    ));
+    await store.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        verifiedAt: 1,
+      ),
+    );
 
     await store.removePeer('devB');
     expect(store.lanEndpoints, isEmpty);

@@ -356,7 +356,6 @@ void main() {
       '${CacheService.lyricsCacheKeyPrefix}kw:a',
       '{"provider":"qq","lyric":"x","timestamp":1}',
     );
-    await prefs.setString('manual_lyrics_cache_kw:a', '{}');
     artworkCache.files['https://cdn.example/a.jpg'] = 300;
     artworkCache.files['https://cdn.example/a-fallback.jpg'] = 120;
     await catalogService.resolve(t, quality: const AudioQuality(type: '320k'));
@@ -366,7 +365,6 @@ void main() {
     expect(lyrics.cleared, isTrue);
     expect(lyrics.freed.count, 1);
     expect(prefs.getString('${CacheService.lyricsCacheKeyPrefix}kw:a'), isNull);
-    expect(prefs.getString('manual_lyrics_cache_kw:a'), isNull);
 
     final artwork = await service.clear(t, LocalCachePart.artwork);
     expect(artwork.cleared, isTrue);
@@ -401,8 +399,7 @@ void main() {
     );
     final t = trackFromSourceTrack(sourceTrack);
 
-    final written =
-        AudioCacheStore.keyForSource(sourceTrack, quality: '320k');
+    final written = AudioCacheStore.keyForSource(sourceTrack, quality: '320k');
     await writeAudio(written, 1234);
 
     expect(AudioCacheStore.keyForTrack(t, quality: '320k'), written);

@@ -119,14 +119,13 @@ void main() {
     await bootstrapPeer(sync);
 
     // 窗口声称覆盖 1..3，但只带 1 与 3（2 被解析层丢弃 / 对端漏发）。
-    transport.available.add(delta(
-      entries: [entry(1, 'k1'), entry(3, 'k3')],
-      windowEnd: 3,
-    ));
+    transport.available.add(
+      delta(entries: [entry(1, 'k1'), entry(3, 'k3')], windowEnd: 3),
+    );
     final report = await sync.syncNow();
 
     // 缺口 → 本轮内改取全量快照（第二次 pull 带 fullPeers）。
-    expect(transport.lastRequest?.fullPeers, contains('devB'));
+    expect(transport.lastRequest?.plan.forcesFull('devB'), isTrue);
     // 空洞之前的条目照常应用；游标不推进到 windowEnd（不跳过 seq 2），
     // 其余条目由 bootstrap 的全量快照补齐。
     expect(adapter.lastKeys, ['k1']);
@@ -142,17 +141,19 @@ void main() {
 
     final pullsBefore = transport.pullCount;
     // 对端主动推来一个起点超本机游标的增量窗口（条目已被对端裁剪）。
-    await sync.onIncomingEnvelope(delta(
-      entries: [entry(5, 'k5')],
-      baseSeq: 4,
-      windowStart: 5,
-      windowEnd: 5,
-    ));
+    await sync.onIncomingEnvelope(
+      delta(
+        entries: [entry(5, 'k5')],
+        baseSeq: 4,
+        windowStart: 5,
+        windowEnd: 5,
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 40));
 
     // 入站轮发现缺口后本轮内也发起全量兜底（带 fullPeers）。
     expect(transport.pullCount, pullsBefore + 1);
-    expect(transport.lastRequest?.fullPeers, contains('devB'));
+    expect(transport.lastRequest?.plan.forcesFull('devB'), isTrue);
   });
 
   test('窗口起点超出本机游标：不应用该窗口，本轮改取全量快照', () async {
@@ -161,15 +162,17 @@ void main() {
     await sync.syncNow();
     await bootstrapPeer(sync);
 
-    transport.available.add(delta(
-      entries: [entry(5, 'k5')],
-      baseSeq: 4,
-      windowStart: 5,
-      windowEnd: 5,
-    ));
+    transport.available.add(
+      delta(
+        entries: [entry(5, 'k5')],
+        baseSeq: 4,
+        windowStart: 5,
+        windowEnd: 5,
+      ),
+    );
     await sync.syncNow();
 
-    expect(transport.lastRequest?.fullPeers, contains('devB'));
+    expect(transport.lastRequest?.plan.forcesFull('devB'), isTrue);
     expect(adapter.lastKeys, isEmpty, reason: '缺口窗口不应用（不完整）');
     expect(state.peers.single.cursorSeq, 0, reason: '游标停在已消费位置（不跳到 5）');
   });
@@ -193,7 +196,9 @@ class RecordingAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async =>
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async =>
       const {};
 
   @override

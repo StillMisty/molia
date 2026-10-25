@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/sync_peer_status.dart';
 
-/// 设备连接状态解析：五种状态 + 旧名册兜底。
+/// 设备连接状态解析：五种状态。
 void main() {
   const now = 2000000000;
   const startedAt = now - 1000;
@@ -85,63 +85,11 @@ void main() {
       lastSeenAt: now - 1000,
       lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
     );
-    expect(peer.effectiveLastSuccessAt, 0);
+    expect(peer.lastSuccessAt, 0);
     expect(peer.isLostAt(now), isFalse);
     expect(
       resolveSyncPeerConnection(peer, report: report(), nowMs: now),
       SyncPeerConnectionStatus.unreachable,
-    );
-  });
-
-  test('旧状态没有 lastSuccessAt 且没有错误：仍用最后尝试 / 数据判失联', () {
-    const now = 2 * SyncPeerState.lostThresholdMs;
-    final attemptOnly = SyncPeerState(
-      deviceId: 'devB',
-      lastSeenAt: now - SyncPeerState.lostThresholdMs - 1,
-    );
-    final dataOnly = SyncPeerState(
-      deviceId: 'devC',
-      lastPullAt: now - SyncPeerState.lostThresholdMs - 1,
-    );
-    expect(attemptOnly.isLostAt(now), isTrue);
-    expect(dataOnly.isLostAt(now), isTrue);
-    // 有失败记录时最后尝试不兜底：那只是失败的尝试，不是成功接触。
-    final failedLegacy = SyncPeerState(
-      deviceId: 'devD',
-      lastSeenAt: now - 1000,
-      lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
-    );
-    expect(failedLegacy.isLostAt(now), isFalse);
-  });
-
-  test('旧状态没有 lastSuccessAt：昨天探测成功要盖过 200 天前的数据时间', () {
-    const day = 24 * 60 * 60 * 1000;
-    const now = 2 * SyncPeerState.lostThresholdMs;
-    final peer = SyncPeerState(
-      deviceId: 'devB',
-      lastSeenAt: now - day,
-      lastPullAt: now - 200 * day,
-    );
-    expect(peer.lastSuccessAt, 0);
-    // 成功证据取「数据时间」与「无失败的最后尝试」中较新的一个。
-    expect(peer.effectiveLastSuccessAt, now - day);
-    expect(peer.isLostAt(now), isFalse);
-    expect(
-      resolveSyncPeerConnection(peer, nowMs: now),
-      SyncPeerConnectionStatus.idle,
-    );
-  });
-
-  test('旧名册没有 lastSuccessAt：用最近数据流转兜底为 connected', () {
-    final peer = SyncPeerState(
-      deviceId: 'devB',
-      lastSeenAt: startedAt + 100,
-      lastPullAt: startedAt + 100,
-    );
-    expect(peer.lastSuccessAt, 0);
-    expect(
-      resolveSyncPeerConnection(peer, report: report(), nowMs: now),
-      SyncPeerConnectionStatus.connected,
     );
   });
 

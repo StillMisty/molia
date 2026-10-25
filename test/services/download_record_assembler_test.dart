@@ -1,5 +1,5 @@
-/// 下载记录装配模块：五种形态（完整下载 / 分项更新 / 本地导入 / 位置重映射 /
-/// 补发布）的字段映射与合并语义钉死。
+/// 下载记录装配模块：四种形态（完整下载 / 分项更新 / 本地导入 / 补发布）的
+/// 字段映射与合并语义钉死。
 ///
 /// 只经公开意图方法断言 `DownloadedTrack` 的字段结果；时钟注入
 /// （`downloadedAt` 是内容时间，记录既有时间不被重新取值）。
@@ -181,34 +181,6 @@ void main() {
     expect(record.coverPath, isNull);
     expect(record.publicUri, isNull);
     expect(record.downloadedAt, 1000);
-  });
-
-  test('位置重映射：三个路径整体替换，其余字段原样保留', () {
-    final record = makeExisting();
-    final moved = assembler.relocated(
-      record,
-      filePath: '/new/旧标题.mp3',
-      lyricPath: '/new/lyrics/旧标题.lrc',
-      coverPath: null,
-    );
-
-    expect(moved.filePath, '/new/旧标题.mp3');
-    expect(moved.lyricPath, '/new/lyrics/旧标题.lrc');
-    expect(moved.coverPath, isNull, reason: '整体替换：传 null 就是清空');
-    // 其余字段逐项保留（含 raw 引用与公共副本定位）。
-    expect(moved.originSourceKey, 'kw');
-    expect(moved.originSongId, '1');
-    expect(moved.title, '旧标题');
-    expect(moved.artist, '旧歌手');
-    expect(moved.album, '旧专辑');
-    expect(moved.coverUrl, 'https://img.example.com/old.jpg');
-    expect(moved.durationMs, 111);
-    expect(moved.raw, {'songmid': 'old'});
-    expect(moved.quality, '128k');
-    expect(moved.sizeBytes, 9);
-    expect(moved.publicUri, 'content://old');
-    expect(moved.imported, isFalse);
-    expect(moved.downloadedAt, 500);
   });
 
   test('补发布：只补公共副本定位，其余字段原样保留', () {

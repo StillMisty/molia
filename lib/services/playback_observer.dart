@@ -7,7 +7,6 @@
 ///
 /// 承担的副作用（顺序与节流与从 PlaybackProvider 抽出前逐一对应）：
 /// - 最后播放信息（SharedPreferences 三键；UI 经 provider getter 读取）；
-/// - 播放上下文 / 最近播放（[PlayContextWriter]，组合根注入 drift 写入）；
 /// - 桌面小组件（[PlaybackWidgetUpdater]，默认实现仅 Android 生效）；
 /// - 封面预取（[ImagePreloadManager]）；
 /// - 播放历史（[LibraryStore]）；
@@ -30,7 +29,6 @@ import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/library.dart';
-import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/playback_facade.dart';
@@ -42,24 +40,12 @@ import 'notification_permission.dart';
 
 final _logger = Logger('molia.playback_observer');
 
-/// 播放上下文写入器：组合根注入
-/// `LocalDatabaseProvider.insertOrUpdatePlayContext`。
-///
-/// 用函数类型而不是直接依赖 provider：服务层不反向 import `lib/providers/**`，
-/// 单测也不需要拉起真实 drift 数据库。
-typedef PlayContextWriter = Future<void> Function({
-  required String contextUri,
-  required String contextType,
-  required String contextName,
-  required String? imageUrl,
-  required int lastPlayedAt,
-});
-
 /// 桌面小组件更新器（Android `top.stillmisty.molia/widget` 通道）。
 ///
 /// 默认实现见 [_updateAndroidWidget]；测试注入记录器断言调用与顺序。
 typedef PlaybackWidgetUpdater = Future<void> Function(
-    Map<String, Object?> payload);
+  Map<String, Object?> payload,
+);
 
 /// 默认小组件更新：非 Android 是空操作，失败静默（不影响播放主流程）。
 Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
@@ -81,7 +67,6 @@ class PlaybackObserver {
     required PlaybackFacade facade,
     DataSaverService? dataSaver,
     LibraryStore? libraryRepository,
-    PlayContextWriter? playContextWriter,
     PlaybackWidgetUpdater? widgetUpdater,
     AlbumArtPreloadStrategy? albumArtPreloader,
     Future<String?> Function(Track track)? artworkResolver,
@@ -92,7 +77,6 @@ class PlaybackObserver {
   })  : _facade = facade,
         _dataSaver = dataSaver,
         _libraryRepository = libraryRepository,
-        _playContextWriter = playContextWriter,
         _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
         _albumArtPreloader = albumArtPreloader ??
             AlbumArtPreloadStrategy(
@@ -118,9 +102,6 @@ class PlaybackObserver {
 
   /// 资料库仓库（播放开始时写 play_history；失败仅日志）。
   final LibraryStore? _libraryRepository;
-
-  /// 播放上下文写入（最近播放），组合根注入。
-  final PlayContextWriter? _playContextWriter;
 
   /// 桌面小组件更新入口（Android 通道；测试注入记录器）。
   final PlaybackWidgetUpdater _widgetUpdater;
@@ -208,8 +189,7 @@ class PlaybackObserver {
     _lastPlayedImageUrl = _displayCoverUrlOf(track);
   }
 
-  /// 曲目切换时：持久化最后播放信息、写入播放上下文（最近播放）、
-  /// 更新桌面小组件并触发封面预加载。
+  /// 曲目切换时：持久化最后播放信息、更新桌面小组件并触发封面预加载。
   void _onSnapshot() {
     final live = _facade.snapshot.value;
     final track = live.current;
@@ -219,7 +199,6 @@ class PlaybackObserver {
     } else if (trackId != _processedTrackId) {
       _processedTrackId = trackId;
       _persistLastPlayedTrackInfo(track!);
-      unawaited(_savePlayContextToDatabase(track, live.context));
       unawaited(_updateWidget());
       _triggerImagePreload();
       unawaited(_recordPlayHistory(track));
@@ -242,45 +221,22 @@ class PlaybackObserver {
     final repository = _libraryRepository;
     if (repository == null) return;
     try {
-      await repository.addHistoryEntry(PlayHistoryEntry(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-        title: track.title,
-        artist: track.artistLabel,
-        album: track.album ?? '',
-        coverUrl: track.artwork?.uri.toString(),
-        durationMs: track.duration?.inMilliseconds,
-        // raw 原样持久化（play_history.raw），供下次播放按需重新取链。
-        raw: Map<String, dynamic>.from(track.payload),
-        playedAt: DateTime.now().millisecondsSinceEpoch,
-      ));
-    } catch (e) {
-      _logger.severe('写入播放历史失败', e);
-    }
-  }
-
-  /// 把当前播放上下文写入本地数据库（媒体库「最近播放」使用）。
-  Future<void> _savePlayContextToDatabase(
-    Track track,
-    PlaybackContext? context,
-  ) async {
-    final name = context?.name;
-    if (name == null || name.isEmpty) return;
-    final writer = _playContextWriter;
-    if (writer == null) return;
-
-    final type = context?.type ?? 'lx';
-    final uri = context?.uri ?? 'lx:$name';
-    try {
-      await writer(
-        contextUri: uri,
-        contextType: type,
-        contextName: name,
-        imageUrl: track.artwork?.uri.toString(),
-        lastPlayedAt: DateTime.now().millisecondsSinceEpoch,
+      await repository.addHistoryEntry(
+        PlayHistoryEntry(
+          sourceKey: track.id.sourceKey,
+          songId: track.id.id,
+          title: track.title,
+          artist: track.artistLabel,
+          album: track.album ?? '',
+          coverUrl: track.artwork?.uri.toString(),
+          durationMs: track.duration?.inMilliseconds,
+          // raw 原样持久化（play_history.raw），供下次播放按需重新取链。
+          raw: Map<String, dynamic>.from(track.payload),
+          playedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
       );
     } catch (e) {
-      _logger.severe('保存播放上下文失败', e);
+      _logger.severe('写入播放历史失败', e);
     }
   }
 
@@ -325,14 +281,16 @@ class PlaybackObserver {
 
   void _persistLastPlayedTrackInfo(Track track) {
     final artists = track.artistLabel;
-    unawaited(_saveLastPlayedTrackInfo(
-      // 只持久化原始封面 URL：展示封面可能指向本地自定义 / 默认封面文件，
-      // 把 file:// 路径写进 prefs 会在文件被替换 / 清理后留下坏地址。本地
-      // 展示由 CustomCoverStore 按曲目键重新解析即可。
-      imageUrl: track.artwork?.uri.toString(),
-      trackName: track.title,
-      artists: artists.isEmpty ? null : artists,
-    ));
+    unawaited(
+      _saveLastPlayedTrackInfo(
+        // 只持久化原始封面 URL：展示封面可能指向本地自定义 / 默认封面文件，
+        // 把 file:// 路径写进 prefs 会在文件被替换 / 清理后留下坏地址。本地
+        // 展示由 CustomCoverStore 按曲目键重新解析即可。
+        imageUrl: track.artwork?.uri.toString(),
+        trackName: track.title,
+        artists: artists.isEmpty ? null : artists,
+      ),
+    );
   }
 
   /// 触发播放相关图片的智能预加载。

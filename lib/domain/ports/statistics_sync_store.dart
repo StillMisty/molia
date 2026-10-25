@@ -3,12 +3,12 @@ import '../models/download.dart' show kLocalSourceKey;
 
 /// 一条可同步的已收尾播放事件（类型化）。
 ///
-/// 适配器只认识本类型：SQL 列名、行结构与旧键回填都留在
+/// 适配器只认识本类型：SQL 列名与行结构都留在
 /// `StatisticsSyncStore` 的实现里。`syncKey` 是跨设备去重键，[version] 是
 /// 唯一的胜负判据；`startedAt` / `endedAt` 只是内容时间，不参与 LWW。
 ///
-/// [toData] 保持 v5 之前的线上形状（事件字段 + 曲目内容逐条自包含），
-/// 这样旧对端仍能解析；`id` / `trackId` 是本机行标识，永不出本机。
+/// [toData] 保持线上形状（事件字段 + 曲目内容逐条自包含），对端按记录信封
+/// 解析；`id` / `trackId` 是本机行标识，永不出本机。
 class StatisticsSyncEvent {
   const StatisticsSyncEvent({
     required this.syncKey,
@@ -28,7 +28,7 @@ class StatisticsSyncEvent {
     this.endReason,
   });
 
-  /// 跨设备去重键（收尾时分配，存量行由内容哈希回填）。
+  /// 跨设备去重键（创建事件时分配，跨设备唯一）。
   final String syncKey;
 
   /// 版本三元组（收尾时由发号器取号；原地更新时比较）。
@@ -79,7 +79,7 @@ class StatisticsSyncEvent {
         endReason: endReason,
       );
 
-  /// 线上载荷（与 v5 之前的行结构同键名；记录逐条自包含）。
+  /// 线上载荷（事件字段 + 曲目内容同键名；记录逐条自包含）。
   ///
   /// 版本列也保留在 data 里：备份文件按自包含记录解析时仍需版本；
   /// 正常同步以记录信封的 [version] 为准。
@@ -136,7 +136,7 @@ class StatisticsSyncEvent {
 
 /// 听歌统计的同步面端口：类型化记录出 / 入。
 ///
-/// 统计仓库只负责事件采集与查询；导出缓存、存量键回填、本地曲目过滤与
+/// 统计仓库只负责事件采集与查询；导出缓存、本地曲目过滤与
 /// 按 `syncKey` 合并都收在实现里。适配器只做「类型化记录 ↔ SyncRecord」，
 /// 不再接触列名与版本列。
 abstract interface class StatisticsSyncStore {

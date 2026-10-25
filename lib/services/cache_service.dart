@@ -30,7 +30,7 @@ export 'cache_storage.dart'
 ///   - 封面上限/过期：setter 通知监听者（`ArtworkCache`）立即 sweep；
 /// - **平台文件操作**走 [CacheStorage]（`dart:io` 只在实现层），策略逻辑与
 ///   文件系统解耦；
-/// - **音频缓存磁盘约定**（文件名 / 完整判据 / 索引 / 命中 / 清扫 / 迁移）
+/// - **音频缓存磁盘约定**（文件名 / 完整判据 / 索引 / 命中 / 清扫）
 ///   唯一实现在 [AudioCacheStore]：本服务只做策略与通知，避免写入侧与读取侧
 ///   再次分叉（见 ADR-0008）；
 /// - **歌词缓存**：默认实例是 prefs-only；生产组合根启动时经
@@ -45,11 +45,7 @@ class CacheService {
         _storage = storage ?? createPlatformCacheStorage(),
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
         _audioProtectAge = audioProtectAge {
-    _audioStore = AudioCacheStore(
-      storage: _storage,
-      // 迁移版本标记与策略读写共用同一 prefs 解析（不可用时按旧命名处理）。
-      preferences: _getPrefs,
-    );
+    _audioStore = AudioCacheStore(storage: _storage);
   }
 
   /// 全局单例（main.dart 注册前的默认入口）。
@@ -113,7 +109,7 @@ class CacheService {
   SharedPreferences? _prefs;
   final Logger _logger = Logger('molia.cache_service');
 
-  /// 音频缓存目录约定（命名 / 完整性 / 索引 / 命中 / 清扫 / 迁移）的唯一实现。
+  /// 音频缓存目录约定（命名 / 完整性 / 索引 / 命中 / 清扫）的唯一实现。
   AudioCacheStore get audioStore => _audioStore;
 
   final List<void Function(CachePartition)> _policyListeners = [];
@@ -247,8 +243,7 @@ class CacheService {
   Future<int> enforceAudioLimit({bool force = false}) async {
     if (_audioEnforcing) return 0;
     final now = DateTime.now();
-    if (!force &&
-        now.difference(_lastAudioEnforce) < audioEnforceMinInterval) {
+    if (!force && now.difference(_lastAudioEnforce) < audioEnforceMinInterval) {
       return 0;
     }
     _audioEnforcing = true;
@@ -358,18 +353,6 @@ class CacheService {
       notifyCacheChanged();
     }
     return deleted;
-  }
-
-  /// 音频缓存命名版本键：1（缺省）= 旧命名，2 = 当前命名。
-  static const String keyAudioNamingVersion = AudioCacheStore.keyNamingVersion;
-  static const int audioNamingVersion = AudioCacheStore.namingVersion;
-
-  /// 一次性迁移：清理旧命名写入的音频缓存（见
-  /// [AudioCacheStore.migrateNamingIfNeeded]）；清掉内容后联动刷新占用展示。
-  Future<void> migrateAudioCacheNamingIfNeeded() async {
-    if (!await _audioStore.migrateNamingIfNeeded()) return;
-    _notifyCleared(CachePartition.audio);
-    notifyCacheChanged();
   }
 
   /// 单曲歌词缓存占用。

@@ -45,7 +45,7 @@ class AnyListenSource {
   /// 在 SourceManager / SourceTrack 中标识本音源的 key。
   static const String sourceKey = 'any_listen';
 
-  /// SourceTrack.origin 标记。
+  /// SourceTrack.origin 标记（仅用于序列化；曲目归属只看 sourceKey）。
   static const String origin = 'any_listen';
 
   /// 搜索页展示名。
@@ -83,9 +83,9 @@ class AnyListenSource {
   /// 已配置且启用；只有此时才允许出现在 SourceManager.searchableSources。
   bool get isUsable => _config.isUsable;
 
-  /// 判断曲目是否来自 any-listen（按 sourceKey，兼容按 origin 标记的旧数据）。
+  /// 判断曲目是否来自 any-listen（只看 sourceKey）。
   static bool isAnyListenTrack(SourceTrack track) =>
-      track.sourceKey == sourceKey || track.origin == origin;
+      track.sourceKey == sourceKey;
 
   /// 从 shared_preferences 加载配置；只读本地，不发起网络请求。
   Future<void> init() async {
@@ -109,8 +109,12 @@ class AnyListenSource {
     int limit = 30,
   }) async {
     _ensureUsable();
-    final data =
-        await _api.searchMusic(_config, keyword, page: page, limit: limit);
+    final data = await _api.searchMusic(
+      _config,
+      keyword,
+      page: page,
+      limit: limit,
+    );
     return _parseSearch(data, page: page, limit: limit);
   }
 
@@ -221,20 +225,25 @@ class AnyListenSource {
       if (title == null) continue;
 
       final meta = raw['meta'] is Map ? raw['meta'] as Map : const {};
-      tracks.add(SourceTrack(
-        sourceKey: sourceKey,
-        origin: origin,
-        title: title,
-        artist: _asText(raw['singer'] ?? raw['artist'] ?? meta['singer']) ?? '',
-        album: _asText(meta['albumName'] ?? raw['albumName'] ?? raw['album']) ??
-            '',
-        coverUrl: _asText(
-            meta['picUrl'] ?? raw['picUrl'] ?? raw['pic'] ?? raw['img']),
-        duration: _parseDuration(raw['interval'] ?? raw['duration']),
-        qualities: _parseQualities(meta['qualitys'] ?? raw['qualitys']),
-        // 原样透传服务器返回对象：取链/歌词/封面请求会把它整体回传。
-        raw: raw,
-      ));
+      tracks.add(
+        SourceTrack(
+          sourceKey: sourceKey,
+          origin: origin,
+          title: title,
+          artist:
+              _asText(raw['singer'] ?? raw['artist'] ?? meta['singer']) ?? '',
+          album:
+              _asText(meta['albumName'] ?? raw['albumName'] ?? raw['album']) ??
+                  '',
+          coverUrl: _asText(
+            meta['picUrl'] ?? raw['picUrl'] ?? raw['pic'] ?? raw['img'],
+          ),
+          duration: _parseDuration(raw['interval'] ?? raw['duration']),
+          qualities: _parseQualities(meta['qualitys'] ?? raw['qualitys']),
+          // 原样透传服务器返回对象：取链/歌词/封面请求会把它整体回传。
+          raw: raw,
+        ),
+      );
     }
     return SourceSearchResult.fromPage(
       tracks: tracks,
@@ -306,10 +315,12 @@ class AnyListenSource {
     value.forEach((key, item) {
       final type = key.toString();
       if (type.isEmpty) return;
-      qualities.add(SourceQuality(
-        type: type,
-        size: item is Map ? _asText(item['sizeStr'] ?? item['size']) : null,
-      ));
+      qualities.add(
+        SourceQuality(
+          type: type,
+          size: item is Map ? _asText(item['sizeStr'] ?? item['size']) : null,
+        ),
+      );
     });
     return qualities;
   }

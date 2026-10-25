@@ -519,7 +519,7 @@ abstract class LyricsOutput {
 | `desktopLyric.isLock` | `desktop.lock` | 锁定 = 点击穿透 |
 | `desktopLyric.width` | `desktop.widthPercent` | |
 | `desktopLyric.maxLineNum` | `desktop.maxLines` | |
-| `desktopLyric.isSingleLine` | 已移除（并入 `desktop.maxLines`） | 读取到旧值 `true` 时一次性映射为行数 1 |
+| `desktopLyric.isSingleLine` | 已移除（并入 `desktop.maxLines`） | |
 | `desktopLyric.textSize` | `desktop.fontSize` | LX 存 0.1 倍值；本项目存 sp 数值（Android 侧按 sp 解释） |
 | `desktopLyric.opacity` | `desktop.opacity` | |
 | `unplayColor/playedColor/shadowColor` | `desktop.unplayedColor/playedColor/shadowColor` | |

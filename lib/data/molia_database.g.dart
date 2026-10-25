@@ -3,393 +3,6 @@
 part of 'molia_database.dart';
 
 // ignore_for_file: type=lint
-class $PlayContextsTable extends PlayContexts
-    with TableInfo<$PlayContextsTable, PlayContext> {
-  @override
-  final GeneratedDatabase attachedDatabase;
-  final String? _alias;
-  $PlayContextsTable(this.attachedDatabase, [this._alias]);
-  static const VerificationMeta _contextUriMeta = const VerificationMeta(
-    'contextUri',
-  );
-  @override
-  late final GeneratedColumn<String> contextUri = GeneratedColumn<String>(
-    'contextUri',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _contextTypeMeta = const VerificationMeta(
-    'contextType',
-  );
-  @override
-  late final GeneratedColumn<String> contextType = GeneratedColumn<String>(
-    'contextType',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _contextNameMeta = const VerificationMeta(
-    'contextName',
-  );
-  @override
-  late final GeneratedColumn<String> contextName = GeneratedColumn<String>(
-    'contextName',
-    aliasedName,
-    false,
-    type: DriftSqlType.string,
-    requiredDuringInsert: true,
-  );
-  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
-    'imageUrl',
-  );
-  @override
-  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
-    'imageUrl',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
-  static const VerificationMeta _lastPlayedAtMeta = const VerificationMeta(
-    'lastPlayedAt',
-  );
-  @override
-  late final GeneratedColumn<int> lastPlayedAt = GeneratedColumn<int>(
-    'lastPlayedAt',
-    aliasedName,
-    false,
-    type: DriftSqlType.int,
-    requiredDuringInsert: true,
-  );
-  @override
-  List<GeneratedColumn> get $columns => [
-    contextUri,
-    contextType,
-    contextName,
-    imageUrl,
-    lastPlayedAt,
-  ];
-  @override
-  String get aliasedName => _alias ?? actualTableName;
-  @override
-  String get actualTableName => $name;
-  static const String $name = 'play_contexts';
-  @override
-  VerificationContext validateIntegrity(
-    Insertable<PlayContext> instance, {
-    bool isInserting = false,
-  }) {
-    final context = VerificationContext();
-    final data = instance.toColumns(true);
-    if (data.containsKey('contextUri')) {
-      context.handle(
-        _contextUriMeta,
-        contextUri.isAcceptableOrUnknown(data['contextUri']!, _contextUriMeta),
-      );
-    }
-    if (data.containsKey('contextType')) {
-      context.handle(
-        _contextTypeMeta,
-        contextType.isAcceptableOrUnknown(
-          data['contextType']!,
-          _contextTypeMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_contextTypeMeta);
-    }
-    if (data.containsKey('contextName')) {
-      context.handle(
-        _contextNameMeta,
-        contextName.isAcceptableOrUnknown(
-          data['contextName']!,
-          _contextNameMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_contextNameMeta);
-    }
-    if (data.containsKey('imageUrl')) {
-      context.handle(
-        _imageUrlMeta,
-        imageUrl.isAcceptableOrUnknown(data['imageUrl']!, _imageUrlMeta),
-      );
-    }
-    if (data.containsKey('lastPlayedAt')) {
-      context.handle(
-        _lastPlayedAtMeta,
-        lastPlayedAt.isAcceptableOrUnknown(
-          data['lastPlayedAt']!,
-          _lastPlayedAtMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_lastPlayedAtMeta);
-    }
-    return context;
-  }
-
-  @override
-  Set<GeneratedColumn> get $primaryKey => {contextUri};
-  @override
-  PlayContext map(Map<String, dynamic> data, {String? tablePrefix}) {
-    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return PlayContext(
-      contextUri: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}contextUri'],
-      ),
-      contextType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}contextType'],
-      )!,
-      contextName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}contextName'],
-      )!,
-      imageUrl: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}imageUrl'],
-      ),
-      lastPlayedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}lastPlayedAt'],
-      )!,
-    );
-  }
-
-  @override
-  $PlayContextsTable createAlias(String alias) {
-    return $PlayContextsTable(attachedDatabase, alias);
-  }
-}
-
-class PlayContext extends DataClass implements Insertable<PlayContext> {
-  final String? contextUri;
-  final String contextType;
-  final String contextName;
-  final String? imageUrl;
-  final int lastPlayedAt;
-  const PlayContext({
-    this.contextUri,
-    required this.contextType,
-    required this.contextName,
-    this.imageUrl,
-    required this.lastPlayedAt,
-  });
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (!nullToAbsent || contextUri != null) {
-      map['contextUri'] = Variable<String>(contextUri);
-    }
-    map['contextType'] = Variable<String>(contextType);
-    map['contextName'] = Variable<String>(contextName);
-    if (!nullToAbsent || imageUrl != null) {
-      map['imageUrl'] = Variable<String>(imageUrl);
-    }
-    map['lastPlayedAt'] = Variable<int>(lastPlayedAt);
-    return map;
-  }
-
-  PlayContextsCompanion toCompanion(bool nullToAbsent) {
-    return PlayContextsCompanion(
-      contextUri: contextUri == null && nullToAbsent
-          ? const Value.absent()
-          : Value(contextUri),
-      contextType: Value(contextType),
-      contextName: Value(contextName),
-      imageUrl: imageUrl == null && nullToAbsent
-          ? const Value.absent()
-          : Value(imageUrl),
-      lastPlayedAt: Value(lastPlayedAt),
-    );
-  }
-
-  factory PlayContext.fromJson(
-    Map<String, dynamic> json, {
-    ValueSerializer? serializer,
-  }) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return PlayContext(
-      contextUri: serializer.fromJson<String?>(json['contextUri']),
-      contextType: serializer.fromJson<String>(json['contextType']),
-      contextName: serializer.fromJson<String>(json['contextName']),
-      imageUrl: serializer.fromJson<String?>(json['imageUrl']),
-      lastPlayedAt: serializer.fromJson<int>(json['lastPlayedAt']),
-    );
-  }
-  @override
-  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
-    serializer ??= driftRuntimeOptions.defaultSerializer;
-    return <String, dynamic>{
-      'contextUri': serializer.toJson<String?>(contextUri),
-      'contextType': serializer.toJson<String>(contextType),
-      'contextName': serializer.toJson<String>(contextName),
-      'imageUrl': serializer.toJson<String?>(imageUrl),
-      'lastPlayedAt': serializer.toJson<int>(lastPlayedAt),
-    };
-  }
-
-  PlayContext copyWith({
-    Value<String?> contextUri = const Value.absent(),
-    String? contextType,
-    String? contextName,
-    Value<String?> imageUrl = const Value.absent(),
-    int? lastPlayedAt,
-  }) => PlayContext(
-    contextUri: contextUri.present ? contextUri.value : this.contextUri,
-    contextType: contextType ?? this.contextType,
-    contextName: contextName ?? this.contextName,
-    imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
-    lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
-  );
-  PlayContext copyWithCompanion(PlayContextsCompanion data) {
-    return PlayContext(
-      contextUri: data.contextUri.present
-          ? data.contextUri.value
-          : this.contextUri,
-      contextType: data.contextType.present
-          ? data.contextType.value
-          : this.contextType,
-      contextName: data.contextName.present
-          ? data.contextName.value
-          : this.contextName,
-      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
-      lastPlayedAt: data.lastPlayedAt.present
-          ? data.lastPlayedAt.value
-          : this.lastPlayedAt,
-    );
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PlayContext(')
-          ..write('contextUri: $contextUri, ')
-          ..write('contextType: $contextType, ')
-          ..write('contextName: $contextName, ')
-          ..write('imageUrl: $imageUrl, ')
-          ..write('lastPlayedAt: $lastPlayedAt')
-          ..write(')'))
-        .toString();
-  }
-
-  @override
-  int get hashCode =>
-      Object.hash(contextUri, contextType, contextName, imageUrl, lastPlayedAt);
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      (other is PlayContext &&
-          other.contextUri == this.contextUri &&
-          other.contextType == this.contextType &&
-          other.contextName == this.contextName &&
-          other.imageUrl == this.imageUrl &&
-          other.lastPlayedAt == this.lastPlayedAt);
-}
-
-class PlayContextsCompanion extends UpdateCompanion<PlayContext> {
-  final Value<String?> contextUri;
-  final Value<String> contextType;
-  final Value<String> contextName;
-  final Value<String?> imageUrl;
-  final Value<int> lastPlayedAt;
-  final Value<int> rowid;
-  const PlayContextsCompanion({
-    this.contextUri = const Value.absent(),
-    this.contextType = const Value.absent(),
-    this.contextName = const Value.absent(),
-    this.imageUrl = const Value.absent(),
-    this.lastPlayedAt = const Value.absent(),
-    this.rowid = const Value.absent(),
-  });
-  PlayContextsCompanion.insert({
-    this.contextUri = const Value.absent(),
-    required String contextType,
-    required String contextName,
-    this.imageUrl = const Value.absent(),
-    required int lastPlayedAt,
-    this.rowid = const Value.absent(),
-  }) : contextType = Value(contextType),
-       contextName = Value(contextName),
-       lastPlayedAt = Value(lastPlayedAt);
-  static Insertable<PlayContext> custom({
-    Expression<String>? contextUri,
-    Expression<String>? contextType,
-    Expression<String>? contextName,
-    Expression<String>? imageUrl,
-    Expression<int>? lastPlayedAt,
-    Expression<int>? rowid,
-  }) {
-    return RawValuesInsertable({
-      if (contextUri != null) 'contextUri': contextUri,
-      if (contextType != null) 'contextType': contextType,
-      if (contextName != null) 'contextName': contextName,
-      if (imageUrl != null) 'imageUrl': imageUrl,
-      if (lastPlayedAt != null) 'lastPlayedAt': lastPlayedAt,
-      if (rowid != null) 'rowid': rowid,
-    });
-  }
-
-  PlayContextsCompanion copyWith({
-    Value<String?>? contextUri,
-    Value<String>? contextType,
-    Value<String>? contextName,
-    Value<String?>? imageUrl,
-    Value<int>? lastPlayedAt,
-    Value<int>? rowid,
-  }) {
-    return PlayContextsCompanion(
-      contextUri: contextUri ?? this.contextUri,
-      contextType: contextType ?? this.contextType,
-      contextName: contextName ?? this.contextName,
-      imageUrl: imageUrl ?? this.imageUrl,
-      lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
-      rowid: rowid ?? this.rowid,
-    );
-  }
-
-  @override
-  Map<String, Expression> toColumns(bool nullToAbsent) {
-    final map = <String, Expression>{};
-    if (contextUri.present) {
-      map['contextUri'] = Variable<String>(contextUri.value);
-    }
-    if (contextType.present) {
-      map['contextType'] = Variable<String>(contextType.value);
-    }
-    if (contextName.present) {
-      map['contextName'] = Variable<String>(contextName.value);
-    }
-    if (imageUrl.present) {
-      map['imageUrl'] = Variable<String>(imageUrl.value);
-    }
-    if (lastPlayedAt.present) {
-      map['lastPlayedAt'] = Variable<int>(lastPlayedAt.value);
-    }
-    if (rowid.present) {
-      map['rowid'] = Variable<int>(rowid.value);
-    }
-    return map;
-  }
-
-  @override
-  String toString() {
-    return (StringBuffer('PlayContextsCompanion(')
-          ..write('contextUri: $contextUri, ')
-          ..write('contextType: $contextType, ')
-          ..write('contextName: $contextName, ')
-          ..write('imageUrl: $imageUrl, ')
-          ..write('lastPlayedAt: $lastPlayedAt, ')
-          ..write('rowid: $rowid')
-          ..write(')'))
-        .toString();
-  }
-}
-
 class $PlayHistoryTable extends PlayHistory
     with TableInfo<$PlayHistoryTable, PlayHistoryData> {
   @override
@@ -4656,9 +4269,9 @@ class $PlayEventsTable extends PlayEvents
   late final GeneratedColumn<String> syncKey = GeneratedColumn<String>(
     'syncKey',
     aliasedName,
-    true,
+    false,
     type: DriftSqlType.string,
-    requiredDuringInsert: false,
+    requiredDuringInsert: true,
   );
   static const VerificationMeta _originDeviceIdMeta = const VerificationMeta(
     'originDeviceId',
@@ -4773,6 +4386,8 @@ class $PlayEventsTable extends PlayEvents
         _syncKeyMeta,
         syncKey.isAcceptableOrUnknown(data['syncKey']!, _syncKeyMeta),
       );
+    } else if (isInserting) {
+      context.missing(_syncKeyMeta);
     }
     if (data.containsKey('originDeviceId')) {
       context.handle(
@@ -4841,7 +4456,7 @@ class $PlayEventsTable extends PlayEvents
       syncKey: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}syncKey'],
-      ),
+      )!,
       originDeviceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}originDeviceId'],
@@ -4871,7 +4486,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
   final int listenedMs;
   final int maxPositionMs;
   final String? endReason;
-  final String? syncKey;
+  final String syncKey;
   final String originDeviceId;
   final int versionPhysical;
   final int versionCounter;
@@ -4883,7 +4498,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     required this.listenedMs,
     required this.maxPositionMs,
     this.endReason,
-    this.syncKey,
+    required this.syncKey,
     required this.originDeviceId,
     required this.versionPhysical,
     required this.versionCounter,
@@ -4902,9 +4517,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     if (!nullToAbsent || endReason != null) {
       map['endReason'] = Variable<String>(endReason);
     }
-    if (!nullToAbsent || syncKey != null) {
-      map['syncKey'] = Variable<String>(syncKey);
-    }
+    map['syncKey'] = Variable<String>(syncKey);
     map['originDeviceId'] = Variable<String>(originDeviceId);
     map['versionPhysical'] = Variable<int>(versionPhysical);
     map['versionCounter'] = Variable<int>(versionCounter);
@@ -4924,9 +4537,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
       endReason: endReason == null && nullToAbsent
           ? const Value.absent()
           : Value(endReason),
-      syncKey: syncKey == null && nullToAbsent
-          ? const Value.absent()
-          : Value(syncKey),
+      syncKey: Value(syncKey),
       originDeviceId: Value(originDeviceId),
       versionPhysical: Value(versionPhysical),
       versionCounter: Value(versionCounter),
@@ -4946,7 +4557,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
       listenedMs: serializer.fromJson<int>(json['listenedMs']),
       maxPositionMs: serializer.fromJson<int>(json['maxPositionMs']),
       endReason: serializer.fromJson<String?>(json['endReason']),
-      syncKey: serializer.fromJson<String?>(json['syncKey']),
+      syncKey: serializer.fromJson<String>(json['syncKey']),
       originDeviceId: serializer.fromJson<String>(json['originDeviceId']),
       versionPhysical: serializer.fromJson<int>(json['versionPhysical']),
       versionCounter: serializer.fromJson<int>(json['versionCounter']),
@@ -4963,7 +4574,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
       'listenedMs': serializer.toJson<int>(listenedMs),
       'maxPositionMs': serializer.toJson<int>(maxPositionMs),
       'endReason': serializer.toJson<String?>(endReason),
-      'syncKey': serializer.toJson<String?>(syncKey),
+      'syncKey': serializer.toJson<String>(syncKey),
       'originDeviceId': serializer.toJson<String>(originDeviceId),
       'versionPhysical': serializer.toJson<int>(versionPhysical),
       'versionCounter': serializer.toJson<int>(versionCounter),
@@ -4978,7 +4589,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     int? listenedMs,
     int? maxPositionMs,
     Value<String?> endReason = const Value.absent(),
-    Value<String?> syncKey = const Value.absent(),
+    String? syncKey,
     String? originDeviceId,
     int? versionPhysical,
     int? versionCounter,
@@ -4990,7 +4601,7 @@ class PlayEventRow extends DataClass implements Insertable<PlayEventRow> {
     listenedMs: listenedMs ?? this.listenedMs,
     maxPositionMs: maxPositionMs ?? this.maxPositionMs,
     endReason: endReason.present ? endReason.value : this.endReason,
-    syncKey: syncKey.present ? syncKey.value : this.syncKey,
+    syncKey: syncKey ?? this.syncKey,
     originDeviceId: originDeviceId ?? this.originDeviceId,
     versionPhysical: versionPhysical ?? this.versionPhysical,
     versionCounter: versionCounter ?? this.versionCounter,
@@ -5078,7 +4689,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
   final Value<int> listenedMs;
   final Value<int> maxPositionMs;
   final Value<String?> endReason;
-  final Value<String?> syncKey;
+  final Value<String> syncKey;
   final Value<String> originDeviceId;
   final Value<int> versionPhysical;
   final Value<int> versionCounter;
@@ -5103,12 +4714,13 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
     this.listenedMs = const Value.absent(),
     this.maxPositionMs = const Value.absent(),
     this.endReason = const Value.absent(),
-    this.syncKey = const Value.absent(),
+    required String syncKey,
     this.originDeviceId = const Value.absent(),
     this.versionPhysical = const Value.absent(),
     this.versionCounter = const Value.absent(),
   }) : trackId = Value(trackId),
-       startedAt = Value(startedAt);
+       startedAt = Value(startedAt),
+       syncKey = Value(syncKey);
   static Insertable<PlayEventRow> custom({
     Expression<int>? id,
     Expression<int>? trackId,
@@ -5145,7 +4757,7 @@ class PlayEventsCompanion extends UpdateCompanion<PlayEventRow> {
     Value<int>? listenedMs,
     Value<int>? maxPositionMs,
     Value<String?>? endReason,
-    Value<String?>? syncKey,
+    Value<String>? syncKey,
     Value<String>? originDeviceId,
     Value<int>? versionPhysical,
     Value<int>? versionCounter,
@@ -6166,7 +5778,6 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
 abstract class _$MoliaDatabase extends GeneratedDatabase {
   _$MoliaDatabase(QueryExecutor e) : super(e);
   $MoliaDatabaseManager get managers => $MoliaDatabaseManager(this);
-  late final $PlayContextsTable playContexts = $PlayContextsTable(this);
   late final $PlayHistoryTable playHistory = $PlayHistoryTable(this);
   late final $PlaylistsTable playlists = $PlaylistsTable(this);
   late final $PlaylistTracksTable playlistTracks = $PlaylistTracksTable(this);
@@ -6178,10 +5789,6 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   late final $PlayTracksTable playTracks = $PlayTracksTable(this);
   late final $PlayEventsTable playEvents = $PlayEventsTable(this);
   late final $DownloadsTable downloads = $DownloadsTable(this);
-  late final Index idxPlayContextsLastPlayedAt = Index(
-    'idx_play_contexts_lastPlayedAt',
-    'CREATE INDEX idx_play_contexts_lastPlayedAt ON play_contexts (lastPlayedAt)',
-  );
   late final Index idxPlayHistoryPlayedAt = Index(
     'idx_play_history_playedAt',
     'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
@@ -6212,7 +5819,7 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   );
   late final Index idxPlayEventsSyncKey = Index(
     'idx_play_events_syncKey',
-    'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey) WHERE syncKey IS NOT NULL',
+    'CREATE UNIQUE INDEX idx_play_events_syncKey ON play_events (syncKey)',
   );
   late final Index idxDownloadsDownloadedAt = Index(
     'idx_downloads_downloadedAt',
@@ -6223,7 +5830,6 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
-    playContexts,
     playHistory,
     playlists,
     playlistTracks,
@@ -6234,7 +5840,6 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     playTracks,
     playEvents,
     downloads,
-    idxPlayContextsLastPlayedAt,
     idxPlayHistoryPlayedAt,
     idxPlaylistsSyncId,
     idxPlaylistTracksOrder,
@@ -6247,223 +5852,6 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   ];
 }
 
-typedef $$PlayContextsTableCreateCompanionBuilder =
-    PlayContextsCompanion Function({
-      Value<String?> contextUri,
-      required String contextType,
-      required String contextName,
-      Value<String?> imageUrl,
-      required int lastPlayedAt,
-      Value<int> rowid,
-    });
-typedef $$PlayContextsTableUpdateCompanionBuilder =
-    PlayContextsCompanion Function({
-      Value<String?> contextUri,
-      Value<String> contextType,
-      Value<String> contextName,
-      Value<String?> imageUrl,
-      Value<int> lastPlayedAt,
-      Value<int> rowid,
-    });
-
-class $$PlayContextsTableFilterComposer
-    extends Composer<_$MoliaDatabase, $PlayContextsTable> {
-  $$PlayContextsTableFilterComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnFilters<String> get contextUri => $composableBuilder(
-    column: $table.contextUri,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get contextType => $composableBuilder(
-    column: $table.contextType,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get contextName => $composableBuilder(
-    column: $table.contextName,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get imageUrl => $composableBuilder(
-    column: $table.imageUrl,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<int> get lastPlayedAt => $composableBuilder(
-    column: $table.lastPlayedAt,
-    builder: (column) => ColumnFilters(column),
-  );
-}
-
-class $$PlayContextsTableOrderingComposer
-    extends Composer<_$MoliaDatabase, $PlayContextsTable> {
-  $$PlayContextsTableOrderingComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  ColumnOrderings<String> get contextUri => $composableBuilder(
-    column: $table.contextUri,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get contextType => $composableBuilder(
-    column: $table.contextType,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get contextName => $composableBuilder(
-    column: $table.contextName,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<String> get imageUrl => $composableBuilder(
-    column: $table.imageUrl,
-    builder: (column) => ColumnOrderings(column),
-  );
-
-  ColumnOrderings<int> get lastPlayedAt => $composableBuilder(
-    column: $table.lastPlayedAt,
-    builder: (column) => ColumnOrderings(column),
-  );
-}
-
-class $$PlayContextsTableAnnotationComposer
-    extends Composer<_$MoliaDatabase, $PlayContextsTable> {
-  $$PlayContextsTableAnnotationComposer({
-    required super.$db,
-    required super.$table,
-    super.joinBuilder,
-    super.$addJoinBuilderToRootComposer,
-    super.$removeJoinBuilderFromRootComposer,
-  });
-  GeneratedColumn<String> get contextUri => $composableBuilder(
-    column: $table.contextUri,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get contextType => $composableBuilder(
-    column: $table.contextType,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get contextName => $composableBuilder(
-    column: $table.contextName,
-    builder: (column) => column,
-  );
-
-  GeneratedColumn<String> get imageUrl =>
-      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
-
-  GeneratedColumn<int> get lastPlayedAt => $composableBuilder(
-    column: $table.lastPlayedAt,
-    builder: (column) => column,
-  );
-}
-
-class $$PlayContextsTableTableManager
-    extends
-        RootTableManager<
-          _$MoliaDatabase,
-          $PlayContextsTable,
-          PlayContext,
-          $$PlayContextsTableFilterComposer,
-          $$PlayContextsTableOrderingComposer,
-          $$PlayContextsTableAnnotationComposer,
-          $$PlayContextsTableCreateCompanionBuilder,
-          $$PlayContextsTableUpdateCompanionBuilder,
-          (
-            PlayContext,
-            BaseReferences<_$MoliaDatabase, $PlayContextsTable, PlayContext>,
-          ),
-          PlayContext,
-          PrefetchHooks Function()
-        > {
-  $$PlayContextsTableTableManager(_$MoliaDatabase db, $PlayContextsTable table)
-    : super(
-        TableManagerState(
-          db: db,
-          table: table,
-          createFilteringComposer: () =>
-              $$PlayContextsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$PlayContextsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$PlayContextsTableAnnotationComposer($db: db, $table: table),
-          updateCompanionCallback:
-              ({
-                Value<String?> contextUri = const Value.absent(),
-                Value<String> contextType = const Value.absent(),
-                Value<String> contextName = const Value.absent(),
-                Value<String?> imageUrl = const Value.absent(),
-                Value<int> lastPlayedAt = const Value.absent(),
-                Value<int> rowid = const Value.absent(),
-              }) => PlayContextsCompanion(
-                contextUri: contextUri,
-                contextType: contextType,
-                contextName: contextName,
-                imageUrl: imageUrl,
-                lastPlayedAt: lastPlayedAt,
-                rowid: rowid,
-              ),
-          createCompanionCallback:
-              ({
-                Value<String?> contextUri = const Value.absent(),
-                required String contextType,
-                required String contextName,
-                Value<String?> imageUrl = const Value.absent(),
-                required int lastPlayedAt,
-                Value<int> rowid = const Value.absent(),
-              }) => PlayContextsCompanion.insert(
-                contextUri: contextUri,
-                contextType: contextType,
-                contextName: contextName,
-                imageUrl: imageUrl,
-                lastPlayedAt: lastPlayedAt,
-                rowid: rowid,
-              ),
-          withReferenceMapper: (p0) => p0
-              .map(
-                (e) => (
-                  e.readTable<$PlayContextsTable, PlayContext>(table),
-                  BaseReferences<
-                    _$MoliaDatabase,
-                    $PlayContextsTable,
-                    PlayContext
-                  >(db, table, e),
-                ),
-              )
-              .toList(),
-          prefetchHooksCallback: null,
-        ),
-      );
-}
-
-typedef $$PlayContextsTableProcessedTableManager =
-    ProcessedTableManager<
-      _$MoliaDatabase,
-      $PlayContextsTable,
-      PlayContext,
-      $$PlayContextsTableFilterComposer,
-      $$PlayContextsTableOrderingComposer,
-      $$PlayContextsTableAnnotationComposer,
-      $$PlayContextsTableCreateCompanionBuilder,
-      $$PlayContextsTableUpdateCompanionBuilder,
-      (
-        PlayContext,
-        BaseReferences<_$MoliaDatabase, $PlayContextsTable, PlayContext>,
-      ),
-      PlayContext,
-      PrefetchHooks Function()
-    >;
 typedef $$PlayHistoryTableCreateCompanionBuilder =
     PlayHistoryCompanion Function({
       required String sourceKey,
@@ -8770,7 +8158,7 @@ typedef $$PlayEventsTableCreateCompanionBuilder = PlayEventsCompanion Function({
   Value<int> listenedMs,
   Value<int> maxPositionMs,
   Value<String?> endReason,
-  Value<String?> syncKey,
+  required String syncKey,
   Value<String> originDeviceId,
   Value<int> versionPhysical,
   Value<int> versionCounter,
@@ -8783,7 +8171,7 @@ typedef $$PlayEventsTableUpdateCompanionBuilder = PlayEventsCompanion Function({
   Value<int> listenedMs,
   Value<int> maxPositionMs,
   Value<String?> endReason,
-  Value<String?> syncKey,
+  Value<String> syncKey,
   Value<String> originDeviceId,
   Value<int> versionPhysical,
   Value<int> versionCounter,
@@ -9085,7 +8473,7 @@ class $$PlayEventsTableTableManager
                 Value<int> listenedMs = const Value.absent(),
                 Value<int> maxPositionMs = const Value.absent(),
                 Value<String?> endReason = const Value.absent(),
-                Value<String?> syncKey = const Value.absent(),
+                Value<String> syncKey = const Value.absent(),
                 Value<String> originDeviceId = const Value.absent(),
                 Value<int> versionPhysical = const Value.absent(),
                 Value<int> versionCounter = const Value.absent(),
@@ -9111,7 +8499,7 @@ class $$PlayEventsTableTableManager
                 Value<int> listenedMs = const Value.absent(),
                 Value<int> maxPositionMs = const Value.absent(),
                 Value<String?> endReason = const Value.absent(),
-                Value<String?> syncKey = const Value.absent(),
+                required String syncKey,
                 Value<String> originDeviceId = const Value.absent(),
                 Value<int> versionPhysical = const Value.absent(),
                 Value<int> versionCounter = const Value.absent(),
@@ -9634,8 +9022,6 @@ typedef $$DownloadsTableProcessedTableManager =
 class $MoliaDatabaseManager {
   final _$MoliaDatabase _db;
   $MoliaDatabaseManager(this._db);
-  $$PlayContextsTableTableManager get playContexts =>
-      $$PlayContextsTableTableManager(_db, _db.playContexts);
   $$PlayHistoryTableTableManager get playHistory =>
       $$PlayHistoryTableTableManager(_db, _db.playHistory);
   $$PlaylistsTableTableManager get playlists =>

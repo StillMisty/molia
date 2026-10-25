@@ -1,6 +1,9 @@
 import 'package:logging/logging.dart';
+
 import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
+
 import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
 import '../data/mapping/track_mapper.dart';
@@ -108,8 +111,9 @@ class SearchProvider extends ChangeNotifier {
       keyOf: (track) => track.id,
       fetchPage: _fetchLyricPage,
     );
-    _registrySubscription =
-        _sourceRegistry?.changes.listen((_) => _onSourcesChanged());
+    _registrySubscription = _sourceRegistry?.changes.listen(
+      (_) => _onSourcesChanged(),
+    );
     _onSourcesChanged();
   }
 
@@ -188,7 +192,7 @@ class SearchProvider extends ChangeNotifier {
   /// 是否已选中可用音源（空音源时搜索结果页展示引导空态）。
   bool get hasSelectedSource => _sourceKey.isNotEmpty;
 
-  /// 可选音源列表：由 [SourceRegistry] 的描述列表映射为兼容 [SourceOption]，
+  /// 可选音源列表：由 [SourceRegistry] 的描述列表映射为 [SourceOption]，
   /// 顺序即用户自定义排序（`lx_source_order`）。
   List<SourceOption> get sourceOptions {
     final descriptors = _sourceRegistry?.descriptors;
@@ -198,7 +202,7 @@ class SearchProvider extends ChangeNotifier {
         SourceOption(
           key: descriptor.key,
           name: descriptor.displayName,
-          kind: _legacyKind(descriptor.kind),
+          kind: _sourceKind(descriptor.kind),
           canSearch: descriptor.capabilities.search,
         ),
     ];
@@ -474,7 +478,10 @@ class SearchProvider extends ChangeNotifier {
     final result = await catalog.searchArtists(
       _sourceKey,
       SearchQuery(
-          keyword: _artistPagerQuery, page: page, limit: _searchPageSize),
+        keyword: _artistPagerQuery,
+        page: page,
+        limit: _searchPageSize,
+      ),
     );
     return PagedResult(
       items: result.items,
@@ -526,7 +533,10 @@ class SearchProvider extends ChangeNotifier {
     final result = await catalog.searchLyrics(
       _sourceKey,
       SearchQuery(
-          keyword: _lyricPagerQuery, page: page, limit: _searchPageSize),
+        keyword: _lyricPagerQuery,
+        page: page,
+        limit: _searchPageSize,
+      ),
     );
     // 播放需回 SourceTrack（payload 同一引用）；片段按回转过后的曲目 id
     // 建表（与行身份严格一致，分页追加时累计）。
@@ -631,11 +641,11 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  /// 领域音源种类 → 兼容 `SourceKind`（两者枚举名一一对应）。
+  /// 领域音源种类 → UI `SourceKind`（两者枚举名一一对应）。
   ///
   /// `local`（本地下载副本）不出现在搜索 / 渠道列表，该分支不可达；
   /// 出现即编程错误，显式抛出而不是静默兜底。
-  SourceKind _legacyKind(domain.SourceKind kind) {
+  SourceKind _sourceKind(domain.SourceKind kind) {
     switch (kind) {
       case domain.SourceKind.builtin:
         return SourceKind.builtin;

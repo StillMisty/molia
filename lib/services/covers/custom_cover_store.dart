@@ -251,45 +251,6 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
     return path == null ? null : Uri.file(path).toString();
   }
 
-  /// 按原始曲目键查询自定义封面（`TrackRowModel.coverKey` 入口）。
-  ///
-  /// 只是 `resolution.realForKey(...).url` 的旧入口；新代码请走解析器。
-  String? trackCoverUrlForKey(String? coverKey) {
-    if (coverKey == null || coverKey.isEmpty) return null;
-    return customCoverUrlForKey(normalizeCoverKey(coverKey));
-  }
-
-  /// 曲目真实封面（自定义优先，否则原始；不含默认封面）。
-  ///
-  /// **旧入口**：新代码用 [resolution] 的 `realOf` / `displayOf`。保留只为
-  /// 兼容旧调用点，仓库内生产代码已无调用。
-  @Deprecated('使用 CustomCoverStore.resolution.realOf / displayOf')
-  String? resolveTrackCover(Track? track) => resolution.realOf(track).url;
-
-  /// 按 [TrackId] 解析真实封面（旧入口，见 [resolveTrackCover]）。
-  @Deprecated('使用 CustomCoverStore.resolution.realForId / displayForId')
-  String? resolveTrackCoverForId(TrackId? id, {String? originalUrl}) =>
-      resolution.realForId(id, originalUrl: originalUrl).url;
-
-  /// 按字符串曲目键解析真实封面（旧入口，见 [resolveTrackCover]）。
-  @Deprecated('使用 CustomCoverStore.resolution.realForKey / displayForKey')
-  String? resolveTrackCoverForKey(String? coverKey, {String? originalUrl}) =>
-      resolution.realForKey(coverKey, originalUrl: originalUrl).url;
-
-  /// 展示封面（旧入口）：自定义 → 原始 → 默认；新代码用 [resolution]。
-  @Deprecated('使用 CustomCoverStore.resolution.displayOf')
-  String? resolveForDisplay(Track? track) => resolution.displayOf(track).url;
-
-  /// 按 [TrackId] 解析展示封面（旧入口）。
-  @Deprecated('使用 CustomCoverStore.resolution.displayForId')
-  String? resolveForDisplayById(TrackId? id, {String? originalUrl}) =>
-      resolution.displayForId(id, originalUrl: originalUrl).url;
-
-  /// 按字符串曲目键解析展示封面（旧入口）。
-  @Deprecated('使用 CustomCoverStore.resolution.displayForKey')
-  String? resolveForDisplayForKey(String? coverKey, {String? originalUrl}) =>
-      resolution.displayForKey(coverKey, originalUrl: originalUrl).url;
-
   /// 当前曲目封面索引（键 = 规范化封面键；只读快照）。
   Map<String, CustomCoverEntry> get trackEntries => Map.unmodifiable(_tracks);
 
@@ -330,12 +291,7 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
       filePrefix: 'track_${_shortHash(key)}',
       bytes: bytes,
     );
-    await _commitTrackEntry(
-      key,
-      entry,
-      trackId: id,
-      local: true,
-    );
+    await _commitTrackEntry(key, entry, trackId: id, local: true);
   }
 
   /// 恢复曲目原始封面（没有自定义封面时为空操作）。

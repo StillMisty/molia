@@ -19,7 +19,6 @@ import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/settings_page.dart';
-import 'package:molia/providers/local_database_provider.dart';
 import 'package:molia/providers/lyrics_display_provider.dart';
 import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -47,7 +46,9 @@ import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/molia_mark.dart';
 
 import 'support/fakes.dart';
+
 import 'package:molia/data/settings/settings_keys.dart';
+
 import 'support/notification_recorder.dart';
 import 'support/sync_test_support.dart';
 
@@ -118,15 +119,11 @@ void main() {
         providers: [
           ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
           ChangeNotifierProvider<PlaybackProvider>.value(
-              value: playbackProvider),
+            value: playbackProvider,
+          ),
           ChangeNotifierProvider<NavProvider>.value(value: navProvider),
-          ChangeNotifierProvider<LocalDatabaseProvider>(
-            create: (_) => LocalDatabaseProvider(),
-          ),
           Provider<LyricsService>(create: (_) => LyricsService()),
-          Provider<NotificationService>.value(
-            value: NotificationService(scaffoldMessengerKey),
-          ),
+          Provider<NotificationService>.value(value: NotificationService()),
           ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
           ChangeNotifierProvider<AudioFocusSettings>.value(
             value: audioFocusSettings,
@@ -175,10 +172,8 @@ void main() {
   Finder settingsHome() => find.text('Appearance');
 
   /// 行内选项的命中：分段/预览圆的标签文本都在行 key 之内。
-  Finder optionOf(Key rowKey, String label) => find.descendant(
-        of: find.byKey(rowKey),
-        matching: find.text(label),
-      );
+  Finder optionOf(Key rowKey, String label) =>
+      find.descendant(of: find.byKey(rowKey), matching: find.text(label));
 
   Map<String, dynamic> backArgs(double progress) => <String, dynamic>{
         'touchOffset': <double>[5, 600],
@@ -192,8 +187,9 @@ void main() {
     String method, [
     Map<String, dynamic>? args,
   ]) async {
-    final data =
-        const StandardMethodCodec().encodeMethodCall(MethodCall(method, args));
+    final data = const StandardMethodCodec().encodeMethodCall(
+      MethodCall(method, args),
+    );
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       SystemChannels.backGesture.name,
       data,
@@ -247,10 +243,7 @@ void main() {
 
     // 壁纸段禁用：点它不产生状态变化。
     await tester.tap(
-      optionOf(
-        const Key('settingsBaseColorItem'),
-        'System wallpaper',
-      ),
+      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -281,10 +274,7 @@ void main() {
     await themeProvider.setBaseColorSource(ColorBaseSource.custom);
     await tester.pumpAndSettle();
     await tester.tap(
-      optionOf(
-        const Key('settingsBaseColorItem'),
-        'System wallpaper',
-      ),
+      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -301,10 +291,7 @@ void main() {
     await themeProvider.setBaseColorSource(ColorBaseSource.custom);
     await tester.pumpAndSettle();
     await tester.tap(
-      optionOf(
-        const Key('settingsBaseColorItem'),
-        'System wallpaper',
-      ),
+      optionOf(const Key('settingsBaseColorItem'), 'System wallpaper'),
     );
     await tester.pumpAndSettle();
     expect(themeProvider.baseColorSource, ColorBaseSource.wallpaper);
@@ -406,9 +393,7 @@ void main() {
     await pumpSettingsPage(tester);
     expect(audioFocusSettings.playWithOtherApps, isTrue);
 
-    await tester.tap(
-      find.byKey(const Key('settingsPlayWithOtherAppsSwitch')),
-    );
+    await tester.tap(find.byKey(const Key('settingsPlayWithOtherAppsSwitch')));
     await tester.pumpAndSettle();
 
     expect(audioFocusSettings.playWithOtherApps, isFalse);
@@ -416,17 +401,13 @@ void main() {
     expect(prefs.getBool(kPlayWithOtherApps.name), isFalse);
   });
 
-  testWidgets(
-    '与其他应用同时播放：桌面没有音频焦点实现，不显示',
-    (tester) async {
-      await pumpSettingsPage(tester);
-      expect(
-        find.byKey(const Key('settingsPlayWithOtherAppsSwitch')),
-        findsNothing,
-      );
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+  testWidgets('与其他应用同时播放：桌面没有音频焦点实现，不显示', (tester) async {
+    await pumpSettingsPage(tester);
+    expect(
+      find.byKey(const Key('settingsPlayWithOtherAppsSwitch')),
+      findsNothing,
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('省流模式：开关/音质上限/封面省流在播放分区内生效并持久化', (tester) async {
     await pumpSettingsPage(tester);
@@ -435,7 +416,9 @@ void main() {
     expect(find.byKey(const Key('settingsDataSaverSwitch')), findsOneWidget);
     expect(find.byKey(const Key('settingsDataSaverQualityItem')), findsNothing);
     expect(
-        find.byKey(const Key('settingsDataSaverCoversSwitch')), findsNothing);
+      find.byKey(const Key('settingsDataSaverCoversSwitch')),
+      findsNothing,
+    );
 
     final switchFinder = find.byKey(const Key('settingsDataSaverSwitch'));
     await tester.ensureVisible(switchFinder);
@@ -557,9 +540,7 @@ void main() {
 
     // 语言行内分段：切到简体中文后写入登记键。
     final prefs = await SharedPreferences.getInstance();
-    LanguageService.attachSettings(
-      testSettingsRegistry(preferences: prefs),
-    );
+    LanguageService.attachSettings(testSettingsRegistry(preferences: prefs));
     await tester.tap(
       find.descendant(
         of: find.byKey(const Key('settingsLanguageItem')),
@@ -660,8 +641,9 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(
-      ShortcutSettings.instance.inAppBindings
-          .comboFor(ShortcutCommand.volumeUp),
+      ShortcutSettings.instance.inAppBindings.comboFor(
+        ShortcutCommand.volumeUp,
+      ),
       const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
     );
 
@@ -690,7 +672,9 @@ void main() {
       findsOneWidget,
     );
     expect(
-        find.byKey(const Key('shortcutReset_inApp_volumeUp')), findsOneWidget);
+      find.byKey(const Key('shortcutReset_inApp_volumeUp')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const Key('shortcutReset_inApp_togglePlayPause')),
       findsOneWidget,
@@ -750,8 +734,9 @@ void main() {
 
     // 互换后两行都被覆盖：「回默认」按钮亮起。
     final volumeReset = find.byKey(const Key('shortcutReset_inApp_volumeUp'));
-    final playReset =
-        find.byKey(const Key('shortcutReset_inApp_togglePlayPause'));
+    final playReset = find.byKey(
+      const Key('shortcutReset_inApp_togglePlayPause'),
+    );
     expect(volumeReset, findsOneWidget);
     expect(playReset, findsOneWidget);
 
@@ -772,8 +757,9 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(
-      ShortcutSettings.instance.inAppBindings
-          .comboFor(ShortcutCommand.volumeUp),
+      ShortcutSettings.instance.inAppBindings.comboFor(
+        ShortcutCommand.volumeUp,
+      ),
       const ShortcutCombo(key: LogicalKeyboardKey.space),
     );
 
@@ -876,10 +862,7 @@ void main() {
       bindings.comboFor(ShortcutCommand.togglePlayPause),
       const ShortcutCombo(key: LogicalKeyboardKey.space),
     );
-    expect(
-      notifications.messages,
-      contains('Already used by “Play / pause”'),
-    );
+    expect(notifications.messages, contains('Already used by “Play / pause”'));
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('通用子页：桌面托盘开关切换并持久化（仅桌面端）', (tester) async {
@@ -1092,8 +1075,9 @@ void main() {
       1.0,
       reason: '子页手势必须由页面过渡接管，不能再显示 sheet 收缩',
     );
-    final subPageRoute =
-        ModalRoute.of(tester.element(find.text('App Language')))!;
+    final subPageRoute = ModalRoute.of(
+      tester.element(find.text('App Language')),
+    )!;
     expect(
       subPageRoute.animation!.value,
       closeTo(0.4, 0.001),
@@ -1105,11 +1089,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('App Language'), findsNothing);
     expect(settingsHome(), findsOneWidget);
-    expect(
-      sheetBackScaleX(tester),
-      1.0,
-      reason: '子页退栈不得把弹层一起缩走',
-    );
+    expect(sheetBackScaleX(tester), 1.0, reason: '子页退栈不得把弹层一起缩走');
   });
 
   testWidgets('底部弹层：首屏预测返回仍是 sheet 收缩，提交关闭设置', (tester) async {
@@ -1278,8 +1258,10 @@ void main() {
       transports: {'lan': transport},
       clock: () => DateTime.fromMillisecondsSinceEpoch(state.nowMs()),
     );
-    final control =
-        SyncControlPlane(state: state, transports: {'lan': transport});
+    final control = SyncControlPlane(
+      state: state,
+      transports: {'lan': transport},
+    );
     final provider = SyncProvider(
       engine: engine,
       controlPlane: control,
@@ -1471,7 +1453,6 @@ void main() {
     expect(find.text('Appearance'), findsOneWidget);
     expect(find.text('Listening Stats'), findsOneWidget, reason: '统计入口在首屏');
   });
-
 }
 
 /// 最小桌面歌词输出：能力就绪，不触碰平台通道。

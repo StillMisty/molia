@@ -5,16 +5,9 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// 注意：`M3ESnackbar.show` 需要能解析到根 Overlay 的 context，而
 /// `ScaffoldMessenger` 位于 Navigator 之上（其 context 没有 Overlay 祖先），
-/// 因此额外接收 [hostContextKey] —— main.dart 挂在 home 上的 GlobalKey。
-/// [scaffoldMessengerKey] 保留以兼容构造签名；提示只经 [hostContextKey]
-/// 走 M3ESnackbar 展示。
+/// 因此接收 [hostContextKey] —— main.dart 挂在 home 上的 GlobalKey。
 class NotificationService {
-  NotificationService(
-    this.scaffoldMessengerKey, {
-    this.hostContextKey,
-  });
-
-  final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey;
+  NotificationService({this.hostContextKey});
 
   /// 指向 Navigator 之下、可解析根 Overlay 的宿主 context（main.dart 注入）。
   final GlobalKey? hostContextKey;
@@ -42,16 +35,19 @@ class NotificationService {
     );
   }
 
-  void showSuccessSnackBar(String message,
-      {Duration duration = const Duration(seconds: 3)}) {
+  void showSuccessSnackBar(
+    String message, {
+    Duration duration = const Duration(seconds: 3),
+  }) {
     showSnackBar(message, isError: false, duration: duration);
   }
 
   void showErrorSnackBar(
-      String message,
-      {Duration duration = const Duration(seconds: 8),
-      String? actionLabel,
-      VoidCallback? onActionPressed}) {
+    String message, {
+    Duration duration = const Duration(seconds: 8),
+    String? actionLabel,
+    VoidCallback? onActionPressed,
+  }) {
     showSnackBar(
       message,
       isError: true,

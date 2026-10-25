@@ -95,10 +95,8 @@ class SourceManager extends ChangeNotifier {
   /// 内置平台原生封面回退（同上）。
   final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch();
 
-  SourceManager({
-    LxEngineSupervisor? engine,
-    required SettingsAccess settings,
-  })  : _engine = engine ?? LxEngineSupervisor(),
+  SourceManager({LxEngineSupervisor? engine, required SettingsAccess settings})
+      : _engine = engine ?? LxEngineSupervisor(),
         _settings = settings,
         _anyListenSource = AnyListenSource(settings: settings) {
     _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
@@ -167,14 +165,16 @@ class SourceManager extends ChangeNotifier {
   ///
   /// 资料页的渠道选择与「音源管理」的渠道排序都消费该列表；脚本扩展源 /
   /// any-listen 只有搜索能力，内置发现平台无论是否有脚本都保留发现入口。
-  List<SourceOption> get channels =>
-      [for (final profile in sourceProfiles.channels) _optionOf(profile)];
+  List<SourceOption> get channels => [
+        for (final profile in sourceProfiles.channels) _optionOf(profile),
+      ];
 
   /// 可供搜索/播放的音源列表（仅启用项；按用户自定义顺序排列）。
-  List<SourceOption> get searchableSources =>
-      [for (final profile in sourceProfiles.searchable) _optionOf(profile)];
+  List<SourceOption> get searchableSources => [
+        for (final profile in sourceProfiles.searchable) _optionOf(profile),
+      ];
 
-  /// 画像 → UI 兼容视图（`SourceOption` 保留给既有调用方）。
+  /// 画像 → UI 视图（`SourceOption`）。
   SourceOption _optionOf(SourceProfile profile) => SourceOption(
         key: profile.key,
         name: profile.displayName,
@@ -187,15 +187,6 @@ class SourceManager extends ChangeNotifier {
   /// 音源能力：直接读 [SourceProfiles]（registry / 领域适配器共用同一答案）。
   SourceCapabilities capabilitiesFor(String key) =>
       sourceProfiles.forKey(key)?.capabilities ?? const SourceCapabilities();
-
-  /// 按照 [order] 整理 [keys]，返回完整排序结果：
-  /// 在顺序表中出现过的按表排列，未出现的保持原相对顺序追加在末尾。
-  ///
-  /// 实现已搬进 [SourceProfiles.applyOrder]（画像构建也在用），这里保留
-  /// 静态入口兼容既有测试 / 调用方。
-  @visibleForTesting
-  static List<String> applySourceOrder(List<String> keys, List<String> order) =>
-      SourceProfiles.applyOrder(keys, order);
 
   /// supervisor 状态回调：重启成功后用引擎当前声明的源刷新 [activeSources]，
   /// 修复“引擎死了源列表还在”（超时 kill 后脚本重新执行，声明可能变化）。
@@ -212,15 +203,19 @@ class SourceManager extends ChangeNotifier {
     // 只读本地配置，不发起网络请求；失败时 AnyListenSource 维持默认（未配置）。
     await _anyListenSource.init();
 
-    _subscriptions.add(_engine.logs.listen((entry) {
-      if (kDebugMode) debugPrint('[LX:${entry.level}] ${entry.message}');
-    }));
-    _subscriptions.add(_engine.updateAlerts.listen((alert) {
-      _lastUpdateAlert = alert;
-      // 运行期上报的更新地址记入当前激活脚本，供「立即更新」使用。
-      unawaited(_recordUpdateUrl(alert));
-      notifyListeners();
-    }));
+    _subscriptions.add(
+      _engine.logs.listen((entry) {
+        if (kDebugMode) debugPrint('[LX:${entry.level}] ${entry.message}');
+      }),
+    );
+    _subscriptions.add(
+      _engine.updateAlerts.listen((alert) {
+        _lastUpdateAlert = alert;
+        // 运行期上报的更新地址记入当前激活脚本，供「立即更新」使用。
+        unawaited(_recordUpdateUrl(alert));
+        notifyListeners();
+      }),
+    );
 
     _initialized = true;
     notifyListeners();
@@ -312,8 +307,10 @@ class SourceManager extends ChangeNotifier {
   }
 
   /// 导入脚本（不激活时可用于预览）。
-  Future<LxScriptInfo> importScript(String script,
-      {bool activate = false}) async {
+  Future<LxScriptInfo> importScript(
+    String script, {
+    bool activate = false,
+  }) async {
     final info = LxScriptInfo.parse(script);
     if (info == null) {
       throw const FormatException('无法解析音源脚本：缺少以 /** @name ... */ 开头的元信息');
@@ -398,10 +395,15 @@ class SourceManager extends ChangeNotifier {
       // 拒绝，避免 UI 显示可搜索但路由报错。
       if (sourceProfiles.forKey(sourceKey)?.searchable != true) {
         throw LxEngineException(
-            '当前环境不支持 ${BuiltinPlatforms.displayName(sourceKey)} 的搜索与播放');
+          '当前环境不支持 ${BuiltinPlatforms.displayName(sourceKey)} 的搜索与播放',
+        );
       }
-      return BuiltinSearch.searchWithMeta(sourceKey, keyword,
-          page: page, limit: limit);
+      return BuiltinSearch.searchWithMeta(
+        sourceKey,
+        keyword,
+        page: page,
+        limit: limit,
+      );
     }
     if (decl == null) {
       throw LxEngineException('未知音源: $sourceKey');
@@ -427,20 +429,25 @@ class SourceManager extends ChangeNotifier {
   /// `Referer` / `User-Agent`，这些请求头必须一路透传到播放器、边播边缓存
   /// 与后台缓存写入；提前降级成 String 就会丢掉头部。any-listen / LX 脚本
   /// 目前只返回 URL（headers 为空），后续原生解析器可直接返回带头的流。
-  Future<PlayableStream> resolveStream(SourceTrack track,
-      {String? requestedQuality}) async {
+  Future<PlayableStream> resolveStream(
+    SourceTrack track, {
+    String? requestedQuality,
+  }) async {
     // any-listen 曲目走远程服务器取链；其余曲目走 LX 脚本取链。
     if (AnyListenSource.isAnyListenTrack(track)) {
       try {
-        final url = await _anyListenSource.resolveUrl(track,
-            requestedQuality: requestedQuality);
+        final url = await _anyListenSource.resolveUrl(
+          track,
+          requestedQuality: requestedQuality,
+        );
         return PlayableStream(Uri.parse(url));
       } on AnyListenException catch (e) {
         throw e.toSourceFailure();
       }
     }
-    final picked =
-        track.pickQuality(requestedQuality ?? _preferences.preferredQuality);
+    final picked = track.pickQuality(
+      requestedQuality ?? _preferences.preferredQuality,
+    );
     // 原生取链优先：B 站等平台的搜索与播放不依赖脚本，走注册表里的解析器
     // 才能保留直链要求的 headers / 有效期。
     final nativeResolve = BuiltinPlatforms.resolveFor(track.sourceKey);
@@ -708,7 +715,9 @@ class SourceManager extends ChangeNotifier {
     final script = repository.scripts.where((s) => s.id == id).firstOrNull;
     if (script == null) {
       throw const ScriptUpdateException(
-          ScriptUpdateError.scriptNotFound, '音源脚本不存在或已被删除');
+        ScriptUpdateError.scriptNotFound,
+        '音源脚本不存在或已被删除',
+      );
     }
     return script;
   }
@@ -723,7 +732,9 @@ class SourceManager extends ChangeNotifier {
     final url = current.updateUrl?.trim();
     if (url == null || url.isEmpty) {
       throw const ScriptUpdateException(
-          ScriptUpdateError.noUpdateUrl, '该音源未提供更新地址，请手动导入新版本');
+        ScriptUpdateError.noUpdateUrl,
+        '该音源未提供更新地址，请手动导入新版本',
+      );
     }
     final text = await downloadLxScriptText(url);
     final latest = parseDownloadedScript(text, id: current.id);

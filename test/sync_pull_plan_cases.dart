@@ -36,8 +36,6 @@ void main() {
     expect(plan.cursorFor('unknown'), -1);
     expect(plan.forcesFull('devB'), isTrue);
     expect(plan.forcesFull('devA'), isFalse);
-    expect(plan.fullPeers, {'devB'});
-    expect(plan.cursors, {'devA': 3, 'devB': -1});
   });
 
   test('本轮新鲜且指纹一致 + 已到头部 → 跳过', () {
@@ -92,12 +90,7 @@ void main() {
   test('没有版本令牌但头部可信且已到头部 → 跳过（WebDAV 无 etag 场景）', () {
     final decision = decideSyncPull(
       intent: const SyncPeerPullIntent(deviceId: 'devA', cursor: 4),
-      evidence: lanEvidence(
-        token: '',
-        cached: null,
-        head: 4,
-        trusted: true,
-      ),
+      evidence: lanEvidence(token: '', cached: null, head: 4, trusted: true),
     );
     expect(decision.action, SyncPullAction.skip);
     expect(decision.sameEvidence, isFalse);

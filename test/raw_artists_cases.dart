@@ -4,7 +4,7 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/sources/raw_track.dart';
 import 'package:molia/sources/source_track.dart';
 
-/// raw 歌手引用约定（`_artists` 内部字段）：解析、映射与回退口径。
+/// raw 歌手引用约定（`_artists` 内部字段）：解析、映射与往返保真。
 void main() {
   SourceTrack sourceTrack({
     Map<String, dynamic>? raw,
@@ -20,14 +20,8 @@ void main() {
       );
 
   test('artistsFromRaw：解析名字 + id；缺省 / 结构不符返回空；忽略空名字', () {
-    expect(
-      artistsFromRaw(const {}),
-      isEmpty,
-    );
-    expect(
-      artistsFromRaw(const {kRawArtistsField: 'not-a-list'}),
-      isEmpty,
-    );
+    expect(artistsFromRaw(const {}), isEmpty);
+    expect(artistsFromRaw(const {kRawArtistsField: 'not-a-list'}), isEmpty);
     expect(
       artistsFromRaw(const {
         kRawArtistsField: [
@@ -58,23 +52,27 @@ void main() {
   });
 
   test('trackFromSourceTrack：raw `_artists` → Track.artists（带平台内 id）', () {
-    final track = trackFromSourceTrack(sourceTrack(raw: const {
-      'songmid': '298317',
-      kRawArtistsField: [
-        {'name': '温岚', 'id': '9612'},
-        {'name': '周杰伦', 'id': '6452'},
-      ],
-    }));
-
-    expect(
-      track.artists.map((artist) => (artist.name, artist.id)).toList(),
-      [('温岚', '9612'), ('周杰伦', '6452')],
+    final track = trackFromSourceTrack(
+      sourceTrack(
+        raw: const {
+          'songmid': '298317',
+          kRawArtistsField: [
+            {'name': '温岚', 'id': '9612'},
+            {'name': '周杰伦', 'id': '6452'},
+          ],
+        },
+      ),
     );
+
+    expect(track.artists.map((artist) => (artist.name, artist.id)).toList(), [
+      ('温岚', '9612'),
+      ('周杰伦', '6452'),
+    ]);
     // payload 原样透传（同一引用）。
     expect(track.payload[kRawArtistsField], isA<List>());
   });
 
-  test('trackFromSourceTrack：无 `_artists`（脚本源 / 旧数据）回退整串 artist', () {
+  test('trackFromSourceTrack：无 `_artists` 时整串 artist 作为唯一条目（无 id）', () {
     final track = trackFromSourceTrack(sourceTrack());
     expect(track.artists, hasLength(1));
     expect(track.artists.single.name, '周杰伦、温岚');
@@ -82,45 +80,35 @@ void main() {
   });
 
   test('收藏夹往返：raw `_artists` 保真（新收藏可进歌手页）', () {
-    final track = trackFromSourceTrack(sourceTrack(raw: const {
-      'songmid': '298317',
-      kRawArtistsField: [
-        {'name': '温岚', 'id': '9612'},
-        {'name': '周杰伦', 'id': '6452'},
-      ],
-    }));
+    final track = trackFromSourceTrack(
+      sourceTrack(
+        raw: const {
+          'songmid': '298317',
+          kRawArtistsField: [
+            {'name': '温岚', 'id': '9612'},
+            {'name': '周杰伦', 'id': '6452'},
+          ],
+        },
+      ),
+    );
     final entry = PlaylistTrack.fromTrack(track, addedAt: 1);
     expect(entry.artist, '温岚, 周杰伦');
     expect(entry.raw[kRawArtistsField], isA<List>());
 
     // 库内条目还原（收藏页播放 / 歌曲信息页入口都走这里）。
-    final restored = trackFromSourceTrack(SourceTrack(
-      sourceKey: entry.sourceKey,
-      origin: 'lx',
-      title: entry.title,
-      artist: entry.artist,
-      album: entry.album,
-      raw: entry.raw,
-    ));
+    final restored = trackFromSourceTrack(
+      SourceTrack(
+        sourceKey: entry.sourceKey,
+        origin: 'lx',
+        title: entry.title,
+        artist: entry.artist,
+        album: entry.album,
+        raw: entry.raw,
+      ),
+    );
     expect(
       restored.artists.map((artist) => (artist.name, artist.id)).toList(),
       [('温岚', '9612'), ('周杰伦', '6452')],
     );
-  });
-
-  test('收藏夹往返：旧数据（无 `_artists`）保留整串名字，供按名回退', () {
-    final legacy = trackFromSourceTrack(sourceTrack());
-    final entry = PlaylistTrack.fromTrack(legacy, addedAt: 1);
-    final restored = trackFromSourceTrack(SourceTrack(
-      sourceKey: entry.sourceKey,
-      origin: 'lx',
-      title: entry.title,
-      artist: entry.artist,
-      album: entry.album,
-      raw: entry.raw,
-    ));
-    expect(restored.artists.single.id, isNull);
-    expect(restored.artists.single.name, '周杰伦、温岚');
-    // 名字首段可供 openTrackArtist 回退检索（见 track_actions）。
   });
 }

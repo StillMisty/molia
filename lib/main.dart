@@ -138,10 +138,7 @@ void main() async {
 
   // 提示出口（纯构造，无插件、无 await）：播放 provider 的 UiMessenger
   // 与 Provider 树共用同一实例。
-  final notifications = NotificationService(
-    scaffoldMessengerKey,
-    hostContextKey: appRootKey,
-  );
+  final notifications = NotificationService(hostContextKey: appRootKey);
 
   // ① 音源与目录（设置注册表 → SourceManager → 目录/评论/专辑/歌手）。
   final catalog = buildCatalogStack();
@@ -314,10 +311,8 @@ void main() async {
     );
     // 数据链路体检（仅 MOLIA_PERF_SCENARIO_DATA=true 的专用构建；正常包
     // 在编译期折叠为一次 return）。
-    unawaited(runDataPathScenario(
-      catalog: catalog,
-      playback: playback,
-      lyrics: lyrics,
-    ));
+    unawaited(
+      runDataPathScenario(catalog: catalog, playback: playback, lyrics: lyrics),
+    );
   });
 }

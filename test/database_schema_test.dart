@@ -21,8 +21,9 @@ void main() {
   setUp(() => db = MoliaDatabase(NativeDatabase.memory()));
   tearDown(() => db.close());
 
-  Future<List<Map<String, Object?>>> rowsOf(String sql) async =>
-      [for (final row in await db.customSelect(sql).get()) row.data];
+  Future<List<Map<String, Object?>>> rowsOf(String sql) async => [
+        for (final row in await db.customSelect(sql).get()) row.data,
+      ];
 
   /// `PRAGMA table_info` 快照行：`名称|类型|NOT NULL|默认值|主键序`。
   String columnSnapshot(Map<String, Object?> row) {
@@ -45,7 +46,6 @@ void main() {
       [for (final row in rows) row['name']],
       [
         'downloads',
-        'play_contexts',
         'play_events',
         'play_history',
         'play_tracks',
@@ -80,13 +80,6 @@ void main() {
         'publicUri|TEXT|0|null|0',
         'imported|INTEGER|1|0|0',
         'downloadedAt|INTEGER|1|null|0',
-      ],
-      'play_contexts': [
-        'contextUri|TEXT|0|null|1',
-        'contextType|TEXT|1|null|0',
-        'contextName|TEXT|1|null|0',
-        'imageUrl|TEXT|0|null|0',
-        'lastPlayedAt|INTEGER|1|null|0',
       ],
       'play_history': [
         'sourceKey|TEXT|1|null|0',
@@ -167,7 +160,7 @@ void main() {
         'listenedMs|INTEGER|1|0|0',
         'maxPositionMs|INTEGER|1|0|0',
         'endReason|TEXT|0|null|0',
-        'syncKey|TEXT|0|null|0',
+        'syncKey|TEXT|1|null|0',
         "originDeviceId|TEXT|1|''|0",
         'versionPhysical|INTEGER|1|0|0',
         'versionCounter|INTEGER|1|0|0',
@@ -196,7 +189,7 @@ void main() {
     }
   });
 
-  test('索引逐字一致（含两个部分唯一索引）', () async {
+  test('索引逐字一致（含 syncId 部分唯一索引）', () async {
     final rows = await rowsOf(
       "SELECT name, sql FROM sqlite_master WHERE type = 'index' "
       'AND sql IS NOT NULL ORDER BY name',
@@ -206,9 +199,6 @@ void main() {
       {
         'idx_downloads_downloadedAt':
             'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
-        'idx_play_contexts_lastPlayedAt':
-            'CREATE INDEX idx_play_contexts_lastPlayedAt '
-                'ON play_contexts (lastPlayedAt)',
         'idx_play_history_playedAt':
             'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
         'idx_playlists_syncId': 'CREATE UNIQUE INDEX idx_playlists_syncId '
@@ -221,8 +211,9 @@ void main() {
             'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)',
         'idx_play_events_trackId': 'CREATE INDEX idx_play_events_trackId '
             'ON play_events (trackId)',
-        'idx_play_events_syncKey': 'CREATE UNIQUE INDEX idx_play_events_syncKey '
-            'ON play_events (syncKey) WHERE syncKey IS NOT NULL',
+        'idx_play_events_syncKey':
+            'CREATE UNIQUE INDEX idx_play_events_syncKey '
+                'ON play_events (syncKey)',
         'idx_sync_journal_at':
             'CREATE INDEX idx_sync_journal_at ON sync_journal (at)',
       },
@@ -232,13 +223,15 @@ void main() {
   test('统计事件外键：指向内容行，且删除内容行被拒（RESTRICT）', () async {
     final fk = await rowsOf('PRAGMA foreign_key_list(play_events)');
     expect(
-      fk.map((row) => [
-            row['table'],
-            row['from'],
-            row['to'],
-            row['on_update'],
-            row['on_delete'],
-          ]),
+      fk.map(
+        (row) => [
+          row['table'],
+          row['from'],
+          row['to'],
+          row['on_update'],
+          row['on_delete'],
+        ],
+      ),
       [
         ['play_tracks', 'trackId', 'id', 'NO ACTION', 'RESTRICT'],
       ],
@@ -255,13 +248,15 @@ void main() {
   test('列表曲目外键级联', () async {
     final fk = await rowsOf('PRAGMA foreign_key_list(playlist_tracks)');
     expect(
-      fk.map((row) => [
-            row['table'],
-            row['from'],
-            row['to'],
-            row['on_update'],
-            row['on_delete'],
-          ]),
+      fk.map(
+        (row) => [
+          row['table'],
+          row['from'],
+          row['to'],
+          row['on_update'],
+          row['on_delete'],
+        ],
+      ),
       [
         ['playlists', 'playlistId', 'id', 'NO ACTION', 'CASCADE'],
       ],
@@ -270,58 +265,71 @@ void main() {
 
   test('外键约束生效：孤立曲目写入被拒，删除列表级联删曲目', () async {
     await expectLater(
-      db.into(db.playlistTracks).insert(PlaylistTracksCompanion.insert(
-            playlistId: 404,
+      db.into(db.playlistTracks).insert(
+            PlaylistTracksCompanion.insert(
+              playlistId: 404,
+              sourceKey: 'wy',
+              songId: '1',
+              title: 'T',
+              addedAt: 1,
+            ),
+          ),
+      throwsA(predicate((e) => e.toString().contains('FOREIGN KEY'))),
+    );
+
+    final playlistId = await db
+        .into(db.playlists)
+        .insert(PlaylistsCompanion.insert(name: 'L', createdAt: 1));
+    await db.into(db.playlistTracks).insert(
+          PlaylistTracksCompanion.insert(
+            playlistId: playlistId,
             sourceKey: 'wy',
             songId: '1',
             title: 'T',
             addedAt: 1,
-          )),
-      throwsA(predicate((e) => e.toString().contains('FOREIGN KEY'))),
-    );
-
-    final playlistId = await db.into(db.playlists).insert(
-          PlaylistsCompanion.insert(name: 'L', createdAt: 1),
+          ),
         );
-    await db.into(db.playlistTracks).insert(PlaylistTracksCompanion.insert(
-          playlistId: playlistId,
-          sourceKey: 'wy',
-          songId: '1',
-          title: 'T',
-          addedAt: 1,
-        ));
     await (db.delete(db.playlists)..where((t) => t.id.equals(playlistId))).go();
     expect(await db.select(db.playlistTracks).get(), isEmpty);
   });
 
-  test('部分唯一索引：syncId/syncKey 允许多个 NULL、拒绝重复值', () async {
-    await db.into(db.playlists).insert(PlaylistsCompanion.insert(
-          name: 'A',
-          createdAt: 1,
-        ));
-    await db.into(db.playlists).insert(PlaylistsCompanion.insert(
-          name: 'B',
-          createdAt: 2,
-        ));
+  test('唯一索引：syncId 允许多个 NULL，syncId / syncKey 拒绝重复值', () async {
+    await db
+        .into(db.playlists)
+        .insert(PlaylistsCompanion.insert(name: 'A', createdAt: 1));
+    await db
+        .into(db.playlists)
+        .insert(PlaylistsCompanion.insert(name: 'B', createdAt: 2));
     await db.into(db.playlists).insert(
-          PlaylistsCompanion.insert(name: 'C', createdAt: 3, syncId: const Value('s1')),
+          PlaylistsCompanion.insert(
+            name: 'C',
+            createdAt: 3,
+            syncId: const Value('s1'),
+          ),
         );
     await expectLater(
       db.into(db.playlists).insert(
             PlaylistsCompanion.insert(
-                name: 'D', createdAt: 4, syncId: const Value('s1')),
+              name: 'D',
+              createdAt: 4,
+              syncId: const Value('s1'),
+            ),
           ),
       throwsA(anything),
     );
 
     await insertPlayEvent(db, songId: '1', startedAt: 1);
     await insertPlayEvent(db, songId: '2', startedAt: 2);
-    final eventId =
-        await insertPlayEvent(db, songId: '3', startedAt: 3, syncKey: 'k1');
+    final eventId = await insertPlayEvent(
+      db,
+      songId: '3',
+      startedAt: 3,
+      syncKey: 'k1',
+    );
     await expectLater(
       insertPlayEvent(db, songId: '4', startedAt: 4, syncKey: 'k1'),
       throwsA(anything),
-      reason: 'syncKey 部分唯一索引生效',
+      reason: 'syncKey 唯一索引生效',
     );
     expect(eventId, greaterThan(0));
   });
@@ -334,17 +342,19 @@ void main() {
           title: 'T$songId',
           playedAt: playedAt,
         );
-    await db.into(db.playHistory).insert(history('1', 100),
-        mode: InsertMode.insertOrReplace);
-    await db.into(db.playHistory).insert(history('1', 300),
-        mode: InsertMode.insertOrReplace);
+    await db
+        .into(db.playHistory)
+        .insert(history('1', 100), mode: InsertMode.insertOrReplace);
+    await db
+        .into(db.playHistory)
+        .insert(history('1', 300), mode: InsertMode.insertOrReplace);
     final entries = await db.select(db.playHistory).get();
     expect(entries, hasLength(1));
     expect(entries.single.playedAt, 300);
 
-    final playlistId = await db.into(db.playlists).insert(
-          PlaylistsCompanion.insert(name: 'L', createdAt: 1),
-        );
+    final playlistId = await db
+        .into(db.playlists)
+        .insert(PlaylistsCompanion.insert(name: 'L', createdAt: 1));
     PlaylistTracksCompanion track(String songId) =>
         PlaylistTracksCompanion.insert(
           playlistId: playlistId,
@@ -354,8 +364,9 @@ void main() {
           addedAt: 1,
         );
     await db.into(db.playlistTracks).insert(track('1'));
-    await db.into(db.playlistTracks).insert(track('1'),
-        mode: InsertMode.insertOrIgnore);
+    await db
+        .into(db.playlistTracks)
+        .insert(track('1'), mode: InsertMode.insertOrIgnore);
     expect(await db.select(db.playlistTracks).get(), hasLength(1));
   });
 }

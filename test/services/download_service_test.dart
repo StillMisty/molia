@@ -49,7 +49,10 @@ void main() {
         album: '专辑',
         duration: const Duration(minutes: 3),
         origin: TrackOrigin.builtin,
-        qualities: const [AudioQuality(type: '320k'), AudioQuality(type: '128k')],
+        qualities: const [
+          AudioQuality(type: '320k'),
+          AudioQuality(type: '128k'),
+        ],
         payload: {'songmid': songId},
       );
 
@@ -64,10 +67,7 @@ void main() {
     CacheService? cacheService,
     int Function()? clock,
   }) {
-    final registry = FakeSourceRegistry({
-      'kw': kwSource,
-      'tx': txSource,
-    });
+    final registry = FakeSourceRegistry({'kw': kwSource, 'tx': txSource});
     return DownloadService(
       catalog: CatalogService(registry: registry),
       repository: repository,
@@ -90,8 +90,10 @@ void main() {
     db = openMemoryDatabase();
     repository = DownloadsRepository(databaseProvider: () => db);
     storage = FakeDownloadStorage();
-    kwSource = FakeMusicSource('kw')..resolveUrl = 'https://cdn.example.com/a.mp3';
-    txSource = FakeMusicSource('tx')..resolveUrl = 'https://cdn.example.com/b.mp3';
+    kwSource = FakeMusicSource('kw')
+      ..resolveUrl = 'https://cdn.example.com/a.mp3';
+    txSource = FakeMusicSource('tx')
+      ..resolveUrl = 'https://cdn.example.com/b.mp3';
   });
 
   tearDown(() async {
@@ -104,7 +106,9 @@ void main() {
       if (options.uri.path.endsWith('.mp3')) {
         return bytesResponse(
           [1, 2, 3, 4],
-          headers: {'content-length': ['4']},
+          headers: {
+            'content-length': ['4'],
+          },
         );
       }
       if (options.uri.path.endsWith('cover.jpg')) {
@@ -225,7 +229,9 @@ void main() {
       (options) => ResponseBody(
         controller.stream,
         200,
-        headers: {'content-length': ['131072']},
+        headers: {
+          'content-length': ['131072'],
+        },
       ),
     );
     final service = makeService(dio: dio);
@@ -264,7 +270,9 @@ void main() {
       (options) => ResponseBody(
         controller.stream,
         200,
-        headers: {'content-length': ['400']},
+        headers: {
+          'content-length': ['400'],
+        },
       ),
     );
     final service = makeService(dio: dio, clock: () => now);
@@ -297,7 +305,9 @@ void main() {
       (options) => ResponseBody(
         controller.stream,
         200,
-        headers: {'content-length': ['400']},
+        headers: {
+          'content-length': ['400'],
+        },
       ),
     );
     final service = makeService(dio: dio, clock: () => now);
@@ -346,7 +356,9 @@ void main() {
       (options) => ResponseBody(
         slowStream(),
         200,
-        headers: {'content-length': ['1000']},
+        headers: {
+          'content-length': ['1000'],
+        },
       ),
     );
     final service = makeService(dio: dio);
@@ -357,9 +369,9 @@ void main() {
     // 先挂错误断言（避免下载先于断言完成被判未处理异步错误）。
     final expectation = expectLater(
       future,
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
-      )),
+      throwsA(
+        predicate((e) => e is SourceFailure && e.kind == FailureKind.cancelled),
+      ),
     );
     await Future<void>.delayed(Duration.zero);
     expect(service.progressForTrack(track), isNotNull);
@@ -371,10 +383,7 @@ void main() {
     expect(service.recordFor('kw', '1'), isNull);
     expect(await repository.findByOrigin('kw', '1'), isNull);
     expect(storage.files, isEmpty);
-    expect(
-      storage.deleted.where((path) => path.endsWith('.part')),
-      isNotEmpty,
-    );
+    expect(storage.deleted.where((path) => path.endsWith('.part')), isNotEmpty);
   });
 
   test('下载失败（HTTP 500）：抛 network 失败、无残留文件与记录', () async {
@@ -384,9 +393,9 @@ void main() {
 
     await expectLater(
       service.download(makeTrack()),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.kind == FailureKind.network,
-      )),
+      throwsA(
+        predicate((e) => e is SourceFailure && e.kind == FailureKind.network),
+      ),
     );
     expect(service.recordFor('kw', '1'), isNull);
     expect(storage.files, isEmpty);
@@ -396,7 +405,9 @@ void main() {
     final dio = mockDio(
       (options) => bytesResponse(
         [1, 2],
-        headers: {'content-length': ['2']},
+        headers: {
+          'content-length': ['2'],
+        },
       ),
     );
     final service = makeService(dio: dio);
@@ -405,15 +416,21 @@ void main() {
     await service.download(makeTrack(sourceKey: 'kw', songId: '1'));
     await service.download(makeTrack(sourceKey: 'tx', songId: '2'));
 
-    expect(service.recordFor('kw', '1')!.filePath,
-        '/downloads/歌手 - 测试歌曲.mp3');
-    expect(service.recordFor('tx', '2')!.filePath,
-        '/downloads/歌手 - 测试歌曲 (2).mp3');
+    expect(service.recordFor('kw', '1')!.filePath, '/downloads/歌手 - 测试歌曲.mp3');
+    expect(
+      service.recordFor('tx', '2')!.filePath,
+      '/downloads/歌手 - 测试歌曲 (2).mp3',
+    );
   });
 
   test('重复下载 / 本地曲目 / 平台不支持：抛可读 unsupported 失败', () async {
     final dio = mockDio(
-      (options) => bytesResponse([1], headers: {'content-length': ['1']}),
+      (options) => bytesResponse(
+        [1],
+        headers: {
+          'content-length': ['1'],
+        },
+      ),
     );
     final service = makeService(dio: dio);
     await service.init();
@@ -422,23 +439,26 @@ void main() {
 
     await expectLater(
       service.download(track),
-      throwsA(predicate(
-        (e) => e is SourceFailure &&
-            e.kind == FailureKind.unsupported &&
-            e.l10nKey == 'downloadAlreadyExists',
-      )),
+      throwsA(
+        predicate(
+          (e) =>
+              e is SourceFailure &&
+              e.kind == FailureKind.unsupported &&
+              e.l10nKey == 'downloadAlreadyExists',
+        ),
+      ),
     );
     await expectLater(
       service.download(service.recordFor('kw', '1')!.localTrack!),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.l10nKey == 'downloadLocalTrack',
-      )),
+      throwsA(
+        predicate(
+          (e) => e is SourceFailure && e.l10nKey == 'downloadLocalTrack',
+        ),
+      ),
     );
 
     final unavailable = DownloadService(
-      catalog: CatalogService(
-        registry: FakeSourceRegistry({'kw': kwSource}),
-      ),
+      catalog: CatalogService(registry: FakeSourceRegistry({'kw': kwSource})),
       repository: repository,
       storage: FakeDownloadStorage(available: false),
       dio: dio,
@@ -447,16 +467,23 @@ void main() {
     expect(unavailable.supported, isFalse);
     await expectLater(
       unavailable.download(track),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.l10nKey == 'downloadUnsupported',
-      )),
+      throwsA(
+        predicate(
+          (e) => e is SourceFailure && e.l10nKey == 'downloadUnsupported',
+        ),
+      ),
     );
   });
 
   test('删除：清记录 + 清音频/歌词/封面文件', () async {
     final dio = mockDio((options) {
       if (options.uri.path.endsWith('.mp3')) {
-        return bytesResponse([1, 2], headers: {'content-length': ['2']});
+        return bytesResponse(
+          [1, 2],
+          headers: {
+            'content-length': ['2'],
+          },
+        );
       }
       return bytesResponse([9]);
     });
@@ -481,14 +508,16 @@ void main() {
   });
 
   test('init 加载已有记录（跨启动恢复）', () async {
-    await repository.insert(DownloadedTrack(
-      originSourceKey: 'kw',
-      originSongId: '9',
-      title: '已有下载',
-      filePath: '/downloads/已有下载.mp3',
-      sizeBytes: 10,
-      downloadedAt: 500,
-    ));
+    await repository.insert(
+      DownloadedTrack(
+        originSourceKey: 'kw',
+        originSongId: '9',
+        title: '已有下载',
+        filePath: '/downloads/已有下载.mp3',
+        sizeBytes: 10,
+        downloadedAt: 500,
+      ),
+    );
 
     final service = makeService();
     await service.init();
@@ -512,7 +541,8 @@ void main() {
           (body.length >> 16) & 0xFF,
           (body.length >> 8) & 0xFF,
           body.length & 0xFF,
-          0x00, 0x00,
+          0x00,
+          0x00,
           ...body,
         ];
       }
@@ -532,13 +562,16 @@ void main() {
     }
 
     test('读标签落记录：就地引用（imported）+ 原文件不动', () async {
-      storage.files['/music/歌手 - 歌名.mp3'] =
-          localMp3(title: '标签标题', artist: '标签歌手');
+      storage.files['/music/歌手 - 歌名.mp3'] = localMp3(
+        title: '标签标题',
+        artist: '标签歌手',
+      );
       final service = makeService();
       await service.init();
 
-      final (imported, skipped) =
-          await service.importLocalFiles(['/music/歌手 - 歌名.mp3']);
+      final (imported, skipped) = await service.importLocalFiles([
+        '/music/歌手 - 歌名.mp3',
+      ]);
 
       expect((imported, skipped), (1, 0));
       final record = service.downloads.single;
@@ -550,8 +583,10 @@ void main() {
       expect(record.localTrack?.id.sourceKey, kLocalSourceKey);
       expect(record.localTrack?.payload['path'], '/music/歌手 - 歌名.mp3');
       // 落库（跨启动恢复）且原文件保留。
-      expect(await repository.findByOrigin(kLocalSourceKey, '/music/歌手 - 歌名.mp3'),
-          isNotNull);
+      expect(
+        await repository.findByOrigin(kLocalSourceKey, '/music/歌手 - 歌名.mp3'),
+        isNotNull,
+      );
       expect(storage.files.containsKey('/music/歌手 - 歌名.mp3'), isTrue);
     });
 
@@ -611,13 +646,16 @@ void main() {
         await repository.findByOrigin(kLocalSourceKey, '/music/a.mp3'),
         isNull,
       );
-      expect(storage.files.containsKey('/music/a.mp3'), isTrue, reason: '不动原文件');
+      expect(
+        storage.files.containsKey('/music/a.mp3'),
+        isTrue,
+        reason: '不动原文件',
+      );
       expect(storage.deleted, isEmpty, reason: '不触发任何删除');
     });
 
-    test('补发布 / 迁移旧位置：跳过导入项', () async {
+    test('补发布：跳过导入项', () async {
       storage.files['/music/a.mp3'] = localMp3(title: 'A', artist: 'B');
-      storage.legacyRoot = '/music';
       final publisher = FakeDownloadsPublisher();
       final service = makeService(publisher: publisher);
       await service.init();
@@ -625,14 +663,18 @@ void main() {
 
       expect(await service.publishMissingPublicCopies(), (0, 0));
       expect(publisher.published, isEmpty);
-      expect(await service.migrateLegacyDownloads(), (0, 0));
       expect(storage.files.containsKey('/music/a.mp3'), isTrue);
     });
   });
 
   test('指定音质下载：取链使用所选音质，记录写入所选音质', () async {
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio);
     await service.init();
@@ -686,7 +728,12 @@ void main() {
       prefs: prefs,
     );
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, cacheService: cacheService);
     await service.init();
@@ -702,11 +749,7 @@ void main() {
     await service.download(makeTrack());
     final record = service.recordFor('kw', '1')!;
     final downloaded = storage.files[record.filePath]!;
-    expect(
-      downloaded.sublist(downloaded.length - 2),
-      [1, 2],
-      reason: '回退网络下载',
-    );
+    expect(downloaded.sublist(downloaded.length - 2), [1, 2], reason: '回退网络下载');
   });
 
   test('缓存 = 已下载：audioCacheFor 命中完整缓存（音质 / 体积），.part 不算', () async {
@@ -789,7 +832,12 @@ void main() {
       if (options.uri.path.endsWith('cover.jpg')) {
         return bytesResponse([9, 9, 9]);
       }
-      return bytesResponse([1, 2], headers: {'content-length': ['2']});
+      return bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      );
     });
     final service = makeService(
       dio: dio,
@@ -826,15 +874,17 @@ void main() {
 
     await expectLater(
       service.downloadLyrics(track),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.l10nKey == 'downloadNoLyrics',
-      )),
+      throwsA(
+        predicate((e) => e is SourceFailure && e.l10nKey == 'downloadNoLyrics'),
+      ),
     );
     await expectLater(
       service.downloadCover(track),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.l10nKey == 'downloadNoArtwork',
-      )),
+      throwsA(
+        predicate(
+          (e) => e is SourceFailure && e.l10nKey == 'downloadNoArtwork',
+        ),
+      ),
     );
   });
 
@@ -844,16 +894,18 @@ void main() {
     await settings.init();
     await settings.setFilenameTemplate('{title} - {artist}');
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, settings: settings);
     await service.init();
 
     await service.download(makeTrack());
-    expect(
-      service.recordFor('kw', '1')!.filePath,
-      '/downloads/测试歌曲 - 歌手.mp3',
-    );
+    expect(service.recordFor('kw', '1')!.filePath, '/downloads/测试歌曲 - 歌手.mp3');
   });
 
   test('标签嵌入开关关闭：文件保持原始下载内容', () async {
@@ -862,7 +914,12 @@ void main() {
     await settings.init();
     await settings.setEmbedTags(false);
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, settings: settings);
     await service.init();
@@ -886,7 +943,10 @@ void main() {
     expect(storage.files.containsKey('/downloads/歌手 - 测试歌曲.mp3.part'), isFalse);
 
     final orphans = await service.orphanFiles();
-    expect(orphans, containsAll(['/downloads/orphan.mp3', '/downloads/lyrics/orphan.lrc']));
+    expect(
+      orphans,
+      containsAll(['/downloads/orphan.mp3', '/downloads/lyrics/orphan.lrc']),
+    );
     expect(orphans, contains('/downloads/歌手 - 测试歌曲.mp3'));
 
     final deleted = await service.deleteOrphanFiles();
@@ -899,7 +959,12 @@ void main() {
       if (options.uri.path.endsWith('cover.jpg')) {
         return bytesResponse([9, 9, 9]);
       }
-      return bytesResponse([1, 2], headers: {'content-length': ['2']});
+      return bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      );
     });
     final service = makeService(
       dio: dio,
@@ -914,7 +979,12 @@ void main() {
 
   test('批量下载：顺序执行，跳过已下载与本地曲目', () async {
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio);
     await service.init();
@@ -943,7 +1013,9 @@ void main() {
       (options) => ResponseBody(
         controller.stream,
         200,
-        headers: {'content-length': ['65536']},
+        headers: {
+          'content-length': ['65536'],
+        },
       ),
     );
     final service = makeService(dio: dio);
@@ -968,7 +1040,7 @@ void main() {
         controller.stream,
         200,
         headers: {
-          'content-length': ['131072']
+          'content-length': ['131072'],
         },
       ),
     );
@@ -1030,10 +1102,7 @@ void main() {
     now += 600;
     controller.add(Uint8List(32 * 1024));
     await waitForProgress(96 * 1024);
-    expect(await updatePayloads(), [
-      (32 * 1024, 131072),
-      (96 * 1024, 131072),
-    ]);
+    expect(await updatePayloads(), [(32 * 1024, 131072), (96 * 1024, 131072)]);
     // 已到最后一个分片：节流不再拦住收尾进度。
     controller.add(Uint8List(32 * 1024));
     await waitForProgress(131072);
@@ -1077,7 +1146,7 @@ void main() {
           slowStream(),
           200,
           headers: {
-            'content-length': ['1000']
+            'content-length': ['1000'],
           },
         ),
       ),
@@ -1088,9 +1157,9 @@ void main() {
     final future = service.download(track);
     final expectation = expectLater(
       future,
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
-      )),
+      throwsA(
+        predicate((e) => e is SourceFailure && e.kind == FailureKind.cancelled),
+      ),
     );
     await Future<void>.delayed(Duration.zero);
     service.cancelTrack(track);
@@ -1101,12 +1170,12 @@ void main() {
 
   test('系统通知：开关关闭 / 平台不支持时不发通知', () async {
     final dio = mockDio(
-      (options) => bytesResponse([
-        1,
-        2
-      ], headers: {
-        'content-length': ['2']
-      }),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     SharedPreferences.setMockInitialValues({});
     final settings = DownloadSettings();
@@ -1124,10 +1193,7 @@ void main() {
     expect(disabled.events, isEmpty);
 
     final unsupported = FakeDownloadNotifications(supported: false);
-    final desktopService = makeService(
-      dio: dio,
-      notifications: unsupported,
-    );
+    final desktopService = makeService(dio: dio, notifications: unsupported);
     await desktopService.init();
     expect(desktopService.notificationsSupported, isFalse);
     await desktopService.download(makeTrack(sourceKey: 'tx', songId: '2'));
@@ -1136,12 +1202,12 @@ void main() {
 
   test('系统通知：批量共享一条「N/N」通知，批内单任务通知被抑制', () async {
     final dio = mockDio(
-      (options) => bytesResponse([
-        1,
-        2
-      ], headers: {
-        'content-length': ['2']
-      }),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final notifications = FakeDownloadNotifications();
     final service = makeService(dio: dio, notifications: notifications);
@@ -1171,54 +1237,15 @@ void main() {
     );
   });
 
-  test('迁移旧位置：文件搬到新根并更新记录，旧文件删除', () async {
-    final dio = mockDio((options) {
-      if (options.uri.path.endsWith('cover.jpg')) {
-        return bytesResponse([9, 9, 9]);
-      }
-      return bytesResponse([1, 2], headers: {'content-length': ['2']});
-    });
-    final service = makeService(
-      dio: dio,
-      lyrics: (track) async => const DownloadLyrics(lyric: '[00:01]词'),
-      artwork: (track) async => 'https://img.example.com/cover.jpg',
-    );
-    // 旧版布局：应用支持目录。
-    storage.root = '/legacy/downloads';
-    await service.init();
-    await service.download(makeTrack());
-    expect(
-      service.recordFor('kw', '1')!.filePath,
-      '/legacy/downloads/歌手 - 测试歌曲.mp3',
-    );
-
-    // 公共目录改造后：新根 + 旧根并存。
-    storage.root = '/new/downloads';
-    storage.legacyRoot = '/legacy/downloads';
-    final (moved, failed) = await service.migrateLegacyDownloads();
-    expect(moved, 1);
-    expect(failed, 0);
-
-    final migrated = service.recordFor('kw', '1')!;
-    expect(migrated.filePath, '/new/downloads/歌手 - 测试歌曲.mp3');
-    expect(migrated.lyricPath, '/new/downloads/lyrics/歌手 - 测试歌曲.lrc');
-    expect(migrated.coverPath, '/new/downloads/covers/歌手 - 测试歌曲.jpg');
-    expect(
-      storage.files.containsKey('/new/downloads/歌手 - 测试歌曲.mp3'),
-      isTrue,
-    );
-    expect(
-      storage.files.containsKey('/legacy/downloads/歌手 - 测试歌曲.mp3'),
-      isFalse,
-      reason: '旧文件应删除',
-    );
-    expect(storage.files.containsKey('/legacy/downloads/lyrics/歌手 - 测试歌曲.lrc'), isFalse);
-  });
-
-  test('公共目录发布：音频拷进公共 Downloads，URI 落库且迁移保留', () async {
+  test('公共目录发布：音频拷进公共 Downloads，URI 落库', () async {
     final publisher = FakeDownloadsPublisher();
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, publisher: publisher);
     await service.init();
@@ -1233,16 +1260,8 @@ void main() {
     expect(publisher.displayNames, ['歌手 - 测试歌曲.mp3']);
     expect(publisher.mimeTypes, ['audio/mpeg']);
     // 落库（重新读库确认 publicUri 持久化）。
-    expect((await repository.findByOrigin('kw', '1'))!.publicUri,
-        'content://media/external/downloads/1');
-
-    // 旧位置迁移不丢公共副本定位。
-    storage.root = '/new/downloads';
-    storage.legacyRoot = '/downloads';
-    final (moved, failed) = await service.migrateLegacyDownloads();
-    expect((moved, failed), (1, 0));
     expect(
-      service.recordFor('kw', '1')!.publicUri,
+      (await repository.findByOrigin('kw', '1'))!.publicUri,
       'content://media/external/downloads/1',
     );
   });
@@ -1250,7 +1269,12 @@ void main() {
   test('公共目录发布失败：下载照常成功，publicUri 为空', () async {
     final publisher = FakeDownloadsPublisher(failPublish: true);
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, publisher: publisher);
     await service.init();
@@ -1268,7 +1292,12 @@ void main() {
     await settings.setPublishToPublicDir(false);
     final publisher = FakeDownloadsPublisher();
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(
       dio: dio,
@@ -1294,7 +1323,12 @@ void main() {
   test('删除下载：回收公共副本（不支持时跳过）', () async {
     final publisher = FakeDownloadsPublisher();
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, publisher: publisher);
     await service.init();
@@ -1309,26 +1343,35 @@ void main() {
     final publisher = FakeDownloadsPublisher();
     // 已有音频但无公共副本（旧版本留下的记录）。
     storage.files['/downloads/旧歌.mp3'] = [1];
-    await repository.insert(DownloadedTrack(
-      originSourceKey: 'kw',
-      originSongId: '9',
-      title: '旧歌',
-      filePath: '/downloads/旧歌.mp3',
-      sizeBytes: 1,
-      downloadedAt: 500,
-    ));
+    await repository.insert(
+      DownloadedTrack(
+        originSourceKey: 'kw',
+        originSongId: '9',
+        title: '旧歌',
+        filePath: '/downloads/旧歌.mp3',
+        sizeBytes: 1,
+        downloadedAt: 500,
+      ),
+    );
     // 文件缺失的记录：计入失败。
-    await repository.insert(DownloadedTrack(
-      originSourceKey: 'tx',
-      originSongId: '8',
-      title: '丢失',
-      filePath: '/downloads/丢失.mp3',
-      sizeBytes: 1,
-      downloadedAt: 400,
-    ));
+    await repository.insert(
+      DownloadedTrack(
+        originSourceKey: 'tx',
+        originSongId: '8',
+        title: '丢失',
+        filePath: '/downloads/丢失.mp3',
+        sizeBytes: 1,
+        downloadedAt: 400,
+      ),
+    );
 
     final dio = mockDio(
-      (options) => bytesResponse([1, 2], headers: {'content-length': ['2']}),
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
     );
     final service = makeService(dio: dio, publisher: publisher);
     await service.init();

@@ -118,7 +118,7 @@ class SettingsRegistry implements SettingsAccess {
 
   /// 同步面：写入远端值。
   ///
-  /// 远端值可能来自旧版本设备，按 kind 宽容转换；转换失败与 `null` 一样删除
+  /// 远端值按 kind 宽容转换；转换失败与 `null` 一样删除
   /// 键（回到默认值），保证重复应用幂等。secure 盒只接受字符串。
   ///
   /// [remote] 为 true（同步适配器应用远端值）时不触发 [onWrite]：本机写入

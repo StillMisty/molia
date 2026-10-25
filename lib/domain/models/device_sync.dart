@@ -40,7 +40,7 @@ enum SyncCategory {
   /// （导出 / 导入仍含封面）。
   covers;
 
-  /// 类别默认开关（新装 / 旧状态缺失该类别时使用）。
+  /// 类别默认开关（缺失该类别时使用）。
   bool get defaultEnabled => this != SyncCategory.covers;
 
   static SyncCategory? tryParse(String? name) {
@@ -82,7 +82,11 @@ abstract final class SyncRecordKeys {
   }
 
   /// 列表曲目复合键：列表 syncId + 平台 + 曲目 id。
-  static String playlistTrack(String playlistSyncId, String sourceKey, String songId) =>
+  static String playlistTrack(
+    String playlistSyncId,
+    String sourceKey,
+    String songId,
+  ) =>
       '$playlistSyncId$_separator$sourceKey$_separator$songId';
 
   /// 解析列表曲目复合键；格式非法返回 null。
@@ -90,11 +94,7 @@ abstract final class SyncRecordKeys {
       parsePlaylistTrack(String key) {
     final parts = key.split(_separator);
     if (parts.length != 3) return null;
-    return (
-      playlistSyncId: parts[0],
-      sourceKey: parts[1],
-      songId: parts[2],
-    );
+    return (playlistSyncId: parts[0], sourceKey: parts[1], songId: parts[2]);
   }
 }
 
@@ -269,11 +269,16 @@ class SyncJournalEntry {
     if (category == null) return null;
     final record = SyncRecord.fromJson(raw['record']);
     if (record == null) return null;
-    return SyncJournalEntry(seq: seq.toInt(), category: category, record: record);
+    return SyncJournalEntry(
+      seq: seq.toInt(),
+      category: category,
+      record: record,
+    );
   }
 
   @override
-  String toString() => 'SyncJournalEntry($seq, ${category.name}, ${record.key})';
+  String toString() =>
+      'SyncJournalEntry($seq, ${category.name}, ${record.key})';
 }
 
 /// 一次同步快照：设备身份 + 各类别记录；也可以是只携带变更的**增量窗口**。
@@ -440,7 +445,9 @@ class SyncEnvelope {
         'records': {
           for (final entry in records.entries)
             if (entry.value.isNotEmpty)
-              entry.key.name: [for (final record in entry.value) record.toJson()],
+              entry.key.name: [
+                for (final record in entry.value) record.toJson()
+              ],
         },
       };
 
@@ -485,10 +492,10 @@ class SyncEnvelope {
     }
     return SyncEnvelope(
       deviceId: deviceId,
-      deviceName: raw['deviceName'] is String ? raw['deviceName'] as String : '',
-      producedAt: raw['producedAt'] is num
-          ? (raw['producedAt'] as num).toInt()
-          : 0,
+      deviceName:
+          raw['deviceName'] is String ? raw['deviceName'] as String : '',
+      producedAt:
+          raw['producedAt'] is num ? (raw['producedAt'] as num).toInt() : 0,
       snapshotId:
           raw['snapshotId'] is String ? raw['snapshotId'] as String : '',
       version: (raw['v'] as num?)?.toInt() ?? protocolVersion,
@@ -499,8 +506,8 @@ class SyncEnvelope {
       windowEnd: (raw['windowEnd'] as num?)?.toInt() ?? 0,
       journal: journal,
       acks: acks,
-      categories:
-          (raw['categories'] as List?)?.whereType<String>().toList() ?? const [],
+      categories: (raw['categories'] as List?)?.whereType<String>().toList() ??
+          const [],
     );
   }
 }
@@ -605,7 +612,9 @@ class ManualPeer {
         // 保留条目自身的探测端口（不参与学习，见文档注释）。
         probePort: probePort,
         httpPort: httpPort ?? this.httpPort,
-        deviceId: (deviceId != null && deviceId.isNotEmpty) ? deviceId : this.deviceId,
+        deviceId: (deviceId != null && deviceId.isNotEmpty)
+            ? deviceId
+            : this.deviceId,
         name: this.name.isNotEmpty
             ? this.name
             : (name != null && name.isNotEmpty ? name : ''),
@@ -1057,8 +1066,9 @@ class SyncTransportReport {
       kind: raw['kind'] as String? ?? '',
       enabled: raw['enabled'] == true,
       running: raw['running'] == true,
-      unavailableReason:
-          raw['unavailableReason'] is String ? raw['unavailableReason'] as String : null,
+      unavailableReason: raw['unavailableReason'] is String
+          ? raw['unavailableReason'] as String
+          : null,
       pulled: intOf('pulled'),
       pushed: intOf('pushed'),
       skippedUnchanged: intOf('skippedUnchanged'),
@@ -1110,8 +1120,7 @@ class SyncPeerState {
 
   /// 最近一次真正接触成功的时间（探测应答 / 未变跳过 / 拉取或推送成功）。
   ///
-  /// 0 = 未知（旧状态没有这个字段，或从未成功过）。判断「已连接 / 失联」
-  /// 一律以它为准，失败尝试不续命；旧状态用 [effectiveLastSuccessAt] 兜底。
+  /// 0 = 从未成功接触过。判断「已连接 / 失联」一律以它为准，失败尝试不续命。
   final int lastSuccessAt;
 
   /// 最近一次成功拉取该对端快照的时间。
@@ -1122,20 +1131,6 @@ class SyncPeerState {
 
   /// 最近一次接触的失败原因；成功接触时清除（见 `SyncRoundRunner`）。
   final SyncIssue? lastError;
-
-  /// 兼容旧状态的有效成功时间：新状态直接用 [lastSuccessAt]；旧状态没有
-  /// 该字段时取「最近一次数据流转（拉取 / 推送）」与「没有失败记录的最后
-  /// 尝试」中的较新者——老名册不该因为升级后缺字段就显示成「还没连上」，
-  /// 也不能让 200 天前的数据时间盖过昨天探测成功的证据。
-  ///
-  /// 失败尝试不算成功：旧状态只要还有 [lastError]，[lastSeenAt] 就不参与
-  /// 兜底（它可能只是最近一次失败）。返回 0 = 从未成功接触。
-  int get effectiveLastSuccessAt {
-    if (lastSuccessAt > 0) return lastSuccessAt;
-    final lastData = lastPullAt > lastPushAt ? lastPullAt : lastPushAt;
-    final legacyAttempt = lastError == null ? lastSeenAt : 0;
-    return lastData > legacyAttempt ? lastData : legacyAttempt;
-  }
 
   /// 对端落后本机 journal 的条数（本机头部 − 对端已 ack 的位置）；
   /// null = 对端尚未 ack 过（无观测）。
@@ -1165,10 +1160,10 @@ class SyncPeerState {
 
   /// 是否已失联（超过 [lostThresholdMs] 没有**成功**接触）。
   ///
-  /// 唯一判据是 [effectiveLastSuccessAt]：失败尝试不续命；从未成功接触过的
-  /// 设备返回 false（界面显示「还没连上 / 未连接」，不是「已失联」）。
+  /// 唯一判据是 [lastSuccessAt]：失败尝试不续命；从未成功接触过的设备返回
+  /// false（界面显示「还没连上 / 未连接」，不是「已失联」）。
   bool isLostAt(int nowMs) {
-    final lastSuccess = effectiveLastSuccessAt;
+    final lastSuccess = lastSuccessAt;
     return lastSuccess > 0 && nowMs - lastSuccess > lostThresholdMs;
   }
 
@@ -1238,7 +1233,6 @@ class SyncPeerState {
       name: raw['name'] as String? ?? '',
       transport: raw['transport'] as String? ?? '',
       lastSeenAt: (raw['lastSeenAt'] as num?)?.toInt() ?? 0,
-      // 缺失 = 旧状态：0 让 effectiveLastSuccessAt 走兼容兜底。
       lastSuccessAt: (raw['lastSuccessAt'] as num?)?.toInt() ?? 0,
       lastPullAt: (raw['lastPullAt'] as num?)?.toInt() ?? 0,
       lastPushAt: (raw['lastPushAt'] as num?)?.toInt() ?? 0,
@@ -1249,8 +1243,8 @@ class SyncPeerState {
       cursorSeq: (raw['cursorSeq'] as num?)?.toInt() ?? -1,
       ackedSeq: (raw['ackedSeq'] as num?)?.toInt() ?? -1,
       snapshotId: raw['snapshotId'] as String? ?? '',
-      categories:
-          (raw['categories'] as List?)?.whereType<String>().toList() ?? const [],
+      categories: (raw['categories'] as List?)?.whereType<String>().toList() ??
+          const [],
       fullPulledAt: (raw['fullPulledAt'] as num?)?.toInt() ?? 0,
     );
   }

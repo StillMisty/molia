@@ -85,7 +85,6 @@ String aiDjOriginText(AppLocalizations l10n, AiDjOrigin origin) =>
       AiDjOrigin.refresh => l10n.aiDjOriginRefresh,
       AiDjOrigin.autoFeed => l10n.aiDjOriginAutoFeed,
       AiDjOrigin.manualFeed => l10n.aiDjOriginManualFeed,
-      AiDjOrigin.restored => l10n.aiDjOriginRestored,
     };
 
 /// 显式生成阶段文案（静默补歌不进入该 UI）。
@@ -93,11 +92,13 @@ String aiDjPhaseText(AppLocalizations l10n, AiDjProgress progress) =>
     switch (progress.phase) {
       AiDjPhase.profile => l10n.aiDjPhaseProfile,
       AiDjPhase.model => l10n.aiDjPhaseModel,
-      AiDjPhase.resolving =>
-        l10n.aiDjPhaseResolving(progress.done, progress.total),
+      AiDjPhase.resolving => l10n.aiDjPhaseResolving(
+          progress.done,
+          progress.total,
+        ),
     };
 
-/// 偏好 token → 文案（未知值原样展示，避免旧数据空白）。
+/// 偏好 token → 文案（未知值原样展示，避免空白）。
 String aiDjStyleLabel(AppLocalizations l10n, String token) => switch (token) {
       'pop' => l10n.aiDjStylePop,
       'rock' => l10n.aiDjStyleRock,

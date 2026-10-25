@@ -56,7 +56,7 @@ class PlaybackSession {
             : {
                 'name': context!.name,
                 'type': context!.type,
-                'uri': context!.uri,
+                'uri': context!.uri
               },
         'tracks': [for (final track in tracks) _trackToJson(track)],
       };
@@ -111,7 +111,7 @@ class PlaybackSessionStore {
   /// 高频进度键（毫秒 int）：与 [_key] 分离的轻量写入面。
   static const String _positionKey = 'playback_session_position_v1';
 
-  /// 写入时间戳键（跨设备同步用它判断会话新旧；旧数据缺省按 0 处理）。
+  /// 写入时间戳键（跨设备同步用它判断会话新旧）。
   static const String savedAtKey = kPlaybackSessionSavedAtKey;
 
   /// [preferences] / [clock] 仅测试注入。
@@ -208,7 +208,7 @@ class PlaybackSessionStore {
       final json = jsonDecode(raw);
       if (json is! Map) return null;
       final map = json.cast<String, dynamic>();
-      // 进度键是更高频的事实来源；旧数据/远端写入没有进度键时沿用会话内值。
+      // 进度键是更高频的事实来源；整份会话与进度键短暂不一致时沿用会话内值。
       final positionMs = sp.getInt(_positionKey);
       if (positionMs != null) map['positionMs'] = positionMs;
       return map;

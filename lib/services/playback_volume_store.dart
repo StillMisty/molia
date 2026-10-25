@@ -29,7 +29,7 @@ class PlaybackVolumeStore {
     try {
       final prefs = _preferences ?? await SharedPreferences.getInstance();
       return (
-        // 越界值（旧数据 / 手工改偏好）收进合法区间，避免滑块与后端不一致。
+        // 越界值（手工改偏好 / 异常存储）收进合法区间，避免滑块与后端不一致。
         volume: (prefs.getDouble(keyVolume) ?? defaultVolume).clamp(0.0, 1.0),
         muted: prefs.getBool(keyMuted) ?? defaultMuted,
       );

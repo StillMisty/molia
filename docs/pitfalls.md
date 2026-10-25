@@ -468,7 +468,7 @@
     全新对端；改成分块文件后增量直接发给全新对端，才全部暴露。回归用例：
     `test/sync_engine_test.dart`（空窗口 / 截断）、`test/sync_protocol_test.dart`。
 
-53. **统计曲目内容在 `play_tracks`，不在事件行（v5）**：`play_events` 只存
+53. **统计曲目内容在 `play_tracks`，不在事件行**：`play_events` 只存
     事件自身字段（时间 / 进度 / 结束原因 / 版本 + `trackId`），曲目元数据与
     取链参数在 `play_tracks`（每曲一行，`UNIQUE (sourceKey, songId)`，`raw` 是
     **gzip 字节**）。为什么：事件是 append-only，逐行复制元数据 + 载荷在保留
@@ -482,18 +482,13 @@
        内容行 `updatedAt` 时覆盖——远端补发的旧事件不许顶掉新内容；记录没带
        `raw` 时不覆盖载荷（`Value.absent()`）；
     ③ **载荷按 gzip 存**（`stats_payload_codec.dart`）：写入 `encodeStatsPayload`、
-       读取 `decodeStatsPayload`，别再往库里塞明文 JSON（解码器对非 gzip 字节做了
-       明文降级，只为迁移期兜底）；线上记录 / 日志条目必须在导出侧解码补齐，
+       读取 `decodeStatsPayload`，别再往库里塞明文 JSON（解码器对非 gzip 字节按
+       明文读取，兼容备份恢复 / 直接注入）；线上记录 / 日志条目必须在导出侧解码补齐，
        否则远端拿到的是二进制乱码；
     ④ **载荷预算**（`PlayStatisticsRepository.maxRetainedPayloadBytes`，默认
        16 MB）：超出按「最近播放」保留、其余清 `raw`（点播回退重新解析）——
        单条载荷大小由脚本决定，行数上限约束不了字节。
-    迁移（v4 → v5）在 `from4To5`：内容行取每曲最新一行快照（SQLite 单 min/max
-    聚合的裸列语义）+ Dart 侧 gzip 搬载荷 + `alterTable` 给事件加 `trackId`
-    （先 `DROP INDEX idx_play_events_track`，否则 alterTable 会重建这个引用
-    已删列的索引）。回归：`test/drift/molia/migration_test.dart` 的
-    「from v4 to v5」数据用例、`test/play_statistics_repository_test.dart` 的
-    「曲目内容表」组。
+    回归：`test/play_statistics_repository_test.dart` 的「曲目内容表」组。
 
 54. **横向滚动视图在桌面端「拖不动、滚轮不动」是两个独立成因**：
     ①鼠标拖动被 `ScrollBehavior.dragDevices` 挡掉——默认集合不含
@@ -878,3 +873,8 @@
     `forward(from:)`；字段要写 `BoundedSingleMotionController`。弹簧逐帧模拟输出
     不 clamp，交给 `Curves` 前先 `clamp(0,1)`；收敛判定要用 `snapToEnd`（否则
     0.999… 会让 `progress < 1` 的分支残留）。
+88. **本地库已切到 v2 基线：旧 `molia_database.sqlite` 是有意不读的**：当前库文件
+    是 `molia_database_v2.sqlite`（`schemaVersion = 1`），旧迁移链、旧
+    `drift_schemas` 快照与 `test/drift/molia` 都已退役。旧库文件保留在磁盘上，
+    但不打开、不迁移；不要为它补迁移、兼容分支或「检测旧库」逻辑，需要旧数据
+    时走 JSON 备份 / 跨设备同步重建。

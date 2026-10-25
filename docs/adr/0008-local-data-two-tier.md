@@ -58,6 +58,25 @@
    `file://`；与移动端 LockCaching 互斥（同一文件不双写），省流 / 开关 / 上限
    规则共用。
 
+### 2026-10-25 修订：删除旧数据迁移
+
+一次性迁移与旧数据兜底已删除，当前行为如下：
+
+- **音频缓存**：不再执行旧命名迁移，也不再读写 `cache_audio_naming_version`
+  prefs 版本键。旧命名（复合曲目 id 时代）文件不再自动扫描或清理，也无法被任何读取
+  路径命中，留在磁盘上（只计入缓存目录总量）；新文件只按 `{sourceKey}_{songId}_{quality}`
+  命名。
+- **歌词缓存**：生产组合根仍用 `LyricsCache.appSupport()` 写
+  `<appSupport>/lyrics_cache/{md5(trackId)}.json`，但旧版 `lyrics_cache_{trackId}`
+  prefs 条目不再懒迁移，历史 `manual_lyrics_cache_*` 键也不再特殊处理（不读、
+  不清）；目录不可用时仍回退 prefs。
+- **下载**：旧下载根（应用支持目录 `downloads/`）的迁移逻辑与下载管理页的迁移
+  入口已删除；管理页只保留 `.part` 清扫、孤儿文件回收与 Android 补发布。
+  `DownloadRecordAssembler` 不再有 `relocated` 形态，只保留 `forAudioDownload` /
+  `forPartialDownload` / `forLocalImport` / `republished`；本地导入（就地引用）
+  既不迁移也不补发布。
+- 上面「决策 5」、影响清单与「取舍」里关于旧命名清理、迁移的表述仅记录历史。
+
 ## 取舍
 
 - **缓存命中仍会离线可播**（`localUriFor` 回退）与**转存不触网**保留 #22 的

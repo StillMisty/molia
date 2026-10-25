@@ -47,7 +47,7 @@ enum LyricColorSource {
   tertiary,
   onSurface,
   onSurfaceVariant,
-  surface
+  surface,
 }
 
 /// 桌面悬浮歌词控制条按钮键（与 [LyricsDisplaySettings.desktopControls] 对应）。
@@ -59,20 +59,13 @@ abstract final class DesktopControlKeys {
   static const lock = 'lock';
   static const close = 'close';
 
-  static const all = [
-    playPause,
-    previous,
-    next,
-    translation,
-    lock,
-    close,
-  ];
+  static const all = [playPause, previous, next, translation, lock, close];
 }
 
 /// 歌词显示配置：歌词页（应用内）+ 输出侧共享项 + 桌面歌词 / 通知栏·锁屏 / 蓝牙三组。
 ///
 /// - 持久化为单 JSON 键（`lyrics_display_settings_v1`，跟人走），读取时与
-///   默认值合并，新增键对旧数据向前兼容；
+///   默认值合并，新增键按默认值补齐；
 /// - 模型平台无关：颜色为 ARGB int、宽度为百分比、字号为逻辑字号
 ///   （Android 侧按 sp 解释，未来桌面窗口按逻辑 px 解释）；
 /// - 悬浮窗位置由原生侧自行持久化（系统级窗口状态），不进本模型。
@@ -114,9 +107,6 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const double defaultDesktopWidthPercent = 100;
 
   /// 默认只显示当前行（单行）；用户可在「显示行数」里放宽到 1–5 行。
-  ///
-  /// 历史配置兼容：旧版「仅显示当前行」开关（`desktop.singleLine`）读到 true
-  /// 时一次性映射为 `maxLines = 1`，之后落盘不再写该键。
   static const int defaultDesktopMaxLines = 1;
   static const DesktopTextAlignX defaultDesktopTextAlignX =
       DesktopTextAlignX.center;
@@ -571,60 +561,108 @@ class LyricsDisplaySettings extends ChangeNotifier {
       };
 
   void _applyJson(Map<String, dynamic> json) {
-    _offsetMs = _intOf(json['offsetMs'], _offsetMs)
-        .clamp(offsetRange.first, offsetRange.last);
-    _translationEnabled =
-        _boolOf(json['translationEnabled'], _translationEnabled);
+    _offsetMs = _intOf(
+      json['offsetMs'],
+      _offsetMs,
+    ).clamp(offsetRange.first, offsetRange.last);
+    _translationEnabled = _boolOf(
+      json['translationEnabled'],
+      _translationEnabled,
+    );
     _romaEnabled = _boolOf(json['romaEnabled'], _romaEnabled);
     _unsyncedBehavior = _enumOf(
-        json['unsyncedBehavior'], UnsyncedBehavior.values, _unsyncedBehavior);
-    _pageTranslationEnabled =
-        _boolOf(json['page.translationEnabled'], _pageTranslationEnabled);
+      json['unsyncedBehavior'],
+      UnsyncedBehavior.values,
+      _unsyncedBehavior,
+    );
+    _pageTranslationEnabled = _boolOf(
+      json['page.translationEnabled'],
+      _pageTranslationEnabled,
+    );
     _pageRomaEnabled = _boolOf(json['page.romaEnabled'], _pageRomaEnabled);
 
     _desktopEnabled = _boolOf(json['desktop.enabled'], _desktopEnabled);
-    _desktopFontSize = _doubleOf(json['desktop.fontSize'], _desktopFontSize)
-        .clamp(fontSizeRange.first, fontSizeRange.last);
-    _desktopOpacity = _doubleOf(json['desktop.opacity'], _desktopOpacity)
-        .clamp(opacityRange.first, opacityRange.last);
-    _desktopPlayedColor =
-        _intOf(json['desktop.playedColor'], _desktopPlayedColor);
-    _desktopUnplayedColor =
-        _intOf(json['desktop.unplayedColor'], _desktopUnplayedColor);
-    _desktopShadowColor =
-        _intOf(json['desktop.shadowColor'], _desktopShadowColor);
-    _desktopPlayedColorSource = _enumOf(json['desktop.playedColorSource'],
-        LyricColorSource.values, _desktopPlayedColorSource);
-    _desktopUnplayedColorSource = _enumOf(json['desktop.unplayedColorSource'],
-        LyricColorSource.values, _desktopUnplayedColorSource);
-    _desktopShadowColorSource = _enumOf(json['desktop.shadowColorSource'],
-        LyricColorSource.values, _desktopShadowColorSource);
-    _desktopSchemeSource = _enumOf(json['desktop.schemeSource'],
-        SurfaceColorSource.values, _desktopSchemeSource);
-    _desktopWidthPercent =
-        _doubleOf(json['desktop.widthPercent'], _desktopWidthPercent)
-            .clamp(widthRange.first, widthRange.last);
-    // 旧版本「仅显示当前行」开关 → 显示行数 1（一次性兼容，读完即弃）。
-    final legacySingleLine = json['desktop.singleLine'] == true;
-    _desktopMaxLines = legacySingleLine
-        ? 1
-        : _intOf(json['desktop.maxLines'], _desktopMaxLines)
-            .clamp(maxLinesRange.first, maxLinesRange.last);
-    _desktopTextAlignX = _enumOf(json['desktop.textAlignX'],
-        DesktopTextAlignX.values, _desktopTextAlignX);
-    _desktopScrollMode = _enumOf(json['desktop.scrollMode'],
-        DesktopScrollMode.values, _desktopScrollMode);
+    _desktopFontSize = _doubleOf(
+      json['desktop.fontSize'],
+      _desktopFontSize,
+    ).clamp(fontSizeRange.first, fontSizeRange.last);
+    _desktopOpacity = _doubleOf(
+      json['desktop.opacity'],
+      _desktopOpacity,
+    ).clamp(opacityRange.first, opacityRange.last);
+    _desktopPlayedColor = _intOf(
+      json['desktop.playedColor'],
+      _desktopPlayedColor,
+    );
+    _desktopUnplayedColor = _intOf(
+      json['desktop.unplayedColor'],
+      _desktopUnplayedColor,
+    );
+    _desktopShadowColor = _intOf(
+      json['desktop.shadowColor'],
+      _desktopShadowColor,
+    );
+    _desktopPlayedColorSource = _enumOf(
+      json['desktop.playedColorSource'],
+      LyricColorSource.values,
+      _desktopPlayedColorSource,
+    );
+    _desktopUnplayedColorSource = _enumOf(
+      json['desktop.unplayedColorSource'],
+      LyricColorSource.values,
+      _desktopUnplayedColorSource,
+    );
+    _desktopShadowColorSource = _enumOf(
+      json['desktop.shadowColorSource'],
+      LyricColorSource.values,
+      _desktopShadowColorSource,
+    );
+    _desktopSchemeSource = _enumOf(
+      json['desktop.schemeSource'],
+      SurfaceColorSource.values,
+      _desktopSchemeSource,
+    );
+    _desktopWidthPercent = _doubleOf(
+      json['desktop.widthPercent'],
+      _desktopWidthPercent,
+    ).clamp(widthRange.first, widthRange.last);
+    _desktopMaxLines = _intOf(
+      json['desktop.maxLines'],
+      _desktopMaxLines,
+    ).clamp(maxLinesRange.first, maxLinesRange.last);
+    _desktopTextAlignX = _enumOf(
+      json['desktop.textAlignX'],
+      DesktopTextAlignX.values,
+      _desktopTextAlignX,
+    );
+    _desktopScrollMode = _enumOf(
+      json['desktop.scrollMode'],
+      DesktopScrollMode.values,
+      _desktopScrollMode,
+    );
     _desktopLock = _boolOf(json['desktop.lock'], _desktopLock);
-    _desktopFreezeOnScreenOff =
-        _boolOf(json['desktop.freezeOnScreenOff'], _desktopFreezeOnScreenOff);
-    _desktopHideOnPause =
-        _boolOf(json['desktop.hideOnPause'], _desktopHideOnPause);
-    _desktopPauseBehavior = _enumOf(json['desktop.pauseBehavior'],
-        LyricsPauseBehavior.values, _desktopPauseBehavior);
-    _desktopNoLyricsBehavior = _enumOf(json['desktop.noLyricsBehavior'],
-        DesktopNoLyricsBehavior.values, _desktopNoLyricsBehavior);
+    _desktopFreezeOnScreenOff = _boolOf(
+      json['desktop.freezeOnScreenOff'],
+      _desktopFreezeOnScreenOff,
+    );
+    _desktopHideOnPause = _boolOf(
+      json['desktop.hideOnPause'],
+      _desktopHideOnPause,
+    );
+    _desktopPauseBehavior = _enumOf(
+      json['desktop.pauseBehavior'],
+      LyricsPauseBehavior.values,
+      _desktopPauseBehavior,
+    );
+    _desktopNoLyricsBehavior = _enumOf(
+      json['desktop.noLyricsBehavior'],
+      DesktopNoLyricsBehavior.values,
+      _desktopNoLyricsBehavior,
+    );
     _desktopShowToggleAnimation = _boolOf(
-        json['desktop.showToggleAnimation'], _desktopShowToggleAnimation);
+      json['desktop.showToggleAnimation'],
+      _desktopShowToggleAnimation,
+    );
     final controls = json['desktop.controls'];
     if (controls is Map) {
       _desktopControls = {
@@ -633,34 +671,61 @@ class LyricsDisplaySettings extends ChangeNotifier {
       };
     }
 
-    _notificationEnabled =
-        _boolOf(json['notification.enabled'], _notificationEnabled);
-    _notificationTarget = _enumOf(json['notification.target'],
-        LyricsMetadataTarget.values, _notificationTarget);
-    _notificationFormat = _enumOf(json['notification.format'],
-        LyricsMetadataFormat.values, _notificationFormat);
+    _notificationEnabled = _boolOf(
+      json['notification.enabled'],
+      _notificationEnabled,
+    );
+    _notificationTarget = _enumOf(
+      json['notification.target'],
+      LyricsMetadataTarget.values,
+      _notificationTarget,
+    );
+    _notificationFormat = _enumOf(
+      json['notification.format'],
+      LyricsMetadataFormat.values,
+      _notificationFormat,
+    );
     _notificationIncludeTranslation = _boolOf(
-        json['notification.includeTranslation'],
-        _notificationIncludeTranslation);
-    _notificationPauseBehavior = _enumOf(json['notification.pauseBehavior'],
-        LyricsPauseBehavior.values, _notificationPauseBehavior);
+      json['notification.includeTranslation'],
+      _notificationIncludeTranslation,
+    );
+    _notificationPauseBehavior = _enumOf(
+      json['notification.pauseBehavior'],
+      LyricsPauseBehavior.values,
+      _notificationPauseBehavior,
+    );
 
     _bluetoothEnabled = _boolOf(json['bluetooth.enabled'], _bluetoothEnabled);
-    _bluetoothOnlyWhenA2dp =
-        _boolOf(json['bluetooth.onlyWhenA2dp'], _bluetoothOnlyWhenA2dp);
-    _bluetoothTarget = _enumOf(json['bluetooth.target'],
-        LyricsMetadataTarget.values, _bluetoothTarget);
-    _bluetoothFormat = _enumOf(json['bluetooth.format'],
-        LyricsMetadataFormat.values, _bluetoothFormat);
+    _bluetoothOnlyWhenA2dp = _boolOf(
+      json['bluetooth.onlyWhenA2dp'],
+      _bluetoothOnlyWhenA2dp,
+    );
+    _bluetoothTarget = _enumOf(
+      json['bluetooth.target'],
+      LyricsMetadataTarget.values,
+      _bluetoothTarget,
+    );
+    _bluetoothFormat = _enumOf(
+      json['bluetooth.format'],
+      LyricsMetadataFormat.values,
+      _bluetoothFormat,
+    );
     _bluetoothIncludeTranslation = _boolOf(
-        json['bluetooth.includeTranslation'], _bluetoothIncludeTranslation);
-    final interval =
-        _intOf(json['bluetooth.updateIntervalMs'], _bluetoothUpdateIntervalMs);
+      json['bluetooth.includeTranslation'],
+      _bluetoothIncludeTranslation,
+    );
+    final interval = _intOf(
+      json['bluetooth.updateIntervalMs'],
+      _bluetoothUpdateIntervalMs,
+    );
     if (updateIntervalOptions.contains(interval)) {
       _bluetoothUpdateIntervalMs = interval;
     }
-    _bluetoothPauseBehavior = _enumOf(json['bluetooth.pauseBehavior'],
-        LyricsPauseBehavior.values, _bluetoothPauseBehavior);
+    _bluetoothPauseBehavior = _enumOf(
+      json['bluetooth.pauseBehavior'],
+      LyricsPauseBehavior.values,
+      _bluetoothPauseBehavior,
+    );
   }
 
   void _commit() {

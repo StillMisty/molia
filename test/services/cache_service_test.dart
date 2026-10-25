@@ -2,20 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
-import '../support/memory_cache_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 领域曲目（读取侧 key 用）。
-Track _track(String sourceKey, String id) => Track(
-      id: TrackId(sourceKey, id),
-      title: 'Title $id',
-      origin: TrackOrigin.lx,
-      payload: const {},
-    );
+import '../support/memory_cache_storage.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// 固定设备容量的存储假件：容量可控，其余委托真实 IO 实现（指向临时目录）。
 class _FixedSpaceStorage extends IoCacheStorage {
@@ -60,8 +53,12 @@ void main() {
     }
   });
 
-  Future<File> writeFile(String dir, String name, int sizeBytes,
-      {Duration age = const Duration(days: 1)}) async {
+  Future<File> writeFile(
+    String dir,
+    String name,
+    int sizeBytes, {
+    Duration age = const Duration(days: 1),
+  }) async {
     final file = File('$dir/$name');
     await file.parent.create(recursive: true);
     await file.writeAsBytes(List<int>.filled(sizeBytes, 0));
@@ -142,10 +139,7 @@ void main() {
         await small.suggestedAudioMaxMb(),
         CacheService.audioMaxSuggestionFloorMb,
       );
-      expect(
-        await small.audioMaxMb(),
-        CacheService.audioMaxSuggestionFloorMb,
-      );
+      expect(await small.audioMaxMb(), CacheService.audioMaxSuggestionFloorMb);
     });
 
     test('容量不可知：建议为 null，缺键回退固定默认值', () async {
@@ -217,14 +211,23 @@ void main() {
   group('音频 LRU 淘汰', () {
     test('超过上限按 mtime 从旧到新删除，最新文件保留', () async {
       const size = 600 * 1024; // 600KB
-      final oldest =
-          await writeFile('${tempRoot.path}/audio_cache', 'oldest', size);
+      final oldest = await writeFile(
+        '${tempRoot.path}/audio_cache',
+        'oldest',
+        size,
+      );
       final middle = await writeFile(
-          '${tempRoot.path}/audio_cache', 'middle', size,
-          age: const Duration(hours: 12));
+        '${tempRoot.path}/audio_cache',
+        'middle',
+        size,
+        age: const Duration(hours: 12),
+      );
       final newest = await writeFile(
-          '${tempRoot.path}/audio_cache', 'newest', size,
-          age: const Duration(minutes: 1));
+        '${tempRoot.path}/audio_cache',
+        'newest',
+        size,
+        age: const Duration(minutes: 1),
+      );
 
       // 上限 1MB：1.8MB → 删到 <= 1MB（删 2 个）。
       await service.setAudioMaxMb(1);
@@ -242,10 +245,18 @@ void main() {
         storage: storage,
         audioProtectAge: const Duration(hours: 1),
       );
-      await writeFile('${tempRoot.path}/audio_cache', 'active', 600 * 1024,
-          age: Duration.zero);
-      await writeFile('${tempRoot.path}/audio_cache', 'idle', 600 * 1024,
-          age: const Duration(days: 2));
+      await writeFile(
+        '${tempRoot.path}/audio_cache',
+        'active',
+        600 * 1024,
+        age: Duration.zero,
+      );
+      await writeFile(
+        '${tempRoot.path}/audio_cache',
+        'idle',
+        600 * 1024,
+        age: const Duration(days: 2),
+      );
 
       await active.setAudioMaxMb(1);
       expect(File('${tempRoot.path}/audio_cache/active').existsSync(), isTrue);
@@ -254,7 +265,10 @@ void main() {
 
     test('上限为 0 表示不限制（不删除）', () async {
       final file = await writeFile(
-          '${tempRoot.path}/audio_cache', 'big', 2 * 1024 * 1024);
+        '${tempRoot.path}/audio_cache',
+        'big',
+        2 * 1024 * 1024,
+      );
       await service.setAudioMaxMb(0);
       expect(await file.exists(), isTrue);
     });
@@ -263,8 +277,11 @@ void main() {
   group('封面策略 sweep', () {
     test('staleDays=0 且 maxObjects=0 不删除', () async {
       final old = await writeFile(
-          '${tempRoot.path}/artwork_cache', 'old.jpg', 10,
-          age: const Duration(days: 999));
+        '${tempRoot.path}/artwork_cache',
+        'old.jpg',
+        10,
+        age: const Duration(days: 999),
+      );
       await service.setArtworkStaleDays(0);
       await service.setArtworkMaxObjects(0);
       await service.enforceArtworkPolicy();
@@ -276,14 +293,26 @@ void main() {
     test('按曲目前缀统计与清理：命中所有音质变体，不误伤其它曲目', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
       final sameTrack320 = AudioCacheStore.key(
-          sourceKey: 'wy', songId: '123', quality: '320k');
+        sourceKey: 'wy',
+        songId: '123',
+        quality: '320k',
+      );
       final sameTrackFlac = AudioCacheStore.key(
-          sourceKey: 'wy', songId: '123', quality: 'flac');
+        sourceKey: 'wy',
+        songId: '123',
+        quality: 'flac',
+      );
       final otherTrack = AudioCacheStore.key(
-          sourceKey: 'wy', songId: '1234', quality: '320k');
+        sourceKey: 'wy',
+        songId: '1234',
+        quality: '320k',
+      );
       // 特殊字符走哈希后缀路径：前缀匹配同样成立。
       final specialKey = AudioCacheStore.key(
-          sourceKey: 'lx', songId: 'lx:abc/1', quality: '128k');
+        sourceKey: 'lx',
+        songId: 'lx:abc/1',
+        quality: '128k',
+      );
       await writeFile(audioDir, sameTrack320, 100);
       await writeFile(audioDir, sameTrackFlac, 200);
       await writeFile(audioDir, otherTrack, 400);
@@ -298,8 +327,10 @@ void main() {
         const CacheUsage(bytes: 300, count: 1),
       );
 
-      final result =
-          await service.clearAudioForTrack(sourceKey: 'wy', songId: '123');
+      final result = await service.clearAudioForTrack(
+        sourceKey: 'wy',
+        songId: '123',
+      );
       expect(result.deleted, const CacheUsage(bytes: 300, count: 2));
       expect(result.skipped, 0);
       expect(File('$audioDir/$sameTrack320').existsSync(), isFalse);
@@ -318,19 +349,38 @@ void main() {
         audioProtectAge: const Duration(hours: 1),
       );
       final writing = AudioCacheStore.key(
-          sourceKey: 'kg', songId: '7', quality: '320k');
+        sourceKey: 'kg',
+        songId: '7',
+        quality: '320k',
+      );
       final idle = AudioCacheStore.key(
-          sourceKey: 'kg', songId: '7', quality: '128k');
-      await writeFile('${tempRoot.path}/audio_cache', writing, 100,
-          age: Duration.zero);
-      await writeFile('${tempRoot.path}/audio_cache', idle, 200,
-          age: const Duration(days: 1));
+        sourceKey: 'kg',
+        songId: '7',
+        quality: '128k',
+      );
+      await writeFile(
+        '${tempRoot.path}/audio_cache',
+        writing,
+        100,
+        age: Duration.zero,
+      );
+      await writeFile(
+        '${tempRoot.path}/audio_cache',
+        idle,
+        200,
+        age: const Duration(days: 1),
+      );
 
-      final result =
-          await active.clearAudioForTrack(sourceKey: 'kg', songId: '7');
+      final result = await active.clearAudioForTrack(
+        sourceKey: 'kg',
+        songId: '7',
+      );
       expect(result.deleted, const CacheUsage(bytes: 200, count: 1));
       expect(result.skipped, 1);
-      expect(File('${tempRoot.path}/audio_cache/$writing').existsSync(), isTrue);
+      expect(
+        File('${tempRoot.path}/audio_cache/$writing').existsSync(),
+        isTrue,
+      );
       expect(File('${tempRoot.path}/audio_cache/$idle').existsSync(), isFalse);
     });
 
@@ -344,25 +394,22 @@ void main() {
         const CacheDeleteResult(),
       );
 
-      final noFs = CacheService(
-        prefs: prefs,
-        storage: MemoryCacheStorage(),
-      );
+      final noFs = CacheService(prefs: prefs, storage: MemoryCacheStorage());
       expect(
         await noFs.audioUsageForTrack(sourceKey: 'kw', songId: 'x'),
         CacheUsage.zero,
       );
       expect(
-        (await noFs.clearAudioForTrack(sourceKey: 'kw', songId: 'x'))
-            .deleted,
+        (await noFs.clearAudioForTrack(sourceKey: 'kw', songId: 'x')).deleted,
         CacheUsage.zero,
       );
     });
 
-    test('歌词：单曲占用与清理（规范键 + 历史键）', () async {
-      await prefs.setString('${CacheService.lyricsCacheKeyPrefix}wy:1',
-          jsonEncode({'provider': 'netease', 'lyric': '歌词', 'ts': 1}));
-      await prefs.setString('manual_lyrics_cache_wy:1', '{}');
+    test('歌词：单曲占用与清理（只动该曲目的规范键）', () async {
+      await prefs.setString(
+        '${CacheService.lyricsCacheKeyPrefix}wy:1',
+        jsonEncode({'provider': 'netease', 'lyric': '歌词', 'ts': 1}),
+      );
       await prefs.setString('${CacheService.lyricsCacheKeyPrefix}wy:2', '{}');
 
       final usage = await service.lyricsUsageForTrack('wy:1');
@@ -371,7 +418,6 @@ void main() {
 
       await service.clearLyricsForTrack('wy:1');
       expect(await service.lyricsUsageForTrack('wy:1'), CacheUsage.zero);
-      expect(prefs.getString('manual_lyrics_cache_wy:1'), isNull);
       expect(
         prefs.getString('${CacheService.lyricsCacheKeyPrefix}wy:2'),
         isNotNull,
@@ -381,11 +427,16 @@ void main() {
     test('AudioCacheStore.keyPrefix 与 key 同源（文件名以它开头）', () {
       for (final songId in ['123', 'lx:abc/1']) {
         final prefix = AudioCacheStore.keyPrefix(
-            sourceKey: 'lx', songId: songId);
+          sourceKey: 'lx',
+          songId: songId,
+        );
         for (final quality in ['auto', '320k', 'flac24bit']) {
           expect(
             AudioCacheStore.key(
-                sourceKey: 'lx', songId: songId, quality: quality),
+              sourceKey: 'lx',
+              songId: songId,
+              quality: quality,
+            ),
             startsWith(prefix),
           );
         }
@@ -395,15 +446,14 @@ void main() {
     test('索引 / 占用只认完整文件：半成品与边车不计入', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
       final complete = AudioCacheStore.key(
-          sourceKey: 'kw', songId: '9', quality: '320k');
+        sourceKey: 'kw',
+        songId: '9',
+        quality: '320k',
+      );
       await writeFile(audioDir, complete, 400);
       await writeFile(audioDir, '$complete$audioCachePartSuffix', 900);
       await writeFile(audioDir, '$complete$audioCacheMimeSuffix', 7);
-      await writeFile(
-        audioDir,
-        'kw_9_flac$audioCachePredownloadSuffix',
-        500,
-      );
+      await writeFile(audioDir, 'kw_9_flac$audioCachePredownloadSuffix', 500);
 
       expect(await service.audioCacheIndex(), {complete: 400});
       expect(
@@ -419,7 +469,10 @@ void main() {
     test('启动清扫半成品：删 .part / .predl，保留完整文件与 .mime 边车', () async {
       final audioDir = '${tempRoot.path}/audio_cache';
       final complete = AudioCacheStore.key(
-          sourceKey: 'kw', songId: '9', quality: '320k');
+        sourceKey: 'kw',
+        songId: '9',
+        quality: '320k',
+      );
       await writeFile(audioDir, complete, 400);
       await writeFile(audioDir, '$complete$audioCachePartSuffix', 900);
       await writeFile(audioDir, '$complete$audioCacheMimeSuffix', 7);
@@ -434,30 +487,7 @@ void main() {
         ..sort();
       expect(remaining, [complete, '$complete$audioCacheMimeSuffix']..sort());
     });
-
-    test('旧命名一次性清理：迁移只执行一次，标记落 prefs', () async {
-      final audioDir = '${tempRoot.path}/audio_cache';
-      // 旧命名：songId 用了复合 id（`kw:9`），文件名带重复 sourceKey。
-      final legacy = AudioCacheStore.key(
-          sourceKey: 'kw', songId: 'kw:9', quality: '320k');
-      await writeFile(audioDir, legacy, 100);
-
-      await service.migrateAudioCacheNamingIfNeeded();
-      expect(File('$audioDir/$legacy').existsSync(), isFalse);
-      expect(
-        prefs.getInt(CacheService.keyAudioNamingVersion),
-        CacheService.audioNamingVersion,
-      );
-
-      // 已是当前版本：不再清（用户新写入的缓存不受影响）。
-      final fresh = AudioCacheStore.keyForTrack(
-          _track('kw', '9'), quality: '320k');
-      await writeFile(audioDir, fresh, 200);
-      await service.migrateAudioCacheNamingIfNeeded();
-      expect(File('$audioDir/$fresh').existsSync(), isTrue);
-    });
   });
 
-  group('AudioCacheStore.key', () {
-  });
+  group('AudioCacheStore.key', () {});
 }

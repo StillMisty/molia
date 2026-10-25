@@ -36,7 +36,7 @@ class SingleInstanceLock {
   static String encode({required int pid, required int port}) =>
       jsonEncode(<String, int>{'pid': pid, 'port': port});
 
-  /// 解析锁文件内容；格式不符（半写、被截断、旧版本）返回 null。
+  /// 解析锁文件内容；格式不符（半写、被截断）返回 null。
   static ({int pid, int port})? parse(String raw) {
     try {
       final decoded = jsonDecode(raw);

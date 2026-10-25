@@ -20,7 +20,7 @@ Future<List<Map<String, Object?>>> tableRows(
   return [for (final row in rows) row.data];
 }
 
-/// 插入统计曲目内容行（schema v5：`play_tracks` 每曲一行，载荷按 gzip 存）。
+/// 插入统计曲目内容行（`play_tracks` 每曲一行，载荷按 gzip 存）。
 ///
 /// 已存在时按「最近一次播放」语义覆盖（`updatedAt` 不早于已有时才写），与
 /// 仓库的写入口径一致。
@@ -40,38 +40,49 @@ Future<int> insertPlayTrack(
     jsonEncode(raw ?? <String, dynamic>{'id': songId}),
   );
   final existing = await (db.select(db.playTracks)
-        ..where((t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId))
+        ..where(
+          (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
+        )
         ..limit(1))
       .getSingleOrNull();
   if (existing == null) {
-    return db.into(db.playTracks).insert(PlayTracksCompanion.insert(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: Value(title),
-          artist: Value(artist),
-          album: Value(album),
-          coverUrl: Value(coverUrl),
-          durationMs: Value(durationMs),
-          raw: Value(payload),
-          updatedAt: updatedAt,
-        ));
+    return db.into(db.playTracks).insert(
+          PlayTracksCompanion.insert(
+            sourceKey: sourceKey,
+            songId: songId,
+            title: Value(title),
+            artist: Value(artist),
+            album: Value(album),
+            coverUrl: Value(coverUrl),
+            durationMs: Value(durationMs),
+            raw: Value(payload),
+            updatedAt: updatedAt,
+          ),
+        );
   }
   if (updatedAt >= existing.updatedAt) {
-    await (db.update(db.playTracks)..where((t) => t.id.equals(existing.id)))
-        .write(PlayTracksCompanion(
-      title: Value(title),
-      artist: Value(artist),
-      album: Value(album),
-      coverUrl: Value(coverUrl),
-      durationMs: Value(durationMs),
-      raw: Value(payload),
-      updatedAt: Value(updatedAt),
-    ));
+    await (db.update(
+      db.playTracks,
+    )..where((t) => t.id.equals(existing.id)))
+        .write(
+      PlayTracksCompanion(
+        title: Value(title),
+        artist: Value(artist),
+        album: Value(album),
+        coverUrl: Value(coverUrl),
+        durationMs: Value(durationMs),
+        raw: Value(payload),
+        updatedAt: Value(updatedAt),
+      ),
+    );
   }
   return existing.id;
 }
 
-/// 插入一条统计事件（含曲目内容行；schema v5 的两表结构）。
+/// 插入一条统计事件（含曲目内容行；两表结构）。
+///
+/// `syncKey` 非空且唯一：未显式给值时生成一个测试内的唯一键（生产写入点
+/// 由 `SqliteStatisticsSyncStore.startEvent` 生成）。
 Future<int> insertPlayEvent(
   MoliaDatabase db, {
   String sourceKey = 'wy',
@@ -101,28 +112,35 @@ Future<int> insertPlayEvent(
     raw: raw,
     updatedAt: startedAt,
   );
-  return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-        trackId: trackId,
-        startedAt: startedAt,
-        endedAt: Value(endedAt),
-        listenedMs: Value(listenedMs),
-        maxPositionMs: Value(maxPositionMs),
-        endReason: Value(endReason),
-        syncKey: Value(syncKey),
-      ));
+  return db.into(db.playEvents).insert(
+        PlayEventsCompanion.insert(
+          trackId: trackId,
+          startedAt: startedAt,
+          endedAt: Value(endedAt),
+          listenedMs: Value(listenedMs),
+          maxPositionMs: Value(maxPositionMs),
+          endReason: Value(endReason),
+          syncKey: syncKey ?? 'test-sync-${_syncKeySeed++}',
+        ),
+      );
 }
 
-/// 事件行 + 曲目内容行（列名与 schema v5 之前的行结构一致）。
+/// 测试内 `syncKey` 序号（未显式给值时保证跨行唯一）。
+var _syncKeySeed = 0;
+
+/// 事件行 + 曲目内容行（列名与同步记录的行结构一致）。
 ///
 /// 断言用：事件表瘦身后（元数据 / `raw` 在 [insertPlayTrack] 那张表里），
 /// 直接读 `play_events` 拿不到曲目字段。
 Future<List<Map<String, Object?>>> playEventRows(MoliaDatabase db) async {
-  final rows = await db.customSelect(
-    'SELECT e.*, pt.sourceKey AS sourceKey, pt.songId AS songId, '
-    'pt.title AS title, pt.artist AS artist, pt.album AS album, '
-    'pt.coverUrl AS coverUrl, pt.durationMs AS durationMs, pt.raw AS raw '
-    'FROM play_events e LEFT JOIN play_tracks pt ON pt.id = e.trackId '
-    'ORDER BY e.id ASC',
-  ).get();
+  final rows = await db
+      .customSelect(
+        'SELECT e.*, pt.sourceKey AS sourceKey, pt.songId AS songId, '
+        'pt.title AS title, pt.artist AS artist, pt.album AS album, '
+        'pt.coverUrl AS coverUrl, pt.durationMs AS durationMs, pt.raw AS raw '
+        'FROM play_events e LEFT JOIN play_tracks pt ON pt.id = e.trackId '
+        'ORDER BY e.id ASC',
+      )
+      .get();
   return [for (final row in rows) row.data];
 }

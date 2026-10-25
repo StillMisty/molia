@@ -27,8 +27,7 @@ class NotificationPermission {
   /// 每个会话至多请求一次（用户拒绝后反复弹窗属骚扰）。
   static bool _requestedThisSession = false;
 
-  static bool get _isAndroid =>
-      defaultTargetPlatform == TargetPlatform.android;
+  static bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
   /// 查询当前状态（不弹窗）。
   static Future<NotificationPermissionStatus> status() async {
@@ -61,7 +60,7 @@ class NotificationPermission {
       final value = await _channel.invokeMethod<String>(method);
       return _parse(value);
     } catch (_) {
-      // 通道缺失（测试 / 旧版本）按不支持处理，不阻塞业务。
+      // 通道缺失（测试 / 降级平台）按不支持处理，不阻塞业务。
       return NotificationPermissionStatus.unsupported;
     }
   }

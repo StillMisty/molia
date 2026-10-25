@@ -15,7 +15,7 @@ import '../support/fake_library_repository.dart';
 import '../support/fake_cover_index.dart';
 import '../support/fakes.dart';
 
-/// 播放观察者：快照副作用扇出（最后播放 / 播放上下文 / 小组件 / 历史 /
+/// 播放观察者：快照副作用扇出（最后播放 / 小组件 / 历史 /
 /// 预取 / 补封面 / 通知权限）。
 ///
 /// 假 facade（真实 facade + 假后端）+ 假副作用入口；断言只经观察者接口与
@@ -70,7 +70,6 @@ void main() {
   late _RecordingLibraryStore libraryStore;
   late _RecordingPreloader preloader;
   late List<Map<String, Object?>> widgetPayloads;
-  late List<({String contextUri, String? imageUrl})> playContexts;
   late int notificationRequests;
   late FakePlaybackBackend backend;
   late DefaultPlaybackFacade facade;
@@ -84,7 +83,6 @@ void main() {
   }) {
     log = [];
     widgetPayloads = [];
-    playContexts = [];
     notificationRequests = 0;
     libraryStore = _RecordingLibraryStore(log);
     preloader = _RecordingPreloader(log);
@@ -92,16 +90,6 @@ void main() {
       facade: facade,
       dataSaver: dataSaver,
       libraryRepository: libraryStore,
-      playContextWriter: ({
-        required contextUri,
-        required contextType,
-        required contextName,
-        required imageUrl,
-        required lastPlayedAt,
-      }) async {
-        log.add('context');
-        playContexts.add((contextUri: contextUri, imageUrl: imageUrl));
-      },
       widgetUpdater: (payload) async {
         log.add('widget');
         widgetPayloads.add(payload);
@@ -127,24 +115,23 @@ void main() {
     final navigatorKey = GlobalKey<NavigatorState>();
     final observer = buildObserver(navigatorKey: navigatorKey);
     addTearDown(observer.dispose);
-    await tester.pumpWidget(MaterialApp(
-      navigatorKey: navigatorKey,
-      home: const SizedBox.shrink(),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: navigatorKey, home: const SizedBox.shrink()),
+    );
 
     final item = track('a', artwork: 'https://img.example/a.jpg');
     final next = track('b', artwork: 'https://img.example/b.jpg');
-    backend.emit(snapshot(
-      item,
-      queue: [item, next],
-      context: const PlaybackContext(name: '收藏', type: 'lx', uri: 'lx:收藏'),
-    ));
+    backend.emit(
+      snapshot(
+        item,
+        queue: [item, next],
+        context: const PlaybackContext(name: '收藏', type: 'lx', uri: 'lx:收藏'),
+      ),
+    );
     await tester.pump();
     await tester.pump();
 
     // 各副作用均已发生。
-    expect(playContexts.single.contextUri, 'lx:收藏');
-    expect(playContexts.single.imageUrl, 'https://img.example/a.jpg');
     expect(widgetPayloads, hasLength(1));
     expect(widgetPayloads.single['songName'], 'Title a');
     expect(widgetPayloads.single['artistName'], 'Artist a');
@@ -166,9 +153,9 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('last_played_track_name'), 'Title a');
 
-    // 顺序：context → widget → history 同步发起；通知权限在播放态判定后
-    // 发起；预取在微任务中执行（跨 async gap 不用 context），落在最后。
-    expect(log, ['context', 'widget', 'history', 'notify', 'preload']);
+    // 顺序：widget → history 同步发起；通知权限在播放态判定后发起；
+    // 预取在微任务中执行（跨 async gap 不用 context），落在最后。
+    expect(log, ['widget', 'history', 'notify', 'preload']);
   });
 
   test('省流：本地封面照常传小组件，远程封面置空', () async {
@@ -182,9 +169,7 @@ void main() {
     expect(dataSaver.blockNetworkArtwork, isTrue);
 
     var displayUrl = 'file:///data/user/0/molia/custom_covers/track_a.jpg';
-    final coverIndex = FakeCoverIndex(
-      customUrls: {'fake:a': displayUrl},
-    );
+    final coverIndex = FakeCoverIndex(customUrls: {'fake:a': displayUrl});
     final observer = buildObserver(
       dataSaver: dataSaver,
       coverResolver: CoverResolver(coverIndex),
@@ -193,8 +178,11 @@ void main() {
 
     final local = track('a', artwork: 'https://img.example/a.jpg');
     backend.emit(snapshot(local));
-    expect(widgetPayloads.single['albumArtUrl'], displayUrl,
-        reason: '本地自定义 / 默认封面不需要网络，省流时照常展示');
+    expect(
+      widgetPayloads.single['albumArtUrl'],
+      displayUrl,
+      reason: '本地自定义 / 默认封面不需要网络，省流时照常展示',
+    );
 
     displayUrl = 'https://img.example/b.jpg';
     final remote = track('b', artwork: displayUrl);
@@ -227,13 +215,12 @@ void main() {
     backend.emit(snapshot(item));
     backend.emit(snapshot(item, position: const Duration(seconds: 2)));
     backend.emit(
-        snapshot(item, playing: false, position: const Duration(seconds: 4)));
+      snapshot(item, playing: false, position: const Duration(seconds: 4)),
+    );
 
     // 同曲目：历史 / 小组件不重复；通知权限只请求一次。
     expect(libraryStore.history, hasLength(1));
     expect(widgetPayloads, hasLength(1));
-    // 无播放上下文（context 为空）时不写「最近播放」。
-    expect(playContexts, isEmpty);
     expect(notificationRequests, 1);
   });
 
@@ -259,10 +246,9 @@ void main() {
       presence: presence,
     );
     addTearDown(observer.dispose);
-    await tester.pumpWidget(MaterialApp(
-      navigatorKey: navigatorKey,
-      home: const SizedBox.shrink(),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: navigatorKey, home: const SizedBox.shrink()),
+    );
     await tester.pump();
 
     // 托盘隐藏期间切歌：历史 / 小组件照常，封面预取被门控拦下。

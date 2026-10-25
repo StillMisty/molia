@@ -11,7 +11,7 @@ enum LibraryAddPosition {
   /// 列表末尾。
   bottom;
 
-  /// 解析持久化值：未知值（旧版本 / 同步来的新值）回退默认的开头。
+  /// 解析持久化值：未知值（同步来的新值 / 损坏数据）回退默认的开头。
   static LibraryAddPosition parse(String? raw) =>
       raw == LibraryAddPosition.bottom.name
           ? LibraryAddPosition.bottom

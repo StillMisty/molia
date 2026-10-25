@@ -4,9 +4,9 @@ import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/transport/webdav_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
-import 'package:molia/domain/ports/sync_transport.dart';
 
 import 'support/fake_webdav_server.dart';
+import 'support/sync_network.dart';
 
 /// WebDAV 传输测试：对本地假 DAV 服务完成推送 / 列表 / 拉取 / 鉴权。
 void main() {
@@ -51,10 +51,8 @@ void main() {
         deviceId: deviceId,
         codec: codecPort,
         passphraseProvider: () async => passphraseOverride ?? passphrase,
-        configProvider: () => WebDavConfig(
-          baseUrl: server.baseUrl,
-          username: 'user',
-        ),
+        configProvider: () =>
+            WebDavConfig(baseUrl: server.baseUrl, username: 'user'),
         passwordProvider: () async => password,
         journalBaseSeqProvider: baseSeq == null ? null : () async => baseSeq,
         requestTimeout: const Duration(seconds: 5),
@@ -108,8 +106,10 @@ void main() {
 
   test('口令不同的快照被跳过', () async {
     final a = transport('devA');
-    final c = transport('devC',
-        passphraseOverride: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ');
+    final c = transport(
+      'devC',
+      passphraseOverride: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
+    );
     addTearDown(() async {
       await a.stop();
       await c.stop();
@@ -158,10 +158,7 @@ void main() {
     final result = await a.pull();
     expect(result.failedPeers, 1);
     expect(result.failedIssues.keys, ['devB']);
-    expect(
-      result.failedIssues['devB']?.code,
-      SyncIssueCode.webdavReadFailed,
-    );
+    expect(result.failedIssues['devB']?.code, SyncIssueCode.webdavReadFailed);
   });
 
   test('回执解密失败但数据文件成功：设备不算失败（只在传输级计数）', () async {
@@ -170,8 +167,10 @@ void main() {
     await a.start();
 
     server.files['devB.p2.acks.msync'] = [1, 2, 3];
-    server.files['devB.p2.0.snapshot.msync'] =
-        codec.encrypt(snapshotEnvelope('devB', coverage: 0), passphrase);
+    server.files['devB.p2.0.snapshot.msync'] = codec.encrypt(
+      snapshotEnvelope('devB', coverage: 0),
+      passphrase,
+    );
 
     final result = await a.pull();
     // 数据已经读到并交付：设备行按成功归属；回执失败仍留在传输级失败计数 /
@@ -225,8 +224,10 @@ void main() {
     server.files['devC.p2.acks.msync'] = codec.encrypt(acks, passphrase);
 
     final result = await a.pull();
-    expect(result.failedIssues['devB']?.code,
-        SyncIssueCode.webdavDecryptFailed);
+    expect(
+      result.failedIssues['devB']?.code,
+      SyncIssueCode.webdavDecryptFailed,
+    );
     expect(result.failedIssues['devC']?.code, SyncIssueCode.webdavReadFailed);
   });
 
@@ -317,9 +318,7 @@ void main() {
 
     // 远端文件未动 + 本机游标已到上次读到的头部：第二轮不 GET、不解密、不合并。
     final decryptionsBefore = codec.decryptions;
-    final second = await b.pull(
-      const SyncPullRequest(cursors: {'devA': 0}),
-    );
+    final second = await b.pull(syncPullRequest(cursors: {'devA': 0}));
     expect(second.envelopes, isEmpty);
     expect(second.skippedUnchanged, 1);
     expect(second.bytesIn, 0);
@@ -343,8 +342,9 @@ void main() {
     final changed = await b.pull();
     expect(changed.envelopes, hasLength(1));
     expect(
-        changed.envelopes.single.recordsOf(SyncCategory.settings).single.data,
-        {'v': 'dark'});
+      changed.envelopes.single.recordsOf(SyncCategory.settings).single.data,
+      {'v': 'dark'},
+    );
     expect(changed.skippedUnchanged, 0);
   });
 
@@ -353,25 +353,27 @@ void main() {
     addTearDown(() => a.stop());
     await a.start();
 
-    await a.push(SyncEnvelope(
-      deviceId: 'devA',
-      producedAt: 1,
-      journalHead: 3,
-      baseSeq: 0,
-      windowStart: 3,
-      windowEnd: 3,
-      journal: [
-        SyncJournalEntry(
-          seq: 3,
-          category: SyncCategory.settings,
-          record: SyncRecord(
-            key: 'theme_mode',
-            version: const SyncVersion(physical: 10, deviceId: 'devA'),
-            data: const {'v': 'dark'},
+    await a.push(
+      SyncEnvelope(
+        deviceId: 'devA',
+        producedAt: 1,
+        journalHead: 3,
+        baseSeq: 0,
+        windowStart: 3,
+        windowEnd: 3,
+        journal: [
+          SyncJournalEntry(
+            seq: 3,
+            category: SyncCategory.settings,
+            record: SyncRecord(
+              key: 'theme_mode',
+              version: const SyncVersion(physical: 10, deviceId: 'devA'),
+              data: const {'v': 'dark'},
+            ),
           ),
-        ),
-      ],
-    ));
+        ],
+      ),
+    );
     expect(server.files.keys, contains('devA.p2.3-3.chunk.msync'));
     expect(
       server.files.keys.where((name) => name.endsWith('.snapshot.msync')),
@@ -430,14 +432,14 @@ void main() {
     expect(payload.journal!.single.record.data, {'v': 'dark'});
 
     // 游标已到窗口末尾 + 文件版本未变：跳过 GET。
-    final skipped = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
+    final skipped = await b.pull(syncPullRequest(cursors: {'devA': 1}));
     expect(skipped.envelopes, isEmpty);
     expect(skipped.skippedUnchanged, 1);
 
     // 窗口推进：新块（1-2）只带新条目，旧块不再重写。
     await a.push(delta([entry(1, 'dark'), entry(2, 'light')]));
     expect(server.files.keys, contains('devA.p2.1-2.chunk.msync'));
-    final second = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
+    final second = await b.pull(syncPullRequest(cursors: {'devA': 1}));
     expect(second.envelopes, hasLength(1));
     expect(second.envelopes.single.journal, hasLength(2));
     expect(second.envelopes.single.windowEnd, 2);
@@ -455,29 +457,31 @@ void main() {
 
     // 快照文件（覆盖到 seq 5）+ 窗口起点已推进到 4 的日志文件。
     await a.push(envelope('devA', value: 'full').withSnapshotId('hash-full'));
-    await a.push(SyncEnvelope(
-      deviceId: 'devA',
-      producedAt: 1,
-      snapshotId: 'hash-full',
-      journalHead: 6,
-      baseSeq: 4,
-      windowStart: 5,
-      windowEnd: 6,
-      journal: [
-        SyncJournalEntry(
-          seq: 5,
-          category: SyncCategory.settings,
-          record: SyncRecord(
-            key: 'theme_mode',
-            version: const SyncVersion(physical: 20, deviceId: 'devA'),
-            data: const {'v': 'newer'},
+    await a.push(
+      SyncEnvelope(
+        deviceId: 'devA',
+        producedAt: 1,
+        snapshotId: 'hash-full',
+        journalHead: 6,
+        baseSeq: 4,
+        windowStart: 5,
+        windowEnd: 6,
+        journal: [
+          SyncJournalEntry(
+            seq: 5,
+            category: SyncCategory.settings,
+            record: SyncRecord(
+              key: 'theme_mode',
+              version: const SyncVersion(physical: 20, deviceId: 'devA'),
+              data: const {'v': 'newer'},
+            ),
           ),
-        ),
-      ],
-    ));
+        ],
+      ),
+    );
 
     // 本机游标 1 < 窗口起点（baseSeq 4）：窗口不完整 → 用全量快照兜底。
-    final pulled = await b.pull(const SyncPullRequest(cursors: {'devA': 1}));
+    final pulled = await b.pull(syncPullRequest(cursors: {'devA': 1}));
     expect(pulled.envelopes, hasLength(1));
     expect(pulled.envelopes.single.isDelta, isFalse);
     expect(
@@ -490,10 +494,14 @@ void main() {
     // 非本协议命名的残留（幽灵设备遗留）、旧命名（不识别）
     // 与身份不符的块文件。
     server.files['ghost.msync'] = codec.encrypt(envelope('ghost'), passphrase);
-    server.files['fake.journal.msync'] =
-        codec.encrypt(envelope('someone-else'), passphrase);
-    server.files['fake.p2.1-1.chunk.msync'] =
-        codec.encrypt(envelope('someone-else'), passphrase);
+    server.files['fake.journal.msync'] = codec.encrypt(
+      envelope('someone-else'),
+      passphrase,
+    );
+    server.files['fake.p2.1-1.chunk.msync'] = codec.encrypt(
+      envelope('someone-else'),
+      passphrase,
+    );
     final a = transport('devA');
     final b = transport('devB');
     addTearDown(() async {
@@ -516,8 +524,9 @@ void main() {
     addTearDown(() => a.stop());
     await a.start();
     await a.push(envelope('devA'));
-    final snapshotName = server.files.keys
-        .firstWhere((name) => name.endsWith('.snapshot.msync'));
+    final snapshotName = server.files.keys.firstWhere(
+      (name) => name.endsWith('.snapshot.msync'),
+    );
     server.files['devA.journal.msync'] = server.files[snapshotName]!;
     server.files['devA.msync'] = server.files[snapshotName]!;
 
@@ -539,8 +548,10 @@ void main() {
     final a = transport('devA');
     addTearDown(() => a.stop());
     await a.start();
-    server.files['ghost.p2.1.snapshot.msync'] =
-        codec.encrypt(envelope('ghost'), passphrase);
+    server.files['ghost.p2.1.snapshot.msync'] = codec.encrypt(
+      envelope('ghost'),
+      passphrase,
+    );
 
     await expectLater(
       a.deleteRemote('ghost'),
@@ -549,12 +560,18 @@ void main() {
   });
 
   test('旧命名空间文件：不读、不删、也不当成对端', () async {
-    server.files['devA.journal.msync'] =
-        codec.encrypt(envelope('devA'), passphrase);
-    server.files['devA.snapshot.msync'] =
-        codec.encrypt(envelope('devA'), passphrase);
-    server.files['devA.acks.msync'] =
-        codec.encrypt(envelope('devA'), passphrase);
+    server.files['devA.journal.msync'] = codec.encrypt(
+      envelope('devA'),
+      passphrase,
+    );
+    server.files['devA.snapshot.msync'] = codec.encrypt(
+      envelope('devA'),
+      passphrase,
+    );
+    server.files['devA.acks.msync'] = codec.encrypt(
+      envelope('devA'),
+      passphrase,
+    );
     final b = transport('devB');
     addTearDown(() => b.stop());
     await b.start();

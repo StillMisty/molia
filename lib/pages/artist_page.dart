@@ -50,40 +50,6 @@ Future<void> showArtistPage(
   );
 }
 
-/// 按歌手名打开歌手页（曲目 payload 没有歌手 id 时的回退入口）。
-///
-/// id 解析延迟到页面加载：解析期间显示加载态，解析失败（未找到）显示可重试
-/// 的错误态；解析结果在 `ArtistService` 内缓存（同一名字不重复检索）。
-Future<void> showArtistPageByName(
-  BuildContext context,
-  String sourceKey,
-  String name,
-) {
-  final service = context.read<ArtistService?>();
-  if (service == null) return Future.value();
-  String? resolvedId;
-  return ResponsiveNavigation.showSecondaryPage<void>(
-    context: context,
-    title: _l10n(context).trackInfoArtist,
-    body: ArtistPage(
-      fallbackName: name,
-      loader: (page) async {
-        resolvedId ??= (await service.resolveByName(sourceKey, name))?.id;
-        final id = resolvedId;
-        if (id == null || id.isEmpty) {
-          throw const SourceFailure(
-            kind: FailureKind.notFound,
-            message: '歌手未找到',
-            l10nKey: 'artistNotFound',
-          );
-        }
-        return service.load(sourceKey, id, page: page);
-      },
-      embedded: true,
-    ),
-  );
-}
-
 /// 单页取数函数（缓存 / 错误边界在 `ArtistService`）。
 typedef ArtistPageLoader = Future<ArtistDetail> Function(int page);
 
@@ -286,7 +252,8 @@ class _ArtistPageState extends State<ArtistPage> {
             ),
             if (state.isLoadingMore || state.loadMoreFailed)
               SliverToBoxAdapter(
-                  child: _buildLoadMoreFooter(context, l10n, state)),
+                child: _buildLoadMoreFooter(context, l10n, state),
+              ),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
           ],
         ),
@@ -329,10 +296,7 @@ class _ArtistPageState extends State<ArtistPage> {
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: Text(l10n.retry),
               )
-            : const M3EProgressIndicator.circular(
-                size: 28,
-                strokeWidth: 2.5,
-              ),
+            : const M3EProgressIndicator.circular(size: 28, strokeWidth: 2.5),
       ),
     );
   }
@@ -428,9 +392,7 @@ class _ArtistPageState extends State<ArtistPage> {
                 case 'shuffle':
                   unawaited(_playShuffled());
                 case 'addToLibrary':
-                  unawaited(
-                    _handoff.addToLibrary(context, _paged.state.items),
-                  );
+                  unawaited(_handoff.addToLibrary(context, _paged.state.items));
               }
             },
           ),

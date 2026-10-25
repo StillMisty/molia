@@ -112,23 +112,21 @@ Future<PlaybackStack> buildPlaybackStack({
       local: local,
       powerPolicy: policy,
     );
-    final service = chain.buildService(
-      playWithOtherApps: audioFocusSettings,
-    );
+    final service = chain.buildService(playWithOtherApps: audioFocusSettings);
     localPlaybackService = service;
-    playbackFacade =
-        DefaultPlaybackFacade(backend: chain.buildBackend(service: service));
+    playbackFacade = DefaultPlaybackFacade(
+      backend: chain.buildBackend(service: service),
+    );
   }
 
-  // 播放观察者：快照副作用扇出（最后播放 / 播放上下文 / 桌面小组件 / 历史 /
-  // 封面预取与补取 / 通知权限）。先建观察者，provider 创建后再挂接——
-  // facade 监听顺序保持「会话模块先做恢复态交接、provider/观察者后写副作用」。
+  // 播放观察者：快照副作用扇出（最后播放 / 桌面小组件 / 历史 / 封面预取与
+  // 补取 / 通知权限）。先建观察者，provider 创建后再挂接——facade 监听顺序
+  // 保持「会话模块先做恢复态交接、provider/观察者后写副作用」。
   final sessionStore = PlaybackSessionStore();
   final playbackObserver = PlaybackObserver(
     facade: playbackFacade,
     dataSaver: dataSaver,
     libraryRepository: library.libraryRepository,
-    playContextWriter: library.localDatabaseProvider.insertOrUpdatePlayContext,
     navigatorKey: navigatorKey,
     // 封面补取：曲目起播无封面时经 SourceManager 现取（脚本 pic →
     // 内置平台原生取图），省流模式不发请求；取到后原地回写队列曲目。
@@ -162,11 +160,9 @@ Future<PlaybackStack> buildPlaybackStack({
     observer: playbackObserver,
     sessionCoordinator: sessionCoordinator,
     autoSwapSettings: library.sourceSwapSettings,
-    autoSwapResolver: (track, {required excludeSourceKeys}) =>
-        library.autoSourceSwapService.findMatch(
-      track,
-      excludeSourceKeys: excludeSourceKeys,
-    ),
+    autoSwapResolver: (track, {required excludeSourceKeys}) => library
+        .autoSourceSwapService
+        .findMatch(track, excludeSourceKeys: excludeSourceKeys),
     onAutoSourceSwapped: covers.carryOver,
   );
   playbackObserver.attach();

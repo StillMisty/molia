@@ -215,11 +215,10 @@ class _TrackInfoViewState extends State<TrackInfoView> {
         track.platformAlbumId != null &&
         (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.collection ??
             false);
-    // 歌手行：能力位为真且能定位歌手时可点——优先 raw 歌手 id，历史数据
-    // （无 id）按歌手名回退解析（见 track_actions.openTrackArtist）。
+    // 歌手行：能力位为真且曲目带平台歌手 id 时可点（脚本扩展源只读）。
     final artistNames = track?.artistLabel ?? '';
     final artistSupported = track != null &&
-        trackHasArtistEntry(track) &&
+        platformArtistOf(track) != null &&
         (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.artist ??
             false);
     final lyricsProviderName = context.select<LyricsProvider, String?>(

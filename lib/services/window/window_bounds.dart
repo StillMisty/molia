@@ -27,7 +27,7 @@ bool windowBoundsVisibleOn(Rect bounds, Rect visibleArea) {
 /// 解析要恢复的窗口矩形。
 ///
 /// 规则：
-/// - 尺寸先夹到最小 [kMinimumWindowSize]（旧版本或异常存储值可能更小）；
+/// - 尺寸先夹到最小 [kMinimumWindowSize]（异常存储值可能更小）；
 /// - 与任一显示器可见区有足够交集 → 按保存的位置恢复（多显示器场景下
 ///   副屏上的窗口不会被打回主屏）；
 /// - 否则（显示器拔掉、分辨率变小、存储值损坏）→ 主显示器居中，保证窗口

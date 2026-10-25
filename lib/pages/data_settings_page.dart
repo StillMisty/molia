@@ -7,8 +7,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../providers/local_database_provider.dart';
 import '../providers/sync_provider.dart';
+import '../services/json_backup_picker.dart';
 import '../services/notification_service.dart';
 import '../services/play_statistics_service.dart';
 import '../services/save_as.dart';
@@ -28,7 +28,8 @@ class DataSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // 完整备份经同步引擎的适配器收集/合并；缺省（测试）时退回旧导出路径。
+    // 完整备份只经同步引擎的适配器收集/合并；引擎未挂载（测试）时导出 /
+    // 导入都按失败处理（没有可回退的旧数据源）。
     final syncProvider = context.watch<SyncProvider?>();
     return Scaffold(
       appBar: M3EAppBar.top(
@@ -47,10 +48,8 @@ class DataSettingsPage extends StatelessWidget {
                 icon: Icons.storage_rounded,
                 title: l10n.settingsCacheTitle,
                 subtitle: l10n.settingsCacheSubtitle,
-                onTap: () => openSettingsSubPage(
-                  context,
-                  const CacheManagementPage(),
-                ),
+                onTap: () =>
+                    openSettingsSubPage(context, const CacheManagementPage()),
               ),
               // 下载设置：保存位置 / 文件名格式 / 标签嵌入。
               SettingsNavTile(
@@ -58,10 +57,8 @@ class DataSettingsPage extends StatelessWidget {
                 icon: Icons.download_rounded,
                 title: l10n.downloadSettingsTitle,
                 subtitle: l10n.downloadSettingsSubtitle,
-                onTap: () => openSettingsSubPage(
-                  context,
-                  const DownloadSettingsPage(),
-                ),
+                onTap: () =>
+                    openSettingsSubPage(context, const DownloadSettingsPage()),
               ),
               // 下载管理：任务队列 / 批量下载 / 文件维护。
               SettingsNavTile(
@@ -69,10 +66,8 @@ class DataSettingsPage extends StatelessWidget {
                 icon: Icons.download_for_offline_rounded,
                 title: l10n.downloadsManageTitle,
                 subtitle: l10n.downloadsManageSubtitle,
-                onTap: () => openSettingsSubPage(
-                  context,
-                  const DownloadsManagePage(),
-                ),
+                onTap: () =>
+                    openSettingsSubPage(context, const DownloadsManagePage()),
               ),
               // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）；
               // 统计明细入口在设置首屏「数据」卡（与听歌统计同一处）。
@@ -126,22 +121,22 @@ class DataSettingsPage extends StatelessWidget {
     AppLocalizations l10n,
     SyncProvider? syncProvider,
   ) async {
-    final localDbProvider =
-        Provider.of<LocalDatabaseProvider>(context, listen: false);
     final saveAs = Provider.of<SaveAs?>(context, listen: false);
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
+    final notificationService = Provider.of<NotificationService>(
+      context,
+      listen: false,
+    );
     final currentContext = context;
 
+    // 没有同步引擎就没有完整备份的收集面：直接按导出失败提示。
+    if (syncProvider == null) {
+      notificationService.showErrorSnackBar(l10n.exportFailed);
+      return;
+    }
+
     try {
-      final String json;
-      if (syncProvider != null) {
-        // 完整备份：同步备份模块收集全部类别（凭证类默认不含）。
-        json = await syncProvider.exportBackupJson();
-      } else {
-        // 测试 / 同步引擎未挂载：退回最近播放上下文的旧导出数据。
-        json = await localDbProvider.exportDataJson();
-      }
+      // 完整备份：同步备份模块收集全部类别（凭证类默认不含）。
+      final json = await syncProvider.exportBackupJson();
       if (saveAs == null) throw StateError('SaveAs 未装配');
       final result = await saveAs.saveBytes(
         fileName: 'molia_backup_${_fileTimestamp()}.json',
@@ -164,10 +159,10 @@ class DataSettingsPage extends StatelessWidget {
     AppLocalizations l10n,
     SyncProvider? syncProvider,
   ) async {
-    final localDbProvider =
-        Provider.of<LocalDatabaseProvider>(context, listen: false);
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
+    final notificationService = Provider.of<NotificationService>(
+      context,
+      listen: false,
+    );
     final navigator = Navigator.of(context, rootNavigator: true);
     final currentContext = context;
 
@@ -177,9 +172,7 @@ class DataSettingsPage extends StatelessWidget {
         title: l10n.importDialogTitle,
         content: SizedBox(
           width: settingsDialogWidth(context),
-          child: Text(
-            l10n.importDialogMessage,
-          ),
+          child: Text(l10n.importDialogMessage),
         ),
         actions: [
           M3EButton.text(
@@ -190,14 +183,12 @@ class DataSettingsPage extends StatelessWidget {
             onPressed: () async {
               navigator.pop();
               try {
-                final bool success;
+                var success = false;
                 if (syncProvider != null) {
-                  final text = await localDbProvider.pickJsonBackup();
+                  final text = await pickJsonBackupText();
                   if (text == null) return; // 用户取消
                   await syncProvider.importBackupJson(text);
                   success = true;
-                } else {
-                  success = await localDbProvider.importDataFromJson();
                 }
                 if (!currentContext.mounted) return;
                 if (success) {

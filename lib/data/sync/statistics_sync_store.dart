@@ -1,4 +1,4 @@
-/// 听歌统计的同步存储：`play_events` 已收尾事件的类型化导出、存量键回填、
+/// 听歌统计的同步存储：`play_events` 已收尾事件的类型化导出、
 /// 本地曲目过滤与按 `syncKey` 合并。
 ///
 /// 为什么单独成模块：统计仓库只该关心「事件怎么采集、怎么查询」，而
@@ -15,7 +15,6 @@ library;
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 
 import '../../domain/models/device_sync.dart';
@@ -27,7 +26,7 @@ import 'sync_stamp.dart';
 
 /// 事件 + 曲目内容的连表查询列集合（同步导出 / 明细查询共用）。
 ///
-/// 键名与 v5 之前的行结构一致——线上格式不变；`trackId` 留在查询里供导出
+/// 键名与线上记录一致——线上格式不变；`trackId` 留在查询里供导出
 /// 缓存按曲补齐载荷，写记录前会剥掉。
 const String playEventTrackSelect = 'SELECT '
     'e.id, e.trackId, e.startedAt, e.endedAt, e.listenedMs, e.maxPositionMs, '
@@ -58,36 +57,44 @@ Future<int> upsertPlayTrackContent(
   required int updatedAt,
 }) async {
   final existing = await (db.select(db.playTracks)
-        ..where((t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId))
+        ..where(
+          (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
+        )
         ..limit(1))
       .getSingleOrNull();
   if (existing == null) {
-    return db.into(db.playTracks).insert(PlayTracksCompanion.insert(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: Value(title),
-          artist: Value(artist),
-          album: Value(album),
-          coverUrl: Value(coverUrl),
-          durationMs: Value(durationMs),
-          raw: Value(payload == null ? null : encodeStatsPayload(payload)),
-          updatedAt: updatedAt,
-        ));
+    return db.into(db.playTracks).insert(
+          PlayTracksCompanion.insert(
+            sourceKey: sourceKey,
+            songId: songId,
+            title: Value(title),
+            artist: Value(artist),
+            album: Value(album),
+            coverUrl: Value(coverUrl),
+            durationMs: Value(durationMs),
+            raw: Value(payload == null ? null : encodeStatsPayload(payload)),
+            updatedAt: updatedAt,
+          ),
+        );
   }
   if (updatedAt >= existing.updatedAt) {
-    await (db.update(db.playTracks)..where((t) => t.id.equals(existing.id)))
-        .write(PlayTracksCompanion(
-      title: Value(title),
-      artist: Value(artist),
-      album: Value(album),
-      coverUrl: Value(coverUrl),
-      durationMs: Value(durationMs),
-      // payload == null：不覆盖载荷（远端记录没带 raw 时不抹掉已有取链参数）。
-      raw: payload == null
-          ? const Value.absent()
-          : Value(encodeStatsPayload(payload)),
-      updatedAt: Value(updatedAt),
-    ));
+    await (db.update(
+      db.playTracks,
+    )..where((t) => t.id.equals(existing.id)))
+        .write(
+      PlayTracksCompanion(
+        title: Value(title),
+        artist: Value(artist),
+        album: Value(album),
+        coverUrl: Value(coverUrl),
+        durationMs: Value(durationMs),
+        // payload == null：不覆盖载荷（远端记录没带 raw 时不抹掉已有取链参数）。
+        raw: payload == null
+            ? const Value.absent()
+            : Value(encodeStatsPayload(payload)),
+        updatedAt: Value(updatedAt),
+      ),
+    );
   }
   return existing.id;
 }
@@ -216,16 +223,18 @@ class SqliteStatisticsSyncStore
         payload: jsonEncode(raw),
         updatedAt: startedAt,
       );
-      return db.into(db.playEvents).insert(PlayEventsCompanion.insert(
-            trackId: trackId,
-            startedAt: startedAt,
-            endedAt: const Value(null),
-            listenedMs: const Value(0),
-            maxPositionMs: const Value(0),
-            endReason: const Value(null),
-            syncKey: Value(_newEventSyncKey()),
-            originDeviceId: Value(_deviceId),
-          ));
+      return db.into(db.playEvents).insert(
+            PlayEventsCompanion.insert(
+              trackId: trackId,
+              startedAt: startedAt,
+              endedAt: const Value(null),
+              listenedMs: const Value(0),
+              maxPositionMs: const Value(0),
+              endReason: const Value(null),
+              syncKey: _newEventSyncKey(),
+              originDeviceId: Value(_deviceId),
+            ),
+          );
     });
   }
 
@@ -239,11 +248,15 @@ class SqliteStatisticsSyncStore
     int eventId,
   ) async {
     final version = _stamps.next();
-    await (executor.update(_db.playEvents)..where((t) => t.id.equals(eventId)))
-        .write(PlayEventsCompanion(
-      versionPhysical: Value(version.physical),
-      versionCounter: Value(version.counter),
-    ));
+    await (executor.update(
+      _db.playEvents,
+    )..where((t) => t.id.equals(eventId)))
+        .write(
+      PlayEventsCompanion(
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+      ),
+    );
     await _appendEventJournal(executor, eventId);
   }
 
@@ -257,11 +270,15 @@ class SqliteStatisticsSyncStore
     if (eventIds.isEmpty) return;
     final version = _stamps.next();
     final db = _db;
-    await (executor.update(db.playEvents)..where((t) => t.id.isIn(eventIds)))
-        .write(PlayEventsCompanion(
-      versionPhysical: Value(version.physical),
-      versionCounter: Value(version.counter),
-    ));
+    await (executor.update(
+      db.playEvents,
+    )..where((t) => t.id.isIn(eventIds)))
+        .write(
+      PlayEventsCompanion(
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+      ),
+    );
     final journal = _journal;
     if (journal == null) return;
     final changes = <SyncJournalChange>[];
@@ -310,7 +327,7 @@ class SqliteStatisticsSyncStore
     return _exportList!;
   }
 
-  /// 全量加载导出缓存（含 `syncKey` 回填）；只在首次导出 / 缓存失效后执行。
+  /// 全量加载导出缓存；只在首次导出 / 缓存失效后执行。
   Future<Map<int, _CachedEvent>> _loadExportRows() async {
     final db = _db;
     final rows = await db
@@ -318,36 +335,22 @@ class SqliteStatisticsSyncStore
         .get();
     final payloads = <int, String>{};
     final result = <int, _CachedEvent>{};
-    final backfilled = <(int, String)>[];
     for (final row in rows) {
       final data = row.data;
       final id = (data['id'] as num?)?.toInt() ?? -1;
       final trackId = (data['trackId'] as num?)?.toInt() ?? -1;
       final payload = decodeStatsPayload(data['raw']);
       if (payload.isNotEmpty) payloads[trackId] = payload;
-      var syncKey = data['syncKey'] as String?;
-      if (syncKey == null || syncKey.isEmpty) {
-        syncKey = _legacySyncKey(data);
-        backfilled.add((id, syncKey));
-      }
       result[id] = _CachedEvent(
         trackId: trackId,
-        event: _eventFromRow(data, syncKey: syncKey, raw: ''),
+        event: _eventFromRow(
+          data,
+          syncKey: data['syncKey'] as String? ?? '',
+          raw: '',
+        ),
       );
     }
     _exportPayloads = payloads;
-    if (backfilled.isNotEmpty) {
-      // 存量键一次性落库：同一事件在任何设备上哈希一致，重复回填无副作用。
-      await db.transaction(() async {
-        for (final (id, key) in backfilled) {
-          await (db.update(db.playEvents)
-                ..where((t) =>
-                    t.id.equals(id) &
-                    (t.syncKey.isNull() | t.syncKey.equals(''))))
-              .write(PlayEventsCompanion(syncKey: Value(key)));
-        }
-      });
-    }
     return result;
   }
 
@@ -363,14 +366,7 @@ class SqliteStatisticsSyncStore
       return;
     }
     final data = row.data;
-    var syncKey = data['syncKey'] as String?;
-    if (syncKey == null || syncKey.isEmpty) {
-      syncKey = _legacySyncKey(data);
-      await (_db.update(_db.playEvents)
-            ..where((t) =>
-                t.id.equals(id) & (t.syncKey.isNull() | t.syncKey.equals(''))))
-          .write(PlayEventsCompanion(syncKey: Value(syncKey)));
-    }
+    final syncKey = data['syncKey'] as String? ?? '';
     final trackId = (data['trackId'] as num?)?.toInt() ?? -1;
     final payload = decodeStatsPayload(data['raw']);
     if (payload.isNotEmpty) {
@@ -446,7 +442,7 @@ class SqliteStatisticsSyncStore
                   listenedMs: Value(event.listenedMs),
                   maxPositionMs: Value(event.maxPositionMs),
                   endReason: Value(event.endReason),
-                  syncKey: Value(event.syncKey),
+                  syncKey: event.syncKey,
                   originDeviceId: Value(event.version.deviceId),
                   versionPhysical: Value(event.version.physical),
                   versionCounter: Value(event.version.counter),
@@ -458,16 +454,19 @@ class SqliteStatisticsSyncStore
             (!event.version.isOlderThan(existing.syncVersion) &&
                 !_eventMatches(existing, event))) {
           // 同版本也应用（修复被直接改写的本地事件行）；内容一致则跳过。
-          await (db.update(db.playEvents)
-                ..where((t) => t.id.equals(existing.id)))
-              .write(PlayEventsCompanion(
-            endedAt: Value(endedAt),
-            listenedMs: Value(event.listenedMs),
-            maxPositionMs: Value(event.maxPositionMs),
-            endReason: Value(event.endReason),
-            versionPhysical: Value(event.version.physical),
-            versionCounter: Value(event.version.counter),
-          ));
+          await (db.update(
+            db.playEvents,
+          )..where((t) => t.id.equals(existing.id)))
+              .write(
+            PlayEventsCompanion(
+              endedAt: Value(endedAt),
+              listenedMs: Value(event.listenedMs),
+              maxPositionMs: Value(event.maxPositionMs),
+              endReason: Value(event.endReason),
+              versionPhysical: Value(event.version.physical),
+              versionCounter: Value(event.version.counter),
+            ),
+          );
           appliedIds.add(existing.id);
           applied++;
         } else {
@@ -560,18 +559,6 @@ class SqliteStatisticsSyncStore
       row.listenedMs == event.listenedMs &&
       row.maxPositionMs == event.maxPositionMs &&
       row.endReason == event.endReason;
-
-  /// 存量事件的确定性去重键：同一条事件在任何设备上哈希一致。
-  static String _legacySyncKey(Map<String, Object?> row) {
-    final content = [
-      row['sourceKey'],
-      row['songId'],
-      row['startedAt'],
-      row['endedAt'],
-      row['listenedMs'],
-    ].join('|');
-    return 'legacy_${sha256.convert(utf8.encode(content))}';
-  }
 }
 
 /// 导出缓存的一项：记录 + 本机曲目行 id（仅用于按曲补齐载荷，不进线上记录）。

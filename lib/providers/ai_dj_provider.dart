@@ -275,11 +275,6 @@ class AiDjProvider extends ChangeNotifier {
     _enabled = await _settingsStore.readEnabled();
     _preferences = await _settingsStore.readPreferences();
     _feedback = await _settingsStore.readFeedbackMemory();
-    // 兼容旧偏好里带种子的数据：种子以反馈记忆为准。
-    if (_feedback.seeds.isEmpty && _preferences.seeds.isNotEmpty) {
-      _feedback = _feedback.withSeeds(_preferences.seeds);
-      await _settingsStore.saveFeedbackMemory(_feedback);
-    }
     _preferences = _preferences.copyWith(seeds: _feedback.seeds);
 
     await _history.init();

@@ -441,7 +441,6 @@
   "settingsAppTitleDialogTitle": "应用名称",
   "settingsAppTitleHint": "输入名称",
   "appName": "Molia",
-  "libraryRecentContexts": "最近播放",
   "libraryHistory": "播放历史",
   "libraryLocalSongs": "本地歌曲",
   "libraryImportLocalSongs": "导入本地歌曲",
@@ -947,7 +946,6 @@
   "aiDjOriginRefresh": "生成推荐",
   "aiDjOriginAutoFeed": "自动补歌",
   "aiDjOriginManualFeed": "手动补歌",
-  "aiDjOriginRestored": "旧推荐",
   "aiDjHistoryLoadFailed": "这批内容已损坏，无法查看",
   "aiDjMoreLikeThis": "多来点这种",
   "aiDjRetryUnresolved": "重新找一次",
@@ -1934,19 +1932,6 @@
   "downloadsBatchPlaylist": "下载指定歌单",
   "downloadsBatchPlaylistSubtitle": "选择歌单后批量下载（跳过已下载与本地曲目）",
   "downloadsPickPlaylist": "选择歌单",
-  "downloadsMigrateLegacy": "迁移旧位置的下载",
-  "downloadsMigrateLegacySubtitle": "把旧版应用目录里的下载文件搬到当前下载目录",
-  "downloadsMigrateLegacyDone": "已迁移 {moved} 首，失败 {failed} 首",
-  "@downloadsMigrateLegacyDone": {
-    "placeholders": {
-      "moved": {
-        "type": "int"
-      },
-      "failed": {
-        "type": "int"
-      }
-    }
-  },
   "downloadsPublishPublic": "补一份到公共目录",
   "downloadsPublishPublicSubtitle": "把还没复制到系统「下载」目录的下载文件补一份（Android）",
   "downloadsPublishPublicDone": "已复制 {published} 首，失败 {failed} 首",

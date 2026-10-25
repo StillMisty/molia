@@ -6,8 +6,7 @@ import 'package:molia/services/notification_service.dart';
 /// 生产实现经 `hostContextKey` 展示 `M3ESnackbar`，而默认构造缺这个 key
 /// （展示是空操作）；测试只收文案与动作，用于断言「弹了什么、点了什么」。
 class RecordingNotificationService extends NotificationService {
-  RecordingNotificationService()
-      : super(GlobalKey<ScaffoldMessengerState>());
+  RecordingNotificationService() : super();
 
   /// 依序收到的提示文案。
   final List<String> messages = [];

@@ -335,75 +335,6 @@ class DownloadService extends ChangeNotifier {
     return orphans.length;
   }
 
-  /// 迁移旧位置（应用支持目录）的下载文件到当前下载根目录。
-  ///
-  /// 逐条记录搬运音频 / 歌词 / 翻译边车 / 封面（相对子目录保持不变），
-  /// 更新记录后删除旧文件；单条失败不影响其余。返回 `(迁移数, 失败数)`。
-  Future<(int, int)> migrateLegacyDownloads() async {
-    await _ensureReady();
-    final newRoot = await _storage.downloadsRoot();
-    final legacyRoot = await _storage.legacyDownloadsRoot();
-    if (newRoot == null || legacyRoot == null || newRoot == legacyRoot) {
-      return (0, 0);
-    }
-    var moved = 0;
-    var failed = 0;
-    for (final record in List<DownloadedTrack>.of(_records.values)) {
-      // 本地导入是就地引用：文件在用户目录，不属于下载根迁移范围。
-      if (record.imported) continue;
-      final audio = record.filePath;
-      if (audio == null || !audio.startsWith(legacyRoot)) continue;
-      try {
-        final newAudio = _remapRoot(audio, legacyRoot, newRoot);
-        await _copyIfNeeded(audio, newAudio);
-        final lyric = record.lyricPath;
-        final newLyric =
-            lyric == null ? null : _remapRoot(lyric, legacyRoot, newRoot);
-        if (lyric != null) await _copyIfNeeded(lyric, newLyric!);
-        final translation = record.translationLyricPath;
-        final newTranslation = translation == null
-            ? null
-            : _remapRoot(translation, legacyRoot, newRoot);
-        if (translation != null) {
-          await _copyIfNeeded(translation, newTranslation!);
-        }
-        final cover = record.coverPath;
-        final newCover =
-            cover == null ? null : _remapRoot(cover, legacyRoot, newRoot);
-        if (cover != null) await _copyIfNeeded(cover, newCover!);
-
-        final updated = _assembler.relocated(
-          record,
-          filePath: newAudio,
-          lyricPath: newLyric,
-          coverPath: newCover,
-        );
-        await _repository.insert(updated);
-        _records[record.key] = updated;
-        await _storage.deleteQuietly(audio);
-        if (lyric != null) await _storage.deleteQuietly(lyric);
-        if (translation != null) await _storage.deleteQuietly(translation);
-        if (cover != null) await _storage.deleteQuietly(cover);
-        moved++;
-      } catch (e) {
-        _logger.warning('迁移下载失败 ${record.key}: $e');
-        failed++;
-      }
-    }
-    if (moved > 0) notifyListeners();
-    return (moved, failed);
-  }
-
-  /// 旧根 → 新根的路径重映射（保留相对子目录，如 `lyrics/`、`covers/`）。
-  static String _remapRoot(String path, String from, String to) =>
-      to + path.substring(from.length);
-
-  Future<void> _copyIfNeeded(String from, String to) async {
-    if (from == to) return;
-    if (await _storage.fileExists(to)) return;
-    await _storage.copyFile(from, to);
-  }
-
   /// 批量下载（队列全量）：顺序执行，跳过已下载与不支持项。
   ///
   /// 不做断点续传（平台直链多为一次性签名地址，续传价值低）；
@@ -880,8 +811,7 @@ class DownloadService extends ChangeNotifier {
 
   /// 补发布：把已有音频但还没有公共副本的记录发布到公共 Downloads。
   ///
-  /// 用于旧版本留下的下载（v4 之前）或发布失败的记录；返回
-  /// `(发布数, 失败数)`。平台不支持（非 Android）时返回 `(0, 0)`。
+  /// 返回 `(发布数, 失败数)`。平台不支持（非 Android）时返回 `(0, 0)`。
   Future<(int, int)> publishMissingPublicCopies() async {
     if (!_publisher.supported) return (0, 0);
     await _ensureReady();
@@ -950,7 +880,9 @@ class DownloadService extends ChangeNotifier {
   /// 平台不支持（非 Android）/ 设置关闭 / 失败一律返回 null，调用方继续
   /// 落库（公共副本只是发布副本，不参与播放取链）。
   Future<String?> _publishPublicCopy(
-      String filePath, String displayName) async {
+    String filePath,
+    String displayName,
+  ) async {
     if (!_publisher.supported) return null;
     if (!(_settings?.publishToPublicDir ?? true)) return null;
     try {
@@ -1257,9 +1189,7 @@ class DownloadService extends ChangeNotifier {
         root: root,
         desiredBase: _layout.baseNameFor(track),
         extension: extension,
-        reservedPaths: [
-          for (final record in _records.values) record.filePath,
-        ],
+        reservedPaths: [for (final record in _records.values) record.filePath],
       );
 
   static String _mimeTypeForPath(String path) {

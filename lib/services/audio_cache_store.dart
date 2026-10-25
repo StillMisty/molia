@@ -1,7 +1,7 @@
-/// 音频缓存目录约定的唯一实现：文件名、完整判据、索引、命中、清扫、迁移。
+/// 音频缓存目录约定的唯一实现：文件名、完整判据、索引、命中、清扫。
 ///
-/// 为什么单独成模块：这些约定过去散落在 `CacheService`（命名 / 索引 / 清扫 /
-/// 迁移）、`TrackLocalDataService`（命中音质）与 `DownloadService`（命中探测）
+/// 为什么单独成模块：这些约定过去散落在 `CacheService`（命名 / 索引 / 清扫）、
+/// `TrackLocalDataService`（命中音质）与 `DownloadService`（命中探测）
 /// 三处，任何一处改动都可能让写入侧与读取侧再次分叉。历史上写入侧把
 /// `SourceTrack.id`（`{sourceKey}:{songId}` 复合 id）当成 songId 写文件名，
 /// 读取侧按 `TrackId.id`（raw songId）查找——两侧永不同名，「缓存 = 已下载」
@@ -17,7 +17,6 @@ library;
 
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models/track.dart';
 import '../sources/source_track.dart';
@@ -32,28 +31,12 @@ typedef AudioCacheFileProbe = Future<bool> Function(String path);
 
 /// 音频缓存目录约定（`CacheStorage` 之上的唯一磁盘约定实现）。
 class AudioCacheStore {
-  AudioCacheStore({
-    required CacheStorage storage,
-    Future<SharedPreferences?> Function()? preferences,
-  })  : _storage = storage,
-        _preferences = preferences ?? _platformPreferences;
+  AudioCacheStore({required CacheStorage storage}) : _storage = storage;
 
   /// 目录解析 / 列举 / 删除的平台实现；目录不可用时返回 null / 空表。
   final CacheStorage _storage;
 
-  /// 迁移版本标记的读取口；prefs 不可用时返回 null。
-  final Future<SharedPreferences?> Function() _preferences;
-
   final Logger _logger = Logger('molia.audio_cache_store');
-
-  /// 缺省 prefs 解析：不可用（平台异常）时返回 null，调用方按「无标记」处理。
-  static Future<SharedPreferences?> _platformPreferences() async {
-    try {
-      return await SharedPreferences.getInstance();
-    } catch (_) {
-      return null;
-    }
-  }
 
   // 命名（纯函数，无 IO）
 
@@ -66,21 +49,15 @@ class AudioCacheStore {
       key(sourceKey: track.sourceKey, songId: track.songId, quality: quality);
 
   /// 单曲音频缓存文件名（**读取侧唯一入口**）：由领域 `Track` 派生。
-  static String keyForTrack(Track track, {String quality = ''}) => key(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-        quality: quality,
-      );
+  static String keyForTrack(Track track, {String quality = ''}) =>
+      key(sourceKey: track.id.sourceKey, songId: track.id.id, quality: quality);
 
   /// 单曲音频缓存文件名前缀（`{sourceKey}_{songId}_`，同一替换规则）。
   ///
   /// 音质在文件名末尾，因此该前缀命中同一曲目的所有音质变体。
   /// 与 [key] 的截断/哈希后缀兼容：前缀始终位于文件名开头
   /// （截断发生在替换后，且哈希后缀追加在末尾）。
-  static String keyPrefix({
-    required String sourceKey,
-    required String songId,
-  }) {
+  static String keyPrefix({required String sourceKey, required String songId}) {
     final prefix = _sanitize('${sourceKey}_${songId}_');
     return prefix.length > _maxKeyLength
         ? prefix.substring(0, _maxKeyLength)
@@ -88,10 +65,8 @@ class AudioCacheStore {
   }
 
   /// 单曲音频缓存前缀（命中该曲目所有音质变体）：由领域 `Track` 派生。
-  static String keyPrefixForTrack(Track track) => keyPrefix(
-        sourceKey: track.id.sourceKey,
-        songId: track.id.id,
-      );
+  static String keyPrefixForTrack(Track track) =>
+      keyPrefix(sourceKey: track.id.sourceKey, songId: track.id.id);
 
   /// 生成音频缓存文件名：`sourceKey_songId_quality`（quality 未知用 auto）。
   ///
@@ -176,11 +151,7 @@ class AudioCacheStore {
     required String sourceKey,
     required String songId,
   }) async =>
-      usageForTrackInFiles(
-        await index(),
-        sourceKey: sourceKey,
-        songId: songId,
-      );
+      usageForTrackInFiles(await index(), sourceKey: sourceKey, songId: songId);
 
   /// 从已列举的文件表统计单曲占用（批量读曲复用同一次列举）。
   static CacheUsage usageForTrackInFiles(
@@ -258,7 +229,7 @@ class AudioCacheStore {
     return path;
   }
 
-  // 清理与迁移
+  // 清理
 
   /// 清理单曲音频缓存（所有音质变体，含半成品）。
   ///
@@ -304,30 +275,6 @@ class AudioCacheStore {
       _logger.warning('音频缓存半成品清扫失败: $e');
       return 0;
     }
-  }
-
-  /// 音频缓存命名版本键：1（缺省）= 旧命名，2 = 当前命名。
-  static const String keyNamingVersion = 'cache_audio_naming_version';
-  static const int namingVersion = 2;
-
-  /// 一次性迁移：清理旧命名写入的音频缓存；返回是否真的执行了迁移。
-  ///
-  /// 旧命名把 `SourceTrack.id`（复合 id）当成 songId 写进文件名，文件名里带
-  /// 重复的 sourceKey 且任何读取路径都匹配不到——既不能被播放命中、也不能被
-  /// 转存，属纯垃圾，直接清空音频分区。版本标记落 prefs，执行一次即不再清
-  /// （标记写入后新写的缓存不受影响）。
-  ///
-  /// 返回值只供上层做联动通知（`CacheService` 的 revision / 清理监听）；
-  /// 磁盘操作没有失败重试语义。
-  Future<bool> migrateNamingIfNeeded() async {
-    final prefs = await _preferences();
-    final version = prefs?.getInt(keyNamingVersion) ?? 1;
-    if (version >= namingVersion) return false;
-    final dir = await directoryPath();
-    if (dir != null) await _storage.clear(dir);
-    await prefs?.setInt(keyNamingVersion, namingVersion);
-    _logger.info('音频缓存命名修复：旧命名缓存已清理');
-    return true;
   }
 
   /// 目录解析失败（平台通道缺失 / 测试假件）按不可用处理。

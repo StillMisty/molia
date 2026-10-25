@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
@@ -17,11 +18,43 @@ import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/sync_codec_isolate.dart';
 import 'package:molia/data/sync/transport/webdav_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/models/sync_pull_plan.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'memory_database.dart';
 import 'sync_test_support.dart';
+
+/// 测试便捷构造：按逐对端游标 / 全量名单生成类型化拉取请求。
+SyncPullRequest syncPullRequest({
+  Map<String, int> cursors = const {},
+  Set<String> fullPeers = const {},
+  bool forceDiscovery = false,
+  SyncRoundWindow? window,
+}) =>
+    SyncPullRequest(
+      plan: SyncPullPlan.fromIntents(
+        discovery: forceDiscovery
+            ? SyncPullDiscovery.full
+            : SyncPullDiscovery.knownOnly,
+        intents: [
+          for (final entry in cursors.entries)
+            SyncPeerPullIntent(
+              deviceId: entry.key,
+              cursor: entry.value,
+              forceFull: fullPeers.contains(entry.key),
+            ),
+          for (final id in fullPeers)
+            if (!cursors.containsKey(id))
+              SyncPeerPullIntent(
+                deviceId: id,
+                cursor: SyncPullRequest.noCursor,
+                forceFull: true,
+              ),
+        ],
+      ),
+      window: window,
+    );
 
 /// 测试用同步网络：多台设备用**真实编解码**交换增量窗口 / 全量快照。
 ///
@@ -318,15 +351,16 @@ class NetworkTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull(
-      [SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull([
+    SyncPullRequest request = SyncPullRequest.none,
+  ]) async {
     final envelopes = <SyncEnvelope>[];
     var bytesIn = 0;
     for (final peer in device.network.devices.values) {
       if (peer.id == device.id) continue;
       final payload = await peer.serve(
         since: request.cursorFor(peer.id),
-        full: request.fullPeers.contains(peer.id),
+        full: request.plan.forcesFull(peer.id),
       );
       final bytes = device.network.codec.encrypt(
         payload,
@@ -357,8 +391,10 @@ class NetworkTransport implements SyncTransport {
     SyncEnvelope envelope, {
     SyncRoundWindow? window,
   }) async {
-    final bytes =
-        device.network.codec.encrypt(envelope, device.network.passphrase);
+    final bytes = device.network.codec.encrypt(
+      envelope,
+      device.network.passphrase,
+    );
     device.network.encryptions++;
     device.network.bytesTransferred += bytes.length;
     var delivered = 0;
@@ -389,21 +425,21 @@ SyncPeerState peerOf(SyncDevice device, String peerId) =>
     device.state.peers.firstWhere((peer) => peer.deviceId == peerId);
 
 /// 直插数据库的辅助（构造「存量数据」：不进增量日志，只影响全量快照体积）。
-Future<void> seedHistoryRows(MoliaDatabase db, int count,
-    {int from = 0}) async {
+Future<void> seedHistoryRows(
+  MoliaDatabase db,
+  int count, {
+  int from = 0,
+}) async {
   await db.batch((batch) {
-    batch.insertAll(
-      db.playHistory,
-      [
-        for (var i = from; i < from + count; i++)
-          PlayHistoryCompanion.insert(
-            sourceKey: 'kuwo',
-            songId: 'seed-$i',
-            title: '存量歌曲 $i',
-            playedAt: i,
-            raw: const Value('{"seed":true}'),
-          ),
-      ],
-    );
+    batch.insertAll(db.playHistory, [
+      for (var i = from; i < from + count; i++)
+        PlayHistoryCompanion.insert(
+          sourceKey: 'kuwo',
+          songId: 'seed-$i',
+          title: '存量歌曲 $i',
+          playedAt: i,
+          raw: const Value('{"seed":true}'),
+        ),
+    ]);
   });
 }

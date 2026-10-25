@@ -99,11 +99,15 @@ void main() {
       expect(find.text('下载目录'), findsOneWidget);
       // 发布器支持（Android）：公共目录发布开关可见，默认开。
       expect(
-          find.byKey(const Key('downloadPublishPublicSwitch')), findsOneWidget);
+        find.byKey(const Key('downloadPublishPublicSwitch')),
+        findsOneWidget,
+      );
       expect(find.text('发布到公共下载目录'), findsOneWidget);
       // 通知支持（Android）：下载通知开关可见，默认开。
       expect(
-          find.byKey(const Key('downloadNotificationsSwitch')), findsOneWidget);
+        find.byKey(const Key('downloadNotificationsSwitch')),
+        findsOneWidget,
+      );
       expect(find.text('下载通知'), findsOneWidget);
 
       // 关闭标签嵌入：持久化。
@@ -213,8 +217,9 @@ void main() {
     expect(find.text('文件维护'), findsOneWidget);
     expect(find.byKey(const Key('downloadsCleanupPartsItem')), findsOneWidget);
     expect(
-        find.byKey(const Key('downloadsCleanupOrphansItem')), findsOneWidget);
-    expect(find.byKey(const Key('downloadsMigrateLegacyItem')), findsOneWidget);
+      find.byKey(const Key('downloadsCleanupOrphansItem')),
+      findsOneWidget,
+    );
     // 发布器支持（Android）：补发布入口可见。
     expect(find.byKey(const Key('downloadsPublishPublicItem')), findsOneWidget);
     expect(find.text('补一份到公共目录'), findsOneWidget);

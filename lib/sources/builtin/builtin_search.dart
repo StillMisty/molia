@@ -16,11 +16,6 @@ import 'builtin_transport.dart';
 class BuiltinSearch {
   BuiltinSearch._();
 
-  /// 平台展示名（键顺序同 [BuiltinPlatforms.keys]）。
-  ///
-  /// 保留该名字是为了兼容既有调用点；矩阵本体在 [BuiltinPlatforms]。
-  static final Map<String, String> platforms = BuiltinPlatforms.displayNames;
-
   static bool isBuiltin(String sourceKey) =>
       BuiltinPlatforms.isSupported(sourceKey);
 
@@ -29,11 +24,6 @@ class BuiltinSearch {
 
   /// 内置请求传输：测试注入 `MockClient` 覆盖 fetch 路径（唯一入口）。
   static BuiltinTransport transport = BuiltinTransport();
-
-  // 兼容别名：发现适配器仍直接引用（与传输层同一常量）。
-  static const Duration defaultTimeout = BuiltinTransport.defaultTimeout;
-  static const Map<String, String> defaultHeaders =
-      BuiltinTransport.defaultHeaders;
 
   /// 分页搜索（返回曲目与 total/hasMore 等分页信息）。
   static Future<SourceSearchResult> searchWithMeta(
@@ -133,11 +123,13 @@ List<SourceQuality> buildQualities(Map<String, Map<String, dynamic>> types) {
   for (final type in kLxQualityOrder) {
     final info = types[type];
     if (info == null) continue;
-    list.add(SourceQuality(
-      type: type,
-      size: info['size']?.toString(),
-      hash: info['hash']?.toString(),
-    ));
+    list.add(
+      SourceQuality(
+        type: type,
+        size: info['size']?.toString(),
+        hash: info['hash']?.toString(),
+      ),
+    );
   }
   return list;
 }

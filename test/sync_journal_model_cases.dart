@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/device_sync.dart';
+import 'package:molia/domain/models/sync_pull_plan.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 
 /// 增量协议领域模型：日志条目 / 增量窗口载荷 / 对端游标与失联判定。
@@ -29,7 +30,10 @@ void main() {
 
   test('日志条目：序号非法 / 类别未知的坏条目跳过', () {
     expect(SyncJournalEntry.fromJson(null), isNull);
-    expect(SyncJournalEntry.fromJson({'seq': 0, 'category': 'settings'}), isNull);
+    expect(
+      SyncJournalEntry.fromJson({'seq': 0, 'category': 'settings'}),
+      isNull,
+    );
     expect(
       SyncJournalEntry.fromJson({
         'seq': 1,
@@ -86,23 +90,27 @@ void main() {
   });
 
   test('空增量窗口与全量快照的区分（journal 字段存在与否）', () {
-    final emptyWindow = SyncEnvelope.fromJson(SyncEnvelope(
-      deviceId: 'devA',
-      producedAt: 1,
-      journalHead: 9,
-      journal: const [],
-    ).toJson());
+    final emptyWindow = SyncEnvelope.fromJson(
+      SyncEnvelope(
+        deviceId: 'devA',
+        producedAt: 1,
+        journalHead: 9,
+        journal: const [],
+      ).toJson(),
+    );
     expect(emptyWindow!.isDelta, isTrue);
     expect(emptyWindow.journal, isEmpty);
 
-    final snapshot = SyncEnvelope.fromJson(SyncEnvelope(
-      deviceId: 'devA',
-      producedAt: 1,
-      journalHead: 9,
-      records: {
-        SyncCategory.settings: [themeRecord('dark', 100)],
-      },
-    ).toJson());
+    final snapshot = SyncEnvelope.fromJson(
+      SyncEnvelope(
+        deviceId: 'devA',
+        producedAt: 1,
+        journalHead: 9,
+        records: {
+          SyncCategory.settings: [themeRecord('dark', 100)],
+        },
+      ).toJson(),
+    );
     expect(snapshot!.isDelta, isFalse);
     expect(snapshot.records[SyncCategory.settings], hasLength(1));
     expect(snapshot.payloadRecords[SyncCategory.settings], hasLength(1));
@@ -139,6 +147,7 @@ void main() {
       categories: ['settings', 'history'],
       fullPulledAt: 900,
       lastSeenAt: 1000,
+      lastSuccessAt: 1000,
     );
 
     final parsed = SyncPeerState.fromJson(peer.toJson())!;
@@ -163,12 +172,20 @@ void main() {
   });
 
   test('拉取请求：游标查询与未记录对端的缺省值', () {
-    const request = SyncPullRequest(
-      cursors: {'devB': 7},
-      fullPeers: {'devC'},
+    final request = SyncPullRequest(
+      plan: SyncPullPlan.fromIntents(
+        intents: const [
+          SyncPeerPullIntent(deviceId: 'devB', cursor: 7),
+          SyncPeerPullIntent(
+            deviceId: 'devC',
+            cursor: SyncPullRequest.noCursor,
+            forceFull: true,
+          ),
+        ],
+      ),
     );
     expect(request.cursorFor('devB'), 7);
     expect(request.cursorFor('devC'), SyncPullRequest.noCursor);
-    expect(request.fullPeers, contains('devC'));
+    expect(request.plan.forcesFull('devC'), isTrue);
   });
 }

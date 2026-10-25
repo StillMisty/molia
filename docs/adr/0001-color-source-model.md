@@ -56,6 +56,15 @@
 `monet_color_enabled → color_base`（新版键存在时不做迁移，旧键保留不清理）。
 纯黑键不变。
 
+### 2026-10-25 修订：删除旧键迁移
+
+一次性旧键迁移已删除：`dynamic_color_enabled` / `monet_color_enabled` 不再读取、
+不再迁移，也不参与任何推导。当前取色相关只读 `follow_artwork_enabled` /
+`color_base` / `pure_black_enabled` / `seed_color`（字体仍读
+`app_font_family`）；新键缺失时按默认值处理
+（基础配色 `wallpaper`、封面覆盖开、纯黑关），旧键留在原处但视为未知键。
+上面「持久化迁移」与后果里的「旧键只读一次迁移」仅记录历史，不再是当前行为。
+
 ## 后果
 
 - 行为可预知：开关状态即真实生效语义；封面覆盖期间设置页明示「覆盖 / 回退」；

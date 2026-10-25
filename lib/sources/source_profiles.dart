@@ -11,7 +11,7 @@
 /// - 能力：`SourceCapabilities` 是唯一答案，`searchable` / `canResolveUrl`
 ///   直接读能力位，不再维护第二份布尔值；
 /// - 排序：渠道顺序由 `SourcePreferences.sourceOrder` 决定，未登记的 key
-///   保持原有相对顺序追加（与迁移前的 `applySourceOrder` 语义一致）。
+///   保持原有相对顺序追加。
 ///
 /// 能力位由「适配器是否存在 + 脚本声明 + any-listen 可用性」推导：
 /// 内置平台的搜索必须同时有搜索适配器与「原生取链或脚本可取链」，

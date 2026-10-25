@@ -42,7 +42,7 @@ class SourcePreferences extends ChangeNotifier {
   String get preferredQuality => _preferredQuality;
 
   /// 用户自定义的渠道顺序（持久化；未列出的渠道排在末尾，见
-  /// `SourceManager.applySourceOrder`）。
+  /// `SourceProfiles.applyOrder`）。
   List<String> get sourceOrder => List.unmodifiable(_sourceOrder);
 
   /// 已停用的渠道集合（持久化；停用只影响列表/选择，不影响已保存曲目的取链）。
@@ -109,7 +109,8 @@ class SourcePreferences extends ChangeNotifier {
     if (!changed) return;
     notifyListeners();
     await _persist(
-        () => _settings.write(kLxChannelDisabled, _disabledChannels.toList()));
+      () => _settings.write(kLxChannelDisabled, _disabledChannels.toList()),
+    );
   }
 
   /// 清空自定义渠道顺序，恢复「脚本音源在前、内置平台在后」的默认排序。

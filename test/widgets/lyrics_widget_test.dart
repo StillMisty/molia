@@ -161,9 +161,7 @@ void main() {
           ChangeNotifierProvider<LyricsDisplaySettings>.value(
             value: effectiveSettings,
           ),
-          Provider<NotificationService>.value(
-            value: NotificationService(GlobalKey<ScaffoldMessengerState>()),
-          ),
+          Provider<NotificationService>.value(value: NotificationService()),
           // 评论入口的能力判定来源（未注册 = 视为不支持，入口禁用）。
           Provider<SourceRegistry?>.value(value: registry),
         ],
@@ -176,9 +174,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(
-            body: LyricsWidget(controller: controller),
-          ),
+          home: Scaffold(body: LyricsWidget(controller: controller)),
         ),
       ),
     );
@@ -316,14 +312,16 @@ void main() {
       origin: TrackOrigin.lx,
       payload: {'id': 'lyrics-other'},
     );
-    backend.emit(const BackendSnapshot(
-      current: otherTrack,
-      queue: [otherTrack],
-      currentIndex: 0,
-      isPlaying: true,
-      position: Duration(seconds: 60),
-      duration: Duration(minutes: 10),
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: otherTrack,
+        queue: [otherTrack],
+        currentIndex: 0,
+        isPlaying: true,
+        position: Duration(seconds: 60),
+        duration: Duration(minutes: 10),
+      ),
+    );
     // 播放快照 → 会话 ensure → 页面监听会话状态变化（微任务里退出复制模式）。
     await tester.pump();
     await tester.pump();
@@ -505,8 +503,9 @@ void main() {
     // 64.6s + 200ms = 64.8s：仍在第 12 行（60s）；逐字组件拿到同一个提前量。
     backend.emit(_snapshot(position: const Duration(milliseconds: 64600)));
     await tester.pump();
-    final karaoke =
-        tester.widget<KaraokeLyricText>(find.byType(KaraokeLyricText));
+    final karaoke = tester.widget<KaraokeLyricText>(
+      find.byType(KaraokeLyricText),
+    );
     expect(karaoke.lead, const Duration(milliseconds: 200));
     expect(karaoke.words.first.text, 'Line ');
     expect(lineStyle('Line 13').fontWeight, FontWeight.w500);
@@ -637,9 +636,7 @@ void main() {
     Opacity nearestOpacity() => tester.widget<Opacity>(
           find
               .ancestor(
-                of: find.byType(M3EFabMenu),
-                matching: find.byType(Opacity),
-              )
+                  of: find.byType(M3EFabMenu), matching: find.byType(Opacity))
               .first,
         );
 
@@ -648,14 +645,11 @@ void main() {
     expect(nearestOpacity().opacity, 0);
 
     // 项集与顺序：跟随中不含「居中当前行」；评论已迁到信息页。
-    expect(
-      fabIcons(tester),
-      const [
-        Icons.swap_horiz_rounded,
-        Icons.edit_note_rounded,
-        Icons.checklist_rounded,
-      ],
-    );
+    expect(fabIcons(tester), const [
+      Icons.swap_horiz_rounded,
+      Icons.edit_note_rounded,
+      Icons.checklist_rounded,
+    ]);
 
     // 手动滚动暂停跟随：居中项入列，操作栏展开且可交互。
     await dragUpSlowly(tester, -300);
@@ -691,10 +685,7 @@ void main() {
     expect(lyrics.bottom - fab.bottom, closeTo(16, 0.5), reason: 'FAB 贴下缘');
 
     // 文案：海报入口用短名（与其余项同档），不吃整句说明。
-    expect(
-      fabItems(tester).map((item) => item.label),
-      contains('歌词海报'),
-    );
+    expect(fabItems(tester).map((item) => item.label), contains('歌词海报'));
     expect(
       fabItems(tester).map((item) => item.label),
       isNot(contains('选择歌词片段生成海报或分享')),
@@ -715,14 +706,16 @@ void main() {
       origin: TrackOrigin.localFile,
       payload: {'path': '/downloads/a.mp3', 'songId': 'fake:lyrics-scroll'},
     );
-    backend.emit(const BackendSnapshot(
-      current: localTrack,
-      queue: [localTrack],
-      currentIndex: 0,
-      isPlaying: true,
-      position: Duration(seconds: 60),
-      duration: Duration(minutes: 10),
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: localTrack,
+        queue: [localTrack],
+        currentIndex: 0,
+        isPlaying: true,
+        position: Duration(seconds: 60),
+        duration: Duration(minutes: 10),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 

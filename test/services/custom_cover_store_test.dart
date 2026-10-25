@@ -51,14 +51,11 @@ void main() {
     expect(firstPath, contains('custom_covers'));
     expect(store.trackCoverUrl(id), Uri.file(firstPath).toString());
     expect(
-        store.resolution
-            .realOf(const Track(
-              id: id,
-              title: 'T',
-              origin: TrackOrigin.builtin,
-            ))
-            .url,
-        Uri.file(firstPath).toString());
+      store.resolution
+          .realOf(const Track(id: id, title: 'T', origin: TrackOrigin.builtin))
+          .url,
+      Uri.file(firstPath).toString(),
+    );
     expect(store.revision.value, revisionBefore + 1);
     expect(changes.single.kind, CustomCoverChangeKind.track);
     expect(changes.single.trackId, id);
@@ -79,7 +76,7 @@ void main() {
     expect(store.trackCoverPath(downloaded), store.trackCoverPath(original));
     // 字符串入口同样按 raw TrackId.uri 规范化。
     expect(
-      store.trackCoverUrlForKey(downloaded.uri),
+      store.resolution.realForKey(downloaded.uri).url,
       store.trackCoverUrl(original),
     );
 
@@ -91,7 +88,9 @@ void main() {
       reason: '导入记录键不再二次剥离',
     );
     expect(
-        store.trackCoverPath(original), isNot(store.trackCoverPath(imported)));
+      store.trackCoverPath(original),
+      isNot(store.trackCoverPath(imported)),
+    );
   });
 
   test('原始封面 / 默认封面：resolve 优先级与重置', () async {
@@ -183,19 +182,20 @@ void main() {
     expect(await store.carryOver(newTrack, newTrack), isFalse);
     expect(store.revision.value, before);
     expect(
-        await store.carryOver(
-          const Track(
-            id: TrackId('kw', 'empty'),
-            title: 'E',
-            origin: TrackOrigin.builtin,
-          ),
-          const Track(
-            id: TrackId('tx', 'empty'),
-            title: 'E',
-            origin: TrackOrigin.builtin,
-          ),
+      await store.carryOver(
+        const Track(
+          id: TrackId('kw', 'empty'),
+          title: 'E',
+          origin: TrackOrigin.builtin,
         ),
-        isFalse);
+        const Track(
+          id: TrackId('tx', 'empty'),
+          title: 'E',
+          origin: TrackOrigin.builtin,
+        ),
+      ),
+      isFalse,
+    );
   });
 
   test('换源跟随：目标曲目已有封面时不覆盖', () async {
@@ -216,8 +216,11 @@ void main() {
 
     expect(await store.carryOver(oldTrack, newTrack), isFalse);
     expect(store.trackCoverPath(newTrack.id), targetPath);
-    expect(await File(targetPath).readAsBytes(), _bytes(15),
-        reason: '用户给新曲目选的封面不能被旧曲目的封面覆盖');
+    expect(
+      await File(targetPath).readAsBytes(),
+      _bytes(15),
+      reason: '用户给新曲目选的封面不能被旧曲目的封面覆盖',
+    );
     expect(store.revision.value, before);
   });
 

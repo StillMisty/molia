@@ -8,6 +8,7 @@ import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/builtin/lyric_search.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'support/settings_test_support.dart';
 
 /// 内置平台能力矩阵：平台只允许在 [BuiltinPlatforms] 声明一次，
@@ -42,7 +43,7 @@ void main() {
 
     // 既有 facade 的别名必须指向同一份注册表，而不是各自复制键表。
     // 发现页与歌手页都包含 bili。
-    expect(BuiltinSearch.platforms.keys, expectedKeys);
+    expect(BuiltinPlatforms.displayNames.keys, expectedKeys);
     expect(BuiltinDiscover.sourceKeys, expectedKeys);
     expect(BuiltinDiscover.sources.keys, expectedKeys);
     expect(BuiltinDiscover.isSupported('bili'), isTrue);
@@ -75,21 +76,31 @@ void main() {
       expect(BuiltinPlatforms.lyricFor(key), isNotNull, reason: key);
       expect(BuiltinPlatforms.picFor(key), isNotNull, reason: key);
       // facade 的能力位不能自己再写一份平台表。
-      expect(BuiltinAlbums.isSupported(key),
-          BuiltinPlatforms.albumKeys.contains(key),
-          reason: key);
-      expect(BuiltinArtists.isSupported(key),
-          BuiltinPlatforms.artistKeys.contains(key),
-          reason: key);
-      expect(BuiltinComments.isSupported(key),
-          BuiltinPlatforms.commentKeys.contains(key),
-          reason: key);
-      expect(BuiltinLyricSearch.isSupported(key),
-          BuiltinPlatforms.lyricSearchKeys.contains(key),
-          reason: key);
-      expect(BuiltinDiscover.isSupported(key),
-          BuiltinPlatforms.discoverKeys.contains(key),
-          reason: key);
+      expect(
+        BuiltinAlbums.isSupported(key),
+        BuiltinPlatforms.albumKeys.contains(key),
+        reason: key,
+      );
+      expect(
+        BuiltinArtists.isSupported(key),
+        BuiltinPlatforms.artistKeys.contains(key),
+        reason: key,
+      );
+      expect(
+        BuiltinComments.isSupported(key),
+        BuiltinPlatforms.commentKeys.contains(key),
+        reason: key,
+      );
+      expect(
+        BuiltinLyricSearch.isSupported(key),
+        BuiltinPlatforms.lyricSearchKeys.contains(key),
+        reason: key,
+      );
+      expect(
+        BuiltinDiscover.isSupported(key),
+        BuiltinPlatforms.discoverKeys.contains(key),
+        reason: key,
+      );
     }
     for (final key in musicKeys) {
       expect(BuiltinPlatforms.lyricSearchFor(key), isNotNull, reason: key);

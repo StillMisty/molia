@@ -309,6 +309,7 @@ void main() {
         SyncPeerState(
           deviceId: 'devGhost',
           lastSeenAt: ancient,
+          lastSuccessAt: ancient,
           cursorSeq: 0,
           ackedSeq: 0,
         ),
@@ -345,6 +346,7 @@ void main() {
         SyncPeerState(
           deviceId: 'devB',
           lastSeenAt: a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
+          lastSuccessAt: a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
           cursorSeq: 0,
           ackedSeq: 0,
         ),
@@ -414,6 +416,7 @@ void main() {
     final peer = SyncPeerState(
       deviceId: 'ghost',
       lastSeenAt: now - SyncPeerState.lostThresholdMs - 1,
+      lastSuccessAt: now - SyncPeerState.lostThresholdMs - 1,
       cursorSeq: 3,
       ackedSeq: 3,
     );

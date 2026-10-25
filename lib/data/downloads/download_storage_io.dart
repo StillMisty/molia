@@ -67,9 +67,7 @@ class IoDownloadStorage implements DownloadStorage {
     }
     // 桌面 / iOS 与“另存目录”共用同一解析：桌面 = 系统公共下载目录下的
     // Molia/，iOS = 应用文档目录下的 Molia/（文件 App 可见）。
-    return resolvePublicDownloadsRoot(
-      downloadsDirectory: _downloadsDirectory,
-    );
+    return resolvePublicDownloadsRoot(downloadsDirectory: _downloadsDirectory);
   }
 
   @override
@@ -101,28 +99,15 @@ class IoDownloadStorage implements DownloadStorage {
   }
 
   @override
-  Future<String?> legacyDownloadsRoot() async {
-    // Android / iOS 当前根就是应用目录：无迁移语义。
-    if (Platform.isAndroid) return null;
-    try {
-      final support = await _supportDirectory();
-      final legacy = p.join(support.path, downloadsDirName);
-      final current = await downloadsRoot();
-      if (current == null || current == legacy) return null;
-      if (!await Directory(legacy).exists()) return null;
-      return legacy;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
   Future<List<String>> listFiles(String dirPath) async {
     final dir = Directory(dirPath);
     if (!await dir.exists()) return const [];
     final files = <String>[];
     try {
-      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) files.add(entity.path);
       }
     } catch (_) {

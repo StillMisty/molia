@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -1346,9 +1347,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appName => 'Molia';
 
   @override
-  String get libraryRecentContexts => 'Recently Played';
-
-  @override
   String get libraryHistory => 'Play History';
 
   @override
@@ -2299,9 +2297,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjOriginManualFeed => 'a manual top-up';
 
   @override
-  String get aiDjOriginRestored => 'older picks';
-
-  @override
   String get aiDjHistoryLoadFailed =>
       'This batch is damaged and cannot be opened';
 
@@ -2750,7 +2745,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncActivityEnvironment(
-      String level, String network, String powerSave) {
+    String level,
+    String network,
+    String powerSave,
+  ) {
     return '$level · $network · $powerSave';
   }
 
@@ -3672,7 +3670,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String updateDownloadProgress(
-      String percent, String receivedMb, String speedMb) {
+    String percent,
+    String receivedMb,
+    String speedMb,
+  ) {
     return 'Downloaded $percent% ($receivedMb MB, $speedMb MB/s)';
   }
 
@@ -4197,18 +4198,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadsPickPlaylist => 'Choose a playlist';
-
-  @override
-  String get downloadsMigrateLegacy => 'Move downloads to the new location';
-
-  @override
-  String get downloadsMigrateLegacySubtitle =>
-      'Move files from the legacy app folder into the current download folder';
-
-  @override
-  String downloadsMigrateLegacyDone(int moved, int failed) {
-    return 'Moved $moved, failed $failed';
-  }
 
   @override
   String get downloadsPublishPublic => 'Copy to public Downloads folder';

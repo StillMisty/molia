@@ -10,7 +10,7 @@ import '../../sources/source_track.dart';
 /// `SourceTrack` → 领域 `Track`。
 ///
 /// 歌手优先取 raw 的项目内部字段 [kRawArtistsField]（内置平台解析时增补，
-/// 名字 + 平台内 id，供歌手页跳转）；缺省（脚本源 / 旧数据）回退整串
+/// 名字 + 平台内 id，供歌手页跳转）；缺省（脚本源 / 无 `_artists`）回退整串
 /// `SourceTrack.artist`（无 id，UI 不展示歌手入口）。
 Track trackFromSourceTrack(SourceTrack source) {
   final sourceArtists = artistsFromRaw(source.raw);
@@ -27,7 +27,7 @@ Track trackFromSourceTrack(SourceTrack source) {
     album: source.album,
     duration: source.duration,
     artwork: _artworkFrom(source.coverUrl),
-    origin: originFromLegacy(source.origin),
+    origin: originFromWire(source.origin),
     qualities: [
       for (final quality in source.qualities)
         AudioQuality(
@@ -102,7 +102,7 @@ String? _platformPageUrlOf(SourceTrack source) {
 SourceTrack sourceTrackFromTrack(Track track) {
   return SourceTrack(
     sourceKey: track.id.sourceKey,
-    origin: originToLegacy(track.origin),
+    origin: originToWire(track.origin),
     title: track.title,
     artist: track.artists.map((artist) => artist.name).join('/'),
     album: track.album ?? '',
@@ -130,7 +130,7 @@ Artwork? _artworkFrom(String? coverUrl) {
 }
 
 /// 字符串来源 → 领域枚举（未知来源按脚本源处理，与本地播放语义一致）。
-TrackOrigin originFromLegacy(String origin) {
+TrackOrigin originFromWire(String origin) {
   switch (origin) {
     case 'builtin':
       return TrackOrigin.builtin;
@@ -149,7 +149,7 @@ TrackOrigin originFromLegacy(String origin) {
 }
 
 /// 领域枚举 → 字符串来源（保持 any-listen 的 `'any_listen'` 约定）。
-String originToLegacy(TrackOrigin origin) {
+String originToWire(TrackOrigin origin) {
   switch (origin) {
     case TrackOrigin.builtin:
       return 'builtin';

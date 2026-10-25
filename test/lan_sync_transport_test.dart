@@ -12,6 +12,8 @@ import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/utils/peer_address.dart';
 
+import 'support/sync_network.dart';
+
 /// 局域网直连传输测试：回环上的探测、拉取、推送与口令不匹配跳过。
 void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
@@ -69,19 +71,15 @@ void main() {
     expect(pulled, hasLength(1));
     expect(pulled.single.deviceId, 'devA');
     expect(pullResult.failedIssues, isEmpty, reason: '读取成功的设备不再标失败');
-    expect(
-      pulled.single.recordsOf(SyncCategory.settings).single.data,
-      {'v': 'light'},
-    );
+    expect(pulled.single.recordsOf(SyncCategory.settings).single.data, {
+      'v': 'light',
+    });
 
     final received = transportA.incoming.first;
     await transportB.push(envB);
     final inbound = await received.timeout(const Duration(seconds: 3));
     expect(inbound.deviceId, 'devB');
-    expect(
-      inbound.recordsOf(SyncCategory.settings).single.data,
-      {'v': 'dark'},
-    );
+    expect(inbound.recordsOf(SyncCategory.settings).single.data, {'v': 'dark'});
   });
 
   test('pull 发现的对端在随后的 push 里仍是预期对端（失败计数不丢）', () async {
@@ -236,15 +234,8 @@ void main() {
     expect(result.envelopes, isEmpty);
     expect(result.failedPeers, 0, reason: '试探性对端失败不把整轮打成 partial');
     expect(result.peersSeen, 0);
-    expect(
-      result.failedIssues.keys,
-      ['devGhost'],
-      reason: '失败仍归属到具体设备',
-    );
-    expect(
-      result.failedIssues['devGhost']?.code,
-      SyncIssueCode.peerReadFailed,
-    );
+    expect(result.failedIssues.keys, ['devGhost'], reason: '失败仍归属到具体设备');
+    expect(result.failedIssues['devGhost']?.code, SyncIssueCode.peerReadFailed);
     expect(result.seenIds, isEmpty);
   });
 
@@ -372,9 +363,7 @@ void main() {
     expect(bootstrap.envelopes.single.isDelta, isFalse);
 
     // 游标 0：对端回增量窗口（只带 seq > 0 的条目）。
-    final delta = await transportB.pull(
-      const SyncPullRequest(cursors: {'devA': 0}),
-    );
+    final delta = await transportB.pull(syncPullRequest(cursors: {'devA': 0}));
     expect(serveCalls, contains(0), reason: '增量端点按游标请求');
     final payload = delta.envelopes.single;
     expect(payload.isDelta, isTrue);
@@ -383,7 +372,7 @@ void main() {
 
     // 游标已到对端头部 + 指纹未变：跳过 GET。
     final skipped = await transportB.pull(
-      const SyncPullRequest(cursors: {'devA': 3}),
+      syncPullRequest(cursors: {'devA': 3}),
     );
     expect(skipped.envelopes, isEmpty);
     expect(skipped.skippedUnchanged, 1);
@@ -534,10 +523,12 @@ void main() {
     expect(client.isRunning, isTrue, reason: 'UDP 不可用不该让整个传输失败');
     expect(client.unavailableReason, isNull);
     expect(
-      client.discoveryPorts,
-      (v4: 0, v6: 0),
-      reason: '没有 UDP socket = 两族探测端口都不可用',
-    );
+        client.discoveryPorts,
+        (
+          v4: 0,
+          v6: 0,
+        ),
+        reason: '没有 UDP socket = 两族探测端口都不可用');
 
     // 没有可直连的对端：原因码是「探测端口不可用」而不是「启动失败」。
     final empty = await client.pull();
@@ -581,10 +572,9 @@ void main() {
 
     final pulled = (await transportB.pull()).envelopes;
     expect(pulled.single.deviceId, 'devA');
-    expect(
-      pulled.single.recordsOf(SyncCategory.settings).single.data,
-      {'v': 'light'},
-    );
+    expect(pulled.single.recordsOf(SyncCategory.settings).single.data, {
+      'v': 'light',
+    });
   });
 
   test('手动 IPv6 对端：方括号写法归一 + HTTP 直连拉取', () async {
@@ -606,11 +596,7 @@ void main() {
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       manualPeersProvider: () => [
-        ManualPeer(
-          host: '[::1]',
-          probePort: 47947,
-          httpPort: serverHttpPort,
-        ),
+        ManualPeer(host: '[::1]', probePort: 47947, httpPort: serverHttpPort),
       ],
       probeWindow: const Duration(milliseconds: 250),
       localAddressesProvider: () async => const [],
@@ -930,12 +916,14 @@ void main() {
     expect(discoveryPort, greaterThan(0));
 
     emitter.send(
-      utf8.encode(jsonEncode({
-        'm': 'molia-sync.probe',
-        'v': 1,
-        'deviceId': 'devLegacy',
-        'port': 1234,
-      })),
+      utf8.encode(
+        jsonEncode({
+          'm': 'molia-sync.probe',
+          'v': 1,
+          'deviceId': 'devLegacy',
+          'port': 1234,
+        }),
+      ),
       InternetAddress.loopbackIPv4,
       discoveryPort,
     );

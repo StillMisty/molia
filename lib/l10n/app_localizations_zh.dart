@@ -1,5 +1,6 @@
 // ignore: unused_import
 import 'package:intl/intl.dart' as intl;
+
 import 'app_localizations.dart';
 
 // ignore_for_file: type=lint
@@ -1300,9 +1301,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appName => 'Molia';
 
   @override
-  String get libraryRecentContexts => '最近播放';
-
-  @override
   String get libraryHistory => '播放历史';
 
   @override
@@ -2211,9 +2209,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjOriginManualFeed => '手动补歌';
 
   @override
-  String get aiDjOriginRestored => '旧推荐';
-
-  @override
   String get aiDjHistoryLoadFailed => '这批内容已损坏，无法查看';
 
   @override
@@ -2648,7 +2643,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncActivityEnvironment(
-      String level, String network, String powerSave) {
+    String level,
+    String network,
+    String powerSave,
+  ) {
     return '$level · $network · $powerSave';
   }
 
@@ -3517,7 +3515,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String updateDownloadProgress(
-      String percent, String receivedMb, String speedMb) {
+    String percent,
+    String receivedMb,
+    String speedMb,
+  ) {
     return '已下载 $percent%（$receivedMb MB，$speedMb MB/s）';
   }
 
@@ -4024,17 +4025,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsPickPlaylist => '选择歌单';
-
-  @override
-  String get downloadsMigrateLegacy => '迁移旧位置的下载';
-
-  @override
-  String get downloadsMigrateLegacySubtitle => '把旧版应用目录里的下载文件搬到当前下载目录';
-
-  @override
-  String downloadsMigrateLegacyDone(int moved, int failed) {
-    return '已迁移 $moved 首，失败 $failed 首';
-  }
 
   @override
   String get downloadsPublishPublic => '补一份到公共目录';

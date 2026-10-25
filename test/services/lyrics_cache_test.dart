@@ -27,8 +27,11 @@ class _CountingProvider extends LyricProvider {
       SongMatch(songId: 'id', title: title, artist: artist);
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     searchCalls++;
     return [SongMatch(songId: 'id', title: title, artist: artist)];
   }
@@ -40,8 +43,8 @@ File lyricsFile(Directory directory, String trackId) {
   return File('${directory.path}${Platform.pathSeparator}$name.json');
 }
 
-/// 歌词缓存测试面：文件后端读写 / 原子写入 / 旧 prefs 迁移 / 用量统计，
-/// 以及旧版 prefs 回退行为与 TTL 过期重取。
+/// 歌词缓存测试面：文件后端读写 / 原子写入 / 用量统计与清理，
+/// 以及 prefs 后端（无文件目录）的读写、TTL 过期重取。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -53,10 +56,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     tempRoot = await Directory.systemTemp.createTemp('lyrics_cache_test_');
-    cacheService = CacheService(
-      prefs: prefs,
-      storage: MemoryCacheStorage(),
-    );
+    cacheService = CacheService(prefs: prefs, storage: MemoryCacheStorage());
   });
 
   tearDown(() async {
@@ -195,59 +195,48 @@ void main() {
 
   test('prefs 损坏条目按未命中处理', () async {
     await prefs.setString('lyrics_cache_x', 'not-json');
-    expect(await LyricsCache(directory: tempRoot).read('x'), isNull);
+    expect(await LyricsCache(prefs: prefs).read('x'), isNull);
   });
 
-  test('usage 只统计规范键（历史 manual 键不算用量）', () async {
+  test('prefs 后端 usage 只统计规范键，不碰其它键', () async {
     await prefs.setString(
       'lyrics_cache_a',
       '{"provider":"qq","lyric":"x","timestamp":1}',
     );
-    await prefs.setString(
-      'manual_lyrics_cache_a',
-      '{"provider":"qq","lyric":"x","timestamp":1}',
-    );
-    final usage = await LyricsCache(directory: tempRoot).usage();
+    await prefs.setString('other_key', '{"provider":"qq","lyric":"x"}');
+    final usage = await LyricsCache(prefs: prefs).usage();
     expect(usage.count, 1);
     expect(usage.bytes, greaterThan(0));
   });
 
-  test('clear 同时清理规范键与历史 manual 键，不碰其它键', () async {
+  test('prefs 后端 clear 只清规范键，不碰其它键', () async {
     await prefs.setString('lyrics_cache_a', '{}');
-    await prefs.setString('manual_lyrics_cache_a', '{}');
     await prefs.setString('other_key', 'keep');
 
-    await LyricsCache(directory: tempRoot).clear();
+    await LyricsCache(prefs: prefs).clear();
 
     expect(prefs.containsKey('lyrics_cache_a'), isFalse);
-    expect(prefs.containsKey('manual_lyrics_cache_a'), isFalse);
     expect(prefs.getString('other_key'), 'keep');
   });
 
-  test('usageOf 只统计该曲目的规范键字节', () async {
+  test('prefs 后端 usageOf 只统计该曲目的规范键字节', () async {
     const value = '{"provider":"qq","lyric":"x","timestamp":1}';
     await prefs.setString('lyrics_cache_qy:1', value);
     await prefs.setString('lyrics_cache_qy:2', value);
-    await prefs.setString('manual_lyrics_cache_qy:1', value);
 
-    final usage = await LyricsCache(directory: tempRoot).usageOf('qy:1');
+    final usage = await LyricsCache(prefs: prefs).usageOf('qy:1');
     expect(usage.count, 1);
     expect(usage.bytes, utf8.encode(value).length);
-    expect(
-      await LyricsCache(directory: tempRoot).usageOf('qy:404'),
-      CacheUsage.zero,
-    );
+    expect(await LyricsCache(prefs: prefs).usageOf('qy:404'), CacheUsage.zero);
   });
 
-  test('remove 只删该曲目（规范键 + 历史键），其它曲目保留', () async {
+  test('prefs 后端 remove 只删该曲目，其它曲目保留', () async {
     await prefs.setString('lyrics_cache_qy:1', '{}');
-    await prefs.setString('manual_lyrics_cache_qy:1', '{}');
     await prefs.setString('lyrics_cache_qy:2', '{}');
 
-    await LyricsCache(directory: tempRoot).remove('qy:1');
+    await LyricsCache(prefs: prefs).remove('qy:1');
 
     expect(prefs.containsKey('lyrics_cache_qy:1'), isFalse);
-    expect(prefs.containsKey('manual_lyrics_cache_qy:1'), isFalse);
     expect(prefs.containsKey('lyrics_cache_qy:2'), isTrue);
   });
 
@@ -274,13 +263,9 @@ void main() {
   test('旧版本 JSON（无翻译字段）按无扩展行读取', () async {
     await prefs.setString(
       'lyrics_cache_fake:2',
-      jsonEncode({
-        'provider': 'qq',
-        'lyric': '[00:01]b',
-        'ts': 1,
-      }),
+      jsonEncode({'provider': 'qq', 'lyric': '[00:01]b', 'ts': 1}),
     );
-    final cache = LyricsCache(prefs: prefs, directory: tempRoot);
+    final cache = LyricsCache(prefs: prefs);
 
     final read = await cache.read('fake:2');
     expect(read, isNotNull);
@@ -297,33 +282,32 @@ void main() {
         lyricsCache: LyricsCache(prefs: prefs, directory: tempRoot),
       );
 
-  String cacheEntry(String lyric, int timestamp) => jsonEncode({
-        'provider': 'seeded',
-        'lyric': lyric,
-        'ts': timestamp,
-      });
+  String cacheEntry(String lyric, int timestamp) =>
+      jsonEncode({'provider': 'seeded', 'lyric': lyric, 'ts': timestamp});
+
+  /// 直接写入文件后端（TTL 用例的种子）。
+  Future<void> seedFileCache(String trackId, String lyric, int timestamp) =>
+      LyricsCache(prefs: prefs, directory: tempRoot).write(
+        trackId,
+        LyricCacheData(provider: 'seeded', lyric: lyric, timestamp: timestamp),
+      );
 
   int nowSeconds() => DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   test('默认 TTL 30 天：新鲜缓存直接命中，不访问 Provider', () async {
-    await prefs.setString(
-      'lyrics_cache_track1',
-      cacheEntry('[00:00]cached', nowSeconds() - 60),
-    );
+    await seedFileCache('track1', '[00:00]cached', nowSeconds() - 60);
     final provider = _CountingProvider();
 
     final result = await serviceWith(provider).getLyrics('t', 'a', 'track1');
     expect(result!.lyric, '[00:00]cached');
     expect(result.provider, 'seeded');
     expect(provider.searchCalls, 0);
-    // 命中旧 prefs 条目后已迁移成文件。
-    expect(prefs.containsKey('lyrics_cache_track1'), isFalse);
     expect(lyricsFile(tempRoot, 'track1').existsSync(), isTrue);
   });
 
   test('TTL=0（永不过期）：1970 年的时间戳也命中', () async {
     await cacheService.setLyricsTtlDays(0);
-    await prefs.setString('lyrics_cache_track2', cacheEntry('[00:00]old', 1));
+    await seedFileCache('track2', '[00:00]old', 1);
     final provider = _CountingProvider();
 
     final result = await serviceWith(provider).getLyrics('t', 'a', 'track2');
@@ -333,9 +317,10 @@ void main() {
 
   test('TTL=1 天：过期条目重新获取并回写缓存', () async {
     await cacheService.setLyricsTtlDays(1);
-    await prefs.setString(
-      'lyrics_cache_track3',
-      cacheEntry('[00:00]stale', nowSeconds() - 3 * 24 * 60 * 60),
+    await seedFileCache(
+      'track3',
+      '[00:00]stale',
+      nowSeconds() - 3 * 24 * 60 * 60,
     );
     final provider = _CountingProvider();
     final service = serviceWith(provider);
@@ -352,9 +337,10 @@ void main() {
   });
 
   test('缩短 TTL 立即生效：29 天前条目在 TTL=7 时视为过期', () async {
-    await prefs.setString(
-      'lyrics_cache_track4',
-      cacheEntry('[00:00]month old', nowSeconds() - 29 * 24 * 60 * 60),
+    await seedFileCache(
+      'track4',
+      '[00:00]month old',
+      nowSeconds() - 29 * 24 * 60 * 60,
     );
     final provider = _CountingProvider();
     final service = serviceWith(provider);
@@ -383,10 +369,7 @@ void main() {
       final fileA = lyricsFile(tempRoot, 'a');
       final sizeA = await fileA.length();
 
-      expect(
-        await cache.usageOf('a'),
-        CacheUsage(bytes: sizeA, count: 1),
-      );
+      expect(await cache.usageOf('a'), CacheUsage(bytes: sizeA, count: 1));
       expect(await cache.usage(), CacheUsage(bytes: sizeA, count: 1));
 
       await cache.write(
@@ -396,10 +379,7 @@ void main() {
       final sizeB = await lyricsFile(tempRoot, 'b').length();
 
       expect(await cache.usageOf('b'), CacheUsage(bytes: sizeB, count: 1));
-      expect(
-        await cache.usage(),
-        CacheUsage(bytes: sizeA + sizeB, count: 2),
-      );
+      expect(await cache.usage(), CacheUsage(bytes: sizeA + sizeB, count: 2));
       expect(await cache.usageOf('missing'), CacheUsage.zero);
     });
 
@@ -419,10 +399,7 @@ void main() {
 
       await cacheService.clearLyricsForTrack('attached');
       expect(lyricsFile(tempRoot, 'attached').existsSync(), isFalse);
-      expect(
-        await cacheService.usage(CachePartition.lyrics),
-        CacheUsage.zero,
-      );
+      expect(await cacheService.usage(CachePartition.lyrics), CacheUsage.zero);
     });
 
     test('损坏文件返回 null，不回退旧 prefs 条目', () async {
@@ -439,32 +416,11 @@ void main() {
       );
 
       expect(await cache.read('bad'), isNull);
-      // 没有回退，也就不会迁移/删除旧键。
+      // 没有回退：prefs 里的残留条目保持原样，也不会被读到。
       expect(prefs.containsKey('lyrics_cache_bad'), isTrue);
     });
 
-    test('旧版 prefs 条目读取后迁移成文件并删除旧键', () async {
-      const value = '{"provider":"legacy","lyric":"[00:01]old","ts":7}';
-      await prefs.setString('lyrics_cache_legacy:1', value);
-      final cache = LyricsCache(prefs: prefs, directory: tempRoot);
-
-      final read = await cache.read('legacy:1');
-      expect(read, isNotNull);
-      expect(read!.provider, 'legacy');
-      expect(read.lyric, '[00:01]old');
-      expect(read.timestamp, 7);
-
-      expect(prefs.containsKey('lyrics_cache_legacy:1'), isFalse);
-      final file = lyricsFile(tempRoot, 'legacy:1');
-      expect(await file.exists(), isTrue);
-      expect(await file.readAsString(), value);
-
-      // 迁移后只依赖文件：不注入 prefs 也能命中。
-      final again = await LyricsCache(directory: tempRoot).read('legacy:1');
-      expect(again!.lyric, '[00:01]old');
-    });
-
-    test('usage / usageOf 包含尚未迁移的旧 prefs 条目', () async {
+    test('文件后端只看文件：prefs 残留条目不计入用量', () async {
       const legacy = '{"provider":"qq","lyric":"旧","ts":1}';
       await prefs.setString('lyrics_cache_old', legacy);
       final cache = LyricsCache(prefs: prefs, directory: tempRoot);
@@ -474,22 +430,15 @@ void main() {
       );
 
       final fileBytes = await lyricsFile(tempRoot, 'new').length();
-      final legacyBytes = utf8.encode(legacy).length;
-      expect(
-        await cache.usage(),
-        CacheUsage(bytes: fileBytes + legacyBytes, count: 2),
-      );
-      expect(
-        await cache.usageOf('old'),
-        CacheUsage(bytes: legacyBytes, count: 1),
-      );
+      expect(await cache.usage(), CacheUsage(bytes: fileBytes, count: 1));
+      expect(await cache.usageOf('old'), CacheUsage.zero);
       expect(
         await cache.usageOf('new'),
         CacheUsage(bytes: fileBytes, count: 1),
       );
     });
 
-    test('remove / clear 删除文件；write 不动历史 manual 键', () async {
+    test('remove / clear 只动文件，不碰 prefs', () async {
       final cache = LyricsCache(prefs: prefs, directory: tempRoot);
       await cache.write(
         'a',
@@ -499,63 +448,52 @@ void main() {
         'b',
         LyricCacheData(provider: 'p', lyric: 'b', timestamp: 2),
       );
-      await prefs.setString('manual_lyrics_cache_a', '{}');
-      await prefs.setString('manual_lyrics_cache_b', '{}');
-
-      // 写路径只清同曲目规范键，不碰历史重复键。
       await prefs.setString('lyrics_cache_a', '{}');
+      await prefs.setString('lyrics_cache_b', '{}');
+
+      // 写路径只写文件，prefs 里的同曲目旧键原样保留。
       await cache.write(
         'a',
         LyricCacheData(provider: 'p', lyric: 'a2', timestamp: 3),
       );
-      expect(prefs.containsKey('lyrics_cache_a'), isFalse);
-      expect(prefs.containsKey('manual_lyrics_cache_a'), isTrue);
+      expect(prefs.containsKey('lyrics_cache_a'), isTrue);
 
       await cache.remove('a');
       expect(lyricsFile(tempRoot, 'a').existsSync(), isFalse);
-      expect(prefs.containsKey('manual_lyrics_cache_a'), isFalse);
+      expect(prefs.containsKey('lyrics_cache_a'), isTrue);
       expect(lyricsFile(tempRoot, 'b').existsSync(), isTrue);
 
       // 文件已被其它路径删掉时 clear 不能失败。
       await lyricsFile(tempRoot, 'b').delete();
       await cache.clear();
       expect(tempRoot.listSync().whereType<File>(), isEmpty);
-      expect(prefs.containsKey('manual_lyrics_cache_b'), isFalse);
+      expect(prefs.containsKey('lyrics_cache_b'), isTrue);
     });
 
-    test('目录不可用时回退 prefs（读写 / 用量 / 删除）', () async {
+    test('目录不可写（非 null）时不回退 prefs：读写 / 用量 / 删除都走文件', () async {
       final blocker = File('${tempRoot.path}${Platform.pathSeparator}blocker');
       await blocker.writeAsString('not a directory');
-      final unusable =
-          Directory('${blocker.path}${Platform.pathSeparator}lyrics_cache');
+      final unusable = Directory(
+        '${blocker.path}${Platform.pathSeparator}lyrics_cache',
+      );
       final cache = LyricsCache(prefs: prefs, directory: unusable);
 
+      // 写入失败按未持久化处理，不写 prefs。
       await cache.write(
         'fb',
-        LyricCacheData(provider: 'fallback', lyric: '[00:01]fb', timestamp: 3),
+        LyricCacheData(provider: 'file', lyric: '[00:01]fb', timestamp: 3),
       );
-      final raw = prefs.getString('lyrics_cache_fb');
-      expect(raw, isNotNull);
+      expect(prefs.getString('lyrics_cache_fb'), isNull);
 
-      final read = await cache.read('fb');
-      expect(read, isNotNull);
-      expect(read!.provider, 'fallback');
-      expect(read.lyric, '[00:01]fb');
-
-      final bytes = utf8.encode(raw!).length;
-      expect(await cache.usageOf('fb'), CacheUsage(bytes: bytes, count: 1));
-      expect(await cache.usage(), CacheUsage(bytes: bytes, count: 1));
-
-      await cache.remove('fb');
-      expect(prefs.containsKey('lyrics_cache_fb'), isFalse);
       expect(await cache.read('fb'), isNull);
+      expect(await cache.usageOf('fb'), CacheUsage.zero);
+      expect(await cache.usage(), CacheUsage.zero);
 
-      // clear 在目录不可用时同样只清 prefs，不抛异常。
+      // remove / clear 同样只处理文件，不碰 prefs。
       await prefs.setString('lyrics_cache_other', '{}');
-      await prefs.setString('manual_lyrics_cache_other', '{}');
+      await cache.remove('other');
       await cache.clear();
-      expect(prefs.containsKey('lyrics_cache_other'), isFalse);
-      expect(prefs.containsKey('manual_lyrics_cache_other'), isFalse);
+      expect(prefs.containsKey('lyrics_cache_other'), isTrue);
     });
   });
 }

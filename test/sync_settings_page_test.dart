@@ -211,6 +211,7 @@ void main() {
           name: deviceId,
           transport: SyncTransportKind.lan,
           lastSeenAt: lastSeenAt,
+          lastSuccessAt: lastSeenAt,
           cursorSeq: 3,
           ackedSeq: 3,
         ),

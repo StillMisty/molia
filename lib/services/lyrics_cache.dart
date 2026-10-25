@@ -12,8 +12,8 @@ import 'lyrics/lyric_provider.dart' show LyricCacheData;
 /// 歌词缓存（键 / 读写 / 用量 / 清理）的唯一实现。
 ///
 /// 存储形态由构造方式**显式选择**：
-/// - 默认（[LyricsCache.new]，仅 [prefs] 或没有参数）：保持旧版
-///   SharedPreferences 行为，不调用 `path_provider`，也不做任何文件 IO。
+/// - 默认（[LyricsCache.new]，仅 [prefs] 或没有参数）：保持 SharedPreferences
+///   行为，不调用 `path_provider`，也不做任何文件 IO。
 ///   widget 测试的 fake async 等不到平台通道 / 文件 Future，默认启用文件后端
 ///   会让 `pumpAndSettle` 超时；目录不可用的降级平台也依赖这条回退路径。
 /// - 文件后端（[LyricsCache.appSupport]，或显式传 [directory] /
@@ -28,12 +28,11 @@ import 'lyrics/lyric_provider.dart' show LyricCacheData;
 /// - prefs 的读取/统计没有按条目的长度信息，[usage] 只能把每条歌词字符串重新
 ///   UTF-8 编码一遍，整个扫描都压在 UI isolate 上。
 ///
-/// 文件后端行为：
-/// - 旧版规范键 `lyrics_cache_{trackId}` 在首次命中时迁移成文件（成功后才删旧
-///   键，失败则继续用 prefs）；文件损坏时按未命中处理，绝不回退到可能过期的
-///   旧 prefs 条目；
-/// - 历史版本在歌词搜索页额外写过一份 `manual_lyrics_cache_*` 重复键：
-///   读取一律不碰，[remove] / [clear] 时连同历史键一起清除。
+/// 文件后端行为（目录解析成功即为文件模式）：
+/// - 文件是唯一副本：读取只看文件、写入只写文件、用量只统计文件，一律不碰
+///   prefs；文件缺失 / 损坏按未命中处理；
+/// - 目录解析失败（没有可用的文件后端）时才整体回退 prefs：读写、用量与清理
+///   都走 prefs 的 `lyrics_cache_{trackId}` 键。
 class LyricsCache {
   /// [directory] 优先于 [directoryResolver]；两者都为空时只走 prefs。
   LyricsCache({
@@ -55,9 +54,6 @@ class LyricsCache {
 
   static const String keyPrefix = 'lyrics_cache_';
 
-  /// 历史遗留的重复键前缀（只清不读）。
-  static const String legacyManualKeyPrefix = 'manual_lyrics_cache_';
-
   /// 歌词缓存子目录名（位于应用支持目录下）。
   static const String directoryName = 'lyrics_cache';
 
@@ -72,57 +68,33 @@ class LyricsCache {
 
   /// 读取条目；不存在 / 损坏 / 存储不可用时返回 null（按未命中处理）。
   ///
-  /// 文件存在但内容损坏时直接返回 null：旧 prefs 条目可能是更早的版本，
-  /// 回退会绕过 TTL 判断返回过期歌词。
+  /// 文件模式只看文件：文件缺失或损坏一律按未命中，不回退 prefs（旧条目可能
+  /// 更早，回退会绕过 TTL 判断返回过期歌词）。
   Future<LyricCacheData?> read(String trackId) async {
     final directory = await _directoryOrNull();
     if (directory != null) {
       final file = File(_filePath(directory, trackId));
       try {
-        if (await file.exists()) {
-          return _decode(await file.readAsString());
-        }
+        if (!await file.exists()) return null;
+        return _decode(await file.readAsString());
       } catch (_) {
-        // 文件存在但读失败（权限 / 并发替换）：按未命中处理，不回退 prefs。
+        // 文件存在但读失败（权限 / 并发替换）：按未命中处理。
         return null;
       }
     }
 
-    // 文件不存在：检查旧版规范键并尽力迁移。迁移失败（目录不可写等）时保留
-    // prefs 条目，下次仍可命中，不会丢歌词。
     final prefs = await _prefsOrNull();
-    final key = '$keyPrefix$trackId';
-    final raw = prefs?.getString(key);
-    if (raw == null) return null;
-    final data = _decode(raw);
-    if (data == null) return null;
-    if (directory != null && await _writeFile(directory, trackId, raw)) {
-      try {
-        await prefs?.remove(key);
-      } catch (_) {
-        // 删除旧键失败不影响本次读取；下次命中文件后不会再走迁移。
-      }
-    }
-    return data;
+    final raw = prefs?.getString('$keyPrefix$trackId');
+    return raw == null ? null : _decode(raw);
   }
 
-  /// 写入一条歌词：优先文件，文件后端不可用时回退 prefs。
+  /// 写入一条歌词：文件模式只写文件，没有文件后端时写 prefs。
   Future<void> write(String trackId, LyricCacheData data) async {
     final raw = json.encode(data.toJson());
     final directory = await _directoryOrNull();
-    if (directory != null && await _writeFile(directory, trackId, raw)) {
-      // 文件成为权威副本后清掉同曲目的旧规范键，避免 [usage] 在迁移窗口
-      // 双算；历史 manual 键不在这里动（写路径不该扩大 prefs 的整文件重写，
-      // [remove] / [clear] 负责清理）。
-      final prefs = await _prefsOrNull();
-      final key = '$keyPrefix$trackId';
-      if (prefs != null && prefs.containsKey(key)) {
-        try {
-          await prefs.remove(key);
-        } catch (_) {
-          // 旧键清理失败只是多算一份占用，不影响文件读取。
-        }
-      }
+    if (directory != null) {
+      // 文件是唯一副本：写入失败按未持久化处理（歌词可再取），不回退 prefs。
+      await _writeFile(directory, trackId, raw);
       return;
     }
 
@@ -130,11 +102,11 @@ class LyricsCache {
     try {
       await prefs?.setString('$keyPrefix$trackId', raw);
     } catch (_) {
-      // prefs 与目录都不可用：按未持久化处理，上层下次会重新取词。
+      // prefs 不可用：按未持久化处理，上层下次会重新取词。
     }
   }
 
-  /// 歌词分区用量（文件 + 尚未迁移的旧版规范键）。
+  /// 歌词分区用量：文件模式统计目录，没有文件后端时统计 prefs 规范键。
   ///
   /// 目录扫描是 O(文件数) 的串行 IO，丢给短命 isolate；闭包只捕获路径字符串，
   /// 不把 [Directory] / plugin 状态带进子 isolate。
@@ -150,36 +122,30 @@ class LyricsCache {
       // 平台不支持短命 isolate：退回主 isolate 同步扫描（正确性优先）。
       scan = _scanLyricsDir(path);
     }
-    // 迁移是逐条懒执行的，旧规范键可能还在：不把它们算进去会让缓存页在
-    // 升级后的第一轮展示里明显少算。
-    return CacheUsage(bytes: scan.bytes, count: scan.count) +
-        await _prefsUsage();
+    return CacheUsage(bytes: scan.bytes, count: scan.count);
   }
 
-  /// 单曲歌词缓存占用（文件 + 尚未迁移的旧规范键，与 [usage] 同一口径）。
+  /// 单曲歌词缓存占用（与 [usage] 同一后端口径）。
   Future<CacheUsage> usageOf(String trackId) async {
-    var usage = CacheUsage.zero;
     final directory = await _directoryOrNull();
     if (directory != null) {
       try {
         final file = File(_filePath(directory, trackId));
-        if (await file.exists()) {
-          usage += CacheUsage(bytes: await file.length(), count: 1);
-        }
+        if (!await file.exists()) return CacheUsage.zero;
+        return CacheUsage(bytes: await file.length(), count: 1);
       } catch (_) {
         // 文件被并发删除 / 不可读：该部分按 0 计。
+        return CacheUsage.zero;
       }
     }
 
     final prefs = await _prefsOrNull();
     final raw = prefs?.getString('$keyPrefix$trackId');
-    if (raw != null) {
-      usage += CacheUsage(bytes: utf8.encode(raw).length, count: 1);
-    }
-    return usage;
+    if (raw == null) return CacheUsage.zero;
+    return CacheUsage(bytes: utf8.encode(raw).length, count: 1);
   }
 
-  /// 删除单曲歌词缓存：文件 + 规范键 + 历史重复键（后者只清不读）。
+  /// 删除单曲歌词缓存：文件模式删文件，没有文件后端时删 prefs 规范键。
   Future<void> remove(String trackId) async {
     final directory = await _directoryOrNull();
     if (directory != null) {
@@ -187,21 +153,21 @@ class LyricsCache {
         final file = File(_filePath(directory, trackId));
         if (await file.exists()) await file.delete();
       } catch (_) {
-        // 文件可能已被其它清理路径删掉：继续清 prefs 键。
+        // 文件可能已被其它清理路径删掉：按已删除处理。
       }
+      return;
     }
 
     final prefs = await _prefsOrNull();
     if (prefs == null) return;
     try {
       await prefs.remove('$keyPrefix$trackId');
-      await prefs.remove('$legacyManualKeyPrefix$trackId');
     } catch (_) {
       // prefs 不可用时保持静默：调用方只关心「尽量清理」。
     }
   }
 
-  /// 清除歌词分区：目录内文件 + 规范键 + 历史重复键。
+  /// 清除歌词分区：文件模式删目录内文件，没有文件后端时清 prefs 规范键。
   ///
   /// 保留目录本身（与音频 / 封面分区一致）；单个文件已不存在或删除失败时
   /// 跳过，不让清理中断。
@@ -220,17 +186,15 @@ class LyricsCache {
           }
         }
       } catch (_) {
-        // 目录不可读：至少把 prefs 里的旧条目清掉。
+        // 目录不可读：按已清空处理（歌词缓存可再取）。
       }
+      return;
     }
 
     final prefs = await _prefsOrNull();
     if (prefs == null) return;
-    final keys = prefs
-        .getKeys()
-        .where((key) =>
-            key.startsWith(keyPrefix) || key.startsWith(legacyManualKeyPrefix))
-        .toList();
+    final keys =
+        prefs.getKeys().where((key) => key.startsWith(keyPrefix)).toList();
     for (final key in keys) {
       try {
         await prefs.remove(key);
@@ -240,7 +204,7 @@ class LyricsCache {
     }
   }
 
-  /// 旧版 prefs 用量（只统计规范键；历史重复键不算用量）。
+  /// prefs 后端用量（只统计规范键）。
   Future<CacheUsage> _prefsUsage() async {
     final prefs = await _prefsOrNull();
     if (prefs == null) return CacheUsage.zero;
@@ -256,7 +220,7 @@ class LyricsCache {
     return CacheUsage(bytes: bytes, count: count);
   }
 
-  /// 解析失败（损坏 / 旧格式不兼容）一律按未命中。
+  /// 解析失败（损坏 / 格式不符）一律按未命中。
   LyricCacheData? _decode(String raw) {
     try {
       final json = jsonDecode(raw);
@@ -279,8 +243,10 @@ class LyricsCache {
     final target = File(_filePath(directory, trackId));
     // 临时名带 pid + 时间戳：同一曲目被并发写入时各自写自己的临时文件，
     // 不会互相截断（固定 `.tmp` 在 rename 交错时可能把半截内容搬到正式名）。
-    final temp = File('${target.path}.$pid.'
-        '${DateTime.now().microsecondsSinceEpoch}.tmp');
+    final temp = File(
+      '${target.path}.$pid.'
+      '${DateTime.now().microsecondsSinceEpoch}.tmp',
+    );
     try {
       await directory.create(recursive: true);
       // 不 fsync：歌词是「可再取」的派生数据，掉电 / 强杀丢一条缓存远好过

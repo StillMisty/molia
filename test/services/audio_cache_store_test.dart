@@ -5,12 +5,13 @@ import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_storage_io.dart';
+
 import '../support/memory_cache_storage.dart';
+
 import 'package:molia/services/cache_types.dart';
 import 'package:molia/sources/source_track.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-/// 音频缓存目录约定：命名 / 完整性 / 索引 / 命中 / 清扫 / 迁移。
+/// 音频缓存目录约定：命名 / 完整性 / 索引 / 命中 / 清扫。
 ///
 /// 只经 [AudioCacheStore] 的接口断言；文件系统用临时目录的真实 IO 实现
 /// （无文件系统场景用空实现），命中探测注入真实的存在性判断。
@@ -19,18 +20,15 @@ void main() {
 
   late Directory tempRoot;
   late IoCacheStorage storage;
-  late SharedPreferences prefs;
   late AudioCacheStore store;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
-    prefs = await SharedPreferences.getInstance();
     tempRoot = await Directory.systemTemp.createTemp('audio_cache_store_test_');
     storage = IoCacheStorage(
       audioDirOverride: '${tempRoot.path}/audio_cache',
       artworkDirOverride: '${tempRoot.path}/artwork_cache',
     );
-    store = AudioCacheStore(storage: storage, preferences: () async => prefs);
+    store = AudioCacheStore(storage: storage);
   });
 
   tearDown(() async {
@@ -86,11 +84,7 @@ void main() {
         'wy_123_auto',
       );
       expect(
-        AudioCacheStore.key(
-          sourceKey: 'wy',
-          songId: '123',
-          quality: '320k',
-        ),
+        AudioCacheStore.key(sourceKey: 'wy', songId: '123', quality: '320k'),
         'wy_123_320k',
       );
       expect(
@@ -145,10 +139,7 @@ void main() {
         sourceTrack,
         quality: '320k',
       );
-      expect(
-        AudioCacheStore.keyForTrack(domain, quality: '320k'),
-        written,
-      );
+      expect(AudioCacheStore.keyForTrack(domain, quality: '320k'), written);
       // 旧命名（把 `SourceTrack.id` 当 songId）会写出带冒号的文件名。
       expect(written.contains(':'), isFalse);
       expect(
@@ -165,13 +156,11 @@ void main() {
         audioCachePredownloadSuffix,
         audioCacheMimeSuffix,
       ]) {
-        expect(
-          AudioCacheStore.isCompleteFileName('kw_1_320k$suffix'),
-          isFalse,
-        );
+        expect(AudioCacheStore.isCompleteFileName('kw_1_320k$suffix'), isFalse);
         expect(
           AudioCacheStore.isCompleteFileName(
-              'kw_1_320k${suffix.toUpperCase()}'),
+            'kw_1_320k${suffix.toUpperCase()}',
+          ),
           isFalse,
         );
       }
@@ -180,8 +169,11 @@ void main() {
 
   group('索引与占用', () {
     test('files 保留原始列举；index 只含完整文件', () async {
-      final complete =
-          AudioCacheStore.key(sourceKey: 'kw', songId: '9', quality: '320k');
+      final complete = AudioCacheStore.key(
+        sourceKey: 'kw',
+        songId: '9',
+        quality: '320k',
+      );
       await writeFile(complete, 400);
       await writeFile('$complete$audioCachePartSuffix', 900);
       await writeFile('$complete$audioCacheMimeSuffix', 7);
@@ -197,8 +189,11 @@ void main() {
     });
 
     test('usageForTrack 只算完整文件；writingUsageForTrack 只算半成品 / 边车', () async {
-      final complete =
-          AudioCacheStore.key(sourceKey: 'kw', songId: '9', quality: '320k');
+      final complete = AudioCacheStore.key(
+        sourceKey: 'kw',
+        songId: '9',
+        quality: '320k',
+      );
       await writeFile(complete, 400);
       await writeFile('$complete$audioCachePartSuffix', 900);
       await writeFile('$complete$audioCacheMimeSuffix', 7);
@@ -307,23 +302,22 @@ void main() {
 
   group('按曲目的已缓存音质', () {
     test('按曲目音质顺序去重，只认有内容的完整文件', () {
-      final t = track(qualities: const [
-        AudioQuality(type: '320k'),
-        AudioQuality(type: '320k'),
-        AudioQuality(type: ''),
-        AudioQuality(type: 'flac'),
-        AudioQuality(type: '128k'),
-      ]);
+      final t = track(
+        qualities: const [
+          AudioQuality(type: '320k'),
+          AudioQuality(type: '320k'),
+          AudioQuality(type: ''),
+          AudioQuality(type: 'flac'),
+          AudioQuality(type: '128k'),
+        ],
+      );
       final index = {
         AudioCacheStore.keyForTrack(t, quality: '320k'): 400,
         // 空文件不算命中。
         AudioCacheStore.keyForTrack(t, quality: 'flac'): 0,
       };
 
-      expect(
-        AudioCacheStore.cachedQualitiesForTrack(t, index),
-        ['320k'],
-      );
+      expect(AudioCacheStore.cachedQualitiesForTrack(t, index), ['320k']);
     });
 
     test('原始列举（含 .part）不算命中：未落成的文件不可离线播', () {
@@ -342,8 +336,11 @@ void main() {
 
   group('清扫与单曲清理', () {
     test('cleanupPartials 删 .part / .predl，保留完整文件与 .mime 边车', () async {
-      final complete =
-          AudioCacheStore.key(sourceKey: 'kw', songId: '9', quality: '320k');
+      final complete = AudioCacheStore.key(
+        sourceKey: 'kw',
+        songId: '9',
+        quality: '320k',
+      );
       await writeFile(complete, 400);
       await writeFile('$complete$audioCachePartSuffix', 900);
       await writeFile('$complete$audioCacheMimeSuffix', 7);
@@ -372,10 +369,16 @@ void main() {
     });
 
     test('protectAge 内修改的文件（正在写入）跳过并计数', () async {
-      final writing =
-          AudioCacheStore.key(sourceKey: 'kg', songId: '7', quality: '320k');
-      final idle =
-          AudioCacheStore.key(sourceKey: 'kg', songId: '7', quality: '128k');
+      final writing = AudioCacheStore.key(
+        sourceKey: 'kg',
+        songId: '7',
+        quality: '320k',
+      );
+      final idle = AudioCacheStore.key(
+        sourceKey: 'kg',
+        songId: '7',
+        quality: '128k',
+      );
       await writeFile(writing, 100, age: Duration.zero);
       await writeFile(idle, 200);
 
@@ -387,54 +390,6 @@ void main() {
       expect(result.deleted, const CacheUsage(bytes: 200, count: 1));
       expect(result.skipped, 1);
       expect(await namesIn(audioDir()), [writing]);
-    });
-  });
-
-  group('旧命名迁移', () {
-    test('一次性清空音频分区：版本标记落 prefs，第二次不再清', () async {
-      // 旧命名：songId 用了复合 id（`kw:9`），文件名带重复 sourceKey。
-      final legacy =
-          AudioCacheStore.key(sourceKey: 'kw', songId: 'kw:9', quality: '320k');
-      final legacyFile = await writeFile(legacy, 100);
-
-      expect(await store.migrateNamingIfNeeded(), isTrue);
-      expect(await legacyFile.exists(), isFalse);
-      expect(
-        prefs.getInt(AudioCacheStore.keyNamingVersion),
-        AudioCacheStore.namingVersion,
-      );
-
-      // 已是当前版本：新写入的缓存不受影响。
-      final fresh = AudioCacheStore.keyForTrack(
-        track(sourceKey: 'kw', id: '9'),
-        quality: '320k',
-      );
-      final freshFile = await writeFile(fresh, 200);
-      expect(await store.migrateNamingIfNeeded(), isFalse);
-      expect(await freshFile.exists(), isTrue);
-    });
-
-    test('prefs 不可用：按旧命名处理（清空一次，但不崩）', () async {
-      final noPrefs = AudioCacheStore(
-        storage: storage,
-        preferences: () async => null,
-      );
-      final file = await writeFile('kw_kw_9_320k', 100);
-
-      expect(await noPrefs.migrateNamingIfNeeded(), isTrue);
-      expect(await file.exists(), isFalse);
-    });
-
-    test('目录不可用（无文件系统）：不崩，仍标记版本', () async {
-      final noFs = AudioCacheStore(
-        storage: MemoryCacheStorage(),
-        preferences: () async => prefs,
-      );
-      expect(await noFs.migrateNamingIfNeeded(), isTrue);
-      expect(
-        prefs.getInt(AudioCacheStore.keyNamingVersion),
-        AudioCacheStore.namingVersion,
-      );
     });
   });
 }

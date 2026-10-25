@@ -660,7 +660,6 @@
   "@appName": {
     "description": "Default app name (brand title, localized)"
   },
-  "libraryRecentContexts": "Recently Played",
   "libraryHistory": "Play History",
   "libraryLocalSongs": "Local tracks",
   "libraryImportLocalSongs": "Import local tracks",
@@ -1211,7 +1210,6 @@
   "aiDjOriginRefresh": "a refresh",
   "aiDjOriginAutoFeed": "auto-feed",
   "aiDjOriginManualFeed": "a manual top-up",
-  "aiDjOriginRestored": "older picks",
   "aiDjHistoryLoadFailed": "This batch is damaged and cannot be opened",
   "aiDjMoreLikeThis": "More like this",
   "aiDjRetryUnresolved": "Search again",
@@ -2315,19 +2313,6 @@
   "downloadsBatchPlaylist": "Download a playlist",
   "downloadsBatchPlaylistSubtitle": "Pick a playlist and download it in batch (skips downloaded and local tracks)",
   "downloadsPickPlaylist": "Choose a playlist",
-  "downloadsMigrateLegacy": "Move downloads to the new location",
-  "downloadsMigrateLegacySubtitle": "Move files from the legacy app folder into the current download folder",
-  "downloadsMigrateLegacyDone": "Moved {moved}, failed {failed}",
-  "@downloadsMigrateLegacyDone": {
-    "placeholders": {
-      "moved": {
-        "type": "int"
-      },
-      "failed": {
-        "type": "int"
-      }
-    }
-  },
   "downloadsPublishPublic": "Copy to public Downloads folder",
   "downloadsPublishPublicSubtitle": "Copy downloads that are not in the system Downloads folder yet (Android)",
   "downloadsPublishPublicDone": "Copied {published}, failed {failed}",

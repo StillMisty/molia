@@ -20,18 +20,8 @@ class FakeDownloadStorage implements DownloadStorage {
   /// 最近一次写流进度回调的累计字节数（测试等待分片被消费用）。
   int? lastProgressReceived;
 
-  /// 旧位置（迁移测试用）：非空且与 [root] 不同时生效。
-  String? legacyRoot;
-
   @override
   Future<String?> downloadsRoot() async => available ? root : null;
-
-  @override
-  Future<String?> legacyDownloadsRoot() async {
-    final legacy = legacyRoot;
-    if (legacy == null || legacy == root) return null;
-    return legacy;
-  }
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);

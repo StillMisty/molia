@@ -116,7 +116,7 @@ class NavProvider extends ChangeNotifier {
           _hidden.remove(_order.first);
         }
       }
-      // 非法 / 旧版本值回退默认播放页（与键默认值一致）。
+      // 非法值回退默认播放页（与键默认值一致）。
       final homeName = await _settings.read(kShellHomeDestination);
       _homeDestination = _homeOf(homeName);
       notifyListeners();
@@ -125,7 +125,7 @@ class NavProvider extends ChangeNotifier {
     }
   }
 
-  /// 键默认值 → 枚举列表（补齐旧版本 / 损坏数据缺失的目的地）。
+  /// 键默认值 → 枚举列表（补齐损坏数据缺失的目的地）。
   static List<ShellDestination> _orderOf(List<String> names) {
     final restored = <ShellDestination>[];
     for (final name in names) {

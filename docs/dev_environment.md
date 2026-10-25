@@ -13,10 +13,12 @@
   否则中文界面显示为方块。
 - 本地数据库（最近播放 / 资料库 / 听歌统计）走 drift：原生 SQLite 由
   `sqlite3` 的 Dart build hooks 提供（`flutter test` / 构建时自动生成，无需
-  `sqlite3_flutter_libs`）；库文件在应用支持目录（Windows
-  `%APPDATA%\top.stillmisty\molia`、Linux `~/.local/share/top.stillmisty.molia`）。
-  改表结构必须写增量迁移：提 `schemaVersion` 后跑 `build_runner` +
-  `drift_dev make-migrations`（schema 快照）并用 `stepByStep` 保留数据（ADR-0005）。
+  `sqlite3_flutter_libs`）；库文件 `molia_database_v2.sqlite` 在应用支持目录
+  （Windows `%APPDATA%\top.stillmisty\molia`、Linux
+  `~/.local/share/top.stillmisty.molia`）。旧 `molia_database.sqlite` 保留在
+  原处但不读、不迁移。以后改表结构仍写增量迁移：提 `schemaVersion` 后跑
+  `build_runner` + `drift_dev make-migrations`（从新 v1 生成 schema 快照）并用
+  `stepByStep` 保留数据（ADR-0005）。
 - **集成测试默认 headless**：`tool/agent/test.sh linux` 无条件套 `xvfb-run -a`
   （并强制 `GDK_BACKEND=x11`、去掉 `WAYLAND_DISPLAY`——只改 DISPLAY 挡不住 GTK 走 WSLg
   Wayland，窗口照样弹）；要肉眼观察加 `--window`。等价裸命令
@@ -76,9 +78,10 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
   脚本直接写 `lx_sources.json` 并置 activeId（绕开应用内 Import from URL）。
 - Android 写入前自动 `force-stop`（SharedPreferences 有内存缓存，运行中写入会被覆盖）；
   Linux 请先退出应用，且会改动 `~/.local/share/top.stillmisty.molia/` 下的真实数据。
-- 数据位置：Android `/data/data/top.stillmisty.molia/{app_flutter/molia_database.sqlite,
+- 数据位置：Android `/data/data/top.stillmisty.molia/{app_flutter/molia_database_v2.sqlite,
   shared_prefs/FlutterSharedPreferences.xml, files/lx_sources.json}`；
   Linux `~/.local/share/top.stillmisty.molia/`（DB 同处）。
+  同目录的旧 `molia_database.sqlite` 保留但不读。
 
 ### Android 集成测试
 

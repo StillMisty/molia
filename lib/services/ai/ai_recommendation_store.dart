@@ -1,9 +1,7 @@
 /// AI 推荐历史持久化：索引 + 每批一键（SharedPreferences）。
 ///
 /// - `ai_dj_history_index_v1`：`{activeBatchId, entries}`（历史页首屏只读索引）；
-/// - `ai_dj_history_batch_v1:<id>`：完整批次 JSON（曲目 + 未解析项 + 元数据）；
-/// - 旧键 `ai_dj_pending_batch_v1` 首次加载时迁移为一批（active），迁移成功
-///   才删除旧键；失败保留旧键下次再试，不丢数据。
+/// - `ai_dj_history_batch_v1:<id>`：完整批次 JSON（曲目 + 未解析项 + 元数据）。
 ///
 /// LLM 原始返回与实际提示词只存内存：批次 JSON 不包含它们。历史详情懒加载，
 /// 启动只读索引 + active 批次。
@@ -71,8 +69,9 @@ class StoredAiBatchItem {
       coverUrl: json['coverUrl']?.toString(),
       durationMs: (json['durationMs'] as num?)?.toInt(),
       raw: json['raw'] is Map
-          ? (json['raw'] as Map)
-              .map((key, value) => MapEntry(key.toString(), value))
+          ? (json['raw'] as Map).map(
+              (key, value) => MapEntry(key.toString(), value),
+            )
           : const {},
     );
   }
@@ -113,11 +112,7 @@ class StoredAiBatch {
         'items': [for (final item in items) item.toJson()],
         'unresolved': [
           for (final item in unresolved)
-            {
-              'title': item.title,
-              'artist': item.artist,
-              'reason': item.reason,
-            },
+            {'title': item.title, 'artist': item.artist, 'reason': item.reason},
         ],
       };
 
@@ -138,11 +133,13 @@ class StoredAiBatch {
         if (entry is! Map) continue;
         final title = entry['title']?.toString() ?? '';
         if (title.isEmpty) continue;
-        unresolved.add(AiRecommendation(
-          title: title,
-          artist: entry['artist']?.toString() ?? '',
-          reason: entry['reason']?.toString() ?? '',
-        ));
+        unresolved.add(
+          AiRecommendation(
+            title: title,
+            artist: entry['artist']?.toString() ?? '',
+            reason: entry['reason']?.toString() ?? '',
+          ),
+        );
       }
     }
     final epochMs = (json['generatedAt'] as num?)?.toInt() ?? 0;
@@ -164,10 +161,7 @@ class StoredAiBatch {
 
 /// 索引 + active id（历史详情不在其中）。
 class AiDjHistoryIndex {
-  const AiDjHistoryIndex({
-    required this.entries,
-    this.activeBatchId,
-  });
+  const AiDjHistoryIndex({required this.entries, this.activeBatchId});
 
   final List<AiDjHistoryEntry> entries;
   final String? activeBatchId;
@@ -191,14 +185,14 @@ typedef AiDjHistoryMutationResult = ({bool ok, AiDjHistoryIndex index});
 
 class AiRecommendationStore {
   /// [preferences] / [clock] 仅测试注入；生产走 SharedPreferences 与系统时钟。
-  AiRecommendationStore(
-      {SharedPreferences? preferences, DateTime Function()? clock})
-      : _preferences = preferences,
+  AiRecommendationStore({
+    SharedPreferences? preferences,
+    DateTime Function()? clock,
+  })  : _preferences = preferences,
         _clock = clock ?? DateTime.now;
 
   static const String indexKey = 'ai_dj_history_index_v1';
   static const String batchKeyPrefix = 'ai_dj_history_batch_v1:';
-  static const String legacyStorageKey = 'ai_dj_pending_batch_v1';
 
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
@@ -226,14 +220,12 @@ class AiRecommendationStore {
     return completer.future;
   }
 
-  /// 读取索引；不存在时尝试迁移旧单批键。
+  /// 读取索引；不存在 / 损坏时返回空索引。
   Future<AiDjHistoryIndex> loadIndex() async {
     try {
       final prefs = await _prefsOrNull();
       if (prefs == null) return AiDjHistoryIndex.empty;
-      final decoded = _decodeIndex(prefs.getString(indexKey));
-      if (decoded != null) return decoded;
-      return await _migrateLegacy(prefs);
+      return _decodeIndex(prefs.getString(indexKey)) ?? AiDjHistoryIndex.empty;
     } catch (_) {
       return AiDjHistoryIndex.empty;
     }
@@ -255,10 +247,7 @@ class AiRecommendationStore {
   /// 写入一批；[makeActive] 为真时同时切换 active（显式生成）。
   ///
   /// 失败时静默返回：调用方的内存状态仍可继续展示与播放。
-  Future<void> saveBatch(
-    StoredAiBatch batch, {
-    bool makeActive = false,
-  }) =>
+  Future<void> saveBatch(StoredAiBatch batch, {bool makeActive = false}) =>
       _serialized(() async {
         try {
           final prefs = await _prefsOrNull();
@@ -299,10 +288,7 @@ class AiRecommendationStore {
           if (index == null) return;
           await _writeIndex(
             prefs,
-            index.copyWith(
-              activeBatchId: id,
-              clearActive: id == null,
-            ),
+            index.copyWith(activeBatchId: id, clearActive: id == null),
           );
         } catch (_) {
           // 失败保持原 active。
@@ -400,41 +386,6 @@ class AiRecommendationStore {
       );
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<AiDjHistoryIndex> _migrateLegacy(SharedPreferences prefs) async {
-    final raw = prefs.getString(legacyStorageKey);
-    if (raw == null || raw.isEmpty) return AiDjHistoryIndex.empty;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return AiDjHistoryIndex.empty;
-      final generatedAt = (decoded['generatedAt'] as num?)?.toInt() ?? 0;
-      final legacy = StoredAiBatch.fromJson({
-        ...decoded.cast<String, dynamic>(),
-        'id': 'restored-$generatedAt',
-        'origin': AiDjOrigin.restored.storageValue,
-      });
-      if (legacy == null) return AiDjHistoryIndex.empty;
-      final saved = await prefs.setString(
-        '$batchKeyPrefix${legacy.id}',
-        jsonEncode(legacy.toJson()),
-      );
-      if (!saved) return AiDjHistoryIndex.empty;
-      final index = AiDjHistoryIndex(
-        entries: [legacy.toHistoryEntry()],
-        activeBatchId: legacy.id,
-      );
-      final wroteIndex = await _writeIndex(prefs, index);
-      if (!wroteIndex) {
-        await prefs.remove('$batchKeyPrefix${legacy.id}');
-        return AiDjHistoryIndex.empty;
-      }
-      // 全部写成功后才删旧键；失败保留旧键下次再试。
-      await prefs.remove(legacyStorageKey);
-      return index;
-    } catch (_) {
-      return AiDjHistoryIndex.empty;
     }
   }
 

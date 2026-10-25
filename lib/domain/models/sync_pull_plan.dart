@@ -43,9 +43,7 @@ class SyncPullPlan {
   SyncPullPlan.fromIntents({
     required Iterable<SyncPeerPullIntent> intents,
     this.discovery = SyncPullDiscovery.knownOnly,
-  }) : peers = {
-          for (final intent in intents) intent.deviceId: intent,
-        };
+  }) : peers = {for (final intent in intents) intent.deviceId: intent};
 
   /// 普通轮次：单播已有候选，不广播。
   static const SyncPullPlan none = SyncPullPlan();
@@ -71,17 +69,6 @@ class SyncPullPlan {
         deviceId: deviceId,
         cursor: SyncPullRequestCursor.none,
       );
-
-  /// 旧接口视图：对端 id → 游标（测试与调用方按需读取）。
-  Map<String, int> get cursors => {
-        for (final entry in peers.entries) entry.key: entry.value.cursor,
-      };
-
-  /// 旧接口视图：强制全量的对端 id。
-  Set<String> get fullPeers => {
-        for (final entry in peers.entries)
-          if (entry.value.forceFull) entry.key,
-      };
 }
 
 /// 拉取请求的常量（避免计划模块反向依赖端口文件）。

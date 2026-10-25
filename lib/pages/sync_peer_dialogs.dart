@@ -43,12 +43,8 @@ String syncPeerSubtitle(
   required int nowMs,
   SyncRoundReport? report,
 }) {
-  final status = resolveSyncPeerConnection(
-    peer,
-    report: report,
-    nowMs: nowMs,
-  );
-  final lastSuccess = peer.effectiveLastSuccessAt;
+  final status = resolveSyncPeerConnection(peer, report: report, nowMs: nowMs);
+  final lastSuccess = peer.lastSuccessAt;
   final cloud = peer.transport == SyncTransportKind.webdav;
   final lastSuccessText = lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
   // 结论 + 上次成功合成一句：两段独立文案会重复「上次同步」。
@@ -132,10 +128,8 @@ Future<void> showSyncPeerDialog(
           children: [
             if (peer != null && peer.deviceId.isNotEmpty)
               Text(l10n.syncPeerDeviceId(shortDeviceId(peer.deviceId))),
-            if (peer != null && peer.effectiveLastSuccessAt > 0)
-              Text(l10n.syncPeerLastSuccess(
-                syncTimeText(peer.effectiveLastSuccessAt),
-              )),
+            if (peer != null && peer.lastSuccessAt > 0)
+              Text(l10n.syncPeerLastSuccess(syncTimeText(peer.lastSuccessAt))),
             if (peer != null && peer.lastSeenAt > 0)
               Text(l10n.syncPeerLastAttempt(syncTimeText(peer.lastSeenAt))),
             if (peer?.lastError != null)
@@ -161,13 +155,15 @@ Future<void> showSyncPeerDialog(
                 subtitle: l10n.syncPeerAddressCount(entries.length),
                 onTap: () {
                   navigator.pop();
-                  unawaited(showSyncPeerAddressesDialog(
-                    context,
-                    provider: provider,
-                    l10n: l10n,
-                    title: title,
-                    entries: entries,
-                  ));
+                  unawaited(
+                    showSyncPeerAddressesDialog(
+                      context,
+                      provider: provider,
+                      l10n: l10n,
+                      title: title,
+                      entries: entries,
+                    ),
+                  );
                 },
               ),
             ],
@@ -284,12 +280,14 @@ Future<void> showSyncPeerAddressesDialog(
                   subtitle: syncManualPeerSubtitle(l10n, entry),
                   onTap: () {
                     navigator.pop();
-                    unawaited(showSyncManualPeerDialog(
-                      context,
-                      provider,
-                      l10n,
-                      editing: entry,
-                    ));
+                    unawaited(
+                      showSyncManualPeerDialog(
+                        context,
+                        provider,
+                        l10n,
+                        editing: entry,
+                      ),
+                    );
                   },
                 ),
             ],
@@ -375,13 +373,15 @@ Future<void> showSyncCandidatesDialog(
                   subtitle: '${entry.host} · ${l10n.syncPeerNotContacted}',
                   onTap: () {
                     navigator.pop();
-                    unawaited(showSyncPeerDialog(
-                      context,
-                      provider: provider,
-                      l10n: l10n,
-                      host: entry.host,
-                      title: entry.name.isEmpty ? entry.host : entry.name,
-                    ));
+                    unawaited(
+                      showSyncPeerDialog(
+                        context,
+                        provider: provider,
+                        l10n: l10n,
+                        host: entry.host,
+                        title: entry.name.isEmpty ? entry.host : entry.name,
+                      ),
+                    );
                   },
                 ),
             ],
@@ -431,14 +431,16 @@ class _ManualPeerDialog extends StatefulWidget {
 }
 
 class _ManualPeerDialogState extends State<_ManualPeerDialog> {
-  late final TextEditingController _host =
-      TextEditingController(text: widget.editing?.host ?? '');
+  late final TextEditingController _host = TextEditingController(
+    text: widget.editing?.host ?? '',
+  );
   late final TextEditingController _port = TextEditingController(
     text:
         '${(widget.editing?.probePort ?? 0) > 0 ? widget.editing!.probePort : ManualPeer.defaultProbePort}',
   );
-  late final TextEditingController _name =
-      TextEditingController(text: widget.editing?.name ?? '');
+  late final TextEditingController _name = TextEditingController(
+    text: widget.editing?.name ?? '',
+  );
   String? _hostError;
   String? _portError;
   String? _contactError;
@@ -591,8 +593,9 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
               M3ETextField(
                 controller: _port,
                 label: l10n.syncPeerProbePortLabel,
-                placeholder:
-                    l10n.syncPeerProbePortHint(ManualPeer.defaultProbePort),
+                placeholder: l10n.syncPeerProbePortHint(
+                  ManualPeer.defaultProbePort,
+                ),
                 leading: const Icon(Icons.settings_ethernet_rounded),
                 errorText: _portError,
                 enabled: !_busy,

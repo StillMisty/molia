@@ -128,7 +128,7 @@ class AiDjBatch {
   /// 这批从哪个显式/静默动作产生（历史标记）。
   final AiDjOrigin origin;
 
-  /// 生成时的偏好快照（旧数据可为空）。
+  /// 生成时的偏好快照（未记录时可为空）。
   final AiPreferences? preferences;
 
   /// LLM 原始返回：**只存内存，不落盘、不打日志**。
@@ -181,20 +181,18 @@ enum AiDjOrigin {
   autoFeed('autoFeed'),
 
   /// 用户显式「补一批到队尾」：只进历史与队列，可显示进度。
-  manualFeed('manualFeed'),
-
-  /// 旧单批数据迁移而来。
-  restored('restored');
+  manualFeed('manualFeed');
 
   const AiDjOrigin(this.storageValue);
 
   final String storageValue;
 
+  /// 未知 / 缺失值按 [refresh] 处理（历史标记只影响展示）。
   static AiDjOrigin fromStorage(Object? value) {
     for (final origin in values) {
       if (origin.storageValue == value) return origin;
     }
-    return AiDjOrigin.restored;
+    return AiDjOrigin.refresh;
   }
 }
 

@@ -17,10 +17,7 @@ void main() {
   testWidgets('NotificationService 展示 M3ESnackbar 且新提示替换旧提示', (tester) async {
     final messengerKey = GlobalKey<ScaffoldMessengerState>();
     final appRootKey = GlobalKey(debugLabel: 'appRoot');
-    final service = NotificationService(
-      messengerKey,
-      hostContextKey: appRootKey,
-    );
+    final service = NotificationService(hostContextKey: appRootKey);
 
     await tester.pumpWidget(
       M3EMaterialApp(

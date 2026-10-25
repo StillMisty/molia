@@ -1,8 +1,8 @@
 /// 下载文件命名 / 放置模块：文件名模板、清洗、去重命名与 sidecar 路径约定的
 /// 唯一实现。
 ///
-/// 为什么独立成模块：下载链路有六种生命周期（远程抓取 / 缓存拷贝 / 分项下载 /
-/// 失败清理 / 删除 / 维护迁移）都要碰文件布局，散在 1561 行的服务里时同一约定
+/// 为什么独立成模块：下载链路有五种生命周期（远程抓取 / 缓存拷贝 / 分项下载 /
+/// 失败清理 / 删除）都要碰文件布局，散在 1561 行的服务里时同一约定
 /// （`lyrics/` 下的 `.lrc` + `.t.lrc` 翻译边车、`covers/`、`.part` 半成品、
 /// 磁盘与记录双重查重的 ` (2)` 递增）会各写一份；命名此前还有两份实现——
 /// 下载真正走的模板版（`DownloadService._baseNameFor`）与只为测试存在的静态
@@ -77,9 +77,7 @@ class DownloadFileLayout {
     var index = 2;
     while (true) {
       if (!used.contains(candidate.toLowerCase()) &&
-          !await _storage.fileExists(
-            p.join(root, '$candidate.$extension'),
-          )) {
+          !await _storage.fileExists(p.join(root, '$candidate.$extension'))) {
         return candidate;
       }
       if (index > 999) {

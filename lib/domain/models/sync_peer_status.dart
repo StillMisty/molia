@@ -30,9 +30,7 @@ enum SyncPeerConnectionStatus {
 /// - [report] 为 null（本次进程还没跑过一轮）时，只能用持久化名册判断：
 ///   有失败原因按未连接，否则按「上次同步」；
 /// - 失联优先于其它状态：即使最近一份报告是旧的，也不能把超过 180 天没有
-///   成功接触的设备说成已连接；
-/// - 旧名册没有 `lastSuccessAt` 时用 [SyncPeerState.effectiveLastSuccessAt]
-///   兜底（数据流转时间 → 无失败的最后尝试），升级后不会一律显示「还没连上」。
+///   成功接触的设备说成已连接。
 SyncPeerConnectionStatus resolveSyncPeerConnection(
   SyncPeerState peer, {
   SyncRoundReport? report,
@@ -40,7 +38,7 @@ SyncPeerConnectionStatus resolveSyncPeerConnection(
 }) {
   if (peer.isLostAt(nowMs)) return SyncPeerConnectionStatus.lost;
 
-  final successAt = peer.effectiveLastSuccessAt;
+  final successAt = peer.lastSuccessAt;
   final attemptAt = peer.lastSeenAt;
   final hasEvidence = successAt > 0 || attemptAt > 0 || peer.lastError != null;
   if (!hasEvidence) return SyncPeerConnectionStatus.never;

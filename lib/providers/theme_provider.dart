@@ -49,15 +49,10 @@ enum SystemBaseColorSource {
 /// - `seed_color`：自定义种子色（ARGB int）；
 /// - `app_font_family`：全局应用字体族名（null = 系统默认）。
 ///
-/// 旧键 `dynamic_color_enabled` / `monet_color_enabled` 只读一次并迁移：
-/// 莫奈开 → 基础=壁纸；否则基础=自定义；动态取色 → 封面覆盖开关。
+/// 缺键时把新键的默认值物化一次，之后启动都走「已有值」的读取路径。
 class ThemeProvider extends ChangeNotifier {
   /// 设备本地键（字体来自本机已装字体，不跟人走）。
   static const String _appFontKey = 'app_font_family';
-
-  /// 旧版键（迁移后删除）。
-  static const String _legacyDynamicKey = 'dynamic_color_enabled';
-  static const String _legacyMonetKey = 'monet_color_enabled';
 
   ColorScheme _colorScheme = buildColorScheme(
     Color(kSeedColor.defaultValue),
@@ -359,27 +354,16 @@ class ThemeProvider extends ChangeNotifier {
       final modeName = await _settings.read(kThemeMode);
       _themeMode = _themeModeOf(modeName);
 
-      // 新键优先；两个新键都不存在时从旧键一次性迁移并清理旧键。
-      // 旧键不登记（迁移后即废弃），因此这里仍需直接访问 prefs。
+      // 新键缺省时把默认值物化一次；之后启动都走「已有值」的读取路径。
       final prefs = await SharedPreferences.getInstance();
-      final hasBase = prefs.containsKey(kColorBase.name) ||
-          prefs.containsKey(kFollowArtworkEnabled.name);
-      if (!hasBase) {
-        // 旧键显式关闭莫奈 → 保持自定义（尊重老用户的选择）；
-        // 从未配置过（无旧键）→ 吃新默认：壁纸（平台支持时）。
-        _baseColorSource = prefs.getBool(_legacyMonetKey) == false
-            ? ColorBaseSource.custom
-            : _colorBaseOf(kColorBase.defaultValue);
-        _followArtworkEnabled = prefs.getBool(_legacyDynamicKey) ??
-            kFollowArtworkEnabled.defaultValue;
+      final baseName = await _settings.read(kColorBase);
+      _baseColorSource = _colorBaseOf(baseName);
+      _followArtworkEnabled = await _settings.read(kFollowArtworkEnabled);
+      if (!prefs.containsKey(kColorBase.name)) {
         await _settings.write(kColorBase, _baseColorSource.name);
+      }
+      if (!prefs.containsKey(kFollowArtworkEnabled.name)) {
         await _settings.write(kFollowArtworkEnabled, _followArtworkEnabled);
-        await prefs.remove(_legacyMonetKey);
-        await prefs.remove(_legacyDynamicKey);
-      } else {
-        final baseName = await _settings.read(kColorBase);
-        _baseColorSource = _colorBaseOf(baseName);
-        _followArtworkEnabled = await _settings.read(kFollowArtworkEnabled);
       }
 
       _pureBlackEnabled = await _settings.read(kPureBlackEnabled);
@@ -387,9 +371,7 @@ class ThemeProvider extends ChangeNotifier {
       _appFontFamily = prefs.getString(_appFontKey);
       // system 模式保留当前亮度，等宿主回调按平台亮度刷新。
       _applyColorScheme(
-        _schemeForBrightness(
-          _effectiveBrightness(_colorScheme.brightness),
-        ),
+        _schemeForBrightness(_effectiveBrightness(_colorScheme.brightness)),
         forceNotify: true,
       );
     } catch (e) {

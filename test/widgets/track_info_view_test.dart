@@ -25,7 +25,9 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
+
 import '../support/memory_cache_storage.dart';
+
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/track_local_data_service.dart';
@@ -44,8 +46,6 @@ import '../support/fakes.dart';
 
 /// 记录型提示服务：断言 Snackbar 文案与「取消」回调。
 class _RecordingNotificationService extends NotificationService {
-  _RecordingNotificationService() : super(GlobalKey<ScaffoldMessengerState>());
-
   final List<(String, String?, VoidCallback?)> snackbars = [];
 
   @override
@@ -68,9 +68,8 @@ class _FakeLocalDataService extends TrackLocalDataService {
           artworkCache: ArtworkCache(
             cacheService: CacheService(storage: MemoryCacheStorage()),
           ),
-          catalogService: CatalogService(
-            registry: FakeSourceRegistry(const {}),
-          ),
+          catalogService:
+              CatalogService(registry: FakeSourceRegistry(const {})),
         );
 
   final _FakeDownloadService downloads;
@@ -83,8 +82,9 @@ class _FakeLocalDataService extends TrackLocalDataService {
   final Map<String, List<String>> cachedQualitiesByTrack = {};
   final Map<String, int> resolveByTrack = {};
 
-  LocalCacheClearResult nextClear =
-      const LocalCacheClearResult(part: LocalCachePart.audio);
+  LocalCacheClearResult nextClear = const LocalCacheClearResult(
+    part: LocalCachePart.audio,
+  );
   final List<(LocalCachePart, String)> clearCalls = [];
 
   /// load 调用次数与曲目（防抖 / 单飞断言用）。
@@ -116,10 +116,7 @@ class _FakeLocalDataService extends TrackLocalDataService {
   }
 
   @override
-  Future<LocalCacheClearResult> clear(
-    Track track,
-    LocalCachePart part,
-  ) async {
+  Future<LocalCacheClearResult> clear(Track track, LocalCachePart part) async {
     clearCalls.add((part, track.id.uri));
     return nextClear;
   }
@@ -230,12 +227,14 @@ void main() {
     ArtistService? artistService,
     NotificationService? notifications,
   }) async {
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [if (track != null) track],
-      currentIndex: track == null ? -1 : 0,
-      duration: track?.duration ?? Duration.zero,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [if (track != null) track],
+        currentIndex: track == null ? -1 : 0,
+        duration: track?.duration ?? Duration.zero,
+      ),
+    );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -260,9 +259,7 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(
-            body: TrackInfoView(controller: ScrollController()),
-          ),
+          home: Scaffold(body: TrackInfoView(controller: ScrollController())),
         ),
       ),
     );
@@ -306,8 +303,9 @@ void main() {
   });
 
   testWidgets('封面行：跟随歌曲 → 自定义后立即显示已自定义', (tester) async {
-    final tempDir =
-        Directory.systemTemp.createTempSync('molia_track_info_cover_');
+    final tempDir = Directory.systemTemp.createTempSync(
+      'molia_track_info_cover_',
+    );
     final store = CustomCoverStore(
       supportDirectory: () async => tempDir,
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
@@ -337,8 +335,9 @@ void main() {
   });
 
   testWidgets('封面行：默认封面只作远端封面的加载失败回退', (tester) async {
-    final tempDir =
-        Directory.systemTemp.createTempSync('molia_track_info_fallback_');
+    final tempDir = Directory.systemTemp.createTempSync(
+      'molia_track_info_fallback_',
+    );
     final store = CustomCoverStore(
       supportDirectory: () async => tempDir,
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
@@ -365,8 +364,11 @@ void main() {
       ),
     );
     expect(thumbnail.url, remote, reason: '主图是歌曲封面，不是默认封面');
-    expect(thumbnail.fallbackUrl, store.defaultCoverUrl,
-        reason: '远端封面加载失败时落到默认封面');
+    expect(
+      thumbnail.fallbackUrl,
+      store.defaultCoverUrl,
+      reason: '远端封面加载失败时落到默认封面',
+    );
   });
 
   testWidgets('专辑行：payload 有专辑 id 且渠道支持时改为可点，进入专辑页', (tester) async {
@@ -384,7 +386,10 @@ void main() {
         artist: 'Artist a',
         tracks: const [
           Track(
-              id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
+            id: TrackId('kw', 'a'),
+            title: 'Title a',
+            origin: TrackOrigin.lx,
+          ),
         ],
       ),
     );
@@ -413,7 +418,11 @@ void main() {
         capabilities: const SourceCapabilities(search: true),
       ),
     });
-    await pumpView(tester, track: _track(albumId: '123'), registry: registry);
+    await pumpView(
+      tester,
+      track: _track(albumId: '123'),
+      registry: registry,
+    );
 
     expect(find.byKey(const Key('trackInfoAlbumItem')), findsNothing);
     expect(find.text('Album a'), findsOneWidget);
@@ -446,7 +455,10 @@ void main() {
         name: 'Artist a',
         tracks: [
           Track(
-              id: TrackId('kw', 'a'), title: 'Title a', origin: TrackOrigin.lx),
+            id: TrackId('kw', 'a'),
+            title: 'Title a',
+            origin: TrackOrigin.lx,
+          ),
         ],
       ),
     );
@@ -483,61 +495,17 @@ void main() {
     expect(find.text('Artist a'), findsOneWidget);
   });
 
-  testWidgets('歌手行：曲目无歌手 id 时按名字回退解析（历史收藏可跳转）', (tester) async {
+  testWidgets('歌手行：曲目无歌手 id 时保持只读信息行', (tester) async {
     final registry = FakeSourceRegistry({
       'kw': FakeMusicSource(
         'kw',
         capabilities: const SourceCapabilities(search: true, artist: true),
       ),
     });
-    final searched = <String>[];
-    final artistService = ArtistService(
-      fetch: (sourceKey, artistId, {required page, required limit}) async =>
-          const ArtistDetail(id: '9527', name: 'Artist a'),
-      search: (sourceKey, name) async {
-        searched.add(name);
-        return [ArtistSummary(id: '9527', name: name)];
-      },
-    );
-    await pumpView(
-      tester,
-      track: _track(),
-      registry: registry,
-      artistService: artistService,
-    );
+    await pumpView(tester, track: _track(), registry: registry);
 
-    expect(find.byKey(const Key('trackInfoArtistItem')), findsOneWidget);
-    expect(find.text('Artist a · 查看歌手'), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('trackInfoArtistItem')));
-    await tester.pumpAndSettle();
-    expect(searched, ['Artist a'], reason: '无 id 时按歌手名回退检索');
-    expect(find.byType(ArtistPage), findsOneWidget);
-  });
-
-  testWidgets('歌手行：未找到回退歌手时显示「未找到该歌手」', (tester) async {
-    final registry = FakeSourceRegistry({
-      'kw': FakeMusicSource(
-        'kw',
-        capabilities: const SourceCapabilities(search: true, artist: true),
-      ),
-    });
-    final artistService = ArtistService(
-      fetch: (sourceKey, artistId, {required page, required limit}) async =>
-          throw StateError('不应到这里'),
-      search: (sourceKey, name) async => const [],
-    );
-    await pumpView(
-      tester,
-      track: _track(),
-      registry: registry,
-      artistService: artistService,
-    );
-
-    await tester.tap(find.byKey(const Key('trackInfoArtistItem')));
-    await tester.pumpAndSettle();
-    expect(find.text('未找到该歌手'), findsOneWidget);
-    expect(find.text('重试'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoArtistItem')), findsNothing);
+    expect(find.text('Artist a'), findsOneWidget);
   });
 
   testWidgets('歌手行：曲目没有歌手名时整行隐藏', (tester) async {
@@ -577,11 +545,15 @@ void main() {
   });
 
   testWidgets('本地数据行：两档汇总副标题 + 打开本地数据页', (tester) async {
-    localDataService.audioCacheByTrack['kw:a'] =
-        const CacheUsage(bytes: 3 * 1024 * 1024, count: 2);
+    localDataService.audioCacheByTrack['kw:a'] = const CacheUsage(
+      bytes: 3 * 1024 * 1024,
+      count: 2,
+    );
     localDataService.cachedQualitiesByTrack['kw:a'] = const ['320k'];
-    localDataService.lyricsCacheByTrack['kw:a'] =
-        const CacheUsage(bytes: 2048, count: 1);
+    localDataService.lyricsCacheByTrack['kw:a'] = const CacheUsage(
+      bytes: 2048,
+      count: 1,
+    );
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
 
@@ -596,8 +568,10 @@ void main() {
   });
 
   testWidgets('本地数据行：只有歌词缓存时列出分区，不误报音频状态', (tester) async {
-    localDataService.lyricsCacheByTrack['kw:a'] =
-        const CacheUsage(bytes: 2048, count: 1);
+    localDataService.lyricsCacheByTrack['kw:a'] = const CacheUsage(
+      bytes: 2048,
+      count: 1,
+    );
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
 
@@ -605,8 +579,10 @@ void main() {
   });
 
   testWidgets('本地数据页：逐项清理需确认，确认后调用清理并提示', (tester) async {
-    localDataService.audioCacheByTrack['kw:a'] =
-        const CacheUsage(bytes: 3 * 1024 * 1024, count: 2);
+    localDataService.audioCacheByTrack['kw:a'] = const CacheUsage(
+      bytes: 3 * 1024 * 1024,
+      count: 2,
+    );
     localDataService.nextClear = const LocalCacheClearResult(
       part: LocalCachePart.audio,
       freed: CacheUsage(bytes: 3 * 1024 * 1024, count: 2),
@@ -633,10 +609,14 @@ void main() {
   });
 
   testWidgets('切歌：本地数据汇总按新曲目重载', (tester) async {
-    localDataService.audioCacheByTrack['kw:a'] =
-        const CacheUsage(bytes: 1024, count: 1);
-    localDataService.audioCacheByTrack['kw:b'] =
-        const CacheUsage(bytes: 5 * 1024 * 1024, count: 3);
+    localDataService.audioCacheByTrack['kw:a'] = const CacheUsage(
+      bytes: 1024,
+      count: 1,
+    );
+    localDataService.audioCacheByTrack['kw:b'] = const CacheUsage(
+      bytes: 5 * 1024 * 1024,
+      count: 3,
+    );
     await pumpView(tester, track: _track());
     await scrollToBottom(tester);
     expect(find.text('已缓存 · 1 KB · 可离线使用'), findsOneWidget);
@@ -647,12 +627,14 @@ void main() {
       origin: TrackOrigin.lx,
       payload: {'id': 'b'},
     );
-    backend.emit(const BackendSnapshot(
-      current: next,
-      queue: [next],
-      currentIndex: 0,
-      duration: Duration(seconds: 100),
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: next,
+        queue: [next],
+        currentIndex: 0,
+        duration: Duration(seconds: 100),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -714,11 +696,7 @@ void main() {
 
   testWidgets('定时关闭：开启弹 Snackbar 反馈（取消可撤销），播完当前歌曲同样有反馈', (tester) async {
     final notifications = _RecordingNotificationService();
-    await pumpView(
-      tester,
-      track: _track(),
-      notifications: notifications,
-    );
+    await pumpView(tester, track: _track(), notifications: notifications);
 
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
@@ -824,11 +802,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 299));
     expect(localDataService.loadCalls, initialLoads, reason: '防抖窗口内不重载');
     await tester.pump(const Duration(milliseconds: 1));
-    expect(
-      localDataService.loadCalls,
-      initialLoads + 1,
-      reason: '窗口结束只补一次',
-    );
+    expect(localDataService.loadCalls, initialLoads + 1, reason: '窗口结束只补一次');
     await tester.pump(const Duration(milliseconds: 300));
     expect(localDataService.loadCalls, initialLoads + 1, reason: '不重复重载');
 
@@ -842,27 +816,21 @@ void main() {
       origin: TrackOrigin.lx,
       payload: {'id': 'b'},
     );
-    backend.emit(const BackendSnapshot(
-      current: next,
-      queue: [next],
-      currentIndex: 0,
-      duration: Duration(seconds: 100),
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: next,
+        queue: [next],
+        currentIndex: 0,
+        duration: Duration(seconds: 100),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
-    expect(
-      localDataService.loadCalls,
-      initialLoads + 2,
-      reason: '切歌立即重载',
-    );
+    expect(localDataService.loadCalls, initialLoads + 2, reason: '切歌立即重载');
     expect(localDataService.loadedTracks.last, const TrackId('kw', 'b'));
 
     await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      localDataService.loadCalls,
-      initialLoads + 2,
-      reason: '切歌已取消防抖重载',
-    );
+    expect(localDataService.loadCalls, initialLoads + 2, reason: '切歌已取消防抖重载');
   });
 
   testWidgets('本地数据加载单飞：进行中再触发只补一次尾随重载（取最新曲目）', (tester) async {
@@ -890,19 +858,17 @@ void main() {
       origin: TrackOrigin.lx,
       payload: {'id': 'b'},
     );
-    backend.emit(const BackendSnapshot(
-      current: next,
-      queue: [next],
-      currentIndex: 0,
-      duration: Duration(seconds: 100),
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: next,
+        queue: [next],
+        currentIndex: 0,
+        duration: Duration(seconds: 100),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      localDataService.loadCalls,
-      initialLoads + 1,
-      reason: '加载中不并发扫描',
-    );
+    expect(localDataService.loadCalls, initialLoads + 1, reason: '加载中不并发扫描');
 
     // 放行后恰好补跑一次，且用的是最新当前曲目。
     localDataService.loadGate = null;
@@ -955,8 +921,10 @@ void main() {
   });
 
   testWidgets('本地数据页：完整缓存命中按「已缓存」呈现，动作是转存', (tester) async {
-    localDataService.audioCacheByTrack['kw:a'] =
-        const CacheUsage(bytes: 3 * 1024 * 1024, count: 1);
+    localDataService.audioCacheByTrack['kw:a'] = const CacheUsage(
+      bytes: 3 * 1024 * 1024,
+      count: 1,
+    );
     localDataService.cachedQualitiesByTrack['kw:a'] = const ['320k'];
     await pumpView(tester, track: _track(), downloads: downloadService);
 

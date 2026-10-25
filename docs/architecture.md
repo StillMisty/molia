@@ -15,7 +15,7 @@
 ┌──────────────┴────────────────────────────────────────────────┐
 │ 应用状态层（lib/providers/*）                                   │
 │   PlaybackProvider（facade 代理）/ SearchProvider /              │
-│   LocalDatabaseProvider（play_contexts）/ ThemeProvider         │
+│   ThemeProvider（取色 / 纯黑 / 字体）                            │
 │   禁止 import main.dart；提示走注入的 UiMessenger                │
 └──────────────▲────────────────────────────────────────────────┘
                │
@@ -120,7 +120,7 @@
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
   应用 / 删除与本地保存 / 清除共用同一个 `PlaybackSessionStore` 与同一条
   `pendingWrite` 队列，不会出现第二个写队列插队或复活已清除的会话。
-  播放副作用的扇出（最后播放 / 播放上下文 / 桌面小组件 / 播放历史 /
+  播放副作用的扇出（最后播放 / 桌面小组件 / 播放历史 /
   预取 / 补封面 / 通知权限）唯一实现在 `lib/services/playback_observer.dart`
   （Playback observer）：直连 facade 快照通道、由组合根挂接，不经 provider 的
   节流通知（避免合并窗口丢中间曲目副作用）；睡眠定时仍属 `PlaybackProvider`。
@@ -323,8 +323,8 @@
   （`lib/providers/ai_dj_history_controller.dart`）独占**当前推荐（active batch）**、
   **历史索引**、按需加载缓存与保留策略，批次与存储形状的转换由 Provider 注入：
   历史存储为索引 + 每批一键（`AiRecommendationStore`，启动只读索引 +
-  active，详情懒加载，20 批 / 400 首 / 30 天、active 不清理），旧单批键首次
-  加载迁移；索引与批次载荷的写序统一为「先写索引、后删载荷」（删除 / 清空 /
+  active，详情懒加载，20 批 / 400 首 / 30 天、active 不清理；旧单批键不再读取、
+  不迁移），索引与批次载荷的写序统一为「先写索引、后删载荷」（删除 / 清空 /
   保留裁剪都一样），孤儿载荷无害；显式「生成推荐 / 换一批」切换 active，
   旧批留在历史；手动补批与
   低水位**静默补歌**只追加队列 + 写历史（`manualFeed` / `autoFeed`），不切换
@@ -483,7 +483,8 @@
   排除回环 / link-local / zone，私网优先排序；过滤判定
   `isRoutablePeerAddress` 与服务 / 传输共用）是地址列表、附近设备探测与探测
   `addrs` 候选的同一口径。
-  资料库 schema（drift，`schemaVersion = 5`）含 `playlists.syncId` / 行级
+  资料库 schema（drift，`schemaVersion = 1`，库文件 `molia_database_v2.sqlite`；
+  旧 `molia_database.sqlite` 保留但不读、不迁移）含 `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
   真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +
   版本列，`originDeviceId` 兼作设备列）；设置同步用「登记哈希」做变化检测，
@@ -615,7 +616,7 @@
   （曾经 SQL / Dart / AI 三份手写，奇数时长上 AI 还差 1ms）；
 - **范围值类型**：`PlayStatisticsRange` + `startOf(now)` / `sinceMs(now)`
   （领域扩展）是范围 → 时间窗口的唯一映射，查询与热力图高亮共用；
-- **曲目内容表**（v5）：`play_events` 只存事件字段 + `trackId`；元数据与载荷
+- **曲目内容表**：`play_events` 只存事件字段 + `trackId`；元数据与载荷
   （gzip BLOB）在 `play_tracks` 每曲一行，写入按「内容时间取新」（旧事件不顶
   新内容），读取（`topTracks` / `dayEvents` / `listEventsForExport` / 同步导出）
   一律 join 补齐；载荷另有字节预算（`maxRetainedPayloadBytes`），超出按最近
@@ -626,7 +627,7 @@
 - **同步存储**：`StatisticsSyncStore`
   （`lib/domain/ports/statistics_sync_store.dart` +
   `lib/data/sync/statistics_sync_store.dart`）以类型化 `StatisticsSyncEvent`
-  出 / 入，拥有导出缓存与廉价指纹、存量事件 `syncKey` 回填、本地下载曲目过滤
+  出 / 入，拥有导出缓存与廉价指纹、本地下载曲目过滤
   与按 `syncKey` 合并；写面 `StatisticsSyncWriter` 负责事件行创建
   （`startEvent`，含 `syncKey` / 来源设备）与收尾取号 / 日志 / 导出缓存维护。
   `StatisticsSyncAdapter` 只做类型化事件 ↔ `SyncRecord` 的映射，
@@ -698,7 +699,7 @@
   `lyrics/` + `.t.lrc` 翻译边车 / `covers/` 路径约定与 sidecar 写入回滚 →
   扩展名推断（B 站 `.m4s` 音频归一为 `.m4a`） → 记录引用文件集，删除 / 失败清理 / 孤儿判定共用）、
   `lib/services/download/download_record_assembler.dart`（记录装配：部分状态 →
-  `DownloadedTrack` 16 字段的唯一装配点，五种形态各一个意图方法）、
+  `DownloadedTrack` 16 字段的唯一装配点，四种形态各一个意图方法）、
   `lib/services/download/download_notification_presenter.dart`（通知 presenter：
   单任务 / 批量 id 分配、批量共享一条「N/N」、500ms 系统频率节流、收尾只收自己
   起过的；端口 / 设置 / 时钟可注入）。命名不再有「测试双胞胎」，测试直接打生产
@@ -716,7 +717,7 @@
 - **Android 公共目录发布**（issue #17）：下载完成后把音频 best-effort 拷进
   MediaStore 的 Downloads 集合（`Download/Molia/`，与桌面同构），用户在文件
   管理器 / 其它播放器里可见。**公共副本是发布副本，不参与播放取链**：应用
-  目录里的 `filePath` 仍是唯一播放源，`publicUri`（schema v4）只用于删除时
+  目录里的 `filePath` 仍是唯一播放源，`publicUri`（drift 列）只用于删除时
   回收副本；API 29+ `insert + openOutputStream`（应用自己创建的行无需存储
   权限，`IS_PENDING` 防半成品可见），< 29 返回 null 不支持；平台 seam
   `DownloadsPublisher`（`lib/data/downloads/downloads_publisher.dart`：
@@ -746,14 +747,13 @@
 - **音频缓存只认完整文件**：`CacheService.audioCacheIndex` /
   `audioUsageForTrack` 排除半成品（`.part` / `.predl`）与 MIME 边车
   （`.mime`）：占用展示、命中探测、「缓存曲目」列表同一口径；半成品单独统计
-  （页内「写入中」）。启动清扫中断残留半成品，旧命名（复合曲目 id 时代的
-  `{sourceKey}_{sourceKey}:{songId}_*`）文件一次性清理（prefs 版本键）；
-  磁盘约定（命名 / 完整判据 / 索引 / 清扫 / 迁移）的唯一实现在
+  （页内「写入中」）。启动清扫中断残留半成品；磁盘约定（命名 / 完整判据 /
+  索引 / 清扫）的唯一实现在
   `lib/services/audio_cache_store.dart`（Audio cache store），`CacheService`
   的同名静态方法是薄委托；缓存文件名写入侧（`SourceTrack.songId`）与读取侧
   （`TrackId.id`）必须同名（回归测试见
   `test/services/track_local_data_service_test.dart`）；
-- **落库**：drift `downloads` 表（schema v5，`filePath` 可空——记录可以只含
+- **落库**：drift `downloads` 表（`filePath` 可空——记录可以只含
   歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
   自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
@@ -765,7 +765,7 @@
   `local:<绝对路径>` 为原音源键（同路径重复导入幂等），`filePath` 指向原文件；
   标签读 `lib/data/downloads/audio_tag_reader.dart`（mp3 ID3v2 / flac Vorbis
   Comment + 时长），其余格式按 `歌手 - 歌名` 文件名兜底。删除导入项只移除
-  记录（原文件保留），补发布 / 旧位置迁移 / 孤儿清理都跳过导入项；
+  记录（原文件保留），补发布 / 孤儿清理都跳过导入项；
 - **标签嵌入**：音频就绪后把标题 / 歌手 / 专辑 / 歌词 / 封面写进文件标签
   （`lib/data/downloads/audio_tag_writer.dart`：自写 MP3 ID3v2.3
   UTF-16+BOM 文本 / USLT / APIC 与 FLAC Vorbis Comment + PICTURE，ffprobe
@@ -810,7 +810,7 @@
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
   进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
   **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
-  孤儿文件回收、旧位置迁移、Android 补发布公共副本）；已下载列表不再单独成页，
+  孤儿文件回收、Android 补发布公共副本）；已下载列表不再单独成页，
   由收藏页「本地歌曲」合集浏览（下载副本 + 导入的本地文件）；
   省流生效（移动数据 + 已开启）时下载前先确认。
 
@@ -820,7 +820,7 @@
 
 - `settings_keys.dart`：登记键总表 —— 键名、默认值、同步类别（跟人走 / 音源 /
   凭证）、存放盒（prefs / secure）的唯一声明处；设备本地键（省流、缓存策略、
-  全局字体、桌面歌词悬浮窗、托盘与关闭行为、AI 待处理批次、播放会话、曲库数据…）
+  全局字体、桌面歌词悬浮窗、托盘与关闭行为、播放会话、曲库数据…）
   不登记，留在各自模块（只有一位消费者，收进来只增加门房面积）。快捷键开关 /
   绑定四键（`kShortcutsEnabled` / `kGlobalShortcutsEnabled` /
   `kShortcutBindings` / `kGlobalShortcutBindings`）按「跟人走」登记，此前漏在

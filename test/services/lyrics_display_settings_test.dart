@@ -5,6 +5,7 @@ import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../support/settings_test_support.dart';
 
 /// 配置模型：默认值 / JSON 往返 / 缺键合并 / 取值夹取 / 非法枚举回落。
@@ -21,7 +22,7 @@ void main() {
     expect(s.pageTranslationEnabled, isTrue);
     expect(s.pageRomaEnabled, isFalse);
     expect(s.offsetMs, 0);
-    // 默认只显示当前行（旧的「仅显示当前行」开关已并入显示行数）。
+    // 默认只显示当前行（单行）。
     expect(s.desktopMaxLines, 1);
     expect(s.desktopFontSize, 22);
     // 默认暂停即整窗隐藏（恢复播放再显示）。
@@ -52,8 +53,9 @@ void main() {
     await source.setDesktopPlayedColor(0xFF00FF00);
     await source.setDesktopShadowColor(0xFF123456);
     await source.setDesktopPlayedColorSource(LyricColorSource.primary);
-    await source
-        .setDesktopUnplayedColorSource(LyricColorSource.onSurfaceVariant);
+    await source.setDesktopUnplayedColorSource(
+      LyricColorSource.onSurfaceVariant,
+    );
     await source.setDesktopShadowColorSource(LyricColorSource.tertiary);
     await source.setDesktopSchemeSource(SurfaceColorSource.artwork);
     await source.setDesktopWidthPercent(80);
@@ -99,7 +101,9 @@ void main() {
     expect(restored.desktopShadowColor, 0xFF123456);
     expect(restored.desktopPlayedColorSource, LyricColorSource.primary);
     expect(
-        restored.desktopUnplayedColorSource, LyricColorSource.onSurfaceVariant);
+      restored.desktopUnplayedColorSource,
+      LyricColorSource.onSurfaceVariant,
+    );
     expect(restored.desktopShadowColorSource, LyricColorSource.tertiary);
     expect(restored.desktopSchemeSource, SurfaceColorSource.artwork);
     expect(restored.desktopWidthPercent, 80);
@@ -143,39 +147,18 @@ void main() {
     expect(s.desktopMaxLines, LyricsDisplaySettings.maxLinesRange.last);
     expect(s.desktopEnabled, isFalse);
     // 旧数据没有 page.* 键：歌词页开关回落默认。
-    expect(s.pageTranslationEnabled,
-        LyricsDisplaySettings.defaultPageTranslationEnabled);
+    expect(
+      s.pageTranslationEnabled,
+      LyricsDisplaySettings.defaultPageTranslationEnabled,
+    );
     expect(s.pageRomaEnabled, LyricsDisplaySettings.defaultPageRomaEnabled);
     // 旧数据没有 desktop.hideOnPause：回落默认（暂停即整窗隐藏）。
     expect(
-        s.desktopHideOnPause, LyricsDisplaySettings.defaultDesktopHideOnPause);
+      s.desktopHideOnPause,
+      LyricsDisplaySettings.defaultDesktopHideOnPause,
+    );
     // 旧数据没有 desktop.scrollMode：回落默认（跟随演唱）。
     expect(s.desktopScrollMode, LyricsDisplaySettings.defaultDesktopScrollMode);
-  });
-
-  test('旧配置兼容：singleLine=true 一次性映射为显示行数 1', () async {
-    SharedPreferences.setMockInitialValues({
-      kLyricsDisplaySettings.name: jsonEncode({
-        'version': 1,
-        'desktop.singleLine': true,
-        'desktop.maxLines': 3,
-      }),
-    });
-    final s = LyricsDisplaySettings(settings: testSettingsRegistry());
-    await s.init();
-    expect(s.desktopMaxLines, 1);
-
-    // singleLine=false 的旧配置保持原显示行数（只改默认、不做其它迁移）。
-    SharedPreferences.setMockInitialValues({
-      kLyricsDisplaySettings.name: jsonEncode({
-        'version': 1,
-        'desktop.singleLine': false,
-        'desktop.maxLines': 3,
-      }),
-    });
-    final kept = LyricsDisplaySettings(settings: testSettingsRegistry());
-    await kept.init();
-    expect(kept.desktopMaxLines, 3);
   });
 
   test('歌词页开关与输出侧开关相互独立', () async {

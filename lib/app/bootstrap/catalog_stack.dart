@@ -12,7 +12,6 @@ import '../../data/catalog/comments_service.dart';
 import '../../data/catalog/source_registry_impl.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_registry.dart';
-import '../../domain/models/catalog.dart' show SearchQuery;
 import '../../domain/ports/source_registry.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/language_service.dart';
@@ -40,12 +39,8 @@ CatalogStack buildCatalogStack() {
   final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
   // 全静态服务（语言 / 品牌名 / 快捷键）：attach 注入按键作用域，模块面
   // 拿不到整表；reload 由组合根在完整注册表上代绑。
-  LanguageService.attachSettings(
-    settingsRegistry.scope([kSelectedLanguage]),
-  );
-  AppBrandingService.attachSettings(
-    settingsRegistry.scope([kAppDisplayTitle]),
-  );
+  LanguageService.attachSettings(settingsRegistry.scope([kSelectedLanguage]));
+  AppBrandingService.attachSettings(settingsRegistry.scope([kAppDisplayTitle]));
   // 快捷键：attach 顺带触发一次异步载入；四个键任一被远端同步改写都整表重读
   // （reload 幂等，重复绑定同一钩子只执行一次）。
   final shortcutSettingsScope = settingsRegistry.scope([
@@ -56,7 +51,9 @@ CatalogStack buildCatalogStack() {
   ]);
   ShortcutSettings.attachSettings(shortcutSettingsScope);
   settingsRegistry.bindReload(
-      kSelectedLanguage, LanguageService.reloadFromPreferences);
+    kSelectedLanguage,
+    LanguageService.reloadFromPreferences,
+  );
   settingsRegistry.bindReload(kAppDisplayTitle, AppBrandingService.load);
   settingsRegistry.bindReload(kShortcutsEnabled, ShortcutSettings.reload);
   settingsRegistry.bindReload(kGlobalShortcutsEnabled, ShortcutSettings.reload);
@@ -93,14 +90,12 @@ CatalogStack buildCatalogStack() {
   // 取数注入 SourceManager.fetchArtist。
   final artistService = ArtistService(
     fetch: (sourceKey, artistId, {required page, required limit}) =>
-        sourceManager.fetchArtist(sourceKey, artistId,
-            page: page, limit: limit),
-    // 历史收藏 / 导入列表没有 raw 歌手 id：按名字回退检索（精确匹配在服务内）。
-    search: (sourceKey, name) async => (await catalogService.searchArtists(
+        sourceManager.fetchArtist(
       sourceKey,
-      SearchQuery(keyword: name, limit: 10),
-    ))
-        .items,
+      artistId,
+      page: page,
+      limit: limit,
+    ),
   );
 
   return (

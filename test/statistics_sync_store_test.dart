@@ -6,11 +6,12 @@ import 'package:molia/data/sync/statistics_sync_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/domain/ports/statistics_sync_store.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
 
-/// 听歌统计同步存储测试：首次导出 / 本地曲目过滤 / 存量键回填 /
+/// 听歌统计同步存储测试：首次导出 / 本地曲目过滤 /
 /// 版本与内容时间分离 / 应用幂等 / 导出缓存。
 void main() {
   late MoliaDatabase db;
@@ -74,8 +75,11 @@ void main() {
     );
     final beforeFinish = await store.syncFingerprint();
     await repository.touchEvent(id, listenedMs: 5000, maxPositionMs: 5000);
-    expect(await store.syncFingerprint(), beforeFinish,
-        reason: '进行中事件不导出，不影响指纹');
+    expect(
+      await store.syncFingerprint(),
+      beforeFinish,
+      reason: '进行中事件不导出，不影响指纹',
+    );
 
     await repository.finishEvent(
       id,
@@ -130,43 +134,11 @@ void main() {
     ]);
     expect(result.applied, 0);
     expect(result.skipped, 1);
-    expect(await tableRows(db, 'play_events'), hasLength(2),
-        reason: '本地事件仍在，但远端 local 记录不落地');
-  });
-
-  test('存量事件（无 syncKey）：内容哈希回填，跨库一致', () async {
-    final dbB = openMemoryDatabase();
-    final storeB = testStatisticsSyncStore(
-      () => dbB,
-      clock: () => clock,
-      deviceId: 'devB',
+    expect(
+      await tableRows(db, 'play_events'),
+      hasLength(2),
+      reason: '本地事件仍在，但远端 local 记录不落地',
     );
-    addTearDown(dbB.close);
-    for (final target in [db, dbB]) {
-      await insertPlayEvent(
-        target,
-        songId: 'legacy',
-        title: 'Legacy',
-        startedAt: 100,
-        endedAt: 200,
-        listenedMs: 100,
-        maxPositionMs: 100,
-        endReason: 'completed',
-      );
-    }
-
-    final a = (await store.syncExportEvents()).single;
-    final b = (await storeB.syncExportEvents()).single;
-    expect(a.syncKey, startsWith('legacy_'));
-    expect(b.syncKey, a.syncKey, reason: '同一事件在任何设备上哈希一致');
-
-    // 回填结果落库，后续导出不再重复计算。
-    final row = await db
-        .customSelect(
-          'SELECT syncKey FROM play_events LIMIT 1',
-        )
-        .getSingle();
-    expect(row.data['syncKey'], a.syncKey);
   });
 
   test('版本与内容时间分离：endedAt 更大但版本更旧的事件不覆盖', () async {

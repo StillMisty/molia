@@ -12,6 +12,7 @@ import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/lx/lx_search_parse.dart';
 import 'package:molia/sources/source_search_result.dart';
 import 'package:molia/sources/source_track.dart';
+
 import 'support/settings_test_support.dart';
 
 /// 使用真实平台响应的快照（test/fixtures/*.json）验证 total 提取。
@@ -178,7 +179,9 @@ void main() {
       final full = parseLxSearchResult(
         'fake',
         List.generate(
-            2, (i) => {'name': 'T$i', 'singer': 'S', 'source': 'fake'}),
+          2,
+          (i) => {'name': 'T$i', 'singer': 'S', 'source': 'fake'},
+        ),
         page: 1,
         limit: 2,
       );
@@ -187,7 +190,7 @@ void main() {
       final partial = parseLxSearchResult(
         'fake',
         [
-          {'name': 'only', 'singer': 'S'}
+          {'name': 'only', 'singer': 'S'},
         ],
         page: 1,
         limit: 2,
@@ -202,7 +205,7 @@ void main() {
         {
           'data': {
             'list': [
-              {'name': 'A', 'artist': 'B'}
+              {'name': 'A', 'artist': 'B'},
             ],
             'total': 50,
           },
@@ -224,20 +227,18 @@ void main() {
   });
 
   group('音源排序', () {
-    test('applySourceOrder: 顺序表优先，未列出的保持原相对顺序追加', () {
-      expect(
-        SourceManager.applySourceOrder(['a', 'b', 'c'], ['c', 'a']),
-        ['c', 'a', 'b'],
-      );
-      expect(
-        SourceManager.applySourceOrder(['a', 'b', 'c'], []),
-        ['a', 'b', 'c'],
-      );
-      expect(
-        SourceManager.applySourceOrder(['a', 'b'], ['x', 'b', 'b']),
-        ['b', 'a'],
-      );
-      expect(SourceManager.applySourceOrder([], ['a']), isEmpty);
+    test('SourceProfiles.applyOrder: 顺序表优先，未列出的保持原相对顺序追加', () {
+      expect(SourceProfiles.applyOrder(['a', 'b', 'c'], ['c', 'a']), [
+        'c',
+        'a',
+        'b',
+      ]);
+      expect(SourceProfiles.applyOrder(['a', 'b', 'c'], []), ['a', 'b', 'c']);
+      expect(SourceProfiles.applyOrder(['a', 'b'], ['x', 'b', 'b']), [
+        'b',
+        'a',
+      ]);
+      expect(SourceProfiles.applyOrder([], ['a']), isEmpty);
     });
 
     test('setSourceOrder 去重并持久化，resetSourceOrder 清空', () async {

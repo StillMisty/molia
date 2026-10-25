@@ -233,7 +233,7 @@ void main() {
     expect(peer.lastError?.code, SyncIssueCode.peerReadFailed,
         reason: '推送成功不能清掉同一轮的拉取失败');
     expect(peer.lastSuccessAt, 0, reason: '拉取失败不算成功接触');
-    expect(peer.lastPushAt, 0, reason: '旧名册会把 lastPushAt 当成功证据，失败轮不推进');
+    expect(peer.lastPushAt, 0, reason: '本轮只带回执，失败轮不推进 lastPushAt');
     expect(peer.lastSeenAt, 7000, reason: '本轮尝试时间仍应刷新');
     expect(
       resolveSyncPeerConnection(
