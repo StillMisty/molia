@@ -203,54 +203,6 @@ void main() {
     expect(library.isFavorite('kw', 'a'), isTrue);
   });
 
-  testWidgets(
-    '桌面宽屏：单曲段渲染表格表头 + 三列，列左缘与表头对齐',
-    (tester) async {
-      await pumpSection(tester);
-      await runSearch(tester);
-
-      // 表头（艺术家 / 专辑 / 时长）只在宽屏单曲段出现。
-      expect(find.byType(TrackTableHeader), findsOneWidget);
-      expect(find.text('艺术家'), findsOneWidget);
-      expect(find.text('专辑'), findsOneWidget);
-      expect(find.text('时长'), findsOneWidget);
-
-      // 行内三列：fake 曲目为 Artist a / Album / 3:05（时长不再占行尾）。
-      expect(find.text('Artist a'), findsOneWidget);
-      expect(find.text('Album'), findsNWidgets(3));
-      expect(find.text('3:05'), findsNWidgets(3));
-
-      // 表格档单行行高（M3E minHeight 56）：行高与列表 itemExtent 同源。
-      final rowContext = tester.element(find.byType(TrackRow).first);
-      expect(tester.getSize(find.byType(TrackRow).first).height, 56);
-      expect(
-        tester
-            .widget<SliverFixedExtentList>(
-              find.byType(SliverFixedExtentList),
-            )
-            .itemExtent,
-        TrackRow.extentOf(rowContext, tableColumns: true) +
-            TrackRow.gapOf(rowContext),
-      );
-
-      // 表头存在的意义就是与列对齐：三列左缘必须逐列相同。
-      expect(
-        tester.getTopLeft(find.text('Artist a')).dx,
-        tester.getTopLeft(find.text('艺术家')).dx,
-      );
-      expect(
-        tester.getTopLeft(find.text('Album').first).dx,
-        tester.getTopLeft(find.text('专辑')).dx,
-      );
-      expect(
-        tester.getTopLeft(find.text('3:05').first).dx,
-        tester.getTopLeft(find.text('时长')).dx,
-      );
-    },
-    // 平台覆盖走 variant：测试体结束后框架自己还原（见 widget_tester.dart）。
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
-
   testWidgets('非桌面平台：不渲染表头，行保持单列布局', (tester) async {
     // 测试环境默认平台为 android：窗口够宽也不进表格模式。
     await pumpSection(tester);

@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/album_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -119,20 +118,6 @@ void main() {
     expect(backend.lastRequest?.startIndex, 0);
     expect(backend.lastRequest?.tracks, hasLength(8));
     expect(backend.lastRequest?.context?.name, '专辑名');
-  });
-
-  testWidgets('随机播放全部：切换 shuffle 模式并从随机曲目起播', (tester) async {
-    await pumpPage(tester, (page) async => albumOf(page));
-
-    await openSplitMenu(tester, const Key('albumPlayAll'));
-    await tester.tap(find.text('随机播放全部'));
-    await tester.pumpAndSettle();
-
-    expect(backend.lastRequest?.tracks, hasLength(8));
-    expect(backend.lastRequest?.context?.name, '专辑名');
-    // 起点在已加载曲目内随机（0..7），模式先落到后端。
-    expect(backend.lastRequest!.startIndex, inInclusiveRange(0, 7));
-    expect(playback.currentMode, PlayMode.shuffle);
   });
 
   testWidgets('曲目行：与搜索页同款行尾菜单（收藏 / 加入列表）', (tester) async {

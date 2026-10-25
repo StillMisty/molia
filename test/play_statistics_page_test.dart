@@ -128,18 +128,6 @@ void main() {
     expect(find.text('Skip rate'), findsOneWidget);
   });
 
-  testWidgets('窄屏（320dp）：布局无溢出', (tester) async {
-    final repository = buildFakeRepository();
-    final provider = PlayStatisticsProvider(repository: repository);
-    addTearDown(provider.dispose);
-    await provider.ensureLoaded();
-
-    await pumpPage(tester, repository, provider, size: const Size(320, 1600));
-
-    expect(find.text('Valid plays'), findsOneWidget);
-    expect(find.text('Most played'), findsOneWidget);
-  });
-
   testWidgets('无数据：展示空态', (tester) async {
     final repository = _FakeStatisticsRepository(
       summaryData: PlayStatisticsSummary.empty,

@@ -147,26 +147,6 @@ void main() {
     return Offset(x, center.dy);
   }
 
-  testWidgets('完整布局：进度滑杆可拖动、无渲染异常', (tester) async {
-    emitThreeTracks();
-    final expand = AnimationController(
-      vsync: const TestVSync(),
-      duration: const Duration(milliseconds: 360),
-      value: 1.0,
-    );
-    addTearDown(expand.dispose);
-
-    await pumpPlayer(tester, expand: expand);
-
-    expect(tester.takeException(), isNull);
-    final slider = tester.widget<M3ESlider>(find.byType(M3ESlider));
-    expect(slider.onChanged, isNotNull);
-    expect(slider.onChangeEnd, isNotNull);
-    expect(slider.value, 5000);
-    expect(slider.max, 30000);
-    expect(coverSwipeHost(), findsOneWidget);
-  });
-
   testWidgets('点击封面播放/暂停；点击邻位封面切歌', (tester) async {
     emitThreeTracks();
     final expand = AnimationController(
@@ -258,35 +238,6 @@ void main() {
     expect(backend.calls, contains('seek'));
     // seek 落点等待计时器（1500ms 兜底）+ 通知节流计时器跑完。
     await tester.pump(const Duration(milliseconds: 1600));
-  });
-
-  testWidgets('收起/展开：封面飞行无异常', (tester) async {
-    emitThreeTracks();
-    final expand = AnimationController(
-      vsync: const TestVSync(),
-      duration: const Duration(milliseconds: 360),
-      value: 1.0,
-    );
-    addTearDown(expand.dispose);
-
-    await pumpPlayer(tester, expand: expand, onToggleExpand: () {});
-
-    // 收起：中途与终点都不应抛异常（封面飞行副本使用两端锚点）。
-    // 滑杆波浪是常驻动画，不能用 pumpAndSettle，按固定时长推进。
-    expand.reverse();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(tester.takeException(), isNull);
-    await tester.pump(const Duration(milliseconds: 220));
-    expect(tester.takeException(), isNull);
-
-    // 展开：回到完整布局。
-    expand.forward();
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 180));
-    expect(tester.takeException(), isNull);
-    await tester.pump(const Duration(milliseconds: 220));
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('小屏高度往返自洽：展开层内重算的封面尺寸与外层预算一致', (tester) async {

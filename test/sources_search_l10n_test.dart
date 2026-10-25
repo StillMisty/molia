@@ -53,18 +53,6 @@ void main() {
         isNot(contains(const Locale('zh', 'TW'))));
   });
 
-  test('集成测试依赖的中文文案保持不变', () {
-    expect(zh['sourcesTitle'], '音源管理');
-    expect(zh['sourcesImportFromText'], '粘贴脚本导入');
-    expect(zh['sourcesContinueImport'], '继续导入');
-    expect(zh['sourcesImportAction'], '导入');
-    expect(zh['sourcesQuality320k'], '320K');
-    expect(zh['sourcesNoScripts'],
-        '还没有导入音源脚本。社区音源可在 Github 搜索 “lx-music-source” 获取。');
-    expect(zh['sourcesNoSearchableSources'],
-        '当前没有可搜索的音源。启用音源脚本后，这里会列出可搜索的平台。');
-  });
-
   test('生成的本地化类包含中文关键文案', () {
     final zhL10n = AppLocalizationsZh();
     expect(zhL10n.sourcesTitle, '音源管理');

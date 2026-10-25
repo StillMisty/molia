@@ -164,8 +164,8 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 ## 5. 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿（新增 `test/services/app_presence_test.dart`、
-  `test/managers/app_memory_manager_test.dart`、`test/app/tray_dormant_gate_test.dart`，
+- `flutter test --no-pub`：全绿（新增 `test/services/audio_services_test.dart`、
+  `test/managers/app_memory_manager_test.dart`、`test/app/app_wiring_test.dart`，
   以及 observer / ArtworkThemeSync 的后台门控用例）；
 - `tool/agent/test.sh linux`：集成用例全绿（含窗口 chrome hide → show 往返）；
 - 真实应用托盘往返：见 §4.3 的三行 `molia.memory` 与同刻断言；

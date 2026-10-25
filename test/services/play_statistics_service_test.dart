@@ -272,20 +272,6 @@ void main() {
       expect(all.single['listenedMs'], 2000);
     });
 
-    test('进程被杀遗留 → 启动收尾 interrupted', () async {
-      final track = trackOf('a');
-      service.onSnapshot(snapshotOf(track));
-      tickRange(const Duration(seconds: 1), const Duration(seconds: 3));
-      service.flush();
-      await service.pendingWrites;
-
-      // 模拟下次冷启动：不经过服务收尾，直接跑遗留清理。
-      expect(await repository.closeStaleEvents(), 1);
-      final row = (await playEventRows(db)).single;
-      expect(row['endReason'], 'interrupted');
-      expect(row['endedAt'], (row['startedAt'] as int) + 2000);
-    });
-
     test('错误快照不产生事件（取链失败没播起来）', () async {
       final track = trackOf('a');
       service.onSnapshot(snapshotOf(

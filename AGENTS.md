@@ -76,6 +76,9 @@ sources/playback。
   `textTheme` 与 `w600/w800/w900` 由 `test/architecture/m3e_typography_test.dart` 拦截；
   顶栏 / 弹层 / 排序的 M3E 口径见 `docs/architecture.md` §6；
 - 每次改动至少 `flutter analyze --no-pub` + `flutter test --no-pub`（迭代可只跑改动范围，提交前跑全量）；
+- 测试按模块聚合：小用例并入同模块 `*_test.dart`，`*_cases.dart` 只作为聚合套件的用例库
+  （不被 `flutter test` 单独发现）。每个测试文件都有独立的 engine/kernel 装载开销（~1s，
+  与文件大小无关），拆得越碎全量越慢；
 - Git：功能分支（主分支 `main`），提交 `type(scope): 描述`；密钥不进仓库。
 
 ## 领域文档与技能

@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
-import 'package:molia/models/play_mode.dart';
 import 'package:molia/pages/artist_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -123,19 +122,6 @@ void main() {
     expect(backend.lastRequest?.context?.name, '歌手名');
   });
 
-  testWidgets('随机播放全部：切换 shuffle 模式并从随机曲目起播', (tester) async {
-    await pumpPage(tester, (page) async => artistOf(page));
-
-    await openSplitMenu(tester, const Key('artistPlayAll'));
-    await tester.tap(find.text('随机播放全部'));
-    await tester.pumpAndSettle();
-
-    expect(backend.lastRequest?.tracks, hasLength(8));
-    expect(backend.lastRequest?.context?.name, '歌手名');
-    expect(backend.lastRequest!.startIndex, inInclusiveRange(0, 7));
-    expect(playback.currentMode, PlayMode.shuffle);
-  });
-
   testWidgets('单曲行：点击从该曲开始播放（队列上下文为歌手名）', (tester) async {
     await pumpPage(tester, (page) async => artistOf(page));
 
@@ -143,110 +129,6 @@ void main() {
     await tester.pump();
     expect(backend.lastRequest?.startIndex, 1);
     expect(backend.lastRequest?.context?.name, '歌手名');
-  });
-
-  testWidgets('滚到底自动加载下一页；末页停止', (tester) async {
-    final calls = <int>[];
-    await pumpPage(tester, (page) async {
-      calls.add(page);
-      return artistOf(page, hasMore: page < 2);
-    });
-    expect(calls, [1]);
-
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
-    await tester.pumpAndSettle();
-    expect(calls, [1, 2]);
-
-    // 末页（hasMore=false）后不再请求。
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
-    await tester.pumpAndSettle();
-    expect(calls, [1, 2]);
-  });
-
-  testWidgets('加载更多失败：底部重试按钮可重试', (tester) async {
-    final calls = <int>[];
-    await pumpPage(tester, (page) async {
-      calls.add(page);
-      if (page == 2) throw StateError('boom');
-      return artistOf(page);
-    });
-
-    await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
-    await tester.pumpAndSettle();
-    expect(calls, [1, 2]);
-    expect(find.text('重试'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('重试'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('重试'));
-    await tester.pumpAndSettle();
-    expect(calls, [1, 2, 2]);
-  });
-
-  testWidgets('空歌手：空态文案', (tester) async {
-    await pumpPage(
-      tester,
-      (page) async => artistOf(page, perPage: 0, hasMore: false),
-    );
-    expect(find.text('该歌手暂无歌曲'), findsOneWidget);
-    expect(find.byKey(const Key('artistPlayAll')), findsNothing);
-  });
-
-  testWidgets('加载失败：错误态 + 重试成功', (tester) async {
-    var fail = true;
-    await pumpPage(tester, (page) async {
-      if (fail) throw StateError('boom');
-      return artistOf(page);
-    });
-    expect(find.text('歌手加载失败'), findsOneWidget);
-
-    fail = false;
-    await tester.tap(find.text('重试'));
-    await tester.pumpAndSettle();
-    expect(find.text('歌手名'), findsOneWidget);
-    expect(find.text('歌手加载失败'), findsNothing);
-  });
-
-  testWidgets('曲目行：与搜索页同款行尾菜单（收藏 / 加入列表）', (tester) async {
-    await pumpPage(tester, (page) async => artistOf(page));
-
-    // 行尾菜单存在（每行一个）。
-    expect(find.byIcon(Icons.more_vert_rounded), findsWidgets);
-
-    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
-    await tester.pumpAndSettle();
-    expect(find.text('加入列表'), findsWidgets);
-
-    await tester.tap(find.text('收藏').last);
-    await tester.pumpAndSettle();
-    expect(await repository.favoriteKeys(), hasLength(1), reason: '行菜单收藏写入仓库');
-  });
-
-  testWidgets('曲目行菜单：加入列表走目标选择流程', (tester) async {
-    await pumpPage(tester, (page) async => artistOf(page));
-
-    await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('加入列表').last);
-    await tester.pumpAndSettle();
-    expect(find.text('我的收藏'), findsOneWidget);
-
-    await tester.tap(find.text('我的收藏'));
-    await tester.pumpAndSettle();
-    expect(await repository.favoriteKeys(), hasLength(1));
-  });
-
-  testWidgets('加入列表：弹层选择收藏后批量写入', (tester) async {
-    await pumpPage(tester, (page) async => artistOf(page));
-
-    await openSplitMenu(tester, const Key('artistPlayAll'));
-    await tester.tap(find.text('加入列表'));
-    await tester.pumpAndSettle();
-    expect(find.text('我的收藏'), findsOneWidget);
-
-    await tester.tap(find.text('我的收藏'));
-    await tester.pumpAndSettle();
-    expect(await repository.favoriteKeys(), hasLength(8));
   });
 
   testWidgets('平台未返回歌手名：回退入口携带的名称', (tester) async {

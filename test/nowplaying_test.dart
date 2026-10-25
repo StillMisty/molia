@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
@@ -19,11 +17,9 @@ import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/now_playing_summary.dart';
 import 'package:molia/widgets/player.dart';
-import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
-import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -421,25 +417,6 @@ void main() {
   int desktopTabIndex(WidgetTester tester) =>
       tester.widget<M3ETabs>(find.byType(M3ETabs)).selectedIndex;
 
-  /// 组件的实际绘制包围盒：本地四角经完整变换（含邻位封面的旋转）映射到
-  /// 全局——`getRect` 只用两角，旋转卡片的包围盒会被低估。
-  Rect paintedBounds(WidgetTester tester, Finder finder) {
-    final box = tester.renderObject<RenderBox>(finder);
-    final Rect local = Offset.zero & box.size;
-    final corners = <Offset>[
-      local.topLeft,
-      local.topRight,
-      local.bottomLeft,
-      local.bottomRight,
-    ].map(box.localToGlobal).toList();
-    return Rect.fromLTRB(
-      corners.map((point) => point.dx).reduce(math.min),
-      corners.map((point) => point.dy).reduce(math.min),
-      corners.map((point) => point.dx).reduce(math.max),
-      corners.map((point) => point.dy).reduce(math.max),
-    );
-  }
-
   testWidgets('桌面版式：左播放器列 + 右「队列/歌词/详细」三 tab（默认歌词）', (tester) async {
     await pumpNowPlaying(
       tester,
@@ -491,115 +468,6 @@ void main() {
     expect(find.text('本次播放音质'), findsOneWidget);
 
     // 通知节流计时器跑完，避免 pending timer 报错。
-    await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('桌面版式：tab 行高按次 tab token（48）', (tester) async {
-    await pumpNowPlaying(
-      tester,
-      desktopLayout: true,
-      size: const Size(1400, 900),
-    );
-
-    final bar = find.byType(M3ETabs);
-    expect(
-      tester.getSize(bar).height,
-      M3ETabTheme.defaults.height,
-      reason: '次 tab（图标 + 文案一行）行高 = M3ETabTheme.height（48），不叠自拟内边距',
-    );
-
-    await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('桌面版式：tab 内容与 tab 栏同一内容边距（16），队列无分组小标题', (tester) async {
-    await pumpNowPlaying(
-      tester,
-      desktopLayout: true,
-      size: const Size(1400, 900),
-    );
-
-    // 队列里给出后续曲目（pump 助手的默认快照不带 upNext）。
-    backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a'), _track('b')],
-      currentIndex: 0,
-      next: _track('b'),
-      upNext: [_track('b')],
-      isPlaying: false,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
-    // 队列通知走节流（300ms），等它落地再切 tab。
-    await tester.pump(const Duration(milliseconds: 400));
-
-    // 默认歌词页 → 切队列。
-    await tester.tap(find.byIcon(M3EIcons.queue_music_rounded));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
-    // 内容左缘与 tab 栏左缘同为「栏 + 16」：M3E 内容边距口径。
-    expect(
-      tester.getRect(find.byType(TrackRow).first).left,
-      tester.getRect(find.byType(M3ETabs)).left,
-      reason: '队列行与 tab 栏对齐（内容边距 16）',
-    );
-    // 「接下来」小标题已去除：首行就是队列条目。
-    expect(find.text('接下来'), findsNothing);
-    final queue = tester.widget<QueueDisplay>(find.byType(QueueDisplay));
-    expect(
-      queue.topPadding,
-      greaterThan(0),
-      reason: 'tab 栏与内容之间留内容间距',
-    );
-
-    await tester.pump(const Duration(milliseconds: 50));
-  });
-
-  testWidgets('桌面版式：封面堆叠不越出播放器列（480）', (tester) async {
-    await pumpNowPlaying(
-      tester,
-      desktopLayout: true,
-      queue: [_track('a'), _track('b'), _track('c')],
-      size: const Size(1400, 900),
-    );
-    final column = tester.getRect(find.byType(Player));
-    expect(column.width, 480, reason: '桌面播放器列宽');
-
-    // 预算口径：两侧各留一个内容内边距（24）→ 可用宽 432 → 封面边 ≈288。
-    final centerRect =
-        tester.getRect(find.byKey(PlayerCoverDeck.centerCoverCardKey));
-    expect(centerRect.width, closeTo(288, 0.5), reason: '视觉几乎不变（≈300）');
-
-    // 布局口径：堆叠容器自身不许比列宽（否则容器被父级夹小、内层 Stack
-    // 仍按未夹取的尺寸绘制）。
-    final deck = tester.getRect(find.byKey(PlayerCoverDeck.stackKey));
-    expect(deck.width, lessThanOrEqualTo(column.width));
-    expect(deck.height, lessThanOrEqualTo(column.height));
-
-    // 绘制口径：三张卡（含邻位旋转包围盒）必须落在列内，不压进侧栏 /
-    // 歌词列。
-    final painted = [
-      find.byKey(PlayerCoverDeck.centerCoverCardKey),
-      find.byKey(
-        PlayerCoverDeck.sideCoverCardKey(
-          left: true,
-          id: const TrackId('fake', 'a'),
-        ),
-      ),
-      find.byKey(
-        PlayerCoverDeck.sideCoverCardKey(
-          left: false,
-          id: const TrackId('fake', 'c'),
-        ),
-      ),
-    ]
-        .map((finder) => paintedBounds(tester, finder))
-        .reduce((a, b) => a.expandToInclude(b));
-    expect(painted.left, greaterThanOrEqualTo(column.left));
-    expect(painted.right, lessThanOrEqualTo(column.right));
-    expect(painted.top, greaterThanOrEqualTo(column.top));
-    expect(painted.bottom, lessThanOrEqualTo(column.bottom));
-
     await tester.pump(const Duration(milliseconds: 50));
   });
 

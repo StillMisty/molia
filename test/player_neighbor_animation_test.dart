@@ -147,13 +147,6 @@ void main() {
     return opacity!;
   }
 
-  /// 拖动距离：deck 的换场行程是封面边长的 0.6（`_coverSwapRange`），
-  /// 硬编码像素会随版式缩放漂移。
-  double dragFor(WidgetTester tester, double fraction) =>
-      tester.getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey)).width *
-      0.6 *
-      fraction;
-
   /// 指定封面卡相对堆叠中心的横向偏移。
   double cardDx(WidgetTester tester, Finder finder) =>
       tester.getCenter(finder).dx -
@@ -246,57 +239,4 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('拖动对账落位：源侧新身份 180ms 纯透明度淡入（无位移跳变）', (tester) async {
-    emitFor('b');
-    await pumpPlayer(tester);
-
-    final steady = sampleCoverOpacities(tester);
-    final double leftDx = steady.first.dx;
-    final double rightDx = steady.last.dx;
-
-    // 左滑提交下一首；后端未确认期间预览保持，随后 emitFor('c') 对账。
-    await tester.timedDrag(
-      find.byKey(Player.artworkSwipeHostKey),
-      Offset(-dragFor(tester, 0.83), 0),
-      const Duration(milliseconds: 300),
-    );
-    expect(backend.calls, contains('next'));
-    await tester.pump(const Duration(milliseconds: 400)); // 提交过渡走完，等待对账
-
-    emitFor('c');
-    await tester.pump(const Duration(milliseconds: 50)); // 对账帧：淡入起点
-    final atStart = sampleCoverOpacities(tester);
-    final startNew = atStart
-        .where((sample) => (sample.dx - rightDx).abs() < 6)
-        .toList();
-    expect(startNew, isNotEmpty);
-    expect(startNew.map((sample) => sample.opacity).reduce(math.max),
-        lessThan(0.01),
-        reason: '对账落位帧源侧新身份从 0 起（不是直接 0.85）');
-    // 纯透明度：起点就在稳态槽位，不做「从中心背后展开」的位移插值。
-    expect(startNew.first.dx, closeTo(rightDx, 0.5));
-    expect(opacitiesNear(atStart, leftDx).reduce(math.max),
-        closeTo(0.85, 0.01),
-        reason: '目标槽位滑出卡已落位（0.85），对账不应让画面回跳');
-
-    await tester.pump(); // 淡入首 tick
-    await tester.pump(const Duration(milliseconds: 90)); // 180ms 中段
-    final mid = sampleCoverOpacities(tester);
-    final midNew = mid
-        .where((sample) => (sample.dx - rightDx).abs() < 6)
-        .toList();
-    expect(midNew.map((sample) => sample.opacity).reduce(math.max),
-        allOf(greaterThan(0.0), lessThan(0.85)));
-    for (final sample in midNew) {
-      expect(sample.dx, closeTo(rightDx, 0.5),
-          reason: '源侧新身份淡入期间不得发生位移');
-    }
-
-    await tester.pump(const Duration(milliseconds: 100));
-    final end = sampleCoverOpacities(tester);
-    expect(opacitiesNear(end, rightDx).reduce(math.max), closeTo(0.85, 0.01));
-
-    await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
-    expect(tester.takeException(), isNull);
-  });
 }

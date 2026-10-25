@@ -47,7 +47,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     tempDir = Directory.systemTemp.createTempSync('molia_bootstrap_');
     // path_provider 通道替身：drift 库 / 下载存储 / 缓存维护在测试里落到
-    // 临时目录（与 test/update/update_downloader_test.dart 同一做法），
+    // 临时目录（与 test/update/update_test.dart 同一做法），
     // 组合根的 `unawaited` 启动维护因此与生产同路径执行。
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(

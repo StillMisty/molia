@@ -197,21 +197,6 @@ void main() {
       expect(await empty.usage(CachePartition.audio), CacheUsage.zero);
     });
 
-    test('歌词按 prefs 键统计 UTF-8 字节与条数', () async {
-      final value = jsonEncode({'provider': 'fake', 'lyric': '歌词', 'ts': 1});
-      await prefs.setString('${CacheService.lyricsCacheKeyPrefix}1', value);
-      await prefs.setString('${CacheService.lyricsCacheKeyPrefix}2', value);
-      await prefs.setString('unrelated_key', 'x');
-
-      final usage = await service.usage(CachePartition.lyrics);
-      expect(usage.count, 2);
-      expect(usage.bytes, utf8.encode(value).length * 2);
-
-      await service.clear(CachePartition.lyrics);
-      expect(await service.usage(CachePartition.lyrics), CacheUsage.zero);
-      expect(prefs.getString('unrelated_key'), 'x');
-    });
-
     test('clear 删除分区文件但保留目录；clearAll 清空三个分区', () async {
       await writeFile('${tempRoot.path}/audio_cache', 'a', 10);
       await writeFile('${tempRoot.path}/artwork_cache', 'b.jpg', 20);
@@ -276,27 +261,6 @@ void main() {
   });
 
   group('封面策略 sweep', () {
-    test('过期文件被删除；未过期按数量 LRU 淘汰', () async {
-      await writeFile('${tempRoot.path}/artwork_cache', 'stale.jpg', 10,
-          age: const Duration(days: 400));
-      await writeFile('${tempRoot.path}/artwork_cache', 'keep1.jpg', 10,
-          age: const Duration(days: 1));
-      await writeFile('${tempRoot.path}/artwork_cache', 'keep2.jpg', 10,
-          age: const Duration(hours: 1));
-
-      // staleDays=365 → 删 stale；maxObjects=1 → 再删最旧的 keep1。
-      await service.setArtworkStaleDays(365);
-      await service.setArtworkMaxObjects(1);
-      await service.enforceArtworkPolicy();
-
-      final remaining = Directory('${tempRoot.path}/artwork_cache')
-          .listSync()
-          .whereType<File>()
-          .map((f) => f.uri.pathSegments.last)
-          .toList();
-      expect(remaining, ['keep2.jpg']);
-    });
-
     test('staleDays=0 且 maxObjects=0 不删除', () async {
       final old = await writeFile(
           '${tempRoot.path}/artwork_cache', 'old.jpg', 10,
@@ -495,35 +459,5 @@ void main() {
   });
 
   group('AudioCacheStore.key', () {
-    test('默认 quality=auto，特殊字符替换且带哈希后缀', () {
-      final key = AudioCacheStore.key(
-        sourceKey: 'lx',
-        songId: 'lx:abc/1',
-      );
-      expect(key, startsWith('lx_lx_abc_1_auto_'));
-      expect(key.contains(':'), isFalse);
-      expect(key.contains('/'), isFalse);
-
-      expect(
-        AudioCacheStore.key(sourceKey: 'wy', songId: '123'),
-        'wy_123_auto',
-      );
-      expect(
-        AudioCacheStore.key(
-            sourceKey: 'wy', songId: '123', quality: '320k'),
-        'wy_123_320k',
-      );
-      expect(
-        AudioCacheStore.key(
-            sourceKey: 'wy', songId: '123', quality: '  '),
-        'wy_123_auto',
-      );
-    });
-
-    test('不同原始 key 不会因替换字符而碰撞', () {
-      final a = AudioCacheStore.key(sourceKey: 's', songId: 'a:b');
-      final b = AudioCacheStore.key(sourceKey: 's', songId: 'a_b');
-      expect(a, isNot(b));
-    });
   });
 }

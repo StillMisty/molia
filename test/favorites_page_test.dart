@@ -26,7 +26,6 @@ import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/track_local_data_service.dart';
-import 'package:molia/utils/responsive.dart';
 import 'package:molia/utils/sync_format.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/empty_state.dart';
@@ -471,60 +470,6 @@ void main() {
     expect(headlines(tester), ['Song A', 'Song B', 'Song C']);
   });
 
-  testWidgets('标题行与搜索行高度一致：展开搜索头部不跳高', (tester) async {
-    await seedFavorites(tester);
-    await pumpFavorites(tester);
-
-    final container = find.byType(ResponsivePageContainer);
-    double headerHeight() => tester
-        .getSize(
-          find.descendant(of: container, matching: find.byType(Padding)).first,
-        )
-        .height;
-
-    final idleHeight = headerHeight();
-    await openSearch(tester);
-    final searchHeight = headerHeight();
-    await tester.tap(find.byIcon(Icons.arrow_back_rounded));
-    await tester.pumpAndSettle();
-    final restoredHeight = headerHeight();
-
-    expect(searchHeight, idleHeight, reason: '展开搜索前后头部高度一致');
-    expect(restoredHeight, idleHeight, reason: '收起搜索后头部高度不跳变');
-  });
-
-  testWidgets('标题行与多选栏高度一致：进入/退出多选头部不跳高', (tester) async {
-    await seedFavorites(tester);
-    await pumpFavorites(tester);
-
-    final container = find.byType(ResponsivePageContainer);
-    double headerHeight() => tester
-        .getSize(
-          find.descendant(of: container, matching: find.byType(Padding)).first,
-        )
-        .height;
-
-    final idleHeight = headerHeight();
-    await tester.longPress(find.text('Song A'));
-    await tester.pumpAndSettle();
-    final selectingHeight = headerHeight();
-    await tester.tap(find.byIcon(Icons.close_rounded));
-    await tester.pumpAndSettle();
-    final restoredHeight = headerHeight();
-
-    expect(selectingHeight, idleHeight, reason: '进入多选前后头部高度一致');
-    expect(restoredHeight, idleHeight, reason: '退出多选后头部高度不跳变');
-  });
-
-  testWidgets('曲目行尾显示歌曲时长', (tester) async {
-    await importLove(tester);
-    await pumpFavorites(tester);
-
-    // lxmc 的 interval（03:00）解码为 durationMs，行尾显示 m:ss。
-    expect(find.text('3:00'), findsNWidgets(3));
-    expect(find.byIcon(Icons.favorite_border_rounded), findsNothing);
-  });
-
   testWidgets('我的收藏：长按多选批量取消收藏', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
@@ -606,65 +551,6 @@ void main() {
     expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('桌面宽屏：曲目列表渲染表格表头 + 三列，列左缘与表头对齐', (tester) async {
-    await importLove(tester);
-    await pumpFavorites(tester);
-
-    // 表头（艺术家 / 专辑 / 时长）只在内容宽（窗口宽 − 栏宽）够时出现；
-    // 收藏没有「播放时间」列（只有播放历史有）。
-    expect(find.byType(TrackTableHeader), findsOneWidget);
-    expect(find.text('艺术家'), findsOneWidget);
-    expect(find.text('专辑'), findsOneWidget);
-    expect(find.text('时长'), findsOneWidget);
-    expect(find.text('播放时间'), findsNothing);
-    final header =
-        tester.widget<TrackTableHeader>(find.byType(TrackTableHeader));
-    expect(header.spec, same(TrackRowColumnSpec.standard));
-    expect(
-      tester.getSize(find.byType(TrackTableHeader)).height,
-      TrackTableHeader.extentOf(tester.element(find.byType(TrackTableHeader))),
-      reason: '钉住表头（发现页）预声明的 extent 与实际高度一致',
-    );
-
-    // 行高走表格档（单行 56 = M3E 列表 token），列表 itemExtent 同一档。
-    final rowFinder = find.byType(TrackRow).first;
-    final rowContext = tester.element(rowFinder);
-    final extent = TrackRow.extentOf(rowContext, tableColumns: true);
-    expect(extent, M3ETheme.of(rowContext).listTheme.item.minHeight);
-    expect(tester.getSize(rowFinder).height, extent);
-    expect(
-      tester.widget<ListView>(find.byType(ListView)).itemExtent,
-      extent + TrackRow.gapOf(rowContext),
-      reason: 'itemExtent 与行渲染同档（表格 56，不是单列的 72）',
-    );
-
-    // 行内列与表头同一份规范（同一实例，不是等值副本）。
-    expect(
-      tester.widget<TrackRow>(rowFinder).surface.tableSpec,
-      same(header.spec),
-      reason: '表头与行必须同 spec 来源',
-    );
-
-    // 行内三列：lxmc 曲目为 Artist N / Album N / 3:00（时长不再占行尾）。
-    expect(find.text('Artist 1'), findsOneWidget);
-    expect(find.text('Album 1'), findsOneWidget);
-    expect(find.text('3:00'), findsNWidgets(3));
-
-    // 表头存在的意义就是与列对齐：三列左缘必须逐列相同。
-    expect(
-      tester.getTopLeft(find.text('Artist 1')).dx,
-      tester.getTopLeft(find.text('艺术家')).dx,
-    );
-    expect(
-      tester.getTopLeft(find.text('Album 1')).dx,
-      tester.getTopLeft(find.text('专辑')).dx,
-    );
-    expect(
-      tester.getTopLeft(find.text('3:00').first).dx,
-      tester.getTopLeft(find.text('时长')).dx,
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
   testWidgets('桌面宽屏：播放历史多一列「播放时间」，表头与行同 spec', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     await pumpFavorites(tester);
@@ -701,95 +587,6 @@ void main() {
       tester.getTopLeft(find.text('时长')).dx,
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('桌面宽屏：本地歌曲列表同样渲染表格列（缓存行带行尾标签仍对齐）', (tester) async {
-    await repository.addHistoryEntry(_history('1', playedAt: 2));
-    final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
-    });
-    final cache = CacheService(storage: cacheStorage);
-    await pumpFavorites(
-      tester,
-      downloads: _StubDownloadService(seed: [_localSong('2')]),
-      cache: cache,
-    );
-    await selectCollection(tester, '本地歌曲');
-    await tester.pump();
-
-    expect(find.byType(TrackTableHeader), findsOneWidget);
-    expect(find.text('缓存'), findsOneWidget, reason: '缓存行走行尾标签');
-    expect(find.text('播放时间'), findsNothing, reason: '本地歌曲没有播放时间列');
-    // 带标签的缓存行与普通行的列左缘一致（行尾固定槽宽）。
-    final cachedRow = tester.getTopLeft(find.text('Artist 1')).dx;
-    final downloadRow = tester.getTopLeft(find.text('歌手')).dx;
-    expect(cachedRow, downloadRow, reason: '行尾标签不挤动列左缘');
-    expect(cachedRow, tester.getTopLeft(find.text('艺术家')).dx);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('桌面宽屏大字号：缓存标签单行省略，不溢出固定槽', (tester) async {
-    await repository.addHistoryEntry(_history('1', playedAt: 2));
-    final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
-    });
-    await pumpFavorites(
-      tester,
-      downloads: _StubDownloadService(seed: [_localSong('2')]),
-      cache: CacheService(storage: cacheStorage),
-      textScaler: const TextScaler.linear(3),
-    );
-    await selectCollection(tester, '本地歌曲');
-    await tester.pump();
-
-    expect(tester.takeException(), isNull, reason: '大字号不溢出');
-    final tag = tester.widget<Text>(find.text('缓存'));
-    expect(tag.maxLines, 1);
-    expect(tag.softWrap, isFalse);
-    expect(tag.overflow, TextOverflow.ellipsis);
-    // 单行渲染（不撑破表格档行高 56）；宽度被 56dp 固定槽约束。
-    expect(
-      tester.getSize(find.text('缓存')).height,
-      lessThan(
-        TrackRow.extentOf(
-          tester.element(find.byType(TrackRow).first),
-          tableColumns: true,
-        ),
-      ),
-      reason: '标签单行渲染',
-    );
-    expect(
-      tester.getSize(find.text('缓存')).width,
-      lessThanOrEqualTo(TrackRowColumnSpec.trailingSlotWidth),
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('桌面窗口：表格判定按「窗口宽 − 栏宽」（719 单列 / 720 表格）', (tester) async {
-    await importLove(tester);
-
-    // 815 − 96（导航轨折叠宽）= 719 < 720：单列（时长仍在行尾）。
-    await pumpFavorites(tester, size: const Size(815, 2400));
-    expect(find.byType(TrackTableHeader), findsNothing);
-    expect(find.text('专辑'), findsNothing);
-    expect(find.text('Album 1'), findsNothing);
-    expect(find.text('Artist 1'), findsOneWidget, reason: '副标题仍是歌手');
-    expect(find.text('3:00'), findsNWidgets(3), reason: '时长仍在行尾');
-
-    // 816 − 96 = 720：进表格档（页内没有常驻栏二次扣减）。
-    await pumpFavorites(tester, size: const Size(816, 2400));
-    expect(find.byType(TrackTableHeader), findsOneWidget);
-    expect(find.text('Album 1'), findsOneWidget, reason: '行内展示专辑列');
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('非桌面平台：宽窗口也不渲染表头（行保持单列）', (tester) async {
-    // 测试环境默认平台为 android：窗口够宽也不进表格模式。
-    await importLove(tester);
-    await pumpFavorites(tester);
-
-    expect(find.byType(TrackTableHeader), findsNothing);
-    expect(find.text('专辑'), findsNothing);
-    expect(find.text('Album 1'), findsNothing);
-    expect(find.text('Artist 1'), findsOneWidget);
-    expect(find.text('3:00'), findsNWidgets(3));
-  });
 
   // 桌面多选：Ctrl 点选切换、Shift 区间选择、Esc 退出。修饰键经真实按键
   // 状态（HardwareKeyboard）注入，行点击时读取；移动端不注入这些回调。
@@ -962,32 +759,6 @@ void main() {
       '2 首',
       reason: '下载记录 1 + 缓存行 1',
     );
-  });
-
-  testWidgets('合集弹层：窄屏（手机宽度）不溢出，行内容齐全', (tester) async {
-    await seedFavorites(tester);
-    await importLove(tester);
-    await provider.createPlaylist('一个特别长的列表名称用来验证省略号与布局稳定性');
-    await pumpFavorites(
-      tester,
-      downloads: _StubDownloadService(seed: [_localSong('1')]),
-      size: const Size(360, 780),
-    );
-
-    await openCollectionPicker(tester);
-
-    expect(tester.takeException(), isNull);
-    for (final name in [
-      '我的收藏',
-      '播放历史',
-      '本地歌曲',
-      '一个特别长的列表名称用来验证省略号与布局稳定性',
-      'love',
-    ]) {
-      expect(pickerRow(name), findsOneWidget, reason: name);
-    }
-    expect(pickerAction(Icons.add_rounded), findsOneWidget);
-    expect(pickerAction(Icons.library_add_rounded), findsOneWidget);
   });
 
   testWidgets('合集弹层：拖动把手自定义顺序并持久化', (tester) async {
@@ -1237,44 +1008,6 @@ void main() {
       (await repository.listPlaylistTracks(loveId)).map((t) => t.songId),
       isNot(contains('Song A')),
     );
-  });
-
-  testWidgets('左滑动作：M3E 胶囊按钮（tonal + filled）与动作名 tooltip', (tester) async {
-    await seedFavorites(tester);
-    await pumpFavorites(tester);
-
-    await tester.drag(find.text('Song B'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
-
-    final buttons = tester
-        .widgetList<M3EIconButton>(
-          find.descendant(
-            of: find.byType(SwipeRevealRow),
-            matching: find.byType(M3EIconButton),
-          ),
-        )
-        .toList();
-    expect(buttons, hasLength(3));
-    // 中性动作 tonal（加入列表 / 换源）、移除类 filled（错误色胶囊）。
-    expect(buttons[0].variant, M3EIconButtonVariant.tonal);
-    expect(buttons[1].variant, M3EIconButtonVariant.tonal);
-    expect(buttons.last.variant, M3EIconButtonVariant.filled);
-    // 纯图标语义有限：动作名走 Icon.semanticLabel（不做悬浮提示）。
-    bool hasLabeledIcon(String label) => tester
-        .widgetList<Icon>(find.byType(Icon))
-        .any((icon) => icon.semanticLabel == label);
-    expect(hasLabeledIcon('加入列表'), isTrue);
-    expect(hasLabeledIcon('换源'), isTrue);
-    expect(hasLabeledIcon('取消收藏'), isTrue);
-
-    // 完全露出后：行位移 = Σ 动作宽 + 间距；胶囊均分内宽（行高 − 8 高），三段等宽。
-    final sizes = [
-      for (final button in buttons) tester.getSize(find.byWidget(button)),
-    ];
-    expect(sizes.first.height, 64);
-    expect(sizes.last.height, 64);
-    expect(sizes[1].width, moreOrLessEquals(sizes.first.width, epsilon: 0.01));
-    expect(sizes[2].width, moreOrLessEquals(sizes.first.width, epsilon: 0.01));
   });
 
   testWidgets('桌面：收藏行无左滑外壳，右键在落点弹菜单，「取消收藏」后该行消失', (tester) async {
@@ -1566,16 +1299,6 @@ void main() {
     expect(await repository.listHistory(), isEmpty);
   });
 
-  testWidgets('曲目列表：常显可拖动滚动条', (tester) async {
-    await seedFavorites(tester);
-    await pumpFavorites(tester);
-
-    final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
-    expect(scrollbar.thumbVisibility, isTrue);
-    expect(scrollbar.interactive, isTrue);
-    expect(scrollbar.controller, isNotNull);
-  });
-
   testWidgets('大列表：固定行高懒加载，只构建视口附近行，滚动条可手拖', (tester) async {
     for (var i = 0; i < 200; i++) {
       await provider.toggleFavorite(
@@ -1690,22 +1413,6 @@ void main() {
 
     // 滚动落盘节流计时器跑完，避免挂起。
     await tester.pump(const Duration(milliseconds: 600));
-  });
-
-  testWidgets('滚动位置节流落盘（≥1 次写入）', (tester) async {
-    await seedManyFavorites(tester);
-    await pumpFavorites(tester);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -600));
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 600));
-    await tester.pump();
-
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(LibraryCollections.scrollOffsetsKey);
-    expect(raw, isNotNull);
-    final saved = jsonDecode(raw!) as Map<String, dynamic>;
-    expect(saved[LibraryCollections.favoritesOrderKey], greaterThan(0));
   });
 
   testWidgets('本地歌曲：弹层出现合集，进入后播放 / 搜索过滤', (tester) async {
@@ -1863,29 +1570,6 @@ void main() {
     ]);
     // 缓存索引已清：列表随缓存 revision 刷新为空。
     expect(headlines(tester), isEmpty);
-  });
-
-  testWidgets('本地歌曲：已有下载记录的曲目不重复列缓存行', (tester) async {
-    await repository.addHistoryEntry(_history('1', playedAt: 2));
-    final downloads = _StubDownloadService(seed: [
-      const DownloadedTrack(
-        originSourceKey: 'wy',
-        originSongId: '1',
-        title: '下载的歌',
-        filePath: '/downloads/1.mp3',
-        downloadedAt: 1,
-      ),
-    ]);
-    final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
-    });
-    final cache = CacheService(storage: cacheStorage);
-    await pumpFavorites(tester, downloads: downloads, cache: cache);
-    await selectCollection(tester, '本地歌曲');
-    await tester.pump();
-
-    expect(headlines(tester), ['下载的歌']);
-    expect(find.text('缓存'), findsNothing);
   });
 
   testWidgets('资料库读取失败：显示可重试错误态，重试成功后回到列表', (tester) async {

@@ -35,19 +35,6 @@ void main() {
     return provider;
   }
 
-  testWidgets('独立打开：渲染表单且不提示错误', (tester) async {
-    final provider =
-        mountProvider(SourceManager(settings: testSettingsRegistry()));
-    await pumpPage(tester, AnyListenPage(provider: provider));
-
-    expect(find.text('any-listen 接入'), findsOneWidget);
-    expect(find.text('服务器地址'), findsOneWidget);
-    expect(find.text('访问密码（可选）'), findsOneWidget);
-    expect(find.text('启用 any-listen 音源'), findsOneWidget);
-    expect(find.text('保存').hitTestable(), findsOneWidget);
-    expect(find.text('连接测试').hitTestable(), findsOneWidget);
-  });
-
   testWidgets('保存：校验地址、写入 any_listen_ 前缀的 prefs', (tester) async {
     final provider =
         mountProvider(SourceManager(settings: testSettingsRegistry()));

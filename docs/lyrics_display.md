@@ -482,7 +482,7 @@ abstract class LyricsOutput {
 
 | 层 | 文件 | 覆盖 |
 |---|---|---|
-| 单测 | `test/lyric_line_tracker_test.dart` | 行边界、同时间戳、翻译对齐、偏移、未同步、upcoming |
+| 单测 | `test/lyrics_core_test.dart` | 行边界、同时间戳、翻译对齐、偏移、未同步、upcoming |
 | | `test/media_lyric_composer_test.dart` | 字段映射、格式、翻译拼接、A2DP 门控、优先级、暂停回退 |
 | | `test/lyrics_display_settings_test.dart` | 默认值、JSON 往返、缺键合并、版本兼容 |
 | | `test/lyrics_display_provider_test.dart` | 曲目切换、去重、能力状态、输出启停 |
@@ -547,4 +547,4 @@ abstract class LyricsOutput {
 | 媒体元数据 | `lib/services/lyrics_display/media_lyric_composer.dart`、`media_lyric_output.dart`、`lib/playback/local_audio_handler.dart` | 通知/锁屏 + 蓝牙 profile 合成 → `MediaMetadata` 覆盖（`displaySubtitle` 无对应字段，忽略）；播放顺序动作图标在 `res/drawable/audio_service_*`（`res/raw/keep.xml` 防资源压缩，见已知坑 34） |
 | 设置页 | `lib/pages/settings_page.dart`、`lib/pages/lyrics_display/*` | 首屏三条直达入口（桌面歌词 / 歌词与输出 / 系统媒体歌词）；歌词页分组 + 输出共享分组 + 预览 + 权限引导；主题种子色与歌词颜色共用任意调色器 |
 | 颜色系统 | `lib/services/lyrics_display/lyric_color_resolver.dart`、`lib/theme/scheme_builder.dart`、`lib/services/artwork_palette_service.dart` | 跟随主题 / 跟随封面经同一解析函数与同一份封面色板；通用 HSV/Hex 任意取色 |
-| 测试 | `test/lyric_line_tracker_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/audio_route_monitor_test.dart`、`test/services/lyrics_cache_test.dart`、`test/lyrics_provider_translation_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |
+| 测试 | `test/lyrics_core_test.dart`、`test/services/media_lyric_composer_test.dart`、`test/services/lyrics_display_settings_test.dart`、`test/services/lyrics_display_provider_test.dart`、`test/services/desktop_lyrics_output_test.dart`、`test/services/audio_services_test.dart`、`test/services/lyrics_cache_test.dart`、`test/lyrics_core_test.dart` | 单一新 seam：`LyricsOutput` 假输出 |
