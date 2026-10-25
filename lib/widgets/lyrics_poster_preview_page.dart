@@ -9,7 +9,6 @@ import 'package:path_provider/path_provider.dart';
 import '../domain/models/track.dart';
 import '../services/artwork_palette_service.dart';
 import '../services/covers/cover_resolution.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
@@ -82,8 +81,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   bool get _isBusy => _isLoading || _isOperating || _isRegenerating;
 
-  CoverResolver get _resolution =>
-      _covers ?? CustomCoverStore.instance.resolution;
+  CoverResolver get _resolution => _covers ?? coverResolverOf(context);
 
   /// 取色 / 「跟随封面」可用性只看真实（原始或自定义）封面；默认封面是
   /// 占位，不参与取色。
@@ -111,9 +109,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final covers =
-        (context.read<CustomCoverStore?>() ?? CustomCoverStore.instance)
-            .resolution;
+    final covers = coverResolverOf(context);
     if (!identical(covers, _covers)) {
       _removeCoverListener?.call();
       _covers = covers;

@@ -19,9 +19,16 @@ import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import 'app_network_image.dart';
 
+/// 当前 Provider 树里的封面存储（没有注入时回退全局单例）。
+///
+/// 全 App 的 singleton 回退只在这里与组合根出现；widget 层其余位置都走
+/// [coverResolverOf] / 这个 helper。
+CustomCoverStore coverStoreOf(BuildContext context) =>
+    context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+
 /// 当前 Provider 树里的封面解析器（没有注入时回退全局存储单例）。
 CoverResolver coverResolverOf(BuildContext context) =>
-    (context.read<CustomCoverStore?>() ?? CustomCoverStore.instance).resolution;
+    coverStoreOf(context).resolution;
 
 /// 订阅封面变化并重建的构建器（不渲染具体图片）。
 ///

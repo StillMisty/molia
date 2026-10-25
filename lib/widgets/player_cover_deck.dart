@@ -54,7 +54,6 @@ import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
@@ -62,6 +61,7 @@ import 'cover_appearance.dart';
 import 'cover_fallback.dart';
 import 'player_cover_session.dart';
 import 'player_morph.dart';
+import 'track_artwork.dart';
 
 /// 曲目封面 URL / 稳定 key 与卡片外观定义在
 /// `cover_appearance.dart`（会话与渲染共用同一份归一化），这里再导出给
@@ -201,9 +201,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   CoverResolver? _covers;
   void Function()? _removeCoverListener;
 
-  /// 当前解析器：Provider 注入优先，挂载早期回退全局单例。
-  CoverResolver get _coverResolver =>
-      _covers ?? CustomCoverStore.instance.resolution;
+  /// 当前解析器（挂载时从 Provider / 全局单例解析一次，随后由订阅换绑）。
+  CoverResolver get _coverResolver => _covers!;
 
   /// 真实封面 URL（自定义 / 原始；默认封面只做展示兜底）。
   String? _realCoverUrlOf(Track? track) => _coverResolver.realOf(track).url;
@@ -273,7 +272,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   @override
   void initState() {
     super.initState();
-    _session = CoverSwapSession(host: this);
+    _covers = coverResolverOf(context);
+    _session = CoverSwapSession(host: this, covers: _covers!);
     _playStateController = SingleMotionController(
       motion:
           const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
@@ -393,14 +393,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _syncPlayState(playback);
   }
 
-  /// 订阅自定义封面存储：当前曲目换图 / 恢复原图后立即刷新中心与邻位。
+  /// 订阅封面解析器：当前曲目换图 / 恢复原图后立即刷新中心与邻位。
   void _bindCoversIfNeeded() {
-    final covers =
-        (context.read<CustomCoverStore?>() ?? CustomCoverStore.instance)
-            .resolution;
+    final covers = coverResolverOf(context);
     if (identical(covers, _covers)) return;
     _removeCoverListener?.call();
     _covers = covers;
+    _session.useCoverResolver(covers);
     _removeCoverListener = covers.addChangeListener(_onCustomCoverChanged);
   }
 

@@ -20,6 +20,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/covers/cover_image_codec.dart';
+import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
@@ -83,8 +84,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
       AppLocalizations.of(context) ??
       lookupAppLocalizations(const Locale('zh'));
 
-  CustomCoverStore get _store =>
-      context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+  CustomCoverStore get _store => coverStoreOf(context);
+
+  CoverResolver get _covers => coverResolverOf(context);
 
   bool get _isDefault => widget.trackId == null;
 
@@ -92,8 +94,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
       !_isDefault && (widget.originalCoverUrl ?? '').isNotEmpty;
 
   bool get _hasCustom => _isDefault
-      ? _store.resolution.defaultCoverUrl != null
-      : _store.resolution.realForId(widget.trackId).isCustom;
+      ? _covers.defaultCoverUrl != null
+      : _covers.realForId(widget.trackId).isCustom;
 
   Future<void> _pickImage() async {
     if (_busy) return;

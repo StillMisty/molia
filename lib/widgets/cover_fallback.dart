@@ -8,10 +8,11 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/playback_provider.dart';
-import '../services/covers/custom_cover_store.dart';
+import '../services/covers/cover_resolution.dart';
 import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'molia_mark.dart';
+import 'track_artwork.dart';
 
 /// 无封面 / 回退图也失败时的最终占位：主题容器色背景 + Molia 标志。
 ///
@@ -41,7 +42,23 @@ Widget buildFallbackArtwork(
   Key? key,
   double iconSize = 64,
 }) {
-  final defaultCoverUrl = CustomCoverStore.instance.resolution.defaultCoverUrl;
+  return CoverChangeBuilder(
+    builder: (context, covers) => _buildFallbackArtwork(
+      context,
+      covers,
+      key: key,
+      iconSize: iconSize,
+    ),
+  );
+}
+
+Widget _buildFallbackArtwork(
+  BuildContext context,
+  CoverResolver covers, {
+  Key? key,
+  required double iconSize,
+}) {
+  final defaultCoverUrl = covers.defaultCoverUrl;
   final mark = _buildMoliaMark(
     context,
     key: key ?? const ValueKey('default_image'),
@@ -68,7 +85,25 @@ Widget buildDefaultArtwork(
   BoxFit fit = BoxFit.cover,
   double iconSize = 64,
 }) {
-  final defaultCoverUrl = CustomCoverStore.instance.resolution.defaultCoverUrl;
+  return CoverChangeBuilder(
+    builder: (context, covers) => _buildDefaultArtwork(
+      context,
+      covers,
+      key: key,
+      fit: fit,
+      iconSize: iconSize,
+    ),
+  );
+}
+
+Widget _buildDefaultArtwork(
+  BuildContext context,
+  CoverResolver covers, {
+  Key? key,
+  required BoxFit fit,
+  required double iconSize,
+}) {
+  final defaultCoverUrl = covers.defaultCoverUrl;
   final lastPlayedImageUrl =
       context.read<PlaybackProvider?>()?.lastPlayedImageUrl;
   final fallback = lastPlayedImageUrl != null
