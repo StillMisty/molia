@@ -12,9 +12,11 @@ import 'package:molia/playback/local_audio_handler.dart';
 import 'package:molia/playback/media_session_copy.dart';
 import 'package:molia/playback/playback_commands.dart';
 import 'package:molia/providers/library_provider.dart';
+import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/services/lyrics_display/media_lyric_composer.dart';
 import 'package:molia/sources/source_track.dart';
 
+import '../support/fake_cover_index.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fake_media_session_backend.dart';
 import '../support/fake_media_session_read_model.dart';
@@ -128,7 +130,7 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
   FakeMediaSessionReadModel readModel, {
   PlaybackCommandPort? commands,
   bool Function()? artworkBlocked,
-  String? Function(SourceTrack track)? coverUrlResolver,
+  CoverResolver? coverResolver,
   Future<String?> Function(String url)? artworkUriResolver,
   bool? periodicPositionStateUpdates,
 }) async {
@@ -139,7 +141,7 @@ Future<(LocalAudioHandler, FakeMediaSessionBackend)> _handler(
     copy: _copy,
     backend: backend,
     artworkBlocked: artworkBlocked,
-    coverUrlResolver: coverUrlResolver,
+    coverResolver: coverResolver,
     artworkUriResolver: artworkUriResolver ?? (_) async => null,
     periodicPositionStateUpdates: periodicPositionStateUpdates,
   );
@@ -609,7 +611,9 @@ void main() {
         service,
         artworkBlocked: () => true,
         // 与组合根同一口径：自定义封面在解析器里替换原始网络封面。
-        coverUrlResolver: (_) => localCover,
+        coverResolver: CoverResolver(
+          FakeCoverIndex(customUrls: const {'wy:186016': localCover}),
+        ),
         artworkUriResolver: (_) async {
           resolverCalls++;
           return 'file:///tmp/network-cover.jpg';
@@ -657,15 +661,17 @@ void main() {
       final service = FakeMediaSessionReadModel()
         ..currentTrack = _track(coverUrl: cover);
       addTearDown(service.dispose);
+      final coverIndex = FakeCoverIndex();
       final (handler, backend) = await _handler(
         service,
-        coverUrlResolver: (_) => cover,
+        coverResolver: CoverResolver(coverIndex),
       );
       final metadataCount = backend.metadataUpdates.length;
       final stateCount = backend.stateUpdates.length;
       final actionCount = backend.actionUpdates.length;
 
       cover = 'file:///tmp/molia-custom-cover.jpg';
+      coverIndex.customUrls['wy:186016'] = cover;
       handler.refreshArtwork();
       await pumpEventQueue();
 

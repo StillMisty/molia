@@ -4,13 +4,12 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'current_track_cover.dart';
-import 'library_cover.dart';
 import 'playback_selectors.dart';
+import 'track_artwork.dart';
 
 /// 曲目行里的歌手链接（名字 + 点击回调；回调为空 = 纯文本）。
 ///
@@ -317,6 +316,7 @@ class TrackRow extends StatelessWidget {
           builder: (context, constraints) => Row(
             children: [
               _buildLeading(
+                context,
                 scheme,
                 isCurrent: isCurrent,
                 isPlaying: isPlaying,
@@ -500,59 +500,50 @@ class TrackRow extends StatelessWidget {
   /// 当前曲目角标只在封面可见时叠加：多选勾选占住前导槽时让位给勾选图标，
   /// 标题主色仍表达当前曲目。
   ///
-  /// 有 [TrackRowModel.coverKey] 的行订阅自定义封面 revision：选择 / 恢复
-  /// 封面后不换行也要立即换图；没有键的行保持原 URL（全局默认封面由
-  /// [LibraryCoverThumb] 自己订阅）。
+  /// 自定义封面 / 默认封面订阅收在 [TrackArtwork] 内：行内不再自己听
+  /// revision，选择 / 恢复封面后不换行也会立即换图。
   Widget _buildLeading(
+    BuildContext context,
     M3EColorScheme scheme, {
     required bool isCurrent,
     required bool isPlaying,
   }) {
-    Widget buildCover(String? coverUrl) {
-      final bool showsCheck = model.selected && surface.showCheckWhenSelected;
-      final Widget cover = isCurrent && !showsCheck
-          ? CurrentTrackCover(
-              url: coverUrl,
-              size: surface.coverSize,
-              isPlaying: isPlaying,
-            )
-          : LibraryCoverThumb(
-              url: coverUrl,
-              size: surface.coverSize,
-              useDefaultCover: true,
-            );
-      if (!surface.showCheckWhenSelected) return cover;
-      // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
-      // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与
-      // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
-      return SizedBox.square(
-        dimension: surface.coverSize,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 180),
-          child: model.selected
-              ? Icon(
-                  Icons.check_circle_rounded,
-                  key: const ValueKey<String>('selected'),
-                  size: surface.coverSize * 0.7,
-                  color: scheme.onSecondaryContainer,
-                )
-              : KeyedSubtree(
-                  key: const ValueKey<String>('cover'),
-                  child: cover,
-                ),
-        ),
-      );
-    }
-
-    final key = model.effectiveCoverKey;
-    if (key == null) return buildCover(model.coverUrl);
-    return ValueListenableBuilder<int>(
-      valueListenable: CustomCoverStore.instance.revision,
-      builder: (context, _, __) => buildCover(
-        CustomCoverStore.instance.resolveTrackCoverForKey(
-          key,
-          originalUrl: model.coverUrl,
-        ),
+    final bool showsCheck = model.selected && surface.showCheckWhenSelected;
+    final Widget artwork = TrackArtwork(
+      coverKey: model.effectiveCoverKey,
+      originalUrl: model.coverUrl,
+      size: surface.coverSize,
+      borderRadius: BorderRadius.circular(10),
+      memCacheWidth:
+          (surface.coverSize * MediaQuery.of(context).devicePixelRatio).round(),
+      fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+    );
+    final Widget cover = isCurrent && !showsCheck
+        ? CurrentTrackCover(
+            cover: artwork,
+            size: surface.coverSize,
+            isPlaying: isPlaying,
+          )
+        : artwork;
+    if (!surface.showCheckWhenSelected) return cover;
+    // 前导槽按封面尺寸固定：AnimatedSwitcher 默认以 Stack 的最大子项定宽，
+    // 勾选图标只有 coverSize * 0.7，淡出结束后单独留下时槽会收窄，标题与
+    // 表格列随之左移（表头仍按封面尺寸预留）。固定槽宽让切换不影响行内网格。
+    return SizedBox.square(
+      dimension: surface.coverSize,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: model.selected
+            ? Icon(
+                Icons.check_circle_rounded,
+                key: const ValueKey<String>('selected'),
+                size: surface.coverSize * 0.7,
+                color: scheme.onSecondaryContainer,
+              )
+            : KeyedSubtree(
+                key: const ValueKey<String>('cover'),
+                child: cover,
+              ),
       ),
     );
   }

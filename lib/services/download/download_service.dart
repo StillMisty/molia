@@ -58,6 +58,7 @@ import '../../domain/models/track.dart';
 import '../../managers/artwork_cache.dart';
 import '../../models/lyrics_result.dart';
 import '../../services/cache_service.dart';
+import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
 import 'download_notification_presenter.dart';
@@ -77,11 +78,6 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 
 /// 下载时封面 URL 解析（组合根注入：`SourceManager.fetchPic` 适配）。
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
-
-/// 下载时自定义封面字节解析（组合根注入本地自定义封面存储）。
-///
-/// 命中时下载封面 / 标签嵌入都用它；全局默认封面不在这里返回。
-typedef DownloadCustomCoverResolver = Future<Uint8List?> Function(Track track);
 
 /// 单条下载任务的实时进度（UI 消费；值相等不重复通知）。
 class DownloadProgress {
@@ -157,7 +153,7 @@ class DownloadService extends ChangeNotifier {
     Dio? dio,
     DownloadLyricsResolver? lyricsResolver,
     DownloadArtworkResolver? artworkResolver,
-    DownloadCustomCoverResolver? customCoverResolver,
+    CoverResolver? coverResolver,
     CacheService? cacheService,
     ArtworkCache? artworkCache,
     DownloadSettings? settings,
@@ -171,7 +167,7 @@ class DownloadService extends ChangeNotifier {
         _dio = dio ?? createAppDio(),
         _lyricsResolver = lyricsResolver,
         _artworkResolver = artworkResolver,
-        _customCoverResolver = customCoverResolver,
+        _coverResolver = coverResolver,
         _cacheService = cacheService,
         _artworkCache = artworkCache,
         _settings = settings,
@@ -192,7 +188,7 @@ class DownloadService extends ChangeNotifier {
   final Dio _dio;
   final DownloadLyricsResolver? _lyricsResolver;
   final DownloadArtworkResolver? _artworkResolver;
-  final DownloadCustomCoverResolver? _customCoverResolver;
+  final CoverResolver? _coverResolver;
   final CacheService? _cacheService;
   final ArtworkCache? _artworkCache;
   final DownloadSettings? _settings;
@@ -1082,12 +1078,14 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// 封面字节：自定义封面优先；否则曲目主图 + 降级链先查缓存，未命中再
-  /// 取图并回填缓存。全局默认封面不参与下载（它只是展示占位）。
+  /// 取图并回填缓存。全局默认封面不参与下载（它只是展示占位）：
+  /// [CoverResolver.realOf] 永远不会返回默认封面。
   Future<_ResolvedCover?> _resolveCover(Track track) async {
-    final custom = _customCoverResolver;
-    if (custom != null) {
+    final covers = _coverResolver;
+    final real = covers?.realOf(track);
+    if (covers != null && real?.isCustom == true) {
       try {
-        final bytes = await custom(track);
+        final bytes = await covers.readCustomCoverBytes(track);
         if (bytes != null && bytes.isNotEmpty) {
           return _ResolvedCover(
             bytes: bytes,
@@ -1100,13 +1098,14 @@ class DownloadService extends ChangeNotifier {
       }
     }
     final artwork = track.artwork;
-    final urls = <String>[
-      if (artwork != null && artwork.uri.toString().isNotEmpty)
-        artwork.uri.toString(),
+    // 真实封面只可能是自定义 / 原始；自定义字节读取失败时回到原始封面链，
+    // 不把自定义文件地址当网络图去下载。
+    final urls = <String>{
+      if (real?.isOriginal == true) real!.url!,
+      if (artwork != null) artwork.uri.toString(),
       if (artwork != null)
-        for (final fallback in artwork.fallbacks)
-          if (fallback.toString().isNotEmpty) fallback.toString(),
-    ];
+        for (final fallback in artwork.fallbacks) fallback.toString(),
+    }.where((url) => url.isNotEmpty).toList();
     final cache = _artworkCache;
     if (cache != null) {
       for (final url in urls) {

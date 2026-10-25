@@ -41,7 +41,7 @@ Widget buildFallbackArtwork(
   Key? key,
   double iconSize = 64,
 }) {
-  final defaultCoverUrl = CustomCoverStore.instance.defaultCoverUrl;
+  final defaultCoverUrl = CustomCoverStore.instance.resolution.defaultCoverUrl;
   final mark = _buildMoliaMark(
     context,
     key: key ?? const ValueKey('default_image'),
@@ -68,7 +68,7 @@ Widget buildDefaultArtwork(
   BoxFit fit = BoxFit.cover,
   double iconSize = 64,
 }) {
-  final defaultCoverUrl = CustomCoverStore.instance.defaultCoverUrl;
+  final defaultCoverUrl = CustomCoverStore.instance.resolution.defaultCoverUrl;
   final lastPlayedImageUrl =
       context.read<PlaybackProvider?>()?.lastPlayedImageUrl;
   final fallback = lastPlayedImageUrl != null

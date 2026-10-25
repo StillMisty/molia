@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../domain/models/track.dart';
 import '../services/artwork_palette_service.dart';
+import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
@@ -24,9 +25,9 @@ import '../theme/scheme_builder.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
 import 'app_color_picker.dart';
-import 'app_network_image.dart';
 import 'cover_picker_sheet.dart';
 import 'font_picker_sheet.dart';
+import 'track_artwork.dart';
 
 class LyricsPosterPreviewPage extends StatefulWidget {
   final String lyrics;
@@ -74,23 +75,26 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 海报字体覆盖：null = 跟随应用字体；'' = 强制系统默认；其它 = 字体族名。
   String? _posterFontOverride;
 
-  /// 自定义封面存储（订阅 revision：换封面后重新生成海报）。
-  CustomCoverStore? _covers;
+  /// 封面解析器（订阅变更信号：换封面后重新生成海报）。
+  CoverResolver? _covers;
+  void Function()? _removeCoverListener;
   String? _lastCoverSignature;
 
   bool get _isBusy => _isLoading || _isOperating || _isRegenerating;
 
+  CoverResolver get _resolution =>
+      _covers ?? CustomCoverStore.instance.resolution;
+
   /// 取色 / 「跟随封面」可用性只看真实（原始或自定义）封面；默认封面是
   /// 占位，不参与取色。
-  String? get _paletteCoverUrl =>
-      CustomCoverStore.instance.resolveTrackCoverForId(
-        widget.trackId,
-        originalUrl: widget.albumCoverUrl,
-      );
+  String? get _paletteCoverUrl => _resolution
+      .realForId(widget.trackId, originalUrl: widget.albumCoverUrl)
+      .url;
 
   /// 海报头部展示封面：自定义 → 原始 → 默认占位。
-  String? get _displayCoverUrl => CustomCoverStore.instance
-      .resolveForDisplayById(widget.trackId, originalUrl: widget.albumCoverUrl);
+  String? get _displayCoverUrl => _resolution
+      .displayForId(widget.trackId, originalUrl: widget.albumCoverUrl)
+      .url;
 
   /// 当前曲目是否带真实封面（「跟随封面」来源可用性）。
   bool get _hasArtwork => (_paletteCoverUrl ?? '').isNotEmpty;
@@ -108,10 +112,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final covers =
-        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+        (context.read<CustomCoverStore?>() ?? CustomCoverStore.instance)
+            .resolution;
     if (!identical(covers, _covers)) {
-      _covers?.revision.removeListener(_onCoverChanged);
-      _covers = covers..revision.addListener(_onCoverChanged);
+      _removeCoverListener?.call();
+      _covers = covers;
+      _removeCoverListener = covers.addChangeListener(_onCoverChanged);
     }
     final scheme = Theme.of(context).colorScheme;
     final signature = (
@@ -148,7 +154,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
 
   @override
   void dispose() {
-    _covers?.revision.removeListener(_onCoverChanged);
+    _removeCoverListener?.call();
     super.dispose();
   }
 
@@ -457,8 +463,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 海报设置行里的封面状态文案（与歌曲信息页同一套词）。
   String _coverStateLabel(AppLocalizations l10n) {
     final trackId = widget.trackId;
-    if (trackId != null &&
-        CustomCoverStore.instance.trackCoverUrl(trackId) != null) {
+    if (trackId != null && _resolution.realForId(trackId).isCustom) {
       return l10n.coverCustomized;
     }
     if ((widget.albumCoverUrl ?? '').isNotEmpty) return l10n.coverFollowSong;
@@ -468,23 +473,20 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 封面设置行：缩略图 + 状态 + 展开图标，点开同一封面弹层。
   Widget _buildCoverPicker(AppLocalizations l10n, ColorScheme scheme) {
     final trackId = widget.trackId;
-    return ValueListenableBuilder<int>(
-      valueListenable: CustomCoverStore.instance.revision,
-      builder: (context, _, __) => M3EButton(
+    return CoverChangeBuilder(
+      builder: (context, _) => M3EButton(
         key: const Key('posterCoverPickerButton'),
         style: M3EButtonStyle.text,
         onPressed: trackId == null ? null : _changeCover,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppNetworkImage(
+            TrackArtwork(
               // 缩略图主图只认真实封面；默认封面仅作加载失败回退。海报
               // 生成仍走 [_displayCoverUrl]（含默认封面占位）。
-              url: CustomCoverStore.instance.resolveTrackCoverForId(
-                trackId,
-                originalUrl: widget.albumCoverUrl,
-              ),
-              fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
+              listenForChanges: false,
+              trackId: trackId,
+              originalUrl: widget.albumCoverUrl,
               width: 28,
               height: 28,
               borderRadius: BorderRadius.circular(6),

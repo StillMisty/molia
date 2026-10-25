@@ -23,22 +23,14 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../utils/local_image_provider.dart';
 import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';
 
-/// 曲目封面 URL（空串视同无封面；领域 Track 自带可靠 id/artwork）。
-///
-/// 封面词汇的唯一来源：真身渲染、飞行副本、切歌会话的占位 URL 与
-/// 迷你/顶栏取值都走它（`player_cover_deck.dart` 再导出）。自定义封面优先；
-/// 全局默认封面是占位，不从这里返回（不参与取色 / 下载 / 标签）。
-String? artworkUrlOf(Track? track) {
-  final resolved = CustomCoverStore.instance.resolveTrackCover(track);
-  return resolved == null || resolved.isEmpty ? null : resolved;
-}
-
 /// 曲目的稳定 key（领域 id）。
+///
+/// 封面「用哪一张」的解析不在这里：见
+/// `services/covers/cover_resolution.dart` 与 `widgets/track_artwork.dart`。
 String? trackKeyOf(Track? track) => track?.id.uri;
 
 /// 顶栏 40×40 封面真身的回退图标尺寸。
@@ -173,8 +165,7 @@ class CoverFlight {
   double pageProgressAt(double t) => (toPage ? t : 1 - t).clamp(0.0, 1.0);
 
   /// 任意进度的封面矩形。
-  Rect rectAt(double t) =>
-      Rect.lerp(fromRect, toRect, t.clamp(0.0, 1.0))!;
+  Rect rectAt(double t) => Rect.lerp(fromRect, toRect, t.clamp(0.0, 1.0))!;
 
   /// 任意进度的外观。
   CoverAppearance appearanceAt(double t) => CoverAppearance.lerp(

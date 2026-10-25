@@ -126,7 +126,7 @@ Future<LocalDataStack> buildLocalDataStack({
     lyricsResolver: (track) => _resolveDownloadLyrics(lyricsService, track),
     artworkResolver: (track) =>
         sourceManager.fetchPic(sourceTrackFromTrack(track)),
-    customCoverResolver: (track) => customCovers.readTrackCover(track.id),
+    coverResolver: customCovers.resolution,
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
   );

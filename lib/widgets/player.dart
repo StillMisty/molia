@@ -12,7 +12,6 @@ import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
 import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
@@ -26,6 +25,7 @@ import 'player_cover_deck.dart';
 import 'player_morph.dart';
 import 'seek_bar.dart';
 import 'seek_preview.dart';
+import 'track_artwork.dart';
 import 'volume_control.dart';
 
 /// 迷你条封面外观与飞行定义在 `cover_appearance.dart`；这里再导出给既有
@@ -310,7 +310,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 缓存，未命中保持现色）。这里只负责预取，让 AppNetworkImage / 飞行副本
   /// 复用同一张已解码图。
   void _prefetchArtworkIfNeeded(BuildContext context, Track? displayTrack) {
-    final currentImageUrl = artworkUrlOf(displayTrack);
+    final currentImageUrl = coverResolverOf(context).realOf(displayTrack).url;
     if (currentImageUrl == null || currentImageUrl == _lastImageUrl) return;
     _lastImageUrl = currentImageUrl;
     // 省流模式（移动数据 + 已开启封面省流）：跳过封面预取
@@ -541,8 +541,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                           otherAppearance: CoverAppearance.mini,
                           toPage: true,
                         ),
-                        url: artworkUrlOf(displayTrack),
-                        fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
+                        url: coverResolverOf(context).realOf(displayTrack).url,
+                        fallbackUrl: coverResolverOf(context).defaultCoverUrl,
                         // 两真身都是回退占位（全局默认封面 / Molia 标志）。
                         fallback: (context, iconSize) =>
                             buildFallbackArtwork(context, iconSize: iconSize),
@@ -952,31 +952,23 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildMiniAlbumArt(Track? track, double iconSize) {
     final displayTrack = track ?? _lastTrack;
     final coverEdge = playbackCoverDecodeEdge(context);
-    return ValueListenableBuilder<int>(
-      valueListenable: CustomCoverStore.instance.revision,
-      builder: (context, _, __) {
-        final String? currentImageUrl = artworkUrlOf(displayTrack);
-        // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
-        // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
-        return AppNetworkImage(
-          key: ValueKey(currentImageUrl),
-          url: currentImageUrl,
-          fallbackUrl: CustomCoverStore.instance.defaultCoverUrl,
-          fit: BoxFit.cover,
-          fallbackIconSize: iconSize,
-          memCacheWidth: coverEdge,
-          placeholder: _lastTrack != null && _lastImageUrl != null
-              ? AppNetworkImage(
-                  url: _lastImageUrl,
-                  fit: BoxFit.cover,
-                  fallbackIconSize: iconSize,
-                  memCacheWidth: coverEdge,
-                )
-              : buildDefaultArtwork(context),
-          // 加载失败是当前曲目的缺图态：不能用最近播放封面冒充。
-          errorWidget: buildFallbackArtwork(context),
-        );
-      },
+    // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
+    // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
+    return TrackArtwork(
+      track: displayTrack,
+      fit: BoxFit.cover,
+      fallbackIconSize: iconSize,
+      memCacheWidth: coverEdge,
+      placeholder: _lastTrack != null && _lastImageUrl != null
+          ? AppNetworkImage(
+              url: _lastImageUrl,
+              fit: BoxFit.cover,
+              fallbackIconSize: iconSize,
+              memCacheWidth: coverEdge,
+            )
+          : buildDefaultArtwork(context),
+      // 加载失败是当前曲目的缺图态：不能用最近播放封面冒充。
+      errorWidget: buildFallbackArtwork(context),
     );
   }
 

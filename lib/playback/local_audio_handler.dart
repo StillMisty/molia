@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_media_session/flutter_media_session.dart';
 
 import '../app/bootstrap/startup_trace.dart';
+import '../domain/models/track.dart' show TrackId;
 import '../managers/artwork_cache.dart';
+import '../services/covers/cover_resolution.dart';
 import '../models/play_mode.dart';
 import '../services/lyrics_display/media_lyric_composer.dart';
 import '../sources/source_track.dart';
@@ -81,7 +83,7 @@ Future<LocalAudioHandler?> initSystemMediaSession(
   required PlaybackCommandPort commands,
   ValueListenable<MediaSessionCopy>? copy,
   bool Function()? artworkBlocked,
-  String? Function(SourceTrack track)? coverUrlResolver,
+  CoverResolver? coverResolver,
 }) async {
   if (!isSystemMediaSessionSupported) {
     return null;
@@ -96,7 +98,7 @@ Future<LocalAudioHandler?> initSystemMediaSession(
       copy: copy ?? LocalizedMediaSessionCopy(),
       backend: backend,
       artworkBlocked: artworkBlocked,
-      coverUrlResolver: coverUrlResolver,
+      coverResolver: coverResolver,
     );
     markStartupStep('sub.mediaSession.build', buildWatch);
     final activateWatch = Stopwatch()..start();
@@ -137,7 +139,7 @@ class LocalAudioHandler {
     required ValueListenable<MediaSessionCopy> copy,
     MediaSessionBackend? backend,
     bool Function()? artworkBlocked,
-    String? Function(SourceTrack track)? coverUrlResolver,
+    CoverResolver? coverResolver,
     Future<String?> Function(String url)? artworkUriResolver,
     bool? periodicPositionStateUpdates,
   })  : _commands = commands,
@@ -146,7 +148,7 @@ class LocalAudioHandler {
             createSystemMediaSessionBackend() ??
             const NoopMediaSessionBackend(),
         _artworkBlocked = artworkBlocked ?? (() => false),
-        _coverUrlResolver = coverUrlResolver,
+        _coverResolver = coverResolver,
         _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
         _periodicPositionStateUpdates = periodicPositionStateUpdates ??
             defaultTargetPlatform != TargetPlatform.android {
@@ -171,8 +173,8 @@ class LocalAudioHandler {
   /// 省流模式封面网关：返回 true 时媒体项不带封面。
   final bool Function() _artworkBlocked;
 
-  /// 封面 URL 解析（自定义 → 原始 → 默认占位；组合根注入）。
-  final String? Function(SourceTrack track)? _coverUrlResolver;
+  /// 封面解析器（自定义 → 原始 → 默认占位；组合根注入）。
+  final CoverResolver? _coverResolver;
 
   /// 封面本地化（返回平台可用的本地地址；失败 / 未命中返回 null）。
   final Future<String?> Function(String url) _artworkUriResolver;
@@ -655,7 +657,14 @@ class LocalAudioHandler {
 
   String? _coverUrlOf(SourceTrack? track) {
     if (track == null) return null;
-    return _coverUrlResolver?.call(track) ?? track.coverUrl;
+    final covers = _coverResolver;
+    if (covers == null) return track.coverUrl;
+    return covers
+        .displayForId(
+          TrackId(track.sourceKey, track.songId),
+          originalUrl: track.coverUrl,
+        )
+        .url;
   }
 
   Future<void> _resolveArtwork(String coverUrl) async {

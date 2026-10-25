@@ -35,9 +35,10 @@
 ///
 /// 对外公开的最小面：
 /// - [PlayerCoverDeck]：组件（槽位渲染 + 手势宿主 + 会话的效果宿主）；
-/// - [artworkUrlOf] / [trackKeyOf]（会话一侧定义、这里再导出）/
-///   [buildDefaultArtwork] / [buildFallbackArtwork]：封面 URL 与占位工具，
-///   迷你条 / 飞行副本共用。
+/// - [trackKeyOf]（会话一侧定义、这里再导出）/
+///   [buildDefaultArtwork] / [buildFallbackArtwork]：稳定身份与占位工具，
+///   迷你条 / 飞行副本共用。封面「用哪一张」走
+///   `services/covers/cover_resolution.dart`。
 library;
 
 import 'dart:async';
@@ -52,6 +53,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
+import '../services/covers/cover_resolution.dart';
 import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../utils/playback_cover_decode.dart';
@@ -65,7 +67,7 @@ import 'player_morph.dart';
 /// `cover_appearance.dart`（会话与渲染共用同一份归一化），这里再导出给
 /// 迷你条 / 飞行副本 / 应用壳。占位构建器在 `cover_fallback.dart`（同一份
 /// 实现，避免与 `now_playing_summary.dart` 形成循环 import）。
-export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
+export 'cover_appearance.dart' show trackKeyOf;
 export 'cover_fallback.dart' show buildDefaultArtwork, buildFallbackArtwork;
 
 /// 完整播放器封面堆叠：三封面（槽位）渲染 + 横滑切歌手势 + 切歌会话状态。
@@ -165,13 +167,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   static const Duration _reconcileFadeDuration = Duration(milliseconds: 180);
 
   /// 对账校正时长：到位曲目与预览目标不一致时，中心封面原位交叉淡化校正。
-  static const Duration _reconcileCorrectionDuration = Duration(milliseconds: 220);
+  static const Duration _reconcileCorrectionDuration =
+      Duration(milliseconds: 220);
 
   /// 空闲期槽位身份交叉淡化时长（原位、纯透明度）。
   static const Duration _slotIdentityFadeDuration = Duration(milliseconds: 180);
 
   /// 中心封面同 id 换图（音源补图）交叉淡化时长。
-  static const Duration _artworkRefreshFadeDuration = Duration(milliseconds: 250);
+  static const Duration _artworkRefreshFadeDuration =
+      Duration(milliseconds: 250);
 
   /// 封面按压反馈：按下缩放比例；进/出走 M3E 按压弹簧（见控制器注释）。
   static const double _pressScale = 0.96;
@@ -193,8 +197,16 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 已订阅的播放 Provider（运行时可能被替换，见 [_bindPlaybackIfNeeded]）。
   PlaybackProvider? _playback;
 
-  /// 已订阅的自定义封面存储（换封面时中心 / 邻位立即换图）。
-  CustomCoverStore? _covers;
+  /// 已订阅的封面解析器（换封面时中心 / 邻位立即换图）。
+  CoverResolver? _covers;
+  void Function()? _removeCoverListener;
+
+  /// 当前解析器：Provider 注入优先，挂载早期回退全局单例。
+  CoverResolver get _coverResolver =>
+      _covers ?? CustomCoverStore.instance.resolution;
+
+  /// 真实封面 URL（自定义 / 原始；默认封面只做展示兜底）。
+  String? _realCoverUrlOf(Track? track) => _coverResolver.realOf(track).url;
 
   /// 快照通知已排入微任务（同一批通知只对账一次）。
   bool _trackSyncScheduled = false;
@@ -311,7 +323,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 中心换图的淡出起点必须是「挂载时正在展示的 URL」：首个快照若只补了
     // 封面 URL（同 id），didUpdateWidget 才能识别为换图而不是首帧接管。
     _centerTrackId = trackKeyOf(widget.displayTrack);
-    _centerArtworkUrl = artworkUrlOf(widget.displayTrack);
+    _centerArtworkUrl = _realCoverUrlOf(widget.displayTrack);
     _coverStackAnimation = Listenable.merge([
       _session,
       _coverController,
@@ -384,10 +396,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 订阅自定义封面存储：当前曲目换图 / 恢复原图后立即刷新中心与邻位。
   void _bindCoversIfNeeded() {
     final covers =
-        context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+        (context.read<CustomCoverStore?>() ?? CustomCoverStore.instance)
+            .resolution;
     if (identical(covers, _covers)) return;
-    _covers?.revision.removeListener(_onCustomCoverChanged);
-    _covers = covers..revision.addListener(_onCustomCoverChanged);
+    _removeCoverListener?.call();
+    _covers = covers;
+    _removeCoverListener = covers.addChangeListener(_onCustomCoverChanged);
   }
 
   void _onCustomCoverChanged() {
@@ -548,7 +562,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 隐藏态切歌：父级还没按新曲目重建，中心身份直接接管传入曲目。
     final track = adoptTrack ?? widget.displayTrack;
     _centerTrackId = trackKeyOf(track);
-    _centerArtworkUrl = artworkUrlOf(track);
+    _centerArtworkUrl = _realCoverUrlOf(track);
     final playback = _playback;
     if (playback != null) _syncPlayState(playback);
   }
@@ -655,7 +669,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (currentId != null &&
         currentId == _session.animatedTrackId &&
         currentId == _centerTrackId) {
-      final url = artworkUrlOf(current);
+      final url = _realCoverUrlOf(current);
       if (url != _centerArtworkUrl) {
         if (!_session.visible || _artworkRefreshFade.isAnimating) {
           // 不可见（或淡化中再次更新）：直接接管新 URL，不启动/重启动画。
@@ -751,7 +765,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 之前把控制器归零，否则会先闪一帧新图再回跳旧图，因此放在这里而不是 build。
   void _syncCenterArtwork(Track? track) {
     final id = trackKeyOf(track);
-    final url = artworkUrlOf(track);
+    final url = _realCoverUrlOf(track);
     if (id != _centerTrackId) {
       _centerTrackId = id;
       _centerArtworkUrl = url;
@@ -807,7 +821,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   @override
   void dispose() {
     _playback?.removeListener(_handlePlaybackChanged);
-    _covers?.revision.removeListener(_onCustomCoverChanged);
+    _removeCoverListener?.call();
     widget.morph?.removeListener(_onMorphChanged);
     disarmTimeout();
     _session.dispose();
@@ -939,7 +953,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     BuildContext context,
     PlaybackProvider playbackProvider,
   ) {
-    final String? currentImageUrl = artworkUrlOf(widget.displayTrack);
+    final String? currentImageUrl = _realCoverUrlOf(widget.displayTrack);
     return Listener(
       // DragGestureRecognizer 对「已接受」手势的 PointerCancel 也走 onEnd
       // （不是 onCancel），而 Listener 先于识别器收到取消事件：这里直接
@@ -1413,7 +1427,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     String? placeholderUrl,
     String? artworkUrlOverride,
   }) {
-    final url = artworkUrlOverride ?? artworkUrlOf(track);
+    final url = artworkUrlOverride ?? _realCoverUrlOf(track);
     return CoverCard(
       key: key,
       size: size,
@@ -1430,9 +1444,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             : fallback;
         return AppNetworkImage(
           url: url,
-          fallbackUrl:
-              _covers?.defaultCoverUrl ??
-              CustomCoverStore.instance.defaultCoverUrl,
+          fallbackUrl: _coverResolver.defaultCoverUrl,
           fit: BoxFit.cover,
           // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
           fallbackIconSize: iconSize,
@@ -1462,8 +1474,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       animation: _centerScaleAnimation,
       builder: (context, child) {
         return Transform.scale(
-          scale: _playStateScaleAnimation.value *
-              _pressScaleFor(_DeckSlot.center),
+          scale:
+              _playStateScaleAnimation.value * _pressScaleFor(_DeckSlot.center),
           child: child,
         );
       },

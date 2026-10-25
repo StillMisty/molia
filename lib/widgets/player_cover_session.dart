@@ -18,11 +18,16 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
+import '../services/covers/custom_cover_store.dart';
 import 'cover_appearance.dart';
 import 'player_cover_swap.dart';
 
-/// 封面 URL / 稳定 key 与外观词汇定义在 `cover_appearance.dart`（会话只消费）。
-export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
+/// 稳定 key 与外观词汇定义在 `cover_appearance.dart`（会话只消费）。
+export 'cover_appearance.dart' show trackKeyOf;
+
+/// 会话里只需要真实封面（切歌占位图；默认封面是展示兜底，不作为滑出占位）。
+String? _realCoverUrlOf(Track? track) =>
+    CustomCoverStore.instance.resolution.realOf(track).url;
 
 /// 会话阶段。
 ///
@@ -471,7 +476,7 @@ class CoverSwapSession extends ChangeNotifier {
     _previous = snapshot.previous;
     _from = oldTrack;
     // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
-    _placeholderUrl = artworkUrlOf(oldTrack) ?? _placeholderUrl;
+    _placeholderUrl = _realCoverUrlOf(oldTrack) ?? _placeholderUrl;
     _host.disarmTimeout();
     if (duringDrag) _host.settleDuringDrag();
     notifyListeners();
@@ -512,7 +517,7 @@ class CoverSwapSession extends ChangeNotifier {
     _correctionDeferred = false;
     _host.disarmTimeout();
     if (adoptTrack != null) {
-      _placeholderUrl = artworkUrlOf(adoptTrack) ?? _placeholderUrl;
+      _placeholderUrl = _realCoverUrlOf(adoptTrack) ?? _placeholderUrl;
     }
     final snapshot = _snapshot;
     if (snapshot != null) {

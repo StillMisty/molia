@@ -24,7 +24,7 @@ import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
-import 'app_network_image.dart';
+import 'track_artwork.dart';
 
 /// 文件选择（测试可注入；返回未归一的原始字节）。
 typedef CoverImagePicker = Future<Uint8List?> Function();
@@ -88,22 +88,12 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
 
   bool get _isDefault => widget.trackId == null;
 
-  bool get _hasOriginal => !_isDefault && (widget.originalCoverUrl ?? '').isNotEmpty;
-
-  String? get _previewUrl {
-    if (_isDefault) return _store.defaultCoverUrl;
-    return _store.resolveTrackCoverForId(
-      widget.trackId,
-      originalUrl: widget.originalCoverUrl,
-    );
-  }
-
-  /// 单曲预览的失败回退：默认封面；默认封面模式本身就是主图，不再回退。
-  String? get _previewFallbackUrl => _isDefault ? null : _store.defaultCoverUrl;
+  bool get _hasOriginal =>
+      !_isDefault && (widget.originalCoverUrl ?? '').isNotEmpty;
 
   bool get _hasCustom => _isDefault
-      ? _store.defaultCoverUrl != null
-      : _store.trackCoverUrl(widget.trackId!) != null;
+      ? _store.resolution.defaultCoverUrl != null
+      : _store.resolution.realForId(widget.trackId).isCustom;
 
   Future<void> _pickImage() async {
     if (_busy) return;
@@ -194,20 +184,19 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
             ),
             const SizedBox(height: 16),
             Center(
-              child: ValueListenableBuilder<int>(
-                valueListenable: _store.revision,
-                builder: (context, _, __) => ClipRRect(
+              child: CoverChangeBuilder(
+                builder: (context, _) => TrackArtwork(
+                  key: const Key('coverPickerPreview'),
+                  // 外层已订阅；默认封面模式没有曲目身份，直接展示默认图。
+                  listenForChanges: false,
+                  trackId: widget.trackId,
+                  originalUrl: widget.originalCoverUrl,
+                  width: 120,
+                  height: 120,
                   borderRadius: BorderRadius.circular(16),
-                  child: AppNetworkImage(
-                    key: const Key('coverPickerPreview'),
-                    url: _previewUrl,
-                    fallbackUrl: _previewFallbackUrl,
-                    width: 120,
-                    height: 120,
-                    memCacheWidth:
-                        (120 * MediaQuery.of(context).devicePixelRatio).round(),
-                    fallbackIconSize: 48,
-                  ),
+                  memCacheWidth:
+                      (120 * MediaQuery.of(context).devicePixelRatio).round(),
+                  fallbackIconSize: 48,
                 ),
               ),
             ),
