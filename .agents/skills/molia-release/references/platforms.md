@@ -15,3 +15,7 @@
 - **Windows 便携版**：解压 zip 到任意可写目录运行；应用内更新是「解压覆盖 + 重启」，
   目录不可写时降级为手动下载。
 - **iOS**：无应用内更新（App Store 规则），产物仅供侧载验证。
+- **macOS**：无应用内更新（GitHub 分发 + ad-hoc 签名，自动替换 `.app` 会与 Gatekeeper
+  冲突）；产物是 `molia-<版本>-macos-<arch>-unsigned.zip`（文件名带 `unsigned`，不进
+  `latest.json`），首次打开需在「系统设置 › 隐私与安全性」放行。播放走 just_audio
+  原生 AVPlayer，不需要 libmpv；托盘 = 菜单栏图标，关闭窗口默认隐藏到菜单栏。

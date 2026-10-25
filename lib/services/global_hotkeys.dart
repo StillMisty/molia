@@ -368,8 +368,8 @@ class GlobalHotkeys {
     }));
   }
 
-  /// macOS 上窗口能力缺失（`WindowChrome` 是 stub）：显示主窗口这条全局
-  /// 热键没有意义，注册前跳过（设置页也按同一判定隐藏该行）。
+  /// 没有窗口能力的平台（Android / iOS）上「显示主窗口」这条全局热键没有
+  /// 意义，注册前跳过（设置页也按同一判定隐藏该行）。
   static bool get _supportsShowWindow => WindowChrome.isSupported;
 
   /// 等待在途的设置变更同步完成（测试用：通知回调是同步的，实际同步在

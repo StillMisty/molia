@@ -4,8 +4,8 @@
 /// 端口，Windows 上可能要等满 2s 连接超时才开始重抢，首帧被白等。这里改为
 /// 先问操作系统「这个 pid 还在不在」，pid 已退出就立刻清锁重抢。
 ///
-/// 窗口能力只在 Linux / Windows 使用（`WindowChrome.isSupported`）；其它平台
-/// 保守返回 true，不参与该路径。
+/// 窗口能力只在 Linux / Windows / macOS 使用（`WindowChrome.isSupported`）；
+/// 其它平台保守返回 true，不参与该路径。
 library;
 
 import 'dart:ffi';
@@ -18,7 +18,7 @@ import 'dart:io';
 bool isProcessAlive(int pid) {
   if (pid <= 0) return false;
   if (Platform.isWindows) return _isProcessAliveWindows(pid);
-  if (Platform.isLinux) return _isProcessAliveLinux(pid);
+  if (Platform.isLinux || Platform.isMacOS) return _isProcessAlivePosix(pid);
   return true;
 }
 
@@ -56,7 +56,7 @@ bool _isProcessAliveWindows(int pid) {
   }
 }
 
-bool _isProcessAliveLinux(int pid) {
+bool _isProcessAlivePosix(int pid) {
   try {
     final kill = DynamicLibrary.process().lookupFunction<
         Int32 Function(Int32, Int32),
@@ -64,9 +64,12 @@ bool _isProcessAliveLinux(int pid) {
     if (kill(pid, 0) == 0) return true;
 
     // errno：ESRCH(3) = 不存在；EPERM(1) = 存在但无权限（仍存活）。
+    // 取值入口按 libc 分支：Linux `__errno_location`、macOS `__error`。
     final errnoLocation = DynamicLibrary.process().lookupFunction<
         Pointer<Int32> Function(),
-        Pointer<Int32> Function()>('__errno_location');
+        Pointer<Int32> Function()>(
+      Platform.isMacOS ? '__error' : '__errno_location',
+    );
     return errnoLocation().value != 3;
   } catch (_) {
     return true;

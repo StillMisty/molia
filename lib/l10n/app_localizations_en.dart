@@ -3597,6 +3597,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'iOS updates come from the App Store; in-app install is not available.';
 
   @override
+  String get updateMacosHint =>
+      'Download macOS builds from the release page; in-app updates are not available.';
+
+  @override
   String get updateGrantInstallPermission => 'Grant permission';
 
   @override

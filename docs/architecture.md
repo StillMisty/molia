@@ -955,8 +955,9 @@
   从 12 变 16 是预期；整块可点打开搜索遮罩，**不做 tooltip**：键位提示只留在
   设置 › 快捷键）；
   品牌区右侧的空白是拖动区（双击最大化，只有它包 `WindowDoubleTapMaximize`，
-  双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（图标按钮一律不做悬浮提示，
-  语义走 `semanticLabel`，全应用同口径——见「按钮选型」）。
+  双击品牌 / 按钮不最大化）+ 设置 + 窗口按钮（仅 Linux / Windows 自画；macOS
+  保留原生标题栏与红绿灯，`WindowChrome.usesCustomTitleBar` 为 false；图标
+  按钮一律不做悬浮提示，语义走 `semanticLabel`，全应用同口径——见「按钮选型」）。
   **全局搜索**是 Ctrl+F / 品牌区打开的全屏遮罩（`lib/widgets/global_search_overlay.dart`）：
   壳层在内容区中上放一个隐形占位盒，遮罩打开时实测它的矩形，把搜索条与结果面板
   摆在同一条位置（自建 route 挂在根导航器上，坐标是整窗口径）；结果与资料库共用
@@ -1027,7 +1028,7 @@
   **封面覆盖**（当前曲目已有封面取色结果时用封面 seed 覆盖基础配色，包括
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
   **纯黑**（深色下覆盖 surface 系列，与来源正交可叠加）。
-  解析：`封面 > 壁纸图 seed（桌面）> 强调色方案 > 自定义` → `applyPureBlackScheme`。
+  解析：`封面 > 壁纸图 seed（Linux / Windows；macOS 暂无壁纸读取入口）> 强调色方案 > 自定义` → `applyPureBlackScheme`。
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；
   `ColorScheme` 派生唯一入口 `lib/theme/scheme_builder.dart::buildColorScheme`；
@@ -1229,7 +1230,7 @@ flutter build apk --release --split-per-abi --split-debug-info=build/symbols --o
 ## 8. 后续
 
 - any-listen 真实协议（WS IPC）接入（当前为 HTTP 占位端点，抽象已就绪）；
-- 真机验证：Android 17 通知/耳机键、iOS 15+ 后台播放；歌词显示的模拟器交互与通知栏验证、
+- 真机验证：Android 17 通知/耳机键、iOS 18+ 后台播放；歌词显示的模拟器交互与通知栏验证、
   A2DP 车载字段映射（见 `docs/lyrics_display.md` §9）；
 - 桌面歌词平台输出等 Flutter windowing stable（同上 §11）；M3E 组件目视复核（弹层观感/间距）；
 - 发布前：release 体积与签名检查。

@@ -329,7 +329,8 @@ class LocalPlaybackService extends ChangeNotifier {
     _scheduleNotify();
   }
 
-  /// 是否走桌面 media_kit 后端（just_audio_media_kit 只在 Windows/Linux 接管）。
+  /// 是否走桌面 media_kit 后端（just_audio_media_kit 只在 Windows/Linux 接管；
+  /// macOS 走 just_audio 原生 AVPlayer）。
   static bool get _usesMediaKitBackend =>
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.linux;

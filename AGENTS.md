@@ -10,6 +10,7 @@
 
 Flutter / Dart 3.47.7 / 3.13.5；JDK 26+；Gradle 9.8.2 / AGP 9.4.1 / Kotlin 2.4.21；
 compileSdk/targetSdk 37，minSdk 35；NDK 30.0.16248370。这里是版本来源，改 CI / 发布工作流前先改本行。
+最低支持：iOS 18 / macOS 12（Xcode + CocoaPods；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
 
 ## 常用命令
 
@@ -35,7 +36,9 @@ tool/agent/memory.ps1                    # Windows 托盘内存采样（专用�
   提 `schemaVersion`，用 `dart run drift_dev make-migrations` 从新 v1 生成快照 +
   `stepByStep` 写增量迁移并保留数据（ADR-0005）；
 - 改 `tool/gen_taskbar_icons.py`（Windows 任务栏按钮字形 / 档位）→ `python3 tool/gen_taskbar_icons.py`
-  （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）。
+  （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）；
+- 改品牌图标 → `swift tool/gen_macos_icons.swift`（产物 `macos/Runner/Assets.xcassets/AppIcon.appiconset/*.png`
+  提交进仓库；iOS / Windows 图标走 `dart run icons_launcher:create`）。
 
 发布：`git tag -s v1.2.3 -m "Molia 1.2.3" && git push origin v1.2.3`（tag 即版本；
 流程、secrets 与产物清单见 `.agents/skills/molia-release/`）。

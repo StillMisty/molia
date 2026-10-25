@@ -1940,6 +1940,7 @@
   "updateCancelDownload": "Cancel",
   "updateInstallingHint": "Handed to the installer — follow the system prompts.",
   "updateIosHint": "iOS updates come from the App Store; in-app install is not available.",
+  "updateMacosHint": "Download macOS builds from the release page; in-app updates are not available.",
   "updateGrantInstallPermission": "Grant permission",
   "updateInstallNow": "Install now",
   "updateDownloadAndInstall": "Download and install",

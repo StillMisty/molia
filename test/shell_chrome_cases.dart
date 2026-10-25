@@ -126,7 +126,7 @@ void main() {
       expect(settingsOpened, 1);
       expect(
         find.byType(WindowControls),
-        WindowChrome.isSupported ? findsOneWidget : findsNothing,
+        WindowChrome.usesCustomTitleBar ? findsOneWidget : findsNothing,
       );
     },
   );

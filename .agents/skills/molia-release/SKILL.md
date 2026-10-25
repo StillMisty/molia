@@ -78,6 +78,7 @@ molia-1.2.3-windows-x64-setup.exe       # Windows 安装器（Inno Setup，安�
 molia-1.2.3-windows-x64.zip             # Windows 便携版
 molia-1.2.3-linux-x64.tar.gz
 molia-1.2.3-ios-unsigned.zip            # 无签名，仅侧载
+molia-1.2.3-macos-arm64-unsigned.zip    # ad-hoc 签名，仅验证（架构随构建机）
 latest.json                             # 应用内更新清单
 SHA256SUMS.txt
 ```

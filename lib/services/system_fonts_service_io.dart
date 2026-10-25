@@ -12,7 +12,8 @@ import 'sfnt_families.dart';
 /// - Android：解析系统字体配置（`fonts.xml` 系列）中的 family/alias 名字，
 ///   与 Skia 的字体匹配逻辑一致。该配置属于字体数据（`font_data_file`，
 ///   app.te 明确允许应用读取），Flutter 引擎自身也解析同一文件构建字体族；
-/// - iOS/macOS：`UIFont.familyNames`（Runner 注册的 `system_fonts` 通道）；
+/// - iOS/macOS：`UIFont.familyNames` / `NSFontManager.availableFontFamilies`
+///   （Runner 注册的 `system_fonts` 通道）；
 /// - Linux：`fc-list : family`（fontconfig，与桌面端渲染同源）；
 /// - Windows：扫描系统 / 用户字体目录并合并注册表
 ///   （`…\CurrentVersion\Fonts` 的 HKLM + HKCU，覆盖自定义安装目录），

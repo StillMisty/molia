@@ -14,6 +14,11 @@ String? desktopAudioInitError;
 /// Linux 需要系统提供 libmpv（如 `pacman -S mpv` / `apt install libmpv-dev`）；
 /// 缺失时不阻塞启动，但本地播放功能不可用。
 ///
+/// macOS 走 just_audio 自带的 AVPlayer 实现（`just_audio` 的 darwin 平台声明
+/// 包含 macOS）：不引 `media_kit_libs_macos_audio`，也不装 libmpv。取链请求头
+/// 由 `UriAudioSource` 经 `AVURLAssetHTTPHeaderFieldsKey` 透传（B 站直链的
+/// Referer / UA 仍有效，见 `docs/media_kit_native_libs.md`）。
+///
 /// 这里的 media_kit 初始化会在主 isolate 上同步 `dlopen` libmpv（本机实测
 /// 39–48ms，见 `docs/performance.md`）：试过在后台 isolate 里预热，但两次
 /// dlopen 争用进程级的动态加载器锁，与建窗阶段互相串行、总时长不变，故保留

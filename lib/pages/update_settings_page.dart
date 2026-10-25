@@ -252,6 +252,8 @@ class _ReleaseActions extends StatelessWidget {
       );
     } else if (platform == 'ios') {
       actions.add(Text(l10n.updateIosHint));
+    } else if (platform == 'macos') {
+      actions.add(Text(l10n.updateMacosHint));
     } else if (primary != null && canOpenPage) {
       actions.add(
         M3ESplitButton<String>(
@@ -305,7 +307,8 @@ class _ReleaseActions extends StatelessWidget {
     );
   }
 
-  /// 当前状态/平台的唯一主操作；iOS 与安装中无主操作（只有说明文案）。
+  /// 当前状态/平台的唯一主操作；iOS / macOS 与安装中无主操作
+  /// （只有说明文案 + 打开发布页）。
   ({Key key, IconData icon, String label, VoidCallback onPressed})?
       _primaryAction(
     BuildContext context,
@@ -315,7 +318,8 @@ class _ReleaseActions extends StatelessWidget {
   ) {
     if (status == UpdateStatus.downloading ||
         status == UpdateStatus.installing ||
-        platform == 'ios') {
+        platform == 'ios' ||
+        platform == 'macos') {
       return null;
     }
     if (permissionMissing) {

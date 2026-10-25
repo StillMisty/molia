@@ -1,6 +1,9 @@
 # dart run icons_launcher:create
 #
 # 注意：Android 图标已改为手绘矢量资源，本工具不生成 Android 图标（platforms.android.enable: false）。
+# macOS 图标也不走本工具（需要 824/1024 的 Apple 图标网格留白）：
+# `swift tool/gen_macos_icons.swift` 从同一张 image_path_android.png 生成
+# macos/Runner/Assets.xcassets/AppIcon.appiconset（改品牌图后重跑，产物提交进仓库）。
 # 品牌更新时 Android 侧维护方式：
 #   1. 源图：assets/icons/molia_icon_full_bleed.svg
 #      （2048×2048：纯色底 #124537 + 外层 group 变换 + 7 条 path 的 mark）

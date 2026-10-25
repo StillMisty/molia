@@ -126,7 +126,7 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
               ),
             ],
           ),
-          // 桌面托盘：仅 Linux/Windows 显示（其余平台 AppTray.isSupported
+          // 桌面托盘：Linux / Windows / macOS 显示（其余平台 AppTray.isSupported
           // 为 false，开关没有意义）。
           if (AppTray.isSupported && tray != null) ...[
             const SizedBox(height: kSettingsSectionSpacing),

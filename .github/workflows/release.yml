@@ -273,9 +273,41 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+  macos:
+    name: macOS（ad-hoc 签名）
+    needs: prepare
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.7
+          channel: stable
+          cache: true
+      - name: pub get
+        run: flutter pub get --enforce-lockfile
+      - name: 构建（ad-hoc 签名；产物仅供验证，不入更新清单）
+        run: |
+          set -euo pipefail
+          v="${{ needs.prepare.outputs.version }}"
+          flutter build macos --release \
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+          arch="$(uname -m)"
+          if [ "$arch" = "arm64" ]; then arch="arm64"; else arch="x64"; fi
+          mkdir -p dist
+          # ditto 保留 .app 的符号链接与权限（zip -r 会把 framework 结构压坏）。
+          ditto -c -k --keepParent "build/macos/Build/Products/Release/Molia.app" \
+            "dist/molia-$v-macos-$arch-unsigned.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-macos
+          path: dist/*.zip
+          if-no-files-found: error
+
   publish:
     name: 发布 Release + latest.json
-    needs: [prepare, android, windows, linux, ios]
+    needs: [prepare, android, windows, linux, ios, macos]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
