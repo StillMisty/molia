@@ -9,8 +9,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/widgets/player_cover_session.dart';
 import 'package:molia/widgets/player_cover_swap.dart';
+
+import 'support/fake_cover_index.dart';
 
 Track _track(String id) => Track(
       id: TrackId('fake', id),
@@ -110,7 +113,10 @@ void main() {
 
   setUp(() {
     host = _RecordingHost();
-    session = CoverSwapSession(host: host);
+    session = CoverSwapSession(
+      host: host,
+      covers: CoverResolver(FakeCoverIndex()),
+    );
   });
 
   tearDown(() => session.dispose());

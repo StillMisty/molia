@@ -16,9 +16,11 @@ import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
+import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
 
+import '../support/fake_cover_index.dart';
 import '../support/fake_download_notifications.dart';
 import '../support/fake_download_storage.dart';
 import '../support/fake_downloads_publisher.dart';
@@ -55,7 +57,7 @@ void main() {
     Dio? dio,
     DownloadLyricsResolver? lyrics,
     DownloadArtworkResolver? artwork,
-    DownloadCustomCoverResolver? customCover,
+    CoverResolver? coverResolver,
     DownloadSettings? settings,
     DownloadsPublisher? publisher,
     DownloadNotifications? notifications,
@@ -74,7 +76,7 @@ void main() {
           mockDio((options) => textResponse('unexpected', statusCode: 500)),
       lyricsResolver: lyrics,
       artworkResolver: artwork,
-      customCoverResolver: customCover,
+      coverResolver: coverResolver,
       settings: settings,
       publisher: publisher,
       notifications: notifications,
@@ -157,6 +159,12 @@ void main() {
 
   test('自定义封面：下载封面与标签使用它，不再取网络图', () async {
     var artworkCalls = 0;
+    final coverIndex = FakeCoverIndex(
+      customUrls: const {'kw:1': 'file:///tmp/custom-cover.jpg'},
+      customBytes: {
+        'kw:1': Uint8List.fromList([7, 7, 7, 7]),
+      },
+    );
     final service = makeService(
       dio: mockDio((options) {
         if (options.uri.path.endsWith('.mp3')) {
@@ -164,7 +172,7 @@ void main() {
         }
         return textResponse('not found', statusCode: 404);
       }),
-      customCover: (track) async => Uint8List.fromList([7, 7, 7, 7]),
+      coverResolver: CoverResolver(coverIndex),
       artwork: (track) async {
         artworkCalls++;
         return 'https://img.example.com/should-not-be-used.jpg';
@@ -180,6 +188,35 @@ void main() {
     expect(record!.coverPath, '/downloads/covers/歌手 - 测试歌曲.jpg');
     expect(storage.files[record.coverPath], [7, 7, 7, 7]);
     expect(artworkCalls, 0);
+  });
+
+  test('默认封面不参与下载：没有真实封面时不写封面', () async {
+    final coverIndex = FakeCoverIndex(
+      defaultUrl: 'file:///tmp/default-cover.jpg',
+    );
+    var artworkCalls = 0;
+    final service = makeService(
+      dio: mockDio((options) {
+        if (options.uri.path.endsWith('.mp3')) {
+          return bytesResponse([1, 2, 3, 4]);
+        }
+        return textResponse('not found', statusCode: 404);
+      }),
+      coverResolver: CoverResolver(coverIndex),
+      artwork: (track) async {
+        artworkCalls++;
+        return null;
+      },
+    );
+    await service.init();
+
+    await service.download(makeTrack(), includeLyrics: false);
+
+    final record = service.recordFor('kw', '1');
+    expect(record, isNotNull);
+    expect(record!.coverPath, isNull, reason: '默认封面只是展示占位');
+    expect(artworkCalls, 1, reason: '仍走真实取图端口（这里返回空）');
+    expect(coverIndex.readCount, 0, reason: '默认封面没有自定义字节可读');
   });
 
   test('进度广播：首个进度可见；完成后状态清空', () async {

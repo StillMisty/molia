@@ -5,12 +5,14 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/image_preload_manager.dart';
 import 'package:molia/services/app_presence.dart';
+import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_library_repository.dart';
+import '../support/fake_cover_index.dart';
 import '../support/fakes.dart';
 
 /// 播放观察者：快照副作用扇出（最后播放 / 播放上下文 / 小组件 / 历史 /
@@ -75,7 +77,7 @@ void main() {
 
   PlaybackObserver buildObserver({
     Future<String?> Function(Track track)? artworkResolver,
-    PlaybackCoverResolver? displayCoverUrlResolver,
+    CoverResolver? coverResolver,
     DataSaverService? dataSaver,
     GlobalKey<NavigatorState>? navigatorKey,
     AppPresence? presence,
@@ -106,7 +108,7 @@ void main() {
       },
       albumArtPreloader: preloader,
       artworkResolver: artworkResolver,
-      displayCoverUrlResolver: displayCoverUrlResolver,
+      coverResolver: coverResolver,
       navigatorKey: navigatorKey,
       requestNotificationPermission: () async {
         log.add('notify');
@@ -180,9 +182,12 @@ void main() {
     expect(dataSaver.blockNetworkArtwork, isTrue);
 
     var displayUrl = 'file:///data/user/0/molia/custom_covers/track_a.jpg';
+    final coverIndex = FakeCoverIndex(
+      customUrls: {'fake:a': displayUrl},
+    );
     final observer = buildObserver(
       dataSaver: dataSaver,
-      displayCoverUrlResolver: (_) => displayUrl,
+      coverResolver: CoverResolver(coverIndex),
     );
     addTearDown(observer.dispose);
 

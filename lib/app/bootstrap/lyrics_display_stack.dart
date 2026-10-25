@@ -55,7 +55,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   required PlaybackPowerPolicy powerPolicy,
   CustomCoverStore? customCovers,
 }) async {
-  final covers = customCovers ?? CustomCoverStore.instance;
+  final covers = (customCovers ?? CustomCoverStore.instance).resolution;
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
   // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键。
   final themeSettings = catalog.settings.scope([
@@ -168,13 +168,13 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   // 封面取色接线：任何页面/后台切歌都经同一链路（稳态延迟 + 过期丢弃）。
   // 无封面 → 清空 seed，主题回退基础配色；取色失败保持现色。
   void syncArtworkPalette() {
-    final artwork = covers.resolveTrackCover(playback.snapshot.current);
+    final artwork = covers.realOf(playback.snapshot.current).url;
     artworkThemeSync.onArtworkChanged(artwork);
   }
 
   playback.addListener(syncArtworkPalette);
   // 自定义封面替换 / 恢复：当前曲目的主题色立即重算（默认封面不参与）。
-  covers.revision.addListener(syncArtworkPalette);
+  covers.addChangeListener(syncArtworkPalette);
   syncArtworkPalette();
 
   // 启动预解析（runApp 前，决定首帧配色）：先按平台亮度定亮度，再依次解析
@@ -215,13 +215,12 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     }
   }
   if (themeProvider.followArtworkEnabled) {
-    final startupArtwork = covers.resolveTrackCover(playback.snapshot.current);
-    if (startupArtwork != null && startupArtwork.isNotEmpty) {
-      final startupPalette =
-          await artworkPaletteService.loadCached(startupArtwork);
-      if (startupPalette != null) {
-        themeProvider.applyArtworkSeed(startupPalette.seed);
-      }
+    final startupPalette = await artworkPaletteService.loadCachedTrack(
+      playback.snapshot.current,
+      covers: covers,
+    );
+    if (startupPalette != null) {
+      themeProvider.applyArtworkSeed(startupPalette.seed);
     }
   }
 

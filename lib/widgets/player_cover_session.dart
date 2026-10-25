@@ -18,11 +18,12 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
+import '../services/covers/cover_resolution.dart';
 import 'cover_appearance.dart';
 import 'player_cover_swap.dart';
 
-/// 封面 URL / 稳定 key 与外观词汇定义在 `cover_appearance.dart`（会话只消费）。
-export 'cover_appearance.dart' show artworkUrlOf, trackKeyOf;
+/// 稳定 key 与外观词汇定义在 `cover_appearance.dart`（会话只消费）。
+export 'cover_appearance.dart' show trackKeyOf;
 
 /// 会话阶段。
 ///
@@ -107,12 +108,25 @@ abstract interface class CoverSwapHost {
 
 /// 一次切歌（拖动/即时）的会话状态机。
 class CoverSwapSession extends ChangeNotifier {
-  CoverSwapSession({required CoverSwapHost host}) : _host = host;
+  CoverSwapSession({
+    required CoverSwapHost host,
+    required CoverResolver covers,
+  })  : _host = host,
+        _covers = covers;
 
   /// 提交等待的兜底时限：取链失败等情况下不能永远停在邻位预览。
   static const Duration commitTimeout = Duration(seconds: 6);
 
   final CoverSwapHost _host;
+
+  /// 封面解析器（组合根 / deck 注入；会话不直接读全局存储）。
+  CoverResolver _covers;
+
+  /// 运行时换绑（deck 的 Provider 被替换时）；稳态下等价于构造注入。
+  void useCoverResolver(CoverResolver covers) => _covers = covers;
+
+  /// 会话里只需要真实封面（切歌占位图；默认封面是展示兜底，不作为滑出占位）。
+  String? _realCoverUrlOf(Track? track) => _covers.realOf(track).url;
 
   /// 最近一次摄入的播放快照（[observe] 写入；派生左槽身份与预览目标）。
   PlaybackSnapshot? _snapshot;
@@ -471,7 +485,7 @@ class CoverSwapSession extends ChangeNotifier {
     _previous = snapshot.previous;
     _from = oldTrack;
     // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
-    _placeholderUrl = artworkUrlOf(oldTrack) ?? _placeholderUrl;
+    _placeholderUrl = _realCoverUrlOf(oldTrack) ?? _placeholderUrl;
     _host.disarmTimeout();
     if (duringDrag) _host.settleDuringDrag();
     notifyListeners();
@@ -512,7 +526,7 @@ class CoverSwapSession extends ChangeNotifier {
     _correctionDeferred = false;
     _host.disarmTimeout();
     if (adoptTrack != null) {
-      _placeholderUrl = artworkUrlOf(adoptTrack) ?? _placeholderUrl;
+      _placeholderUrl = _realCoverUrlOf(adoptTrack) ?? _placeholderUrl;
     }
     final snapshot = _snapshot;
     if (snapshot != null) {

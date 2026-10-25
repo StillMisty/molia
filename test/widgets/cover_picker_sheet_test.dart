@@ -26,8 +26,7 @@ class _FakeCoverStore extends CustomCoverStore {
   String? get defaultCoverUrl => defaultUrl;
 
   @override
-  String? resolveTrackCoverForId(TrackId? id, {String? originalUrl}) =>
-      trackUrl ?? originalUrl;
+  String? customCoverUrlForKey(String key) => trackUrl;
 
   @override
   Future<void> resetTrackCover(TrackId id) async {

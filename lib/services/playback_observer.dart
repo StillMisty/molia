@@ -35,6 +35,7 @@ import '../domain/models/track.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/playback_facade.dart';
 import '../managers/image_preload_manager.dart';
+import 'covers/cover_resolution.dart';
 import 'app_presence.dart';
 import 'data_saver_service.dart';
 import 'notification_permission.dart';
@@ -60,9 +61,6 @@ typedef PlayContextWriter = Future<void> Function({
 typedef PlaybackWidgetUpdater = Future<void> Function(
     Map<String, Object?> payload);
 
-/// 曲目封面 URL 解析（自定义封面优先；组合根注入本地封面存储）。
-typedef PlaybackCoverResolver = String? Function(Track? track);
-
 /// 默认小组件更新：非 Android 是空操作，失败静默（不影响播放主流程）。
 Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
   if (defaultTargetPlatform != TargetPlatform.android) return;
@@ -87,8 +85,7 @@ class PlaybackObserver {
     PlaybackWidgetUpdater? widgetUpdater,
     AlbumArtPreloadStrategy? albumArtPreloader,
     Future<String?> Function(Track track)? artworkResolver,
-    PlaybackCoverResolver? coverUrlResolver,
-    PlaybackCoverResolver? displayCoverUrlResolver,
+    CoverResolver? coverResolver,
     GlobalKey<NavigatorState>? navigatorKey,
     Future<void> Function()? requestNotificationPermission,
     AppPresence? presence,
@@ -99,11 +96,12 @@ class PlaybackObserver {
         _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
         _albumArtPreloader = albumArtPreloader ??
             AlbumArtPreloadStrategy(
-              coverUrlResolver: displayCoverUrlResolver ?? coverUrlResolver,
+              coverUrlResolver: coverResolver == null
+                  ? null
+                  : (track) => coverResolver.displayOf(track).url,
             ),
         _artworkResolver = artworkResolver,
-        _coverUrlResolver = coverUrlResolver,
-        _displayCoverUrlResolver = displayCoverUrlResolver ?? coverUrlResolver,
+        _coverResolver = coverResolver,
         _navigatorKey = navigatorKey,
         _requestNotificationPermission = requestNotificationPermission ??
             NotificationPermission.ensureRequested,
@@ -133,11 +131,8 @@ class PlaybackObserver {
   /// 返回空表示无法补取（省流网关由注入侧实现）。
   final Future<String?> Function(Track track)? _artworkResolver;
 
-  /// 曲目封面解析（自定义封面优先，不含默认封面占位）。
-  final PlaybackCoverResolver? _coverUrlResolver;
-
-  /// 展示封面解析（自定义 → 原始 → 全局默认占位）。
-  final PlaybackCoverResolver? _displayCoverUrlResolver;
+  /// 封面解析器（组合根注入；真实 / 展示两种语义由类型区分）。
+  final CoverResolver? _coverResolver;
 
   /// 组合根注入（封面预加载需要 BuildContext）。
   final GlobalKey<NavigatorState>? _navigatorKey;
@@ -442,9 +437,15 @@ class PlaybackObserver {
 
   static final RegExp _windowsPathPattern = RegExp(r'^[a-zA-Z]:[\\/]');
 
-  String? _coverUrlOf(Track? track) =>
-      _coverUrlResolver?.call(track) ?? track?.artwork?.uri.toString();
+  String? _coverUrlOf(Track? track) {
+    final covers = _coverResolver;
+    if (covers != null) return covers.realOf(track).url;
+    return track?.artwork?.uri.toString();
+  }
 
-  String? _displayCoverUrlOf(Track? track) =>
-      _displayCoverUrlResolver?.call(track) ?? _coverUrlOf(track);
+  String? _displayCoverUrlOf(Track? track) {
+    final covers = _coverResolver;
+    if (covers != null) return covers.displayOf(track).url;
+    return _coverUrlOf(track);
+  }
 }

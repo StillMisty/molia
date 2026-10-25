@@ -8,16 +8,15 @@ import '../l10n/app_localizations.dart';
 import '../models/lyric_line.dart';
 import '../models/poster_lyric_line.dart';
 import '../providers/playback_provider.dart';
-import '../services/covers/custom_cover_store.dart';
 import '../services/haptics.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/notification_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
-import 'app_network_image.dart';
 import 'lyrics_poster_preview_page.dart';
 import 'playback_selectors.dart';
+import 'track_artwork.dart';
 
 class LyricsSelectionPage extends StatefulWidget {
   // 共享歌词模型（不可变）：选中态由页面自身的下标集合维护。
@@ -345,24 +344,15 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                         ),
                         child: Row(
                           children: [
-                            ValueListenableBuilder<int>(
-                              valueListenable:
-                                  CustomCoverStore.instance.revision,
-                              builder: (context, _, __) => AppNetworkImage(
-                                url: CustomCoverStore.instance
-                                    .resolveTrackCoverForId(
-                                  widget.trackId,
-                                  originalUrl: widget.albumCoverUrl,
-                                ),
-                                fallbackUrl:
-                                    CustomCoverStore.instance.defaultCoverUrl,
-                                width: 60,
-                                height: 60,
-                                borderRadius: BorderRadius.circular(8),
-                                memCacheWidth: (60 *
-                                        MediaQuery.of(context).devicePixelRatio)
-                                    .round(),
-                              ),
+                            TrackArtwork(
+                              trackId: widget.trackId,
+                              originalUrl: widget.albumCoverUrl,
+                              width: 60,
+                              height: 60,
+                              borderRadius: BorderRadius.circular(8),
+                              memCacheWidth:
+                                  (60 * MediaQuery.of(context).devicePixelRatio)
+                                      .round(),
                             ),
                             const SizedBox(width: 16),
                             Expanded(
