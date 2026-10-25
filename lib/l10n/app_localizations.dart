@@ -368,6 +368,12 @@ abstract class AppLocalizations {
   /// **'Restore song artwork'**
   String get coverResetSong;
 
+  /// No description provided for @coverResetToDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Use default cover'**
+  String get coverResetToDefault;
+
   /// No description provided for @coverRestored.
   ///
   /// In en, this message translates to:

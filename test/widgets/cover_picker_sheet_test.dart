@@ -110,6 +110,29 @@ void main() {
     expect(store.trackUrl, isNull);
   });
 
+  testWidgets('单曲无原始封面：副标题说明回落到默认封面，无重置入口', (tester) async {
+    tester.view.physicalSize = const Size(390, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final store = _FakeCoverStore();
+    final notifications = RecordingNotificationService();
+
+    await pumpHost(
+      tester,
+      store: store,
+      notifications: notifications,
+      open: (context) =>
+          showCoverPickerSheet(context, trackId: const TrackId('kw', 'plain')),
+    );
+
+    expect(find.text(l10n.coverDefaultTitle), findsOneWidget);
+    expect(find.byKey(const Key('coverPickerResetButton')), findsNothing);
+  });
+
   testWidgets('默认封面：宽屏弹层标题使用默认封面文案', (tester) async {
     tester.view.physicalSize = const Size(900, 1600);
     tester.view.devicePixelRatio = 1.0;

@@ -155,6 +155,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get coverResetSong => 'Restore song artwork';
 
   @override
+  String get coverResetToDefault => 'Use default cover';
+
+  @override
   String get coverRestored => 'Cover restored';
 
   @override

@@ -152,6 +152,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coverResetSong => '恢复歌曲封面';
 
   @override
+  String get coverResetToDefault => '恢复默认封面';
+
+  @override
   String get coverRestored => '封面已恢复';
 
   @override

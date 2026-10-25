@@ -73,6 +73,7 @@
   "coverChooseImage": "Choose image",
   "coverChangeImage": "Change image",
   "coverResetSong": "Restore song artwork",
+  "coverResetToDefault": "Use default cover",
   "coverRestored": "Cover restored",
   "coverDefaultRestored": "Molia mark restored",
   "coverUpdated": "Cover updated",

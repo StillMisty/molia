@@ -88,6 +88,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
 
   bool get _isDefault => widget.trackId == null;
 
+  bool get _hasOriginal => !_isDefault && (widget.originalCoverUrl ?? '').isNotEmpty;
+
   String? get _previewUrl {
     if (_isDefault) return _store.defaultCoverUrl;
     return _store.resolveTrackCoverForId(
@@ -173,7 +175,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     final scheme = m3e.colorScheme;
     final subtitle = _isDefault
         ? l10n.coverDefaultSubtitle
-        : (_hasCustom ? l10n.coverCustomized : l10n.coverFollowSong);
+        : _hasCustom
+            ? l10n.coverCustomized
+            : (_hasOriginal ? l10n.coverFollowSong : l10n.coverDefaultTitle);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -233,7 +237,11 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 onPressed: _busy ? null : () => unawaited(_reset()),
                 icon: const Icon(Icons.restart_alt_rounded),
                 label: Text(
-                  _isDefault ? l10n.coverResetDefault : l10n.coverResetSong,
+                  _isDefault
+                      ? l10n.coverResetDefault
+                      : (_hasOriginal
+                          ? l10n.coverResetSong
+                          : l10n.coverResetToDefault),
                 ),
               ),
             ],
