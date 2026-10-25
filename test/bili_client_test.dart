@@ -4,7 +4,9 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/http/app_dio.dart';
+import 'package:molia/domain/models/bili_account.dart';
 import 'package:molia/domain/models/failure.dart';
+import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_client.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
@@ -19,7 +21,12 @@ import 'support/mock_dio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(BiliApi.reset);
+  setUp(() {
+    BiliApi.reset();
+    BiliAccountStore.instance.reset();
+  });
+
+  tearDown(() => BiliAccountStore.instance.reset());
 
   MockDioAdapter adapterOf(
     FutureOr<ResponseBody> Function(RequestOptions options) onRequest,
@@ -32,7 +39,8 @@ void main() {
   }
 
   BiliClient clientOf(MockDioAdapter adapter) => BiliClient(
-      transport: BuiltinTransport(dio: createAppDio(adapter: adapter)));
+    transport: BuiltinTransport(dio: createAppDio(adapter: adapter)),
+  );
 
   int sessionFetches(MockDioAdapter adapter) => adapter.requests
       .where((request) => request.uri.path == '/x/frontend/finger/spi')
@@ -41,10 +49,12 @@ void main() {
   test('session 端点：Cookie + WBI 签名，成功后不刷新会话', () async {
     final adapter = adapterOf((options) async {
       if (options.uri.path == '/x/player/wbi/playurl') {
-        return textResponse(jsonEncode({
-          'code': 0,
-          'data': {'ok': true}
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': 0,
+            'data': {'ok': true},
+          }),
+        );
       }
       return textResponse('{}', statusCode: 500);
     });
@@ -76,10 +86,12 @@ void main() {
         if (calls == 1) {
           return textResponse(jsonEncode({'code': -403, 'message': '风控'}));
         }
-        return textResponse(jsonEncode({
-          'code': 0,
-          'data': {'ok': true}
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': 0,
+            'data': {'ok': true},
+          }),
+        );
       }
       return textResponse('{}', statusCode: 500);
     });
@@ -138,9 +150,7 @@ void main() {
       ),
     );
     expect(
-      adapter.requests.where(
-        (r) => r.uri.path == '/x/player/wbi/playurl',
-      ),
+      adapter.requests.where((r) => r.uri.path == '/x/player/wbi/playurl'),
       hasLength(1),
     );
     expect(sessionFetches(adapter), 1, reason: '-404 不是风控');
@@ -165,9 +175,7 @@ void main() {
       ),
     );
     expect(
-      adapter.requests.where(
-        (r) => r.uri.path == '/x/v3/fav/resource/list',
-      ),
+      adapter.requests.where((r) => r.uri.path == '/x/v3/fav/resource/list'),
       hasLength(1),
     );
     expect(sessionFetches(adapter), 0, reason: '收藏夹的 -403 不是会话风控');
@@ -189,6 +197,73 @@ void main() {
     expect(request.headers.containsKey('Cookie'), isFalse);
     expect(sessionFetches(adapter), 0);
   });
+
+  test(
+    '账号口径：account / accountSession 带账号 Cookie，session / anonymous 不带',
+    () async {
+      BiliAccountStore.instance.update(
+        cookieHeader: 'SESSDATA=test-sessdata; bili_jct=test-jct',
+        account: const BiliAccount(userId: '1'),
+      );
+      final adapter = adapterOf((options) async {
+        switch (options.uri.path) {
+          case '/x/web-interface/nav':
+            return textResponse(
+              jsonEncode({
+                'code': 0,
+                'data': {'isLogin': true},
+              }),
+            );
+          case '/x/player/wbi/v2':
+          case '/x/player/wbi/playurl':
+          case '/x/v2/reply/main':
+            return textResponse(jsonEncode({'code': 0, 'data': {}}));
+          default:
+            return textResponse('{}', statusCode: 500);
+        }
+      });
+      final client = clientOf(adapter);
+
+      // 账号资料：只带账号 Cookie，不拉 buvid / WBI。
+      await client.get(
+        '/x/web-interface/nav',
+        auth: BiliAuth.account,
+        codePolicy: BiliCodePolicy.none,
+      );
+      final nav = adapter.requests.last;
+      expect(
+        nav.headers['Cookie'],
+        'SESSDATA=test-sessdata; bili_jct=test-jct',
+      );
+      expect(sessionFetches(adapter), 0);
+
+      // 字幕：buvid + WBI + 账号 Cookie。
+      await client.get(
+        '/x/player/wbi/v2',
+        query: {'bvid': 'BV1xx411c7mD', 'cid': 1},
+        auth: BiliAuth.accountSession,
+      );
+      final subtitle = adapter.requests.last;
+      expect(subtitle.headers['Cookie'], contains('buvid3=buvid3-test'));
+      expect(subtitle.headers['Cookie'], contains('SESSDATA=test-sessdata'));
+      expect(subtitle.uri.queryParameters['w_rid'], isNotEmpty);
+
+      // 播放取链：即使已登录也不能带账号 Cookie。
+      await client.get(
+        '/x/player/wbi/playurl',
+        query: {'bvid': 'BV1xx411c7mD', 'cid': 1},
+        auth: BiliAuth.session,
+      );
+      final playurl = adapter.requests.last;
+      expect(playurl.headers['Cookie'], contains('buvid3=buvid3-test'));
+      expect(playurl.headers['Cookie'], isNot(contains('SESSDATA')));
+
+      // 评论 / 搜索等匿名端点：完全不带 Cookie。
+      await client.get('/x/v2/reply/main', query: {'oid': '1'});
+      final reply = adapter.requests.last;
+      expect(reply.headers.containsKey('Cookie'), isFalse);
+    },
+  );
 
   test('空 body / 非 JSON：归一为 network 失败（可重试）', () async {
     for (final body in ['', '<html>not json</html>']) {

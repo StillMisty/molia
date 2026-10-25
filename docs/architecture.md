@@ -177,10 +177,12 @@
   `lib/models/lyric_line.dart`：`hasLyricTimestamps` 与 `parseLyrics` 共用同一正则
   （兼容 1–3 位分钟与行内多标签）。
   **取词顺序**：缓存 → 曲目原生（`SourceManager.fetchLyric`：脚本 `lyric` action →
-  any-listen → 内置平台原生实现（五个音乐平台 + B 站 CC 字幕），用曲目 raw 的
-  精确平台 ID）→ 跨平台名字搜索回退
+  any-listen → 内置平台原生实现（五个音乐平台 + B 站 CC/AI 字幕，B 站需扫码
+  登录，见 ADR-0016），用曲目 raw 的精确平台 ID）→ 跨平台名字搜索回退
   （netease / qq / kugou / kuwo / migu / lrclib 并行，**首个非空即返回**，并经
-  时长 ±5s + 歌名/歌手/版本词相似度挑选）。`lxlyric` 的 `<相对ms,时长ms>` 经
+  时长 ±5s + 歌名/歌手/版本词相似度挑选）。B 站登录后，缓存来源不是 `bili`
+  且非手动选择时优先重试原生；登录成功会清 `bili:` 原生取词缓存并强刷当前
+  歌词。`lxlyric` 的 `<相对ms,时长ms>` 经
   `attachWordTimings` 对齐到主行（`LyricLine.words`），歌词页当前行用
   `KaraokeLyricText` 做词级高亮，桌面歌词 / 通知 / 蓝牙仍按行。
   UI（LyricsWidget / 歌词搜索页 / 歌词选择页）只渲染状态与交互，不再各自构造
@@ -495,7 +497,8 @@
   （数据与存储页导出/导入）是独立模块（`sync_backup.dart` 的
   `SyncBackup.exportBackupJson` / `importBackupJson`）：复用同一 envelope、
   适配器与版本戳，收集入口由引擎注入（`collectRecords`），但不构造轮次也不经
-  传输，凭证类默认排除，备份只做结构校验（kind / 内层 envelope，不按协议
+  传输；默认导出全部类别与凭证（换机状态一致，备份文件为明文 JSON，调用方
+  负责保管），备份只做结构校验（kind / 内层 envelope，不按协议
   版本判定）。数据变更经
   调度器进入触发链，生命周期回调由 `main.dart` 的 `AppLifecycleListener` 转发；
   同步后的定向重载经 `PrefsSyncAdapter.onApplied` 接线。设置入口
@@ -545,9 +548,13 @@
   ADR-0014 任何失败刷新一次）。`bili_search` /
   `bili_play` / `bili_lyric` / `bili_comment` / `bili_artist` / `bili_ranking` /
   `bili_favorites` / `bili_discover` 分别覆盖全站视频搜索、原生取链（dash 192k/128k/64k
-  + `durl` 回退）、CC 字幕歌词、游标评论、UP 主页、音乐榜 / 热搜与公开收藏夹导入。
+  + `durl` 回退）、CC/AI 字幕歌词、游标评论、UP 主页、音乐榜 / 热搜与公开收藏夹导入。
   取链返回 `PlayableStream(headers: UA + Referer, expiresIn: deadline)`；
-  收藏夹按 `media_count` 拉全（上限 50 页 / 1000 条）。决策与边界见 ADR-0014。
+  收藏夹按 `media_count` 拉全（上限 50 页 / 1000 条）。可选 B 站扫码登录
+  （`BiliAccountService` + `BiliAccountStore`）只为字幕提供账号 Cookie：字幕走
+  `accountSession`（buvid + WBI + Cookie）/ `account` 回退，播放、搜索、评论、
+  字幕 CDN 继续匿名；凭据是凭证类别设置键，默认随同步与完整备份。决策与边界见
+  ADR-0014 / ADR-0016。
 - **内置尝试循环 / 发现执行器**：`builtin_transport.dart::runBuiltinAttempts` 是
   「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
   `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名

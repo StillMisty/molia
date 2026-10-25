@@ -72,8 +72,9 @@ class DataSettingsPage extends StatelessWidget {
               // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）；
               // 统计明细入口在设置首屏「数据」卡（与听歌统计同一处）。
               ValueListenableBuilder<bool>(
-                valueListenable:
-                    context.read<PlayStatisticsService>().enabledNotifier,
+                valueListenable: context
+                    .read<PlayStatisticsService>()
+                    .enabledNotifier,
                 builder: (context, enabled, _) => SettingsSwitchTile(
                   switchKey: const Key('settingsPlayStatisticsSwitch'),
                   icon: Icons.query_stats_rounded,
@@ -135,7 +136,7 @@ class DataSettingsPage extends StatelessWidget {
     }
 
     try {
-      // 完整备份：同步备份模块收集全部类别（凭证类默认不含）。
+      // 完整备份：默认导出全部类别与凭证，保证换机后的状态一致。
       final json = await syncProvider.exportBackupJson();
       if (saveAs == null) throw StateError('SaveAs 未装配');
       final result = await saveAs.saveBytes(

@@ -521,6 +521,14 @@ class SourceManager extends ChangeNotifier {
     return _builtinLyricFallback.fetch(track);
   }
 
+  /// 清掉某平台的原生取词缓存（B 站扫码登录后调用）。
+  ///
+  /// `BuiltinLyricDispatch` 会缓存 null 5 分钟；登录态从无到有时必须清掉，
+  /// 否则当前曲目仍会走跨平台回退。
+  void invalidateLyricCacheFor(String sourceKey) {
+    _builtinLyricFallback.invalidateSource(sourceKey);
+  }
+
   /// 获取曲目评论（内置平台；脚本扩展源 / any-listen 无评论能力）。
   ///
   /// 失败统一归一化为 [SourceFailure]（业务拒绝 → unknown/retryable，

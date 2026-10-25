@@ -9,26 +9,29 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'any_listen_page.dart';
+import '../domain/models/bili_account.dart';
 import '../domain/models/source.dart' show SourceKind;
 import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sources_provider.dart';
+import '../services/bili_account_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_tiles.dart';
+import 'bili_account_page.dart';
 
 /// AppLocalizations 查找：集成测试等场景会直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文，保证与中文正式环境文案一致（正式 App 恒有 delegate）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 音源管理页：导入 / 启停 / 排序 / 删除 LX Music 音源脚本。
+/// 音源管理页：LX 脚本导入 / 启停 / 排序 / 删除 + 内置平台账号（哔哩哔哩）。
 ///
 /// 与设置页共用同一套 M3E 语言：`SettingsSectionCard` + 设置行
 /// （`CardListSurface` 形状、`cardList.gap` 行距、`M3ETypeScale` 排版），
 /// 渠道排序复用 [SettingsReorderableRows] 的拖拽手柄模式。
-/// 分层：只依赖 [SourcesProvider] 与 domain 模型，
+/// 分层：只依赖 [SourcesProvider] / 平台账号服务与 domain 模型，
 /// 不直接 import `lib/sources/**`（R5）。
 class SourcesPage extends StatefulWidget {
   const SourcesPage({super.key});
@@ -59,9 +62,8 @@ class _SourcesPageState extends State<SourcesPage> {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => AnyListenPage(
-                    provider: context.read<SourcesProvider>(),
-                  ),
+                  builder: (_) =>
+                      AnyListenPage(provider: context.read<SourcesProvider>()),
                 ),
               );
             },
@@ -70,6 +72,7 @@ class _SourcesPageState extends State<SourcesPage> {
       ),
       body: Consumer<SourcesProvider>(
         builder: (context, provider, _) {
+          final biliAccount = context.watch<BiliAccountService?>();
           if (!provider.initialized) {
             return const Center(child: M3ELoadingIndicator());
           }
@@ -77,6 +80,10 @@ class _SourcesPageState extends State<SourcesPage> {
             padding: const EdgeInsets.all(kSettingsPadding),
             children: [
               _buildStatusSection(context, l10n, provider),
+              if (biliAccount != null) ...[
+                const SizedBox(height: kSettingsSectionSpacing),
+                _buildPlatformAccountsSection(context, l10n, biliAccount),
+              ],
               const SizedBox(height: kSettingsSectionSpacing),
               _buildImportSection(context, l10n, provider),
               const SizedBox(height: kSettingsSectionSpacing),
@@ -87,6 +94,29 @@ class _SourcesPageState extends State<SourcesPage> {
           );
         },
       ),
+    );
+  }
+
+  /// 内置平台账号：目前只有 B 站（登录后字幕歌词同源优先）。
+  Widget _buildPlatformAccountsSection(
+    BuildContext context,
+    AppLocalizations l10n,
+    BiliAccountService account,
+  ) {
+    final loggedIn = account.status == BiliAccountStatus.loggedIn;
+    return SettingsSectionCard(
+      title: l10n.sourcesPlatformAccounts,
+      children: [
+        SettingsNavTile(
+          key: const Key('sourcesBiliAccountItem'),
+          icon: Icons.account_circle_rounded,
+          title: l10n.biliAccountTitle,
+          subtitle: loggedIn
+              ? l10n.biliAccountTileLoggedIn
+              : l10n.biliAccountTileLoggedOut,
+          onTap: () => openSettingsSubPage(context, const BiliAccountPage()),
+        ),
+      ],
     );
   }
 
@@ -116,10 +146,12 @@ class _SourcesPageState extends State<SourcesPage> {
             icon: hasActive
                 ? Icons.check_circle_rounded
                 : Icons.error_outline_rounded,
-            containerColor:
-                hasActive ? semantic.successContainer : scheme.errorContainer,
-            foregroundColor:
-                hasActive ? semantic.onSuccessContainer : scheme.onErrorContainer,
+            containerColor: hasActive
+                ? semantic.successContainer
+                : scheme.errorContainer,
+            foregroundColor: hasActive
+                ? semantic.onSuccessContainer
+                : scheme.onErrorContainer,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -337,8 +369,9 @@ class _SourcesPageState extends State<SourcesPage> {
     SourceEntry entry,
     int index,
   ) {
-    final kindLabel =
-        entry.kind == SourceKind.lx ? l10n.sourcesKindLx : l10n.sourcesKindBuiltin;
+    final kindLabel = entry.kind == SourceKind.lx
+        ? l10n.sourcesKindLx
+        : l10n.sourcesKindBuiltin;
     final supporting = StringBuffer('${index + 1}. ${entry.key} · $kindLabel');
     if (!entry.enabled) {
       supporting.write(' · ${l10n.sourcesChannelDisabled}');
@@ -448,13 +481,11 @@ class _SourcesPageState extends State<SourcesPage> {
     try {
       await provider.activate(script.id);
       if (context.mounted) {
-        M3ESnackbar.show(
-            context, message: l10n.sourcesActivated(script.name));
+        M3ESnackbar.show(context, message: l10n.sourcesActivated(script.name));
       }
     } catch (e) {
       if (context.mounted) {
-        M3ESnackbar.show(
-            context, message: l10n.sourcesActivateFailed('$e'));
+        M3ESnackbar.show(context, message: l10n.sourcesActivateFailed('$e'));
       }
     }
   }
@@ -484,7 +515,8 @@ class _SourcesPageState extends State<SourcesPage> {
         M3ESnackbar.show(
           context,
           message: l10n.sourcesUpdateSuccess(
-              updated.version.isEmpty ? updated.name : updated.version),
+            updated.version.isEmpty ? updated.name : updated.version,
+          ),
         );
       }
       if (fromAlert) provider.clearUpdateAlert();
@@ -648,8 +680,7 @@ class _SourcesPageState extends State<SourcesPage> {
       await provider.importScript(script, activate: true);
     } catch (e) {
       if (context.mounted) {
-        M3ESnackbar.show(
-            context, message: l10n.sourcesImportFailed('$e'));
+        M3ESnackbar.show(context, message: l10n.sourcesImportFailed('$e'));
       }
     }
   }
@@ -694,8 +725,7 @@ class _SourcesPageState extends State<SourcesPage> {
       await provider.importScript(script, activate: true);
     } catch (e) {
       if (context.mounted) {
-        M3ESnackbar.show(
-            context, message: l10n.sourcesImportFailed('$e'));
+        M3ESnackbar.show(context, message: l10n.sourcesImportFailed('$e'));
       }
     }
   }
@@ -742,8 +772,9 @@ class _SourcesPageState extends State<SourcesPage> {
     } catch (e) {
       if (mounted) {
         M3ESnackbar.show(
-            this.context,
-            message: l10n.sourcesImportFailed(_readableError(e)));
+          this.context,
+          message: l10n.sourcesImportFailed(_readableError(e)),
+        );
       }
     } finally {
       if (mounted) setState(() => _importingFromUrl = false);

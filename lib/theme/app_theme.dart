@@ -4,6 +4,13 @@ import 'package:material_ui/material_ui.dart';
 
 import 'app_semantic_colors.dart';
 
+/// 扫码登录二维码固定黑 / 白：扫码器不保证支持反色，不能跟随暗色主题。
+///
+/// 放主题基建而不是页面：颜色架构测试只允许 `lib/theme/app_theme.dart`
+/// 出现原始颜色字面量。
+const Color kQrModuleColor = Color(0xFF000000);
+const Color kQrBackgroundColor = Color(0xFFFFFFFF);
+
 /// 应用 ThemeData 的唯一构建入口：`ThemeProvider` 只产出 ColorScheme，
 /// 其余组件默认值/语义扩展在这里集中展开，避免 main.dart 与各页面
 /// 各自覆写造成「同语义不同颜色」。

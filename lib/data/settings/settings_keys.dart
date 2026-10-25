@@ -5,8 +5,8 @@
 ///   默认播放模式 / 统计开关 / App 标题 / AI 功能开关…；
 /// - **音源** → [SyncCategory.sources]：渠道顺序、停用、默认音质、
 ///   any-listen 连接（LX 脚本本体由 ScriptSyncAdapter 处理）；
-/// - **凭证** → [SyncCategory.credentials]：AI Key / any-listen token，
-///   随快照加密传输（加入同步即互信，见 ADR-0003）；
+/// - **凭证** → [SyncCategory.credentials]：AI Key / any-listen token / B 站
+///   登录，随快照加密传输（加入同步即互信，见 ADR-0003 / ADR-0016）；
 /// - **设备相关项不登记**：省流模式、缓存策略、桌面歌词悬浮窗开关、全局字体、
 ///   AI 推荐历史、播放会话、曲库数据等 —— 只有一位消费者，留在各自模块。
 ///
@@ -57,11 +57,11 @@ const kSelectedLanguage = SettingsKey<String?>(
   null,
   category: SyncCategory.settings,
 );
-const kShellNavOrder = SettingsKey<List<String>>(
-  'shell_nav_order',
-  ['library', 'nowPlaying', 'favorites'],
-  category: SyncCategory.settings,
-);
+const kShellNavOrder = SettingsKey<List<String>>('shell_nav_order', [
+  'library',
+  'nowPlaying',
+  'favorites',
+], category: SyncCategory.settings);
 const kShellNavHidden = SettingsKey<List<String>>(
   'shell_nav_hidden',
   <String>[],
@@ -206,6 +206,17 @@ const kAnyListenToken = SettingsKey<String>(
   '',
   category: SyncCategory.credentials,
 );
+
+/// B 站账号 Cookie：仅用于字幕 / 账号资料，绝不进入播放、搜索、评论请求。
+///
+/// 凭证类别 → 开启跨设备同步后随快照加密同步；完整备份默认导出全部凭证，
+/// 退出登录的清空也会同步到其它设备。
+const kBiliAccountCookie = SettingsKey<String>(
+  'bili_account_cookie_v1',
+  '',
+  category: SyncCategory.credentials,
+  store: SettingsValueStore.secure,
+);
 const kAiDjBaseUrl = SettingsKey<String>(
   'ai_dj_base_url',
   '',
@@ -262,6 +273,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kAnyListenServerUrl,
   kAnyListenEnabled,
   kAnyListenToken,
+  kBiliAccountCookie,
   kAiDjBaseUrl,
   kAiDjApiKey,
   kAiDjModel,

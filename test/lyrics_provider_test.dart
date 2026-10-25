@@ -5,21 +5,23 @@ import 'package:molia/services/lyrics_service.dart';
 
 /// 歌词会话模块：加载/解析/去重/过期守卫/预取/手动选择。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 class _FakeLyricsService extends LyricsService {
   _FakeLyricsService({Map<String, LyricsResult?>? results})
-      : _results = results ?? const {};
+    : _results = results ?? const {};
 
   final Map<String, LyricsResult?> _results;
   final Map<String, Duration> delays = {};
   final List<String> requested = [];
+  final List<bool> ignoreCacheCalls = [];
   final List<({String trackId, String provider})> saved = [];
+  bool manual = false;
 
   @override
   Future<LyricsResult?> getLyrics(
@@ -27,14 +29,19 @@ class _FakeLyricsService extends LyricsService {
     String artistName,
     String trackId, {
     Track? track,
+    bool ignoreCache = false,
   }) async {
     requested.add(trackId);
+    ignoreCacheCalls.add(ignoreCache);
     final delay = delays[trackId];
     if (delay != null) {
       await Future<void>.delayed(delay);
     }
     return _results[trackId];
   }
+
+  @override
+  Future<bool> hasManualLyrics(String trackId) async => manual;
 
   @override
   Future<void> saveLyrics(
@@ -63,6 +70,7 @@ class _FlakyLyricsService extends LyricsService {
     String artistName,
     String trackId, {
     Track? track,
+    bool ignoreCache = false,
   }) async {
     requested.add(trackId);
     if (_call >= results.length) return null;
@@ -72,12 +80,19 @@ class _FlakyLyricsService extends LyricsService {
 
 void main() {
   test('同步歌词：ready + isSynced；未同步歌词：伪时间戳 + isSynced=false', () async {
-    final service = _FakeLyricsService(results: {
-      'fake:synced': const LyricsResult(
-          lyric: '[00:01.00]hello\n[00:02.00]world', provider: 'fake'),
-      'fake:plain': const LyricsResult(lyric: 'hello\nworld', provider: 'fake'),
-      'fake:empty': null,
-    });
+    final service = _FakeLyricsService(
+      results: {
+        'fake:synced': const LyricsResult(
+          lyric: '[00:01.00]hello\n[00:02.00]world',
+          provider: 'fake',
+        ),
+        'fake:plain': const LyricsResult(
+          lyric: 'hello\nworld',
+          provider: 'fake',
+        ),
+        'fake:empty': null,
+      },
+    );
     final provider = LyricsProvider(service: service);
 
     await provider.load(_track('synced'));
@@ -95,11 +110,39 @@ void main() {
     expect(provider.state.lines, isEmpty);
   });
 
+  test('B 站登录刷新：非 B 源且非手动时强制绕过缓存，手动 / B 源跳过', () async {
+    final service = _FakeLyricsService(
+      results: {
+        'bili:1': const LyricsResult(lyric: '[00:01.00]云', provider: 'netease'),
+      },
+    );
+    final provider = LyricsProvider(service: service);
+    final track = Track(
+      id: const TrackId('bili', '1'),
+      title: 'B 站歌',
+      artists: const [Artist(name: 'UP')],
+      origin: TrackOrigin.builtin,
+    );
+    await provider.load(track);
+    expect(service.ignoreCacheCalls, [false]);
+
+    await provider.refreshAfterBiliLogin();
+    expect(service.requested, ['bili:1', 'bili:1']);
+    expect(service.ignoreCacheCalls.last, isTrue);
+
+    service.manual = true;
+    final before = service.requested.length;
+    await provider.refreshAfterBiliLogin();
+    expect(service.requested.length, before, reason: '手动歌词不覆盖');
+  });
+
   test('同一曲目重复 ensure 复用结果；过期响应被丢弃', () async {
-    final service = _FakeLyricsService(results: {
-      'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
-      'fake:b': const LyricsResult(lyric: '[00:01.00]b', provider: 'fake'),
-    });
+    final service = _FakeLyricsService(
+      results: {
+        'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
+        'fake:b': const LyricsResult(lyric: '[00:01.00]b', provider: 'fake'),
+      },
+    );
     service.delays['fake:a'] = const Duration(milliseconds: 50);
     final provider = LyricsProvider(service: service);
 
@@ -119,9 +162,11 @@ void main() {
   });
 
   test('ensure：曲目变化加载、同曲目 ready / loading 不重复取词', () async {
-    final service = _FakeLyricsService(results: {
-      'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
-    });
+    final service = _FakeLyricsService(
+      results: {
+        'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
+      },
+    );
     final provider = LyricsProvider(service: service);
 
     await provider.ensureForTrack(_track('a'));
@@ -178,9 +223,11 @@ void main() {
   });
 
   test('ensure(null) 清空会话；无曲目重复通知不重置', () async {
-    final service = _FakeLyricsService(results: {
-      'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
-    });
+    final service = _FakeLyricsService(
+      results: {
+        'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
+      },
+    );
     final provider = LyricsProvider(service: service);
     await provider.ensureForTrack(_track('a'));
     expect(provider.state.status, LyricsStatus.ready);
@@ -196,11 +243,15 @@ void main() {
   });
 
   test('预取：写缓存不改展示状态，且不重复请求', () async {
-    final service = _FakeLyricsService(results: {
-      'fake:current':
-          const LyricsResult(lyric: '[00:01.00]c', provider: 'fake'),
-      'fake:next': const LyricsResult(lyric: '[00:01.00]n', provider: 'fake'),
-    });
+    final service = _FakeLyricsService(
+      results: {
+        'fake:current': const LyricsResult(
+          lyric: '[00:01.00]c',
+          provider: 'fake',
+        ),
+        'fake:next': const LyricsResult(lyric: '[00:01.00]n', provider: 'fake'),
+      },
+    );
     final provider = LyricsProvider(service: service);
 
     await provider.load(_track('current'));
@@ -237,9 +288,11 @@ void main() {
   });
 
   test('reset 清空状态', () async {
-    final service = _FakeLyricsService(results: {
-      'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
-    });
+    final service = _FakeLyricsService(
+      results: {
+        'fake:a': const LyricsResult(lyric: '[00:01.00]a', provider: 'fake'),
+      },
+    );
     final provider = LyricsProvider(service: service);
     await provider.load(_track('a'));
     expect(provider.state.status, LyricsStatus.ready);

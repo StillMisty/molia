@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
+import 'package:molia/services/lyrics_cache.dart';
 import 'package:molia/services/lyrics_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,12 +14,12 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Track track(String id) => Track(
-        id: TrackId('kw', id),
-        title: '歌',
-        artists: const [Artist(name: '手')],
-        origin: TrackOrigin.builtin,
-        payload: {'songmid': id},
-      );
+    id: TrackId('kw', id),
+    title: '歌',
+    artists: const [Artist(name: '手')],
+    origin: TrackOrigin.builtin,
+    payload: {'songmid': id},
+  );
 
   test('曲目原生优先：loader 命中则不搜名字，并写入缓存', () async {
     var loaderCalls = 0;
@@ -37,8 +38,7 @@ void main() {
     expect(provider.searchCalls, 0);
 
     // 缓存命中：不再调 loader。
-    final again =
-        await service.getLyrics('歌', '手', 'kw:1', track: track('1'));
+    final again = await service.getLyrics('歌', '手', 'kw:1', track: track('1'));
     expect(again?.lyric, '[00:00.00]原生');
     expect(loaderCalls, 1);
   });
@@ -50,8 +50,7 @@ void main() {
       trackLyricLoader: (t) async => null,
     );
 
-    final result =
-        await service.getLyrics('歌', '手', 'kw:2', track: track('2'));
+    final result = await service.getLyrics('歌', '手', 'kw:2', track: track('2'));
     expect(result?.provider, 'fast');
     // 慢提供者仍在飞行：完成它不影响已返回的结果。
     slow.complete(null);
@@ -61,6 +60,149 @@ void main() {
     final service = LyricsService(providers: [_FastProvider()]);
     final result = await service.getLyrics('歌', '手', 'kw:3');
     expect(result?.provider, 'fast');
+  });
+
+  test('B 站登录后：缓存来源不同源则先试原生（忽略手动缓存）', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final cache = LyricsCache(prefs: prefs);
+    final biliTrack = Track(
+      id: const TrackId('bili', '1'),
+      title: 'B 站歌',
+      artists: const [Artist(name: 'UP')],
+      origin: TrackOrigin.builtin,
+    );
+    await cache.write(
+      'bili:1',
+      LyricCacheData(
+        provider: 'netease',
+        lyric: '[00:01.00]网易云',
+        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
+    var loaderCalls = 0;
+    final service = LyricsService(
+      providers: const [],
+      lyricsCache: cache,
+      trackLyricLoader: (t) async {
+        loaderCalls++;
+        return const LyricsResult(lyric: '[00:02.00]B 站', provider: 'bili');
+      },
+      nativeLyricAvailable: (t) => true,
+    );
+
+    final result = await service.getLyrics(
+      'B 站歌',
+      'UP',
+      'bili:1',
+      track: biliTrack,
+    );
+    expect(result?.provider, 'bili');
+    expect(loaderCalls, 1);
+  });
+
+  test('B 站未登录：沿用缓存，不触原生', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final cache = LyricsCache(prefs: prefs);
+    final biliTrack = Track(
+      id: const TrackId('bili', '2'),
+      title: 'B 站歌',
+      artists: const [Artist(name: 'UP')],
+      origin: TrackOrigin.builtin,
+    );
+    await cache.write(
+      'bili:2',
+      LyricCacheData(
+        provider: 'netease',
+        lyric: '[00:01.00]网易云',
+        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
+    var loaderCalls = 0;
+    final service = LyricsService(
+      providers: const [],
+      lyricsCache: cache,
+      trackLyricLoader: (t) async {
+        loaderCalls++;
+        return const LyricsResult(lyric: '[00:02.00]B 站', provider: 'bili');
+      },
+      nativeLyricAvailable: (t) => false,
+    );
+
+    final result = await service.getLyrics(
+      'B 站歌',
+      'UP',
+      'bili:2',
+      track: biliTrack,
+    );
+    expect(result?.provider, 'netease');
+    expect(loaderCalls, 0);
+  });
+
+  test('手动选择歌词不会被 B 站同源刷新覆盖', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final cache = LyricsCache(prefs: prefs);
+    final service = LyricsService(
+      providers: const [],
+      lyricsCache: cache,
+      trackLyricLoader: (t) async =>
+          const LyricsResult(lyric: '[00:02.00]B 站', provider: 'bili'),
+      nativeLyricAvailable: (t) => true,
+    );
+    await service.saveLyrics('bili:3', '[00:03.00]手动', 'netease');
+    expect(await service.hasManualLyrics('bili:3'), isTrue);
+
+    final biliTrack = Track(
+      id: const TrackId('bili', '3'),
+      title: 'B 站歌',
+      artists: const [Artist(name: 'UP')],
+      origin: TrackOrigin.builtin,
+    );
+    final result = await service.getLyrics(
+      'B 站歌',
+      'UP',
+      'bili:3',
+      track: biliTrack,
+    );
+    expect(result?.lyric, '[00:03.00]手动');
+  });
+
+  test('ignoreCache：跳过缓存强制取原生', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final cache = LyricsCache(prefs: prefs);
+    final biliTrack = Track(
+      id: const TrackId('bili', '4'),
+      title: 'B 站歌',
+      artists: const [Artist(name: 'UP')],
+      origin: TrackOrigin.builtin,
+    );
+    await cache.write(
+      'bili:4',
+      LyricCacheData(
+        provider: 'netease',
+        lyric: '[00:01.00]网易云',
+        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
+    var loaderCalls = 0;
+    final service = LyricsService(
+      providers: const [],
+      lyricsCache: cache,
+      trackLyricLoader: (t) async {
+        loaderCalls++;
+        return const LyricsResult(lyric: '[00:02.00]B 站', provider: 'bili');
+      },
+      nativeLyricAvailable: (t) => false,
+    );
+
+    final result = await service.getLyrics(
+      'B 站歌',
+      'UP',
+      'bili:4',
+      track: biliTrack,
+      ignoreCache: true,
+    );
+    expect(result?.provider, 'bili');
+    expect(loaderCalls, 1);
   });
 
   test('saveLyrics 透传翻译 / 罗马音 / 逐字（缓存可读回）', () async {
@@ -80,11 +222,13 @@ void main() {
 
   test('LyricsState 行携带逐字时间轴（lxlyric 对齐）', () async {
     final provider = LyricsProvider(
-      service: _StubService(const LyricsResult(
-        lyric: '[00:01.00]你好',
-        lxlyric: '[00:01.00]<0,200>你<200,300>好',
-        provider: 'kw',
-      )),
+      service: _StubService(
+        const LyricsResult(
+          lyric: '[00:01.00]你好',
+          lxlyric: '[00:01.00]<0,200>你<200,300>好',
+          provider: 'kw',
+        ),
+      ),
     );
     await provider.load(track('10'));
     expect(provider.state.lines.single.words, hasLength(2));
@@ -102,8 +246,11 @@ class _RecordingProvider extends LyricProvider {
   Future<SongMatch?> search(String title, String artist) async => null;
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     searchCalls++;
     return [];
   }
@@ -124,9 +271,11 @@ class _SlowProvider extends LyricProvider {
   Future<SongMatch?> search(String title, String artist) async => null;
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-          {int limit = 3}) async =>
-      [];
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async => [];
 
   @override
   Future<String?> fetchLyric(String songId) async => null;
@@ -144,9 +293,11 @@ class _FastProvider extends LyricProvider {
   Future<SongMatch?> search(String title, String artist) async => null;
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-          {int limit = 3}) async =>
-      [];
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async => [];
 
   @override
   Future<String?> fetchLyric(String songId) async => null;
@@ -167,6 +318,6 @@ class _StubService extends LyricsService {
     String artistName,
     String trackId, {
     Track? track,
-  }) async =>
-      result;
+    bool ignoreCache = false,
+  }) async => result;
 }

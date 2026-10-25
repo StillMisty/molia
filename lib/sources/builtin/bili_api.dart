@@ -175,6 +175,7 @@ class BiliApi {
   BiliApi._();
 
   static const String baseUrl = 'https://api.bilibili.com';
+  static const String passportBaseUrl = 'https://passport.bilibili.com';
   static const String referer = 'https://www.bilibili.com/';
 
   /// 浏览器 UA：B 站会拒绝 curl/python 等非浏览器 UA（-352 / 412）。
@@ -196,6 +197,15 @@ class BiliApi {
     'User-Agent': browserUserAgent,
     'Referer': referer,
   };
+
+  /// 账号接口请求头：只在 B 站字幕 / 账号资料等需要登录态的端点使用。
+  ///
+  /// 播放直链、搜索、评论、收藏夹必须继续走 [anonymousHeaders] /
+  /// [BiliSession.apiHeaders]，避免把账号 Cookie 粘到播放器缓存或平台请求。
+  static Map<String, String> accountHeaders(String cookie) => {
+        ...anonymousHeaders,
+        if (cookie.trim().isNotEmpty) 'Cookie': cookie.trim(),
+      };
 
   /// UP 投稿接口（`space/wbi/arc/search`）的风控指纹参数。
   ///

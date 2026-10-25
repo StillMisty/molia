@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
@@ -15,7 +16,7 @@ import 'support/sync_test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const keys = [kThemeMode, kAiDjApiKey];
+  const keys = [kThemeMode, kAiDjApiKey, kBiliAccountCookie];
 
   late SharedPreferences prefs;
   late MemorySyncSecretStore secrets;
@@ -62,62 +63,126 @@ void main() {
 
   /// 一份备份文件（外层 v 是备份文件格式版本，内层 envelope 是协议快照）。
   String backupJson({required Map<String, Object?> records}) => jsonEncode({
-        'kind': 'molia_backup',
-        'v': 1,
-        'producedAt': 1,
-        'envelope': {
-          'v': SyncEnvelope.protocolVersion,
-          'deviceId': 'devB',
-          'producedAt': 1,
-          'records': records,
-        },
-      });
+    'kind': 'molia_backup',
+    'v': 1,
+    'producedAt': 1,
+    'envelope': {
+      'v': SyncEnvelope.protocolVersion,
+      'deviceId': 'devB',
+      'producedAt': 1,
+      'records': records,
+    },
+  });
 
-  test('导出：包含跟人走的设置，默认排除凭证', () async {
+  test('B 站登录凭据：凭证类别 + secure 盒', () {
+    expect(kBiliAccountCookie.category, SyncCategory.credentials);
+    expect(kBiliAccountCookie.store, SettingsValueStore.secure);
+  });
+
+  test('导出：默认导出完整状态（设置 + 全部凭证）', () async {
     await prefs.setString('theme_mode', 'dark');
     await secrets.write('ai_dj_api_key', 'sk-secret');
+    await secrets.write(kBiliAccountCookie.name, 'SESSDATA=bili-login');
 
     final json = await backup.exportBackupJson();
     expect(json, contains('molia_backup'));
     expect(json, contains('theme_mode'));
     expect(json, contains('dark'));
-    expect(json, isNot(contains('ai_dj_api_key')));
-    expect(json, isNot(contains('sk-secret')));
+    expect(json, contains('ai_dj_api_key'));
+    expect(json, contains('sk-secret'));
+    expect(json, contains('bili_account_cookie_v1'));
+    expect(json, contains('SESSDATA=bili-login'));
     // 内层 envelope 是协议 v3（记录带版本对象；协议自始为 v3）。
     expect(jsonDecode(json)['envelope']['v'], SyncEnvelope.protocolVersion);
   });
 
-  test('导出：显式要求时凭证随快照进入（由调用方负责密文/保管）', () async {
+  test('导出：includeCredentials=false 时显式排除全部凭证', () async {
     await secrets.write('ai_dj_api_key', 'sk-secret');
-    final json = await backup.exportBackupJson(includeCredentials: true);
-    expect(json, contains('ai_dj_api_key'));
-    expect(json, contains('sk-secret'));
+    await secrets.write(kBiliAccountCookie.name, 'SESSDATA=bili-login');
+    final json = await backup.exportBackupJson(includeCredentials: false);
+    expect(json, isNot(contains('ai_dj_api_key')));
+    expect(json, isNot(contains('bili_account_cookie_v1')));
   });
 
-  test('导入：与新备份逐键合并，凭证类别忽略；重复导入幂等', () async {
-    final backupText = backupJson(records: {
-      'settings': [
-        {
-          'key': 'theme_mode',
-          'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
-          'data': {'v': 'light'},
-        },
-      ],
-      'credentials': [
-        {
-          'key': 'ai_dj_api_key',
-          'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
-          'data': {'v': 'sk-from-backup'},
-        },
-      ],
-    });
+  test('导入：默认恢复全部凭证，换机状态一致', () async {
+    final backupText = backupJson(
+      records: {
+        'credentials': [
+          {
+            'key': kBiliAccountCookie.name,
+            'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+            'data': {'v': 'SESSDATA=from-backup; DedeUserID=7'},
+          },
+          {
+            'key': 'ai_dj_api_key',
+            'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+            'data': {'v': 'sk-from-backup'},
+          },
+        ],
+      },
+    );
 
     final result = await backup.importBackupJson(backupText);
+    expect(result.applied, 2);
+    expect(
+      secrets.values[kBiliAccountCookie.name],
+      contains('SESSDATA=from-backup'),
+    );
+    expect(secrets.values['ai_dj_api_key'], 'sk-from-backup');
+  });
+
+  test('导入：includeCredentials=false 时忽略全部凭证', () async {
+    final backupText = backupJson(
+      records: {
+        'credentials': [
+          {
+            'key': 'ai_dj_api_key',
+            'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+            'data': {'v': 'sk-from-backup'},
+          },
+        ],
+      },
+    );
+    final result = await backup.importBackupJson(
+      backupText,
+      includeCredentials: false,
+    );
+    expect(result.applied, 0);
+    expect(secrets.values['ai_dj_api_key'], isNull);
+  });
+
+  test('导入：显式排除凭证时只合并普通设置；重复导入幂等', () async {
+    final backupText = backupJson(
+      records: {
+        'settings': [
+          {
+            'key': 'theme_mode',
+            'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+            'data': {'v': 'light'},
+          },
+        ],
+        'credentials': [
+          {
+            'key': 'ai_dj_api_key',
+            'version': {'physical': 9000, 'counter': 0, 'deviceId': 'devB'},
+            'data': {'v': 'sk-from-backup'},
+          },
+        ],
+      },
+    );
+
+    final result = await backup.importBackupJson(
+      backupText,
+      includeCredentials: false,
+    );
     expect(result.applied, 1);
     expect(prefs.getString('theme_mode'), 'light');
     expect(secrets.values['ai_dj_api_key'], isNull);
 
-    final again = await backup.importBackupJson(backupText);
+    final again = await backup.importBackupJson(
+      backupText,
+      includeCredentials: false,
+    );
     expect(again.applied, 0);
     expect(again.skipped, greaterThanOrEqualTo(1));
   });
@@ -128,15 +193,17 @@ void main() {
     // 先登记本地现状（本次改动版本 = 50000）。
     await backup.exportBackupJson();
 
-    final staleBackup = backupJson(records: {
-      'settings': [
-        {
-          'key': 'theme_mode',
-          'version': {'physical': 10000, 'counter': 0, 'deviceId': 'devB'},
-          'data': {'v': 'light'},
-        },
-      ],
-    });
+    final staleBackup = backupJson(
+      records: {
+        'settings': [
+          {
+            'key': 'theme_mode',
+            'version': {'physical': 10000, 'counter': 0, 'deviceId': 'devB'},
+            'data': {'v': 'light'},
+          },
+        ],
+      },
+    );
     final result = await backup.importBackupJson(staleBackup);
     expect(result.applied, 0);
     expect(prefs.getString('theme_mode'), 'dark');

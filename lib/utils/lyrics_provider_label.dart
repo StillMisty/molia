@@ -21,6 +21,7 @@ String lyricsProviderLabel(
     'kugou' || 'kg' => l10n.providerKugou,
     'kuwo' || 'kw' => l10n.providerKuwo,
     'migu' || 'mg' => l10n.providerMigu,
+    'bili' => l10n.providerBilibili,
     'lrclib' => l10n.providerLRCLIB,
     'local' => l10n.downloadSourceLocal,
     _ => null,

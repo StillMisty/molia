@@ -901,3 +901,12 @@
     重试（`force`）或仓库变更事件；读取本身有 10s 超时兜底。新建列表的导入用
     `importTracks.created` 直接预置列表头 + 曲目缓存，页面不依赖导入后的读库
     （晚到的后台重载只做原地校准）。
+91. **B 站 CC/AI 字幕未登录恒为空：buvid 也救不了**：`/x/player/v2` 匿名（带
+    buvid、不带登录 Cookie）返回 `code: 0` 但 `data.subtitle.subtitles` 恒为
+    `[]`；字幕列表必须带 B 站账号 Cookie（`SESSDATA`）。登录后字幕走
+    `/x/player/wbi/v2`（buvid + WBI + 账号 Cookie），失败再退 unsigned
+    `/x/player/v2`（账号 Cookie）；字幕 CDN 保持匿名，绝不带账号 Cookie。
+    登录成功必须清 `BuiltinLyricDispatch` 的 `bili:` 取词缓存（包括缓存过的
+    null），否则 5 分钟内当前曲目仍会回退网易云。完整备份默认导出全部类别与
+    凭证（换机状态一致）；备份文件是明文 JSON，需要妥善保管。同步 / 备份的
+    凭据默认随 `SyncCategory.credentials` 走。见 ADR-0016。

@@ -133,6 +133,9 @@ class LyricCacheData {
   final String? lxlyric;
   final int timestamp;
 
+  /// 用户手动选择（换歌词）的缓存：B 站登录后的同源重试不覆盖它。
+  final bool manual;
+
   LyricCacheData({
     required this.provider,
     required this.lyric,
@@ -140,6 +143,7 @@ class LyricCacheData {
     this.roma,
     this.lxlyric,
     required this.timestamp,
+    this.manual = false,
   });
 
   Map<String, dynamic> toJson() {
@@ -149,6 +153,7 @@ class LyricCacheData {
       if (translation != null) 'translation': translation,
       if (roma != null) 'roma': roma,
       if (lxlyric != null) 'lxlyric': lxlyric,
+      if (manual) 'manual': true,
       'ts': timestamp,
     };
   }
@@ -160,6 +165,7 @@ class LyricCacheData {
       translation: json['translation'] as String?,
       roma: json['roma'] as String?,
       lxlyric: json['lxlyric'] as String?,
+      manual: json['manual'] == true,
       timestamp: json['ts'] as int,
     );
   }

@@ -214,6 +214,11 @@ void main() async {
     libraryProvider: libraryProvider,
   );
   final lyrics = buildLyricsStack(local: local);
+  wireBiliLoginLyricsRefresh(
+    account: catalog.biliAccount,
+    sourceManager: catalog.sourceManager,
+    lyricsProvider: lyrics.lyricsProvider,
+  );
   // ⑧ 歌词显示与主题（含 runApp 前的启动预解析：首帧即封面色）。
   // 与桌面壳并行：两者互不依赖，串行会白等 tray settings 的 prefs 读取。
   final displayWatch = Stopwatch()..start();
