@@ -10,21 +10,18 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
-import '../models/play_mode.dart';
 import '../services/data_saver_service.dart';
-import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'cover_deck_metrics.dart';
-import 'icon_swap.dart';
 import 'now_playing_summary.dart';
+import 'playback_transport.dart';
 import 'player_cover_deck.dart';
 import 'player_morph.dart';
 import 'seek_bar.dart';
-import 'seek_preview.dart';
 import 'track_artwork.dart';
 import 'volume_control.dart';
 
@@ -143,9 +140,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   double _playerContentHeight(double art) =>
       art * coverDeckVerticalFactor + _sectionsReservedHeight;
 
-  /// 进度拖动预览：与桌面底栏共用同一状态机（见 `seek_preview.dart`）。
-  late final SeekPreviewController _seekPreview;
-
   /// 迷你 ⇄ 完整切换时的封面飞行：两端锚点与页内 Stack 坐标系。
   final GlobalKey _playerStackKey = GlobalKey(debugLabel: 'playerStack');
   final GlobalKey _miniCoverKey = GlobalKey(debugLabel: 'miniCover');
@@ -177,14 +171,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     widget.expandAnimation?.addListener(_handleExpandValue);
-
-    final playbackProvider = context.read<PlaybackProvider>();
-    _seekPreview = SeekPreviewController(
-      position: playbackProvider.position,
-      trackChanges: playbackProvider,
-      currentTrackId: () => playbackProvider.snapshot.current?.id,
-      seek: playbackProvider.seekToPosition,
-    );
 
     if (_lastImageUrl != null) {
       _prefetchImage(_lastImageUrl!);
@@ -298,7 +284,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   void dispose() {
     widget.expandAnimation?.removeStatusListener(_handleExpandStatus);
     widget.expandAnimation?.removeListener(_handleExpandValue);
-    _seekPreview.dispose();
     _trackEntrance.dispose();
     super.dispose();
   }
@@ -433,7 +418,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               child: _buildTrackInfo(context, displayTrack, playbackProvider),
             ),
             const SizedBox(height: 2),
-            _buildSeekBar(context, playbackProvider),
+            _buildSeekBar(),
           ],
         );
       },
@@ -559,13 +544,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 播放模式（右）。
   ///
-  /// 拖动期间本地预览、松手才提交 seek。
-  Widget _buildSeekBar(
-    BuildContext context,
-    PlaybackProvider playbackProvider,
-  ) {
-    final mode = context
-        .select<PlaybackProvider, PlayMode>((provider) => provider.currentMode);
+  /// 拖动期间本地预览、松手才提交 seek；控制器生命周期与低频快照订阅都在
+  /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。
+  Widget _buildSeekBar() {
     return Padding(
       // 纵向不留内边距：上方 2dp 由外层排布给（小屏 / 大屏两套版式都是
       // `SizedBox(height: 2)`），下方 2dp 由时间行自己的呼吸位承担——进度排
@@ -577,59 +558,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         children: [
           _buildFavoriteButton(),
           const SizedBox(width: 4),
-          Expanded(child: _buildSeekSlider(playbackProvider)),
+          // 播放页版式：时间挪到条下方，横向空间全给进度条。
+          const Expanded(
+            child: PlaybackSeekBar(timeLabels: SeekTimeLabels.below),
+          ),
           const SizedBox(width: 4),
-          _buildModeButton(context, mode, () {
-            HapticsService.lightImpact();
-            playbackProvider.togglePlayMode();
-          }),
+          // 与收藏同一套简单图标按钮；模式图标 / 标签由共享模块唯一映射。
+          const PlaybackModeButton(visualSize: Size(44, 44)),
         ],
-      ),
-    );
-  }
-
-  /// 播放模式：与收藏同一套简单图标按钮。
-  Widget _buildModeButton(
-      BuildContext context, PlayMode mode, VoidCallback onPressed) {
-    final l10n = AppLocalizations.of(context);
-    final label = switch (mode) {
-      PlayMode.listLoop => l10n?.playModeListLoop,
-      PlayMode.sequential => l10n?.playModeSequential,
-      PlayMode.shuffle => l10n?.playModeShuffle,
-      PlayMode.singleRepeat => l10n?.playModeSingleRepeat,
-    };
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.standard,
-      size: M3EIconButtonSize.sm,
-      visualSize: const Size(44, 44),
-      // 颜色交给 standard 变体默认值（不手写 primary 强调）。
-      icon: IconSwap<PlayMode>(
-        value: mode,
-        builder: (context, mode) => Icon(_getPlayModeIcon(mode)),
-      ),
-      semanticLabel: label,
-      onPressed: onPressed,
-    );
-  }
-
-  /// 进度滑杆：低频状态（时长 / 播放中 / 有无曲目）经 Selector 订阅，
-  /// 取值与时序在共用模块 `seek_bar.dart` / `seek_preview.dart`。
-  Widget _buildSeekSlider(PlaybackProvider playbackProvider) {
-    return Selector<PlaybackProvider,
-        ({int durationMs, bool isPlaying, bool hasTrack})>(
-      selector: (_, provider) => (
-        durationMs: provider.snapshot.duration.inMilliseconds,
-        isPlaying: provider.isPlaying,
-        hasTrack: provider.hasTrack,
-      ),
-      builder: (context, state, _) => SeekBar(
-        controller: _seekPreview,
-        position: playbackProvider.position,
-        durationMs: state.durationMs,
-        isPlaying: state.isPlaying,
-        hasTrack: state.hasTrack,
-        // 播放页版式：时间挪到条下方，横向空间全给进度条。
-        timeLabels: SeekTimeLabels.below,
       ),
     );
   }
@@ -682,19 +618,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  IconData _getPlayModeIcon(PlayMode mode) {
-    switch (mode) {
-      case PlayMode.shuffle:
-        return Icons.shuffle_rounded;
-      case PlayMode.listLoop:
-        return Icons.repeat_rounded;
-      case PlayMode.sequential:
-        return Icons.playlist_play_rounded;
-      case PlayMode.singleRepeat:
-        return Icons.repeat_one_rounded;
-    }
-  }
-
   /// 本地收藏按钮：加入/移出默认收藏列表（无当前曲目/资料库时隐藏）。
   ///
   /// 尺寸是唯一宿主差异：进度排用 44 视觉格，迷你条按窄屏档位缩放。
@@ -709,9 +632,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     Track? track,
     PlaybackProvider playback,
   ) {
-    final isPlaying = context
-        .select<PlaybackProvider, bool>((provider) => provider.isPlaying);
-
     return SizedBox(
       height: miniPlayerHeight,
       child: Stack(
@@ -770,7 +690,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                       ],
                     ),
                   ),
-                  _buildResponsiveControlButtons(context, playback, isPlaying),
+                  _buildResponsiveControlButtons(context),
                 ],
               ),
             ),
@@ -846,18 +766,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
 
   /// 迷你播放器控制排：与全屏控制排同序（收藏/上一首/播放/下一首）、同风格；
   /// 极窄屏退化为仅播放键。
-  Widget _buildResponsiveControlButtons(
-    BuildContext context,
-    PlaybackProvider playback,
-    bool isPlaying,
-  ) {
+  ///
+  /// 三个传输键走共享模块：无曲目（含冷启动恢复态）一律禁用，与桌面底栏 /
+  /// 顶栏 / 播放页传输排同一契约（此前迷你条在无曲目时仍可点，是唯一的漂移）。
+  Widget _buildResponsiveControlButtons(BuildContext context) {
     if (context.isCompact) {
-      return _buildPlayPauseButton(
-        context,
-        playback,
-        isPlaying,
+      return const PlaybackPlayPauseButton(
         size: M3EIconButtonSize.xs,
-        visualSize: const Size(36, 36),
+        visualSize: Size(36, 36),
       );
     }
     final bool narrow = context.isNarrow;
@@ -870,82 +786,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           size: size,
           visualSize: visualSize,
         ),
-        _buildMiniIconControl(
-          context,
-          icon: Icons.skip_previous_rounded,
-          semanticLabel: _l10n(context).previousTrackTooltip,
-          size: size,
-          visualSize: visualSize,
-          onPressed: () {
-            HapticsService.lightImpact();
-            playback.skipToPrevious();
-          },
-        ),
-        _buildPlayPauseButton(
-          context,
-          playback,
-          isPlaying,
-          size: size,
-          visualSize: visualSize,
-        ),
-        _buildMiniIconControl(
-          context,
-          icon: Icons.skip_next_rounded,
-          semanticLabel: _l10n(context).nextTrackTooltip,
-          size: size,
-          visualSize: visualSize,
-          onPressed: () {
-            HapticsService.lightImpact();
-            playback.skipToNext();
-          },
-        ),
+        PlaybackPreviousButton(size: size, visualSize: visualSize),
+        PlaybackPlayPauseButton(size: size, visualSize: visualSize),
+        PlaybackNextButton(size: size, visualSize: visualSize),
       ],
-    );
-  }
-
-  Widget _buildMiniIconControl(
-    BuildContext context, {
-    required IconData icon,
-    required String semanticLabel,
-    required M3EIconButtonSize size,
-    required Size visualSize,
-    required VoidCallback onPressed,
-  }) {
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.standard,
-      size: size,
-      visualSize: visualSize,
-      // 图标颜色交给 standard 变体默认值。
-      icon: Icon(icon),
-      semanticLabel: semanticLabel,
-      onPressed: onPressed,
-    );
-  }
-
-  Widget _buildPlayPauseButton(
-    BuildContext context,
-    PlaybackProvider playback,
-    bool isPlaying, {
-    required M3EIconButtonSize size,
-    required Size visualSize,
-  }) {
-    final l10n = _l10n(context);
-    return M3EIconButton(
-      variant: M3EIconButtonVariant.standard,
-      size: size,
-      visualSize: visualSize,
-      icon: IconSwap<bool>(
-        value: isPlaying,
-        builder: (context, isPlaying) => Icon(
-          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          // 颜色交给 standard 变体默认值。
-        ),
-      ),
-      semanticLabel: isPlaying ? l10n.pause : l10n.play,
-      onPressed: () {
-        HapticsService.lightImpact();
-        playback.togglePlayPause();
-      },
     );
   }
 
@@ -1023,10 +867,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             ),
             if (widget.desktopLayout) ...[
               const SizedBox(height: 8),
-              _buildTransportRow(context, playbackProvider),
+              _buildTransportRow(),
             ],
             const SizedBox(height: spacingBelowArt),
-            _buildSeekBar(context, playbackProvider),
+            _buildSeekBar(),
           ],
         );
       },
@@ -1037,16 +881,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 主场景」，与移动端把控制放在播放器里同一意图）。
   ///
   /// 底栏进播放页会隐藏（沉浸主场），音量必须在这一排同样可达；传输三键
-  /// 居中（播放键是这一列的视觉锚点），音量作为次级控件贴右缘。
-  Widget _buildTransportRow(
-    BuildContext context,
-    PlaybackProvider playbackProvider,
-  ) {
-    final (hasTrack, isPlaying) =
-        context.select<PlaybackProvider, (bool, bool)>(
-      (provider) => (provider.hasTrack, provider.isPlaying),
-    );
-    final l10n = _l10n(context);
+  /// 居中（播放键是这一列的视觉锚点），音量作为次级控件贴右缘。三个键的
+  /// 启用谓词 / 图标 / 标签 / 触感全在共享传输模块，这里只管布局。
+  Widget _buildTransportRow() {
     return SizedBox(
       // 撑满列宽：传输三键按列居中，音量贴列右缘（Stack 只按最大子项定宽，
       // 不撑满就会缩到三键那一小条上）。
@@ -1054,52 +891,17 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                size: M3EIconButtonSize.sm,
-                semanticLabel: l10n.previousTrackTooltip,
-                icon: const Icon(Icons.skip_previous_rounded),
-                onPressed: hasTrack
-                    ? () {
-                        HapticsService.lightImpact();
-                        playbackProvider.skipToPrevious();
-                      }
-                    : null,
-              ),
-              const SizedBox(width: 8),
-              M3EIconButton(
+              PlaybackPreviousButton(),
+              SizedBox(width: 8),
+              PlaybackPlayPauseButton(
                 variant: M3EIconButtonVariant.tonal,
                 size: M3EIconButtonSize.md,
-                semanticLabel: isPlaying ? l10n.pause : l10n.play,
-                icon: IconSwap<bool>(
-                  value: isPlaying,
-                  builder: (context, isPlaying) => Icon(
-                    isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  ),
-                ),
-                onPressed: hasTrack
-                    ? () {
-                        HapticsService.lightImpact();
-                        playbackProvider.togglePlayPause();
-                      }
-                    : null,
               ),
-              const SizedBox(width: 8),
-              M3EIconButton(
-                variant: M3EIconButtonVariant.standard,
-                size: M3EIconButtonSize.sm,
-                semanticLabel: l10n.nextTrackTooltip,
-                icon: const Icon(Icons.skip_next_rounded),
-                onPressed: hasTrack
-                    ? () {
-                        HapticsService.lightImpact();
-                        playbackProvider.skipToNext();
-                      }
-                    : null,
-              ),
+              SizedBox(width: 8),
+              PlaybackNextButton(),
             ],
           ),
           Positioned.fill(

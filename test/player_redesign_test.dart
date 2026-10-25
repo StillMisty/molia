@@ -205,6 +205,37 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   });
 
+  testWidgets('迷你条无曲目时播放 / 切歌键禁用（与其它传输面同契约）', (tester) async {
+    // 回归：迷你条的播放 / 暂停（以及同排切歌键）此前不读 hasTrack，冷启动
+    // 无曲目时仍可点；共享传输模块后与播放页 / 底栏 / 顶栏同一启用谓词。
+    final expand = AnimationController(
+      vsync: const TestVSync(),
+      duration: const Duration(milliseconds: 360),
+      value: 0,
+    );
+    addTearDown(expand.dispose);
+
+    await pumpPlayer(tester, expand: expand);
+    for (final icon in const [
+      Icons.play_arrow_rounded,
+      Icons.skip_previous_rounded,
+      Icons.skip_next_rounded,
+    ]) {
+      final button = tester.widget<M3EIconButton>(
+        find.ancestor(
+          of: find.byIcon(icon),
+          matching: find.byType(M3EIconButton),
+        ),
+      );
+      expect(button.onPressed, isNull, reason: '$icon 应在无曲目时禁用');
+    }
+
+    await tester.tap(find.byIcon(Icons.play_arrow_rounded),
+        warnIfMissed: false);
+    await tester.pump();
+    expect(backend.calls, isEmpty, reason: '禁用键不发播放命令');
+  });
+
   testWidgets('拖动进度滑杆提交 seek', (tester) async {
     emitThreeTracks();
     final expand = AnimationController(
@@ -301,9 +332,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 900));
     }
 
-    double centerCoverWidth() => tester
-        .getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey))
-        .width;
+    double centerCoverWidth() =>
+        tester.getSize(find.byKey(PlayerCoverDeck.centerCoverCardKey)).width;
 
     // 直接渲染完整版式：这一路的高度预算就是外层口径。
     await pumpTopAligned(null);
