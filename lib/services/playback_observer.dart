@@ -33,6 +33,7 @@ import '../domain/models/track.dart';
 import '../domain/ports/library_store.dart';
 import '../domain/ports/playback_facade.dart';
 import '../managers/image_preload_manager.dart';
+import '../playback/playback_power_policy.dart';
 import 'covers/cover_resolution.dart';
 import 'app_presence.dart';
 import 'data_saver_service.dart';
@@ -74,6 +75,7 @@ class PlaybackObserver {
     this._navigatorKey,
     Future<void> Function()? requestNotificationPermission,
     AppPresence? presence,
+    PlaybackPowerPolicy? mobilePowerPolicy,
   })  : _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
         _albumArtPreloader = albumArtPreloader ??
             AlbumArtPreloadStrategy(
@@ -84,7 +86,8 @@ class PlaybackObserver {
         _coverResolver = coverResolver,
         _requestNotificationPermission = requestNotificationPermission ??
             NotificationPermission.ensureRequested,
-        _presence = presence ?? AppPresence.instance {
+        _presence = presence ?? AppPresence.instance,
+        _powerPolicy = mobilePowerPolicy {
     _ready = _loadLastPlayedTrackInfo();
   }
 
@@ -115,6 +118,12 @@ class PlaybackObserver {
 
   /// 窗口存在态：后台期不预取封面；恢复后补一次（见 [_onPresenceChanged]）。
   final AppPresence _presence;
+
+  /// 移动端前后台 / 歌词输出策略：封面预取只在应用内可见时执行。
+  ///
+  /// 与 [AppPresence] 是两条独立信号：桌面用窗口存在态，移动端用生命周期；
+  /// 两者任一不允许就跳过，恢复时任一先恢复都会补一次（幂等）。
+  final PlaybackPowerPolicy? _powerPolicy;
 
   /// 首次真正出声请求通知权限（测试注入记录器）。
   final Future<void> Function() _requestNotificationPermission;
@@ -150,6 +159,7 @@ class PlaybackObserver {
     _attached = true;
     _facade.snapshot.addListener(_onSnapshot);
     _presence.addListener(_onPresenceChanged);
+    _powerPolicy?.addListener(_onPowerPolicyChanged);
     _onSnapshot();
   }
 
@@ -159,6 +169,7 @@ class PlaybackObserver {
     _attached = false;
     _facade.snapshot.removeListener(_onSnapshot);
     _presence.removeListener(_onPresenceChanged);
+    _powerPolicy?.removeListener(_onPowerPolicyChanged);
   }
 
   /// 回到可见：补一次封面预取。
@@ -166,8 +177,17 @@ class PlaybackObserver {
   /// 托盘隐藏期间界面处于休眠，唤醒后的页面重建发生在下一帧——
   /// [_triggerImagePreload] 依赖 navigator context，因此必须等这一帧建完；
   /// 提前置位 `visible` 时帧可能还是停的，先 `ensureVisualUpdate` 把帧排上。
-  void _onPresenceChanged() {
-    if (!_presence.isVisible) return;
+  void _onPresenceChanged() => _resumeCoverPreload();
+
+  /// 移动端回到前台：与托盘恢复同一套补取路径。
+  void _onPowerPolicyChanged() {
+    if (_powerPolicy?.canPreloadCovers != true) return;
+    _resumeCoverPreload();
+  }
+
+  void _resumeCoverPreload() {
+    if (!_attached || _presence.isBackgrounded) return;
+    if (_powerPolicy?.canPreloadCovers == false) return;
     WidgetsBinding.instance.ensureVisualUpdate();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_attached) return;
@@ -292,10 +312,11 @@ class PlaybackObserver {
   ///
   /// 使用 ImagePreloadManager 预加载当前曲目、下一首、以及队列中的封面图片。
   /// 省流模式阻止封面网络请求时直接跳过（避免注定失败的下载与日志噪音）；
-  /// 窗口在后台（托盘 / 最小化）时同样跳过——解码结果没有展示面，只白占内存，
-  /// 恢复后由 [_onPresenceChanged] 补一次。
+  /// 窗口在后台（托盘 / 最小化）或移动端不在前台时同样跳过——解码结果没有
+  /// 展示面，只白占内存与 CPU，恢复后由 [_resumeCoverPreload] 补一次。
   void _triggerImagePreload() {
     if (_presence.isBackgrounded) return;
+    if (_powerPolicy?.canPreloadCovers == false) return;
     if (_dataSaver?.blockNetworkArtwork ?? false) return;
     final context = _navigatorKey?.currentContext;
     if (context == null || !context.mounted) return;

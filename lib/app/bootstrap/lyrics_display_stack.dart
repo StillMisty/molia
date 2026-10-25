@@ -79,6 +79,8 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     load: artworkPaletteService.load,
     onPalette: (palette) => themeProvider.applyArtworkSeed(palette.seed),
     onCleared: themeProvider.clearArtworkSeed,
+    // 移动端退后台且没有桌面歌词：取色没有消费面，先记 URL，回前台再取。
+    mobilePowerPolicy: powerPolicy,
   );
   // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
@@ -92,6 +94,11 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   void syncDesktopLyricsActive() {
     powerPolicy.setDesktopLyricsActive(
       LyricsChannel.isSupportedPlatform && lyricsDisplaySettings.desktopEnabled,
+    );
+    powerPolicy.setLyricsOutputActive(
+      lyricsDisplaySettings.desktopEnabled ||
+          lyricsDisplaySettings.notificationEnabled ||
+          lyricsDisplaySettings.bluetoothEnabled,
     );
   }
 
@@ -156,6 +163,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   wireLyricsSession(
     playback: playback,
     lyricsProvider: lyricsProvider,
+    powerPolicy: powerPolicy,
   );
 
   // 下一首歌词预载接线：紧跟歌词显示接线之后、取色接线之前
@@ -163,6 +171,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   wireNextTrackLyricsPreload(
     playback: playback,
     lyricsProvider: lyricsProvider,
+    powerPolicy: powerPolicy,
   );
 
   // 封面取色接线：任何页面/后台切歌都经同一链路（稳态延迟 + 过期丢弃）。

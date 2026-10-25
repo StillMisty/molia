@@ -128,6 +128,9 @@ Future<PlaybackStack> buildPlaybackStack({
     dataSaver: dataSaver,
     libraryRepository: library.libraryRepository,
     navigatorKey: navigatorKey,
+    // 移动端退后台不预取封面（应用内没有展示面）；桌面仍由 AppPresence
+    // 管托盘 / 最小化，两条信号互不覆盖。
+    mobilePowerPolicy: policy,
     // 封面补取：曲目起播无封面时经 SourceManager 现取（脚本 pic →
     // 内置平台原生取图），省流模式不发请求；取到后原地回写队列曲目。
     artworkResolver: (track) async {
@@ -159,6 +162,8 @@ Future<PlaybackStack> buildPlaybackStack({
     dataSaver: dataSaver,
     observer: playbackObserver,
     sessionCoordinator: sessionCoordinator,
+    // 定时关闭的原生 wake lock 只在移动端后台 / 息屏时持有。
+    isForeground: () => policy.isForeground,
     autoSwapSettings: library.sourceSwapSettings,
     autoSwapResolver: (track, {required excludeSourceKeys}) => library
         .autoSourceSwapService

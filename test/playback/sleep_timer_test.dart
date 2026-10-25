@@ -12,7 +12,7 @@ import '../support/fakes.dart';
 /// 记录 arm/cancel 的可注入假原生定时器。
 class _FakeSleepTimerAlarm implements SleepTimerAlarm {
   SleepTimerFired? _onFired;
-  final List<(Duration, int)> arms = [];
+  final List<(Duration, int, bool)> arms = [];
   int cancels = 0;
   bool disposed = false;
 
@@ -20,7 +20,8 @@ class _FakeSleepTimerAlarm implements SleepTimerAlarm {
   set onFired(SleepTimerFired? callback) => _onFired = callback;
 
   @override
-  void arm(Duration delay, int token) => arms.add((delay, token));
+  void arm(Duration delay, int token, {bool keepAwake = true}) =>
+      arms.add((delay, token, keepAwake));
 
   @override
   void cancel() => cancels++;
@@ -514,6 +515,78 @@ void main() {
 
     timer.cancel();
     expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('wake lock 只在后台持有：前台 arm 不持锁，退后台重排持锁', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    var foreground = true;
+    final localAlarm = _FakeSleepTimerAlarm();
+    final localTimer = SleepTimerController(
+      snapshot: facade.snapshot,
+      position: facade.position,
+      trackCompletions: facade.trackCompletions,
+      setStopAfterCurrentTrack: facade.setStopAfterCurrentTrack,
+      alarm: localAlarm,
+      isForeground: () => foreground,
+      now: () => now,
+      onFire: () async {
+        fired++;
+        await facade.pause();
+      },
+    );
+    addTearDown(localTimer.dispose);
+
+    localTimer.startCountdown(const Duration(minutes: 30));
+    expect(localAlarm.arms, isNotEmpty);
+    expect(
+      localAlarm.arms.last.$3,
+      isFalse,
+      reason: '屏幕亮着时 Handler 正常调度，不需要 partial wake lock',
+    );
+
+    // 息屏 / 切后台：生命周期补检重新 arm，本次必须持锁（显式传当时事实，
+    // 不等组合根的策略监听更新）。
+    foreground = false;
+    localTimer.recheckDeadline(foreground: false);
+    expect(localAlarm.arms.last.$3, isTrue);
+    expect(localAlarm.arms.last.$1, lessThanOrEqualTo(const Duration(minutes: 30)));
+
+    // 回到前台：恢复为不持锁。
+    foreground = true;
+    localTimer.recheckDeadline(foreground: true);
+    expect(localAlarm.arms.last.$3, isFalse);
+
+    localTimer.cancel();
+  });
+
+  testWidgets('生命周期 onPause 立即按后台重排 wake lock（不等策略先更新）', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    // isForeground 默认恒 true，模拟「策略监听还没跑到」的同一事件栈。
+    timer.startCountdown(const Duration(minutes: 30));
+    expect(alarm.arms.last.$3, isFalse);
+
+    final recheck = SleepTimerLifecycleRecheck(timer);
+    addTearDown(recheck.detach);
+    recheck.attach();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(alarm.arms.last.$3, isTrue,
+        reason: '进入后台必须立刻重新 arm 并持锁');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(alarm.arms.last.$3, isFalse);
+
+    timer.cancel();
   });
 
   testWidgets('倒计时：原生回调到点暂停；过期 token 无效', (tester) async {

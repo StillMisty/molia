@@ -172,6 +172,7 @@ class PlaybackProvider extends ChangeNotifier {
     this._autoSwapResolver,
     this._onAutoSourceSwapped,
     required this._settings,
+    bool Function()? isForeground,
   })  : _session = sessionCoordinator,
         _volumeStore = volumeStore ?? PlaybackVolumeStore() {
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
@@ -200,6 +201,8 @@ class PlaybackProvider extends ChangeNotifier {
       onFire: () async {
         await _session.pause();
       },
+      // 前台屏幕亮着不持 partial wake lock；退后台 / 息屏再持有。
+      isForeground: isForeground,
     );
     // 「播完当前歌曲」的完成处理保持不变：后端按 stopAfterCurrentTrack 在
     // 曲末自己停住（`_pauseAtTrackEnd` 推 playing→paused 快照），会话协调者

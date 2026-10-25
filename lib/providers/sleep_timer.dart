@@ -82,8 +82,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     SleepTimerAlarm? alarm,
     Stream<Track>? trackCompletions,
     this._setStopAfterCurrentTrack,
+    bool Function()? isForeground,
   })  : _snapshot = snapshot,
-        _position = position {
+        _position = position,
+        _isForeground = isForeground ?? _alwaysForeground {
     // 原生定时器是熄屏 / Doze 的补触发通道；平台不支持时是 no-op，纯 Dart
     // ticker 仍按原语义工作。
     _alarm = alarm ?? createSleepTimerAlarm();
@@ -117,6 +119,14 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 
   /// 把「播完当前歌曲」停止标志下发给播放后端（null = 测试 / 旧宿主）。
   final void Function(bool enabled)? _setStopAfterCurrentTrack;
+
+  /// 应用是否在前台：原生定时的 wake lock 只在后台 / 息屏时持有。
+  ///
+  /// 前台屏幕亮着，Handler 不会被 Doze 冻结，长期持有 partial wake lock
+  /// 只会白耗电（一小时的定时关闭就是一小时不让 CPU 深睡）。
+  final bool Function() _isForeground;
+
+  static bool _alwaysForeground() => true;
 
   /// 原生定时器代次：覆盖 / 取消时自增，旧回调直接丢弃。
   int _alarmToken = 0;
@@ -285,16 +295,20 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   ///
   /// 熄屏 / 后台时 tick 可能被系统节流甚至整段冻结（Doze），回前台的第一件事
   /// 就是按绝对 deadline 补触发，避免「亮屏才发现还在播」。
-  void recheckDeadline() {
+  ///
+  /// [foreground] 是生命周期回调**当时**的前后台事实（null = 读注入的策略）：
+  /// 同一次 `onPause` 里组合根的策略监听可能还没跑（事件监听顺序不保证），
+  /// 不能等 `PlaybackPowerPolicy` 更新后再决定要不要持 wake lock。
+  void recheckDeadline({bool? foreground}) {
     if (_mode != SleepTimerMode.countdown) return;
-    _syncTicker();
+    _syncTicker(foregroundOverride: foreground);
   }
 
   /// 倒计时 ticker 同步：播放中（重新）武装绝对 deadline，非播放时冻结剩余。
   ///
   /// 每个触发源（tick、快照变化、[recheckDeadline]）都先做一次 deadline 判定，
   /// tick 迟到 / 整段丢失因此都不影响到点时机。
-  void _syncTicker() {
+  void _syncTicker({bool? foregroundOverride}) {
     if (_mode != SleepTimerMode.countdown) {
       _cancelTicker();
       _cancelAlarm();
@@ -322,11 +336,11 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     }
     // 即使 Dart ticker 已在跑，也重新 arm 原生定时器：通道重建 / 回前台 /
     // 快照变化后都能恢复熄屏补触发。
-    _armAlarm();
+    _armAlarm(foregroundOverride: foregroundOverride);
   }
 
   /// 武装原生定时器（每次 arm 递增 token，旧回调自动失效）。
-  void _armAlarm() {
+  void _armAlarm({bool? foregroundOverride}) {
     final deadline = _deadlineAt;
     if (deadline == null) return;
     final remaining = deadline.difference(_now());
@@ -335,7 +349,11 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       return;
     }
     _alarmToken++;
-    _alarm.arm(remaining, _alarmToken);
+    _alarm.arm(
+      remaining,
+      _alarmToken,
+      keepAwake: !(foregroundOverride ?? _isForeground()),
+    );
   }
 
   void _cancelAlarm() {
@@ -439,6 +457,11 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 /// 合帧）甚至整段冻结进程（Doze），1Hz tick 不保证准时；只靠 tick 会出现
 /// 「到点没暂停」。回到前台补检一次，把「到点暂停」的迟到上限压到
 /// 「下一次获得调度」。
+///
+/// 退后台 / 息屏（`onPause` / `onHide`）也要补检一次：原生定时器的
+/// wake lock 只在后台持有，前台已撤销；进入后台必须按新的前后台状态重排
+/// （[SleepTimerController.recheckDeadline] 会重新 arm），否则熄屏后可能
+/// 根本收不到到点回调。
 class SleepTimerLifecycleRecheck {
   SleepTimerLifecycleRecheck(this._timer);
 
@@ -447,7 +470,11 @@ class SleepTimerLifecycleRecheck {
 
   /// 挂接（幂等；组合根在 provider 建好后调用一次，App 生命周期内有效）。
   void attach() {
-    _listener ??= AppLifecycleListener(onResume: _timer.recheckDeadline);
+    _listener ??= AppLifecycleListener(
+      onResume: () => _timer.recheckDeadline(foreground: true),
+      onPause: () => _timer.recheckDeadline(foreground: false),
+      onHide: () => _timer.recheckDeadline(foreground: false),
+    );
   }
 
   /// 解挂（测试 / 非常规宿主用）。

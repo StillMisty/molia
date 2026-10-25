@@ -20,7 +20,11 @@ abstract interface class SleepTimerAlarm {
   set onFired(SleepTimerFired? callback);
 
   /// 在 [delay] 后唤醒；重复调用覆盖旧定时。
-  void arm(Duration delay, int token);
+  ///
+  /// [keepAwake] 为 true 时原生实现应在定时期间持有 partial wake lock
+  /// （Android：熄屏 / Doze 下 Handler 可能不跑）；前台屏幕亮着时传 false，
+  /// 避免长时间无意义地阻止 CPU 休眠。iOS 没有 wake lock，忽略该参数。
+  void arm(Duration delay, int token, {bool keepAwake = true});
 
   /// 取消当前定时（幂等）。
   void cancel();
@@ -37,7 +41,7 @@ class NoopSleepTimerAlarm implements SleepTimerAlarm {
   set onFired(SleepTimerFired? callback) {}
 
   @override
-  void arm(Duration delay, int token) {}
+  void arm(Duration delay, int token, {bool keepAwake = true}) {}
 
   @override
   void cancel() {}

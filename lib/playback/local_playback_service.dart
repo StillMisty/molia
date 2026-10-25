@@ -103,8 +103,9 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 移动端播放功耗策略（组合根注入共享实例；默认前台实例便于单测）。
   ///
-  /// 只影响位置采样节拍——本服务不据它停产任何预取 / 取色（那些由
-  /// `PlaybackObserver` 等观察者按各自口径驱动）。
+  /// 本服务只用它决定位置采样节拍；下一首字节预取由 `NextTrackPreloader`
+  /// 消费同一实例，封面预取 / 取色由 `PlaybackObserver` / `ArtworkThemeSync`
+  /// 各自按同一策略判定。
   final PlaybackPowerPolicy _powerPolicy;
 
   /// 当前曲目后台缓存写入（组合根注入；null = 关闭）。

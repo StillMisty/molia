@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/artwork_cache.dart';
+import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/artwork_palette_service.dart';
 import 'package:molia/services/covers/cover_resolution.dart';
@@ -429,6 +430,52 @@ void main() {
       await pumpEventQueue();
       expect(loaded, ['a']);
       expect(applied, hasLength(1));
+
+      sync.dispose();
+    });
+
+    test('移动端后台：无桌面歌词不取色；开悬浮窗允许取色', () async {
+      final policy = PlaybackPowerPolicy();
+      addTearDown(policy.dispose);
+      final loaded = <String>[];
+      final applied = <ArtworkPalette>[];
+      final sync = ArtworkThemeSync(
+        load: (url) async {
+          loaded.add(url);
+          return paletteOf(Colors.green);
+        },
+        onPalette: applied.add,
+        onCleared: () {},
+        settleDelay: Duration.zero,
+        mobilePowerPolicy: policy,
+      );
+
+      // 息屏 / 切后台、没有桌面歌词：记录 URL 但不解码封面。
+      policy.markBackground();
+      sync.onArtworkChanged('a');
+      await pumpEventQueue();
+      expect(loaded, isEmpty);
+
+      // 回前台：补一次。
+      policy.markForeground();
+      await pumpEventQueue();
+      expect(loaded, ['a']);
+      expect(applied, hasLength(1));
+
+      // 再退后台并打开桌面歌词：悬浮窗可能跟随封面配色，允许取色。
+      policy.markBackground();
+      sync.onArtworkChanged('b');
+      policy.setDesktopLyricsActive(true);
+      await pumpEventQueue();
+      expect(loaded, ['a', 'b']);
+      expect(applied, hasLength(2));
+
+      // 关闭悬浮窗后后台不再取色。
+      policy.setDesktopLyricsActive(false);
+      sync.onArtworkChanged('c');
+      await pumpEventQueue();
+      expect(loaded, ['a', 'b']);
+      expect(applied, hasLength(2));
 
       sync.dispose();
     });

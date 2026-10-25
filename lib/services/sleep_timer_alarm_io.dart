@@ -48,11 +48,12 @@ class MethodChannelSleepTimerAlarm implements SleepTimerAlarm {
   }
 
   @override
-  void arm(Duration delay, int token) {
+  void arm(Duration delay, int token, {bool keepAwake = true}) {
     if (!_supported || delay <= Duration.zero) return;
     unawaited(_invoke('arm', {
       'millis': delay.inMilliseconds,
       'token': token,
+      'keepAwake': keepAwake,
     }));
   }
 

@@ -33,7 +33,8 @@ class LocalPlaybackChain {
   final CatalogStack catalog;
   final LocalDataStack local;
 
-  /// 组合根共享的播放功耗策略（位置采样节拍；与预取 / 取色无关）。
+  /// 组合根共享的播放功耗策略（位置采样节拍、下一首字节预取门控；
+  /// 封面预取 / 取色由观察者与歌词显示栈消费同一实例）。
   final PlaybackPowerPolicy powerPolicy;
 
   /// 取链外层装饰：优先命中本地下载副本 / 完整音频缓存（直接 file://），
@@ -83,6 +84,9 @@ class LocalPlaybackChain {
           resolver: resolveSourceStream,
           preferredQuality: preferredQuality,
           predownloader: local.audioCacheWriter,
+          // 移动端后台只预热直链：字节预取把整首下一曲提前拉到本地，是
+          // 熄屏听歌时最重的网络 / 磁盘开销。
+          canPredownloadBytes: () => powerPolicy.canPredownloadNextTrackBytes,
         ),
         audioCacheWriter: PlayingTrackCacheWriter(
           predownloader: local.audioCacheWriter,
