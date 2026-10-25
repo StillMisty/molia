@@ -80,10 +80,9 @@ class CommentsTabState {
 
 class CommentsProvider extends ChangeNotifier {
   CommentsProvider({
-    required CommentsService service,
-    required SourceRegistry registry,
-  })  : _service = service,
-        _registry = registry {
+    required this._service,
+    required this._registry,
+  }) {
     for (final kind in CommentKind.values) {
       _controllers[kind] = PagedListController<Comment>(
         keyOf: (comment) => comment.id,

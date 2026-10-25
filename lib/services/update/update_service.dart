@@ -22,12 +22,10 @@ class UpdateCheckResult {
 /// UI 不直接持有本服务。
 class UpdateService {
   UpdateService({
-    required UpdateManifestClient client,
-    required UpdateDownloader downloader,
-    required UpdateInstaller installer,
-  })  : _client = client,
-        _downloader = downloader,
-        _installer = installer;
+    required this._client,
+    required this._downloader,
+    required this._installer,
+  });
 
   final UpdateManifestClient _client;
   final UpdateDownloader _downloader;

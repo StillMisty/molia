@@ -99,7 +99,7 @@ class AiDjTrackTile extends StatelessWidget {
         track.title,
         artist,
         reason,
-        if (stateLabel != null) stateLabel,
+        ?stateLabel,
       ].where((part) => part.isNotEmpty).join(', '),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,

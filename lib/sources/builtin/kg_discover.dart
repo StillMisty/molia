@@ -231,7 +231,7 @@ class KgDiscoverSource extends DiscoverSource {
       return DiscoverPlaylistPage(
         playlists: [
           for (final item in list)
-            if (filterListItem(item) case final playlist?) playlist,
+            ?filterListItem(item),
         ],
         page: page,
         limit: limit,
@@ -306,7 +306,7 @@ class KgDiscoverSource extends DiscoverSource {
       return DiscoverPlaylistPage(
         playlists: [
           for (final item in (items is List ? items : const []))
-            if (filterSearchItem(item) case final playlist?) playlist,
+            ?filterSearchItem(item),
         ],
         page: page,
         limit: 20,

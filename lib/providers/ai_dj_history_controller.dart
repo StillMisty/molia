@@ -18,14 +18,11 @@ typedef AiDjBatchEncoder = StoredAiBatch Function(AiDjBatch batch);
 /// 推荐历史控制器：Provider 只保留编排，历史读写与保留策略全部在这里。
 class AiDjHistoryController {
   AiDjHistoryController({
-    required AiRecommendationStore store,
-    required AiDjBatchDecoder decode,
-    required AiDjBatchEncoder encode,
+    required this._store,
+    required this._decode,
+    required this._encode,
     DateTime Function()? clock,
-  })  : _store = store,
-        _decode = decode,
-        _encode = encode,
-        _clock = clock ?? DateTime.now;
+  })  : _clock = clock ?? DateTime.now;
 
   /// 历史详情缓存上限（按需加载；不持久化）。
   ///

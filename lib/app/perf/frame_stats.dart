@@ -59,7 +59,7 @@ class FrameStats {
     if (stats == null) return;
     final payload = <String, Object?>{
       'scenario': _scenario,
-      if (label != null) 'label': label,
+      'label': ?label,
       ...stats,
       'image_cache_mb': _imageCacheMb(),
     };

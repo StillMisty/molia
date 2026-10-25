@@ -66,17 +66,13 @@ typedef RestoredTrackReporter = void Function(Track track);
 class PlaybackSessionCoordinator
     implements PlaybackSessionSyncPort, PlaybackCommandPort {
   PlaybackSessionCoordinator({
-    required PlaybackFacade facade,
-    required PlaybackSessionStore store,
-    required SettingsAccess settings,
-    RestoredTrackReporter? onRestoredTrack,
+    required this._facade,
+    required this._store,
+    required this._settings,
+    this._onRestoredTrack,
     DateTime Function()? clock,
     PlaybackPowerPolicy? powerPolicy,
-  })  : _facade = facade,
-        _store = store,
-        _settings = settings,
-        _onRestoredTrack = onRestoredTrack,
-        _clock = clock ?? DateTime.now,
+  })  : _clock = clock ?? DateTime.now,
         _powerPolicy = powerPolicy ?? PlaybackPowerPolicy() {
     _position = _RestoredPositionChannel(_facade.position);
     _facade.snapshot.addListener(_onLiveSnapshot);

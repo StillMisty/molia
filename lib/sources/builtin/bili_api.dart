@@ -263,7 +263,7 @@ class BiliApi {
 
     future.then<void>(
       (_) => clearPending(),
-      onError: (Object _, StackTrace __) => clearPending(),
+      onError: (Object _, StackTrace _) => clearPending(),
     );
     return future;
   }

@@ -80,7 +80,7 @@ class KwComment {
       replies: children is List
           ? [
               for (final child in children)
-                if (_parseItem(child) case final reply?) reply,
+                ?_parseItem(child),
             ]
           : const [],
     );

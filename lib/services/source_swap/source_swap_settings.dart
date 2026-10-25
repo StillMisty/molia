@@ -7,8 +7,7 @@ import '../../data/settings/settings_keys.dart';
 ///
 /// 只影响播放失败后的自动行为；手动换源不受开关控制。
 class SourceSwapSettings extends ChangeNotifier {
-  SourceSwapSettings({required SettingsAccess settings})
-      : _settings = settings {
+  SourceSwapSettings({required this._settings}) {
     _settings.bindReload(kSourceSwapAutoEnabled, init);
   }
 

@@ -26,22 +26,15 @@ import '../utils/peer_address.dart';
 /// 只服务恢复动作（添加手动对端 / 失败重试），首屏无手动同步入口。
 class SyncProvider extends ChangeNotifier {
   SyncProvider({
-    required SyncEngine engine,
-    required SyncControlPlane controlPlane,
-    required SyncBackup backup,
-    SyncScheduler? scheduler,
-    LocalNetworkPermission? lanPermission,
+    required this._engine,
+    required this._controlPlane,
+    required this._backup,
+    this._scheduler,
+    this._lanPermission,
     LocalEndpointsService? localEndpoints,
-    SyncCodecPort? codec,
-    SyncPairingPort? pairing,
-  })  : _engine = engine,
-        _controlPlane = controlPlane,
-        _backup = backup,
-        _scheduler = scheduler,
-        _lanPermission = lanPermission,
-        _endpoints = localEndpoints ?? LocalEndpointsService(),
-        _codec = codec,
-        _pairing = pairing {
+    this._codec,
+    this._pairing,
+  })  : _endpoints = localEndpoints ?? LocalEndpointsService() {
     _engine.addListener(notifyListeners);
     _controlPlane.addListener(notifyListeners);
   }

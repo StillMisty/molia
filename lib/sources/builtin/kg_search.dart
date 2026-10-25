@@ -206,7 +206,7 @@ class KgSearch {
       'songmid': songId,
       'source': 'kg',
       'interval': intervalText,
-      if (rawInterval != null) '_interval': rawInterval,
+      '_interval': ?rawInterval,
       'img': img,
       'lrc': null,
       'otherSource': null,

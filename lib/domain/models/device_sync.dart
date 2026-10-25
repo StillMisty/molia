@@ -466,7 +466,7 @@ class SyncEnvelope {
         if (list is! List) continue;
         final parsed = <SyncRecord>[
           for (final item in list)
-            if (SyncRecord.fromJson(item) case final record?) record,
+            ?SyncRecord.fromJson(item),
         ];
         if (parsed.isNotEmpty) records[category] = parsed;
       }
@@ -477,7 +477,7 @@ class SyncEnvelope {
     if (rawJournal is List) {
       journal = <SyncJournalEntry>[
         for (final item in rawJournal)
-          if (SyncJournalEntry.fromJson(item) case final entry?) entry,
+          ?SyncJournalEntry.fromJson(item),
       ];
     }
     final acks = <String, int>{};

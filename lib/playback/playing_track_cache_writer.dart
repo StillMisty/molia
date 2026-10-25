@@ -18,8 +18,7 @@ import 'audio_predownload.dart';
 import 'audio_predownloader.dart';
 
 class PlayingTrackCacheWriter {
-  PlayingTrackCacheWriter({AudioPredownloader? predownloader})
-      : _predownloader = predownloader;
+  PlayingTrackCacheWriter({this._predownloader});
 
   final AudioPredownloader? _predownloader;
 

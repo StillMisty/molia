@@ -28,21 +28,15 @@ const String _androidPublicDownloadsDirName = 'Download';
 /// - iOS：直接写应用文档目录（文件 App 可见），不弹系统选择器。
 class IoSaveAs implements SaveAs {
   IoSaveAs({
-    required DownloadsPublisher publisher,
-    String? Function()? customRoot,
-    SaveFileDialog? dialog,
-    Future<Directory?> Function()? downloadsDirectory,
-    Future<Directory> Function()? documentsDirectory,
-    Future<Directory> Function()? temporaryDirectory,
+    required this._publisher,
+    this._customRoot,
+    this._dialog,
+    this._downloadsDirectory,
+    this._documentsDirectory,
+    this._temporaryDirectory,
     bool? android,
     bool? ios,
-  })  : _publisher = publisher,
-        _customRoot = customRoot,
-        _dialog = dialog,
-        _downloadsDirectory = downloadsDirectory,
-        _documentsDirectory = documentsDirectory,
-        _temporaryDirectory = temporaryDirectory,
-        _isAndroid = android ?? Platform.isAndroid,
+  })  : _isAndroid = android ?? Platform.isAndroid,
         _isIos = ios ?? Platform.isIOS;
 
   final DownloadsPublisher _publisher;

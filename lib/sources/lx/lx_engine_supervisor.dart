@@ -58,13 +58,12 @@ class LxEngineSupervisor {
       Duration(seconds: 2),
       Duration(seconds: 8),
     ],
-    Duration readyWaitTimeout = const Duration(seconds: 10),
+    this._readyWaitTimeout = const Duration(seconds: 10),
     int maxConsecutiveTimeouts = 3,
   })  : assert(restartDelays.isNotEmpty, '至少需要一个退避间隔'),
         assert(maxConsecutiveTimeouts > 0, '熔断阈值必须为正数'),
         _engine = (engineFactory ?? LxEngine.new)(),
         _restartDelays = List<Duration>.unmodifiable(restartDelays),
-        _readyWaitTimeout = readyWaitTimeout,
         _maxConsecutiveTimeouts = maxConsecutiveTimeouts;
 
   /// 被包装的引擎实例（重启时复用同一实例重放 `start`）。

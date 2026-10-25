@@ -50,7 +50,7 @@ enum BiliCodePolicy {
 
 /// B 站端点客户端（可在测试里注入独立传输）。
 class BiliClient {
-  const BiliClient({BuiltinTransport? transport}) : _transport = transport;
+  const BiliClient({this._transport});
 
   /// 生产 / 业务文件共用实例：传输走 [BuiltinSearch.transport]，测试替换全局
   /// 传输即可覆盖。自身不持有可变状态，因此不需要 reset。

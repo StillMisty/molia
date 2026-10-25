@@ -23,8 +23,7 @@ class _PositionNotifier extends ValueNotifier<Duration>
 /// 默认播放 facade：把 [PlaybackBackend] 的状态映射为领域快照，
 /// 并拆分高频进度通道。
 class DefaultPlaybackFacade implements PlaybackFacade {
-  DefaultPlaybackFacade({required PlaybackBackend backend})
-      : _backend = backend {
+  DefaultPlaybackFacade({required this._backend}) {
     _backend.state.addListener(_onBackendState);
     _syncFromBackend(initial: true);
   }

@@ -318,7 +318,7 @@ abstract final class SyncPayloadBinary {
         if (cell == null) hasNulls = true;
       }
     }
-    final values = [for (final value in present) if (value != null) value];
+    final values = [for (final value in present) ?value];
     var flags = 0;
     if (hasPresence) flags |= _Col.flagPresence;
     if (hasNulls) flags |= _Col.flagNulls;

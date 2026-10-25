@@ -21,11 +21,10 @@ typedef ArtistFetcher = Future<ArtistDetail> Function(
 /// 重试时用 [invalidateArtist] 清该歌手全部页。
 class ArtistService {
   ArtistService({
-    required ArtistFetcher fetch,
+    required this._fetch,
     RequestCache? cache,
     Duration ttl = const Duration(minutes: 10),
-  })  : _fetch = fetch,
-        _cache = cache ?? RequestCache(maxEntries: 64, ttl: ttl);
+  })  : _cache = cache ?? RequestCache(maxEntries: 64, ttl: ttl);
 
   final ArtistFetcher _fetch;
   final RequestCache _cache;

@@ -23,9 +23,8 @@ import '../../domain/models/failure.dart';
 class LlmClient {
   LlmClient({
     Dio? dio,
-    Duration timeout = const Duration(seconds: 30),
-  })  : _dio = dio ?? createAppDio(),
-        _timeout = timeout;
+    this._timeout = const Duration(seconds: 30),
+  })  : _dio = dio ?? createAppDio();
 
   final Dio _dio;
   final Duration _timeout;

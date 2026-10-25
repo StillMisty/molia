@@ -13,8 +13,7 @@ import '../sync_adapter.dart';
 /// 本地下载曲目（`sourceKey = local`）不同步：文件是设备本机的持久副本，
 /// 导出与应用两侧都过滤（含其墓碑），避免把「本机路径」带到其它设备。
 class PlaylistSyncAdapter implements SyncAdapter {
-  PlaylistSyncAdapter({required LibrarySyncStore repository})
-      : _repository = repository;
+  PlaylistSyncAdapter({required this._repository});
 
   final LibrarySyncStore _repository;
 

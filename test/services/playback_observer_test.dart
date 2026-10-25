@@ -47,7 +47,7 @@ void main() {
     PlaybackContext? context,
   }) {
     // 与真实后端一致：next / previous / upNext 由队列与下标派生。
-    final tracks = queue ?? [if (current != null) current];
+    final tracks = queue ?? [?current];
     final index = current == null
         ? -1
         : tracks.indexWhere((item) => item.id.uri == current.id.uri);

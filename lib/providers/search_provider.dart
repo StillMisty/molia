@@ -95,10 +95,9 @@ class SearchProvider extends ChangeNotifier {
 
   SearchProvider(
     this._playbackProvider, {
-    CatalogService? catalogService,
-    SourceRegistry? sourceRegistry,
-  })  : _catalogService = catalogService,
-        _sourceRegistry = sourceRegistry {
+    this._catalogService,
+    this._sourceRegistry,
+  }) {
     _pager = PagedListController<SourceTrack>(
       keyOf: (track) => track.id,
       fetchPage: _fetchSearchPage,

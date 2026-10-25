@@ -30,10 +30,9 @@ class _BackendStateNotifier extends ValueNotifier<BackendSnapshot>
 /// 把服务状态映射为领域 [BackendSnapshot]，并把控制委托给服务。
 class LocalPlaybackBackend implements PlaybackBackend {
   LocalPlaybackBackend({
-    required LocalPlaybackService service,
-    required PlaybackStreamResolver resolver,
-  })  : _service = service,
-        _resolver = resolver {
+    required this._service,
+    required this._resolver,
+  }) {
     _service.addListener(_onServiceChanged);
     _state.value = _buildSnapshot();
   }

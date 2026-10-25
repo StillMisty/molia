@@ -35,30 +35,25 @@ import 'sync/sync_stamp.dart';
 const String favoritesPlaylistRowName = '__favorites__';
 
 class LibraryWriteEngine {
-  /// [databaseProvider] 与仓库共用同一库（测试注入 in-memory drift 库）；
-  /// [stamps] 是版本戳唯一发号器（本地写入每步取一个号）；[clock] 供内容
+  /// [_databaseProvider] 与仓库共用同一库（测试注入 in-memory drift 库）；
+  /// [_stamps] 是版本戳唯一发号器（本地写入每步取一个号）；[clock] 供内容
   /// 时间（`createdAt` / `addedAt` / `playedAt` / 墓碑的真实删除时间）——
   /// 两者刻意分开（内容时间分离，见 ADR-0003 v2 §2）。
   ///
-  /// [journal] 是增量日志（可选）：本地写入在**同一个 drift 事务**里追加
+  /// [_journal] 是增量日志（可选）：本地写入在**同一个 drift 事务**里追加
   /// 日志条目，对端按游标只拉变更。
   ///
-  /// [addToTop] 是「加入列表」的位置偏好（设置页，默认放开头）：true 时新曲目
+  /// [_addToTop] 是「加入列表」的位置偏好（设置页，默认放开头）：true 时新曲目
   /// 排到列表开头。缺省 = 追加到末尾——测试与未接线场景保持旧口径，生产由
   /// 组合根注入 `LibraryAddSettings.addToTop`。
   LibraryWriteEngine({
-    required MoliaDatabase Function() databaseProvider,
-    required SyncStampIssuer stamps,
+    required this._databaseProvider,
+    required this._stamps,
     int Function()? clock,
-    SyncJournalRepository? journal,
-    bool Function()? addToTop,
-    Future<void> Function()? beforeWrite,
-  })  : _databaseProvider = databaseProvider,
-        _stamps = stamps,
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _journal = journal,
-        _addToTop = addToTop,
-        _beforeWrite = beforeWrite;
+    this._journal,
+    this._addToTop,
+    this._beforeWrite,
+  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final MoliaDatabase Function() _databaseProvider;
   final SyncStampIssuer _stamps;

@@ -109,10 +109,9 @@ abstract interface class CoverSwapHost {
 /// 一次切歌（拖动/即时）的会话状态机。
 class CoverSwapSession extends ChangeNotifier {
   CoverSwapSession({
-    required CoverSwapHost host,
-    required CoverResolver covers,
-  })  : _host = host,
-        _covers = covers;
+    required this._host,
+    required this._covers,
+  });
 
   /// 提交等待的兜底时限：取链失败等情况下不能永远停在邻位预览。
   static const Duration commitTimeout = Duration(seconds: 6);

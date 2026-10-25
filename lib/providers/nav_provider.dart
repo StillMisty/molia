@@ -14,7 +14,7 @@ enum ShellDestination { nowPlaying, favorites, library }
 
 /// 底部导航定制：顺序 + 显示/隐藏 + 启动首页，SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
-  NavProvider({required SettingsAccess settings}) : _settings = settings {
+  NavProvider({required this._settings}) {
     _settings.bindReload(kShellNavOrder, reloadFromPreferences);
     _settings.bindReload(kShellNavHidden, reloadFromPreferences);
     _settings.bindReload(kShellHomeDestination, reloadFromPreferences);

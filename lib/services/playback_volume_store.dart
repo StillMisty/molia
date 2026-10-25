@@ -10,9 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 读写失败静默（读取回默认、写入不打断交互）：音量是尽力而为的体验设置，
 /// 存储不可用（测试 / 平台异常）时播放照常。
 class PlaybackVolumeStore {
-  /// [preferences] 仅测试注入；生产走 SharedPreferences 单例。
-  PlaybackVolumeStore({SharedPreferences? preferences})
-      : _preferences = preferences;
+  /// [_preferences] 仅测试注入；生产走 SharedPreferences 单例。
+  PlaybackVolumeStore({this._preferences});
 
   /// 设备本地键。
   static const String keyVolume = 'playback_volume';

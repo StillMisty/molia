@@ -26,15 +26,11 @@ class LyricsDisplayProvider extends ChangeNotifier {
   LyricsDisplayProvider({
     required this.settings,
     required List<LyricsOutput> outputs,
-    AudioRouteMonitor? audioRoute,
-    Listenable? themeListenable,
-    void Function(LyricsPlaybackCommand command)? onPlaybackCommand,
-    bool mediaSessionInitFailed = false,
-  })  : _outputs = List.unmodifiable(outputs),
-        _audioRoute = audioRoute,
-        _themeListenable = themeListenable,
-        _onPlaybackCommand = onPlaybackCommand,
-        _mediaSessionInitFailed = mediaSessionInitFailed {
+    this._audioRoute,
+    this._themeListenable,
+    this._onPlaybackCommand,
+    this._mediaSessionInitFailed = false,
+  })  : _outputs = List.unmodifiable(outputs) {
     for (final output in _outputs) {
       if (output is InteractiveLyricsOutput) {
         _subscriptions.add(output.actions.listen(_onOutputAction));

@@ -78,8 +78,7 @@ class LocalSongsInput {
 /// 输入上。
 class LocalSongsCollection extends ChangeNotifier {
   LocalSongsCollection(
-      {required CachedAudioTrackIdsLookup loadCachedAudioTrackIds})
-      : _loadCachedAudioTrackIds = loadCachedAudioTrackIds;
+      {required this._loadCachedAudioTrackIds});
 
   final CachedAudioTrackIdsLookup _loadCachedAudioTrackIds;
 

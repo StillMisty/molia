@@ -12,11 +12,10 @@ import '../cache/request_cache.dart';
 /// 评论随时间变化，TTL 取 5 分钟，刷新时用 [invalidateTrack] 清该曲目全部页。
 class CommentsService {
   CommentsService({
-    required SourceRegistry registry,
+    required this._registry,
     RequestCache? cache,
     Duration ttl = const Duration(minutes: 5),
-  })  : _registry = registry,
-        _cache = cache ?? RequestCache(maxEntries: 96, ttl: ttl);
+  })  : _cache = cache ?? RequestCache(maxEntries: 96, ttl: ttl);
 
   final SourceRegistry _registry;
   final RequestCache _cache;

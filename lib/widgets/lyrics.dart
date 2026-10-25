@@ -1082,7 +1082,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         alignment: Alignment.topLeft,
         children: [
           ...previousChildren,
-          if (currentChild != null) currentChild,
+          ?currentChild,
         ],
       ),
       transitionBuilder: (child, animation) => SizeTransition(

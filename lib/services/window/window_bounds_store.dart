@@ -18,7 +18,7 @@ typedef SavedWindowBounds = ({Rect bounds, bool maximized});
 
 /// 窗口几何读写（`WindowChrome` 的恢复与防抖保存路径调用）。
 class WindowBoundsStore {
-  WindowBoundsStore({SharedPreferences? prefs}) : _prefs = prefs;
+  WindowBoundsStore({this._prefs});
 
   static const String keyX = 'window_bounds_x';
   static const String keyY = 'window_bounds_y';

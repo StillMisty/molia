@@ -40,8 +40,8 @@ class LyricsService {
     SharedPreferences? prefs,
     CacheService? cacheService,
     LyricsCache? lyricsCache,
-    TrackLyricLoader? trackLyricLoader,
-    bool Function(Track track)? networkFallbackAllowed,
+    this._trackLyricLoader,
+    this._networkFallbackAllowed,
   })  : _providers = providers ??
             [
               NetEaseProvider(),
@@ -51,8 +51,6 @@ class LyricsService {
               MiguProvider(),
               LRCLibProvider(),
             ],
-        _trackLyricLoader = trackLyricLoader,
-        _networkFallbackAllowed = networkFallbackAllowed,
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
         _cacheService = cacheService ?? CacheService.instance;
 

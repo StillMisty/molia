@@ -106,7 +106,7 @@ class AppNetworkImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        errorBuilder: (_, error, ___) {
+        errorBuilder: (_, error, _) {
           if (!isFallback) _notifyError(error);
           return _errorFallback(context, isFallback: isFallback);
         },
@@ -164,8 +164,8 @@ class AppNetworkImage extends StatelessWidget {
       fit: fit,
       memCacheWidth: cacheWidth,
       memCacheHeight: cacheHeight,
-      placeholder: (_, __) => placeholder ?? _placeholder(context),
-      errorWidget: (_, __, error) {
+      placeholder: (_, _) => placeholder ?? _placeholder(context),
+      errorWidget: (_, _, error) {
         if (!isFallback) _notifyError(error);
         return _errorFallback(context, isFallback: isFallback);
       },

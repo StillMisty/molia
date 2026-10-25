@@ -59,17 +59,14 @@ class ArtworkPalette {
 ///   `runApp` 前调用，让首帧直接是封面色。
 class ArtworkPaletteService {
   ArtworkPaletteService({
-    int maxCacheEntries = 8,
-    Future<ImageProvider> Function(String url) providerFor =
+    this._maxCacheEntries = 8,
+    this._providerFor =
         artworkImageProvider,
-    Future<Uint8List?> Function(String url) cachedBytesFor =
+    this._cachedBytesFor =
         _cachedBytesFromStore,
-    Future<Uint8List?> Function(String path) localFileBytesFor =
+    this._localFileBytesFor =
         _localFileBytesFromDisk,
-  })  : _maxCacheEntries = maxCacheEntries,
-        _providerFor = providerFor,
-        _cachedBytesFor = cachedBytesFor,
-        _localFileBytesFor = localFileBytesFor;
+  });
 
   static const int _quantizeColorCount = 128;
 
@@ -309,16 +306,12 @@ class ArtworkPaletteService {
 ///   没有任何展示面；恢复后补一次（LRU 命中时等于零成本）。
 class ArtworkThemeSync {
   ArtworkThemeSync({
-    required Future<ArtworkPalette?> Function(String url) load,
-    required void Function(ArtworkPalette palette) onPalette,
-    required void Function() onCleared,
-    Duration settleDelay = const Duration(milliseconds: 500),
+    required this._load,
+    required this._onPalette,
+    required this._onCleared,
+    this._settleDelay = const Duration(milliseconds: 500),
     AppPresence? presence,
-  })  : _load = load,
-        _onPalette = onPalette,
-        _onCleared = onCleared,
-        _settleDelay = settleDelay,
-        _presence = presence ?? AppPresence.instance {
+  })  : _presence = presence ?? AppPresence.instance {
     _presence.addListener(_onPresenceChanged);
   }
 

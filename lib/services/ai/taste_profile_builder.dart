@@ -60,10 +60,9 @@ class TasteProfile {
 
 class TasteProfileBuilder {
   TasteProfileBuilder({
-    required PlayStatisticsRepository repository,
-    LibraryStore? libraryStore,
-  })  : _repository = repository,
-        _libraryStore = libraryStore;
+    required this._repository,
+    this._libraryStore,
+  });
 
   final PlayStatisticsRepository _repository;
   final LibraryStore? _libraryStore;

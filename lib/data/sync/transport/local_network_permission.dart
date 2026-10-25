@@ -37,12 +37,10 @@ enum LocalNetworkPermissionStatus {
 class LocalNetworkPermission {
   LocalNetworkPermission({
     required this.needsPermission,
-    Future<LocalNetworkPermissionStatus> Function()? request,
-    Future<LocalNetworkPermissionStatus> Function()? check,
-    Future<void> Function()? openSettings,
-  })  : _request = request,
-        _check = check,
-        _openSettings = openSettings;
+    this._request,
+    this._check,
+    this._openSettings,
+  });
 
   /// 平台通道（Android 原生实现见 `LocalNetworkPermissionChannelHandler.kt`）。
   static const MethodChannel _channel =

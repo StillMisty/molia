@@ -7,8 +7,8 @@ import 'dart:async';
 class AudioPredownloadTask {
   AudioPredownloadTask({
     required this.done,
-    required void Function() onCancel,
-  }) : _onCancel = onCancel;
+    required this._onCancel,
+  });
 
   final Future<void> done;
   final void Function() _onCancel;

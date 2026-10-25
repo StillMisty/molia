@@ -105,16 +105,12 @@ typedef SourceSwapTrackHook = Future<void> Function(Track seed, Track selected);
 
 class SourceSwapProvider extends ChangeNotifier {
   SourceSwapProvider({
-    required CatalogService catalogService,
-    required SourceRegistry sourceRegistry,
-    required LibraryProvider libraryProvider,
-    required PlaybackProvider playbackProvider,
-    SourceSwapTrackHook? onTrackSwapped,
-  })  : _catalogService = catalogService,
-        _sourceRegistry = sourceRegistry,
-        _libraryProvider = libraryProvider,
-        _playbackProvider = playbackProvider,
-        _onTrackSwapped = onTrackSwapped;
+    required this._catalogService,
+    required this._sourceRegistry,
+    required this._libraryProvider,
+    required this._playbackProvider,
+    this._onTrackSwapped,
+  });
 
   /// 每个音源的候选上限（对齐 LX 弹窗的 25 条量级）。
   static const int perSourceLimit = 30;

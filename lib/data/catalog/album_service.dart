@@ -21,11 +21,10 @@ typedef AlbumFetcher = Future<Album> Function(
 /// 重试时用 [invalidateAlbum] 清该专辑全部页。
 class AlbumService {
   AlbumService({
-    required AlbumFetcher fetch,
+    required this._fetch,
     RequestCache? cache,
     Duration ttl = const Duration(minutes: 10),
-  })  : _fetch = fetch,
-        _cache = cache ?? RequestCache(maxEntries: 64, ttl: ttl);
+  })  : _cache = cache ?? RequestCache(maxEntries: 64, ttl: ttl);
 
   final AlbumFetcher _fetch;
   final RequestCache _cache;

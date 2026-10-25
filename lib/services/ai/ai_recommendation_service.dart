@@ -77,18 +77,14 @@ abstract interface class AiRecommendationGenerator {
 
 class AiRecommendationService implements AiRecommendationGenerator {
   AiRecommendationService({
-    required LlmClient llm,
-    required CatalogService catalog,
-    required SourceRegistry registry,
-    required TasteProfileBuilder profileBuilder,
+    required this._llm,
+    required this._catalog,
+    required this._registry,
+    required this._profileBuilder,
     AiPromptLanguage Function()? promptLanguage,
     this.resolveConcurrency = 3,
     this.resolveHedgeDelay = const Duration(milliseconds: 250),
   })  : assert(!resolveHedgeDelay.isNegative),
-        _llm = llm,
-        _catalog = catalog,
-        _registry = registry,
-        _profileBuilder = profileBuilder,
         _promptLanguage = promptLanguage ?? (() => AiPromptLanguage.zh);
 
   final LlmClient _llm;

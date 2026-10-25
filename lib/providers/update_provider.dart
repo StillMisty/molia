@@ -69,20 +69,13 @@ class UpdateProgress {
 ///   直接依赖窗口实现，测试可注入假实现。
 class UpdateProvider extends ChangeNotifier {
   UpdateProvider({
-    required UpdateService service,
-    required UpdatePreferences preferences,
-    // 版本 / 构建号：默认占位（0.0.0+0），[start] 里从平台包信息读真值。
-    // 读不到时保持占位，检查仍可跑（只是比较无基准），与拆分前的口径一致。
-    String currentVersion = '0.0.0',
-    int currentBuild = 0,
-    Future<void> Function()? quitApp,
+    required this._service,
+    required this._preferences,
+    this._currentVersion = '0.0.0',
+    this._currentBuild = 0,
+    this._quitApp,
     DateTime Function()? now,
-  })  : _service = service,
-        _preferences = preferences,
-        _currentVersion = currentVersion,
-        _currentBuild = currentBuild,
-        _quitApp = quitApp,
-        _now = now ?? DateTime.now;
+  })  : _now = now ?? DateTime.now;
 
   /// 启动静默检查的节流间隔。
   static const Duration autoCheckInterval = Duration(hours: 24);

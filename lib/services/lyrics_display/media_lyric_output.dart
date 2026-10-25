@@ -6,14 +6,11 @@ import 'lyrics_output.dart';
 /// [LocalAudioHandler] 的歌词覆盖入口（同一份 MediaItem 驱动通知与 AVRCP）。
 class MediaLyricOutput implements LyricsOutput {
   MediaLyricOutput({
-    required bool Function() supported,
-    required void Function(LyricMetadataOverride? override) applyOverride,
-    required bool Function() a2dpConnected,
-    MediaLyricComposer composer = const MediaLyricComposer(),
-  })  : _supported = supported,
-        _applyOverride = applyOverride,
-        _a2dpConnected = a2dpConnected,
-        _composer = composer;
+    required this._supported,
+    required this._applyOverride,
+    required this._a2dpConnected,
+    this._composer = const MediaLyricComposer(),
+  });
 
   final bool Function() _supported;
   final void Function(LyricMetadataOverride?) _applyOverride;

@@ -45,12 +45,10 @@ class SyncActivityLogSnapshot {
 /// 同步轮次流水（内存状态；不做持久化）。
 class SyncActivityLog {
   SyncActivityLog({
-    required void Function() onChanged,
-    int logLimit = SyncStateCodec.logLimit,
-    int activityLimit = SyncStateCodec.activityLimit,
-  })  : _onChanged = onChanged,
-        _logLimit = logLimit,
-        _activityLimit = activityLimit;
+    required this._onChanged,
+    this._logLimit = SyncStateCodec.logLimit,
+    this._activityLimit = SyncStateCodec.activityLimit,
+  });
 
   /// 有内存变更（由状态存储标脏；轮内不改磁盘）。
   final void Function() _onChanged;

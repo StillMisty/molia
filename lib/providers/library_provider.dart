@@ -42,10 +42,9 @@ class PlaylistTracksView {
 
 class LibraryProvider extends ChangeNotifier {
   LibraryProvider({
-    required LibraryStore repository,
+    required this._repository,
     required PlaybackProvider playbackProvider,
-  })  : _repository = repository,
-        _playback = playbackProvider {
+  })  : _playback = playbackProvider {
     _subscription = _repository.changes.listen(_onRepositoryChanged);
   }
 

@@ -23,16 +23,12 @@ typedef SyncRecordCollector = Future<Map<SyncCategory, List<SyncRecord>>>
 /// 轮次；引擎的 interface 也不再为备份留两个方法。
 class SyncBackup {
   SyncBackup({
-    required SyncBackupState state,
-    required List<SyncAdapter> adapters,
-    required SyncStampIssuer stamps,
-    required SyncRecordCollector collect,
+    required this._state,
+    required this._adapters,
+    required this._stamps,
+    required this._collect,
     DateTime Function()? clock,
-  })  : _state = state,
-        _adapters = adapters,
-        _stamps = stamps,
-        _collect = collect,
-        _clock = clock ?? DateTime.now;
+  })  : _clock = clock ?? DateTime.now;
 
   /// 备份文件外层格式标识（内层 envelope 是同步协议快照）。
   static const String backupKind = 'molia_backup';

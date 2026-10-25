@@ -163,16 +163,12 @@ class SyncDevice {
     required this.network,
     required this.id,
     required this.db,
-    required SyncJournalLimits limits,
-    required List<SettingsKey<Object?>> keys,
-    required String kind,
-    required bool servesLiveSnapshot,
-    int Function()? clock,
-  })  : _limits = limits,
-        _keys = keys,
-        _kind = kind,
-        _servesLiveSnapshot = servesLiveSnapshot,
-        _clock = clock;
+    required this._limits,
+    required this._keys,
+    required this._kind,
+    required this._servesLiveSnapshot,
+    this._clock,
+  });
 
   final SyncNetwork network;
   final String id;

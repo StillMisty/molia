@@ -47,7 +47,7 @@ void main() {
         commits++;
         return batch;
       },
-      onFailure: (_, __) => failures++,
+      onFailure: (_, _) => failures++,
     );
 
     expect(executor.isBusy, isTrue);
@@ -65,12 +65,12 @@ void main() {
 
     final second = await executor.run<AiDjBatch>(
       intent: _intent(AiGenerationLane.explicit),
-      invoke: (_, __) async => _batch('next'),
+      invoke: (_, _) async => _batch('next'),
       commit: (batch) async {
         commits++;
         return batch;
       },
-      onFailure: (_, __) => failures++,
+      onFailure: (_, _) => failures++,
     );
 
     expect(second?.id, 'next');
@@ -86,21 +86,21 @@ void main() {
 
     final silent = executor.run<AiDjBatch>(
       intent: _intent(AiGenerationLane.silent),
-      invoke: (_, __) async => silentGate.future,
+      invoke: (_, _) async => silentGate.future,
       commit: (batch) async {
         silentCommits++;
         return batch;
       },
-      onFailure: (_, __) {},
+      onFailure: (_, _) {},
     );
     expect(executor.autoFeedInFlight, isTrue);
     expect(executor.isBusy, isFalse);
 
     final explicit = await executor.run<AiDjBatch>(
       intent: _intent(AiGenerationLane.explicit),
-      invoke: (_, __) async => _batch('explicit'),
+      invoke: (_, _) async => _batch('explicit'),
       commit: (batch) async => batch,
-      onFailure: (_, __) {},
+      onFailure: (_, _) {},
     );
 
     expect(explicit?.id, 'explicit');
@@ -121,12 +121,12 @@ void main() {
 
     final replace = executor.run<AiDjBatch>(
       intent: _intent(AiGenerationLane.replace, replacingUri: replacingUri),
-      invoke: (_, __) async => replaceGate.future,
+      invoke: (_, _) async => replaceGate.future,
       commit: (batch) async {
         replaceCommits++;
         return batch;
       },
-      onFailure: (_, __) {},
+      onFailure: (_, _) {},
     );
     expect(executor.replacingUri, replacingUri);
     expect(executor.isBusy, isFalse);
@@ -136,9 +136,9 @@ void main() {
 
     final explicit = executor.run<AiDjBatch>(
       intent: _intent(AiGenerationLane.explicit),
-      invoke: (_, __) async => explicitGate.future,
+      invoke: (_, _) async => explicitGate.future,
       commit: (batch) async => batch,
-      onFailure: (_, __) {},
+      onFailure: (_, _) {},
     );
     expect(executor.isBusy, isTrue);
     expect(executor.replacingUri, replacingUri);
@@ -170,7 +170,7 @@ void main() {
           return _batch(lane.name);
         },
         commit: (batch) async => batch,
-        onFailure: (_, __) {},
+        onFailure: (_, _) {},
       );
     }
 
@@ -192,7 +192,7 @@ void main() {
           lane,
           replacingUri: lane == AiGenerationLane.replace ? 'wy:1' : null,
         ),
-        invoke: (_, __) async => throw const SourceFailure(
+        invoke: (_, _) async => throw const SourceFailure(
           kind: FailureKind.unknown,
           message: 'boom',
         ),

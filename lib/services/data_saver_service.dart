@@ -26,11 +26,9 @@ import '../sources/source_track.dart' show capQualityFor;
 class DataSaverService extends ChangeNotifier {
   DataSaverService({
     SharedPreferences? prefs,
-    Future<bool> Function()? cellularProbe,
-    Stream<bool>? cellularChanges,
-  })  : _prefsOverride = prefs,
-        _cellularProbe = cellularProbe,
-        _cellularChanges = cellularChanges;
+    this._cellularProbe,
+    this._cellularChanges,
+  })  : _prefsOverride = prefs;
 
   // 持久化键名（设置 UI / 测试共用）
   static const String keyEnabled = 'data_saver_enabled';

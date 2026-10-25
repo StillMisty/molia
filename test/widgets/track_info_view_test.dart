@@ -196,7 +196,7 @@ Track _track({
         AudioQuality(type: '320k', size: '9.8MB'),
         AudioQuality(type: 'flac'),
       ],
-      payload: {'id': 'a', if (albumId != null) 'albumId': albumId},
+      payload: {'id': 'a', 'albumId': ?albumId},
       platformAlbumId: albumId,
     );
 
@@ -230,7 +230,7 @@ void main() {
     backend.emit(
       BackendSnapshot(
         current: track,
-        queue: [if (track != null) track],
+        queue: [?track],
         currentIndex: track == null ? -1 : 0,
         duration: track?.duration ?? Duration.zero,
       ),
