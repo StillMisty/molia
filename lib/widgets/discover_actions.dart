@@ -5,9 +5,8 @@ import 'package:provider/provider.dart';
 import '../domain/models/discover.dart';
 import '../domain/models/track.dart';
 import '../providers/discover_provider.dart';
-import '../providers/library_provider.dart';
-import 'add_to_library.dart';
 import 'favorite_action.dart';
+import 'track_handoff.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
@@ -26,18 +25,18 @@ Future<void> toggleDiscoverFavorite(
   );
 }
 
-/// 「加入列表」流程：与收藏页共用 [addTracksToLibraryTarget]（选择目标 →
-/// 写入 → 解析新建列表名 → 反馈提示）。
+/// 「加入列表」流程：与收藏页共用 `TrackHandoff` 的目标选择与反馈。
+///
+/// 发现曲目保留自己的 `PlaylistTrack` 转换（歌单导入同源），只把流程交给
+/// 交接模块，避免「选择目标 → 写入 → 反馈」再抄一份。
 Future<void> addDiscoverTrackToPlaylist(
   BuildContext context,
   DiscoverTrack track,
 ) {
   final discover = context.read<DiscoverProvider>();
-  final library = context.read<LibraryProvider>();
-  return addTracksToLibraryTarget(
+  return const TrackHandoff().addPlaylistTracksToLibrary(
     context,
-    provider: library,
-    tracks: [discover.toPlaylistTrack(track)],
+    [discover.toPlaylistTrack(track)],
   );
 }
 

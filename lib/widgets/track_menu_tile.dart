@@ -4,14 +4,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../utils/responsive.dart';
-import 'add_to_library.dart';
 import 'favorite_action.dart';
 import 'row_actions.dart';
+import 'track_handoff.dart';
 import 'track_row.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -47,6 +46,9 @@ List<RowAction> trackRowActionMenu(
   ];
 }
 
+/// 单曲交接句柄（模块无状态；这里只用到「加入列表」意图）。
+const TrackHandoff _handoff = TrackHandoff();
+
 /// 领域曲目（队列 / 搜索结果等自建行）：收藏态订阅与写入流程（收藏切换 +
 /// snackbar、加入列表走统一目标弹层）收在这里，自建行不再各抄一份。
 ///
@@ -65,23 +67,8 @@ List<RowAction> trackRowActionMenuForTrack(
     favorite: favorite,
     // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
     onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
-    onAddToPlaylist: () => unawaited(_addTrackToPlaylist(context, track)),
-  );
-}
-
-/// 领域曲目加入列表：与收藏页 / 发现页共用统一目标选择与反馈流程。
-Future<void> _addTrackToPlaylist(BuildContext context, Track track) async {
-  final library = context.read<LibraryProvider?>();
-  if (library == null) return;
-  await addTracksToLibraryTarget(
-    context,
-    provider: library,
-    tracks: [
-      PlaylistTrack.fromTrack(
-        track,
-        addedAt: DateTime.now().millisecondsSinceEpoch,
-      ),
-    ],
+    // 领域曲目加入列表：与收藏页 / 发现页共用统一目标选择与反馈流程。
+    onAddToPlaylist: () => unawaited(_handoff.addToLibrary(context, [track])),
   );
 }
 
