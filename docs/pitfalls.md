@@ -893,3 +893,11 @@
     进程重启后授权失效（未做 security-scoped bookmark）；默认下载目录与同一次
     会话内选择的目录不受影响。macOS 不做应用内更新（ADR-0015），发布产物是
     ad-hoc 签名的 `-unsigned.zip`，首次打开需在「系统设置 › 隐私与安全性」放行。
+90. **列表曲目读取失败后不能在每次 build 清错重试**：`CollectionSession.sync`
+    每帧都会对当前列表调 `LibraryProvider.ensurePlaylistTracks`；如果 `ensure`
+    每次都先删 `_playlistTracksErrors` 再重读，一次读失败就会变成
+    「失败 → 清错 → loading → 再失败」的每帧死循环，页面永远转圈（导入 B 站
+    收藏后切到新列表时出现过，Windows 上读取连接被占住）。错误必须保留到显式
+    重试（`force`）或仓库变更事件；读取本身有 10s 超时兜底。新建列表的导入用
+    `importTracks.created` 直接预置列表头 + 曲目缓存，页面不依赖导入后的读库
+    （晚到的后台重载只做原地校准）。

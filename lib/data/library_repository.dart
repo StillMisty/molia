@@ -351,17 +351,20 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   /// 把曲目导入同名列表（不存在则创建；重复导入幂等）。
   ///
-  /// 返回 `(playlistId, 本次新增数, 曲目总数)`；供平台链接导入与
-  /// 发现页歌单导入使用（总数用于区分空歌单与全部重复）。
+  /// 返回 `(playlistId, 本次新增数, 曲目总数, created)`；供平台链接导入与
+  /// 发现页歌单导入使用（总数用于区分空歌单与全部重复，[created] 让调用方
+  /// 知道「本次导入的曲目就是新列表全量」，可直接建立缓存）。
   ///
   /// 导入保持文件 / 歌单原顺序**追加**到末尾，不受「加入列表位置」偏好影响
   /// （偏好只作用于手动加入与收藏）。
   @override
-  Future<({int playlistId, int added, int total})> importTracks(
+  Future<({int playlistId, int added, int total, bool created})> importTracks(
     String name,
     List<PlaylistTrack> tracks,
   ) async {
-    if (tracks.isEmpty) return (playlistId: -1, added: 0, total: 0);
+    if (tracks.isEmpty) {
+      return (playlistId: -1, added: 0, total: 0, created: false);
+    }
     final existing = await findPlaylistByName(name);
     final playlistId = existing?.id ?? await createPlaylist(name);
     final added = await _writeEngine.addTracksToPlaylist(
@@ -369,7 +372,12 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
       tracks,
       addToTop: false,
     );
-    return (playlistId: playlistId, added: added, total: tracks.length);
+    return (
+      playlistId: playlistId,
+      added: added,
+      total: tracks.length,
+      created: existing == null,
+    );
   }
 
   // 跨设备同步（data/sync 适配器消费）

@@ -84,7 +84,12 @@ abstract interface class LibraryStore {
 
   // ── 导入 ─────────────────────────────────────────────────
   Future<LxmcImportResult> importLxmcBytes(Uint8List bytes, {String? fileName});
-  Future<({int playlistId, int added, int total})> importTracks(
+
+  /// 把曲目导入同名列表（不存在则创建；重复导入幂等）。
+  ///
+  /// [created] 表示本次调用新建了列表：新列表的曲目就是本次写入的全量，
+  /// 消费方可以据此直接建立缓存，不必再读一次库。
+  Future<({int playlistId, int added, int total, bool created})> importTracks(
     String name,
     List<PlaylistTrack> tracks,
   );

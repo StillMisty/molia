@@ -672,6 +672,10 @@
   直接按它重算本地歌曲，不再依赖「先 sync 一次」的隐藏调用顺序。资料库读取
   阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
   读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
+  列表曲目读取失败会保留错误，只有显式重试（`force`）或仓库变更事件才重读
+  ——每次 build 清错重试会把收藏页变成永久 loading（pitfalls #90）；读取有
+  10s 超时兜底。列表 / 历史刷新失败也给终态（有旧数据 ready，空数据 failed），
+  不把状态留在 loading。
 - **合集行动作**：`lib/providers/collection_actions.dart` 是收藏页「选中的行 /
   当前视图 → 类型化命令」的唯一翻译层（播放 / 收藏 / 移除 / 历史删除 / 本地
   删除 / 重排 / 复制）；行变体归一与 provider / 下载 / 缓存选择在模块内，页面
@@ -685,6 +689,10 @@
   B 站收藏夹由 `bili_favorites.dart` 解析数字 / `fid` / `media_id` / `ml<id>` /
   `space...favlist` / `b23.tv` 短链并按 `media_count` 全量拉取（上限 50 页 /
   1000 条），只收公开视频；私密 / 失效收藏夹归一为 `notFound`。
+  `importTracks` 返回 `created`：新建列表的曲目就是本次写入的全量，
+  `LibraryProvider.importTracksAsPlaylist` 直接预置列表头与曲目缓存，收藏页
+  切过去不再依赖一次读库（后台变更加载到位后原地校准）；同名复用列表仍有
+  旧曲目，继续走读库。
 
 ### 本地下载（downloads）
 

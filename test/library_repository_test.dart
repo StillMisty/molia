@@ -331,6 +331,7 @@ void main() {
       expect(first.added, 2);
       expect(first.total, 2);
       expect(first.playlistId, greaterThan(0));
+      expect(first.created, isTrue, reason: '新建列表要能告诉调用方可以预置缓存');
 
       final again = await repository.importTracks(
         '外部歌单',
@@ -338,12 +339,14 @@ void main() {
       );
       expect(again.playlistId, first.playlistId);
       expect(again.added, 0);
+      expect(again.created, isFalse);
       expect(await repository.listPlaylistTracks(first.playlistId),
           hasLength(2));
 
       final empty = await repository.importTracks('空歌单', const []);
       expect(empty.playlistId, -1);
       expect(empty.total, 0);
+      expect(empty.created, isFalse);
       expect(await repository.findPlaylistByName('空歌单'), isNull);
     });
   });

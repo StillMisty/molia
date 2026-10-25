@@ -44,13 +44,22 @@ class LibraryProvider extends ChangeNotifier {
   LibraryProvider({
     required this._repository,
     required PlaybackProvider playbackProvider,
-  })  : _playback = playbackProvider {
+
+    /// 资料库读取的超时上限（生产默认 10s；测试可注入更短的值）。
+    ///
+    /// 为什么需要：数据库连接被长时间占住（Windows 上实测出现过查询迟迟不
+    /// 落地）时，收藏页会把「当前列表曲目在途」当成 loading，整页永远转圈。
+    /// 超时把「挂住」收敛成可重试的失败态；查询本身没有取消语义，晚到的结果
+    /// 不再采用，用户点「重试」即可重新读。
+    this._readTimeout = const Duration(seconds: 10),
+  }) : _playback = playbackProvider {
     _subscription = _repository.changes.listen(_onRepositoryChanged);
   }
 
   final LibraryStore _repository;
   final PlaybackProvider _playback;
   StreamSubscription<void>? _subscription;
+  final Duration _readTimeout;
 
   List<PlayHistoryEntry> _history = const [];
   List<PlaylistInfo> _playlists = const [];
@@ -137,17 +146,25 @@ class LibraryProvider extends ChangeNotifier {
   /// [force] 由「加载失败后重试」使用：丢掉旧缓存重新查询。
   void ensurePlaylistTracks(int playlistId, {bool force = false}) {
     if (!force && _tracksByPlaylist.containsKey(playlistId)) return;
+    // 读失败后不自动重试：收藏页每次 build 都会调用这里，如果清掉错误再重读，
+    // 一次失败就会变成「失败 → 清错 → loading → 再失败」的每帧死循环（页面
+    // 永远转圈）。错误保留到显式重试（force）或仓库变更事件重载。
+    if (!force && _playlistTracksErrors.containsKey(playlistId)) return;
     // 已有请求在途：不并发；force 等它落地后由调用方再次重试。
     if (!_loadingPlaylistIds.add(playlistId)) return;
-    if (force) _tracksByPlaylist.remove(playlistId);
-    _playlistTracksErrors.remove(playlistId);
+    if (force) {
+      _tracksByPlaylist.remove(playlistId);
+      _playlistTracksErrors.remove(playlistId);
+    }
     // build 期调用：同步标记 loading（本帧即可显示加载态），通知推迟到
     // 微任务，避免 setState during build。
     unawaited(Future<void>.microtask(() async {
       if (_disposed) return;
       _notify();
       try {
-        final tracks = await _repository.listPlaylistTracks(playlistId);
+        final tracks = await _repository
+            .listPlaylistTracks(playlistId)
+            .timeout(_readTimeout);
         if (_disposed) return;
         _tracksByPlaylist[playlistId] = tracks;
         _playlistTracksErrors.remove(playlistId);
@@ -188,6 +205,9 @@ class LibraryProvider extends ChangeNotifier {
           unawaited(_pendingReload!);
         }
       case LibraryPlaylistTracksChange(:final playlistId):
+        // 列表刚被写过：之前的读取失败不再代表当前数据，允许页面下一次重读
+        //（否则错误会一直挡住 ensure，数据恢复后仍停在失败态）。
+        _playlistTracksErrors.remove(playlistId);
         _pendingReload = Future.wait([
           _reloadPlaylistTracksQuietly(playlistId),
           _refreshPlaylistsQuietly(),
@@ -377,6 +397,9 @@ class LibraryProvider extends ChangeNotifier {
     _favoritesRevision++;
     _playlistsRevision++;
     _tracksByPlaylist.clear();
+    // 全量失效后旧的读取错误也不再代表当前数据：清掉，页面下一次 ensure
+    // 才能重新读（失败会重新记录）。
+    _playlistTracksErrors.clear();
     _notify();
     _pendingReload = Future.wait([
       _reloadHistoryQuietly(),
@@ -401,15 +424,18 @@ class LibraryProvider extends ChangeNotifier {
           _historyLoadsInFlight++;
           var success = false;
           try {
-            final fresh = await _repository.listHistory();
+            final fresh =
+                await _repository.listHistory().timeout(_readTimeout);
             _history = _mergeHistoryOrder(current: _history, fresh: fresh);
             _historyLoaded = true;
             _historyState = const LibraryReadState.ready();
             success = true;
           } catch (e) {
             debugPrint('[Library] 重载播放历史失败: $e');
-            // 有旧缓存就继续展示旧值；从未加载成功才是 failed（可重试）。
-            if (!_historyLoaded) _historyState = LibraryReadState.failed(e);
+            // 有旧缓存就继续展示旧值；空历史才是 failed（可重试）。
+            _historyState = _history.isEmpty
+                ? LibraryReadState.failed(e)
+                : const LibraryReadState.ready();
           } finally {
             _finishHistoryLoad(success: success);
           }
@@ -487,8 +513,9 @@ class LibraryProvider extends ChangeNotifier {
             if (favoritesId != null &&
                 _tracksByPlaylist.containsKey(favoritesId)) {
               try {
-                _tracksByPlaylist[favoritesId] =
-                    await _repository.listPlaylistTracks(favoritesId);
+                _tracksByPlaylist[favoritesId] = await _repository
+                    .listPlaylistTracks(favoritesId)
+                    .timeout(_readTimeout);
               } catch (e) {
                 debugPrint('[Library] 刷新收藏列表失败: $e');
               }
@@ -517,12 +544,16 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _refreshPlaylistsQuietly({bool notify = true}) async {
     _playlistsRevision++;
     try {
-      _playlists = await _repository.listPlaylists();
+      _playlists = await _repository.listPlaylists().timeout(_readTimeout);
       _playlistsLoaded = true;
       _playlistsState = const LibraryReadState.ready();
     } catch (e) {
       debugPrint('[Library] 刷新列表失败: $e');
-      if (!_playlistsLoaded) _playlistsState = LibraryReadState.failed(e);
+      // 永远给终态：有旧列表就继续可用，没有数据才是失败。不能因为「曾经
+      // 成功过」留在 loading（空库导入后刷新失败会让收藏页永久转圈）。
+      _playlistsState = _playlists.isEmpty
+          ? LibraryReadState.failed(e)
+          : const LibraryReadState.ready();
     }
     if (notify) _notify();
   }
@@ -531,15 +562,16 @@ class LibraryProvider extends ChangeNotifier {
   Future<void> _reloadPlaylistTracksQuietly(int playlistId) async {
     if (!_tracksByPlaylist.containsKey(playlistId)) return;
     try {
-      _tracksByPlaylist[playlistId] =
-          await _repository.listPlaylistTracks(playlistId);
+      _tracksByPlaylist[playlistId] = await _repository
+          .listPlaylistTracks(playlistId)
+          .timeout(_readTimeout);
       _playlistTracksErrors.remove(playlistId);
-      _notify();
     } catch (e) {
       debugPrint('[Library] 重载列表曲目失败: $e');
-      // 有旧缓存时保持 ready；错误留到显式重试时再清。
+      // 有旧缓存时保持 ready；错误留给显式重试。
       _playlistTracksErrors[playlistId] = e;
     }
+    _notify();
   }
 
   int? get _favoritesPlaylistId {
@@ -565,14 +597,17 @@ class LibraryProvider extends ChangeNotifier {
     _notify();
     var success = false;
     try {
-      _history = await _repository.listHistory();
+      _history = await _repository.listHistory().timeout(_readTimeout);
       _historyLoaded = true;
       _historyState = const LibraryReadState.ready();
       success = true;
     } catch (e) {
-      // 查询失败保持旧缓存（首次为空列表），并把失败阶段交给页面重试。
+      // 查询失败保持旧缓存，并把终态交给页面：有旧数据继续可用，空历史
+      // 才是 failed（可重试）；不能留在 loading。
       debugPrint('[Library] 加载播放历史失败: $e');
-      if (!_historyLoaded) _historyState = LibraryReadState.failed(e);
+      _historyState = _history.isEmpty
+          ? LibraryReadState.failed(e)
+          : const LibraryReadState.ready();
     } finally {
       _finishHistoryLoad(success: success);
       _notify();
@@ -585,12 +620,15 @@ class LibraryProvider extends ChangeNotifier {
     _playlistsState = const LibraryReadState.loading();
     _notify();
     try {
-      _playlists = await _repository.listPlaylists();
+      _playlists = await _repository.listPlaylists().timeout(_readTimeout);
       _playlistsLoaded = true;
       _playlistsState = const LibraryReadState.ready();
     } catch (e) {
       debugPrint('[Library] 加载列表失败: $e');
-      if (!_playlistsLoaded) _playlistsState = LibraryReadState.failed(e);
+      // 同 history：有旧列表就保持可用，空列表才是 failed；不能留在 loading。
+      _playlistsState = _playlists.isEmpty
+          ? LibraryReadState.failed(e)
+          : const LibraryReadState.ready();
     } finally {
       _notify();
     }
@@ -622,7 +660,9 @@ class LibraryProvider extends ChangeNotifier {
     }
     if (_loadingPlaylistIds.add(playlistId)) _notify();
     try {
-      final tracks = await _repository.listPlaylistTracks(playlistId);
+      final tracks = await _repository
+          .listPlaylistTracks(playlistId)
+          .timeout(_readTimeout);
       _tracksByPlaylist[playlistId] = tracks;
       _playlistTracksErrors.remove(playlistId);
       return tracks;
@@ -819,15 +859,104 @@ class LibraryProvider extends ChangeNotifier {
   /// 把外部曲目导入同名本地列表（重复导入幂等）。
   ///
   /// 返回 `(playlistId, 本次新增数, 曲目总数)`；曲目为空时不落库。
+  ///
+  /// 新建列表时，本次导入的曲目就是全量：先直接放进缓存，收藏页切到新列表
+  /// 不再依赖一次读库（Windows 上出现过读连接被占住、页面一直 loading 的
+  /// 情况）；真实数据仍由随后的变更加载原地校准。同名复用列表里还有旧曲目，
+  /// 不能只拿本次导入的曲目当全量，仍走读库。
   Future<({int playlistId, int added, int total})> importTracksAsPlaylist({
     required String name,
     required List<PlaylistTrack> tracks,
   }) async {
     final result = await _repository.importTracks(name, tracks);
     if (result.playlistId > 0 && result.added > 0) {
+      if (result.created) {
+        _seedImportedPlaylist(result.playlistId, name, tracks);
+      }
       await refreshPlaylists(force: true);
+      // 强制刷新可能失败，也可能被并发旧快照覆盖（列表 / 曲目缓存缺一块）：
+      // 页面切过来之前补一次；已有真实数据时不覆盖。
+      if (result.created) {
+        _seedImportedPlaylist(result.playlistId, name, tracks);
+      }
     }
-    return result;
+    return (
+      playlistId: result.playlistId,
+      added: result.added,
+      total: result.total,
+    );
+  }
+
+  /// 补「本次导入新建的列表」的曲目缓存与列表头（幂等）。
+  ///
+  /// 已有真实数据时不覆盖：曲目缓存优先保留读库结果，列表头只在缺失或
+  /// 计数比本次导入少（旧快照 / 刷新失败）时修正。顺序与写入一致：写入网关
+  /// 按 `(sourceKey, songId)` 去重后从 0 递增 `sortOrder`。
+  void _seedImportedPlaylist(
+    int playlistId,
+    String name,
+    List<PlaylistTrack> tracks,
+  ) {
+    final seen = <String>{};
+    final seeded = <PlaylistTrack>[];
+    for (final track in tracks) {
+      if (!seen.add('${track.sourceKey}:${track.songId}')) continue;
+      seeded.add(
+        PlaylistTrack(
+          playlistId: playlistId,
+          sourceKey: track.sourceKey,
+          songId: track.songId,
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          coverUrl: track.coverUrl,
+          durationMs: track.durationMs,
+          raw: track.raw,
+          addedAt: track.addedAt,
+          sortOrder: seeded.length,
+        ),
+      );
+    }
+    if (!_tracksByPlaylist.containsKey(playlistId)) {
+      _tracksByPlaylist[playlistId] = seeded;
+      _playlistTracksErrors.remove(playlistId);
+    }
+    var index = -1;
+    for (var i = 0; i < _playlists.length; i++) {
+      if (_playlists[i].id == playlistId) {
+        index = i;
+        break;
+      }
+    }
+    if (index < 0) {
+      _playlists = [
+        PlaylistInfo(
+          id: playlistId,
+          name: name,
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          trackCount: seeded.length,
+        ),
+        ..._playlists,
+      ];
+      _playlistsRevision++;
+    } else if (_playlists[index].trackCount < seeded.length) {
+      final playlist = _playlists[index];
+      _playlists = [
+        for (final item in _playlists)
+          if (item.id == playlistId)
+            PlaylistInfo(
+              id: playlist.id,
+              name: playlist.name,
+              createdAt: playlist.createdAt,
+              trackCount: seeded.length,
+              isFavorites: playlist.isFavorites,
+            )
+          else
+            item,
+      ];
+      _playlistsRevision++;
+    }
+    _notify();
   }
 
   /// 批量把列表曲目加入播放历史（最近播放置顶）。
