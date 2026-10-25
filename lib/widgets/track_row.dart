@@ -298,7 +298,7 @@ class TrackRow extends StatelessWidget {
     final semanticArtist = tableSpec == null ? model.artist : model.tableArtist;
     final semanticLabel = [
       semanticArtist.isEmpty ? model.title : '${model.title}, $semanticArtist',
-      if (stateLabel != null) stateLabel,
+      ?stateLabel,
     ].join(', ');
     final String? durationLabel = durationText(model.durationMs);
     final String? trailingText = model.trailingText ?? durationLabel;

@@ -49,13 +49,12 @@ class SyncStateStore
         SyncSchedulerState,
         SyncBackupState {
   SyncStateStore({
-    SharedPreferences? preferences,
+    this._preferences,
     SettingsSecretStore? secrets,
     Random? random,
     String? deviceId,
     int Function()? clock,
-  })  : _preferences = preferences,
-        _secrets = secrets ?? const SecureSettingsSecretStore(),
+  })  : _secrets = secrets ?? const SecureSettingsSecretStore(),
         _random = random ?? Random.secure(),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
         _deviceId = deviceId ?? '';

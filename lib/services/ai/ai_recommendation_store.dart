@@ -184,12 +184,11 @@ class AiDjHistoryIndex {
 typedef AiDjHistoryMutationResult = ({bool ok, AiDjHistoryIndex index});
 
 class AiRecommendationStore {
-  /// [preferences] / [clock] 仅测试注入；生产走 SharedPreferences 与系统时钟。
+  /// [_preferences] / [clock] 仅测试注入；生产走 SharedPreferences 与系统时钟。
   AiRecommendationStore({
-    SharedPreferences? preferences,
+    this._preferences,
     DateTime Function()? clock,
-  })  : _preferences = preferences,
-        _clock = clock ?? DateTime.now;
+  })  : _clock = clock ?? DateTime.now;
 
   static const String indexKey = 'ai_dj_history_index_v1';
   static const String batchKeyPrefix = 'ai_dj_history_batch_v1:';

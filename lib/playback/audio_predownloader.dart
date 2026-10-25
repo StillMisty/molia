@@ -32,12 +32,10 @@ abstract interface class AudioPredownloader {
 class CacheAudioPredownloader implements AudioPredownloader {
   CacheAudioPredownloader({
     CacheService? cacheService,
-    bool Function()? allowed,
-    bool Function()? platformSupported,
+    this._allowed,
+    this._platformSupported,
     AudioPredownloadStarter? starter,
   })  : _cache = cacheService ?? CacheService.instance,
-        _allowed = allowed,
-        _platformSupported = platformSupported,
         _starter = starter ?? startAudioPredownload;
 
   final CacheService _cache;

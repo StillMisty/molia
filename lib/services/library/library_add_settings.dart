@@ -23,8 +23,7 @@ enum LibraryAddPosition {
 /// 两位消费者：写入网关按它取新曲目的 `sortOrder`（加入收藏与列表），设置页
 /// 读写这一份实例——偏好只有一个家，不各读各的键。
 class LibraryAddSettings extends ChangeNotifier {
-  LibraryAddSettings({required SettingsAccess settings})
-      : _settings = settings {
+  LibraryAddSettings({required this._settings}) {
     _settings.bindReload(kLibraryAddPosition, init);
   }
 

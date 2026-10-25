@@ -17,11 +17,10 @@ import '../song_match.dart';
 
 class AutoSourceSwapService {
   AutoSourceSwapService({
-    required CatalogService catalog,
-    required SourceRegistry registry,
+    required this._catalog,
+    required this._registry,
     this.perSourceLimit = 20,
-  })  : _catalog = catalog,
-        _registry = registry;
+  });
 
   final CatalogService _catalog;
   final SourceRegistry _registry;

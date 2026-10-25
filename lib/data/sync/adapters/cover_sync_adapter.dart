@@ -32,15 +32,12 @@ import '../sync_stamp.dart';
 /// - 远端应用只写封面存储与登记，不触发本地变更回调（不会形成同步回环）。
 class CoverSyncAdapter implements CategoryScopedSyncAdapter {
   CoverSyncAdapter({
-    required CustomCoverStore store,
-    required SyncStampLedger state,
-    SyncJournalAppender? journal,
+    required this._store,
+    required this._state,
+    this._journal,
     bool Function()? enabled,
     Logger? logger,
-  })  : _store = store,
-        _state = state,
-        _journal = journal,
-        _enabled = enabled ?? (() => true),
+  })  : _enabled = enabled ?? (() => true),
         _logger = logger ?? Logger('molia.sync') {
     // 构造时开关已开启 = 不是本进程内的「刚开启」：首次收集按常规登记
     // 变化。构造时关闭、之后开启才走切换轮规则（见 [collectForCategories]）。

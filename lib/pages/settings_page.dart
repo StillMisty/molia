@@ -117,8 +117,8 @@ class SettingsPage extends StatefulWidget {
   const SettingsPage({
     super.key,
     this.navigatorKey,
-    SettingsSheetBackCoordinator? backCoordinator,
-  }) : _backCoordinator = backCoordinator;
+    this._backCoordinator,
+  });
 
   /// 弹层宿主与 dismiss guard 共享的内部导航 key。
   ///

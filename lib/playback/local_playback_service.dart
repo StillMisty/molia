@@ -221,11 +221,11 @@ class LocalPlaybackService extends ChangeNotifier {
   bool _stopAfterCurrentTrack = false;
 
   LocalPlaybackService({
-    required SourceStreamResolver resolver,
+    required this._resolver,
     CacheService? cacheService,
-    String Function()? preferredQuality,
+    this._preferredQuality,
     math.Random? random,
-    NextTrackPreloader? nextTrackPreloader,
+    this._nextTrackPreloader,
     PlayingTrackCacheWriter? audioCacheWriter,
     Stream<AudioInterruptionEvent>? audioInterruptions,
     Stream<void>? audioBecomingNoisy,
@@ -234,13 +234,8 @@ class LocalPlaybackService extends ChangeNotifier {
     PlaybackPowerPolicy? powerPolicy,
     // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
     @visibleForTesting AudioPlayer? player,
-  })  : _resolver = resolver,
-        // 中断 / 耳机拔出由本服务统一处理（见 AudioFocusGuard）：just_audio
-        // 自带的处理会无条件暂停，绕过「与其他应用同时播放」开关。
-        _player = player ?? AudioPlayer(handleInterruptions: false),
+  })  : _player = player ?? AudioPlayer(handleInterruptions: false),
         _cacheService = cacheService ?? CacheService.instance,
-        _preferredQuality = preferredQuality,
-        _nextTrackPreloader = nextTrackPreloader,
         _cacheWriter = audioCacheWriter,
         _interruptionsOverride = audioInterruptions,
         _becomingNoisyOverride = audioBecomingNoisy,

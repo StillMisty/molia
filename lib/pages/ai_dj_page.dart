@@ -148,7 +148,7 @@ class _AiDjPageState extends State<AiDjPage> {
           ),
         ] else
           const Spacer(),
-        if (trailing != null) trailing,
+        ?trailing,
       ],
     );
   }

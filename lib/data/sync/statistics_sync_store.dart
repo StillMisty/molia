@@ -148,11 +148,9 @@ class SqliteStatisticsSyncStore
     implements StatisticsSyncStore, StatisticsSyncWriter {
   SqliteStatisticsSyncStore({
     MoliaDatabase Function()? databaseProvider,
-    required SyncStampIssuer stamps,
-    SyncJournalRepository? journal,
-  })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
-        _stamps = stamps,
-        _journal = journal;
+    required this._stamps,
+    this._journal,
+  })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance);
 
   final MoliaDatabase Function() _databaseProvider;
 

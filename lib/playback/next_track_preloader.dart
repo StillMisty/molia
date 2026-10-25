@@ -12,14 +12,10 @@ import 'audio_predownloader.dart';
 /// 失败静默：预载只是优化，真正播放时会走同一取链路径重试。
 class NextTrackPreloader {
   NextTrackPreloader({
-    required Future<PlayableStream> Function(SourceTrack track,
-            {String? quality})
-        resolver,
-    String Function()? preferredQuality,
-    AudioPredownloader? predownloader,
-  })  : _resolver = resolver,
-        _preferredQuality = preferredQuality,
-        _predownloader = predownloader;
+    required this._resolver,
+    this._preferredQuality,
+    this._predownloader,
+  });
 
   /// 必须返回完整 [PlayableStream]：预取要带上与播放相同的请求头（B 站
   /// 直链离开 `Referer` 会 403），只留 URL 会让预取必然失败。

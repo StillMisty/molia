@@ -126,7 +126,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                         const SizedBox(height: 2),
                         ValueListenableBuilder<AiGenerationState>(
                           valueListenable: provider.generationState,
-                          builder: (context, _, __) => Text(
+                          builder: (context, _, _) => Text(
                             _subtitleText(l10n, provider),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,

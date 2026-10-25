@@ -21,14 +21,11 @@ import '../domain/models/track.dart';
 /// [previewMs] 向外发布。
 class SeekPreviewController {
   SeekPreviewController({
-    required ValueListenable<Duration> position,
-    required Listenable trackChanges,
+    required this._position,
+    required this._trackChanges,
     required TrackId? Function() currentTrackId,
-    required void Function(int milliseconds) seek,
-  })  : _position = position,
-        _trackChanges = trackChanges,
-        _currentTrackId = currentTrackId,
-        _seek = seek,
+    required this._seek,
+  })  : _currentTrackId = currentTrackId,
         _lastTrackId = currentTrackId() {
     _position.addListener(_handlePositionTick);
     _trackChanges.addListener(_handleTrackChanged);

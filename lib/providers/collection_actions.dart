@@ -240,10 +240,9 @@ abstract interface class CollectionLocalData {
 /// [CollectionLocalData] 的生产实现：转发下载 / 本地数据服务。
 final class ProviderCollectionLocalData implements CollectionLocalData {
   const ProviderCollectionLocalData({
-    DownloadService? downloads,
-    TrackLocalDataService? localData,
-  })  : _downloads = downloads,
-        _localData = localData;
+    this._downloads,
+    this._localData,
+  });
 
   final DownloadService? _downloads;
   final TrackLocalDataService? _localData;
@@ -274,14 +273,11 @@ final class ProviderCollectionLocalData implements CollectionLocalData {
 /// 结果；确认框、snackbar、触感以外的选择清空仍由页面决定。
 final class CollectionActions {
   CollectionActions({
-    required CollectionActionLibrary library,
-    required CollectionHandoff handoff,
-    CollectionLocalData? localData,
+    required this._library,
+    required this._handoff,
+    this._localData,
     DateTime Function()? clock,
-  })  : _library = library,
-        _handoff = handoff,
-        _localData = localData,
-        _clock = clock ?? DateTime.now;
+  })  : _clock = clock ?? DateTime.now;
 
   final CollectionActionLibrary _library;
   final CollectionHandoff _handoff;

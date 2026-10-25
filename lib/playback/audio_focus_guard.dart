@@ -26,12 +26,10 @@ import 'package:flutter/foundation.dart';
 /// 直接暂停，只绕开本守卫无法做到「其他应用出声时继续播放」。
 class AudioFocusGuard {
   AudioFocusGuard({
-    required bool Function() shouldPause,
-    required Future<bool> Function() onFocusLoss,
-    required Future<void> Function() onFocusGain,
-  })  : _shouldPause = shouldPause,
-        _onFocusLoss = onFocusLoss,
-        _onFocusGain = onFocusGain;
+    required this._shouldPause,
+    required this._onFocusLoss,
+    required this._onFocusGain,
+  });
 
   /// 当前策略是否允许因焦点丢失暂停（设置 / 平台差异由调用方决定）。
   final bool Function() _shouldPause;

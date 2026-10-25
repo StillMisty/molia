@@ -22,7 +22,7 @@ const List<String> kFilenameTemplatePlaceholders = [
 
 /// 下载设置：读写 `SharedPreferences`，变更即时生效（服务每次下载读取）。
 class DownloadSettings extends ChangeNotifier {
-  DownloadSettings({SharedPreferences? prefs}) : _prefs = prefs;
+  DownloadSettings({this._prefs});
 
   static const String keySaveDir = 'download_save_dir';
   static const String keyFilenameTemplate = 'download_filename_template';

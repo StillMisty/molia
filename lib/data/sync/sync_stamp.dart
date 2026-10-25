@@ -51,14 +51,11 @@ class SyncStamp {
 /// 磁盘落盘由状态存储的 `commit()` 提交点承担）。
 class SyncStampIssuer {
   SyncStampIssuer({
-    required int Function() clock,
-    required String Function() deviceId,
-    void Function(SyncVersion value)? onAdvanced,
+    required this._clock,
+    required this._deviceId,
+    this._onAdvanced,
     Logger? logger,
-  })  : _clock = clock,
-        _deviceId = deviceId,
-        _onAdvanced = onAdvanced,
-        _logger = logger ?? Logger('molia.sync');
+  })  : _logger = logger ?? Logger('molia.sync');
 
   final int Function() _clock;
   final String Function() _deviceId;

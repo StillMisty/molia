@@ -117,7 +117,7 @@ void main() {
     final path = await service.download(
       release: windowsRelease(),
       platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
-      onProgress: (_, __) {},
+      onProgress: (_, _) {},
     );
 
     expect(downloader.lastFileName, 'molia-0.1.0-beta.2-windows-x64-setup.exe');
@@ -137,7 +137,7 @@ void main() {
     await service.download(
       release: windowsRelease(),
       platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
-      onProgress: (_, __) {},
+      onProgress: (_, _) {},
     );
 
     expect(downloader.lastFileName, 'molia-0.1.0-beta.2-windows-x64.zip');
@@ -154,7 +154,7 @@ void main() {
     await service.download(
       release: windowsRelease(),
       platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
-      onProgress: (_, __) {},
+      onProgress: (_, _) {},
     );
 
     expect(downloader.lastFileName, isNotNull);
@@ -171,7 +171,7 @@ void main() {
       service.download(
         release: windowsRelease(),
         platform: const UpdatePlatformInfo(platform: 'linux', arch: 'x64'),
-        onProgress: (_, __) {},
+        onProgress: (_, _) {},
       ),
       throwsA(isA<UpdateFailureException>().having(
         (e) => e.kind,

@@ -28,12 +28,10 @@ import '../domain/models/track.dart';
 
 class PlayStatisticsService {
   PlayStatisticsService({
-    required PlayStatisticsRepository repository,
-    required SettingsAccess settings,
+    required this._repository,
+    required this._settings,
     DateTime Function()? clock,
-  })  : _repository = repository,
-        _settings = settings,
-        _clock = clock ?? DateTime.now {
+  })  : _clock = clock ?? DateTime.now {
     _settings.bindReload(kPlayStatisticsEnabled, reloadFromPreferences);
   }
 

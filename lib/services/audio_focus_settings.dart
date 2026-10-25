@@ -9,8 +9,7 @@ import '../data/settings/settings_keys.dart';
 /// 关闭后回到「焦点丢失 → 暂停」，开启后 Android 忽略焦点丢失、iOS 混播。
 class AudioFocusSettings extends ChangeNotifier
     implements ValueListenable<bool> {
-  AudioFocusSettings({required SettingsAccess settings})
-      : _settings = settings {
+  AudioFocusSettings({required this._settings}) {
     _settings.bindReload(kPlayWithOtherApps, init);
   }
 

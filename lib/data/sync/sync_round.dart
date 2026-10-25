@@ -91,24 +91,17 @@ class _RoundContext {
 class SyncRoundRunner {
   SyncRoundRunner({
     required SyncRoundState state,
-    required List<SyncAdapter> adapters,
+    required this._adapters,
     required Map<String, SyncTransport> transports,
-    required SyncStampIssuer stamps,
-    required SyncKnownStore known,
-    SyncJournalStore? journal,
-    SyncCodecPort? fingerprintPort,
-    required SyncTransportRuntime runtime,
-    required DateTime Function() clock,
+    required this._stamps,
+    required this._known,
+    this._journal,
+    this._fingerprintPort,
+    required this._runtime,
+    required this._clock,
     Logger? logger,
   })  : _state = state,
-        _adapters = adapters,
         _transports = transports,
-        _stamps = stamps,
-        _known = known,
-        _journal = journal,
-        _fingerprintPort = fingerprintPort,
-        _runtime = runtime,
-        _clock = clock,
         _logger = logger ?? Logger('molia.sync') {
     // 发布台账由运行时自己建立：阶段测试直接构造 runner 也不会漏门控。
     for (final entry in transports.entries) {
@@ -1082,7 +1075,7 @@ class SyncRoundRunner {
   }) async {
     final peerSet = <SyncCategory>{
       for (final name in peerCategories)
-        if (SyncCategory.tryParse(name) case final category?) category,
+        ?SyncCategory.tryParse(name),
     };
     if (peerSet.isEmpty) {
       // 对端未声明类别（测试注入的载荷）：按本机类别集合比较。

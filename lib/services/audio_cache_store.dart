@@ -31,7 +31,7 @@ typedef AudioCacheFileProbe = Future<bool> Function(String path);
 
 /// 音频缓存目录约定（`CacheStorage` 之上的唯一磁盘约定实现）。
 class AudioCacheStore {
-  AudioCacheStore({required CacheStorage storage}) : _storage = storage;
+  AudioCacheStore({required this._storage});
 
   /// 目录解析 / 列举 / 删除的平台实现；目录不可用时返回 null / 空表。
   final CacheStorage _storage;

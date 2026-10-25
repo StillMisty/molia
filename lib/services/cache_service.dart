@@ -40,11 +40,10 @@ class CacheService {
     SharedPreferences? prefs,
     CacheStorage? storage,
     LyricsCache? lyricsCache,
-    Duration audioProtectAge = const Duration(minutes: 10),
+    this._audioProtectAge = const Duration(minutes: 10),
   })  : _prefs = prefs,
         _storage = storage ?? createPlatformCacheStorage(),
-        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
-        _audioProtectAge = audioProtectAge {
+        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs) {
     _audioStore = AudioCacheStore(storage: _storage);
   }
 

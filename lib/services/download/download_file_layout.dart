@@ -30,10 +30,9 @@ import 'download_settings.dart';
 /// 写文件的必须是同一个文件系统视图。
 class DownloadFileLayout {
   DownloadFileLayout({
-    required DownloadStorage storage,
-    DownloadSettings? settings,
-  })  : _storage = storage,
-        _settings = settings;
+    required this._storage,
+    this._settings,
+  });
 
   final DownloadStorage _storage;
   final DownloadSettings? _settings;
@@ -208,11 +207,11 @@ class DownloadFileLayout {
   }) {
     final translation = translationLyricPathOf(lyricPath);
     return [
-      if (partPath != null) partPath,
-      if (filePath != null) filePath,
-      if (lyricPath != null) lyricPath,
-      if (translation != null) translation,
-      if (coverPath != null) coverPath,
+      ?partPath,
+      ?filePath,
+      ?lyricPath,
+      ?translation,
+      ?coverPath,
     ];
   }
 

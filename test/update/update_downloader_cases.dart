@@ -90,7 +90,7 @@ void main() {
         url: Uri.parse('https://example.com/molia.apk'),
         targetFileName: 'molia-1.2.3-android-arm64.apk',
         sha256: 'deadbeef',
-        onProgress: (_, __) {},
+        onProgress: (_, _) {},
       ),
       throwsA(isA<UpdateFailureException>().having(
         (e) => e.kind,
@@ -116,7 +116,7 @@ void main() {
       downloader.download(
         url: Uri.parse('https://example.com/molia.zip'),
         targetFileName: 'molia.zip',
-        onProgress: (_, __) {},
+        onProgress: (_, _) {},
       ),
       throwsA(isA<UpdateFailureException>().having(
         (e) => e.kind,
@@ -142,7 +142,7 @@ void main() {
     final path = await downloader.download(
       url: Uri.parse('https://example.com/molia.zip'),
       targetFileName: 'molia-1.2.3-windows-x64.zip',
-      onProgress: (_, __) {},
+      onProgress: (_, _) {},
     );
 
     expect(await stale.exists(), isFalse);

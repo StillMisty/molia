@@ -260,11 +260,10 @@ class CollectionSession extends ChangeNotifier {
   CollectionSession({
     LibraryCollections? collections,
     CollectionPresenter? presenter,
-    CollectionScrollPort? scroll,
+    this._scroll,
     CachedAudioTrackIdsLookup? loadCachedAudioTrackIds,
   })  : _collections = collections ?? LibraryCollections(),
         _presenter = presenter ?? CollectionPresenter(),
-        _scroll = scroll,
         _localSongs = LocalSongsCollection(
           loadCachedAudioTrackIds:
               loadCachedAudioTrackIds ?? _noCachedAudioTracks,

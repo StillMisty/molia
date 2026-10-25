@@ -20,14 +20,11 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
   DesktopLyricsOutput({
     LyricsChannel? channel,
     bool? supported,
-    ColorScheme Function()? colorScheme,
-    ColorScheme? Function()? artworkColorScheme,
-    String? Function()? appFontFamily,
+    this._colorScheme,
+    this._artworkColorScheme,
+    this._appFontFamily,
   })  : _channel = channel ?? LyricsChannel.instance,
-        _supported = supported ?? LyricsChannel.isSupportedPlatform,
-        _colorScheme = colorScheme,
-        _artworkColorScheme = artworkColorScheme,
-        _appFontFamily = appFontFamily {
+        _supported = supported ?? LyricsChannel.isSupportedPlatform {
     if (_supported) {
       _eventSub = _channel.events.listen(_onChannelEvent);
     }

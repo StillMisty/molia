@@ -34,14 +34,13 @@ import 'lyrics/lyric_provider.dart' show LyricCacheData;
 /// - 目录解析失败（没有可用的文件后端）时才整体回退 prefs：读写、用量与清理
 ///   都走 prefs 的 `lyrics_cache_{trackId}` 键。
 class LyricsCache {
-  /// [directory] 优先于 [directoryResolver]；两者都为空时只走 prefs。
+  /// [directory] 优先于 [_directoryResolver]；两者都为空时只走 prefs。
   LyricsCache({
     SharedPreferences? prefs,
     Directory? directory,
-    Future<Directory?> Function()? directoryResolver,
+    this._directoryResolver,
   })  : _prefsOverride = prefs,
-        _directoryOverride = directory,
-        _directoryResolver = directoryResolver;
+        _directoryOverride = directory;
 
   /// 生产组合根：显式启用 `<appSupport>/lyrics_cache` 文件后端。
   ///

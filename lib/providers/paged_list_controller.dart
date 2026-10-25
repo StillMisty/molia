@@ -127,12 +127,9 @@ class PagedListState<T> {
 /// - [dispose] 使在途请求过期：销毁后不写状态、不发通知。
 class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
   PagedListController({
-    required Future<PagedResult<T>> Function(int page) fetchPage,
-    String Function(T item)? keyOf,
-  })  : _fetchPage = fetchPage,
-        _keyOf = keyOf,
-        // 初始态与 [reset] 一致：尚不知道是否还有下一页（hasMore = true）。
-        super(PagedListState<T>(hasMore: true));
+    required this._fetchPage,
+    this._keyOf,
+  })  : super(PagedListState<T>(hasMore: true));
 
   final Future<PagedResult<T>> Function(int page) _fetchPage;
   final String Function(T item)? _keyOf;

@@ -88,7 +88,7 @@ class ThemeProvider extends ChangeNotifier {
 
   late final Future<void> _preferencesReady;
 
-  ThemeProvider({required SettingsAccess settings}) : _settings = settings {
+  ThemeProvider({required this._settings}) {
     _settings.bindReload(kThemeMode, reloadFromPreferences);
     _settings.bindReload(kColorBase, reloadFromPreferences);
     _settings.bindReload(kFollowArtworkEnabled, reloadFromPreferences);

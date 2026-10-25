@@ -114,12 +114,11 @@ class PlaybackSessionStore {
   /// 写入时间戳键（跨设备同步用它判断会话新旧）。
   static const String savedAtKey = kPlaybackSessionSavedAtKey;
 
-  /// [preferences] / [clock] 仅测试注入。
+  /// [_preferences] / [clock] 仅测试注入。
   PlaybackSessionStore({
-    SharedPreferences? preferences,
+    this._preferences,
     DateTime Function()? clock,
-  })  : _preferences = preferences,
-        _clock = clock ?? DateTime.now;
+  })  : _clock = clock ?? DateTime.now;
 
   /// 会话落盘回调（组合根在同步栈建好后接线：标记「会话待外发」）。
   void Function()? onSaved;

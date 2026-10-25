@@ -20,13 +20,12 @@ import '../cache/request_cache.dart';
 /// - 边界错误统一归一化为 [SourceFailure]（幂等，失败不缓存由 RequestCache 保证）。
 class CatalogService {
   CatalogService({
-    required SourceRegistry registry,
+    required this._registry,
     RequestCache? searchCache,
     Duration searchTtl = const Duration(minutes: 5),
     RequestCache? resolveCache,
     Duration resolveTtl = const Duration(minutes: 10),
-  })  : _registry = registry,
-        _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
+  })  : _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
         _resolveCache = resolveCache ?? RequestCache(ttl: resolveTtl);
 
   final SourceRegistry _registry;

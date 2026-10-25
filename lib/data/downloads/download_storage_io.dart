@@ -24,14 +24,11 @@ import 'download_storage_types.dart';
 /// [downloadsDirectory] 替换 path_provider。
 class IoDownloadStorage implements DownloadStorage {
   IoDownloadStorage({
-    String? rootOverride,
+    this._rootOverride,
     Future<Directory> Function()? supportDirectory,
-    Future<Directory?> Function()? downloadsDirectory,
-    String? Function()? customRoot,
-  })  : _rootOverride = rootOverride,
-        _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
-        _downloadsDirectory = downloadsDirectory,
-        _customRoot = customRoot;
+    this._downloadsDirectory,
+    this._customRoot,
+  })  : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
 
   final String? _rootOverride;
   final Future<Directory> Function() _supportDirectory;

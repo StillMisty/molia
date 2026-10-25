@@ -48,11 +48,10 @@ class PlayStatisticsRepository {
     MoliaDatabase Function()? databaseProvider,
     int Function()? clock,
     required StatisticsSyncWriter statisticsSync,
-    Future<void> Function()? beforeWrite,
+    this._beforeWrite,
   })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
         _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _sync = statisticsSync,
-        _beforeWrite = beforeWrite {
+        _sync = statisticsSync {
     // 远端落地后仍需走仓库的变更流：UI 刷新与同步调度都监听这里。
     _sync.onChanged = _notifyChanged;
   }

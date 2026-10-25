@@ -16,14 +16,11 @@ import '../sync_stamp.dart';
 /// - 应用后经 [onChanged] 让播放器重载恢复态（仅在没有真实播放时生效）。
 class SessionSyncAdapter implements SyncAdapter {
   SessionSyncAdapter({
-    required PlaybackSessionSyncPort port,
-    required SyncStampLedger state,
-    SyncJournalAppender? journal,
-    Future<void> Function()? onChanged,
-  })  : _port = port,
-        _state = state,
-        _journal = journal,
-        _onChanged = onChanged;
+    required this._port,
+    required this._state,
+    this._journal,
+    this._onChanged,
+  });
 
   /// 会话读写端口（生产 = `PlaybackSessionCoordinator`，保证远端写入与本地
   /// 保存共用同一个 store 写队列；测试也可直接注入 store）。

@@ -128,14 +128,11 @@ class TrackLocalData {
 
 class TrackLocalDataService {
   TrackLocalDataService({
-    required CacheService cacheService,
-    required ArtworkCache artworkCache,
-    required CatalogService catalogService,
-    DownloadService? downloadService,
-  })  : _cacheService = cacheService,
-        _artworkCache = artworkCache,
-        _catalogService = catalogService,
-        _downloadService = downloadService;
+    required this._cacheService,
+    required this._artworkCache,
+    required this._catalogService,
+    this._downloadService,
+  });
 
   final CacheService _cacheService;
   final ArtworkCache _artworkCache;

@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 托盘行为偏好：读 / 写 `SharedPreferences`，变更即时生效
 /// （`WindowChrome` 的关闭策略每次读取）。
 class TraySettings extends ChangeNotifier {
-  TraySettings({SharedPreferences? prefs}) : _prefs = prefs;
+  TraySettings({this._prefs});
 
   static const String keyCloseToTray = 'tray_close_to_tray';
 

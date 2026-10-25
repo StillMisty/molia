@@ -130,11 +130,10 @@ class SyncJournalStats {
 
 class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
   SyncJournalRepository({
-    required MoliaDatabase Function() databaseProvider,
+    required this._databaseProvider,
     this.limits = const SyncJournalLimits(),
     int Function()? clock,
-  })  : _databaseProvider = databaseProvider,
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final MoliaDatabase Function() _databaseProvider;
   final SyncJournalLimits limits;
@@ -237,7 +236,7 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     final rows = await query.get();
     return [
       for (final row in rows)
-        if (_entryFromRow(row) case final entry?) entry,
+        ?_entryFromRow(row),
     ];
   }
 

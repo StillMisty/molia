@@ -27,15 +27,14 @@ import 'sync_book.dart';
 ///   起点，否则落后 / 新加入的对端无法 bootstrap。
 class PublishLedger {
   /// [kind] 是传输标识（`sync_state_v2` 的 `snapshotPushSeq` 键）；
-  /// [servesLiveSnapshot] 是能力位读取（构造时传
+  /// [_servesLiveSnapshot] 是能力位读取（构造时传
   /// `() => transport.servesLiveSnapshot`）——判定时即时读取，测试替身可在
-  /// 引擎建好后假替；[state] 提供持久覆盖的读写。
+  /// 引擎建好后假替；[_state] 提供持久覆盖的读写。
   PublishLedger({
     required this.kind,
-    required SyncPublicationState state,
-    required bool Function() servesLiveSnapshot,
-  })  : _state = state,
-        _servesLiveSnapshot = servesLiveSnapshot;
+    required this._state,
+    required this._servesLiveSnapshot,
+  });
 
   /// 传输标识（`sync_state_v2` 的 `snapshotPushSeq` 键）。
   final String kind;

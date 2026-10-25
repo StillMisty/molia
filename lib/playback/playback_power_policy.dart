@@ -16,7 +16,7 @@ library;
 import 'package:flutter/foundation.dart';
 
 class PlaybackPowerPolicy extends ChangeNotifier {
-  PlaybackPowerPolicy({bool foreground = true}) : _foreground = foreground;
+  PlaybackPowerPolicy({this._foreground = true});
 
   bool _foreground;
   bool _desktopLyricsActive = false;

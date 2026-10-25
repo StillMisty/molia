@@ -12,7 +12,7 @@ import '../sync_adapter.dart';
 /// 发号器给的三元组（收尾时取号）；`endedAt`（何时结束）是内容时间、
 /// **不参与胜负判定**。删除不参与同步。
 class StatisticsSyncAdapter implements SyncAdapter {
-  StatisticsSyncAdapter({required StatisticsSyncStore store}) : _store = store;
+  StatisticsSyncAdapter({required this._store});
 
   final StatisticsSyncStore _store;
 

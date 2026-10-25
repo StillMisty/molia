@@ -425,7 +425,7 @@ class _MorphCoverState extends State<MorphCover> {
                 if (wasSynchronouslyLoaded || frame != null) return child;
                 return _fallback(context);
               },
-              errorBuilder: (_, __, ___) => _fallback(context),
+              errorBuilder: (_, _, _) => _fallback(context),
             ),
     );
   }

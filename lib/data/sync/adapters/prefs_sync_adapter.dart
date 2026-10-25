@@ -18,13 +18,11 @@ import '../sync_stamp.dart';
 /// 变化，重新开启后可直接参与合并）。
 class PrefsSyncAdapter implements SyncAdapter {
   PrefsSyncAdapter({
-    required SyncStampLedger state,
+    required this._state,
     required SettingsRegistry settings,
-    SyncJournalAppender? journal,
+    this._journal,
     this.onApplied,
-  })  : _state = state,
-        _settings = settings,
-        _journal = journal,
+  })  : _settings = settings,
         _byName = {for (final key in settings.keys) key.name: key};
 
   final SyncStampLedger _state;

@@ -23,8 +23,7 @@ class InMemorySyncKnownStore implements SyncKnownStore {
 
 /// drift 持久化登记（生产）：`sync_known` 表，跨重启保持变更集基线。
 class SyncKnownRepository implements SyncKnownStore {
-  SyncKnownRepository({required MoliaDatabase Function() databaseProvider})
-      : _databaseProvider = databaseProvider;
+  SyncKnownRepository({required this._databaseProvider});
 
   final MoliaDatabase Function() _databaseProvider;
 

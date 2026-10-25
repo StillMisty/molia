@@ -65,15 +65,12 @@ class _NotInterestedItem {
 
 class AiDjProvider extends ChangeNotifier {
   AiDjProvider({
-    required PlaybackProvider playbackProvider,
-    required LibraryProvider libraryProvider,
-    required AiRecommendationGenerator recommendationService,
-    required AiSettingsStore settingsStore,
+    required this._playbackProvider,
+    required this._libraryProvider,
+    required this._recommendationService,
+    required this._settingsStore,
     AiRecommendationStore? recommendationStore,
-  })  : _playbackProvider = playbackProvider,
-        _libraryProvider = libraryProvider,
-        _recommendationService = recommendationService,
-        _settingsStore = settingsStore {
+  }) {
     _generation = AiGenerationExecutor();
     _generation.state.addListener(_onGenerationStateChanged);
     _history = AiDjHistoryController(

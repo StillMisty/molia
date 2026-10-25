@@ -64,29 +64,24 @@ Future<void> _updateAndroidWidget(Map<String, Object?> payload) async {
 /// 所有写入细节（去重、过期丢弃）留在实现内部。
 class PlaybackObserver {
   PlaybackObserver({
-    required PlaybackFacade facade,
-    DataSaverService? dataSaver,
-    LibraryStore? libraryRepository,
+    required this._facade,
+    this._dataSaver,
+    this._libraryRepository,
     PlaybackWidgetUpdater? widgetUpdater,
     AlbumArtPreloadStrategy? albumArtPreloader,
-    Future<String?> Function(Track track)? artworkResolver,
+    this._artworkResolver,
     CoverResolver? coverResolver,
-    GlobalKey<NavigatorState>? navigatorKey,
+    this._navigatorKey,
     Future<void> Function()? requestNotificationPermission,
     AppPresence? presence,
-  })  : _facade = facade,
-        _dataSaver = dataSaver,
-        _libraryRepository = libraryRepository,
-        _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
+  })  : _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
         _albumArtPreloader = albumArtPreloader ??
             AlbumArtPreloadStrategy(
               coverUrlResolver: coverResolver == null
                   ? null
                   : (track) => coverResolver.displayOf(track).url,
             ),
-        _artworkResolver = artworkResolver,
         _coverResolver = coverResolver,
-        _navigatorKey = navigatorKey,
         _requestNotificationPermission = requestNotificationPermission ??
             NotificationPermission.ensureRequested,
         _presence = presence ?? AppPresence.instance {

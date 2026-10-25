@@ -45,14 +45,11 @@ class SyncRosterSnapshot {
 /// 对端名册与地址簿（内存状态；不做持久化）。
 class SyncRoster {
   SyncRoster({
-    required void Function() onChanged,
-    int peerLimit = SyncStateCodec.peerLimit,
-    int lanEndpointLimit = SyncStateCodec.lanEndpointLimit,
-    int lanEndpointRetentionMs = defaultLanEndpointRetentionMs,
-  })  : _onChanged = onChanged,
-        _peerLimit = peerLimit,
-        _lanEndpointLimit = lanEndpointLimit,
-        _lanEndpointRetentionMs = lanEndpointRetentionMs;
+    required this._onChanged,
+    this._peerLimit = SyncStateCodec.peerLimit,
+    this._lanEndpointLimit = SyncStateCodec.lanEndpointLimit,
+    this._lanEndpointRetentionMs = defaultLanEndpointRetentionMs,
+  });
 
   /// 已验证局域网端点的保留期：超过该时长没再验证过随名册淘汰。
   ///

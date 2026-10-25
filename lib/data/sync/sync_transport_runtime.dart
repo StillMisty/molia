@@ -15,10 +15,9 @@ import 'sync_book.dart';
 
 class SyncTransportRuntime {
   SyncTransportRuntime({
-    required SyncTransportState state,
-    required Map<String, SyncTransport> transports,
-  })  : _state = state,
-        _transports = transports;
+    required this._state,
+    required this._transports,
+  });
 
   final SyncTransportState _state;
   final Map<String, SyncTransport> _transports;

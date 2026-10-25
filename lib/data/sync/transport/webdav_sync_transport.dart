@@ -52,21 +52,15 @@ class WebDavHttpException implements Exception {
 class WebDavSyncTransport implements SyncTransport {
   WebDavSyncTransport({
     required this.deviceId,
-    required SyncCodecPort codec,
-    required Future<String?> Function() passphraseProvider,
-    required WebDavConfig Function() configProvider,
-    required Future<String?> Function() passwordProvider,
-    Future<int> Function()? journalBaseSeqProvider,
+    required this._codec,
+    required this._passphraseProvider,
+    required this._configProvider,
+    required this._passwordProvider,
+    this._journalBaseSeqProvider,
     Dio? dio,
-    Duration requestTimeout = const Duration(seconds: 15),
-  })  : _codec = codec,
-        _journalBaseSeqProvider = journalBaseSeqProvider,
-        _passphraseProvider = passphraseProvider,
-        _configProvider = configProvider,
-        _passwordProvider = passwordProvider,
-        _dio = dio,
-        _ownsDio = dio == null,
-        _requestTimeout = requestTimeout;
+    this._requestTimeout = const Duration(seconds: 15),
+  })  : _dio = dio,
+        _ownsDio = dio == null;
 
   /// 回执文件后缀（固定名，可变）：`<deviceId>.p2.acks.msync`。
   static const String acksSuffix = PeerJournalNames.acksSuffix;

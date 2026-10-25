@@ -21,18 +21,13 @@ import '../sync_stamp.dart';
 /// - 收到脚本不弹确认：同步组内设备完全互信（ADR-0003）。
 class ScriptSyncAdapter implements SyncAdapter {
   ScriptSyncAdapter({
-    required LxScriptRepository repository,
-    required SyncStampLedger state,
-    SyncJournalAppender? journal,
+    required this._repository,
+    required this._state,
+    this._journal,
     bool Function()? ready,
-    Set<String> reservedKeys = const {},
-    Future<void> Function()? onScriptsChanged,
-  })  : _repository = repository,
-        _state = state,
-        _journal = journal,
-        _ready = ready ?? (() => true),
-        _reservedKeys = reservedKeys,
-        _onScriptsChanged = onScriptsChanged;
+    this._reservedKeys = const {},
+    this._onScriptsChanged,
+  })  : _ready = ready ?? (() => true);
 
   final LxScriptRepository _repository;
   final SyncStampLedger _state;

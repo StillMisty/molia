@@ -135,20 +135,17 @@ Future<String?> _artworkUriFromCache(String url) async {
 class LocalAudioHandler {
   LocalAudioHandler(
     this._readModel, {
-    required PlaybackCommandPort commands,
-    required ValueListenable<MediaSessionCopy> copy,
+    required this._commands,
+    required this._copy,
     MediaSessionBackend? backend,
     bool Function()? artworkBlocked,
-    CoverResolver? coverResolver,
+    this._coverResolver,
     Future<String?> Function(String url)? artworkUriResolver,
     bool? periodicPositionStateUpdates,
-  })  : _commands = commands,
-        _copy = copy,
-        _backend = backend ??
+  })  : _backend = backend ??
             createSystemMediaSessionBackend() ??
             const NoopMediaSessionBackend(),
         _artworkBlocked = artworkBlocked ?? (() => false),
-        _coverResolver = coverResolver,
         _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
         _periodicPositionStateUpdates = periodicPositionStateUpdates ??
             defaultTargetPlatform != TargetPlatform.android {

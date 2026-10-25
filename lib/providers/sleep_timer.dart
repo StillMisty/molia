@@ -77,16 +77,13 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   SleepTimerController({
     required StateListenable<PlaybackSnapshot> snapshot,
     required StateListenable<Duration> position,
-    required Future<void> Function() onFire,
-    DateTime Function() now = DateTime.now,
+    required this._onFire,
+    this._now = DateTime.now,
     SleepTimerAlarm? alarm,
     Stream<Track>? trackCompletions,
-    void Function(bool enabled)? setStopAfterCurrentTrack,
+    this._setStopAfterCurrentTrack,
   })  : _snapshot = snapshot,
-        _position = position,
-        _onFire = onFire,
-        _now = now,
-        _setStopAfterCurrentTrack = setStopAfterCurrentTrack {
+        _position = position {
     // 原生定时器是熄屏 / Doze 的补触发通道；平台不支持时是 no-op，纯 Dart
     // ticker 仍按原语义工作。
     _alarm = alarm ?? createSleepTimerAlarm();

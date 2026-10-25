@@ -30,10 +30,9 @@ import 'artwork_cache_fs.dart';
 class ArtworkCache {
   ArtworkCache({
     CacheService? cacheService,
-    CacheManager? managerOverride,
+    this._managerOverride,
     CacheInfoRepository? repoOverride,
   })  : _cacheService = cacheService ?? CacheService.instance,
-        _managerOverride = managerOverride,
         _repoOverride = repoOverride {
     _repo = repoOverride;
     _cacheService.addPolicyListener(_onPolicyChanged);
@@ -421,10 +420,9 @@ class ArtworkNetworkBlockedException implements Exception {
 class ArtworkCacheManager extends CacheManager with ImageCacheManager {
   ArtworkCacheManager(
     super.config, {
-    required VoidCallback onUsed,
+    required this._onUsed,
     bool Function()? networkBlocked,
-  })  : _onUsed = onUsed,
-        _networkBlocked = networkBlocked ?? (() => false);
+  })  : _networkBlocked = networkBlocked ?? (() => false);
 
   final VoidCallback _onUsed;
   final bool Function() _networkBlocked;

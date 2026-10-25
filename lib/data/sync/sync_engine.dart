@@ -75,14 +75,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   }
 
   SyncEngine._({
-    required SyncEngineState state,
+    required this._state,
     required SyncRoundRunner runner,
-    required Duration inboundWindow,
-    required DateTime Function() clock,
-  })  : _state = state,
-        _runner = runner,
-        _inboundWindow = inboundWindow,
-        _clock = clock {
+    required this._inboundWindow,
+    required this._clock,
+  })  : _runner = runner {
     for (final entry in runner.transports.entries) {
       // 引擎只负责订阅入站流；发布台账等轮次状态由 runner 自己持有。
       _incomingSubscriptions.add(entry.value.incoming.listen(

@@ -20,15 +20,13 @@ import 'download_settings.dart';
 
 /// 下载通知 presenter（`DownloadService` 持有；每进程一个）。
 class DownloadNotificationPresenter {
-  /// [settings] 的通知开关与端口能力共同决定是否发通知（每次事件即时读取，
+  /// [_settings] 的通知开关与端口能力共同决定是否发通知（每次事件即时读取，
   /// 改设置无需重建）；[clock] 供系统频率节流（与下载时间无关）。
   DownloadNotificationPresenter({
-    required DownloadNotifications notifications,
-    DownloadSettings? settings,
+    required this._notifications,
+    this._settings,
     int Function()? clock,
-  })  : _notifications = notifications,
-        _settings = settings,
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final DownloadNotifications _notifications;
   final DownloadSettings? _settings;

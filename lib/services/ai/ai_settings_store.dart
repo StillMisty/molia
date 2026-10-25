@@ -13,7 +13,7 @@ import '../../data/settings/settings_keys.dart';
 import '../../domain/models/ai_dj.dart';
 
 class AiSettingsStore {
-  AiSettingsStore({required SettingsAccess settings}) : _settings = settings;
+  AiSettingsStore({required this._settings});
 
   final SettingsAccess _settings;
 

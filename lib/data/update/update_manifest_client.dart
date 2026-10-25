@@ -19,11 +19,9 @@ import 'update_repository.dart';
 class UpdateManifestClient {
   UpdateManifestClient({
     Dio? dio,
-    String Function()? manifestUrlOverride,
-    String Function()? downloadPrefix,
-  })  : _dio = dio ?? createAppDio(),
-        _manifestUrlOverride = manifestUrlOverride,
-        _downloadPrefix = downloadPrefix;
+    this._manifestUrlOverride,
+    this._downloadPrefix,
+  })  : _dio = dio ?? createAppDio();
 
   /// 官方仓库（下载地址与文档同源；改这里要同步 release.yml 的发布目标）。
   static const String repository = kUpdateRepository;

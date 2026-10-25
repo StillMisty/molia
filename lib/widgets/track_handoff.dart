@@ -70,7 +70,7 @@ List<PlaylistTrack> playlistTracksFrom(
 ///
 /// 无状态；[random] 只在洗牌起播时使用（null = 每次现建随机源）。
 final class TrackHandoff {
-  const TrackHandoff({math.Random? random}) : _random = random;
+  const TrackHandoff({this._random});
 
   /// 洗牌起点的随机源（测试注入固定种子；生产不传）。
   final math.Random? _random;

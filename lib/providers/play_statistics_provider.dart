@@ -21,8 +21,7 @@ import '../services/play_statistics_export.dart';
 enum PlayStatisticsValueMode { duration, count }
 
 class PlayStatisticsProvider extends ChangeNotifier {
-  PlayStatisticsProvider({required PlayStatisticsRepository repository})
-      : _repository = repository;
+  PlayStatisticsProvider({required this._repository});
 
   final PlayStatisticsRepository _repository;
   final Logger _logger = Logger('molia.play_statistics_provider');

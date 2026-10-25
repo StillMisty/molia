@@ -22,13 +22,12 @@ const double _volumeStep = 0.05;
 /// 命令执行器：把 [ShortcutCommand] 翻译成对 provider / 窗口 / 壳层回调的调用。
 class ShortcutActions {
   ShortcutActions({
-    required PlaybackProvider playback,
+    required this._playback,
     Future<void> Function()? showMainWindow,
     this.onFocusSearch,
     this.onSelectDestinationIndex,
     this.onCloseQueuePanel,
-  })  : _playback = playback,
-        _showMainWindow = showMainWindow ?? WindowChrome.show;
+  })  : _showMainWindow = showMainWindow ?? WindowChrome.show;
 
   final PlaybackProvider _playback;
 

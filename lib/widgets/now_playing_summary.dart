@@ -354,7 +354,7 @@ class NowPlayingSummary extends StatelessWidget {
             ),
           ),
         ),
-        if (trailing != null) trailing!,
+        ?trailing,
       ],
     );
   }

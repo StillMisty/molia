@@ -70,8 +70,7 @@ abstract final class DesktopControlKeys {
 ///   （Android 侧按 sp 解释，未来桌面窗口按逻辑 px 解释）；
 /// - 悬浮窗位置由原生侧自行持久化（系统级窗口状态），不进本模型。
 class LyricsDisplaySettings extends ChangeNotifier {
-  LyricsDisplaySettings({required SettingsAccess settings})
-      : _settings = settings {
+  LyricsDisplaySettings({required this._settings}) {
     _settings.bindReload(kLyricsDisplaySettings, init);
   }
 

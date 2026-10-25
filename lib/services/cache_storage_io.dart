@@ -18,12 +18,10 @@ import 'cache_types.dart';
 /// 或注入 [supportDirectory] 替换 path_provider。
 class IoCacheStorage implements CacheStorage {
   IoCacheStorage({
-    String? audioDirOverride,
-    String? artworkDirOverride,
+    this._audioDirOverride,
+    this._artworkDirOverride,
     Future<Directory> Function()? supportDirectory,
-  })  : _audioDirOverride = audioDirOverride,
-        _artworkDirOverride = artworkDirOverride,
-        _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+  })  : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
 
   static const String audioDirName = 'audio_cache';
   static const String artworkDirName = 'artwork_cache';

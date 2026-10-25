@@ -35,12 +35,11 @@ class DiscoverProvider extends ChangeNotifier {
     required PlaybackProvider playbackProvider,
     required LibraryProvider libraryProvider,
     Map<String, DiscoverSource>? sources,
-    void Function(String channelKey)? onChannelChanged,
+    this._onChannelChanged,
     String? initialChannelKey,
   })  : _playback = playbackProvider,
         _library = libraryProvider,
-        _sources = sources ?? BuiltinDiscover.sources,
-        _onChannelChanged = onChannelChanged {
+        _sources = sources ?? BuiltinDiscover.sources {
     // 默认选中规范顺序里的第一个可用平台（当前为 QQ）；测试/恢复场景可
     // 显式指定初始渠道。
     _channelKey =
