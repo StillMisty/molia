@@ -10,17 +10,12 @@ library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../models/play_mode.dart';
-import '../../providers/playback_provider.dart';
-import '../../services/haptics.dart';
-import '../../widgets/icon_swap.dart';
 import '../../widgets/now_playing_summary.dart';
+import '../../widgets/playback_transport.dart';
 import '../../widgets/player_morph.dart';
 import '../../widgets/seek_bar.dart';
-import '../../widgets/seek_preview.dart';
 import '../../widgets/volume_control.dart';
 
 /// 常驻底部播放条。
@@ -146,120 +141,26 @@ class _TrackSection extends StatelessWidget {
 
 /// 中区：上一首 / 播放暂停 / 下一首 + 可拖进度 + 时间。
 ///
-/// 无曲目（含冷启动恢复态）时三个控制键禁用；触感走全应用唯一入口
-/// [HapticsService]（与顶栏播放按钮同一契约）。
+/// 传输三键走共享模块（无曲目时禁用、触感、命令与语义标签只有一份）；这里
+/// 只排行，按钮外观全是模块默认档。进度排的控制器生命周期与低频快照订阅在
+/// [PlaybackSeekBar] 内，宿主只选时间标签档位。
 class _BarControls extends StatelessWidget {
   const _BarControls();
 
   @override
   Widget build(BuildContext context) {
-    final (hasTrack, isPlaying) =
-        context.select<PlaybackProvider, (bool, bool)>(
-      (provider) => (provider.hasTrack, provider.isPlaying),
-    );
-    final l10n = AppLocalizations.of(context)!;
-    final playback = context.read<PlaybackProvider>();
-    return Row(
+    return const Row(
       children: [
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          semanticLabel: l10n.previousTrackTooltip,
-          icon: const Icon(Icons.skip_previous_rounded),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  playback.skipToPrevious();
-                }
-              : null,
-        ),
-        M3EIconButton(
-          // 播放/暂停是这条底栏唯一的高亮按钮（tonal）：一屏一个视觉重点，
-          // 与移动骨架顶栏的约定一致。
-          variant: M3EIconButtonVariant.tonal,
-          semanticLabel: isPlaying ? l10n.pause : l10n.play,
-          icon: IconSwap<bool>(
-            value: isPlaying,
-            builder: (context, isPlaying) => Icon(
-              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-            ),
-          ),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  playback.togglePlayPause();
-                }
-              : null,
-        ),
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          semanticLabel: l10n.nextTrackTooltip,
-          icon: const Icon(Icons.skip_next_rounded),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  playback.skipToNext();
-                }
-              : null,
-        ),
-        const SizedBox(width: 12),
-        const Expanded(child: _BarSeekSlider()),
+        PlaybackPreviousButton(),
+        // 播放/暂停是这条底栏唯一的高亮按钮（tonal）：一屏一个视觉重点，
+        // 与移动骨架顶栏的约定一致。
+        PlaybackPlayPauseButton(variant: M3EIconButtonVariant.tonal),
+        PlaybackNextButton(),
+        SizedBox(width: 12),
+        // 底栏版式：时间与条同行（底栏横向与传输键 / 右区共享，另起一行会
+        // 顶高整条）。
+        Expanded(child: PlaybackSeekBar(timeLabels: SeekTimeLabels.inline)),
       ],
-    );
-  }
-}
-
-/// 可拖进度排：当前时间 + 波浪滑杆 + 总时长。
-///
-/// seek 语义（拖动预览 / 提交等待 / 换曲清理）与播放页共用
-/// `widgets/seek_preview.dart` + `widgets/seek_bar.dart`；宿主只负责生命周期，
-/// 取值与时间标签版式都在共享模块里。
-class _BarSeekSlider extends StatefulWidget {
-  const _BarSeekSlider();
-
-  @override
-  State<_BarSeekSlider> createState() => _BarSeekSliderState();
-}
-
-class _BarSeekSliderState extends State<_BarSeekSlider> {
-  late final PlaybackProvider _playback;
-  late final SeekPreviewController _seekPreview;
-
-  @override
-  void initState() {
-    super.initState();
-    _playback = context.read<PlaybackProvider>();
-    _seekPreview = SeekPreviewController(
-      position: _playback.position,
-      trackChanges: _playback,
-      currentTrackId: () => _playback.snapshot.current?.id,
-      seek: _playback.seekToPosition,
-    );
-  }
-
-  @override
-  void dispose() {
-    _seekPreview.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Selector<PlaybackProvider,
-        ({int durationMs, bool isPlaying, bool hasTrack})>(
-      selector: (_, provider) => (
-        durationMs: provider.snapshot.duration.inMilliseconds,
-        isPlaying: provider.isPlaying,
-        hasTrack: provider.hasTrack,
-      ),
-      builder: (context, state, _) => SeekBar(
-        controller: _seekPreview,
-        position: _playback.position,
-        durationMs: state.durationMs,
-        isPlaying: state.isPlaying,
-        hasTrack: state.hasTrack,
-        // 底栏版式：时间与条同行（底栏横向与传输键 / 右区共享，另起一行会顶高整条）。
-        timeLabels: SeekTimeLabels.inline,
-      ),
     );
   }
 }
@@ -275,37 +176,12 @@ class _BarActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mode = context.select<PlaybackProvider, PlayMode>(
-      (provider) => provider.currentMode,
-    );
     final l10n = AppLocalizations.of(context)!;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          icon: IconSwap<PlayMode>(
-            value: mode,
-            builder: (context, mode) => Icon(
-              switch (mode) {
-                PlayMode.shuffle => Icons.shuffle_rounded,
-                PlayMode.listLoop => Icons.repeat_rounded,
-                PlayMode.sequential => Icons.playlist_play_rounded,
-                PlayMode.singleRepeat => Icons.repeat_one_rounded,
-              },
-            ),
-          ),
-          semanticLabel: switch (mode) {
-            PlayMode.listLoop => l10n.playModeListLoop,
-            PlayMode.sequential => l10n.playModeSequential,
-            PlayMode.shuffle => l10n.playModeShuffle,
-            PlayMode.singleRepeat => l10n.playModeSingleRepeat,
-          },
-          onPressed: () {
-            HapticsService.lightImpact();
-            context.read<PlaybackProvider>().togglePlayMode();
-          },
-        ),
+        // 模式图标 / 标签 / 触感 / 命令在共享传输模块，播放页进度排同源。
+        const PlaybackModeButton(),
         VolumeControl(
           buttonKey: DesktopNowPlayingBar.volumeButtonKey,
           panelKey: DesktopNowPlayingBar.volumePanelKey,

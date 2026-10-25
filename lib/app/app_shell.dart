@@ -42,10 +42,10 @@ import '../utils/responsive.dart';
 import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search_overlay.dart';
-import '../widgets/icon_swap.dart';
 import '../widgets/now_playing_controller.dart';
 import '../widgets/now_playing_summary.dart';
 import '../widgets/playback_selectors.dart';
+import '../widgets/playback_transport.dart';
 import '../widgets/player_morph.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/shell_page_visibility.dart';
@@ -1033,8 +1033,9 @@ class _BarHeaderTransition extends StatelessWidget {
 }
 
 /// 顶栏「播放/暂停」按钮（非播放页）：图标随播放态切换；无曲目（含冷启动
-/// 恢复态）时禁用，与「下一首」同一契约。`select` 只订阅 hasTrack/播放态，
-/// 不触发整个 Shell 重建。
+/// 恢复态）时禁用，与「下一首」同一契约。启用谓词 / 图标 / 标签 / 触感与
+/// 命令都在共享传输模块，`select` 只订阅 hasTrack / 播放态，不触发整个
+/// Shell 重建。
 ///
 /// 顶栏唯一的高亮按钮（tonal）：一屏只留一个视觉重点，其余图标无底色。
 /// 入场与歌名/作者共用同一根弹簧：0.92→1 缩放 pop + 透明度同步。
@@ -1045,30 +1046,12 @@ class _BarPlayPauseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (hasTrack, isPlaying) =
-        context.select<PlaybackProvider, (bool, bool)>(
-      (provider) => (provider.hasTrack, provider.isPlaying),
-    );
-    final l10n = AppLocalizations.of(context)!;
     return AnimatedBuilder(
       animation: reveal,
       builder: (context, _) => _BarRevealTransition(
         progress: reveal.progress,
-        child: M3EIconButton(
+        child: const PlaybackPlayPauseButton(
           variant: M3EIconButtonVariant.tonal,
-          semanticLabel: isPlaying ? l10n.pause : l10n.play,
-          icon: IconSwap<bool>(
-            value: isPlaying,
-            builder: (context, isPlaying) => Icon(
-              isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-            ),
-          ),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  context.read<PlaybackProvider>().togglePlayPause();
-                }
-              : null,
         ),
       ),
     );
@@ -1076,7 +1059,7 @@ class _BarPlayPauseButton extends StatelessWidget {
 }
 
 /// 顶栏「下一首」按钮（非播放页）：无曲目（含冷启动恢复态）时禁用，
-/// 避免空操作误导；`select` 只订阅 hasTrack，不触发整个 Shell 重建。
+/// 避免空操作误导；订阅与命令收在共享传输模块，不触发整个 Shell 重建。
 ///
 /// 无底色标准样式：顶栏唯一高亮留给旁边的播放/暂停。
 /// 入场与播放/暂停按钮同一根弹簧（与歌名/作者同源）。
@@ -1087,25 +1070,11 @@ class _BarNextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasTrack = context.select<PlaybackProvider, bool>(
-      (provider) => provider.hasTrack,
-    );
-    final l10n = AppLocalizations.of(context)!;
     return AnimatedBuilder(
       animation: reveal,
       builder: (context, _) => _BarRevealTransition(
         progress: reveal.progress,
-        child: M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          semanticLabel: l10n.nextTrackTooltip,
-          icon: const Icon(Icons.skip_next_rounded),
-          onPressed: hasTrack
-              ? () {
-                  HapticsService.lightImpact();
-                  context.read<PlaybackProvider>().skipToNext();
-                }
-              : null,
-        ),
+        child: const PlaybackNextButton(),
       ),
     );
   }
