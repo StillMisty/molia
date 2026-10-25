@@ -48,9 +48,12 @@ void main() {
     expect(BuiltinDiscover.isSupported('bili'), isTrue);
   });
 
-  test('六族支持矩阵与注册表一致（每族都有自己的类型化适配器）', () {
+  test('能力族支持矩阵与注册表一致（每族都有自己的类型化适配器）', () {
     expect(BuiltinPlatforms.searchKeys, expectedKeys.toSet());
     expect(BuiltinPlatforms.lyricSearchKeys, musicKeys.toSet());
+    // 六个平台都有原生取词 / 取图；能力位不按「是不是内置平台」一刀切。
+    expect(BuiltinPlatforms.lyricKeys, expectedKeys.toSet());
+    expect(BuiltinPlatforms.picKeys, expectedKeys.toSet());
     expect(BuiltinPlatforms.commentKeys, expectedKeys.toSet());
     expect(BuiltinPlatforms.albumKeys, musicKeys.toSet());
     expect(BuiltinPlatforms.artistKeys, expectedKeys.toSet());
@@ -69,6 +72,8 @@ void main() {
 
     for (final key in expectedKeys) {
       expect(BuiltinPlatforms.searchFor(key), isNotNull, reason: key);
+      expect(BuiltinPlatforms.lyricFor(key), isNotNull, reason: key);
+      expect(BuiltinPlatforms.picFor(key), isNotNull, reason: key);
       // facade 的能力位不能自己再写一份平台表。
       expect(BuiltinAlbums.isSupported(key),
           BuiltinPlatforms.albumKeys.contains(key),
@@ -103,9 +108,10 @@ void main() {
       final platform = BuiltinPlatforms.maybeOf(key)!;
       final capabilities = manager.capabilitiesFor(key);
 
-      // 内置取词 / 封面是 Dart 原生实现，不依赖脚本声明。
-      expect(capabilities.lyrics, isTrue, reason: key);
-      expect(capabilities.artwork, isTrue, reason: key);
+      // 内置取词 / 封面是 Dart 原生实现，不依赖脚本声明；能力位由
+      // 注册表里的适配器是否存在推导。
+      expect(capabilities.lyrics, platform.lyric != null, reason: key);
+      expect(capabilities.artwork, platform.pic != null, reason: key);
       expect(capabilities.comment, platform.comments != null, reason: key);
       expect(capabilities.collection, platform.album != null, reason: key);
 
@@ -123,8 +129,8 @@ void main() {
     expect(bili.search, isTrue);
     expect(bili.pagination, isTrue);
     expect(bili.resolveUrl, isTrue);
-    expect(bili.artwork, isTrue);
-    expect(bili.lyrics, isTrue);
+    expect(bili.artwork, BuiltinPlatforms.picFor('bili') != null);
+    expect(bili.lyrics, BuiltinPlatforms.lyricFor('bili') != null);
     expect(bili.comment, isTrue);
     expect(bili.collection, isFalse);
     expect(bili.artist, isTrue);

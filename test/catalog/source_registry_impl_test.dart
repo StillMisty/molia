@@ -36,7 +36,7 @@ void main() {
     expect(registry.byKey('kw'), same(source));
   });
 
-  test('descriptors：由 searchableSources 映射（key/名称/kind/order/能力）', () async {
+  test('descriptors：由 sourceProfiles 快照映射（key/名称/kind/order/能力）', () async {
     final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
     final registry = SourceRegistryImpl(manager);
@@ -51,10 +51,18 @@ void main() {
     ));
 
     final descriptors = registry.descriptors;
+    final profiles = manager.sourceProfiles.searchable;
     expect(descriptors.map((d) => d.key), [
       'bili',
       AnyListenSource.sourceKey,
     ]);
+    // 列表与能力位来自同一次画像快照，不能再各算一份。
+    expect(descriptors.map((d) => d.key), profiles.map((p) => p.key));
+    for (var index = 0; index < descriptors.length; index++) {
+      expect(descriptors[index].displayName, profiles[index].displayName);
+      expect(descriptors[index].capabilities, profiles[index].capabilities);
+    }
+
     final bili = descriptors.first;
     expect(bili.displayName, '哔哩哔哩');
     expect(bili.capabilities.search, isTrue);
