@@ -905,12 +905,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchKindLyrics => '歌词';
 
   @override
-  String get searchLoadMore => '加载更多';
-
-  @override
-  String searchLoadMoreWithTotal(int total) {
-    return '加载更多（共 $total 首）';
-  }
+  String get searchLoadMoreFailed => '加载更多结果失败';
 
   @override
   String get languageSettingTitle => '应用语言';
@@ -1225,9 +1220,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discoverAllTags => '全部标签';
-
-  @override
-  String get discoverLoadMore => '加载更多';
 
   @override
   String get discoverLoadFailed => '加载失败';

@@ -23,6 +23,7 @@ import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
+import '../widgets/paged_list_auto_load.dart';
 import '../widgets/track_handoff.dart';
 import '../widgets/track_row.dart';
 
@@ -114,22 +115,6 @@ class _AlbumPageState extends State<AlbumPage> {
   /// 重试 / 失败重试：重新取首屏（在途请求由控制器过期丢弃）。
   Future<void> _load() => _paged.loadFirstPage();
 
-  /// 触底 400px 内自动加载下一页（失败后不自动重试，保留按钮兜底）。
-  bool _onScroll(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.vertical) return false;
-    if (notification.metrics.pixels >=
-        notification.metrics.maxScrollExtent - 400) {
-      _maybeLoadMore();
-    }
-    return false;
-  }
-
-  void _maybeLoadMore() {
-    // 失败后不自动重试（底部保留重试按钮）；加载中 / 已到底由控制器守卫。
-    if (_paged.state.loadMoreFailed) return;
-    unawaited(_paged.loadMore());
-  }
-
   /// 播放（[index] 为起始下标；队列上下文名为专辑名）。
   void _playFrom(int index) {
     unawaited(
@@ -220,8 +205,12 @@ class _AlbumPageState extends State<AlbumPage> {
       controller: _listController,
       thumbVisibility: true,
       interactive: true,
-      child: NotificationListener<ScrollNotification>(
-        onNotification: _onScroll,
+      child: PagedListAutoLoad(
+        hasMore: state.hasMore,
+        failed: state.failed,
+        isLoadingMore: state.isLoadingMore,
+        loadMoreFailed: state.loadMoreFailed,
+        onLoadMore: () => unawaited(_paged.loadMore()),
         child: CustomScrollView(
           controller: _listController,
           slivers: [
@@ -247,7 +236,12 @@ class _AlbumPageState extends State<AlbumPage> {
             ),
             if (state.isLoadingMore || state.loadMoreFailed)
               SliverToBoxAdapter(
-                  child: _buildLoadMoreFooter(context, l10n, state)),
+                child: PagedListFooter(
+                  isLoadingMore: state.isLoadingMore,
+                  loadMoreFailed: state.loadMoreFailed,
+                  onRetry: () => unawaited(_paged.loadMore()),
+                ),
+              ),
             const SliverToBoxAdapter(child: SizedBox(height: 16)),
           ],
         ),
@@ -271,30 +265,6 @@ class _AlbumPageState extends State<AlbumPage> {
       onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
       // 行尾菜单「加入列表」：与头部 / 收藏页 / 发现页同一流程。
       onAddToPlaylist: () => unawaited(_handoff.addToLibrary(context, [track])),
-    );
-  }
-
-  /// 底部加载更多：加载中显示进度圈；失败给重试按钮（不自动重试）。
-  Widget _buildLoadMoreFooter(
-    BuildContext context,
-    AppLocalizations l10n,
-    PagedListState<Track> state,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Center(
-        child: state.loadMoreFailed
-            ? M3EButton.icon(
-                style: M3EButtonStyle.outlined,
-                onPressed: () => unawaited(_paged.loadMore()),
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: Text(l10n.retry),
-              )
-            : const M3EProgressIndicator.circular(
-                size: 28,
-                strokeWidth: 2.5,
-              ),
-      ),
     );
   }
 

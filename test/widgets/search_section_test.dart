@@ -3,6 +3,7 @@ import 'package:molia/data/catalog/artist_service.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
@@ -37,6 +38,13 @@ void main() {
         id: TrackId('kw', 'a'),
         title: '曲目 a',
         artists: [Artist(name: '周杰伦', id: '336')],
+        origin: TrackOrigin.builtin,
+      );
+
+  Track trackOf(String id) => Track(
+        id: TrackId('kw', id),
+        title: '曲目 $id',
+        artists: const [Artist(name: '周杰伦', id: '336')],
         origin: TrackOrigin.builtin,
       );
 
@@ -215,5 +223,78 @@ void main() {
 
     expect(find.text('周杰伦'), findsWidgets);
     expect(find.textContaining('首歌曲'), findsNothing);
+  });
+
+  testWidgets('单曲结果：滚到底自动取下一页，不再有加载更多按钮', (tester) async {
+    final pages = <int>[];
+    final musicSource = source()
+      ..onSearch = ((query) async {
+        pages.add(query.page);
+        return SearchResult(
+          items: [for (var i = 0; i < 30; i++) trackOf('${query.page}-$i')],
+          hasMore: query.page < 2,
+          total: 60,
+        );
+      });
+    final provider = await pumpSection(tester, musicSource: musicSource);
+    provider.submitSearch('周杰伦');
+    await tester.pumpAndSettle();
+
+    expect(pages, [1]);
+    expect(find.textContaining('加载更多'), findsNothing);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+
+    expect(pages, [1, 2], reason: '触底自动取下一页');
+    expect(provider.currentPage, 2);
+    expect(provider.hasMore, isFalse);
+    expect(find.textContaining('加载更多'), findsNothing);
+  });
+
+  testWidgets('加载更多失败：保留结果 + 底部重试；不占顶部错误条', (tester) async {
+    var failPage2 = true;
+    final pages = <int>[];
+    final musicSource = source()
+      ..onSearch = ((query) async {
+        pages.add(query.page);
+        if (query.page == 2 && failPage2) {
+          throw const SourceFailure(
+            kind: FailureKind.network,
+            message: 'boom',
+          );
+        }
+        return SearchResult(
+          items: [for (var i = 0; i < 30; i++) trackOf('${query.page}-$i')],
+          hasMore: query.page < 2,
+          total: 60,
+        );
+      });
+    final provider = await pumpSection(tester, musicSource: musicSource);
+    provider.submitSearch('周杰伦');
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+
+    expect(pages, [1, 2]);
+    expect(provider.loadMoreFailed, isTrue);
+    // 失败页脚在滚动位置下方一屏内（失败态出现后又长出来一截）：
+    // 断言用 skipOffstage: false，重试前先滚到可见。
+    final failureLabel = find.text('加载更多结果失败', skipOffstage: false);
+    expect(failureLabel, findsOneWidget);
+    expect(find.text('搜索失败'), findsNothing, reason: '加载更多失败只停底部');
+    expect(provider.searchResults, hasLength(30), reason: '已有结果保留');
+
+    failPage2 = false;
+    await tester.ensureVisible(failureLabel);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(pages, [1, 2, 2]);
+    expect(find.text('加载更多结果失败', skipOffstage: false), findsNothing);
+    expect(provider.loadMoreFailed, isFalse);
+    expect(provider.currentPage, 2);
   });
 }

@@ -182,6 +182,13 @@ class SearchProvider extends ChangeNotifier {
         SearchKind.lyric => _lyricPager.isLoadingMore,
       };
 
+  /// 加载下一页是否失败（失败后停在当前页，由列表底部重试）。
+  bool get loadMoreFailed => switch (_kind) {
+        SearchKind.song => _pager.loadMoreFailed,
+        SearchKind.artist => _artistPager.loadMoreFailed,
+        SearchKind.lyric => _lyricPager.loadMoreFailed,
+      };
+
   /// 「歌手」类型的结果（当前音源支持歌手能力时才有内容）。
   List<ArtistSummary> get artistResults => _artistResults;
 
@@ -454,13 +461,15 @@ class SearchProvider extends ChangeNotifier {
 
   /// 把分页状态机的结果映射到搜索状态（typed rows / 失败 / 分页元数据）。
   ///
-  /// 失败时保留已有结果：错误提示与列表并存，不闪空。
+  /// 失败时保留已有结果：错误提示与列表并存，不闪空。成功页会清掉上一次
+  /// 「加载更多失败」留下的错误（重试成功后不再挂旧错误条）。
   void _applyPagerState() {
     final error = _pager.error;
     if (error != null) {
       _logger.fine('Search failed: $error');
       _failure = SourceFailure.from(error);
     } else {
+      _failure = null;
       _sourceTracks = _pager.items;
       _searchRows = List.unmodifiable([
         for (final track in _sourceTracks) _searchRowOf(track),
@@ -519,6 +528,7 @@ class SearchProvider extends ChangeNotifier {
       _logger.fine('Artist search failed: $error');
       _artistFailure = SourceFailure.from(error);
     } else {
+      _artistFailure = null;
       _artistResults = _artistPager.items;
     }
   }
@@ -583,6 +593,7 @@ class SearchProvider extends ChangeNotifier {
       _logger.fine('Lyric search failed: $error');
       _lyricFailure = SourceFailure.from(error);
     } else {
+      _lyricFailure = null;
       _lyricTracks = _lyricPager.items;
       _lyricSnippets = Map.unmodifiable(_pendingLyricSnippets);
       _lyricRows = List.unmodifiable([
@@ -595,7 +606,7 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  /// 加载下一页当前类型（触底 / 底部按钮）。
+  /// 加载下一页当前类型（触底自动调用）。
   ///
   /// 「加载中 / 已到底 / 跨页去重」等守卫由 [PagedListController] 持有：
   /// 换词 / 换音源时的 `_reset*Pagination` 已使在途请求过期，旧响应不会
@@ -605,15 +616,23 @@ class SearchProvider extends ChangeNotifier {
     switch (_kind) {
       case SearchKind.song:
         if (_pagerQuery.trim().isEmpty) return;
-        await _pager.loadMore();
+        // 先在途置位并通知：列表底部进度圈要在请求返回前出现
+        // （pager 的 isLoadingMore 是同步写入的）。
+        final pending = _pager.loadMore();
+        notifyListeners();
+        await pending;
         _applyPagerState();
       case SearchKind.artist:
         if (_artistPagerQuery.trim().isEmpty) return;
-        await _artistPager.loadMore();
+        final pending = _artistPager.loadMore();
+        notifyListeners();
+        await pending;
         _applyArtistPagerState();
       case SearchKind.lyric:
         if (_lyricPagerQuery.trim().isEmpty) return;
-        await _lyricPager.loadMore();
+        final pending = _lyricPager.loadMore();
+        notifyListeners();
+        await pending;
         _applyLyricPagerState();
     }
     notifyListeners();

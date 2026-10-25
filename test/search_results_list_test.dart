@@ -22,7 +22,7 @@ import 'support/fakes.dart';
 ///
 /// 覆盖：列表行渲染（标题 / 歌手 / 时长）、点按播放（结果整体进队列）、
 /// 操作菜单（触摸端行尾 ⋮ 收藏写库 + 状态切换、加入列表弹层；桌面端行表面
-/// 右键在落点弹菜单）、分页入口保留、桌面宽屏表格列（表头 + 三列，与行内列
+/// 右键在落点弹菜单）、触底自动分页、桌面宽屏表格列（表头 + 三列，与行内列
 /// 左缘对齐）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -150,8 +150,8 @@ void main() {
     expect(find.text('Title a'), findsOneWidget);
     expect(find.text('Artist a'), findsOneWidget);
     expect(find.text('3:05'), findsNWidgets(3));
-    // 分页入口保留：结果尾部「加载更多」按钮（带平台总数）。
-    expect(find.text('加载更多（共 42 首）'), findsOneWidget);
+    // 分页改为触底自动加载：结果尾部不再有「加载更多」按钮。
+    expect(find.textContaining('加载更多'), findsNothing);
   });
 
   testWidgets('点按行：结果整体进队列并从当前行开始播放', (tester) async {

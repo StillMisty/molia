@@ -114,7 +114,7 @@ class PagedListState<T> {
 /// 由列表的持有方（provider 或 widget）创建并提供 [fetchPage]：
 /// 1. 切换筛选条件（平台 / 标签 / 关键词）时先 [reset]（使在途请求过期），
 ///    再 [loadFirstPage]；
-/// 2. 触底或「加载更多」按钮调用 [loadMore]（加载中 / 已到底时由控制器忽略）；
+/// 2. 触底自动调用 [loadMore]（加载中 / 已到底时由控制器忽略）；
 /// 3. 通过 [state]（不可变值）渲染，不再自己维护 flag。
 ///
 /// 语义：
@@ -147,6 +147,7 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
   bool get isLoading => value.isLoading;
   bool get isLoadingMore => value.isLoadingMore;
   bool get failed => value.failed;
+  bool get loadMoreFailed => value.loadMoreFailed;
 
   /// 最近一次请求的原始异常（成功时清空）；调用方按需归一化为领域失败。
   Object? get error => value.error;

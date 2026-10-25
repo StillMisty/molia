@@ -939,12 +939,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchKindLyrics => 'Lyrics';
 
   @override
-  String get searchLoadMore => 'Load more';
-
-  @override
-  String searchLoadMoreWithTotal(int total) {
-    return 'Load more ($total tracks)';
-  }
+  String get searchLoadMoreFailed => 'Failed to load more results';
 
   @override
   String get languageSettingTitle => 'App Language';
@@ -1269,9 +1264,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discoverAllTags => 'All tags';
-
-  @override
-  String get discoverLoadMore => 'Load more';
 
   @override
   String get discoverLoadFailed => 'Failed to load';

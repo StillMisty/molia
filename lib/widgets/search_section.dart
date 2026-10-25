@@ -15,6 +15,7 @@ import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
 import 'desktop_layout.dart';
+import 'paged_list_auto_load.dart';
 import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
@@ -102,7 +103,9 @@ class _SearchSectionState extends State<SearchSection> {
                 child: M3EProgressIndicator.linear(),
               ),
 
-            if (failure != null) _buildErrorView(l10n, searchProvider),
+            // 有结果时的加载更多失败只停底部；没有结果才占顶部错误条。
+            if (failure != null && itemCount == 0)
+              _buildErrorView(l10n, searchProvider),
 
             // 表格列表头固定在滚动区之上：列标题不随结果滚走，列与行内
             // 列同宽同左缘（TrackTableHeader 内部复刻行的留白结构）。
@@ -117,49 +120,65 @@ class _SearchSectionState extends State<SearchSection> {
                 controller: _controller,
                 thumbVisibility: true,
                 interactive: true,
-                child: CustomScrollView(
-                  controller: _controller,
-                  slivers: [
-                    if (itemCount == 0 &&
-                        !searchProvider.isSearching &&
-                        failure == null)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: _buildEmptyResultsView(l10n, searchProvider),
-                      )
-                    else if (isArtistKind)
-                      SliverPadding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        sliver: _ArtistResultsList(
-                          items: artistResults,
-                          onItemTap: (artist) =>
-                              unawaited(_openArtist(searchProvider, artist)),
-                        ),
-                      )
-                    else
-                      SliverPadding(
-                        padding:
-                            EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        sliver: _SearchResultsList(
-                          // 歌词类型：行的 [SearchRow.lyricSnippet] 做副标题（命中片段）。
-                          items: isLyricKind ? lyricResults : results,
-                          onItemTap: (item) => searchProvider.playItem(item),
-                          surface: TrackRowSurface(
-                            tableSpec: tableColumns
-                                ? TrackRowColumnSpec.standard
-                                : null,
+                child: PagedListAutoLoad(
+                  hasMore: searchProvider.hasMore,
+                  // 首屏失败：顶部错误条负责恢复；加载更多失败只停底部。
+                  failed: failure != null && itemCount == 0,
+                  isLoadingMore: searchProvider.isLoadingMore,
+                  loadMoreFailed: searchProvider.loadMoreFailed,
+                  onLoadMore: searchProvider.loadMore,
+                  child: CustomScrollView(
+                    controller: _controller,
+                    slivers: [
+                      if (itemCount == 0 &&
+                          !searchProvider.isSearching &&
+                          failure == null)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyResultsView(l10n, searchProvider),
+                        )
+                      else if (isArtistKind)
+                        SliverPadding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: horizontalPadding),
+                          sliver: _ArtistResultsList(
+                            items: artistResults,
+                            onItemTap: (artist) =>
+                                unawaited(_openArtist(searchProvider, artist)),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: horizontalPadding),
+                          sliver: _SearchResultsList(
+                            // 歌词类型：行的 [SearchRow.lyricSnippet] 做副标题（命中片段）。
+                            items: isLyricKind ? lyricResults : results,
+                            onItemTap: (item) => searchProvider.playItem(item),
+                            surface: TrackRowSurface(
+                              tableSpec: tableColumns
+                                  ? TrackRowColumnSpec.standard
+                                  : null,
+                            ),
                           ),
                         ),
-                      ),
 
-                    // 音源搜索分页：列表尾部按钮加载下一页
-                    if (itemCount > 0 &&
-                        searchProvider.hasSelectedSource &&
-                        (searchProvider.hasMore ||
-                            searchProvider.isLoadingMore))
-                      _buildLoadMoreFooter(l10n, searchProvider),
-                  ],
+                      // 触底自动取下一页；页脚只承担加载中 / 失败重试。
+                      if (itemCount > 0 &&
+                          searchProvider.hasSelectedSource &&
+                          (searchProvider.isLoadingMore ||
+                              searchProvider.loadMoreFailed))
+                        SliverToBoxAdapter(
+                          child: PagedListFooter(
+                            isLoadingMore: searchProvider.isLoadingMore,
+                            loadMoreFailed: searchProvider.loadMoreFailed,
+                            onRetry: searchProvider.loadMore,
+                            failureLabel: l10n.searchLoadMoreFailed,
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -262,40 +281,6 @@ class _SearchSectionState extends State<SearchSection> {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  /// 结果列表尾部的「加载更多」（音源分页；加载中显示进度圈）。
-  Widget _buildLoadMoreFooter(
-    AppLocalizations l10n,
-    SearchProvider searchProvider,
-  ) {
-    final total = searchProvider.totalResults;
-    return SliverToBoxAdapter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        child: Center(
-          child: searchProvider.isLoadingMore
-              ? const SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: M3EProgressIndicator.circular(
-                    size: 28,
-                    strokeWidth: 2.5,
-                  ),
-                )
-              : M3EButton.icon(
-                  style: M3EButtonStyle.outlined,
-                  onPressed: searchProvider.loadMore,
-                  icon: const Icon(Icons.expand_more_rounded),
-                  label: Text(
-                    total != null
-                        ? l10n.searchLoadMoreWithTotal(total)
-                        : l10n.searchLoadMore,
-                  ),
-                ),
-        ),
       ),
     );
   }

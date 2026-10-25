@@ -1790,17 +1790,11 @@ abstract class AppLocalizations {
   /// **'Lyrics'**
   String get searchKindLyrics;
 
-  /// No description provided for @searchLoadMore.
+  /// No description provided for @searchLoadMoreFailed.
   ///
   /// In en, this message translates to:
-  /// **'Load more'**
-  String get searchLoadMore;
-
-  /// No description provided for @searchLoadMoreWithTotal.
-  ///
-  /// In en, this message translates to:
-  /// **'Load more ({total} tracks)'**
-  String searchLoadMoreWithTotal(int total);
+  /// **'Failed to load more results'**
+  String get searchLoadMoreFailed;
 
   /// No description provided for @languageSettingTitle.
   ///
@@ -2401,12 +2395,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'All tags'**
   String get discoverAllTags;
-
-  /// No description provided for @discoverLoadMore.
-  ///
-  /// In en, this message translates to:
-  /// **'Load more'**
-  String get discoverLoadMore;
 
   /// No description provided for @discoverLoadFailed.
   ///

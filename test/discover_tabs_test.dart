@@ -285,11 +285,41 @@ void main() {
     expect(cards, greaterThan(0));
     expect(cards, lessThan(60));
     expect(find.text('歌单 3-39'), findsNothing);
+    expect(find.text('加载更多'), findsNothing, reason: '不再提供手动加载按钮');
 
     // 触底自动加载第 2 页（无需点按钮）。
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -4000));
     await tester.pumpAndSettle();
     expect(wy.playlistPageCalls, contains(2));
+    expect(find.text('加载更多'), findsNothing);
+  });
+
+  testWidgets('歌单 tab：加载更多失败停在当前页，底部重试恢复', (tester) async {
+    wy.playlistPages = 2;
+    wy.playlistsPerPage = 40;
+    await pumpTab(tester, const DiscoverPlaylistsTab());
+    expect(wy.playlistPageCalls, [1]);
+
+    // 第 2 页失败：保留已加载的 40 张卡片，之后滚动不再自动重试。
+    wy.fail = true;
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+    expect(wy.playlistPageCalls, [1, 2]);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+    expect(wy.playlistPageCalls, [1, 2], reason: '失败后不自动重试');
+
+    final retry = find.text('重试', skipOffstage: false);
+    expect(retry, findsOneWidget);
+    wy.fail = false;
+    await tester.ensureVisible(retry);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(wy.playlistPageCalls, [1, 2, 2]);
+    expect(find.text('歌单 2-0'), findsOneWidget);
   });
 
 }

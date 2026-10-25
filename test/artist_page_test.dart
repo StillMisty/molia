@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/artist.dart';
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/artist_page.dart';
@@ -159,5 +160,38 @@ void main() {
       ),
     );
     expect(find.byIcon(Icons.person_rounded), findsOneWidget);
+  });
+
+  testWidgets('滚到底自动加载下一页；失败后底部重试恢复', (tester) async {
+    final calls = <int>[];
+    var failSecondPage = true;
+    await pumpPage(tester, (page) async {
+      calls.add(page);
+      if (page == 2 && failSecondPage) {
+        throw const SourceFailure(
+          kind: FailureKind.network,
+          message: 'boom',
+        );
+      }
+      return artistOf(page, hasMore: page < 2);
+    });
+    expect(calls, [1]);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
+    await tester.pumpAndSettle();
+    expect(calls, [1, 2], reason: '触底自动取下一页');
+    expect(find.text('歌手名', skipOffstage: false), findsOneWidget,
+        reason: '失败保留头部');
+
+    final retry = find.text('重试', skipOffstage: false);
+    expect(retry, findsOneWidget);
+    failSecondPage = false;
+    await tester.ensureVisible(retry);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(calls, [1, 2, 2], reason: '手动重试');
+    expect(find.text('曲目 2-0'), findsOneWidget);
   });
 }

@@ -15,6 +15,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
 import '../theme/m3e_context.dart';
 import 'comment_avatar.dart';
+import 'paged_list_auto_load.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
 /// 此时回退到简体中文（与换源视图同一约定）。
@@ -67,26 +68,28 @@ class CommentListView extends StatelessWidget {
         ),
       );
     } else {
-      content = NotificationListener<ScrollNotification>(
-        // 触底 400px 内自动取下一页；失败后不自动重试（底部保留重试按钮，
-        // 否则滚动通知会在失败后持续重放请求）。
-        onNotification: (notification) {
-          if (notification.metrics.axis != Axis.vertical) return false;
-          if (notification.metrics.pixels >=
-              notification.metrics.maxScrollExtent - 400) {
-            if (!provider.stateOf(kind).loadMoreFailed) {
-              unawaited(provider.loadMore());
-            }
-          }
-          return false;
-        },
+      content = PagedListAutoLoad(
+        // 触底自动取下一页；失败后不自动重试（页脚保留重试，否则滚动通知
+        // 会在失败后持续重放请求）。
+        hasMore: state.hasMore,
+        isLoadingMore: state.isLoadingMore,
+        loadMoreFailed: state.loadMoreFailed,
+        onLoadMore: () => unawaited(provider.loadMore()),
         child: ListView.builder(
           padding: const EdgeInsets.only(bottom: 24),
           // 末项固定为页脚（加载中 / 加载更多失败 / 已到底）。
           itemCount: state.items.length + 1,
           itemBuilder: (context, index) {
             if (index == state.items.length) {
-              return _buildFooter(context, provider, state);
+              return PagedListFooter(
+                hasMore: state.hasMore,
+                isLoadingMore: state.isLoadingMore,
+                loadMoreFailed: state.loadMoreFailed,
+                onRetry: () => unawaited(provider.loadMore()),
+                failureLabel: _l10n(context).commentsLoadMoreFailed,
+                endLabel: _l10n(context).commentsNoMore,
+                retryKey: const Key('commentsLoadMoreRetry'),
+              );
             }
             final comment = state.items[index];
             return Column(
@@ -105,60 +108,6 @@ class CommentListView extends StatelessWidget {
       onRefresh: state.failed ? provider.retry : provider.refresh,
       child: content,
     );
-  }
-
-  Widget _buildFooter(
-    BuildContext context,
-    CommentsProvider provider,
-    CommentsTabState state,
-  ) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
-    if (state.isLoadingMore) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: M3EProgressIndicator.circular(size: 24, strokeWidth: 3),
-        ),
-      );
-    }
-    if (state.loadMoreFailed) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          children: [
-            Text(
-              l10n.commentsLoadMoreFailed,
-              style: context.typeScale.bodySmall.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 4),
-            M3EIconButton(
-              key: const Key('commentsLoadMoreRetry'),
-              variant: M3EIconButtonVariant.standard,
-              icon: const Icon(Icons.refresh_rounded),
-              semanticLabel: l10n.retry,
-              onPressed: () => unawaited(provider.loadMore()),
-            ),
-          ],
-        ),
-      );
-    }
-    if (!state.hasMore) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: Text(
-            l10n.commentsNoMore,
-            style: context.typeScale.bodySmall.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    }
-    return const SizedBox(height: 16);
   }
 }
 

@@ -14,6 +14,7 @@ import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
 import 'empty_state.dart';
 import 'library_cover.dart';
+import 'paged_list_auto_load.dart';
 import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -92,23 +93,8 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     super.dispose();
   }
 
-  /// 触底 400px 内自动加载下一页（失败后不自动重试，保留按钮兜底）。
-  bool _onScroll(ScrollNotification notification) {
-    if (notification.metrics.axis != Axis.vertical) return false;
-    if (notification.metrics.pixels >=
-        notification.metrics.maxScrollExtent - 400) {
-      _maybeLoadMore();
-    }
-    return false;
-  }
-
-  void _maybeLoadMore() {
-    // 首屏失败时由错误态的重试按钮兜底（不在滚动里自动恢复）；
-    // 加载中 / 已到底 / 已加载更多失败等守卫由控制器持有。
-    if (_paged.state.failed) return;
-    unawaited(_paged.loadMore());
-  }
-
+  /// 触底自动加载：统一由 [PagedListAutoLoad] 驱动（失败后不自动重试，
+  /// 保留页脚「重试」兜底）。
   DiscoverProvider get _provider => context.read<DiscoverProvider>();
 
   void _ensureSourceLoaded() {
@@ -291,12 +277,16 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       builder: (context, state, _) {
         final l10n = _l10n(context);
         final theme = Theme.of(context);
-        return NotificationListener<ScrollNotification>(
-          onNotification: _onScroll,
-          child: Scrollbar(
-            controller: _scrollController,
-            thumbVisibility: true,
-            interactive: true,
+        return Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          interactive: true,
+          child: PagedListAutoLoad(
+            hasMore: state.hasMore,
+            failed: state.failed,
+            isLoadingMore: state.isLoadingMore,
+            loadMoreFailed: state.loadMoreFailed,
+            onLoadMore: () => unawaited(_paged.loadMore()),
             child: CustomScrollView(
               controller: _scrollController,
               slivers: [
@@ -475,20 +465,12 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
               _playlistCard(theme, l10n, items[index]),
         ),
       ),
-      if (state.hasMore)
+      if (state.isLoadingMore || state.loadMoreFailed)
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Center(
-              child: M3EButton.icon(
-                style: M3EButtonStyle.text,
-                onPressed: state.isLoadingMore
-                    ? null
-                    : () => unawaited(_paged.loadMore()),
-                icon: const Icon(Icons.expand_more_rounded),
-                label: Text(l10n.discoverLoadMore),
-              ),
-            ),
+          child: PagedListFooter(
+            isLoadingMore: state.isLoadingMore,
+            loadMoreFailed: state.loadMoreFailed,
+            onRetry: () => unawaited(_paged.loadMore()),
           ),
         ),
     ];

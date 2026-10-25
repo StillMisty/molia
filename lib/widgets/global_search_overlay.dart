@@ -489,7 +489,9 @@ class _GlobalSearchResults extends StatelessWidget {
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: M3EProgressIndicator.linear(),
               ),
-            if (failure != null) _buildFailure(context, l10n, search),
+            // 分页失败只影响完整结果页的底部；预览面板仍可看已加载结果。
+            if (failure != null && itemCount == 0)
+              _buildFailure(context, l10n, search),
             if (itemCount > 0)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
