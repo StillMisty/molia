@@ -87,10 +87,16 @@ class PositionLineIndexBuilder extends StatefulWidget {
     required this.position,
     required this.lineIndexFor,
     required this.builder,
+    this.enabled = true,
   });
 
   /// 进度通道（provider.position / facade.position）。
   final ValueListenable<Duration> position;
+
+  /// 是否订阅进度通道。隐藏页面（壳层不可见 / 停在别的 tab）传 false：
+  /// 不注册监听、不重建，也不产生任何滚动副作用；重新为 true 时在
+  /// [didUpdateWidget] 里同步一次最新行号。
+  final bool enabled;
 
   /// 由进度计算当前行号（返回 -1 表示无高亮行）。
   final int Function(Duration position) lineIndexFor;
@@ -105,11 +111,27 @@ class PositionLineIndexBuilder extends StatefulWidget {
 class _PositionLineIndexBuilderState extends State<PositionLineIndexBuilder> {
   late int _currentLineIndex;
 
+  /// 当前是否已向 [widget.position] 注册监听：enabled 翻转时按这个标记
+  /// 增删，避免「从未监听却去 remove」或「重复 add」。
+  bool _listening = false;
+
   @override
   void initState() {
     super.initState();
     _currentLineIndex = widget.lineIndexFor(widget.position.value);
+    _listenIfEnabled();
+  }
+
+  void _listenIfEnabled() {
+    if (!widget.enabled || _listening) return;
     widget.position.addListener(_onPositionChanged);
+    _listening = true;
+  }
+
+  void _stopListening() {
+    if (!_listening) return;
+    widget.position.removeListener(_onPositionChanged);
+    _listening = false;
   }
 
   void _onPositionChanged() {
@@ -123,17 +145,28 @@ class _PositionLineIndexBuilderState extends State<PositionLineIndexBuilder> {
   void didUpdateWidget(PositionLineIndexBuilder oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.position != widget.position) {
-      oldWidget.position.removeListener(_onPositionChanged);
-      widget.position.addListener(_onPositionChanged);
+      // 换通道：旧通道仍挂着监听时先摘下（_stopListening 只认当前通道，
+      // 这里必须显式用 oldWidget.position）。
+      if (_listening) {
+        oldWidget.position.removeListener(_onPositionChanged);
+        _listening = false;
+      }
+      _listenIfEnabled();
+    } else if (widget.enabled != oldWidget.enabled) {
+      if (widget.enabled) {
+        _listenIfEnabled();
+      } else {
+        _stopListening();
+      }
     }
-    // 父级重建（歌词加载/换曲/翻译等）时同步一次行号；
+    // 父级重建（歌词加载/换曲/翻译等）或隐藏→可见时同步一次行号；
     // 后续 build 紧随其后，直接赋值即可。
     _currentLineIndex = widget.lineIndexFor(widget.position.value);
   }
 
   @override
   void dispose() {
-    widget.position.removeListener(_onPositionChanged);
+    _stopListening();
     super.dispose();
   }
 

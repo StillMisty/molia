@@ -903,6 +903,9 @@
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
 歌词行高亮用 `PositionLineIndexBuilder`（仅跨行重建）；队列列表用稳定引用。
+歌词页可见性门控：播放页内部再包一层 `ShellPageVisibility`（nearest scope =
+壳层可见 && 当前 tab），隐藏时 `PositionLineIndexBuilder(enabled: false)` 不订阅
+position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一次当前行。
 
 ### 播放页封面堆叠（cover deck）
 
@@ -1129,7 +1132,11 @@
   （交互细节见 `docs/pitfalls.md` #21）。壳层 tab fade-through 的控制器是
   `BoundedSingleMotionController` + `M3EMotion.expressiveSpatialDefault`
   （`snapToEnd`；`shellPageLayerPresentation` 消费处 clamp 0..1），形状配方仍在
-  `shellPageLayerPresentation` 的 Curves 里。
+  `shellPageLayerPresentation` 的 Curves 里。歌词页行高亮 / 翻译展开是 effects
+  （`medium1` / `short4` + emphasized 曲线），自动滚动用 `long4` +
+  `emphasizedDecelerate`；时长统一经 `effectDurationOf` / `reduceMotionOf`
+  收口（减弱动效零时长，自动滚动直接落位），翻译展开只为当前行播放（其余行
+  零时长硬切）。
 - 设置页：首屏 7 个语义分区（外观 / 封面 / 播放 / 歌词与展示 / 内容与来源 /
   通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`

@@ -22,6 +22,7 @@ import 'package:molia/services/lyrics_service.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/lyric_karaoke_text.dart';
 import 'package:molia/widgets/lyrics.dart';
+import 'package:molia/widgets/shell_page_visibility.dart';
 
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
@@ -120,12 +121,16 @@ void main() {
   /// 挂载歌词组件：420x900、进度 60s（第 12 行），等首轮歌词加载与自动滚动落定。
   ///
   /// [fontFamily] 注入 MaterialApp 主题（模拟设置页的「应用字体」）。
+  /// [visibility] 非空时在页面外包一层 [ShellPageVisibility]（模拟壳层 /
+  /// 播放页 tab 的门控）；[disableAnimations] 打开系统「减弱动效」。
   Future<ScrollController> pumpLyrics(
     WidgetTester tester, {
     LyricsService? service,
     LyricsDisplaySettings? settings,
     SourceRegistry? registry,
     String? fontFamily,
+    ValueNotifier<bool>? visibility,
+    bool disableAnimations = false,
   }) async {
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -154,6 +159,17 @@ void main() {
     addTearDown(() => playback.removeListener(syncCurrentTrack));
     lyricsProvider.ensureForTrack(playback.snapshot.current);
 
+    Widget page = Scaffold(body: LyricsWidget(controller: controller));
+    final gate = visibility;
+    if (gate != null) {
+      page = ValueListenableBuilder<bool>(
+        valueListenable: gate,
+        builder: (context, visible, child) =>
+            ShellPageVisibility(visible: visible, child: child!),
+        child: page,
+      );
+    }
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -169,13 +185,20 @@ void main() {
         child: MaterialApp(
           // 不注入字体时保持与原来一致的默认主题（MaterialApp 默认主题）。
           theme: fontFamily == null ? null : ThemeData(fontFamily: fontFamily),
+          builder: disableAnimations
+              ? (context, child) => MediaQuery(
+                    data:
+                        MediaQuery.of(context).copyWith(disableAnimations: true),
+                    child: child!,
+                  )
+              : null,
           locale: const Locale('zh'),
           localizationsDelegates: const [
             AppLocalizations.delegate,
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(body: LyricsWidget(controller: controller)),
+          home: page,
         ),
       ),
     );
@@ -725,5 +748,152 @@ void main() {
     expect(icons, contains(Icons.checklist_rounded));
 
     await tester.pump(const Duration(milliseconds: 300));
+  });
+
+  testWidgets('隐藏时不跟随进度，重新可见同步一次当前行', (tester) async {
+    final visibility = ValueNotifier<bool>(true);
+    addTearDown(visibility.dispose);
+    final controller = await pumpLyrics(tester, visibility: visibility);
+    final double followingOffset = controller.offset;
+    expect(followingOffset, greaterThan(0), reason: '首轮已滚到当前行');
+
+    TextStyle lineStyle(String text) => tester
+        .widget<AnimatedDefaultTextStyle>(
+          find
+              .ancestor(
+                of: find.text(text),
+                matching: find.byType(AnimatedDefaultTextStyle),
+              )
+              .first,
+        )
+        .style;
+
+    // 隐藏（壳层不可见 / 停在别的 tab）：放弃 position 订阅。
+    visibility.value = false;
+    await tester.pump();
+
+    // 隐藏期间进度推进 8 行（60s → 100s）：列表与行高亮都不动。
+    backend.emit(_snapshot(positionSeconds: 100));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      controller.offset,
+      closeTo(followingOffset, 0.5),
+      reason: '隐藏页不自动滚动',
+    );
+    expect(
+      lineStyle('Line 12').fontWeight,
+      FontWeight.w700,
+      reason: '隐藏页行高亮不前进',
+    );
+
+    // 重新可见：一次同步到最新行（第 20 行，100s），而不是从旧行慢慢追。
+    visibility.value = true;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 700));
+
+    expect(
+      controller.offset,
+      greaterThan(followingOffset + 100),
+      reason: '重新可见时应滚到最新行',
+    );
+    expect(lineStyle('Line 20').fontWeight, FontWeight.w700);
+  });
+
+  testWidgets('减弱动效：行高亮与扩展行展开零时长', (tester) async {
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      disableAnimations: true,
+      service: _FakeLyricsService(
+        _buildLrc(),
+        translation: _buildExtendedLrc('译'),
+      ),
+    );
+
+    T nearestAncestor<T extends Widget>(String text) => tester.widget<T>(
+          find
+              .ancestor(of: find.text(text), matching: find.byType(T))
+              .first,
+        );
+
+    // 行高亮三件套都硬切。
+    expect(
+      nearestAncestor<AnimatedDefaultTextStyle>('Line 12').duration,
+      Duration.zero,
+    );
+    expect(
+      nearestAncestor<AnimatedPadding>('Line 12').duration,
+      Duration.zero,
+    );
+    expect(nearestAncestor<AnimatedOpacity>('Line 12').duration, Duration.zero);
+
+    // 当前行的翻译展开同样零时长。
+    expect(
+      nearestAncestor<AnimatedSwitcher>('译 12').duration,
+      Duration.zero,
+    );
+  });
+
+  testWidgets('翻译开关：只有当前行播放展开 / 收起动画', (tester) async {
+    final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
+    await pumpLyrics(
+      tester,
+      settings: settings,
+      service: _FakeLyricsService(
+        _buildLrc(),
+        translation: _buildExtendedLrc('译'),
+      ),
+    );
+
+    List<AnimatedSwitcher> rowSwitchers() => tester
+        .widgetList<AnimatedSwitcher>(
+          find.descendant(
+            of: find.byType(ListView),
+            matching: find.byType(AnimatedSwitcher),
+          ),
+        )
+        .toList();
+
+    /// 某一行的扩展行 AnimatedSwitcher（按主行文本定位整行）。
+    AnimatedSwitcher rowSwitcher(String lineText) {
+      final row = find
+          .ancestor(
+            of: find.text(lineText),
+            matching: find.byType(AnimatedPadding),
+          )
+          .first;
+      return tester.widget<AnimatedSwitcher>(
+        find.descendant(of: row, matching: find.byType(AnimatedSwitcher)),
+      );
+    }
+
+    // 当前行（第 12 行）：200ms；其余行（含同样有翻译的 10 / 14）零时长。
+    final current = rowSwitcher('Line 12');
+    expect(current.duration, const Duration(milliseconds: 200));
+    expect(current.switchInCurve, M3EMotion.emphasizedDecelerate);
+    expect(current.switchOutCurve, M3EMotion.emphasizedAccelerate);
+    expect(rowSwitcher('Line 10').duration, Duration.zero);
+    expect(rowSwitcher('Line 14').duration, Duration.zero);
+    expect(
+      rowSwitchers().where((widget) => widget.duration > Duration.zero).length,
+      1,
+      reason: '整页只有当前行做展开动画',
+    );
+
+    // 关闭翻译：其余行立即消失（零时长），当前行仍保留 200ms 收起动画。
+    await settings.setPageTranslationEnabled(false);
+    await tester.pump();
+    expect(find.text('译 10'), findsNothing);
+    expect(rowSwitcher('Line 12').duration, const Duration(milliseconds: 200));
+    expect(
+      rowSwitchers().where((widget) => widget.duration > Duration.zero).length,
+      1,
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('译 12'), findsNothing);
   });
 }

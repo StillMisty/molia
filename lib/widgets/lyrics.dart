@@ -20,11 +20,13 @@ import '../services/haptics.dart';
 import '../services/lyrics_display/lyric_timing_policy.dart';
 import '../services/lyrics_display/lyrics_display_settings.dart';
 import '../services/notification_service.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import 'lyric_karaoke_text.dart';
 import 'lyrics_selection_page.dart';
 import 'lyrics_source_search_view.dart';
 import 'playback_selectors.dart';
+import 'shell_page_visibility.dart';
 
 class LyricsWidget extends StatefulWidget {
   const LyricsWidget({
@@ -87,6 +89,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
   bool _isCopyLyricsMode = false;
   PlayMode? _previousPlayMode;
   int _previousLineIndex = -1;
+
+  /// 页面当前是否活跃：nearest [ShellPageVisibility] 为 true（壳层可见且
+  /// 宿主播放页停在歌词 tab；见 nowplaying.dart 的 tab 门控包装）。
+  ///
+  /// build 期写入、post-frame 回调读取：隐藏页即使还有排队中的帧末回调，
+  /// 也不能再滚动 / 起弹簧。隐藏时 [PositionLineIndexBuilder] 不订阅进度，
+  /// 因此本页在隐藏期间不会再因播放进度重建。
+  bool _active = true;
 
   /// 行（整项）的 key：点行 seek 与命中判定用。
   final List<GlobalKey> _lineKeys = [];
@@ -256,7 +266,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
     _scrollabilityCheckScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollabilityCheckScheduled = false;
-      if (!mounted) {
+      if (!mounted || !_active) {
         return;
       }
       if (!_scrollController.hasClients) {
@@ -465,6 +475,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 目标尚未布局（远跳 / 首帧）时先按时间戳比例粗定位一次，下一帧重试。
   void _scrollToCurrentLine(int currentLineIndex) {
     if (!mounted ||
+        !_active ||
         !_autoScroll ||
         !_session.isSynced ||
         !_scrollController.hasClients ||
@@ -512,11 +523,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
         maxScrollExtent: position.maxScrollExtent,
       );
 
-      _scrollController.animateTo(
-        clampedOffset,
-        duration: const Duration(milliseconds: 600),
-        curve: Curves.fastOutSlowIn,
-      );
+      if (reduceMotionOf(context)) {
+        // 减弱动效：直接落位，保留同一 clamp / 重试口径。
+        _scrollController.jumpTo(clampedOffset);
+      } else {
+        _scrollController.animateTo(
+          clampedOffset,
+          // M3E long4 + emphasized decelerate：长距离跟随「先快后稳」收住，
+          // 到点不甩尾。
+          duration: M3EMotion.long4,
+          curve: M3EMotion.emphasizedDecelerate,
+        );
+      }
     } catch (_) {
       // 滚动失败可忽略：下一 tick 会重试
     }
@@ -646,6 +664,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
 
+    // 可见性门控：隐藏页（壳层不在前台，或播放页停在队列 / 信息 tab）不再
+    // 订阅进度、不自动滚动、不跑快捷操作弹簧。nearest scope 已把「壳层可见
+    // && 当前 tab」组合好（见 nowplaying.dart），无壳层挂载时按可见处理。
+    final bool active = ShellPageVisibility.maybeVisibleOf(context) ?? true;
+    final bool becameActive = active && !_active;
+    _active = active;
+    if (becameActive) {
+      // 隐藏期间进度通道被放弃，行号可能已经过期：重新可见时按最新进度
+      // 强制同步一次当前行（否则行号没变就永远不会触发自动滚动）。
+      _previousLineIndex = -1;
+    }
+
     // 曲目变化走低频快照 Selector；行高亮订阅 position 独立通道，
     // 仅在行号变化时重建（PositionLineIndexBuilder 内部缓存行号）。
     return Selector<PlaybackProvider, String?>(
@@ -653,12 +683,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
       builder: (context, currentTrackId, _) {
         return PositionLineIndexBuilder(
           position: playbackProvider.position,
+          enabled: active,
           lineIndexFor: _getCurrentLineIndex,
           builder: (context, currentLineIndex) => _buildLyricsContent(
             context,
             l10n,
             currentTrackId,
             currentLineIndex,
+            active: active,
           ),
         );
       },
@@ -670,10 +702,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
     BuildContext context,
     AppLocalizations l10n,
     String? currentTrackId,
-    int currentLineIndex,
-  ) {
+    int currentLineIndex, {
+    required bool active,
+  }) {
     _syncLineKeys(_session.lines.length);
-    _scheduleScrollabilityCheck();
+    // 隐藏页不排帧末探测 / 自动滚动 / 弹簧同步：等重新可见时这里会再跑一遍。
+    if (active) {
+      _scheduleScrollabilityCheck();
+    }
 
     // 歌词页扩展行开关：独立于输出侧（桌面 / 通知 / 蓝牙）的翻译·罗马音设置。
     final lyricsDisplaySettings = context.watch<LyricsDisplaySettings>();
@@ -681,7 +717,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
 
-    if (_autoScroll &&
+    if (active &&
+        _autoScroll &&
         _session.lines.isNotEmpty &&
         mounted &&
         currentLineIndex >= 0) {
@@ -691,6 +728,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
         _pendingScrollIndex = currentLineIndex;
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted &&
+              _active &&
               _autoScroll &&
               _pendingScrollIndex == currentLineIndex) {
             _scrollToCurrentLine(currentLineIndex);
@@ -700,7 +738,13 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     final bool shouldShowQuickActions = _shouldShowQuickActionsBar;
-    _syncQuickActions(shouldShowQuickActions);
+    if (active) {
+      _syncQuickActions(shouldShowQuickActions);
+    }
+
+    // 行高亮 / 展开收起是 effects：减弱动效时零时长硬切。
+    final Duration lineEffectDuration =
+        effectDurationOf(context, M3EMotion.medium1);
 
     return Material(
       color: Colors.transparent,
@@ -845,8 +889,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     lineRoma.isNotEmpty;
                 // 逐字渲染：仅当前行 + 有词时间轴 + 非复制模式；
                 // 已唱/未唱用 primary/onSurface 双色，行级强调由词高亮表达。
+                // 隐藏页不挂逐字组件：它会自己订阅 position（4Hz + 补间控制器），
+                // 重新可见时由当前行重建按最新进度直接落位。
                 final List<LyricWord>? lineWords = line.words;
-                final bool useKaraoke = isCurrentLine &&
+                final bool useKaraoke = active &&
+                    isCurrentLine &&
                     !_isCopyLyricsMode &&
                     lineWords != null &&
                     lineWords.isNotEmpty;
@@ -903,8 +950,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     }
                   },
                   child: AnimatedPadding(
-                    duration: const Duration(milliseconds: 450),
-                    curve: Curves.easeOutCubic,
+                    duration: lineEffectDuration,
+                    curve: M3EMotion.emphasizedDecelerate,
                     padding: EdgeInsets.symmetric(
                       vertical: isCurrentLine ? 12.0 : 8.0,
                       // 宽版式（桌面右栏 / 平板两栏）与队列、详情同一内容边距
@@ -912,8 +959,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       horizontal: isWideLyricLayout ? 16.0 : 40.0,
                     ),
                     child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 450),
-                      curve: Curves.easeOutCubic,
+                      duration: lineEffectDuration,
+                      curve: M3EMotion.emphasizedDecelerate,
                       style: lineBaseStyle.copyWith(
                         fontSize: lyricFontSize,
                         // M3E 没有 w600 档：当前行 w700、其余 w500，
@@ -924,8 +971,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         height: 1.1,
                       ),
                       child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 450),
-                        curve: Curves.easeOutCubic,
+                        duration: lineEffectDuration,
+                        curve: M3EMotion.emphasizedDecelerate,
                         opacity:
                             lyricsSynced ? (isCurrentLine ? 1.0 : 0.8) : 1.0,
                         child: Column(
@@ -956,6 +1003,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                               showRoma: showRoma,
                               roma: lineRoma,
                               style: extendedLineStyle,
+                              // 只有当前行（且页面活跃）做展开 / 收起：
+                              // 否则切换翻译开关时几十行 SizeTransition 同时跑。
+                              animate: active && isCurrentLine,
                             ),
                           ],
                         ),
@@ -1066,18 +1116,23 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 通过 [AnimatedSwitcher] + `SizeTransition` 做「淡出 + 收起」：歌词页
   /// 开关切换（翻译 / 罗马音开或关）时扩展行从主行下方展开 / 收起，
   /// 而不是硬切、也不是留下占位。
+  ///
+  /// [animate] 只为当前行打开：其余行零时长直接切换，避免开关一次让
+  /// 几十行 SizeTransition 同时跑（列表越大越明显）。
   Widget _buildExtendedLines({
     required bool showTranslation,
     required String translation,
     required bool showRoma,
     required String roma,
     required TextStyle style,
+    required bool animate,
   }) {
     final bool visible = showTranslation || showRoma;
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 450),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
+      duration:
+          animate ? effectDurationOf(context, M3EMotion.short4) : Duration.zero,
+      switchInCurve: M3EMotion.emphasizedDecelerate,
+      switchOutCurve: M3EMotion.emphasizedAccelerate,
       layoutBuilder: (currentChild, previousChildren) => Stack(
         alignment: Alignment.topLeft,
         children: [
