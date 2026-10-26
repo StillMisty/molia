@@ -1172,8 +1172,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourceSwapNoSources => 'No other sources available';
 
   @override
-  String sourceSwapFailedSources(int count) {
-    return '$count source(s) failed to search';
+  String sourceSwapFailedSources(String sources) {
+    return 'Search failed for $sources';
   }
 
   @override

@@ -1134,8 +1134,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceSwapNoSources => '没有可用的其它音源';
 
   @override
-  String sourceSwapFailedSources(int count) {
-    return '$count 个音源搜索失败';
+  String sourceSwapFailedSources(String sources) {
+    return '$sources 搜索失败';
   }
 
   @override

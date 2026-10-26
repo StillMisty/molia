@@ -2231,8 +2231,8 @@ abstract class AppLocalizations {
   /// No description provided for @sourceSwapFailedSources.
   ///
   /// In en, this message translates to:
-  /// **'{count} source(s) failed to search'**
-  String sourceSwapFailedSources(int count);
+  /// **'Search failed for {sources}'**
+  String sourceSwapFailedSources(String sources);
 
   /// No description provided for @sourceSwapConfirm.
   ///

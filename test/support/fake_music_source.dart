@@ -185,6 +185,9 @@ class FakeSourceRegistry implements SourceRegistry {
       ];
 
   @override
+  Set<String> get enabledChannelKeys => _sources.keys.toSet();
+
+  @override
   MusicSource? byKey(String key) => _sources[key];
 
   @override

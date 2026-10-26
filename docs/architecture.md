@@ -611,9 +611,12 @@
   夹取、上下文名归一、批量 `addedAt` 都在这里；`PlaylistTrack.fromTrack` 生产代码
   只在此调用，加入列表仍复用 `add_to_library.dart` 的目标选择流程。
 - **换源**：`SourceSwapProvider`（`lib/providers/source_swap_provider.dart`）是
-  跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在其它可搜索音源
-  并行检索（`CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
-  `failedSourceKeys` 可重试），载体是统一的「换源」页
+  跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在可搜索音源
+  并行检索（默认排除种子源；B 站允许同源多投稿，且 B 站曲目的 artists 是 UP 主、
+  不当歌手关键词；每个源的口径由 `SourceSwapStrategies`
+  （`lib/services/source_swap/source_swap_strategy.dart`）声明，未声明渠道走默认；
+  `CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
+  `failedSourceKeys` / `failedSourceNames` 可重试），载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
   `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
   默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
@@ -624,6 +627,12 @@
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
   `PlaybackFacade.replaceQueueTrack` 端口；命中当前曲目重新取链从头播放，
   冷启动恢复会话同步替换并落盘）。
+  **歌词 tab**：来源来自 `LyricsSourceRegistry`
+  （`lib/services/lyrics/lyrics_source_registry.dart`）——五个音乐平台 + LRCLIB
+  参与自动名字回退；`BuiltinPlatforms` 中同时有 `search` + `lyric` 适配器的渠道
+  自动获得通用 `BuiltinLyricProvider`（当前为 B 站 CC/AI 字幕），新增渠道无需改
+  UI。B 站字幕需登录：未登录时该来源只显示提示、不发搜索请求；且只进手动换源，
+  不参与自动回退。停用渠道从其歌词来源中隐藏（LRCLIB 不是渠道，不受影响）。
   **自动换源**：播放失败同源重试仍失败后，组合根注入的 `AutoSourceSwapService.findMatch`
   用 `lib/services/song_match.dart`（LX `findMusic` 判定的唯一实现，与歌词搜索
   回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目

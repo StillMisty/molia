@@ -9,12 +9,7 @@ import '../models/lyrics_result.dart';
 import 'cache_service.dart';
 import 'lyrics_cache.dart';
 import 'lyrics/lyric_provider.dart';
-import 'lyrics/qq_provider.dart';
-import 'lyrics/netease_provider.dart';
-import 'lyrics/kugou_provider.dart';
-import 'lyrics/kuwo_provider.dart';
-import 'lyrics/migu_provider.dart';
-import 'lyrics/lrclib_provider.dart';
+import 'lyrics/lyrics_source_registry.dart';
 
 export '../models/lyrics_result.dart';
 
@@ -41,6 +36,11 @@ class LyricsService {
   /// 优先重试原生，而不是继续用跨平台缓存。
   final bool Function(Track track)? _nativeLyricAvailable;
 
+  /// [providers] 只用于测试注入；缺省取 [LyricsSourceRegistry.standard] 的
+  /// 自动回退来源（五个音乐平台 + LRCLIB，B 站字幕不在其中）。
+  ///
+  /// 注册表是 static final（延迟初始化），这里只读列表，不创建实例、不发
+  /// 请求；provider 的网络调用仍只发生在真正取词时。
   LyricsService({
     List<LyricProvider>? providers,
     SharedPreferences? prefs,
@@ -49,18 +49,9 @@ class LyricsService {
     this._trackLyricLoader,
     this._networkFallbackAllowed,
     this._nativeLyricAvailable,
-  }) : _providers =
-           providers ??
-           [
-             NetEaseProvider(),
-             QQProvider(),
-             KugouProvider(),
-             KuwoProvider(),
-             MiguProvider(),
-             LRCLibProvider(),
-           ],
-       _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
-       _cacheService = cacheService ?? CacheService.instance;
+  })  : _providers = providers ?? LyricsSourceRegistry.standard.autoProviders,
+        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
+        _cacheService = cacheService ?? CacheService.instance;
 
   /// 获取歌词（原文 + 可选翻译 / 罗马音 / 逐字）。
   ///

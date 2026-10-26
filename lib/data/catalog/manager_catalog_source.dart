@@ -69,6 +69,11 @@ class SourceManagerMusicSource implements MusicSource {
     }
     // 协议层不支持取消：以“丢弃结果”等价实现。
     if (cancel?.isCancelled ?? false) return SearchResult.empty<Track>();
+    // 平台级失败（风控 / 传输）不能当成「没有结果」：搜索页会把失败
+    // 显示成空列表，换源页更会把 B 站等分组静默丢掉。统一在边界抛
+    // SourceFailure，由 CatalogService 归一化且不写缓存。
+    final failure = result.failure;
+    if (failure != null) throw failure;
     return SearchResult(
       items: [for (final track in result.tracks) trackFromSourceTrack(track)],
       hasMore: result.hasMore,

@@ -161,6 +161,9 @@ class _FakeRegistry implements SourceRegistry {
   List<SourceDescriptor> get descriptors => const [];
 
   @override
+  Set<String> get enabledChannelKeys => _sources.keys.toSet();
+
+  @override
   MusicSource? byKey(String key) => _sources[key];
 
   @override

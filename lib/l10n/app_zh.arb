@@ -390,7 +390,7 @@
   "sourceSwapSearching": "正在搜索其它音源…",
   "sourceSwapEmpty": "其它音源没有找到这首歌",
   "sourceSwapNoSources": "没有可用的其它音源",
-  "sourceSwapFailedSources": "{count} 个音源搜索失败",
+  "sourceSwapFailedSources": "{sources} 搜索失败",
   "sourceSwapConfirm": "换源",
   "sourceSwapPreviewContext": "换源试听",
   "sourceSwapDuplicateTitle": "曲目已存在",

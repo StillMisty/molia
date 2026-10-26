@@ -127,6 +127,12 @@ class _FakeRegistry implements SourceRegistry {
   }
 
   @override
+  Set<String> get enabledChannelKeys => {
+        for (final entry in _entries)
+          if (entry.enabled) entry.source.key,
+      };
+
+  @override
   MusicSource? forTrack(Track track) => byKey(track.id.sourceKey);
 
   @override
