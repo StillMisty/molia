@@ -53,7 +53,8 @@ abstract class LyricProvider {
     try {
       final matches = await searchMultiple(title, artist, limit: 5);
       if (matches.isEmpty) return null;
-      final match = pickBestSongMatch(matches, title: title, artist: artist) ??
+      final match =
+          pickBestSongMatch(matches, title: title, artist: artist) ??
           matches.first;
 
       final payload = await fetchForMatch(match);
@@ -61,21 +62,23 @@ abstract class LyricProvider {
 
       final normalized = LyricsPayload(
         lyric: normalizeLyric(payload.lyric),
-        translation: _normalizeOptional(payload.translation),
-        roma: _normalizeOptional(payload.roma),
-        lxlyric: _normalizeOptional(payload.lxlyric),
+        translation: normalizeOptionalLyric(this, payload.translation),
+        roma: normalizeOptionalLyric(this, payload.roma),
+        lxlyric: normalizeOptionalLyric(this, payload.lxlyric),
       );
       return normalized.lyric.isEmpty ? null : normalized;
     } catch (e) {
       return null;
     }
   }
+}
 
-  String? _normalizeOptional(String? text) {
-    if (text == null) return null;
-    final normalized = normalizeLyric(text);
-    return normalized.isEmpty ? null : normalized;
-  }
+/// 可选扩展字段（翻译 / 罗马音 / 逐字）的统一归一：空串按 null，避免 UI
+/// 渲染出空占位行。
+String? normalizeOptionalLyric(LyricProvider provider, String? text) {
+  if (text == null || text.trim().isEmpty) return null;
+  final normalized = provider.normalizeLyric(text);
+  return normalized.isEmpty ? null : normalized;
 }
 
 /// 结构化歌词结果：原文必填，翻译 / 罗马音 / 逐字可选（LRC 或纯文本）。

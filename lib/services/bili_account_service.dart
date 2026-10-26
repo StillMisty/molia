@@ -36,7 +36,7 @@ class BiliAccountService extends ChangeNotifier {
   late final BiliQrLogin _login;
   final Logger _logger = Logger('molia.bili_account');
 
-  /// 凭据 / 账号资料 / 过期标记的唯一状态：服务自身不再镜像 Cookie 或账号。
+  /// 凭据 / 账号资料 / 过期标记的唯一状态源：服务自身不持有 Cookie 或账号副本。
   final BiliSession _session;
 
   BiliAccountStatus _status = BiliAccountStatus.unknown;

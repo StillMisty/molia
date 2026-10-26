@@ -86,7 +86,7 @@ final class LyricsSelectionNotFound extends LyricsSelectionOutcome {
   const LyricsSelectionNotFound();
 }
 
-/// 取词或写缓存抛错；[error] 原样交给视图展示。
+/// 取词或写缓存抛错；[error] 只用于日志 / 测试，视图展示通用失败文案。
 final class LyricsSelectionFailed extends LyricsSelectionOutcome {
   const LyricsSelectionFailed(this.error);
 
@@ -327,12 +327,12 @@ class LyricsSourceSearchSession extends ChangeNotifier {
             trackId: _trackId,
             lyric: normalizedLyric,
             providerName: result.provider.name,
-            translation: _normalizeOptional(
+            translation: normalizeOptionalLyric(
               result.provider,
               payload?.translation,
             ),
-            roma: _normalizeOptional(result.provider, payload?.roma),
-            lxlyric: _normalizeOptional(result.provider, payload?.lxlyric),
+            roma: normalizeOptionalLyric(result.provider, payload?.roma),
+            lxlyric: normalizeOptionalLyric(result.provider, payload?.lxlyric),
           );
           _logger.fine(
             '手动获取的歌词已缓存，曲目ID：$_trackId，'
@@ -355,12 +355,6 @@ class LyricsSourceSearchSession extends ChangeNotifier {
       _isFetchingLyric = false;
       _notifyNow();
     }
-  }
-
-  static String? _normalizeOptional(LyricProvider provider, String? text) {
-    if (text == null || text.trim().isEmpty) return null;
-    final normalized = provider.normalizeLyric(text);
-    return normalized.isEmpty ? null : normalized;
   }
 
   /// 立即通知：搜索开始 / 清空 / 选中态切换这类整屏可见的变化。

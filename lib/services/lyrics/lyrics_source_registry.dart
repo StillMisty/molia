@@ -5,6 +5,7 @@
 /// `lyric` 适配器，就会自动出现在手动换源里，不需要再改 UI 或服务。
 library;
 
+import '../../sources/builtin/bili_lyric.dart';
 import '../../sources/builtin/bili_session.dart';
 import '../../sources/builtin/builtin_platforms.dart';
 import 'builtin_lyric_provider.dart';
@@ -85,7 +86,12 @@ class LyricsSourceRegistry {
       strategies.add(
         LyricsSourceStrategy(
           channelKey: platform.key,
-          provider: BuiltinLyricProvider(platform.key, biliSession: session),
+          provider: BuiltinLyricProvider(
+            platform.key,
+            adapter: platform.key == 'bili'
+                ? BiliLyric(session: session).fetch
+                : null,
+          ),
           // 只进手动换源，不参与自动回退：B 站搜索结果是视频（同名翻唱 /
           // 搬运 / 切片很多），跨平台名字竞速时很容易先返回一条错匹配；
           // 这类平台的歌词也不一定对得上「这首歌」。手动换源里用户看得见

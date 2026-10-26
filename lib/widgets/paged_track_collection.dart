@@ -45,8 +45,7 @@ typedef PagedTrackPageLoader<T, R> = Future<PagedTrackPage<T, R>> Function(
 ///
 /// 列表状态仍由 [PagedListController] 负责（在途请求过期丢弃、跨页去重、
 /// 首屏 / 加载更多的失败语义）；本类只把成功响应的实体记下来，让头部与列表
-/// 读同一份快照。[reset] 同时作废列表与实体的在途响应，页面不再各自写
-/// `_album = album` 之类的赋值。
+/// 读同一份快照。[reset] 同时作废列表与实体的在途响应。
 class PagedTrackCollection<T, R> extends ValueNotifier<PagedListState<R>> {
   PagedTrackCollection({
     required this._loadPage,
@@ -113,8 +112,8 @@ class PagedTrackCollection<T, R> extends ValueNotifier<PagedListState<R>> {
 /// 分页曲目列表的共享正文：加载 / 首屏失败 / 空态 / 列表 / 底部重试。
 ///
 /// 三个详情页只有头部、行与文案不同；滚动容器、固定行高、可选钉住表头与
-/// 页脚的组合方式收在这里。宿主只给 [state] 与回调，不再各抄一份 sliver
-/// 结构（行高与表头列宽的口径也随之同源）。
+/// 页脚的组合方式收在这里。宿主只给 [state] 与回调，行高与表头列宽的口径
+/// 也随之同源。
 class PagedTrackCollectionBody<R> extends StatefulWidget {
   const PagedTrackCollectionBody({
     super.key,

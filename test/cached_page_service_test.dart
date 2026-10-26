@@ -16,7 +16,7 @@ CachedPageService<String, _Query> _build({
   maxEntries: 8,
 );
 
-/// 分页缓存服务：缓存命中 / 单飞 / 失败不缓存 / TTL / 前缀失效 / 错误归一化。
+/// 分页缓存服务：key 透传 / 缓存命中 / 失败归一化 / 前缀失效与计数。
 void main() {
   test('同 query / page 命中缓存，不再取数', () async {
     var calls = 0;

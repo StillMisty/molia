@@ -43,55 +43,64 @@ void main() {
         await utf8.decoder.bind(request).join();
       }
       if (gate != null) await gate!.future;
-      request.response.headers.contentType =
-          ContentType('application', 'json', charset: 'utf-8');
+      request.response.headers.contentType = ContentType(
+        'application',
+        'json',
+        charset: 'utf-8',
+      );
       switch (request.uri.path) {
         case '/api/music/search':
-          final limit =
-              int.tryParse(request.uri.queryParameters['limit'] ?? '');
+          final limit = int.tryParse(
+            request.uri.queryParameters['limit'] ?? '',
+          );
           if (limit == 1) {
-            request.response.write(jsonEncode({
-              'list': [
-                {'id': 'any-1', 'name': '第一首', 'singer': '歌手'},
-              ],
-              'total': 3,
-            }));
+            request.response.write(
+              jsonEncode({
+                'list': [
+                  {'id': 'any-1', 'name': '第一首', 'singer': '歌手'},
+                ],
+                'total': 3,
+              }),
+            );
           } else {
-            request.response.write(jsonEncode({
-              'list': [
-                {
-                  'id': 'any-9',
-                  'name': '测试曲目',
-                  'singer': '测试歌手',
-                  'interval': '03:00',
-                  'meta': {
-                    'albumName': '测试专辑',
-                    'source': 'tx',
-                    'picUrl': 'http://127.0.0.1:1/cover.jpg',
-                    'qualitys': {
-                      '320k': {'sizeStr': '8.5MB'},
+            request.response.write(
+              jsonEncode({
+                'list': [
+                  {
+                    'id': 'any-9',
+                    'name': '测试曲目',
+                    'singer': '测试歌手',
+                    'interval': '03:00',
+                    'meta': {
+                      'albumName': '测试专辑',
+                      'source': 'tx',
+                      'picUrl': 'http://127.0.0.1:1/cover.jpg',
+                      'qualitys': {
+                        '320k': {'sizeStr': '8.5MB'},
+                      },
                     },
                   },
-                }
-              ],
-              'total': 1,
-              'limit': 30,
-              'page': 1,
-            }));
+                ],
+                'total': 1,
+                'limit': 30,
+                'page': 1,
+              }),
+            );
           }
         case '/api/music/url':
-          request.response
-              .write(jsonEncode({'url': 'http://127.0.0.1:1/stream.mp3'}));
+          request.response.write(
+            jsonEncode({'url': 'http://127.0.0.1:1/stream.mp3'}),
+          );
         case '/api/music/lyric':
-          request.response.write(jsonEncode({
-            'info': {
-              'lyric': '[00:00.00]hello',
-              'tlyric': '[00:00.00]你好',
-            }
-          }));
+          request.response.write(
+            jsonEncode({
+              'info': {'lyric': '[00:00.00]hello', 'tlyric': '[00:00.00]你好'},
+            }),
+          );
         case '/api/music/pic':
-          request.response
-              .write(jsonEncode({'url': 'http://127.0.0.1:1/pic.jpg'}));
+          request.response.write(
+            jsonEncode({'url': 'http://127.0.0.1:1/pic.jpg'}),
+          );
         default:
           request.response
             ..statusCode = 404
@@ -108,10 +117,9 @@ void main() {
   Future<SourceManager> configuredManager() async {
     final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();
-    await manager.updateAnyListenConfig(AnyListenConfig(
-      serverUrl: 'http://127.0.0.1:$port',
-      enabled: true,
-    ));
+    await manager.updateAnyListenConfig(
+      AnyListenConfig(serverUrl: 'http://127.0.0.1:$port', enabled: true),
+    );
     return manager;
   }
 
@@ -144,8 +152,10 @@ void main() {
     test('capabilities：any-listen 已配置时全能力', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
       expect(source.capabilities.search, isTrue);
       expect(source.capabilities.pagination, isTrue);
       expect(source.capabilities.resolveUrl, isTrue);
@@ -157,12 +167,17 @@ void main() {
     test('displayName 从可搜索画像读取；停用 / 未知 key 回退；adopt 按 key', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
       expect(source.displayName, AnyListenSource.displayName);
+      // 停用后回退 key（路由仍可命中历史曲目）。
+      await manager.setChannelEnabled(AnyListenSource.sourceKey, false);
+      expect(source.displayName, AnyListenSource.sourceKey);
 
       final kw = SourceManagerMusicSource('kw', manager);
-      // 无脚本 / 不可搜索的内置渠道沿用旧口径回退 key（路由仍可命中历史曲目）。
+      // 无脚本 / 不可搜索的内置渠道回退 key。
       expect(kw.displayName, 'kw');
       await manager.setChannelEnabled('kw', false);
       expect(kw.displayName, 'kw');
@@ -191,8 +206,13 @@ void main() {
 
       await expectLater(
         source.collection(const CollectionRef(type: 'album', id: 'a')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
     });
 
@@ -204,8 +224,13 @@ void main() {
 
       await expectLater(
         source.collection(const CollectionRef(type: 'playlist', id: 'a')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
     });
 
@@ -248,13 +273,23 @@ void main() {
 
       await expectLater(
         source.searchArtists(const SearchQuery(keyword: 'x')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
       await expectLater(
         source.searchLyrics(const SearchQuery(keyword: 'x')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
     });
 
@@ -270,13 +305,23 @@ void main() {
 
       await expectLater(
         source.searchArtists(const SearchQuery(keyword: '周杰伦')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
       await expectLater(
         source.searchLyrics(const SearchQuery(keyword: '雨下整夜')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
     });
   });
@@ -285,8 +330,10 @@ void main() {
     test('search：SourceTrack → Track 映射，hasMore/total 原样透传', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
 
       final result = await source.search(
         const SearchQuery(keyword: '测试', page: 1, limit: 30),
@@ -318,8 +365,10 @@ void main() {
     test('search：page/limit 透传，total 推断 hasMore', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
 
       final result = await source.search(
         const SearchQuery(keyword: 'x', page: 2, limit: 1),
@@ -334,8 +383,10 @@ void main() {
     test('search：取消令牌生效（前/后检查都丢弃结果）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
 
       // 请求前已取消：不发网络请求。
       final cancelled = CancelToken()..cancel();
@@ -366,8 +417,10 @@ void main() {
     test('resolve：返回 PlayableStream（URL 来自 manager.resolveStream）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
 
       final result = await source.search(const SearchQuery(keyword: 'x'));
       final stream = await source.resolve(
@@ -381,8 +434,10 @@ void main() {
     test('lyrics：LxLyricResult → LyricsDoc（含翻译）', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
 
       final result = await source.search(const SearchQuery(keyword: 'x'));
       final doc = await source.lyrics(result.items.single);
@@ -394,8 +449,10 @@ void main() {
     test('artwork：URL → Artwork；空 URL 返回 null', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
-      final source =
-          SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
+      final source = SourceManagerMusicSource(
+        AnyListenSource.sourceKey,
+        manager,
+      );
 
       final result = await source.search(const SearchQuery(keyword: 'x'));
       final art = await source.artwork(result.items.single);
@@ -427,8 +484,13 @@ void main() {
       expect(await source.lyrics(track), isNull);
       await expectLater(
         source.resolve(track),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.scriptError)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.scriptError,
+          ),
+        ),
       );
     });
 
@@ -439,9 +501,11 @@ void main() {
 
       await expectLater(
         source.search(const SearchQuery(keyword: 'x')),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.scriptError)
-            .having((f) => f.retryable, 'retryable', isTrue)),
+        throwsA(
+          isA<SourceFailure>()
+              .having((f) => f.kind, 'kind', FailureKind.scriptError)
+              .having((f) => f.retryable, 'retryable', isTrue),
+        ),
       );
     });
 

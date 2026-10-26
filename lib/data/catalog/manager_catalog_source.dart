@@ -30,10 +30,12 @@ class SourceManagerMusicSource implements MusicSource {
 
   @override
   String get displayName {
-    // 只有当前可搜索的渠道沿用旧口径显示名称；已停用 / 不可搜索的 key
-    // 仍回退 key（路由可能命中历史曲目，但展示面不冒充启用渠道）。
+    // 只有启用且可搜索的渠道显示画像名称；停用 / 不可搜索的 key 回退
+    // key（路由仍可命中历史曲目，但展示面不冒充启用渠道）。
     final profile = _manager.sourceProfiles.forKey(key);
-    return profile != null && profile.searchable ? profile.displayName : key;
+    return profile != null && profile.enabled && profile.searchable
+        ? profile.displayName
+        : key;
   }
 
   @override

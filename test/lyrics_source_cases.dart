@@ -8,6 +8,7 @@ import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics/lyrics_source_registry.dart';
 import 'package:molia/services/lyrics/lyrics_source_strategy.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
+import 'package:molia/sources/builtin/bili_lyric.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
 import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
@@ -228,7 +229,10 @@ void main() {
         }
       });
 
-      final provider = BuiltinLyricProvider('bili', biliSession: session);
+      final provider = BuiltinLyricProvider(
+        'bili',
+        adapter: BiliLyric(session: session).fetch,
+      );
       final payload = await provider.fetchForMatch(biliMatch);
 
       expect(payload, isNotNull);
@@ -251,7 +255,7 @@ void main() {
 
       final payload = await BuiltinLyricProvider(
         'bili',
-        biliSession: BiliSession(),
+        adapter: BiliLyric(session: BiliSession()).fetch,
       ).fetchForMatch(biliMatch);
 
       expect(payload, isNull);

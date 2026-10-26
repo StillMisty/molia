@@ -140,53 +140,53 @@ class SearchProvider extends ChangeNotifier {
   ///
   /// 直接读当前类型分页控制器的加载态（不再维护镜像 flag）。
   bool get isSearching => switch (_kind) {
-        SearchKind.song => _pager.isLoading,
-        SearchKind.artist => _artistPager.isLoading,
-        SearchKind.lyric => _lyricPager.isLoading,
-      };
+    SearchKind.song => _pager.isLoading,
+    SearchKind.artist => _artistPager.isLoading,
+    SearchKind.lyric => _lyricPager.isLoading,
+  };
 
   /// 归一化失败对象（UI 的唯一错误出口：标题走 l10n，详情用 message，
   /// 不再暴露 `'Search failed: $e'` 这类原始异常字符串）。
   SourceFailure? get failure => switch (_kind) {
-        SearchKind.song => _failure,
-        SearchKind.artist => _artistFailure,
-        SearchKind.lyric => _lyricFailure,
-      };
+    SearchKind.song => _failure,
+    SearchKind.artist => _artistFailure,
+    SearchKind.lyric => _lyricFailure,
+  };
 
   /// 当前已加载到第几页（从 1 开始）。
   int get currentPage => switch (_kind) {
-        SearchKind.song => _pager.page,
-        SearchKind.artist => _artistPager.page,
-        SearchKind.lyric => _lyricPager.page,
-      };
+    SearchKind.song => _pager.page,
+    SearchKind.artist => _artistPager.page,
+    SearchKind.lyric => _lyricPager.page,
+  };
 
   /// 平台返回的结果总数（部分平台/脚本不返回则为 null）。
   int? get totalResults => switch (_kind) {
-        SearchKind.song => _pager.total,
-        SearchKind.artist => _artistPager.total,
-        SearchKind.lyric => _lyricPager.total,
-      };
+    SearchKind.song => _pager.total,
+    SearchKind.artist => _artistPager.total,
+    SearchKind.lyric => _lyricPager.total,
+  };
 
   /// 是否还有下一页可加载。
   bool get hasMore => switch (_kind) {
-        SearchKind.song => _pager.hasMore,
-        SearchKind.artist => _artistPager.hasMore,
-        SearchKind.lyric => _lyricPager.hasMore,
-      };
+    SearchKind.song => _pager.hasMore,
+    SearchKind.artist => _artistPager.hasMore,
+    SearchKind.lyric => _lyricPager.hasMore,
+  };
 
   /// 是否正在加载下一页。
   bool get isLoadingMore => switch (_kind) {
-        SearchKind.song => _pager.isLoadingMore,
-        SearchKind.artist => _artistPager.isLoadingMore,
-        SearchKind.lyric => _lyricPager.isLoadingMore,
-      };
+    SearchKind.song => _pager.isLoadingMore,
+    SearchKind.artist => _artistPager.isLoadingMore,
+    SearchKind.lyric => _lyricPager.isLoadingMore,
+  };
 
   /// 加载下一页是否失败（失败后停在当前页，由列表底部重试）。
   bool get loadMoreFailed => switch (_kind) {
-        SearchKind.song => _pager.loadMoreFailed,
-        SearchKind.artist => _artistPager.loadMoreFailed,
-        SearchKind.lyric => _lyricPager.loadMoreFailed,
-      };
+    SearchKind.song => _pager.loadMoreFailed,
+    SearchKind.artist => _artistPager.loadMoreFailed,
+    SearchKind.lyric => _lyricPager.loadMoreFailed,
+  };
 
   /// 「歌手」类型的结果（当前音源支持歌手能力时才有内容）。
   List<ArtistSummary> get artistResults => _artistResults;
@@ -197,8 +197,8 @@ class SearchProvider extends ChangeNotifier {
   /// 是否已选中可用音源（空音源时搜索结果页展示引导空态）。
   bool get hasSelectedSource => _sourceKey.isNotEmpty;
 
-  /// 可选音源列表：直接是 [SourceRegistry] 的渠道描述（唯一渠道形状），
-  /// 不再在 provider 里二次投影；顺序即用户自定义排序（`lx_source_order`）。
+  /// 可选音源列表：直接是 [SourceRegistry] 的渠道描述（唯一渠道形状）；
+  /// 顺序即用户自定义排序（`lx_source_order`）。
   List<SourceDescriptor> get sourceChannels =>
       _sourceRegistry?.descriptors ?? const [];
 

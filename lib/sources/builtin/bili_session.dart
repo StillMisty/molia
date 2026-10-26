@@ -43,8 +43,6 @@ class BiliSession {
 
   void markExpired() => _expired = true;
 
-  void clearExpired() => _expired = false;
-
   /// 绑定账号服务的初始化 Future：这里是唯一就绪来源，消费者不另建。
   void bindReady(Future<void> ready) {
     _ready = ready;
