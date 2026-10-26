@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../services/bili_account_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// AppLocalizations 查找：独立挂载 / 测试场景回退简体中文。
@@ -71,18 +72,14 @@ class _BiliAccountPageState extends State<BiliAccountPage>
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.biliAccountTitle),
-        automaticallyImplyLeading: true,
-      ),
+    return SettingsSubPage.body(
+      title: l10n.biliAccountTitle,
       body: Consumer<BiliAccountService>(
         builder: (context, service, _) {
           if (service.status == BiliAccountStatus.unknown) {
             return const Center(child: M3ELoadingIndicator());
           }
-          return ListView(
-            padding: const EdgeInsets.all(kSettingsPadding),
+          return SettingsSubPageList(
             children: [
               if (service.status == BiliAccountStatus.loggedIn)
                 ..._buildLoggedIn(context, l10n, service)

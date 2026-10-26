@@ -8,6 +8,7 @@ import '../providers/sources_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/icon_swap.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// AppLocalizations 查找：测试/独立挂载场景未注册 delegate 时回退简体中文
@@ -149,15 +150,11 @@ class _AnyListenPageState extends State<AnyListenPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.anyListenEntry),
-        automaticallyImplyLeading: true,
-      ),
+    return SettingsSubPage.body(
+      title: l10n.anyListenEntry,
       body: _loading
           ? const Center(child: M3ELoadingIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(kSettingsPadding),
+          : SettingsSubPageList(
               children: [
                 SettingsSectionCard(
                   children: [_introRow(context, l10n)],

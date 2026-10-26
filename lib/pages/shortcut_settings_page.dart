@@ -13,6 +13,7 @@ import '../services/shortcuts.dart';
 import '../services/window/app_tray.dart';
 import '../services/window/window_chrome.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/settings/shortcut_recorder_tile.dart';
 
@@ -38,19 +39,13 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     // provider 缺省（独立挂载的测试）时回退单例：生产里两者是同一实例。
     final settings =
         context.watch<ShortcutSettings?>() ?? ShortcutSettings.instance;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.settingsShortcutsTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          _buildScopeCard(context, l10n, settings, ShortcutScope.inApp),
-          const SizedBox(height: kSettingsSectionSpacing),
-          _buildScopeCard(context, l10n, settings, ShortcutScope.global),
-        ],
-      ),
+    return SettingsSubPage(
+      title: l10n.settingsShortcutsTitle,
+      children: [
+        _buildScopeCard(context, l10n, settings, ShortcutScope.inApp),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _buildScopeCard(context, l10n, settings, ShortcutScope.global),
+      ],
     );
   }
 

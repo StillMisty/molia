@@ -15,6 +15,7 @@ import '../services/window/tray_settings.dart';
 import '../services/window/window_settings.dart';
 import '../widgets/nav_destination_style.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 通用设置子页：底部导航、语言、应用名称与震动反馈（按改动频率排序）。
@@ -66,104 +67,98 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
     // 托盘设置同理：缺省（或非桌面平台）时隐藏「桌面」分组。
     final tray = context.watch<TraySettings?>();
 
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.generalTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          // 行序按改动频率：底部导航（常改）→ 震动反馈 → 语言 → 应用名称
-          // → 桌面行为。
-          if (nav != null) ...[
-            SettingsSectionCard(
-              title: l10n.settingsBottomNavTitle,
-              footer: SettingsSectionHint(text: l10n.settingsBottomNavHint),
-              children: [
-                _StartupPageSettings(provider: nav),
-                _BottomNavSettings(provider: nav),
-              ],
-            ),
-            const SizedBox(height: kSettingsSectionSpacing),
-          ],
+    return SettingsSubPage(
+      title: l10n.generalTitle,
+      children: [
+        // 行序按改动频率：底部导航（常改）→ 震动反馈 → 语言 → 应用名称
+        // → 桌面行为。
+        if (nav != null) ...[
           SettingsSectionCard(
+            title: l10n.settingsBottomNavTitle,
+            footer: SettingsSectionHint(text: l10n.settingsBottomNavHint),
             children: [
-              // 震动反馈（设备本地键，不随同步）：关掉后全应用触感一起静音。
+              _StartupPageSettings(provider: nav),
+              _BottomNavSettings(provider: nav),
+            ],
+          ),
+          const SizedBox(height: kSettingsSectionSpacing),
+        ],
+        SettingsSectionCard(
+          children: [
+            // 震动反馈（设备本地键，不随同步）：关掉后全应用触感一起静音。
+            ValueListenableBuilder<bool>(
+              valueListenable: HapticsService.enabledNotifier,
+              builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
+                switchKey: const Key('settingsHapticsSwitch'),
+                icon: Icons.vibration_rounded,
+                title: l10n.settingsHapticsTitle,
+                subtitle: l10n.settingsHapticsSubtitle,
+                value: hapticsEnabled,
+                onChanged: HapticsService.setEnabled,
+              ),
+            ),
+            SettingsChoiceRow<String>(
+              key: const Key('settingsLanguageItem'),
+              icon: Icons.language_rounded,
+              title: l10n.languageSettingTitle,
+              value: _locale?.languageCode ?? 'system',
+              options: [
+                ('system', l10n.languageSystem),
+                ('en', l10n.languageEnglish),
+                ('zh', l10n.languageSimplifiedChinese),
+              ],
+              onChanged: _setLanguage,
+            ),
+            // 应用名称：顶栏无歌曲时显示的自定义文案。
+            ValueListenableBuilder<String>(
+              valueListenable: AppBrandingService.titleNotifier,
+              builder: (context, appTitle, _) => SettingsNavTile(
+                key: const Key('settingsAppTitleItem'),
+                icon: Icons.badge_rounded,
+                title: l10n.settingsAppTitle,
+                subtitle: appTitle,
+                onTap: () => _showAppTitleDialog(context, l10n),
+              ),
+            ),
+          ],
+        ),
+        // 桌面托盘：Linux / Windows / macOS 显示（其余平台 AppTray.isSupported
+        // 为 false，开关没有意义）。
+        if (AppTray.isSupported && tray != null) ...[
+          const SizedBox(height: kSettingsSectionSpacing),
+          SettingsSectionCard(
+            title: l10n.settingsDesktopSection,
+            // Linux 托盘图标依赖桌面面板：GNOME 需 AppIndicator 扩展，
+            // 否则图标不显示（只在 Linux 提醒，避免 Windows 用户困惑）。
+            footer: AppTray.isLinuxDesktop
+                ? SettingsSectionHint(text: l10n.settingsTrayLinuxHint)
+                : null,
+            children: [
+              SettingsSwitchTile(
+                switchKey: const Key('settingsCloseToTraySwitch'),
+                icon: Icons.desktop_windows_rounded,
+                title: l10n.settingsCloseToTray,
+                subtitle: l10n.settingsCloseToTraySubtitle,
+                value: tray.closeToTray,
+                onChanged: tray.setCloseToTray,
+              ),
+              // 记住窗口位置与大小（设备本地键，不随同步）：重启后窗口回到
+              // 上次的位置/尺寸（最大化状态一并恢复）。
               ValueListenableBuilder<bool>(
-                valueListenable: HapticsService.enabledNotifier,
-                builder: (context, hapticsEnabled, _) => SettingsSwitchTile(
-                  switchKey: const Key('settingsHapticsSwitch'),
-                  icon: Icons.vibration_rounded,
-                  title: l10n.settingsHapticsTitle,
-                  subtitle: l10n.settingsHapticsSubtitle,
-                  value: hapticsEnabled,
-                  onChanged: HapticsService.setEnabled,
-                ),
-              ),
-              SettingsChoiceRow<String>(
-                key: const Key('settingsLanguageItem'),
-                icon: Icons.language_rounded,
-                title: l10n.languageSettingTitle,
-                value: _locale?.languageCode ?? 'system',
-                options: [
-                  ('system', l10n.languageSystem),
-                  ('en', l10n.languageEnglish),
-                  ('zh', l10n.languageSimplifiedChinese),
-                ],
-                onChanged: _setLanguage,
-              ),
-              // 应用名称：顶栏无歌曲时显示的自定义文案。
-              ValueListenableBuilder<String>(
-                valueListenable: AppBrandingService.titleNotifier,
-                builder: (context, appTitle, _) => SettingsNavTile(
-                  key: const Key('settingsAppTitleItem'),
-                  icon: Icons.badge_rounded,
-                  title: l10n.settingsAppTitle,
-                  subtitle: appTitle,
-                  onTap: () => _showAppTitleDialog(context, l10n),
+                valueListenable: WindowSettings.rememberBoundsNotifier,
+                builder: (context, rememberBounds, _) => SettingsSwitchTile(
+                  switchKey: const Key('settingsRememberWindowBoundsSwitch'),
+                  icon: Icons.window_rounded,
+                  title: l10n.settingsRememberWindowBounds,
+                  subtitle: l10n.settingsRememberWindowBoundsSubtitle,
+                  value: rememberBounds,
+                  onChanged: WindowSettings.setRememberBounds,
                 ),
               ),
             ],
           ),
-          // 桌面托盘：Linux / Windows / macOS 显示（其余平台 AppTray.isSupported
-          // 为 false，开关没有意义）。
-          if (AppTray.isSupported && tray != null) ...[
-            const SizedBox(height: kSettingsSectionSpacing),
-            SettingsSectionCard(
-              title: l10n.settingsDesktopSection,
-              // Linux 托盘图标依赖桌面面板：GNOME 需 AppIndicator 扩展，
-              // 否则图标不显示（只在 Linux 提醒，避免 Windows 用户困惑）。
-              footer: AppTray.isLinuxDesktop
-                  ? SettingsSectionHint(text: l10n.settingsTrayLinuxHint)
-                  : null,
-              children: [
-                SettingsSwitchTile(
-                  switchKey: const Key('settingsCloseToTraySwitch'),
-                  icon: Icons.desktop_windows_rounded,
-                  title: l10n.settingsCloseToTray,
-                  subtitle: l10n.settingsCloseToTraySubtitle,
-                  value: tray.closeToTray,
-                  onChanged: tray.setCloseToTray,
-                ),
-                // 记住窗口位置与大小（设备本地键，不随同步）：重启后窗口回到
-                // 上次的位置/尺寸（最大化状态一并恢复）。
-                ValueListenableBuilder<bool>(
-                  valueListenable: WindowSettings.rememberBoundsNotifier,
-                  builder: (context, rememberBounds, _) => SettingsSwitchTile(
-                    switchKey: const Key('settingsRememberWindowBoundsSwitch'),
-                    icon: Icons.window_rounded,
-                    title: l10n.settingsRememberWindowBounds,
-                    subtitle: l10n.settingsRememberWindowBoundsSubtitle,
-                    value: rememberBounds,
-                    onChanged: WindowSettings.setRememberBounds,
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
-      ),
+      ],
     );
   }
 

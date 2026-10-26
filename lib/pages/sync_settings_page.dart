@@ -13,6 +13,7 @@ import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
 import '../utils/device_id.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_advanced_page.dart';
 import 'sync_content_page.dart';
@@ -167,23 +168,17 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.settingsSyncTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          _transportsSection(context, provider, l10n),
-          const SizedBox(height: kSettingsSectionSpacing),
-          _peersSection(context, provider, l10n),
-          const SizedBox(height: kSettingsSectionSpacing),
-          _nearbySection(context, provider, l10n),
-          const SizedBox(height: kSettingsSectionSpacing),
-          _entriesSection(context, provider, l10n),
-        ],
-      ),
+    return SettingsSubPage(
+      title: l10n.settingsSyncTitle,
+      children: [
+        _transportsSection(context, provider, l10n),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _peersSection(context, provider, l10n),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _nearbySection(context, provider, l10n),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _entriesSection(context, provider, l10n),
+      ],
     );
   }
 
