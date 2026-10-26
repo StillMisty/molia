@@ -929,9 +929,13 @@ class _ShellBarHeader extends StatelessWidget {
                   hidden: !showTrack,
                 ),
                 AnimatedOpacity(
-                  duration: showTrack
-                      ? Duration.zero
-                      : const Duration(milliseconds: 160),
+                  // 切歌信息出现时品牌标志瞬时让位（零时长不跑曲线）；回退时
+                  // 短淡入，减弱动效下两端都硬切。
+                  duration: effectDurationOf(
+                    context,
+                    showTrack ? Duration.zero : M3EMotion.short3,
+                  ),
+                  curve: M3EMotion.emphasizedDecelerate,
                   opacity: showTrack ? 0 : 1,
                   child: ColorFiltered(
                     // 同 MoliaMark：Image.color 在 Impeller 下会引入

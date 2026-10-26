@@ -1136,11 +1136,14 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`snapToEnd`；`shellPageLayerPresentation` 消费处 clamp 0..1），形状配方仍在
   `shellPageLayerPresentation` 的 Curves 里。歌词页行高亮 / 翻译展开是 effects
   （`medium1` / `short4` + emphasized 曲线），自动滚动用 `long4` +
-  `emphasizedDecelerate`；时长统一经 `effectDurationOf` / `reduceMotionOf`
-  收口（减弱动效零时长，自动滚动直接落位），翻译展开只为当前行播放（其余行
-  零时长硬切）。音量浮层 / 收藏页多选栏也走这套收口：浮层缩放是 spatial
-  弹簧、透明度从同一进度截断 0..1；多选栏与页头同高交叉淡入淡出（effects
-  时长 + 曲线，离场层 `IgnorePointer`）。
+  `emphasizedDecelerate`；effects 时长 / 减弱动效统一经
+  `lib/theme/motion_policy.dart`（`reduceMotionOf` / `effectDurationOf`）收口
+  （减弱动效零时长，自动滚动直接落位）；网络封面 `AppNetworkImage` 显式覆盖
+  `CachedNetworkImage` 默认 500/1000ms 淡入淡出，走 `short4` / `short2` +
+  emphasized 曲线。翻译展开只为当前行播放（其余行零时长硬切）。音量浮层 /
+  收藏页多选栏也走这套收口：浮层缩放是 spatial 弹簧、透明度从同一进度截断
+  0..1；多选栏与页头同高交叉淡入淡出（effects 时长 + 曲线，离场层
+  `IgnorePointer`）。
 - 设置页：首屏 7 个语义分区（外观 / 封面 / 播放 / 歌词与展示 / 内容与来源 /
   通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`

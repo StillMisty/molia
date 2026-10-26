@@ -47,7 +47,7 @@ String? nowPlayingCoverUrl(BuildContext context, PlaybackProvider provider) =>
 ///
 /// 隐藏语义与共享飞行绑定：播放页激活或飞行期间封面淡出，但两件事不能
 /// 混在一次时长里——飞行落位帧必须与副本移除同帧亮出（亮出 0ms），收起
-/// 方向才走 160ms 淡出，否则结束/开始两帧会看到重影或跳变。
+/// 方向才走 short3（150ms）淡出，否则结束/开始两帧会看到重影或跳变。
 class NowPlayingCover extends StatelessWidget {
   /// 跟随当前曲目（顶栏 / 桌面底栏的封面位）。
   const NowPlayingCover.current({
