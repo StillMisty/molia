@@ -11,6 +11,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/artist_page.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
+import 'package:molia/widgets/playing_indicator.dart';
 import 'package:molia/widgets/search_section.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -119,7 +120,7 @@ void main() {
     );
     provider.submitSearch('周杰伦');
     await tester.pumpAndSettle();
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
 
     final item = provider.searchResults.first;
     final current = Track(
@@ -134,7 +135,7 @@ void main() {
       isPlaying: true,
     ));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
   });
 
   testWidgets('无歌手能力：不显示类型分段，结果仍是单曲行', (tester) async {

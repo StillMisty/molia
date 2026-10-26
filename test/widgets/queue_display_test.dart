@@ -6,6 +6,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_session_store.dart';
+import 'package:molia/widgets/playing_indicator.dart';
 import 'package:molia/widgets/queue.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_ui/material_ui.dart';
@@ -113,7 +114,7 @@ void main() {
     expect(find.text('接下来'), findsNothing);
     expect(find.text('Title b'), findsOneWidget);
     // 播放指示（均衡器图形）随「正在播放」行一起移除；时长走固定行尾。
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
     expect(find.text('0:30'), findsOneWidget);
 
     await drainThrottle(tester);
