@@ -226,7 +226,23 @@ void main() {
     expect(image.image, isA<ResizeImage>());
   });
 
-  testWidgets('远端封面未显式给尺寸时按布局宽度 × DPR 兜底', (tester) async {
+  testWidgets('file:// 封面双轴只保留一轴（双轴会按精确尺寸拉伸）', (tester) async {
+    await tester.pumpWidget(_host(const AppNetworkImage(
+      url: 'file:///tmp/molia-perf-cover.png',
+      width: 44,
+      height: 44,
+      memCacheWidth: 120,
+      memCacheHeight: 80,
+    )));
+
+    final image = tester.widget<Image>(find.byType(Image));
+    final resize = image.image as ResizeImage;
+    expect(resize.width, 120);
+    expect(resize.height, isNull, reason: '双轴会拉伸封面，只保留较大的一轴');
+  });
+
+  testWidgets('远端封面未显式给尺寸时按布局宽度 × DPR 兜底，且只给一轴',
+      (tester) async {
     final manager = _PendingCacheManager();
     addTearDown(manager.close);
     final cache = _cacheWith(manager);
@@ -245,6 +261,27 @@ void main() {
       tester.element(find.byType(CachedNetworkImage)),
     );
     expect(image.memCacheWidth, (96 * dpr).round());
-    expect(image.memCacheHeight, (96 * dpr).round());
+    expect(image.memCacheHeight, isNull, reason: '双轴会拉伸封面，只给一轴');
+  });
+
+  testWidgets('远端封面显式双轴也只保留较大的一轴', (tester) async {
+    final manager = _PendingCacheManager();
+    addTearDown(manager.close);
+    final cache = _cacheWith(manager);
+
+    await tester.pumpWidget(_host(AppNetworkImage(
+      url: 'https://p1.music.126.net/explicit.jpg',
+      width: 100,
+      height: 100,
+      memCacheWidth: 120,
+      memCacheHeight: 80,
+      artworkCache: cache,
+    )));
+
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage),
+    );
+    expect(image.memCacheWidth, 120);
+    expect(image.memCacheHeight, isNull);
   });
 }

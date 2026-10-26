@@ -95,6 +95,7 @@ void main() {
       find.byKey(const Key('coverViewerImage')),
     );
     expect(image.fit, BoxFit.contain);
+    expect(image.memCacheHeight, isNull, reason: '双轴会拉伸；查看器只给宽度');
     expect(find.byKey(const Key('coverViewerSaveButton')), findsOneWidget);
     expect(find.byKey(const Key('coverViewerEditButton')), findsNothing);
   });

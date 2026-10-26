@@ -95,12 +95,13 @@ class AppNetworkImage extends StatelessWidget {
     // 省流网关。
     final localProvider = localFileImageProvider(imageUrl);
     if (localProvider != null) {
+      final bounds = _decodeBounds(context);
       return Image(
         // FileImage 自身不认 memCacheWidth；不包 ResizeImage 时列表里的
         // 下载封面会按原图解码（1k 封面 = 数 MB），与远端缩略图路径不一致。
         image: ResizeImage.resizeIfNeeded(
-          memCacheWidth,
-          memCacheHeight,
+          bounds.width,
+          bounds.height,
           localProvider,
         ),
         width: width,
@@ -144,17 +145,7 @@ class AppNetworkImage extends StatelessWidget {
     CacheManager? manager, {
     required bool isFallback,
   }) {
-    // 调用方没显式给尺寸时按布局宽度 / DPR 兜底：96px 的详情页头像、评论区
-    // 头像不应该按 1k 原图解码。显式值优先（列表缩略图已按 44/56 传）。
-    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
-    final cacheWidth = memCacheWidth ??
-        (width != null && width!.isFinite && width! > 0
-            ? (width! * dpr).round()
-            : null);
-    final cacheHeight = memCacheHeight ??
-        (height != null && height!.isFinite && height! > 0
-            ? (height! * dpr).round()
-            : null);
+    final bounds = _decodeBounds(context);
     return CachedNetworkImage(
       imageUrl: imageUrl,
       cacheManager: manager,
@@ -162,14 +153,45 @@ class AppNetworkImage extends StatelessWidget {
       width: width,
       height: height,
       fit: fit,
-      memCacheWidth: cacheWidth,
-      memCacheHeight: cacheHeight,
+      memCacheWidth: bounds.width,
+      memCacheHeight: bounds.height,
       placeholder: (_, _) => placeholder ?? _placeholder(context),
       errorWidget: (_, _, error) {
         if (!isFallback) _notifyError(error);
         return _errorFallback(context, isFallback: isFallback);
       },
     );
+  }
+
+  /// 解码边界：**只给一个轴**，另一个轴由原图比例决定。
+  ///
+  /// `ResizeImage` / `CachedNetworkImage` 的 `memCacheWidth` 与
+  /// `memCacheHeight` 同时给出时会被当成精确目标尺寸（`instantiateImageCodec`
+  /// 双轴不保比例），方形容器里的 16:9 封面会被压扁。显式双轴也只保留较大
+  /// 的一轴；都没给时按容器长边 × DPR 兜底，避免列表按原图解码。
+  ({int? width, int? height}) _decodeBounds(BuildContext context) {
+    final explicitWidth = memCacheWidth;
+    final explicitHeight = memCacheHeight;
+    if (explicitWidth != null && explicitHeight != null) {
+      return explicitWidth >= explicitHeight
+          ? (width: explicitWidth, height: null)
+          : (width: null, height: explicitHeight);
+    }
+    if (explicitWidth != null) return (width: explicitWidth, height: null);
+    if (explicitHeight != null) return (width: null, height: explicitHeight);
+
+    final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    final boxWidth =
+        (width != null && width!.isFinite && width! > 0) ? width! : 0.0;
+    final boxHeight =
+        (height != null && height!.isFinite && height! > 0) ? height! : 0.0;
+    if (boxWidth <= 0 && boxHeight <= 0) {
+      return (width: null, height: null);
+    }
+    if (boxWidth >= boxHeight) {
+      return (width: (boxWidth * dpr).round(), height: null);
+    }
+    return (width: null, height: (boxHeight * dpr).round());
   }
 
   /// 主图失败时的回退：优先调用方给的 [errorWidget]，否则尝试 [fallbackUrl]，

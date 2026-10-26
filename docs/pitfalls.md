@@ -917,6 +917,9 @@
     100×100（2x）方块，`drawImageRect(src: 全图, dst: 方块)` 会把 16:9 封面压扁。
     方形展示必须按 `BoxFit.cover` 语义先算居中裁切源矩形（`coverCropSourceRect`
     在 `lyrics_poster_service.dart`），不要直接铺满；UI 方形缩略图统一
-    `BoxFit.cover`，查看原图走 `CoverViewer` 的 `BoxFit.contain`。另：网络封面
-    「保存原图」不要读 `ArtworkCache` 的缓存字节——缩略图路径会把原 URL 缓存键
-    覆盖成缩小图，必须按原 URL 直连（`cover_bytes_downloader.dart`）。
+    `BoxFit.cover`，查看原图走 `CoverViewer` 的 `BoxFit.contain`。
+    `AppNetworkImage` 的解码也只给一个轴：同时给 `memCacheWidth` /
+    `memCacheHeight` 会被 `ResizeImage` 当成精确目标尺寸，方形容器里的 16:9
+    封面同样会被压扁。另：网络封面「保存原图」不要读 `ArtworkCache` 的缓存
+    字节——缩略图路径会把原 URL 缓存键覆盖成缩小图，必须按原 URL 直连
+    （`cover_bytes_downloader.dart`）。

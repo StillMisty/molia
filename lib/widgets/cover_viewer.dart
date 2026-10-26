@@ -98,7 +98,6 @@ class _CoverViewerPageState extends State<CoverViewerPage> {
     final dpr = media?.devicePixelRatio ?? 1.0;
     final screen = media?.size ?? const Size(1080, 1920);
     final cacheWidth = (screen.width * dpr).round();
-    final cacheHeight = (screen.height * dpr).round();
 
     return Scaffold(
       key: const Key('coverViewerPage'),
@@ -121,8 +120,8 @@ class _CoverViewerPageState extends State<CoverViewerPage> {
                   key: const Key('coverViewerImage'),
                   url: widget.coverUrl,
                   fit: BoxFit.contain,
+                  // 只给宽度：双轴会被 ResizeImage 当成精确尺寸而拉伸。
                   memCacheWidth: cacheWidth,
-                  memCacheHeight: cacheHeight,
                   placeholder: ColoredBox(
                     color: scheme.surfaceContainerHighest,
                   ),
