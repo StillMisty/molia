@@ -5,17 +5,14 @@ import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/bili_account.dart';
 import 'package:molia/pages/bili_account_page.dart';
 import 'package:molia/services/bili_account_service.dart';
-import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_login.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:provider/provider.dart';
 
 import 'support/settings_test_support.dart';
 
 /// 哔哩哔哩账号页：未登录扫码 → 已登录 → 退出。
 void main() {
-  setUp(() => BiliAccountStore.instance.reset());
-  tearDown(() => BiliAccountStore.instance.reset());
-
   Future<(BiliAccountService, _FakeBiliQrLogin)> pumpPage(
     WidgetTester tester,
   ) async {
@@ -30,6 +27,7 @@ void main() {
     final service = BiliAccountService(
       settings: registry.scope([kBiliAccountCookie]),
       login: login,
+      session: BiliSession(),
     );
     addTearDown(service.dispose);
     await service.init();

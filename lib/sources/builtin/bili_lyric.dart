@@ -13,13 +13,23 @@
 library;
 
 import '../../domain/models/failure.dart';
-import 'bili_account.dart';
 import 'bili_client.dart';
 import 'bili_play.dart';
+import 'bili_session.dart';
 import 'lyric_result.dart';
 
 class BiliLyric {
-  BiliLyric._();
+  BiliLyric({BiliSession? session})
+    : _session = session,
+      _client = BiliClient(session: session);
+
+  /// 静态内置歌词适配器使用的共享实例（账号会话走 [BiliSession.shared]）。
+  static final BiliLyric shared = BiliLyric();
+
+  final BiliSession? _session;
+  final BiliClient _client;
+
+  BiliSession get _accountSession => _session ?? BiliSession.shared;
 
   /// 中文轨判定：`lan` 命中平台已知标识，或 `lan_doc` 含「中文」。
   static const Set<String> _chineseLans = {'zh-Hans', 'zh-CN', 'zh', 'ai-zh'};
@@ -27,12 +37,12 @@ class BiliLyric {
   /// 获取字幕歌词；未登录 / 无字幕 / 请求失败返回 null。
   ///
   /// 不在这里缓存：失败若被缓存，用户重试或重新播放会一直拿不到歌词。
-  static Future<BuiltinLyricResult?> fetch(Map<String, dynamic> raw) async {
+  Future<BuiltinLyricResult?> fetch(Map<String, dynamic> raw) async {
     try {
-      final store = BiliAccountStore.instance;
-      await store.ready;
-      final cookie = store.cookieHeader;
-      if (cookie == null || cookie.isEmpty || !store.isLoggedIn) return null;
+      final session = _accountSession;
+      await session.ready;
+      final cookie = session.cookieHeader;
+      if (cookie == null || cookie.isEmpty || !session.isLoggedIn) return null;
 
       final bvid = raw['bvid']?.toString().trim() ?? '';
       final aid = (raw['aid'] ?? raw['avid'])?.toString().trim() ?? '';
@@ -47,7 +57,7 @@ class BiliLyric {
 
       dynamic response;
       try {
-        response = await BiliClient.shared.get(
+        response = await _client.get(
           '/x/player/wbi/v2',
           query: query,
           auth: BiliAuth.accountSession,
@@ -55,7 +65,7 @@ class BiliLyric {
       } on SourceFailure {
         // WBI 签名 / 风控失败时退回 unsigned 账号接口；两条都失败由外层
         // catch 收口为 null。
-        response = await BiliClient.shared.get(
+        response = await _client.get(
           '/x/player/v2',
           query: query,
           auth: BiliAuth.account,
@@ -69,7 +79,7 @@ class BiliLyric {
 
       // 字幕文件是没有业务码的静态 JSON：只复用匿名传输，不校验 code，
       // 也不带账号 Cookie。
-      final body = await BiliClient.shared.get(
+      final body = await _client.get(
         url,
         codePolicy: BiliCodePolicy.none,
       );

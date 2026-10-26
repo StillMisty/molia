@@ -7,9 +7,9 @@ import 'package:molia/services/lyrics/builtin_lyric_provider.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics/lyrics_source_registry.dart';
 import 'package:molia/services/lyrics/lyrics_source_strategy.dart';
-import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
@@ -38,13 +38,16 @@ void main() {
     BuiltinSearch.transport = originalTransport;
     BiliApi.reset();
     BiliPlay.reset();
-    BiliAccountStore.instance.reset();
+    // 静态内置适配器（BuiltinLyricProvider → BiliLyric.shared）只能读
+    // 共享会话；注册表用例另行注入本地会话。
+    BiliSession.shared.reset();
   });
 
+  tearDown(() => BiliSession.shared.reset());
   tearDownAll(() => BuiltinSearch.transport = originalTransport);
 
-  void login() {
-    BiliAccountStore.instance.update(
+  void login({BiliSession? session}) {
+    (session ?? BiliSession.shared).apply(
       cookieHeader: accountCookie,
       account: const BiliAccount(userId: '1'),
     );
@@ -110,16 +113,16 @@ void main() {
     });
 
     test('B 站可用性按调用时求值：登录后消失、退出后恢复', () {
-      final bili = LyricsSourceRegistry.standard.strategies.firstWhere(
-        (s) => s.channelKey == 'bili',
-      );
+      final session = BiliSession();
+      final bili = LyricsSourceRegistry.forSession(session).strategies
+          .firstWhere((s) => s.channelKey == 'bili');
 
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
 
-      login();
+      login(session: session);
       expect(bili.unavailable!(), isNull);
 
-      BiliAccountStore.instance.clear();
+      session.clear();
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
     });
 

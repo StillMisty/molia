@@ -3,7 +3,7 @@
 /// 公开视频/音频接口都要求浏览器 UA + `Referer: https://www.bilibili.com/`，
 /// WBI 接口还要求把参数按时间戳签名；这两件事一旦在各个业务文件里各写一份，
 /// 密钥过期、Cookie 缺失与签名顺序漂移会散成难查的 412。这里收成唯一入口：
-/// - [BiliSession] 是一次会话的快照（buvid + mixinKey）；
+/// - [BiliAnonSession] 是一次匿名会话的快照（buvid + mixinKey）；
 /// - [BiliApi.session] 负责 single-flight 拉取与 1 小时缓存；
 /// - [biliSignQuery] 是纯函数，测试用官方文档给出的固定向量钉住算法。
 ///
@@ -140,8 +140,11 @@ String biliSignQuery(
 }
 
 /// 一次 B 站匿名会话（Cookie + WBI 密钥快照）。
-class BiliSession {
-  const BiliSession({
+///
+/// 与账号会话（`bili_session.dart` 的 `BiliSession`）是两件事：这里只承载
+/// buvid / WBI 密钥，绝不带账号 Cookie。
+class BiliAnonSession {
+  const BiliAnonSession({
     required this.buvid3,
     required this.buvid4,
     required this.mixinKey,
@@ -201,7 +204,7 @@ class BiliApi {
   /// 账号接口请求头：只在 B 站字幕 / 账号资料等需要登录态的端点使用。
   ///
   /// 播放直链、搜索、评论、收藏夹必须继续走 [anonymousHeaders] /
-  /// [BiliSession.apiHeaders]，避免把账号 Cookie 粘到播放器缓存或平台请求。
+  /// [BiliAnonSession.apiHeaders]，避免把账号 Cookie 粘到播放器缓存或平台请求。
   static Map<String, String> accountHeaders(String cookie) => {
         ...anonymousHeaders,
         if (cookie.trim().isNotEmpty) 'Cookie': cookie.trim(),
@@ -223,15 +226,15 @@ class BiliApi {
   /// 会话有效期：WBI 密钥约一天轮换，1 小时刷新足够避开跨天失效。
   static const Duration sessionTtl = Duration(hours: 1);
 
-  static BiliSession? _session;
+  static BiliAnonSession? _session;
   static DateTime? _fetchedAt;
-  static Future<BiliSession>? _pending;
+  static Future<BiliAnonSession>? _pending;
 
   /// 当前会话（缓存过期或未拉取时发起一次请求；并发调用共用同一 Future）。
   ///
   /// [transport] 只给测试注入独立传输用；生产走 [BuiltinSearch.transport]
   /// 这一全局注入点。
-  static Future<BiliSession> session({BuiltinTransport? transport}) {
+  static Future<BiliAnonSession> session({BuiltinTransport? transport}) {
     final cached = _session;
     final fetchedAt = _fetchedAt;
     if (cached != null &&
@@ -244,7 +247,7 @@ class BiliApi {
   }
 
   /// 丢弃缓存并重新拉取（风控后的唯一恢复手段）。
-  static Future<BiliSession> refresh({BuiltinTransport? transport}) {
+  static Future<BiliAnonSession> refresh({BuiltinTransport? transport}) {
     _session = null;
     _fetchedAt = null;
     return _pending ??=
@@ -259,7 +262,9 @@ class BiliApi {
     _pending = null;
   }
 
-  static Future<BiliSession> _startSessionFetch(BuiltinTransport transport) {
+  static Future<BiliAnonSession> _startSessionFetch(
+    BuiltinTransport transport,
+  ) {
     final future = _fetchSession(transport).then((session) {
       _session = session;
       _fetchedAt = DateTime.now();
@@ -278,7 +283,9 @@ class BiliApi {
     return future;
   }
 
-  static Future<BiliSession> _fetchSession(BuiltinTransport transport) async {
+  static Future<BiliAnonSession> _fetchSession(
+    BuiltinTransport transport,
+  ) async {
     final baseHeaders = {
       'User-Agent': browserUserAgent,
       'Referer': referer,
@@ -326,7 +333,7 @@ class BiliApi {
       );
     }
 
-    return BiliSession(
+    return BiliAnonSession(
       buvid3: buvid3,
       buvid4: buvid4,
       mixinKey: biliMixinKey(imgKey, subKey),

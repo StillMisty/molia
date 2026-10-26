@@ -9,8 +9,8 @@
 library;
 
 import '../../domain/models/failure.dart';
-import 'bili_account.dart';
 import 'bili_api.dart';
+import 'bili_session.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 
@@ -55,18 +55,23 @@ enum BiliCodePolicy {
   none,
 }
 
-/// B 站端点客户端（可在测试里注入独立传输）。
+/// B 站端点客户端（可在测试里注入独立传输 / 账号会话）。
 class BiliClient {
-  const BiliClient({this._transport});
+  const BiliClient({this._transport, this._session});
 
-  /// 生产 / 业务文件共用实例：传输走 [BuiltinSearch.transport]，测试替换全局
-  /// 传输即可覆盖。自身不持有可变状态，因此不需要 reset。
+  /// 生产 / 业务文件共用实例：传输走 [BuiltinSearch.transport]，账号会话走
+  /// [BiliSession.shared]；测试替换全局传输或注入自己的客户端即可覆盖。
+  /// 自身不持有可变状态，因此不需要 reset。
   static const BiliClient shared = BiliClient();
 
   final BuiltinTransport? _transport;
+  final BiliSession? _session;
 
   /// 显式注入优先；否则跟随全局传输（组合根与既有测试的注入点）。
   BuiltinTransport get transport => _transport ?? BuiltinSearch.transport;
+
+  /// 账号 Cookie 来源：显式注入优先，否则是生产共享会话。
+  BiliSession get session => _session ?? BiliSession.shared;
 
   /// 发起一次 GET 并校验响应。
   ///
@@ -143,7 +148,7 @@ class BiliClient {
     Map<String, Object?>? query,
     int retries,
   ) {
-    final cookie = BiliAccountStore.instance.cookieHeader;
+    final cookie = session.cookieHeader;
     return transport.getJson(
       _urlOf(path, query),
       headers: cookie == null || cookie.isEmpty
@@ -257,7 +262,7 @@ class BiliClient {
     return retried;
   }
 
-  Future<BiliSession> _refreshOrThrow(SourceFailure original) async {
+  Future<BiliAnonSession> _refreshOrThrow(SourceFailure original) async {
     try {
       return await BiliApi.refresh(transport: transport);
     } catch (_) {
@@ -267,21 +272,23 @@ class BiliClient {
   }
 
   Future<dynamic> _sendWithSession(
-    BiliSession session,
+    BiliAnonSession anonSession,
     String path,
     Map<String, Object?>? query,
     int retries, {
     required bool withAccount,
   }) {
-    final headers = Map<String, String>.from(session.apiHeaders);
+    final headers = Map<String, String>.from(anonSession.apiHeaders);
     if (withAccount) {
-      final accountCookie = BiliAccountStore.instance.cookieHeader;
+      // 参数名不能叫 session：那会盖住账号会话 getter，把 buvid 当成账号
+      // Cookie（或直接编译失败）。
+      final accountCookie = session.cookieHeader;
       if (accountCookie != null && accountCookie.isNotEmpty) {
         headers['Cookie'] = '${headers['Cookie']}; $accountCookie';
       }
     }
     return transport.getJson(
-      session.signUrl(_absolute(path), query ?? const {}),
+      anonSession.signUrl(_absolute(path), query ?? const {}),
       headers: headers,
       retries: retries,
     );

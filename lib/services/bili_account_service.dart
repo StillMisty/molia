@@ -17,19 +17,31 @@ import 'package:logging/logging.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
 import '../domain/models/bili_account.dart';
-import '../sources/builtin/bili_account.dart';
+import '../sources/builtin/bili_client.dart';
 import '../sources/builtin/bili_login.dart';
+import '../sources/builtin/bili_session.dart';
 
 class BiliAccountService extends ChangeNotifier {
-  BiliAccountService({required this._settings, BiliQrLogin? login})
-    : _login = login ?? BiliQrLogin();
+  BiliAccountService({
+    required this._settings,
+    BiliQrLogin? login,
+    BiliSession? session,
+  }) : _session = session ?? BiliSession.shared,
+       // 扫码请求（含 nav 资料）必须读同一份会话：否则注入的 session 只影响
+       // 设置页，而 BiliQrLogin 仍拿共享 Cookie。
+       _login = login ??
+           BiliQrLogin(
+             client: BiliClient(session: session ?? BiliSession.shared),
+           );
 
   final SettingsAccess _settings;
   final BiliQrLogin _login;
   final Logger _logger = Logger('molia.bili_account');
 
+  /// 凭据 / 账号资料的唯一状态：服务自身不再镜像 Cookie 或账号。
+  final BiliSession _session;
+
   BiliAccountStatus _status = BiliAccountStatus.unknown;
-  BiliAccount? _account;
   bool _sessionExpired = false;
   bool _lastLoginPersisted = true;
 
@@ -44,7 +56,14 @@ class BiliAccountService extends ChangeNotifier {
 
   BiliAccountStatus get status => _status;
 
-  BiliAccount? get account => _account;
+  /// 账号会话（组合根可把它注入给其它 B 站消费者）。
+  BiliSession get session => _session;
+
+  /// [session] 的登录态快捷读数（组合根接线用）。
+  bool get isLoggedIn => _session.isLoggedIn;
+
+  /// 账号资料由会话持有，服务只转发（ChangeNotifier 仍服务设置页刷新）。
+  BiliAccount? get account => _session.account;
 
   /// 资料校验发现登录已失效（供页面显示「登录已过期」）。
   bool get sessionExpired => _sessionExpired;
@@ -52,14 +71,14 @@ class BiliAccountService extends ChangeNotifier {
   /// 最近一次扫码登录是否成功写入设置存储（false = 本次会话可用，重启失效）。
   bool get lastLoginPersisted => _lastLoginPersisted;
 
-  /// 读取本地 / 同步到达的凭据；幂等。`BiliAccountStore.ready` 会等它完成。
+  /// 读取本地 / 同步到达的凭据；幂等。`BiliSession.ready` 会等它完成。
   Future<void> init() {
     final existing = _initFuture;
     if (existing != null) return existing;
-    BiliAccountStore.instance.reset();
+    _session.reset();
     final future = _loadFromSettings();
     _initFuture = future;
-    BiliAccountStore.instance.ready = future;
+    _session.bindReady(future);
     return future;
   }
 
@@ -86,7 +105,7 @@ class BiliAccountService extends ChangeNotifier {
   Future<void> refreshProfile({bool force = false}) async {
     await init();
     if (_status != BiliAccountStatus.loggedIn) return;
-    final cookie = BiliAccountStore.instance.cookieHeader;
+    final cookie = _session.cookieHeader;
     if (cookie == null || cookie.isEmpty) return;
     final now = DateTime.now();
     final last = _lastProfileFetch;
@@ -98,25 +117,24 @@ class BiliAccountService extends ChangeNotifier {
     _lastProfileFetch = now;
     try {
       final profile = await _login.fetchProfile();
-      if (BiliAccountStore.instance.cookieHeader != cookie) return;
+      if (_session.cookieHeader != cookie) return;
       if (profile == null) {
         _logger.info('B 站登录已失效，清除账号凭据');
         await _clearCookie();
-        BiliAccountStore.instance.clear();
-        _account = null;
+        _session.clear();
         _status = BiliAccountStatus.loggedOut;
         _sessionExpired = true;
         notifyListeners();
         return;
       }
+      final current = _session.account;
       final merged = BiliAccount(
         userId: profile.userId.isNotEmpty
             ? profile.userId
-            : (_account?.userId ?? ''),
-        userName: profile.userName ?? _account?.userName,
+            : (current?.userId ?? ''),
+        userName: profile.userName ?? current?.userName,
       );
-      _account = merged;
-      BiliAccountStore.instance.updateAccount(merged);
+      _session.updateAccount(merged);
       notifyListeners();
     } catch (e) {
       // 网络失败不判失效：保留登录态，下次打开账号页再试。
@@ -168,7 +186,7 @@ class BiliAccountService extends ChangeNotifier {
           unawaited(refreshProfile(force: true));
           return BiliQrPollResult(
             status: BiliQrPollStatus.confirmed,
-            account: _account,
+            account: _session.account,
             persisted: persisted,
           );
         case BiliQrPollStatus.expired:
@@ -207,8 +225,7 @@ class BiliAccountService extends ChangeNotifier {
     await _settings.clear(kBiliAccountCookie);
     _qrGeneration++;
     _pendingQrKey = null;
-    BiliAccountStore.instance.clear();
-    _account = null;
+    _session.clear();
     _status = BiliAccountStatus.loggedOut;
     _sessionExpired = false;
     _lastLoginPersisted = true;
@@ -248,12 +265,11 @@ class BiliAccountService extends ChangeNotifier {
   /// 应用 Cookie；返回登录态是否发生变化。
   bool _applyCookie(String cookie) {
     final trimmed = cookie.trim();
-    final previous = BiliAccountStore.instance.cookieHeader;
+    final previous = _session.cookieHeader;
     if (trimmed.isEmpty) {
       final changed =
           _status != BiliAccountStatus.loggedOut || previous != null;
-      BiliAccountStore.instance.clear();
-      _account = null;
+      _session.clear();
       _status = BiliAccountStatus.loggedOut;
       _sessionExpired = false;
       _lastProfileFetch = null;
@@ -264,8 +280,7 @@ class BiliAccountService extends ChangeNotifier {
     final account = BiliAccount(
       userId: biliCookieValue(trimmed, 'DedeUserID') ?? '',
     );
-    BiliAccountStore.instance.update(cookieHeader: trimmed, account: account);
-    _account = account;
+    _session.apply(cookieHeader: trimmed, account: account);
     _status = BiliAccountStatus.loggedIn;
     _sessionExpired = false;
     _lastLoginPersisted = true;

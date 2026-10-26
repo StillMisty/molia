@@ -6,9 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/http/app_dio.dart';
 import 'package:molia/domain/models/bili_account.dart';
 import 'package:molia/domain/models/failure.dart';
-import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_client.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/bili_session_mock.dart';
@@ -21,12 +21,12 @@ import 'support/mock_dio.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  late BiliSession session;
+
   setUp(() {
     BiliApi.reset();
-    BiliAccountStore.instance.reset();
+    session = BiliSession();
   });
-
-  tearDown(() => BiliAccountStore.instance.reset());
 
   MockDioAdapter adapterOf(
     FutureOr<ResponseBody> Function(RequestOptions options) onRequest,
@@ -40,6 +40,7 @@ void main() {
 
   BiliClient clientOf(MockDioAdapter adapter) => BiliClient(
     transport: BuiltinTransport(dio: createAppDio(adapter: adapter)),
+    session: session,
   );
 
   int sessionFetches(MockDioAdapter adapter) => adapter.requests
@@ -201,7 +202,7 @@ void main() {
   test(
     '账号口径：account / accountSession 带账号 Cookie，session / anonymous 不带',
     () async {
-      BiliAccountStore.instance.update(
+      session.apply(
         cookieHeader: 'SESSDATA=test-sessdata; bili_jct=test-jct',
         account: const BiliAccount(userId: '1'),
       );

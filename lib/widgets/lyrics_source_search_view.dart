@@ -89,7 +89,8 @@ class LyricsSourceSearchView extends StatefulWidget {
   /// 歌词会话模块：手动选择结果经它写缓存并更新展示状态。
   final LyricsProvider lyricsProvider;
 
-  /// 来源列表（测试注入）；缺省使用 [LyricsSourceRegistry.standard]。
+  /// 来源列表（测试注入）；缺省使用 [LyricsSourceRegistry.standard]
+  /// （B 站可用性绑定 `BiliSession.shared`，与生产账号服务同一份）。
   final List<LyricsSourceStrategy>? sources;
 
   /// 已启用的渠道 key（停用的渠道不显示歌词来源）；null = 不过滤。

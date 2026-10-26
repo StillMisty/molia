@@ -40,7 +40,9 @@ class LyricsService {
   /// 自动回退来源（五个音乐平台 + LRCLIB，B 站字幕不在其中）。
   ///
   /// 注册表是 static final（延迟初始化），这里只读列表，不创建实例、不发
-  /// 请求；provider 的网络调用仍只发生在真正取词时。
+  /// 请求；provider 的网络调用仍只发生在真正取词时。`standard` 的 B 站
+  /// 可用性闭包绑定 `BiliSession.shared`（生产账号服务默认写同一份）；
+  /// 自动回退列表本来就不含 B 站，会话注入不改变取词顺序。
   LyricsService({
     List<LyricProvider>? providers,
     SharedPreferences? prefs,

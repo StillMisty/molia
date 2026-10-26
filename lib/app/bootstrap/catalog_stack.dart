@@ -65,7 +65,7 @@ CatalogStack buildCatalogStack() {
   settingsRegistry.bindReload(kGlobalShortcutBindings, ShortcutSettings.reload);
 
   // B 站账号：凭据是凭证类别（默认随同步 / 备份），初始化放后台，取词链路
-  // 会 await `BiliAccountStore.ready`，不阻塞首帧。
+  // 会 await `BiliSession.ready`，不阻塞首帧。
   final biliAccount = BiliAccountService(
     settings: settingsRegistry.scope([kBiliAccountCookie]),
   );

@@ -9,6 +9,7 @@ import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/bili_account_service.dart';
 import 'package:molia/services/lyrics_service.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/source_manager.dart';
 
 import '../support/fakes.dart';
@@ -183,6 +184,7 @@ void main() {
     final account = BiliAccountService(
       settings: testSettingsRegistry(keys: [kBiliAccountCookie])
           .scope([kBiliAccountCookie]),
+      session: BiliSession(),
     );
     addTearDown(account.dispose);
     await account.init();
