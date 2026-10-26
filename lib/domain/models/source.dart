@@ -77,7 +77,10 @@ class SourceCapabilities {
       );
 }
 
-/// 音源描述（搜索页选择器 / 音源管理页消费）。
+/// 音源描述：一个渠道的事实唯一形状。
+///
+/// 搜索页选择器 / 资料页渠道 / 音源管理页 / AI 推歌 / 自动换源都消费它，
+/// 由 `SourceProfile.toDescriptor` 从画像投影一次；字段只在投影处组装。
 class SourceDescriptor {
   /// 'kw' / 脚本 key / 'any_listen'。
   final String key;
@@ -88,6 +91,10 @@ class SourceDescriptor {
   /// 用户开关 / 登录态。
   final bool enabled;
 
+  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
+  /// B 站没有歌单浏览）。
+  final bool discoverable;
+
   /// 用户排序（承接 `lx_source_order`）。
   final int order;
 
@@ -97,6 +104,7 @@ class SourceDescriptor {
     required this.kind,
     this.capabilities = const SourceCapabilities(),
     this.enabled = true,
+    this.discoverable = false,
     this.order = 0,
   });
 
@@ -108,11 +116,19 @@ class SourceDescriptor {
       other.kind == kind &&
       other.capabilities == capabilities &&
       other.enabled == enabled &&
+      other.discoverable == discoverable &&
       other.order == order;
 
   @override
-  int get hashCode =>
-      Object.hash(key, displayName, kind, capabilities, enabled, order);
+  int get hashCode => Object.hash(
+        key,
+        displayName,
+        kind,
+        capabilities,
+        enabled,
+        discoverable,
+        order,
+      );
 
   @override
   String toString() => 'SourceDescriptor($key)';

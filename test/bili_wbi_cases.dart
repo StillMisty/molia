@@ -47,8 +47,8 @@ void main() {
     expect(rid, md5Hex('$body$mixin'));
   });
 
-  test('BiliSession.signUrl：追加/合并查询串并带签名', () {
-    const session = BiliSession(buvid3: 'b3', buvid4: 'b4', mixinKey: 'k');
+  test('BiliAnonSession.signUrl：追加/合并查询串并带签名', () {
+    const session = BiliAnonSession(buvid3: 'b3', buvid4: 'b4', mixinKey: 'k');
     final url = session.signUrl(
       'https://api.bilibili.com/x/player/wbi/playurl',
       {'cid': 1, 'fnval': 16},
@@ -70,7 +70,7 @@ void main() {
   });
 
   test('apiHeaders 带 buvid Cookie，直链 headers 只留 UA + Referer', () {
-    const session = BiliSession(buvid3: 'b3', buvid4: 'b4', mixinKey: 'k');
+    const session = BiliAnonSession(buvid3: 'b3', buvid4: 'b4', mixinKey: 'k');
     expect(session.apiHeaders['Cookie'], 'buvid3=b3; buvid4=b4');
     expect(session.apiHeaders['Referer'], BiliApi.referer);
     expect(session.apiHeaders['User-Agent'], BiliApi.browserUserAgent);

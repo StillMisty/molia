@@ -32,6 +32,7 @@ import '../widgets/ai_dj_shared.dart';
 import '../widgets/ai_dj_track_tile.dart';
 import '../widgets/ai_dj_waiting.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/track_row.dart';
 
 class AiDjPage extends StatefulWidget {
@@ -93,35 +94,31 @@ class _AiDjPageState extends State<AiDjPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.aiDjTitle),
-        automaticallyImplyLeading: true,
-        actions: [
-          M3EIconButton(
-            key: const Key('aiDjHistoryButton'),
-            variant: M3EIconButtonVariant.standard,
-            icon: const Icon(Icons.history_rounded),
-            semanticLabel: l10n.aiDjHistoryTitle,
-            onPressed: () => _openPage(const AiDjHistoryPage()),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Consumer<AiDjProvider>(
-          builder: (context, provider, _) => ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-            children: [
-              _statusSection(l10n, provider),
-              if (provider.enabled) ...[
-                _preferencesSection(l10n, provider),
-                ..._recommendationsSection(context, l10n, provider),
-                ..._feedbackSection(l10n, provider),
-                ..._sendingSection(l10n, provider),
-              ],
-              ..._configSection(l10n, provider),
+    return SettingsSubPage.body(
+      title: l10n.aiDjTitle,
+      safeArea: true,
+      actions: [
+        M3EIconButton(
+          key: const Key('aiDjHistoryButton'),
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.history_rounded),
+          semanticLabel: l10n.aiDjHistoryTitle,
+          onPressed: () => _openPage(const AiDjHistoryPage()),
+        ),
+      ],
+      body: Consumer<AiDjProvider>(
+        builder: (context, provider, _) => ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+          children: [
+            _statusSection(l10n, provider),
+            if (provider.enabled) ...[
+              _preferencesSection(l10n, provider),
+              ..._recommendationsSection(context, l10n, provider),
+              ..._feedbackSection(l10n, provider),
+              ..._sendingSection(l10n, provider),
             ],
-          ),
+            ..._configSection(l10n, provider),
+          ],
         ),
       ),
     );
@@ -199,8 +196,9 @@ class _AiDjPageState extends State<AiDjPage> {
               M3ESwitch(
                 key: const Key('aiDjModeSwitch'),
                 value: provider.enabled,
-                onChanged:
-                    _busy ? null : (value) => value ? _enable() : _disable(),
+                onChanged: _busy
+                    ? null
+                    : (value) => value ? _enable() : _disable(),
               ),
             ],
           ),
@@ -328,13 +326,13 @@ class _AiDjPageState extends State<AiDjPage> {
     final scheme = theme.colorScheme;
     final batch = provider.recommendations;
     final items = batch?.items ?? const <ResolvedRecommendation>[];
-    final nowPlaying =
-        context.select<PlaybackProvider, ({String? uri, bool isPlaying})>(
-      (playback) => (
-        uri: playback.snapshot.current?.id.uri,
-        isPlaying: playback.snapshot.isPlaying,
-      ),
-    );
+    final nowPlaying = context
+        .select<PlaybackProvider, ({String? uri, bool isPlaying})>(
+          (playback) => (
+            uri: playback.snapshot.current?.id.uri,
+            isPlaying: playback.snapshot.isPlaying,
+          ),
+        );
     final busy = provider.isBusy;
     final radioActive = provider.status == AiDjStatus.playing;
 
@@ -421,12 +419,10 @@ class _AiDjPageState extends State<AiDjPage> {
             replacing: provider.isReplacing(items[i].track.id.uri),
             onPlay: () => unawaited(provider.playRecommendation(i)),
             onReplace: () => unawaited(provider.replaceRecommendation(i)),
-            onNotInterested: () => unawaited(
-              provider.markNotInterested(items[i].track.id.uri),
-            ),
-            onMoreLikeThis: () => unawaited(
-              provider.addSeed(items[i].source.label),
-            ),
+            onNotInterested: () =>
+                unawaited(provider.markNotInterested(items[i].track.id.uri)),
+            onMoreLikeThis: () =>
+                unawaited(provider.addSeed(items[i].source.label)),
           ),
         ],
       ],
@@ -462,19 +458,13 @@ class _AiDjPageState extends State<AiDjPage> {
   }
 
   /// 空列表：显式「生成推荐」（不自动消耗 token）。
-  Widget _emptyRecommendations(
-    AppLocalizations l10n,
-    AiDjProvider provider,
-  ) {
+  Widget _emptyRecommendations(AppLocalizations l10n, AiDjProvider provider) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          l10n.aiDjEmptyList,
-          style: context.typeScale.titleSmall,
-        ),
+        Text(l10n.aiDjEmptyList, style: context.typeScale.titleSmall),
         const SizedBox(height: 4),
         Text(
           l10n.aiDjEmptyListHint,
@@ -497,9 +487,7 @@ class _AiDjPageState extends State<AiDjPage> {
 
   List<Widget> _feedbackSection(AppLocalizations l10n, AiDjProvider provider) {
     final notInterested = provider.notInterestedItems;
-    final manualLabels = {
-      for (final item in notInterested) item.source.label,
-    };
+    final manualLabels = {for (final item in notInterested) item.source.label};
     final autoSkipped = [
       for (final label in provider.skippedLabels)
         if (!manualLabels.contains(label)) label,
@@ -528,10 +516,7 @@ class _AiDjPageState extends State<AiDjPage> {
       ),
       if (rememberedSkipped.isNotEmpty || rememberedLiked.isNotEmpty) ...[
         const SizedBox(height: 8),
-        Text(
-          l10n.aiDjFeedbackMemory,
-          style: context.typeScale.labelMedium,
-        ),
+        Text(l10n.aiDjFeedbackMemory, style: context.typeScale.labelMedium),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -554,10 +539,7 @@ class _AiDjPageState extends State<AiDjPage> {
           liked.isNotEmpty ||
           notInterested.isNotEmpty) ...[
         const SizedBox(height: 8),
-        Text(
-          l10n.aiDjFeedbackThisRound,
-          style: context.typeScale.labelMedium,
-        ),
+        Text(l10n.aiDjFeedbackThisRound, style: context.typeScale.labelMedium),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -588,10 +570,7 @@ class _AiDjPageState extends State<AiDjPage> {
       ],
       if (seeds.isNotEmpty) ...[
         const SizedBox(height: 8),
-        Text(
-          l10n.aiDjSeedsTitle,
-          style: context.typeScale.labelMedium,
-        ),
+        Text(l10n.aiDjSeedsTitle, style: context.typeScale.labelMedium),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
@@ -790,8 +769,9 @@ class _AiDjPageState extends State<AiDjPage> {
     );
   }
 
-  bool _matchesAnyPreset() => LlmProviderPreset.builtIn
-      .any((preset) => preset.baseUrl == _baseUrlController.text.trim());
+  bool _matchesAnyPreset() => LlmProviderPreset.builtIn.any(
+    (preset) => preset.baseUrl == _baseUrlController.text.trim(),
+  );
 
   void _applyPreset(LlmProviderPreset preset) {
     setState(() {
@@ -1005,10 +985,7 @@ class _AiDjPageState extends State<AiDjPage> {
 ///
 /// 静默自动补歌永远不实例化本组件（provider 不设置 progress）。
 class _GenerationCard extends StatefulWidget {
-  const _GenerationCard({
-    required this.progress,
-    required this.onCancel,
-  });
+  const _GenerationCard({required this.progress, required this.onCancel});
 
   final AiDjProgress progress;
   final VoidCallback onCancel;
@@ -1039,8 +1016,9 @@ class _GenerationCardState extends State<_GenerationCard> {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final seconds =
-        DateTime.now().difference(widget.progress.startedAt).inSeconds;
+    final seconds = DateTime.now()
+        .difference(widget.progress.startedAt)
+        .inSeconds;
     final progress = widget.progress;
     return M3ECard(
       key: const Key('aiDjGenerationCard'),

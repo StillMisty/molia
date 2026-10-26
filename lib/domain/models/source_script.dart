@@ -5,8 +5,6 @@
 /// 不进入领域模型：UI 展示与操作都不需要它。
 library;
 
-import 'source.dart' show SourceKind;
-
 /// 脚本声明的一个音乐源（`inited` 事件 name/actions/qualitys 的纯数据视图）。
 class SourceScriptDecl {
   /// kw / kg / tx / wy / mg / local / 自定义 key。
@@ -86,30 +84,6 @@ class SourceUpdateAlert {
   final String? updateUrl;
 
   const SourceUpdateAlert({required this.log, this.updateUrl});
-}
-
-/// 排序 / 展示用的音源条目（内置平台 / 脚本源 / any-listen）。
-class SourceEntry {
-  final String key;
-  final String name;
-  final SourceKind kind;
-  final bool canSearch;
-
-  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
-  /// B 站没有歌单浏览）。
-  final bool discoverable;
-
-  /// 是否启用（停用后不出现在资料页渠道选择与搜索结果中）。
-  final bool enabled;
-
-  const SourceEntry({
-    required this.key,
-    required this.name,
-    required this.kind,
-    required this.canSearch,
-    this.discoverable = false,
-    this.enabled = true,
-  });
 }
 
 /// 音质选项：值 + 通用显示名（本地化文案由 UI 层按 value 覆盖）。

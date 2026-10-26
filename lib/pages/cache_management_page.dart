@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../services/cache_service.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 缓存管理页：音频 / 歌词 / 封面三分区的占用、策略与清理。
@@ -176,37 +177,30 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
     final l10n = AppLocalizations.of(context)!;
     final m3e = M3ETheme.of(context);
 
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.settingsCacheTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(kSettingsPadding),
-          children: [
-            Text(
-              l10n.settingsCacheSubtitle,
-              style: m3e.typeScale.bodySmall.copyWith(
-                color: m3e.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: kSettingsSectionSpacing),
-            _buildAudioSection(l10n),
-            const SizedBox(height: kSettingsSectionSpacing),
-            _buildLyricsSection(l10n),
-            const SizedBox(height: kSettingsSectionSpacing),
-            _buildArtworkSection(l10n),
-            const SizedBox(height: 24),
-            M3EButton.icon(
-              style: M3EButtonStyle.tonal,
-              onPressed: _busy ? null : _clearAll,
-              icon: const Icon(Icons.delete_sweep_rounded),
-              label: Text(l10n.cacheClearAll),
-            ),
-          ],
+    return SettingsSubPage(
+      title: l10n.settingsCacheTitle,
+      safeArea: true,
+      children: [
+        Text(
+          l10n.settingsCacheSubtitle,
+          style: m3e.typeScale.bodySmall.copyWith(
+            color: m3e.colorScheme.onSurfaceVariant,
+          ),
         ),
-      ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _buildAudioSection(l10n),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _buildLyricsSection(l10n),
+        const SizedBox(height: kSettingsSectionSpacing),
+        _buildArtworkSection(l10n),
+        const SizedBox(height: 24),
+        M3EButton.icon(
+          style: M3EButtonStyle.tonal,
+          onPressed: _busy ? null : _clearAll,
+          icon: const Icon(Icons.delete_sweep_rounded),
+          label: Text(l10n.cacheClearAll),
+        ),
+      ],
     );
   }
 

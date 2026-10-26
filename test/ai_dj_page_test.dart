@@ -19,6 +19,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_track_tile.dart';
+import 'package:molia/widgets/playing_indicator.dart';
 
 import 'support/fake_ai_generator.dart';
 import 'support/fake_library_repository.dart';
@@ -187,7 +188,7 @@ void main() {
       isPlaying: true,
     ));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
 
     backend.emit(BackendSnapshot(
       current: track,
@@ -196,7 +197,9 @@ void main() {
     ));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    // provider 通知有 300ms 节流，400ms 帧才刚重建；再给 IconSwap 150ms 收尾。
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(PlayingIndicator), findsNothing);
   });
 
   testWidgets('播放全部 / 加入队列 / 换一批 / 历史入口', (tester) async {

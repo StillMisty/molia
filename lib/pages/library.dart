@@ -2,7 +2,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/source_script.dart';
+import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/search_provider.dart';
@@ -129,7 +129,7 @@ class _LibraryState extends State<Library> {
         if (entry.enabled) entry,
     ];
 
-    SourceEntry? current;
+    SourceDescriptor? current;
     for (final entry in enabledChannels) {
       if (entry.key == discover.channelKey) {
         current = entry;
@@ -142,7 +142,7 @@ class _LibraryState extends State<Library> {
     // 在 post-frame 执行，避免在 build 中修改 provider 状态。
     final needsFallback = current == null && enabledChannels.isNotEmpty;
     final needsSearchSync = current != null &&
-        current.canSearch &&
+        current.capabilities.search &&
         search.sourceKey != current.key;
     if (needsFallback || needsSearchSync) {
       final target = needsFallback ? enabledChannels.first : current!;
@@ -151,7 +151,7 @@ class _LibraryState extends State<Library> {
         if (needsFallback) {
           context.read<DiscoverProvider>().selectChannel(target.key);
         }
-        if (needsSearchSync && target.canSearch) {
+        if (needsSearchSync && target.capabilities.search) {
           context.read<DiscoverProvider>().syncSearchSource();
         }
       });
@@ -162,7 +162,7 @@ class _LibraryState extends State<Library> {
         current.discoverable &&
         discover.channelKey == current.key;
     final visibleTabs = <_LibraryTab>[
-      if (current != null && current.canSearch) _LibraryTab.search,
+      if (current != null && current.capabilities.search) _LibraryTab.search,
       if (discoverActive && discover.supportsLeaderboards)
         _LibraryTab.leaderboards,
       if (discoverActive && discover.supportsPlaylists) _LibraryTab.playlists,
@@ -263,8 +263,8 @@ class _LibraryState extends State<Library> {
     return index >= 0 ? index : 0;
   }
 
-  void _selectChannel(String key, List<SourceEntry> enabledChannels) {
-    SourceEntry? entry;
+  void _selectChannel(String key, List<SourceDescriptor> enabledChannels) {
+    SourceDescriptor? entry;
     for (final candidate in enabledChannels) {
       if (candidate.key == key) {
         entry = candidate;

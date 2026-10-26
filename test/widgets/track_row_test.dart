@@ -8,6 +8,7 @@ import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
+import 'package:molia/widgets/playing_indicator.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -41,14 +42,23 @@ void main() {
   });
   tearDown(() => playback.dispose());
 
-  Future<void> pumpContents(WidgetTester tester, Widget child) async {
+  Future<void> pumpContents(
+    WidgetTester tester,
+    Widget child, {
+    bool settle = true,
+  }) async {
     await tester.pumpWidget(
       ChangeNotifierProvider<PlaybackProvider>.value(
         value: playback,
         child: MaterialApp(home: Scaffold(body: Center(child: child))),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      // 播放角标是常驻动画：不 pumpAndSettle，只推进固定时长取稳定帧。
+      await tester.pump(const Duration(milliseconds: 400));
+    }
   }
 
   Future<void> pumpRow(
@@ -80,6 +90,7 @@ void main() {
         position: position,
         onTap: () {},
       ),
+      settle: !isPlaying,
     );
   }
 
@@ -92,7 +103,7 @@ void main() {
 
   testWidgets('当前曲目：封面状态角标 + 标题主色，选中时让位给勾选', (tester) async {
     await pumpRow(tester, isCurrent: true, isPlaying: true);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
     final scheme =
         M3ETheme.of(tester.element(find.byType(TrackRow))).colorScheme;
     expect(
@@ -102,11 +113,11 @@ void main() {
 
     await pumpRow(tester, isCurrent: true);
     expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
 
     await pumpRow(tester);
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
     expect(
       tester.widget<Text>(find.text('Title')).style?.color,
       scheme.onSurface,
@@ -114,7 +125,7 @@ void main() {
 
     await pumpRow(tester, isCurrent: true, selected: true);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
     expect(
       tester.widget<Text>(find.text('Title')).style?.color,
       scheme.onSecondaryContainer,

@@ -17,7 +17,9 @@ import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/now_playing_summary.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:molia/widgets/playback_selectors.dart';
 import 'package:molia/widgets/queue.dart';
+import 'package:molia/widgets/shell_page_visibility.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -43,6 +45,17 @@ Track _track(String id) => Track(
       payload: {'id': id},
     );
 
+/// 测试用壳层可见性门控：null = 不挂（独立挂载时按可见处理）。
+Widget _withShellVisibility(ValueNotifier<bool>? visibility, Widget child) {
+  if (visibility == null) return child;
+  return ValueListenableBuilder<bool>(
+    valueListenable: visibility,
+    builder: (context, visible, child) =>
+        ShellPageVisibility(visible: visible, child: child!),
+    child: child,
+  );
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -65,6 +78,7 @@ void main() {
     List<Track>? queue,
     Size size = const Size(420, 900),
     bool desktopLayout = false,
+    ValueNotifier<bool>? shellVisibility,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -110,10 +124,13 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: NowPlaying(
-            reselect: reselect,
-            controller: controller,
-            desktopLayout: desktopLayout,
+          home: _withShellVisibility(
+            shellVisibility,
+            NowPlaying(
+              reselect: reselect,
+              controller: controller,
+              desktopLayout: desktopLayout,
+            ),
           ),
         ),
       ),
@@ -151,6 +168,24 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
   }
+
+  /// 歌词页是否在跟随播放进度（PositionLineIndexBuilder 的订阅门控）。
+  ///
+  /// 切到别的 tab 后歌词页留在 PageView 的 keepAlive 里，所以 finder 要
+  /// 跳过 offstage 才能读到它（与用户是否看得见无关）。
+  bool lyricsFollowing(WidgetTester tester) => tester
+      .widget<PositionLineIndexBuilder>(
+        find.byType(PositionLineIndexBuilder, skipOffstage: false),
+      )
+      .enabled;
+
+  /// 圆点里真正可点的 GestureDetector（M3ETooltip 自己也包了一层）。
+  Finder dotTargets() => find.descendant(
+        of: find.byType(LyricsQueueDots),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is GestureDetector && widget.onTap != null,
+        ),
+      );
 
   testWidgets('收藏按钮：写失败提示操作失败，图标保持原状态', (tester) async {
     final repository = FakeLibraryRepository();
@@ -535,6 +570,73 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(QueueDisplay), findsOneWidget);
     expect(find.byType(LyricsWidget), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  for (final (String layoutName, Size size) in <(String, Size)>[
+    ('手机版式', const Size(420, 900)),
+    ('大屏两栏', const Size(1400, 900)),
+  ]) {
+    testWidgets('歌词页只在壳层可见且停在歌词 tab 时跟随进度（$layoutName）', (tester) async {
+      final shellVisibility = ValueNotifier<bool>(true);
+      addTearDown(shellVisibility.dispose);
+      await pumpNowPlaying(
+        tester,
+        size: size,
+        shellVisibility: shellVisibility,
+      );
+      expect(lyricsFollowing(tester), isTrue);
+      // 翻页只重建 PageView 子树：播放器（含封面 deck）保持同一 widget 实例，
+      // 不被落定 tab 的整页 setState 带着重建。
+      final playerBefore = tester.widget<Player>(find.byType(Player));
+
+      // 停在队列 tab：歌词页不可见 → 不订阅进度。
+      await selectQueuePage(tester);
+      expect(lyricsFollowing(tester), isFalse);
+      expect(
+        identical(tester.widget<Player>(find.byType(Player)), playerBefore),
+        isTrue,
+        reason: '翻页不得重建播放器',
+      );
+
+      // 切回歌词 tab：恢复跟随。
+      await tester.tap(dotTargets().at(nowPlayingLyricsTabIndex));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(lyricsFollowing(tester), isTrue);
+
+      // 壳层隐藏（播放页不在前台）：即使停在歌词 tab 也不跟随。
+      shellVisibility.value = false;
+      await tester.pump();
+      expect(lyricsFollowing(tester), isFalse);
+
+      // 回到前台：重新跟随。
+      shellVisibility.value = true;
+      await tester.pump();
+      expect(lyricsFollowing(tester), isTrue);
+
+      await tester.pump(const Duration(milliseconds: 50));
+    });
+  }
+
+  testWidgets('桌面版式：非歌词 tab 时歌词页不跟随进度', (tester) async {
+    await pumpNowPlaying(
+      tester,
+      desktopLayout: true,
+      size: const Size(1400, 900),
+    );
+    expect(lyricsFollowing(tester), isTrue);
+
+    await tester.tap(find.byIcon(M3EIcons.queue_music_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(lyricsFollowing(tester), isFalse);
+
+    await tester.tap(find.byIcon(M3EIcons.lyrics_rounded));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(lyricsFollowing(tester), isTrue);
 
     await tester.pump(const Duration(milliseconds: 50));
   });

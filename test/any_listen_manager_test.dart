@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/domain/models/failure.dart';
+import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -44,7 +45,7 @@ void main() {
         expect(manager.anyListenAvailable, isFalse);
         expect(
           manager.searchableSources
-              .where((o) => o.kind == SourceKind.anyListen),
+              .where((o) => o.kind == domain.SourceKind.anyListen),
           isEmpty,
         );
 
@@ -108,11 +109,11 @@ void main() {
 
       final options = manager.searchableSources;
       final anyListen =
-          options.where((o) => o.kind == SourceKind.anyListen).toList();
+          options.where((o) => o.kind == domain.SourceKind.anyListen).toList();
       expect(anyListen, hasLength(1));
       expect(anyListen.single.key, AnyListenSource.sourceKey);
-      expect(anyListen.single.name, AnyListenSource.displayName);
-      expect(anyListen.single.canSearch, isTrue);
+      expect(anyListen.single.displayName, AnyListenSource.displayName);
+      expect(anyListen.single.capabilities.search, isTrue);
       // 新 key 未出现在持久化顺序表中：自动排在末尾，不打乱既有排序
       expect(options.last.key, AnyListenSource.sourceKey);
 

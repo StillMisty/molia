@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -10,6 +9,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/device_id.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_dialogs.dart';
 import 'sync_peer_dialogs.dart';
@@ -57,15 +57,11 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.syncAdvancedTitle),
-        automaticallyImplyLeading: true,
-      ),
+    return SettingsSubPage.body(
+      title: l10n.syncAdvancedTitle,
       body: FutureBuilder<List<LocalEndpoint>>(
         future: _endpoints,
-        builder: (context, snapshot) => ListView(
-          padding: const EdgeInsets.all(kSettingsPadding),
+        builder: (context, snapshot) => SettingsSubPageList(
           children: [
             _localSection(context, provider, l10n, snapshot.data),
             const SizedBox(height: kSettingsSectionSpacing),

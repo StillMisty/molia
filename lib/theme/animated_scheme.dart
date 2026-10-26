@@ -1,3 +1,4 @@
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// ColorScheme 过渡构建器：封面取色/莫奈/种子色/亮度切换时，在
@@ -5,14 +6,16 @@ import 'package:material_ui/material_ui.dart';
 ///
 /// 只插值 ColorScheme 本身，由上层（main.dart）用它同时重建 material
 /// ThemeData 与 M3EThemeData，保证两套组件树过渡一致；连续快速换色
-/// （连切歌曲）会从「当前视觉值」续接，不跳回旧起点。
+/// （连切歌曲）会从「当前视觉值」续接，不跳回旧起点。默认时长/曲线取
+/// M3E effects `long1` + `emphasized`，系统减弱动效时直接跳变（见
+/// `didUpdateWidget`）。
 class AnimatedSchemeBuilder extends StatefulWidget {
   const AnimatedSchemeBuilder({
     super.key,
     required this.scheme,
     required this.builder,
-    this.duration = const Duration(milliseconds: 450),
-    this.curve = Curves.easeInOutCubic,
+    this.duration = M3EMotion.long1,
+    this.curve = M3EMotion.emphasized,
   });
 
   /// 目标方案（ThemeProvider 的当前输出）。

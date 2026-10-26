@@ -20,7 +20,7 @@
 /// 对应路由一定存在实现。
 library;
 
-import '../domain/models/source.dart' show SourceCapabilities;
+import '../domain/models/source.dart' as domain;
 import 'any_listen/any_listen_source.dart';
 import 'builtin/builtin_platforms.dart';
 import 'lx/lx_script_info.dart';
@@ -46,7 +46,7 @@ class SourceProfile {
   final bool discoverable;
 
   /// 能力矩阵是唯一事实：`searchable` / `canResolveUrl` 都是它的派生视图。
-  final SourceCapabilities capabilities;
+  final domain.SourceCapabilities capabilities;
 
   const SourceProfile({
     required this.key,
@@ -67,6 +67,26 @@ class SourceProfile {
   /// 这样音源页可以重新启用。
   bool get visible => searchable || discoverable;
 
+  /// 画像 → 领域渠道形状（全应用唯一的渠道投影）。
+  ///
+  /// [order] 由消费方按列表下标给出（渠道列表 / 可搜索列表 / 注册表），
+  /// 其余字段逐项取自本画像；sources 层与 domain 层的 `SourceKind` 映射
+  /// 只在这里发生一次。
+  domain.SourceDescriptor toDescriptor({int order = 0}) =>
+      domain.SourceDescriptor(
+        key: key,
+        displayName: displayName,
+        kind: switch (kind) {
+          SourceKind.builtin => domain.SourceKind.builtin,
+          SourceKind.lx => domain.SourceKind.lx,
+          SourceKind.anyListen => domain.SourceKind.anyListen,
+        },
+        capabilities: capabilities,
+        enabled: enabled,
+        discoverable: discoverable,
+        order: order,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is SourceProfile &&
@@ -78,17 +98,19 @@ class SourceProfile {
       other.capabilities == capabilities;
 
   @override
-  int get hashCode => Object.hash(
-        key,
-        displayName,
-        kind,
-        enabled,
-        discoverable,
-        capabilities,
-      );
+  int get hashCode =>
+      Object.hash(key, displayName, kind, enabled, discoverable, capabilities);
 
   @override
   String toString() => 'SourceProfile($key)';
+}
+
+/// 画像列表 → 渠道描述列表（顺序即列表下标，唯一投影处）。
+extension SourceProfileDescriptors on Iterable<SourceProfile> {
+  List<domain.SourceDescriptor> toDescriptors() {
+    var order = 0;
+    return [for (final profile in this) profile.toDescriptor(order: order++)];
+  }
 }
 
 /// 一次构建的只读画像快照：按 key 查能力 + 已排序的渠道 / 可搜索列表。
@@ -98,9 +120,9 @@ class SourceProfile {
 /// 逻辑，反而容易与路由漂移。
 class SourceProfiles {
   SourceProfiles._(this._byKey, this.channels)
-      : searchable = List.unmodifiable(
-          channels.where((profile) => profile.enabled && profile.searchable),
-        );
+    : searchable = List.unmodifiable(
+        channels.where((profile) => profile.enabled && profile.searchable),
+      );
 
   final Map<String, SourceProfile> _byKey;
 
@@ -147,8 +169,10 @@ class SourceProfiles {
 
     // 3. any-listen：不可用时仍保留画像（能力全 false），
     //    这样 capabilitiesFor 与渠道判断不必特判 key。
-    profiles[AnyListenSource.sourceKey] =
-        _anyListenProfile(anyListenUsable, disabledChannels);
+    profiles[AnyListenSource.sourceKey] = _anyListenProfile(
+      anyListenUsable,
+      disabledChannels,
+    );
 
     // 4. 渠道候选顺序与迁移前一致：脚本可搜索源 → 内置可搜索平台 →
     //    any-listen → 仅发现的内置平台（避免发现入口排到搜索源前面）。
@@ -177,9 +201,7 @@ class SourceProfiles {
     final orderedKeys = applyOrder(candidateKeys, sourceOrder);
     return SourceProfiles._(
       Map.unmodifiable(profiles),
-      List.unmodifiable([
-        for (final key in orderedKeys) profiles[key]!,
-      ]),
+      List.unmodifiable([for (final key in orderedKeys) profiles[key]!]),
     );
   }
 
@@ -206,7 +228,8 @@ class SourceProfiles {
     final scriptCanResolve = script?.canResolveUrl ?? false;
     // 与 searchWithMeta 的路由门一致：搜索适配器存在，且原生取链或脚本
     // 可取链才允许搜索；缺少搜索适配器时即使有原生取链也不能宣称可搜索。
-    final searchable = platform.search != null &&
+    final searchable =
+        platform.search != null &&
         (platform.resolve != null || scriptCanResolve);
     final canResolve = platform.resolve != null || scriptCanResolve;
     return SourceProfile(
@@ -215,7 +238,7 @@ class SourceProfiles {
       kind: SourceKind.builtin,
       enabled: !disabledChannels.contains(platform.key),
       discoverable: platform.discover != null,
-      capabilities: SourceCapabilities(
+      capabilities: domain.SourceCapabilities(
         search: searchable,
         pagination: searchable,
         resolveUrl: canResolve,
@@ -241,7 +264,7 @@ class SourceProfiles {
       displayName: decl.name.isEmpty ? decl.key : decl.name,
       kind: SourceKind.lx,
       enabled: !disabledChannels.contains(decl.key),
-      capabilities: SourceCapabilities(
+      capabilities: domain.SourceCapabilities(
         search: decl.canSearch,
         pagination: decl.canSearch,
         resolveUrl: decl.canResolveUrl,
@@ -260,7 +283,7 @@ class SourceProfiles {
       displayName: AnyListenSource.displayName,
       kind: SourceKind.anyListen,
       enabled: !disabledChannels.contains(AnyListenSource.sourceKey),
-      capabilities: SourceCapabilities(
+      capabilities: domain.SourceCapabilities(
         search: usable,
         pagination: usable,
         resolveUrl: usable,

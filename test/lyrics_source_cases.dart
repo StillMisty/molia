@@ -7,9 +7,10 @@ import 'package:molia/services/lyrics/builtin_lyric_provider.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:molia/services/lyrics/lyrics_source_registry.dart';
 import 'package:molia/services/lyrics/lyrics_source_strategy.dart';
-import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
+import 'package:molia/sources/builtin/bili_lyric.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
@@ -38,13 +39,12 @@ void main() {
     BuiltinSearch.transport = originalTransport;
     BiliApi.reset();
     BiliPlay.reset();
-    BiliAccountStore.instance.reset();
   });
 
   tearDownAll(() => BuiltinSearch.transport = originalTransport);
 
-  void login() {
-    BiliAccountStore.instance.update(
+  void login({BiliSession? session}) {
+    (session ?? BiliSession.shared).apply(
       cookieHeader: accountCookie,
       account: const BiliAccount(userId: '1'),
     );
@@ -110,16 +110,16 @@ void main() {
     });
 
     test('B 站可用性按调用时求值：登录后消失、退出后恢复', () {
-      final bili = LyricsSourceRegistry.standard.strategies.firstWhere(
-        (s) => s.channelKey == 'bili',
-      );
+      final session = BiliSession();
+      final bili = LyricsSourceRegistry.forSession(session).strategies
+          .firstWhere((s) => s.channelKey == 'bili');
 
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
 
-      login();
+      login(session: session);
       expect(bili.unavailable!(), isNull);
 
-      BiliAccountStore.instance.clear();
+      session.clear();
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
     });
 
@@ -194,7 +194,8 @@ void main() {
     });
 
     test('取词：raw 透传给字幕接口，空扩展行按 null', () async {
-      login();
+      final session = BiliSession();
+      login(session: session);
       BuiltinSearch.transport = biliTransport((request) async {
         switch (request.uri.path) {
           case '/x/player/wbi/v2':
@@ -228,7 +229,10 @@ void main() {
         }
       });
 
-      final provider = BuiltinLyricProvider('bili');
+      final provider = BuiltinLyricProvider(
+        'bili',
+        adapter: BiliLyric(session: session).fetch,
+      );
       final payload = await provider.fetchForMatch(biliMatch);
 
       expect(payload, isNotNull);
@@ -249,8 +253,10 @@ void main() {
         }),
       );
 
-      final payload =
-          await BuiltinLyricProvider('bili').fetchForMatch(biliMatch);
+      final payload = await BuiltinLyricProvider(
+        'bili',
+        adapter: BiliLyric(session: BiliSession()).fetch,
+      ).fetchForMatch(biliMatch);
 
       expect(payload, isNull);
       expect(requests, isEmpty, reason: '未登录时字幕接口必为空，不白跑');
@@ -261,8 +267,8 @@ void main() {
         (request) async => textResponse('{}', statusCode: 500),
       );
 
-      final matches =
-          await BuiltinLyricProvider('bili').searchMultiple('晴天', '周杰伦');
+      final matches = await BuiltinLyricProvider('bili')
+          .searchMultiple('晴天', '周杰伦');
       expect(matches, isEmpty);
     });
 

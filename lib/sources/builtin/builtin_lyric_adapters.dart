@@ -69,7 +69,7 @@ Future<BuiltinLyricResult?> mgBuiltinLyric(Map<String, dynamic> raw) =>
 
 /// B 站：CC 字幕轨（中文优先）。
 Future<BuiltinLyricResult?> biliBuiltinLyric(Map<String, dynamic> raw) =>
-    BiliLyric.fetch(raw);
+    BiliLyric.shared.fetch(raw);
 
 /// 曲目时长（秒）：优先 `_interval`，否则解析 `mm:ss` 文本。
 int _intervalSecondsOf(Map<String, dynamic> raw) {

@@ -20,6 +20,7 @@ import '../../providers/nav_provider.dart';
 import '../../services/app_branding_service.dart';
 import '../../services/window/window_chrome.dart';
 import '../../theme/m3e_context.dart';
+import '../../theme/motion_policy.dart';
 import '../../widgets/global_search_overlay.dart';
 import '../../widgets/molia_mark.dart';
 import '../../widgets/player_morph.dart';
@@ -225,8 +226,9 @@ class _SearchBackdropBlur extends StatelessWidget {
         valueListenable: open,
         builder: (context, open, _) => AnimatedOpacity(
           opacity: open ? 1 : 0,
-          // 与 scrim 的淡入同拍（scrim 走包内 effects 弹簧，约 200ms 量级）。
-          duration: const Duration(milliseconds: 200),
+          // 与 scrim 的淡入同拍（搜索遮罩 `short4` effects），减弱动效时硬切。
+          duration: effectDurationOf(context, M3EMotion.short4),
+          curve: M3EMotion.emphasizedDecelerate,
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
             child: const SizedBox.expand(),

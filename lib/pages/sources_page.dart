@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'any_listen_page.dart';
 import '../domain/models/bili_account.dart';
-import '../domain/models/source.dart' show SourceKind;
+import '../domain/models/source.dart' show SourceDescriptor, SourceKind;
 import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sources_provider.dart';
@@ -18,6 +18,7 @@ import '../services/bili_account_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'bili_account_page.dart';
 
@@ -50,34 +51,30 @@ class _SourcesPageState extends State<SourcesPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.sourcesTitle),
-        automaticallyImplyLeading: true,
-        actions: [
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            semanticLabel: l10n.anyListenEntry,
-            icon: const Icon(Icons.cloud_rounded),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      AnyListenPage(provider: context.read<SourcesProvider>()),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+    return SettingsSubPage.body(
+      title: l10n.sourcesTitle,
+      actions: [
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          semanticLabel: l10n.anyListenEntry,
+          icon: const Icon(Icons.cloud_rounded),
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    AnyListenPage(provider: context.read<SourcesProvider>()),
+              ),
+            );
+          },
+        ),
+      ],
       body: Consumer<SourcesProvider>(
         builder: (context, provider, _) {
           final biliAccount = context.watch<BiliAccountService?>();
           if (!provider.initialized) {
             return const Center(child: M3ELoadingIndicator());
           }
-          return ListView(
-            padding: const EdgeInsets.all(kSettingsPadding),
+          return SettingsSubPageList(
             children: [
               _buildStatusSection(context, l10n, provider),
               if (biliAccount != null) ...[
@@ -366,7 +363,7 @@ class _SourcesPageState extends State<SourcesPage> {
     BuildContext context,
     AppLocalizations l10n,
     SourcesProvider provider,
-    SourceEntry entry,
+    SourceDescriptor entry,
     int index,
   ) {
     final kindLabel = entry.kind == SourceKind.lx
@@ -381,7 +378,7 @@ class _SourcesPageState extends State<SourcesPage> {
       icon: entry.kind == SourceKind.lx
           ? Icons.code_rounded
           : Icons.radio_rounded,
-      title: entry.name,
+      title: entry.displayName,
       subtitle: supporting.toString(),
       value: entry.enabled,
       onChanged: (value) => provider.setChannelEnabled(entry.key, value),

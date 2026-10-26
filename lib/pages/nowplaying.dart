@@ -11,6 +11,7 @@ import 'package:molia/widgets/lyrics.dart';
 import 'package:molia/widgets/mdtab.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
 import 'package:molia/widgets/player_morph.dart';
+import 'package:molia/widgets/shell_page_visibility.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_info_view.dart';
 
@@ -94,6 +95,16 @@ class _NowPlayingState extends State<NowPlaying>
   /// 桌面版式右侧分页：0 = 队列、1 = 歌词、2 = 歌曲信息。
   late int _desktopTab;
 
+  /// 移动 / 平板版式当前落定的内容页（PageView 落定后更新）。
+  ///
+  /// 与 [_desktopTab] 分开：桌面没有 [PageView]，tab 选中态由
+  /// `M3ETabsView` 的回调驱动；两者都用于歌词页的 tab 门控（停在队列 /
+  /// 信息 tab 时不跟随播放进度）。
+  ///
+  /// 用 notifier 而不是 state：翻页只需要重建 PageView 子树，不能让播放器 /
+  /// 封面 deck 跟着整页 setState 重建。
+  late final ValueNotifier<int> _visibleTab;
+
   /// 桌面版式右栏内容与 tab 栏之间的间距（M3E：tab 栏与内容同为 16 口径，
   /// 内容左右边距由各内容组件自持）。
   static const double _desktopContentTopPadding = 16;
@@ -109,6 +120,9 @@ class _NowPlayingState extends State<NowPlaying>
     // 请求先于挂载（壳层先发请求、页面后才挂载）：作为初始页消费，不补动画。
     final int? requested = widget.controller?.requestedTab;
     _desktopTab = requested ?? nowPlayingLyricsTabIndex;
+    _visibleTab = ValueNotifier<int>(
+      requested ?? nowPlayingLyricsTabIndex,
+    );
     _pageController =
         PageController(initialPage: requested ?? _currentPageIndex);
     _queueScrollController = ScrollController();
@@ -144,6 +158,7 @@ class _NowPlayingState extends State<NowPlaying>
     widget.controller?.removeListener(_handleTabRequest);
     _expandController.dispose();
     _pageController.dispose();
+    _visibleTab.dispose();
     _queueScrollController.dispose();
     _lyricsScrollController.dispose();
     _infoScrollController.dispose();
@@ -294,6 +309,49 @@ class _NowPlayingState extends State<NowPlaying>
     return _cachedPages!;
   }
 
+  /// PageView 内容页：每页按「壳层可见 && 是当前 tab」套上可见性 scope。
+  List<Widget> _buildTabPages(
+    BuildContext context, {
+    required bool shellVisible,
+    required int visibleTab,
+  }) {
+    final pages = _buildPages(context);
+    return [
+      for (var index = 0; index < pages.length; index++)
+        _withTabVisibility(
+          shellVisible: shellVisible,
+          tabIndex: index,
+          visibleTab: visibleTab,
+          child: pages[index].page,
+        ),
+    ];
+  }
+
+  /// 给内容页套上可见性 scope：`visible = 壳层可见 && 本页是当前 tab`。
+  ///
+  /// [ShellPageVisibility] 的壳层语义是「整个页面是否在前台」；播放页内部的
+  /// 队列 / 歌词 / 信息是页内 tab，这里把它作为**最近的** scope 再包一层，
+  /// 歌词页据此在停在别的 tab 时放弃 position 订阅与自动滚动。作用域只覆盖
+  /// 播放页子树，资料库 / 收藏页看到的仍是壳层自己的那个 scope。
+  Widget _withTabVisibility({
+    required bool shellVisible,
+    required int tabIndex,
+    required int visibleTab,
+    required Widget child,
+  }) {
+    return ShellPageVisibility(
+      visible: shellVisible && tabIndex == visibleTab,
+      child: child,
+    );
+  }
+
+  /// PageView 落定到新页：只写 notifier（相同页不写），
+  /// 由 PageView 外层的 [ValueListenableBuilder] 重建翻页子树。
+  void _handleVisiblePageChanged(int index) {
+    if (!mounted || index == _visibleTab.value) return;
+    _visibleTab.value = index;
+  }
+
   @override
   bool get wantKeepAlive => true;
 
@@ -428,7 +486,10 @@ class _NowPlayingState extends State<NowPlaying>
     _contentSwipeDx = 0;
   }
 
-  Widget _buildCollapsedLargeLayout(BuildContext context) {
+  Widget _buildCollapsedLargeLayout(
+    BuildContext context, {
+    required bool shellVisible,
+  }) {
     return Scaffold(
       body: Row(
         children: [
@@ -454,11 +515,19 @@ class _NowPlayingState extends State<NowPlaying>
                   child: RepaintBoundary(
                     child: _buildTopFade(
                       context,
-                      child: PageView(
-                        controller: _pageController,
-                        children: _buildPages(context)
-                            .map((page) => page.page)
-                            .toList(),
+                      // tab 落定只重建 PageView 子树：播放器 / 封面 deck 不跟
+                      // 着整页 setState 重建（_visibleTab 用 notifier 的原因）。
+                      child: ValueListenableBuilder<int>(
+                        valueListenable: _visibleTab,
+                        builder: (context, visibleTab, _) => PageView(
+                          controller: _pageController,
+                          onPageChanged: _handleVisiblePageChanged,
+                          children: _buildTabPages(
+                            context,
+                            shellVisible: shellVisible,
+                            visibleTab: visibleTab,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -489,7 +558,10 @@ class _NowPlayingState extends State<NowPlaying>
   ///
   /// 与移动版式的差别：没有迷你态与圆点切换（也不需要展开/收起与内容
   /// 下拉手势），页序与默认页跟移动端一致（队列 / 歌词 / 信息，默认歌词）。
-  Widget _buildDesktopLayout(BuildContext context) {
+  Widget _buildDesktopLayout(
+    BuildContext context, {
+    required bool shellVisible,
+  }) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: Row(
@@ -549,10 +621,18 @@ class _NowPlayingState extends State<NowPlaying>
                         ),
                       ),
                       RepaintBoundary(
-                        child: LyricsWidget(
-                          // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
-                          quickActionsEnabled: true,
-                          controller: _lyricsScrollController,
+                        // 歌词页是唯一订阅播放进度的页内 tab：停在别的 tab
+                        // 时通过 nearest scope 放弃 position 订阅（与移动版式
+                        // 的 PageView 同一语义）。
+                        child: _withTabVisibility(
+                          shellVisible: shellVisible,
+                          tabIndex: nowPlayingLyricsTabIndex,
+                          visibleTab: _desktopTab,
+                          child: LyricsWidget(
+                            // 桌面歌词区常展开（无迷你条可让位），快捷操作常显。
+                            quickActionsEnabled: true,
+                            controller: _lyricsScrollController,
+                          ),
                         ),
                       ),
                       RepaintBoundary(
@@ -578,10 +658,14 @@ class _NowPlayingState extends State<NowPlaying>
   Widget build(BuildContext context) {
     super.build(context);
 
+    // 壳层可见性只读一次：页面隐藏时内部 tab 一并不活跃（见 _withTabVisibility）。
+    final bool shellVisible =
+        ShellPageVisibility.maybeVisibleOf(context) ?? true;
+
     // 桌面版式由壳层启用：布局与窗口宽度解耦（窄窗口也保持两栏），
     // 不走移动骨架的尺寸分支。
     if (widget.desktopLayout) {
-      return _buildDesktopLayout(context);
+      return _buildDesktopLayout(context, shellVisible: shellVisible);
     }
 
     final bool isLargeScreen = _getIsLargeScreen(context);
@@ -589,7 +673,7 @@ class _NowPlayingState extends State<NowPlaying>
     _isLargeScreen = isLargeScreen;
 
     if (isLargeScreen) {
-      return _buildCollapsedLargeLayout(context);
+      return _buildCollapsedLargeLayout(context, shellVisible: shellVisible);
     }
 
     // 小屏：播放器高度随展开进度连续插值，
@@ -631,11 +715,18 @@ class _NowPlayingState extends State<NowPlaying>
                         child: RepaintBoundary(
                           child: _buildTopFade(
                             context,
-                            child: PageView(
-                              controller: _pageController,
-                              children: _buildPages(context)
-                                  .map((page) => page.page)
-                                  .toList(),
+                            // 与两栏版式同一门控：只重建翻页子树。
+                            child: ValueListenableBuilder<int>(
+                              valueListenable: _visibleTab,
+                              builder: (context, visibleTab, _) => PageView(
+                                controller: _pageController,
+                                onPageChanged: _handleVisiblePageChanged,
+                                children: _buildTabPages(
+                                  context,
+                                  shellVisible: shellVisible,
+                                  visibleTab: visibleTab,
+                                ),
+                              ),
                             ),
                           ),
                         ),

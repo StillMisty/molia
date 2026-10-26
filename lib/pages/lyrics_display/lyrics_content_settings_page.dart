@@ -1,9 +1,9 @@
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/lyrics_display/lyrics_display_settings.dart';
+import '../../widgets/settings/settings_subpage.dart';
 import '../../widgets/settings/settings_tiles.dart';
 import 'lyrics_shared_display_section.dart';
 
@@ -22,39 +22,33 @@ class LyricsContentSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = context.watch<LyricsDisplaySettings>();
-    final body = ListView(
-      padding: const EdgeInsets.all(kSettingsPadding),
-      children: [
-        SettingsSectionCard(
-          title: l10n.lyricsPageTitle,
-          children: [
-            SettingsSwitchTile(
-              icon: Icons.translate_rounded,
-              title: l10n.lyricsDisplayTranslation,
-              subtitle: l10n.lyricsPageTranslationSubtitle,
-              value: settings.pageTranslationEnabled,
-              onChanged: settings.setPageTranslationEnabled,
-            ),
-            SettingsSwitchTile(
-              icon: Icons.record_voice_over_rounded,
-              title: l10n.lyricsDisplayRoma,
-              subtitle: l10n.lyricsPageRomaSubtitle,
-              value: settings.pageRomaEnabled,
-              onChanged: settings.setPageRomaEnabled,
-            ),
-          ],
-        ),
-        const SizedBox(height: kSettingsSectionSpacing),
-        LyricsSharedDisplaySection(title: l10n.lyricsDisplaySharedTitle),
-      ],
-    );
-    if (embedded) return body;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.lyricsContentTitle),
-        automaticallyImplyLeading: true,
+    final children = <Widget>[
+      SettingsSectionCard(
+        title: l10n.lyricsPageTitle,
+        children: [
+          SettingsSwitchTile(
+            icon: Icons.translate_rounded,
+            title: l10n.lyricsDisplayTranslation,
+            subtitle: l10n.lyricsPageTranslationSubtitle,
+            value: settings.pageTranslationEnabled,
+            onChanged: settings.setPageTranslationEnabled,
+          ),
+          SettingsSwitchTile(
+            icon: Icons.record_voice_over_rounded,
+            title: l10n.lyricsDisplayRoma,
+            subtitle: l10n.lyricsPageRomaSubtitle,
+            value: settings.pageRomaEnabled,
+            onChanged: settings.setPageRomaEnabled,
+          ),
+        ],
       ),
-      body: body,
+      const SizedBox(height: kSettingsSectionSpacing),
+      LyricsSharedDisplaySection(title: l10n.lyricsDisplaySharedTitle),
+    ];
+    if (embedded) return SettingsSubPageList(children: children);
+    return SettingsSubPage(
+      title: l10n.lyricsContentTitle,
+      children: children,
     );
   }
 }

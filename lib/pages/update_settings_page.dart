@@ -10,6 +10,7 @@ import '../data/update/update_repository.dart';
 import '../domain/models/app_release.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/update_provider.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 「关于与更新」子页：渠道 / 自动检查 / 检查更新 / 新版本下载安装 / 高级 / 关于。
@@ -26,15 +27,11 @@ class UpdateSettingsPage extends StatelessWidget {
     // 测试等场景可能不提供 provider：显示空页而不是崩溃（入口行同样隐藏）。
     final provider = context.watch<UpdateProvider?>();
 
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.settingsUpdateTitle),
-        automaticallyImplyLeading: true,
-      ),
+    return SettingsSubPage.body(
+      title: l10n.settingsUpdateTitle,
       body: provider == null
           ? const SizedBox.shrink()
-          : ListView(
-              padding: const EdgeInsets.all(kSettingsPadding),
+          : SettingsSubPageList(
               children: [
                 _UpdateSection(provider: provider, l10n: l10n),
                 // 检查中不展示上一次的结果：否则会把上一次下载过的版本

@@ -22,7 +22,7 @@
   "delete": "删除",
   "lyricsFetching": "正在获取歌词...",
   "lyricsNotFoundForTrack": "未找到此歌曲的歌词。",
-  "lyricsFetchError": "获取歌词时出错: {error}",
+  "lyricsFetchError": "获取歌词失败，换一个来源试试。",
   "lyricsTitle": "歌词",
   "lyricsLoading": "正在加载歌词...",
   "lyricsFailedToLoad": "加载歌词失败。",

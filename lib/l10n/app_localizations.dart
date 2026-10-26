@@ -191,8 +191,8 @@ abstract class AppLocalizations {
   /// No description provided for @lyricsFetchError.
   ///
   /// In en, this message translates to:
-  /// **'Error fetching lyrics: {error}'**
-  String lyricsFetchError(String error);
+  /// **'Couldn\'t fetch lyrics. Try another source.'**
+  String get lyricsFetchError;
 
   /// No description provided for @lyricsTitle.
   ///

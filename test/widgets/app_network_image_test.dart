@@ -12,6 +12,7 @@ import 'package:molia/services/cache_service.dart';
 import '../support/memory_cache_storage.dart';
 import 'package:molia/widgets/app_network_image.dart';
 import 'package:molia/widgets/molia_mark.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// 永远失败的 CacheManager：离线验证 error 回退。
@@ -65,8 +66,15 @@ ArtworkCache _cacheWith(CacheManager manager) => ArtworkCache(
       managerOverride: manager,
     );
 
-Widget _host(Widget child) => MaterialApp(
-      home: Scaffold(body: Center(child: child)),
+Widget _host(Widget child, {bool disableAnimations = false}) => MaterialApp(
+      home: Builder(
+        builder: (context) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            disableAnimations: disableAnimations,
+          ),
+          child: Scaffold(body: Center(child: child)),
+        ),
+      ),
     );
 
 File _localPng() {
@@ -283,5 +291,51 @@ void main() {
     );
     expect(image.memCacheWidth, 120);
     expect(image.memCacheHeight, isNull);
+  });
+
+  testWidgets('淡入淡出走 M3E effects token（占位层快速让位）', (tester) async {
+    final manager = _PendingCacheManager();
+    addTearDown(manager.close);
+
+    await tester.pumpWidget(_host(AppNetworkImage(
+      url: 'https://p1.music.126.net/fade.jpg',
+      width: 40,
+      height: 40,
+      artworkCache: _cacheWith(manager),
+    )));
+
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage),
+    );
+    expect(image.fadeInDuration, M3EMotion.short4);
+    expect(image.fadeInCurve, M3EMotion.emphasizedDecelerate);
+    expect(image.fadeOutDuration, M3EMotion.short2);
+    expect(image.fadeOutCurve, M3EMotion.emphasizedAccelerate);
+    expect(
+      image.placeholderFadeInDuration,
+      isNull,
+      reason: '占位淡入保持 CachedNetworkImage 默认，只收紧占位淡出',
+    );
+  });
+
+  testWidgets('减弱动效：淡入淡出时长为零（硬切）', (tester) async {
+    final manager = _PendingCacheManager();
+    addTearDown(manager.close);
+
+    await tester.pumpWidget(_host(
+      AppNetworkImage(
+        url: 'https://p1.music.126.net/reduced-motion.jpg',
+        width: 40,
+        height: 40,
+        artworkCache: _cacheWith(manager),
+      ),
+      disableAnimations: true,
+    ));
+
+    final image = tester.widget<CachedNetworkImage>(
+      find.byType(CachedNetworkImage),
+    );
+    expect(image.fadeInDuration, Duration.zero);
+    expect(image.fadeOutDuration, Duration.zero);
   });
 }

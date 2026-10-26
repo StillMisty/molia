@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/bili_account.dart';
-import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/bili_lyric.dart';
 import 'package:molia/sources/builtin/bili_play.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
@@ -22,6 +23,8 @@ void main() {
   late List<Map<String, dynamic>> subtitles;
   late int playerCode;
   late int pagelistCalls;
+  late BiliSession session;
+  late BiliLyric biliLyric;
 
   const accountCookie = 'SESSDATA=test-sessdata; bili_jct=test-jct';
 
@@ -30,7 +33,8 @@ void main() {
   setUp(() {
     BiliApi.reset();
     BiliPlay.reset();
-    BiliAccountStore.instance.reset();
+    session = BiliSession();
+    biliLyric = BiliLyric(session: session);
     options = [];
     pagelistCalls = 0;
     playerCode = 0;
@@ -95,30 +99,44 @@ void main() {
     );
   });
 
-  tearDown(() {
-    BuiltinSearch.transport = originalTransport;
-    BiliAccountStore.instance.reset();
-  });
+  tearDown(() => BuiltinSearch.transport = originalTransport);
 
   void login() {
-    BiliAccountStore.instance.update(
+    session.apply(
       cookieHeader: accountCookie,
       account: const BiliAccount(userId: '1'),
     );
   }
 
   test('未登录：直接返回 null，不发任何 B 站请求', () async {
-    final lyric = await BiliLyric.fetch(const {
+    final result = await biliLyric.fetch(const {
       'bvid': 'BV1xx411c7mD',
       'aid': 987654,
     });
-    expect(lyric, isNull);
+    expect(result, isNull);
     expect(options, isEmpty);
+  });
+
+  test('初始化未就绪：先等 ready 再读 Cookie / 发请求', () async {
+    final gate = Completer<void>();
+    session.bindReady(gate.future);
+    final pending = biliLyric.fetch(const {'bvid': 'BV1xx411c7mD'});
+    await pumpEventQueue();
+    expect(options, isEmpty, reason: '安全存储读完前不应发请求');
+
+    login();
+    gate.complete();
+    final result = await pending;
+    expect(result, isNotNull);
+    expect(
+      options.any((request) => request.uri.path == '/x/player/wbi/v2'),
+      isTrue,
+    );
   });
 
   test('登录后中文优先：WBI + 账号 Cookie，按 from 排序并生成 LRC', () async {
     login();
-    final lyric = await BiliLyric.fetch(const {
+    final lyric = await biliLyric.fetch(const {
       'bvid': 'BV1xx411c7mD',
       'aid': 987654,
     });
@@ -206,7 +224,7 @@ void main() {
       }),
     );
 
-    final lyric = await BiliLyric.fetch(const {'bvid': 'BV1xx411c7mD'});
+    final lyric = await biliLyric.fetch(const {'bvid': 'BV1xx411c7mD'});
     expect(lyric?.lyric, '[00:01.000]退回成功');
     expect(wbiCalls, 2, reason: '风控刷新一次 + 重试仍失败');
     final fallback = options.firstWhere((o) => o.uri.path == '/x/player/v2');
@@ -215,7 +233,7 @@ void main() {
 
   test('raw 带 cid：不查分 P', () async {
     login();
-    final lyric = await BiliLyric.fetch(const {
+    final lyric = await biliLyric.fetch(const {
       'bvid': 'BV1xx411c7mD',
       'cid': 777,
     });
@@ -236,7 +254,7 @@ void main() {
       },
     ];
 
-    final lyric = await BiliLyric.fetch(const {
+    final lyric = await biliLyric.fetch(const {
       'bvid': 'BV1xx411c7mD',
       'cid': 777,
     });
@@ -263,7 +281,7 @@ void main() {
       },
     ];
 
-    final lyric = await BiliLyric.fetch(const {
+    final lyric = await biliLyric.fetch(const {
       'bvid': 'BV1xx411c7mD',
       'cid': 777,
     });
@@ -274,7 +292,7 @@ void main() {
     login();
     subtitles = [];
     expect(
-      await BiliLyric.fetch(const {'bvid': 'BV1xx411c7mD', 'cid': 777}),
+      await biliLyric.fetch(const {'bvid': 'BV1xx411c7mD', 'cid': 777}),
       isNull,
     );
 
@@ -286,7 +304,7 @@ void main() {
       },
     ];
     expect(
-      await BiliLyric.fetch(const {'bvid': 'BV1xx411c7mD', 'cid': 777}),
+      await biliLyric.fetch(const {'bvid': 'BV1xx411c7mD', 'cid': 777}),
       isNull,
     );
   });
@@ -295,14 +313,14 @@ void main() {
     login();
     playerCode = -404;
     expect(
-      await BiliLyric.fetch(const {'bvid': 'BV1xx411c7mD', 'cid': 777}),
+      await biliLyric.fetch(const {'bvid': 'BV1xx411c7mD', 'cid': 777}),
       isNull,
     );
   });
 
   test('缺少 bvid / aid：返回 null 且不发请求', () async {
     login();
-    expect(await BiliLyric.fetch(const {'cid': 777}), isNull);
+    expect(await biliLyric.fetch(const {'cid': 777}), isNull);
     expect(options, isEmpty);
   });
 }

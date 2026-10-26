@@ -7,12 +7,12 @@
 /// - LX 脚本 / any-listen：脚本 key，经渠道列表查显示名，查不到回退 key。
 library;
 
-import '../domain/models/source_script.dart';
+import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
 
 String lyricsProviderLabel(
   AppLocalizations l10n,
-  Iterable<SourceEntry> channels,
+  Iterable<SourceDescriptor> channels,
   String providerKey,
 ) {
   final known = switch (providerKey) {
@@ -29,7 +29,7 @@ String lyricsProviderLabel(
   if (known != null) return known;
   if (providerKey.isEmpty) return providerKey;
   for (final entry in channels) {
-    if (entry.key == providerKey) return entry.name;
+    if (entry.key == providerKey) return entry.displayName;
   }
   return providerKey;
 }

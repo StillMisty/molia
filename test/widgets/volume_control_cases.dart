@@ -29,6 +29,7 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(400, 400),
     Alignment alignment = Alignment.center,
+    bool disableAnimations = false,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -47,6 +48,13 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
+          builder: disableAnimations
+              ? (context, child) => MediaQuery(
+                  data: MediaQuery.of(context)
+                      .copyWith(disableAnimations: true),
+                  child: child!,
+                )
+              : null,
           home: Scaffold(
             body: Align(alignment: alignment, child: const VolumeControl()),
           ),
@@ -118,5 +126,41 @@ void main() {
     expect(panelRect.left, greaterThanOrEqualTo(0));
     expect(panelRect.right, lessThanOrEqualTo(200));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('减弱动效：面板直接开合，不排入场 / 退场帧', (tester) async {
+    await pumpControl(tester, disableAnimations: true);
+
+    // 零时长：一次 pump 就应完全打开（不是先把面板挂在透明 / 缩放中间态）。
+    await tester.tap(volumeButton());
+    await tester.pump();
+    expect(find.byType(M3ESlider), findsOneWidget);
+
+    await tester.tap(volumeButton().first);
+    await tester.pump();
+    expect(find.byType(M3ESlider), findsNothing);
+  });
+
+  testWidgets('关闭动画：落定后移除 overlay；途中重开不被旧关闭请求误关', (tester) async {
+    await pumpControl(tester);
+
+    await tester.tap(volumeButton());
+    await tester.pumpAndSettle();
+    expect(find.byType(M3ESlider), findsOneWidget);
+
+    // 点外部开始退场：动画期间保留视觉（避免突兀消失），但已不再接收点击。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pump(const Duration(milliseconds: 30));
+    expect(find.byType(M3ESlider), findsOneWidget, reason: '退场动画中面板仍在');
+
+    // 途中重开：旧的 whenComplete 不能把新面板关掉。
+    await tester.tap(volumeButton().first);
+    await tester.pumpAndSettle();
+    expect(find.byType(M3ESlider), findsOneWidget);
+
+    // 再关闭：动画落定后 overlay 必须完全移除（不残留可命中的面板）。
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(M3ESlider), findsNothing);
   });
 }

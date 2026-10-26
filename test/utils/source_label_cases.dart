@@ -1,13 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/source.dart';
-import 'package:molia/domain/models/source_script.dart';
 import 'package:molia/utils/source_label.dart';
 
-SourceEntry _entry(String key, String name) => SourceEntry(
+SourceDescriptor _entry(String key, String name) => SourceDescriptor(
       key: key,
-      name: name,
+      displayName: name,
       kind: SourceKind.builtin,
-      canSearch: true,
+      capabilities: const SourceCapabilities(search: true),
     );
 
 void main() {

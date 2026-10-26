@@ -30,10 +30,12 @@ class SourceManagerMusicSource implements MusicSource {
 
   @override
   String get displayName {
-    for (final option in _manager.searchableSources) {
-      if (option.key == key) return option.name;
-    }
-    return key;
+    // 只有启用且可搜索的渠道显示画像名称；停用 / 不可搜索的 key 回退
+    // key（路由仍可命中历史曲目，但展示面不冒充启用渠道）。
+    final profile = _manager.sourceProfiles.forKey(key);
+    return profile != null && profile.enabled && profile.searchable
+        ? profile.displayName
+        : key;
   }
 
   @override
@@ -238,8 +240,12 @@ class SourceManagerMusicSource implements MusicSource {
       );
     }
     try {
-      final album =
-          await _manager.fetchAlbum(key, ref.id, page: page, limit: limit);
+      final album = await _manager.fetchAlbum(
+        key,
+        ref.id,
+        page: page,
+        limit: limit,
+      );
       return CollectionPage(items: album.tracks, hasMore: album.hasMore);
     } catch (e) {
       // 边界错误归一化（幂等：AlbumService 再包一层也不会重复包装）。
@@ -248,6 +254,5 @@ class SourceManagerMusicSource implements MusicSource {
   }
 
   @override
-  Track? adopt(Track track) =>
-      track.id.sourceKey == key ? track : null;
+  Track? adopt(Track track) => track.id.sourceKey == key ? track : null;
 }

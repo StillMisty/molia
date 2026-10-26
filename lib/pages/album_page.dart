@@ -22,12 +22,12 @@ import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/cover_tap_target.dart';
 import '../widgets/cover_viewer.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
-import '../widgets/paged_list_auto_load.dart';
+import '../widgets/paged_track_collection.dart';
 import '../widgets/track_handoff.dart';
-import '../widgets/track_row.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -78,13 +78,9 @@ class AlbumPage extends StatefulWidget {
 }
 
 class _AlbumPageState extends State<AlbumPage> {
-  /// 专辑头部数据（随每页响应更新；由取数回调写入，控制器通知触发重建）。
-  Album? _album;
-
-  /// 分页状态机：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重都在控制器内。
-  late final PagedListController<Track> _paged;
-
-  final ScrollController _listController = ScrollController();
+  /// 分页集合：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在
+  /// 控制器内。
+  late final PagedTrackCollection<Album, Track> _collection;
 
   /// 播放 / 加入列表的唯一编排（洗牌、上下文名、addedAt 都在模块内）。
   final TrackHandoff _handoff = const TrackHandoff();
@@ -92,39 +88,41 @@ class _AlbumPageState extends State<AlbumPage> {
   @override
   void initState() {
     super.initState();
-    _paged = PagedListController<Track>(
+    _collection = PagedTrackCollection<Album, Track>(
       // 平台分页边界会重复返回（忽略 page 时重复整表）：按 track id 跨页去重。
       keyOf: (track) => track.id.uri,
-      fetchPage: _fetchPage,
+      loadPage: _fetchPage,
     );
     unawaited(_load());
   }
 
   @override
   void dispose() {
-    _paged.dispose();
-    _listController.dispose();
+    _collection.dispose();
     super.dispose();
   }
 
   /// 取一页（缓存 / 错误边界在 `AlbumService`）；头部数据随响应更新。
-  Future<PagedResult<Track>> _fetchPage(int page) async {
+  Future<PagedTrackPage<Album, Track>> _fetchPage(int page) async {
     final album = await widget.loader(page);
-    _album = album;
-    return PagedResult(items: album.tracks, hasMore: album.hasMore);
+    return PagedTrackPage(
+      entity: album,
+      items: album.tracks,
+      hasMore: album.hasMore,
+    );
   }
 
   /// 重试 / 失败重试：重新取首屏（在途请求由控制器过期丢弃）。
-  Future<void> _load() => _paged.loadFirstPage();
+  Future<void> _load() => _collection.loadFirstPage();
 
   /// 播放（[index] 为起始下标；队列上下文名为专辑名）。
   void _playFrom(int index) {
     unawaited(
       _handoff.play(
         context,
-        _paged.state.items,
+        _collection.items,
         startIndex: index,
-        contextName: _album?.name,
+        contextName: _collection.entity?.name,
         fallbackContextName: widget.fallbackName,
       ),
     );
@@ -132,23 +130,23 @@ class _AlbumPageState extends State<AlbumPage> {
 
   /// 「随机播放全部」：洗牌与起播下标的顺序统一由 handoff 负责。
   Future<void> _playShuffled() => _handoff.play(
-        context,
-        _paged.state.items,
-        shuffle: true,
-        contextName: _album?.name,
-        fallbackContextName: widget.fallbackName,
-      );
+    context,
+    _collection.items,
+    shuffle: true,
+    contextName: _collection.entity?.name,
+    fallbackContextName: widget.fallbackName,
+  );
 
   String _titleOf(Album? album) => resolveTrackListName(
-        name: album?.name,
-        fallbackName: widget.fallbackName,
-      );
+    name: album?.name,
+    fallbackName: widget.fallbackName,
+  );
 
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final body = ValueListenableBuilder<PagedListState<Track>>(
-      valueListenable: _paged,
+      valueListenable: _collection,
       // 分页状态是不可变值：整块 body 按最新快照重建。
       builder: (context, state, _) => _buildBody(context, l10n, state),
     );
@@ -167,101 +165,30 @@ class _AlbumPageState extends State<AlbumPage> {
     AppLocalizations l10n,
     PagedListState<Track> state,
   ) {
-    if (state.isLoading) {
-      return const Center(child: M3ELoadingIndicator());
-    }
-    final album = _album;
-    if (state.failed || album == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.albumLoadFailed,
-              style: context.typeScale.bodyLarge,
-            ),
-            const SizedBox(height: 12),
-            M3EButton.filled(
-              onPressed: () => unawaited(_load()),
-              child: Text(l10n.retry),
-            ),
-          ],
-        ),
-      );
-    }
-    if (state.isEmpty) {
-      return Center(
-        child: Text(
-          l10n.albumEmpty,
-          style: context.typeScale.bodyMedium.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-
-    final tracks = state.items;
-    final cardList = M3ETheme.of(context).listTheme.cardList;
-    final horizontalPadding = context.horizontalPadding;
-    return Scrollbar(
-      controller: _listController,
-      thumbVisibility: true,
-      interactive: true,
-      child: PagedListAutoLoad(
-        hasMore: state.hasMore,
-        failed: state.failed,
-        isLoadingMore: state.isLoadingMore,
-        loadMoreFailed: state.loadMoreFailed,
-        onLoadMore: () => unawaited(_paged.loadMore()),
-        child: CustomScrollView(
-          controller: _listController,
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(context, l10n, album, tracks.length),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-              sliver: SliverFixedExtentList.builder(
-                // 行高 + 行距：固定 extent，长专辑滚动条拖动一次定位。
-                itemExtent: TrackRow.extent + cardList.gap,
-                itemCount: tracks.length,
-                itemBuilder: (context, index) {
-                  final isLast = index == tracks.length - 1;
-                  return Column(
-                    children: [
-                      _buildTrackRow(context, index, album, tracks),
-                      if (!isLast) SizedBox(height: cardList.gap),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (state.isLoadingMore || state.loadMoreFailed)
-              SliverToBoxAdapter(
-                child: PagedListFooter(
-                  isLoadingMore: state.isLoadingMore,
-                  loadMoreFailed: state.loadMoreFailed,
-                  onRetry: () => unawaited(_paged.loadMore()),
-                ),
-              ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          ],
-        ),
-      ),
+    return PagedTrackCollectionBody<Track>(
+      state: state,
+      headerBuilder: (context, state) {
+        final album = _collection.entity;
+        // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
+        if (album == null) return const SizedBox.shrink();
+        return _buildHeader(context, l10n, album, state.items.length);
+      },
+      rowBuilder: (context, index, count, tableColumns) =>
+          _buildTrackRow(context, index, count),
+      onRetry: () => unawaited(_load()),
+      onLoadMore: () => unawaited(_collection.loadMore()),
+      emptyText: l10n.albumEmpty,
+      failureText: l10n.albumLoadFailed,
+      retryText: l10n.retry,
     );
   }
 
-  Widget _buildTrackRow(
-    BuildContext context,
-    int index,
-    Album album,
-    List<Track> tracks,
-  ) {
-    final track = tracks[index];
+  Widget _buildTrackRow(BuildContext context, int index, int count) {
+    final track = _collection.items[index];
     return FavoriteTrackTile.track(
       track: track,
-      fallbackCoverUrl: album.coverUrl,
-      position: calculateCardPosition(index, tracks.length),
+      fallbackCoverUrl: _collection.entity?.coverUrl,
+      position: calculateCardPosition(index, count),
       onTap: () => _playFrom(index),
       // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
       onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
@@ -309,28 +236,26 @@ class _AlbumPageState extends State<AlbumPage> {
       ),
     );
     if (cover == null || cover.isEmpty) return image;
-    return Semantics(
-      button: true,
-      label: l10n.coverLabel,
-      child: GestureDetector(
-        key: const Key('albumHeaderCover'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticsService.lightImpact();
-          unawaited(
-            showCoverViewer(
-              context,
-              coverUrl: cover,
-              title: l10n.coverLabel,
-              subtitle: album.name,
-              fileNameBase: album.artist.isEmpty
-                  ? album.name
-                  : '${album.name} - ${album.artist}',
-            ),
-          );
-        },
-        child: image,
-      ),
+    return CoverTapTarget(
+      key: const Key('albumHeaderCover'),
+      size: 96,
+      borderRadius: BorderRadius.circular(16),
+      semanticLabel: l10n.coverLabel,
+      onPressed: () {
+        HapticsService.lightImpact();
+        unawaited(
+          showCoverViewer(
+            context,
+            coverUrl: cover,
+            title: l10n.coverLabel,
+            subtitle: album.name,
+            fileNameBase: album.artist.isEmpty
+                ? album.name
+                : '${album.name} - ${album.artist}',
+          ),
+        );
+      },
+      child: image,
     );
   }
 
@@ -403,9 +328,7 @@ class _AlbumPageState extends State<AlbumPage> {
                 case 'shuffle':
                   unawaited(_playShuffled());
                 case 'addToLibrary':
-                  unawaited(
-                    _handoff.addToLibrary(context, _paged.state.items),
-                  );
+                  unawaited(_handoff.addToLibrary(context, _collection.items));
               }
             },
           ),

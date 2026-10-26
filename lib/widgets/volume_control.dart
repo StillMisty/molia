@@ -9,12 +9,14 @@ import 'package:flutter/services.dart'
     show HardwareKeyboard, KeyDownEvent, KeyEvent, LogicalKeyboardKey;
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../services/escape_claims.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import 'icon_swap.dart';
 
 /// 音量图标按钮 + 弹层。
@@ -34,8 +36,22 @@ class VolumeControl extends StatefulWidget {
   State<VolumeControl> createState() => _VolumeControlState();
 }
 
-class _VolumeControlState extends State<VolumeControl> {
+class _VolumeControlState extends State<VolumeControl>
+    with SingleTickerProviderStateMixin {
   final OverlayPortalController _controller = OverlayPortalController();
+
+  /// 面板入场 / 退场进度：spatial 弹簧驱动缩放，透明度从同一进度截断
+  /// 0..1（effects 不过冲）。
+  late final SingleMotionController _panelMotion = SingleMotionController(
+    motion: const MaterialSpringMotion.expressiveSpatialFast(snapToEnd: true),
+    vsync: this,
+  );
+
+  /// 面板逻辑可见（关闭动画期间为 false，但 overlay 尚未移除）。
+  bool _panelVisible = false;
+
+  /// 关闭请求序号：关闭途中重开 / 再次关闭时让旧的 whenComplete 失效。
+  int _closeRequest = 0;
 
   /// 图标与面板同组：点图标算「组内」，不触发 onTapOutside——否则点图标
   /// 关闭面板时 onTapOutside 会先关一次、onPressed 的 toggle 再把它开回来。
@@ -50,6 +66,45 @@ class _VolumeControlState extends State<VolumeControl> {
 
   /// 面板与宿主边缘的最小间距（窄窗收窄与贴边判定用同一值）。
   static const double _panelEdgeInset = 8;
+
+  @override
+  void dispose() {
+    _panelMotion.dispose();
+    super.dispose();
+  }
+
+  /// 打开面板：先挂 overlay 再起弹簧（关闭途中重开从当前进度续跑）。
+  void _showPanel() {
+    // 任何一次打开都让尚未落定的关闭请求失效。
+    _closeRequest++;
+    if (!_panelVisible) {
+      setState(() => _panelVisible = true);
+      _controller.show();
+    }
+    if (reduceMotionOf(context)) {
+      _panelMotion.value = 1;
+      return;
+    }
+    _panelMotion.animateTo(1);
+  }
+
+  /// 关闭面板：收起动画落定后才移除 overlay；等待期间 IgnorePointer。
+  void _hidePanel() {
+    if (!_panelVisible) return;
+    final request = ++_closeRequest;
+    setState(() => _panelVisible = false);
+    if (reduceMotionOf(context)) {
+      _panelMotion.value = 0;
+      _controller.hide();
+      return;
+    }
+    _panelMotion.animateTo(0).whenComplete(() {
+      if (!mounted || request != _closeRequest || _panelVisible) return;
+      _controller.hide();
+    });
+  }
+
+  void _togglePanel() => _panelVisible ? _hidePanel() : _showPanel();
 
   @override
   Widget build(BuildContext context) {
@@ -82,13 +137,34 @@ class _VolumeControlState extends State<VolumeControl> {
         return Positioned(
           left: (anchor.right - width).clamp(_panelEdgeInset, maxLeft),
           bottom: info.overlaySize.height - anchor.top + _panelEdgeInset,
-          child: TapRegion(
-            groupId: _tapGroup,
-            onTapOutside: (_) => _controller.hide(),
-            child: _VolumePanel(
-              key: widget.panelKey,
-              width: width,
-              onClose: _controller.hide,
+          child: AnimatedBuilder(
+            animation: _panelMotion,
+            builder: (context, child) {
+              final double progress = _panelMotion.value;
+              return IgnorePointer(
+                // 关闭动画期间只保留视觉，不再接收点击（Esc / 外部点击
+                // 的关闭入口都已走 [_hidePanel]，不会重复触发）。
+                ignoring: !_panelVisible,
+                child: Opacity(
+                  opacity: progress.clamp(0.0, 1.0),
+                  child: Transform.scale(
+                    // 以图标（面板右下角）为锚点从 0.94 展开；spatial 弹簧
+                    // 允许轻微过冲，透明度仍截断在 0..1。
+                    scale: 0.94 + 0.06 * progress,
+                    alignment: Alignment.bottomRight,
+                    child: child,
+                  ),
+                ),
+              );
+            },
+            child: TapRegion(
+              groupId: _tapGroup,
+              onTapOutside: (_) => _hidePanel(),
+              child: _VolumePanel(
+                key: widget.panelKey,
+                width: width,
+                onClose: _hidePanel,
+              ),
             ),
           ),
         );
@@ -106,7 +182,7 @@ class _VolumeControlState extends State<VolumeControl> {
               off ? Icons.volume_off_rounded : Icons.volume_up_rounded,
             ),
           ),
-          onPressed: _controller.toggle,
+          onPressed: _togglePanel,
         ),
       ),
     );

@@ -21,6 +21,7 @@ import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 桌面平台支持自选保存目录（dart:io 路径语义；移动端固定平台目录）。
@@ -39,129 +40,123 @@ class DownloadSettingsPage extends StatelessWidget {
     final settings = context.watch<DownloadSettings>();
     final downloads = context.watch<DownloadService?>();
     final saveAs = context.read<SaveAs?>();
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.downloadSettingsTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          SettingsSectionCard(
-            children: [
-              SettingsValueTile(
-                key: const Key('downloadSaveLocationItem'),
-                icon: Icons.folder_rounded,
-                title: l10n.downloadSaveLocation,
-                subtitle: switch (defaultTargetPlatform) {
-                  TargetPlatform.android => settings.publishToPublicDir
-                      ? l10n.downloadSaveLocationFixedHintAndroid
-                      : l10n.downloadSaveLocationFixedHintAndroidOff,
-                  TargetPlatform.iOS => l10n.downloadSaveLocationFixedHintIos,
-                  _ => l10n.downloadSaveLocationSharedHint,
-                },
-                value: _saveLocationLabel(l10n, settings),
-                onTap: _supportsCustomSaveDir
-                    ? () => unawaited(
-                          _pickDirectory(context, settings, saveAs),
-                        )
-                    : () => M3ESnackbar.show(
-                          context,
-                          message: _fixedLocationHint(l10n, settings),
-                        ),
-              ),
-              SettingsValueTile(
-                key: const Key('downloadFilenameTemplateItem'),
-                icon: Icons.edit_note_rounded,
-                title: l10n.downloadFilenameTemplate,
-                subtitle: l10n.downloadFilenameTemplateHint,
-                value: settings.filenameTemplate,
-                onTap: () => unawaited(_editTemplate(context, settings)),
-              ),
+    return SettingsSubPage(
+      title: l10n.downloadSettingsTitle,
+      children: [
+        SettingsSectionCard(
+          children: [
+            SettingsValueTile(
+              key: const Key('downloadSaveLocationItem'),
+              icon: Icons.folder_rounded,
+              title: l10n.downloadSaveLocation,
+              subtitle: switch (defaultTargetPlatform) {
+                TargetPlatform.android => settings.publishToPublicDir
+                    ? l10n.downloadSaveLocationFixedHintAndroid
+                    : l10n.downloadSaveLocationFixedHintAndroidOff,
+                TargetPlatform.iOS => l10n.downloadSaveLocationFixedHintIos,
+                _ => l10n.downloadSaveLocationSharedHint,
+              },
+              value: _saveLocationLabel(l10n, settings),
+              onTap: _supportsCustomSaveDir
+                  ? () => unawaited(
+                        _pickDirectory(context, settings, saveAs),
+                      )
+                  : () => M3ESnackbar.show(
+                        context,
+                        message: _fixedLocationHint(l10n, settings),
+                      ),
+            ),
+            SettingsValueTile(
+              key: const Key('downloadFilenameTemplateItem'),
+              icon: Icons.edit_note_rounded,
+              title: l10n.downloadFilenameTemplate,
+              subtitle: l10n.downloadFilenameTemplateHint,
+              value: settings.filenameTemplate,
+              onTap: () => unawaited(_editTemplate(context, settings)),
+            ),
+            SettingsSwitchTile(
+              switchKey: const Key('downloadEmbedTagsSwitch'),
+              icon: Icons.music_note_rounded,
+              title: l10n.downloadEmbedTags,
+              subtitle: l10n.downloadEmbedTagsSubtitle,
+              value: settings.embedTags,
+              onChanged: (value) => unawaited(settings.setEmbedTags(value)),
+            ),
+            // 公共目录发布只在 Android 有语义（其余平台的下载根目录本身
+            // 就是公共目录）；发布器不支持时整行不显示。
+            if (downloads?.publisherSupported ?? false)
               SettingsSwitchTile(
-                switchKey: const Key('downloadEmbedTagsSwitch'),
-                icon: Icons.music_note_rounded,
-                title: l10n.downloadEmbedTags,
-                subtitle: l10n.downloadEmbedTagsSubtitle,
-                value: settings.embedTags,
-                onChanged: (value) => unawaited(settings.setEmbedTags(value)),
+                switchKey: const Key('downloadPublishPublicSwitch'),
+                icon: Icons.public_rounded,
+                title: l10n.downloadPublishToPublicDir,
+                subtitle: l10n.downloadPublishToPublicDirSubtitle,
+                value: settings.publishToPublicDir,
+                onChanged: (value) =>
+                    unawaited(settings.setPublishToPublicDir(value)),
               ),
-              // 公共目录发布只在 Android 有语义（其余平台的下载根目录本身
-              // 就是公共目录）；发布器不支持时整行不显示。
-              if (downloads?.publisherSupported ?? false)
-                SettingsSwitchTile(
-                  switchKey: const Key('downloadPublishPublicSwitch'),
-                  icon: Icons.public_rounded,
-                  title: l10n.downloadPublishToPublicDir,
-                  subtitle: l10n.downloadPublishToPublicDirSubtitle,
-                  value: settings.publishToPublicDir,
-                  onChanged: (value) =>
-                      unawaited(settings.setPublishToPublicDir(value)),
-                ),
-              // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）；
-              // 打开时顺手补一次通知权限请求（用户主动动作，不打扰）。
-              if (downloads?.notificationsSupported ?? false)
-                SettingsSwitchTile(
-                  switchKey: const Key('downloadNotificationsSwitch'),
-                  icon: Icons.notifications_active_rounded,
-                  title: l10n.downloadNotifications,
-                  subtitle: l10n.downloadNotificationsSubtitle,
-                  value: settings.notifications,
-                  onChanged: (value) {
-                    unawaited(settings.setNotifications(value));
-                    if (value) {
-                      unawaited(NotificationPermission.ensureRequested());
-                    }
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          // 实际目录：Android 拆成“播放副本（应用目录）+ 另存目录（系统
-          // 「下载」）”；桌面 / iOS 的下载根本身就是另存目录。
-          SettingsSectionCard(
-            children: [
-              if (downloads == null || !downloads.supported)
-                SettingsInfoTile(
+            // 下载通知只在 Android 有语义（前台服务 + 通知栏进度）；
+            // 打开时顺手补一次通知权限请求（用户主动动作，不打扰）。
+            if (downloads?.notificationsSupported ?? false)
+              SettingsSwitchTile(
+                switchKey: const Key('downloadNotificationsSwitch'),
+                icon: Icons.notifications_active_rounded,
+                title: l10n.downloadNotifications,
+                subtitle: l10n.downloadNotificationsSubtitle,
+                value: settings.notifications,
+                onChanged: (value) {
+                  unawaited(settings.setNotifications(value));
+                  if (value) {
+                    unawaited(NotificationPermission.ensureRequested());
+                  }
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        // 实际目录：Android 拆成“播放副本（应用目录）+ 另存目录（系统
+        // 「下载」）”；桌面 / iOS 的下载根本身就是另存目录。
+        SettingsSectionCard(
+          children: [
+            if (downloads == null || !downloads.supported)
+              SettingsInfoTile(
+                key: const Key('downloadLocationInfoItem'),
+                icon: Icons.download_rounded,
+                title: _isAndroid
+                    ? l10n.downloadPlaybackLocation
+                    : l10n.downloadLocationInfo,
+                subtitle: l10n.downloadLocationUnsupported,
+              )
+            else ...[
+              FutureBuilder<String?>(
+                future: downloads.rootPath(),
+                builder: (context, snapshot) => SettingsInfoTile(
                   key: const Key('downloadLocationInfoItem'),
-                  icon: Icons.download_rounded,
+                  icon: _isAndroid
+                      ? Icons.phone_android_rounded
+                      : Icons.download_rounded,
                   title: _isAndroid
                       ? l10n.downloadPlaybackLocation
                       : l10n.downloadLocationInfo,
-                  subtitle: l10n.downloadLocationUnsupported,
-                )
-              else ...[
+                  subtitle: _isIos
+                      ? l10n.downloadSaveLocationIos
+                      : snapshot.data ?? l10n.cacheUsageComputing,
+                ),
+              ),
+              if (_isAndroid)
                 FutureBuilder<String?>(
-                  future: downloads.rootPath(),
+                  future: saveAs?.rootPath(),
                   builder: (context, snapshot) => SettingsInfoTile(
-                    key: const Key('downloadLocationInfoItem'),
-                    icon: _isAndroid
-                        ? Icons.phone_android_rounded
-                        : Icons.download_rounded,
-                    title: _isAndroid
-                        ? l10n.downloadPlaybackLocation
-                        : l10n.downloadLocationInfo,
-                    subtitle: _isIos
-                        ? l10n.downloadSaveLocationIos
-                        : snapshot.data ?? l10n.cacheUsageComputing,
+                    key: const Key('downloadPublicLocationInfoItem'),
+                    icon: Icons.public_rounded,
+                    title: l10n.downloadPublicCopyLocation,
+                    subtitle:
+                        snapshot.data ?? l10n.downloadSaveLocationAndroid,
                   ),
                 ),
-                if (_isAndroid)
-                  FutureBuilder<String?>(
-                    future: saveAs?.rootPath(),
-                    builder: (context, snapshot) => SettingsInfoTile(
-                      key: const Key('downloadPublicLocationInfoItem'),
-                      icon: Icons.public_rounded,
-                      title: l10n.downloadPublicCopyLocation,
-                      subtitle:
-                          snapshot.data ?? l10n.downloadSaveLocationAndroid,
-                    ),
-                  ),
-              ],
             ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 

@@ -61,9 +61,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsNotFoundForTrack => '未找到此歌曲的歌词。';
 
   @override
-  String lyricsFetchError(String error) {
-    return '获取歌词时出错: $error';
-  }
+  String get lyricsFetchError => '获取歌词失败，换一个来源试试。';
 
   @override
   String get lyricsTitle => '歌词';

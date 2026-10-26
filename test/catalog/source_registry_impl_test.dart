@@ -69,6 +69,8 @@ void main() {
     expect(bili.capabilities.resolveUrl, isTrue);
     expect(bili.capabilities.lyrics, isTrue);
     expect(bili.capabilities.artist, isTrue);
+    expect(bili.discoverable, isTrue);
+    expect(bili.enabled, isTrue);
     expect(bili.order, 0);
 
     final descriptor = descriptors.last;

@@ -41,6 +41,7 @@ import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import 'app_search_bar.dart';
 import 'artist_row.dart';
 import 'track_row.dart';
@@ -56,8 +57,10 @@ const double _barPanelGap = 2;
 /// 面板与窗口底缘的最小留白：结果再多也不贴底。
 const double _panelBottomMargin = 24;
 
-/// 开合时长：scrim（路由 barrier）与内容同一拍，M3E effects 档量级。
-const Duration _openDuration = Duration(milliseconds: 200);
+/// 开合时长：scrim（路由 barrier）与内容同一拍，取 M3E effects `short4`。
+///
+/// 减弱动效时调用处会把它收成 [Duration.zero]，开合直接跳变。
+const Duration _openDuration = M3EMotion.short4;
 
 /// 内容入场缩放起点：只做「轻微」缩放，避免整块像弹窗一样飞进来。
 const double _enterScale = 0.97;
@@ -174,7 +177,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       barrierDismissible: true,
       barrierLabel: _l10n(context).searchClose,
       barrierColor: _scrimColor(context),
-      transitionDuration: _openDuration,
+      transitionDuration: effectDurationOf(context, _openDuration),
       pageBuilder: (context, animation, secondaryAnimation) =>
           _GlobalSearchView(
         restingRect: _restingRect(context),
@@ -199,8 +202,8 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   ) {
     final curved = CurvedAnimation(
       parent: animation,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
+      curve: M3EMotion.emphasizedDecelerate,
+      reverseCurve: M3EMotion.emphasizedAccelerate,
     );
     return FadeTransition(
       key: GlobalSearchOverlay.transitionKey,

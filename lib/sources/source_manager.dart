@@ -32,7 +32,7 @@ import '../domain/models/album.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
-import '../domain/models/source.dart' show SourceCapabilities;
+import '../domain/models/source.dart' show SourceCapabilities, SourceDescriptor;
 import '../domain/ports/music_source.dart' show PlayableStream;
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
@@ -43,29 +43,6 @@ export 'lx/lx_script_update.dart'
 // SourceKind 搬到 sources/source_profiles.dart（画像模块的唯一事实），
 // 这里 re-export 保持既有 import 路径与调用方不变。
 export 'source_profiles.dart' show SourceKind, SourceProfile, SourceProfiles;
-
-class SourceOption {
-  final String key;
-  final String name;
-  final SourceKind kind;
-  final bool canSearch;
-
-  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
-  /// B 站没有歌单浏览）。
-  final bool discoverable;
-
-  /// 是否启用（停用后不出现在资料页渠道选择与搜索结果中）。
-  final bool enabled;
-
-  const SourceOption({
-    required this.key,
-    required this.name,
-    required this.kind,
-    required this.canSearch,
-    this.discoverable = false,
-    this.enabled = true,
-  });
-}
 
 /// 音源管理器：
 /// - 管理已导入的 LX 音源脚本（导入 / 删除 / 激活）；
@@ -96,9 +73,9 @@ class SourceManager extends ChangeNotifier {
   final BuiltinPicDispatch _builtinPicFallback = BuiltinPicDispatch();
 
   SourceManager({LxEngineSupervisor? engine, required SettingsAccess settings})
-      : _engine = engine ?? LxEngineSupervisor(),
-        _settings = settings,
-        _anyListenSource = AnyListenSource(settings: settings) {
+    : _engine = engine ?? LxEngineSupervisor(),
+      _settings = settings,
+      _anyListenSource = AnyListenSource(settings: settings) {
     _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
     _engine.onStateChanged = _onEngineStateChanged;
     // 应用远端设置后的定向重载：渠道偏好（自绑于 SourcePreferences）/
@@ -155,34 +132,22 @@ class SourceManager extends ChangeNotifier {
   /// 每次读取按当前激活脚本、any-listen 配置与渠道偏好重建；个位数条目，
   /// 不做缓存就没有失效逻辑，也不会出现「能力位更新了、渠道没更新」。
   SourceProfiles get sourceProfiles => SourceProfiles.build(
-        activeSources: _activeSources,
-        anyListenUsable: _anyListenSource.isUsable,
-        disabledChannels: _preferences.disabledChannels,
-        sourceOrder: _preferences.sourceOrder,
-      );
+    activeSources: _activeSources,
+    anyListenUsable: _anyListenSource.isUsable,
+    disabledChannels: _preferences.disabledChannels,
+    sourceOrder: _preferences.sourceOrder,
+  );
 
   /// 全部渠道（可搜索源 + 内置发现平台的并集，含停用项；按用户顺序排列）。
   ///
   /// 资料页的渠道选择与「音源管理」的渠道排序都消费该列表；脚本扩展源 /
   /// any-listen 只有搜索能力，内置发现平台无论是否有脚本都保留发现入口。
-  List<SourceOption> get channels => [
-        for (final profile in sourceProfiles.channels) _optionOf(profile),
-      ];
+  List<SourceDescriptor> get channels =>
+      sourceProfiles.channels.toDescriptors();
 
   /// 可供搜索/播放的音源列表（仅启用项；按用户自定义顺序排列）。
-  List<SourceOption> get searchableSources => [
-        for (final profile in sourceProfiles.searchable) _optionOf(profile),
-      ];
-
-  /// 画像 → UI 视图（`SourceOption`）。
-  SourceOption _optionOf(SourceProfile profile) => SourceOption(
-        key: profile.key,
-        name: profile.displayName,
-        kind: profile.kind,
-        canSearch: profile.searchable,
-        discoverable: profile.discoverable,
-        enabled: profile.enabled,
-      );
+  List<SourceDescriptor> get searchableSources =>
+      sourceProfiles.searchable.toDescriptors();
 
   /// 音源能力：直接读 [SourceProfiles]（registry / 领域适配器共用同一答案）。
   SourceCapabilities capabilitiesFor(String key) =>
@@ -411,8 +376,9 @@ class SourceManager extends ChangeNotifier {
     if (!decl.canSearch) {
       throw LxEngineException('音源「${decl.name}」不支持搜索');
     }
-    final action =
-        decl.actions.contains('musicSearch') ? 'musicSearch' : 'search';
+    final action = decl.actions.contains('musicSearch')
+        ? 'musicSearch'
+        : 'search';
     final data = await _engine.search(
       source: sourceKey,
       action: action,
@@ -477,8 +443,9 @@ class SourceManager extends ChangeNotifier {
   /// 酷狗等平台不同音质对应不同 hash，取链前替换为所选音质的 hash。
   Map<String, dynamic> _withPickedHash(SourceTrack track, String quality) {
     final info = Map<String, dynamic>.from(track.raw);
-    final qualityInfo =
-        track.qualities.where((q) => q.type == quality).firstOrNull;
+    final qualityInfo = track.qualities
+        .where((q) => q.type == quality)
+        .firstOrNull;
     if (qualityInfo?.hash != null && qualityInfo!.hash!.isNotEmpty) {
       info['hash'] = qualityInfo.hash;
     }
@@ -746,7 +713,8 @@ class SourceManager extends ChangeNotifier {
     }
     final text = await downloadLxScriptText(url);
     final latest = parseDownloadedScript(text, id: current.id);
-    final hasUpdate = latest.version != current.version ||
+    final hasUpdate =
+        latest.version != current.version ||
         _scriptHash(latest.script) != _scriptHash(current.script);
     return ScriptUpdateCheck(
       hasUpdate: hasUpdate,

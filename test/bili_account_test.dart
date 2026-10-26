@@ -8,9 +8,9 @@ import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/domain/models/bili_account.dart';
 import 'package:molia/services/bili_account_service.dart';
-import 'package:molia/sources/builtin/bili_account.dart';
 import 'package:molia/sources/builtin/bili_client.dart';
 import 'package:molia/sources/builtin/bili_login.dart';
+import 'package:molia/sources/builtin/bili_session.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 
 import 'support/mock_dio.dart';
@@ -20,14 +20,15 @@ import 'support/settings_test_support.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => BiliAccountStore.instance.reset());
-  tearDown(() => BiliAccountStore.instance.reset());
-
   group('BiliQrLogin', () {
     BiliQrLogin loginWith(
-      FutureOr<ResponseBody> Function(RequestOptions options) handler,
-    ) => BiliQrLogin(
-      client: BiliClient(transport: BuiltinTransport(dio: mockDio(handler))),
+      FutureOr<ResponseBody> Function(RequestOptions options) handler, {
+      BiliSession? session,
+    }) => BiliQrLogin(
+      client: BiliClient(
+        transport: BuiltinTransport(dio: mockDio(handler)),
+        session: session,
+      ),
     );
 
     test('生成二维码并用 key 轮询；未扫码 / 已扫码 / 过期', () async {
@@ -201,7 +202,7 @@ void main() {
     });
 
     test('资料：nav isLogin + 昵称；-101 视为登录失效', () async {
-      BiliAccountStore.instance.update(cookieHeader: 'SESSDATA=test');
+      final session = BiliSession()..apply(cookieHeader: 'SESSDATA=test');
       var code = 0;
       final qr = loginWith((options) async {
         if (options.uri.path == '/x/web-interface/nav') {
@@ -215,7 +216,7 @@ void main() {
           );
         }
         return textResponse('{}', statusCode: 500);
-      });
+      }, session: session);
 
       final profile = await qr.fetchProfile();
       expect(profile?.userId, '42');
@@ -229,6 +230,7 @@ void main() {
   group('BiliAccountService', () {
     late MemorySettingsSecretStore secrets;
     late SettingsRegistry settings;
+    late BiliSession session;
 
     setUp(() {
       secrets = MemorySettingsSecretStore();
@@ -236,11 +238,13 @@ void main() {
         keys: [kBiliAccountCookie],
         secrets: secrets,
       );
+      session = BiliSession();
     });
 
     BiliAccountService serviceWith(BiliQrLogin login) => BiliAccountService(
       settings: settings.scope([kBiliAccountCookie]),
       login: login,
+      session: session,
     );
 
     test('初始化恢复已存凭据；同步到达的登录 / 清空', () async {
@@ -252,12 +256,15 @@ void main() {
       await service.init();
       expect(service.status, BiliAccountStatus.loggedIn);
       expect(service.account?.userId, '5');
-      expect(BiliAccountStore.instance.isLoggedIn, isTrue);
+      expect(service.session, same(session));
+      expect(service.isLoggedIn, isTrue);
+      expect(session.isLoggedIn, isTrue);
 
       await settings.clear(kBiliAccountCookie);
       await service.reloadFromSettings();
       expect(service.status, BiliAccountStatus.loggedOut);
-      expect(BiliAccountStore.instance.isLoggedIn, isFalse);
+      expect(service.isLoggedIn, isFalse);
+      expect(session.isLoggedIn, isFalse);
       expect(loggedInCount, 0, reason: '初始化恢复不算新登录');
 
       await settings.write(kBiliAccountCookie, 'SESSDATA=remote; DedeUserID=6');
@@ -327,6 +334,7 @@ void main() {
       final service = BiliAccountService(
         settings: registry.scope([kBiliAccountCookie]),
         login: login,
+        session: session,
       );
       await service.init();
       await service.startQrLogin();
@@ -335,7 +343,7 @@ void main() {
       expect(result.persisted, isFalse);
       expect(service.lastLoginPersisted, isFalse);
       expect(service.status, BiliAccountStatus.loggedIn);
-      expect(BiliAccountStore.instance.isLoggedIn, isTrue);
+      expect(session.isLoggedIn, isTrue);
     });
 
     test('退出：清空凭据与内存态', () async {
@@ -346,7 +354,7 @@ void main() {
 
       await service.logout();
       expect(service.status, BiliAccountStatus.loggedOut);
-      expect(BiliAccountStore.instance.isLoggedIn, isFalse);
+      expect(session.isLoggedIn, isFalse);
       expect(secrets.data.containsKey(kBiliAccountCookie.name), isFalse);
     });
 
@@ -363,7 +371,7 @@ void main() {
       await service.refreshProfile(force: true);
       expect(service.status, BiliAccountStatus.loggedOut);
       expect(service.sessionExpired, isTrue);
-      expect(BiliAccountStore.instance.isLoggedIn, isFalse);
+      expect(session.isLoggedIn, isFalse);
       expect(secrets.data.containsKey(kBiliAccountCookie.name), isFalse);
     });
 

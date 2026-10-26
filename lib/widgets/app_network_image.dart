@@ -3,9 +3,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 // 直接引用 CacheManager 类型。
 // ignore: depend_on_referenced_packages
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../managers/artwork_cache.dart';
+import '../theme/motion_policy.dart';
 import '../utils/local_image_provider.dart';
 import 'molia_mark.dart';
 
@@ -155,6 +157,13 @@ class AppNetworkImage extends StatelessWidget {
       fit: fit,
       memCacheWidth: bounds.width,
       memCacheHeight: bounds.height,
+      // 默认 fadeIn 500ms / fadeOut 1000ms（占位层要在图片上方淡出近 1s），
+      // 切歌时整块封面会「糊」很久；收到 M3E effects 档：图片快速淡入、
+      // 占位层短促让位。减弱动效时两个方向都硬切。
+      fadeInDuration: effectDurationOf(context, M3EMotion.short4),
+      fadeInCurve: M3EMotion.emphasizedDecelerate,
+      fadeOutDuration: effectDurationOf(context, M3EMotion.short2),
+      fadeOutCurve: M3EMotion.emphasizedAccelerate,
       placeholder: (_, _) => placeholder ?? _placeholder(context),
       errorWidget: (_, _, error) {
         if (!isFallback) _notifyError(error);

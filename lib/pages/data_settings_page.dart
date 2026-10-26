@@ -14,6 +14,7 @@ import '../services/play_statistics_service.dart';
 import '../services/save_as.dart';
 import '../utils/save_as_label.dart';
 import '../widgets/lxmc_import.dart' show importLxmcFavoritesFlow;
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'cache_management_page.dart';
 import 'download_settings_page.dart';
@@ -31,89 +32,83 @@ class DataSettingsPage extends StatelessWidget {
     // 完整备份只经同步引擎的适配器收集/合并；引擎未挂载（测试）时导出 /
     // 导入都按失败处理（没有可回退的旧数据源）。
     final syncProvider = context.watch<SyncProvider?>();
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.dataManagementTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          SettingsSectionCard(
-            title: l10n.settingsDataStorageSection,
-            children: [
-              // 缓存管理：音频/歌词/封面占用 + 策略 + 单清/全清。
-              SettingsNavTile(
-                key: const Key('settingsCacheManagementItem'),
-                icon: Icons.storage_rounded,
-                title: l10n.settingsCacheTitle,
-                subtitle: l10n.settingsCacheSubtitle,
-                onTap: () =>
-                    openSettingsSubPage(context, const CacheManagementPage()),
-              ),
-              // 下载设置：保存位置 / 文件名格式 / 标签嵌入。
-              SettingsNavTile(
-                key: const Key('settingsDownloadSettingsItem'),
-                icon: Icons.download_rounded,
-                title: l10n.downloadSettingsTitle,
-                subtitle: l10n.downloadSettingsSubtitle,
-                onTap: () =>
-                    openSettingsSubPage(context, const DownloadSettingsPage()),
-              ),
-              // 下载管理：任务队列 / 批量下载 / 文件维护。
-              SettingsNavTile(
-                key: const Key('settingsDownloadsManageItem'),
-                icon: Icons.download_for_offline_rounded,
-                title: l10n.downloadsManageTitle,
-                subtitle: l10n.downloadsManageSubtitle,
-                onTap: () =>
-                    openSettingsSubPage(context, const DownloadsManagePage()),
-              ),
-              // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）；
-              // 统计明细入口在设置首屏「数据」卡（与听歌统计同一处）。
-              ValueListenableBuilder<bool>(
-                valueListenable: context
-                    .read<PlayStatisticsService>()
-                    .enabledNotifier,
-                builder: (context, enabled, _) => SettingsSwitchTile(
-                  switchKey: const Key('settingsPlayStatisticsSwitch'),
-                  icon: Icons.query_stats_rounded,
-                  title: l10n.statsRecordSwitch,
-                  subtitle: l10n.statsRecordSwitchSubtitle,
-                  value: enabled,
-                  onChanged: (value) => unawaited(
-                    context.read<PlayStatisticsService>().setEnabled(value),
-                  ),
+    return SettingsSubPage(
+      title: l10n.dataManagementTitle,
+      children: [
+        SettingsSectionCard(
+          title: l10n.settingsDataStorageSection,
+          children: [
+            // 缓存管理：音频/歌词/封面占用 + 策略 + 单清/全清。
+            SettingsNavTile(
+              key: const Key('settingsCacheManagementItem'),
+              icon: Icons.storage_rounded,
+              title: l10n.settingsCacheTitle,
+              subtitle: l10n.settingsCacheSubtitle,
+              onTap: () =>
+                  openSettingsSubPage(context, const CacheManagementPage()),
+            ),
+            // 下载设置：保存位置 / 文件名格式 / 标签嵌入。
+            SettingsNavTile(
+              key: const Key('settingsDownloadSettingsItem'),
+              icon: Icons.download_rounded,
+              title: l10n.downloadSettingsTitle,
+              subtitle: l10n.downloadSettingsSubtitle,
+              onTap: () =>
+                  openSettingsSubPage(context, const DownloadSettingsPage()),
+            ),
+            // 下载管理：任务队列 / 批量下载 / 文件维护。
+            SettingsNavTile(
+              key: const Key('settingsDownloadsManageItem'),
+              icon: Icons.download_for_offline_rounded,
+              title: l10n.downloadsManageTitle,
+              subtitle: l10n.downloadsManageSubtitle,
+              onTap: () =>
+                  openSettingsSubPage(context, const DownloadsManagePage()),
+            ),
+            // 统计采集开关（关闭 = 停止记录新事件，已有数据保留）；
+            // 统计明细入口在设置首屏「数据」卡（与听歌统计同一处）。
+            ValueListenableBuilder<bool>(
+              valueListenable: context
+                  .read<PlayStatisticsService>()
+                  .enabledNotifier,
+              builder: (context, enabled, _) => SettingsSwitchTile(
+                switchKey: const Key('settingsPlayStatisticsSwitch'),
+                icon: Icons.query_stats_rounded,
+                title: l10n.statsRecordSwitch,
+                subtitle: l10n.statsRecordSwitchSubtitle,
+                value: enabled,
+                onChanged: (value) => unawaited(
+                  context.read<PlayStatisticsService>().setEnabled(value),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.settingsDataPortabilitySection,
-            children: [
-              SettingsNavTile(
-                icon: Icons.upload_file_rounded,
-                title: l10n.exportDataTitle,
-                subtitle: l10n.exportDataSubtitle,
-                onTap: () => _exportData(context, l10n, syncProvider),
-              ),
-              SettingsNavTile(
-                icon: Icons.download_rounded,
-                title: l10n.importDataTitle,
-                subtitle: l10n.importDataSubtitle,
-                onTap: () => _showImportDialog(context, l10n, syncProvider),
-              ),
-              SettingsNavTile(
-                icon: Icons.favorite_border_rounded,
-                title: l10n.libraryImportFavorites,
-                subtitle: l10n.libraryImportFavoritesSubtitle,
-                onTap: () => importLxmcFavoritesFlow(context),
-              ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        SettingsSectionCard(
+          title: l10n.settingsDataPortabilitySection,
+          children: [
+            SettingsNavTile(
+              icon: Icons.upload_file_rounded,
+              title: l10n.exportDataTitle,
+              subtitle: l10n.exportDataSubtitle,
+              onTap: () => _exportData(context, l10n, syncProvider),
+            ),
+            SettingsNavTile(
+              icon: Icons.download_rounded,
+              title: l10n.importDataTitle,
+              subtitle: l10n.importDataSubtitle,
+              onTap: () => _showImportDialog(context, l10n, syncProvider),
+            ),
+            SettingsNavTile(
+              icon: Icons.favorite_border_rounded,
+              title: l10n.libraryImportFavorites,
+              subtitle: l10n.libraryImportFavoritesSubtitle,
+              onTap: () => importLxmcFavoritesFlow(context),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

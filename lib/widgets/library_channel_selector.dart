@@ -1,14 +1,14 @@
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../domain/models/source_script.dart';
+import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
 /// 启用渠道（顺序不变）。
-List<SourceEntry> _enabledOf(List<SourceEntry> channels) {
+List<SourceDescriptor> _enabledOf(List<SourceDescriptor> channels) {
   return [for (final entry in channels) if (entry.enabled) entry];
 }
 
@@ -25,7 +25,7 @@ class LibraryChannelSelector extends StatelessWidget {
   });
 
   /// 全部渠道（含停用项；本组件只展示启用项）。
-  final List<SourceEntry> channels;
+  final List<SourceDescriptor> channels;
 
   /// 当前选中的渠道 key。
   final String selectedKey;
@@ -43,7 +43,7 @@ class LibraryChannelSelector extends StatelessWidget {
         items: [
           for (final entry in entries)
             M3EDropdownItem<String>(
-              label: entry.name,
+              label: entry.displayName,
               value: entry.key,
               selected: entry.key == selectedKey,
             ),

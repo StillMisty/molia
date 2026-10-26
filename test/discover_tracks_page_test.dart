@@ -97,8 +97,11 @@ void main() {
       });
     }
     await tester.pumpWidget(
-      ChangeNotifierProvider<DiscoverProvider>.value(
-        value: discover,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
+        ],
         child: MaterialApp(
           locale: const Locale('zh'),
           localizationsDelegates: const [

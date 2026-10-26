@@ -329,5 +329,92 @@ void main() {
       expect(builds, before + 1);
       expect(lastIndex, 1);
     });
+
+    testWidgets('enabled=false 时不订阅 position，重新启用后同步最新行', (tester) async {
+      final position = ValueNotifier<Duration>(Duration.zero);
+      addTearDown(position.dispose);
+
+      var builds = 0;
+      var lastIndex = -1;
+      int lineIndexFor(Duration value) => value.inSeconds ~/ 5;
+
+      Widget build({required bool enabled}) => MaterialApp(
+            home: PositionLineIndexBuilder(
+              position: position,
+              enabled: enabled,
+              lineIndexFor: lineIndexFor,
+              builder: (context, currentLineIndex) {
+                builds++;
+                lastIndex = currentLineIndex;
+                return Text('$currentLineIndex');
+              },
+            ),
+          );
+
+      await tester.pumpWidget(build(enabled: false));
+      expect(lastIndex, 0);
+      final before = builds;
+
+      // 隐藏期间进度继续走：没有监听 → 不重建、行号也不前进。
+      position.value = const Duration(seconds: 12); // 第 2 行
+      await tester.pump();
+      expect(builds, before, reason: '禁用时不得订阅 position');
+      expect(lastIndex, 0, reason: '禁用期间不跟随进度');
+
+      // 重新可见：一次重建同步到最新行（而不是从旧行慢慢追）。
+      await tester.pumpWidget(build(enabled: true));
+      expect(builds, greaterThan(before));
+      expect(lastIndex, 2, reason: '重新启用时同步最新行号');
+
+      // 恢复订阅后继续跟随。
+      position.value = const Duration(seconds: 18); // 第 3 行
+      await tester.pump();
+      expect(lastIndex, 3);
+    });
+
+    testWidgets('enabled 翻转与通道替换交错时不重复监听', (tester) async {
+      final first = ValueNotifier<Duration>(Duration.zero);
+      final second = ValueNotifier<Duration>(const Duration(seconds: 30));
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      var lastIndex = -1;
+      int lineIndexFor(Duration value) => value.inSeconds ~/ 5;
+
+      Widget build({
+        required ValueNotifier<Duration> position,
+        required bool enabled,
+      }) =>
+          MaterialApp(
+            home: PositionLineIndexBuilder(
+              position: position,
+              enabled: enabled,
+              lineIndexFor: lineIndexFor,
+              builder: (context, currentLineIndex) {
+                lastIndex = currentLineIndex;
+                return Text('$currentLineIndex');
+              },
+            ),
+          );
+
+      // 禁用 → 换通道：旧通道没挂监听，新通道也不该挂。
+      await tester.pumpWidget(build(position: first, enabled: false));
+      expect(lastIndex, 0);
+      await tester.pumpWidget(build(position: second, enabled: false));
+      expect(lastIndex, 6, reason: '父级重建时按新通道同步一次行号');
+      second.value = const Duration(seconds: 60); // 第 12 行
+      await tester.pump();
+      expect(lastIndex, 6, reason: '禁用时换通道也不能开始监听');
+
+      // 启用：同步最新行；之后两条通道交错变化只跟随当前通道。
+      await tester.pumpWidget(build(position: second, enabled: true));
+      expect(lastIndex, 12);
+
+      await tester.pumpWidget(build(position: second, enabled: false));
+      await tester.pumpWidget(build(position: second, enabled: true));
+      second.value = const Duration(seconds: 66); // 第 13 行
+      await tester.pump();
+      expect(lastIndex, 13);
+    });
   });
 }

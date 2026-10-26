@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 同步内容子页：类别开关 + 移动数据策略。
@@ -58,49 +58,43 @@ class SyncContentPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.syncContentSection),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          SettingsSectionCard(
-            // 页面标题已经说明这是「同步内容」，卡片不再重复一层标题。
-            footer: SettingsSectionHint(text: l10n.syncCategorySubtitle),
-            children: [
-              for (final entry in _categoryOrder.entries)
-                SettingsSwitchTile(
-                  switchKey: Key('settingsSyncCategory-${entry.key.name}'),
-                  icon: entry.value.$1,
-                  title: entry.value.$2(l10n),
-                  // 关闭后果集中在 footer；不逐行重复同一句话。
-                  subtitle: '',
-                  value: provider.categories[entry.key] ??
-                      entry.key.defaultEnabled,
-                  onChanged: (value) =>
-                      unawaited(provider.setCategory(entry.key, value)),
-                ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.syncCellularSection,
-            children: [
+    return SettingsSubPage(
+      title: l10n.syncContentSection,
+      children: [
+        SettingsSectionCard(
+          // 页面标题已经说明这是「同步内容」，卡片不再重复一层标题。
+          footer: SettingsSectionHint(text: l10n.syncCategorySubtitle),
+          children: [
+            for (final entry in _categoryOrder.entries)
               SettingsSwitchTile(
-                switchKey: const Key('settingsSyncCellularPauseSwitch'),
-                icon: Icons.signal_cellular_off_rounded,
-                title: l10n.syncCellularPauseTitle,
-                subtitle: l10n.syncCellularPauseSubtitle,
-                value: provider.cellularPolicy == SyncCellularPolicy.pause,
-                onChanged: (value) => unawaited(provider.setCellularPolicy(
-                    value ? SyncCellularPolicy.pause : SyncCellularPolicy.auto)),
+                switchKey: Key('settingsSyncCategory-${entry.key.name}'),
+                icon: entry.value.$1,
+                title: entry.value.$2(l10n),
+                // 关闭后果集中在 footer；不逐行重复同一句话。
+                subtitle: '',
+                value: provider.categories[entry.key] ??
+                    entry.key.defaultEnabled,
+                onChanged: (value) =>
+                    unawaited(provider.setCategory(entry.key, value)),
               ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        SettingsSectionCard(
+          title: l10n.syncCellularSection,
+          children: [
+            SettingsSwitchTile(
+              switchKey: const Key('settingsSyncCellularPauseSwitch'),
+              icon: Icons.signal_cellular_off_rounded,
+              title: l10n.syncCellularPauseTitle,
+              subtitle: l10n.syncCellularPauseSubtitle,
+              value: provider.cellularPolicy == SyncCellularPolicy.pause,
+              onChanged: (value) => unawaited(provider.setCellularPolicy(
+                  value ? SyncCellularPolicy.pause : SyncCellularPolicy.auto)),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

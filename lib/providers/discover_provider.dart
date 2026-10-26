@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/mapping/track_mapper.dart';
 import '../domain/models/discover.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
+import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 import '../sources/builtin/builtin_search.dart';
 import '../sources/builtin/discover_source.dart';
@@ -37,15 +39,15 @@ class DiscoverProvider extends ChangeNotifier {
     Map<String, DiscoverSource>? sources,
     this._onChannelChanged,
     String? initialChannelKey,
-  })  : _playback = playbackProvider,
-        _library = libraryProvider,
-        _sources = sources ?? BuiltinDiscover.sources {
+  }) : _playback = playbackProvider,
+       _library = libraryProvider,
+       _sources = sources ?? BuiltinDiscover.sources {
     // 默认选中规范顺序里的第一个可用平台（当前为 QQ）；测试/恢复场景可
     // 显式指定初始渠道。
     _channelKey =
         initialChannelKey != null && _sources.containsKey(initialChannelKey)
-            ? initialChannelKey
-            : _firstAvailableChannelKey();
+        ? initialChannelKey
+        : _firstAvailableChannelKey();
     // 收藏状态 / 我的列表变化时转发通知，让发现页的收藏按钮与「加入列表」
     // 弹层保持响应。历史写入（每首歌一次）不转发——发现页对历史无依赖，
     // 无脑转发会让整页（含全部 tab 与 AI 推荐卡片）随每次切歌重建。
@@ -94,9 +96,9 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 可用平台（保持内置注册顺序，注入的假数据源同样适用）。
   List<String> get sourceKeys => [
-        for (final key in BuiltinDiscover.sourceKeys)
-          if (_sources.containsKey(key)) key,
-      ];
+    for (final key in BuiltinDiscover.sourceKeys)
+      if (_sources.containsKey(key)) key,
+  ];
 
   /// 平台展示名（与「音源」页一致：酷我/酷狗/QQ/网易/咪咕）。
   String sourceDisplayName(String sourceKey) =>
@@ -176,25 +178,35 @@ class DiscoverProvider extends ChangeNotifier {
   Future<DiscoverDetail> loadPlaylistDetail(String rawId, int page) =>
       _guard((source) => source.playlistDetail(rawId, page));
 
-  /// 播放发现曲目队列（[index] 为起始下标）。
-  /// 播放歌单曲目（`mode` 非空时先切换播放模式：「随机播放全部」→ shuffle，
-  /// 与收藏页 / 歌手页同一约定；单曲点击不传，尊重用户当前模式）。
+  /// 播放发现曲目队列（测试 / 兼容入口；生产页面走 `TrackHandoff`）。
+  ///
+  /// 与 [domainTracksOf] 共用同一份领域曲目转换和 `playDomainTracks` 后端，
+  /// 不再走独立的源曲目播放链路。`mode` 非空时先切换播放模式。
   Future<void> playTracks(
     List<DiscoverTrack> tracks,
     int index, {
     String? contextName,
     PlayMode? mode,
   }) async {
-    if (tracks.isEmpty) return;
+    final domainTracks = domainTracksOf(tracks);
+    if (domainTracks.isEmpty) return;
     if (mode != null) {
       await _playback.setPlayMode(mode);
     }
-    await _playback.playSourceTracks(
-      [for (final track in tracks) _toSourceTrack(track)],
-      index.clamp(0, tracks.length - 1),
+    await _playback.playDomainTracks(
+      domainTracks,
+      index.clamp(0, domainTracks.length - 1),
       contextName: contextName,
     );
   }
+
+  /// 发现曲目 → 领域曲目（`TrackHandoff` 播放入口的统一形状）。
+  ///
+  /// raw 由 [_toSourceTrack] 原样透传，页面只拿领域 `Track`（不读 payload）；
+  /// 与 [playTracks] 共用同一份曲目转换，不产生第二条映射口径。
+  List<Track> domainTracksOf(List<DiscoverTrack> tracks) => [
+    for (final track in tracks) trackFromSourceTrack(_toSourceTrack(track)),
+  ];
 
   /// 收藏 / 取消收藏；仓库写失败以 failed 结果返回（图标态保持原样）。
   Future<FavoriteToggleOutcome> toggleFavorite(DiscoverTrack track) =>
@@ -276,32 +288,32 @@ class DiscoverProvider extends ChangeNotifier {
   }
 
   SourceTrack _toSourceTrack(DiscoverTrack track) => SourceTrack(
-        sourceKey: track.sourceKey,
-        origin: 'builtin',
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        coverUrl: (track.coverUrl?.isNotEmpty ?? false) ? track.coverUrl : null,
-        duration: (track.durationMs != null && track.durationMs! > 0)
-            ? Duration(milliseconds: track.durationMs!)
-            : null,
-        qualities: qualitiesFromRaw(track.raw),
-        raw: track.raw,
-      );
+    sourceKey: track.sourceKey,
+    origin: 'builtin',
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    coverUrl: (track.coverUrl?.isNotEmpty ?? false) ? track.coverUrl : null,
+    duration: (track.durationMs != null && track.durationMs! > 0)
+        ? Duration(milliseconds: track.durationMs!)
+        : null,
+    qualities: qualitiesFromRaw(track.raw),
+    raw: track.raw,
+  );
 
   /// 发现曲目 → 资料库列表曲目（「加入列表」统一流程使用）。
   PlaylistTrack toPlaylistTrack(DiscoverTrack track) => PlaylistTrack(
-        playlistId: 0,
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        coverUrl: track.coverUrl,
-        durationMs: track.durationMs,
-        raw: track.raw,
-        addedAt: DateTime.now().millisecondsSinceEpoch,
-      );
+    playlistId: 0,
+    sourceKey: track.sourceKey,
+    songId: track.songId,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    coverUrl: track.coverUrl,
+    durationMs: track.durationMs,
+    raw: track.raw,
+    addedAt: DateTime.now().millisecondsSinceEpoch,
+  );
 
   @override
   void dispose() {

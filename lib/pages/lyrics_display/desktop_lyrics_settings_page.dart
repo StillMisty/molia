@@ -16,6 +16,7 @@ import '../../theme/m3e_context.dart';
 import '../../theme/scheme_builder.dart';
 import '../../utils/color_hex.dart';
 import '../../widgets/app_color_picker.dart';
+import '../../widgets/settings/settings_subpage.dart';
 import '../../widgets/settings/settings_tiles.dart';
 import 'lyrics_shared_display_section.dart';
 
@@ -40,316 +41,310 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
       artworkScheme: themeProvider.artworkColorScheme,
     );
 
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.lyricsDesktopTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          SettingsSectionCard(
-            title: l10n.lyricsDesktopTitle,
-            children: [
-              SettingsSwitchTile(
-                icon: Icons.picture_in_picture_alt_rounded,
-                title: l10n.lyricsDesktopEnable,
-                subtitle: l10n.lyricsDesktopEnableSubtitle,
-                value: settings.desktopEnabled,
-                onChanged: (value) async {
-                  if (value &&
-                      capability == LyricsOutputCapability.needsPermission) {
-                    // 未授权：不假装开启，直接引导到系统授权页；
-                    // 授权返回后由设置首屏的 lifecycle 监听复查能力。
-                    await display.requestDesktopOverlayPermission();
-                    return;
-                  }
-                  await settings.setDesktopEnabled(value);
-                },
-              ),
-              if (capability == LyricsOutputCapability.needsPermission)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 18,
-                        color: AppSemanticColors.of(context).warning,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          l10n.lyricsDesktopPermissionNeeded,
-                          style: context.typeScale.bodySmall.copyWith(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant,
-                          ),
+    return SettingsSubPage(
+      title: l10n.lyricsDesktopTitle,
+      children: [
+        SettingsSectionCard(
+          title: l10n.lyricsDesktopTitle,
+          children: [
+            SettingsSwitchTile(
+              icon: Icons.picture_in_picture_alt_rounded,
+              title: l10n.lyricsDesktopEnable,
+              subtitle: l10n.lyricsDesktopEnableSubtitle,
+              value: settings.desktopEnabled,
+              onChanged: (value) async {
+                if (value &&
+                    capability == LyricsOutputCapability.needsPermission) {
+                  // 未授权：不假装开启，直接引导到系统授权页；
+                  // 授权返回后由设置首屏的 lifecycle 监听复查能力。
+                  await display.requestDesktopOverlayPermission();
+                  return;
+                }
+                await settings.setDesktopEnabled(value);
+              },
+            ),
+            if (capability == LyricsOutputCapability.needsPermission)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      size: 18,
+                      color: AppSemanticColors.of(context).warning,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        l10n.lyricsDesktopPermissionNeeded,
+                        style: context.typeScale.bodySmall.copyWith(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
                         ),
                       ),
-                      M3EButton.icon(
-                        style: M3EButtonStyle.text,
-                        onPressed: display.requestDesktopOverlayPermission,
-                        icon: const Icon(Icons.lock_open_rounded, size: 18),
-                        label: Text(l10n.lyricsDesktopPermissionGrant),
-                      ),
-                    ],
-                  ),
-                ),
-              _previewCard(context, l10n, settings, scheme),
-              SettingsSliderRow(
-                icon: Icons.format_size_rounded,
-                title: l10n.lyricsDesktopFontSize,
-                valueLabel: settings.desktopFontSize.round().toString(),
-                value: settings.desktopFontSize,
-                min: LyricsDisplaySettings.fontSizeRange.first,
-                max: LyricsDisplaySettings.fontSizeRange.last,
-                divisions: 36,
-                onChanged: (value) =>
-                    settings.setDesktopFontSize(value.roundToDouble()),
-              ),
-              SettingsSliderRow(
-                icon: Icons.opacity_rounded,
-                title: l10n.lyricsDesktopOpacity,
-                valueLabel: '${(settings.desktopOpacity * 100).round()}%',
-                value: settings.desktopOpacity * 100,
-                min: LyricsDisplaySettings.opacityRange.first * 100,
-                max: LyricsDisplaySettings.opacityRange.last * 100,
-                divisions: 16,
-                onChanged: (value) =>
-                    settings.setDesktopOpacity((value / 100).clamp(0.2, 1.0)),
-              ),
-              SettingsSliderRow(
-                icon: Icons.width_normal_rounded,
-                title: l10n.lyricsDesktopWidth,
-                valueLabel: '${settings.desktopWidthPercent.round()}%',
-                value: settings.desktopWidthPercent,
-                min: LyricsDisplaySettings.widthRange.first,
-                max: LyricsDisplaySettings.widthRange.last,
-                divisions: 12,
-                onChanged: (value) => settings.setDesktopWidthPercent(value),
-              ),
-              // 显示行数（默认 1 = 只显示当前行；旧的「仅显示当前行」开关已合并到这里）。
-              // 保持 dropdown：选项多、文案是纯数字，下拉比分段更省横向空间。
-              SettingsDropdownRow<int>(
-                icon: Icons.format_list_numbered_rounded,
-                title: l10n.lyricsDesktopMaxLines,
-                value: settings.desktopMaxLines,
-                options: [
-                  for (final value in const [1, 2, 3, 4, 5])
-                    (value, '$value'),
-                ],
-                onChanged: settings.setDesktopMaxLines,
-              ),
-              SettingsChoiceRow<DesktopTextAlignX>(
-                icon: Icons.format_align_center_rounded,
-                title: l10n.lyricsDesktopAlign,
-                value: settings.desktopTextAlignX,
-                options: [
-                  (DesktopTextAlignX.left, l10n.lyricsDesktopAlignLeft),
-                  (DesktopTextAlignX.center, l10n.lyricsDesktopAlignCenter),
-                  (DesktopTextAlignX.right, l10n.lyricsDesktopAlignRight),
-                ],
-                icons: const {
-                  DesktopTextAlignX.left: Icons.format_align_left_rounded,
-                  DesktopTextAlignX.center: Icons.format_align_center_rounded,
-                  DesktopTextAlignX.right: Icons.format_align_right_rounded,
-                },
-                onChanged: settings.setDesktopTextAlignX,
-              ),
-              // 取色来源：决定三行「跟随主题角色」用哪套方案（应用主题 /
-              // 当前曲目封面）；自定义行不受影响。
-              SettingsChoiceRow<SurfaceColorSource>(
-                icon: Icons.palette_rounded,
-                title: l10n.lyricsDesktopSchemeSource,
-                value: settings.desktopSchemeSource,
-                options: [
-                  (
-                    SurfaceColorSource.appTheme,
-                    l10n.lyricsDesktopSchemeAppTheme,
-                  ),
-                  (
-                    SurfaceColorSource.artwork,
-                    l10n.lyricsDesktopSchemeArtwork,
-                  ),
-                ],
-                onChanged: settings.setDesktopSchemeSource,
-              ),
-              _colorRow(
-                context,
-                rowKey: const Key('desktopColorPlayedRow'),
-                icon: Icons.text_fields_rounded,
-                title: l10n.lyricsDesktopColorPlayed,
-                source: settings.desktopPlayedColorSource,
-                customColor: settings.desktopPlayedColor,
-                scheme: scheme,
-                onSourceChanged: settings.setDesktopPlayedColorSource,
-                onCustomColorChanged: settings.setDesktopPlayedColor,
-              ),
-              _colorRow(
-                context,
-                rowKey: const Key('desktopColorUnplayedRow'),
-                icon: Icons.text_fields_rounded,
-                title: l10n.lyricsDesktopColorUnplayed,
-                source: settings.desktopUnplayedColorSource,
-                customColor: settings.desktopUnplayedColor,
-                scheme: scheme,
-                onSourceChanged: settings.setDesktopUnplayedColorSource,
-                onCustomColorChanged: settings.setDesktopUnplayedColor,
-              ),
-              _colorRow(
-                context,
-                rowKey: const Key('desktopColorShadowRow'),
-                icon: Icons.blur_on_rounded,
-                title: l10n.lyricsDesktopColorShadow,
-                source: settings.desktopShadowColorSource,
-                customColor: settings.desktopShadowColor,
-                scheme: scheme,
-                onSourceChanged: settings.setDesktopShadowColorSource,
-                onCustomColorChanged: settings.setDesktopShadowColor,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 2, bottom: 4),
-                child: Text(
-                  l10n.lyricsDesktopColorThemeHint,
-                  style: context.typeScale.bodySmall.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
+                    ),
+                    M3EButton.icon(
+                      style: M3EButtonStyle.text,
+                      onPressed: display.requestDesktopOverlayPermission,
+                      icon: const Icon(Icons.lock_open_rounded, size: 18),
+                      label: Text(l10n.lyricsDesktopPermissionGrant),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          LyricsSharedDisplaySection(title: l10n.lyricsSharedDisplaySection),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.lyricsDesktopBehaviorSection,
-            children: [
-              SettingsSwitchTile(
-                icon: Icons.lock_rounded,
-                title: l10n.lyricsDesktopLock,
-                subtitle: '',
-                value: settings.desktopLock,
-                onChanged: settings.setDesktopLock,
-              ),
-              SettingsSwitchTile(
-                icon: Icons.ac_unit_rounded,
-                title: l10n.lyricsDesktopFreeze,
-                subtitle: '',
-                value: settings.desktopFreezeOnScreenOff,
-                onChanged: settings.setDesktopFreezeOnScreenOff,
-              ),
-              SettingsSwitchTile(
-                icon: Icons.animation_rounded,
-                title: l10n.lyricsDesktopAnimation,
-                subtitle: '',
-                value: settings.desktopShowToggleAnimation,
-                onChanged: settings.setDesktopShowToggleAnimation,
-              ),
-              SettingsChoiceRow<DesktopScrollMode>(
-                key: const Key('desktopScrollModeRow'),
-                icon: Icons.keyboard_double_arrow_right_rounded,
-                title: l10n.lyricsDesktopScrollMode,
-                subtitle: l10n.lyricsDesktopScrollModeSubtitle,
-                value: settings.desktopScrollMode,
-                options: [
-                  (
-                    DesktopScrollMode.followSinging,
-                    l10n.lyricsDesktopScrollFollow,
-                  ),
-                  (
-                    DesktopScrollMode.constant,
-                    l10n.lyricsDesktopScrollConstant,
-                  ),
-                ],
-                onChanged: settings.setDesktopScrollMode,
-              ),
-              SettingsSwitchTile(
-                icon: Icons.visibility_off_rounded,
-                title: l10n.lyricsDesktopHideOnPause,
-                subtitle: l10n.lyricsDesktopHideOnPauseSubtitle,
-                value: settings.desktopHideOnPause,
-                onChanged: settings.setDesktopHideOnPause,
-              ),
-              SettingsChoiceRow<LyricsPauseBehavior>(
-                icon: Icons.pause_rounded,
-                title: l10n.lyricsDesktopPauseBehavior,
-                // 整窗隐藏时回退策略不生效：置灰并说明原因（值保留，关掉开关即恢复可点）。
-                subtitle: settings.desktopHideOnPause
-                    ? l10n.lyricsDesktopPauseFallbackOverridden
-                    : null,
-                enabled: !settings.desktopHideOnPause,
-                value: settings.desktopPauseBehavior,
-                options: [
-                  (LyricsPauseBehavior.keep, l10n.lyricsBehaviorKeep),
-                  (LyricsPauseBehavior.title, l10n.lyricsBehaviorTitle),
-                  (LyricsPauseBehavior.clear, l10n.lyricsBehaviorClear),
-                ],
-                onChanged: settings.setDesktopPauseBehavior,
-              ),
-              SettingsChoiceRow<DesktopNoLyricsBehavior>(
-                icon: Icons.music_off_rounded,
-                title: l10n.lyricsDesktopNoLyrics,
-                value: settings.desktopNoLyricsBehavior,
-                options: [
-                  (DesktopNoLyricsBehavior.title, l10n.lyricsBehaviorTitle),
-                  (
-                    DesktopNoLyricsBehavior.hide,
-                    l10n.lyricsDisplayUnsyncedHide,
-                  ),
-                ],
-                onChanged: settings.setDesktopNoLyricsBehavior,
-              ),
-              _controlSwitch(
-                l10n.lyricsControlPlayPause,
-                Icons.play_arrow_rounded,
-                DesktopControlKeys.playPause,
-                settings,
-              ),
-              _controlSwitch(
-                l10n.lyricsControlPrevious,
-                Icons.skip_previous_rounded,
-                DesktopControlKeys.previous,
-                settings,
-              ),
-              _controlSwitch(
-                l10n.lyricsControlNext,
-                Icons.skip_next_rounded,
-                DesktopControlKeys.next,
-                settings,
-              ),
-              _controlSwitch(
-                l10n.lyricsControlTranslation,
-                Icons.translate_rounded,
-                DesktopControlKeys.translation,
-                settings,
-              ),
-              _controlSwitch(
-                l10n.lyricsControlLock,
-                Icons.lock_rounded,
-                DesktopControlKeys.lock,
-                settings,
-              ),
-              _controlSwitch(
-                l10n.lyricsControlClose,
-                Icons.close_rounded,
-                DesktopControlKeys.close,
-                settings,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: M3EButton.icon(
-                  style: M3EButtonStyle.tonal,
-                  onPressed: display.resetDesktopPosition,
-                  icon: const Icon(Icons.center_focus_strong_rounded),
-                  label: Text(l10n.lyricsDesktopResetPosition),
+            _previewCard(context, l10n, settings, scheme),
+            SettingsSliderRow(
+              icon: Icons.format_size_rounded,
+              title: l10n.lyricsDesktopFontSize,
+              valueLabel: settings.desktopFontSize.round().toString(),
+              value: settings.desktopFontSize,
+              min: LyricsDisplaySettings.fontSizeRange.first,
+              max: LyricsDisplaySettings.fontSizeRange.last,
+              divisions: 36,
+              onChanged: (value) =>
+                  settings.setDesktopFontSize(value.roundToDouble()),
+            ),
+            SettingsSliderRow(
+              icon: Icons.opacity_rounded,
+              title: l10n.lyricsDesktopOpacity,
+              valueLabel: '${(settings.desktopOpacity * 100).round()}%',
+              value: settings.desktopOpacity * 100,
+              min: LyricsDisplaySettings.opacityRange.first * 100,
+              max: LyricsDisplaySettings.opacityRange.last * 100,
+              divisions: 16,
+              onChanged: (value) =>
+                  settings.setDesktopOpacity((value / 100).clamp(0.2, 1.0)),
+            ),
+            SettingsSliderRow(
+              icon: Icons.width_normal_rounded,
+              title: l10n.lyricsDesktopWidth,
+              valueLabel: '${settings.desktopWidthPercent.round()}%',
+              value: settings.desktopWidthPercent,
+              min: LyricsDisplaySettings.widthRange.first,
+              max: LyricsDisplaySettings.widthRange.last,
+              divisions: 12,
+              onChanged: (value) => settings.setDesktopWidthPercent(value),
+            ),
+            // 显示行数（默认 1 = 只显示当前行；旧的「仅显示当前行」开关已合并到这里）。
+            // 保持 dropdown：选项多、文案是纯数字，下拉比分段更省横向空间。
+            SettingsDropdownRow<int>(
+              icon: Icons.format_list_numbered_rounded,
+              title: l10n.lyricsDesktopMaxLines,
+              value: settings.desktopMaxLines,
+              options: [
+                for (final value in const [1, 2, 3, 4, 5])
+                  (value, '$value'),
+              ],
+              onChanged: settings.setDesktopMaxLines,
+            ),
+            SettingsChoiceRow<DesktopTextAlignX>(
+              icon: Icons.format_align_center_rounded,
+              title: l10n.lyricsDesktopAlign,
+              value: settings.desktopTextAlignX,
+              options: [
+                (DesktopTextAlignX.left, l10n.lyricsDesktopAlignLeft),
+                (DesktopTextAlignX.center, l10n.lyricsDesktopAlignCenter),
+                (DesktopTextAlignX.right, l10n.lyricsDesktopAlignRight),
+              ],
+              icons: const {
+                DesktopTextAlignX.left: Icons.format_align_left_rounded,
+                DesktopTextAlignX.center: Icons.format_align_center_rounded,
+                DesktopTextAlignX.right: Icons.format_align_right_rounded,
+              },
+              onChanged: settings.setDesktopTextAlignX,
+            ),
+            // 取色来源：决定三行「跟随主题角色」用哪套方案（应用主题 /
+            // 当前曲目封面）；自定义行不受影响。
+            SettingsChoiceRow<SurfaceColorSource>(
+              icon: Icons.palette_rounded,
+              title: l10n.lyricsDesktopSchemeSource,
+              value: settings.desktopSchemeSource,
+              options: [
+                (
+                  SurfaceColorSource.appTheme,
+                  l10n.lyricsDesktopSchemeAppTheme,
+                ),
+                (
+                  SurfaceColorSource.artwork,
+                  l10n.lyricsDesktopSchemeArtwork,
+                ),
+              ],
+              onChanged: settings.setDesktopSchemeSource,
+            ),
+            _colorRow(
+              context,
+              rowKey: const Key('desktopColorPlayedRow'),
+              icon: Icons.text_fields_rounded,
+              title: l10n.lyricsDesktopColorPlayed,
+              source: settings.desktopPlayedColorSource,
+              customColor: settings.desktopPlayedColor,
+              scheme: scheme,
+              onSourceChanged: settings.setDesktopPlayedColorSource,
+              onCustomColorChanged: settings.setDesktopPlayedColor,
+            ),
+            _colorRow(
+              context,
+              rowKey: const Key('desktopColorUnplayedRow'),
+              icon: Icons.text_fields_rounded,
+              title: l10n.lyricsDesktopColorUnplayed,
+              source: settings.desktopUnplayedColorSource,
+              customColor: settings.desktopUnplayedColor,
+              scheme: scheme,
+              onSourceChanged: settings.setDesktopUnplayedColorSource,
+              onCustomColorChanged: settings.setDesktopUnplayedColor,
+            ),
+            _colorRow(
+              context,
+              rowKey: const Key('desktopColorShadowRow'),
+              icon: Icons.blur_on_rounded,
+              title: l10n.lyricsDesktopColorShadow,
+              source: settings.desktopShadowColorSource,
+              customColor: settings.desktopShadowColor,
+              scheme: scheme,
+              onSourceChanged: settings.setDesktopShadowColorSource,
+              onCustomColorChanged: settings.setDesktopShadowColor,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Text(
+                l10n.lyricsDesktopColorThemeHint,
+                style: context.typeScale.bodySmall.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        LyricsSharedDisplaySection(title: l10n.lyricsSharedDisplaySection),
+        const SizedBox(height: kSettingsSectionSpacing),
+        SettingsSectionCard(
+          title: l10n.lyricsDesktopBehaviorSection,
+          children: [
+            SettingsSwitchTile(
+              icon: Icons.lock_rounded,
+              title: l10n.lyricsDesktopLock,
+              subtitle: '',
+              value: settings.desktopLock,
+              onChanged: settings.setDesktopLock,
+            ),
+            SettingsSwitchTile(
+              icon: Icons.ac_unit_rounded,
+              title: l10n.lyricsDesktopFreeze,
+              subtitle: '',
+              value: settings.desktopFreezeOnScreenOff,
+              onChanged: settings.setDesktopFreezeOnScreenOff,
+            ),
+            SettingsSwitchTile(
+              icon: Icons.animation_rounded,
+              title: l10n.lyricsDesktopAnimation,
+              subtitle: '',
+              value: settings.desktopShowToggleAnimation,
+              onChanged: settings.setDesktopShowToggleAnimation,
+            ),
+            SettingsChoiceRow<DesktopScrollMode>(
+              key: const Key('desktopScrollModeRow'),
+              icon: Icons.keyboard_double_arrow_right_rounded,
+              title: l10n.lyricsDesktopScrollMode,
+              subtitle: l10n.lyricsDesktopScrollModeSubtitle,
+              value: settings.desktopScrollMode,
+              options: [
+                (
+                  DesktopScrollMode.followSinging,
+                  l10n.lyricsDesktopScrollFollow,
+                ),
+                (
+                  DesktopScrollMode.constant,
+                  l10n.lyricsDesktopScrollConstant,
+                ),
+              ],
+              onChanged: settings.setDesktopScrollMode,
+            ),
+            SettingsSwitchTile(
+              icon: Icons.visibility_off_rounded,
+              title: l10n.lyricsDesktopHideOnPause,
+              subtitle: l10n.lyricsDesktopHideOnPauseSubtitle,
+              value: settings.desktopHideOnPause,
+              onChanged: settings.setDesktopHideOnPause,
+            ),
+            SettingsChoiceRow<LyricsPauseBehavior>(
+              icon: Icons.pause_rounded,
+              title: l10n.lyricsDesktopPauseBehavior,
+              // 整窗隐藏时回退策略不生效：置灰并说明原因（值保留，关掉开关即恢复可点）。
+              subtitle: settings.desktopHideOnPause
+                  ? l10n.lyricsDesktopPauseFallbackOverridden
+                  : null,
+              enabled: !settings.desktopHideOnPause,
+              value: settings.desktopPauseBehavior,
+              options: [
+                (LyricsPauseBehavior.keep, l10n.lyricsBehaviorKeep),
+                (LyricsPauseBehavior.title, l10n.lyricsBehaviorTitle),
+                (LyricsPauseBehavior.clear, l10n.lyricsBehaviorClear),
+              ],
+              onChanged: settings.setDesktopPauseBehavior,
+            ),
+            SettingsChoiceRow<DesktopNoLyricsBehavior>(
+              icon: Icons.music_off_rounded,
+              title: l10n.lyricsDesktopNoLyrics,
+              value: settings.desktopNoLyricsBehavior,
+              options: [
+                (DesktopNoLyricsBehavior.title, l10n.lyricsBehaviorTitle),
+                (
+                  DesktopNoLyricsBehavior.hide,
+                  l10n.lyricsDisplayUnsyncedHide,
+                ),
+              ],
+              onChanged: settings.setDesktopNoLyricsBehavior,
+            ),
+            _controlSwitch(
+              l10n.lyricsControlPlayPause,
+              Icons.play_arrow_rounded,
+              DesktopControlKeys.playPause,
+              settings,
+            ),
+            _controlSwitch(
+              l10n.lyricsControlPrevious,
+              Icons.skip_previous_rounded,
+              DesktopControlKeys.previous,
+              settings,
+            ),
+            _controlSwitch(
+              l10n.lyricsControlNext,
+              Icons.skip_next_rounded,
+              DesktopControlKeys.next,
+              settings,
+            ),
+            _controlSwitch(
+              l10n.lyricsControlTranslation,
+              Icons.translate_rounded,
+              DesktopControlKeys.translation,
+              settings,
+            ),
+            _controlSwitch(
+              l10n.lyricsControlLock,
+              Icons.lock_rounded,
+              DesktopControlKeys.lock,
+              settings,
+            ),
+            _controlSwitch(
+              l10n.lyricsControlClose,
+              Icons.close_rounded,
+              DesktopControlKeys.close,
+              settings,
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: M3EButton.icon(
+                style: M3EButtonStyle.tonal,
+                onPressed: display.resetDesktopPosition,
+                icon: const Icon(Icons.center_focus_strong_rounded),
+                label: Text(l10n.lyricsDesktopResetPosition),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

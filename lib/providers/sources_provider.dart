@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../domain/models/any_listen.dart';
-import '../domain/models/source.dart' as domain;
+import '../domain/models/source.dart' show SourceDescriptor;
 import '../domain/models/source_script.dart';
 import '../sources/any_listen/any_listen_source.dart';
 import '../sources/lx/lx_script_info.dart';
@@ -64,24 +64,10 @@ class SourcesProvider extends ChangeNotifier {
       _manager.scripts.map(_toInfo).toList(growable: false);
 
   /// 可供搜索/播放的音源（仅启用项；按用户自定义顺序排列）。
-  List<SourceEntry> get searchableSources =>
-      _entries(_manager.sourceProfiles.searchable);
+  List<SourceDescriptor> get searchableSources => _manager.searchableSources;
 
   /// 全部渠道（可搜索源 + 内置发现平台的并集，含停用项；按用户顺序）。
-  List<SourceEntry> get channels => _entries(_manager.sourceProfiles.channels);
-
-  /// 画像 → 领域视图：canSearch / discoverable / enabled 全部来自同一快照。
-  List<SourceEntry> _entries(Iterable<SourceProfile> profiles) => [
-        for (final profile in profiles)
-          SourceEntry(
-            key: profile.key,
-            name: profile.displayName,
-            kind: _toDomainKind(profile.kind),
-            canSearch: profile.searchable,
-            discoverable: profile.discoverable,
-            enabled: profile.enabled,
-          ),
-      ];
+  List<SourceDescriptor> get channels => _manager.channels;
 
   /// 默认音质偏好。
   String get preferredQuality => _manager.preferredQuality;
@@ -252,10 +238,4 @@ class SourcesProvider extends ChangeNotifier {
         actions: decl.actions,
         qualitys: decl.qualitys,
       );
-
-  domain.SourceKind _toDomainKind(SourceKind kind) => switch (kind) {
-        SourceKind.builtin => domain.SourceKind.builtin,
-        SourceKind.lx => domain.SourceKind.lx,
-        SourceKind.anyListen => domain.SourceKind.anyListen,
-      };
 }

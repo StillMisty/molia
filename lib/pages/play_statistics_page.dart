@@ -31,8 +31,10 @@ import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import '../widgets/statistics/listening_heatmap.dart';
 import '../widgets/track_row.dart';
@@ -67,51 +69,47 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.statsTitle),
-        automaticallyImplyLeading: true,
-        actions: [
-          M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            icon: const Icon(Icons.ios_share_rounded),
-            semanticLabel: l10n.statsExport,
-            onPressed: _export,
-          ),
-          M3EMenu.entries(
-            position: M3EMenuAnchorPosition.bottomEnd,
-            anchorBuilder: (context, open) => M3EIconButton(
-              variant: M3EIconButtonVariant.standard,
-              icon: const Icon(Icons.more_vert_rounded),
-              semanticLabel: l10n.statsClear,
-              onPressed: open,
-            ),
-            onSelected: (value) {
-              if (value == 'clear') unawaited(_confirmClear());
-            },
-            entries: [
-              M3EMenuEntry(
-                label: l10n.statsClear,
-                value: 'clear',
-                leading: const Icon(Icons.delete_outline_rounded),
-                isDestructive: true,
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Consumer<PlayStatisticsProvider>(
-          builder: (context, provider, _) {
-            if (!provider.hasLoaded && provider.isLoading) {
-              return const Center(child: M3ELoadingIndicator());
-            }
-            if (!provider.hasLoaded && provider.hasError) {
-              return _errorState(l10n, provider);
-            }
-            return _content(l10n, provider);
-          },
+    return SettingsSubPage.body(
+      title: l10n.statsTitle,
+      safeArea: true,
+      actions: [
+        M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          icon: const Icon(Icons.ios_share_rounded),
+          semanticLabel: l10n.statsExport,
+          onPressed: _export,
         ),
+        M3EMenu.entries(
+          position: M3EMenuAnchorPosition.bottomEnd,
+          anchorBuilder: (context, open) => M3EIconButton(
+            variant: M3EIconButtonVariant.standard,
+            icon: const Icon(Icons.more_vert_rounded),
+            semanticLabel: l10n.statsClear,
+            onPressed: open,
+          ),
+          onSelected: (value) {
+            if (value == 'clear') unawaited(_confirmClear());
+          },
+          entries: [
+            M3EMenuEntry(
+              label: l10n.statsClear,
+              value: 'clear',
+              leading: const Icon(Icons.delete_outline_rounded),
+              isDestructive: true,
+            ),
+          ],
+        ),
+      ],
+      body: Consumer<PlayStatisticsProvider>(
+        builder: (context, provider, _) {
+          if (!provider.hasLoaded && provider.isLoading) {
+            return const Center(child: M3ELoadingIndicator());
+          }
+          if (!provider.hasLoaded && provider.hasError) {
+            return _errorState(l10n, provider);
+          }
+          return _content(l10n, provider);
+        },
       ),
     );
   }
@@ -315,7 +313,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
     final firstDay = firstPlayedAt == null
         ? today
         : DateUtils.dateOnly(
-            DateTime.fromMillisecondsSinceEpoch(firstPlayedAt));
+            DateTime.fromMillisecondsSinceEpoch(firstPlayedAt),
+          );
     final localizations = MaterialLocalizations.of(context);
     final duration = provider.valueMode == PlayStatisticsValueMode.duration;
 
@@ -396,8 +395,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       if (entry.weekday < 0 || entry.weekday > 6) continue;
       values[entry.weekday][entry.hour] =
           provider.valueMode == PlayStatisticsValueMode.duration
-              ? entry.listenedMs
-              : entry.playCount;
+          ? entry.listenedMs
+          : entry.playCount;
     }
     final duration = provider.valueMode == PlayStatisticsValueMode.duration;
     final narrow = MaterialLocalizations.of(context).narrowWeekdays;
@@ -465,10 +464,7 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            l10n.statsSources,
-            style: context.typeScale.titleSmall,
-          ),
+          Text(l10n.statsSources, style: context.typeScale.titleSmall),
           const SizedBox(height: 12),
           for (var i = 0; i < sources.length; i++) ...[
             if (i > 0) const SizedBox(height: 10),
@@ -534,7 +530,8 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
               coverUrl: tracks[i].coverUrl,
               durationMs: tracks[i].durationMs,
               trackId: TrackId(tracks[i].sourceKey, tracks[i].songId),
-              trailingText: '${l10n.statsPlaysCount(tracks[i].playCount)} · '
+              trailingText:
+                  '${l10n.statsPlaysCount(tracks[i].playCount)} · '
                   '${_formatListened(l10n, tracks[i].listenedMs)}',
             ),
             position: calculateCardPosition(i, tracks.length),
@@ -631,7 +628,9 @@ class _PlayStatisticsPageState extends State<PlayStatisticsPage> {
   }
 
   Future<void> _playTopTracks(
-      List<PlayStatTrackEntry> entries, int index) async {
+    List<PlayStatTrackEntry> entries,
+    int index,
+  ) async {
     if (entries.isEmpty) return;
     final l10n = AppLocalizations.of(context)!;
     final library = context.read<LibraryProvider>();
@@ -873,6 +872,7 @@ class _ShareBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double target = share.clamp(0.0, 1.0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(_height / 2),
       child: Container(
@@ -880,10 +880,17 @@ class _ShareBar extends StatelessWidget {
         color: background,
         child: Align(
           alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: share,
-            heightFactor: 1,
-            child: ColoredBox(color: color),
+          // 一次性入场 / 数值变化动画（不是常驻 ticker）：落定后停在目标
+          // 占比；减弱动效零时长硬切到目标。
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: target),
+            duration: effectDurationOf(context, M3EMotion.short4),
+            curve: M3EMotion.emphasizedDecelerate,
+            builder: (context, value, _) => FractionallySizedBox(
+              widthFactor: value,
+              heightFactor: 1,
+              child: ColoredBox(color: color),
+            ),
           ),
         ),
       ),
@@ -945,8 +952,9 @@ class _DayDetailSheet extends StatelessWidget {
                   TimeOfDay.fromDateTime(
                     DateTime.fromMillisecondsSinceEpoch(event.startedAt),
                   ),
-                  alwaysUse24HourFormat:
-                      MediaQuery.alwaysUse24HourFormatOf(context),
+                  alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(
+                    context,
+                  ),
                 );
                 return TrackRow(
                   model: TrackRowModel(

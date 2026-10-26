@@ -27,6 +27,7 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import '../utils/collection_row_query.dart';
 import '../utils/scroll_to_top.dart';
@@ -836,17 +837,21 @@ class _FavoritesPageState extends State<FavoritesPage> {
     // 当下 provider 状态现算。
     final listColumn = Column(
       children: [
-        _selecting
-            ? _buildSelectionBar(context, l10n, view)
-            : _buildIdleHeader(
-                context,
-                l10n,
-                provider,
-                playlists,
-                favoritesId,
-                view,
-                reorderActive: reorderActive,
-              ),
+        // 标题行 / 搜索行 / 多选栏同高：两态交叉淡入淡出，头部不跳高，
+        // 离场层不吃点击（多选栏入场 / 退场不误触下面的按钮）。
+        _HeaderCrossFade(
+          selecting: _selecting,
+          idle: _buildIdleHeader(
+            context,
+            l10n,
+            provider,
+            playlists,
+            favoritesId,
+            view,
+            reorderActive: reorderActive,
+          ),
+          selection: _buildSelectionBar(context, l10n, view),
+        ),
         Expanded(
           child: sessionView.isLoading
               ? const Center(child: M3ELoadingIndicator())
@@ -1524,6 +1529,99 @@ class _FavoritesPageState extends State<FavoritesPage> {
               : null,
         ),
       ),
+    );
+  }
+}
+
+/// 页头两态（常规 / 多选）交叉淡入淡出。
+///
+/// 两态高度相同（顶部 / 底部留白 + 56 行高），避免切换时头部跳高、列表
+/// 滚动位置抖动。落定后只挂当前层：隐藏态不参与 finder / 焦点 / 点击。
+/// 用自绘控制器而不是 `AnimatedSwitcher`（图标切换专用，架构测试会拦），
+/// 也不直接用 `AnimatedCrossFade`（隐藏层仍留在树里，测试与焦点会命中原层）。
+class _HeaderCrossFade extends StatefulWidget {
+  const _HeaderCrossFade({
+    required this.selecting,
+    required this.idle,
+    required this.selection,
+  });
+
+  final bool selecting;
+  final Widget idle;
+  final Widget selection;
+
+  @override
+  State<_HeaderCrossFade> createState() => _HeaderCrossFadeState();
+}
+
+class _HeaderCrossFadeState extends State<_HeaderCrossFade>
+    with SingleTickerProviderStateMixin {
+  static const Duration _duration = M3EMotion.short4;
+
+  late final AnimationController _progress = AnimationController(
+    vsync: this,
+    value: widget.selecting ? 1 : 0,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // effects 时长随系统减弱动效归零（硬切）。
+    _progress.duration = effectDurationOf(context, _duration);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HeaderCrossFade oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selecting == widget.selecting) return;
+    final double target = widget.selecting ? 1 : 0;
+    if (_progress.duration == Duration.zero) {
+      _progress.value = target;
+      return;
+    }
+    _progress.animateTo(target, curve: M3EMotion.emphasizedDecelerate);
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _progress,
+      builder: (context, _) {
+        final double t = _progress.value;
+        // 落定后只保留当前态：隐藏层不再构建（finder / 键盘焦点 / 语义都
+        // 不会命中已经离开的页头）。
+        if (t <= 0) {
+          return IgnorePointer(
+            ignoring: widget.selecting,
+            child: widget.idle,
+          );
+        }
+        if (t >= 1) {
+          return IgnorePointer(
+            ignoring: !widget.selecting,
+            child: widget.selection,
+          );
+        }
+        return Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            IgnorePointer(
+              ignoring: widget.selecting,
+              child: Opacity(opacity: 1 - t, child: widget.idle),
+            ),
+            IgnorePointer(
+              ignoring: !widget.selecting,
+              child: Opacity(opacity: t, child: widget.selection),
+            ),
+          ],
+        );
+      },
     );
   }
 }

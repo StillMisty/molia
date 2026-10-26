@@ -15,10 +15,16 @@ import '../../sources/source_track.dart';
 import 'lyric_provider.dart';
 
 class BuiltinLyricProvider extends LyricProvider {
-  BuiltinLyricProvider(this.key);
+  BuiltinLyricProvider(this.key, {this.adapter});
 
   /// 内置平台 key（`BuiltinPlatforms.byKey` 的键，如 `bili`）。
   final String key;
+
+  /// 平台特定取词适配器；null = 使用 [BuiltinPlatforms] 的静态注册。
+  ///
+  /// 需要账号会话的渠道（B 站字幕）由注册表注入会话绑定的适配器，
+  /// 本类不按平台 key 另开分支。
+  final BuiltinLyricAdapter? adapter;
 
   final Logger _logger = Logger('molia.builtin_lyric_provider');
 
@@ -90,7 +96,8 @@ class BuiltinLyricProvider extends LyricProvider {
 
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
-    final adapter = BuiltinPlatforms.lyricFor(key);
+    // 注入的适配器优先（B 站字幕的账号会话由注册表绑定）；否则查静态注册表。
+    final adapter = this.adapter ?? BuiltinPlatforms.lyricFor(key);
     if (adapter == null) return null;
     try {
       final info = await adapter(match.extra);

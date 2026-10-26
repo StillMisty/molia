@@ -11,6 +11,7 @@ import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../utils/sync_format.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 import 'sync_dialogs.dart';
 import 'sync_labels.dart';
@@ -27,58 +28,52 @@ class SyncLogPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
     final entries = provider.log;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.syncLogTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(kSettingsPadding),
-        children: [
-          SettingsSectionCard(
-            title: l10n.syncActivitySection,
-            children: [
+    return SettingsSubPage(
+      title: l10n.syncLogTitle,
+      children: [
+        SettingsSectionCard(
+          title: l10n.syncActivitySection,
+          children: [
+            SettingsInfoTile(
+              key: const Key('settingsSyncActivityItem'),
+              icon: Icons.insights_rounded,
+              title: l10n.syncActivityTitle,
+              subtitle: _activitySubtitle(provider, l10n),
+            ),
+          ],
+        ),
+        const SizedBox(height: kSettingsSectionSpacing),
+        SettingsSectionCard(
+          title: l10n.syncLogSection,
+          footer: SettingsSectionHint(text: l10n.syncLogHint),
+          children: [
+            if (entries.isEmpty)
               SettingsInfoTile(
-                key: const Key('settingsSyncActivityItem'),
-                icon: Icons.insights_rounded,
-                title: l10n.syncActivityTitle,
-                subtitle: _activitySubtitle(provider, l10n),
-              ),
-            ],
-          ),
-          const SizedBox(height: kSettingsSectionSpacing),
-          SettingsSectionCard(
-            title: l10n.syncLogSection,
-            footer: SettingsSectionHint(text: l10n.syncLogHint),
-            children: [
-              if (entries.isEmpty)
-                SettingsInfoTile(
-                  icon: Icons.history_rounded,
-                  title: l10n.syncLogSection,
-                  subtitle: l10n.syncLogEmpty,
-                )
-              else
-                for (final entry in entries)
-                  SyncLogRow(
-                    key: Key('settingsSyncLogPage-${entry.at}'),
-                    entry: entry,
-                    onTap: syncLogEntryActionable(entry)
-                        ? () => unawaited(showSyncIssueDialog(
-                              context,
-                              provider: provider,
-                              issue: entry.error,
-                              l10n: l10n,
-                              // 口令动作就在本页弹层。
-                              onConfigurePassphrase: () =>
-                                  showSyncPassphraseDialog(
-                                      context, provider, l10n),
-                            ))
-                        : null,
-                  ),
-            ],
-          ),
-        ],
-      ),
+                icon: Icons.history_rounded,
+                title: l10n.syncLogSection,
+                subtitle: l10n.syncLogEmpty,
+              )
+            else
+              for (final entry in entries)
+                SyncLogRow(
+                  key: Key('settingsSyncLogPage-${entry.at}'),
+                  entry: entry,
+                  onTap: syncLogEntryActionable(entry)
+                      ? () => unawaited(showSyncIssueDialog(
+                            context,
+                            provider: provider,
+                            issue: entry.error,
+                            l10n: l10n,
+                            // 口令动作就在本页弹层。
+                            onConfigurePassphrase: () =>
+                                showSyncPassphraseDialog(
+                                    context, provider, l10n),
+                          ))
+                      : null,
+                ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -8,6 +8,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/favorite_track_tile.dart';
+import 'package:molia/widgets/playing_indicator.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -103,7 +104,7 @@ void main() {
 
   testWidgets('当前曲目订阅：播放 / 暂停角标跟随，切到别的歌后消失', (tester) async {
     await pumpTile(tester);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
 
     backend.emit(const BackendSnapshot(
       current: track,
@@ -112,7 +113,7 @@ void main() {
       isPlaying: true,
     ));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
 
     // 同一首暂停：仍标记当前曲目，只换暂停图形。
     backend.emit(const BackendSnapshot(
@@ -122,7 +123,9 @@ void main() {
     ));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    // provider 通知有 300ms 节流，400ms 帧才刚重建；再给 IconSwap 150ms 收尾。
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(PlayingIndicator), findsNothing);
 
     const other = Track(
       id: TrackId('kw', 'b'),
@@ -136,7 +139,7 @@ void main() {
       isPlaying: true,
     ));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsNothing);
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
   });
 

@@ -29,6 +29,7 @@ import '../providers/playback_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/playback_cover_decode.dart';
 import 'cover_appearance.dart';
 import 'favorite_action.dart';
@@ -46,7 +47,7 @@ String? nowPlayingCoverUrl(BuildContext context, PlaybackProvider provider) =>
 ///
 /// 隐藏语义与共享飞行绑定：播放页激活或飞行期间封面淡出，但两件事不能
 /// 混在一次时长里——飞行落位帧必须与副本移除同帧亮出（亮出 0ms），收起
-/// 方向才走 160ms 淡出，否则结束/开始两帧会看到重影或跳变。
+/// 方向才走 short3（150ms）淡出，否则结束/开始两帧会看到重影或跳变。
 class NowPlayingCover extends StatelessWidget {
   /// 跟随当前曲目（顶栏 / 桌面底栏的封面位）。
   const NowPlayingCover.current({
@@ -72,7 +73,7 @@ class NowPlayingCover extends StatelessWidget {
   /// 是否处于隐藏态（播放页激活或飞行中）。
   final bool hidden;
 
-  static const Duration _hideDuration = Duration(milliseconds: 160);
+  static const Duration _hideDuration = M3EMotion.short3;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +82,12 @@ class NowPlayingCover extends StatelessWidget {
     );
     return AnimatedOpacity(
       // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
-      duration: hidden ? _hideDuration : Duration.zero,
+      // 减弱动效时两个方向都硬切，避免收起后仍留半透明封面挡住飞行锚点。
+      duration: effectDurationOf(
+        context,
+        hidden ? _hideDuration : Duration.zero,
+      ),
+      curve: M3EMotion.emphasizedDecelerate,
       opacity: hidden ? 0 : 1,
       child: CoverCard(
         key: flightKey,
@@ -311,8 +317,10 @@ class NowPlayingFavoriteButton extends StatelessWidget {
 /// 宿主通过槽位保留自己的版式：顶栏在封面槽里叠应用标志（播放页激活时
 /// 交叉淡出），桌面底栏在尾部放收藏按钮；间距与点击语义在这里唯一。
 ///
-/// 刻意不用 M3ETappable：它点击时会请求焦点，搜索页输入中点击顶栏会打断
-/// 输入；GestureDetector 与播放页封面的手势实现保持一致。
+/// 点击区走 [M3ETappable] 收口手势与桌面手型光标，不再裸用 GestureDetector；
+/// `focusable: false` 让点击不请求焦点（搜索页输入中点击顶栏不会打断输入），
+/// `pressedScale: 1` 让顶栏文字不做按压缩放。builder 原样返回排版，不需要
+/// hover / press 状态层。
 class NowPlayingSummary extends StatelessWidget {
   const NowPlayingSummary({
     super.key,
@@ -342,10 +350,15 @@ class NowPlayingSummary extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          child: M3ETappable(
             onTap: onTap,
-            child: Row(
+            // 点击不抢焦点：搜索输入中点击顶栏不能打断输入；文字也不做
+            // 按压缩放（顶栏是信息区，缩放会连带抖动整行）。
+            focusable: false,
+            pressedScale: 1,
+            // 排版原样返回，没有 hover 视觉，不必为指针移动重建整行。
+            trackHover: false,
+            builder: (context, _) => Row(
               children: [
                 cover,
                 const SizedBox(width: _gap),
