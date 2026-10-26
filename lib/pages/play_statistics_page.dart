@@ -31,6 +31,7 @@ import '../providers/playback_provider.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import '../utils/save_as_label.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -873,6 +874,7 @@ class _ShareBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double target = share.clamp(0.0, 1.0);
     return ClipRRect(
       borderRadius: BorderRadius.circular(_height / 2),
       child: Container(
@@ -880,10 +882,17 @@ class _ShareBar extends StatelessWidget {
         color: background,
         child: Align(
           alignment: Alignment.centerLeft,
-          child: FractionallySizedBox(
-            widthFactor: share,
-            heightFactor: 1,
-            child: ColoredBox(color: color),
+          // 一次性入场 / 数值变化动画（不是常驻 ticker）：落定后停在目标
+          // 占比；减弱动效零时长硬切到目标。
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: target),
+            duration: effectDurationOf(context, M3EMotion.short4),
+            curve: M3EMotion.emphasizedDecelerate,
+            builder: (context, value, _) => FractionallySizedBox(
+              widthFactor: value,
+              heightFactor: 1,
+              child: ColoredBox(color: color),
+            ),
           ),
         ),
       ),

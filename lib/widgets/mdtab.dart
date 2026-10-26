@@ -60,8 +60,8 @@ class _LyricsQueueDotsState extends State<LyricsQueueDots> {
     HapticsService.lightImpact();
     widget.pageController.animateToPage(
       index,
-      duration: const Duration(milliseconds: 360),
-      curve: Curves.easeInOutCubic,
+      duration: M3EMotion.medium2,
+      curve: M3EMotion.emphasizedDecelerate,
     );
   }
 

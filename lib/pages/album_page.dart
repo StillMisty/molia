@@ -22,6 +22,7 @@ import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/cover_tap_target.dart';
 import '../widgets/cover_viewer.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
@@ -309,28 +310,26 @@ class _AlbumPageState extends State<AlbumPage> {
       ),
     );
     if (cover == null || cover.isEmpty) return image;
-    return Semantics(
-      button: true,
-      label: l10n.coverLabel,
-      child: GestureDetector(
-        key: const Key('albumHeaderCover'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticsService.lightImpact();
-          unawaited(
-            showCoverViewer(
-              context,
-              coverUrl: cover,
-              title: l10n.coverLabel,
-              subtitle: album.name,
-              fileNameBase: album.artist.isEmpty
-                  ? album.name
-                  : '${album.name} - ${album.artist}',
-            ),
-          );
-        },
-        child: image,
-      ),
+    return CoverTapTarget(
+      key: const Key('albumHeaderCover'),
+      size: 96,
+      borderRadius: BorderRadius.circular(16),
+      semanticLabel: l10n.coverLabel,
+      onPressed: () {
+        HapticsService.lightImpact();
+        unawaited(
+          showCoverViewer(
+            context,
+            coverUrl: cover,
+            title: l10n.coverLabel,
+            subtitle: album.name,
+            fileNameBase: album.artist.isEmpty
+                ? album.name
+                : '${album.name} - ${album.artist}',
+          ),
+        );
+      },
+      child: image,
     );
   }
 

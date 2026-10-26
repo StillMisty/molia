@@ -317,8 +317,10 @@ class NowPlayingFavoriteButton extends StatelessWidget {
 /// 宿主通过槽位保留自己的版式：顶栏在封面槽里叠应用标志（播放页激活时
 /// 交叉淡出），桌面底栏在尾部放收藏按钮；间距与点击语义在这里唯一。
 ///
-/// 刻意不用 M3ETappable：它点击时会请求焦点，搜索页输入中点击顶栏会打断
-/// 输入；GestureDetector 与播放页封面的手势实现保持一致。
+/// 点击区走 [M3ETappable] 收口手势与桌面手型光标，不再裸用 GestureDetector；
+/// `focusable: false` 让点击不请求焦点（搜索页输入中点击顶栏不会打断输入），
+/// `pressedScale: 1` 让顶栏文字不做按压缩放。builder 原样返回排版，不需要
+/// hover / press 状态层。
 class NowPlayingSummary extends StatelessWidget {
   const NowPlayingSummary({
     super.key,
@@ -348,10 +350,15 @@ class NowPlayingSummary extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          child: M3ETappable(
             onTap: onTap,
-            child: Row(
+            // 点击不抢焦点：搜索输入中点击顶栏不能打断输入；文字也不做
+            // 按压缩放（顶栏是信息区，缩放会连带抖动整行）。
+            focusable: false,
+            pressedScale: 1,
+            // 排版原样返回，没有 hover 视觉，不必为指针移动重建整行。
+            trackHover: false,
+            builder: (context, _) => Row(
               children: [
                 cover,
                 const SizedBox(width: _gap),

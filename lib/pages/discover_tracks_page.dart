@@ -14,6 +14,7 @@ import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
+import '../widgets/cover_tap_target.dart';
 import '../widgets/cover_viewer.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/discover_actions.dart';
@@ -347,26 +348,24 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     );
     if (cover == null || cover.isEmpty) return image;
     final name = info.name.isEmpty ? widget.title : info.name;
-    return Semantics(
-      button: true,
-      label: l10n.coverLabel,
-      child: GestureDetector(
-        key: const Key('discoverHeaderCover'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticsService.lightImpact();
-          unawaited(
-            showCoverViewer(
-              context,
-              coverUrl: cover,
-              title: l10n.coverLabel,
-              subtitle: name,
-              fileNameBase: name,
-            ),
-          );
-        },
-        child: image,
-      ),
+    return CoverTapTarget(
+      key: const Key('discoverHeaderCover'),
+      size: 96,
+      borderRadius: BorderRadius.circular(16),
+      semanticLabel: l10n.coverLabel,
+      onPressed: () {
+        HapticsService.lightImpact();
+        unawaited(
+          showCoverViewer(
+            context,
+            coverUrl: cover,
+            title: l10n.coverLabel,
+            subtitle: name,
+            fileNameBase: name,
+          ),
+        );
+      },
+      child: image,
     );
   }
 

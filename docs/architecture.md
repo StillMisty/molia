@@ -1095,6 +1095,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 - 组件：UI 全面使用 `M3E*`；基础件（Scaffold/Text/Icon/Theme 等）来自 `material_ui`
   （M3E 必需依赖，不要试图移除）；禁止 import `package:flutter/material.dart`，
   组件 import 用 `package:material_3_expressive/material_3_expressive.dart`。
+- 可点击封面统一走 `lib/widgets/cover_tap_target.dart`（透明 `M3ECard` 状态层：
+  hover / press / 焦点环 / 键盘激活）；页面只保留封面裁切与打开原图。
 - **二级页 chrome**：`ResponsiveNavigation.showSecondaryPage(title:, body:)` 收口
   窄屏全屏（`M3EAppBar.top`）与宽屏 `M3ESideSheet`。页面用 `embedded: true` 只出
   正文（不带 Scaffold / AppBar），两种 chrome 由宿主提供；宽屏宽度用
@@ -1136,7 +1138,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`medium1` / `short4` + emphasized 曲线），自动滚动用 `long4` +
   `emphasizedDecelerate`；时长统一经 `effectDurationOf` / `reduceMotionOf`
   收口（减弱动效零时长，自动滚动直接落位），翻译展开只为当前行播放（其余行
-  零时长硬切）。
+  零时长硬切）。音量浮层 / 收藏页多选栏也走这套收口：浮层缩放是 spatial
+  弹簧、透明度从同一进度截断 0..1；多选栏与页头同高交叉淡入淡出（effects
+  时长 + 曲线，离场层 `IgnorePointer`）。
 - 设置页：首屏 7 个语义分区（外观 / 封面 / 播放 / 歌词与展示 / 内容与来源 /
   通用 / 数据），分组标题 + 分段卡片行：行表面统一走共享的
   `lib/widgets/card_list_surface.dart`
