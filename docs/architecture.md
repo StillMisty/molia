@@ -68,7 +68,10 @@
   - `Album`（专辑 id / 名称 / 歌手 / 封面 / 年份 / 曲目列表 / 分页）；
   - `ArtistSummary` / `ArtistDetail`（歌手搜索条目 / 歌手页数据：头像、简介、曲目、分页）；
   - `LyricHit`（按歌词搜歌命中：领域 `Track` + 命中片段）；`SearchKind`（song / artist / lyric）；
-  - `SourceDescriptor` / `SourceCapabilities`。
+  - `SourceDescriptor` / `SourceCapabilities`：`SourceDescriptor` 是渠道的**唯一形状**
+    （key / displayName / kind / capabilities / enabled / discoverable / order），
+    由 `SourceProfile.toDescriptor` 投影一次；旧的 `SourceEntry` / `SourceOption`
+    双胞胎已删除。
 - **端口**：`MusicSource`（search / `resolve`（返回 `PlayableStream`：uri + 请求头 +
   有效期）/ lyrics / artwork / comments / collection / searchArtists / searchLyrics）、`SourceRegistry`
   （descriptors/byKey/forTrack/setOrder/changes）、`PlaybackBackend`（state ValueListenable +
@@ -85,6 +88,10 @@
   失败不缓存，可 `invalidatePrefix`），并把异常归一化为 `SourceFailure`；
   `resolve` 返回 `PlayableStream`（uri + headers + expiresIn），B 站等需要
   `Referer` / UA 的平台由这一层原样保留请求头。
+  目录详情分页（专辑 / 歌手 / 评论）共用 `lib/data/catalog/cached_page_service.dart`
+  的 `CachedPageService<T, Q>`：single-flight + LRU + TTL + `SourceFailure` 归一化 +
+  前缀失效 / 计数只此一份；三个类型化服务只提供取数函数与 key / 前缀，容量与 TTL
+  在各自适配器声明（专辑 / 歌手 64 条 · 10min，评论 96 条 · 5min）。
 - **Playback**：`LocalPlaybackBackend` 组合 `LocalPlaybackService`（值变才发快照；
   播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供快照 `previous`）；
   `DefaultPlaybackFacade` 合并快照通知（`==` 去重）、把进度拆到独立 `position`
@@ -234,8 +241,9 @@
   **不读**可能已被缩略图覆盖的封面缓存；省流生效时先确认。入口为歌曲信息 /
   封面选择弹层 / 专辑 / 歌手 / 发现详情头图，播放页大封面保持切歌手势。
 - **Comments**：`CommentsService`（`lib/data/catalog/comments_service.dart`）是评论分页的
-  唯一取数入口（single-flight + LRU + TTL 5min，key=`comments:{source}:{songId}:{kind}:{page}`，
-  失败不缓存，`invalidateTrack` 供下拉刷新）。取数经 `MusicSource.comments`
+  唯一取数入口（经 `CachedPageService`：single-flight + LRU + TTL 5min，
+  key=`comments:{source}:{songId}:{kind}:{page}`，失败不缓存，`invalidateTrack`
+  供下拉刷新）。取数经 `MusicSource.comments`
   （能力位 `capabilities.comment`：五个音乐平台 + B 站视频）→ `SourceManager.fetchComments`
   → `lib/sources/builtin/{wy,tx,kg,kw,mg}_comment.dart` + `bili_comment.dart`
   （移植 LX：热门 / 最新、分页、表情还原、引用 / 楼中楼归一化；B 站用
@@ -245,8 +253,9 @@
   `lib/widgets/comment_list_view.dart`；入口：歌曲信息页「评论」行（能力位判定唯一
   来源 `CommentsProvider.supports`，不支持时行内说明；展开态播放器进度排不再放入口）。
 - **专辑**：`AlbumService`（`lib/data/catalog/album_service.dart`）是专辑分页的唯一取数
-  入口（single-flight + LRU + TTL 10min，key=`album:{source}:{id}:{page}:{limit}`，
-  失败不缓存，`invalidateAlbum` 供重试）；取数函数由组合根注入
+  入口（经 `CachedPageService`：single-flight + LRU + TTL 10min，
+  key=`album:{source}:{id}:{page}:{limit}`，失败不缓存，`invalidateAlbum` 供重试）；
+  取数函数由组合根注入
   `SourceManager.fetchAlbum`（能力位 `capabilities.collection`：仅内置音乐五平台置真，
   B 站无专辑、LX 脚本 / any-listen / local 为假）→ `lib/sources/builtin/{wy,tx,kg,kw,mg}_album.dart`
   按专辑 id 精确拉取（wy `api/v1/album`、tx `music.musichallAlbum.AlbumSongList` 模块、
@@ -256,7 +265,7 @@
   `tool/gen_album_fixtures.mjs`），端点均需真机复验。端口路由：
   `MusicSource.collection(CollectionRef(type: album))` 在能力位为真时转发
   `fetchAlbum`（playlist / artist 仍 unsupported）。UI 为 `lib/pages/album_page.dart`
-  （头部元信息 + 播放全部 + 加入列表 + `TrackRow` 分页列表），入口：歌曲信息页
+  （头部元信息 + 播放全部 + 加入列表 + `PagedTrackCollection` 分页列表），入口：歌曲信息页
   「专辑」行（`track_mapper` 派生的 `Track.platformAlbumId` + 能力位双判定；否则保持只读）。
 - **系统媒体会话**（Android/iOS/macOS/Windows/Linux）：`LocalAudioHandler`
   经读取面 `MediaSessionReadModel`（生产实现 `LocalPlaybackMediaSessionReadModel`
@@ -569,10 +578,12 @@
   + `durl` 回退）、CC/AI 字幕歌词、游标评论、UP 主页、音乐榜 / 热搜与公开收藏夹导入。
   取链返回 `PlayableStream(headers: UA + Referer, expiresIn: deadline)`；
   收藏夹按 `media_count` 拉全（上限 50 页 / 1000 条）。可选 B 站扫码登录
-  （`BiliAccountService` + `BiliAccountStore`）只为字幕提供账号 Cookie：字幕走
+  （`BiliAccountService` + `BiliSession`）只为字幕提供账号 Cookie：字幕走
   `accountSession`（buvid + WBI + Cookie）/ `account` 回退，播放、搜索、评论、
-  字幕 CDN 继续匿名；凭据是凭证类别设置键，默认随同步与完整备份。决策与边界见
-  ADR-0014 / ADR-0016。
+  字幕 CDN 继续匿名；凭据是凭证类别设置键，默认随同步与完整备份。`BiliSession`
+  是 Cookie / 账号 / 就绪 Future 的唯一持有者（账号服务只保留 UI 状态），
+  `BiliClient` / `BiliLyric` 接受注入会话；`BiliLyric` 在读取 Cookie 前 await
+  `ready`。决策与边界见 ADR-0014 / ADR-0016。
 - **内置尝试循环 / 发现执行器**：`builtin_transport.dart::runBuiltinAttempts` 是
   「`attempt` 返回 null 即重试、异常直接上抛、耗尽抛 `StateError`」的唯一循环，
   `cachedRetry` 与无缓存的发现端点共用；`BuiltinRetryBudget` 集中命名
@@ -609,7 +620,14 @@
 - **曲目交接**：`lib/widgets/track_handoff.dart` 是「把一组曲目交给播放 / 资料库」
   的唯一编排；页面只提供曲目与上下文名。空列表 no-op、洗牌先落模式、起播下标
   夹取、上下文名归一、批量 `addedAt` 都在这里；`PlaylistTrack.fromTrack` 生产代码
-  只在此调用，加入列表仍复用 `add_to_library.dart` 的目标选择流程。
+  只在此调用，加入列表仍复用 `add_to_library.dart` 的目标选择流程。发现详情页
+  的 `DiscoverTrack` 经 `DiscoverProvider.domainTracksOf` 归一为领域曲目后走同一
+  交接，不再维护 `playTracks` 的第二套洗牌 / 触感 / 起播口径。
+- **分页曲目集合**：`lib/widgets/paged_track_collection.dart` 是专辑 / 歌手 / 发现
+  详情页的分页曲目骨架。`PagedTrackCollection<T,R>` 在 `PagedListController` 上
+  捕获同页实体（`reset` 同时作废列表与实体），`PagedTrackCollectionBody<R>` 收口
+  loading / 首屏失败 / 空态 / 列表 / 页脚 / 可选钉住表头 / 表格档行高；页面只保留
+  头部、行与播放动作。
 - **换源**：`SourceSwapProvider`（`lib/providers/source_swap_provider.dart`）是
   跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在可搜索音源
   并行检索（默认排除种子源；B 站允许同源多投稿，且 B 站曲目的 artists 是 UP 主、
@@ -618,7 +636,9 @@
   `CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
   `failedSourceKeys` / `failedSourceNames` 可重试），载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
-  `LyricsSourceSearchView`，音频侧为 `SourceSwapView`；入口：歌曲信息页「换源」
+  `LyricsSourceSearchView` + `LyricsSourceSearchSession`（逐源搜索 / 过期结果 /
+  可用性 / 选中写缓存的状态机，视图只渲染与提示），音频侧为 `SourceSwapView`；
+  入口：歌曲信息页「换源」
   默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
   自建列表）行动作（触摸端左滑胶囊 / 桌面右键菜单）默认音频 tab）点候选即试听
   （单曲「换源试听」上下文）、
@@ -898,7 +918,7 @@
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（按 `SearchKind` 三会话，分页状态机 `PagedListController` 以状态值发布） | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（按 `SearchKind` 三会话，分页状态机 `PagedListController` 以状态值发布）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
@@ -1102,7 +1122,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   正文（不带 Scaffold / AppBar），两种 chrome 由宿主提供；宽屏宽度用
   `M3ESideSheetTheme.copyWith(width/maxWidth)` 覆盖到详情页档位（平板 520 /
   桌面 720，包内默认上限只有 400），body 外包透明 `Material` 补 ink 祖先并补
-  键盘 bottom inset。
+  键盘 bottom inset。**设置子页是例外**：`SettingsSubPage`
+  （`lib/widgets/settings/settings_subpage.dart`）是设置内层 Navigator 的 chrome
+  （Scaffold / AppBar / `kSettingsPadding` 滚动正文的唯一实现），因为预测返回
+  要按「子页 / 弹层首屏」分派手势归属，普通返回也要先退子页再关弹层；设置域
+  之外仍走 `showSecondaryPage`。
 - **页面型弹窗**：`showPageModal` —— 窄屏 `M3EBottomSheet`，宽屏 `M3EDialog.show`
   + `PageModalCard`（`M3ECard` 取 `M3EDialogTheme` 的圆角 / elevation / scrim；
   容器色取 `surface`，与页面自带 Scaffold 的底色一致）。简单弹层（定时关闭 /

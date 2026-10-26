@@ -14,12 +14,13 @@
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：内置平台（五个音乐平台 + B 站）搜索 / 发现 / 评论 / 取链共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；HTTP 重试预算统一为 `BuiltinTransport.defaultRetries`（发现端点的业务级预算见 Builtin retry attempts），结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
 - **Builtin platform registry（内置平台注册表）** — `lib/sources/builtin/builtin_platforms.dart`：内置六平台（五个音乐平台 + 哔哩哔哩）的唯一注册表：规范键 `wy / tx / kg / kw / mg / bili`、展示名、搜索候选排序位，以及类型化能力族适配器（搜索 / 原生取链 / 原生取词 / 原生取图 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）。能力位由适配器是否存在推导，组合后的唯一读取口是 **Source profile**；新增平台只改这里，不再同步七份 `supportedKeys` 与 switch。B 站只注册搜索 / 原生取链 / 评论 / 歌手 / 发现，没有专辑与按歌词搜歌。
 - **Source profile（音源画像）** — `lib/sources/source_profiles.dart`：把内置注册表、激活脚本声明、any-listen 可用性与渠道偏好（停用 / 顺序）合成每个 key 一份不可变 `SourceProfile`（key / 展示名 / kind / enabled / discoverable / `SourceCapabilities`）。`SourceProfiles.build` 是唯一组合点，`channels` / `searchable` / `forKey` 是一轮快照；`SourceManager` 的渠道、能力位、搜索 / 评论 / 专辑 / 歌手 / 歌词搜索路由，`SourceRegistryImpl` 与 `SourcesProvider` 读同一份，不再各自推导。搜索能力 = 搜索适配器存在且（原生取链或脚本可取链）；歌词 / 封面 = 注册表适配器或脚本对应 action；停用项仍进 `channels`（可重新启用）但不进 `searchable`。内置 key 的脚本声明只补能力，不生成第二个同名 LX 源；未知 key 返回 null。
+- **Source descriptor（渠道描述）** — `lib/domain/models/source.dart::SourceDescriptor`：渠道的唯一形状（key / displayName / kind / `SourceCapabilities` / enabled / discoverable / order），由 `SourceProfile.toDescriptor` 投影一次；`SourceManager.channels` / `searchableSources`、`SourceRegistry.descriptors`、`SearchProvider.sourceOptions`、`SourcesProvider.channels` 与资料页渠道选择共用它。旧的 `SourceEntry` / `SourceOption` 双胞胎已删除，调用方不再按场景挑选渠道类型。
 - **Builtin retry attempts（内置尝试循环）** — `builtin_transport.dart::runBuiltinAttempts` + `BuiltinRetryBudget`：`attempt` 返回 null 表示本次失败、未达上限继续；抛异常直接上抛，耗尽抛 `StateError`；退避与传输层同一条策略。`cachedRetry` 与无缓存的发现端点共用这一循环，`discover` / `leaderboard` / `wyLeaderboard` 预算集中命名，平台文件不再各写 3/4/6。
 - **Discover call runner（发现端点执行器）** — `lib/sources/builtin/discover_runner.dart`：`DiscoverCall`（`DiscoverRequestCall` 一次请求 + 无效判定 + 解析 / `DiscoverAttemptCall` 多步尝试）与 `runDiscoverCall` 是发现端点的唯一执行入口；有稳定 key 走 `BuiltinTransport.cachedRetry`（single-flight，成功才缓存），没有 key 走 `runBuiltinAttempts`。平台文件只保留 URL / 参数 / parser 与端点自己的缓存键，不再各自拼 `cachedRetry` 形状。
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：内置平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；五个音乐平台走它，平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。B 站搜索走 **Bili client**（会话 / WBI / ADR-0014 的 any-failure 刷新），与 runner 共用 `SourceSearchResult` 的 empty / failed 语义。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源是 **Source profile**（channels 候选 / 能力位 / 搜索路由共用）。
 - **Bilibili source（B 站音源 `bili`）** — `lib/sources/builtin/bili_*.dart`：第六个内置平台（展示名「哔哩哔哩」，默认启用）。`bili_api.dart` 维护匿名会话：`/x/frontend/finger/spi` 取 buvid3/4、`nav` 取 WBI 密钥（1 小时缓存 + single-flight）；`bili_client.dart` 是请求生命周期的唯一实现（WBI 签名、匿名 vs 会话头、业务码口径、风控刷新；搜索按 ADR-0014 任何失败刷新一次）。能力：全站视频搜索、原生取链（分 P cid → WBI playurl → dash 音频 192k/128k/64k）、CC/AI 字幕歌词（**需 B 站扫码登录**，见 ADR-0016）、视频评论、UP 主页、B 站音乐榜 / 热搜、公开收藏夹导入。边界：无专辑、无按歌词搜歌、无 Molia 账号系统、无大会员高音质、不浏览 / 搜索歌单、私密收藏夹不可导入（见 ADR-0014 / ADR-0016）。
-- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ `BiliAccountStore`（`lib/sources/builtin/bili_account.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + secure 盒，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。
-- **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 账号 Cookie（仅 `account` / `accountSession` 两种鉴权口径，播放 / 搜索 / 评论绝不带）/ 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是会话（buvid + WBI 密钥）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
+- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ **Bili session** `BiliSession`（`lib/sources/builtin/bili_session.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + secure 盒，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。`BiliSession` 是 Cookie / 账号 / 就绪 Future 的唯一持有者；账号服务只保留 UI 状态（登录态 / 过期 / 持久化标记）并通过同一会话读写，`BiliClient` / `BiliLyric` 接受注入的会话（默认 `BiliSession.shared`），`BiliLyric` 先 await `ready` 再判断登录态。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。
+- **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 账号 Cookie（仅 `account` / `accountSession` 两种鉴权口径，播放 / 搜索 / 评论绝不带，Cookie 来自注入的 `BiliSession`）/ 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是匿名访问会话（buvid + WBI 密钥，类型 `BiliAnonSession`）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
 - **Bilibili raw id（B 站取链 id）** — `bvid`（`BV...`）优先、`aid`（av 号）兜底：`raw_track.dart` 的通用 id 优先级把 `bvid` 放在最前，`_platformIdFields['bili'] = ['bvid','aid','id']`，且不登记 `_canonicalIdFields['bili']`（B 站不靠 LX 脚本取链）。raw 原样保留 `cid`（首个分 P，取链与字幕共用）与 `source:'bili'`；`bvid` / `aid` 都缺失的条目不可播放（收藏夹里的番剧 / 课程在映射时过滤）。
 - **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
 
@@ -350,6 +351,11 @@
   换源（`autoFallback=false`：视频结果不是歌曲，自动竞速容易拿错），未登录时
   返回 `biliLoginRequired`，换源页只显示登录提示、不发搜索请求；手动选择写
   `provider='bili'` + `manual=true`，不会被登录后的原生刷新覆盖。
+- **Lyrics manual search session（手动歌词换源会话）** —
+  `lib/providers/lyrics_source_search_session.dart`：手动换源页的搜索与选择唯一
+  实现——逐来源状态 / 结果、查询代际（旧查询结果丢弃）、可用性每次读取时求值、
+  最佳匹配与「选中 → 取词 → 规范化 → `saveManual`」结果类型（成功 / 未找到 /
+  失败 / 忙）。会话不碰 Navigator 与 SnackBar；视图只渲染条目、提示并 pop。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
@@ -385,8 +391,12 @@
   游标分页会话状态（wy 最新评论的 `cursor`、mg 最新评论的 `commentId`），
   按「曲目 + 页码」保存平台游标（取第 N 页读 key N，第 N-1 页写入），
   只保留最近两页 + 有限曲目数；缺游标时 mg 直接失败（不静默返回首页数据）。
+- **Cached page service（分页缓存模块）** — `lib/data/catalog/cached_page_service.dart`：
+  目录详情分页（专辑 / 歌手 / 评论）共用的缓存骨架（single-flight + LRU + TTL +
+  `SourceFailure` 归一化 + 前缀失效 / 计数）。类型化适配器只提供取数函数与
+  key / 前缀；缓存策略只有这一份实现，TTL / 容量由各适配器声明。
 - **Comments service（评论服务）** — `lib/data/catalog/comments_service.dart`：评论分页的
-  唯一取数入口（single-flight + LRU + TTL 5min + `SourceFailure` 归一化），
+  唯一取数入口（经 **Cached page service**，96 条 / TTL 5min），
   key 为 `comments:{source}:{songId}:{kind}:{page}`；`invalidateTrack` 供下拉刷新。
 - **Comments session（评论会话）** — `lib/providers/comments_provider.dart`：热门 / 最新
   两个 tab 的懒加载、分页（跨页按 id 去重）、刷新与错误态；能力位 `capabilities.comment`
@@ -404,7 +414,7 @@
   `tool/gen_album_fixtures.mjs`），端点均需真机复验。B 站没有专辑实体，不注册
   `album` 适配器（`capabilities.collection` 为 false）。
 - **Album service（专辑服务）** — `lib/data/catalog/album_service.dart`：专辑分页的
-  唯一取数入口（single-flight + LRU + TTL 10min + `SourceFailure` 归一化），
+  唯一取数入口（经 **Cached page service**，64 条 / TTL 10min），
   key 为 `album:{source}:{id}:{page}:{limit}`；取数函数由组合根注入
   `SourceManager.fetchAlbum`（服务不依赖 sources 层）。
 - **Collection routing（集合路由）** — `MusicSource.collection(CollectionRef)` 在
@@ -424,8 +434,9 @@
   （行动作菜单收藏 / 加入列表：触摸端行尾 ⋮、桌面行表面右键），入口：歌曲信息页
   「歌手」行、搜索结果行内歌手名、
   搜索「歌手」类型条目；取数走 **Artist service（歌手服务）**
-  `lib/data/catalog/artist_service.dart`（single-flight + LRU + TTL 10min，
-  key `artist:{source}:{id}:{page}:{limit}`，注入 `SourceManager.fetchArtist`）。
+  `lib/data/catalog/artist_service.dart`（经 **Cached page service**，64 条 /
+  TTL 10min，key `artist:{source}:{id}:{page}:{limit}`，注入
+  `SourceManager.fetchArtist`），页面正文由 **Paged track collection** 承担。
 - **Builtin artists（内置歌手取数）** — `lib/sources/builtin/artist_source.dart`
   （`BuiltinArtists` 调度）+ `{kw,kg,tx,wy,mg}_artist.dart` + `bili_artist.dart`：
   五个音乐平台的歌手搜索与「详情 + 歌曲」以及 B 站 UP 搜索 / 资料 / 投稿的唯一实现
@@ -512,8 +523,10 @@
   交给播放或资料库的唯一实现。播放意图负责空列表 no-op、触感、洗牌先落模式再
   装载、起播下标夹取 / 随机、上下文名 trim + 回退与列表快照；加入列表意图用同一
   `addedAt` 批量转 `PlaylistTrack`，并复用 Add-to-library flow。专辑 / 歌手 /
-  曲目菜单 / 发现单曲只说意图，不再各写 `setPlayMode → playDomainTracks` 与
-  `PlaylistTrack.fromTrack`（生产代码唯一调用点）。
+  发现详情 / 曲目菜单 / 发现单曲只说意图，不再各写
+  `setPlayMode → playDomainTracks` 与 `PlaylistTrack.fromTrack`（生产代码唯一
+  调用点）；发现详情经 `DiscoverProvider.domainTracksOf` 把 `DiscoverTrack`
+  归一为领域曲目后走同一交接。
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是渠道状态的唯一持有者；
   渠道变化经注入的 `onChannelChanged`（组合根）触发搜索源跟随（可搜索渠道才跟随），
   资料页不再在两个 provider 之间仲裁同步，只处理「渠道被停用」的 UI 回退。
@@ -827,6 +840,11 @@
 - **Settings key（登记键）** — `lib/data/settings/settings_key.dart`：一个设置键的
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
   （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
+- **Settings subpage chrome（设置子页 chrome）** — `lib/widgets/settings/settings_subpage.dart`：
+  设置内层 Navigator 子页的 `Scaffold + M3EAppBar.top + ListView(kSettingsPadding)`
+  唯一实现（`SettingsSubPage` / `.body` / `SettingsSubPageList`）。设置子页不走
+  `ResponsiveNavigation.showSecondaryPage`：预测返回要按「子页 / 弹层首屏」分派
+  手势归属，普通返回先退子页再关弹层，所有权在 `settings_page.dart` 的弹层宿主。
 - **Settings registry（设置注册表）** — `lib/data/settings/settings_registry.dart`：
   登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根只构造这一份实例，
   再按模块分发按键作用域（`SettingsScope`），模块把 reload 钩子绑到自己的键，
@@ -967,6 +985,12 @@
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词读写、用量与清理的唯一实现。默认构造 / 未接入实例保持旧的 SharedPreferences 行为（不碰 `path_provider` 与文件 IO，widget 测试与降级平台依赖它）；生产组合根用 `LyricsCache.appSupport()` 显式接入文件后端：`<appSupport>/lyrics_cache/{md5(trackId)}.json`（一条一文件、临时文件 + rename 原子写）。旧版 prefs 条目不再懒迁移，历史 `manual_lyrics_cache_*` 键也不再特殊处理（不读、不清）；目录不可用时回退 prefs。TTL 策略属于 `CacheService`（取词时读取）。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。消费面：`SearchProvider`（按 `SearchKind` 三会话）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
+- **Paged track collection（分页曲目集合）** — `lib/widgets/paged_track_collection.dart`：
+  详情页的分页曲目集合与控制器的唯一实现。`PagedTrackCollection<T,R>` 在
+  `PagedListController` 上补「同页实体」捕获（专辑 / 歌手 / 发现详情），`reset`
+  同时作废列表与实体；`PagedTrackCollectionBody<R>` 收口 loading / 首屏失败 /
+  空态 / 列表 / 底部重试 / 可选钉住表头 / 表格档行高。专辑页、歌手页、发现详情页
+  只保留头部、行与播放动作。
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
 - **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
 - **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
