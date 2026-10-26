@@ -1,8 +1,9 @@
 /// 换源（跨音源找回同一首歌）的唯一状态机。
 ///
 /// 职责：
-/// - `begin`：按种子曲目「歌名 + 歌手」在**其它**可搜索音源并行检索
-///   （逐源就绪即填充；单源失败不阻塞，可重试）；
+/// - `begin`：按种子曲目「歌名 + 歌手」在可搜索音源并行检索
+///   （逐源就绪即填充；单源失败不阻塞，可重试）；默认排除种子源，
+///   B 站等允许同源多投稿的渠道由 [SourceSwapStrategies] 放行；
 /// - 会话状态：分组候选 / 当前 tab / 选中项（不可变对象，UI 用 `Selector`）；
 /// - `apply`：库内**原位替换**（列表/历史，经 [LibraryProvider]）与
 ///   **队列跟随**（经 [PlaybackProvider]，命中才跟随），两者解耦。
@@ -20,6 +21,7 @@ import '../domain/models/library.dart';
 import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
+import '../services/source_swap/source_swap_strategy.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
 
@@ -109,6 +111,7 @@ class SourceSwapProvider extends ChangeNotifier {
     required this._sourceRegistry,
     required this._libraryProvider,
     required this._playbackProvider,
+    this._strategies = SourceSwapStrategies.standard,
     this._onTrackSwapped,
   });
 
@@ -119,6 +122,9 @@ class SourceSwapProvider extends ChangeNotifier {
   final SourceRegistry _sourceRegistry;
   final LibraryProvider _libraryProvider;
   final PlaybackProvider _playbackProvider;
+
+  /// 按音源覆盖换源行为（同源候选 / 关键词构成）。
+  final SourceSwapStrategies _strategies;
 
   /// 写回成功后的曲目级本地数据钩子（自定义封面跟随；失败不影响换源）。
   final SourceSwapTrackHook? _onTrackSwapped;
@@ -145,6 +151,28 @@ class SourceSwapProvider extends ChangeNotifier {
 
   List<SourceSwapGroup> get groups => _groups;
   Set<String> get failedSourceKeys => Set.unmodifiable(_failedSourceKeys);
+
+  /// 失败音源的展示名（按注册表顺序；描述符已被移除时回退 key）。
+  ///
+  /// UI 要报出具体名字（如「哔哩哔哩」）：用户据此判断值不值得点重试。
+  List<String> get failedSourceNames {
+    if (_failedSourceKeys.isEmpty) return const [];
+    final descriptors = _sourceRegistry.descriptors;
+    final names = <String>[
+      for (final descriptor in descriptors)
+        if (_failedSourceKeys.contains(descriptor.key)) descriptor.displayName,
+    ];
+    final knownKeys = {for (final descriptor in descriptors) descriptor.key};
+    names.addAll(_failedSourceKeys.where((key) => !knownKeys.contains(key)));
+    return names;
+  }
+
+  /// 已启用的渠道 key（含当前不可搜索的内置平台）。
+  ///
+  /// 歌词来源跟随渠道停用开关：五个音乐平台没有 LX 脚本时不在
+  /// `descriptors` 里，但用户没有停用它们，歌词来源仍应保留。
+  Set<String> get enabledChannelKeys => _sourceRegistry.enabledChannelKeys;
+
   String get activeSourceKey => _activeSourceKey;
   Track? get selected => _selected;
 
@@ -164,7 +192,8 @@ class SourceSwapProvider extends ChangeNotifier {
     _failedSourceKeys.clear();
     _activeSourceKey = '';
     _selected = null;
-    _keyword = _buildKeyword(request.seed);
+    _keyword =
+        _strategies.of(request.seed.id.sourceKey).keywordFor(request.seed);
 
     final descriptors = _otherSearchableSources(request.seed);
     _noOtherSources = descriptors.isEmpty;
@@ -360,19 +389,19 @@ class SourceSwapProvider extends ChangeNotifier {
     }
   }
 
-  List<SourceDescriptor> _otherSearchableSources(Track seed) => [
-        for (final descriptor in _sourceRegistry.descriptors)
-          if (descriptor.enabled &&
-              descriptor.capabilities.search &&
-              descriptor.key != seed.id.sourceKey)
-            descriptor,
-      ];
-
-  /// 搜索关键词：歌名 + 歌手（空段过滤），对齐 LX 的 `name + singer`。
-  static String _buildKeyword(Track seed) => [
-        seed.title,
-        ...seed.artists.map((artist) => artist.name),
-      ].map((value) => value.trim()).where((value) => value.isNotEmpty).join(' ');
+  List<SourceDescriptor> _otherSearchableSources(Track seed) {
+    // 默认排除种子源；B 站等「同源多投稿」渠道按策略保留（仍会在结果里
+    // 过滤掉种子曲目自身，见 _searchSource）。
+    final sameSourceAllowed =
+        _strategies.of(seed.id.sourceKey).sameSourceCandidates;
+    return [
+      for (final descriptor in _sourceRegistry.descriptors)
+        if (descriptor.enabled &&
+            descriptor.capabilities.search &&
+            (descriptor.key != seed.id.sourceKey || sameSourceAllowed))
+          descriptor,
+    ];
+  }
 
   /// 单源搜索：结果就绪即并入分组（渐进渲染）；失败记入 [failedSourceKeys]。
   Future<void> _searchSource(int sessionId, SourceDescriptor descriptor) async {
@@ -401,7 +430,7 @@ class SourceSwapProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       if (sessionId != _sessionId) return;
-      _logger.fine('换源搜索失败 ${descriptor.key}: $e');
+      _logger.warning('换源搜索失败 ${descriptor.key}: $e');
       _failedSourceKeys.add(descriptor.key);
       notifyListeners();
     }

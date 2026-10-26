@@ -353,6 +353,12 @@ class _FakeRegistry implements SourceRegistry {
   List<domain.SourceDescriptor> get descriptors => _descriptors;
 
   @override
+  Set<String> get enabledChannelKeys => {
+        for (final descriptor in _descriptors)
+          if (descriptor.enabled) descriptor.key,
+      };
+
+  @override
   MusicSource? byKey(String key) => null;
 
   @override

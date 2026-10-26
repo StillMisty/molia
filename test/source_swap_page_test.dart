@@ -279,7 +279,7 @@ void main() {
     await openPage(tester);
 
     expect(find.text('其它音源没有找到这首歌'), findsOneWidget);
-    expect(find.text('1 个音源搜索失败'), findsOneWidget);
+    expect(find.text('kg 搜索失败'), findsOneWidget);
 
     // 重试：失败源恢复后候选出现。
     kg.fail = false;
@@ -287,6 +287,39 @@ void main() {
     await tester.tap(find.byKey(const Key('sourceSwapRetryFailedSources')));
     await tester.pumpAndSettle();
     expect(find.text('Title（kg）'), findsOneWidget);
-    expect(find.text('1 个音源搜索失败'), findsNothing);
+    expect(find.text('kg 搜索失败'), findsNothing);
+  });
+
+  testWidgets('6 个音源 chip 全部渲染（Wrap 换行，不用横向滚动）', (tester) async {
+    final bili = FakeMusicSource('bili');
+    sources
+      ..clear()
+      ..addAll({
+        'kg': kg,
+        'tx': tx,
+        'kw': FakeMusicSource('kw'),
+        'wy': FakeMusicSource('wy'),
+        'mg': FakeMusicSource('mg'),
+        'bili': bili,
+      });
+    for (final source in sources.values) {
+      source.items = [sourceTrack(source.key, '1', title: 'T-${source.key}')];
+    }
+    // B 站种子允许同源候选，但要排除种子自身：返回另一条投稿。
+    final seed = sourceTrack('bili', 'seed');
+    bili.items = [sourceTrack('bili', '2', title: 'T-bili')];
+
+    await pumpHost(tester, seed: seed);
+    await openPage(tester);
+
+    expect(find.byType(M3EChip), findsNWidgets(6));
+    for (final key in ['kg', 'tx', 'kw', 'wy', 'mg', 'bili']) {
+      expect(find.text(key), findsOneWidget, reason: '$key 的音源 chip 应可见');
+    }
+    // chip 行是换行布局（不是横向 ScrollView）。
+    expect(
+      find.ancestor(of: find.text('bili'), matching: find.byType(Wrap)),
+      findsWidgets,
+    );
   });
 }

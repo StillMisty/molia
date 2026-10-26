@@ -557,11 +557,11 @@
   "sourceSwapSearching": "Searching other sources…",
   "sourceSwapEmpty": "No match found in other sources",
   "sourceSwapNoSources": "No other sources available",
-  "sourceSwapFailedSources": "{count} source(s) failed to search",
+  "sourceSwapFailedSources": "Search failed for {sources}",
   "@sourceSwapFailedSources": {
     "placeholders": {
-      "count": {
-        "type": "int"
+      "sources": {
+        "type": "String"
       }
     }
   },

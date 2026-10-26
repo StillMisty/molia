@@ -7,6 +7,7 @@ import 'lyrics_provider_translation_cases.dart' as lyrics_provider_translation;
 import 'lyrics_scroll_policy_cases.dart' as lyrics_scroll_policy;
 import 'lyrics_service_cases.dart' as lyrics_service;
 import 'lyrics_service_native_cases.dart' as lyrics_service_native;
+import 'lyrics_source_cases.dart' as lyrics_source;
 
 void main() {
   group('lyric line tracker', lyric_line_tracker.main);
@@ -16,4 +17,5 @@ void main() {
   group('lyrics scroll policy', lyrics_scroll_policy.main);
   group('lyrics service', lyrics_service.main);
   group('lyrics service native', lyrics_service_native.main);
+  group('lyrics source', lyrics_source.main);
 }

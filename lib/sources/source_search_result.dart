@@ -14,7 +14,10 @@ class SourceSearchResult {
   final bool hasMore;
   final int? total;
 
-  /// 失败语义（延迟消费：UI 收口前仍只读 tracks，失败由后续版本展示）。
+  /// 失败语义：非空表示本次搜索失败（与「平台正常返回空」区分）。
+  ///
+  /// `ManagerCatalogSource.search` 在边界把它抛成 [SourceFailure]；搜索页 /
+  /// 换源页据此显示失败与重试，不再静默成空列表。
   final SourceFailure? failure;
 
   const SourceSearchResult({

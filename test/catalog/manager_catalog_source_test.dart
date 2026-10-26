@@ -11,6 +11,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
 import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
+import 'package:molia/sources/builtin/bili_api.dart';
 import 'package:molia/sources/builtin/builtin_search.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -433,6 +434,25 @@ void main() {
         throwsA(isA<SourceFailure>()
             .having((f) => f.kind, 'kind', FailureKind.scriptError)
             .having((f) => f.retryable, 'retryable', isTrue)),
+      );
+    });
+
+    test('search：平台返回 failed 时抛 SourceFailure（不静默成空结果）', () async {
+      final original = BuiltinSearch.transport;
+      addTearDown(() => BuiltinSearch.transport = original);
+      BuiltinSearch.transport = BuiltinTransport(
+        dio: mockDio((_) async => textResponse('{}', statusCode: 500)),
+      );
+      BiliApi.reset();
+
+      final manager = SourceManager(settings: testSettingsRegistry());
+      addTearDown(manager.dispose);
+      final source = SourceManagerMusicSource('bili', manager);
+
+      await expectLater(
+        source.search(const SearchQuery(keyword: 'x')),
+        throwsA(isA<SourceFailure>()),
+        reason: '失败必须在边界暴露，换源页才能把 B 站列进失败源',
       );
     });
   });

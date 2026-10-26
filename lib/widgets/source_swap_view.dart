@@ -138,27 +138,29 @@ class _SourceSwapViewState extends State<SourceSwapView> {
   }
 
   /// 音源筛选 chip（顺序即用户音源顺序）。
+  ///
+  /// 用 [Wrap] 而不是横向滚动：B 站排在最后，横向滚动时窄屏默认看不到，
+  /// 用户很难发现还能「滑出」一个音源；换行保证所有源一眼可见。
   Widget _buildSourceTabs(
     BuildContext context,
     AppLocalizations l10n,
     SourceSwapProvider provider,
   ) {
-    return M3EChipGroup(
-      groupLabel: l10n.sourceSwap,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: M3EChipGroup(
+        groupLabel: l10n.sourceSwap,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            for (final group in provider.groups) ...[
+            for (final group in provider.groups)
               M3EChip(
                 label: group.displayName,
                 type: M3EChipType.filter,
                 selected: group.sourceKey == provider.activeSourceKey,
                 onPressed: () => provider.selectSource(group.sourceKey),
               ),
-              const SizedBox(width: 8),
-            ],
           ],
         ),
       ),
@@ -203,7 +205,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
     SourceSwapProvider provider,
   ) {
     final theme = Theme.of(context);
-    final failed = provider.failedSourceKeys;
+    final failedNames = provider.failedSourceNames;
     final canApply = _started && provider.selected != null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
@@ -211,7 +213,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (failed.isNotEmpty && !provider.isSearching)
+          if (failedNames.isNotEmpty && !provider.isSearching)
             Row(
               children: [
                 Icon(
@@ -222,7 +224,8 @@ class _SourceSwapViewState extends State<SourceSwapView> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    l10n.sourceSwapFailedSources(failed.length),
+                    // 中英都用逗号分隔：中文可读，英文也不会混入顿号。
+                    l10n.sourceSwapFailedSources(failedNames.join(', ')),
                     style: context.typeScale.bodySmall.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

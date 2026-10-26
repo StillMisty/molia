@@ -10,6 +10,13 @@ abstract interface class SourceRegistry {
   /// 按 order 排序后的可用列表；搜索页选择器直接消费。
   List<SourceDescriptor> get descriptors;
 
+  /// 已启用的渠道 key（含当前不可搜索的内置平台）。
+  ///
+  /// 歌词来源等「非播放」场景只关心渠道是否被用户停用，不能用
+  /// [descriptors]（它只含可搜索源：五个音乐平台在没有 LX 脚本时不在其中，
+  /// 但它们的歌词来源仍然可用）。
+  Set<String> get enabledChannelKeys;
+
   MusicSource? byKey(String key);
 
   /// 按 `track.id.sourceKey` 查找。

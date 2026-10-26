@@ -57,6 +57,12 @@ class SourceRegistryImpl implements SourceRegistry {
   }
 
   @override
+  Set<String> get enabledChannelKeys => {
+        for (final profile in _manager.sourceProfiles.channels)
+          if (profile.enabled) profile.key,
+      };
+
+  @override
   MusicSource? byKey(String key) {
     if (key.isEmpty) return null;
     // 本地下载副本：manager 不认识该 key，直接返回本地音源

@@ -10,6 +10,7 @@ library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
@@ -104,6 +105,10 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     final seed = widget.request.seed;
     final artist = seed.artistLabel;
     final selectedIndex = _tabs.indexOf(_tab);
+    // 歌词来源跟随渠道停用：取「已启用渠道」而不是「可搜索渠道」，
+    // 五个音乐平台没有 LX 脚本时仍能用歌词来源。
+    final enabledChannelKeys =
+        context.read<SourceSwapProvider>().enabledChannelKeys;
 
     final body = Column(
       children: [
@@ -138,6 +143,7 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
                   trackId: seed.id.uri,
                   lyricsProvider: widget.lyricsProvider,
                   preferredSourceKey: seed.id.sourceKey,
+                  enabledChannelKeys: enabledChannelKeys,
                   // 仅默认 tab 为歌词时自动聚焦：音频入口不抢键盘。
                   autofocusSearch: widget.initialTab == SourceSwapTab.lyrics,
                 )

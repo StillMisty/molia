@@ -90,6 +90,47 @@ void main() {
     expect(sources['wy']!.searchCalls, 0, reason: '种子源被排除');
   });
 
+  test('begin：B 站种子保留同源候选（换到其它投稿），关键词只用标题', () async {
+    final bili = FakeMusicSource('bili');
+    sources['bili'] = bili;
+    final seed = track('bili', 'BV1');
+    // 同源结果里混入种子自身：仍要按 URI 排除。
+    bili.items = [seed, track('bili', 'BV2')];
+    kg.items = [track('kg', '100')];
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+
+    await provider.begin(SourceSwapRequest(
+      seed: seed,
+      placement: SourceSwapPlacement.queue,
+    ));
+
+    expect(
+      provider.groups.map((g) => g.sourceKey),
+      containsAll(['kg', 'bili']),
+    );
+    final biliGroup = provider.groups.singleWhere((g) => g.sourceKey == 'bili');
+    expect(biliGroup.items.map((t) => t.id.uri), ['bili:BV2'],
+        reason: '种子自身仍从候选中排除');
+    expect(bili.lastQuery?.keyword, 'Title', reason: 'UP 主不是歌手，不进关键词');
+    expect(kg.lastQuery?.keyword, 'Title', reason: '搜索其它平台同样只用标题');
+  });
+
+  test('begin：非 B 站种子仍搜 B 站，关键词保持标题 + 歌手', () async {
+    final bili = FakeMusicSource('bili')..items = [track('bili', 'BV1')];
+    sources['bili'] = bili;
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+
+    await provider.begin(SourceSwapRequest(
+      seed: track('wy', '1'),
+      placement: SourceSwapPlacement.queue,
+    ));
+
+    expect(provider.groups.map((g) => g.sourceKey), contains('bili'));
+    expect(bili.lastQuery?.keyword, 'Title Artist');
+  });
+
   test('begin：没有其它可搜索音源 → noOtherSources，不发起搜索', () async {
     final wy = FakeMusicSource('wy');
     sources
@@ -127,6 +168,25 @@ void main() {
     expect(provider.failedSourceKeys, isEmpty);
     expect(provider.groups.map((g) => g.sourceKey), ['tx']);
     expect(provider.activeSourceKey, 'tx');
+  });
+
+  test('failedSourceNames：按注册表顺序给出展示名，描述符缺失时回退 key', () async {
+    kg.fail = true;
+    tx.fail = true;
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+
+    await provider.begin(SourceSwapRequest(
+      seed: track('wy', '1'),
+      placement: SourceSwapPlacement.queue,
+    ));
+
+    expect(provider.failedSourceKeys, {'kg', 'tx'});
+    expect(provider.failedSourceNames, ['kg', 'tx']);
+
+    // 会话期间音源被移除（注册表里找不到描述符）：仍需报出失败 key。
+    sources.remove('tx');
+    expect(provider.failedSourceNames, ['kg', 'tx']);
   });
 
   test('select：切换 tab 与选中项（不可变分组）', () async {
