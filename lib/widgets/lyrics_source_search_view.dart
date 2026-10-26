@@ -1,83 +1,29 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:logging/logging.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
 import '../providers/lyrics_provider.dart';
-import '../services/lyrics/lyric_provider.dart';
+import '../providers/lyrics_source_search_session.dart';
 import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
-import '../services/lyrics/lyrics_match.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/lyrics_provider_label.dart';
 import 'app_search_bar.dart';
 
-final _logger = Logger('molia.lyrics_source_search_view');
-
-class LyricsSearchResult {
-  final SongMatch match;
-  final LyricProvider provider;
-
-  LyricsSearchResult({required this.match, required this.provider});
-}
-
-class LyricsSearchSelection {
-  final String lyrics;
-  final String provider;
-
-  const LyricsSearchSelection({
-    required this.lyrics,
-    required this.provider,
-  });
-}
-
-/// 每个提供者的搜索状态
-enum ProviderSearchState {
-  idle,
-  loading,
-  loaded,
-  error,
-
-  /// 来源当前不可用（如未登录 B 站）：不发请求，只提示「怎么办」。
-  unavailable,
-}
-
-enum _LyricsSearchEntryType {
-  header,
-  result,
-  loadingPlaceholder,
-  divider,
-}
-
-class _LyricsSearchEntry {
-  final _LyricsSearchEntryType type;
-  final LyricsSourceStrategy? strategy;
-  final LyricsSearchResult? result;
-
-  const _LyricsSearchEntry.header(this.strategy)
-      : type = _LyricsSearchEntryType.header,
-        result = null;
-
-  const _LyricsSearchEntry.result(this.result)
-      : type = _LyricsSearchEntryType.result,
-        strategy = null;
-
-  const _LyricsSearchEntry.loadingPlaceholder(this.strategy)
-      : type = _LyricsSearchEntryType.loadingPlaceholder,
-        result = null;
-
-  const _LyricsSearchEntry.divider()
-      : type = _LyricsSearchEntryType.divider,
-        strategy = null,
-        result = null;
-}
+// 宿主页（换源页 / 播放页）只关心 pop 回来的类型，保持从 widget 路径导入。
+export '../providers/lyrics_source_search_session.dart'
+    show LyricsSearchResult, LyricsSearchSelection;
 
 /// 歌词换源视图：搜索栏 + 逐平台分组结果；选中即写缓存并退出宿主页。
 ///
 /// 作为「换源」页的歌词 tab 使用（宿主页负责标题与 tab 切换）；结果经
 /// `Navigator.pop(LyricsSearchSelection)` 返回给宿主页的调用方。
+/// 搜索 / 竞态 / 写缓存在 [LyricsSourceSearchSession]，本文件只负责渲染、
+/// 焦点、提示与导航。
 class LyricsSourceSearchView extends StatefulWidget {
   final String initialTrackTitle;
   final String initialArtistName;
@@ -121,13 +67,8 @@ class LyricsSourceSearchView extends StatefulWidget {
 class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
-  bool _isFetchingLyric = false;
-  String _currentQuery = '';
 
-  final Map<String, ProviderSearchState> _providerStates = {};
-  final Map<String, List<LyricsSearchResult>> _providerResults = {};
-
-  late final List<LyricsSourceStrategy> _strategies;
+  late final LyricsSourceSearchSession _session;
 
   late NotificationService _notificationService;
 
@@ -143,7 +84,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
         LyricsSourceRegistry.standard
             .manualSources(preferredKey: widget.preferredSourceKey);
     final enabled = widget.enabledChannelKeys;
-    _strategies = enabled == null
+    final strategies = enabled == null
         ? allStrategies
         : [
             for (final strategy in allStrategies)
@@ -151,17 +92,20 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
                 strategy,
           ];
 
-    for (final strategy in _strategies) {
-      _providerStates[strategy.provider.name] = ProviderSearchState.idle;
-      _providerResults[strategy.provider.name] = [];
-    }
+    _session = LyricsSourceSearchSession(
+      strategies: strategies,
+      lyricsProvider: widget.lyricsProvider,
+      trackId: widget.trackId,
+      trackTitle: widget.initialTrackTitle,
+      trackArtist: widget.initialArtistName,
+    )..addListener(_onSessionChanged);
 
-    _currentQuery =
+    final initialQuery =
         '${widget.initialTrackTitle} ${widget.initialArtistName}'.trim();
-    _searchController.text = _currentQuery;
+    _searchController.text = initialQuery;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _performSearch(_currentQuery);
+      unawaited(_runSearch(initialQuery));
       if (!widget.autofocusSearch) return;
       FocusScope.of(context).requestFocus(_searchFocusNode);
       // 选择全部文本方便替换
@@ -172,233 +116,57 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
 
   @override
   void dispose() {
+    _session
+      ..removeListener(_onSessionChanged)
+      ..dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
   }
 
-  bool get _isAnyProviderLoading {
-    return _providerStates.values
-        .any((state) => state == ProviderSearchState.loading);
+  void _onSessionChanged() {
+    if (mounted) setState(() {});
   }
 
-  /// 当前不可用的来源原因（去重、保持声明顺序）。
-  ///
-  /// 无结果时要在空态里补一句「怎么办」（如未登录 B 站）；有结果时
-  /// 分组头自己会显示提示，不重复。
-  List<LyricsSourceUnavailable> get _unavailableReasons {
-    final reasons = <LyricsSourceUnavailable>[];
-    for (final strategy in _strategies) {
-      final reason = _unavailableOf(strategy);
-      if (reason != null && !reasons.contains(reason)) reasons.add(reason);
-    }
-    return reasons;
-  }
-
-  /// 来源的可用性在**每次读取时**求值（登录 / 退出会发生在页面打开之后）。
-  static LyricsSourceUnavailable? _unavailableOf(
-    LyricsSourceStrategy strategy,
-  ) =>
-      strategy.unavailable?.call();
-
-  List<LyricsSearchResult> get _allResults {
-    final results = <LyricsSearchResult>[];
-    for (final strategy in _strategies) {
-      results.addAll(_providerResults[strategy.provider.name] ?? []);
-    }
-    return results;
-  }
-
-  List<_LyricsSearchEntry> _buildSearchEntries() {
-    final entries = <_LyricsSearchEntry>[];
-    for (final strategy in _strategies) {
-      final providerName = strategy.provider.name;
-      final state = _providerStates[providerName] ?? ProviderSearchState.idle;
-      final results = _providerResults[providerName] ?? [];
-
-      if (state == ProviderSearchState.idle && _currentQuery.isEmpty) {
-        continue;
-      }
-
-      entries.add(_LyricsSearchEntry.header(strategy));
-
-      if (results.isNotEmpty) {
-        for (final result in results) {
-          entries.add(_LyricsSearchEntry.result(result));
-        }
-      }
-
-      if (state == ProviderSearchState.loading && results.isEmpty) {
-        entries.add(_LyricsSearchEntry.loadingPlaceholder(strategy));
-      }
-
-      if (_currentQuery.isNotEmpty) {
-        entries.add(const _LyricsSearchEntry.divider());
-      }
-    }
-    return entries;
-  }
-
-  Future<void> _performSearch(String query) async {
-    if (!mounted || query.trim().isEmpty) {
-      setState(() {
-        _currentQuery = '';
-        for (final strategy in _strategies) {
-          _providerStates[strategy.provider.name] = ProviderSearchState.idle;
-          _providerResults[strategy.provider.name] = [];
-        }
-      });
-      return;
-    }
-
-    _searchFocusNode.unfocus(); // 隐藏键盘
-
-    // 不可用来源（未登录 B 站）不发请求：字幕接口只会返回空，白跑一次；
-    // 状态置 unavailable，分组头直接显示「怎么办」。
-    final searchable = <LyricProvider>[
-      for (final strategy in _strategies)
-        if (_unavailableOf(strategy) == null) strategy.provider,
-    ];
-
-    setState(() {
-      _currentQuery = query.trim();
-      for (final strategy in _strategies) {
-        final providerName = strategy.provider.name;
-        _providerResults[providerName] = [];
-        _providerStates[providerName] = _unavailableOf(strategy) == null
-            ? ProviderSearchState.loading
-            : ProviderSearchState.unavailable;
-      }
-    });
-
-    await Future.wait(
-      searchable.map((provider) => _searchProvider(provider, _currentQuery)),
-    );
-  }
-
-  Future<void> _searchProvider(LyricProvider provider, String query) async {
-    const int resultsPerProvider = 3;
-
-    try {
-      final matches =
-          await provider.searchMultiple(query, '', limit: resultsPerProvider);
-
-      if (!mounted) return;
-
-      // 检查查询是否仍然是当前查询（避免过时的结果）
-      if (query != _currentQuery) return;
-
-      final results = matches
-          .map((match) => LyricsSearchResult(match: match, provider: provider))
-          .toList();
-
-      setState(() {
-        _providerResults[provider.name] = results;
-        _providerStates[provider.name] = ProviderSearchState.loaded;
-      });
-    } catch (e) {
-      _logger.fine('Provider ${provider.name} search error: $e');
-
-      if (!mounted) return;
-      if (query != _currentQuery) return;
-
-      setState(() {
-        _providerStates[provider.name] = ProviderSearchState.error;
-        _providerResults[provider.name] = [];
-      });
-    }
+  Future<void> _runSearch(String query) async {
+    // 清空（清除键或手动删空）保留焦点与键盘，方便重新输入。
+    if (query.trim().isNotEmpty) _searchFocusNode.unfocus(); // 隐藏键盘
+    await _session.search(query);
   }
 
   Future<void> _selectResult(LyricsSearchResult result) async {
-    if (!mounted || _isFetchingLyric) return;
+    if (_session.isFetchingLyric) return;
 
-    // 在异步调用前捕获 Navigator
+    // 在异步调用前捕获 Navigator / 文案：await 之后只用它们提示与 pop。
     final navigator = Navigator.of(context);
     final l10n = AppLocalizations.of(context)!;
 
-    setState(() {
-      _isFetchingLyric = true;
-    });
+    _notificationService.showSnackBar(l10n.lyricsFetching);
 
-    try {
-      _notificationService.showSnackBar(l10n.lyricsFetching);
+    final outcome = await _session.select(result);
+    if (!mounted) return;
 
-      final payload = await result.provider.fetchForMatch(result.match);
-
-      if (!mounted) return;
-
-      final rawLyric = payload?.lyric;
-      if (rawLyric != null) {
-        final normalizedLyric = result.provider.normalizeLyric(rawLyric);
-
-        if (normalizedLyric.isNotEmpty) {
-          await widget.lyricsProvider.saveManual(
-            trackId: widget.trackId,
-            lyric: normalizedLyric,
-            providerName: result.provider.name,
-            translation: _normalizeOptional(
-              result.provider,
-              payload?.translation,
-            ),
-            roma: _normalizeOptional(result.provider, payload?.roma),
-            lxlyric: _normalizeOptional(result.provider, payload?.lxlyric),
-          );
-          _logger.fine(
-              "手动获取的歌词已缓存，曲目ID：${widget.trackId}，提供者：${result.provider.name}");
-          navigator.pop(LyricsSearchSelection(
-            lyrics: normalizedLyric,
-            provider: result.provider.name,
-          ));
-          return;
-        }
-      }
-
-      if (mounted) {
-        _notificationService.showErrorSnackBar(
-            AppLocalizations.of(context)!.lyricsNotFoundForTrack);
-      }
-    } catch (e) {
-      if (mounted) {
-        _notificationService.showErrorSnackBar(
-            AppLocalizations.of(context)!.lyricsFetchError(e.toString()));
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isFetchingLyric = false;
-        });
-      }
+    switch (outcome) {
+      case LyricsSelectionSuccess(:final selection):
+        navigator.pop(selection);
+      case LyricsSelectionNotFound():
+        _notificationService.showErrorSnackBar(l10n.lyricsNotFoundForTrack);
+      case LyricsSelectionFailed(:final error):
+        _notificationService
+            .showErrorSnackBar(l10n.lyricsFetchError(error.toString()));
+      case LyricsSelectionBusy():
+        // 并发点击：已经有一次取词在途，不重复提示。
+        break;
     }
-  }
-
-  /// 该提供者分组内与当前曲目最相近的结果（时长/歌名/歌手相似度）。
-  LyricsSearchResult? _bestMatchOf(LyricProvider provider) {
-    final results = _providerResults[provider.name] ?? [];
-    if (results.isEmpty) return null;
-    final best = pickBestSongMatch(
-      [for (final result in results) result.match],
-      title: widget.initialTrackTitle,
-      artist: widget.initialArtistName,
-    );
-    if (best == null) return null;
-    for (final result in results) {
-      if (identical(result.match, best)) return result;
-    }
-    return null;
-  }
-
-  static String? _normalizeOptional(LyricProvider provider, String? text) {
-    if (text == null || text.trim().isEmpty) return null;
-    final normalized = provider.normalizeLyric(text);
-    return normalized.isEmpty ? null : normalized;
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final allResults = _allResults;
-    final searchEntries = _buildSearchEntries();
+    final allResults = _session.allResults;
+    final searchEntries = _session.entries;
+    final isLoading = _session.isAnyProviderLoading;
 
     return Column(
       children: [
@@ -409,7 +177,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
             focusNode: _searchFocusNode,
             hintText: l10n.searchHint,
             trailing: [
-              if (_isAnyProviderLoading)
+              if (isLoading)
                 const Padding(
                   padding: EdgeInsets.all(12.0),
                   child: SizedBox(
@@ -424,19 +192,17 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
             ],
             onChanged: (value) {
               // 清空（清除键或手动删空）：回到初始提示并保留焦点。
-              if (value.isEmpty) _performSearch('');
+              if (value.isEmpty) unawaited(_runSearch(''));
             },
             onSubmitted: (value) {
-              _performSearch(value);
+              unawaited(_runSearch(value));
             },
           ),
         ),
         Expanded(
           child: Stack(
             children: [
-              if (!_isAnyProviderLoading &&
-                  allResults.isEmpty &&
-                  _currentQuery.isEmpty)
+              if (!isLoading && allResults.isEmpty && _session.query.isEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(20.0),
@@ -449,27 +215,27 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
                     ),
                   ),
                 )
-              else if (allResults.isNotEmpty || _isAnyProviderLoading)
+              else if (allResults.isNotEmpty || isLoading)
                 ListView.builder(
                   padding: const EdgeInsets.only(top: 8.0, bottom: 16.0),
                   itemCount: searchEntries.length,
                   itemBuilder: (context, index) {
                     final entry = searchEntries[index];
                     switch (entry.type) {
-                      case _LyricsSearchEntryType.header:
+                      case LyricsSearchEntryType.header:
                         return _buildProviderHeader(entry.strategy!);
-                      case _LyricsSearchEntryType.result:
+                      case LyricsSearchEntryType.result:
                         return _buildResultTile(entry.result!);
-                      case _LyricsSearchEntryType.loadingPlaceholder:
+                      case LyricsSearchEntryType.loadingPlaceholder:
                         return _buildLoadingPlaceholder();
-                      case _LyricsSearchEntryType.divider:
+                      case LyricsSearchEntryType.divider:
                         return _buildSectionDivider();
                     }
                   },
                 )
-              else if (!_isAnyProviderLoading &&
+              else if (!isLoading &&
                   allResults.isEmpty &&
-                  _currentQuery.isNotEmpty)
+                  _session.query.isNotEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -485,7 +251,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
                         ),
                         // 无结果时把不可用来源的「怎么办」补在空态里：
                         // 分组头没有渲染，提示不能跟着消失。
-                        for (final reason in _unavailableReasons) ...[
+                        for (final reason in _session.unavailableReasons) ...[
                           const SizedBox(height: 8),
                           Text(
                             _unavailableHint(l10n, reason),
@@ -500,7 +266,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
                   ),
                 ),
               // 只在获取歌词内容时显示遮罩（背景统一取 colorScheme.surface）。
-              if (_isFetchingLyric)
+              if (_session.isFetchingLyric)
                 Positioned.fill(
                   child: Container(
                     color: theme.colorScheme.surface.withValues(alpha: 0.7),
@@ -520,9 +286,9 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final provider = strategy.provider;
-    final state = _providerStates[provider.name] ?? ProviderSearchState.idle;
-    final results = _providerResults[provider.name] ?? [];
-    final unavailable = _unavailableOf(strategy);
+    final state = _session.stateOf(provider.name);
+    final results = _session.resultsOf(provider.name);
+    final unavailable = _session.unavailableReasonOf(strategy);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -591,7 +357,8 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
   Widget _buildResultTile(LyricsSearchResult result) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    final isBest = identical(_bestMatchOf(result.provider), result);
+    final isBest = identical(_session.bestMatchOf(result.provider), result);
+    final isFetching = _session.isFetchingLyric;
     return M3EListItem(
       headline: result.match.title,
       supportingText: result.match.artist,
@@ -606,8 +373,8 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
               Icons.chevron_right_rounded,
               color: theme.colorScheme.onSurfaceVariant,
             ),
-      onTap: _isFetchingLyric ? null : () => _selectResult(result),
-      enabled: !_isFetchingLyric,
+      onTap: isFetching ? null : () => _selectResult(result),
+      enabled: !isFetching,
     );
   }
 
