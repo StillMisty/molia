@@ -1,9 +1,8 @@
 /// 手动歌词换源的会话状态：来源搜索 → 选中取词 → 写入手动缓存。
 ///
-/// 从 `lyrics_source_search_view.dart` 抽出：旧查询结果丢弃、来源可用性判定
-/// 与写缓存都不依赖 widget 生命周期，可以脱离界面单测。会话不碰 Navigator
-/// 与 SnackBar：`select` 只返回 [LyricsSelectionOutcome]，由视图决定提示与
-/// pop 的时机。
+/// 持有逐来源状态、查询代际、可用性判定、最佳匹配与「选中 → 取词 → 写缓存」
+/// 的结果类型。会话不碰 Navigator / SnackBar：`select` 只返回
+/// [LyricsSelectionOutcome]，由视图决定提示与 pop 的时机。
 library;
 
 import 'dart:async';
@@ -28,10 +27,7 @@ class LyricsSearchResult {
 
 /// 手动选择成功后由宿主页 pop 回调用方的数据。
 class LyricsSearchSelection {
-  const LyricsSearchSelection({
-    required this.lyrics,
-    required this.provider,
-  });
+  const LyricsSearchSelection({required this.lyrics, required this.provider});
 
   final String lyrics;
   final String provider;
@@ -48,31 +44,26 @@ enum ProviderSearchState {
   unavailable,
 }
 
-enum LyricsSearchEntryType {
-  header,
-  result,
-  loadingPlaceholder,
-  divider,
-}
+enum LyricsSearchEntryType { header, result, loadingPlaceholder, divider }
 
 /// 逐平台分组列表的一行；视图直接按 [type] 渲染。
 class LyricsSearchEntry {
   const LyricsSearchEntry.header(this.strategy)
-      : type = LyricsSearchEntryType.header,
-        result = null;
+    : type = LyricsSearchEntryType.header,
+      result = null;
 
   const LyricsSearchEntry.result(this.result)
-      : type = LyricsSearchEntryType.result,
-        strategy = null;
+    : type = LyricsSearchEntryType.result,
+      strategy = null;
 
   const LyricsSearchEntry.loadingPlaceholder(this.strategy)
-      : type = LyricsSearchEntryType.loadingPlaceholder,
-        result = null;
+    : type = LyricsSearchEntryType.loadingPlaceholder,
+      result = null;
 
   const LyricsSearchEntry.divider()
-      : type = LyricsSearchEntryType.divider,
-        strategy = null,
-        result = null;
+    : type = LyricsSearchEntryType.divider,
+      strategy = null,
+      result = null;
 
   final LyricsSearchEntryType type;
   final LyricsSourceStrategy? strategy;
@@ -115,11 +106,18 @@ final class LyricsSelectionBusy extends LyricsSelectionOutcome {
 class LyricsSourceSearchSession extends ChangeNotifier {
   LyricsSourceSearchSession({
     required List<LyricsSourceStrategy> strategies,
+    Set<String>? enabledChannelKeys,
     required this._lyricsProvider,
     required this._trackId,
     required this._trackTitle,
     required this._trackArtist,
-  }) : _strategies = List.unmodifiable(strategies) {
+  }) : _strategies = List.unmodifiable([
+         for (final strategy in strategies)
+           if (enabledChannelKeys == null ||
+               !strategy.isChannel ||
+               enabledChannelKeys.contains(strategy.channelKey))
+             strategy,
+       ]) {
     for (final strategy in _strategies) {
       _providerStates[strategy.provider.name] = ProviderSearchState.idle;
       _providerResults[strategy.provider.name] = const [];
@@ -158,8 +156,9 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
   bool get isFetchingLyric => _isFetchingLyric;
 
-  bool get isAnyProviderLoading => _providerStates.values
-      .any((state) => state == ProviderSearchState.loading);
+  bool get isAnyProviderLoading => _providerStates.values.any(
+    (state) => state == ProviderSearchState.loading,
+  );
 
   List<LyricsSearchResult> get allResults {
     final results = <LyricsSearchResult>[];

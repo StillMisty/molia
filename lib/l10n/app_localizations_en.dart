@@ -61,9 +61,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsNotFoundForTrack => 'No lyrics found for this track.';
 
   @override
-  String lyricsFetchError(String error) {
-    return 'Error fetching lyrics: $error';
-  }
+  String get lyricsFetchError => 'Couldn\'t fetch lyrics. Try another source.';
 
   @override
   String get lyricsTitle => 'Lyrics';

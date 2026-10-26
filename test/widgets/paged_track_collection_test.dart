@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:molia/providers/paged_list_controller.dart';
+import 'package:molia/widgets/paged_list_auto_load.dart';
 import 'package:molia/widgets/paged_track_collection.dart';
 
 /// 分页曲目集合：页实体捕获与 [PagedListController] 语义的接线。
@@ -167,5 +170,91 @@ void main() {
     await pending;
     expect(collection.entity, 'fresh', reason: '过期响应不得回写实体');
     expect(collection.items, ['fresh'], reason: '过期响应不得覆盖列表');
+  });
+
+  group('PagedTrackCollectionBody', () {
+    Future<void> pumpBody(
+      WidgetTester tester, {
+      required PagedListState<String> state,
+      VoidCallback? onRetry,
+      VoidCallback? onLoadMore,
+    }) async {
+      await tester.pumpWidget(
+        M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData()),
+          theme: ThemeData(),
+          home: Scaffold(
+            body: PagedTrackCollectionBody<String>(
+              state: state,
+              headerBuilder: (context, state) =>
+                  Text('header-${state.items.length}'),
+              rowBuilder: (context, index, count, tableColumns) =>
+                  Text('row-${state.items[index]}'),
+              onRetry: onRetry ?? () {},
+              onLoadMore: onLoadMore ?? () {},
+              emptyText: 'empty',
+              failureText: 'failed',
+              retryText: 'retry',
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    testWidgets('加载态 / 首屏失败重试 / 空态', (tester) async {
+      var retried = 0;
+      await pumpBody(
+        tester,
+        state: const PagedListState(isLoading: true),
+        onRetry: () => retried++,
+      );
+      expect(find.byType(M3ELoadingIndicator), findsOneWidget);
+
+      await pumpBody(
+        tester,
+        state: const PagedListState(failed: true),
+        onRetry: () => retried++,
+      );
+      expect(find.text('failed'), findsOneWidget);
+      await tester.tap(find.text('retry'));
+      expect(retried, 1);
+
+      await pumpBody(tester, state: const PagedListState(page: 1));
+      expect(find.text('empty'), findsOneWidget);
+    });
+
+    testWidgets('列表态：头部 + 行 + 表格档表头；页脚重试接 onLoadMore', (tester) async {
+      var loadMore = 0;
+      await pumpBody(
+        tester,
+        state: const PagedListState(
+          page: 1,
+          items: ['a', 'b'],
+          hasMore: true,
+          loadMoreFailed: true,
+        ),
+        onLoadMore: () => loadMore++,
+      );
+
+      expect(find.text('header-2'), findsOneWidget);
+      expect(find.text('row-a'), findsOneWidget);
+      expect(find.text('row-b'), findsOneWidget);
+      await tester.ensureVisible(find.byType(PagedListFooter));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(PagedListFooter),
+          matching: find.byType(M3EButton),
+        ),
+      );
+      expect(loadMore, 1);
+
+      await pumpBody(
+        tester,
+        state: const PagedListState(page: 1, items: ['a', 'b'], hasMore: false),
+      );
+      expect(find.text('header-2'), findsOneWidget);
+      expect(find.text('retry'), findsNothing);
+    });
   });
 }

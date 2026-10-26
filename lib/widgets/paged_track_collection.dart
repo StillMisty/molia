@@ -1,10 +1,8 @@
 /// 分页曲目集合：控制器（页实体捕获 + 分页状态）与共享列表体的唯一实现。
 ///
-/// 为什么单独一层：专辑 / 歌手 / 发现详情三页的头部数据与曲目列表来自同一次
-/// 响应，页面各自维护一份「最近一次响应的实体」+ 一套 loading / failed /
-/// empty / list / footer 的 sliver 结构，导致分页口径散在三处。这里把实体捕获
-/// 收进 [PagedTrackCollection]，把正文骨架收进 [PagedTrackCollectionBody]，
-/// 页面只保留头部、行与播放动作。
+/// 专辑 / 歌手 / 发现详情三页的头部数据与曲目列表来自同一次响应。实体捕获
+/// 收在 [PagedTrackCollection]，正文骨架收在 [PagedTrackCollectionBody]，
+/// 页面只保留头部、行与播放动作；分页口径与列表态只有这一份实现。
 library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';

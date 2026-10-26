@@ -83,17 +83,10 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
     final allStrategies = widget.sources ??
         LyricsSourceRegistry.standard
             .manualSources(preferredKey: widget.preferredSourceKey);
-    final enabled = widget.enabledChannelKeys;
-    final strategies = enabled == null
-        ? allStrategies
-        : [
-            for (final strategy in allStrategies)
-              if (!strategy.isChannel || enabled.contains(strategy.channelKey))
-                strategy,
-          ];
 
     _session = LyricsSourceSearchSession(
-      strategies: strategies,
+      strategies: allStrategies,
+      enabledChannelKeys: widget.enabledChannelKeys,
       lyricsProvider: widget.lyricsProvider,
       trackId: widget.trackId,
       trackTitle: widget.initialTrackTitle,
@@ -151,9 +144,10 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView> {
         navigator.pop(selection);
       case LyricsSelectionNotFound():
         _notificationService.showErrorSnackBar(l10n.lyricsNotFoundForTrack);
-      case LyricsSelectionFailed(:final error):
-        _notificationService
-            .showErrorSnackBar(l10n.lyricsFetchError(error.toString()));
+      case LyricsSelectionFailed():
+        // 不在界面展示原始异常（边界已归一为 LyricsSelectionFailed）；
+        // 文案只说「没取到 + 换一个来源」。
+        _notificationService.showErrorSnackBar(l10n.lyricsFetchError);
       case LyricsSelectionBusy():
         // 并发点击：已经有一次取词在途，不重复提示。
         break;

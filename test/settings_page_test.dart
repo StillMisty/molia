@@ -40,6 +40,7 @@ import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/molia_mark.dart';
+import 'package:molia/widgets/settings/settings_subpage.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import 'support/fakes.dart';
@@ -144,6 +145,75 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 设置子页 chrome 的独立挂载：不需要整棵 provider 树。
+  Future<void> pumpSubPage(WidgetTester tester, Widget page) async {
+    await tester.pumpWidget(
+      M3EMaterialApp(
+        data: M3EThemeData.fromMaterial(ThemeData()),
+        theme: ThemeData(),
+        home: page,
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('设置子页 chrome：标题 / 动作 / 正文与统一内边距', (tester) async {
+    await pumpSubPage(
+      tester,
+      SettingsSubPage(
+        title: 'Settings title',
+        actions: [
+          M3EIconButton(
+            key: const Key('subpageAction'),
+            variant: M3EIconButtonVariant.standard,
+            icon: const Icon(Icons.refresh_rounded),
+            semanticLabel: 'Refresh',
+            onPressed: () {},
+          ),
+        ],
+        children: const [Text('Body child')],
+      ),
+    );
+
+    expect(find.text('Settings title'), findsOneWidget);
+    expect(find.byKey(const Key('subpageAction')), findsOneWidget);
+    expect(find.text('Body child'), findsOneWidget);
+    expect(
+      tester.widget<ListView>(find.byType(ListView)).padding,
+      const EdgeInsets.all(kSettingsPadding),
+    );
+  });
+
+  testWidgets('设置子页 chrome：自定义正文不再自动套 ListView', (tester) async {
+    await pumpSubPage(
+      tester,
+      const SettingsSubPage.body(
+        title: 'Custom title',
+        body: Center(child: Text('Custom body')),
+      ),
+    );
+
+    expect(find.text('Custom title'), findsOneWidget);
+    expect(find.text('Custom body'), findsOneWidget);
+    expect(find.byType(ListView), findsNothing);
+  });
+
+  testWidgets('设置子页 chrome：safeArea 在标准正文外层补系统 inset', (tester) async {
+    await pumpSubPage(
+      tester,
+      const SettingsSubPage(
+        title: 'Cache',
+        safeArea: true,
+        children: [Text('Cache body')],
+      ),
+    );
+
+    expect(
+      find.ancestor(of: find.byType(ListView), matching: find.byType(SafeArea)),
+      findsOneWidget,
+    );
+  });
+
   Future<void> pumpSettingsPage(
     WidgetTester tester, {
     List<SingleChildWidget> extraProviders = const [],
@@ -173,10 +243,10 @@ void main() {
       find.descendant(of: find.byKey(rowKey), matching: find.text(label));
 
   Map<String, dynamic> backArgs(double progress) => <String, dynamic>{
-        'touchOffset': <double>[5, 600],
-        'progress': progress,
-        'swipeEdge': 0,
-      };
+    'touchOffset': <double>[5, 600],
+    'progress': progress,
+    'swipeEdge': 0,
+  };
 
   /// 模拟 Android 预测返回手势通道事件（start / update / commit / cancel）。
   Future<void> sendBack(

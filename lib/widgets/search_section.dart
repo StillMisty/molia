@@ -331,7 +331,7 @@ class _SearchSectionState extends State<SearchSection> {
 
   /// 当前选中音源的显示名；选中的 key 不在可选列表中（未选择/已失效）时为 null。
   String? _selectedSourceName(SearchProvider searchProvider) {
-    for (final option in searchProvider.sourceOptions) {
+    for (final option in searchProvider.sourceChannels) {
       if (option.key == searchProvider.sourceKey) {
         return option.displayName;
       }

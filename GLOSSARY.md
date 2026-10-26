@@ -14,12 +14,12 @@
 - **Builtin transport（内置传输模块）** — `lib/sources/builtin/builtin_transport.dart`：内置平台（五个音乐平台 + B 站）搜索 / 发现 / 评论 / 取链共用的 HTTP 入口（客户端可注入、统一请求头/超时、响应级重试 `retryIf`、JSON 解码与 `cached` 结果缓存）。`BuiltinSearch.transport` 是唯一实例，测试注入 `MockClient` 即可覆盖 fetch 路径；HTTP 重试预算统一为 `BuiltinTransport.defaultRetries`（发现端点的业务级预算见 Builtin retry attempts），结果缓存统一为 `defaultCacheTtl`（5 分钟，single-flight + LRU + TTL），发现适配器不再各自持有静态 `RequestCache`。
 - **Builtin platform registry（内置平台注册表）** — `lib/sources/builtin/builtin_platforms.dart`：内置六平台（五个音乐平台 + 哔哩哔哩）的唯一注册表：规范键 `wy / tx / kg / kw / mg / bili`、展示名、搜索候选排序位，以及类型化能力族适配器（搜索 / 原生取链 / 原生取词 / 原生取图 / 歌词搜索 / 评论 / 专辑 / 歌手 / 发现）。能力位由适配器是否存在推导，组合后的唯一读取口是 **Source profile**；新增平台只改这里，不再同步七份 `supportedKeys` 与 switch。B 站只注册搜索 / 原生取链 / 评论 / 歌手 / 发现，没有专辑与按歌词搜歌。
 - **Source profile（音源画像）** — `lib/sources/source_profiles.dart`：把内置注册表、激活脚本声明、any-listen 可用性与渠道偏好（停用 / 顺序）合成每个 key 一份不可变 `SourceProfile`（key / 展示名 / kind / enabled / discoverable / `SourceCapabilities`）。`SourceProfiles.build` 是唯一组合点，`channels` / `searchable` / `forKey` 是一轮快照；`SourceManager` 的渠道、能力位、搜索 / 评论 / 专辑 / 歌手 / 歌词搜索路由，`SourceRegistryImpl` 与 `SourcesProvider` 读同一份，不再各自推导。搜索能力 = 搜索适配器存在且（原生取链或脚本可取链）；歌词 / 封面 = 注册表适配器或脚本对应 action；停用项仍进 `channels`（可重新启用）但不进 `searchable`。内置 key 的脚本声明只补能力，不生成第二个同名 LX 源；未知 key 返回 null。
-- **Source descriptor（渠道描述）** — `lib/domain/models/source.dart::SourceDescriptor`：渠道的唯一形状（key / displayName / kind / `SourceCapabilities` / enabled / discoverable / order），由 `SourceProfile.toDescriptor` 投影一次；`SourceManager.channels` / `searchableSources`、`SourceRegistry.descriptors`、`SearchProvider.sourceOptions`、`SourcesProvider.channels` 与资料页渠道选择共用它。旧的 `SourceEntry` / `SourceOption` 双胞胎已删除，调用方不再按场景挑选渠道类型。
+- **Source descriptor（渠道描述）** — `lib/domain/models/source.dart::SourceDescriptor`：渠道的唯一形状（key / displayName / kind / `SourceCapabilities` / enabled / discoverable / order），由 `SourceProfile.toDescriptor` 投影一次；`SourceManager.channels` / `searchableSources`、`SourceRegistry.descriptors`、`SearchProvider.sourceChannels`、`SourcesProvider.channels` 与资料页渠道选择共用它。旧的 `SourceEntry` / `SourceOption` 双胞胎已删除，调用方不再按场景挑选渠道类型。
 - **Builtin retry attempts（内置尝试循环）** — `builtin_transport.dart::runBuiltinAttempts` + `BuiltinRetryBudget`：`attempt` 返回 null 表示本次失败、未达上限继续；抛异常直接上抛，耗尽抛 `StateError`；退避与传输层同一条策略。`cachedRetry` 与无缓存的发现端点共用这一循环，`discover` / `leaderboard` / `wyLeaderboard` 预算集中命名，平台文件不再各写 3/4/6。
 - **Discover call runner（发现端点执行器）** — `lib/sources/builtin/discover_runner.dart`：`DiscoverCall`（`DiscoverRequestCall` 一次请求 + 无效判定 + 解析 / `DiscoverAttemptCall` 多步尝试）与 `runDiscoverCall` 是发现端点的唯一执行入口；有稳定 key 走 `BuiltinTransport.cachedRetry`（single-flight，成功才缓存），没有 key 走 `runBuiltinAttempts`。平台文件只保留 URL / 参数 / parser 与端点自己的缓存键，不再各自拼 `cachedRetry` 形状。
 - **Builtin search runner（内置检索 runner）** — `lib/sources/builtin/builtin_search_runner.dart`：内置平台搜索的执行骨架（`runBuiltinSearch`）与策略的唯一实现——重试预算、分页推断、失败归一；五个音乐平台走它，平台变体面（请求方式/URL/body、响应级重试判定、业务码判定、列表路径与解析）收进 `BuiltinSearchCall`，各平台文件只剩字面量与 parser。B 站搜索走 **Bili client**（会话 / WBI / ADR-0014 的 any-failure 刷新），与 runner 共用 `SourceSearchResult` 的 empty / failed 语义。结果语义分界：**平台返回空** = 正常结果（tracks 空、failure 空）；**业务拒绝 / 传输失败** = `SourceSearchResult.failed`（`SourceSearchResult.failure`，不抛异常，UI 收口前只读 tracks）。内置平台「可搜索」判定唯一来源是 **Source profile**（channels 候选 / 能力位 / 搜索路由共用）。
 - **Bilibili source（B 站音源 `bili`）** — `lib/sources/builtin/bili_*.dart`：第六个内置平台（展示名「哔哩哔哩」，默认启用）。`bili_api.dart` 维护匿名会话：`/x/frontend/finger/spi` 取 buvid3/4、`nav` 取 WBI 密钥（1 小时缓存 + single-flight）；`bili_client.dart` 是请求生命周期的唯一实现（WBI 签名、匿名 vs 会话头、业务码口径、风控刷新；搜索按 ADR-0014 任何失败刷新一次）。能力：全站视频搜索、原生取链（分 P cid → WBI playurl → dash 音频 192k/128k/64k）、CC/AI 字幕歌词（**需 B 站扫码登录**，见 ADR-0016）、视频评论、UP 主页、B 站音乐榜 / 热搜、公开收藏夹导入。边界：无专辑、无按歌词搜歌、无 Molia 账号系统、无大会员高音质、不浏览 / 搜索歌单、私密收藏夹不可导入（见 ADR-0014 / ADR-0016）。
-- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ **Bili session** `BiliSession`（`lib/sources/builtin/bili_session.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + secure 盒，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。`BiliSession` 是 Cookie / 账号 / 就绪 Future 的唯一持有者；账号服务只保留 UI 状态（登录态 / 过期 / 持久化标记）并通过同一会话读写，`BiliClient` / `BiliLyric` 接受注入的会话（默认 `BiliSession.shared`），`BiliLyric` 先 await `ready` 再判断登录态。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。
+- **Bili account（B 站账号）** — `BiliAccountService`（`lib/services/bili_account_service.dart`）+ `BiliQrLogin`（`lib/sources/builtin/bili_login.dart`）+ **Bili session** `BiliSession`（`lib/sources/builtin/bili_session.dart`）：官方扫码登录，Cookie 存 `kBiliAccountCookie`（凭证类别 + secure 盒，**默认随跨设备同步；完整备份默认包含全部凭证**；退出登录的清空也会同步）。`BiliSession` 是 Cookie / 账号 / 就绪 Future 的唯一持有者；账号服务只保留 UI 状态（登录态 / 过期 / 持久化标记）并通过同一会话读写，`BiliClient` / `BiliLyric` 接受注入的会话（默认 `BiliSession.shared`）；账号请求与字幕取词都先 await `ready` 再读 Cookie，过期标记也由会话持有。只用于 B 站字幕（`/x/player/wbi/v2` + `accountSession`）与账号资料（nav + `account`）；播放直链、搜索、评论、字幕 CDN 保持匿名。登录成功清 `bili:` 原生取词缓存并强刷当前 B 站歌词；手动选择的歌词不被覆盖。
 - **Bili client（B 站请求客户端）** — `lib/sources/builtin/bili_client.dart`：B 站端点请求生命周期的唯一实现——URL / WBI 签名 / 匿名 vs 会话头 / 账号 Cookie（仅 `account` / `accountSession` 两种鉴权口径，播放 / 搜索 / 评论绝不带，Cookie 来自注入的 `BiliSession`）/ 业务码口径（`standard` / `favorites` / `none`）/ 刷新口径（`riskOnly` 默认，仅风控刷新；搜索与 UP 搜索 `anyFailure`，任何失败刷新一次）/ 空响应与非 JSON 归一为 `SourceFailure`。`BiliApi` 仍是匿名访问会话（buvid + WBI 密钥，类型 `BiliAnonSession`）的唯一来源；业务文件只拼参数与解析 `data`，不再各自判断 code / 带 Cookie / 刷新。
 - **Bilibili raw id（B 站取链 id）** — `bvid`（`BV...`）优先、`aid`（av 号）兜底：`raw_track.dart` 的通用 id 优先级把 `bvid` 放在最前，`_platformIdFields['bili'] = ['bvid','aid','id']`，且不登记 `_canonicalIdFields['bili']`（B 站不靠 LX 脚本取链）。raw 原样保留 `cid`（首个分 P，取链与字幕共用）与 `source:'bili'`；`bvid` / `aid` 都缺失的条目不可播放（收藏夹里的番剧 / 课程在映射时过滤）。
 - **LX engine bridge（LX 引擎桥）** — `lib/sources/lx/lx_engine_native.dart`：脚本 isolate 与宿主的唯一通道。投递用 JSInvokable 值直投（`__lxDeliver` / `__lxSetup`，不再把消息拼成 JS 源码 evaluate）；HTTP 响应只下行原文 `raw`，`body` 由 prelude 在 JS 侧还原；任务泵按活动状态自适应（有在途 25ms / 空闲 250ms）；调用超时先探活（`ping`/`pong`，有在途 HTTP 时按脚本声明的超时延长预算），只有无应答才重启——单请求超时抛 `LxEngineTimeoutException` 只失败该请求，`LxEngineSupervisor` 对连续超时熔断（默认 3 次 → `failed` + `failureReason`，成功一次清零）。
@@ -350,7 +350,9 @@
   `BuiltinLyricProvider`（当前为 B 站），新增渠道无需改 UI。B 站字幕只进手动
   换源（`autoFallback=false`：视频结果不是歌曲，自动竞速容易拿错），未登录时
   返回 `biliLoginRequired`，换源页只显示登录提示、不发搜索请求；手动选择写
-  `provider='bili'` + `manual=true`，不会被登录后的原生刷新覆盖。
+  `provider='bili'` + `manual=true`，不会被登录后的原生刷新覆盖。`forSession`
+  同时把可用性闭包与 B 站字幕 provider 绑到注入的 `BiliSession`；`standard`
+  只是生产共享会话的默认绑定。
 - **Lyrics manual search session（手动歌词换源会话）** —
   `lib/providers/lyrics_source_search_session.dart`：手动换源页的搜索与选择唯一
   实现——逐来源状态 / 结果、查询代际（旧查询结果丢弃）、可用性每次读取时求值、
@@ -841,8 +843,9 @@
   全部事实（名字 / 默认值 / 同步类别 / 存放盒）；只有有「第二消费者」的键才登记
   （同步、备份、应用远端后的重载、整表驱动的测试），设备本地键留在各自模块。
 - **Settings subpage chrome（设置子页 chrome）** — `lib/widgets/settings/settings_subpage.dart`：
-  设置内层 Navigator 子页的 `Scaffold + M3EAppBar.top + ListView(kSettingsPadding)`
-  唯一实现（`SettingsSubPage` / `.body` / `SettingsSubPageList`）。设置子页不走
+  设置内层 Navigator 子页（含 AI 推歌 / 听歌统计）的
+  `Scaffold + M3EAppBar.top + ListView(kSettingsPadding)` 唯一实现
+  （`SettingsSubPage` / `.body` / `SettingsSubPageList`）。设置子页不走
   `ResponsiveNavigation.showSecondaryPage`：预测返回要按「子页 / 弹层首屏」分派
   手势归属，普通返回先退子页再关弹层，所有权在 `settings_page.dart` 的弹层宿主。
 - **Settings registry（设置注册表）** — `lib/data/settings/settings_registry.dart`：

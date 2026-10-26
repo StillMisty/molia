@@ -71,7 +71,7 @@ class BiliClient {
   BuiltinTransport get transport => _transport ?? BuiltinSearch.transport;
 
   /// 账号 Cookie 来源：显式注入优先，否则是生产共享会话。
-  BiliSession get session => _session ?? BiliSession.shared;
+  BiliSession get session => BiliSession.resolve(_session);
 
   /// 发起一次 GET 并校验响应。
   ///
@@ -147,7 +147,10 @@ class BiliClient {
     String path,
     Map<String, Object?>? query,
     int retries,
-  ) {
+  ) async {
+    // 账号请求同样等初始化完成：否则冷启动首个字幕 / 资料请求会在安全存储
+    // 读完前读到空 Cookie，误走匿名路径。
+    await session.ready;
     final cookie = session.cookieHeader;
     return transport.getJson(
       _urlOf(path, query),
@@ -277,9 +280,10 @@ class BiliClient {
     Map<String, Object?>? query,
     int retries, {
     required bool withAccount,
-  }) {
+  }) async {
     final headers = Map<String, String>.from(anonSession.apiHeaders);
     if (withAccount) {
+      await session.ready;
       // 参数名不能叫 session：那会盖住账号会话 getter，把 buvid 当成账号
       // Cookie（或直接编译失败）。
       final accountCookie = session.cookieHeader;

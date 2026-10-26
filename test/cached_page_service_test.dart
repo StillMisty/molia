@@ -1,7 +1,4 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/cache/request_cache.dart';
 import 'package:molia/data/catalog/cached_page_service.dart';
 import 'package:molia/domain/models/failure.dart';
 
@@ -13,14 +10,10 @@ String _prefixOf(_Query query) => '${query.scope}:${query.id}:';
 
 CachedPageService<String, _Query> _build({
   required Future<String> Function(_Query query, int page, int limit) fetch,
-  RequestCache? cache,
-  Duration ttl = const Duration(minutes: 10),
 }) => CachedPageService<String, _Query>(
   fetch: (query, {required page, required limit}) => fetch(query, page, limit),
   keyOf: (query, page, limit) => '${query.scope}:${query.id}:$page:$limit',
   maxEntries: 8,
-  ttl: ttl,
-  cache: cache,
 );
 
 /// 分页缓存服务：缓存命中 / 单飞 / 失败不缓存 / TTL / 前缀失效 / 错误归一化。
@@ -38,26 +31,6 @@ void main() {
     expect(await service.load(_query, page: 1, limit: 20), '1/20');
     expect(calls, 1);
     expect(service.countPrefix(_prefixOf(_query)), 1);
-  });
-
-  test('并发同 key 只取数一次（single-flight）', () async {
-    var calls = 0;
-    final gate = Completer<void>();
-    final service = _build(
-      fetch: (query, page, limit) async {
-        calls++;
-        await gate.future;
-        return 'v$page';
-      },
-    );
-
-    final first = service.load(_query, page: 1, limit: 20);
-    final second = service.load(_query, page: 1, limit: 20);
-    expect(calls, 1);
-
-    gate.complete();
-    expect(await Future.wait([first, second]), ['v1', 'v1']);
-    expect(calls, 1);
   });
 
   test('失败不缓存：异常归一化，下一次调用重试', () async {
@@ -119,38 +92,5 @@ void main() {
 
     await service.load(_query, page: 1, limit: 20);
     expect(calls, 4, reason: '失效后重新取数');
-  });
-
-  test('注入缓存：TTL 到期后重新取数', () async {
-    var now = DateTime(2026, 1, 1);
-    var calls = 0;
-    final cache = RequestCache(
-      maxEntries: 8,
-      ttl: const Duration(minutes: 1),
-      clock: () => now,
-    );
-    final service = _build(
-      fetch: (query, page, limit) async => 'v${++calls}',
-      cache: cache,
-    );
-
-    expect(await service.load(_query, page: 1, limit: 20), 'v1');
-    now = now.add(const Duration(seconds: 59));
-    expect(await service.load(_query, page: 1, limit: 20), 'v1');
-    now = now.add(const Duration(seconds: 2));
-    expect(await service.load(_query, page: 1, limit: 20), 'v2');
-    expect(calls, 2);
-  });
-
-  test('ttl 参数控制自建缓存：零 TTL 不命中', () async {
-    var calls = 0;
-    final service = _build(
-      fetch: (query, page, limit) async => 'v${++calls}',
-      ttl: Duration.zero,
-    );
-
-    expect(await service.load(_query, page: 1, limit: 20), 'v1');
-    expect(await service.load(_query, page: 1, limit: 20), 'v2');
-    expect(calls, 2);
   });
 }

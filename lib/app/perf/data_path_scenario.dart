@@ -98,7 +98,7 @@ Future<void> _run({
   );
   try {
     final options =
-        search.sourceOptions.where((o) => o.capabilities.search).toList();
+        search.sourceChannels.where((o) => o.capabilities.search).toList();
     if (options.isEmpty) {
       _logger.warning('scenario: 没有可搜索音源');
       return;

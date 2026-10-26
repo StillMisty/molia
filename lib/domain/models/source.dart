@@ -80,8 +80,7 @@ class SourceCapabilities {
 /// 音源描述：一个渠道的事实唯一形状。
 ///
 /// 搜索页选择器 / 资料页渠道 / 音源管理页 / AI 推歌 / 自动换源都消费它，
-/// 由 `SourceProfile.toDescriptor` 从画像投影一次；不再有第二套渠道结构
-/// 各自复制字段。
+/// 由 `SourceProfile.toDescriptor` 从画像投影一次；字段只在投影处组装。
 class SourceDescriptor {
   /// 'kw' / 脚本 key / 'any_listen'。
   final String key;

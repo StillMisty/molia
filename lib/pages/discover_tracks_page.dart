@@ -60,7 +60,7 @@ class DiscoverTracksPage extends StatefulWidget {
 
 class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   /// 分页集合：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在
-  /// 控制器内（页面不再自己持有 `_detail`）。
+  /// 控制器内。
   late final PagedTrackCollection<DiscoverDetail, DiscoverTrack> _collection;
 
   /// 播放 / 加入列表的唯一编排（洗牌、上下文名、触感都在模块内）。
@@ -146,14 +146,15 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       return;
     }
     try {
-      final result =
-          await context.read<DiscoverProvider>().importDetailToLibrary(
-                DiscoverDetail(
-                  info: detail.info,
-                  tracks: List<DiscoverTrack>.of(tracks),
-                ),
-                fallbackName: widget.title,
-              );
+      final result = await context
+          .read<DiscoverProvider>()
+          .importDetailToLibrary(
+            DiscoverDetail(
+              info: detail.info,
+              tracks: List<DiscoverTrack>.of(tracks),
+            ),
+            fallbackName: widget.title,
+          );
       if (!mounted) return;
       M3ESnackbar.show(
         context,

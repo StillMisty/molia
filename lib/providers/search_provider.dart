@@ -23,7 +23,7 @@ final _logger = Logger('molia.search_provider');
 
 /// 搜索状态（内部经 [CatalogService]/[SourceRegistry]）。
 ///
-/// 公开 API：`filteredResults` / `loadMore` / `sourceOptions` / 分页 / 空态；
+/// 公开 API：`filteredResults` / `loadMore` / `sourceChannels` / 分页 / 空态；
 /// 结果行统一是 [SearchRow]（领域 `Track` + 可选歌词片段）。音源侧的
 /// `SourceTrack`（含 raw payload）只在内部保留，播放时由 `playItem` 交给
 /// [PlaybackProvider]。
@@ -199,18 +199,18 @@ class SearchProvider extends ChangeNotifier {
 
   /// 可选音源列表：直接是 [SourceRegistry] 的渠道描述（唯一渠道形状），
   /// 不再在 provider 里二次投影；顺序即用户自定义排序（`lx_source_order`）。
-  List<SourceDescriptor> get sourceOptions =>
+  List<SourceDescriptor> get sourceChannels =>
       _sourceRegistry?.descriptors ?? const [];
 
   String get sourceDisplayName {
-    for (final option in sourceOptions) {
+    for (final option in sourceChannels) {
       if (option.key == _sourceKey) return option.displayName;
     }
     return _sourceKey;
   }
 
   void _onSourcesChanged() {
-    final available = sourceOptions;
+    final available = sourceChannels;
     // 当前音源仍可用：仅通知 UI（音源列表可能变化）。
     if (_sourceKey.isNotEmpty && available.any((o) => o.key == _sourceKey)) {
       notifyListeners();

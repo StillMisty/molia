@@ -322,7 +322,7 @@ void main() {
     return provider;
   }
 
-  test('sourceOptions 直接是 registry.descriptors（不二次投影），默认选中第一个可用源', () {
+  test('sourceChannels 直接是 registry.descriptors（不二次投影），默认选中第一个可用源', () {
     final registry = _FakeRegistry(
       {'kw': _FakeMusicSource('kw'), 'tx': _FakeMusicSource('tx')},
       [
@@ -333,7 +333,7 @@ void main() {
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
-    final options = provider.sourceOptions;
+    final options = provider.sourceChannels;
     // 同一个描述列表：provider 不再把字段搬进第二套形状。
     expect(identical(options, registry.descriptors), isTrue);
     expect(options.map((o) => o.key), ['kw', 'tx']);
@@ -498,7 +498,7 @@ void main() {
     registry.setDescriptors([]);
     await _waitUntil(() => provider.sourceKey.isEmpty);
     expect(provider.hasSelectedSource, isFalse);
-    expect(provider.sourceOptions, isEmpty);
+    expect(provider.sourceChannels, isEmpty);
   });
 
   test('搜索类型：能力位决定分段；不支持的类型切换被忽略', () async {
@@ -723,7 +723,7 @@ void main() {
     final provider = SearchProvider(playbackProvider);
     addTearDown(provider.dispose);
 
-    expect(provider.sourceOptions, isEmpty);
+    expect(provider.sourceChannels, isEmpty);
     expect(provider.hasSelectedSource, isFalse);
 
     provider.submitSearch('hello');

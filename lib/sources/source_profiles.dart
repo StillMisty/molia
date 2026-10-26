@@ -98,17 +98,19 @@ class SourceProfile {
       other.capabilities == capabilities;
 
   @override
-  int get hashCode => Object.hash(
-        key,
-        displayName,
-        kind,
-        enabled,
-        discoverable,
-        capabilities,
-      );
+  int get hashCode =>
+      Object.hash(key, displayName, kind, enabled, discoverable, capabilities);
 
   @override
   String toString() => 'SourceProfile($key)';
+}
+
+/// 画像列表 → 渠道描述列表（顺序即列表下标，唯一投影处）。
+extension SourceProfileDescriptors on Iterable<SourceProfile> {
+  List<domain.SourceDescriptor> toDescriptors() {
+    var order = 0;
+    return [for (final profile in this) profile.toDescriptor(order: order++)];
+  }
 }
 
 /// 一次构建的只读画像快照：按 key 查能力 + 已排序的渠道 / 可搜索列表。
@@ -118,9 +120,9 @@ class SourceProfile {
 /// 逻辑，反而容易与路由漂移。
 class SourceProfiles {
   SourceProfiles._(this._byKey, this.channels)
-      : searchable = List.unmodifiable(
-          channels.where((profile) => profile.enabled && profile.searchable),
-        );
+    : searchable = List.unmodifiable(
+        channels.where((profile) => profile.enabled && profile.searchable),
+      );
 
   final Map<String, SourceProfile> _byKey;
 
@@ -167,8 +169,10 @@ class SourceProfiles {
 
     // 3. any-listen：不可用时仍保留画像（能力全 false），
     //    这样 capabilitiesFor 与渠道判断不必特判 key。
-    profiles[AnyListenSource.sourceKey] =
-        _anyListenProfile(anyListenUsable, disabledChannels);
+    profiles[AnyListenSource.sourceKey] = _anyListenProfile(
+      anyListenUsable,
+      disabledChannels,
+    );
 
     // 4. 渠道候选顺序与迁移前一致：脚本可搜索源 → 内置可搜索平台 →
     //    any-listen → 仅发现的内置平台（避免发现入口排到搜索源前面）。
@@ -197,9 +201,7 @@ class SourceProfiles {
     final orderedKeys = applyOrder(candidateKeys, sourceOrder);
     return SourceProfiles._(
       Map.unmodifiable(profiles),
-      List.unmodifiable([
-        for (final key in orderedKeys) profiles[key]!,
-      ]),
+      List.unmodifiable([for (final key in orderedKeys) profiles[key]!]),
     );
   }
 
@@ -226,7 +228,8 @@ class SourceProfiles {
     final scriptCanResolve = script?.canResolveUrl ?? false;
     // 与 searchWithMeta 的路由门一致：搜索适配器存在，且原生取链或脚本
     // 可取链才允许搜索；缺少搜索适配器时即使有原生取链也不能宣称可搜索。
-    final searchable = platform.search != null &&
+    final searchable =
+        platform.search != null &&
         (platform.resolve != null || scriptCanResolve);
     final canResolve = platform.resolve != null || scriptCanResolve;
     return SourceProfile(

@@ -80,7 +80,7 @@ class ArtistPage extends StatefulWidget {
 
 class _ArtistPageState extends State<ArtistPage> {
   /// 分页集合：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在
-  /// 控制器内（页面不再自己持有 `_artist`）。
+  /// 控制器内。
   late final PagedTrackCollection<ArtistDetail, Track> _collection;
 
   /// 播放 / 加入列表的唯一编排（洗牌、上下文名、addedAt 都在模块内）。
@@ -131,17 +131,17 @@ class _ArtistPageState extends State<ArtistPage> {
 
   /// 「随机播放全部」：洗牌与起播下标的顺序统一由 handoff 负责。
   Future<void> _playShuffled() => _handoff.play(
-        context,
-        _collection.items,
-        shuffle: true,
-        contextName: _collection.entity?.name,
-        fallbackContextName: widget.fallbackName,
-      );
+    context,
+    _collection.items,
+    shuffle: true,
+    contextName: _collection.entity?.name,
+    fallbackContextName: widget.fallbackName,
+  );
 
   String _titleOf(ArtistDetail? artist) => resolveTrackListName(
-        name: artist?.name,
-        fallbackName: widget.fallbackName,
-      );
+    name: artist?.name,
+    fallbackName: widget.fallbackName,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -335,11 +335,11 @@ class _ArtistPageState extends State<ArtistPage> {
   }
 
   Widget _buildAvatarPlaceholder(ThemeData theme) => ColoredBox(
-        color: theme.colorScheme.surfaceContainerHighest,
-        child: Icon(
-          Icons.person_rounded,
-          size: 40,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      );
+    color: theme.colorScheme.surfaceContainerHighest,
+    child: Icon(
+      Icons.person_rounded,
+      size: 40,
+      color: theme.colorScheme.onSurfaceVariant,
+    ),
+  );
 }

@@ -73,7 +73,7 @@ void main() {
       initialChannelKey: 'wy',
       // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
       onChannelChanged: (key) {
-        if (search.sourceOptions
+        if (search.sourceChannels
             .any((option) => option.key == key && option.capabilities.search)) {
           search.selectSource(key);
         }

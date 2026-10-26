@@ -5,6 +5,7 @@ import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../sources/source_manager.dart';
+import '../../sources/source_profiles.dart';
 import 'local_music_source.dart';
 import 'manager_catalog_source.dart';
 
@@ -42,18 +43,14 @@ class SourceRegistryImpl implements SourceRegistry {
   List<domain.SourceDescriptor> get descriptors {
     // 一次快照同时给出顺序与能力位：避免列表来自 channels、能力又来自
     // capabilitiesFor 的二次读取在状态切换时对不上。
-    final profiles = _manager.sourceProfiles.searchable;
-    return [
-      for (var index = 0; index < profiles.length; index++)
-        profiles[index].toDescriptor(order: index),
-    ];
+    return _manager.sourceProfiles.searchable.toDescriptors();
   }
 
   @override
   Set<String> get enabledChannelKeys => {
-        for (final profile in _manager.sourceProfiles.channels)
-          if (profile.enabled) profile.key,
-      };
+    for (final profile in _manager.sourceProfiles.channels)
+      if (profile.enabled) profile.key,
+  };
 
   @override
   MusicSource? byKey(String key) {

@@ -38,12 +38,8 @@ void main() {
     BuiltinSearch.transport = originalTransport;
     BiliApi.reset();
     BiliPlay.reset();
-    // 静态内置适配器（BuiltinLyricProvider → BiliLyric.shared）只能读
-    // 共享会话；注册表用例另行注入本地会话。
-    BiliSession.shared.reset();
   });
 
-  tearDown(() => BiliSession.shared.reset());
   tearDownAll(() => BuiltinSearch.transport = originalTransport);
 
   void login({BiliSession? session}) {
@@ -197,7 +193,8 @@ void main() {
     });
 
     test('取词：raw 透传给字幕接口，空扩展行按 null', () async {
-      login();
+      final session = BiliSession();
+      login(session: session);
       BuiltinSearch.transport = biliTransport((request) async {
         switch (request.uri.path) {
           case '/x/player/wbi/v2':
@@ -231,7 +228,7 @@ void main() {
         }
       });
 
-      final provider = BuiltinLyricProvider('bili');
+      final provider = BuiltinLyricProvider('bili', biliSession: session);
       final payload = await provider.fetchForMatch(biliMatch);
 
       expect(payload, isNotNull);
@@ -252,8 +249,10 @@ void main() {
         }),
       );
 
-      final payload =
-          await BuiltinLyricProvider('bili').fetchForMatch(biliMatch);
+      final payload = await BuiltinLyricProvider(
+        'bili',
+        biliSession: BiliSession(),
+      ).fetchForMatch(biliMatch);
 
       expect(payload, isNull);
       expect(requests, isEmpty, reason: '未登录时字幕接口必为空，不白跑');
@@ -264,8 +263,8 @@ void main() {
         (request) async => textResponse('{}', statusCode: 500),
       );
 
-      final matches =
-          await BuiltinLyricProvider('bili').searchMultiple('晴天', '周杰伦');
+      final matches = await BuiltinLyricProvider('bili')
+          .searchMultiple('晴天', '周杰伦');
       expect(matches, isEmpty);
     });
 

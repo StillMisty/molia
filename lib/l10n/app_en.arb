@@ -36,14 +36,7 @@
   "delete": "Delete",
   "lyricsFetching": "Fetching lyrics...",
   "lyricsNotFoundForTrack": "No lyrics found for this track.",
-  "lyricsFetchError": "Error fetching lyrics: {error}",
-  "@lyricsFetchError": {
-    "placeholders": {
-      "error": {
-        "type": "String"
-      }
-    }
-  },
+  "lyricsFetchError": "Couldn't fetch lyrics. Try another source.",
   "lyricsTitle": "Lyrics",
   "lyricsLoading": "Loading lyrics...",
   "lyricsFailedToLoad": "Failed to load lyrics.",

@@ -126,6 +126,7 @@ void main() {
   LyricsSourceSearchSession buildSession(
     List<LyricsSourceStrategy> sources, {
     LyricsService? service,
+    Set<String>? enabledChannelKeys,
   }) {
     final lyricsProvider = LyricsProvider(
       service: service ?? _FakeLyricsService(),
@@ -133,6 +134,7 @@ void main() {
     addTearDown(lyricsProvider.dispose);
     final session = LyricsSourceSearchSession(
       strategies: sources,
+      enabledChannelKeys: enabledChannelKeys,
       lyricsProvider: lyricsProvider,
       trackId: 'bili:1',
       trackTitle: '晴天',
@@ -145,11 +147,13 @@ void main() {
   LyricsSourceStrategy strategy(
     LyricProvider provider, {
     String? channelKey,
+    bool isChannel = true,
     LyricsSourceUnavailable? Function()? unavailable,
   }) {
     return LyricsSourceStrategy(
       channelKey: channelKey ?? provider.name,
       provider: provider,
+      isChannel: isChannel,
       unavailable: unavailable,
     );
   }
@@ -157,8 +161,27 @@ void main() {
   SongMatch sunnyDay(String songId, {String artist = '周杰伦'}) =>
       SongMatch(songId: songId, title: '晴天', artist: artist);
 
-  test('不可用来源不发请求：仍保留分组头并报告原因，且每次读取都重新求值',
-      () async {
+  test('渠道开关过滤：停用渠道不进会话，LRCLIB 不受影响', () {
+    final session = buildSession(
+      [
+        strategy(_FakeLyricProvider('enabled'), channelKey: 'enabled'),
+        strategy(_FakeLyricProvider('disabled'), channelKey: 'disabled'),
+        strategy(
+          _FakeLyricProvider('lrclib'),
+          channelKey: 'lrclib',
+          isChannel: false,
+        ),
+      ],
+      enabledChannelKeys: {'enabled'},
+    );
+
+    expect(session.strategies.map((strategy) => strategy.channelKey), [
+      'enabled',
+      'lrclib',
+    ]);
+  });
+
+  test('不可用来源不发请求：仍保留分组头并报告原因，且每次读取都重新求值', () async {
     final qq = _FakeLyricProvider('qq', matches: [sunnyDay('qq-1')]);
     final bili = _FakeLyricProvider('bili');
     var loggedIn = false;
@@ -167,9 +190,8 @@ void main() {
       strategy(
         bili,
         channelKey: 'bili',
-        unavailable: () => loggedIn
-            ? null
-            : LyricsSourceUnavailable.biliLoginRequired,
+        unavailable: () =>
+            loggedIn ? null : LyricsSourceUnavailable.biliLoginRequired,
       ),
     ]);
 
@@ -179,23 +201,23 @@ void main() {
     expect(bili.searchCalls, 0, reason: '不可用来源不发请求');
     expect(session.stateOf('qq'), ProviderSearchState.loaded);
     expect(session.stateOf('bili'), ProviderSearchState.unavailable);
-    expect(
-      session.unavailableReasons,
-      [LyricsSourceUnavailable.biliLoginRequired],
-    );
+    expect(session.unavailableReasons, [
+      LyricsSourceUnavailable.biliLoginRequired,
+    ]);
 
     final headers = session.entries
         .where((entry) => entry.type == LyricsSearchEntryType.header)
         .toList();
+    expect(headers.map((entry) => entry.strategy!.channelKey), [
+      'tx',
+      'bili',
+    ], reason: '不可用来源的分组头仍然渲染「怎么办」');
     expect(
-      headers.map((entry) => entry.strategy!.channelKey),
-      ['tx', 'bili'],
-      reason: '不可用来源的分组头仍然渲染「怎么办」',
-    );
-    expect(
-      session.entries.any((entry) =>
-          entry.type == LyricsSearchEntryType.result &&
-          entry.result!.match.songId == 'qq-1'),
+      session.entries.any(
+        (entry) =>
+            entry.type == LyricsSearchEntryType.result &&
+            entry.result!.match.songId == 'qq-1',
+      ),
       isTrue,
     );
 
@@ -262,8 +284,7 @@ void main() {
     expect(session.isFetchingLyric, isFalse);
   });
 
-  test('选中结果：无歌词 → notFound，取词抛错 → failed，并发点击 → busy',
-      () async {
+  test('选中结果：无歌词 → notFound，取词抛错 → failed，并发点击 → busy', () async {
     final service = _FakeLyricsService();
 
     final empty = _FakeLyricProvider('empty', matches: [sunnyDay('e-1')]);
@@ -318,9 +339,7 @@ void main() {
     );
     final bili = _FakeLyricProvider(
       'bili',
-      matches: [
-        SongMatch(songId: 'bili-1', title: '晴天 翻唱', artist: '某UP主'),
-      ],
+      matches: [SongMatch(songId: 'bili-1', title: '晴天 翻唱', artist: '某UP主')],
     );
     final session = buildSession([
       strategy(qq, channelKey: 'tx'),

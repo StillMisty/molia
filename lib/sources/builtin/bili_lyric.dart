@@ -29,7 +29,7 @@ class BiliLyric {
   final BiliSession? _session;
   final BiliClient _client;
 
-  BiliSession get _accountSession => _session ?? BiliSession.shared;
+  BiliSession get _accountSession => BiliSession.resolve(_session);
 
   /// 中文轨判定：`lan` 命中平台已知标识，或 `lan_doc` 含「中文」。
   static const Set<String> _chineseLans = {'zh-Hans', 'zh-CN', 'zh', 'ai-zh'};
@@ -79,10 +79,7 @@ class BiliLyric {
 
       // 字幕文件是没有业务码的静态 JSON：只复用匿名传输，不校验 code，
       // 也不带账号 Cookie。
-      final body = await _client.get(
-        url,
-        codePolicy: BiliCodePolicy.none,
-      );
+      final body = await _client.get(url, codePolicy: BiliCodePolicy.none);
       final lyric = _lrcOf(body);
       return lyric == null ? null : BuiltinLyricResult(lyric: lyric);
     } catch (_) {

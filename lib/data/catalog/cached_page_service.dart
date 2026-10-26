@@ -10,10 +10,9 @@ typedef PageFetcher<T, Q> = Future<T> Function(
 
 /// 分页缓存服务：目录详情（专辑 / 歌手 / 评论）共用的取数骨架。
 ///
-/// 收拢三处重复的缓存策略：single-flight + LRU + TTL 由 [RequestCache]
-/// 承担，失败在这里统一归一化为 [SourceFailure]（失败不缓存由缓存保证）。
-/// key / 前缀的拼装由类型化适配器注入——平台字面量留在各自模块，泛型层
-/// 不解析 key 语义。
+/// 缓存策略：single-flight + LRU + TTL 由 [RequestCache] 承担，失败在这里
+/// 统一归一化为 [SourceFailure]（失败不缓存由缓存保证）。key / 前缀的拼装
+/// 由类型化适配器注入——平台字面量留在各自模块，泛型层不解析 key 语义。
 ///
 /// `maxEntries` / `ttl` 只在未注入 `cache` 时生效（注入场景由调用方完全
 /// 掌控缓存策略，测试可用可控时钟驱动 TTL）。

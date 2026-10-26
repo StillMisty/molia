@@ -20,11 +20,9 @@ import 'qq_provider.dart';
 class LyricsSourceRegistry {
   const LyricsSourceRegistry(this.strategies);
 
-  /// 用指定账号会话派生来源集合：可用性闭包绑定注入的会话。
-  ///
-  /// 测试 / 多实例接线不碰 [BiliSession.shared]；[standard] 只是它的生产
-  /// 默认绑定。内置取词适配器本身仍是静态 `BiliLyric.shared`：生产的
-  /// [standard] 与共享会话同源，注入会话目前只影响可用性判定。
+  /// 用指定账号会话派生来源集合：可用性闭包与 B 站字幕 provider 都绑定
+  /// 注入的会话。测试 / 多实例接线不碰 [BiliSession.shared]；[standard]
+  /// 只是它的生产默认绑定。
   factory LyricsSourceRegistry.forSession(BiliSession session) =>
       LyricsSourceRegistry(_standardStrategies(session));
 
@@ -33,9 +31,9 @@ class LyricsSourceRegistry {
 
   /// [LyricsService] 的名字搜索回退列表（并行竞速，首个非空即用）。
   List<LyricProvider> get autoProviders => [
-        for (final strategy in strategies)
-          if (strategy.autoFallback) strategy.provider,
-      ];
+    for (final strategy in strategies)
+      if (strategy.autoFallback) strategy.provider,
+  ];
 
   /// 换源页「歌词」tab 的来源：`preferredKey` 同源置顶，其余保持声明顺序。
   List<LyricsSourceStrategy> manualSources({String? preferredKey}) {
@@ -53,8 +51,9 @@ class LyricsSourceRegistry {
   /// 组合根构造 [LyricsService] 不额外产生网络请求。B 站可用性闭包绑定
   /// [BiliSession.shared]（生产账号服务默认写同一份）；其它实例走
   /// [LyricsSourceRegistry.forSession]。
-  static final LyricsSourceRegistry standard =
-      LyricsSourceRegistry.forSession(BiliSession.shared);
+  static final LyricsSourceRegistry standard = LyricsSourceRegistry.forSession(
+    BiliSession.shared,
+  );
 
   static List<LyricsSourceStrategy> _standardStrategies(BiliSession session) {
     // 五个音乐平台沿用各自的专用 provider：搜索后需要平台特有字段
@@ -86,7 +85,7 @@ class LyricsSourceRegistry {
       strategies.add(
         LyricsSourceStrategy(
           channelKey: platform.key,
-          provider: BuiltinLyricProvider(platform.key),
+          provider: BuiltinLyricProvider(platform.key, biliSession: session),
           // 只进手动换源，不参与自动回退：B 站搜索结果是视频（同名翻唱 /
           // 搬运 / 切片很多），跨平台名字竞速时很容易先返回一条错匹配；
           // 这类平台的歌词也不一定对得上「这首歌」。手动换源里用户看得见
@@ -118,8 +117,7 @@ class LyricsSourceRegistry {
     BiliSession session,
   ) {
     if (key != 'bili') return null;
-    return () => session.isLoggedIn
-        ? null
-        : LyricsSourceUnavailable.biliLoginRequired;
+    return () =>
+        session.isLoggedIn ? null : LyricsSourceUnavailable.biliLoginRequired;
   }
 }

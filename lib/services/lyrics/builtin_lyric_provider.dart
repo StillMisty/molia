@@ -9,16 +9,21 @@ library;
 
 import 'package:logging/logging.dart';
 
+import '../../sources/builtin/bili_lyric.dart';
+import '../../sources/builtin/bili_session.dart';
 import '../../sources/builtin/builtin_platforms.dart';
 import '../../sources/builtin/builtin_search.dart';
 import '../../sources/source_track.dart';
 import 'lyric_provider.dart';
 
 class BuiltinLyricProvider extends LyricProvider {
-  BuiltinLyricProvider(this.key);
+  BuiltinLyricProvider(this.key, {this.biliSession});
 
   /// 内置平台 key（`BuiltinPlatforms.byKey` 的键，如 `bili`）。
   final String key;
+
+  /// B 站字幕的账号会话；null = 静态 `BiliLyric.shared`。
+  final BiliSession? biliSession;
 
   final Logger _logger = Logger('molia.builtin_lyric_provider');
 
@@ -90,7 +95,11 @@ class BuiltinLyricProvider extends LyricProvider {
 
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
-    final adapter = BuiltinPlatforms.lyricFor(key);
+    // B 站字幕需要账号会话；经会话实例取词，注册表注入的会话（测试 /
+    // 多实例）不落到静态 `BiliLyric.shared`。其它通用渠道仍走注册表适配器。
+    final adapter = key == 'bili'
+        ? BiliLyric(session: biliSession).fetch
+        : BuiltinPlatforms.lyricFor(key);
     if (adapter == null) return null;
     try {
       final info = await adapter(match.extra);

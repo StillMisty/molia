@@ -26,23 +26,20 @@ class BiliAccountService extends ChangeNotifier {
     required this._settings,
     BiliQrLogin? login,
     BiliSession? session,
-  }) : _session = session ?? BiliSession.shared,
-       // 扫码请求（含 nav 资料）必须读同一份会话：否则注入的 session 只影响
-       // 设置页，而 BiliQrLogin 仍拿共享 Cookie。
-       _login = login ??
-           BiliQrLogin(
-             client: BiliClient(session: session ?? BiliSession.shared),
-           );
+  }) : _session = BiliSession.resolve(session) {
+    // 扫码请求（含 nav 资料）必须读同一份会话：否则注入的 session 只影响
+    // 设置页，而 BiliQrLogin 仍拿共享 Cookie。
+    _login = login ?? BiliQrLogin(client: BiliClient(session: _session));
+  }
 
   final SettingsAccess _settings;
-  final BiliQrLogin _login;
+  late final BiliQrLogin _login;
   final Logger _logger = Logger('molia.bili_account');
 
-  /// 凭据 / 账号资料的唯一状态：服务自身不再镜像 Cookie 或账号。
+  /// 凭据 / 账号资料 / 过期标记的唯一状态：服务自身不再镜像 Cookie 或账号。
   final BiliSession _session;
 
   BiliAccountStatus _status = BiliAccountStatus.unknown;
-  bool _sessionExpired = false;
   bool _lastLoginPersisted = true;
 
   Future<void>? _initFuture;
@@ -66,7 +63,7 @@ class BiliAccountService extends ChangeNotifier {
   BiliAccount? get account => _session.account;
 
   /// 资料校验发现登录已失效（供页面显示「登录已过期」）。
-  bool get sessionExpired => _sessionExpired;
+  bool get sessionExpired => _session.expired;
 
   /// 最近一次扫码登录是否成功写入设置存储（false = 本次会话可用，重启失效）。
   bool get lastLoginPersisted => _lastLoginPersisted;
@@ -121,9 +118,10 @@ class BiliAccountService extends ChangeNotifier {
       if (profile == null) {
         _logger.info('B 站登录已失效，清除账号凭据');
         await _clearCookie();
-        _session.clear();
+        _session
+          ..clear()
+          ..markExpired();
         _status = BiliAccountStatus.loggedOut;
-        _sessionExpired = true;
         notifyListeners();
         return;
       }
@@ -180,7 +178,6 @@ class BiliAccountService extends ChangeNotifier {
           _applyCookie(credentials.cookieHeader);
           final persisted = await _persistCookie(credentials.cookieHeader);
           _lastLoginPersisted = persisted;
-          _sessionExpired = false;
           notifyListeners();
           onLoggedIn?.call();
           unawaited(refreshProfile(force: true));
@@ -227,7 +224,6 @@ class BiliAccountService extends ChangeNotifier {
     _pendingQrKey = null;
     _session.clear();
     _status = BiliAccountStatus.loggedOut;
-    _sessionExpired = false;
     _lastLoginPersisted = true;
     _lastProfileFetch = null;
     notifyListeners();
@@ -271,7 +267,6 @@ class BiliAccountService extends ChangeNotifier {
           _status != BiliAccountStatus.loggedOut || previous != null;
       _session.clear();
       _status = BiliAccountStatus.loggedOut;
-      _sessionExpired = false;
       _lastProfileFetch = null;
       return changed;
     }
@@ -282,7 +277,6 @@ class BiliAccountService extends ChangeNotifier {
     );
     _session.apply(cookieHeader: trimmed, account: account);
     _status = BiliAccountStatus.loggedIn;
-    _sessionExpired = false;
     _lastLoginPersisted = true;
     _lastProfileFetch = null;
     return true;
