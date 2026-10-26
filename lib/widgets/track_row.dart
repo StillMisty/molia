@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/motion_policy.dart';
 import '../utils/duration_text.dart';
 import '../utils/responsive.dart';
 import 'card_list_surface.dart';
@@ -532,7 +533,10 @@ class TrackRow extends StatelessWidget {
     return SizedBox.square(
       dimension: surface.coverSize,
       child: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 180),
+        // 封面 ⇄ 勾选是 effects 交叉淡入淡出：入减速、出加速；减弱动效时硬切。
+        duration: effectDurationOf(context, M3EMotion.short4),
+        switchInCurve: M3EMotion.emphasizedDecelerate,
+        switchOutCurve: M3EMotion.emphasizedAccelerate,
         child: model.selected
             ? Icon(
                 Icons.check_circle_rounded,

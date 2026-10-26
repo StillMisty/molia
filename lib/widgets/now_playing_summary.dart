@@ -29,6 +29,7 @@ import '../providers/playback_provider.dart';
 import '../services/app_branding_service.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/playback_cover_decode.dart';
 import 'cover_appearance.dart';
 import 'favorite_action.dart';
@@ -72,7 +73,7 @@ class NowPlayingCover extends StatelessWidget {
   /// 是否处于隐藏态（播放页激活或飞行中）。
   final bool hidden;
 
-  static const Duration _hideDuration = Duration(milliseconds: 160);
+  static const Duration _hideDuration = M3EMotion.short3;
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +82,12 @@ class NowPlayingCover extends StatelessWidget {
     );
     return AnimatedOpacity(
       // 落位方向必须同步亮出（与飞行副本移除同帧）；收起方向才做淡出。
-      duration: hidden ? _hideDuration : Duration.zero,
+      // 减弱动效时两个方向都硬切，避免收起后仍留半透明封面挡住飞行锚点。
+      duration: effectDurationOf(
+        context,
+        hidden ? _hideDuration : Duration.zero,
+      ),
+      curve: M3EMotion.emphasizedDecelerate,
       opacity: hidden ? 0 : 1,
       child: CoverCard(
         key: flightKey,

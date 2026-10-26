@@ -38,6 +38,7 @@ import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
@@ -103,7 +104,7 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
     super.initState();
 
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
+      duration: M3EMotion.medium2,
       vsync: this,
     );
 
@@ -114,7 +115,7 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
       end: _currentProgress,
     ).animate(CurvedAnimation(
       parent: _animationController,
-      curve: Curves.easeInOut,
+      curve: M3EMotion.standard,
     ));
   }
 
@@ -123,8 +124,13 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
     super.didUpdateWidget(oldWidget);
     final target = widget.position.inMilliseconds.toDouble();
     // 仅 seek/切歌等 >1s 的跳变做 300ms 平滑过渡；
-    // 常规推进直接跟随 position 通道。
+    // 常规推进直接跟随 position 通道。减弱动效时直接落位（不补过渡）。
     if ((target - _currentProgress).abs() > 1000) {
+      if (reduceMotionOf(context)) {
+        _currentProgress = target;
+        _animationController.value = 1.0;
+        return;
+      }
       final display = _animationController.isAnimating
           ? _progressAnimation.value
           : _currentProgress;
@@ -133,7 +139,7 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
         end: target,
       ).animate(CurvedAnimation(
         parent: _animationController,
-        curve: Curves.easeInOut,
+        curve: M3EMotion.standard,
       ));
       _currentProgress = target;
       _animationController.forward(from: 0);
@@ -990,7 +996,8 @@ class _BarHeaderReveal extends ChangeNotifier {
 ///
 /// 入场方向（曲目信息）：expressive spatial 弹簧驱动 −6dp → 0 位移，
 /// 透明度从同一根弹簧进度 clamp 0..1（spatial 与 effects 同帧耦合）。
-/// 出场方向（应用名）：90ms + 曲线淡出（effects 保持时长+曲线，不走弹簧）。
+/// 出场方向（应用名）：`short2` + `emphasizedAccelerate` 先走淡出
+/// （effects 保持时长+曲线，不走弹簧）；减弱动效时直接跳变。
 class _BarHeaderTransition extends StatelessWidget {
   const _BarHeaderTransition({required this.reveal, required this.showTrack});
 
@@ -1019,9 +1026,14 @@ class _BarHeaderTransition extends StatelessWidget {
               ),
             ),
             AnimatedOpacity(
-              // 出场 90ms（先走），入场 160ms。
-              duration: Duration(milliseconds: showTrack ? 90 : 160),
-              curve: showTrack ? Curves.easeIn : Curves.easeOut,
+              // 出场先走（short2），入场稍慢（short3）：两段文字不错峰叠影。
+              duration: effectDurationOf(
+                context,
+                showTrack ? M3EMotion.short2 : M3EMotion.short3,
+              ),
+              curve: showTrack
+                  ? M3EMotion.emphasizedAccelerate
+                  : M3EMotion.emphasizedDecelerate,
               opacity: showTrack ? 0 : 1,
               child: const NowPlayingAppTitle(),
             ),
@@ -1111,10 +1123,15 @@ class _ShellBarProgress extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final duration = effectDurationOf(context, M3EMotion.short3);
     return AnimatedBuilder(
       animation: morph,
       builder: (context, _) => AnimatedOpacity(
-        duration: const Duration(milliseconds: 160),
+        duration: duration,
+        // 收起（进播放页）加速让位，恢复时减速落定：与顶栏文本同一节奏。
+        curve: morph.barHeaderHidden
+            ? M3EMotion.emphasizedAccelerate
+            : M3EMotion.emphasizedDecelerate,
         opacity: morph.barHeaderHidden ? 0 : 1,
         child: ProgressBarSelector(
           builder: (context, position, state, child) {
