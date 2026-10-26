@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/domain/models/source.dart' show SourceCapabilities;
+import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/builtin/builtin_platforms.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
@@ -100,12 +100,42 @@ void main() {
 
       final anyListen = profiles.forKey(AnyListenSource.sourceKey)!;
       expect(anyListen.kind, SourceKind.anyListen);
-      expect(anyListen.capabilities, const SourceCapabilities());
+      expect(anyListen.capabilities, const domain.SourceCapabilities());
       expect(anyListen.visible, isFalse);
       expect(profiles.channels, isNot(contains(anyListen)));
 
       expect(profiles.forKey('not-imported'), isNull);
     });
+  });
+
+  test('toDescriptor：画像 → 渠道形状的唯一投影（kind / discoverable / enabled / order）',
+      () {
+    final projected = SourceProfiles.build(
+      activeSources: {
+        'custom': decl('custom', ['search', 'musicUrl'])
+      },
+      anyListenUsable: true,
+      disabledChannels: const {'custom'},
+    );
+
+    final custom = projected.forKey('custom')!.toDescriptor(order: 2);
+    expect(custom.key, 'custom');
+    expect(custom.displayName, 'custom');
+    expect(custom.kind, domain.SourceKind.lx);
+    expect(custom.capabilities, projected.forKey('custom')!.capabilities);
+    expect(custom.enabled, isFalse, reason: '停用是画像事实，投影原样带出');
+    expect(custom.discoverable, isFalse);
+    expect(custom.order, 2, reason: 'order 由消费方按列表下标传入');
+
+    final bili = projected.forKey('bili')!.toDescriptor();
+    expect(bili.kind, domain.SourceKind.builtin);
+    expect(bili.discoverable, isTrue, reason: '内置发现平台仍保留发现入口');
+    expect(bili.enabled, isTrue);
+
+    final anyListen =
+        projected.forKey(AnyListenSource.sourceKey)!.toDescriptor(order: 1);
+    expect(anyListen.kind, domain.SourceKind.anyListen);
+    expect(anyListen.order, 1);
   });
 
   group('脚本声明合并', () {

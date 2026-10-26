@@ -400,6 +400,32 @@ void main() {
           order: 1,
         ),
       );
+      // 渠道唯一形状的全部事实都参与相等性（含 discoverable）。
+      const bili = SourceDescriptor(
+        key: 'bili',
+        displayName: '哔哩哔哩',
+        kind: SourceKind.builtin,
+        discoverable: true,
+        order: 2,
+      );
+      const sameBili = SourceDescriptor(
+        key: 'bili',
+        displayName: '哔哩哔哩',
+        kind: SourceKind.builtin,
+        discoverable: true,
+        order: 2,
+      );
+      expect(bili, sameBili);
+      expect(bili.hashCode, sameBili.hashCode);
+      expect(
+        bili,
+        isNot(const SourceDescriptor(
+          key: 'bili',
+          displayName: '哔哩哔哩',
+          kind: SourceKind.builtin,
+          order: 2,
+        )),
+      );
     });
 
     test('SourceCapabilities.comment 参与相等性', () {

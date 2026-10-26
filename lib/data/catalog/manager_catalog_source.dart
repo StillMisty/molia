@@ -29,12 +29,8 @@ class SourceManagerMusicSource implements MusicSource {
   final SourceManager _manager;
 
   @override
-  String get displayName {
-    for (final option in _manager.searchableSources) {
-      if (option.key == key) return option.name;
-    }
-    return key;
-  }
+  String get displayName =>
+      _manager.sourceProfiles.forKey(key)?.displayName ?? key;
 
   @override
   SourceCapabilities get capabilities => _manager.capabilitiesFor(key);

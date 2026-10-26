@@ -18,7 +18,6 @@ import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
-import 'package:molia/sources/source_manager.dart' show SourceKind;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../support/fakes.dart';
 
@@ -323,7 +322,7 @@ void main() {
     return provider;
   }
 
-  test('sourceOptions 由 registry.descriptors 映射，默认选中第一个可用源', () {
+  test('sourceOptions 直接是 registry.descriptors（不二次投影），默认选中第一个可用源', () {
     final registry = _FakeRegistry(
       {'kw': _FakeMusicSource('kw'), 'tx': _FakeMusicSource('tx')},
       [
@@ -335,10 +334,13 @@ void main() {
     final provider = buildProvider(registry);
 
     final options = provider.sourceOptions;
+    // 同一个描述列表：provider 不再把字段搬进第二套形状。
+    expect(identical(options, registry.descriptors), isTrue);
     expect(options.map((o) => o.key), ['kw', 'tx']);
-    expect(options.map((o) => o.name), ['酷我', 'QQ音乐']);
-    expect(options.map((o) => o.kind), [SourceKind.builtin, SourceKind.lx]);
-    expect(options.every((o) => o.canSearch), isTrue);
+    expect(options.map((o) => o.displayName), ['酷我', 'QQ音乐']);
+    expect(options.map((o) => o.kind),
+        [domain.SourceKind.builtin, domain.SourceKind.lx]);
+    expect(options.every((o) => o.capabilities.search), isTrue);
 
     expect(provider.sourceKey, 'kw');
     expect(provider.hasSelectedSource, isTrue);

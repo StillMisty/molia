@@ -32,7 +32,7 @@ import '../domain/models/album.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/comment.dart';
 import '../domain/models/failure.dart';
-import '../domain/models/source.dart' show SourceCapabilities;
+import '../domain/models/source.dart' show SourceCapabilities, SourceDescriptor;
 import '../domain/ports/music_source.dart' show PlayableStream;
 
 // UI（音源页）白名单仅允许直连 source_manager，这里把在线更新流程的
@@ -43,29 +43,6 @@ export 'lx/lx_script_update.dart'
 // SourceKind 搬到 sources/source_profiles.dart（画像模块的唯一事实），
 // 这里 re-export 保持既有 import 路径与调用方不变。
 export 'source_profiles.dart' show SourceKind, SourceProfile, SourceProfiles;
-
-class SourceOption {
-  final String key;
-  final String name;
-  final SourceKind kind;
-  final bool canSearch;
-
-  /// 是否具备内置「发现」能力（热榜 / 歌单 / 热搜：五个音乐平台 + B 站；
-  /// B 站没有歌单浏览）。
-  final bool discoverable;
-
-  /// 是否启用（停用后不出现在资料页渠道选择与搜索结果中）。
-  final bool enabled;
-
-  const SourceOption({
-    required this.key,
-    required this.name,
-    required this.kind,
-    required this.canSearch,
-    this.discoverable = false,
-    this.enabled = true,
-  });
-}
 
 /// 音源管理器：
 /// - 管理已导入的 LX 音源脚本（导入 / 删除 / 激活）；
@@ -165,24 +142,22 @@ class SourceManager extends ChangeNotifier {
   ///
   /// 资料页的渠道选择与「音源管理」的渠道排序都消费该列表；脚本扩展源 /
   /// any-listen 只有搜索能力，内置发现平台无论是否有脚本都保留发现入口。
-  List<SourceOption> get channels => [
-        for (final profile in sourceProfiles.channels) _optionOf(profile),
-      ];
+  List<SourceDescriptor> get channels {
+    final profiles = sourceProfiles.channels;
+    return [
+      for (var index = 0; index < profiles.length; index++)
+        profiles[index].toDescriptor(order: index),
+    ];
+  }
 
   /// 可供搜索/播放的音源列表（仅启用项；按用户自定义顺序排列）。
-  List<SourceOption> get searchableSources => [
-        for (final profile in sourceProfiles.searchable) _optionOf(profile),
-      ];
-
-  /// 画像 → UI 视图（`SourceOption`）。
-  SourceOption _optionOf(SourceProfile profile) => SourceOption(
-        key: profile.key,
-        name: profile.displayName,
-        kind: profile.kind,
-        canSearch: profile.searchable,
-        discoverable: profile.discoverable,
-        enabled: profile.enabled,
-      );
+  List<SourceDescriptor> get searchableSources {
+    final profiles = sourceProfiles.searchable;
+    return [
+      for (var index = 0; index < profiles.length; index++)
+        profiles[index].toDescriptor(order: index),
+    ];
+  }
 
   /// 音源能力：直接读 [SourceProfiles]（registry / 领域适配器共用同一答案）。
   SourceCapabilities capabilitiesFor(String key) =>

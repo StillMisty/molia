@@ -45,14 +45,7 @@ class SourceRegistryImpl implements SourceRegistry {
     final profiles = _manager.sourceProfiles.searchable;
     return [
       for (var index = 0; index < profiles.length; index++)
-        domain.SourceDescriptor(
-          key: profiles[index].key,
-          displayName: profiles[index].displayName,
-          kind: _kindOf(profiles[index].kind),
-          capabilities: profiles[index].capabilities,
-          enabled: true,
-          order: index,
-        ),
+        profiles[index].toDescriptor(order: index),
     ];
   }
 
@@ -100,16 +93,5 @@ class SourceRegistryImpl implements SourceRegistry {
 
   void _emitChange() {
     if (!_changes.isClosed) _changes.add(null);
-  }
-
-  domain.SourceKind _kindOf(SourceKind kind) {
-    switch (kind) {
-      case SourceKind.builtin:
-        return domain.SourceKind.builtin;
-      case SourceKind.lx:
-        return domain.SourceKind.lx;
-      case SourceKind.anyListen:
-        return domain.SourceKind.anyListen;
-    }
   }
 }

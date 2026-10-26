@@ -74,7 +74,7 @@ void main() {
       // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
       onChannelChanged: (key) {
         if (search.sourceOptions
-            .any((option) => option.key == key && option.canSearch)) {
+            .any((option) => option.key == key && option.capabilities.search)) {
           search.selectSource(key);
         }
       },

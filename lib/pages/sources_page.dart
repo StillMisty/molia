@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'any_listen_page.dart';
 import '../domain/models/bili_account.dart';
-import '../domain/models/source.dart' show SourceKind;
+import '../domain/models/source.dart' show SourceDescriptor, SourceKind;
 import '../domain/models/source_script.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sources_provider.dart';
@@ -366,7 +366,7 @@ class _SourcesPageState extends State<SourcesPage> {
     BuildContext context,
     AppLocalizations l10n,
     SourcesProvider provider,
-    SourceEntry entry,
+    SourceDescriptor entry,
     int index,
   ) {
     final kindLabel = entry.kind == SourceKind.lx
@@ -381,7 +381,7 @@ class _SourcesPageState extends State<SourcesPage> {
       icon: entry.kind == SourceKind.lx
           ? Icons.code_rounded
           : Icons.radio_rounded,
-      title: entry.name,
+      title: entry.displayName,
       subtitle: supporting.toString(),
       value: entry.enabled,
       onChanged: (value) => provider.setChannelEnabled(entry.key, value),

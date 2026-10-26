@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/domain/models/source_script.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/lx/lx_engine.dart';
@@ -124,7 +125,7 @@ void main() {
     // 在两层各算一份）。
     final channelProfiles = f.manager.sourceProfiles.channels;
     expect(
-      f.provider.channels.map((o) => o.canSearch),
+      f.provider.channels.map((o) => o.capabilities.search),
       channelProfiles.map((p) => p.searchable),
     );
     expect(
@@ -151,6 +152,51 @@ void main() {
     );
   });
 
+  test(
+      'channels / searchableSources：同一 SourceDescriptor 形状，provider 直接委托 manager',
+      () async {
+    final f = await fixture(sources: {
+      'a': const LxSourceDecl(
+          key: 'a', name: 'A', actions: ['search'], qualitys: []),
+    });
+    await f.provider.importScript(_script(), activate: true);
+
+    // 静态类型即是领域渠道形状：两层都不再有第二种结构。
+    final List<domain.SourceDescriptor> channels = f.provider.channels;
+    final List<domain.SourceDescriptor> searchable =
+        f.provider.searchableSources;
+
+    final profiles = f.manager.sourceProfiles.channels;
+    expect(channels, hasLength(profiles.length));
+    for (var index = 0; index < profiles.length; index++) {
+      final profile = profiles[index];
+      final descriptor = channels[index];
+      expect(descriptor.key, profile.key, reason: profile.key);
+      expect(descriptor.displayName, profile.displayName, reason: profile.key);
+      expect(descriptor.capabilities, profile.capabilities,
+          reason: profile.key);
+      expect(descriptor.enabled, profile.enabled, reason: profile.key);
+      expect(descriptor.discoverable, profile.discoverable,
+          reason: profile.key);
+      expect(descriptor.order, index, reason: 'order 就是渠道列表下标');
+    }
+    // sources 层 → domain 层的 kind 映射只发生在画像投影里。
+    expect(
+      channels.firstWhere((d) => d.key == 'a').kind,
+      domain.SourceKind.lx,
+    );
+    expect(
+      channels.firstWhere((d) => d.key == 'bili').kind,
+      domain.SourceKind.builtin,
+    );
+
+    // provider 视图与 manager 完全一致（不再各复制一份字段）。
+    expect(channels, f.manager.channels);
+    expect(searchable, f.manager.searchableSources);
+    expect(searchable.every((d) => d.enabled), isTrue);
+    expect(searchable.every((d) => d.capabilities.search), isTrue);
+  });
+
   test('capabilitiesFor：内置平台搜索能力跟随脚本可取链，与渠道 canSearch 一致', () async {
     final f = await fixture(sources: {
       'wy': const LxSourceDecl(
@@ -170,7 +216,7 @@ void main() {
 
     // 渠道侧：内置平台在有可取链脚本时可搜索（搜索由 Dart 移植实现）。
     final wyChannel = f.provider.channels.firstWhere((o) => o.key == 'wy');
-    expect(wyChannel.canSearch, isTrue);
+    expect(wyChannel.capabilities.search, isTrue);
     expect(f.provider.searchableSources.map((o) => o.key), contains('wy'));
 
     // 描述符能力必须与渠道一致；search=false 会让

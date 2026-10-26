@@ -20,7 +20,7 @@
 /// 对应路由一定存在实现。
 library;
 
-import '../domain/models/source.dart' show SourceCapabilities;
+import '../domain/models/source.dart' as domain;
 import 'any_listen/any_listen_source.dart';
 import 'builtin/builtin_platforms.dart';
 import 'lx/lx_script_info.dart';
@@ -46,7 +46,7 @@ class SourceProfile {
   final bool discoverable;
 
   /// 能力矩阵是唯一事实：`searchable` / `canResolveUrl` 都是它的派生视图。
-  final SourceCapabilities capabilities;
+  final domain.SourceCapabilities capabilities;
 
   const SourceProfile({
     required this.key,
@@ -66,6 +66,26 @@ class SourceProfile {
   /// 是否进入渠道列表：可搜索或有发现页。停用项仍在列表里（enabled=false），
   /// 这样音源页可以重新启用。
   bool get visible => searchable || discoverable;
+
+  /// 画像 → 领域渠道形状（全应用唯一的渠道投影）。
+  ///
+  /// [order] 由消费方按列表下标给出（渠道列表 / 可搜索列表 / 注册表），
+  /// 其余字段逐项取自本画像；sources 层与 domain 层的 `SourceKind` 映射
+  /// 只在这里发生一次。
+  domain.SourceDescriptor toDescriptor({int order = 0}) =>
+      domain.SourceDescriptor(
+        key: key,
+        displayName: displayName,
+        kind: switch (kind) {
+          SourceKind.builtin => domain.SourceKind.builtin,
+          SourceKind.lx => domain.SourceKind.lx,
+          SourceKind.anyListen => domain.SourceKind.anyListen,
+        },
+        capabilities: capabilities,
+        enabled: enabled,
+        discoverable: discoverable,
+        order: order,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -215,7 +235,7 @@ class SourceProfiles {
       kind: SourceKind.builtin,
       enabled: !disabledChannels.contains(platform.key),
       discoverable: platform.discover != null,
-      capabilities: SourceCapabilities(
+      capabilities: domain.SourceCapabilities(
         search: searchable,
         pagination: searchable,
         resolveUrl: canResolve,
@@ -241,7 +261,7 @@ class SourceProfiles {
       displayName: decl.name.isEmpty ? decl.key : decl.name,
       kind: SourceKind.lx,
       enabled: !disabledChannels.contains(decl.key),
-      capabilities: SourceCapabilities(
+      capabilities: domain.SourceCapabilities(
         search: decl.canSearch,
         pagination: decl.canSearch,
         resolveUrl: decl.canResolveUrl,
@@ -260,7 +280,7 @@ class SourceProfiles {
       displayName: AnyListenSource.displayName,
       kind: SourceKind.anyListen,
       enabled: !disabledChannels.contains(AnyListenSource.sourceKey),
-      capabilities: SourceCapabilities(
+      capabilities: domain.SourceCapabilities(
         search: usable,
         pagination: usable,
         resolveUrl: usable,

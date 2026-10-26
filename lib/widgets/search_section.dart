@@ -333,7 +333,7 @@ class _SearchSectionState extends State<SearchSection> {
   String? _selectedSourceName(SearchProvider searchProvider) {
     for (final option in searchProvider.sourceOptions) {
       if (option.key == searchProvider.sourceKey) {
-        return option.name;
+        return option.displayName;
       }
     }
     return null;

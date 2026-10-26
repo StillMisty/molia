@@ -10,9 +10,8 @@ import '../data/mapping/track_mapper.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind, SearchQuery;
 import '../domain/models/failure.dart';
-import '../domain/models/source.dart' as domain;
+import '../domain/models/source.dart' show SourceDescriptor;
 import '../domain/ports/source_registry.dart';
-import '../sources/source_manager.dart' show SourceKind, SourceOption;
 import '../sources/source_track.dart';
 import 'paged_list_controller.dart';
 import 'playback_provider.dart';
@@ -198,25 +197,14 @@ class SearchProvider extends ChangeNotifier {
   /// 是否已选中可用音源（空音源时搜索结果页展示引导空态）。
   bool get hasSelectedSource => _sourceKey.isNotEmpty;
 
-  /// 可选音源列表：由 [SourceRegistry] 的描述列表映射为 [SourceOption]，
-  /// 顺序即用户自定义排序（`lx_source_order`）。
-  List<SourceOption> get sourceOptions {
-    final descriptors = _sourceRegistry?.descriptors;
-    if (descriptors == null) return const [];
-    return [
-      for (final descriptor in descriptors)
-        SourceOption(
-          key: descriptor.key,
-          name: descriptor.displayName,
-          kind: _sourceKind(descriptor.kind),
-          canSearch: descriptor.capabilities.search,
-        ),
-    ];
-  }
+  /// 可选音源列表：直接是 [SourceRegistry] 的渠道描述（唯一渠道形状），
+  /// 不再在 provider 里二次投影；顺序即用户自定义排序（`lx_source_order`）。
+  List<SourceDescriptor> get sourceOptions =>
+      _sourceRegistry?.descriptors ?? const [];
 
   String get sourceDisplayName {
     for (final option in sourceOptions) {
-      if (option.key == _sourceKey) return option.name;
+      if (option.key == _sourceKey) return option.displayName;
     }
     return _sourceKey;
   }
@@ -657,23 +645,6 @@ class SearchProvider extends ChangeNotifier {
       index < 0 ? 0 : index,
       contextName: sourceDisplayName,
     );
-  }
-
-  /// 领域音源种类 → UI `SourceKind`（两者枚举名一一对应）。
-  ///
-  /// `local`（本地下载副本）不出现在搜索 / 渠道列表，该分支不可达；
-  /// 出现即编程错误，显式抛出而不是静默兜底。
-  SourceKind _sourceKind(domain.SourceKind kind) {
-    switch (kind) {
-      case domain.SourceKind.builtin:
-        return SourceKind.builtin;
-      case domain.SourceKind.lx:
-        return SourceKind.lx;
-      case domain.SourceKind.anyListen:
-        return SourceKind.anyListen;
-      case domain.SourceKind.local:
-        throw StateError('本地下载音源不参与搜索');
-    }
   }
 
   @override

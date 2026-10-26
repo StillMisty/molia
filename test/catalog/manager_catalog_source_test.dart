@@ -154,12 +154,20 @@ void main() {
       expect(source.capabilities.collection, isFalse);
     });
 
-    test('displayName 从 manager.searchableSources 读取；adopt 按 key', () async {
+    test('displayName 从画像读取（含停用 / 未知 key 回退）；adopt 按 key', () async {
       final manager = await configuredManager();
       addTearDown(manager.dispose);
       final source =
           SourceManagerMusicSource(AnyListenSource.sourceKey, manager);
       expect(source.displayName, AnyListenSource.displayName);
+
+      // 内置渠道不依赖「可搜索列表」：被停用或没有脚本时仍有可读名称。
+      final kw = SourceManagerMusicSource('kw', manager);
+      expect(kw.displayName, '酷我音乐');
+      await manager.setChannelEnabled('kw', false);
+      expect(kw.displayName, '酷我音乐');
+      // 画像里不存在的 key（脚本已下架等）回退 key 本身。
+      expect(SourceManagerMusicSource('gone', manager).displayName, 'gone');
 
       final own = Track(
         id: const TrackId(AnyListenSource.sourceKey, 'x'),

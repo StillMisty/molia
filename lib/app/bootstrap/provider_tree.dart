@@ -140,7 +140,7 @@ List<SingleChildWidget> buildAppProviders({
         onChannelChanged: (key) {
           final search = context.read<SearchProvider>();
           if (search.sourceOptions.any(
-            (option) => option.key == key && option.canSearch,
+            (option) => option.key == key && option.capabilities.search,
           )) {
             search.selectSource(key);
           }
