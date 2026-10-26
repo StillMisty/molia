@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,20 +6,18 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
-import '../models/play_mode.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_tap_target.dart';
 import '../widgets/cover_viewer.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/discover_actions.dart';
-import '../widgets/paged_list_auto_load.dart';
+import '../widgets/paged_track_collection.dart';
+import '../widgets/track_handoff.dart';
 import '../widgets/track_row.dart';
-import '../widgets/track_table_header.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -62,33 +59,27 @@ class DiscoverTracksPage extends StatefulWidget {
 }
 
 class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
-  /// 最近一次响应的头部信息（由取数回调写入，控制器通知触发重建）。
-  DiscoverDetail? _detail;
+  /// 分页集合：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重 / 页实体都在
+  /// 控制器内（页面不再自己持有 `_detail`）。
+  late final PagedTrackCollection<DiscoverDetail, DiscoverTrack> _collection;
 
-  /// 分页状态机：首屏 / 加载更多 / 失败 / 在途守卫 / 跨页去重都在控制器内。
-  late final PagedListController<DiscoverTrack> _paged;
-
-  /// 曲目区滚动控制器（常显滚动条，支持手拖定位）。
-  final ScrollController _listController = ScrollController();
-
-  /// 随机播放起点用（与收藏页同一做法：可见列表内随机取一首起播）。
-  final math.Random _shuffleRandom = math.Random();
+  /// 播放 / 加入列表的唯一编排（洗牌、上下文名、触感都在模块内）。
+  final TrackHandoff _handoff = const TrackHandoff();
 
   @override
   void initState() {
     super.initState();
-    _paged = PagedListController<DiscoverTrack>(
+    _collection = PagedTrackCollection<DiscoverDetail, DiscoverTrack>(
       // 平台分页边界会重复返回（忽略 page 时重复整表）：按曲目 key 跨页去重。
       keyOf: (track) => track.key,
-      fetchPage: _fetchPage,
+      loadPage: _fetchPage,
     );
     unawaited(_load());
   }
 
   @override
   void dispose() {
-    _paged.dispose();
-    _listController.dispose();
+    _collection.dispose();
     super.dispose();
   }
 
@@ -98,12 +89,14 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   /// （榜单 / 部分平台）即单页加载。`loaded` = 本次请求前已累计的条数 +
   /// 本页条数（取数发生在控制器追加之前），达到总数即结束；平台忽略 page
   /// 重复返回整表时，控制器按「本页去重后无新增」兜底停住（防死循环）。
-  Future<PagedResult<DiscoverTrack>> _fetchPage(int page) async {
+  Future<PagedTrackPage<DiscoverDetail, DiscoverTrack>> _fetchPage(
+    int page,
+  ) async {
     final detail = await widget.loader(page);
-    _detail = detail;
     final total = detail.info.trackCount;
-    final loaded = _paged.state.items.length + detail.tracks.length;
-    return PagedResult(
+    final loaded = _collection.items.length + detail.tracks.length;
+    return PagedTrackPage(
+      entity: detail,
       items: detail.tracks,
       hasMore: total > 0 && loaded < total,
       total: total,
@@ -111,41 +104,41 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   }
 
   /// 首屏 / 失败重试（在途请求由控制器过期丢弃）。
-  Future<void> _load() => _paged.loadFirstPage();
+  Future<void> _load() => _collection.loadFirstPage();
 
+  /// 播放（[index] 为起始下标；上下文名先取歌单名，缺失回退入口标题）。
   void _playFrom(int index) {
-    final tracks = _paged.state.items;
+    final tracks = _collection.items;
     if (tracks.isEmpty) return;
-    HapticsService.lightImpact();
-    final info = _detail?.info;
-    context.read<DiscoverProvider>().playTracks(
-          tracks,
-          index,
-          contextName:
-              (info != null && info.name.isNotEmpty) ? info.name : widget.title,
-        );
+    unawaited(
+      _handoff.play(
+        context,
+        context.read<DiscoverProvider>().domainTracksOf(tracks),
+        startIndex: index,
+        contextName: _collection.entity?.info.name,
+        fallbackContextName: widget.title,
+      ),
+    );
   }
 
   /// 「随机播放全部」：先落 shuffle 模式再装载（洗牌顺序依赖装载前模式），
   /// 起点在已加载曲目内随机；与收藏页 / 歌手页同一约定。
-  Future<void> _playShuffled() async {
-    final tracks = _paged.state.items;
-    if (tracks.isEmpty) return;
-    HapticsService.lightImpact();
-    final info = _detail?.info;
-    await context.read<DiscoverProvider>().playTracks(
-          tracks,
-          _shuffleRandom.nextInt(tracks.length),
-          contextName:
-              (info != null && info.name.isNotEmpty) ? info.name : widget.title,
-          mode: PlayMode.shuffle,
-        );
+  Future<void> _playShuffled() {
+    final tracks = _collection.items;
+    if (tracks.isEmpty) return Future.value();
+    return _handoff.play(
+      context,
+      context.read<DiscoverProvider>().domainTracksOf(tracks),
+      shuffle: true,
+      contextName: _collection.entity?.info.name,
+      fallbackContextName: widget.title,
+    );
   }
 
   /// 把当前歌单导入本地列表（同名列表复用）。
   Future<void> _importPlaylist() async {
-    final detail = _detail;
-    final tracks = _paged.state.items;
+    final detail = _collection.entity;
+    final tracks = _collection.items;
     if (detail == null) return;
     final l10n = _l10n(context);
     if (tracks.isEmpty) {
@@ -177,14 +170,16 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<PagedListState<DiscoverTrack>>(
-      valueListenable: _paged,
+      valueListenable: _collection,
       // 分页状态是不可变值：整页（含 AppBar 导入动作）按最新快照重建。
       builder: (context, state, _) => Scaffold(
         appBar: M3EAppBar.top(
           title: Text(widget.title, overflow: TextOverflow.ellipsis),
           automaticallyImplyLeading: true,
           actions: [
-            if (widget.importable && _detail != null && state.items.isNotEmpty)
+            if (widget.importable &&
+                _collection.entity != null &&
+                state.items.isNotEmpty)
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 semanticLabel: _l10n(context).playlistImportToMine,
@@ -200,111 +195,34 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
 
   Widget _buildBody(BuildContext context, PagedListState<DiscoverTrack> state) {
     final l10n = _l10n(context);
-    if (state.isLoading) {
-      return const Center(child: M3ELoadingIndicator());
-    }
-    final detail = _detail;
-    if (state.failed || detail == null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              l10n.discoverLoadFailed,
-              style: context.typeScale.bodyLarge,
-            ),
-            const SizedBox(height: 12),
-            M3EButton.filled(
-              onPressed: () => unawaited(_load()),
-              child: Text(l10n.discoverRetry),
-            ),
-          ],
-        ),
-      );
-    }
-    final tracks = state.items;
-    if (state.isEmpty) {
-      return Center(
-        child: Text(
-          l10n.discoverNoContent,
-          style: context.typeScale.bodyMedium.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-    final cardList = M3ETheme.of(context).listTheme.cardList;
-    final horizontalPadding = context.horizontalPadding;
     // 表格列判定用窗口宽 − 实际栏宽（判据唯一在 DesktopLayout）；行高按档
-    // 取 M3E 列表 token（表格单行 56 / 非表格双行 72）。
+    // 取 M3E 列表 token（表格单行 56 / 非表格双行 72），与共享正文同源。
     final tableColumns = DesktopLayout.of(context).tableColumns;
-    return Scrollbar(
-      controller: _listController,
-      thumbVisibility: true,
-      interactive: true,
-      child: PagedListAutoLoad(
-        hasMore: state.hasMore,
-        failed: state.failed,
-        isLoadingMore: state.isLoadingMore,
-        loadMoreFailed: state.loadMoreFailed,
-        onLoadMore: () => unawaited(_paged.loadMore()),
-        child: CustomScrollView(
-          controller: _listController,
-          slivers: [
-            SliverToBoxAdapter(
-              child: _buildHeader(context, detail, tracks.length),
-            ),
-            // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在），与行内
-            // 列同宽同左缘；表面色遮挡滚过其下的行。
-            if (tableColumns)
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _PinnedTableHeaderDelegate(
-                  extent: TrackTableHeader.extentOf(context),
-                  background: Theme.of(context).colorScheme.surface,
-                  horizontalPadding: horizontalPadding,
-                ),
-              ),
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-              sliver: SliverFixedExtentList.builder(
-                // 行高 + 行距：固定 extent，长歌单滚动条拖动一次定位。
-                itemExtent: TrackRow.extentOf(
-                      context,
-                      tableColumns: tableColumns,
-                    ) +
-                    cardList.gap,
-                itemCount: tracks.length,
-                itemBuilder: (context, index) {
-                  final isLast = index == tracks.length - 1;
-                  final track = tracks[index];
-                  return Column(
-                    children: [
-                      DiscoverTrackTile(
-                        track: track,
-                        position: calculateCardPosition(index, tracks.length),
-                        tableSpec:
-                            tableColumns ? TrackRowColumnSpec.standard : null,
-                        onTap: () => _playFrom(index),
-                      ),
-                      if (!isLast) SizedBox(height: cardList.gap),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (state.isLoadingMore || state.loadMoreFailed)
-              SliverToBoxAdapter(
-                child: PagedListFooter(
-                  isLoadingMore: state.isLoadingMore,
-                  loadMoreFailed: state.loadMoreFailed,
-                  onRetry: () => unawaited(_paged.loadMore()),
-                ),
-              ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
-          ],
-        ),
-      ),
+    return PagedTrackCollectionBody<DiscoverTrack>(
+      state: state,
+      tableColumns: tableColumns,
+      // 表头钉在滚动视口顶部（封面头部滚走后列标题仍在）。
+      pinnedTableHeader: true,
+      headerBuilder: (context, state) {
+        final detail = _collection.entity;
+        // 列表态必有实体（与曲目同一响应写入）；空值只为类型收窄。
+        if (detail == null) return const SizedBox.shrink();
+        return _buildHeader(context, detail, state.items.length);
+      },
+      rowBuilder: (context, index, count, columns) {
+        final track = _collection.items[index];
+        return DiscoverTrackTile(
+          track: track,
+          position: calculateCardPosition(index, count),
+          tableSpec: columns ? TrackRowColumnSpec.standard : null,
+          onTap: () => _playFrom(index),
+        );
+      },
+      onRetry: () => unawaited(_load()),
+      onLoadMore: () => unawaited(_collection.loadMore()),
+      emptyText: l10n.discoverNoContent,
+      failureText: l10n.discoverLoadFailed,
+      retryText: l10n.discoverRetry,
     );
   }
 
@@ -454,50 +372,4 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       ),
     );
   }
-}
-
-/// 钉住的表格表头（发现详情页）：列标题固定在滚动视口顶部，封面头部滚走
-/// 后行内列仍有标题可对照；[ColoredBox] 用页面表面色遮挡滚过其下的行。
-///
-/// extent 由 [TrackTableHeader.extentOf] 按主题 + 系统文字缩放算出，不写死
-/// 行高（大字号下不裁切）。子组件在 [build] 内按可比较的字段构造：
-/// widget 实例比较恒不相等，起不到去重作用。
-class _PinnedTableHeaderDelegate extends SliverPersistentHeaderDelegate {
-  const _PinnedTableHeaderDelegate({
-    required this.extent,
-    required this.background,
-    required this.horizontalPadding,
-  });
-
-  final double extent;
-  final Color background;
-
-  /// 列表横向页边距（与行列表同值）：表头列缘据此与行内列对齐。
-  final double horizontalPadding;
-
-  @override
-  double get minExtent => extent;
-
-  @override
-  double get maxExtent => extent;
-
-  @override
-  Widget build(
-    BuildContext context,
-    double shrinkOffset,
-    bool overlapsContent,
-  ) =>
-      ColoredBox(
-        color: background,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          child: const TrackTableHeader(),
-        ),
-      );
-
-  @override
-  bool shouldRebuild(covariant _PinnedTableHeaderDelegate oldDelegate) =>
-      oldDelegate.extent != extent ||
-      oldDelegate.background != background ||
-      oldDelegate.horizontalPadding != horizontalPadding;
 }

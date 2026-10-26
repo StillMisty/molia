@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/mapping/track_mapper.dart';
 import '../domain/models/discover.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
+import '../domain/models/track.dart';
 import '../models/play_mode.dart';
 import '../sources/builtin/builtin_search.dart';
 import '../sources/builtin/discover_source.dart';
@@ -195,6 +197,14 @@ class DiscoverProvider extends ChangeNotifier {
       contextName: contextName,
     );
   }
+
+  /// 发现曲目 → 领域曲目（`TrackHandoff` 播放入口的统一形状）。
+  ///
+  /// raw 由 [_toSourceTrack] 原样透传，页面只拿领域 `Track`（不读 payload）；
+  /// 与 [playTracks] 共用同一份曲目转换，不产生第二条映射口径。
+  List<Track> domainTracksOf(List<DiscoverTrack> tracks) => [
+        for (final track in tracks) trackFromSourceTrack(_toSourceTrack(track)),
+      ];
 
   /// 收藏 / 取消收藏；仓库写失败以 failed 结果返回（图标态保持原样）。
   Future<FavoriteToggleOutcome> toggleFavorite(DiscoverTrack track) =>
