@@ -51,6 +51,7 @@ BackendSnapshot _live(
     currentIndex: index,
     next: index + 1 < tracks.length ? tracks[index + 1] : null,
     previous: index > 0 ? tracks[index - 1] : null,
+    previousOfPrevious: index > 1 ? tracks[index - 2] : null,
     upNext: index >= 0 ? tracks.sublist(index + 1) : const [],
     isPlaying: playing,
     position: position,
@@ -224,7 +225,7 @@ void main() {
     expect(session.phase, PlaybackSessionPhase.idle);
   });
 
-  test('恢复态列表循环：next / previous / upNext 按队列回绕', () async {
+  test('恢复态列表循环：next / previous / previousOfPrevious / upNext 按队列回绕', () async {
     build();
     await seedSession(PlaybackSession(
       tracks: [_track('a'), _track('b'), _track('c')],
@@ -236,6 +237,7 @@ void main() {
     final restored = session.resolve(facade.snapshot.value);
     expect(restored.next?.id.id, 'a');
     expect(restored.previous?.id.id, 'b');
+    expect(restored.previousOfPrevious?.id.id, 'a');
     expect(restored.upNext.map((track) => track.id.id), ['a', 'b']);
   });
 
@@ -254,6 +256,7 @@ void main() {
     expect(restored.upNext, isEmpty);
     // 上一首不依赖洗牌顺序：回退队列前一位。
     expect(restored.previous?.id.id, 'a');
+    expect(restored.previousOfPrevious, isNull);
   });
 
   test('恢复态停止播放：撤下恢复数据、清空持久化会话', () async {

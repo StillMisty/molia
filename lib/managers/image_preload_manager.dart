@@ -74,6 +74,7 @@ class ImagePreloadManager {
     required BuildContext context,
     String? currentAlbumArt,
     String? previousAlbumArt,
+    String? previousOfPreviousAlbumArt,
     String? nextAlbumArt,
     List<String?>? queueAlbumArts,
   }) async {
@@ -102,6 +103,16 @@ class ImagePreloadManager {
       tasks.add((
         url: previousAlbumArt,
         priority: 80,
+        memCacheWidth: coverEdge,
+      ));
+    }
+
+    // 封面左槽向后拖动时会提前显示再上一首；它通常不在最近可见曲目里，
+    // 不预取会先看到占位图再跳成真实封面。
+    if (previousOfPreviousAlbumArt != null) {
+      tasks.add((
+        url: previousOfPreviousAlbumArt,
+        priority: 75,
         memCacheWidth: coverEdge,
       ));
     }
@@ -232,6 +243,8 @@ class AlbumArtPreloadStrategy {
     required BuildContext context,
     Track? currentTrack,
     Track? nextTrack,
+    Track? previousTrack,
+    Track? previousOfPreviousTrack,
     List<Track>? upcomingTracks,
   }) async {
     final queueArts = upcomingTracks?.take(5).map(albumArtOf).toList();
@@ -240,6 +253,8 @@ class AlbumArtPreloadStrategy {
       context: context,
       currentAlbumArt: albumArtOf(currentTrack),
       nextAlbumArt: albumArtOf(nextTrack),
+      previousAlbumArt: albumArtOf(previousTrack),
+      previousOfPreviousAlbumArt: albumArtOf(previousOfPreviousTrack),
       queueAlbumArts: queueArts,
     );
   }

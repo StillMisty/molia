@@ -215,9 +215,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
     final currentSource = _service.currentSourceTrack;
     final index = _service.currentIndex;
 
-    // 一次投影复用 next / previous / upNext：三个 getter 各自都会重算整份
-    // 投影（shuffle 下含 O(N) 的排列查找与 upNext 列表），位置 tick 触发
-    // 的快照重建里连算三次纯属浪费。
+    // 一次投影复用 next / previous / previousOfPrevious / upNext：四个 getter
+    // 各自都会重算整份投影（shuffle 下含 O(N) 的排列查找与 upNext 列表），
+    // 位置 tick 触发的快照重建里重复计算纯属浪费。
     final projection = _service.queueProjection;
     final current = currentSource == null ? null : _toTrack(currentSource);
 
@@ -237,6 +237,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       currentIndex: index,
       next: _toTrackOrNull(projection.next),
       previous: _toTrackOrNull(projection.previous),
+      previousOfPrevious: _toTrackOrNull(projection.previousOfPrevious),
       upNext: List<Track>.unmodifiable(upNext),
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,

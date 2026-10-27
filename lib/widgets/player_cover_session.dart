@@ -7,7 +7,9 @@
 ///
 /// 唯一快照入口是 [CoverSwapSession.observe]：切歌检测、空闲缓存（左槽身份 /
 /// 下一首 / 方向提示）与预览目标都从它派生——调用方不再各刷一半，ghost 方向
-/// 那类「缓存只在空闲帧刷新」的漂移因此没有落脚点。
+/// 那类「缓存只在空闲帧刷新」的漂移因此没有落脚点。拖动预览的源侧新身份
+/// （再下一首 / 再上一首）也在 [CoverSwapSession.dragUpdate] 里固定，渲染侧
+/// 不再自己重读会随提交翻页的 `next` / `previous`。
 ///
 /// 只在离散迁移时 [CoverSwapSession.notifyListeners]（build 读取阶段与身份）；
 /// 拖动跟手的逐帧进度不进会话——它由宿主控制器持有并自行通知。
@@ -144,6 +146,13 @@ class CoverSwapSession extends ChangeNotifier {
   /// 先推「新的下一首」，重读会让中心封面闪成再下一首。
   Track? _to;
 
+  /// 预览目标落到源侧后，源槽位应提前展示的身份（再下一首 / 再上一首）。
+  ///
+  /// 前进取目标之后的 `upNext`，后退取 `previousOfPrevious`；拖动开始时固定，
+  /// 提交对账后由宿主据此判断源侧能否连续接管（不再补 180ms 淡入）。
+  /// 无可靠身份（队列到头 / 两首歌回绕到当前 / 随机轮末）时为 null。
+  Track? _previewSourceNeighbor;
+
   /// 方向反转时让位的旧邻位（从另一侧淡出）。
   Track? _oldNeighbor;
 
@@ -191,6 +200,12 @@ class CoverSwapSession extends ChangeNotifier {
   int get direction => _direction;
   Track? get from => _from;
   Track? get to => _to;
+
+  /// 预览目标之后的源侧身份：前进 = 再下一首，后退 = 再上一首。
+  ///
+  /// 只在拖动预览 / 提交等待 / 回弹期间有意义（对账收尾后由宿主清空/忽略）。
+  Track? get previewSourceNeighbor => _previewSourceNeighbor;
+
   Track? get oldNeighbor => _oldNeighbor;
   Track? get previous => _previous;
   String? get placeholderUrl => _placeholderUrl;
@@ -319,6 +334,11 @@ class CoverSwapSession extends ChangeNotifier {
       _to = target;
       changed = true;
     }
+    final neighbor = _previewSourceNeighborFor(target, dir, snapshot);
+    if (neighbor?.id != _previewSourceNeighbor?.id) {
+      _previewSourceNeighbor = neighbor;
+      changed = true;
+    }
     if (changed) notifyListeners();
     _host.previewProgress(progress);
   }
@@ -370,6 +390,7 @@ class CoverSwapSession extends ChangeNotifier {
     _phase = CoverSwapPhase.idle;
     _to = null;
     _from = null;
+    _previewSourceNeighbor = null;
     notifyListeners();
     _host.adoptSteadySlots();
   }
@@ -386,6 +407,7 @@ class CoverSwapSession extends ChangeNotifier {
       // 即时切歌：会话到此结束（视觉已由控制器最后一帧画完）。
       _phase = CoverSwapPhase.idle;
       _to = null;
+      _previewSourceNeighbor = null;
       notifyListeners();
       _host.adoptSteadySlots();
       return;
@@ -410,6 +432,7 @@ class CoverSwapSession extends ChangeNotifier {
     _phase = CoverSwapPhase.idle;
     _to = null;
     _from = null;
+    _previewSourceNeighbor = null;
     notifyListeners();
     _host.adoptSteadySlots();
   }
@@ -500,7 +523,10 @@ class CoverSwapSession extends ChangeNotifier {
     notifyListeners();
     // 槽位身份已由切歌窗口演到位：接管对齐，空闲期不补淡换。
     _host.adoptSteadySlots();
+    // 宿主在这一次同步调用里读取预览源侧身份，判断能否连续接管；
+    // 读完后清空，避免 idle 阶段留下过期身份。
     _host.settleCommit();
+    _previewSourceNeighbor = null;
   }
 
   /// 开始对账校正：中心封面从预览目标原位淡化到实际曲目。
@@ -508,6 +534,8 @@ class CoverSwapSession extends ChangeNotifier {
     _correctionDeferred = false;
     _phase = CoverSwapPhase.correcting;
     _previous = snapshot.previous;
+    // 校正分支不渲染源侧新身份，预览身份到此作废。
+    _previewSourceNeighbor = null;
     // 对账后新快照即下一次切歌的「变化前」基准。
     _cacheDirectionHints(snapshot);
     notifyListeners();
@@ -522,6 +550,7 @@ class CoverSwapSession extends ChangeNotifier {
     _phase = CoverSwapPhase.idle;
     _to = null;
     _from = null;
+    _previewSourceNeighbor = null;
     _correctionDeferred = false;
     _host.disarmTimeout();
     if (adoptTrack != null) {
@@ -569,5 +598,34 @@ class CoverSwapSession extends ChangeNotifier {
     final Track? target =
         dir == 1 ? snapshot.next : (dir == -1 ? snapshot.previous : null);
     return target;
+  }
+
+  /// 预览目标之后、源侧槽位应提前展示的身份。
+  ///
+  /// - 前进：`upNext` 是目标之后的实际播放顺序；目标应为第一项，取第二项。
+  ///   只认这个锚点，列表变化导致对不上时宁可留空，不显示错误的再下一首。
+  /// - 后退：`previousOfPrevious` 已按播放顺序栈次顶 → 队列前一位推导。
+  ///
+  /// 与当前/目标同 id 的候选丢弃（两首歌循环等回绕场景），落位后的
+  /// 180ms 淡入会补上，避免同一封面同时出现在滑出卡与源槽位。
+  Track? _previewSourceNeighborFor(
+    Track target,
+    int dir,
+    PlaybackSnapshot snapshot,
+  ) {
+    final Track? candidate;
+    if (dir == 1) {
+      final upcoming = snapshot.upNext;
+      candidate = upcoming.length >= 2 && upcoming.first.id == target.id
+          ? upcoming[1]
+          : null;
+    } else {
+      candidate = snapshot.previousOfPrevious;
+    }
+    if (candidate == null) return null;
+    if (candidate.id == target.id || candidate.id == _seenTrack?.id) {
+      return null;
+    }
+    return candidate;
   }
 }

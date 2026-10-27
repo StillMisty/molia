@@ -96,6 +96,7 @@ class FakePlaybackBackend implements PlaybackBackend {
       currentIndex: current.currentIndex,
       next: current.next,
       previous: current.previous,
+      previousOfPrevious: current.previousOfPrevious,
       upNext: [...current.upNext, ...tracks],
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
@@ -133,6 +134,7 @@ class FakePlaybackBackend implements PlaybackBackend {
       currentIndex: current.currentIndex,
       next: current.next,
       previous: current.previous,
+      previousOfPrevious: current.previousOfPrevious,
       upNext: current.upNext,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
@@ -182,6 +184,9 @@ class FakePlaybackBackend implements PlaybackBackend {
       currentIndex: current.currentIndex,
       next: current.next == null ? null : swap(current.next!),
       previous: current.previous == null ? null : swap(current.previous!),
+      previousOfPrevious: current.previousOfPrevious == null
+          ? null
+          : swap(current.previousOfPrevious!),
       upNext: [for (final track in current.upNext) swap(track)],
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,

@@ -47,7 +47,7 @@ void main() {
     Duration position = Duration.zero,
     PlaybackContext? context,
   }) {
-    // 与真实后端一致：next / previous / upNext 由队列与下标派生。
+    // 与真实后端一致：next / previous / previousOfPrevious / upNext 由队列与下标派生。
     final tracks = queue ?? [?current];
     final index = current == null
         ? -1
@@ -58,6 +58,7 @@ void main() {
       currentIndex: index,
       next: index >= 0 && index + 1 < tracks.length ? tracks[index + 1] : null,
       previous: index > 0 ? tracks[index - 1] : null,
+      previousOfPrevious: index > 1 ? tracks[index - 2] : null,
       upNext: index >= 0 ? tracks.sublist(index + 1) : const [],
       isPlaying: playing,
       position: position,
@@ -147,6 +148,8 @@ void main() {
     expect(preloader.preloaded, hasLength(1));
     expect(preloader.preloaded.single.current?.id.uri, 'fake:a');
     expect(preloader.preloaded.single.next?.id.uri, 'fake:b');
+    expect(preloader.preloaded.single.previous, isNull);
+    expect(preloader.preloaded.single.previousOfPrevious, isNull);
 
     // 最后播放信息落盘并对外可读。
     await observer.ready;
@@ -159,6 +162,30 @@ void main() {
     // 顺序：widget → history 同步发起；通知权限在播放态判定后发起；
     // 预取在微任务中执行（跨 async gap 不用 context），落在最后。
     expect(log, ['widget', 'history', 'notify', 'preload']);
+  });
+
+  testWidgets('预取封面：上一首 / 再上一首一并下发，供封面左槽向后拖动复用',
+      (tester) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final observer = buildObserver(navigatorKey: navigatorKey);
+    addTearDown(observer.dispose);
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: navigatorKey, home: const SizedBox.shrink()),
+    );
+    await tester.pump();
+
+    final a = track('a', artwork: 'https://img.example/a.jpg');
+    final b = track('b', artwork: 'https://img.example/b.jpg');
+    final c = track('c', artwork: 'https://img.example/c.jpg');
+    backend.emit(snapshot(c, queue: [a, b, c]));
+    await tester.pump();
+    await tester.pump();
+
+    expect(preloader.preloaded, hasLength(1));
+    expect(preloader.preloaded.single.current?.id.uri, 'fake:c');
+    expect(preloader.preloaded.single.previous?.id.uri, 'fake:b');
+    expect(preloader.preloaded.single.previousOfPrevious?.id.uri, 'fake:a');
+    expect(preloader.preloaded.single.next, isNull);
   });
 
   test('省流：本地封面照常传小组件，远程封面置空', () async {
@@ -325,17 +352,30 @@ class _RecordingPreloader extends AlbumArtPreloadStrategy {
 
   final List<String> _log;
 
-  /// 预取请求（当前 / 下一首）。
-  final List<({Track? current, Track? next})> preloaded = [];
+  /// 预取请求（当前 / 下一首 / 上一首 / 再上一首）。
+  final List<
+      ({
+        Track? current,
+        Track? next,
+        Track? previous,
+        Track? previousOfPrevious,
+      })> preloaded = [];
 
   @override
   Future<void> preloadForPlayback({
     required BuildContext context,
     Track? currentTrack,
     Track? nextTrack,
+    Track? previousTrack,
+    Track? previousOfPreviousTrack,
     List<Track>? upcomingTracks,
   }) async {
     _log.add('preload');
-    preloaded.add((current: currentTrack, next: nextTrack));
+    preloaded.add((
+      current: currentTrack,
+      next: nextTrack,
+      previous: previousTrack,
+      previousOfPrevious: previousOfPreviousTrack,
+    ));
   }
 }

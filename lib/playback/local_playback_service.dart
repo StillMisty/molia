@@ -503,8 +503,8 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 最近一次 `playTracks` 传入的上下文名（系统媒体会话/快照映射用）。
   String? get contextName => _contextName;
 
-  /// 队列投影：快照的 next / previous / upNext 唯一推导（纯函数在
-  /// `queue_projection.dart`；恢复态共用同一实现）。
+  /// 队列投影：快照的 next / previous / previousOfPrevious / upNext 唯一推导
+  /// （纯函数在 `queue_projection.dart`；恢复态共用同一实现）。
   ///
   /// shuffle 排列只在长度 > 1 时需要——单曲队列的「下一首」就是自己，
   /// 与既有语义一致；排列缺失时按当前曲目置首补齐（正常路径在
@@ -524,6 +524,7 @@ class LocalPlaybackService extends ChangeNotifier {
         shuffleIndices:
             _mode == PlayMode.shuffle ? _shuffleOrder.indices : null,
         previousIndex: _order.peekPrevious(),
+        previousOfPreviousIndex: _order.peekPreviousOfPrevious(),
       ),
       idOf: (track) => track.id,
     );

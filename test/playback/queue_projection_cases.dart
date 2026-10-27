@@ -1,7 +1,9 @@
-/// 队列投影纯函数：真实播放与恢复态共用的 next / previous / upNext 口径。
+/// 队列投影纯函数：真实播放与恢复态共用的 next / previous /
+/// previousOfPrevious / upNext 口径。
 ///
 /// 表驱动覆盖线性（顺序 / 列表循环 / 单曲循环）、shuffle（排列中段 / 轮末 /
-/// 单曲）与「没有顺序」的恢复态；另外钉住播放顺序优先与同 id 排除。
+/// 单曲）与「没有顺序」的恢复态；另外钉住播放顺序优先、再上一首的栈次顶 /
+/// 队列回退，以及同 id 排除。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +19,7 @@ typedef _Case = ({
   QueueOrder order,
   String? next,
   String? previous,
+  String? previousOfPrevious,
   List<String> upNext,
 });
 
@@ -32,6 +35,7 @@ void main() {
       order: const QueueOrder(),
       next: 'c',
       previous: 'a',
+      previousOfPrevious: null,
       upNext: ['c'],
     ),
     (
@@ -42,6 +46,7 @@ void main() {
       order: const QueueOrder(),
       next: null,
       previous: 'b',
+      previousOfPrevious: 'a',
       upNext: <String>[],
     ),
     (
@@ -52,16 +57,18 @@ void main() {
       order: const QueueOrder(),
       next: 'a',
       previous: 'b',
+      previousOfPrevious: 'a',
       upNext: ['a', 'b'],
     ),
     (
-      name: 'listLoop 队首：上一首回绕到队尾',
+      name: 'listLoop 队首：上一首回绕到队尾，再上一首回退队尾前一位',
       queue: queue,
       currentIndex: 0,
       mode: PlayMode.listLoop,
       order: const QueueOrder(),
       next: 'b',
       previous: 'c',
+      previousOfPrevious: 'b',
       upNext: ['b', 'c'],
     ),
     (
@@ -72,6 +79,7 @@ void main() {
       order: const QueueOrder(),
       next: 'c',
       previous: 'a',
+      previousOfPrevious: null,
       upNext: ['c'],
     ),
     (
@@ -82,6 +90,7 @@ void main() {
       order: const QueueOrder(shuffleIndices: [2, 0, 1]),
       next: 'b',
       previous: null,
+      previousOfPrevious: null,
       upNext: ['b'],
     ),
     (
@@ -92,6 +101,7 @@ void main() {
       order: const QueueOrder(shuffleIndices: [2, 0, 1]),
       next: null,
       previous: 'a',
+      previousOfPrevious: null,
       upNext: <String>[],
     ),
     (
@@ -102,6 +112,7 @@ void main() {
       order: const QueueOrder(shuffleIndices: [0]),
       next: 'a',
       previous: null,
+      previousOfPrevious: null,
       upNext: <String>[],
     ),
     (
@@ -112,6 +123,7 @@ void main() {
       order: const QueueOrder(),
       next: null,
       previous: 'a',
+      previousOfPrevious: null,
       upNext: <String>[],
     ),
     (
@@ -122,6 +134,29 @@ void main() {
       order: const QueueOrder(previousIndex: 2),
       next: 'c',
       previous: 'c',
+      previousOfPrevious: 'b',
+      upNext: ['c'],
+    ),
+    (
+      name: '播放顺序次顶存在：再上一首读次顶而不是队列前一位',
+      queue: queue,
+      currentIndex: 1,
+      mode: PlayMode.sequential,
+      order: const QueueOrder(previousIndex: 2, previousOfPreviousIndex: 0),
+      next: 'c',
+      previous: 'c',
+      previousOfPrevious: 'a',
+      upNext: ['c'],
+    ),
+    (
+      name: '播放顺序次顶越界：不回退、不猜',
+      queue: queue,
+      currentIndex: 1,
+      mode: PlayMode.sequential,
+      order: const QueueOrder(previousIndex: 2, previousOfPreviousIndex: 9),
+      next: 'c',
+      previous: 'c',
+      previousOfPrevious: null,
       upNext: ['c'],
     ),
     (
@@ -132,6 +167,7 @@ void main() {
       order: const QueueOrder(previousIndex: 9),
       next: 'c',
       previous: null,
+      previousOfPrevious: null,
       upNext: ['c', 'a'],
     ),
   ];
@@ -147,16 +183,13 @@ void main() {
 
       expect(projection.next, testCase.next);
       expect(projection.previous, testCase.previous);
+      expect(projection.previousOfPrevious, testCase.previousOfPrevious);
       expect(projection.upNext, testCase.upNext);
     });
   }
 
   test('上一首与当前同 id：排除（重复曲目槽位不当作上一首）', () {
-    final queue = [
-      (slot: 1, id: 'a'),
-      (slot: 2, id: 'a'),
-      (slot: 3, id: 'b'),
-    ];
+    final queue = [(slot: 1, id: 'a'), (slot: 2, id: 'a'), (slot: 3, id: 'b')];
     final projection = projectQueue(
       queue,
       currentIndex: 1,
@@ -166,6 +199,7 @@ void main() {
     );
 
     expect(projection.previous, isNull);
+    expect(projection.previousOfPrevious, isNull);
     expect(projection.next?.slot, 3);
   });
 
@@ -182,6 +216,7 @@ void main() {
       );
       expect(projection.next, isNull);
       expect(projection.previous, isNull);
+      expect(projection.previousOfPrevious, isNull);
       expect(projection.upNext, isEmpty);
     }
   });

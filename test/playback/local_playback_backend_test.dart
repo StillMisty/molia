@@ -37,6 +37,9 @@ class _FakeService extends LocalPlaybackService {
   /// 播放顺序栈的最近一首（投影 previous 优先读它）。
   int? _previousIndex;
 
+  /// 播放顺序栈的次近一首（投影 previousOfPrevious 优先读它）。
+  int? _previousOfPreviousIndex;
+
   /// `queueProjection` 的求值次数：用来钉住「一次快照只求一次投影」。
   int projectionBuilds = 0;
 
@@ -93,6 +96,7 @@ class _FakeService extends LocalPlaybackService {
       order: QueueOrder(
         shuffleIndices: _mode == PlayMode.shuffle ? _shuffleIndices : null,
         previousIndex: _previousIndex,
+        previousOfPreviousIndex: _previousOfPreviousIndex,
       ),
       idOf: (track) => track.id,
     );
@@ -109,6 +113,7 @@ class _FakeService extends LocalPlaybackService {
     PlayMode? mode,
     List<int>? shuffleIndices,
     int? previousIndex,
+    int? previousOfPreviousIndex,
   }) {
     _queue
       ..clear()
@@ -123,6 +128,7 @@ class _FakeService extends LocalPlaybackService {
     if (mode != null) _mode = mode;
     _shuffleIndices = shuffleIndices;
     _previousIndex = previousIndex;
+    _previousOfPreviousIndex = previousOfPreviousIndex;
     notifyListeners();
   }
 
@@ -292,7 +298,9 @@ void main() {
     expect(snapshot.current?.id.id, 'a', reason: '当前曲目不变');
   });
 
-  test('状态映射：current/queue/next/previous/upNext/duration/context/error', () {
+  test(
+      '状态映射：current/queue/next/previous/previousOfPrevious/upNext/duration/context/error',
+      () {
     final a = _source('a');
     final b = _source('b');
     service.seed(
@@ -311,11 +319,13 @@ void main() {
     expect(snapshot.next?.id.id, 'b');
     expect(snapshot.upNext.map((t) => t.id.id), ['b']);
     expect(snapshot.previous, isNull);
+    expect(snapshot.previousOfPrevious, isNull);
 
-    // 下标回退：previous 透传服务解析结果（当前在队尾时 next 为空）。
+    // 下标回退：previous / previousOfPrevious 透传服务解析结果。
     service.seed([a, b], index: 1, playing: true);
     final atEnd = backend.state.value;
     expect(atEnd.previous?.id.id, 'a');
+    expect(atEnd.previousOfPrevious, isNull);
     expect(atEnd.next, isNull);
     expect(snapshot.isPlaying, isTrue);
     expect(snapshot.duration, const Duration(seconds: 42));
@@ -342,7 +352,7 @@ void main() {
     expect(notifies, 2);
   });
 
-  test('next/previous/upNext 与投影一致：线性模式', () {
+  test('next/previous/previousOfPrevious/upNext 与投影一致：线性模式', () {
     service.seed(
       [_source('a'), _source('b'), _source('c')],
       index: 1,
@@ -352,6 +362,7 @@ void main() {
     var snapshot = backend.state.value;
     expect(snapshot.next?.id.id, 'c');
     expect(snapshot.previous?.id.id, 'a');
+    expect(snapshot.previousOfPrevious, isNull);
     expect(snapshot.upNext.map((t) => t.id.id), ['c']);
 
     // 列表循环队尾：下一首回绕队首，upNext 补上队首到当前之前。
@@ -363,10 +374,11 @@ void main() {
     snapshot = backend.state.value;
     expect(snapshot.next?.id.id, 'a');
     expect(snapshot.previous?.id.id, 'b');
+    expect(snapshot.previousOfPrevious?.id.id, 'a');
     expect(snapshot.upNext.map((t) => t.id.id), ['a', 'b']);
   });
 
-  test('next/previous/upNext 与投影一致：shuffle 排列与轮末', () {
+  test('next/previous/previousOfPrevious/upNext 与投影一致：shuffle 排列与轮末', () {
     final a = _source('a');
     final b = _source('b');
     final c = _source('c');
@@ -381,6 +393,7 @@ void main() {
     var snapshot = backend.state.value;
     expect(snapshot.next?.id.id, 'b');
     expect(snapshot.previous, isNull);
+    expect(snapshot.previousOfPrevious, isNull);
     expect(snapshot.upNext.map((t) => t.id.id), ['b']);
 
     // 轮末：peek 不重洗，next / upNext 为空。
@@ -393,16 +406,20 @@ void main() {
     snapshot = backend.state.value;
     expect(snapshot.next, isNull);
     expect(snapshot.previous?.id.id, 'a');
+    expect(snapshot.previousOfPrevious, isNull);
     expect(snapshot.upNext, isEmpty);
 
-    // 播放顺序栈优先于队列前一位。
+    // 播放顺序栈优先于队列前一位；次顶存在时再上一首读次顶。
     service.seed(
       [a, b, c],
       index: 1,
       mode: PlayMode.sequential,
       previousIndex: 2,
+      previousOfPreviousIndex: 0,
     );
-    expect(backend.state.value.previous?.id.id, 'c');
+    snapshot = backend.state.value;
+    expect(snapshot.previous?.id.id, 'c');
+    expect(snapshot.previousOfPrevious?.id.id, 'a');
   });
 
   test('一次快照只求一次队列投影', () {

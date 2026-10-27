@@ -716,7 +716,8 @@ class PlaybackSessionCoordinator
   ///
   /// 队列投影与真实播放共用 `projectQueue`；恢复态没有播放顺序栈、也没有
   /// 持久化洗牌排列，因此显式传空 [QueueOrder]——shuffle 的 next 为 null、
-  /// upNext 为空（不拿队列下标冒充洗牌顺序），previous 只回退队列前一位。
+  /// upNext 为空（不拿队列下标冒充洗牌顺序），previous / previousOfPrevious
+  /// 按队列前一位依次回退。
   void _publishRestoredSnapshot() {
     final session = _restoredSession;
     final current = session?.current;
@@ -736,6 +737,7 @@ class PlaybackSessionCoordinator
       currentIndex: session.index,
       next: projection.next,
       previous: projection.previous,
+      previousOfPrevious: projection.previousOfPrevious,
       upNext: projection.upNext,
       isPlaying: false,
       isLoading: false,

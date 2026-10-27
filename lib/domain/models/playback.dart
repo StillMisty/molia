@@ -77,6 +77,12 @@ class BackendSnapshot {
   /// 同 id 为 null（队首的「重播当前」不算上一首）。
   final Track? previous;
 
+  /// 可展示的再上一首：实际播放顺序次近一首 → 「上一首」的队列前一位。
+  ///
+  /// 封面左槽向后拖动时提前渲染「再上一首」用；[previous] 为 null 时
+  /// 也为 null（没有可回退目标就不猜）。
+  final Track? previousOfPrevious;
+
   /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
   /// 队列面板「接下来」展示用）。
   final List<Track> upNext;
@@ -95,6 +101,7 @@ class BackendSnapshot {
     this.currentIndex = -1,
     this.next,
     this.previous,
+    this.previousOfPrevious,
     this.upNext = const [],
     this.isPlaying = false,
     this.isLoading = false,
@@ -115,6 +122,7 @@ class BackendSnapshot {
       other.currentIndex == currentIndex &&
       other.next == next &&
       other.previous == previous &&
+      other.previousOfPrevious == previousOfPrevious &&
       deepEquals(other.upNext, upNext) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
@@ -131,6 +139,7 @@ class BackendSnapshot {
         currentIndex,
         next,
         previous,
+        previousOfPrevious,
         deepHash(upNext),
         isPlaying,
         isLoading,
@@ -159,6 +168,12 @@ class PlaybackSnapshot {
   /// 同 id 为 null（恢复态为会话队列下标回退的近似）。
   final Track? previous;
 
+  /// 可展示的再上一首：实际播放顺序次近一首 → 「上一首」的队列前一位。
+  ///
+  /// 封面左槽向后拖动时提前渲染「再上一首」用；恢复态没有播放顺序栈，
+  /// 按队列回退口径近似。
+  final Track? previousOfPrevious;
+
   /// 实际播放顺序中当前曲目之后的曲目（shuffle 为洗牌排列的剩余；
   /// 队列面板「接下来」展示用）。
   final List<Track> upNext;
@@ -177,6 +192,7 @@ class PlaybackSnapshot {
     this.currentIndex = -1,
     this.next,
     this.previous,
+    this.previousOfPrevious,
     this.upNext = const [],
     this.isPlaying = false,
     this.isLoading = false,
@@ -197,6 +213,7 @@ class PlaybackSnapshot {
       other.currentIndex == currentIndex &&
       other.next == next &&
       other.previous == previous &&
+      other.previousOfPrevious == previousOfPrevious &&
       deepEquals(other.upNext, upNext) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
@@ -213,6 +230,7 @@ class PlaybackSnapshot {
         currentIndex,
         next,
         previous,
+        previousOfPrevious,
         deepHash(upNext),
         isPlaying,
         isLoading,

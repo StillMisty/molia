@@ -310,7 +310,8 @@ class PlaybackObserver {
 
   /// 触发播放相关图片的智能预加载。
   ///
-  /// 使用 ImagePreloadManager 预加载当前曲目、下一首、以及队列中的封面图片。
+  /// 使用 ImagePreloadManager 预加载当前曲目、下一首、上一首 / 再上一首，
+  /// 以及队列中的封面图片。
   /// 省流模式阻止封面网络请求时直接跳过（避免注定失败的下载与日志噪音）；
   /// 窗口在后台（托盘 / 最小化）或移动端不在前台时同样跳过——解码结果没有
   /// 展示面，只白占内存与 CPU，恢复后由 [_resumeCoverPreload] 补一次。
@@ -334,6 +335,8 @@ class PlaybackObserver {
         context: context,
         currentTrack: currentTrack,
         nextTrack: nextTrack,
+        previousTrack: live.previous,
+        previousOfPreviousTrack: live.previousOfPrevious,
         upcomingTracks: upcomingTracks,
       );
     });
