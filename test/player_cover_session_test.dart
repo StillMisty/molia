@@ -90,7 +90,7 @@ void main() {
   final d = _track('d');
   final order = [a, b, c, d];
 
-  /// 按队列下标构造快照（next / previous 与队列一致，与后端语义对齐）。
+  /// 按队列下标构造快照（next / previous / 再上一首与队列一致，与后端语义对齐）。
   PlaybackSnapshot snapshotAt(
     int index, {
     List<Track>? queue,
@@ -103,6 +103,8 @@ void main() {
       currentIndex: index,
       next: index + 1 < list.length ? list[index + 1] : null,
       previous: index > 0 ? list[index - 1] : null,
+      previousOfPrevious: index > 1 ? list[index - 2] : null,
+      upNext: list.sublist(index + 1),
       isPlaying: true,
       mode: mode,
     );
@@ -273,6 +275,69 @@ void main() {
       expect(session.to, isNull);
       expect(session.from, isNull);
       expect(host.calls.last, 'adoptSteadySlots');
+    });
+
+    test('预览源侧邻里：前进取下下张，后退取再上一首，方向翻转即重算', () {
+      settleAt(1); // 队列 a,b,c,d：当前 b
+      expect(session.dragStart(), isTrue);
+
+      session.dragUpdate(delta: -20, progress: 0.2);
+      expect(session.to, c);
+      expect(session.previewSourceNeighbor, d, reason: '前进时源槽位应提前展示再下一首');
+
+      session.releasePreview();
+      session.returnCompleted();
+      settleAt(2); // 当前 c：上一首 b，再上一首 a
+
+      expect(session.dragStart(), isTrue);
+      session.dragUpdate(delta: 20, progress: 0.2);
+      expect(session.to, b);
+      expect(session.previewSourceNeighbor, a, reason: '后退时源槽位应提前展示再上一首');
+    });
+
+    test('预览源侧邻里在两首歌循环回绕到当前时留空', () {
+      final only = [a, b];
+      final snapshot = PlaybackSnapshot(
+        current: a,
+        queue: only,
+        currentIndex: 0,
+        next: b,
+        previous: b,
+        // 两首歌列表循环：跳回 b 后再上一首会回绕到当前 a。
+        previousOfPrevious: a,
+        upNext: [b],
+        isPlaying: true,
+        mode: PlayMode.listLoop,
+      );
+      session.observe(snapshot: snapshot, displayTrack: a);
+      session.progressCompleted();
+      expect(session.phase, CoverSwapPhase.idle);
+      session.dragStart();
+
+      session.dragUpdate(delta: 20, progress: 0.2);
+      expect(session.to, b);
+      expect(session.previewSourceNeighbor, isNull,
+          reason: '再上一首会回绕到当前曲目，不能重复渲染同一张封面');
+    });
+
+    test('回退/对账落位时清空预览源侧邻里', () {
+      settleAt(1);
+      session.dragStart();
+      session.dragUpdate(delta: -20, progress: 0.2);
+      expect(session.previewSourceNeighbor, d);
+
+      session.releasePreview();
+      expect(session.previewSourceNeighbor, d, reason: '回弹期间源侧身份保留到弹簧落位');
+      session.returnCompleted();
+      expect(session.previewSourceNeighbor, isNull);
+
+      // 再次预览并提交：对账匹配后在 settleCommit 宿主调用结束时清空。
+      session.dragStart();
+      session.dragUpdate(delta: -20, progress: 0.2);
+      expect(session.previewSourceNeighbor, d);
+      session.commit(progressVelocity: -1);
+      session.observe(snapshot: snapshotAt(2), displayTrack: c);
+      expect(session.previewSourceNeighbor, isNull);
     });
 
     test('回退落位只在 returning 生效：阶段被接管后重复回调无副作用', () {

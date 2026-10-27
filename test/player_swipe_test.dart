@@ -34,7 +34,8 @@ void main() {
   final a = _track('a');
   final b = _track('b');
   final c = _track('c');
-  final order = [a, b, c];
+  final d = _track('d');
+  final order = [a, b, c, d];
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -44,7 +45,7 @@ void main() {
 
   tearDown(() => playback.dispose());
 
-  /// 模拟后端切到指定曲目：next / previous 与队列保持一致。
+  /// 模拟后端切到指定曲目：next / previous / 再上一首 / upNext 与队列一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
     backend.emit(BackendSnapshot(
@@ -53,6 +54,8 @@ void main() {
       currentIndex: index,
       next: index + 1 < order.length ? order[index + 1] : null,
       previous: index > 0 ? order[index - 1] : null,
+      previousOfPrevious: index > 1 ? order[index - 2] : null,
+      upNext: order.sublist(index + 1),
       isPlaying: true,
       position: const Duration(seconds: 5),
       duration: const Duration(seconds: 30),
@@ -112,6 +115,53 @@ void main() {
   double cardDx(WidgetTester tester, Finder finder) =>
       tester.getCenter(finder).dx -
       tester.getCenter(coverSwipeHost()).dx;
+
+  /// 指定封面卡最近一层 Opacity 的透明度（卡的动画透明度层）。
+  double nearestOpacityOf(WidgetTester tester, Finder finder) {
+    final elements = finder.evaluate();
+    expect(elements, hasLength(1), reason: '封面卡应唯一存在');
+    double? opacity;
+    elements.single.visitAncestorElements((ancestor) {
+      final widget = ancestor.widget;
+      if (widget is Opacity) {
+        opacity = widget.opacity;
+        return false;
+      }
+      return true;
+    });
+    expect(opacity, isNotNull, reason: '未找到封面卡的透明度层');
+    return opacity!;
+  }
+
+  /// 指定卡片在封面 Stack 中的子节点序号；序号越大越晚绘制（越在上层）。
+  int cardPaintIndex(WidgetTester tester, Key key) {
+    final stack = tester.element(
+      find
+          .descendant(
+            of: find.byKey(PlayerCoverDeck.stackKey),
+            matching: find.byType(Stack),
+          )
+          .first,
+    );
+    final target = tester.element(find.byKey(key));
+    final children = <Element>[];
+    stack.visitChildElements(children.add);
+    bool contains(Element root) {
+      var found = false;
+      void visit(Element element) {
+        if (element == target) found = true;
+        if (!found) element.visitChildElements(visit);
+      }
+
+      visit(root);
+      return found;
+    }
+
+    for (var i = 0; i < children.length; i++) {
+      if (contains(children[i])) return i;
+    }
+    fail('未在封面 Stack 中找到 $key');
+  }
 
   /// 拖动行程：deck 的换场行程是封面边长的 0.6（`_coverSwapRange`），
   /// 硬编码像素会随版式缩放漂移。
@@ -241,8 +291,224 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('队列到头：硬边界不回弹也不提交', (tester) async {
+  testWidgets('左滑到下一首：下下张在拖动中进入右槽，落位后不重放淡入', (tester) async {
+    emitFor('b'); // 队列 a,b,c,d：当前 b，右槽 c，再下一首 d
+    await pumpPlayer(tester);
+    expect(
+      playback.snapshot.upNext.map((track) => track.id.id),
+      ['c', 'd'],
+      reason: '测试快照应带实际播放顺序',
+    );
+
+    final double range = dragFor(tester, 1.0);
+    final gesture =
+        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(-(range * 0.8 - 30), 0));
+    await tester.pump();
+
+    final dCard = find.byKey(
+      PlayerCoverDeck.sideCoverCardKey(left: false, id: d.id),
+    );
+    expect(dCard, findsOneWidget, reason: '拖动预览应提前渲染再下一首 d');
+    expect(
+      nearestOpacityOf(tester, dCard),
+      greaterThan(0.1),
+      reason: 'p≈0.8 时源侧新身份应已进入淡入窗口',
+    );
+    expect(cardDx(tester, dCard), greaterThan(20),
+        reason: 'd 应落在右槽位而不是中心');
+
+    // 走满行程：源侧新身份完全淡入。
+    await gesture.moveBy(Offset(-(range * 0.2), 0));
+    await tester.pump();
+    expect(nearestOpacityOf(tester, dCard), closeTo(0.85, 0.02));
+
+    await gesture.up();
+    await tester.pump();
+    expect(nextCalls(), 1);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(dCard, findsOneWidget, reason: '提交等待期间源侧身份应保持');
+    expect(nearestOpacityOf(tester, dCard), closeTo(0.85, 0.02));
+
+    emitFor('c'); // 对账到预览目标：新快照的 next 正是 d
+    await tester.pump();
+    expect(dCard, findsOneWidget, reason: '对账切换帧不能让 d 消失');
+    expect(nearestOpacityOf(tester, dCard), closeTo(0.85, 0.02),
+        reason: '预览已渲染同一身份，不应重放 180ms 淡入');
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(dCard, findsOneWidget);
+    expect(nearestOpacityOf(tester, dCard), closeTo(0.85, 0.02));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('右滑到上一首：再上一首在拖动中进入左槽，落位后不重放淡入', (tester) async {
+    emitFor('c'); // 队列 a,b,c,d：当前 c，左槽 b，再上一首 a
+    await pumpPlayer(tester);
+
+    final double range = dragFor(tester, 1.0);
+    final gesture =
+        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(range * 0.8 - 30, 0));
+    await tester.pump();
+
+    final aCard = find.byKey(
+      PlayerCoverDeck.sideCoverCardKey(left: true, id: a.id),
+    );
+    expect(aCard, findsOneWidget, reason: '向后拖动预览应提前渲染再上一首 a');
+    expect(nearestOpacityOf(tester, aCard), greaterThan(0.1));
+    expect(cardDx(tester, aCard), lessThan(-20),
+        reason: 'a 应落在左槽位而不是中心');
+
+    await gesture.moveBy(Offset(range * 0.2, 0));
+    await tester.pump();
+    expect(nearestOpacityOf(tester, aCard), closeTo(0.85, 0.02));
+
+    await gesture.up();
+    await tester.pump();
+    expect(previousCalls(), 1);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(aCard, findsOneWidget);
+    expect(nearestOpacityOf(tester, aCard), closeTo(0.85, 0.02));
+
+    emitFor('b'); // 对账到预览目标：新快照的 previous 正是 a
+    await tester.pump();
+    expect(aCard, findsOneWidget, reason: '对账切换帧不能让 a 消失');
+    expect(nearestOpacityOf(tester, aCard), closeTo(0.85, 0.02),
+        reason: '预览已渲染同一身份，不应重放 180ms 淡入');
+
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(aCard, findsOneWidget);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('左滑后回拖：当前封面压住下一首，松手回弹期间也不翻回上层', (tester) async {
+    emitFor('b');
+    await pumpPlayer(tester);
+
+    final double range = dragFor(tester, 1.0);
+    final gesture =
+        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    await gesture.moveBy(const Offset(-30, 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(-(range * 0.5 - 30), 0));
+    await tester.pump();
+
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    expect(outgoing, findsOneWidget);
+    expect(center, findsOneWidget);
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.outgoingCoverCardKey),
+      lessThan(cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey)),
+      reason: '正向拖动时目标封面在上层',
+    );
+
+    // 不松手回拖到 p≈0.2：当前封面必须压住仍在回退的下一首封面。
+    await gesture.moveBy(Offset(range * 0.3, 0));
+    await tester.pump();
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.outgoingCoverCardKey),
+      greaterThan(cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey)),
+      reason: '回拖时当前封面应置顶，不能看到下一首盖在当前封面上',
+    );
+    await tester.pump(const Duration(milliseconds: 300)); // 清掉速度
+
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.outgoingCoverCardKey),
+      greaterThan(cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey)),
+      reason: '松手回弹期间当前封面继续保持置顶',
+    );
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(outgoing, findsNothing);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+      findsOneWidget,
+    );
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey),
+      greaterThan(cardPaintIndex(
+        tester,
+        PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id),
+      )),
+      reason: '回弹落位后恢复稳态层级：中心封面在上',
+    );
+    expect(nextCalls(), 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('右滑后回拖：当前封面压住上一首，左右方向层级一致', (tester) async {
     emitFor('c');
+    await pumpPlayer(tester);
+
+    final double range = dragFor(tester, 1.0);
+    final gesture =
+        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    await gesture.moveBy(const Offset(30, 0));
+    await tester.pump();
+    await gesture.moveBy(Offset(range * 0.5 - 30, 0));
+    await tester.pump();
+
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    expect(outgoing, findsOneWidget);
+    expect(center, findsOneWidget);
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.outgoingCoverCardKey),
+      lessThan(cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey)),
+      reason: '正向（向上一首）拖动时目标封面在上层',
+    );
+
+    await gesture.moveBy(Offset(-range * 0.3, 0));
+    await tester.pump();
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.outgoingCoverCardKey),
+      greaterThan(cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey)),
+      reason: '回拖时当前封面应置顶',
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.outgoingCoverCardKey),
+      greaterThan(cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey)),
+      reason: '松手回弹期间当前封面继续保持置顶',
+    );
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(outgoing, findsNothing);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+    );
+    expect(
+      cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey),
+      greaterThan(cardPaintIndex(
+        tester,
+        PlayerCoverDeck.sideCoverCardKey(left: true, id: b.id),
+      )),
+      reason: '回弹落位后恢复稳态层级：中心封面在上',
+    );
+    expect(previousCalls(), 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('队列到头：硬边界不回弹也不提交', (tester) async {
+    emitFor('d');
     await pumpPlayer(tester);
 
     await tester.timedDrag(

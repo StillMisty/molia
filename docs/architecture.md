@@ -61,7 +61,8 @@
   - `PlaybackSnapshot` / `BackendSnapshot` / `PlaybackRequest` / `PlaybackContext`；
     `PlaybackSnapshot.next` 是后端按当前模式解析出的下一首（shuffle 单曲内稳定，
     列表循环队尾回绕），`previous` 是实际播放顺序最近一首（无则队列前一位，
-    列表循环队首回绕），`upNext` 是队列顺序（列表循环回绕）；
+    列表循环队首回绕），`previousOfPrevious` 是再上一首（播放顺序次顶 → 队列前一位链），
+    `upNext` 是队列顺序（列表循环回绕）；
   - `SearchQuery` / `SearchResult<T>`；`SourceFailure(kind/l10nKey/retryable)`；
   - `Comment` / `CommentPage`（评论正文 / 时间 / IP 归属 / 点赞 / 引用 / 楼中楼，
     `CommentKind` 区分热门与最新）；
@@ -99,9 +100,11 @@
   `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
   真实播放取 facade 快照；冷启动恢复态由 `PlaybackSessionCoordinator`
   （`lib/playback/`）构造覆盖快照（`isPlaying=false`）。next / previous /
-  upNext 的唯一推导是 `lib/playback/queue_projection.dart::projectQueue`（真实播放与恢复态
+  previousOfPrevious / upNext 的唯一推导是
+  `lib/playback/queue_projection.dart::projectQueue`（真实播放与恢复态
   共用）：恢复态没有洗牌排列与播放顺序栈，显式留空 `QueueOrder`——shuffle 的
-  next 为 null、upNext 为空（不拿下标近似），previous 回退队列前一位。
+  next 为 null、upNext 为空（不拿下标近似），previous / previousOfPrevious
+  按队列前一位依次回退。
   恢复播放：会话模式先落到后端（shuffle 洗牌顺序依赖装载前模式）；
   seek 落地前进度通道继续显示恢复进度（不闪回 0）；装载期间用户 seek 优先；
   生命周期 `paused` 强制落盘会话。旧「远程播放风格 Map 兼容层」
@@ -936,8 +939,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `player_cover_swap.dart`（方向判定纯函数）；播放器只提供布局尺寸、顶栏共享飞行
   锚点与主题联动。
 - **三槽位模型**：左 = 上一首（实际播放顺序最近一首 → 队列前一位 → 空，
-  排除与当前同 id，与后端 `skipToPrevious` 同源）、中 = 当前（拖动/提交等待期间
-  为预览目标）、右 = `PlaybackSnapshot.next`；左右槽只要展示了身份即可点击切歌。
+  排除与当前同 id，与后端 `skipToPrevious` 同源）、中 = 当前（拖动/提交等待/回退期间
+  为预览目标）、右 = `PlaybackSnapshot.next`；拖动预览时源侧槽位提前显示目标之后的
+  身份（前进 = `upNext` 的再下一首，后退 = `previousOfPrevious`），窗口随进度连续
+  滑动；左右槽只要展示了身份即可点击切歌。
 - **会话与宿主（时机 / 效果分离）**：会话只决定「什么时候」，宿主（deck State）决定
   「怎么做」——会话经 `CoverSwapHost` 意图接口驱动控制器编排、post-frame 与播放命令
   （`startSettle` / `land` / `releasePreview` / `settleCommit` / `crossfadeCorrection` /
@@ -948,7 +953,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （即时切歌完成中）` / `correcting`（对账不匹配校正）/ `returning`（松手未达标、
   取消或提交超时后的回退，预览目标保持到弹簧落位）。唯一一根进度控制器由 deck
   State 持有，拖动跟手按位移反解写入，松手从同一进度续走或回弹，不跳；回弹是
-  拖动预览的严格反向，落位前不得换回当前封面；即时切歌由 motor expressive spatial
+  拖动预览的严格反向，落位前不得换回当前封面；回拖/回弹期间当前封面压在目标
+  封面之上（只改绘制顺序，不改中心身份）；即时切歌由 motor expressive spatial
   弹簧驱动，无固定时长。
 - **检测与缓存（唯一写入者）**：deck 把快照喂给 `CoverSwapSession.observe`——切歌检测、
   空闲缓存（左槽身份 / 下一首 / 方向提示）与预览目标全由它派生，调用方不再各刷一半；
@@ -956,9 +962,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   以宿主的 `progressAnimating`（弹簧尾部也算）门控，快照通知仍按微任务合并同批通知，
   build 期间零写入。
 - **窗口时序与常量**：目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份
-  p∈[0.6,1] 淡入（仅透明度、无位移，避免叠影）；移动卡全程插值（位移 ±0.30 卡宽、
-  旋转 ±0.05rad、缩放 0.78↔1.0、透明度 0.85↔1.0）；拖动对账落位后源侧 180ms
-  纯淡入；对账校正 220ms；提交后 6 秒（`CoverSwapSession.commitTimeout`）无对账回弹。
+  p∈[0.6,1] 淡入（仅透明度、无位移，避免叠影）；拖动预览的源侧新身份同样走这个
+  窗口，对账到同一身份时从预览透明度连续接管（p=1 直接满值），不一致 / 不可预测
+  时保留 180ms 纯淡入兜底；移动卡全程插值（位移 ±0.30 卡宽、
+  旋转 ±0.05rad、缩放 0.78↔1.0、透明度 0.85↔1.0）；对账校正 220ms；提交后
+  6 秒（`CoverSwapSession.commitTimeout`）无对账回弹。
 - **对账**：提交后等待快照 current 变为会话目标——匹配无缝落位；不匹配
   （随机目标 / 失败恢复 / 列表变化）先让提交过渡落位，再以 220ms 中心原位
   交叉淡化校正到实际曲目，随后按新快照重建槽位回 idle。

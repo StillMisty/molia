@@ -47,17 +47,23 @@
   线性队列的下一首 / 上一首与列表循环的回绕口径。
 - **Played order（播放顺序）** — `lib/playback/playback_order.dart`：实际播放过的队列下标栈
   （最近在后、上限 100、`popPrevious` 供上一首消费）。驱动 `PlaybackSnapshot.previous`
-  语义（实际播放顺序最近一首 → 队列前一位）；与播放页队列视图的 `upNext`（队列顺序）是两回事。
+  与 `previousOfPrevious` 语义（最近一首 / 次近一首 → 队列前一位链）；与播放页队列视图的
+  `upNext`（队列顺序）是两回事。
 - **Queue projection（队列投影）** — `lib/playback/queue_projection.dart`：
-  `projectQueue` 是 `next` / `previous` / `upNext` 的唯一实现，`LocalPlaybackService`
-  与恢复态共用。恢复态没有洗牌排列 / 播放顺序栈时显式留空 `QueueOrder`：
-  shuffle 的 `next` 为 null、`upNext` 为空（不拿下标近似），`previous` 回退队列前一位。
+  `projectQueue` 是 `next` / `previous` / `previousOfPrevious` / `upNext` 的唯一实现，
+  `LocalPlaybackService` 与恢复态共用。恢复态没有洗牌排列 / 播放顺序栈时显式留空
+  `QueueOrder`：shuffle 的 `next` 为 null、`upNext` 为空（不拿下标近似），
+  `previous` / `previousOfPrevious` 按队列前一位依次回退。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义
   在服务内显式分开（`queueProjection` / `_commitNextIndex`），轮末重洗只发生在 commit。
 - **Previous（上一首）** — `PlaybackSnapshot.previous`：可展示的上一首（播放顺序最近一首
   的非破坏性 peek → 队列前一位；无 / 与当前同 id 为 null，队首的「重播当前」不算）。
   封面左槽与切歌会话只读它，不再各自解析。
+- **Previous of previous（再上一首）** — `PlaybackSnapshot.previousOfPrevious`：
+  播放顺序栈次近一首 → 「上一首」的队列前一位；`previous` 为空时恒为空。
+  封面左槽向后拖动时提前渲染源侧新身份（与前进方向的 `upNext[1]` 对称），
+  不按队列下标猜播放历史。
 - **Playback session coordinator（播放会话模块）** — `lib/playback/playback_session_coordinator.dart`：
   恢复态（冷启动未起播）与真实播放（live）之间的唯一交接点，也是
   `PlaybackSessionStore` 的唯一写者。三阶段状态机 `idle → restored → live`（装载进恢复态，
@@ -175,7 +181,9 @@
 - **Cover slot（封面槽位）** — 堆叠的三个位置：左 = 上一首（实际播放顺序最近一首 →
   队列前一位 → 空，排除与当前同 id，与后端 `skipToPrevious` 同源）、
   中 = 当前（拖动/提交等待/回退期间为预览目标）、右 = `PlaybackSnapshot.next`；
-  左右槽只要展示了身份即可点击切歌，为空时不渲染卡片。
+  拖动预览时源侧槽位提前显示目标之后的身份（前进 = `upNext` 的再下一首，
+  后退 = `previousOfPrevious`），窗口随进度连续滑动；左右槽只要展示了身份即可
+  点击切歌，为空时不渲染卡片。
 - **Swap session（切歌会话）** — `CoverSwapSession`：一次拖动/切歌从开始到落位的
   唯一状态机（起止身份/方向/旧邻位/阶段/方向提示/6 秒兜底），只决定「什么时候」；
   唯一快照入口 `observe`（切歌检测、空闲缓存与预览目标都从它派生，调用方不再各刷
@@ -199,7 +207,11 @@
   淡化校正到实际曲目）；`CoverSwapSession.commitTimeout`（6 秒）无对账回弹。
 - **Windowed crossfade（窗口化交叉淡化）** — 切歌进度窗口内的纯透明度交叉：
   目标槽位旧身份 p∈[0,0.4] 淡出、源槽位新身份 p∈[0.6,1] 淡入（无位移/叠影），
-  移动卡全程插值；空闲期身份变化另有 180ms 原位交叉淡化。
+  移动卡全程插值；拖动预览的源侧新身份同样走这个窗口，对账匹配时从预览透明度
+  连续接管，不重放 180ms；空闲期身份变化另有 180ms 原位交叉淡化。
+- **Cover depth handoff（封面层级交接）** — 正向拖动与落位时目标封面在中心上层；
+  回拖 / 松手回弹时当前封面压在目标封面之上（仅改 Stack 绘制顺序，不改中心身份）；
+  回弹落位后恢复「中心在上」的稳态层级。
 
 ## 自定义封面（custom covers）
 

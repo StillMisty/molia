@@ -347,6 +347,15 @@ void main() {
         position: const Duration(seconds: 1),
       );
       expect(a, isNot(moved));
+
+      final withPreviousOfPrevious = BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+        previousOfPrevious: track,
+      );
+      expect(a, isNot(withPreviousOfPrevious));
     });
 
     test('PlaybackSnapshot：不含 position，值比较稳定', () {
@@ -368,6 +377,16 @@ void main() {
       expect(a, b);
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(PlaybackSnapshot.empty));
+
+      final withPreviousOfPrevious = PlaybackSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+        mode: PlayMode.shuffle,
+        previousOfPrevious: track,
+      );
+      expect(a, isNot(withPreviousOfPrevious));
     });
 
     test('SearchQuery / SearchResult 相等性', () {

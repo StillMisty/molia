@@ -144,13 +144,20 @@ void main() {
     final order = PlaybackOrder();
 
     expect(order.peekPrevious(), isNull);
+    expect(order.peekPreviousOfPrevious(), isNull);
 
     order.record(0);
+    expect(order.peekPrevious(), 0);
+    expect(order.peekPreviousOfPrevious(), isNull);
+
     order.record(2);
     expect(order.peekPrevious(), 2);
+    expect(order.peekPreviousOfPrevious(), 0,
+        reason: '再上一首读栈次顶，不弹出栈顶');
     expect(order.peekPrevious(), 2);
     expect(order.popPrevious(), 2);
     expect(order.peekPrevious(), 0);
+    expect(order.peekPreviousOfPrevious(), isNull);
   });
 
   test('栈深上限：超出后丢弃最早记录', () {
