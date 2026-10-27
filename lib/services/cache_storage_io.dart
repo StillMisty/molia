@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import 'cache_types.dart';
@@ -216,56 +217,21 @@ class IoCacheStorage implements CacheStorage {
   }
 
   @override
-  Future<int> sweepArtwork(
+  Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,
   }) async {
-    final files = await _listFiles(dirPath);
-    if (files.isEmpty) return 0;
-
-    final entries = <_FileEntry>[];
-    for (final file in files) {
-      try {
-        final stat = await file.stat();
-        entries.add(_FileEntry(file, stat.modified, stat.size));
-      } catch (_) {}
-    }
-
-    final deletedPaths = <String>{};
-    var deleted = 0;
-
-    Future<void> remove(_FileEntry entry) async {
-      if (deletedPaths.contains(entry.file.path)) return;
-      try {
-        await entry.file.delete();
-        deletedPaths.add(entry.file.path);
-        deleted++;
-      } catch (_) {}
-    }
-
-    // 1) 过期清理。
-    if (staleDays > 0) {
-      final cutoff = DateTime.now().subtract(Duration(days: staleDays));
-      for (final entry in entries) {
-        if (entry.modified.isBefore(cutoff)) await remove(entry);
-      }
-    }
-
-    // 2) 超量 LRU 清理（按 mtime 从旧到新）。
-    if (maxObjects > 0) {
-      final remaining =
-          entries.where((e) => !deletedPaths.contains(e.file.path)).toList()
-            ..sort((a, b) => a.modified.compareTo(b.modified));
-      var over = remaining.length - maxObjects;
-      for (final entry in remaining) {
-        if (over <= 0) break;
-        await remove(entry);
-        over--;
-      }
-    }
-
-    return deleted;
+    // 递归列举 + 逐文件 stat 是 O(文件数) 的串行 IO，封面缓存通常上千个
+    // 文件；留在主 isolate 会让启动 sweep 直接卡首帧。整体丢给短命 isolate，
+    // 主 isolate 只等删除数与存活文件相对路径。
+    return Isolate.run(
+      () => _sweepArtworkDir(
+        dirPath,
+        maxObjects: maxObjects,
+        staleDays: staleDays,
+      ),
+    );
   }
 
   Future<List<File>> _listFiles(String dirPath) async {
@@ -306,24 +272,7 @@ _CacheDirScan _scanCacheDir(String dirPath, {bool withFiles = true}) {
     return (bytes: 0, count: 0, files: const <String, int>{});
   }
 
-  final files = <File>[];
-  // 逐目录列举而不是 `listSync(recursive: true)`：子目录不可读时前者能保留
-  // 其它已扫描到的文件，与原异步流「返回已扫描部分」的语义一致。
-  final pending = <Directory>[root];
-  while (pending.isNotEmpty) {
-    final dir = pending.removeLast();
-    try {
-      for (final entity in dir.listSync(followLinks: false)) {
-        if (entity is File) {
-          files.add(entity);
-        } else if (entity is Directory) {
-          pending.add(entity);
-        }
-      }
-    } catch (_) {
-      // 权限 / 并发删除等问题：跳过该目录，继续扫描其它目录。
-    }
-  }
+  final files = _listCacheFilesSync(root).files;
 
   var bytes = 0;
   final sizes = <String, int>{};
@@ -337,6 +286,120 @@ _CacheDirScan _scanCacheDir(String dirPath, {bool withFiles = true}) {
     }
   }
   return (bytes: bytes, count: files.length, files: sizes);
+}
+
+/// 递归列举 [root] 下的全部文件（在短命 isolate 中执行）。
+///
+/// 逐目录列举而不是 `listSync(recursive: true)`：子目录不可读时前者能保留
+/// 其它已扫描到的文件，与原异步流「返回已扫描部分」的语义一致。
+///
+/// `rootReadable` 单独标记根目录能否枚举：空目录与「根目录不可读」都返回
+/// 空文件表，但后者不能被当作「缓存里一个文件都没有」（否则索引会被全删）。
+_CacheFileScan _listCacheFilesSync(Directory root) {
+  final files = <File>[];
+  var rootReadable = false;
+  final pending = <Directory>[root];
+  while (pending.isNotEmpty) {
+    final dir = pending.removeLast();
+    try {
+      for (final entity in dir.listSync(followLinks: false)) {
+        if (entity is File) {
+          files.add(entity);
+        } else if (entity is Directory) {
+          pending.add(entity);
+        }
+      }
+      if (identical(dir, root)) rootReadable = true;
+    } catch (_) {
+      // 权限 / 并发删除等问题：跳过该目录，继续扫描其它目录。
+    }
+  }
+  return (files: files, rootReadable: rootReadable);
+}
+
+/// `_listCacheFilesSync` 的返回：文件表 + 根目录是否成功枚举。
+typedef _CacheFileScan = ({List<File> files, bool rootReadable});
+
+/// 封面缓存相对路径统一用 `/`：Windows 的 `p.relative` 返回 `\`，而索引里的
+/// `relativePath` 可能写 `/`；比较前两边都要归一化，否则会误判整份索引缺失。
+String _normalizeRelativePath(String path) => path.replaceAll('\\', '/');
+
+/// 封面缓存 sweep（在短命 isolate 中执行，必须是顶层函数）。
+///
+/// 顺序与原主 isolate 实现一致：
+/// 1. 删除 mtime 早于 `now - staleDays` 的过期文件；
+/// 2. 剩余文件按 mtime 从旧到新删到不超过 [maxObjects]。
+/// `staleDays` / `maxObjects` 为 0 表示对应维度不限制。
+///
+/// 正常扫描时返回删除数 + 扫描后存活文件的相对路径；目录不存在 / 根目录
+/// 无法枚举时返回 [CacheSweepResult.failed]（`remainingRelativePaths = null`），
+/// 调用方不能把「没扫到」当成「全部缺失」。
+///
+/// 单个文件 stat / 删除失败（正被写入 / 并发删除）时仍把该文件算作存活：
+/// 拿不准就不要让调用方删索引条目。
+CacheSweepResult _sweepArtworkDir(
+  String dirPath, {
+  required int maxObjects,
+  required int staleDays,
+}) {
+  final root = Directory(dirPath);
+  if (!root.existsSync()) return CacheSweepResult.failed;
+
+  final scan = _listCacheFilesSync(root);
+  if (!scan.rootReadable) return CacheSweepResult.failed;
+
+  final files = scan.files;
+  final entries = <_FileEntry>[];
+  for (final file in files) {
+    try {
+      final stat = file.statSync();
+      entries.add(_FileEntry(file, stat.modified, stat.size));
+    } catch (_) {
+      // 文件可能正被删除/替换：跳过该文件，但它仍留在 files 里参与存活集合。
+    }
+  }
+
+  final deletedPaths = <String>{};
+  var deleted = 0;
+
+  void remove(_FileEntry entry) {
+    if (deletedPaths.contains(entry.file.path)) return;
+    try {
+      entry.file.deleteSync();
+      deletedPaths.add(entry.file.path);
+      deleted++;
+    } catch (_) {
+      // 删除失败不重试：占用 / 权限问题交给下次 sweep。
+    }
+  }
+
+  // 1) 过期清理。
+  if (staleDays > 0) {
+    final cutoff = DateTime.now().subtract(Duration(days: staleDays));
+    for (final entry in entries) {
+      if (entry.modified.isBefore(cutoff)) remove(entry);
+    }
+  }
+
+  // 2) 超量 LRU 清理（按 mtime 从旧到新）。
+  if (maxObjects > 0) {
+    final remaining =
+        entries.where((e) => !deletedPaths.contains(e.file.path)).toList()
+          ..sort((a, b) => a.modified.compareTo(b.modified));
+    var over = remaining.length - maxObjects;
+    for (final entry in remaining) {
+      if (over <= 0) break;
+      remove(entry);
+      over--;
+    }
+  }
+
+  final surviving = <String>{
+    for (final file in files)
+      if (!deletedPaths.contains(file.path))
+        _normalizeRelativePath(p.relative(file.path, from: dirPath)),
+  };
+  return CacheSweepResult(deleted: deleted, remainingRelativePaths: surviving);
 }
 
 class _FileEntry {

@@ -18,6 +18,13 @@ final logger = Logger('molia.lyrics_poster_service');
 Dio? _sharedDio;
 Dio get _dio => _sharedDio ??= createAppDio();
 
+/// 海报封面在 1440 宽成品里只占 200px 见方：解码到 256px 足够清晰，
+/// 又能避免把 1000+ px 的原图整张解码进内存。
+const int _albumImageTargetWidth = 256;
+
+/// 水印图标与 40px 水印文字同高，解码到 64px 已覆盖 2x 渲染。
+const int _watermarkImageTargetWidth = 64;
+
 /// 方形封面在源图中的居中裁切区域（`BoxFit.cover` 语义，不拉伸）。
 ///
 /// 海报头图是固定正方形；直接把整张源图铺满会把 16:9 封面压扁。这里按
@@ -50,6 +57,22 @@ Rect coverCropSourceRect({
 }
 
 class LyricsPosterService {
+  /// [dio] 仅供测试注入；默认复用进程内共享客户端。
+  ///
+  /// [networkTimeout] 是封面下载的整次请求截止时间：CDN 长时间无响应时
+  /// 不再无限期占住海报生成流程。
+  LyricsPosterService({
+    Dio? dio,
+    Duration networkTimeout = const Duration(seconds: 15),
+  }) : _http = dio ?? _dio,
+       // 参数名保持公开的 networkTimeout，字段名按约定私有，无法用
+       // initializing formal（会变成私有的命名参数）。
+       // ignore: prefer_initializing_formals
+       _networkTimeout = networkTimeout;
+
+  final Dio _http;
+  final Duration _networkTimeout;
+
   Future<Uint8List> generatePosterData({
     required String lyrics,
     List<PosterLyricLine>? posterLyricLines,
@@ -303,171 +326,221 @@ class LyricsPosterService {
     final double finalPosterHeight =
         (calculatedHeight < 400) ? 400 : calculatedHeight;
 
-    final recorder = ui.PictureRecorder();
-    final canvas =
-        Canvas(recorder, Rect.fromLTWH(0, 0, width, finalPosterHeight));
+    // 绘制与编码阶段产生的所有图像句柄都在这里统一释放：封面 / 水印图标
+    // 是解码出来的，picture / 成品位图是录制出来的，任何一步抛错都要回收，
+    // 否则一次失败就会留下一整张封面或海报位图（1440×N）常驻。
+    ui.Picture? picture;
+    ui.Image? renderedImage;
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(
+        recorder,
+        Rect.fromLTWH(0, 0, width, finalPosterHeight),
+      );
 
-    final backgroundPaint = Paint()..color = backgroundColor;
-    canvas.drawRect(
-        Rect.fromLTWH(0, 0, width, finalPosterHeight), backgroundPaint);
+      final backgroundPaint = Paint()..color = backgroundColor;
+      canvas.drawRect(
+        Rect.fromLTWH(0, 0, width, finalPosterHeight),
+        backgroundPaint,
+      );
 
-    double currentY = topMargin;
+      double currentY = topMargin;
 
-    if (loadedAlbumImage != null) {
-      final titleStyle = TextStyle(
+      if (loadedAlbumImage != null) {
+        final titleStyle = TextStyle(
           fontFamily: fontFamily,
           fontFamilyFallback: fontFamilyFallback,
           fontSize: titleFontSize,
           color: titleColor,
-          fontWeight: FontWeight.w400);
-      final titlePainter = TextPainter(
-        text: TextSpan(text: trackTitle, style: titleStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.left,
-      );
-      final artistStyle = TextStyle(
+          fontWeight: FontWeight.w400,
+        );
+        final titlePainter = TextPainter(
+          text: TextSpan(text: trackTitle, style: titleStyle),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+        );
+        final artistStyle = TextStyle(
           fontFamily: fontFamily,
           fontFamilyFallback: fontFamilyFallback,
           fontSize: artistFontSize,
           color: artistColor,
-          fontWeight: FontWeight.w400);
-      final artistPainter = TextPainter(
-        text: TextSpan(text: artistName, style: artistStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.left,
-      );
+          fontWeight: FontWeight.w400,
+        );
+        final artistPainter = TextPainter(
+          text: TextSpan(text: artistName, style: artistStyle),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+        );
 
-      final maxTextWidth = contentWidth - albumArtSize - headerSpacing;
-      titlePainter.layout(maxWidth: maxTextWidth);
-      artistPainter.layout(maxWidth: maxTextWidth);
+        final maxTextWidth = contentWidth - albumArtSize - headerSpacing;
+        titlePainter.layout(maxWidth: maxTextWidth);
+        artistPainter.layout(maxWidth: maxTextWidth);
 
-      final albumX = horizontalMargin;
-      final albumRect =
-          Rect.fromLTWH(albumX, currentY, albumArtSize, albumArtSize);
-      final albumRRect = RRect.fromRectAndRadius(
-          albumRect, const Radius.circular(albumCornerRadius));
+        final albumX = horizontalMargin;
+        final albumRect = Rect.fromLTWH(
+          albumX,
+          currentY,
+          albumArtSize,
+          albumArtSize,
+        );
+        final albumRRect = RRect.fromRectAndRadius(
+          albumRect,
+          const Radius.circular(albumCornerRadius),
+        );
 
-      canvas.save();
-      canvas.clipRRect(albumRRect);
-      canvas.drawImageRect(
-        loadedAlbumImage,
-        coverCropSourceRect(
-          sourceWidth: loadedAlbumImage.width.toDouble(),
-          sourceHeight: loadedAlbumImage.height.toDouble(),
-          targetWidth: albumRect.width,
-          targetHeight: albumRect.height,
-        ),
-        albumRect,
-        Paint()..filterQuality = FilterQuality.medium,
-      );
-      canvas.restore();
+        canvas.save();
+        canvas.clipRRect(albumRRect);
+        canvas.drawImageRect(
+          loadedAlbumImage,
+          coverCropSourceRect(
+            sourceWidth: loadedAlbumImage.width.toDouble(),
+            sourceHeight: loadedAlbumImage.height.toDouble(),
+            targetWidth: albumRect.width,
+            targetHeight: albumRect.height,
+          ),
+          albumRect,
+          Paint()..filterQuality = FilterQuality.medium,
+        );
+        canvas.restore();
 
-      final textStartX = albumX + albumArtSize + headerSpacing;
+        final textStartX = albumX + albumArtSize + headerSpacing;
 
-      final textTotalHeight =
-          titlePainter.height + interTextSpacing + artistPainter.height;
-      final textStartY = currentY + (albumArtSize - textTotalHeight) / 2;
+        final textTotalHeight =
+            titlePainter.height + interTextSpacing + artistPainter.height;
+        final textStartY = currentY + (albumArtSize - textTotalHeight) / 2;
 
-      titlePainter.paint(canvas, Offset(textStartX, textStartY));
+        titlePainter.paint(canvas, Offset(textStartX, textStartY));
 
-      artistPainter.paint(
+        artistPainter.paint(
           canvas,
           Offset(
-              textStartX, textStartY + titlePainter.height + interTextSpacing));
+            textStartX,
+            textStartY + titlePainter.height + interTextSpacing,
+          ),
+        );
 
-      currentY += headerHeight + elementSpacing;
-    } else {
-      final titleStyle = TextStyle(
+        currentY += headerHeight + elementSpacing;
+      } else {
+        final titleStyle = TextStyle(
           fontFamily: fontFamily,
           fontFamilyFallback: fontFamilyFallback,
           fontSize: titleFontSize,
           color: titleColor,
-          fontWeight: FontWeight.w400);
-      final artistStyle = TextStyle(
+          fontWeight: FontWeight.w400,
+        );
+        final artistStyle = TextStyle(
           fontFamily: fontFamily,
           fontFamilyFallback: fontFamilyFallback,
           fontSize: artistFontSize,
           color: artistColor,
-          fontWeight: FontWeight.w400);
+          fontWeight: FontWeight.w400,
+        );
 
-      final titlePainter = TextPainter(
-        text: TextSpan(text: trackTitle, style: titleStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.left,
-      );
-      titlePainter.layout(maxWidth: contentWidth);
+        final titlePainter = TextPainter(
+          text: TextSpan(text: trackTitle, style: titleStyle),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+        );
+        titlePainter.layout(maxWidth: contentWidth);
 
-      final artistPainter = TextPainter(
-        text: TextSpan(text: artistName, style: artistStyle),
-        textDirection: TextDirection.ltr,
-        textAlign: TextAlign.left,
-      );
-      artistPainter.layout(maxWidth: contentWidth);
+        final artistPainter = TextPainter(
+          text: TextSpan(text: artistName, style: artistStyle),
+          textDirection: TextDirection.ltr,
+          textAlign: TextAlign.left,
+        );
+        artistPainter.layout(maxWidth: contentWidth);
 
-      _drawText(
+        _drawText(
           canvas,
           trackTitle,
           Offset(horizontalMargin, currentY + titlePainter.height / 2),
           titleStyle,
           contentWidth,
-          TextAlign.left);
-      currentY += titlePainter.height + interTextSpacing;
+          TextAlign.left,
+        );
+        currentY += titlePainter.height + interTextSpacing;
 
-      _drawText(
+        _drawText(
           canvas,
           artistName,
           Offset(horizontalMargin, currentY + artistPainter.height / 2),
           artistStyle,
           contentWidth,
-          TextAlign.left);
-      currentY += artistPainter.height + elementSpacing;
-    }
+          TextAlign.left,
+        );
+        currentY += artistPainter.height + elementSpacing;
+      }
 
-    for (int i = 0; i < lyricLinePainters.length; i++) {
-      final painter = lyricLinePainters[i];
-      _drawTextPainter(
+      for (int i = 0; i < lyricLinePainters.length; i++) {
+        final painter = lyricLinePainters[i];
+        _drawTextPainter(
           canvas,
           painter,
           Offset(horizontalMargin, currentY + painter.height / 2),
-          TextAlign.left);
-      currentY += painter.height + lyricLineGaps[i];
-    }
-    if (lyricLinePainters.isNotEmpty) {
-      currentY += elementSpacing;
-    }
+          TextAlign.left,
+        );
+        currentY += painter.height + lyricLineGaps[i];
+      }
+      if (lyricLinePainters.isNotEmpty) {
+        currentY += elementSpacing;
+      }
 
-    final watermarkY = currentY + (watermarkHeight / 2);
+      final watermarkY = currentY + (watermarkHeight / 2);
 
-    if (watermarkIcon != null) {
-      final watermarkStartX = horizontalMargin;
+      if (watermarkIcon != null) {
+        final watermarkStartX = horizontalMargin;
 
-      final iconY =
-          watermarkY - (watermarkHeight / 2) + (watermarkHeight - iconSize) / 2;
-      canvas.drawImageRect(
-        watermarkIcon,
-        Rect.fromLTWH(0, 0, watermarkIcon.width.toDouble(),
-            watermarkIcon.height.toDouble()),
-        Rect.fromLTWH(watermarkStartX, iconY, iconSize, iconSize),
-        Paint()
-          ..colorFilter =
-              ColorFilter.mode(watermarkColor, BlendMode.srcIn),
+        final iconY =
+            watermarkY -
+            (watermarkHeight / 2) +
+            (watermarkHeight - iconSize) / 2;
+        canvas.drawImageRect(
+          watermarkIcon,
+          Rect.fromLTWH(
+            0,
+            0,
+            watermarkIcon.width.toDouble(),
+            watermarkIcon.height.toDouble(),
+          ),
+          Rect.fromLTWH(watermarkStartX, iconY, iconSize, iconSize),
+          Paint()
+            ..colorFilter = ColorFilter.mode(watermarkColor, BlendMode.srcIn),
+        );
+
+        final textX = watermarkStartX + iconSize + iconTextSpacing;
+        final textY =
+            watermarkY -
+            (watermarkHeight / 2) +
+            (watermarkHeight - watermarkPainter.height) / 2;
+        watermarkPainter.paint(canvas, Offset(textX, textY));
+      } else {
+        _drawText(
+          canvas,
+          watermarkText,
+          Offset(horizontalMargin, watermarkY),
+          watermarkStyle,
+          contentWidth,
+          TextAlign.left,
+        );
+      }
+
+      final recordedPicture = recorder.endRecording();
+      picture = recordedPicture;
+      final img = await recordedPicture.toImage(
+        width.toInt(),
+        finalPosterHeight.toInt(),
       );
+      renderedImage = img;
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
 
-      final textX = watermarkStartX + iconSize + iconTextSpacing;
-      final textY = watermarkY -
-          (watermarkHeight / 2) +
-          (watermarkHeight - watermarkPainter.height) / 2;
-      watermarkPainter.paint(canvas, Offset(textX, textY));
-    } else {
-      _drawText(canvas, watermarkText, Offset(horizontalMargin, watermarkY),
-          watermarkStyle, contentWidth, TextAlign.left);
+      return byteData!.buffer.asUint8List();
+    } finally {
+      // PNG 字节是 toByteData 的独立拷贝，返回前即可释放位图。
+      renderedImage?.dispose();
+      picture?.dispose();
+      loadedAlbumImage?.dispose();
+      watermarkIcon?.dispose();
     }
-
-    final picture = recorder.endRecording();
-    final img = await picture.toImage(width.toInt(), finalPosterHeight.toInt());
-    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
-
-    return byteData!.buffer.asUint8List();
   }
 
   Future<void> sharePosterFile(String imagePath, String textToShare) async {
@@ -488,19 +561,16 @@ class LyricsPosterService {
     final localFile = _localFileFor(url);
     if (localFile != null) {
       final bytes = await localFile.readAsBytes();
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      return frame.image;
+      return _decodeImage(bytes, _albumImageTargetWidth);
     }
-    final response = await _dio.getUri(
-      Uri.parse(url),
-      options: Options(headers: ArtworkCache.headersFor(url)),
-    );
+    final response = await _http
+        .getUri(
+          Uri.parse(url),
+          options: Options(headers: ArtworkCache.headersFor(url)),
+        )
+        .timeout(_networkTimeout);
     if (response.statusCode == 200) {
-      final bytes = bodyBytes(response);
-      final codec = await ui.instantiateImageCodec(bytes);
-      final frame = await codec.getNextFrame();
-      return frame.image;
+      return _decodeImage(bodyBytes(response), _albumImageTargetWidth);
     } else {
       throw Exception('Failed to load image from $url');
     }
@@ -520,9 +590,22 @@ class LyricsPosterService {
   Future<ui.Image> _loadAssetImage(String assetPath) async {
     final data = await rootBundle.load(assetPath);
     final bytes = data.buffer.asUint8List();
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    return frame.image;
+    return _decodeImage(bytes, _watermarkImageTargetWidth);
+  }
+
+  /// 按目标宽度等比解码；codec 在取到帧后立即释放，返回的 image 由调用方
+  /// 负责 dispose。
+  Future<ui.Image> _decodeImage(Uint8List bytes, int targetWidth) async {
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: targetWidth,
+    );
+    try {
+      final frame = await codec.getNextFrame();
+      return frame.image;
+    } finally {
+      codec.dispose();
+    }
   }
 
   void _drawText(

@@ -46,6 +46,39 @@ class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
   }
 }
 
+/// 单帧图片 provider：图片句柄所有权交给 [ImageInfo]，测试另留 clone 观察
+/// 取色结束后是否还有句柄未释放。
+class _ProbeImageProvider extends ImageProvider<_ProbeImageProvider> {
+  _ProbeImageProvider(this._image);
+
+  final ui.Image _image;
+
+  @override
+  Future<_ProbeImageProvider> obtainKey(ImageConfiguration configuration) {
+    return SynchronousFuture<_ProbeImageProvider>(this);
+  }
+
+  @override
+  ImageStreamCompleter loadImage(
+      _ProbeImageProvider key, ImageDecoderCallback decode) {
+    return OneFrameImageStreamCompleter(
+      SynchronousFuture<ImageInfo>(ImageInfo(image: _image)),
+    );
+  }
+}
+
+/// 生成 [size]×[size] 纯色图像（调用方负责 dispose 返回的句柄）。
+Future<ui.Image> _solidImage(Color color, {int size = 4}) {
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  canvas.drawRect(
+    Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble()),
+    Paint()..color = color,
+  );
+  final picture = recorder.endRecording();
+  return picture.toImage(size, size).whenComplete(picture.dispose);
+}
+
 /// 生成 [size]×[size] 纯色 PNG 字节：驱动「本地缓存字节」启动预解析路径。
 Future<Uint8List> _pngBytes(Color color, {int size = 8}) async {
   final recorder = ui.PictureRecorder();
@@ -146,6 +179,37 @@ void main() {
         reason: '取色不应把原图按 512px 留在共享图片缓存',
       );
       cache.clear();
+    });
+
+    testWidgets('取色完成后释放监听持有的 ImageInfo（图像句柄可回收）', (tester) async {
+      final image = (await tester.runAsync(
+        () => _solidImage(const Color(0xFF00BB00)),
+      ))!;
+      final probe = image.clone();
+      addTearDown(() {
+        if (!probe.debugDisposed) probe.dispose();
+      });
+
+      final provider = _ProbeImageProvider(image);
+      final service = ArtworkPaletteService(
+        providerFor: (url) async => provider,
+      );
+      final palette = await tester.runAsync(
+        () => service.load('https://example.com/lifetime.jpg'),
+      );
+      expect(palette, isNotNull);
+
+      // 清空共享图片缓存并跑一帧：`ImageCache` 通过 post-frame 回调释放
+      // keepAlive 句柄，只有显式调度一帧后图片流才会真正释放当前图像。
+      // 此时只剩测试自己的 probe；若取色监听泄漏 ImageInfo，会多一个句柄。
+      final cache = PaintingBinding.instance.imageCache;
+      await tester.runAsync(() async {
+        cache.clear();
+        cache.clearLiveImages();
+      });
+      tester.binding.scheduleFrame();
+      await tester.pump();
+      expect(probe.debugGetOpenHandleStackTraces(), hasLength(1));
     });
 
     testWidgets('同 URL 并发请求合并为一次提取', (tester) async {
@@ -285,6 +349,26 @@ void main() {
           .runAsync(() => service.loadLocalFile('/home/u/wallpaper.png'));
       expect(identical(second, first), isTrue);
       expect(reads, 1);
+    });
+
+    testWidgets('loadLocalFile：大图按采样尺寸缩略解码后仍取到主色', (tester) async {
+      final bytes = (await tester.runAsync(
+        () => _pngBytes(const Color(0xFF00BB00), size: 512),
+      ))!;
+      final service = ArtworkPaletteService(
+        localFileBytesFor: (path) async => bytes,
+      );
+
+      final palette = await tester.runAsync(
+        () => service.loadLocalFile('/home/u/wallpaper-large.png'),
+      );
+      expect(palette, isNotNull);
+      final argb = palette!.seed.toARGB32();
+      final r = (argb >> 16) & 0xFF;
+      final g = (argb >> 8) & 0xFF;
+      final b = argb & 0xFF;
+      expect(g, greaterThan(r), reason: '绿色壁纸主色应偏绿');
+      expect(g, greaterThan(b));
     });
 
     testWidgets('loadLocalFile：读盘失败 / 空字节 / 解码失败返回 null，不抛错', (tester) async {

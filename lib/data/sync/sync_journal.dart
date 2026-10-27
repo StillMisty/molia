@@ -144,6 +144,10 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
   /// 追加本地变更（**必须在数据写入的同一事务 executor 内调用**）。
   ///
   /// 返回分配到的 seq 列表（与输入同序；空输入不写库）。
+  ///
+  /// 整批走一次 [Batch] 提交：批量导入 / 同步应用动辄上百条，逐条
+  /// `await insert` 会把 SQL round trip 放大成 O(n)，而 seq 在编号后彼此
+  /// 无依赖、同事务落库的语义不变（[Batch] 在事务内复用同一 executor）。
   Future<List<int>> append(
     DatabaseConnectionUser executor,
     Iterable<SyncJournalChange> changes,
@@ -153,29 +157,29 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     final db = _db;
     final head = await _headSeq(executor);
     final at = _clock();
-    final seqs = <int>[];
-    var seq = head;
-    for (final change in list) {
-      seq++;
-      seqs.add(seq);
-      await executor.into(db.syncJournal).insert(
-            SyncJournalCompanion.insert(
-              seq: Value(seq),
-              category: change.category.name,
-              key: change.record.key,
-              versionPhysical: change.record.version.physical,
-              versionCounter: Value(change.record.version.counter),
-              deviceId: Value(change.record.version.deviceId),
-              deleted: Value(change.record.deleted),
-              data: Value(
-                change.record.data == null
-                    ? null
-                    : jsonEncode(change.record.data),
-              ),
-              at: at,
+    final seqs = [for (var i = 0; i < list.length; i++) head + 1 + i];
+    await executor.batch((batch) {
+      for (var i = 0; i < list.length; i++) {
+        final change = list[i];
+        final record = change.record;
+        batch.insert(
+          db.syncJournal,
+          SyncJournalCompanion.insert(
+            seq: Value(seqs[i]),
+            category: change.category.name,
+            key: record.key,
+            versionPhysical: record.version.physical,
+            versionCounter: Value(record.version.counter),
+            deviceId: Value(record.version.deviceId),
+            deleted: Value(record.deleted),
+            data: Value(
+              record.data == null ? null : jsonEncode(record.data),
             ),
-          );
-    }
+            at: at,
+          ),
+        );
+      }
+    });
     return seqs;
   }
 

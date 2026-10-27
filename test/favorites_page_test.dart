@@ -95,6 +95,15 @@ class _StubDownloadService extends DownloadService {
     ];
     notifyListeners();
   }
+
+  /// 模拟纯下载进度 tick：与 [DownloadService] 的进度通知同形，记录列表不变。
+  void notifyProgress() => notifyListeners();
+
+  /// 模拟记录列表变化（下载完成 / 重导入）。
+  void replaceRecords(List<DownloadedTrack> records) {
+    _seed = List.of(records);
+    notifyListeners();
+  }
 }
 
 /// 无封面缓存桩：封面占用在收藏页用例里恒为零（manager 不可用即零）。
@@ -190,12 +199,12 @@ class _FakeCacheStorage implements CacheStorage {
       0;
 
   @override
-  Future<int> sweepArtwork(
+  Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,
   }) async =>
-      0;
+      CacheSweepResult.failed;
 }
 
 /// 本地歌曲记录：`imported` 决定删除语义（就地引用 / 下载副本）。
@@ -1533,6 +1542,35 @@ void main() {
 
     expect(find.text('还没有本地歌曲'), findsOneWidget);
     expect(find.widgetWithText(M3EButton, '导入本地歌曲'), findsOneWidget);
+  });
+
+  testWidgets('本地歌曲：下载进度通知不重建列表，记录变化立即刷新', (tester) async {
+    final service = _StubDownloadService(seed: [
+      _localSong('1', title: '下载的歌'),
+    ]);
+    await pumpFavorites(tester, downloads: service);
+    await selectCollection(tester, '本地歌曲');
+    expect(headlines(tester), ['下载的歌']);
+
+    final before = tester.widget<TrackRow>(find.byType(TrackRow).first);
+    // 进度 tick（约 100ms 一次）不改记录列表：页面不重建，行实例保持不变。
+    for (var i = 0; i < 5; i++) {
+      service.notifyProgress();
+    }
+    await tester.pump();
+    expect(
+      identical(before, tester.widget<TrackRow>(find.byType(TrackRow).first)),
+      isTrue,
+      reason: '纯下载进度不应触发整页重建',
+    );
+
+    // 下载完成 = 记录列表变化：立即刷新（不等下一次进度 tick / 延迟）。
+    service.replaceRecords([
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '刚下载完'),
+    ]);
+    await tester.pumpAndSettle();
+    expect(headlines(tester), ['下载的歌', '刚下载完']);
   });
 
   testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {

@@ -12,6 +12,7 @@ export 'cache_storage.dart'
     show
         CacheDeleteResult,
         CachePartition,
+        CacheSweepResult,
         CacheUsage,
         audioCacheMimeSuffix,
         audioCachePartSuffix,
@@ -271,25 +272,28 @@ class CacheService {
   }
 
   /// 封面策略 sweep（启动时 / 修改策略后 / 定期由 ArtworkCache 触发）。
-  Future<int> enforceArtworkPolicy() async {
+  ///
+  /// 正常扫描会带回存活文件相对路径，供 ArtworkCache 一次对齐索引；
+  /// 目录不可用或执行失败返回 [CacheSweepResult.failed]。
+  Future<CacheSweepResult> enforceArtworkPolicy() async {
     try {
       final dir = await _safeDir(_storage.artworkCacheDir);
-      if (dir == null) return 0;
+      if (dir == null) return CacheSweepResult.failed;
       final maxObjects = await artworkMaxObjects();
       final staleDays = await artworkStaleDays();
-      final deleted = await _storage.sweepArtwork(
+      final result = await _storage.sweepArtwork(
         dir,
         maxObjects: maxObjects,
         staleDays: staleDays,
       );
-      if (deleted > 0) {
-        _logger.info('封面缓存 sweep 清理 $deleted 个文件');
+      if (result.deleted > 0) {
+        _logger.info('封面缓存 sweep 清理 ${result.deleted} 个文件');
         notifyCacheChanged();
       }
-      return deleted;
+      return result;
     } catch (e) {
       _logger.warning('封面缓存 sweep 失败: $e');
-      return 0;
+      return CacheSweepResult.failed;
     }
   }
 

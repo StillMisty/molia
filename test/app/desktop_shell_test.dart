@@ -723,6 +723,33 @@ void main() {
     expect(backdropBlurOpacity(tester), 0, reason: '遮罩收起后背景模糊淡出');
   });
 
+  testWidgets('搜索遮罩：结果预览最多 8 行，超出仍显示「查看全部结果」', (tester) async {
+    final source = FakeMusicSource('kw');
+    source.onSearch = (query) => Future.value(
+          SearchResult(
+            items: [for (var i = 0; i < 12; i++) searchTrack('$i')],
+            total: 12,
+          ),
+        );
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      searchSource: source,
+      configureSearch: (search) => search.submitSearch('hello'),
+    );
+
+    await openSearchOverlay(tester);
+    expect(
+      find.byType(TrackRow),
+      findsNWidgets(8),
+      reason: '面板只就地预览前 8 行，避免长列表把出口挤出视野',
+    );
+    expect(find.text(l10n.viewAllResults), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  });
+
   // 旧实现（M3E docked 搜索视图）的容器变换终点矩形完全由锚点推导，锚点就在
   // 静止位置时位移为 0：遮罩是「闪现」的。这里钉住开合真的走了过渡。
   testWidgets('Ctrl+F：遮罩开合走淡入 + 缩放过渡（不是瞬间出现）', (tester) async {

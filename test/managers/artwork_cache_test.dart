@@ -17,11 +17,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// 纯内存 + 永远失败的 CacheManager：测试不触网、不落平台目录。
 class _OfflineCacheManager extends CacheManager {
-  _OfflineCacheManager()
+  _OfflineCacheManager({FileSystem? fileSystem})
       : super(Config(
           'artwork_cache_test_offline',
           repo: NonStoringObjectProvider(),
-          fileSystem: MemoryCacheSystem(),
+          fileSystem: fileSystem ?? MemoryCacheSystem(),
           fileService: HttpFileService(),
         ));
 
@@ -64,6 +64,10 @@ class _RecordingCacheManager extends CacheManager {
 /// 纯内存 repo：putFile / getFileFromCache 全链路可用，不触碰 sqflite。
 class _MemoryRepo implements CacheInfoRepository {
   final Map<String, CacheObject> _store = {};
+
+  /// `getAllObjects` 调用次数：`_pruneMissingEntries` 的唯一入口，用来断言
+  /// 「这次 sweep 到底有没有扫描索引」。
+  int getAllCalls = 0;
 
   @override
   Future<bool> open() async => true;
@@ -116,7 +120,10 @@ class _MemoryRepo implements CacheInfoRepository {
   }
 
   @override
-  Future<List<CacheObject>> getAllObjects() async => _store.values.toList();
+  Future<List<CacheObject>> getAllObjects() async {
+    getAllCalls++;
+    return _store.values.toList();
+  }
 
   @override
   Future<List<CacheObject>> getObjectsOverCapacity(int capacity) async =>
@@ -129,6 +136,26 @@ class _MemoryRepo implements CacheInfoRepository {
   Future<void> deleteDataFile() async {}
 }
 
+/// 按路径统计 `createFile` 调用的 FileSystem 包装：`createFile` 是逐条
+/// `exists()` 的必经入口，用来验证存活集合内的条目零探测、集合外候选才复核。
+class _CountingFileSystem implements FileSystem {
+  _CountingFileSystem(this._inner);
+
+  final FileSystem _inner;
+
+  /// 相对路径 → 调用次数。
+  final Map<String, int> createFileCounts = {};
+
+  int get createFileCalls =>
+      createFileCounts.values.fold(0, (sum, count) => sum + count);
+
+  @override
+  Future<pkg_file.File> createFile(String name) {
+    createFileCounts.update(name, (count) => count + 1, ifAbsent: () => 1);
+    return _inner.createFile(name);
+  }
+}
+
 Future<void> _waitUntil(
   Future<bool> Function() predicate, {
   Duration timeout = const Duration(seconds: 2),
@@ -139,6 +166,36 @@ Future<void> _waitUntil(
     await Future<void>.delayed(const Duration(milliseconds: 25));
   }
   fail('等待条件超时');
+}
+
+/// 记录封面 sweep 调用次数的真实存储（临时目录 + 真实删文件）。
+class _SweepCountingStorage extends IoCacheStorage {
+  _SweepCountingStorage({
+    required String audioDir,
+    required String artworkDir,
+  }) : super(
+          audioDirOverride: audioDir,
+          artworkDirOverride: artworkDir,
+        );
+
+  int sweepCalls = 0;
+  int deletedFiles = 0;
+
+  @override
+  Future<CacheSweepResult> sweepArtwork(
+    String dirPath, {
+    required int maxObjects,
+    required int staleDays,
+  }) async {
+    final result = await super.sweepArtwork(
+      dirPath,
+      maxObjects: maxObjects,
+      staleDays: staleDays,
+    );
+    sweepCalls++;
+    deletedFiles += result.deleted;
+    return result;
+  }
 }
 
 void main() {
@@ -300,6 +357,174 @@ void main() {
 
       final remaining = await repo.getAllObjects();
       expect(remaining.map((o) => o.relativePath), ['present.jpg']);
+    });
+
+    test('clean sweep 修复外部删除，只复核快照外候选', () async {
+      final tempRoot = await Directory.systemTemp.createTemp('artwork_prune_');
+      addTearDown(() async {
+        if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
+      });
+      final artworkDir = '${tempRoot.path}/artwork';
+      final storage = _SweepCountingStorage(
+        audioDir: '${tempRoot.path}/audio',
+        artworkDir: artworkDir,
+      );
+      // 真实缓存目录只剩 present.jpg：missing.jpg 已被系统 / 其它进程直接删除，
+      // 本次 sweep 自己一个文件都没删。
+      final present = File('$artworkDir/present.jpg');
+      await present.parent.create(recursive: true);
+      await present.writeAsBytes([1, 2, 3]);
+
+      final service = CacheService(prefs: prefs, storage: storage);
+      final repo = _MemoryRepo();
+      Future<void> seed(int id, String relativePath) => repo.insert(CacheObject(
+            'https://p1.music.126.net/$relativePath',
+            relativePath: relativePath,
+            validTill: DateTime.now().add(const Duration(days: 1)),
+            id: id,
+          ));
+      await seed(1, 'present.jpg');
+      await seed(2, 'missing.jpg');
+
+      final memoryFileSystem = MemoryCacheSystem();
+      // 模拟扫描快照之后 manager 才下载并插入的索引：文件真实存在，但不在
+      // surviving 集合里（清单一扫完就插入索引的竞态）。
+      final fresh = await memoryFileSystem.createFile('fresh.jpg');
+      await fresh.writeAsBytes([4, 5, 6]);
+      final fileSystem = _CountingFileSystem(memoryFileSystem);
+      final manager = _OfflineCacheManager(fileSystem: fileSystem);
+      await seed(3, 'fresh.jpg');
+      final cache = ArtworkCache(
+        cacheService: service,
+        managerOverride: manager,
+        repoOverride: repo,
+      );
+
+      // 策略变更走非强制 sweep，与启动 / 5 分钟节流是同一条 _sweepNow 路径。
+      await service.setArtworkStaleDays(30);
+      await _waitUntil(() async =>
+          repo.getAllCalls == 1 &&
+          await repo.get('https://p1.music.126.net/missing.jpg') == null);
+      // 等 _sweepNow 的 finally 复位 _sweeping 再走显式入口。
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(storage.deletedFiles, 0, reason: '本次 sweep 没删任何文件');
+      expect(repo.getAllCalls, 1, reason: 'clean sweep 也要对齐索引');
+      // 只复核不在快照里的条目：外部删除的 missing + 竞态新增的 fresh。
+      expect(fileSystem.createFileCounts['missing.jpg'], 1);
+      expect(fileSystem.createFileCounts['fresh.jpg'], 1);
+      // 快照内的 present 不做任何文件探测。
+      expect(fileSystem.createFileCounts['present.jpg'], isNull);
+      expect(await repo.get('https://p1.music.126.net/present.jpg'), isNotNull);
+      expect(
+        await repo.get('https://p1.music.126.net/fresh.jpg'),
+        isNotNull,
+        reason: '扫描后新写入的索引不能被误删',
+      );
+
+      // 显式入口同样只复核快照外候选。
+      await seed(4, 'missing2.jpg');
+      await cache.enforcePolicyNow();
+      expect(storage.sweepCalls, 2);
+      expect(repo.getAllCalls, 2);
+      expect(fileSystem.createFileCounts['present.jpg'], isNull);
+      expect(fileSystem.createFileCounts['fresh.jpg'], 2);
+      expect(fileSystem.createFileCounts['missing2.jpg'], 1);
+      expect(
+        await repo.get('https://p1.music.126.net/missing2.jpg'),
+        isNull,
+      );
+
+      // 分区被 UI 清理（CacheStorage 直删文件，不经过 manager）没有扫描结果，
+      // 退回逐条探测，仍要清掉索引。
+      await service.clear(CachePartition.artwork);
+      await _waitUntil(() async =>
+          repo.getAllCalls == 3 &&
+          await repo.get('https://p1.music.126.net/present.jpg') == null);
+      expect(fileSystem.createFileCounts['present.jpg'], 1);
+      expect(fileSystem.createFileCounts['fresh.jpg'], 3);
+    });
+
+    test('相对路径分隔符归一化：索引的 \\ 与扫描的 / 视为同一文件', () async {
+      final tempRoot = await Directory.systemTemp.createTemp('artwork_sep_');
+      addTearDown(() async {
+        if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
+      });
+      final artworkDir = '${tempRoot.path}/artwork';
+      final storage = _SweepCountingStorage(
+        audioDir: '${tempRoot.path}/audio',
+        artworkDir: artworkDir,
+      );
+      // 真实目录用平台分隔符；索引里模拟 Windows 风格的 `\`。
+      final present = File('$artworkDir/nested/present.jpg');
+      await present.parent.create(recursive: true);
+      await present.writeAsBytes([1, 2, 3]);
+
+      final service = CacheService(prefs: prefs, storage: storage);
+      final repo = _MemoryRepo();
+      await repo.insert(CacheObject(
+        'https://p1.music.126.net/nested/present.jpg',
+        relativePath: 'nested\\present.jpg',
+        validTill: DateTime.now().add(const Duration(days: 1)),
+        id: 1,
+      ));
+      final fileSystem = _CountingFileSystem(MemoryCacheSystem());
+      final cache = ArtworkCache(
+        cacheService: service,
+        managerOverride: _OfflineCacheManager(fileSystem: fileSystem),
+        repoOverride: repo,
+      );
+
+      await cache.enforcePolicyNow();
+      expect(
+        await repo.get('https://p1.music.126.net/nested/present.jpg'),
+        isNotNull,
+        reason: '归一化后应命中存活集合，不能被当成缺失',
+      );
+      expect(
+        fileSystem.createFileCalls,
+        0,
+        reason: '命中存活集合的条目不该再做文件探测',
+      );
+    });
+
+    test('扫描不完整且非强制 sweep 不误删索引；显式入口逐条兜底', () async {
+      final tempRoot =
+          await Directory.systemTemp.createTemp('artwork_prune_failed_');
+      addTearDown(() async {
+        if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
+      });
+      // 封面目录从不创建：sweep 没扫到 ≠ 缓存全空。
+      final storage = _SweepCountingStorage(
+        audioDir: '${tempRoot.path}/audio',
+        artworkDir: '${tempRoot.path}/missing_artwork',
+      );
+      final service = CacheService(prefs: prefs, storage: storage);
+      final repo = _MemoryRepo();
+      final present = await manager.config.fileSystem.createFile('present.jpg');
+      await present.writeAsBytes([1, 2, 3]);
+      await repo.insert(CacheObject(
+        'https://p1.music.126.net/present.jpg',
+        relativePath: 'present.jpg',
+        validTill: DateTime.now().add(const Duration(days: 1)),
+        id: 1,
+      ));
+      final cache = ArtworkCache(
+        cacheService: service,
+        managerOverride: manager,
+        repoOverride: repo,
+      );
+
+      await service.setArtworkStaleDays(30);
+      await _waitUntil(() async => storage.sweepCalls == 1);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(storage.deletedFiles, 0);
+      expect(repo.getAllCalls, 0, reason: '没扫到目录不能当成缓存全空');
+
+      // 显式入口：扫描失败时退回逐条 exists()，文件还在就不删索引。
+      await cache.enforcePolicyNow();
+      expect(storage.sweepCalls, 2);
+      expect(repo.getAllCalls, 1);
+      expect(await repo.get('https://p1.music.126.net/present.jpg'), isNotNull);
     });
   });
 

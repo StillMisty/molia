@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/sync_journal.dart';
@@ -53,6 +54,28 @@ void main() {
     final tombstone = (await journal.window(since: 3)).single;
     expect(tombstone.record.deleted, isTrue);
     expect(tombstone.record.version.physical, 4);
+  });
+
+  test('批量追加一次提交：round trip 不随条数增长，seq 与输入同序', () async {
+    // 先建窗口状态行，避免把「首次建行」的 INSERT 计入追加。
+    await journal.stats();
+
+    final counter = _CountingInterceptor();
+    final changes = [for (var i = 0; i < 100; i++) change('k$i', i + 1)];
+
+    late List<int> seqs;
+    await db.runWithInterceptor(
+      () async {
+        seqs = await journal.append(db, changes);
+      },
+      interceptor: counter,
+    );
+
+    expect(counter.batches, 1, reason: '整批走一次 batch 提交');
+    expect(counter.inserts, 0, reason: '不退回逐条 INSERT');
+    expect(seqs, [for (var i = 0; i < 100; i++) i + 1]);
+    expect([for (final entry in await journal.window()) entry.seq], seqs);
+    expect(await journal.headSeq(), 100);
   });
 
   test('reset：清空日志与窗口状态，不碰用户数据表', () async {
@@ -191,4 +214,30 @@ void main() {
     await journal.markSnapshotBuilt(1);
     expect(await journal.snapshotSeq(), 2);
   });
+}
+
+/// 统计 SQL round trip：批量提交走 [QueryInterceptor.runBatched]（一次），
+/// 逐条 INSERT 走 [QueryInterceptor.runInsert]。
+class _CountingInterceptor extends QueryInterceptor {
+  int batches = 0;
+  int inserts = 0;
+
+  @override
+  Future<void> runBatched(
+    QueryExecutor executor,
+    BatchedStatements statements,
+  ) {
+    batches++;
+    return super.runBatched(executor, statements);
+  }
+
+  @override
+  Future<int> runInsert(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    inserts++;
+    return super.runInsert(executor, statement, args);
+  }
 }

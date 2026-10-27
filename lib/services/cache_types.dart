@@ -81,6 +81,34 @@ class CacheDeleteResult {
   String toString() => 'CacheDeleteResult($deleted, skipped: $skipped)';
 }
 
+/// 封面策略 sweep 的结果：删除数 + 扫描后存活文件集合。
+///
+/// [remainingRelativePaths] 让调用方（`ArtworkCache`）一次目录扫描就能对齐
+/// 索引，不必再对每条索引逐文件 `exists()`；为 null 表示本次没有完整扫描
+/// （目录不可用 / 扫描失败），调用方不能据此判断索引条目缺失。
+class CacheSweepResult {
+  const CacheSweepResult({
+    this.deleted = 0,
+    this.remainingRelativePaths,
+  });
+
+  /// 实际删除的文件数。
+  final int deleted;
+
+  /// 扫描后仍存在的文件，相对缓存目录的路径。
+  ///
+  /// null = 本次 sweep 未完整扫描（目录不存在 / 根目录不可读 / 异常），
+  /// 此时索引条目是否缺失未知，不能拿空集合当作「全部缺失」。
+  final Set<String>? remainingRelativePaths;
+
+  /// 未完成扫描（或执行失败）的 sweep：调用方只能走逐条探测的兜底。
+  static const CacheSweepResult failed = CacheSweepResult();
+
+  @override
+  String toString() => 'CacheSweepResult(deleted: $deleted, '
+      'remaining: ${remainingRelativePaths?.length})';
+}
+
 /// 分区存储抽象：策略/统计逻辑（[CacheService]）与平台文件操作解耦。
 ///
 /// IO 实现走 `path_provider` + `dart:io`（`cache_storage_io.dart`）；
@@ -141,8 +169,11 @@ abstract class CacheStorage {
   });
 
   /// 封面策略 sweep：先删 mtime 超过 [staleDays] 的文件，再按 mtime LRU
-  /// 删到 [maxObjects] 以内。0 表示对应维度不限制。返回删除的文件数。
-  Future<int> sweepArtwork(
+  /// 删到 [maxObjects] 以内。0 表示对应维度不限制。
+  ///
+  /// 正常扫描时返回删除数与存活文件相对路径（供索引对齐）；目录不存在 /
+  /// 根目录不可读时 `remainingRelativePaths` 为 null（见 [CacheSweepResult]）。
+  Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,

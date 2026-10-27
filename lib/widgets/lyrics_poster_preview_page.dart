@@ -100,6 +100,10 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   /// 底部设置行里值控件的统一宽度：右值成一列，行与行之间不参差。
   static const double _settingValueWidth = 190;
 
+  /// 预览解码宽度上限：海报成品是 1440 宽，预览区通常不超过 3x 手机宽度；
+  /// 限制到 1080 可覆盖高清屏，又不把整张 PNG（1440×N）解码进 ImageCache。
+  static const int _previewCacheWidth = 1080;
+
   @override
   void initState() {
     super.initState();
@@ -261,12 +265,28 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       }
 
       if (mounted) {
+        final previousBytes = _posterBytes;
         setState(() {
           _posterBytes = bytes;
           _tempFilePath = file.path;
           _isLoading = false;
           _isRegenerating = false;
         });
+        if (previousBytes != null && !identical(previousBytes, bytes)) {
+          // 旧预览在本帧仍可能被绘制（新 Image 还没 build），此时按
+          // includeLive 驱逐有释放正在使用图像的风险。等新帧完成、旧
+          // Image 离场后再把旧 provider 从 ImageCache 丢掉；只命中旧
+          // 字节，不影响新图，旧图已不在缓存时 evict 静默返回 false。
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            PaintingBinding.instance.imageCache.evict(
+              ResizeImage.resizeIfNeeded(
+                _previewCacheWidth,
+                null,
+                MemoryImage(previousBytes),
+              ),
+            );
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -724,6 +744,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
             borderRadius: BorderRadius.circular(12),
             child: Image.memory(
               bytes,
+              cacheWidth: _previewCacheWidth,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stackTrace) => Column(
                 children: [

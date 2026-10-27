@@ -100,6 +100,48 @@ void main() {
     expect(stable[SyncCategory.session]!.single.version.physical, 9000);
   });
 
+  test('同队列仅切歌：导出读到游标键合并后的下标与内容时间', () async {
+    final tracks = [
+      Track(
+        id: const TrackId('fake', 'a'),
+        title: 'Title a',
+        artists: const [Artist(name: 'Artist a')],
+        origin: TrackOrigin.lx,
+        payload: const {'id': 'a'},
+      ),
+      Track(
+        id: const TrackId('fake', 'b'),
+        title: 'Title b',
+        artists: const [Artist(name: 'Artist b')],
+        origin: TrackOrigin.lx,
+        payload: const {'id': 'b'},
+      ),
+    ];
+    await store.save(PlaybackSession(
+      tracks: tracks,
+      index: 0,
+      position: const Duration(seconds: 1),
+    ));
+    await adapter.collect();
+    final full = prefs.getString('playback_session_v1');
+
+    now = 9000;
+    await store.save(PlaybackSession(
+      tracks: tracks,
+      index: 1,
+      position: const Duration(seconds: 2),
+    ));
+    // 整份 JSON 没有重写（同一队列列表）：savedAt / 下标来自游标键，仍要上行。
+    expect(prefs.getString('playback_session_v1'), full);
+
+    final collected = await adapter.collect();
+    final data = collected[SyncCategory.session]!.single.data!;
+    expect(data['index'], 1);
+    expect(data['savedAt'], 9000);
+    expect(data['positionMs'], 2000);
+    expect(data['tracks'], hasLength(2));
+  });
+
   test('应用远端会话：写入存储、更新登记、触发回调；重复应用幂等', () async {
     await adapter.collect();
     final remote = SyncRecord(

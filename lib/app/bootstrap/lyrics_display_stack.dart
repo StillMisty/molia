@@ -186,7 +186,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   covers.addChangeListener(syncArtworkPalette);
   syncArtworkPalette();
 
-  // 启动预解析（runApp 前，决定首帧配色）：先按平台亮度定亮度，再依次解析
+  // 启动预解析（runApp 前，决定首帧配色）：先按平台亮度定亮度，再并行解析
   // 系统壁纸图与恢复会话的当前封面——进入应用即最终配色，不再先出基础配色
   // 再渐变；未命中不等待网络，回退上面的稳态链路（settleDelay 后取色再过渡）。
   // 主题偏好 / 播放偏好（恢复会话解析）/ 导航偏好（启动首页）互不依赖：
@@ -195,41 +195,50 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   await (
     themeProvider.preferencesReady,
     playback.preferencesReady,
-    navProvider.preferencesReady
+    navProvider.preferencesReady,
   ).wait;
   markStartupStep('sub.theme/nav/playback.prefs', prefsWatch);
   themeProvider.applyPlatformBrightness(
     WidgetsBinding.instance.platformDispatcher.platformBrightness,
   );
+  // 两条启动取色链路（系统壁纸 / 恢复会话封面）互不依赖：壁纸 future 先起跑，
+  // 再 await 封面，两次解码重叠——只阻塞首帧真正需要的那一条，去掉串行叠加。
   // 桌面系统壁纸（B-lite）：只探测桌面平台（移动端壁纸档 = 莫奈，探测无意义、
   // warning 是噪音）；且无论当前是否壁纸档都解析一次——启动时是自定义档的
   // 用户之后切回壁纸 / 同步推来 wallpaper 时 seed 已在位，不必重启，
   // 冷启动与会话内切档行为一致。
-  // - 壁纸档：await 解析后注入，首帧即壁纸色（不回归）；
+  // - 壁纸档且封面未命中：await 解析后注入，首帧即壁纸色（不回归）；
+  // - 壁纸档但封面命中：封面已是首帧色（[_schemeForBrightness] 封面优先），
+  //   壁纸 future 继续后台跑，落地只备用 seed，不必阻塞首帧；
   // - 自定义档：unawaited 后台解析，不增加启动延迟（服务内部吞异常，不抛）；
   //   若晚于封面预解析完成才落地，[_schemeForBrightness] 封面优先，不会被盖回。
   // 拿不到壁纸（非 GNOME / 文件缺失 / 解码失败）保持 null，由 DynamicColorBuilder
   // 的强调色兜底。
-  if (isDesktopPlatform()) {
-    final wallpaperSource = SystemWallpaperSource();
-    final wallpaperSeeds =
-        _resolveWallpaperSeeds(wallpaperSource, artworkPaletteService);
-    if (themeProvider.baseColorSource == ColorBaseSource.wallpaper) {
-      final seeds = await wallpaperSeeds;
-      themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
-    } else {
-      unawaited(wallpaperSeeds.then(
-        (seeds) => themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2),
-      ));
-    }
-  }
+  final wallpaperSeeds = isDesktopPlatform()
+      ? _resolveWallpaperSeeds(SystemWallpaperSource(), artworkPaletteService)
+      : null;
+  ArtworkPalette? startupPalette;
   if (themeProvider.followArtworkEnabled) {
-    final startupPalette = await artworkPaletteService.loadCachedTrack(
+    startupPalette = await artworkPaletteService.loadCachedTrack(
       playback.snapshot.current,
       covers: covers,
     );
     if (startupPalette != null) {
       themeProvider.applyArtworkSeed(startupPalette.seed);
+    }
+  }
+  if (wallpaperSeeds != null) {
+    if (themeProvider.baseColorSource == ColorBaseSource.wallpaper &&
+        startupPalette == null) {
+      final seeds = await wallpaperSeeds;
+      themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
+    } else {
+      unawaited(
+        wallpaperSeeds.then(
+          (seeds) =>
+              themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2),
+        ),
+      );
     }
   }
 

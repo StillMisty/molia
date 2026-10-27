@@ -140,13 +140,20 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 本地数据唯一读取口（可能未注册）：批量判定历史曲目的音频两档状态。
   TrackLocalDataService? _localDataService;
 
-  /// 下载服务（可能未注册）：只在能力位 / 初始化状态变化或正在浏览本地
-  /// 歌曲时重建，下载进度 tick 不拖整页。
+  /// 下载服务（可能未注册）：只在能力位 / 初始化状态变化或下载记录签名
+  /// 变化时重建，下载进度 tick（100ms 一次）不拖整页。
   DownloadService? _downloadService;
   bool _downloadsSupported = false;
   bool _downloadsInitialized = true;
 
-  /// 当前是否正在浏览本地歌曲合集（决定下载进度要不要触发重建）。
+  /// 上次观察到的下载记录签名（见 [_downloadsSignatureOf]）。
+  ///
+  /// 下载进度只改服务内存里的 `active` 进度，不改变记录列表：签名相同就不
+  /// 重建。下载完成 / 删除 / 重导入都会改变记录字段，签名立刻变化。
+  String? _downloadsSignature;
+
+  /// 当前是否正在浏览本地歌曲合集：只有这个合集的可见行依赖下载记录，
+  /// 其余合集跳过记录签名比对（见 [_onDownloadsChanged]）。
   bool _browsingLocalSongs = false;
 
   /// 播放历史列表滚动控制器（常显滚动条，支持手拖定位）。
@@ -195,6 +202,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       _downloadService = downloads;
       _downloadsSupported = downloads?.supported ?? false;
       _downloadsInitialized = downloads?.initialized ?? true;
+      _downloadsSignature = _downloadsSignatureOf(downloads);
       downloads?.addListener(_onDownloadsChanged);
     }
     // 重新可见 = 重新进入本页：刷新历史顺序（provider 通知自带重建）。
@@ -239,8 +247,13 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (mounted) setState(() {});
   }
 
-  /// 下载服务变化：能力位 / 初始化状态变化一定重建；其余（下载进度 tick）
-  /// 只在正在浏览本地歌曲时重建，避免拖整页进重建。
+  /// 下载服务变化：能力位 / 初始化状态变化一定重建；其余只在下载记录签名
+  /// 变化时重建。
+  ///
+  /// [DownloadService] 在下载进度（约 100ms 一次）与记录列表变化时共用
+  /// [ChangeNotifier]，进度 tick 不改记录：不比对签名的话，浏览本地歌曲时
+  /// 整页会跟着 10Hz 重建。记录与当前合集的可见行无关时（不在本地歌曲）
+  /// 跳过签名计算，省掉每次 tick 的整份记录序列化。
   void _onDownloadsChanged() {
     if (!mounted) return;
     final downloads = _downloadService;
@@ -250,7 +263,55 @@ class _FavoritesPageState extends State<FavoritesPage> {
         initialized != _downloadsInitialized;
     _downloadsSupported = supported;
     _downloadsInitialized = initialized;
-    if (capabilityChanged || _browsingLocalSongs) setState(() {});
+    if (!_browsingLocalSongs) {
+      if (capabilityChanged) setState(() {});
+      return;
+    }
+    final signature = _downloadsSignatureOf(downloads);
+    final recordsChanged = signature != _downloadsSignature;
+    _downloadsSignature = signature;
+    if (capabilityChanged || recordsChanged) setState(() {});
+  }
+
+  /// 下载记录签名：本地歌曲行会读到的字段（身份 / 元数据 / 文件路径）。
+  ///
+  /// 记录列表已按下载时间排序，顺序变化一定伴随 `downloadedAt` 变化；`raw`
+  /// 不签名（UI 禁止读 payload）。签名只用于「是否重建」判定，不参与展示。
+  String _downloadsSignatureOf(DownloadService? service) {
+    final records = service?.downloads ?? const <DownloadedTrack>[];
+    final buffer = StringBuffer();
+    for (final record in records) {
+      buffer
+        ..write(record.key)
+        ..write('\u0001')
+        ..write(record.title)
+        ..write('\u0001')
+        ..write(record.artist)
+        ..write('\u0001')
+        ..write(record.album)
+        ..write('\u0001')
+        ..write(record.durationMs ?? '')
+        ..write('\u0001')
+        ..write(record.coverUrl ?? '')
+        ..write('\u0001')
+        ..write(record.quality)
+        ..write('\u0001')
+        ..write(record.sizeBytes)
+        ..write('\u0001')
+        ..write(record.filePath ?? '')
+        ..write('\u0001')
+        ..write(record.lyricPath ?? '')
+        ..write('\u0001')
+        ..write(record.coverPath ?? '')
+        ..write('\u0001')
+        ..write(record.publicUri ?? '')
+        ..write('\u0001')
+        ..write(record.imported)
+        ..write('\u0001')
+        ..write(record.downloadedAt)
+        ..write('\u0002');
+    }
+    return buffer.toString();
   }
 
   /// 缓存变化（清缓存 / LRU 淘汰）：重建以按新签名重算缓存行。
@@ -830,7 +891,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
     final view = sessionView.view;
     final reorderActive = sessionView.reorderActive;
-    // 下载进度只在该合集可见时需要重建（见 _onDownloadsChanged）。
+    // 只有本地歌曲合集消费下载记录：其余合集的通知不比对记录签名
+    //（见 _onDownloadsChanged）。进入该合集时把签名对齐到这一帧的记录，
+    // 离开期间的变化不会在回来后触发一次多余的签名重建。
+    if (view.isLocalSongs && !_browsingLocalSongs) {
+      _downloadsSignature = _downloadsSignatureOf(_downloadService);
+    }
     _browsingLocalSongs = view.isLocalSongs;
 
     // 合集切换只有标题行弹层一个入口：条目不额外解析一份，弹层打开时按

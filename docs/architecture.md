@@ -112,11 +112,14 @@
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
   分叉，只按 `PlaybackCommandOutcome` 的变化域决定通知类别）；恢复态快照与进度
-  覆盖值在这里构造；落盘
-  口径（整份 / 轻量进度键前台 1s / 后台 15s 节流 / 满 1min 整份刷新 / `clear` /
-  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。改变会话的命令
-  （暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前等 `pendingWrite`（已提交
-  语义），live seek 强制整份落盘；系统媒体 handler 与 UI 共用
+  覆盖值在这里构造；会话存储拆成完整队列键 / 游标键（index、position、
+  savedAt）/ 轻量进度键：队列未变时切歌 / 暂停 / seek 只写游标键 + 进度键，
+  队列 / 模式 / 上下文变化才重写完整 JSON；落盘口径（前台 1s / 后台 15s
+  节流 / 满 1min 提交一次（队列未变只写游标 / 进度键）/ `clear` /
+  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。
+  改变会话的命令（暂停 / seek / 切歌 / 模式 /
+  停止 / 换源）返回前等 `pendingWrite`（已提交语义），live seek 也强制提交
+  （队列未变只写游标 / 进度键）；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
   落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
   换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`），不直写
@@ -172,8 +175,9 @@
     1s Timer 读 `_player.position`（值变才通知）；后台暂停 → 不采样。切换档位
     先取消旧订阅 / Timer，避免双采样。
   - 会话落盘（`PlaybackSessionCoordinator`）：前台 1s / 后台 15s 节流；进入
-    后台先强制整份落盘一次；暂停 / 切歌 / 系统控制仍立即落盘。满 1min 整份
-    刷新语义不变。
+    后台先强制提交一次，store 按队列是否变化决定整份重写还是只写游标。
+    暂停 / 切歌 / 系统控制仍立即提交。满 1min 提交一次（队列未变只写
+    游标 / 进度键）。
   - 系统媒体会话（`LocalAudioHandler`）：仅 Android 取消「位置差 > 1s 就补发
     state」的周期更新（平台按 `lastPositionMs + elapsed × speed` 插值），改由
     `LocalPlaybackService.seekRevision` 识别显式 seek / 内部回跳；歌词覆盖与

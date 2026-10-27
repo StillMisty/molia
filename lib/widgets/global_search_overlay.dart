@@ -19,8 +19,8 @@
 /// - 包内没有暴露动画 / 聚焦钩子，这两点只能靠自建 route 解决：开合走
 ///   「scrim 淡入 + 内容淡入 + 轻微缩放」，输入框在首帧就 autofocus。
 ///
-/// 结果列表在面板内限高滚动，更长的列表交给资料库目的地（「查看全部结果」
-/// 回调由壳层给）。
+/// 结果列表面板内限高滚动、最多就地预览 [_maxPreviewRows] 行，更长的列表
+/// 交给资料库目的地（「查看全部结果」回调由壳层给）。
 ///
 /// 与 M3E 搜索视图的取舍细节见 `docs/pitfalls.md` 已知坑 57。
 library;
@@ -56,6 +56,10 @@ const double _barPanelGap = 2;
 
 /// 面板与窗口底缘的最小留白：结果再多也不贴底。
 const double _panelBottomMargin = 24;
+
+/// 结果面板最多就地预览的行数：更长的列表交给「查看全部结果」后的资料库
+/// 目的地（面板不是全量结果页，堆太多行只会把底部的出口挤出视野）。
+const int _maxPreviewRows = 8;
 
 /// 开合时长：scrim（路由 barrier）与内容同一拍，取 M3E effects `short4`。
 ///
@@ -471,6 +475,9 @@ class _GlobalSearchResults extends StatelessWidget {
     final artists =
         isArtistKind ? search.artistResults : const <ArtistSummary>[];
     final itemCount = isArtistKind ? artists.length : results.length;
+    // 就地预览只取前 [_maxPreviewRows] 行：空态 / 失败 / 页脚仍按真实结果数
+    // 判定（有结果才给「查看全部结果」），只有行渲染被截断。
+    final previewCount = math.min(itemCount, _maxPreviewRows);
     final failure = search.failure;
 
     return _buildPanel(
@@ -502,12 +509,12 @@ class _GlobalSearchResults extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    for (var index = 0; index < itemCount; index++)
+                    for (var index = 0; index < previewCount; index++)
                       isArtistKind
                           ? _buildArtistRow(
-                              context, l10n, artists[index], index, itemCount)
+                              context, l10n, artists[index], index, previewCount)
                           : _buildTrackRow(
-                              context, results[index], index, itemCount),
+                              context, results[index], index, previewCount),
                   ],
                 ),
               )

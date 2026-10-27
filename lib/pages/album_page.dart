@@ -214,6 +214,9 @@ class _AlbumPageState extends State<AlbumPage> {
             ? AppNetworkImage(
                 url: cover,
                 fit: BoxFit.cover,
+                // 头部只有 96dp：按容器解码封面，避免按原图尺寸解码。
+                memCacheWidth:
+                    (96 * MediaQuery.of(context).devicePixelRatio).round(),
                 placeholder: ColoredBox(
                   color: theme.colorScheme.surfaceContainerHighest,
                 ),

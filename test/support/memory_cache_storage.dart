@@ -48,10 +48,10 @@ class MemoryCacheStorage implements CacheStorage {
       0;
 
   @override
-  Future<int> sweepArtwork(
+  Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,
   }) async =>
-      0;
+      CacheSweepResult.failed;
 }

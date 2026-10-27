@@ -14,6 +14,10 @@ import '../services/cache_service.dart';
 import '../utils/local_image_provider.dart';
 import 'artwork_cache_fs.dart';
 
+/// 缓存相对路径归一化：`p.relative` 在 Windows 返回 `\`，而
+/// flutter_cache_manager 的 `relativePath` 可能写 `/`；比较前两边统一成 `/`。
+String _normalizeRelativePath(String path) => path.replaceAll('\\', '/');
+
 /// 封面缓存管理器：统一请求头（修 CDN 403）+ 共享持久 CacheManager。
 ///
 /// - **403 修复**：网易云等平台 CDN 对 Dart 默认 UA 返回 403；统一附带
@@ -198,7 +202,10 @@ class ArtworkCache {
   }
 
   /// 立即按当前策略 sweep 一次（策略变更 / 启动 / 定期触发）。
-  Future<void> enforcePolicyNow() => _sweepNow();
+  ///
+  /// 显式入口无条件对齐索引：即使本次 sweep 没删文件，也要清掉索引里
+  /// 「文件已缺失」的条目（用户可能刚在系统 / 其它进程里清过缓存）。
+  Future<void> enforcePolicyNow() => _sweepNow(forcePrune: true);
 
   /// 删除单张封面的持久缓存（文件 + 索引条目）与 Flutter 内存缓存条目。
   ///
@@ -348,22 +355,43 @@ class ArtworkCache {
     unawaited(_sweepNow());
   }
 
-  Future<void> _sweepNow() async {
+  /// 执行一次 sweep。
+  ///
+  /// sweep 正常扫描时会带回存活文件集合，直接据此对齐索引（一次目录扫描
+  /// 替代对索引逐条 `exists()`）；外部（系统 / 其它进程）删掉的文件也在
+  /// 这里一并修复，不再依赖「本次删了文件」。
+  ///
+  /// 仅当扫描不完整（目录不可用 / 读取失败）时：[forcePrune] 的显式入口
+  /// 退回逐条探测兜底；自动触发（启动 / 节流 / 策略变更）跳过，避免把
+  /// 「没扫到」误判成「全部缺失」清空索引。分区被 UI 清理走
+  /// [_onPartitionCleared]。
+  Future<void> _sweepNow({bool forcePrune = false}) async {
     if (_sweeping) return;
     _sweeping = true;
     _lastSweep = DateTime.now();
     try {
-      await _cacheService.enforceArtworkPolicy();
-      // sweep 直接删文件（不经过 manager）：同步清理索引中的失效条目，
-      // 否则命中会返回指向缺失文件的 FileInfo（封面失败且不再回源）。
-      await _pruneMissingEntries();
+      final result = await _cacheService.enforceArtworkPolicy();
+      final surviving = result.remainingRelativePaths;
+      if (surviving != null) {
+        // sweep 直接删文件（不经过 manager）：同步清理索引中的失效条目，
+        // 否则命中会返回指向缺失文件的 FileInfo（封面失败且不再回源）。
+        await _pruneMissingEntries(surviving: surviving);
+      } else if (forcePrune) {
+        await _pruneMissingEntries();
+      }
     } finally {
       _sweeping = false;
     }
   }
 
   /// 清理索引中「文件已不存在」的条目（sweep / clear 之后的索引修复）。
-  Future<void> _pruneMissingEntries() async {
+  ///
+  /// [surviving] 为 sweep 扫描到的存活文件相对路径：
+  /// - 集合内的条目直接视为存在，不做任何文件探测；
+  /// - 集合外的条目再 `exists()` 复核一次——扫描快照之后 manager 可能刚下载
+  ///   并写入新索引，其文件不在快照里，直接按缺失删除会误伤；
+  /// - null 时逐条 `exists()`，供显式入口 / 分区清理这类没有扫描结果的路径。
+  Future<void> _pruneMissingEntries({Set<String>? surviving}) async {
     final repo = _repo;
     if (repo == null) return;
     final manager = await managerOrNull();
@@ -371,12 +399,23 @@ class ArtworkCache {
     try {
       final objects = await repo.getAllObjects();
       if (objects.isEmpty) return;
+      final survivingPaths = surviving == null
+          ? null
+          : {for (final path in surviving) _normalizeRelativePath(path)};
       final missing = <int>[];
       for (final object in objects) {
         if (object.id == null) continue;
-        final file = await manager.config.fileSystem
-            .createFile(object.relativePath);
-        if (!await file.exists()) missing.add(object.id!);
+        final relativePath = _normalizeRelativePath(object.relativePath);
+        final bool found;
+        if (survivingPaths != null && survivingPaths.contains(relativePath)) {
+          found = true;
+        } else {
+          // 快照外条目（可能是扫描后才写入的）逐条复核：确实不存在才删索引。
+          final file = await manager.config.fileSystem
+              .createFile(object.relativePath);
+          found = await file.exists();
+        }
+        if (!found) missing.add(object.id!);
       }
       if (missing.isEmpty) return;
       final deleted = await repo.deleteAll(missing);

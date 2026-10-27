@@ -651,7 +651,7 @@ class PlaybackSessionCoordinator
       // 真实播放接管：撤下冷启动恢复态。恢复播放的 seek 尚未落地时，
       // 继续沿用恢复进度显示（见 [_resumeRestoring]），避免进度条闪回 0。
       _dropRestoredSession(keepPosition: _resumeRestoring);
-      // 曲目切换：整份重写会话（含队列 / 下标 / 模式 / 上下文）。
+      // 曲目切换：提交会话（store 内部按队列是否变化决定整份重写还是只写游标）。
       _maybeSaveSession(force: true);
     }
     // 播放中→暂停/停止：强制保存一次进度（避免节流窗口内丢进度）。
@@ -676,7 +676,10 @@ class PlaybackSessionCoordinator
     _writeSession(live, now);
   }
 
-  /// 整份落盘：重写会话 JSON（`savedAt` 随 [now] 刷新）并触发 `onSaved`。
+  /// 提交落盘：`savedAt` 随 [now] 刷新并触发 `onSaved`。
+  ///
+  /// store 内部决定整份重写（队列 / 模式 / 上下文变化）还是只写游标键
+  /// （切歌 / 暂停 / seek）。
   void _writeSession(PlaybackSnapshot live, DateTime now) {
     final session = _sessionOf(live);
     _lastSessionSave = now;

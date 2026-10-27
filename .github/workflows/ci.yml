@@ -1,7 +1,8 @@
 name: CI
 
 # PR / main 的快速校验：静态分析 + 单元测试。
-# 发布构建走 release.yml；真实引擎的集成测试走 integration.yml。
+# 发布构建走 release.yml；真实引擎的集成测试不进 CI，本地用 tool/agent/test.sh
+# 在 Linux / Android 上运行，CI 只跑 analyze + 单元测试。
 on:
   pull_request:
   push:

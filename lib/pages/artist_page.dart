@@ -218,6 +218,9 @@ class _ArtistPageState extends State<ArtistPage> {
             ? AppNetworkImage(
                 url: avatar,
                 fit: BoxFit.cover,
+                // 头部只有 96dp：按容器解码头像，避免按原图尺寸解码。
+                memCacheWidth:
+                    (96 * MediaQuery.of(context).devicePixelRatio).round(),
                 placeholder: ColoredBox(
                   color: theme.colorScheme.surfaceContainerHighest,
                 ),

@@ -201,8 +201,21 @@ class ArtworkPaletteService {
         bytes,
         targetWidth: _sampleTargetSize,
       );
-      final frame = await codec.getNextFrame();
-      return await _paletteFromPixels(url, await _samplePixels(frame.image));
+      try {
+        final frame = await codec.getNextFrame();
+        try {
+          return await _paletteFromPixels(
+            url,
+            await _samplePixels(frame.image),
+          );
+        } finally {
+          // 采样完（含量化）再释放帧图像，保证 toByteData 期间仍然有效。
+          frame.image.dispose();
+        }
+      } finally {
+        // codec 只负责解码，帧图像已独立持有，用完即释放。
+        codec.dispose();
+      }
     } catch (e) {
       // 缓存文件 / 壁纸文件损坏、解码失败：返回 null，调用方回退稳态链路。
       _logger.warning('图像取色失败（保持现色）: $e');
@@ -246,24 +259,51 @@ class ArtworkPaletteService {
   }
 
   /// 取图 → 采样像素。
-  Future<List<int>> _extractPixels(ImageProvider imageProvider) async {
-    final completer = Completer<ui.Image>();
+  ///
+  /// [ImageStreamListener] 收到的是图片流克隆给监听方的 [ImageInfo]（各自
+  /// 持有一个 image 句柄）：采样必须在句柄释放前完成，所以采样在回调内启动，
+  /// 采样结束立即 dispose。先移除监听再异步读图则可能读到已被图片流 / 缓存
+  /// 释放的图（use-after-dispose）。
+  Future<List<int>> _extractPixels(ImageProvider imageProvider) {
+    final completer = Completer<List<int>>();
     final stream = imageProvider.resolve(ImageConfiguration.empty);
 
-    late ImageStreamListener listener;
+    var listenerRemoved = false;
+    late final ImageStreamListener listener;
+    void removeListenerOnce() {
+      if (listenerRemoved) return;
+      listenerRemoved = true;
+      stream.removeListener(listener);
+    }
+
     listener = ImageStreamListener(
       (ImageInfo info, bool _) {
-        completer.complete(info.image);
-        stream.removeListener(listener);
+        removeListenerOnce();
+        unawaited(() async {
+          try {
+            final pixels = await _samplePixels(info.image);
+            if (!completer.isCompleted) completer.complete(pixels);
+          } catch (error, stackTrace) {
+            if (!completer.isCompleted) {
+              completer.completeError(error, stackTrace);
+            }
+          } finally {
+            // ImageInfo 的所有权归监听方：采样完成必须释放，否则 image
+            // 句柄泄漏，整张封面无法回收。
+            info.dispose();
+          }
+        }());
       },
       onError: (Object exception, StackTrace? stackTrace) {
-        completer.completeError(exception, stackTrace);
-        stream.removeListener(listener);
+        removeListenerOnce();
+        if (!completer.isCompleted) {
+          completer.completeError(exception, stackTrace);
+        }
       },
     );
     stream.addListener(listener);
 
-    return _samplePixels(await completer.future);
+    return completer.future;
   }
 
   /// 采样像素（ARGB int 列表）：缩略采样 + 透明像素跳过。

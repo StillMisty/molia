@@ -275,7 +275,7 @@ void main() {
   });
 
   group('封面策略 sweep', () {
-    test('staleDays=0 且 maxObjects=0 不删除', () async {
+    test('staleDays=0 且 maxObjects=0 不删除，并回报存活文件', () async {
       final old = await writeFile(
         '${tempRoot.path}/artwork_cache',
         'old.jpg',
@@ -284,8 +284,20 @@ void main() {
       );
       await service.setArtworkStaleDays(0);
       await service.setArtworkMaxObjects(0);
-      await service.enforceArtworkPolicy();
+      final result = await service.enforceArtworkPolicy();
+      expect(result.deleted, 0);
+      expect(result.remainingRelativePaths, {'old.jpg'});
       expect(await old.exists(), isTrue);
+    });
+
+    test('目录不可用：返回 failed（remaining 为 null）', () async {
+      final unavailable = CacheService(
+        prefs: prefs,
+        storage: MemoryCacheStorage(),
+      );
+      final result = await unavailable.enforceArtworkPolicy();
+      expect(result.deleted, 0);
+      expect(result.remainingRelativePaths, isNull);
     });
   });
 

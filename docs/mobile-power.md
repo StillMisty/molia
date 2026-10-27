@@ -30,7 +30,7 @@
 | 位置 | 前台 | 后台（息屏 / 切走） |
 | --- | --- | --- |
 | 位置采样 `LocalPlaybackService` | `positionStream`（约 5Hz） | 1s 轮询；后台暂停不采样 |
-| 会话落盘 `PlaybackSessionCoordinator` | 1s 节流 | 15s 节流（进入后台先强制整份落盘） |
+| 会话落盘 `PlaybackSessionCoordinator` | 1s 节流 | 15s 节流（进入后台先强制提交一次，store 按队列是否变化决定整份 / 游标） |
 | 封面预取 `PlaybackObserver` | 当前 + 下一首 + 队列 5 张 | 不预取；回前台补一次 |
 | 封面取色 `ArtworkThemeSync` | 正常取色 | 仅桌面歌词可能展示时取色；否则只记 URL，回前台补 |
 | 当前 / 下一首歌词 `wireLyricsSession` / `wireNextTrackLyricsPreload` | 正常取词 / 预载 | 有任一词输出才取词；否则等回前台或打开输出 |
