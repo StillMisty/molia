@@ -1,5 +1,5 @@
-/// 本地数据栈：省流模式与封面网关 → 下载设置 / 下载服务 → 歌词服务 →
-/// 音频缓存字节写入器 + 缓存启动维护。
+/// 本地数据栈：省流模式与封面网关 → 歌词服务 → 封面补取 → 下载设置 /
+/// 下载服务 → 音频缓存字节写入器 + 缓存启动维护。
 ///
 /// **为什么歌词服务在这里**：歌词服务（在线取词）与下载服务互为依赖——
 /// 下载动作要在线取词（`DownloadService.lyricsResolver` → `LyricsService`），
@@ -22,12 +22,15 @@ import '../../domain/models/track.dart';
 import '../../managers/artwork_cache.dart';
 import '../../playback/audio_predownloader.dart';
 import '../../services/cache_service.dart';
+import '../../services/covers/cover_backfill_service.dart';
 import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
 import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
+import '../../services/source_swap/source_swap_strategy.dart';
+import '../../sources/builtin/builtin_search.dart';
 import 'catalog_stack.dart';
 import 'startup_trace.dart';
 
@@ -37,6 +40,7 @@ typedef LocalDataStack = ({
   DownloadSettings downloadSettings,
   DownloadService downloadService,
   LyricsService lyricsService,
+  CoverBackfillService coverBackfill,
   AudioPredownloader audioCacheWriter,
   CustomCoverStore customCovers,
 });
@@ -112,12 +116,35 @@ Future<LocalDataStack> buildLocalDataStack({
     },
   );
 
+  // 封面补取：本渠道原生取图失败后，按名字搜同渠道 / 其它音乐平台并严格
+  // 匹配补图。播放补封面与下载取封面共用同一实例；本地 / 离线由服务内部
+  // 跳过跨渠道，播放侧省流由组合根在调用前门控。
+  final coverBackfill = CoverBackfillService(
+    nativeLoader: (track) =>
+        sourceManager.fetchPic(sourceTrackFromTrack(track)),
+    searchChannel: (channelKey, keyword) async {
+      final page = await BuiltinSearch.searchWithMeta(
+        channelKey,
+        keyword,
+        limit: 10,
+      );
+      if (page.failure != null) return const [];
+      return [for (final track in page.tracks) trackFromSourceTrack(track)];
+    },
+    isChannelEnabled: (channelKey) =>
+        catalog.sourceRegistry.enabledChannelKeys.contains(channelKey),
+    // 与手动换源共用同一关键词口径：B 站曲目的 artists 是 UP 主，只搜标题。
+    keywordOf: (track) =>
+        SourceSwapStrategies.standard.of(track.id.sourceKey).keywordFor(track),
+  );
+
   // 本地下载：持久副本 + 离线歌词/封面 + 音频标签嵌入。
   // 存储不可用（无文件系统 / 目录解析失败）时 supported=false，UI 隐藏下载
   // 入口；初始化失败不阻断
   // 启动（init 内部已吞错）。下载时的取词/取图**缓存优先**：歌词与播放页
   // 共用同一个 LyricsService（缓存 → 原生 → 跨平台回退），封面经 ArtworkCache
-  // 命中直读、未命中取图后回填；音频命中完整缓存时直接拷贝，不触网。
+  // 命中直读、未命中先走本渠道原生、再按名字跨渠道严格兜底；音频命中完整
+  // 缓存时直接拷贝，不触网。
   final downloadService = DownloadService(
     catalog: catalog.catalogService,
     repository: DownloadsRepository(),
@@ -128,8 +155,7 @@ Future<LocalDataStack> buildLocalDataStack({
     publisher: createDownloadsPublisher(),
     notifications: createDownloadNotifications(),
     lyricsResolver: (track) => _resolveDownloadLyrics(lyricsService, track),
-    artworkResolver: (track) =>
-        sourceManager.fetchPic(sourceTrackFromTrack(track)),
+    artworkResolver: (track) => coverBackfill.fetch(track),
     coverResolver: customCovers.resolution,
     preferredQuality: () =>
         dataSaver.effectiveQuality(sourceManager.preferredQuality),
@@ -153,6 +179,7 @@ Future<LocalDataStack> buildLocalDataStack({
     downloadSettings: downloadSettings,
     downloadService: downloadService,
     lyricsService: lyricsService,
+    coverBackfill: coverBackfill,
     audioCacheWriter: audioCacheWriter,
     customCovers: customCovers,
   );

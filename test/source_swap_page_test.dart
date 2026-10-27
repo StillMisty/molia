@@ -249,23 +249,42 @@ void main() {
     expect(tracks.map((t) => '${t.sourceKey}:${t.songId}'), ['kg:100']);
   });
 
-  testWidgets('没有其它可搜索音源：空态 + 确认禁用', (tester) async {
+  testWidgets('没有任何可搜索音源：空态 + 确认禁用', (tester) async {
     final playlistId = await seedPlaylist(tester);
     final seed = library.trackFromPlaylistTrack(
       (await repository.listPlaylistTracks(playlistId)).single,
     );
-    sources
-      ..clear()
-      ..['wy'] = FakeMusicSource('wy');
+    sources.clear();
 
     await pumpHost(tester, seed: seed, playlistId: playlistId);
     await openPage(tester);
 
-    expect(find.text('没有可用的其它音源'), findsOneWidget);
+    expect(find.text('没有可用的音源'), findsOneWidget);
     final confirm = tester.widget<M3EButton>(
       find.widgetWithText(M3EButton, '换源'),
     );
     expect(confirm.onPressed, isNull);
+  });
+
+  testWidgets('非 B 站种子：原渠道保留为候选 chip', (tester) async {
+    final playlistId = await seedPlaylist(tester);
+    final seed = library.trackFromPlaylistTrack(
+      (await repository.listPlaylistTracks(playlistId)).single,
+    );
+    final wy = FakeMusicSource('wy')
+      ..items = [sourceTrack('wy', '2', title: 'Title（wy 其它版本）')];
+    sources['wy'] = wy;
+    kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
+
+    await pumpHost(tester, seed: seed, playlistId: playlistId);
+    await openPage(tester);
+
+    expect(find.text('wy'), findsOneWidget);
+    expect(find.text('kg'), findsOneWidget);
+    // 候选列表只展示当前 chip 的分组：切到原渠道再断言结果。
+    await tester.tap(find.text('wy'));
+    await tester.pumpAndSettle();
+    expect(find.text('Title（wy 其它版本）'), findsOneWidget);
   });
 
   testWidgets('全部无结果：空态提示；失败源可重试', (tester) async {
@@ -278,7 +297,7 @@ void main() {
     await pumpHost(tester, seed: seed, playlistId: playlistId);
     await openPage(tester);
 
-    expect(find.text('其它音源没有找到这首歌'), findsOneWidget);
+    expect(find.text('没有找到这首歌'), findsOneWidget);
     expect(find.text('kg 搜索失败'), findsOneWidget);
 
     // 重试：失败源恢复后候选出现。

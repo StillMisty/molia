@@ -67,8 +67,8 @@ void main() {
         onTrackSwapped: onTrackSwapped,
       );
 
-  test('begin：其它音源并行检索，按源分组；排除种子源 / 空结果 / 失败隔离', () async {
-    sources['wy'] = FakeMusicSource('wy'); // 种子源：必须被排除
+  test('begin：全部可搜索音源并行检索（含种子源）；空结果 / 失败隔离', () async {
+    sources['wy'] = FakeMusicSource('wy'); // 种子源：保留，但种子自身要排除
     kg.items = [track('kg', '100'), track('kg', '101')];
     tx.fail = true;
     final provider = buildProvider();
@@ -80,14 +80,35 @@ void main() {
     ));
 
     expect(provider.isSearching, isFalse);
-    expect(provider.noOtherSources, isFalse);
-    // 只有 kg 有结果（tx 失败、wy 被排除；空源不产生分组）。
+    expect(provider.noSources, isFalse);
+    // 只有 kg 有结果（tx 失败、wy 无其它结果；空源不产生分组）。
     expect(provider.groups.map((g) => g.sourceKey), ['kg']);
     expect(provider.activeSourceKey, 'kg');
     expect(provider.activeItems.map((t) => t.id.uri), ['kg:100', 'kg:101']);
     expect(provider.failedSourceKeys, {'tx'});
     expect(kg.lastQuery?.keyword, 'Title Artist');
-    expect(sources['wy']!.searchCalls, 0, reason: '种子源被排除');
+    expect(sources['wy']!.searchCalls, 1, reason: '种子源保留并参与搜索');
+  });
+
+  test('begin：种子源有其它版本时出现在分组，种子自身按 URI 排除', () async {
+    final wy = FakeMusicSource('wy')
+      ..items = [track('wy', '1'), track('wy', '2')];
+    sources['wy'] = wy;
+    kg.items = [track('kg', '100')];
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+
+    await provider.begin(SourceSwapRequest(
+      seed: track('wy', '1'),
+      placement: SourceSwapPlacement.queue,
+    ));
+
+    final wyGroup = provider.groups.singleWhere((g) => g.sourceKey == 'wy');
+    expect(wyGroup.items.map((t) => t.id.uri), ['wy:2']);
+    expect(
+      provider.groups.map((g) => g.sourceKey),
+      containsAll(['wy', 'kg']),
+    );
   });
 
   test('begin：B 站种子保留同源候选（换到其它投稿），关键词只用标题', () async {
@@ -131,11 +152,8 @@ void main() {
     expect(bili.lastQuery?.keyword, 'Title Artist');
   });
 
-  test('begin：没有其它可搜索音源 → noOtherSources，不发起搜索', () async {
-    final wy = FakeMusicSource('wy');
-    sources
-      ..clear()
-      ..['wy'] = wy;
+  test('begin：没有任何可搜索音源 → noSources，不发起搜索', () async {
+    sources.clear();
     final provider = buildProvider();
     addTearDown(provider.dispose);
 
@@ -144,9 +162,8 @@ void main() {
       placement: SourceSwapPlacement.queue,
     ));
 
-    expect(provider.noOtherSources, isTrue);
+    expect(provider.noSources, isTrue);
     expect(provider.groups, isEmpty);
-    expect(wy.searchCalls, 0);
   });
 
   test('retryFailed：失败源重搜成功后清空失败集并入组', () async {

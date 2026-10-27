@@ -1,8 +1,8 @@
 /// 桌面应用骨架（Linux / Windows / macOS）。
 ///
-/// 顶栏（品牌区 = 搜索入口 + 空白拖动区 + 设置 + 窗口按钮）+ 恒折叠侧栏
-/// （96dp）+ 页面栈 + 常驻底部播放条（播放页里整条让位）+ 搜索遮罩宿主
-/// （Ctrl+F / 品牌区点击打开）。手机 / 平板骨架不经过本文件
+/// 顶栏（品牌区 = 搜索入口 + 空白拖动区 + 设置 + 窗口按钮）+ 恒折叠、
+/// 标签常显侧栏（96dp）+ 页面栈 + 常驻底部播放条（播放页里整条让位）+
+/// 搜索遮罩宿主（Ctrl+F / 品牌区点击打开）。手机 / 平板骨架不经过本文件
 /// （`app_shell.dart` 按平台分流）。
 ///
 /// 骨架本身无状态：侧栏恒折叠、队列并入播放页右栏之后，与窗口相关的可变量
@@ -117,9 +117,11 @@ class DesktopShell extends StatelessWidget {
                     M3ENavigationRail(
                       // 恒折叠：无展开按钮、也不可展开；窗口宽不影响侧栏形态。
                       type: M3ENavigationRailType.alwaysCollapse,
-                      // 标签一律隐藏：折叠轨里图标是唯一常显信息，标签留给无障碍名
-                      // （项高随之走包内 shortItemHeight）。
-                      labelBehavior: M3ENavigationRailLabelBehavior.alwaysHide,
+                      // 标签常显：包内有标签时选中指示器是 56×32 胶囊（与移动端
+                      // 底栏 / 平板侧栏同几何），无标签会退化成 56×56 圆——选中时
+                      // 从 0.4 倍横向拉开，在桌面大图标下很违和。不要改 onlySelected：
+                      // 未选中项回到圆、选中项变胶囊，切换会有一档高度跳变。
+                      labelBehavior: M3ENavigationRailLabelBehavior.alwaysShow,
                       selectedIndex: chrome.selectedIndex,
                       onDestinationSelected: chrome.selectDestinationAt,
                       sections: [

@@ -14,6 +14,9 @@ class KugouProvider extends LyricProvider {
   @override
   String get name => 'kugou';
 
+  @override
+  String get channelKey => 'kg';
+
   /// 搜索歌曲，返回首条匹配
   @override
   Future<SongMatch?> search(String title, String artist) async {

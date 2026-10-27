@@ -547,9 +547,9 @@
   "selectAllItems": "Select all",
   "historyDeleteEntry": "Delete entry",
   "sourceSwap": "Change source",
-  "sourceSwapSearching": "Searching other sources…",
-  "sourceSwapEmpty": "No match found in other sources",
-  "sourceSwapNoSources": "No other sources available",
+  "sourceSwapSearching": "Searching sources…",
+  "sourceSwapEmpty": "No match found",
+  "sourceSwapNoSources": "No sources available",
   "sourceSwapFailedSources": "Search failed for {sources}",
   "@sourceSwapFailedSources": {
     "placeholders": {

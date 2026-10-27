@@ -38,6 +38,13 @@ abstract class LyricProvider {
   /// 提供者名称
   String get name;
 
+  /// 自动回退用的渠道 key（音源 key，如 `wy` / `tx`）。
+  ///
+  /// 默认与 [name] 相同；跨平台 provider 的展示名与渠道 key 不同
+  /// （`netease` ↔ `wy`、`qq` ↔ `tx`），由实现覆盖。自动回退据此
+  /// 判断「这个 provider 是不是曲目来源渠道」。
+  String get channelKey => name;
+
   /// 规范化歌词文本
   String normalizeLyric(String rawLyric) {
     final unescape = HtmlUnescape();

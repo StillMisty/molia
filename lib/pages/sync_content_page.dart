@@ -17,8 +17,8 @@ import '../widgets/settings/settings_tiles.dart';
 class SyncContentPage extends StatelessWidget {
   const SyncContentPage({super.key});
 
-  /// 展示顺序：媒体内容在前，设置与记录居中，凭证靠后；自定义封面默认
-  /// 关闭，但入口紧跟在音源之后，避免被后面的类别淹没。
+  /// 展示顺序：媒体内容在前，设置与记录居中，凭证靠后；自定义封面体积大，
+  /// 入口紧跟在音源之后，方便用户单独关掉而不必翻到列表末尾。
   static const Map<SyncCategory, (IconData, String Function(AppLocalizations))>
       _categoryOrder = {
     SyncCategory.playlists: (Icons.queue_music_rounded, _playlistsTitle),

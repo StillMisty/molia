@@ -2213,19 +2213,19 @@ abstract class AppLocalizations {
   /// No description provided for @sourceSwapSearching.
   ///
   /// In en, this message translates to:
-  /// **'Searching other sources…'**
+  /// **'Searching sources…'**
   String get sourceSwapSearching;
 
   /// No description provided for @sourceSwapEmpty.
   ///
   /// In en, this message translates to:
-  /// **'No match found in other sources'**
+  /// **'No match found'**
   String get sourceSwapEmpty;
 
   /// No description provided for @sourceSwapNoSources.
   ///
   /// In en, this message translates to:
-  /// **'No other sources available'**
+  /// **'No sources available'**
   String get sourceSwapNoSources;
 
   /// No description provided for @sourceSwapFailedSources.

@@ -122,7 +122,7 @@ class _SourceSwapViewState extends State<SourceSwapView> {
     if (!_started || (provider.isSearching && provider.groups.isEmpty)) {
       return const Center(child: M3EProgressIndicator.circular());
     }
-    if (provider.noOtherSources) {
+    if (provider.noSources) {
       return _emptyState(Icons.source_rounded, l10n.sourceSwapNoSources);
     }
     if (provider.groups.isEmpty) {

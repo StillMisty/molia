@@ -1161,13 +1161,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourceSwap => 'Change source';
 
   @override
-  String get sourceSwapSearching => 'Searching other sources…';
+  String get sourceSwapSearching => 'Searching sources…';
 
   @override
-  String get sourceSwapEmpty => 'No match found in other sources';
+  String get sourceSwapEmpty => 'No match found';
 
   @override
-  String get sourceSwapNoSources => 'No other sources available';
+  String get sourceSwapNoSources => 'No sources available';
 
   @override
   String sourceSwapFailedSources(String sources) {

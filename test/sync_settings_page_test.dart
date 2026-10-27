@@ -1047,16 +1047,17 @@ void main() {
   testWidgets('同步内容子页：类别开关可切、蜂窝暂停在页内，入口副文案跟随', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
-    expect(find.text('1 turned off'), findsOneWidget, reason: '自定义封面默认关闭');
+    expect(find.text('All categories'), findsOneWidget, reason: '所有类别默认开启');
 
     await openSubPage(tester, 'settingsSyncContentItem');
     expect(find.byType(SyncContentPage), findsOneWidget);
-    expect(provider.categories[SyncCategory.covers], isFalse);
+    expect(provider.categories[SyncCategory.covers], isTrue,
+        reason: '自定义封面默认同步');
 
-    // 自定义封面默认关闭；在内容页打开后与同步设置同源。
+    // 内容页与同步设置同源：关闭封面后立即生效。
     await tester.tap(find.byKey(const Key('settingsSyncCategory-covers')));
     await tester.pumpAndSettle();
-    expect(provider.categories[SyncCategory.covers], isTrue);
+    expect(provider.categories[SyncCategory.covers], isFalse);
 
     await tester.tap(find.byKey(const Key('settingsSyncCategory-statistics')));
     await tester.pumpAndSettle();
@@ -1067,10 +1068,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(provider.cellularPolicy, SyncCellularPolicy.pause);
 
-    // 返回：内容入口副文案给「已关闭 1 项」。
+    // 返回：内容入口副文案给「已关闭 2 项」。
     await tester.tap(find.byType(BackButtonIcon));
     await tester.pumpAndSettle();
-    expect(find.text('1 turned off'), findsOneWidget);
+    expect(find.text('2 turned off'), findsOneWidget);
   });
 
   testWidgets('日志与诊断子页：24h 动态行与环境行', (tester) async {

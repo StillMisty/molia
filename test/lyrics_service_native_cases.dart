@@ -13,13 +13,15 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Track track(String id) => Track(
-    id: TrackId('kw', id),
+  Track trackFor(String sourceKey, String id) => Track(
+    id: TrackId(sourceKey, id),
     title: '歌',
     artists: const [Artist(name: '手')],
     origin: TrackOrigin.builtin,
     payload: {'songmid': id},
   );
+
+  Track track(String id) => trackFor('kw', id);
 
   test('曲目原生优先：loader 命中则不搜名字，并写入缓存', () async {
     var loaderCalls = 0;
@@ -60,6 +62,156 @@ void main() {
     final service = LyricsService(providers: [_FastProvider()]);
     final result = await service.getLyrics('歌', '手', 'kw:3');
     expect(result?.provider, 'fast');
+  });
+
+  test('同源优先：其它渠道更快也等本渠道（预算内）', () async {
+    final service = LyricsService(
+      providers: [
+        _ChannelProvider(
+          'qq',
+          'tx',
+          result: const LyricsPayload(lyric: '[00:00.00]QQ'),
+          delay: const Duration(milliseconds: 40),
+        ),
+        _ChannelProvider(
+          'netease',
+          'wy',
+          result: const LyricsPayload(lyric: '[00:00.00]WY'),
+        ),
+      ],
+      trackLyricLoader: (t) async => null,
+    );
+
+    final result = await service.getLyrics(
+      '歌',
+      '手',
+      'tx:src-1',
+      track: trackFor('tx', 'src-1'),
+    );
+    expect(result?.provider, 'qq');
+    expect(result?.lyric, '[00:00.00]QQ');
+  });
+
+  test('同源为空立即回退其它渠道', () async {
+    final service = LyricsService(
+      providers: [
+        _ChannelProvider('qq', 'tx'),
+        _ChannelProvider(
+          'netease',
+          'wy',
+          result: const LyricsPayload(lyric: '[00:00.00]WY'),
+        ),
+      ],
+      trackLyricLoader: (t) async => null,
+    );
+
+    final result = await service.getLyrics(
+      '歌',
+      '手',
+      'tx:src-2',
+      track: trackFor('tx', 'src-2'),
+    );
+    expect(result?.provider, 'netease');
+  });
+
+  test('同源抛错回退其它渠道', () async {
+    final service = LyricsService(
+      providers: [
+        _ChannelProvider('qq', 'tx', throws: true),
+        _ChannelProvider(
+          'netease',
+          'wy',
+          result: const LyricsPayload(lyric: '[00:00.00]WY'),
+        ),
+      ],
+      trackLyricLoader: (t) async => null,
+    );
+
+    final result = await service.getLyrics(
+      '歌',
+      '手',
+      'tx:src-3',
+      track: trackFor('tx', 'src-3'),
+    );
+    expect(result?.provider, 'netease');
+  });
+
+  test('同源超时：预算到点后用其它渠道', () async {
+    final pending = Completer<LyricsPayload?>();
+    final service = LyricsService(
+      providers: [
+        _ChannelProvider('qq', 'tx', pending: pending.future),
+        _ChannelProvider(
+          'netease',
+          'wy',
+          result: const LyricsPayload(lyric: '[00:00.00]WY'),
+        ),
+      ],
+      trackLyricLoader: (t) async => null,
+      sameSourceTimeout: const Duration(milliseconds: 30),
+    );
+
+    final result = await service.getLyrics(
+      '歌',
+      '手',
+      'tx:src-4',
+      track: trackFor('tx', 'src-4'),
+    );
+    expect(result?.provider, 'netease');
+  });
+
+  test('同源晚到仍可作为兜底', () async {
+    final pending = Completer<LyricsPayload?>();
+    final service = LyricsService(
+      providers: [
+        _ChannelProvider('qq', 'tx', pending: pending.future),
+        _ChannelProvider('netease', 'wy'),
+      ],
+      trackLyricLoader: (t) async => null,
+      sameSourceTimeout: const Duration(milliseconds: 20),
+    );
+
+    final future = service.getLyrics(
+      '歌',
+      '手',
+      'tx:src-5',
+      track: trackFor('tx', 'src-5'),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    pending.complete(const LyricsPayload(lyric: '[00:00.00]QQ late'));
+    expect((await future)?.provider, 'qq');
+  });
+
+  test('跨渠道缓存命中：不再请求本渠道', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final cache = LyricsCache(prefs: prefs);
+    await cache.write(
+      'tx:src-6',
+      LyricCacheData(
+        provider: 'netease',
+        lyric: '[00:00.00]WY cached',
+        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      ),
+    );
+    final qq = _ChannelProvider(
+      'qq',
+      'tx',
+      result: const LyricsPayload(lyric: '[00:00.00]QQ'),
+    );
+    final service = LyricsService(
+      providers: [qq],
+      lyricsCache: cache,
+      trackLyricLoader: (t) async => null,
+    );
+
+    final result = await service.getLyrics(
+      '歌',
+      '手',
+      'tx:src-6',
+      track: trackFor('tx', 'src-6'),
+    );
+    expect(result?.provider, 'netease');
+    expect(qq.getLyricsCalls, 0);
   });
 
   test('B 站登录后：缓存来源不同源则先试原生（忽略手动缓存）', () async {
@@ -234,6 +386,54 @@ void main() {
     expect(provider.state.lines.single.words, hasLength(2));
     expect(provider.state.lines.single.words!.first.text, '你');
   });
+}
+
+/// 可指定渠道 / 结果 / 延迟 / 异常 / 挂起的歌词提供者。
+class _ChannelProvider extends LyricProvider {
+  _ChannelProvider(
+    this._name,
+    this._channelKey, {
+    this.result,
+    this.pending,
+    this.delay = Duration.zero,
+    this.throws = false,
+  });
+
+  final String _name;
+  final String _channelKey;
+  final LyricsPayload? result;
+  final Future<LyricsPayload?>? pending;
+  final Duration delay;
+  final bool throws;
+  int getLyricsCalls = 0;
+
+  @override
+  String get name => _name;
+
+  @override
+  String get channelKey => _channelKey;
+
+  @override
+  Future<SongMatch?> search(String title, String artist) async => null;
+
+  @override
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async => [];
+
+  @override
+  Future<String?> fetchLyric(String songId) async => null;
+
+  @override
+  Future<LyricsPayload?> getLyrics(String title, String artist) async {
+    getLyricsCalls++;
+    if (pending != null) return pending;
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
+    if (throws) throw StateError('boom');
+    return result;
+  }
 }
 
 class _RecordingProvider extends LyricProvider {

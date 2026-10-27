@@ -137,10 +137,10 @@ void main() {
     expect(handled.freshInstall, isFalse);
   });
 
-  test('自定义封面类别默认关闭；封面登记 / 墓碑跨实例持久化', () async {
+  test('自定义封面类别默认开启；封面登记 / 墓碑跨实例持久化', () async {
     final first = await freshStore();
-    expect(first.categories[SyncCategory.covers], isFalse);
-    expect(first.isCategoryEnabled(SyncCategory.covers), isFalse);
+    expect(first.categories[SyncCategory.covers], isTrue);
+    expect(first.isCategoryEnabled(SyncCategory.covers), isTrue);
     first.putCoverStamp(
       'wy:1',
       const SyncStamp(
@@ -160,13 +160,14 @@ void main() {
     expect(reloaded.coverTombstones['wy:2']!.version.physical, 2001);
     expect(
       reloaded.isCategoryEnabled(SyncCategory.covers),
-      isFalse,
-      reason: '缺失 / 旧状态都按默认关闭',
+      isTrue,
+      reason: '缺失 / 旧状态都按默认开启',
     );
 
-    await reloaded.setCategory(SyncCategory.covers, true);
-    final enabled = await freshStore();
-    expect(enabled.isCategoryEnabled(SyncCategory.covers), isTrue);
+    await reloaded.setCategory(SyncCategory.covers, false);
+    final disabled = await freshStore();
+    expect(disabled.isCategoryEnabled(SyncCategory.covers), isFalse,
+        reason: '用户关闭后跨实例保持');
   });
 
   test('所有身份备份都不存在时才生成新 id，之后跨实例保持', () async {

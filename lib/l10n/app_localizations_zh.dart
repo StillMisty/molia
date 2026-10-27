@@ -1123,13 +1123,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceSwap => '换源';
 
   @override
-  String get sourceSwapSearching => '正在搜索其它音源…';
+  String get sourceSwapSearching => '正在搜索音源…';
 
   @override
-  String get sourceSwapEmpty => '其它音源没有找到这首歌';
+  String get sourceSwapEmpty => '没有找到这首歌';
 
   @override
-  String get sourceSwapNoSources => '没有可用的其它音源';
+  String get sourceSwapNoSources => '没有可用的音源';
 
   @override
   String sourceSwapFailedSources(String sources) {

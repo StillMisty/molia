@@ -36,6 +36,13 @@ class LyricsService {
   /// 优先重试原生，而不是继续用跨平台缓存。
   final bool Function(Track track)? _nativeLyricAvailable;
 
+  /// 同渠道名字搜索的优先预算。
+  ///
+  /// 跨平台回退会同时发起全部请求，但只有曲目来源渠道能在预算内决定结果；
+  /// 超时后改用其它渠道的首个非空结果（此时通常已在途 / 已完成，不再额外
+  /// 等待网络）。没有同渠道 provider 的曲目保持原有并行竞速。
+  final Duration sameSourceTimeout;
+
   /// [providers] 只用于测试注入；缺省取 [LyricsSourceRegistry.standard] 的
   /// 自动回退来源（五个音乐平台 + LRCLIB，B 站字幕不在其中）。
   ///
@@ -51,6 +58,7 @@ class LyricsService {
     this._trackLyricLoader,
     this._networkFallbackAllowed,
     this._nativeLyricAvailable,
+    this.sameSourceTimeout = const Duration(seconds: 3),
   })  : _providers = providers ?? LyricsSourceRegistry.standard.autoProviders,
         _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
         _cacheService = cacheService ?? CacheService.instance;
@@ -58,7 +66,7 @@ class LyricsService {
   /// 获取歌词（原文 + 可选翻译 / 罗马音 / 逐字）。
   ///
   /// 顺序：缓存 → 曲目原生取词（精确平台 ID，需传入 [track]）→
-  /// 跨平台名字搜索回退（并行竞速）。
+  /// 本渠道名字搜索（同源预算内优先）→ 其它渠道并行竞速兜底。
   ///
   /// [ignoreCache] 为 true 时跳过缓存读取（登录 / 手动刷新场景）。
   Future<LyricsResult?> getLyrics(
@@ -141,7 +149,11 @@ class LyricsService {
       _logger.info('从网络获取歌词: $songName - $artistName');
       final result = await DataPathTrace.async(
         'lyrics.network',
-        () => _getFromProviders(songName, artistName),
+        () => _getFromProviders(
+          songName,
+          artistName,
+          preferredChannelKey: track?.id.sourceKey,
+        ),
       );
       if (result != null) {
         await DataPathTrace.async(
@@ -227,31 +239,79 @@ class LyricsService {
     );
   }
 
-  /// 并行请求所有提供者，**首个非空结果即返回**。
+  /// 并行请求所有提供者：同渠道优先，其它渠道首个非空兜底。
   ///
-  /// 谁先返回非空就用谁，展示延迟不被最慢的提供者（通常 10s 超时）拖住；
-  /// 其余请求继续完成但结果丢弃（HTTP 无法真正取消，不阻塞展示即可）。
-  Future<LyricsResult?> _getFromProviders(String title, String artist) {
+  /// 所有请求在进入方法时同时发起（预取），因此同渠道超时后通常不用再等
+  /// 一轮网络。判定规则：
+  /// - 没有同渠道 provider（B 站 / 脚本 / 本地）→ 保持首个非空即返回；
+  /// - 同渠道在 [sameSourceTimeout] 内返回非空 → 直接用它（即使其它渠道
+  ///   更早返回）；
+  /// - 同渠道为空 / 抛错 / 超时 → 用其它渠道的首个非空结果；
+  /// - 同渠道晚到的非空结果仍可作为兜底（已经包含在竞速里）。
+  Future<LyricsResult?> _getFromProviders(
+    String title,
+    String artist, {
+    String? preferredChannelKey,
+  }) {
     if (_providers.isEmpty) return Future.value(null);
-    final completer = Completer<LyricsResult?>();
-    var remaining = _providers.length;
-    for (final provider in _providers) {
-      _fetchFromProvider(provider, title, artist)
-          .then((result) {
-            if (result != null && !completer.isCompleted) {
-              completer.complete(result);
-            }
-          })
-          .catchError((Object e) {
+
+    // provider → 在途请求；错误在这里统一归一为 null，竞速不再处理异常。
+    final pending = <LyricProvider, Future<LyricsResult?>>{
+      for (final provider in _providers)
+        provider: _fetchFromProvider(provider, title, artist).catchError(
+          (Object e) {
             _logger.warning('从 ${provider.name} 获取歌词失败: $e');
-          })
-          .whenComplete(() {
-            remaining--;
-            if (remaining == 0 && !completer.isCompleted) {
-              completer.complete(null);
-            }
-          });
+            return null;
+          },
+        ),
+    };
+    final firstAny = _firstNonEmpty(pending.values);
+
+    final preferred = _providerForChannel(preferredChannelKey);
+    if (preferred == null || _providers.length == 1) return firstAny;
+
+    return pending[preferred]!
+        .timeout(sameSourceTimeout, onTimeout: () => null)
+        .then((sameSource) {
+      if (sameSource != null) {
+        _logger.info('同源歌词命中: ${preferred.name}');
+        return sameSource;
+      }
+      _logger.info('同源歌词未命中 / 超时，使用跨平台回退: ${preferred.name}');
+      return firstAny;
+    });
+  }
+
+  /// 曲目来源渠道对应的自动回退 provider（没有 / 已停用时为 null）。
+  LyricProvider? _providerForChannel(String? channelKey) {
+    final key = channelKey?.trim();
+    if (key == null || key.isEmpty) return null;
+    for (final provider in _providers) {
+      if (provider.channelKey == key) return provider;
     }
+    return null;
+  }
+
+  /// 第一个非空结果；全部为空 / 失败时返回 null。
+  static Future<LyricsResult?> _firstNonEmpty(
+    Iterable<Future<LyricsResult?>> futures,
+  ) {
+    final completer = Completer<LyricsResult?>();
+    var remaining = 0;
+    for (final future in futures) {
+      remaining++;
+      future.then((result) {
+        if (result != null && !completer.isCompleted) {
+          completer.complete(result);
+        }
+      }).whenComplete(() {
+        remaining--;
+        if (remaining == 0 && !completer.isCompleted) {
+          completer.complete(null);
+        }
+      });
+    }
+    if (remaining == 0) completer.complete(null);
     return completer.future;
   }
 

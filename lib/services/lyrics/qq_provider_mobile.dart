@@ -37,6 +37,9 @@ class QQProvider extends LyricProvider {
   String get name => 'qq';
 
   @override
+  String get channelKey => 'tx';
+
+  @override
   Future<SongMatch?> search(String title, String artist) async {
     final results = await searchMultiple(title, artist, limit: 1);
     return results.isNotEmpty ? results.first : null;

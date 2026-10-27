@@ -48,7 +48,7 @@ import '../support/settings_test_support.dart';
 ///
 /// 覆盖骨架结构与三条不变量：顶栏是纯工具条（无标题 / 无播放控制 / 无进度线，
 /// 最左是「标志 + 应用名」品牌区（贴窗口左缘、无 tooltip）、右侧空白拖动区）；
-/// 侧栏恒折叠（无展开按钮）；底栏只在非播放页出现（播放页沉浸）且封面飞行两端
+/// 侧栏恒折叠、标签常显（无展开按钮）；底栏只在非播放页出现（播放页沉浸）且封面飞行两端
 /// 都成立。另有队列入口（跳播放页 + 切队列 tab）、搜索遮罩（品牌区点击 /
 /// Ctrl+F 打开、docked 结果面板、查看全部结果切资料库）、全局快捷键（Space 切
 /// 播放态、Esc 收起队列视图、输入框聚焦时让位）。
@@ -216,7 +216,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// 侧栏条目：标签恒隐藏（`alwaysHide`），只能按图标定位。
+  /// 侧栏条目：标签常显，但用例仍按图标定位（文案变化不影响点击）。
   Finder railItem(IconData outlinedIcon) => find.descendant(
         of: find.byType(M3ENavigationRail),
         matching: find.byIcon(outlinedIcon),
@@ -350,26 +350,36 @@ void main() {
     );
   });
 
-  testWidgets('侧栏：恒折叠、标签隐藏、无展开入口', (tester) async {
+  testWidgets('侧栏：恒折叠、标签常显、无展开入口', (tester) async {
     await pumpShell(tester, desktopShell: true);
 
-    final rail =
-        tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail));
+    final railFinder = find.byType(M3ENavigationRail);
+    final rail = tester.widget<M3ENavigationRail>(railFinder);
     expect(rail.type, M3ENavigationRailType.alwaysCollapse);
-    expect(rail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysHide);
+    expect(rail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysShow);
+    // 标签常显：选中指示器走包内 56×32 胶囊，不再退化成 56×56 圆。
+    for (final label in [
+      l10n.libraryLabel,
+      l10n.nowPlayingLabel,
+      l10n.favoritesLabel,
+    ]) {
+      expect(
+        find.descendant(of: railFinder, matching: find.text(label)),
+        findsOneWidget,
+        reason: '侧栏应常显「$label」标签',
+      );
+    }
     // 窗口宽变化不影响侧栏形态。
     tester.view.physicalSize = const Size(900, 900);
     await settleTransition(tester);
-    expect(
-      tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
-      M3ENavigationRailType.alwaysCollapse,
-    );
+    final narrowRail = tester.widget<M3ENavigationRail>(railFinder);
+    expect(narrowRail.type, M3ENavigationRailType.alwaysCollapse);
+    expect(narrowRail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysShow);
     tester.view.physicalSize = const Size(1440, 900);
     await settleTransition(tester);
-    expect(
-      tester.widget<M3ENavigationRail>(find.byType(M3ENavigationRail)).type,
-      M3ENavigationRailType.alwaysCollapse,
-    );
+    final wideRail = tester.widget<M3ENavigationRail>(railFinder);
+    expect(wideRail.type, M3ENavigationRailType.alwaysCollapse);
+    expect(wideRail.labelBehavior, M3ENavigationRailLabelBehavior.alwaysShow);
     expect(find.byType(M3ENavigationBar), findsNothing);
   });
 

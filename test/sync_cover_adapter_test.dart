@@ -374,9 +374,9 @@ void main() {
     expect(counting.reads, 1);
   });
 
-  test('默认关闭：不写封面日志；开启后变化照常追加', () async {
-    expect(state.isCategoryEnabled(SyncCategory.covers), isFalse,
-        reason: '状态层默认关闭');
+  test('类别关闭：不写封面日志；开启后变化照常追加', () async {
+    await state.setCategory(SyncCategory.covers, false);
+    expect(state.isCategoryEnabled(SyncCategory.covers), isFalse);
     enabled = false;
     await store.setTrackCover(trackId, jpeg(1));
 

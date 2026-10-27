@@ -103,6 +103,16 @@ void main() {
         'migu',
         'lrclib',
       ]);
+      // provider 名与曲目来源渠道 key 不同（qq→tx / netease→wy）：
+      // 自动回退靠 channelKey 判断同源，不能拿 name 直接比。
+      expect(registry.autoProviders.map((provider) => provider.channelKey), [
+        'tx',
+        'wy',
+        'kg',
+        'kw',
+        'mg',
+        'lrclib',
+      ]);
       expect(
         registry.autoProviders.map((provider) => provider.name),
         isNot(contains('bili')),

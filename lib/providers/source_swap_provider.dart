@@ -2,8 +2,8 @@
 ///
 /// 职责：
 /// - `begin`：按种子曲目「歌名 + 歌手」在可搜索音源并行检索
-///   （逐源就绪即填充；单源失败不阻塞，可重试）；默认排除种子源，
-///   B 站等允许同源多投稿的渠道由 [SourceSwapStrategies] 放行；
+///   （逐源就绪即填充；单源失败不阻塞，可重试）；**保留种子源**，种子
+///   曲目自身再按 URI 排除（同一渠道可能有其它版本 / 投稿）；
 /// - 会话状态：分组候选 / 当前 tab / 选中项（不可变对象，UI 用 `Selector`）；
 /// - `apply`：库内**原位替换**（列表/历史，经 [LibraryProvider]）与
 ///   **队列跟随**（经 [PlaybackProvider]，命中才跟随），两者解耦。
@@ -123,7 +123,7 @@ class SourceSwapProvider extends ChangeNotifier {
   final LibraryProvider _libraryProvider;
   final PlaybackProvider _playbackProvider;
 
-  /// 按音源覆盖换源行为（同源候选 / 关键词构成）。
+  /// 按音源覆盖换源关键词口径（B 站 artists 是 UP 主，只搜标题）。
   final SourceSwapStrategies _strategies;
 
   /// 写回成功后的曲目级本地数据钩子（自定义封面跟随；失败不影响换源）。
@@ -135,7 +135,7 @@ class SourceSwapProvider extends ChangeNotifier {
   SourceSwapRequest? _request;
   String _keyword = '';
   bool _isSearching = false;
-  bool _noOtherSources = false;
+  bool _noSources = false;
   List<SourceSwapGroup> _groups = const [];
   final Set<String> _failedSourceKeys = <String>{};
   String _activeSourceKey = '';
@@ -146,8 +146,8 @@ class SourceSwapProvider extends ChangeNotifier {
   Track? get seed => _request?.seed;
   SourceSwapPlacement? get placement => _request?.placement;
 
-  /// 没有任何「其它可搜索音源」（搜索前即可判定）。
-  bool get noOtherSources => _noOtherSources;
+  /// 没有任何可搜索音源（搜索前即可判定）。
+  bool get noSources => _noSources;
 
   List<SourceSwapGroup> get groups => _groups;
   Set<String> get failedSourceKeys => Set.unmodifiable(_failedSourceKeys);
@@ -195,9 +195,9 @@ class SourceSwapProvider extends ChangeNotifier {
     _keyword =
         _strategies.of(request.seed.id.sourceKey).keywordFor(request.seed);
 
-    final descriptors = _otherSearchableSources(request.seed);
-    _noOtherSources = descriptors.isEmpty;
-    _isSearching = !_noOtherSources;
+    final descriptors = _searchableSources;
+    _noSources = descriptors.isEmpty;
+    _isSearching = !_noSources;
     notifyListeners();
     if (descriptors.isEmpty) return;
 
@@ -215,7 +215,7 @@ class SourceSwapProvider extends ChangeNotifier {
     final request = _request;
     if (request == null || _failedSourceKeys.isEmpty || _isSearching) return;
     final sessionId = _sessionId;
-    final descriptors = _otherSearchableSources(request.seed)
+    final descriptors = _searchableSources
         .where((descriptor) => _failedSourceKeys.contains(descriptor.key))
         .toList();
     if (descriptors.isEmpty) return;
@@ -250,7 +250,7 @@ class SourceSwapProvider extends ChangeNotifier {
     _request = null;
     _keyword = '';
     _isSearching = false;
-    _noOtherSources = false;
+    _noSources = false;
     _groups = const [];
     _failedSourceKeys.clear();
     _activeSourceKey = '';
@@ -389,19 +389,11 @@ class SourceSwapProvider extends ChangeNotifier {
     }
   }
 
-  List<SourceDescriptor> _otherSearchableSources(Track seed) {
-    // 默认排除种子源；B 站等「同源多投稿」渠道按策略保留（仍会在结果里
-    // 过滤掉种子曲目自身，见 _searchSource）。
-    final sameSourceAllowed =
-        _strategies.of(seed.id.sourceKey).sameSourceCandidates;
-    return [
-      for (final descriptor in _sourceRegistry.descriptors)
-        if (descriptor.enabled &&
-            descriptor.capabilities.search &&
-            (descriptor.key != seed.id.sourceKey || sameSourceAllowed))
-          descriptor,
-    ];
-  }
+  /// 可搜索且启用的音源（含种子源；种子曲目自身在 [_searchSource] 过滤）。
+  List<SourceDescriptor> get _searchableSources => [
+        for (final descriptor in _sourceRegistry.descriptors)
+          if (descriptor.enabled && descriptor.capabilities.search) descriptor,
+      ];
 
   /// 单源搜索：结果就绪即并入分组（渐进渲染）；失败记入 [failedSourceKeys]。
   Future<void> _searchSource(int sessionId, SourceDescriptor descriptor) async {

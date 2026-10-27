@@ -323,6 +323,16 @@ class BuiltinPlatforms {
   static final List<BuiltinPlatform> searchCandidates =
       List.unmodifiable(byKey.values);
 
+  /// 音乐平台 key（不含视频站 B 站），按规范顺序。
+  ///
+  /// 跨渠道补封面等「按名字找歌」的场景使用：这些平台的搜索适配器不依赖
+  /// LX 脚本取链，可直接搜到带封面的曲目。B 站搜索结果是视频，不参与
+  /// 自动找歌匹配。
+  static final List<String> musicKeys = List.unmodifiable([
+    for (final platform in searchCandidates)
+      if (platform.key != 'bili') platform.key,
+  ]);
+
   /// 某能力族的非空适配器表：`byKey` 是唯一事实来源，各族键表都从这里推导，
   /// 选择器为 null 的平台不进表。
   static Map<String, T> _adaptersOf<T extends Object>(

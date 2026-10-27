@@ -15,6 +15,9 @@ class MiguProvider extends LyricProvider {
   String get name => 'migu';
 
   @override
+  String get channelKey => 'mg';
+
+  @override
   Future<SongMatch?> search(String title, String artist) async {
     final results = await searchMultiple(title, artist, limit: 1);
     return results.isNotEmpty ? results.first : null;

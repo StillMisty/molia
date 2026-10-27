@@ -37,7 +37,10 @@ T? pickBestSongMatchBy<T>(
   required bool requireStrictMatch,
 }) {
   if (candidates.isEmpty) return null;
-  if (candidates.length == 1) return candidates.first;
+  // 非严格模式单候选直接采用（歌词搜索的「至少不比首个候选差」）；
+  // 严格模式必须继续走完整校验——否则唯一一条搜索结果即使是另一首歌
+  // 也会被自动换源 / 跨渠道补封面采用。
+  if (candidates.length == 1 && !requireStrictMatch) return candidates.first;
 
   final targetName = normalizeSongText(target.title).toLowerCase();
   final targetSinger =

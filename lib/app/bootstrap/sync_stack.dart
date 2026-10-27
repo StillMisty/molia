@@ -116,8 +116,8 @@ Future<SyncStack> buildSyncStack({
     store: covers,
     state: syncState,
     journal: library.syncJournal,
-    // 默认关闭：未请求封面类别时 collect 直接返回空，不读封面文件；重新
-    // 开启后由控制面重置快照发布、用全量快照补传已有封面。
+    // 未请求封面类别时 collect 直接返回空，不读封面文件；用户关闭后再
+    // 开启时由控制面重置快照发布、用全量快照补传已有封面。
     enabled: () => syncState.isCategoryEnabled(SyncCategory.covers),
   );
 

@@ -35,13 +35,15 @@ enum SyncCategory {
 
   /// 自定义封面（每曲 + 全局默认封面图片，体积大）。
   ///
-  /// 默认关闭：自动同步只在用户显式开启后才外发封面；关闭期间本地修改仍会
-  /// 登记，重新开启后由全量快照 / 后续变更外发。手动完整备份不受此开关限制
-  /// （导出 / 导入仍含封面）。
+  /// 与其他类别一样默认同步；封面体积大，用户可在同步内容页单独关闭。
+  /// 关闭期间本地修改仍会登记，重新开启后由全量快照 / 后续变更外发。手动
+  /// 完整备份不受此开关限制（导出 / 导入仍含封面）。
   covers;
 
   /// 类别默认开关（缺失该类别时使用）。
-  bool get defaultEnabled => this != SyncCategory.covers;
+  ///
+  /// 所有类别默认开启；`covers` 也不额外关闭，只是不进蜂窝小类别轮。
+  bool get defaultEnabled => true;
 
   static SyncCategory? tryParse(String? name) {
     for (final value in SyncCategory.values) {

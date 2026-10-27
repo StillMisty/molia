@@ -42,6 +42,28 @@ void main() {
     expect(best?.title, '晴天（2023 重制）', reason: '歌名包含且无版本词差异');
   });
 
+  test('严格模式：单条候选也要校验，不匹配返回 null', () {
+    expect(
+      pickBestSongMatchBy(
+        [info('完全不同的歌', artist: '别人', seconds: 10)],
+        target: info('晴天', seconds: 269),
+        info: (candidate) => candidate,
+        requireStrictMatch: true,
+      ),
+      isNull,
+    );
+    // 非严格模式仍保留「至少不比首个候选差」的兜底下限。
+    expect(
+      pickBestSongMatchBy(
+        [info('完全不同的歌', artist: '别人', seconds: 10)],
+        target: info('晴天', seconds: 269),
+        info: (candidate) => candidate,
+        requireStrictMatch: false,
+      )?.title,
+      '完全不同的歌',
+    );
+  });
+
   test('严格模式：全部不匹配 → null；非严格 → 首个候选', () {
     final candidates = [
       info('完全不同的歌', artist: '别人', seconds: 10),

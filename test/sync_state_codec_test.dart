@@ -155,7 +155,7 @@ void main() {
       for (final category in SyncCategory.values)
         category: category.defaultEnabled,
     });
-    expect(empty.categories[SyncCategory.covers], isFalse, reason: '自定义封面默认关闭');
+    expect(empty.categories[SyncCategory.covers], isTrue, reason: '自定义封面默认同步');
     expect(empty.transports, isEmpty);
     expect(empty.webdav.baseUrl, '');
     expect(empty.webdav.username, '');
@@ -223,15 +223,10 @@ void main() {
     expect(sparse.transports, {'lan'});
     expect(
       sparse.categories[SyncCategory.covers],
-      isFalse,
-      reason: '缺 covers 时按默认关闭，不能回退成开启',
-    );
-    expect(
-      sparse.categories.entries
-          .where((entry) => entry.key != SyncCategory.covers)
-          .every((entry) => entry.value),
       isTrue,
+      reason: '缺 covers 时按默认开启',
     );
+    expect(sparse.categories.values.every((enabled) => enabled), isTrue);
     expect(sparse.coverStamps, isEmpty);
     expect(sparse.coverTombstones, isEmpty);
     expect(sparse.settingStamps['themeMode']!.hash, 'hash');

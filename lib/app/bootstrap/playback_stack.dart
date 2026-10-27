@@ -15,7 +15,6 @@ library;
 import '../../domain/ports/playback_backend.dart';
 import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/ui_messenger.dart';
-import '../../data/mapping/track_mapper.dart';
 import '../../data/playback/default_playback_facade.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../data/settings/settings_registry.dart';
@@ -131,11 +130,11 @@ Future<PlaybackStack> buildPlaybackStack({
     // 移动端退后台不预取封面（应用内没有展示面）；桌面仍由 AppPresence
     // 管托盘 / 最小化，两条信号互不覆盖。
     mobilePowerPolicy: policy,
-    // 封面补取：曲目起播无封面时经 SourceManager 现取（脚本 pic →
-    // 内置平台原生取图），省流模式不发请求；取到后原地回写队列曲目。
+    // 封面补取：曲目起播无封面时先走本渠道原生取图，失败后按名字跨渠道
+    // 严格匹配兜底；省流模式不发请求。取到后原地回写队列曲目。
     artworkResolver: (track) async {
       if (dataSaver.blockNetworkArtwork) return null;
-      return sourceManager.fetchPic(sourceTrackFromTrack(track));
+      return local.coverBackfill.fetch(track);
     },
     coverResolver: covers.resolution,
   );

@@ -44,13 +44,12 @@ void main() {
     expect(control.enabled, isFalse);
     expect(control.deviceId, 'devA');
     expect(control.deviceName, isNotEmpty);
-    expect(control.categories[SyncCategory.covers], isFalse,
-        reason: '自定义封面默认关闭');
+    expect(control.categories[SyncCategory.covers], isTrue,
+        reason: '自定义封面默认同步');
     expect(
-      control.categories.entries
-          .where((entry) => entry.key != SyncCategory.covers)
-          .every((entry) => entry.value),
+      control.categories.values.every((enabled) => enabled),
       isTrue,
+      reason: '所有类别默认开启',
     );
     expect(control.enabledTransports, isEmpty);
     expect(control.webdav.isConfigured, isFalse);
@@ -149,6 +148,8 @@ void main() {
       transports: {'lan': lan, 'webdav': webdav},
     );
     addTearDown(multi.dispose);
+    // 封面默认开启：先显式关闭，才能走到「重新开启」的重置分支。
+    await multi.setCategory(SyncCategory.covers, false);
     state.setSnapshotPushSeq('lan', 42);
     state.setSnapshotPushSeq('webdav', 42);
     expect(state.snapshotPushSeq('lan'), 42);

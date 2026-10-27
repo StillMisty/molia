@@ -390,7 +390,7 @@ void main() {
     });
   });
 
-  test('蜂窝小类别轮只清已外发类别：历史 / 统计留到 Wi-Fi 轮', () {
+  test('蜂窝小类别轮只清已外发类别：历史 / 统计 / 封面留到 Wi-Fi 轮', () {
     fakeAsync((async) {
       var cellular = true;
       final host = RecordingSyncSchedulerHost();
@@ -410,10 +410,14 @@ void main() {
       scheduler.notifyLocalChange();
       async.elapse(const Duration(seconds: 5));
       expect(host.rounds.single.categories, SyncScheduler.smallCategories);
-      // 小类别已外发；历史 / 统计仍未外发（等 Wi-Fi）。
+      // 小类别已外发；历史 / 统计 / 封面仍未外发（等 Wi-Fi）。
       expect(
         scheduler.dirtyCategories,
-        {SyncCategory.statistics, SyncCategory.history},
+        {
+          SyncCategory.statistics,
+          SyncCategory.history,
+          SyncCategory.covers,
+        },
       );
 
       // 切回 Wi-Fi：下一次去抖轮覆盖全部类别并清空待发标记。

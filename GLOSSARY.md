@@ -350,10 +350,18 @@
   `lib/sources/builtin/builtin_lyric_dispatch.dart` /
   `builtin_pic_dispatch.dart`，与平台适配器同门。B 站登录后由组合根清
   `bili:` 缓存并强刷当前歌词；`LyricsService` 对未手动选择的跨平台缓存先试原生。
-- **Lyrics source preference（同源优先）** — 缓存命中前先判断：曲目原生源现在
-  可用（B 站已登录）且缓存来源不是曲目源、非手动选择时，忽略跨平台缓存重试
-  原生；手动选择的 `LyricCacheData.manual` 永远优先。五平台跨平台回退仍保持
-  「并行竞速、首个非空即返回」。
+- **Lyrics source preference（同源优先）** — 两层含义：① 缓存命中前先判断：
+  曲目原生源现在可用（B 站已登录）且缓存来源不是曲目源、非手动选择时，忽略
+  跨平台缓存重试原生；手动选择的 `LyricCacheData.manual` 永远优先。② 缓存
+  未命中时的名字回退：`LyricProvider.channelKey` 与曲目来源渠道一致时给 3s
+  同源预算（命中即用），超时 / 空 / 抛错后才用其它渠道的首个非空结果；其它
+  请求仍并行预取，不额外等第二轮网络。没有同渠道 provider 的曲目（B 站 /
+  脚本 / 本地）保持「并行竞速、首个非空即返回」。
+- **Cover backfill（封面补取）** — `lib/services/covers/cover_backfill_service.dart`：
+  本渠道原生取图 → 本渠道名字搜索（2s 预算）→ 五个音乐平台并行按名字搜索并用
+  `song_match.dart` 严格匹配兜底；播放补图与下载取图共用同一实例，本地 / 离线
+  曲目不跨渠道，播放侧省流模式不发起请求；正结果缓存 10min，空结果不缓存
+  （下次起播可重试）。
 - **Lyrics source strategy（歌词来源策略）** — `lib/services/lyrics/lyrics_source_strategy.dart`
   + `lyrics_source_registry.dart`：「歌词换源有哪些来源」与 `LyricsService` 自动
   回退的唯一事实。每个来源声明渠道 key / `LyricProvider` / 是否参与自动回退 /
@@ -555,15 +563,15 @@
 - **Source swap（换源）** — `lib/providers/source_swap_provider.dart` + 
   `lib/widgets/source_swap_view.dart`：按种子曲目「歌名 + 歌手」在可搜索音源
   并行检索（逐源就绪即填充、单源失败隔离），点候选即试听（单曲「换源试听」），
-  确认后原位替换。默认排除种子源；B 站允许同源多投稿，且 B 站曲目的 artists
-  是 UP 主、不当歌手关键词（只搜标题）——每个源的候选口径由 **Swap strategy**
-  声明。入口：收藏页合集（收藏 / 历史 / 自建列表）行动作
-  （移动端左滑胶囊 / 桌面右键菜单）/ 播放页 seek 行（队列入口）；
-  本地歌曲不含换源（本地文件无在线音源可换）。
+  确认后原位替换。**保留种子源**（种子曲目自身按 URI 排除；同一渠道可能有
+  其它版本 / 投稿）；B 站曲目的 artists 是 UP 主、不当歌手关键词（只搜标题）
+  ——每个源的候选口径由 **Swap strategy** 声明。入口：收藏页合集
+  （收藏 / 历史 / 自建列表）行动作（移动端左滑胶囊 / 桌面右键菜单）/ 播放页
+  seek 行（队列入口）；本地歌曲不含换源（本地文件无在线音源可换）。
 - **Swap strategy（换源策略）** — `lib/services/source_swap/source_swap_strategy.dart`：
-  按音源 key 声明「是否允许同源候选」与「种子 artists 是否为 UP 主」；未声明的
-  渠道继承默认行为（新渠道无需注册即可参与换源）。歌词侧的同名概念是
-  **Lyrics source strategy**（渠道 → `LyricProvider`）。
+  按音源 key 声明「种子 artists 是否为 UP 主」；未声明的渠道继承默认行为
+  （新渠道无需注册即可参与换源）。歌词侧的同名概念是 **Lyrics source strategy**
+  （渠道 → `LyricProvider`）。
 - **Swap placement（换源写回位置）** — `SourceSwapPlacement`：`playlist`
   （收藏/自建列表，仓库事务保 `sortOrder`/`addedAt`）、`history`（保 `playedAt`）、
   `queue`（仅播放队列，不落库）。库内替换与队列跟随**解耦**：队列中同 id 曲目
@@ -790,7 +798,7 @@
   `playlistTracks` / `sources` / `settings` / `credentials` / `statistics` /
   `history` / `session` / `covers`；关闭的类别既不推送也不应用（多数类别本机
   仍持续登记本地变化；`covers` 未请求时整轮跳过）。`covers`（自定义封面）默认
-  关闭，且不进蜂窝小类别。
+  开启，且不进蜂窝小类别。
 - **Cover sync adapter（封面同步适配器）** — `lib/data/sync/adapters/cover_sync_adapter.dart`：
   `covers` 类别的记录桥：每曲封面 + 默认封面保留键 `__default_cover__`；版本
   由 `SyncStampIssuer` 按内容哈希发放。类别未请求时立即返回空（不读文件、不算
