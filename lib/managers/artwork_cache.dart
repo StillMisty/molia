@@ -286,6 +286,34 @@ class ArtworkCache {
     }
   }
 
+  /// 已缓存封面文件的元数据；未命中 / 文件不存在返回 null。
+  ///
+  /// 供封面取色 seed 缓存判断「同一 URL 的缓存文件内容是否变了」：只
+  /// `stat()` 取大小与修改时间，不读图片字节——取色 seed 只需要内容身份，
+  /// 每次启动 / 每次命中都读一遍图片字节会把封面缓存变成额外 IO 热点。
+  Future<({int sizeBytes, int modifiedMs})?> cachedFileInfo(
+    String url,
+  ) async {
+    if (url.isEmpty) return null;
+    try {
+      final manager = await managerOrNull();
+      if (manager == null) return null;
+      final cached = await manager.getFileFromCache(url);
+      if (cached == null) return null;
+      // 索引可能领先于磁盘：文件被 sweep / 外部进程删掉时按未命中处理。
+      if (!await cached.file.exists()) return null;
+      final stat = await cached.file.stat();
+      return (
+        sizeBytes: stat.size,
+        modifiedMs: stat.modified.millisecondsSinceEpoch,
+      );
+    } catch (e) {
+      // manager 未就绪 / stat 失败：调用方回退到「没有缓存」的路径。
+      _logger.fine('封面缓存元数据读取失败: $e');
+      return null;
+    }
+  }
+
   /// 取得封面的本地文件路径（系统媒体会话封面用）。
   ///
   /// 先查持久缓存；未命中时用统一请求头（浏览器 UA + 平台 Referer）下载，

@@ -10,7 +10,9 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/playback/playback_power_policy.dart';
 import 'package:molia/services/app_presence.dart';
+import 'package:molia/services/artwork_palette_seed_store.dart';
 import 'package:molia/services/artwork_palette_service.dart';
+import 'package:molia/services/covers/cover_image_identity.dart';
 import 'package:molia/services/covers/cover_resolution.dart';
 import 'package:molia/theme/scheme_builder.dart';
 
@@ -29,7 +31,9 @@ class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
 
   @override
   ImageStreamCompleter loadImage(
-      _SolidColorImageProvider key, ImageDecoderCallback decode) {
+    _SolidColorImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
     return OneFrameImageStreamCompleter(
       _createImage().then((image) => ImageInfo(image: image)),
     );
@@ -38,10 +42,7 @@ class _SolidColorImageProvider extends ImageProvider<_SolidColorImageProvider> {
   Future<ui.Image> _createImage() {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, 4, 4),
-      Paint()..color = color,
-    );
+    canvas.drawRect(const Rect.fromLTWH(0, 0, 4, 4), Paint()..color = color);
     return recorder.endRecording().toImage(4, 4);
   }
 }
@@ -60,7 +61,9 @@ class _ProbeImageProvider extends ImageProvider<_ProbeImageProvider> {
 
   @override
   ImageStreamCompleter loadImage(
-      _ProbeImageProvider key, ImageDecoderCallback decode) {
+    _ProbeImageProvider key,
+    ImageDecoderCallback decode,
+  ) {
     return OneFrameImageStreamCompleter(
       SynchronousFuture<ImageInfo>(ImageInfo(image: _image)),
     );
@@ -92,6 +95,19 @@ Future<Uint8List> _pngBytes(Color color, {int size = 8}) async {
   return data!.buffer.asUint8List();
 }
 
+/// 内存 seed store：写发生在 future 完成前，测试无需等待落盘队列。
+class _FakeSeedStore extends ArtworkPaletteSeedStore {
+  final Map<String, int> entries = {};
+
+  @override
+  Future<int?> read(String cacheKey) async => entries[cacheKey];
+
+  @override
+  Future<void> write(String cacheKey, int seed) async {
+    entries[cacheKey] = seed;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -100,13 +116,13 @@ void main() {
     // 普通 test 的 fake async 区不会完成。
     test('loadTrack：只有默认封面时不取色 / 不读图', () async {
       var providerCalls = 0;
-      final service = ArtworkPaletteService(providerFor: (url) async {
-        providerCalls++;
-        return _SolidColorImageProvider(const Color(0xFF00BB00));
-      });
-      final index = FakeCoverIndex(
-        defaultUrl: 'file:///tmp/default-cover.jpg',
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFF00BB00));
+        },
       );
+      final index = FakeCoverIndex(defaultUrl: 'file:///tmp/default-cover.jpg');
       const track = Track(
         id: TrackId('wy', '1'),
         title: 'T',
@@ -124,13 +140,16 @@ void main() {
 
     testWidgets('提取纯色封面：seed → 双亮度方案，缓存命中不重复取图', (tester) async {
       var providerCalls = 0;
-      final service = ArtworkPaletteService(providerFor: (url) async {
-        providerCalls++;
-        return _SolidColorImageProvider(const Color(0xFF00BB00));
-      });
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFF00BB00));
+        },
+      );
 
-      final first = await tester
-          .runAsync(() => service.load('https://example.com/a.jpg'));
+      final first = await tester.runAsync(
+        () => service.load('https://example.com/a.jpg'),
+      );
       expect(first, isNotNull);
       expect(first!.light, buildColorScheme(first.seed, Brightness.light));
       expect(first.dark, buildColorScheme(first.seed, Brightness.dark));
@@ -142,15 +161,17 @@ void main() {
       expect(providerCalls, 1);
 
       // 再次读取命中缓存：同一个 palette 实例，不再取图。
-      final second = await tester
-          .runAsync(() => service.load('https://example.com/a.jpg'));
+      final second = await tester.runAsync(
+        () => service.load('https://example.com/a.jpg'),
+      );
       expect(identical(second, first), isTrue);
       expect(providerCalls, 1);
     });
 
     testWidgets('取色只缓存 100px 采样图，不把原图留在图片缓存', (tester) async {
       final dir = (await tester.runAsync(
-          () => Directory.systemTemp.createTemp('molia_palette_probe')))!;
+        () => Directory.systemTemp.createTemp('molia_palette_probe'),
+      ))!;
       addTearDown(() => dir.deleteSync(recursive: true));
       final file = File('${dir.path}/large-cover.png');
       await tester.runAsync(() async {
@@ -167,8 +188,9 @@ void main() {
         providerFor: (url) async => FileImage(file),
       );
       final before = cache.currentSizeBytes;
-      final palette =
-          await tester.runAsync(() => service.load(file.uri.toString()));
+      final palette = await tester.runAsync(
+        () => service.load(file.uri.toString()),
+      );
       final after = cache.currentSizeBytes;
 
       expect(palette, isNotNull);
@@ -214,26 +236,35 @@ void main() {
 
     testWidgets('同 URL 并发请求合并为一次提取', (tester) async {
       var providerCalls = 0;
-      final service = ArtworkPaletteService(providerFor: (url) async {
-        providerCalls++;
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-        return _SolidColorImageProvider(const Color(0xFFBB0000));
-      });
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          providerCalls++;
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+          return _SolidColorImageProvider(const Color(0xFFBB0000));
+        },
+      );
 
-      final results = await tester.runAsync(() => Future.wait([
-            service.load('https://example.com/b.jpg'),
-            service.load('https://example.com/b.jpg'),
-          ]));
+      final results = await tester.runAsync(
+        () => Future.wait([
+          service.load('https://example.com/b.jpg'),
+          service.load('https://example.com/b.jpg'),
+        ]),
+      );
       expect(providerCalls, 1);
       expect(identical(results![0], results[1]), isTrue);
     });
 
     testWidgets('取图失败（省流未命中/网络失败）返回 null，不抛错', (tester) async {
-      final service = ArtworkPaletteService(providerFor: (url) async {
-        throw const ArtworkNetworkBlockedException('https://example.com/c.jpg');
-      });
-      final result = await tester
-          .runAsync(() => service.load('https://example.com/c.jpg'));
+      final service = ArtworkPaletteService(
+        providerFor: (url) async {
+          throw const ArtworkNetworkBlockedException(
+            'https://example.com/c.jpg',
+          );
+        },
+      );
+      final result = await tester.runAsync(
+        () => service.load('https://example.com/c.jpg'),
+      );
       expect(result, isNull);
       // 失败不写缓存：下次可重试（恢复网络后补取色）。
       expect(service.cacheSize, 0);
@@ -252,8 +283,9 @@ void main() {
     });
 
     testWidgets('启动预解析：命中本地缓存出方案，写入 LRU 后稳态 load 不再取图', (tester) async {
-      final bytes =
-          (await tester.runAsync(() => _pngBytes(const Color(0xFF00BB00))))!;
+      final bytes = (await tester.runAsync(
+        () => _pngBytes(const Color(0xFF00BB00)),
+      ))!;
       var providerCalls = 0;
       var bytesCalls = 0;
       final service = ArtworkPaletteService(
@@ -267,16 +299,18 @@ void main() {
         },
       );
 
-      final palette = await tester
-          .runAsync(() => service.loadCached('https://example.com/a.jpg'));
+      final palette = await tester.runAsync(
+        () => service.loadCached('https://example.com/a.jpg'),
+      );
       expect(palette, isNotNull);
       expect(palette!.light, buildColorScheme(palette.seed, Brightness.light));
       expect(bytesCalls, 1);
       expect(providerCalls, 0, reason: '本地命中不应走取图（网络）路径');
 
       // LRU 已写入：同 URL 的稳态取色直接命中，不重复取图 / 读缓存字节。
-      final loaded = await tester
-          .runAsync(() => service.load('https://example.com/a.jpg'));
+      final loaded = await tester.runAsync(
+        () => service.load('https://example.com/a.jpg'),
+      );
       expect(identical(loaded, palette), isTrue);
       expect(providerCalls, 0);
       expect(bytesCalls, 1);
@@ -292,8 +326,9 @@ void main() {
         cachedBytesFor: (url) async => null,
       );
 
-      final palette = await tester
-          .runAsync(() => service.loadCached('https://example.com/miss.jpg'));
+      final palette = await tester.runAsync(
+        () => service.loadCached('https://example.com/miss.jpg'),
+      );
       expect(palette, isNull);
       expect(providerCalls, 0, reason: '启动预解析不能触网');
       expect(service.cacheSize, 0);
@@ -301,7 +336,8 @@ void main() {
 
     testWidgets('启动预解析：file:// 封面走本地文件，不读网络缓存', (tester) async {
       final dir = (await tester.runAsync(
-          () => Directory.systemTemp.createTemp('molia_palette_test')))!;
+        () => Directory.systemTemp.createTemp('molia_palette_test'),
+      ))!;
       addTearDown(() => dir.deleteSync(recursive: true));
       final file = File('${dir.path}/cover.png');
       await tester.runAsync(() async {
@@ -316,15 +352,17 @@ void main() {
         },
       );
 
-      final palette =
-          await tester.runAsync(() => service.loadCached(file.uri.toString()));
+      final palette = await tester.runAsync(
+        () => service.loadCached(file.uri.toString()),
+      );
       expect(palette, isNotNull);
       expect(bytesCalls, 0, reason: 'file:// 本身就是本地文件');
     });
 
     testWidgets('loadLocalFile：读盘字节出方案，同路径第二次只读一次盘', (tester) async {
-      final bytes =
-          (await tester.runAsync(() => _pngBytes(const Color(0xFF00BB00))))!;
+      final bytes = (await tester.runAsync(
+        () => _pngBytes(const Color(0xFF00BB00)),
+      ))!;
       var reads = 0;
       final service = ArtworkPaletteService(
         localFileBytesFor: (path) async {
@@ -333,8 +371,9 @@ void main() {
         },
       );
 
-      final first = await tester
-          .runAsync(() => service.loadLocalFile('/home/u/wallpaper.png'));
+      final first = await tester.runAsync(
+        () => service.loadLocalFile('/home/u/wallpaper.png'),
+      );
       expect(first, isNotNull);
       expect(first!.light, buildColorScheme(first.seed, Brightness.light));
       expect(
@@ -345,8 +384,9 @@ void main() {
       expect(reads, 1);
 
       // 浅 / 深壁纸常是同一文件：第二次命中 LRU，不再读盘、不再解码。
-      final second = await tester
-          .runAsync(() => service.loadLocalFile('/home/u/wallpaper.png'));
+      final second = await tester.runAsync(
+        () => service.loadLocalFile('/home/u/wallpaper.png'),
+      );
       expect(identical(second, first), isTrue);
       expect(reads, 1);
     });
@@ -394,6 +434,185 @@ void main() {
       expect(
         await tester.runAsync(() => corrupt.loadLocalFile('/corrupt.png')),
         isNull,
+      );
+    });
+
+    testWidgets('seed 命中：不读缓存字节 / 不取图，稳态 load 复用 LRU', (tester) async {
+      const identity = CoverImageIdentity(
+        url: 'https://example.com/seed.jpg',
+        sizeBytes: 1024,
+        modifiedMs: 1234,
+      );
+      final store = _FakeSeedStore()..entries[identity.cacheKey] = 0xFF00BB00;
+      var providerCalls = 0;
+      var bytesCalls = 0;
+      final service = ArtworkPaletteService(
+        seedStore: store,
+        identityFor: (url) async => identity,
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFFBB0000));
+        },
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return Uint8List(0);
+        },
+      );
+
+      final cached = await tester.runAsync(
+        () => service.loadCached(identity.url),
+      );
+      expect(cached, isNotNull);
+      expect(cached!.seed.toARGB32(), 0xFF00BB00);
+      expect(providerCalls, 0);
+      expect(bytesCalls, 0, reason: 'seed 命中不应读封面缓存字节');
+
+      // 500ms 稳态 load 按同一内容身份命中内存 LRU，不重复提取。
+      final loaded = await tester.runAsync(() => service.load(identity.url));
+      expect(identical(loaded, cached), isTrue);
+      expect(providerCalls, 0);
+      expect(bytesCalls, 0);
+    });
+
+    testWidgets('新实例直接 load：持久 seed 命中，不读字节 / 不取图', (tester) async {
+      const identity = CoverImageIdentity(
+        url: 'https://example.com/load-seed.jpg',
+        sizeBytes: 512,
+        modifiedMs: 4321,
+      );
+      final store = _FakeSeedStore()..entries[identity.cacheKey] = 0xFF112233;
+      var providerCalls = 0;
+      var bytesCalls = 0;
+      // 全新服务、内存 LRU 为空，也没有先走 loadCached。
+      final service = ArtworkPaletteService(
+        seedStore: store,
+        identityFor: (url) async => identity,
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFFBB0000));
+        },
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return Uint8List(0);
+        },
+      );
+
+      final palette = await tester.runAsync(() => service.load(identity.url));
+      expect(palette, isNotNull);
+      expect(palette!.seed.toARGB32(), 0xFF112233);
+      expect(providerCalls, 0);
+      expect(bytesCalls, 0);
+
+      // seed 命中时已写 LRU：后续 load 直接复用同一实例。
+      final again = await tester.runAsync(() => service.load(identity.url));
+      expect(identical(again, palette), isTrue);
+      expect(providerCalls, 0);
+      expect(bytesCalls, 0);
+    });
+
+    testWidgets('seed 未命中：走本地缓存字节，提取成功后写入 seed', (tester) async {
+      const identity = CoverImageIdentity(
+        url: 'https://example.com/miss.jpg',
+        sizeBytes: 2048,
+        modifiedMs: 5678,
+      );
+      final store = _FakeSeedStore();
+      final bytes = (await tester.runAsync(
+        () => _pngBytes(const Color(0xFF00BB00)),
+      ))!;
+      var bytesCalls = 0;
+      final service = ArtworkPaletteService(
+        seedStore: store,
+        identityFor: (url) async => identity,
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return bytes;
+        },
+      );
+
+      final palette = await tester.runAsync(
+        () => service.loadCached(identity.url),
+      );
+      expect(palette, isNotNull);
+      expect(bytesCalls, 1);
+      expect(store.entries[identity.cacheKey], palette!.seed.toARGB32());
+    });
+
+    testWidgets('稳态 load 取图成功后也写 seed（不读本地缓存字节）', (tester) async {
+      const identity = CoverImageIdentity(
+        url: 'https://example.com/provider.jpg',
+        sizeBytes: 4096,
+        modifiedMs: 9999,
+      );
+      final store = _FakeSeedStore();
+      var providerCalls = 0;
+      var bytesCalls = 0;
+      final service = ArtworkPaletteService(
+        seedStore: store,
+        identityFor: (url) async => identity,
+        providerFor: (url) async {
+          providerCalls++;
+          return _SolidColorImageProvider(const Color(0xFF00BB00));
+        },
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return null;
+        },
+      );
+
+      final palette = await tester.runAsync(() => service.load(identity.url));
+      expect(palette, isNotNull);
+      expect(providerCalls, 1);
+      expect(bytesCalls, 0);
+      expect(store.entries[identity.cacheKey], palette!.seed.toARGB32());
+    });
+
+    testWidgets('内容身份变化：旧 seed 不复用，重新提取并写新 seed', (tester) async {
+      const url = 'https://example.com/changing.jpg';
+      const oldIdentity = CoverImageIdentity(
+        url: url,
+        sizeBytes: 10,
+        modifiedMs: 1,
+      );
+      const newIdentity = CoverImageIdentity(
+        url: url,
+        sizeBytes: 20,
+        modifiedMs: 2,
+      );
+      final store = _FakeSeedStore()
+        ..entries[oldIdentity.cacheKey] = 0xFF00BB00;
+      final bytes = (await tester.runAsync(
+        () => _pngBytes(const Color(0xFFBB0000)),
+      ))!;
+      var identity = oldIdentity;
+      var bytesCalls = 0;
+      final service = ArtworkPaletteService(
+        seedStore: store,
+        identityFor: (_) async => identity,
+        cachedBytesFor: (url) async {
+          bytesCalls++;
+          return bytes;
+        },
+      );
+
+      final oldPalette = await tester.runAsync(() => service.loadCached(url));
+      expect(oldPalette!.seed.toARGB32(), 0xFF00BB00);
+      expect(bytesCalls, 0, reason: '旧身份 seed 仍有效');
+
+      // 同一 URL 的缓存文件被替换：新身份没有 seed，必须重新提取。
+      identity = newIdentity;
+      final freshPalette = await tester.runAsync(() => service.loadCached(url));
+      expect(freshPalette, isNotNull);
+      expect(identical(freshPalette, oldPalette), isFalse);
+      expect(bytesCalls, 1);
+      expect(
+        store.entries[newIdentity.cacheKey],
+        freshPalette!.seed.toARGB32(),
+      );
+      expect(
+        store.entries[oldIdentity.cacheKey],
+        0xFF00BB00,
+        reason: '旧内容 seed 保留，回滚到旧文件仍可命中',
       );
     });
   });

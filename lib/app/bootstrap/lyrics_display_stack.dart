@@ -18,6 +18,7 @@ import '../../providers/theme_provider.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/playback_power_policy.dart';
 import '../../data/settings/settings_keys.dart';
+import '../../services/artwork_palette_seed_store.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/covers/custom_cover_store.dart';
 import '../../services/lyrics_display/audio_route_monitor.dart';
@@ -74,7 +75,11 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   ]);
   final navProvider = NavProvider(settings: navSettings);
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
-  final artworkPaletteService = ArtworkPaletteService();
+  // seed 持久化按封面内容身份（URL + 文件大小 + 修改时间），设备本地派生
+  // 缓存，不参与同步；启动命中时不必再解码封面。
+  final artworkPaletteService = ArtworkPaletteService(
+    seedStore: ArtworkPaletteSeedStore(),
+  );
   final artworkThemeSync = ArtworkThemeSync(
     load: artworkPaletteService.load,
     onPalette: (palette) => themeProvider.applyArtworkSeed(palette.seed),
@@ -186,9 +191,9 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   covers.addChangeListener(syncArtworkPalette);
   syncArtworkPalette();
 
-  // 启动预解析（runApp 前，决定首帧配色）：先按平台亮度定亮度，再并行解析
-  // 系统壁纸图与恢复会话的当前封面——进入应用即最终配色，不再先出基础配色
-  // 再渐变；未命中不等待网络，回退上面的稳态链路（settleDelay 后取色再过渡）。
+  // 启动预解析（runApp 前，决定首帧配色）：先按平台亮度定亮度，再解析恢复
+  // 会话的当前封面——进入应用即最终配色，不再先出基础配色再渐变；未命中不
+  // 等待网络，回退上面的稳态链路（settleDelay 后取色再过渡）。
   // 主题偏好 / 播放偏好（恢复会话解析）/ 导航偏好（启动首页）互不依赖：
   // 并行等待——启动首页必须在首帧前就绪，否则会先亮默认页再跳。
   final prefsWatch = Stopwatch()..start();
@@ -201,22 +206,10 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   themeProvider.applyPlatformBrightness(
     WidgetsBinding.instance.platformDispatcher.platformBrightness,
   );
-  // 两条启动取色链路（系统壁纸 / 恢复会话封面）互不依赖：壁纸 future 先起跑，
-  // 再 await 封面，两次解码重叠——只阻塞首帧真正需要的那一条，去掉串行叠加。
-  // 桌面系统壁纸（B-lite）：只探测桌面平台（移动端壁纸档 = 莫奈，探测无意义、
-  // warning 是噪音）；且无论当前是否壁纸档都解析一次——启动时是自定义档的
-  // 用户之后切回壁纸 / 同步推来 wallpaper 时 seed 已在位，不必重启，
-  // 冷启动与会话内切档行为一致。
-  // - 壁纸档且封面未命中：await 解析后注入，首帧即壁纸色（不回归）；
-  // - 壁纸档但封面命中：封面已是首帧色（[_schemeForBrightness] 封面优先），
-  //   壁纸 future 继续后台跑，落地只备用 seed，不必阻塞首帧；
-  // - 自定义档：unawaited 后台解析，不增加启动延迟（服务内部吞异常，不抛）；
-  //   若晚于封面预解析完成才落地，[_schemeForBrightness] 封面优先，不会被盖回。
-  // 拿不到壁纸（非 GNOME / 文件缺失 / 解码失败）保持 null，由 DynamicColorBuilder
-  // 的强调色兜底。
-  final wallpaperSeeds = isDesktopPlatform()
-      ? _resolveWallpaperSeeds(SystemWallpaperSource(), artworkPaletteService)
-      : null;
+  // 先查封面：命中持久 seed 时只读 prefs、不解码图片，是首帧最便宜的一档。
+  // seed 由图片内容决定，封面命中后首帧已经是封面色——即使基础配色是壁纸 /
+  // 自定义档，也不必再解析壁纸，把桌面壁纸取色整段移出启动路径。
+  final coverWatch = Stopwatch()..start();
   ArtworkPalette? startupPalette;
   if (themeProvider.followArtworkEnabled) {
     startupPalette = await artworkPaletteService.loadCachedTrack(
@@ -227,17 +220,34 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
       themeProvider.applyArtworkSeed(startupPalette.seed);
     }
   }
-  if (wallpaperSeeds != null) {
-    if (themeProvider.baseColorSource == ColorBaseSource.wallpaper &&
-        startupPalette == null) {
+  markStartupStep('sub.startupCover', coverWatch);
+
+  // 封面未命中才回退壁纸（顺序：封面 → 壁纸）。桌面系统壁纸（B-lite）：
+  // 只探测桌面平台（移动端壁纸档 = 莫奈，探测无意义、warning 是噪音）。
+  // - 壁纸档：await 解析后注入，首帧即壁纸色；
+  // - 自定义档：unawaited 后台解析，不增加启动延迟（服务内部吞异常，不抛）。
+  // 拿不到壁纸（非 GNOME / 文件缺失 / 解码失败）保持 null，由 DynamicColorBuilder
+  // 的强调色兜底。
+  //
+  // 已知取舍：封面命中但用户之后切到壁纸档时，本次启动没有壁纸 seed（壁纸
+  // future 根本没创建）；重启或下次封面未命中时再按本段逻辑解析。
+  // `followArtworkEnabled == false` 时 startupPalette 恒为 null，保持原壁纸逻辑。
+  if (startupPalette == null && isDesktopPlatform()) {
+    final wallpaperWatch = Stopwatch()..start();
+    final wallpaperSeeds = _resolveWallpaperSeeds(
+      SystemWallpaperSource(),
+      artworkPaletteService,
+    );
+    if (themeProvider.baseColorSource == ColorBaseSource.wallpaper) {
       final seeds = await wallpaperSeeds;
       themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
+      markStartupStep('sub.startupWallpaper', wallpaperWatch);
     } else {
       unawaited(
-        wallpaperSeeds.then(
-          (seeds) =>
-              themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2),
-        ),
+        wallpaperSeeds.then((seeds) {
+          themeProvider.updateSystemWallpaperSeed(seeds.$1, seeds.$2);
+          markStartupStep('sub.startupWallpaper', wallpaperWatch);
+        }),
       );
     }
   }

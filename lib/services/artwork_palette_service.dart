@@ -14,6 +14,8 @@ import '../playback/playback_power_policy.dart';
 import '../theme/scheme_builder.dart';
 import '../utils/local_image_provider.dart';
 import 'app_presence.dart';
+import 'artwork_palette_seed_store.dart';
+import 'covers/cover_image_identity.dart';
 import 'covers/cover_resolution.dart';
 
 /// 单张图像的取色结果：种子色 + 双亮度方案（一次提取，多处复用）。
@@ -26,10 +28,10 @@ class ArtworkPalette {
 
   /// 统一派生入口：[seed] 经 `buildColorScheme` 生成双亮度方案。
   factory ArtworkPalette.fromSeed(Color seed) => ArtworkPalette(
-        seed: seed,
-        light: buildColorScheme(seed, Brightness.light),
-        dark: buildColorScheme(seed, Brightness.dark),
-      );
+    seed: seed,
+    light: buildColorScheme(seed, Brightness.light),
+    dark: buildColorScheme(seed, Brightness.dark),
+  );
 
   /// 图像（封面 / 系统壁纸）提取出的种子色。
   final Color seed;
@@ -56,18 +58,23 @@ class ArtworkPalette {
 /// - 省流模式（`ArtworkCache` 网关只读本地缓存）下未命中会抛错：这里吞掉
 ///   并返回 null，调用方保持现色（不回退、不闪变）；
 /// - 同 URL / 同路径并发请求合并为一次提取；LRU 上限 8 条；
+/// - 传入 [ArtworkPaletteSeedStore] 时，内存 LRU 按封面内容身份
+///   （`CoverImageIdentity`）索引，并持久化「内容身份 → seed」：命中 seed
+///   时不读字节、不解码、不跑量化；未启用时保持原有的 URL / path 索引；
 /// - 启动预解析 [loadCached] 只吃本地已有封面（不触网），由组合根在
 ///   `runApp` 前调用，让首帧直接是封面色。
 class ArtworkPaletteService {
+  // 参数名保持公开的 seedStore，字段名按约定私有；不能用 initializing formal
+  // （那会把命名参数变成私有的 `_seedStore`）。
   ArtworkPaletteService({
     this._maxCacheEntries = 8,
-    this._providerFor =
-        artworkImageProvider,
-    this._cachedBytesFor =
-        _cachedBytesFromStore,
-    this._localFileBytesFor =
-        _localFileBytesFromDisk,
-  });
+    this._providerFor = artworkImageProvider,
+    this._cachedBytesFor = _cachedBytesFromStore,
+    this._localFileBytesFor = _localFileBytesFromDisk,
+    ArtworkPaletteSeedStore? seedStore,
+    Future<CoverImageIdentity?> Function(String url)? identityFor,
+  })  : _seedStore = seedStore, // ignore: prefer_initializing_formals
+        _identityFor = identityFor ?? CoverImageIdentity.resolve;
 
   static const int _quantizeColorCount = 128;
 
@@ -95,6 +102,14 @@ class ArtworkPaletteService {
 
   /// 本地文件字节读取入口（系统壁纸用；测试注入固定字节）。
   final Future<Uint8List?> Function(String path) _localFileBytesFor;
+
+  /// 封面 seed 的设备本地持久缓存；null = 不启用（保持只按 URL 索引的旧
+  /// 行为，现有测试也不需要触碰平台）。
+  final ArtworkPaletteSeedStore? _seedStore;
+
+  /// 封面内容身份解析（默认只读本地文件元数据，不读图片字节）。
+  final Future<CoverImageIdentity?> Function(String url) _identityFor;
+
   final LinkedHashMap<String, ArtworkPalette> _cache =
       LinkedHashMap<String, ArtworkPalette>();
   final Map<String, Future<ArtworkPalette?>> _inFlight = {};
@@ -103,30 +118,30 @@ class ArtworkPaletteService {
   int get cacheSize => _cache.length;
 
   /// 读取（或提取）封面方案；失败返回 null（调用方保持现色）。
+  ///
+  /// 启用 seed 缓存时按封面内容身份索引；否则保持原有 URL 索引。
   Future<ArtworkPalette?> load(String url) =>
-      _resolve(url, () => _extract(url));
+      _resolveCover(url, cachedOnly: false);
 
   /// 本地图像文件取色（桌面系统壁纸）：读盘 → 缩略解码 → seed。
   ///
   /// 与封面共用同一 LRU / 并发合并：同一路径（浅 / 深壁纸常为同一文件）
   /// 第二次请求命中缓存，只读一次盘、只解码一次；读取 / 解码失败返回 null
   /// （调用方回退系统强调色）。
+  ///
+  /// 壁纸不读 / 不写 seed：用户明确要求启动路径不省壁纸开销，按 path LRU
+  /// 复用即可。
   Future<ArtworkPalette?> loadLocalFile(String path) =>
       _resolve(path, () => _extractLocalFile(path));
 
-  /// 启动预解析：只吃本地已有封面（磁盘缓存 / 本地文件），未命中立即返回
-  /// null，不发任何网络请求。
+  /// 启动预解析：只吃本地已有封面（seed / 磁盘缓存 / 本地文件），未命中立即
+  /// 返回 null，不发任何网络请求。
   ///
   /// 供组合根在 `runApp` 前调用：命中时首帧直接是封面色，不再先出基础配色
   /// （莫奈）再渐变；未命中/失败不等待网络，回退稳态链路
   /// （[ArtworkThemeSync] 在封面就绪后照常过渡）。
-  Future<ArtworkPalette?> loadCached(String url) => _resolve(url, () async {
-        // 本地下载封面（`file://`）本身就是本地文件：走统一取图路径。
-        if (localFileImageProvider(url) != null) return _extract(url);
-        final bytes = await _cachedBytesFor(url);
-        if (bytes == null || bytes.isEmpty) return null;
-        return _extractFromBytes(url, bytes);
-      });
+  Future<ArtworkPalette?> loadCached(String url) =>
+      _resolveCover(url, cachedOnly: true);
 
   /// 曲目取色：只接受解析器的真实封面（默认封面是占位，永不参与取色）。
   ///
@@ -150,29 +165,119 @@ class ArtworkPaletteService {
     return loadCached(url);
   }
 
-  /// LRU 命中 / 并发合并：同一 URL 的进行中提取只做一次。
-  Future<ArtworkPalette?> _resolve(
+  /// 封面读取的统一入口：先解析内容身份，再按身份 key 查 LRU / 合并并发，
+  /// 最后才决定读 seed、本地缓存字节还是取图。
+  ///
+  /// 没启用 seed 缓存时完全走旧路径（URL 索引、不查文件元数据），避免测试
+  /// 和不需要持久化的调用方触碰平台。
+  Future<ArtworkPalette?> _resolveCover(
+    String url, {
+    required bool cachedOnly,
+  }) async {
+    final seedStore = _seedStore;
+    if (seedStore == null) {
+      return cachedOnly
+          ? _resolve(url, () => _loadCachedFromBytes(url))
+          : _resolve(url, () => _extract(url));
+    }
+    final identity = await _identityOf(url);
+    final key = _coverCacheKey(url, identity);
+    return _resolve(key, () async {
+      // LRU 未命中时，无论启动预解析还是稳态 load，都先读持久 seed：内容
+      // 身份不变就没有必要重新解码 / 量化。
+      final seed = identity == null
+          ? null
+          : await seedStore.read(identity.cacheKey);
+      if (seed != null) {
+        // 命中：只派生双亮度方案，不读字节、不解码、不跑量化。
+        return _store(key, ArtworkPalette.fromSeed(Color(seed)));
+      }
+      if (!cachedOnly) {
+        final palette = await _extract(url, cacheKey: key);
+        if (palette == null) return null;
+        if (identity != null) {
+          _writeSeed(identity, palette);
+        } else {
+          // 取图前文件还没落地（例如刚下载完尚未 stat 到）：取图成功后缓存
+          // 通常已就位，再查一次身份补写 seed；失败就算了，不重试。
+          unawaited(_writeSeedAfterLateIdentity(url, palette));
+        }
+        return palette;
+      }
+      final palette = await _loadCachedFromBytes(url, cacheKey: key);
+      if (palette != null) _writeSeed(identity, palette);
+      return palette;
+    });
+  }
+
+  /// 启动预解析的本地路径：`file://` 直接取图，其余读封面缓存字节。
+  Future<ArtworkPalette?> _loadCachedFromBytes(
+    String url, {
+    String? cacheKey,
+  }) async {
+    // 本地下载封面（`file://`）本身就是本地文件：走统一取图路径。
+    if (localFileImageProvider(url) != null) {
+      return _extract(url, cacheKey: cacheKey);
+    }
+    final bytes = await _cachedBytesFor(url);
+    if (bytes == null || bytes.isEmpty) return null;
+    return _extractFromBytes(cacheKey ?? url, bytes);
+  }
+
+  /// 解析内容身份；解析失败按「没有身份」继续原链路，不影响取色。
+  Future<CoverImageIdentity?> _identityOf(String url) async {
+    try {
+      return await _identityFor(url);
+    } catch (e) {
+      _logger.warning('封面内容身份解析失败（不写 seed）: $e');
+      return null;
+    }
+  }
+
+  /// 内存 LRU / 并发合并键：身份可用时按内容，否则退回 URL。
+  String _coverCacheKey(String url, CoverImageIdentity? identity) =>
+      identity?.cacheKey ?? 'url:$url';
+
+  /// 派生缓存写入不阻塞首帧 / 切歌；写失败由 store 自己记日志吞掉。
+  void _writeSeed(CoverImageIdentity? identity, ArtworkPalette palette) {
+    final seedStore = _seedStore;
+    if (seedStore == null || identity == null) return;
+    unawaited(seedStore.write(identity.cacheKey, palette.seed.toARGB32()));
+  }
+
+  /// 起始身份为 null 时的补写：取图完成后本地文件通常已可 stat。
+  Future<void> _writeSeedAfterLateIdentity(
     String url,
+    ArtworkPalette palette,
+  ) async {
+    _writeSeed(await _identityOf(url), palette);
+  }
+
+  /// LRU 命中 / 并发合并：同一 key 的进行中提取只做一次。
+  Future<ArtworkPalette?> _resolve(
+    String key,
     Future<ArtworkPalette?> Function() extract,
   ) {
-    final cached = _cache.remove(url);
+    final cached = _cache.remove(key);
     if (cached != null) {
-      _cache[url] = cached; // 触碰 LRU 顺序
+      _cache[key] = cached; // 触碰 LRU 顺序
       return Future.value(cached);
     }
-    final pending = _inFlight[url];
+    final pending = _inFlight[key];
     if (pending != null) return pending;
-    // 注意：whenComplete 的回调必须返回 void——返回 `_inFlight.remove(url)`
+    // 注意：whenComplete 的回调必须返回 void——返回 `_inFlight.remove(key)`
     // 会把「清理用的派生 future」指回自身，形成自引用死锁。
     final future = extract();
-    _inFlight[url] = future;
-    unawaited(future.whenComplete(() {
-      _inFlight.remove(url);
-    }));
+    _inFlight[key] = future;
+    unawaited(
+      future.whenComplete(() {
+        _inFlight.remove(key);
+      }),
+    );
     return future;
   }
 
-  Future<ArtworkPalette?> _extract(String url) async {
+  Future<ArtworkPalette?> _extract(String url, {String? cacheKey}) async {
     try {
       final imageProvider = await _providerFor(url);
       // 取色只需要 100px 的色调信息：把显示路径的原图解码降到采样尺寸。
@@ -184,7 +289,7 @@ class ArtworkPaletteService {
         imageProvider,
       );
       final pixels = await _extractPixels(sampleProvider);
-      return await _paletteFromPixels(url, pixels);
+      return await _paletteFromPixels(cacheKey ?? url, pixels);
     } catch (e) {
       // 省流未命中（ArtworkNetworkBlockedException）/ 网络失败 / 解码失败：
       // 保持现色，不打断主题与歌词显示。
@@ -194,7 +299,10 @@ class ArtworkPaletteService {
   }
 
   /// 本地字节 → 方案（封面缓存预解析 / 系统壁纸共用：不取图、不触网）。
-  Future<ArtworkPalette?> _extractFromBytes(String url, Uint8List bytes) async {
+  Future<ArtworkPalette?> _extractFromBytes(
+    String cacheKey,
+    Uint8List bytes,
+  ) async {
     try {
       // 取色只需色调：按采样边长缩略解码，避免整图解码开销。
       final codec = await ui.instantiateImageCodec(
@@ -205,7 +313,7 @@ class ArtworkPaletteService {
         final frame = await codec.getNextFrame();
         try {
           return await _paletteFromPixels(
-            url,
+            cacheKey,
             await _samplePixels(frame.image),
           );
         } finally {
@@ -238,20 +346,22 @@ class ArtworkPaletteService {
 
   /// 采样像素 → 量化 → 方案，并写入 LRU；无有效像素 / 量化失败返回 null。
   Future<ArtworkPalette?> _paletteFromPixels(
-    String url,
+    String cacheKey,
     List<int> pixels,
   ) async {
     if (pixels.isEmpty) return null;
-    final quantized =
-        await QuantizerCelebi().quantize(pixels, _quantizeColorCount);
+    final quantized = await QuantizerCelebi().quantize(
+      pixels,
+      _quantizeColorCount,
+    );
     final ranked = Score.score(quantized.colorToCount);
     if (ranked.isEmpty) return null;
-    return _store(url, ArtworkPalette.fromSeed(Color(ranked.first)));
+    return _store(cacheKey, ArtworkPalette.fromSeed(Color(ranked.first)));
   }
 
   /// 写入 LRU（超出上限淘汰最早条目）。
-  ArtworkPalette _store(String url, ArtworkPalette palette) {
-    _cache[url] = palette;
+  ArtworkPalette _store(String cacheKey, ArtworkPalette palette) {
+    _cache[cacheKey] = palette;
     if (_cache.length > _maxCacheEntries) {
       _cache.remove(_cache.keys.first);
     }
@@ -354,8 +464,8 @@ class ArtworkThemeSync {
     this._settleDelay = const Duration(milliseconds: 500),
     AppPresence? presence,
     PlaybackPowerPolicy? mobilePowerPolicy,
-  })  : _presence = presence ?? AppPresence.instance,
-        _powerPolicy = mobilePowerPolicy {
+  }) : _presence = presence ?? AppPresence.instance,
+       _powerPolicy = mobilePowerPolicy {
     _presence.addListener(_onSurfaceChanged);
     _powerPolicy?.addListener(_onSurfaceChanged);
   }

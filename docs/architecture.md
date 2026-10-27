@@ -1116,6 +1116,14 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   盖过莫奈；启动恢复态在首帧前用本地缓存预解析；无封面回退）+
   **纯黑**（深色下覆盖 surface 系列，与来源正交可叠加）。
   解析：`封面 > 壁纸图 seed（Linux / Windows；macOS 暂无壁纸读取入口）> 强调色方案 > 自定义` → `applyPureBlackScheme`。
+- 封面取色 seed 持久化（`ArtworkPaletteSeedStore`）：键 = 封面内容身份
+  （`CoverImageIdentity`：URL + 本地文件 size + mtime），值 = seed。它是可从像素
+  重算的派生缓存，只存设备本地，不登记 `SettingsRegistry`、不参与同步 / 备份；
+  换设备或清数据只会多一次取色。启动预解析先读 seed，命中直接
+  `ArtworkPalette.fromSeed`，不读图片字节、不解码、不跑量化；内存 LRU 与并发
+  合并也按内容身份索引，稳态链路随后直接复用。封面命中时启动**不解析桌面壁纸**
+  （壁纸 seed 只在封面未命中时按原逻辑解析；代价是本次启动切到壁纸档没有壁纸
+  seed，重启或封面未命中时补上）。壁纸的 `loadLocalFile` 不读 / 不写 seed。
 - 主题出口：`lib/theme/app_theme.dart::buildAppThemeData(ColorScheme)` 是唯一 ThemeData 构建处，
   并注册语义色扩展 `AppSemanticColors`（success/warning，固定色调、随亮度派生）；
   `ColorScheme` 派生唯一入口 `lib/theme/scheme_builder.dart::buildColorScheme`；

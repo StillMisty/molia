@@ -61,6 +61,42 @@ class _RecordingCacheManager extends CacheManager {
   }
 }
 
+/// 可注入 `getFileFromCache` 结果的 CacheManager：不读图片字节、不触网，
+/// 用来覆盖「未命中 / 文件不存在 / 抛异常」三条元数据分支。
+class _StubInfoCacheManager extends CacheManager {
+  _StubInfoCacheManager()
+      : super(Config(
+          'artwork_cache_test_info',
+          repo: _MemoryRepo(),
+          fileSystem: MemoryCacheSystem(),
+          fileService: HttpFileService(),
+        ));
+
+  /// 非 null 时命中该相对路径（文件是否真实存在由调用方决定）。
+  String? hitRelativePath;
+
+  /// 非 null 时 `getFileFromCache` 直接抛出。
+  Object? error;
+
+  @override
+  Future<FileInfo?> getFileFromCache(
+    String key, {
+    bool ignoreMemCache = false,
+  }) async {
+    final error = this.error;
+    if (error != null) throw error;
+    final relativePath = hitRelativePath;
+    if (relativePath == null) return null;
+    final file = await config.fileSystem.createFile(relativePath);
+    return FileInfo(
+      file,
+      FileSource.Cache,
+      DateTime.now().add(const Duration(days: 1)),
+      key,
+    );
+  }
+}
+
 /// 纯内存 repo：putFile / getFileFromCache 全链路可用，不触碰 sqflite。
 class _MemoryRepo implements CacheInfoRepository {
   final Map<String, CacheObject> _store = {};
@@ -654,6 +690,86 @@ void main() {
       final info = events.single as FileInfo;
       expect(info.source, FileSource.Cache);
       expect(info.file.path, file.path);
+    });
+  });
+
+  group('封面元数据（cachedFileInfo）', () {
+    test('命中缓存返回文件大小与修改时间（不读字节）', () async {
+      final tempRoot = await Directory.systemTemp.createTemp('artwork_info_');
+      addTearDown(() async {
+        if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
+      });
+      final service = CacheService(
+        prefs: prefs,
+        storage: IoCacheStorage(
+          audioDirOverride: '${tempRoot.path}/audio',
+          artworkDirOverride: '${tempRoot.path}/artwork',
+        ),
+      );
+      final cache = ArtworkCache(
+        cacheService: service,
+        repoOverride: NonStoringObjectProvider(),
+      );
+      const url = 'https://p1.music.126.net/info.jpg';
+      final manager = await cache.manager;
+      final file = await manager.putFile(
+        url,
+        Uint8List.fromList([1, 2, 3, 4, 5]),
+        fileExtension: 'jpg',
+      );
+      final modified = DateTime.fromMillisecondsSinceEpoch(1700000000000);
+      await File(file.path).setLastModified(modified);
+
+      expect(
+        await cache.cachedFileInfo(url),
+        (sizeBytes: 5, modifiedMs: modified.millisecondsSinceEpoch),
+      );
+    });
+
+    group('未命中 / 异常', () {
+      late _StubInfoCacheManager manager;
+
+      setUp(() => manager = _StubInfoCacheManager());
+
+      tearDown(() => manager.dispose());
+
+      test('未命中返回 null', () async {
+        final cache = ArtworkCache(
+          cacheService: cacheService,
+          managerOverride: manager,
+        );
+
+        expect(
+          await cache.cachedFileInfo('https://p1.music.126.net/miss.jpg'),
+          isNull,
+        );
+      });
+
+      test('索引命中但文件不存在返回 null', () async {
+        final cache = ArtworkCache(
+          cacheService: cacheService,
+          managerOverride: manager,
+        );
+        manager.hitRelativePath = 'gone.jpg';
+
+        expect(
+          await cache.cachedFileInfo('https://p1.music.126.net/gone.jpg'),
+          isNull,
+        );
+      });
+
+      test('getFileFromCache 抛异常返回 null（不向上传播）', () async {
+        final cache = ArtworkCache(
+          cacheService: cacheService,
+          managerOverride: manager,
+        );
+        manager.error = StateError('索引不可用');
+
+        expect(
+          await cache.cachedFileInfo('https://p1.music.126.net/broken.jpg'),
+          isNull,
+        );
+      });
     });
   });
 
