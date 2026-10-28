@@ -17,6 +17,7 @@ import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/covers/cover_resolution.dart';
+import 'package:molia/services/download/download_journal.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
 
@@ -157,6 +158,13 @@ void main() {
     expect(storage.files[record.lyricPath], isNotNull);
     expect(storage.files[record.translationLyricPath], isNotNull);
     expect(storage.files[record.coverPath], isNotNull);
+    // 成功落库后提交日志不应留下 marker。
+    expect(
+      storage.files.keys.where(
+        (path) => path.startsWith('/download_journal/'),
+      ),
+      isEmpty,
+    );
     // 取链音质跟随偏好。
     expect(kwSource.lastResolveQuality?.type, '320k');
     // 落库（重新读库确认）。
@@ -551,6 +559,71 @@ void main() {
     expect(service.initialized, isTrue);
     expect(service.downloads, hasLength(1));
     expect(service.recordFor('kw', '9')!.title, '已有下载');
+  });
+
+  test('崩溃恢复：journal + 最终文件存在时补记录并删 marker', () async {
+    final journal = DownloadJournal(storage);
+    final pending = DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'recover',
+      title: '恢复歌曲',
+      filePath: '/downloads/恢复歌曲.mp3',
+      sizeBytes: 2,
+      quality: '320k',
+      raw: const {'songmid': 'recover'},
+      downloadedAt: 700,
+    );
+    storage.files[pending.filePath!] = [1, 2];
+    await journal.write(pending);
+
+    final service = makeService();
+    await service.init();
+
+    expect(service.recordFor('kw', 'recover')!.title, '恢复歌曲');
+    expect(await repository.findByOrigin('kw', 'recover'), isNotNull);
+    expect(await journal.readAll(), isEmpty);
+  });
+
+  test('崩溃恢复：marker 无最终文件时只清理 marker', () async {
+    final journal = DownloadJournal(storage);
+    await journal.write(
+      DownloadedTrack(
+        originSourceKey: 'kw',
+        originSongId: 'missing',
+        title: '未完成',
+        filePath: '/downloads/未完成.mp3',
+        sizeBytes: 2,
+        downloadedAt: 700,
+      ),
+    );
+
+    final service = makeService();
+    await service.init();
+
+    expect(service.recordFor('kw', 'missing'), isNull);
+    expect(await journal.readAll(), isEmpty);
+  });
+
+  test('崩溃恢复：同 key 已有记录时只清理 marker', () async {
+    final journal = DownloadJournal(storage);
+    final record = DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'already',
+      title: '已落库',
+      filePath: '/downloads/已落库.mp3',
+      sizeBytes: 2,
+      downloadedAt: 700,
+    );
+    await repository.insert(record);
+    storage.files[record.filePath!] = [1, 2];
+    await journal.write(record);
+
+    final service = makeService();
+    await service.init();
+
+    expect(service.downloads, hasLength(1));
+    expect(service.recordFor('kw', 'already')!.title, '已落库');
+    expect(await journal.readAll(), isEmpty);
   });
 
   group('导入本地文件', () {

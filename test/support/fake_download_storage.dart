@@ -5,11 +5,18 @@ import 'package:molia/data/downloads/download_storage.dart';
 
 /// 内存下载存储（下载服务测试用）：文件内容存内存 map，路径即键。
 class FakeDownloadStorage implements DownloadStorage {
-  FakeDownloadStorage({this.root = '/downloads', this.available = true});
+  FakeDownloadStorage({
+    this.root = '/downloads',
+    this.available = true,
+    this.journalRootPath = '/download_journal',
+  });
 
   /// [downloadsRoot] 返回值；[available] 为 false 时返回 null（存储不可用语义）。
   String? root;
   bool available;
+
+  /// [journalRoot] 返回值；null 表示提交日志不可用。
+  String? journalRootPath;
 
   /// 路径 → 文件内容。
   final Map<String, List<int>> files = {};
@@ -22,6 +29,10 @@ class FakeDownloadStorage implements DownloadStorage {
 
   @override
   Future<String?> downloadsRoot() async => available ? root : null;
+
+  @override
+  Future<String?> journalRoot() async =>
+      available ? journalRootPath : null;
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);

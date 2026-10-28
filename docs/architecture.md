@@ -769,13 +769,15 @@
 （下载一首 / 一批：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库），
 `download_queue.dart` 是任务队列（严格串行 FIFO / 去重 / 取消 / 重试 /
 进度通道）；组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流
-上限；任务队列、命名 / 放置、记录装配与通知 presenter 是四个独立 module
-（见下）：
+上限；任务队列、命名 / 放置、记录装配、提交日志与通知 presenter 是五个独立
+module（见下）：
 
-- **模块拆分**：`DownloadService` 只做编排，四个 module 各有一份唯一实现——
+- **模块拆分**：`DownloadService` 只做编排，五个 module 各有一份唯一实现——
   `lib/services/download/download_queue.dart`（下载任务队列：`DownloadTask`
   进度 / 状态、单 worker FIFO、同 key 去重、排队 / 运行取消、失败保留重试；
   不持久化、无跨重启恢复）、
+  `lib/services/download/download_journal.dart`（提交日志：rename 前写 pending、
+  启动恢复音频记录；详见下文「下载提交日志 / 崩溃恢复」）、
   `lib/services/download/download_file_layout.dart`（命名 / 放置：文件名模板 →
   基名 → sanitize → 磁盘与记录双重查重的 ` (2)` 去重 → 音频 / `.part` /
   `lyrics/` + `.t.lrc` 翻译边车 / `covers/` 路径约定与 sidecar 写入回滚 →
@@ -852,8 +854,18 @@
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
   自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
   `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
-  半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时清扫
-  崩溃遗留 `.part`；
+  半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时先恢复
+  提交日志，再清扫崩溃遗留 `.part`；
+- **下载提交日志 / 崩溃恢复**：`lib/services/download/download_journal.dart`
+  是文件型 write-ahead journal（**不新增 DB 表、不迁移 drift**）。位置 =
+  应用支持目录 `download_journal/`（`DownloadStorage.journalRoot()`，与下载根
+  解耦：改保存位置 / 清公共目录不影响恢复；它也不是用户文件，不放进下载夹）。
+  音频 `.part` 写完后、rename 前写一条 pending `DownloadedTrack`（仅音频，
+  继承旧 sidecar / publicUri；文件名 `<md5(key)>.json`，`.tmp` 写 + rename
+  原子替换）；rename 后继续歌词 / 封面 / 标签 / 发布，最终落库后删除 marker。
+  启动 `init` 在加载记录后、`.part` 清扫前恢复：已有同 key 记录或最终文件不存在
+  只删 marker；文件存在则补库 + 删 marker；补库失败保留 marker 下次再试。
+  journal 只包裹单个音频提交，**不是队列持久化**（排队 / 失败任务重启仍清空）；
 - **本地导入**：`DownloadService.importLocalFiles`（收藏页「本地歌曲」合集 →
   「导入本地歌曲」：多选音频文件）**不复制文件**——记录以
   `local:<绝对路径>` 为原音源键（同路径重复导入幂等），`filePath` 指向原文件；

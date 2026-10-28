@@ -68,6 +68,16 @@ class IoDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<String?> journalRoot() async {
+    try {
+      final support = await _supportDirectory();
+      return p.join(support.path, downloadJournalDirName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
   Future<bool> fileExists(String path) async {
     try {
       return await File(path).exists();

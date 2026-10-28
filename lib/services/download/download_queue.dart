@@ -283,6 +283,7 @@ class DownloadQueue extends ChangeNotifier {
   /// 失败 / 取消任务再入队时替换为新任务（同一对象则原地复位）。完成 /
   /// 取消后任务从队列移除，失败任务保留供重试。
   Future<void> enqueue(DownloadTask task) {
+    if (_disposed) return task.done;
     final existing = _tasks[task.key];
     if (existing != null && existing.isActive) return existing.done;
     if (existing != null) {
@@ -370,8 +371,13 @@ class DownloadQueue extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
     _disposed = true;
-    for (final task in _tasks.values) {
+    // 先让所有仍活跃的 future 以 cancelled 收尾，再销毁任务；快照遍历避免
+    // 监听者在通知回调里操作 map。
+    final tasks = List<DownloadTask>.of(_tasks.values);
+    for (final task in tasks) {
+      if (task.isActive) task.markCancelled();
       task.dispose();
     }
     _tasks.clear();

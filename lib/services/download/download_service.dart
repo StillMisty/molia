@@ -16,7 +16,9 @@
 /// - **标签嵌入**：音频就绪后把标题/歌手/专辑/歌词/封面写进文件标签
 ///   （`audio_tag_writer.dart`，best-effort，失败保留 sidecar）；
 /// - 半成品用 `.part` 后缀，完成时原子改名，落库在改名之后：
-///   播放取链只认数据库记录，永远不会读到半成品；
+///   播放取链只认数据库记录，永远不会读到半成品；音频 `.part` 写完后、
+///   rename 前写一条文件型提交日志（应用支持目录 `download_journal/`），
+///   落库后删除；启动时补回 rename 后未落库的记录（**不是队列持久化**）；
 /// - 进度 / 取消 / 失败：全局严格串行单 worker（`download_queue.dart`），
 ///   每任务进度只经 [DownloadTask] 自己节流广播（100ms 合并；首个分片 /
 ///   100% / 终态立即送达），队列只在任务增删 / 状态变化时通知；排队任务
@@ -30,9 +32,10 @@
 ///   日志，下载本身与既有语义完全不变；歌词/封面这类秒级分项动作不发通知
 ///   （无进度可言，闪一下反而吵）。
 ///
-/// 本文件只做编排（下载一首 / 一批）；四个 module 各有一份唯一实现：
+/// 本文件只做编排（下载一首 / 一批）；五个 module 各有一份唯一实现：
 /// - 任务队列：`download_queue.dart`（严格串行 FIFO / 去重 / 取消 / 重试 /
 ///   进度通道）；
+/// - 提交日志：`download_journal.dart`（rename 前写 pending、启动恢复）；
 /// - 命名 / 放置：`download_file_layout.dart`（模板 + sanitize + ` (2)` 去重 +
 ///   sidecar 路径约定）；
 /// - 记录装配：`download_record_assembler.dart`（部分状态 → `DownloadedTrack`）；
@@ -66,6 +69,7 @@ import '../covers/cover_bytes_downloader.dart';
 import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
+import 'download_journal.dart';
 import 'download_notification_presenter.dart';
 import 'download_queue.dart';
 import 'download_record_assembler.dart';
@@ -141,6 +145,7 @@ class DownloadService extends ChangeNotifier {
        _clock = clock,
        _layout = DownloadFileLayout(storage: storage, settings: settings),
        _assembler = DownloadRecordAssembler(clock: clock),
+       _journal = DownloadJournal(storage),
        _notifications = DownloadNotificationPresenter(
          notifications: notifications ?? createDownloadNotifications(),
          settings: settings,
@@ -178,6 +183,9 @@ class DownloadService extends ChangeNotifier {
   /// `download_record_assembler.dart`）。
   final DownloadRecordAssembler _assembler;
 
+  /// 下载提交日志：rename 前写 pending，落库后删除（崩溃恢复用）。
+  final DownloadJournal _journal;
+
   /// 通知 presenter 模块：id 分配、批量共享、系统频率节流与收尾不残留的
   /// 唯一实现（见 `download_notification_presenter.dart`；端口由组合根注入
   /// `createDownloadNotifications()`，未注入 / 非 Android 时整体 no-op）。
@@ -205,6 +213,15 @@ class DownloadService extends ChangeNotifier {
 
   bool _supported = false;
   bool _initialized = false;
+
+  /// dispose 后不再通知（运行中的 runner 可能晚于 service 销毁）。
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
 
   /// 记录加载只做一次（幂等）；首帧后的启动尾巴与按需调用共用同一 Future。
   Future<void>? _initFuture;
@@ -570,6 +587,9 @@ class DownloadService extends ChangeNotifier {
       if (_supported) {
         final records = await _repository.listAll();
         _replaceRecords(records);
+        // 先恢复「文件已 rename、记录未落库」的提交，再清扫 .part；否则
+        // 恢复失败时 .part 与 marker 会被重复处理。
+        await _recoverPendingDownloads();
         // 崩溃遗留的半成品（.part）清扫：失败仅记日志，不影响记录可用。
         final cleaned = await cleanupIncompleteDownloads();
         if (cleaned > 0) _logger.info('清理未完成的下载文件 $cleaned 个');
@@ -580,6 +600,40 @@ class DownloadService extends ChangeNotifier {
       _initialized = true;
       notifyListeners();
     }
+  }
+
+  /// 恢复 rename 后、落库前崩溃的音频下载。
+  ///
+  /// marker 只在「最终文件已就位、DB 记录未落」的窗口存在：文件不存在说明
+  /// 崩溃在 rename 前（交给 `.part` 清扫），已有同 key 记录说明落库成功但
+  /// marker 未删。两种情况都只删 marker，不覆盖已有记录。
+  Future<void> _recoverPendingDownloads() async {
+    final entries = await _journal.readAll();
+    var recovered = 0;
+    for (final entry in entries) {
+      final record = entry.record;
+      try {
+        if (_records.containsKey(record.key)) {
+          await _journal.removePath(entry.markerPath);
+          continue;
+        }
+        final path = record.filePath;
+        if (path == null ||
+            path.isEmpty ||
+            !await _storage.fileExists(path)) {
+          await _journal.removePath(entry.markerPath);
+          continue;
+        }
+        await _repository.insert(record);
+        _putRecord(record);
+        await _journal.removePath(entry.markerPath);
+        recovered++;
+      } catch (e) {
+        // 保留 marker：下次启动再试；不能因为一条坏记录阻断整个初始化。
+        _logger.warning('下载恢复失败（${record.key}）: $e');
+      }
+    }
+    if (recovered > 0) _logger.info('恢复未落库的下载 $recovered 条');
   }
 
   /// 等待记录加载完成；已就绪时是同步空操作，不额外占用事件循环。
@@ -674,6 +728,9 @@ class DownloadService extends ChangeNotifier {
     String? coverPath;
     DownloadLyrics? lyrics;
     _ResolvedCover? cover;
+    DownloadedTrack? pending;
+    var journalWritten = false;
+    int? partTotal;
     late final String root;
     late final String base;
     final outputs = <String>{};
@@ -699,9 +756,6 @@ class DownloadService extends ChangeNotifier {
         registerOutput(filePath);
         registerOutput(partPath);
         await _storage.copyFile(cached, partPath);
-        await _storage.rename(partPath, filePath);
-        partPath = null;
-        _updateProgress(task, await _storage.fileSize(filePath), null);
       } else {
         // 2) 网络下载（扩展名优先取 URL 后缀，回退音质推断）。
         final stream = await _catalog.resolve(
@@ -744,6 +798,7 @@ class DownloadService extends ChangeNotifier {
         final total = int.tryParse(
           response.headers.value(Headers.contentLengthHeader) ?? '',
         );
+        partTotal = total;
         await _storage.writeStream(
           partPath,
           streamBody(response).stream,
@@ -751,15 +806,30 @@ class DownloadService extends ChangeNotifier {
           onProgress: (received, expected) =>
               _updateProgress(task, received, expected),
         );
-        _throwIfCancelled(cancelToken);
-        await _storage.rename(partPath, filePath);
-        partPath = null;
       }
 
-      final size = await _storage.fileSize(filePath);
+      final part = partPath;
+      final size = await _storage.fileSize(part);
       _throwIfCancelled(cancelToken);
 
-      // 3) 离线歌词 / 封面（best-effort，失败不阻断音频下载）。
+      // 3) 提交日志写在 rename 之前：崩溃时只要最终文件存在，启动就能把
+      //    「文件已就位、记录未落库」的音频记录补回来。
+      final targetPath = filePath;
+      pending = _assembler.forAudioDownload(
+        track: track,
+        quality: resolvedQuality,
+        filePath: targetPath,
+        sizeBytes: size,
+        previous: _records[key],
+      );
+      await _journal.write(pending);
+      journalWritten = true;
+      _throwIfCancelled(cancelToken);
+      await _storage.rename(part, targetPath);
+      partPath = null;
+      _updateProgress(task, size, partTotal);
+
+      // 4) 离线歌词 / 封面（best-effort，失败不阻断音频下载）。
       if (task.includeLyrics) {
         lyrics = await _resolveLyrics(track);
         if (lyrics != null) {
@@ -793,7 +863,7 @@ class DownloadService extends ChangeNotifier {
       }
       _throwIfCancelled(cancelToken);
 
-      // 4) 标签嵌入（best-effort：失败保留 sidecar；可在下载设置关闭）。
+      // 5) 标签嵌入（best-effort：失败保留 sidecar；可在下载设置关闭）。
       if (_settings?.embedTags ?? true) {
         await embedDownloadTags(
           storage: _storage,
@@ -807,8 +877,7 @@ class DownloadService extends ChangeNotifier {
         );
       }
 
-      final previous = _records[key];
-      // 5) 公共目录发布（best-effort）：Android 拷进 MediaStore Downloads，
+      // 6) 公共目录发布（best-effort）：Android 拷进 MediaStore Downloads，
       //    用户在文件管理器 / 其它播放器里可见；失败只记日志，不影响下载。
       final publicUri = await _publishPublicCopy(
         filePath,
@@ -822,13 +891,19 @@ class DownloadService extends ChangeNotifier {
         lyricPath: lyricPath,
         coverPath: coverPath,
         publicUri: publicUri,
-        previous: previous,
+        previous: pending,
       );
       await _repository.insert(record);
       _putRecord(record);
       notifyListeners();
       _logger.info('下载完成: $key -> $filePath (${record.sizeLabel})');
+      await _journal.remove(key);
+      journalWritten = false;
     } catch (e) {
+      if (journalWritten) {
+        await _journal.remove(key);
+        journalWritten = false;
+      }
       await _cleanupFailedDownload(
         partPath: partPath,
         filePath: filePath,
@@ -1393,6 +1468,8 @@ class DownloadService extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     for (final token in _tokens.values) {
       token.cancel();
     }
