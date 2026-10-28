@@ -189,7 +189,7 @@ void main() {
     return opacity!;
   }
 
-  testWidgets('飞行 reveal：侧槽从中心展开/收回，中心封面锚点矩形不变', (tester) async {
+  testWidgets('飞行 reveal：侧槽原位淡入/淡出，中心封面锚点矩形不变', (tester) async {
     emitFor('b'); // 队列 a,b,c,d：左槽 a、右槽 c
     final morph = PlayerMorphController();
     addTearDown(morph.dispose);
@@ -235,18 +235,25 @@ void main() {
     final double deckDx =
         tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey)).dx;
 
-    // reveal = 0：两侧收在中心但 element/图片状态保留（scale 0 + 透明 + 不
-    // 响应指针），飞行尾段展开时不重建 AppNetworkImage/闪占位。
+    // reveal = 0：侧槽保持在稳态位置/倾角，只把 element 透明化；图片与布局
+    // 状态保留，飞行尾段淡入时不重建 AppNetworkImage/闪占位。
     morph.setPageDeckReveal(0);
     await tester.pump();
     expect(left, findsOneWidget);
     expect(right, findsOneWidget);
-    expect(renderedRect(tester, left).width, lessThan(1));
-    expect(renderedRect(tester, right).width, lessThan(1));
+    expect(
+      renderedRect(tester, left).width,
+      closeTo(projectedSideWidth(sideSize, 1, -0.05), 1),
+      reason: '侧槽不再从中心缩放/平移，位置与倾角保持稳态',
+    );
+    expect(
+      renderedRect(tester, right).width,
+      closeTo(projectedSideWidth(sideSize, 1, 0.05), 1),
+    );
     expect(nearestOpacityOf(tester, left), 0);
     expect(nearestOpacityOf(tester, right), 0);
     expect(morph.rectOf(morph.pageCoverKey), anchorSteady,
-        reason: '侧槽收回不得改变中心封面锚点矩形');
+        reason: '侧槽淡入不得改变中心封面锚点矩形');
 
     // reveal 只驱动侧槽包装层：deck 主 builder / 卡片子树不应逐帧重建。
     final previousProbe = debugOnRebuildDirtyWidget;
@@ -256,38 +263,42 @@ void main() {
     };
     addTearDown(() => debugOnRebuildDirtyWidget = previousProbe);
 
-    // reveal = 0.5：两侧从中心展开（位置/缩放/透明度按进度，倾角始终保持
-    // 稳态 ±0.05；倾角不能从 0 开始插值，否则会先水平出现再倾斜）。
+    // reveal = 0.5：侧槽原位半透明，位置/倾角不变；只有透明度变化。
     morph.setPageDeckReveal(0.5);
     await tester.pump();
     expect(coverCardRebuilds, 0,
-        reason: 'reveal 逐帧只重建 Transform/Opacity 包装，不重建卡片图片子树');
+        reason: 'reveal 逐帧只重建 Opacity 包装，不重建卡片图片子树');
     debugOnRebuildDirtyWidget = previousProbe;
     final double eased = Curves.easeOutCubic.transform(0.5);
     final Rect leftMid = renderedRect(tester, left);
     final Rect rightMid = renderedRect(tester, right);
-    const double midAngle = 0.05;
     expect(
       leftMid.width,
-      closeTo(projectedSideWidth(sideSize, eased, -midAngle), 1),
-      reason: '半程侧槽卡按同进度缩放（左槽旋转为负，已带旋转）',
+      closeTo(projectedSideWidth(sideSize, 1, -0.05), 1),
+      reason: '半程侧槽卡不再缩放（左槽旋转为负，已带旋转）',
     );
     expect(
       rightMid.width,
-      closeTo(projectedSideWidth(sideSize, eased, midAngle), 1),
+      closeTo(projectedSideWidth(sideSize, 1, 0.05), 1),
     );
     expect(
       leftMid.center.dx - deckDx,
-      closeTo(-offset * eased, 1),
-      reason: '左槽从中心向左展开（半程）',
+      closeTo(-offset, 1),
+      reason: '左槽原位淡入，不再从中心平移',
     );
     expect(
       rightMid.center.dx - deckDx,
-      closeTo(offset * eased, 1),
-      reason: '右槽从中心向右展开（半程）',
+      closeTo(offset, 1),
+      reason: '右槽原位淡入，不再从中心平移',
     );
+    expect(
+      nearestOpacityOf(tester, left),
+      closeTo(0.85 * eased, 0.01),
+      reason: '半程只按透明度淡入',
+    );
+    expect(nearestOpacityOf(tester, right), closeTo(0.85 * eased, 0.01));
     expect(morph.rectOf(morph.pageCoverKey), anchorSteady,
-        reason: '展开过程中中心锚点必须是稳态矩形（飞行落点不能漂移）');
+        reason: '淡入过程中中心锚点必须是稳态矩形（飞行落点不能漂移）');
 
     // reveal = 1：稳态侧槽几何，中心锚点仍不变。
     morph.setPageDeckReveal(1);
