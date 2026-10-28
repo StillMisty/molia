@@ -164,6 +164,28 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 邻位稳态透明度；窗口淡出/淡入的端点值（p=0 / p=1 与稳态卡一致）。
   static const double _neighborOpacity = 0.85;
 
+  /// 侧槽卡片相对主封面的缩放；中心换场起手/落点也使用同一缩放。
+  static const double _sideSlotScale = 0.78;
+
+  /// 侧槽卡外观：把 [CoverAppearance.page] 的圆角 / 描边 / 阴影按
+  /// [_sideSlotScale] 一起缩放。
+  ///
+  /// 换场结束时，滑出卡是「主封面尺寸 × scale 0.78」，而稳态侧槽卡是
+  /// 「侧槽尺寸 × scale 1」。若侧槽仍用页面端 r18/1px/24px 阴影，落位帧
+  /// 圆角会从 18×0.78 跳到 18、描边从 0.78 跳到 1、阴影也突然变重；
+  /// 缩放过外观后两段视觉完全一致，交接无跳变。
+  static final CoverAppearance _sideSlotAppearance = CoverAppearance(
+    radius: CoverAppearance.page.radius * _sideSlotScale,
+    stroke: CoverAppearance.page.stroke * _sideSlotScale,
+    shadow: CoverAppearance.page.shadow * _sideSlotScale,
+    iconRatio: CoverAppearance.page.iconRatio,
+    iconSize: CoverAppearance.page.iconSize,
+  );
+
+  /// 中心卡从侧槽入场 / 退到侧槽时的缩放。
+  static double _centerScaleAt(double progress) =>
+      _sideSlotScale + (1 - _sideSlotScale) * progress;
+
   /// 目标槽位旧身份淡出窗口终点：p ∈ [0, 0.4] 内 0.85 → 0（窗口内 easeOut）。
   static const double _oldNeighborFadeEnd = 0.4;
 
@@ -715,7 +737,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
           ? _HandoffVisual(
               x: direction * sideOffset,
               rotation: 0.05 * direction,
-              scale: 0.78,
+              scale: _sideSlotScale,
               opacity: sourceOpacity,
             )
           : null,
@@ -808,7 +830,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         ? _HandoffVisual(
             x: oldDirection * sideOffset,
             rotation: 0.05 * oldDirection,
-            scale: 0.78,
+            scale: _sideSlotScale,
             opacity: sourceOpacity,
           )
         : null;
@@ -839,7 +861,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             _HandoffVisual(
               x: value.direction * sideOffset * (1 - value.p0),
               rotation: 0.05 * value.direction * (1 - value.p0),
-              scale: 0.78 + 0.22 * value.p0,
+              scale: _centerScaleAt(value.p0),
               opacity: 0.85 + 0.15 * value.p0,
             ),
         ((progress - value.p0) / (1 - value.p0)).clamp(0.0, 1.0),
@@ -854,7 +876,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     return _HandoffVisual(
       x: _lerp(from.x, -sideOffset * value.direction, t),
       rotation: _lerp(from.rotation, -0.05 * value.direction, t),
-      scale: _lerp(from.scale, 0.78, t),
+      scale: _lerp(from.scale, _sideSlotScale, t),
       opacity: _lerp(from.opacity, 0.85, t),
     );
   }
@@ -897,7 +919,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     return _HandoffVisual(
       x: dir * sideOffset * (1 - progress),
       rotation: 0.05 * dir * (1 - progress),
-      scale: 0.78 + 0.22 * progress,
+      scale: _centerScaleAt(progress),
       opacity: 0.85 + 0.15 * progress,
     );
   }
@@ -1471,7 +1493,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   final double t = p;
                   final double pClamped = p.clamp(0.0, 1.0);
                   final dir = session.direction;
-                  final double sideSize = widget.artDimension * 0.78;
+                  final double sideSize =
+                      widget.artDimension * _sideSlotScale;
                   final double offset = widget.artDimension * 0.30;
                   const double sideRotation = 0.05;
                   // 侧邻位展开进度：进入飞行最后 45% 从中心展开 / 离开前 45%
@@ -1745,7 +1768,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                         rotation:
                             handoffCenter?.rotation ??
                             sideRotation * dir * (1 - t),
-                        scale: handoffCenter?.scale ?? 0.78 + 0.22 * t,
+                        scale: handoffCenter?.scale ?? _centerScaleAt(t),
                         opacity:
                             handoffCenter?.opacity ?? 0.85 + 0.15 * pClamped,
                         interactive: !showingPreview,
@@ -1960,6 +1983,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       track,
       sideSize,
       key: cardKey,
+      appearance: _sideSlotAppearance,
       placeholderUrl: placeholderUrl,
     );
     if (onTap != null) {
@@ -2084,6 +2108,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     Track? track,
     double size, {
     Key? key,
+    CoverAppearance appearance = CoverAppearance.page,
     Widget? fallback,
     String? placeholderUrl,
     String? artworkUrlOverride,
@@ -2092,7 +2117,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     return CoverCard(
       key: key,
       size: size,
-      appearance: CoverAppearance.page,
+      appearance: appearance,
       content: (context, clip, iconSize) {
         final coverEdge = playbackCoverDecodeEdge(context);
         final placeholder = placeholderUrl != null && placeholderUrl != url

@@ -6,7 +6,8 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/app_network_image.dart';
-import 'package:molia/widgets/cover_appearance.dart' show CoverCard;
+import 'package:molia/widgets/cover_appearance.dart'
+    show CoverAppearance, CoverCard;
 import 'package:molia/widgets/cover_deck_metrics.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
@@ -297,6 +298,36 @@ void main() {
         reason: '稳态侧槽卡边长保持 0.78×封面边');
     expect(renderedRect(tester, right).center.dx - deckDx, closeTo(offset, 1));
     expect(morph.rectOf(morph.pageCoverKey), anchorSteady);
+
+    // 侧槽外观必须按 0.78 缩放：换场结束帧的滑出卡是「主封面尺寸 ×
+    // scale 0.78」，若侧槽仍用页面端 r18/1px/24px 阴影，落位后圆角、
+    // 描边、阴影会再跳一档（用户反馈的切歌完成二次变化）。
+    final leftCard = tester.widget<CoverCard>(left);
+    final rightCard = tester.widget<CoverCard>(right);
+    for (final card in [leftCard, rightCard]) {
+      expect(
+        card.appearance.radius,
+        closeTo(CoverAppearance.page.radius * 0.78, 1e-6),
+      );
+      expect(
+        card.appearance.stroke,
+        closeTo(CoverAppearance.page.stroke * 0.78, 1e-6),
+      );
+      expect(
+        card.appearance.shadow,
+        closeTo(CoverAppearance.page.shadow * 0.78, 1e-6),
+      );
+      expect(card.appearance.clip.topLeft.x,
+          closeTo(CoverAppearance.page.clip.topLeft.x * 0.78, 1e-6));
+    }
+    final centerCoverCard = tester.widget<CoverCard>(
+      find.descendant(
+        of: find.byKey(PlayerCoverDeck.centerCoverCardKey),
+        matching: find.byType(CoverCard),
+      ),
+    );
+    expect(centerCoverCard.appearance.radius, CoverAppearance.page.radius,
+        reason: '中心卡保持页面端外观');
 
     // 飞行期间侧槽点击关闭：pageHeaderHidden 即「副本接管」状态。
     int previousCalls() =>
