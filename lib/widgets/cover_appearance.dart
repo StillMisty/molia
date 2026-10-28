@@ -27,11 +27,13 @@ import '../utils/local_image_provider.dart';
 import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';
 
-/// 飞行期阴影恢复的「页端进度」起点：只在这之后画 24px blur 阴影。
+/// 飞行期阴影恢复的「页端进度」窗口：前 80% 不画，80%→95% 线性恢复，
+/// 最后 5% 保持真身强度（避免落点前一帧阴影突然变重）。
 ///
-/// 高 DPR 下 24px blur 随尺寸逐帧重画是主要 raster 嫌疑；前 80% 行程不画，
-/// 页端最后 20% 线性恢复到真身（t=1 / 反向 t=0 仍与真身完全一致）。
+/// 高 DPR 下 24px blur 随尺寸逐帧重画是主要 raster 嫌疑；端点仍与真身
+/// 完全一致（t=1 / 反向 t=0）。
 const double flightShadowPageRevealStart = 0.8;
+const double flightShadowPageRevealEnd = 0.95;
 
 /// 曲目的稳定 key（领域 id）。
 ///
@@ -315,7 +317,7 @@ class CoverFlightLayer extends StatelessWidget {
     final double page = flight.pageProgressAt(t);
     if (page >= 1.0) return appearance;
     final double window = ((page - flightShadowPageRevealStart) /
-            (1 - flightShadowPageRevealStart))
+            (flightShadowPageRevealEnd - flightShadowPageRevealStart))
         .clamp(0.0, 1.0);
     final double shadow = appearance.shadow * window;
     if (shadow == appearance.shadow) return appearance;

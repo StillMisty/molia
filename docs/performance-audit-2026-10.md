@@ -370,10 +370,10 @@ Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」�
    （图片子树只更新外层 Transform/Opacity/IgnorePointer）。
 4. 删掉页中心 160ms `AnimatedOpacity`：隐藏/亮出改为零时长（透明度乘进
    中心层同一条 `Opacity`），少一条逐帧隐式动画与一次合成。
-5. 阴影降级：`CoverCard` 的 24px blur 只保留在飞行「页端最后 20%」，
-   前 80% 不画阴影；端点仍与真身精确一致（前进 `t=0` 无阴影、`t=1` 播放页
-   阴影；反向起飞端同理）。这是先保飞行平滑、尾段恢复阴影的取舍，是否会
-   在落点前看到阴影变重仍需真机观察。
+5. 阴影降级：`CoverCard` 的 24px blur 只在飞行「页端进度 80%→95%」
+   线性恢复、最后 5% 保持真身强度（前 80% 不画）；端点仍与真身精确一致
+   （前进 `t=0` 无阴影、`t=1` 播放页阴影；反向起飞端同理）。这是先保飞行
+   平滑、尾段恢复阴影的取舍，仍需真机观察落点前阴影恢复是否可接受。
 6. `integration_test/perf_flows_test.dart` 移动壳新增
    `mobile-nowplaying-leave-return` 场景（播放页 ⇄ 收藏反复进出），供
    `tool/agent/perf.sh frames android` 以后回归。
