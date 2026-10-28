@@ -533,7 +533,7 @@ class _MyAppState extends State<MyApp>
     // 离开方向也从第一帧起收起页中心：飞行副本接管整段行程，页面真身
     // 不能先在原地亮着等副本飞过来。
     _morph.setPageHeaderHidden(true);
-    // 侧邻位从稳态开始，飞行 tick 按 1 - reveal 收回中心。
+    // 侧邻位从稳态开始；飞行前 45% 由 tick 时间对称地收回中心。
     _morph.setPageDeckReveal(1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -598,7 +598,7 @@ class _MyAppState extends State<MyApp>
     final geometry = _morphGeometry;
     if (geometry == null) return;
     final double progress = _morphAnimation.value.clamp(0.0, 1.0);
-    // 侧邻位只在飞行尾段展开/收回（不新增 ticker，复用同一条弹簧）。
+    // 侧邻位进入时尾段展开 / 离开时前段收回（不新增 ticker，复用同一条弹簧）。
     _morph.setPageDeckReveal(
       PlayerMorphController.pageDeckRevealAt(progress, toPage: geometry.toPage),
     );

@@ -27,6 +27,12 @@ import '../utils/local_image_provider.dart';
 import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';
 
+/// 飞行期阴影恢复的「页端进度」起点：只在这之后画 24px blur 阴影。
+///
+/// 高 DPR 下 24px blur 随尺寸逐帧重画是主要 raster 嫌疑；前 80% 行程不画，
+/// 页端最后 20% 线性恢复到真身（t=1 / 反向 t=0 仍与真身完全一致）。
+const double flightShadowPageRevealStart = 0.8;
+
 /// 曲目的稳定 key（领域 id）。
 ///
 /// 封面「用哪一张」的解析不在这里：见
@@ -300,6 +306,28 @@ class CoverFlightLayer extends StatelessWidget {
   /// 未命中缓存/无封面时的回退（拿到插值后的图标尺寸）。
   final Widget Function(BuildContext context, double iconSize)? fallback;
 
+  /// 飞行期间的外观：阴影只在页端最后 20% 恢复，其余端点/插值不变。
+  ///
+  /// 用 [CoverFlight.pageProgressAt] 而不是几何 t：反向飞行 t=0 就在播放页端
+  /// （阴影必须与真身一致），t=1 才到顶栏端（无阴影）。
+  CoverAppearance _appearanceAt(double t) {
+    final CoverAppearance appearance = flight.appearanceAt(t);
+    final double page = flight.pageProgressAt(t);
+    if (page >= 1.0) return appearance;
+    final double window = ((page - flightShadowPageRevealStart) /
+            (1 - flightShadowPageRevealStart))
+        .clamp(0.0, 1.0);
+    final double shadow = appearance.shadow * window;
+    if (shadow == appearance.shadow) return appearance;
+    return CoverAppearance(
+      radius: appearance.radius,
+      stroke: appearance.stroke,
+      shadow: shadow,
+      iconRatio: appearance.iconRatio,
+      iconSize: appearance.iconSize,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // 图片子树做成 AnimatedBuilder 的稳定 child：飞行期间只换外框（尺寸 /
@@ -344,7 +372,7 @@ class CoverFlightLayer extends StatelessWidget {
             child: RepaintBoundary(
               child: CoverCard.prebuilt(
                 size: rect.width,
-                appearance: flight.appearanceAt(t),
+                appearance: _appearanceAt(t),
                 iconSize: iconSize,
                 contentChild: child!,
               ),

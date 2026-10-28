@@ -116,16 +116,25 @@ void main() {
         .size!;
   }
 
-  test('pageDeckRevealAt：侧邻位只在飞行最后约 45% 展开/收回', () {
+  test('pageDeckRevealAt：进入尾段展开，离开时段时间对称地先收回', () {
     // 进入：前半程收在中心，落位帧完全展开。
     expect(PlayerMorphController.pageDeckRevealAt(0, toPage: true), 0);
     expect(PlayerMorphController.pageDeckRevealAt(0.4, toPage: true), 0);
     expect(PlayerMorphController.pageDeckRevealAt(0.55, toPage: true), 0);
     expect(PlayerMorphController.pageDeckRevealAt(1, toPage: true), 1);
-    // 离开：从稳态反向收回，起点仍是 1、落点 0（飞行期间页中心同时隐藏）。
+    // 离开：progress=0 时仍完全展开，约 45% 行程就已收回中心；后段页面层
+    // 已淡出，不再做看不见的收回。
     expect(PlayerMorphController.pageDeckRevealAt(0, toPage: false), 1);
-    expect(PlayerMorphController.pageDeckRevealAt(0.55, toPage: false), 1);
+    expect(PlayerMorphController.pageDeckRevealAt(0.45, toPage: false), 0);
+    expect(PlayerMorphController.pageDeckRevealAt(0.55, toPage: false), 0);
     expect(PlayerMorphController.pageDeckRevealAt(1, toPage: false), 0);
+    // 与进入方向时间对称：leave(p) == enter(1-p)。
+    for (final double p in [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]) {
+      expect(
+        PlayerMorphController.pageDeckRevealAt(p, toPage: false),
+        PlayerMorphController.pageDeckRevealAt(1 - p, toPage: true),
+      );
+    }
   });
 
   testWidgets('双向飞行：外观（圆角/描边/阴影）与回退图标严格取两端真身', (tester) async {
@@ -143,6 +152,12 @@ void main() {
     expect(forwardStart.border!.top.color.a, 0);
     expect(forwardStart.boxShadow!.first.color.a, 0);
     expect(fallbackIconSize(tester), barCoverFallbackIconSize);
+
+    // 飞行前 80% 不画 24px blur 阴影（逐帧重画的主要 raster 嫌疑）。
+    await pumpFlight(tester, toPage: true, value: 0.5);
+    expect(coverDecoration(tester).boxShadow!.first.color.a, 0);
+    await pumpFlight(tester, toPage: false, value: 0.5);
+    expect(coverDecoration(tester).boxShadow!.first.color.a, 0);
 
     // 前进落点：与播放页真身同款——外圆角 18、1px 描边内缘裁剪 17、柔和
     // 阴影，回退图标（边长 × 0.35）。

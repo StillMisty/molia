@@ -533,6 +533,30 @@ void main() {
     );
     expect(nextCalls(), 1);
 
+    // 动画尾部立即再滑：提交等待期间的新拖动被拒绝，中心不得闪回旧曲目。
+    final centerPreviewC =
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id));
+    expect(centerPreviewC, findsOneWidget);
+    await tester.timedDrag(
+      coverSwipeHost(),
+      const Offset(-160, 0),
+      const Duration(milliseconds: 300),
+    );
+    expect(nextCalls(), 1);
+    expect(centerPreviewC, findsOneWidget,
+        reason: '动画尾部的新拖动不得把中心闪回旧曲目');
+
+    // 让提交过渡落位（仍等待后端对账）：再次拖动仍应被会话拒绝，且画面
+    // 不能因第二次手势出现旧中心卡/位置跳变。
+    await tester.pump(const Duration(milliseconds: 600));
+    final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
+    final double beforeDx = cardDx(tester, center);
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+      reason: '提交等待期间中心仍是预览目标 c',
+    );
+
     // 后端尚未切换：第二次拖动不应再次提交。
     await tester.timedDrag(
       coverSwipeHost(),
@@ -540,6 +564,13 @@ void main() {
       const Duration(milliseconds: 300),
     );
     expect(nextCalls(), 1);
+    expect(cardDx(tester, center), closeTo(beforeDx, 0.5),
+        reason: '第二次拖动被拒绝，中心卡位置不得跳变');
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+      reason: '第二次拖动不得把中心闪回旧曲目或再下一首',
+    );
 
     emitFor('c');
     await tester.pump();

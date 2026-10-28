@@ -85,16 +85,20 @@ class PlayerMorphController extends ChangeNotifier {
 
   /// 飞行行程内的侧邻位 reveal 目标值。
   ///
-  /// 进入：飞行最后 [pageDeckRevealStart] 之后从 0 展到 1；离开：反向收回。
-  /// 失败 / 落定路径由壳层直接置 1（见 `_completeMorph`）。
+  /// 进入：飞行最后 [pageDeckRevealStart] 之后从 0 展到 1；离开：时间对称，
+  /// 飞行前 45% 先收回中心（`entryWindow(1 - progress)`），页面层后段淡出时
+  /// 不会出现「收回看不见」。失败 / 落定路径由壳层直接置 1（见
+  /// `_completeMorph`）。
   static double pageDeckRevealAt(double progress, {required bool toPage}) {
-    final double reveal =
-        ((progress.clamp(0.0, 1.0) - pageDeckRevealStart) /
+    double entryWindow(double value) =>
+        ((value.clamp(0.0, 1.0) - pageDeckRevealStart) /
                 (1 - pageDeckRevealStart))
             .clamp(0.0, 1.0);
     // 只做窗口裁切；easing 形状由 deck 的侧槽几何统一施加（避免双重缓动）。
     // 减弱动效时 deck 直接按 1 落位。
-    return toPage ? reveal : 1 - reveal;
+    return toPage
+        ? entryWindow(progress)
+        : entryWindow(1 - progress);
   }
 
   void setBarHeaderHidden(bool value) {
