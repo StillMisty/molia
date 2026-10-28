@@ -1239,8 +1239,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 final double reveal = reduceMotionOf(context)
                     ? 1.0
                     : _pageDeckReveal.value.clamp(0.0, 1.0);
-                // 飞行期间整层手势与侧槽点击关闭（副本才是唯一交互/视觉来源）。
-                final bool deckFrozen = widget.morph?.pageHeaderHidden ?? false;
+                // 飞行期间整层手势与侧槽点击关闭（副本才是唯一交互/视觉来源）；
+                // 顶栏⇄播放页与迷你⇄完整两种飞行都走同一个隐藏判定。
+                final bool deckFrozen = _pageCoverHidden;
                 final _CoverHandoff? handoff = _handoff;
                 final bool handoffActive =
                     handoff != null &&
