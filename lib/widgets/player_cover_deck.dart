@@ -737,22 +737,19 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 旧 tail 在 restart 时进度归零，必须按当前渲染值 rebase 到 p0=0，
     // 否则会被冻结在旧进度上（甚至永不消失）。
     final double sideOffset = widget.artDimension * 0.30;
-    final rebased = <_CoverHandoffTail>[];
-    final seenTracks = <String>{};
-    for (final tail in _handoffTails) {
-      final String trackKey = trackKeyOf(tail.track)!;
+    final List<_CoverHandoffTail> oldTails = List.of(_handoffTails);
+    _handoffTails.clear();
+    for (final tail in oldTails) {
       // 新中心接管同一身份时，旧 tail 不能继续画（否则同曲两张卡）；
-      // 同一身份只保留最近捕获的一张 tail。
-      if (trackKey == trackKeyOf(nextTrack) || !seenTracks.add(trackKey)) {
-        continue;
-      }
+      // 同一身份只保留最近捕获的一张 tail（_addHandoffTail 去重）。
+      if (trackKeyOf(tail.track) == trackKeyOf(nextTrack)) continue;
       final _HandoffVisual visual = tail.visualAt(
         progress,
         sideOffset: sideOffset,
         fadeSpan: _takeoverTailFadeSpan,
       );
       if (visual.opacity <= 0.01) continue;
-      rebased.add(
+      _addHandoffTail(
         _CoverHandoffTail(
           track: tail.track,
           p0: 0,
@@ -764,9 +761,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         ),
       );
     }
-    _handoffTails
-      ..clear()
-      ..addAll(rebased);
     // 旧滑出 A 若成为新中心，不能同时以 tail 重复渲染；否则保留短淡出。
     if (!targetIsOldOutgoing && oldOutgoing != null && outgoingVisual != null) {
       _addHandoffTail(
