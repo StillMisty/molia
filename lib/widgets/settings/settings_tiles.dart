@@ -473,11 +473,15 @@ class SettingsInfoTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.trailing,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
+
+  /// 只读行尾的附加动作（如下载任务的取消 / 重试按钮）；整行仍不可点。
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -485,6 +489,7 @@ class SettingsInfoTile extends StatelessWidget {
       icon: icon,
       title: title,
       subtitle: subtitle,
+      trailing: trailing,
       onPressed: null,
     );
   }

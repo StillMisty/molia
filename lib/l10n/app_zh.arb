@@ -1868,12 +1868,27 @@
   "downloadFileMissing": "本地文件不存在，可能已被删除",
   "downloadSourceLocal": "本地下载",
   "downloadsEmpty": "还没有下载的歌曲",
+  "downloadsNothingToAdd": "没有可下载的歌曲（已是本地、已下载或正在下载）",
   "downloadsManageTitle": "下载管理",
   "downloadsManageSubtitle": "任务队列、批量下载与文件维护",
-  "downloadsActiveSection": "进行中",
-  "downloadsActiveEmpty": "没有进行中的下载",
-  "downloadsActiveCount": "{count} 个任务",
-  "@downloadsActiveCount": {
+  "downloadsTasksSection": "任务",
+  "downloadsNoTasks": "没有下载任务",
+  "downloadsFailedSection": "失败",
+  "downloadsRetry": "重试",
+  "downloadsRetryAll": "全部重试",
+  "downloadsRemove": "移除",
+  "downloadsCancelAll": "取消全部",
+  "downloadStatusQueued": "等待中",
+  "downloadsQueued": "已加入下载队列（{count} 首）",
+  "@downloadsQueued": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsWaitingMore": "还有 {count} 首等待中",
+  "@downloadsWaitingMore": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -1884,14 +1899,6 @@
   "downloadsBatchQueue": "下载当前队列",
   "downloadsBatchQueueSubtitle": "共 {count} 首；跳过已下载与本地曲目",
   "@downloadsBatchQueueSubtitle": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "downloadsBatchStarted": "已开始批量下载（{count} 首）",
-  "@downloadsBatchStarted": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -1922,6 +1929,23 @@
   },
   "downloadsCleanupOrphans": "清理残留文件",
   "downloadsCleanupOrphansSubtitle": "删除下载目录里找不到记录的残留文件",
+  "downloadsCleanupOrphansConfirm": "发现 {count} 个可清理的残留文件。只会删除音频、歌词和封面文件，其它文件保留。",
+  "@downloadsCleanupOrphansConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphansMore": "还有 {count} 个文件",
+  "@downloadsCleanupOrphansMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphansNone": "没有可清理的残留文件",
   "downloadsCleanupOrphansDone": "已清理 {count} 个残留文件",
   "@downloadsCleanupOrphansDone": {
     "placeholders": {

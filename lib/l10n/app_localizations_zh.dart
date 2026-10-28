@@ -3960,14 +3960,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadsManageSubtitle => '任务队列、批量下载与文件维护';
 
   @override
-  String get downloadsActiveSection => '进行中';
+  String get downloadsTasksSection => '任务';
 
   @override
-  String get downloadsActiveEmpty => '没有进行中的下载';
+  String get downloadsNoTasks => '没有下载任务';
 
   @override
-  String downloadsActiveCount(int count) {
-    return '$count 个任务';
+  String get downloadsFailedSection => '失败';
+
+  @override
+  String get downloadsRetry => '重试';
+
+  @override
+  String get downloadsRetryAll => '全部重试';
+
+  @override
+  String get downloadsRemove => '移除';
+
+  @override
+  String get downloadsCancelAll => '取消全部';
+
+  @override
+  String get downloadStatusQueued => '等待中';
+
+  @override
+  String downloadsQueued(int count) {
+    return '已加入下载队列（$count 首）';
+  }
+
+  @override
+  String downloadsWaitingMore(int count) {
+    return '还有 $count 首等待中';
   }
 
   @override
@@ -3979,11 +4002,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String downloadsBatchQueueSubtitle(int count) {
     return '共 $count 首；跳过已下载与本地曲目';
-  }
-
-  @override
-  String downloadsBatchStarted(int count) {
-    return '已开始批量下载（$count 首）';
   }
 
   @override
@@ -4010,6 +4028,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsCleanupOrphansSubtitle => '删除下载目录里找不到记录的残留文件';
+
+  @override
+  String downloadsCleanupOrphansConfirm(int count) {
+    return '发现 $count 个可清理的残留文件。只会删除音频、歌词和封面文件，其它文件保留。';
+  }
+
+  @override
+  String downloadsCleanupOrphansMore(int count) {
+    return '还有 $count 个文件';
+  }
+
+  @override
+  String get downloadsCleanupOrphansNone => '没有可清理的残留文件';
 
   @override
   String downloadsCleanupOrphansDone(int count) {
@@ -4042,6 +4073,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadsEmpty => '还没有下载的歌曲';
+
+  @override
+  String get downloadsNothingToAdd => '没有可下载的歌曲（已是本地、已下载或正在下载）';
 
   @override
   String get sleepTimerTitle => '定时关闭';

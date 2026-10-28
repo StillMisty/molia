@@ -23,6 +23,11 @@ const String downloadsCoversDirName = 'covers';
 /// 下载中的半成品文件后缀（完成后原子改名为最终文件名）。
 const String downloadPartSuffix = '.part';
 
+/// 下载提交日志目录名（应用支持目录下，与下载根解耦）。
+///
+/// 改保存位置 / 公共目录时不能影响崩溃恢复，所以日志不放在下载根目录。
+const String downloadJournalDirName = 'download_journal';
+
 /// 下载文件存储抽象：下载服务与平台文件操作解耦。
 ///
 /// 实现（`IoDownloadStorage`）走 `path_provider` + `dart:io`；
@@ -31,6 +36,11 @@ const String downloadPartSuffix = '.part';
 abstract interface class DownloadStorage {
   /// 下载根目录绝对路径；目录不可用（无文件系统 / 解析失败）时返回 null。
   Future<String?> downloadsRoot();
+
+  /// 下载提交日志根目录；目录不可用（无文件系统 / 解析失败）时返回 null。
+  ///
+  /// 独立于 [downloadsRoot]：改保存位置或公共目录不应让崩溃恢复失效。
+  Future<String?> journalRoot();
 
   /// 文件是否存在。
   Future<bool> fileExists(String path);

@@ -25,6 +25,7 @@ import '../services/download/download_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
+import 'download_data_saver_guard.dart';
 
 /// 打开来源行弹层（歌曲信息页「来源」行唯一入口）。
 Future<void> showTrackShareSheet(
@@ -34,14 +35,18 @@ Future<void> showTrackShareSheet(
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.trackInfoSource,
-    child: _TrackShareSheet(track: track),
+    child: _TrackShareSheet(track: track, pageContext: context),
   );
 }
 
 class _TrackShareSheet extends StatelessWidget {
-  const _TrackShareSheet({required this.track});
+  const _TrackShareSheet({required this.track, required this.pageContext});
 
   final Track track;
+
+  /// 外层页面 context：弹层关闭后下载动作仍要用它取 l10n / provider / 提示，
+  /// 不能继续持有已销毁的弹层 context。
+  final BuildContext pageContext;
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +62,7 @@ class _TrackShareSheet extends StatelessWidget {
       if (notifications != null) {
         notifications.showSnackBar(text);
       } else {
-        M3ESnackbar.show(context, message: text);
+        M3ESnackbar.show(pageContext, message: text);
       }
     }
 
@@ -121,7 +126,7 @@ class _TrackShareSheet extends StatelessWidget {
               Navigator.of(context).pop();
               unawaited(
                 _shareTrackFile(
-                  context,
+                  pageContext,
                   record: record,
                   downloads: downloads,
                   message: message,
@@ -161,6 +166,10 @@ class _TrackShareSheet extends StatelessWidget {
         message(l10n.downloadUnsupported);
         return;
       }
+      // 省流生效先确认；弹层已被关闭，确认框挂 root navigator 并挂在外层
+      // 页面上，不依赖已销毁的 sheet context。
+      if (!await confirmDownloadOnDataSaver(context)) return;
+      if (!context.mounted) return;
       message(l10n.shareDownloading);
       try {
         await downloads.download(track);

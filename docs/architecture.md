@@ -766,11 +766,18 @@
 ### 本地下载（downloads）
 
 `lib/services/download/download_service.dart` 是单曲下载的唯一编排实现
-（下载一首 / 一批），组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 /
-设置与省流上限；命名 / 放置、记录装配与通知 presenter 是三个独立 module
-（见下）：
+（下载一首 / 一批：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库），
+`download_queue.dart` 是任务队列（严格串行 FIFO / 去重 / 取消 / 重试 /
+进度通道）；组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流
+上限；任务队列、命名 / 放置、记录装配、提交日志与通知 presenter 是五个独立
+module（见下）：
 
-- **模块拆分**：`DownloadService` 只做编排，三个 module 各有一份唯一实现——
+- **模块拆分**：`DownloadService` 只做编排，五个 module 各有一份唯一实现——
+  `lib/services/download/download_queue.dart`（下载任务队列：`DownloadTask`
+  进度 / 状态、单 worker FIFO、同 key 去重、排队 / 运行取消、失败保留重试；
+  不持久化、无跨重启恢复）、
+  `lib/services/download/download_journal.dart`（提交日志：rename 前写 pending、
+  启动恢复音频记录；详见下文「下载提交日志 / 崩溃恢复」）、
   `lib/services/download/download_file_layout.dart`（命名 / 放置：文件名模板 →
   基名 → sanitize → 磁盘与记录双重查重的 ` (2)` 去重 → 音频 / `.part` /
   `lyrics/` + `.t.lrc` 翻译边车 / `covers/` 路径约定与 sidecar 写入回滚 →
@@ -781,6 +788,18 @@
   单任务 / 批量 id 分配、批量共享一条「N/N」、500ms 系统频率节流、收尾只收自己
   起过的；端口 / 设置 / 时钟可注入）。命名不再有「测试双胞胎」，测试直接打生产
   实现；
+- **任务队列与进度通道**：音频 / 歌词 / 封面共用同一条队列，全局严格串行
+  （单 worker、FIFO），`enqueue` 同步进入等待列表（批量一次入队全部，页面
+  立即看到等待列表）；同 key 已有排队 / 运行任务时返回同一 future，失败 /
+  取消任务再入队则替换。完成 / 取消后从队列移除，**失败音频任务保留供本次
+  进程重试**（重试生成不带批量位置的新任务，批次结束后按单任务通知），
+  歌词 / 封面等分项失败直接移除（由调用方 snackbar 呈现）。
+  **队列不持久化**：重启只保留既有的 `.part` 清扫，不做断点续传或任务恢复。
+  进度只由 `DownloadTask` 通知并做 100ms 合并（首个分片 / 100% / 终态立即
+  送达），队列只在任务增删 / 状态变化时通知；系统通知仍逐分块上报（presenter
+  自己 500ms 节流）。严格串行同时消除了同名 `.part` 竞争与分项记录并发覆盖；
+- **取消**：`cancelTrack` 先撤排队任务（队列移除并抛 `cancelled`），运行中再
+  取消 dio `CancelToken`；半成品清理后统一以 `cancelled` 失败收尾（UI 静默）；
 - **目录与位置**：下载根目录按平台解析（`IoDownloadStorage`）——桌面 =
   系统公共下载目录下 `Molia/`（Windows 走 Known Folder，OneDrive 重定向时
   不会写到 `%USERPROFILE%\Downloads`；Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
@@ -835,8 +854,20 @@
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
   自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
   `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
-  半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时清扫
-  崩溃遗留 `.part`；
+  半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时先恢复
+  提交日志，再清扫崩溃遗留 `.part`；
+- **下载提交日志 / 崩溃恢复**：`lib/services/download/download_journal.dart`
+  是文件型 write-ahead journal（**不新增 DB 表、不迁移 drift**）。位置 =
+  应用支持目录 `download_journal/`（`DownloadStorage.journalRoot()`，与下载根
+  解耦：改保存位置 / 清公共目录不影响恢复；它也不是用户文件，不放进下载夹）。
+  音频 `.part` 写完后、rename 前写一条 pending `DownloadedTrack`（仅音频，
+  继承旧 sidecar / publicUri；文件名 `<md5(key)>.json`，`.tmp` 写 + rename
+  原子替换）；**写失败会在 rename 前中止下载**，不留下没有恢复保障的最终文件；
+  rename 后继续歌词 / 封面 / 标签 / 发布，最终落库后删除 marker。
+  启动 `init` 在加载记录后、`.part` 清扫前恢复：已有**音频**记录或最终文件不存在
+  只删 marker；只有分项记录（歌词 / 封面）不算已落库，文件存在则补库 + 删 marker；
+  补库失败保留 marker 下次再试。
+  journal 只包裹单个音频提交，**不是队列持久化**（排队 / 失败任务重启仍清空）；
 - **本地导入**：`DownloadService.importLocalFiles`（收藏页「本地歌曲」合集 →
   「导入本地歌曲」：多选音频文件）**不复制文件**——记录以
   `local:<绝对路径>` 为原音源键（同路径重复导入幂等），`filePath` 指向原文件；
@@ -885,11 +916,23 @@
   文件夹 / 取消 / 分享导出 / 删除下载）+ 歌词/封面各自下载或转存 + 缓存占用
   四项（音频 / 歌词 / 封面 / 取链）逐项清理与全部清理；
   下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
-  进行中任务 + 批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目；
-  **不做断点续传**：平台直链多为一次性签名地址）+ 文件维护（`.part` 清扫、
-  孤儿文件回收、Android 补发布公共副本）；已下载列表不再单独成页，
-  由收藏页「本地歌曲」合集浏览（下载副本 + 导入的本地文件）；
-  省流生效（移动数据 + 已开启）时下载前先确认。
+  **任务区只展示运行 / 等待 / 失败**（运行在前；等待超过 20 首折叠成「还有
+  N 首等待中」），任务区订阅队列结构、每行只订阅自己的 `DownloadTask` 进度，
+  不再整页 10Hz 重建；失败区给出原因 + 单条重试 / 移除 + 顶部全部重试；
+  **不展示已完成列表**，完成即从任务区消失，批量结束用 snackbar 汇总成功 /
+  失败。批量下载（当前队列 / 指定歌单，跳过已下载与本地曲目）只负责入队，
+  页面不锁；**不做断点续传**（平台直链多为一次性签名地址）。文件维护
+  （`.part` 清扫、孤儿文件回收、Android 补发布公共副本）单独占用维护 busy，
+  不影响下载操作；孤儿扫描只收应用可识别的格式（音频扩展名 / `.lrc` +
+  `.t.lrc` / 封面图片），用户手放的 `notes.txt` 等任意文件不参与；运行中
+  任务已产生 / 即将产生的输出（音频 / `.part` / 歌词 / 翻译 / 封面）也排除
+  在外；删除前弹层展示数量与前几个文件名，随后按这一批路径再校验记录引用
+  与活跃输出后删除。已下载列表不再单独成页，由收藏页「本地歌曲」合集浏览
+  （下载副本 + 导入的本地文件）。
+  省流生效（移动数据 + 已开启）时下载前先确认：本地数据页、下载管理批量、
+  来源行「下载并分享」三处共用
+  `lib/widgets/download_data_saver_guard.dart::confirmDownloadOnDataSaver`，
+  弹层统一挂 root navigator（设置弹层 / 二级页的内层 Navigator 不能误退页面）。
 
 ### 设置注册表（settings registry）
 
