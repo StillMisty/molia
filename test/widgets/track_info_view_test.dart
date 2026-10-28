@@ -11,6 +11,7 @@ import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/download.dart';
+import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
@@ -63,14 +64,13 @@ class _RecordingNotificationService extends NotificationService {
 /// 可编排的单曲本地数据假件：数据来自假下载服务记录 + 各分项占用表。
 class _FakeLocalDataService extends TrackLocalDataService {
   _FakeLocalDataService({required this.downloads})
-      : super(
+    : super(
+        cacheService: CacheService(storage: MemoryCacheStorage()),
+        artworkCache: ArtworkCache(
           cacheService: CacheService(storage: MemoryCacheStorage()),
-          artworkCache: ArtworkCache(
-            cacheService: CacheService(storage: MemoryCacheStorage()),
-          ),
-          catalogService:
-              CatalogService(registry: FakeSourceRegistry(const {})),
-        );
+        ),
+        catalogService: CatalogService(registry: FakeSourceRegistry(const {})),
+      );
 
   final _FakeDownloadService downloads;
 
@@ -125,16 +125,17 @@ class _FakeLocalDataService extends TrackLocalDataService {
 /// 可编排的下载服务假件：只覆盖页面消费的状态与动作。
 class _FakeDownloadService extends DownloadService {
   _FakeDownloadService()
-      : super(
-          catalog: CatalogService(registry: FakeSourceRegistry(const {})),
-          repository: DownloadsRepository(
-            databaseProvider: () => throw UnimplementedError(),
-          ),
-          storage: FakeDownloadStorage(),
-        );
+    : super(
+        catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+        repository: DownloadsRepository(
+          databaseProvider: () => throw UnimplementedError(),
+        ),
+        storage: FakeDownloadStorage(),
+      );
 
   DownloadedTrack? record;
-  DownloadProgress? progress;
+  DownloadTask? task;
+  final ValueNotifier<int> taskRevision = ValueNotifier<int>(0);
   bool downloadSupported = true;
   int downloadCalls = 0;
   int cancelCalls = 0;
@@ -147,7 +148,10 @@ class _FakeDownloadService extends DownloadService {
   DownloadedTrack? recordForTrack(Track track) => record;
 
   @override
-  DownloadProgress? progressForTrack(Track track) => progress;
+  Listenable get taskChanges => taskRevision;
+
+  @override
+  DownloadTask? taskForTrack(Track track) => task;
 
   @override
   Future<void> download(
@@ -159,11 +163,11 @@ class _FakeDownloadService extends DownloadService {
     downloadCalls++;
   }
 
-  /// 模拟一次下载进度通知（与真实服务一样走 notifyListeners）。
-  void emitProgress(DownloadProgress next) {
-    progress = next;
-    notifyListeners();
-  }
+  /// 模拟一次下载记录变化（真实服务只在记录 / 能力变化时通知）。
+  void emitDownloadChange() => notifyListeners();
+
+  /// 模拟一次任务结构变化（入队 / 完成 / 失败）。
+  void emitTaskChange() => taskRevision.value++;
 
   @override
   void cancelTrack(Track track) {
@@ -183,22 +187,21 @@ Track _track({
   String? artistId,
   String artistName = 'Artist a',
   String? artworkUrl,
-}) =>
-    Track(
-      id: const TrackId('kw', 'a'),
-      title: 'Title a',
-      artists: [Artist(name: artistName, id: artistId)],
-      album: 'Album a',
-      duration: const Duration(seconds: 245),
-      origin: TrackOrigin.lx,
-      artwork: artworkUrl == null ? null : Artwork(uri: Uri.parse(artworkUrl)),
-      qualities: const [
-        AudioQuality(type: '320k', size: '9.8MB'),
-        AudioQuality(type: 'flac'),
-      ],
-      payload: {'id': 'a', 'albumId': ?albumId},
-      platformAlbumId: albumId,
-    );
+}) => Track(
+  id: const TrackId('kw', 'a'),
+  title: 'Title a',
+  artists: [Artist(name: artistName, id: artistId)],
+  album: 'Album a',
+  duration: const Duration(seconds: 245),
+  origin: TrackOrigin.lx,
+  artwork: artworkUrl == null ? null : Artwork(uri: Uri.parse(artworkUrl)),
+  qualities: const [
+    AudioQuality(type: '320k', size: '9.8MB'),
+    AudioQuality(type: 'flac'),
+  ],
+  payload: {'id': 'a', 'albumId': ?albumId},
+  platformAlbumId: albumId,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -420,17 +423,17 @@ void main() {
     final albumService = AlbumService(
       fetch: (sourceKey, albumId, {required page, required limit}) async =>
           Album(
-        id: albumId,
-        name: 'Album a',
-        artist: 'Artist a',
-        tracks: const [
-          Track(
-            id: TrackId('kw', 'a'),
-            title: 'Title a',
-            origin: TrackOrigin.lx,
+            id: albumId,
+            name: 'Album a',
+            artist: 'Artist a',
+            tracks: const [
+              Track(
+                id: TrackId('kw', 'a'),
+                title: 'Title a',
+                origin: TrackOrigin.lx,
+              ),
+            ],
           ),
-        ],
-      ),
     );
     await pumpView(
       tester,
@@ -490,16 +493,16 @@ void main() {
     final artistService = ArtistService(
       fetch: (sourceKey, artistId, {required page, required limit}) async =>
           const ArtistDetail(
-        id: '9527',
-        name: 'Artist a',
-        tracks: [
-          Track(
-            id: TrackId('kw', 'a'),
-            title: 'Title a',
-            origin: TrackOrigin.lx,
+            id: '9527',
+            name: 'Artist a',
+            tracks: [
+              Track(
+                id: TrackId('kw', 'a'),
+                title: 'Title a',
+                origin: TrackOrigin.lx,
+              ),
+            ],
           ),
-        ],
-      ),
     );
     await pumpView(
       tester,
@@ -812,10 +815,14 @@ void main() {
   });
 
   testWidgets('本地数据页：下载中显示百分比 + 取消', (tester) async {
-    downloadService.progress = const DownloadProgress(
-      receivedBytes: 50,
-      totalBytes: 100,
-    );
+    downloadService.task =
+        DownloadTask(
+            track: _track(),
+            kind: DownloadTaskKind.audio,
+            quality: '320k',
+          )
+          ..markRunning()
+          ..reportProgress(50, 100, nowMs: 1000);
     await pumpView(tester, track: _track(), downloads: downloadService);
 
     expect(find.text('已缓存 · 50%'), findsNothing);
@@ -828,15 +835,45 @@ void main() {
     expect(downloadService.cancelCalls, 1);
   });
 
-  testWidgets('下载进度：快速通知合并为一次防抖重载，切歌立即重载', (tester) async {
+  testWidgets('本地数据页：排队中显示「等待中」+ 取消，失败后回落到重新下载', (tester) async {
+    downloadService.task = DownloadTask(
+      track: _track(),
+      kind: DownloadTaskKind.audio,
+      quality: '320k',
+    );
+    await pumpView(tester, track: _track(), downloads: downloadService);
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
+    await tester.pumpAndSettle();
+    expect(find.text('等待中'), findsOneWidget);
+    expect(find.byKey(const Key('localDataCancel')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('localDataCancel')));
+    await tester.pump();
+    expect(downloadService.cancelCalls, 1);
+
+    final failed = DownloadTask(
+      track: _track(),
+      kind: DownloadTaskKind.audio,
+      quality: '320k',
+    );
+    unawaited(failed.done.catchError((_) {}));
+    failed.markFailed(
+      const SourceFailure(kind: FailureKind.network, message: 'HTTP 500'),
+    );
+    downloadService.task = failed;
+    downloadService.emitTaskChange();
+    await tester.pump();
+    expect(find.text('下载失败：HTTP 500'), findsOneWidget);
+    expect(find.byKey(const Key('localDataDownloadAudio')), findsOneWidget);
+  });
+
+  testWidgets('下载记录变化：快速通知合并为一次防抖重载，切歌立即重载', (tester) async {
     await pumpView(tester, track: _track(), downloads: downloadService);
     final initialLoads = localDataService.loadCalls;
 
-    // 连续进度通知（真实服务按时间节流后仍可能约 10Hz）。
+    // 同批下载记录连续变化：窗口内只安排一次重算。
     for (var i = 0; i < 10; i++) {
-      downloadService.emitProgress(
-        DownloadProgress(receivedBytes: i * 10, totalBytes: 1000),
-      );
+      downloadService.emitDownloadChange();
     }
     await tester.pump(const Duration(milliseconds: 299));
     expect(localDataService.loadCalls, initialLoads, reason: '防抖窗口内不重载');
@@ -846,9 +883,7 @@ void main() {
     expect(localDataService.loadCalls, initialLoads + 1, reason: '不重复重载');
 
     // 防抖未到期时切歌：取消待执行重载，新曲目立即重算。
-    downloadService.emitProgress(
-      const DownloadProgress(receivedBytes: 1, totalBytes: 1000),
-    );
+    downloadService.emitDownloadChange();
     const next = Track(
       id: TrackId('kw', 'b'),
       title: 'Title b',
@@ -879,17 +914,13 @@ void main() {
     localDataService.loadGate = gate;
 
     // 防抖到期进入加载（挂起，模拟慢磁盘扫描）。
-    downloadService.emitProgress(
-      const DownloadProgress(receivedBytes: 1, totalBytes: 1000),
-    );
+    downloadService.emitDownloadChange();
     await tester.pump(const Duration(milliseconds: 300));
     expect(localDataService.loadCalls, initialLoads + 1);
 
     // 加载中再触发多次 + 切歌：不并发，只记一次尾随。
     for (var i = 0; i < 5; i++) {
-      downloadService.emitProgress(
-        DownloadProgress(receivedBytes: 10 + i, totalBytes: 1000),
-      );
+      downloadService.emitDownloadChange();
     }
     const next = Track(
       id: TrackId('kw', 'b'),

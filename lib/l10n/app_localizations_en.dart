@@ -4130,14 +4130,37 @@ class AppLocalizationsEn extends AppLocalizations {
       'Task queue, batch download and file maintenance';
 
   @override
-  String get downloadsActiveSection => 'In progress';
+  String get downloadsTasksSection => 'Tasks';
 
   @override
-  String get downloadsActiveEmpty => 'No downloads in progress';
+  String get downloadsNoTasks => 'No download tasks';
 
   @override
-  String downloadsActiveCount(int count) {
-    return '$count task(s)';
+  String get downloadsFailedSection => 'Failed';
+
+  @override
+  String get downloadsRetry => 'Retry';
+
+  @override
+  String get downloadsRetryAll => 'Retry all';
+
+  @override
+  String get downloadsRemove => 'Remove';
+
+  @override
+  String get downloadsCancelAll => 'Cancel all';
+
+  @override
+  String get downloadStatusQueued => 'Waiting';
+
+  @override
+  String downloadsQueued(int count) {
+    return 'Added $count track(s) to the download queue';
+  }
+
+  @override
+  String downloadsWaitingMore(int count) {
+    return '$count more waiting';
   }
 
   @override
@@ -4149,11 +4172,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String downloadsBatchQueueSubtitle(int count) {
     return '$count track(s); skips downloaded and local tracks';
-  }
-
-  @override
-  String downloadsBatchStarted(int count) {
-    return 'Batch download started ($count)';
   }
 
   @override
@@ -4182,6 +4200,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get downloadsCleanupOrphansSubtitle =>
       'Delete files in the download folder that no record points to';
+
+  @override
+  String downloadsCleanupOrphansConfirm(int count) {
+    return '$count leftover file(s) can be removed. Only audio, lyrics and cover files are deleted; other files are kept.';
+  }
+
+  @override
+  String downloadsCleanupOrphansMore(int count) {
+    return '$count more file(s)';
+  }
+
+  @override
+  String get downloadsCleanupOrphansNone => 'No leftover files to remove';
 
   @override
   String downloadsCleanupOrphansDone(int count) {

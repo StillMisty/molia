@@ -2237,10 +2237,24 @@
   "downloadSourceLocal": "Local download",
   "downloadsManageTitle": "Downloads",
   "downloadsManageSubtitle": "Task queue, batch download and file maintenance",
-  "downloadsActiveSection": "In progress",
-  "downloadsActiveEmpty": "No downloads in progress",
-  "downloadsActiveCount": "{count} task(s)",
-  "@downloadsActiveCount": {
+  "downloadsTasksSection": "Tasks",
+  "downloadsNoTasks": "No download tasks",
+  "downloadsFailedSection": "Failed",
+  "downloadsRetry": "Retry",
+  "downloadsRetryAll": "Retry all",
+  "downloadsRemove": "Remove",
+  "downloadsCancelAll": "Cancel all",
+  "downloadStatusQueued": "Waiting",
+  "downloadsQueued": "Added {count} track(s) to the download queue",
+  "@downloadsQueued": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsWaitingMore": "{count} more waiting",
+  "@downloadsWaitingMore": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -2251,14 +2265,6 @@
   "downloadsBatchQueue": "Download current queue",
   "downloadsBatchQueueSubtitle": "{count} track(s); skips downloaded and local tracks",
   "@downloadsBatchQueueSubtitle": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "downloadsBatchStarted": "Batch download started ({count})",
-  "@downloadsBatchStarted": {
     "placeholders": {
       "count": {
         "type": "int"
@@ -2289,6 +2295,23 @@
   },
   "downloadsCleanupOrphans": "Remove leftover files",
   "downloadsCleanupOrphansSubtitle": "Delete files in the download folder that no record points to",
+  "downloadsCleanupOrphansConfirm": "{count} leftover file(s) can be removed. Only audio, lyrics and cover files are deleted; other files are kept.",
+  "@downloadsCleanupOrphansConfirm": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphansMore": "{count} more file(s)",
+  "@downloadsCleanupOrphansMore": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "downloadsCleanupOrphansNone": "No leftover files to remove",
   "downloadsCleanupOrphansDone": "Removed {count} leftover file(s)",
   "@downloadsCleanupOrphansDone": {
     "placeholders": {

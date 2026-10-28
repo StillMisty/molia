@@ -17,8 +17,11 @@
 ///   （`audio_tag_writer.dart`，best-effort，失败保留 sidecar）；
 /// - 半成品用 `.part` 后缀，完成时原子改名，落库在改名之后：
 ///   播放取链只认数据库记录，永远不会读到半成品；
-/// - 进度 / 取消 / 失败：进度经 [notifyListeners] 节流广播；取消走 dio
-///   `CancelToken`，半成品清理后抛 `cancelled` 失败（UI 静默）；
+/// - 进度 / 取消 / 失败：全局严格串行单 worker（`download_queue.dart`），
+///   每任务进度只经 [DownloadTask] 自己节流广播（100ms 合并；首个分片 /
+///   100% / 终态立即送达），队列只在任务增删 / 状态变化时通知；排队任务
+///   由队列移除，运行中取消走 dio `CancelToken`，半成品清理后抛
+///   `cancelled` 失败（UI 静默）；
 /// - 歌词/封面是 best-effort：失败不阻断音频下载，对应路径记为 null；
 /// - 同一原曲只保留一条记录（下载前查重，重名文件自动 `(2)`、`(3)` 递增）；
 /// - **系统通知**（Android）：音频下载任务起一条前台服务（dataSync）进度通知，
@@ -27,7 +30,9 @@
 ///   日志，下载本身与既有语义完全不变；歌词/封面这类秒级分项动作不发通知
 ///   （无进度可言，闪一下反而吵）。
 ///
-/// 本文件只做编排（下载一首 / 一批）；三个 module 各有一份唯一实现：
+/// 本文件只做编排（下载一首 / 一批）；四个 module 各有一份唯一实现：
+/// - 任务队列：`download_queue.dart`（严格串行 FIFO / 去重 / 取消 / 重试 /
+///   进度通道）；
 /// - 命名 / 放置：`download_file_layout.dart`（模板 + sanitize + ` (2)` 去重 +
 ///   sidecar 路径约定）；
 /// - 记录装配：`download_record_assembler.dart`（部分状态 → `DownloadedTrack`）；
@@ -62,8 +67,11 @@ import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
 import 'download_notification_presenter.dart';
+import 'download_queue.dart';
 import 'download_record_assembler.dart';
 import 'download_settings.dart';
+
+export 'download_queue.dart';
 
 /// 下载时取词结果（主歌词 + 可选翻译；罗马音/逐字不落盘）。
 class DownloadLyrics {
@@ -78,41 +86,6 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 
 /// 下载时封面 URL 解析（组合根注入：`SourceManager.fetchPic` 适配）。
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
-
-/// 单条下载任务的实时进度（UI 消费；值相等不重复通知）。
-class DownloadProgress {
-  const DownloadProgress({required this.receivedBytes, this.totalBytes});
-
-  final int receivedBytes;
-
-  /// 响应头 Content-Length；未知时为 null（进度不可量化）。
-  final int? totalBytes;
-
-  /// 0..1；总大小未知时为 null。
-  double? get fraction {
-    final total = totalBytes;
-    if (total == null || total <= 0) return null;
-    return (receivedBytes / total).clamp(0.0, 1.0);
-  }
-
-  /// 百分比 0..100；总大小未知时为 null。
-  int? get percent {
-    final value = fraction;
-    return value == null ? null : (value * 100).round();
-  }
-
-  @override
-  bool operator ==(Object other) =>
-      other is DownloadProgress &&
-      other.receivedBytes == receivedBytes &&
-      other.totalBytes == totalBytes;
-
-  @override
-  int get hashCode => Object.hash(receivedBytes, totalBytes);
-
-  @override
-  String toString() => 'DownloadProgress($receivedBytes/$totalBytes)';
-}
 
 /// 完整音频缓存命中（「缓存 = 已下载」识别与离线取链共用）。
 class AudioCacheHit {
@@ -161,18 +134,18 @@ class DownloadService extends ChangeNotifier {
     DownloadNotifications? notifications,
     this._preferredQuality,
     int Function()? clock,
-  })  : _storage = storage,
-        _dio = dio ?? createAppDio(),
-        _settings = settings,
-        _publisher = publisher ?? const NoopDownloadsPublisher(),
-        _clock = clock,
-        _layout = DownloadFileLayout(storage: storage, settings: settings),
-        _assembler = DownloadRecordAssembler(clock: clock),
-        _notifications = DownloadNotificationPresenter(
-          notifications: notifications ?? createDownloadNotifications(),
-          settings: settings,
-          clock: clock,
-        );
+  }) : _storage = storage,
+       _dio = dio ?? createAppDio(),
+       _settings = settings,
+       _publisher = publisher ?? const NoopDownloadsPublisher(),
+       _clock = clock,
+       _layout = DownloadFileLayout(storage: storage, settings: settings),
+       _assembler = DownloadRecordAssembler(clock: clock),
+       _notifications = DownloadNotificationPresenter(
+         notifications: notifications ?? createDownloadNotifications(),
+         settings: settings,
+         clock: clock,
+       );
 
   final CatalogService _catalog;
   final DownloadsRepository _repository;
@@ -193,7 +166,8 @@ class DownloadService extends ChangeNotifier {
 
   /// UI 进度节流用的毫秒时间源（测试注入；缺省墙钟）。
   ///
-  /// 只服务 `notifyListeners` 的频率，不参与下载时间 / 记录时间。
+  /// 只服务 [DownloadTask.reportProgress] 的合并窗口，不参与下载时间 /
+  /// 记录时间。
   final int Function()? _clock;
 
   /// 文件名 / 放置模块：命名、去重与 sidecar 路径约定的唯一实现（见
@@ -214,12 +188,16 @@ class DownloadService extends ChangeNotifier {
   /// 已下载记录（键 = 原音源曲目键 `sourceKey:songId`）。
   Map<String, DownloadedTrack> _records = {};
 
-  /// 进行中的下载（键同上）。
-  final Map<String, DownloadProgress> _active = {};
+  /// 运行中任务的 dio 取消令牌（只给网络下载用；排队取消由队列处理）。
   final Map<String, CancelToken> _tokens = {};
 
-  /// 进行中任务对应的曲目（下载管理页展示用）。
-  final Map<String, Track> _activeTracks = {};
+  /// 记录排序列表缓存：记录变更时失效，避免每次读取都复制 + 排序。
+  List<DownloadedTrack>? _downloadsCache;
+
+  /// 任务队列（严格串行单 worker；完成 / 取消即移除，失败保留供重试）。
+  ///
+  /// 延迟初始化：runner 是实例方法，构造器初始化列表里拿不到 `this`。
+  late final DownloadQueue _queue = DownloadQueue(_runTask);
 
   bool _supported = false;
   bool _initialized = false;
@@ -241,15 +219,20 @@ class DownloadService extends ChangeNotifier {
   /// 记录是否已加载（启动时 [init] 一次）。
   bool get initialized => _initialized;
 
-  /// 全部下载（下载时间倒序）。
+  /// 全部下载（下载时间倒序；缓存不可变列表，记录变更时失效）。
   List<DownloadedTrack> get downloads {
+    final cached = _downloadsCache;
+    if (cached != null) return cached;
     final list = List<DownloadedTrack>.of(_records.values)
       ..sort((a, b) {
         final byTime = b.downloadedAt.compareTo(a.downloadedAt);
         return byTime != 0 ? byTime : b.key.compareTo(a.key);
       });
-    return list;
+    return _downloadsCache = List<DownloadedTrack>.unmodifiable(list);
   }
+
+  /// 记录变化后失效排序缓存（写 `_records` 的所有路径都必须调用）。
+  void _invalidateDownloadsCache() => _downloadsCache = null;
 
   /// 按原音源曲目键查询下载记录。
   DownloadedTrack? recordFor(String sourceKey, String songId) =>
@@ -261,21 +244,37 @@ class DownloadService extends ChangeNotifier {
     return _records['${track.id.sourceKey}:${track.id.id}'];
   }
 
-  /// 当前曲目的下载进度；未在下载返回 null。
-  DownloadProgress? progressForTrack(Track track) {
+  /// 当前曲目的下载进度；未在下载（或已失败 / 完成）返回 null。
+  ///
+  /// 保留给既有调用方 / 测试：进度通道已拆到 [DownloadTask]，新 UI 直接
+  /// 监听任务本身（见 [taskForTrack]）。
+  DownloadProgress? progressForTrack(Track track) =>
+      taskForTrack(track)?.progress;
+
+  /// 任务结构变化（增删 / 状态切换）：页面任务区只监听这里。
+  Listenable get taskChanges => _queue;
+
+  /// 下载管理页可见的音频任务（运行 / 排队 / 失败；不展示已完成）。
+  List<DownloadTask> get tasks => [
+    for (final task in _queue.tasks)
+      if (task.kind == DownloadTaskKind.audio) task,
+  ];
+
+  /// 当前曲目的音频任务（排队 / 运行 / 失败）；本地曲目与分项任务返回 null。
+  DownloadTask? taskForTrack(Track track) {
     if (track.id.sourceKey == kLocalSourceKey) return null;
-    return _active['${track.id.sourceKey}:${track.id.id}'];
+    final task = _queue.taskFor(track.id.uri);
+    return task?.kind == DownloadTaskKind.audio ? task : null;
   }
+
+  /// 重试失败任务（同一对象复位后重新入队；音频失败才保留在队列里）。
+  Future<void> retryTask(DownloadTask task) => _queue.enqueue(task);
+
+  /// 从失败区移除任务（不重试）。
+  void dismissTask(DownloadTask task) => _queue.dismiss(task.key);
 
   /// 当前解析出的下载根目录（设置页展示；不可用返回 null）。
   Future<String?> rootPath() => _storage.downloadsRoot();
-
-  /// 进行中的任务（曲目 + 进度）：下载管理页展示。
-  List<(Track, DownloadProgress)> get activeTasks => [
-        for (final entry in _active.entries)
-          if (_activeTracks[entry.key] != null)
-            (_activeTracks[entry.key]!, entry.value),
-      ];
 
   /// 清扫崩溃遗留的半成品（`*.part`），返回删除数量。
   Future<int> cleanupIncompleteDownloads() async {
@@ -296,6 +295,11 @@ class DownloadService extends ChangeNotifier {
   }
 
   /// 无记录引用的孤儿文件（删除下载失败 / 手工拷贝残留），返回绝对路径。
+  ///
+  /// 只收应用可识别的文件（音频扩展名 / `.lrc` 与 `.t.lrc` / 封面图片）：
+  /// 下载根目录在桌面默认就是用户的公共下载目录下 `Molia/`，用户可能自己
+  /// 往里放 `notes.txt` 等文件；「清理残留」只清应用写过的格式，任意文件
+  /// 不参与判定与删除。
   Future<List<String>> orphanFiles() async {
     await _ensureReady();
     final root = await _storage.downloadsRoot();
@@ -308,7 +312,9 @@ class DownloadService extends ChangeNotifier {
       final files = await _storage.listFiles(root);
       return [
         for (final path in files)
-          if (!path.endsWith(downloadPartSuffix) && !referenced.contains(path))
+          if (!path.endsWith(downloadPartSuffix) &&
+              !referenced.contains(path) &&
+              _isRecognizedDownloadFile(path))
             path,
       ];
     } catch (e) {
@@ -316,6 +322,23 @@ class DownloadService extends ChangeNotifier {
       return const [];
     }
   }
+
+  /// 应用会写入下载根目录的文件格式（孤儿候选的安全白名单）。
+  static bool _isRecognizedDownloadFile(String path) {
+    final ext = p.extension(path).toLowerCase().replaceFirst('.', '');
+    return DownloadFileLayout.audioExtensions.contains(ext) ||
+        ext == 'lrc' ||
+        _coverImageExtensions.contains(ext);
+  }
+
+  static const Set<String> _coverImageExtensions = {
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+    'gif',
+    'bmp',
+  };
 
   /// 删除全部孤儿文件，返回删除数量。
   Future<int> deleteOrphanFiles() async {
@@ -327,34 +350,46 @@ class DownloadService extends ChangeNotifier {
     return orphans.length;
   }
 
-  /// 批量下载（队列全量）：顺序执行，跳过已下载与不支持项。
+  /// 批量下载：先一次性把全部任务放进队列，再在后台逐个等待结果。
   ///
-  /// 不做断点续传（平台直链多为一次性签名地址，续传价值低）；
-  /// 单项失败不影响后续，返回 `(下载数, 失败数)`。
+  /// 页面调用后立即拿到「已加入队列」的反馈，不再被整批 await 锁住；队列
+  /// 本身严格串行（一次只跑一个）。不做断点续传（平台直链多为一次性签名
+  /// 地址）；单项失败不影响后续，返回 `(下载数, 失败数)`，失败音频任务
+  /// 留在管理页失败区可重试。
   ///
   /// 通知（Android）：整批共享一条「N/N」通知（曲目位置按入参序号），批内单任务
   /// 通知被抑制——顺序下载时逐条通知会闪成一串，一条批量通知更接近用户直觉。
   Future<(int, int)> downloadBatch(Iterable<Track> tracks) async {
     // 物化入参只为「批量位置」计数（顺序与跳过判定完全不变）。
     final items = tracks.toList();
-    var done = 0;
-    var failed = 0;
+    await _ensureReady();
     // 已有批量在进行（并发调用）时不抢占通知：服务端只有一个批量 id。
     final batch = _notifications.beginBatch(items.length);
+    final futures = <Future<void>>[];
+    final seen = <String>{};
     try {
       for (var index = 0; index < items.length; index++) {
         final track = items[index];
         if (recordForTrack(track)?.hasAudio ?? false) continue;
         if (track.id.sourceKey == kLocalSourceKey) continue;
-        if (batch) {
-          _notifications.enterBatch(
-            index: index + 1,
-            key: '${track.id.sourceKey}:${track.id.id}',
-            track: track,
-          );
-        }
+        // 入参重复：队列本来会同 key 去重，这里跳过避免重复计数。
+        if (!seen.add(track.id.uri)) continue;
+        final task = DownloadTask(
+          track: track,
+          kind: DownloadTaskKind.audio,
+          quality: _pickQuality(track),
+          batchIndex: batch ? index + 1 : null,
+          batchTotal: batch ? items.length : null,
+        );
+        // enqueue 同步入队：所有任务在第一个 await 前全部可见。
+        futures.add(_queue.enqueue(task));
+      }
+
+      var done = 0;
+      var failed = 0;
+      for (final future in futures) {
         try {
-          await download(track);
+          await future;
           done++;
         } on SourceFailure catch (failure) {
           if (failure.kind != FailureKind.cancelled) failed++;
@@ -362,10 +397,10 @@ class DownloadService extends ChangeNotifier {
           failed++;
         }
       }
+      return (done, failed);
     } finally {
       if (batch) _notifications.endBatch();
     }
-    return (done, failed);
   }
 
   /// 指定音质是否命中完整音频缓存（下载弹层的「本地缓存」标记）。
@@ -425,6 +460,7 @@ class DownloadService extends ChangeNotifier {
       if (_supported) {
         final records = await _repository.listAll();
         _records = {for (final record in records) record.key: record};
+        _invalidateDownloadsCache();
         // 崩溃遗留的半成品（.part）清扫：失败仅记日志，不影响记录可用。
         final cleaned = await cleanupIncompleteDownloads();
         if (cleaned > 0) _logger.info('清理未完成的下载文件 $cleaned 个');
@@ -459,8 +495,7 @@ class DownloadService extends ChangeNotifier {
   }) async {
     await _ensureReady();
     _guardDownloadable(track);
-    final root = await _requireRoot();
-    final key = '${track.id.sourceKey}:${track.id.id}';
+    final key = track.id.uri;
     if (_records[key]?.hasAudio ?? false) {
       throw const SourceFailure(
         kind: FailureKind.unsupported,
@@ -468,15 +503,61 @@ class DownloadService extends ChangeNotifier {
         l10nKey: 'downloadAlreadyExists',
       );
     }
-    if (_active.containsKey(key)) return; // 重复请求：忽略
+    await _requireRoot();
+    final task = DownloadTask(
+      track: track,
+      kind: DownloadTaskKind.audio,
+      quality: quality ?? _pickQuality(track),
+      includeLyrics: includeLyrics,
+      includeCover: includeCover,
+    );
+    return _queue.enqueue(task);
+  }
 
-    final resolvedQuality = quality ?? _pickQuality(track);
-    _active[key] = const DownloadProgress(receivedBytes: 0);
-    _activeTracks[key] = track;
+  /// 单独下载歌词（缓存优先）；无歌词抛 `downloadNoLyrics`。
+  Future<void> downloadLyrics(Track track) async {
+    await _ensureReady();
+    _guardDownloadable(track);
+    await _requireRoot();
+    return _queue.enqueue(
+      DownloadTask(track: track, kind: DownloadTaskKind.lyrics, quality: ''),
+    );
+  }
+
+  /// 单独下载封面（缓存优先）；无封面抛 `downloadNoArtwork`。
+  Future<void> downloadCover(Track track) async {
+    await _ensureReady();
+    _guardDownloadable(track);
+    await _requireRoot();
+    return _queue.enqueue(
+      DownloadTask(track: track, kind: DownloadTaskKind.cover, quality: ''),
+    );
+  }
+
+  /// 队列执行入口：按任务种类路由到对应编排。
+  Future<void> _runTask(DownloadTask task) => switch (task.kind) {
+    DownloadTaskKind.audio => _runAudioTask(task),
+    DownloadTaskKind.lyrics => _runLyricsTask(task),
+    DownloadTaskKind.cover => _runCoverTask(task),
+  };
+
+  /// 完整音频下载（原 `download()` 主体）：取链 / 缓存拷贝 / 分项 / 标签 /
+  /// 发布 / 落库。失败归一为 [SourceFailure]，由队列决定保留还是移除任务。
+  Future<void> _runAudioTask(DownloadTask task) async {
+    final track = task.track;
+    final key = task.key;
+    final resolvedQuality = task.quality;
     final cancelToken = CancelToken();
     _tokens[key] = cancelToken;
-    notifyListeners();
-    _notifications.startTask(key, track);
+    if (task.batchIndex != null && task.batchTotal != null) {
+      _notifications.enterBatch(
+        index: task.batchIndex!,
+        key: key,
+        track: track,
+      );
+    } else {
+      _notifications.startTask(key, track);
+    }
 
     String? partPath;
     String? filePath;
@@ -484,8 +565,10 @@ class DownloadService extends ChangeNotifier {
     String? coverPath;
     DownloadLyrics? lyrics;
     _ResolvedCover? cover;
+    late final String root;
     late final String base;
     try {
+      root = await _requireRoot();
       // 1) 缓存优先：完整缓存文件直接拷贝，不触网。
       final cached = await _completeAudioCachePath(track, resolvedQuality);
       if (cached != null) {
@@ -500,7 +583,7 @@ class DownloadService extends ChangeNotifier {
         await _storage.copyFile(cached, partPath);
         await _storage.rename(partPath, filePath);
         partPath = null;
-        _updateProgress(key, await _storage.fileSize(filePath), null);
+        _updateProgress(task, await _storage.fileSize(filePath), null);
       } else {
         // 2) 网络下载（扩展名优先取 URL 后缀，回退音质推断）。
         final stream = await _catalog.resolve(
@@ -546,7 +629,7 @@ class DownloadService extends ChangeNotifier {
           streamBody(response).stream,
           total: total,
           onProgress: (received, expected) =>
-              _updateProgress(key, received, expected),
+              _updateProgress(task, received, expected),
         );
         _throwIfCancelled(cancelToken);
         await _storage.rename(partPath, filePath);
@@ -557,7 +640,7 @@ class DownloadService extends ChangeNotifier {
       _throwIfCancelled(cancelToken);
 
       // 3) 离线歌词 / 封面（best-effort，失败不阻断音频下载）。
-      if (includeLyrics) {
+      if (task.includeLyrics) {
         lyrics = await _resolveLyrics(track);
         if (lyrics != null) {
           lyricPath = await _layout.writeLyrics(
@@ -568,7 +651,7 @@ class DownloadService extends ChangeNotifier {
           );
         }
       }
-      if (includeCover) {
+      if (task.includeCover) {
         cover = await _resolveCover(track);
         if (cover != null) {
           coverPath = await _layout.writeCover(
@@ -614,6 +697,8 @@ class DownloadService extends ChangeNotifier {
       );
       await _repository.insert(record);
       _records[key] = record;
+      _invalidateDownloadsCache();
+      notifyListeners();
       _logger.info('下载完成: $key -> $filePath (${record.sizeLabel})');
     } catch (e) {
       await _cleanupFailedDownload(
@@ -633,19 +718,16 @@ class DownloadService extends ChangeNotifier {
       if (e is SourceFailure) rethrow;
       throw SourceFailure.from(e);
     } finally {
-      _active.remove(key);
       _tokens.remove(key);
-      _activeTracks.remove(key);
-      _lastProgressNotifiedAt.remove(key);
+      // 批量中的当前曲目由批量通知统一表达（presenter 内部按 key 抑制）。
       _notifications.stopTask(key);
-      notifyListeners();
     }
   }
 
-  /// 单独下载歌词（缓存优先）；无歌词抛 `downloadNoLyrics`。
-  Future<void> downloadLyrics(Track track) async {
-    await _ensureReady();
-    _guardDownloadable(track);
+  /// 单独下载歌词（原 `downloadLyrics()` 主体）：与音频共用同一条队列，
+  /// 避免分项记录写库与音频下载并发覆盖。
+  Future<void> _runLyricsTask(DownloadTask task) async {
+    final track = task.track;
     final root = await _requireRoot();
     final lyrics = await _resolveLyrics(track);
     if (lyrics == null || lyrics.lyric.trim().isEmpty) {
@@ -682,10 +764,9 @@ class DownloadService extends ChangeNotifier {
     unawaited(_embedTagsFromFiles(track));
   }
 
-  /// 单独下载封面（缓存优先）；无封面抛 `downloadNoArtwork`。
-  Future<void> downloadCover(Track track) async {
-    await _ensureReady();
-    _guardDownloadable(track);
+  /// 单独下载封面（原 `downloadCover()` 主体）：与音频共用同一条队列。
+  Future<void> _runCoverTask(DownloadTask task) async {
+    final track = task.track;
     final root = await _requireRoot();
     final cover = await _resolveCover(track);
     if (cover == null) {
@@ -723,9 +804,12 @@ class DownloadService extends ChangeNotifier {
     unawaited(_embedTagsFromFiles(track));
   }
 
-  /// 取消下载（无进行中任务时空操作）。
-  void cancel(String sourceKey, String songId) =>
-      _tokens['$sourceKey:$songId']?.cancel();
+  /// 取消下载（无进行中任务时空操作）：先撤排队任务，运行中再撤 dio 请求。
+  void cancel(String sourceKey, String songId) {
+    final key = '$sourceKey:$songId';
+    if (_queue.cancelQueued(key)) return;
+    _tokens[key]?.cancel();
+  }
 
   /// 取消当前曲目的下载（UI 入口）。
   void cancelTrack(Track track) {
@@ -740,6 +824,7 @@ class DownloadService extends ChangeNotifier {
   Future<void> delete(DownloadedTrack record) async {
     await _repository.delete(record.originSourceKey, record.originSongId);
     _records.remove(record.key);
+    _invalidateDownloadsCache();
     if (!record.imported) {
       // 记录引用的文件集（音频 / 歌词 / 翻译边车 / 封面）：约定见放置模块。
       for (final path in DownloadFileLayout.referencedFiles(record)) {
@@ -795,6 +880,7 @@ class DownloadService extends ChangeNotifier {
       );
       await _repository.insert(record);
       _records[record.key] = record;
+      _invalidateDownloadsCache();
       imported++;
     }
     if (imported > 0) notifyListeners();
@@ -828,6 +914,7 @@ class DownloadService extends ChangeNotifier {
       final updated = _assembler.republished(record, uri);
       await _repository.insert(updated);
       _records[record.key] = updated;
+      _invalidateDownloadsCache();
       published++;
     }
     if (published > 0) notifyListeners();
@@ -945,6 +1032,7 @@ class DownloadService extends ChangeNotifier {
     );
     await _repository.insert(record);
     _records[key] = record;
+    _invalidateDownloadsCache();
   }
 
   /// 已有音频时把（sidecar 里的）歌词 / 封面补写进标签。
@@ -1062,11 +1150,7 @@ class DownloadService extends ChangeNotifier {
   }
 
   Future<_ResolvedCover?> _downloadCoverBytes(String url) async {
-    final bytes = await downloadCoverBytes(
-      _dio,
-      url,
-      cache: _artworkCache,
-    );
+    final bytes = await downloadCoverBytes(_dio, url, cache: _artworkCache);
     if (bytes == null) return null;
     return _ResolvedCover(
       bytes: bytes,
@@ -1087,41 +1171,13 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  /// UI 进度节流：同一任务最多每 [_progressNotifyIntervalMs] 通知一次。
-  ///
-  /// 快速下载（尤其命中本地缓存后的直拷）分片间隔远小于 100ms，按字节阈值
-  /// 通知会让监听页每秒重建几十次；这里按时间合并，但首个进度与终态
-  /// （已收满 / 完成 / 失败 / 取消）始终立即送达——结束状态不能等窗口。
-  /// 系统通知有自己的 500ms 节流，每个分片仍照常上报（见
-  /// `DownloadNotificationPresenter.reportProgress`）。
-  static const int _progressNotifyIntervalMs = 100;
-
-  /// 任务键 → 最近一次 UI 进度通知的毫秒时间（只服务节流）。
-  ///
-  /// 条目在任务收尾的 `finally` 清理，与 [_active] 等任务态同生命周期。
-  final Map<String, int> _lastProgressNotifiedAt = {};
-
   int _nowMs() => _clock?.call() ?? DateTime.now().millisecondsSinceEpoch;
 
-  void _updateProgress(String key, int received, int? total) {
-    _notifications.reportProgress(key, received, total);
-    final now = _nowMs();
-    final lastAt = _lastProgressNotifiedAt[key];
-    final complete = total != null && total > 0 && received >= total;
-    // 首个进度（无历史时间）与终态无条件通知；其余按时间窗口合并。
-    if (lastAt != null &&
-        !complete &&
-        now - lastAt < _progressNotifyIntervalMs) {
-      return;
-    }
-    final progress = DownloadProgress(
-      receivedBytes: received,
-      totalBytes: total,
-    );
-    if (_active[key] == progress) return;
-    _lastProgressNotifiedAt[key] = now;
-    _active[key] = progress;
-    notifyListeners();
+  /// 进度双通道：系统通知逐分片上报（presenter 自己 500ms 节流）；UI 进度
+  /// 只进任务自身并做 100ms 合并——队列与服务都不在进度时通知。
+  void _updateProgress(DownloadTask task, int received, int? total) {
+    _notifications.reportProgress(task.key, received, total);
+    task.reportProgress(received, total, nowMs: _nowMs());
   }
 
   Future<void> _cleanupFailedDownload({
@@ -1188,6 +1244,12 @@ class DownloadService extends ChangeNotifier {
       'mka' => 'audio/x-matroska',
       _ => 'application/octet-stream',
     };
+  }
+
+  @override
+  void dispose() {
+    _queue.dispose();
+    super.dispose();
   }
 }
 

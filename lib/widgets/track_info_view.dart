@@ -77,10 +77,11 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   TrackLocalData? _localData;
   bool _listening = false;
 
-  /// 下载进度触发的本地数据重算防抖。
+  /// 下载记录变化触发的本地数据重算防抖。
   ///
-  /// 进度通知每秒可达数十次，而一次重算要递归列音频缓存目录并统计每个
-  /// 文件；300ms 窗口把同一批进度合并成一次扫描。
+  /// 下载完成 / 删除会连续触发记录通知，而一次重算要递归列音频缓存目录并
+  /// 统计每个文件；300ms 窗口把同一批变化合并成一次扫描。任务进度已拆到
+  /// `DownloadTask`，不再经过这里。
   static const Duration _reloadDebounce = Duration(milliseconds: 300);
   Timer? _reloadTimer;
 
@@ -96,9 +97,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
         context.read<CacheService?>() ?? CacheService.instance;
     final downloads = context.read<DownloadService?>();
     if (!identical(_downloads, downloads)) {
-      _downloads?.removeListener(_onDownloadProgress);
+      _downloads?.removeListener(_onDownloadRecordsChanged);
       _downloads = downloads;
-      downloads?.addListener(_onDownloadProgress);
+      downloads?.addListener(_onDownloadRecordsChanged);
     }
     if (!_listening) {
       _listening = true;
@@ -115,7 +116,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   @override
   void dispose() {
     _playback?.removeListener(_syncTrack);
-    _downloads?.removeListener(_onDownloadProgress);
+    _downloads?.removeListener(_onDownloadRecordsChanged);
     if (_listening) {
       _cacheServiceRevision?.revision.removeListener(_onLocalDataChanged);
     }
@@ -124,8 +125,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     super.dispose();
   }
 
-  /// 下载进度 / 完成 / 删除：防抖后重算，避免逐分片扫缓存目录。
-  void _onDownloadProgress() {
+  /// 下载记录变化 / 完成 / 删除：防抖后重算，避免同批记录通知重复扫缓存目录。
+  void _onDownloadRecordsChanged() {
     if (!mounted) return;
     _reloadTimer?.cancel();
     _reloadTimer = Timer(_reloadDebounce, () {

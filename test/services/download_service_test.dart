@@ -41,20 +41,19 @@ void main() {
     String songId = '1',
     String title = '测试歌曲',
     String artist = '歌手',
-  }) =>
-      Track(
-        id: TrackId(sourceKey, songId),
-        title: title,
-        artists: [Artist(name: artist)],
-        album: '专辑',
-        duration: const Duration(minutes: 3),
-        origin: TrackOrigin.builtin,
-        qualities: const [
-          AudioQuality(type: '320k'),
-          AudioQuality(type: '128k'),
-        ],
-        payload: {'songmid': songId},
-      );
+  }) => Track(
+    id: TrackId(sourceKey, songId),
+    title: title,
+    artists: [Artist(name: artist)],
+    album: '专辑',
+    duration: const Duration(minutes: 3),
+    origin: TrackOrigin.builtin,
+    qualities: const [
+      AudioQuality(type: '320k'),
+      AudioQuality(type: '128k'),
+    ],
+    payload: {'songmid': songId},
+  );
 
   DownloadService makeService({
     Dio? dio,
@@ -72,7 +71,8 @@ void main() {
       catalog: CatalogService(registry: registry),
       repository: repository,
       storage: storage,
-      dio: dio ??
+      dio:
+          dio ??
           mockDio((options) => textResponse('unexpected', statusCode: 500)),
       lyricsResolver: lyrics,
       artworkResolver: artwork,
@@ -100,6 +100,21 @@ void main() {
     await repository.dispose();
     await db.close();
   });
+
+  /// 等任务入队并开始运行（队列 worker 在 microtask 里启动）。
+  Future<DownloadTask> waitForRunningTask(
+    DownloadService service,
+    Track track,
+  ) async {
+    for (var i = 0; i < 100; i++) {
+      final task = service.taskForTrack(track);
+      if (task != null && task.status == DownloadTaskStatus.running) {
+        return task;
+      }
+      await Future<void>.delayed(Duration.zero);
+    }
+    throw StateError('任务未开始运行');
+  }
 
   test('下载成功：音频落盘 + 记录入库 + 离线歌词/封面 + 本地副本优先取链', () async {
     final dio = mockDio((options) {
@@ -238,17 +253,16 @@ void main() {
     await service.init();
 
     final track = makeTrack();
+    final future = service.download(track);
+    final task = await waitForRunningTask(service, track);
     final progressSeen = Completer<DownloadProgress>();
-    service.addListener(() {
-      final progress = service.progressForTrack(track);
-      if (progress != null &&
-          progress.receivedBytes >= 64 * 1024 &&
-          !progressSeen.isCompleted) {
+    task.addListener(() {
+      final progress = task.progress;
+      if (progress.receivedBytes >= 64 * 1024 && !progressSeen.isCompleted) {
         progressSeen.complete(progress);
       }
     });
 
-    final future = service.download(track);
     // 第一块 64KB：首个进度不受时间窗口限制，立即可见。
     controller.add(Uint8List(64 * 1024));
     final midway = await progressSeen.future;
@@ -279,13 +293,16 @@ void main() {
     await service.init();
 
     final track = makeTrack();
+    final future = service.download(track);
+    final task = await waitForRunningTask(service, track);
     final notified = <int>[];
-    service.addListener(() {
-      final progress = service.progressForTrack(track);
-      if (progress != null) notified.add(progress.receivedBytes);
+    task.addListener(() {
+      // 收尾时的状态通知不算进度（终态由 status 单独表达）。
+      if (task.status == DownloadTaskStatus.running) {
+        notified.add(task.progress.receivedBytes);
+      }
     });
 
-    final future = service.download(track);
     // 四个分片在同一毫秒内到达：中间进度合并，只保留首个与终态。
     controller.add(Uint8List(100));
     controller.add(Uint8List(100));
@@ -294,7 +311,7 @@ void main() {
     await controller.close();
     await future;
 
-    expect(notified, [0, 100, 400], reason: '100ms 内合并，100% 不被节流吞掉');
+    expect(notified, [100, 400], reason: '100ms 内合并，100% 不被节流吞掉');
     expect(service.progressForTrack(track), isNull);
   });
 
@@ -314,10 +331,13 @@ void main() {
     await service.init();
 
     final track = makeTrack();
+    final future = service.download(track);
+    final task = await waitForRunningTask(service, track);
     final notified = <int>[];
-    service.addListener(() {
-      final progress = service.progressForTrack(track);
-      if (progress != null) notified.add(progress.receivedBytes);
+    task.addListener(() {
+      if (task.status == DownloadTaskStatus.running) {
+        notified.add(task.progress.receivedBytes);
+      }
     });
 
     /// 等分片被写流消费后再推进时钟（时钟读数与分片处理顺序一一对应）。
@@ -327,7 +347,6 @@ void main() {
       }
     }
 
-    final future = service.download(track);
     controller.add(Uint8List(100)); // 1000：首个进度（立即送达）
     await waitForChunk(100);
     now += 40;
@@ -341,7 +360,7 @@ void main() {
     await controller.close();
     await future;
 
-    expect(notified, [0, 100, 300, 400]);
+    expect(notified, [100, 300, 400]);
   });
 
   test('取消：清理半成品、不落记录、抛 cancelled 失败', () async {
@@ -373,7 +392,7 @@ void main() {
         predicate((e) => e is SourceFailure && e.kind == FailureKind.cancelled),
       ),
     );
-    await Future<void>.delayed(Duration.zero);
+    await waitForRunningTask(service, track);
     expect(service.progressForTrack(track), isNotNull);
 
     service.cancelTrack(track);
@@ -977,6 +996,54 @@ void main() {
     expect(await service.orphanFiles(), isEmpty);
   });
 
+  test('批量下载：先一次性入队全部，页面立即看到运行 + 等待任务', () async {
+    final first = StreamController<Uint8List>();
+    final second = StreamController<Uint8List>();
+    final dio = mockDio((options) {
+      if (options.uri.path.endsWith('a.mp3')) {
+        return ResponseBody(
+          first.stream,
+          200,
+          headers: {
+            'content-length': ['2'],
+          },
+        );
+      }
+      if (options.uri.path.endsWith('b.mp3')) {
+        return ResponseBody(
+          second.stream,
+          200,
+          headers: {
+            'content-length': ['2'],
+          },
+        );
+      }
+      return textResponse('not found', statusCode: 404);
+    });
+    final service = makeService(dio: dio);
+    await service.init();
+
+    final kw = makeTrack(sourceKey: 'kw', songId: '1');
+    final tx = makeTrack(sourceKey: 'tx', songId: '2');
+    final batch = service.downloadBatch([kw, tx]);
+    await waitForRunningTask(service, kw);
+
+    // 第一条还在下载，第二条已经在等待列表（不是等第一条完成后才入队）。
+    expect(
+      [for (final task in service.tasks) task.status],
+      [DownloadTaskStatus.running, DownloadTaskStatus.queued],
+    );
+    expect(service.tasks.map((task) => task.track.id), [kw.id, tx.id]);
+
+    first.add(Uint8List.fromList([1, 2]));
+    await first.close();
+    await waitForRunningTask(service, tx);
+    second.add(Uint8List.fromList([3, 4]));
+    await second.close();
+
+    expect(await batch, (2, 0));
+  });
+
   test('批量下载：顺序执行，跳过已下载与本地曲目', () async {
     final dio = mockDio(
       (options) => bytesResponse(
@@ -1007,7 +1074,7 @@ void main() {
     expect(service.recordFor('tx', '2')?.hasAudio, isTrue);
   });
 
-  test('进行中任务：activeTasks 暴露曲目与进度，完成后清空', () async {
+  test('任务列表：tasks / taskForTrack 暴露曲目与进度，完成后清空', () async {
     final controller = StreamController<Uint8List>();
     final dio = mockDio(
       (options) => ResponseBody(
@@ -1023,13 +1090,15 @@ void main() {
 
     final track = makeTrack();
     final download = service.download(track);
-    await Future<void>.delayed(Duration.zero);
-    expect(service.activeTasks.single.$1.id, track.id);
+    final task = await waitForRunningTask(service, track);
+    expect(service.tasks.single.track.id, track.id);
+    expect(identical(service.taskForTrack(track), task), isTrue);
 
     controller.add(Uint8List.fromList(List.filled(65536, 0)));
     await controller.close();
     await download;
-    expect(service.activeTasks, isEmpty);
+    expect(service.tasks, isEmpty);
+    expect(service.progressForTrack(track), isNull);
   });
 
   test('系统通知：单任务 start → 进度 update（节流）→ stop', () async {
@@ -1054,33 +1123,31 @@ void main() {
 
     final track = makeTrack();
     final download = service.download(track);
-    await Future<void>.delayed(Duration.zero);
+    final task = await waitForRunningTask(service, track);
     expect(notifications.methods, ['start']);
     expect(notifications.events.single.id, 'track:kw:1');
     expect(notifications.events.single.title, '测试歌曲');
     expect(notifications.events.single.subtitle, '歌手');
 
     Future<List<(int?, int?)>> updatePayloads() async => [
-          for (final event in notifications.events)
-            if (event.method == 'update') (event.progress, event.max),
-        ];
+      for (final event in notifications.events)
+        if (event.method == 'update') (event.progress, event.max),
+    ];
 
     /// 等 UI 进度推进到 [received]：通知推送在同一处、先于 UI 进度发出。
     Future<void> waitForProgress(int received) async {
       final reached = Completer<void>();
       void listener() {
-        final progress = service.progressForTrack(track);
-        if (progress != null &&
-            progress.receivedBytes >= received &&
-            !reached.isCompleted) {
+        final progress = task.progress;
+        if (progress.receivedBytes >= received && !reached.isCompleted) {
           reached.complete();
         }
       }
 
-      service.addListener(listener);
+      task.addListener(listener);
       listener();
       await reached.future;
-      service.removeListener(listener);
+      task.removeListener(listener);
     }
 
     /// 等分片被写流消费：UI 进度另有 100ms 时间节流，不能用它判断处理进度。
@@ -1161,7 +1228,7 @@ void main() {
         predicate((e) => e is SourceFailure && e.kind == FailureKind.cancelled),
       ),
     );
-    await Future<void>.delayed(Duration.zero);
+    await waitForRunningTask(service, track);
     service.cancelTrack(track);
     gate.complete();
     await expectation;
@@ -1431,16 +1498,14 @@ class _FakeCacheStorage implements CacheStorage {
   Future<int> deleteWhere(
     String dirPath, {
     required bool Function(String fileName) test,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<CacheDeleteResult> deleteMatching(
     String dirPath, {
     required String prefix,
     Duration protectAge = Duration.zero,
-  }) async =>
-      const CacheDeleteResult();
+  }) async => const CacheDeleteResult();
 
   @override
   Future<void> clear(String dirPath) async {}
@@ -1450,14 +1515,12 @@ class _FakeCacheStorage implements CacheStorage {
     String dirPath, {
     required int maxBytes,
     required Duration protectAge,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,
-  }) async =>
-      CacheSweepResult.failed;
+  }) async => CacheSweepResult.failed;
 }

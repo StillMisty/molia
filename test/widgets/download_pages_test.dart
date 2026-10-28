@@ -2,9 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/download_settings_page.dart';
 import 'package:molia/pages/downloads_manage_page.dart';
+import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
@@ -17,9 +20,58 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/fake_download_notifications.dart';
 import '../support/fake_download_storage.dart';
 import '../support/fake_downloads_publisher.dart';
+import '../support/fake_library_repository.dart';
 import '../support/fake_music_source.dart';
 import '../support/fake_save_as.dart';
 import '../support/fakes.dart';
+
+/// 只记录批量入队的下载服务（页面流程测试不触网 / 不落库）。
+class _RecordingDownloadService extends DownloadService {
+  _RecordingDownloadService()
+    : super(
+        catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+        repository: DownloadsRepository(
+          databaseProvider: () => throw UnimplementedError(),
+        ),
+        storage: FakeDownloadStorage(),
+      );
+
+  final List<List<Track>> batches = [];
+
+  @override
+  Future<(int, int)> downloadBatch(Iterable<Track> tracks) async {
+    batches.add(tracks.toList());
+    return (tracks.length, 0);
+  }
+}
+
+/// 直接暴露内存任务列表的下载服务（任务区 UI 测试用）。
+class _StaticTasksDownloadService extends DownloadService {
+  _StaticTasksDownloadService(this.audioTasks)
+    : super(
+        catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+        repository: DownloadsRepository(
+          databaseProvider: () => throw UnimplementedError(),
+        ),
+        storage: FakeDownloadStorage(),
+      );
+
+  final List<DownloadTask> audioTasks;
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  int cancelCalls = 0;
+
+  @override
+  bool get supported => true;
+
+  @override
+  Listenable get taskChanges => revision;
+
+  @override
+  List<DownloadTask> get tasks => audioTasks;
+
+  @override
+  void cancelTrack(Track track) => cancelCalls++;
+}
 
 /// 下载设置页 / 下载管理页 smoke：段落与开关接线（动作细节由服务测试覆盖）。
 void main() {
@@ -60,14 +112,20 @@ void main() {
     WidgetTester tester,
     Widget page, {
     SaveAs? saveAs,
+    DownloadService? service,
+    LibraryProvider? library,
   }) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
-          ChangeNotifierProvider<DownloadService>.value(value: downloads),
+          ChangeNotifierProvider<DownloadService>.value(
+            value: service ?? downloads,
+          ),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           if (saveAs != null) Provider<SaveAs>.value(value: saveAs),
+          if (library != null)
+            ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -77,6 +135,42 @@ void main() {
           ],
           supportedLocales: const [Locale('zh')],
           home: page,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+
+  /// 模拟设置页：页面在 MaterialApp 的内层 Navigator 里，弹层却挂 root。
+  ///
+  /// 这是「弹窗不关、页面被误退」bug 的复现条件；直接 home 挂载测不出来。
+  Future<void> pumpNestedPage(
+    WidgetTester tester,
+    Widget page, {
+    required DownloadService service,
+    LibraryProvider? library,
+  }) async {
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<DownloadSettings>.value(value: settings),
+          ChangeNotifierProvider<DownloadService>.value(value: service),
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          if (library != null)
+            ChangeNotifierProvider<LibraryProvider>.value(value: library),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Navigator(
+            onGenerateRoute: (_) =>
+                MaterialPageRoute<void>(builder: (_) => page),
+          ),
         ),
       ),
     );
@@ -209,8 +303,8 @@ void main() {
     await pumpPage(tester, const DownloadsManagePage());
 
     expect(find.text('下载管理'), findsOneWidget);
-    expect(find.text('进行中'), findsOneWidget);
-    expect(find.text('没有进行中的下载'), findsOneWidget);
+    expect(find.text('任务'), findsOneWidget);
+    expect(find.text('没有下载任务'), findsOneWidget);
     expect(find.text('批量下载'), findsOneWidget);
     expect(find.byKey(const Key('downloadsBatchQueueItem')), findsOneWidget);
     expect(find.byKey(const Key('downloadsBatchPlaylistItem')), findsOneWidget);
@@ -264,5 +358,140 @@ void main() {
     await tester.tap(find.byKey(const Key('downloadsCleanupPartsItem')));
     await tester.pumpAndSettle();
     expect(find.text('已清理 1 个未完成文件'), findsOneWidget);
+  });
+
+  testWidgets('下载管理页：任务区显示进度 / 等待中 / 音质，等待超 20 首折叠', (tester) async {
+    Track track(String id) => Track(
+      id: TrackId('kw', id),
+      title: '曲目 $id',
+      origin: TrackOrigin.builtin,
+      payload: {'songmid': id},
+    );
+    final running = DownloadTask(
+      track: track('running'),
+      kind: DownloadTaskKind.audio,
+      quality: '320k',
+    )..markRunning();
+    final queued = [
+      for (var i = 0; i < 21; i++)
+        DownloadTask(
+          track: track('$i'),
+          kind: DownloadTaskKind.audio,
+          quality: '128k',
+        ),
+    ];
+    final service = _StaticTasksDownloadService([running, ...queued]);
+    addTearDown(service.dispose);
+    addTearDown(service.revision.dispose);
+
+    await pumpPage(tester, const DownloadsManagePage(), service: service);
+
+    expect(find.byKey(const Key('downloadsTask_kw:running')), findsOneWidget);
+    expect(find.textContaining('下载中'), findsOneWidget);
+    expect(find.textContaining('等待中'), findsWidgets);
+    expect(find.textContaining('320K'), findsOneWidget);
+    expect(find.text('还有 1 首等待中'), findsOneWidget);
+
+    // 整行不承担取消；只有行尾按钮取消当前任务。
+    await tester.tap(find.byKey(const Key('downloadsTask_kw:running')));
+    await tester.pump();
+    expect(service.cancelCalls, 0);
+    await tester.tap(find.byKey(const Key('downloadsTaskCancel_kw:running')));
+    await tester.pump();
+    expect(service.cancelCalls, 1);
+
+    // 顶部「取消全部」只撤等待任务（21 条），不包含运行中的那条。
+    await tester.tap(find.byKey(const Key('downloadsCancelAllItem')));
+    await tester.pump();
+    expect(service.cancelCalls, 22);
+  });
+
+  testWidgets('下载管理页（嵌套 Navigator）：选歌单弹层关闭，页面保留并启动批量', (tester) async {
+    final repository = FakeLibraryRepository();
+    addTearDown(repository.dispose);
+    final playlistId = await repository.createPlaylist('测试歌单');
+    await repository.addTrackToPlaylist(
+      playlistId,
+      PlaylistTrack(
+        playlistId: playlistId,
+        sourceKey: 'kw',
+        songId: '1',
+        title: '测试歌曲',
+        addedAt: 1,
+        raw: const {'songmid': '1'},
+      ),
+    );
+    final library = LibraryProvider(
+      repository: repository,
+      playbackProvider: playback,
+    );
+    await library.refreshPlaylists();
+    addTearDown(library.dispose);
+    final service = _RecordingDownloadService();
+    await service.init();
+    addTearDown(service.dispose);
+
+    await pumpNestedPage(
+      tester,
+      const DownloadsManagePage(),
+      service: service,
+      library: library,
+    );
+
+    await tester.tap(find.byKey(const Key('downloadsBatchPlaylistItem')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(Key('downloadsPlaylist_$playlistId')), findsOneWidget);
+
+    await tester.tap(find.byKey(Key('downloadsPlaylist_$playlistId')));
+    await tester.pumpAndSettle();
+
+    // 弹层关闭、页面仍在（旧实现会把本页 pop 掉、弹窗留着）。
+    expect(find.byType(DownloadsManagePage), findsOneWidget);
+    expect(find.byKey(Key('downloadsPlaylist_$playlistId')), findsNothing);
+    expect(service.batches.single.single.id, const TrackId('kw', '1'));
+  });
+
+  testWidgets('下载管理页（嵌套 Navigator）：残留清理展示数量 / 文件名，取消与删除都正确', (tester) async {
+    final storage = FakeDownloadStorage();
+    storage.files['/downloads/orphan.mp3'] = [1];
+    storage.files['/downloads/orphan.lrc'] = [2];
+    storage.files['/downloads/cover.png'] = [3];
+    storage.files['/downloads/notes.txt'] = [4];
+    final service = DownloadService(
+      catalog: CatalogService(registry: FakeSourceRegistry(const {})),
+      repository: DownloadsRepository(
+        databaseProvider: () => throw UnimplementedError(),
+      ),
+      storage: storage,
+      settings: settings,
+    );
+    await service.init();
+    addTearDown(service.dispose);
+
+    await pumpNestedPage(tester, const DownloadsManagePage(), service: service);
+
+    await tester.tap(find.byKey(const Key('downloadsCleanupOrphansItem')));
+    await tester.pumpAndSettle();
+    // 只列应用可识别的残留：音频 / 歌词 / 封面，notes.txt 不参与。
+    expect(find.textContaining('3 个可清理的残留文件'), findsOneWidget);
+    expect(find.textContaining('orphan.mp3'), findsOneWidget);
+    expect(find.textContaining('notes.txt'), findsNothing);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DownloadsManagePage), findsOneWidget);
+    expect(storage.files.containsKey('/downloads/orphan.mp3'), isTrue);
+    expect(storage.files.containsKey('/downloads/notes.txt'), isTrue);
+
+    await tester.tap(find.byKey(const Key('downloadsCleanupOrphansItem')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DownloadsManagePage), findsOneWidget);
+    expect(storage.files.containsKey('/downloads/orphan.mp3'), isFalse);
+    expect(storage.files.containsKey('/downloads/orphan.lrc'), isFalse);
+    expect(storage.files.containsKey('/downloads/cover.png'), isFalse);
+    expect(storage.files.containsKey('/downloads/notes.txt'), isTrue);
+    expect(find.text('已清理 3 个残留文件'), findsOneWidget);
   });
 }

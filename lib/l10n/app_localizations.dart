@@ -7390,23 +7390,65 @@ abstract class AppLocalizations {
   /// **'Task queue, batch download and file maintenance'**
   String get downloadsManageSubtitle;
 
-  /// No description provided for @downloadsActiveSection.
+  /// No description provided for @downloadsTasksSection.
   ///
   /// In en, this message translates to:
-  /// **'In progress'**
-  String get downloadsActiveSection;
+  /// **'Tasks'**
+  String get downloadsTasksSection;
 
-  /// No description provided for @downloadsActiveEmpty.
+  /// No description provided for @downloadsNoTasks.
   ///
   /// In en, this message translates to:
-  /// **'No downloads in progress'**
-  String get downloadsActiveEmpty;
+  /// **'No download tasks'**
+  String get downloadsNoTasks;
 
-  /// No description provided for @downloadsActiveCount.
+  /// No description provided for @downloadsFailedSection.
   ///
   /// In en, this message translates to:
-  /// **'{count} task(s)'**
-  String downloadsActiveCount(int count);
+  /// **'Failed'**
+  String get downloadsFailedSection;
+
+  /// No description provided for @downloadsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get downloadsRetry;
+
+  /// No description provided for @downloadsRetryAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get downloadsRetryAll;
+
+  /// No description provided for @downloadsRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get downloadsRemove;
+
+  /// No description provided for @downloadsCancelAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel all'**
+  String get downloadsCancelAll;
+
+  /// No description provided for @downloadStatusQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting'**
+  String get downloadStatusQueued;
+
+  /// No description provided for @downloadsQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {count} track(s) to the download queue'**
+  String downloadsQueued(int count);
+
+  /// No description provided for @downloadsWaitingMore.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more waiting'**
+  String downloadsWaitingMore(int count);
 
   /// No description provided for @downloadsBatchSection.
   ///
@@ -7425,12 +7467,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} track(s); skips downloaded and local tracks'**
   String downloadsBatchQueueSubtitle(int count);
-
-  /// No description provided for @downloadsBatchStarted.
-  ///
-  /// In en, this message translates to:
-  /// **'Batch download started ({count})'**
-  String downloadsBatchStarted(int count);
 
   /// No description provided for @downloadsBatchDone.
   ///
@@ -7473,6 +7509,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Delete files in the download folder that no record points to'**
   String get downloadsCleanupOrphansSubtitle;
+
+  /// No description provided for @downloadsCleanupOrphansConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} leftover file(s) can be removed. Only audio, lyrics and cover files are deleted; other files are kept.'**
+  String downloadsCleanupOrphansConfirm(int count);
+
+  /// No description provided for @downloadsCleanupOrphansMore.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more file(s)'**
+  String downloadsCleanupOrphansMore(int count);
+
+  /// No description provided for @downloadsCleanupOrphansNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No leftover files to remove'**
+  String get downloadsCleanupOrphansNone;
 
   /// No description provided for @downloadsCleanupOrphansDone.
   ///

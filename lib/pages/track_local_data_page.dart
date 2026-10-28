@@ -26,7 +26,6 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
-import '../services/data_saver_service.dart';
 import '../services/download/download_service.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
@@ -37,6 +36,7 @@ import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
+import '../widgets/download_data_saver_guard.dart';
 import '../widgets/settings/settings_tiles.dart';
 
 /// 打开「本地数据」页（歌曲信息页唯一入口）。
@@ -78,6 +78,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   CacheService? _cacheService;
   DownloadService? _downloads;
   TrackLocalData? _data;
+
+  /// 当前曲目的音频任务（排队 / 运行 / 失败）：进度只订阅它，不整页扫盘。
+  DownloadTask? _task;
   bool _busy = false;
 
   /// 音频缓存开关（关闭时音频行给出状态说明）。
@@ -92,24 +95,41 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _service = context.read<TrackLocalDataService?>();
-    _downloads = context.read<DownloadService?>();
     _cacheService = context.read<CacheService?>() ?? CacheService.instance;
+    final downloads = context.read<DownloadService?>();
+    if (!identical(_downloads, downloads)) {
+      if (_listening) {
+        _downloads?.removeListener(_onRecordsChanged);
+        _downloads?.taskChanges.removeListener(_onTasksChanged);
+        _task?.removeListener(_onTaskProgress);
+      }
+      _downloads = downloads;
+      _task = null;
+      if (_listening) {
+        downloads?.addListener(_onRecordsChanged);
+        downloads?.taskChanges.addListener(_onTasksChanged);
+      }
+    }
     _data ??= _service?.downloadState(widget.track);
     if (!_listening) {
       _listening = true;
-      // 缓存内容（清缓存 / LRU / 边播边缓存落成）与下载记录（转存 / 删除 /
-      // 进度落库）任一变化都重算本页状态。
+      // 缓存内容（清缓存 / LRU / 边播边缓存落成）与下载记录（转存 / 删除）
+      // 变化才重算本页状态；任务进度只触发轻量 setState。
       _cacheService?.revision.addListener(_onChanged);
-      _downloads?.addListener(_onChanged);
+      _downloads?.addListener(_onRecordsChanged);
+      _downloads?.taskChanges.addListener(_onTasksChanged);
       unawaited(_reload());
     }
+    _syncTask();
   }
 
   @override
   void dispose() {
     if (_listening) {
       _cacheService?.revision.removeListener(_onChanged);
-      _downloads?.removeListener(_onChanged);
+      _downloads?.removeListener(_onRecordsChanged);
+      _downloads?.taskChanges.removeListener(_onTasksChanged);
+      _task?.removeListener(_onTaskProgress);
     }
     super.dispose();
   }
@@ -117,6 +137,31 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   void _onChanged() {
     if (!mounted) return;
     unawaited(_reload());
+  }
+
+  /// 下载记录变化：重算两档状态（不再随每 100ms 进度扫缓存目录）。
+  void _onRecordsChanged() {
+    if (!mounted) return;
+    unawaited(_reload());
+  }
+
+  /// 任务结构变化（入队 / 开始 / 完成 / 失败 / 取消）：只切订阅 + 重建。
+  void _onTasksChanged() {
+    if (!mounted) return;
+    setState(_syncTask);
+  }
+
+  /// 当前任务进度 / 状态变化：只重建本页，不触发磁盘扫描。
+  void _onTaskProgress() {
+    if (mounted) setState(() {});
+  }
+
+  void _syncTask() {
+    final next = _downloads?.taskForTrack(widget.track);
+    if (identical(next, _task)) return;
+    _task?.removeListener(_onTaskProgress);
+    _task = next;
+    _task?.addListener(_onTaskProgress);
   }
 
   Future<void> _reload() async {
@@ -166,31 +211,14 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   }
 
   /// 下载 / 转存音频（缓存命中时由 `DownloadService` 直接拷贝，不触网）。
+  ///
+  /// 只入队，不占用整页 `_busy`：任务进度经 [DownloadTask] 单独更新，页面
+  /// 在排队 / 下载期间仍可操作。省流生效时先确认（弹层挂 root navigator）。
   Future<void> _downloadAudio() async {
     final downloads = _downloads;
-    if (downloads == null || _busy) return;
+    if (downloads == null) return;
     final l10n = AppLocalizations.of(context)!;
-    final dataSaver = context.read<DataSaverService?>();
-    if (dataSaver?.active ?? false) {
-      final confirmed = await M3EDialog.show<bool>(
-        context,
-        dialog: M3EDialog(
-          title: l10n.downloadDataSaverTitle,
-          content: Text(l10n.downloadDataSaverConfirm),
-          actions: [
-            M3EButton.text(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n.cancel),
-            ),
-            M3EButton.filled(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l10n.downloadContinue),
-            ),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-    }
+    if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     await _runDownload(
       () => downloads.download(
         widget.track,
@@ -215,13 +243,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     );
   }
 
+  /// 等待任务结果并提示；页面不锁，进度 / 状态由任务监听驱动。
   Future<void> _runDownload(
     Future<void> Function() action, {
     required String done,
   }) async {
     final l10n = AppLocalizations.of(context)!;
     HapticsService.lightImpact();
-    setState(() => _busy = true);
     try {
       await action();
       if (!mounted) return;
@@ -232,8 +260,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       _showMessage(downloadFailureLabel(l10n, failure));
     } catch (e) {
       if (mounted) _showMessage(l10n.downloadFailed(e.toString()));
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -248,6 +274,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final downloads = _downloads;
     if (downloads == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
+    // 弹层挂 root navigator（M3EDialog.show 语义）；本页在二级页 / 设置弹层
+    // 的内层 Navigator 里，页面 context 上的 pop 会误退本页。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
@@ -259,11 +288,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         ),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => navigator.pop(true),
             child: Text(l10n.delete),
           ),
         ],
@@ -301,6 +330,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final service = _service;
     if (service == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
+    // 弹层挂 root navigator（M3EDialog.show 语义）；本页在二级页 / 设置弹层
+    // 的内层 Navigator 里，页面 context 上的 pop 会误退本页。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
@@ -308,11 +340,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         content: Text(l10n.trackCacheClearHint),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => navigator.pop(true),
             child: Text(l10n.delete),
           ),
         ],
@@ -335,6 +367,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final service = _service;
     if (service == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
+    // 弹层挂 root navigator（M3EDialog.show 语义）；本页在二级页 / 设置弹层
+    // 的内层 Navigator 里，页面 context 上的 pop 会误退本页。
+    final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
       dialog: M3EDialog(
@@ -342,11 +377,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         content: Text(l10n.trackCacheClearAllConfirm),
         actions: [
           M3EButton.text(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => navigator.pop(false),
             child: Text(l10n.cancel),
           ),
           M3EButton.filled(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => navigator.pop(true),
             child: Text(l10n.delete),
           ),
         ],
@@ -380,9 +415,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final data = _data;
-    final progress = context.select<DownloadService?, DownloadProgress?>(
-      (service) => service?.progressForTrack(widget.track),
-    );
     final body = ListView(
       padding: const EdgeInsets.all(kSettingsPadding),
       children: [
@@ -396,7 +428,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
           ],
         ),
         const SizedBox(height: kSettingsSectionSpacing),
-        ..._buildAudioSection(l10n, data, progress),
+        ..._buildAudioSection(l10n, data, _task),
         const SizedBox(height: kSettingsSectionSpacing),
         _buildExtrasSection(l10n, data),
         const SizedBox(height: kSettingsSectionSpacing),
@@ -416,7 +448,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   List<Widget> _buildAudioSection(
     AppLocalizations l10n,
     TrackLocalData? data,
-    DownloadProgress? progress,
+    DownloadTask? task,
   ) {
     final downloads = _downloads;
     final qualities = _qualities;
@@ -424,6 +456,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final state = data?.audioState ?? LocalPartState.none;
     final downloaded = state == LocalPartState.downloaded;
     final supported = downloads != null && downloads.supported;
+    final active = task?.isActive ?? false;
     return [
       SettingsSectionCard(
         title: l10n.downloadAudioSection,
@@ -442,33 +475,33 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
                   : null,
               selected: quality == selected,
               enabled: !downloaded,
-              onTap:
-                  downloaded ? null : () => setState(() => _quality = quality),
+              onTap: downloaded
+                  ? null
+                  : () => setState(() => _quality = quality),
             ),
           SettingsInfoTile(
             key: const Key('localDataAudioStatus'),
             icon: switch (state) {
               LocalPartState.downloaded => Icons.download_done_rounded,
               LocalPartState.cached => Icons.offline_pin_rounded,
-              LocalPartState.none => progress != null
-                  ? Icons.downloading_rounded
-                  : Icons.download_rounded,
+              LocalPartState.none =>
+                active ? Icons.downloading_rounded : Icons.download_rounded,
             },
             title: localPartStateLabel(l10n, state),
-            subtitle: _audioSubtitle(l10n, data, progress),
+            subtitle: _audioSubtitle(l10n, data, task),
           ),
-          ..._buildAudioActions(l10n, data, progress, supported),
+          ..._buildAudioActions(l10n, data, task, supported),
         ],
       ),
     ];
   }
 
-  /// 音频状态副标题：下载（体积 · 音质）/ 下载中（百分比）/ 缓存（体积 ·
-  /// 音质 · 可离线使用）/ 未下载（平台 / 开关说明）。
+  /// 音频状态副标题：下载（体积 · 音质）/ 等待中 / 下载中（百分比）/
+  /// 失败原因 / 缓存（体积 · 音质 · 可离线使用）/ 未下载（平台 / 开关说明）。
   String _audioSubtitle(
     AppLocalizations l10n,
     TrackLocalData? data,
-    DownloadProgress? progress,
+    DownloadTask? task,
   ) {
     if (data == null) return l10n.cacheUsageComputing;
     final record = data.download;
@@ -481,20 +514,33 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         if (quality.isNotEmpty) quality,
       ].where((part) => part.isNotEmpty).join(' · ');
     }
-    // 下载 / 转存进行中（已有缓存时同样是「转存中」，进度不能藏起来）。
-    if (progress != null) {
-      final percent = progress.percent;
-      return percent == null
-          ? '${l10n.downloadStatusDownloading} · '
-              '${formatCacheBytes(progress.receivedBytes)}'
-          : '${l10n.downloadStatusDownloading} · '
-              '${l10n.downloadProgressPercent(percent)}';
+    // 排队 / 下载 / 失败：任务状态优先于缓存说明，进度不能藏起来。
+    if (task != null) {
+      switch (task.status) {
+        case DownloadTaskStatus.queued:
+          return l10n.downloadStatusQueued;
+        case DownloadTaskStatus.running:
+          final percent = task.progress.percent;
+          return percent == null
+              ? '${l10n.downloadStatusDownloading} · '
+                    '${formatCacheBytes(task.progress.receivedBytes)}'
+              : '${l10n.downloadStatusDownloading} · '
+                    '${l10n.downloadProgressPercent(percent)}';
+        case DownloadTaskStatus.failed:
+          final failure = task.failure;
+          return failure == null
+              ? l10n.downloadStatusNotDownloaded
+              : downloadFailureLabel(l10n, failure);
+        case DownloadTaskStatus.completed:
+        case DownloadTaskStatus.cancelled:
+          break;
+      }
     }
     if (data.audioState == LocalPartState.cached) {
       final quality =
           data.cachedQualities.isEmpty || data.cachedQualities.first == 'auto'
-              ? ''
-              : sourceQualityLabel(l10n, data.cachedQualities.first);
+          ? ''
+          : sourceQualityLabel(l10n, data.cachedQualities.first);
       return [
         formatCacheBytes(data.audioCache.bytes),
         if (quality.isNotEmpty) quality,
@@ -518,10 +564,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   }
 
   /// 音频动作行：按两档状态给出下载 / 转存 / 取消 / 分享 / 删除。
+  ///
+  /// 排队中与下载中都可取消；失败后回落到「下载」动作（重新入队），
+  /// 失败原因在状态副标题里说明。
   List<Widget> _buildAudioActions(
     AppLocalizations l10n,
     TrackLocalData? data,
-    DownloadProgress? progress,
+    DownloadTask? task,
     bool supported,
   ) {
     final record = data?.download;
@@ -545,7 +594,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         ),
       ];
     }
-    if (progress != null) {
+    if (task?.isActive ?? false) {
       return [
         SettingsNavTile(
           key: const Key('localDataCancel'),
@@ -599,11 +648,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
             subtitle: switch (part.state) {
               LocalPartState.downloaded => l10n.downloadStatusDownloaded,
               LocalPartState.cached => l10n.localDataTransferHint,
-              LocalPartState.none => downloads == null
-                  ? l10n.downloadStatusNotDownloaded
-                  : l10n.downloadAction,
+              LocalPartState.none =>
+                downloads == null
+                    ? l10n.downloadStatusNotDownloaded
+                    : l10n.downloadAction,
             },
-            onTap: part.state == LocalPartState.downloaded ||
+            onTap:
+                part.state == LocalPartState.downloaded ||
                     downloads == null ||
                     _busy
                 ? null
@@ -631,8 +682,8 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
               semanticLabel: l10n.downloadPartRemove,
               onPressed:
                   data == null || _busy || !_cachePartHasCache(part, data)
-                      ? null
-                      : () => unawaited(_clearCache(part)),
+                  ? null
+                  : () => unawaited(_clearCache(part)),
             ),
           ),
         if (data != null && !data.hasAnyCache)
@@ -681,9 +732,9 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   }
 
   static IconData _cachePartIcon(LocalCachePart part) => switch (part) {
-        LocalCachePart.audio => Icons.audiotrack_rounded,
-        LocalCachePart.lyrics => Icons.lyrics_rounded,
-        LocalCachePart.artwork => Icons.image_rounded,
-        LocalCachePart.resolveUrl => Icons.link_rounded,
-      };
+    LocalCachePart.audio => Icons.audiotrack_rounded,
+    LocalCachePart.lyrics => Icons.lyrics_rounded,
+    LocalCachePart.artwork => Icons.image_rounded,
+    LocalCachePart.resolveUrl => Icons.link_rounded,
+  };
 }
