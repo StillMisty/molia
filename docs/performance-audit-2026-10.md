@@ -354,6 +354,30 @@ mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / �
   同源：仍是「首个平台通道」在并行任务间落点，不是媒体会话本身。把它
   后移只会换一个阶段承担，勿重试（延续 §7.1 结论）。
 
+### 3.3.6 播放页共享封面飞行（2026-10-28，结构优化，待真机复测）
+
+Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」；同一轮修复了
+页中心隐藏时序（进入首帧 / 离开飞行期间都应收起）与连切接管。本轮只做
+低风险、确定性的结构优化，没有可信的 raster 数据，不编造收益：
+
+1. `PlayerMorphFlight` 与 `CoverFlightLayer` 包 `RepaintBoundary`：飞行副本
+   逐帧脏区不再波及整条 Overlay。
+2. `CoverFlightLayer` 的 `MorphCover` 图片子树改为 `AnimatedBuilder.child`
+   稳定 child，逐帧只重建几何 / 裁剪 / 描边 / 阴影 / 回退图标尺寸
+   （`CoverCard.prebuilt`；外观仍只由 `CoverAppearance` 插值）。
+3. 删掉页中心 160ms `AnimatedOpacity`：隐藏/亮出改为零时长（透明度乘进
+   中心层同一条 `Opacity`），少一条逐帧隐式动画与一次合成。
+4. 未改阴影视觉：`CoverCard` 的 24px blur 仍随外观插值重画。它是下一个
+   raster 嫌疑，但没有真机 profile 证据，按「先不改视觉」处理。
+5. `integration_test/perf_flows_test.dart` 移动壳新增
+   `mobile-nowplaying-leave-return` 场景（播放页 ⇄ 收藏反复进出），供
+   `tool/agent/perf.sh frames android` 以后回归。
+
+**待办**：Android 真机（非软件渲染模拟器）跑 `perf.sh frames android`，
+对比 `mobile-nowplaying-open` / `-leave-return` 的 raster p95 与 >16.7ms
+帧数；若阴影仍是主项，再评估飞行中降低 blur / 缓存阴影层，并保证端点
+外观与真身一致。
+
 ### 3.4 内存（Windows，本机实测）
 
 | 状态 | 专用工作集 | 提交 |
@@ -413,5 +437,9 @@ mock LX 脚本把网络压到 1–3ms，因此这组数字测的是**装配 / �
 - CPU 基线已由 §3.3.5 补上：WSLg / 模拟器都被呈现层主导，Dart 侧没有
   可修热点；真实 GPU 桌面与真机数据仍待补，届时先看 raster / 主线程占比；
 - 若目标是降低「触摸到呈现」的延迟，再评估 shader 缓存 / 帧调度；
+- 播放页共享封面飞行（§3.3.6）已做 RepaintBoundary / 稳定图片子树 /
+  删除多余透明度动画，但模拟器 raster 不可信；待 Android 真机用
+  `mobile-nowplaying-open` / `mobile-nowplaying-leave-return` 场景复测，
+  再决定是否给 24px blur 阴影做飞行期降级；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。
