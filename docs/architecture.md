@@ -1065,14 +1065,13 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`morph.pageCoverKey`）；页中心显隐是零时长 `Opacity`（飞行副本精确承接，
   进入首帧就隐藏、落位帧与副本移除同帧亮出，离开方向飞行期间也收起）。
   侧邻位由 `PlayerMorphController.pageDeckReveal` 驱动：复用同一根飞行弹簧，
-  进入时只在飞行最后约 45% 从中心展开（scale 0→1、透明度 0→0.85、位移
-  0→±0.30 卡宽；倾角始终保持稳态 ±0.05rad，不从 0 起转，避免侧图先水平
-  出现再二次倾斜）；离开时间对称，前 45% 先收回中心
-  （`entryWindow(1 - progress)`），避免页面层淡出后段做看不见的收回。
-  每个侧槽由窄包装器直接监听该 `ValueListenable`，卡片作为稳定 child，
-  reveal 逐帧只重建 Transform/Opacity/IgnorePointer，不重建 deck 主 builder
-  或图片子树；reveal=0 保留布局与图片状态（scale 0 + opacity 0），避免
-  尾段展开时重新解码闪占位。reveal 只作用于左右槽，中心锚点始终是稳态
+  进入时只在飞行最后约 45% 让侧槽**原位淡入**（透明度 0→0.85；位置与倾角
+  始终保持稳态 ±0.30 卡宽 / ±0.05rad，不做平移/缩放/转正）；离开时间对称，
+  前 45% 原位淡出。这样侧图从第一帧可见时就是其最终姿态，不会先水平平移
+  再倾斜。每个侧槽由窄包装器直接监听该 `ValueListenable`，卡片作为稳定
+  child，reveal 逐帧只重建 Opacity/IgnorePointer，不重建 deck 主 builder 或
+  图片子树；reveal=0 保留布局与图片状态（opacity 0），避免尾段淡入时重新
+  解码闪占位。reveal 只作用于左右槽，中心锚点始终是稳态
   矩形，reveal=1 时不叠加 transform，减弱动效直接落位。飞行期间整层
   `IgnorePointer` 关闭中心点击、侧槽点击、横滑与按压反馈；已按下的拖动由
   morph 隐藏翻转主动收尾，不依赖 PointerCancel。

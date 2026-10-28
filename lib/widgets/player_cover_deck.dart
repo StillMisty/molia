@@ -1497,8 +1497,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                       widget.artDimension * _sideSlotScale;
                   final double offset = widget.artDimension * 0.30;
                   const double sideRotation = 0.05;
-                  // 侧邻位展开进度：进入飞行最后 45% 从中心展开 / 离开前 45%
-                  // 收回中心。只有侧槽包装器订阅这个 ValueListenable；deck 主
+                  // 侧邻位淡入进度：进入飞行最后 45% 原位淡入 / 离开前 45%
+                  // 原位淡出。只有侧槽包装器订阅这个 ValueListenable；deck 主
                   // builder 不因 reveal 逐帧重建（卡图片子树保持稳定）。减弱
                   // 动效直接落位（不订阅）。中心卡不参与，锚点保持稳态矩形。
                   final ValueListenable<double>? sideReveal =
@@ -1957,9 +1957,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 邻位封面（压在当前封面之下；[onTap] 非空时可点击切歌）。
   ///
   /// 稳态几何固定（位置/旋转/尺寸），透明度由调用方按窗口/淡入计算。
-  /// [reveal] 是进入/离开播放页时侧槽从中心展开/收回的进度监听：只有本层
+  /// [reveal] 是进入/离开播放页时侧槽原位淡入/淡出的进度监听：只有本层
   /// 包装器逐帧重建，卡片作为稳定 child 保留（reveal=0 也保持布局与解码，
-  /// 用 scale 0 + opacity 0 隐藏，避免飞行尾段展开时重建图片闪占位）。
+  /// 只把 opacity 调到 0，避免飞行尾段淡入时重建图片闪占位）。
   /// 中心卡不在这里，所以 reveal 不会改变封面锚点。
   /// 不参与 hit test 时（[onTap] 为空）忽略指针。[cardKey] 是身份语义 key
   /// （空闲淡换时同一槽位并存新旧两张卡，测试按身份定位）。
@@ -2204,9 +2204,9 @@ enum _DeckSlot { left, center, right }
 
 /// 单个侧槽的 reveal 包装：直接监听飞行控制器，把卡片作为稳定 child。
 ///
-/// 逐帧只重建 transform / opacity / IgnorePointer；reveal=1 时返回与稳态
-/// 完全一致的几何（不额外套缩放），reveal<1 时从中心展开/收回。卡片在
-/// reveal=0 也保持布局与图片状态（scale 0 + opacity 0），避免尾段重建闪占位。
+/// 逐帧只重建 opacity / IgnorePointer；位置与倾角始终是稳态，reveal<1 时
+/// 只做原位淡入/淡出。卡片在 reveal=0 也保持布局与图片状态（opacity 0），
+/// 避免尾段淡入时重建闪占位。
 class _SideRevealSlot extends StatelessWidget {
   const _SideRevealSlot({
     required this.reveal,
@@ -2250,19 +2250,16 @@ class _SideRevealSlot extends StatelessWidget {
               );
             }
             final double eased = Curves.easeOutCubic.transform(progress);
+            // 侧槽只做原位淡入/淡出：位置与倾角保持稳态，不再从中心
+            // 平移/缩放。否则飞行动画里侧图会先沿水平方向滑出，随后才
+            // 显出倾角（用户反馈的「先水平平移再倾斜」）。
             return Transform.translate(
-              offset: Offset(x * eased, 0),
+              offset: Offset(x, 0),
               child: Transform.rotate(
-                // 倾角保持稳态：只让位置/缩放/透明度从中心展开。若倾角也从
-                // 0 插值，侧图会在靠近中心时先水平出现再逐渐倾斜，观感上像
-                // 一次独立的「转正」二次动作（用户反馈的突兀来源）。
                 angle: rotation,
-                child: Transform.scale(
-                  scale: eased,
-                  child: Opacity(
-                    opacity: opacity * eased,
-                    child: IgnorePointer(ignoring: true, child: content),
-                  ),
+                child: Opacity(
+                  opacity: opacity * eased,
+                  child: IgnorePointer(ignoring: true, child: content),
                 ),
               ),
             );
