@@ -255,13 +255,18 @@ class CoverCard extends StatelessWidget {
             color: scheme.outlineVariant.withValues(alpha: appearance.stroke),
             width: appearance.stroke,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.shadow.withValues(alpha: 0.28 * appearance.shadow),
-              blurRadius: 24 * appearance.shadow,
-              offset: Offset(0, 10 * appearance.shadow),
-            ),
-          ],
+          // shadow=0 时不创建透明 BoxShadow：少一次对象分配与透明 draw。
+          boxShadow: appearance.shadow <= 0
+              ? null
+              : [
+                  BoxShadow(
+                    color: scheme.shadow.withValues(
+                      alpha: 0.28 * appearance.shadow,
+                    ),
+                    blurRadius: 24 * appearance.shadow,
+                    offset: Offset(0, 10 * appearance.shadow),
+                  ),
+                ],
         ),
         child: ClipRRect(
           borderRadius: appearance.clip,

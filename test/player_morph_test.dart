@@ -150,14 +150,14 @@ void main() {
     final forwardStart = coverDecoration(tester);
     expect(forwardStart.borderRadius, BorderRadius.circular(8));
     expect(forwardStart.border!.top.color.a, 0);
-    expect(forwardStart.boxShadow!.first.color.a, 0);
+    expect(forwardStart.boxShadow, isNull);
     expect(fallbackIconSize(tester), barCoverFallbackIconSize);
 
-    // 飞行前 80% 不画 24px blur 阴影（逐帧重画的主要 raster 嫌疑）。
+    // 飞行前 80% 完全不创建 BoxShadow（逐帧重画的主要 raster 嫌疑）。
     await pumpFlight(tester, toPage: true, value: 0.5);
-    expect(coverDecoration(tester).boxShadow!.first.color.a, 0);
+    expect(coverDecoration(tester).boxShadow, isNull);
     await pumpFlight(tester, toPage: false, value: 0.5);
-    expect(coverDecoration(tester).boxShadow!.first.color.a, 0);
+    expect(coverDecoration(tester).boxShadow, isNull);
 
     // 前进落点：与播放页真身同款——外圆角 18、1px 描边内缘裁剪 17、柔和
     // 阴影，回退图标（边长 × 0.35）。
@@ -195,7 +195,7 @@ void main() {
     final backwardEnd = coverDecoration(tester);
     expect(backwardEnd.borderRadius, BorderRadius.circular(8));
     expect(backwardEnd.border!.top.color.a, 0);
-    expect(backwardEnd.boxShadow!.first.color.a, 0);
+    expect(backwardEnd.boxShadow, isNull);
     expect(fallbackIconSize(tester), barCoverFallbackIconSize);
   });
 

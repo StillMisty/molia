@@ -255,6 +255,90 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   });
 
+  testWidgets('方向反转接管：旧中心 B 与新中心 A 都从捕获位置连续接管', (tester) async {
+    emitFor('a');
+    final swaps = await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final centerB = find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id));
+    final oldOutgoingA = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    final double beforeB = offsetOf(tester, centerB);
+    final double beforeA = offsetOf(tester, oldOutgoingA);
+    expect(beforeB, greaterThan(4), reason: '前提：B 从右侧入场途中');
+    expect(beforeA, lessThan(-4), reason: '前提：A 正滑向左槽');
+
+    // 弹簧途中反向切回 A：A 是上一段旧 outgoing，restart 接管时新中心 A
+    // 从 A 的捕获位置起，B 从中心捕获位置继续滑向右槽。
+    emitFor('a');
+    await tester.pump(const Duration(milliseconds: 20)); // track 通知节流
+    await tester.pump();
+    final newCenterA = find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id));
+    final newOutgoingB = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(newCenterA, findsOneWidget);
+    expect(newOutgoingB, findsOneWidget);
+    final double afterA = offsetOf(tester, newCenterA);
+    final double afterB = offsetOf(tester, newOutgoingB);
+    final double sideOffset = _deck.artDimension * 0.30;
+    expect(
+      (afterA - beforeA).abs(),
+      lessThan(sideOffset * 0.35),
+      reason: '新中心 A 应接住旧 outgoing A 的位置（$beforeA → $afterA）',
+    );
+    expect(
+      (afterB - beforeB).abs(),
+      lessThan(sideOffset * 0.35),
+      reason: '旧中心 B 应接住自己上一帧中心位置（$beforeB → $afterB）',
+    );
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id)),
+        findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
+    expect(swaps, hasLength(2));
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('p0 ≥ 0.75 接管：旧中心从接近中心的位置续滑，不落位重播', (tester) async {
+    emitFor('a');
+    await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120)); // 接近落位
+    final centerB = find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id));
+    final double before = offsetOf(tester, centerB);
+    expect(before, greaterThan(0), reason: '前提：B 已接近中心但尚未落位');
+    expect(before, lessThan(_deck.artDimension * 0.30));
+
+    // 同方向继续切 c：restart 从 B 的捕获位置起滑向左槽，不能把 p 归零后
+    // 从中心重新起跳（旧实现的落位式跳变）。
+    emitFor('c');
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(outgoing, findsOneWidget);
+    final double after = offsetOf(tester, outgoing);
+    expect(after, greaterThan(0),
+        reason: '滑出卡起点应保留捕获时仍在中心右侧的位置（不是 p=0 的中心）');
+    expect(
+      (after - before).abs(),
+      lessThan(_deck.artDimension * 0.30 * 0.25),
+      reason: '接近落位接管也不应有落位式跳变（$before → $after）',
+    );
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+        findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
   testWidgets('current 变为 null：不触发切歌、不崩，随后切歌仍正常', (tester) async {
     emitFor('a');
     final swaps = await pumpDeck(tester);

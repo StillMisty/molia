@@ -47,7 +47,8 @@ class _RecordingHost implements CoverSwapHost {
       calls.add('releasePreview(${progressVelocity.toStringAsFixed(2)})');
 
   @override
-  void startSettle({required int direction}) => calls.add('startSettle');
+  void startSettle({required int direction, required Track nextTrack}) =>
+      calls.add('startSettle');
 
   @override
   void settleDuringDrag() => calls.add('settleDuringDrag');

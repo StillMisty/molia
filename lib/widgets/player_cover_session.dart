@@ -74,9 +74,10 @@ abstract interface class CoverSwapHost {
 
   /// 即时切歌入场：停掉旧校正、把进度钉回起点，post-frame 起播入场。
   ///
-  /// [direction] 是本次切歌解析后的方向：宿主据此判断弹簧途中能否沿用
-  /// 上一段进度做连续接管（方向反转必须走落位兜底）。
-  void startSettle({required int direction});
+  /// [direction] 是本次切歌解析后的方向，[nextTrack] 是本次目标曲目：
+  /// 宿主据此判断弹簧途中能否沿用上一段进度做连续接管；方向反转 /
+  /// 接近落位时走 restart 接管（新弹簧从 0 起跑，但起点视觉来自接管帧）。
+  void startSettle({required int direction, required Track nextTrack});
 
   /// 拖动中切歌落位：动画不接管，交还手指驱动。
   void settleDuringDrag();
@@ -483,7 +484,7 @@ class CoverSwapSession extends ChangeNotifier {
       // 新会话先把进度钉在起点：检测帧就画在 p=0（与稳态的源槽位卡一致），
       // 而不是先画落位态、动画启动后再回跳。弹簧途中同一方向时宿主会改为
       // 连续接管（捕获上一段视觉），不走钉回起点的路径。
-      _host.startSettle(direction: nextDirection);
+      _host.startSettle(direction: nextDirection, nextTrack: track);
       _phase = CoverSwapPhase.settling;
       _to = track;
     }
@@ -579,8 +580,9 @@ class CoverSwapSession extends ChangeNotifier {
   /// 两个方向都直接读快照解析好的身份（服务侧已保证与实际的
   /// `skipToNext` / `skipToPrevious` 同源，且上一首已排除与当前同 id）。
   Track? _previewTargetFor(int dir, PlaybackSnapshot snapshot) {
-    final Track? target =
-        dir == 1 ? snapshot.next : (dir == -1 ? snapshot.previous : null);
+    final Track? target = dir == 1
+        ? snapshot.next
+        : (dir == -1 ? snapshot.previous : null);
     return target;
   }
 
