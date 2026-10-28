@@ -371,9 +371,11 @@ Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」�
 4. 删掉页中心 160ms `AnimatedOpacity`：隐藏/亮出改为零时长（透明度乘进
    中心层同一条 `Opacity`），少一条逐帧隐式动画与一次合成。
 5. 阴影降级：`CoverCard` 的 24px blur 只在飞行「页端进度 80%→95%」
-   线性恢复、最后 5% 保持真身强度（前 80% 不画）；端点仍与真身精确一致
-   （前进 `t=0` 无阴影、`t=1` 播放页阴影；反向起飞端同理）。这是先保飞行
-   平滑、尾段恢复阴影的取舍，仍需真机观察落点前阴影恢复是否可接受。
+   线性恢复、最后 5% 保持真身强度（前 80% 不画）；`appearance.shadow <= 0`
+   时 `BoxDecoration.boxShadow` 直接为 `null`，不创建 alpha 0 的透明
+   BoxShadow（少对象分配与透明 draw）。端点仍与真身精确一致（前进 `t=0`
+   无阴影、`t=1` 播放页阴影；反向起飞端同理）。这是先保飞行平滑、尾段
+   恢复阴影的取舍，仍需真机观察落点前阴影恢复是否可接受。
 6. `integration_test/perf_flows_test.dart` 移动壳新增
    `mobile-nowplaying-leave-return` 场景（播放页 ⇄ 收藏反复进出），供
    `tool/agent/perf.sh frames android` 以后回归。
@@ -443,8 +445,9 @@ Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」�
   可修热点；真实 GPU 桌面与真机数据仍待补，届时先看 raster / 主线程占比；
 - 若目标是降低「触摸到呈现」的延迟，再评估 shader 缓存 / 帧调度；
 - 播放页共享封面飞行（§3.3.6）已做 RepaintBoundary / 稳定图片子树 /
-  删除多余透明度动画 / 飞行前 80% 关闭 24px blur 阴影，但模拟器 raster
-  不可信；待 Android 真机用 `mobile-nowplaying-open` /
-  `mobile-nowplaying-leave-return` 场景复测阴影降级是否足够；
+  删除多余透明度动画 / 飞行前 80% 关闭 24px blur 阴影（shadow=0 时
+  boxShadow 为 null），但模拟器 raster 不可信；待 Android 真机用
+  `mobile-nowplaying-open` / `mobile-nowplaying-leave-return` 场景复测
+  阴影降级是否足够；
 - 真机 Android / iOS 仍需设备侧采样（模拟器的首个平台通道等待会掩盖
   Dart 侧收益）。
