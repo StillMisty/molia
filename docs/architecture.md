@@ -1022,6 +1022,31 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   时保留 180ms 纯淡入兜底；移动卡全程插值（位移 ±0.30 卡宽、
   旋转 ±0.05rad、缩放 0.78↔1.0、透明度 0.85↔1.0）；对账校正 220ms；提交后
   6 秒（`CoverSwapSession.commitTimeout`）无对账回弹。
+- **连切接管**：弹簧途中再次切歌时，`startSettle(direction, nextTrack)` 捕获
+  上一段中心卡（上一段进场卡）与滑出卡在 `p0` 的视觉状态，分两种模式：
+  - **continuous**（同方向且 `p0 < 0.75`）：新会话的滑出卡用
+    `q = (p - p0) / (1 - p0)` 从捕获位置连续插值到目标侧槽，弹簧不重置、
+    直接从当前进度续走；新中心卡在 `p0` 已进入 source neighbor 淡入窗口
+    （≥0.6）时，从该侧槽卡的实际位置/透明度按 q 接管到中心，否则仍用
+    全局 p 的侧槽入场公式；
+  - **restart**（方向反转 / `p0 ≥ 0.75` / 新中心就是上一段滑出卡）：先把
+    controller 停掉并置 0，post-frame 起全新弹簧；旧中心 B 从捕获视觉按
+    p 0→1 插到新方向目标侧槽；新中心 C 若就是上一段滑出卡 A（方向反转最
+    常见），从 A 的捕获视觉插到中心；否则若 C 已作为上一段 source neighbor
+    半透明出现，接住它在**旧方向**侧槽的实际位置/透明度按 p 插到中心；
+    两者都不成立时才从新方向侧槽全槽位入场。controller 置 0 会合成一次
+    completed 状态，宿主用重置标记屏蔽，不能让它清掉刚捕获的 handoff。
+  两种模式都：上一段更早的滑出卡作为独立 tail 层短淡出；tail 按 track id
+  去重（同一身份最多一张），layer key 只依赖 track 身份（restart rebase
+  p0 时 Element 不重建）；新中心身份会先从 tail 列表移除，避免回绕/重复
+  id 时 tail + center 同曲两张卡；restart 时旧 tail 按当前渲染值 rebase 到
+  新 p=0，且若旧滑出卡成为新中心就不再作为 tail 重复渲染；接管期间
+  `oldNeighbor` 层被抑制。接管快照记录上一段实际中心 track
+  （`centerFromTrack`，含 restart 的 C==A / source neighbor 与 continuous
+  的 source neighbor），链式接管按实际捕获视觉继续，不退回公式位置。
+  `hardReset`、会话完成与非接管路径清空接管快照。中心/预览卡不再借用
+  上一首封面作加载占位，目标图未命中时走曲目自己的默认封面 / 中性回退，
+  避免旧封面从新卡下面透出。
 - **对账**：提交后等待快照 current 变为会话目标——匹配无缝落位；不匹配
   （随机目标 / 失败恢复 / 列表变化）先让提交过渡落位，再以 220ms 中心原位
   交叉淡化校正到实际曲目，随后按新快照重建槽位回 idle。
@@ -1033,7 +1058,19 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   会话的 no-animation 落位（`setVisible` / 隐藏态 `observe`：`hardReset` + 身份对齐），
   宿主侧只负责控制器归位与中心身份接管。
 - **与共享飞行的关系**：顶栏↔播放页与迷你↔完整飞行只隐藏/复刻中心封面真身
-  （`morph.pageCoverKey`）；侧邻位随页面层自身淡入以稳态出现，无独立入场演出。
+  （`morph.pageCoverKey`）；页中心显隐是零时长 `Opacity`（飞行副本精确承接，
+  进入首帧就隐藏、落位帧与副本移除同帧亮出，离开方向飞行期间也收起）。
+  侧邻位由 `PlayerMorphController.pageDeckReveal` 驱动：复用同一根飞行弹簧，
+  进入时只在飞行最后约 45% 从中心展开（scale 0→1、透明度 0→0.85、位移
+  0→±0.30 卡宽、旋转 0→±0.05rad）；离开时间对称，前 45% 先收回中心
+  （`entryWindow(1 - progress)`），避免页面层淡出后段做看不见的收回。
+  每个侧槽由窄包装器直接监听该 `ValueListenable`，卡片作为稳定 child，
+  reveal 逐帧只重建 Transform/Opacity/IgnorePointer，不重建 deck 主 builder
+  或图片子树；reveal=0 保留布局与图片状态（scale 0 + opacity 0），避免
+  尾段展开时重新解码闪占位。reveal 只作用于左右槽，中心锚点始终是稳态
+  矩形，reveal=1 时不叠加 transform，减弱动效直接落位。飞行期间整层
+  `IgnorePointer` 关闭中心点击、侧槽点击、横滑与按压反馈；已按下的拖动由
+  morph 隐藏翻转主动收尾，不依赖 PointerCancel。
 - **飞行几何与外观**：外观与插值只有一份实现（`cover_appearance.dart`）——三端真身
   （顶栏 r8/图标 22、迷你 r8/图标 24、播放页 r18 + 1px 描边 + 柔和阴影/裁剪 17/图标
   0.35×边长）是 `CoverAppearance` 的命名值，两个飞行是 `CoverFlight` 的薄壳；两条
@@ -1042,6 +1079,13 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   插值（反向起飞不跳），图标按两端真身尺寸插值。迷你⇄完整飞行在阈值收尾后仍有
   弹簧容差拖尾（`AnimationStatus` 仍为 `forward`）：拖尾内反向切换必须由进度监听
   补起新飞行，不能只依赖状态变化。
+- **飞行性能结构**：`PlayerMorphFlight` 与 `CoverFlightLayer` 都包
+  `RepaintBoundary`，逐帧重绘不扩散到整条 Overlay；`CoverFlightLayer` 把
+  `MorphCover` 图片子树做成 `AnimatedBuilder.child`（稳定 child），逐帧只更新
+  几何、裁剪、描边/阴影与回退图标尺寸。阴影按「页端进度」降级：飞行前 80%
+  不画 24px blur，80%→95% 线性恢复、最后 5% 保持真身强度（避免落点前一帧
+  阴影突然变重；`t=1` / 反向 `t=0` 与真身完全一致）。这是先保飞行平滑、
+  尾段恢复阴影的取舍，仍需真机 profile 确认收益。
 - **飞行几何不变量**：锚点在点击那一刻**同步**抓取（封面 URL 同刻确定，飞行中不换
   图），因此①隐藏页层（出场过渡结束/未参与过渡）必须 `scale == 1`
   （`app_shell.dart::shellPageLayerPresentation`，出场微缩只存在于过渡进行中）；

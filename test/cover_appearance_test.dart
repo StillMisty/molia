@@ -206,7 +206,7 @@ void main() {
       expect(decoration.borderRadius, BorderRadius.circular(8));
       expect(decoration.border!.top.width, 0);
       expect(decoration.border!.top.color.a, 0);
-      expect(decoration.boxShadow!.first.color.a, 0);
+      expect(decoration.boxShadow, isNull);
       expect(clipOf(tester), BorderRadius.circular(8));
       expect(
         tester.widget<MoliaMark>(find.byType(MoliaMark)).size,

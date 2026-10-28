@@ -41,7 +41,8 @@ void main() {
   final a = _track('a');
   final b = _track('b');
   final c = _track('c');
-  final order = [a, b, c];
+  final d = _track('d');
+  final order = [a, b, c, d];
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -65,20 +66,44 @@ void main() {
     ));
   }
 
-  /// 中心封面相对堆叠中心的横向偏移：0 = 稳态；切歌入场期间非 0
+  /// 指定封面卡相对堆叠中心的横向偏移：0 = 稳态；切歌入场期间非 0
   /// （向前从右侧入场 = 正值）。
-  double centerOffset(WidgetTester tester) {
-    final deckCenter =
-        tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey));
-    final coverCenter =
-        tester.getCenter(find.byKey(PlayerCoverDeck.centerCoverCardKey));
-    return coverCenter.dx - deckCenter.dx;
+  double offsetOf(WidgetTester tester, Finder finder) =>
+      tester.getCenter(finder).dx -
+      tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey)).dx;
+
+  double centerOffset(WidgetTester tester) =>
+      offsetOf(tester, find.byKey(PlayerCoverDeck.centerCoverCardKey));
+
+  /// 指定卡片最近一层 Opacity 的值（侧槽窗口 / 中心接管透明度）。
+  double opacityOf(WidgetTester tester, Finder finder) {
+    final elements = finder.evaluate();
+    expect(elements, hasLength(1), reason: '卡片应唯一存在');
+    double? opacity;
+    elements.single.visitAncestorElements((ancestor) {
+      final widget = ancestor.widget;
+      if (widget is Opacity) {
+        opacity = widget.opacity;
+        return false;
+      }
+      return true;
+    });
+    expect(opacity, isNotNull, reason: '未找到卡片的透明度层');
+    return opacity!;
   }
 
-  /// 挂载固定 `displayTrack = A` 的 deck，等首帧落定，
-  /// 返回切歌联动回调的记录列表（已清掉首帧入场留下的调用）。
-  Future<List<bool>> pumpDeck(WidgetTester tester) async {
+  /// 挂载 deck，等首帧落定，返回切歌联动回调的记录列表（已清掉首帧入场
+  /// 留下的调用）。
+  ///
+  /// 默认 `displayTrack = A` 固定不变：锁定「切歌检测完全由快照监听驱动、
+  /// 不依赖父级重建」。连续接管用例需要生产口径（父级随快照把 displayTrack
+  /// 换成新 current），此时传 [reactiveDisplayTrack]。
+  Future<List<bool>> pumpDeck(
+    WidgetTester tester, {
+    bool reactiveDisplayTrack = false,
+  }) async {
     final swaps = <bool>[];
+    final fullCoverKey = GlobalKey();
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -93,14 +118,25 @@ void main() {
         child: MaterialApp(
           home: Scaffold(
             body: Center(
-              child: PlayerCoverDeck(
-                displayTrack: a,
-                artDimension: _deck.artDimension,
-                stackDimension: _deck.stackWidth,
-                stackHeight: _deck.stackHeight,
-                fullCoverKey: GlobalKey(),
-                onTrackSwapped: swaps.add,
-              ),
+              child: reactiveDisplayTrack
+                  ? Consumer<PlaybackProvider>(
+                      builder: (context, provider, _) => PlayerCoverDeck(
+                        displayTrack: provider.snapshot.current ?? a,
+                        artDimension: _deck.artDimension,
+                        stackDimension: _deck.stackWidth,
+                        stackHeight: _deck.stackHeight,
+                        fullCoverKey: fullCoverKey,
+                        onTrackSwapped: swaps.add,
+                      ),
+                    )
+                  : PlayerCoverDeck(
+                      displayTrack: a,
+                      artDimension: _deck.artDimension,
+                      stackDimension: _deck.stackWidth,
+                      stackHeight: _deck.stackHeight,
+                      fullCoverKey: fullCoverKey,
+                      onTrackSwapped: swaps.add,
+                    ),
             ),
           ),
         ),
@@ -147,7 +183,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   });
 
-  testWidgets('快速连切：从当前进度续走，不回到起点重放', (tester) async {
+  testWidgets('快速连切：从当前进度连续接管，不回到起点重放', (tester) async {
     emitFor('a');
     final swaps = await pumpDeck(tester);
 
@@ -169,6 +205,328 @@ void main() {
     expect(centerOffset(tester), closeTo(0, 1));
     expect(tester.takeException(), isNull);
     // 让 provider 的通知节流计时器（queue 300ms）跑完，避免残留 pending timer。
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('连切接管：弹簧途中再切歌，滑出卡从上一帧中心卡位置连续接管，不跳侧槽', (tester) async {
+    emitFor('a');
+    final swaps = await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50)); // 第一次检测帧
+    await tester.pump(); // 动画首 tick
+    await tester.pump(const Duration(milliseconds: 90)); // 弹簧中段
+    final centerB = find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id));
+    final double before = offsetOf(tester, centerB);
+    expect(before, greaterThan(4), reason: '前提：第一次切歌中心卡仍在侧槽入场途中');
+
+    // 弹簧途中切到 c：新会话的滑出卡就是上一段的中位卡 b，必须以它当前
+    // 位置为起点（旧实现按新会话 -offset*p 重画，会瞬移约一个侧槽宽）。
+    emitFor('c');
+    // 让 provider 的 track 通知节流（16ms）落地；只推进这一小段，让接管帧
+    // 的滑出卡仍应落在上一帧中心卡附近（旧实现会瞬移约一个侧槽宽）。
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(outgoing, findsOneWidget);
+    final double sideOffset = _deck.artDimension * 0.30;
+    final double after = offsetOf(tester, outgoing);
+    expect(
+      (after - before).abs(),
+      lessThan(sideOffset * 0.5),
+      reason: '接管帧滑出卡位置应连续（前 $before → 后 $after，侧槽宽 $sideOffset）',
+    );
+
+    // 再逐帧采样：接管后的滑出卡不允许出现约一个侧槽宽的跳变。
+    var previous = after;
+    for (var i = 0; i < 3; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      if (outgoing.evaluate().isEmpty) break;
+      final double current = offsetOf(tester, outgoing);
+      expect(
+        (current - previous).abs(),
+        lessThan(sideOffset * 0.5),
+        reason: '接管后逐帧位移不应跳变（$previous → $current）',
+      );
+      previous = current;
+    }
+
+    // 第二次动画仍在途中再切到 d：链式接管，最终中心只留 d，没有上一首残影。
+    emitFor('d');
+    await tester.pump(const Duration(milliseconds: 20)); // track 通知节流
+    await tester.pump(); // 接管首帧
+    await tester.pump(const Duration(milliseconds: 60));
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsOneWidget,
+        reason: '链式接管仍应渲染当前滑出卡');
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)), findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsNothing,
+        reason: '连续切多首后中心不残留更早的封面');
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsNothing,
+        reason: '连续切多首后中心不残留上一首');
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
+    expect(swaps, hasLength(3));
+    expect(tester.takeException(), isNull);
+    // 通知节流计时器跑完，避免测试结束时报 pending timer。
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('方向反转接管：旧中心 B 与新中心 A 都从捕获位置连续接管', (tester) async {
+    emitFor('a');
+    final swaps = await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    final centerB = find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id));
+    final oldOutgoingA = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    final double beforeB = offsetOf(tester, centerB);
+    final double beforeA = offsetOf(tester, oldOutgoingA);
+    expect(beforeB, greaterThan(4), reason: '前提：B 从右侧入场途中');
+    expect(beforeA, lessThan(-4), reason: '前提：A 正滑向左槽');
+
+    // 弹簧途中反向切回 A：A 是上一段旧 outgoing，restart 接管时新中心 A
+    // 从 A 的捕获位置起，B 从中心捕获位置继续滑向右槽。
+    emitFor('a');
+    await tester.pump(const Duration(milliseconds: 20)); // track 通知节流
+    await tester.pump();
+    final newCenterA = find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id));
+    final newOutgoingB = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(newCenterA, findsOneWidget);
+    expect(newOutgoingB, findsOneWidget);
+    final double afterA = offsetOf(tester, newCenterA);
+    final double afterB = offsetOf(tester, newOutgoingB);
+    final double sideOffset = _deck.artDimension * 0.30;
+    expect(
+      (afterA - beforeA).abs(),
+      lessThan(sideOffset * 0.35),
+      reason: '新中心 A 应接住旧 outgoing A 的位置（$beforeA → $afterA）',
+    );
+    expect(
+      (afterB - beforeB).abs(),
+      lessThan(sideOffset * 0.35),
+      reason: '旧中心 B 应接住自己上一帧中心位置（$beforeB → $afterB）',
+    );
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id)),
+        findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
+    expect(swaps, hasLength(2));
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('p0 ≥ 0.75 接管：旧中心从接近中心的位置续滑，不落位重播', (tester) async {
+    emitFor('a');
+    await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120)); // 接近落位
+    final centerB = find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id));
+    final double before = offsetOf(tester, centerB);
+    final double sideOffset = _deck.artDimension * 0.30;
+    expect(before, greaterThan(0), reason: '前提：B 已接近中心但尚未落位');
+    expect(before, lessThan(sideOffset * 0.25),
+        reason: '前提必须真的越过 p0≥0.75（中心偏移 < 0.25 侧槽宽）');
+    final sourceC =
+        find.byKey(PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id));
+    expect(sourceC, findsOneWidget);
+    final double beforeCOpacity = opacityOf(tester, sourceC);
+    expect(beforeCOpacity, greaterThan(0.01),
+        reason: '前提：C 已作为 source neighbor 半透明出现');
+
+    // 同方向继续切 c：restart 从 B 的捕获位置起滑向左槽，不能把 p 归零后
+    // 从中心重新起跳（旧实现的落位式跳变）；新中心 C 也应接住 source
+    // neighbor 的低透明度，而不是直接跳到 0.85。
+    emitFor('c');
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(outgoing, findsOneWidget);
+    final double after = offsetOf(tester, outgoing);
+    expect(after, greaterThan(0),
+        reason: '滑出卡起点应保留捕获时仍在中心右侧的位置（不是 p=0 的中心）');
+    expect(
+      (after - before).abs(),
+      lessThan(sideOffset * 0.25),
+      reason: '接近落位接管也不应有落位式跳变（$before → $after）',
+    );
+    final centerC = find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id));
+    expect(centerC, findsOneWidget);
+    final double afterCOpacity = opacityOf(tester, centerC);
+    expect(afterCOpacity, lessThan(0.8),
+        reason: '新中心 C 不应直接以 0.85 全亮出现');
+    expect((afterCOpacity - beforeCOpacity).abs(), lessThan(0.25),
+        reason:
+            '新中心 C 应接住 source neighbor 的透明度（$beforeCOpacity → $afterCOpacity）');
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+        findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('p0 0.6~0.75：新中心从 source neighbor 的实际视觉接管', (tester) async {
+    emitFor('a');
+    await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100)); // p0 已进入源侧淡入窗口
+    final sourceC =
+        find.byKey(PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id));
+    expect(sourceC, findsOneWidget);
+    final double beforeDx = offsetOf(tester, sourceC);
+    final double beforeOpacity = opacityOf(tester, sourceC);
+    expect(beforeOpacity, greaterThan(0.01),
+        reason: '前提：C 已作为 source neighbor 半透明出现');
+
+    // 同方向继续切 c：新中心 C 应接住 source neighbor 的位置/透明度，而不是
+    // 从全局 p 公式的中途位置突然出现。
+    emitFor('c');
+    await tester.pump(const Duration(milliseconds: 17)); // 刚过 track 节流
+    await tester.pump();
+    final centerC = find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id));
+    expect(centerC, findsOneWidget);
+    final double afterDx = offsetOf(tester, centerC);
+    final double afterOpacity = opacityOf(tester, centerC);
+    final double sideOffset = _deck.artDimension * 0.30;
+    // 捕获帧可能已经自然滑动了一小段：仍应明显靠近右槽，而不是按全局 p
+    // 公式跳到接近中心；透明度也应从 source neighbor 的低窗口值起步。
+    expect(afterDx, greaterThan(sideOffset * 0.5),
+        reason: '新中心 C 应从 source neighbor 的槽位附近接管');
+    expect(beforeDx - afterDx, lessThan(sideOffset * 0.4),
+        reason: '一帧内自然滑动，不应出现公式中途位置的大跳');
+    expect(afterOpacity, lessThan(0.6),
+        reason: '新中心 C 透明度应从 source neighbor 窗口值起步，而不是硬跳满值');
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('restart 链式接管：A 的中心实际视觉被下一次接管捕获', (tester) async {
+    emitFor('a');
+    await pumpDeck(tester, reactiveDisplayTrack: true);
+
+    // A→B 中段。
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+
+    // 反向 B→A restart；等它从 A 的捕获视觉走向中心一段。
+    emitFor('a');
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+    final centerA = find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id));
+    final double beforeA = offsetOf(tester, centerA);
+
+    // 再反向 A→B restart：新滑出卡 A 必须接住刚才 restart 中心 A 的实际
+    // 视觉（旧实现会退回公式位置，跳一下）。
+    emitFor('b');
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    final outgoingA = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(outgoingA, findsOneWidget);
+    final double afterA = offsetOf(tester, outgoingA);
+    final double sideOffset = _deck.artDimension * 0.30;
+    expect(
+      (afterA - beforeA).abs(),
+      lessThan(sideOffset * 0.2),
+      reason: '链式 restart 的新 outgoing A 应接住上一段中心 A（$beforeA → $afterA）',
+    );
+
+    int tailLayers() => find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is Positioned &&
+              widget.key is ValueKey<String> &&
+              (widget.key! as ValueKey<String>)
+                  .value
+                  .startsWith('coverHandoffTail:'),
+        )
+        .evaluate()
+        .length;
+    expect(tailLayers(), lessThanOrEqualTo(2), reason: 'tail 同身份去重后最多两层');
+    expect(tester.takeException(), isNull,
+        reason: 'tail 稳定 key 去重后不应出现重复 key');
+
+    // 第三次继续 B→C（同方向 continuous），验证 restart 链后再接管不崩。
+    await tester.pump(const Duration(milliseconds: 40));
+    emitFor('c');
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
+    expect(tailLayers(), 0);
+    expect(tester.takeException(), isNull);
+    await tester.pump(const Duration(milliseconds: 400));
+  });
+
+  testWidgets('回绕连切：新中心身份不会同时留在 tail', (tester) async {
+    void emitCyclic(Track track, int index) {
+      final int nextIndex = (index + 1) % order.length;
+      final int previousIndex = (index - 1 + order.length) % order.length;
+      backend.emit(BackendSnapshot(
+        current: track,
+        queue: order,
+        currentIndex: index,
+        next: order[nextIndex],
+        previous: order[previousIndex],
+        previousOfPrevious:
+            order[(index - 2 + order.length) % order.length],
+        upNext: [
+          order[nextIndex],
+          order[(index + 2) % order.length],
+          order[(index + 3) % order.length],
+        ],
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ));
+    }
+
+    emitCyclic(a, 0);
+    await pumpDeck(tester, reactiveDisplayTrack: true);
+    emitCyclic(b, 1);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    emitCyclic(c, 2);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    // 回绕前 A 已经是上一段的 tail。
+    final tailA = ValueKey('coverHandoffTail:${a.id.uri}');
+    expect(find.byKey(tailA), findsOneWidget);
+
+    // C→A（next 提示命中 → 同方向 continuous）。新中心 A 必须先从 tail 移除，
+    // 不能 tail + center 同曲两张卡。
+    emitCyclic(a, 0);
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pump();
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id)),
+        findsOneWidget);
+    expect(find.byKey(tailA), findsNothing,
+        reason: '新中心 A 不得同时留在 tail 列表');
+    expect(tester.takeException(), isNull,
+        reason: '同身份 tail 若重复会触发重复 key');
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(a.id)),
+        findsOneWidget);
+    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
     await tester.pump(const Duration(milliseconds: 400));
   });
 

@@ -8,6 +8,7 @@
 /// `CoverFlight` / `CoverFlightLayer`）——本文件只负责锚点捕获与飞行生命周期。
 library;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 
 import 'cover_appearance.dart';
@@ -16,6 +17,12 @@ import 'cover_appearance.dart';
 /// 播放页 / 飞行宿主（既有 import 面不变）。
 export 'cover_appearance.dart'
     show MorphCover, barCoverFallbackIconSize, playerCoverFallbackIconRatio;
+
+/// 侧邻位展开的飞行窗口起点：只在飞行最后约 45% 从中心展开，前半程保持收起。
+///
+/// 副本身位在飞行中段才接近播放页中心，侧邻位过早出现会与副本抢视觉；
+/// 收起方向按同一窗口反向收回。
+const double pageDeckRevealStart = 0.55;
 
 /// 读取锚点当前矩形（含祖先变换）；元素未挂载/未布局时返回 null。
 ///
@@ -52,12 +59,47 @@ class PlayerMorphController extends ChangeNotifier {
 
   bool _barHeaderHidden = false;
   bool _pageHeaderHidden = false;
+  final ValueNotifier<double> _pageDeckReveal = ValueNotifier<double>(1);
 
   /// 顶栏封面/歌名/进度是否隐藏（播放页激活或飞行中）。
   bool get barHeaderHidden => _barHeaderHidden;
 
   /// 播放页封面是否隐藏（飞行中，由飞行副本承接）。
   bool get pageHeaderHidden => _pageHeaderHidden;
+
+  /// 播放页左右邻位槽的展开进度：0 = 收回中心、1 = 稳态侧槽。
+  ///
+  /// 由壳层用现有飞行弹簧驱动（不额外建 ticker），只暴露值本身：deck
+  /// 监听它逐帧更新侧槽几何，不触发整个壳层重建。center 锚点不受影响。
+  ValueListenable<double> get pageDeckReveal => _pageDeckReveal;
+
+  /// 设置侧邻位展开进度（壳层飞行 tick / 起止路径调用）。
+  ///
+  /// 不走 [notifyListeners]：那是隐藏状态（整树重建）的通道；值监听只让
+  /// deck 的 Stack 子树逐帧重建。
+  void setPageDeckReveal(double value) {
+    final double clamped = value.clamp(0.0, 1.0);
+    if (_pageDeckReveal.value == clamped) return;
+    _pageDeckReveal.value = clamped;
+  }
+
+  /// 飞行行程内的侧邻位 reveal 目标值。
+  ///
+  /// 进入：飞行最后 [pageDeckRevealStart] 之后从 0 展到 1；离开：时间对称，
+  /// 飞行前 45% 先收回中心（`entryWindow(1 - progress)`），页面层后段淡出时
+  /// 不会出现「收回看不见」。失败 / 落定路径由壳层直接置 1（见
+  /// `_completeMorph`）。
+  static double pageDeckRevealAt(double progress, {required bool toPage}) {
+    double entryWindow(double value) =>
+        ((value.clamp(0.0, 1.0) - pageDeckRevealStart) /
+                (1 - pageDeckRevealStart))
+            .clamp(0.0, 1.0);
+    // 只做窗口裁切；easing 形状由 deck 的侧槽几何统一施加（避免双重缓动）。
+    // 减弱动效时 deck 直接按 1 落位。
+    return toPage
+        ? entryWindow(progress)
+        : entryWindow(1 - progress);
+  }
 
   void setBarHeaderHidden(bool value) {
     if (_barHeaderHidden == value) return;
@@ -84,6 +126,12 @@ class PlayerMorphController extends ChangeNotifier {
       pageCover: pageCover,
       toPage: toPage,
     );
+  }
+
+  @override
+  void dispose() {
+    _pageDeckReveal.dispose();
+    super.dispose();
   }
 }
 
@@ -131,7 +179,10 @@ class PlayerMorphFlight extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    // RepaintBoundary 把逐帧变化的副本与 Overlay 其它内容隔离：飞行中每帧
+    // 只有这一层重绘，不会把整条 Overlay（页面 / 顶栏）拖进 raster。
+    return RepaintBoundary(
+      child: Stack(
       clipBehavior: Clip.none,
       children: [
         CoverFlightLayer(
@@ -145,6 +196,7 @@ class PlayerMorphFlight extends StatelessWidget {
           fallback: fallback,
         ),
       ],
+      ),
     );
   }
 }

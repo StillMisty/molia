@@ -528,14 +528,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('切歌占位：新曲目无封面时以旧封面 URL 作占位（不闪黑块）', (tester) async {
+  testWidgets('切歌占位：中心卡不借旧封面作占位（目标图未命中走中性回退）', (tester) async {
     final b1 = _track('b', artwork: 'https://img.example/b.jpg');
     final c = _track('c'); // 无封面
     emitCustom(current: b1, queue: [a, b1, c], index: 1, previous: a, next: c);
     // 直接挂载封面堆叠（带封面的曲目会触发播放器的取色/预取路径）。
     await pumpDeckHost(tester);
 
-    // 切到无封面的 c：动画期间中心卡（c）以旧封面 b 的 URL 作占位。
+    // 切到无封面的 c：中心卡（c）不得拿旧封面 b 当加载占位——否则目标图
+    // 未预热时旧封面会从新卡下面透出来（连切残影的叠加来源）。
     emitCustom(
         current: c, queue: [a, b1, c], index: 2, previous: b1, next: null);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
@@ -545,11 +546,20 @@ void main() {
     final image = tester.widget<AppNetworkImage>(
         find.descendant(of: center, matching: find.byType(AppNetworkImage)).first);
     expect(image.url, isNull, reason: '新曲目 c 无封面（渲染回退占位）');
-    expect(image.placeholder, isA<AppNetworkImage>(),
-        reason: '无封面卡片应带旧封面占位（不是空占位）');
-    expect((image.placeholder! as AppNetworkImage).url,
-        'https://img.example/b.jpg',
-        reason: '占位应为旧封面 b 的 URL：新封面未加载不闪黑块');
+    expect(image.placeholder, isNot(isA<AppNetworkImage>()),
+        reason: '中心卡不得用上一首封面当占位（应走曲目自己的默认封面 / 中性回退）');
+    // 滑出卡仍是旧曲目 b 自己的封面（旧封面作为动画内容保留，不是占位）。
+    final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
+    expect(
+      tester
+          .widget<AppNetworkImage>(
+            find
+                .descendant(of: outgoing, matching: find.byType(AppNetworkImage))
+                .first,
+          )
+          .url,
+      'https://img.example/b.jpg',
+    );
 
     await tester.pump(const Duration(milliseconds: 400)); // 动画走完
     expect(tester.takeException(), isNull);

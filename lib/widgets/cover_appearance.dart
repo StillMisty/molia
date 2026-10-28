@@ -27,6 +27,14 @@ import '../utils/local_image_provider.dart';
 import '../utils/playback_cover_decode.dart';
 import 'molia_mark.dart';
 
+/// 飞行期阴影恢复的「页端进度」窗口：前 80% 不画，80%→95% 线性恢复，
+/// 最后 5% 保持真身强度（避免落点前一帧阴影突然变重）。
+///
+/// 高 DPR 下 24px blur 随尺寸逐帧重画是主要 raster 嫌疑；端点仍与真身
+/// 完全一致（t=1 / 反向 t=0）。
+const double flightShadowPageRevealStart = 0.8;
+const double flightShadowPageRevealEnd = 0.95;
+
 /// 曲目的稳定 key（领域 id）。
 ///
 /// 封面「用哪一张」的解析不在这里：见
@@ -202,9 +210,21 @@ class CoverCard extends StatelessWidget {
     super.key,
     required this.size,
     required this.appearance,
-    required this.content,
+    required CoverCardContent this.content,
     this.iconSize,
-  });
+  }) : contentChild = null;
+
+  /// 预构建内容：飞行副本用它在逐帧插值时保持图片子树不变（只换外框 /
+  /// 裁剪），避免每帧重建 `MorphCover` 的图片状态与解码 provider。
+  ///
+  /// 裁剪仍由本卡片的 `appearance.clip` 负责（内容自身不要再裁一次圆角）。
+  const CoverCard.prebuilt({
+    super.key,
+    required this.size,
+    required this.appearance,
+    required Widget this.contentChild,
+    this.iconSize,
+  }) : content = null;
 
   /// 卡片边长（封面卡恒为方形）。
   final double size;
@@ -215,7 +235,11 @@ class CoverCard extends StatelessWidget {
   /// 不跟随所在卡片的当前边长。
   final double? iconSize;
 
-  final CoverCardContent content;
+  /// 按外观计算裁剪与图标尺寸后构建内容（真身常规路径）。
+  final CoverCardContent? content;
+
+  /// 已经构建好的内容（飞行副本身份稳定路径）。
+  final Widget? contentChild;
 
   @override
   Widget build(BuildContext context) {
@@ -231,17 +255,22 @@ class CoverCard extends StatelessWidget {
             color: scheme.outlineVariant.withValues(alpha: appearance.stroke),
             width: appearance.stroke,
           ),
-          boxShadow: [
-            BoxShadow(
-              color: scheme.shadow.withValues(alpha: 0.28 * appearance.shadow),
-              blurRadius: 24 * appearance.shadow,
-              offset: Offset(0, 10 * appearance.shadow),
-            ),
-          ],
+          // shadow=0 时不创建透明 BoxShadow：少一次对象分配与透明 draw。
+          boxShadow: appearance.shadow <= 0
+              ? null
+              : [
+                  BoxShadow(
+                    color: scheme.shadow.withValues(
+                      alpha: 0.28 * appearance.shadow,
+                    ),
+                    blurRadius: 24 * appearance.shadow,
+                    offset: Offset(0, 10 * appearance.shadow),
+                  ),
+                ],
         ),
         child: ClipRRect(
           borderRadius: appearance.clip,
-          child: content(context, appearance.clip, icon),
+          child: contentChild ?? content!(context, appearance.clip, icon),
         ),
       ),
     );
@@ -284,11 +313,61 @@ class CoverFlightLayer extends StatelessWidget {
   /// 未命中缓存/无封面时的回退（拿到插值后的图标尺寸）。
   final Widget Function(BuildContext context, double iconSize)? fallback;
 
+  /// 飞行期间的外观：阴影只在页端最后 20% 恢复，其余端点/插值不变。
+  ///
+  /// 用 [CoverFlight.pageProgressAt] 而不是几何 t：反向飞行 t=0 就在播放页端
+  /// （阴影必须与真身一致），t=1 才到顶栏端（无阴影）。
+  CoverAppearance _appearanceAt(double t) {
+    final CoverAppearance appearance = flight.appearanceAt(t);
+    final double page = flight.pageProgressAt(t);
+    if (page >= 1.0) return appearance;
+    final double window = ((page - flightShadowPageRevealStart) /
+            (flightShadowPageRevealEnd - flightShadowPageRevealStart))
+        .clamp(0.0, 1.0);
+    final double shadow = appearance.shadow * window;
+    if (shadow == appearance.shadow) return appearance;
+    return CoverAppearance(
+      radius: appearance.radius,
+      stroke: appearance.stroke,
+      shadow: shadow,
+      iconRatio: appearance.iconRatio,
+      iconSize: appearance.iconSize,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 图片子树做成 AnimatedBuilder 的稳定 child：飞行期间只换外框（尺寸 /
+    // 圆角 / 描边 / 阴影），不逐帧重建 MorphCover 的图片状态与 provider。
+    // 圆角裁剪改由 CoverCard 的 appearance.clip 逐帧负责（这里传零圆角，
+    // 内容自身不再裁一次，避免双重裁剪的边缘发黑）。
+    final Widget image = MorphCover(
+      url: url,
+      fallbackUrl: fallbackUrl,
+      borderRadius: BorderRadius.zero,
+      // 回退图标尺寸必须逐帧插值，但图片子树本身要稳定：把「按进度算图标
+      // 尺寸」留在 fallback 内部的 AnimatedBuilder 里。没有调用方回退时
+      // 仍复刻 MorphCover 的默认中性回退（主题容器色 + 标志）。
+      fallback: AnimatedBuilder(
+        animation: animation,
+        builder: (context, _) {
+          final double t = (animation.value / flightPortion).clamp(0.0, 1.0);
+          final double icon = flight.iconSizeAt(t);
+          final custom = fallback;
+          if (custom != null) return custom(context, icon);
+          final scheme = Theme.of(context).colorScheme;
+          return Container(
+            color: scheme.surfaceContainerHighest,
+            alignment: Alignment.center,
+            child: MoliaMark(color: scheme.onSurfaceVariant, size: icon),
+          );
+        },
+      ),
+    );
     return AnimatedBuilder(
       animation: animation,
-      builder: (context, _) {
+      child: image,
+      builder: (context, child) {
         // 弹簧原值即运动曲线；归一化到飞行行程。
         final double t = (animation.value / flightPortion).clamp(0.0, 1.0);
         final Rect rect = flight.rectAt(t);
@@ -296,16 +375,13 @@ class CoverFlightLayer extends StatelessWidget {
         return Positioned.fromRect(
           rect: rect,
           child: IgnorePointer(
-            child: CoverCard(
-              size: rect.width,
-              appearance: flight.appearanceAt(t),
-              iconSize: iconSize,
-              content: (context, clip, icon) => MorphCover(
-                url: url,
-                fallbackUrl: fallbackUrl,
-                borderRadius: clip,
-                fallbackIconSize: icon,
-                fallback: fallback?.call(context, icon),
+            // 逐帧变化的几何/装饰单独成层：不把 Overlay 其余内容拖进重绘。
+            child: RepaintBoundary(
+              child: CoverCard.prebuilt(
+                size: rect.width,
+                appearance: _appearanceAt(t),
+                iconSize: iconSize,
+                contentChild: child!,
               ),
             ),
           ),

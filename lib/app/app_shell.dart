@@ -450,9 +450,10 @@ class _MyAppState extends State<MyApp>
     } else if (leavingPlayer) {
       _startMorphBackToBar();
     } else {
-      // 两端都不是播放页：不涉及共享元素，确保两端真身可见。
+      // 两端都不是播放页：不涉及共享元素，确保两端真身可见、侧槽落位。
       _morph.setPageHeaderHidden(false);
       _morph.setBarHeaderHidden(false);
+      _morph.setPageDeckReveal(1);
     }
   }
 
@@ -485,24 +486,30 @@ class _MyAppState extends State<MyApp>
     final barCover = _morph.rectOf(_morph.barCoverKey);
     if (barCover == null) {
       // 起点不在场（启动就落在播放页等）：跳过飞行，只对齐两端状态。
+      _morph.setPageDeckReveal(1);
       _morph.setPageHeaderHidden(false);
       _morph.setBarHeaderHidden(true);
       return;
     }
     _morph.setBarHeaderHidden(true);
     _morph.setPageHeaderHidden(true);
+    // 进入首帧页中心就收起（飞行副本承接），侧邻位收回中心等飞行尾段展开。
+    _morph.setPageDeckReveal(0);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_effectiveDestination != ShellDestination.nowPlaying) {
         // 一帧之内又离开了播放页：这次进入被撤销，两端状态按「不在播放页」
-        // 对齐（两端真身都可见）。
+        // 对齐（两端真身都可见、侧槽落位）。
+        _morph.setPageDeckReveal(1);
         _morph.setPageHeaderHidden(false);
         _morph.setBarHeaderHidden(false);
         return;
       }
       final pageCover = _morph.rectOf(_morph.pageCoverKey);
       if (pageCover == null) {
-        // 终点不可用：不飞，页内封面直接亮出（顶栏/底栏这一端不在场，无重影）。
+        // 终点不可用：不飞，页内封面与侧槽直接亮出（顶栏/底栏这一端不在场，
+        // 无重影）。
+        _morph.setPageDeckReveal(1);
         _morph.setPageHeaderHidden(false);
         return;
       }
@@ -523,7 +530,11 @@ class _MyAppState extends State<MyApp>
   /// 再下一帧起飞——代价是飞行比切页晚一帧（16ms），肉眼不可辨。
   void _startMorphBackToBar() {
     _morph.setBarHeaderHidden(true);
-    _morph.setPageHeaderHidden(false);
+    // 离开方向也从第一帧起收起页中心：飞行副本接管整段行程，页面真身
+    // 不能先在原地亮着等副本飞过来。
+    _morph.setPageHeaderHidden(true);
+    // 侧邻位从稳态开始；飞行前 45% 由 tick 时间对称地收回中心。
+    _morph.setPageDeckReveal(1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_effectiveDestination == ShellDestination.nowPlaying) {
@@ -531,12 +542,14 @@ class _MyAppState extends State<MyApp>
         // （底栏封面仍收起，与启动就落在播放页时同一口径）。
         _morph.setBarHeaderHidden(true);
         _morph.setPageHeaderHidden(false);
+        _morph.setPageDeckReveal(1);
         return;
       }
       _completeMorph();
       final geometry = _morph.captureGeometry(toPage: false);
       if (geometry == null) {
         // 锚点缺失（迷你态/首帧）：跳过飞行，两端真身可见。
+        _morph.setPageDeckReveal(1);
         _morph.setPageHeaderHidden(false);
         _morph.setBarHeaderHidden(false);
         return;
@@ -550,7 +563,9 @@ class _MyAppState extends State<MyApp>
   /// 封面 URL 与锚点在同一刻抓取：飞行期间不换图（副本承接的是起飞时那一张）。
   void _flyMorph(PlayerMorphGeometry geometry) {
     _morph.setBarHeaderHidden(true);
-    if (geometry.toPage) _morph.setPageHeaderHidden(true);
+    // 两个方向都收起页中心：副本精确承接整段几何，真身不参与飞行（进入时
+    // 首帧就不能亮，离开时也不能留到最后才收）。
+    _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
     final url = nowPlayingCoverUrl(
       context,
@@ -580,8 +595,14 @@ class _MyAppState extends State<MyApp>
   ///
   /// `snapToEnd` 保证最后一步 value 精确为 1.0，此处即落定帧（零速度）。
   void _onMorphTick() {
-    if (_morphGeometry == null) return;
-    if (_morphAnimation.value >= PlayerMorphFlight.flightPortion) {
+    final geometry = _morphGeometry;
+    if (geometry == null) return;
+    final double progress = _morphAnimation.value.clamp(0.0, 1.0);
+    // 侧邻位进入时尾段展开 / 离开时前段收回（不新增 ticker，复用同一条弹簧）。
+    _morph.setPageDeckReveal(
+      PlayerMorphController.pageDeckRevealAt(progress, toPage: geometry.toPage),
+    );
+    if (progress >= PlayerMorphFlight.flightPortion) {
       _completeMorph();
     }
   }
@@ -595,12 +616,14 @@ class _MyAppState extends State<MyApp>
     _morphToken++;
     final geometry = _morphGeometry;
     _morphGeometry = null;
+    // 失败 / 落定都回到稳态展开：落位帧副本移除、真身与侧槽同一帧就位。
+    _morph.setPageDeckReveal(1);
     if (geometry == null) {
       _removeMorphOverlay();
       return;
     }
-    // 落位：目标端真身瞬时亮出（AnimatedOpacity 的 reveal 方向时长为 0），
-    // 同一帧移除飞行副本；播放页激活时顶栏收起（内容由页面承接）。
+    // 落位：目标端真身瞬时亮出（零时长 Opacity），同一帧移除飞行副本；
+    // 播放页激活时顶栏收起（内容由页面承接）。
     _morph.setPageHeaderHidden(false);
     _morph.setBarHeaderHidden(geometry.toPage);
     _removeMorphOverlay();
