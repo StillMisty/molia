@@ -421,6 +421,24 @@ void main() {
     );
   }
 
+  /// 播放页中心封面最近一层 Opacity 的值（飞行显隐乘在中心层同一条
+  /// Opacity 上，不再嵌套第二层）。
+  double pageCoverOpacity(WidgetTester tester) {
+    final element =
+        tester.element(find.byKey(PlayerCoverDeck.centerCoverCardKey));
+    double? opacity;
+    element.visitAncestorElements((ancestor) {
+      final widget = ancestor.widget;
+      if (widget is Opacity) {
+        opacity = widget.opacity;
+        return false;
+      }
+      return true;
+    });
+    expect(opacity, isNotNull, reason: '未找到中心封面的透明度层');
+    return opacity!;
+  }
+
   testWidgets('封面飞行：进入方向副本末帧落点 == 落定后真身矩形（≤1dp）', (tester) async {
     await pumpShell(tester, desktopShell: true);
     // 先离开播放页：底栏在场，封面是进入方向的起点；也让页内封面先按
@@ -512,6 +530,62 @@ void main() {
       findsOneWidget,
       reason: '底栏封面真身回位（占位不跳）',
     );
+  });
+
+  testWidgets('封面飞行：进入首帧页中心就隐藏，落位帧副本移除与真身亮出同帧', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+    // 先离开播放页：底栏封面成为进入方向的起点。
+    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
+
+    await tester.tap(railPlayerItem());
+    await tester.pump(); // 帧 1：页面落定 + 两端真身收进飞行态
+    expect(find.byType(PlayerMorphFlight), findsNothing,
+        reason: '飞行副本下一帧才挂载（终点锚点先落定）');
+    expect(pageCoverOpacity(tester), 0,
+        reason: '进入首帧页中心必须已经隐藏，不能先在原地亮着等副本');
+
+    await tester.pump(); // 帧 2：副本接管
+    expect(find.byType(PlayerMorphFlight), findsOneWidget);
+
+    // 逐帧跑到副本消失：交接帧真身必须已经亮出（零时长 Opacity）。
+    var seenFlight = false;
+    var landed = false;
+    for (var i = 0; i < 200; i++) {
+      await tester.pump(const Duration(milliseconds: 8));
+      final flightGone = find.byType(PlayerMorphFlight).evaluate().isEmpty;
+      if (!flightGone) {
+        seenFlight = true;
+        expect(pageCoverOpacity(tester), 0,
+            reason: '飞行期间页中心真身保持隐藏');
+        continue;
+      }
+      if (seenFlight) {
+        expect(pageCoverOpacity(tester), 1,
+            reason: '副本移除的同一帧真身必须亮出（无尾段亮度下陷）');
+        landed = true;
+        break;
+      }
+    }
+    expect(landed, isTrue, reason: '前提：进入方向飞行跑完并落位');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('封面飞行：离开方向页中心在飞行期间收起', (tester) async {
+    await pumpShell(tester, desktopShell: true);
+    expect(pageCoverOpacity(tester), 1, reason: '前提：播放页稳态真身可见');
+
+    await tester.tap(railItem(Icons.favorite_border_rounded));
+    await tester.pump(); // 帧 1：页面切出 + 页中心立即收起
+    expect(pageCoverOpacity(tester), 0,
+        reason: '离开首帧页中心就应收起，不能等副本飞走才消失');
+
+    await tester.pump(); // 帧 2：副本挂载
+    expect(find.byType(PlayerMorphFlight), findsOneWidget, reason: '离开方向有飞行副本');
+    expect(pageCoverOpacity(tester), 0, reason: '离开飞行期间页中心保持隐藏');
+
+    await settleTransition(tester);
+    expect(find.byType(PlayerMorphFlight), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('底栏进度条：拖动提交 seek', (tester) async {

@@ -60,6 +60,7 @@ import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/haptics.dart';
+import '../theme/motion_policy.dart';
 import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
@@ -172,15 +173,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   static const Duration _reconcileFadeDuration = Duration(milliseconds: 180);
 
   /// 对账校正时长：到位曲目与预览目标不一致时，中心封面原位交叉淡化校正。
-  static const Duration _reconcileCorrectionDuration =
-      Duration(milliseconds: 220);
+  static const Duration _reconcileCorrectionDuration = Duration(
+    milliseconds: 220,
+  );
 
   /// 空闲期槽位身份交叉淡化时长（原位、纯透明度）。
   static const Duration _slotIdentityFadeDuration = Duration(milliseconds: 180);
 
   /// 中心封面同 id 换图（音源补图）交叉淡化时长。
-  static const Duration _artworkRefreshFadeDuration =
-      Duration(milliseconds: 250);
+  static const Duration _artworkRefreshFadeDuration = Duration(
+    milliseconds: 250,
+  );
 
   /// 封面按压反馈：按下缩放比例；进/出走 M3E 按压弹簧（见控制器注释）。
   static const double _pressScale = 0.96;
@@ -189,14 +192,28 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// element（图片 / 动画状态）不被按位置重建。
   static const Key _centerLayerKey = ValueKey('coverLayerCenter');
   static const Key _outgoingLayerKey = ValueKey('coverLayerOutgoing');
-  static const Key _outgoingArtworkLayerKey =
-      ValueKey('coverLayerOutgoingArtwork');
+  static const Key _outgoingArtworkLayerKey = ValueKey(
+    'coverLayerOutgoingArtwork',
+  );
 
   /// 拖动方向反转的判定阈值（进度域）：超过它才把手势视为回拖。
   ///
   /// 只做「当前封面置顶」的层级切换，不改身份；阈值用来吃掉手指抖动，
   /// 同时按累计位移判定，慢速回拖也能在约 1% 行程内切过来。
   static const double _reverseHandoffProgress = 0.01;
+
+  /// 连切接管的进度上限。
+  ///
+  /// 弹簧接近落位时中心卡已贴住中心，继续沿用 q 插值会让滑出卡在极短
+  /// 剩余行程里扫过整侧槽（超高速滑行）；此时改成「上一段落位、新一段
+  /// 从起点重播」的兜底。
+  static const double _takeoverMaxProgress = 0.75;
+
+  /// 接管后上一段滑出卡的离场窗口（占剩余行程的比例）。
+  ///
+  /// 它已经不在新会话的邻位窗口里，必须在接管开头快速淡出，否则会与
+  /// 新 oldNeighbor 身份在同一槽位叠影。
+  static const double _takeoverTailFadeSpan = 0.45;
 
   double? _dragStartX;
   double? _dragStartY;
@@ -211,6 +228,20 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 正向拖动与落位时目标封面在上；回拖时如果仍让中心预览目标压着当前
   /// 封面，视觉上就像下一首盖住了正在回来的当前封面。
   bool _outgoingCoverOnTop = false;
+
+  /// 连切接管快照（弹簧途中再次切歌）。
+  ///
+  /// 上一段的中位卡此刻停在侧槽入场公式的中途；新会话必须以它当前视觉
+  /// 为起点继续滑向目标槽，而不是按新会话的 `-offset*p` 重新绘制（那会
+  /// 瞬间跳约一个侧槽宽）。
+  _CoverHandoff? _handoff;
+
+  /// 接管后被替换下来的更早滑出卡：各自从捕获位置继续向左离场并快速
+  /// 淡出，避免「上一首残影」。只保留最近两层，够覆盖连续快滑。
+  final List<_CoverHandoffTail> _handoffTails = <_CoverHandoffTail>[];
+
+  /// 播放页侧邻位展开进度（壳层飞行驱动；deck 镜像一份供 Stack 子树重建）。
+  late final ValueNotifier<double> _pageDeckReveal;
 
   /// 切歌会话状态机：拖动预览、提交等待、对账、兜底与方向提示的唯一持有者。
   ///
@@ -233,6 +264,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
   /// 真实封面 URL（自定义 / 原始；默认封面只做展示兜底）。
   String? _realCoverUrlOf(Track? track) => _coverResolver.realOf(track).url;
+
+  /// 页中心封面是否隐藏：顶栏⇄播放页飞行或迷你⇄完整飞行期间，真身由
+  /// 飞行副本承接。直接乘进中心层的同一条 Opacity（不嵌套第二层，否则
+  /// 「最近透明度」观测会失真，也会多一次合成）。
+  bool get _pageCoverHidden =>
+      (widget.morph?.pageHeaderHidden ?? false) || widget.coverFlightActive;
 
   /// 快照通知已排入微任务（同一批通知只对账一次）。
   bool _trackSyncScheduled = false;
@@ -303,19 +340,23 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   void initState() {
     super.initState();
     _covers = coverResolverOf(context);
-    _session = CoverSwapSession(host: this, covers: _covers!);
+    _session = CoverSwapSession(host: this);
     _playStateController = SingleMotionController(
-      motion:
-          const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
+      motion: const MaterialSpringMotion.expressiveSpatialDefault(
+        snapToEnd: true,
+      ),
       vsync: this,
       initialValue: 0,
     );
-    _playStateScaleAnimation =
-        Tween<double>(begin: 0.98, end: 1.0).animate(_playStateController);
+    _playStateScaleAnimation = Tween<double>(
+      begin: 0.98,
+      end: 1.0,
+    ).animate(_playStateController);
 
     _coverController = SingleMotionController(
-      motion:
-          const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
+      motion: const MaterialSpringMotion.expressiveSpatialDefault(
+        snapToEnd: true,
+      ),
       vsync: this,
       initialValue: 0,
     )..value = 1.0;
@@ -348,12 +389,19 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       vsync: this,
       initialValue: 0,
     );
-    _centerScaleAnimation =
-        Listenable.merge([_playStateController, _pressController]);
+    _centerScaleAnimation = Listenable.merge([
+      _playStateController,
+      _pressController,
+    ]);
     // 中心换图的淡出起点必须是「挂载时正在展示的 URL」：首个快照若只补了
     // 封面 URL（同 id），didUpdateWidget 才能识别为换图而不是首帧接管。
     _centerTrackId = trackKeyOf(widget.displayTrack);
     _centerArtworkUrl = _realCoverUrlOf(widget.displayTrack);
+    // 邻位展开值镜像到本地 notifier：morph 的值监听只重建本 Stack 子树，
+    // 不触发整个 deck（手势宿主 / 播放器列）逐帧 setState。
+    _pageDeckReveal = ValueNotifier<double>(
+      widget.morph?.pageDeckReveal.value ?? 1,
+    );
     _coverStackAnimation = Listenable.merge([
       _session,
       _coverController,
@@ -362,6 +410,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       _slotIdentityFade,
       _artworkRefreshFade,
       _pressController,
+      _pageDeckReveal,
     ]);
     // 即时切歌落位即会话结束（完成中 → 空闲）；拖动提交由对账路径收尾。
     _coverController.addStatusListener(_handleCoverStatus);
@@ -371,6 +420,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _pressController.addStatusListener(_handlePressStatus);
     // 顶栏⇄播放页飞行期间中心封面隐藏，必须监听 morph 控制器重建真身。
     widget.morph?.addListener(_onMorphChanged);
+    widget.morph?.pageDeckReveal.addListener(_onPageDeckRevealChanged);
   }
 
   @override
@@ -390,6 +440,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (oldWidget.morph != widget.morph) {
       oldWidget.morph?.removeListener(_onMorphChanged);
       widget.morph?.addListener(_onMorphChanged);
+      oldWidget.morph?.pageDeckReveal.removeListener(_onPageDeckRevealChanged);
+      widget.morph?.pageDeckReveal.addListener(_onPageDeckRevealChanged);
+      _pageDeckReveal.value = widget.morph?.pageDeckReveal.value ?? 1;
     }
     // provider 可能被替换：父级重建时重新检查订阅（此时 widget.displayTrack
     // 已来自新快照）。
@@ -414,10 +467,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 系统媒体恢复）按稳态接管，不把「本来就在展示的曲目」当成切歌入场。
     final snapshot = playback.snapshot;
     _session.adoptInitial(snapshot);
-    _session.observe(
-      snapshot: snapshot,
-      displayTrack: widget.displayTrack,
-    );
+    _session.observe(snapshot: snapshot, displayTrack: widget.displayTrack);
     // 渲染起点就是当前身份：槽位跟踪对齐，不补身份淡换。
     adoptSteadySlots();
     _syncPlayState(playback);
@@ -429,7 +479,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (identical(covers, _covers)) return;
     _removeCoverListener?.call();
     _covers = covers;
-    _session.useCoverResolver(covers);
     _removeCoverListener = covers.addChangeListener(_onCustomCoverChanged);
   }
 
@@ -518,25 +567,121 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }
 
   @override
-  void startSettle() {
+  void startSettle({required int direction}) {
     // 即时切歌/快速连切：目标始终在上层。
     _outgoingCoverOnTop = false;
     // 上一个会话可能停在（或正在）校正：新切歌直接接管，停掉校正控制器。
     if (_reconcileCorrection.isAnimating) _reconcileCorrection.stop();
-    // 新会话先把进度钉在起点：检测帧就画在 p=0（与稳态的源槽位卡一致），
-    // 而不是先画落位态、动画启动后再回跳。弹簧尾部（进度 ≈1）按「已落定」
-    // 处理，从起点完整重播。
-    if (!_coverSwapMidFlight) _coverController.value = 0;
+    final bool midFlight = _coverSwapMidFlight;
+    final double p0 = _coverController.value.clamp(0.0, 1.0);
+    // 连续接管只接受「同一方向 + 仍是上一段的完成中 + 未接近落位」：
+    // 方向反转时两侧槽位语义对不上，接近落位时剩余行程太短，都走兜底。
+    final bool canHandoff =
+        midFlight &&
+        _session.phase == CoverSwapPhase.settling &&
+        direction == _session.direction &&
+        p0 < _takeoverMaxProgress &&
+        _session.to != null;
+    if (canHandoff) {
+      _captureHandoff(progress: p0, direction: direction);
+    } else {
+      // 安全兜底：等价于「上一段先落位，再从新一段起点重播」——上一段的
+      // 进场卡在落位帧就位于中心，新一段 p=0 的滑出卡同样从中心起手，
+      // 两张卡的身份/位置连续；方向反转时不做跨方向插值。
+      _handoff = null;
+      _handoffTails.clear();
+      _coverController.stop(canceled: true);
+      _coverController.value = 0;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       widget.onTrackSwapped?.call(false);
-      if (_coverSwapMidFlight) {
-        // 拖动续播 / 快速连切：从当前进度接着走（带速度），不回到起点重放。
+      if (canHandoff) {
+        // 从当前进度接着走：新会话的 q 把接管起点映射到剩余行程。
         _coverController.animateTo(1);
       } else {
         _coverController.animateTo(1, from: 0, withVelocity: 0);
       }
     });
+  }
+
+  /// 捕获连切接管状态：中心卡（上一段的进场卡）与上一段滑出卡。
+  ///
+  /// 新会话的滑出卡以中心卡捕获位置为起点，用 `q = (p - p0) / (1 - p0)`
+  /// 连续插值到目标侧槽；新的中心卡继续沿用全局 `p` 的侧槽入场公式，
+  /// 因此它在 p0 帧与旧中心卡完全重合，形成无缝接管。
+  void _captureHandoff({required double progress, required int direction}) {
+    final Track? centerTrack = _session.to;
+    final Track? oldOutgoing = _session.from;
+    // 链路中的上一段：若已是接管会话，它的滑出卡由 q 公式绘制，必须按
+    // 当前渲染值捕获，不能再用新会话公式重算。
+    final _CoverHandoff? previousHandoff = _handoff;
+    if (previousHandoff != null) {
+      final _HandoffVisual? visual = _handoffOutgoingVisual(
+        progress,
+        handoff: previousHandoff,
+      );
+      if (visual != null && visual.opacity > 0.01) {
+        _handoffTails.add(
+          _CoverHandoffTail(
+            track: previousHandoff.centerTrack,
+            p0: progress,
+            direction: previousHandoff.direction,
+            x: visual.x,
+            scale: visual.scale,
+            rotation: visual.rotation,
+            opacity: visual.opacity,
+          ),
+        );
+      }
+    } else if (oldOutgoing != null) {
+      // 上一段是常规滑出：中心运动公式在 p0 的值就是它此刻的视觉状态。
+      _handoffTails.add(
+        _CoverHandoffTail(
+          track: oldOutgoing,
+          p0: progress,
+          direction: _session.direction,
+          x: -widget.artDimension * 0.30 * _session.direction * progress,
+          scale: 1.0 - 0.22 * progress,
+          rotation: -0.05 * _session.direction * progress,
+          opacity: 1.0 - 0.15 * progress,
+        ),
+      );
+    }
+    // 只保留最近两层离场卡（连续快滑的眼可见残影窗口）。
+    while (_handoffTails.length > 2) {
+      _handoffTails.removeAt(0);
+    }
+    _handoff = _CoverHandoff(
+      p0: progress,
+      direction: direction,
+      centerTrack: centerTrack!,
+    );
+  }
+
+  /// 接管会话中滑出卡的当前视觉（未接管时返回 null）。
+  _HandoffVisual? _handoffOutgoingVisual(
+    double progress, {
+    _CoverHandoff? handoff,
+  }) {
+    final _CoverHandoff? value = handoff ?? _handoff;
+    if (value == null) return null;
+    final double sideOffset = widget.artDimension * 0.30;
+    final double q = ((progress - value.p0) / (1 - value.p0)).clamp(0.0, 1.0);
+    return _HandoffVisual(
+      x: _lerp(
+        value.direction * sideOffset * (1 - value.p0),
+        -sideOffset * value.direction,
+        q,
+      ),
+      scale: _lerp(0.78 + 0.22 * value.p0, 0.78, q),
+      rotation: _lerp(
+        0.05 * value.direction * (1 - value.p0),
+        -0.05 * value.direction,
+        q,
+      ),
+      opacity: _lerp(0.85 + 0.15 * value.p0, 0.85, q),
+    );
   }
 
   @override
@@ -561,14 +706,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     final actualSource = _session.direction == 1
         ? _playback?.snapshot.next
         : _playback?.snapshot.previous;
-    final bool continuous = previewNeighbor != null &&
+    final bool continuous =
+        previewNeighbor != null &&
         actualSource != null &&
         previewNeighbor.id == actualSource.id;
     final double start = continuous
         ? _sourceFadeStartFor(
-            _sourceNewNeighborOpacityAt(
-              _coverController.value.clamp(0.0, 1.0),
-            ),
+            _sourceNewNeighborOpacityAt(_coverController.value.clamp(0.0, 1.0)),
           )
         : 0.0;
     _sourceNeighborFade.value = start;
@@ -618,6 +762,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _pressedSlot = null;
     _outgoingCoverOnTop = false;
     _previewTrendAnchor = 0;
+    _handoff = null;
+    _handoffTails.clear();
     _centerArtworkRefreshing = false;
     _outgoingCenterArtworkUrl = null;
     _leftSlotOutgoing = null;
@@ -717,6 +863,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   void _onMorphChanged() {
     if (!mounted) return;
     setState(() {});
+  }
+
+  /// 飞行中的侧邻位 reveal 变化：只更新本地镜像（Stack 子树逐帧重建）。
+  void _onPageDeckRevealChanged() {
+    if (!mounted) return;
+    final double value = widget.morph?.pageDeckReveal.value ?? 1;
+    if (_pageDeckReveal.value != value) _pageDeckReveal.value = value;
   }
 
   /// current 未变时的空闲刷新：中心换图 + 左右槽位身份淡换。
@@ -879,6 +1032,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 三种收尾都属于会话时机（见 [CoverSwapSession.progressCompleted]）。
   void _handleCoverStatus(AnimationStatus status) {
     if (status != AnimationStatus.completed) return;
+    // 落位帧起稳态槽位接管：清掉接管快照，避免下一次会话误用过期起点。
+    _handoff = null;
+    _handoffTails.clear();
     _session.progressCompleted();
   }
 
@@ -887,6 +1043,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _playback?.removeListener(_handlePlaybackChanged);
     _removeCoverListener?.call();
     widget.morph?.removeListener(_onMorphChanged);
+    widget.morph?.pageDeckReveal.removeListener(_onPageDeckRevealChanged);
+    _pageDeckReveal.dispose();
     disarmTimeout();
     _session.dispose();
     _artworkRefreshFade.removeStatusListener(_handleArtworkRefreshStatus);
@@ -907,9 +1065,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   void _handleHorizontalDragStart(DragStartDetails details) {
     // 横滑接管：按压反馈让位（拖动跟手本身就是反馈）。
     _handleCoverPressEnd();
-    // 过渡动画 / 迷你⇄完整封面飞行期间不接受新手势（提交等待与校正由会话
-    // 自己拒绝）：一次拖动只对应一次切歌，避免两段过渡叠加。
-    if (_coverSwapMidFlight || widget.coverFlightActive) return;
+    // 过渡动画 / 迷你⇄完整封面飞行 / 顶栏⇄播放页飞行期间不接受新手势
+    // （提交等待与校正由会话自己拒绝）：一次拖动只对应一次切歌，避免两段
+    // 过渡叠加；飞行期间由副本承接，deck 本身冻结。
+    if (_coverSwapMidFlight ||
+        widget.coverFlightActive ||
+        (widget.morph?.pageHeaderHidden ?? false)) {
+      return;
+    }
     if (!_session.dragStart()) return;
     _dragStartX = details.globalPosition.dx;
     _dragStartY = details.globalPosition.dy;
@@ -1056,7 +1219,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 // 预览视觉（拖动跟手 / 提交等待 / 回退中）都由会话目标驱动：
                 // 回退中若换回当前曲目，目标槽位会在回弹半途闪成当前封面。
                 final showingPreview = session.showingPreviewTarget;
-                final animating = !correcting &&
+                final animating =
+                    !correcting &&
                     (showingPreview ||
                         _coverController.isAnimating ||
                         session.phase == CoverSwapPhase.settling);
@@ -1069,8 +1233,49 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 final double sideSize = widget.artDimension * 0.78;
                 final double offset = widget.artDimension * 0.30;
                 const double sideRotation = 0.05;
-
+                // 侧邻位展开进度：进入飞行最后 45% 从中心展开 / 离开反向收回；
+                // 减弱动效直接落位。中心卡不参与这个 transform（锚点必须是
+                // 稳态矩形）。
+                final double reveal = reduceMotionOf(context)
+                    ? 1.0
+                    : _pageDeckReveal.value.clamp(0.0, 1.0);
+                // 飞行期间整层手势与侧槽点击关闭（副本才是唯一交互/视觉来源）。
+                final bool deckFrozen = widget.morph?.pageHeaderHidden ?? false;
+                final _CoverHandoff? handoff = _handoff;
+                final bool handoffActive =
+                    handoff != null &&
+                    session.phase == CoverSwapPhase.settling &&
+                    trackKeyOf(session.from) == trackKeyOf(handoff.centerTrack);
                 final children = <Widget>[];
+
+                // 接管后更早的滑出卡：从捕获位置继续向左离场并快速淡出，
+                // 不参与新会话的邻位窗口（否则会与 oldNeighbor 同身份叠影）。
+                for (final tail in _handoffTails) {
+                  final _HandoffVisual visual = tail.visualAt(
+                    p,
+                    sideOffset: offset,
+                    fadeSpan: _takeoverTailFadeSpan,
+                  );
+                  if (visual.opacity <= 0.005) continue;
+                  children.add(
+                    _mainCoverLayer(
+                      context,
+                      tail.track,
+                      playbackProvider,
+                      artDimension: widget.artDimension,
+                      // 尾卡列表只在接管时变动：按身份 + 捕获进度给稳定
+                      // key，避免新增尾卡时旧 element 被换曲重建（图片闪）。
+                      layerKey: ValueKey(
+                        'coverHandoffTail:${tail.track.id.uri}:${tail.p0}',
+                      ),
+                      x: visual.x,
+                      rotation: visual.rotation,
+                      scale: visual.scale,
+                      opacity: visual.opacity,
+                      interactive: false,
+                    ),
+                  );
+                }
 
                 // 回拖/回弹时当前封面压在中心目标之上；正向拖动/落位时
                 // 目标在上（与稳态一致）。
@@ -1079,20 +1284,26 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 Widget? outgoingLayer;
                 // 目标槽位旧身份：窗口 p∈[0, 0.4] 内 0.85→0 原位淡出（无位移），
                 // 与源槽位新身份的淡入窗口（p∈[0.6, 1]）错开——同一槽位不出现
-                // 两张半透明封面叠加的「叠影」。
-                if (animating && session.oldNeighbor != null) {
-                  children.add(_sideCoverLayer(
-                    context,
-                    session.oldNeighbor,
-                    sideSize: sideSize,
-                    x: -offset * dir,
-                    rotation: -sideRotation * dir,
-                    opacity: _oldNeighborOpacityAt(pClamped),
-                    cardKey: PlayerCoverDeck.sideCoverCardKey(
-                      left: dir > 0,
-                      id: session.oldNeighbor!.id,
+                // 两张半透明封面叠加的「叠影」。接管会话中这个旧身份正是被
+                // 替换下来的上一段滑出卡，由 tail 层接管，不能重复渲染。
+                if (animating &&
+                    session.oldNeighbor != null &&
+                    !handoffActive) {
+                  children.add(
+                    _sideCoverLayer(
+                      context,
+                      session.oldNeighbor,
+                      sideSize: sideSize,
+                      x: -offset * dir,
+                      rotation: -sideRotation * dir,
+                      opacity: _oldNeighborOpacityAt(pClamped),
+                      reveal: reveal,
+                      cardKey: PlayerCoverDeck.sideCoverCardKey(
+                        left: dir > 0,
+                        id: session.oldNeighbor!.id,
+                      ),
                     ),
-                  ));
+                  );
                 }
 
                 if (animating) {
@@ -1110,25 +1321,39 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   final String? sourcePlaceholderUrl = showingPreview
                       ? (_realCoverUrlOf(session.to) ?? currentImageUrl)
                       : currentImageUrl;
-                  children.add(_sideCoverLayer(
-                    context,
-                    sourceTrack,
-                    sideSize: sideSize,
-                    x: offset * dir,
-                    rotation: sideRotation * dir,
-                    opacity: _sourceNewNeighborOpacityAt(pClamped),
-                    cardKey: sourceTrack == null
-                        ? null
-                        : PlayerCoverDeck.sideCoverCardKey(
-                            left: dir < 0,
-                            id: sourceTrack.id,
-                          ),
-                    placeholderUrl: sourcePlaceholderUrl,
-                  ));
+                  children.add(
+                    _sideCoverLayer(
+                      context,
+                      sourceTrack,
+                      sideSize: sideSize,
+                      x: offset * dir,
+                      rotation: sideRotation * dir,
+                      opacity: _sourceNewNeighborOpacityAt(pClamped),
+                      reveal: reveal,
+                      cardKey: sourceTrack == null
+                          ? null
+                          : PlayerCoverDeck.sideCoverCardKey(
+                              left: dir < 0,
+                              id: sourceTrack.id,
+                            ),
+                      placeholderUrl: sourcePlaceholderUrl,
+                    ),
+                  );
                   // 滑出的旧当前 → 目标槽位：全程插值（终点与稳态槽位卡
                   // 完全重合：位置/旋转/缩放/透明度一致，动画结束无 pop）。
+                  // 连切接管时以捕获的中心卡视觉为起点、按剩余行程
+                  // `q = (p - p0) / (1 - p0)` 插值（见 _handoffOutgoingVisual）；
+                  // 否则沿用本轮全局进度公式。
                   // 入栈时机由 outgoingOnTop 决定（见中心卡渲染）。
                   if (session.from != null) {
+                    final _HandoffVisual outgoing = handoffActive
+                        ? _handoffOutgoingVisual(p, handoff: handoff)!
+                        : _HandoffVisual(
+                            x: -offset * dir * t,
+                            rotation: -sideRotation * dir * t,
+                            scale: 1.0 - 0.22 * t,
+                            opacity: 1.0 - 0.15 * pClamped,
+                          );
                     outgoingLayer = _mainCoverLayer(
                       context,
                       session.from,
@@ -1136,10 +1361,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                       artDimension: widget.artDimension,
                       slotKey: PlayerCoverDeck.outgoingCoverCardKey,
                       layerKey: _outgoingLayerKey,
-                      x: -offset * dir * t,
-                      rotation: -sideRotation * dir * t,
-                      scale: 1.0 - 0.22 * t,
-                      opacity: 1.0 - 0.15 * pClamped,
+                      x: outgoing.x,
+                      rotation: outgoing.rotation,
+                      scale: outgoing.scale,
+                      opacity: outgoing.opacity,
                       interactive: false,
                     );
                   }
@@ -1149,10 +1374,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   // - 空闲期身份变化（加歌/删歌/开关随机/next 变空）以约
                   //   180ms 原位交叉淡化表达（旧身份淡出、新身份淡入）。
                   // 两个淡化控制器稳态都停在 1，倍率不产生任何影响。
-                  final double sourceFade = Curves.easeOut
-                      .transform(_sourceNeighborFade.value.clamp(0.0, 1.0));
-                  final double identityFade = Curves.easeOut
-                      .transform(_slotIdentityFade.value.clamp(0.0, 1.0));
+                  final double sourceFade = Curves.easeOut.transform(
+                    _sourceNeighborFade.value.clamp(0.0, 1.0),
+                  );
+                  final double identityFade = Curves.easeOut.transform(
+                    _slotIdentityFade.value.clamp(0.0, 1.0),
+                  );
                   // 邻位占位只在槽位身份过渡期间借用当前封面：冷启动首帧
                   // 左右图还没解码完时若也用当前封面，会短暂出现「三张
                   // 同一封面」的错位闪动；稳态交给各自的中性占位。
@@ -1161,39 +1388,46 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                           _sourceNeighborFade.isAnimating;
                   final String? sidePlaceholderUrl =
                       sideTransitioning ? currentImageUrl : null;
-                  children.addAll(_idleSideLayers(
-                    context,
-                    left: true,
-                    shown: session.previous,
-                    outgoing: _leftSlotOutgoing,
-                    sideSize: sideSize,
-                    x: -offset,
-                    rotation: -sideRotation,
-                    sourceFade: dir == -1 ? sourceFade : 1.0,
-                    identityFade: identityFade,
-                    placeholderUrl: sidePlaceholderUrl,
-                    // 左槽点击 = 上一首：只要展示了身份（快照 previous 或
-                    // 队列前一位，与后端 skipToPrevious 的回退、拖动预览
-                    // 同源）就可点；左槽为空时不渲染卡片，自然不可点。
-                    onTap: playbackProvider.hasTrack
-                        ? playbackProvider.skipToPrevious
-                        : null,
-                  ));
-                  children.addAll(_idleSideLayers(
-                    context,
-                    left: false,
-                    shown: playbackProvider.snapshot.next,
-                    outgoing: _rightSlotOutgoing,
-                    sideSize: sideSize,
-                    x: offset,
-                    rotation: sideRotation,
-                    sourceFade: dir == 1 ? sourceFade : 1.0,
-                    identityFade: identityFade,
-                    placeholderUrl: sidePlaceholderUrl,
-                    onTap: playbackProvider.hasTrack
-                        ? playbackProvider.skipToNext
-                        : null,
-                  ));
+                  children.addAll(
+                    _idleSideLayers(
+                      context,
+                      left: true,
+                      shown: session.previous,
+                      outgoing: _leftSlotOutgoing,
+                      sideSize: sideSize,
+                      x: -offset,
+                      rotation: -sideRotation,
+                      sourceFade: dir == -1 ? sourceFade : 1.0,
+                      identityFade: identityFade,
+                      reveal: reveal,
+                      placeholderUrl: sidePlaceholderUrl,
+                      // 左槽点击 = 上一首：只要展示了身份（快照 previous 或
+                      // 队列前一位，与后端 skipToPrevious 的回退、拖动预览
+                      // 同源）就可点；左槽为空时不渲染卡片，自然不可点。
+                      // 飞行期间禁用点击（副本/锚点交接期间不接受切歌）。
+                      onTap: !deckFrozen && playbackProvider.hasTrack
+                          ? playbackProvider.skipToPrevious
+                          : null,
+                    ),
+                  );
+                  children.addAll(
+                    _idleSideLayers(
+                      context,
+                      left: false,
+                      shown: playbackProvider.snapshot.next,
+                      outgoing: _rightSlotOutgoing,
+                      sideSize: sideSize,
+                      x: offset,
+                      rotation: sideRotation,
+                      sourceFade: dir == 1 ? sourceFade : 1.0,
+                      identityFade: identityFade,
+                      reveal: reveal,
+                      placeholderUrl: sidePlaceholderUrl,
+                      onTap: !deckFrozen && playbackProvider.hasTrack
+                          ? playbackProvider.skipToNext
+                          : null,
+                    ),
+                  );
                 }
 
                 // 中心位：拖动/提交/回退时由预览目标封面顶上（真正的切歌在松手后
@@ -1207,28 +1441,34 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                 if (correcting) {
                   // 对账校正：旧预览卡（原位）淡出、实际曲目卡淡入，全程
                   // 无位移/缩放——到位曲目与预览目标不同时只换图不搬位。
-                  final double correctionFade = Curves.easeOut
-                      .transform(_reconcileCorrection.value.clamp(0.0, 1.0));
+                  final double correctionFade = Curves.easeOut.transform(
+                    _reconcileCorrection.value.clamp(0.0, 1.0),
+                  );
                   if (session.to != null) {
-                    children.add(_mainCoverLayer(
-                      context,
-                      session.to,
-                      playbackProvider,
-                      artDimension: widget.artDimension,
-                      slotKey: PlayerCoverDeck.outgoingCoverCardKey,
-                      layerKey: _outgoingLayerKey,
-                      x: 0,
-                      rotation: 0,
-                      scale: 1.0,
-                      opacity: 1.0 - correctionFade,
-                      interactive: false,
-                    ));
+                    children.add(
+                      _mainCoverLayer(
+                        context,
+                        session.to,
+                        playbackProvider,
+                        artDimension: widget.artDimension,
+                        slotKey: PlayerCoverDeck.outgoingCoverCardKey,
+                        layerKey: _outgoingLayerKey,
+                        x: 0,
+                        rotation: 0,
+                        scale: 1.0,
+                        opacity: 1.0 - correctionFade,
+                        interactive: false,
+                        hidden: _pageCoverHidden,
+                      ),
+                    );
                   }
-                  children.addAll(_steadyCenterLayers(
-                    context,
-                    playbackProvider,
-                    opacity: correctionFade,
-                  ));
+                  children.addAll(
+                    _steadyCenterLayers(
+                      context,
+                      playbackProvider,
+                      opacity: correctionFade,
+                    ),
+                  );
                 } else if (animating) {
                   final Track? centerTrack = showingPreview
                       ? (session.to ?? widget.displayTrack)
@@ -1236,38 +1476,41 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   if (!outgoingOnTop && outgoingLayer != null) {
                     children.add(outgoingLayer);
                   }
-                  children.add(_mainCoverLayer(
-                    context,
-                    centerTrack,
-                    playbackProvider,
-                    artDimension: widget.artDimension,
-                    slotKey: PlayerCoverDeck.centerCoverCardKey,
-                    layerKey: _centerLayerKey,
-                    trackKey: centerTrack == null
-                        ? null
-                        : PlayerCoverDeck.centerCoverTrackKey(centerTrack.id),
-                    x: dir * offset * (1 - t),
-                    rotation: sideRotation * dir * (1 - t),
-                    scale: 0.78 + 0.22 * t,
-                    opacity: 0.85 + 0.15 * pClamped,
-                    interactive: !showingPreview,
-                    coverKey: widget.morph?.pageCoverKey,
-                    hidden: widget.morph?.pageHeaderHidden ?? false,
-                    placeholderUrl: showingPreview
-                        ? currentImageUrl
-                        : session.placeholderUrl,
-                  ));
+                  children.add(
+                    _mainCoverLayer(
+                      context,
+                      centerTrack,
+                      playbackProvider,
+                      artDimension: widget.artDimension,
+                      slotKey: PlayerCoverDeck.centerCoverCardKey,
+                      layerKey: _centerLayerKey,
+                      trackKey: centerTrack == null
+                          ? null
+                          : PlayerCoverDeck.centerCoverTrackKey(centerTrack.id),
+                      x: dir * offset * (1 - t),
+                      rotation: sideRotation * dir * (1 - t),
+                      scale: 0.78 + 0.22 * t,
+                      opacity: 0.85 + 0.15 * pClamped,
+                      interactive: !showingPreview,
+                      coverKey: widget.morph?.pageCoverKey,
+                      hidden: _pageCoverHidden,
+                      // 中心卡不借上一首封面当占位：目标图未预热时用曲目自己的
+                      // 默认封面 / 中性回退，避免旧封面从下面透出。
+                    ),
+                  );
                   if (outgoingOnTop && outgoingLayer != null) {
                     children.add(outgoingLayer);
                   }
                 } else {
                   // 稳态中心：同 id、URL 更新（音源补图）时以约 250ms 交叉
                   // 淡化换图（旧图淡出、新图淡入），不播切歌动画。
-                  children.addAll(_steadyCenterLayers(
-                    context,
-                    playbackProvider,
-                    opacity: 1.0,
-                  ));
+                  children.addAll(
+                    _steadyCenterLayers(
+                      context,
+                      playbackProvider,
+                      opacity: 1.0,
+                    ),
+                  );
                 }
 
                 return Stack(clipBehavior: Clip.none, children: children);
@@ -1289,8 +1532,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   /// 源槽位新身份透明度：窗口 p∈[0.6, 1] 内 0→0.85（窗口内 easeInOut）。
   double _sourceNewNeighborOpacityAt(double p) {
     final double window =
-        ((p - _newNeighborFadeStart) / (1 - _newNeighborFadeStart))
-            .clamp(0.0, 1.0);
+        ((p - _newNeighborFadeStart) / (1 - _newNeighborFadeStart)).clamp(
+          0.0,
+          1.0,
+        );
     return _neighborOpacity * Curves.easeInOut.transform(window);
   }
 
@@ -1328,36 +1573,46 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     required double rotation,
     required double sourceFade,
     required double identityFade,
+    required double reveal,
     required String? placeholderUrl,
     required VoidCallback? onTap,
   }) {
     final double base = _neighborOpacity * sourceFade;
     final layers = <Widget>[];
     if (outgoing != null) {
-      layers.add(_sideCoverLayer(
-        context,
-        outgoing,
-        sideSize: sideSize,
-        x: x,
-        rotation: rotation,
-        opacity: base * (1 - identityFade),
-        cardKey: PlayerCoverDeck.sideCoverCardKey(left: left, id: outgoing.id),
-        placeholderUrl: placeholderUrl,
-      ));
+      layers.add(
+        _sideCoverLayer(
+          context,
+          outgoing,
+          sideSize: sideSize,
+          x: x,
+          rotation: rotation,
+          opacity: base * (1 - identityFade),
+          reveal: reveal,
+          cardKey: PlayerCoverDeck.sideCoverCardKey(
+            left: left,
+            id: outgoing.id,
+          ),
+          placeholderUrl: placeholderUrl,
+        ),
+      );
     }
     if (shown != null) {
-      layers.add(_sideCoverLayer(
-        context,
-        shown,
-        sideSize: sideSize,
-        x: x,
-        rotation: rotation,
-        opacity: base * identityFade,
-        cardKey: PlayerCoverDeck.sideCoverCardKey(left: left, id: shown.id),
-        placeholderUrl: placeholderUrl,
-        onTap: onTap,
-        pressSlot: left ? _DeckSlot.left : _DeckSlot.right,
-      ));
+      layers.add(
+        _sideCoverLayer(
+          context,
+          shown,
+          sideSize: sideSize,
+          x: x,
+          rotation: rotation,
+          opacity: base * identityFade,
+          reveal: reveal,
+          cardKey: PlayerCoverDeck.sideCoverCardKey(left: left, id: shown.id),
+          placeholderUrl: placeholderUrl,
+          onTap: onTap,
+          pressSlot: left ? _DeckSlot.left : _DeckSlot.right,
+        ),
+      );
     }
     return layers;
   }
@@ -1369,56 +1624,63 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     PlaybackProvider playbackProvider, {
     required double opacity,
   }) {
-    final double artworkFade =
-        Curves.easeOut.transform(_artworkRefreshFade.value.clamp(0.0, 1.0));
+    final double artworkFade = Curves.easeOut.transform(
+      _artworkRefreshFade.value.clamp(0.0, 1.0),
+    );
     final layers = <Widget>[];
     if (_centerArtworkRefreshing && artworkFade < 1) {
-      layers.add(_mainCoverLayer(
+      layers.add(
+        _mainCoverLayer(
+          context,
+          widget.displayTrack,
+          playbackProvider,
+          artDimension: widget.artDimension,
+          slotKey: PlayerCoverDeck.outgoingArtworkCardKey,
+          layerKey: _outgoingArtworkLayerKey,
+          x: 0,
+          rotation: 0,
+          scale: 1.0,
+          opacity: opacity * (1 - artworkFade),
+          interactive: false,
+          hidden: _pageCoverHidden,
+          // 空串表达「明确无封面」（音源补图前的起点）：传 null 会被当作
+          // 「未提供覆盖」而回退到曲目当前（新）URL，旧图卡就变成新图了。
+          artworkUrlOverride: _outgoingCenterArtworkUrl ?? '',
+          fallback: buildFallbackArtwork(context),
+        ),
+      );
+    }
+    layers.add(
+      _mainCoverLayer(
         context,
         widget.displayTrack,
         playbackProvider,
         artDimension: widget.artDimension,
-        slotKey: PlayerCoverDeck.outgoingArtworkCardKey,
-        layerKey: _outgoingArtworkLayerKey,
+        slotKey: PlayerCoverDeck.centerCoverCardKey,
+        layerKey: _centerLayerKey,
+        trackKey: widget.displayTrack == null
+            ? null
+            : PlayerCoverDeck.centerCoverTrackKey(widget.displayTrack!.id),
         x: 0,
         rotation: 0,
         scale: 1.0,
-        opacity: opacity * (1 - artworkFade),
-        interactive: false,
-        // 空串表达「明确无封面」（音源补图前的起点）：传 null 会被当作
-        // 「未提供覆盖」而回退到曲目当前（新）URL，旧图卡就变成新图了。
-        artworkUrlOverride: _outgoingCenterArtworkUrl ?? '',
-        fallback: buildFallbackArtwork(context),
-      ));
-    }
-    layers.add(_mainCoverLayer(
-      context,
-      widget.displayTrack,
-      playbackProvider,
-      artDimension: widget.artDimension,
-      slotKey: PlayerCoverDeck.centerCoverCardKey,
-      layerKey: _centerLayerKey,
-      trackKey: widget.displayTrack == null
-          ? null
-          : PlayerCoverDeck.centerCoverTrackKey(widget.displayTrack!.id),
-      x: 0,
-      rotation: 0,
-      scale: 1.0,
-      opacity: opacity * artworkFade,
-      interactive: true,
-      coverKey: widget.morph?.pageCoverKey,
-      hidden: widget.morph?.pageHeaderHidden ?? false,
-      placeholderUrl: _session.placeholderUrl,
-    ));
+        opacity: opacity * artworkFade,
+        interactive: true,
+        coverKey: widget.morph?.pageCoverKey,
+        hidden: _pageCoverHidden,
+      ),
+    );
     return layers;
   }
 
   /// 邻位封面（压在当前封面之下；[onTap] 非空时可点击切歌）。
   ///
-  /// 只渲染稳态几何（位置/旋转/尺寸固定），透明度由调用方按窗口/淡入
-  /// 计算；侧邻位无独立的位移/缩放入场演出。不参与 hit test 时
-  /// （[onTap] 为空）忽略指针。[cardKey] 是身份语义 key（空闲淡换时同一
-  /// 槽位并存新旧两张卡，测试按身份定位）。
+  /// 稳态几何固定（位置/旋转/尺寸），透明度由调用方按窗口/淡入计算。
+  /// [reveal] 是进入/离开播放页时侧槽从中心展开/收回的进度：0 = 收回中心
+  /// （不渲染，省掉缩放为 0 的图片层），1 = 稳态侧槽（直接返回原 child，
+  /// 不叠加 transform）。中心卡不在这里，所以 reveal 不会改变封面锚点。
+  /// 不参与 hit test 时（[onTap] 为空）忽略指针。[cardKey] 是身份语义 key
+  /// （空闲淡换时同一槽位并存新旧两张卡，测试按身份定位）。
   /// 卡本体的渲染归 [CoverCard]（可点邻位的手势 child 即它）。
   Widget _sideCoverLayer(
     BuildContext context,
@@ -1427,14 +1689,26 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     required double x,
     required double rotation,
     required double opacity,
+    required double reveal,
     Key? cardKey,
     String? placeholderUrl,
     VoidCallback? onTap,
     _DeckSlot? pressSlot,
   }) {
     if (track == null) return const SizedBox.shrink();
-    Widget card = _buildCoverCard(context, track, sideSize,
-        key: cardKey, placeholderUrl: placeholderUrl);
+    final double progress = reveal.clamp(0.0, 1.0);
+    if (progress <= 0) return const SizedBox.shrink();
+    final bool settled = progress >= 1.0;
+    final double eased = settled
+        ? 1.0
+        : Curves.easeOutCubic.transform(progress);
+    Widget card = _buildCoverCard(
+      context,
+      track,
+      sideSize,
+      key: cardKey,
+      placeholderUrl: placeholderUrl,
+    );
     if (onTap != null) {
       final slot = pressSlot!;
       card = Transform.scale(
@@ -1456,19 +1730,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         ),
       );
     }
+    final Widget body = Opacity(
+      opacity: settled ? opacity : opacity * eased,
+      child: IgnorePointer(ignoring: onTap == null, child: card),
+    );
     return Positioned.fill(
       child: Center(
         child: Transform.translate(
-          offset: Offset(x, 0),
+          offset: Offset(settled ? x : x * eased, 0),
           child: Transform.rotate(
-            angle: rotation,
-            child: Opacity(
-              opacity: opacity,
-              child: IgnorePointer(
-                ignoring: onTap == null,
-                child: card,
-              ),
-            ),
+            angle: settled ? rotation : rotation * eased,
+            child: settled ? body : Transform.scale(scale: eased, child: body),
           ),
         ),
       ),
@@ -1495,7 +1767,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     Key? layerKey,
     Key? coverKey,
     bool hidden = false,
-    String? placeholderUrl,
     String? artworkUrlOverride,
     Widget? fallback,
   }) {
@@ -1506,13 +1777,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             playbackProvider,
             artDimension: artDimension,
             coverKey: coverKey,
-            hidden: hidden,
-            placeholderUrl: placeholderUrl,
           )
-        : _buildCoverCard(context, track, artDimension,
-            placeholderUrl: placeholderUrl,
+        : _buildCoverCard(
+            context,
+            track,
+            artDimension,
             artworkUrlOverride: artworkUrlOverride,
-            fallback: fallback);
+            fallback: fallback,
+          );
     if (slotKey != null) {
       card = KeyedSubtree(key: slotKey, child: card);
     }
@@ -1528,7 +1800,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             angle: rotation,
             child: Transform.scale(
               scale: scale,
-              child: Opacity(opacity: opacity, child: card),
+              // 隐藏（飞行中）直接乘进同一条透明度：零时长、同层合成，
+              // 不嵌套第二层 Opacity（锚点仍在同一布局盒内）。
+              child: Opacity(opacity: hidden ? 0 : opacity, child: card),
             ),
           ),
         ),
@@ -1589,8 +1863,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     PlaybackProvider playback, {
     required double artDimension,
     Key? coverKey,
-    bool hidden = false,
-    String? placeholderUrl,
   }) {
     return AnimatedBuilder(
       // 播放态缩放 × 按压反馈（两者相乘合成，互不覆盖）：播放态只用极轻微
@@ -1621,22 +1893,14 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
               key: coverKey,
               child: KeyedSubtree(
                 key: widget.fullCoverKey,
-                child: AnimatedOpacity(
-                  // 隐藏用淡出（飞行起点在别处，淡出自然）；亮出必须瞬时——
-                  // 飞行副本与真身在同一帧交接，淡入会造成尾段亮度下陷（闪动）。
-                  duration: (hidden || widget.coverFlightActive)
-                      ? const Duration(milliseconds: 160)
-                      : Duration.zero,
-                  // 顶栏⇄播放页飞行 / 迷你⇄完整飞行期间真身隐藏，
-                  // 由飞行副本承接（其余元素不参与共享飞行）。
-                  opacity: (hidden || widget.coverFlightActive) ? 0 : 1,
-                  child: _buildCoverCard(
-                    context,
-                    track,
-                    artDimension,
-                    fallback: buildFallbackArtwork(context),
-                    placeholderUrl: placeholderUrl,
-                  ),
+                // 隐藏透明度由外层中心层按 `hidden` 乘进同一条 Opacity：
+                // 飞行副本精确承接起手/落点，真身必须在飞行第一帧就隐去、
+                // 落位帧瞬时亮出（这里不再嵌套第二层透明度）。
+                child: _buildCoverCard(
+                  context,
+                  track,
+                  artDimension,
+                  fallback: buildFallbackArtwork(context),
                 ),
               ),
             ),
@@ -1649,3 +1913,78 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
 /// 封面堆叠的槽位标识（按压反馈按槽位定位）。
 enum _DeckSlot { left, center, right }
+
+/// 线性插值（避免为一个几何 helper 引入 dart:ui 的 lerpDouble）。
+double _lerp(double a, double b, double t) => a + (b - a) * t;
+
+/// 接管会话捕获的起点：上一段中心卡在 p0 的侧槽入场公式值。
+///
+/// [centerTrack] 是上一段的进场卡（也就是新会话的滑出卡）；[p0] 是新会话
+/// 接管时的全局进度，滑出卡用 `(p - p0) / (1 - p0)` 走完剩余行程。
+class _CoverHandoff {
+  const _CoverHandoff({
+    required this.p0,
+    required this.direction,
+    required this.centerTrack,
+  });
+
+  final double p0;
+  final int direction;
+  final Track centerTrack;
+}
+
+/// 一帧可复用的封面视觉状态（接管插值的输入/输出）。
+class _HandoffVisual {
+  const _HandoffVisual({
+    required this.x,
+    required this.rotation,
+    required this.scale,
+    required this.opacity,
+  });
+
+  final double x;
+  final double rotation;
+  final double scale;
+  final double opacity;
+}
+
+/// 接管后被替换下来的更早滑出卡：从捕获视觉继续向左离场并短淡出。
+class _CoverHandoffTail {
+  const _CoverHandoffTail({
+    required this.track,
+    required this.p0,
+    required this.direction,
+    required this.x,
+    required this.scale,
+    required this.rotation,
+    required this.opacity,
+  });
+
+  final Track track;
+  final double p0;
+  final int direction;
+  final double x;
+  final double scale;
+  final double rotation;
+  final double opacity;
+
+  /// 当前全局进度 [progress] 下的视觉：前 [fadeSpan] 段剩余行程内淡出，
+  /// 同时继续向远离中心的方向滑出（不回到新会话的侧槽窗口）。
+  _HandoffVisual visualAt(
+    double progress, {
+    required double sideOffset,
+    required double fadeSpan,
+  }) {
+    final double q = ((progress - p0) / (1 - p0)).clamp(0.0, 1.0);
+    final double slide = Curves.easeOut.transform(q);
+    final double fade = Curves.easeOut.transform(
+      (q / fadeSpan).clamp(0.0, 1.0),
+    );
+    return _HandoffVisual(
+      x: _lerp(x, -sideOffset * direction * 1.15, slide),
+      rotation: _lerp(rotation, -0.05 * direction * 1.15, slide),
+      scale: _lerp(scale, 0.70, slide),
+      opacity: opacity * (1 - fade),
+    );
+  }
+}

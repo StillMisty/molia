@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player_morph.dart';
 import 'package:material_ui/material_ui.dart';
@@ -70,13 +71,19 @@ void main() {
     await tester.pump();
   }
 
-  /// 飞行副本图片的裁剪圆角（MorphCover 内部 ClipRRect）。
+  /// 飞行副本图片的裁剪圆角。
+  ///
+  /// 圆角由 `CoverCard` 的逐帧外观裁剪（`appearance.clip`）唯一给出；
+  /// MorphCover 内部仍有一层零圆角 ClipRRect（图片子树的稳定壳），
+  /// 取 `CoverCard` 下第一个 ClipRRect 才是对外可见的裁剪。
   BorderRadius coverClip(WidgetTester tester) {
     final clip = tester.widget<ClipRRect>(
-      find.descendant(
-        of: find.byType(MorphCover),
-        matching: find.byType(ClipRRect),
-      ),
+      find
+          .descendant(
+            of: find.byType(CoverCard),
+            matching: find.byType(ClipRRect),
+          )
+          .first,
     );
     return clip.borderRadius as BorderRadius;
   }
@@ -108,6 +115,18 @@ void main() {
         )
         .size!;
   }
+
+  test('pageDeckRevealAt：侧邻位只在飞行最后约 45% 展开/收回', () {
+    // 进入：前半程收在中心，落位帧完全展开。
+    expect(PlayerMorphController.pageDeckRevealAt(0, toPage: true), 0);
+    expect(PlayerMorphController.pageDeckRevealAt(0.4, toPage: true), 0);
+    expect(PlayerMorphController.pageDeckRevealAt(0.55, toPage: true), 0);
+    expect(PlayerMorphController.pageDeckRevealAt(1, toPage: true), 1);
+    // 离开：从稳态反向收回，起点仍是 1、落点 0（飞行期间页中心同时隐藏）。
+    expect(PlayerMorphController.pageDeckRevealAt(0, toPage: false), 1);
+    expect(PlayerMorphController.pageDeckRevealAt(0.55, toPage: false), 1);
+    expect(PlayerMorphController.pageDeckRevealAt(1, toPage: false), 0);
+  });
 
   testWidgets('双向飞行：外观（圆角/描边/阴影）与回退图标严格取两端真身', (tester) async {
     // 端点值由 cover_appearance_test.dart 精确覆盖，这里只锁 widget 级接线：

@@ -20,7 +20,6 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../models/play_mode.dart';
-import '../services/covers/cover_resolution.dart';
 import 'cover_appearance.dart';
 import 'player_cover_swap.dart';
 
@@ -74,7 +73,10 @@ abstract interface class CoverSwapHost {
   void releasePreview({double progressVelocity = 0});
 
   /// 即时切歌入场：停掉旧校正、把进度钉回起点，post-frame 起播入场。
-  void startSettle();
+  ///
+  /// [direction] 是本次切歌解析后的方向：宿主据此判断弹簧途中能否沿用
+  /// 上一段进度做连续接管（方向反转必须走落位兜底）。
+  void startSettle({required int direction});
 
   /// 拖动中切歌落位：动画不接管，交还手指驱动。
   void settleDuringDrag();
@@ -110,24 +112,12 @@ abstract interface class CoverSwapHost {
 
 /// 一次切歌（拖动/即时）的会话状态机。
 class CoverSwapSession extends ChangeNotifier {
-  CoverSwapSession({
-    required this._host,
-    required this._covers,
-  });
+  CoverSwapSession({required this._host});
 
   /// 提交等待的兜底时限：取链失败等情况下不能永远停在邻位预览。
   static const Duration commitTimeout = Duration(seconds: 6);
 
   final CoverSwapHost _host;
-
-  /// 封面解析器（组合根 / deck 注入；会话不直接读全局存储）。
-  CoverResolver _covers;
-
-  /// 运行时换绑（deck 的 Provider 被替换时）；稳态下等价于构造注入。
-  void useCoverResolver(CoverResolver covers) => _covers = covers;
-
-  /// 会话里只需要真实封面（切歌占位图；默认封面是展示兜底，不作为滑出占位）。
-  String? _realCoverUrlOf(Track? track) => _covers.realOf(track).url;
 
   /// 最近一次摄入的播放快照（[observe] 写入；派生左槽身份与预览目标）。
   PlaybackSnapshot? _snapshot;
@@ -162,9 +152,6 @@ class CoverSwapSession extends ChangeNotifier {
 
   /// 空闲帧缓存的下一首（向后拖动时的旧邻位身份）。
   Track? _lastNext;
-
-  /// 旧封面 URL：新封面未加载完成时作为占位，避免黑块闪一下。
-  String? _placeholderUrl;
 
   /// 上一首非空展示曲目（滑出身份的来源；快照 current 为 null 时不更新）。
   Track? _seenTrack;
@@ -208,7 +195,6 @@ class CoverSwapSession extends ChangeNotifier {
 
   Track? get oldNeighbor => _oldNeighbor;
   Track? get previous => _previous;
-  String? get placeholderUrl => _placeholderUrl;
   String? get animatedTrackId => _animatedTrackId;
   bool get visible => _visible;
   bool get dragActive => _dragActive;
@@ -491,23 +477,24 @@ class CoverSwapSession extends ChangeNotifier {
     // 拖动预览进行中时，阶段与预览目标归拖动会话（切歌只更新身份供拖动继续
     // 驱动）；其余情况进入即时切歌的「完成中」。
     final bool duringDrag = previewActive;
+    final int nextDirection = resolved == coverSwapBackward ? -1 : 1;
     if (!duringDrag) {
       _correctionDeferred = false;
       // 新会话先把进度钉在起点：检测帧就画在 p=0（与稳态的源槽位卡一致），
-      // 而不是先画落位态、动画启动后再回跳。钉值会同步触发一次 completed，
-      // 此时阶段仍未切换，[progressCompleted] 的守卫会忽略它。
-      _host.startSettle();
+      // 而不是先画落位态、动画启动后再回跳。弹簧途中同一方向时宿主会改为
+      // 连续接管（捕获上一段视觉），不走钉回起点的路径。
+      _host.startSettle(direction: nextDirection);
       _phase = CoverSwapPhase.settling;
       _to = track;
     }
-    _direction = resolved == coverSwapBackward ? -1 : 1;
+    _direction = nextDirection;
     _oldNeighbor = resolved == coverSwapBackward ? _lastNext : _previous;
     // 新快照即下一次切歌的「变化前」基准（快速连切时动画中不会有空闲帧）。
     _cacheDirectionHints(snapshot);
     _previous = snapshot.previous;
     _from = oldTrack;
-    // 旧封面作为切歌动画中未加载完成时的占位，避免黑块闪一下。
-    _placeholderUrl = _realCoverUrlOf(oldTrack) ?? _placeholderUrl;
+    // 注意：中心/预览卡不借用旧封面作加载占位——目标曲目自己的图未命中时
+    // 走默认封面/中性回退，否则目标图未预热时旧封面会从下面透出来。
     _host.disarmTimeout();
     if (duringDrag) _host.settleDuringDrag();
     notifyListeners();
@@ -553,9 +540,6 @@ class CoverSwapSession extends ChangeNotifier {
     _previewSourceNeighbor = null;
     _correctionDeferred = false;
     _host.disarmTimeout();
-    if (adoptTrack != null) {
-      _placeholderUrl = _realCoverUrlOf(adoptTrack) ?? _placeholderUrl;
-    }
     final snapshot = _snapshot;
     if (snapshot != null) {
       _lastNext = snapshot.next;
