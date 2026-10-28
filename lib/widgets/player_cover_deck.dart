@@ -2228,7 +2228,10 @@ class _SideRevealSlot extends StatelessWidget {
             return Transform.translate(
               offset: Offset(x * eased, 0),
               child: Transform.rotate(
-                angle: rotation * eased,
+                // 倾角保持稳态：只让位置/缩放/透明度从中心展开。若倾角也从
+                // 0 插值，侧图会在靠近中心时先水平出现再逐渐倾斜，观感上像
+                // 一次独立的「转正」二次动作（用户反馈的突兀来源）。
+                angle: rotation,
                 child: Transform.scale(
                   scale: eased,
                   child: Opacity(
