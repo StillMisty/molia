@@ -64,8 +64,8 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final downloads = context.watch<DownloadService?>();
-    final queue = context.select<PlaybackProvider, List<Track>>(
-      (provider) => provider.snapshot.queue,
+    final queueLength = context.select<PlaybackProvider, int>(
+      (provider) => provider.snapshot.queue.length,
     );
 
     return SettingsSubPage(
@@ -81,10 +81,16 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               key: const Key('downloadsBatchQueueItem'),
               icon: Icons.playlist_add_rounded,
               title: l10n.downloadsBatchQueue,
-              subtitle: l10n.downloadsBatchQueueSubtitle(queue.length),
-              onTap: downloads == null || !downloads.supported || queue.isEmpty
+              subtitle: l10n.downloadsBatchQueueSubtitle(queueLength),
+              onTap: downloads == null ||
+                      !downloads.supported ||
+                      queueLength == 0
                   ? null
-                  : () => unawaited(_batchDownload(downloads, queue)),
+                  : () {
+                      final queue =
+                          context.read<PlaybackProvider>().snapshot.queue;
+                      unawaited(_batchDownload(downloads, queue));
+                    },
             ),
             SettingsNavTile(
               key: const Key('downloadsBatchPlaylistItem'),
@@ -340,14 +346,17 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     List<Track> queue,
   ) async {
     final l10n = AppLocalizations.of(context)!;
-    final eligible = [
-      for (final track in queue)
-        if (track.id.sourceKey != kLocalSourceKey &&
-            !(downloads.recordForTrack(track)?.hasAudio ?? false))
-          track,
-    ];
+    final seen = <String>{};
+    final eligible = <Track>[];
+    for (final track in queue) {
+      if (track.id.sourceKey == kLocalSourceKey) continue;
+      if (downloads.recordForTrack(track)?.hasAudio ?? false) continue;
+      if (downloads.taskForTrack(track)?.isActive ?? false) continue;
+      if (!seen.add(track.id.uri)) continue;
+      eligible.add(track);
+    }
     if (eligible.isEmpty) {
-      _showMessage(l10n.downloadsEmpty);
+      _showMessage(l10n.downloadsNothingToAdd);
       return;
     }
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
@@ -375,8 +384,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       _showMessage(l10n.downloadsEmpty);
       return;
     }
-    // 弹层挂 root navigator（M3EDialog.show 语义）；本页位于设置弹层的
-    // 嵌套 Navigator 内，页面 context 上的 pop 会误退本页。
+    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final picked = await M3EDialog.show<PlaylistInfo>(
       context,
@@ -488,8 +496,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       _showMessage(l10n.downloadsCleanupOrphansNone);
       return;
     }
-    // 弹层挂 root navigator（M3EDialog.show 语义）；本页位于设置弹层的
-    // 嵌套 Navigator 内，页面 context 上的 pop 会误退本页。
+    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final names = [for (final path in orphans.take(5)) p.basename(path)];
     final scheme = Theme.of(context).colorScheme;
@@ -542,7 +549,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final count = await downloads.deleteOrphanFiles();
+      final count = await downloads.deleteOrphanFiles(paths: orphans);
       if (!mounted) return;
       _showMessage(l10n.downloadsCleanupOrphansDone(count));
     } finally {

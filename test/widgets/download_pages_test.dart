@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/downloads/downloads_repository.dart';
+import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/download_settings_page.dart';
@@ -37,6 +39,24 @@ class _RecordingDownloadService extends DownloadService {
       );
 
   final List<List<Track>> batches = [];
+  final Set<String> downloadedKeys = {};
+  final Map<String, DownloadTask> activeTasks = {};
+
+  @override
+  DownloadedTrack? recordForTrack(Track track) {
+    if (!downloadedKeys.contains(track.id.uri)) return null;
+    return DownloadedTrack(
+      originSourceKey: track.id.sourceKey,
+      originSongId: track.id.id,
+      title: track.title,
+      filePath: '/downloads/${track.id.id}.mp3',
+      sizeBytes: 1,
+      downloadedAt: 1,
+    );
+  }
+
+  @override
+  DownloadTask? taskForTrack(Track track) => activeTasks[track.id.uri];
 
   @override
   Future<(int, int)> downloadBatch(Iterable<Track> tracks) async {
@@ -406,6 +426,72 @@ void main() {
     expect(service.cancelCalls, 22);
   });
 
+  Track makeQueueTrack(String id) => Track(
+    id: TrackId('kw', id),
+    title: '曲目 $id',
+    origin: TrackOrigin.builtin,
+    payload: {'songmid': id},
+  );
+
+  testWidgets('下载管理页：批量跳过已下载 / 进行中并按 key 去重', (tester) async {
+    final downloaded = makeQueueTrack('1');
+    final activeTrack = makeQueueTrack('2');
+    final target = makeQueueTrack('3');
+    final service = _RecordingDownloadService();
+    await service.init();
+    addTearDown(service.dispose);
+    service.downloadedKeys.add(downloaded.id.uri);
+    service.activeTasks[activeTrack.id.uri] = DownloadTask(
+      track: activeTrack,
+      kind: DownloadTaskKind.audio,
+      quality: '320k',
+    )..markRunning();
+    backend.emit(
+      BackendSnapshot(
+        current: downloaded,
+        queue: [downloaded, activeTrack, target, target],
+        currentIndex: 0,
+        duration: const Duration(seconds: 30),
+      ),
+    );
+
+    await pumpPage(tester, const DownloadsManagePage(), service: service);
+    await tester.tap(find.byKey(const Key('downloadsBatchQueueItem')));
+    await tester.pumpAndSettle();
+
+    expect(service.batches.single, hasLength(1));
+    expect(service.batches.single.single.id, target.id);
+  });
+
+  testWidgets('下载管理页：没有可下载的歌曲时提示专用文案', (tester) async {
+    final downloaded = makeQueueTrack('1');
+    final activeTrack = makeQueueTrack('2');
+    final service = _RecordingDownloadService();
+    await service.init();
+    addTearDown(service.dispose);
+    service.downloadedKeys.add(downloaded.id.uri);
+    service.activeTasks[activeTrack.id.uri] = DownloadTask(
+      track: activeTrack,
+      kind: DownloadTaskKind.audio,
+      quality: '320k',
+    )..markRunning();
+    backend.emit(
+      BackendSnapshot(
+        current: downloaded,
+        queue: [downloaded, activeTrack],
+        currentIndex: 0,
+        duration: const Duration(seconds: 30),
+      ),
+    );
+
+    await pumpPage(tester, const DownloadsManagePage(), service: service);
+    await tester.tap(find.byKey(const Key('downloadsBatchQueueItem')));
+    await tester.pumpAndSettle();
+
+    expect(service.batches, isEmpty);
+    expect(find.text('没有可下载的歌曲（已下载或正在下载）'), findsOneWidget);
+  });
+
   testWidgets('下载管理页（嵌套 Navigator）：选歌单弹层关闭，页面保留并启动批量', (tester) async {
     final repository = FakeLibraryRepository();
     addTearDown(repository.dispose);
@@ -445,7 +531,7 @@ void main() {
     await tester.tap(find.byKey(Key('downloadsPlaylist_$playlistId')));
     await tester.pumpAndSettle();
 
-    // 弹层关闭、页面仍在（旧实现会把本页 pop 掉、弹窗留着）。
+    // 弹层关闭、页面仍在，歌单已交给批量流程。
     expect(find.byType(DownloadsManagePage), findsOneWidget);
     expect(find.byKey(Key('downloadsPlaylist_$playlistId')), findsNothing);
     expect(service.batches.single.single.id, const TrackId('kw', '1'));

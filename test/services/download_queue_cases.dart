@@ -215,7 +215,7 @@ void main() {
     expect(oldTask.status, DownloadTaskStatus.failed);
   });
 
-  test('失败任务：移除与清空', () async {
+  test('失败任务：可逐条移除', () async {
     final attempts = <Completer<void>>[];
     final queue = DownloadQueue((task) async {
       final gate = Completer<void>();
@@ -238,9 +238,6 @@ void main() {
 
     queue.dismiss(one.key);
     expect(queue.tasks.map((task) => task.key), [two.key]);
-
-    queue.clearFailed();
-    expect(queue.tasks, isEmpty);
   });
 
   test('进度只通知任务自身，队列不在进度时通知', () async {
@@ -274,6 +271,23 @@ void main() {
     gate.complete();
     await future;
     await flush();
+  });
+
+  test('dispose 后恢复的 runner 不再通知队列', () async {
+    final gate = Completer<void>();
+    final queue = DownloadQueue((task) => gate.future);
+    var notifications = 0;
+    queue.addListener(() => notifications++);
+    final task = audio('1');
+    queue.enqueue(task);
+    await flush();
+    final before = notifications;
+
+    queue.dispose();
+    gate.complete();
+    await flush();
+
+    expect(notifications, before);
   });
 
   test('非 audio 任务失败自动移除（失败由调用方提示）', () async {

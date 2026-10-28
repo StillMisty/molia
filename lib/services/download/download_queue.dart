@@ -1,11 +1,9 @@
 /// 下载任务队列：全局严格串行、单 worker、FIFO 的唯一实现。
 ///
 /// 为什么独立成模块：下载编排（取链 / 落盘 / 落库）与「谁先谁后、排队 /
-/// 取消 / 重试」是两件事。此前单曲下载直接跑、批量在服务里顺序 await，
-/// 分项（歌词 / 封面）又会与音频并发写同一条记录；进度还和记录变化挤在
-/// 一个 [ChangeNotifier] 里，页面为了 10Hz 进度被迫整页重建。
+/// 取消 / 重试」是两件事。所有下载都经过同一条队列，分项（歌词 / 封面）与
+/// 音频不会并发写同一条记录；进度与记录变化也分开通知，页面只为任务区重建。
 ///
-/// 现在：
 /// - 队列只在任务增删 / 状态变化时通知（页面只重建任务区）；
 /// - 进度由 [DownloadTask] 自己通知并做 100ms 合并（首个分片 / 100% /
 ///   终态立即送达）；系统通知的 500ms 节流仍由通知 presenter 负责；
@@ -111,6 +109,19 @@ class DownloadTask extends ChangeNotifier {
   SourceFailure? _failure;
   int? _lastProgressNotifiedAt;
   Completer<void> _completion = Completer<void>();
+  bool _disposed = false;
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   DownloadTaskStatus get status => _status;
 
@@ -219,6 +230,11 @@ class DownloadQueue extends ChangeNotifier {
 
   final Queue<DownloadTask> _pending = Queue<DownloadTask>();
   bool _workerScheduled = false;
+  bool _disposed = false;
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
 
   /// 运行中 + 排队中 + 失败任务（running 在前，其次按入队顺序）。
   List<DownloadTask> get tasks => List.unmodifiable(<DownloadTask>[
@@ -246,16 +262,11 @@ class DownloadQueue extends ChangeNotifier {
       _tasks.remove(previous);
       if (!identical(previous, task)) previous.dispose();
     }
-    if (!identical(previous, task) &&
-        task.status != DownloadTaskStatus.queued) {
-      task.resetForRetry();
-    } else if (identical(previous, task)) {
-      task.resetForRetry();
-    }
+    if (task.status != DownloadTaskStatus.queued) task.resetForRetry();
     if (!_tasks.contains(task)) _tasks.add(task);
     _active[task.key] = task;
     _pending.add(task);
-    notifyListeners();
+    _notify();
     _scheduleWorker();
     return task.done;
   }
@@ -268,7 +279,7 @@ class DownloadQueue extends ChangeNotifier {
     _active.remove(key);
     _tasks.remove(task);
     task.markCancelled();
-    notifyListeners();
+    _notify();
     return true;
   }
 
@@ -277,21 +288,11 @@ class DownloadQueue extends ChangeNotifier {
     final task = _failed.remove(key);
     if (task == null) return;
     _tasks.remove(task);
-    notifyListeners();
-  }
-
-  /// 清空全部失败任务。
-  void clearFailed() {
-    if (_failed.isEmpty) return;
-    for (final task in _failed.values) {
-      _tasks.remove(task);
-    }
-    _failed.clear();
-    notifyListeners();
+    _notify();
   }
 
   void _scheduleWorker() {
-    if (_workerScheduled) return;
+    if (_disposed || _workerScheduled) return;
     _workerScheduled = true;
     scheduleMicrotask(() {
       unawaited(_drain());
@@ -301,15 +302,17 @@ class DownloadQueue extends ChangeNotifier {
   /// 单 worker：一次只跑一个任务；排队期间新入队的任务在同一循环里消费。
   Future<void> _drain() async {
     try {
-      while (_pending.isNotEmpty) {
+      while (!_disposed && _pending.isNotEmpty) {
         final task = _pending.removeFirst();
         if (task.status != DownloadTaskStatus.queued) continue;
         task.markRunning();
-        notifyListeners();
+        _notify();
         try {
           await _runner(task);
+          if (_disposed) return;
           if (task.status == DownloadTaskStatus.running) task.markCompleted();
         } catch (e) {
+          if (_disposed) return;
           if (task.status != DownloadTaskStatus.running) continue;
           if (e is SourceFailure && e.kind == FailureKind.cancelled) {
             task.markCancelled();
@@ -327,17 +330,18 @@ class DownloadQueue extends ChangeNotifier {
             // 不在队列里留下不可操作的条目。
             _tasks.remove(task);
           }
-          notifyListeners();
+          _notify();
         }
       }
     } finally {
       _workerScheduled = false;
-      if (_pending.isNotEmpty) _scheduleWorker();
+      if (!_disposed && _pending.isNotEmpty) _scheduleWorker();
     }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     for (final task in _tasks) {
       task.dispose();
     }

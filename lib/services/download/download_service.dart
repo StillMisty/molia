@@ -191,6 +191,10 @@ class DownloadService extends ChangeNotifier {
   /// 运行中任务的 dio 取消令牌（只给网络下载用；排队取消由队列处理）。
   final Map<String, CancelToken> _tokens = {};
 
+  /// 运行中任务已产生 / 即将产生的输出路径（音频 / `.part` / 歌词 / 翻译 /
+  /// 封面）。落库前这些文件还不算「记录引用」，孤儿扫描必须避开它们。
+  final Set<String> _activeOutputPaths = <String>{};
+
   /// 记录排序列表缓存：记录变更时失效，避免每次读取都复制 + 排序。
   List<DownloadedTrack>? _downloadsCache;
 
@@ -267,8 +271,22 @@ class DownloadService extends ChangeNotifier {
     return task?.kind == DownloadTaskKind.audio ? task : null;
   }
 
-  /// 重试失败任务（同一对象复位后重新入队；音频失败才保留在队列里）。
-  Future<void> retryTask(DownloadTask task) => _queue.enqueue(task);
+  /// 重试失败任务：新建一个不带批量位置的任务入队。
+  ///
+  /// 批量位置是「这一批」的上下文，重试发生在批次结束之后；沿用旧任务会让
+  /// 通知 presenter 走已结束的批量分支（no-op），或污染另一条正在跑的批次。
+  Future<void> retryTask(DownloadTask task) {
+    if (task.isActive) return task.done;
+    return _queue.enqueue(
+      DownloadTask(
+        track: task.track,
+        kind: task.kind,
+        quality: task.quality,
+        includeLyrics: task.includeLyrics,
+        includeCover: task.includeCover,
+      ),
+    );
+  }
 
   /// 从失败区移除任务（不重试）。
   void dismissTask(DownloadTask task) => _queue.dismiss(task.key);
@@ -299,21 +317,18 @@ class DownloadService extends ChangeNotifier {
   /// 只收应用可识别的文件（音频扩展名 / `.lrc` 与 `.t.lrc` / 封面图片）：
   /// 下载根目录在桌面默认就是用户的公共下载目录下 `Molia/`，用户可能自己
   /// 往里放 `notes.txt` 等文件；「清理残留」只清应用写过的格式，任意文件
-  /// 不参与判定与删除。
+  /// 不参与判定与删除。运行中任务的输出（落库前）也不参与。
   Future<List<String>> orphanFiles() async {
     await _ensureReady();
     final root = await _storage.downloadsRoot();
     if (root == null) return const [];
-    final referenced = <String>{
-      for (final record in _records.values)
-        ...DownloadFileLayout.referencedFiles(record),
-    };
+    final protected = _protectedPaths();
     try {
       final files = await _storage.listFiles(root);
       return [
         for (final path in files)
           if (!path.endsWith(downloadPartSuffix) &&
-              !referenced.contains(path) &&
+              !protected.contains(path) &&
               _isRecognizedDownloadFile(path))
             path,
       ];
@@ -322,6 +337,13 @@ class DownloadService extends ChangeNotifier {
       return const [];
     }
   }
+
+  /// 当前不能被当作孤儿删除的路径：记录引用 + 运行中任务的输出。
+  Set<String> _protectedPaths() => {
+    for (final record in _records.values)
+      ...DownloadFileLayout.referencedFiles(record),
+    ..._activeOutputPaths,
+  };
 
   /// 应用会写入下载根目录的文件格式（孤儿候选的安全白名单）。
   static bool _isRecognizedDownloadFile(String path) {
@@ -340,14 +362,31 @@ class DownloadService extends ChangeNotifier {
     'bmp',
   };
 
-  /// 删除全部孤儿文件，返回删除数量。
-  Future<int> deleteOrphanFiles() async {
+  /// 删除孤儿文件，返回实际删除数量。
+  ///
+  /// [paths] 非空时删除弹层里看到的那批路径（不再重新扫描）；删除前按当前
+  /// 记录引用与运行中任务输出再校验一次，避免把扫描后刚被引用的文件删掉。
+  Future<int> deleteOrphanFiles({Iterable<String>? paths}) async {
     await _ensureReady();
-    final orphans = await orphanFiles();
-    for (final path in orphans) {
-      await _storage.deleteQuietly(path);
+    final root = await _storage.downloadsRoot();
+    if (root == null) return 0;
+    final candidates = paths == null
+        ? await orphanFiles()
+        : <String>{...paths}.toList();
+    final protected = _protectedPaths();
+    final normalizedRoot = p.normalize(root);
+    var deleted = 0;
+    for (final path in candidates) {
+      final normalized = p.normalize(path);
+      if (!p.isWithin(normalizedRoot, normalized) ||
+          !_isRecognizedDownloadFile(normalized) ||
+          protected.contains(normalized)) {
+        continue;
+      }
+      await _storage.deleteQuietly(normalized);
+      deleted++;
     }
-    return orphans.length;
+    return deleted;
   }
 
   /// 批量下载：先一次性把全部任务放进队列，再在后台逐个等待结果。
@@ -365,7 +404,10 @@ class DownloadService extends ChangeNotifier {
     await _ensureReady();
     // 已有批量在进行（并发调用）时不抢占通知：服务端只有一个批量 id。
     final batch = _notifications.beginBatch(items.length);
-    final futures = <Future<void>>[];
+    // 入队后立刻给每个 future 挂错误处理：排队任务可能在轮到自己之前被
+    // 取消，若等到按序 await 才监听，completeError 会变成未处理异步错误。
+    // 结果：true = 成功，false = 失败，null = 已取消（不计入失败）。
+    final outcomes = <Future<bool?>>[];
     final seen = <String>{};
     try {
       for (var index = 0; index < items.length; index++) {
@@ -382,19 +424,28 @@ class DownloadService extends ChangeNotifier {
           batchTotal: batch ? items.length : null,
         );
         // enqueue 同步入队：所有任务在第一个 await 前全部可见。
-        futures.add(_queue.enqueue(task));
+        outcomes.add(
+          _queue.enqueue(task).then<bool?>(
+            (_) => true,
+            onError: (Object error) =>
+                error is SourceFailure &&
+                    error.kind == FailureKind.cancelled
+                ? null
+                : false,
+          ),
+        );
       }
 
       var done = 0;
       var failed = 0;
-      for (final future in futures) {
-        try {
-          await future;
-          done++;
-        } on SourceFailure catch (failure) {
-          if (failure.kind != FailureKind.cancelled) failed++;
-        } catch (_) {
-          failed++;
+      for (final outcome in outcomes) {
+        switch (await outcome) {
+          case true:
+            done++;
+          case false:
+            failed++;
+          case null:
+            break;
         }
       }
       return (done, failed);
@@ -541,8 +592,8 @@ class DownloadService extends ChangeNotifier {
     DownloadTaskKind.cover => _runCoverTask(task),
   };
 
-  /// 完整音频下载（原 `download()` 主体）：取链 / 缓存拷贝 / 分项 / 标签 /
-  /// 发布 / 落库。失败归一为 [SourceFailure]，由队列决定保留还是移除任务。
+  /// 完整音频下载：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库。
+  /// 失败归一为 [SourceFailure]，由队列决定保留还是移除任务。
   Future<void> _runAudioTask(DownloadTask task) async {
     final track = task.track;
     final key = task.key;
@@ -567,6 +618,13 @@ class DownloadService extends ChangeNotifier {
     _ResolvedCover? cover;
     late final String root;
     late final String base;
+    final outputs = <String>{};
+    void registerOutput(String? path) {
+      if (path == null || path.isEmpty) return;
+      outputs.add(path);
+      _activeOutputPaths.add(path);
+    }
+
     try {
       root = await _requireRoot();
       // 1) 缓存优先：完整缓存文件直接拷贝，不触网。
@@ -580,6 +638,8 @@ class DownloadService extends ChangeNotifier {
         base = await _audioBaseName(root, track, extension);
         filePath = DownloadFileLayout.audioPath(root, base, extension);
         partPath = DownloadFileLayout.partPath(filePath);
+        registerOutput(filePath);
+        registerOutput(partPath);
         await _storage.copyFile(cached, partPath);
         await _storage.rename(partPath, filePath);
         partPath = null;
@@ -604,6 +664,8 @@ class DownloadService extends ChangeNotifier {
         base = await _audioBaseName(root, track, extension);
         filePath = DownloadFileLayout.audioPath(root, base, extension);
         partPath = DownloadFileLayout.partPath(filePath);
+        registerOutput(filePath);
+        registerOutput(partPath);
         final response = await _dio.get<ResponseBody>(
           url.toString(),
           options: Options(
@@ -643,6 +705,9 @@ class DownloadService extends ChangeNotifier {
       if (task.includeLyrics) {
         lyrics = await _resolveLyrics(track);
         if (lyrics != null) {
+          final expectedLyricPath = DownloadFileLayout.lyricsPath(root, base);
+          registerOutput(expectedLyricPath);
+          registerOutput(translationLyricPathOf(expectedLyricPath));
           lyricPath = await _layout.writeLyrics(
             root,
             base,
@@ -654,6 +719,12 @@ class DownloadService extends ChangeNotifier {
       if (task.includeCover) {
         cover = await _resolveCover(track);
         if (cover != null) {
+          final expectedCoverPath = DownloadFileLayout.coverPath(
+            root,
+            base,
+            cover.url ?? '',
+          );
+          registerOutput(expectedCoverPath);
           coverPath = await _layout.writeCover(
             root: root,
             base: base,
@@ -718,90 +789,116 @@ class DownloadService extends ChangeNotifier {
       if (e is SourceFailure) rethrow;
       throw SourceFailure.from(e);
     } finally {
+      _activeOutputPaths.removeAll(outputs);
       _tokens.remove(key);
       // 批量中的当前曲目由批量通知统一表达（presenter 内部按 key 抑制）。
       _notifications.stopTask(key);
     }
   }
 
-  /// 单独下载歌词（原 `downloadLyrics()` 主体）：与音频共用同一条队列，
-  /// 避免分项记录写库与音频下载并发覆盖。
+  /// 单独下载歌词：与音频共用同一条队列，避免分项记录写库与音频下载并发覆盖。
   Future<void> _runLyricsTask(DownloadTask task) async {
     final track = task.track;
-    final root = await _requireRoot();
-    final lyrics = await _resolveLyrics(track);
-    if (lyrics == null || lyrics.lyric.trim().isEmpty) {
-      throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '未找到歌词',
-        l10nKey: 'downloadNoLyrics',
-      );
+    final outputs = <String>{};
+    void registerOutput(String? path) {
+      if (path == null || path.isEmpty) return;
+      outputs.add(path);
+      _activeOutputPaths.add(path);
     }
-    final existing = recordForTrack(track);
-    final base = await _layout.partBaseName(
-      root: root,
-      track: track,
-      audioPath: existing?.filePath,
-      existingPath: existing?.lyricPath,
-      subdir: downloadsLyricsDirName,
-      extension: 'lrc',
-    );
-    final path = await _layout.writeLyrics(
-      root,
-      base,
-      lyric: lyrics.lyric,
-      translation: lyrics.translation,
-    );
-    if (path == null) {
-      throw const SourceFailure(
-        kind: FailureKind.unknown,
-        message: '歌词写入失败',
-        l10nKey: 'downloadFailed',
+
+    try {
+      final root = await _requireRoot();
+      final lyrics = await _resolveLyrics(track);
+      if (lyrics == null || lyrics.lyric.trim().isEmpty) {
+        throw const SourceFailure(
+          kind: FailureKind.unsupported,
+          message: '未找到歌词',
+          l10nKey: 'downloadNoLyrics',
+        );
+      }
+      final existing = recordForTrack(track);
+      final base = await _layout.partBaseName(
+        root: root,
+        track: track,
+        audioPath: existing?.filePath,
+        existingPath: existing?.lyricPath,
+        subdir: downloadsLyricsDirName,
+        extension: 'lrc',
       );
+      final expectedPath = DownloadFileLayout.lyricsPath(root, base);
+      registerOutput(expectedPath);
+      registerOutput(translationLyricPathOf(expectedPath));
+      final path = await _layout.writeLyrics(
+        root,
+        base,
+        lyric: lyrics.lyric,
+        translation: lyrics.translation,
+      );
+      if (path == null) {
+        throw const SourceFailure(
+          kind: FailureKind.unknown,
+          message: '歌词写入失败',
+          l10nKey: 'downloadFailed',
+        );
+      }
+      await _upsertPart(track, lyricPath: path);
+      notifyListeners();
+      unawaited(_embedTagsFromFiles(track));
+    } finally {
+      _activeOutputPaths.removeAll(outputs);
     }
-    await _upsertPart(track, lyricPath: path);
-    notifyListeners();
-    unawaited(_embedTagsFromFiles(track));
   }
 
-  /// 单独下载封面（原 `downloadCover()` 主体）：与音频共用同一条队列。
+  /// 单独下载封面：与音频共用同一条队列。
   Future<void> _runCoverTask(DownloadTask task) async {
     final track = task.track;
-    final root = await _requireRoot();
-    final cover = await _resolveCover(track);
-    if (cover == null) {
-      throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '没有封面',
-        l10nKey: 'downloadNoArtwork',
-      );
+    final outputs = <String>{};
+    void registerOutput(String? path) {
+      if (path == null || path.isEmpty) return;
+      outputs.add(path);
+      _activeOutputPaths.add(path);
     }
-    final coverUrl = cover.url ?? '';
-    final existing = recordForTrack(track);
-    final base = await _layout.partBaseName(
-      root: root,
-      track: track,
-      audioPath: existing?.filePath,
-      existingPath: existing?.coverPath,
-      subdir: downloadsCoversDirName,
-      extension: DownloadFileLayout.coverExtension(coverUrl),
-    );
-    final path = await _layout.writeCover(
-      root: root,
-      base: base,
-      coverUrl: coverUrl,
-      bytes: cover.bytes,
-    );
-    if (path == null) {
-      throw const SourceFailure(
-        kind: FailureKind.unknown,
-        message: '封面写入失败',
-        l10nKey: 'downloadFailed',
+
+    try {
+      final root = await _requireRoot();
+      final cover = await _resolveCover(track);
+      if (cover == null) {
+        throw const SourceFailure(
+          kind: FailureKind.unsupported,
+          message: '没有封面',
+          l10nKey: 'downloadNoArtwork',
+        );
+      }
+      final coverUrl = cover.url ?? '';
+      final existing = recordForTrack(track);
+      final base = await _layout.partBaseName(
+        root: root,
+        track: track,
+        audioPath: existing?.filePath,
+        existingPath: existing?.coverPath,
+        subdir: downloadsCoversDirName,
+        extension: DownloadFileLayout.coverExtension(coverUrl),
       );
+      registerOutput(DownloadFileLayout.coverPath(root, base, coverUrl));
+      final path = await _layout.writeCover(
+        root: root,
+        base: base,
+        coverUrl: coverUrl,
+        bytes: cover.bytes,
+      );
+      if (path == null) {
+        throw const SourceFailure(
+          kind: FailureKind.unknown,
+          message: '封面写入失败',
+          l10nKey: 'downloadFailed',
+        );
+      }
+      await _upsertPart(track, coverPath: path);
+      notifyListeners();
+      unawaited(_embedTagsFromFiles(track));
+    } finally {
+      _activeOutputPaths.removeAll(outputs);
     }
-    await _upsertPart(track, coverPath: path);
-    notifyListeners();
-    unawaited(_embedTagsFromFiles(track));
   }
 
   /// 取消下载（无进行中任务时空操作）：先撤排队任务，运行中再撤 dio 请求。
@@ -1248,6 +1345,10 @@ class DownloadService extends ChangeNotifier {
 
   @override
   void dispose() {
+    for (final token in _tokens.values) {
+      token.cancel();
+    }
+    _tokens.clear();
     _queue.dispose();
     super.dispose();
   }

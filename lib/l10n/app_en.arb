@@ -2338,6 +2338,7 @@
   },
   "downloadsNoResume": "Failed downloads start over (platform links usually expire quickly).",
   "downloadsEmpty": "No downloaded tracks yet",
+  "downloadsNothingToAdd": "Nothing to download (already downloaded or in progress)",
   "sleepTimerTitle": "Sleep timer",
   "sleepTimerOff": "Off",
   "sleepTimerRemaining": "{time} left",

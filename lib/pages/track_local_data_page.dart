@@ -101,7 +101,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       if (_listening) {
         _downloads?.removeListener(_onRecordsChanged);
         _downloads?.taskChanges.removeListener(_onTasksChanged);
-        _task?.removeListener(_onTaskProgress);
       }
       _downloads = downloads;
       _task = null;
@@ -114,7 +113,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     if (!_listening) {
       _listening = true;
       // 缓存内容（清缓存 / LRU / 边播边缓存落成）与下载记录（转存 / 删除）
-      // 变化才重算本页状态；任务进度只触发轻量 setState。
+      // 变化才重算本页状态；任务进度只重建音频区。
       _cacheService?.revision.addListener(_onChanged);
       _downloads?.addListener(_onRecordsChanged);
       _downloads?.taskChanges.addListener(_onTasksChanged);
@@ -129,7 +128,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       _cacheService?.revision.removeListener(_onChanged);
       _downloads?.removeListener(_onRecordsChanged);
       _downloads?.taskChanges.removeListener(_onTasksChanged);
-      _task?.removeListener(_onTaskProgress);
     }
     super.dispose();
   }
@@ -139,29 +137,20 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     unawaited(_reload());
   }
 
-  /// 下载记录变化：重算两档状态（不再随每 100ms 进度扫缓存目录）。
+  /// 下载记录变化：重算两档状态。
   void _onRecordsChanged() {
     if (!mounted) return;
     unawaited(_reload());
   }
 
-  /// 任务结构变化（入队 / 开始 / 完成 / 失败 / 取消）：只切订阅 + 重建。
+  /// 任务结构变化（入队 / 完成 / 失败 / 取消）：切换音频区订阅的任务。
   void _onTasksChanged() {
     if (!mounted) return;
     setState(_syncTask);
   }
 
-  /// 当前任务进度 / 状态变化：只重建本页，不触发磁盘扫描。
-  void _onTaskProgress() {
-    if (mounted) setState(() {});
-  }
-
   void _syncTask() {
-    final next = _downloads?.taskForTrack(widget.track);
-    if (identical(next, _task)) return;
-    _task?.removeListener(_onTaskProgress);
-    _task = next;
-    _task?.addListener(_onTaskProgress);
+    _task = _downloads?.taskForTrack(widget.track);
   }
 
   Future<void> _reload() async {
@@ -213,7 +202,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   /// 下载 / 转存音频（缓存命中时由 `DownloadService` 直接拷贝，不触网）。
   ///
   /// 只入队，不占用整页 `_busy`：任务进度经 [DownloadTask] 单独更新，页面
-  /// 在排队 / 下载期间仍可操作。省流生效时先确认（弹层挂 root navigator）。
+  /// 在排队 / 下载期间仍可操作。省流生效时先确认。
   Future<void> _downloadAudio() async {
     final downloads = _downloads;
     if (downloads == null) return;
@@ -235,6 +224,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final downloads = _downloads;
     if (downloads == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
+    if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     await _runDownload(
       () => lyrics
           ? downloads.downloadLyrics(widget.track)
@@ -274,8 +264,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final downloads = _downloads;
     if (downloads == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    // 弹层挂 root navigator（M3EDialog.show 语义）；本页在二级页 / 设置弹层
-    // 的内层 Navigator 里，页面 context 上的 pop 会误退本页。
+    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -330,8 +319,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final service = _service;
     if (service == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    // 弹层挂 root navigator（M3EDialog.show 语义）；本页在二级页 / 设置弹层
-    // 的内层 Navigator 里，页面 context 上的 pop 会误退本页。
+    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -367,8 +355,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final service = _service;
     if (service == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    // 弹层挂 root navigator（M3EDialog.show 语义）；本页在二级页 / 设置弹层
-    // 的内层 Navigator 里，页面 context 上的 pop 会误退本页。
+    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -428,7 +415,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
           ],
         ),
         const SizedBox(height: kSettingsSectionSpacing),
-        ..._buildAudioSection(l10n, data, _task),
+        _buildAudioSectionWidget(l10n, data),
         const SizedBox(height: kSettingsSectionSpacing),
         _buildExtrasSection(l10n, data),
         const SizedBox(height: kSettingsSectionSpacing),
@@ -442,6 +429,27 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
         automaticallyImplyLeading: true,
       ),
       body: body,
+    );
+  }
+
+  /// 音频区只订阅当前任务：进度 / 状态变化不重建整页（缓存占用等）。
+  Widget _buildAudioSectionWidget(
+    AppLocalizations l10n,
+    TrackLocalData? data,
+  ) {
+    final task = _task;
+    if (task == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _buildAudioSection(l10n, data, null),
+      );
+    }
+    return ListenableBuilder(
+      listenable: task,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: _buildAudioSection(l10n, data, _task),
+      ),
     );
   }
 

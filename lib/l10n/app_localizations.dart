@@ -7582,6 +7582,12 @@ abstract class AppLocalizations {
   /// **'No downloaded tracks yet'**
   String get downloadsEmpty;
 
+  /// No description provided for @downloadsNothingToAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to download (already downloaded or in progress)'**
+  String get downloadsNothingToAdd;
+
   /// No description provided for @sleepTimerTitle.
   ///
   /// In en, this message translates to:

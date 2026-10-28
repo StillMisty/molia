@@ -3,7 +3,7 @@
 /// 为什么独立成 widget 文件：确认弹层要挂 **root navigator**（`M3EDialog.show`
 /// 语义）——设置页与本地数据页都在内层 Navigator 里，页面 context 上的 pop
 /// 会误退页面而不是关闭弹窗。把「省流是否生效 + 定向关闭」收在一处，三个
-/// 入口不再各写一份弹层与 pop 目标。
+/// 入口共用同一套弹层与 pop 目标。
 library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -13,7 +13,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../services/data_saver_service.dart';
 
-/// 省流生效时弹确认；继续返回 true，取消 / 未生效返回 false（未生效直接放行）。
+/// 省流生效时弹确认：继续或未生效返回 true，取消返回 false。
 Future<bool> confirmDownloadOnDataSaver(BuildContext context) async {
   final dataSaver = context.read<DataSaverService?>();
   if (!(dataSaver?.active ?? false)) return true;

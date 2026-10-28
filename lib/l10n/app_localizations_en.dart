@@ -4249,6 +4249,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadsEmpty => 'No downloaded tracks yet';
 
   @override
+  String get downloadsNothingToAdd =>
+      'Nothing to download (already downloaded or in progress)';
+
+  @override
   String get sleepTimerTitle => 'Sleep timer';
 
   @override

@@ -26,6 +26,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
+import 'package:molia/services/data_saver_service.dart';
 
 import '../support/memory_cache_storage.dart';
 
@@ -138,6 +139,8 @@ class _FakeDownloadService extends DownloadService {
   final ValueNotifier<int> taskRevision = ValueNotifier<int>(0);
   bool downloadSupported = true;
   int downloadCalls = 0;
+  int lyricsCalls = 0;
+  int coverCalls = 0;
   int cancelCalls = 0;
   int deleteCalls = 0;
 
@@ -161,6 +164,16 @@ class _FakeDownloadService extends DownloadService {
     bool includeCover = true,
   }) async {
     downloadCalls++;
+  }
+
+  @override
+  Future<void> downloadLyrics(Track track) async {
+    lyricsCalls++;
+  }
+
+  @override
+  Future<void> downloadCover(Track track) async {
+    coverCalls++;
   }
 
   /// 模拟一次下载记录变化（真实服务只在记录 / 能力变化时通知）。
@@ -229,6 +242,7 @@ void main() {
     AlbumService? albumService,
     ArtistService? artistService,
     NotificationService? notifications,
+    DataSaverService? dataSaver,
   }) async {
     backend.emit(
       BackendSnapshot(
@@ -254,6 +268,8 @@ void main() {
             Provider<ArtistService>.value(value: artistService),
           if (notifications != null)
             Provider<NotificationService>.value(value: notifications),
+          if (dataSaver != null)
+            ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -812,6 +828,45 @@ void main() {
 
     await scrollLocalDataPage(tester);
     expect(find.text('缓存占用'), findsOneWidget);
+  });
+
+  testWidgets('本地数据页：单独下载歌词先确认省流', (tester) async {
+    SharedPreferences.setMockInitialValues({
+      DataSaverService.keyEnabled: true,
+    });
+    final dataSaver = DataSaverService(
+      prefs: await SharedPreferences.getInstance(),
+      cellularProbe: () async => true,
+      cellularChanges: const Stream<bool>.empty(),
+    );
+    await dataSaver.init();
+    addTearDown(dataSaver.dispose);
+    expect(dataSaver.active, isTrue);
+
+    await pumpView(
+      tester,
+      track: _track(),
+      downloads: downloadService,
+      dataSaver: dataSaver,
+    );
+    await tester.tap(find.byKey(const Key('trackInfoLocalDataItem')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('localDataLyricsPart')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('localDataLyricsPart')));
+    await tester.pumpAndSettle();
+    expect(find.text('省流模式生效中'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(downloadService.lyricsCalls, 0);
+
+    await tester.tap(find.byKey(const Key('localDataLyricsPart')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('继续'));
+    await tester.pumpAndSettle();
+    expect(downloadService.lyricsCalls, 1);
   });
 
   testWidgets('本地数据页：下载中显示百分比 + 取消', (tester) async {
