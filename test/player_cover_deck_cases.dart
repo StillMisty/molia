@@ -255,7 +255,8 @@ void main() {
     };
     addTearDown(() => debugOnRebuildDirtyWidget = previousProbe);
 
-    // reveal = 0.5：两侧从中心展开（位置/旋转按同一进度，卡片整体缩放）。
+    // reveal = 0.5：两侧从中心展开（位置/缩放/透明度按进度，倾角始终保持
+    // 稳态 ±0.05；倾角不能从 0 开始插值，否则会先水平出现再倾斜）。
     morph.setPageDeckReveal(0.5);
     await tester.pump();
     expect(coverCardRebuilds, 0,
@@ -264,7 +265,7 @@ void main() {
     final double eased = Curves.easeOutCubic.transform(0.5);
     final Rect leftMid = renderedRect(tester, left);
     final Rect rightMid = renderedRect(tester, right);
-    final double midAngle = 0.05 * eased;
+    const double midAngle = 0.05;
     expect(
       leftMid.width,
       closeTo(projectedSideWidth(sideSize, eased, -midAngle), 1),

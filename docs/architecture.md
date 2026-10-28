@@ -1062,7 +1062,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   进入首帧就隐藏、落位帧与副本移除同帧亮出，离开方向飞行期间也收起）。
   侧邻位由 `PlayerMorphController.pageDeckReveal` 驱动：复用同一根飞行弹簧，
   进入时只在飞行最后约 45% 从中心展开（scale 0→1、透明度 0→0.85、位移
-  0→±0.30 卡宽、旋转 0→±0.05rad）；离开时间对称，前 45% 先收回中心
+  0→±0.30 卡宽；倾角始终保持稳态 ±0.05rad，不从 0 起转，避免侧图先水平
+  出现再二次倾斜）；离开时间对称，前 45% 先收回中心
   （`entryWindow(1 - progress)`），避免页面层淡出后段做看不见的收回。
   每个侧槽由窄包装器直接监听该 `ValueListenable`，卡片作为稳定 child，
   reveal 逐帧只重建 Transform/Opacity/IgnorePointer，不重建 deck 主 builder
