@@ -1003,10 +1003,16 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （`morph.pageCoverKey`）；页中心显隐是零时长 `Opacity`（飞行副本精确承接，
   进入首帧就隐藏、落位帧与副本移除同帧亮出，离开方向飞行期间也收起）。
   侧邻位由 `PlayerMorphController.pageDeckReveal` 驱动：复用同一根飞行弹簧，
-  只在飞行最后约 45% 从中心展开（scale 0→1、透明度 0→0.85、位移
-  0→±0.30 卡宽、旋转 0→±0.05rad），离开方向反向收回；reveal 只作用于
-  左右槽，中心锚点始终是稳态矩形，reveal=1 时不叠加 transform，减弱动效
-  直接落位。飞行期间 deck 手势与侧槽点击关闭。
+  进入时只在飞行最后约 45% 从中心展开（scale 0→1、透明度 0→0.85、位移
+  0→±0.30 卡宽、旋转 0→±0.05rad）；离开时间对称，前 45% 先收回中心
+  （`entryWindow(1 - progress)`），避免页面层淡出后段做看不见的收回。
+  每个侧槽由窄包装器直接监听该 `ValueListenable`，卡片作为稳定 child，
+  reveal 逐帧只重建 Transform/Opacity/IgnorePointer，不重建 deck 主 builder
+  或图片子树；reveal=0 保留布局与图片状态（scale 0 + opacity 0），避免
+  尾段展开时重新解码闪占位。reveal 只作用于左右槽，中心锚点始终是稳态
+  矩形，reveal=1 时不叠加 transform，减弱动效直接落位。飞行期间整层
+  `IgnorePointer` 关闭中心点击、侧槽点击、横滑与按压反馈；已按下的拖动由
+  morph 隐藏翻转主动收尾，不依赖 PointerCancel。
 - **飞行几何与外观**：外观与插值只有一份实现（`cover_appearance.dart`）——三端真身
   （顶栏 r8/图标 22、迷你 r8/图标 24、播放页 r18 + 1px 描边 + 柔和阴影/裁剪 17/图标
   0.35×边长）是 `CoverAppearance` 的命名值，两个飞行是 `CoverFlight` 的薄壳；两条
@@ -1018,8 +1024,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 - **飞行性能结构**：`PlayerMorphFlight` 与 `CoverFlightLayer` 都包
   `RepaintBoundary`，逐帧重绘不扩散到整条 Overlay；`CoverFlightLayer` 把
   `MorphCover` 图片子树做成 `AnimatedBuilder.child`（稳定 child），逐帧只更新
-  几何、裁剪、描边/阴影与回退图标尺寸。24px blur 阴影仍随外观插值，当前
-  没有真机 raster 数据证明它是瓶颈，暂不降级视觉，待真机 profile 复测。
+  几何、裁剪、描边/阴影与回退图标尺寸。阴影按「页端进度」降级：飞行前 80%
+  不画 24px blur，只在页端最后 20% 线性恢复到真身（`t=1` / 反向 `t=0` 与
+  真身完全一致）。这是先保飞行平滑、尾段恢复阴影的取舍，仍需真机 profile
+  确认收益。
 - **飞行几何不变量**：锚点在点击那一刻**同步**抓取（封面 URL 同刻确定，飞行中不换
   图），因此①隐藏页层（出场过渡结束/未参与过渡）必须 `scale == 1`
   （`app_shell.dart::shellPageLayerPresentation`，出场微缩只存在于过渡进行中）；
