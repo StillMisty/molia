@@ -989,18 +989,21 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   - **restart**（方向反转 / `p0 ≥ 0.75` / 新中心就是上一段滑出卡）：先把
     controller 停掉并置 0，post-frame 起全新弹簧；旧中心 B 从捕获视觉按
     p 0→1 插到新方向目标侧槽；新中心 C 若就是上一段滑出卡 A（方向反转最
-    常见），从 A 的捕获视觉插到中心，否则从新方向侧槽的全槽位入场公式起
-    跑。controller 置 0 会合成一次 completed 状态，宿主用重置标记屏蔽，
-    不能让它清掉刚捕获的 handoff。
+    常见），从 A 的捕获视觉插到中心；否则若 C 已作为上一段 source neighbor
+    半透明出现，接住它在**旧方向**侧槽的实际位置/透明度按 p 插到中心；
+    两者都不成立时才从新方向侧槽全槽位入场。controller 置 0 会合成一次
+    completed 状态，宿主用重置标记屏蔽，不能让它清掉刚捕获的 handoff。
   两种模式都：上一段更早的滑出卡作为独立 tail 层短淡出；tail 按 track id
   去重（同一身份最多一张），layer key 只依赖 track 身份（restart rebase
-  p0 时 Element 不重建）；restart 时旧 tail 按当前渲染值 rebase 到新 p=0，
-  且若旧滑出卡成为新中心就不再作为 tail 重复渲染；接管期间 `oldNeighbor`
-  层被抑制。接管快照记录上一段实际中心 track（`centerFromTrack`，含
-  restart 的 C==A 与 continuous 的 source neighbor），链式接管按实际捕获
-  视觉继续，不退回公式位置。`hardReset`、会话完成与非接管路径清空接管
-  快照。中心/预览卡不再借用上一首封面作加载占位，目标图未命中时走曲目
-  自己的默认封面 / 中性回退，避免旧封面从新卡下面透出。
+  p0 时 Element 不重建）；新中心身份会先从 tail 列表移除，避免回绕/重复
+  id 时 tail + center 同曲两张卡；restart 时旧 tail 按当前渲染值 rebase 到
+  新 p=0，且若旧滑出卡成为新中心就不再作为 tail 重复渲染；接管期间
+  `oldNeighbor` 层被抑制。接管快照记录上一段实际中心 track
+  （`centerFromTrack`，含 restart 的 C==A / source neighbor 与 continuous
+  的 source neighbor），链式接管按实际捕获视觉继续，不退回公式位置。
+  `hardReset`、会话完成与非接管路径清空接管快照。中心/预览卡不再借用
+  上一首封面作加载占位，目标图未命中时走曲目自己的默认封面 / 中性回退，
+  避免旧封面从新卡下面透出。
 - **对账**：提交后等待快照 current 变为会话目标——匹配无缝落位；不匹配
   （随机目标 / 失败恢复 / 列表变化）先让提交过渡落位，再以 220ms 中心原位
   交叉淡化校正到实际曲目，随后按新快照重建槽位回 idle。
