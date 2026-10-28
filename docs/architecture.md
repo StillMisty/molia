@@ -862,9 +862,11 @@ module（见下）：
   解耦：改保存位置 / 清公共目录不影响恢复；它也不是用户文件，不放进下载夹）。
   音频 `.part` 写完后、rename 前写一条 pending `DownloadedTrack`（仅音频，
   继承旧 sidecar / publicUri；文件名 `<md5(key)>.json`，`.tmp` 写 + rename
-  原子替换）；rename 后继续歌词 / 封面 / 标签 / 发布，最终落库后删除 marker。
-  启动 `init` 在加载记录后、`.part` 清扫前恢复：已有同 key 记录或最终文件不存在
-  只删 marker；文件存在则补库 + 删 marker；补库失败保留 marker 下次再试。
+  原子替换）；**写失败会在 rename 前中止下载**，不留下没有恢复保障的最终文件；
+  rename 后继续歌词 / 封面 / 标签 / 发布，最终落库后删除 marker。
+  启动 `init` 在加载记录后、`.part` 清扫前恢复：已有**音频**记录或最终文件不存在
+  只删 marker；只有分项记录（歌词 / 封面）不算已落库，文件存在则补库 + 删 marker；
+  补库失败保留 marker 下次再试。
   journal 只包裹单个音频提交，**不是队列持久化**（排队 / 失败任务重启仍清空）；
 - **本地导入**：`DownloadService.importLocalFiles`（收藏页「本地歌曲」合集 →
   「导入本地歌曲」：多选音频文件）**不复制文件**——记录以

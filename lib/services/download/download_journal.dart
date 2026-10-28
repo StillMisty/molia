@@ -26,11 +26,12 @@ class DownloadJournal {
 
   /// 写一条 pending 记录（原子替换同名 marker）。
   ///
-  /// 日志不可用 / 写入失败只记日志，不影响下载主流程；调用方仍按正常流程
-  /// rename + 落库，只是崩溃后少了这一条恢复线索。
-  Future<void> write(DownloadedTrack record) async {
+  /// 返回 false 表示这次提交没有崩溃保护（目录不可用 / 编码失败 / 写临时
+  /// 文件或 rename 失败）。调用方必须在 rename 前中止，不能把「没有提交
+  /// 日志的 rename」当成成功——否则崩溃恢复保证失效。
+  Future<bool> write(DownloadedTrack record) async {
     final root = await _journalRoot();
-    if (root == null) return;
+    if (root == null) return false;
     final target = _markerPath(root, record.key);
     final tmp = '$target.tmp';
     String content;
@@ -39,16 +40,18 @@ class DownloadJournal {
     } catch (e) {
       _logger.warning('下载日志编码失败（${record.key}）: $e');
       await _storage.deleteQuietly(tmp);
-      return;
+      return false;
     }
     try {
       await _storage.writeString(tmp, content);
       // 部分平台 rename 不覆盖已有文件：先删旧目标再改名。
       await _storage.deleteQuietly(target);
       await _storage.rename(tmp, target);
+      return true;
     } catch (e) {
       _logger.warning('下载日志写入失败（${record.key}）: $e');
       await _storage.deleteQuietly(tmp);
+      return false;
     }
   }
 

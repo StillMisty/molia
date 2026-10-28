@@ -283,7 +283,7 @@ class DownloadQueue extends ChangeNotifier {
   /// 失败 / 取消任务再入队时替换为新任务（同一对象则原地复位）。完成 /
   /// 取消后任务从队列移除，失败任务保留供重试。
   Future<void> enqueue(DownloadTask task) {
-    if (_disposed) return task.done;
+    if (_disposed) throw StateError('download queue disposed');
     final existing = _tasks[task.key];
     if (existing != null && existing.isActive) return existing.done;
     if (existing != null) {

@@ -604,6 +604,64 @@ void main() {
     expect(await journal.readAll(), isEmpty);
   });
 
+  test('崩溃恢复：同 key 分项记录不阻塞音频恢复，且保留歌词路径', () async {
+    final journal = DownloadJournal(storage);
+    final existing = DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'partial',
+      title: '分项记录',
+      lyricPath: '/downloads/lyrics/分项记录.lrc',
+      downloadedAt: 600,
+    );
+    await repository.insert(existing);
+    final pending = DownloadedTrack(
+      originSourceKey: 'kw',
+      originSongId: 'partial',
+      title: '分项记录',
+      filePath: '/downloads/分项记录.mp3',
+      sizeBytes: 2,
+      lyricPath: existing.lyricPath,
+      downloadedAt: 700,
+    );
+    storage.files[pending.filePath!] = [1, 2];
+    expect(await journal.write(pending), isTrue);
+
+    final service = makeService();
+    await service.init();
+
+    final record = service.recordFor('kw', 'partial')!;
+    expect(record.filePath, pending.filePath);
+    expect(record.lyricPath, existing.lyricPath);
+    expect(await journal.readAll(), isEmpty);
+  });
+
+  test('提交日志不可用：rename 前中止，无最终文件 / 记录 / marker', () async {
+    storage.journalRootPath = null;
+    final dio = mockDio(
+      (options) => bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
+    );
+    final service = makeService(dio: dio);
+    await service.init();
+    final track = makeTrack();
+
+    await expectLater(
+      service.download(track),
+      throwsA(
+        predicate(
+          (e) => e is SourceFailure && e.l10nKey == 'downloadFailed',
+        ),
+      ),
+    );
+    expect(service.recordFor('kw', '1'), isNull);
+    expect(storage.files.containsKey('/downloads/歌手 - 测试歌曲.mp3'), isFalse);
+    expect(storage.files, isEmpty);
+  });
+
   test('崩溃恢复：同 key 已有记录时只清理 marker', () async {
     final journal = DownloadJournal(storage);
     final record = DownloadedTrack(

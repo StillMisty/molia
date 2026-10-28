@@ -18,7 +18,8 @@
 /// - 半成品用 `.part` 后缀，完成时原子改名，落库在改名之后：
 ///   播放取链只认数据库记录，永远不会读到半成品；音频 `.part` 写完后、
 ///   rename 前写一条文件型提交日志（应用支持目录 `download_journal/`），
-///   落库后删除；启动时补回 rename 后未落库的记录（**不是队列持久化**）；
+///   写失败则在 rename 前中止，落库后删除；启动时补回 rename 后未落库的
+///   记录（**不是队列持久化**）；
 /// - 进度 / 取消 / 失败：全局严格串行单 worker（`download_queue.dart`），
 ///   每任务进度只经 [DownloadTask] 自己节流广播（100ms 合并；首个分片 /
 ///   100% / 终态立即送达），队列只在任务增删 / 状态变化时通知；排队任务
@@ -613,7 +614,10 @@ class DownloadService extends ChangeNotifier {
     for (final entry in entries) {
       final record = entry.record;
       try {
-        if (_records.containsKey(record.key)) {
+        final existing = _records[record.key];
+        // 只有「已有音频」才说明落库成功。分项记录（仅歌词 / 封面）不能
+        // 代表音频已落库，marker 仍要用来恢复音频。
+        if (existing != null && existing.hasAudio) {
           await _journal.removePath(entry.markerPath);
           continue;
         }
@@ -822,7 +826,14 @@ class DownloadService extends ChangeNotifier {
         sizeBytes: size,
         previous: _records[key],
       );
-      await _journal.write(pending);
+      final journalOk = await _journal.write(pending);
+      if (!journalOk) {
+        throw const SourceFailure(
+          kind: FailureKind.unknown,
+          message: '无法写入下载记录，请重试',
+          l10nKey: 'downloadFailed',
+        );
+      }
       journalWritten = true;
       _throwIfCancelled(cancelToken);
       await _storage.rename(part, targetPath);

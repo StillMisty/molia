@@ -38,7 +38,7 @@ void main() {
     final journal = DownloadJournal(storage);
     final source = record();
 
-    await journal.write(source);
+    expect(await journal.write(source), isTrue);
     final entries = await journal.readAll();
     expect(entries, hasLength(1));
     final restored = entries.single.record;
@@ -90,7 +90,7 @@ void main() {
     final storage = FakeDownloadStorage(journalRootPath: null);
     final journal = DownloadJournal(storage);
 
-    await journal.write(record());
+    expect(await journal.write(record()), isFalse);
     expect(await journal.readAll(), isEmpty);
     await journal.remove('kw:1');
     await journal.removePath('/download_journal/missing.json');
@@ -110,8 +110,8 @@ void main() {
       downloadedAt: 1,
     );
 
-    await journal.write(first);
-    await journal.write(second);
+    expect(await journal.write(first), isTrue);
+    expect(await journal.write(second), isTrue);
     final entries = await journal.readAll();
     expect(entries, hasLength(1));
     expect(entries.single.record.title, '新标题');

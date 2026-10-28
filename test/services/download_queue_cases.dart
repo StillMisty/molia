@@ -339,7 +339,7 @@ void main() {
     expect(queued.status, DownloadTaskStatus.cancelled);
 
     final after = audio('3');
-    unawaited(queue.enqueue(after));
+    expect(() => queue.enqueue(after), throwsStateError);
     gate.complete();
     await flush();
     expect(started, [running.key], reason: 'dispose 后 enqueue 不启动 worker');
