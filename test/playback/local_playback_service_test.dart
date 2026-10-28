@@ -5,7 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:molia/domain/ports/music_source.dart' show PlayableStream;
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/audio_predownload.dart';
+import 'package:molia/playback/audio_predownloader.dart';
 import 'package:molia/playback/local_playback_service.dart';
+import 'package:molia/playback/next_track_preloader.dart';
+import 'package:molia/playback/playing_track_cache_writer.dart';
 import 'package:molia/sources/source_track.dart';
 
 /// 可脚本化播放器：只实现 [LocalPlaybackService] 用到的状态与控制接口，
@@ -159,6 +163,25 @@ SourceTrack _track({int index = 0}) => SourceTrack(
       duration: const Duration(seconds: 30),
       raw: {'id': 'a$index'},
     );
+
+/// 记录预取调用：任务永不完成，取消时记录曲目 id。
+class _TaskPredownloader implements AudioPredownloader {
+  final List<SourceTrack> calls = [];
+  final List<String> cancelled = [];
+
+  @override
+  Future<AudioPredownloadTask?> predownload({
+    required SourceTrack track,
+    required PlayableStream stream,
+    String? quality,
+  }) async {
+    calls.add(track);
+    return AudioPredownloadTask(
+      done: Completer<void>().future,
+      onCancel: () => cancelled.add(track.id),
+    );
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -492,5 +515,41 @@ void main() {
     final source = player.lastAudioSource;
     expect(source, isA<UriAudioSource>());
     expect((source! as UriAudioSource).headers, headers);
+  });
+
+  test('桌面切到正在预取的下一首：复用在途任务，不另起 writer 重下', () async {
+    final predownloader = _TaskPredownloader();
+    final preloader = NextTrackPreloader(
+      resolver: (track, {String? quality}) async => PlayableStream(
+        Uri.parse('https://cdn.example/${track.id}.mp3'),
+      ),
+      predownloader: predownloader,
+    );
+    final player = _FakeAudioPlayer();
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async => PlayableStream(
+        Uri.parse('https://cdn.example/${track.id}.mp3'),
+      ),
+      player: player,
+      nextTrackPreloader: preloader,
+      audioCacheWriter: PlayingTrackCacheWriter(predownloader: predownloader),
+    );
+    addTearDown(service.dispose);
+
+    final tracks = [_track(index: 0), _track(index: 1)];
+    await service.playTracks(tracks, 0);
+    await pumpEventQueue();
+    expect(preloader.isCacheWriteInFlight(tracks[1]), isTrue,
+        reason: '起播 A 后应开始预取 B');
+
+    await service.playQueueIndex(1);
+    await pumpEventQueue();
+
+    expect(
+      predownloader.calls.where((track) => track.id == tracks[1].id),
+      hasLength(1),
+      reason: 'B 的写入由在途预取负责，不能再起 writer 重下同一首',
+    );
+    expect(predownloader.cancelled, isNot(contains(tracks[1].id)));
   });
 }

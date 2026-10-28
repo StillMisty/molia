@@ -256,6 +256,37 @@ void main() {
       expect(session.selection.selectedCount, 1);
     });
 
+    test('收藏视图不受历史写入影响：视图原样复用，选择保持', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 2)],
+        tracks: {
+          1: [track('a'), track('b')],
+        },
+        history: [history('a')],
+      );
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+
+      session.sync(inputFor(library));
+      session.selection.select('wy:a');
+      final first = session.sync(inputFor(library));
+
+      // 后台播放写入历史：收藏曲目列表引用不变，视图应原样复用。
+      library.history = [history('b', playedAt: 9), history('a')];
+      final second = session.sync(inputFor(library));
+
+      expect(identical(second.view, first.view), isTrue);
+      expect(
+        identical(second.view.visibleRows, first.view.visibleRows),
+        isTrue,
+      );
+      expect(
+        session.selectedRows(second.view).map((row) => row.key),
+        ['wy:a'],
+      );
+    });
+
     test('行被删除 / 被过滤：选择集收缩，计数不虚高', () async {
       final library = _FakeLibrary(
         playlists: [favorites(trackCount: 2)],

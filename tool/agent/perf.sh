@@ -6,6 +6,7 @@
 #   tool/agent/perf.sh frames windows --real   # release 真实窗口 + 滚轮，raster 可信
 #   tool/agent/perf.sh startup linux|android
 #   tool/agent/perf.sh data linux|android      # 搜索/起播/取词端到端时延（mock 音源）
+#   MOLIA_PERF_SCENARIO_NEXT=1 tool/agent/perf.sh data linux  # 追加下一首起播采样
 #   tool/agent/perf.sh cpu linux|android       # 空闲/播放 CPU（按线程）
 #   tool/agent/perf.sh memory linux|windows
 #   tool/agent/perf.sh size android|linux
@@ -153,6 +154,16 @@ PERF_DART_DEFINES=(
   --dart-define="MOLIA_PERF_SOURCE=${MOLIA_PERF_SOURCE:-mock}"
   --dart-define="MOLIA_PERF_KEYWORD=${MOLIA_PERF_KEYWORD:-周杰伦}"
 )
+# 下一首采样默认关闭（保持既有 data 口径）；仅在显式 MOLIA_PERF_SCENARIO_NEXT=1
+# 时打开，等待时长可用 MOLIA_PERF_NEXT_WAIT_MS 覆盖（验证在途预取时设小）。
+if [[ "${MOLIA_PERF_SCENARIO_NEXT:-0}" == "1" ]]; then
+  PERF_DART_DEFINES+=(--dart-define=MOLIA_PERF_SCENARIO_NEXT=true)
+fi
+if [[ -n "${MOLIA_PERF_NEXT_WAIT_MS:-}" ]]; then
+  PERF_DART_DEFINES+=(
+    --dart-define="MOLIA_PERF_NEXT_WAIT_MS=$MOLIA_PERF_NEXT_WAIT_MS"
+  )
+fi
 
 prepare_perf_home() {
   mkdir -p "$PERF_HOME/.local/share/$APP_ID" "$RUN_DIR"

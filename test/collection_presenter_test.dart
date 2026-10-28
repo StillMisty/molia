@@ -233,6 +233,153 @@ void main() {
       expect(view.visibleCount, 0);
       expect(view.collectionKey, LibraryCollections.favoritesOrderKey);
     });
+
+    test('同一输入复用同一视图与可见行（不重新分配行对象）', () {
+      final presenter = CollectionPresenter();
+      final identity = identityFor(LibraryCollections.favoritesSentinel);
+      final tracks = [track('b'), track('a')];
+
+      final first = presenter.viewFor(
+        identity: identity,
+        tracks: tracks,
+        history: const [],
+        localSongs: const [],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+      final second = presenter.viewFor(
+        identity: identityFor(LibraryCollections.favoritesSentinel),
+        tracks: tracks,
+        history: const [],
+        localSongs: const [],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+
+      expect(identical(second, first), isTrue);
+      expect(identical(second.visibleRows, first.visibleRows), isTrue);
+    });
+
+    test('历史写入（历史列表换引用）不失效收藏视图', () {
+      final presenter = CollectionPresenter();
+      final identity = identityFor(LibraryCollections.favoritesSentinel);
+      final tracks = [track('b'), track('a')];
+
+      final first = presenter.viewFor(
+        identity: identity,
+        tracks: tracks,
+        history: [history('1')],
+        localSongs: const [],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+      // 后台播放写入历史：provider 替换历史列表引用，收藏曲目引用不变。
+      final second = presenter.viewFor(
+        identity: identity,
+        tracks: tracks,
+        history: [history('2'), history('1')],
+        localSongs: const [],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+
+      expect(identical(second, first), isTrue);
+      expect(identical(second.visibleRows, first.visibleRows), isTrue);
+    });
+
+    test('查询 / 排序 / 曲目列表 / 身份变化都让缓存失效', () {
+      final presenter = CollectionPresenter();
+      final identity = identityFor(LibraryCollections.favoritesSentinel);
+      final tracks = [track('b', title: 'Beta'), track('a', title: 'Alpha')];
+
+      CollectionView view({
+        CollectionIdentity? withIdentity,
+        List<PlaylistTrack>? withTracks,
+        String query = '',
+        CollectionTrackSort sort = CollectionTrackSort.added,
+      }) =>
+          presenter.viewFor(
+            identity: withIdentity ?? identity,
+            tracks: withTracks ?? tracks,
+            history: const [],
+            localSongs: const [],
+            query: query,
+            sort: sort,
+          );
+
+      final base = view();
+
+      final queried = view(query: 'alpha');
+      expect(identical(queried, base), isFalse);
+      expect(queried.visibleRows.single.title, 'Alpha');
+
+      final sorted = view(sort: CollectionTrackSort.title);
+      expect(identical(sorted, base), isFalse);
+      expect(sorted.visibleRows.first.title, 'Alpha');
+
+      final replacedTracks = [...tracks, track('c', title: 'Gamma')];
+      final grown = view(withTracks: replacedTracks);
+      expect(identical(grown, base), isFalse);
+      expect(grown.visibleCount, 3);
+      expect(identical(grown.tracks, replacedTracks), isTrue);
+
+      final renamed = view(
+        withIdentity: CollectionIdentity(
+          selectedId: identity.selectedId,
+          kind: identity.kind,
+          playlistId: identity.playlistId,
+          displayName: 'Favorites',
+        ),
+      );
+      expect(identical(renamed, base), isFalse);
+      expect(renamed.displayName, 'Favorites');
+    });
+
+    test('历史 / 本地歌曲按各自源列表失效，互不串缓存', () {
+      final presenter = CollectionPresenter();
+      final historyIdentity = identityFor(LibraryCollections.historySentinel);
+      final historyRows = [history('1')];
+
+      final firstHistory = presenter.viewFor(
+        identity: historyIdentity,
+        tracks: const [],
+        history: historyRows,
+        localSongs: const [],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+      final secondHistory = presenter.viewFor(
+        identity: historyIdentity,
+        tracks: const [],
+        history: [...historyRows, history('2')],
+        localSongs: const [],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+      expect(identical(secondHistory, firstHistory), isFalse);
+      expect(secondHistory.visibleCount, 2);
+
+      final localIdentity = identityFor(LibraryCollections.downloadsSentinel);
+      final localRows = [localSong('1')];
+      final firstLocal = presenter.viewFor(
+        identity: localIdentity,
+        tracks: const [],
+        history: const [],
+        localSongs: localRows,
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+      final secondLocal = presenter.viewFor(
+        identity: localIdentity,
+        tracks: const [],
+        history: const [],
+        localSongs: [...localRows, localSong('2')],
+        query: '',
+        sort: CollectionTrackSort.added,
+      );
+      expect(identical(secondLocal, firstLocal), isFalse);
+      expect(secondLocal.visibleCount, 2);
+    });
   });
 
   group('行动作构成', () {

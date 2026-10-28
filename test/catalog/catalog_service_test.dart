@@ -233,6 +233,31 @@ void main() {
     expect(source.searchCalls, 2);
   });
 
+  test('clearSearchCache：只清搜索缓存，已缓存的取链仍然命中', () async {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source});
+    addTearDown(registry.dispose);
+    final service = CatalogService(registry: registry);
+    final track = _track('kw', 'a');
+    const query = SearchQuery(keyword: 'hello');
+
+    await service.search('kw', query);
+    await service.resolve(track);
+    expect(source.searchCalls, 1);
+    expect(source.resolveCalls, 1);
+
+    service.clearSearchCache();
+
+    await service.search('kw', query);
+    await service.resolve(track);
+    expect(source.searchCalls, 2, reason: '搜索缓存已清空，重新请求');
+    expect(
+      source.resolveCalls,
+      1,
+      reason: '取链缓存刻意保留，托盘听歌不重新取链',
+    );
+  });
+
   test('search：未知音源抛 StateError', () async {
     final registry = _FakeRegistry({});
     addTearDown(registry.dispose);

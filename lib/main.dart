@@ -29,6 +29,7 @@ import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/playback_power_policy.dart';
 import 'providers/library_provider.dart';
+import 'providers/search_provider.dart';
 import 'services/app_logging.dart';
 import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
@@ -177,6 +178,23 @@ void main() async {
     repository: library.libraryRepository,
     playbackProvider: playback.playbackProvider,
   );
+  // 搜索 provider 由组合根创建（原先在 Provider 树里懒建）：只为了在创建时
+  // 注册托盘期的缓存释放回调；挂树仍是同一个实例（`provider_tree.dart`）。
+  final searchProvider = SearchProvider(
+    playback.playbackProvider,
+    catalogService: catalog.catalogService,
+    sourceRegistry: catalog.sourceRegistry,
+  );
+  // 托盘期释放业务缓存（只清可重建的瞬时 / 浏览数据，不动收藏与历史）：
+  // 搜索结果是本次会话的瞬时数据；列表曲目与目录分页页退出后按需重取。
+  // 只注册释放入口，AppMemoryManager 不反向依赖这些类型。
+  AppMemoryManager.instance
+    ..addReleaser(libraryProvider.releaseBrowseCaches)
+    ..addReleaser(searchProvider.releaseSearchResults)
+    ..addReleaser(catalog.catalogService.clearSearchCache)
+    ..addReleaser(catalog.albumService.clearCache)
+    ..addReleaser(catalog.artistService.clearCache)
+    ..addReleaser(catalog.commentsService.clearCache);
   // 系统媒体会话的「收藏」动作：通知点击 ↔ 曲库（与托盘 / 任务栏按钮同一
   // 写入路径）。必须在 provider 建好之后接线（handler 先于它创建）。
   wireNotificationFavorite(
@@ -286,6 +304,7 @@ void main() async {
         library: library,
         playback: playback,
         libraryProvider: libraryProvider,
+        searchProvider: searchProvider,
         desktop: desktop,
         ai: ai,
         lyrics: lyrics,

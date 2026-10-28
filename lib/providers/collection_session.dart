@@ -316,6 +316,9 @@ class CollectionSession extends ChangeNotifier {
   /// 最近一次 sync 解析出的列表 id（失败重试用）。
   int? _lastPlaylistId;
 
+  /// 上一帧投影的视图：identical 时可见行集合没变，选择集无需全量重扫。
+  CollectionView? _lastView;
+
   Future<void>? _restoreFuture;
 
   /// 多选状态机（页面读选中态 / 计数，写操作走本类意图方法）。
@@ -409,7 +412,14 @@ class CollectionSession extends ChangeNotifier {
 
     // 视图落定即校准选择集：被删除 / 被过滤掉的行不再计数，仍在可见列表
     // 里的行（例如历史前插后的旧行）保持选中。
-    _selection.retainKeys([for (final row in view.visibleRows) row.key]);
+    //
+    // 只有视图换了才需要扫描可见行：presenter 对同一输入返回同一份
+    // CollectionView（历史写入不影响收藏视图），identical 即「可见行集合
+    // 与顺序都没变」；选择 key 都来自可见行，不会因跳过而留下失效项。
+    if (!identical(view, _lastView)) {
+      _selection.retainKeys([for (final row in view.visibleRows) row.key]);
+      _lastView = view;
+    }
 
     // 加载组合：首帧列表 / 当前列表曲目 / 历史首载 / 本地歌曲联结，
     // 四个来源合成一个阶段，页面只判断 loading 与否。

@@ -82,6 +82,23 @@ void main() {
     expect(source.commentCalls, 4, reason: '失效后重新取数');
   });
 
+  test('clearCache 清空全部曲目 / 类型的评论页（托盘隐藏释放）', () async {
+    final track = trackOf('186016');
+    final other = trackOf('other');
+    await service.fetch(track, kind: CommentKind.hot);
+    await service.fetch(track, kind: CommentKind.latest);
+    await service.fetch(other, kind: CommentKind.hot);
+    expect(service.countForTrack(track), 2);
+    expect(service.countForTrack(other), 1);
+
+    service.clearCache();
+    expect(service.countForTrack(track), 0);
+    expect(service.countForTrack(other), 0);
+
+    await service.fetch(track, kind: CommentKind.hot);
+    expect(source.commentCalls, 4, reason: '清空后重新取数');
+  });
+
   test('任意异常归一化为 SourceFailure', () async {
     source.onComments = (kind, page, limit) async => throw StateError('boom');
     await expectLater(

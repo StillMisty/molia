@@ -21,7 +21,9 @@ class CommentsService {
              .comments(query.track, kind: query.kind, page: page, limit: limit),
          keyOf: (query, page, limit) =>
              '${trackCacheKeyPrefix(query.track)}${query.kind.name}:$page:$limit',
-         maxEntries: 96,
+         // 容量 32（约 2–3 首曲目的热门 + 最新页）：评论页退出后不把整份
+         // 分页正文留在常驻内存；TTL 5min 不变，重进同曲目仍可命中。
+         maxEntries: 32,
          ttl: ttl,
          cache: cache,
        );
@@ -53,6 +55,12 @@ class CommentsService {
   /// 使该曲目的评论缓存全部失效（下拉刷新 / 重试用）。
   void invalidateTrack(Track track) =>
       _pages.invalidatePrefix(trackCacheKeyPrefix(track));
+
+  /// 清空全部评论分页缓存（托盘隐藏时由内存守卫调用）。
+  ///
+  /// 本服务所有 key 都以 `comments:` 开头，整段前缀即全清；在途条目一并
+  /// 移除，结果仍返回原等待方，只是不再写回缓存。
+  void clearCache() => _pages.invalidatePrefix('comments:');
 
   /// 指定曲目当前的评论缓存条目数（含 in-flight）。
   int countForTrack(Track track) =>

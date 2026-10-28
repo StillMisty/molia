@@ -134,6 +134,13 @@ class CatalogService {
   void invalidateSearchPrefix(String prefix) =>
       _searchCache.invalidatePrefix(prefix);
 
+  /// 清空全部搜索缓存（单曲 / 歌手 / 歌词共用同一实例）。
+  ///
+  /// 托盘隐藏时由内存守卫调用：搜索结果带 raw payload，且下次打开搜索多半
+  /// 换了关键词，没有常驻价值。取链缓存**刻意保留**：托盘听歌仍在取链，
+  /// 清掉会让恢复后的播放重新走一遍音源脚本。
+  void clearSearchCache() => _searchCache.clear();
+
   /// 搜索缓存 key：`search:{source}:{keyword}:{page}:{limit}`。
   static String searchCacheKey(String sourceKey, SearchQuery query) =>
       'search:$sourceKey:${query.keyword}:${query.page}:${query.limit}';

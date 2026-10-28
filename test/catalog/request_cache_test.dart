@@ -120,6 +120,82 @@ void main() {
     });
   });
 
+  group('RequestCache · 过期清理', () {
+    test('clearExpired 只清已完成且过期的条目，保留 in-flight', () async {
+      var now = DateTime(2026, 1, 1);
+      final cache = RequestCache(
+        ttl: const Duration(minutes: 5),
+        clock: () => now,
+      );
+
+      await cache.getOrCreate('done', () async => 1);
+      final pending = Completer<int>();
+      unawaited(cache.getOrCreate<int>('pending', () => pending.future));
+
+      now = now.add(const Duration(minutes: 6));
+      expect(cache.clearExpired(), 1);
+      expect(cache.containsKey('done'), isFalse);
+      expect(
+        cache.containsKey('pending'),
+        isTrue,
+        reason: 'single-flight 的等待方还挂着，不能半路移除',
+      );
+
+      pending.complete(2);
+      await Future<void>.delayed(Duration.zero);
+      expect(cache.length, 1);
+    });
+
+    test('clearExpired 保留 TTL 内条目', () async {
+      var now = DateTime(2026, 1, 1);
+      final cache = RequestCache(
+        ttl: const Duration(minutes: 5),
+        clock: () => now,
+      );
+
+      await cache.getOrCreate('k', () async => 1);
+      now = now.add(const Duration(minutes: 4));
+      expect(cache.clearExpired(), 0);
+      expect(cache.containsKey('k'), isTrue);
+    });
+
+    test('写入路径低频清理：容量内的过期条目不会永久占位', () async {
+      var now = DateTime(2026, 1, 1);
+      final cache = RequestCache(
+        ttl: const Duration(minutes: 5),
+        clock: () => now,
+      );
+
+      for (var i = 0; i < 5; i++) {
+        await cache.getOrCreate('old$i', () async => i);
+      }
+      expect(cache.length, 5);
+
+      now = now.add(const Duration(minutes: 6));
+      for (var i = 0; i < 16; i++) {
+        await cache.getOrCreate('new$i', () async => i);
+      }
+
+      expect(cache.length, 16, reason: '第 16 次插入顺带扫掉 5 个过期条目');
+      expect(cache.containsKey('old0'), isFalse);
+    });
+
+    test('clear 清空全部条目；在途结果不再写回', () async {
+      final cache = RequestCache(ttl: const Duration(minutes: 5));
+      await cache.getOrCreate('done', () async => 1);
+
+      final pending = Completer<int>();
+      final inFlight = cache.getOrCreate<int>('pending', () => pending.future);
+      cache.clear();
+      expect(cache.length, 0);
+
+      pending.complete(2);
+      expect(await inFlight, 2, reason: '原等待方仍拿到自己的结果');
+      await Future<void>.delayed(Duration.zero);
+      expect(cache.length, 0, reason: '在途结果不能复活已清空的条目');
+    });
+  });
+
   group('RequestCache · LRU', () {
     test('超容量淘汰最久未使用条目', () async {
       final cache = RequestCache(maxEntries: 2, ttl: const Duration(minutes: 5));

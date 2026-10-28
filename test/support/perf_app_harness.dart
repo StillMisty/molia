@@ -39,10 +39,16 @@ import 'settings_test_support.dart';
 const String _favoritesName = '__favorites__';
 
 /// 挂载一屏真实壳层 + [favoritesCount] 条收藏；返回播放后端供切歌场景使用。
+///
+/// [size] 是测试视口的逻辑尺寸（DPR 固定 1）。默认桌面宽度；小屏展开场景
+/// 需要从首帧就用手机宽度装配——播放页会在 1440 宽走大屏两栏版式（没有
+/// 迷你态），且运行中跨断点切换会让隐藏页的两套歌词视图短暂共用一个
+/// ScrollController。
 Future<FakePlaybackBackend> pumpPerfApp(
   WidgetTester tester, {
   required bool desktopShell,
   int favoritesCount = 1000,
+  Size size = const Size(1440, 900),
 }) async {
   SharedPreferences.setMockInitialValues({
     'shell_home_destination': 'favorites',
@@ -157,7 +163,7 @@ Future<FakePlaybackBackend> pumpPerfApp(
     upNext: queue.sublist(1),
   ));
 
-  tester.view.physicalSize = const Size(1440, 900);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(() {
     tester.view.resetPhysicalSize();

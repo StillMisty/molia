@@ -85,6 +85,10 @@ class SearchProvider extends ChangeNotifier {
 
   Timer? _debounceTimer;
 
+  /// 已 dispose：释放入口可能比页面生命周期晚（组合根注册的回调），
+  /// 销毁后不得再通知已卸下的监听器。
+  bool _disposed = false;
+
   /// 输入防抖：300ms 是「停止输入到发请求」的折中。
   ///
   /// 原值 500ms 在 perf 场景里占首屏搜索墙钟的 90%+（mock 本地音源 1.5ms
@@ -387,6 +391,25 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 释放搜索结果（托盘隐藏时由内存守卫调用）。
+  ///
+  /// 搜索结果页随休眠门卸载，恢复时会重建；瞬时结果 / 歌词片段 / 分页会话
+  /// 没有保留价值，却会连同 raw payload 一直挂到下次搜索。清空关键词与三类
+  /// 分页控制器（[PagedListController.reset] 同时使在途响应过期），并取消
+  /// 防抖计时器；音源选择与当前类型分段保留（那是用户偏好，不占内存）。
+  void releaseSearchResults() {
+    if (_disposed) return;
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    _searchQuery = '';
+    _failure = null;
+    _clearSongResults();
+    _resetPagination();
+    _clearArtistSession();
+    _clearLyricSession();
+    notifyListeners();
+  }
+
   Future<void> performSearch(String query) async {
     // 归一化一次：搜索缓存 key 含关键词，带首尾空格的输入会命中不同条目
     // 并重复请求（手机键盘自动补空格很常见）。
@@ -649,6 +672,7 @@ class SearchProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _debounceTimer?.cancel();
     _registrySubscription?.cancel();
     _pager.dispose();

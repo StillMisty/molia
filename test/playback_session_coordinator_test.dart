@@ -543,6 +543,35 @@ void main() {
     expect(await PlaybackSessionStore().load(), isNotNull);
   });
 
+  test('UI 停止释放会话引用；系统停止仍保留可恢复会话', () async {
+    build(persistStore: true);
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_live(a, queue: [a, b], position: const Duration(seconds: 5)));
+    expect(session.lastWrittenSession, isNotNull);
+
+    // UI 的「本次会话结束」：清持久化之外，也不再引用上一份完整队列。
+    await session.stopPlayback();
+    await session.pendingWrite;
+    expect(
+      session.lastWrittenSession,
+      isNull,
+      reason: '停止后常驻内存里不应还挂着一整份队列',
+    );
+
+    // 系统媒体「停止」是可恢复语义：随后的整份落盘与引用都要保留。
+    backend.emit(_live(_track('c'), queue: [_track('c')]));
+    expect(session.lastWrittenSession, isNotNull);
+    await session.stop();
+    expect(session.lastWrittenSession, isNotNull);
+    expect(store.calls.last, 'save');
+    expect(
+      store.calls.where((call) => call == 'clear'),
+      hasLength(1),
+      reason: '只有 UI 停止清持久化，系统停止不清',
+    );
+  });
+
   test('单写者：切歌整份落盘 → 暂停强制落盘 → 停止清除，写请求按序', () async {
     build(persistStore: true);
     final a = _track('a');

@@ -930,6 +930,64 @@ void main() {
       expect(view.tracks!.single.songId, '1');
     });
 
+    test('releaseBrowseCaches：清列表曲目 / 错误，保留收藏键、清单与历史；在途读取作废',
+        () async {
+      final playlistId = await repository.createPlaylist('测试列表');
+      await repository.addTrackToPlaylist(
+        playlistId,
+        PlaylistTrack(
+          playlistId: playlistId,
+          sourceKey: 'wy',
+          songId: '1',
+          title: 'Song 1',
+          addedAt: 0,
+        ),
+      );
+      await provider.refreshPlaylists(force: true);
+      await provider.refreshHistory();
+      await repository.addHistoryEntry(entry('1', playedAt: 1));
+      await settle();
+      await provider.toggleFavorite(sourceKey: 'wy', songId: '9', title: 'Fav');
+      await provider.loadPlaylistTracks(playlistId);
+      expect(provider.playlistTracksView(playlistId).tracks, hasLength(1));
+
+      // 释放前的在途读取：释放后既不能挡住新读取，也不能把旧结果写回。
+      final gate = Completer<List<PlaylistTrack>>();
+      repository.nextPlaylistTracksSnapshot = gate;
+      provider.ensurePlaylistTracks(playlistId, force: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.playlistTracksView(playlistId).loading, isTrue);
+
+      provider.releaseBrowseCaches();
+      expect(provider.playlistTracksView(playlistId).tracks, isNull);
+      expect(provider.playlistTracksView(playlistId).failed, isFalse);
+      expect(provider.playlists.map((p) => p.name), contains('测试列表'));
+      expect(provider.history.single.songId, '1');
+      expect(provider.isFavorite('wy', '9'), isTrue);
+
+      // 页面恢复重建时 ensure：旧请求仍在途，新读取不能被 loading 标记挡住。
+      provider.ensurePlaylistTracks(playlistId);
+      for (var i = 0;
+          i < 50 && provider.playlistTracksView(playlistId).tracks == null;
+          i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        provider.playlistTracksView(playlistId).tracks!.single.songId,
+        '1',
+      );
+
+      // 旧请求（旧列表）落地：作废，不覆盖刚加载的新结果。
+      gate.complete(const []);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        provider.playlistTracksView(playlistId).tracks!.single.songId,
+        '1',
+        reason: '释放前发出的读取结果不能再写回缓存',
+      );
+    });
+
     test('列表曲目读取超时 → failed（不再无限 loading）', () async {
       final playlistId = await repository.createPlaylist('测试列表');
       await provider.refreshPlaylists();

@@ -186,3 +186,30 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
   曲目封面由恢复后的补发预取提前解好。
 - `tool/agent/memory.sh` 只支持桌面 Linux（Android 不在范围）；Windows 用
   `tool/agent/memory.ps1`。
+
+## 7. 2026-10-28：托盘期业务缓存释放（第一批）
+
+在既有图片缓存 / 休眠界面清理之外，托盘隐藏时再释放纯 Dart 的业务缓存：
+
+- `lib/managers/app_memory_manager.dart` 增加 `addReleaser` / `removeReleaser`，
+  只在 `trayHidden` 的休眠帧之后执行；`minimized` 不触发，保持跟手恢复。
+- `LibraryProvider.releaseBrowseCaches()`：清 `_tracksByPlaylist` / 读取错误，
+  保留收藏键、列表清单与历史；browse generation 让释放前在途读取作废，
+  恢复后页面按需重读。
+- `SearchProvider.releaseSearchResults()` + `CatalogService.clearSearchCache()`：
+  清搜索瞬时结果与目录分页结果（含 raw payload）；**不清** `_resolveCache`，
+  避免托盘恢复播放重新取链。
+- `RequestCache` 增加 TTL 清理 / `clear()`；专辑 / 歌手上限 64→16、评论 96→32。
+- `PlaybackSessionCoordinator.stopPlayback()` 清 `_lastWrittenSession`；
+  `LocalPlaybackBackend` 在队列 revision 变化时裁剪 `_trackCache` 旧身份。
+- 组合根在 `main.dart` 注册这些 releaser；AppMemoryManager 不反向依赖 provider。
+
+验证：`test/managers/app_memory_manager_test.dart` 等 17 个新增用例覆盖
+「托盘触发 / 最小化不触发 / 快速可见往返跳过 / 在途读取作废 / 停止播放清队列引用」。
+
+**观测限制**：同一 debug 进程、500 首收藏（mock raw 只有 `{songId}`）里，
+托盘隐藏前后 heap `212.7 → 209.1MB`、RSS `701.8 → 685.8MB`；旧代码同
+fixture 的 heap 是 `209.5 → 205.8MB`，两者下降几乎相同，说明这个 fixture
+上本批新增释放**不可分辨**——主要仍是既有的图片缓存 / 界面卸载。真实
+raw payload / 多列表详情场景请按 §4 的隔离 HOME + 真实库复测，不要把
+3.6MB 当成线上收益，也不要对外宣称这批已经实测省了内存。

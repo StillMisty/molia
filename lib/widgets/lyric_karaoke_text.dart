@@ -60,6 +60,18 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
   /// 补间目标 / 静态显示值（毫秒）。
   double _targetMs = 0;
 
+  /// 非当前词（已唱 / 未唱）的 span 缓存：这两类颜色只随「词状态」变化，
+  /// 逐帧重算时直接复用；只有正在插值的当前词需要新的 TextStyle。
+  ///
+  /// 键是词表引用 + 已唱 / 未唱颜色：父级换行或换主题色时整体丢弃。
+  List<LyricWord>? _spanWords;
+  Color? _spanPlayedColor;
+  Color? _spanUnplayedColor;
+  List<TextSpan?> _spanCache = const [];
+  List<_WordPaint?> _spanPaints = const [];
+  TextStyle _playedStyle = const TextStyle();
+  TextStyle _unplayedStyle = const TextStyle();
+
   @override
   void initState() {
     super.initState();
@@ -140,24 +152,60 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
   }
 
   List<InlineSpan> _buildSpans(double ms) {
-    final spans = <InlineSpan>[];
-    for (final word in widget.words) {
+    final words = widget.words;
+    if (!identical(words, _spanWords) ||
+        words.length != _spanCache.length ||
+        widget.playedColor != _spanPlayedColor ||
+        widget.unplayedColor != _spanUnplayedColor) {
+      _resetSpanCache(words);
+    }
+    final spans = List<TextSpan>.filled(
+      words.length,
+      const TextSpan(),
+      growable: false,
+    );
+    for (var i = 0; i < words.length; i++) {
+      final word = words[i];
       final start = word.start.inMilliseconds.toDouble();
       final end = word.end.inMilliseconds.toDouble();
-      final Color color;
       if (ms >= end) {
-        color = widget.playedColor;
+        spans[i] = _spanFor(i, word, _WordPaint.played);
       } else if (ms <= start || end <= start) {
-        color = widget.unplayedColor;
+        spans[i] = _spanFor(i, word, _WordPaint.unplayed);
       } else {
-        color = Color.lerp(
+        final color = Color.lerp(
           widget.unplayedColor,
           widget.playedColor,
           (ms - start) / (end - start),
         )!;
+        spans[i] = TextSpan(text: word.text, style: TextStyle(color: color));
       }
-      spans.add(TextSpan(text: word.text, style: TextStyle(color: color)));
     }
     return spans;
   }
+
+  void _resetSpanCache(List<LyricWord> words) {
+    _spanWords = words;
+    _spanPlayedColor = widget.playedColor;
+    _spanUnplayedColor = widget.unplayedColor;
+    _spanCache = List<TextSpan?>.filled(words.length, null, growable: false);
+    _spanPaints = List<_WordPaint?>.filled(words.length, null, growable: false);
+    _playedStyle = TextStyle(color: widget.playedColor);
+    _unplayedStyle = TextStyle(color: widget.unplayedColor);
+  }
+
+  /// 已唱 / 未唱词复用同色 span：词表与颜色不变时，同一个词只会分配一次。
+  TextSpan _spanFor(int index, LyricWord word, _WordPaint paint) {
+    if (_spanPaints[index] == paint) return _spanCache[index]!;
+    final span = TextSpan(
+      text: word.text,
+      style: paint == _WordPaint.played ? _playedStyle : _unplayedStyle,
+    );
+    _spanPaints[index] = paint;
+    _spanCache[index] = span;
+    return span;
+  }
 }
+
+/// 非当前词的两档颜色：只决定 span 缓存的复用边界。
+enum _WordPaint { played, unplayed }

@@ -30,6 +30,14 @@ class RequestCache {
   /// 插入顺序即 LRU 顺序（最旧在前）；命中时删除并重新插入实现“最近使用”。
   final Map<String, _CacheEntry> _entries = {};
 
+  /// 每 N 次插入顺带扫一次过期条目。
+  ///
+  /// 容量内的过期条目不会被 LRU 淘汰，不主动扫就会一直占着值引用（长驻
+  /// 进程里是慢性增长）；每次插入都全表扫又没必要，固定低频即可。
+  static const int _expirySweepInterval = 16;
+
+  int _insertsSinceExpirySweep = 0;
+
   /// 当前条目数（含 in-flight 条目），诊断/测试用。
   int get length => _entries.length;
 
@@ -71,6 +79,12 @@ class RequestCache {
     final entry = _CacheEntry(pending: future);
     _entries[key] = entry;
     _evictOverflow();
+    // 低频顺带清理：新条目是 in-flight，不会被扫掉；清的是容量内自然过期
+    // 却一直没被访问的旧值（见 [_expirySweepInterval]）。
+    if (++_insertsSinceExpirySweep >= _expirySweepInterval) {
+      _insertsSinceExpirySweep = 0;
+      clearExpired();
+    }
 
     future.then((value) {
       if (identical(_entries[key], entry)) {
@@ -88,6 +102,31 @@ class RequestCache {
     });
 
     return future.then((value) => value as T);
+  }
+
+  /// 清理已过 TTL 的已完成条目，返回清理数量。
+  ///
+  /// in-flight 条目一律保留：single-flight 的等待方还挂在同一个 Future 上，
+  /// 半路移除只会让下一次调用重复取数（失败不缓存 / LRU 语义不变）。
+  int clearExpired() {
+    final now = _clock();
+    var removed = 0;
+    _entries.removeWhere((_, entry) {
+      if (entry.pending != null) return false;
+      final expiresAt = entry.expiresAt;
+      if (expiresAt == null || now.isBefore(expiresAt)) return false;
+      removed++;
+      return true;
+    });
+    return removed;
+  }
+
+  /// 清空全部条目（含 in-flight：结果仍会返回给原来的等待方，只是不再写回）。
+  ///
+  /// 托盘隐藏这类「界面已卸载、缓存没必要常驻」的时机使用；与
+  /// [invalidatePrefix] 一样，在途请求的 identity 校验会阻止旧结果复活条目。
+  void clear() {
+    _entries.clear();
   }
 
   /// 使单个 key 失效（in-flight 条目一并移除，后续调用重新执行）。

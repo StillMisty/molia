@@ -60,6 +60,10 @@ class LocalPlaybackBackend implements PlaybackBackend {
   String? _cachedErrorRaw;
   SourceFailure? _cachedError;
 
+  /// 身份缓存条目数（测试观察用）：队列 revision 变化后应只剩当前队列。
+  @visibleForTesting
+  int get trackCacheLength => _trackCache.length;
+
   @override
   PlaybackBackendKind get kind => PlaybackBackendKind.local;
 
@@ -254,12 +258,24 @@ class LocalPlaybackBackend implements PlaybackBackend {
     final revision = _service.queueRevision;
     final cached = _cachedQueue;
     if (cached != null && revision == _cachedQueueRevision) return cached;
+    final sourceQueue = _service.queueTracks;
     final queue = List<Track>.unmodifiable([
-      for (final source in _service.queueTracks) _toTrack(source),
+      for (final source in sourceQueue) _toTrack(source),
     ]);
+    // 队列整体换掉（播放新列表 / 换源后重建）时，上一份队列的 SourceTrack
+    // 身份不会再出现；不清掉这些条目，Track（含 raw payload 引用）会随
+    // 播放过的列表数量线性常驻。当前 / 下一首仍在本队列内，映射照常复用。
+    _trimTrackCache(sourceQueue);
     _cachedQueue = queue;
     _cachedQueueRevision = revision;
     return queue;
+  }
+
+  /// 只保留仍属于 [queue] 的身份缓存条目（按对象身份比较）。
+  void _trimTrackCache(List<SourceTrack> queue) {
+    if (_trackCache.isEmpty) return;
+    final alive = Set<SourceTrack>.identity()..addAll(queue);
+    _trackCache.removeWhere((source, _) => !alive.contains(source));
   }
 
   Track? _toTrackOrNull(SourceTrack? source) =>

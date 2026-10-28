@@ -19,6 +19,24 @@ import 'dart:async';
 
 import 'data_path_trace.dart';
 
+/// 本次起播实际走的资源路径（轻量枚举，仅用于埋点分桶）。
+enum PlaybackCachePath {
+  /// 本地文件（下载副本 / 已完整的音频缓存），直接 `file://` 播放。
+  file,
+
+  /// 边播边缓存源（`LockCachingAudioSource`）。
+  caching,
+
+  /// 直接网络流播（桌面后端 / 缓存源回退）。
+  direct;
+
+  String get wireName => switch (this) {
+    PlaybackCachePath.file => 'file',
+    PlaybackCachePath.caching => 'caching',
+    PlaybackCachePath.direct => 'direct',
+  };
+}
+
 /// 一次起播的耗时记录器；同一时刻最多一个活跃实例。
 class PlaybackStartTrace {
   PlaybackStartTrace._(this._trackId) : _watch = Stopwatch()..start() {
@@ -36,6 +54,9 @@ class PlaybackStartTrace {
   Timer? _timeout;
   int? _resolveUs;
   int? _sourceUs;
+  PlaybackCachePath? _cachePath;
+  bool? _prefetched;
+  bool _playRequested = false;
   bool _finished = false;
 
   /// 开始一次起播记录；上一个未完成的记录按 `superseded` 落盘。
@@ -56,15 +77,34 @@ class PlaybackStartTrace {
   }
 
   /// `setAudioSource` 完成（播放器已接受资源）。
-  void markSourceSet() {
+  ///
+  /// [cachePath] / [prefetched] 是本次起播的分桶信息：走本地文件、边播边
+  /// 缓存还是直接流播；起播时该曲目的字节预取是否仍在途。只在埋点开启时
+  /// 有用，调用方不需要为计算它们额外统计。
+  void markSourceSet({PlaybackCachePath? cachePath, bool? prefetched}) {
     if (!enabled || _finished) return;
     _sourceUs ??= _watch.elapsedMicroseconds;
+    _cachePath ??= cachePath;
+    _prefetched ??= prefetched;
+  }
+
+  /// 已把播放请求下发给播放器（`play()` 调用前）。
+  ///
+  /// 切歌时上一首的位置事件可能晚到；只有 play 之后的位置前进才算「首声」，
+  /// 否则新一笔 trace 会被旧曲目的残留位置瞬间完成。
+  void markPlayRequested() {
+    if (!enabled || _finished) return;
+    _playRequested = true;
   }
 
   /// 位置首次前进：视为「首声」。
   static void firstProgress() {
     if (!enabled) return;
-    _active?.complete();
+    final active = _active;
+    if (active == null || !active._playRequested || active._sourceUs == null) {
+      return;
+    }
+    active.complete();
   }
 
   /// 当前这一笔失败（异常 / 被取消）。
@@ -103,6 +143,10 @@ class PlaybackStartTrace {
           'source_ms': _ms(sourceUs - (resolveUs ?? 0)),
           'play_ms': _ms(totalUs - sourceUs),
         },
+        // 路径分桶：file = 本地文件命中，caching = 边播边缓存，
+        // direct = 直接网络流播；prefetched = 起播时字节预取仍在途。
+        if (_cachePath != null) 'cache_path': _cachePath!.wireName,
+        if (_prefetched != null) 'prefetched': _prefetched! ? 1 : 0,
       },
     );
   }

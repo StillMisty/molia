@@ -50,6 +50,7 @@ List<SingleChildWidget> buildAppProviders({
   required LibraryStack library,
   required PlaybackStack playback,
   required LibraryProvider libraryProvider,
+  required SearchProvider searchProvider,
   required DesktopStack desktop,
   required AiStack ai,
   required LyricsStack lyrics,
@@ -94,13 +95,8 @@ List<SingleChildWidget> buildAppProviders({
     // 封面取色服务（海报「跟随封面」按需查询；主题链路已在上方接线）。
     Provider<ArtworkPaletteService>.value(value: display.artworkPaletteService),
     ChangeNotifierProvider.value(value: display.navProvider),
-    ChangeNotifierProvider(
-      create: (context) => SearchProvider(
-        context.read<PlaybackProvider>(),
-        catalogService: catalogService,
-        sourceRegistry: sourceRegistry,
-      ),
-    ),
+    // 搜索：组合根创建（托盘内存守卫按生命周期注册释放回调），这里只挂树。
+    ChangeNotifierProvider.value(value: searchProvider),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
     ChangeNotifierProvider.value(value: libraryProvider),
     // 自定义封面（每曲 + 默认）：歌曲信息页 / 设置页 / 封面选择弹层读取。
