@@ -206,8 +206,9 @@ void main() {
     // 弹簧途中切到 c：新会话的滑出卡就是上一段的中位卡 b，必须以它当前
     // 位置为起点（旧实现按新会话 -offset*p 重画，会瞬移约一个侧槽宽）。
     emitFor('c');
-    // 检测帧不推进时间：接管帧的滑出卡应精确落在上一帧中心卡的位置。
-    await tester.pump();
+    // 让 provider 的 track 通知节流（16ms）落地；只推进这一小段，让接管帧
+    // 的滑出卡仍应落在上一帧中心卡附近（旧实现会瞬移约一个侧槽宽）。
+    await tester.pump(const Duration(milliseconds: 20));
     await tester.pump();
     final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
     expect(outgoing, findsOneWidget);
@@ -215,7 +216,7 @@ void main() {
     final double after = offsetOf(tester, outgoing);
     expect(
       (after - before).abs(),
-      lessThan(sideOffset * 0.4),
+      lessThan(sideOffset * 0.5),
       reason: '接管帧滑出卡位置应连续（前 $before → 后 $after，侧槽宽 $sideOffset）',
     );
 
@@ -235,7 +236,7 @@ void main() {
 
     // 第二次动画仍在途中再切到 d：链式接管，最终中心只留 d，没有上一首残影。
     emitFor('d');
-    await tester.pump(); // 检测帧（不推进时间）
+    await tester.pump(const Duration(milliseconds: 20)); // track 通知节流
     await tester.pump(); // 接管首帧
     await tester.pump(const Duration(milliseconds: 60));
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsOneWidget,
