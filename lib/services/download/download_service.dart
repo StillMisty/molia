@@ -270,8 +270,10 @@ class DownloadService extends ChangeNotifier {
   ///
   /// 保留给既有调用方 / 测试：进度通道已拆到 [DownloadTask]，新 UI 直接
   /// 监听任务本身（见 [taskForTrack]）。
-  DownloadProgress? progressForTrack(Track track) =>
-      taskForTrack(track)?.progress;
+  DownloadProgress? progressForTrack(Track track) {
+    final task = taskForTrack(track);
+    return task != null && task.isActive ? task.progress : null;
+  }
 
   /// 任务结构变化（增删 / 状态切换）：页面任务区只监听这里。
   Listenable get taskChanges => _queue;

@@ -287,7 +287,11 @@ class DownloadQueue extends ChangeNotifier {
     if (existing != null && existing.isActive) return existing.done;
     if (existing != null) {
       _tasks.remove(task.key);
-      if (!identical(existing, task)) existing.dispose();
+      // 替换可能发生在旧任务的状态通知回调里（监听者同步重试同 key）；
+      // 延迟到当前通知栈结束后再销毁，避免在 notifyListeners 迭代中 dispose。
+      if (!identical(existing, task)) {
+        scheduleMicrotask(existing.dispose);
+      }
     }
     if (task.status != DownloadTaskStatus.queued) task.resetForRetry();
     _tasks[task.key] = task;
@@ -349,9 +353,10 @@ class DownloadQueue extends ChangeNotifier {
           if (task.status == DownloadTaskStatus.failed &&
               task.kind == DownloadTaskKind.audio) {
             // 音频失败保留在失败区，等待用户重试 / 移除。
-          } else {
+          } else if (identical(_tasks[key], task)) {
             // 完成 / 取消 / 分项失败：调用方（页面 / snackbar）已收到结果，
-            // 不在队列里留下不可操作的条目。
+            // 不在队列里留下不可操作的条目。只移除自己：状态通知的监听者
+            // 可能已同步入队同 key 的新任务，不能把它一起删掉。
             _tasks.remove(key);
           }
           _notify();

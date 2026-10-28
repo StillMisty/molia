@@ -4075,7 +4075,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadsEmpty => '还没有下载的歌曲';
 
   @override
-  String get downloadsNothingToAdd => '没有可下载的歌曲（已下载或正在下载）';
+  String get downloadsNothingToAdd => '没有可下载的歌曲（已是本地、已下载或正在下载）';
 
   @override
   String get sleepTimerTitle => '定时关闭';

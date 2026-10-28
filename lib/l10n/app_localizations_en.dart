@@ -4250,7 +4250,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadsNothingToAdd =>
-      'Nothing to download (already downloaded or in progress)';
+      'Nothing to download (already local, downloaded, or in progress)';
 
   @override
   String get sleepTimerTitle => 'Sleep timer';

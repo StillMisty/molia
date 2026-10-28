@@ -409,15 +409,22 @@ void main() {
     final dio = mockDio((options) => textResponse('err', statusCode: 500));
     final service = makeService(dio: dio);
     await service.init();
+    final track = makeTrack();
 
     await expectLater(
-      service.download(makeTrack()),
+      service.download(track),
       throwsA(
         predicate((e) => e is SourceFailure && e.kind == FailureKind.network),
       ),
     );
     expect(service.recordFor('kw', '1'), isNull);
     expect(storage.files, isEmpty);
+    expect(service.taskForTrack(track)?.status, DownloadTaskStatus.failed);
+    expect(
+      service.progressForTrack(track),
+      isNull,
+      reason: '失败任务不再对外暴露最后进度',
+    );
   });
 
   test('重名策略：不同原曲同标题自动追加 (2)', () async {

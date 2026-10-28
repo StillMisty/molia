@@ -70,6 +70,33 @@ void main() {
     expect(queue.tasks, isEmpty, reason: '完成后从队列移除');
   });
 
+  test('完成通知里同步入队同 key 新任务：旧任务收尾不删新任务', () async {
+    final started = <String>[];
+    final queue = DownloadQueue((task) async {
+      started.add(task.key);
+    });
+    final first = audio('1');
+    late DownloadTask second;
+    late Future<void> secondDone;
+    var reentered = false;
+    first.addListener(() {
+      if (first.status == DownloadTaskStatus.completed && !reentered) {
+        reentered = true;
+        second = audio('1');
+        secondDone = queue.enqueue(second);
+      }
+    });
+
+    final firstDone = queue.enqueue(first);
+    await firstDone;
+    await secondDone;
+    await flush();
+
+    expect(started, [first.key, second.key]);
+    expect(second.status, DownloadTaskStatus.completed);
+    expect(queue.tasks, isEmpty);
+  });
+
   test('同 key 去重：排队 / 运行中返回同一 future，不重复入队', () async {
     final gate = Completer<void>();
     final queue = DownloadQueue((task) => gate.future);

@@ -553,7 +553,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.batches, isEmpty);
-    expect(find.text('没有可下载的歌曲（已下载或正在下载）'), findsOneWidget);
+    expect(find.text('没有可下载的歌曲（已是本地、已下载或正在下载）'), findsOneWidget);
   });
 
   testWidgets('下载管理页（嵌套 Navigator）：选歌单弹层关闭，页面保留并启动批量', (tester) async {

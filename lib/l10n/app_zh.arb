@@ -1868,7 +1868,7 @@
   "downloadFileMissing": "本地文件不存在，可能已被删除",
   "downloadSourceLocal": "本地下载",
   "downloadsEmpty": "还没有下载的歌曲",
-  "downloadsNothingToAdd": "没有可下载的歌曲（已下载或正在下载）",
+  "downloadsNothingToAdd": "没有可下载的歌曲（已是本地、已下载或正在下载）",
   "downloadsManageTitle": "下载管理",
   "downloadsManageSubtitle": "任务队列、批量下载与文件维护",
   "downloadsTasksSection": "任务",

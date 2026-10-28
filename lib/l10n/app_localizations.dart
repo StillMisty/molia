@@ -7585,7 +7585,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadsNothingToAdd.
   ///
   /// In en, this message translates to:
-  /// **'Nothing to download (already downloaded or in progress)'**
+  /// **'Nothing to download (already local, downloaded, or in progress)'**
   String get downloadsNothingToAdd;
 
   /// No description provided for @sleepTimerTitle.

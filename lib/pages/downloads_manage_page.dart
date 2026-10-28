@@ -286,10 +286,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     return ListenableBuilder(
       listenable: task,
       builder: (context, _) {
-        final failure = task.failure;
-        final reason = failure == null
-            ? l10n.downloadStatusNotDownloaded
-            : downloadFailureLabel(l10n, failure);
+        final reason = downloadTaskStatusLabel(l10n, task);
         return SettingsInfoTile(
           key: Key('downloadsFailed_${task.key}'),
           icon: Icons.error_outline_rounded,
