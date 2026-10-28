@@ -33,6 +33,7 @@ import '../services/save_as.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
+import '../utils/download_task_label.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
@@ -264,7 +265,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final downloads = _downloads;
     if (downloads == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -319,7 +319,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final service = _service;
     if (service == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -355,7 +354,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     final service = _service;
     if (service == null || _busy) return;
     final l10n = AppLocalizations.of(context)!;
-    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final confirmed = await M3EDialog.show<bool>(
       context,
@@ -523,27 +521,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       ].where((part) => part.isNotEmpty).join(' · ');
     }
     // 排队 / 下载 / 失败：任务状态优先于缓存说明，进度不能藏起来。
-    if (task != null) {
-      switch (task.status) {
-        case DownloadTaskStatus.queued:
-          return l10n.downloadStatusQueued;
-        case DownloadTaskStatus.running:
-          final percent = task.progress.percent;
-          return percent == null
-              ? '${l10n.downloadStatusDownloading} · '
-                    '${formatCacheBytes(task.progress.receivedBytes)}'
-              : '${l10n.downloadStatusDownloading} · '
-                    '${l10n.downloadProgressPercent(percent)}';
-        case DownloadTaskStatus.failed:
-          final failure = task.failure;
-          return failure == null
-              ? l10n.downloadStatusNotDownloaded
-              : downloadFailureLabel(l10n, failure);
-        case DownloadTaskStatus.completed:
-        case DownloadTaskStatus.cancelled:
-          break;
-      }
-    }
+    if (task != null) return downloadTaskStatusLabel(l10n, task);
     if (data.audioState == LocalPartState.cached) {
       final quality =
           data.cachedQualities.isEmpty || data.cachedQualities.first == 'auto'

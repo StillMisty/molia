@@ -238,6 +238,24 @@ class DownloadService extends ChangeNotifier {
   /// 记录变化后失效排序缓存（写 `_records` 的所有路径都必须调用）。
   void _invalidateDownloadsCache() => _downloadsCache = null;
 
+  /// 写入一条记录并失效排序缓存（所有运行期写入共用）。
+  void _putRecord(DownloadedTrack record) {
+    _records[record.key] = record;
+    _invalidateDownloadsCache();
+  }
+
+  /// 移除一条记录并失效排序缓存。
+  void _removeRecord(String key) {
+    _records.remove(key);
+    _invalidateDownloadsCache();
+  }
+
+  /// 替换整表记录（启动加载）。
+  void _replaceRecords(Iterable<DownloadedTrack> records) {
+    _records = {for (final record in records) record.key: record};
+    _invalidateDownloadsCache();
+  }
+
   /// 按原音源曲目键查询下载记录。
   DownloadedTrack? recordFor(String sourceKey, String songId) =>
       _records['$sourceKey:$songId'];
@@ -263,6 +281,25 @@ class DownloadService extends ChangeNotifier {
     for (final task in _queue.tasks)
       if (task.kind == DownloadTaskKind.audio) task,
   ];
+
+  /// 按状态分组的音频任务（运行在前），管理页不再逐条过滤三遍。
+  DownloadTaskGroups get taskGroups {
+    final groups = _queue.taskGroups;
+    return (
+      running: [
+        for (final task in groups.running)
+          if (task.kind == DownloadTaskKind.audio) task,
+      ],
+      queued: [
+        for (final task in groups.queued)
+          if (task.kind == DownloadTaskKind.audio) task,
+      ],
+      failed: [
+        for (final task in groups.failed)
+          if (task.kind == DownloadTaskKind.audio) task,
+      ],
+    );
+  }
 
   /// 当前曲目的音频任务（排队 / 运行 / 失败）；本地曲目与分项任务返回 null。
   DownloadTask? taskForTrack(Track track) {
@@ -389,7 +426,28 @@ class DownloadService extends ChangeNotifier {
     return deleted;
   }
 
+  /// 批量候选：排除本地曲目、已有音频下载、已有 active 音频任务，
+  /// 按 `track.id.uri` 去重；`index` 是原入参位置（通知序号用）。
+  List<({int index, Track track})> batchCandidates(Iterable<Track> tracks) {
+    final items = tracks.toList();
+    final seen = <String>{};
+    final candidates = <({int index, Track track})>[];
+    for (var index = 0; index < items.length; index++) {
+      final track = items[index];
+      if (track.id.sourceKey == kLocalSourceKey) continue;
+      if (recordForTrack(track)?.hasAudio ?? false) continue;
+      // active 任务不 join 批次：与页面「已加入数」口径一致。
+      if (taskForTrack(track)?.isActive ?? false) continue;
+      if (!seen.add(track.id.uri)) continue;
+      candidates.add((index: index, track: track));
+    }
+    return candidates;
+  }
+
   /// 批量下载：先一次性把全部任务放进队列，再在后台逐个等待结果。
+  ///
+  /// [onEnqueued] 在全部候选入队后、开始等待结果前调用，参数是实际新入队
+  /// 数；页面据此提示「已加入下载队列」，与实际列表一致。
   ///
   /// 页面调用后立即拿到「已加入队列」的反馈，不再被整批 await 锁住；队列
   /// 本身严格串行（一次只跑一个）。不做断点续传（平台直链多为一次性签名
@@ -398,7 +456,10 @@ class DownloadService extends ChangeNotifier {
   ///
   /// 通知（Android）：整批共享一条「N/N」通知（曲目位置按入参序号），批内单任务
   /// 通知被抑制——顺序下载时逐条通知会闪成一串，一条批量通知更接近用户直觉。
-  Future<(int, int)> downloadBatch(Iterable<Track> tracks) async {
+  Future<(int, int)> downloadBatch(
+    Iterable<Track> tracks, {
+    void Function(int enqueued)? onEnqueued,
+  }) async {
     // 物化入参只为「批量位置」计数（顺序与跳过判定完全不变）。
     final items = tracks.toList();
     await _ensureReady();
@@ -408,19 +469,14 @@ class DownloadService extends ChangeNotifier {
     // 取消，若等到按序 await 才监听，completeError 会变成未处理异步错误。
     // 结果：true = 成功，false = 失败，null = 已取消（不计入失败）。
     final outcomes = <Future<bool?>>[];
-    final seen = <String>{};
     try {
-      for (var index = 0; index < items.length; index++) {
-        final track = items[index];
-        if (recordForTrack(track)?.hasAudio ?? false) continue;
-        if (track.id.sourceKey == kLocalSourceKey) continue;
-        // 入参重复：队列本来会同 key 去重，这里跳过避免重复计数。
-        if (!seen.add(track.id.uri)) continue;
+      final candidates = batchCandidates(items);
+      for (final candidate in candidates) {
         final task = DownloadTask(
-          track: track,
+          track: candidate.track,
           kind: DownloadTaskKind.audio,
-          quality: _pickQuality(track),
-          batchIndex: batch ? index + 1 : null,
+          quality: _pickQuality(candidate.track),
+          batchIndex: batch ? candidate.index + 1 : null,
           batchTotal: batch ? items.length : null,
         );
         // enqueue 同步入队：所有任务在第一个 await 前全部可见。
@@ -435,6 +491,7 @@ class DownloadService extends ChangeNotifier {
           ),
         );
       }
+      onEnqueued?.call(outcomes.length);
 
       var done = 0;
       var failed = 0;
@@ -510,8 +567,7 @@ class DownloadService extends ChangeNotifier {
       // 存储不可用时不触碰数据库：本机下载整体关闭。
       if (_supported) {
         final records = await _repository.listAll();
-        _records = {for (final record in records) record.key: record};
-        _invalidateDownloadsCache();
+        _replaceRecords(records);
         // 崩溃遗留的半成品（.part）清扫：失败仅记日志，不影响记录可用。
         final cleaned = await cleanupIncompleteDownloads();
         if (cleaned > 0) _logger.info('清理未完成的下载文件 $cleaned 个');
@@ -767,8 +823,7 @@ class DownloadService extends ChangeNotifier {
         previous: previous,
       );
       await _repository.insert(record);
-      _records[key] = record;
-      _invalidateDownloadsCache();
+      _putRecord(record);
       notifyListeners();
       _logger.info('下载完成: $key -> $filePath (${record.sizeLabel})');
     } catch (e) {
@@ -901,17 +956,12 @@ class DownloadService extends ChangeNotifier {
     }
   }
 
-  /// 取消下载（无进行中任务时空操作）：先撤排队任务，运行中再撤 dio 请求。
-  void cancel(String sourceKey, String songId) {
-    final key = '$sourceKey:$songId';
-    if (_queue.cancelQueued(key)) return;
-    _tokens[key]?.cancel();
-  }
-
-  /// 取消当前曲目的下载（UI 入口）。
+  /// 取消当前曲目的下载（UI 入口）：先撤排队任务，运行中再撤 dio 请求。
   void cancelTrack(Track track) {
     if (track.id.sourceKey == kLocalSourceKey) return;
-    cancel(track.id.sourceKey, track.id.id);
+    final key = track.id.uri;
+    if (_queue.cancelQueued(key)) return;
+    _tokens[key]?.cancel();
   }
 
   /// 删除下载：先删数据库记录（避免残留半删记录），再删音频 / 歌词 / 封面文件
@@ -920,8 +970,7 @@ class DownloadService extends ChangeNotifier {
   /// 本地导入（`imported`）是就地引用：只移除记录，**不动用户原文件**。
   Future<void> delete(DownloadedTrack record) async {
     await _repository.delete(record.originSourceKey, record.originSongId);
-    _records.remove(record.key);
-    _invalidateDownloadsCache();
+    _removeRecord(record.key);
     if (!record.imported) {
       // 记录引用的文件集（音频 / 歌词 / 翻译边车 / 封面）：约定见放置模块。
       for (final path in DownloadFileLayout.referencedFiles(record)) {
@@ -976,8 +1025,7 @@ class DownloadService extends ChangeNotifier {
         durationMs: tags.durationMs,
       );
       await _repository.insert(record);
-      _records[record.key] = record;
-      _invalidateDownloadsCache();
+      _putRecord(record);
       imported++;
     }
     if (imported > 0) notifyListeners();
@@ -1010,8 +1058,7 @@ class DownloadService extends ChangeNotifier {
       }
       final updated = _assembler.republished(record, uri);
       await _repository.insert(updated);
-      _records[record.key] = updated;
-      _invalidateDownloadsCache();
+      _putRecord(updated);
       published++;
     }
     if (published > 0) notifyListeners();
@@ -1128,8 +1175,7 @@ class DownloadService extends ChangeNotifier {
       coverPath: coverPath,
     );
     await _repository.insert(record);
-    _records[key] = record;
-    _invalidateDownloadsCache();
+    _putRecord(record);
   }
 
   /// 已有音频时把（sidecar 里的）歌词 / 封面补写进标签。

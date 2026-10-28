@@ -1075,6 +1075,65 @@ void main() {
     expect(await service.orphanFiles(), isEmpty);
   });
 
+  test('批量候选：跳过本地 / 已下载 / active / 重复 key，保留原入参位置', () async {
+    final controller = StreamController<Uint8List>();
+    final dio = mockDio(
+      (options) => ResponseBody(
+        controller.stream,
+        200,
+        headers: {
+          'content-length': ['2'],
+        },
+      ),
+    );
+    await repository.insert(
+      DownloadedTrack(
+        originSourceKey: 'kw',
+        originSongId: 'downloaded',
+        title: '已下载',
+        filePath: '/downloads/downloaded.mp3',
+        sizeBytes: 1,
+        downloadedAt: 1,
+      ),
+    );
+    final service = makeService(dio: dio);
+    await service.init();
+
+    final downloaded = makeTrack(
+      sourceKey: 'kw',
+      songId: 'downloaded',
+      title: '已下载',
+    );
+    const local = Track(
+      id: TrackId('local', '/downloads/downloaded.mp3'),
+      title: '本地',
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/downloaded.mp3'},
+    );
+    final active = makeTrack(sourceKey: 'tx', songId: 'active');
+    final target = makeTrack(sourceKey: 'kw', songId: 'target');
+
+    final activeFuture = service.download(active);
+    unawaited(activeFuture.catchError((_) {}));
+    await waitForRunningTask(service, active);
+
+    final candidates = service.batchCandidates([
+      downloaded,
+      local,
+      active,
+      target,
+      target,
+    ]);
+    expect(candidates, hasLength(1));
+    expect(candidates.single.index, 3, reason: 'index 是原入参位置');
+    expect(candidates.single.track.id, target.id);
+
+    // 清理进行中的任务：dispose 会取消 token 并停止队列通知；不再等待
+    // 已废弃的任务 future。
+    service.dispose();
+    unawaited(controller.close());
+  });
+
   test('批量取消排队任务：不产生未处理错误，取消不计失败', () async {
     final first = StreamController<Uint8List>();
     final dio = mockDio((options) {
@@ -1184,10 +1243,15 @@ void main() {
 
     final kw = makeTrack(sourceKey: 'kw', songId: '1');
     final tx = makeTrack(sourceKey: 'tx', songId: '2');
-    final batch = service.downloadBatch([kw, tx]);
+    int? enqueued;
+    final batch = service.downloadBatch(
+      [kw, tx],
+      onEnqueued: (count) => enqueued = count,
+    );
     await waitForRunningTask(service, kw);
 
     // 第一条还在下载，第二条已经在等待列表（不是等第一条完成后才入队）。
+    expect(enqueued, 2, reason: '回调在全部入队后、等待结果前触发');
     expect(
       [for (final task in service.tasks) task.status],
       [DownloadTaskStatus.running, DownloadTaskStatus.queued],
@@ -1442,18 +1506,27 @@ void main() {
     // 列表第一首先下过：批量里被跳过，但序号仍占位。
     await service.download(makeTrack());
     notifications.events.clear();
+    const local = Track(
+      id: TrackId('local', 'kw:9'),
+      title: '本地',
+      origin: TrackOrigin.localFile,
+      payload: {'path': '/downloads/x.mp3'},
+    );
+    final second = makeTrack(sourceKey: 'tx', songId: '2', title: '第二首');
 
     final (done, failed) = await service.downloadBatch([
+      local,
       makeTrack(),
-      makeTrack(sourceKey: 'tx', songId: '2', title: '第二首'),
+      second,
+      second,
     ]);
     expect((done, failed), (1, 0));
-    // 只有尝试下载的第二首起通知，序号从 2 起（「第 2/2 首」）。
+    // 只有尝试下载的第三项起通知，序号按原入参位置（「第 3/4 首」）。
     expect(notifications.events.first.method, 'start');
     expect(notifications.events.first.id, 'batch');
     expect(notifications.events.first.title, '第二首');
-    expect(notifications.events.first.index, 2);
-    expect(notifications.events.first.total, 2);
+    expect(notifications.events.first.index, 3);
+    expect(notifications.events.first.total, 4);
     expect(notifications.events.last.method, 'stop');
     expect(notifications.events.last.id, 'batch');
     expect(

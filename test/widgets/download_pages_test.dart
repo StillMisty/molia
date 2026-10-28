@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
@@ -41,6 +43,9 @@ class _RecordingDownloadService extends DownloadService {
   final List<List<Track>> batches = [];
   final Set<String> downloadedKeys = {};
   final Map<String, DownloadTask> activeTasks = {};
+  Completer<void>? batchGate;
+  Completer<void>? batchResultGate;
+  int? enqueuedOverride;
 
   @override
   DownloadedTrack? recordForTrack(Track track) {
@@ -59,9 +64,19 @@ class _RecordingDownloadService extends DownloadService {
   DownloadTask? taskForTrack(Track track) => activeTasks[track.id.uri];
 
   @override
-  Future<(int, int)> downloadBatch(Iterable<Track> tracks) async {
-    batches.add(tracks.toList());
-    return (tracks.length, 0);
+  Future<(int, int)> downloadBatch(
+    Iterable<Track> tracks, {
+    void Function(int enqueued)? onEnqueued,
+  }) async {
+    final list = tracks.toList();
+    batches.add(list);
+    final gate = batchGate;
+    if (gate != null) await gate.future;
+    final enqueued = enqueuedOverride ?? list.length;
+    onEnqueued?.call(enqueued);
+    final resultGate = batchResultGate;
+    if (resultGate != null) await resultGate.future;
+    return (enqueued, 0);
   }
 }
 
@@ -88,6 +103,22 @@ class _StaticTasksDownloadService extends DownloadService {
 
   @override
   List<DownloadTask> get tasks => audioTasks;
+
+  @override
+  DownloadTaskGroups get taskGroups => (
+    running: [
+      for (final task in audioTasks)
+        if (task.status == DownloadTaskStatus.running) task,
+    ],
+    queued: [
+      for (final task in audioTasks)
+        if (task.status == DownloadTaskStatus.queued) task,
+    ],
+    failed: [
+      for (final task in audioTasks)
+        if (task.status == DownloadTaskStatus.failed) task,
+    ],
+  );
 
   @override
   void cancelTrack(Track track) => cancelCalls++;
@@ -461,6 +492,39 @@ void main() {
 
     expect(service.batches.single, hasLength(1));
     expect(service.batches.single.single.id, target.id);
+  });
+
+  testWidgets('下载管理页：批量提示在真正入队后显示并使用回调数量', (tester) async {
+    final one = makeQueueTrack('1');
+    final two = makeQueueTrack('2');
+    final service = _RecordingDownloadService();
+    await service.init();
+    addTearDown(service.dispose);
+    service.batchGate = Completer<void>();
+    service.batchResultGate = Completer<void>();
+    service.enqueuedOverride = 1;
+    backend.emit(
+      BackendSnapshot(
+        current: one,
+        queue: [one, two],
+        currentIndex: 0,
+        duration: const Duration(seconds: 30),
+      ),
+    );
+
+    await pumpPage(tester, const DownloadsManagePage(), service: service);
+    await tester.tap(find.byKey(const Key('downloadsBatchQueueItem')));
+    await tester.pump();
+    expect(service.batches.single, hasLength(2));
+    expect(find.text('已加入下载队列（1 首）'), findsNothing, reason: '尚未入队');
+
+    service.batchGate!.complete();
+    await tester.pump();
+    expect(find.text('已加入下载队列（1 首）'), findsOneWidget);
+
+    service.batchResultGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('批量下载完成：成功 1，失败 0'), findsOneWidget);
   });
 
   testWidgets('下载管理页：没有可下载的歌曲时提示专用文案', (tester) async {

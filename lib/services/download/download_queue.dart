@@ -213,22 +213,26 @@ class DownloadTask extends ChangeNotifier {
 /// 任务执行器：由下载服务注入（队列不感知取链 / 文件 / 数据库）。
 typedef DownloadTaskRunner = Future<void> Function(DownloadTask task);
 
+/// 队列按状态分组的读口（running 在前，组内保持入队顺序）。
+typedef DownloadTaskGroups = ({
+  List<DownloadTask> running,
+  List<DownloadTask> queued,
+  List<DownloadTask> failed,
+});
+
 /// 严格串行 FIFO 下载队列（单 worker；不持久化，重启即清空）。
 class DownloadQueue extends ChangeNotifier {
   DownloadQueue(this._runner);
 
   final DownloadTaskRunner _runner;
 
-  /// 活跃 + 失败任务（完成 / 取消立即移除；失败保留供重试）。
-  final List<DownloadTask> _tasks = <DownloadTask>[];
+  /// 活跃 + 失败任务（键 → 任务，保持入队顺序）：完成 / 取消立即移除，
+  /// 失败音频保留供重试。一个 map 同时承担去重、查找与状态分组的数据源。
+  final LinkedHashMap<String, DownloadTask> _tasks =
+      LinkedHashMap<String, DownloadTask>();
 
-  /// 排队 / 运行中任务（键 → 任务），用于同 key 去重与取消。
-  final Map<String, DownloadTask> _active = <String, DownloadTask>{};
-
-  /// 失败任务（键 → 任务），与 [_tasks] 同步维护。
-  final Map<String, DownloadTask> _failed = <String, DownloadTask>{};
-
-  final Queue<DownloadTask> _pending = Queue<DownloadTask>();
+  /// 等待执行的任务键（FIFO）；任务对象本身在 [_tasks] 里。
+  final Queue<String> _pending = Queue<String>();
   bool _workerScheduled = false;
   bool _disposed = false;
 
@@ -236,36 +240,58 @@ class DownloadQueue extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  /// 运行中 + 排队中 + 失败任务（running 在前，其次按入队顺序）。
-  List<DownloadTask> get tasks => List.unmodifiable(<DownloadTask>[
-    for (final task in _tasks)
-      if (task.status == DownloadTaskStatus.running) task,
-    for (final task in _tasks)
-      if (task.status == DownloadTaskStatus.queued) task,
-    for (final task in _tasks)
-      if (task.status == DownloadTaskStatus.failed) task,
-  ]);
+  /// 按状态分组（running → queued → failed，组内保持入队顺序）。
+  DownloadTaskGroups get taskGroups {
+    final running = <DownloadTask>[];
+    final queued = <DownloadTask>[];
+    final failed = <DownloadTask>[];
+    for (final task in _tasks.values) {
+      switch (task.status) {
+        case DownloadTaskStatus.running:
+          running.add(task);
+        case DownloadTaskStatus.queued:
+          queued.add(task);
+        case DownloadTaskStatus.failed:
+          failed.add(task);
+        case DownloadTaskStatus.completed:
+        case DownloadTaskStatus.cancelled:
+          break;
+      }
+    }
+    return (
+      running: List.unmodifiable(running),
+      queued: List.unmodifiable(queued),
+      failed: List.unmodifiable(failed),
+    );
+  }
 
-  /// 按 key 查任务：优先活跃，其次失败（本地数据页据此呈现重试态）。
-  DownloadTask? taskFor(String key) => _active[key] ?? _failed[key];
+  /// 运行中 + 排队中 + 失败任务（running 在前，其次按入队顺序）。
+  List<DownloadTask> get tasks {
+    final groups = taskGroups;
+    return List.unmodifiable([
+      ...groups.running,
+      ...groups.queued,
+      ...groups.failed,
+    ]);
+  }
+
+  /// 按 key 查任务（活跃或失败；本地数据页据此呈现重试态）。
+  DownloadTask? taskFor(String key) => _tasks[key];
 
   /// 入队：同步进入等待列表；同 key 已有排队 / 运行任务时返回同一 future。
   ///
   /// 失败 / 取消任务再入队时替换为新任务（同一对象则原地复位）。完成 /
   /// 取消后任务从队列移除，失败任务保留供重试。
   Future<void> enqueue(DownloadTask task) {
-    final active = _active[task.key];
-    if (active != null) return active.done;
-
-    final previous = _failed.remove(task.key);
-    if (previous != null) {
-      _tasks.remove(previous);
-      if (!identical(previous, task)) previous.dispose();
+    final existing = _tasks[task.key];
+    if (existing != null && existing.isActive) return existing.done;
+    if (existing != null) {
+      _tasks.remove(task.key);
+      if (!identical(existing, task)) existing.dispose();
     }
     if (task.status != DownloadTaskStatus.queued) task.resetForRetry();
-    if (!_tasks.contains(task)) _tasks.add(task);
-    _active[task.key] = task;
-    _pending.add(task);
+    _tasks[task.key] = task;
+    _pending.add(task.key);
     _notify();
     _scheduleWorker();
     return task.done;
@@ -273,11 +299,10 @@ class DownloadQueue extends ChangeNotifier {
 
   /// 取消排队中的任务；已在运行（或没有任务）返回 false（由服务取消 dio）。
   bool cancelQueued(String key) {
-    final task = _active[key];
+    final task = _tasks[key];
     if (task == null || task.status != DownloadTaskStatus.queued) return false;
-    _pending.remove(task);
-    _active.remove(key);
-    _tasks.remove(task);
+    _pending.remove(key);
+    _tasks.remove(key);
     task.markCancelled();
     _notify();
     return true;
@@ -285,9 +310,9 @@ class DownloadQueue extends ChangeNotifier {
 
   /// 移除失败任务（不重试）。
   void dismiss(String key) {
-    final task = _failed.remove(key);
-    if (task == null) return;
-    _tasks.remove(task);
+    final task = _tasks[key];
+    if (task == null || task.status != DownloadTaskStatus.failed) return;
+    _tasks.remove(key);
     _notify();
   }
 
@@ -303,8 +328,9 @@ class DownloadQueue extends ChangeNotifier {
   Future<void> _drain() async {
     try {
       while (!_disposed && _pending.isNotEmpty) {
-        final task = _pending.removeFirst();
-        if (task.status != DownloadTaskStatus.queued) continue;
+        final key = _pending.removeFirst();
+        final task = _tasks[key];
+        if (task == null || task.status != DownloadTaskStatus.queued) continue;
         task.markRunning();
         _notify();
         try {
@@ -320,15 +346,13 @@ class DownloadQueue extends ChangeNotifier {
             task.markFailed(e is SourceFailure ? e : SourceFailure.from(e));
           }
         } finally {
-          _active.remove(task.key);
           if (task.status == DownloadTaskStatus.failed &&
               task.kind == DownloadTaskKind.audio) {
             // 音频失败保留在失败区，等待用户重试 / 移除。
-            _failed[task.key] = task;
           } else {
             // 完成 / 取消 / 分项失败：调用方（页面 / snackbar）已收到结果，
             // 不在队列里留下不可操作的条目。
-            _tasks.remove(task);
+            _tasks.remove(key);
           }
           _notify();
         }
@@ -342,12 +366,10 @@ class DownloadQueue extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    for (final task in _tasks) {
+    for (final task in _tasks.values) {
       task.dispose();
     }
     _tasks.clear();
-    _active.clear();
-    _failed.clear();
     _pending.clear();
     super.dispose();
   }

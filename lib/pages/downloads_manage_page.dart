@@ -15,7 +15,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
-import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
@@ -26,8 +25,8 @@ import '../services/download/download_service.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
+import '../utils/download_task_label.dart';
 import '../utils/source_quality_label.dart';
-import '../utils/track_local_data_label.dart';
 import '../widgets/download_data_saver_guard.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -179,19 +178,10 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     return ListenableBuilder(
       listenable: downloads.taskChanges,
       builder: (context, _) {
-        final tasks = downloads.tasks;
-        final running = [
-          for (final task in tasks)
-            if (task.status == DownloadTaskStatus.running) task,
-        ];
-        final queued = [
-          for (final task in tasks)
-            if (task.status == DownloadTaskStatus.queued) task,
-        ];
-        final failed = [
-          for (final task in tasks)
-            if (task.status == DownloadTaskStatus.failed) task,
-        ];
+        final groups = downloads.taskGroups;
+        final running = groups.running;
+        final queued = groups.queued;
+        final failed = groups.failed;
         final visibleQueued = queued.take(_maxQueuedRows).toList();
         final hiddenQueued = queued.length - visibleQueued.length;
         return Column(
@@ -261,17 +251,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       listenable: task,
       builder: (context, _) {
         final running = task.status == DownloadTaskStatus.running;
-        final percent = task.progress.percent;
-        final status = switch (task.status) {
-          DownloadTaskStatus.running =>
-            percent == null
-                ? '${l10n.downloadStatusDownloading} · '
-                      '${formatCacheBytes(task.progress.receivedBytes)}'
-                : '${l10n.downloadStatusDownloading} · '
-                      '${l10n.downloadProgressPercent(percent)}',
-          DownloadTaskStatus.queued => l10n.downloadStatusQueued,
-          _ => l10n.downloadStatusNotDownloaded,
-        };
+        final status = downloadTaskStatusLabel(l10n, task);
         final quality = task.quality.isEmpty
             ? ''
             : sourceQualityLabel(l10n, task.quality);
@@ -346,23 +326,24 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     List<Track> queue,
   ) async {
     final l10n = AppLocalizations.of(context)!;
-    final seen = <String>{};
-    final eligible = <Track>[];
-    for (final track in queue) {
-      if (track.id.sourceKey == kLocalSourceKey) continue;
-      if (downloads.recordForTrack(track)?.hasAudio ?? false) continue;
-      if (downloads.taskForTrack(track)?.isActive ?? false) continue;
-      if (!seen.add(track.id.uri)) continue;
-      eligible.add(track);
-    }
-    if (eligible.isEmpty) {
+    final candidates = downloads.batchCandidates(queue);
+    if (candidates.isEmpty) {
       _showMessage(l10n.downloadsNothingToAdd);
       return;
     }
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
-    _showMessage(l10n.downloadsQueued(eligible.length));
     try {
-      final (done, failed) = await downloads.downloadBatch(eligible);
+      final (done, failed) = await downloads.downloadBatch(
+        [for (final candidate in candidates) candidate.track],
+        onEnqueued: (enqueued) {
+          if (!mounted) return;
+          _showMessage(
+            enqueued == 0
+                ? l10n.downloadsNothingToAdd
+                : l10n.downloadsQueued(enqueued),
+          );
+        },
+      );
       if (!mounted) return;
       _showMessage(l10n.downloadsBatchDone(done, failed));
     } on SourceFailure catch (failure) {
@@ -384,7 +365,6 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       _showMessage(l10n.downloadsEmpty);
       return;
     }
-    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final picked = await M3EDialog.show<PlaylistInfo>(
       context,
@@ -455,10 +435,8 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
 
   /// 取消全部等待任务（运行中的由行内取消按钮处理）。
   void _cancelQueued(DownloadService downloads) {
-    for (final task in downloads.tasks) {
-      if (task.status == DownloadTaskStatus.queued) {
-        downloads.cancelTrack(task.track);
-      }
+    for (final task in downloads.taskGroups.queued) {
+      downloads.cancelTrack(task.track);
     }
   }
 
@@ -496,7 +474,6 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
       _showMessage(l10n.downloadsCleanupOrphansNone);
       return;
     }
-    // 弹层动作定向 root navigator（原因见 download_data_saver_guard.dart）。
     final navigator = Navigator.of(context, rootNavigator: true);
     final names = [for (final path in orphans.take(5)) p.basename(path)];
     final scheme = Theme.of(context).colorScheme;
