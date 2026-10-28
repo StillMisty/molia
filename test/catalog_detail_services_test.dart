@@ -56,6 +56,21 @@ void main() {
       expect(calls, hasLength(4), reason: '失效后重新取数');
     });
 
+    test('clearCache 清空全部专辑页（托盘隐藏释放）', () async {
+      await service.load('wy', '32311');
+      await service.load('wy', '32311', page: 2);
+      await service.load('tx', 'other');
+      expect(service.countForAlbum('wy', '32311'), 2);
+      expect(service.countForAlbum('tx', 'other'), 1);
+
+      service.clearCache();
+      expect(service.countForAlbum('wy', '32311'), 0);
+      expect(service.countForAlbum('tx', 'other'), 0);
+
+      await service.load('wy', '32311');
+      expect(calls, hasLength(4), reason: '清空后重新取数');
+    });
+
     test('cacheKey 含平台 / 专辑 / 页 / 每页条数', () {
       expect(
         AlbumService.cacheKey('wy', '32311', page: 2),
@@ -137,6 +152,21 @@ void main() {
 
       await service.load('wy', '6452');
       expect(calls, hasLength(4), reason: '失效后重新取数');
+    });
+
+    test('clearCache 清空全部歌手页（托盘隐藏释放）', () async {
+      await service.load('wy', '6452');
+      await service.load('wy', '6452', page: 2);
+      await service.load('tx', 'other');
+      expect(service.countForArtist('wy', '6452'), 2);
+      expect(service.countForArtist('tx', 'other'), 1);
+
+      service.clearCache();
+      expect(service.countForArtist('wy', '6452'), 0);
+      expect(service.countForArtist('tx', 'other'), 0);
+
+      await service.load('wy', '6452');
+      expect(calls, hasLength(4), reason: '清空后重新取数');
     });
 
     test('cacheKey 含平台 / 歌手 / 页 / 每页条数', () {

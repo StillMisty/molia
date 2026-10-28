@@ -78,6 +78,13 @@ class LibraryProvider extends ChangeNotifier {
   /// 各列表曲目最近一次读取失败（有旧缓存时视图仍按 ready 展示旧值）。
   final Map<int, Object> _playlistTracksErrors = {};
 
+  /// 浏览缓存代数：托盘释放后自增，使释放前发出的列表曲目读取结果作废。
+  ///
+  /// provider 常驻托盘门之外：只清 `_tracksByPlaylist` 不够——在途查询落地
+  /// 后仍会把旧列表写回来，恢复窗口时页面拿到的又是释放前那份数据。读取
+  /// 发起时捕获代数、写回前比对；代数变了就只把结果交给显式等待方，不缓存。
+  int _browseGeneration = 0;
+
   /// `_favoriteKeys` 是否来自仓库整表（而非只有一次乐观 toggle）。
   /// 只有整表可信时才能用它的长度校准收藏计数。
   bool _favoriteKeysAuthoritative = false;
@@ -156,6 +163,7 @@ class LibraryProvider extends ChangeNotifier {
       _tracksByPlaylist.remove(playlistId);
       _playlistTracksErrors.remove(playlistId);
     }
+    final generation = _browseGeneration;
     // build 期调用：同步标记 loading（本帧即可显示加载态），通知推迟到
     // 微任务，避免 setState during build。
     unawaited(Future<void>.microtask(() async {
@@ -165,18 +173,36 @@ class LibraryProvider extends ChangeNotifier {
         final tracks = await _repository
             .listPlaylistTracks(playlistId)
             .timeout(_readTimeout);
-        if (_disposed) return;
+        if (_disposed || generation != _browseGeneration) return;
         _tracksByPlaylist[playlistId] = tracks;
         _playlistTracksErrors.remove(playlistId);
       } catch (e) {
         debugPrint('[Library] 加载列表曲目失败: $e');
-        if (_disposed) return;
+        if (_disposed || generation != _browseGeneration) return;
         _playlistTracksErrors[playlistId] = e;
       } finally {
-        _loadingPlaylistIds.remove(playlistId);
+        // 只回收自己那份 loading 标记：释放清空后可能已有新请求占位，
+        // 旧请求落地时不能把新请求的标记删掉（否则页面误判 ready）。
+        if (generation == _browseGeneration) {
+          _loadingPlaylistIds.remove(playlistId);
+        }
         _notify();
       }
     }));
+  }
+
+  /// 释放浏览缓存（托盘隐藏时由内存守卫调用）：清列表曲目与读取错误。
+  ///
+  /// 保留收藏键、列表清单与历史：恢复后收藏图标 / 合集入口立即有正确依据，
+  /// 页面重建时经 [ensurePlaylistTracks] 重新读列表曲目。代数自增 + 清
+  /// loading 标记，让释放前的在途读取（以及紧随其后的静默重载）落地后作废，
+  /// 不会把旧列表又塞回缓存；释放后新发起的读取则正常占位、正常写回。
+  void releaseBrowseCaches() {
+    _browseGeneration++;
+    _tracksByPlaylist.clear();
+    _playlistTracksErrors.clear();
+    _loadingPlaylistIds.clear();
+    _notify();
   }
 
   bool isFavorite(String sourceKey, String songId) =>
@@ -501,6 +527,7 @@ class LibraryProvider extends ChangeNotifier {
           // 避免校准后重放已被后续删除的 toggle。校准期间的新 toggle 会重新入队。
           _pendingFavoriteToggles.clear();
           _favoritesCalibrationsInFlight++;
+          final generation = _browseGeneration;
           try {
             try {
               _favoriteKeys = await _repository.favoriteKeys();
@@ -510,12 +537,19 @@ class LibraryProvider extends ChangeNotifier {
               debugPrint('[Library] 刷新收藏状态失败: $e');
             }
             final favoritesId = _favoritesPlaylistId;
-            if (favoritesId != null &&
+            // 收藏键照常校准（托盘释放保留它）；曲目缓存已在释放时清空，
+            // 这一轮结果不再写回，等页面重新 ensure 时读取。
+            if (generation == _browseGeneration &&
+                favoritesId != null &&
                 _tracksByPlaylist.containsKey(favoritesId)) {
               try {
-                _tracksByPlaylist[favoritesId] = await _repository
+                final tracks = await _repository
                     .listPlaylistTracks(favoritesId)
                     .timeout(_readTimeout);
+                // 请求期间可能托盘释放：这一份不再写回已清空的缓存。
+                if (generation == _browseGeneration) {
+                  _tracksByPlaylist[favoritesId] = tracks;
+                }
               } catch (e) {
                 debugPrint('[Library] 刷新收藏列表失败: $e');
               }
@@ -561,13 +595,18 @@ class LibraryProvider extends ChangeNotifier {
   /// 单个列表曲目的后台重载：已缓存时原地替换（滚动位置/列表实例稳定）。
   Future<void> _reloadPlaylistTracksQuietly(int playlistId) async {
     if (!_tracksByPlaylist.containsKey(playlistId)) return;
+    final generation = _browseGeneration;
     try {
-      _tracksByPlaylist[playlistId] = await _repository
+      final tracks = await _repository
           .listPlaylistTracks(playlistId)
           .timeout(_readTimeout);
+      // 释放后旧缓存已按设计清空：这次重载结果不能把它写回来。
+      if (generation != _browseGeneration) return;
+      _tracksByPlaylist[playlistId] = tracks;
       _playlistTracksErrors.remove(playlistId);
     } catch (e) {
       debugPrint('[Library] 重载列表曲目失败: $e');
+      if (generation != _browseGeneration) return;
       // 有旧缓存时保持 ready；错误留给显式重试。
       _playlistTracksErrors[playlistId] = e;
     }
@@ -658,20 +697,27 @@ class LibraryProvider extends ChangeNotifier {
       final cached = _tracksByPlaylist[playlistId];
       if (cached != null) return cached;
     }
+    final generation = _browseGeneration;
     if (_loadingPlaylistIds.add(playlistId)) _notify();
     try {
       final tracks = await _repository
           .listPlaylistTracks(playlistId)
           .timeout(_readTimeout);
+      // 释放后旧读取只服务本次显式调用，不重新填充已清空的缓存。
+      if (generation != _browseGeneration) return tracks;
       _tracksByPlaylist[playlistId] = tracks;
       _playlistTracksErrors.remove(playlistId);
       return tracks;
     } catch (e) {
       debugPrint('[Library] 加载列表曲目失败: $e');
-      _playlistTracksErrors[playlistId] = e;
+      if (generation == _browseGeneration) {
+        _playlistTracksErrors[playlistId] = e;
+      }
       return _tracksByPlaylist[playlistId] ?? const [];
     } finally {
-      _loadingPlaylistIds.remove(playlistId);
+      if (generation == _browseGeneration) {
+        _loadingPlaylistIds.remove(playlistId);
+      }
       _notify();
     }
   }

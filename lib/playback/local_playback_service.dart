@@ -672,16 +672,26 @@ class LocalPlaybackService extends ChangeNotifier {
     if (index < 0 || index >= _queue.length) return;
     // 新曲目 = 用户主动选择，撤销音频中断的待续播。
     _focusGuard?.cancelPendingResume();
-    // 预取与边播边缓存不能双写同一缓存文件：起播前取消未完成的预取。
-    _nextTrackPreloader?.cancelPending();
-    // 上一首的后台缓存写入（桌面）同理：切歌即停，避免与新曲目抢带宽。
-    _cacheWriter?.cancel();
     // 切到不同曲目时把「离开的当前曲目」压入播放顺序；显式回退不重复压栈。
     if (recordHistory && _currentTrack != null && _currentIndex != index) {
       _order.record(_currentIndex);
     }
     final requestId = ++_playRequestId;
     final track = _queue[index];
+    final preferred = _preferredQuality?.call();
+    final quality = preferred == null ? null : track.pickQuality(preferred);
+    // 预取所有权：桌面 / 回退直接流播时，如果正在预取的就是这一首，保留
+    // 在途任务（不取消、不再起 writer），落位后的缓存供重播命中。移动端
+    // 边播边缓存会写同一文件，仍保持「起播前取消」。
+    final prefetchOwnsCache = _nextTrackPreloader?.retainForPlayback(
+          track,
+          quality: quality,
+          reuseInFlight:
+              !_platformSupportsAudioCaching || _audioCacheUnsupported,
+        ) ??
+        false;
+    // 上一首的后台缓存写入（桌面）同理：切歌即停，避免与新曲目抢带宽。
+    _cacheWriter?.cancel();
     final startTrace = PlaybackStartTrace.begin(track.id.toString());
 
     _currentIndex = index;
@@ -695,24 +705,33 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final preferred = _preferredQuality?.call();
-      final quality = preferred == null ? null : track.pickQuality(preferred);
       final stream = await _resolver(track, quality: quality);
       if (requestId != _playRequestId) return;
       startTrace?.markResolved();
 
-      await _setAudioSourceWithCache(
+      final cachePath = await _setAudioSourceWithCache(
         stream.uri,
         track,
         quality: quality,
         headers: stream.headers,
       );
       if (requestId != _playRequestId) return;
-      startTrace?.markSourceSet();
+      startTrace?.markSourceSet(
+        cachePath: cachePath,
+        prefetched: prefetchOwnsCache,
+      );
 
       // 播放侧没有写缓存（平台不支持边播边缓存 / 后端拒绝后退到直接流播）：
       // 由后台字节下载补上缓存——重播经 `localUriFor` 命中 file://。
-      if (!_platformSupportsAudioCaching || _audioCacheUnsupported) {
+      // 目标此刻仍由在途预取负责时不再起第二个 writer（任务可能在上面的
+      // setAudioSource 期间刚好落位：writer 会因完整缓存已存在而自动跳过）。
+      final prefetchInFlight = _nextTrackPreloader?.isCacheWriteInFlight(
+            track,
+            quality: quality,
+          ) ??
+          false;
+      if ((!_platformSupportsAudioCaching || _audioCacheUnsupported) &&
+          !prefetchInFlight) {
         final writer = _cacheWriter;
         if (writer != null) {
           unawaited(writer.start(
@@ -727,6 +746,7 @@ class LocalPlaybackService extends ChangeNotifier {
       // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
       // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
       // completed 事件；启动失败单独捕获进 lastError。
+      startTrace?.markPlayRequested();
       unawaited(_player.play().catchError((Object e) {
         if (requestId == _playRequestId) {
           _lastError = e.toString();
@@ -754,18 +774,21 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 设置音频源：优先边播边缓存（策略开启时），失败回退直接流播。
   ///
   /// 缓存不能影响播放可用性：平台不支持、目录解析失败、网络异常都会
-  /// 回退到 `AudioSource.uri`，仅记录日志。
+  /// 回退到 `AudioSource.uri`，仅记录日志。返回实际使用的路径，供起播
+  /// 埋点按 file / caching / direct 分桶。
   ///
   /// [headers] 来自取链结果，必须同时交给缓存源与直接流播源（B 站等平台
   /// 要求 `Referer`）；为空时传 null，避免给 just_audio 挂空代理。
-  Future<void> _setAudioSourceWithCache(
+  Future<PlaybackCachePath> _setAudioSourceWithCache(
     Uri uri,
     SourceTrack track, {
     String? quality,
     Map<String, String> headers = const {},
   }) async {
     final cache = _cacheService;
-    final cacheable = _platformSupportsAudioCaching &&
+    final localFile = uri.scheme == 'file';
+    final cacheable = !localFile &&
+        _platformSupportsAudioCaching &&
         !_audioCacheUnsupported &&
         cache != null &&
         (uri.scheme == 'http' || uri.scheme == 'https') &&
@@ -792,7 +815,7 @@ class LocalPlaybackService extends ChangeNotifier {
                     .timeout(const Duration(seconds: 30));
                 // 写入开始后执行一次 LRU 淘汰（策略上限）。
                 unawaited(cache.enforceAudioLimit());
-                return;
+                return PlaybackCachePath.caching;
               } on UnsupportedError catch (e) {
                 // 防御性兜底：平台后端不支持 StreamAudioSource 时本会话停用。
                 _audioCacheUnsupported = true;
@@ -814,6 +837,7 @@ class LocalPlaybackService extends ChangeNotifier {
           headers: headers.isEmpty ? null : headers,
         ))
         .timeout(const Duration(seconds: 30));
+    return localFile ? PlaybackCachePath.file : PlaybackCachePath.direct;
   }
 
   /// 是否尝试边播边缓存：仅 Android / iOS / macOS（见 [platformSupportsAudioCaching]）。
@@ -954,7 +978,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> stop({bool clear = true}) async {
     _playRequestId++;
     _stopAfterCurrentTrack = false;
-    _nextTrackPreloader?.cancelPending();
+    _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
     try {
       await _player.stop();
@@ -1158,6 +1182,10 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> shutdownAudioForQuit() async {
     if (_playerDisposed) return;
     _playerDisposed = true;
+    // 退出路径不经过 dispose：在途预取 / 后台缓存写入都在这里收掉，避免
+    // 进程退出时留下 `.predl` 半成品。
+    _nextTrackPreloader?.cancelAll();
+    _cacheWriter?.cancel();
     try {
       await _player.pause();
     } catch (e) {
@@ -1181,6 +1209,7 @@ class LocalPlaybackService extends ChangeNotifier {
     _playerStateSubscription?.cancel();
     _errorSubscription?.cancel();
     _cancelPositionSubscription();
+    _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
     _playWithOtherApps.removeListener(_onPlayWithOtherAppsChanged);
     unawaited(_becomingNoisySubscription?.cancel());

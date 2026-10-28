@@ -271,6 +271,14 @@ class CollectionPresenter {
   List<PlaylistTrack> _sorted = const [];
   CollectionTrackSort? _sortedSort;
 
+  /// 上一帧的完整投影（含可见行）。
+  ///
+  /// 播放历史写入只会替换 `history` 列表，收藏 / 自建列表的 `tracks` 引用
+  /// 不变；此时若重新过滤 + 分配 N 个行对象，1000 首的收藏页每次历史写入都
+  /// 要白扔一整份列表。缓存键只包含「该合集实际读取的输入」，历史写入不会
+  /// 打进收藏视图。
+  _CachedCollectionView? _cachedView;
+
   /// 解析选集与合集身份（页面在加载曲目前就需要知道 kind / 落库 id）。
   CollectionIdentity identityFor({
     required int selectedId,
@@ -321,6 +329,25 @@ class CollectionPresenter {
     required String query,
     required CollectionTrackSort sort,
   }) {
+    // 只把该合集真正读取的源列表放进键：收藏页不依赖历史列表，后台写入
+    // 历史（列表引用替换）不能让整页可见行失效。
+    final Object source = switch (identity.kind) {
+      CollectionKind.history => history,
+      CollectionKind.localSongs => localSongs,
+      CollectionKind.favorites || CollectionKind.custom => tracks,
+    };
+    final key = _CollectionViewKey(
+      selectedId: identity.selectedId,
+      kind: identity.kind,
+      playlistId: identity.playlistId,
+      displayName: identity.displayName,
+      source: source,
+      query: query,
+      sort: sort,
+    );
+    final cached = _cachedView;
+    if (cached != null && cached.key == key) return cached.view;
+
     final visibleRows = switch (identity.kind) {
       CollectionKind.history => [
           for (final entry in filterRowsByQuery(
@@ -352,7 +379,7 @@ class CollectionPresenter {
       CollectionKind.localSongs => localSongs.isNotEmpty,
       CollectionKind.favorites || CollectionKind.custom => tracks.isNotEmpty,
     };
-    return CollectionView(
+    final view = CollectionView(
       identity: identity,
       tracks: identity.isHistory || identity.isLocalSongs
           ? const <PlaylistTrack>[]
@@ -360,6 +387,8 @@ class CollectionPresenter {
       visibleRows: visibleRows,
       hasItems: hasItems,
     );
+    _cachedView = _CachedCollectionView(key, view);
+    return view;
   }
 
   /// 一行应有哪些行动作（顺序 / 是否移除类在这里定；图标 / 文案 / 流程由
@@ -433,4 +462,59 @@ class CollectionPresenter {
     }
     return null;
   }
+}
+
+/// 一次完整投影的缓存键。
+///
+/// [source] 是当前合集实际读取的列表（收藏 / 自建 = 曲目；历史 = 历史；
+/// 本地歌曲 = 本地行）。比较列表引用而不是内容：provider 的列表快照按
+/// 「改动即替换」维护，同一引用即同一内容版本；内容不同的新列表必然是新
+/// 引用，缓存自然失效。
+class _CollectionViewKey {
+  const _CollectionViewKey({
+    required this.selectedId,
+    required this.kind,
+    required this.playlistId,
+    required this.displayName,
+    required this.source,
+    required this.query,
+    required this.sort,
+  });
+
+  final int selectedId;
+  final CollectionKind kind;
+  final int? playlistId;
+  final String displayName;
+  final Object source;
+  final String query;
+  final CollectionTrackSort sort;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CollectionViewKey &&
+      other.selectedId == selectedId &&
+      other.kind == kind &&
+      other.playlistId == playlistId &&
+      other.displayName == displayName &&
+      identical(other.source, source) &&
+      other.query == query &&
+      other.sort == sort;
+
+  @override
+  int get hashCode => Object.hash(
+        selectedId,
+        kind,
+        playlistId,
+        displayName,
+        identityHashCode(source),
+        query,
+        sort,
+      );
+}
+
+class _CachedCollectionView {
+  const _CachedCollectionView(this.key, this.view);
+
+  final _CollectionViewKey key;
+  final CollectionView view;
 }

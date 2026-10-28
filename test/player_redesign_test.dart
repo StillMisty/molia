@@ -9,6 +9,7 @@ import 'package:molia/widgets/cover_appearance.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
+import 'package:molia/widgets/player_morph.dart';
 import 'package:molia/widgets/seek_bar.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -308,6 +309,113 @@ void main() {
     expect(bottomGap, lessThan(48), reason: '展开容器底部空白 $bottomGap');
 
     // 通知节流计时器跑完，避免 pending timer。
+    await tester.pump(const Duration(milliseconds: 50));
+  });
+
+  /// 展开 / 收起端点与逐帧重建边界：完整层在弹簧中段保持同一 widget 实例，
+  /// morph 锚点只在完整端点挂载。
+  testWidgets('展开 / 收起端点：完整层逐帧不重建，morph 锚点只在完整态挂载',
+      (tester) async {
+    emitThreeTracks();
+    final morph = PlayerMorphController();
+    addTearDown(morph.dispose);
+    final expand = AnimationController(
+      vsync: const TestVSync(),
+      duration: const Duration(milliseconds: 360),
+      value: 0,
+    );
+    addTearDown(expand.dispose);
+    var toggles = 0;
+
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    // 宽松高度约束（`Align`）：迷你态才能量到 72 的真实高度。
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: Player(
+                morph: morph,
+                expandAnimation: expand,
+                onToggleExpand: () => toggles++,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(
+      tester.getSize(find.byType(Player)).height,
+      closeTo(miniPlayerHeight, 0.5),
+      reason: '展开进度 0 = 迷你条高度',
+    );
+    expect(
+      morph.pageCoverKey.currentContext,
+      isNull,
+      reason: '迷你态不挂顶栏⇄播放页锚点（顶栏飞行走跳过路径）',
+    );
+
+    // 迷你层整条可点：完整层即使已挂载也不得拦截。
+    await tester.tap(find.byType(Player));
+    await tester.pump();
+    expect(toggles, 1);
+
+    final fullDeck = find.byType(PlayerCoverDeck);
+    // 起手（status=forward）会抓一次封面飞行、触发一次整页重建；等它落定
+    // 后再取稳定实例，比较弹簧中段两帧的完整层 widget。
+    expand.value = 0.3;
+    await tester.pump();
+    final midDeck = tester.widget<PlayerCoverDeck>(fullDeck);
+    expand.value = 0.6;
+    await tester.pump();
+    expect(
+      identical(tester.widget<PlayerCoverDeck>(fullDeck), midDeck),
+      isTrue,
+      reason: '弹簧逐帧只重建高度 / 透明度 / 裁剪包装层，完整层保持同一实例',
+    );
+
+    // 完整端点：morph 锚点挂上，完整层交互可用。
+    expand.value = 1;
+    await tester.pump();
+    expect(morph.pageCoverKey.currentContext, isNotNull);
+    expect(
+      tester.getSize(find.byType(Player)).height,
+      greaterThan(miniPlayerHeight),
+    );
+
+    // 收起端点：锚点撤下，容器回到 72，迷你条仍可再次点开。
+    expand.value = 0;
+    await tester.pump();
+    expect(morph.pageCoverKey.currentContext, isNull);
+    expect(
+      tester.getSize(find.byType(Player)).height,
+      closeTo(miniPlayerHeight, 0.5),
+    );
+    await tester.tap(find.byType(Player));
+    await tester.pump();
+    expect(toggles, 2);
+    expect(tester.takeException(), isNull);
+
+    // 通知节流计时器跑完，避免测试结束时报 pending timer。
     await tester.pump(const Duration(milliseconds: 50));
   });
 

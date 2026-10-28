@@ -81,6 +81,75 @@ void main() {
     expect(cache.maximumSizeBytes, 100 * 1024 * 1024);
   });
 
+  testWidgets('托盘隐藏：业务缓存释放回调在休眠帧后执行；最小化 / 恢复不执行',
+      (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    final manager = AppMemoryManager(presence: presence, imageCache: cache);
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    var releases = 0;
+    void releaser() => releases++;
+    manager.addReleaser(releaser);
+
+    presence.markMinimized();
+    await tester.pump();
+    expect(releases, 0, reason: '最小化要跟手恢复，不释放业务缓存');
+
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+    expect(releases, 1);
+
+    presence.markVisible();
+    expect(releases, 1, reason: '恢复窗口不触发释放');
+
+    // 取消注册后再次隐藏不再触发。
+    manager.removeReleaser(releaser);
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+    expect(releases, 1);
+  });
+
+  testWidgets('隐藏→恢复快速往返：不触发业务缓存释放', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    final manager = AppMemoryManager(presence: presence, imageCache: cache);
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    var releases = 0;
+    manager.addReleaser(() => releases++);
+
+    presence.markTrayHidden();
+    presence.markVisible();
+    await tester.pump();
+    await tester.pump();
+
+    expect(releases, 0, reason: 'token 已变，休眠帧后不再释放');
+  });
+
+  testWidgets('单个释放回调抛错不影响其它回调与图片缓存清理', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    final manager = AppMemoryManager(presence: presence, imageCache: cache);
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    var releases = 0;
+    manager.addReleaser(() => throw StateError('boom'));
+    manager.addReleaser(() => releases++);
+
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+
+    expect(releases, 1);
+    expect(cache.clearCount, 1);
+  });
+
   testWidgets('attach 时已处于托盘隐藏：立即校正一次', (tester) async {
     final presence = AppPresence(AppPresenceState.trayHidden);
     final cache = _FakeImageCache();

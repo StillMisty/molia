@@ -156,6 +156,13 @@ class AppMemoryManager {
   /// 清理代数：隐藏→恢复快速往返时让在途清理作废。
   int _trimToken = 0;
 
+  /// 业务缓存释放回调（组合根注册；本类只负责时机，不认识 provider 类型）。
+  ///
+  /// 用回调列表而不是让 managers 层 import provider：托盘隐藏时释放什么
+  /// （浏览列表曲目 / 搜索结果 / 目录分页）属于各自持有者的知识，这里只保证
+  /// 「休眠帧已换上、且仍在托盘隐藏」时统一触发。
+  final List<void Function()> _releasers = [];
+
   bool _attached = false;
 
   /// 订阅存在态并立即校正一次（启动即处于托盘隐藏时也要清理）。
@@ -166,7 +173,16 @@ class AppMemoryManager {
     if (_presence.isTrayHidden) unawaited(_trimForTray());
   }
 
+  /// 注册托盘隐藏时的业务缓存释放回调（组合根在创建持有者后调用）。
+  ///
+  /// 回调必须是幂等的：托盘可能反复隐藏 / 恢复，每次隐藏都会再触发一次。
+  void addReleaser(void Function() releaser) => _releasers.add(releaser);
+
+  /// 取消注册（持有者先于本类销毁时调用，避免回调打到已 dispose 的对象）。
+  void removeReleaser(void Function() releaser) => _releasers.remove(releaser);
+
   void dispose() {
+    _releasers.clear();
     if (!_attached) return;
     _attached = false;
     _presence.removeListener(_onPresenceChanged);
@@ -199,6 +215,9 @@ class AppMemoryManager {
     await SchedulerBinding.instance.endOfFrame
         .timeout(const Duration(seconds: 2), onTimeout: () {});
     if (token != _trimToken || !_presence.isTrayHidden) return;
+    // 业务缓存先放掉：纯 Dart 对象不依赖休眠帧，但同样挂住列表 / 搜索的
+    // raw payload；快速隐藏→恢复（token 已变）时跳过，避免白白触发重载。
+    _runReleasers();
     _cache.clear();
     _cache.clearLiveImages();
     _cache.maximumSizeBytes =
@@ -206,6 +225,17 @@ class AppMemoryManager {
     // 清完再 trim：不然日志里的 RSS / 工作集还是「已释放未归还」的那笔数。
     _releaseFreedMemoryToOs();
     _log('托盘隐藏完成');
+  }
+
+  /// 依次执行释放回调：单个失败只记日志，不影响图片缓存清理与其它持有者。
+  void _runReleasers() {
+    for (final releaser in List<void Function()>.of(_releasers)) {
+      try {
+        releaser();
+      } catch (e, stackTrace) {
+        _logger.warning('托盘业务缓存释放失败', e, stackTrace);
+      }
+    }
   }
 
   void _log(String phase) {

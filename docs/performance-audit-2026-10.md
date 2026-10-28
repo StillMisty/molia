@@ -385,6 +385,80 @@ Android release 用户反馈「顶栏 ⇄ 播放页封面飞行一卡一卡」�
 帧数；确认阴影降级是否足够，若仍不够再评估缓存阴影层 / 更低成本画法，
 并保证端点外观与真身一致。
 
+### 3.3.7 常驻缓存释放 / 播放器稳定子树 / 起播预取所有权（2026-10-28）
+
+本轮按「Linux release + Linux profile（三个场景各 3 轮）+ 500 首收藏的
+debug 内存探针」做 A/B；没有可信的 Android 真机 raster 数据，不把
+Linux/Xvfb 数字外推到 Android。
+
+**常驻缓存释放**
+
+- `LibraryProvider.releaseBrowseCaches()`：托盘隐藏时清列表曲目与读取错误，
+  保留收藏键 / 列表清单 / 历史；用 browse generation 让释放前在途读取作废，
+  恢复后由页面 `ensurePlaylistTracks` 重读。
+- `SearchProvider.releaseSearchResults()`、`CatalogService.clearSearchCache()`：
+  清搜索瞬时结果与目录分页结果（含 raw payload），**不清 resolve 取链缓存**，
+  避免托盘恢复播放重新取链。
+- `RequestCache` 增加 TTL 清理 / `clear()`，每 16 次插入低频扫一次过期条目；
+  专辑 / 歌手缓存上限 64→16，评论 96→32。
+- `PlaybackSessionCoordinator.stopPlayback()` 清 `_lastWrittenSession`；
+  `LocalPlaybackBackend._trackCache` 在队列 revision 变化时按身份裁剪。
+- 组合根通过 `AppMemoryManager.addReleaser` 注册，仅 `trayHidden` 触发；
+  `minimized` 保持现有「不休眠、不清缓存」语义。
+
+**同进程 500 首收藏 debug 探针**（mock raw 仅 `{songId}`，不代表真实库）：
+托盘隐藏前后 heap `212.7 → 209.1MB`（−3.6MB），RSS `701.8 → 685.8MB`
+（−16.0MB，主体仍是既有的图片缓存 / 界面卸载）；旧代码同 fixture 的
+heap 是 `209.5 → 205.8MB`，两者几乎相同，说明本 fixture 上新增的浏览缓存
+释放**不可分辨**。因此本轮**不宣称**真实库的绝对内存收益；真实 raw payload /
+多列表详情场景仍需用真实库按 `docs/memory.md` 的口径复测。
+
+**播放器展开 / 收起**
+
+- `player.dart` 把完整层 / 迷你层构建成 `AnimatedBuilder` 的稳定 child，
+  逐帧只更新高度 / Clip / Opacity / 指针门控 / 封面飞行包装；morph 锚点只在
+  `t>=1` 端点翻转一次。
+- `CollectionPresenter` 按「身份 + 当前合集实际读取的列表引用 + query + sort」
+  缓存 `CollectionView` 与 `visibleRows`；`CollectionSession` 视图 identical 时
+  跳过选择集全量 `retainKeys`。历史写入不再让收藏视图重新分配 1000 行。
+- `lyric_karaoke_text` 复用已唱 / 未唱词的 `TextSpan`，逐帧只为当前插值词
+  创建新 span。
+- 既有移动壳场景改用真实底栏入口（原 `ctrlDigit` 在移动壳没有
+  `DesktopShortcuts`，实际只测到空闲帧）；新增 `mobile-mini-expand` 场景。
+
+Linux profile、`mobile-mini-expand`、3 轮中位数：
+
+| 版本 | frames | build p50 | build p95 | build p99 | worst |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 改前（旧 lib + 新场景） | 55 / 49 / 62 | 1.02–1.10 | **3.60** | 3.95 | 5.23 |
+| 改后 | 44–52 | 1.05–1.14 | **1.81** | 4.86 | 5.91 |
+
+- build p95 中位约降一半；p99 / worst 受 Xvfb 软件渲染和帧数抖动影响，
+  **没有稳定改善**，不宣称「不卡了」；raster 在 Linux profile 下仍为 0。
+- 对照既有场景：收藏滚动 build p95 中位 `3.77 → 3.80ms`，连续切歌
+  `1.29 → 1.37ms`，均在抖动内；没有用 UI 结构改动换滚动回归。
+
+**起播 / 下一首预取**
+
+- `PlaybackStartTrace` 增加 `cache_path`（file / caching / direct）与
+  `prefetched` 分桶；修正切歌时上一首晚到位置事件会提前完成新 trace 的问题。
+- `NextTrackPreloader` 区分投机预取与已提升的当前曲目缓存写入；桌面 /
+  直接流播路径切到正在预取的下一首时保留在途任务，不再起第二个 writer；
+  移动端仍保持「起播前取消，避免与 LockCachingAudioSource 双写」。
+- mock 音源下该改动已被端到端触发（`MOLIA_PERF_NEXT_WAIT_MS=0` 时
+  `prefetched=1`），并避免一次重复下载；但**没有降低起播延迟**：
+
+| 第二首路径 | n | total 中位 | resolve 中位 | source 中位 |
+| --- | ---: | ---: | ---: | ---: |
+| 预取完成 → `file` | 3 | 870ms | 10.5ms | **852ms** |
+| 预取在途 → `direct` | 2 | 708ms | 8.1ms | **699ms** |
+
+`source_ms` 仍绝对主导，且本机 `file://` 打开不比直接流播快；另有 1 次
+`file://` 路径在 `setAudioSource` 上出现 30s 超时（同一 fixture 随后复跑成功），
+属于当前媒体后端 / Xvfb 的不稳定点，尚未归因。因此下一步要压起播只能做
+播放器预打开 / 双播放器预加载，不能把「预取命中」当成起播收益；保留本改动
+的理由只能是「避免切歌时重复下载」，不是延迟。
+
 ### 3.4 内存（Windows，本机实测）
 
 | 状态 | 专用工作集 | 提交 |

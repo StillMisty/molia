@@ -1,8 +1,9 @@
 /// 数据链路 perf 场景（opt-in，`--dart-define=MOLIA_PERF_SCENARIO_DATA=true`）。
 ///
 /// 目的：在没有 UI 点击坐标 / 不依赖截图的情况下，用真实组合根跑一遍
-/// 「搜索 → 点首条 → 起播 → 取词」，把 `molia.perf` 的端到端时延打出来。
-/// 正常包不编译这段逻辑（const 判断在编译期折叠），也不改任何默认行为。
+/// 「搜索 → 点首条 → 起播（可选切下一首）→ 取词」，把 `molia.perf` 的
+/// 端到端时延打出来。正常包不编译这段逻辑（const 判断在编译期折叠），也
+/// 不改任何默认行为。
 ///
 /// 场景数据来源：`tool/agent/seed.sh linux|android mock-source` 注入的本地
 /// LX 脚本（`MOLIA_PERF_SOURCE` 默认为 `mock`，见 seed.sh）。音源初始化是
@@ -10,6 +11,9 @@
 ///
 /// 环境变量（均为 `--dart-define` 编译期常量）：
 /// - `MOLIA_PERF_SCENARIO_DATA=true`：启用；
+/// - `MOLIA_PERF_SCENARIO_NEXT=true`：首首起播后再切下一首，验证预取命中
+///   （默认关闭，避免改变既有 data 采样口径）；
+/// - `MOLIA_PERF_NEXT_WAIT_MS=2000`：切下一首前等待预取的时长；
 /// - `MOLIA_PERF_SOURCE=mock`：音源 key（空 = 第一个可搜索音源）；
 /// - `MOLIA_PERF_KEYWORD=周杰伦`：搜索词；
 /// - `MOLIA_PERF_HOLD_SECONDS=3`：场景完成后保持进程的时长（CPU 采样用）。
@@ -28,6 +32,12 @@ import 'data_path_trace.dart';
 
 const bool _enabled =
     bool.fromEnvironment('MOLIA_PERF_SCENARIO_DATA', defaultValue: false);
+const bool _nextEnabled =
+    bool.fromEnvironment('MOLIA_PERF_SCENARIO_NEXT', defaultValue: false);
+const int _nextWaitMs = int.fromEnvironment(
+  'MOLIA_PERF_NEXT_WAIT_MS',
+  defaultValue: 2000,
+);
 const String _sourceKey = String.fromEnvironment('MOLIA_PERF_SOURCE');
 const String _keyword = String.fromEnvironment(
   'MOLIA_PERF_KEYWORD',
@@ -146,9 +156,51 @@ Future<void> _run({
           'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
           'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
         });
+    playbackWatch.stop();
+    // 兼容既有 `scenario.play.done`：next 口径单独记一笔首首起播。
+    if (_nextEnabled) {
+      DataPathTrace.event('scenario.play.first.done', fields: () => {
+            'ok': playing ? 1 : 0,
+            'ms': playbackWatch.elapsedMilliseconds,
+            'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
+            'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
+          });
+    }
+
+    // 取词对象固定在首首曲目：next 采样只关心起播，不改变歌词链路口径。
+    final current = playback.playbackProvider.snapshot.current;
+
+    if (_nextEnabled && playing) {
+      // 先切歌再取词：MOLIA_PERF_NEXT_WAIT_MS=0 时能落在预取仍取链/下载的
+      // 窗口里，验证桌面「保留在途任务」路径；默认 2s 等预取完整落位。
+      if (_nextWaitMs > 0) {
+        await Future<void>.delayed(Duration(milliseconds: _nextWaitMs));
+      }
+      final before = playback.playbackProvider.snapshot.current?.id.uri ?? '';
+      final nextWatch = Stopwatch()..start();
+      await playback.playbackProvider.skipToNext();
+      final nextPlaying = await _waitFor(
+        () {
+          final snapshot = playback.playbackProvider.snapshot;
+          final current = snapshot.current;
+          return current != null &&
+              current.id.uri != before &&
+              !playback.playbackProvider.isLoading &&
+              playback.playbackProvider.isPlaying;
+        },
+        timeout: const Duration(seconds: 45),
+      );
+      DataPathTrace.event('scenario.play.next.done', fields: () => {
+            'ok': nextPlaying ? 1 : 0,
+            'ms': nextWatch.elapsedMilliseconds,
+            'wait_ms': _nextWaitMs,
+            'from': before,
+            'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
+            'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
+          });
+    }
 
     // 取词：真实链路（原生 lyric action → 缓存 → 网络回退）。
-    final current = playback.playbackProvider.snapshot.current;
     if (current != null) {
       final lyricsWatch = Stopwatch()..start();
       await lyrics.lyricsProvider.load(current);

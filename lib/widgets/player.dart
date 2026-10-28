@@ -152,6 +152,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 用于按「进度到达终端阈值」结束飞行，不等弹簧容差拖尾。
   bool _coverFlightToMini = false;
 
+  /// 完整层是否挂载顶栏⇄播放页 morph 锚点（只在展开端点翻转）。
+  ///
+  /// 逐帧用 `t >= 1` 决定会让完整层每帧换一份 morph 身份，整棵完整布局跟着
+  /// 重建；端点本身是布尔值，在动画监听里只翻这一下即可。
+  bool _morphAttached = false;
+
   /// 切歌入场：M3E no-overshoot spatial 弹簧（aospSpatial 380/1.0）驱动文字
   /// 轻量上移落位 + 同源淡入，与封面切歌同帧启动；连续切歌带速度续跑。
   /// 弹簧保持无过冲是刻意的设计意图。
@@ -171,6 +177,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     widget.expandAnimation?.addListener(_handleExpandValue);
+    _morphAttached = (widget.expandAnimation?.value ?? 1.0) >= 1.0;
 
     if (_lastImageUrl != null) {
       _prefetchImage(_lastImageUrl!);
@@ -191,6 +198,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       oldWidget.expandAnimation?.removeListener(_handleExpandValue);
       widget.expandAnimation?.addStatusListener(_handleExpandStatus);
       widget.expandAnimation?.addListener(_handleExpandValue);
+      // didUpdateWidget 后必有一次 build：直接对齐端点，不需要 setState。
+      _morphAttached = (widget.expandAnimation?.value ?? 1.0) >= 1.0;
     }
   }
 
@@ -207,6 +216,21 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       case AnimationStatus.dismissed:
         _endCoverFlight();
     }
+    _syncMorphAttachment();
+  }
+
+  /// 展开端点（t>=1）才把 morph 锚点交给完整层。
+  ///
+  /// 迷你态下顶栏⇄播放页飞行应走「跳过」路径，避免飞到不可见的完整封面
+  /// 锚点。只在布尔边界 setState：值监听每帧都会调用，同一端点内直接返回。
+  void _syncMorphAttachment() {
+    final bool attached = (widget.expandAnimation?.value ?? 0.0) >= 1.0;
+    if (attached == _morphAttached) return;
+    if (!mounted) {
+      _morphAttached = attached;
+      return;
+    }
+    setState(() => _morphAttached = attached);
   }
 
   /// 开始一段页内封面飞行：抓两端锚点并隐藏真身。
@@ -236,6 +260,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final animation = widget.expandAnimation;
     if (animation == null) return;
     final double value = animation.value;
+    _syncMorphAttachment();
 
     if (!_coverFlightActive) {
       // 容差拖尾内再切换：motor 的 animateTo 永远把状态置为 forward，反向
@@ -446,6 +471,16 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             constraints.maxHeight,
           ).artDimension,
         );
+        // 两套布局在这里构建一次，弹簧逐帧只改下面的包装层（高度 / 收起
+        // 裁剪 / 交叉淡化 / 点击门控）与飞行副本：整棵完整层与迷你层不再随
+        // 每一帧动画重建。
+        final Widget fullLayer = _buildSmallScreenPlayerLayout(
+          displayTrack,
+          playbackProvider,
+          morph: _morphAttached ? widget.morph : null,
+        );
+        final Widget miniLayer =
+            _buildMiniPlayer(context, displayTrack, playbackProvider);
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
@@ -457,14 +492,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                 1 - Curves.easeOutCubic.transform((t / 0.45).clamp(0.0, 1.0));
             final double fullOpacity = Curves.easeInCubic
                 .transform(((t - 0.35) / 0.65).clamp(0.0, 1.0));
-            final Rect? flightRect = (_coverFlightActive &&
-                    _coverFlightFrom != null &&
-                    _coverFlightTo != null)
-                ? Rect.lerp(_coverFlightFrom!, _coverFlightTo!, t)
-                : null;
-            // 展开完成才挂 morph 锚点：迷你态下顶栏⇄播放页飞行应走
-            // 「跳过」路径，避免飞到不可见的完整封面锚点。
-            final PlayerMorphController? morph = t >= 1.0 ? widget.morph : null;
+            final bool flightReady = _coverFlightActive &&
+                _coverFlightFrom != null &&
+                _coverFlightTo != null;
             return SizedBox(
               height: height,
               child: ClipRect(
@@ -484,11 +514,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                             ignoring: t < 0.5,
                             child: Opacity(
                               opacity: fullOpacity,
-                              child: _buildSmallScreenPlayerLayout(
-                                displayTrack,
-                                playbackProvider,
-                                morph: morph,
-                              ),
+                              child: fullLayer,
                             ),
                           ),
                         ),
@@ -509,15 +535,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: widget.onToggleExpand,
-                              child: _buildMiniPlayer(
-                                  context, displayTrack, playbackProvider),
+                              child: miniLayer,
                             ),
                           ),
                         ),
                       ),
                     ),
                     // 共享封面飞行副本：真实封面在飞行期间隐藏。
-                    if (flightRect != null)
+                    if (flightReady)
                       CoverFlightLayer(
                         animation: expand,
                         flight: CoverFlight(

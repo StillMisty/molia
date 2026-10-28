@@ -17,6 +17,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 
 import '../data/settings/settings_access.dart';
@@ -179,6 +180,11 @@ class PlaybackSessionCoordinator
   /// 最近一次写请求的完成时机：写请求按调用顺序串行落盘，`clear` 不会被在途
   /// 保存在之后复活；系统控制路径 await 它保证动作返回时会话已在本地。
   Future<void> get pendingWrite => _store.pendingWrite;
+
+  /// 最近一次整份写入的会话（测试观察用）：UI 停止播放后必须为 null，
+  /// 系统媒体「停止」则保留（那是可恢复的会话）。
+  @visibleForTesting
+  PlaybackSession? get lastWrittenSession => _lastWrittenSession;
 
   // ── 装载（冷启动 / 跨设备同步） ─────────────────────────
 
@@ -530,6 +536,10 @@ class PlaybackSessionCoordinator
   Future<void> stopPlayback() async {
     await _facade.stop();
     _dropRestoredSession();
+    // 会话已明确结束：不再持有上一份完整队列（Track 含 raw payload）。
+    // 不这么做时 `_lastWrittenSession` 会一直挂到下次播放，托盘常驻期间
+    // 等于白留一整份队列；命令提交点的去重依据在无会话时也不再需要。
+    _lastWrittenSession = null;
     await _store.clear();
   }
 

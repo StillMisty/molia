@@ -35,7 +35,9 @@ class ArtistService {
            page: page,
            limit: limit,
          ),
-         maxEntries: 64,
+         // 容量 16（约 4 位歌手 × 4 页）：同专辑服务的内存取舍，退出歌手页
+         // 后不把整份分页详情留在常驻进程里。
+         maxEntries: 16,
          ttl: ttl,
          cache: cache,
        );
@@ -60,6 +62,12 @@ class ArtistService {
   /// 使该歌手的缓存全部失效（重试 / 手动刷新用）。
   void invalidateArtist(String sourceKey, String artistId) =>
       _pages.invalidatePrefix(artistCacheKeyPrefix(sourceKey, artistId));
+
+  /// 清空全部分页缓存（托盘隐藏时由内存守卫调用；页面重建后按需重取）。
+  ///
+  /// 本服务所有 key 都以 `artist:` 开头，整段前缀即全清；在途条目一并移除，
+  /// 结果仍返回原等待方，只是不再写回缓存。
+  void clearCache() => _pages.invalidatePrefix('artist:');
 
   /// 指定歌手当前的缓存条目数（含 in-flight）。
   int countForArtist(String sourceKey, String artistId) =>

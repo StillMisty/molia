@@ -237,6 +237,239 @@ void main() {
     });
   });
 
+  group('预取所有权（起播前）', () {
+    test('桌面：目标匹配时保留在途任务，不取消', () async {
+      final cancelled = <String>[];
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: Completer<void>().future,
+          onCancel: () => cancelled.add(track.id),
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final track = _track('b');
+      await preloader.preload(track);
+      expect(preloader.targetTrackId, track.id);
+      expect(preloader.hasPendingTask, isTrue);
+
+      final reused = preloader.retainForPlayback(
+        track,
+        reuseInFlight: true,
+      );
+
+      expect(reused, isTrue);
+      expect(cancelled, isEmpty);
+      expect(preloader.targetTrackId, isNull, reason: '投机目标已提升为当前曲目');
+      expect(preloader.isCacheWriteInFlight(track), isTrue);
+    });
+
+    test('桌面：目标不匹配时取消未完成的预取', () async {
+      final cancelled = <String>[];
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: Completer<void>().future,
+          onCancel: () => cancelled.add(track.id),
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final trackA = _track('a');
+      await preloader.preload(trackA);
+      final reused = preloader.retainForPlayback(
+        _track('b'),
+        reuseInFlight: true,
+      );
+
+      expect(reused, isFalse);
+      expect(cancelled, [trackA.id]);
+      expect(preloader.targetTrackId, isNull);
+      expect(preloader.isCacheWriteInFlight(trackA), isFalse);
+    });
+
+    test('移动端：即使目标匹配也在起播前取消（避免与边播边缓存双写）', () async {
+      final cancelled = <String>[];
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: Completer<void>().future,
+          onCancel: () => cancelled.add(track.id),
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final track = _track('b');
+      await preloader.preload(track);
+      final reused = preloader.retainForPlayback(
+        track,
+        reuseInFlight: false,
+      );
+
+      expect(reused, isFalse);
+      expect(cancelled, [track.id]);
+      expect(preloader.isCacheWriteInFlight(track), isFalse);
+    });
+
+    test('桌面：保留当前曲目写入后，继续预取下一首不取消它', () async {
+      final cancelled = <String>[];
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: Completer<void>().future,
+          onCancel: () => cancelled.add(track.id),
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final trackB = _track('b');
+      final trackC = _track('c');
+      await preloader.preload(trackB);
+      expect(
+        preloader.retainForPlayback(trackB, reuseInFlight: true),
+        isTrue,
+      );
+
+      await preloader.preload(trackC);
+
+      expect(cancelled, isEmpty, reason: '当前曲目的写入不能被下一首预取取消');
+      expect(preloader.targetTrackId, trackC.id);
+      expect(preloader.isCacheWriteInFlight(trackB), isTrue);
+      expect(
+        downloader.calls.map((call) => call.$1),
+        [trackB.id, trackC.id],
+      );
+    });
+
+    test('桌面：取链途中切到该曲目，提升后仍会启动预下载', () async {
+      final resolved = Completer<PlayableStream>();
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: Completer<void>().future,
+          onCancel: () {},
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) => resolved.future,
+        predownloader: downloader,
+      );
+
+      final track = _track('a');
+      final loading = preloader.preload(track);
+      // 取链尚未返回时用户就切到了这一首。
+      expect(
+        preloader.retainForPlayback(track, reuseInFlight: true),
+        isTrue,
+      );
+      expect(preloader.isCacheWriteInFlight(track), isTrue);
+
+      resolved.complete(
+        PlayableStream(Uri.parse('https://cdn.example/a.mp3')),
+      );
+      await loading;
+
+      expect(downloader.calls, hasLength(1));
+      expect(preloader.hasPendingTask, isTrue);
+    });
+
+    test('任务落位后释放所有权，下一次起播可以重新起 writer', () async {
+      final done = Completer<void>();
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: done.future,
+          onCancel: () {},
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final track = _track('a');
+      await preloader.preload(track);
+      expect(
+        preloader.retainForPlayback(track, reuseInFlight: true),
+        isTrue,
+      );
+
+      done.complete();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(preloader.isCacheWriteInFlight(track), isFalse);
+      expect(
+        preloader.retainForPlayback(track, reuseInFlight: true),
+        isFalse,
+        reason: '任务结束后不再占用写入所有权',
+      );
+    });
+
+    test('预下载器跳过时不占用缓存写入所有权', () async {
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => null,
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final track = _track('a');
+      await preloader.preload(track);
+
+      expect(preloader.isCacheWriteInFlight(track), isFalse);
+      expect(
+        preloader.retainForPlayback(track, reuseInFlight: true),
+        isFalse,
+      );
+    });
+
+    test('当前曲目写入在途时，重复预取同一目标不再启动第二份', () async {
+      final downloader = _RecordingPredownloader(
+        onCall: (track, stream) => AudioPredownloadTask(
+          done: Completer<void>().future,
+          onCancel: () {},
+        ),
+      );
+      final preloader = NextTrackPreloader(
+        resolver: (track, {quality}) async => PlayableStream(
+          Uri.parse('https://cdn.example/${track.id}.mp3'),
+        ),
+        predownloader: downloader,
+      );
+
+      final track = _track('a');
+      await preloader.preload(track);
+      expect(
+        preloader.retainForPlayback(track, reuseInFlight: true),
+        isTrue,
+      );
+
+      await preloader.preload(track);
+
+      expect(downloader.calls, hasLength(1));
+    });
+  });
+
   group('CacheAudioPredownloader', () {
     test('非 http(s) / m3u8 直链直接跳过', () async {
       final started = <String>[];

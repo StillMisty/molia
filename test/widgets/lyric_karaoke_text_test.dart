@@ -157,6 +157,78 @@ void main() {
     );
     expect(_spansOf(tester, words.length)[1].style!.color, Colors.grey);
   });
+
+  testWidgets('颜色 / 词表变化后，已唱 / 未唱 span 缓存按新输入重建', (tester) async {
+    final position =
+        ValueNotifier<Duration>(const Duration(milliseconds: 1200));
+    addTearDown(position.dispose);
+
+    final words = [
+      LyricWord(
+        start: Duration.zero,
+        end: const Duration(milliseconds: 500),
+        text: '你',
+      ),
+      LyricWord(
+        start: const Duration(milliseconds: 500),
+        end: const Duration(milliseconds: 1000),
+        text: '好',
+      ),
+    ];
+
+    Widget build({
+      required List<LyricWord> input,
+      required Color played,
+      required Color unplayed,
+    }) =>
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: KaraokeLyricText(
+            words: input,
+            position: position,
+            playedColor: played,
+            unplayedColor: unplayed,
+          ),
+        );
+
+    await tester.pumpWidget(build(
+      input: words,
+      played: Colors.red,
+      unplayed: Colors.grey,
+    ));
+    expect(
+      _spansOf(tester, words.length).map((span) => span.style!.color),
+      everyElement(Colors.red),
+    );
+
+    // 同一词表换颜色：已唱 span 的缓存必须失效（不能沿用旧色）。
+    await tester.pumpWidget(build(
+      input: words,
+      played: Colors.blue,
+      unplayed: Colors.green,
+    ));
+    expect(
+      _spansOf(tester, words.length).map((span) => span.style!.color),
+      everyElement(Colors.blue),
+    );
+
+    // 换词表：长度与文本都按新行重建。
+    final nextWords = [
+      LyricWord(
+        start: Duration.zero,
+        end: const Duration(milliseconds: 100),
+        text: '新',
+      ),
+    ];
+    await tester.pumpWidget(build(
+      input: nextWords,
+      played: Colors.blue,
+      unplayed: Colors.green,
+    ));
+    final next = _spansOf(tester, nextWords.length).single;
+    expect(next.text, '新');
+    expect(next.style!.color, Colors.blue);
+  });
 }
 
 /// 逐字歌词渲染出的词级 [TextSpan]（按叶子数匹配词数挑选）。

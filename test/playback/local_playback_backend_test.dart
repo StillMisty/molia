@@ -352,6 +352,37 @@ void main() {
     expect(notifies, 2);
   });
 
+  test('队列 revision 变化：身份缓存裁到当前队列，当前 / 下一首映射复用', () {
+    final a = _source('a');
+    final b = _source('b');
+    service.seed([a, b], index: 0);
+    final first = backend.state.value;
+    expect(backend.trackCacheLength, 2);
+
+    // 同一批 SourceTrack 对象进入更长队列：当前 / 下一首复用同一 Track。
+    service.seed([a, b, _source('c')], index: 0);
+    final second = backend.state.value;
+    expect(identical(second.current, first.current), isTrue);
+    expect(identical(second.queue[0], first.queue[0]), isTrue);
+    expect(identical(second.queue[1], first.queue[1]), isTrue);
+    expect(backend.trackCacheLength, 3);
+
+    // 整体换队列（上一份身份全部离队）：缓存不能继续膨胀。
+    service.seed([_source('a')], index: 0);
+    expect(backend.trackCacheLength, 1);
+    expect(backend.state.value.queue.single.id.id, 'a');
+  });
+
+  test('stop 清空身份缓存', () async {
+    service.seed([_source('a'), _source('b')], index: 0);
+    expect(backend.trackCacheLength, 2);
+
+    await backend.stop();
+
+    expect(backend.trackCacheLength, 0);
+    expect(backend.state.value.queue, isEmpty);
+  });
+
   test('next/previous/previousOfPrevious/upNext 与投影一致：线性模式', () {
     service.seed(
       [_source('a'), _source('b'), _source('c')],

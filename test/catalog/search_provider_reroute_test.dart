@@ -692,6 +692,107 @@ void main() {
     expect(provider.supportedSearchKinds, [SearchKind.song]);
   });
 
+  test('releaseSearchResults：清三类分页 / 歌词片段与关键词，保留音源选择', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        artist: true,
+        lyricSearch: true,
+      ),
+    );
+    source.onSearch = (query) => Future.value(SearchResult(
+          items: [_track('kw', 'song-${query.page}')],
+          hasMore: true,
+          total: 10,
+        ));
+    source.onSearchLyrics = (query) => Future.value(SearchResult(
+          items: [
+            LyricHit(
+              track: _track('kw', 'lyric-${query.page}'),
+              snippet: '命中片段',
+            ),
+          ],
+          hasMore: true,
+          total: 1,
+        ));
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('周杰伦');
+    await _waitUntil(() => provider.searchResults.isNotEmpty);
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => provider.artistResults.isNotEmpty);
+    provider.selectSearchKind(SearchKind.lyric);
+    await _waitUntil(() => provider.lyricResults.isNotEmpty);
+    expect(provider.searchResults, isNotEmpty);
+    expect(provider.artistResults, isNotEmpty);
+    expect(provider.lyricResults.single.lyricSnippet, '命中片段');
+
+    provider.releaseSearchResults();
+
+    expect(provider.searchQuery, isEmpty);
+    expect(provider.searchResults, isEmpty);
+    expect(provider.artistResults, isEmpty);
+    expect(provider.lyricResults, isEmpty);
+    expect(provider.isSearching, isFalse);
+    expect(provider.sourceKey, 'kw', reason: '音源选择是用户偏好，保留');
+    expect(provider.hasSelectedSource, isTrue);
+
+    // 恢复窗口后页面重建：重新搜索从干净会话开始。
+    provider.selectSearchKind(SearchKind.song);
+    provider.submitSearch('晴天');
+    await _waitUntil(() => provider.searchResults.isNotEmpty);
+    expect(provider.searchResults.single.id.uri, 'kw:song-1');
+    expect(provider.totalResults, 10);
+  });
+
+  test('releaseSearchResults：释放前在途的响应落地后作废', () async {
+    final gate = Completer<SearchResult<Track>>();
+    final source = _FakeMusicSource('kw')..onSearch = (query) => gate.future;
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('旧关键词');
+    expect(provider.isSearching, isTrue, reason: '请求已在途');
+
+    provider.releaseSearchResults();
+    expect(provider.searchQuery, isEmpty);
+    expect(provider.isSearching, isFalse);
+
+    gate.complete(SearchResult(items: [_track('kw', 'old')]));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(provider.searchResults, isEmpty, reason: '过期响应不能写回已释放的会话');
+    expect(provider.searchQuery, isEmpty);
+  });
+
+  test('releaseSearchResults：取消待触发的防抖计时器，不再发请求', () {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    fakeAsync((async) {
+      provider.updateSearchQuery('a');
+      provider.releaseSearchResults();
+      async.elapse(const Duration(seconds: 1));
+      expect(source.searchCalls, 0);
+      expect(provider.searchQuery, isEmpty);
+    });
+  });
+
   test('输入防抖 300ms：连续输入只发最后一次请求', () {
     final source = _FakeMusicSource('kw');
     SearchQuery? lastQuery;
