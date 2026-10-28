@@ -130,5 +130,18 @@ void main() {
     await ctrlDigit(tester, 2);
     await pumpFrames(tester, frames: 90);
     FrameStats.instance.reportNow('end');
+
+    // 播放页 ⇄ 收藏反复进出：覆盖顶栏/底栏共享封面飞行 + 页中心隐藏时序 +
+    // 侧邻位 reveal（离开时反向收回）。真机 raster 口径见 perf.sh frames。
+    FrameStats.instance.beginScenario('mobile-nowplaying-leave-return');
+    await ctrlDigit(tester, 3);
+    await pumpFrames(tester, frames: 30);
+    for (var i = 0; i < 3; i++) {
+      await ctrlDigit(tester, 2);
+      await pumpFrames(tester, frames: 30);
+      await ctrlDigit(tester, 3);
+      await pumpFrames(tester, frames: 30);
+    }
+    FrameStats.instance.reportNow('end');
   });
 }
