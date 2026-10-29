@@ -115,17 +115,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(PlayingIndicator), findsOneWidget);
 
-    // 同一首暂停：仍标记当前曲目，只换暂停图形。
+    // 同一首暂停：仍标记当前曲目，均衡器停在静态相位。
     backend.emit(const BackendSnapshot(
       current: track,
       queue: [track],
       currentIndex: 0,
     ));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-    // provider 通知有 300ms 节流，400ms 帧才刚重建；再给 IconSwap 150ms 收尾。
-    await tester.pump(const Duration(milliseconds: 200));
-    expect(find.byType(PlayingIndicator), findsNothing);
+    expect(find.byIcon(Icons.pause_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
 
     const other = Track(
       id: TrackId('kw', 'b'),

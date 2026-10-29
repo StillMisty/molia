@@ -112,8 +112,8 @@ void main() {
     );
 
     await pumpRow(tester, isCurrent: true);
-    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-    expect(find.byType(PlayingIndicator), findsNothing);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
+    expect(find.byIcon(Icons.pause_rounded), findsNothing);
 
     await pumpRow(tester);
     expect(find.byIcon(Icons.pause_rounded), findsNothing);

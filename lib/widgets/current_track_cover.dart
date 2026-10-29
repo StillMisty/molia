@@ -2,10 +2,12 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../theme/motion_policy.dart';
-import 'icon_swap.dart';
 import 'playing_indicator.dart';
 
-/// 当前曲目封面：封面右下角叠「播放中 / 暂停」角标。
+/// 当前曲目封面：封面右下角叠播放状态角标。
+///
+/// 播放中是三柱均衡器动画，暂停时同一个均衡器停在静态相位；角标始终只作
+/// 状态标识，避免被读成可点击的播放控件。
 ///
 /// 封面内容由调用方给出（曲目行走 [TrackArtwork]）；这里只负责角标与固定
 /// 方形槽，保证状态切换不改变行内网格。
@@ -69,9 +71,9 @@ class _CurrentTrackCoverState extends State<CurrentTrackCover>
 
   /// 只有「正在播放 + 未减弱动效」才跑 ticker；其余状态停在同一相位。
   ///
-  /// 暂停后不能保留 ticker 空转：角标虽不再换图标，但旧 [PlayingIndicator]
-  /// 会在 IconSwap 的 150ms 离场淡出里继续被绘制，仍起伏就会违反「暂停时
-  /// 完全不动」。
+  /// 暂停后不能保留 ticker 空转：角标仍留在屏幕上，继续起伏就会违反
+  /// 「暂停时完全不动」。复位到固定相位则让静态形状保持统一，不因暂停时刻
+  /// 不同而高低不一。
   void _syncAnimation() {
     if (widget.isPlaying && !_reduceMotion) {
       if (!_controller.isAnimating) {
@@ -112,18 +114,9 @@ class _CurrentTrackCoverState extends State<CurrentTrackCover>
                 child: SizedBox.square(
                   dimension: CurrentTrackCover.badgeSize,
                   child: Center(
-                    child: IconSwap<bool>(
-                      value: widget.isPlaying,
-                      builder: (context, isPlaying) => isPlaying
-                          ? PlayingIndicator(
-                              progress: _controller,
-                              color: scheme.onPrimary,
-                            )
-                          : Icon(
-                              Icons.pause_rounded,
-                              size: 12,
-                              color: scheme.onPrimary,
-                            ),
+                    child: PlayingIndicator(
+                      progress: _controller,
+                      color: scheme.onPrimary,
                     ),
                   ),
                 ),
