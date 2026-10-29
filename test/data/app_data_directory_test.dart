@@ -132,6 +132,89 @@ void main() {
     );
   });
 
+  test('缓存迁移：目标不存在时整体 rename（不逐文件复制）', () async {
+    final oldAudio = Directory('${legacy.path}/audio_cache')
+      ..createSync(recursive: true);
+    File('${oldAudio.path}/wy_1_flac').writeAsStringSync('cached-audio');
+
+    expect(
+      await migrateLegacyCacheDirectories(
+        platform: TargetPlatform.windows,
+        targetDirectory: target,
+        legacyDirectory: legacy,
+      ),
+      isTrue,
+    );
+    expect(
+      File('${target.path}/audio_cache/wy_1_flac').readAsStringSync(),
+      'cached-audio',
+    );
+    expect(oldAudio.existsSync(), isFalse, reason: '整体 rename 后旧目录消失');
+  });
+
+  test('缓存迁移：目标已存在时只补缺失，不覆盖新文件', () async {
+    final oldAudio = Directory('${legacy.path}/audio_cache')
+      ..createSync(recursive: true);
+    File('${oldAudio.path}/present').writeAsStringSync('old');
+    File('${oldAudio.path}/missing').writeAsStringSync('old-missing');
+    final newAudio = Directory('${target.path}/audio_cache')
+      ..createSync(recursive: true);
+    File('${newAudio.path}/present').writeAsStringSync('new');
+
+    expect(
+      await migrateLegacyCacheDirectories(
+        platform: TargetPlatform.windows,
+        targetDirectory: target,
+        legacyDirectory: legacy,
+      ),
+      isTrue,
+    );
+    expect(File('${newAudio.path}/present').readAsStringSync(), 'new');
+    expect(File('${newAudio.path}/missing').readAsStringSync(), 'old-missing');
+  });
+
+  test('缓存迁移：rename 失败回退 copy，旧文件保留', () async {
+    final oldArtwork = Directory('${legacy.path}/artwork_cache')
+      ..createSync(recursive: true);
+    File('${oldArtwork.path}/cover').writeAsStringSync('cover-bytes');
+
+    expect(
+      await migrateLegacyCacheDirectories(
+        platform: TargetPlatform.windows,
+        targetDirectory: target,
+        legacyDirectory: legacy,
+        moveDirectory: (_, _) async =>
+            throw const FileSystemException('rename failed'),
+        moveFile: (_, _) async =>
+            throw const FileSystemException('rename failed'),
+      ),
+      isTrue,
+    );
+    expect(
+      File('${target.path}/artwork_cache/cover').readAsStringSync(),
+      'cover-bytes',
+    );
+    expect(File('${oldArtwork.path}/cover').existsSync(), isTrue,
+        reason: 'copy 回退保留旧文件');
+  });
+
+  test('缓存迁移：非 Windows 跳过', () async {
+    final oldAudio = Directory('${legacy.path}/audio_cache')
+      ..createSync(recursive: true);
+    File('${oldAudio.path}/track').writeAsStringSync('bytes');
+
+    expect(
+      await migrateLegacyCacheDirectories(
+        platform: TargetPlatform.linux,
+        targetDirectory: target,
+        legacyDirectory: legacy,
+      ),
+      isTrue,
+    );
+    expect(Directory('${target.path}/audio_cache').existsSync(), isFalse);
+    expect(oldAudio.existsSync(), isTrue);
+  });
+
   test('下载 journal 迁移失败：回退旧 journal 根，旧记录仍可达', () async {
     final oldJournal = Directory('${legacy.path}/download_journal')
       ..createSync(recursive: true);

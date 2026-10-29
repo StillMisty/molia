@@ -51,8 +51,12 @@ MB/s 写盘（Windows 实测约 2MB/s）。同时 Windows 的应用支持目录�
    - 用户数据：`custom_covers/`、`lx_sources.json`、`download_journal/` 复制到
      新目录（已存在则跳过），并改写 `custom_cover_index_v1` 里的旧 base 路径；
      失败保留旧文件 / 回退读取，不删除旧目录。
-   - 缓存可丢弃：audio_cache / artwork_cache / lyrics_cache 直接用新路径，
-     不复制旧文件，也不自动删除用户目录。
+   - 缓存目录：audio_cache / artwork_cache / lyrics_cache 在 Windows 首次
+     启动时移动 / 合并到新目录。目标不存在优先整体 `rename`（同卷零内容写），
+     失败才逐个复制；目标已存在只补缺失、不覆盖新数据，旧目录保留。
+     缓存内容本身可丢弃，但**不能只换路径不迁移**：音频缓存是整首
+     FLAC（24–40MB），漏迁会让已缓存歌曲被重新下载，形成约 0.1MB/s 的
+     持续写入 / 流量回归。
    - 单实例锁：新版本只在 `appDataDirectory()` 创建 / 释放主锁；旧 Roaming
      锁只由升级守卫读取 / 清理陈旧 pid，不再作为主锁路径。
 

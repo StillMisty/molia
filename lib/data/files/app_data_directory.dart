@@ -8,8 +8,8 @@
 /// 其余平台继续用应用支持目录：它是本机持久目录，不会被系统当缓存清理。
 /// Windows 新目录 = `getApplicationCacheDirectory()`（path_provider 返回
 /// `%LOCALAPPDATA%\top.stillmisty\molia`），旧目录 = 应用支持目录
-/// （`%APPDATA%\top.stillmisty\molia`）。迁移只复制用户数据，不复制可丢弃的
-/// 缓存，也不删除旧目录（保留作回退 / 备份）。
+/// （`%APPDATA%\top.stillmisty\molia`）。用户数据与缓存目录迁移，旧目录保留
+/// 作回退 / 备份；缓存优先整体 rename，避免已缓存音频被重新下载。
 library;
 
 import 'dart:io';
@@ -134,6 +134,108 @@ Future<bool> migrateLegacyFileIfNeeded({
     return true;
   } catch (e) {
     _logger.warning('迁移用户数据失败（保留旧文件）：$relativePath：$e');
+    return false;
+  }
+}
+
+/// 缓存目录名（音频 / 封面 / 歌词）：Windows 升级时移动 / 合并到新目录。
+const List<String> legacyCacheDirectoryNames = [
+  'audio_cache',
+  'artwork_cache',
+  'lyrics_cache',
+];
+
+/// Windows 升级：把旧 Roaming 缓存目录移到 LocalAppData。
+///
+/// 为什么缓存也要迁移：音频缓存里是整首已下载的音频（FLAC 24–40MB）。只换
+/// 路径不迁移会让 `localUriFor` 未命中并重新下载整首，形成持续写盘 / 流量
+/// 回归。目标目录不存在时优先 `Directory.rename`（同卷零内容写），失败才
+/// 回退逐个复制；目标已存在时只补齐缺失文件（优先 rename，失败 copy），
+/// 不覆盖新数据。幂等、失败只日志，绝不阻断启动。
+///
+/// [moveDirectory] / [moveFile] 仅测试注入；生产使用真实 rename。
+Future<bool> migrateLegacyCacheDirectories({
+  Directory? targetDirectory,
+  Directory? legacyDirectory,
+  TargetPlatform? platform,
+  Future<void> Function(Directory source, String targetPath)? moveDirectory,
+  Future<void> Function(File source, String targetPath)? moveFile,
+}) async {
+  if (!_usesSeparateLegacyDirectory(platform ?? defaultTargetPlatform)) {
+    return true;
+  }
+  final target = targetDirectory ?? await appDataDirectory(platform: platform);
+  final legacy =
+      legacyDirectory ?? await legacyAppDataDirectory(platform: platform);
+  if (legacy == null || _sameDirectory(target, legacy)) return true;
+
+  final moveDir = moveDirectory ??
+      (source, targetPath) => source.rename(targetPath);
+  final move = moveFile ?? (source, targetPath) => source.rename(targetPath);
+  var ok = true;
+  for (final name in legacyCacheDirectoryNames) {
+    if (!await _migrateLegacyCacheDirectory(
+      source: Directory(p.join(legacy.path, name)),
+      target: Directory(p.join(target.path, name)),
+      moveDirectory: moveDir,
+      moveFile: move,
+    )) {
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+Future<bool> _migrateLegacyCacheDirectory({
+  required Directory source,
+  required Directory target,
+  required Future<void> Function(Directory source, String targetPath)
+      moveDirectory,
+  required Future<void> Function(File source, String targetPath) moveFile,
+}) async {
+  try {
+    if (!await source.exists()) return true;
+    if (!await target.exists()) {
+      try {
+        await target.parent.create(recursive: true);
+        // 同卷整体移动：只改目录项，不重写几十 MB 缓存内容。
+        await moveDirectory(source, target.path);
+        _logger.info('缓存目录已整体迁移：${target.path}');
+        return true;
+      } catch (e) {
+        _logger.info('缓存目录整体移动失败，改为逐个文件补齐：${source.path}：$e');
+        await target.create(recursive: true);
+      }
+    } else {
+      await target.create(recursive: true);
+    }
+
+    var ok = true;
+    await for (final entity in source.list(
+      recursive: true,
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      final relative = p.relative(entity.path, from: source.path);
+      final destination = File(p.join(target.path, relative));
+      if (await _exists(destination)) continue;
+      try {
+        await destination.parent.create(recursive: true);
+        try {
+          await moveFile(entity, destination.path);
+        } catch (_) {
+          // 跨卷 / 被占用：复制保留旧文件，下次启动目标已存在会跳过。
+          await entity.copy(destination.path);
+        }
+      } catch (e) {
+        ok = false;
+        _logger.warning('迁移缓存文件失败：${entity.path}：$e');
+      }
+    }
+    if (ok) _logger.info('缓存目录已合并到新目录：${target.path}');
+    return ok;
+  } catch (e) {
+    _logger.warning('迁移缓存目录失败（保留旧目录）：${source.path}：$e');
     return false;
   }
 }

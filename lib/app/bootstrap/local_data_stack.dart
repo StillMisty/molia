@@ -13,6 +13,7 @@ import 'dart:async';
 
 import '../../data/downloads/download_notifications.dart';
 import '../../data/downloads/download_storage.dart';
+import '../../data/files/app_data_directory.dart';
 import '../../data/downloads/downloads_publisher.dart';
 import '../../data/downloads/downloads_repository.dart';
 import '../../data/downloads/local_lyrics.dart';
@@ -50,6 +51,14 @@ Future<LocalDataStack> buildLocalDataStack({
   required CatalogStack catalog,
 }) async {
   final sourceManager = catalog.sourceManager;
+
+  // Windows 升级：先把旧 Roaming 的音频 / 封面 / 歌词缓存移到 LocalAppData。
+  // 必须在 LyricsCache / CacheService 解析新路径之前完成；音频缓存可能是
+  // 几十 MB 的整首 FLAC，只换路径不迁移会导致重新下载（持续写盘回归）。
+  // 非 Windows 是立即返回；失败只记日志，不阻断启动。
+  final cacheMigrationWatch = Stopwatch()..start();
+  await migrateLegacyCacheDirectories();
+  markStartupStep('sub.cacheMigration', cacheMigrationWatch);
 
   // 歌词缓存的文件后端只在生产组合根显式启用：默认 `LyricsCache()` 保持
   // prefs-only，避免 widget 测试 / 降级平台在 fake async 下等待平台通道与文件
