@@ -17,8 +17,28 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// 仅测试用：模拟平台 remove 返回 false（不是 lib 的依赖）。
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import 'support/memory_database.dart';
+
+/// 可拒绝删除旧会话键的平台实现：验证 false 不被当作成功永久缓存。
+class _RejectingRemovePrefsStore extends InMemorySharedPreferencesStore {
+  _RejectingRemovePrefsStore(super.data) : super.withData();
+
+  bool reject = true;
+  final List<String> rejected = [];
+
+  @override
+  Future<bool> remove(String key) async {
+    if (reject && key.contains('playback_session')) {
+      rejected.add(key);
+      return false;
+    }
+    return super.remove(key);
+  }
+}
 
 /// 记录写入口径并可暂停 saveAll 的仓库（验证串行队列）。
 class _GatedRepository extends PlaybackSessionRepository {
@@ -309,6 +329,29 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey('playback_session_v1'), isFalse);
     expect(prefs.containsKey('playback_session_position_v1'), isFalse);
+  });
+
+  test('旧 prefs 删除被平台拒绝：不缓存成功，下次读取重试', () async {
+    final platform = _RejectingRemovePrefsStore({
+      'flutter.playback_session_v1': '{"tracks":[{"id":"old"}]}',
+      'flutter.playback_session_position_v1': 1234,
+    });
+    SharedPreferences.resetStatic();
+    SharedPreferencesStorePlatform.instance = platform;
+    final value = store();
+
+    expect(await value.loadRaw(), isNull);
+    expect(platform.rejected, isNotEmpty);
+    final firstRejects = platform.rejected.length;
+
+    // 平台恢复后再次读取：清理重试成功。
+    platform.reject = false;
+    expect(await value.loadRaw(), isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('playback_session_v1'), isFalse);
+    expect(prefs.containsKey('playback_session_position_v1'), isFalse);
+    expect(platform.rejected.length, firstRejects,
+        reason: '恢复后不应再被拒绝');
   });
 
   test('远端应用排在在途本地保存之后：同一个 pendingWrite 队列', () async {

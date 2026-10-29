@@ -39,7 +39,11 @@ MB/s 写盘（Windows 实测约 2MB/s）。同时 Windows 的应用支持目录�
 5. **Windows 数据路径迁到 LocalAppData**：`appDataDirectory()` 在 Windows 用
    `getApplicationCacheDirectory()`（`%LOCALAPPDATA%\top.stillmisty\molia`），
    其余平台用 `getApplicationSupportDirectory()`。数据库 / 音频与封面缓存 /
-   歌词缓存 / 自定义封面 / LX 脚本 / 下载 journal / 单实例锁全部走该 helper。
+   歌词缓存 / 自定义封面 / LX 脚本 / 下载 journal 走该 helper。
+   **单实例锁是例外**：仍固定用 `getApplicationSupportDirectory()`（Windows =
+   旧 Roaming）。锁是运行时 IPC 文件、不是用户数据；保留旧路径才能让升级后的
+   新版本看见旧版本持有的锁，按 secondary 退出，避免新旧进程并存时复制一个
+   正在被旧版本写入的数据库。
 6. **一次性迁移策略**：
    - 主库：打开前若新目录无库、旧 Roaming 目录有库，复制 DB + `-wal` + `-shm`
      （先复制到临时名，sidecar 先 rename、主库最后 rename）；旧库保留。
@@ -49,6 +53,8 @@ MB/s 写盘（Windows 实测约 2MB/s）。同时 Windows 的应用支持目录�
      失败保留旧文件 / 回退读取，不删除旧目录。
    - 缓存可丢弃：audio_cache / artwork_cache / lyrics_cache 直接用新路径，
      不复制旧文件，也不自动删除用户目录。
+   - 单实例锁不迁移：新旧版本继续共用应用支持目录里的
+     `single_instance.lock`；旧锁的陈旧清理逻辑不变。
 
 ## 后果
 
@@ -58,3 +64,5 @@ MB/s 写盘（Windows 实测约 2MB/s）。同时 Windows 的应用支持目录�
   `sub.db.prewarm` / `sub.session.load` 埋点观测，不改变首帧恢复态语义。
 - 旧 Roaming 目录仍保留作回退 / 备份；确认稳定后可另行决定是否清理。
 - 迁移只在 Windows、且新旧路径不同时执行；其余平台行为不变。
+- 单实例锁留在旧 Roaming 路径，因此升级时旧版本在跑，新版本会正常识别并
+  退出；DB 复制不会与旧写者并发。

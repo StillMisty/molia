@@ -101,8 +101,19 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
   默认字体恢复为读取 `MessageFont` 的系统 UI 字体，第三项恢复；并行结论不受影响。）
 - 本地数据栈与资料库栈互不依赖 → 并行装配。内部细分（实测）：`dataSaver.init`
   8–9ms、`downloadSettings.init` 0ms、`syncState.init` 0ms、统计 init / 换源 init /
-  DB `maxVersion()`（含 drift 库打开）11–12ms、`downloadService.init` 12–13ms；
+  DB `maxVersion()`（当时含 drift 库打开）11–12ms、`downloadService.init` 12–13ms；
   串行是相加，并行取最大值。
+
+### 5.1a 2026-10 播放会话入库后的主库预热
+
+播放会话迁入主库后，冷启动恢复态仍要在**首帧前**读出会话，语义没有改变。
+`main` 在本地数据 / 资料库装配期间并行触发主库首个查询（`sub.db.prewarm`），
+首帧前 await；会话读取本身另记 `sub.session.load`。这两项是首帧内容的前置，
+不再属于「DB 完全首帧后」：
+
+- `LibraryRepository.maxVersion`、统计收尾 / 裁剪、下载记录加载仍在首帧后；
+- Windows 首次升级的旧库复制（DB + `-wal` + `-shm`）与 schema v1→v2 迁移是
+  一次性成本，看 `sub.db.prewarm` 拉长的那一次；之后冷启动只有正常开库 / 读取。
 
 ### 5.2 同步栈初始化后移（≈ −38ms）
 
@@ -192,7 +203,7 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 | GTK 建窗 + 隐藏 + 几何恢复（`WindowChrome.ensureInitialized`） | ~46ms | 窗口必须存在才能 `runApp`；窗口先隐藏、首帧回调再亮（避免盯空白窗）是既定交互 |
 | libmpv `dlopen`（`initDesktopAudioIfNeeded`） | ~39ms | 播放后端注册必须早于播放栈（恢复会话要用），推迟到首帧后会让恢复态/通知状态可见地迟一拍 |
 | 引擎 + 框架 + 首帧渲染 | ~100ms | 见 §5.5，与界面树无关 |
-| Dart 侧装配（`molia.startup` 各阶段合计） | ~20ms | 省流探测、下载存储、drift 库打开；都是首帧内容或播放链路的前置 |
+| Dart 侧装配（`molia.startup` 各阶段合计） | ~20ms | 省流探测、下载存储、播放会话主库预热；都是首帧内容或播放链路的前置 |
 
 ## 7. Android 参考（模拟器，非真机）
 
@@ -247,6 +258,9 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
   `EmojiCompatInitializer`（Flutter 自绘文本用不到；原生只有 RemoteViews）。
 - 真机结论仍需真机复测：模拟器的 400ms 固定等待会掩盖 Dart 侧收益；
   真机上应重点看「首帧之后」的 DB/下载/探测是否消失、以及系统 TotalTime。
+- **2026-10 会话迁移后的口径变化**：主库现在首帧前预热（`sub.db.prewarm`），
+  因为播放会话恢复态要在首帧可见；`maxVersion` / 统计维护仍留在首帧后。
+  上一段与本表是迁移前的历史测量，不能理解为「DB 完全在首帧后打开」。
 - **不采用引擎 / 系统库替换类 hack**：试过排除 `androidx.window`、影子类、
   反射清空 `WindowInfoTracker` 的 extension backend——要么直接崩
   （`WindowMetricsCalculator` 是 Flutter `ViewUtils` 必需），要么能压掉这

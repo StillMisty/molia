@@ -329,15 +329,25 @@ class PlaybackSessionStore {
   /// 因为跳过会话读取而长期留在 prefs 里。失败只记日志并允许下次重试。
   Future<void> cleanupLegacyPreferences() {
     return _legacyCleanup ??= () async {
+      var failed = false;
       try {
         final prefs = await _preferences();
         for (final key in [_key, _stateKey, _positionKey]) {
-          if (prefs.containsKey(key)) await prefs.remove(key);
+          if (!prefs.containsKey(key)) continue;
+          // 平台写入失败会返回 false（不抛错）：不能当成功缓存，否则旧 2MB
+          // 键再也不会被重试。
+          final removed = await prefs.remove(key);
+          if (!removed) {
+            failed = true;
+            _logger.warning('清理旧播放会话 prefs 被平台拒绝: $key');
+          }
         }
       } catch (e) {
+        failed = true;
         _logger.warning('清理旧播放会话 prefs 失败: $e');
-        // 失败不缓存：下次启动 / 读取 / 清除再试一次。
-        _legacyCleanup = null;
+      } finally {
+        // 任一键失败都不缓存：下次启动 / 读取 / 清除再试一次。
+        if (failed) _legacyCleanup = null;
       }
     }();
   }

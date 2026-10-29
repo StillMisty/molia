@@ -277,8 +277,13 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
         }
       }
       if (changed) {
-        await prefs.setString(prefsKey, jsonEncode(decoded));
-        debugPrint('[Molia] 自定义封面索引已迁移到 LocalAppData');
+        final written = await prefs.setString(prefsKey, jsonEncode(decoded));
+        if (written) {
+          debugPrint('[Molia] 自定义封面索引已迁移到 LocalAppData');
+        } else {
+          // 平台拒绝：索引仍是旧路径（文件已复制），下次启动重试改写。
+          debugPrint('[Molia] 自定义封面索引迁移写回被平台拒绝，下次启动重试');
+        }
       }
     } catch (e) {
       debugPrint('[Molia] 迁移自定义封面索引失败（保留旧路径）：$e');
