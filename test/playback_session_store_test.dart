@@ -153,6 +153,43 @@ void main() {
     expect((await cursorRow())!.savedAt, 1000);
   });
 
+  test('新实例 load 后恢复缓存：第一次暂停 / seek 只写 cursor', () async {
+    final writer = store();
+    final session = PlaybackSession(
+      tracks: [_track('a'), _track('b')],
+      index: 0,
+      position: const Duration(seconds: 3),
+      mode: PlayMode.shuffle,
+      context: const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
+    );
+    await writer.save(session);
+    final payloadBefore = await payloadRow();
+
+    // 模拟冷启动：新 store 实例从库里读回同一份 payload。
+    final restored = store();
+    final loaded = await restored.load();
+    expect(loaded, isNotNull);
+    final payloadAfterLoad = await payloadRow();
+    expect(payloadAfterLoad!.updatedAt, payloadBefore!.updatedAt);
+    expect(payloadAfterLoad.json, payloadBefore.json);
+
+    // 恢复后第一次动作：队列 / 模式 / 上下文都没变，只改下标 / 进度。
+    repository.writes.clear();
+    clockMs = 2000;
+    await restored.save(loaded!.copyWith(
+      index: 1,
+      position: const Duration(seconds: 9),
+    ));
+
+    expect(repository.writes, ['cursor'],
+        reason: '同一份 payload 不应因恢复后的第一次动作重写');
+    final payloadAfterSave = await payloadRow();
+    expect(payloadAfterSave!.updatedAt, payloadBefore.updatedAt);
+    expect(payloadAfterSave.json, payloadBefore.json);
+    expect((await cursorRow())!.cursorIndex, 1);
+    expect((await cursorRow())!.positionMs, 9000);
+  });
+
   test('同队列切歌 / 暂停：只写 cursor，payload 行不变', () async {
     final value = store();
     final tracks = [_track('a'), _track('b')];

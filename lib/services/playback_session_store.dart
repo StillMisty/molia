@@ -270,9 +270,21 @@ class PlaybackSessionStore {
   Future<PlaybackSession?> load() async {
     // 启动埋点：首帧前的恢复态读取（含首次开库 / Windows 旧库迁移成本）。
     final watch = Stopwatch()..start();
+    final cacheEpoch = _queueCacheEpoch;
     try {
       final json = await loadRaw();
-      return json == null ? null : PlaybackSession.fromJson(json);
+      if (json == null) return null;
+      final session = PlaybackSession.fromJson(json);
+      if (session == null) return null;
+      // 恢复出的队列就是库里已有的 payload：把写缓存对齐过去，否则恢复后
+      // 第一次暂停 / seek 会走「队列变化」分支，把 MB 级 payload 重写一遍。
+      // 期间若有写入 / 作废请求（epoch 变了），缓存不可信，交给下一次 save。
+      if (cacheEpoch == _queueCacheEpoch) {
+        _writtenTracks = session.tracks;
+        _writtenMode = session.mode;
+        _writtenContext = session.context;
+      }
+      return session;
     } catch (e) {
       _logger.warning('加载播放会话失败: $e');
       return null;
