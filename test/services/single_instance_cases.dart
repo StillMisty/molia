@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/window/single_instance.dart';
 // 仅测试用：跨平台模拟 path_provider（Windows 是 Dart/FFI 实现，不走
@@ -10,9 +12,13 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 /// 只覆盖 support / cache 两个路径；其余抽象方法保持抛 UnimplementedError，
 /// 用来确认锁目录只调用 support path。
 class _RecordingPathProviderPlatform extends PathProviderPlatform {
-  _RecordingPathProviderPlatform(this.supportPath);
+  _RecordingPathProviderPlatform({
+    required this.supportPath,
+    required this.cachePath,
+  });
 
   final String supportPath;
+  final String cachePath;
   int supportCalls = 0;
   int cacheCalls = 0;
 
@@ -25,7 +31,7 @@ class _RecordingPathProviderPlatform extends PathProviderPlatform {
   @override
   Future<String?> getApplicationCachePath() async {
     cacheCalls++;
-    return supportPath;
+    return cachePath;
   }
 }
 
@@ -36,20 +42,78 @@ class _RecordingPathProviderPlatform extends PathProviderPlatform {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('锁目录仍走应用支持目录（升级后能看见旧版本持有的锁）', () async {
-    final temp = Directory.systemTemp.createTempSync('molia_single_lock_');
+  test('主锁目录：Windows 走 LocalAppData，其余平台走应用支持目录', () async {
+    final support = Directory.systemTemp.createTempSync('molia_lock_support_');
+    final cache = Directory.systemTemp.createTempSync('molia_lock_cache_');
     addTearDown(() {
-      if (temp.existsSync()) temp.deleteSync(recursive: true);
+      if (support.existsSync()) support.deleteSync(recursive: true);
+      if (cache.existsSync()) cache.deleteSync(recursive: true);
     });
-    final original = PathProviderPlatform.instance;
-    final platform = _RecordingPathProviderPlatform(temp.path);
-    PathProviderPlatform.instance = platform;
-    addTearDown(() => PathProviderPlatform.instance = original);
+    final originalPlatform = PathProviderPlatform.instance;
+    final originalTarget = debugDefaultTargetPlatformOverride;
+    final provider = _RecordingPathProviderPlatform(
+      supportPath: support.path,
+      cachePath: cache.path,
+    );
+    PathProviderPlatform.instance = provider;
+    addTearDown(() {
+      PathProviderPlatform.instance = originalPlatform;
+      debugDefaultTargetPlatformOverride = originalTarget;
+    });
 
-    expect((await SingleInstance.lockDirectory()).path, temp.path);
-    expect(platform.supportCalls, 1);
-    expect(platform.cacheCalls, 0,
-        reason: '锁是运行时 IPC，不迁 LocalAppData，必须与旧版本共用同一路径');
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    expect((await SingleInstance.lockDirectory()).path, cache.path);
+    expect(provider.cacheCalls, 1);
+    expect(provider.supportCalls, 0);
+
+    provider
+      ..supportCalls = 0
+      ..cacheCalls = 0;
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    expect((await SingleInstance.lockDirectory()).path, support.path);
+    expect(provider.supportCalls, 1);
+    expect(provider.cacheCalls, 0);
+  });
+
+  group('upgrade guard decide', () {
+    test('没有旧锁 / 读不出 / pid 已退出：继续抢新锁', () {
+      for (final args in [
+        (exists: false, readable: false, alive: false, connected: false),
+        (exists: true, readable: false, alive: false, connected: false),
+        (exists: true, readable: true, alive: false, connected: false),
+      ]) {
+        expect(
+          SingleInstanceLock.decideUpgradeGuard(
+            lockExists: args.exists,
+            readable: args.readable,
+            alive: args.alive,
+            connected: args.connected,
+          ),
+          LegacyUpgradeAction.proceed,
+        );
+      }
+    });
+
+    test('旧 pid 存活：连得上 / 连不上都按 secondary 退出', () {
+      expect(
+        SingleInstanceLock.decideUpgradeGuard(
+          lockExists: true,
+          readable: true,
+          alive: true,
+          connected: true,
+        ),
+        LegacyUpgradeAction.secondary,
+      );
+      expect(
+        SingleInstanceLock.decideUpgradeGuard(
+          lockExists: true,
+          readable: true,
+          alive: true,
+          connected: false,
+        ),
+        LegacyUpgradeAction.secondaryUnresponsive,
+      );
+    });
   });
 
   group('encode / parse', () {

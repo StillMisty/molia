@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import '../../data/files/app_data_directory.dart';
 import 'process_liveness.dart';
 import 'single_instance_lock.dart';
 import 'window_chrome.dart';
@@ -23,10 +23,14 @@ import 'window_chrome.dart';
 /// 后来进程连上后发一行 `show` 请它显示窗口，然后自己退出。探测不到既有
 /// 实例（崩溃残留的陈旧锁）时清掉重抢；重试耗尽保守按主实例继续。
 ///
-/// **路径例外**：锁文件固定在应用支持目录（Windows 仍是旧 Roaming），
-/// 不跟其它数据迁到 LocalAppData。它是运行时 IPC 文件、不是用户数据；
-/// 保持在旧路径才能让升级后的新版本仍看见旧版本持有的锁，按 secondary
-/// 退出，避免新旧进程并存时新版本复制一个正在被旧版本写入的数据库。
+/// **主锁路径**：`appDataDirectory()`（Windows = LocalAppData，其余平台 =
+/// 应用支持目录）。这是唯一被 acquire / release 管理的锁，退出时也只删它。
+///
+/// **升级守卫**：Windows 升级时，旧版本仍可能在 `%APPDATA%` 的旧目录持有
+/// 一份锁、并正在写旧库。新版本抢新锁之前只读一次旧锁：旧 pid 存活时按
+/// secondary 退出（连不上也不冒险 primary），pid 已退出才删除旧锁继续。
+/// 这个 guard 不参与新锁生命周期，也不写 legacy mirror 锁；降级场景下新旧
+/// 版本各用各的库，不会损坏新库。
 ///
 /// 与 `window_chrome` / `app_tray` 同一约束：`dart:io` 与锁文件协议收在
 /// 本文件，其余代码只经 `single_instance.dart` 出口访问。
@@ -67,6 +71,10 @@ class SingleInstance {
       _logger.info('单实例已由 $disableEnvKey 关闭（测试 / 自动化实例）');
       return SingleInstanceRole.primary;
     }
+    // 升级守卫：抢新锁前先确认旧版（Roaming 锁）没有在跑。旧版本仍在写
+    // 旧库时绝不能进入 primary 去复制数据库。
+    final legacyRole = await _legacyUpgradeGuard();
+    if (legacyRole != null) return legacyRole;
     final lockFile = await _lockFileHandle();
     if (lockFile == null) return SingleInstanceRole.primary;
 
@@ -211,9 +219,63 @@ class SingleInstance {
     }
   }
 
-  /// 锁目录：**故意**用应用支持目录（见类注释的路径例外）。
+  /// 主锁目录：应用数据目录（Windows LocalAppData）。
   @visibleForTesting
-  static Future<Directory> lockDirectory() => getApplicationSupportDirectory();
+  static Future<Directory> lockDirectory() => appDataDirectory();
+
+  /// 旧版 Roaming 锁的一次性升级守卫（仅 Windows 新旧目录不同时生效）。
+  ///
+  /// 返回 null 表示继续正常抢新锁；返回 secondary 表示旧版本仍在运行，
+  /// 本进程应立即退出。旧锁只在这里读取 / 清理，不参与新锁生命周期。
+  static Future<SingleInstanceRole?> _legacyUpgradeGuard() async {
+    if (!hasSeparateLegacyDirectory) return null;
+    try {
+      final legacyDirectory = await legacyAppDataDirectory();
+      if (legacyDirectory == null) return null;
+      final lockDirectory = await SingleInstance.lockDirectory();
+      if (p.normalize(p.absolute(legacyDirectory.path)) ==
+          p.normalize(p.absolute(lockDirectory.path))) {
+        return null;
+      }
+      final legacyLock =
+          File(p.join(legacyDirectory.path, _lockFileName));
+      if (!await legacyLock.exists()) return null;
+
+      final existing = await _readLock(legacyLock);
+      final readable = existing != null;
+      final alive = existing != null && isProcessAlive(existing.pid);
+      final connected = alive && await _notifyExisting(existing.port);
+      switch (SingleInstanceLock.decideUpgradeGuard(
+        lockExists: true,
+        readable: readable,
+        alive: alive,
+        connected: connected,
+      )) {
+        case LegacyUpgradeAction.proceed:
+          if (readable && !alive) {
+            _logger.info('旧版本单实例锁进程 ${existing.pid} 已退出，清理后继续');
+            await _removeLockFile(legacyLock);
+          }
+          return null;
+        case LegacyUpgradeAction.secondary:
+          _logger.info(
+            '检测到旧版本实例（pid ${existing!.pid}），请它显示窗口后退出',
+          );
+          return SingleInstanceRole.secondary;
+        case LegacyUpgradeAction.secondaryUnresponsive:
+          _logger.warning(
+            '检测到旧版本锁（pid ${existing!.pid}）但无法连接；'
+            '为避免复制正在写入的数据库，本次按 secondary 退出。'
+            '请先关闭旧版本再启动。',
+          );
+          return SingleInstanceRole.secondary;
+      }
+    } catch (error) {
+      // 守卫失败不能阻断启动：最坏情况回到原有新锁流程。
+      _logger.warning('检查旧版本单实例锁失败（继续启动）：$error');
+      return null;
+    }
+  }
 
   static Future<File?> _lockFileHandle() async {
     try {

@@ -14,6 +14,19 @@ enum SingleInstanceRole {
   secondary,
 }
 
+/// 旧版（Roaming 锁）升级守卫的结论。
+enum LegacyUpgradeAction {
+  /// 没有旧版实例 / 旧 pid 已退出：继续抢新锁。
+  proceed,
+
+  /// 旧版实例存活且能连上：按 secondary 退出。
+  secondary,
+
+  /// 旧版实例存活但连不上：仍按 secondary 退出（绝不能进入 primary 后
+  /// 复制一个正在被旧版本写入的数据库）。
+  secondaryUnresponsive,
+}
+
 /// 抢锁失败且既有实例探测完成后的下一步。
 enum SingleInstanceAction {
   /// 既有实例活着（已发出显示请求）。
@@ -66,5 +79,24 @@ class SingleInstanceLock {
     return attempt < maxAcquireAttempts
         ? SingleInstanceAction.retryAcquire
         : SingleInstanceAction.fallbackPrimary;
+  }
+
+  /// 旧版 Roaming 锁的升级守卫结论（新锁抢到之前检查一次）。
+  ///
+  /// 旧文件不存在 / 读不出 / pid 已退出都继续；pid 存活时无论是否能连上
+  /// 都按 secondary 退出——连不上说明旧版本可能卡住，仍不能冒险进入
+  /// primary 复制它正在写入的数据库。
+  static LegacyUpgradeAction decideUpgradeGuard({
+    required bool lockExists,
+    required bool readable,
+    required bool alive,
+    required bool connected,
+  }) {
+    if (!lockExists || !readable || !alive) {
+      return LegacyUpgradeAction.proceed;
+    }
+    return connected
+        ? LegacyUpgradeAction.secondary
+        : LegacyUpgradeAction.secondaryUnresponsive;
   }
 }

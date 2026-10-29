@@ -1,12 +1,9 @@
-/// 应用数据目录的唯一解析入口（数据库 / 缓存 / 用户数据 / 日志）。
-///
-/// **例外**：单实例锁文件仍走应用支持目录（Windows = 旧 Roaming）。它是
-/// 运行时 IPC 文件、不是用户数据；保留旧路径才能让升级后的新版本看见旧版本
-/// 持有的锁，避免新旧进程并存时复制一个正在写入的数据库。
+/// 应用数据目录的唯一解析入口（数据库 / 缓存 / 用户数据 / 日志 / 锁文件）。
 ///
 /// **Windows 规范**：本机、当前用户、不随账号漫游、可能很大的数据（SQLite、
-/// 缓存、下载记录、日志、会话）放 LocalAppData；Roaming 只放小的用户偏好
-/// （设置仍在 SharedPreferences 的 Roaming 目录）。
+/// 缓存、下载记录、日志、会话、单实例锁）放 LocalAppData；Roaming 只放小的
+/// 用户偏好（设置仍在 SharedPreferences 的 Roaming 目录）。旧 Roaming 锁只在
+/// 升级守卫里读取一次，不是主锁路径。
 ///
 /// 其余平台继续用应用支持目录：它是本机持久目录，不会被系统当缓存清理。
 /// Windows 新目录 = `getApplicationCacheDirectory()`（path_provider 返回
