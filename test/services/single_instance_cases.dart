@@ -1,11 +1,44 @@
+import 'dart:io';
+
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/services/window/single_instance_lock.dart';
+import 'package:molia/services/window/single_instance.dart';
 
 /// 单实例锁文件的纯逻辑：内容编解码、格式校验与探测结论。
 ///
 /// IO（独占创建 / loopback 连接）不在本文件覆盖：`decide` 是「陈旧锁清理
 /// 与保守放行」的全部决策点，边界必须钉死。
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('锁目录仍走应用支持目录（升级后能看见旧版本持有的锁）', () async {
+    final temp = Directory.systemTemp.createTempSync('molia_single_lock_');
+    addTearDown(() {
+      if (temp.existsSync()) temp.deleteSync(recursive: true);
+    });
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (call) async {
+        calls.add(call.method);
+        return temp.path;
+      },
+    );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+    });
+
+    expect((await SingleInstance.lockDirectory()).path, temp.path);
+    expect(calls, contains('getApplicationSupportDirectory'));
+    expect(calls, isNot(contains('getApplicationCacheDirectory')),
+        reason: '锁是运行时 IPC，不迁 LocalAppData，必须与旧版本共用同一路径');
+  });
+
   group('encode / parse', () {
     test('编解码往返：pid / port 原样还原', () {
       final raw = SingleInstanceLock.encode(pid: 1234, port: 45678);
