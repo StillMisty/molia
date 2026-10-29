@@ -3,7 +3,7 @@ import 'package:molia/widgets/current_track_cover.dart';
 import 'package:molia/widgets/playing_indicator.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// 当前曲目封面角标：播放态是常驻自绘均衡器，暂停后必须彻底静止。
+/// 当前曲目封面角标：播放态是常驻自绘均衡器；暂停后保留同一图形并彻底静止。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -48,16 +48,16 @@ void main() {
     expect(find.byType(PlayingIndicator), findsOneWidget);
   });
 
-  testWidgets('暂停：过渡结束后只剩 pause 图标，且不再有 ticker', (tester) async {
+  testWidgets('暂停：保留静态均衡器，且不再有 ticker', (tester) async {
     await pumpCover(tester, isPlaying: true);
     await tester.pump(const Duration(milliseconds: 300));
 
     await pumpCover(tester, isPlaying: false);
-    // IconSwap 是 150ms 交叉淡入：等离场的旧 PlayingIndicator 收尾。
+    // 等过一个图标切换周期：角标应始终留在原位。
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.byIcon(Icons.pause_rounded), findsOneWidget);
-    expect(find.byType(PlayingIndicator), findsNothing);
+    expect(find.byIcon(Icons.pause_rounded), findsNothing);
+    expect(find.byType(PlayingIndicator), findsOneWidget);
     expect(
       tester.binding.transientCallbackCount,
       0,
