@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
 
 import '../files/app_data_directory.dart';
@@ -26,19 +27,25 @@ class IoDownloadStorage implements DownloadStorage {
   IoDownloadStorage({
     this._rootOverride,
     Future<Directory> Function()? supportDirectory,
+    Future<Directory?> Function()? legacyDirectory,
     this._downloadsDirectory,
     this._customRoot,
   })  : _supportDirectory = supportDirectory ?? appDataDirectory,
-        _migrateLegacy = supportDirectory == null;
+        _legacyDirectory = legacyDirectory ?? legacyAppDataDirectory,
+        _migrateLegacy =
+            supportDirectory == null || legacyDirectory != null;
 
   final String? _rootOverride;
   final Future<Directory> Function() _supportDirectory;
+  final Future<Directory?> Function() _legacyDirectory;
 
-  /// 只有生产默认目录才做 Windows 旧目录迁移；测试注入目录不碰真实 Roaming。
+  /// 只有生产默认目录 / 显式注入旧目录时才迁移；测试不碰真实 Roaming。
   final bool _migrateLegacy;
 
   /// journal 每次 marker 操作都会取根目录；迁移只尝试一次（失败下次启动重试）。
   bool _journalMigrationAttempted = false;
+
+  static final Logger _logger = Logger('molia.download_storage');
   final Future<Directory?> Function()? _downloadsDirectory;
 
   /// 设置页选择的保存位置（每次解析重新读取；改设置无需重启）。
@@ -77,16 +84,29 @@ class IoDownloadStorage implements DownloadStorage {
   @override
   Future<String?> journalRoot() async {
     try {
-      final support = await _supportDirectory();
+      var root = await _supportDirectory();
       if (_migrateLegacy && !_journalMigrationAttempted) {
         _journalMigrationAttempted = true;
         // 崩溃恢复依赖旧记录：Windows 首次启动复制一次（不删除旧目录）。
-        await migrateLegacyDirectoryIfNeeded(
-          targetDirectory: support,
+        final legacy = await _legacyDirectory();
+        final migrated = await migrateLegacyDirectoryIfNeeded(
+          targetDirectory: root,
           relativePath: downloadJournalDirName,
+          legacyDirectory: legacy,
         );
+        if (!migrated) {
+          // 迁移失败不能把旧 journal 变成不可达：回退旧目录继续恢复。
+          if (legacy != null) {
+            _logger.warning(
+              '下载 journal 迁移失败，回退旧目录：${legacy.path}',
+            );
+            root = legacy;
+          } else {
+            _logger.warning('下载 journal 迁移失败且旧目录不可用');
+          }
+        }
       }
-      return p.join(support.path, downloadJournalDirName);
+      return p.join(root.path, downloadJournalDirName);
     } catch (_) {
       return null;
     }

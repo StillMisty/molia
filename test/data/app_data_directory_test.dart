@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/downloads/download_storage_io.dart';
 import 'package:molia/data/files/app_data_directory.dart';
 
 void main() {
@@ -129,6 +130,25 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  test('下载 journal 迁移失败：回退旧 journal 根，旧记录仍可达', () async {
+    final oldJournal = Directory('${legacy.path}/download_journal')
+      ..createSync(recursive: true);
+    File('${oldJournal.path}/a.json').writeAsStringSync('{}');
+    // 目标路径被同名文件占住 → Directory.create 失败 → 迁移返回 false。
+    File('${target.path}/download_journal').writeAsStringSync('blocked');
+
+    final storage = IoDownloadStorage(
+      supportDirectory: () async => target,
+      legacyDirectory: () async => legacy,
+    );
+    expect(
+      await storage.journalRoot(),
+      '${legacy.path}/download_journal',
+      reason: '迁移失败不能让旧 journal 不可达',
+    );
+    expect(File('${oldJournal.path}/a.json').existsSync(), isTrue);
   });
 
   test('单文件迁移：目标不存在才复制，失败保留旧文件', () async {

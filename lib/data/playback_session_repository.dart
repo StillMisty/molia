@@ -33,34 +33,38 @@ class PlaybackSessionRepository {
   ///
   /// 游标 `savedAt` 不早于 payload 内容时间才覆盖下标 / 进度 / savedAt：
   /// 远端或数据注入整份改写 payload 后，旧游标不属于这份队列，必须忽略。
-  Future<Map<String, dynamic>?> loadRaw() async {
-    final payloadRow = await (_db.select(
-      _db.playbackSessionPayloads,
-    )..where((row) => row.id.equals(playbackSessionRowId))).getSingleOrNull();
-    if (payloadRow == null || payloadRow.json.isEmpty) return null;
+  Future<Map<String, dynamic>?> loadRaw() {
+    // payload / cursor 必须读同一快照：写者可能正好在两次 select 之间提交
+    // 「新 payload + 新 cursor」，分开读会把旧游标套到新队列上。
+    return _db.transaction(() async {
+      final payloadRow = await (_db.select(
+        _db.playbackSessionPayloads,
+      )..where((row) => row.id.equals(playbackSessionRowId))).getSingleOrNull();
+      if (payloadRow == null || payloadRow.json.isEmpty) return null;
 
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(payloadRow.json);
-    } catch (e) {
-      _logger.warning('播放会话 payload 损坏，按无会话处理：$e');
-      return null;
-    }
-    if (decoded is! Map) return null;
-    final map = decoded.cast<String, dynamic>();
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(payloadRow.json);
+      } catch (e) {
+        _logger.warning('播放会话 payload 损坏，按无会话处理：$e');
+        return null;
+      }
+      if (decoded is! Map) return null;
+      final map = decoded.cast<String, dynamic>();
 
-    final cursor = await (_db.select(
-      _db.playbackSessionCursors,
-    )..where((row) => row.id.equals(playbackSessionRowId))).getSingleOrNull();
-    if (cursor == null) return map;
-    final contentSavedAt =
-        (map[kPlaybackSessionSavedAtKey] as num?)?.toInt() ??
-        payloadRow.updatedAt;
-    if (cursor.savedAt < contentSavedAt) return map;
-    map['index'] = cursor.cursorIndex;
-    map['positionMs'] = cursor.positionMs;
-    map[kPlaybackSessionSavedAtKey] = cursor.savedAt;
-    return map;
+      final cursor = await (_db.select(
+        _db.playbackSessionCursors,
+      )..where((row) => row.id.equals(playbackSessionRowId))).getSingleOrNull();
+      if (cursor == null) return map;
+      final contentSavedAt =
+          (map[kPlaybackSessionSavedAtKey] as num?)?.toInt() ??
+          payloadRow.updatedAt;
+      if (cursor.savedAt < contentSavedAt) return map;
+      map['index'] = cursor.cursorIndex;
+      map['positionMs'] = cursor.positionMs;
+      map[kPlaybackSessionSavedAtKey] = cursor.savedAt;
+      return map;
+    });
   }
 
   /// 写整份 payload（单行 upsert）；队列 / 模式 / 上下文变化时才调用。
