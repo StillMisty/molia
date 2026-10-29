@@ -238,6 +238,46 @@ void main() {
     expect(payloadAfterChange.json, contains('"id":"c"'));
   });
 
+  test('大队列（1000 首）动作落盘：50 次只写 cursor，内容变化才写 payload',
+      () async {
+    final value = store();
+    final tracks = [for (var i = 0; i < 1000; i++) _track('$i')];
+    final session = PlaybackSession(tracks: tracks, index: 0);
+
+    await value.save(session);
+    final payloadBefore = await payloadRow();
+    expect(payloadBefore, isNotNull);
+
+    repository.writes.clear();
+    for (var i = 0; i < 50; i++) {
+      clockMs = 2000 + i;
+      await value.save(session.copyWith(
+        index: i % tracks.length,
+        position: Duration(seconds: i),
+      ));
+    }
+
+    expect(repository.writes, everyElement('cursor'),
+        reason: '50 次动作都只改 cursor，不能重写 MB 级 payload');
+    expect(repository.writes.where((write) => write == 'saveAll'), isEmpty);
+    // 循环内不读 DB 大 JSON：结束后只核对一次。
+    final payloadAfterActions = await payloadRow();
+    expect(payloadAfterActions!.updatedAt, payloadBefore!.updatedAt);
+    expect(payloadAfterActions.json, payloadBefore.json);
+
+    // 队列内容真实变化（追加一首）：必须重写一次 payload。
+    repository.writes.clear();
+    clockMs = 4000;
+    await value.save(PlaybackSession(
+      tracks: [...tracks, _track('extra')],
+      index: 0,
+    ));
+    expect(repository.writes.where((write) => write == 'saveAll'), hasLength(1));
+    final payloadAfterChange = await payloadRow();
+    expect(payloadAfterChange!.updatedAt, 4000);
+    expect(payloadAfterChange.json, contains('"id":"extra"'));
+  });
+
   test('同队列切歌 / 暂停：只写 cursor，payload 行不变', () async {
     final value = store();
     final tracks = [_track('a'), _track('b')];
