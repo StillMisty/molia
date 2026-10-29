@@ -419,7 +419,10 @@
   `sync_book.dart` 的窄接口（登记 / 发布覆盖 / 轮次 / 引擎 / 运行时 / 调度 /
   备份），`SyncStateStore` 仍是唯一实现与持久化所有者：所有写入先改内存 +
   标脏，`commit()` 是唯一落盘出口（轮内台账 / 首连提示 / 端点记账只标脏，
-  引擎轮末提交一次；用户命令仍即时提交）。
+  引擎轮末提交一次；用户命令仍即时提交）。自动轮「零对端 / 无变化」只更新
+  内存展示、不标脏；名册没有真实观测变化也不标脏，失败探测只刷新
+  `lastSeenAt` 时同样不落盘——空闲轮 / 重连阶梯探测不再反复重写整份
+  `sync_state_v2`（Windows 实测约 142KB/次）。
   拉取前由 `SyncRoundRunner._pullPlan` 生成一份**拉取计划**（`SyncPullPlan`：逐对端
   `cursor` / `forceFull` + discovery）；局域网与 WebDAV 只提供证据（局域网
   `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部），

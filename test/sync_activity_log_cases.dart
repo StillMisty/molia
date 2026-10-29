@@ -55,6 +55,37 @@ void main() {
     expect(state.activity.first.bytesIn, 3);
   });
 
+  test('自动 noPeers / noChanges 轮不标脏，手动轮仍记录', () {
+    var changes = 0;
+    final state = activityLog(onChanged: () => changes++);
+
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 0,
+      finishedAt: 1,
+      outcome: SyncOutcome.noPeers,
+    ));
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.timer,
+      startedAt: 1,
+      finishedAt: 2,
+      outcome: SyncOutcome.noChanges,
+    ));
+
+    expect(changes, 0, reason: '空轮次不写盘');
+    expect(state.lastSyncAt, 2, reason: '本次进程内仍更新最近一轮');
+    expect(state.log, hasLength(2), reason: '日志用于本次进程内展示');
+    expect(state.activity, hasLength(2), reason: '活动记录口径不变');
+
+    state.recordRound(const SyncRoundReport(
+      trigger: SyncTrigger.manual,
+      startedAt: 2,
+      finishedAt: 3,
+      outcome: SyncOutcome.noPeers,
+    ));
+    expect(changes, 1, reason: '手动同步是用户动作');
+  });
+
   test('日志与活动各自按上限截断，活动窗口不受展示条数限制', () {
     final state = activityLog(logLimit: 3, activityLimit: 5);
     for (var i = 0; i < 7; i++) {

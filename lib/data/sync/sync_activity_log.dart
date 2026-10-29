@@ -102,7 +102,13 @@ class SyncActivityLog {
   ///
   /// 落盘由存储层在轮末提交一次；这里只维护内存与保留上限。
   void recordRound(SyncRoundReport report) {
-    _onChanged();
+    // 自动轮的「零对端 / 无变化」不产生可持久化的状态变化：只更新内存里的
+    // 最近一轮展示，不标脏，避免每分钟把整份 sync_state_v2 重写一遍。
+    // 手动轮是用户动作，即使无对端也要留下记录。
+    final silent = report.trigger != SyncTrigger.manual &&
+        (report.outcome == SyncOutcome.noPeers ||
+            report.outcome == SyncOutcome.noChanges);
+    var changed = !silent;
     _lastSyncAt = report.finishedAt;
     _log.insert(
       0,
@@ -142,9 +148,14 @@ class SyncActivityLog {
     }
     for (final transport in report.transports) {
       if (transport.enabled && transport.succeeded) {
-        _transportLastSuccess[transport.kind] = report.finishedAt;
+        if (_transportLastSuccess[transport.kind] != report.finishedAt) {
+          _transportLastSuccess[transport.kind] = report.finishedAt;
+          changed = true;
+        }
       }
     }
+    // 静默轮次：日志 / 活动只在内存里更新，落盘由下一次真实状态变化带上。
+    if (changed) _onChanged();
   }
 
   /// 清空本机对**旧同步组**的传输成功时间（换口令时调用）。

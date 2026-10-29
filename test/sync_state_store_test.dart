@@ -447,6 +447,113 @@ void main() {
     expect(reloaded.activity.first.at, 1024);
   });
 
+  test('零对端 / 无变化自动轮不写状态', () async {
+    final store = await freshStore();
+    await store.commit();
+    final before = store.persistedWrites;
+
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.noPeers,
+      ),
+    );
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 3,
+        finishedAt: 4,
+        outcome: SyncOutcome.noChanges,
+      ),
+    );
+    await store.commit();
+
+    expect(store.persistedWrites, before, reason: '空轮次不重写整份状态 JSON');
+    expect(store.lastSyncAt, 4, reason: '内存里仍更新最近一轮');
+
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 5,
+        finishedAt: 6,
+        outcome: SyncOutcome.ok,
+        applied: 1,
+      ),
+    );
+    await store.commit();
+    expect(store.persistedWrites, before + 1, reason: '有效轮次仍落盘');
+  });
+
+  test('发现轮只刷新 lastSeenAt 时不写状态', () async {
+    final store = await freshStore();
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.discovery,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.noPeers,
+        peers: [
+          SyncPeerState(
+            deviceId: 'devB',
+            name: 'B',
+            lastSeenAt: 1,
+            lastError: SyncIssue(
+              code: SyncIssueCode.peerReadFailed,
+              args: {'peer': 'B'},
+            ),
+          ),
+        ],
+      ),
+    );
+    await store.commit();
+    final before = store.persistedWrites;
+
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.discovery,
+        startedAt: 3,
+        finishedAt: 4,
+        outcome: SyncOutcome.noPeers,
+        peers: [
+          SyncPeerState(
+            deviceId: 'devB',
+            name: 'B',
+            lastSeenAt: 4,
+            lastError: SyncIssue(
+              code: SyncIssueCode.peerReadFailed,
+              args: {'peer': 'B'},
+            ),
+          ),
+        ],
+      ),
+    );
+    await store.commit();
+
+    expect(store.persistedWrites, before, reason: '仅 lastSeenAt 前进不重写');
+    expect(store.peers.single.lastSeenAt, 4, reason: '内存仍更新');
+
+    store.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.discovery,
+        startedAt: 5,
+        finishedAt: 6,
+        outcome: SyncOutcome.noPeers,
+        peers: [
+          SyncPeerState(
+            deviceId: 'devB',
+            name: 'B',
+            lastSeenAt: 6,
+            lastSuccessAt: 6,
+          ),
+        ],
+      ),
+    );
+    await store.commit();
+    expect(store.persistedWrites, before + 1, reason: '成功接触时间变化要落盘');
+  });
+
   test('活动记录：超过上限时丢弃最旧的', () async {
     final store = await freshStore();
     for (var i = 0; i < SyncStateStore.activityLimit + 5; i++) {
@@ -486,7 +593,8 @@ void main() {
         trigger: SyncTrigger.timer,
         startedAt: 1,
         finishedAt: 2,
-        outcome: SyncOutcome.noChanges,
+        outcome: SyncOutcome.ok,
+        applied: 1,
       ),
     );
     platform.fail = true;

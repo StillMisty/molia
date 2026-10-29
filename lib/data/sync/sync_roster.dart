@@ -10,6 +10,8 @@
 /// 不可变切片，不维护 JSON 键名或容错规则。
 library;
 
+import 'dart:convert';
+
 import '../../domain/models/device_sync.dart';
 import '../../utils/peer_address.dart';
 import 'sync_state_codec.dart';
@@ -236,7 +238,7 @@ class SyncRoster {
   /// 名册由引擎合并后传入（每条都是完整状态），这里只负责内存更新与按最近
   /// 接触时间淘汰，避免长期运行后无界增长；落盘由引擎在轮末提交一次。
   void recordRound(SyncRoundReport report) {
-    _onChanged();
+    final beforePeers = [for (final peer in _peers.values) _peerSignature(peer)];
     // 用户刚移除的设备：压住本轮的在途快照，避免删除动作被收尾中的一轮
     // 立刻写回。只影响这一次落库；下一轮重新发现（设备仍在线）会照常写入。
     final forgotten = Set<String>.of(_forgottenPeers);
@@ -249,14 +251,21 @@ class SyncRoster {
     _peers
       ..clear()
       ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
+    final afterPeers = [for (final peer in _peers.values) _peerSignature(peer)];
+    var changed = !_sameStrings(beforePeers, afterPeers);
     // 180 天没再验证过的端点随名册一起淘汰：换网 / DHCP 变更后旧地址多半
     // 已失效，留着只会让每轮多试几个连不通的地址（保留期可注入，见构造）。
     final now = report.finishedAt;
+    final endpointCount = _lanEndpoints.length;
     _lanEndpoints.removeWhere(
       (_, endpoint) =>
           endpoint.verifiedAt > 0 &&
           now - endpoint.verifiedAt > _lanEndpointRetentionMs,
     );
+    if (_lanEndpoints.length != endpointCount) changed = true;
+    // 空名册 / 完全相同的观测不标脏：自动同步每分钟一轮，名册没有变化时
+    // 不能把整份 sync_state_v2 反复写盘。
+    if (changed) _onChanged();
   }
 
   /// 当前内存状态的持久化切片（不可变；字段由 `sync_state_codec.dart` 编码）。
@@ -340,4 +349,23 @@ class SyncRoster {
       _lanEndpoints.remove(oldestId);
     }
   }
+}
+
+/// 对端观测的稳定签名：名册每轮都会收到新对象，用字段 JSON 判断是否真的
+/// 变化（`SyncPeerState` 没有值相等实现）。
+///
+/// `lastSeenAt` 是「本轮尝试过」的易变时间：发现轮即使没连上也会刷新。
+/// 把它排除在落盘判据外，避免每次重连阶梯探测都重写整份 `sync_state_v2`；
+/// 内存里仍更新，下一次真实变化（成功接触 / 改名 / 错误码等）会一起带上。
+String _peerSignature(SyncPeerState peer) {
+  final json = peer.toJson()..remove('lastSeenAt');
+  return jsonEncode(json);
+}
+
+bool _sameStrings(List<String> a, List<String> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
 }

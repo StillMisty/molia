@@ -55,6 +55,42 @@ void main() {
     expect(state.peers.single.deviceId, 'devB');
   });
 
+  test('空名册 / 相同观测不标脏；真实观测变化才标脏', () {
+    var changes = 0;
+    final state = roster(onChanged: () => changes++);
+
+    state.recordRound(round(finishedAt: 1));
+    expect(changes, 0, reason: '零对端轮次不产生名册变化');
+
+    const devB = SyncPeerState(deviceId: 'devB', name: 'B', lastSeenAt: 2);
+    state.recordRound(round(finishedAt: 2, peers: const [devB]));
+    expect(changes, 1);
+
+    state.recordRound(round(finishedAt: 3, peers: const [devB]));
+    expect(changes, 1, reason: '完全相同的观测不重复标脏');
+
+    state.recordRound(round(
+      finishedAt: 4,
+      peers: const [
+        SyncPeerState(deviceId: 'devB', name: 'B', lastSeenAt: 4),
+      ],
+    ));
+    expect(changes, 1, reason: '仅 lastSeenAt 前进不落盘（内存仍更新）');
+
+    state.recordRound(round(
+      finishedAt: 5,
+      peers: const [
+        SyncPeerState(
+          deviceId: 'devB',
+          name: 'B',
+          lastSeenAt: 5,
+          lastSuccessAt: 5,
+        ),
+      ],
+    ));
+    expect(changes, 2, reason: '成功接触时间变化要落盘');
+  });
+
   test('移除设备：地址簿 / 已验证端点 / 首连提示一并清理，其它设备不受影响', () {
     final state = roster();
     state.recordRound(round(
