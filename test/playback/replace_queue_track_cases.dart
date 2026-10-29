@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -73,17 +71,12 @@ void main() {
   test('恢复态会话命中：替换会话队列、更新恢复快照并落盘', () async {
     final old = track('a');
     final other = track('b');
-    SharedPreferences.setMockInitialValues({
-      'playback_session_v1': jsonEncode(
-        PlaybackSession(
-          tracks: [old, other],
-          index: 0,
-          position: const Duration(seconds: 42),
-          context:
-              const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
-        ).toJson(),
-      ),
-    });
+    await PlaybackSessionStore().save(PlaybackSession(
+      tracks: [old, other],
+      index: 0,
+      position: const Duration(seconds: 42),
+      context: const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
+    ));
 
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
@@ -101,11 +94,8 @@ void main() {
     expect(provider.snapshot.queue.map((t) => t.id.uri), ['kg:a', 'fake:b']);
 
     // 会话已落盘：冷启动恢复读的是换源后的队列。
-    final prefs = await SharedPreferences.getInstance();
-    final saved = jsonDecode(prefs.getString('playback_session_v1')!)
-        as Map<String, dynamic>;
-    final savedTracks = saved['tracks'] as List;
-    expect((savedTracks.first as Map)['sourceKey'], 'kg');
-    expect(saved['positionMs'], 42000);
+    final saved = await PlaybackSessionStore().load();
+    expect(saved!.tracks.first.id.sourceKey, 'kg');
+    expect(saved.position, const Duration(seconds: 42));
   });
 }

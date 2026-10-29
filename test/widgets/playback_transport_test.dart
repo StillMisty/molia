@@ -35,10 +35,12 @@ void main() {
   late FakePlaybackBackend backend;
   late PlaybackProvider playback;
 
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(backend: backend);
+    // 会话读取是异步 DB；等它完成再让用例推快照，避免 dispose 后回调通知。
+    await playback.preferencesReady;
   });
 
   tearDown(() => playback.dispose());

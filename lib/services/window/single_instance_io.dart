@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import '../../data/files/app_data_directory.dart';
 import 'process_liveness.dart';
 import 'single_instance_lock.dart';
 import 'window_chrome.dart';
@@ -16,7 +16,7 @@ import 'window_chrome.dart';
 /// 会话与两份设置写入，而再次启动的意图几乎总是「把已有窗口拉到前台」；
 /// 因此不做用户开关。
 ///
-/// 机制（纯 `dart:io`，不引额外依赖）：应用支持目录下的锁文件
+/// 机制（纯 `dart:io`，不引额外依赖）：应用数据目录下的锁文件
 /// （`single_instance.lock`，内容 `{"pid":...,"port":...}`）用
 /// `File.create(exclusive: true)` 原子抢占；主实例监听 loopback 端口，
 /// 后来进程连上后发一行 `show` 请它显示窗口，然后自己退出。探测不到既有
@@ -207,7 +207,7 @@ class SingleInstance {
 
   static Future<File?> _lockFileHandle() async {
     try {
-      final directory = await getApplicationSupportDirectory();
+      final directory = await appDataDirectory();
       await directory.create(recursive: true);
       return File(p.join(directory.path, _lockFileName));
     } catch (error) {

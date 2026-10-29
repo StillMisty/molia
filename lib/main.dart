@@ -24,6 +24,7 @@ import 'app/bootstrap/sync_stack.dart';
 import 'app/bootstrap/update_stack.dart';
 import 'app/perf/data_path_scenario.dart';
 import 'app/perf/frame_stats.dart';
+import 'data/molia_database.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
@@ -88,7 +89,8 @@ void main() async {
   // - 单实例（桌面）：已有实例在跑 → 请它显示主窗口后立即退出；此刻窗口还没
   //   创建，不会闪一下再消失。其余平台 / 抢锁异常按主实例继续。
   final windowSettingsWatch = Stopwatch()..start();
-  final windowSettingsFuture = defaultTargetPlatform == TargetPlatform.linux ||
+  final windowSettingsFuture =
+      defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.windows ||
           defaultTargetPlatform == TargetPlatform.macOS
       // 窗口几何只属于桌面；Android/iOS 不读这个设备键，别让首帧
@@ -129,7 +131,8 @@ void main() async {
   // 默认一直前台；启动时若系统已把应用放到后台（如从通知恢复的冷启动），
   // 先按后台节拍采样 / 落盘 / 停后台工作，首帧后再由生命周期回调纠正。
   final powerPolicy = PlaybackPowerPolicy();
-  final mobilePowerPolicy = defaultTargetPlatform == TargetPlatform.android ||
+  final mobilePowerPolicy =
+      defaultTargetPlatform == TargetPlatform.android ||
       defaultTargetPlatform == TargetPlatform.iOS;
   if (mobilePowerPolicy) {
     final lifecycle = WidgetsBinding.instance.lifecycleState;
@@ -145,6 +148,18 @@ void main() async {
 
   // ① 音源与目录（设置注册表 → SourceManager → 目录/评论/专辑/歌手）。
   final catalog = buildCatalogStack();
+  // 主库预热：播放会话首帧前就要读（恢复态可见），提前与本地数据 / 资料库
+  // 并行开库。Windows 首次启动的旧库复制 + v1→v2 迁移是一次性成本，单独埋点。
+  final dbPrewarmWatch = Stopwatch()..start();
+  final databasePrewarm = () async {
+    try {
+      await MoliaDatabase.instance.customSelect('SELECT 1').get();
+    } catch (e) {
+      _startupLog.warning('主库预热失败（首个查询会重试）：$e');
+    } finally {
+      markStartupStep('sub.db.prewarm', dbPrewarmWatch);
+    }
+  }();
   // ② 本地数据（省流 + 封面网关 + 下载链路 + 歌词服务 + 缓存写入器）
   //    与 ③ 资料库 / 统计 / 换源偏好互不依赖：并行装配，等待取最大值
   //    （串行等待是两段相加，实测该段是启动装配里最大的一块）。
@@ -154,6 +169,7 @@ void main() async {
     // （写入方经 stampSeedReady 等种子，不会提前取号）。
     buildLibraryStack(catalog: catalog, deferStampSeed: true),
   ).wait;
+  await databasePrewarm;
   _markStartup('本地数据/资料库栈', startup);
   // ④ 播放链路 + provider + 观察者 + 系统媒体会话。
   final playback = await buildPlaybackStack(

@@ -121,6 +121,8 @@ Future<PlaybackStack> buildPlaybackStack({
   // 播放观察者：快照副作用扇出（最后播放 / 桌面小组件 / 历史 / 封面预取与
   // 补取 / 通知权限）。先建观察者，provider 创建后再挂接——facade 监听顺序
   // 保持「会话模块先做恢复态交接、provider/观察者后写副作用」。
+  // 默认仓库 = 主库 `MoliaDatabase.instance`（测试经 store 的 debug override
+  // 注入内存库）；不在这里另建 repository，避免绕过测试缝。
   final sessionStore = PlaybackSessionStore();
   final playbackObserver = PlaybackObserver(
     facade: playbackFacade,

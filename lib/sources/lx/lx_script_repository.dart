@@ -2,14 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
+import '../../data/files/app_data_directory.dart';
 import 'lx_script_info.dart';
 
 /// LX 音源脚本的持久化管理（导入、删除、启用状态）。
 ///
-/// 存储于应用支持目录下的 `lx_sources.json`，脚本原文一并保存，
-/// 便于导出与引擎每次激活时重新执行。
+/// 存储于应用数据目录下的 `lx_sources.json`，脚本原文一并保存，
+/// 便于导出与引擎每次激活时重新执行。Windows 从旧 Roaming 目录复制一次；
+/// 复制失败时回退读取旧文件（不让音源列表凭空消失），下次启动重试。
 class LxScriptRepository {
   static const _fileName = 'lx_sources.json';
 
@@ -31,8 +32,19 @@ class LxScriptRepository {
 
   Future<void> init() async {
     try {
-      final dir = await getApplicationSupportDirectory();
-      final file = File('${dir.path}/$_fileName');
+      final dir = await appDataDirectory();
+      var file = File('${dir.path}/$_fileName');
+      await migrateLegacyFileIfNeeded(
+        targetDirectory: dir,
+        relativePath: _fileName,
+      );
+      if (!await file.exists()) {
+        final legacy = await legacyAppDataDirectory();
+        if (legacy != null) {
+          final old = File('${legacy.path}/$_fileName');
+          if (await old.exists()) file = old;
+        }
+      }
       _file = file;
       if (!await file.exists()) return;
       final content = await file.readAsString();

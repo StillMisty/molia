@@ -1,15 +1,47 @@
 import 'dart:convert';
 
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:molia/data/playback_session_repository.dart';
 import 'package:molia/data/stats_payload_codec.dart';
+import 'package:molia/services/playback_session_store.dart';
 
 /// 测试用内存数据库：schema 与生产一致（首个查询才建表建连接）。
 ///
 /// 生产库的执行器只走 drift_flutter（见 lib/data/molia_database.dart）；
 /// `NativeDatabase.memory()` 仅测试使用。关闭由调用方负责（`await db.close()`）。
 MoliaDatabase openMemoryDatabase() => MoliaDatabase(NativeDatabase.memory());
+
+MoliaDatabase? _sharedSessionDatabase;
+
+/// 当前用例共享的播放会话内存库（`flutter_test_config.dart` 每个用例重置）。
+///
+/// 参数默认的 `PlaybackSessionStore()` 与测试装配的协调者因此读写同一份库，
+/// 模拟「写入 → 冷启动读取」而不触碰真实文件 / path_provider。
+MoliaDatabase get sharedSessionDatabase =>
+    _sharedSessionDatabase ??= openMemoryDatabase();
+
+/// 每个用例开始前换一份空库（上一份异步关闭，不阻塞用例）。
+void resetSharedSessionDatabase() {
+  final previous = _sharedSessionDatabase;
+  _sharedSessionDatabase = null;
+  if (previous != null) unawaited(previous.close());
+}
+
+/// 用当前共享内存库建一个会话 store（需要显式 store 时用）。
+PlaybackSessionStore testSessionStore({
+  MoliaDatabase? database,
+  DateTime Function()? clock,
+}) {
+  final db = database ?? sharedSessionDatabase;
+  return PlaybackSessionStore(
+    repository: PlaybackSessionRepository(database: () => db),
+    clock: clock,
+  );
+}
 
 /// 按原列名读出一张表的全部行（断言沿用列名取值，不关心 drift 行类型）。
 Future<List<Map<String, Object?>>> tableRows(
@@ -39,14 +71,17 @@ Future<int> insertPlayTrack(
   final payload = encodeStatsPayload(
     jsonEncode(raw ?? <String, dynamic>{'id': songId}),
   );
-  final existing = await (db.select(db.playTracks)
-        ..where(
-          (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
-        )
-        ..limit(1))
-      .getSingleOrNull();
+  final existing =
+      await (db.select(db.playTracks)
+            ..where(
+              (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
+            )
+            ..limit(1))
+          .getSingleOrNull();
   if (existing == null) {
-    return db.into(db.playTracks).insert(
+    return db
+        .into(db.playTracks)
+        .insert(
           PlayTracksCompanion.insert(
             sourceKey: sourceKey,
             songId: songId,
@@ -63,8 +98,7 @@ Future<int> insertPlayTrack(
   if (updatedAt >= existing.updatedAt) {
     await (db.update(
       db.playTracks,
-    )..where((t) => t.id.equals(existing.id)))
-        .write(
+    )..where((t) => t.id.equals(existing.id))).write(
       PlayTracksCompanion(
         title: Value(title),
         artist: Value(artist),
@@ -112,7 +146,9 @@ Future<int> insertPlayEvent(
     raw: raw,
     updatedAt: startedAt,
   );
-  return db.into(db.playEvents).insert(
+  return db
+      .into(db.playEvents)
+      .insert(
         PlayEventsCompanion.insert(
           trackId: trackId,
           startedAt: startedAt,

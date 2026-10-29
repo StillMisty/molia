@@ -138,6 +138,16 @@ Future<DesktopStack> buildDesktopStack({
   libraryProvider.addListener(syncTray);
   AppBrandingService.titleNotifier.addListener(syncTray);
   LanguageService.localeNotifier.addListener(syncTray);
+  // 窗口隐藏 / 最小化到托盘也是「离开」动作：提交一次会话进度（与退出共用
+  // suspendPlaybackSession），托盘期进程被结束时可恢复最后位置。
+  var lastPresence = AppPresence.instance.value;
+  AppPresence.instance.addListener(() {
+    final presence = AppPresence.instance.value;
+    final leftVisible = lastPresence == AppPresenceState.visible &&
+        !AppPresence.instance.isVisible;
+    lastPresence = presence;
+    if (leftVisible) unawaited(playback.suspendPlaybackSession());
+  });
   syncTray();
 
   return (

@@ -2,12 +2,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import '../files/app_data_directory.dart';
 import '../files/public_downloads_path.dart';
 import 'download_storage_types.dart';
 
-/// IO 平台（Android/iOS/桌面）下载存储：`dart:io` + `path_provider`。
+/// IO 平台（Android/iOS/桌面）下载存储：`dart:io` + 应用数据目录 helper。
 ///
 /// 下载根目录按平台选择：
 /// - **桌面**：系统公共下载目录下 `Molia/`（Windows 走 Known Folder，Linux 走
@@ -28,10 +28,17 @@ class IoDownloadStorage implements DownloadStorage {
     Future<Directory> Function()? supportDirectory,
     this._downloadsDirectory,
     this._customRoot,
-  })  : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+  })  : _supportDirectory = supportDirectory ?? appDataDirectory,
+        _migrateLegacy = supportDirectory == null;
 
   final String? _rootOverride;
   final Future<Directory> Function() _supportDirectory;
+
+  /// 只有生产默认目录才做 Windows 旧目录迁移；测试注入目录不碰真实 Roaming。
+  final bool _migrateLegacy;
+
+  /// journal 每次 marker 操作都会取根目录；迁移只尝试一次（失败下次启动重试）。
+  bool _journalMigrationAttempted = false;
   final Future<Directory?> Function()? _downloadsDirectory;
 
   /// 设置页选择的保存位置（每次解析重新读取；改设置无需重启）。
@@ -71,6 +78,14 @@ class IoDownloadStorage implements DownloadStorage {
   Future<String?> journalRoot() async {
     try {
       final support = await _supportDirectory();
+      if (_migrateLegacy && !_journalMigrationAttempted) {
+        _journalMigrationAttempted = true;
+        // 崩溃恢复依赖旧记录：Windows 首次启动复制一次（不删除旧目录）。
+        await migrateLegacyDirectoryIfNeeded(
+          targetDirectory: support,
+          relativePath: downloadJournalDirName,
+        );
+      }
       return p.join(support.path, downloadJournalDirName);
     } catch (_) {
       return null;

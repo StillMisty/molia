@@ -5775,6 +5775,564 @@ class DownloadsCompanion extends UpdateCompanion<DownloadRow> {
   }
 }
 
+class $PlaybackSessionPayloadsTable extends PlaybackSessionPayloads
+    with TableInfo<$PlaybackSessionPayloadsTable, PlaybackSessionPayload> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlaybackSessionPayloadsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _jsonMeta = const VerificationMeta('json');
+  @override
+  late final GeneratedColumn<String> json = GeneratedColumn<String>(
+    'json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updatedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, json, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'playback_session_payloads';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PlaybackSessionPayload> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('json')) {
+      context.handle(
+        _jsonMeta,
+        json.isAcceptableOrUnknown(data['json']!, _jsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_jsonMeta);
+    }
+    if (data.containsKey('updatedAt')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updatedAt']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlaybackSessionPayload map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlaybackSessionPayload(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      json: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}json'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updatedAt'],
+      )!,
+    );
+  }
+
+  @override
+  $PlaybackSessionPayloadsTable createAlias(String alias) {
+    return $PlaybackSessionPayloadsTable(attachedDatabase, alias);
+  }
+}
+
+class PlaybackSessionPayload extends DataClass
+    implements Insertable<PlaybackSessionPayload> {
+  final int id;
+  final String json;
+
+  /// 内容时间（与 JSON 里的 `savedAt` 同义，供游标新旧比较）。
+  final int updatedAt;
+  const PlaybackSessionPayload({
+    required this.id,
+    required this.json,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['json'] = Variable<String>(json);
+    map['updatedAt'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  PlaybackSessionPayloadsCompanion toCompanion(bool nullToAbsent) {
+    return PlaybackSessionPayloadsCompanion(
+      id: Value(id),
+      json: Value(json),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PlaybackSessionPayload.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlaybackSessionPayload(
+      id: serializer.fromJson<int>(json['id']),
+      json: serializer.fromJson<String>(json['json']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'json': serializer.toJson<String>(json),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  PlaybackSessionPayload copyWith({int? id, String? json, int? updatedAt}) =>
+      PlaybackSessionPayload(
+        id: id ?? this.id,
+        json: json ?? this.json,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  PlaybackSessionPayload copyWithCompanion(
+    PlaybackSessionPayloadsCompanion data,
+  ) {
+    return PlaybackSessionPayload(
+      id: data.id.present ? data.id.value : this.id,
+      json: data.json.present ? data.json.value : this.json,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlaybackSessionPayload(')
+          ..write('id: $id, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, json, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlaybackSessionPayload &&
+          other.id == this.id &&
+          other.json == this.json &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PlaybackSessionPayloadsCompanion
+    extends UpdateCompanion<PlaybackSessionPayload> {
+  final Value<int> id;
+  final Value<String> json;
+  final Value<int> updatedAt;
+  const PlaybackSessionPayloadsCompanion({
+    this.id = const Value.absent(),
+    this.json = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  PlaybackSessionPayloadsCompanion.insert({
+    this.id = const Value.absent(),
+    required String json,
+    required int updatedAt,
+  }) : json = Value(json),
+       updatedAt = Value(updatedAt);
+  static Insertable<PlaybackSessionPayload> custom({
+    Expression<int>? id,
+    Expression<String>? json,
+    Expression<int>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (json != null) 'json': json,
+      if (updatedAt != null) 'updatedAt': updatedAt,
+    });
+  }
+
+  PlaybackSessionPayloadsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? json,
+    Value<int>? updatedAt,
+  }) {
+    return PlaybackSessionPayloadsCompanion(
+      id: id ?? this.id,
+      json: json ?? this.json,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (json.present) {
+      map['json'] = Variable<String>(json.value);
+    }
+    if (updatedAt.present) {
+      map['updatedAt'] = Variable<int>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlaybackSessionPayloadsCompanion(')
+          ..write('id: $id, ')
+          ..write('json: $json, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PlaybackSessionCursorsTable extends PlaybackSessionCursors
+    with TableInfo<$PlaybackSessionCursorsTable, PlaybackSessionCursor> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PlaybackSessionCursorsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cursorIndexMeta = const VerificationMeta(
+    'cursorIndex',
+  );
+  @override
+  late final GeneratedColumn<int> cursorIndex = GeneratedColumn<int>(
+    'cursorIndex',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMsMeta = const VerificationMeta(
+    'positionMs',
+  );
+  @override
+  late final GeneratedColumn<int> positionMs = GeneratedColumn<int>(
+    'positionMs',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _savedAtMeta = const VerificationMeta(
+    'savedAt',
+  );
+  @override
+  late final GeneratedColumn<int> savedAt = GeneratedColumn<int>(
+    'savedAt',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, cursorIndex, positionMs, savedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'playback_session_cursors';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PlaybackSessionCursor> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('cursorIndex')) {
+      context.handle(
+        _cursorIndexMeta,
+        cursorIndex.isAcceptableOrUnknown(
+          data['cursorIndex']!,
+          _cursorIndexMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_cursorIndexMeta);
+    }
+    if (data.containsKey('positionMs')) {
+      context.handle(
+        _positionMsMeta,
+        positionMs.isAcceptableOrUnknown(data['positionMs']!, _positionMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMsMeta);
+    }
+    if (data.containsKey('savedAt')) {
+      context.handle(
+        _savedAtMeta,
+        savedAt.isAcceptableOrUnknown(data['savedAt']!, _savedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_savedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PlaybackSessionCursor map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PlaybackSessionCursor(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      cursorIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}cursorIndex'],
+      )!,
+      positionMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}positionMs'],
+      )!,
+      savedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}savedAt'],
+      )!,
+    );
+  }
+
+  @override
+  $PlaybackSessionCursorsTable createAlias(String alias) {
+    return $PlaybackSessionCursorsTable(attachedDatabase, alias);
+  }
+}
+
+class PlaybackSessionCursor extends DataClass
+    implements Insertable<PlaybackSessionCursor> {
+  final int id;
+  final int cursorIndex;
+  final int positionMs;
+  final int savedAt;
+  const PlaybackSessionCursor({
+    required this.id,
+    required this.cursorIndex,
+    required this.positionMs,
+    required this.savedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['cursorIndex'] = Variable<int>(cursorIndex);
+    map['positionMs'] = Variable<int>(positionMs);
+    map['savedAt'] = Variable<int>(savedAt);
+    return map;
+  }
+
+  PlaybackSessionCursorsCompanion toCompanion(bool nullToAbsent) {
+    return PlaybackSessionCursorsCompanion(
+      id: Value(id),
+      cursorIndex: Value(cursorIndex),
+      positionMs: Value(positionMs),
+      savedAt: Value(savedAt),
+    );
+  }
+
+  factory PlaybackSessionCursor.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PlaybackSessionCursor(
+      id: serializer.fromJson<int>(json['id']),
+      cursorIndex: serializer.fromJson<int>(json['cursorIndex']),
+      positionMs: serializer.fromJson<int>(json['positionMs']),
+      savedAt: serializer.fromJson<int>(json['savedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'cursorIndex': serializer.toJson<int>(cursorIndex),
+      'positionMs': serializer.toJson<int>(positionMs),
+      'savedAt': serializer.toJson<int>(savedAt),
+    };
+  }
+
+  PlaybackSessionCursor copyWith({
+    int? id,
+    int? cursorIndex,
+    int? positionMs,
+    int? savedAt,
+  }) => PlaybackSessionCursor(
+    id: id ?? this.id,
+    cursorIndex: cursorIndex ?? this.cursorIndex,
+    positionMs: positionMs ?? this.positionMs,
+    savedAt: savedAt ?? this.savedAt,
+  );
+  PlaybackSessionCursor copyWithCompanion(
+    PlaybackSessionCursorsCompanion data,
+  ) {
+    return PlaybackSessionCursor(
+      id: data.id.present ? data.id.value : this.id,
+      cursorIndex: data.cursorIndex.present
+          ? data.cursorIndex.value
+          : this.cursorIndex,
+      positionMs: data.positionMs.present
+          ? data.positionMs.value
+          : this.positionMs,
+      savedAt: data.savedAt.present ? data.savedAt.value : this.savedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlaybackSessionCursor(')
+          ..write('id: $id, ')
+          ..write('cursorIndex: $cursorIndex, ')
+          ..write('positionMs: $positionMs, ')
+          ..write('savedAt: $savedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, cursorIndex, positionMs, savedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PlaybackSessionCursor &&
+          other.id == this.id &&
+          other.cursorIndex == this.cursorIndex &&
+          other.positionMs == this.positionMs &&
+          other.savedAt == this.savedAt);
+}
+
+class PlaybackSessionCursorsCompanion
+    extends UpdateCompanion<PlaybackSessionCursor> {
+  final Value<int> id;
+  final Value<int> cursorIndex;
+  final Value<int> positionMs;
+  final Value<int> savedAt;
+  const PlaybackSessionCursorsCompanion({
+    this.id = const Value.absent(),
+    this.cursorIndex = const Value.absent(),
+    this.positionMs = const Value.absent(),
+    this.savedAt = const Value.absent(),
+  });
+  PlaybackSessionCursorsCompanion.insert({
+    this.id = const Value.absent(),
+    required int cursorIndex,
+    required int positionMs,
+    required int savedAt,
+  }) : cursorIndex = Value(cursorIndex),
+       positionMs = Value(positionMs),
+       savedAt = Value(savedAt);
+  static Insertable<PlaybackSessionCursor> custom({
+    Expression<int>? id,
+    Expression<int>? cursorIndex,
+    Expression<int>? positionMs,
+    Expression<int>? savedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (cursorIndex != null) 'cursorIndex': cursorIndex,
+      if (positionMs != null) 'positionMs': positionMs,
+      if (savedAt != null) 'savedAt': savedAt,
+    });
+  }
+
+  PlaybackSessionCursorsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? cursorIndex,
+    Value<int>? positionMs,
+    Value<int>? savedAt,
+  }) {
+    return PlaybackSessionCursorsCompanion(
+      id: id ?? this.id,
+      cursorIndex: cursorIndex ?? this.cursorIndex,
+      positionMs: positionMs ?? this.positionMs,
+      savedAt: savedAt ?? this.savedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (cursorIndex.present) {
+      map['cursorIndex'] = Variable<int>(cursorIndex.value);
+    }
+    if (positionMs.present) {
+      map['positionMs'] = Variable<int>(positionMs.value);
+    }
+    if (savedAt.present) {
+      map['savedAt'] = Variable<int>(savedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PlaybackSessionCursorsCompanion(')
+          ..write('id: $id, ')
+          ..write('cursorIndex: $cursorIndex, ')
+          ..write('positionMs: $positionMs, ')
+          ..write('savedAt: $savedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$MoliaDatabase extends GeneratedDatabase {
   _$MoliaDatabase(QueryExecutor e) : super(e);
   $MoliaDatabaseManager get managers => $MoliaDatabaseManager(this);
@@ -5789,6 +6347,10 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
   late final $PlayTracksTable playTracks = $PlayTracksTable(this);
   late final $PlayEventsTable playEvents = $PlayEventsTable(this);
   late final $DownloadsTable downloads = $DownloadsTable(this);
+  late final $PlaybackSessionPayloadsTable playbackSessionPayloads =
+      $PlaybackSessionPayloadsTable(this);
+  late final $PlaybackSessionCursorsTable playbackSessionCursors =
+      $PlaybackSessionCursorsTable(this);
   late final Index idxPlayHistoryPlayedAt = Index(
     'idx_play_history_playedAt',
     'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
@@ -5840,6 +6402,8 @@ abstract class _$MoliaDatabase extends GeneratedDatabase {
     playTracks,
     playEvents,
     downloads,
+    playbackSessionPayloads,
+    playbackSessionCursors,
     idxPlayHistoryPlayedAt,
     idxPlaylistsSyncId,
     idxPlaylistTracksOrder,
@@ -9018,6 +9582,403 @@ typedef $$DownloadsTableProcessedTableManager =
       DownloadRow,
       PrefetchHooks Function()
     >;
+typedef $$PlaybackSessionPayloadsTableCreateCompanionBuilder =
+    PlaybackSessionPayloadsCompanion Function({
+      Value<int> id,
+      required String json,
+      required int updatedAt,
+    });
+typedef $$PlaybackSessionPayloadsTableUpdateCompanionBuilder =
+    PlaybackSessionPayloadsCompanion Function({
+      Value<int> id,
+      Value<String> json,
+      Value<int> updatedAt,
+    });
+
+class $$PlaybackSessionPayloadsTableFilterComposer
+    extends Composer<_$MoliaDatabase, $PlaybackSessionPayloadsTable> {
+  $$PlaybackSessionPayloadsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PlaybackSessionPayloadsTableOrderingComposer
+    extends Composer<_$MoliaDatabase, $PlaybackSessionPayloadsTable> {
+  $$PlaybackSessionPayloadsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get json => $composableBuilder(
+    column: $table.json,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PlaybackSessionPayloadsTableAnnotationComposer
+    extends Composer<_$MoliaDatabase, $PlaybackSessionPayloadsTable> {
+  $$PlaybackSessionPayloadsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get json =>
+      $composableBuilder(column: $table.json, builder: (column) => column);
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PlaybackSessionPayloadsTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlaybackSessionPayloadsTable,
+          PlaybackSessionPayload,
+          $$PlaybackSessionPayloadsTableFilterComposer,
+          $$PlaybackSessionPayloadsTableOrderingComposer,
+          $$PlaybackSessionPayloadsTableAnnotationComposer,
+          $$PlaybackSessionPayloadsTableCreateCompanionBuilder,
+          $$PlaybackSessionPayloadsTableUpdateCompanionBuilder,
+          (
+            PlaybackSessionPayload,
+            BaseReferences<
+              _$MoliaDatabase,
+              $PlaybackSessionPayloadsTable,
+              PlaybackSessionPayload
+            >,
+          ),
+          PlaybackSessionPayload,
+          PrefetchHooks Function()
+        > {
+  $$PlaybackSessionPayloadsTableTableManager(
+    _$MoliaDatabase db,
+    $PlaybackSessionPayloadsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlaybackSessionPayloadsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PlaybackSessionPayloadsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PlaybackSessionPayloadsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> json = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+              }) => PlaybackSessionPayloadsCompanion(
+                id: id,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String json,
+                required int updatedAt,
+              }) => PlaybackSessionPayloadsCompanion.insert(
+                id: id,
+                json: json,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $PlaybackSessionPayloadsTable,
+                    PlaybackSessionPayload
+                  >(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $PlaybackSessionPayloadsTable,
+                    PlaybackSessionPayload
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PlaybackSessionPayloadsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlaybackSessionPayloadsTable,
+      PlaybackSessionPayload,
+      $$PlaybackSessionPayloadsTableFilterComposer,
+      $$PlaybackSessionPayloadsTableOrderingComposer,
+      $$PlaybackSessionPayloadsTableAnnotationComposer,
+      $$PlaybackSessionPayloadsTableCreateCompanionBuilder,
+      $$PlaybackSessionPayloadsTableUpdateCompanionBuilder,
+      (
+        PlaybackSessionPayload,
+        BaseReferences<
+          _$MoliaDatabase,
+          $PlaybackSessionPayloadsTable,
+          PlaybackSessionPayload
+        >,
+      ),
+      PlaybackSessionPayload,
+      PrefetchHooks Function()
+    >;
+typedef $$PlaybackSessionCursorsTableCreateCompanionBuilder =
+    PlaybackSessionCursorsCompanion Function({
+      Value<int> id,
+      required int cursorIndex,
+      required int positionMs,
+      required int savedAt,
+    });
+typedef $$PlaybackSessionCursorsTableUpdateCompanionBuilder =
+    PlaybackSessionCursorsCompanion Function({
+      Value<int> id,
+      Value<int> cursorIndex,
+      Value<int> positionMs,
+      Value<int> savedAt,
+    });
+
+class $$PlaybackSessionCursorsTableFilterComposer
+    extends Composer<_$MoliaDatabase, $PlaybackSessionCursorsTable> {
+  $$PlaybackSessionCursorsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get cursorIndex => $composableBuilder(
+    column: $table.cursorIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get positionMs => $composableBuilder(
+    column: $table.positionMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PlaybackSessionCursorsTableOrderingComposer
+    extends Composer<_$MoliaDatabase, $PlaybackSessionCursorsTable> {
+  $$PlaybackSessionCursorsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get cursorIndex => $composableBuilder(
+    column: $table.cursorIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get positionMs => $composableBuilder(
+    column: $table.positionMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PlaybackSessionCursorsTableAnnotationComposer
+    extends Composer<_$MoliaDatabase, $PlaybackSessionCursorsTable> {
+  $$PlaybackSessionCursorsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get cursorIndex => $composableBuilder(
+    column: $table.cursorIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get positionMs => $composableBuilder(
+    column: $table.positionMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get savedAt =>
+      $composableBuilder(column: $table.savedAt, builder: (column) => column);
+}
+
+class $$PlaybackSessionCursorsTableTableManager
+    extends
+        RootTableManager<
+          _$MoliaDatabase,
+          $PlaybackSessionCursorsTable,
+          PlaybackSessionCursor,
+          $$PlaybackSessionCursorsTableFilterComposer,
+          $$PlaybackSessionCursorsTableOrderingComposer,
+          $$PlaybackSessionCursorsTableAnnotationComposer,
+          $$PlaybackSessionCursorsTableCreateCompanionBuilder,
+          $$PlaybackSessionCursorsTableUpdateCompanionBuilder,
+          (
+            PlaybackSessionCursor,
+            BaseReferences<
+              _$MoliaDatabase,
+              $PlaybackSessionCursorsTable,
+              PlaybackSessionCursor
+            >,
+          ),
+          PlaybackSessionCursor,
+          PrefetchHooks Function()
+        > {
+  $$PlaybackSessionCursorsTableTableManager(
+    _$MoliaDatabase db,
+    $PlaybackSessionCursorsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PlaybackSessionCursorsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$PlaybackSessionCursorsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PlaybackSessionCursorsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> cursorIndex = const Value.absent(),
+                Value<int> positionMs = const Value.absent(),
+                Value<int> savedAt = const Value.absent(),
+              }) => PlaybackSessionCursorsCompanion(
+                id: id,
+                cursorIndex: cursorIndex,
+                positionMs: positionMs,
+                savedAt: savedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int cursorIndex,
+                required int positionMs,
+                required int savedAt,
+              }) => PlaybackSessionCursorsCompanion.insert(
+                id: id,
+                cursorIndex: cursorIndex,
+                positionMs: positionMs,
+                savedAt: savedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $PlaybackSessionCursorsTable,
+                    PlaybackSessionCursor
+                  >(table),
+                  BaseReferences<
+                    _$MoliaDatabase,
+                    $PlaybackSessionCursorsTable,
+                    PlaybackSessionCursor
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PlaybackSessionCursorsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MoliaDatabase,
+      $PlaybackSessionCursorsTable,
+      PlaybackSessionCursor,
+      $$PlaybackSessionCursorsTableFilterComposer,
+      $$PlaybackSessionCursorsTableOrderingComposer,
+      $$PlaybackSessionCursorsTableAnnotationComposer,
+      $$PlaybackSessionCursorsTableCreateCompanionBuilder,
+      $$PlaybackSessionCursorsTableUpdateCompanionBuilder,
+      (
+        PlaybackSessionCursor,
+        BaseReferences<
+          _$MoliaDatabase,
+          $PlaybackSessionCursorsTable,
+          PlaybackSessionCursor
+        >,
+      ),
+      PlaybackSessionCursor,
+      PrefetchHooks Function()
+    >;
 
 class $MoliaDatabaseManager {
   final _$MoliaDatabase _db;
@@ -9042,4 +10003,14 @@ class $MoliaDatabaseManager {
       $$PlayEventsTableTableManager(_db, _db.playEvents);
   $$DownloadsTableTableManager get downloads =>
       $$DownloadsTableTableManager(_db, _db.downloads);
+  $$PlaybackSessionPayloadsTableTableManager get playbackSessionPayloads =>
+      $$PlaybackSessionPayloadsTableTableManager(
+        _db,
+        _db.playbackSessionPayloads,
+      );
+  $$PlaybackSessionCursorsTableTableManager get playbackSessionCursors =>
+      $$PlaybackSessionCursorsTableTableManager(
+        _db,
+        _db.playbackSessionCursors,
+      );
 }

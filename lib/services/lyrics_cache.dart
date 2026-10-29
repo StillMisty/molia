@@ -3,9 +3,9 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart' show md5;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/files/app_data_directory.dart';
 import 'cache_storage.dart' show CacheUsage;
 import 'lyrics/lyric_provider.dart' show LyricCacheData;
 
@@ -316,7 +316,7 @@ class LyricsCache {
 /// Future 可能永远不完成。
 Future<Directory?> resolveAppSupportLyricsDirectory() async {
   try {
-    final support = await getApplicationSupportDirectory();
+    final support = await appDataDirectory();
     return Directory(
       LyricsCache._joinPath(support.path, LyricsCache.directoryName),
     );
