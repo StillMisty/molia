@@ -135,9 +135,14 @@ class PlaybackSessionCoordinator
   /// 已处理过的当前曲目（去重：真实播放接管只发生一次、切歌提交一次）。
   String? _processedTrackId;
 
-  /// 上一帧的队列 / 模式 / 上下文：只比较内容变化，loading / isPlaying 抖动
-  /// 不触发 payload 重写。
+  /// 上一帧的队列 / 下标 / 模式 / 上下文：只比较内容变化，loading / isPlaying
+  /// 抖动不触发 payload 重写。
+  ///
+  /// 下标必须单独比较：队列里有重复曲目（同一 TrackId）时，自动切到另一
+  /// 槽位不会改变 trackId / 队列，但 cursor 的 index 必须更新，否则冷启动
+  /// 会回到旧槽位（next / previous 语义错）。
   List<Track>? _observedQueue;
+  int? _observedIndex;
   PlayMode? _observedMode;
   PlaybackContext? _observedContext;
 
@@ -638,8 +643,9 @@ class PlaybackSessionCoordinator
 
   /// 真实播放快照变化：真实播放接管时撤下恢复数据，内容变化时提交。
   ///
-  /// 只比较会落盘的字段（曲目 / 队列内容 / 模式 / 上下文 / 播放态转暂停），
-  /// loading / isPlaying 抖动不写 payload。
+  /// 只比较会落盘的字段（曲目 / 队列内容 / 下标 / 模式 / 上下文 / 播放态
+  /// 转暂停），loading / isPlaying 抖动不写 payload。下标覆盖「同曲目不同
+  /// 队列槽位」（重复曲目）的自动切换。
   void _onLiveSnapshot() => _handleLiveSnapshot(_facade.snapshot.value);
 
   void _handleLiveSnapshot(PlaybackSnapshot live) {
@@ -655,14 +661,20 @@ class PlaybackSessionCoordinator
     }
 
     final queueChanged = !_sameTrackList(live.queue, _observedQueue);
+    final indexChanged = live.currentIndex != _observedIndex;
     final modeChanged = live.mode != _observedMode;
     final contextChanged = live.context != _observedContext;
     _observedQueue = live.queue;
+    _observedIndex = live.currentIndex;
     _observedMode = live.mode;
     _observedContext = live.context;
 
-    // 曲目 / 队列 / 模式 / 上下文变化，或播放中→暂停/停止：提交一次。
-    if (trackChanged || queueChanged || modeChanged || contextChanged) {
+    // 曲目 / 队列 / 下标 / 模式 / 上下文变化，或播放中→暂停/停止：提交一次。
+    if (trackChanged ||
+        queueChanged ||
+        indexChanged ||
+        modeChanged ||
+        contextChanged) {
       _maybeSaveSession();
     } else if (_wasPlaying && !live.isPlaying) {
       _maybeSaveSession();

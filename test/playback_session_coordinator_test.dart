@@ -762,6 +762,40 @@ void main() {
     expect(store.positions, isEmpty);
   });
 
+  test('重复曲目切到同 id 的另一槽位：cursor index 提交一次', () async {
+    build();
+    final a = _track('a');
+    final queue = [a, a];
+    backend.emit(_live(
+      a,
+      queue: queue,
+      index: 0,
+      position: const Duration(seconds: 2),
+    ));
+    expect(store.saves, hasLength(1));
+    expect(store.saves.last.index, 0);
+
+    // trackId / 队列内容 / 模式 / 上下文都没变，只有槽位从 0 → 1。
+    backend.emit(_live(
+      a,
+      queue: queue,
+      index: 1,
+      position: const Duration(seconds: 5),
+    ));
+    expect(store.saves, hasLength(2));
+    expect(store.saves.last.index, 1);
+    expect(store.saves.last.current!.id, a.id);
+
+    // 同槽位继续推进：没有周期写，不能再提交。
+    backend.emit(_live(
+      a,
+      queue: queue,
+      index: 1,
+      position: const Duration(seconds: 6),
+    ));
+    expect(store.saves, hasLength(2));
+  });
+
   test('进入后台提交一次；后台进度 tick 不再写', () async {
     final policy = PlaybackPowerPolicy();
     addTearDown(policy.dispose);
