@@ -1,8 +1,33 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/window/single_instance.dart';
+// 仅测试用：跨平台模拟 path_provider（Windows 是 Dart/FFI 实现，不走
+// method channel），不是 lib 的依赖。
+// ignore: depend_on_referenced_packages
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+/// 只覆盖 support / cache 两个路径；其余抽象方法保持抛 UnimplementedError，
+/// 用来确认锁目录只调用 support path。
+class _RecordingPathProviderPlatform extends PathProviderPlatform {
+  _RecordingPathProviderPlatform(this.supportPath);
+
+  final String supportPath;
+  int supportCalls = 0;
+  int cacheCalls = 0;
+
+  @override
+  Future<String?> getApplicationSupportPath() async {
+    supportCalls++;
+    return supportPath;
+  }
+
+  @override
+  Future<String?> getApplicationCachePath() async {
+    cacheCalls++;
+    return supportPath;
+  }
+}
 
 /// 单实例锁文件的纯逻辑：内容编解码、格式校验与探测结论。
 ///
@@ -16,26 +41,14 @@ void main() {
     addTearDown(() {
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
-    final calls = <String>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async {
-        calls.add(call.method);
-        return temp.path;
-      },
-    );
-    addTearDown(() {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(
-        const MethodChannel('plugins.flutter.io/path_provider'),
-        null,
-      );
-    });
+    final original = PathProviderPlatform.instance;
+    final platform = _RecordingPathProviderPlatform(temp.path);
+    PathProviderPlatform.instance = platform;
+    addTearDown(() => PathProviderPlatform.instance = original);
 
     expect((await SingleInstance.lockDirectory()).path, temp.path);
-    expect(calls, contains('getApplicationSupportDirectory'));
-    expect(calls, isNot(contains('getApplicationCacheDirectory')),
+    expect(platform.supportCalls, 1);
+    expect(platform.cacheCalls, 0,
         reason: '锁是运行时 IPC，不迁 LocalAppData，必须与旧版本共用同一路径');
   });
 
