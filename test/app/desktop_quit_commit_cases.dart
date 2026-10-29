@@ -65,6 +65,45 @@ void main() {
     expect(log, ['session', 'stats', 'quit']);
   });
 
+  test('退出前提交：统计落盘未完成不销毁窗口', () async {
+    final gate = Completer<void>();
+    final log = <String>[];
+
+    final quit = commitBeforeQuit(
+      commitSession: () async => log.add('session'),
+      flushStatistics: () async {
+        log.add('stats-start');
+        await gate.future;
+        log.add('stats-end');
+      },
+      quitWindow: () async => log.add('quit'),
+    );
+
+    await Future<void>.delayed(Duration.zero);
+    expect(log, ['session', 'stats-start']);
+
+    gate.complete();
+    await quit;
+    expect(log, ['session', 'stats-start', 'stats-end', 'quit']);
+  });
+
+  test('退出前提交：统计落盘超时有界，随后仍退出', () async {
+    final never = Completer<void>();
+    final log = <String>[];
+
+    await commitBeforeQuit(
+      commitSession: () async => log.add('session'),
+      flushStatistics: () {
+        log.add('stats');
+        return never.future;
+      },
+      quitWindow: () async => log.add('quit'),
+      statisticsTimeout: const Duration(milliseconds: 20),
+    );
+
+    expect(log, ['session', 'stats', 'quit']);
+  });
+
   test('退出前提交：顺序为会话 → 音频 → 统计 → quit，会话在途时音频不能先跑', () async {
     final gate = Completer<void>();
     final log = <String>[];

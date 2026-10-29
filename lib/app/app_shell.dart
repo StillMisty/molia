@@ -1347,8 +1347,8 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
           context.read<PlaybackProvider>().suspendPlaybackSession(),
         );
       }
-      // 听歌统计：立即落盘进行中的播放事件（被杀进程最多丢 ~15s 进度）。
-      context.read<PlayStatisticsService>().flush();
+      // 听歌统计：退后台是动作，立即落盘进行中的播放事件；播放途中不写。
+      unawaited(context.read<PlayStatisticsService>().flush());
     }
   }
 

@@ -131,8 +131,9 @@
   facade；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
-  500ms）→ 统计落盘 → 销毁窗口」：会话必须先把最后一段进度取下来，音频收尾
-  要在销毁窗口前停掉设备，否则 Windows 上进程在 libmpv 仍出数据时结束会爆音。
+  500ms）→ 统计落盘（有界 500ms）→ 销毁窗口」：会话必须先把最后一段进度取
+  下来，音频收尾要在销毁窗口前停掉设备，否则 Windows 上进程在 libmpv 仍出
+  数据时结束会爆音；统计只在动作时写库，退出必须等最后一次写入完成。
   系统媒体控制与恢复态切歌键由组合根接到会话模块（不再直连
   provider）。跨设备同步只经 `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
@@ -342,8 +343,8 @@
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
   `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
-  真正出声才开事件、暂停不切断、统计事件按 15s 节流落盘（与播放会话无关）、
-  启动收尾遗留事件。
+  真正出声才开事件、暂停不切断、统计事件只在动作 / 退后台 / 退出时落盘
+  （与播放会话无关；播放途中不按 tick / 定时器写库）、启动收尾遗留事件。
   统计页（`play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
   全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
