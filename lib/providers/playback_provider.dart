@@ -206,11 +206,12 @@ class PlaybackProvider extends ChangeNotifier {
     );
     // 「播完当前歌曲」的完成处理保持不变：后端按 stopAfterCurrentTrack 在
     // 曲末自己停住（`_pauseAtTrackEnd` 推 playing→paused 快照），会话协调者
-    // 的快照监听随之强制整份落盘——那条路径已经提交；这里共用 onFire 的
-    // pause 对已在曲末停住的后端是幂等的，不改变完成语义。
+    // 的快照监听提交一次（payload / cursor 由 store 决定）——那条路径已经
+    // 提交；这里共用 onFire 的 pause 对已在曲末停住的后端是幂等的。
     _facade.snapshot.addListener(_onFacadeSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
-    // 只重建进度条/歌词行，不触发整 Provider 重建（节流落盘在会话模块里）。
+    // 只重建进度条/歌词行，不触发整 Provider 重建（会话只在动作时落盘，
+    // 进度 tick 不写库）。
     _sourceManager?.addListener(_onSourceManagerChanged);
     _dataSaver?.addListener(_onDataSaverChanged);
     _preferencesReady = () async {
@@ -286,7 +287,7 @@ class PlaybackProvider extends ChangeNotifier {
     try {
       // 装载新队列不是会话命令：它建立新的播放上下文（不是对当前会话的
       // 增量修改），恢复态路由与「返回前已提交」都不适用；会话内容由协调者
-      // 的快照监听整份落盘。
+      // 的快照监听提交一次（payload / cursor 由 store 决定）。
       await DataPathTrace.async(
         'play.queue',
         () => _facade.playTracks(PlaybackRequest(

@@ -180,7 +180,7 @@ class _FakeService extends LocalPlaybackService {
   }
 }
 
-/// 统计整份落盘次数：验证「一个控制动作只写一次」。
+/// 统计会话提交次数：验证「一个控制动作只写一次」。
 class _RecordingStore extends PlaybackSessionStore {
   int fullSaves = 0;
   int clears = 0;
@@ -276,7 +276,7 @@ void main() {
     );
     await harness.provider.preferencesReady;
 
-    // 播放推进到 6s（在观察者的 1s 节流窗口内，不会被自动落盘）。
+    // 播放推进到 6s：进度 tick 不会自动落盘，只有暂停动作会提交。
     harness.service.advance(position: const Duration(seconds: 6));
     final savesBeforePause = harness.store.fullSaves;
 

@@ -25,7 +25,7 @@ Track _track(String id, {String? artwork}) => Track(
   payload: {'id': id, 'songmid': 'mid_$id'},
 );
 
-/// 记录整份落盘的会话存储：区分「命令面暂停（强制提交一次）」与
+/// 记录会话提交的存储：区分「命令面暂停（提交一次）」与
 /// 「直接 facade.pause（不落盘）」。
 class _RecordingSessionStore extends PlaybackSessionStore {
   final List<PlaybackSession> saves = [];
@@ -567,7 +567,7 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
-    // 起播一帧：切歌快照先整份落盘一次（进度 7s），定时到点时应提交同一进度。
+    // 起播一帧：切歌快照先提交一次（进度 7s），定时到点时应提交同一进度。
     final a = _track('a');
     backend.emit(
       BackendSnapshot(

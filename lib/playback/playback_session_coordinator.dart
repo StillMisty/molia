@@ -132,7 +132,7 @@ class PlaybackSessionCoordinator
   /// 上一帧是否在播放（播放中→暂停/停止时强制保存一次进度）。
   bool _wasPlaying = false;
 
-  /// 已处理过的当前曲目（去重：真实播放接管只发生一次、切歌整份落盘一次）。
+  /// 已处理过的当前曲目（去重：真实播放接管只发生一次、切歌提交一次）。
   String? _processedTrackId;
 
   /// 上一帧的队列 / 模式 / 上下文：只比较内容变化，loading / isPlaying 抖动
@@ -331,7 +331,7 @@ class PlaybackSessionCoordinator
       return resume(startIndex: next);
     }
     await _facade.next();
-    // 切歌的整份落盘由快照监听触发；提交点按内容去重并等它排空。
+    // 切歌的会话提交由快照监听触发；提交点按内容去重并等它排空。
     await _commitLiveSession();
     return PlaybackCommandOutcome.trackOnly;
   }
@@ -487,7 +487,7 @@ class PlaybackSessionCoordinator
   /// 设置播放模式。
   ///
   /// 恢复态必须同步改写保存的会话（否则模式按钮看起来「点不动」），恢复
-  /// 播放时会把该模式带给后端；live 立即整份落盘并等它写完（重开应用恢复的
+  /// 播放时会把该模式带给后端；live 立即提交并等它写完（重开应用恢复的
   /// 是改后的模式）。
   @override
   Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode) async {

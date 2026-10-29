@@ -342,7 +342,8 @@
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
   `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
-  真正出声才开事件、暂停不切断、15s 节流落盘、启动收尾遗留事件。
+  真正出声才开事件、暂停不切断、统计事件按 15s 节流落盘（与播放会话无关）、
+  启动收尾遗留事件。
   统计页（`play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
   全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。

@@ -69,8 +69,9 @@
 - **不做 security-scoped bookmark**：自定义保存目录只在当次进程内有效，重启后
   可能失去授权（默认 `~/Downloads/Molia` 不受影响），见 pitfalls #89。
 - **Cmd+Q 不走 `quitApp`**：macOS 的「退出」菜单直接 `terminate:`，不经
-  `WindowChrome` 的关闭策略；播放会话有 1s 节流落盘兜底，但不做退出前强制提交
-  与音频收尾（与 iOS 被系统杀掉同口径）。托盘菜单 / 关窗退出仍走完整 `quitApp`。
+  `WindowChrome` 的关闭策略；播放会话只在动作（播放 / 暂停 / seek / 切歌 /
+  曲末等）时提交，不做退出前强制提交与音频收尾（与 iOS 被系统杀掉同口径：
+  最多丢最后一个动作之后的进度）。托盘菜单 / 关窗退出仍走完整 `quitApp`。
 - **不做 macOS 桌面歌词**：仍等 Flutter 官方多窗口 API（同 `docs/lyrics_display.md`）。
 - **局域网自动发现受 Apple multicast entitlement 限制**：与 iOS 同一约束
   （见 `docs/architecture.md` §同步），未申请时降级为手动填对端地址 / 扫码；

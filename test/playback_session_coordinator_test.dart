@@ -69,10 +69,10 @@ class _RecordingSessionStore extends PlaybackSessionStore {
   /// 写请求调用顺序（save / savePosition / clear）。
   final List<String> calls = [];
 
-  /// 整份落盘的会话。
+  /// 提交落盘的会话（payload / cursor 由 store 决定）。
   final List<PlaybackSession> saves = [];
 
-  /// 轻量进度落盘（毫秒）。
+  /// 旧进度直写入口（已不再被协调者调用；保留用于断言“没有周期写”）。
   final List<int> positions = [];
 
   @override
@@ -581,7 +581,7 @@ void main() {
     await session.pendingWrite;
     expect(session.lastWrittenSession, isNull, reason: '停止后常驻内存里不应还挂着一整份队列');
 
-    // 系统媒体「停止」是可恢复语义：随后的整份落盘与引用都要保留。
+    // 系统媒体「停止」是可恢复语义：随后的会话提交与引用都要保留。
     backend.emit(_live(_track('c'), queue: [_track('c')]));
     expect(session.lastWrittenSession, isNotNull);
     await session.stop();
@@ -594,11 +594,11 @@ void main() {
     );
   });
 
-  test('单写者：切歌整份落盘 → 暂停强制落盘 → 停止清除，写请求按序', () async {
+  test('单写者：切歌提交 → 暂停提交 → 停止清除，写请求按序', () async {
     build(persistStore: true);
     final a = _track('a');
 
-    // 切歌：整份落盘（含队列 / 下标 / 模式 / 上下文与当前进度）。
+    // 切歌：提交（队列 / 下标 / 模式 / 上下文与当前进度）。
     backend.emit(_live(a, position: const Duration(seconds: 5)));
     expect(store.calls, ['save']);
     expect(store.saves.single.tracks.single.id.uri, 'fake:a');
@@ -681,7 +681,7 @@ void main() {
     backend.emit(_live(b, queue: [a, b], index: 1));
     expect(store.calls, ['save'], reason: '起播切歌一次');
 
-    // 当前曲目换源：新 id 触发快照监听整份落盘，不应再补写一遍。
+    // 当前曲目换源：新 id 触发快照监听提交，不应再补写一遍。
     await session.replaceTrack(b, _track('b2'));
     expect(store.calls, ['save', 'save']);
     expect(store.saves.last.tracks.map((track) => track.id.id), ['a', 'b2']);
@@ -716,7 +716,7 @@ void main() {
     expect(backend.calls, isEmpty);
     expect(store.calls, ['save']);
 
-    // 当前曲目换源：新 id 由快照监听整份落盘，命令面不再重复写。
+    // 当前曲目换源：新 id 由快照监听提交，命令面不再重复写。
     expect(
       await session.replaceQueueTrack('fake:a', _track('a2')),
       PlaybackCommandOutcome.trackAndQueue,
