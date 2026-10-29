@@ -66,6 +66,13 @@ Future<LocalDataStack> buildLocalDataStack({
   // 取词服务与缓存页统计必须共享同一实例，否则一边写文件、一边读/清 prefs。
   final lyricsCache = LyricsCache.appSupport();
   CacheService.instance.attachLyricsCache(lyricsCache);
+  // 旧版把每首歌词写成一条 prefs 键；文件后端启用后这些键永远不会再读，
+  // 却会随任意偏好变更被整文件重写（Windows 实测约 43 万字节）。启动时
+  // 一次性清掉；没有旧键时只是一次 getKeys 扫描。await 保证首次同步状态
+  // 写入前完成，避免又触发一轮 500KB 写放大。
+  final lyricsPrefsWatch = Stopwatch()..start();
+  await lyricsCache.cleanupLegacyPreferences();
+  markStartupStep('sub.lyricsPrefsCleanup', lyricsPrefsWatch);
 
   // 省流模式（仅移动数据生效）：必须在解析/播放/封面链路创建前就绪，
   // 供取链回调、封面网关与播放 provider 共享同一实例。
