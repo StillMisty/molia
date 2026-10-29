@@ -173,21 +173,42 @@ void main() {
     expect(payloadAfterLoad!.updatedAt, payloadBefore!.updatedAt);
     expect(payloadAfterLoad.json, payloadBefore.json);
 
-    // 恢复后第一次动作：队列 / 模式 / 上下文都没变，只改下标 / 进度。
+    // 恢复后第一次动作：模拟 `playTracks` 复制队列 List（实例不同、内容
+    // 相同），只改下标 / 进度，不能重写 payload。
+    final restoredTracks = List<Track>.of(loaded!.tracks);
+    expect(identical(restoredTracks, loaded.tracks), isFalse);
     repository.writes.clear();
     clockMs = 2000;
-    await restored.save(loaded!.copyWith(
+    await restored.save(PlaybackSession(
+      tracks: restoredTracks,
       index: 1,
       position: const Duration(seconds: 9),
+      mode: loaded.mode,
+      context: loaded.context,
     ));
 
     expect(repository.writes, ['cursor'],
-        reason: '同一份 payload 不应因恢复后的第一次动作重写');
+        reason: '内容相同的队列不应因恢复后的第一次动作重写');
     final payloadAfterSave = await payloadRow();
     expect(payloadAfterSave!.updatedAt, payloadBefore.updatedAt);
     expect(payloadAfterSave.json, payloadBefore.json);
     expect((await cursorRow())!.cursorIndex, 1);
     expect((await cursorRow())!.positionMs, 9000);
+
+    // 队列内容真的变了（追加一首）：必须重写 payload。
+    repository.writes.clear();
+    clockMs = 3000;
+    await restored.save(PlaybackSession(
+      tracks: [...restoredTracks, _track('c')],
+      index: 1,
+      position: const Duration(seconds: 9),
+      mode: loaded.mode,
+      context: loaded.context,
+    ));
+    expect(repository.writes, ['saveAll', 'cursor']);
+    final payloadAfterChange = await payloadRow();
+    expect(payloadAfterChange!.updatedAt, 3000);
+    expect(payloadAfterChange.json, contains('"id":"c"'));
   });
 
   test('同队列切歌 / 暂停：只写 cursor，payload 行不变', () async {

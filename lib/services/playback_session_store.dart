@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show listEquals, visibleForTesting;
 import 'package:logging/logging.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -149,8 +149,10 @@ class PlaybackSessionStore {
   Future<void> get pendingWrite => _pendingWrite ?? Future<void>.value();
   Future<void>? _pendingWrite;
 
-  /// 上一次成功写 payload 的队列形状：列表实例 + 模式 + 上下文都相同时，
+  /// 上一次成功写 payload 的队列形状：列表内容 + 模式 + 上下文都相同时，
   /// [save] 只更新 cursor 行。写成功后才更新。
+  ///
+  /// 列表比较用 `identical` 快路径 + 逐曲 `==`：恢复播放会复制队列 List。
   List<Track>? _writtenTracks;
   PlayMode? _writtenMode;
   PlaybackContext? _writtenContext;
@@ -174,8 +176,12 @@ class PlaybackSessionStore {
     final tracks = session.tracks;
     final mode = session.mode;
     final context = session.context;
+    // 队列内容去重：恢复播放会把会话队列复制成新的 List（实例不同、内容
+    // 相同），只比较 identical 会让第一次暂停 / seek 重写 MB 级 payload。
+    // 逐曲 `==` 只发生在 save（动作）路径，不在进度 tick；大队列可接受。
     final queueUnchanged =
-        identical(tracks, _writtenTracks) &&
+        (identical(tracks, _writtenTracks) ||
+            listEquals(tracks, _writtenTracks)) &&
         mode == _writtenMode &&
         context == _writtenContext;
     if (queueUnchanged) {
