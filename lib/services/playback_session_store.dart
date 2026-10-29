@@ -185,6 +185,12 @@ class PlaybackSessionStore {
         mode == _writtenMode &&
         context == _writtenContext;
     if (queueUnchanged) {
+      // 内容相等等价于库里的 payload：把缓存指向当前 List 实例，下一次动作
+      // 走 `identical` 快路径。深比较只应发生在恢复 / 队列实例变化后的第一次。
+      // cursor 写失败不影响该缓存：payload 内容仍然相等，下次仍可只写 cursor。
+      _writtenTracks = tracks;
+      _writtenMode = mode;
+      _writtenContext = context;
       return _enqueueWrite(
         (repository) => repository.saveCursor(
           index: session.index,

@@ -195,6 +195,33 @@ void main() {
     expect((await cursorRow())!.cursorIndex, 1);
     expect((await cursorRow())!.positionMs, 9000);
 
+    // 第一次 cursor 写成功后缓存已指向 restoredTracks：紧接着用同一实例
+    // 再做一次动作走 identical；换一份内容相同的新 List 也只写 cursor。
+    repository.writes.clear();
+    clockMs = 2500;
+    await restored.save(PlaybackSession(
+      tracks: restoredTracks,
+      index: 1,
+      position: const Duration(seconds: 10),
+      mode: loaded.mode,
+      context: loaded.context,
+    ));
+    expect(repository.writes, ['cursor']);
+    expect((await payloadRow())!.updatedAt, payloadBefore.updatedAt);
+
+    repository.writes.clear();
+    final sameContentTracks = List<Track>.of(restoredTracks);
+    expect(identical(sameContentTracks, restoredTracks), isFalse);
+    await restored.save(PlaybackSession(
+      tracks: sameContentTracks,
+      index: 1,
+      position: const Duration(seconds: 11),
+      mode: loaded.mode,
+      context: loaded.context,
+    ));
+    expect(repository.writes, ['cursor']);
+    expect((await payloadRow())!.updatedAt, payloadBefore.updatedAt);
+
     // 队列内容真的变了（追加一首）：必须重写 payload。
     repository.writes.clear();
     clockMs = 3000;
