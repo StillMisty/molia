@@ -3,13 +3,14 @@ import 'dart:isolate';
 
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 
+import '../data/files/app_data_directory.dart';
 import 'cache_types.dart';
 
-/// IO 平台（Android/iOS/桌面）缓存存储：`dart:io` + `path_provider`。
+/// IO 平台（Android/iOS/桌面）缓存存储：`dart:io` + 应用数据目录 helper。
 ///
-/// 音频与封面目录都放在应用支持目录（持久，系统清理不会触碰）：
+/// 音频与封面目录都放在应用数据目录（Windows LocalAppData，其余平台应用
+/// 支持目录；持久，系统清理不会触碰）：
 /// - `<appSupport>/audio_cache`：just_audio `LockCachingAudioSource` 的
 ///   cacheFile 落盘位置（LRU 按 mtime 淘汰）；
 /// - `<appSupport>/artwork_cache`：flutter_cache_manager 的 FileSystem 根目录
@@ -22,7 +23,7 @@ class IoCacheStorage implements CacheStorage {
     this._audioDirOverride,
     this._artworkDirOverride,
     Future<Directory> Function()? supportDirectory,
-  })  : _supportDirectory = supportDirectory ?? getApplicationSupportDirectory;
+  })  : _supportDirectory = supportDirectory ?? appDataDirectory;
 
   static const String audioDirName = 'audio_cache';
   static const String artworkDirName = 'artwork_cache';

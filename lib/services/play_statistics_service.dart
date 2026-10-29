@@ -7,9 +7,10 @@
 ///   （没播起来）不产生事件。
 /// - 一次播放尝试 = 一行：切歌 / 播完 / 重播 / 停止收尾并开新行；
 ///   **暂停不切断**（时长停止累计，恢复后继续）；位置回到开头视为重播。
-/// - 落盘节流：tick 驱动（≤4Hz）周期 touch（[touchInterval]），
-///   播放态变化与生命周期 flush 立即落盘；进程被杀由启动时
-///   `PlayStatisticsRepository.closeStaleEvents()` 收尾为 interrupted。
+/// - 落盘时机：只在具体动作时写——暂停 / seek / 切歌 / 曲末 / 停止 / 错误 /
+///   退后台 / 退出；播放途中不按 tick、也不按定时器写库。进程被杀由启动时
+///   `PlayStatisticsRepository.closeStaleEvents()` 收尾为 interrupted，
+///   最多丢最后一个动作之后的统计进度。
 /// - 所有写操作串行化（[_writes]）：同一微任务内的 start → finish 也能
 ///   拿到正确的行 id；测试可 await [pendingWrites] 后断言数据库。
 library;
@@ -34,9 +35,6 @@ class PlayStatisticsService {
   })  : _clock = clock ?? DateTime.now {
     _settings.bindReload(kPlayStatisticsEnabled, reloadFromPreferences);
   }
-
-  /// 进行中事件的周期落盘间隔（tick 驱动，无 Timer）。
-  static const Duration touchInterval = Duration(seconds: 15);
 
   /// 正常前进的单次 tick 最大计入时长；更大的位置跳变视为 seek，不计入。
   static const Duration maxCountedDelta = Duration(seconds: 2);
@@ -72,7 +70,11 @@ class PlayStatisticsService {
   Duration _maxPosition = Duration.zero;
   Duration? _lastTickPosition;
   bool _reachedEnd = false;
-  DateTime _lastTouch = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// 最近一次入队的进度值：暂停 + 生命周期 flush 可能连续触发同一进度，
+  /// 值没变时不重复写。开始 / 收尾事件时重置。
+  int? _queuedListenedMs;
+  int? _queuedMaxPositionMs;
 
   /// 采集开关当前值。
   bool get enabled => _enabled;
@@ -144,8 +146,8 @@ class PlayStatisticsService {
         // 队列末尾自然结束（isPlaying 落 false，位置停在末尾）。
         _finishOpen(reason: PlayEventEndReason.completed);
       } else {
-        // 暂停：不切断事件，落盘当前进度并重置累计基线。
-        _touch(force: true);
+        // 暂停：不切断事件，落盘当前进度并重置累计基线（动作写）。
+        _persistProgress();
         _lastTickPosition = null;
       }
     }
@@ -167,6 +169,7 @@ class PlayStatisticsService {
         : (track.duration ?? Duration.zero);
 
     // 位置回到开头：重播（含单曲循环的一遍）→ 收尾 + 开新事件。
+    var restarted = false;
     if (_openTrack != null &&
         position < restartThreshold &&
         _maxPosition > restartMinPosition) {
@@ -175,18 +178,24 @@ class PlayStatisticsService {
             ? PlayEventEndReason.completed
             : PlayEventEndReason.restart,
       );
+      restarted = true;
     }
 
     if (_openTrack == null) {
       _startEvent(track, duration);
     }
 
-    // 累计收听时长：只在正常前进时计入（seek 跳变不计）。
+    // 累计收听时长：只在正常前进时计入（seek 跳变不计）。跳变本身是用户
+    // 动作，落盘一次；普通 tick 不写库。重播刚开的新事件不再补写。
+    var seeked = false;
     final last = _lastTickPosition;
     if (last != null) {
       final delta = position - last;
       if (delta > Duration.zero && delta <= maxCountedDelta) {
         _listened += delta;
+      } else if (!restarted &&
+          (delta > maxCountedDelta || delta < -maxCountedDelta)) {
+        seeked = true;
       }
     }
     _lastTickPosition = position;
@@ -199,11 +208,17 @@ class PlayStatisticsService {
                 )) {
       _reachedEnd = true;
     }
-    _touch();
+    if (seeked) _persistProgress();
   }
 
-  /// 立即落盘进行中事件（生命周期 paused / 后台时由组合根调用）。
-  void flush() => _touch(force: true);
+  /// 立即落盘进行中事件（生命周期 paused / 后台 / 退出时由组合根调用）。
+  ///
+  /// 返回的 Future 在写队列排空后完成：退出流程必须 await 它，否则进程
+  /// 可能在数据库写入前退出，丢掉最后一个动作之后的统计进度。
+  Future<void> flush() {
+    _persistProgress();
+    return pendingWrites;
+  }
 
   void _startEvent(Track track, Duration duration) {
     final now = _clock();
@@ -211,7 +226,9 @@ class PlayStatisticsService {
     _listened = Duration.zero;
     _maxPosition = Duration.zero;
     _reachedEnd = false;
-    _lastTouch = now;
+    // 新行由 startEvent 以 0/0 建出；暂停在起播瞬间也不会重复写同一进度。
+    _queuedListenedMs = 0;
+    _queuedMaxPositionMs = 0;
     final raw = Map<String, dynamic>.from(track.payload);
     final durationMs = duration > Duration.zero
         ? duration.inMilliseconds
@@ -242,6 +259,8 @@ class PlayStatisticsService {
     _listened = Duration.zero;
     _maxPosition = Duration.zero;
     _reachedEnd = false;
+    _queuedListenedMs = null;
+    _queuedMaxPositionMs = null;
     _enqueue(() async {
       final id = _openEventId;
       _openEventId = null;
@@ -256,14 +275,18 @@ class PlayStatisticsService {
     });
   }
 
-  /// 进行中事件的进度落盘（默认按 [touchInterval] 节流）。
-  void _touch({bool force = false}) {
+  /// 进行中事件的进度落盘（只在动作入口调用，不做 tick / 定时器调度）。
+  void _persistProgress() {
     if (_openTrack == null) return;
-    final now = _clock();
-    if (!force && now.difference(_lastTouch) < touchInterval) return;
-    _lastTouch = now;
     final listenedMs = _listened.inMilliseconds;
     final maxPositionMs = _maxPosition.inMilliseconds;
+    // 暂停后紧接生命周期 flush 时两个动作是同一份进度：不重复写。
+    if (_queuedListenedMs == listenedMs &&
+        _queuedMaxPositionMs == maxPositionMs) {
+      return;
+    }
+    _queuedListenedMs = listenedMs;
+    _queuedMaxPositionMs = maxPositionMs;
     _enqueue(() async {
       final id = _openEventId;
       if (id == null) return;

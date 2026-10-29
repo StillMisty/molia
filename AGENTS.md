@@ -32,9 +32,9 @@ tool/agent/memory.ps1                    # Windows 托盘内存采样（专用�
 - 改 `tool/lx_prelude/` → `node tool/build_lx_prelude.mjs`（`assets/lx/lx_prelude.js` 是 terser 产物，勿手改）
   + `node tool/lx_prelude_harness.mjs`（应输出 PROTOCOL OK）；重抓平台响应 → `node tool/gen_{search,artist,lyric_search}_fixtures.mjs`；
 - 改 `lib/data/molia_database.dart` → `dart run build_runner build`；当前基线是
-  `molia_database_v2.sqlite` / `schemaVersion = 1`，旧库不迁移、不读取；以后改表结构
-  提 `schemaVersion`，用 `dart run drift_dev make-migrations` 从新 v1 生成快照 +
-  `stepByStep` 写增量迁移并保留数据（ADR-0005）；
+  `molia_database_v2.sqlite` / `schemaVersion = 2`（v2 新增播放会话两表），旧库不迁移、
+  不读取；以后改表结构提 `schemaVersion`，用 `dart run drift_dev make-migrations`
+  从新 v1 生成快照 + `stepByStep` 写增量迁移并保留数据（ADR-0005、ADR-0017）；
 - 改 `tool/gen_taskbar_icons.py`（Windows 任务栏按钮字形 / 档位）→ `python3 tool/gen_taskbar_icons.py`
   （产物 `windows/runner/resources/thumbbar/*.ico` 提交进仓库；需 `rsvg-convert`）；
 - 改品牌图标 → `swift tool/gen_macos_icons.swift`（产物 `macos/Runner/Assets.xcassets/AppIcon.appiconset/*.png`

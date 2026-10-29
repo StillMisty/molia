@@ -1,11 +1,121 @@
+import 'dart:io';
+
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/services/window/single_instance_lock.dart';
+import 'package:molia/services/window/single_instance.dart';
+// 仅测试用：跨平台模拟 path_provider（Windows 是 Dart/FFI 实现，不走
+// method channel），不是 lib 的依赖。
+// ignore: depend_on_referenced_packages
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+/// 只覆盖 support / cache 两个路径；其余抽象方法保持抛 UnimplementedError，
+/// 用来确认锁目录只调用 support path。
+class _RecordingPathProviderPlatform extends PathProviderPlatform {
+  _RecordingPathProviderPlatform({
+    required this.supportPath,
+    required this.cachePath,
+  });
+
+  final String supportPath;
+  final String cachePath;
+  int supportCalls = 0;
+  int cacheCalls = 0;
+
+  @override
+  Future<String?> getApplicationSupportPath() async {
+    supportCalls++;
+    return supportPath;
+  }
+
+  @override
+  Future<String?> getApplicationCachePath() async {
+    cacheCalls++;
+    return cachePath;
+  }
+}
 
 /// 单实例锁文件的纯逻辑：内容编解码、格式校验与探测结论。
 ///
 /// IO（独占创建 / loopback 连接）不在本文件覆盖：`decide` 是「陈旧锁清理
 /// 与保守放行」的全部决策点，边界必须钉死。
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('主锁目录：Windows 走 LocalAppData，其余平台走应用支持目录', () async {
+    final support = Directory.systemTemp.createTempSync('molia_lock_support_');
+    final cache = Directory.systemTemp.createTempSync('molia_lock_cache_');
+    addTearDown(() {
+      if (support.existsSync()) support.deleteSync(recursive: true);
+      if (cache.existsSync()) cache.deleteSync(recursive: true);
+    });
+    final originalPlatform = PathProviderPlatform.instance;
+    final originalTarget = debugDefaultTargetPlatformOverride;
+    final provider = _RecordingPathProviderPlatform(
+      supportPath: support.path,
+      cachePath: cache.path,
+    );
+    PathProviderPlatform.instance = provider;
+    addTearDown(() {
+      PathProviderPlatform.instance = originalPlatform;
+      debugDefaultTargetPlatformOverride = originalTarget;
+    });
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    expect((await SingleInstance.lockDirectory()).path, cache.path);
+    expect(provider.cacheCalls, 1);
+    expect(provider.supportCalls, 0);
+
+    provider
+      ..supportCalls = 0
+      ..cacheCalls = 0;
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    expect((await SingleInstance.lockDirectory()).path, support.path);
+    expect(provider.supportCalls, 1);
+    expect(provider.cacheCalls, 0);
+  });
+
+  group('upgrade guard decide', () {
+    test('没有旧锁 / 读不出 / pid 已退出：继续抢新锁', () {
+      for (final args in [
+        (exists: false, readable: false, alive: false, connected: false),
+        (exists: true, readable: false, alive: false, connected: false),
+        (exists: true, readable: true, alive: false, connected: false),
+      ]) {
+        expect(
+          SingleInstanceLock.decideUpgradeGuard(
+            lockExists: args.exists,
+            readable: args.readable,
+            alive: args.alive,
+            connected: args.connected,
+          ),
+          LegacyUpgradeAction.proceed,
+        );
+      }
+    });
+
+    test('旧 pid 存活：连得上 / 连不上都按 secondary 退出', () {
+      expect(
+        SingleInstanceLock.decideUpgradeGuard(
+          lockExists: true,
+          readable: true,
+          alive: true,
+          connected: true,
+        ),
+        LegacyUpgradeAction.secondary,
+      );
+      expect(
+        SingleInstanceLock.decideUpgradeGuard(
+          lockExists: true,
+          readable: true,
+          alive: true,
+          connected: false,
+        ),
+        LegacyUpgradeAction.secondaryUnresponsive,
+      );
+    });
+  });
+
   group('encode / parse', () {
     test('编解码往返：pid / port 原样还原', () {
       final raw = SingleInstanceLock.encode(pid: 1234, port: 45678);

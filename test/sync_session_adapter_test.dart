@@ -56,7 +56,6 @@ void main() {
     );
     await state.init();
     store = PlaybackSessionStore(
-      preferences: prefs,
       clock: () => DateTime.fromMillisecondsSinceEpoch(now),
     );
     // 生产接线：同步适配器只拿到会话端口（协调者），远端写入与本地落盘

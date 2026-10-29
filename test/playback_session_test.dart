@@ -11,20 +11,21 @@ import 'package:molia/services/playback_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/memory_database.dart';
 
 /// 上次播放会话：持久化往返 + 冷启动恢复（封面/进度/继续播放）。
 Track _track(String id, {String? artwork}) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album $id',
-      duration: const Duration(seconds: 30),
-      artwork: artwork == null ? null : Artwork(uri: Uri.parse(artwork)),
-      origin: TrackOrigin.lx,
-      payload: {'id': id, 'songmid': 'mid_$id'},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album $id',
+  duration: const Duration(seconds: 30),
+  artwork: artwork == null ? null : Artwork(uri: Uri.parse(artwork)),
+  origin: TrackOrigin.lx,
+  payload: {'id': id, 'songmid': 'mid_$id'},
+);
 
-/// 记录整份落盘的会话存储：区分「命令面暂停（强制提交一次）」与
+/// 记录会话提交的存储：区分「命令面暂停（提交一次）」与
 /// 「直接 facade.pause（不落盘）」。
 class _RecordingSessionStore extends PlaybackSessionStore {
   final List<PlaybackSession> saves = [];
@@ -48,15 +49,17 @@ class _LoadingBackend extends FakePlaybackBackend {
   Future<void> load(PlaybackRequest request) async {
     await super.load(request);
     final track = request.tracks[request.startIndex];
-    emit(BackendSnapshot(
-      current: track,
-      queue: request.tracks,
-      currentIndex: request.startIndex,
-      isLoading: true,
-      position: Duration.zero,
-      duration: track.duration ?? Duration.zero,
-      mode: state.value.mode,
-    ));
+    emit(
+      BackendSnapshot(
+        current: track,
+        queue: request.tracks,
+        currentIndex: request.startIndex,
+        isLoading: true,
+        position: Duration.zero,
+        duration: track.duration ?? Duration.zero,
+        mode: state.value.mode,
+      ),
+    );
     final gate = this.gate;
     if (gate != null) await gate.future;
   }
@@ -79,11 +82,7 @@ void main() {
       index: 1,
       position: const Duration(seconds: 42),
       mode: PlayMode.shuffle,
-      context: const PlaybackContext(
-        name: '收藏',
-        type: 'lx',
-        uri: 'lx:收藏',
-      ),
+      context: const PlaybackContext(name: '收藏', type: 'lx', uri: 'lx:收藏'),
     );
 
     await store.save(session);
@@ -96,7 +95,9 @@ void main() {
     expect(loaded.mode, PlayMode.shuffle);
     expect(loaded.context?.name, '收藏');
     expect(
-        loaded.tracks[0].artwork?.uri.toString(), 'https://img.example/a.jpg');
+      loaded.tracks[0].artwork?.uri.toString(),
+      'https://img.example/a.jpg',
+    );
     // raw（payload）必须原样保留：恢复播放依赖它重新取链。
     expect(loaded.tracks[0].payload['songmid'], 'mid_a');
   });
@@ -109,20 +110,20 @@ void main() {
 
     final store = PlaybackSessionStore();
     Map<String, dynamic> raw(String mode) => {
-          'index': 0,
-          'positionMs': 0,
-          'mode': mode,
-          'tracks': [
-            {
-              'sourceKey': 'fake',
-              'id': 'a',
-              'title': 'Title a',
-              'artists': const <Object?>[],
-              'origin': 'lx',
-              'payload': const <String, Object?>{},
-            },
-          ],
-        };
+      'index': 0,
+      'positionMs': 0,
+      'mode': mode,
+      'tracks': [
+        {
+          'sourceKey': 'fake',
+          'id': 'a',
+          'title': 'Title a',
+          'artists': const <Object?>[],
+          'origin': 'lx',
+          'payload': const <String, Object?>{},
+        },
+      ],
+    };
 
     await store.saveRaw(raw('sequential'));
     expect((await store.load())?.mode, PlayMode.sequential);
@@ -131,22 +132,28 @@ void main() {
     expect((await store.load())?.mode, PlayMode.listLoop);
   });
 
-  test('进度键拆分：savePosition 不重写会话 JSON，load 合并最新进度', () async {
+  test('savePosition 只改 cursor 进度：payload JSON 不动，load 合并最新进度', () async {
     final store = PlaybackSessionStore();
-    await store.save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 1),
-      mode: PlayMode.sequential,
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 1),
+        mode: PlayMode.sequential,
+      ),
+    );
+    final db = sharedSessionDatabase;
+    final payloadBefore =
+        (await db.select(db.playbackSessionPayloads).getSingle()).json;
+
     await store.savePosition(42000);
 
-    final prefs = await SharedPreferences.getInstance();
-    // 会话 JSON 里的 positionMs 仍是整份写入时的值（没有被进度 tick 重写）。
-    final rawSession = prefs.getString('playback_session_v1');
-    expect(rawSession, isNotNull);
-    expect(rawSession, contains('"positionMs":1000'));
-    // load / loadRaw 把轻量进度键合并成完整会话。
+    // payload 里的 positionMs 仍是整份写入时的值（进度只写 cursor 行）。
+    final payloadAfter =
+        (await db.select(db.playbackSessionPayloads).getSingle()).json;
+    expect(payloadAfter, payloadBefore);
+    expect(payloadAfter, contains('"positionMs":1000'));
+    // load / loadRaw 把 cursor 合并成完整会话。
     expect((await store.load())!.position, const Duration(seconds: 42));
     expect((await store.loadRaw())!['positionMs'], 42000);
   });
@@ -155,12 +162,14 @@ void main() {
     var saved = 0;
     final store = PlaybackSessionStore()..onSaved = () => saved++;
 
-    await store.save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: Duration.zero,
-      mode: PlayMode.sequential,
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: Duration.zero,
+        mode: PlayMode.sequential,
+      ),
+    );
     expect(saved, 1);
 
     // 同步适配器应用远端会话走 saveRaw：不应回传待发标记。
@@ -174,16 +183,18 @@ void main() {
 
   test('冷启动恢复：展示上次曲目/封面/进度，可继续播放并 seek 回进度', () async {
     final store = PlaybackSessionStore();
-    await store.save(PlaybackSession(
-      tracks: [
-        _track('a'),
-        _track('b', artwork: 'https://img.example/b.jpg'),
-      ],
-      index: 1,
-      position: const Duration(seconds: 20),
-      mode: PlayMode.sequential,
-      context: const PlaybackContext(name: '队列', type: 'lx', uri: 'lx:队列'),
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: [
+          _track('a'),
+          _track('b', artwork: 'https://img.example/b.jpg'),
+        ],
+        index: 1,
+        position: const Duration(seconds: 20),
+        mode: PlayMode.sequential,
+        context: const PlaybackContext(name: '队列', type: 'lx', uri: 'lx:队列'),
+      ),
+    );
 
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
@@ -194,8 +205,10 @@ void main() {
     expect(provider.hasRestoredSession, isTrue);
     expect(provider.hasTrack, isTrue);
     expect(provider.snapshot.current?.title, 'Title b');
-    expect(provider.snapshot.current?.artwork?.uri.toString(),
-        'https://img.example/b.jpg');
+    expect(
+      provider.snapshot.current?.artwork?.uri.toString(),
+      'https://img.example/b.jpg',
+    );
     expect(provider.currentTrackId, const TrackId('fake', 'b'));
     // 恢复会话保留队列里 index-1：左侧「上一首」封面不因重启丢失。
     expect(provider.snapshot.previous?.title, 'Title a');
@@ -217,12 +230,14 @@ void main() {
   });
 
   test('恢复态切歌：从新下标立即恢复播放，首/末越界 no-op', () async {
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a'), _track('b')],
-      index: 0,
-      position: const Duration(seconds: 12),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b')],
+        index: 0,
+        position: const Duration(seconds: 12),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
@@ -245,12 +260,14 @@ void main() {
   });
 
   test('重启后恢复态仍可调整播放模式，恢复播放沿用所选模式', () async {
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: Duration.zero,
-      mode: PlayMode.shuffle,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: Duration.zero,
+        mode: PlayMode.shuffle,
+      ),
+    );
 
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
@@ -286,12 +303,14 @@ void main() {
     SharedPreferences.setMockInitialValues({
       kRestoreSessionEnabled.name: false,
     });
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 12),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 12),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final provider = buildTestPlaybackProvider();
     addTearDown(provider.dispose);
@@ -305,12 +324,14 @@ void main() {
   });
 
   test('关闭启动恢复开关：立即撤下未播放的恢复态并持久化', () async {
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 12),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 12),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final provider = buildTestPlaybackProvider();
     addTearDown(provider.dispose);
@@ -327,12 +348,14 @@ void main() {
   });
 
   test('远端同步改「启动时恢复上次播放」：reload 撤下恢复态并通知 UI', () async {
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 12),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 12),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final settings = SettingsRegistry(keys: kAllSettingsKeys);
     final provider = buildTestPlaybackProvider(settings: settings);
@@ -359,12 +382,14 @@ void main() {
     SharedPreferences.setMockInitialValues({
       kRestoreSessionEnabled.name: false,
     });
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 12),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 12),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final settings = SettingsRegistry(keys: kAllSettingsKeys);
     final provider = buildTestPlaybackProvider(settings: settings);
@@ -388,12 +413,14 @@ void main() {
   });
 
   test('恢复播放：seek 落地前进度不闪回 0（保持恢复进度）', () async {
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 20),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 20),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final backend = _LoadingBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
@@ -415,17 +442,21 @@ void main() {
     // 装载时的强制保存记的是 0；恢复流程末尾应立即写回恢复进度。
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
-    expect((await PlaybackSessionStore().load())?.position,
-        const Duration(seconds: 20));
+    expect(
+      (await PlaybackSessionStore().load())?.position,
+      const Duration(seconds: 20),
+    );
   });
 
   test('恢复装载期间用户 seek 优先于保存进度', () async {
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a')],
-      index: 0,
-      position: const Duration(seconds: 20),
-      mode: PlayMode.sequential,
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 20),
+        mode: PlayMode.sequential,
+      ),
+    );
 
     final gate = Completer<void>();
     final backend = _LoadingBackend(gate: gate);
@@ -444,48 +475,59 @@ void main() {
     expect(provider.currentPosition, const Duration(seconds: 60));
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
-    expect((await PlaybackSessionStore().load())?.position,
-        const Duration(seconds: 60));
+    expect(
+      (await PlaybackSessionStore().load())?.position,
+      const Duration(seconds: 60),
+    );
   });
 
-  test('suspendPlaybackSession：后台强制保存最新进度（不等节流窗口）', () async {
+  test('suspendPlaybackSession：退后台 / 退出入口强制保存最新进度', () async {
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
-    backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a')],
-      currentIndex: 0,
-      isPlaying: true,
-      position: const Duration(seconds: 7),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track('a'),
+        queue: [_track('a')],
+        currentIndex: 0,
+        isPlaying: true,
+        position: const Duration(seconds: 7),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
-    expect((await PlaybackSessionStore().load())?.position,
-        const Duration(seconds: 7));
+    expect(
+      (await PlaybackSessionStore().load())?.position,
+      const Duration(seconds: 7),
+    );
 
-    // 播放推进到 30s：节流窗口内不会自动落盘（先强制保存 7s 重置窗口，
-    // 避免测试时长影响节流判定）。
+    // 先提交 7s；随后进度推进到 30s：没有周期写，存储仍是 7s。
     await provider.suspendPlaybackSession();
-    backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a')],
-      currentIndex: 0,
-      isPlaying: true,
-      position: const Duration(seconds: 30),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track('a'),
+        queue: [_track('a')],
+        currentIndex: 0,
+        isPlaying: true,
+        position: const Duration(seconds: 30),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
-    expect((await PlaybackSessionStore().load())?.position,
-        const Duration(seconds: 7));
+    expect(
+      (await PlaybackSessionStore().load())?.position,
+      const Duration(seconds: 7),
+    );
 
     // 生命周期 paused：强制落盘到最新进度。
     await provider.suspendPlaybackSession();
-    expect((await PlaybackSessionStore().load())?.position,
-        const Duration(seconds: 30));
+    expect(
+      (await PlaybackSessionStore().load())?.position,
+      const Duration(seconds: 30),
+    );
   });
 
   test('真实播放后保存会话：新实例可恢复（含 raw）', () async {
@@ -494,14 +536,16 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
-    backend.emit(BackendSnapshot(
-      current: _track('a', artwork: 'https://img.example/a.jpg'),
-      queue: [_track('a'), _track('b')],
-      currentIndex: 0,
-      isPlaying: true,
-      position: const Duration(seconds: 7),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track('a', artwork: 'https://img.example/a.jpg'),
+        queue: [_track('a'), _track('b')],
+        currentIndex: 0,
+        isPlaying: true,
+        position: const Duration(seconds: 7),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     // 保存是异步的：让微任务/SharedPreferences 写入完成。
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
@@ -523,29 +567,32 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
-    // 起播一帧：切歌快照先整份落盘一次（进度 7s），定时到点时应提交同一进度。
+    // 起播一帧：切歌快照先提交一次（进度 7s），定时到点时应提交同一进度。
     final a = _track('a');
-    backend.emit(BackendSnapshot(
-      current: a,
-      queue: [a],
-      currentIndex: 0,
-      isPlaying: true,
-      position: const Duration(seconds: 7),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: a,
+        queue: [a],
+        currentIndex: 0,
+        isPlaying: true,
+        position: const Duration(seconds: 7),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     expect(store.saves, hasLength(1));
     expect(store.saves.single.position, const Duration(seconds: 7));
 
-    // 播放推进到 8s（仍在 1s 整份落盘节流窗口内）：到点暂停必须提交最新进度，
-    // 而不是停在切歌时的 7s。
-    backend.emit(BackendSnapshot(
-      current: a,
-      queue: [a],
-      currentIndex: 0,
-      isPlaying: true,
-      position: const Duration(seconds: 8),
-      duration: const Duration(seconds: 30),
-    ));
+    // 播放推进到 8s：到点暂停必须提交最新进度，而不是停在切歌时的 7s。
+    backend.emit(
+      BackendSnapshot(
+        current: a,
+        queue: [a],
+        currentIndex: 0,
+        isPlaying: true,
+        position: const Duration(seconds: 8),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     expect(store.saves, hasLength(1), reason: '进度 tick 不重写整份会话');
 
     // 极短倒计时：ticker 周期固定 1s，第一次 tick 即越过 deadline 到点。

@@ -16,10 +16,10 @@ void main() {
   late CustomCoverStore store;
 
   CustomCoverStore buildStore() => CustomCoverStore(
-        supportDirectory: () async => tempDir,
-        // 固定时间会让替换文件名只在序号上不同，仍能验证「每次替换新文件」。
-        clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
-      );
+    supportDirectory: () async => tempDir,
+    // 固定时间会让替换文件名只在序号上不同，仍能验证「每次替换新文件」。
+    clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -264,6 +264,46 @@ void main() {
     await store.applySyncedDefaultDelete();
     expect(store.defaultCoverUrl, isNull);
     expect(localChanges, hasLength(2));
+  });
+
+  test('Windows 旧目录迁移：复制封面并把索引 base 路径改到新目录', () async {
+    final legacy = await Directory.systemTemp.createTemp('molia_covers_old_');
+    final target = await Directory.systemTemp.createTemp('molia_covers_new_');
+    addTearDown(() async {
+      if (await legacy.exists()) await legacy.delete(recursive: true);
+      if (await target.exists()) await target.delete(recursive: true);
+    });
+    final oldDir = Directory('${legacy.path}/custom_covers')
+      ..createSync(recursive: true);
+    final oldFile = File('${oldDir.path}/track_a.jpg')
+      ..writeAsBytesSync(_bytes(21));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      CustomCoverStore.prefsKey,
+      '{"version":1,"tracks":{"fake:a":{"path":"${oldFile.path}",'
+      '"hash":"h","updatedAt":1}}}',
+    );
+
+    final migrated = CustomCoverStore(
+      supportDirectory: () async => target,
+      legacyDirectory: () async => legacy,
+    );
+    await migrated.load();
+
+    final expected = File('${target.path}/custom_covers/track_a.jpg');
+    expect(expected.existsSync(), isTrue);
+    expect(oldFile.existsSync(), isTrue, reason: '旧目录保留作回退，不删除');
+    expect(migrated.trackCoverPath(const TrackId('fake', 'a')), expected.path);
+    final rewritten = prefs.getString(CustomCoverStore.prefsKey)!;
+    expect(rewritten, contains(expected.path));
+    expect(rewritten, isNot(contains(oldFile.path)));
+
+    // 幂等：再次 load 不改路径、不重复复制。
+    await CustomCoverStore(
+      supportDirectory: () async => target,
+      legacyDirectory: () async => legacy,
+    ).load();
+    expect(prefs.getString(CustomCoverStore.prefsKey), rewritten);
   });
 
   test('损坏索引：按空索引启动，不抛异常', () async {

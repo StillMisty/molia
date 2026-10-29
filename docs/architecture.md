@@ -112,22 +112,28 @@
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
   分叉，只按 `PlaybackCommandOutcome` 的变化域决定通知类别）；恢复态快照与进度
-  覆盖值在这里构造；会话存储拆成完整队列键 / 游标键（index、position、
-  savedAt）/ 轻量进度键：队列未变时切歌 / 暂停 / seek 只写游标键 + 进度键，
-  队列 / 模式 / 上下文变化才重写完整 JSON；落盘口径（前台 1s / 后台 15s
-  节流 / 满 1min 提交一次（队列未变只写游标 / 进度键）/ `clear` /
-  可 await 的 `flushSession`）随 `pendingWrite` 串行化收在一处。
+  覆盖值在这里构造。会话只存在**主库** `molia_database_v2.sqlite` 的两张单行表
+  （`playback_session_payloads` 整份队列 JSON / `playback_session_cursors`
+  index + position + savedAt），没有独立 session DB、cursor 文件或 prefs 会话：
+  - 只在**具体动作**落盘：播放 / 暂停、seek 落点（拖拽只在结束提交）、切歌 /
+    系统 next / previous、队列 / 模式 / 上下文变化（含 AI 追加）、曲末完成
+    （单曲循环 / 列表循环单曲重播）、停止、换源、退后台、窗口隐藏 / 最小化到
+    托盘、退出；没有 1Hz / 15s / 1min 定时写；
+  - 队列 / 模式 / 上下文变化才写 payload，且与 cursor 同一事务；切歌 / 暂停 /
+    seek 只 UPDATE cursor 单行，绝不重写 MB 级 payload；
+  - `savedAt` 随动作刷新；长时间无动作时接受远端旧会话可能压过本地（不重新
+    引入定时器）。`pendingWrite` 仍串行化写入，`clear` 不会被在途保存复活。
   改变会话的命令（暂停 / seek / 切歌 / 模式 /
-  停止 / 换源）返回前等 `pendingWrite`（已提交语义），live seek 也强制提交
-  （队列未变只写游标 / 进度键）；系统媒体 handler 与 UI 共用
+  停止 / 换源）返回前等 `pendingWrite`（已提交语义）；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
   落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
   换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`），不直写
   facade；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
-  500ms）→ 统计落盘 → 销毁窗口」：会话必须先把最后一段进度取下来，音频收尾
-  要在销毁窗口前停掉设备，否则 Windows 上进程在 libmpv 仍出数据时结束会爆音。
+  500ms）→ 统计落盘（有界 500ms）→ 销毁窗口」：会话必须先把最后一段进度取
+  下来，音频收尾要在销毁窗口前停掉设备，否则 Windows 上进程在 libmpv 仍出
+  数据时结束会爆音；统计只在动作时写库，退出必须等最后一次写入完成。
   系统媒体控制与恢复态切歌键由组合根接到会话模块（不再直连
   provider）。跨设备同步只经 `PlaybackSessionSyncPort`（`lib/domain/ports/playback_session_sync.dart` 的
   `loadRaw` / `applyRemote` / `clearRemote`）认识会话，唯一实现是协调者：远端
@@ -174,10 +180,9 @@
     未授予悬浮窗权限也算）→ 订阅 `positionStream`（约 5Hz）；后台其余情形 →
     1s Timer 读 `_player.position`（值变才通知）；后台暂停 → 不采样。切换档位
     先取消旧订阅 / Timer，避免双采样。
-  - 会话落盘（`PlaybackSessionCoordinator`）：前台 1s / 后台 15s 节流；进入
-    后台先强制提交一次，store 按队列是否变化决定整份重写还是只写游标。
-    暂停 / 切歌 / 系统控制仍立即提交。满 1min 提交一次（队列未变只写
-    游标 / 进度键）。
+  - 会话落盘（`PlaybackSessionCoordinator`）：不做周期写；进入后台 / 息屏
+    时提交一次（`flushSession` → cursor 单行），播放 / 暂停 / seek / 切歌 /
+    曲末等动作各自提交。桌面隐藏到托盘 / 最小化走同一提交入口。
   - 系统媒体会话（`LocalAudioHandler`）：仅 Android 取消「位置差 > 1s 就补发
     state」的周期更新（平台按 `lastPositionMs + elapsed × speed` 插值），改由
     `LocalPlaybackService.seekRevision` 识别显式 seek / 内部回跳；歌词覆盖与
@@ -233,7 +238,9 @@
 - **自定义封面（custom covers）**：`lib/services/covers/custom_cover_store.dart` 是
   每曲封面与全局默认封面的唯一存储（设备本地，不登记设置键；默认随
   `covers` 同步类别跨设备同步，可在同步内容页关闭）。
-  文件写应用支持目录 `custom_covers/`（与封面缓存隔离，清缓存不丢失），每次
+  文件写应用数据目录 `custom_covers/`（Windows LocalAppData，其余平台应用
+  支持目录；与封面缓存隔离，清缓存不丢失；Windows 旧 Roaming 目录首次启动
+  复制一次并改写 prefs 索引路径），每次
   替换都换新文件名（避免 ImageCache / 取色 LRU 命中旧图）；索引（路径 + 哈希 +
   更新时间）在 SharedPreferences，启动只读索引并剔除丢失文件。选图经
   `lib/services/covers/cover_image_codec.dart` 解码、烘焙 EXIF 方向、最长边
@@ -336,7 +343,8 @@
   `PlayStatisticsLimits`（有效播放 = `min(30s, 50%·时长)`，error 事件不计入
   计数/比率）。采集是 `PlayStatisticsService` 纯观察者——组合根把
   `PlaybackProvider` 快照 + position 接进去，**零改动播放内核**；
-  真正出声才开事件、暂停不切断、15s 节流落盘、启动收尾遗留事件。
+  真正出声才开事件、暂停不切断、统计事件只在动作 / 退后台 / 退出时落盘
+  （与播放会话无关；播放途中不按 tick / 定时器写库）、启动收尾遗留事件。
   统计页（`play_statistics_page.dart`）消费 provider 投影：日历热力图（hero，
   全量历史 + 范围高亮）、作息热力图（7×24，随范围过滤）、汇总/指标/榜单
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
@@ -411,7 +419,10 @@
   `sync_book.dart` 的窄接口（登记 / 发布覆盖 / 轮次 / 引擎 / 运行时 / 调度 /
   备份），`SyncStateStore` 仍是唯一实现与持久化所有者：所有写入先改内存 +
   标脏，`commit()` 是唯一落盘出口（轮内台账 / 首连提示 / 端点记账只标脏，
-  引擎轮末提交一次；用户命令仍即时提交）。
+  引擎轮末提交一次；用户命令仍即时提交）。自动轮「零对端 / 无变化」只更新
+  内存展示、不标脏；名册没有真实观测变化也不标脏，失败探测只刷新
+  `lastSeenAt` 时同样不落盘——空闲轮 / 重连阶梯探测不再反复重写整份
+  `sync_state_v2`（Windows 实测约 142KB/次）。
   拉取前由 `SyncRoundRunner._pullPlan` 生成一份**拉取计划**（`SyncPullPlan`：逐对端
   `cursor` / `forceFull` + discovery）；局域网与 WebDAV 只提供证据（局域网
   `snapshotId + snapshotFresh`，WebDAV `etag` / `lastmodified` + 回执头部），
@@ -526,8 +537,10 @@
   排除回环 / link-local / zone，私网优先排序；过滤判定
   `isRoutablePeerAddress` 与服务 / 传输共用）是地址列表、附近设备探测与探测
   `addrs` 候选的同一口径。
-  资料库 schema（drift，`schemaVersion = 1`，库文件 `molia_database_v2.sqlite`；
-  旧 `molia_database.sqlite` 保留但不读、不迁移）含 `playlists.syncId` / 行级
+  主库 schema（drift，`schemaVersion = 2`，库文件 `molia_database_v2.sqlite`；
+  旧 `molia_database.sqlite` 保留但不读、不迁移）含播放会话两表
+  （`playback_session_payloads` / `playback_session_cursors`）、
+  `playlists.syncId` / 行级
   `versionPhysical + versionCounter + deviceId` / `sync_tombstones`（版本三列 +
   真实删除时间）/ `sync_known`（已知版本登记）/ `play_events`（syncKey +
   版本列，`originDeviceId` 兼作设备列）；设置同步用「登记哈希」做变化检测，
@@ -804,7 +817,7 @@ module（见下）：
   系统公共下载目录下 `Molia/`（Windows 走 Known Folder，OneDrive 重定向时
   不会写到 `%USERPROFILE%\Downloads`；Linux 读 XDG `XDG_DOWNLOAD_DIR`，回退
   `~/Downloads`），iOS = 应用文档目录 `Molia/`（文件 App 可见），Android =
-  应用支持目录 `downloads/`（**公共副本**另经 MediaStore 发布到
+  应用数据目录 `downloads/`（**公共副本**另经 MediaStore 发布到
   `Download/Molia`，见下）；设置页可选自定义目录
   （`DownloadSettings.saveDir`，存储层每次解析读取，改设置无需重启）；
   `lyrics/` + `covers/` 子目录与 `cache/audio_cache` 完全隔离——「清理缓存」
@@ -858,7 +871,8 @@ module（见下）：
   提交日志，再清扫崩溃遗留 `.part`；
 - **下载提交日志 / 崩溃恢复**：`lib/services/download/download_journal.dart`
   是文件型 write-ahead journal（**不新增 DB 表、不迁移 drift**）。位置 =
-  应用支持目录 `download_journal/`（`DownloadStorage.journalRoot()`，与下载根
+  应用数据目录 `download_journal/`（Windows LocalAppData，其余平台应用支持
+  目录；`DownloadStorage.journalRoot()`，与下载根
   解耦：改保存位置 / 清公共目录不影响恢复；它也不是用户文件，不放进下载夹）。
   音频 `.part` 写完后、rename 前写一条 pending `DownloadedTrack`（仅音频，
   继承旧 sidecar / publicUri；文件名 `<md5(key)>.json`，`.tmp` 写 + rename

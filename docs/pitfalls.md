@@ -882,10 +882,10 @@
     不 clamp，交给 `Curves` 前先 `clamp(0,1)`；收敛判定要用 `snapToEnd`（否则
     0.999… 会让 `progress < 1` 的分支残留）。
 88. **本地库已切到 v2 基线：旧 `molia_database.sqlite` 是有意不读的**：当前库文件
-    是 `molia_database_v2.sqlite`（`schemaVersion = 1`），旧迁移链、旧
-    `drift_schemas` 快照与 `test/drift/molia` 都已退役。旧库文件保留在磁盘上，
-    但不打开、不迁移；不要为它补迁移、兼容分支或「检测旧库」逻辑，需要旧数据
-    时走 JSON 备份 / 跨设备同步重建。
+    是 `molia_database_v2.sqlite`（fresh 基线 `schemaVersion = 1`；v2 新增播放
+    会话两表并保留 v1 数据）。更早的迁移链、旧 `drift_schemas` 快照已退役。
+    旧库文件保留在磁盘上，但不打开、不迁移；不要为它补迁移、兼容分支或
+    「检测旧库」逻辑，需要旧数据时走 JSON 备份 / 跨设备同步重建。
 89. **macOS 目标默认开 App Sandbox：网络 / 下载目录 / 自定义目录都靠 entitlements**：
     `macos/Runner/DebugProfile.entitlements` 与 `Release.entitlements` 必须保留
     `network.client`（音源 / 歌词 / 更新 / 同步）、`network.server`（局域网同步的
@@ -923,3 +923,11 @@
     封面同样会被压扁。另：网络封面「保存原图」不要读 `ArtworkCache` 的缓存
     字节——缩略图路径会把原 URL 缓存键覆盖成缩小图，必须按原 URL 直连
     （`cover_bytes_downloader.dart`）。
+93. **SharedPreferences 是整文件重写，不能放大对象 / 高频写**：`SharedPreferences`
+    的每次 `setString` 都会重写整个 prefs 文件（Windows 上常见 `shared_preferences.json`），
+    不是只改一个键。把整份播放队列（含每首音源 payload，大队列 MB 级）放在
+    prefs、再按 1Hz 写进度，会让应用持续按 MB/s 写盘（Windows 大队列实测约
+    2MB/s）。行为数据 / 会话 / 大 JSON 必须进 SQLite（`molia_database_v2.sqlite`）；
+    进度这类高频小字段只 UPDATE 单行 cursor，且只在动作时写，不要用定时器
+    周期性落盘。旧 prefs 会话键要一次性删除，否则小设置写入仍会反复重写那
+    2MB 大对象。

@@ -138,6 +138,16 @@ Future<DesktopStack> buildDesktopStack({
   libraryProvider.addListener(syncTray);
   AppBrandingService.titleNotifier.addListener(syncTray);
   LanguageService.localeNotifier.addListener(syncTray);
+  // 窗口隐藏 / 最小化到托盘也是「离开」动作：提交一次会话进度（与退出共用
+  // suspendPlaybackSession），托盘期进程被结束时可恢复最后位置。
+  var lastPresence = AppPresence.instance.value;
+  AppPresence.instance.addListener(() {
+    final presence = AppPresence.instance.value;
+    final leftVisible = lastPresence == AppPresenceState.visible &&
+        !AppPresence.instance.isVisible;
+    lastPresence = presence;
+    if (leftVisible) unawaited(playback.suspendPlaybackSession());
+  });
   syncTray();
 
   return (
@@ -179,18 +189,20 @@ Future<DesktopStack> buildDesktopStack({
 /// 不清空会话——清会话是壳层暂停 / 停止的语义，不是退出语义。
 ///
 /// 拆成注入面是为了让「会话提交没完成不销毁窗口」可以被测试用 fake 钉住；
-/// 生产调用点只有 [buildDesktopStack] 的 `quitApp`。会话提交与音频收尾都有界
-/// 等待（[sessionTimeout] 默认 2s、[audioTimeout] 默认 500ms）：平台通道或
-/// 音频设备挂起时不能把退出流程无限拖住。超时 / 失败都继续退出：用户已经点了
-/// 退出，卡在保存或音频设备上比丢一次进度更糟。
+/// 生产调用点只有 [buildDesktopStack] 的 `quitApp`。会话提交、音频收尾与
+/// 统计落盘都有界等待（[sessionTimeout] 默认 2s、[audioTimeout] /
+/// [statisticsTimeout] 默认 500ms）：平台通道、音频设备或数据库挂起时不能把
+/// 退出流程无限拖住。超时 / 失败都继续退出：用户已经点了退出，卡在保存或
+/// 音频设备上比丢一次进度更糟。
 @visibleForTesting
 Future<void> commitBeforeQuit({
   required Future<void> Function() commitSession,
-  required void Function() flushStatistics,
+  required FutureOr<void> Function() flushStatistics,
   required Future<void> Function() quitWindow,
   Future<void> Function()? shutdownAudio,
   Duration sessionTimeout = const Duration(seconds: 2),
   Duration audioTimeout = const Duration(milliseconds: 500),
+  Duration statisticsTimeout = const Duration(milliseconds: 500),
 }) async {
   final sessionWatch = Stopwatch()..start();
   try {
@@ -221,7 +233,14 @@ Future<void> commitBeforeQuit({
 
   final statsWatch = Stopwatch()..start();
   try {
-    flushStatistics();
+    // 统计现在只在动作时写库；退出是最后一个动作，必须等写入完成，
+    // 否则进程可能在数据库落盘前退出，丢掉最后一段收听时长。
+    await Future<void>.sync(flushStatistics).timeout(statisticsTimeout);
+  } on TimeoutException {
+    debugPrint(
+      '[Molia] 退出前落盘统计超时'
+      '（${statisticsTimeout.inMilliseconds}ms，继续退出）',
+    );
   } catch (e) {
     debugPrint('[Molia] 退出前落盘统计失败（继续退出）: $e');
   }

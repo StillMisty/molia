@@ -1339,7 +1339,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
       context.read<DataSaverService>().refreshConnectivity();
     } else if (state == AppLifecycleState.paused) {
       // 播放会话：移动端的「进后台」由 main 把生命周期喂给
-      // `PlaybackPowerPolicy`，协调者据此强制整份落盘——这里再提交一次
+      // `PlaybackPowerPolicy`，协调者据此提交一次会话——这里再提交一次
       // 只会把同一次 paused 写两遍。桌面不接生命周期策略（恒前台），
       // 窗口隐藏 / 系统挂起时用与退出相同的入口提交一次。
       if (!_mobileLifecycleOwnsPlaybackCommit) {
@@ -1347,8 +1347,8 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
           context.read<PlaybackProvider>().suspendPlaybackSession(),
         );
       }
-      // 听歌统计：立即落盘进行中的播放事件（被杀进程最多丢 ~15s 进度）。
-      context.read<PlayStatisticsService>().flush();
+      // 听歌统计：退后台是动作，立即落盘进行中的播放事件；播放途中不写。
+      unawaited(context.read<PlayStatisticsService>().flush());
     }
   }
 

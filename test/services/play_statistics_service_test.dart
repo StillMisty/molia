@@ -105,13 +105,13 @@ void main() {
       expect(decodeStatsPayload(opened.single['raw']), '{}');
     });
 
-    test('正常前进计入时长；seek 快进不计入', () async {
+    test('正常前进计入时长；seek 快进不计入但动作落盘', () async {
       final track = trackOf('a');
       service.onSnapshot(snapshotOf(track));
       tickRange(const Duration(milliseconds: 300),
           const Duration(milliseconds: 2300));
 
-      now = now.add(const Duration(seconds: 16));
+      // seek 是动作：跳变不计入收听时长，但落盘一次（不是周期写）。
       service.onPosition(const Duration(seconds: 60));
       final opened = await rows();
 
@@ -119,26 +119,31 @@ void main() {
       expect(opened.single['maxPositionMs'], 60000);
     });
 
-    test('进度落盘按 15s 节流（未到间隔不写库）', () async {
+    test('播放途中不写库，只有动作 flush 才落盘', () async {
       final track = trackOf('a');
       service.onSnapshot(snapshotOf(track));
       tickRange(const Duration(seconds: 1), const Duration(seconds: 3));
 
-      // 未到 touchInterval：库里仍是最新一次已落盘值（此处为 0）。
+      // 播放 tick 不落盘：库里仍是开始事件时的 0。
       await service.pendingWrites;
       expect(
         (await playEventRows(db)).single['listenedMs'],
         0,
-        reason: '节流窗口内不写库',
+        reason: '普通进度 tick 不写库',
       );
 
-      now = now.add(const Duration(seconds: 16));
+      // 时间过去也不是动作。
+      now = now.add(const Duration(seconds: 30));
       service.onPosition(const Duration(seconds: 4));
       await service.pendingWrites;
       expect(
         (await playEventRows(db)).single['listenedMs'],
-        3000,
+        0,
+        reason: '没有动作不写库',
       );
+
+      await service.flush();
+      expect((await playEventRows(db)).single['listenedMs'], 3000);
     });
   });
 
@@ -183,7 +188,7 @@ void main() {
       // 播完回卷：位置回到开头，仍在播放。
       service.onPosition(const Duration(milliseconds: 200));
       service.onPosition(const Duration(milliseconds: 1200));
-      service.flush();
+      await service.flush();
       final all = await rows();
 
       expect(all, hasLength(2));
@@ -221,8 +226,16 @@ void main() {
       service.onSnapshot(snapshotOf(track));
       service.onPosition(const Duration(seconds: 1));
       service.onPosition(const Duration(milliseconds: 1500));
-      now = now.add(const Duration(seconds: 16));
       service.onPosition(const Duration(seconds: 2));
+
+      // 恢复后的普通 tick 不写库；再暂停 / flush 才落盘累计值。
+      await service.pendingWrites;
+      expect(
+        (await playEventRows(db)).single['listenedMs'],
+        500,
+        reason: '播放途中沿用暂停时的落盘值',
+      );
+      await service.flush();
 
       all = await rows();
       expect(all, hasLength(1), reason: '恢复后仍是同一行');

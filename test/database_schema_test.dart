@@ -22,8 +22,8 @@ void main() {
   tearDown(() => db.close());
 
   Future<List<Map<String, Object?>>> rowsOf(String sql) async => [
-        for (final row in await db.customSelect(sql).get()) row.data,
-      ];
+    for (final row in await db.customSelect(sql).get()) row.data,
+  ];
 
   /// `PRAGMA table_info` 快照行：`名称|类型|NOT NULL|默认值|主键序`。
   String columnSnapshot(Map<String, Object?> row) {
@@ -49,6 +49,8 @@ void main() {
         'play_events',
         'play_history',
         'play_tracks',
+        'playback_session_cursors',
+        'playback_session_payloads',
         'playlist_tracks',
         'playlists',
         'sqlite_sequence',
@@ -177,6 +179,17 @@ void main() {
         'raw|BLOB|0|null|0',
         'updatedAt|INTEGER|1|null|0',
       ],
+      'playback_session_payloads': [
+        'id|INTEGER|0|null|1',
+        'json|TEXT|1|null|0',
+        'updatedAt|INTEGER|1|null|0',
+      ],
+      'playback_session_cursors': [
+        'id|INTEGER|0|null|1',
+        'cursorIndex|INTEGER|1|null|0',
+        'positionMs|INTEGER|1|null|0',
+        'savedAt|INTEGER|1|null|0',
+      ],
     };
 
     for (final entry in expected.entries) {
@@ -197,23 +210,25 @@ void main() {
     expect(
       {for (final row in rows) row['name']: row['sql']},
       {
-        'idx_downloads_downloadedAt':
-            'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
+        'idx_downloads_downloadedAt': 'CREATE INDEX idx_downloads_downloadedAt ON downloads (downloadedAt)',
         'idx_play_history_playedAt':
             'CREATE INDEX idx_play_history_playedAt ON play_history (playedAt)',
-        'idx_playlists_syncId': 'CREATE UNIQUE INDEX idx_playlists_syncId '
+        'idx_playlists_syncId':
+            'CREATE UNIQUE INDEX idx_playlists_syncId '
             'ON playlists (syncId) WHERE syncId IS NOT NULL',
-        'idx_playlist_tracks_order': 'CREATE INDEX idx_playlist_tracks_order '
+        'idx_playlist_tracks_order':
+            'CREATE INDEX idx_playlist_tracks_order '
             'ON playlist_tracks (playlistId, sortOrder, addedAt)',
         'idx_play_events_startedAt':
             'CREATE INDEX idx_play_events_startedAt ON play_events (startedAt)',
         'idx_play_events_endedAt':
             'CREATE INDEX idx_play_events_endedAt ON play_events (endedAt)',
-        'idx_play_events_trackId': 'CREATE INDEX idx_play_events_trackId '
+        'idx_play_events_trackId':
+            'CREATE INDEX idx_play_events_trackId '
             'ON play_events (trackId)',
         'idx_play_events_syncKey':
             'CREATE UNIQUE INDEX idx_play_events_syncKey '
-                'ON play_events (syncKey)',
+            'ON play_events (syncKey)',
         'idx_sync_journal_at':
             'CREATE INDEX idx_sync_journal_at ON sync_journal (at)',
       },
@@ -265,7 +280,9 @@ void main() {
 
   test('外键约束生效：孤立曲目写入被拒，删除列表级联删曲目', () async {
     await expectLater(
-      db.into(db.playlistTracks).insert(
+      db
+          .into(db.playlistTracks)
+          .insert(
             PlaylistTracksCompanion.insert(
               playlistId: 404,
               sourceKey: 'wy',
@@ -280,7 +297,9 @@ void main() {
     final playlistId = await db
         .into(db.playlists)
         .insert(PlaylistsCompanion.insert(name: 'L', createdAt: 1));
-    await db.into(db.playlistTracks).insert(
+    await db
+        .into(db.playlistTracks)
+        .insert(
           PlaylistTracksCompanion.insert(
             playlistId: playlistId,
             sourceKey: 'wy',
@@ -300,7 +319,9 @@ void main() {
     await db
         .into(db.playlists)
         .insert(PlaylistsCompanion.insert(name: 'B', createdAt: 2));
-    await db.into(db.playlists).insert(
+    await db
+        .into(db.playlists)
+        .insert(
           PlaylistsCompanion.insert(
             name: 'C',
             createdAt: 3,
@@ -308,7 +329,9 @@ void main() {
           ),
         );
     await expectLater(
-      db.into(db.playlists).insert(
+      db
+          .into(db.playlists)
+          .insert(
             PlaylistsCompanion.insert(
               name: 'D',
               createdAt: 4,

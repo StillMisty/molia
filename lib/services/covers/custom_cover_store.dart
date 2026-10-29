@@ -23,9 +23,10 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/files/app_data_directory.dart';
 import '../../domain/models/track.dart';
 import 'cover_resolution.dart' as cover_resolution;
 
@@ -73,10 +74,10 @@ class CustomCoverEntry {
   final int updatedAt;
 
   Map<String, Object?> toJson() => {
-        'path': path,
-        'hash': hash,
-        'updatedAt': updatedAt,
-      };
+    'path': path,
+    'hash': hash,
+    'updatedAt': updatedAt,
+  };
 
   static CustomCoverEntry? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -101,10 +102,13 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
   CustomCoverStore({
     Future<SharedPreferences> Function()? preferences,
     Future<Directory> Function()? supportDirectory,
+    Future<Directory?> Function()? legacyDirectory,
     DateTime Function()? clock,
-  })  : _preferences = preferences ?? SharedPreferences.getInstance,
-        _supportDirectory = supportDirectory ?? getApplicationSupportDirectory,
-        _clock = clock ?? DateTime.now;
+  }) : _preferences = preferences ?? SharedPreferences.getInstance,
+       _supportDirectory = supportDirectory ?? appDataDirectory,
+       _legacyDirectory = legacyDirectory ?? legacyAppDataDirectory,
+       _migrateLegacy = supportDirectory == null || legacyDirectory != null,
+       _clock = clock ?? DateTime.now;
 
   static CustomCoverStore _instance = CustomCoverStore();
 
@@ -132,6 +136,10 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
 
   final Future<SharedPreferences> Function() _preferences;
   final Future<Directory> Function() _supportDirectory;
+  final Future<Directory?> Function() _legacyDirectory;
+
+  /// 只有生产默认目录或显式注入旧目录时才迁移（测试注入新目录不碰 Roaming）。
+  final bool _migrateLegacy;
   final DateTime Function() _clock;
 
   /// UI 订阅通道：任何替换 / 重置都会自增。
@@ -158,6 +166,11 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
 
   Future<void> _load() async {
     try {
+      // Windows：先把旧 Roaming 目录的封面文件复制到 LocalAppData，并把
+      // prefs 索引里的旧 base 路径改写掉；否则下面的「剔除丢失文件」会把
+      // 用户封面全部剪掉。复制失败的文件保留旧路径（旧文件仍在，可继续用）。
+      final support = await _supportDirectory();
+      if (_migrateLegacy) await _migrateLegacyDirectory(support);
       final prefs = await _preferences();
       final raw = prefs.getString(prefsKey);
       if (raw != null && raw.isNotEmpty) {
@@ -201,6 +214,80 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
     }
     _loaded = true;
     _bumpRevision();
+  }
+
+  /// Windows 旧目录（Roaming）→ LocalAppData：复制封面并改写索引路径。
+  ///
+  /// 只在存在旧目录且与新目录不同时执行；复制失败只记日志，旧文件保留，
+  /// 索引里对应路径不改写（文件仍可读），下次启动继续尝试。
+  Future<void> _migrateLegacyDirectory(Directory support) async {
+    final legacy = await _legacyDirectory();
+    if (legacy == null) return;
+    if (p.normalize(p.absolute(legacy.path)) ==
+        p.normalize(p.absolute(support.path))) {
+      return;
+    }
+    await migrateLegacyDirectoryIfNeeded(
+      targetDirectory: support,
+      relativePath: directoryName,
+      legacyDirectory: legacy,
+    );
+    await _rewriteLegacyIndexPaths(legacy, support);
+  }
+
+  /// 把索引里的旧 base 路径改成新 base（目标文件不存在则保留旧路径）。
+  Future<void> _rewriteLegacyIndexPaths(
+    Directory legacy,
+    Directory support,
+  ) async {
+    try {
+      final prefs = await _preferences();
+      final raw = prefs.getString(prefsKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return;
+      final oldBase = p.join(legacy.path, directoryName);
+      final newBase = p.join(support.path, directoryName);
+
+      Future<String?> rewrite(Object? value) async {
+        if (value is! String || !p.isWithin(oldBase, value)) return null;
+        final candidate = p.join(newBase, p.relative(value, from: oldBase));
+        return await _fileExists(candidate) ? candidate : null;
+      }
+
+      var changed = false;
+      final tracks = decoded['tracks'];
+      if (tracks is Map) {
+        for (final entry in tracks.entries) {
+          final item = entry.value;
+          if (item is! Map) continue;
+          final path = await rewrite(item['path']);
+          if (path != null && path != item['path']) {
+            item['path'] = path;
+            changed = true;
+          }
+        }
+      }
+      final defaultCover = decoded['default'];
+      if (defaultCover is Map) {
+        final path = await rewrite(defaultCover['path']);
+        if (path != null && path != defaultCover['path']) {
+          defaultCover['path'] = path;
+          changed = true;
+        }
+      }
+      if (changed) {
+        final written = await prefs.setString(prefsKey, jsonEncode(decoded));
+        if (written) {
+          debugPrint('[Molia] 自定义封面索引已迁移到 LocalAppData');
+        } else {
+          // 平台拒绝：索引仍是旧路径（文件已复制），下次启动重试改写。
+          debugPrint('[Molia] 自定义封面索引迁移写回被平台拒绝，下次启动重试');
+        }
+      }
+    } catch (e) {
+      debugPrint('[Molia] 迁移自定义封面索引失败（保留旧路径）：$e');
+    }
   }
 
   /// 注册变化回调（返回取消函数）。

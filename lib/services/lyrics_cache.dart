@@ -3,9 +3,9 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:crypto/crypto.dart' show md5;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../data/files/app_data_directory.dart';
 import 'cache_storage.dart' show CacheUsage;
 import 'lyrics/lyric_provider.dart' show LyricCacheData;
 
@@ -166,6 +166,28 @@ class LyricsCache {
     }
   }
 
+  /// 文件后端启用后，删除旧版 prefs 后端遗留的歌词键。
+  ///
+  /// 这些键在文件模式下永远不会再被读取，却会随任意偏好变更被整文件重写：
+  /// Windows 实测 prefs 约 500KB，其中 43 万字节是死歌词键，一次同步状态
+  /// 更新就要重写整份。只在确认有文件后端时清理；prefs 回退模式不能删，
+  /// 否则会丢当前缓存。失败逐键忽略，下次启动会重试。
+  Future<void> cleanupLegacyPreferences() async {
+    final directory = await _directoryOrNull();
+    if (directory == null) return;
+    final prefs = await _prefsOrNull();
+    if (prefs == null) return;
+    final keys =
+        prefs.getKeys().where((key) => key.startsWith(keyPrefix)).toList();
+    for (final key in keys) {
+      try {
+        await prefs.remove(key);
+      } catch (_) {
+        // 单个键删除失败不阻断其余清理；下次启动再试。
+      }
+    }
+  }
+
   /// 清除歌词分区：文件模式删目录内文件，没有文件后端时清 prefs 规范键。
   ///
   /// 保留目录本身（与音频 / 封面分区一致）；单个文件已不存在或删除失败时
@@ -316,7 +338,7 @@ class LyricsCache {
 /// Future 可能永远不完成。
 Future<Directory?> resolveAppSupportLyricsDirectory() async {
   try {
-    final support = await getApplicationSupportDirectory();
+    final support = await appDataDirectory();
     return Directory(
       LyricsCache._joinPath(support.path, LyricsCache.directoryName),
     );

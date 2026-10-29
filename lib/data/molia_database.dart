@@ -1,13 +1,14 @@
 /// 本地数据库（drift）：资料库（播放历史 / 用户列表 / 删除墓碑 / 同步已知版本）
 /// + 跨设备增量日志（sync_journal / sync_journal_state）+ 听歌统计
-/// （play_events / play_tracks）+ 本地下载。
+/// （play_events / play_tracks）+ 本地下载 + 播放会话。
 ///
 /// `schemaVersion = 1` 是 fresh 基线（库文件名见 [moliaDatabaseFileName]，
-/// 不迁移历史数据）；后续结构变更仍必须写增量迁移并保留数据
-/// （见 docs/adr/0005-drift-migration.md）。
+/// 不迁移历史数据）；`2` 新增播放会话两表并保留 v1 数据（见
+/// docs/adr/0005-drift-migration.md、docs/adr/0017-playback-session-sql.md）。
 ///
-/// 只 import drift / drift_flutter / path_provider：`dart:io` 不进入数据层
-/// （`NativeDatabase` 仅测试内存库使用，见 test/support/memory_database.dart）。
+/// 文件复制 / 目录迁移收在 [appDataDirectory] 旁边的 helper 里（带 `dart:io`），
+/// 本文件仍只做库声明与路径选择；`NativeDatabase` 仅测试内存库使用
+/// （见 test/support/memory_database.dart）。
 library;
 
 import 'package:drift/drift.dart';
@@ -15,6 +16,8 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/models/device_sync.dart';
+import 'files/app_data_directory.dart';
+import 'molia_database.steps.dart';
 
 part 'molia_database.g.dart';
 
@@ -300,7 +303,43 @@ class PlayEvents extends Table {
   IntColumn get versionCounter => integer().withDefault(const Constant(0))();
 }
 
-/// 生产库文件名（drift_flutter 落在应用支持目录，见 [_databaseDirectory]）。
+/// 播放会话的整份队列快照（单行 `id = 1`）。
+///
+/// 为什么与游标分表：整份 JSON 含队列每首曲目的原始 payload，大队列下是
+/// MB 级大对象；进度 / 下标每次动作都变，把它和 payload 放同一行会让每次
+/// `UPDATE` 都重写整份大对象。这里只在队列 / 模式 / 上下文变化时写。
+class PlaybackSessionPayloads extends Table {
+  @override
+  String get tableName => 'playback_session_payloads';
+
+  IntColumn get id => integer()();
+  TextColumn get json => text()();
+
+  /// 内容时间（与 JSON 里的 `savedAt` 同义，供游标新旧比较）。
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 播放会话游标（单行 `id = 1`）：下标 / 进度 / 内容时间。
+///
+/// 动作（播放 / 暂停 / seek / 切歌 / 曲末 / 退后台）时更新；不存在 1Hz
+/// 周期写。`cursorIndex` 不叫 `index`：SQLite 关键字，避免生成 SQL 的歧义。
+class PlaybackSessionCursors extends Table {
+  @override
+  String get tableName => 'playback_session_cursors';
+
+  IntColumn get id => integer()();
+  IntColumn get cursorIndex => integer()();
+  IntColumn get positionMs => integer()();
+  IntColumn get savedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 生产库文件名（drift_flutter 落在应用数据目录，见 [_databaseDirectory]）。
 ///
 /// fresh 基线换了文件名：旧库（`molia_database`）不迁移、不读取，避免把
 /// 历史 schema 带进新基线。
@@ -318,6 +357,8 @@ const String moliaDatabaseFileName = 'molia_database_v2';
     PlayTracks,
     PlayEvents,
     Downloads,
+    PlaybackSessionPayloads,
+    PlaybackSessionCursors,
   ],
 )
 class MoliaDatabase extends _$MoliaDatabase {
@@ -347,29 +388,49 @@ class MoliaDatabase extends _$MoliaDatabase {
     );
   }
 
-  /// 数据库目录：应用支持目录（Windows `%APPDATA%\top.stillmisty\molia`、
-  /// Linux `~/.local/share/top.stillmisty.molia`），与设置等用户数据同处。
+  /// 数据库目录：应用数据目录（Windows `%LOCALAPPDATA%\top.stillmisty\molia`、
+  /// Linux `~/.local/share/top.stillmisty.molia`）。Windows 首次启动会把旧
+  /// Roaming 目录里的库（含 WAL / SHM）复制过来；复制失败回退旧目录并记日志，
+  /// 下次启动重试。
   ///
   /// 不用文档目录：那是用户可见区域（Windows 的 `Documents`），还可能被
   /// OneDrive 等同步工具接管——SQLite 文件被同步有损坏风险。
   static Future<Object> _databaseDirectory() async {
     try {
-      return await getApplicationSupportDirectory();
+      final target = await appDataDirectory();
+      if (hasSeparateLegacyDirectory) {
+        final legacy = await legacyAppDataDirectory();
+        if (legacy != null) {
+          final migrated = await migrateLegacyDatabaseFile(
+            targetDirectory: target,
+            legacyDirectory: legacy,
+            fileName: moliaDatabaseFileName,
+          );
+          if (!migrated) return legacy;
+        }
+      }
+      return target;
     } on MissingPlatformDirectoryException {
       return await getApplicationDocumentsDirectory();
     }
   }
 
-  /// 当前 schema 版本：`1` 为 fresh 基线（全部表一次建出，不迁移历史数据）。
+  /// 当前 schema 版本：`1` 为 fresh 基线，`2` 新增播放会话两表。
   ///
   /// 后续结构变更必须写增量迁移：提版本号 → `dart run drift_dev make-migrations`
   /// 生成 schema 快照 → 用 `stepByStep` 写迁移并保留数据（见 ADR-0005）。
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
+        onUpgrade: stepByStep(
+          from1To2: (m, schema) async {
+            await m.createTable(schema.playbackSessionPayloads);
+            await m.createTable(schema.playbackSessionCursors);
+          },
+        ),
         beforeOpen: (details) async {
           // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
           await customStatement('PRAGMA foreign_keys = ON');

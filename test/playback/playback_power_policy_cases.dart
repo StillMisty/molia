@@ -13,32 +13,29 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('PlaybackPowerPolicy', () {
-    test('默认前台：高频采样、1s 会话落盘', () {
+    test('默认前台：高频采样', () {
       final policy = PlaybackPowerPolicy();
       addTearDown(policy.dispose);
 
       expect(policy.isForeground, isTrue);
       expect(policy.desktopLyricsActive, isFalse);
       expect(policy.keepHighFrequencyPosition, isTrue);
-      expect(policy.sessionSaveInterval, const Duration(seconds: 1));
     });
 
-    test('退后台：降为 1s 采样判据关闭、会话落盘放宽到 15s', () {
+    test('退后台：降为 1s 采样判据关闭', () {
       final policy = PlaybackPowerPolicy();
       addTearDown(policy.dispose);
 
       policy.markBackground();
       expect(policy.isForeground, isFalse);
       expect(policy.keepHighFrequencyPosition, isFalse);
-      expect(policy.sessionSaveInterval, const Duration(seconds: 15));
 
       policy.markForeground();
       expect(policy.isForeground, isTrue);
       expect(policy.keepHighFrequencyPosition, isTrue);
-      expect(policy.sessionSaveInterval, const Duration(seconds: 1));
     });
 
-    test('后台开桌面歌词：仍按高频采样，会话落盘保持后台 15s', () {
+    test('后台开桌面歌词：仍按高频采样', () {
       final policy = PlaybackPowerPolicy();
       addTearDown(policy.dispose);
 
@@ -47,11 +44,6 @@ void main() {
 
       expect(policy.desktopLyricsActive, isTrue);
       expect(policy.keepHighFrequencyPosition, isTrue);
-      expect(
-        policy.sessionSaveInterval,
-        const Duration(seconds: 15),
-        reason: '桌面歌词只影响位置采样，不改变会话落盘节流',
-      );
 
       policy.setDesktopLyricsActive(false);
       expect(policy.keepHighFrequencyPosition, isFalse);

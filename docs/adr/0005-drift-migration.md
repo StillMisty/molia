@@ -43,10 +43,11 @@
    native: DriftNativeOptions(databaseDirectory: ...))` 内部走
    `NativeDatabase.createBackgroundConnection`，SQL 与结果解码不占 UI 线程；
    桌面端不再需要数据库工厂初始化（`lib/data/database_factory_init*.dart` 已删除，
-   `main()` 里的调用一并移除）。库文件落在**应用支持目录**（Windows
-   `%APPDATA%\top.stillmisty\molia`、Linux `~/.local/share/top.stillmisty.molia`，
-   与设置等数据同处；该目录不可用时回退文档目录）。数据库对象是懒加载单例
-   （`MoliaDatabase.instance`），首个查询
+   `main()` 里的调用一并移除）。库文件落在**应用数据目录**（Windows
+   `%LOCALAPPDATA%\top.stillmisty\molia`、Linux
+   `~/.local/share/top.stillmisty.molia`，与缓存 / 会话等本机数据同处；该目录
+   不可用时回退文档目录）。Windows 旧 Roaming 库在首次启动时复制一次，见
+   ADR-0017。数据库对象是懒加载单例（`MoliaDatabase.instance`），首个查询
    才真正开库。
 5. **原生 SQLite 由 Dart build hooks 提供**：`sqlite3 ^3.7.0` 经 Dart hooks 打包
    预编译 `libsqlite3`（Android / iOS / macOS / Windows / Linux），不再使用

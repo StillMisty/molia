@@ -6,9 +6,10 @@
 
 ## 1. 结论（一行）
 
-后台听歌只保留**播放必需**与**用户仍在看的输出**：位置采样 / 会话落盘降频
-（#44），封面预取、无消费面的取色、无输出的取词、下一首音频字节预取全部停掉；
-下一首直链仍预热，定时关闭的 partial wake lock 只在后台 / 息屏时持有。
+后台听歌只保留**播放必需**与**用户仍在看的输出**：位置采样降频（#44），
+会话落盘不再有周期写（只在动作 / 退后台时提交），封面预取、无消费面的取色、
+无输出的取词、下一首音频字节预取全部停掉；下一首直链仍预热，定时关闭的
+partial wake lock 只在后台 / 息屏时持有。
 
 ## 2. 信号源
 
@@ -17,7 +18,7 @@
 
 | 信号 | 来源 | 用途 |
 | --- | --- | --- |
-| 前后台 | Android / iOS `AppLifecycleListener`（`onResume` / `onPause` / `onHide`） | 位置采样档位、会话落盘节流、后台工作门控、定时关闭 wake lock |
+| 前后台 | Android / iOS `AppLifecycleListener`（`onResume` / `onPause` / `onHide`） | 位置采样档位、退后台会话提交、后台工作门控、定时关闭 wake lock |
 | 桌面歌词可展示 | `LyricsChannel.isSupportedPlatform && desktopEnabled` | 后台位置采样保持高频；允许后台取色（悬浮窗可跟随封面配色） |
 | 任一歌词输出 | 桌面 / 通知锁屏 / 蓝牙开关 | 决定后台是否值得取词 |
 | 桌面窗口可见性 | `AppPresence`（**仅桌面**） | 托盘 / 最小化停产封面预取与取色 |
@@ -30,7 +31,7 @@
 | 位置 | 前台 | 后台（息屏 / 切走） |
 | --- | --- | --- |
 | 位置采样 `LocalPlaybackService` | `positionStream`（约 5Hz） | 1s 轮询；后台暂停不采样 |
-| 会话落盘 `PlaybackSessionCoordinator` | 1s 节流 | 15s 节流（进入后台先强制提交一次，store 按队列是否变化决定整份 / 游标） |
+| 会话落盘 `PlaybackSessionCoordinator` | 动作时提交（播放 / 暂停 / seek / 切歌 / 曲末等），无周期写 | 进入后台提交一次；后台无定时器（游标单行，队列变化才写 payload） |
 | 封面预取 `PlaybackObserver` | 当前 + 下一首 + 队列 5 张 | 不预取；回前台补一次 |
 | 封面取色 `ArtworkThemeSync` | 正常取色 | 仅桌面歌词可能展示时取色；否则只记 URL，回前台补 |
 | 当前 / 下一首歌词 `wireLyricsSession` / `wireNextTrackLyricsPreload` | 正常取词 / 预载 | 有任一词输出才取词；否则等回前台或打开输出 |
@@ -48,6 +49,9 @@
 - **下一首字节预取**：边播当前曲目 + 整首预下载下一曲会让网络长期停在
   高吞吐状态。直链仍预热，切歌不会多等一次取链；缺少的只是「下一首本地
   已就绪」的提前量，真正播放时会边播边缓存。
+- **会话落盘**：以前进度按 1s / 15s 周期写，会把整份队列 JSON（含每首 payload）
+  反复写盘；现在只在动作 / 退后台时写 cursor 单行，队列内容不变就不碰 payload。
+  进程被回收最多丢「最后一个动作之后」的进度，这是可接受的取舍。
 - **定时关闭 wake lock**：前台屏幕亮着时主线程 Handler 不会被 Doze 冻结，
   为一个 30–60 分钟的定时常驻 partial wake lock 只会阻止 CPU 深睡。
 

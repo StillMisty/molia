@@ -219,6 +219,29 @@ void main() {
     expect(prefs.getString('other_key'), 'keep');
   });
 
+  test('文件后端清理旧 prefs 歌词键，不碰其它键', () async {
+    await prefs.setString('lyrics_cache_a', '{}');
+    await prefs.setString('lyrics_cache_b', '{}');
+    await prefs.setString('other_key', 'keep');
+
+    await LyricsCache(
+      prefs: prefs,
+      directory: tempRoot,
+    ).cleanupLegacyPreferences();
+
+    expect(prefs.containsKey('lyrics_cache_a'), isFalse);
+    expect(prefs.containsKey('lyrics_cache_b'), isFalse);
+    expect(prefs.getString('other_key'), 'keep');
+  });
+
+  test('prefs 回退模式不清理歌词键（仍是唯一副本）', () async {
+    await prefs.setString('lyrics_cache_a', '{}');
+
+    await LyricsCache(prefs: prefs).cleanupLegacyPreferences();
+
+    expect(prefs.getString('lyrics_cache_a'), '{}');
+  });
+
   test('prefs 后端 usageOf 只统计该曲目的规范键字节', () async {
     const value = '{"provider":"qq","lyric":"x","timestamp":1}';
     await prefs.setString('lyrics_cache_qy:1', value);

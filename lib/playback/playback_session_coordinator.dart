@@ -6,12 +6,11 @@
 /// 分叉，恢复态展示快照也在 provider 里手工拼装；同一个会话存储由 provider /
 /// 观察者 / 系统媒体 handler 三处并写，只靠 `pendingWrite` 排序。收进本模块后：
 /// - 三阶段状态机 [phase] 只在这里演进，命令按阶段路由（provider 不再分叉）；
-/// - 恢复态展示快照只在这里构造（[_publishRestoredSnapshot]）；
-/// - 落盘（会话 JSON / 轻量进度键 / 清除）全部经本模块，节流口径见
-///   [_sessionSaveInterval] / [_sessionRefreshInterval]，`pendingWrite` 串行化
-///   随之收进来；改变会话的命令（seek / 暂停 / 切歌 / 模式 / 停止 / 换源）返回前
-///   等写队列排空（「已提交」语义），系统媒体控制与壳层挂起 / 退出共用
-///   同一个写队列；
+/// - 落盘（payload / cursor / 清除）全部经本模块：**只在具体动作时写**，
+///   没有 1Hz / 定时写；`pendingWrite` 串行化随之收进来。动作 = 播放 / 暂停 /
+///   seek / 切歌 / 队列模式上下文变化 / 曲末 / 停止 / 换源 / 退后台 / 退出；
+///   改变会话的命令返回前等写队列排空（「已提交」语义），系统媒体控制与
+///   壳层挂起 / 退出共用同一个写队列；
 /// - 「冷启动跳过恢复」的判据（开关关闭 / 无会话 / 已有真实播放）只在这里。
 library;
 
@@ -71,13 +70,13 @@ class PlaybackSessionCoordinator
     required this._store,
     required this._settings,
     this._onRestoredTrack,
-    DateTime Function()? clock,
     PlaybackPowerPolicy? powerPolicy,
-  })  : _clock = clock ?? DateTime.now,
-        _powerPolicy = powerPolicy ?? PlaybackPowerPolicy() {
+  }) : _powerPolicy = powerPolicy ?? PlaybackPowerPolicy() {
     _position = _RestoredPositionChannel(_facade.position);
     _facade.snapshot.addListener(_onLiveSnapshot);
-    _facade.position.addListener(_onPositionTick);
+    // 曲末完成只在事件到达时写一次：单曲循环 / 列表循环单曲重播没有
+    // 「曲目 id 变化」的快照，不能只靠快照监听。
+    _trackCompletions = _facade.trackCompletions.listen(_onTrackCompleted);
     _powerPolicy.addListener(_onPowerPolicyChanged);
     _wasForeground = _powerPolicy.isForeground;
     // 构造时同步一次快照：接线前真实播放可能已恢复曲目（如系统媒体会话），
@@ -85,17 +84,6 @@ class PlaybackSessionCoordinator
     // 否则启动即播放时第一次暂停会被当成「本就没在播」而少一次强制落盘）。
     _handleLiveSnapshot(_facade.snapshot.value);
   }
-
-  /// 会话进度落盘节流：前台 1s / 后台 15s（[PlaybackPowerPolicy.sessionSaveInterval]）。
-  ///
-  /// 息屏听歌不再每秒重写 prefs 文件，进程被回收最多丢约 15s 进度；曲目
-  /// 切换 / 暂停 / 进入后台仍强制整份落盘。
-  Duration get _sessionSaveInterval => _powerPolicy.sessionSaveInterval;
-
-  /// 整份会话（含队列 JSON）的刷新上限：进度 tick 默认只写轻量进度键，
-  /// 但每满一分钟整份重写一次——`savedAt` 随之刷新，「正在播放的设备持续
-  /// 抢占」的跨设备同步语义保持不变，而整队列序列化从每秒一次降到每分钟一次。
-  static const Duration _sessionRefreshInterval = Duration(minutes: 1);
 
   final PlaybackFacade _facade;
   final PlaybackSessionStore _store;
@@ -105,11 +93,11 @@ class PlaybackSessionCoordinator
   /// 播放功耗策略（组合根注入共享实例；默认前台实例便于单测）。
   final PlaybackPowerPolicy _powerPolicy;
 
-  /// 上一帧是否前台：只在「前台 → 后台」那一刻强制整份落盘一次。
+  /// 上一帧是否前台：只在「前台 → 后台」那一刻提交一次。
   bool _wasForeground = true;
 
-  /// 落盘节流判定用的时钟（测试注入）。
-  final DateTime Function() _clock;
+  /// 曲末完成订阅（单曲循环 / 单曲队列重播没有曲目 id 变化，必须单独落盘）。
+  StreamSubscription<Track>? _trackCompletions;
 
   /// 进度通道（恢复态覆盖值；见 [_RestoredPositionChannel]）。
   late final _RestoredPositionChannel _position;
@@ -134,10 +122,7 @@ class PlaybackSessionCoordinator
   /// 启动时是否恢复上次播放（曲目 / 队列 / 进度）；设置页开关，默认开。
   bool _restoreSessionEnabled = kRestoreSessionEnabled.defaultValue;
 
-  /// 上次整份落盘时间：进度 tick 节流与强制落盘共用同一口径。
-  DateTime _lastSessionSave = DateTime.fromMillisecondsSinceEpoch(0);
-
-  /// 最近一次整份写入的会话内容（命令提交点的去重依据）。
+  /// 最近一次写入的会话内容（命令提交点的去重依据）。
   ///
   /// 命令改完 facade 后统一走 [_commitLiveSession]：若快照监听已经写过同一份
   /// 内容（切歌 / 暂停），这里按内容比较跳过重复写——不再用「写次数是否变化」
@@ -147,8 +132,19 @@ class PlaybackSessionCoordinator
   /// 上一帧是否在播放（播放中→暂停/停止时强制保存一次进度）。
   bool _wasPlaying = false;
 
-  /// 已处理过的当前曲目（去重：真实播放接管只发生一次、切歌整份落盘一次）。
+  /// 已处理过的当前曲目（去重：真实播放接管只发生一次、切歌提交一次）。
   String? _processedTrackId;
+
+  /// 上一帧的队列 / 下标 / 模式 / 上下文：只比较内容变化，loading / isPlaying
+  /// 抖动不触发 payload 重写。
+  ///
+  /// 下标必须单独比较：队列里有重复曲目（同一 TrackId）时，自动切到另一
+  /// 槽位不会改变 trackId / 队列，但 cursor 的 index 必须更新，否则冷启动
+  /// 会回到旧槽位（next / previous 语义错）。
+  List<Track>? _observedQueue;
+  int? _observedIndex;
+  PlayMode? _observedMode;
+  PlaybackContext? _observedContext;
 
   // ── 出口 ───────────────────────────────────────────────
 
@@ -194,6 +190,8 @@ class PlaybackSessionCoordinator
   /// 会话恢复）三种情况都不装载，已有真实播放不会被恢复态覆盖。
   Future<bool> load() async {
     try {
+      // 即使用户关闭了恢复开关，也要清掉旧 prefs 会话（不读内容）。
+      await _store.cleanupLegacyPreferences();
       _restoreSessionEnabled = await _settings.read(kRestoreSessionEnabled);
       if (!_restoreSessionEnabled) return false;
       final session = await _store.load();
@@ -280,8 +278,8 @@ class PlaybackSessionCoordinator
   /// 播放：恢复态 = 用保存的队列 / 下标重新取链并跳回保存进度；
   /// live = 暂停时才起播（幂等，不会把系统「播放」键变成暂停）。
   ///
-  /// 播放不改变持久化会话的内容（会话不存 isPlaying），不需要落盘；恢复态
-  /// 的恢复流程自己会在末尾提交恢复进度。
+  /// 播放是显式动作：起播后提交一次（刷新 cursor 的 savedAt），恢复态的
+  /// 恢复流程自己会在末尾提交恢复进度。
   @override
   Future<PlaybackCommandOutcome> play() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
@@ -291,13 +289,14 @@ class PlaybackSessionCoordinator
       return PlaybackCommandOutcome.none;
     }
     await _facade.play();
+    await _commitLiveSession(force: true);
     return PlaybackCommandOutcome.trackOnly;
   }
 
   /// 暂停：恢复态没有真实播放（空操作）；live 转发 facade，返回前等会话提交。
   ///
   /// 「暂停 → 重开应用恢复暂停态」依赖进度与暂停时刻的队列：快照监听
-  /// （playing → paused）会强制整份落盘；[_commitLiveSession] 按内容去重，
+  /// （playing → paused）会提交一次；[_commitLiveSession] 按内容去重，
   /// 因此同一动作只会产生一次写请求，且返回写入完成之后。
   @override
   Future<PlaybackCommandOutcome> pause() async {
@@ -337,7 +336,7 @@ class PlaybackSessionCoordinator
       return resume(startIndex: next);
     }
     await _facade.next();
-    // 切歌的整份落盘由快照监听触发；提交点按内容去重并等它排空。
+    // 切歌的会话提交由快照监听触发；提交点按内容去重并等它排空。
     await _commitLiveSession();
     return PlaybackCommandOutcome.trackOnly;
   }
@@ -384,7 +383,7 @@ class PlaybackSessionCoordinator
   /// 改保存的会话只会让 UI 显示一首并未播放的曲目——因此返回
   /// [PlaybackCommandOutcome.none]。未命中（uri 不在队列）同样是 no-op。
   ///
-  /// live 返回前必须保证换源结果已写进会话，而不是等 1s 节流 / 1min 整份刷新：
+  /// live 返回前必须保证换源结果已写进会话，而不是等下一次动作：
   /// 换源后又指向过期直链，进程此时被杀，重开应用恢复的还是旧来源。提交点
   /// 按内容去重：当前曲目 id 变了时快照监听已写同一份内容，不再补写；同 id
   /// 换元数据 / 非当前槽位则由这里补一次。
@@ -429,8 +428,8 @@ class PlaybackSessionCoordinator
   /// seek：恢复装载期间记下用户目标（恢复流程末尾以它为准），恢复态只更新
   /// 保存的进度（点播放时再落到真实播放器上），live 转发 facade 并强制落盘。
   ///
-  /// live 与系统 seek 同一口径：拖动 / 点歌词行也是一次会话内容变化，
-  /// 不依赖 1s 节流（进程紧接着被杀时重开要落在新位置）。返回的 Future 在
+  /// live 与系统 seek 同一口径：拖动只在落点提交（滑杆 onChangeEnd / 点歌词
+  /// 行），不是每一帧写；进程紧接着被杀时重开要落在新位置。返回的 Future 在
   /// 写队列排空后结束。
   @override
   Future<PlaybackCommandOutcome> seekToPosition(Duration position) async {
@@ -493,7 +492,7 @@ class PlaybackSessionCoordinator
   /// 设置播放模式。
   ///
   /// 恢复态必须同步改写保存的会话（否则模式按钮看起来「点不动」），恢复
-  /// 播放时会把该模式带给后端；live 立即整份落盘并等它写完（重开应用恢复的
+  /// 播放时会把该模式带给后端；live 立即提交并等它写完（重开应用恢复的
   /// 是改后的模式）。
   @override
   Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode) async {
@@ -579,7 +578,7 @@ class PlaybackSessionCoordinator
       }
       _dropRestoredSession();
       // 立刻把恢复进度写回会话：装载时的强制保存记的是 0，
-      // 若在节流窗口内被杀进程，下次冷启动会从 0 开始。
+      // 若此时被杀进程，下次冷启动会从 0 开始。
       await _commitLiveSession();
       return PlaybackCommandOutcome.trackAndQueue;
     } catch (e) {
@@ -612,36 +611,21 @@ class PlaybackSessionCoordinator
   @override
   Future<void> clearRemote() => _store.clear();
 
-  /// 强制落盘当前会话（进入后台 / 生命周期 paused / 系统媒体控制调用）。
+  /// 强制提交当前会话（进入后台 / 桌面隐藏 / 退出 / 系统媒体控制调用）。
   ///
   /// 返回的 Future 在写请求落盘后结束：系统控制动作 await 它，保证控制动作
   /// 返回时会话已在本地——进程随后被系统回收，重开应用仍能恢复上一首 / 队列 /
-  /// 模式 / 进度。
+  /// 模式 / 进度。这是动作入口，不引入任何定时器。
   Future<void> flushSession() async {
-    _maybeSaveSession(force: true);
+    final live = _facade.snapshot.value;
+    if (_hasSavableSession(live)) _writeSession(live);
     await _store.pendingWrite;
   }
 
-  /// 高频进度 tick：写轻量进度键（必要时整份刷新，见 [_sessionRefreshInterval]）。
-  void _onPositionTick() {
-    final live = _facade.snapshot.value;
-    if (!_hasSavableSession(live)) return;
-    final now = _clock();
-    final elapsed = now.difference(_lastSessionSave);
-    if (elapsed < _sessionSaveInterval) return;
-    if (elapsed >= _sessionRefreshInterval) {
-      _writeSession(live, now);
-      return;
-    }
-    _lastSessionSave = now;
-    unawaited(_store.savePosition(_facade.position.value.inMilliseconds));
-  }
-
-  /// 前后台切换：进入后台先强制整份落盘一次（节流窗口内也不等），之后
-  /// 进度 tick 改按 15s 节流；回前台恢复 1s 节流（不必额外写一次）。
+  /// 前后台切换：进入后台提交一次（息屏 / 切走前把最后进度写回）。
   ///
-  /// 与壳层 paused / 桌面退出共用 [flushSession] 这个提交入口；生命周期回调
-  /// 不能 await，用 `unawaited` 触发（写队列仍按调用顺序串行）。
+  /// 与壳层 paused / 桌面隐藏 / 退出共用 [flushSession] 这个提交入口；
+  /// 生命周期回调不能 await，用 `unawaited` 触发（写队列仍按顺序串行）。
   void _onPowerPolicyChanged() {
     final foreground = _powerPolicy.isForeground;
     final enteredBackground = _wasForeground && !foreground;
@@ -649,24 +633,51 @@ class PlaybackSessionCoordinator
     if (enteredBackground) unawaited(flushSession());
   }
 
-  /// 真实播放快照变化：真实播放接管时撤下恢复数据，并按口径强制落盘。
+  /// 曲末完成：单曲循环 / 单曲队列重播没有曲目 id 变化，快照监听不会触发；
+  /// 在完成事件到达时提交一次进度（自动切歌随后还会按新曲目再写游标）。
+  void _onTrackCompleted(Track track) {
+    final live = _facade.snapshot.value;
+    if (live.current?.id != track.id) return;
+    _maybeSaveSession();
+  }
+
+  /// 真实播放快照变化：真实播放接管时撤下恢复数据，内容变化时提交。
+  ///
+  /// 只比较会落盘的字段（曲目 / 队列内容 / 下标 / 模式 / 上下文 / 播放态
+  /// 转暂停），loading / isPlaying 抖动不写 payload。下标覆盖「同曲目不同
+  /// 队列槽位」（重复曲目）的自动切换。
   void _onLiveSnapshot() => _handleLiveSnapshot(_facade.snapshot.value);
 
   void _handleLiveSnapshot(PlaybackSnapshot live) {
     final trackId = live.current?.id.uri;
+    final trackChanged = trackId != _processedTrackId;
     if (trackId == null) {
       _processedTrackId = null;
-    } else if (trackId != _processedTrackId) {
+    } else if (trackChanged) {
       _processedTrackId = trackId;
       // 真实播放接管：撤下冷启动恢复态。恢复播放的 seek 尚未落地时，
       // 继续沿用恢复进度显示（见 [_resumeRestoring]），避免进度条闪回 0。
       _dropRestoredSession(keepPosition: _resumeRestoring);
-      // 曲目切换：提交会话（store 内部按队列是否变化决定整份重写还是只写游标）。
-      _maybeSaveSession(force: true);
     }
-    // 播放中→暂停/停止：强制保存一次进度（避免节流窗口内丢进度）。
-    if (_wasPlaying && !live.isPlaying) {
-      _maybeSaveSession(force: true);
+
+    final queueChanged = !_sameTrackList(live.queue, _observedQueue);
+    final indexChanged = live.currentIndex != _observedIndex;
+    final modeChanged = live.mode != _observedMode;
+    final contextChanged = live.context != _observedContext;
+    _observedQueue = live.queue;
+    _observedIndex = live.currentIndex;
+    _observedMode = live.mode;
+    _observedContext = live.context;
+
+    // 曲目 / 队列 / 下标 / 模式 / 上下文变化，或播放中→暂停/停止：提交一次。
+    if (trackChanged ||
+        queueChanged ||
+        indexChanged ||
+        modeChanged ||
+        contextChanged) {
+      _maybeSaveSession();
+    } else if (_wasPlaying && !live.isPlaying) {
+      _maybeSaveSession();
     }
     _wasPlaying = live.isPlaying;
   }
@@ -675,24 +686,16 @@ class PlaybackSessionCoordinator
   bool _hasSavableSession(PlaybackSnapshot live) =>
       live.current != null && live.queue.isNotEmpty && live.currentIndex >= 0;
 
-  /// 保存当前会话（节流；曲目切换 / 暂停 / seek 落地后强制）。
-  void _maybeSaveSession({bool force = false}) {
+  /// 保存当前快照对应的会话（store 决定写 payload 还是只写 cursor）。
+  void _maybeSaveSession() {
     final live = _facade.snapshot.value;
     if (!_hasSavableSession(live)) return;
-    final now = _clock();
-    if (!force && now.difference(_lastSessionSave) < _sessionSaveInterval) {
-      return;
-    }
-    _writeSession(live, now);
+    _writeSession(live);
   }
 
-  /// 提交落盘：`savedAt` 随 [now] 刷新并触发 `onSaved`。
-  ///
-  /// store 内部决定整份重写（队列 / 模式 / 上下文变化）还是只写游标键
-  /// （切歌 / 暂停 / seek）。
-  void _writeSession(PlaybackSnapshot live, DateTime now) {
+  /// 提交落盘：`savedAt` 由 store 按本次动作刷新并触发 `onSaved`。
+  void _writeSession(PlaybackSnapshot live) {
     final session = _sessionOf(live);
-    _lastSessionSave = now;
     _lastWrittenSession = session;
     unawaited(_store.save(session));
   }
@@ -700,15 +703,15 @@ class PlaybackSessionCoordinator
   /// 命令的唯一会话提交点：facade 已改完后调用一次。
   ///
   /// 快照监听可能已经替同一份内容写过会话（切歌 / 暂停），这里按内容比较
-  /// 跳过重复写——不再用「写次数是否变化」猜监听有没有替我写。末尾等写队列
+  /// 跳过重复写；[force] 用于显式动作（播放）刷新 cursor 时间。末尾等写队列
   /// 排空，保证命令返回时会话已在本地（ADR-0010 的「返回即已提交」）。
-  Future<void> _commitLiveSession() async {
+  Future<void> _commitLiveSession({bool force = false}) async {
     final live = _facade.snapshot.value;
     if (_hasSavableSession(live)) {
       final session = _sessionOf(live);
       final last = _lastWrittenSession;
-      if (last == null || !_sameSession(last, session)) {
-        _maybeSaveSession(force: true);
+      if (force || last == null || !_sameSession(last, session)) {
+        _writeSession(live);
       }
     }
     await _store.pendingWrite;
@@ -776,7 +779,8 @@ class PlaybackSessionCoordinator
   void dispose() {
     _powerPolicy.removeListener(_onPowerPolicyChanged);
     _facade.snapshot.removeListener(_onLiveSnapshot);
-    _facade.position.removeListener(_onPositionTick);
+    unawaited(_trackCompletions?.cancel());
+    _trackCompletions = null;
     _position.dispose();
   }
 }
@@ -794,10 +798,15 @@ bool _sameSession(PlaybackSession a, PlaybackSession b) {
       a.context != b.context) {
     return false;
   }
-  if (identical(a.tracks, b.tracks)) return true;
-  if (a.tracks.length != b.tracks.length) return false;
-  for (var i = 0; i < a.tracks.length; i++) {
-    if (a.tracks[i] != b.tracks[i]) return false;
+  return _sameTrackList(a.tracks, b.tracks);
+}
+
+/// 两份队列内容是否相同（`identical` 快路径 + 逐曲相等）。
+bool _sameTrackList(List<Track>? a, List<Track>? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null || a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
   }
   return true;
 }

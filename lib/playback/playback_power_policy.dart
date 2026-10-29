@@ -4,8 +4,8 @@
 /// 移动端退后台**不能**写进它，否则会把桌面托盘语义和移动端生命周期混在
 /// 一起。本策略按「后台还有没有展示面 / 输出需要」回答三类问题：
 /// - 播放节拍：位置采样（前台或桌面歌词开启 → 高频流；后台其余情形 →
-///   1s 轮询；后台暂停 → 不采样）与会话落盘（前台 1s / 后台 15s，进入后台
-///   先强制整份落盘一次）；
+///   1s 轮询；后台暂停 → 不采样）；会话落盘不在本策略里做周期调度，
+///   只在动作 / 进入后台时提交一次（见 `PlaybackSessionCoordinator`）；
 /// - 视觉工作：封面预取只为应用内界面服务，后台不跑；封面取色在桌面歌词
 ///   可能展示时仍要跑（悬浮窗可跟随封面配色）；
 /// - 歌词与音频预取：后台只有存在歌词输出（悬浮窗 / 通知 / 蓝牙）时才取词；
@@ -60,10 +60,6 @@ class PlaybackPowerPolicy extends ChangeNotifier {
   /// 下一首地址，但不再一边播当前曲目一边下载整首下一曲——这是后台最重的
   /// 网络 / 磁盘工作，会明显拉高熄屏功耗。
   bool get canPredownloadNextTrackBytes => _foreground;
-
-  /// 会话进度落盘节流：后台放宽到 15s（被系统杀死最多丢约 15s 进度）。
-  Duration get sessionSaveInterval =>
-      _foreground ? const Duration(seconds: 1) : const Duration(seconds: 15);
 
   /// 回到前台（幂等）。
   void markForeground() => _setForeground(true);
