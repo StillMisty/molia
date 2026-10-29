@@ -161,7 +161,7 @@ class PlaybackSessionStore {
   /// ——否则一次迟到的成功写入会把已被覆盖的队列误记为「库里是它」。
   int _queueCacheEpoch = 0;
 
-  /// 旧 prefs 清理只做一次（失败也标记，避免每次读取都碰 prefs）。
+  /// 旧 prefs 清理只做一次；失败清掉 future，下次启动 / 读取会重试。
   Future<void>? _legacyCleanup;
 
   /// 启动埋点只记第一次读取（同步轮询 loadRaw / 恢复态重载不刷日志）。
@@ -287,7 +287,7 @@ class PlaybackSessionStore {
 
   /// 原始 JSON（含 [savedAtKey]；cursor 以 savedAt 合并）：无记录或损坏返回 null。
   Future<Map<String, dynamic>?> loadRaw() async {
-    await _cleanupLegacyPreferences();
+    await cleanupLegacyPreferences();
     try {
       return await _repository.loadRaw();
     } catch (e) {
@@ -319,12 +319,15 @@ class PlaybackSessionStore {
     _invalidateQueueCache();
     return _enqueueWrite((repository) async {
       await repository.clear();
-      await _cleanupLegacyPreferences();
+      await cleanupLegacyPreferences();
     });
   }
 
   /// 旧 prefs 会话键一次性删除：不读内容、不导入，只清掉大对象。
-  Future<void> _cleanupLegacyPreferences() {
+  ///
+  /// 协调者启动时即使「恢复上次播放」开关关闭也会调用它，保证旧 2MB 不会
+  /// 因为跳过会话读取而长期留在 prefs 里。失败只记日志并允许下次重试。
+  Future<void> cleanupLegacyPreferences() {
     return _legacyCleanup ??= () async {
       try {
         final prefs = await _preferences();
@@ -333,6 +336,8 @@ class PlaybackSessionStore {
         }
       } catch (e) {
         _logger.warning('清理旧播放会话 prefs 失败: $e');
+        // 失败不缓存：下次启动 / 读取 / 清除再试一次。
+        _legacyCleanup = null;
       }
     }();
   }

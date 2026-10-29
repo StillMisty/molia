@@ -902,6 +902,22 @@ void main() {
     expect(await PlaybackSessionStore().load(), isNotNull);
   });
 
+  test('恢复开关关闭也清旧 prefs 会话键（不读内容、不装载）', () async {
+    SharedPreferences.setMockInitialValues({
+      kRestoreSessionEnabled.name: false,
+      'playback_session_v1': '{"tracks":[{"id":"old"}]}',
+      'playback_session_state_v1': '{"index":0}',
+      'playback_session_position_v1': 1234,
+    });
+    build();
+
+    expect(await session.load(), isFalse);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('playback_session_v1'), isFalse);
+    expect(prefs.containsKey('playback_session_state_v1'), isFalse);
+    expect(prefs.containsKey('playback_session_position_v1'), isFalse);
+  });
+
   test('关闭恢复开关：撤下未播放的恢复态并报告变化', () async {
     build();
     await seedSession(

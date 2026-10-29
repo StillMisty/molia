@@ -185,6 +185,8 @@ class PlaybackSessionCoordinator
   /// 会话恢复）三种情况都不装载，已有真实播放不会被恢复态覆盖。
   Future<bool> load() async {
     try {
+      // 即使用户关闭了恢复开关，也要清掉旧 prefs 会话（不读内容）。
+      await _store.cleanupLegacyPreferences();
       _restoreSessionEnabled = await _settings.read(kRestoreSessionEnabled);
       if (!_restoreSessionEnabled) return false;
       final session = await _store.load();
