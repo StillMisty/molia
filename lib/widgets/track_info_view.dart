@@ -208,7 +208,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
         .select<PlaybackProvider, (Track?, String)>(
           (provider) =>
               (provider.snapshot.current, provider.currentQualityType),
-        );
+    );
     final commentsSupported = context.select<CommentsProvider?, bool>(
       (provider) =>
           track == null ? false : (provider?.supports(track) ?? false),
@@ -259,7 +259,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                       : l10n.commentsUnsupported,
                   onTap: commentsSupported
                       ? () =>
-                            unawaited(openTrackComments(context, track: track))
+                          unawaited(openTrackComments(context, track: track))
                       : null,
                 ),
               // 定时关闭：与曲目无关的播放控制（队列播完后仍可取消）。
@@ -313,8 +313,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                   onTap: _localDataService == null
                       ? null
                       : () => unawaited(
-                          showTrackLocalDataPage(context, track: track),
-                        ),
+                            showTrackLocalDataPage(context, track: track),
+                          ),
                 ),
               ],
             ),
@@ -353,7 +353,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                   title: l10n.trackInfoQuality,
                   subtitle: (dataSaver?.active ?? false)
                       ? '${sourceQualityLabel(l10n, qualityType)} · '
-                            '${l10n.settingsDataSaverTitle}'
+                          '${l10n.settingsDataSaverTitle}'
                       : sourceQualityLabel(l10n, qualityType),
                 ),
                 SettingsInfoTile(
@@ -488,8 +488,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     final channel = key.isEmpty
         ? l10n.trackInfoChannelUnknown
         : key == kLocalSourceKey
-        ? l10n.downloadSourceLocal
-        : sourceChannelName(sources?.channels ?? const [], key);
+            ? l10n.downloadSourceLocal
+            : sourceChannelName(sources?.channels ?? const [], key);
     final id = track.id.uri;
     return id.isEmpty ? channel : '$channel · $id';
   }
@@ -502,7 +502,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
           (quality.size ?? '').isEmpty
               ? sourceQualityLabel(l10n, quality.type)
               : '${sourceQualityLabel(l10n, quality.type)}'
-                    ' (${quality.size})',
+                  ' (${quality.size})',
     ];
     return labels.isEmpty ? l10n.trackInfoQualityUnknown : labels.join(' · ');
   }

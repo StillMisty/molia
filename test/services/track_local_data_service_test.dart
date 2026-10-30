@@ -34,7 +34,7 @@ class _ResolvableSource extends FakeMusicSource {
 /// 假封面缓存：只记录「有哪些 URL 被命中/删除」，不碰 flutter_cache_manager。
 class _FakeArtworkCache extends ArtworkCache {
   _FakeArtworkCache()
-    : super(cacheService: CacheService(storage: MemoryCacheStorage()));
+      : super(cacheService: CacheService(storage: MemoryCacheStorage()));
 
   final Map<String, int> files = {};
   final List<String> removed = [];
@@ -97,19 +97,19 @@ void main() {
   });
 
   Track track({String id = 'a'}) => Track(
-    id: TrackId('kw', id),
-    title: 'Title $id',
-    origin: TrackOrigin.lx,
-    artwork: Artwork(
-      uri: Uri.parse('https://cdn.example/$id.jpg'),
-      fallbacks: [Uri.parse('https://cdn.example/$id-fallback.jpg')],
-    ),
-    qualities: const [
-      AudioQuality(type: '320k'),
-      AudioQuality(type: 'flac'),
-    ],
-    payload: {'id': id},
-  );
+        id: TrackId('kw', id),
+        title: 'Title $id',
+        origin: TrackOrigin.lx,
+        artwork: Artwork(
+          uri: Uri.parse('https://cdn.example/$id.jpg'),
+          fallbacks: [Uri.parse('https://cdn.example/$id-fallback.jpg')],
+        ),
+        qualities: const [
+          AudioQuality(type: '320k'),
+          AudioQuality(type: 'flac'),
+        ],
+        payload: {'id': id},
+      );
 
   Future<void> writeAudio(String name, int size) async {
     final file = File('${tempRoot.path}/audio_cache/$name');
@@ -170,13 +170,13 @@ void main() {
     final a = track();
     downloadRecords.replaceAll([
       DownloadedTrack(
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: a.title,
-        artist: 'Artist',
-        album: '',
-        filePath: '/downloads/Title a.mp3',
-        downloadedAt: 1,
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: a.title,
+      artist: 'Artist',
+      album: '',
+      filePath: '/downloads/Title a.mp3',
+      downloadedAt: 1,
       ),
     ]);
 
@@ -206,13 +206,13 @@ void main() {
     // 有音频下载就归下载档（下载优先）：缓存文件还在也不算「已缓存」。
     downloadRecords.replaceAll([
       DownloadedTrack(
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: a.title,
-        artist: 'Artist',
-        album: '',
-        filePath: '/downloads/Title a.mp3',
-        downloadedAt: 1,
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: a.title,
+      artist: 'Artist',
+      album: '',
+      filePath: '/downloads/Title a.mp3',
+      downloadedAt: 1,
       ),
     ]);
     expect(
@@ -235,15 +235,15 @@ void main() {
 
     downloadRecords.replaceAll([
       DownloadedTrack(
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: t.title,
-        artist: 'Artist',
-        album: '',
-        filePath: '/downloads/Title a.mp3',
-        quality: '320k',
-        sizeBytes: 1024,
-        downloadedAt: 1,
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: t.title,
+      artist: 'Artist',
+      album: '',
+      filePath: '/downloads/Title a.mp3',
+      quality: '320k',
+      sizeBytes: 1024,
+      downloadedAt: 1,
       ),
     ]);
     final data = await service.load(t);
@@ -266,14 +266,14 @@ void main() {
 
     downloadRecords.replaceAll([
       DownloadedTrack(
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: t.title,
-        artist: 'Artist',
-        album: '',
-        lyricPath: '/downloads/lyrics/Title a.lrc',
-        coverPath: '/downloads/covers/Title a.jpg',
-        downloadedAt: 1,
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: t.title,
+      artist: 'Artist',
+      album: '',
+      lyricPath: '/downloads/lyrics/Title a.lrc',
+      coverPath: '/downloads/covers/Title a.jpg',
+      downloadedAt: 1,
       ),
     ]);
     final downloaded = await service.load(t);
@@ -285,14 +285,14 @@ void main() {
     final t = track();
     downloadRecords.replaceAll([
       DownloadedTrack(
-        originSourceKey: 'kw',
-        originSongId: 'a',
-        title: t.title,
-        artist: 'Artist',
-        album: '',
-        filePath: '/downloads/Title a.mp3',
-        sizeBytes: 2048,
-        downloadedAt: 1,
+      originSourceKey: 'kw',
+      originSongId: 'a',
+      title: t.title,
+      artist: 'Artist',
+      album: '',
+      filePath: '/downloads/Title a.mp3',
+      sizeBytes: 2048,
+      downloadedAt: 1,
       ),
     ]);
     final seed = service.downloadState(t);

@@ -439,13 +439,13 @@ class DownloadService extends DownloadManager {
           _queue
               .enqueue(task)
               .then<bool?>(
-                (_) => true,
-                onError: (Object error) =>
-                    error is SourceFailure &&
-                        error.kind == FailureKind.cancelled
-                    ? null
-                    : false,
-              ),
+            (_) => true,
+            onError: (Object error) =>
+                error is SourceFailure &&
+                    error.kind == FailureKind.cancelled
+                ? null
+                : false,
+          ),
         );
       }
       onEnqueued?.call(outcomes.length);
@@ -1090,8 +1090,8 @@ class DownloadService extends DownloadManager {
       return Uri.file(path);
     }
     final qualities = <String>[
-      if (quality != null && quality.isNotEmpty) quality,
-      ..._audioCacheQualityCandidates(track),
+        if (quality != null && quality.isNotEmpty) quality,
+        ..._audioCacheQualityCandidates(track),
     ];
     for (final candidate in qualities) {
       final cached = await _completeAudioCachePath(track, candidate);

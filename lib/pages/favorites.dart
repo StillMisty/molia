@@ -127,9 +127,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 滚动簿记：按合集键保存 / 恢复滚动偏移（节流落盘 + 只恢复一次）。
   late final CollectionScrollBookkeeping _bookkeeping =
       CollectionScrollBookkeeping(
-        controllerOf: _scrollControllerForKey,
-        persist: _session.persistScrollOffsets,
-      );
+    controllerOf: _scrollControllerForKey,
+    persist: _session.persistScrollOffsets,
+  );
 
   /// 上次观察到的壳层可见性：隐藏 → 可见 = 重新进入收藏页，刷新播放历史
   /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
@@ -502,15 +502,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 本页动作的统一入口：端口按此刻 context 组装，命令 / 结果都在模块内。
   CollectionActions get _actions => CollectionActions(
     library: LibraryProviderCollectionActions(context.read<LibraryProvider>()),
-    handoff: TrackHandoffCollectionHandoff(
-      context,
-      random: widget.shuffleRandom,
-    ),
-    localData: ProviderCollectionLocalData(
+        handoff: TrackHandoffCollectionHandoff(
+          context,
+          random: widget.shuffleRandom,
+        ),
+        localData: ProviderCollectionLocalData(
       downloads: context.read<DownloadManager?>(),
-      localData: _localDataService,
-    ),
-  );
+          localData: _localDataService,
+        ),
+      );
 
   /// 从当前合集可见行的 [index] 起播（随机播放传 [shuffle]）。
   ///
@@ -1381,14 +1381,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
     // 否则换行会被 72dp 固定行高裁切。
     final cachedTag = switch (row) {
       LocalSongCollectionRow(:final song) when song.isCached => Text(
-        l10n.localSongsCachedTag,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        softWrap: false,
-        style: context.typeScale.labelSmall.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          l10n.localSongsCachedTag,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          softWrap: false,
+          style: context.typeScale.labelSmall.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
         ),
-      ),
       _ => null,
     };
     return CollectionTrackRow(
@@ -1457,12 +1457,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onSwap: swap == null
           ? null
           : () => showSourceSwapPage(
-              context,
-              seed: swap.track,
-              lyricsProvider: context.read<LyricsProvider>(),
-              playlistId: swap.playlistId,
-              historyKey: swap.historyKey,
-            ),
+                context,
+                seed: swap.track,
+                lyricsProvider: context.read<LyricsProvider>(),
+                playlistId: swap.playlistId,
+                historyKey: swap.historyKey,
+              ),
       onRemoveFromPlaylist: _reported(commands.removeFromPlaylist),
       onRemoveFromFavorites: _reported(commands.removeFromFavorites),
       onToggleFavorite: _reported(commands.toggleFavorite),
@@ -1499,17 +1499,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
           icon: view.isHistory
               ? Icons.history_rounded
               : view.isLocalSongs
-              ? Icons.library_music_rounded
-              : view.isFavorites
-              ? Icons.favorite_border_rounded
-              : Icons.queue_music_rounded,
+                  ? Icons.library_music_rounded
+                  : view.isFavorites
+                      ? Icons.favorite_border_rounded
+                      : Icons.queue_music_rounded,
           message: view.isHistory
               ? l10n.historyEmpty
               : view.isLocalSongs
-              ? l10n.localSongsEmpty
-              : view.isFavorites
-              ? l10n.favoritesEmpty
-              : l10n.playlistTracksEmpty,
+                  ? l10n.localSongsEmpty
+                  : view.isFavorites
+                      ? l10n.favoritesEmpty
+                      : l10n.playlistTracksEmpty,
           // 主行动只在「本页就能完成」时给：本地歌曲空态 = 导入入口（标题行按钮
           // 之外的第二入口，同一动作）。收藏 / 历史 / 自建列表空态不给按钮——
           // 收藏要先在别处收藏、历史要先有播放、自建列表要先在别处加入曲目，

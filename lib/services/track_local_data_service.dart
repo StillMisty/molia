@@ -149,9 +149,9 @@ class TrackLocalDataService {
 
   /// 完整读取（下载记录 + 四项缓存占用 + 命中音质）。
   Future<TrackLocalData> load(Track track) => DataPathTrace.async(
-    'track_local_data.load',
-    () async => (await loadMany([track]))[track.id.uri]!,
-  );
+        'track_local_data.load',
+        () async => (await loadMany([track]))[track.id.uri]!,
+      );
 
   /// 批量读取：一次目录列举 + 并发封面统计服务多首曲目（本地歌曲合集等
   /// 列表消费面用），与 [load] 同一判据、同一返回形状；key 为 `TrackId.uri`。

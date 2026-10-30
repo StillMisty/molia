@@ -71,11 +71,11 @@ class LocalSongsInput {
   /// 记录顺序变化也值得重算，与页面原实现保持同一口径（签名相同则零等待
   /// 复用上一轮结果）。
   int get signature => Object.hash(
-    Object.hashAll([for (final entry in history) entry.key]),
-    Object.hashAll([for (final record in downloads) record.key]),
+        Object.hashAll([for (final entry in history) entry.key]),
+        Object.hashAll([for (final record in downloads) record.key]),
     recordsRevision,
-    cacheRevision,
-  );
+        cacheRevision,
+      );
 }
 
 /// 本地歌曲合集：拥有联结、下载优先去重、输入签名、加载令牌与加载态。

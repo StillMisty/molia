@@ -91,7 +91,7 @@ class _StubDownloadManager extends ChangeNotifier implements DownloadManager {
 /// 无封面缓存桩：封面占用在收藏页用例里恒为零（manager 不可用即零）。
 class _NoopArtworkCache extends ArtworkCache {
   _NoopArtworkCache()
-    : super(cacheService: CacheService(storage: MemoryCacheStorage()));
+      : super(cacheService: CacheService(storage: MemoryCacheStorage()));
 }
 
 /// 指定列表的曲目读取失败（模拟损坏行 / 数据库读错误）。
@@ -193,17 +193,17 @@ DownloadedTrack _localSong(
   int? durationMs = 180000,
   int? downloadedAt,
 }) => DownloadedTrack(
-  originSourceKey: imported ? kLocalSourceKey : 'kw',
-  originSongId: id,
-  title: title ?? '本地 $id',
-  artist: artist,
-  durationMs: durationMs,
-  filePath: '/downloads/$id.mp3',
+      originSourceKey: imported ? kLocalSourceKey : 'kw',
+      originSongId: id,
+      title: title ?? '本地 $id',
+      artist: artist,
+      durationMs: durationMs,
+      filePath: '/downloads/$id.mp3',
   // 同一批记录给稳定的下载时间：记录按时间倒序（同时间再按 key 倒序），
   // 夹具用 id 递增反推时间，保持用例里的「1 在前、2 在后」。
   downloadedAt: downloadedAt ?? 1000 - (int.tryParse(id) ?? 0),
-  imported: imported,
-);
+      imported: imported,
+    );
 
 /// 「收藏」页 widget 测试。
 ///
@@ -357,11 +357,11 @@ void main() {
 
   /// 弹层内的合集行（限定在弹层 surface 内，避免与页面曲目行混淆）。
   Finder pickerRow(String name) => find.descendant(
-    of: find.byType(M3EBottomSheetSurface),
-    matching: find.byWidgetPredicate(
-      (widget) => widget is M3EListItem && widget.headline == name,
-    ),
-  );
+        of: find.byType(M3EBottomSheetSurface),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is M3EListItem && widget.headline == name,
+        ),
+      );
 
   /// 弹层标题行的工具动作（新建 `Icons.add_rounded` / 导入
   /// `Icons.library_add_rounded`）。
@@ -729,8 +729,8 @@ void main() {
       cache: CacheService(
         storage: _FakeCacheStorage(
           files: {
-            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-                2048,
+          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+              2048,
           },
         ),
       ),
@@ -759,8 +759,8 @@ void main() {
       cache: CacheService(
         storage: _FakeCacheStorage(
           files: {
-            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-                2048,
+          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+              2048,
           },
         ),
       ),
@@ -1338,8 +1338,8 @@ void main() {
     final firstRowTexts = tester
         .widgetList<Text>(
           find.descendant(
-            of: find.byType(TrackRow).first,
-            matching: find.byType(Text),
+          of: find.byType(TrackRow).first,
+          matching: find.byType(Text),
           ),
         )
         .toList();
@@ -1432,8 +1432,8 @@ void main() {
   testWidgets('本地歌曲：弹层出现合集，进入后播放 / 搜索过滤', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-        _localSong('1', title: '下载的歌'),
-        _localSong('2', title: '导入的歌', imported: true),
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '导入的歌', imported: true),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1467,8 +1467,8 @@ void main() {
   testWidgets('本地歌曲：左滑删除按来源区分（下载删文件 / 导入只移出列表）', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-        _localSong('1', title: '下载的歌'),
-        _localSong('2', title: '导入的歌', imported: true),
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '导入的歌', imported: true),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1500,8 +1500,8 @@ void main() {
   testWidgets('本地歌曲：长按多选删除（混合来源文案）', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-        _localSong('1', title: '下载的歌'),
-        _localSong('2', title: '导入的歌', imported: true),
+      _localSong('1', title: '下载的歌'),
+      _localSong('2', title: '导入的歌', imported: true),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1557,8 +1557,8 @@ void main() {
   testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-        for (var i = 0; i < 40; i++)
-          _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
+      for (var i = 0; i < 40; i++)
+        _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1706,13 +1706,13 @@ void main() {
 }
 
 Map<String, dynamic> _track(int id) => {
-  'id': 'wy_$id',
-  'name': 'Song $id',
-  'singer': 'Artist $id',
-  'source': 'wy',
-  'interval': '03:00',
-  'meta': {'songId': id, 'albumName': 'Album $id'},
-};
+      'id': 'wy_$id',
+      'name': 'Song $id',
+      'singer': 'Artist $id',
+      'source': 'wy',
+      'interval': '03:00',
+      'meta': {'songId': id, 'albumName': 'Album $id'},
+    };
 
 PlayHistoryEntry _history(String songId, {int playedAt = 1}) =>
     PlayHistoryEntry(
@@ -1732,8 +1732,8 @@ Uint8List _lxmcBytes(List<Map<String, dynamic>> list) {
     gzip.encode(
       utf8.encode(
         jsonEncode({
-          'type': 'playListPart_v2',
-          'data': {'id': 'x', 'name': 'list__name_love', 'list': list},
+    'type': 'playListPart_v2',
+    'data': {'id': 'x', 'name': 'list__name_love', 'list': list},
         }),
       ),
     ),

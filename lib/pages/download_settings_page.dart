@@ -52,8 +52,8 @@ class DownloadSettingsPage extends StatelessWidget {
               subtitle: switch (defaultTargetPlatform) {
                 TargetPlatform.android =>
                   settings.publishToPublicDir
-                      ? l10n.downloadSaveLocationFixedHintAndroid
-                      : l10n.downloadSaveLocationFixedHintAndroidOff,
+                    ? l10n.downloadSaveLocationFixedHintAndroid
+                    : l10n.downloadSaveLocationFixedHintAndroidOff,
                 TargetPlatform.iOS => l10n.downloadSaveLocationFixedHintIos,
                 _ => l10n.downloadSaveLocationSharedHint,
               },
@@ -61,9 +61,9 @@ class DownloadSettingsPage extends StatelessWidget {
               onTap: _supportsCustomSaveDir
                   ? () => unawaited(_pickDirectory(context, settings, saveAs))
                   : () => M3ESnackbar.show(
-                      context,
-                      message: _fixedLocationHint(l10n, settings),
-                    ),
+                        context,
+                        message: _fixedLocationHint(l10n, settings),
+                      ),
             ),
             SettingsValueTile(
               key: const Key('downloadFilenameTemplateItem'),

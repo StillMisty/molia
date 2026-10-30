@@ -73,22 +73,22 @@ enum CollectionLibraryLoadKind {
 /// [force] 只用于失败重试；[playlistId] 只在需要列表曲目的意图上出现。
 class CollectionLibraryLoad {
   const CollectionLibraryLoad.startup()
-    : kind = CollectionLibraryLoadKind.startup,
-      playlistId = null,
-      force = false;
+      : kind = CollectionLibraryLoadKind.startup,
+        playlistId = null,
+        force = false;
 
   const CollectionLibraryLoad.playlistTracks(int this.playlistId)
-    : kind = CollectionLibraryLoadKind.playlistTracks,
-      force = false;
+      : kind = CollectionLibraryLoadKind.playlistTracks,
+        force = false;
 
   const CollectionLibraryLoad.retry({this.playlistId})
-    : kind = CollectionLibraryLoadKind.retry,
-      force = true;
+      : kind = CollectionLibraryLoadKind.retry,
+        force = true;
 
   const CollectionLibraryLoad.resortHistory()
-    : kind = CollectionLibraryLoadKind.resortHistory,
-      playlistId = null,
-      force = false;
+      : kind = CollectionLibraryLoadKind.resortHistory,
+        playlistId = null,
+        force = false;
 
   final CollectionLibraryLoadKind kind;
 
@@ -172,8 +172,8 @@ class CollectionDownloads {
 
   /// 下载 / 导入能力不可用（合集不出现，也不产生缓存行）。
   const CollectionDownloads.unavailable()
-    : records = const <DownloadedTrack>[],
-      supported = false,
+      : records = const <DownloadedTrack>[],
+        supported = false,
       initialized = true,
       recordsRevision = 0;
 
@@ -299,12 +299,12 @@ class CollectionSession extends ChangeNotifier {
     CollectionPresenter? presenter,
     this._scroll,
     CachedAudioTrackIdsLookup? loadCachedAudioTrackIds,
-  }) : _collections = collections ?? LibraryCollections(),
-       _presenter = presenter ?? CollectionPresenter(),
-       _localSongs = LocalSongsCollection(
-         loadCachedAudioTrackIds:
-             loadCachedAudioTrackIds ?? _noCachedAudioTracks,
-       ) {
+  })  : _collections = collections ?? LibraryCollections(),
+        _presenter = presenter ?? CollectionPresenter(),
+        _localSongs = LocalSongsCollection(
+          loadCachedAudioTrackIds:
+              loadCachedAudioTrackIds ?? _noCachedAudioTracks,
+        ) {
     _selection.addListener(_forwardChange);
     _localSongs.addListener(_forwardChange);
   }
@@ -425,10 +425,10 @@ class CollectionSession extends ChangeNotifier {
     final frame = CollectionFrame(
       library: library,
       snapshot: snapshot,
-      downloads: input.downloads,
-      cacheRevision: input.cacheRevision,
+            downloads: input.downloads,
+            cacheRevision: input.cacheRevision,
       playlistId: selectedPlaylistId,
-    );
+      );
 
     if (identity.isLocalSongs) {
       unawaited(_localSongs.sync(_localSongsInput(frame)));
@@ -484,8 +484,8 @@ class CollectionSession extends ChangeNotifier {
     final phase = loading
         ? CollectionViewPhase.loading
         : failure != null
-        ? CollectionViewPhase.failed
-        : CollectionViewPhase.ready;
+            ? CollectionViewPhase.failed
+            : CollectionViewPhase.ready;
     final reorderActive =
         _reordering && view.isCustom && !_searching && view.visibleCount >= 2;
 
@@ -554,7 +554,7 @@ class CollectionSession extends ChangeNotifier {
     if (_disposed) return;
     frame.library.load(
       CollectionLibraryLoad.retry(playlistId: frame.playlistId),
-    );
+      );
     unawaited(_localSongs.sync(_localSongsInput(frame)));
   }
 
@@ -692,13 +692,13 @@ class CollectionSession extends ChangeNotifier {
     List<PlaylistInfo> playlists,
     int? favoritesId,
   ) => _presenter.identityFor(
-    selectedId: _selectedId,
-    playlists: playlists,
-    favoritesId: favoritesId,
-    favoritesName: input.names.favorites,
-    historyName: input.names.history,
-    localSongsName: input.names.localSongs,
-  );
+        selectedId: _selectedId,
+        playlists: playlists,
+        favoritesId: favoritesId,
+        favoritesName: input.names.favorites,
+        historyName: input.names.history,
+        localSongsName: input.names.localSongs,
+      );
 
   /// 恢复的选集校准：首次合集列表加载完成后，若持久化选集已不存在
   /// （列表被删 / 下载能力不可用）或尚未选择，则采用默认解析结果并落盘。
@@ -743,8 +743,8 @@ class CollectionSession extends ChangeNotifier {
     // 的监听者（provider 的 refresh* 在第一个 await 前就通知）。
     unawaited(
       Future<void>.microtask(() {
-        if (_disposed) return;
-        library.load(const CollectionLibraryLoad.startup());
+      if (_disposed) return;
+      library.load(const CollectionLibraryLoad.startup());
       }),
     );
   }

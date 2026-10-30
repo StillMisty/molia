@@ -269,7 +269,7 @@ final class CollectionActions {
     required this._handoff,
     this._localData,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+  })  : _clock = clock ?? DateTime.now;
 
   final CollectionActionLibrary _library;
   final CollectionHandoff _handoff;
@@ -343,11 +343,11 @@ final class CollectionActions {
     final addedAt = _addedAt;
     return switch (change) {
       CollectionFavoriteChange.add => _library.addTracksToFavorites([
-        for (final row in selected) row.toPlaylistTrack(addedAt: addedAt),
-      ]),
+          for (final row in selected) row.toPlaylistTrack(addedAt: addedAt),
+        ]),
       CollectionFavoriteChange.remove => _library.removeTracksFromFavorites([
-        for (final row in selected) row.favoriteKey,
-      ]),
+          for (final row in selected) row.favoriteKey,
+        ]),
     };
   }
 
@@ -390,9 +390,9 @@ final class CollectionActions {
 
   /// 选中行里的本地歌曲（删除确认的输入，按可见顺序）。
   List<CollectionLocalSong> localSongsOf(Iterable<CollectionRow> rows) => [
-    for (final row in rows)
-      if (row case LocalSongCollectionRow(:final song)) song,
-  ];
+        for (final row in rows)
+          if (row case LocalSongCollectionRow(:final song)) song,
+      ];
 
   /// 删除本地歌曲：下载副本删记录 + 文件、导入项只移出列表、缓存行清缓存。
   ///
@@ -587,7 +587,7 @@ sealed class CollectionRowCommands {
     CollectionView view,
     this.row,
   ) : _actions = actions,
-      _view = view;
+        _view = view;
 
   final CollectionActions _actions;
   final CollectionView _view;
@@ -638,9 +638,9 @@ final class TrackCollectionRowCommands extends CollectionRowCommands {
 
   @override
   CollectionSwapSeed? get swap => CollectionSwapSeed(
-    track: _actions._library.trackFromPlaylistTrack(track),
-    playlistId: _view.playlistId,
-  );
+        track: _actions._library.trackFromPlaylistTrack(track),
+        playlistId: _view.playlistId,
+      );
 }
 
 final class HistoryCollectionRowCommands extends CollectionRowCommands {
@@ -659,9 +659,9 @@ final class HistoryCollectionRowCommands extends CollectionRowCommands {
 
   @override
   CollectionSwapSeed? get swap => CollectionSwapSeed(
-    track: _actions._library.trackFromHistoryEntry(entry),
-    historyKey: (sourceKey: entry.sourceKey, songId: entry.songId),
-  );
+        track: _actions._library.trackFromHistoryEntry(entry),
+        historyKey: (sourceKey: entry.sourceKey, songId: entry.songId),
+      );
 }
 
 final class LocalSongCollectionRowCommands extends CollectionRowCommands {
@@ -683,9 +683,9 @@ final class LocalSongCollectionRowCommands extends CollectionRowCommands {
 
   @override
   bool get isFavorite => _actions._library.isFavorite(
-    song.favoriteKey.sourceKey,
-    song.favoriteKey.songId,
-  );
+        song.favoriteKey.sourceKey,
+        song.favoriteKey.songId,
+      );
 
   @override
   bool get localSongCached => song.isCached;

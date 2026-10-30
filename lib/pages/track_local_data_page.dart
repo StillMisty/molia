@@ -105,7 +105,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       if (_listening) _records?.removeListener(_onRecordsChanged);
       _records = records;
       if (_listening) records?.addListener(_onRecordsChanged);
-    }
+      }
     final downloads = context.read<DownloadManager?>();
     if (!identical(_downloads, downloads)) {
       if (_listening) _downloads?.taskChanges.removeListener(_onTasksChanged);
