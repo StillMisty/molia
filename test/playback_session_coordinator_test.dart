@@ -138,6 +138,55 @@ class _LoadingBackend extends FakePlaybackBackend {
   }
 }
 
+/// 队列跳转后像真实后端一样推一帧新下标快照（命令提交点据此写 cursor）。
+class _QueueJumpBackend extends FakePlaybackBackend {
+  @override
+  Future<void> playQueueIndex(int index) async {
+    await super.playQueueIndex(index);
+    final snapshot = state.value;
+    if (index < 0 || index >= snapshot.queue.length) return;
+    final track = snapshot.queue[index];
+    emit(
+      BackendSnapshot(
+        current: track,
+        queue: snapshot.queue,
+        currentIndex: index,
+        next: index + 1 < snapshot.queue.length
+            ? snapshot.queue[index + 1]
+            : null,
+        previous: index > 0 ? snapshot.queue[index - 1] : null,
+        previousOfPrevious: index > 1 ? snapshot.queue[index - 2] : null,
+        upNext: snapshot.queue.sublist(index + 1),
+        isPlaying: snapshot.isPlaying,
+        position: snapshot.position,
+        duration: track.duration ?? Duration.zero,
+        mode: snapshot.mode,
+        context: snapshot.context,
+        error: snapshot.error,
+      ),
+    );
+  }
+}
+
+/// 记录队列播放路由：`playQueueItemById` 必须先解析成下标再走 `playQueueIndex`。
+class _RecordingQueueCoordinator extends PlaybackSessionCoordinator {
+  _RecordingQueueCoordinator({
+    required super.facade,
+    required super.store,
+    required super.settings,
+    super.onRestoredTrack,
+    super.powerPolicy,
+  });
+
+  final List<int> playedIndexes = [];
+
+  @override
+  Future<PlaybackCommandOutcome> playQueueIndex(int index) {
+    playedIndexes.add(index);
+    return super.playQueueIndex(index);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -156,17 +205,27 @@ void main() {
     RestoredTrackReporter? onRestoredTrack,
     SettingsAccess? settings,
     PlaybackPowerPolicy? powerPolicy,
+    bool recordQueueRouting = false,
   }) {
     backend = backendOverride ?? FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
     store = _RecordingSessionStore(persist: persistStore);
-    session = PlaybackSessionCoordinator(
-      facade: facade,
-      store: store,
-      settings: settings ?? testSettingsRegistry(),
-      onRestoredTrack: onRestoredTrack,
-      powerPolicy: powerPolicy,
-    );
+    final coordinator = recordQueueRouting
+        ? _RecordingQueueCoordinator(
+            facade: facade,
+            store: store,
+            settings: settings ?? testSettingsRegistry(),
+            onRestoredTrack: onRestoredTrack,
+            powerPolicy: powerPolicy,
+          )
+        : PlaybackSessionCoordinator(
+            facade: facade,
+            store: store,
+            settings: settings ?? testSettingsRegistry(),
+            onRestoredTrack: onRestoredTrack,
+            powerPolicy: powerPolicy,
+          );
+    session = coordinator;
     addTearDown(session.dispose);
     return session;
   }
@@ -340,6 +399,69 @@ void main() {
     );
   });
 
+  test('play-by-id 恢复态：解析下标后走 playQueueIndex，装载提交一次', () async {
+    final recorder = build(
+      backendOverride: _LoadingBackend(),
+      recordQueueRouting: true,
+    ) as _RecordingQueueCoordinator;
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b')],
+        index: 0,
+        position: const Duration(seconds: 10),
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    // 命中保存会话的 b（下标 1）：先解析成下标，恢复路由只走 playQueueIndex。
+    expect(
+      await recorder.playQueueItemById(const TrackId('fake', 'b').uri),
+      PlaybackCommandOutcome.trackAndQueue,
+    );
+    expect(recorder.playedIndexes, [1]);
+    expect(backend.calls, ['setMode', 'load']);
+    expect((backend as _LoadingBackend).lastRequest?.startIndex, 1);
+    expect(store.calls, ['save'], reason: '装载提交一次，恢复流程末尾按内容去重');
+
+    // 未命中：不解析下标、不转发、不再提交。
+    expect(
+      await recorder.playQueueItemById('fake:zzz'),
+      PlaybackCommandOutcome.none,
+    );
+    expect(recorder.playedIndexes, [1]);
+    expect(store.calls, ['save']);
+  });
+
+  test('play-by-id live：解析下标后走 playQueueIndex，下标变化提交一次', () async {
+    final recorder = build(
+      backendOverride: _QueueJumpBackend(),
+      recordQueueRouting: true,
+    ) as _RecordingQueueCoordinator;
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_live(a, queue: [a, b], index: 0));
+    expect(store.calls, ['save']);
+
+    // live 队列优先：同一个 id 先解析成下标，再由 playQueueIndex 转发后端。
+    expect(
+      await recorder.playQueueItemById(const TrackId('fake', 'b').uri),
+      PlaybackCommandOutcome.trackOnly,
+    );
+    expect(recorder.playedIndexes, [1]);
+    expect(backend.calls, ['playQueueIndex:1']);
+    expect(store.calls, ['save', 'save'], reason: '下标变化只提交一次 cursor');
+    expect(session.resolve(facade.snapshot.value).currentIndex, 1);
+
+    // 未命中：不解析下标、不转发、不再提交。
+    expect(
+      await recorder.playQueueItemById('fake:zzz'),
+      PlaybackCommandOutcome.none,
+    );
+    expect(recorder.playedIndexes, [1]);
+    expect(backend.calls, ['playQueueIndex:1']);
+    expect(store.calls, ['save', 'save']);
+  });
+
   test('恢复态：模式 / 换源改写保存的会话并落盘；未命中不算失败', () async {
     build();
     await seedSession(
@@ -358,14 +480,20 @@ void main() {
     expect(store.saves.last.mode, PlayMode.shuffle);
 
     // 换源命中恢复队列：原地替换并落盘（facade 队列为空，不转发）。
-    expect(await session.replaceTrack(_track('a'), _track('a2')), isTrue);
+    expect(
+      await session.replaceTrack(_track('a'), _track('a2')),
+      PlaybackCommandOutcome.trackAndQueue,
+    );
     expect(backend.calls, ['setMode']);
     expect(store.saves.last.tracks.first.id.id, 'a2');
     expect(session.resolve(facade.snapshot.value).queue.first.id.id, 'a2');
 
-    // 未命中：不落盘、不转发，返回 false。
+    // 未命中：不落盘、不转发，返回空操作。
     final saves = store.saves.length;
-    expect(await session.replaceTrack(_track('zzz'), _track('zzz2')), isFalse);
+    expect(
+      await session.replaceTrack(_track('zzz'), _track('zzz2')),
+      PlaybackCommandOutcome.none,
+    );
     expect(store.saves, hasLength(saves));
   });
 
@@ -682,12 +810,18 @@ void main() {
     expect(store.calls, ['save'], reason: '起播切歌一次');
 
     // 当前曲目换源：新 id 触发快照监听提交，不应再补写一遍。
-    await session.replaceTrack(b, _track('b2'));
+    expect(
+      await session.replaceTrack(b, _track('b2')),
+      PlaybackCommandOutcome.trackAndQueue,
+    );
     expect(store.calls, ['save', 'save']);
     expect(store.saves.last.tracks.map((track) => track.id.id), ['a', 'b2']);
 
     // 非当前槽位换源：current.id 不变，监听不触发，需要显式补写一次。
-    await session.replaceTrack(a, _track('a2'));
+    expect(
+      await session.replaceTrack(a, _track('a2')),
+      PlaybackCommandOutcome.trackAndQueue,
+    );
     expect(store.calls, ['save', 'save', 'save']);
     expect(store.saves.last.tracks.map((track) => track.id.id), ['a2', 'b2']);
   });
@@ -745,6 +879,57 @@ void main() {
     );
     expect(store.calls, ['save', 'save', 'save']);
     expect(store.saves.last.tracks.single.title, 'Renamed');
+  });
+
+  test('换源作用域：liveOnly 不碰恢复态；liveAndRestored 两处都改且只提交一次', () async {
+    build(persistStore: true);
+    final a = _track('a');
+    final b = _track('b');
+    await seedSession(
+      PlaybackSession(
+        tracks: [a, b],
+        index: 0,
+        position: const Duration(seconds: 5),
+      ),
+    );
+    expect(await session.load(), isTrue);
+    // 交接窗口：facade 已推了队列但还没有当前曲目；恢复阶段仍以保存会话为准。
+    backend.emit(BackendSnapshot(queue: [a, b], currentIndex: -1));
+
+    // 自动换源（liveOnly）：恢复态没有真实队列可换，不转发也不改保存的会话。
+    expect(
+      await session.replaceQueueTrack('fake:a', _track('a2')),
+      PlaybackCommandOutcome.none,
+    );
+    expect(
+      facade.snapshot.value.queue.map((track) => track.id.id),
+      ['a', 'b'],
+      reason: '恢复阶段不能改 facade 里尚未接管的队列',
+    );
+    expect(backend.calls, isEmpty);
+    expect(store.calls, isEmpty);
+    expect(session.resolve(facade.snapshot.value).queue.first.id.id, 'a');
+
+    // 交接窗口：facade 已有队列但还没有当前曲目，恢复态仍然保留。此时两处
+    // 都含同一个 uri——各自换成新来源，命令只产生一次写请求。
+    backend.emit(BackendSnapshot(queue: [a, b], currentIndex: -1));
+    expect(
+      await session.replaceTrack(a, _track('a2')),
+      PlaybackCommandOutcome.trackAndQueue,
+    );
+    expect(backend.calls, ['replaceQueueTrack:fake:a']);
+    expect(facade.snapshot.value.queue.map((track) => track.id.id), ['a2', 'b']);
+    expect(
+      session.resolve(facade.snapshot.value).queue.map((track) => track.id.id),
+      ['a2', 'b'],
+    );
+    expect(store.calls, ['save'], reason: 'live 不可保存时只写恢复会话一次');
+    expect(store.saves.single.tracks.map((track) => track.id.id), ['a2', 'b']);
+    // 返回即已落盘：冷启动恢复的是换源后的队列。
+    expect(
+      (await PlaybackSessionStore().load())?.tracks.map((track) => track.id.id),
+      ['a2', 'b'],
+    );
   });
 
   test('进度 tick / loading 抖动：不写 payload，也不做周期落盘', () async {
