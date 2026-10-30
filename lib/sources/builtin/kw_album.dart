@@ -3,6 +3,7 @@ import '../../domain/models/album.dart';
 import '../../domain/models/track.dart';
 import '../source_search_result.dart';
 import 'album_utils.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
 import 'kw_discover.dart';
@@ -45,18 +46,18 @@ class KwAlbum {
     }
     final id = body['albumid']?.toString() ?? albumId;
     final rawList = body['musiclist'] as List;
+    final coverUrl = kwCoverUrlOf(body);
     final tracks = <Track>[];
     for (final raw in rawList) {
-      final track = parseSong(raw, albumId: id);
+      final track = parseSong(raw, albumId: id, fallbackCoverUrl: coverUrl);
       if (track != null) tracks.add(track);
     }
 
-    final img = _nonEmpty(body['img']) ?? _nonEmpty(body['hts_img']);
     return Album(
       id: id,
       name: decodeName(body['name']?.toString()),
       artist: formatSinger(decodeName(body['artist']?.toString())),
-      coverUrl: img,
+      coverUrl: coverUrl,
       year: null,
       tracks: tracks,
       hasMore: albumHasMore(
@@ -68,7 +69,11 @@ class KwAlbum {
   }
 
   /// 单曲响应 → 领域曲目（音质按 `N_MINFO` 解析，与榜单 / 歌单同一实现）。
-  static Track? parseSong(dynamic raw, {required String albumId}) {
+  static Track? parseSong(
+    dynamic raw, {
+    required String albumId,
+    String? fallbackCoverUrl,
+  }) {
     if (raw is! Map) return null;
     final songId = (raw['id'] ?? raw['musicrid'])?.toString() ?? '';
     if (songId.isEmpty) return null;
@@ -89,12 +94,7 @@ class KwAlbum {
       albumId: raw['albumId']?.toString() ?? albumId,
       intervalSeconds: duration,
       types: sorted,
-      img: _nonEmpty(raw['pic120']) ?? _nonEmpty(raw['img']),
+      img: kwCoverUrlOf(raw) ?? fallbackCoverUrl,
     ));
-  }
-
-  static String? _nonEmpty(Object? value) {
-    final text = value?.toString();
-    return (text == null || text.isEmpty) ? null : text;
   }
 }

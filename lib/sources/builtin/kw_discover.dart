@@ -5,6 +5,7 @@ import '../raw_track.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
 import 'artist_utils.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
@@ -150,7 +151,7 @@ class KwDiscoverSource extends DiscoverSource {
       albumId: rawItem['albumId']?.toString() ?? '',
       intervalSeconds: duration,
       types: sorted,
-      img: rawItem['pic']?.toString(),
+      img: kwCoverUrlOf(rawItem),
     );
   }
 
@@ -514,7 +515,7 @@ class KwDiscoverSource extends DiscoverSource {
         albumId: item['albumid']?.toString() ?? '',
         intervalSeconds: duration,
         types: sorted,
-        img: null,
+        img: kwCoverUrlOf(item),
       ));
     }
     return list;

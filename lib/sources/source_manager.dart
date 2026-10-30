@@ -644,7 +644,7 @@ class SourceManager extends ChangeNotifier {
 
   /// 获取封面（搜索自带封面 / 脚本 pic action / 内置平台原生实现）。
   ///
-  /// 平台搜索响应已带封面（wy/tx/mg）时直接复用；否则脚本 pic 优先，
+  /// 平台搜索响应已带封面（wy/tx/kg/kw/mg）时直接复用；否则脚本 pic 优先，
   /// 再回退内置实现（kw/kg 取图接口、wy 歌曲详情、tx 专辑 mid 拼 URL、
   /// mg 资源封面）。
   Future<String?> fetchPic(SourceTrack track) async {

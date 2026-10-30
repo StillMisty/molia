@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../domain/models/discover.dart';
 import '../source_track.dart';
 import '../source_search_result.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'crypto_utils.dart';
@@ -159,6 +160,7 @@ class KgDiscoverSource extends DiscoverSource {
       intervalText: formatPlayTime(duration),
       duration: duration > 0 ? Duration(seconds: duration) : null,
       types: types,
+      img: kgCoverUrlOf(rawItem),
     );
   }
 
@@ -493,6 +495,7 @@ class KgDiscoverSource extends DiscoverSource {
           durationMs > 0 ? formatPlayTime((durationMs / 1000).floor()) : null,
       duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
       types: types,
+      img: kgCoverUrlOf(album),
     );
   }
 

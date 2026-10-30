@@ -3,8 +3,10 @@ import 'builtin_transport.dart';
 
 /// 酷狗封面获取（移植自 lx-music-mobile `kg/pic.js`）。
 ///
-/// 搜索/榜单响应本身不带封面（`img: null`），播放时用 `get_res_privilege`
-/// 按 `hash` + `album_id` 拿 `info.image`（`{size}` 占位替换为可用尺寸）。
+/// 搜索 / 榜单 / 歌单响应里通常已带 `Image` / `sizable_cover`，由
+/// `builtin_cover_urls.dart` 直接解析；老 payload、专辑 / 歌手歌曲等没有
+/// 封面字段的入口，播放时用 `get_res_privilege` 按 `hash` + `album_id`
+/// 拿 `info.image`（`{size}` 占位替换为可用尺寸）。
 class KgPic {
   KgPic._();
 
@@ -23,17 +25,11 @@ class KgPic {
     String? name,
     String? singer,
   }) async {
-    // songmid 为 32 位 hash（歌曲 ID 存储口径变更）时，改用 audioId 推导
-    // album_audio_id 兜底（LX `kg/pic.js` 同款逻辑）。
-    var albumAudioId = songmid;
-    if (songmid.length == 32) {
-      final audio = audioId ?? '';
-      if (audio.contains('_')) {
-        albumAudioId = audio.split('_').first;
-      } else if (audio.isNotEmpty) {
-        albumAudioId = audio;
-      }
-    }
+    // `album_audio_id` 的规范值是 MixSongID（raw.audioId）：搜索结果的
+    // `songmid` 是 Audioid，部分存储口径下是 32 位 hash，直接拿它取图会失败。
+    // 旧 payload 没有 audioId 时仍按 LX 的兜底逻辑回退到 songmid。
+    final audio = audioId?.trim() ?? '';
+    final albumAudioId = audio.isNotEmpty ? audio.split('_').first : songmid;
 
     final body = {
       'appid': 1001,

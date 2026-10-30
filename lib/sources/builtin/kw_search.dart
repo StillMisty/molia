@@ -1,6 +1,7 @@
 import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
@@ -85,7 +86,7 @@ class KwSearch {
       albumId: decodeName(rawItem['ALBUMID']?.toString()),
       intervalSeconds: interval,
       types: parseNMinfo(nMinfo),
-      img: null,
+      img: kwCoverUrlOf(rawItem),
     );
   }
 
@@ -178,6 +179,9 @@ class KwSearch {
       title: name,
       artist: artist,
       album: album,
+      // `img` 必须同时落到 coverUrl：列表行只读 SourceTrack.coverUrl，
+      // 仅写进 raw 会让酷我搜索结果、专辑 / 歌手曲目全部显示占位图。
+      coverUrl: (img?.isEmpty ?? true) ? null : img,
       duration: intervalSeconds > 0 ? Duration(seconds: intervalSeconds) : null,
       qualities: buildQualities(types),
       raw: raw,

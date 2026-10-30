@@ -39,14 +39,15 @@ void main() {
     ];
   }
 
-  SourceTrack kwTrack({String? coverUrl}) => SourceTrack(
+  SourceTrack kwTrack({String? coverUrl, String songmid = '228908'}) =>
+      SourceTrack(
         sourceKey: 'kw',
         origin: 'builtin',
         title: '晴天',
         artist: '周杰伦',
         album: '叶惠美',
         coverUrl: coverUrl,
-        raw: {'songmid': '228908', 'source': 'kw'},
+        raw: {'songmid': songmid, 'source': 'kw'},
       );
 
   test('能力位：歌词/封面按注册表适配器推导（六个平台都不是一刀切）', () {
@@ -106,6 +107,20 @@ void main() {
 
     final manager = SourceManager(settings: testSettingsRegistry());
     final pic = await manager.fetchPic(kwTrack());
+    expect(pic, 'http://img.example/228908.jpg');
+    manager.dispose();
+  });
+
+  test('fetchPic：kw 的 MUSIC_ 前缀在请求前剥离', () async {
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        expect(request.uri.queryParameters['rid'], '228908');
+        return textResponse('http://img.example/228908.jpg', statusCode: 200);
+      }),
+    );
+
+    final manager = SourceManager(settings: testSettingsRegistry());
+    final pic = await manager.fetchPic(kwTrack(songmid: 'MUSIC_228908'));
     expect(pic, 'http://img.example/228908.jpg');
     manager.dispose();
   });

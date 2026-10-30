@@ -10,6 +10,7 @@
 library;
 
 import 'bili_track.dart';
+import 'builtin_cover_urls.dart';
 import 'kg_pic.dart';
 import 'kw_pic.dart';
 import 'mg_lyric.dart';
@@ -34,19 +35,27 @@ Future<String?> txBuiltinPic(Map<String, dynamic> raw) {
   );
 }
 
-/// 酷狗：`get_res_privilege` 按 hash / album_id 取图。
-Future<String?> kgBuiltinPic(Map<String, dynamic> raw) => KgPic.fetch(
-      songmid: raw['songmid']?.toString() ?? '',
-      audioId: raw['audioId']?.toString(),
-      albumId: raw['albumId']?.toString(),
-      hash: raw['hash']?.toString(),
-      name: raw['name']?.toString(),
-      singer: raw['singer']?.toString(),
-    );
+/// 酷狗：响应内已带封面（`Image` / `sizable_cover`）时直接复用；
+/// 否则 `get_res_privilege` 按 hash / album_id 取图。
+Future<String?> kgBuiltinPic(Map<String, dynamic> raw) {
+  final fromRaw = kgCoverUrlOf(raw);
+  if (fromRaw != null) return Future.value(fromRaw);
+  return KgPic.fetch(
+    songmid: raw['songmid']?.toString() ?? '',
+    audioId: (raw['audioId'] ?? raw['albumAudioId'])?.toString(),
+    albumId: raw['albumId']?.toString(),
+    hash: raw['hash']?.toString(),
+    name: raw['name']?.toString(),
+    singer: raw['singer']?.toString(),
+  );
+}
 
-/// 酷我：pic.web 接口返回纯文本 URL。
-Future<String?> kwBuiltinPic(Map<String, dynamic> raw) =>
-    KwPic.fetch(raw['songmid']?.toString() ?? '');
+/// 酷我：响应内已带封面时直接复用；否则 pic.web 接口返回纯文本 URL。
+Future<String?> kwBuiltinPic(Map<String, dynamic> raw) {
+  final fromRaw = kwCoverUrlOf(raw);
+  if (fromRaw != null) return Future.value(fromRaw);
+  return KwPic.fetch(raw['songmid']?.toString() ?? '');
+}
 
 /// 咪咕：搜索响应自带 `img`，否则走资源信息封面。
 Future<String?> mgBuiltinPic(Map<String, dynamic> raw) {

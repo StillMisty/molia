@@ -6,6 +6,7 @@ import '../../domain/models/track.dart';
 import '../raw_track.dart';
 import '../source_search_result.dart';
 import 'artist_source.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'crypto_utils.dart';
 import 'kw_discover.dart';
@@ -182,7 +183,7 @@ class KwArtist {
       albumId: raw['albumId']?.toString() ?? '',
       intervalSeconds: duration,
       types: sorted,
-      img: _nonEmpty(raw['pic300']) ?? _nonEmpty(raw['pic']),
+      img: kwCoverUrlOf(raw),
     ));
   }
 

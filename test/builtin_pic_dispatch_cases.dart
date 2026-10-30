@@ -155,6 +155,37 @@ void main() {
     expect(requests, isEmpty);
   });
 
+  test('响应自带封面：直接复用，不再请求取图接口', () async {
+    final requests = <RequestOptions>[];
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        requests.add(request);
+        return textResponse('unexpected', statusCode: 500);
+      }),
+    );
+
+    final dispatch = BuiltinPicDispatch();
+    expect(
+      await dispatch.fetch(
+        track('kg', {
+          'songmid': '1',
+          'img': 'http://imge.kugou.com/stdmusic/{size}/kg.jpg',
+        }),
+      ),
+      'http://imge.kugou.com/stdmusic/480/kg.jpg',
+    );
+    expect(
+      await dispatch.fetch(
+        track('kw', {
+          'songmid': '2',
+          'web_albumpic_short': '120/s3s94/93/211513640.jpg',
+        }),
+      ),
+      'https://img1.kuwo.cn/star/albumcover/500/s3s94/93/211513640.jpg',
+    );
+    expect(requests, isEmpty);
+  });
+
   test('缓存：失败不进缓存、成功命中缓存', () async {
     // 取 wy 链路：平台拒绝时 `getList` 抛错（异常路径不缓存）；
     // kw/mg/kg 内部把失败吞成 null，那是「成功返回无结果」，与本用例无关。

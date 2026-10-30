@@ -4,6 +4,7 @@ import '../raw_track.dart';
 import '../source_search_result.dart';
 import '../source_track.dart';
 import 'artist_utils.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'builtin_search_runner.dart';
 import 'crypto_utils.dart';
@@ -115,6 +116,8 @@ class KgSearch {
       duration: duration > 0 ? Duration(seconds: duration) : null,
       types: types,
       rawInterval: duration,
+      img: kgCoverUrlOf(item),
+      audioId: item['MixSongID']?.toString(),
     );
   }
 
@@ -146,6 +149,7 @@ class KgSearch {
     required String albumId,
     String fallbackArtist = '',
     List<SourceArtistRef>? artists,
+    String? img,
   }) {
     if (raw is! Map) return null;
     final hash = raw['hash']?.toString() ?? '';
@@ -178,6 +182,7 @@ class KgSearch {
       duration: duration > 0 ? Duration(seconds: duration) : null,
       types: types,
       rawInterval: duration,
+      img: img,
     ));
   }
 
@@ -195,6 +200,7 @@ class KgSearch {
     int? rawInterval,
     List<SourceArtistRef>? artists,
     String? img,
+    String? audioId,
   }) {
     final raw = <String, dynamic>{
       'singer': artist,
@@ -208,6 +214,7 @@ class KgSearch {
       'interval': intervalText,
       '_interval': ?rawInterval,
       'img': img,
+      if (audioId != null && audioId.isNotEmpty) 'audioId': audioId,
       'lrc': null,
       'otherSource': null,
       'hash': hash,

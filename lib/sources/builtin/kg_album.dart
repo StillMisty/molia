@@ -2,6 +2,7 @@ import '../../domain/models/album.dart';
 import '../../domain/models/track.dart';
 import '../source_search_result.dart';
 import 'album_utils.dart';
+import 'builtin_cover_urls.dart';
 import 'builtin_search.dart';
 import 'builtin_transport.dart';
 import 'kg_search.dart';
@@ -75,7 +76,7 @@ class KgAlbum {
     final infoData = (info is Map && info['data'] is Map) ? info['data'] as Map : const {};
     final albumName = infoData['albumname']?.toString() ?? '';
     final artist = infoData['singername']?.toString() ?? '';
-    final img = infoData['imgurl']?.toString();
+    final coverUrl = kgCoverUrlOf(infoData);
 
     final rawList = data['info'] is List ? data['info'] as List : const [];
     final tracks = <Track>[];
@@ -85,6 +86,8 @@ class KgAlbum {
         albumName: albumName,
         albumId: albumId,
         fallbackArtist: artist,
+        // 专辑歌曲接口不带封面；列表行复用专辑封面，避免整页占位图。
+        img: coverUrl,
       );
       if (track != null) tracks.add(track);
     }
@@ -93,9 +96,7 @@ class KgAlbum {
       id: infoData['albumid']?.toString() ?? albumId,
       name: albumName,
       artist: artist,
-      coverUrl: (img == null || img.isEmpty)
-          ? null
-          : img.replaceAll('{size}', '480'),
+      coverUrl: coverUrl,
       year: albumYearOf(infoData['publishtime']),
       tracks: tracks,
       hasMore: albumHasMore(
@@ -112,11 +113,13 @@ class KgAlbum {
     required String albumName,
     required String albumId,
     String fallbackArtist = '',
+    String? img,
   }) =>
       KgSearch.parseListSong(
         raw,
         albumName: albumName,
         albumId: albumId,
         fallbackArtist: fallbackArtist,
+        img: img,
       );
 }

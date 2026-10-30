@@ -1,4 +1,5 @@
 import '../source_search_result.dart';
+import 'builtin_cover_urls.dart';
 import 'crypto_utils.dart';
 import 'kg_search.dart';
 import 'lyric_hit.dart';
@@ -82,7 +83,6 @@ class KgLyricSearch {
     }
 
     final duration = parseSourceCount(raw['TimeLength']) ?? 0;
-    final image = raw['Image']?.toString() ?? '';
     final track = KgSearch.buildTrack(
       songId: songId,
       name: decodeName(raw['SongName']?.toString()),
@@ -96,7 +96,7 @@ class KgLyricSearch {
       duration: duration > 0 ? Duration(seconds: duration) : null,
       types: types,
       rawInterval: duration,
-      img: image.isEmpty ? null : image.replaceAll('{size}', '480'),
+      img: kgCoverUrlOf(raw),
     );
     return SourceLyricHit(
       track: track,
