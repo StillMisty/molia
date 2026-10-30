@@ -1,8 +1,8 @@
 /// 窗口几何恢复的纯逻辑：保存值的可用性校验与离屏回退。
 ///
-/// 与插件 IO 分离（screen_retriever / window_manager 的调用都在
-/// `window_chrome_io.dart`）：这里只做矩形运算，便于单测覆盖「显示器拔掉 /
-/// 分辨率变化后窗口落在屏幕外」的边界。
+/// 与插件 IO 分离（nativeapi / window_manager 的调用都在 `*_io.dart`）：
+/// 这里只做矩形运算，便于单测覆盖「显示器拔掉 / 分辨率变化后窗口落在屏幕外」
+/// 的边界。
 library;
 
 import 'dart:math' as math;
@@ -45,10 +45,15 @@ Rect resolveRestoredBounds({
         )
       : kMinimumWindowSize;
   if (usable) {
-    final candidate =
-        Rect.fromLTWH(saved.left, saved.top, size.width, size.height);
-    if (displayVisibleAreas
-        .any((area) => windowBoundsVisibleOn(candidate, area))) {
+    final candidate = Rect.fromLTWH(
+      saved.left,
+      saved.top,
+      size.width,
+      size.height,
+    );
+    if (displayVisibleAreas.any(
+      (area) => windowBoundsVisibleOn(candidate, area),
+    )) {
       return candidate;
     }
   }

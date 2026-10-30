@@ -8,7 +8,7 @@
 
 ## 工具链
 
-Flutter / Dart 3.47.7 / 3.13.5；JDK 26+；Gradle 9.8.2 / AGP 9.4.1 / Kotlin 2.4.21；
+Flutter / Dart 3.47.9 / 3.13.7；JDK 27+；Gradle 9.8.2 / AGP 9.5.0 / Kotlin 2.4.21；
 compileSdk/targetSdk 37，minSdk 35；NDK 30.0.16248370。这里是版本来源，改 CI / 发布工作流前先改本行。
 最低支持：iOS 18 / macOS 12（Xcode；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
 
