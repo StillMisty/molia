@@ -66,6 +66,7 @@ import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'cover_appearance.dart';
 import 'cover_fallback.dart';
+import 'cover_handoff.dart';
 import 'player_cover_session.dart';
 import 'player_morph.dart';
 import 'track_artwork.dart';
@@ -162,10 +163,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     with TickerProviderStateMixin
     implements CoverSwapHost {
   /// 邻位稳态透明度；窗口淡出/淡入的端点值（p=0 / p=1 与稳态卡一致）。
-  static const double _neighborOpacity = 0.85;
+  static const double _neighborOpacity = coverHandoffNeighborOpacity;
 
   /// 侧槽卡片相对主封面的缩放；中心换场起手/落点也使用同一缩放。
-  static const double _sideSlotScale = 0.78;
+  static const double _sideSlotScale = coverHandoffSideSlotScale;
 
   /// 侧槽卡外观：把 [CoverAppearance.page] 的圆角 / 描边 / 阴影按
   /// [_sideSlotScale] 一起缩放。
@@ -181,16 +182,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     iconRatio: CoverAppearance.page.iconRatio,
     iconSize: CoverAppearance.page.iconSize,
   );
-
-  /// 中心卡从侧槽入场 / 退到侧槽时的缩放。
-  static double _centerScaleAt(double progress) =>
-      _sideSlotScale + (1 - _sideSlotScale) * progress;
-
-  /// 目标槽位旧身份淡出窗口终点：p ∈ [0, 0.4] 内 0.85 → 0（窗口内 easeOut）。
-  static const double _oldNeighborFadeEnd = 0.4;
-
-  /// 源槽位新身份淡入窗口起点：p ∈ [0.6, 1] 内 0 → 0.85（窗口内 easeInOut）。
-  static const double _newNeighborFadeStart = 0.6;
 
   /// 拖动对账落位后源侧新身份的纯透明度淡入时长。
   static const Duration _reconcileFadeDuration = Duration(milliseconds: 180);
@@ -256,12 +247,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   ///
   /// 上一段的中位卡此刻停在侧槽入场公式的中途；新会话必须以它当前视觉
   /// 为起点继续滑向目标槽，而不是按新会话的 `-offset*p` 重新绘制（那会
-  /// 瞬间跳约一个侧槽宽）。
-  _CoverHandoff? _handoff;
+  /// 瞬间跳约一个侧槽宽）。视觉代数在 `cover_handoff.dart`。
+  CoverHandoff? _handoff;
 
   /// 接管后被替换下来的更早滑出卡：各自从捕获位置继续向左离场并快速
   /// 淡出，避免「上一首残影」。只保留最近两层，够覆盖连续快滑。
-  final List<_CoverHandoffTail> _handoffTails = <_CoverHandoffTail>[];
+  final List<CoverHandoffTail> _handoffTails = <CoverHandoffTail>[];
 
   /// 正在把进度重置到 0（restart / 兜底）。controller 的 value setter 会按
   /// 旧 target 合成 completed 状态，不能让它误触发会话落位并清掉刚捕获的
@@ -595,6 +586,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     if (_reconcileCorrection.isAnimating) _reconcileCorrection.stop();
     final bool midFlight = _coverSwapMidFlight;
     final double p0 = _coverController.value.clamp(0.0, 1.0);
+    // 次序不变量：这里必须读「本次迁移前」的会话身份（旧中心 / 旧滑出）。
+    // 会话在 startSettle 返回后才改写 _to/_from/phase，捕获逻辑依赖该顺序，
+    // 不要在调用前重置会话或移动这段读取。
     final Track? previousCenter = _session.to;
     final Track? previousOutgoing = _session.from;
     final bool targetIsOldOutgoing =
@@ -647,7 +641,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   ///
   /// [exclude] 是新中心 track：新中心不能同时留在 tail 列表（回绕/重复 id
   /// 时尤其重要）。
-  void _addHandoffTail(_CoverHandoffTail tail, {Track? exclude}) {
+  void _addHandoffTail(CoverHandoffTail tail, {Track? exclude}) {
     final String trackKey = trackKeyOf(tail.track)!;
     if (exclude != null && trackKeyOf(exclude) == trackKey) return;
     if (_handoffTails.any(
@@ -670,11 +664,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     );
   }
 
+  /// 侧槽相对中心的横向偏移（占主封面边长的比例）。
+  double get _sideOffset => widget.artDimension * coverHandoffSideOffsetFactor;
+
   /// 捕获连切接管状态：中心卡（上一段的进场卡）与上一段滑出卡。
   ///
   /// 新会话的滑出卡以中心卡捕获位置为起点，用 `q = (p - p0) / (1 - p0)`
   /// 连续插值到目标侧槽；新的中心卡继续沿用全局 `p` 的侧槽入场公式，
-  /// 因此它在 p0 帧与旧中心卡完全重合，形成无缝接管。
+  /// 因此它在 p0 帧与旧中心卡完全重合，形成无缝接管。公式在
+  /// `cover_handoff.dart`，这里只做身份/图层编排。
   void _captureHandoff({
     required double progress,
     required int direction,
@@ -686,37 +684,22 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _removeHandoffTail(nextTrack);
     // 链路中的上一段：若已是接管会话，它的滑出卡由 q 公式绘制，必须按
     // 当前渲染值捕获，不能再用新会话公式重算。
-    final _CoverHandoff? previousHandoff = _handoff;
+    final CoverHandoff? previousHandoff = _handoff;
     if (previousHandoff != null) {
-      final _HandoffVisual? visual = _handoffOutgoingVisual(
+      final CoverHandoffTail? tail = coverHandoffTailFromOutgoingHandoff(
+        previousHandoff,
         progress,
-        handoff: previousHandoff,
+        sideOffset: _sideOffset,
       );
-      if (visual != null && visual.opacity > 0.01) {
-        _addHandoffTail(
-          _CoverHandoffTail(
-            track: previousHandoff.previousCenterTrack,
-            p0: progress,
-            direction: previousHandoff.direction,
-            x: visual.x,
-            scale: visual.scale,
-            rotation: visual.rotation,
-            opacity: visual.opacity,
-          ),
-          exclude: nextTrack,
-        );
-      }
+      if (tail != null) _addHandoffTail(tail, exclude: nextTrack);
     } else if (oldOutgoing != null) {
       // 上一段是常规滑出：中心运动公式在 p0 的值就是它此刻的视觉状态。
       _addHandoffTail(
-        _CoverHandoffTail(
+        coverHandoffTailFromRegularOutgoing(
           track: oldOutgoing,
           p0: progress,
           direction: _session.direction,
-          x: -widget.artDimension * 0.30 * _session.direction * progress,
-          scale: 1.0 - 0.22 * progress,
-          rotation: -0.05 * _session.direction * progress,
-          opacity: 1.0 - 0.15 * progress,
+          sideOffset: _sideOffset,
         ),
         exclude: nextTrack,
       );
@@ -724,20 +707,18 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // p0 已进入源侧淡入窗口时，新中心 C 在上一帧就是右/左槽的 source
     // neighbor。捕获它的实际视觉作为新中心起点（位置/透明度都连续）；
     // 未进入窗口时 C 本来看不见，继续用全局 p 公式即可。
-    final double sourceOpacity = _sourceNewNeighborOpacityAt(progress);
+    final double sourceOpacity = coverSourceNewNeighborOpacityAt(progress);
     final bool captureSourceCenter = sourceOpacity > 0.01;
-    final double sideOffset = widget.artDimension * 0.30;
-    _handoff = _CoverHandoff(
-      kind: _CoverHandoffKind.continuous,
+    _handoff = CoverHandoff(
+      kind: CoverHandoffKind.continuous,
       p0: progress,
       direction: direction,
       previousCenterTrack: centerTrack!,
       outgoingFrom: _centerVisualAt(progress),
       centerFrom: captureSourceCenter
-          ? _HandoffVisual(
-              x: direction * sideOffset,
-              rotation: 0.05 * direction,
-              scale: _sideSlotScale,
+          ? coverSourceNeighborVisual(
+              direction: direction,
+              sideOffset: _sideOffset,
               opacity: sourceOpacity,
             )
           : null,
@@ -766,10 +747,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   }) {
     final Track centerTrack = _session.to!;
     final Track? oldOutgoing = _session.from;
-    final _HandoffVisual centerVisual = _centerVisualAt(progress);
-    final _HandoffVisual? outgoingVisual = oldOutgoing == null
+    final CoverHandoffVisual centerVisual = _centerVisualAt(progress);
+    final CoverHandoffVisual? outgoingVisual = oldOutgoing == null
         ? null
-        : _previousOutgoingVisualAt(progress);
+        : coverOutgoingVisualAt(
+            handoff: _handoff,
+            progress: progress,
+            direction: _session.direction,
+            sideOffset: _sideOffset,
+          );
     final bool targetIsOldOutgoing =
         oldOutgoing != null && trackKeyOf(nextTrack) == trackKeyOf(oldOutgoing);
     final int oldDirection = _session.direction;
@@ -779,43 +765,34 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
 
     // 旧 tail 在 restart 时进度归零，必须按当前渲染值 rebase 到 p0=0，
     // 否则会被冻结在旧进度上（甚至永不消失）。
-    final double sideOffset = widget.artDimension * 0.30;
-    final List<_CoverHandoffTail> oldTails = List.of(_handoffTails);
+    final double sideOffset = _sideOffset;
+    final List<CoverHandoffTail> oldTails = List.of(_handoffTails);
     _handoffTails.clear();
     for (final tail in oldTails) {
       // 新中心接管同一身份时，旧 tail 不能继续画（否则同曲两张卡）；
       // 同一身份只保留最近捕获的一张 tail（_addHandoffTail 去重）。
       if (trackKeyOf(tail.track) == trackKeyOf(nextTrack)) continue;
-      final _HandoffVisual visual = tail.visualAt(
+      final CoverHandoffVisual visual = tail.visualAt(
         progress,
         sideOffset: sideOffset,
         fadeSpan: _takeoverTailFadeSpan,
       );
       if (visual.opacity <= 0.01) continue;
       _addHandoffTail(
-        _CoverHandoffTail(
-          track: tail.track,
-          p0: 0,
-          direction: tail.direction,
-          x: visual.x,
-          scale: visual.scale,
-          rotation: visual.rotation,
-          opacity: visual.opacity,
-        ),
+        tail.rebased(p0: 0, visual: visual),
         exclude: nextTrack,
       );
     }
     // 旧滑出 A 若成为新中心，不能同时以 tail 重复渲染；否则保留短淡出。
-    if (!targetIsOldOutgoing && oldOutgoing != null && outgoingVisual != null) {
+    if (!targetIsOldOutgoing &&
+        oldOutgoing != null &&
+        outgoingVisual != null) {
       _addHandoffTail(
-        _CoverHandoffTail(
+        CoverHandoffTail(
           track: oldOutgoing,
           p0: 0,
           direction: oldDirection,
-          x: outgoingVisual.x,
-          scale: outgoingVisual.scale,
-          rotation: outgoingVisual.rotation,
-          opacity: outgoingVisual.opacity,
+          from: outgoingVisual,
         ),
         exclude: nextTrack,
       );
@@ -824,18 +801,17 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     // 它在旧方向侧槽的实际视觉；否则才用全侧槽 0.85 入场。
     final double sourceOpacity = targetIsOldOutgoing
         ? 0
-        : _sourceNewNeighborOpacityAt(progress);
+        : coverSourceNewNeighborOpacityAt(progress);
     final bool captureSourceCenter = sourceOpacity > 0.01;
-    final _HandoffVisual? sourceCenterFrom = captureSourceCenter
-        ? _HandoffVisual(
-            x: oldDirection * sideOffset,
-            rotation: 0.05 * oldDirection,
-            scale: _sideSlotScale,
+    final CoverHandoffVisual? sourceCenterFrom = captureSourceCenter
+        ? coverSourceNeighborVisual(
+            direction: oldDirection,
+            sideOffset: sideOffset,
             opacity: sourceOpacity,
           )
         : null;
-    _handoff = _CoverHandoff(
-      kind: _CoverHandoffKind.restart,
+    _handoff = CoverHandoff(
+      kind: CoverHandoffKind.restart,
       p0: 0,
       direction: direction,
       previousCenterTrack: centerTrack,
@@ -847,96 +823,18 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     );
   }
 
-  /// 接管会话中滑出卡的当前视觉（未接管时返回 null）。
-  _HandoffVisual? _handoffOutgoingVisual(
-    double progress, {
-    _CoverHandoff? handoff,
-  }) {
-    final _CoverHandoff? value = handoff ?? _handoff;
-    if (value == null) return null;
-    final double sideOffset = widget.artDimension * 0.30;
-    final (_HandoffVisual, double) start = switch (value.kind) {
-      _CoverHandoffKind.continuous => (
-        value.outgoingFrom ??
-            _HandoffVisual(
-              x: value.direction * sideOffset * (1 - value.p0),
-              rotation: 0.05 * value.direction * (1 - value.p0),
-              scale: _centerScaleAt(value.p0),
-              opacity: 0.85 + 0.15 * value.p0,
-            ),
-        ((progress - value.p0) / (1 - value.p0)).clamp(0.0, 1.0),
-      ),
-      _CoverHandoffKind.restart => (
-        value.outgoingFrom!,
-        progress.clamp(0.0, 1.0),
-      ),
-    };
-    final _HandoffVisual from = start.$1;
-    final double t = start.$2;
-    return _HandoffVisual(
-      x: _lerp(from.x, -sideOffset * value.direction, t),
-      rotation: _lerp(from.rotation, -0.05 * value.direction, t),
-      scale: _lerp(from.scale, _sideSlotScale, t),
-      opacity: _lerp(from.opacity, 0.85, t),
-    );
-  }
-
-  /// 接管后的新中心视觉：只在捕获了 centerFrom 时覆盖公式。
-  ///
-  /// continuous 用剩余行程 q（source neighbor → 中心）；restart 用新弹簧
-  /// p（旧滑出 A → 中心）。
-  _HandoffVisual? _handoffCenterVisual(double progress, _CoverHandoff handoff) {
-    final _HandoffVisual? from = handoff.centerFrom;
-    if (from == null) return null;
-    final double t = switch (handoff.kind) {
-      _CoverHandoffKind.continuous =>
-        ((progress - handoff.p0) / (1 - handoff.p0)).clamp(0.0, 1.0),
-      _CoverHandoffKind.restart => progress.clamp(0.0, 1.0),
-    };
-    return _HandoffVisual(
-      x: _lerp(from.x, 0, t),
-      rotation: _lerp(from.rotation, 0, t),
-      scale: _lerp(from.scale, 1.0, t),
-      opacity: _lerp(from.opacity, 1.0, t),
-    );
-  }
-
   /// 上一段中心卡在 [progress] 的实际视觉。
   ///
   /// 常规会话用全局 p 公式；若上一段接管时捕获过新中心起点（restart 的
   /// C==A，或 continuous 的 source neighbor），中心可能已被 override，必须
-  /// 按 [_handoffCenterVisual] 取实际值，链式接管才不会以公式位置重新起跳。
-  _HandoffVisual _centerVisualAt(double progress) {
-    final _CoverHandoff? current = _handoff;
-    if (current != null &&
-        current.centerFromTrack != null &&
-        trackKeyOf(_session.to) == trackKeyOf(current.centerFromTrack)) {
-      final _HandoffVisual? visual = _handoffCenterVisual(progress, current);
-      if (visual != null) return visual;
-    }
-    final double sideOffset = widget.artDimension * 0.30;
-    final int dir = _session.direction;
-    return _HandoffVisual(
-      x: dir * sideOffset * (1 - progress),
-      rotation: 0.05 * dir * (1 - progress),
-      scale: _centerScaleAt(progress),
-      opacity: 0.85 + 0.15 * progress,
-    );
-  }
-
-  /// 上一段滑出卡在 [progress] 的视觉：已接管链按 q 计算，否则用常规公式。
-  _HandoffVisual _previousOutgoingVisualAt(double progress) {
-    final _HandoffVisual? handoffVisual = _handoffOutgoingVisual(progress);
-    if (handoffVisual != null) return handoffVisual;
-    final int dir = _session.direction;
-    final double sideOffset = widget.artDimension * 0.30;
-    return _HandoffVisual(
-      x: -sideOffset * dir * progress,
-      rotation: -0.05 * dir * progress,
-      scale: 1.0 - 0.22 * progress,
-      opacity: 1.0 - 0.15 * progress,
-    );
-  }
+  /// 按捕获视觉取实际值，链式接管才不会以公式位置重新起跳。
+  CoverHandoffVisual _centerVisualAt(double progress) => coverCenterVisualAt(
+    handoff: _handoff,
+    centerTrack: _session.to,
+    progress: progress,
+    direction: _session.direction,
+    sideOffset: _sideOffset,
+  );
 
   @override
   void settleDuringDrag() {
@@ -965,8 +863,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         actualSource != null &&
         previewNeighbor.id == actualSource.id;
     final double start = continuous
-        ? _sourceFadeStartFor(
-            _sourceNewNeighborOpacityAt(_coverController.value.clamp(0.0, 1.0)),
+        ? coverSourceFadeStartFor(
+            coverSourceNewNeighborOpacityAt(
+              _coverController.value.clamp(0.0, 1.0),
+            ),
           )
         : 0.0;
     _sourceNeighborFade.value = start;
@@ -1490,13 +1390,13 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   // p 是弹簧进度：位移/旋转/缩放直接用 p（spatial 弹簧保留过冲）；
                   // 透明度窗口从 p 派生且截断 0..1（M3E 规范：effects 不过冲）。
                   final double p = _coverController.value;
-                  final double t = p;
                   final double pClamped = p.clamp(0.0, 1.0);
                   final dir = session.direction;
                   final double sideSize =
                       widget.artDimension * _sideSlotScale;
-                  final double offset = widget.artDimension * 0.30;
-                  const double sideRotation = 0.05;
+                  final double offset = widget.artDimension *
+                      coverHandoffSideOffsetFactor;
+                  const double sideRotation = coverHandoffSideRotation;
                   // 侧邻位淡入进度：进入飞行最后 45% 原位淡入 / 离开前 45%
                   // 原位淡出。只有侧槽包装器订阅这个 ValueListenable；deck 主
                   // builder 不因 reveal 逐帧重建（卡图片子树保持稳定）。减弱
@@ -1508,7 +1408,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   // 飞行期间整层手势与侧槽点击关闭（副本才是唯一交互/视觉来源）；
                   // 顶栏⇄播放页与迷你⇄完整两种飞行都走同一个隐藏判定。
                   final bool deckFrozen = _pageCoverHidden;
-                  final _CoverHandoff? handoff = _handoff;
+                  final CoverHandoff? handoff = _handoff;
                   final bool handoffActive =
                       handoff != null &&
                       session.phase == CoverSwapPhase.settling &&
@@ -1519,7 +1419,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   // 接管后更早的滑出卡：从捕获位置继续向左离场并快速淡出，
                   // 不参与新会话的邻位窗口（否则会与 oldNeighbor 同身份叠影）。
                   for (final tail in _handoffTails) {
-                    final _HandoffVisual visual = tail.visualAt(
+                    final CoverHandoffVisual visual = tail.visualAt(
                       p,
                       sideOffset: offset,
                       fadeSpan: _takeoverTailFadeSpan,
@@ -1565,7 +1465,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                         sideSize: sideSize,
                         x: -offset * dir,
                         rotation: -sideRotation * dir,
-                        opacity: _oldNeighborOpacityAt(pClamped),
+                        opacity: coverOldNeighborOpacityAt(pClamped),
                         reveal: sideReveal,
                         cardKey: PlayerCoverDeck.sideCoverCardKey(
                           left: dir > 0,
@@ -1597,7 +1497,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                         sideSize: sideSize,
                         x: offset * dir,
                         rotation: sideRotation * dir,
-                        opacity: _sourceNewNeighborOpacityAt(pClamped),
+                        opacity: coverSourceNewNeighborOpacityAt(pClamped),
                         reveal: sideReveal,
                         cardKey: sourceTrack == null
                             ? null
@@ -1611,18 +1511,16 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     // 滑出的旧当前 → 目标槽位：全程插值（终点与稳态槽位卡
                     // 完全重合：位置/旋转/缩放/透明度一致，动画结束无 pop）。
                     // 连切接管时以捕获的中心卡视觉为起点、按剩余行程
-                    // `q = (p - p0) / (1 - p0)` 插值（见 _handoffOutgoingVisual）；
+                    // `q = (p - p0) / (1 - p0)` 插值（见 cover_handoff.dart）；
                     // 否则沿用本轮全局进度公式。
                     // 入栈时机由 outgoingOnTop 决定（见中心卡渲染）。
                     if (session.from != null) {
-                      final _HandoffVisual outgoing = handoffActive
-                          ? _handoffOutgoingVisual(p, handoff: handoff)!
-                          : _HandoffVisual(
-                              x: -offset * dir * t,
-                              rotation: -sideRotation * dir * t,
-                              scale: 1.0 - 0.22 * t,
-                              opacity: 1.0 - 0.15 * pClamped,
-                            );
+                      final CoverHandoffVisual outgoing = coverOutgoingVisualAt(
+                        handoff: handoffActive ? handoff : null,
+                        progress: p,
+                        direction: dir,
+                        sideOffset: offset,
+                      );
                       outgoingLayer = _mainCoverLayer(
                         context,
                         session.from,
@@ -1748,9 +1646,15 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                     }
                     // 接管捕获了新中心起点时（restart 的 C==A / continuous 的
                     // source neighbor）按捕获视觉插值；否则用公式入场。
-                    final _HandoffVisual? handoffCenter = handoffActive
-                        ? _handoffCenterVisual(p, handoff)
+                    final CoverHandoffVisual? handoffCenter = handoffActive
+                        ? coverHandoffCenterVisual(handoff, p)
                         : null;
+                    final CoverHandoffVisual regularCenter =
+                        coverRegularCenterVisual(
+                          p,
+                          direction: dir,
+                          sideOffset: offset,
+                        );
                     children.add(
                       _mainCoverLayer(
                         context,
@@ -1764,13 +1668,11 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                             : PlayerCoverDeck.centerCoverTrackKey(
                                 centerTrack.id,
                               ),
-                        x: handoffCenter?.x ?? dir * offset * (1 - t),
+                        x: handoffCenter?.x ?? regularCenter.x,
                         rotation:
-                            handoffCenter?.rotation ??
-                            sideRotation * dir * (1 - t),
-                        scale: handoffCenter?.scale ?? _centerScaleAt(t),
-                        opacity:
-                            handoffCenter?.opacity ?? 0.85 + 0.15 * pClamped,
+                            handoffCenter?.rotation ?? regularCenter.rotation,
+                        scale: handoffCenter?.scale ?? regularCenter.scale,
+                        opacity: handoffCenter?.opacity ?? regularCenter.opacity,
                         interactive: !showingPreview,
                         coverKey: widget.morph?.pageCoverKey,
                         hidden: _pageCoverHidden,
@@ -1801,44 +1703,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         ),
       ),
     );
-  }
-
-  /// 目标槽位旧身份透明度：窗口 p∈[0, 0.4] 内 0.85→0（窗口内 easeOut），
-  /// 之后保持 0。窗口化交叉让旧身份先退场、新身份后进场。
-  double _oldNeighborOpacityAt(double p) {
-    final double window = (p / _oldNeighborFadeEnd).clamp(0.0, 1.0);
-    return _neighborOpacity * (1 - Curves.easeOut.transform(window));
-  }
-
-  /// 源槽位新身份透明度：窗口 p∈[0.6, 1] 内 0→0.85（窗口内 easeInOut）。
-  double _sourceNewNeighborOpacityAt(double p) {
-    final double window =
-        ((p - _newNeighborFadeStart) / (1 - _newNeighborFadeStart)).clamp(
-          0.0,
-          1.0,
-        );
-    return _neighborOpacity * Curves.easeInOut.transform(window);
-  }
-
-  /// 把预览阶段的源侧透明度换算成 [_sourceNeighborFade] 的起点。
-  ///
-  /// 稳态淡入渲染的是 `_neighborOpacity × easeOut(fade)`；预览窗口用的是
-  /// easeInOut。求 easeOut 的反函数，保证对账切换的那一帧透明度不跳。
-  double _sourceFadeStartFor(double previewOpacity) {
-    final double target = (previewOpacity / _neighborOpacity).clamp(0.0, 1.0);
-    if (target <= 0) return 0;
-    if (target >= 1) return 1;
-    var low = 0.0;
-    var high = 1.0;
-    for (var i = 0; i < 12; i++) {
-      final mid = (low + high) / 2;
-      if (Curves.easeOut.transform(mid) < target) {
-        low = mid;
-      } else {
-        high = mid;
-      }
-    }
-    return (low + high) / 2;
   }
 
   /// 稳态邻位槽位的渲染层：身份交叉淡化期间同槽位并存旧（淡出）与新
@@ -2266,106 +2130,6 @@ class _SideRevealSlot extends StatelessWidget {
           },
         ),
       ),
-    );
-  }
-}
-
-/// 线性插值（避免为一个几何 helper 引入 dart:ui 的 lerpDouble）。
-double _lerp(double a, double b, double t) => a + (b - a) * t;
-
-/// 接管方式。
-///
-/// - [continuous]：同一方向、未接近落位，沿用旧弹簧进度，q 走剩余行程；
-/// - [restart]：方向反转 / 接近落位 / 新中心是旧滑出卡，新弹簧 p=0→1，
-///   起点视觉来自接管瞬间。
-enum _CoverHandoffKind { continuous, restart }
-
-/// 接管会话捕获的起点。
-///
-/// [previousCenterTrack] 是上一段的旧中心卡（也就是新会话的滑出卡），
-/// 不是本段新中心。continuous 用
-/// `(p - p0) / (1 - p0)` 走剩余行程；restart 保留接管瞬间的旧中心/旧滑出
-/// 视觉，作为新弹簧 p=0 的起点。
-class _CoverHandoff {
-  const _CoverHandoff({
-    required this.kind,
-    required this.p0,
-    required this.direction,
-    required this.previousCenterTrack,
-    this.outgoingFrom,
-    this.centerFrom,
-    this.centerFromTrack,
-  });
-
-  final _CoverHandoffKind kind;
-  final double p0;
-  final int direction;
-  final Track previousCenterTrack;
-
-  /// 旧中心卡（新会话滑出卡）在接管瞬间的实际视觉；链式接管时不再按公式
-  /// 重算（上一段可能已被 restart 中心 override）。
-  final _HandoffVisual? outgoingFrom;
-
-  /// 新中心在接管瞬间的捕获视觉：restart 的 C==A，或 continuous 中 C 已
-  /// 作为 source neighbor 出现；否则为 null（用公式入场）。
-  final _HandoffVisual? centerFrom;
-
-  /// [centerFrom] 对应的新中心 track（链式接管时用于识别上一段中心身份）。
-  final Track? centerFromTrack;
-}
-
-/// 一帧可复用的封面视觉状态（接管插值的输入/输出）。
-class _HandoffVisual {
-  const _HandoffVisual({
-    required this.x,
-    required this.rotation,
-    required this.scale,
-    required this.opacity,
-  });
-
-  final double x;
-  final double rotation;
-  final double scale;
-  final double opacity;
-}
-
-/// 接管后被替换下来的更早滑出卡：从捕获视觉继续向左离场并短淡出。
-class _CoverHandoffTail {
-  const _CoverHandoffTail({
-    required this.track,
-    required this.p0,
-    required this.direction,
-    required this.x,
-    required this.scale,
-    required this.rotation,
-    required this.opacity,
-  });
-
-  final Track track;
-  final double p0;
-  final int direction;
-  final double x;
-  final double scale;
-  final double rotation;
-  final double opacity;
-
-  /// 当前全局进度 [progress] 下的视觉：前 [fadeSpan] 段剩余行程内淡出，
-  /// 同时继续向远离中心的方向滑出（不回到新会话的侧槽窗口）。
-  _HandoffVisual visualAt(
-    double progress, {
-    required double sideOffset,
-    required double fadeSpan,
-  }) {
-    final double q = ((progress - p0) / (1 - p0)).clamp(0.0, 1.0);
-    final double slide = Curves.easeOut.transform(q);
-    final double fade = Curves.easeOut.transform(
-      (q / fadeSpan).clamp(0.0, 1.0),
-    );
-    return _HandoffVisual(
-      x: _lerp(x, -sideOffset * direction * 1.15, slide),
-      rotation: _lerp(rotation, -0.05 * direction * 1.15, slide),
-      scale: _lerp(scale, 0.70, slide),
-      opacity: opacity * (1 - fade),
     );
   }
 }
