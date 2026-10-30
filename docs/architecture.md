@@ -1243,7 +1243,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   禁止 `Colors.*`/`Color(0x...)` 字面量、`withAlpha/withOpacity`、
   `scaffoldBackgroundColor/dividerColor` 双源属性（`test/architecture/color_usage_test.dart` 扫描强制）。
 - 当前曲目（曲目列表）：标题 `primary` + 封面右下角 `primary` 圆形状态角标
-  （播放中自绘均衡器动画（PlayingIndicator 3 柱起伏）/ 暂停同一均衡器静止、
+  （播放中自绘均衡器动画（PlayingIndicator 3 柱起伏）/ 暂停同一均衡器原地冻结、
   不换暂停图标，见 `widgets/current_track_cover.dart`）；减弱动效时静态显示，
   含播放行的 widget 测试不要 `pumpAndSettle`；`selected`（多选勾选）优先，
   选中时只显示勾选、不叠角标。队列的「正在播放」小节保留既有高亮，不叠角标。

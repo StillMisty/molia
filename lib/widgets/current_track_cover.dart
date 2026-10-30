@@ -34,8 +34,9 @@ class CurrentTrackCover extends StatefulWidget {
 
 class _CurrentTrackCoverState extends State<CurrentTrackCover>
     with SingleTickerProviderStateMixin {
-  /// 暂停时停住的相位：三柱高低错落，静止时也读得出是均衡器。
-  static const double _pausedPhase = 0.25;
+  /// 首次渲染即处于暂停态时的初始相位：三柱高低错落，静止时也读得出是
+  /// 均衡器。播放中按暂停则原地冻结，不会跳回这个相位。
+  static const double _idlePhase = 0.25;
 
   /// 播放中角标的起伏周期。取 M3E extraLong4（1000ms）：起伏要慢到不抢
   /// 列表阅读，又能在扫一行时看出在动。
@@ -49,7 +50,7 @@ class _CurrentTrackCoverState extends State<CurrentTrackCover>
     _controller = AnimationController(
       vsync: this,
       duration: M3EMotion.extraLong4,
-      value: _pausedPhase,
+      value: _idlePhase,
     );
     // 初始相位已知，但「减弱动效」要等 didChangeDependencies 才能读到：
     // 先按正常动效起跑，下一拍再按真实偏好校正。
@@ -69,11 +70,11 @@ class _CurrentTrackCoverState extends State<CurrentTrackCover>
     _syncAnimation();
   }
 
-  /// 只有「正在播放 + 未减弱动效」才跑 ticker；其余状态停在同一相位。
+  /// 只有「正在播放 + 未减弱动效」才跑 ticker；暂停时停在当前相位。
   ///
   /// 暂停后不能保留 ticker 空转：角标仍留在屏幕上，继续起伏就会违反
-  /// 「暂停时完全不动」。复位到固定相位则让静态形状保持统一，不因暂停时刻
-  /// 不同而高低不一。
+  /// 「暂停时完全不动」。不重置相位则让暂停那一刻原地冻结，恢复播放时也从
+  /// 同一相位续跑。
   void _syncAnimation() {
     if (widget.isPlaying && !_reduceMotion) {
       if (!_controller.isAnimating) {
@@ -82,9 +83,6 @@ class _CurrentTrackCoverState extends State<CurrentTrackCover>
       return;
     }
     _controller.stop();
-    if (_controller.value != _pausedPhase) {
-      _controller.value = _pausedPhase;
-    }
   }
 
   @override

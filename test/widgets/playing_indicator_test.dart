@@ -48,9 +48,14 @@ void main() {
     expect(find.byType(PlayingIndicator), findsOneWidget);
   });
 
-  testWidgets('暂停：保留静态均衡器，且不再有 ticker', (tester) async {
+  testWidgets('暂停：原地冻结，保留静态均衡器且不再有 ticker', (tester) async {
     await pumpCover(tester, isPlaying: true);
     await tester.pump(const Duration(milliseconds: 300));
+
+    final frozenAt = tester
+        .widget<PlayingIndicator>(find.byType(PlayingIndicator))
+        .progress
+        .value;
 
     await pumpCover(tester, isPlaying: false);
     // 等过一个图标切换周期：角标应始终留在原位。
@@ -58,6 +63,14 @@ void main() {
 
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
     expect(find.byType(PlayingIndicator), findsOneWidget);
+    final pausedProgress = tester
+        .widget<PlayingIndicator>(find.byType(PlayingIndicator))
+        .progress;
+    expect(
+      pausedProgress.value,
+      moreOrLessEquals(frozenAt),
+      reason: '暂停应停在按下那一刻的相位，不跳回固定相位',
+    );
     expect(
       tester.binding.transientCallbackCount,
       0,
