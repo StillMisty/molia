@@ -235,23 +235,54 @@ class CollectionSessionInput {
   final int cacheRevision;
 }
 
+/// [CollectionSession.sync] 一帧解析出的完整输入。
+///
+/// 弹层计数 / 失败重试这类命令只读调用方传入的帧：资料库端口、快照、下载 /
+/// 缓存输入与落库列表 id 都是同一帧的值，不再依赖「先 sync 一次」留在会话
+/// 里的隐藏状态。
+@immutable
+class CollectionFrame {
+  const CollectionFrame({
+    required this.library,
+    required this.snapshot,
+    required this.downloads,
+    required this.cacheRevision,
+    required this.playlistId,
+  });
+
+  final CollectionLibrary library;
+
+  /// 该帧读取的资料库快照（含当前列表的曲目视图）。
+  final CollectionLibrarySnapshot snapshot;
+
+  final CollectionDownloads downloads;
+  final int cacheRevision;
+
+  /// 该帧解析出的落库列表 id（历史 / 本地歌曲为 null）。
+  final int? playlistId;
+}
+
 /// 合集视图的加载阶段。
 enum CollectionViewPhase { loading, ready, failed }
 
-/// 会话每帧交给页面的一个值：视图 + 加载态 + 排序态。
+/// 会话每帧交给页面的一个值：视图 + 帧 + 加载态 + 排序态。
 class CollectionSessionView {
   const CollectionSessionView({
     required this.view,
+    required this.frame,
     required this.phase,
     required this.reorderActive,
-    required this.searchOpen,
     this.error,
   });
 
   final CollectionView view;
+
+  /// 本帧输入；页面把它交回 `ensureLocalSongsReady` / `retry`，命令不读
+  /// 会话缓存的上一帧。
+  final CollectionFrame frame;
+
   final CollectionViewPhase phase;
   final bool reorderActive;
-  final bool searchOpen;
 
   /// 读取失败的原始异常（只用于诊断；UI 展示 l10n 文案 + 重试）。
   final Object? error;
@@ -304,36 +335,40 @@ class CollectionSession extends ChangeNotifier {
 
   bool _disposed = false;
 
-  /// 最近一次 sync 的资料库端口：事件意图（切换合集 / 重新可见 / 重试）用它。
+  /// 最近一次 sync 的资料库端口：切换合集 / 页面重新可见的事件意图用它。
+  /// 命令（弹层计数 / 重试）不再从这里读快照，只读调用方交回的
+  /// [CollectionFrame]。
   CollectionLibrary? _library;
-
-  /// 最近一次 sync 消费的资料库快照：弹层计数与重试按它重算本地歌曲，
-  /// 不需要调用方再交一遍 provider 状态。
-  CollectionLibrarySnapshot? _lastSnapshot;
-
-  /// 最近一帧的下载 / 缓存输入（`ensureLocalSongsReady` 未显式给值时的兜底）。
-  CollectionDownloads _lastDownloads = const CollectionDownloads.unavailable();
-  int _lastCacheRevision = -1;
 
   /// 当前滚动键与是否已为它调度过恢复（同一合集只恢复一次）。
   String? _scrollKey;
   bool _scrollReady = false;
-
-  /// 最近一次 sync 解析出的列表 id（失败重试用）。
-  int? _lastPlaylistId;
 
   /// 上一帧投影的视图：identical 时可见行集合没变，选择集无需全量重扫。
   CollectionView? _lastView;
 
   Future<void>? _restoreFuture;
 
-  /// 多选状态机（页面读选中态 / 计数，写操作走本类意图方法）。
+  /// 多选状态机（测试直接驱动纯选择语义用；生产代码只走本类的选择意图）。
+  @visibleForTesting
   CollectionSelection get selection => _selection;
 
   bool get selecting => _selection.isSelecting;
+  int get selectedCount => _selection.selectedCount;
   bool get searching => _searching;
   bool get reordering => _reordering;
   CollectionTrackSort get sort => _sort;
+
+  /// 清空多选（Esc / 关闭多选栏 / 切换合集 / 批量写入成功后）。
+  void clearSelection() => _selection.clear();
+
+  /// 选中当前视图的全部可见行（多选栏「全选」）。
+  void selectAllVisible(CollectionView view) => _selection.selectAll([
+        for (final row in view.visibleRows) row.key,
+      ]);
+
+  /// 某一行是否选中（行渲染读取，生产代码不直接碰选择状态机）。
+  bool isSelected(String key) => _selection.isSelected(key);
 
   /// 合集自定义顺序（持久化键 `favorites` / `history` / `downloads` /
   /// `playlist:<id>`）。
@@ -368,8 +403,6 @@ class CollectionSession extends ChangeNotifier {
   CollectionSessionView sync(CollectionSessionInput input) {
     final library = input.library;
     _library = library;
-    _lastDownloads = input.downloads;
-    _lastCacheRevision = input.cacheRevision;
     _ensureStartupLoads(library);
     if (!_restoreStarted) unawaited(start());
 
@@ -389,19 +422,16 @@ class CollectionSession extends ChangeNotifier {
       snapshot = library.snapshot(playlistId: selectedPlaylistId);
       tracksView = snapshot.playlistTracks;
     }
-    _lastSnapshot = snapshot;
-    _lastPlaylistId = selectedPlaylistId;
+    final frame = CollectionFrame(
+      library: library,
+      snapshot: snapshot,
+      downloads: input.downloads,
+      cacheRevision: input.cacheRevision,
+      playlistId: selectedPlaylistId,
+    );
 
     if (identity.isLocalSongs) {
-      unawaited(
-        _localSongs.sync(
-          _localSongsInput(
-            snapshot,
-            downloads: input.downloads,
-            cacheRevision: input.cacheRevision,
-          ),
-        ),
-      );
+      unawaited(_localSongs.sync(_localSongsInput(frame)));
     }
     final localSongs = identity.isLocalSongs
         ? _localSongs.rows
@@ -467,9 +497,9 @@ class CollectionSession extends ChangeNotifier {
 
     return CollectionSessionView(
       view: view,
+      frame: frame,
       phase: phase,
       reorderActive: reorderActive,
-      searchOpen: _searching,
       error: failure,
     );
   }
@@ -507,49 +537,25 @@ class CollectionSession extends ChangeNotifier {
 
   /// 合集弹层打开前把缓存行重算到当前输入（计数与列表行数同源）。
   ///
-  /// [downloads] / [cacheRevision] 可传当前帧之外的最新快照：弹层从别的合集
-  /// 打开时页面不一定因下载记录变化重建，计数仍要按最新记录算。
-  ///
-  /// 读取来源是会话自己持有的最近一帧快照（[sync] 落下的那份），调用方
-  /// 不需要先交一次输入；[downloads] / [cacheRevision] 不给时用同一帧的值。
-  Future<void> ensureLocalSongsReady({
-    CollectionDownloads? downloads,
-    int? cacheRevision,
-  }) {
-    final library = _library;
-    final snapshot = _lastSnapshot;
-    if (library == null || snapshot == null) return Future<void>.value();
-    return _localSongs.sync(
-      _localSongsInput(
-        snapshot,
-        downloads: downloads ?? _lastDownloads,
-        cacheRevision: cacheRevision ?? _lastCacheRevision,
-      ),
-    );
-  }
+  /// 只读传入帧：页面把当前 [CollectionSessionView.frame] 交回来，弹层从
+  /// 别的合集打开时也按打开这一帧的下载 / 缓存输入算计数，不看会话里是否
+  /// 留下了另一帧。签名未变时 [LocalSongsCollection.sync] 零等待复用上一轮
+  /// 结果。
+  Future<void> ensureLocalSongsReady(CollectionFrame frame) =>
+      _localSongs.sync(_localSongsInput(frame));
 
   /// 读取失败后的重试：合集清单 / 历史 / 当前列表曲目全部按 force 重查，
-  /// 本地歌曲联结也按最近一帧快照重跑。成功路径由 provider / local songs 的
+  /// 本地歌曲联结也按传入帧重跑。成功路径由 provider / local songs 的
   /// 通知驱动页面重建，这里不额外改状态。
   ///
-  /// 重试意图只需要端口与上一帧解析出的列表 id；没有快照时本地歌曲联结
-  /// 跳过（此时页面也还没渲染过失败态，不构成正确性条件）。
-  void retry() {
-    final library = _library;
-    if (_disposed || library == null) return;
-    library.load(CollectionLibraryLoad.retry(playlistId: _lastPlaylistId));
-    final snapshot = _lastSnapshot;
-    if (snapshot != null) {
-      unawaited(
-        _localSongs.sync(
-          _localSongsInput(
-            snapshot,
-            downloads: _lastDownloads,
-            cacheRevision: _lastCacheRevision,
-          ),
-        ),
-      );
-    }
+  /// 只读传入帧：失败态页面把渲染失败那一帧交回来，列表 id 与本地歌曲输入
+  /// 不会因为期间又 sync 过别的合集而错位。
+  void retry(CollectionFrame frame) {
+    if (_disposed) return;
+    frame.library.load(
+      CollectionLibraryLoad.retry(playlistId: frame.playlistId),
+    );
+    unawaited(_localSongs.sync(_localSongsInput(frame)));
   }
 
   /// 多选批量写入：成功（含无变化）才清空选择；失败保留选择，交给页面
@@ -743,23 +749,20 @@ class CollectionSession extends ChangeNotifier {
     );
   }
 
-  LocalSongsInput _localSongsInput(
-    CollectionLibrarySnapshot snapshot, {
-    required CollectionDownloads downloads,
-    required int cacheRevision,
-  }) {
-    final history = snapshot.history;
+  LocalSongsInput _localSongsInput(CollectionFrame frame) {
+    final history = frame.snapshot.history;
     return LocalSongsInput(
       history: history,
       // 惰性转换：签名只读历史键；真正列举缓存时才需要领域曲目。
       historyTracks: () => [
-        for (final entry in history) _library!.trackFromHistoryEntry(entry),
+        for (final entry in history)
+          frame.library.trackFromHistoryEntry(entry),
       ],
-      downloads: downloads.records,
-      supported: downloads.supported,
-      initialized: downloads.initialized,
-      recordsRevision: downloads.recordsRevision,
-      cacheRevision: cacheRevision,
+      downloads: frame.downloads.records,
+      supported: frame.downloads.supported,
+      initialized: frame.downloads.initialized,
+      recordsRevision: frame.downloads.recordsRevision,
+      cacheRevision: frame.cacheRevision,
     );
   }
 

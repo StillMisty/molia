@@ -335,6 +335,37 @@ void main() {
       expect(renamed.displayName, 'Favorites');
     });
 
+    test('本地歌曲：源行列表引用不变时复用视图，换列表即失效', () {
+      final presenter = CollectionPresenter();
+      final identity = identityFor(LibraryCollections.downloadsSentinel);
+      final localRows = [localSong('1')];
+
+      CollectionView viewFor(List<CollectionLocalSong> rows) =>
+          presenter.viewFor(
+            identity: identity,
+            tracks: const [],
+            history: const [],
+            localSongs: rows,
+            query: '',
+            sort: CollectionTrackSort.added,
+          );
+
+      // 本地歌曲的 rows 由状态机缓存：同一引用 = 同一内容版本。
+      final first = viewFor(localRows);
+      final second = viewFor(localRows);
+      expect(identical(second, first), isTrue);
+      expect(identical(second.visibleRows, first.visibleRows), isTrue);
+
+      final changed = viewFor([...localRows, localSong('2')]);
+      expect(identical(changed, first), isFalse);
+      expect(changed.visibleCount, 2);
+
+      // 内容相同但换引用同样失效：缓存键按源列表身份比较，不做内容比较。
+      final copied = viewFor([...localRows]);
+      expect(identical(copied, first), isFalse);
+      expect(copied.visibleCount, 1);
+    });
+
     test('历史 / 本地歌曲按各自源列表失效，互不串缓存', () {
       final presenter = CollectionPresenter();
       final historyIdentity = identityFor(LibraryCollections.historySentinel);

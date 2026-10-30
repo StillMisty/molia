@@ -332,7 +332,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.escape) return false;
     if (!_canHandleEscape()) return false;
-    _session.selection.clear();
+    _session.clearSelection();
     return true;
   }
 
@@ -449,19 +449,18 @@ class _FavoritesPageState extends State<FavoritesPage> {
   ///
   /// 本地歌曲计数含缓存行：弹层打开前先把缓存行重算到当前输入，否则刚启动
   /// （还没进过本地歌曲合集）时计数会漏掉缓存行、与列表行数对不上。
-  /// 签名未变时是零等待；只有输入变过才等一次音频缓存目录列举。
+  /// 重算只读传入的 [frame]；签名未变时是零等待，只有输入变过才等一次音频
+  /// 缓存目录列举。
   Future<void> _showCollectionPicker(
     AppLocalizations l10n,
+    CollectionFrame frame,
     List<PlaylistInfo> playlists,
     int? favoritesId,
     int selected,
   ) async {
     final provider = context.read<LibraryProvider>();
     final records = context.read<DownloadRecords?>();
-    await _session.ensureLocalSongsReady(
-      downloads: _downloadsSnapshot,
-      cacheRevision: _cacheService?.revision.value ?? -1,
-    );
+    await _session.ensureLocalSongsReady(frame);
     if (!mounted) return;
     final outcome = await showCollectionPicker(
       context,
@@ -730,7 +729,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     final outcome = await actions.deleteLocalSongs(selected);
     if (!mounted) return;
     _reportLocalDelete(outcome);
-    _session.selection.clear();
+    _session.clearSelection();
   }
 
   /// 删除确认：按选中项构成给文案（全导入 = 只移出列表；全缓存 = 清缓存；
@@ -781,7 +780,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
 
   Future<void> _copySelectionToPlaylist(CollectionView view) async {
     final copied = await _actions.copyToLibrary(view, _selectedRows(view));
-    if (copied && mounted) _session.selection.clear();
+    if (copied && mounted) _session.clearSelection();
   }
 
   @override
@@ -829,6 +828,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
             playlists,
             favoritesId,
             view,
+            frame: sessionView.frame,
             reorderActive: reorderActive,
           ),
           selection: _buildSelectionBar(context, l10n, view),
@@ -837,7 +837,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           child: sessionView.isLoading
               ? const Center(child: M3ELoadingIndicator())
               : sessionView.hasFailed
-              ? _buildReadFailed(context, l10n)
+              ? _buildReadFailed(context, l10n, sessionView.frame)
               : _buildBody(context, l10n, view, reorderActive: reorderActive),
         ),
       ],
@@ -848,7 +848,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (_selecting) {
-          _session.selection.clear();
+          _session.clearSelection();
           return;
         }
         if (reorderActive) {
@@ -866,7 +866,14 @@ class _FavoritesPageState extends State<FavoritesPage> {
   }
 
   /// 资料库读取失败：给出错误 + 重试，而不是把失败伪装成空资料库。
-  Widget _buildReadFailed(BuildContext context, AppLocalizations l10n) {
+  ///
+  /// 重试按渲染失败态的这一帧发起：列表 id 与本地歌曲输入不依赖会话里是否
+  /// 又 sync 过别的合集。
+  Widget _buildReadFailed(
+    BuildContext context,
+    AppLocalizations l10n,
+    CollectionFrame frame,
+  ) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -874,7 +881,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
           Text(l10n.libraryLoadFailed, style: context.typeScale.bodyLarge),
           const SizedBox(height: 12),
           M3EButton.filled(
-            onPressed: _session.retry,
+            onPressed: () => _session.retry(frame),
             child: Text(l10n.retryButton),
           ),
         ],
@@ -889,11 +896,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
     List<PlaylistInfo> playlists,
     int? favoritesId,
     CollectionView view, {
+    required CollectionFrame frame,
     required bool reorderActive,
   }) {
     if (reorderActive) return _buildReorderHeader(context, l10n, view);
     if (_session.searching) return _buildSearchHeader(context, l10n, view);
-    return _buildTitleRow(context, l10n, playlists, favoritesId, view);
+    return _buildTitleRow(context, l10n, playlists, favoritesId, view, frame);
   }
 
   /// 常驻标题行：合集切换器（弹层）+ 随机播放 / （本地歌曲）导入 / 搜索按钮
@@ -907,6 +915,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     List<PlaylistInfo> playlists,
     int? favoritesId,
     CollectionView view,
+    CollectionFrame frame,
   ) {
     final theme = Theme.of(context);
     final horizontalPadding = context
@@ -938,6 +947,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   HapticsService.lightImpact();
                   _showCollectionPicker(
                     l10n,
+                    frame,
                     playlists,
                     favoritesId,
                     view.selectedId,
@@ -1270,11 +1280,11 @@ class _FavoritesPageState extends State<FavoritesPage> {
                   variant: M3EIconButtonVariant.standard,
                   icon: const Icon(Icons.close_rounded),
                   semanticLabel: l10n.cancel,
-                  onPressed: _session.selection.clear,
+                  onPressed: _session.clearSelection,
                 ),
                 Expanded(
                   child: Text(
-                    '${_session.selection.selectedCount}',
+                    '${_session.selectedCount}',
                     style: m3e.typeScale.titleLarge.copyWith(color: foreground),
                   ),
                 ),
@@ -1286,11 +1296,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
                       : l10n.selectAllItems,
                   onPressed: () {
                     if (allSelected) {
-                      _session.selection.clear();
+                      _session.clearSelection();
                     } else {
-                      _session.selection.selectAll([
-                        for (final row in view.visibleRows) row.key,
-                      ]);
+                      _session.selectAllVisible(view);
                     }
                   },
                 ),
@@ -1398,7 +1406,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
         // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
         // local 源键，缓存行 / 历史行保留原曲键。
         trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
-        selected: _session.selection.isSelected(row.key),
+        selected: _session.isSelected(row.key),
       ),
       surface: TrackRowSurface(tableSpec: columnSpec),
       trailing: reorderActive

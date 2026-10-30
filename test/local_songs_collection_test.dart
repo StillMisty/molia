@@ -314,4 +314,120 @@ void main() {
 
     expect(localData.requests, hasLength(1));
   });
+
+  group('行列表缓存', () {
+    test('输入不变：rows 返回同一列表，count 与 rows 同源', () async {
+      final library = _FakeLibrary([historyOf('1')], [trackOf('1')]);
+      final downloads = _FakeDownloads(records: [downloadOf('1')]);
+      final localData = _FakeTrackLocalData(
+        (tracks) async => {for (final track in tracks) track.id},
+      );
+      final collection = LocalSongsCollection(
+        loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
+      );
+      addTearDown(collection.dispose);
+
+      await collection.sync(inputFor(library, downloads));
+
+      final first = collection.rows;
+      final revision = collection.rowsRevision;
+      expect(identical(collection.rows, first), isTrue);
+
+      // 每帧都会构造新的 LocalSongsInput：对象换了但内容没变，仍复用。
+      await collection.sync(inputFor(library, downloads));
+      expect(identical(collection.rows, first), isTrue);
+      expect(collection.rowsRevision, revision);
+      expect(collection.count, first.length);
+    });
+
+    test('recordsRevision / 下载列表换引用：替换行列表', () async {
+      final library = _FakeLibrary(const [], const []);
+      final downloads = _FakeDownloads(records: [downloadOf('1')]);
+      final localData = _FakeTrackLocalData(
+        (tracks) async => const <TrackId>{},
+      );
+      final collection = LocalSongsCollection(
+        loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
+      );
+      addTearDown(collection.dispose);
+
+      await collection.sync(inputFor(library, downloads));
+      var previous = collection.rows;
+      var revision = collection.rowsRevision;
+
+      await collection.sync(
+        inputFor(library, downloads, recordsRevision: 1),
+      );
+      var current = collection.rows;
+      expect(identical(current, previous), isFalse, reason: 'revision 变要重算');
+      expect(collection.rowsRevision, greaterThan(revision));
+
+      // 记录键 / revision 都没变，但下载列表换了引用（标题 / 路径等快照
+      // 替换不一定改 revision）：行列表同样要重算。
+      previous = current;
+      revision = collection.rowsRevision;
+      await collection.sync(
+        inputFor(
+          library,
+          _FakeDownloads(records: [downloadOf('1')]),
+          recordsRevision: 1,
+        ),
+      );
+      current = collection.rows;
+      expect(identical(current, previous), isFalse);
+      expect(collection.rowsRevision, greaterThan(revision));
+      expect(collection.count, current.length);
+    });
+
+    test('历史列表换引用（键不变）：替换行列表', () async {
+      final downloads = _FakeDownloads();
+      final firstLibrary = _FakeLibrary([historyOf('1')], [trackOf('1')]);
+      final secondLibrary = _FakeLibrary([historyOf('1')], [trackOf('1')]);
+      final localData = _FakeTrackLocalData(
+        (tracks) async => {for (final track in tracks) track.id},
+      );
+      final collection = LocalSongsCollection(
+        loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
+      );
+      addTearDown(collection.dispose);
+
+      await collection.sync(inputFor(firstLibrary, downloads));
+      final first = collection.rows;
+      final revision = collection.rowsRevision;
+
+      await collection.sync(inputFor(secondLibrary, downloads));
+      final second = collection.rows;
+      expect(identical(second, first), isFalse);
+      expect(collection.rowsRevision, greaterThan(revision));
+      expect(
+        second.map((row) => row.key),
+        first.map((row) => row.key),
+        reason: '键一样，但历史列表是新引用，行列表不能复用',
+      );
+    });
+
+    test('缓存行异步落定：替换行列表', () async {
+      final library = _FakeLibrary([historyOf('1')], [trackOf('1')]);
+      final completer = Completer<Set<TrackId>>();
+      final localData = _FakeTrackLocalData((_) => completer.future);
+      final collection = LocalSongsCollection(
+        loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
+      );
+      addTearDown(collection.dispose);
+
+      final load = collection.sync(inputFor(library, _FakeDownloads()));
+      final before = collection.rows;
+      final revision = collection.rowsRevision;
+      expect(before, isEmpty, reason: '缓存索引还在途');
+
+      completer.complete({trackOf('1').id});
+      await load;
+
+      final after = collection.rows;
+      expect(identical(after, before), isFalse);
+      expect(after.single.title, 'Song 1');
+      expect(collection.rowsRevision, greaterThan(revision));
+      expect(collection.count, after.length);
+    });
+  });
 }
