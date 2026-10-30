@@ -70,6 +70,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     this.httpTimeout = const Duration(seconds: 4),
     this.sweepInterval = const Duration(seconds: 1),
     this.scanProbeDelaysMs = const [100, 500, 1500],
+    this.scanRefreshInterval = const Duration(seconds: 5),
     this.maxPending = 8,
     this.maxRequests = 64,
     this.requestRateLimit = 10,
@@ -121,6 +122,10 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   final Duration httpTimeout;
   final Duration sweepInterval;
   final List<int> scanProbeDelaysMs;
+
+  /// 扫描期间的补探间隔：复用 sweep 定时器，按此节奏补发新 nonce 的 probe，
+  /// 让候选随对端上线 / 用户犹豫持续刷新（候选 TTL 仍是 15 秒，不清空）。
+  final Duration scanRefreshInterval;
   final int maxPending;
   final int maxRequests;
   final int requestRateLimit;
@@ -151,6 +156,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   bool _hidden = false;
   String? _activePromptId;
   bool _disposed = false;
+
+  /// 上次发起扫描探测的时间（毫秒；0 = 当前没有待补探的扫描）。
+  int _lastScanProbeAtMs = 0;
 
   /// 仅测试：sweep 定时器是否仍在跑（后台必须为 false）。
   bool get debugSweepScheduled => _sweepTimer?.isActive ?? false;
@@ -203,6 +211,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     _running = false;
     _scanning = false;
     _hidden = false;
+    _lastScanProbeAtMs = 0;
     _cancelScanTimers();
     _sweepTimer?.cancel();
     _sweepTimer = null;
@@ -252,7 +261,13 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   @override
   Future<bool> startScan() async {
     if (_disposed || !_canUsePairing) return false;
+    // 配对探测端口不可用时不再假装「正在查找」：本机发不出 MSP，扫描只会
+    // 停在空的「正在查找」。provider 为 null（旧测试 / 无发现层接线）保持
+    // 原行为。
+    final probePort = _probePortProvider;
+    if (probePort != null && probePort() == 0) return false;
     _scanning = true;
+    _lastScanProbeAtMs = _nowMs();
     _cancelScanTimers();
     _candidates.clear();
     _emitNearby();
@@ -273,6 +288,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   @override
   void stopScan() {
     _scanning = false;
+    _lastScanProbeAtMs = 0;
     _cancelScanTimers();
     _candidates.clear();
     _emitNearby();
@@ -291,6 +307,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     // 能进入候选表（否则 _onPacket 会按「未扫描」丢弃）。
     if (!_scanning) {
       _scanning = true;
+      _lastScanProbeAtMs = _nowMs();
       _emitNearby();
     }
     try {
@@ -306,6 +323,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   @override
   void onAppHidden() {
     _hidden = true;
+    // 后台不再补探：sweep 本身会被取消，这里一并清掉补探基准，避免回前台
+    // 恢复时按「距上次补探已经很久」立刻多补一条。
+    _lastScanProbeAtMs = 0;
     _cancelScanTimers();
     // 后台没有候选更新需求：停掉周期 sweep（省电，也避免隐藏期间刷新
     // 候选 / 清 pending）；回前台时按 _running 重新挂上。
@@ -330,6 +350,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (!_running) return;
     if (!debugSweepScheduled) _startSweepTimer();
     if (!_scanning || !_canUsePairing) return;
+    // 回前台立刻补一次，并把补探基准重置：这次补探之后仍按扫描间隔续期。
+    _lastScanProbeAtMs = _nowMs();
     unawaited(_resendProbe());
   }
 
@@ -435,10 +457,22 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     final now = _nowMs();
     final changed = _candidates.sweep(now);
     if (changed) _emitNearby();
+    _refreshScanProbe(now);
     for (final entry in List<_IncomingPairing>.of(_requests.values)) {
       _expireIfNeeded(entry, now);
     }
     _trimRequests(now);
+  }
+
+  /// 扫描期补探：复用 sweep 定时器，按 [scanRefreshInterval] 补发新 nonce 的
+  /// probe。只刷新候选，不碰已有候选（TTL 仍由 [_candidates.sweep] 负责）。
+  void _refreshScanProbe(int now) {
+    if (!_scanning || !_canUsePairing) return;
+    final interval = scanRefreshInterval.inMilliseconds;
+    if (interval <= 0) return;
+    if (now - _lastScanProbeAtMs < interval) return;
+    _lastScanProbeAtMs = now;
+    unawaited(_resendProbe());
   }
 
   void _cancelScanTimers() {
