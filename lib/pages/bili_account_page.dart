@@ -3,13 +3,13 @@ import 'dart:async';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../domain/models/bili_account.dart';
 import '../l10n/app_localizations.dart';
 import '../services/bili_account_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/qr_code_view.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -228,19 +228,11 @@ class _BiliAccountPageState extends State<BiliAccountPage>
           Container(
             color: kQrBackgroundColor,
             padding: const EdgeInsets.all(12),
-            child: QrImageView(
+            child: QrCodeView(
               key: const Key('biliAccountQrImage'),
               data: _session!.url,
-              size: 220,
               backgroundColor: kQrBackgroundColor,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: kQrModuleColor,
-              ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: kQrModuleColor,
-              ),
+              moduleColor: kQrModuleColor,
               semanticsLabel: l10n.biliAccountQrSemantics,
             ),
           ),

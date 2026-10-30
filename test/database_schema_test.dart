@@ -8,10 +8,13 @@
 /// 行为一致，只差元数据，比较前统一按 0 处理。
 library;
 
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:path/path.dart' as p;
 
 import 'support/memory_database.dart';
 
@@ -391,5 +394,31 @@ void main() {
         .into(db.playlistTracks)
         .insert(track('1'), mode: InsertMode.insertOrIgnore);
     expect(await db.select(db.playlistTracks).get(), hasLength(1));
+  });
+
+  test('文件库：后台 isolate 建表、写入并重开', () async {
+    final directory = await Directory.systemTemp.createTemp('molia-db-test');
+    addTearDown(() async {
+      if (directory.existsSync()) await directory.delete(recursive: true);
+    });
+    final file = File(p.join(directory.path, 'molia_database_v2.sqlite'));
+
+    final first = MoliaDatabase(MoliaDatabase.openAt(file, directory));
+    await first
+        .into(first.playHistory)
+        .insert(
+          PlayHistoryCompanion.insert(
+            sourceKey: 'wy',
+            songId: '1',
+            title: 'T',
+            playedAt: 1,
+          ),
+        );
+    await first.close();
+
+    final second = MoliaDatabase(MoliaDatabase.openAt(file, directory));
+    final rows = await second.select(second.playHistory).get();
+    expect(rows.single.title, 'T');
+    await second.close();
   });
 }

@@ -7,13 +7,18 @@
 /// docs/adr/0005-drift-migration.md、docs/adr/0017-playback-session-sql.md）。
 ///
 /// 文件复制 / 目录迁移收在 [appDataDirectory] 旁边的 helper 里（带 `dart:io`），
-/// 本文件仍只做库声明与路径选择；`NativeDatabase` 仅测试内存库使用
+/// 本文件仍只做库声明、路径选择与连接配置；测试可用内存库
 /// （见 test/support/memory_database.dart）。
 library;
 
+import 'dart:io';
+
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite3;
 
 import '../domain/models/device_sync.dart';
 import 'files/app_data_directory.dart';
@@ -339,7 +344,7 @@ class PlaybackSessionCursors extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// 生产库文件名（drift_flutter 落在应用数据目录，见 [_databaseDirectory]）。
+/// 生产库文件名（落在应用数据目录，见 [_databaseDirectory]）。
 ///
 /// fresh 基线换了文件名：旧库（`molia_database`）不迁移、不读取，避免把
 /// 历史 schema 带进新基线。
@@ -370,21 +375,40 @@ class MoliaDatabase extends _$MoliaDatabase {
   static MoliaDatabase get instance => _instance ??= MoliaDatabase(_open());
 
   static QueryExecutor _open() {
-    return driftDatabase(
-      name: moliaDatabaseFileName,
-      native: DriftNativeOptions(
-        databaseDirectory: _databaseDirectory,
-        setup: (db) {
-          // WAL：读（资料库 / 统计查询）不再被写事务阻塞，写入吞吐也更稳；
-          // 文件级持久设置，重复执行无副作用。
-          db.execute('PRAGMA journal_mode = WAL');
-          // 本地单文件库：同步提交降为 NORMAL，进程崩溃窗口可接受，
-          // 避免每次写都 fsync 整个 WAL。
-          db.execute('PRAGMA synchronous = NORMAL');
-          // 并发写（同步引擎 / 播放写入 / 统计 touch）等锁的上限。
-          db.execute('PRAGMA busy_timeout = 5000');
-        },
-      ),
+    return DatabaseConnection.delayed(
+      Future(() async {
+        final directory = await _databaseDirectory();
+        final tempDirectory = await getTemporaryDirectory();
+        return openAt(
+          File(p.join(directory.path, '$moliaDatabaseFileName.sqlite')),
+          tempDirectory,
+        );
+      }),
+    );
+  }
+
+  /// 文件库执行器：后台 isolate 打开，与界面线程解耦。
+  ///
+  /// `sqlite3.tempDirectory` 必须在主 isolate 和后台 isolate 各设一次：
+  /// 两者不共享全局变量，Android 的默认 `/tmp` 又不可写。
+  @visibleForTesting
+  static DatabaseConnection openAt(File file, Directory tempDirectory) {
+    sqlite3.sqlite3.tempDirectory = tempDirectory.path;
+    return NativeDatabase.createBackgroundConnection(
+      file,
+      setup: (db) {
+        // WAL：读（资料库 / 统计查询）不再被写事务阻塞，写入吞吐也更稳；
+        // 文件级持久设置，重复执行无副作用。
+        db.execute('PRAGMA journal_mode = WAL');
+        // 本地单文件库：同步提交降为 NORMAL，进程崩溃窗口可接受，
+        // 避免每次写都 fsync 整个 WAL。
+        db.execute('PRAGMA synchronous = NORMAL');
+        // 并发写（同步引擎 / 播放写入 / 统计 touch）等锁的上限。
+        db.execute('PRAGMA busy_timeout = 5000');
+      },
+      isolateSetup: () {
+        sqlite3.sqlite3.tempDirectory = tempDirectory.path;
+      },
     );
   }
 
@@ -395,7 +419,7 @@ class MoliaDatabase extends _$MoliaDatabase {
   ///
   /// 不用文档目录：那是用户可见区域（Windows 的 `Documents`），还可能被
   /// OneDrive 等同步工具接管——SQLite 文件被同步有损坏风险。
-  static Future<Object> _databaseDirectory() async {
+  static Future<Directory> _databaseDirectory() async {
     try {
       final target = await appDataDirectory();
       if (hasSeparateLegacyDirectory) {

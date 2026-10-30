@@ -88,6 +88,15 @@
 - 之后改表仍走 `build_runner` + `dart run drift_dev make-migrations`，但起点是
   新的 v1：从新 v1 生成快照与 `steps.dart`，写增量迁移并保留数据。不要恢复旧迁移链、
   旧快照，也不要新增读取旧库的分支。
+
+## 2026-10-30 修订：去掉 drift_flutter
+
+- 执行器改为直接使用 `NativeDatabase.createBackgroundConnection`
+  （`MoliaDatabase.openAt`），保留后台 isolate、临时目录与 PRAGMA 配置；
+  移除 `drift_flutter` 及其带入的 `sqlite3_flutter_libs` /
+  `sqlcipher_flutter_libs` 两个 EOL 空壳。
+- `package:drift/native.dart` 仍只出现在生产连接与测试内存库 helper 中；
+  Web 继续不初始化数据库。
 - 本文头部的 `lib/providers/local_database_provider.dart` 与
   `test/drift/molia/migration_test.dart` 等路径已随本次清理删除，仅作历史引用。
 
