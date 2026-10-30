@@ -46,7 +46,6 @@ dependencies:
   material_3_expressive: ^1.2.0
   motor: ^1.1.0
   window_manager: ^0.5.2
-  screen_retriever: ^0.2.2
   quickjs_engine: ^0.1.6
   dio: ^5.11.1
   package_info_plus: ^10.2.2

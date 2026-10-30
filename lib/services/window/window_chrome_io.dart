@@ -5,10 +5,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
-import 'package:screen_retriever/screen_retriever.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../app_presence.dart';
+import 'display_areas_io.dart';
 import 'single_instance.dart';
 import 'window_bounds.dart';
 import 'window_bounds_store.dart';
@@ -32,8 +32,7 @@ class WindowChrome {
   ///
   /// macOS 走原生标题栏：`WindowControls` 只在 [usesCustomTitleBar] 为真时
   /// 挂载，避免与系统红绿灯重复。
-  static bool get usesCustomTitleBar =>
-      Platform.isLinux || Platform.isWindows;
+  static bool get usesCustomTitleBar => Platform.isLinux || Platform.isWindows;
 
   static final Logger _logger = Logger('molia.window_chrome');
 
@@ -120,23 +119,13 @@ class WindowChrome {
       _restoreMaximized = await _boundsStore.loadMaximized();
       final saved = await _boundsStore.load();
       if (saved == null) return;
-      final displays = await screenRetriever.getAllDisplays();
-      if (displays.isEmpty) return;
-      final visibleAreas = [
-        for (final display in displays) _visibleAreaOf(display),
-      ];
-      Rect primaryArea;
-      try {
-        primaryArea = _visibleAreaOf(await screenRetriever.getPrimaryDisplay());
-      } catch (_) {
-        // 主显示器查询失败（个别平台只实现枚举）：用列表首项居中兜底。
-        primaryArea = visibleAreas.first;
-      }
+      final areas = DesktopDisplayAreas.read();
+      if (areas == null) return;
       await windowManager.setBounds(
         resolveRestoredBounds(
           saved: saved.bounds,
-          displayVisibleAreas: visibleAreas,
-          primaryVisibleArea: primaryArea,
+          displayVisibleAreas: areas.visibleAreas,
+          primaryVisibleArea: areas.primary,
         ),
       );
     } catch (error) {
@@ -144,11 +133,6 @@ class WindowChrome {
       _logger.warning('窗口几何恢复失败：$error');
     }
   }
-
-  /// 显示器可见区（Dock / 任务栏之外的部分）；字段缺失时退回整屏矩形。
-  static Rect _visibleAreaOf(Display display) =>
-      (display.visiblePosition ?? Offset.zero) &
-      (display.visibleSize ?? display.size);
 
   /// 拖动 / 缩放落定后延迟落盘；重复事件重置计时（防抖）。
   static void _scheduleBoundsSave() {
@@ -263,8 +247,9 @@ class WindowChrome {
   /// 空白底色（实测 Windows 是白色）。因此桌面端先让窗口「可见但不可见」：
   /// Windows 用 DWM cloak，Linux 用窗口透明度；等重建首帧落定后再显示 / 恢复
   /// 不透明。启动首帧路径窗口已经由 runner 显示，不走这条。
-  static const MethodChannel _windowChannel =
-      MethodChannel('top.stillmisty.molia/window');
+  static const MethodChannel _windowChannel = MethodChannel(
+    'top.stillmisty.molia/window',
+  );
 
   /// 是否已接管 macOS 的 Dock「重新打开」回调（进程内只需一次）。
   static bool _reopenHandlerInstalled = false;

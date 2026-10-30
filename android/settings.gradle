@@ -18,7 +18,7 @@ pluginManagement {
 
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version '9.4.1' apply false
+    id "com.android.application" version '9.5.0' apply false
     // AGP9 内置 Kotlin 直接复用类路径上的 KGP 当编译器（AGP 自带下限 2.2.10），
     // 此处 apply false 只做版本声明、不下发到 app 模块。
     // 需保持 2.4.x：JvmTarget.JVM_26 是 2.4 起的枚举值（2.2.x 上限 JVM_24）。

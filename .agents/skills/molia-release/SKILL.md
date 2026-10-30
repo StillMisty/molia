@@ -16,7 +16,7 @@ description: 发布 Molia 版本，或改动发布产物 / 更新清单 / 平台
 | `integration.yml` | 每日 02:00（UTC+8）/ 手动 | Linux 端到端（真实引擎 + 本地 mock；不含播放，见 `docs/pitfalls.md` #33；xvfb） |
 | `release.yml` | 推 `v*` tag | 矩阵构建 → 产物 + sha256 + `latest.json` → GitHub Release |
 
-Flutter `3.47.7`、JDK 26、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工具链表同源，
+Flutter `3.47.9`、JDK 27、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工具链表同源，
 改版本时两边一起改。
 
 ## 2. 发一个版本
