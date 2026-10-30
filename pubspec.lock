@@ -313,14 +313,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.35.2"
-  drift_flutter:
-    dependency: "direct main"
-    description:
-      name: drift_flutter
-      sha256: "91acf4bee7c3c84467cba46455aa70e5292a3b889f4582645d74f2e5a8c106f2"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.3.1"
   dynamic_color:
     dependency: "direct main"
     description:
@@ -1013,21 +1005,13 @@ packages:
     source: hosted
     version: "1.7.0"
   qr:
-    dependency: transitive
-    description:
-      name: qr
-      sha256: "2c0189dca64a3ab08dda7acd7911c89af2374f08eb4eaded3e8ef4609f3b9c8b"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "3.0.3"
-  qr_flutter:
     dependency: "direct main"
     description:
-      name: qr_flutter
-      sha256: "5095f0fc6e3f71d08adef8feccc8cea4f12eec18a2e31c2e8d82cb6019f4b097"
+      name: qr
+      sha256: f9461594b257c2ec882159fb8100db28408f6aacdba5b21f109708bce2e482b6
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "4.1.0"
+    version: "4.0.1"
   quickjs_engine:
     dependency: "direct main"
     description:
@@ -1257,30 +1241,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.4.3"
-  sqlcipher_flutter_libs:
-    dependency: transitive
-    description:
-      name: sqlcipher_flutter_libs
-      sha256: "38d62d659d2fb8739bf25a42c9a350d1fdd6c29a5a61f13a946778ec75d27929"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.7.0+eol"
   sqlite3:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: sqlite3
       sha256: "5340531ad17f386ae444873f643f281060b6238cc702edeee6b1e90bc4c6874e"
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.8.0"
-  sqlite3_flutter_libs:
-    dependency: transitive
-    description:
-      name: sqlite3_flutter_libs
-      sha256: "3ed7553eee7bb368f8950f58ba29f634e06e813c029aff6a0d60862b96de8454"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.6.0+eol"
   sqlparser:
     dependency: transitive
     description:
