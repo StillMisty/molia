@@ -2924,7 +2924,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyResultConflict => '两台设备已在不同的同步组，请先重置其中一台的同步口令再试。';
 
   @override
-  String get syncNearbyResultUnreachable => '连不上这台设备，请确认两台设备在同一网络且都开启了局域网同步。';
+  String get syncNearbyResultUnreachable =>
+      '连不上这台设备。请确认两台设备在同一网络，让对方保持 Molia 在前台，并确认已授权局域网。';
 
   @override
   String get syncNearbyResultBusy => '对方正在处理另一条配对请求，请稍后再试。';
@@ -2933,7 +2934,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyResultUnsupported => '这台设备暂不支持一键配对，请更新 Molia 后重试。';
 
   @override
-  String get syncNearbyResultUnavailable => '配对暂时不可用，请确认两台设备都开启了局域网同步后重试。';
+  String get syncNearbyResultUnavailable =>
+      '配对暂时不可用。请让对方保持 Molia 在前台，并确认已授权局域网后重试。';
 
   @override
   String get syncNearbyResultCancelled => '已取消配对，需要时可以重新点击设备。';

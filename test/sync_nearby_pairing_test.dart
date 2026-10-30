@@ -511,7 +511,7 @@ void main() {
       ),
       (
         SyncPairingOutcome.unreachable,
-        'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.',
+        'Couldn’t reach the device. Make sure both devices are on the same network; keep Molia open in the foreground on the other device and confirm LAN access is granted.',
       ),
       (
         SyncPairingOutcome.rejected,
@@ -590,7 +590,7 @@ void main() {
 
     expect(
       notifications.last,
-      'Pairing is unavailable. Make sure both devices have LAN sync on and try again.',
+      'Pairing is unavailable. Keep Molia open in the foreground on the other device and confirm LAN access is granted, then try again.',
     );
     expect(find.text('Pair with “Pixel 9”'), findsNothing);
   });

@@ -5565,7 +5565,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyResultUnreachable.
   ///
   /// In en, this message translates to:
-  /// **'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.'**
+  /// **'Couldn’t reach the device. Make sure both devices are on the same network; keep Molia open in the foreground on the other device and confirm LAN access is granted.'**
   String get syncNearbyResultUnreachable;
 
   /// No description provided for @syncNearbyResultBusy.
@@ -5583,7 +5583,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyResultUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Pairing is unavailable. Make sure both devices have LAN sync on and try again.'**
+  /// **'Pairing is unavailable. Keep Molia open in the foreground on the other device and confirm LAN access is granted, then try again.'**
   String get syncNearbyResultUnavailable;
 
   /// No description provided for @syncNearbyResultCancelled.

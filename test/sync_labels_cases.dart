@@ -129,6 +129,28 @@ void main() {
     );
   });
 
+  test('配对失败文案：提醒对端保持前台并确认局域网授权', () {
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    final en = lookupAppLocalizations(const Locale('en'));
+    for (final text in [
+      zh.syncNearbyResultUnreachable,
+      zh.syncNearbyResultUnavailable,
+    ]) {
+      expect(text, contains('保持 Molia 在前台'));
+      expect(text, contains('已授权局域网'));
+    }
+    for (final text in [
+      en.syncNearbyResultUnreachable,
+      en.syncNearbyResultUnavailable,
+    ]) {
+      expect(
+        text.toLowerCase(),
+        contains('keep molia open in the foreground'),
+      );
+      expect(text, contains('LAN access is granted'));
+    }
+  });
+
   test('附近设备可用性：优先级与每种状态都有专属文案', () {
     SyncNearbyAvailability resolve({
       bool lanEnabled = true,

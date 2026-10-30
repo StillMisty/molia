@@ -1565,10 +1565,10 @@
   "syncNearbyResultRejected": "The other device rejected the request. You can try again later.",
   "syncNearbyResultExpired": "The pairing request expired. Tap the device to try again.",
   "syncNearbyResultConflict": "The devices are in different sync groups. Reset one device’s passphrase and try again.",
-  "syncNearbyResultUnreachable": "Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.",
+  "syncNearbyResultUnreachable": "Couldn’t reach the device. Make sure both devices are on the same network; keep Molia open in the foreground on the other device and confirm LAN access is granted.",
   "syncNearbyResultBusy": "The other device is handling another request. Try again shortly.",
   "syncNearbyResultUnsupported": "This device doesn’t support one-tap pairing yet. Update Molia and try again.",
-  "syncNearbyResultUnavailable": "Pairing is unavailable. Make sure both devices have LAN sync on and try again.",
+  "syncNearbyResultUnavailable": "Pairing is unavailable. Keep Molia open in the foreground on the other device and confirm LAN access is granted, then try again.",
   "syncNearbyResultCancelled": "Pairing cancelled. Tap the device to try again.",
   "syncNearbyIncomingJoinTitle": "“{name}” wants to join your sync group",
   "@syncNearbyIncomingJoinTitle": {
