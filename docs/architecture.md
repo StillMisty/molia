@@ -127,8 +127,9 @@
   停止 / 换源）返回前等 `pendingWrite`（已提交语义）；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
   落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
-  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`），不直写
-  facade；壳层 paused 与桌面退出共用
+  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`；库内 / 手动
+  换源走同一实现的 `replaceTrack` + `PlaybackReplaceScope.liveAndRestored`，
+  自动换源固定 `liveOnly`），不直写 facade；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
   500ms）→ 统计落盘（有界 500ms）→ 销毁窗口」：会话必须先把最后一段进度取
@@ -791,6 +792,11 @@
 module（见下）：
 
 - **模块拆分**：`DownloadService` 只做编排，五个 module 各有一份唯一实现——
+  `lib/services/download/download_records.dart`（记录只读面：记录表 / 排序
+  列表 / `initialized` / `supported` / `revision` 的唯一持有者；收藏、单曲
+  本地数据与分享只依赖它，下载进度不经过这里）、
+  `lib/services/download/download_manager.dart`（命令面：管理页 / 本地数据页 /
+  分享 / 导入使用的窄接口，唯一实现是 `DownloadService`）、
   `lib/services/download/download_queue.dart`（下载任务队列：`DownloadTask`
   进度 / 状态、单 worker FIFO、同 key 去重、排队 / 运行取消、失败保留重试；
   不持久化、无跨重启恢复）、
@@ -1381,7 +1387,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `lib/widgets/track_actions.dart`；单曲本地数据在
   `lib/pages/track_local_data_page.dart`（读取唯走 `TrackLocalDataService`，
   两档词表见 ADR-0008），缓存内容变更经 `CacheService.revision`、下载记录经
-  `DownloadService` 通知跨页刷新。
+  `DownloadRecords` 通知跨页刷新。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现/搜索结果共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、
