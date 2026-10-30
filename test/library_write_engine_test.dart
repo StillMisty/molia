@@ -162,6 +162,34 @@ void main() {
     }
   });
 
+  test('批量加入历史：写路径负责批内时间戳（基准时钟 + 序号）', () async {
+    expect(
+      await engine.addHistoryTracks([track('1'), track('2'), track('3')]),
+      3,
+    );
+    final rows = await db.select(db.playHistory).get();
+    final byId = {for (final row in rows) row.songId: row.playedAt};
+    // 基准 = 注入时钟；批内按传入顺序递增，供 listHistory 的倒序口径使用。
+    expect(byId, {'1': clockMs, '2': clockMs + 1, '3': clockMs + 2});
+
+    // 显式基准覆盖注入时钟（固定时刻导入 / 测试用）。
+    await engine.addHistoryTracks([track('4'), track('5')], playedAt: 900);
+    final explicit = {
+      for (final row in await db.select(db.playHistory).get())
+        row.songId: row.playedAt,
+    };
+    expect(explicit['4'], 900);
+    expect(explicit['5'], 901);
+
+    // 空输入：不发号、不写、不广播。
+    events.clear();
+    final head = await journal.headSeq();
+    expect(await engine.addHistoryTracks(const []), 0);
+    await flush();
+    expect(events, isEmpty);
+    expect(await journal.headSeq(), head);
+  });
+
   test('重播复活：再次写入清除该曲目的历史墓碑', () async {
     await engine.addHistoryEntry(history('1'));
     await engine.deleteHistoryEntry('wy', '1');
@@ -393,6 +421,45 @@ void main() {
     expect(await engine.importPlaylistTracks(playlistId, [track('1')]), 0);
     await flush();
     expect(events.single, isA<LibraryImportChange>());
+  });
+
+  test('平台歌单导入：返回实际落库行（playlistId / sortOrder / addedAt）', () async {
+    final playlistId = await createPlaylist();
+    final head = await journal.headSeq();
+
+    final result = await engine.importTracks(playlistId, [
+      track('1', addedAt: 777),
+      track('2', addedAt: 777),
+    ]);
+    await flush();
+
+    expect(result.added, 2);
+    expect(result.rows.map((row) => row.songId), ['1', '2']);
+    expect(result.rows.map((row) => row.playlistId), everyElement(playlistId));
+    expect(result.rows.map((row) => row.sortOrder), [0, 1]);
+    expect(result.rows.map((row) => row.addedAt), everyElement(777));
+
+    // 返回行与库内行一致：消费方可以直接拿它预置缓存。
+    final rows = await db.select(db.playlistTracks).get();
+    final byId = {for (final row in rows) row.songId: row};
+    for (final inserted in result.rows) {
+      final row = byId[inserted.songId]!;
+      expect(row.playlistId, inserted.playlistId);
+      expect(row.sortOrder, inserted.sortOrder);
+      expect(row.addedAt, inserted.addedAt);
+      expect(row.title, inserted.title);
+    }
+    // 与 addTracksToPlaylist 同口径：走常规五步仪式（追 journal）。
+    expect(await journal.window(since: head), hasLength(2));
+    expect(events.single, isA<LibraryPlaylistTracksChange>());
+
+    // 重复导入：0 新增、不返回行、不广播。
+    events.clear();
+    final again = await engine.importTracks(playlistId, [track('1')]);
+    await flush();
+    expect(again.added, 0);
+    expect(again.rows, isEmpty);
+    expect(events, isEmpty);
   });
 
   test('空输入：不发号、不写、不广播', () async {
