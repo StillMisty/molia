@@ -931,8 +931,10 @@ void main() {
     );
     await provider.init();
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await provider.syncNow(manual: true);
-    final startedAt = provider.lastReport!.startedAt;
+    // 直接经引擎跑一轮拿一个稳定的本轮起点：provider 的手动轮走调度器，
+    // 可能与刚才「打开传输立即检查」的 check 轮撞车而返回 null。
+    final report = await engine.syncNow(trigger: SyncTrigger.manual);
+    final startedAt = report!.startedAt;
     state.recordRound(SyncRoundReport(
       trigger: SyncTrigger.check,
       startedAt: startedAt,
@@ -987,8 +989,10 @@ void main() {
     await provider.init();
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await scheduler.refreshEnvironment();
-    await provider.syncNow(manual: true);
-    final startedAt = provider.lastReport!.startedAt;
+    // 手动轮直接走引擎（测试只关心报告存在），不依赖调度器的暂停策略 /
+    // 与打开传输触发的 check 轮竞态。
+    final report = await engine.syncNow(trigger: SyncTrigger.manual);
+    final startedAt = report!.startedAt;
     state.recordRound(SyncRoundReport(
       trigger: SyncTrigger.check,
       startedAt: startedAt,
