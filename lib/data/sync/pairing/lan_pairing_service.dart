@@ -16,6 +16,8 @@
 ///
 /// 策略：
 /// - 只在前台、非蜂窝、局域网传输运行时发送 / 应答配对包；
+/// - 同步页扫描期间按 [scanRefreshInterval] 复用 sweep 定时器补发 probe，
+///   候选 TTL 仍是 15 秒；探测端口为 0 时 [startScan] 直接失败；
 /// - 后台 / 锁屏 / 省电（组合根把省电并入 `canPrompt`）返回 unavailable；
 /// - pending ≤8、TTL 60s、同一时间一个可见弹窗、每来源请求限流。
 library;
