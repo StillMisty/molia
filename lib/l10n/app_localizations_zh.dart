@@ -3039,6 +3039,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncRoundNoRecords => '还没有连接记录';
 
   @override
+  String get syncRecheckConnections => '重新检查连接';
+
+  @override
+  String get syncRecheckConnectionsHint => '按当前网络与电量状态立即检查一次';
+
+  @override
   String syncRoundSynced(String names) {
     return '本轮已同步 $names';
   }

@@ -57,6 +57,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Timer? _nearbySettleTimer;
   bool _nearbySearchSettled = false;
 
+  /// 相对时间（「3 分钟前」）每 30 秒重算一次：页面可能停留很久，不能只在
+  /// provider 通知时刷新；只 setState 重算文案，不额外跑同步轮次。
+  Timer? _relativeTimeTimer;
+
   /// 附近设备当前能否搜索（权限 / 开关 / 传输 / 网络 / 省电 / UDP / 配对）。
   /// 只在 availability 变化时启停扫描，避免 provider 每次通知都重跑 startScan。
   SyncNearbyAvailability? _nearbyAvailability;
@@ -74,6 +78,9 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     _provider = provider;
     _nearbyAvailability = provider.nearbyAvailability;
     _lanRunning = _isLanRunning(provider);
+    _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
     provider.refreshLocalEndpoints();
     // 打开同步页自动检查一轮：设备行显示的是「最近一轮是否真的接触成功」，
     // 不跑一轮就只能是旧状态。首帧后再触发，避免在构建期通知 provider；
@@ -121,6 +128,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   void dispose() {
     _nearbySettleTimer?.cancel();
     _nearbySettleTimer = null;
+    _relativeTimeTimer?.cancel();
+    _relativeTimeTimer = null;
     // 离开同步页就停止探测并清空候选：候选只服务这一页，后台不保留。
     _provider?.stopNearbyScan();
     super.dispose();
@@ -286,7 +295,37 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         for (final peer in provider.peers)
           _peerRow(
               context, provider, l10n, peer, manualByDevice[peer.deviceId]),
+        // 有名册但本轮一个都没连上：给一次受策略约束的即时检查，避免用户
+        // 只能干等下一轮定时唤醒。省电 / 移动数据暂停时点了也不会跑，
+        // 因此直接隐藏。
+        if (_shouldOfferRecheck(provider))
+          SettingsNavTile(
+            key: const Key('settingsSyncPeersRecheck'),
+            icon: Icons.refresh_rounded,
+            title: l10n.syncRecheckConnections,
+            subtitle: l10n.syncRecheckConnectionsHint,
+            onTap: () => unawaited(provider.checkConnections()),
+          ),
       ],
+    );
+  }
+
+  /// 是否显示「重新检查连接」：名册非空、本轮报告存在且没有任何设备
+  /// connected；自动检查被省电 / 移动数据暂停策略挡住时不显示。
+  static bool _shouldOfferRecheck(SyncProvider provider) {
+    if (provider.peers.isEmpty || provider.syncing) return false;
+    if (provider.powerSaveActive) return false;
+    if (provider.onCellular &&
+        provider.cellularPolicy == SyncCellularPolicy.pause) {
+      return false;
+    }
+    final report = provider.lastReport;
+    if (report == null) return false;
+    final now = provider.nowMs;
+    return !provider.peers.any(
+      (peer) =>
+          resolveSyncPeerConnection(peer, report: report, nowMs: now) ==
+          SyncPeerConnectionStatus.connected,
     );
   }
 

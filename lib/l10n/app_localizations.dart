@@ -5742,6 +5742,18 @@ abstract class AppLocalizations {
   /// **'No connection records yet'**
   String get syncRoundNoRecords;
 
+  /// No description provided for @syncRecheckConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Check connections again'**
+  String get syncRecheckConnections;
+
+  /// No description provided for @syncRecheckConnectionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Run one check now with the current network and power settings'**
+  String get syncRecheckConnectionsHint;
+
   /// No description provided for @syncRoundSynced.
   ///
   /// In en, this message translates to:

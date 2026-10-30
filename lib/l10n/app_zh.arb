@@ -1370,6 +1370,8 @@
   "syncPeerNameSeparator": "、",
   "syncRoundNoConnectedPeers": "本轮没有连上设备",
   "syncRoundNoRecords": "还没有连接记录",
+  "syncRecheckConnections": "重新检查连接",
+  "syncRecheckConnectionsHint": "按当前网络与电量状态立即检查一次",
   "syncRoundSynced": "本轮已同步 {names}",
   "@syncRoundSynced": {
     "placeholders": {

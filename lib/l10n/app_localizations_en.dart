@@ -3164,6 +3164,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncRoundNoRecords => 'No connection records yet';
 
   @override
+  String get syncRecheckConnections => 'Check connections again';
+
+  @override
+  String get syncRecheckConnectionsHint =>
+      'Run one check now with the current network and power settings';
+
+  @override
   String syncRoundSynced(String names) {
     return 'Synced this round: $names';
   }

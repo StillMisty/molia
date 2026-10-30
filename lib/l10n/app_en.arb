@@ -1665,6 +1665,8 @@
   "syncPeerNameSeparator": ", ",
   "syncRoundNoConnectedPeers": "No devices connected this round",
   "syncRoundNoRecords": "No connection records yet",
+  "syncRecheckConnections": "Check connections again",
+  "syncRecheckConnectionsHint": "Run one check now with the current network and power settings",
   "syncRoundSynced": "Synced this round: {names}",
   "@syncRoundSynced": {
     "placeholders": {
