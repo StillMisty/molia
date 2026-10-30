@@ -4,10 +4,9 @@
 ///   JSON 的映射在 `sync_state_codec.dart`（本类只管内存状态与写入时机）；
 /// - 敏感项（同步口令、WebDAV 密码）走 [SettingsSecretStore]（生产 =
 ///   flutter_secure_storage），口令即信任根（见 ADR-0003）；
-/// - 变更登记（设置键哈希、脚本 / 自定义封面墓碑、激活脚本指针）是
-///   「变化检测」的基线：
-///   settings 写入方分散在多个服务，同步层用「上次登记值 vs 当前值」判定
-///   本地修改，避免改造全部写入方。
+/// - 变更登记（设置键哈希、脚本 / 自定义封面墓碑、激活脚本指针）与发号器
+///   由 `sync_stamp_book.dart` 持有：settings 写入方分散在多个服务，同步层用
+///   「上次登记值 vs 当前值」判定本地修改，避免改造全部写入方。
 /// - 名册 / 地址簿 / 端点与轮次流水各有自己的容器（`sync_roster.dart` /
 ///   `sync_activity_log.dart`）：这里只拼装持久化快照并决定提交时机。
 /// - 持久化只有一个出口 [commit]：所有写入先改内存并标脏，用户命令 / 轮末
@@ -28,8 +27,9 @@ import 'sync_activity.dart';
 import 'sync_activity_log.dart';
 import 'sync_book.dart';
 import 'sync_roster.dart';
-import 'sync_state_codec.dart';
 import 'sync_stamp.dart';
+import 'sync_stamp_book.dart';
+import 'sync_state_codec.dart';
 
 // 登记项是状态与适配器共用的值类型；定义在 sync_stamp.dart，保持旧 import
 // 路径可用（大量调用方经本文件拿到 SyncStamp）。
@@ -152,17 +152,15 @@ class SyncStateStore
   /// 本机局域网快照端点端口（0 = 尚未绑定过）。
   int _lanHttpPort = 0;
 
-  final Map<String, SyncStamp> _settingStamps = {};
-  final Map<String, SyncStamp> _scriptTombstones = {};
-  final Map<String, SyncStamp> _scriptStamps = {};
-  final List<String> _knownScriptIds = [];
-  final Map<String, SyncStamp> _coverStamps = {};
-  final Map<String, SyncStamp> _coverTombstones = {};
-  SyncStamp? _activeScriptStamp;
-  SyncStamp? _sessionStamp;
-
-  /// 版本戳发号器基线（`sync_state_v2` 的 `stampSeq`）：重启后不倒退。
-  SyncVersion _stampBaseline = SyncVersion.zero;
+  /// 本机同步戳账本（登记表 + 发号器；改动经 `onChanged` 标脏）。
+  ///
+  /// 这里只转交 [SyncStampLedger] 成员：登记与取号的先后关系关在账本内，
+  /// 状态存储仍负责快照拼装与提交时机。
+  late final SyncStampBook _stamps = SyncStampBook(
+    clock: _clock,
+    deviceId: () => _deviceId,
+    onChanged: _markDirty,
+  );
 
   /// 全库最大戳种子是否已补入（首帧后由 `LibraryRepository.maxVersion` 完成）。
   ///
@@ -172,21 +170,10 @@ class SyncStateStore
 
   /// 本机所有同步戳的唯一发号器（见 [SyncStampIssuer]）。
   ///
-  /// 基线经 `onAdvanced` 写回本状态并在 [commit] 落盘；初始化时用
-  /// `max(持久化基线, 当前时钟, 全库最大戳)` 通过 [SyncStampIssuer.seed] 恢复。
+  /// 基线经账本的 `onAdvanced` 写回并在 [commit] 落盘；初始化时用
+  /// `max(持久化基线, 当前时钟, 全库最大戳)` 通过 [SyncStampBook.seed] 恢复。
   @override
-  late final SyncStampIssuer stampIssuer = SyncStampIssuer(
-    clock: _clock,
-    deviceId: () => _deviceId,
-    onAdvanced: (value) {
-      _stampBaseline = SyncVersion(
-        physical: value.physical,
-        counter: value.counter,
-      );
-      // 发号器基线也是持久状态的一部分：随轮末 / 用户命令一起提交。
-      _markDirty();
-    },
-  );
+  SyncStampIssuer get stampIssuer => _stamps.stampIssuer;
 
   @override
   String get deviceId => _deviceId;
@@ -217,31 +204,31 @@ class SyncStateStore
 
   /// 本机局域网快照端点端口（0 = 尚未绑定过；绑定后持久化，对端才能记住）。
   int get lanHttpPort => _lanHttpPort;
-  @override
-  Map<String, SyncStamp> get settingStamps => _settingStamps;
 
   @override
-  Map<String, SyncStamp> get scriptTombstones => _scriptTombstones;
-
-  /// 脚本 id → 内容哈希 + 版本（本地变化检测；脚本文件本身不带版本）。
-  @override
-  Map<String, SyncStamp> get scriptStamps => _scriptStamps;
+  Map<String, SyncStamp> get settingStamps => _stamps.settingStamps;
 
   @override
-  List<String> get knownScriptIds => List.unmodifiable(_knownScriptIds);
+  Map<String, SyncStamp> get scriptTombstones => _stamps.scriptTombstones;
 
   @override
-  SyncStamp? get activeScriptStamp => _activeScriptStamp;
+  Map<String, SyncStamp> get scriptStamps => _stamps.scriptStamps;
 
   @override
-  SyncStamp? get sessionStamp => _sessionStamp;
-
-  /// 自定义封面键 → 内容哈希 + 版本（本地变化检测）。
-  @override
-  Map<String, SyncStamp> get coverStamps => _coverStamps;
+  List<String> get knownScriptIds => _stamps.knownScriptIds;
 
   @override
-  Map<String, SyncStamp> get coverTombstones => _coverTombstones;
+  SyncStamp? get activeScriptStamp => _stamps.activeScriptStamp;
+
+  @override
+  SyncStamp? get sessionStamp => _stamps.sessionStamp;
+
+  @override
+  Map<String, SyncStamp> get coverStamps => _stamps.coverStamps;
+
+  @override
+  Map<String, SyncStamp> get coverTombstones => _stamps.coverTombstones;
+
   int get lastSyncAt => _activityLog.lastSyncAt;
   List<SyncLogEntry> get log => _activityLog.log;
 
@@ -278,7 +265,7 @@ class SyncStateStore
   }
 
   @override
-  int nowMs() => _clock();
+  int nowMs() => _stamps.nowMs();
 
   bool isCategoryEnabled(SyncCategory category) =>
       _categories[category] ?? category.defaultEnabled;
@@ -334,7 +321,7 @@ class SyncStateStore
 
   /// 首帧后由组合根调用：吸收全库最大戳并放行写入。
   void seedStampBaseline(SyncVersion dbMax) {
-    stampIssuer.seed(dbMax);
+    _stamps.seed(dbMax);
     if (!_stampSeedReady.isCompleted) _stampSeedReady.complete();
   }
 
@@ -400,7 +387,7 @@ class SyncStateStore
     // 发号器基线 = max(持久化基线, 当前时钟)：重启（含时钟回拨）不倒退。
     // 「全库最大戳」由组合根在仓库就绪后经 seed() 补入（见 LibraryRepository
     // .maxVersion）。
-    stampIssuer.seed(_stampBaseline);
+    _stamps.seed(_stamps.stampBaseline);
     _initialized = true;
   }
 
@@ -622,75 +609,51 @@ class SyncStateStore
     _roster.rememberLanEndpoint(endpoint);
   }
 
-  @override
-  void putSettingStamp(String key, SyncStamp stamp) {
-    _settingStamps[key] = stamp;
-    _markDirty();
-  }
+  // 登记写入只在账本内改内存并标脏；适配器仍经本类的 SyncStampLedger 面
+  // 写入，落盘时机仍由本类的 commit() 统一决定。
 
   @override
-  void putScriptTombstone(String id, SyncStamp stamp) {
-    _scriptTombstones[id] = stamp;
-    _markDirty();
-  }
+  void putSettingStamp(String key, SyncStamp stamp) =>
+      _stamps.putSettingStamp(key, stamp);
 
   @override
-  void putScriptStamp(String id, SyncStamp stamp) {
-    _scriptStamps[id] = stamp;
-    _markDirty();
-  }
+  void putScriptTombstone(String id, SyncStamp stamp) =>
+      _stamps.putScriptTombstone(id, stamp);
 
   @override
-  void removeScriptStamp(String id) {
-    if (_scriptStamps.remove(id) != null) _markDirty();
-  }
+  void putScriptStamp(String id, SyncStamp stamp) =>
+      _stamps.putScriptStamp(id, stamp);
 
   @override
-  void removeScriptTombstone(String id) {
-    if (_scriptTombstones.remove(id) != null) _markDirty();
-  }
+  void removeScriptStamp(String id) => _stamps.removeScriptStamp(id);
 
   @override
-  void setKnownScriptIds(Iterable<String> ids) {
-    _knownScriptIds
-      ..clear()
-      ..addAll(ids);
-    _markDirty();
-  }
+  void removeScriptTombstone(String id) => _stamps.removeScriptTombstone(id);
 
   @override
-  void setActiveScriptStamp(SyncStamp? stamp) {
-    _activeScriptStamp = stamp;
-    _markDirty();
-  }
+  void setKnownScriptIds(Iterable<String> ids) =>
+      _stamps.setKnownScriptIds(ids);
 
   @override
-  void setSessionStamp(SyncStamp? stamp) {
-    _sessionStamp = stamp;
-    _markDirty();
-  }
+  void setActiveScriptStamp(SyncStamp? stamp) =>
+      _stamps.setActiveScriptStamp(stamp);
 
   @override
-  void putCoverStamp(String key, SyncStamp stamp) {
-    _coverStamps[key] = stamp;
-    _markDirty();
-  }
+  void setSessionStamp(SyncStamp? stamp) => _stamps.setSessionStamp(stamp);
 
   @override
-  void removeCoverStamp(String key) {
-    if (_coverStamps.remove(key) != null) _markDirty();
-  }
+  void putCoverStamp(String key, SyncStamp stamp) =>
+      _stamps.putCoverStamp(key, stamp);
 
   @override
-  void putCoverTombstone(String key, SyncStamp stamp) {
-    _coverTombstones[key] = stamp;
-    _markDirty();
-  }
+  void removeCoverStamp(String key) => _stamps.removeCoverStamp(key);
 
   @override
-  void removeCoverTombstone(String key) {
-    if (_coverTombstones.remove(key) != null) _markDirty();
-  }
+  void putCoverTombstone(String key, SyncStamp stamp) =>
+      _stamps.putCoverTombstone(key, stamp);
+
+  @override
+  void removeCoverTombstone(String key) => _stamps.removeCoverTombstone(key);
 
   /// 记录一轮同步结果：日志条目（变更语义）+ 设备名册。
   ///
@@ -732,6 +695,7 @@ class SyncStateStore
   SyncPersistedState _snapshot() {
     final roster = _roster.snapshot();
     final activityLog = _activityLog.snapshot();
+    final stamps = _stamps.snapshot();
     return SyncPersistedState(
       deviceId: _deviceId,
       deviceName: _deviceName,
@@ -742,15 +706,15 @@ class SyncStateStore
       manualPeers: roster.manualPeers,
       notifiedPeers: roster.notifiedPeers,
       lanHttpPort: _lanHttpPort,
-      stampBaseline: _stampBaseline,
-      settingStamps: _settingStamps,
-      scriptTombstones: _scriptTombstones,
-      scriptStamps: _scriptStamps,
-      knownScriptIds: _knownScriptIds,
-      activeScriptStamp: _activeScriptStamp,
-      sessionStamp: _sessionStamp,
-      coverStamps: _coverStamps,
-      coverTombstones: _coverTombstones,
+      stampBaseline: stamps.stampBaseline,
+      settingStamps: stamps.settingStamps,
+      scriptTombstones: stamps.scriptTombstones,
+      scriptStamps: stamps.scriptStamps,
+      knownScriptIds: stamps.knownScriptIds,
+      activeScriptStamp: stamps.activeScriptStamp,
+      sessionStamp: stamps.sessionStamp,
+      coverStamps: stamps.coverStamps,
+      coverTombstones: stamps.coverTombstones,
       lastSyncAt: activityLog.lastSyncAt,
       transportLastSuccess: activityLog.transportLastSuccess,
       snapshotPushSeq: activityLog.snapshotPushSeq,
@@ -774,40 +738,36 @@ class SyncStateStore
     _webdav = state.webdav;
     _cellularPolicy = state.cellularPolicy;
     _lanHttpPort = state.lanHttpPort;
-    _stampBaseline = state.stampBaseline;
-    _settingStamps
-      ..clear()
-      ..addAll(state.settingStamps);
-    _scriptTombstones
-      ..clear()
-      ..addAll(state.scriptTombstones);
-    _scriptStamps
-      ..clear()
-      ..addAll(state.scriptStamps);
-    _knownScriptIds
-      ..clear()
-      ..addAll(state.knownScriptIds);
-    _coverStamps
-      ..clear()
-      ..addAll(state.coverStamps);
-    _coverTombstones
-      ..clear()
-      ..addAll(state.coverTombstones);
-    _activeScriptStamp = state.activeScriptStamp;
-    _sessionStamp = state.sessionStamp;
-    _roster.applySnapshot(SyncRosterSnapshot(
-      manualPeers: state.manualPeers,
-      notifiedPeers: state.notifiedPeers,
-      peers: state.peers,
-      lanEndpoints: state.lanEndpoints,
-    ));
-    _activityLog.applySnapshot(SyncActivityLogSnapshot(
-      lastSyncAt: state.lastSyncAt,
-      transportLastSuccess: state.transportLastSuccess,
-      snapshotPushSeq: state.snapshotPushSeq,
-      log: state.log,
-      activity: state.activity,
-    ));
+    _stamps.applyState(
+      SyncStampBookState(
+        stampBaseline: state.stampBaseline,
+        settingStamps: state.settingStamps,
+        scriptTombstones: state.scriptTombstones,
+        scriptStamps: state.scriptStamps,
+        knownScriptIds: state.knownScriptIds,
+        activeScriptStamp: state.activeScriptStamp,
+        sessionStamp: state.sessionStamp,
+        coverStamps: state.coverStamps,
+        coverTombstones: state.coverTombstones,
+      ),
+    );
+    _roster.applySnapshot(
+      SyncRosterSnapshot(
+        manualPeers: state.manualPeers,
+        notifiedPeers: state.notifiedPeers,
+        peers: state.peers,
+        lanEndpoints: state.lanEndpoints,
+      ),
+    );
+    _activityLog.applySnapshot(
+      SyncActivityLogSnapshot(
+        lastSyncAt: state.lastSyncAt,
+        transportLastSuccess: state.transportLastSuccess,
+        snapshotPushSeq: state.snapshotPushSeq,
+        log: state.log,
+        activity: state.activity,
+      ),
+    );
   }
 
   String _generateDeviceId() {
