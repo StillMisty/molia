@@ -391,9 +391,14 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// 控制面写入 + 口令兜底（不经过权限门，供授权成功后的启用路径复用）。
+  ///
+  /// 打开传输成功后立刻排一次 check 轮：用户刚打开局域网 / WebDAV 时最关心
+  /// 「现在能不能连上」，不必等下一次空闲唤醒；仍走调度器，省电 / 移动数据
+  /// 暂停 / 同步关闭时由调度器自己拦住。关闭传输不触发。
   Future<void> _applyTransportEnabled(String kind, bool value) async {
     if (value) await _controlPlane.ensurePassphrase();
     await _controlPlane.setTransportEnabled(kind, value);
+    if (value) unawaited(_scheduler?.checkNow());
   }
 
   Future<void> setCategory(SyncCategory category, bool value) async {
