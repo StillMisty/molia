@@ -15,8 +15,8 @@ import '../widgets/empty_state.dart';
 import '../widgets/library_channel_selector.dart';
 import '../widgets/library_search_tab.dart';
 import '../widgets/shell_page_visibility.dart';
+import '../widgets/settings/settings_sheet.dart';
 import '../widgets/shell_reselect.dart';
-import 'settings_page.dart';
 
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }

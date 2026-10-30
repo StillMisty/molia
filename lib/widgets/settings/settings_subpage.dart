@@ -5,7 +5,7 @@ import 'settings_tiles.dart';
 
 /// 设置子页的统一 chrome：M3E 顶栏 + 统一内边距的滚动正文。
 ///
-/// 设置子页活在 `SettingsPage` 的内层 Navigator 里（见 `settings_page.dart`），
+/// 设置子页活在设置弹层壳的内层 Navigator 里（见 `settings_sheet.dart`），
 /// 不能像根导航器上的二级页那样交给 `ResponsiveNavigation.showSecondaryPage`：
 /// 预测返回要按「子页 / 弹层首屏」分派手势归属（子页手势只退子页，首屏手势才
 /// 让弹层收缩），普通返回也必须先退子页、再关弹层。这套所有权在设置弹层，

@@ -1320,14 +1320,15 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
-  AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
-  的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）；省流模式不单开
+  AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经设置弹层壳
+  （`lib/widgets/settings/settings_sheet.dart`）的内部 Navigator 在同一弹层内
+  push（`openSettingsSubPage`）；省流模式不单开
   子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
   与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
   再关弹层：窄屏底部弹层由 `showPageModal(onDismissRequest:)` guard 读取
   内部 Navigator 的 `canPop()`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
   并请求关闭，必须由 guard 挡下）；宽屏设置弹窗是 `M3EDialog.show` + `PageModalCard`，
-  返回仍由页面自己的 `NavigatorPopHandler` 先退子页。对话框 / 独立挂载同样由它承接。
+  返回仍由弹层壳自己的 `NavigatorPopHandler` 先退子页。
   弹层内 dialog 挂在 root navigator（`M3EDialog.show` 语义），关闭须显式
   `rootNavigator: true`。
 - 页面过渡 / 预测返回：Android 侧 `PageTransitionsTheme` 必须保留
@@ -1342,7 +1343,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   二级页宽屏侧滑走 `M3ESideSheet.show`、页面型弹窗走 `M3EDialog.show` 路由，scrim /
   弹簧 / 键盘 inset / 关闭手势都由 M3E 宿主处理；自建 route 只剩全局搜索遮罩。
   嵌套 Navigator（设置弹层内层）由
-  `SettingsPage._SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
+  `settings_sheet.dart` 的 `_SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
   过渡保持 fade-forwards 并附一个预测返回 detector，只在
   `内层路由 isCurrent && popGestureEnabled && 内层 Navigator 还能 pop &&
   弹层路由仍是顶层` 时接管。框架会把一次手势派发给**所有**返回 true 的观察者，
@@ -1352,7 +1353,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
     FadeForwards 页面退场；提交只退子页，弹层保留（guard 读 coordinator 返回 false）。
   - 首屏手势：弹层正常收缩，提交关闭设置。
   护栏见 `test/settings_page_test.dart` 的「子页预测返回由页面接管」「根导航器上方
-  dialog」两组用例。
+  dialog」两组用例；协议本身由 `test/settings_sheet_back_coordinator_test.dart`
+  直接覆盖（含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走

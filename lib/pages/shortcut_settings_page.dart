@@ -19,7 +19,7 @@ import '../widgets/settings/shortcut_recorder_tile.dart';
 
 /// 快捷键设置子页：软件内 / 全局两组的总开关与绑定自定义。
 ///
-/// 从设置 › 通用进入，在设置弹层内部导航（见 `settings_page.dart`）。
+/// 从设置 › 通用进入，在设置弹层内部导航（见 `settings_sheet.dart`）。
 /// 绑定校验（全局必须带修饰键、同组不重复、回默认目标同样查占用）由
 /// [ShortcutSettings.setBinding] 兜底，拒绝原因由服务层分类
 /// （[ShortcutBindingResult]）；本页只做文案映射：缺修饰键 / 平台不支持走

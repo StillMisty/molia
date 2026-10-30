@@ -36,9 +36,9 @@ const double _autoFieldWidthSlack = 2.0;
 
 /// 在设置弹层内部打开子页（不新开弹层）。
 ///
-/// [SettingsPage] 内部有一层 Navigator：这里 push 到最近一层 Navigator，
-/// 弹层内使用时即为设置内部导航（返回键先退子页、再关弹层）；独立挂载
-/// （测试等）时等价普通页面 push。
+/// 设置弹层壳（`settings_sheet.dart`）内部有一层 Navigator：这里 push 到
+/// 最近一层 Navigator，弹层内使用时即为设置内部导航（返回键先退子页、再关
+/// 弹层）；独立挂载（测试等）时等价普通页面 push。
 Future<T?> openSettingsSubPage<T>(BuildContext context, Widget page) {
   return Navigator.of(context).push<T>(
     MaterialPageRoute<T>(builder: (_) => page),
