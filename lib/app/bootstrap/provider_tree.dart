@@ -27,6 +27,8 @@ import '../../services/ai/ai_settings_store.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/covers/custom_cover_store.dart';
+import '../../services/download/download_manager.dart';
+import '../../services/download/download_records.dart';
 import '../../services/notification_service.dart';
 import '../../services/play_statistics_service.dart';
 import '../../services/save_as.dart';
@@ -156,12 +158,17 @@ List<SingleChildWidget> buildAppProviders({
         cacheService: CacheService.instance,
         artworkCache: ArtworkCache.instance,
         catalogService: catalogService,
-        downloadService: downloadService,
+        downloadRecords: downloadService.records,
       ),
     ),
-    // 本地下载：信息页「本地数据」页与「已下载」列表共用同一状态源。
-    // 与缓存门面是两套东西：清缓存不触碰 downloads/，删下载是独立动作。
-    ChangeNotifierProvider.value(value: downloadService),
+    // 下载记录只读面：收藏页本地歌曲 / 单曲本地数据 / 信息页只订阅记录，
+    // 不感知下载队列与文件布局（记录变化低频，进度不经这里）。
+    ChangeNotifierProvider<DownloadRecords>.value(
+      value: downloadService.records,
+    ),
+    // 下载命令面：管理页 / 本地数据页 / 分享弹层 / 导入流程只依赖窄接口。
+    // 队列 / 提交日志 / 文件放置仍只有 DownloadService 一份实现。
+    ChangeNotifierProvider<DownloadManager>.value(value: downloadService),
     // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
     ChangeNotifierProvider.value(value: local.downloadSettings),
     Provider<NotificationService>.value(value: notifications),

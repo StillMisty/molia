@@ -44,31 +44,32 @@ void main() {
   LocalSongsInput inputFor(
     _FakeLibrary library,
     _FakeDownloads downloads, {
+    int recordsRevision = 0,
     int cacheRevision = 0,
-  }) =>
-      LocalSongsInput(
-        history: library.history,
-        historyTracks: () => library.tracks,
-        downloads: downloads.records,
-        supported: downloads.supported,
-        initialized: downloads.initialized,
-        cacheRevision: cacheRevision,
-      );
+  }) => LocalSongsInput(
+    history: library.history,
+    historyTracks: () => library.tracks,
+    downloads: downloads.records,
+    supported: downloads.supported,
+    initialized: downloads.initialized,
+    recordsRevision: recordsRevision,
+    cacheRevision: cacheRevision,
+  );
 
   PlayHistoryEntry historyOf(String id) => PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: id,
-        title: 'Song $id',
-        artist: 'Artist $id',
-        raw: {'songId': id},
-        playedAt: 1,
-      );
+    sourceKey: 'wy',
+    songId: id,
+    title: 'Song $id',
+    artist: 'Artist $id',
+    raw: {'songId': id},
+    playedAt: 1,
+  );
 
   Track trackOf(String id) => Track(
-        id: TrackId('wy', id),
-        title: 'Song $id',
-        origin: TrackOrigin.builtin,
-      );
+    id: TrackId('wy', id),
+    title: 'Song $id',
+    origin: TrackOrigin.builtin,
+  );
 
   DownloadedTrack downloadOf(String id, {bool imported = false}) =>
       DownloadedTrack(
@@ -217,14 +218,42 @@ void main() {
     expect(collection.count, 0);
   });
 
+  test('记录 revision 失效：记录键不变也会重算缓存行', () async {
+    final library = _FakeLibrary([historyOf('1')], [trackOf('1')]);
+    final downloads = _FakeDownloads(records: [downloadOf('1')]);
+    var recordsRevision = 0;
+    final localData = _FakeTrackLocalData(
+      (tracks) async => {for (final track in tracks) track.id},
+    );
+    final collection = LocalSongsCollection(
+      loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
+    );
+    addTearDown(collection.dispose);
+
+    await collection.sync(
+      inputFor(library, downloads, recordsRevision: recordsRevision),
+    );
+    expect(collection.rows, hasLength(1));
+    expect(collection.rows.single.isCached, isFalse);
+
+    recordsRevision = 1;
+    await collection.sync(
+      inputFor(library, downloads, recordsRevision: recordsRevision),
+    );
+
+    expect(localData.requests, hasLength(2), reason: 'revision 变了要重算');
+    expect(collection.rows.single.key, 'wy:1');
+  });
+
   test('过期结果丢弃：旧输入晚到的缓存行不能覆盖新输入', () async {
     final libraryA = _FakeLibrary([historyOf('1')], [trackOf('1')]);
     final libraryB = _FakeLibrary([historyOf('2')], [trackOf('2')]);
     final first = Completer<Set<TrackId>>();
     final second = Completer<Set<TrackId>>();
     final pending = <Completer<Set<TrackId>>>[first, second];
-    final localData =
-        _FakeTrackLocalData((tracks) => pending.removeAt(0).future);
+    final localData = _FakeTrackLocalData(
+      (tracks) => pending.removeAt(0).future,
+    );
     final collection = LocalSongsCollection(
       loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
     );
@@ -267,18 +296,13 @@ void main() {
     // 下载 2 条（wy:1 / local:x）+ 缓存 1 条（wy:2；wy:1 被下载抑制）。
     expect(collection.rows, hasLength(3));
     expect(collection.count, collection.rows.length);
-    expect(
-      collection.rows.map((row) => row.key),
-      ['wy:1', 'local:x', 'wy:2'],
-    );
+    expect(collection.rows.map((row) => row.key), ['wy:1', 'local:x', 'wy:2']);
   });
 
   test('签名相同：不重复列举缓存索引', () async {
     final library = _FakeLibrary([historyOf('1')], [trackOf('1')]);
     final downloads = _FakeDownloads();
-    final localData = _FakeTrackLocalData(
-      (tracks) async => {tracks.single.id},
-    );
+    final localData = _FakeTrackLocalData((tracks) async => {tracks.single.id});
     final collection = LocalSongsCollection(
       loadCachedAudioTrackIds: localData.cachedAudioTrackIds,
     );

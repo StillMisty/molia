@@ -34,6 +34,7 @@ class LocalSongsInput {
     required this.downloads,
     required this.supported,
     required this.initialized,
+    required this.recordsRevision,
     required this.cacheRevision,
   });
 
@@ -55,19 +56,26 @@ class LocalSongsInput {
   /// 下载记录是否已加载；未加载完成时合集显示加载态，避免空态闪烁。
   final bool initialized;
 
+  /// 下载记录 revision（记录替换 / 删除 / 初始化 / 能力变化时递增）。
+  ///
+  /// 记录键相同也可能换了快照（标题 / 路径 / 分项），revision 是「是否重算
+  /// 缓存行」的失效信号；它不参与展示。
+  final int recordsRevision;
+
   /// 音频缓存 revision（清缓存 / LRU 淘汰后递增）。
   final int cacheRevision;
 
-  /// 重算签名 = 历史键 + 下载记录键 + 缓存 revision。
+  /// 重算签名 = 历史键 + 下载记录键 + 记录 revision + 缓存 revision。
   ///
   /// 顺序敏感：历史在重新进入合集时会按最近播放重排（停留期间冻结）、下载
   /// 记录顺序变化也值得重算，与页面原实现保持同一口径（签名相同则零等待
   /// 复用上一轮结果）。
   int get signature => Object.hash(
-        Object.hashAll([for (final entry in history) entry.key]),
-        Object.hashAll([for (final record in downloads) record.key]),
-        cacheRevision,
-      );
+    Object.hashAll([for (final entry in history) entry.key]),
+    Object.hashAll([for (final record in downloads) record.key]),
+    recordsRevision,
+    cacheRevision,
+  );
 }
 
 /// 本地歌曲合集：拥有联结、下载优先去重、输入签名、加载令牌与加载态。
@@ -77,8 +85,7 @@ class LocalSongsInput {
 /// 令牌，输入已经变过的旧结果直接丢弃——不能把旧历史算出的缓存行盖到新
 /// 输入上。
 class LocalSongsCollection extends ChangeNotifier {
-  LocalSongsCollection(
-      {required this._loadCachedAudioTrackIds});
+  LocalSongsCollection({required this._loadCachedAudioTrackIds});
 
   final CachedAudioTrackIdsLookup _loadCachedAudioTrackIds;
 

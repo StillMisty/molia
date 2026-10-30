@@ -73,22 +73,22 @@ enum CollectionLibraryLoadKind {
 /// [force] 只用于失败重试；[playlistId] 只在需要列表曲目的意图上出现。
 class CollectionLibraryLoad {
   const CollectionLibraryLoad.startup()
-      : kind = CollectionLibraryLoadKind.startup,
-        playlistId = null,
-        force = false;
+    : kind = CollectionLibraryLoadKind.startup,
+      playlistId = null,
+      force = false;
 
   const CollectionLibraryLoad.playlistTracks(int this.playlistId)
-      : kind = CollectionLibraryLoadKind.playlistTracks,
-        force = false;
+    : kind = CollectionLibraryLoadKind.playlistTracks,
+      force = false;
 
   const CollectionLibraryLoad.retry({this.playlistId})
-      : kind = CollectionLibraryLoadKind.retry,
-        force = true;
+    : kind = CollectionLibraryLoadKind.retry,
+      force = true;
 
   const CollectionLibraryLoad.resortHistory()
-      : kind = CollectionLibraryLoadKind.resortHistory,
-        playlistId = null,
-        force = false;
+    : kind = CollectionLibraryLoadKind.resortHistory,
+      playlistId = null,
+      force = false;
 
   final CollectionLibraryLoadKind kind;
 
@@ -129,8 +129,9 @@ class LibraryCollectionReader implements CollectionLibrary {
       history: _provider.history,
       playlistsState: _provider.playlistsState,
       historyState: _provider.historyState,
-      playlistTracks:
-          playlistId == null ? null : _provider.playlistTracksView(playlistId),
+      playlistTracks: playlistId == null
+          ? null
+          : _provider.playlistTracksView(playlistId),
     );
   }
 
@@ -160,23 +161,28 @@ class LibraryCollectionReader implements CollectionLibrary {
 
 /// 下载能力的一帧快照（本地歌曲合集的输入）。
 ///
-/// 用快照而不是 `DownloadService`：会话与单测都不感知下载服务的实现。
+/// 用快照而不是 `DownloadRecords`：会话与单测都不感知记录实现。
 class CollectionDownloads {
   const CollectionDownloads({
     required this.records,
     required this.supported,
     required this.initialized,
+    this.recordsRevision = 0,
   });
 
   /// 下载 / 导入能力不可用（合集不出现，也不产生缓存行）。
   const CollectionDownloads.unavailable()
-      : records = const <DownloadedTrack>[],
-        supported = false,
-        initialized = true;
+    : records = const <DownloadedTrack>[],
+      supported = false,
+      initialized = true,
+      recordsRevision = 0;
 
   final List<DownloadedTrack> records;
   final bool supported;
   final bool initialized;
+
+  /// 下载记录 revision（记录快照变化的失效信号）。
+  final int recordsRevision;
 }
 
 /// 合集展示名（l10n 由页面传入；会话不依赖 BuildContext）。
@@ -262,12 +268,12 @@ class CollectionSession extends ChangeNotifier {
     CollectionPresenter? presenter,
     this._scroll,
     CachedAudioTrackIdsLookup? loadCachedAudioTrackIds,
-  })  : _collections = collections ?? LibraryCollections(),
-        _presenter = presenter ?? CollectionPresenter(),
-        _localSongs = LocalSongsCollection(
-          loadCachedAudioTrackIds:
-              loadCachedAudioTrackIds ?? _noCachedAudioTracks,
-        ) {
+  }) : _collections = collections ?? LibraryCollections(),
+       _presenter = presenter ?? CollectionPresenter(),
+       _localSongs = LocalSongsCollection(
+         loadCachedAudioTrackIds:
+             loadCachedAudioTrackIds ?? _noCachedAudioTracks,
+       ) {
     _selection.addListener(_forwardChange);
     _localSongs.addListener(_forwardChange);
   }
@@ -425,11 +431,13 @@ class CollectionSession extends ChangeNotifier {
     // 四个来源合成一个阶段，页面只判断 loading 与否。
     final initialLoading =
         snapshot.playlists.isEmpty && snapshot.playlistsState.isLoading;
-    final tracksLoading = !identity.isHistory &&
+    final tracksLoading =
+        !identity.isHistory &&
         !identity.isLocalSongs &&
         selectedPlaylistId != null &&
         (tracksView?.loading ?? false);
-    final historyLoading = identity.isHistory &&
+    final historyLoading =
+        identity.isHistory &&
         snapshot.history.isEmpty &&
         snapshot.historyState.isLoading;
     final localSongsLoading = identity.isLocalSongs && _localSongs.loading;
@@ -446,8 +454,8 @@ class CollectionSession extends ChangeNotifier {
     final phase = loading
         ? CollectionViewPhase.loading
         : failure != null
-            ? CollectionViewPhase.failed
-            : CollectionViewPhase.ready;
+        ? CollectionViewPhase.failed
+        : CollectionViewPhase.ready;
     final reorderActive =
         _reordering && view.isCustom && !_searching && view.visibleCount >= 2;
 
@@ -671,22 +679,20 @@ class CollectionSession extends ChangeNotifier {
   List<CollectionRowActionSpec> rowActionsFor(
     CollectionRow row,
     CollectionView view,
-  ) =>
-      _presenter.rowActionsFor(row, view.identity);
+  ) => _presenter.rowActionsFor(row, view.identity);
 
   CollectionIdentity _identityFor(
     CollectionSessionInput input,
     List<PlaylistInfo> playlists,
     int? favoritesId,
-  ) =>
-      _presenter.identityFor(
-        selectedId: _selectedId,
-        playlists: playlists,
-        favoritesId: favoritesId,
-        favoritesName: input.names.favorites,
-        historyName: input.names.history,
-        localSongsName: input.names.localSongs,
-      );
+  ) => _presenter.identityFor(
+    selectedId: _selectedId,
+    playlists: playlists,
+    favoritesId: favoritesId,
+    favoritesName: input.names.favorites,
+    historyName: input.names.history,
+    localSongsName: input.names.localSongs,
+  );
 
   /// 恢复的选集校准：首次合集列表加载完成后，若持久化选集已不存在
   /// （列表被删 / 下载能力不可用）或尚未选择，则采用默认解析结果并落盘。
@@ -709,7 +715,8 @@ class CollectionSession extends ChangeNotifier {
     _calibrated = true;
 
     final previous = _selectedId;
-    final valid = previous == LibraryCollections.unset ||
+    final valid =
+        previous == LibraryCollections.unset ||
         previous == LibraryCollections.favoritesSentinel ||
         previous == LibraryCollections.historySentinel ||
         (previous == LibraryCollections.downloadsSentinel &&
@@ -728,10 +735,12 @@ class CollectionSession extends ChangeNotifier {
     _startupRequested = true;
     // 首次刷新会同步 notify：推迟到微任务，避免在 build 期通知 provider
     // 的监听者（provider 的 refresh* 在第一个 await 前就通知）。
-    unawaited(Future<void>.microtask(() {
-      if (_disposed) return;
-      library.load(const CollectionLibraryLoad.startup());
-    }));
+    unawaited(
+      Future<void>.microtask(() {
+        if (_disposed) return;
+        library.load(const CollectionLibraryLoad.startup());
+      }),
+    );
   }
 
   LocalSongsInput _localSongsInput(
@@ -749,6 +758,7 @@ class CollectionSession extends ChangeNotifier {
       downloads: downloads.records,
       supported: downloads.supported,
       initialized: downloads.initialized,
+      recordsRevision: downloads.recordsRevision,
       cacheRevision: cacheRevision,
     );
   }

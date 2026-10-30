@@ -9,10 +9,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
-import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/models/play_mode.dart';
@@ -24,7 +22,8 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
-import 'package:molia/services/download/download_service.dart';
+import 'package:molia/services/download/download_manager.dart';
+import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/sync_format.dart';
 import 'package:molia/widgets/app_search_bar.dart';
@@ -40,76 +39,59 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_discover_api.dart';
-import 'support/fake_download_storage.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
 import 'support/memory_cache_storage.dart';
 
-/// 下载服务桩：验证收藏页「本地歌曲」合集的显隐、列表与删除动作。
-class _StubDownloadService extends DownloadService {
-  _StubDownloadService({List<DownloadedTrack>? seed})
-      : _seed = List.of(seed ?? const []),
-        super(
-          catalog: CatalogService(registry: FakeSourceRegistry(const {})),
-          repository: DownloadsRepository(
-            databaseProvider: () => throw UnimplementedError(),
-          ),
-          storage: FakeDownloadStorage(),
-        );
+/// 下载记录 / 删除动作的测试夹具：记录用真实模块（验证 revision 驱动），
+/// 管理面只实现收藏页真正用到的 `delete`。
+class _DownloadsFixture {
+  _DownloadsFixture({
+    List<DownloadedTrack>? seed,
+    bool supported = true,
+    bool initialized = true,
+  }) : records = DownloadRecords(
+         records: seed ?? const [],
+         supported: supported,
+         initialized: initialized,
+       ) {
+    manager = _StubDownloadManager(records);
+  }
 
-  List<DownloadedTrack> _seed;
+  final DownloadRecords records;
+  late final _StubDownloadManager manager;
+
+  /// 已删除的记录（断言删除路径）。
+  List<DownloadedTrack> get deleted => manager.deleted;
+
+  /// 模拟记录列表变化（下载完成 / 重导入）。
+  void replaceRecords(List<DownloadedTrack> records) =>
+      this.records.replaceAll(records);
+}
+
+class _StubDownloadManager extends ChangeNotifier implements DownloadManager {
+  _StubDownloadManager(this.records);
+
+  final DownloadRecords records;
 
   /// 已删除的记录（断言删除路径）。
   final List<DownloadedTrack> deleted = [];
 
   @override
-  bool get supported => true;
-
-  @override
-  bool get initialized => true;
-
-  @override
-  List<DownloadedTrack> get downloads => List.unmodifiable(_seed);
-
-  @override
-  DownloadedTrack? recordFor(String sourceKey, String songId) {
-    for (final song in _seed) {
-      if (song.originSourceKey == sourceKey && song.originSongId == songId) {
-        return song;
-      }
-    }
-    return null;
-  }
-
-  @override
-  DownloadedTrack? recordForTrack(Track track) =>
-      recordFor(track.id.sourceKey, track.id.id);
-
-  @override
   Future<void> delete(DownloadedTrack record) async {
     deleted.add(record);
-    _seed = [
-      for (final song in _seed)
-        if (song.key != record.key) song
-    ];
-    notifyListeners();
+    records.remove(record.key);
   }
 
-  /// 模拟纯下载进度 tick：与 [DownloadService] 的进度通知同形，记录列表不变。
-  void notifyProgress() => notifyListeners();
-
-  /// 模拟记录列表变化（下载完成 / 重导入）。
-  void replaceRecords(List<DownloadedTrack> records) {
-    _seed = List.of(records);
-    notifyListeners();
-  }
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// 无封面缓存桩：封面占用在收藏页用例里恒为零（manager 不可用即零）。
 class _NoopArtworkCache extends ArtworkCache {
   _NoopArtworkCache()
-      : super(cacheService: CacheService(storage: MemoryCacheStorage()));
+    : super(cacheService: CacheService(storage: MemoryCacheStorage()));
 }
 
 /// 指定列表的曲目读取失败（模拟损坏行 / 数据库读错误）。
@@ -117,10 +99,7 @@ class _FailingTrackReadRepository extends FakeLibraryRepository {
   final Set<int> failingPlaylistIds = {};
 
   @override
-  Future<List<PlaylistTrack>> listPlaylistTracks(
-    int playlistId, {
-    int? limit,
-  }) {
+  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId, {int? limit}) {
     if (failingPlaylistIds.contains(playlistId)) {
       return Future.error(StateError('tracks read failed'));
     }
@@ -195,16 +174,14 @@ class _FakeCacheStorage implements CacheStorage {
     String dirPath, {
     required int maxBytes,
     required Duration protectAge,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,
-  }) async =>
-      CacheSweepResult.failed;
+  }) async => CacheSweepResult.failed;
 }
 
 /// 本地歌曲记录：`imported` 决定删除语义（就地引用 / 下载副本）。
@@ -214,17 +191,19 @@ DownloadedTrack _localSong(
   String artist = '歌手',
   bool imported = false,
   int? durationMs = 180000,
-}) =>
-    DownloadedTrack(
-      originSourceKey: imported ? kLocalSourceKey : 'kw',
-      originSongId: id,
-      title: title ?? '本地 $id',
-      artist: artist,
-      durationMs: durationMs,
-      filePath: '/downloads/$id.mp3',
-      downloadedAt: 1,
-      imported: imported,
-    );
+  int? downloadedAt,
+}) => DownloadedTrack(
+  originSourceKey: imported ? kLocalSourceKey : 'kw',
+  originSongId: id,
+  title: title ?? '本地 $id',
+  artist: artist,
+  durationMs: durationMs,
+  filePath: '/downloads/$id.mp3',
+  // 同一批记录给稳定的下载时间：记录按时间倒序（同时间再按 key 倒序），
+  // 夹具用 id 递增反推时间，保持用例里的「1 在前、2 在后」。
+  downloadedAt: downloadedAt ?? 1000 - (int.tryParse(id) ?? 0),
+  imported: imported,
+);
 
 /// 「收藏」页 widget 测试。
 ///
@@ -265,7 +244,7 @@ void main() {
   Future<void> pumpFavorites(
     WidgetTester tester, {
     math.Random? shuffleRandom,
-    DownloadService? downloads,
+    _DownloadsFixture? downloads,
     CacheService? cache,
     Size size = const Size(1200, 2400),
     ShellReselectSignal? reselect,
@@ -287,17 +266,24 @@ void main() {
           ChangeNotifierProvider<LibraryProvider>.value(
             value: libraryProvider ?? provider,
           ),
-          if (downloads != null)
-            ChangeNotifierProvider<DownloadService>.value(value: downloads),
+          if (downloads != null) ...[
+            ChangeNotifierProvider<DownloadRecords>.value(
+              value: downloads.records,
+            ),
+            ChangeNotifierProvider<DownloadManager>.value(
+              value: downloads.manager,
+            ),
+          ],
           if (cache != null) ...[
             Provider<CacheService>.value(value: cache),
             Provider<TrackLocalDataService>.value(
               value: TrackLocalDataService(
                 cacheService: cache,
                 artworkCache: _NoopArtworkCache(),
-                catalogService:
-                    CatalogService(registry: FakeSourceRegistry(const {})),
-                downloadService: downloads,
+                catalogService: CatalogService(
+                  registry: FakeSourceRegistry(const {}),
+                ),
+                downloadRecords: downloads?.records,
               ),
             ),
           ],
@@ -344,11 +330,9 @@ void main() {
   }
 
   Future<void> importLove(WidgetTester tester) async {
-    await provider.importLxmcBytes(_lxmcBytes([
-      _track(1),
-      _track(2),
-      _track(3),
-    ]));
+    await provider.importLxmcBytes(
+      _lxmcBytes([_track(1), _track(2), _track(3)]),
+    );
   }
 
   List<String> headlines(WidgetTester tester) => tester
@@ -373,11 +357,11 @@ void main() {
 
   /// 弹层内的合集行（限定在弹层 surface 内，避免与页面曲目行混淆）。
   Finder pickerRow(String name) => find.descendant(
-        of: find.byType(M3EBottomSheetSurface),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is M3EListItem && widget.headline == name,
-        ),
-      );
+    of: find.byType(M3EBottomSheetSurface),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is M3EListItem && widget.headline == name,
+    ),
+  );
 
   /// 弹层标题行的工具动作（新建 `Icons.add_rounded` / 导入
   /// `Icons.library_add_rounded`）。
@@ -586,8 +570,9 @@ void main() {
     expect(find.text('播放时间'), findsOneWidget, reason: '历史独有列');
     expect(find.text('Album'), findsOneWidget);
     expect(find.text('3:00'), findsOneWidget);
-    final header =
-        tester.widget<TrackTableHeader>(find.byType(TrackTableHeader));
+    final header = tester.widget<TrackTableHeader>(
+      find.byType(TrackTableHeader),
+    );
     expect(header.spec, same(TrackRowColumnSpec.history));
     expect(
       tester.widget<TrackRow>(find.byType(TrackRow).first).surface.tableSpec,
@@ -621,10 +606,9 @@ void main() {
     await pumpFavorites(tester);
 
     bool selectedOf(String title) => tester
-        .widget<TrackRow>(find.ancestor(
-          of: find.text(title),
-          matching: find.byType(TrackRow),
-        ))
+        .widget<TrackRow>(
+          find.ancestor(of: find.text(title), matching: find.byType(TrackRow)),
+        )
         .model
         .selected;
 
@@ -660,10 +644,9 @@ void main() {
     await pumpFavorites(tester);
 
     bool selectedOf(String title) => tester
-        .widget<TrackRow>(find.ancestor(
-          of: find.text(title),
-          matching: find.byType(TrackRow),
-        ))
+        .widget<TrackRow>(
+          find.ancestor(of: find.text(title), matching: find.byType(TrackRow)),
+        )
         .model
         .selected;
 
@@ -742,12 +725,14 @@ void main() {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     await pumpFavorites(
       tester,
-      downloads: _StubDownloadService(),
+      downloads: _DownloadsFixture(),
       cache: CacheService(
-        storage: _FakeCacheStorage(files: {
-          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-              2048,
-        }),
+        storage: _FakeCacheStorage(
+          files: {
+            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+                2048,
+          },
+        ),
       ),
     );
 
@@ -770,12 +755,14 @@ void main() {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     await pumpFavorites(
       tester,
-      downloads: _StubDownloadService(seed: [_localSong('2')]),
+      downloads: _DownloadsFixture(seed: [_localSong('2')]),
       cache: CacheService(
-        storage: _FakeCacheStorage(files: {
-          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-              2048,
-        }),
+        storage: _FakeCacheStorage(
+          files: {
+            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+                2048,
+          },
+        ),
       ),
     );
 
@@ -793,16 +780,14 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    expect(
-      pickerHeadlines(tester),
-      ['我的收藏', '播放历史', 'love'],
-    );
+    expect(pickerHeadlines(tester), ['我的收藏', '播放历史', 'love']);
 
     // 把 love 的把手向上拖到「播放历史」之前。必须小步移动：
     // 单步位移过大时 ReorderableListView 的目标索引计算会跳过（实测）。
     final handle = find.byIcon(Icons.drag_handle_rounded).last;
     final start = tester.getCenter(handle);
-    final rowDelta = tester.getCenter(pickerRow('播放历史')).dy -
+    final rowDelta =
+        tester.getCenter(pickerRow('播放历史')).dy -
         tester.getCenter(pickerRow('love')).dy;
     final gesture = await tester.startGesture(start);
     await tester.pump(const Duration(milliseconds: 50));
@@ -813,18 +798,17 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    expect(
-      pickerHeadlines(tester),
-      ['我的收藏', 'love', '播放历史'],
-    );
+    expect(pickerHeadlines(tester), ['我的收藏', 'love', '播放历史']);
 
-    final loveId =
-        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    final loveId = provider.playlists
+        .firstWhere((playlist) => playlist.name == 'love')
+        .id;
     final prefs = await SharedPreferences.getInstance();
-    expect(
-      prefs.getStringList('favorites_collection_order'),
-      ['favorites', 'playlist:$loveId', 'history'],
-    );
+    expect(prefs.getStringList('favorites_collection_order'), [
+      'favorites',
+      'playlist:$loveId',
+      'history',
+    ]);
   });
 
   testWidgets('合集弹层：新建列表并切换过去', (tester) async {
@@ -870,10 +854,7 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    expect(
-      pickerHeadlines(tester),
-      ['我的收藏', '播放历史', 'love'],
-    );
+    expect(pickerHeadlines(tester), ['我的收藏', '播放历史', 'love']);
 
     await tester.tap(find.byIcon(Icons.more_vert_rounded));
     await tester.pumpAndSettle();
@@ -884,10 +865,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 弹层行局部移除；仓库同步删除。
-    expect(
-      pickerHeadlines(tester),
-      ['我的收藏', '播放历史'],
-    );
+    expect(pickerHeadlines(tester), ['我的收藏', '播放历史']);
     await flushLibraryReloads(tester);
     expect(await repository.listPlaylists(), isEmpty);
 
@@ -967,8 +945,9 @@ void main() {
     await flushLibraryReloads(tester);
 
     expect(headlines(tester), ['Song 1', 'Song 3']);
-    final loveId =
-        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    final loveId = provider.playlists
+        .firstWhere((playlist) => playlist.name == 'love')
+        .id;
     expect(await repository.listPlaylistTracks(loveId), hasLength(2));
   });
 
@@ -987,8 +966,9 @@ void main() {
     await tester.pumpAndSettle();
     await flushLibraryReloads(tester);
 
-    final loveId =
-        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    final loveId = provider.playlists
+        .firstWhere((playlist) => playlist.name == 'love')
+        .id;
     final copied = await repository.listPlaylistTracks(loveId);
     expect(copied.map((track) => track.songId), contains('Song A'));
     expect(find.text('已加入「love」'), findsOneWidget);
@@ -1028,8 +1008,9 @@ void main() {
 
     expect(find.text('操作失败'), findsOneWidget);
     expect(find.text('已加入「love」'), findsNothing);
-    final loveId =
-        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    final loveId = provider.playlists
+        .firstWhere((playlist) => playlist.name == 'love')
+        .id;
     expect(
       (await repository.listPlaylistTracks(loveId)).map((t) => t.songId),
       isNot(contains('Song A')),
@@ -1193,10 +1174,12 @@ void main() {
     expect(find.byIcon(Icons.drag_handle_rounded), findsNWidgets(3));
 
     // 长按 Song 3 拖到 Song 1 之前（向上两行）。
-    final rowDelta = tester.getCenter(find.text('Song 2')).dy -
+    final rowDelta =
+        tester.getCenter(find.text('Song 2')).dy -
         tester.getCenter(find.text('Song 1')).dy;
-    final gesture =
-        await tester.startGesture(tester.getCenter(find.text('Song 3')));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('Song 3')),
+    );
     await tester.pump(const Duration(milliseconds: 700));
     for (var step = 0; step < 6; step++) {
       await gesture.moveBy(Offset(0, -rowDelta * 2 / 6));
@@ -1205,8 +1188,9 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
 
-    final loveId =
-        provider.playlists.firstWhere((playlist) => playlist.name == 'love').id;
+    final loveId = provider.playlists
+        .firstWhere((playlist) => playlist.name == 'love')
+        .id;
     expect(
       (await repository.listPlaylistTracks(loveId))
           .map((track) => track.songId)
@@ -1352,10 +1336,12 @@ void main() {
 
     // 标题/歌手都单行省略：固定高度不会被换行撑高。
     final firstRowTexts = tester
-        .widgetList<Text>(find.descendant(
-          of: find.byType(TrackRow).first,
-          matching: find.byType(Text),
-        ))
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(TrackRow).first,
+            matching: find.byType(Text),
+          ),
+        )
         .toList();
     expect(firstRowTexts, hasLength(2));
     expect(firstRowTexts.every((text) => text.maxLines == 1), isTrue);
@@ -1413,8 +1399,9 @@ void main() {
     await pumpFavorites(tester);
 
     expect(find.text('我的收藏'), findsOneWidget);
-    final controller =
-        tester.widget<Scrollbar>(find.byType(Scrollbar)).controller!;
+    final controller = tester
+        .widget<Scrollbar>(find.byType(Scrollbar))
+        .controller!;
     expect(controller.offset, closeTo(400, 1));
     // 恢复触发的落盘节流计时器：推进到触发，避免挂起。
     await tester.pump(const Duration(milliseconds: 600));
@@ -1426,8 +1413,9 @@ void main() {
     await seedManyFavorites(tester);
     await pumpFavorites(tester, reselect: reselect);
 
-    final controller =
-        tester.widget<Scrollbar>(find.byType(Scrollbar)).controller!;
+    final controller = tester
+        .widget<Scrollbar>(find.byType(Scrollbar))
+        .controller!;
     await tester.drag(find.byType(ListView), const Offset(0, -600));
     await tester.pumpAndSettle();
     expect(controller.offset, greaterThan(0), reason: '先滚离顶部');
@@ -1442,10 +1430,12 @@ void main() {
   });
 
   testWidgets('本地歌曲：弹层出现合集，进入后播放 / 搜索过滤', (tester) async {
-    final service = _StubDownloadService(seed: [
-      _localSong('1', title: '下载的歌'),
-      _localSong('2', title: '导入的歌', imported: true),
-    ]);
+    final service = _DownloadsFixture(
+      seed: [
+        _localSong('1', title: '下载的歌'),
+        _localSong('2', title: '导入的歌', imported: true),
+      ],
+    );
     await pumpFavorites(tester, downloads: service);
 
     await openCollectionPicker(tester);
@@ -1475,10 +1465,12 @@ void main() {
   });
 
   testWidgets('本地歌曲：左滑删除按来源区分（下载删文件 / 导入只移出列表）', (tester) async {
-    final service = _StubDownloadService(seed: [
-      _localSong('1', title: '下载的歌'),
-      _localSong('2', title: '导入的歌', imported: true),
-    ]);
+    final service = _DownloadsFixture(
+      seed: [
+        _localSong('1', title: '下载的歌'),
+        _localSong('2', title: '导入的歌', imported: true),
+      ],
+    );
     await pumpFavorites(tester, downloads: service);
     await selectCollection(tester, '本地歌曲');
 
@@ -1506,10 +1498,12 @@ void main() {
   });
 
   testWidgets('本地歌曲：长按多选删除（混合来源文案）', (tester) async {
-    final service = _StubDownloadService(seed: [
-      _localSong('1', title: '下载的歌'),
-      _localSong('2', title: '导入的歌', imported: true),
-    ]);
+    final service = _DownloadsFixture(
+      seed: [
+        _localSong('1', title: '下载的歌'),
+        _localSong('2', title: '导入的歌', imported: true),
+      ],
+    );
     await pumpFavorites(tester, downloads: service);
     await selectCollection(tester, '本地歌曲');
 
@@ -1519,10 +1513,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
-    expect(
-      find.text('删除下载？音频、歌词与封面会一起删除；导入的歌曲只从列表移除。'),
-      findsOneWidget,
-    );
+    expect(find.text('删除下载？音频、歌词与封面会一起删除；导入的歌曲只从列表移除。'), findsOneWidget);
     await tester.tap(find.widgetWithText(M3EButton, '删除'));
     await tester.pumpAndSettle();
     expect(service.deleted.map((song) => song.key), ['kw:1', 'local:2']);
@@ -1537,47 +1528,39 @@ void main() {
   });
 
   testWidgets('本地歌曲：空态显示导入入口', (tester) async {
-    await pumpFavorites(tester, downloads: _StubDownloadService());
+    await pumpFavorites(tester, downloads: _DownloadsFixture());
     await selectCollection(tester, '本地歌曲');
 
     expect(find.text('还没有本地歌曲'), findsOneWidget);
     expect(find.widgetWithText(M3EButton, '导入本地歌曲'), findsOneWidget);
   });
 
-  testWidgets('本地歌曲：下载进度通知不重建列表，记录变化立即刷新', (tester) async {
-    final service = _StubDownloadService(seed: [
-      _localSong('1', title: '下载的歌'),
-    ]);
+  testWidgets('本地歌曲：记录 revision 变化立即刷新', (tester) async {
+    // 进度已拆到 DownloadTask，不再经过记录通知；本用例只覆盖记录变化
+    // （revision 递增）驱动本地歌曲刷新。
+    final service = _DownloadsFixture(seed: [_localSong('1', title: '下载的歌')]);
     await pumpFavorites(tester, downloads: service);
     await selectCollection(tester, '本地歌曲');
     expect(headlines(tester), ['下载的歌']);
+    final before = service.records.revision;
 
-    final before = tester.widget<TrackRow>(find.byType(TrackRow).first);
-    // 进度 tick（约 100ms 一次）不改记录列表：页面不重建，行实例保持不变。
-    for (var i = 0; i < 5; i++) {
-      service.notifyProgress();
-    }
-    await tester.pump();
-    expect(
-      identical(before, tester.widget<TrackRow>(find.byType(TrackRow).first)),
-      isTrue,
-      reason: '纯下载进度不应触发整页重建',
-    );
-
-    // 下载完成 = 记录列表变化：立即刷新（不等下一次进度 tick / 延迟）。
+    // 下载完成 = 记录替换：revision 递增，页面立即刷新。
     service.replaceRecords([
       _localSong('1', title: '下载的歌'),
       _localSong('2', title: '刚下载完'),
     ]);
     await tester.pumpAndSettle();
+    expect(service.records.revision, greaterThan(before));
     expect(headlines(tester), ['下载的歌', '刚下载完']);
   });
 
   testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {
-    final service = _StubDownloadService(seed: [
-      for (var i = 0; i < 40; i++)
-        _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
-    ]);
+    final service = _DownloadsFixture(
+      seed: [
+        for (var i = 0; i < 40; i++)
+          _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
+      ],
+    );
     await pumpFavorites(tester, downloads: service);
     await selectCollection(tester, '本地歌曲');
 
@@ -1594,12 +1577,14 @@ void main() {
 
   testWidgets('本地歌曲：缓存曲目入列（原曲身份）且删除 = 清缓存', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
-    final cacheStorage = _FakeCacheStorage(files: {
-      AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'): 2048,
-    });
+    final cacheStorage = _FakeCacheStorage(
+      files: {
+        AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+            2048,
+      },
+    );
     final cache = CacheService(storage: cacheStorage);
-    await pumpFavorites(tester,
-        downloads: _StubDownloadService(), cache: cache);
+    await pumpFavorites(tester, downloads: _DownloadsFixture(), cache: cache);
     await selectCollection(tester, '本地歌曲');
     await tester.pump();
 
@@ -1685,11 +1670,7 @@ void main() {
     brokenRepository.failingPlaylistIds.add(imported.playlistId);
 
     // settle=false：回归时不能让 pumpAndSettle 等十分钟。
-    await pumpFavorites(
-      tester,
-      libraryProvider: brokenProvider,
-      settle: false,
-    );
+    await pumpFavorites(tester, libraryProvider: brokenProvider, settle: false);
     for (var i = 0; i < 30; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
@@ -1725,13 +1706,13 @@ void main() {
 }
 
 Map<String, dynamic> _track(int id) => {
-      'id': 'wy_$id',
-      'name': 'Song $id',
-      'singer': 'Artist $id',
-      'source': 'wy',
-      'interval': '03:00',
-      'meta': {'songId': id, 'albumName': 'Album $id'},
-    };
+  'id': 'wy_$id',
+  'name': 'Song $id',
+  'singer': 'Artist $id',
+  'source': 'wy',
+  'interval': '03:00',
+  'meta': {'songId': id, 'albumName': 'Album $id'},
+};
 
 PlayHistoryEntry _history(String songId, {int playedAt = 1}) =>
     PlayHistoryEntry(
@@ -1747,8 +1728,14 @@ PlayHistoryEntry _history(String songId, {int playedAt = 1}) =>
 
 /// 合成 .lxmc（gzip JSON），名称 `list__name_love` → 清洗为 `love`。
 Uint8List _lxmcBytes(List<Map<String, dynamic>> list) {
-  return Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode({
-    'type': 'playListPart_v2',
-    'data': {'id': 'x', 'name': 'list__name_love', 'list': list},
-  }))));
+  return Uint8List.fromList(
+    gzip.encode(
+      utf8.encode(
+        jsonEncode({
+          'type': 'playListPart_v2',
+          'data': {'id': 'x', 'name': 'list__name_love', 'list': list},
+        }),
+      ),
+    ),
+  );
 }

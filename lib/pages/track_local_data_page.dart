@@ -26,7 +26,9 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_manager.dart';
+import '../services/download/download_queue.dart';
+import '../services/download/download_records.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
@@ -77,7 +79,8 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
 
   TrackLocalDataService? _service;
   CacheService? _cacheService;
-  DownloadService? _downloads;
+  DownloadRecords? _records;
+  DownloadManager? _downloads;
   TrackLocalData? _data;
 
   /// 当前曲目的音频任务（排队 / 运行 / 失败）：进度只订阅它，不整页扫盘。
@@ -97,18 +100,18 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     super.didChangeDependencies();
     _service = context.read<TrackLocalDataService?>();
     _cacheService = context.read<CacheService?>() ?? CacheService.instance;
-    final downloads = context.read<DownloadService?>();
+    final records = context.read<DownloadRecords?>();
+    if (!identical(_records, records)) {
+      if (_listening) _records?.removeListener(_onRecordsChanged);
+      _records = records;
+      if (_listening) records?.addListener(_onRecordsChanged);
+    }
+    final downloads = context.read<DownloadManager?>();
     if (!identical(_downloads, downloads)) {
-      if (_listening) {
-        _downloads?.removeListener(_onRecordsChanged);
-        _downloads?.taskChanges.removeListener(_onTasksChanged);
-      }
+      if (_listening) _downloads?.taskChanges.removeListener(_onTasksChanged);
       _downloads = downloads;
       _task = null;
-      if (_listening) {
-        downloads?.addListener(_onRecordsChanged);
-        downloads?.taskChanges.addListener(_onTasksChanged);
-      }
+      if (_listening) downloads?.taskChanges.addListener(_onTasksChanged);
     }
     _data ??= _service?.downloadState(widget.track);
     if (!_listening) {
@@ -116,7 +119,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       // 缓存内容（清缓存 / LRU / 边播边缓存落成）与下载记录（转存 / 删除）
       // 变化才重算本页状态；任务进度只重建音频区。
       _cacheService?.revision.addListener(_onChanged);
-      _downloads?.addListener(_onRecordsChanged);
+      _records?.addListener(_onRecordsChanged);
       _downloads?.taskChanges.addListener(_onTasksChanged);
       unawaited(_reload());
     }
@@ -127,7 +130,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   void dispose() {
     if (_listening) {
       _cacheService?.revision.removeListener(_onChanged);
-      _downloads?.removeListener(_onRecordsChanged);
+      _records?.removeListener(_onRecordsChanged);
       _downloads?.taskChanges.removeListener(_onTasksChanged);
     }
     super.dispose();
@@ -200,7 +203,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     return qualities.isEmpty ? '' : qualities.first;
   }
 
-  /// 下载 / 转存音频（缓存命中时由 `DownloadService` 直接拷贝，不触网）。
+  /// 下载 / 转存音频（缓存命中时由下载服务直接拷贝，不触网）。
   ///
   /// 只入队，不占用整页 `_busy`：任务进度经 [DownloadTask] 单独更新，页面
   /// 在排队 / 下载期间仍可操作。省流生效时先确认。
@@ -431,10 +434,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   }
 
   /// 音频区只订阅当前任务：进度 / 状态变化不重建整页（缓存占用等）。
-  Widget _buildAudioSectionWidget(
-    AppLocalizations l10n,
-    TrackLocalData? data,
-  ) {
+  Widget _buildAudioSectionWidget(AppLocalizations l10n, TrackLocalData? data) {
     final task = _task;
     if (task == null) {
       return Column(

@@ -21,7 +21,8 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_manager.dart';
+import '../services/download/download_queue.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
@@ -46,13 +47,13 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   bool _busy = false;
 
   /// 下载根目录 Future：只在服务实例变化时重建，记录 / 任务变化不重新解析。
-  DownloadService? _rootService;
+  DownloadManager? _rootService;
   Future<String?>? _rootPath;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final downloads = context.read<DownloadService?>();
+    final downloads = context.read<DownloadManager?>();
     if (!identical(downloads, _rootService)) {
       _rootService = downloads;
       _rootPath = downloads?.rootPath() ?? Future<String?>.value();
@@ -62,7 +63,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final downloads = context.watch<DownloadService?>();
+    final downloads = context.watch<DownloadManager?>();
     final queueLength = context.select<PlaybackProvider, int>(
       (provider) => provider.snapshot.queue.length,
     );
@@ -81,13 +82,14 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               icon: Icons.playlist_add_rounded,
               title: l10n.downloadsBatchQueue,
               subtitle: l10n.downloadsBatchQueueSubtitle(queueLength),
-              onTap: downloads == null ||
-                      !downloads.supported ||
-                      queueLength == 0
+              onTap:
+                  downloads == null || !downloads.supported || queueLength == 0
                   ? null
                   : () {
-                      final queue =
-                          context.read<PlaybackProvider>().snapshot.queue;
+                      final queue = context
+                          .read<PlaybackProvider>()
+                          .snapshot
+                          .queue;
                       unawaited(_batchDownload(downloads, queue));
                     },
             ),
@@ -161,7 +163,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 任务区只订阅队列结构（增删 / 状态），每行再单独订阅自己的进度。
-  Widget _buildTasksSection(AppLocalizations l10n, DownloadService? downloads) {
+  Widget _buildTasksSection(AppLocalizations l10n, DownloadManager? downloads) {
     if (downloads == null) {
       return SettingsSectionCard(
         title: l10n.downloadsTasksSection,
@@ -244,7 +246,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 单条运行 / 等待任务：行内只订阅任务自身的进度与状态。
   Widget _taskTile(
     AppLocalizations l10n,
-    DownloadService downloads,
+    DownloadManager downloads,
     DownloadTask task,
   ) {
     return ListenableBuilder(
@@ -280,7 +282,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 失败任务：失败原因 + 重试 + 移除（顶部另有「全部重试」）。
   Widget _failedTile(
     AppLocalizations l10n,
-    DownloadService downloads,
+    DownloadManager downloads,
     DownloadTask task,
   ) {
     return ListenableBuilder(
@@ -319,7 +321,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
 
   /// 批量下载：省流确认 → 一次性入队 → 立即提示；页面不锁。
   Future<void> _batchDownload(
-    DownloadService downloads,
+    DownloadManager downloads,
     List<Track> queue,
   ) async {
     final l10n = AppLocalizations.of(context)!;
@@ -355,7 +357,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   Future<void> _pickPlaylist() async {
     final l10n = AppLocalizations.of(context)!;
     final library = context.read<LibraryProvider?>();
-    final downloads = context.read<DownloadService?>();
+    final downloads = context.read<DownloadManager?>();
     if (library == null || downloads == null) return;
     final playlists = library.playlists;
     if (playlists.isEmpty) {
@@ -405,7 +407,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
 
   /// 重试单条失败任务（失败再次落回失败区，并提示原因）。
   Future<void> _retryTask(
-    DownloadService downloads,
+    DownloadManager downloads,
     DownloadTask task, {
     required bool notifyFailure,
   }) async {
@@ -424,21 +426,21 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 全部重试：逐条重新入队（队列仍然严格串行）。
-  void _retryAll(DownloadService downloads, List<DownloadTask> failed) {
+  void _retryAll(DownloadManager downloads, List<DownloadTask> failed) {
     for (final task in failed) {
       unawaited(_retryTask(downloads, task, notifyFailure: false));
     }
   }
 
   /// 取消全部等待任务（运行中的由行内取消按钮处理）。
-  void _cancelQueued(DownloadService downloads) {
+  void _cancelQueued(DownloadManager downloads) {
     for (final task in downloads.taskGroups.queued) {
       downloads.cancelTrack(task.track);
     }
   }
 
   /// 补发布：把还没有公共副本的下载拷进系统「下载」目录（Android）。
-  Future<void> _publishPublic(DownloadService downloads) async {
+  Future<void> _publishPublic(DownloadManager downloads) async {
     final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
@@ -450,7 +452,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     }
   }
 
-  Future<void> _cleanupParts(DownloadService downloads) async {
+  Future<void> _cleanupParts(DownloadManager downloads) async {
     final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
@@ -463,7 +465,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 孤儿清理：先扫描可识别文件并展示数量 / 前几个文件名，确认后再删。
-  Future<void> _cleanupOrphans(DownloadService downloads) async {
+  Future<void> _cleanupOrphans(DownloadManager downloads) async {
     final l10n = AppLocalizations.of(context)!;
     final orphans = await downloads.orphanFiles();
     if (!mounted) return;

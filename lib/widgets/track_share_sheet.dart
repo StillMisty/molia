@@ -21,17 +21,15 @@ import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_manager.dart';
+import '../services/download/download_records.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
 import 'download_data_saver_guard.dart';
 
 /// 打开来源行弹层（歌曲信息页「来源」行唯一入口）。
-Future<void> showTrackShareSheet(
-  BuildContext context, {
-  required Track track,
-}) {
+Future<void> showTrackShareSheet(BuildContext context, {required Track track}) {
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.trackInfoSource,
@@ -52,11 +50,13 @@ class _TrackShareSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final notifications = context.read<NotificationService?>();
-    final downloads = context.read<DownloadService?>();
+    final records = context.read<DownloadRecords?>();
+    final downloads = context.read<DownloadManager?>();
     final pageUrl = track.platformPageUrl;
-    final record = downloads?.recordForTrack(track);
-    final trackIdLabel =
-        track.id.uri.isEmpty ? l10n.trackInfoSourceUnknownId : track.id.uri;
+    final record = records?.recordForTrack(track);
+    final trackIdLabel = track.id.uri.isEmpty
+        ? l10n.trackInfoSourceUnknownId
+        : track.id.uri;
 
     void message(String text) {
       if (notifications != null) {
@@ -92,8 +92,9 @@ class _TrackShareSheet extends StatelessWidget {
           M3EListItem(
             leading: const Icon(Icons.link_rounded),
             headline: l10n.sharePlatformPage,
-            supportingText:
-                pageUrl == null ? l10n.platformPageUnavailable : null,
+            supportingText: pageUrl == null
+                ? l10n.platformPageUnavailable
+                : null,
             enabled: pageUrl != null,
             onTap: pageUrl == null
                 ? null
@@ -120,14 +121,16 @@ class _TrackShareSheet extends StatelessWidget {
           ),
           M3EListItem(
             leading: const Icon(Icons.ios_share_rounded),
-            headline:
-                record != null ? l10n.shareTrackFile : l10n.downloadAndShare,
+            headline: record != null
+                ? l10n.shareTrackFile
+                : l10n.downloadAndShare,
             onTap: () {
               Navigator.of(context).pop();
               unawaited(
                 _shareTrackFile(
                   pageContext,
                   record: record,
+                  records: records,
                   downloads: downloads,
                   message: message,
                 ),
@@ -156,7 +159,8 @@ class _TrackShareSheet extends StatelessWidget {
   Future<void> _shareTrackFile(
     BuildContext context, {
     required DownloadedTrack? record,
-    required DownloadService? downloads,
+    required DownloadRecords? records,
+    required DownloadManager? downloads,
     required void Function(String) message,
   }) async {
     final l10n = AppLocalizations.of(context)!;
@@ -181,7 +185,7 @@ class _TrackShareSheet extends StatelessWidget {
         message(l10n.downloadFailed(e.toString()));
         return;
       }
-      target = downloads.recordForTrack(track);
+      target = records?.recordForTrack(track);
       if (target == null) {
         message(l10n.downloadFailed(''));
         return;
@@ -193,9 +197,7 @@ class _TrackShareSheet extends StatelessWidget {
         message(l10n.downloadFileMissing);
         return;
       }
-      await SharePlus.instance.share(
-        ShareParams(files: [XFile(path)]),
-      );
+      await SharePlus.instance.share(ShareParams(files: [XFile(path)]));
     } catch (_) {
       message(l10n.exportFailed);
     }

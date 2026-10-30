@@ -4,14 +4,14 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_manager.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
 /// 此时回退到简体中文（与 lxmc_import / 收藏页同一约定）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 「导入本地歌曲」流程：多选音频文件 → `DownloadService.importLocalFiles`
+/// 「导入本地歌曲」流程：多选音频文件 → `DownloadManager.importLocalFiles`
 /// （就地引用：不复制、不移动）→ SnackBar 反馈。
 ///
 /// 与 `.lxmc` 导入（`lxmc_import.dart`）同一形态：文件选择与反馈在 UI 层，
@@ -19,7 +19,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 这里再兜一层防御。
 Future<void> importLocalAudioFilesFlow(BuildContext context) async {
   final l10n = _l10n(context);
-  final downloads = context.read<DownloadService?>();
+  final downloads = context.read<DownloadManager?>();
   final messengerContext = context;
   if (downloads == null || !downloads.supported) return;
 
