@@ -5418,6 +5418,84 @@ abstract class AppLocalizations {
   /// **'Ask the other device to open Molia and turn on LAN sync'**
   String get syncNearbyEmptyHint;
 
+  /// No description provided for @syncNearbyPermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby search needs LAN access'**
+  String get syncNearbyPermissionTitle;
+
+  /// No description provided for @syncNearbyPermissionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant LAN access above first, then search again.'**
+  String get syncNearbyPermissionHint;
+
+  /// No description provided for @syncNearbyTransportDownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN sync isn\'t running'**
+  String get syncNearbyTransportDownTitle;
+
+  /// No description provided for @syncNearbyTransportDownHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the sync log for the reason, then try again.'**
+  String get syncNearbyTransportDownHint;
+
+  /// No description provided for @syncNearbyOpenLog.
+  ///
+  /// In en, this message translates to:
+  /// **'View sync log'**
+  String get syncNearbyOpenLog;
+
+  /// No description provided for @syncNearbyCellularTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'On mobile data'**
+  String get syncNearbyCellularTitle;
+
+  /// No description provided for @syncNearbyCellularHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby search is unavailable on mobile data. Switch to Wi-Fi and try again.'**
+  String get syncNearbyCellularHint;
+
+  /// No description provided for @syncNearbyPowerSaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Power saver is on'**
+  String get syncNearbyPowerSaveTitle;
+
+  /// No description provided for @syncNearbyPowerSaveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby search is paused. Turn off power saver and try again.'**
+  String get syncNearbyPowerSaveHint;
+
+  /// No description provided for @syncNearbyDiscoveryUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-discovery unavailable'**
+  String get syncNearbyDiscoveryUnavailableTitle;
+
+  /// No description provided for @syncNearbyDiscoveryUnavailableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic discovery couldn\'t start on this device. Use a manual address or WebDAV instead.'**
+  String get syncNearbyDiscoveryUnavailableHint;
+
+  /// No description provided for @syncNearbyPairingUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'One-tap pairing unavailable'**
+  String get syncNearbyPairingUnavailableTitle;
+
+  /// No description provided for @syncNearbyPairingUnavailableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing isn\'t ready on this device. Use a manual address or WebDAV instead.'**
+  String get syncNearbyPairingUnavailableHint;
+
   /// No description provided for @syncNearbyFooter.
   ///
   /// In en, this message translates to:

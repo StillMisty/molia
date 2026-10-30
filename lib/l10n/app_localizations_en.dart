@@ -2958,6 +2958,52 @@ class AppLocalizationsEn extends AppLocalizations {
       'Ask the other device to open Molia and turn on LAN sync';
 
   @override
+  String get syncNearbyPermissionTitle => 'Nearby search needs LAN access';
+
+  @override
+  String get syncNearbyPermissionHint =>
+      'Grant LAN access above first, then search again.';
+
+  @override
+  String get syncNearbyTransportDownTitle => 'LAN sync isn\'t running';
+
+  @override
+  String get syncNearbyTransportDownHint =>
+      'Check the sync log for the reason, then try again.';
+
+  @override
+  String get syncNearbyOpenLog => 'View sync log';
+
+  @override
+  String get syncNearbyCellularTitle => 'On mobile data';
+
+  @override
+  String get syncNearbyCellularHint =>
+      'Nearby search is unavailable on mobile data. Switch to Wi-Fi and try again.';
+
+  @override
+  String get syncNearbyPowerSaveTitle => 'Power saver is on';
+
+  @override
+  String get syncNearbyPowerSaveHint =>
+      'Nearby search is paused. Turn off power saver and try again.';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableTitle =>
+      'Auto-discovery unavailable';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableHint =>
+      'Automatic discovery couldn\'t start on this device. Use a manual address or WebDAV instead.';
+
+  @override
+  String get syncNearbyPairingUnavailableTitle => 'One-tap pairing unavailable';
+
+  @override
+  String get syncNearbyPairingUnavailableHint =>
+      'Pairing isn\'t ready on this device. Use a manual address or WebDAV instead.';
+
+  @override
   String get syncNearbyFooter =>
       'Only accept devices you know. Accepting lets the other device read all synced data (including keys). If nothing appears, add an address in Advanced settings.';
 

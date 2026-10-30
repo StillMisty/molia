@@ -2848,6 +2848,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyEmptyHint => '让对方打开 Molia 并开启局域网同步';
 
   @override
+  String get syncNearbyPermissionTitle => '附近搜索需要局域网权限';
+
+  @override
+  String get syncNearbyPermissionHint => '请先完成上方的局域网授权，再重新查找。';
+
+  @override
+  String get syncNearbyTransportDownTitle => '局域网同步没有运行';
+
+  @override
+  String get syncNearbyTransportDownHint => '请到同步日志查看原因后重试。';
+
+  @override
+  String get syncNearbyOpenLog => '查看同步日志';
+
+  @override
+  String get syncNearbyCellularTitle => '正在使用移动数据';
+
+  @override
+  String get syncNearbyCellularHint => '移动数据下无法搜索附近设备，请切换到 Wi-Fi 后重试。';
+
+  @override
+  String get syncNearbyPowerSaveTitle => '省电模式已开启';
+
+  @override
+  String get syncNearbyPowerSaveHint => '自动搜索已暂停，请关闭省电模式后重试。';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableTitle => '自动发现不可用';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableHint =>
+      '本机的自动发现没有启动，只能手动添加地址或改用 WebDAV。';
+
+  @override
+  String get syncNearbyPairingUnavailableTitle => '一键配对不可用';
+
+  @override
+  String get syncNearbyPairingUnavailableHint => '本机配对服务未就绪，请手动添加地址或改用 WebDAV。';
+
+  @override
   String get syncNearbyFooter =>
       '只接受你认识的设备；接受后对方可读取全部同步数据（含密钥）。找不到时可在高级设置手动添加地址。';
 

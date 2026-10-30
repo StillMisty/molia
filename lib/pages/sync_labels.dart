@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/sync_nearby_availability.dart';
 
 /// 同步观测面的文案映射（结论 / 失败原因 / 触发原因；设置页与子页共用）。
 ///
@@ -75,6 +76,53 @@ String syncLevelText(AppLocalizations l10n, SyncLevel? level) => switch (level) 
 /// 网络类型文案（观测面：是否移动数据）。
 String syncNetworkText(AppLocalizations l10n, {required bool onCellular}) =>
     onCellular ? l10n.syncNetworkCellular : l10n.syncNetworkOther;
+
+/// 附近设备不可用状态的卡片文案；`null` = 可以正常展示候选列表。
+///
+/// 每种状态都说「本机为什么没在找」+「下一步做什么」，不把本机原因说成
+/// 对端原因（例如权限被拒时不要写「让对方打开 Molia」）。
+({IconData icon, String title, String subtitle})? syncNearbyAvailabilityCopy(
+  AppLocalizations l10n,
+  SyncNearbyAvailability availability,
+) =>
+    switch (availability) {
+      SyncNearbyAvailability.available => null,
+      SyncNearbyAvailability.permissionDenied => (
+          icon: Icons.lock_rounded,
+          title: l10n.syncNearbyPermissionTitle,
+          subtitle: l10n.syncNearbyPermissionHint,
+        ),
+      SyncNearbyAvailability.lanOff => (
+          icon: Icons.wifi_off_rounded,
+          title: l10n.syncNearbyLanOffTitle,
+          subtitle: l10n.syncNearbyLanOffHint,
+        ),
+      SyncNearbyAvailability.transportUnavailable => (
+          icon: Icons.error_outline_rounded,
+          title: l10n.syncNearbyTransportDownTitle,
+          subtitle: l10n.syncNearbyTransportDownHint,
+        ),
+      SyncNearbyAvailability.cellular => (
+          icon: Icons.signal_cellular_alt_rounded,
+          title: l10n.syncNearbyCellularTitle,
+          subtitle: l10n.syncNearbyCellularHint,
+        ),
+      SyncNearbyAvailability.powerSave => (
+          icon: Icons.battery_saver_rounded,
+          title: l10n.syncNearbyPowerSaveTitle,
+          subtitle: l10n.syncNearbyPowerSaveHint,
+        ),
+      SyncNearbyAvailability.discoveryUnavailable => (
+          icon: Icons.wifi_tethering_off_rounded,
+          title: l10n.syncNearbyDiscoveryUnavailableTitle,
+          subtitle: l10n.syncNearbyDiscoveryUnavailableHint,
+        ),
+      SyncNearbyAvailability.pairingUnavailable => (
+          icon: Icons.sync_problem_rounded,
+          title: l10n.syncNearbyPairingUnavailableTitle,
+          subtitle: l10n.syncNearbyPairingUnavailableHint,
+        ),
+    };
 
 /// 时间戳 → 相对时间（首屏结论行用：一句话里只给「多久以前」，
 /// 绝对时刻留给日志与名册；窗口越久粒度越粗）。

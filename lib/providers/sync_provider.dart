@@ -17,6 +17,7 @@ import '../domain/ports/sync_pairing.dart';
 import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/peer_address.dart';
+import 'sync_nearby_availability.dart';
 
 /// 跨设备同步的 UI 门面：控制面（身份 / 开关 / 观测）+ 引擎（轮次 / 报告）
 /// + 备份（导出 / 导入）+ 恢复动作触发 + 策略转发。
@@ -103,6 +104,33 @@ class SyncProvider extends ChangeNotifier {
 
   /// 是否正在主动扫描附近设备。
   bool get scanningNearby => _pairing?.scanning ?? false;
+
+  /// 附近设备卡片当前为什么能 / 不能搜索（权限 / 开关 / 传输 / 网络 / 省电 /
+  /// UDP / 配对端口）。同步页据此启停扫描，而不是在不可用状态下反复
+  /// `startScan`。
+  SyncNearbyAvailability get nearbyAvailability {
+    final lanEnabled = enabledTransports.contains(SyncTransportKind.lan);
+    final status = transportStatus(SyncTransportKind.lan);
+    final ports = lanDiscoveryPorts;
+    final discoveryAvailable = ports.v4 > 0 || ports.v6 > 0;
+    return resolveSyncNearbyAvailability(
+      lanEnabled: lanEnabled,
+      // 传输自己报告权限被拒时也算：启动路径可能还没让权限门记下
+      // `needsUserAction`，但「开关已开、传输没起来」的原因是缺权限。
+      permissionDenied: lanPermissionNeedsAttention ||
+          status?.unavailableReason == SyncUnavailableReason.permissionDenied,
+      transportRunning: status?.running ?? false,
+      transportUnavailable: status == null ||
+          !status.running ||
+          status.unavailableReason != null,
+      discoveryAvailable: discoveryAvailable,
+      // 配对服务与 UDP 发现共用同一批端口；没注入配对端口（或端口为 0）
+      // 时即使发现报文能收发也无法发起一键配对。
+      pairingAvailable: _pairing != null && discoveryAvailable,
+      onCellular: onCellular,
+      powerSaveActive: powerSaveActive,
+    );
+  }
 
   /// 本机是否已有同步组（判据统一定义在 [SyncControlPlane.hasEstablishedGroup]）。
   bool get hasGroup => _controlPlane.hasEstablishedGroup;
