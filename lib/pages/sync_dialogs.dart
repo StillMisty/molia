@@ -77,14 +77,18 @@ Future<void> showWebdavConfigDialog(
         ),
         M3EButton.filled(
           onPressed: () async {
-            await provider.setWebdavConfig(WebDavConfig(
-              baseUrl: server.text.trim(),
-              username: username.text.trim(),
-              remoteDir: remoteDir.text.trim().isEmpty
-                  ? 'molia-sync'
-                  : remoteDir.text.trim(),
-            ));
-            await provider.setWebdavPassword(passwordController.text);
+            // 配置与密码一次写入：分两步写会让已启用的 WebDAV 在中间跑到
+            // 一轮「新地址 + 旧密码」的失败轮。
+            await provider.saveWebdavConfig(
+              WebDavConfig(
+                baseUrl: server.text.trim(),
+                username: username.text.trim(),
+                remoteDir: remoteDir.text.trim().isEmpty
+                    ? 'molia-sync'
+                    : remoteDir.text.trim(),
+              ),
+              passwordController.text,
+            );
             navigator.pop();
           },
           child: Text(l10n.syncSave),

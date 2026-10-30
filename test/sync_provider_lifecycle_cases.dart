@@ -192,6 +192,43 @@ void main() {
     expect(built.provider.lastReport?.trigger, SyncTrigger.check);
   });
 
+  test('保存 WebDAV 配置：启用且已配置才检查，关闭 / 未配置不触发', () async {
+    final built = await _buildProviderWithScheduler(
+      kind: SyncTransportKind.webdav,
+    );
+    addTearDown(built.provider.dispose);
+    addTearDown(built.control.dispose);
+    addTearDown(built.engine.dispose);
+
+    // 未启用：保存配置和密码不触发检查轮。
+    await built.provider.saveWebdavConfig(
+      const WebDavConfig(baseUrl: 'https://dav.example.com/dav'),
+      'secret',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(built.transport.pullCount, 0);
+    expect(built.provider.webdav.isConfigured, isTrue);
+
+    // 启用但配置为空：仍不触发（没有可跑的地址）。
+    await built.control.setTransportEnabled(SyncTransportKind.webdav, true);
+    await built.provider.saveWebdavConfig(const WebDavConfig(), 'secret');
+    await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(built.transport.pullCount, 0);
+
+    // 启用且已配置：保存后立即跑一次 check 轮。
+    final pulled = Completer<void>();
+    built.transport.onPull = () async {
+      if (!pulled.isCompleted) pulled.complete();
+    };
+    await built.provider.saveWebdavConfig(
+      const WebDavConfig(baseUrl: 'https://dav.example.com/dav'),
+      'secret',
+    );
+    await pulled.future.timeout(const Duration(seconds: 2));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(built.provider.lastReport?.trigger, SyncTrigger.check);
+  });
+
   test('回前台：局域网关闭且从未申请过时不查询权限，避免误显示警告', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();

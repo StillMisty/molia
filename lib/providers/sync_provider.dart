@@ -416,6 +416,19 @@ class SyncProvider extends ChangeNotifier {
   Future<void> setWebdavPassword(String password) =>
       _controlPlane.writeWebdavPassword(password);
 
+  /// 一次写入 WebDAV 配置与密码（配置弹层的唯一保存入口）。
+  ///
+  /// 分两步写时，配置先落地会让已启用的 WebDAV 用「新地址 + 旧密码」跑一轮
+  /// 必然失败的检查；保存完成后才排一次 check 轮。未启用 / 未配置不触发。
+  Future<void> saveWebdavConfig(WebDavConfig config, String password) async {
+    await _controlPlane.setWebdavConfig(config);
+    await _controlPlane.writeWebdavPassword(password);
+    if (enabledTransports.contains(SyncTransportKind.webdav) &&
+        webdav.isConfigured) {
+      unawaited(_scheduler?.checkNow());
+    }
+  }
+
   Future<String?> readWebdavPassword() => _controlPlane.readWebdavPassword();
 
   /// 重置口令：所有设备需重新输入新口令。
