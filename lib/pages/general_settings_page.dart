@@ -20,7 +20,7 @@ import '../widgets/settings/settings_tiles.dart';
 
 /// 通用设置子页：底部导航、语言、应用名称与震动反馈（按改动频率排序）。
 ///
-/// 从设置首屏「通用与数据」进入，在设置弹层内部导航（见 `settings_page.dart`）。
+/// 从设置首屏「通用与数据」进入，在设置弹层内部导航（见 `settings_sheet.dart`）。
 class GeneralSettingsPage extends StatefulWidget {
   const GeneralSettingsPage({super.key});
 

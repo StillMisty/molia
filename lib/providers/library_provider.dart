@@ -15,6 +15,7 @@ import 'package:flutter/foundation.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../domain/ports/library_store.dart';
+import '../data/library_read_model.dart';
 import '../data/mapping/track_mapper.dart';
 import '../domain/models/download.dart' show kLocalSourceKey;
 import '../domain/models/library.dart';
@@ -247,8 +248,8 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 单条历史写入的内存补丁（不查库）。
   ///
-  /// 与 [_mergeHistoryOrder] 同一顺序口径：已有条目原位替换内容（重播不打断
-  /// 浏览），新条目插到最前；超出上限时裁掉尾部最旧记录。
+  /// 与整表重载同一顺序口径（[LibraryHistoryOrder]）：已有条目原位替换内容
+  /// （重播不打断浏览），新条目插到最前；超出上限时裁掉尾部最旧记录。
   void _applyHistoryEntry(PlayHistoryEntry entry) {
     // 查询进行中：结果可能还没包含这次写入，先缓冲，等查询落地后再合并。
     if (_historyLoadsInFlight > 0) {
@@ -258,24 +259,12 @@ class LibraryProvider extends ChangeNotifier {
     // 历史尚未加载过：缓存本来就没有可补的基线，保持 dirty 等首次
     // refreshHistory。这里刻意不回查——首屏可能根本没打开历史页。
     if (!_historyLoaded) return;
-    _mergeHistoryEntry(entry);
+    _history = LibraryHistoryOrder.applyEntry(
+      _history,
+      entry,
+      limit: kHistoryLimit,
+    );
     _notify();
-  }
-
-  /// 把 [entry] 合并进当前历史（不通知）；调用方负责一次性通知。
-  void _mergeHistoryEntry(PlayHistoryEntry entry) {
-    final key = _historyKey(entry);
-    final index = _history.indexWhere((item) => _historyKey(item) == key);
-    final next = List<PlayHistoryEntry>.of(_history);
-    if (index >= 0) {
-      next[index] = entry;
-    } else {
-      next.insert(0, entry);
-    }
-    if (next.length > kHistoryLimit) {
-      next.removeRange(kHistoryLimit, next.length);
-    }
-    _history = next;
   }
 
   /// 查询结束时补入期间缓冲的单条写入。
@@ -287,7 +276,11 @@ class LibraryProvider extends ChangeNotifier {
     if (_historyLoadsInFlight > 0 || _pendingHistoryEntries.isEmpty) return;
     if (!_historyLoaded) return;
     for (final entry in _pendingHistoryEntries) {
-      _mergeHistoryEntry(entry);
+      _history = LibraryHistoryOrder.applyEntry(
+        _history,
+        entry,
+        limit: kHistoryLimit,
+      );
     }
     _pendingHistoryEntries = const [];
   }
@@ -364,14 +357,13 @@ class LibraryProvider extends ChangeNotifier {
     // 计数优先级：整表收藏键 > 已加载列表长度 > ±1。
     // 前两者都是权威快照，重放时不会把校准已包含的 toggle 再算一次。
     final favoriteTracks = _tracksByPlaylist[favoritesId];
-    final trackCount = _favoriteKeysAuthoritative
-        ? _favoriteKeys.length
-        : favoriteTracks != null
-            ? favoriteTracks.length
-            : _adjustTrackCount(
-                favorites.trackCount,
-                toggle.favorite ? 1 : -1,
-              );
+    final trackCount = FavoriteCountPolicy.trackCount(
+      authoritative: _favoriteKeysAuthoritative,
+      favoriteKeyCount: _favoriteKeys.length,
+      loadedTrackCount: favoriteTracks?.length,
+      currentCount: favorites.trackCount,
+      delta: toggle.favorite ? 1 : -1,
+    );
     if (trackCount == favorites.trackCount) return;
     _playlists = [
       for (final playlist in _playlists)
@@ -401,14 +393,6 @@ class LibraryProvider extends ChangeNotifier {
       _patchFavoriteToggle(toggle);
     }
   }
-
-  static int _adjustTrackCount(int count, int delta) {
-    if (delta > 0) return count + 1;
-    if (delta < 0) return _dec(count);
-    return count;
-  }
-
-  static int _dec(int value) => value > 0 ? value - 1 : 0;
 
   void _invalidateAll() {
     // 立即失效缓存并通知（同步），后台静默重载；不做事件去重——
@@ -452,7 +436,8 @@ class LibraryProvider extends ChangeNotifier {
           try {
             final fresh =
                 await _repository.listHistory().timeout(_readTimeout);
-            _history = _mergeHistoryOrder(current: _history, fresh: fresh);
+            _history =
+                LibraryHistoryOrder.merge(current: _history, fresh: fresh);
             _historyLoaded = true;
             _historyState = const LibraryReadState.ready();
             success = true;
@@ -470,51 +455,22 @@ class LibraryProvider extends ChangeNotifier {
         fields: () => {'rows': _history.length},
       );
 
-  /// 稳定合并：已存在条目保持 [current] 的相对顺序（内容用最新值），全新条目
-  /// 按最近优先插到最前（[fresh] 本身即最近优先）。
-  static List<PlayHistoryEntry> _mergeHistoryOrder({
-    required List<PlayHistoryEntry> current,
-    required List<PlayHistoryEntry> fresh,
-  }) {
-    final freshByKey = {for (final entry in fresh) _historyKey(entry): entry};
-    final ordered = <PlayHistoryEntry>[];
-    for (final entry in current) {
-      final updated = freshByKey.remove(_historyKey(entry));
-      if (updated != null) ordered.add(updated);
-    }
-    if (freshByKey.isEmpty) return ordered;
-    return [
-      for (final entry in fresh)
-        if (freshByKey.containsKey(_historyKey(entry))) entry,
-      ...ordered,
-    ];
-  }
-
-  static String _historyKey(PlayHistoryEntry entry) =>
-      '${entry.sourceKey}:${entry.songId}';
-
   /// 按最近播放（`playedAt` 倒序）重排内存历史；顺序真变了才通知。
   ///
   /// 由收藏页在重新进入播放历史 / 本地歌曲合集、或页面重新可见时调用：
   /// 停留期间列表顺序冻结（见 [_reloadHistoryQuietly]），只在这一刻刷新。
-  /// 时间相同的条目保持当前相对顺序（内存侧不读 DB rowid）。
   void resortHistoryByRecency() {
     if (_history.length < 2) return;
-    final decorated = [
-      for (var i = 0; i < _history.length; i++) (entry: _history[i], index: i),
-    ]..sort((a, b) {
-        final byTime = b.entry.playedAt.compareTo(a.entry.playedAt);
-        return byTime != 0 ? byTime : a.index.compareTo(b.index);
-      });
+    final ordered = LibraryHistoryOrder.resortByRecency(_history);
     var changed = false;
-    for (var i = 0; i < decorated.length; i++) {
-      if (!identical(decorated[i].entry, _history[i])) {
+    for (var i = 0; i < ordered.length; i++) {
+      if (!identical(ordered[i], _history[i])) {
         changed = true;
         break;
       }
     }
     if (!changed) return;
-    _history = [for (final item in decorated) item.entry];
+    _history = ordered;
     _notify();
   }
 
@@ -906,10 +862,10 @@ class LibraryProvider extends ChangeNotifier {
   ///
   /// 返回 `(playlistId, 本次新增数, 曲目总数)`；曲目为空时不落库。
   ///
-  /// 新建列表时，本次导入的曲目就是全量：先直接放进缓存，收藏页切到新列表
-  /// 不再依赖一次读库（Windows 上出现过读连接被占住、页面一直 loading 的
-  /// 情况）；真实数据仍由随后的变更加载原地校准。同名复用列表里还有旧曲目，
-  /// 不能只拿本次导入的曲目当全量，仍走读库。
+  /// 新建列表时，写入返回的行就是本次导入的全量：先直接放进缓存，收藏页
+  /// 切到新列表不再依赖一次读库（Windows 上出现过读连接被占住、页面一直
+  /// loading 的情况）；真实数据仍由随后的变更加载原地校准。同名复用列表里
+  /// 还有旧曲目，不能只拿本次导入的曲目当全量，仍走读库。
   Future<({int playlistId, int added, int total})> importTracksAsPlaylist({
     required String name,
     required List<PlaylistTrack> tracks,
@@ -917,13 +873,15 @@ class LibraryProvider extends ChangeNotifier {
     final result = await _repository.importTracks(name, tracks);
     if (result.playlistId > 0 && result.added > 0) {
       if (result.created) {
-        _seedImportedPlaylist(result.playlistId, name, tracks);
+        _seedImportedPlaylist(result.playlistId, name, result.rows);
       }
       await refreshPlaylists(force: true);
       // 强制刷新可能失败，也可能被并发旧快照覆盖（列表 / 曲目缓存缺一块）：
-      // 页面切过来之前补一次；已有真实数据时不覆盖。
+      // 页面切过来之前补一次。两次都只填缺失项（见 _seedImportedPlaylist），
+      // 第二次是幂等的；保留这个 workaround 是为了 Windows 上读连接被占住
+      // 时新列表仍能立刻显示（文档见该方法注释）。
       if (result.created) {
-        _seedImportedPlaylist(result.playlistId, name, tracks);
+        _seedImportedPlaylist(result.playlistId, name, result.rows);
       }
     }
     return (
@@ -935,36 +893,18 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 补「本次导入新建的列表」的曲目缓存与列表头（幂等）。
   ///
+  /// [rows] 是写路径实际落库的行：`playlistId` / `sortOrder` / `addedAt` 已由
+  /// 导入写入分配好，这里只负责放进缓存，不再去重或重排。
+  ///
   /// 已有真实数据时不覆盖：曲目缓存优先保留读库结果，列表头只在缺失或
-  /// 计数比本次导入少（旧快照 / 刷新失败）时修正。顺序与写入一致：写入网关
-  /// 按 `(sourceKey, songId)` 去重后从 0 递增 `sortOrder`。
+  /// 计数比本次导入少（旧快照 / 刷新失败）时修正。因此重复调用是幂等的。
   void _seedImportedPlaylist(
     int playlistId,
     String name,
-    List<PlaylistTrack> tracks,
+    List<PlaylistTrack> rows,
   ) {
-    final seen = <String>{};
-    final seeded = <PlaylistTrack>[];
-    for (final track in tracks) {
-      if (!seen.add('${track.sourceKey}:${track.songId}')) continue;
-      seeded.add(
-        PlaylistTrack(
-          playlistId: playlistId,
-          sourceKey: track.sourceKey,
-          songId: track.songId,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          coverUrl: track.coverUrl,
-          durationMs: track.durationMs,
-          raw: track.raw,
-          addedAt: track.addedAt,
-          sortOrder: seeded.length,
-        ),
-      );
-    }
     if (!_tracksByPlaylist.containsKey(playlistId)) {
-      _tracksByPlaylist[playlistId] = seeded;
+      _tracksByPlaylist[playlistId] = rows;
       _playlistTracksErrors.remove(playlistId);
     }
     var index = -1;
@@ -980,12 +920,12 @@ class LibraryProvider extends ChangeNotifier {
           id: playlistId,
           name: name,
           createdAt: DateTime.now().millisecondsSinceEpoch,
-          trackCount: seeded.length,
+          trackCount: rows.length,
         ),
         ..._playlists,
       ];
       _playlistsRevision++;
-    } else if (_playlists[index].trackCount < seeded.length) {
+    } else if (_playlists[index].trackCount < rows.length) {
       final playlist = _playlists[index];
       _playlists = [
         for (final item in _playlists)
@@ -994,7 +934,7 @@ class LibraryProvider extends ChangeNotifier {
               id: playlist.id,
               name: playlist.name,
               createdAt: playlist.createdAt,
-              trackCount: seeded.length,
+              trackCount: rows.length,
               isFavorites: playlist.isFavorites,
             )
           else
@@ -1007,31 +947,18 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 批量把列表曲目加入播放历史（最近播放置顶）。
   ///
-  /// 只落库：内存顺序按停留期间冻结的口径合并（新条目置前、已有条目不重排），
-  /// 播放历史列表下次进入时由 [resortHistoryByRecency] 刷新到最新顺序。
+  /// 只落库：批内 `playedAt` 与顺序由写入侧负责（见
+  /// `LibraryWriteEngine.addHistoryTracks`）；内存顺序按停留期间冻结的口径
+  /// 合并（新条目置前、已有条目不重排），播放历史列表下次进入时由
+  /// [resortHistoryByRecency] 刷新到最新顺序。
   /// 写失败在边界收口成 failed，调用方据此提示而不是抛出。
   Future<LibraryMutationOutcome> addTracksToHistory(
     List<PlaylistTrack> tracks,
   ) async {
     if (tracks.isEmpty) return const LibraryMutationOutcome.unchanged();
-    final now = DateTime.now().millisecondsSinceEpoch;
-    var offset = 0;
     final int added;
     try {
-      added = await _repository.addHistoryEntries([
-        for (final track in tracks)
-          PlayHistoryEntry(
-            sourceKey: track.sourceKey,
-            songId: track.songId,
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            coverUrl: track.coverUrl,
-            durationMs: track.durationMs,
-            raw: track.raw,
-            playedAt: now + offset++,
-          ),
-      ]);
+      added = await _repository.addHistoryTracks(tracks);
     } catch (e) {
       debugPrint('[Library] 批量加入播放历史失败: $e');
       return LibraryMutationOutcome.failed(e);

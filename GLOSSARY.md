@@ -91,6 +91,11 @@
   写者：命令改完 facade 后经 `_commitLiveSession` 按内容去重、等 `pendingWrite`
   （ADR-0010 的「返回前已提交」）；`PlaybackProvider` 必须注入同一个协调者，不能再
   自建 store 形成第二个写队列。
+- **Playback replace scope（换源作用域）** — `lib/playback/playback_commands.dart` 的
+  `PlaybackReplaceScope`：`liveOnly` = 自动换源只改真实队列；`liveAndRestored` =
+  库内 / 手动换源同时跟随恢复态保存会话。两条命令共用一个实现与一个提交点
+  （ADR-0010 / ADR-0017）；`replaceQueueTrack` 是前者的端口命令，`replaceTrack`
+  是后者的协调者命令。
 - **Playback session sync port（会话同步端口）** — `lib/domain/ports/playback_session_sync.dart`：
   `PlaybackSessionSyncPort` 只暴露 `loadRaw` / `applyRemote` / `clearRemote`，传输的
   是原始会话 JSON（含 `savedAt`）——同步记录就是会话键里的 wire format，转成领域对象
@@ -159,7 +164,12 @@
 - **Cover deck（封面堆叠）** — `lib/widgets/player_cover_deck.dart`：播放页封面区
   （三槽位渲染、横滑手势、会话的效果宿主）的唯一实现；播放器只提供布局尺寸、
   顶栏共享飞行锚点与主题联动。会话状态机在 `player_cover_session.dart`，方向判定
-  纯函数在 `player_cover_swap.dart`，卡片外观与飞行在 `cover_appearance.dart`。
+  纯函数在 `player_cover_swap.dart`，接管视觉代数在 `cover_handoff.dart`，卡片
+  外观与飞行在 `cover_appearance.dart`。
+- **Cover handoff（封面接管代数）** — `lib/widgets/cover_handoff.dart`：弹簧途中
+  再次切歌的全部视觉公式（常规中心 / 滑出卡、continuous / restart 接管、tail
+  离场、源侧淡入反解），纯数值、可脱离 widget 树单测；deck 只保留控制器、布局、
+  身份编排与图层合成。
 - **Cover deck metrics（封面堆叠尺寸预算）** — `lib/widgets/cover_deck_metrics.dart`：
   可用宽高 → 封面边长与堆叠尺寸的纯函数（唯一口径，两轴因子具名），硬不变量
   `stackWidth ≤ availableWidth` 且 `stackHeight ≤ availableHeight`；三套版式都走它，
@@ -757,6 +767,11 @@
   用户命令（类别 / 传输 / 名称 / 口令、地址簿）仍即时提交。登记类写入必须
   在增量日志追加成功之后（`SyncJournalAppender`），追加失败时旧登记保留，
   下一轮仍能检测到同一变更。
+- **Sync stamp book（同步戳账本）** — `lib/data/sync/sync_stamp_book.dart`：
+  设置 / 脚本 / 自定义封面的登记表、墓碑、已知脚本 id、激活脚本 / 会话登记与
+  唯一发号器基线的持有者；实现 `SyncStampLedger`，适配器仍只看到这个端口。
+  `snapshot()` / `applyState()` 只交换类型化切片，`sync_state_codec.dart` 仍是
+  JSON 键名的唯一实现；`SyncStateStore` 只负责拼装持久化快照与提交时机。
 - **Sync state codec（持久化形状）** — `lib/data/sync/sync_state_codec.dart`：
   `SyncPersistedState` 是 `sync_state_v2` 的不可变快照（身份 / 类别与传输开关 /
   WebDAV / 地址簿 / 名册 / 已验证端点 / 登记表 / 指纹 / 日志 / 活动 / 版本基线），
@@ -1014,12 +1029,17 @@
   同时作废列表与实体；`PagedTrackCollectionBody<R>` 收口 loading / 首屏失败 /
   空态 / 列表 / 底部重试 / 可选钉住表头 / 表格档行高。专辑页、歌手页、发现详情页
   只保留头部、行与播放动作。
+- **Library read model（资料库读侧策略）** — `lib/data/library_read_model.dart`：
+  `LibraryHistoryOrder`（历史整表合并 / 单条补丁 / 按最近播放重排）与
+  `FavoriteCountPolicy`（收藏键 > 已加载列表 > ±1）的唯一实现；批量历史的
+  `playedAt` 由 `LibraryWriteEngine.addHistoryTracks` 发放，provider 不再自己
+  造时间戳。
 - **Library collections（合集策略模块）** — `lib/providers/library_collections.dart`：收藏 / 播放历史 / 本地歌曲 / 自建列表的哨兵（`unset` / `favoritesSentinel` / `historySentinel` / `downloadsSentinel`）、默认选择解析（`resolveSelection`，后两者仅显式选择进入）、顺序应用（`applyOrder`）与持久化（顺序 / 选择的唯一实现）；收藏页只保留 UI 状态。滚动位置见 Collection scroll bookkeeping。
-- **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
+- **Local songs collection（本地歌曲状态机）** — `lib/providers/local_songs_collection.dart`：本地歌曲伪合集的数据状态机：拥有播放历史 × 下载 / 导入记录 × 完整音频缓存的联结、下载优先去重、输入签名（历史键 + 下载记录键 + 缓存 revision）、在途加载令牌（输入变化即丢弃过期结果）与加载态 / 弹层计数；`CollectionLocalSong` 的行形状也从渲染层移到这里。页面每帧只把输入交给 `sync` 并消费 `rows`，不再在 build 里重算联结；`rows` 在输入签名、历史 / 下载列表身份与缓存行身份都不变时复用同一个列表（presenter 的源引用缓存因此对本地歌曲也生效，`rowsRevision` 是列表被替换的观察信号），缓存列举失败只影响缓存行，不拖垮下载 / 导入行。
 - **Collection presenter（合集投影器）** — `lib/providers/collection_presenter.dart`：收藏页合集身份、可见行与行动作构成的唯一推导：先把选集解析成 `CollectionIdentity`（`CollectionKind` / 落库 `playlistId` / 展示名 / 合集键 / 列规范），再按当前合集做过滤与排序，产出 `CollectionView.visibleRows`——统一的 `CollectionRow` 联合（`TrackCollectionRow` / `HistoryCollectionRow` / `LocalSongCollectionRow`）与 `hasItems`；排序结果按源列表身份记忆化，`rowActionsFor` 按行变体给出动作规格。收藏页不再用四个布尔值 + 三份可见列表，也不按 `CollectionKind` 分支拼行或挑动作；标题 / 滚动键 / 多选栏 / 表头都读同一份视图。
 - **Collection actions（合集行动作）** — `lib/providers/collection_actions.dart`：收藏页「选中的行 / 当前视图 → 类型化命令」的唯一实现（播放 / 收藏 / 移除 / 历史删除 / 本地删除 / 重排 / 复制）。行变体归一（列表曲目 / 历史 / 本地歌曲）与 provider / 下载 / 缓存选择在模块内，页面只留确认 / 提示 / 清选择与布局；播放 / 加入列表接 **Track handoff**（context 适配在 `lib/widgets/collection_handoff.dart`）。本地删除返回 `CollectionLocalDeleteOutcome`（逐项 deleted / removed / cleared / skipped / failed），失败不再逃进 `unawaited`；页面不再出现 `as ...Row` 强转。
 
-- **Collection session（合集会话）** — `lib/providers/collection_session.dart`：收藏页「当前合集」的唯一状态机：恢复（合集顺序 / 选集 / 滚动偏移，一次）、选中合集校准（合集列表首次加载完成、下载能力就绪后校准一次；失效 / 未选的选集回退到默认解析并落盘）、模式（搜索 / 排序 / 调整顺序）、按行 key 的多选与失效、加载组合（首帧列表 / 列表曲目 / 历史首载 / 本地歌曲联结合成为一个 `loading` / `ready` / `failed` 阶段，failed 提供重试）、合集切换与选择 / 顺序持久化、滚动键与恢复时机（同一合集只激活 / 恢复一次）。页面每帧只交一份 `CollectionSessionInput`（资料库读取端口 `CollectionLibrary` + 展示名 + 搜索词 + 下载 / 缓存快照）、消费一个 `CollectionSessionView`；不再在 build 里做 post-frame setState 校准或 `ensure*` 编排。端口只有 `snapshot(playlistId:)`（一帧 `CollectionLibrarySnapshot`：列表清单 / 历史 / 读取阶段 / 当前列表曲目视图）、`load(CollectionLibraryLoad)`（首帧 / 当前列表 / 整页重试 / 历史重排意图）与 `trackFromHistoryEntry`；会话持有最近一帧快照，弹层计数与重试不再依赖「先 sync 一次」的隐藏顺序。本地歌曲联结与展示名以外的合集投影仍由 Collection presenter 提供。
+- **Collection session（合集会话）** — `lib/providers/collection_session.dart`：收藏页「当前合集」的唯一状态机：恢复（合集顺序 / 选集 / 滚动偏移，一次）、选中合集校准（合集列表首次加载完成、下载能力就绪后校准一次；失效 / 未选的选集回退到默认解析并落盘）、模式（搜索 / 排序 / 调整顺序）、按行 key 的多选与失效、加载组合（首帧列表 / 列表曲目 / 历史首载 / 本地歌曲联结合成为一个 `loading` / `ready` / `failed` 阶段，failed 提供重试）、合集切换与选择 / 顺序持久化、滚动键与恢复时机（同一合集只激活 / 恢复一次）。页面每帧只交一份 `CollectionSessionInput`（资料库读取端口 `CollectionLibrary` + 展示名 + 搜索词 + 下载 / 缓存快照）、消费一个 `CollectionSessionView`；`sync` 把当帧解析结果装进 `CollectionFrame`（资料库端口 + `CollectionLibrarySnapshot` + 下载 / 缓存输入 + 落库列表 id）一并交回，弹层计数 `ensureLocalSongsReady(frame)` 与失败重试 `retry(frame)` 只读这个帧，不再读会话缓存的上一帧，也不依赖「先 sync 一次」的隐藏顺序。多选的生产入口同样是会话意图（`clearSelection` / `selectAllVisible` / `isSelected` / `selectedCount` / `handleRowTap`），页面不直接持有 `CollectionSelection`。端口只有 `snapshot(playlistId:)`（一帧 `CollectionLibrarySnapshot`：列表清单 / 历史 / 读取阶段 / 当前列表曲目视图）、`load(CollectionLibraryLoad)`（首帧 / 当前列表 / 整页重试 / 历史重排意图）与 `trackFromHistoryEntry`。本地歌曲联结与展示名以外的合集投影仍由 Collection presenter 提供。
 - **Collection selection（合集多选状态机）** — `lib/utils/collection_selection.dart`：收藏页收藏 / 历史 / 本地歌曲共用的多选唯一实现（选择集按**行稳定 key** 而不是可见行下标，Ctrl 切换、Shift 区间与锚点移动、全选三态、`retainKeys` 随视图收缩；插入 / 过滤后选择仍指向原行）；页面只保留点播分支与动作实现，Esc 的可见性 / 焦点判定仍属页面（同源规则见 Escape claims）。
 - **Collection list（合集列表模块）** — `lib/widgets/collection_track_list.dart`：收藏页各合集共用的一份列表脚手架（Scrollbar 参数、`itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`、懒构建、重排模式、空态 / 搜索空态、行动作（触摸端左滑胶囊 / 桌面右键菜单）与行外壳 `CollectionTrackRow`）；行内容由调用方 `itemBuilder` 提供，页内过滤 / 排序口径在 `lib/utils/collection_row_query.dart`（`collectionRowMatches` / `sortCollectionTracks`）。
 - **Collection scroll bookkeeping（合集滚动簿记）** — `lib/widgets/collection_scroll_bookkeeping.dart`：按合集键保存 / 恢复滚动位置的唯一实现（节流 ≤2 次/秒、切换合集各自只恢复一次、夹取到可滚动范围）；调度器（`CollectionScrollScheduler`）可注入，脱离 widget 树可单测。
@@ -1029,6 +1049,13 @@
 - **Public output root（另存目录 / 公共输出根）** — `lib/data/files/public_downloads_path.dart` + `SaveAs.rootPath`：应用对用户可见的输出根。桌面 = 系统公共下载目录（Windows Known Folder / Linux XDG）下的 `Molia/`，设置页自选目录优先；Android = `Download/Molia`（MediaStore，Dart 不直接写）；iOS = 文件 App 可见的应用文档目录 `Molia/`（没有系统公共 Downloads 概念）。音频在根下，导出 JSON 进 `exports/`，海报进 `posters/`；下载根与另存根共用同一解析（Android 例外：私有播放副本 + 默认公共副本）。
 - **Download notifications（下载通知模块）** — `lib/data/downloads/download_notifications*.dart`（平台 seam：IO=MethodChannel，其它平台 no-op，通道异常只记日志、绝不影响下载本身）+ Android `DownloadNotificationService`（`dataSync` 前台服务）：下载进行中在系统通知显示进度（批量共享一条「N/N」），完成 / 失败 / 取消收尾并移除；API 33+ 未授予通知权限时降级为「无通知但继续下载」；开关 `download_notifications`（设备本地键，默认开）。通知生命周期的编排见 Download notification presenter。
 - **Download file layout（下载文件命名 / 放置模块）** — `lib/services/download/download_file_layout.dart`：文件名模板（`DownloadSettings.filenameTemplate`）→ 基名 → 清洗（`sanitizeFileName`）→ 唯一基名（磁盘与下载记录双重查重，` (2)` 递增）→ 路径约定（音频 / `.part` 半成品 / `lyrics/` + `.t.lrc` 翻译边车 / `covers/`）与 sidecar 写入（失败回滚）的唯一实现；扩展名推断（直链后缀 / 音质映射 / 封面后缀）与「记录引用的文件集」（删除 / 失败清理 / 孤儿判定共用）也在这里。命名与 sidecar 约定只维护这一份，测试直接打生产实现。
+- **Download records（下载记录只读面）** — `lib/services/download/download_records.dart`：
+  下载记录表、排序列表缓存、`initialized` / `supported` 与 `revision` 的唯一
+  持有者；收藏 / 单曲本地数据 / 分享只依赖它，下载进度永远不经过这里（进度属于
+  `DownloadTask`）。
+- **Download manager（下载命令面）** — `lib/services/download/download_manager.dart`：
+  管理页 / 本地数据页 / 分享 / 导入使用的窄命令接口；`DownloadService` 是唯一
+  实现，队列 / journal / 文件放置仍只有一份。
 - **Download record assembler（下载记录装配模块）** — `lib/services/download/download_record_assembler.dart`：部分状态 → `DownloadedTrack`（16 字段）的唯一装配点，四种形态各一个意图方法：`forAudioDownload`（完整下载 + 分项合并 / 公共副本回退）、`forPartialDownload`（分项更新保留已有音频与另一分项）、`forLocalImport`（就地引用）、`republished`（补发布只补定位）。`downloadedAt` 走注入时钟，记录既有时间不重取；`DownloadService` 不再感知记录字段。
 - **Download notification presenter（下载通知 presenter 模块）** — `lib/services/download/download_notification_presenter.dart`：下载生命周期 → 系统通知 start / update / stop 的唯一实现（单任务 id `track:{key}`、批量共享 `batch`「N/N」、500ms 系统频率节流「首片 / 窗口 / 完成突破」、收尾只收自己起过的——中途关掉开关也不残留）；端口（`DownloadNotifications`）/ 设置开关 / 时钟都可注入，编排与其测试不依赖 Android。批量并发调用不抢占（同一时刻只有一条批量通知）。
 - **Download task（下载任务）** — `DownloadTask`（`lib/services/download/download_queue.dart`）：一条任务的唯一状态载体，键 = `track.id.uri`（分项任务追加 `#lyrics` / `#cover`），持有曲目 / 任务种类 / 音质 / 是否带歌词封面 / 批量位置，以及状态（queued / running / completed / failed / cancelled）、进度与失败原因。进度只由任务自己 notify（100ms 合并，首个分片 / 100% / 终态立即送达），队列与服务不在进度时通知；音频失败任务保留供本次进程重试，完成 / 取消即移出队列。

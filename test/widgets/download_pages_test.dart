@@ -13,6 +13,7 @@ import 'package:molia/pages/download_settings_page.dart';
 import 'package:molia/pages/downloads_manage_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_service.dart';
 import 'package:molia/services/download/download_settings.dart';
 import 'package:molia/services/save_as.dart';
@@ -29,17 +30,44 @@ import '../support/fake_music_source.dart';
 import '../support/fake_save_as.dart';
 import '../support/fakes.dart';
 
-/// 只记录批量入队的下载服务（页面流程测试不触网 / 不落库）。
-class _RecordingDownloadService extends DownloadService {
-  _RecordingDownloadService()
-    : super(
-        catalog: CatalogService(registry: FakeSourceRegistry(const {})),
-        repository: DownloadsRepository(
-          databaseProvider: () => throw UnimplementedError(),
-        ),
-        storage: FakeDownloadStorage(),
-      );
+/// 管理面测试底座：只实现页面公共路径，未用到的命令由 noSuchMethod 兜底
+///（调用即失败，暴露意外扩宽）。
+abstract class _FakeDownloadManager extends ChangeNotifier
+    implements DownloadManager {
+  @override
+  bool get supported => true;
 
+  @override
+  bool get publisherSupported => false;
+
+  @override
+  bool get notificationsSupported => false;
+
+  @override
+  bool get initialized => true;
+
+  @override
+  Future<void> get ready async {}
+
+  @override
+  Future<void> init() async {}
+
+  @override
+  Future<String?> rootPath() async => null;
+
+  @override
+  Listenable get taskChanges => this;
+
+  @override
+  DownloadTaskGroups get taskGroups =>
+      (running: const [], queued: const [], failed: const []);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// 只记录批量入队的下载管理器（页面流程测试不触网 / 不落库）。
+class _RecordingDownloadManager extends _FakeDownloadManager {
   final List<List<Track>> batches = [];
   final Set<String> downloadedKeys = {};
   final Map<String, DownloadTask> activeTasks = {};
@@ -48,20 +76,23 @@ class _RecordingDownloadService extends DownloadService {
   int? enqueuedOverride;
 
   @override
-  DownloadedTrack? recordForTrack(Track track) {
-    if (!downloadedKeys.contains(track.id.uri)) return null;
-    return DownloadedTrack(
-      originSourceKey: track.id.sourceKey,
-      originSongId: track.id.id,
-      title: track.title,
-      filePath: '/downloads/${track.id.id}.mp3',
-      sizeBytes: 1,
-      downloadedAt: 1,
-    );
-  }
+  DownloadTask? taskForTrack(Track track) => activeTasks[track.id.uri];
 
   @override
-  DownloadTask? taskForTrack(Track track) => activeTasks[track.id.uri];
+  List<({int index, Track track})> batchCandidates(Iterable<Track> tracks) {
+    final items = tracks.toList();
+    final seen = <String>{};
+    final candidates = <({int index, Track track})>[];
+    for (var index = 0; index < items.length; index++) {
+      final track = items[index];
+      if (track.id.sourceKey == kLocalSourceKey) continue;
+      if (downloadedKeys.contains(track.id.uri)) continue;
+      if (activeTasks[track.id.uri]?.isActive ?? false) continue;
+      if (!seen.add(track.id.uri)) continue;
+      candidates.add((index: index, track: track));
+    }
+    return candidates;
+  }
 
   @override
   Future<(int, int)> downloadBatch(
@@ -80,29 +111,16 @@ class _RecordingDownloadService extends DownloadService {
   }
 }
 
-/// 直接暴露内存任务列表的下载服务（任务区 UI 测试用）。
-class _StaticTasksDownloadService extends DownloadService {
-  _StaticTasksDownloadService(this.audioTasks)
-    : super(
-        catalog: CatalogService(registry: FakeSourceRegistry(const {})),
-        repository: DownloadsRepository(
-          databaseProvider: () => throw UnimplementedError(),
-        ),
-        storage: FakeDownloadStorage(),
-      );
+/// 直接暴露内存任务列表的下载管理器（任务区 UI 测试用）。
+class _StaticTasksDownloadManager extends _FakeDownloadManager {
+  _StaticTasksDownloadManager(this.audioTasks);
 
   final List<DownloadTask> audioTasks;
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
   int cancelCalls = 0;
 
   @override
-  bool get supported => true;
-
-  @override
   Listenable get taskChanges => revision;
-
-  @override
-  List<DownloadTask> get tasks => audioTasks;
 
   @override
   DownloadTaskGroups get taskGroups => (
@@ -163,14 +181,14 @@ void main() {
     WidgetTester tester,
     Widget page, {
     SaveAs? saveAs,
-    DownloadService? service,
+    DownloadManager? service,
     LibraryProvider? library,
   }) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
-          ChangeNotifierProvider<DownloadService>.value(
+          ChangeNotifierProvider<DownloadManager>.value(
             value: service ?? downloads,
           ),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
@@ -199,14 +217,14 @@ void main() {
   Future<void> pumpNestedPage(
     WidgetTester tester,
     Widget page, {
-    required DownloadService service,
+    required DownloadManager service,
     LibraryProvider? library,
   }) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
-          ChangeNotifierProvider<DownloadService>.value(value: service),
+          ChangeNotifierProvider<DownloadManager>.value(value: service),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           if (library != null)
             ChangeNotifierProvider<LibraryProvider>.value(value: library),
@@ -313,7 +331,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
-          ChangeNotifierProvider<DownloadService>.value(value: nonAndroid),
+          ChangeNotifierProvider<DownloadManager>.value(value: nonAndroid),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
         ],
         child: MaterialApp(
@@ -390,7 +408,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<DownloadSettings>.value(value: settings),
-          ChangeNotifierProvider<DownloadService>.value(value: service),
+          ChangeNotifierProvider<DownloadManager>.value(value: service),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
         ],
         child: MaterialApp(
@@ -431,7 +449,7 @@ void main() {
           quality: '128k',
         ),
     ];
-    final service = _StaticTasksDownloadService([running, ...queued]);
+    final service = _StaticTasksDownloadManager([running, ...queued]);
     addTearDown(service.dispose);
     addTearDown(service.revision.dispose);
 
@@ -468,7 +486,7 @@ void main() {
     final downloaded = makeQueueTrack('1');
     final activeTrack = makeQueueTrack('2');
     final target = makeQueueTrack('3');
-    final service = _RecordingDownloadService();
+    final service = _RecordingDownloadManager();
     await service.init();
     addTearDown(service.dispose);
     service.downloadedKeys.add(downloaded.id.uri);
@@ -497,7 +515,7 @@ void main() {
   testWidgets('下载管理页：批量提示在真正入队后显示并使用回调数量', (tester) async {
     final one = makeQueueTrack('1');
     final two = makeQueueTrack('2');
-    final service = _RecordingDownloadService();
+    final service = _RecordingDownloadManager();
     await service.init();
     addTearDown(service.dispose);
     service.batchGate = Completer<void>();
@@ -530,7 +548,7 @@ void main() {
   testWidgets('下载管理页：没有可下载的歌曲时提示专用文案', (tester) async {
     final downloaded = makeQueueTrack('1');
     final activeTrack = makeQueueTrack('2');
-    final service = _RecordingDownloadService();
+    final service = _RecordingDownloadManager();
     await service.init();
     addTearDown(service.dispose);
     service.downloadedKeys.add(downloaded.id.uri);
@@ -577,7 +595,7 @@ void main() {
     );
     await library.refreshPlaylists();
     addTearDown(library.dispose);
-    final service = _RecordingDownloadService();
+    final service = _RecordingDownloadManager();
     await service.init();
     addTearDown(service.dispose);
 

@@ -144,6 +144,36 @@ class LibraryWriteEngine {
     notifyChanged(LibraryChange.history(entry: entry));
   }
 
+  /// 批量把列表曲目加入播放历史（最近播放置顶）。
+  ///
+  /// 批内 `playedAt` 由写路径发：第 i 条 = `(playedAt ?? 当前时钟) + i`。
+  /// 这与行的隐式 `rowid` 同向递增，`listHistory` 的
+  /// `ORDER BY playedAt DESC, rowid DESC` 因而让整批按**倒序**出现在历史顶部
+  /// （最后一条最先）。调用方不再自己造时间戳——时间口径只在写路径一处。
+  ///
+  /// [playedAt] 非空时作为批内基准（测试 / 导入固定时刻用）。
+  Future<int> addHistoryTracks(
+    List<PlaylistTrack> tracks, {
+    int? playedAt,
+  }) async {
+    if (tracks.isEmpty) return 0;
+    final base = playedAt ?? _nowMs();
+    return addHistoryEntries([
+      for (var i = 0; i < tracks.length; i++)
+        PlayHistoryEntry(
+          sourceKey: tracks[i].sourceKey,
+          songId: tracks[i].songId,
+          title: tracks[i].title,
+          artist: tracks[i].artist,
+          album: tracks[i].album,
+          coverUrl: tracks[i].coverUrl,
+          durationMs: tracks[i].durationMs,
+          raw: tracks[i].raw,
+          playedAt: base + i,
+        ),
+    ]);
+  }
+
   /// 批量写入播放历史（唯一键 upsert + 裁剪上限；单次广播）。
   ///
   /// 供「加入列表 → 播放历史」使用：把曲目记为最近播放。
@@ -533,7 +563,42 @@ class LibraryWriteEngine {
     bool favoriteChange = false,
     bool? addToTop,
   }) async {
-    if (tracks.isEmpty) return 0;
+    final result = await _insertPlaylistTracks(
+      playlistId,
+      tracks,
+      favoriteChange: favoriteChange,
+      addToTop: addToTop,
+    );
+    return result.added;
+  }
+
+  /// 平台歌单 / 收藏夹导入：按传入顺序追加到末尾，忽略「加入列表位置」偏好。
+  ///
+  /// 返回实际落库行（`playlistId` / `sortOrder` / `addedAt` 已由写路径定好），
+  /// 调用方据此直接预置缓存，不必再做一次去重与排序位分配。
+  ///
+  /// 与 [importPlaylistTracks]（`.lxmc` 整批导入、不追 journal）不同：本路径
+  /// 保持 `LibraryRepository.importTracks` 的既有口径（常规五步仪式 + 列表
+  /// 曲目变更事件）。
+  Future<({int added, List<PlaylistTrack> rows})> importTracks(
+    int playlistId,
+    List<PlaylistTrack> tracks,
+  ) =>
+      _insertPlaylistTracks(
+        playlistId,
+        tracks,
+        favoriteChange: false,
+        addToTop: false,
+      );
+
+  /// 批量插入列表曲目的唯一实现；返回实际新增数与落库行。
+  Future<({int added, List<PlaylistTrack> rows})> _insertPlaylistTracks(
+    int playlistId,
+    List<PlaylistTrack> tracks, {
+    required bool favoriteChange,
+    required bool? addToTop,
+  }) async {
+    if (tracks.isEmpty) return (added: 0, rows: const <PlaylistTrack>[]);
     await _ensureReady();
     final db = _db;
     final knownRows = await (db.selectOnly(db.playlistTracks)
@@ -550,15 +615,15 @@ class LibraryWriteEngine {
     for (final track in tracks) {
       if (known.add('${track.sourceKey}:${track.songId}')) fresh.add(track);
     }
-    if (fresh.isEmpty) return 0;
+    if (fresh.isEmpty) return (added: 0, rows: const <PlaylistTrack>[]);
     var nextOrder = await _insertionStart(
       db,
       playlistId,
       count: fresh.length,
       addToTop: addToTop ?? _insertAtTop,
     );
-    var added = 0;
     final rows = <PlaylistTracksCompanion>[];
+    final inserted = <PlaylistTrack>[];
     final pending = <({PlaylistTrack track, SyncVersion version, int sortOrder})>[];
     for (final track in fresh) {
       final version = _nextVersion();
@@ -580,44 +645,46 @@ class LibraryWriteEngine {
         deviceId: Value(version.deviceId),
       ));
       pending.add((track: track, version: version, sortOrder: order));
-      added++;
+      inserted.add(_trackAtPosition(
+        track,
+        playlistId: playlistId,
+        sortOrder: order,
+      ));
     }
-    if (added > 0) {
-      await db.transaction(() async {
-        await db.batch((batch) => batch.insertAll(
-              db.playlistTracks,
-              rows,
-              mode: InsertMode.insertOrIgnore,
-            ));
-        final syncId = await _ensurePlaylistSyncId(db, playlistId);
-        if (syncId.isNotEmpty && _journal != null) {
-          await _journal.append(db, [
-            for (final item in pending)
-              (
-                category: SyncCategory.playlistTracks,
-                record: _trackRecord(
-                  playlistSyncId: syncId,
-                  sourceKey: item.track.sourceKey,
-                  songId: item.track.songId,
-                  title: item.track.title,
-                  artist: item.track.artist,
-                  album: item.track.album,
-                  coverUrl: item.track.coverUrl,
-                  durationMs: item.track.durationMs,
-                  raw: jsonEncode(item.track.raw),
-                  addedAt: item.track.addedAt,
-                  sortOrder: item.sortOrder,
-                  version: item.version,
-                ),
+    await db.transaction(() async {
+      await db.batch((batch) => batch.insertAll(
+            db.playlistTracks,
+            rows,
+            mode: InsertMode.insertOrIgnore,
+          ));
+      final syncId = await _ensurePlaylistSyncId(db, playlistId);
+      if (syncId.isNotEmpty && _journal != null) {
+        await _journal.append(db, [
+          for (final item in pending)
+            (
+              category: SyncCategory.playlistTracks,
+              record: _trackRecord(
+                playlistSyncId: syncId,
+                sourceKey: item.track.sourceKey,
+                songId: item.track.songId,
+                title: item.track.title,
+                artist: item.track.artist,
+                album: item.track.album,
+                coverUrl: item.track.coverUrl,
+                durationMs: item.track.durationMs,
+                raw: jsonEncode(item.track.raw),
+                addedAt: item.track.addedAt,
+                sortOrder: item.sortOrder,
+                version: item.version,
               ),
-          ]);
-        }
-      });
-      notifyChanged(favoriteChange
-          ? const LibraryChange.favorites()
-          : LibraryChange.playlistTracks(playlistId));
-    }
-    return added;
+            ),
+        ]);
+      }
+    });
+    notifyChanged(favoriteChange
+        ? const LibraryChange.favorites()
+        : LibraryChange.playlistTracks(playlistId));
+    return (added: inserted.length, rows: inserted);
   }
 
   Future<int> removeTrackFromPlaylist(

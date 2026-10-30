@@ -16,7 +16,7 @@ library;
 import '../domain/models/download.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_manager.dart';
 import '../services/track_local_data_service.dart';
 import 'collection_presenter.dart';
 import 'library_outcome.dart';
@@ -173,27 +173,23 @@ final class LibraryProviderCollectionActions
   @override
   Future<LibraryMutationOutcome> addTracksToFavorites(
     List<PlaylistTrack> tracks,
-  ) =>
-      _provider.addTracksToFavorites(tracks);
+  ) => _provider.addTracksToFavorites(tracks);
 
   @override
   Future<LibraryMutationOutcome> removeTracksFromFavorites(
     List<TrackKey> keys,
-  ) =>
-      _provider.removeTracksFromFavorites(keys);
+  ) => _provider.removeTracksFromFavorites(keys);
 
   @override
   Future<LibraryMutationOutcome> removeTracksFromPlaylist(
     int playlistId,
     List<PlaylistTrack> tracks,
-  ) =>
-      _provider.removeTracksFromPlaylist(playlistId, tracks);
+  ) => _provider.removeTracksFromPlaylist(playlistId, tracks);
 
   @override
   Future<LibraryMutationOutcome> deleteHistoryEntries(
     List<PlayHistoryEntry> entries,
-  ) =>
-      _provider.deleteHistoryEntries(entries);
+  ) => _provider.deleteHistoryEntries(entries);
 
   @override
   Future<LibraryMutationOutcome> clearHistory() => _provider.clearHistory();
@@ -202,8 +198,7 @@ final class LibraryProviderCollectionActions
   Future<LibraryMutationOutcome> reorderPlaylistTracks(
     int playlistId,
     List<PlaylistTrack> ordered,
-  ) =>
-      _provider.reorderPlaylistTracks(playlistId, ordered);
+  ) => _provider.reorderPlaylistTracks(playlistId, ordered);
 }
 
 /// 曲目交接端口：播放 / 加入列表都委托给 TrackHandoff。
@@ -239,12 +234,9 @@ abstract interface class CollectionLocalData {
 
 /// [CollectionLocalData] 的生产实现：转发下载 / 本地数据服务。
 final class ProviderCollectionLocalData implements CollectionLocalData {
-  const ProviderCollectionLocalData({
-    this._downloads,
-    this._localData,
-  });
+  const ProviderCollectionLocalData({this._downloads, this._localData});
 
-  final DownloadService? _downloads;
+  final DownloadManager? _downloads;
   final TrackLocalDataService? _localData;
 
   @override
@@ -302,10 +294,12 @@ final class CollectionActions {
     final tracks = [
       for (final row in rows)
         switch (row) {
-          TrackCollectionRow(:final track) =>
-            _library.trackFromPlaylistTrack(track),
-          HistoryCollectionRow(:final entry) =>
-            _library.trackFromHistoryEntry(entry),
+          TrackCollectionRow(:final track) => _library.trackFromPlaylistTrack(
+            track,
+          ),
+          HistoryCollectionRow(:final entry) => _library.trackFromHistoryEntry(
+            entry,
+          ),
           LocalSongCollectionRow(:final song) =>
             _library.trackFromPlaylistTrack(
               song.toPlaylistTrack(addedAt: addedAt),
@@ -464,12 +458,24 @@ final class CollectionActions {
   /// 一行的动作载荷：行变体归一 + 具体命令选择都在这里，页面只接线。
   CollectionRowCommands rowCommands(CollectionView view, CollectionRow row) =>
       switch (row) {
-        TrackCollectionRow(:final track) =>
-          TrackCollectionRowCommands(this, view, row, track),
-        HistoryCollectionRow(:final entry) =>
-          HistoryCollectionRowCommands(this, view, row, entry),
-        LocalSongCollectionRow(:final song) =>
-          LocalSongCollectionRowCommands(this, view, row, song),
+        TrackCollectionRow(:final track) => TrackCollectionRowCommands(
+          this,
+          view,
+          row,
+          track,
+        ),
+        HistoryCollectionRow(:final entry) => HistoryCollectionRowCommands(
+          this,
+          view,
+          row,
+          entry,
+        ),
+        LocalSongCollectionRow(:final song) => LocalSongCollectionRowCommands(
+          this,
+          view,
+          row,
+          song,
+        ),
       };
 
   Future<CollectionLocalDeleteItem> _deleteLocalSong(
@@ -518,11 +524,7 @@ final class CollectionActions {
     }
     try {
       await localData.deleteDownload(record);
-      return CollectionLocalDeleteItem(
-        song: song,
-        kind: kind,
-        status: success,
-      );
+      return CollectionLocalDeleteItem(song: song, kind: kind, status: success);
     } catch (error) {
       return CollectionLocalDeleteItem(
         song: song,
@@ -546,8 +548,9 @@ final class CollectionActions {
       );
     }
     try {
-      final result = await localData
-          .clearCachedAudio(_library.trackFromHistoryEntry(entry));
+      final result = await localData.clearCachedAudio(
+        _library.trackFromHistoryEntry(entry),
+      );
       if (result == null) {
         return CollectionLocalDeleteItem(
           song: song,
@@ -580,8 +583,10 @@ final class CollectionActions {
 /// 提示 / 清选择；确认类动作（本地删除）只给输入，不在这里执行。
 sealed class CollectionRowCommands {
   CollectionRowCommands(
-      CollectionActions actions, CollectionView view, this.row)
-      : _actions = actions,
+    CollectionActions actions,
+    CollectionView view,
+    this.row,
+  ) : _actions = actions,
         _view = view;
 
   final CollectionActions _actions;
@@ -616,12 +621,7 @@ sealed class CollectionRowCommands {
 }
 
 final class TrackCollectionRowCommands extends CollectionRowCommands {
-  TrackCollectionRowCommands(
-    super.actions,
-    super.view,
-    super.row,
-    this.track,
-  );
+  TrackCollectionRowCommands(super.actions, super.view, super.row, this.track);
 
   final PlaylistTrack track;
 
@@ -633,10 +633,8 @@ final class TrackCollectionRowCommands extends CollectionRowCommands {
 
   @override
   Future<LibraryMutationOutcome> Function()? get removeFromFavorites =>
-      () => _actions.setFavorite(
-            [row],
-            change: CollectionFavoriteChange.remove,
-          );
+      () =>
+          _actions.setFavorite([row], change: CollectionFavoriteChange.remove);
 
   @override
   CollectionSwapSeed? get swap => CollectionSwapSeed(

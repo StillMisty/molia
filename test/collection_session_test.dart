@@ -478,29 +478,43 @@ void main() {
       expect(view.phase, CollectionViewPhase.ready);
     });
 
-    test('本地歌曲：弹层计数可按最新下载快照重算', () async {
-      final library = _FakeLibrary(playlists: [favorites()]);
+    test('本地歌曲：弹层计数按传入帧重算，不读上一次 sync', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 1), playlist(2, trackCount: 1)],
+        tracks: {
+          1: [track('a')],
+          2: [track('b')],
+        },
+      );
       final session = buildSession();
       addTearDown(session.dispose);
       await session.start();
-      session.sync(inputFor(library));
+
+      DownloadedTrack download(String id) => DownloadedTrack(
+            originSourceKey: 'wy',
+            originSongId: id,
+            title: '下载 $id',
+            filePath: '/downloads/$id.mp3',
+            downloadedAt: 1,
+          );
+      CollectionDownloads downloadsOf(List<String> ids) => CollectionDownloads(
+            records: [for (final id in ids) download(id)],
+            supported: true,
+            initialized: true,
+          );
+
+      final frameA = session.sync(
+        inputFor(library, downloads: downloadsOf(['1'])),
+      ).frame;
+      expect(frameA.playlistId, 1);
+
+      // 再 sync 另一个合集 + 另一份下载快照：命令只认传回的帧。
+      session.selectCollection(2);
+      session.sync(inputFor(library, downloads: downloadsOf(['2', '3'])));
       expect(session.localSongsCount, 0);
 
-      final downloads = CollectionDownloads(
-        records: [
-          DownloadedTrack(
-            originSourceKey: 'wy',
-            originSongId: '1',
-            title: '下载 1',
-            filePath: '/downloads/1.mp3',
-            downloadedAt: 1,
-          ),
-        ],
-        supported: true,
-        initialized: true,
-      );
-      await session.ensureLocalSongsReady(downloads: downloads);
-      expect(session.localSongsCount, 1);
+      await session.ensureLocalSongsReady(frameA);
+      expect(session.localSongsCount, 1, reason: '按帧 A 的下载记录重算');
     });
 
     test('本地歌曲：能力未初始化 / 缓存联结在途时 loading，落定后 ready', () async {
@@ -526,7 +540,7 @@ void main() {
         initialized: true,
       );
       view = session.sync(inputFor(library, downloads: ready));
-      await session.ensureLocalSongsReady();
+      await session.ensureLocalSongsReady(view.frame);
       view = session.sync(inputFor(library, downloads: ready));
       expect(view.phase, CollectionViewPhase.ready);
       expect(view.view.hasItems, isFalse);
@@ -542,7 +556,7 @@ void main() {
       final session = buildSession();
       addTearDown(session.dispose);
       await session.start();
-      session.sync(inputFor(library));
+      final frame = session.sync(inputFor(library)).frame;
       await Future<void>.delayed(Duration.zero);
 
       expect(
@@ -566,11 +580,36 @@ void main() {
         hasLength(1),
       );
 
-      session.retry();
+      session.retry(frame);
       final retry = library.loads.last;
       expect(retry.kind, CollectionLibraryLoadKind.retry);
-      expect(retry.playlistId, 1, reason: '按上一帧解析出的列表 id 重试');
+      expect(retry.playlistId, 1, reason: '按传入帧解析出的列表 id 重试');
       expect(retry.force, isTrue);
+    });
+
+    test('重试按传入帧的列表 id，不读上一次 sync 的合集', () async {
+      final library = _FakeLibrary(
+        playlists: [favorites(trackCount: 1), playlist(2, trackCount: 1)],
+        tracks: {
+          1: [track('a')],
+          2: [track('b')],
+        },
+      );
+      final session = buildSession();
+      addTearDown(session.dispose);
+      await session.start();
+
+      final frameA = session.sync(inputFor(library)).frame;
+      expect(frameA.playlistId, 1);
+
+      session.selectCollection(2);
+      final frameB = session.sync(inputFor(library)).frame;
+      expect(frameB.playlistId, 2);
+
+      session.retry(frameA);
+      final retry = library.loads.last;
+      expect(retry.kind, CollectionLibraryLoadKind.retry);
+      expect(retry.playlistId, 1, reason: '帧 A 的列表 id，而不是最近 sync 的 2');
     });
   });
 
@@ -667,7 +706,7 @@ void main() {
         ..playlistsState = const LibraryReadState.ready()
         ..playlists = [favorites(), playlist(2, trackCount: 1)]
         ..tracks[2] = [track('b')];
-      session.retry();
+      session.retry(view.frame);
       view = session.sync(inputFor(library));
       expect(view.phase, CollectionViewPhase.ready);
       expect(view.view.selectedId, 2);
@@ -689,7 +728,7 @@ void main() {
       expect(view.phase, CollectionViewPhase.failed);
 
       library.failedTracks.remove(1);
-      session.retry();
+      session.retry(view.frame);
       view = session.sync(inputFor(library));
       expect(view.phase, CollectionViewPhase.ready);
       expect(view.view.visibleRows.single.key, 'wy:a');
@@ -711,7 +750,7 @@ void main() {
       library
         ..historyState = const LibraryReadState.ready()
         ..history = [history('1')];
-      session.retry();
+      session.retry(view.frame);
       view = session.sync(inputFor(library));
       expect(view.phase, CollectionViewPhase.ready);
       expect(view.view.visibleCount, 1);

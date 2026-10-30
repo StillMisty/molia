@@ -117,6 +117,13 @@ void main() {
     throw StateError('任务未开始运行');
   }
 
+  /// 任务列表（运行 → 等待 → 失败），替代已删除的测试专用 `tasks` 成员。
+  List<DownloadTask> audioTasksOf(DownloadService service) => [
+    ...service.taskGroups.running,
+    ...service.taskGroups.queued,
+    ...service.taskGroups.failed,
+  ];
+
   test('下载成功：音频落盘 + 记录入库 + 离线歌词/封面 + 本地副本优先取链', () async {
     final dio = mockDio((options) {
       if (options.uri.path.endsWith('.mp3')) {
@@ -144,7 +151,7 @@ void main() {
     final track = makeTrack();
     await service.download(track);
 
-    final record = service.recordFor('kw', '1');
+    final record = service.records.recordFor('kw', '1');
     expect(record, isNotNull);
     expect(record!.filePath, '/downloads/歌手 - 测试歌曲.mp3');
     expect(record.sizeBytes, 4);
@@ -160,9 +167,7 @@ void main() {
     expect(storage.files[record.coverPath], isNotNull);
     // 成功落库后提交日志不应留下 marker。
     expect(
-      storage.files.keys.where(
-        (path) => path.startsWith('/download_journal/'),
-      ),
+      storage.files.keys.where((path) => path.startsWith('/download_journal/')),
       isEmpty,
     );
     // 取链音质跟随偏好。
@@ -172,7 +177,7 @@ void main() {
     // 播放取链优先命中本地副本。
     expect(await service.localUriFor(track), Uri.file(record.filePath!));
     // 已下载状态与本地曲目还原。
-    expect(service.recordForTrack(track)!.key, 'kw:1');
+    expect(service.records.recordForTrack(track)!.key, 'kw:1');
     final local = record.localTrack!;
     expect(local.id.sourceKey, kLocalSourceKey);
     expect(local.id.id, 'kw:1');
@@ -210,7 +215,7 @@ void main() {
     final track = makeTrack();
     await service.download(track, includeLyrics: false);
 
-    final record = service.recordFor('kw', '1');
+    final record = service.records.recordFor('kw', '1');
     expect(record, isNotNull);
     expect(record!.coverPath, '/downloads/covers/歌手 - 测试歌曲.jpg');
     expect(storage.files[record.coverPath], [7, 7, 7, 7]);
@@ -239,7 +244,7 @@ void main() {
 
     await service.download(makeTrack(), includeLyrics: false);
 
-    final record = service.recordFor('kw', '1');
+    final record = service.records.recordFor('kw', '1');
     expect(record, isNotNull);
     expect(record!.coverPath, isNull, reason: '默认封面只是展示占位');
     expect(artworkCalls, 1, reason: '仍走真实取图端口（这里返回空）');
@@ -281,8 +286,8 @@ void main() {
     controller.add(Uint8List(64 * 1024));
     await controller.close();
     await future;
-    expect(service.progressForTrack(track), isNull);
-    expect(service.recordFor('kw', '1'), isNotNull);
+    expect(service.taskForTrack(track), isNull);
+    expect(service.records.recordFor('kw', '1'), isNotNull);
   });
 
   test('进度广播：快速分片按时间合并，首个与收尾 100% 仍立即送达', () async {
@@ -320,7 +325,7 @@ void main() {
     await future;
 
     expect(notified, [100, 400], reason: '100ms 内合并，100% 不被节流吞掉');
-    expect(service.progressForTrack(track), isNull);
+    expect(service.taskForTrack(track), isNull);
   });
 
   test('进度广播：超过 100ms 窗口的中间进度照常送达', () async {
@@ -401,13 +406,13 @@ void main() {
       ),
     );
     await waitForRunningTask(service, track);
-    expect(service.progressForTrack(track), isNotNull);
+    expect(service.taskForTrack(track), isNotNull);
 
     service.cancelTrack(track);
     gate.complete();
 
     await expectation;
-    expect(service.recordFor('kw', '1'), isNull);
+    expect(service.records.recordFor('kw', '1'), isNull);
     expect(await repository.findByOrigin('kw', '1'), isNull);
     expect(storage.files, isEmpty);
     expect(storage.deleted.where((path) => path.endsWith('.part')), isNotEmpty);
@@ -425,12 +430,12 @@ void main() {
         predicate((e) => e is SourceFailure && e.kind == FailureKind.network),
       ),
     );
-    expect(service.recordFor('kw', '1'), isNull);
+    expect(service.records.recordFor('kw', '1'), isNull);
     expect(storage.files, isEmpty);
     expect(service.taskForTrack(track)?.status, DownloadTaskStatus.failed);
     expect(
-      service.progressForTrack(track),
-      isNull,
+      service.taskForTrack(track)?.isActive,
+      isFalse,
       reason: '失败任务不再对外暴露最后进度',
     );
   });
@@ -450,9 +455,12 @@ void main() {
     await service.download(makeTrack(sourceKey: 'kw', songId: '1'));
     await service.download(makeTrack(sourceKey: 'tx', songId: '2'));
 
-    expect(service.recordFor('kw', '1')!.filePath, '/downloads/歌手 - 测试歌曲.mp3');
     expect(
-      service.recordFor('tx', '2')!.filePath,
+      service.records.recordFor('kw', '1')!.filePath,
+      '/downloads/歌手 - 测试歌曲.mp3',
+    );
+    expect(
+      service.records.recordFor('tx', '2')!.filePath,
       '/downloads/歌手 - 测试歌曲 (2).mp3',
     );
   });
@@ -483,7 +491,7 @@ void main() {
       ),
     );
     await expectLater(
-      service.download(service.recordFor('kw', '1')!.localTrack!),
+      service.download(service.records.recordFor('kw', '1')!.localTrack!),
       throwsA(
         predicate(
           (e) => e is SourceFailure && e.l10nKey == 'downloadLocalTrack',
@@ -529,11 +537,11 @@ void main() {
     await service.init();
     final track = makeTrack();
     await service.download(track);
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
 
     await service.delete(record);
 
-    expect(service.recordFor('kw', '1'), isNull);
+    expect(service.records.recordFor('kw', '1'), isNull);
     expect(await repository.findByOrigin('kw', '1'), isNull);
     expect(storage.files.containsKey(record.filePath!), isFalse);
     expect(storage.files.containsKey(record.lyricPath), isFalse);
@@ -557,8 +565,8 @@ void main() {
     await service.init();
 
     expect(service.initialized, isTrue);
-    expect(service.downloads, hasLength(1));
-    expect(service.recordFor('kw', '9')!.title, '已有下载');
+    expect(service.records.downloads, hasLength(1));
+    expect(service.records.recordFor('kw', '9')!.title, '已有下载');
   });
 
   test('崩溃恢复：journal + 最终文件存在时补记录并删 marker', () async {
@@ -579,7 +587,7 @@ void main() {
     final service = makeService();
     await service.init();
 
-    expect(service.recordFor('kw', 'recover')!.title, '恢复歌曲');
+    expect(service.records.recordFor('kw', 'recover')!.title, '恢复歌曲');
     expect(await repository.findByOrigin('kw', 'recover'), isNotNull);
     expect(await journal.readAll(), isEmpty);
   });
@@ -600,7 +608,7 @@ void main() {
     final service = makeService();
     await service.init();
 
-    expect(service.recordFor('kw', 'missing'), isNull);
+    expect(service.records.recordFor('kw', 'missing'), isNull);
     expect(await journal.readAll(), isEmpty);
   });
 
@@ -629,7 +637,7 @@ void main() {
     final service = makeService();
     await service.init();
 
-    final record = service.recordFor('kw', 'partial')!;
+    final record = service.records.recordFor('kw', 'partial')!;
     expect(record.filePath, pending.filePath);
     expect(record.lyricPath, existing.lyricPath);
     expect(await journal.readAll(), isEmpty);
@@ -652,12 +660,10 @@ void main() {
     await expectLater(
       service.download(track),
       throwsA(
-        predicate(
-          (e) => e is SourceFailure && e.l10nKey == 'downloadFailed',
-        ),
+        predicate((e) => e is SourceFailure && e.l10nKey == 'downloadFailed'),
       ),
     );
-    expect(service.recordFor('kw', '1'), isNull);
+    expect(service.records.recordFor('kw', '1'), isNull);
     expect(storage.files.containsKey('/downloads/歌手 - 测试歌曲.mp3'), isFalse);
     expect(storage.files, isEmpty);
   });
@@ -679,8 +685,8 @@ void main() {
     final service = makeService();
     await service.init();
 
-    expect(service.downloads, hasLength(1));
-    expect(service.recordFor('kw', 'already')!.title, '已落库');
+    expect(service.records.downloads, hasLength(1));
+    expect(service.records.recordFor('kw', 'already')!.title, '已落库');
     expect(await journal.readAll(), isEmpty);
   });
 
@@ -731,7 +737,7 @@ void main() {
       ]);
 
       expect((imported, skipped), (1, 0));
-      final record = service.downloads.single;
+      final record = service.records.downloads.single;
       expect(record.imported, isTrue);
       expect(record.title, '标签标题', reason: '优先读文件标签');
       expect(record.artist, '标签歌手');
@@ -754,7 +760,7 @@ void main() {
 
       await service.importLocalFiles(['/music/老王 - 晚风.mp3']);
 
-      final record = service.downloads.single;
+      final record = service.records.downloads.single;
       expect(record.title, '晚风');
       expect(record.artist, '老王');
       expect(record.durationMs, isNull);
@@ -772,12 +778,12 @@ void main() {
       ]);
 
       expect(result, (1, 2));
-      expect(service.downloads, hasLength(1));
+      expect(service.records.downloads, hasLength(1));
 
       // 重复导入同一路径：同键替换，不新增记录。
       final again = await service.importLocalFiles(['/music/a.mp3']);
       expect(again.$1, 1);
-      expect(service.downloads, hasLength(1));
+      expect(service.records.downloads, hasLength(1));
     });
 
     test('存储不可用（无文件系统）：全部跳过', () async {
@@ -786,7 +792,7 @@ void main() {
       await service.init();
 
       expect(await service.importLocalFiles(['/music/a.mp3']), (0, 1));
-      expect(service.downloads, isEmpty);
+      expect(service.records.downloads, isEmpty);
     });
 
     test('删除导入项：只移除记录，不删原文件', () async {
@@ -794,11 +800,11 @@ void main() {
       final service = makeService();
       await service.init();
       await service.importLocalFiles(['/music/a.mp3']);
-      final record = service.downloads.single;
+      final record = service.records.downloads.single;
 
       await service.delete(record);
 
-      expect(service.downloads, isEmpty);
+      expect(service.records.downloads, isEmpty);
       expect(
         await repository.findByOrigin(kLocalSourceKey, '/music/a.mp3'),
         isNull,
@@ -838,7 +844,7 @@ void main() {
 
     await service.download(makeTrack(), quality: '128k');
     expect(kwSource.lastResolveQuality?.type, '128k');
-    expect(service.recordFor('kw', '1')!.quality, '128k');
+    expect(service.records.recordFor('kw', '1')!.quality, '128k');
   });
 
   test('音频缓存命中：直接拷贝到下载目录，不取链 / 不请求网络', () async {
@@ -870,7 +876,7 @@ void main() {
     storage.files['/cache/audio/$cacheName'] = [7, 7, 7];
 
     await service.download(makeTrack());
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
     expect(record.filePath, '/downloads/歌手 - 测试歌曲.mp3');
     final copied = storage.files[record.filePath]!;
     expect(copied.sublist(copied.length - 3), [7, 7, 7]);
@@ -904,12 +910,12 @@ void main() {
     storage.files['/cache/audio/$cacheName.part'] = [7];
 
     await service.download(makeTrack());
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
     final downloaded = storage.files[record.filePath]!;
     expect(downloaded.sublist(downloaded.length - 2), [1, 2], reason: '回退网络下载');
   });
 
-  test('缓存 = 已下载：audioCacheFor 命中完整缓存（音质 / 体积），.part 不算', () async {
+  test('缓存 = 已下载：完整缓存命中本地取链（音质回退），.part 不算', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final cacheStorage = _FakeCacheStorage(audioDir: '/cache/audio');
@@ -929,28 +935,25 @@ void main() {
       quality: '128k',
     );
 
-    expect(await service.audioCacheFor(track), isNull);
+    expect(await service.localUriFor(track), isNull);
 
     // 只有 128k 完整缓存：探测顺序（偏好 320k 在前）回退到 128k。
     storage.files['/cache/audio/$name128'] = [1, 2, 3];
-    final hit = await service.audioCacheFor(track);
+    final hit = await service.localUriFor(track);
     expect(hit, isNotNull);
-    expect(hit!.quality, '128k');
-    expect(hit.path, '/cache/audio/$name128');
-    expect(hit.sizeBytes, 3);
+    expect(hit!.toFilePath(), '/cache/audio/$name128');
 
-    // 320k 出现 .part 半成品：不视为命中，仍回退 128k。
+    // 320k 出现完整文件但仍有 `.part` 半成品：不视为命中，仍回退 128k。
     storage.files['/cache/audio/$name320'] = [7, 7, 7, 7];
     storage.files['/cache/audio/$name320.part'] = [7];
-    expect((await service.audioCacheFor(track))!.quality, '128k');
-
-    // 精确音质探测：只有 128k 命中。
     expect(
-      await service.audioCacheFor(track, qualities: const ['320k']),
-      isNull,
+      (await service.localUriFor(track))!.toFilePath(),
+      '/cache/audio/$name128',
     );
+
+    // 指定音质同样走回退链；精确命中 128k。
     expect(
-      (await service.audioCacheFor(track, qualities: const ['128k']))!.path,
+      (await service.localUriFor(track, quality: '128k'))!.toFilePath(),
       '/cache/audio/$name128',
     );
   });
@@ -979,7 +982,7 @@ void main() {
 
     // 已有下载记录：记录优先于缓存。
     await service.download(track, includeLyrics: false, includeCover: false);
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
     final downloadedUri = await service.localUriFor(track, quality: '320k');
     expect(downloadedUri!.toFilePath(), record.filePath);
   });
@@ -1005,19 +1008,19 @@ void main() {
     final track = makeTrack();
 
     await service.downloadLyrics(track);
-    var record = service.recordFor('kw', '1')!;
+    var record = service.records.recordFor('kw', '1')!;
     expect(record.hasAudio, isFalse);
     expect(record.hasLyrics, isTrue);
     expect(record.lyricPath, '/downloads/lyrics/歌手 - 测试歌曲.lrc');
 
     await service.downloadCover(track);
-    record = service.recordFor('kw', '1')!;
+    record = service.records.recordFor('kw', '1')!;
     expect(record.hasCover, isTrue);
     expect(record.coverPath, '/downloads/covers/歌手 - 测试歌曲.jpg');
 
     // 再下音频（不带分项）：既有歌词 / 封面保留。
     await service.download(track, includeLyrics: false, includeCover: false);
-    record = service.recordFor('kw', '1')!;
+    record = service.records.recordFor('kw', '1')!;
     expect(record.hasAudio, isTrue);
     expect(record.hasLyrics, isTrue);
     expect(record.hasCover, isTrue);
@@ -1062,7 +1065,10 @@ void main() {
     await service.init();
 
     await service.download(makeTrack());
-    expect(service.recordFor('kw', '1')!.filePath, '/downloads/测试歌曲 - 歌手.mp3');
+    expect(
+      service.records.recordFor('kw', '1')!.filePath,
+      '/downloads/测试歌曲 - 歌手.mp3',
+    );
   });
 
   test('标签嵌入开关关闭：文件保持原始下载内容', () async {
@@ -1082,7 +1088,7 @@ void main() {
     await service.init();
 
     await service.download(makeTrack());
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
     expect(storage.files[record.filePath], [1, 2]);
   });
 
@@ -1123,10 +1129,7 @@ void main() {
         },
       ),
     );
-    final service = makeService(
-      dio: dio,
-      lyrics: (track) => lyricsGate.future,
-    );
+    final service = makeService(dio: dio, lyrics: (track) => lyricsGate.future);
     await service.init();
 
     final track = makeTrack();
@@ -1177,11 +1180,7 @@ void main() {
     expect(orphans, ['/downloads/orphan.mp3']);
     expect(
       await service.deleteOrphanFiles(
-        paths: [
-          ...orphans,
-          '/downloads/keep.mp3',
-          '/downloads/notes.txt',
-        ],
+        paths: [...orphans, '/downloads/keep.mp3', '/downloads/notes.txt'],
       ),
       1,
     );
@@ -1302,8 +1301,8 @@ void main() {
     await first.close();
 
     expect(await batch, (1, 0));
-    expect(service.recordFor('kw', '1'), isNotNull);
-    expect(service.recordFor('tx', '2'), isNull);
+    expect(service.records.recordFor('kw', '1'), isNotNull);
+    expect(service.records.recordFor('tx', '2'), isNull);
   });
 
   test('批量失败任务重试：批次结束后走单任务通知', () async {
@@ -1333,11 +1332,11 @@ void main() {
     );
     notifications.events.clear();
 
-    final failed = service.tasks.single;
+    final failed = audioTasksOf(service).single;
     expect(failed.status, DownloadTaskStatus.failed);
     final retried = service.retryTask(failed);
     // 重试任务不带旧的批量位置，入队即替换失败任务。
-    expect(service.tasks.single, isNot(same(failed)));
+    expect(audioTasksOf(service).single, isNot(same(failed)));
     await retried;
 
     expect(notifications.events.first.method, 'start');
@@ -1382,19 +1381,19 @@ void main() {
     final kw = makeTrack(sourceKey: 'kw', songId: '1');
     final tx = makeTrack(sourceKey: 'tx', songId: '2');
     int? enqueued;
-    final batch = service.downloadBatch(
-      [kw, tx],
-      onEnqueued: (count) => enqueued = count,
-    );
+    final batch = service.downloadBatch([
+      kw,
+      tx,
+    ], onEnqueued: (count) => enqueued = count);
     await waitForRunningTask(service, kw);
 
     // 第一条还在下载，第二条已经在等待列表（不是等第一条完成后才入队）。
     expect(enqueued, 2, reason: '回调在全部入队后、等待结果前触发');
     expect(
-      [for (final task in service.tasks) task.status],
+      [for (final task in audioTasksOf(service)) task.status],
       [DownloadTaskStatus.running, DownloadTaskStatus.queued],
     );
-    expect(service.tasks.map((task) => task.track.id), [kw.id, tx.id]);
+    expect(audioTasksOf(service).map((task) => task.track.id), [kw.id, tx.id]);
 
     first.add(Uint8List.fromList([1, 2]));
     await first.close();
@@ -1432,7 +1431,7 @@ void main() {
     ]);
     expect(done, 1);
     expect(failed, 0);
-    expect(service.recordFor('tx', '2')?.hasAudio, isTrue);
+    expect(service.records.recordFor('tx', '2')?.hasAudio, isTrue);
   });
 
   test('任务列表：tasks / taskForTrack 暴露曲目与进度，完成后清空', () async {
@@ -1452,14 +1451,14 @@ void main() {
     final track = makeTrack();
     final download = service.download(track);
     final task = await waitForRunningTask(service, track);
-    expect(service.tasks.single.track.id, track.id);
+    expect(audioTasksOf(service).single.track.id, track.id);
     expect(identical(service.taskForTrack(track), task), isTrue);
 
     controller.add(Uint8List.fromList(List.filled(65536, 0)));
     await controller.close();
     await download;
-    expect(service.tasks, isEmpty);
-    expect(service.progressForTrack(track), isNull);
+    expect(audioTasksOf(service), isEmpty);
+    expect(service.taskForTrack(track), isNull);
   });
 
   test('系统通知：单任务 start → 进度 update（节流）→ stop', () async {
@@ -1689,7 +1688,7 @@ void main() {
     expect(service.publisherSupported, isTrue);
 
     await service.download(makeTrack());
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
     expect(record.publicUri, 'content://media/external/downloads/1');
     expect(record.hasPublicCopy, isTrue);
     // 发布的是应用目录里的最终文件（标签嵌入之后），不是半成品。
@@ -1717,7 +1716,7 @@ void main() {
     await service.init();
 
     await service.download(makeTrack());
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
     expect(record.hasAudio, isTrue);
     expect(record.publicUri, null);
   });
@@ -1743,7 +1742,7 @@ void main() {
     );
     await service.init();
     await service.download(makeTrack());
-    expect(service.recordFor('kw', '1')!.publicUri, null);
+    expect(service.records.recordFor('kw', '1')!.publicUri, null);
     expect(publisher.published, isEmpty);
 
     // 非 Android（发布器不支持）：同样 no-op，且 supported 为 false。
@@ -1754,7 +1753,7 @@ void main() {
     await unsupported.init();
     await unsupported.download(makeTrack(sourceKey: 'tx', songId: '2'));
     expect(unsupported.publisherSupported, isFalse);
-    expect(unsupported.recordFor('tx', '2')!.publicUri, null);
+    expect(unsupported.records.recordFor('tx', '2')!.publicUri, null);
   });
 
   test('删除下载：回收公共副本（不支持时跳过）', () async {
@@ -1770,7 +1769,7 @@ void main() {
     final service = makeService(dio: dio, publisher: publisher);
     await service.init();
     await service.download(makeTrack());
-    final record = service.recordFor('kw', '1')!;
+    final record = service.records.recordFor('kw', '1')!;
 
     await service.delete(record);
     expect(publisher.removed, ['content://media/external/downloads/1']);
@@ -1818,14 +1817,14 @@ void main() {
     final (published, failed) = await service.publishMissingPublicCopies();
     expect((published, failed), (1, 1));
     expect(
-      service.recordFor('kw', '9')!.publicUri,
+      service.records.recordFor('kw', '9')!.publicUri,
       'content://media/external/downloads/2',
     );
     expect(
       (await repository.findByOrigin('kw', '9'))!.publicUri,
       'content://media/external/downloads/2',
     );
-    expect(service.recordFor('tx', '8')!.publicUri, null);
+    expect(service.records.recordFor('tx', '8')!.publicUri, null);
   });
 
   test('音频 MIME 类型映射（公共目录发布用）', () {

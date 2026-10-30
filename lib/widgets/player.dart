@@ -8,9 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
-import '../managers/artwork_cache.dart';
 import '../providers/playback_provider.dart';
-import '../services/data_saver_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
@@ -80,9 +78,6 @@ class Player extends StatefulWidget {
 
 class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Track? _lastTrack;
-
-  /// 最近一次展示的封面地址：仅供迷你占位与预取复用（取色不在此处触发）。
-  String? _lastImageUrl;
 
   // 标题单行 38、进度排 46（滑杆盒 32 + 时间行 2+16 的溢出绘制 + 余量）、
   // 两者间距 14。
@@ -178,10 +173,6 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     widget.expandAnimation?.addStatusListener(_handleExpandStatus);
     widget.expandAnimation?.addListener(_handleExpandValue);
     _morphAttached = (widget.expandAnimation?.value ?? 1.0) >= 1.0;
-
-    if (_lastImageUrl != null) {
-      _prefetchImage(_lastImageUrl!);
-    }
   }
 
   @override
@@ -290,45 +281,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     });
   }
 
-  Future<void> _prefetchImage(String imageUrl) async {
-    // 省流模式（移动数据 + 已开启封面省流）：跳过封面预取
-    // （ArtworkCache 网关在只读缓存未命中时会抛错，这里提前拦截）。
-    if (context.read<DataSaverService?>()?.blockNetworkArtwork ?? false) {
-      return;
-    }
-    // 与封面显示完全同键（共享 CacheManager、同一个有界解码边长）：
-    // 预取才能命中后续 AppNetworkImage / 飞行副本的 ImageCache 查询。
-    final coverEdge = playbackCoverDecodeEdge(context);
-    final rawProvider = await artworkImageProvider(imageUrl);
-    if (!mounted) return;
-    final provider = ResizeImage.resizeIfNeeded(coverEdge, null, rawProvider);
-    await precacheImage(provider, context);
-  }
-
   @override
   void dispose() {
     widget.expandAnimation?.removeStatusListener(_handleExpandStatus);
     widget.expandAnimation?.removeListener(_handleExpandValue);
     _trackEntrance.dispose();
     super.dispose();
-  }
-
-  /// 封面切换时的显示预取：与显示路径完全同键，命中的图直接进 ImageCache。
-  ///
-  /// 取色不在这里触发：composition root 的 `ArtworkThemeSync` 监听
-  /// PlaybackProvider（任何页面/后台切歌都走同一条取色链路，省流时读本地
-  /// 缓存，未命中保持现色）。这里只负责预取，让 AppNetworkImage / 飞行副本
-  /// 复用同一张已解码图。
-  void _prefetchArtworkIfNeeded(BuildContext context, Track? displayTrack) {
-    final currentImageUrl = coverResolverOf(context).realOf(displayTrack).url;
-    if (currentImageUrl == null || currentImageUrl == _lastImageUrl) return;
-    _lastImageUrl = currentImageUrl;
-    // 省流模式（移动数据 + 已开启封面省流）：跳过封面预取
-    // （ArtworkCache 网关在只读缓存未命中时会抛错，这里提前拦截）。
-    if (context.read<DataSaverService?>()?.blockNetworkArtwork ?? false) {
-      return;
-    }
-    _prefetchImage(currentImageUrl);
   }
 
   /// 歌手展示名（唯一词表 [Track.artistLabel]；无有效歌手回退 l10n 兜底）。
@@ -358,13 +316,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final playbackProvider =
         Provider.of<PlaybackProvider>(context, listen: false);
 
+    // 迷你封面换图时用上一首封面做加载占位；当前曲目没有封面时不借用，
+    // 避免旧封面从新卡下面透出来（见 player_reconcile_test 的切歌占位）。
+    final previousDisplayTrack = _lastTrack;
     final displayTrack = track ?? _lastTrack;
     if (track != null) {
       _lastTrack = track;
     }
-
-    // 封面预取（显示路径；取色由组合根的 ArtworkThemeSync 统一触发）
-    _prefetchArtworkIfNeeded(context, displayTrack);
 
     if (widget.isLargeScreen) {
       return RepaintBoundary(
@@ -398,6 +356,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         displayTrack,
         playbackProvider,
         expand,
+        previousTrack: previousDisplayTrack,
       ),
     );
   }
@@ -461,8 +420,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildExpandableSmallScreenLayout(
     Track? displayTrack,
     PlaybackProvider playbackProvider,
-    Animation<double> expand,
-  ) {
+    Animation<double> expand, {
+    Track? previousTrack,
+  }) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final double fullHeight = _playerContentHeight(
@@ -480,7 +440,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           morph: _morphAttached ? widget.morph : null,
         );
         final Widget miniLayer =
-            _buildMiniPlayer(context, displayTrack, playbackProvider);
+            _buildMiniPlayer(
+              context,
+              displayTrack,
+              playbackProvider,
+              previousTrack: previousTrack,
+            );
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
@@ -655,8 +620,9 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildMiniPlayer(
     BuildContext context,
     Track? track,
-    PlaybackProvider playback,
-  ) {
+    PlaybackProvider playback, {
+    Track? previousTrack,
+  }) {
     return SizedBox(
       height: miniPlayerHeight,
       child: Stack(
@@ -678,7 +644,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                       size: 48,
                       appearance: CoverAppearance.mini,
                       content: (context, clip, iconSize) =>
-                          _buildMiniAlbumArt(track, iconSize),
+                          _buildMiniAlbumArt(
+                            track,
+                            iconSize,
+                            previousTrack: previousTrack,
+                          ),
                     ),
                   ),
                   SizedBox(width: context.isCompact ? 8 : 16),
@@ -818,9 +788,23 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMiniAlbumArt(Track? track, double iconSize) {
+  Widget _buildMiniAlbumArt(
+    Track? track,
+    double iconSize, {
+    Track? previousTrack,
+  }) {
     final displayTrack = track ?? _lastTrack;
     final coverEdge = playbackCoverDecodeEdge(context);
+    final covers = coverResolverOf(context);
+    final currentUrl = covers.realOf(displayTrack).url;
+    final previousUrl =
+        previousTrack == null ? null : covers.realOf(previousTrack).url;
+    // 只有当前曲目自己有封面时才拿上一首封面垫底；无封面曲目直接走回退，
+    // 否则旧封面会从新卡下面透出来。
+    final placeholderUrl =
+        currentUrl != null && currentUrl.isNotEmpty && previousUrl != null
+            ? previousUrl
+            : null;
     // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
     // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
     return TrackArtwork(
@@ -828,14 +812,14 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       fit: BoxFit.cover,
       fallbackIconSize: iconSize,
       memCacheWidth: coverEdge,
-      placeholder: _lastTrack != null && _lastImageUrl != null
-          ? AppNetworkImage(
-              url: _lastImageUrl,
+      placeholder: placeholderUrl == null
+          ? null
+          : AppNetworkImage(
+              url: placeholderUrl,
               fit: BoxFit.cover,
               fallbackIconSize: iconSize,
               memCacheWidth: coverEdge,
-            )
-          : buildDefaultArtwork(context),
+            ),
       // 加载失败是当前曲目的缺图态：不能用最近播放封面冒充。
       errorWidget: buildFallbackArtwork(context),
     );

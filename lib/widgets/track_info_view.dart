@@ -17,7 +17,7 @@ import '../providers/sources_provider.dart';
 import '../services/cache_service.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/data_saver_service.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_records.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/lyrics_provider_label.dart';
@@ -66,7 +66,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   PlaybackProvider? _playback;
   TrackLocalDataService? _localDataService;
   CacheService? _cacheServiceRevision;
-  DownloadService? _downloads;
+  DownloadRecords? _downloads;
 
   /// 当前已加载本地数据的曲目；用于切歌重载与过期结果丢弃。
   TrackId? _dataForTrack;
@@ -95,7 +95,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     _localDataService = context.read<TrackLocalDataService?>();
     _cacheServiceRevision =
         context.read<CacheService?>() ?? CacheService.instance;
-    final downloads = context.read<DownloadService?>();
+    final downloads = context.read<DownloadRecords?>();
     if (!identical(_downloads, downloads)) {
       _downloads?.removeListener(_onDownloadRecordsChanged);
       _downloads = downloads;
@@ -204,9 +204,10 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     // 是二者的派生值，改完设置要立即刷新，不等下一次播放通知。
     final sources = context.watch<SourcesProvider?>();
     final dataSaver = context.watch<DataSaverService?>();
-    final (track, qualityType) =
-        context.select<PlaybackProvider, (Track?, String)>(
-      (provider) => (provider.snapshot.current, provider.currentQualityType),
+    final (track, qualityType) = context
+        .select<PlaybackProvider, (Track?, String)>(
+          (provider) =>
+              (provider.snapshot.current, provider.currentQualityType),
     );
     final commentsSupported = context.select<CommentsProvider?, bool>(
       (provider) =>
@@ -214,13 +215,15 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     );
     // 专辑行：映射层派生了专辑 id 且渠道能力位为真时可点（否则保持只读信息行）。
     final sourceRegistry = context.watch<SourceRegistry?>();
-    final albumSupported = track != null &&
+    final albumSupported =
+        track != null &&
         track.platformAlbumId != null &&
         (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.collection ??
             false);
     // 歌手行：能力位为真且曲目带平台歌手 id 时可点（脚本扩展源只读）。
     final artistNames = track?.artistLabel ?? '';
-    final artistSupported = track != null &&
+    final artistSupported =
+        track != null &&
         platformArtistOf(track) != null &&
         (sourceRegistry?.byKey(track.id.sourceKey)?.capabilities.artist ??
             false);
@@ -326,8 +329,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                       key: const Key('trackInfoCoverItem'),
                       icon: Icons.image_rounded,
                       title: l10n.coverTitle,
-                      subtitle:
-                          custom ? l10n.coverCustomized : l10n.coverFollowSong,
+                      subtitle: custom
+                          ? l10n.coverCustomized
+                          : l10n.coverFollowSong,
                       trailing: TrackArtwork(
                         track: track,
                         // 外层 CoverChangeBuilder 已经订阅，避免双监听。
@@ -339,9 +343,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                                 .round(),
                         fallbackIconSize: 16,
                       ),
-                      onTap: () => unawaited(
-                        _openCover(context, track, covers, l10n),
-                      ),
+                      onTap: () =>
+                          unawaited(_openCover(context, track, covers, l10n)),
                     );
                   },
                 ),

@@ -139,6 +139,12 @@ class PlaybackObserver {
   /// 已处理过的当前曲目（用于去重持久化 / 写库 / 预加载）。
   String? _processedTrackId;
 
+  /// 恢复态展示曲目（facade 快照此时没有 current）。
+  ///
+  /// 预取按「展示中的曲目」工作：live 用快照 current，冷启动恢复态用这份
+  /// 会话曲目，二者共用 [_preloadCovers] 与同一组门控。真实播放接管后清空。
+  Track? _restoredDisplayTrack;
+
   /// 本次会话是否已请求过通知权限（首次真正播放时请求）。
   bool _notificationPermissionAsked = false;
 
@@ -198,10 +204,18 @@ class PlaybackObserver {
   /// 冷启动恢复态：把恢复曲目信息作为「最后播放」展示（不落盘）。
   ///
   /// 曲目并未真正起播，只在 UI 空态复用该信息；会话模块装载恢复会话时调用。
+  /// 恢复曲目同样是「展示中的封面」：冷启动装载发生在 runApp 之前（没有
+  /// Navigator context），等首帧建完立刻按与 live 相同的门控预取，恢复曲目
+  /// 不会因为没有真实播放而漏预热。
   void showRestoredTrack(Track track) {
+    _restoredDisplayTrack = track;
     _lastPlayedTrackName = track.title;
     _lastPlayedArtists = track.artistLabel;
     _lastPlayedImageUrl = _displayCoverUrlOf(track);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_attached) return;
+      _triggerImagePreload();
+    });
   }
 
   /// 曲目切换时：持久化最后播放信息、更新桌面小组件并触发封面预加载。
@@ -213,6 +227,8 @@ class PlaybackObserver {
       _processedTrackId = null;
     } else if (trackId != _processedTrackId) {
       _processedTrackId = trackId;
+      // 真实播放接管：展示曲目改由 live 快照提供，恢复态兜底不再参与预取。
+      _restoredDisplayTrack = null;
       _persistLastPlayedTrackInfo(track!);
       unawaited(_updateWidget());
       _triggerImagePreload();
@@ -311,11 +327,31 @@ class PlaybackObserver {
   /// 触发播放相关图片的智能预加载。
   ///
   /// 使用 ImagePreloadManager 预加载当前曲目、下一首、上一首 / 再上一首，
-  /// 以及队列中的封面图片。
+  /// 以及队列中的封面图片。当前曲目取「正在展示的曲目」：live 快照有 current
+  /// 时用它，冷启动恢复态回退到 [showRestoredTrack] 记下的会话曲目。
   /// 省流模式阻止封面网络请求时直接跳过（避免注定失败的下载与日志噪音）；
   /// 窗口在后台（托盘 / 最小化）或移动端不在前台时同样跳过——解码结果没有
   /// 展示面，只白占内存与 CPU，恢复后由 [_resumeCoverPreload] 补一次。
   void _triggerImagePreload() {
+    final live = _facade.snapshot.value;
+    // 预加载实际播放顺序（shuffle 为洗牌排列剩余），避免随机模式下白下封面。
+    _preloadCovers(
+      currentTrack: live.current ?? _restoredDisplayTrack,
+      nextTrack: live.next,
+      previousTrack: live.previous,
+      previousOfPreviousTrack: live.previousOfPrevious,
+      upcomingTracks: live.upNext,
+    );
+  }
+
+  /// 封面预取的唯一策略入口：live 邻居与恢复态展示曲目共用同一组门控。
+  void _preloadCovers({
+    Track? currentTrack,
+    Track? nextTrack,
+    Track? previousTrack,
+    Track? previousOfPreviousTrack,
+    List<Track>? upcomingTracks,
+  }) {
     if (_presence.isBackgrounded) return;
     if (_powerPolicy?.canPreloadCovers == false) return;
     if (_dataSaver?.blockNetworkArtwork ?? false) return;
@@ -323,20 +359,14 @@ class PlaybackObserver {
     if (context == null || !context.mounted) return;
 
     // 异步执行预加载，不阻塞主流程
-    final live = _facade.snapshot.value;
-    final currentTrack = live.current;
-    final nextTrack = live.next;
-    // 预加载实际播放顺序（shuffle 为洗牌排列剩余），避免随机模式下白下封面。
-    final upcomingTracks = live.upNext;
-
     Future.microtask(() {
       if (!context.mounted) return;
       _albumArtPreloader.preloadForPlayback(
         context: context,
         currentTrack: currentTrack,
         nextTrack: nextTrack,
-        previousTrack: live.previous,
-        previousOfPreviousTrack: live.previousOfPrevious,
+        previousTrack: previousTrack,
+        previousOfPreviousTrack: previousOfPreviousTrack,
         upcomingTracks: upcomingTracks,
       );
     });

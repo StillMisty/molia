@@ -22,7 +22,7 @@ import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
 import 'audio_cache_store.dart';
 import 'cache_service.dart';
-import 'download/download_service.dart';
+import 'download/download_records.dart';
 
 /// 单项本地拥有状态（两档词表）：已下载（持久）> 已缓存（易失）> 无。
 enum LocalPartState {
@@ -121,7 +121,8 @@ class TrackLocalData {
       hasAudioDownload || hasLyricsDownload || hasCoverDownload;
 
   @override
-  String toString() => 'TrackLocalData(audio: $audioState, lyrics: '
+  String toString() =>
+      'TrackLocalData(audio: $audioState, lyrics: '
       '$lyricsState, artwork: $artworkState, '
       'download: ${download?.key}, audioWriting: $audioWriting)';
 }
@@ -131,21 +132,20 @@ class TrackLocalDataService {
     required this._cacheService,
     required this._artworkCache,
     required this._catalogService,
-    this._downloadService,
+    this._downloadRecords,
   });
 
   final CacheService _cacheService;
   final ArtworkCache _artworkCache;
   final CatalogService _catalogService;
-  final DownloadService? _downloadService;
+  final DownloadRecords? _downloadRecords;
 
   /// 下载档的同步种子（缓存占用异步补全）。
   ///
   /// 下载记录在内存里（drift 已加载），同步读可以避免首帧把「已下载」闪成
   /// 「未下载」；缓存占用必须走文件系统 / prefs，只能异步补。
-  TrackLocalData downloadState(Track track) => TrackLocalData(
-        download: _downloadService?.recordForTrack(track),
-      );
+  TrackLocalData downloadState(Track track) =>
+      TrackLocalData(download: _downloadRecords?.recordForTrack(track));
 
   /// 完整读取（下载记录 + 四项缓存占用 + 命中音质）。
   Future<TrackLocalData> load(Track track) => DataPathTrace.async(
@@ -168,7 +168,7 @@ class TrackLocalDataService {
     for (var i = 0; i < tracks.length; i++) {
       final track = tracks[i];
       result[track.id.uri] = TrackLocalData(
-        download: _downloadService?.recordForTrack(track),
+        download: _downloadRecords?.recordForTrack(track),
         audioCache: AudioCacheStore.usageForTrackInFiles(
           index,
           sourceKey: track.id.sourceKey,
@@ -203,7 +203,7 @@ class TrackLocalDataService {
     final result = <TrackId>{};
     for (final track in tracks) {
       // 下载优先：有音频下载的曲目归下载档，不出现在缓存行。
-      if (_downloadService?.recordForTrack(track)?.hasAudio ?? false) continue;
+      if (_downloadRecords?.recordForTrack(track)?.hasAudio ?? false) continue;
       final usage = AudioCacheStore.usageForTrackInFiles(
         index,
         sourceKey: track.id.sourceKey,
@@ -216,10 +216,7 @@ class TrackLocalDataService {
 
   /// 清理单项缓存（音频跳过正在写入的文件，见
   /// `CacheService.clearAudioForTrack`）。
-  Future<LocalCacheClearResult> clear(
-    Track track,
-    LocalCachePart part,
-  ) async {
+  Future<LocalCacheClearResult> clear(Track track, LocalCachePart part) async {
     switch (part) {
       case LocalCachePart.audio:
         final result = await _cacheService.clearAudioForTrack(

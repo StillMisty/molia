@@ -127,8 +127,9 @@
   停止 / 换源）返回前等 `pendingWrite`（已提交语义）；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
   落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
-  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`），不直写
-  facade；壳层 paused 与桌面退出共用
+  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`；库内 / 手动
+  换源走同一实现的 `replaceTrack` + `PlaybackReplaceScope.liveAndRestored`，
+  自动换源固定 `liveOnly`），不直写 facade；壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
   500ms）→ 统计落盘（有界 500ms）→ 销毁窗口」：会话必须先把最后一段进度取
@@ -744,14 +745,19 @@
   排序）与行动作构成。`CollectionView.visibleRows` 是统一的 `CollectionRow` 联合
   （列表曲目 / 播放历史 / 本地歌曲），`rowActionsFor` 按行变体给动作规格；收藏页
   每帧只把资料库读取端口 + 下载 / 缓存快照交给会话，消费一个
-  `CollectionSessionView`（视图 + loading / ready / failed），不在 build 里做
-  post-frame 校准或 `ensure*` 编排，也不按 kind 分支拼行或挑动作。端口只有
+  `CollectionSessionView`（视图 + 当帧 `CollectionFrame` + loading / ready /
+  failed），不在 build 里做 post-frame 校准或 `ensure*` 编排，也不按 kind
+  分支拼行或挑动作。端口只有
   「一帧快照 + 一条加载意图」：`CollectionLibrary.snapshot(playlistId:)` 返回
   `CollectionLibrarySnapshot`（列表清单 / 播放历史 / 两者读取阶段 / 当前选集
   的 `PlaylistTracksView`），`load(CollectionLibraryLoad)` 表达首帧、当前列表
   曲目、整页重试与历史重排（playlist id 与 force 在意图里）；`LibraryProvider`
-  的其余成员不再逐个映射成 getter。会话持有最近一帧快照，弹层计数与失败重试
-  直接按它重算本地歌曲，不再依赖「先 sync 一次」的隐藏调用顺序。资料库读取
+  的其余成员不再逐个映射成 getter。会话不缓存上一帧快照：弹层计数
+  （`ensureLocalSongsReady`）与失败重试（`retry`）只接受 `sync` 交回的
+  `CollectionFrame`（端口 / 快照 / 下载 / 缓存 / 落库列表 id），页面不存在
+  「先 sync 一次」的隐藏调用顺序；多选的生产入口也收在会话意图
+  （`clearSelection` / `selectAllVisible` / `isSelected` / `selectedCount`），
+  页面不直接持有 `CollectionSelection`。资料库读取
   阶段与写入结果都是类型化值（`LibraryReadState` / `LibraryMutationOutcome`）：
   读取失败给重试态而不是空资料库，批量写入只在成功（含无变化）后清空选择。
   列表曲目读取失败会保留错误，只有显式重试（`force`）或仓库变更事件才重读
@@ -786,6 +792,11 @@
 module（见下）：
 
 - **模块拆分**：`DownloadService` 只做编排，五个 module 各有一份唯一实现——
+  `lib/services/download/download_records.dart`（记录只读面：记录表 / 排序
+  列表 / `initialized` / `supported` / `revision` 的唯一持有者；收藏、单曲
+  本地数据与分享只依赖它，下载进度不经过这里）、
+  `lib/services/download/download_manager.dart`（命令面：管理页 / 本地数据页 /
+  分享 / 导入使用的窄接口，唯一实现是 `DownloadService`）、
   `lib/services/download/download_queue.dart`（下载任务队列：`DownloadTask`
   进度 / 状态、单 worker FIFO、同 key 去重、排队 / 运行取消、失败保留重试；
   不持久化、无跨重启恢复）、
@@ -1320,14 +1331,15 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   ≥5 项或长文案 → Dropdown（必设 `fieldStyle.hintText`）、区间数值 → Slider、
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
-  AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经 `SettingsPage`
-  的内部 Navigator 在同一弹层内 push（`openSettingsSubPage`）；省流模式不单开
+  AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经设置弹层壳
+  （`lib/widgets/settings/settings_sheet.dart`）的内部 Navigator 在同一弹层内
+  push（`openSettingsSubPage`）；省流模式不单开
   子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
   与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
   再关弹层：窄屏底部弹层由 `showPageModal(onDismissRequest:)` guard 读取
   内部 Navigator 的 `canPop()`（M3E 弹层宿主会给层内所有 PopScope 回调发 didPop=false
   并请求关闭，必须由 guard 挡下）；宽屏设置弹窗是 `M3EDialog.show` + `PageModalCard`，
-  返回仍由页面自己的 `NavigatorPopHandler` 先退子页。对话框 / 独立挂载同样由它承接。
+  返回仍由弹层壳自己的 `NavigatorPopHandler` 先退子页。
   弹层内 dialog 挂在 root navigator（`M3EDialog.show` 语义），关闭须显式
   `rootNavigator: true`。
 - 页面过渡 / 预测返回：Android 侧 `PageTransitionsTheme` 必须保留
@@ -1342,7 +1354,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   二级页宽屏侧滑走 `M3ESideSheet.show`、页面型弹窗走 `M3EDialog.show` 路由，scrim /
   弹簧 / 键盘 inset / 关闭手势都由 M3E 宿主处理；自建 route 只剩全局搜索遮罩。
   嵌套 Navigator（设置弹层内层）由
-  `SettingsPage._SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
+  `settings_sheet.dart` 的 `_SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
   过渡保持 fade-forwards 并附一个预测返回 detector，只在
   `内层路由 isCurrent && popGestureEnabled && 内层 Navigator 还能 pop &&
   弹层路由仍是顶层` 时接管。框架会把一次手势派发给**所有**返回 true 的观察者，
@@ -1352,7 +1364,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
     FadeForwards 页面退场；提交只退子页，弹层保留（guard 读 coordinator 返回 false）。
   - 首屏手势：弹层正常收缩，提交关闭设置。
   护栏见 `test/settings_page_test.dart` 的「子页预测返回由页面接管」「根导航器上方
-  dialog」两组用例。
+  dialog」两组用例；协议本身由 `test/settings_sheet_back_coordinator_test.dart`
+  直接覆盖（含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。
   `test/architecture/icon_usage_test.dart` 扫描强制。**同一按钮的状态图标切换**统一走
@@ -1374,7 +1387,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `lib/widgets/track_actions.dart`；单曲本地数据在
   `lib/pages/track_local_data_page.dart`（读取唯走 `TrackLocalDataService`，
   两档词表见 ADR-0008），缓存内容变更经 `CacheService.revision`、下载记录经
-  `DownloadService` 通知跨页刷新。
+  `DownloadRecords` 通知跨页刷新。
 - 列表行统一走 `lib/widgets/track_row.dart`（队列/收藏/历史/本地歌曲/发现/搜索结果共用）：形状按 M3E 列表规范
   （静止内 4dp、首末外侧 16dp；hover 12dp；press/选中 16dp），带 expressive spatial 弹簧
   morph；分段列表用 `cardList.gap`（2dp）行距、

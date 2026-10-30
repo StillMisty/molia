@@ -99,6 +99,29 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
+  Future<int> addHistoryTracks(
+    List<PlaylistTrack> tracks, {
+    int? playedAt,
+  }) {
+    if (tracks.isEmpty) return Future.value(0);
+    final base = playedAt ?? DateTime.now().millisecondsSinceEpoch;
+    return addHistoryEntries([
+      for (var i = 0; i < tracks.length; i++)
+        PlayHistoryEntry(
+          sourceKey: tracks[i].sourceKey,
+          songId: tracks[i].songId,
+          title: tracks[i].title,
+          artist: tracks[i].artist,
+          album: tracks[i].album,
+          coverUrl: tracks[i].coverUrl,
+          durationMs: tracks[i].durationMs,
+          raw: tracks[i].raw,
+          playedAt: base + i,
+        ),
+    ]);
+  }
+
+  @override
   Future<void> clearHistory() async {
     _history.clear();
     _changed(const LibraryChange.history());
@@ -234,38 +257,50 @@ class FakeLibraryRepository implements LibraryStore {
     List<PlaylistTrack> tracks, {
     bool favoriteChange = false,
   }) async {
+    final result = await _insertTracks(
+      playlistId,
+      tracks,
+      favoriteChange: favoriteChange,
+    );
+    return result.added;
+  }
+
+  Future<({int added, List<PlaylistTrack> inserted})> _insertTracks(
+    int playlistId,
+    List<PlaylistTrack> tracks, {
+    required bool favoriteChange,
+  }) async {
     if (failTrackWrites) throw StateError('playlist tracks write failed');
-    if (tracks.isEmpty) return 0;
+    if (tracks.isEmpty) return (added: 0, inserted: const <PlaylistTrack>[]);
     final list = _tracks.putIfAbsent(playlistId, () => []);
-    var added = 0;
+    final inserted = <PlaylistTrack>[];
     for (final track in tracks) {
       final exists = list.any(
           (t) => t.sourceKey == track.sourceKey && t.songId == track.songId);
       if (exists) continue;
-      list.add(
-        PlaylistTrack(
-          playlistId: playlistId,
-          sourceKey: track.sourceKey,
-          songId: track.songId,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          coverUrl: track.coverUrl,
-          durationMs: track.durationMs,
-          raw: track.raw,
-          addedAt: track.addedAt,
-          sortOrder: list.length,
-        ),
+      final row = PlaylistTrack(
+        playlistId: playlistId,
+        sourceKey: track.sourceKey,
+        songId: track.songId,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        coverUrl: track.coverUrl,
+        durationMs: track.durationMs,
+        raw: track.raw,
+        addedAt: track.addedAt,
+        sortOrder: list.length,
       );
-      added++;
+      list.add(row);
+      inserted.add(row);
     }
-    if (added > 0) {
+    if (inserted.isNotEmpty) {
       _syncTrackCount(playlistId);
       _changed(favoriteChange
           ? const LibraryChange.favorites()
           : LibraryChange.playlistTracks(playlistId));
     }
-    return added;
+    return (added: inserted.length, inserted: inserted);
   }
 
   @override
@@ -521,21 +556,38 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
-  Future<({int playlistId, int added, int total, bool created})> importTracks(
+  Future<({
+    int playlistId,
+    int added,
+    int total,
+    bool created,
+    List<PlaylistTrack> rows,
+  })> importTracks(
     String name,
     List<PlaylistTrack> tracks,
   ) async {
     if (tracks.isEmpty) {
-      return (playlistId: -1, added: 0, total: 0, created: false);
+      return (
+        playlistId: -1,
+        added: 0,
+        total: 0,
+        created: false,
+        rows: const <PlaylistTrack>[],
+      );
     }
     final existing = await findPlaylistByName(name);
     final playlistId = existing?.id ?? await createPlaylist(name);
-    final added = await addTracksToPlaylist(playlistId, tracks);
+    final inserted = await _insertTracks(
+      playlistId,
+      tracks,
+      favoriteChange: false,
+    );
     return (
       playlistId: playlistId,
-      added: added,
+      added: inserted.added,
       total: tracks.length,
       created: existing == null,
+      rows: inserted.inserted,
     );
   }
 

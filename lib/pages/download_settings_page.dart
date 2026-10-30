@@ -14,7 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
-import '../services/download/download_service.dart';
+import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
 import '../services/notification_permission.dart';
 import '../services/notification_service.dart';
@@ -38,7 +38,7 @@ class DownloadSettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = context.watch<DownloadSettings>();
-    final downloads = context.watch<DownloadService?>();
+    final downloads = context.watch<DownloadManager?>();
     final saveAs = context.read<SaveAs?>();
     return SettingsSubPage(
       title: l10n.downloadSettingsTitle,
@@ -50,7 +50,8 @@ class DownloadSettingsPage extends StatelessWidget {
               icon: Icons.folder_rounded,
               title: l10n.downloadSaveLocation,
               subtitle: switch (defaultTargetPlatform) {
-                TargetPlatform.android => settings.publishToPublicDir
+                TargetPlatform.android =>
+                  settings.publishToPublicDir
                     ? l10n.downloadSaveLocationFixedHintAndroid
                     : l10n.downloadSaveLocationFixedHintAndroidOff,
                 TargetPlatform.iOS => l10n.downloadSaveLocationFixedHintIos,
@@ -58,9 +59,7 @@ class DownloadSettingsPage extends StatelessWidget {
               },
               value: _saveLocationLabel(l10n, settings),
               onTap: _supportsCustomSaveDir
-                  ? () => unawaited(
-                        _pickDirectory(context, settings, saveAs),
-                      )
+                  ? () => unawaited(_pickDirectory(context, settings, saveAs))
                   : () => M3ESnackbar.show(
                         context,
                         message: _fixedLocationHint(l10n, settings),
@@ -149,8 +148,7 @@ class DownloadSettingsPage extends StatelessWidget {
                     key: const Key('downloadPublicLocationInfoItem'),
                     icon: Icons.public_rounded,
                     title: l10n.downloadPublicCopyLocation,
-                    subtitle:
-                        snapshot.data ?? l10n.downloadSaveLocationAndroid,
+                    subtitle: snapshot.data ?? l10n.downloadSaveLocationAndroid,
                   ),
                 ),
             ],
@@ -161,10 +159,7 @@ class DownloadSettingsPage extends StatelessWidget {
   }
 
   /// 保存位置的显示值：桌面显示自定义路径 / 默认；移动端说明实际落点。
-  String _saveLocationLabel(
-    AppLocalizations l10n,
-    DownloadSettings settings,
-  ) {
+  String _saveLocationLabel(AppLocalizations l10n, DownloadSettings settings) {
     if (_isAndroid) return l10n.downloadSaveLocationAndroid;
     if (_isIos) return l10n.downloadSaveLocationIos;
     return settings.saveDir.isEmpty
@@ -172,10 +167,7 @@ class DownloadSettingsPage extends StatelessWidget {
         : settings.saveDir;
   }
 
-  String _fixedLocationHint(
-    AppLocalizations l10n,
-    DownloadSettings settings,
-  ) {
+  String _fixedLocationHint(AppLocalizations l10n, DownloadSettings settings) {
     if (_isAndroid) {
       return settings.publishToPublicDir
           ? l10n.downloadSaveLocationFixedHintAndroid
@@ -221,11 +213,7 @@ class DownloadSettingsPage extends StatelessWidget {
         builder: (context, setDialogState) {
           final preview = DownloadSettings.applyTemplate(
             controller.text,
-            const {
-              'artist': '歌手',
-              'title': '歌名',
-              'album': '专辑',
-            },
+            const {'artist': '歌手', 'title': '歌名', 'album': '专辑'},
           );
           return M3EDialog(
             title: l10n.downloadFilenameTemplate,

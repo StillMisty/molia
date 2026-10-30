@@ -33,7 +33,8 @@ import 'playback_power_policy.dart';
 import 'queue_projection.dart';
 
 // provider 仍只 import 协调者：命令结果与命令面同源，避免再添一个 import。
-export 'playback_commands.dart' show PlaybackCommandOutcome, PlaybackDomain;
+export 'playback_commands.dart'
+    show PlaybackCommandOutcome, PlaybackDomain, PlaybackReplaceScope;
 
 final _logger = Logger('molia.playback_session');
 
@@ -377,9 +378,9 @@ class PlaybackSessionCoordinator
     return PlaybackCommandOutcome.trackOnly;
   }
 
-  /// 自动换源写回：把队列中 [trackUri] 的曲目原地替换为 [newTrack]。
+  /// 自动换源写回：把 live 队列中 [trackUri] 的曲目原地替换为 [newTrack]。
   ///
-  /// 只有 live 会处理：自动换源由真实播放失败触发，恢复态没有真实队列可换，
+  /// 只改真实播放：自动换源由真实播放失败触发，恢复态没有真实队列可换，
   /// 改保存的会话只会让 UI 显示一首并未播放的曲目——因此返回
   /// [PlaybackCommandOutcome.none]。未命中（uri 不在队列）同样是 no-op。
   ///
@@ -391,38 +392,28 @@ class PlaybackSessionCoordinator
   Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
-  ) async {
-    if (phase == PlaybackSessionPhase.restored) {
-      return PlaybackCommandOutcome.none;
-    }
-    final live = _facade.snapshot.value;
-    if (live.current == null) return PlaybackCommandOutcome.none;
-    if (!live.queue.any((track) => track.id.uri == trackUri)) {
-      return PlaybackCommandOutcome.none;
-    }
-    await _facade.replaceQueueTrack(trackUri, newTrack);
-    await _commitLiveSession();
-    return PlaybackCommandOutcome.trackAndQueue;
-  }
+  ) =>
+      _replaceTrack(
+        trackUri,
+        newTrack,
+        scope: PlaybackReplaceScope.liveOnly,
+      );
 
   /// 播放队列中指定 id 的曲目（队列面板点击）；未命中返回
   /// [PlaybackCommandOutcome.none]。
   ///
-  /// 恢复态下 facade 队列为空：命中保存的会话队列则从该曲目恢复播放。
+  /// 只负责把 id 解析成下标（live 队列优先，其次恢复态保存的会话队列），
+  /// 阶段路由、越界校验与提交都复用 [playQueueIndex]——队列播放只有一条路径。
   Future<PlaybackCommandOutcome> playQueueItemById(String trackId) async {
-    final queue = _facade.snapshot.value.queue;
-    final index = queue.indexWhere((track) => track.id.uri == trackId);
-    if (index < 0) {
-      final session = _restoredSession;
-      if (session == null) return PlaybackCommandOutcome.none;
-      final restoredIndex =
-          session.tracks.indexWhere((track) => track.id.uri == trackId);
-      if (restoredIndex < 0) return PlaybackCommandOutcome.none;
-      return resume(startIndex: restoredIndex);
-    }
-    await _facade.playQueueIndex(index);
-    await _commitLiveSession();
-    return PlaybackCommandOutcome.trackOnly;
+    // 下标必须与 playQueueIndex 接下来读取的那份队列同源：恢复阶段解析
+    // 保存会话，live 阶段解析 facade 队列。否则交接窗口里两份队列顺序不同
+    // 时会播到另一首。
+    final restored = phase == PlaybackSessionPhase.restored;
+    final tracks =
+        restored ? _restoredSession!.tracks : _facade.snapshot.value.queue;
+    final index = tracks.indexWhere((track) => track.id.uri == trackId);
+    if (index < 0) return PlaybackCommandOutcome.none;
+    return playQueueIndex(index);
   }
 
   /// seek：恢复装载期间记下用户目标（恢复流程末尾以它为准），恢复态只更新
@@ -451,42 +442,85 @@ class PlaybackSessionCoordinator
     return PlaybackCommandOutcome.trackOnly;
   }
 
-  /// 换源：把队列中的 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
+  /// 换源：把队列中的 [oldTrack] 原地替换为 [newTrack]（库内 / 手动换源）。
   ///
-  /// facade 队列命中走真实替换（命中当前曲目会重新取链）；恢复态（facade 队列
-  /// 为空）替换保存的会话队列并落盘。未命中不算失败：库内换源与队列跟随解耦。
-  /// 返回前等写队列排空（命中才可能产生写入）；live 的提交点按内容去重，
-  /// 当前曲目换源（快照监听已写）不会重复写，非当前槽位 / 同 id 换元数据
-  /// 才补一次。
-  Future<bool> replaceTrack(Track oldTrack, Track newTrack) async {
-    final uri = oldTrack.id.uri;
-    final live = _facade.snapshot.value;
-    var hit = false;
-    var liveHit = false;
-    if (live.queue.any((track) => track.id.uri == uri)) {
-      await _facade.replaceQueueTrack(uri, newTrack);
-      hit = true;
-      liveHit = true;
+  /// 与 [replaceQueueTrack] 共用同一个实现，区别只有作用范围：live 队列与
+  /// 恢复态保存的会话都跟随。facade 队列命中走真实替换（命中当前曲目会重新
+  /// 取链）；恢复态（facade 队列为空）替换保存的会话队列并落盘。未命中不算
+  /// 失败：库内换源与队列跟随解耦。返回 [PlaybackCommandOutcome.trackAndQueue]
+  /// 表示至少命中一处；返回前等写队列排空（命中才可能产生写入）。
+  Future<PlaybackCommandOutcome> replaceTrack(
+    Track oldTrack,
+    Track newTrack,
+  ) =>
+      _replaceTrack(
+        oldTrack.id.uri,
+        newTrack,
+        scope: PlaybackReplaceScope.liveAndRestored,
+      );
+
+  /// 换源的唯一实现：解析 uri → 改 live / 恢复态 → 提交一次。
+  ///
+  /// [PlaybackReplaceScope.liveOnly] 只处理真实播放（恢复态 / 无曲目 no-op）；
+  /// [PlaybackReplaceScope.liveAndRestored] 两处各自命中才改。提交点只有一个：
+  /// live 可保存时按 [_commitLiveSession] 的内容去重提交，否则只有恢复态命中
+  /// 时写保存的会话——每个命令最多一次写请求。
+  Future<PlaybackCommandOutcome> _replaceTrack(
+    String trackUri,
+    Track newTrack, {
+    required PlaybackReplaceScope scope,
+  }) async {
+    // 自动换源只跟随真实播放：恢复阶段即使 facade 已经推了队列（还没有
+    // current），也不能改它——那会让恢复态 UI 显示一首并未播放的曲目。
+    if (scope == PlaybackReplaceScope.liveOnly &&
+        phase == PlaybackSessionPhase.restored) {
+      return PlaybackCommandOutcome.none;
     }
-    final session = _restoredSession;
-    if (session != null && session.tracks.any((track) => track.id.uri == uri)) {
+    final live = _facade.snapshot.value;
+    final liveHit = live.queue.any((track) => track.id.uri == trackUri);
+    if (scope == PlaybackReplaceScope.liveOnly &&
+        (live.current == null || !liveHit)) {
+      return PlaybackCommandOutcome.none;
+    }
+    if (liveHit) {
+      await _facade.replaceQueueTrack(trackUri, newTrack);
+    }
+    // live 替换可能触发真实播放接管并撤下恢复态；改恢复态前重新读取，
+    // 与「先 live 再 restored」的既有顺序一致。
+    final session = scope == PlaybackReplaceScope.liveAndRestored
+        ? _restoredSession
+        : null;
+    final restoredHit = session != null &&
+        session.tracks.any((track) => track.id.uri == trackUri);
+    if (!liveHit && !restoredHit) return PlaybackCommandOutcome.none;
+    if (restoredHit) {
       _restoredSession = session.copyWith(
         tracks: [
           for (final track in session.tracks)
-            track.id.uri == uri ? newTrack : track,
+            track.id.uri == trackUri ? newTrack : track,
         ],
       );
       _publishRestoredSnapshot();
-      await _store.save(_restoredSession!);
-      hit = true;
     }
-    // live 的换源结果不能等下一分钟整份刷新：提交点保证返回前已写入。
-    if (liveHit) {
+    await _commitReplacement(liveHit: liveHit, restoredHit: restoredHit);
+    return PlaybackCommandOutcome.trackAndQueue;
+  }
+
+  /// 换源的单一提交点（见 [_replaceTrack]）。
+  Future<void> _commitReplacement({
+    required bool liveHit,
+    required bool restoredHit,
+  }) async {
+    // live 与恢复态同时命中只可能出现在交接窗口：live 可保存时以 live 为准
+    // （恢复态随后会被真实播放接管丢弃）；否则提交恢复态，保证不丢换源结果。
+    if (liveHit && _hasSavableSession(_facade.snapshot.value)) {
       await _commitLiveSession();
-    } else if (hit) {
-      await _store.pendingWrite;
+      return;
     }
-    return hit;
+    if (restoredHit) {
+      await _store.save(_restoredSession!);
+    }
+    await _store.pendingWrite;
   }
 
   /// 设置播放模式。

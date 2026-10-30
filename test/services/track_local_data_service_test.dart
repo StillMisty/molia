@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/data/mapping/track_mapper.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/track.dart';
@@ -11,13 +10,14 @@ import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage_io.dart';
+
 import '../support/memory_cache_storage.dart';
-import 'package:molia/services/download/download_service.dart';
+
+import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../support/fake_download_storage.dart';
 import '../support/fake_music_source.dart';
 
 /// 可解析的假音源：用于把取链缓存灌进 CatalogService。
@@ -28,8 +28,7 @@ class _ResolvableSource extends FakeMusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
-  }) async =>
-      PlayableStream(Uri.parse('https://cdn.example/${track.id.id}'));
+  }) async => PlayableStream(Uri.parse('https://cdn.example/${track.id.id}'));
 }
 
 /// 假封面缓存：只记录「有哪些 URL 被命中/删除」，不碰 flutter_cache_manager。
@@ -52,23 +51,6 @@ class _FakeArtworkCache extends ArtworkCache {
   }
 }
 
-/// 可编排的下载记录假件：只覆盖页面 / 门面消费的读方法。
-class _FakeDownloadService extends DownloadService {
-  _FakeDownloadService()
-      : super(
-          catalog: CatalogService(registry: FakeSourceRegistry(const {})),
-          repository: DownloadsRepository(
-            databaseProvider: () => throw UnimplementedError(),
-          ),
-          storage: FakeDownloadStorage(),
-        );
-
-  DownloadedTrack? record;
-
-  @override
-  DownloadedTrack? recordForTrack(Track track) => record;
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -76,7 +58,7 @@ void main() {
   late SharedPreferences prefs;
   late CacheService cacheService;
   late _FakeArtworkCache artworkCache;
-  late _FakeDownloadService downloadService;
+  late DownloadRecords downloadRecords;
   late _ResolvableSource source;
   late CatalogService catalogService;
   late TrackLocalDataService service;
@@ -94,7 +76,7 @@ void main() {
       audioProtectAge: Duration.zero, // 测试文件视为“非活动”
     );
     artworkCache = _FakeArtworkCache();
-    downloadService = _FakeDownloadService();
+    downloadRecords = DownloadRecords();
     source = _ResolvableSource('kw');
     catalogService = CatalogService(
       registry: FakeSourceRegistry({'kw': source}),
@@ -103,12 +85,12 @@ void main() {
       cacheService: cacheService,
       artworkCache: artworkCache,
       catalogService: catalogService,
-      downloadService: downloadService,
+      downloadRecords: downloadRecords,
     );
   });
 
   tearDown(() async {
-    downloadService.dispose();
+    downloadRecords.dispose();
     if (await tempRoot.exists()) {
       await tempRoot.delete(recursive: true);
     }
@@ -186,7 +168,8 @@ void main() {
 
   test('loadMany：下载记录附着为 downloaded 口径；空表不触存储', () async {
     final a = track();
-    downloadService.record = DownloadedTrack(
+    downloadRecords.replaceAll([
+      DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
       title: a.title,
@@ -194,7 +177,8 @@ void main() {
       album: '',
       filePath: '/downloads/Title a.mp3',
       downloadedAt: 1,
-    );
+      ),
+    ]);
 
     final data = await service.loadMany([a]);
 
@@ -215,13 +199,13 @@ void main() {
       '$audioCachePartSuffix',
       50,
     );
-    expect(
-      await service.cachedAudioTrackIds([a, b]),
-      {const TrackId('kw', 'a')},
-    );
+    expect(await service.cachedAudioTrackIds([a, b]), {
+      const TrackId('kw', 'a'),
+    });
 
     // 有音频下载就归下载档（下载优先）：缓存文件还在也不算「已缓存」。
-    downloadService.record = DownloadedTrack(
+    downloadRecords.replaceAll([
+      DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
       title: a.title,
@@ -229,7 +213,8 @@ void main() {
       album: '',
       filePath: '/downloads/Title a.mp3',
       downloadedAt: 1,
-    );
+      ),
+    ]);
     expect(
       await service.cachedAudioTrackIds([a, b]),
       isEmpty,
@@ -248,7 +233,8 @@ void main() {
     );
     expect((await service.load(t)).audioState, LocalPartState.cached);
 
-    downloadService.record = DownloadedTrack(
+    downloadRecords.replaceAll([
+      DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
       title: t.title,
@@ -258,7 +244,8 @@ void main() {
       quality: '320k',
       sizeBytes: 1024,
       downloadedAt: 1,
-    );
+      ),
+    ]);
     final data = await service.load(t);
     expect(data.audioState, LocalPartState.downloaded);
     expect(data.hasAudioDownload, isTrue);
@@ -277,7 +264,8 @@ void main() {
     expect(cached.artworkState, LocalPartState.cached);
     expect(cached.audioState, LocalPartState.none);
 
-    downloadService.record = DownloadedTrack(
+    downloadRecords.replaceAll([
+      DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
       title: t.title,
@@ -286,7 +274,8 @@ void main() {
       lyricPath: '/downloads/lyrics/Title a.lrc',
       coverPath: '/downloads/covers/Title a.jpg',
       downloadedAt: 1,
-    );
+      ),
+    ]);
     final downloaded = await service.load(t);
     expect(downloaded.lyricsState, LocalPartState.downloaded);
     expect(downloaded.artworkState, LocalPartState.downloaded);
@@ -294,7 +283,8 @@ void main() {
 
   test('downloadState：同步种子只带下载档，缓存占用为零', () {
     final t = track();
-    downloadService.record = DownloadedTrack(
+    downloadRecords.replaceAll([
+      DownloadedTrack(
       originSourceKey: 'kw',
       originSongId: 'a',
       title: t.title,
@@ -303,7 +293,8 @@ void main() {
       filePath: '/downloads/Title a.mp3',
       sizeBytes: 2048,
       downloadedAt: 1,
-    );
+      ),
+    ]);
     final seed = service.downloadState(t);
     expect(seed.audioState, LocalPartState.downloaded);
     expect(seed.audioCache, CacheUsage.zero);
@@ -340,10 +331,7 @@ void main() {
       catalogService: catalogService,
     );
     final t = track();
-    await writeAudio(
-      AudioCacheStore.keyForTrack(t, quality: '320k'),
-      100,
-    );
+    await writeAudio(AudioCacheStore.keyForTrack(t, quality: '320k'), 100);
 
     final result = await guarded.clear(t, LocalCachePart.audio);
     expect(result.cleared, isFalse);

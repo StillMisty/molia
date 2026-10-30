@@ -34,6 +34,7 @@ class LocalSongsInput {
     required this.downloads,
     required this.supported,
     required this.initialized,
+    required this.recordsRevision,
     required this.cacheRevision,
   });
 
@@ -55,10 +56,16 @@ class LocalSongsInput {
   /// 下载记录是否已加载；未加载完成时合集显示加载态，避免空态闪烁。
   final bool initialized;
 
+  /// 下载记录 revision（记录替换 / 删除 / 初始化 / 能力变化时递增）。
+  ///
+  /// 记录键相同也可能换了快照（标题 / 路径 / 分项），revision 是「是否重算
+  /// 缓存行」的失效信号；它不参与展示。
+  final int recordsRevision;
+
   /// 音频缓存 revision（清缓存 / LRU 淘汰后递增）。
   final int cacheRevision;
 
-  /// 重算签名 = 历史键 + 下载记录键 + 缓存 revision。
+  /// 重算签名 = 历史键 + 下载记录键 + 记录 revision + 缓存 revision。
   ///
   /// 顺序敏感：历史在重新进入合集时会按最近播放重排（停留期间冻结）、下载
   /// 记录顺序变化也值得重算，与页面原实现保持同一口径（签名相同则零等待
@@ -66,6 +73,7 @@ class LocalSongsInput {
   int get signature => Object.hash(
         Object.hashAll([for (final entry in history) entry.key]),
         Object.hashAll([for (final record in downloads) record.key]),
+    recordsRevision,
         cacheRevision,
       );
 }
@@ -77,13 +85,24 @@ class LocalSongsInput {
 /// 令牌，输入已经变过的旧结果直接丢弃——不能把旧历史算出的缓存行盖到新
 /// 输入上。
 class LocalSongsCollection extends ChangeNotifier {
-  LocalSongsCollection(
-      {required this._loadCachedAudioTrackIds});
+  LocalSongsCollection({required this._loadCachedAudioTrackIds});
 
   final CachedAudioTrackIdsLookup _loadCachedAudioTrackIds;
 
   LocalSongsInput? _input;
   List<CollectionLocalSong> _cachedRows = const [];
+
+  /// [rows] 的缓存：输入签名、历史 / 下载列表身份与缓存行身份都没变时复用
+  /// 同一个列表。presenter 按源列表引用缓存视图，每次 build 新分配行列表会
+  /// 让本地歌曲视图永远命中不了缓存、选择集每帧全量重扫。
+  List<CollectionLocalSong>? _rows;
+  int? _rowsSignature;
+  List<DownloadedTrack>? _rowsDownloads;
+  List<PlayHistoryEntry>? _rowsHistory;
+  List<CollectionLocalSong>? _rowsCachedRows;
+
+  /// [rows] 被替换的次数（测试 / 诊断信号；内容变化才递增）。
+  int _rowsRevision = 0;
 
   /// 最近一次请求的输入签名（null = 还没同步过）。
   int? _signature;
@@ -106,17 +125,42 @@ class LocalSongsCollection extends ChangeNotifier {
   /// 缓存行来自上一轮落定结果（与页面原实现一致：新输入加载期间旧缓存行
   /// 保持可见，避免列表整段闪空）；下载记录始终取当前输入，删除下载后
   /// 立即消失。
+  ///
+  /// 输入没变时返回上一份列表本身：presenter 按源列表引用判断视图是否可
+  /// 复用，行为算出的新列表会让本地歌曲视图每帧重新投影、选择集每帧重扫。
+  /// 失效条件：输入签名（历史键 / 下载键 / 记录 revision / 缓存 revision）、
+  /// 历史与下载列表身份（同键换快照不改 revision 的情况）、缓存行列表身份
+  /// （异步列举落定）。
   List<CollectionLocalSong> get rows {
     final input = _input;
     if (input == null || !input.supported) return const [];
+    final signature = input.signature;
+    final cached = _rows;
+    if (cached != null &&
+        _rowsSignature == signature &&
+        identical(_rowsDownloads, input.downloads) &&
+        identical(_rowsHistory, input.history) &&
+        identical(_rowsCachedRows, _cachedRows)) {
+      return cached;
+    }
     final downloadKeys = {for (final record in input.downloads) record.key};
-    return [
+    final rows = [
       for (final record in input.downloads)
         CollectionLocalSong.download(record),
       for (final row in _cachedRows)
         if (!downloadKeys.contains(row.key)) row,
     ];
+    _rows = rows;
+    _rowsSignature = signature;
+    _rowsDownloads = input.downloads;
+    _rowsHistory = input.history;
+    _rowsCachedRows = _cachedRows;
+    _rowsRevision++;
+    return rows;
   }
+
+  /// [rows] 被替换的次数（内容变化才递增；测试 / 诊断用）。
+  int get rowsRevision => _rowsRevision;
 
   /// 弹层计数与列表行数同源（下载 / 导入 + 缓存行，去重后）。
   int get count => rows.length;
@@ -155,6 +199,8 @@ class LocalSongsCollection extends ChangeNotifier {
       _indexLoading = false;
       _cachedRows = const [];
       _loadedSignature = null;
+      // 能力恢复后必须重新组装行（不能把关闭期间的缓存当成当前内容）。
+      _rows = null;
       return Future<void>.value();
     }
     if (_signature == signature && _loadedSignature == signature) {

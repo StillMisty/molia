@@ -7,7 +7,6 @@ import 'package:image/image.dart' as image;
 import 'package:molia/data/catalog/album_service.dart';
 import 'package:molia/data/catalog/artist_service.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/downloads/downloads_repository.dart';
 import 'package:molia/domain/models/album.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/download.dart';
@@ -27,10 +26,9 @@ import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/data_saver_service.dart';
-
-import '../support/memory_cache_storage.dart';
-
-import 'package:molia/services/download/download_service.dart';
+import 'package:molia/services/download/download_manager.dart';
+import 'package:molia/services/download/download_queue.dart';
+import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/lyrics_provider_label.dart';
@@ -42,9 +40,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../support/fake_download_storage.dart';
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
+import '../support/memory_cache_storage.dart';
 
 /// 记录型提示服务：断言 Snackbar 文案与「取消」回调。
 class _RecordingNotificationService extends NotificationService {
@@ -62,7 +60,7 @@ class _RecordingNotificationService extends NotificationService {
   }
 }
 
-/// 可编排的单曲本地数据假件：数据来自假下载服务记录 + 各分项占用表。
+/// 可编排的单曲本地数据假件：数据来自下载记录 + 各分项占用表。
 class _FakeLocalDataService extends TrackLocalDataService {
   _FakeLocalDataService({required this.downloads})
     : super(
@@ -71,9 +69,10 @@ class _FakeLocalDataService extends TrackLocalDataService {
           cacheService: CacheService(storage: MemoryCacheStorage()),
         ),
         catalogService: CatalogService(registry: FakeSourceRegistry(const {})),
+        downloadRecords: downloads,
       );
 
-  final _FakeDownloadService downloads;
+  final DownloadRecords downloads;
 
   /// 按曲目 id 编排缓存（验证两档状态与切歌后重载）。
   final Map<String, CacheUsage> audioCacheByTrack = {};
@@ -97,7 +96,7 @@ class _FakeLocalDataService extends TrackLocalDataService {
 
   @override
   TrackLocalData downloadState(Track track) =>
-      TrackLocalData(download: downloads.record);
+      TrackLocalData(download: downloads.recordForTrack(track));
 
   @override
   Future<TrackLocalData> load(Track track) async {
@@ -106,7 +105,7 @@ class _FakeLocalDataService extends TrackLocalDataService {
     final gate = loadGate;
     if (gate != null) await gate.future;
     return TrackLocalData(
-      download: downloads.record,
+      download: downloads.recordForTrack(track),
       audioCache: audioCacheByTrack[track.id.uri] ?? CacheUsage.zero,
       audioWriting: audioWritingByTrack[track.id.uri] ?? CacheUsage.zero,
       lyricsCache: lyricsCacheByTrack[track.id.uri] ?? CacheUsage.zero,
@@ -123,18 +122,29 @@ class _FakeLocalDataService extends TrackLocalDataService {
   }
 }
 
-/// 可编排的下载服务假件：只覆盖页面消费的状态与动作。
-class _FakeDownloadService extends DownloadService {
-  _FakeDownloadService()
-    : super(
-        catalog: CatalogService(registry: FakeSourceRegistry(const {})),
-        repository: DownloadsRepository(
-          databaseProvider: () => throw UnimplementedError(),
-        ),
-        storage: FakeDownloadStorage(),
-      );
+/// 可编排的下载记录假件：真实模块 + 测试手动触发记录通知。
+class _TestDownloadRecords extends DownloadRecords {
+  _TestDownloadRecords() : super(supported: true, initialized: true);
 
   DownloadedTrack? record;
+
+  void setRecord(DownloadedTrack? value) {
+    record = value;
+    replaceAll(value == null ? const [] : [value]);
+  }
+
+  @override
+  DownloadedTrack? recordForTrack(Track track) => record;
+
+  void emitChange() => notifyListeners();
+}
+
+/// 可编排的下载管理面假件：只覆盖页面消费的状态与动作。
+class _FakeDownloadManager extends ChangeNotifier implements DownloadManager {
+  _FakeDownloadManager(this.records);
+
+  final _TestDownloadRecords records;
+
   DownloadTask? task;
   final ValueNotifier<int> taskRevision = ValueNotifier<int>(0);
   bool downloadSupported = true;
@@ -144,17 +154,22 @@ class _FakeDownloadService extends DownloadService {
   int cancelCalls = 0;
   int deleteCalls = 0;
 
+  set record(DownloadedTrack? value) => records.setRecord(value);
+
   @override
   bool get supported => downloadSupported;
 
   @override
-  DownloadedTrack? recordForTrack(Track track) => record;
+  bool get initialized => true;
 
   @override
   Listenable get taskChanges => taskRevision;
 
   @override
   DownloadTask? taskForTrack(Track track) => task;
+
+  @override
+  String defaultQualityFor(Track track) => '320k';
 
   @override
   Future<void> download(
@@ -176,8 +191,8 @@ class _FakeDownloadService extends DownloadService {
     coverCalls++;
   }
 
-  /// 模拟一次下载记录变化（真实服务只在记录 / 能力变化时通知）。
-  void emitDownloadChange() => notifyListeners();
+  /// 模拟一次下载记录变化（真实记录模块只在记录 / 能力变化时通知）。
+  void emitDownloadChange() => records.emitChange();
 
   /// 模拟一次任务结构变化（入队 / 完成 / 失败）。
   void emitTaskChange() => taskRevision.value++;
@@ -190,9 +205,11 @@ class _FakeDownloadService extends DownloadService {
   @override
   Future<void> delete(DownloadedTrack downloaded) async {
     deleteCalls++;
-    record = null;
-    notifyListeners();
+    records.setRecord(null);
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 Track _track({
@@ -221,15 +238,17 @@ void main() {
 
   late FakePlaybackBackend backend;
   late PlaybackProvider playback;
-  late _FakeDownloadService downloadService;
+  late _TestDownloadRecords downloadRecords;
+  late _FakeDownloadManager downloadService;
   late _FakeLocalDataService localDataService;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(backend: backend);
-    downloadService = _FakeDownloadService();
-    localDataService = _FakeLocalDataService(downloads: downloadService);
+    downloadRecords = _TestDownloadRecords();
+    downloadService = _FakeDownloadManager(downloadRecords);
+    localDataService = _FakeLocalDataService(downloads: downloadRecords);
   });
 
   tearDown(() => playback.dispose());
@@ -237,7 +256,7 @@ void main() {
   Future<void> pumpView(
     WidgetTester tester, {
     Track? track,
-    DownloadService? downloads,
+    DownloadManager? downloads,
     SourceRegistry? registry,
     AlbumService? albumService,
     ArtistService? artistService,
@@ -259,8 +278,9 @@ void main() {
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider(create: (_) => LyricsProvider()),
           Provider<TrackLocalDataService>.value(value: localDataService),
+          ChangeNotifierProvider<DownloadRecords>.value(value: downloadRecords),
           if (downloads != null)
-            ChangeNotifierProvider<DownloadService>.value(value: downloads),
+            ChangeNotifierProvider<DownloadManager>.value(value: downloads),
           if (registry != null) Provider<SourceRegistry>.value(value: registry),
           if (albumService != null)
             Provider<AlbumService>.value(value: albumService),
@@ -831,9 +851,7 @@ void main() {
   });
 
   testWidgets('本地数据页：单独下载歌词先确认省流', (tester) async {
-    SharedPreferences.setMockInitialValues({
-      DataSaverService.keyEnabled: true,
-    });
+    SharedPreferences.setMockInitialValues({DataSaverService.keyEnabled: true});
     final dataSaver = DataSaverService(
       prefs: await SharedPreferences.getInstance(),
       cellularProbe: () async => true,

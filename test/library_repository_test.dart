@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/library_read_model.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/lxmc_decoder.dart';
 import 'package:molia/data/lxmc_decoder_io.dart'
@@ -176,6 +177,58 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(events, hasLength(2)); // 每次批量写入只广播一次
     });
+
+    test('批量加入历史：写路径盖批内时间戳，listHistory 按批次倒序', () async {
+      final fixed = LibraryRepository(
+        databaseProvider: () => db,
+        clock: () => 1000,
+        stamps: testStampIssuer(),
+      );
+      addTearDown(fixed.dispose);
+      PlaylistTrack track(String songId) => PlaylistTrack(
+            playlistId: 0,
+            sourceKey: 'wy',
+            songId: songId,
+            title: 'Song $songId',
+            addedAt: 1,
+          );
+
+      expect(
+        await fixed.addHistoryTracks([track('1'), track('2'), track('3')]),
+        3,
+      );
+      final list = await fixed.listHistory();
+      // 后写入的 playedAt 更大 + rowid 更大：整批在历史顶部倒序。
+      expect(list.map((entry) => entry.songId), ['3', '2', '1']);
+      expect(list.map((entry) => entry.playedAt), [1002, 1001, 1000]);
+
+      // 显式基准：调用方只给批内起点，偏移仍由写路径负责。
+      await fixed.addHistoryTracks([track('4'), track('5')], playedAt: 2000);
+      expect(
+        (await fixed.listHistory()).map((entry) => entry.songId),
+        ['5', '4', '3', '2', '1'],
+      );
+    });
+
+    test('DB 顺序与 LibraryHistoryOrder.resortByRecency 等价', () async {
+      for (final (index, playedAt)
+          in [(0, 100), (1, 400), (2, 300), (3, 200)]) {
+        await repository.addHistoryEntry(
+          history('${index + 1}', playedAt: playedAt),
+        );
+      }
+      final fresh = await repository.listHistory();
+      expect(fresh.map((entry) => entry.songId), ['2', '3', '4', '1']);
+
+      // 内存侧只保证 playedAt 倒序；不同时刻的条目顺序必须与 DB 完全一致。
+      final current = fresh.reversed.toList();
+      final resorted = LibraryHistoryOrder.resortByRecency(current);
+      expect(
+        resorted.map((entry) => entry.songId),
+        fresh.map((entry) => entry.songId),
+        reason: '内存排序口径必须能复现仓库 ORDER BY playedAt DESC',
+      );
+    });
   });
 
   group('playlists / playlist_tracks', () {
@@ -332,6 +385,14 @@ void main() {
       expect(first.total, 2);
       expect(first.playlistId, greaterThan(0));
       expect(first.created, isTrue, reason: '新建列表要能告诉调用方可以预置缓存');
+      // rows 是写路径实际落库行：位置字段已分配，消费方不必再去重 / 重排。
+      expect(first.rows.map((track) => track.songId), ['1', '2']);
+      expect(
+        first.rows.map((track) => track.playlistId),
+        everyElement(first.playlistId),
+      );
+      expect(first.rows.map((track) => track.sortOrder), [0, 1]);
+      expect(first.rows.map((track) => track.addedAt), everyElement(1));
 
       final again = await repository.importTracks(
         '外部歌单',
@@ -340,6 +401,7 @@ void main() {
       expect(again.playlistId, first.playlistId);
       expect(again.added, 0);
       expect(again.created, isFalse);
+      expect(again.rows, isEmpty);
       expect(await repository.listPlaylistTracks(first.playlistId),
           hasLength(2));
 
@@ -347,6 +409,7 @@ void main() {
       expect(empty.playlistId, -1);
       expect(empty.total, 0);
       expect(empty.created, isFalse);
+      expect(empty.rows, isEmpty);
       expect(await repository.findPlaylistByName('空歌单'), isNull);
     });
   });

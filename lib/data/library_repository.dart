@@ -117,6 +117,14 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries) =>
       _writeEngine.addHistoryEntries(entries);
 
+  /// 批量把列表曲目加入播放历史：批内时间戳与顺序由写路径负责。
+  @override
+  Future<int> addHistoryTracks(
+    List<PlaylistTrack> tracks, {
+    int? playedAt,
+  }) =>
+      _writeEngine.addHistoryTracks(tracks, playedAt: playedAt);
+
   @override
   Future<void> clearHistory() => _writeEngine.clearHistory();
 
@@ -351,32 +359,42 @@ class LibraryRepository implements LibraryStore, LibrarySyncStore {
 
   /// 把曲目导入同名列表（不存在则创建；重复导入幂等）。
   ///
-  /// 返回 `(playlistId, 本次新增数, 曲目总数, created)`；供平台链接导入与
-  /// 发现页歌单导入使用（总数用于区分空歌单与全部重复，[created] 让调用方
-  /// 知道「本次导入的曲目就是新列表全量」，可直接建立缓存）。
+  /// 返回 `(playlistId, 本次新增数, 曲目总数, created, rows)`；供平台链接导入
+  /// 与发现页歌单导入使用（总数用于区分空歌单与全部重复，[created] 让调用方
+  /// 知道「本次导入的曲目就是新列表全量」，`rows` 是写路径分配好
+  /// `playlistId` / `sortOrder` / `addedAt` 的实际落库行，可直接预置缓存）。
   ///
   /// 导入保持文件 / 歌单原顺序**追加**到末尾，不受「加入列表位置」偏好影响
   /// （偏好只作用于手动加入与收藏）。
   @override
-  Future<({int playlistId, int added, int total, bool created})> importTracks(
+  Future<({
+    int playlistId,
+    int added,
+    int total,
+    bool created,
+    List<PlaylistTrack> rows,
+  })> importTracks(
     String name,
     List<PlaylistTrack> tracks,
   ) async {
     if (tracks.isEmpty) {
-      return (playlistId: -1, added: 0, total: 0, created: false);
+      return (
+        playlistId: -1,
+        added: 0,
+        total: 0,
+        created: false,
+        rows: const <PlaylistTrack>[],
+      );
     }
     final existing = await findPlaylistByName(name);
     final playlistId = existing?.id ?? await createPlaylist(name);
-    final added = await _writeEngine.addTracksToPlaylist(
-      playlistId,
-      tracks,
-      addToTop: false,
-    );
+    final inserted = await _writeEngine.importTracks(playlistId, tracks);
     return (
       playlistId: playlistId,
-      added: added,
+      added: inserted.added,
       total: tracks.length,
       created: existing == null,
+      rows: inserted.rows,
     );
   }
 

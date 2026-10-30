@@ -157,6 +157,17 @@ class _CountingLibraryRepository extends LibraryRepository {
   }
 
   @override
+  Future<int> addHistoryTracks(
+    List<PlaylistTrack> tracks, {
+    int? playedAt,
+  }) {
+    if (failHistoryWrites) {
+      return Future.error(StateError('history add failed'));
+    }
+    return super.addHistoryTracks(tracks, playedAt: playedAt);
+  }
+
+  @override
   Future<void> renamePlaylist(int id, String name) {
     if (failPlaylistWrites) {
       return Future.error(StateError('playlist rename failed'));
@@ -331,6 +342,24 @@ void main() {
     provider.resortHistoryByRecency();
     expect([for (final item in provider.history) item.songId],
         ['2', '4', '3', '1']);
+  });
+
+  test('批量加入历史：顺序由写入侧决定（后写入的在前）', () async {
+    PlaylistTrack track(String songId) => PlaylistTrack(
+          playlistId: 0,
+          sourceKey: 'wy',
+          songId: songId,
+          title: 'Song $songId',
+          addedAt: 0,
+        );
+
+    final outcome = await provider.addTracksToHistory([track('1'), track('2')]);
+    expect(outcome.changed, 2);
+    await settle();
+    // 写路径按传入顺序盖递增 playedAt；仓库倒序查询让整批倒序出现。
+    expect([for (final item in provider.history) item.songId], ['2', '1']);
+    expect(provider.history.first.playedAt,
+        greaterThan(provider.history.last.playedAt));
   });
 
   test('历史增量：单条写入直接打补丁，不回查仓库', () async {
@@ -1040,6 +1069,8 @@ void main() {
       final view = provider.playlistTracksView(result.playlistId);
       expect(view.ready, isTrue, reason: '新建列表直接预置缓存，不等读库');
       expect(view.tracks!.map((t) => t.songId), ['BV1', 'BV2']);
+      // 位置字段直接用写路径的返回值，provider 不再二次分配 sortOrder。
+      expect(view.tracks!.map((t) => t.sortOrder), [0, 1]);
       expect(provider.playlistsState.isLoading, isFalse,
           reason: '刷新失败也要给终态，不能留在 loading');
       expect(provider.playlists.single.trackCount, 2);

@@ -468,8 +468,9 @@ class CollectionPresenter {
 ///
 /// [source] 是当前合集实际读取的列表（收藏 / 自建 = 曲目；历史 = 历史；
 /// 本地歌曲 = 本地行）。比较列表引用而不是内容：provider 的列表快照按
-/// 「改动即替换」维护，同一引用即同一内容版本；内容不同的新列表必然是新
-/// 引用，缓存自然失效。
+/// 「改动即替换」维护，本地歌曲也把 `rows` 组装结果缓存到输入变化为止，
+/// 三种源都满足「同一引用即同一内容版本」；内容不同的新列表必然是新引用，
+/// 缓存自然失效。
 class _CollectionViewKey {
   const _CollectionViewKey({
     required this.selectedId,

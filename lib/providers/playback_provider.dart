@@ -358,15 +358,13 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 换源：把队列中 [oldTrack] 原地替换为 [newTrack]，返回是否命中。
   ///
-  /// 真实队列经 facade 替换；冷启动恢复态替换保存的会话队列并落盘。
+  /// 真实队列与冷启动恢复态会话都由协调者按范围改写并落盘；这里只按命令
+  /// 结果的变化域通知 UI，与其它播放命令同一条 `_applyOutcome` 路径。
   /// 未命中不算失败：库内换源与队列跟随解耦（曲目可能不在当前队列）。
   Future<bool> replaceQueueTrack(Track oldTrack, Track newTrack) async {
-    final hit = await _session.replaceTrack(oldTrack, newTrack);
-    if (hit) {
-      _notifyCategory('track');
-      _notifyCategory('queue');
-    }
-    return hit;
+    final outcome = await _session.replaceTrack(oldTrack, newTrack);
+    _applyOutcome(outcome);
+    return outcome.hasChanges;
   }
 
   /// 播放本地队列中指定 id 的曲目（队列面板点击）。

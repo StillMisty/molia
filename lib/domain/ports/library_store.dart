@@ -14,6 +14,12 @@ abstract interface class LibraryStore {
   // ── 播放历史 ─────────────────────────────────────────────
   Future<void> addHistoryEntry(PlayHistoryEntry entry);
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries);
+
+  /// 批量把列表曲目加入播放历史（最近播放置顶）。
+  ///
+  /// 批内 `playedAt` 与写入顺序由存储实现负责：调用方不再自己造时间戳。
+  /// [playedAt] 非空时作为批内基准（测试 / 固定时刻用）。
+  Future<int> addHistoryTracks(List<PlaylistTrack> tracks, {int? playedAt});
   Future<List<PlayHistoryEntry>> listHistory({int limit = kHistoryLimit});
   Future<void> deleteHistoryEntry(String sourceKey, String songId);
   Future<int> deleteHistoryEntries(List<TrackKey> keys);
@@ -89,7 +95,16 @@ abstract interface class LibraryStore {
   ///
   /// [created] 表示本次调用新建了列表：新列表的曲目就是本次写入的全量，
   /// 消费方可以据此直接建立缓存，不必再读一次库。
-  Future<({int playlistId, int added, int total, bool created})> importTracks(
+  ///
+  /// [rows] 是写路径实际落库的行（已分配 `playlistId` / `sortOrder` /
+  /// `addedAt`，按导入顺序）：消费方直接用它预置缓存，不要再做去重或重排。
+  Future<({
+    int playlistId,
+    int added,
+    int total,
+    bool created,
+    List<PlaylistTrack> rows,
+  })> importTracks(
     String name,
     List<PlaylistTrack> tracks,
   );

@@ -40,6 +40,7 @@ import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/widgets/molia_mark.dart';
+import 'package:molia/widgets/settings/settings_sheet.dart';
 import 'package:molia/widgets/settings/settings_subpage.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
 

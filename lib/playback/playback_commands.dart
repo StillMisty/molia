@@ -22,6 +22,18 @@ enum PlaybackDomain {
   queue,
 }
 
+/// 换源的作用范围：同一个实现按范围决定是否跟随恢复态会话。
+///
+/// 自动换源由真实播放失败触发，只该改 live 队列；库内 / 手动换源是用户对
+/// 「这首歌」的决定，恢复态下也要同步改写保存的会话，否则冷启动恢复的是旧来源。
+enum PlaybackReplaceScope {
+  /// 只改真实播放队列（恢复态 / 无曲目 = 空操作）。
+  liveOnly,
+
+  /// 真实播放队列与恢复态保存会话都改（各自命中才处理）。
+  liveAndRestored,
+}
+
 /// 一条播放命令的落地结果。
 ///
 /// [changed] 只包含**真正发生变化**的领域：空操作（越界 / 未命中 / 无会话）
@@ -98,9 +110,10 @@ abstract interface class PlaybackCommandPort {
 
   /// 把队列中 [trackUri] 的曲目原地替换为 [newTrack]（自动换源写回）。
   ///
-  /// 只有 live 处理：自动换源由真实播放失败触发，恢复态没有真实队列可换。
-  /// 恢复态 / 无曲目 / 未命中都返回 [PlaybackCommandOutcome.none]；live 返回前
-  /// 保证换源结果已写进会话（重开应用恢复的是新来源，而不是过期直链）。
+  /// 只有 live 处理（[PlaybackReplaceScope.liveOnly]）：自动换源由真实播放
+  /// 失败触发，恢复态没有真实队列可换。恢复态 / 无曲目 / 未命中都返回
+  /// [PlaybackCommandOutcome.none]；live 返回前保证换源结果已写进会话
+  /// （重开应用恢复的是新来源，而不是过期直链）。
   Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,

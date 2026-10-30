@@ -23,7 +23,7 @@ class LibraryCollections {
   /// 播放历史伪合集哨兵（仅显式选择进入，不参与默认回退）。
   static const int historySentinel = -3;
 
-  /// 下载记录伪合集哨兵（同上；数据来自 `DownloadService`，不落列表表）。
+  /// 下载记录伪合集哨兵（同上；数据来自 `DownloadRecords`，不落列表表）。
   static const int downloadsSentinel = -4;
 
   static const String orderKey = 'favorites_collection_order';
