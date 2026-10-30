@@ -4,7 +4,6 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/app_network_image.dart';
-import 'package:molia/widgets/cover_deck_metrics.dart';
 import 'package:molia/widgets/player.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:material_ui/material_ui.dart';
@@ -12,12 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
-
-/// 封面堆叠尺寸：与播放器同一预算口径（封面边 240 → 堆叠 360 × 254.4）。
-final _deck = coverDeckMetricsFor(
-  availableWidth: 240 * coverDeckHorizontalFactor,
-  availableHeight: 300,
-);
 
 /// 对账与会话外槽位更新：
 /// - 提交对账到非预览曲目：中心封面 220ms 原位交叉淡化校正；
@@ -129,33 +122,6 @@ void main() {
                 expandAnimation: expand,
                 onToggleExpand: () {},
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-    // 等首帧落定（冷启动恢复态首帧已是稳态；保留一拍覆盖布局/入场）。
-    await tester.pump(const Duration(milliseconds: 900));
-  }
-
-  /// 直接挂载封面堆叠（不经过播放器：带封面的曲目会触发播放器的取色/
-  /// 预取路径，与换图淡化无关）；宿主按快照 current 重建 displayTrack，
-  /// 等价播放器对封面堆叠的喂法。
-  Future<void> pumpDeckHost(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(420, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-    await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
-        child: MaterialApp(
-          home: Scaffold(
-            body: Center(
-              child: _DeckHost(fullCoverKey: GlobalKey()),
             ),
           ),
         ),
@@ -475,9 +441,9 @@ void main() {
     final b1 = _track('b', artwork: 'https://img.example/b1.jpg');
     final b2 = _track('b', artwork: 'https://img.example/b2.jpg');
     emitCustom(current: b, queue: [a, b, c], index: 1, previous: a, next: c);
-    // 直接挂载封面堆叠（带封面的曲目会触发播放器的取色/预取路径，与换图
-    // 淡化无关）；宿主按快照 current 重建 displayTrack，等价播放器的喂法。
-    await pumpDeckHost(tester);
+    // 走播放器真实喂法（displayTrack 随快照 current 变化）：封面预取已收口到
+    // PlaybackObserver，播放器 build 不再有会干扰换图断言的图片副作用。
+    await pumpPlayer(tester);
     final double centerDx =
         tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey)).dx;
 
@@ -532,8 +498,8 @@ void main() {
     final b1 = _track('b', artwork: 'https://img.example/b.jpg');
     final c = _track('c'); // 无封面
     emitCustom(current: b1, queue: [a, b1, c], index: 1, previous: a, next: c);
-    // 直接挂载封面堆叠（带封面的曲目会触发播放器的取色/预取路径）。
-    await pumpDeckHost(tester);
+    // 走播放器真实喂法（displayTrack 随快照 current 变化）。
+    await pumpPlayer(tester);
 
     // 切到无封面的 c：中心卡（c）不得拿旧封面 b 当加载占位——否则目标图
     // 未预热时旧封面会从新卡下面透出来（连切残影的叠加来源）。
@@ -637,24 +603,4 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(tester.takeException(), isNull);
   });
-}
-
-/// 封面堆叠宿主：按快照 current 重建 displayTrack（等价播放器的喂法）。
-class _DeckHost extends StatelessWidget {
-  const _DeckHost({required this.fullCoverKey});
-
-  final GlobalKey fullCoverKey;
-
-  @override
-  Widget build(BuildContext context) {
-    final track =
-        context.select<PlaybackProvider, Track?>((p) => p.snapshot.current);
-    return PlayerCoverDeck(
-      displayTrack: track,
-      artDimension: _deck.artDimension,
-      stackDimension: _deck.stackWidth,
-      stackHeight: _deck.stackHeight,
-      fullCoverKey: fullCoverKey,
-    );
-  }
 }

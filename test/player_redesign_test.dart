@@ -21,7 +21,7 @@ import 'support/fakes.dart';
 /// 播放页 smoke 测试：封面手势（点中间播放/暂停、点邻位切歌）、
 /// 可拖动进度滑杆、迷你/完整连续过渡与共享封面飞行。
 ///
-/// 曲目刻意不带封面 URL：避免测试中触发网络预取/取色路径。
+/// 曲目刻意不带封面 URL：避免测试触发真实网络图片请求 / 取色路径。
 Track _track(String id) => Track(
       id: TrackId('fake', id),
       title: 'Title $id',

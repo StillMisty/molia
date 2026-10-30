@@ -188,6 +188,42 @@ void main() {
     expect(preloader.preloaded.single.next, isNull);
   });
 
+  testWidgets('恢复态展示曲目：首帧后按同一路径预取，后台期跳过、回前台补一次',
+      (tester) async {
+    final presence = AppPresence();
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final observer = buildObserver(
+      navigatorKey: navigatorKey,
+      presence: presence,
+    );
+    addTearDown(observer.dispose);
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: navigatorKey, home: const SizedBox.shrink()),
+    );
+    await tester.pump();
+
+    // 冷启动恢复发生在 runApp 前：会话模块只把展示曲目交给观察者，
+    // facade 快照没有 current；预取必须等首帧建好再走同一套门控。
+    presence.markTrayHidden();
+    final restored = track('r', artwork: 'https://img.example/r.jpg');
+    observer.showRestoredTrack(restored);
+    // 冷启动时首帧由 runApp 排；测试里手动排一帧让 post-frame 预取回调落地。
+    tester.binding.scheduleFrame();
+    await tester.pump();
+    await tester.pump();
+    expect(preloader.preloaded, isEmpty, reason: '后台期不预取恢复态封面');
+    expect(observer.lastPlayedTrackName, 'Title r');
+    expect(observer.lastPlayedImageUrl, 'https://img.example/r.jpg');
+
+    // 恢复可见：与 live 曲目共用补取路径，恢复曲目作为预取目标下发。
+    presence.markVisible();
+    await tester.pump();
+    await tester.pump();
+    expect(preloader.preloaded, hasLength(1));
+    expect(preloader.preloaded.single.current?.id.uri, 'fake:r');
+    expect(preloader.preloaded.single.next, isNull);
+  });
+
   test('省流：本地封面照常传小组件，远程封面置空', () async {
     final dataSaver = DataSaverService(
       prefs: await SharedPreferences.getInstance(),
