@@ -4,7 +4,7 @@
 - 日期：2026-10-25
 - 相关：`macos/`、`lib/services/window/**`、`lib/app/bootstrap/desktop_stack.dart`、
   `lib/playback/desktop_audio_init_io.dart`、`docs/media_kit_native_libs.md`、
-  `.github/workflows/release.yml`、`ios/Podfile`、`ios/Runner.xcodeproj/project.pbxproj`
+  `.github/workflows/release.yml`、`ios/Runner.xcodeproj/project.pbxproj`
 
 ## 背景
 
@@ -101,3 +101,10 @@
   「sandbox is not in sync」直接失败；macOS 插件（含 `quickjs_engine`、
   `window_manager` 等）都已提供 `Package.swift`，Flutter 也提示「All plugins found
   for macos are Swift Packages」，因此不再保留 CocoaPods 集成。
+- 2026-10-30：iOS 同样切到 Swift Package Manager——`ios/Podfile` / `Podfile.lock`
+  与 `Pods/` 工程接线全部移除，Runner 通过本地包
+  `FlutterGeneratedPluginSwiftPackage` 链接插件。iOS 侧插件（`audio_session`、
+  `file_picker_darwin`、`flutter_secure_storage_darwin`、`just_audio`、
+  `quickjs_engine` 等）均已提供 `Package.swift`，仓库不再依赖 CocoaPods；
+  原先由 `file_picker` 经 CocoaPods 带入的 DKImagePickerController / SDWebImage /
+  SwiftyGif 也随之消失。

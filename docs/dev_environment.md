@@ -2,9 +2,9 @@
 
 ## macOS 桌面运行要求
 
-- **macOS 12 及以上 + Xcode**：macOS 目标只用 Swift Package Manager（不跑 `pod install`，
-  仓库里没有 `macos/Podfile`；插件都提供 `Package.swift`）。不需要在 Xcode 里选开发者
-  团队——模板用 ad-hoc 签名（`CODE_SIGN_IDENTITY = "-"`），
+- **macOS 12 及以上 + Xcode**：macOS 与 iOS 目标都只用 Swift Package Manager（不跑
+  `pod install`，仓库里没有 `macos/Podfile` / `ios/Podfile`；插件都提供 `Package.swift`）。
+  不需要在 Xcode 里选开发者团队——模板用 ad-hoc 签名（`CODE_SIGN_IDENTITY = "-"`），
   `flutter build macos --release` 可直接出包。
 - **播放不依赖 libmpv**：macOS 走 `just_audio` 自带的 AVPlayer 实现，
   `desktop_audio_init_io` 不会初始化 media_kit（见 `docs/media_kit_native_libs.md`）。
@@ -16,7 +16,8 @@
   退出）；点 Dock 图标会经窗口通道恢复窗口。
 - **更新走手动**：macOS 没有应用内安装，发布产物是 `-unsigned.zip`；本机调试用
   `flutter run -d macos`，不需要签名证书。
-- **iOS 最低版本 18.0**：`ios/Podfile` 与 Xcode 工程已同步；真机 / 模拟器需 iOS 18+。
+- **iOS 最低版本 18.0**：Xcode 工程的 `IPHONEOS_DEPLOYMENT_TARGET` 已同步；真机 /
+  模拟器需 iOS 18+。
 
 ## Linux 桌面运行要求
 
