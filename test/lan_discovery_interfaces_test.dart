@@ -82,6 +82,26 @@ void main() {
     );
   });
 
+  test('start 走重绑串行化：端口与接口 socket 就绪，stop 后清空', () async {
+    final calls = <_BindCall>[];
+    final discovery = build(
+      calls: calls,
+      addresses: () async => const ['192.168.1.10'],
+      redirect: _loopbackRedirect(['192.168.1.10']),
+    );
+    addTearDown(discovery.stop);
+    await discovery.start();
+
+    expect(discovery.discoveryPorts.v4, greaterThan(0));
+    expect(discovery.debugInterfaceBindAddresses, ['192.168.1.10']);
+    expect(discovery.debugInterfacePorts, everyElement(greaterThan(0)));
+
+    await discovery.stop();
+    expect(discovery.debugInterfaceBindAddresses, isEmpty);
+    expect(discovery.debugInterfacePorts, isEmpty);
+    expect(discovery.discoveryPorts, (v4: 0, v6: 0));
+  });
+
   test('地址变化后重建接口 socket：新地址出现、旧地址消失', () async {
     var addresses = <String>['192.168.1.10'];
     final calls = <_BindCall>[];
@@ -149,6 +169,8 @@ void main() {
     final interfaceBinds = calls
         .where((call) => call.address == '192.168.1.10')
         .length;
+    final joinRuns = discovery.debugIpv4JoinRuns;
+    final joinEpoch = discovery.debugIpv4JoinEpoch;
 
     await discovery.onAppResumed();
 
@@ -161,6 +183,16 @@ void main() {
       calls.where((call) => call.address == '0.0.0.0').length,
       mainBinds,
       reason: 'rebind=false 不重绑主 socket',
+    );
+    expect(
+      discovery.debugIpv4JoinRuns,
+      joinRuns + 1,
+      reason: '短回前台必须重新进入组播 join 流程',
+    );
+    expect(
+      discovery.debugIpv4JoinEpoch,
+      joinEpoch + 1,
+      reason: '先重置记账，之前的接口不会拦住重 join',
     );
     expect(discovery.debugInterfaceBindAddresses, ['192.168.1.10']);
   });
@@ -263,6 +295,69 @@ void main() {
     expect(resolvePresenceProbePort(announced: 47825, source: 50000), 47825);
     expect(resolvePresenceProbePort(announced: 0, source: 50000), 50000);
     expect(resolvePresenceProbePort(announced: 0, source: 0), 0);
+  });
+
+  test('重复 join 的 errno 按平台区分', () {
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('in use', 98),
+        operatingSystem: 'linux',
+      ),
+      isTrue,
+    );
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('in use', 98),
+        operatingSystem: 'android',
+      ),
+      isTrue,
+    );
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('in use', 48),
+        operatingSystem: 'macos',
+      ),
+      isTrue,
+    );
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('in use', 48),
+        operatingSystem: 'ios',
+      ),
+      isTrue,
+    );
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('in use', 10048),
+        operatingSystem: 'windows',
+      ),
+      isTrue,
+    );
+    // Windows 的 48 = ERROR_GEN_FAILURE，不是 EADDRINUSE。
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('failure', 48),
+        operatingSystem: 'windows',
+      ),
+      isFalse,
+    );
+    expect(
+      isMulticastAlreadyJoinedError(
+        const OSError('in use', 98),
+        operatingSystem: 'windows',
+      ),
+      isFalse,
+    );
+    expect(
+      isMulticastAlreadyJoinedError(
+        const SocketException(
+          'in use',
+          osError: OSError('in use', 10048),
+        ),
+        operatingSystem: 'windows',
+      ),
+      isTrue,
+    );
   });
 }
 
