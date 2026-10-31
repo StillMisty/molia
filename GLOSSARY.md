@@ -388,9 +388,10 @@
   只是生产共享会话的默认绑定。
 - **Lyrics manual search session（手动歌词换源会话）** —
   `lib/providers/lyrics_source_search_session.dart`：手动换源页的搜索与选择唯一
-  实现——逐来源状态 / 结果、查询代际（旧查询结果丢弃）、可用性每次读取时求值、
-  失败来源重试、最佳匹配，以及「选中（只切态）→ 确认 → 取词 → 规范化 →
-  `saveManual`」的两步结果类型（成功 / 未找到 / 失败 / 忙 / 未选中）。会话不碰
+  实现——可用性每次读取时求值、逐来源状态 / 结果、失败来源重试、最佳匹配，以及
+  「选中（只切态）→ 确认 → 取词 → 规范化 → `saveManual`」的两步结果类型（成功 /
+  未找到 / 失败 / 忙 / 未选中）。逐源搜索协议（查询代际 / 失败重试 / 选中失效 /
+  通知合并）委托 **Source fan-out session**，本类只叠加歌词侧口径。会话不碰
   Navigator 与 SnackBar；视图只渲染条目、提示并 pop。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
@@ -574,9 +575,18 @@
 
 ## 换源
 
+- **Source fan-out session（跨来源扇出会话）** — `lib/providers/fan_out_search_session.dart`：
+  跨来源并行搜索的唯一协议（查询 trim / 空查询清空、查询代际丢弃旧响应、逐源
+  idle / loading / loaded / error / unavailable 状态、逐源结果、失败集合与只重试
+  失败源、选中项随所属来源结果替换而失效、dispose 安全）。通知节拍也在这里统一：
+  查询开始 / 清空 / 选中变化立即通知，同一轮事件循环内的来源完成合并为一次通知。
+  适配器是 `FanOutSource`（key / 可用性 / 单源 `search` / 结果→来源 key）；两个
+  消费面只叠加自己的口径：**Source swap** 提供音源描述符、种子 URI 排除与分组，
+  **Lyrics manual search session** 提供歌词来源策略、不可用原因与最佳匹配。
 - **Source swap（换源）** — `lib/providers/source_swap_provider.dart` + 
   `lib/widgets/source_swap_view.dart`：按种子曲目「歌名 + 歌手」在可搜索音源
-  并行检索（逐源就绪即填充、单源失败隔离）。页面搜索栏可改关键词重搜，来源
+  并行检索（逐源就绪即填充、单源失败隔离；搜索协议见
+  **Source fan-out session**）。页面搜索栏可改关键词重搜，来源
   默认「全部」并按来源分组展示，也可切单源；音频 tab 点候选即试听（单曲
   「换源试听」），确认后原位替换。**保留种子源**（种子曲目自身按 URI 排除；
   同一渠道可能有其它版本 / 投稿）；B 站曲目的 artists 是 UP 主、不当歌手关键词
