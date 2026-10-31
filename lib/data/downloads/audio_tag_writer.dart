@@ -39,23 +39,23 @@ Future<bool> embedDownloadTags({
   try {
     final Uint8List? rewritten = switch (extension) {
       '.mp3' => _writeId3v23(
-          existing,
-          title: title,
-          artist: artist,
-          album: album,
-          lyrics: (text == null || text.isEmpty) ? null : text,
-          coverBytes: coverBytes,
-          coverMimeType: coverMimeType,
-        ),
+        existing,
+        title: title,
+        artist: artist,
+        album: album,
+        lyrics: (text == null || text.isEmpty) ? null : text,
+        coverBytes: coverBytes,
+        coverMimeType: coverMimeType,
+      ),
       '.flac' => _writeFlacComments(
-          existing,
-          title: title,
-          artist: artist,
-          album: album,
-          lyrics: (text == null || text.isEmpty) ? null : text,
-          coverBytes: coverBytes,
-          coverMimeType: coverMimeType,
-        ),
+        existing,
+        title: title,
+        artist: artist,
+        album: album,
+        lyrics: (text == null || text.isEmpty) ? null : text,
+        coverBytes: coverBytes,
+        coverMimeType: coverMimeType,
+      ),
       _ => null,
     };
     if (rewritten == null) return false;
@@ -106,7 +106,8 @@ Uint8List _writeId3v23(
 Uint8List _stripId3v2(Uint8List file) {
   if (file.length < 10) return file;
   if (file[0] != 0x49 || file[1] != 0x44 || file[2] != 0x33) return file;
-  final size = (file[6] & 0x7F) << 21 |
+  final size =
+      (file[6] & 0x7F) << 21 |
       (file[7] & 0x7F) << 14 |
       (file[8] & 0x7F) << 7 |
       (file[9] & 0x7F);
@@ -168,19 +169,19 @@ Uint8List _utf16WithBom(String text) {
 }
 
 Uint8List _uint32be(int value) => Uint8List.fromList([
-      (value >> 24) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 8) & 0xFF,
-      value & 0xFF,
-    ]);
+  (value >> 24) & 0xFF,
+  (value >> 16) & 0xFF,
+  (value >> 8) & 0xFF,
+  value & 0xFF,
+]);
 
 /// ID3 标签长度：4 字节 syncsafe（每字节 7 位）。
 Uint8List _syncSafe(int value) => Uint8List.fromList([
-      (value >> 21) & 0x7F,
-      (value >> 14) & 0x7F,
-      (value >> 7) & 0x7F,
-      value & 0x7F,
-    ]);
+  (value >> 21) & 0x7F,
+  (value >> 14) & 0x7F,
+  (value >> 7) & 0x7F,
+  value & 0x7F,
+]);
 
 /// 重写 FLAC 元数据块：替换 VORBIS_COMMENT（4）与 PICTURE（6），其余原样保留。
 Uint8List? _writeFlacComments(
@@ -207,9 +208,8 @@ Uint8List? _writeFlacComments(
     final header = file[offset];
     last = header & 0x80 != 0;
     final type = header & 0x7F;
-    final length = (file[offset + 1] << 16) |
-        (file[offset + 2] << 8) |
-        file[offset + 3];
+    final length =
+        (file[offset + 1] << 16) | (file[offset + 2] << 8) | file[offset + 3];
     final start = offset + 4;
     final end = start + length;
     if (end > file.length) return null;
@@ -237,9 +237,7 @@ Uint8List? _writeFlacComments(
   );
   if (comments.isNotEmpty) newBlocks.add(_FlacBlock(4, comments));
   if (coverBytes != null && coverBytes.isNotEmpty) {
-    newBlocks.add(
-      _FlacBlock(6, _flacPicture(coverBytes, coverMimeType)),
-    );
+    newBlocks.add(_FlacBlock(6, _flacPicture(coverBytes, coverMimeType)));
   }
   if (newBlocks.isEmpty) return null;
 
@@ -249,11 +247,7 @@ Uint8List? _writeFlacComments(
     final isLast = i == newBlocks.length - 1;
     final length = block.data.length;
     out.addByte((isLast ? 0x80 : 0x00) | block.type);
-    out.add([
-      (length >> 16) & 0xFF,
-      (length >> 8) & 0xFF,
-      length & 0xFF,
-    ]);
+    out.add([(length >> 16) & 0xFF, (length >> 8) & 0xFF, length & 0xFF]);
     out.add(block.data);
   }
   out.add(audio);
@@ -306,11 +300,11 @@ Uint8List _flacPicture(Uint8List image, String mimeType) {
 }
 
 Uint8List _uint32le(int value) => Uint8List.fromList([
-      value & 0xFF,
-      (value >> 8) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 24) & 0xFF,
-    ]);
+  value & 0xFF,
+  (value >> 8) & 0xFF,
+  (value >> 16) & 0xFF,
+  (value >> 24) & 0xFF,
+]);
 
 class _FlacBlock {
   const _FlacBlock(this.type, this.data);

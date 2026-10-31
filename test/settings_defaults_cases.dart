@@ -66,14 +66,18 @@ void main() {
     expectDefaults();
     await provider.preferencesReady;
     expectDefaults();
-    expect(NavProvider.defaultOrder.map((destination) => destination.name),
-        kShellNavOrder.defaultValue);
+    expect(
+      NavProvider.defaultOrder.map((destination) => destination.name),
+      kShellNavOrder.defaultValue,
+    );
   });
 
   test('ShortcutSettings 初始开关来自键默认值', () {
     // 独立测试文件内、attach 之前读取单例初始值。
     expect(
-        ShortcutSettings.instance.inAppEnabled, kShortcutsEnabled.defaultValue);
+      ShortcutSettings.instance.inAppEnabled,
+      kShortcutsEnabled.defaultValue,
+    );
     expect(
       ShortcutSettings.instance.globalEnabled,
       kGlobalShortcutsEnabled.defaultValue,

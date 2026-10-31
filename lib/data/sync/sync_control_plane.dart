@@ -25,10 +25,11 @@ class SyncControlPlane extends ChangeNotifier {
     required SyncStateStore state,
     required Map<String, SyncTransport> transports,
     SyncTransportRuntime? runtime,
-  })  : _state = state,
-        _transports = transports,
-        _runtime = runtime ??
-            SyncTransportRuntime(state: state, transports: transports);
+  }) : _state = state,
+       _transports = transports,
+       _runtime =
+           runtime ??
+           SyncTransportRuntime(state: state, transports: transports);
 
   final SyncStateStore _state;
   final Map<String, SyncTransport> _transports;

@@ -35,8 +35,8 @@ class CacheAudioPredownloader implements AudioPredownloader {
     this._allowed,
     this._platformSupported,
     AudioPredownloadStarter? starter,
-  })  : _cache = cacheService ?? CacheService.instance,
-        _starter = starter ?? startAudioPredownload;
+  }) : _cache = cacheService ?? CacheService.instance,
+       _starter = starter ?? startAudioPredownload;
 
   final CacheService _cache;
   final bool Function()? _allowed;

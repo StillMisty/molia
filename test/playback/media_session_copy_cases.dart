@@ -17,8 +17,9 @@ void main() {
   });
 
   test('MediaSessionCopy：取自生成的 l10n，动作文案反映当前状态', () {
-    final copy =
-        MediaSessionCopy.of(lookupAppLocalizations(const Locale('zh')));
+    final copy = MediaSessionCopy.of(
+      lookupAppLocalizations(const Locale('zh')),
+    );
 
     expect(copy.unknownArtist, '未知歌手');
     expect(copy.favoriteLabel(favorite: false), '收藏');

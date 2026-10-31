@@ -133,8 +133,7 @@ class MgLyric {
 
       lrcLines.add('$timeTag${words.replaceAll(_word, '')}');
 
-      final times =
-          _wordAll.allMatches(words).map((m) => m.group(0)!).toList();
+      final times = _wordAll.allMatches(words).map((m) => m.group(0)!).toList();
       if (times.isEmpty) continue;
       final converted = <String>[];
       for (final time in times) {
@@ -211,9 +210,7 @@ class MgLyric {
     if (length < 1) return data;
     final lengthBig = BigInt.from(length);
     var j2 = data[0];
-    var j3 = _toLong(
-      (BigInt.from(6) + BigInt.from(52) ~/ lengthBig) * _delta,
-    );
+    var j3 = _toLong((BigInt.from(6) + BigInt.from(52) ~/ lengthBig) * _delta);
     while (true) {
       final j4 = j3;
       if (j4 == BigInt.zero) break;
@@ -238,9 +235,7 @@ class MgLyric {
         }
       }
       final j8 = data[length - 1];
-      final a = _toLong(
-        key[(_toLong(j6 & BigInt.from(3)) ^ j5).toInt()] ^ j8,
-      );
+      final a = _toLong(key[(_toLong(j6 & BigInt.from(3)) ^ j5).toInt()] ^ j8);
       final b = _toLong(j2 ^ j4);
       final c = _toLong(_toLong(j8 >> 5) ^ _toLong(j2 << 2));
       final d = _toLong(_toLong(j2 >> 3) ^ _toLong(j8 << 4));
@@ -281,21 +276,15 @@ class MgLyric {
     for (var i = 0; i < longCount; i++) {
       var value = BigInt.zero;
       for (var j = 3; j >= 0; j--) {
-        final unit =
-            i * 4 + j < codeUnits.length ? codeUnits[i * 4 + j] : 0;
+        final unit = i * 4 + j < codeUnits.length ? codeUnits[i * 4 + j] : 0;
         value = (value << 16) | BigInt.from(unit);
       }
       data[i] = _toLong(value);
     }
-    final encrypted = _teaEncrypt(
-      List<BigInt>.from(data),
-      _keyArr,
-    );
+    final encrypted = _teaEncrypt(List<BigInt>.from(data), _keyArr);
     final buffer = StringBuffer();
     for (final value in encrypted) {
-      buffer.write(
-        value.toUnsigned(64).toRadixString(16).padLeft(16, '0'),
-      );
+      buffer.write(value.toUnsigned(64).toRadixString(16).padLeft(16, '0'));
     }
     return buffer.toString();
   }
@@ -306,15 +295,16 @@ class MgLyric {
     // data[i]（decrypt 内层 i = n-1..1 的逆序），sum 以 delta 递增。
     final length = data.length;
     if (length < 1) return data;
-    final rounds =
-        (BigInt.from(6) + BigInt.from(52) ~/ BigInt.from(length)).toInt();
+    final rounds = (BigInt.from(6) + BigInt.from(52) ~/ BigInt.from(length))
+        .toInt();
     var sum = BigInt.zero;
     for (var round = 0; round < rounds; round++) {
       sum = _toLong(sum + _delta);
       final j5 = _toLong(BigInt.from(3) & _toLong(sum >> 2));
       if (length == 1) {
         data[0] = _toLong(
-          data[0] + _mix(y: data[0], z: data[0], sum: sum, key: key[j5.toInt()]),
+          data[0] +
+              _mix(y: data[0], z: data[0], sum: sum, key: key[j5.toInt()]),
         );
         continue;
       }

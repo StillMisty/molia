@@ -39,17 +39,17 @@ class LyricsCache {
     SharedPreferences? prefs,
     Directory? directory,
     this._directoryResolver,
-  })  : _prefsOverride = prefs,
-        _directoryOverride = directory;
+  }) : _prefsOverride = prefs,
+       _directoryOverride = directory;
 
   /// 生产组合根：显式启用 `<appSupport>/lyrics_cache` 文件后端。
   ///
   /// 目录解析保持惰性（首次读写 / 统计才调用 `path_provider`），不阻塞首帧；
   /// 解析失败自动回退 prefs。普通 [LyricsCache] 构造不会走文件后端。
   factory LyricsCache.appSupport({SharedPreferences? prefs}) => LyricsCache(
-        prefs: prefs,
-        directoryResolver: resolveAppSupportLyricsDirectory,
-      );
+    prefs: prefs,
+    directoryResolver: resolveAppSupportLyricsDirectory,
+  );
 
   static const String keyPrefix = 'lyrics_cache_';
 
@@ -177,8 +177,10 @@ class LyricsCache {
     if (directory == null) return;
     final prefs = await _prefsOrNull();
     if (prefs == null) return;
-    final keys =
-        prefs.getKeys().where((key) => key.startsWith(keyPrefix)).toList();
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(keyPrefix))
+        .toList();
     for (final key in keys) {
       try {
         await prefs.remove(key);
@@ -214,8 +216,10 @@ class LyricsCache {
 
     final prefs = await _prefsOrNull();
     if (prefs == null) return;
-    final keys =
-        prefs.getKeys().where((key) => key.startsWith(keyPrefix)).toList();
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith(keyPrefix))
+        .toList();
     for (final key in keys) {
       try {
         await prefs.remove(key);

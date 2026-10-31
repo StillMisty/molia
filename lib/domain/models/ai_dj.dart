@@ -159,17 +159,16 @@ class AiDjBatch {
     AiPreferences? preferences,
     String? rawResponse,
     AiPrompt? prompt,
-  }) =>
-      AiDjBatch(
-        id: id ?? this.id,
-        items: items ?? this.items,
-        unresolved: unresolved ?? this.unresolved,
-        generatedAt: generatedAt ?? this.generatedAt,
-        origin: origin ?? this.origin,
-        preferences: preferences ?? this.preferences,
-        rawResponse: rawResponse ?? this.rawResponse,
-        prompt: prompt ?? this.prompt,
-      );
+  }) => AiDjBatch(
+    id: id ?? this.id,
+    items: items ?? this.items,
+    unresolved: unresolved ?? this.unresolved,
+    generatedAt: generatedAt ?? this.generatedAt,
+    origin: origin ?? this.origin,
+    preferences: preferences ?? this.preferences,
+    rawResponse: rawResponse ?? this.rawResponse,
+    prompt: prompt ?? this.prompt,
+  );
 }
 
 /// 批次来源（历史标记）。
@@ -215,13 +214,13 @@ class AiDjHistoryEntry {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'generatedAt': generatedAt.millisecondsSinceEpoch,
-        'itemCount': itemCount,
-        'unresolvedCount': unresolvedCount,
-        'origin': origin.storageValue,
-        if (preferences != null) 'preferences': preferences!.toJson(),
-      };
+    'id': id,
+    'generatedAt': generatedAt.millisecondsSinceEpoch,
+    'itemCount': itemCount,
+    'unresolvedCount': unresolvedCount,
+    'origin': origin.storageValue,
+    if (preferences != null) 'preferences': preferences!.toJson(),
+  };
 
   static AiDjHistoryEntry? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -453,38 +452,37 @@ class AiPreferences {
     Set<AiUpstreamSection>? sections,
     List<String>? seeds,
     Set<AiUpstreamSection>? acknowledgedScopes,
-  }) =>
-      AiPreferences(
-        batchSize: batchSize ?? this.batchSize,
-        autoFeed: autoFeed ?? this.autoFeed,
-        styles: styles ?? this.styles,
-        scenes: scenes ?? this.scenes,
-        languages: languages ?? this.languages,
-        era: era ?? this.era,
-        exploration: exploration ?? this.exploration,
-        onlyUnheard: onlyUnheard ?? this.onlyUnheard,
-        extraPrompt: extraPrompt ?? this.extraPrompt,
-        sections: sections ?? this.sections,
-        seeds: seeds ?? this.seeds,
-        acknowledgedScopes: acknowledgedScopes ?? this.acknowledgedScopes,
-      );
+  }) => AiPreferences(
+    batchSize: batchSize ?? this.batchSize,
+    autoFeed: autoFeed ?? this.autoFeed,
+    styles: styles ?? this.styles,
+    scenes: scenes ?? this.scenes,
+    languages: languages ?? this.languages,
+    era: era ?? this.era,
+    exploration: exploration ?? this.exploration,
+    onlyUnheard: onlyUnheard ?? this.onlyUnheard,
+    extraPrompt: extraPrompt ?? this.extraPrompt,
+    sections: sections ?? this.sections,
+    seeds: seeds ?? this.seeds,
+    acknowledgedScopes: acknowledgedScopes ?? this.acknowledgedScopes,
+  );
 
   Map<String, dynamic> toJson() => {
-        'batchSize': batchSize,
-        'autoFeed': autoFeed,
-        'styles': styles,
-        'scenes': scenes,
-        'languages': languages,
-        'era': era,
-        'exploration': exploration,
-        'onlyUnheard': onlyUnheard,
-        'extraPrompt': extraPrompt,
-        'sections': [for (final section in sections) section.storageValue],
-        'seeds': seeds,
-        'acknowledgedScopes': [
-          for (final section in acknowledgedScopes) section.storageValue,
-        ],
-      };
+    'batchSize': batchSize,
+    'autoFeed': autoFeed,
+    'styles': styles,
+    'scenes': scenes,
+    'languages': languages,
+    'era': era,
+    'exploration': exploration,
+    'onlyUnheard': onlyUnheard,
+    'extraPrompt': extraPrompt,
+    'sections': [for (final section in sections) section.storageValue],
+    'seeds': seeds,
+    'acknowledgedScopes': [
+      for (final section in acknowledgedScopes) section.storageValue,
+    ],
+  };
 
   /// 宽松解析：缺项/损坏字段回退默认值，不因单个字段丢弃整份偏好。
   static AiPreferences tryFromJson(Object? json) {
@@ -521,8 +519,9 @@ class AiPreferences {
       exploration: kAiExplorationOptions.contains(exploration)
           ? exploration
           : kAiExplorationBalanced,
-      onlyUnheard:
-          json['onlyUnheard'] is bool ? json['onlyUnheard'] as bool : true,
+      onlyUnheard: json['onlyUnheard'] is bool
+          ? json['onlyUnheard'] as bool
+          : true,
       extraPrompt: extraPrompt.length > extraPromptLimit
           ? extraPrompt.substring(0, extraPromptLimit)
           : extraPrompt,
@@ -561,38 +560,38 @@ class AiFeedbackMemory {
   static const int seedLimit = 20;
 
   AiFeedbackMemory withSkipped(List<String> labels) => AiFeedbackMemory(
-        skipped: _trim(labels, skippedLimit),
-        liked: liked,
-        seeds: seeds,
-      );
+    skipped: _trim(labels, skippedLimit),
+    liked: liked,
+    seeds: seeds,
+  );
 
   AiFeedbackMemory addSkipped(String label) => withSkipped([label, ...skipped]);
 
   AiFeedbackMemory removeSkipped(String label) => withSkipped([
-        for (final entry in skipped)
-          if (entry != label) entry,
-      ]);
+    for (final entry in skipped)
+      if (entry != label) entry,
+  ]);
 
   AiFeedbackMemory withLiked(List<String> labels) => AiFeedbackMemory(
-        skipped: skipped,
-        liked: _trim(labels, likedLimit),
-        seeds: seeds,
-      );
+    skipped: skipped,
+    liked: _trim(labels, likedLimit),
+    seeds: seeds,
+  );
 
   AiFeedbackMemory addLiked(String label) => withLiked([label, ...liked]);
 
   AiFeedbackMemory withSeeds(List<String> values) => AiFeedbackMemory(
-        skipped: skipped,
-        liked: liked,
-        seeds: _trim(values, seedLimit),
-      );
+    skipped: skipped,
+    liked: liked,
+    seeds: _trim(values, seedLimit),
+  );
 
   AiFeedbackMemory addSeed(String label) => withSeeds([label, ...seeds]);
 
   AiFeedbackMemory removeSeed(String label) => withSeeds([
-        for (final entry in seeds)
-          if (entry != label) entry,
-      ]);
+    for (final entry in seeds)
+      if (entry != label) entry,
+  ]);
 
   static List<String> _trim(List<String> values, int limit) {
     final seen = <String>{};
@@ -607,10 +606,10 @@ class AiFeedbackMemory {
   }
 
   Map<String, dynamic> toJson() => {
-        'skipped': skipped,
-        'liked': liked,
-        'seeds': seeds,
-      };
+    'skipped': skipped,
+    'liked': liked,
+    'seeds': seeds,
+  };
 
   static AiFeedbackMemory tryFromJson(Object? json) {
     if (json is! Map) return empty;

@@ -19,14 +19,14 @@ import 'support/settings_test_support.dart';
 /// 下一首）稳定就位，而不是把「挂载时已有的当前曲目」当成一次切歌、
 /// 先播入场再落位。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -40,11 +40,13 @@ void main() {
     a = _track('a');
     b = _track('b');
     c = _track('c');
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [a, b, c],
-      index: 1,
-      position: const Duration(seconds: 5),
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [a, b, c],
+        index: 1,
+        position: const Duration(seconds: 5),
+      ),
+    );
   });
 
   Future<PlaybackProvider> restoredProvider(WidgetTester tester) async {
@@ -97,10 +99,12 @@ void main() {
   }
 
   void expectSteadyDeck(WidgetTester tester) {
-    final deckCenter =
-        tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey));
-    final coverCenter =
-        tester.getCenter(find.byKey(PlayerCoverDeck.centerCoverCardKey));
+    final deckCenter = tester.getCenter(
+      find.byKey(PlayerCoverDeck.swipeHostKey),
+    );
+    final coverCenter = tester.getCenter(
+      find.byKey(PlayerCoverDeck.centerCoverCardKey),
+    );
     expect(
       (coverCenter.dx - deckCenter.dx).abs(),
       lessThan(0.5),
@@ -133,8 +137,9 @@ void main() {
     await pumpNowPlaying(tester, playback);
 
     expectSteadyDeck(tester);
-    final coverCenter =
-        tester.getCenter(find.byKey(PlayerCoverDeck.centerCoverCardKey));
+    final coverCenter = tester.getCenter(
+      find.byKey(PlayerCoverDeck.centerCoverCardKey),
+    );
 
     await tester.pump(const Duration(milliseconds: 50));
     expect(

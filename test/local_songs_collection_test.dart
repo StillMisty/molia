@@ -47,29 +47,29 @@ void main() {
     int recordsRevision = 0,
     int cacheRevision = 0,
   }) => LocalSongsInput(
-        history: library.history,
-        historyTracks: () => library.tracks,
-        downloads: downloads.records,
-        supported: downloads.supported,
-        initialized: downloads.initialized,
+    history: library.history,
+    historyTracks: () => library.tracks,
+    downloads: downloads.records,
+    supported: downloads.supported,
+    initialized: downloads.initialized,
     recordsRevision: recordsRevision,
-        cacheRevision: cacheRevision,
-      );
+    cacheRevision: cacheRevision,
+  );
 
   PlayHistoryEntry historyOf(String id) => PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: id,
-        title: 'Song $id',
-        artist: 'Artist $id',
-        raw: {'songId': id},
-        playedAt: 1,
-      );
+    sourceKey: 'wy',
+    songId: id,
+    title: 'Song $id',
+    artist: 'Artist $id',
+    raw: {'songId': id},
+    playedAt: 1,
+  );
 
   Track trackOf(String id) => Track(
-        id: TrackId('wy', id),
-        title: 'Song $id',
-        origin: TrackOrigin.builtin,
-      );
+    id: TrackId('wy', id),
+    title: 'Song $id',
+    origin: TrackOrigin.builtin,
+  );
 
   DownloadedTrack downloadOf(String id, {bool imported = false}) =>
       DownloadedTrack(
@@ -355,9 +355,7 @@ void main() {
       var previous = collection.rows;
       var revision = collection.rowsRevision;
 
-      await collection.sync(
-        inputFor(library, downloads, recordsRevision: 1),
-      );
+      await collection.sync(inputFor(library, downloads, recordsRevision: 1));
       var current = collection.rows;
       expect(identical(current, previous), isFalse, reason: 'revision 变要重算');
       expect(collection.rowsRevision, greaterThan(revision));

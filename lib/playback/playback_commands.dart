@@ -49,8 +49,9 @@ class PlaybackCommandOutcome {
   static const PlaybackCommandOutcome none = PlaybackCommandOutcome();
 
   /// 只有曲目面变化（播放 / 暂停 / 切歌 / 进度 / 模式）。
-  static const PlaybackCommandOutcome trackOnly =
-      PlaybackCommandOutcome(changed: {PlaybackDomain.track});
+  static const PlaybackCommandOutcome trackOnly = PlaybackCommandOutcome(
+    changed: {PlaybackDomain.track},
+  );
 
   /// 曲目面与队列面都变化（恢复态接管 / 换源）。
   static const PlaybackCommandOutcome trackAndQueue = PlaybackCommandOutcome(
@@ -107,6 +108,14 @@ abstract interface class PlaybackCommandPort {
 
   /// 播放队列中的指定下标（系统媒体队列跳转）。
   Future<PlaybackCommandOutcome> playQueueIndex(int index);
+
+  /// 移动队列中的一项（[from] → [to]）。恢复态改写保存的会话；live 转发
+  /// facade。越界 / 当前曲目 / 随机模式 / 原地不动返回 [none]。
+  Future<PlaybackCommandOutcome> moveQueueIndex(int from, int to);
+
+  /// 移除队列中的一项。恢复态改写保存的会话；live 转发 facade。
+  /// 越界 / 当前曲目 / 空队列返回 [none]。
+  Future<PlaybackCommandOutcome> removeQueueIndex(int index);
 
   /// 以指定音质重新取链当前曲目，保持进度与播放态。
   ///

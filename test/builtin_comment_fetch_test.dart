@@ -37,27 +37,31 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) handler,
   ) {
     final adapter = MockDioAdapter(handler);
-    BuiltinSearch.transport = BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
   group('kw 酷我', () {
     test('最新评论：type/start/count 分页 + 总数', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': '200',
-          'comments': [
-            {
-              'id': '1001',
-              'msg': '好听',
-              'time': '1700000000',
-              'u_name': '听友',
-              'u_pic': 'http://img/avatar.jpg',
-              'like_num': '3',
-            },
-          ],
-          'comments_counts': 42,
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': '200',
+            'comments': [
+              {
+                'id': '1001',
+                'msg': '好听',
+                'time': '1700000000',
+                'u_name': '听友',
+                'u_pic': 'http://img/avatar.jpg',
+                'like_num': '3',
+              },
+            ],
+            'comments_counts': 42,
+          }),
+        );
       });
 
       final page = await KwComment.fetch(
@@ -81,17 +85,22 @@ void main() {
 
     test('热门评论：type=get_rec_comment + hot_comments_counts', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': '200',
-          'hot_comments': [
-            {'id': '9', 'msg': '热评', 'time': '1700000000', 'u_name': 'A'},
-          ],
-          'hot_comments_counts': 7,
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': '200',
+            'hot_comments': [
+              {'id': '9', 'msg': '热评', 'time': '1700000000', 'u_name': 'A'},
+            ],
+            'hot_comments_counts': 7,
+          }),
+        );
       });
 
       final page = await KwComment.fetch('1', kind: CommentKind.hot);
-      expect(adapter.lastRequest.uri.queryParameters['type'], 'get_rec_comment');
+      expect(
+        adapter.lastRequest.uri.queryParameters['type'],
+        'get_rec_comment',
+      );
       expect(page.total, 7);
       expect(page.items.single.text, '热评');
     });
@@ -116,23 +125,29 @@ void main() {
   group('kg 酷狗', () {
     test('最新评论：签名 + extdata/schash + p 页码', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'err_code': 0,
-          'count': 12,
-          'list': [
-            {
-              'id': 5,
-              'content': '酷狗评论',
-              'addtime': '2024-01-02 03:04:05',
-              'user_name': '听友',
-              'location': '广东',
-              'like': {'likenum': 8},
-            },
-          ],
-        }));
+        return textResponse(
+          jsonEncode({
+            'err_code': 0,
+            'count': 12,
+            'list': [
+              {
+                'id': 5,
+                'content': '酷狗评论',
+                'addtime': '2024-01-02 03:04:05',
+                'user_name': '听友',
+                'location': '广东',
+                'like': {'likenum': 8},
+              },
+            ],
+          }),
+        );
       });
 
-      final page = await KgComment.fetch('HASH1', kind: CommentKind.latest, page: 2);
+      final page = await KgComment.fetch(
+        'HASH1',
+        kind: CommentKind.latest,
+        page: 2,
+      );
       final query = adapter.lastRequest.uri.queryParameters;
       expect(query['p'], '2');
       expect(query['extdata'], 'HASH1');
@@ -167,24 +182,30 @@ void main() {
   group('mg 咪咕', () {
     test('热门评论：hotCommentStart 偏移 + cfgHotCount', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': '000000',
-          'data': {
-            'cfgHotCount': 9,
-            'hotComments': [
-              {
-                'commentId': 'c1',
-                'commentInfo': '咪咕热评',
-                'commentTime': '2024-05-06 07:08',
-                'user': {'nickName': 'A', 'smallIcon': 'http://img/s.jpg'},
-                'opNumItem': {'thumbNum': 2},
-              },
-            ],
-          },
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': '000000',
+            'data': {
+              'cfgHotCount': 9,
+              'hotComments': [
+                {
+                  'commentId': 'c1',
+                  'commentInfo': '咪咕热评',
+                  'commentTime': '2024-05-06 07:08',
+                  'user': {'nickName': 'A', 'smallIcon': 'http://img/s.jpg'},
+                  'opNumItem': {'thumbNum': 2},
+                },
+              ],
+            },
+          }),
+        );
       });
 
-      final page = await MgComment.fetch('600908', kind: CommentKind.hot, page: 2);
+      final page = await MgComment.fetch(
+        '600908',
+        kind: CommentKind.hot,
+        page: 2,
+      );
       final query = adapter.lastRequest.uri.queryParameters;
       expect(query['queryType'], '2');
       expect(query['hotCommentStart'], '20');
@@ -199,15 +220,21 @@ void main() {
       final adapter = install((options) async {
         lastCommentId = options.uri.queryParameters['commentId'];
         final id = (lastCommentId ?? '').isEmpty ? 'first' : 'second';
-        return textResponse(jsonEncode({
-          'code': '000000',
-          'data': {
-            'commentNums': 30,
-            'comments': [
-              {'commentId': id, 'commentInfo': 'x', 'commentTime': '2024-05-06 07:08'},
-            ],
-          },
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': '000000',
+            'data': {
+              'commentNums': 30,
+              'comments': [
+                {
+                  'commentId': id,
+                  'commentInfo': 'x',
+                  'commentTime': '2024-05-06 07:08',
+                },
+              ],
+            },
+          }),
+        );
       });
 
       await MgComment.fetch('600908', kind: CommentKind.latest);
@@ -231,16 +258,18 @@ void main() {
   group('wy 网易云', () {
     test('最新评论：响应游标写入下一页 + 第 2 页请求体与第 1 页不同', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': 200,
-          'data': {
-            'comments': [
-              {'commentId': 'c1', 'content': '好听', 'time': 1700000000000},
-            ],
-            'totalCount': 30,
-            'cursor': 'CURSOR-1',
-          },
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': 200,
+            'data': {
+              'comments': [
+                {'commentId': 'c1', 'content': '好听', 'time': 1700000000000},
+              ],
+              'totalCount': 30,
+              'cursor': 'CURSOR-1',
+            },
+          }),
+        );
       });
 
       final first = await WyComment.fetch('186016', kind: CommentKind.latest);
@@ -256,13 +285,15 @@ void main() {
 
     test('热门评论：热门接口 + total', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': 200,
-          'hotComments': [
-            {'commentId': 'h1', 'content': '热评', 'time': 1700000000000},
-          ],
-          'total': 5,
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': 200,
+            'hotComments': [
+              {'commentId': 'h1', 'content': '热评', 'time': 1700000000000},
+            ],
+            'total': 5,
+          }),
+        );
       });
 
       final page = await WyComment.fetch('186016', kind: CommentKind.hot);
@@ -283,23 +314,34 @@ void main() {
   group('tx QQ 音乐', () {
     test('热门评论：PageNum 偏移 + Total', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': 0,
-          'req': {
+        return textResponse(
+          jsonEncode({
             'code': 0,
-            'data': {
-              'CommentList': {
-                'Total': 88,
-                'Comments': [
-                  {'SeqNo': 's1', 'CmId': 'm1', 'Content': '热评', 'PubTime': 1700000000},
-                ],
+            'req': {
+              'code': 0,
+              'data': {
+                'CommentList': {
+                  'Total': 88,
+                  'Comments': [
+                    {
+                      'SeqNo': 's1',
+                      'CmId': 'm1',
+                      'Content': '热评',
+                      'PubTime': 1700000000,
+                    },
+                  ],
+                },
               },
             },
-          },
-        }));
+          }),
+        );
       });
 
-      final page = await TxComment.fetch('97773', kind: CommentKind.hot, page: 2);
+      final page = await TxComment.fetch(
+        '97773',
+        kind: CommentKind.hot,
+        page: 2,
+      );
       final body = jsonDecode(requestBodyText(adapter.lastRequest)) as Map;
       final req = body['req'] as Map;
       expect((req['param'] as Map)['BizId'], '97773');
@@ -312,24 +354,30 @@ void main() {
 
     test('最新评论：表单 pagenum 偏移 + commenttotal', () async {
       final adapter = install((options) async {
-        return textResponse(jsonEncode({
-          'code': 0,
-          'comment': {
-            'commenttotal': 230665,
-            'commentlist': [
-              {
-                'rootcommentid': 'r1',
-                'commentid': 'c1',
-                'rootcommentcontent': '根评论\\n第二行',
-                'rootcommentnick': '@甲',
-                'time': 1700000000,
-              },
-            ],
-          },
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': 0,
+            'comment': {
+              'commenttotal': 230665,
+              'commentlist': [
+                {
+                  'rootcommentid': 'r1',
+                  'commentid': 'c1',
+                  'rootcommentcontent': '根评论\\n第二行',
+                  'rootcommentnick': '@甲',
+                  'time': 1700000000,
+                },
+              ],
+            },
+          }),
+        );
       });
 
-      final page = await TxComment.fetch('97773', kind: CommentKind.latest, page: 3);
+      final page = await TxComment.fetch(
+        '97773',
+        kind: CommentKind.latest,
+        page: 3,
+      );
       final form = Uri.splitQueryString(requestBodyText(adapter.lastRequest));
       expect(form['topid'], '97773');
       expect(form['pagenum'], '2');
@@ -342,10 +390,12 @@ void main() {
 
     test('req.code 非 0：失败', () async {
       install((options) async {
-        return textResponse(jsonEncode({
-          'code': 0,
-          'req': {'code': 1000, 'data': <String, dynamic>{}},
-        }));
+        return textResponse(
+          jsonEncode({
+            'code': 0,
+            'req': {'code': 1000, 'data': <String, dynamic>{}},
+          }),
+        );
       });
       await expectLater(
         TxComment.fetch('1', kind: CommentKind.hot),
@@ -359,8 +409,11 @@ void main() {
       await expectLater(
         BuiltinComments.fetch('lx_custom', const {}, kind: CommentKind.hot),
         throwsA(
-          isA<SourceFailure>()
-              .having((f) => f.kind, 'kind', FailureKind.unsupported),
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
         ),
       );
     });
@@ -370,7 +423,9 @@ void main() {
         fail('不应发起请求');
       });
       await expectLater(
-        BuiltinComments.fetch('kw', const {'name': '无 id'}, kind: CommentKind.hot),
+        BuiltinComments.fetch('kw', const {
+          'name': '无 id',
+        }, kind: CommentKind.hot),
         throwsA(
           isA<SourceFailure>()
               .having((f) => f.kind, 'kind', FailureKind.unknown)

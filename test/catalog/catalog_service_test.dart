@@ -14,11 +14,11 @@ import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 
 Track _track(String sourceKey, String id) => Track(
-      id: TrackId(sourceKey, id),
-      title: 'Title $id',
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId(sourceKey, id),
+  title: 'Title $id',
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 class _FakeMusicSource implements MusicSource {
   _FakeMusicSource(this.key);
@@ -40,10 +40,10 @@ class _FakeMusicSource implements MusicSource {
 
   @override
   SourceCapabilities get capabilities => const SourceCapabilities(
-        search: true,
-        pagination: true,
-        resolveUrl: true,
-      );
+    search: true,
+    pagination: true,
+    resolveUrl: true,
+  );
 
   @override
   Future<void> init() async {}
@@ -92,10 +92,7 @@ class _FakeMusicSource implements MusicSource {
     return SearchResult(
       items: [
         LyricHit(
-          track: _track(
-            key,
-            '${query.keyword}-l${query.page}',
-          ),
+          track: _track(key, '${query.keyword}-l${query.page}'),
           snippet: '命中歌词 ${query.keyword}',
         ),
       ],
@@ -113,8 +110,10 @@ class _FakeMusicSource implements MusicSource {
     final error = resolveError;
     if (error != null) throw error;
     return PlayableStream(
-      Uri.parse('https://cdn.example/$key/${track.id.id}'
-          '${preferredQuality == null ? '' : '?q=${preferredQuality.type}'}'),
+      Uri.parse(
+        'https://cdn.example/$key/${track.id.id}'
+        '${preferredQuality == null ? '' : '?q=${preferredQuality.type}'}',
+      ),
     );
   }
 
@@ -130,22 +129,20 @@ class _FakeMusicSource implements MusicSource {
     required CommentKind kind,
     int page = 1,
     int limit = 20,
-  }) async =>
-      CommentPage.fromPage(
-        kind: kind,
-        items: const [],
-        page: page,
-        limit: limit,
-        total: 0,
-      );
+  }) async => CommentPage.fromPage(
+    kind: kind,
+    items: const [],
+    page: page,
+    limit: limit,
+    total: 0,
+  );
 
   @override
   Future<CollectionPage> collection(
     CollectionRef ref, {
     int page = 1,
     int limit = 50,
-  }) async =>
-      const CollectionPage();
+  }) async => const CollectionPage();
 
   @override
   Track? adopt(Track track) => null;
@@ -251,11 +248,7 @@ void main() {
     await service.search('kw', query);
     await service.resolve(track);
     expect(source.searchCalls, 2, reason: '搜索缓存已清空，重新请求');
-    expect(
-      source.resolveCalls,
-      1,
-      reason: '取链缓存刻意保留，托盘听歌不重新取链',
-    );
+    expect(source.resolveCalls, 1, reason: '取链缓存刻意保留，托盘听歌不重新取链');
   });
 
   test('search：未知音源抛 StateError', () async {
@@ -306,26 +299,32 @@ void main() {
       },
     );
 
-    expect(CatalogService.resolveCacheKey(a, null),
-        CatalogService.resolveCacheKey(b, null),
-        reason: 'Map 键序不同但内容相同 → 同一 key');
+    expect(
+      CatalogService.resolveCacheKey(a, null),
+      CatalogService.resolveCacheKey(b, null),
+      reason: 'Map 键序不同但内容相同 → 同一 key',
+    );
     expect(CatalogService.resolveCacheKey(a, null), startsWith('url:kw:'));
     expect(CatalogService.resolveCacheKey(a, null), endsWith(':auto'));
     expect(
       CatalogService.resolveCacheKey(a, const AudioQuality(type: '320k')),
-      isNot(CatalogService.resolveCacheKey(
-          a, const AudioQuality(type: '128k'))),
+      isNot(
+        CatalogService.resolveCacheKey(a, const AudioQuality(type: '128k')),
+      ),
     );
     expect(
       CatalogService.resolveCacheKey(a, null),
-      isNot(CatalogService.resolveCacheKey(
+      isNot(
+        CatalogService.resolveCacheKey(
           Track(
             id: const TrackId('tx', 'a'),
             title: 't',
             origin: TrackOrigin.lx,
             payload: a.payload,
           ),
-          null)),
+          null,
+        ),
+      ),
     );
   });
 
@@ -364,8 +363,13 @@ void main() {
 
     await expectLater(
       service.resolve(track),
-      throwsA(isA<SourceFailure>()
-          .having((f) => f.kind, 'kind', FailureKind.scriptError)),
+      throwsA(
+        isA<SourceFailure>().having(
+          (f) => f.kind,
+          'kind',
+          FailureKind.scriptError,
+        ),
+      ),
     );
 
     source.resolveError = null;
@@ -420,9 +424,11 @@ void main() {
 
     await expectLater(
       service.search('kw', query),
-      throwsA(isA<SourceFailure>()
-          .having((f) => f.kind, 'kind', FailureKind.unknown)
-          .having((f) => f.retryable, 'retryable', isFalse)),
+      throwsA(
+        isA<SourceFailure>()
+            .having((f) => f.kind, 'kind', FailureKind.unknown)
+            .having((f) => f.retryable, 'retryable', isFalse),
+      ),
     );
 
     source.searchError = null;
@@ -443,7 +449,10 @@ void main() {
     await service.searchArtists('kw', query);
     expect(source.artistSearchCalls, 1, reason: '同 key 命中缓存');
 
-    await service.searchArtists('kw', const SearchQuery(keyword: '周杰伦', page: 2));
+    await service.searchArtists(
+      'kw',
+      const SearchQuery(keyword: '周杰伦', page: 2),
+    );
     await service.searchArtists('kw', const SearchQuery(keyword: '温岚'));
     expect(source.artistSearchCalls, 3);
 
@@ -513,10 +522,7 @@ void main() {
     addTearDown(registry.dispose);
     final service = CatalogService(registry: registry);
 
-    await expectLater(
-      service.resolve(_track('nope', 'a')),
-      throwsStateError,
-    );
+    await expectLater(service.resolve(_track('nope', 'a')), throwsStateError);
   });
 
   test('invalidateSearchPrefix 清空对应前缀缓存', () async {

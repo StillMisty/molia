@@ -8,11 +8,11 @@ import 'package:molia/domain/ports/music_source.dart';
 /// `local` 音源：能力位、payload 路径取链、文件缺失归一化。
 void main() {
   Track makeTrack(Map<String, Object?> payload) => Track(
-        id: const TrackId('local', 'kw:1'),
-        title: '本地歌曲',
-        origin: TrackOrigin.localFile,
-        payload: payload,
-      );
+    id: const TrackId('local', 'kw:1'),
+    title: '本地歌曲',
+    origin: TrackOrigin.localFile,
+    payload: payload,
+  );
 
   test('能力位只有 resolveUrl（搜索/歌词/封面/集合全 false）', () {
     final source = LocalMusicSource();
@@ -37,11 +37,14 @@ void main() {
     final source = LocalMusicSource(fileExists: (path) async => false);
     await expectLater(
       source.resolve(makeTrack({'path': '/data/missing.mp3'})),
-      throwsA(predicate(
-        (e) => e is SourceFailure &&
-            e.kind == FailureKind.notFound &&
-            e.l10nKey == 'downloadFileMissing',
-      )),
+      throwsA(
+        predicate(
+          (e) =>
+              e is SourceFailure &&
+              e.kind == FailureKind.notFound &&
+              e.l10nKey == 'downloadFileMissing',
+        ),
+      ),
     );
   });
 
@@ -49,9 +52,9 @@ void main() {
     final source = LocalMusicSource(fileExists: (path) async => true);
     await expectLater(
       source.resolve(makeTrack(const {})),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.kind == FailureKind.notFound,
-      )),
+      throwsA(
+        predicate((e) => e is SourceFailure && e.kind == FailureKind.notFound),
+      ),
     );
   });
 
@@ -59,15 +62,19 @@ void main() {
     final source = LocalMusicSource();
     await expectLater(
       source.search(const SearchQuery(keyword: 'x')),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.kind == FailureKind.unsupported,
-      )),
+      throwsA(
+        predicate(
+          (e) => e is SourceFailure && e.kind == FailureKind.unsupported,
+        ),
+      ),
     );
     await expectLater(
       source.collection(const CollectionRef(type: 'album', id: '1')),
-      throwsA(predicate(
-        (e) => e is SourceFailure && e.kind == FailureKind.unsupported,
-      )),
+      throwsA(
+        predicate(
+          (e) => e is SourceFailure && e.kind == FailureKind.unsupported,
+        ),
+      ),
     );
     expect(await source.lyrics(makeTrack(const {})), isNull);
     expect(await source.artwork(makeTrack(const {})), isNull);
@@ -78,11 +85,13 @@ void main() {
     final local = makeTrack(const {});
     expect(source.adopt(local), same(local));
     expect(
-      source.adopt(Track(
-        id: const TrackId('kw', '1'),
-        title: 't',
-        origin: TrackOrigin.builtin,
-      )),
+      source.adopt(
+        Track(
+          id: const TrackId('kw', '1'),
+          title: 't',
+          origin: TrackOrigin.builtin,
+        ),
+      ),
       isNull,
     );
   });

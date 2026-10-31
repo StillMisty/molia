@@ -56,7 +56,8 @@ void showSyncNoticeAndClose(BuildContext context, String message) {
 void showSyncPeerConnectedNotice(BuildContext hostContext, SyncPeerState peer) {
   final l10n = AppLocalizations.of(hostContext);
   if (l10n == null) return;
-  final name =
-      peer.name.trim().isEmpty ? shortDeviceId(peer.deviceId) : peer.name.trim();
+  final name = peer.name.trim().isEmpty
+      ? shortDeviceId(peer.deviceId)
+      : peer.name.trim();
   showSyncNotice(hostContext, l10n.syncPeerConnected(name));
 }

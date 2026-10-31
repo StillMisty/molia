@@ -38,11 +38,12 @@ class SyncJournalLimits {
   final int maxEntries;
 
   /// 窗口是否已超过任一硬上限。
-  bool exceeds(
-          {required int entries,
-          required int bytes,
-          required int oldestAt,
-          required int nowMs}) =>
+  bool exceeds({
+    required int entries,
+    required int bytes,
+    required int oldestAt,
+    required int nowMs,
+  }) =>
       entries > maxEntries ||
       bytes > maxBytes ||
       (oldestAt > 0 && nowMs - oldestAt > maxAge.inMilliseconds);
@@ -79,11 +80,7 @@ abstract interface class SyncJournalStore {
   /// 正常路径不会裁到它之后（否则落后 / 新加入的对端无法 bootstrap）；
   /// 窗口超过硬上限时把覆盖推进到头部并保留最新的、仍在上限内的条目，
   /// 更旧的对端降级 bootstrap。
-  Future<int> compact({
-    required int minAck,
-    required int coverage,
-    int? nowMs,
-  });
+  Future<int> compact({required int minAck, required int coverage, int? nowMs});
 
   /// 清空日志与窗口状态（派生数据：可由本地数据重建）。
   ///
@@ -133,7 +130,7 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     required this._databaseProvider,
     this.limits = const SyncJournalLimits(),
     int Function()? clock,
-  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+  }) : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final MoliaDatabase Function() _databaseProvider;
   final SyncJournalLimits limits;
@@ -172,9 +169,7 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
             versionCounter: Value(record.version.counter),
             deviceId: Value(record.version.deviceId),
             deleted: Value(record.deleted),
-            data: Value(
-              record.data == null ? null : jsonEncode(record.data),
-            ),
+            data: Value(record.data == null ? null : jsonEncode(record.data)),
             at: at,
           ),
         );
@@ -212,12 +207,17 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     return db.transaction(() async {
       final state = await _stateRow(db);
       final head = await _headSeq(db);
-      final row = await db.customSelect('''
+      final row = await db
+          .customSelect(
+            '''
         SELECT COUNT(*) AS n,
                COALESCE(SUM(LENGTH("key") + COALESCE(LENGTH(data), 0) + 96), 0) AS b,
                COALESCE(MIN(at), 0) AS o
         FROM sync_journal WHERE seq > ?
-      ''', variables: [Variable<int>(state.baseSeq)]).getSingle();
+      ''',
+            variables: [Variable<int>(state.baseSeq)],
+          )
+          .getSingle();
       return SyncJournalStats(
         headSeq: head,
         baseSeq: state.baseSeq,
@@ -238,20 +238,22 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
       ..orderBy([(t) => OrderingTerm.asc(t.seq)]);
     if (limit > 0) query.limit(limit);
     final rows = await query.get();
-    return [
-      for (final row in rows)
-        ?_entryFromRow(row),
-    ];
+    return [for (final row in rows) ?_entryFromRow(row)];
   }
 
   /// 窗口的近似字节量（`seq > since` 的部分；对端落后字节用）。
   @override
   Future<int> windowBytes({int since = -1}) async {
     final db = _db;
-    final row = await db.customSelect('''
+    final row = await db
+        .customSelect(
+          '''
       SELECT COALESCE(SUM(LENGTH("key") + COALESCE(LENGTH(data), 0) + 96), 0) AS b
       FROM sync_journal WHERE seq > ?
-    ''', variables: [Variable<int>(since)]).getSingle();
+    ''',
+          variables: [Variable<int>(since)],
+        )
+        .getSingle();
     return (row.data['b'] as num?)?.toInt() ?? 0;
   }
 
@@ -283,12 +285,17 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     return db.transaction(() async {
       final state = await _stateRow(db);
       final head = await _headSeq(db);
-      final row = await db.customSelect('''
+      final row = await db
+          .customSelect(
+            '''
         SELECT COUNT(*) AS n,
                COALESCE(SUM(LENGTH("key") + COALESCE(LENGTH(data), 0) + 96), 0) AS b,
                COALESCE(MIN(at), 0) AS o
         FROM sync_journal WHERE seq > ?
-      ''', variables: [Variable<int>(state.baseSeq)]).getSingle();
+      ''',
+            variables: [Variable<int>(state.baseSeq)],
+          )
+          .getSingle();
       final entries = (row.data['n'] as num?)?.toInt() ?? 0;
       final bytes = (row.data['b'] as num?)?.toInt() ?? 0;
       final oldestAt = (row.data['o'] as num?)?.toInt() ?? 0;
@@ -300,8 +307,12 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
       )) {
         // 硬上限：快照覆盖推进到头部（引擎随后构建并推送新快照），保留最新
         // 的、仍在上限内的条目；更旧的对端下次拉取时走 bootstrap。
-        final keepFrom =
-            await _newestWithinLimits(db, state.baseSeq, head, now);
+        final keepFrom = await _newestWithinLimits(
+          db,
+          state.baseSeq,
+          head,
+          now,
+        );
         await _writeState(db, baseSeq: keepFrom, snapshotSeq: head);
         await _trim(db, keepFrom);
         return keepFrom;
@@ -339,10 +350,15 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     int head,
     int nowMs,
   ) async {
-    final rows = await executor.customSelect('''
+    final rows = await executor
+        .customSelect(
+          '''
       SELECT seq, at, LENGTH("key") + COALESCE(LENGTH(data), 0) + 96 AS b
       FROM sync_journal WHERE seq > ? ORDER BY seq DESC
-    ''', variables: [Variable<int>(baseSeq)]).get();
+    ''',
+          variables: [Variable<int>(baseSeq)],
+        )
+        .get();
     var entries = 0;
     var bytes = 0;
     var keepFrom = -1;
@@ -380,14 +396,17 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     DatabaseConnectionUser executor,
   ) async {
     final db = _db;
-    final row = await (executor.select(db.syncJournalStates)
-          ..where((t) => t.id.equals(0))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (executor.select(db.syncJournalStates)
+              ..where((t) => t.id.equals(0))
+              ..limit(1))
+            .getSingleOrNull();
     if (row != null) {
       return (baseSeq: row.baseSeq, snapshotSeq: row.snapshotSeq);
     }
-    await executor.into(db.syncJournalStates).insert(
+    await executor
+        .into(db.syncJournalStates)
+        .insert(
           const SyncJournalStatesCompanion(
             id: Value(0),
             baseSeq: Value(0),
@@ -404,7 +423,9 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
     required int snapshotSeq,
   }) async {
     final db = _db;
-    await executor.into(db.syncJournalStates).insert(
+    await executor
+        .into(db.syncJournalStates)
+        .insert(
           SyncJournalStatesCompanion(
             id: const Value(0),
             baseSeq: Value(baseSeq),
@@ -416,9 +437,9 @@ class SyncJournalRepository implements SyncJournalStore, SyncJournalAppender {
 
   Future<void> _trim(DatabaseConnectionUser executor, int throughSeq) async {
     final db = _db;
-    await (executor.delete(db.syncJournal)
-          ..where((t) => t.seq.isSmallerOrEqualValue(throughSeq)))
-        .go();
+    await (executor.delete(
+      db.syncJournal,
+    )..where((t) => t.seq.isSmallerOrEqualValue(throughSeq))).go();
   }
 
   /// 行 → 领域条目；类别未知的行跳过（返回 null）。

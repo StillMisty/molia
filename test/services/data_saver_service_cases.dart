@@ -18,10 +18,10 @@ void main() {
   });
 
   DataSaverService build({bool cellular = false}) => DataSaverService(
-        prefs: prefs,
-        cellularProbe: () async => cellular,
-        cellularChanges: const Stream<bool>.empty(),
-      );
+    prefs: prefs,
+    cellularProbe: () async => cellular,
+    cellularChanges: const Stream<bool>.empty(),
+  );
 
   test('默认值：关闭 / 128k 上限 / 封面省流开启', () async {
     final service = build();

@@ -19,6 +19,7 @@ import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../support/fakes.dart';
 
 class _TestListenable<T> extends ValueNotifier<T>
@@ -27,8 +28,9 @@ class _TestListenable<T> extends ValueNotifier<T>
 }
 
 class _FakeBackend implements PlaybackBackend {
-  final _TestListenable<BackendSnapshot> _notifier =
-      _TestListenable(BackendSnapshot.empty);
+  final _TestListenable<BackendSnapshot> _notifier = _TestListenable(
+    BackendSnapshot.empty,
+  );
 
   PlaybackRequest? lastRequest;
 
@@ -56,6 +58,12 @@ class _FakeBackend implements PlaybackBackend {
   }
 
   List<Track>? lastEnqueued;
+
+  @override
+  Future<bool> moveQueueIndex(int from, int to) async => false;
+
+  @override
+  Future<bool> removeQueueIndex(int index) async => false;
 
   @override
   Future<void> load(PlaybackRequest request) async => lastRequest = request;
@@ -103,8 +111,10 @@ class _FakeBackend implements PlaybackBackend {
 class _FakeMusicSource implements MusicSource {
   _FakeMusicSource(this.key, {this.capabilities = _searchOnly});
 
-  static const _searchOnly =
-      domain.SourceCapabilities(search: true, pagination: true);
+  static const _searchOnly = domain.SourceCapabilities(
+    search: true,
+    pagination: true,
+  );
 
   @override
   final String key;
@@ -173,10 +183,7 @@ class _FakeMusicSource implements MusicSource {
     return SearchResult(
       items: [
         LyricHit(
-          track: _track(
-            key,
-            '${query.keyword}-l${query.page}',
-          ),
+          track: _track(key, '${query.keyword}-l${query.page}'),
           snippet: '命中歌词 ${query.keyword}',
         ),
       ],
@@ -189,8 +196,7 @@ class _FakeMusicSource implements MusicSource {
   Future<PlayableStream> resolve(
     Track track, {
     AudioQuality? preferredQuality,
-  }) async =>
-      PlayableStream(Uri.parse('https://cdn.example/${track.id.uri}'));
+  }) async => PlayableStream(Uri.parse('https://cdn.example/${track.id.uri}'));
 
   @override
   Future<LyricsDoc?> lyrics(Track track) async => null;
@@ -204,22 +210,20 @@ class _FakeMusicSource implements MusicSource {
     required CommentKind kind,
     int page = 1,
     int limit = 20,
-  }) async =>
-      CommentPage.fromPage(
-        kind: kind,
-        items: const [],
-        page: page,
-        limit: limit,
-        total: 0,
-      );
+  }) async => CommentPage.fromPage(
+    kind: kind,
+    items: const [],
+    page: page,
+    limit: limit,
+    total: 0,
+  );
 
   @override
   Future<CollectionPage> collection(
     CollectionRef ref, {
     int page = 1,
     int limit = 50,
-  }) async =>
-      const CollectionPage();
+  }) async => const CollectionPage();
 
   @override
   Track? adopt(Track track) => null;
@@ -242,9 +246,9 @@ class _FakeRegistry implements SourceRegistry {
 
   @override
   Set<String> get enabledChannelKeys => {
-        for (final descriptor in _descriptors)
-          if (descriptor.enabled) descriptor.key,
-      };
+    for (final descriptor in _descriptors)
+      if (descriptor.enabled) descriptor.key,
+  };
 
   @override
   MusicSource? byKey(String key) => _sources[key];
@@ -268,29 +272,28 @@ domain.SourceDescriptor _descriptor(
   String key,
   String name, {
   domain.SourceKind kind = domain.SourceKind.builtin,
-}) =>
-    domain.SourceDescriptor(
-      key: key,
-      displayName: name,
-      kind: kind,
-      capabilities: const domain.SourceCapabilities(
-        search: true,
-        pagination: true,
-        resolveUrl: true,
-      ),
-    );
+}) => domain.SourceDescriptor(
+  key: key,
+  displayName: name,
+  kind: kind,
+  capabilities: const domain.SourceCapabilities(
+    search: true,
+    pagination: true,
+    resolveUrl: true,
+  ),
+);
 
 Track _track(String sourceKey, String id) => Track(
-      id: TrackId(sourceKey, id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      artwork: Artwork(uri: Uri.parse('https://img.example/$id.jpg')),
-      origin: TrackOrigin.lx,
-      qualities: const [AudioQuality(type: '320k')],
-      payload: {'songmid': id, 'id': id},
-    );
+  id: TrackId(sourceKey, id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  artwork: Artwork(uri: Uri.parse('https://img.example/$id.jpg')),
+  origin: TrackOrigin.lx,
+  qualities: const [AudioQuality(type: '320k')],
+  payload: {'songmid': id, 'id': id},
+);
 
 Future<void> _waitUntil(bool Function() predicate) async {
   for (var i = 0; i < 100 && !predicate(); i++) {
@@ -341,8 +344,10 @@ void main() {
     expect(identical(options, registry.descriptors), isTrue);
     expect(options.map((o) => o.key), ['kw', 'tx']);
     expect(options.map((o) => o.displayName), ['酷我', 'QQ音乐']);
-    expect(options.map((o) => o.kind),
-        [domain.SourceKind.builtin, domain.SourceKind.lx]);
+    expect(options.map((o) => o.kind), [
+      domain.SourceKind.builtin,
+      domain.SourceKind.lx,
+    ]);
     expect(options.every((o) => o.capabilities.search), isTrue);
 
     expect(provider.sourceKey, 'kw');
@@ -352,15 +357,14 @@ void main() {
 
   test('performSearch：typed 行 + 分页元数据', () async {
     final source = _FakeMusicSource('kw')
-      ..onSearch = (query) => Future.value(SearchResult(
-            items: [_track('kw', 'a'), _track('kw', 'b')],
-            hasMore: true,
-            total: 100,
-          ));
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+      ..onSearch = (query) => Future.value(
+        SearchResult(
+          items: [_track('kw', 'a'), _track('kw', 'b')],
+          hasMore: true,
+          total: 100,
+        ),
+      );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -388,10 +392,7 @@ void main() {
 
   test('搜索缓存：同 query 重复提交只请求一次', () async {
     final source = _FakeMusicSource('kw');
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -406,21 +407,20 @@ void main() {
 
   test('loadMore：跨页去重、currentPage/hasMore/total 更新', () async {
     final source = _FakeMusicSource('kw')
-      ..onSearch = (query) => Future.value(query.page == 1
-          ? SearchResult(
-              items: [_track('kw', 'a'), _track('kw', 'b')],
-              hasMore: true,
-              total: 4,
-            )
-          : SearchResult(
-              items: [_track('kw', 'b'), _track('kw', 'c')],
-              hasMore: false,
-              total: 4,
-            ));
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+      ..onSearch = (query) => Future.value(
+        query.page == 1
+            ? SearchResult(
+                items: [_track('kw', 'a'), _track('kw', 'b')],
+                hasMore: true,
+                total: 4,
+              )
+            : SearchResult(
+                items: [_track('kw', 'b'), _track('kw', 'c')],
+                hasMore: false,
+                total: 4,
+              ),
+      );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -438,10 +438,7 @@ void main() {
 
   test('搜索失败：failure 归一化（kind/message），结果保留为空', () async {
     final source = _FakeMusicSource('kw')..searchError = StateError('boom');
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -449,10 +446,16 @@ void main() {
     await _waitUntil(() => !provider.isSearching);
 
     expect(provider.failure, isNotNull);
-    expect(provider.failure!.message, contains('boom'),
-        reason: '归一化后的 message 保留原始说明');
-    expect(provider.failure!.kind, FailureKind.unknown,
-        reason: 'StateError 归一化为 unknown');
+    expect(
+      provider.failure!.message,
+      contains('boom'),
+      reason: '归一化后的 message 保留原始说明',
+    );
+    expect(
+      provider.failure!.kind,
+      FailureKind.unknown,
+      reason: 'StateError 归一化为 unknown',
+    );
     expect(provider.failure!.retryable, isFalse);
     expect(provider.searchResults, isEmpty);
     expect(provider.filteredResults, isEmpty);
@@ -460,13 +463,10 @@ void main() {
 
   test('playItem：SourceTrack 队列交给 PlaybackProvider，payload 原样保留', () async {
     final source = _FakeMusicSource('kw')
-      ..onSearch = (query) => Future.value(SearchResult(
-            items: [_track('kw', 'a'), _track('kw', 'b')],
-          ));
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+      ..onSearch = (query) => Future.value(
+        SearchResult(items: [_track('kw', 'a'), _track('kw', 'b')]),
+      );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -530,10 +530,7 @@ void main() {
         artist: true,
       ),
     );
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -545,7 +542,8 @@ void main() {
 
     provider.selectSearchKind(SearchKind.artist);
     await _waitUntil(
-        () => !provider.isSearching && provider.artistResults.isNotEmpty);
+      () => !provider.isSearching && provider.artistResults.isNotEmpty,
+    );
     expect(source.artistSearchCalls, 1, reason: '切到歌手类型才发起歌手搜索');
     expect(provider.artistResults.single.name, '歌手 周杰伦');
     expect(provider.totalResults, 42, reason: '分页元数据取当前类型');
@@ -572,10 +570,7 @@ void main() {
         artist: true,
       ),
     );
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -587,9 +582,11 @@ void main() {
 
     // 歌手类型处于激活态时换词：直接按新关键词刷新（同一会话）。
     provider.submitSearch('温岚');
-    await _waitUntil(() =>
-        provider.artistResults.isNotEmpty &&
-        provider.artistResults.single.name == '歌手 温岚');
+    await _waitUntil(
+      () =>
+          provider.artistResults.isNotEmpty &&
+          provider.artistResults.single.name == '歌手 温岚',
+    );
     expect(source.artistSearchCalls, 2);
 
     // 切回单曲后换词：非激活类型的会话被清空，切回时重新搜索。
@@ -613,20 +610,15 @@ void main() {
         lyricSearch: true,
       ),
     );
-    source.onSearch = (query) => Future.value(SearchResult(
-          items: [_track('kw', 'a')],
-          total: 1,
-        ));
-    source.onSearchLyrics = (query) => Future.value(SearchResult(
-          items: [
-            LyricHit(track: _track('kw', 'l1'), snippet: '雨下整夜'),
-          ],
-          total: 1,
-        ));
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
+    source.onSearch = (query) =>
+        Future.value(SearchResult(items: [_track('kw', 'a')], total: 1));
+    source.onSearchLyrics = (query) => Future.value(
+      SearchResult(
+        items: [LyricHit(track: _track('kw', 'l1'), snippet: '雨下整夜')],
+        total: 1,
+      ),
     );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -653,10 +645,7 @@ void main() {
 
   test('歌词类型：能力位不足时分段不出现且切换被忽略', () async {
     final source = _FakeMusicSource('kw');
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -705,25 +694,23 @@ void main() {
         lyricSearch: true,
       ),
     );
-    source.onSearch = (query) => Future.value(SearchResult(
-          items: [_track('kw', 'song-${query.page}')],
-          hasMore: true,
-          total: 10,
-        ));
-    source.onSearchLyrics = (query) => Future.value(SearchResult(
-          items: [
-            LyricHit(
-              track: _track('kw', 'lyric-${query.page}'),
-              snippet: '命中片段',
-            ),
-          ],
-          hasMore: true,
-          total: 1,
-        ));
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
+    source.onSearch = (query) => Future.value(
+      SearchResult(
+        items: [_track('kw', 'song-${query.page}')],
+        hasMore: true,
+        total: 10,
+      ),
     );
+    source.onSearchLyrics = (query) => Future.value(
+      SearchResult(
+        items: [
+          LyricHit(track: _track('kw', 'lyric-${query.page}'), snippet: '命中片段'),
+        ],
+        hasMore: true,
+        total: 1,
+      ),
+    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -758,10 +745,7 @@ void main() {
   test('releaseSearchResults：释放前在途的响应落地后作废', () async {
     final gate = Completer<SearchResult<Track>>();
     final source = _FakeMusicSource('kw')..onSearch = (query) => gate.future;
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -780,10 +764,7 @@ void main() {
 
   test('releaseSearchResults：取消待触发的防抖计时器，不再发请求', () {
     final source = _FakeMusicSource('kw');
-    final registry = _FakeRegistry(
-      {'kw': source},
-      [_descriptor('kw', '酷我')],
-    );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 

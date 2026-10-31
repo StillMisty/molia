@@ -30,25 +30,32 @@ void main() {
 
   const trackId = TrackId('wy', '1');
 
-  Uint8List jpeg(int seed) => Uint8List.fromList(
-        [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, seed, seed, seed],
-      );
+  Uint8List jpeg(int seed) => Uint8List.fromList([
+    0xFF,
+    0xD8,
+    0xFF,
+    0xE0,
+    0x00,
+    0x10,
+    seed,
+    seed,
+    seed,
+  ]);
 
   SyncRecord imageRecord(
     String key,
     Uint8List bytes, {
     required SyncVersion version,
-  }) =>
-      SyncRecord(
-        key: key,
-        version: version,
-        data: {
-          'image': base64Encode(bytes),
-          'mime': 'image/jpeg',
-          'hash': sha256.convert(bytes).toString(),
-          'updatedAt': version.physical,
-        },
-      );
+  }) => SyncRecord(
+    key: key,
+    version: version,
+    data: {
+      'image': base64Encode(bytes),
+      'mime': 'image/jpeg',
+      'hash': sha256.convert(bytes).toString(),
+      'updatedAt': version.physical,
+    },
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -89,10 +96,7 @@ void main() {
     expect(record.key, 'wy:1');
     expect(record.deleted, isFalse);
     expect(record.version.physical, greaterThan(0));
-    expect(
-      base64Decode(record.data!['image'] as String),
-      jpeg(1),
-    );
+    expect(base64Decode(record.data!['image'] as String), jpeg(1));
     expect(record.data!['mime'], 'image/jpeg');
     expect(record.data!['hash'], sha256.convert(jpeg(1)).toString());
     expect(journal.changes, hasLength(1), reason: '开启类别时首次登记要进增量');
@@ -130,8 +134,9 @@ void main() {
 
     now = 2000;
     await store.resetTrackCover(trackId);
-    final deleted = (await adapter.collect())[SyncCategory.covers]!
-        .singleWhere((record) => record.deleted);
+    final deleted = (await adapter.collect())[SyncCategory.covers]!.singleWhere(
+      (record) => record.deleted,
+    );
     expect(state.coverTombstones['wy:1']!.version, deleted.version);
 
     journal.changes.clear();
@@ -157,8 +162,9 @@ void main() {
     await store.resetTrackCover(trackId);
     final after = (await adapter.collect())[SyncCategory.covers]!;
 
-    final tombstone =
-        after.singleWhere((record) => record.deleted && record.key == 'wy:1');
+    final tombstone = after.singleWhere(
+      (record) => record.deleted && record.key == 'wy:1',
+    );
     expect(tombstone.version.isNewerThan(image.version), isTrue);
     expect(state.coverStamps.containsKey('wy:1'), isFalse);
     expect(state.coverTombstones['wy:1']!.version, tombstone.version);
@@ -192,9 +198,7 @@ void main() {
 
     // 同版本不同内容（全量快照强制交付）：修回远端视图。
     outcome = await adapter.apply({
-      SyncCategory.covers: [
-        imageRecord('wy:1', jpeg(3), version: newer),
-      ],
+      SyncCategory.covers: [imageRecord('wy:1', jpeg(3), version: newer)],
     });
     expect(outcome.applied, 1);
     expect(await store.readTrackCover(trackId), jpeg(3));
@@ -285,7 +289,7 @@ void main() {
           key: 'wy:bad',
           version: const SyncVersion(physical: 5000, deviceId: 'devB'),
           data: {
-            'image': base64Encode([1, 2, 3])
+            'image': base64Encode([1, 2, 3]),
           },
         ),
         SyncRecord(
@@ -341,10 +345,7 @@ void main() {
       ]),
     );
     final records = (await adapter.collect())[SyncCategory.covers]!;
-    expect(
-      records.where((record) => record.key == 'wy:local-huge'),
-      isEmpty,
-    );
+    expect(records.where((record) => record.key == 'wy:local-huge'), isEmpty);
     expect(store.trackCoverPath(const TrackId('wy', 'local-huge')), isNotNull);
     expect(journal.changes, isEmpty);
   });
@@ -369,7 +370,8 @@ void main() {
 
     // 手动完整备份请求全部类别（即使开关关闭）仍能看到封面记录。
     final covers = (await scoped.collectForCategories(
-        SyncCategory.values.toSet()))[SyncCategory.covers]!;
+      SyncCategory.values.toSet(),
+    ))[SyncCategory.covers]!;
     expect(covers, hasLength(1));
     expect(counting.reads, 1);
   });
@@ -437,10 +439,7 @@ void main() {
 
 /// 记录读盘次数的封面存储：验证非封面轮不触碰封面文件。
 class _CountingCoverStore extends CustomCoverStore {
-  _CountingCoverStore({
-    required super.supportDirectory,
-    required super.clock,
-  });
+  _CountingCoverStore({required super.supportDirectory, required super.clock});
 
   int reads = 0;
 

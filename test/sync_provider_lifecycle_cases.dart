@@ -72,11 +72,7 @@ void main() {
 
     await transport.pulled.future.timeout(const Duration(seconds: 2));
     expect(transport.hiddenCalls, 1);
-    expect(
-      transport.hiddenAtPull,
-      1,
-      reason: 'pause 轮开始时传输已进入后台：该轮不得广播',
-    );
+    expect(transport.hiddenAtPull, 1, reason: 'pause 轮开始时传输已进入后台：该轮不得广播');
   });
 
   test('回前台复查权限：已开局域网且刚授权时启动传输，不再次请求', () async {
@@ -154,11 +150,7 @@ void main() {
     final beforeClose = built.transport.pullCount;
     await built.provider.setTransportEnabled(SyncTransportKind.lan, false);
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(
-      built.transport.pullCount,
-      beforeClose,
-      reason: '关闭传输不触发检查轮',
-    );
+    expect(built.transport.pullCount, beforeClose, reason: '关闭传输不触发检查轮');
   });
 
   test('requestLanPermission 授权成功后自动启用并立即检查', () async {
@@ -185,10 +177,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     expect(requested, 1);
-    expect(
-      built.provider.enabledTransports,
-      contains(SyncTransportKind.lan),
-    );
+    expect(built.provider.enabledTransports, contains(SyncTransportKind.lan));
     expect(built.provider.lastReport?.trigger, SyncTrigger.check);
   });
 
@@ -286,13 +275,15 @@ void main() {
 }
 
 Future<
-    ({
-      FakeSyncTransport transport,
-      SyncEngine engine,
-      SyncControlPlane control,
-      SyncScheduler scheduler,
-      SyncProvider provider,
-    })> _buildProviderWithScheduler({
+  ({
+    FakeSyncTransport transport,
+    SyncEngine engine,
+    SyncControlPlane control,
+    SyncScheduler scheduler,
+    SyncProvider provider,
+  })
+>
+_buildProviderWithScheduler({
   LocalNetworkPermission? permission,
   String kind = SyncTransportKind.lan,
 }) async {
@@ -312,10 +303,7 @@ Future<
     transports: {kind: transport},
   );
   await engine.init();
-  final control = SyncControlPlane(
-    state: state,
-    transports: {kind: transport},
-  );
+  final control = SyncControlPlane(state: state, transports: {kind: transport});
   final backup = SyncBackup(
     state: state,
     adapters: const [],

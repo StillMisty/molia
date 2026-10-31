@@ -17,9 +17,9 @@ enum PlayMode {
 
   /// 循环切换到的下一个模式（App 内与系统媒体会话共用）。
   PlayMode get next => switch (this) {
-        PlayMode.listLoop => PlayMode.sequential,
-        PlayMode.sequential => PlayMode.singleRepeat,
-        PlayMode.singleRepeat => PlayMode.shuffle,
-        PlayMode.shuffle => PlayMode.listLoop,
-      };
+    PlayMode.listLoop => PlayMode.sequential,
+    PlayMode.sequential => PlayMode.singleRepeat,
+    PlayMode.singleRepeat => PlayMode.shuffle,
+    PlayMode.shuffle => PlayMode.listLoop,
+  };
 }

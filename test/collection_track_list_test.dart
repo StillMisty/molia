@@ -1,6 +1,6 @@
 /// 合集列表 module 的脚手架与行形状测试：滚动条 / 固定行高 / 行 key /
 /// 空态（共享 EmptyState 配方 + 搜索空态）/ 排序模式 / 行动作构成与两平台
-/// 入口（触摸端左滑胶囊 / 桌面右键菜单）/ 本地歌曲行映射。
+/// 入口（触摸端行尾 ⋮ / 桌面右键菜单）/ 本地歌曲行映射。
 library;
 
 import 'package:flutter/gestures.dart';
@@ -13,7 +13,6 @@ import 'package:molia/providers/local_songs_collection.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/row_actions.dart';
-import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -29,15 +28,17 @@ Future<void> pumpHost(WidgetTester tester, Widget child) async {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
   });
-  await tester.pumpWidget(MaterialApp(
-    locale: const Locale('zh'),
-    localizationsDelegates: const [
-      AppLocalizations.delegate,
-      ...GlobalMaterialLocalizations.delegates,
-    ],
-    supportedLocales: const [Locale('zh')],
-    home: Scaffold(body: child),
-  ));
+  await tester.pumpWidget(
+    MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        ...GlobalMaterialLocalizations.delegates,
+      ],
+      supportedLocales: const [Locale('zh')],
+      home: Scaffold(body: child),
+    ),
+  );
   await tester.pumpAndSettle();
 }
 
@@ -83,8 +84,12 @@ void main() {
 
       final list = tester.widget<ListView>(find.byType(ListView));
       expect(list.padding, _narrowListPadding);
-      final gap = TrackRow.gapOf(tester.element(find.byType(ListView)));
-      expect(list.itemExtent, TrackRow.extent + gap);
+      final context = tester.element(find.byType(ListView));
+      final gap = TrackRow.gapOf(context);
+      expect(
+        list.itemExtent,
+        TrackRow.extentOf(context, tableColumns: false) + gap,
+      );
 
       // 懒加载：200 行只构建视口附近的行。
       expect(find.byType(Text), findsWidgets);
@@ -97,8 +102,11 @@ void main() {
       final list = tester.widget<ListView>(find.byType(ListView));
       final context = tester.element(find.byType(ListView));
       final extent = TrackRow.extentOf(context, tableColumns: true);
-      expect(extent, M3EListItemTheme.defaults.minHeight,
-          reason: 'M3E 列表 token');
+      expect(
+        extent,
+        M3EListItemTheme.defaults.minHeight,
+        reason: 'M3E 列表 token',
+      );
       expect(list.itemExtent, extent + TrackRow.gapOf(context));
     });
 
@@ -110,11 +118,7 @@ void main() {
     });
 
     testWidgets('无可见行：只展示空态，不建列表', (tester) async {
-      await pumpTrackList(
-        tester,
-        count: 0,
-        empty: const Text('合集为空'),
-      );
+      await pumpTrackList(tester, count: 0, empty: const Text('合集为空'));
 
       expect(find.text('合集为空'), findsOneWidget);
       expect(find.byType(Scrollbar), findsNothing);
@@ -130,16 +134,22 @@ void main() {
       );
 
       expect(find.byType(ListView), findsNothing);
-      final reorderable =
-          tester.widget<ReorderableListView>(find.byType(ReorderableListView));
+      final reorderable = tester.widget<ReorderableListView>(
+        find.byType(ReorderableListView),
+      );
       final sliver = tester.widget<SliverReorderableList>(
         find.byType(SliverReorderableList),
       );
-      final gap =
-          TrackRow.gapOf(tester.element(find.byType(SliverReorderableList)));
-      expect(sliver.itemExtent, TrackRow.extent + gap);
+      final gap = TrackRow.gapOf(
+        tester.element(find.byType(SliverReorderableList)),
+      );
+      final extent = TrackRow.extentOf(
+        tester.element(find.byType(SliverReorderableList)),
+        tableColumns: false,
+      );
+      expect(sliver.itemExtent, extent + gap);
       expect(reorderable.padding, _narrowListPadding);
-      expect(reorderable.itemExtent, TrackRow.extent + gap);
+      expect(reorderable.itemExtent, extent + gap);
 
       expect(
         find.byType(ReorderableDelayedDragStartListener),
@@ -153,7 +163,7 @@ void main() {
   });
 
   group('CollectionTrackRow 行外壳', () {
-    testWidgets('无动作 = 纯行；有动作 = 左滑外壳', (tester) async {
+    testWidgets('无动作 = 纯行；有动作 = 行尾 ⋮（触摸端唯一入口）', (tester) async {
       await pumpHost(
         tester,
         Column(
@@ -184,10 +194,18 @@ void main() {
       );
 
       expect(find.byType(TrackRow), findsNWidgets(3));
-      expect(find.byType(SwipeRevealRow), findsOneWidget);
+      expect(
+        find.byIcon(Icons.more_vert_rounded),
+        findsOneWidget,
+        reason: '只有有动作的行渲染 ⋮，空动作不弹空菜单',
+      );
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      expect(find.text('删除'), findsOneWidget);
     });
 
-    testWidgets('桌面：无左滑外壳，右键行表面弹动作菜单，选中触发对应回调', (tester) async {
+    testWidgets('桌面：无行尾 ⋮，右键行表面弹动作菜单，选中触发对应回调', (tester) async {
       var copyPressed = 0;
       var removePressed = 0;
       await pumpHost(
@@ -212,9 +230,9 @@ void main() {
       );
 
       expect(
-        find.byType(SwipeRevealRow),
+        find.byIcon(Icons.more_vert_rounded),
         findsNothing,
-        reason: '桌面不再有鼠标左滑，动作走行表面右键',
+        reason: '桌面入口是行表面右键，不渲染 ⋮',
       );
 
       // 右键行表面 → 菜单在落点展开，条目与动作 label 一一对应。
@@ -254,11 +272,7 @@ void main() {
         kind: PointerDeviceKind.mouse,
       );
       await tester.pumpAndSettle();
-      expect(
-        find.byType(M3EMenuPopup),
-        findsNothing,
-        reason: '无动作 = 纯行，无右键菜单',
-      );
+      expect(find.byType(M3EMenuPopup), findsNothing, reason: '无动作 = 纯行，无右键菜单');
       expect(taps, 0, reason: '右键不触发行点击');
 
       await tester.tap(find.byType(TrackRow));
@@ -318,54 +332,46 @@ void main() {
     });
 
     testWidgets('搜索空态：只给文案', (tester) async {
-      await pumpHost(
-        tester,
-        const CollectionSearchEmpty(message: '没有匹配的歌曲'),
-      );
+      await pumpHost(tester, const CollectionSearchEmpty(message: '没有匹配的歌曲'));
 
       expect(find.text('没有匹配的歌曲'), findsOneWidget);
     });
   });
 
   group('行动作形状与构成', () {
-    testWidgets('触摸端编译：中性 = 默认胶囊；移除类 = primary + error 配色', (tester) async {
-      await pumpHost(tester, const SizedBox());
-      final context = tester.element(find.byType(SizedBox));
-      final scheme = Theme.of(context).colorScheme;
-      var neutralPressed = false;
-      var destructivePressed = false;
-
-      final actions = collectionSwipeActions(context, [
-        RowAction(
-          icon: Icons.playlist_add_rounded,
-          label: '加入列表',
-          onPressed: () => neutralPressed = true,
+    testWidgets('触摸端 ⋮ 菜单：条目按动作顺序，选中触发对应回调', (tester) async {
+      var copyPressed = 0;
+      var removePressed = 0;
+      await pumpHost(
+        tester,
+        CollectionTrackRow(
+          row: const TrackRowModel(title: '有动作'),
+          position: M3ECardPosition.single,
+          actions: [
+            RowAction(
+              icon: Icons.playlist_add_rounded,
+              label: '加入列表',
+              onPressed: () => copyPressed++,
+            ),
+            RowAction(
+              icon: Icons.delete_rounded,
+              label: '取消收藏',
+              destructive: true,
+              onPressed: () => removePressed++,
+            ),
+          ],
         ),
-        RowAction(
-          icon: Icons.delete_rounded,
-          label: '删除',
-          destructive: true,
-          onPressed: () => destructivePressed = true,
-        ),
-      ]);
+      );
 
-      expect(actions, hasLength(2));
-      expect(actions[0].isPrimary, isFalse);
-      expect(actions[0].backgroundColor, isNull);
-      expect(actions[0].foregroundColor, isNull);
-      expect(actions[1].isPrimary, isTrue);
-      expect(actions[1].backgroundColor, scheme.error);
-      expect(actions[1].foregroundColor, scheme.onError);
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      expect(find.text('加入列表'), findsOneWidget);
+      expect(find.text('取消收藏'), findsOneWidget);
 
-      // 图标 semanticLabel 承担无障碍语义（提示气泡不做）。
-      final icon = actions[0].icon;
-      expect(icon, isA<Icon>());
-      expect((icon as Icon).semanticLabel, '加入列表');
-
-      actions[0].onPressed!();
-      actions[1].onPressed!();
-      expect(neutralPressed, isTrue);
-      expect(destructivePressed, isTrue);
+      await tester.tap(find.text('取消收藏'));
+      await tester.pumpAndSettle();
+      expect(removePressed, 1);
+      expect(copyPressed, 0);
     });
 
     testWidgets('接线缺席 = 动作不出现（不生成点了没反应的条目）', (tester) async {
@@ -391,9 +397,9 @@ void main() {
         ),
       );
       final specs = presenter.rowActionsFor(row, identity);
-      expect(specs, hasLength(3), reason: '投影器给出了三条动作');
+      expect(specs, hasLength(4), reason: '投影器给出了四条动作');
 
-      // 页面只接了「加入列表」：另两条动作（换源 / 删除）不出现，
+      // 页面只接了「加入列表」：收藏 / 换源 / 删除都不出现，
       // 而不是留在菜单里点了没反应。
       final wired = buildCollectionRowActions(
         l10n: l10n,
@@ -403,7 +409,7 @@ void main() {
       expect(wired, hasLength(1));
       expect(wired.single.label, l10n.addToPlaylist);
 
-      // 一条都没接：不产生任何动作（调用方据此不渲染菜单 / 左滑入口）。
+      // 一条都没接：不产生任何动作（调用方据此不渲染菜单入口）。
       expect(
         buildCollectionRowActions(
           l10n: l10n,
@@ -425,10 +431,7 @@ void main() {
       );
       final presenter = CollectionPresenter();
 
-      CollectionIdentity identity(
-        CollectionKind kind, {
-        int? playlistId,
-      }) =>
+      CollectionIdentity identity(CollectionKind kind, {int? playlistId}) =>
           CollectionIdentity(
             selectedId: playlistId ?? 1,
             kind: kind,
@@ -669,8 +672,10 @@ void main() {
 
       expect(row.isImported, isTrue);
       expect(row.isCached, isFalse);
-      expect(row.favoriteKey,
-          (sourceKey: kLocalSourceKey, songId: 'local:/music/local.flac'));
+      expect(row.favoriteKey, (
+        sourceKey: kLocalSourceKey,
+        songId: 'local:/music/local.flac',
+      ));
     });
 
     test('缓存行：保留原曲身份，删除 = 清缓存（无下载记录）', () {

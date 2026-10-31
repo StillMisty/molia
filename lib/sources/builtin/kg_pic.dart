@@ -59,8 +59,7 @@ class KgPic {
         body: body,
         headers: _headers,
         retries: BuiltinTransport.defaultRetries,
-        retryIf: (value) =>
-            value is! Map || (value['error_code'] ?? 0) != 0,
+        retryIf: (value) => value is! Map || (value['error_code'] ?? 0) != 0,
       );
       if (json is! Map || json['error_code'] != 0) return null;
       final data = json['data'];

@@ -35,8 +35,10 @@ abstract final class PlayStatisticsLimits {
   }
 
   /// 有效播放判定：`listenedMs ≥ qualifiedThresholdMs(durationMs)`。
-  static bool isQualified({required int listenedMs, required int? durationMs}) =>
-      listenedMs >= qualifiedThresholdMs(durationMs);
+  static bool isQualified({
+    required int listenedMs,
+    required int? durationMs,
+  }) => listenedMs >= qualifiedThresholdMs(durationMs);
 }
 
 /// 统计范围：周 / 月 / 全部。
@@ -46,10 +48,10 @@ enum PlayStatisticsRange { week, month, all }
 extension PlayStatisticsWindow on PlayStatisticsRange {
   /// 窗口起点；[PlayStatisticsRange.all] 为 null。
   DateTime? startOf(DateTime now) => switch (this) {
-        PlayStatisticsRange.week => now.subtract(const Duration(days: 7)),
-        PlayStatisticsRange.month => now.subtract(const Duration(days: 30)),
-        PlayStatisticsRange.all => null,
-      };
+    PlayStatisticsRange.week => now.subtract(const Duration(days: 7)),
+    PlayStatisticsRange.month => now.subtract(const Duration(days: 30)),
+    PlayStatisticsRange.all => null,
+  };
 
   /// 查询用的毫秒纪元（与 [startOf] 同一窗口）。
   int? sinceMs(DateTime now) => startOf(now)?.millisecondsSinceEpoch;

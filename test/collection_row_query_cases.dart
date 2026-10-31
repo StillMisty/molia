@@ -14,17 +14,10 @@ const List<Row> _rows = [
   (title: 'Another', artist: 'Some Artist'),
 ];
 
-List<Row> filter(String query) => filterRowsByQuery(
-      _rows,
-      query: query,
-      fields: (row) => row,
-    );
+List<Row> filter(String query) =>
+    filterRowsByQuery(_rows, query: query, fields: (row) => row);
 
-PlaylistTrack track(
-  String title, {
-  String artist = '',
-  int addedAt = 0,
-}) =>
+PlaylistTrack track(String title, {String artist = '', int addedAt = 0}) =>
     PlaylistTrack(
       playlistId: 1,
       sourceKey: 'wy',
@@ -35,8 +28,9 @@ PlaylistTrack track(
       addedAt: addedAt,
     );
 
-List<String> titlesOf(List<PlaylistTrack> tracks) =>
-    [for (final item in tracks) item.title];
+List<String> titlesOf(List<PlaylistTrack> tracks) => [
+  for (final item in tracks) item.title,
+];
 
 void main() {
   group('filterRowsByQuery', () {

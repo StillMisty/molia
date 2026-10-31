@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
+
 import '../../sources/builtin/tx_lyric.dart';
 import 'lyric_provider.dart';
 import '../../data/http/app_dio.dart';
@@ -22,14 +24,13 @@ class QQProvider extends LyricProvider {
 
   final Map<String, String> _headers = {
     'referer': 'https://y.qq.com/',
-    'user-agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
   };
 
   Map<String, String> get _searchHeaders => {
-        ..._headers,
-        'content-type': 'application/json;charset=utf-8',
-      };
+    ..._headers,
+    'content-type': 'application/json;charset=utf-8',
+  };
 
   QQProvider({Dio? dio}) : _dio = dio ?? createAppDio();
 
@@ -46,16 +47,15 @@ class QQProvider extends LyricProvider {
   }
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     try {
       final keyword = '$title $artist';
       final requestBody = jsonEncode({
-        'comm': {
-          'ct': '19',
-          'cv': '1859',
-          'uin': '0',
-        },
+        'comm': {'ct': '19', 'cv': '1859', 'uin': '0'},
         'req': {
           'method': 'DoSearchForQQMusicDesktop',
           'module': 'music.search.SearchCgiService',
@@ -71,16 +71,16 @@ class QQProvider extends LyricProvider {
 
       final response = await _dio
           .postUri(
-        Uri.parse(_baseSearchUrl),
-        data: requestBody,
-        options: Options(headers: _searchHeaders),
-      )
+            Uri.parse(_baseSearchUrl),
+            data: requestBody,
+            options: Options(headers: _searchHeaders),
+          )
           .timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('搜索请求超时');
-        },
-      );
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException('搜索请求超时');
+            },
+          );
 
       if (response.statusCode != 200) {
         _logger.warning('QQ音乐搜索请求失败，状态码: ${response.statusCode}');
@@ -119,22 +119,24 @@ class QQProvider extends LyricProvider {
         final album = songData['album'];
         final numericId = songData['id']?.toString();
 
-        results.add(SongMatch(
-          songId: songmid as String,
-          title: _normalizeTextField(
-            songData['title'] as String? ?? songData['name'] as String?,
-            title,
+        results.add(
+          SongMatch(
+            songId: songmid as String,
+            title: _normalizeTextField(
+              songData['title'] as String? ?? songData['name'] as String?,
+              title,
+            ),
+            artist: _normalizeTextField(primaryArtist, artist),
+            album: album is Map ? album['name']?.toString() : null,
+            duration: durationSeconds > 0
+                ? Duration(seconds: durationSeconds)
+                : null,
+            extra: {
+              if (numericId != null && numericId.isNotEmpty)
+                'songId': numericId,
+            },
           ),
-          artist: _normalizeTextField(primaryArtist, artist),
-          album: album is Map ? album['name']?.toString() : null,
-          duration: durationSeconds > 0
-              ? Duration(seconds: durationSeconds)
-              : null,
-          extra: {
-            if (numericId != null && numericId.isNotEmpty)
-              'songId': numericId,
-          },
-        ));
+        );
       }
       return results;
     } catch (e) {
@@ -155,9 +157,8 @@ class QQProvider extends LyricProvider {
   /// 结构化歌词：QRC 路径优先（lx 同款参数，含翻译/罗马音/逐字），
   /// 失败依次回退 `PlayLyricInfo`（无 qrc）与 `fcg_query_lyric_new.fcg`。
   @override
-  Future<LyricsPayload?> fetchLyrics(String songId) => fetchForMatch(
-        SongMatch(songId: songId, title: '', artist: ''),
-      );
+  Future<LyricsPayload?> fetchLyrics(String songId) =>
+      fetchForMatch(SongMatch(songId: songId, title: '', artist: ''));
 
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
@@ -218,25 +219,23 @@ class QQProvider extends LyricProvider {
       'req_1': {
         'module': 'music.musichallSong.PlayLyricInfo',
         'method': 'GetPlayLyricInfo',
-        'param': {
-          'songMID': songId,
-        },
+        'param': {'songMID': songId},
       },
     });
 
     try {
       final response = await _dio
           .postUri(
-        Uri.parse(_baseSearchUrl),
-        data: requestBody,
-        options: Options(headers: _searchHeaders),
-      )
+            Uri.parse(_baseSearchUrl),
+            data: requestBody,
+            options: Options(headers: _searchHeaders),
+          )
           .timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('获取歌词请求超时');
-        },
-      );
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException('获取歌词请求超时');
+            },
+          );
 
       if (response.statusCode != 200) {
         _logger.warning('QQ音乐 PlayLyricInfo 请求失败，状态码: ${response.statusCode}');
@@ -291,21 +290,20 @@ class QQProvider extends LyricProvider {
     required int retriesLeft,
   }) async {
     final baseUrl = _useBackupDomain ? _backupLyricUrl : _baseLyricUrl;
-    final url = Uri.parse(baseUrl).replace(queryParameters: {
-      'songmid': songId,
-      'format': 'json',
-      'nobase64': '1'
-    });
+    final url = Uri.parse(baseUrl).replace(
+      queryParameters: {'songmid': songId, 'format': 'json', 'nobase64': '1'},
+    );
 
     Response<dynamic> response;
     try {
       response = await _dio
-          .getUri(url, options: Options(headers: _headers)).timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw TimeoutException('获取歌词请求超时');
-        },
-      );
+          .getUri(url, options: Options(headers: _headers))
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException('获取歌词请求超时');
+            },
+          );
     } catch (e) {
       _logger.severe('QQ音乐获取歌词详情失败: $e');
       if (e is SocketException) {

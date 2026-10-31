@@ -73,8 +73,9 @@ void main() {
       initialChannelKey: 'wy',
       // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
       onChannelChanged: (key) {
-        if (search.sourceChannels
-            .any((option) => option.key == key && option.capabilities.search)) {
+        if (search.sourceChannels.any(
+          (option) => option.key == key && option.capabilities.search,
+        )) {
           search.selectSource(key);
         }
       },
@@ -84,8 +85,10 @@ void main() {
       engineFactory: () => engine,
       restartDelays: const [Duration(milliseconds: 10)],
     );
-    manager =
-        SourceManager(engine: supervisor, settings: testSettingsRegistry());
+    manager = SourceManager(
+      engine: supervisor,
+      settings: testSettingsRegistry(),
+    );
     sources = SourcesProvider(manager);
     scriptActive = false;
   });
@@ -102,10 +105,7 @@ void main() {
 
   SearchProvider buildSearch(List<domain.SourceDescriptor> descs) {
     final registry = _FakeRegistry(descs);
-    final provider = SearchProvider(
-      playback,
-      sourceRegistry: registry,
-    );
+    final provider = SearchProvider(playback, sourceRegistry: registry);
     addTearDown(provider.dispose);
     return provider;
   }
@@ -114,7 +114,8 @@ void main() {
     WidgetTester tester, {
     Map<String, LxSourceDecl>? sources,
   }) async {
-    engine.nextSources = sources ??
+    engine.nextSources =
+        sources ??
         {
           'test': const LxSourceDecl(
             key: 'test',
@@ -181,10 +182,7 @@ void main() {
     expect(find.text('搜索'), findsNothing); // 当前 wy 无脚本不可搜索 → 隐藏
 
     // 渠道并集：bili 有原生搜索/播放与发现页（音乐榜 / 热搜），可进发现渠道。
-    expect(
-      sources.channels.map((option) => option.key),
-      contains('bili'),
-    );
+    expect(sources.channels.map((option) => option.key), contains('bili'));
     expect(
       sources.channels
           .firstWhere((option) => option.key == 'bili')
@@ -217,17 +215,21 @@ void main() {
 
     // 无脚本：可见 tab = 热榜 / 歌单（默认渲染热榜）。切到歌单（按图标点：
     // 触摸档 tab 只留图标，按文案找会因平台而异）。
-    await tester.tap(find.descendant(
-      of: find.byType(M3ETabs),
-      matching: find.byIcon(Icons.queue_music_rounded),
-    ));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(M3ETabs),
+        matching: find.byIcon(Icons.queue_music_rounded),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final controller = tester
-        .widget<Scrollbar>(find.descendant(
-          of: find.byType(DiscoverPlaylistsTab),
-          matching: find.byType(Scrollbar),
-        ))
+        .widget<Scrollbar>(
+          find.descendant(
+            of: find.byType(DiscoverPlaylistsTab),
+            matching: find.byType(Scrollbar),
+          ),
+        )
         .controller!;
     await tester.drag(find.byType(DiscoverPlaylistsTab), const Offset(0, -600));
     await tester.pumpAndSettle();
@@ -248,10 +250,8 @@ void main() {
     expect(find.text('热榜'), findsNothing);
     expect(find.text('歌单'), findsNothing);
 
-    Finder tabIcon(IconData icon) => find.descendant(
-          of: find.byType(M3ETabs),
-          matching: find.byIcon(icon),
-        );
+    Finder tabIcon(IconData icon) =>
+        find.descendant(of: find.byType(M3ETabs), matching: find.byIcon(icon));
     expect(tabIcon(Icons.leaderboard_rounded), findsOneWidget);
     expect(tabIcon(Icons.queue_music_rounded), findsOneWidget);
 
@@ -300,7 +300,7 @@ void main() {
     expect(find.text('热榜'), findsNothing);
     expect(find.text('歌单'), findsNothing);
     // 只剩搜索一个 tab 时不渲染 tab 栏，直接显示搜索内容。
-    expect(find.text('输入关键词搜索歌曲'), findsOneWidget);
+    expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
 
     // 切回内置平台恢复热榜/歌单。
     await tester.tap(find.text('测试源').first);
@@ -313,14 +313,17 @@ void main() {
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('搜索源跟随渠道：挂载时将搜索源同步到当前渠道', (tester) async {
-    await activateScript(tester, sources: {
-      'wy': const LxSourceDecl(
-        key: 'wy',
-        name: '网易音乐',
-        actions: ['musicUrl', 'search'],
-        qualitys: ['320k'],
-      ),
-    });
+    await activateScript(
+      tester,
+      sources: {
+        'wy': const LxSourceDecl(
+          key: 'wy',
+          name: '网易音乐',
+          actions: ['musicUrl', 'search'],
+          qualitys: ['320k'],
+        ),
+      },
+    );
     search = buildSearch(const [
       domain.SourceDescriptor(
         key: 'tx',
@@ -354,9 +357,9 @@ class _FakeRegistry implements SourceRegistry {
 
   @override
   Set<String> get enabledChannelKeys => {
-        for (final descriptor in _descriptors)
-          if (descriptor.enabled) descriptor.key,
-      };
+    for (final descriptor in _descriptors)
+      if (descriptor.enabled) descriptor.key,
+  };
 
   @override
   MusicSource? byKey(String key) => null;
@@ -418,24 +421,21 @@ class _FakeLxEngine implements LxEngine {
     required Map<String, dynamic> musicInfo,
     required String quality,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      'https://example.com/$source/$quality';
+  }) async => 'https://example.com/$source/$quality';
 
   @override
   Future<LxLyricResult> getLyric({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      const LxLyricResult(lyric: '[00:00.00]fake');
+  }) async => const LxLyricResult(lyric: '[00:00.00]fake');
 
   @override
   Future<String> getPic({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 15),
-  }) async =>
-      'https://example.com/pic.jpg';
+  }) async => 'https://example.com/pic.jpg';
 
   @override
   Future<dynamic> search({
@@ -445,8 +445,7 @@ class _FakeLxEngine implements LxEngine {
     int page = 1,
     int limit = 20,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<void> dispose() async {

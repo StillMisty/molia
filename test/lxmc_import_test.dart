@@ -10,56 +10,58 @@ import 'package:molia/data/lxmc_decoder_io.dart'
 
 /// `.lxmc` 解码测试：真实 LX Music 导出夹具（1018 首）+ 合成异常夹具。
 void main() {
-  Uint8List lxmc(Map<String, dynamic> payload) => Uint8List.fromList(
-        gzip.encode(utf8.encode(jsonEncode(payload))),
-      );
+  Uint8List lxmc(Map<String, dynamic> payload) =>
+      Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode(payload))));
 
-  Map<String, dynamic> wrap(List<dynamic> list, {String name = 'list__name_x'}) => {
-        'type': 'playListPart_v2',
-        'data': {'id': 'x', 'name': name, 'list': list},
-      };
+  Map<String, dynamic> wrap(
+    List<dynamic> list, {
+    String name = 'list__name_x',
+  }) => {
+    'type': 'playListPart_v2',
+    'data': {'id': 'x', 'name': name, 'list': list},
+  };
 
   /// 超过 isolate 阈值的合成列表（压缩后 > 64KB）。
   List<Map<String, dynamic>> largeTracks([int count = 4000]) => [
-        for (var i = 0; i < count; i++)
-          {
-            'id': 'wy_$i',
-            'name': 'Song $i',
-            'singer': 'Artist $i',
-            'source': 'wy',
-            'interval': '03:00',
-            'meta': {
-              'songId': i,
-              'albumName': 'Album $i',
-              'picUrl': 'https://img.example/$i.jpg',
-              'qualitys': [
-                {'type': '128k', 'size': '1 MiB'},
-              ],
-              '_qualitys': {
-                '320k': {'size': '2 MiB'},
-              },
-            },
+    for (var i = 0; i < count; i++)
+      {
+        'id': 'wy_$i',
+        'name': 'Song $i',
+        'singer': 'Artist $i',
+        'source': 'wy',
+        'interval': '03:00',
+        'meta': {
+          'songId': i,
+          'albumName': 'Album $i',
+          'picUrl': 'https://img.example/$i.jpg',
+          'qualitys': [
+            {'type': '128k', 'size': '1 MiB'},
+          ],
+          '_qualitys': {
+            '320k': {'size': '2 MiB'},
           },
-      ];
+        },
+      },
+  ];
 
   /// 可发送模型 → 纯数据描述，便于比较同步 / isolate 两条路径的结果。
   Map<String, Object?> describe(LxmcDecodedPlaylist playlist) => {
-        'name': playlist.name,
-        'skipped': playlist.skipped,
-        'tracks': [
-          for (final track in playlist.tracks)
-            {
-              'sourceKey': track.sourceKey,
-              'songId': track.songId,
-              'title': track.title,
-              'artist': track.artist,
-              'album': track.album,
-              'coverUrl': track.coverUrl,
-              'durationMs': track.durationMs,
-              'raw': track.raw,
-            },
-        ],
-      };
+    'name': playlist.name,
+    'skipped': playlist.skipped,
+    'tracks': [
+      for (final track in playlist.tracks)
+        {
+          'sourceKey': track.sourceKey,
+          'songId': track.songId,
+          'title': track.title,
+          'artist': track.artist,
+          'album': track.album,
+          'coverUrl': track.coverUrl,
+          'durationMs': track.durationMs,
+          'raw': track.raw,
+        },
+    ],
+  };
 
   group('真实夹具（test/fixtures/lx_list_love.lxmc）', () {
     late LxmcDecodedPlaylist decoded;
@@ -106,73 +108,108 @@ void main() {
 
   group('平台 id 映射', () {
     test('各平台字段优先级 + item.id 前缀兜底', () {
-      final decoded = decodeLxmcBytes(lxmc(wrap([
-        {
-          'id': 'tx_0039MnYb0qxYhV',
-          'name': 'TX Song',
-          'singer': 'A',
-          'source': 'tx',
-          'interval': '03:05',
-          'meta': {'songmid': '0039MnYb0qxYhV', 'songId': 999, 'albumName': 'TA'},
-        },
-        {
-          'id': 'kg_HASH1',
-          'name': 'KG Song',
-          'singer': 'B',
-          'source': 'kg',
-          'meta': {'hash': 'HASH1', 'songmid': '123', 'albumName': 'KA'},
-        },
-        {
-          'id': 'kw_456',
-          'name': 'KW Song',
-          'singer': 'C',
-          'source': 'kw',
-          'meta': {'musicId': '456', 'albumName': 'WA'},
-        },
-        {
-          'id': 'mg_789',
-          'name': 'MG Song',
-          'singer': 'D',
-          'source': 'mg',
-          'meta': {'copyrightId': '789', 'albumName': 'MA'},
-        },
-        {
-          // meta 缺平台字段：解析 item.id 前缀
-          'id': 'wy_112233',
-          'name': 'WY Fallback',
-          'singer': 'E',
-          'source': 'wy',
-          'meta': {'albumName': 'Fallback'},
-        },
-      ])));
+      final decoded = decodeLxmcBytes(
+        lxmc(
+          wrap([
+            {
+              'id': 'tx_0039MnYb0qxYhV',
+              'name': 'TX Song',
+              'singer': 'A',
+              'source': 'tx',
+              'interval': '03:05',
+              'meta': {
+                'songmid': '0039MnYb0qxYhV',
+                'songId': 999,
+                'albumName': 'TA',
+              },
+            },
+            {
+              'id': 'kg_HASH1',
+              'name': 'KG Song',
+              'singer': 'B',
+              'source': 'kg',
+              'meta': {'hash': 'HASH1', 'songmid': '123', 'albumName': 'KA'},
+            },
+            {
+              'id': 'kw_456',
+              'name': 'KW Song',
+              'singer': 'C',
+              'source': 'kw',
+              'meta': {'musicId': '456', 'albumName': 'WA'},
+            },
+            {
+              'id': 'mg_789',
+              'name': 'MG Song',
+              'singer': 'D',
+              'source': 'mg',
+              'meta': {'copyrightId': '789', 'albumName': 'MA'},
+            },
+            {
+              // meta 缺平台字段：解析 item.id 前缀
+              'id': 'wy_112233',
+              'name': 'WY Fallback',
+              'singer': 'E',
+              'source': 'wy',
+              'meta': {'albumName': 'Fallback'},
+            },
+          ]),
+        ),
+      );
 
       expect(decoded.skipped, 0);
-      expect(decoded.tracks.map((t) => t.songId).toList(),
-          ['0039MnYb0qxYhV', 'HASH1', '456', '789', '112233']);
+      expect(decoded.tracks.map((t) => t.songId).toList(), [
+        '0039MnYb0qxYhV',
+        'HASH1',
+        '456',
+        '789',
+        '112233',
+      ]);
       expect(decoded.tracks[0].album, 'TA');
       expect(decoded.tracks[2].songId, '456');
     });
 
     test('未知平台走默认字段顺序', () {
-      final decoded = decodeLxmcBytes(lxmc(wrap([
-        {
-          'id': 'custom_1',
-          'name': 'Custom',
-          'source': 'custom',
-          'meta': {'songId': 's1', 'hash': 'h1'},
-        },
-      ])));
+      final decoded = decodeLxmcBytes(
+        lxmc(
+          wrap([
+            {
+              'id': 'custom_1',
+              'name': 'Custom',
+              'source': 'custom',
+              'meta': {'songId': 's1', 'hash': 'h1'},
+            },
+          ]),
+        ),
+      );
       expect(decoded.tracks.single.songId, 's1');
     });
 
     test('缺 source / 标题 / 平台 id 的条目被跳过', () {
-      final decoded = decodeLxmcBytes(lxmc(wrap([
-        {'id': 'wy_1', 'name': 'ok', 'source': 'wy', 'meta': {'songId': 1}},
-        {'id': 'wy_2', 'name': 'no source', 'meta': {'songId': 2}},
-        {'id': 'wy_3', 'name': '', 'source': 'wy', 'meta': {'songId': 3}},
-        {'name': 'no id', 'source': 'wy', 'meta': {}},
-        'not a map',
-      ])));
+      final decoded = decodeLxmcBytes(
+        lxmc(
+          wrap([
+            {
+              'id': 'wy_1',
+              'name': 'ok',
+              'source': 'wy',
+              'meta': {'songId': 1},
+            },
+            {
+              'id': 'wy_2',
+              'name': 'no source',
+              'meta': {'songId': 2},
+            },
+            {
+              'id': 'wy_3',
+              'name': '',
+              'source': 'wy',
+              'meta': {'songId': 3},
+            },
+            {'name': 'no id', 'source': 'wy', 'meta': {}},
+            'not a map',
+          ]),
+        ),
+      );
       expect(decoded.tracks, hasLength(1));
       expect(decoded.skipped, 4);
     });
@@ -180,12 +217,40 @@ void main() {
 
   group('时长与名称', () {
     test('interval 支持 mm:ss / h:mm:ss / 秒数', () {
-      final decoded = decodeLxmcBytes(lxmc(wrap([
-        {'id': 'wy_1', 'name': 'a', 'source': 'wy', 'interval': '04:25', 'meta': {'songId': 1}},
-        {'id': 'wy_2', 'name': 'b', 'source': 'wy', 'interval': '1:02:03', 'meta': {'songId': 2}},
-        {'id': 'wy_3', 'name': 'c', 'source': 'wy', 'interval': 125, 'meta': {'songId': 3}},
-        {'id': 'wy_4', 'name': 'd', 'source': 'wy', 'interval': 'oops', 'meta': {'songId': 4}},
-      ])));
+      final decoded = decodeLxmcBytes(
+        lxmc(
+          wrap([
+            {
+              'id': 'wy_1',
+              'name': 'a',
+              'source': 'wy',
+              'interval': '04:25',
+              'meta': {'songId': 1},
+            },
+            {
+              'id': 'wy_2',
+              'name': 'b',
+              'source': 'wy',
+              'interval': '1:02:03',
+              'meta': {'songId': 2},
+            },
+            {
+              'id': 'wy_3',
+              'name': 'c',
+              'source': 'wy',
+              'interval': 125,
+              'meta': {'songId': 3},
+            },
+            {
+              'id': 'wy_4',
+              'name': 'd',
+              'source': 'wy',
+              'interval': 'oops',
+              'meta': {'songId': 4},
+            },
+          ]),
+        ),
+      );
       expect(decoded.tracks[0].durationMs, 265000);
       expect(decoded.tracks[1].durationMs, 3723000);
       expect(decoded.tracks[2].durationMs, 125000);
@@ -230,15 +295,17 @@ void main() {
     });
 
     test('小文件仍走同步快路径：结果与同步入口一致', () async {
-      final bytes = lxmc(wrap([
-        {
-          'id': 'wy_1',
-          'name': 'Small',
-          'singer': 'A',
-          'source': 'wy',
-          'meta': {'songId': 1},
-        },
-      ]));
+      final bytes = lxmc(
+        wrap([
+          {
+            'id': 'wy_1',
+            'name': 'Small',
+            'singer': 'A',
+            'source': 'wy',
+            'meta': {'songId': 1},
+          },
+        ]),
+      );
       expect(shouldDecodeLxmcBytesOffThread(bytes), isFalse);
 
       final sync = decodeLxmcBytes(bytes);
@@ -250,8 +317,13 @@ void main() {
       final bytes = Uint8List(lxmcDecodeIsolateThreshold);
       await expectLater(
         decodeLxmcBytesOffThread(bytes),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'not_gzip')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'not_gzip',
+          ),
+        ),
       );
     });
 
@@ -266,8 +338,13 @@ void main() {
 
       await expectLater(
         decodeLxmcBytesOffThread(bytes),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'invalid_json')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'invalid_json',
+          ),
+        ),
       );
     });
 
@@ -280,8 +357,13 @@ void main() {
 
       await expectLater(
         decodeLxmcBytesOffThread(bytes),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'not_play_list')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'not_play_list',
+          ),
+        ),
       );
     });
   });
@@ -290,18 +372,29 @@ void main() {
     test('非 gzip 字节 → not_gzip', () {
       expect(
         () => decodeLxmcBytes(Uint8List.fromList(utf8.encode('{"type":"x"}'))),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'not_gzip')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'not_gzip',
+          ),
+        ),
       );
     });
 
     test('gzip 内非法 JSON → invalid_json', () {
-      final bytes =
-          Uint8List.fromList(gzip.encode(utf8.encode('not json at all')));
+      final bytes = Uint8List.fromList(
+        gzip.encode(utf8.encode('not json at all')),
+      );
       expect(
         () => decodeLxmcBytes(bytes),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'invalid_json')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'invalid_json',
+          ),
+        ),
       );
     });
 
@@ -312,8 +405,13 @@ void main() {
       });
       expect(
         () => decodeLxmcBytes(bytes),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'not_play_list')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'not_play_list',
+          ),
+        ),
       );
     });
 
@@ -324,8 +422,13 @@ void main() {
       });
       expect(
         () => decodeLxmcBytes(bytes),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'not_play_list')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'not_play_list',
+          ),
+        ),
       );
     });
   });

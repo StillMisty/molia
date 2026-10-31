@@ -268,13 +268,12 @@ class ShortcutBindings {
 
   /// 当前生效的全部绑定（含未覆盖的默认项）。
   Map<ShortcutCommand, ShortcutCombo> get effective => {
-        for (final command in commandsOf(scope))
-          if (comboFor(command) != null) command: comboFor(command)!,
-      };
+    for (final command in commandsOf(scope))
+      if (comboFor(command) != null) command: comboFor(command)!,
+  };
 
   /// 该动作是否被用户改过（设置页「恢复默认」按钮的可用性判定）。
-  bool isOverridden(ShortcutCommand command) =>
-      _overrides.containsKey(command);
+  bool isOverridden(ShortcutCommand command) => _overrides.containsKey(command);
 
   /// 覆盖某动作的绑定；[combo] 为空表示清掉覆盖（回默认）。
   ShortcutBindings withOverride(ShortcutCommand command, ShortcutCombo? combo) {

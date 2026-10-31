@@ -6,10 +6,8 @@ import 'package:molia/widgets/paged_list_auto_load.dart';
 /// 分页列表通用自动加载 / 页脚的独立用例（不依赖具体页面）。
 void main() {
   Widget host(Widget child) => MaterialApp(
-        home: Scaffold(
-          body: SizedBox(width: 300, height: 300, child: child),
-        ),
-      );
+    home: Scaffold(body: SizedBox(width: 300, height: 300, child: child)),
+  );
 
   Widget shortList() =>
       ListView(children: const [SizedBox(height: 20, child: Text('唯一一条'))]);

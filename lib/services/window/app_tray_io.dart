@@ -136,8 +136,7 @@ class AppTray {
     try {
       final trayIcon = TrayIcon.create();
       // 没有像素的托盘项无法点击：图标资源缺失（打包异常）时直接放弃。
-      final image =
-          trayIcon == null ? null : ImageAsset.fromAsset(_iconAsset);
+      final image = trayIcon == null ? null : ImageAsset.fromAsset(_iconAsset);
       if (trayIcon == null || image == null) {
         image?.dispose();
         trayIcon?.dispose();
@@ -260,13 +259,8 @@ class AppTray {
     final menu = Menu.create();
     if (menu == null) throw StateError('无法创建托盘菜单');
 
-    MenuItem add(
-      String label,
-      void Function() onTap, {
-      bool enabled = true,
-    }) {
-      final item =
-          MenuItem.createWithLabelAndType(label, MenuItemType.normal);
+    MenuItem add(String label, void Function() onTap, {bool enabled = true}) {
+      final item = MenuItem.createWithLabelAndType(label, MenuItemType.normal);
       if (item == null) throw StateError('无法创建托盘菜单项：$label');
       item.isEnabled = enabled;
       final listenerId = item.addListener((event) {
@@ -282,8 +276,11 @@ class AppTray {
     _playPauseItem = add(labels.play, onTogglePlay, enabled: _hasTrack);
     _previousItem = add(labels.previous, onPrevious, enabled: _hasTrack);
     _nextItem = add(labels.next, onNext, enabled: _hasTrack);
-    _favoriteItem =
-        add(labels.addFavorite, onToggleFavorite, enabled: _hasTrack);
+    _favoriteItem = add(
+      labels.addFavorite,
+      onToggleFavorite,
+      enabled: _hasTrack,
+    );
     menu.addSeparator();
     _quitItem = add(labels.quit, onQuit);
     return menu;

@@ -5,6 +5,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -27,16 +28,15 @@ void main() {
     String songId, {
     required int playedAt,
     String title = '',
-  }) =>
-      PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: songId,
-        title: title.isEmpty ? 'Song $songId' : title,
-        artist: 'Artist',
-        album: 'Album',
-        raw: {'songId': songId},
-        playedAt: playedAt,
-      );
+  }) => PlayHistoryEntry(
+    sourceKey: 'wy',
+    songId: songId,
+    title: title.isEmpty ? 'Song $songId' : title,
+    artist: 'Artist',
+    album: 'Album',
+    raw: {'songId': songId},
+    playedAt: playedAt,
+  );
 
   setUp(() async {
     nowA = 1000;
@@ -191,11 +191,7 @@ void main() {
       ),
     );
     final after = (await repoA.syncExportHistory()).single.version;
-    expect(
-      after.isNewerThan(before),
-      isTrue,
-      reason: '换源是本地修改：版本必须前进（否则永不传播）',
-    );
+    expect(after.isNewerThan(before), isTrue, reason: '换源是本地修改：版本必须前进（否则永不传播）');
 
     final result = await adapterB.apply(await adapterA.collect());
     expect(result.applied, 1);
@@ -214,19 +210,20 @@ void main() {
 
   test('本地下载曲目（local）不同步：条目与墓碑都过滤', () async {
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
-    await repoA.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'local',
-      songId: 'wy:9',
-      title: '本地下载',
-      playedAt: 2000,
-    ));
+    await repoA.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'local',
+        songId: 'wy:9',
+        title: '本地下载',
+        playedAt: 2000,
+      ),
+    );
     await repoA.deleteHistoryEntry('local', 'wy:8'); // 无对应行 → 不产生墓碑
 
     final collected = await adapterA.collect();
-    expect(
-      collected[SyncCategory.history]!.map((record) => record.key),
-      [SyncRecordKeys.history('wy', 's1')],
-    );
+    expect(collected[SyncCategory.history]!.map((record) => record.key), [
+      SyncRecordKeys.history('wy', 's1'),
+    ]);
 
     // 对端收到 local 条目 / 墓碑也忽略（防御：异常或外来数据）。
     final result = await adapterB.apply({
@@ -258,29 +255,37 @@ void main() {
       required SyncVersion version,
       required int deletedAt,
     }) async {
-      await dbB.into(dbB.syncTombstones).insert(SyncTombstonesCompanion.insert(
-            category: 'history',
-            key: SyncRecordKeys.history('wy', 's1'),
-            versionPhysical: version.physical,
-            versionCounter: Value(version.counter),
-            deviceId: Value(version.deviceId),
-            deletedAt: Value(deletedAt),
-          ));
+      await dbB
+          .into(dbB.syncTombstones)
+          .insert(
+            SyncTombstonesCompanion.insert(
+              category: 'history',
+              key: SyncRecordKeys.history('wy', 's1'),
+              versionPhysical: version.physical,
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+              deletedAt: Value(deletedAt),
+            ),
+          );
     }
 
     Future<void> seedRow({
       required int playedAt,
       required SyncVersion version,
     }) async {
-      await dbB.into(dbB.playHistory).insert(PlayHistoryCompanion.insert(
-            sourceKey: 'wy',
-            songId: 's1',
-            title: '本地行',
-            playedAt: playedAt,
-            versionPhysical: Value(version.physical),
-            versionCounter: Value(version.counter),
-            deviceId: Value(version.deviceId),
-          ));
+      await dbB
+          .into(dbB.playHistory)
+          .insert(
+            PlayHistoryCompanion.insert(
+              sourceKey: 'wy',
+              songId: 's1',
+              title: '本地行',
+              playedAt: playedAt,
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+          );
     }
 
     test('入站墓碑版本更旧（未被采用）：不按它的删除时间删行，也不撤本地墓碑', () async {

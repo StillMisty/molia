@@ -61,23 +61,25 @@ void main() {
 
   /// 往名册里注入一台设备（`lastSeenAt` 可控：失联阈值 = 180 天）。
   void seedPeer(String deviceId, {required int lastSeenAt}) {
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: deviceId,
-          name: deviceId,
-          transport: SyncTransportKind.lan,
-          lastSeenAt: lastSeenAt,
-          lastSuccessAt: lastSeenAt,
-          cursorSeq: 3,
-          ackedSeq: 3,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: deviceId,
+            name: deviceId,
+            transport: SyncTransportKind.lan,
+            lastSeenAt: lastSeenAt,
+            lastSuccessAt: lastSeenAt,
+            cursorSeq: 3,
+            ackedSeq: 3,
+          ),
+        ],
+      ),
+    );
   }
 
   test('失联判定：超过阈值标记，未超阈值不标记', () {
@@ -87,15 +89,20 @@ void main() {
 
     final peers = state.peers;
     expect(
-        peers.firstWhere((p) => p.deviceId == 'ghost').isLostAt(now), isTrue);
+      peers.firstWhere((p) => p.deviceId == 'ghost').isLostAt(now),
+      isTrue,
+    );
     expect(
-        peers.firstWhere((p) => p.deviceId == 'alive').isLostAt(now), isFalse);
+      peers.firstWhere((p) => p.deviceId == 'alive').isLostAt(now),
+      isFalse,
+    );
     // 名册不自动删除失联设备：处置动作由用户显式选择。
     expect(peers, hasLength(2));
   });
 
   test('接触即更新最近接触：未变跳过（探测应答）的对端不误标失联', () async {
-    final ancient = DateTime.now().millisecondsSinceEpoch -
+    final ancient =
+        DateTime.now().millisecondsSinceEpoch -
         SyncPeerState.lostThresholdMs -
         1000;
     seedPeer('ghost', lastSeenAt: ancient);
@@ -126,8 +133,10 @@ void main() {
     expect(state.manualPeers, isEmpty);
     await state.commit();
 
-    final reloaded =
-        SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
+    final reloaded = SyncStateStore(
+      preferences: prefs,
+      secrets: MemorySyncSecretStore(),
+    );
     await reloaded.init();
     expect(reloaded.peers, isEmpty, reason: '移除后重启不出现');
     expect(reloaded.manualPeers, isEmpty);

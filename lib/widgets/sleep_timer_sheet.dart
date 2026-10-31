@@ -34,8 +34,8 @@ String sleepTimerStatusLabel(AppLocalizations l10n, SleepTimerState state) {
     SleepTimerMode.off => l10n.sleepTimerOff,
     SleepTimerMode.afterCurrentTrack => l10n.sleepTimerAfterTrack,
     SleepTimerMode.countdown => l10n.sleepTimerRemaining(
-        formatSleepTimerRemaining(state.remaining ?? Duration.zero),
-      ),
+      formatSleepTimerRemaining(state.remaining ?? Duration.zero),
+    ),
   };
 }
 
@@ -122,7 +122,8 @@ class _SleepTimerSheet extends StatelessWidget {
                 key: const Key('sleepTimerCustomItem'),
                 leading: const Icon(Icons.schedule_rounded),
                 headline: l10n.sleepTimerCustom,
-                trailingText: state.mode == SleepTimerMode.countdown &&
+                trailingText:
+                    state.mode == SleepTimerMode.countdown &&
                         state.duration != null
                     ? formatSleepTimerRemaining(state.duration!)
                     : null,
@@ -204,9 +205,9 @@ class _SleepTimerSheet extends StatelessWidget {
     if (picked == null || !context.mounted) return;
     final minutes = picked.hour * 60 + picked.minute;
     if (minutes < kSleepTimerMinMinutes || minutes > kSleepTimerMaxMinutes) {
-      context
-          .read<NotificationService?>()
-          ?.showSnackBar(l10n.sleepTimerCustomInvalid);
+      context.read<NotificationService?>()?.showSnackBar(
+        l10n.sleepTimerCustomInvalid,
+      );
       return;
     }
     _armCountdown(context, l10n, timer, Duration(minutes: minutes));
@@ -239,9 +240,9 @@ class _SleepTimerSheet extends StatelessWidget {
     String message,
   ) {
     context.read<NotificationService?>()?.showSnackBar(
-          message,
-          actionLabel: AppLocalizations.of(context)!.cancel,
-          onActionPressed: timer.cancel,
-        );
+      message,
+      actionLabel: AppLocalizations.of(context)!.cancel,
+      onActionPressed: timer.cancel,
+    );
   }
 }

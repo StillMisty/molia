@@ -21,7 +21,8 @@ class MockAnyListenServer {
   String get baseUrl => 'http://127.0.0.1:$port';
 
   Future<void> start(
-      FutureOr<void> Function(MockRequest request) handler) async {
+    FutureOr<void> Function(MockRequest request) handler,
+  ) async {
     _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     _server.listen((request) async {
       try {
@@ -42,9 +43,10 @@ class MockAnyListenServer {
 
   Future<void> stop() => _server.close(force: true);
 
-  MockRequest requestTo(String path) =>
-      requests.firstWhere((r) => r.path == path,
-          orElse: () => throw StateError('未收到请求: $path'));
+  MockRequest requestTo(String path) => requests.firstWhere(
+    (r) => r.path == path,
+    orElse: () => throw StateError('未收到请求: $path'),
+  );
 }
 
 class MockRequest {
@@ -134,8 +136,10 @@ Future<void> handleDefault(MockAnyListenServer server, MockRequest req) async {
         'isFromCache': false,
       });
     case '/api/music/pic':
-      respondJson(
-          req, {'url': '${server.baseUrl}/pic/1.jpg', 'isFromCache': false});
+      respondJson(req, {
+        'url': '${server.baseUrl}/pic/1.jpg',
+        'isFromCache': false,
+      });
     default:
       respondJson(req, {'message': 'not found'}, status: 404);
   }
@@ -150,11 +154,9 @@ Future<AnyListenSource> buildSource(
     api: api ?? AnyListenApi(timeout: timeout),
     settings: testSettingsRegistry(),
   );
-  await source.updateConfig(AnyListenConfig(
-    serverUrl: baseUrl,
-    token: 'test-token',
-    enabled: true,
-  ));
+  await source.updateConfig(
+    AnyListenConfig(serverUrl: baseUrl, token: 'test-token', enabled: true),
+  );
   return source;
 }
 
@@ -200,10 +202,7 @@ void main() {
       expect(track.coverUrl, 'https://img.example/cover.jpg');
       expect(track.duration, const Duration(minutes: 3, seconds: 55));
       expect(track.qualities.map((q) => q.type), containsAll(['320k', 'flac']));
-      expect(
-        track.qualities.firstWhere((q) => q.type == 'flac').size,
-        '25MB',
-      );
+      expect(track.qualities.firstWhere((q) => q.type == 'flac').size, '25MB');
       // raw 原样：id/meta.source 等字段必须保留，供取链回传
       expect(track.raw['id'], 'any-1');
       expect(track.raw['interval'], '03:55');
@@ -264,16 +263,18 @@ void main() {
 
       await expectLater(
         brokenSource.fetchLyric(rawTrack),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.badResponse,
-        )),
+        throwsA(
+          isA<AnyListenException>().having(
+            (e) => e.kind,
+            'kind',
+            AnyListenErrorKind.badResponse,
+          ),
+        ),
       );
 
       // info 存在但没有 lyric：视为「无歌词」，返回 null 以便上层回退
       lyricPayload = {
-        'info': {'name': 'x'}
+        'info': {'name': 'x'},
       };
       expect(await brokenSource.fetchLyric(rawTrack), isNull);
 
@@ -313,12 +314,20 @@ void main() {
       // debug 断言给出调用栈，release 抛 StateError（见 _requireSettings）。
       expect(
         () => AnyListenSource(),
-        throwsA(anyOf(
-          isA<AssertionError>()
-              .having((e) => e.message, 'message', contains('configStore')),
-          isA<StateError>()
-              .having((e) => e.message, 'message', contains('configStore')),
-        )),
+        throwsA(
+          anyOf(
+            isA<AssertionError>().having(
+              (e) => e.message,
+              'message',
+              contains('configStore'),
+            ),
+            isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              contains('configStore'),
+            ),
+          ),
+        ),
       );
     });
 
@@ -355,11 +364,13 @@ void main() {
       final source = await buildSource('http://127.0.0.1:$deadPort');
       await expectLater(
         source.search('x'),
-        throwsA(isA<AnyListenException>().having(
-          (e) => e.kind,
-          'kind',
-          AnyListenErrorKind.connectionFailed,
-        )),
+        throwsA(
+          isA<AnyListenException>().having(
+            (e) => e.kind,
+            'kind',
+            AnyListenErrorKind.connectionFailed,
+          ),
+        ),
       );
 
       // testConnection 不抛异常：连接失败以结果对象返回

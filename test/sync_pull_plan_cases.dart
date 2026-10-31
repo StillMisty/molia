@@ -12,14 +12,13 @@ void main() {
     bool fresh = true,
     int? head = 5,
     bool trusted = true,
-  }) =>
-      SyncPeerPullEvidence(
-        token: token,
-        cachedToken: cached,
-        fresh: fresh,
-        journalHead: head,
-        headTrusted: trusted,
-      );
+  }) => SyncPeerPullEvidence(
+    token: token,
+    cachedToken: cached,
+    fresh: fresh,
+    journalHead: head,
+    headTrusted: trusted,
+  );
 
   test('计划携带逐对端游标 / 全量名单 / 发现策略', () {
     final plan = SyncPullPlan.fromIntents(

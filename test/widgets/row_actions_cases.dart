@@ -6,10 +6,7 @@ import 'package:material_ui/material_ui.dart';
 /// 行操作模块（动作词汇 + 两平台入口编译）的契约：条目映射只有一份，
 /// 触摸端 ⋮ 与桌面右键消费的是同一组动作。
 void main() {
-  List<RowAction> sample({
-    void Function()? onAdd,
-    void Function()? onRemove,
-  }) =>
+  List<RowAction> sample({void Function()? onAdd, void Function()? onRemove}) =>
       [
         RowAction(
           icon: Icons.playlist_add_rounded,
@@ -63,10 +60,7 @@ void main() {
         home: Scaffold(
           body: Center(
             child: RowActionMenuButton(
-              actions: sample(
-                onAdd: () => add++,
-                onRemove: () => remove++,
-              ),
+              actions: sample(onAdd: () => add++, onRemove: () => remove++),
               semanticLabel: '曲目操作',
             ),
           ),
@@ -100,17 +94,13 @@ void main() {
     expect(find.byType(M3EIconButton), findsNothing);
   });
 
-  testWidgets(
-    '桌面右键入口：有动作才返回回调，空动作不接次级手势',
-    (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      final context = tester.element(find.byType(SizedBox));
+  testWidgets('桌面右键入口：有动作才返回回调，空动作不接次级手势', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    final context = tester.element(find.byType(SizedBox));
 
-      expect(rowActionsAtPointer(context, sample()), isNotNull);
-      expect(rowActionsAtPointer(context, const []), isNull);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+    expect(rowActionsAtPointer(context, sample()), isNotNull);
+    expect(rowActionsAtPointer(context, const []), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('触摸端不接次级手势（右键入口恒为 null）', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));

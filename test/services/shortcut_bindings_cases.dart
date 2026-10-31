@@ -13,24 +13,19 @@ void main() {
     );
     expect(combo.encode(), 'ctrl+alt+space');
     expect(ShortcutCombo.parse('Ctrl+Alt+Space'), combo);
-    expect(ShortcutCombo.parse('space'), const ShortcutCombo(
-      key: LogicalKeyboardKey.space,
-    ));
+    expect(
+      ShortcutCombo.parse('space'),
+      const ShortcutCombo(key: LogicalKeyboardKey.space),
+    );
     expect(ShortcutCombo.parse('ctrl+ctrl+space'), isNull, reason: '主键重复非法');
     expect(ShortcutCombo.parse('ctrl+notakey'), isNull);
     expect(ShortcutCombo.parse(''), isNull);
   });
 
   test('展示文案：修饰键 + 可读键名', () {
-    const combo = ShortcutCombo(
-      key: LogicalKeyboardKey.arrowLeft,
-      ctrl: true,
-    );
+    const combo = ShortcutCombo(key: LogicalKeyboardKey.arrowLeft, ctrl: true);
     expect(combo.label(), 'Ctrl + ←');
-    expect(
-      const ShortcutCombo(key: LogicalKeyboardKey.space).label(),
-      'Space',
-    );
+    expect(const ShortcutCombo(key: LogicalKeyboardKey.space).label(), 'Space');
   });
 
   test('全局分组要求带修饰键（软件内允许单键）', () {
@@ -53,12 +48,15 @@ void main() {
     expect(custom.isOverridden(ShortcutCommand.togglePlayPause), isTrue);
     expect(custom.comboFor(ShortcutCommand.togglePlayPause)!.ctrl, isTrue);
     expect(
-      custom.withOverride(ShortcutCommand.togglePlayPause, null)
+      custom
+          .withOverride(ShortcutCommand.togglePlayPause, null)
           .isOverridden(ShortcutCommand.togglePlayPause),
       isFalse,
     );
-    expect(custom.cleared().isOverridden(ShortcutCommand.togglePlayPause),
-        isFalse);
+    expect(
+      custom.cleared().isOverridden(ShortcutCommand.togglePlayPause),
+      isFalse,
+    );
   });
 
   test('序列化往返：只存覆盖项，坏条目跳过', () {
@@ -69,8 +67,10 @@ void main() {
         );
     final encoded = bindings.encode();
     final decoded = ShortcutBindings.decode(ShortcutScope.inApp, encoded);
-    expect(decoded.comboFor(ShortcutCommand.toggleMute)!.key,
-        LogicalKeyboardKey.keyJ);
+    expect(
+      decoded.comboFor(ShortcutCommand.toggleMute)!.key,
+      LogicalKeyboardKey.keyJ,
+    );
 
     // 坏条目：未知动作 / 非法组合 / 不属于本分组的动作（全局专用动作）
     final tolerant = ShortcutBindings.decode(

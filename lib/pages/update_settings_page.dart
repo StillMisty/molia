@@ -61,28 +61,29 @@ class _UpdateSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final busy = provider.status == UpdateStatus.checking ||
+    final busy =
+        provider.status == UpdateStatus.checking ||
         provider.status == UpdateStatus.downloading;
     return SettingsSectionCard(
       title: l10n.updateSettingsSection,
       children: [
         SettingsChoiceRow<UpdateChannel>(
-            key: const Key('settingsUpdateChannelItem'),
-            icon: Icons.alt_route_rounded,
-            title: l10n.updateChannelTitle,
-            subtitle: l10n.updateChannelSubtitle,
-            value: provider.channel,
-            options: [
-              (UpdateChannel.stable, l10n.updateChannelStable),
-              (UpdateChannel.beta, l10n.updateChannelBeta),
-            ],
-            // 逐项图标：选中段的对勾替换图标（M3E 分段形态）。
-            icons: const {
-              UpdateChannel.stable: Icons.verified_rounded,
-              UpdateChannel.beta: Icons.science_rounded,
-            },
-            onChanged: (channel) => unawaited(provider.setChannel(channel)),
-          ),
+          key: const Key('settingsUpdateChannelItem'),
+          icon: Icons.alt_route_rounded,
+          title: l10n.updateChannelTitle,
+          subtitle: l10n.updateChannelSubtitle,
+          value: provider.channel,
+          options: [
+            (UpdateChannel.stable, l10n.updateChannelStable),
+            (UpdateChannel.beta, l10n.updateChannelBeta),
+          ],
+          // 逐项图标：选中段的对勾替换图标（M3E 分段形态）。
+          icons: const {
+            UpdateChannel.stable: Icons.verified_rounded,
+            UpdateChannel.beta: Icons.science_rounded,
+          },
+          onChanged: (channel) => unawaited(provider.setChannel(channel)),
+        ),
         SettingsSwitchTile(
           switchKey: const Key('settingsUpdateAutoCheckSwitch'),
           icon: Icons.schedule_rounded,
@@ -217,11 +218,16 @@ class _ReleaseActions extends StatelessWidget {
     final status = provider.status;
     final platform = provider.platform?.platform;
     final canOpenPage =
-        provider.release?.notesUrl != null && status != UpdateStatus.downloading;
-    final permissionMissing =
-        provider.failure == UpdateFailureKind.permission;
+        provider.release?.notesUrl != null &&
+        status != UpdateStatus.downloading;
+    final permissionMissing = provider.failure == UpdateFailureKind.permission;
 
-    final primary = _primaryAction(context, status, platform, permissionMissing);
+    final primary = _primaryAction(
+      context,
+      status,
+      platform,
+      permissionMissing,
+    );
 
     final actions = <Widget>[];
 
@@ -241,9 +247,7 @@ class _ReleaseActions extends StatelessWidget {
           children: [
             const M3EProgressIndicator.circular(size: 16, strokeWidth: 2),
             const SizedBox(width: kSettingsSmallSpacing),
-            Expanded(
-              child: Text(l10n.updateInstallingHint),
-            ),
+            Expanded(child: Text(l10n.updateInstallingHint)),
           ],
         ),
       );
@@ -307,7 +311,7 @@ class _ReleaseActions extends StatelessWidget {
   /// 当前状态/平台的唯一主操作；iOS / macOS 与安装中无主操作
   /// （只有说明文案 + 打开发布页）。
   ({Key key, IconData icon, String label, VoidCallback onPressed})?
-      _primaryAction(
+  _primaryAction(
     BuildContext context,
     UpdateStatus status,
     String? platform,
@@ -490,9 +494,7 @@ String updateStatusText(AppLocalizations l10n, UpdateProvider provider) {
       final last = provider.lastCheckedAt;
       return last == null
           ? l10n.updateStatusIdle
-          : l10n.updateLastChecked(
-              DateFormat('yyyy-MM-dd HH:mm').format(last),
-            );
+          : l10n.updateLastChecked(DateFormat('yyyy-MM-dd HH:mm').format(last));
     case UpdateStatus.checking:
       return l10n.updateStatusChecking;
     case UpdateStatus.upToDate:

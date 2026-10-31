@@ -26,15 +26,17 @@ class NavProvider extends ChangeNotifier {
   /// 默认顺序来自登记键默认值（资料 / 播放 / 收藏），避免两处各写一份。
   static List<ShellDestination> get defaultOrder =>
       List<ShellDestination>.unmodifiable(
-          _orderOf(kShellNavOrder.defaultValue));
+        _orderOf(kShellNavOrder.defaultValue),
+      );
 
   List<ShellDestination> _order = List<ShellDestination>.of(defaultOrder);
   final Set<ShellDestination> _hidden = _hiddenOf(kShellNavHidden.defaultValue);
 
   /// 存储的启动首页；同步推来的 hidden 列表可能让它当前不可见（见
   /// [effectiveHomeDestination]）。
-  ShellDestination _homeDestination =
-      _homeOf(kShellHomeDestination.defaultValue);
+  ShellDestination _homeDestination = _homeOf(
+    kShellHomeDestination.defaultValue,
+  );
 
   late final Future<void> _preferencesReady;
 
@@ -141,10 +143,10 @@ class NavProvider extends ChangeNotifier {
     return restored;
   }
 
-  static Set<ShellDestination> _hiddenOf(List<String> names) =>
-      ShellDestination.values
-          .where((value) => names.contains(value.name))
-          .toSet();
+  static Set<ShellDestination> _hiddenOf(List<String> names) => ShellDestination
+      .values
+      .where((value) => names.contains(value.name))
+      .toSet();
 
   static ShellDestination _homeOf(String name) =>
       ShellDestination.values.firstWhere(

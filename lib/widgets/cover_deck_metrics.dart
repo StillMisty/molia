@@ -36,8 +36,9 @@ CoverDeckMetrics coverDeckMetricsFor({
   required double availableHeight,
 }) {
   final double maxWidth = max(0.0, availableWidth);
-  final double maxHeight =
-      availableHeight.isFinite ? max(0.0, availableHeight) : double.infinity;
+  final double maxHeight = availableHeight.isFinite
+      ? max(0.0, availableHeight)
+      : double.infinity;
   final double byWidth = maxWidth / coverDeckHorizontalFactor;
   final double byHeight = maxHeight / coverDeckVerticalFactor;
   double artDimension = min(byWidth, byHeight);

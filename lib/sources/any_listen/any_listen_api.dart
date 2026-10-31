@@ -70,10 +70,8 @@ class AnyListenProbeResult {
 /// 职责边界：只负责「URL 拼装 / 请求头 / 超时 / 状态码归类 / JSON 解码」，
 /// 不做业务字段解析；业务解析在 `AnyListenSource` 中，便于替换本类时对照。
 class AnyListenApi {
-  AnyListenApi({
-    Dio? dio,
-    this.timeout = const Duration(seconds: 10),
-  }) : _injectedDio = dio;
+  AnyListenApi({Dio? dio, this.timeout = const Duration(seconds: 10)})
+    : _injectedDio = dio;
 
   /// 外部注入的客户端（可选）；为空时在首次请求时惰性创建。
   ///
@@ -251,7 +249,8 @@ class AnyListenApi {
   }
 
   Future<Response<dynamic>> _send(
-      Future<Response<dynamic>> Function() request) async {
+    Future<Response<dynamic>> Function() request,
+  ) async {
     try {
       final response = await request().timeout(timeout);
       if (response.httpStatus < 200 || response.httpStatus >= 300) {

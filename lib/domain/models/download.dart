@@ -113,14 +113,14 @@ class DownloadedTrack {
 
   /// 本地曲目 payload（含路径的 raw；UI 禁读，只走音源链路）。
   Map<String, dynamic> get localPayload => {
-        if (hasAudio) 'path': filePath,
-        // rawIdOf 取键优先级含 songId：本地曲目 id 稳定为 `{origin}:{id}`。
-        'songId': localSongId,
-        if (lyricPath != null) 'lyricPath': lyricPath,
-        if (translationLyricPath != null)
-          'translationLyricPath': translationLyricPath,
-        if (coverPath != null) 'coverPath': coverPath,
-      };
+    if (hasAudio) 'path': filePath,
+    // rawIdOf 取键优先级含 songId：本地曲目 id 稳定为 `{origin}:{id}`。
+    'songId': localSongId,
+    if (lyricPath != null) 'lyricPath': lyricPath,
+    if (translationLyricPath != null)
+      'translationLyricPath': translationLyricPath,
+    if (coverPath != null) 'coverPath': coverPath,
+  };
 
   /// 展示/播放用封面：本地文件优先，回退原音源 URL。
   Uri? get artworkUri {

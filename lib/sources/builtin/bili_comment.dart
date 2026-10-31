@@ -103,8 +103,9 @@ class BiliComment {
     final text = decodeName(content['message']?.toString() ?? '').trim();
     if (id == null || text.isEmpty) return null;
 
-    final member =
-        raw['member'] is Map ? raw['member'] as Map : const <String, dynamic>{};
+    final member = raw['member'] is Map
+        ? raw['member'] as Map
+        : const <String, dynamic>{};
     final control = raw['reply_control'] is Map
         ? raw['reply_control'] as Map
         : const <String, dynamic>{};

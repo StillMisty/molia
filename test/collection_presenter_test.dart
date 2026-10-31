@@ -21,13 +21,13 @@ void main() {
   CollectionPresenter presenter() => CollectionPresenter();
 
   CollectionIdentity identityFor(int selected) => presenter().identityFor(
-        selectedId: selected,
-        playlists: playlists,
-        favoritesId: 1,
-        favoritesName: '我的收藏',
-        historyName: '播放历史',
-        localSongsName: '本地歌曲',
-      );
+    selectedId: selected,
+    playlists: playlists,
+    favoritesId: 1,
+    favoritesName: '我的收藏',
+    historyName: '播放历史',
+    localSongsName: '本地歌曲',
+  );
 
   PlaylistTrack track(String id, {String title = '', String artist = ''}) =>
       PlaylistTrack(
@@ -43,15 +43,15 @@ void main() {
       );
 
   PlayHistoryEntry history(String id) => PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: id,
-        title: 'Song $id',
-        artist: 'Artist $id',
-        album: 'Album $id',
-        durationMs: 180000,
-        coverUrl: 'https://cover/$id.jpg',
-        playedAt: 1,
-      );
+    sourceKey: 'wy',
+    songId: id,
+    title: 'Song $id',
+    artist: 'Artist $id',
+    album: 'Album $id',
+    durationMs: 180000,
+    coverUrl: 'https://cover/$id.jpg',
+    playedAt: 1,
+  );
 
   CollectionLocalSong localSong(String id, {bool imported = false}) =>
       CollectionLocalSong.download(
@@ -148,8 +148,10 @@ void main() {
       expect(downloaded.isImported, isFalse);
       expect(imported.key, 'l:local:2');
       expect(imported.isImported, isTrue);
-      expect(imported.favoriteKey,
-          (sourceKey: kLocalSourceKey, songId: 'local:2'));
+      expect(imported.favoriteKey, (
+        sourceKey: kLocalSourceKey,
+        songId: 'local:2',
+      ));
     });
   });
 
@@ -297,15 +299,14 @@ void main() {
         List<PlaylistTrack>? withTracks,
         String query = '',
         CollectionTrackSort sort = CollectionTrackSort.added,
-      }) =>
-          presenter.viewFor(
-            identity: withIdentity ?? identity,
-            tracks: withTracks ?? tracks,
-            history: const [],
-            localSongs: const [],
-            query: query,
-            sort: sort,
-          );
+      }) => presenter.viewFor(
+        identity: withIdentity ?? identity,
+        tracks: withTracks ?? tracks,
+        history: const [],
+        localSongs: const [],
+        query: query,
+        sort: sort,
+      );
 
       final base = view();
 
@@ -419,23 +420,23 @@ void main() {
     CollectionRowActionSpec swap() =>
         const CollectionRowActionSpec(CollectionRowActionKind.swapSource);
     CollectionRowActionSpec removePlaylist() => const CollectionRowActionSpec(
-          CollectionRowActionKind.removeFromPlaylist,
-          destructive: true,
-        );
+      CollectionRowActionKind.removeFromPlaylist,
+      destructive: true,
+    );
     CollectionRowActionSpec removeFavorite() => const CollectionRowActionSpec(
-          CollectionRowActionKind.removeFromFavorite,
-          destructive: true,
-        );
+      CollectionRowActionKind.removeFromFavorite,
+      destructive: true,
+    );
     CollectionRowActionSpec toggleFavorite() =>
         const CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite);
     CollectionRowActionSpec deleteHistory() => const CollectionRowActionSpec(
-          CollectionRowActionKind.deleteHistoryEntry,
-          destructive: true,
-        );
+      CollectionRowActionKind.deleteHistoryEntry,
+      destructive: true,
+    );
     CollectionRowActionSpec deleteLocal() => const CollectionRowActionSpec(
-          CollectionRowActionKind.deleteLocalSong,
-          destructive: true,
-        );
+      CollectionRowActionKind.deleteLocalSong,
+      destructive: true,
+    );
 
     test('曲目行：收藏 / 自建列表 / 本地音源的动作集合', () {
       final presenter = CollectionPresenter();
@@ -448,10 +449,11 @@ void main() {
         ),
         [add(), swap(), removeFavorite()],
       );
-      expect(
-        presenter.rowActionsFor(trackRow, identityFor(2)),
-        [add(), swap(), removePlaylist()],
-      );
+      expect(presenter.rowActionsFor(trackRow, identityFor(2)), [
+        add(),
+        swap(),
+        removePlaylist(),
+      ]);
       expect(
         presenter.rowActionsFor(
           TrackCollectionRow(
@@ -489,7 +491,7 @@ void main() {
 
       expect(
         presenter.rowActionsFor(HistoryCollectionRow(history('1')), identity),
-        [add(), swap(), deleteHistory()],
+        [add(), toggleFavorite(), swap(), deleteHistory()],
       );
       expect(
         presenter.rowActionsFor(
@@ -503,7 +505,7 @@ void main() {
           ),
           identity,
         ),
-        [add(), deleteHistory()],
+        [add(), toggleFavorite(), deleteHistory()],
       );
     });
 

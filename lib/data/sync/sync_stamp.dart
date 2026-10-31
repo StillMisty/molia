@@ -29,9 +29,9 @@ class SyncStamp {
   const SyncStamp({this.hash = '', this.version = SyncVersion.zero});
 
   Map<String, dynamic> toJson() => {
-        if (hash.isNotEmpty) 'h': hash,
-        'v': version.toJson(),
-      };
+    if (hash.isNotEmpty) 'h': hash,
+    'v': version.toJson(),
+  };
 
   static SyncStamp? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -55,7 +55,7 @@ class SyncStampIssuer {
     required this._deviceId,
     this._onAdvanced,
     Logger? logger,
-  })  : _logger = logger ?? Logger('molia.sync');
+  }) : _logger = logger ?? Logger('molia.sync');
 
   final int Function() _clock;
   final String Function() _deviceId;
@@ -106,7 +106,8 @@ class SyncStampIssuer {
 
   /// 吸收 `(physical, counter)` 中更大的值；严格大于才前进。
   void _advance(SyncVersion value, {required bool warnAhead}) {
-    final advanced = value.physical > _physical ||
+    final advanced =
+        value.physical > _physical ||
         (value.physical == _physical && value.counter > _counter);
     if (!advanced) return;
     if (warnAhead) {

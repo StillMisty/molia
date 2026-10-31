@@ -81,7 +81,9 @@ void main() {
     expect(request.context?.name, '热歌榜');
     expect(request.tracks.single.payload['songmid'], 111);
     expect(
-        request.tracks.single.duration, const Duration(milliseconds: 245000));
+      request.tracks.single.duration,
+      const Duration(milliseconds: 245000),
+    );
   });
 
   test('收藏切换写入资料库并更新 isFavorite', () async {
@@ -103,19 +105,15 @@ void main() {
 
     // 「加入列表」统一流程的数据面：DiscoverTrack → PlaylistTrack → 写入。
     expect(
-      (await library.addTracksToPlaylist(
-        playlistId,
-        [discover.toPlaylistTrack(track)],
-      ))
-          .changed,
+      (await library.addTracksToPlaylist(playlistId, [
+        discover.toPlaylistTrack(track),
+      ])).changed,
       1,
     );
     expect(
-      (await library.addTracksToPlaylist(
-        playlistId,
-        [discover.toPlaylistTrack(track)],
-      ))
-          .changed,
+      (await library.addTracksToPlaylist(playlistId, [
+        discover.toPlaylistTrack(track),
+      ])).changed,
       0,
     );
 
@@ -214,10 +212,7 @@ void main() {
     expect(multi.supportsHotSearch, isFalse);
     expect(multi.leaderboards, isEmpty);
     expect(multi.hotSearches, isEmpty);
-    await expectLater(
-      multi.loadTags(),
-      throwsA(isA<DiscoverFailure>()),
-    );
+    await expectLater(multi.loadTags(), throwsA(isA<DiscoverFailure>()));
   });
 
   test('标签 / 歌单列表 / 搜索 / 详情委托数据源', () async {

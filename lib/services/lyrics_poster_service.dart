@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:logging/logging.dart';
 import 'package:dio/dio.dart';
+
 import '../data/http/app_dio.dart';
 import '../managers/artwork_cache.dart';
 import '../models/poster_lyric_line.dart';
@@ -88,6 +90,7 @@ class LyricsPosterService {
     required Color separatorColor,
     String? fontFamily,
     List<String>? fontFamilyFallback,
+
     /// 海报水印品牌名（Molia）。
     String watermarkText = 'Molia',
   }) async {
@@ -120,22 +123,24 @@ class LyricsPosterService {
       try {
         loadedAlbumImage = await _loadNetworkImage(albumCoverUrl);
         final titleStyle = TextStyle(
-            fontFamily: fontFamily,
-            fontFamilyFallback: fontFamilyFallback,
-            fontSize: titleFontSize,
-            color: titleColor,
-            fontWeight: FontWeight.w600);
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
+          fontSize: titleFontSize,
+          color: titleColor,
+          fontWeight: FontWeight.w600,
+        );
         final titlePainter = TextPainter(
           text: TextSpan(text: trackTitle, style: titleStyle),
           textDirection: TextDirection.ltr,
           textAlign: TextAlign.left,
         );
         final artistStyle = TextStyle(
-            fontFamily: fontFamily,
-            fontFamilyFallback: fontFamilyFallback,
-            fontSize: artistFontSize,
-            color: artistColor,
-            fontWeight: FontWeight.w400);
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
+          fontSize: artistFontSize,
+          color: artistColor,
+          fontWeight: FontWeight.w400,
+        );
         final artistPainter = TextPainter(
           text: TextSpan(text: artistName, style: artistStyle),
           textDirection: TextDirection.ltr,
@@ -148,17 +153,19 @@ class LyricsPosterService {
 
         final textTotalHeight =
             titlePainter.height + interTextSpacing + artistPainter.height;
-        headerHeight =
-            albumArtSize > textTotalHeight ? albumArtSize : textTotalHeight;
+        headerHeight = albumArtSize > textTotalHeight
+            ? albumArtSize
+            : textTotalHeight;
         calculatedHeight += headerHeight + elementSpacing;
       } catch (e) {
         logger.warning('Failed to load album cover for height calculation: $e');
         final titleStyle = TextStyle(
-            fontFamily: fontFamily,
-            fontFamilyFallback: fontFamilyFallback,
-            fontSize: titleFontSize,
-            color: titleColor,
-            fontWeight: FontWeight.w400);
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
+          fontSize: titleFontSize,
+          color: titleColor,
+          fontWeight: FontWeight.w400,
+        );
         final titlePainter = TextPainter(
           text: TextSpan(text: trackTitle, style: titleStyle),
           textDirection: TextDirection.ltr,
@@ -168,11 +175,12 @@ class LyricsPosterService {
         headerHeight += titlePainter.height + interTextSpacing;
 
         final artistStyle = TextStyle(
-            fontFamily: fontFamily,
-            fontFamilyFallback: fontFamilyFallback,
-            fontSize: artistFontSize,
-            color: artistColor,
-            fontWeight: FontWeight.w400);
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFamilyFallback,
+          fontSize: artistFontSize,
+          color: artistColor,
+          fontWeight: FontWeight.w400,
+        );
         final artistPainter = TextPainter(
           text: TextSpan(text: artistName, style: artistStyle),
           textDirection: TextDirection.ltr,
@@ -184,11 +192,12 @@ class LyricsPosterService {
       }
     } else {
       final titleStyle = TextStyle(
-          fontFamily: fontFamily,
-          fontFamilyFallback: fontFamilyFallback,
-          fontSize: titleFontSize,
-          color: titleColor,
-          fontWeight: FontWeight.w600);
+        fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
+        fontSize: titleFontSize,
+        color: titleColor,
+        fontWeight: FontWeight.w600,
+      );
       final titlePainter = TextPainter(
         text: TextSpan(text: trackTitle, style: titleStyle),
         textDirection: TextDirection.ltr,
@@ -198,11 +207,12 @@ class LyricsPosterService {
       headerHeight += titlePainter.height + interTextSpacing;
 
       final artistStyle = TextStyle(
-          fontFamily: fontFamily,
-          fontFamilyFallback: fontFamilyFallback,
-          fontSize: artistFontSize,
-          color: artistColor,
-          fontWeight: FontWeight.w400);
+        fontFamily: fontFamily,
+        fontFamilyFallback: fontFamilyFallback,
+        fontSize: artistFontSize,
+        color: artistColor,
+        fontWeight: FontWeight.w400,
+      );
       final artistPainter = TextPainter(
         text: TextSpan(text: artistName, style: artistStyle),
         textDirection: TextDirection.ltr,
@@ -235,19 +245,20 @@ class LyricsPosterService {
     const double lyricExtendedLineSpacing = 2.0 * scaleFactor;
     final List<PosterLyricLine> lyricEntries =
         (posterLyricLines != null && posterLyricLines.isNotEmpty)
-            ? posterLyricLines
-            : lyrics
-                .split('\n')
-                .map((line) => PosterLyricLine(text: line))
-                .toList();
+        ? posterLyricLines
+        : lyrics
+              .split('\n')
+              .map((line) => PosterLyricLine(text: line))
+              .toList();
 
     final List<TextPainter> lyricLinePainters = [];
 
     /// 每个 painter 之后要额外留出的间距（主行→扩展行 / 扩展行→扩展行）。
     final List<double> lyricLineGaps = [];
     double totalLyricsBlockHeight = 0;
-    final bool hasNonEmptyLyric =
-        lyricEntries.any((entry) => entry.text.trim().isNotEmpty);
+    final bool hasNonEmptyLyric = lyricEntries.any(
+      (entry) => entry.text.trim().isNotEmpty,
+    );
 
     TextPainter layoutLine(String text, TextStyle style) {
       final painter = TextPainter(
@@ -268,22 +279,25 @@ class LyricsPosterService {
           if (entry.translation.trim().isNotEmpty) entry.translation,
           if (entry.roma.trim().isNotEmpty) entry.roma,
         ];
-        lyricLineGaps
-            .add(extendedTexts.isEmpty ? 0.0 : lyricExtendedSpacing);
+        lyricLineGaps.add(extendedTexts.isEmpty ? 0.0 : lyricExtendedSpacing);
         for (var i = 0; i < extendedTexts.length; i++) {
-          lyricLinePainters.add(layoutLine(extendedTexts[i], extendedLyricsStyle));
+          lyricLinePainters.add(
+            layoutLine(extendedTexts[i], extendedLyricsStyle),
+          );
           lyricLineGaps.add(
             i == extendedTexts.length - 1 ? 0.0 : lyricExtendedLineSpacing,
           );
         }
       }
       for (var i = 0; i < lyricLinePainters.length; i++) {
-        totalLyricsBlockHeight += lyricLinePainters[i].height + lyricLineGaps[i];
+        totalLyricsBlockHeight +=
+            lyricLinePainters[i].height + lyricLineGaps[i];
       }
     } else {
       final emptyLyricPainter = TextPainter(
-          text: TextSpan(text: ' ', style: lyricsStyle),
-          textDirection: TextDirection.ltr);
+        text: TextSpan(text: ' ', style: lyricsStyle),
+        textDirection: TextDirection.ltr,
+      );
       emptyLyricPainter.layout(maxWidth: contentWidth);
       totalLyricsBlockHeight = emptyLyricPainter.height;
       lyricLinePainters.add(emptyLyricPainter);
@@ -293,11 +307,12 @@ class LyricsPosterService {
     if (lyricLinePainters.isNotEmpty) calculatedHeight += elementSpacing;
 
     final watermarkStyle = TextStyle(
-        fontFamily: fontFamily,
-        fontFamilyFallback: fontFamilyFallback,
-        fontSize: watermarkFontSize,
-        color: watermarkColor,
-        fontWeight: FontWeight.w400);
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
+      fontSize: watermarkFontSize,
+      color: watermarkColor,
+      fontWeight: FontWeight.w400,
+    );
     final watermarkPainter = TextPainter(
       text: TextSpan(text: watermarkText, style: watermarkStyle),
       textDirection: TextDirection.ltr,
@@ -307,8 +322,9 @@ class LyricsPosterService {
 
     ui.Image? watermarkIcon;
     try {
-      watermarkIcon =
-          await _loadAssetImage('assets/icons/adaptive_icon_monochrome.png');
+      watermarkIcon = await _loadAssetImage(
+        'assets/icons/adaptive_icon_monochrome.png',
+      );
     } catch (e) {
       logger.warning('Failed to load watermark icon: $e');
     }
@@ -323,8 +339,9 @@ class LyricsPosterService {
     calculatedHeight += watermarkHeight;
 
     calculatedHeight += bottomMargin;
-    final double finalPosterHeight =
-        (calculatedHeight < 400) ? 400 : calculatedHeight;
+    final double finalPosterHeight = (calculatedHeight < 400)
+        ? 400
+        : calculatedHeight;
 
     // 绘制与编码阶段产生的所有图像句柄都在这里统一释放：封面 / 水印图标
     // 是解码出来的，picture / 成品位图是录制出来的，任何一步抛错都要回收，
@@ -634,8 +651,12 @@ class LyricsPosterService {
     textPainter.paint(canvas, Offset(dx, offsetY));
   }
 
-  void _drawTextPainter(Canvas canvas, TextPainter textPainter, Offset position,
-      TextAlign textAlign) {
+  void _drawTextPainter(
+    Canvas canvas,
+    TextPainter textPainter,
+    Offset position,
+    TextAlign textAlign,
+  ) {
     double dx = position.dx;
     if (textAlign == TextAlign.center) {
       dx -= textPainter.width / 2;

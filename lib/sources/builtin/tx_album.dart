@@ -47,7 +47,8 @@ class TxAlbum {
         },
       },
     };
-    final url = '$_url?g_tk=5381&format=json&inCharset=utf8&outCharset=utf-8'
+    final url =
+        '$_url?g_tk=5381&format=json&inCharset=utf8&outCharset=utf-8'
         '&data=${Uri.encodeComponent(jsonEncode(payload))}';
     final body = await lxHttpGet(
       url,
@@ -87,7 +88,9 @@ class TxAlbum {
     final data = section['data'];
     if (data is! Map) throw albumPlatformFailure('tx', '专辑数据结构不符');
 
-    final rawList = data['songList'] is List ? data['songList'] as List : const [];
+    final rawList = data['songList'] is List
+        ? data['songList'] as List
+        : const [];
     final tracks = <Track>[];
     Map<String, dynamic>? firstInfo;
     for (final item in rawList) {
@@ -101,9 +104,9 @@ class TxAlbum {
 
     // 专辑元信息取首条歌曲内嵌的 album / singer（平台随曲目返回）。
     final album = firstInfo?['album'];
-    final mid = (data['albumMid'] ?? (album is Map ? album['mid'] : null) ??
-            albumMid)
-        .toString();
+    final mid =
+        (data['albumMid'] ?? (album is Map ? album['mid'] : null) ?? albumMid)
+            .toString();
     final total = parseSourceCount(data['totalNum']);
     return Album(
       id: mid,

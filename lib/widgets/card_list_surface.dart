@@ -80,8 +80,7 @@ class _CardListSurfaceState extends State<CardListSurface> {
       innerRadius: cardList.innerRadius,
     );
     // press / focus / 选中 = shape large（16dp）；hover = shape medium（12dp）。
-    final BorderRadius active =
-        BorderRadius.circular(itemTheme.selectedRadius);
+    final BorderRadius active = BorderRadius.circular(itemTheme.selectedRadius);
     final BorderRadius target;
     if (widget.selected || _interaction.pressed || _interaction.focused) {
       target = active;
@@ -102,8 +101,7 @@ class _CardListSurfaceState extends State<CardListSurface> {
         borderRadius: radius,
         color: fill,
         // 显式传静止档：行不因 hover/press 抬升阴影（对齐 M3EListRowSurface）。
-        elevation:
-            cardTheme.elevation(M3ECardVariant.filled, hovered: false),
+        elevation: cardTheme.elevation(M3ECardVariant.filled, hovered: false),
         padding: widget.padding,
         onPressed: widget.onPressed,
         onLongPress: widget.onLongPress,
@@ -174,8 +172,10 @@ class _RadiusMorphState extends State<_RadiusMorph>
     _from = BorderRadius.lerp(_from, _to, _controller.value) ?? _to;
     _to = widget.radius;
     if (oldWidget.spring != widget.spring) {
-      _controller.motion =
-          SpringMotion(widget.spring.toDescription(), snapToEnd: true);
+      _controller.motion = SpringMotion(
+        widget.spring.toDescription(),
+        snapToEnd: true,
+      );
     }
     _controller.animateTo(1, from: 0, withVelocity: 0);
   }

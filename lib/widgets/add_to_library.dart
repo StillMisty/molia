@@ -72,8 +72,9 @@ Future<bool> addTracksToLibraryTarget(
   }
   M3ESnackbar.show(
     context,
-    message:
-        added > 0 ? l10n.playlistAddedTo(name) : l10n.playlistAlreadyContains,
+    message: added > 0
+        ? l10n.playlistAddedTo(name)
+        : l10n.playlistAlreadyContains,
   );
   return true;
 }

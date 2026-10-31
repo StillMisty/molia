@@ -19,8 +19,10 @@ const double kSettingsElementSpacing = 16.0;
 const double kSettingsSmallSpacing = 8.0;
 
 /// 设置行统一内边距（标签行 / 复合行同用；行高 token 的计算基准）。
-const EdgeInsets kSettingsRowPadding =
-    EdgeInsets.symmetric(horizontal: 12, vertical: 8);
+const EdgeInsets kSettingsRowPadding = EdgeInsets.symmetric(
+  horizontal: 12,
+  vertical: 8,
+);
 
 /// 行首图标与标题之间的统一间距。
 const double _settingsTileLeadGap = 12.0;
@@ -41,9 +43,7 @@ const double _autoFieldWidthSlack = 2.0;
 /// 最近一层 Navigator，弹层内使用时即为设置内部导航（返回键先退子页、再关
 /// 弹层）；独立挂载（测试等）时等价普通页面 push。
 Future<T?> openSettingsSubPage<T>(BuildContext context, Widget page) {
-  return Navigator.of(context).push<T>(
-    M3EPageRoute<T>(builder: (_) => page),
-  );
+  return Navigator.of(context).push<T>(M3EPageRoute<T>(builder: (_) => page));
 }
 
 /// 设置弹层内 dialog 的统一宽度（弹层窄于屏幕，弹窗跟随弹层宽度）。
@@ -710,7 +710,10 @@ class SettingsDropdownRow<T> extends StatelessWidget {
           children: [
             Expanded(
               child: SettingsTileLead(
-                  icon: icon, title: title, subtitle: subtitle),
+                icon: icon,
+                title: title,
+                subtitle: subtitle,
+              ),
             ),
             const SizedBox(width: 8),
             SizedBox(
@@ -786,12 +789,14 @@ class SettingsDropdownRow<T> extends StatelessWidget {
     // 结果（框架对未设置的尺寸回退 24），M3E 主题的 iconTheme 可能不带尺寸。
     final icon = IconTheme.of(context).size ?? 24;
     // 字段：选中文本 + 左右内边距 + 与箭头的 8 间距 + 箭头图标。
-    final fieldNeeded = widestOf(m3e.typeScale.bodyMedium) +
+    final fieldNeeded =
+        widestOf(m3e.typeScale.bodyMedium) +
         fieldStyle.padding.resolve(direction).horizontal +
         8 +
         icon;
     // 面板里的选中条目：面板 / 条目内边距 + 对勾图标，文字用条目样式。
-    final itemNeeded = widestOf(
+    final itemNeeded =
+        widestOf(
           itemStyle.textStyle ??
               m3e.dropdownMenuTheme.itemTextStyle(
                 m3e.typeScale,
@@ -850,7 +855,9 @@ class SettingsSliderRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: SettingsTileLead(icon: icon, title: title)),
+              Expanded(
+                child: SettingsTileLead(icon: icon, title: title),
+              ),
               const SizedBox(width: 8),
               Text(
                 valueLabel,
@@ -949,7 +956,9 @@ class SettingsColorSwatch extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: M3ETheme.of(context).colorScheme.outlineVariant),
+        border: Border.all(
+          color: M3ETheme.of(context).colorScheme.outlineVariant,
+        ),
       ),
     );
   }
@@ -1016,13 +1025,15 @@ class SettingsTileIcon extends StatelessWidget {
       height: 40,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: containerColor ??
+        color:
+            containerColor ??
             (isDestructive ? scheme.errorContainer : scheme.secondaryContainer),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Icon(
         icon,
-        color: foregroundColor ??
+        color:
+            foregroundColor ??
             (isDestructive
                 ? scheme.onErrorContainer
                 : scheme.onSecondaryContainer),

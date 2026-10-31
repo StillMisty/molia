@@ -158,8 +158,7 @@ class AudioCacheStore {
     Map<String, int> files, {
     required String sourceKey,
     required String songId,
-  }) =>
-      _usageMatching(files, keyPrefix(sourceKey: sourceKey, songId: songId));
+  }) => _usageMatching(files, keyPrefix(sourceKey: sourceKey, songId: songId));
 
   /// 单曲音频缓存「写入中」占用（半成品 / 边车）。
   ///
@@ -167,12 +166,11 @@ class AudioCacheStore {
   Future<CacheUsage> writingUsageForTrack({
     required String sourceKey,
     required String songId,
-  }) async =>
-      usageForTrackInFiles(
-        (await splitIndex()).$2,
-        sourceKey: sourceKey,
-        songId: songId,
-      );
+  }) async => usageForTrackInFiles(
+    (await splitIndex()).$2,
+    sourceKey: sourceKey,
+    songId: songId,
+  );
 
   /// 前缀匹配统计（文件名 → 字节数）。
   static CacheUsage _usageMatching(Map<String, int> files, String prefix) {

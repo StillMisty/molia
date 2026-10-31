@@ -57,15 +57,18 @@ class TxArtist {
       final id = raw['singerMID']?.toString() ?? '';
       final name = decodeName(raw['singerName']?.toString());
       if (id.isEmpty || name.isEmpty) continue;
-      artists.add(ArtistSummary(
-        id: id,
-        name: name,
-        // 搜索条目给 150 尺寸头像；换成 500（与详情页同一图源）。
-        avatarUrl: raw['singerPic']
-            ?.toString()
-            .replaceAll('R150x150', 'R500x500'),
-        songCount: parseSourceCount(raw['songNum']),
-      ));
+      artists.add(
+        ArtistSummary(
+          id: id,
+          name: name,
+          // 搜索条目给 150 尺寸头像；换成 500（与详情页同一图源）。
+          avatarUrl: raw['singerPic']?.toString().replaceAll(
+            'R150x150',
+            'R500x500',
+          ),
+          songCount: parseSourceCount(raw['songNum']),
+        ),
+      );
     }
     final total = TxSearch.totalOf(data);
     return ArtistSearchPage(
@@ -86,12 +89,7 @@ class TxArtist {
       'music.web_singer_info_svr': {
         'module': 'music.web_singer_info_svr',
         'method': 'get_singer_detail_info',
-        'param': {
-          'sort': 5,
-          'singermid': artistId,
-          'begin': 0,
-          'num': limit,
-        },
+        'param': {'sort': 5, 'singermid': artistId, 'begin': 0, 'num': limit},
       },
     };
     final response = await _post(body);
@@ -122,7 +120,8 @@ class TxArtist {
     return ArtistDetail(
       id: artistId,
       name: decodeName(infoMap['name']?.toString()),
-      avatarUrl: 'https://y.gtimg.cn/music/photo_new/'
+      avatarUrl:
+          'https://y.gtimg.cn/music/photo_new/'
           'T001R500x500M000$artistId.jpg',
       description: decodeName(data['singer_brief']?.toString()),
       tracks: tracks,

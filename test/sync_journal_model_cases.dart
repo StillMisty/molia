@@ -6,10 +6,10 @@ import 'package:molia/domain/ports/sync_transport.dart';
 /// 增量协议领域模型：日志条目 / 增量窗口载荷 / 对端游标与失联判定。
 void main() {
   SyncRecord themeRecord(String value, int physical) => SyncRecord(
-        key: 'theme_mode',
-        version: SyncVersion(physical: physical, deviceId: 'devA'),
-        data: {'v': value},
-      );
+    key: 'theme_mode',
+    version: SyncVersion(physical: physical, deviceId: 'devA'),
+    data: {'v': value},
+  );
 
   test('日志条目 JSON 往返保留序号 / 类别 / 记录', () {
     final entry = SyncJournalEntry(

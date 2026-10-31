@@ -11,11 +11,7 @@ import 'package:molia/sources/source_profiles.dart';
 void main() {
   const musicKeys = ['tx', 'wy', 'kg', 'kw', 'mg'];
 
-  LxSourceDecl decl(
-    String key,
-    List<String> actions, {
-    String? name,
-  }) =>
+  LxSourceDecl decl(String key, List<String> actions, {String? name}) =>
       LxSourceDecl(
         key: key,
         name: name ?? key,
@@ -46,17 +42,32 @@ void main() {
           platform.resolve != null,
           reason: '$key: 搜索必须同时有搜索适配器与取链路径',
         );
-        expect(profile.capabilities.pagination, profile.capabilities.search,
-            reason: key);
+        expect(
+          profile.capabilities.pagination,
+          profile.capabilities.search,
+          reason: key,
+        );
         expect(profile.canResolveUrl, platform.resolve != null, reason: key);
-        expect(profile.capabilities.lyrics, platform.lyric != null,
-            reason: '$key: 歌词只认注册表里的原生取词适配器');
-        expect(profile.capabilities.artwork, platform.pic != null,
-            reason: '$key: 封面只认注册表里的原生取图适配器');
-        expect(profile.capabilities.comment, platform.comments != null,
-            reason: key);
-        expect(profile.capabilities.collection, platform.album != null,
-            reason: key);
+        expect(
+          profile.capabilities.lyrics,
+          platform.lyric != null,
+          reason: '$key: 歌词只认注册表里的原生取词适配器',
+        );
+        expect(
+          profile.capabilities.artwork,
+          platform.pic != null,
+          reason: '$key: 封面只认注册表里的原生取图适配器',
+        );
+        expect(
+          profile.capabilities.comment,
+          platform.comments != null,
+          reason: key,
+        );
+        expect(
+          profile.capabilities.collection,
+          platform.album != null,
+          reason: key,
+        );
         expect(
           profile.capabilities.artist,
           platform.artist != null && platform.resolve != null,
@@ -88,15 +99,17 @@ void main() {
     });
 
     test('渠道 / 可搜索列表：发现平台保留入口，any-listen 不可用时不出现', () {
-      expect(
-        profiles.channels.map((profile) => profile.key).toList(),
-        ['bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
-        reason: '可搜索平台在前，仅发现的平台按规范顺序追加',
-      );
-      expect(
-        profiles.searchable.map((profile) => profile.key).toList(),
-        ['bili'],
-      );
+      expect(profiles.channels.map((profile) => profile.key).toList(), [
+        'bili',
+        'tx',
+        'wy',
+        'kg',
+        'kw',
+        'mg',
+      ], reason: '可搜索平台在前，仅发现的平台按规范顺序追加');
+      expect(profiles.searchable.map((profile) => profile.key).toList(), [
+        'bili',
+      ]);
 
       final anyListen = profiles.forKey(AnyListenSource.sourceKey)!;
       expect(anyListen.kind, SourceKind.anyListen);
@@ -108,35 +121,38 @@ void main() {
     });
   });
 
-  test('toDescriptor：画像 → 渠道形状的唯一投影（kind / discoverable / enabled / order）',
-      () {
-    final projected = SourceProfiles.build(
-      activeSources: {
-        'custom': decl('custom', ['search', 'musicUrl'])
-      },
-      anyListenUsable: true,
-      disabledChannels: const {'custom'},
-    );
+  test(
+    'toDescriptor：画像 → 渠道形状的唯一投影（kind / discoverable / enabled / order）',
+    () {
+      final projected = SourceProfiles.build(
+        activeSources: {
+          'custom': decl('custom', ['search', 'musicUrl']),
+        },
+        anyListenUsable: true,
+        disabledChannels: const {'custom'},
+      );
 
-    final custom = projected.forKey('custom')!.toDescriptor(order: 2);
-    expect(custom.key, 'custom');
-    expect(custom.displayName, 'custom');
-    expect(custom.kind, domain.SourceKind.lx);
-    expect(custom.capabilities, projected.forKey('custom')!.capabilities);
-    expect(custom.enabled, isFalse, reason: '停用是画像事实，投影原样带出');
-    expect(custom.discoverable, isFalse);
-    expect(custom.order, 2, reason: 'order 由消费方按列表下标传入');
+      final custom = projected.forKey('custom')!.toDescriptor(order: 2);
+      expect(custom.key, 'custom');
+      expect(custom.displayName, 'custom');
+      expect(custom.kind, domain.SourceKind.lx);
+      expect(custom.capabilities, projected.forKey('custom')!.capabilities);
+      expect(custom.enabled, isFalse, reason: '停用是画像事实，投影原样带出');
+      expect(custom.discoverable, isFalse);
+      expect(custom.order, 2, reason: 'order 由消费方按列表下标传入');
 
-    final bili = projected.forKey('bili')!.toDescriptor();
-    expect(bili.kind, domain.SourceKind.builtin);
-    expect(bili.discoverable, isTrue, reason: '内置发现平台仍保留发现入口');
-    expect(bili.enabled, isTrue);
+      final bili = projected.forKey('bili')!.toDescriptor();
+      expect(bili.kind, domain.SourceKind.builtin);
+      expect(bili.discoverable, isTrue, reason: '内置发现平台仍保留发现入口');
+      expect(bili.enabled, isTrue);
 
-    final anyListen =
-        projected.forKey(AnyListenSource.sourceKey)!.toDescriptor(order: 1);
-    expect(anyListen.kind, domain.SourceKind.anyListen);
-    expect(anyListen.order, 1);
-  });
+      final anyListen = projected
+          .forKey(AnyListenSource.sourceKey)!
+          .toDescriptor(order: 1);
+      expect(anyListen.kind, domain.SourceKind.anyListen);
+      expect(anyListen.order, 1);
+    },
+  );
 
   group('脚本声明合并', () {
     final active = <String, LxSourceDecl>{
@@ -174,10 +190,16 @@ void main() {
       expect(kg.discoverable, isTrue, reason: '仍有发现入口');
 
       final anyListen = profiles.forKey(AnyListenSource.sourceKey)!;
-      expect(anyListen.kind, SourceKind.anyListen,
-          reason: '脚本声明同名 key 不改变 any-listen 身份');
-      expect(anyListen.capabilities.search, isFalse,
-          reason: 'any-listen 未配置时脚本声明不能代替它');
+      expect(
+        anyListen.kind,
+        SourceKind.anyListen,
+        reason: '脚本声明同名 key 不改变 any-listen 身份',
+      );
+      expect(
+        anyListen.capabilities.search,
+        isFalse,
+        reason: 'any-listen 未配置时脚本声明不能代替它',
+      );
     });
 
     test('脚本扩展源按 action 声明能力；仅取链源不进渠道但可取链', () {
@@ -204,14 +226,20 @@ void main() {
     });
 
     test('渠道顺序：脚本可搜索源 → 内置可搜索平台 → 仅发现平台', () {
-      expect(
-        profiles.channels.map((profile) => profile.key).toList(),
-        ['custom', 'wy', 'bili', 'tx', 'kg', 'kw', 'mg'],
-      );
-      expect(
-        profiles.searchable.map((profile) => profile.key).toList(),
-        ['custom', 'wy', 'bili'],
-      );
+      expect(profiles.channels.map((profile) => profile.key).toList(), [
+        'custom',
+        'wy',
+        'bili',
+        'tx',
+        'kg',
+        'kw',
+        'mg',
+      ]);
+      expect(profiles.searchable.map((profile) => profile.key).toList(), [
+        'custom',
+        'wy',
+        'bili',
+      ]);
     });
   });
 
@@ -227,18 +255,21 @@ void main() {
     );
 
     test('停用项仍在渠道列表（可重新启用），但不进可搜索列表', () {
-      expect(
-        profiles.channels.map((profile) => profile.key).toList(),
-        ['tx', 'bili', 'custom', 'wy', 'kg', 'kw', 'mg'],
-        reason: '顺序表优先，未列出的保持候选相对顺序',
-      );
+      expect(profiles.channels.map((profile) => profile.key).toList(), [
+        'tx',
+        'bili',
+        'custom',
+        'wy',
+        'kg',
+        'kw',
+        'mg',
+      ], reason: '顺序表优先，未列出的保持候选相对顺序');
       expect(profiles.forKey('custom')!.enabled, isFalse);
       expect(profiles.forKey('tx')!.enabled, isFalse);
-      expect(
-        profiles.searchable.map((profile) => profile.key).toList(),
-        ['bili', 'wy'],
-        reason: 'custom 被停用、tx 无搜索能力',
-      );
+      expect(profiles.searchable.map((profile) => profile.key).toList(), [
+        'bili',
+        'wy',
+      ], reason: 'custom 被停用、tx 无搜索能力');
     });
   });
 
@@ -255,14 +286,19 @@ void main() {
       expect(anyListen.capabilities.artwork, isTrue);
       expect(anyListen.capabilities.comment, isFalse);
       expect(anyListen.capabilities.collection, isFalse);
-      expect(
-        usable.channels.map((profile) => profile.key).toList(),
-        ['bili', AnyListenSource.sourceKey, 'tx', 'wy', 'kg', 'kw', 'mg'],
-      );
-      expect(
-        usable.searchable.map((profile) => profile.key).toList(),
-        ['bili', AnyListenSource.sourceKey],
-      );
+      expect(usable.channels.map((profile) => profile.key).toList(), [
+        'bili',
+        AnyListenSource.sourceKey,
+        'tx',
+        'wy',
+        'kg',
+        'kw',
+        'mg',
+      ]);
+      expect(usable.searchable.map((profile) => profile.key).toList(), [
+        'bili',
+        AnyListenSource.sourceKey,
+      ]);
 
       final disabled = SourceProfiles.build(
         anyListenUsable: true,
@@ -273,10 +309,9 @@ void main() {
         contains(AnyListenSource.sourceKey),
       );
       expect(disabled.forKey(AnyListenSource.sourceKey)!.enabled, isFalse);
-      expect(
-        disabled.searchable.map((profile) => profile.key).toList(),
-        ['bili'],
-      );
+      expect(disabled.searchable.map((profile) => profile.key).toList(), [
+        'bili',
+      ]);
     });
   });
 
@@ -301,21 +336,32 @@ void main() {
 
         if (profile.searchable) {
           expect(platform.search, isNotNull, reason: '$reason: 可搜索必须有搜索适配器');
-          expect(platform.resolve != null || scriptResolve, isTrue,
-              reason: '$reason: 可搜索必须有原生或脚本取链');
+          expect(
+            platform.resolve != null || scriptResolve,
+            isTrue,
+            reason: '$reason: 可搜索必须有原生或脚本取链',
+          );
         }
         if (profile.canResolveUrl) {
-          expect(platform.resolve != null || scriptResolve, isTrue,
-              reason: '$reason: 可取链必须有原生或脚本实现');
+          expect(
+            platform.resolve != null || scriptResolve,
+            isTrue,
+            reason: '$reason: 可取链必须有原生或脚本实现',
+          );
         }
         if (profile.capabilities.lyrics) {
-          expect(platform.lyric != null || (script?.canFetchLyric ?? false),
-              isTrue,
-              reason: '$reason: 歌词能力必须有原生适配器或脚本 lyric');
+          expect(
+            platform.lyric != null || (script?.canFetchLyric ?? false),
+            isTrue,
+            reason: '$reason: 歌词能力必须有原生适配器或脚本 lyric',
+          );
         }
         if (profile.capabilities.artwork) {
-          expect(platform.pic != null || (script?.canFetchPic ?? false), isTrue,
-              reason: '$reason: 封面能力必须有原生适配器或脚本 pic');
+          expect(
+            platform.pic != null || (script?.canFetchPic ?? false),
+            isTrue,
+            reason: '$reason: 封面能力必须有原生适配器或脚本 pic',
+          );
         }
         if (profile.capabilities.comment) {
           expect(platform.comments, isNotNull, reason: '$reason: 评论');

@@ -78,10 +78,7 @@ class KwComment {
       avatarUrl: commentUrlOf(raw['u_pic']),
       likedCount: commentIntOf(raw['like_num']),
       replies: children is List
-          ? [
-              for (final child in children)
-                ?_parseItem(child),
-            ]
+          ? [for (final child in children) ?_parseItem(child)]
           : const [],
     );
   }

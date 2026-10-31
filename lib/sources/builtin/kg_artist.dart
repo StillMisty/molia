@@ -101,18 +101,23 @@ class KgArtist {
       throw artistPlatformFailure('kg', '获取歌手歌曲失败（结构不符）');
     }
 
-    final infoData =
-        (info is Map && info['data'] is Map) ? info['data'] as Map : const {};
+    final infoData = (info is Map && info['data'] is Map)
+        ? info['data'] as Map
+        : const {};
     final name = decodeName(infoData['singername']?.toString());
     final tracks = <Track>[];
     for (final raw in rawList) {
       final track = KgSearch.parseListSong(
         raw,
-        albumName: decodeName((raw is Map ? raw['album_name'] : null)?.toString()),
+        albumName: decodeName(
+          (raw is Map ? raw['album_name'] : null)?.toString(),
+        ),
         albumId: (raw is Map ? raw['album_id'] : null)?.toString() ?? '',
         fallbackArtist: name,
         // 歌手页曲目的歌手引用已知：id 即当前歌手。
-        artists: name.isEmpty ? null : [SourceArtistRef(name: name, id: artistId)],
+        artists: name.isEmpty
+            ? null
+            : [SourceArtistRef(name: name, id: artistId)],
       );
       if (track != null) tracks.add(track);
     }

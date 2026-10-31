@@ -9,7 +9,6 @@ import '../providers/collection_presenter.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'row_actions.dart';
-import 'swipe_reveal_row.dart';
 import 'track_row.dart';
 
 /// 合集曲目列表脚手架：常显可拖动滚动条 + 固定行高懒加载列表
@@ -43,7 +42,7 @@ class CollectionTrackList<T> extends StatelessWidget {
   /// 不丢滚动位置。同一列表内必须唯一。
   final Key Function(T row) keyOf;
 
-  /// 行内容（点播 / 多选 / 左滑等语义在调用方）；行距由脚手架补齐。
+  /// 行内容（点播 / 多选 / 菜单等语义在调用方）；行距由脚手架补齐。
   final Widget Function(BuildContext context, T row, int index) itemBuilder;
 
   /// 无可见行时的空态：合集为空还是被搜索条件过滤掉，由调用方决定形状。
@@ -61,8 +60,9 @@ class CollectionTrackList<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) return empty;
-    final horizontalPadding =
-        context.layoutType(ResponsivePageType.browse).horizontalPadding;
+    final horizontalPadding = context
+        .layoutType(ResponsivePageType.browse)
+        .horizontalPadding;
     final gap = TrackRow.gapOf(context);
     final itemExtent =
         TrackRow.extentOf(context, tableColumns: surface.isTable) + gap;
@@ -97,10 +97,10 @@ class CollectionTrackList<T> extends StatelessWidget {
               onReorderItem: onReorder,
               itemBuilder: (context, index) =>
                   ReorderableDelayedDragStartListener(
-                key: keyOf(rows[index]),
-                index: index,
-                child: _buildRow(context, index, gap),
-              ),
+                    key: keyOf(rows[index]),
+                    index: index,
+                    child: _buildRow(context, index, gap),
+                  ),
             ),
     );
   }
@@ -117,8 +117,8 @@ class CollectionTrackList<T> extends StatelessWidget {
 /// 合集曲目行：固定行高行 + 多选勾选 + （给了动作时的）管理入口。
 ///
 /// 四种合集的行走同一形状；点播 / 多选 / 动作语义（图标、文案、回调）
-/// 都在调用方，这里只组装 [TrackRow]：触摸端动作渲染成 [SwipeRevealRow]
-/// 左滑胶囊；桌面端不装左滑外壳，行表面右键在落点弹同一组动作的菜单。
+/// 都在调用方，这里只组装 [TrackRow]：触摸端动作渲染成行尾 ⋮，桌面端
+/// 不渲染 ⋮、行表面右键在落点弹同一组动作的菜单。
 class CollectionTrackRow extends StatelessWidget {
   const CollectionTrackRow({
     super.key,
@@ -153,38 +153,48 @@ class CollectionTrackRow extends StatelessWidget {
 
   final VoidCallback? onLongPress;
 
-  /// 行动作描述；null / 空 = 无动作（多选与排序模式：触摸端无左滑、
-  /// 桌面端也没有右键菜单）。
+  /// 行动作描述；null / 空 = 无动作（多选与排序模式：没有 ⋮，桌面端
+  /// 也没有右键菜单）。
   final List<RowAction>? actions;
 
   @override
   Widget build(BuildContext context) {
     final tapWithModifiers = onTapWithModifiers;
     final rowActions = actions ?? const <RowAction>[];
-    final rowWidget = TrackRow(
+    // 触摸端行尾 ⋮：与缓存标签并排；桌面端入口是行表面右键。
+    final menu = !isDesktopPlatform() && rowActions.isNotEmpty
+        ? RowActionMenuButton(
+            actions: rowActions,
+            semanticLabel: AppLocalizations.of(context)!.trackActionsTooltip,
+            compact: true,
+          )
+        : null;
+    final trailingWidget = _mergeTrailing(trailing, menu);
+    return TrackRow(
       model: row,
       surface: surface,
       position: position,
-      trailing: trailing,
+      trailing: trailingWidget,
       // 修饰键在点击回调里读：行只在列表数据变化时重建，按下 Ctrl 本身
       // 不会触发重建；build 时读会把「上一次构建」的按键状态固化到点击上。
       onTap: tapWithModifiers == null
           ? onTap
           : () => tapWithModifiers(
-                HardwareKeyboard.instance.isControlPressed,
-                HardwareKeyboard.instance.isShiftPressed,
-              ),
+              HardwareKeyboard.instance.isControlPressed,
+              HardwareKeyboard.instance.isShiftPressed,
+            ),
       onLongPress: onLongPress,
       // 桌面端入口是行表面右键：动作编译成同一份菜单，在落点弹出。
       onSecondaryTap: rowActionsAtPointer(context, rowActions),
     );
-    if (rowActions.isEmpty) return rowWidget;
-    // 桌面不再有鼠标左滑：动作已挂在行表面右键，不装左滑外壳。
-    if (isDesktopPlatform()) return rowWidget;
-    return SwipeRevealRow(
-      actions: collectionSwipeActions(context, rowActions),
-      child: rowWidget,
-    );
+  }
+
+  /// 行尾内容按出现顺序并排（缓存标签 / 拖动把手 + ⋮）；都为 null 时整个
+  /// 插槽留空，行内网格不变。
+  Widget? _mergeTrailing(Widget? trailing, Widget? menu) {
+    if (trailing == null) return menu;
+    if (menu == null) return trailing;
+    return Row(mainAxisSize: MainAxisSize.min, children: [trailing, menu]);
   }
 }
 
@@ -207,30 +217,6 @@ class CollectionSearchEmpty extends StatelessWidget {
       ),
     );
   }
-}
-
-/// 把行动作（[RowAction]，触摸端左滑胶囊 / 桌面右键菜单共用）编译成
-/// [M3EListSwipeAction]（触摸端左滑胶囊，渲染在 [SwipeRevealRow]）；桌面端
-/// 右键菜单由 [rowActionsAtPointer] 直接编译同一组动作，不经过这里
-/// （菜单只要图标 + 文案，不需要配色）。
-///
-/// 图标用 `semanticLabel` 承担无障碍语义：纯图标在窄胶囊里不容易自解释，
-/// 提示气泡则不做（口径见 docs/architecture.md §6「按钮选型」）。
-List<M3EListSwipeAction> collectionSwipeActions(
-  BuildContext context,
-  List<RowAction> actions,
-) {
-  final scheme = Theme.of(context).colorScheme;
-  return [
-    for (final action in actions)
-      M3EListSwipeAction(
-        icon: Icon(action.icon, semanticLabel: action.label),
-        isPrimary: action.destructive,
-        backgroundColor: action.destructive ? scheme.error : null,
-        foregroundColor: action.destructive ? scheme.onError : null,
-        onPressed: action.onPressed,
-      ),
-  ];
 }
 
 /// 行动作流程回调：投影器决定一行「有哪些动作」，页面只在这里接上对应流程
@@ -266,8 +252,8 @@ class CollectionRowActionWiring {
   final bool localSongImported;
 }
 
-/// 把投影器给出的动作声明编译成 [RowAction]（触摸端左滑胶囊 /
-/// 桌面右键菜单共用）：图标 / 文案 / 移除类配色只有这一份实现。
+/// 把投影器给出的动作声明编译成 [RowAction]（触摸端 ⋮ / 桌面右键菜单
+/// 共用）：图标 / 文案 / 移除类配色只有这一份实现。
 ///
 /// 接线缺席 = 动作不存在：宁可少一条，也不生成点了没反应的条目（行上看得到
 /// 的动作一定可执行，这是 [RowAction.onPressed] 非空的同一条承诺）。
@@ -280,50 +266,50 @@ List<RowAction> buildCollectionRowActions({
   for (final spec in specs) {
     final action = switch (spec.kind) {
       CollectionRowActionKind.addToPlaylist => _action(
-          icon: Icons.playlist_add_rounded,
-          label: l10n.addToPlaylist,
-          onPressed: wiring.onCopy,
-        ),
+        icon: Icons.playlist_add_rounded,
+        label: l10n.addToPlaylist,
+        onPressed: wiring.onCopy,
+      ),
       CollectionRowActionKind.swapSource => _action(
-          icon: Icons.swap_horiz_rounded,
-          label: l10n.sourceSwap,
-          onPressed: wiring.onSwap,
-        ),
+        icon: Icons.swap_horiz_rounded,
+        label: l10n.sourceSwap,
+        onPressed: wiring.onSwap,
+      ),
       CollectionRowActionKind.removeFromPlaylist => _action(
-          icon: Icons.playlist_remove_rounded,
-          label: l10n.playlistRemoveTrack,
-          destructive: true,
-          onPressed: wiring.onRemoveFromPlaylist,
-        ),
+        icon: Icons.playlist_remove_rounded,
+        label: l10n.playlistRemoveTrack,
+        destructive: true,
+        onPressed: wiring.onRemoveFromPlaylist,
+      ),
       CollectionRowActionKind.removeFromFavorite => _action(
-          icon: Icons.delete_rounded,
-          label: l10n.favoriteRemove,
-          destructive: true,
-          onPressed: wiring.onRemoveFromFavorites,
-        ),
+        icon: Icons.delete_rounded,
+        label: l10n.favoriteRemove,
+        destructive: true,
+        onPressed: wiring.onRemoveFromFavorites,
+      ),
       CollectionRowActionKind.toggleFavorite => _action(
-          icon: wiring.isFavorite
-              ? Icons.heart_broken_rounded
-              : Icons.favorite_border_rounded,
-          label: wiring.isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
-          onPressed: wiring.onToggleFavorite,
-        ),
+        icon: wiring.isFavorite
+            ? Icons.heart_broken_rounded
+            : Icons.favorite_border_rounded,
+        label: wiring.isFavorite ? l10n.favoriteRemove : l10n.favoriteAdd,
+        onPressed: wiring.onToggleFavorite,
+      ),
       CollectionRowActionKind.deleteHistoryEntry => _action(
-          icon: Icons.delete_rounded,
-          label: l10n.historyDeleteEntry,
-          destructive: true,
-          onPressed: wiring.onDeleteHistory,
-        ),
+        icon: Icons.delete_rounded,
+        label: l10n.historyDeleteEntry,
+        destructive: true,
+        onPressed: wiring.onDeleteHistory,
+      ),
       CollectionRowActionKind.deleteLocalSong => _action(
-          icon: Icons.delete_rounded,
-          label: wiring.localSongCached
-              ? l10n.localSongsCachedRemove
-              : wiring.localSongImported
-                  ? l10n.localSongsRemove
-                  : l10n.downloadDelete,
-          destructive: true,
-          onPressed: wiring.onDeleteLocalSong,
-        ),
+        icon: Icons.delete_rounded,
+        label: wiring.localSongCached
+            ? l10n.localSongsCachedRemove
+            : wiring.localSongImported
+            ? l10n.localSongsRemove
+            : l10n.downloadDelete,
+        destructive: true,
+        onPressed: wiring.onDeleteLocalSong,
+      ),
     };
     if (action != null) actions.add(action);
   }

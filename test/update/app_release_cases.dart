@@ -8,13 +8,12 @@ void main() {
     int build = 10,
     UpdateChannel channel = UpdateChannel.stable,
     List<ReleaseAsset> assets = const [],
-  }) =>
-      AppRelease(
-        channel: channel,
-        version: version,
-        build: build,
-        assets: assets,
-      );
+  }) => AppRelease(
+    channel: channel,
+    version: version,
+    build: build,
+    assets: assets,
+  );
 
   ReleaseAsset asset(String platform, String arch, {String kind = 'zip'}) =>
       ReleaseAsset(
@@ -37,10 +36,7 @@ void main() {
     test('预发布按 semver 规则：数字段按数值、字母段字典序、短前缀更小', () {
       expect(compareAppVersions('1.0.0-beta.2', '1.0.0'), lessThan(0));
       expect(compareAppVersions('1.0.0', '1.0.0-beta.2'), greaterThan(0));
-      expect(
-        compareAppVersions('1.0.0-beta.2', '1.0.0-beta.10'),
-        lessThan(0),
-      );
+      expect(compareAppVersions('1.0.0-beta.2', '1.0.0-beta.10'), lessThan(0));
       expect(compareAppVersions('1.0.0-beta', '1.0.0-beta.1'), lessThan(0));
       expect(compareAppVersions('1.0.0-alpha', '1.0.0-beta'), lessThan(0));
     });
@@ -55,34 +51,44 @@ void main() {
   group('AppRelease.isNewerThan', () {
     test('版本号更高即更新', () {
       expect(
-        release(version: '1.2.4', build: 1)
-            .isNewerThan(currentVersion: '1.2.3', currentBuild: 99),
+        release(
+          version: '1.2.4',
+          build: 1,
+        ).isNewerThan(currentVersion: '1.2.3', currentBuild: 99),
         isTrue,
       );
     });
 
     test('版本相同比构建号（测试渠道重发同版本）', () {
       expect(
-        release(version: '1.2.3', build: 11)
-            .isNewerThan(currentVersion: '1.2.3', currentBuild: 10),
+        release(
+          version: '1.2.3',
+          build: 11,
+        ).isNewerThan(currentVersion: '1.2.3', currentBuild: 10),
         isTrue,
       );
       expect(
-        release(version: '1.2.3', build: 10)
-            .isNewerThan(currentVersion: '1.2.3', currentBuild: 10),
+        release(
+          version: '1.2.3',
+          build: 10,
+        ).isNewerThan(currentVersion: '1.2.3', currentBuild: 10),
         isFalse,
       );
     });
 
     test('beta 清单相对稳定版安装仍按 semver 判定', () {
       expect(
-        release(version: '1.2.3-beta.1', build: 1)
-            .isNewerThan(currentVersion: '1.2.2', currentBuild: 99),
+        release(
+          version: '1.2.3-beta.1',
+          build: 1,
+        ).isNewerThan(currentVersion: '1.2.2', currentBuild: 99),
         isTrue,
       );
       expect(
-        release(version: '1.2.2', build: 100)
-            .isNewerThan(currentVersion: '1.2.3-beta.1', currentBuild: 1),
+        release(
+          version: '1.2.2',
+          build: 100,
+        ).isNewerThan(currentVersion: '1.2.3-beta.1', currentBuild: 1),
         isFalse,
       );
     });
@@ -97,24 +103,24 @@ void main() {
     ];
 
     test('精确匹配优先', () {
-      expect(release(assets: assets).assetFor(
-        platform: 'android',
-        arch: 'x86_64',
-      ), assets[1]);
+      expect(
+        release(assets: assets).assetFor(platform: 'android', arch: 'x86_64'),
+        assets[1],
+      );
     });
 
     test('没有精确架构时回退同平台任意架构', () {
-      expect(release(assets: assets).assetFor(
-        platform: 'android',
-        arch: 'armv7',
-      ), assets[0]);
+      expect(
+        release(assets: assets).assetFor(platform: 'android', arch: 'armv7'),
+        assets[0],
+      );
     });
 
     test('没有该平台产物时为 null', () {
-      expect(release(assets: assets).assetFor(
-        platform: 'ios',
-        arch: 'arm64',
-      ), isNull);
+      expect(
+        release(assets: assets).assetFor(platform: 'ios', arch: 'arm64'),
+        isNull,
+      );
     });
 
     test('assetOfKind：同平台多形态（Windows 安装器 / 便携包）按类别挑', () {

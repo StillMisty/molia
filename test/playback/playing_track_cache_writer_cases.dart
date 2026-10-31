@@ -15,7 +15,7 @@ class _RecordingPredownloader implements AudioPredownloader {
   final bool skip;
 
   final List<(SourceTrack track, PlayableStream stream, String? quality)>
-      calls = [];
+  calls = [];
   final List<int> cancelled = [];
   int _nextId = 0;
 
@@ -36,13 +36,13 @@ class _RecordingPredownloader implements AudioPredownloader {
 }
 
 SourceTrack _track(String id) => SourceTrack(
-      sourceKey: 'kw',
-      origin: 'builtin',
-      title: 'Song $id',
-      artist: 'Artist',
-      album: 'Album',
-      raw: {'songmid': id},
-    );
+  sourceKey: 'kw',
+  origin: 'builtin',
+  title: 'Song $id',
+  artist: 'Artist',
+  album: 'Album',
+  raw: {'songmid': id},
+);
 
 void main() {
   test('起播写入：直链 / 音质原样交给预下载器', () async {
@@ -56,8 +56,10 @@ void main() {
     );
 
     expect(predownloader.calls, hasLength(1));
-    expect(predownloader.calls.single.$2.uri.toString(),
-        'https://cdn.example/1.mp3');
+    expect(
+      predownloader.calls.single.$2.uri.toString(),
+      'https://cdn.example/1.mp3',
+    );
     expect(predownloader.calls.single.$3, '320k');
     expect(predownloader.cancelled, isEmpty);
   });
@@ -83,10 +85,14 @@ void main() {
     final predownloader = _RecordingPredownloader();
     final writer = PlayingTrackCacheWriter(predownloader: predownloader);
 
-    await writer.start(_track('1'),
-        stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')));
-    await writer.start(_track('2'),
-        stream: PlayableStream(Uri.parse('https://cdn.example/2.mp3')));
+    await writer.start(
+      _track('1'),
+      stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')),
+    );
+    await writer.start(
+      _track('2'),
+      stream: PlayableStream(Uri.parse('https://cdn.example/2.mp3')),
+    );
 
     expect(predownloader.calls, hasLength(2));
     expect(predownloader.cancelled, [0]);
@@ -96,8 +102,10 @@ void main() {
     final predownloader = _RecordingPredownloader();
     final writer = PlayingTrackCacheWriter(predownloader: predownloader);
 
-    await writer.start(_track('1'),
-        stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')));
+    await writer.start(
+      _track('1'),
+      stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')),
+    );
     writer.cancel();
 
     expect(predownloader.cancelled, [0]);
@@ -110,8 +118,10 @@ void main() {
     final predownloader = _RecordingPredownloader(skip: true);
     final writer = PlayingTrackCacheWriter(predownloader: predownloader);
 
-    await writer.start(_track('1'),
-        stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')));
+    await writer.start(
+      _track('1'),
+      stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')),
+    );
     writer.cancel();
 
     expect(predownloader.calls, hasLength(1));
@@ -120,8 +130,10 @@ void main() {
 
   test('未注入预下载器：start / cancel 都不抛', () async {
     final writer = PlayingTrackCacheWriter();
-    await writer.start(_track('1'),
-        stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')));
+    await writer.start(
+      _track('1'),
+      stream: PlayableStream(Uri.parse('https://cdn.example/1.mp3')),
+    );
     writer.cancel();
   });
 }

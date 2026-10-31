@@ -87,8 +87,8 @@ Future<LocalDataStack> buildLocalDataStack({
   markStartupStep('sub.dataSaver/downloadSettings', dataSaverWatch);
   // 封面统一咽喉：省流生效时只用本地缓存，不发网络请求
   // （AppNetworkImage / artworkImageProvider / 取色共用）。
-  ArtworkCache.instance.networkImageBlocked =
-      () => dataSaver.blockNetworkArtwork;
+  ArtworkCache.instance.networkImageBlocked = () =>
+      dataSaver.blockNetworkArtwork;
 
   final downloadStorage = createDownloadStorage(
     customRoot: () => downloadSettings.saveDir,
@@ -119,8 +119,9 @@ Future<LocalDataStack> buildLocalDataStack({
       if (track.id.sourceKey == kLocalSourceKey) {
         return readDownloadedLyrics(downloadStorage, track);
       }
-      final result =
-          await sourceManager.fetchLyric(sourceTrackFromTrack(track));
+      final result = await sourceManager.fetchLyric(
+        sourceTrackFromTrack(track),
+      );
       if (result == null || result.lyric.trim().isEmpty) return null;
       return LyricsResult(
         lyric: result.lyric,
@@ -216,8 +217,5 @@ Future<DownloadLyrics?> _resolveDownloadLyrics(
     track: track,
   );
   if (result == null || result.lyric.trim().isEmpty) return null;
-  return DownloadLyrics(
-    lyric: result.lyric,
-    translation: result.translation,
-  );
+  return DownloadLyrics(lyric: result.lyric, translation: result.translation);
 }

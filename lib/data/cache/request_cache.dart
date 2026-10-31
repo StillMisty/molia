@@ -16,8 +16,8 @@ class RequestCache {
     this.maxEntries = 64,
     required this.ttl,
     DateTime Function()? clock,
-  })  : assert(maxEntries > 0),
-        _clock = clock ?? DateTime.now;
+  }) : assert(maxEntries > 0),
+       _clock = clock ?? DateTime.now;
 
   /// 容量上限（默认 64）。
   final int maxEntries;
@@ -86,20 +86,23 @@ class RequestCache {
       clearExpired();
     }
 
-    future.then((value) {
-      if (identical(_entries[key], entry)) {
-        entry
-          ..pending = null
-          ..value = value
-          ..expiresAt = _clock().add(ttl);
-        _evictOverflow();
-      }
-    }, onError: (Object error, StackTrace stackTrace) {
-      // 失败不缓存；被淘汰（identity 不同）时不打扰新条目。
-      if (identical(_entries[key], entry)) {
-        _entries.remove(key);
-      }
-    });
+    future.then(
+      (value) {
+        if (identical(_entries[key], entry)) {
+          entry
+            ..pending = null
+            ..value = value
+            ..expiresAt = _clock().add(ttl);
+          _evictOverflow();
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        // 失败不缓存；被淘汰（identity 不同）时不打扰新条目。
+        if (identical(_entries[key], entry)) {
+          _entries.remove(key);
+        }
+      },
+    );
 
     return future.then((value) => value as T);
   }

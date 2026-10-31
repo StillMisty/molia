@@ -24,15 +24,17 @@ class PlaylistSyncAdapter implements SyncAdapter {
 
   @override
   Set<SyncCategory> get categories => const {
-        SyncCategory.playlists,
-        SyncCategory.playlistTracks,
-      };
+    SyncCategory.playlists,
+    SyncCategory.playlistTracks,
+  };
 
   @override
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async {
     final key = syncFingerprintKey(
       await _repository.syncFingerprints(categories),
     );
@@ -48,11 +50,13 @@ class PlaylistSyncAdapter implements SyncAdapter {
     final playlists = <SyncRecord>[];
     for (final playlist in await _repository.syncExportPlaylists()) {
       if (playlist.syncId.isEmpty) continue;
-      playlists.add(SyncRecord(
-        key: playlist.syncId,
-        version: playlist.version,
-        data: playlist.toJson(),
-      ));
+      playlists.add(
+        SyncRecord(
+          key: playlist.syncId,
+          version: playlist.version,
+          data: playlist.toJson(),
+        ),
+      );
     }
 
     final tracks = <SyncRecord>[];
@@ -64,15 +68,17 @@ class PlaylistSyncAdapter implements SyncAdapter {
       }
       // 本地下载曲目不同步（文件是设备本机的持久副本）。
       if (track.sourceKey == kLocalSourceKey) continue;
-      tracks.add(SyncRecord(
-        key: SyncRecordKeys.playlistTrack(
-          track.playlistSyncId,
-          track.sourceKey,
-          track.songId,
+      tracks.add(
+        SyncRecord(
+          key: SyncRecordKeys.playlistTrack(
+            track.playlistSyncId,
+            track.sourceKey,
+            track.songId,
+          ),
+          version: track.version,
+          data: track.toJson(),
         ),
-        version: track.version,
-        data: track.toJson(),
-      ));
+      );
     }
 
     final tombstones = <SyncRecord>[];
@@ -83,17 +89,24 @@ class PlaylistSyncAdapter implements SyncAdapter {
       // 本地下载曲目的墓碑同样不同步（对端没有对应条目）。
       final parsed = SyncRecordKeys.parsePlaylistTrack(tombstone.key);
       if (parsed != null && parsed.sourceKey == kLocalSourceKey) continue;
-      tombstones.add(SyncRecord.tombstone(
-        key: tombstone.key,
-        version: tombstone.version,
-        deletedAt: tombstone.deletedAt,
-      ));
+      tombstones.add(
+        SyncRecord.tombstone(
+          key: tombstone.key,
+          version: tombstone.version,
+          deletedAt: tombstone.deletedAt,
+        ),
+      );
     }
 
     return {
-      SyncCategory.playlists: [...playlists, ..._tombstonesFor(tombstones, true)],
-      SyncCategory.playlistTracks:
-          [...tracks, ..._tombstonesFor(tombstones, false)],
+      SyncCategory.playlists: [
+        ...playlists,
+        ..._tombstonesFor(tombstones, true),
+      ],
+      SyncCategory.playlistTracks: [
+        ...tracks,
+        ..._tombstonesFor(tombstones, false),
+      ],
     };
   }
 
@@ -110,12 +123,14 @@ class PlaylistSyncAdapter implements SyncAdapter {
           // 本地下载曲目的墓碑不落地（对端不会有对应条目）。
           final parsed = SyncRecordKeys.parsePlaylistTrack(record.key);
           if (parsed != null && parsed.sourceKey == kLocalSourceKey) continue;
-          tombstones.add(SyncTombstoneRecord(
-            category: entry.key.name,
-            key: record.key,
-            version: record.version,
-            deletedAt: record.deletedAt,
-          ));
+          tombstones.add(
+            SyncTombstoneRecord(
+              category: entry.key.name,
+              key: record.key,
+              version: record.version,
+              deletedAt: record.deletedAt,
+            ),
+          );
         } else if (entry.key == SyncCategory.playlistTracks) {
           final track = PlaylistTrackSyncRecord.fromJson(
             record.data ?? const <String, Object?>{},
@@ -125,10 +140,12 @@ class PlaylistSyncAdapter implements SyncAdapter {
           if (track.sourceKey == kLocalSourceKey) continue;
           tracks.add(track);
         } else {
-          playlists.add(PlaylistSyncRecord.fromJson(
-            record.data ?? const <String, Object?>{},
-            version: record.version,
-          ));
+          playlists.add(
+            PlaylistSyncRecord.fromJson(
+              record.data ?? const <String, Object?>{},
+              version: record.version,
+            ),
+          );
         }
       }
     }
@@ -154,11 +171,10 @@ class PlaylistSyncAdapter implements SyncAdapter {
   static List<SyncRecord> _tombstonesFor(
     List<SyncRecord> tombstones,
     bool playlistLevel,
-  ) =>
-      [
-        for (final record in tombstones)
-          if ((SyncRecordKeys.parsePlaylistTrack(record.key) == null) ==
-              playlistLevel)
-            record,
-      ];
+  ) => [
+    for (final record in tombstones)
+      if ((SyncRecordKeys.parsePlaylistTrack(record.key) == null) ==
+          playlistLevel)
+        record,
+  ];
 }

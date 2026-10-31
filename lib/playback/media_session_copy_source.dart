@@ -18,7 +18,7 @@ import 'media_session_copy.dart';
 /// 的全局 notifier 一致）。测试直接注入自己的 `ValueNotifier<MediaSessionCopy>`。
 class LocalizedMediaSessionCopy extends ValueNotifier<MediaSessionCopy> {
   LocalizedMediaSessionCopy()
-      : super(MediaSessionCopy.of(_currentLocalizations())) {
+    : super(MediaSessionCopy.of(_currentLocalizations())) {
     LanguageService.localeNotifier.addListener(_refresh);
   }
 
@@ -29,11 +29,13 @@ class LocalizedMediaSessionCopy extends ValueNotifier<MediaSessionCopy> {
   /// 与托盘菜单同一解析口径：用户选择优先、否则跟随系统，不支持的 locale
   /// 回退首个支持语言（`lookupAppLocalizations` 对不支持的语言会抛错）。
   static AppLocalizations _currentLocalizations() {
-    final effective = LanguageService.localeNotifier.value ??
+    final effective =
+        LanguageService.localeNotifier.value ??
         WidgetsBinding.instance.platformDispatcher.locale;
-    final resolved = LanguageService.supportedLocales.any(
-      (supported) => supported.languageCode == effective.languageCode,
-    )
+    final resolved =
+        LanguageService.supportedLocales.any(
+          (supported) => supported.languageCode == effective.languageCode,
+        )
         ? effective
         : LanguageService.supportedLocales.first;
     return lookupAppLocalizations(resolved);

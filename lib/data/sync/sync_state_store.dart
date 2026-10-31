@@ -54,10 +54,10 @@ class SyncStateStore
     Random? random,
     String? deviceId,
     int Function()? clock,
-  })  : _secrets = secrets ?? const SecureSettingsSecretStore(),
-        _random = random ?? Random.secure(),
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _deviceId = deviceId ?? '';
+  }) : _secrets = secrets ?? const SecureSettingsSecretStore(),
+       _random = random ?? Random.secure(),
+       _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+       _deviceId = deviceId ?? '';
 
   /// 状态键的断代命名空间（见 ADR-0003 的硬断代）。
   ///
@@ -272,9 +272,9 @@ class SyncStateStore
 
   @override
   Set<SyncCategory> get enabledCategories => {
-        for (final entry in _categories.entries)
-          if (entry.value) entry.key,
-      };
+    for (final entry in _categories.entries)
+      if (entry.value) entry.key,
+  };
 
   bool _initialized = false;
 
@@ -676,7 +676,9 @@ class SyncStateStore
     try {
       final prefs = _prefs ??= await SharedPreferences.getInstance();
       if (!await prefs.setString(
-          stateKey, jsonEncode(SyncStateCodec.encode(_snapshot())))) {
+        stateKey,
+        jsonEncode(SyncStateCodec.encode(_snapshot())),
+      )) {
         throw StateError('同步状态写入被平台拒绝（setString 返回 false）');
       }
       _persistedWrites++;

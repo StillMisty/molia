@@ -26,10 +26,10 @@ class SyncRosterSnapshot {
     Set<String> notifiedPeers = const {},
     List<SyncPeerState> peers = const [],
     List<LanPeerEndpoint> lanEndpoints = const [],
-  })  : manualPeers = List.unmodifiable(manualPeers),
-        notifiedPeers = Set.unmodifiable(notifiedPeers),
-        peers = List.unmodifiable(peers),
-        lanEndpoints = List.unmodifiable(lanEndpoints);
+  }) : manualPeers = List.unmodifiable(manualPeers),
+       notifiedPeers = Set.unmodifiable(notifiedPeers),
+       peers = List.unmodifiable(peers),
+       lanEndpoints = List.unmodifiable(lanEndpoints);
 
   /// 手动地址簿（顺序即探测与展示的优先序）。
   final List<ManualPeer> manualPeers;
@@ -127,11 +127,9 @@ class SyncRoster {
   }) {
     final index = _manualPeers.indexWhere((entry) => entry.host == fromHost);
     if (index < 0 || toHost.isEmpty || toHost == fromHost) return false;
-    final moved = _manualPeers.removeAt(index).copyWith(
-          host: toHost,
-          probePort: probePort,
-          name: name,
-        );
+    final moved = _manualPeers
+        .removeAt(index)
+        .copyWith(host: toHost, probePort: probePort, name: name);
     final existing = _manualPeers.indexWhere((entry) => entry.host == toHost);
     if (existing >= 0) {
       _manualPeers[existing] = _manualPeers[existing].mergeLearned(
@@ -218,7 +216,8 @@ class SyncRoster {
           : (existing?.probePort ?? 0),
       verifiedAt: endpoint.verifiedAt,
     );
-    final identityChanged = existing == null ||
+    final identityChanged =
+        existing == null ||
         existing.host != next.host ||
         existing.httpPort != next.httpPort ||
         existing.probePort != next.probePort;
@@ -238,7 +237,9 @@ class SyncRoster {
   /// 名册由引擎合并后传入（每条都是完整状态），这里只负责内存更新与按最近
   /// 接触时间淘汰，避免长期运行后无界增长；落盘由引擎在轮末提交一次。
   void recordRound(SyncRoundReport report) {
-    final beforePeers = [for (final peer in _peers.values) _peerSignature(peer)];
+    final beforePeers = [
+      for (final peer in _peers.values) _peerSignature(peer),
+    ];
     // 用户刚移除的设备：压住本轮的在途快照，避免删除动作被收尾中的一轮
     // 立刻写回。只影响这一次落库；下一轮重新发现（设备仍在线）会照常写入。
     final forgotten = Set<String>.of(_forgottenPeers);
@@ -270,11 +271,11 @@ class SyncRoster {
 
   /// 当前内存状态的持久化切片（不可变；字段由 `sync_state_codec.dart` 编码）。
   SyncRosterSnapshot snapshot() => SyncRosterSnapshot(
-        manualPeers: _manualPeers,
-        notifiedPeers: _notifiedPeers,
-        peers: _peers.values.toList(),
-        lanEndpoints: _lanEndpoints.values.toList(),
-      );
+    manualPeers: _manualPeers,
+    notifiedPeers: _notifiedPeers,
+    peers: _peers.values.toList(),
+    lanEndpoints: _lanEndpoints.values.toList(),
+  );
 
   /// 把解码出的切片写回内存（整体替换：状态 JSON 是完整视图，不是增量）。
   ///
@@ -291,8 +292,11 @@ class SyncRoster {
       ..addEntries(snapshot.peers.map((peer) => MapEntry(peer.deviceId, peer)));
     _lanEndpoints
       ..clear()
-      ..addEntries(snapshot.lanEndpoints
-          .map((endpoint) => MapEntry(endpoint.deviceId, endpoint)));
+      ..addEntries(
+        snapshot.lanEndpoints.map(
+          (endpoint) => MapEntry(endpoint.deviceId, endpoint),
+        ),
+      );
   }
 
   /// 地址簿写入的唯一入口：按 host 查找合并（重复地址不新增条目）。

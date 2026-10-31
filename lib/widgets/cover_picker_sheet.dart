@@ -49,7 +49,8 @@ Future<void> showCoverPickerSheet(
   CoverImagePicker? pickImage,
   CoverImageNormalizer? normalize,
 }) {
-  final l10n = AppLocalizations.of(context) ??
+  final l10n =
+      AppLocalizations.of(context) ??
       lookupAppLocalizations(const Locale('zh'));
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
@@ -110,8 +111,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
   String? get _viewerCoverUrl => _isDefault
       ? _covers.defaultCoverUrl
       : _covers
-          .realForId(widget.trackId, originalUrl: widget.originalCoverUrl)
-          .url;
+            .realForId(widget.trackId, originalUrl: widget.originalCoverUrl)
+            .url;
 
   Future<void> _pickImage() async {
     if (_busy) return;
@@ -120,8 +121,9 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     setState(() => _busy = true);
     try {
       final picker = widget.pickImage;
-      final raw =
-          picker != null ? await picker() : await _pickImageFromDevice(l10n);
+      final raw = picker != null
+          ? await picker()
+          : await _pickImageFromDevice(l10n);
       if (raw == null || raw.isEmpty) return;
       final normalized = await (widget.normalize ?? CoverImageCodec.normalize)(
         raw,
@@ -161,9 +163,7 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
       } else {
         await _store.resetTrackCover(widget.trackId!);
       }
-      _showMessage(
-        _isDefault ? l10n.coverDefaultRestored : l10n.coverRestored,
-      );
+      _showMessage(_isDefault ? l10n.coverDefaultRestored : l10n.coverRestored);
     } catch (_) {
       _showMessage(l10n.coverUpdateFailed);
     } finally {
@@ -184,8 +184,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     final subtitle = _isDefault
         ? l10n.coverDefaultSubtitle
         : _hasCustom
-            ? l10n.coverCustomized
-            : (_hasOriginal ? l10n.coverFollowSong : l10n.coverDefaultTitle);
+        ? l10n.coverCustomized
+        : (_hasOriginal ? l10n.coverFollowSong : l10n.coverDefaultTitle);
     final viewerUrl = _viewerCoverUrl;
 
     return SafeArea(
@@ -212,8 +212,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 // 方形预览按 cover 裁切；原图查看走 cover_viewer 的 contain。
                 fit: BoxFit.cover,
                 borderRadius: BorderRadius.circular(16),
-                memCacheWidth:
-                    (120 * MediaQuery.of(context).devicePixelRatio).round(),
+                memCacheWidth: (120 * MediaQuery.of(context).devicePixelRatio)
+                    .round(),
                 fallbackIconSize: 48,
               ),
             ),

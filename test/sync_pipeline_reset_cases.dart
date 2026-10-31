@@ -125,16 +125,16 @@ class ResetTransport implements SyncTransport {
   Future<void> stop() async {}
 
   @override
-  Future<SyncPullResult> pull(
-          [SyncPullRequest request = SyncPullRequest.none]) async =>
+  Future<SyncPullResult> pull([
+    SyncPullRequest request = SyncPullRequest.none,
+  ]) async =>
       SyncPullResult(envelopes: [snapshot], peersSeen: 1, contacted: true);
 
   @override
   Future<SyncPushResult> push(
     SyncEnvelope envelope, {
     SyncRoundWindow? window,
-  }) async =>
-      const SyncPushResult(succeededPeers: 1);
+  }) async => const SyncPushResult(succeededPeers: 1);
 
   @override
   Future<bool> deleteRemote(String deviceId) async => false;

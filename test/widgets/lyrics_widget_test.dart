@@ -70,39 +70,37 @@ class _FakeLyricsService extends LyricsService {
     String trackId, {
     Track? track,
     bool ignoreCache = false,
-  }) async =>
-      LyricsResult(
-        lyric: lrc,
-        translation: translation,
-        roma: roma,
-        lxlyric: lxlyric,
-        provider: 'test',
-      );
+  }) async => LyricsResult(
+    lyric: lrc,
+    translation: translation,
+    roma: roma,
+    lxlyric: lxlyric,
+    provider: 'test',
+  );
 }
 
 Track _track() => Track(
-      id: const TrackId('fake', 'lyrics-scroll'),
-      title: 'Title',
-      artists: const [Artist(name: 'Artist')],
-      album: 'Album',
-      duration: const Duration(minutes: 10),
-      origin: TrackOrigin.lx,
-      payload: const {'id': 'lyrics-scroll'},
-    );
+  id: const TrackId('fake', 'lyrics-scroll'),
+  title: 'Title',
+  artists: const [Artist(name: 'Artist')],
+  album: 'Album',
+  duration: const Duration(minutes: 10),
+  origin: TrackOrigin.lx,
+  payload: const {'id': 'lyrics-scroll'},
+);
 
 BackendSnapshot _snapshot({
   bool isPlaying = true,
   int positionSeconds = 60,
   Duration? position,
-}) =>
-    BackendSnapshot(
-      current: _track(),
-      queue: [_track()],
-      currentIndex: 0,
-      isPlaying: isPlaying,
-      position: position ?? Duration(seconds: positionSeconds),
-      duration: const Duration(minutes: 10),
-    );
+}) => BackendSnapshot(
+  current: _track(),
+  queue: [_track()],
+  currentIndex: 0,
+  isPlaying: isPlaying,
+  position: position ?? Duration(seconds: positionSeconds),
+  duration: const Duration(minutes: 10),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -187,10 +185,10 @@ void main() {
           theme: fontFamily == null ? null : ThemeData(fontFamily: fontFamily),
           builder: disableAnimations
               ? (context, child) => MediaQuery(
-                    data:
-                        MediaQuery.of(context).copyWith(disableAnimations: true),
-                    child: child!,
-                  )
+                  data: MediaQuery.of(context)
+                      .copyWith(disableAnimations: true),
+                  child: child!,
+                )
               : null,
           locale: const Locale('zh'),
           localizationsDelegates: const [
@@ -243,8 +241,8 @@ void main() {
 
   /// FAB menu 项的图标（顺序即菜单自上而下的顺序）。
   List<IconData> fabIcons(WidgetTester tester) => [
-        for (final item in fabItems(tester)) (item.icon as Icon).icon!,
-      ];
+    for (final item in fabItems(tester)) (item.icon as Icon).icon!,
+  ];
 
   /// 展开 FAB menu 并点击指定 label 的项（等菜单弹簧落定）。
   Future<void> tapFabItem(WidgetTester tester, String label) async {
@@ -259,8 +257,7 @@ void main() {
   /// 主题样式，这里就会是 null（引擎默认字体）而不是主题注入的应用字体。
   String? resolvedFontFamily(WidgetTester tester, Finder finder) {
     final element = tester.element(finder);
-    return DefaultTextStyle.of(element)
-        .style
+    return DefaultTextStyle.of(element).style
         .merge(tester.widget<Text>(finder).style)
         .fontFamily;
   }
@@ -405,7 +402,7 @@ void main() {
     // 14% 视口高度（落在约 38%–40% 的中上位置）。
     final double anchorFraction =
         ((40.0 + viewport.height) / 2.0 - viewport.height * 0.14) /
-            viewport.height;
+        viewport.height;
     final double expectedTop = viewport.top + anchorFraction * viewport.height;
     expect(textRect.top, closeTo(expectedTop, 1.0));
     expect(
@@ -447,7 +444,7 @@ void main() {
     expect(find.text('这是当前行的翻译'), findsOneWidget);
     final double anchorFraction =
         ((40.0 + viewport.height) / 2.0 - viewport.height * 0.14) /
-            viewport.height;
+        viewport.height;
     expect(
       textRect.top,
       closeTo(viewport.top + anchorFraction * viewport.height, 1.0),
@@ -650,19 +647,18 @@ void main() {
 
     // 取 FAB menu 最近一层包装：隐藏态判定用 IgnorePointer，透明度用 Opacity。
     IgnorePointer nearestIgnore() => tester.widget<IgnorePointer>(
-          find
-              .ancestor(
-                of: find.byType(M3EFabMenu),
-                matching: find.byType(IgnorePointer),
-              )
-              .first,
-        );
+      find
+          .ancestor(
+            of: find.byType(M3EFabMenu),
+            matching: find.byType(IgnorePointer),
+          )
+          .first,
+    );
     Opacity nearestOpacity() => tester.widget<Opacity>(
-          find
-              .ancestor(
-                  of: find.byType(M3EFabMenu), matching: find.byType(Opacity))
-              .first,
-        );
+      find
+          .ancestor(of: find.byType(M3EFabMenu), matching: find.byType(Opacity))
+          .first,
+    );
 
     // 自动跟随中：操作栏收起（弹簧落定），手势穿透不挡歌词滚动。
     expect(nearestIgnore().ignoring, isTrue);
@@ -815,27 +811,19 @@ void main() {
     );
 
     T nearestAncestor<T extends Widget>(String text) => tester.widget<T>(
-          find
-              .ancestor(of: find.text(text), matching: find.byType(T))
-              .first,
-        );
+      find.ancestor(of: find.text(text), matching: find.byType(T)).first,
+    );
 
     // 行高亮三件套都硬切。
     expect(
       nearestAncestor<AnimatedDefaultTextStyle>('Line 12').duration,
       Duration.zero,
     );
-    expect(
-      nearestAncestor<AnimatedPadding>('Line 12').duration,
-      Duration.zero,
-    );
+    expect(nearestAncestor<AnimatedPadding>('Line 12').duration, Duration.zero);
     expect(nearestAncestor<AnimatedOpacity>('Line 12').duration, Duration.zero);
 
     // 当前行的翻译展开同样零时长。
-    expect(
-      nearestAncestor<AnimatedSwitcher>('译 12').duration,
-      Duration.zero,
-    );
+    expect(nearestAncestor<AnimatedSwitcher>('译 12').duration, Duration.zero);
   });
 
   testWidgets('翻译开关：只有当前行播放展开 / 收起动画', (tester) async {

@@ -36,27 +36,27 @@ void main() {
   late SearchProvider search;
 
   Track track(String id) => Track(
-        id: TrackId('kw', id),
-        title: 'Title $id',
-        artists: [Artist(name: 'Artist $id')],
-        album: 'Album',
-        duration: const Duration(minutes: 3, seconds: 5),
-        artwork: Artwork(uri: Uri.parse('https://img.example/$id.jpg')),
-        origin: TrackOrigin.builtin,
-        // kw 的规范 id 字段（收藏 / 列表 songId 与 raw 取键口径一致）。
-        payload: {'songmid': id},
-      );
+    id: TrackId('kw', id),
+    title: 'Title $id',
+    artists: [Artist(name: 'Artist $id')],
+    album: 'Album',
+    duration: const Duration(minutes: 3, seconds: 5),
+    artwork: Artwork(uri: Uri.parse('https://img.example/$id.jpg')),
+    origin: TrackOrigin.builtin,
+    // kw 的规范 id 字段（收藏 / 列表 songId 与 raw 取键口径一致）。
+    payload: {'songmid': id},
+  );
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     source = FakeMusicSource('kw');
     source.onSearch = (query) => Future.value(
-          SearchResult(
-            items: [track('a'), track('b'), track('c')],
-            hasMore: true,
-            total: 42,
-          ),
-        );
+      SearchResult(
+        items: [track('a'), track('b'), track('c')],
+        hasMore: true,
+        total: 42,
+      ),
+    );
     catalog = CatalogService(registry: FakeSourceRegistry({'kw': source}));
     backend = FakePlaybackBackend();
     repository = FakeLibraryRepository();
@@ -87,6 +87,7 @@ void main() {
     WidgetTester tester, {
     ScrollController? controller,
     double width = 1200,
+    TextScaler textScaler = TextScaler.noScaling,
   }) async {
     tester.view.physicalSize = Size(width, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -108,7 +109,12 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(body: SearchSection(controller: controller)),
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: Scaffold(body: SearchSection(controller: controller)),
+            ),
+          ),
         ),
       ),
     );
@@ -124,12 +130,12 @@ void main() {
 
   testWidgets('结果列表滚动控制器可注入（底栏重复点击回顶的数据通路）', (tester) async {
     source.onSearch = (query) => Future.value(
-          SearchResult(
-            items: [for (var i = 0; i < 60; i++) track('$i')],
-            hasMore: false,
-            total: 60,
-          ),
-        );
+      SearchResult(
+        items: [for (var i = 0; i < 60; i++) track('$i')],
+        hasMore: false,
+        total: 60,
+      ),
+    );
     final controller = ScrollController();
     addTearDown(controller.dispose);
     await pumpSection(tester, controller: controller);
@@ -215,74 +221,86 @@ void main() {
     expect(find.text('3:05'), findsNWidgets(3), reason: '时长仍在行尾');
   });
 
-  testWidgets(
-    '桌面窄窗口（内容宽 < 720）：不渲染表头，行高回落双行档',
-    (tester) async {
-      await pumpSection(tester, width: 800);
+  testWidgets('桌面窄窗口（内容宽 < 720）：不渲染表头，行高回落双行档', (tester) async {
+    await pumpSection(tester, width: 800);
+    await runSearch(tester);
+
+    expect(find.byType(TrackTableHeader), findsNothing);
+    expect(find.text('Artist a'), findsOneWidget);
+
+    // 非表格档：双行行高（M3E twoLineHeight 为最小值），itemExtent 同源。
+    final rowContext = tester.element(find.byType(TrackRow).first);
+    final extent = TrackRow.extentOf(rowContext, tableColumns: false);
+    expect(tester.getSize(find.byType(TrackRow).first).height, extent);
+    expect(
+      tester
+          .widget<SliverFixedExtentList>(find.byType(SliverFixedExtentList))
+          .itemExtent,
+      extent + TrackRow.gapOf(rowContext),
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('桌面：宽屏表格 / 窄屏单列行内都无 ⋮，右键在落点弹菜单', (tester) async {
+    await pumpSection(tester);
+    await runSearch(tester);
+    expect(find.byType(TrackTableHeader), findsOneWidget, reason: '宽屏走表格行');
+    expect(
+      find.byIcon(Icons.more_vert_rounded),
+      findsNothing,
+      reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+    );
+
+    // 右键落到第一行内的一个非中心点：菜单在落点展开（收藏 / 加入列表）。
+    final rowRect = tester.getRect(find.byType(TrackRow).first);
+    await tester.tapAt(
+      Offset(rowRect.left + 40, rowRect.center.dy),
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('收藏'), findsOneWidget);
+    expect(find.text('加入列表'), findsOneWidget);
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+
+    // 窄屏（内容宽 < 720）走单列行：同一份右键接线仍然生效。
+    await pumpSection(tester, width: 800);
+    expect(find.byType(TrackTableHeader), findsNothing, reason: '窄屏走单列行');
+    expect(
+      find.byIcon(Icons.more_vert_rounded),
+      findsNothing,
+      reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+    );
+    await tester.tap(
+      find.byType(TrackRow).first,
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('收藏'), findsOneWidget);
+    await tester.tapAt(const Offset(8, 8));
+    await tester.pumpAndSettle();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('1.3× / 1.5× 大字体：结果行高动态，itemExtent 与行同源', (tester) async {
+    for (final scale in [1.3, 1.5]) {
+      await pumpSection(
+        tester,
+        width: 800,
+        textScaler: TextScaler.linear(scale),
+      );
       await runSearch(tester);
 
-      expect(find.byType(TrackTableHeader), findsNothing);
-      expect(find.text('Artist a'), findsOneWidget);
-
-      // 非表格档：双行行高（M3E twoLineHeight 72），itemExtent 同源。
+      expect(tester.takeException(), isNull, reason: '$scale× 不应布局溢出');
       final rowContext = tester.element(find.byType(TrackRow).first);
-      expect(tester.getSize(find.byType(TrackRow).first).height, 72);
+      final extent = TrackRow.extentOf(rowContext, tableColumns: false);
       expect(
         tester
-            .widget<SliverFixedExtentList>(
-              find.byType(SliverFixedExtentList),
-            )
+            .widget<SliverFixedExtentList>(find.byType(SliverFixedExtentList))
             .itemExtent,
-        TrackRow.extentOf(rowContext, tableColumns: false) +
-            TrackRow.gapOf(rowContext),
+        extent + TrackRow.gapOf(rowContext),
       );
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
-
-  testWidgets(
-    '桌面：宽屏表格 / 窄屏单列行内都无 ⋮，右键在落点弹菜单',
-    (tester) async {
-      await pumpSection(tester);
-      await runSearch(tester);
-      expect(find.byType(TrackTableHeader), findsOneWidget, reason: '宽屏走表格行');
-      expect(
-        find.byIcon(Icons.more_vert_rounded),
-        findsNothing,
-        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
-      );
-
-      // 右键落到第一行内的一个非中心点：菜单在落点展开（收藏 / 加入列表）。
-      final rowRect = tester.getRect(find.byType(TrackRow).first);
-      await tester.tapAt(
-        Offset(rowRect.left + 40, rowRect.center.dy),
-        buttons: kSecondaryButton,
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('收藏'), findsOneWidget);
-      expect(find.text('加入列表'), findsOneWidget);
-      await tester.tapAt(const Offset(8, 8));
-      await tester.pumpAndSettle();
-
-      // 窄屏（内容宽 < 720）走单列行：同一份右键接线仍然生效。
-      await pumpSection(tester, width: 800);
-      expect(find.byType(TrackTableHeader), findsNothing, reason: '窄屏走单列行');
-      expect(
-        find.byIcon(Icons.more_vert_rounded),
-        findsNothing,
-        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
-      );
-      await tester.tap(
-        find.byType(TrackRow).first,
-        buttons: kSecondaryButton,
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('收藏'), findsOneWidget);
-      await tester.tapAt(const Offset(8, 8));
-      await tester.pumpAndSettle();
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+      expect(tester.getSize(find.byType(TrackRow).first).height, extent);
+    }
+  });
 }

@@ -68,7 +68,8 @@ String aiDjUpdatedText(AppLocalizations l10n, DateTime time) {
   if (sameDay && diff.inHours < 24) {
     return l10n.aiDjUpdatedHoursAgo(diff.inHours);
   }
-  final hhmm = '${time.hour.toString().padLeft(2, '0')}:'
+  final hhmm =
+      '${time.hour.toString().padLeft(2, '0')}:'
       '${time.minute.toString().padLeft(2, '0')}';
   final yesterday = now.subtract(const Duration(days: 1));
   if (time.year == yesterday.year &&
@@ -93,37 +94,37 @@ String aiDjPhaseText(AppLocalizations l10n, AiDjProgress progress) =>
       AiDjPhase.profile => l10n.aiDjPhaseProfile,
       AiDjPhase.model => l10n.aiDjPhaseModel,
       AiDjPhase.resolving => l10n.aiDjPhaseResolving(
-          progress.done,
-          progress.total,
-        ),
+        progress.done,
+        progress.total,
+      ),
     };
 
 /// 偏好 token → 文案（未知值原样展示，避免空白）。
 String aiDjStyleLabel(AppLocalizations l10n, String token) => switch (token) {
-      'pop' => l10n.aiDjStylePop,
-      'rock' => l10n.aiDjStyleRock,
-      'electronic' => l10n.aiDjStyleElectronic,
-      'folk' => l10n.aiDjStyleFolk,
-      'rap' => l10n.aiDjStyleRap,
-      'rnb' => l10n.aiDjStyleRnb,
-      'jazz' => l10n.aiDjStyleJazz,
-      'classical' => l10n.aiDjStyleClassical,
-      'metal' => l10n.aiDjStyleMetal,
-      'acg' => l10n.aiDjStyleAcg,
-      'instrumental' => l10n.aiDjStyleInstrumental,
-      'chineseStyle' => l10n.aiDjStyleChineseStyle,
-      _ => token,
-    };
+  'pop' => l10n.aiDjStylePop,
+  'rock' => l10n.aiDjStyleRock,
+  'electronic' => l10n.aiDjStyleElectronic,
+  'folk' => l10n.aiDjStyleFolk,
+  'rap' => l10n.aiDjStyleRap,
+  'rnb' => l10n.aiDjStyleRnb,
+  'jazz' => l10n.aiDjStyleJazz,
+  'classical' => l10n.aiDjStyleClassical,
+  'metal' => l10n.aiDjStyleMetal,
+  'acg' => l10n.aiDjStyleAcg,
+  'instrumental' => l10n.aiDjStyleInstrumental,
+  'chineseStyle' => l10n.aiDjStyleChineseStyle,
+  _ => token,
+};
 
 String aiDjSceneLabel(AppLocalizations l10n, String token) => switch (token) {
-      'commute' => l10n.aiDjSceneCommute,
-      'focus' => l10n.aiDjSceneFocus,
-      'relax' => l10n.aiDjSceneRelax,
-      'workout' => l10n.aiDjSceneWorkout,
-      'sleep' => l10n.aiDjSceneSleep,
-      'weekend' => l10n.aiDjSceneWeekend,
-      _ => token,
-    };
+  'commute' => l10n.aiDjSceneCommute,
+  'focus' => l10n.aiDjSceneFocus,
+  'relax' => l10n.aiDjSceneRelax,
+  'workout' => l10n.aiDjSceneWorkout,
+  'sleep' => l10n.aiDjSceneSleep,
+  'weekend' => l10n.aiDjSceneWeekend,
+  _ => token,
+};
 
 String aiDjLanguageLabel(AppLocalizations l10n, String token) =>
     switch (token) {
@@ -137,12 +138,12 @@ String aiDjLanguageLabel(AppLocalizations l10n, String token) =>
     };
 
 String aiDjEraLabel(AppLocalizations l10n, String token) => switch (token) {
-      kAiEraRecent3 => l10n.aiDjEraRecent3,
-      kAiEra2010s => l10n.aiDjEra2010s,
-      kAiEra2000s => l10n.aiDjEra2000s,
-      kAiEraBefore90 => l10n.aiDjEraBefore90,
-      _ => l10n.aiDjEraAny,
-    };
+  kAiEraRecent3 => l10n.aiDjEraRecent3,
+  kAiEra2010s => l10n.aiDjEra2010s,
+  kAiEra2000s => l10n.aiDjEra2000s,
+  kAiEraBefore90 => l10n.aiDjEraBefore90,
+  _ => l10n.aiDjEraAny,
+};
 
 String aiDjExplorationLabel(AppLocalizations l10n, String token) =>
     switch (token) {

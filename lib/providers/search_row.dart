@@ -29,9 +29,9 @@ class SearchRow {
 
   /// 全部歌手名（表格歌手列口径，`、` 连接；全空返回空串）。
   String get artistNames => [
-        for (final artist in track.artists)
-          if (artist.name.isNotEmpty) artist.name,
-      ].join('、');
+    for (final artist in track.artists)
+      if (artist.name.isNotEmpty) artist.name,
+  ].join('、');
 
   @override
   bool operator ==(Object other) =>

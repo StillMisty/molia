@@ -26,12 +26,12 @@ void main() {
   late DownloadFileLayout layout;
 
   Track makeTrack({String title = '测试歌曲', String artist = '歌手'}) => Track(
-        id: const TrackId('kw', '1'),
-        title: title,
-        artists: artist.isEmpty ? const [] : [Artist(name: artist)],
-        album: '专辑',
-        origin: TrackOrigin.builtin,
-      );
+    id: const TrackId('kw', '1'),
+    title: title,
+    artists: artist.isEmpty ? const [] : [Artist(name: artist)],
+    album: '专辑',
+    origin: TrackOrigin.builtin,
+  );
 
   setUp(() {
     storage = FakeDownloadStorage();
@@ -55,8 +55,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final settings = DownloadSettings();
     await settings.init();
-    final withSettings =
-        DownloadFileLayout(storage: storage, settings: settings);
+    final withSettings = DownloadFileLayout(
+      storage: storage,
+      settings: settings,
+    );
     expect(withSettings.baseNameFor(makeTrack()), '歌手 - 测试歌曲');
 
     await settings.setFilenameTemplate('{title} - {artist}');
@@ -70,10 +72,7 @@ void main() {
   test('sanitize：非法字符替换、空白折叠、空名回退、按 rune 限长', () {
     expect(DownloadFileLayout.sanitizeFileName('///'), '___');
     expect(DownloadFileLayout.sanitizeFileName('   '), 'unknown');
-    expect(
-      DownloadFileLayout.sanitizeFileName('a' * 130),
-      'a' * 120,
-    );
+    expect(DownloadFileLayout.sanitizeFileName('a' * 130), 'a' * 120);
     // 代理对不被截断成孤立半区（U+FFFD 替换字符不出现）。
     final emoji = DownloadFileLayout.sanitizeFileName('😀' * 130);
     expect(emoji.runes.length, 120);
@@ -111,16 +110,13 @@ void main() {
 
     // 缓存命中没有直链后缀：优先用音质条目携带的容器，否则按音质推断。
     Track carried(String type, String? container) => Track(
-          id: TrackId('kw', 'a'),
-          title: 'a',
-          origin: TrackOrigin.lx,
-          qualities: [AudioQuality(type: type, container: container)],
-        );
+      id: TrackId('kw', 'a'),
+      title: 'a',
+      origin: TrackOrigin.lx,
+      qualities: [AudioQuality(type: type, container: container)],
+    );
     expect(
-      DownloadFileLayout.extensionForTrack(
-        carried('192k', 'm4a'),
-        '192k',
-      ),
+      DownloadFileLayout.extensionForTrack(carried('192k', 'm4a'), '192k'),
       'm4a',
     );
     expect(
@@ -151,13 +147,12 @@ void main() {
     Future<String> unique({
       Iterable<String?> reserved = const [],
       String desired = '歌手 - 测试歌曲',
-    }) =>
-        layout.uniqueBaseName(
-          root: '/downloads',
-          desiredBase: desired,
-          extension: 'mp3',
-          reservedPaths: reserved,
-        );
+    }) => layout.uniqueBaseName(
+      root: '/downloads',
+      desiredBase: desired,
+      extension: 'mp3',
+      reservedPaths: reserved,
+    );
 
     expect(await unique(), '歌手 - 测试歌曲');
 
@@ -196,19 +191,20 @@ void main() {
       String? existingPath,
       String subdir = downloadsLyricsDirName,
       String extension = 'lrc',
-    }) =>
-        layout.partBaseName(
-          root: '/downloads',
-          track: makeTrack(),
-          audioPath: audioPath,
-          existingPath: existingPath,
-          subdir: subdir,
-          extension: extension,
-        );
+    }) => layout.partBaseName(
+      root: '/downloads',
+      track: makeTrack(),
+      audioPath: audioPath,
+      existingPath: existingPath,
+      subdir: subdir,
+      extension: extension,
+    );
 
     // 已有音频：sidecar 跟随音频基名（含查重后的 ` (2)` 后缀）。
     expect(
-        await part(audioPath: '/downloads/歌手 - 测试歌曲 (2).mp3'), '歌手 - 测试歌曲 (2)');
+      await part(audioPath: '/downloads/歌手 - 测试歌曲 (2).mp3'),
+      '歌手 - 测试歌曲 (2)',
+    );
     // 音频优先于已有分项路径。
     expect(
       await part(
@@ -299,11 +295,9 @@ void main() {
     );
     expect(half.files, isEmpty);
     expect(
-        half.deleted,
-        containsAll([
-          '/downloads/lyrics/A.lrc',
-          '/downloads/lyrics/A.t.lrc',
-        ]));
+      half.deleted,
+      containsAll(['/downloads/lyrics/A.lrc', '/downloads/lyrics/A.t.lrc']),
+    );
   });
 
   test('写封面：covers 子目录；失败清理并返回 null', () async {

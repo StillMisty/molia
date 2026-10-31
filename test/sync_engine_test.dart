@@ -77,21 +77,20 @@ void main() {
     int at = 5000,
     String deviceId = 'devB',
     String deviceName = 'B',
-  }) =>
-      SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceName,
-        producedAt: at,
-        records: {
-          SyncCategory.settings: [
-            SyncRecord(
-              key: 'theme_mode',
-              version: SyncVersion(physical: at, deviceId: deviceId),
-              data: {'v': value},
-            ),
-          ],
-        },
-      );
+  }) => SyncEnvelope(
+    deviceId: deviceId,
+    deviceName: deviceName,
+    producedAt: at,
+    records: {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: SyncVersion(physical: at, deviceId: deviceId),
+          data: {'v': value},
+        ),
+      ],
+    },
+  );
 
   test('一轮同步：应用远端、推送合并结果、报告 ok 且写入名册', () async {
     transport.available.add(remoteTheme('dark'));
@@ -472,7 +471,9 @@ void main() {
       ),
     });
     // 真实用户数据与墓碑不是派生状态：清理不能碰。
-    await db.into(db.playHistory).insert(
+    await db
+        .into(db.playHistory)
+        .insert(
           PlayHistoryCompanion.insert(
             sourceKey: 'kuwo',
             songId: 's1',
@@ -480,7 +481,9 @@ void main() {
             playedAt: 1,
           ),
         );
-    await db.into(db.syncTombstones).insert(
+    await db
+        .into(db.syncTombstones)
+        .insert(
           SyncTombstonesCompanion.insert(
             category: 'settings',
             key: 'theme_mode',
@@ -1095,18 +1098,17 @@ LanPeerSighting _sighting({
   int? head = 5,
   String snapshotId = 'snap-1',
   String bootId = 'boot-1',
-}) =>
-    LanPeerSighting(
-      deviceId: deviceId,
-      name: 'B',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      probePort: 47825,
-      snapshotId: snapshotId,
-      journalHead: head,
-      bootId: bootId,
-      observedAt: 7000,
-    );
+}) => LanPeerSighting(
+  deviceId: deviceId,
+  name: 'B',
+  host: '192.168.1.23',
+  httpPort: 40000,
+  probePort: 47825,
+  snapshotId: snapshotId,
+  journalHead: head,
+  bootId: bootId,
+  observedAt: 7000,
+);
 
 /// 首次 apply 抛异常、之后成功：验证「应用失败不丢入站数据」。
 class _FlakyAdapter implements SyncAdapter {
@@ -1122,8 +1124,7 @@ class _FlakyAdapter implements SyncAdapter {
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect({
     bool fresh = false,
-  }) async =>
-      const {};
+  }) async => const {};
 
   @override
   Future<SyncApplyOutcome> apply(

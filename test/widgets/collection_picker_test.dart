@@ -25,40 +25,40 @@ void main() {
   late List<int> deletedIds;
 
   List<CollectionPickerEntry> entries() => [
-        const CollectionPickerEntry(
-          key: favoritesKey,
-          id: -1,
-          name: '我的收藏',
-          icon: Icons.favorite_rounded,
-          trackCount: 3,
-          selected: true,
-        ),
-        const CollectionPickerEntry(
-          key: historyKey,
-          id: -3,
-          name: '播放历史',
-          icon: Icons.history_rounded,
-          trackCount: 0,
-          selected: false,
-        ),
-        const CollectionPickerEntry(
-          key: loveKey,
-          id: 7,
-          name: 'love',
-          icon: Icons.queue_music_rounded,
-          trackCount: 3,
-          selected: false,
-          playlistId: 7,
-        ),
-      ];
+    const CollectionPickerEntry(
+      key: favoritesKey,
+      id: -1,
+      name: '我的收藏',
+      icon: Icons.favorite_rounded,
+      trackCount: 3,
+      selected: true,
+    ),
+    const CollectionPickerEntry(
+      key: historyKey,
+      id: -3,
+      name: '播放历史',
+      icon: Icons.history_rounded,
+      trackCount: 0,
+      selected: false,
+    ),
+    const CollectionPickerEntry(
+      key: loveKey,
+      id: 7,
+      name: 'love',
+      icon: Icons.queue_music_rounded,
+      trackCount: 3,
+      selected: false,
+      playlistId: 7,
+    ),
+  ];
 
   /// 弹层内的合集行（限定在弹层 surface 内，避免与页面其它列表混淆）。
   Finder pickerRow(String name) => find.descendant(
-        of: find.byType(M3EBottomSheetSurface),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is M3EListItem && widget.headline == name,
-        ),
-      );
+    of: find.byType(M3EBottomSheetSurface),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is M3EListItem && widget.headline == name,
+    ),
+  );
 
   List<String> pickerHeadlines(WidgetTester tester) => tester
       .widgetList<M3EListItem>(
@@ -150,7 +150,8 @@ void main() {
     // 单步位移过大时 ReorderableListView 的目标索引计算会跳过（实测）。
     final handle = find.byIcon(Icons.drag_handle_rounded).last;
     final start = tester.getCenter(handle);
-    final rowDelta = tester.getCenter(pickerRow('播放历史')).dy -
+    final rowDelta =
+        tester.getCenter(pickerRow('播放历史')).dy -
         tester.getCenter(pickerRow('love')).dy;
     final gesture = await tester.startGesture(start);
     await tester.pump(const Duration(milliseconds: 50));

@@ -77,9 +77,13 @@ typedef _EmptyWorkingSetDart = int Function(int process);
 
 /// `malloc_zone_pressure_relief(zone, goal)` 的 Dart 签名（size_t）。
 typedef _MallocZonePressureReliefNative = IntPtr Function(
-    Pointer<Void> zone, IntPtr goal);
+  Pointer<Void> zone,
+  IntPtr goal,
+);
 typedef _MallocZonePressureReliefDart = int Function(
-    Pointer<Void> zone, int goal);
+  Pointer<Void> zone,
+  int goal,
+);
 
 /// 把已 free / 可换出的页交还系统（平台或符号不可用时静默跳过）。
 ///
@@ -107,9 +111,11 @@ void _releaseFreedMemoryToOs() {
   }
   if (Platform.isMacOS) {
     try {
-      final relief = DynamicLibrary.process().lookupFunction<
-          _MallocZonePressureReliefNative,
-          _MallocZonePressureReliefDart>('malloc_zone_pressure_relief');
+      final relief = DynamicLibrary.process()
+          .lookupFunction<
+            _MallocZonePressureReliefNative,
+            _MallocZonePressureReliefDart
+          >('malloc_zone_pressure_relief');
       // zone = NULL：对所有 zone 生效；goal = 0：尽力归还全部可释放页。
       relief(nullptr, 0);
     } catch (_) {
@@ -122,7 +128,8 @@ void _releaseFreedMemoryToOs() {
       final psapi = DynamicLibrary.open('psapi.dll');
       final emptyWorkingSet = psapi
           .lookupFunction<_EmptyWorkingSetNative, _EmptyWorkingSetDart>(
-              'EmptyWorkingSet');
+            'EmptyWorkingSet',
+          );
       // 伪句柄 -1 = 当前进程（GetCurrentProcess）。
       emptyWorkingSet(-1);
     } catch (_) {
@@ -133,11 +140,9 @@ void _releaseFreedMemoryToOs() {
 
 /// 托盘期内存守卫（单例入口 [AppMemoryManager.instance]）。
 class AppMemoryManager {
-  AppMemoryManager({
-    AppPresence? presence,
-    ImageCacheTarget? imageCache,
-  })  : _presence = presence ?? AppPresence.instance,
-        _cache = imageCache ?? const PaintingImageCache() {
+  AppMemoryManager({AppPresence? presence, ImageCacheTarget? imageCache})
+    : _presence = presence ?? AppPresence.instance,
+      _cache = imageCache ?? const PaintingImageCache() {
     _fullLimitBytes = _cache.maximumSizeBytes;
   }
 
@@ -212,16 +217,20 @@ class AppMemoryManager {
     _log('托盘隐藏（等休眠帧）');
     // 休眠树在下一次 build 换上：等这一帧结束，页面里的 live 图片引用先释放，
     // 再清缓存才能真正把像素交还。
-    await SchedulerBinding.instance.endOfFrame
-        .timeout(const Duration(seconds: 2), onTimeout: () {});
+    await SchedulerBinding.instance.endOfFrame.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {},
+    );
     if (token != _trimToken || !_presence.isTrayHidden) return;
     // 业务缓存先放掉：纯 Dart 对象不依赖休眠帧，但同样挂住列表 / 搜索的
     // raw payload；快速隐藏→恢复（token 已变）时跳过，避免白白触发重载。
     _runReleasers();
     _cache.clear();
     _cache.clearLiveImages();
-    _cache.maximumSizeBytes =
-        math.min(_fullLimitBytes, kTrayImageCacheLimitBytes);
+    _cache.maximumSizeBytes = math.min(
+      _fullLimitBytes,
+      kTrayImageCacheLimitBytes,
+    );
     // 清完再 trim：不然日志里的 RSS / 工作集还是「已释放未归还」的那笔数。
     _releaseFreedMemoryToOs();
     _log('托盘隐藏完成');

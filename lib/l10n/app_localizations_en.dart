@@ -30,10 +30,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get searchHint => 'Search songs, albums, artists...';
+  String get searchHint => 'Search songs, artists or lyrics';
 
   @override
-  String get searchIdleHint => 'Search songs by keyword';
+  String get searchIdleHint => 'Search songs, artists or lyrics';
 
   @override
   String get clearSearch => 'Clear search';
@@ -1144,6 +1144,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addToPlaylist => 'Add to playlist';
+
+  @override
+  String get addToQueue => 'Add to queue';
+
+  @override
+  String get addedToQueue => 'Added to queue';
+
+  @override
+  String get playNext => 'Play next';
+
+  @override
+  String get moveQueueUp => 'Move up';
+
+  @override
+  String get moveQueueDown => 'Move down';
+
+  @override
+  String get removeFromQueue => 'Remove from queue';
 
   @override
   String get playlistReorder => 'Reorder';
@@ -4168,6 +4186,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadCompleted => 'Download complete';
+
+  @override
+  String get downloadStarted => 'Added to downloads';
 
   @override
   String downloadFailed(String message) {

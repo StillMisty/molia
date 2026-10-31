@@ -16,11 +16,7 @@ void main() {
         {'name': '歌手1'},
         {'name': '歌手2'},
       ],
-      'al': {
-        'id': 9,
-        'name': '专辑',
-        'picUrl': 'https://p1.music.126.net/x.jpg',
-      },
+      'al': {'id': 9, 'name': '专辑', 'picUrl': 'https://p1.music.126.net/x.jpg'},
       'hr': {'size': 50 * 1024 * 1024},
       'sq': {'size': 20 * 1024 * 1024},
       'h': {'size': 8 * 1024 * 1024},
@@ -42,17 +38,21 @@ void main() {
       expect(track.album, '专辑');
       expect(track.coverUrl, 'https://p1.music.126.net/x.jpg');
       expect(track.duration, const Duration(milliseconds: 245000));
-      expect(
-        track.qualities.map((q) => q.type).toList(),
-        ['flac24bit', 'flac', '320k', '128k'],
-      );
+      expect(track.qualities.map((q) => q.type).toList(), [
+        'flac24bit',
+        'flac',
+        '320k',
+        '128k',
+      ]);
       expect(track.raw['songmid'], 111);
       expect(track.raw['interval'], '04:05');
       // types 按 LX 在 push 后 reverse
-      expect(
-        (track.raw['types'] as List).map((t) => t['type']).toList(),
-        ['128k', '320k', 'flac', 'flac24bit'],
-      );
+      expect((track.raw['types'] as List).map((t) => t['type']).toList(), [
+        '128k',
+        '320k',
+        'flac',
+        'flac24bit',
+      ]);
       expect(track.raw['_types'], isA<Map>());
     });
 
@@ -65,10 +65,10 @@ void main() {
         ],
       );
       expect(tracks, hasLength(1));
-      expect(
-        tracks.first.qualities.map((q) => q.type).toList(),
-        ['320k', '128k'],
-      );
+      expect(tracks.first.qualities.map((q) => q.type).toList(), [
+        '320k',
+        '128k',
+      ]);
 
       final skipped = WyMusicDetail.filterList(
         songs: [song],
@@ -111,9 +111,7 @@ void main() {
       expect(WyLeaderboard.boards.first.id, 'wy__19723756');
       final ids = WyLeaderboard.boards.map((b) => b.id).toSet();
       expect(ids, hasLength(WyLeaderboard.boards.length));
-      final hot = WyLeaderboard.boards
-          .where((b) => b.name == '热歌榜')
-          .toList();
+      final hot = WyLeaderboard.boards.where((b) => b.name == '热歌榜').toList();
       expect(hot, hasLength(1));
       expect(hot.first.bangid, '3778678');
     });
@@ -163,10 +161,10 @@ void main() {
     test('filterHotTagInfo：playlistTag.name', () {
       final tags = WySongList.filterHotTagInfo([
         {
-          'playlistTag': {'name': '华语'}
+          'playlistTag': {'name': '华语'},
         },
         {
-          'playlistTag': {'name': '电子'}
+          'playlistTag': {'name': '电子'},
         },
       ]);
       expect(tags.map((t) => t.name).toList(), ['华语', '电子']);
@@ -175,8 +173,8 @@ void main() {
     test('parseListId：链接 / ID / id###token', () async {
       expect(
         (await WySongList.parseListId(
-                'https://music.163.com/playlist?id=123456&userid=1'))
-            .id,
+          'https://music.163.com/playlist?id=123456&userid=1',
+        )).id,
         '123456',
       );
       expect(
@@ -186,8 +184,8 @@ void main() {
       );
       expect(
         (await WySongList.parseListId(
-                'https://music.163.com/playlist/789/123456789/?_hash=x'))
-            .id,
+          'https://music.163.com/playlist/789/123456789/?_hash=x',
+        )).id,
         '789',
       );
       expect((await WySongList.parseListId('987')).id, '987');
@@ -220,10 +218,12 @@ void main() {
       );
       expect(tracks, hasLength(1));
       expect(tracks.first.artist, 'A&B、C');
-      expect(tracks.first.qualities.map((q) => q.type).toList(),
-          ['flac', '320k', '128k']);
-      final flac =
-          tracks.first.raw['_types']['flac'] as Map<String, dynamic>;
+      expect(tracks.first.qualities.map((q) => q.type).toList(), [
+        'flac',
+        '320k',
+        '128k',
+      ]);
+      final flac = tracks.first.raw['_types']['flac'] as Map<String, dynamic>;
       expect(flac['size'], isNull);
     });
   });
@@ -254,11 +254,7 @@ void main() {
         '{"t":2500,"c":[{"tx":"你"},{"tx":"好"}]}\n'
         '[offset:0]',
       );
-      expect(lines, [
-        '[00:01.00]hello',
-        '[00:02.50]你好',
-        '[offset:0]',
-      ]);
+      expect(lines, ['[00:01.00]hello', '[00:02.50]你好', '[offset:0]']);
     });
 
     test('parseLyric：yrc 行 → LRC + LX 逐字（相对行首时间）', () {
@@ -306,7 +302,8 @@ void main() {
 
     test('parse：yrc 分支（元数据头 + 逐字 + 翻译对齐）', () {
       final info = WyLyricParser.parse(
-        ylrc: '{"t":100,"c":[{"tx":"作词"},{"tx":" : 某人"}]}\n'
+        ylrc:
+            '{"t":100,"c":[{"tx":"作词"},{"tx":" : 某人"}]}\n'
             '[1000,2000](0,500,0)Hello (500,1500,0)world\n'
             '[offset:0]',
         ytlrc: '[00:01.000]你好世界',

@@ -52,11 +52,11 @@ void main() {
 
   /// 假接口数据：地址列表用例断言具体地址。
   LocalEndpointsService fakeEndpoints() => LocalEndpointsService(
-        enumerate: () async => const [
-          LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10'),
-          LocalEndpoint(interfaceName: 'wlan0', address: '2409:8a55::5'),
-        ],
-      );
+    enumerate: () async => const [
+      LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10'),
+      LocalEndpoint(interfaceName: 'wlan0', address: '2409:8a55::5'),
+    ],
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -193,30 +193,36 @@ void main() {
         return null;
       },
     );
-    addTearDown(() => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null));
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
     return clipboard;
   }
 
   /// 往名册注入一台设备（`lastSeenAt` 可控；失联阈值 = 180 天）。
   void seedPeer(String deviceId, {required int lastSeenAt}) {
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: deviceId,
-          name: deviceId,
-          transport: SyncTransportKind.lan,
-          lastSeenAt: lastSeenAt,
-          lastSuccessAt: lastSeenAt,
-          cursorSeq: 3,
-          ackedSeq: 3,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: deviceId,
+            name: deviceId,
+            transport: SyncTransportKind.lan,
+            lastSeenAt: lastSeenAt,
+            lastSuccessAt: lastSeenAt,
+            cursorSeq: 3,
+            ackedSeq: 3,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
   }
 
@@ -346,10 +352,12 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     final probe = tester.widget<SettingsInfoTile>(
-        find.byKey(const Key('settingsSyncProbePortItem')));
+      find.byKey(const Key('settingsSyncProbePortItem')),
+    );
     expect(probe.subtitle, '47825', reason: '两族同值只显示一个端口');
     final http = tester.widget<SettingsInfoTile>(
-        find.byKey(const Key('settingsSyncHttpPortItem')));
+      find.byKey(const Key('settingsSyncHttpPortItem')),
+    );
     expect(http.subtitle, '40000');
   });
 
@@ -361,7 +369,8 @@ void main() {
     await openAdvanced(tester);
 
     final probe = tester.widget<SettingsInfoTile>(
-        find.byKey(const Key('settingsSyncProbePortItem')));
+      find.byKey(const Key('settingsSyncProbePortItem')),
+    );
     expect(probe.subtitle, '47825 (IPv4) / 51234 (IPv6)');
   });
 
@@ -423,7 +432,9 @@ void main() {
     // 地址已写入地址簿（用户不用重填），但弹层留在原地让用户改地址重试。
     expect(provider.manualPeers.single.host, '192.168.1.23');
     expect(
-        find.textContaining('make sure the device is online'), findsOneWidget);
+      find.textContaining('make sure the device is online'),
+      findsOneWidget,
+    );
     expect(find.text('Save'), findsOneWidget);
 
     // 关掉弹层后：未连上的条目在地址簿里可见（点开可改 / 删）。
@@ -469,18 +480,22 @@ void main() {
 
   testWidgets('手动连接：连上后关闭并提示已添加；重复地址提示已更新', (tester) async {
     transport.onPull = () async {
-      await state.learnManualPeer(const ManualPeer(
-        host: '192.168.1.23',
-        deviceId: 'devB',
-        httpPort: 40000,
-      ));
+      await state.learnManualPeer(
+        const ManualPeer(
+          host: '192.168.1.23',
+          deviceId: 'devB',
+          httpPort: 40000,
+        ),
+      );
     };
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 5000,
-      records: const {},
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 5000,
+        records: const {},
+      ),
+    );
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
     await openManualConnect(tester);
@@ -598,12 +613,16 @@ void main() {
     );
     expect(find.text('3 available addresses'), findsOneWidget);
     expect(
-        find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsNothing);
+      find.byKey(const Key('settingsSyncPeer-192.168.1.24')),
+      findsNothing,
+    );
 
     await tester.tap(find.byKey(const Key('settingsSyncPeerCandidatesItem')));
     await tester.pumpAndSettle();
     expect(
-        find.byKey(const Key('settingsSyncPeer-192.168.1.24')), findsOneWidget);
+      find.byKey(const Key('settingsSyncPeer-192.168.1.24')),
+      findsOneWidget,
+    );
 
     // 点开单项 → 详情弹层 → 移除地址。
     await tester.tap(find.byKey(const Key('settingsSyncPeer-192.168.1.24')));
@@ -615,20 +634,22 @@ void main() {
 
   testWidgets('名册行内联：对端行有名称与最后同步时间', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 9000,
-      records: {
-        SyncCategory.settings: [
-          SyncRecord(
-            key: 'theme_mode',
-            version: const SyncVersion(physical: 9000, deviceId: 'devB'),
-            data: {'v': 'dark'},
-          ),
-        ],
-      },
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 9000,
+        records: {
+          SyncCategory.settings: [
+            SyncRecord(
+              key: 'theme_mode',
+              version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+              data: {'v': 'dark'},
+            ),
+          ],
+        },
+      ),
+    );
     await provider.syncNow(manual: true);
     await pumpPage(tester);
 
@@ -651,9 +672,7 @@ void main() {
   }
 
   String peerSubtitle(WidgetTester tester, String deviceId) => tester
-      .widget<SettingsNavTile>(
-        find.byKey(Key('settingsSyncPeer-$deviceId')),
-      )
+      .widget<SettingsNavTile>(find.byKey(Key('settingsSyncPeer-$deviceId')))
       .subtitle;
 
   testWidgets('打开同步页自动检查：经调度器跑 check 轮，不是 manual', (tester) async {
@@ -708,8 +727,9 @@ void main() {
     expect(peersFooter(tester), 'No devices connected this round');
   });
 
-  testWidgets('设备行五态：已连接 / 未连接 / 上次同步 / 还没连上 / 已失联；WebDAV 不冒充已连接',
-      (tester) async {
+  testWidgets('设备行五态：已连接 / 未连接 / 上次同步 / 还没连上 / 已失联；WebDAV 不冒充已连接', (
+    tester,
+  ) async {
     // 失联阈值是 180 天：用真实纪元时钟，才能表达「成功在阈值之前」。
     nowMs = DateTime.now().millisecondsSinceEpoch;
     // 先跑一轮拿到「本轮起点」（页面本身不注入调度器，不会自动再跑）。
@@ -718,89 +738,95 @@ void main() {
     final startedAt = provider.lastReport!.startedAt;
 
     final now = provider.nowMs;
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: startedAt,
-      finishedAt: startedAt + 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: 'connectedA',
-          name: 'Device A',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 4,
-          lastSuccessAt: startedAt + 4,
-        ),
-        SyncPeerState(
-          deviceId: 'connectedB',
-          name: 'Device B',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 3,
-          lastSuccessAt: startedAt + 3,
-        ),
-        SyncPeerState(
-          deviceId: 'connectedC',
-          name: 'Device C',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 2,
-          lastSuccessAt: startedAt + 2,
-        ),
-        SyncPeerState(
-          deviceId: 'webdav',
-          name: 'Cloud',
-          transport: SyncTransportKind.webdav,
-          lastSeenAt: startedAt + 1,
-          lastSuccessAt: startedAt + 1,
-        ),
-        SyncPeerState(
-          deviceId: 'unreachable',
-          name: 'Offline',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 5,
-          lastSuccessAt: startedAt - 5000,
-          lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
-        ),
-        // 只有失败尝试、从未成功过：不能说「未连接 · 上次同步」。
-        SyncPeerState(
-          deviceId: 'failedOnly',
-          name: 'Failed only',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 6,
-          lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
-        ),
-        // WebDAV 从未同步成功：也不能说「云端未同步」（那暗示同步过）。
-        SyncPeerState(
-          deviceId: 'webdavNever',
-          name: 'Cloud never',
-          transport: SyncTransportKind.webdav,
-          lastSeenAt: startedAt + 7,
-          lastError: const SyncIssue(code: SyncIssueCode.webdavReadFailed),
-        ),
-        SyncPeerState(
-          deviceId: 'idle',
-          name: 'Idle',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt - 5000,
-          lastSuccessAt: startedAt - 5000,
-        ),
-        SyncPeerState(deviceId: 'never', name: 'Never'),
-        SyncPeerState(
-          deviceId: 'lost',
-          name: 'Lost',
-          transport: SyncTransportKind.lan,
-          // 最近尝试是刚刚，但最近成功超过 180 天：失败尝试不续命。
-          lastSeenAt: now,
-          lastSuccessAt: now - SyncPeerState.lostThresholdMs - 1,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: startedAt,
+        finishedAt: startedAt + 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: 'connectedA',
+            name: 'Device A',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 4,
+            lastSuccessAt: startedAt + 4,
+          ),
+          SyncPeerState(
+            deviceId: 'connectedB',
+            name: 'Device B',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 3,
+            lastSuccessAt: startedAt + 3,
+          ),
+          SyncPeerState(
+            deviceId: 'connectedC',
+            name: 'Device C',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 2,
+            lastSuccessAt: startedAt + 2,
+          ),
+          SyncPeerState(
+            deviceId: 'webdav',
+            name: 'Cloud',
+            transport: SyncTransportKind.webdav,
+            lastSeenAt: startedAt + 1,
+            lastSuccessAt: startedAt + 1,
+          ),
+          SyncPeerState(
+            deviceId: 'unreachable',
+            name: 'Offline',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 5,
+            lastSuccessAt: startedAt - 5000,
+            lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
+          ),
+          // 只有失败尝试、从未成功过：不能说「未连接 · 上次同步」。
+          SyncPeerState(
+            deviceId: 'failedOnly',
+            name: 'Failed only',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 6,
+            lastError: const SyncIssue(code: SyncIssueCode.peerReadFailed),
+          ),
+          // WebDAV 从未同步成功：也不能说「云端未同步」（那暗示同步过）。
+          SyncPeerState(
+            deviceId: 'webdavNever',
+            name: 'Cloud never',
+            transport: SyncTransportKind.webdav,
+            lastSeenAt: startedAt + 7,
+            lastError: const SyncIssue(code: SyncIssueCode.webdavReadFailed),
+          ),
+          SyncPeerState(
+            deviceId: 'idle',
+            name: 'Idle',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt - 5000,
+            lastSuccessAt: startedAt - 5000,
+          ),
+          SyncPeerState(deviceId: 'never', name: 'Never'),
+          SyncPeerState(
+            deviceId: 'lost',
+            name: 'Lost',
+            transport: SyncTransportKind.lan,
+            // 最近尝试是刚刚，但最近成功超过 180 天：失败尝试不续命。
+            lastSeenAt: now,
+            lastSuccessAt: now - SyncPeerState.lostThresholdMs - 1,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
     await pumpPage(tester);
 
-    expect(peerSubtitle(tester, 'connectedA'),
-        allOf(contains('Connected'), contains('last synced')));
-    expect(peerSubtitle(tester, 'unreachable'),
-        allOf(contains('Not connected'), contains('last synced')));
+    expect(
+      peerSubtitle(tester, 'connectedA'),
+      allOf(contains('Connected'), contains('last synced')),
+    );
+    expect(
+      peerSubtitle(tester, 'unreachable'),
+      allOf(contains('Not connected'), contains('last synced')),
+    );
     expect(peerSubtitle(tester, 'idle'), contains('Last synced'));
     expect(peerSubtitle(tester, 'idle'), isNot(contains('Connected')));
     expect(peerSubtitle(tester, 'never'), contains('Not connected yet'));
@@ -846,21 +872,23 @@ void main() {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.syncNow(manual: true);
     final startedAt = provider.lastReport!.startedAt;
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: startedAt,
-      finishedAt: startedAt + 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: 'cloud',
-          name: 'Cloud',
-          transport: SyncTransportKind.webdav,
-          lastSeenAt: startedAt + 1,
-          lastSuccessAt: startedAt + 1,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: startedAt,
+        finishedAt: startedAt + 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: 'cloud',
+            name: 'Cloud',
+            transport: SyncTransportKind.webdav,
+            lastSeenAt: startedAt + 1,
+            lastSuccessAt: startedAt + 1,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
 
     await pumpPage(tester);
@@ -874,35 +902,37 @@ void main() {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.syncNow(manual: true);
     final startedAt = provider.lastReport!.startedAt;
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: startedAt,
-      finishedAt: startedAt + 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: 'lanA',
-          name: 'Device A',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 3,
-          lastSuccessAt: startedAt + 3,
-        ),
-        SyncPeerState(
-          deviceId: 'lanB',
-          name: 'Device B',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt + 2,
-          lastSuccessAt: startedAt + 2,
-        ),
-        SyncPeerState(
-          deviceId: 'cloud',
-          name: 'Cloud',
-          transport: SyncTransportKind.webdav,
-          lastSeenAt: startedAt + 1,
-          lastSuccessAt: startedAt + 1,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: startedAt,
+        finishedAt: startedAt + 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: 'lanA',
+            name: 'Device A',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 3,
+            lastSuccessAt: startedAt + 3,
+          ),
+          SyncPeerState(
+            deviceId: 'lanB',
+            name: 'Device B',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt + 2,
+            lastSuccessAt: startedAt + 2,
+          ),
+          SyncPeerState(
+            deviceId: 'cloud',
+            name: 'Cloud',
+            transport: SyncTransportKind.webdav,
+            lastSeenAt: startedAt + 1,
+            lastSuccessAt: startedAt + 1,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
 
     await pumpPage(tester);
@@ -935,21 +965,23 @@ void main() {
     // 可能与刚才「打开传输立即检查」的 check 轮撞车而返回 null。
     final report = await engine.syncNow(trigger: SyncTrigger.manual);
     final startedAt = report!.startedAt;
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.check,
-      startedAt: startedAt,
-      finishedAt: startedAt + 1,
-      outcome: SyncOutcome.noPeers,
-      peers: [
-        SyncPeerState(
-          deviceId: 'offline',
-          name: 'Offline',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt - 1000,
-          lastSuccessAt: 0,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.check,
+        startedAt: startedAt,
+        finishedAt: startedAt + 1,
+        outcome: SyncOutcome.noPeers,
+        peers: [
+          SyncPeerState(
+            deviceId: 'offline',
+            name: 'Offline',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt - 1000,
+            lastSuccessAt: 0,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
     await pumpPage(tester);
 
@@ -993,20 +1025,22 @@ void main() {
     // 与打开传输触发的 check 轮竞态。
     final report = await engine.syncNow(trigger: SyncTrigger.manual);
     final startedAt = report!.startedAt;
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.check,
-      startedAt: startedAt,
-      finishedAt: startedAt + 1,
-      outcome: SyncOutcome.noPeers,
-      peers: [
-        SyncPeerState(
-          deviceId: 'offline',
-          name: 'Offline',
-          transport: SyncTransportKind.lan,
-          lastSeenAt: startedAt - 1000,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.check,
+        startedAt: startedAt,
+        finishedAt: startedAt + 1,
+        outcome: SyncOutcome.noPeers,
+        peers: [
+          SyncPeerState(
+            deviceId: 'offline',
+            name: 'Offline',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: startedAt - 1000,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
     expect(provider.canCheckNow, isFalse);
     await pumpPage(tester);
@@ -1062,12 +1096,14 @@ void main() {
 
   testWidgets('自动发现的设备也能从本机移除（不依赖地址簿条目）', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 9000,
-      records: const {},
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 9000,
+        records: const {},
+      ),
+    );
     await provider.syncNow(manual: true);
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
@@ -1086,23 +1122,25 @@ void main() {
   testWidgets('名册展示优先用户命名，对端自报名仅兜底', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await provider.addManualPeer('192.168.1.23', name: '书房');
-    await state.learnManualPeer(const ManualPeer(
-      host: '192.168.1.23',
-      deviceId: 'devB',
-      httpPort: 40000,
-    ));
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 5000,
-      records: const {},
-    ));
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devC',
-      deviceName: 'Device C',
-      producedAt: 5000,
-      records: const {},
-    ));
+    await state.learnManualPeer(
+      const ManualPeer(host: '192.168.1.23', deviceId: 'devB', httpPort: 40000),
+    );
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 5000,
+        records: const {},
+      ),
+    );
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devC',
+        deviceName: 'Device C',
+        producedAt: 5000,
+        records: const {},
+      ),
+    );
     await provider.syncNow(manual: true);
 
     await pumpPage(tester);
@@ -1133,17 +1171,21 @@ void main() {
         return;
       }
       // 补跑轮：对端应答，地址簿学到身份，本轮算接触成功。
-      await state.learnManualPeer(const ManualPeer(
-        host: '192.168.1.23',
-        deviceId: 'devB',
-        httpPort: 40000,
-      ));
-      transport.available.add(SyncEnvelope(
-        deviceId: 'devB',
-        deviceName: 'Device B',
-        producedAt: 5000,
-        records: const {},
-      ));
+      await state.learnManualPeer(
+        const ManualPeer(
+          host: '192.168.1.23',
+          deviceId: 'devB',
+          httpPort: 40000,
+        ),
+      );
+      transport.available.add(
+        SyncEnvelope(
+          deviceId: 'devB',
+          deviceName: 'Device B',
+          producedAt: 5000,
+          records: const {},
+        ),
+      );
     };
     final inFlight = provider.syncNow(manual: true);
     await pumpPage(tester);
@@ -1176,8 +1218,11 @@ void main() {
 
     await openSubPage(tester, 'settingsSyncContentItem');
     expect(find.byType(SyncContentPage), findsOneWidget);
-    expect(provider.categories[SyncCategory.covers], isTrue,
-        reason: '自定义封面默认同步');
+    expect(
+      provider.categories[SyncCategory.covers],
+      isTrue,
+      reason: '自定义封面默认同步',
+    );
 
     // 内容页与同步设置同源：关闭封面后立即生效。
     await tester.tap(find.byKey(const Key('settingsSyncCategory-covers')));
@@ -1208,10 +1253,7 @@ void main() {
 
     await openSubPage(tester, 'settingsSyncLogItem');
     expect(find.text('Last 24 hours'), findsOneWidget);
-    expect(
-      find.textContaining('1 runs, 0 with changes'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('1 runs, 0 with changes'), findsOneWidget);
     // 环境行：未注入调度器 → 等级「未运行」；非移动数据；非省电。
     expect(
       find.textContaining('not running · Wi-Fi / other · power save off'),
@@ -1242,8 +1284,9 @@ void main() {
     await provider.syncNow(manual: true);
     await tester.pumpAndSettle();
     expect(find.text('No records yet'), findsNothing);
-    final logTile = tester
-        .widget<SettingsNavTile>(find.byKey(const Key('settingsSyncLogItem')));
+    final logTile = tester.widget<SettingsNavTile>(
+      find.byKey(const Key('settingsSyncLogItem')),
+    );
     expect(logTile.subtitle, contains('No other device found'));
     expect(logTile.subtitle, contains('just now'));
   });
@@ -1256,7 +1299,9 @@ void main() {
     await tester.tap(find.byKey(const Key('settingsSyncWebdavSwitch')));
     await tester.pumpAndSettle();
     expect(
-        find.byKey(const Key('settingsSyncWebdavConfigItem')), findsOneWidget);
+      find.byKey(const Key('settingsSyncWebdavConfigItem')),
+      findsOneWidget,
+    );
     expect(find.text('Not configured'), findsOneWidget);
   });
 
@@ -1307,9 +1352,7 @@ void main() {
     expect(find.text('Open settings'), findsOneWidget);
     expect(find.text('Grant'), findsNothing);
     expect(requested, 0, reason: '永久拒绝不应再向系统请求');
-    await tester.tap(
-      find.byKey(const Key('settingsSyncLanPermissionGrant')),
-    );
+    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionGrant')));
     await tester.pumpAndSettle();
     expect(opened, 1);
   });
@@ -1338,9 +1381,7 @@ void main() {
     await pumpPage(tester);
 
     expect(find.text('LAN permission required'), findsOneWidget);
-    await tester.tap(
-      find.byKey(const Key('settingsSyncLanPermissionGrant')),
-    );
+    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionGrant')));
     await tester.pumpAndSettle();
     expect(requested, 1);
     expect(
@@ -1469,9 +1510,7 @@ void main() {
       find.byKey(const Key('settingsSyncLanPermissionItem')),
       findsOneWidget,
     );
-    await tester.tap(
-      find.byKey(const Key('settingsSyncLanPermissionGrant')),
-    );
+    await tester.tap(find.byKey(const Key('settingsSyncLanPermissionGrant')));
     await tester.pumpAndSettle();
     expect(opened, 1);
   });
@@ -1504,8 +1543,9 @@ void main() {
 
   testWidgets('探测端口不可用：动作同样给手动地址出路', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    transport.pullError =
-        const SyncIssue(code: SyncIssueCode.probePortUnavailable);
+    transport.pullError = const SyncIssue(
+      code: SyncIssueCode.probePortUnavailable,
+    );
     await provider.syncNow(manual: true);
     await pumpPage(tester);
 
@@ -1556,12 +1596,14 @@ void main() {
 
   testWidgets('传输副文案：成功接触后状态词仍是「运行中」，颜色走成功色', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 5000,
-      records: const {},
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 5000,
+        records: const {},
+      ),
+    );
     await provider.syncNow(manual: true);
     await pumpPage(tester);
 

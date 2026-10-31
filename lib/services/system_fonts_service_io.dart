@@ -24,8 +24,9 @@ import 'sfnt_families.dart';
 class SystemFontsService {
   SystemFontsService._();
 
-  static const MethodChannel _channel =
-      MethodChannel('top.stillmisty.molia/system_fonts');
+  static const MethodChannel _channel = MethodChannel(
+    'top.stillmisty.molia/system_fonts',
+  );
 
   /// Android 字体族定义文件（不同系统版本/厂商分区，存在即解析；
   /// 权限不可读的路径静默跳过）。
@@ -129,15 +130,12 @@ class SystemFontsService {
       text.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
 
   static Future<String?> _windowsMessageFontFamily() async {
-    final result = await Process.run(
-      'reg.exe',
-      <String>[
-        'query',
-        r'HKCU\Control Panel\Desktop\WindowMetrics',
-        '/v',
-        'MessageFont',
-      ],
-    );
+    final result = await Process.run('reg.exe', <String>[
+      'query',
+      r'HKCU\Control Panel\Desktop\WindowMetrics',
+      '/v',
+      'MessageFont',
+    ]);
     if (result.exitCode != 0) return null;
     return parseWindowsMessageFontOutput('${result.stdout}');
   }
@@ -153,7 +151,7 @@ class SystemFontsService {
       } else if (Platform.isIOS || Platform.isMacOS) {
         families =
             await _channel.invokeListMethod<String>('listFamilies') ??
-                const <String>[];
+            const <String>[];
       } else if (Platform.isLinux) {
         families = await _linuxFamilies();
       } else if (Platform.isWindows) {
@@ -220,8 +218,10 @@ class SystemFontsService {
   }
 
   /// 可解析家族名的字体文件扩展名（点阵 `.fon`、Type 1 `.pfb` 都不是 sfnt）。
-  static final RegExp _sfntFilePattern =
-      RegExp(r'\.(ttf|otf|ttc|otc)$', caseSensitive: false);
+  static final RegExp _sfntFilePattern = RegExp(
+    r'\.(ttf|otf|ttc|otc)$',
+    caseSensitive: false,
+  );
 
   /// Windows 字体枚举：目录扫描合并注册表条目，家族名从字体文件 `name`
   /// 表解析；文件解析整体失败时回退注册表值名（有样式后缀、不保证可解析，
@@ -343,7 +343,9 @@ class SystemFontsService {
   /// 拆 TTC 多家族。仅作文件解析失败时的兜底，值名常带样式后缀
   /// （`Arial Bold`）而不可被渲染器解析。
   static List<String> parseWindowsFontRegistryName(String valueName) {
-    final base = valueName.replaceFirst(RegExp(r'\s*\([^()]*\)\s*$'), '').trim();
+    final base = valueName
+        .replaceFirst(RegExp(r'\s*\([^()]*\)\s*$'), '')
+        .trim();
     if (base.isEmpty) return const <String>[];
     return <String>[
       for (final part in base.split('&'))

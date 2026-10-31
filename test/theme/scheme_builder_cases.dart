@@ -28,13 +28,19 @@ void main() {
     final artworkScheme = buildColorScheme(otherSeed, Brightness.light);
 
     expect(
-      resolveSurfaceScheme(SurfaceColorSource.appTheme,
-          appScheme: appScheme, artworkScheme: artworkScheme),
+      resolveSurfaceScheme(
+        SurfaceColorSource.appTheme,
+        appScheme: appScheme,
+        artworkScheme: artworkScheme,
+      ),
       appScheme,
     );
     expect(
-      resolveSurfaceScheme(SurfaceColorSource.artwork,
-          appScheme: appScheme, artworkScheme: artworkScheme),
+      resolveSurfaceScheme(
+        SurfaceColorSource.artwork,
+        appScheme: appScheme,
+        artworkScheme: artworkScheme,
+      ),
       artworkScheme,
     );
     // 无封面取色结果：回退应用主题，不抛错、不换来源。

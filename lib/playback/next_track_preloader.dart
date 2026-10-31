@@ -51,7 +51,7 @@ class NextTrackPreloader {
   /// 必须返回完整 [PlayableStream]：预取要带上与播放相同的请求头（B 站
   /// 直链离开 `Referer` 会 403），只留 URL 会让预取必然失败。
   final Future<PlayableStream> Function(SourceTrack track, {String? quality})
-      _resolver;
+  _resolver;
 
   /// 与播放完全同源的音质选择（省流上限由组合根在闭包里套用）。
   final String Function()? _preferredQuality;
@@ -122,13 +122,15 @@ class NextTrackPreloader {
       }
       attempt.task = task;
       unawaited(
-        task.done.whenComplete(() {
-          if (!identical(attempt.task, task)) return;
-          attempt.task = null;
-          _settle(attempt);
-        }).catchError((Object _) {
-          // 任务失败只需要释放所有权，不在预载链路里抛异步错误。
-        }),
+        task.done
+            .whenComplete(() {
+              if (!identical(attempt.task, task)) return;
+              attempt.task = null;
+              _settle(attempt);
+            })
+            .catchError((Object _) {
+              // 任务失败只需要释放所有权，不在预载链路里抛异步错误。
+            }),
       );
     } catch (_) {
       // 预载失败静默：真正播放时会正常取链。

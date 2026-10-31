@@ -84,10 +84,7 @@ abstract final class PairingCrypto {
     final random = FortunaRandom();
     random.seed(KeyParameter(_randomBytes(32)));
     final generator = ECKeyGenerator()
-      ..init(ParametersWithRandom(
-        ECKeyGeneratorParameters(_p256),
-        random,
-      ));
+      ..init(ParametersWithRandom(ECKeyGeneratorParameters(_p256), random));
     final pair = generator.generateKeyPair();
     final publicKey = pair.publicKey;
     final point = publicKey.Q;
@@ -113,12 +110,14 @@ abstract final class PairingCrypto {
     final secret = _unsignedBigEndian(shared, 32);
     final salt = Uint8List.fromList([...initiatorNonce, ...receiverNonce]);
     final derivator = HKDFKeyDerivator(SHA256Digest())
-      ..init(HkdfParameters(
-        secret,
-        32,
-        salt,
-        Uint8List.fromList(utf8.encode(protocol)),
-      ));
+      ..init(
+        HkdfParameters(
+          secret,
+          32,
+          salt,
+          Uint8List.fromList(utf8.encode(protocol)),
+        ),
+      );
     return derivator.process(Uint8List(0));
   }
 
@@ -132,12 +131,7 @@ abstract final class PairingCrypto {
     final cipher = GCMBlockCipher(AESEngine())
       ..init(
         true,
-        AEADParameters(
-          KeyParameter(key),
-          128,
-          nonce,
-          Uint8List.fromList(aad),
-        ),
+        AEADParameters(KeyParameter(key), 128, nonce, Uint8List.fromList(aad)),
       );
     final encrypted = cipher.process(Uint8List.fromList(plaintext));
     return Uint8List.fromList([_sealedVersion, ...nonce, ...encrypted]);
@@ -158,12 +152,7 @@ abstract final class PairingCrypto {
     final cipher = GCMBlockCipher(AESEngine())
       ..init(
         false,
-        AEADParameters(
-          KeyParameter(key),
-          128,
-          nonce,
-          Uint8List.fromList(aad),
-        ),
+        AEADParameters(KeyParameter(key), 128, nonce, Uint8List.fromList(aad)),
       );
     try {
       return cipher.process(cipherText);
@@ -210,14 +199,13 @@ abstract final class PairingCrypto {
     required SyncPairingIntent intent,
     required String initiatorDeviceId,
     required String receiverDeviceId,
-  }) =>
-      _canonical([
-        ('tag', utf8.encode('$protocol/aad')),
-        ('requestId', utf8.encode(requestId)),
-        ('intent', utf8.encode(intent.name)),
-        ('initiator', utf8.encode(initiatorDeviceId)),
-        ('receiver', utf8.encode(receiverDeviceId)),
-      ]);
+  }) => _canonical([
+    ('tag', utf8.encode('$protocol/aad')),
+    ('requestId', utf8.encode(requestId)),
+    ('intent', utf8.encode(intent.name)),
+    ('initiator', utf8.encode(initiatorDeviceId)),
+    ('receiver', utf8.encode(receiverDeviceId)),
+  ]);
 
   /// 同组证明：HMAC-SHA256(discoveryKey(passphrase), requestId)。
   ///

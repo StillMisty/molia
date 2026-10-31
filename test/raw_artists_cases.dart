@@ -9,15 +9,14 @@ void main() {
   SourceTrack sourceTrack({
     Map<String, dynamic>? raw,
     String artist = '周杰伦、温岚',
-  }) =>
-      SourceTrack(
-        sourceKey: 'wy',
-        origin: 'builtin',
-        title: '屋顶',
-        artist: artist,
-        album: '有点野',
-        raw: raw ?? const {'songmid': '298317'},
-      );
+  }) => SourceTrack(
+    sourceKey: 'wy',
+    origin: 'builtin',
+    title: '屋顶',
+    artist: artist,
+    album: '有点野',
+    raw: raw ?? const {'songmid': '298317'},
+  );
 
   test('artistsFromRaw：解析名字 + id；缺省 / 结构不符返回空；忽略空名字', () {
     expect(artistsFromRaw(const {}), isEmpty);

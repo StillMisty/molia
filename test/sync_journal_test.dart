@@ -12,7 +12,8 @@ void main() {
   late MoliaDatabase db;
   late SyncJournalRepository journal;
 
-  SyncJournalChange change(String key, int physical, {bool deleted = false}) => (
+  SyncJournalChange change(String key, int physical, {bool deleted = false}) =>
+      (
         category: SyncCategory.settings,
         record: SyncRecord(
           key: key,
@@ -64,12 +65,9 @@ void main() {
     final changes = [for (var i = 0; i < 100; i++) change('k$i', i + 1)];
 
     late List<int> seqs;
-    await db.runWithInterceptor(
-      () async {
-        seqs = await journal.append(db, changes);
-      },
-      interceptor: counter,
-    );
+    await db.runWithInterceptor(() async {
+      seqs = await journal.append(db, changes);
+    }, interceptor: counter);
 
     expect(counter.batches, 1, reason: '整批走一次 batch 提交');
     expect(counter.inserts, 0, reason: '不退回逐条 INSERT');
@@ -81,7 +79,9 @@ void main() {
   test('reset：清空日志与窗口状态，不碰用户数据表', () async {
     await journal.append(db, [change('a', 1), change('b', 2)]);
     await journal.markSnapshotBuilt(2);
-    await db.into(db.playHistory).insert(
+    await db
+        .into(db.playHistory)
+        .insert(
           PlayHistoryCompanion.insert(
             sourceKey: 'kuwo',
             songId: 'song-1',
@@ -96,8 +96,11 @@ void main() {
     expect(await journal.baseSeq(), 0);
     expect(await journal.snapshotSeq(), -1);
     expect(await journal.window(), isEmpty);
-    expect(await db.select(db.playHistory).get(), hasLength(1),
-        reason: '派生状态清空不动真实用户数据');
+    expect(
+      await db.select(db.playHistory).get(),
+      hasLength(1),
+      reason: '派生状态清空不动真实用户数据',
+    );
 
     // 重建后 seq 从 1 重新开始。
     await journal.append(db, [change('c', 3)]);
@@ -107,7 +110,9 @@ void main() {
   test('追加与数据写入同事务：事务回滚后日志与数据都不落', () async {
     try {
       await db.transaction(() async {
-        await db.into(db.playHistory).insert(
+        await db
+            .into(db.playHistory)
+            .insert(
               PlayHistoryCompanion.insert(
                 sourceKey: 'kuwo',
                 songId: 'song-1',
@@ -138,7 +143,12 @@ void main() {
   });
 
   test('compact 边界：只裁到 min(minAck, 已发布快照覆盖)，未 ack 的条目保留', () async {
-    await journal.append(db, [change('a', 1), change('b', 2), change('c', 3), change('d', 4)]);
+    await journal.append(db, [
+      change('a', 1),
+      change('b', 2),
+      change('c', 3),
+      change('d', 4),
+    ]);
     // 已发布快照覆盖到 4：允许裁到 4；对端只 ack 到 2。
     await journal.markSnapshotBuilt(4);
 

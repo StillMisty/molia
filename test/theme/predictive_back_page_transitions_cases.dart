@@ -19,18 +19,19 @@ void main() {
   const seed = Color(0xFF2196F3);
 
   Map<String, dynamic> backArgs(double progress) => <String, dynamic>{
-        'touchOffset': <double>[5, 600],
-        'progress': progress,
-        'swipeEdge': 0,
-      };
+    'touchOffset': <double>[5, 600],
+    'progress': progress,
+    'swipeEdge': 0,
+  };
 
   Future<void> sendBack(
     WidgetTester tester,
     String method, [
     Map<String, dynamic>? args,
   ]) async {
-    final data = const StandardMethodCodec()
-        .encodeMethodCall(MethodCall(method, args));
+    final data = const StandardMethodCodec().encodeMethodCall(
+      MethodCall(method, args),
+    );
     await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
       SystemChannels.backGesture.name,
       data,
@@ -116,9 +117,7 @@ void main() {
       );
     }
 
-    await tester.pumpWidget(
-      buildApp(ColorScheme.fromSeed(seedColor: seed)),
-    );
+    await tester.pumpWidget(buildApp(ColorScheme.fromSeed(seedColor: seed)));
     navigatorKey.currentState!.push(
       M3EPageRoute<void>(
         builder: (_) => const Scaffold(body: Center(child: Text('page'))),
@@ -146,9 +145,7 @@ void main() {
     // 提交路径：同样在退场途中换主题，页面应正常出栈。
     await sendBack(tester, 'startBackGesture', backArgs(0));
     await tester.pump();
-    await tester.pumpWidget(
-      buildApp(ColorScheme.fromSeed(seedColor: seed)),
-    );
+    await tester.pumpWidget(buildApp(ColorScheme.fromSeed(seedColor: seed)));
     await tester.pump();
     await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
     await tester.pump();

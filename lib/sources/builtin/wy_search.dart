@@ -13,11 +13,7 @@ class WySearch {
     int page = 1,
     int limit = _limit,
   }) async {
-    final result = await searchWithMeta(
-      keyword,
-      page: page,
-      limit: limit,
-    );
+    final result = await searchWithMeta(keyword, page: page, limit: limit);
     return result.tracks;
   }
 
@@ -56,8 +52,7 @@ class WySearch {
       form: true,
       body: {'params': params},
       headers: {
-        'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
         'origin': 'https://music.163.com',
       },
       isInvalid: invalid,
@@ -129,10 +124,10 @@ class WySearch {
       albumName: albumName,
       albumId: albumId,
       img: cover,
-      intervalText:
-          durationSeconds > 0 ? formatPlayTime(durationSeconds) : null,
-      duration:
-          durationSeconds > 0 ? Duration(seconds: durationSeconds) : null,
+      intervalText: durationSeconds > 0
+          ? formatPlayTime(durationSeconds)
+          : null,
+      duration: durationSeconds > 0 ? Duration(seconds: durationSeconds) : null,
       types: reversedTypes,
       typeMap: typeMap,
     );

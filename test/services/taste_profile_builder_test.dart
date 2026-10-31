@@ -39,15 +39,15 @@ class _RecordingLibraryStore implements LibraryStore {
 
   @override
   Future<List<PlaylistInfo>> listPlaylists() async => [
-        PlaylistInfo(
-          id: favoritesId,
-          name: '__favorites__',
-          createdAt: 0,
-          trackCount: tracks[favoritesId]?.length ?? 0,
-          isFavorites: true,
-        ),
-        ...customPlaylists,
-      ];
+    PlaylistInfo(
+      id: favoritesId,
+      name: '__favorites__',
+      createdAt: 0,
+      trackCount: tracks[favoritesId]?.length ?? 0,
+      isFavorites: true,
+    ),
+    ...customPlaylists,
+  ];
 
   @override
   Future<List<PlaylistTrack>> listPlaylistTracks(
@@ -82,17 +82,17 @@ class _RecordingLibraryStore implements LibraryStore {
 }
 
 List<PlaylistTrack> _tracksFor(int playlistId, int count) => [
-      for (var i = 0; i < count; i++)
-        PlaylistTrack(
-          playlistId: playlistId,
-          sourceKey: 'wy',
-          songId: '$playlistId-$i',
-          title: '歌$playlistId-$i',
-          artist: '歌手$playlistId',
-          addedAt: i,
-          sortOrder: i,
-        ),
-    ];
+  for (var i = 0; i < count; i++)
+    PlaylistTrack(
+      playlistId: playlistId,
+      sourceKey: 'wy',
+      songId: '$playlistId-$i',
+      title: '歌$playlistId-$i',
+      artist: '歌手$playlistId',
+      addedAt: i,
+      sortOrder: i,
+    ),
+];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -102,10 +102,7 @@ void main() {
 
   /// 只勾选收藏与自建歌单：不触碰统计查询，专心验证资料库读取路径。
   const preferences = AiPreferences(
-    sections: {
-      AiUpstreamSection.favorites,
-      AiUpstreamSection.playlists,
-    },
+    sections: {AiUpstreamSection.favorites, AiUpstreamSection.playlists},
   );
 
   setUp(() {
@@ -125,12 +122,7 @@ void main() {
     const favoritesId = 1;
     final custom = [
       for (var i = 0; i < 10; i++)
-        PlaylistInfo(
-          id: 100 + i,
-          name: '歌单$i',
-          createdAt: i,
-          trackCount: 25,
-        ),
+        PlaylistInfo(id: 100 + i, name: '歌单$i', createdAt: i, trackCount: 25),
     ];
     final store = _RecordingLibraryStore(
       favoritesId: favoritesId,
@@ -153,10 +145,12 @@ void main() {
     store.release();
     final profile = await future;
 
-    final favoritesReads =
-        reads.where((read) => read.playlistId == favoritesId).toList();
-    final customReads =
-        reads.where((read) => read.playlistId != favoritesId).toList();
+    final favoritesReads = reads
+        .where((read) => read.playlistId == favoritesId)
+        .toList();
+    final customReads = reads
+        .where((read) => read.playlistId != favoritesId)
+        .toList();
     expect(favoritesReads, hasLength(1));
     expect(favoritesReads.single.limit, TasteProfileBuilder.favoritesLimit);
     expect(customReads, hasLength(10), reason: '最多读 10 个自建歌单');
@@ -171,10 +165,13 @@ void main() {
     expect(profile.favorites.last.title, '歌$favoritesId-99');
 
     // 每单读 20 首，总预算 100 → 顺序保留前 5 个歌单。
-    expect(
-      profile.playlists.map((playlist) => playlist.name),
-      ['歌单0', '歌单1', '歌单2', '歌单3', '歌单4'],
-    );
+    expect(profile.playlists.map((playlist) => playlist.name), [
+      '歌单0',
+      '歌单1',
+      '歌单2',
+      '歌单3',
+      '歌单4',
+    ]);
     expect(
       profile.playlists.expand((playlist) => playlist.tracks),
       hasLength(TasteProfileBuilder.playlistTotalTrackLimit),
@@ -210,10 +207,7 @@ void main() {
 
     final profile = await builder.build(preferences: preferences);
 
-    expect(
-      profile.playlists.map((playlist) => playlist.name),
-      ['歌单A', '歌单C'],
-    );
+    expect(profile.playlists.map((playlist) => playlist.name), ['歌单A', '歌单C']);
     expect(profile.favorites, hasLength(1));
   });
 }

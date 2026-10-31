@@ -9,7 +9,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/services/cache_service.dart';
+
 import '../support/memory_cache_storage.dart';
+
 import 'package:molia/widgets/app_network_image.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
@@ -18,12 +20,14 @@ import 'package:material_ui/material_ui.dart';
 /// 永远失败的 CacheManager：离线验证 error 回退。
 class _FailingCacheManager extends CacheManager {
   _FailingCacheManager()
-      : super(Config(
+    : super(
+        Config(
           'app_network_image_test_fail',
           repo: NonStoringObjectProvider(),
           fileSystem: MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   @override
   Stream<FileResponse> getFileStream(
@@ -39,12 +43,14 @@ class _FailingCacheManager extends CacheManager {
 /// 永不结束的 CacheManager：离线验证加载中占位。
 class _PendingCacheManager extends CacheManager {
   _PendingCacheManager()
-      : super(Config(
+    : super(
+        Config(
           'app_network_image_test_pending',
           repo: NonStoringObjectProvider(),
           fileSystem: MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   final StreamController<FileResponse> _controller =
       StreamController<FileResponse>();
@@ -55,27 +61,25 @@ class _PendingCacheManager extends CacheManager {
     String? key,
     Map<String, String>? headers,
     bool withProgress = false,
-  }) =>
-      _controller.stream;
+  }) => _controller.stream;
 
   Future<void> close() => _controller.close();
 }
 
 ArtworkCache _cacheWith(CacheManager manager) => ArtworkCache(
-      cacheService: CacheService(storage: MemoryCacheStorage()),
-      managerOverride: manager,
-    );
+  cacheService: CacheService(storage: MemoryCacheStorage()),
+  managerOverride: manager,
+);
 
 Widget _host(Widget child, {bool disableAnimations = false}) => MaterialApp(
-      home: Builder(
-        builder: (context) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            disableAnimations: disableAnimations,
-          ),
-          child: Scaffold(body: Center(child: child)),
-        ),
-      ),
-    );
+  home: Builder(
+    builder: (context) => MediaQuery(
+      data: MediaQuery.of(context)
+          .copyWith(disableAnimations: disableAnimations),
+      child: Scaffold(body: Center(child: child)),
+    ),
+  ),
+);
 
 File _localPng() {
   final dir = Directory.systemTemp.createTempSync('molia_network_image_');
@@ -90,12 +94,16 @@ File _localPng() {
 
 void main() {
   testWidgets('url 为空：直接显示 Molia 标志回退，不创建网络加载', (tester) async {
-    await tester.pumpWidget(_host(const AppNetworkImage(
-      url: null,
-      width: 40,
-      height: 40,
-      fallbackIconSize: 20,
-    )));
+    await tester.pumpWidget(
+      _host(
+        const AppNetworkImage(
+          url: null,
+          width: 40,
+          height: 40,
+          fallbackIconSize: 20,
+        ),
+      ),
+    );
 
     expect(find.byType(MoliaMark), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -166,13 +174,17 @@ void main() {
     final manager = _PendingCacheManager();
     addTearDown(manager.close);
 
-    await tester.pumpWidget(_host(AppNetworkImage(
-      url: 'https://p1.music.126.net/pending.jpg',
-      width: 40,
-      height: 40,
-      placeholder: const SizedBox(key: ValueKey('placeholder')),
-      artworkCache: _cacheWith(manager),
-    )));
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/pending.jpg',
+          width: 40,
+          height: 40,
+          placeholder: const SizedBox(key: ValueKey('placeholder')),
+          artworkCache: _cacheWith(manager),
+        ),
+      ),
+    );
     // 等待 manager Future 完成并挂载 CachedNetworkImage。
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
@@ -182,13 +194,17 @@ void main() {
   });
 
   testWidgets('加载失败：回退 Molia 标志（不触网）', (tester) async {
-    await tester.pumpWidget(_host(AppNetworkImage(
-      url: 'https://p1.music.126.net/failing.jpg',
-      width: 40,
-      height: 40,
-      fallbackIconSize: 20,
-      artworkCache: _cacheWith(_FailingCacheManager()),
-    )));
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/failing.jpg',
+          width: 40,
+          height: 40,
+          fallbackIconSize: 20,
+          artworkCache: _cacheWith(_FailingCacheManager()),
+        ),
+      ),
+    );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
@@ -202,13 +218,15 @@ void main() {
     addTearDown(manager.close);
     final cache = _cacheWith(manager);
 
-    Widget build() => _host(AppNetworkImage(
-          url: 'https://p1.music.126.net/frame-rebuild.jpg',
-          width: 40,
-          height: 40,
-          placeholder: const SizedBox(key: ValueKey('placeholder')),
-          artworkCache: cache,
-        ));
+    Widget build() => _host(
+      AppNetworkImage(
+        url: 'https://p1.music.126.net/frame-rebuild.jpg',
+        width: 40,
+        height: 40,
+        placeholder: const SizedBox(key: ValueKey('placeholder')),
+        artworkCache: cache,
+      ),
+    );
 
     await tester.pumpWidget(build());
     // manager Future 必须身份稳定：每次 build 新建会让 FutureBuilder 重置为
@@ -223,25 +241,33 @@ void main() {
   });
 
   testWidgets('file:// 封面也按 memCacheWidth 缩略解码', (tester) async {
-    await tester.pumpWidget(_host(const AppNetworkImage(
-      url: 'file:///tmp/molia-perf-cover.png',
-      width: 44,
-      height: 44,
-      memCacheWidth: 44,
-    )));
+    await tester.pumpWidget(
+      _host(
+        const AppNetworkImage(
+          url: 'file:///tmp/molia-perf-cover.png',
+          width: 44,
+          height: 44,
+          memCacheWidth: 44,
+        ),
+      ),
+    );
 
     final image = tester.widget<Image>(find.byType(Image));
     expect(image.image, isA<ResizeImage>());
   });
 
   testWidgets('file:// 封面双轴只保留一轴（双轴会按精确尺寸拉伸）', (tester) async {
-    await tester.pumpWidget(_host(const AppNetworkImage(
-      url: 'file:///tmp/molia-perf-cover.png',
-      width: 44,
-      height: 44,
-      memCacheWidth: 120,
-      memCacheHeight: 80,
-    )));
+    await tester.pumpWidget(
+      _host(
+        const AppNetworkImage(
+          url: 'file:///tmp/molia-perf-cover.png',
+          width: 44,
+          height: 44,
+          memCacheWidth: 120,
+          memCacheHeight: 80,
+        ),
+      ),
+    );
 
     final image = tester.widget<Image>(find.byType(Image));
     final resize = image.image as ResizeImage;
@@ -249,18 +275,21 @@ void main() {
     expect(resize.height, isNull, reason: '双轴会拉伸封面，只保留较大的一轴');
   });
 
-  testWidgets('远端封面未显式给尺寸时按布局宽度 × DPR 兜底，且只给一轴',
-      (tester) async {
+  testWidgets('远端封面未显式给尺寸时按布局宽度 × DPR 兜底，且只给一轴', (tester) async {
     final manager = _PendingCacheManager();
     addTearDown(manager.close);
     final cache = _cacheWith(manager);
 
-    await tester.pumpWidget(_host(AppNetworkImage(
-      url: 'https://p1.music.126.net/header.jpg',
-      width: 96,
-      height: 96,
-      artworkCache: cache,
-    )));
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/header.jpg',
+          width: 96,
+          height: 96,
+          artworkCache: cache,
+        ),
+      ),
+    );
 
     final image = tester.widget<CachedNetworkImage>(
       find.byType(CachedNetworkImage),
@@ -277,14 +306,18 @@ void main() {
     addTearDown(manager.close);
     final cache = _cacheWith(manager);
 
-    await tester.pumpWidget(_host(AppNetworkImage(
-      url: 'https://p1.music.126.net/explicit.jpg',
-      width: 100,
-      height: 100,
-      memCacheWidth: 120,
-      memCacheHeight: 80,
-      artworkCache: cache,
-    )));
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/explicit.jpg',
+          width: 100,
+          height: 100,
+          memCacheWidth: 120,
+          memCacheHeight: 80,
+          artworkCache: cache,
+        ),
+      ),
+    );
 
     final image = tester.widget<CachedNetworkImage>(
       find.byType(CachedNetworkImage),
@@ -297,12 +330,16 @@ void main() {
     final manager = _PendingCacheManager();
     addTearDown(manager.close);
 
-    await tester.pumpWidget(_host(AppNetworkImage(
-      url: 'https://p1.music.126.net/fade.jpg',
-      width: 40,
-      height: 40,
-      artworkCache: _cacheWith(manager),
-    )));
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/fade.jpg',
+          width: 40,
+          height: 40,
+          artworkCache: _cacheWith(manager),
+        ),
+      ),
+    );
 
     final image = tester.widget<CachedNetworkImage>(
       find.byType(CachedNetworkImage),
@@ -322,15 +359,17 @@ void main() {
     final manager = _PendingCacheManager();
     addTearDown(manager.close);
 
-    await tester.pumpWidget(_host(
-      AppNetworkImage(
-        url: 'https://p1.music.126.net/reduced-motion.jpg',
-        width: 40,
-        height: 40,
-        artworkCache: _cacheWith(manager),
+    await tester.pumpWidget(
+      _host(
+        AppNetworkImage(
+          url: 'https://p1.music.126.net/reduced-motion.jpg',
+          width: 40,
+          height: 40,
+          artworkCache: _cacheWith(manager),
+        ),
+        disableAnimations: true,
       ),
-      disableAnimations: true,
-    ));
+    );
 
     final image = tester.widget<CachedNetworkImage>(
       find.byType(CachedNetworkImage),

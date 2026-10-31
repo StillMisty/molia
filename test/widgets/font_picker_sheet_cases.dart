@@ -144,11 +144,7 @@ void main() {
     expect(surfaces, hasLength(3));
     expect(
       [for (final surface in surfaces) surface.position],
-      [
-        M3ECardPosition.first,
-        M3ECardPosition.middle,
-        M3ECardPosition.last,
-      ],
+      [M3ECardPosition.first, M3ECardPosition.middle, M3ECardPosition.last],
     );
 
     // 字体名用自身字体预览；字阶来自 M3E typeScale，选中态 primary + w500。
@@ -162,10 +158,7 @@ void main() {
     // CardListSurface / M3ECard 自带键盘语义：聚焦后 Enter 直接选中
     // （裸 InkWell 没有这条路径）。
     final cardFinder = find
-        .ancestor(
-          of: find.text('Alpha Sans'),
-          matching: find.byType(M3ECard),
-        )
+        .ancestor(of: find.text('Alpha Sans'), matching: find.byType(M3ECard))
         .first;
     final detector = tester.widget<FocusableActionDetector>(
       find

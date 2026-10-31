@@ -30,10 +30,9 @@ class IoDownloadStorage implements DownloadStorage {
     Future<Directory?> Function()? legacyDirectory,
     this._downloadsDirectory,
     this._customRoot,
-  })  : _supportDirectory = supportDirectory ?? appDataDirectory,
-        _legacyDirectory = legacyDirectory ?? legacyAppDataDirectory,
-        _migrateLegacy =
-            supportDirectory == null || legacyDirectory != null;
+  }) : _supportDirectory = supportDirectory ?? appDataDirectory,
+       _legacyDirectory = legacyDirectory ?? legacyAppDataDirectory,
+       _migrateLegacy = supportDirectory == null || legacyDirectory != null;
 
   final String? _rootOverride;
   final Future<Directory> Function() _supportDirectory;
@@ -97,9 +96,7 @@ class IoDownloadStorage implements DownloadStorage {
         if (!migrated) {
           // 迁移失败不能把旧 journal 变成不可达：回退旧目录继续恢复。
           if (legacy != null) {
-            _logger.warning(
-              '下载 journal 迁移失败，回退旧目录：${legacy.path}',
-            );
+            _logger.warning('下载 journal 迁移失败，回退旧目录：${legacy.path}');
             root = legacy;
           } else {
             _logger.warning('下载 journal 迁移失败且旧目录不可用');

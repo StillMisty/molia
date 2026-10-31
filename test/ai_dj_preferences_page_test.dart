@@ -33,19 +33,21 @@ void main() {
   Future<void> pumpProvider() async {
     final prefs = await SharedPreferences.getInstance();
     await AiSettingsStore(
-            settings:
-                testSettingsRegistry(preferences: prefs, secrets: secrets))
-        .saveConfig(const LlmConfig(
-      baseUrl: 'https://api.example.com/v1',
-      apiKey: 'sk-test',
-      model: 'm',
-    ));
+      settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+    ).saveConfig(
+      const LlmConfig(
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'm',
+      ),
+    );
     provider = AiDjProvider(
       playbackProvider: playbackProvider,
       libraryProvider: libraryProvider,
       recommendationService: generator,
       settingsStore: AiSettingsStore(
-          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ),
     );
     await provider.init();
   }
@@ -62,7 +64,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<AiDjProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(
-              value: playbackProvider),
+            value: playbackProvider,
+          ),
           ChangeNotifierProvider<LibraryProvider>.value(value: libraryProvider),
         ],
         child: M3EMaterialApp(
@@ -80,10 +83,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder switchIn(Key row) => find.descendant(
-        of: find.byKey(row),
-        matching: find.byType(M3ESwitch),
-      );
+  Finder switchIn(Key row) =>
+      find.descendant(of: find.byKey(row), matching: find.byType(M3ESwitch));
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -148,10 +149,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(provider.preferences.styles, ['pop']);
 
-    await tester.enterText(
-      find.byKey(const Key('aiDjPrefExtraField')),
-      '想听女声',
-    );
+    await tester.enterText(find.byKey(const Key('aiDjPrefExtraField')), '想听女声');
     await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
@@ -184,18 +182,19 @@ void main() {
     await tester.tap(switchIn(const Key('aiDjPrefScope_favorites')));
     await tester.pumpAndSettle();
 
+    expect(find.textContaining('reads the titles and artists'), findsOneWidget);
     expect(
-      find.textContaining('reads the titles and artists'),
-      findsOneWidget,
+      provider.preferences.sections.contains(AiUpstreamSection.favorites),
+      isFalse,
     );
-    expect(provider.preferences.sections.contains(AiUpstreamSection.favorites),
-        isFalse);
 
     await tester.tap(find.byKey(const Key('aiDjScopeConfirm_favorites')));
     await tester.pumpAndSettle();
 
-    expect(provider.preferences.sections.contains(AiUpstreamSection.favorites),
-        isTrue);
+    expect(
+      provider.preferences.sections.contains(AiUpstreamSection.favorites),
+      isTrue,
+    );
     expect(
       provider.preferences.acknowledgedScopes,
       contains(AiUpstreamSection.favorites),
@@ -206,12 +205,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(switchIn(const Key('aiDjPrefScope_favorites')));
     await tester.pumpAndSettle();
+    expect(find.textContaining('reads the titles and artists'), findsNothing);
     expect(
-      find.textContaining('reads the titles and artists'),
-      findsNothing,
+      provider.preferences.sections.contains(AiUpstreamSection.favorites),
+      isTrue,
     );
-    expect(provider.preferences.sections.contains(AiUpstreamSection.favorites),
-        isTrue);
   });
 
   testWidgets('种子可删除；渠道选择已从页面移除', (tester) async {
@@ -231,10 +229,7 @@ void main() {
         batchSize: 50,
         autoFeed: false,
         styles: ['rock'],
-        sections: {
-          ...kAiDefaultUpstreamSections,
-          AiUpstreamSection.favorites,
-        },
+        sections: {...kAiDefaultUpstreamSections, AiUpstreamSection.favorites},
       ),
     );
     await pumpPage(tester);

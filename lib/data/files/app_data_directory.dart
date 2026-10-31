@@ -169,8 +169,8 @@ Future<bool> migrateLegacyCacheDirectories({
       legacyDirectory ?? await legacyAppDataDirectory(platform: platform);
   if (legacy == null || _sameDirectory(target, legacy)) return true;
 
-  final moveDir = moveDirectory ??
-      (source, targetPath) => source.rename(targetPath);
+  final moveDir =
+      moveDirectory ?? (source, targetPath) => source.rename(targetPath);
   final move = moveFile ?? (source, targetPath) => source.rename(targetPath);
   var ok = true;
   for (final name in legacyCacheDirectoryNames) {
@@ -190,7 +190,7 @@ Future<bool> _migrateLegacyCacheDirectory({
   required Directory source,
   required Directory target,
   required Future<void> Function(Directory source, String targetPath)
-      moveDirectory,
+  moveDirectory,
   required Future<void> Function(File source, String targetPath) moveFile,
 }) async {
   try {

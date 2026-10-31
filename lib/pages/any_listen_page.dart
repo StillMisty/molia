@@ -77,11 +77,10 @@ class _AnyListenPageState extends State<AnyListenPage> {
   }
 
   AnyListenConfig _formConfig() => AnyListenConfig(
-        serverUrl:
-            AnyListenConfig.normalizeServerUrl(_serverUrlController.text),
-        token: _tokenController.text.trim(),
-        enabled: _enabled,
-      );
+    serverUrl: AnyListenConfig.normalizeServerUrl(_serverUrlController.text),
+    token: _tokenController.text.trim(),
+    enabled: _enabled,
+  );
 
   /// 地址校验：未启用时允许留空（用于清除配置）。
   String? _validateAddress(AppLocalizations l10n) {
@@ -156,9 +155,7 @@ class _AnyListenPageState extends State<AnyListenPage> {
           ? const Center(child: M3ELoadingIndicator())
           : SettingsSubPageList(
               children: [
-                SettingsSectionCard(
-                  children: [_introRow(context, l10n)],
-                ),
+                SettingsSectionCard(children: [_introRow(context, l10n)]),
                 const SizedBox(height: kSettingsSectionSpacing),
                 SettingsSectionCard(
                   title: l10n.anyListenServerSection,
@@ -218,7 +215,9 @@ class _AnyListenPageState extends State<AnyListenPage> {
                       onChanged: (value) => setState(() => _enabled = value),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(top: kSettingsSmallSpacing),
+                      padding: const EdgeInsets.only(
+                        top: kSettingsSmallSpacing,
+                      ),
                       child: M3EButtonGroup(
                         type: M3EButtonGroupType.standard,
                         style: M3EButtonStyle.tonal,
@@ -249,7 +248,9 @@ class _AnyListenPageState extends State<AnyListenPage> {
                     ),
                     if (_testMessage != null)
                       Padding(
-                        padding: const EdgeInsets.only(top: kSettingsSmallSpacing),
+                        padding: const EdgeInsets.only(
+                          top: kSettingsSmallSpacing,
+                        ),
                         child: _testResultRow(context, _testMessage!),
                       ),
                   ],
@@ -279,14 +280,16 @@ class _AnyListenPageState extends State<AnyListenPage> {
               children: [
                 Text(
                   l10n.anyListenIntroBody,
-                  style:
-                      m3e.typeScale.bodyMedium.copyWith(color: scheme.onSurface),
+                  style: m3e.typeScale.bodyMedium.copyWith(
+                    color: scheme.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   l10n.anyListenIntroHint,
-                  style: m3e.typeScale.bodySmall
-                      .copyWith(color: scheme.onSurfaceVariant),
+                  style: m3e.typeScale.bodySmall.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -334,7 +337,10 @@ class _AnyListenPageState extends State<AnyListenPage> {
         ),
         const SizedBox(width: kSettingsSmallSpacing),
         Expanded(
-          child: Text(message, style: m3e.typeScale.bodySmall.copyWith(color: color)),
+          child: Text(
+            message,
+            style: m3e.typeScale.bodySmall.copyWith(color: color),
+          ),
         ),
       ],
     );

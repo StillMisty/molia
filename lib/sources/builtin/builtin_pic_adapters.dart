@@ -67,6 +67,5 @@ Future<String?> mgBuiltinPic(Map<String, dynamic> raw) {
 }
 
 /// B 站：搜索 / 收藏夹自带封面，只做 `//` 补协议，不再发请求。
-Future<String?> biliBuiltinPic(Map<String, dynamic> raw) => Future.value(
-      biliCoverUrl(raw['pic'] ?? raw['cover'] ?? raw['img']),
-    );
+Future<String?> biliBuiltinPic(Map<String, dynamic> raw) =>
+    Future.value(biliCoverUrl(raw['pic'] ?? raw['cover'] ?? raw['img']));

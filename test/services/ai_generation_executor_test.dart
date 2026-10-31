@@ -5,16 +5,10 @@ import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/services/ai/ai_generation_executor.dart';
 
-AiDjBatch _batch(String id) => AiDjBatch(
-      id: id,
-      items: const [],
-      generatedAt: DateTime(2026, 10, 22),
-    );
+AiDjBatch _batch(String id) =>
+    AiDjBatch(id: id, items: const [], generatedAt: DateTime(2026, 10, 22));
 
-AiGenerationIntent _intent(
-  AiGenerationLane lane, {
-  String? replacingUri,
-}) =>
+AiGenerationIntent _intent(AiGenerationLane lane, {String? replacingUri}) =>
     AiGenerationIntent(
       origin: lane == AiGenerationLane.silent
           ? AiDjOrigin.autoFeed
@@ -36,10 +30,12 @@ void main() {
     final first = executor.run<AiDjBatch>(
       intent: _intent(AiGenerationLane.explicit),
       invoke: (token, onProgress) async {
-        onProgress?.call(AiDjProgress(
-          phase: AiDjPhase.profile,
-          startedAt: DateTime(2026, 10, 22),
-        ));
+        onProgress?.call(
+          AiDjProgress(
+            phase: AiDjPhase.profile,
+            startedAt: DateTime(2026, 10, 22),
+          ),
+        );
         progressCalls++;
         return gate.future;
       },

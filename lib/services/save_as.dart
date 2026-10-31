@@ -16,12 +16,11 @@ SaveAs createSaveAs({
   Future<Directory?> Function()? downloadsDirectory,
   Future<Directory> Function()? documentsDirectory,
   Future<Directory> Function()? temporaryDirectory,
-}) =>
-    createIoSaveAs(
-      publisher: createDownloadsPublisher(),
-      customRoot: customRoot,
-      dialog: dialog,
-      downloadsDirectory: downloadsDirectory,
-      documentsDirectory: documentsDirectory,
-      temporaryDirectory: temporaryDirectory,
-    );
+}) => createIoSaveAs(
+  publisher: createDownloadsPublisher(),
+  customRoot: customRoot,
+  dialog: dialog,
+  downloadsDirectory: downloadsDirectory,
+  documentsDirectory: documentsDirectory,
+  temporaryDirectory: temporaryDirectory,
+);

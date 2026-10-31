@@ -19,7 +19,10 @@ class LyricMetadataOverride {
   });
 
   bool get isEmpty =>
-      title == null && artist == null && album == null && displaySubtitle == null;
+      title == null &&
+      artist == null &&
+      album == null &&
+      displaySubtitle == null;
 
   @override
   bool operator ==(Object other) =>
@@ -122,9 +125,13 @@ class MediaLyricComposer {
       case LyricsMetadataFormat.lyric:
         return text;
       case LyricsMetadataFormat.lyricTitle:
-        return presentation.title.isEmpty ? text : '$text · ${presentation.title}';
+        return presentation.title.isEmpty
+            ? text
+            : '$text · ${presentation.title}';
       case LyricsMetadataFormat.titleLyric:
-        return presentation.title.isEmpty ? text : '${presentation.title} · $text';
+        return presentation.title.isEmpty
+            ? text
+            : '${presentation.title} · $text';
     }
   }
 }

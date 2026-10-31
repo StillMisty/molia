@@ -204,7 +204,8 @@ class PlaybackSessionCoordinator
       _onRestoredTrack?.call(session.current!);
       _publishRestoredSnapshot();
       _logger.fine(
-          '已恢复上次播放会话: ${session.current!.title} @${session.position.inSeconds}s');
+        '已恢复上次播放会话: ${session.current!.title} @${session.position.inSeconds}s',
+      );
       return true;
     } catch (e) {
       _logger.severe('恢复上次播放会话失败', e);
@@ -356,6 +357,18 @@ class PlaybackSessionCoordinator
     return PlaybackCommandOutcome.trackOnly;
   }
 
+  /// 恢复态追加队列：真实播放尚未接管时，「加入队列」只能改保存的会话。
+  ///
+  /// live 的追加仍走 facade（不换当前曲目，由快照监听落盘）；这里只服务
+  /// 冷启动恢复态，避免把曲目追加到 facade 的空队列后 UI 看不到。
+  Future<void> enqueueRestoredTracks(List<Track> tracks) async {
+    final session = _restoredSession;
+    if (session == null || tracks.isEmpty) return;
+    _restoredSession = session.copyWith(tracks: [...session.tracks, ...tracks]);
+    _publishRestoredSnapshot();
+    await _store.save(_restoredSession!);
+  }
+
   /// 播放队列中指定下标的曲目（系统媒体队列跳转）；越界返回
   /// [PlaybackCommandOutcome.none]。
   ///
@@ -376,6 +389,65 @@ class PlaybackSessionCoordinator
     await _facade.playQueueIndex(index);
     await _commitLiveSession();
     return PlaybackCommandOutcome.trackOnly;
+  }
+
+  /// 移动队列中的一项：恢复态改会话并落盘，live 转发 facade 后提交。
+  ///
+  /// 两个阶段共用同一套 no-op 判定（越界 / 移动当前曲目 / 随机模式），
+  /// 保证 UI 在恢复态与真实播放里看到同样的可编辑边界。
+  @override
+  Future<PlaybackCommandOutcome> moveQueueIndex(int from, int to) async {
+    if (phase == PlaybackSessionPhase.restored) {
+      final session = _restoredSession!;
+      if (!_canMoveQueueIndex(
+        length: session.tracks.length,
+        currentIndex: session.index,
+        mode: session.mode,
+        from: from,
+        to: to,
+      )) {
+        return PlaybackCommandOutcome.none;
+      }
+      final tracks = List<Track>.of(session.tracks);
+      final track = tracks.removeAt(from);
+      tracks.insert(to, track);
+      _restoredSession = session.copyWith(
+        tracks: tracks,
+        index: _movedIndex(session.index, from, to),
+      );
+      _publishRestoredSnapshot();
+      await _store.save(_restoredSession!);
+      return const PlaybackCommandOutcome(changed: {PlaybackDomain.queue});
+    }
+    final changed = await _facade.moveQueueIndex(from, to);
+    if (!changed) return PlaybackCommandOutcome.none;
+    await _commitLiveSession();
+    return const PlaybackCommandOutcome(changed: {PlaybackDomain.queue});
+  }
+
+  /// 移除队列中的一项：恢复态改会话并落盘，live 转发 facade 后提交。
+  @override
+  Future<PlaybackCommandOutcome> removeQueueIndex(int index) async {
+    if (phase == PlaybackSessionPhase.restored) {
+      final session = _restoredSession!;
+      if (index < 0 ||
+          index >= session.tracks.length ||
+          index == session.index) {
+        return PlaybackCommandOutcome.none;
+      }
+      final tracks = List<Track>.of(session.tracks)..removeAt(index);
+      _restoredSession = session.copyWith(
+        tracks: tracks,
+        index: index < session.index ? session.index - 1 : session.index,
+      );
+      _publishRestoredSnapshot();
+      await _store.save(_restoredSession!);
+      return const PlaybackCommandOutcome(changed: {PlaybackDomain.queue});
+    }
+    final changed = await _facade.removeQueueIndex(index);
+    if (!changed) return PlaybackCommandOutcome.none;
+    await _commitLiveSession();
+    return const PlaybackCommandOutcome(changed: {PlaybackDomain.queue});
   }
 
   /// 切换当前曲目音质：以指定音质重新取链，保持进度与播放态。
@@ -405,12 +477,7 @@ class PlaybackSessionCoordinator
   Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,
-  ) =>
-      _replaceTrack(
-        trackUri,
-        newTrack,
-        scope: PlaybackReplaceScope.liveOnly,
-      );
+  ) => _replaceTrack(trackUri, newTrack, scope: PlaybackReplaceScope.liveOnly);
 
   /// 播放队列中指定 id 的曲目（队列面板点击）；未命中返回
   /// [PlaybackCommandOutcome.none]。
@@ -422,8 +489,9 @@ class PlaybackSessionCoordinator
     // 保存会话，live 阶段解析 facade 队列。否则交接窗口里两份队列顺序不同
     // 时会播到另一首。
     final restored = phase == PlaybackSessionPhase.restored;
-    final tracks =
-        restored ? _restoredSession!.tracks : _facade.snapshot.value.queue;
+    final tracks = restored
+        ? _restoredSession!.tracks
+        : _facade.snapshot.value.queue;
     final index = tracks.indexWhere((track) => track.id.uri == trackId);
     if (index < 0) return PlaybackCommandOutcome.none;
     return playQueueIndex(index);
@@ -462,10 +530,7 @@ class PlaybackSessionCoordinator
   /// 取链）；恢复态（facade 队列为空）替换保存的会话队列并落盘。未命中不算
   /// 失败：库内换源与队列跟随解耦。返回 [PlaybackCommandOutcome.trackAndQueue]
   /// 表示至少命中一处；返回前等写队列排空（命中才可能产生写入）。
-  Future<PlaybackCommandOutcome> replaceTrack(
-    Track oldTrack,
-    Track newTrack,
-  ) =>
+  Future<PlaybackCommandOutcome> replaceTrack(Track oldTrack, Track newTrack) =>
       _replaceTrack(
         oldTrack.id.uri,
         newTrack,
@@ -503,7 +568,8 @@ class PlaybackSessionCoordinator
     final session = scope == PlaybackReplaceScope.liveAndRestored
         ? _restoredSession
         : null;
-    final restoredHit = session != null &&
+    final restoredHit =
+        session != null &&
         session.tracks.any((track) => track.id.uri == trackUri);
     if (!liveHit && !restoredHit) return PlaybackCommandOutcome.none;
     if (restoredHit) {
@@ -603,8 +669,10 @@ class PlaybackSessionCoordinator
     if (session == null || session.current == null || _resumeRestoring) {
       return PlaybackCommandOutcome.none;
     }
-    final index =
-        (startIndex ?? session.index).clamp(0, session.tracks.length - 1);
+    final index = (startIndex ?? session.index).clamp(
+      0,
+      session.tracks.length - 1,
+    );
     final seekBack = index == session.index ? _restoredPosition : Duration.zero;
     // 装载期间保持显示恢复进度：后端装载会把进度通道对齐到 0，
     // 若立刻交还底层，进度条会先闪回首部再跳到恢复进度。
@@ -613,11 +681,13 @@ class PlaybackSessionCoordinator
       // 会话模式先落地：shuffle 需要在装载队列前生效（决定洗牌顺序）；
       // 也保证实际播放模式与恢复态 UI 显示的一致。
       await _facade.setMode(session.mode);
-      await _facade.playTracks(PlaybackRequest(
-        tracks: session.tracks,
-        startIndex: index,
-        context: session.context,
-      ));
+      await _facade.playTracks(
+        PlaybackRequest(
+          tracks: session.tracks,
+          startIndex: index,
+          context: session.context,
+        ),
+      );
       // 装载期间用户主动 seek（拖进度条/点歌词行）优先于保存进度。
       final targetSeek = _resumeSeekTarget ?? seekBack;
       if (targetSeek > Duration.zero) {
@@ -766,12 +836,12 @@ class PlaybackSessionCoordinator
 
   /// 当前 live 快照对应的持久化会话形状（与 [_writeSession] 同源）。
   PlaybackSession _sessionOf(PlaybackSnapshot live) => PlaybackSession(
-        tracks: live.queue,
-        index: live.currentIndex,
-        position: _facade.position.value,
-        mode: live.mode,
-        context: live.context,
-      );
+    tracks: live.queue,
+    index: live.currentIndex,
+    position: _facade.position.value,
+    mode: live.mode,
+    context: live.context,
+  );
 
   // ── 恢复态内部 ─────────────────────────────────────────
 
@@ -802,6 +872,7 @@ class PlaybackSessionCoordinator
       previous: projection.previous,
       previousOfPrevious: projection.previousOfPrevious,
       upNext: projection.upNext,
+      upNextIndices: projection.upNextIndices,
       isPlaying: false,
       isLoading: false,
       duration: current.duration ?? Duration.zero,
@@ -830,6 +901,31 @@ class PlaybackSessionCoordinator
     _trackCompletions = null;
     _position.dispose();
   }
+}
+
+/// 队列移动的合法边界（恢复态与真实播放共用，避免两套 no-op 口径）。
+bool _canMoveQueueIndex({
+  required int length,
+  required int currentIndex,
+  required PlayMode mode,
+  required int from,
+  required int to,
+}) {
+  if (mode == PlayMode.shuffle) return false;
+  if (from < 0 || from >= length || to < 0 || to >= length) return false;
+  if (from == to || from == currentIndex || to == currentIndex) return false;
+  return true;
+}
+
+/// 队列移动后的当前下标：只随「跨过当前曲目」的移动平移。
+int _movedIndex(int currentIndex, int from, int to) {
+  if (from < to && currentIndex > from && currentIndex <= to) {
+    return currentIndex - 1;
+  }
+  if (to < from && currentIndex >= to && currentIndex < from) {
+    return currentIndex + 1;
+  }
+  return currentIndex;
 }
 
 /// 两份会话内容是否相同（命令提交点的去重依据）。

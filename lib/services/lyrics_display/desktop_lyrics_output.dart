@@ -23,8 +23,8 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
     this._colorScheme,
     this._artworkColorScheme,
     this._appFontFamily,
-  })  : _channel = channel ?? LyricsChannel.instance,
-        _supported = supported ?? LyricsChannel.isSupportedPlatform {
+  }) : _channel = channel ?? LyricsChannel.instance,
+       _supported = supported ?? LyricsChannel.isSupportedPlatform {
     if (_supported) {
       _eventSub = _channel.events.listen(_onChannelEvent);
     }
@@ -186,12 +186,21 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       // （与 Flutter 侧未自定义字体时的平台默认排版一致）。
       'fontFamily': _appFontFamily?.call(),
       'opacity': s.desktopOpacity,
-      'playedColor':
-          _resolveColor(s.desktopPlayedColorSource, s.desktopPlayedColor, scheme),
+      'playedColor': _resolveColor(
+        s.desktopPlayedColorSource,
+        s.desktopPlayedColor,
+        scheme,
+      ),
       'unplayedColor': _resolveColor(
-          s.desktopUnplayedColorSource, s.desktopUnplayedColor, scheme),
-      'shadowColor':
-          _resolveColor(s.desktopShadowColorSource, s.desktopShadowColor, scheme),
+        s.desktopUnplayedColorSource,
+        s.desktopUnplayedColor,
+        scheme,
+      ),
+      'shadowColor': _resolveColor(
+        s.desktopShadowColorSource,
+        s.desktopShadowColor,
+        scheme,
+      ),
       'widthPercent': s.desktopWidthPercent,
       'maxLines': s.desktopMaxLines,
       'textAlignX': s.desktopTextAlignX.name,
@@ -242,7 +251,9 @@ class DesktopLyricsOutput implements InteractiveLyricsOutput {
       scheme == null ? custom : resolveLyricColor(source, custom, scheme);
 
   Map<String, Object?> _presentationMap(
-      LyricsPresentation p, LyricsDisplaySettings s) {
+    LyricsPresentation p,
+    LyricsDisplaySettings s,
+  ) {
     var line = p.line;
     // 无歌词回退 / 暂停回退（歌名 / 清空）下主行已不是歌词行：翻译与罗马音
     // 必须同步撤下，否则主行换成歌名（或清空）后扩展行仍残留在悬浮窗上。

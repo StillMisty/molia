@@ -178,7 +178,10 @@ class _KaraokeLyricTextState extends State<KaraokeLyricText>
           widget.playedColor,
           (ms - start) / (end - start),
         )!;
-        spans[i] = TextSpan(text: word.text, style: TextStyle(color: color));
+        spans[i] = TextSpan(
+          text: word.text,
+          style: TextStyle(color: color),
+        );
       }
     }
     return spans;

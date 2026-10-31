@@ -247,15 +247,15 @@ class LocalPlaybackService extends ChangeNotifier {
     PlaybackPowerPolicy? powerPolicy,
     // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
     @visibleForTesting AudioPlayer? player,
-  })  : _player = player ?? AudioPlayer(handleInterruptions: false),
-        _cacheService = cacheService ?? CacheService.instance,
-        _cacheWriter = audioCacheWriter,
-        _interruptionsOverride = audioInterruptions,
-        _becomingNoisyOverride = audioBecomingNoisy,
-        _audioDevicesOverride = audioDevicesChanged,
-        _playWithOtherApps = playWithOtherApps ?? _alwaysPlayWithOtherApps,
-        _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
-        _shuffleOrder = PlaybackShuffleOrder(random: random) {
+  }) : _player = player ?? AudioPlayer(handleInterruptions: false),
+       _cacheService = cacheService ?? CacheService.instance,
+       _cacheWriter = audioCacheWriter,
+       _interruptionsOverride = audioInterruptions,
+       _becomingNoisyOverride = audioBecomingNoisy,
+       _audioDevicesOverride = audioDevicesChanged,
+       _playWithOtherApps = playWithOtherApps ?? _alwaysPlayWithOtherApps,
+       _powerPolicy = powerPolicy ?? PlaybackPowerPolicy(),
+       _shuffleOrder = PlaybackShuffleOrder(random: random) {
     _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
     _playWithOtherApps.addListener(_onPlayWithOtherAppsChanged);
     // 曲末解码错误也要收：源文件最后一帧损坏时不会走 completed，见
@@ -274,9 +274,9 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 当前位置采样档位（测试观察用；生产只经 [_syncPositionSampling] 演进）。
   @visibleForTesting
   PositionSamplingMode get positionSamplingMode => positionSamplingModeFor(
-        keepHighFrequency: _powerPolicy.keepHighFrequencyPosition,
-        playing: _player.playing,
-      );
+    keepHighFrequency: _powerPolicy.keepHighFrequencyPosition,
+    playing: _player.playing,
+  );
 
   /// 位置流订阅是否活跃（测试观察用）。
   @visibleForTesting
@@ -297,8 +297,9 @@ class LocalPlaybackService extends ChangeNotifier {
     )) {
       case PositionSamplingMode.highFrequency:
         _stopPositionSampleTimer();
-        _positionSubscription ??=
-            _player.positionStream.listen(_onPlayerPosition);
+        _positionSubscription ??= _player.positionStream.listen(
+          _onPlayerPosition,
+        );
       case PositionSamplingMode.periodic:
         _cancelPositionSubscription();
         _positionSampleTimer ??= Timer.periodic(
@@ -480,13 +481,10 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 生命周期限制。判定规则见 [shouldPauseForDeviceRemoval]。
   void _attachDeviceChanges(Stream<AudioDevicesChangedEvent> events) {
     unawaited(_audioDevicesSubscription?.cancel());
-    _audioDevicesSubscription = events.listen(
-      (event) {
-        if (!shouldPauseForDeviceRemoval(event.devicesRemoved)) return;
-        unawaited(pause());
-      },
-      onError: (Object e) => debugPrint('[LocalPlayback] 音频设备变化失败: $e'),
-    );
+    _audioDevicesSubscription = events.listen((event) {
+      if (!shouldPauseForDeviceRemoval(event.devicesRemoved)) return;
+      unawaited(pause());
+    }, onError: (Object e) => debugPrint('[LocalPlayback] 音频设备变化失败: $e'));
   }
 
   /// 焦点归还后的续播（只在守卫确认「本次中断由它暂停」时调用）。
@@ -538,8 +536,9 @@ class LocalPlaybackService extends ChangeNotifier {
       currentIndex: _currentIndex,
       mode: _mode,
       order: QueueOrder(
-        shuffleIndices:
-            _mode == PlayMode.shuffle ? _shuffleOrder.indices : null,
+        shuffleIndices: _mode == PlayMode.shuffle
+            ? _shuffleOrder.indices
+            : null,
         previousIndex: _order.peekPrevious(),
         previousOfPreviousIndex: _order.peekPreviousOfPrevious(),
       ),
@@ -674,6 +673,66 @@ class LocalPlaybackService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 队列内移动一项（[from] → [to]）：只允许非随机模式，当前曲目 / 目标
+  /// 为当前曲目或越界/原地不动都返回 false（no-op）。
+  ///
+  /// 队列是播放顺序的唯一事实：移动后同步播放顺序栈与 shuffle 排列的下标，
+  /// 否则 previous / 下一首预览会指到另一首。
+  bool moveQueueIndex(int from, int to) {
+    if (_mode == PlayMode.shuffle) return false;
+    if (from < 0 || from >= _queue.length) return false;
+    if (to < 0 || to >= _queue.length) return false;
+    if (from == to || from == _currentIndex || to == _currentIndex) {
+      return false;
+    }
+    final track = _queue.removeAt(from);
+    _queue.insert(to, track);
+    _queueRevision++;
+    // 当前曲目只随「跨过它的移动」平移，不允许被移动本身。
+    if (from < to) {
+      if (_currentIndex > from && _currentIndex <= to) _currentIndex--;
+    } else {
+      if (_currentIndex >= to && _currentIndex < from) _currentIndex++;
+    }
+    _order.moveIndex(from, to);
+    _shuffleOrder.moveIndex(from, to);
+    notifyListeners();
+    _refreshNextPreload();
+    return true;
+  }
+
+  /// 从队列移除一项：当前曲目 / 越界返回 false（no-op）。
+  ///
+  /// 随机模式同样允许移除（产品约定：随机队列只保留「移出队列」）；
+  /// 播放顺序栈与洗牌排列同步重映射，轮次剩余不会包含已移除下标。
+  bool removeQueueIndex(int index) {
+    if (index < 0 || index >= _queue.length) return false;
+    if (index == _currentIndex) return false;
+    _queue.removeAt(index);
+    _queueRevision++;
+    if (index < _currentIndex) _currentIndex--;
+    _order.removeIndex(index);
+    _shuffleOrder.removeIndex(index);
+    notifyListeners();
+    _refreshNextPreload();
+    return true;
+  }
+
+  /// 队列编辑后刷新下一首投机预取：正在播放时以新的 next 重新预载，
+  /// 暂停 / 停止时只作废旧目标。
+  ///
+  /// `NextTrackPreloader.preload` 只取消投机预取、不会碰当前曲目的缓存写入
+  /// （`_playback` 所有权），因此这里不需要额外判断“是否正在下载当前曲目”。
+  void _refreshNextPreload() {
+    final preloader = _nextTrackPreloader;
+    if (preloader == null) return;
+    if (_isPlaying) {
+      unawaited(preloader.preload(nextSourceTrack));
+    } else {
+      preloader.cancelPending();
+    }
+  }
+
   Future<void> playTrackId(String trackId) async {
     final index = _queue.indexWhere((t) => t.id == trackId);
     if (index < 0) return;
@@ -724,7 +783,9 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     final requestId = ++_playRequestId;
     final track = _queue[index];
-    final override = _qualityOverrideTrackId == track.id ? _qualityOverride : null;
+    final override = _qualityOverrideTrackId == track.id
+        ? _qualityOverride
+        : null;
     final preferred = override ?? _preferredQuality?.call();
     final quality = preferred == null ? null : track.pickQuality(preferred);
     final preservePosition = resumeAt != null;
@@ -736,7 +797,8 @@ class LocalPlaybackService extends ChangeNotifier {
     // 预取所有权：桌面 / 回退直接流播时，如果正在预取的就是这一首，保留
     // 在途任务（不取消、不再起 writer），落位后的缓存供重播命中。移动端
     // 边播边缓存会写同一文件，仍保持「起播前取消」。
-    final prefetchOwnsCache = _nextTrackPreloader?.retainForPlayback(
+    final prefetchOwnsCache =
+        _nextTrackPreloader?.retainForPlayback(
           track,
           quality: quality,
           reuseInFlight:
@@ -779,20 +841,14 @@ class LocalPlaybackService extends ChangeNotifier {
       // 由后台字节下载补上缓存——重播经 `localUriFor` 命中 file://。
       // 目标此刻仍由在途预取负责时不再起第二个 writer（任务可能在上面的
       // setAudioSource 期间刚好落位：writer 会因完整缓存已存在而自动跳过）。
-      final prefetchInFlight = _nextTrackPreloader?.isCacheWriteInFlight(
-            track,
-            quality: quality,
-          ) ??
+      final prefetchInFlight =
+          _nextTrackPreloader?.isCacheWriteInFlight(track, quality: quality) ??
           false;
       if ((!_platformSupportsAudioCaching || _audioCacheUnsupported) &&
           !prefetchInFlight) {
         final writer = _cacheWriter;
         if (writer != null) {
-          unawaited(writer.start(
-            track,
-            stream: stream,
-            quality: quality,
-          ));
+          unawaited(writer.start(track, stream: stream, quality: quality));
         }
       }
 
@@ -814,13 +870,15 @@ class LocalPlaybackService extends ChangeNotifier {
         // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
         // completed 事件；启动失败单独捕获进 lastError。
         startTrace?.markPlayRequested();
-        unawaited(_player.play().catchError((Object e) {
-          if (requestId == _playRequestId) {
-            _lastError = e.toString();
-            _isPlaying = false;
-            notifyListeners();
-          }
-        }));
+        unawaited(
+          _player.play().catchError((Object e) {
+            if (requestId == _playRequestId) {
+              _lastError = e.toString();
+              _isPlaying = false;
+              notifyListeners();
+            }
+          }),
+        );
       } else if (_player.playing) {
         // 暂停中切换音质：只换源 + 对齐进度，不重新起播。
         await _player.pause();
@@ -868,7 +926,8 @@ class LocalPlaybackService extends ChangeNotifier {
   }) async {
     final cache = _cacheService;
     final localFile = uri.scheme == 'file';
-    final cacheable = !localFile &&
+    final cacheable =
+        !localFile &&
         _platformSupportsAudioCaching &&
         !_audioCacheUnsupported &&
         cache != null &&
@@ -913,10 +972,9 @@ class LocalPlaybackService extends ChangeNotifier {
     }
 
     await _player
-        .setAudioSource(AudioSource.uri(
-          uri,
-          headers: headers.isEmpty ? null : headers,
-        ))
+        .setAudioSource(
+          AudioSource.uri(uri, headers: headers.isEmpty ? null : headers),
+        )
         .timeout(const Duration(seconds: 30));
     return localFile ? PlaybackCachePath.file : PlaybackCachePath.direct;
   }
@@ -958,11 +1016,13 @@ class LocalPlaybackService extends ChangeNotifier {
     if (_isAtTrackEnd) {
       await _restartFromStart();
     }
-    unawaited(_player.play().catchError((Object e) {
-      _lastError = e.toString();
-      _isPlaying = false;
-      notifyListeners();
-    }));
+    unawaited(
+      _player.play().catchError((Object e) {
+        _lastError = e.toString();
+        _isPlaying = false;
+        notifyListeners();
+      }),
+    );
   }
 
   Future<void> seek(Duration position) async {
@@ -1024,7 +1084,8 @@ class LocalPlaybackService extends ChangeNotifier {
     // 永远切上一首：滑动/按钮/耳机键同一语义，不做「>3 秒重播本曲」。
     // 有播放顺序（含 shuffle）消费最近一首；否则回退到队列前一位
     // （列表循环队首回绕到队尾）。
-    final previous = _order.popPrevious() ??
+    final previous =
+        _order.popPrevious() ??
         previousQueueIndex(
           _currentIndex,
           _queue.length,
@@ -1122,7 +1183,7 @@ class LocalPlaybackService extends ChangeNotifier {
         state.playing && state.processingState != ProcessingState.completed;
     final enteredCompleted =
         state.processingState == ProcessingState.completed &&
-            _lastProcessingState != ProcessingState.completed;
+        _lastProcessingState != ProcessingState.completed;
     _lastProcessingState = state.processingState;
     // 播放态变化可能改变采样档位（后台暂停 → 停采样；后台续播 → 1s Timer；
     // 前台始终高频流，这里是无操作）。
@@ -1144,7 +1205,8 @@ class LocalPlaybackService extends ChangeNotifier {
     if (_currentTrack == null) return;
     // 只对桌面 media_kit 做曲末兜底：Android/iOS 的 completed / 错误语义可靠，
     // 不把真实的播放故障吞成「播完」。
-    final atEnd = _usesMediaKitBackend &&
+    final atEnd =
+        _usesMediaKitBackend &&
         _duration > Duration.zero &&
         _position >= _duration - _trackEndErrorWindow;
     if (atEnd) {
@@ -1153,9 +1215,7 @@ class LocalPlaybackService extends ChangeNotifier {
       _handleTrackCompleted();
       return;
     }
-    debugPrint(
-      '[LocalPlayback] 播放失败（${error.code}）：${error.message}',
-    );
+    debugPrint('[LocalPlayback] 播放失败（${error.code}）：${error.message}');
     _lastError = error.message ?? error.toString();
     _isPlaying = false;
     notifyListeners();
@@ -1239,11 +1299,13 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 续播当前曲目（单曲循环重播）：与 `_playIndex` 一致，不等待整曲播完。
   void _resumeCurrentTrack() {
-    unawaited(_player.play().catchError((Object e) {
-      _lastError = e.toString();
-      _isPlaying = false;
-      notifyListeners();
-    }));
+    unawaited(
+      _player.play().catchError((Object e) {
+        _lastError = e.toString();
+        _isPlaying = false;
+        notifyListeners();
+      }),
+    );
   }
 
   void _scheduleNotify() {

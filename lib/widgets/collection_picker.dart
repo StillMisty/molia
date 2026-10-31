@@ -44,24 +44,24 @@ class CollectionPickerEntry {
   final int? playlistId;
 
   CollectionPickerEntry copyWithName(String name) => CollectionPickerEntry(
-        key: key,
-        id: id,
-        name: name,
-        icon: icon,
-        trackCount: trackCount,
-        selected: selected,
-        playlistId: playlistId,
-      );
+    key: key,
+    id: id,
+    name: name,
+    icon: icon,
+    trackCount: trackCount,
+    selected: selected,
+    playlistId: playlistId,
+  );
 }
 
 /// 合集弹层结果：切换到某合集 / 请求导入收藏。
 class CollectionPickerOutcome {
   const CollectionPickerOutcome.select(this.selectedId)
-      : importRequested = false;
+    : importRequested = false;
 
   const CollectionPickerOutcome.importRequested()
-      : selectedId = null,
-        importRequested = true;
+    : selectedId = null,
+      importRequested = true;
 
   final int? selectedId;
   final bool importRequested;
@@ -80,7 +80,7 @@ Future<CollectionPickerOutcome?> showCollectionPicker(
   required Future<int> Function(String name) onCreate,
   required Future<LibraryMutationOutcome> Function(int playlistId) onDelete,
   required Future<LibraryMutationOutcome> Function(int playlistId, String name)
-      onRename,
+  onRename,
 }) {
   return M3EBottomSheet.show<CollectionPickerOutcome>(
     context,
@@ -111,7 +111,7 @@ class _CollectionPickerSheet extends StatefulWidget {
   final Future<LibraryMutationOutcome> Function(int playlistId) onDelete;
   final Future<int> Function(String name) onCreate;
   final Future<LibraryMutationOutcome> Function(int playlistId, String name)
-      onRename;
+  onRename;
 
   @override
   State<_CollectionPickerSheet> createState() => _CollectionPickerSheetState();
@@ -121,9 +121,9 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
   late final List<CollectionPickerEntry> _entries = List.of(widget.entries);
 
   List<String> get _existingNames => [
-        for (final entry in _entries)
-          if (entry.playlistId != null) entry.name,
-      ];
+    for (final entry in _entries)
+      if (entry.playlistId != null) entry.name,
+  ];
 
   void _onReorder(int oldIndex, int newIndex) {
     // onReorderItem 已按移除后位置调整 newIndex，直接插入即可。
@@ -257,9 +257,9 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   size: M3EIconButtonSize.sm,
                   semanticLabel: l10n.libraryImportFavorites,
                   icon: const Icon(Icons.library_add_rounded),
-                  onPressed: () => Navigator.of(context).pop(
-                    const CollectionPickerOutcome.importRequested(),
-                  ),
+                  onPressed: () =>
+                      Navigator.of(context)
+                          .pop(const CollectionPickerOutcome.importRequested()),
                 ),
               ],
             ),
@@ -280,8 +280,9 @@ class _CollectionPickerSheetState extends State<_CollectionPickerSheet> {
                   // selected 高亮（选中容器），不叠对号图标。
                   trailingText: l10n.playlistTrackCount(entry.trackCount),
                   selected: entry.selected,
-                  onTap: () => Navigator.of(context)
-                      .pop(CollectionPickerOutcome.select(entry.id)),
+                  onTap: () =>
+                      Navigator.of(context)
+                          .pop(CollectionPickerOutcome.select(entry.id)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

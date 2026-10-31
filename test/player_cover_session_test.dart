@@ -13,14 +13,14 @@ import 'package:molia/widgets/player_cover_session.dart';
 import 'package:molia/widgets/player_cover_swap.dart';
 
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 /// 记录型假宿主：只记录意图调用序列；弹簧是否在动画由测试拨动。
 class _RecordingHost implements CoverSwapHost {
@@ -63,8 +63,8 @@ class _RecordingHost implements CoverSwapHost {
   void adoptSteadySlots() => calls.add('adoptSteadySlots');
 
   @override
-  void hardReset({Track? adoptTrack}) => calls.add(
-      'hardReset(${adoptTrack == null ? '-' : adoptTrack.id.uri})');
+  void hardReset({Track? adoptTrack}) =>
+      calls.add('hardReset(${adoptTrack == null ? '-' : adoptTrack.id.uri})');
 
   @override
   void requestSkip(int direction) => calls.add('requestSkip($direction)');
@@ -127,10 +127,7 @@ void main() {
 
   group('首帧与身份', () {
     test('首次 observe：以展示曲目建立身份、起播入场，落位后回 idle', () {
-      final changed = session.observe(
-        snapshot: snapshotAt(0),
-        displayTrack: a,
-      );
+      final changed = session.observe(snapshot: snapshotAt(0), displayTrack: a);
       expect(changed, isTrue);
       expect(session.phase, CoverSwapPhase.settling);
       expect(session.to, a);
@@ -165,10 +162,7 @@ void main() {
       session.adoptInitial(snapshotAt(1));
       host.clear();
 
-      final changed = session.observe(
-        snapshot: snapshotAt(2),
-        displayTrack: c,
-      );
+      final changed = session.observe(snapshot: snapshotAt(2), displayTrack: c);
 
       expect(changed, isTrue);
       expect(session.phase, CoverSwapPhase.settling);
@@ -181,8 +175,11 @@ void main() {
       expect(session.phase, CoverSwapPhase.idle);
 
       expect(session.adoptInitial(snapshotAt(1)), isTrue);
-      expect(session.adoptInitial(snapshotAt(2)), isFalse,
-          reason: '已有身份时后续变化必须走 observe 的切歌路径');
+      expect(
+        session.adoptInitial(snapshotAt(2)),
+        isFalse,
+        reason: '已有身份时后续变化必须走 observe 的切歌路径',
+      );
       expect(session.animatedTrackId, b.id.uri);
     });
 
@@ -190,10 +187,7 @@ void main() {
       settleAt(0);
       host.clear();
 
-      final changed = session.observe(
-        snapshot: snapshotAt(0),
-        displayTrack: a,
-      );
+      final changed = session.observe(snapshot: snapshotAt(0), displayTrack: a);
       expect(changed, isFalse);
       expect(session.phase, CoverSwapPhase.idle);
       expect(host.calls, isEmpty, reason: '稳态回填不应产生任何效果意图');
@@ -261,8 +255,10 @@ void main() {
       expect(session.to, b, reason: '回退期间保留预览目标（否则目标槽位闪成当前封面）');
       expect(session.showingPreviewTarget, isTrue);
       expect(host.calls, contains('releasePreview(0.50)'));
-      expect(host.calls.sublist(host.calls.length - 2),
-          ['disarmTimeout', 'releasePreview(0.50)']);
+      expect(host.calls.sublist(host.calls.length - 2), [
+        'disarmTimeout',
+        'releasePreview(0.50)',
+      ]);
 
       // 回退弹簧落位（宿主回调）：预览撤下，回 idle。
       session.returnCompleted();
@@ -311,8 +307,11 @@ void main() {
 
       session.dragUpdate(delta: 20, progress: 0.2);
       expect(session.to, b);
-      expect(session.previewSourceNeighbor, isNull,
-          reason: '再上一首会回绕到当前曲目，不能重复渲染同一张封面');
+      expect(
+        session.previewSourceNeighbor,
+        isNull,
+        reason: '再上一首会回绕到当前曲目，不能重复渲染同一张封面',
+      );
     });
 
     test('回退/对账落位时清空预览源侧邻里', () {
@@ -344,16 +343,22 @@ void main() {
       session.releasePreview();
       expect(session.phase, CoverSwapPhase.returning);
       session.returnCompleted();
-      expect(host.calls,
-          ['disarmTimeout', 'releasePreview(0.00)', 'adoptSteadySlots']);
+      expect(host.calls, [
+        'disarmTimeout',
+        'releasePreview(0.00)',
+        'adoptSteadySlots',
+      ]);
 
       // 新会话已接管（这里用切歌入场模拟）时，迟到的回退完成回调必须忽略。
       session.observe(snapshot: snapshotAt(3), displayTrack: d);
       expect(session.phase, CoverSwapPhase.settling);
       host.clear();
       session.returnCompleted();
-      expect(session.phase, CoverSwapPhase.settling,
-          reason: '非 returning 阶段忽略');
+      expect(
+        session.phase,
+        CoverSwapPhase.settling,
+        reason: '非 returning 阶段忽略',
+      );
       expect(host.calls, isEmpty);
     });
 
@@ -415,11 +420,7 @@ void main() {
       session.commit(progressVelocity: -1.5);
       expect(session.phase, CoverSwapPhase.committed);
       expect(session.awaitingReconcile, isTrue);
-      expect(host.calls, [
-        'land(-1.50)',
-        'armTimeout(6s)',
-        'requestSkip(1)',
-      ]);
+      expect(host.calls, ['land(-1.50)', 'armTimeout(6s)', 'requestSkip(1)']);
     });
 
     test('兜底超时：撤下预览回退（不切歌）', () {
@@ -475,10 +476,10 @@ void main() {
       host.animating = false;
       session.progressCompleted();
       expect(session.phase, CoverSwapPhase.correcting);
-      expect(host.calls, containsAllInOrder([
-        'adoptSteadySlots',
-        'crossfadeCorrection',
-      ]));
+      expect(
+        host.calls,
+        containsAllInOrder(['adoptSteadySlots', 'crossfadeCorrection']),
+      );
 
       session.correctionCompleted();
       expect(session.phase, CoverSwapPhase.idle);
@@ -501,7 +502,11 @@ void main() {
       session.observe(snapshot: snapshotAt(1), displayTrack: b);
       expect(session.phase, CoverSwapPhase.settling);
       session.correctionCompleted();
-      expect(session.phase, CoverSwapPhase.settling, reason: '其它阶段的 completed 忽略');
+      expect(
+        session.phase,
+        CoverSwapPhase.settling,
+        reason: '其它阶段的 completed 忽略',
+      );
     });
   });
 
@@ -558,10 +563,7 @@ void main() {
       session.setVisible(false);
       host.clear();
 
-      final changed = session.observe(
-        snapshot: snapshotAt(1),
-        displayTrack: b,
-      );
+      final changed = session.observe(snapshot: snapshotAt(1), displayTrack: b);
       expect(changed, isTrue);
       expect(session.phase, CoverSwapPhase.idle);
       expect(session.from, isNull);

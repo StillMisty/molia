@@ -55,23 +55,23 @@ class ShellChrome {
 
   /// 目的地 → 导航轨条目（唯一映射循环）。
   List<M3ENavigationRailDestination> railDestinations() => [
-        for (final destination in destinations)
-          M3ENavigationRailDestination(
-            icon: destination.outlinedIcon,
-            selectedIcon: destination.filledIcon,
-            label: labelFor(destination),
-          ),
-      ];
+    for (final destination in destinations)
+      M3ENavigationRailDestination(
+        icon: destination.outlinedIcon,
+        selectedIcon: destination.filledIcon,
+        label: labelFor(destination),
+      ),
+  ];
 
   /// 目的地 → 底栏条目（唯一映射循环）。
   List<M3ENavigationBarDestination> barDestinations() => [
-        for (final destination in destinations)
-          M3ENavigationBarDestination(
-            icon: destination.outlinedIcon,
-            selectedIcon: destination.filledIcon,
-            label: labelFor(destination),
-          ),
-      ];
+    for (final destination in destinations)
+      M3ENavigationBarDestination(
+        icon: destination.outlinedIcon,
+        selectedIcon: destination.filledIcon,
+        label: labelFor(destination),
+      ),
+  ];
 
   /// 顶栏槽：工具行（M3E compact，56dp）+ 骨架自己的前置动作 / 底部槽。
   ///
@@ -82,26 +82,25 @@ class ShellChrome {
     required Widget title,
     List<Widget> actions = const [],
     PreferredSizeWidget? bottom,
-  }) =>
-      ShellAppBar(
-        title: title,
-        actions: [...actions, ..._trailingActions()],
-        bottom: bottom,
-      );
+  }) => ShellAppBar(
+    title: title,
+    actions: [...actions, ..._trailingActions()],
+    bottom: bottom,
+  );
 
   /// 顶栏尾部动作：设置 + 窗口控件 + 右侧留白（两套骨架同一份）。
   List<Widget> _trailingActions() => [
-        M3EIconButton(
-          variant: M3EIconButtonVariant.standard,
-          onPressed: onOpenSettings,
-          // 图标按钮统一不做悬浮提示（口径见 docs/architecture.md §6
-          // 「按钮选型」）；这一排紧挨窗口控件，提示只会更吵，无障碍名保留。
-          semanticLabel: l10n.settingsTitle,
-          icon: const Icon(Icons.settings_rounded),
-        ),
-        if (WindowChrome.usesCustomTitleBar) const WindowControls(),
-        const SizedBox(width: 8),
-      ];
+    M3EIconButton(
+      variant: M3EIconButtonVariant.standard,
+      onPressed: onOpenSettings,
+      // 图标按钮统一不做悬浮提示（口径见 docs/architecture.md §6
+      // 「按钮选型」）；这一排紧挨窗口控件，提示只会更吵，无障碍名保留。
+      semanticLabel: l10n.settingsTitle,
+      icon: const Icon(Icons.settings_rounded),
+    ),
+    if (WindowChrome.usesCustomTitleBar) const WindowControls(),
+    const SizedBox(width: 8),
+  ];
 
   /// 顶栏标题区左缘（= `M3EAppBarTheme.titleInset`，品牌区左缘对齐它）。
   ///

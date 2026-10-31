@@ -90,8 +90,7 @@ class TxComment {
       'http://c.y.qq.com/base/fcgi-bin/fcg_global_comment_h5.fcg',
       form: true,
       headers: const {
-        'User-Agent':
-            'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
+        'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
       },
       retries: BuiltinTransport.defaultRetries,
       retryIf: _isInvalidLatest,
@@ -129,18 +128,21 @@ class TxComment {
     final comments = <Comment>[];
     for (final item in rawList) {
       if (item is! Map) continue;
-      final id = '${commentTextOf(item['SeqNo']) ?? ''}_'
+      final id =
+          '${commentTextOf(item['SeqNo']) ?? ''}_'
           '${commentTextOf(item['CmId']) ?? ''}';
-      comments.add(Comment(
-        id: id,
-        text: _fixText(item['Content']),
-        createdAt: commentTimeFromEpoch(item['PubTime']),
-        location: commentTextOf(item['Location']),
-        authorName: item['Nick']?.toString() ?? '',
-        avatarUrl: commentUrlOf(item['Avatar']),
-        likedCount: commentIntOf(item['PraiseNum']),
-        replies: _parseHotReplies(item['SubComments'], id),
-      ));
+      comments.add(
+        Comment(
+          id: id,
+          text: _fixText(item['Content']),
+          createdAt: commentTimeFromEpoch(item['PubTime']),
+          location: commentTextOf(item['Location']),
+          authorName: item['Nick']?.toString() ?? '',
+          avatarUrl: commentUrlOf(item['Avatar']),
+          likedCount: commentIntOf(item['PraiseNum']),
+          replies: _parseHotReplies(item['SubComments'], id),
+        ),
+      );
     }
     return comments;
   }
@@ -187,14 +189,16 @@ class TxComment {
       final item = rawList[index];
       if (item is! Map) continue;
       final newest = index == 0;
-      replies.add(Comment(
-        id: 'sub_${rootId}_${commentTextOf(item['subcommentid']) ?? ''}',
-        text: _fixText(item['subcommentcontent']),
-        createdAt: newest ? commentTimeFromEpoch(raw['time']) : null,
-        authorName: _nick(item['replynick']),
-        avatarUrl: newest ? commentUrlOf(raw['avatarurl']) : null,
-        likedCount: newest ? commentIntOf(raw['praisenum']) : null,
-      ));
+      replies.add(
+        Comment(
+          id: 'sub_${rootId}_${commentTextOf(item['subcommentid']) ?? ''}',
+          text: _fixText(item['subcommentcontent']),
+          createdAt: newest ? commentTimeFromEpoch(raw['time']) : null,
+          authorName: _nick(item['replynick']),
+          avatarUrl: newest ? commentUrlOf(raw['avatarurl']) : null,
+          likedCount: newest ? commentIntOf(raw['praisenum']) : null,
+        ),
+      );
     }
     return replies;
   }
@@ -204,15 +208,18 @@ class TxComment {
     final replies = <Comment>[];
     for (final item in rawList) {
       if (item is! Map) continue;
-      replies.add(Comment(
-        id: 'sub_${commentTextOf(item['SeqNo']) ?? ''}_'
-            '${commentTextOf(item['CmId']) ?? ''}',
-        text: _fixText(item['Content']),
-        createdAt: commentTimeFromEpoch(item['PubTime']),
-        authorName: item['Nick']?.toString() ?? '',
-        avatarUrl: commentUrlOf(item['Avatar']),
-        likedCount: commentIntOf(item['PraiseNum']),
-      ));
+      replies.add(
+        Comment(
+          id:
+              'sub_${commentTextOf(item['SeqNo']) ?? ''}_'
+              '${commentTextOf(item['CmId']) ?? ''}',
+          text: _fixText(item['Content']),
+          createdAt: commentTimeFromEpoch(item['PubTime']),
+          authorName: item['Nick']?.toString() ?? '',
+          avatarUrl: commentUrlOf(item['Avatar']),
+          likedCount: commentIntOf(item['PraiseNum']),
+        ),
+      );
     }
     return replies;
   }
@@ -243,7 +250,8 @@ class TxComment {
     return comment is Map ? comment : null;
   }
 
-  static bool _isInvalidHot(dynamic response) => _hotCommentListOf(response) == null;
+  static bool _isInvalidHot(dynamic response) =>
+      _hotCommentListOf(response) == null;
 
   static bool _isInvalidLatest(dynamic response) =>
       _commentSectionOf(response) == null;
@@ -321,8 +329,6 @@ class TxComment {
   static final RegExp _emojiPattern = RegExp(r'\[em\](e\d+)\[/em\]');
 
   /// 表情还原（未知编码移除，与 LX 的 `emojis[code] || ''` 一致）。
-  static String replaceEmoji(String text) => text.replaceAllMapped(
-        _emojiPattern,
-        (match) => _emojis[match[1]] ?? '',
-      );
+  static String replaceEmoji(String text) =>
+      text.replaceAllMapped(_emojiPattern, (match) => _emojis[match[1]] ?? '');
 }

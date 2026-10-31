@@ -28,8 +28,9 @@ void main() {
     );
   }
 
-  testWidgets('shell layout switches to two pane at tablet breakpoint',
-      (tester) async {
+  testWidgets('shell layout switches to two pane at tablet breakpoint', (
+    tester,
+  ) async {
     Future<bool> prefersTwoPane(double width) async {
       await pumpResponsiveHarness(
         tester,
@@ -51,8 +52,9 @@ void main() {
     expect(await prefersTwoPane(1280), isTrue);
   });
 
-  testWidgets('adaptiveColumns stays consistent across standard breakpoints',
-      (tester) async {
+  testWidgets('adaptiveColumns stays consistent across standard breakpoints', (
+    tester,
+  ) async {
     Future<int> columnsFor(double width) async {
       await pumpResponsiveHarness(
         tester,
@@ -74,8 +76,9 @@ void main() {
     expect(await columnsFor(1280), 6);
   });
 
-  testWidgets('ResponsivePageContainer caps detail width on large screens',
-      (tester) async {
+  testWidgets('ResponsivePageContainer caps detail width on large screens', (
+    tester,
+  ) async {
     const contentKey = Key('detail-content');
 
     await pumpResponsiveHarness(
@@ -83,11 +86,7 @@ void main() {
       width: 1280,
       child: const ResponsivePageContainer(
         pageType: ResponsivePageType.detail,
-        child: SizedBox(
-          key: contentKey,
-          width: double.infinity,
-          height: 80,
-        ),
+        child: SizedBox(key: contentKey, width: double.infinity, height: 80),
       ),
     );
 
@@ -163,7 +162,9 @@ void main() {
     expect(find.text('simple-title'), findsOneWidget);
   });
 
-  testWidgets('simple modal titleTrailing shows in sheet header', (tester) async {
+  testWidgets('simple modal titleTrailing shows in sheet header', (
+    tester,
+  ) async {
     await pumpResponsiveHarness(
       tester,
       width: 390,
@@ -196,8 +197,9 @@ void main() {
     expect(find.text('trailing'), findsOneWidget);
   });
 
-  testWidgets('simple modal forceSheet stays a sheet on large screens',
-      (tester) async {
+  testWidgets('simple modal forceSheet stays a sheet on large screens', (
+    tester,
+  ) async {
     await pumpResponsiveHarness(
       tester,
       width: 1280,
@@ -232,8 +234,9 @@ void main() {
     expect(find.text('trailing'), findsOneWidget);
   });
 
-  testWidgets('secondary page uses M3ESideSheet on large screens',
-      (tester) async {
+  testWidgets('secondary page uses M3ESideSheet on large screens', (
+    tester,
+  ) async {
     await pumpResponsiveHarness(
       tester,
       width: 1280,
@@ -294,36 +297,37 @@ void main() {
   });
 
   testWidgets(
-      'page modal uses M3EDialog route with a page card on large screens',
-      (tester) async {
-    await pumpResponsiveHarness(
-      tester,
-      width: 1280,
-      child: Builder(
-        builder: (context) => Center(
-          child: FilledButton(
-            onPressed: () {
-              ResponsiveNavigation.showPageModal<void>(
-                context: context,
-                child: const Center(child: Text('page-modal-body')),
-              );
-            },
-            child: const Text('open'),
+    'page modal uses M3EDialog route with a page card on large screens',
+    (tester) async {
+      await pumpResponsiveHarness(
+        tester,
+        width: 1280,
+        child: Builder(
+          builder: (context) => Center(
+            child: FilledButton(
+              onPressed: () {
+                ResponsiveNavigation.showPageModal<void>(
+                  context: context,
+                  child: const Center(child: Text('page-modal-body')),
+                );
+              },
+              child: const Text('open'),
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    // 页面卡片是自定义外壳，不是 M3EDialog 本体：整页内容不能进它的
-    // SingleChildScrollView。
-    expect(find.byType(M3EDialog), findsNothing);
-    expect(find.byType(Dialog), findsNothing);
-    expect(find.byType(PageModalCard), findsOneWidget);
-    expect(find.text('page-modal-body'), findsOneWidget);
-  });
+      // 页面卡片是自定义外壳，不是 M3EDialog 本体：整页内容不能进它的
+      // SingleChildScrollView。
+      expect(find.byType(M3EDialog), findsNothing);
+      expect(find.byType(Dialog), findsNothing);
+      expect(find.byType(PageModalCard), findsOneWidget);
+      expect(find.text('page-modal-body'), findsOneWidget);
+    },
+  );
 
   testWidgets('page modal uses bottom sheet on mobile', (tester) async {
     await pumpResponsiveHarness(

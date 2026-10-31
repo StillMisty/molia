@@ -11,11 +11,8 @@ import 'support/fake_music_source.dart';
 void main() {
   const caps = SourceCapabilities(search: true, comment: true);
 
-  Track trackOf(String id) => Track(
-        id: TrackId('wy', id),
-        title: '晴天',
-        origin: TrackOrigin.builtin,
-      );
+  Track trackOf(String id) =>
+      Track(id: TrackId('wy', id), title: '晴天', origin: TrackOrigin.builtin);
 
   Comment commentOf(String id) => Comment(id: id, text: '评论 $id');
 
@@ -25,14 +22,13 @@ void main() {
     int limit = 20,
     int total = 45,
     int count = 20,
-  }) =>
-      CommentPage.fromPage(
-        kind: kind,
-        items: [for (var i = 0; i < count; i++) commentOf('$page-$i')],
-        page: page,
-        limit: limit,
-        total: total,
-      );
+  }) => CommentPage.fromPage(
+    kind: kind,
+    items: [for (var i = 0; i < count; i++) commentOf('$page-$i')],
+    page: page,
+    limit: limit,
+    total: total,
+  );
 
   late FakeMusicSource source;
   late CommentsService service;
@@ -55,15 +51,12 @@ void main() {
     await service.fetch(track, kind: CommentKind.hot, page: 2);
     await service.fetch(track, kind: CommentKind.latest);
     await service.fetch(trackOf('other'), kind: CommentKind.hot);
-    expect(
-      calls,
-      [
-        (kind: CommentKind.hot, page: 1),
-        (kind: CommentKind.hot, page: 2),
-        (kind: CommentKind.latest, page: 1),
-        (kind: CommentKind.hot, page: 1),
-      ],
-    );
+    expect(calls, [
+      (kind: CommentKind.hot, page: 1),
+      (kind: CommentKind.hot, page: 2),
+      (kind: CommentKind.latest, page: 1),
+      (kind: CommentKind.hot, page: 1),
+    ]);
   });
 
   test('invalidateTrack 清该曲目全部页；其他曲目不受影响', () async {
@@ -116,12 +109,19 @@ void main() {
     );
     await expectLater(
       service.fetch(
-        Track(id: const TrackId('kw', '1'), title: 'x', origin: TrackOrigin.builtin),
+        Track(
+          id: const TrackId('kw', '1'),
+          title: 'x',
+          origin: TrackOrigin.builtin,
+        ),
         kind: CommentKind.hot,
       ),
       throwsA(
-        isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.unsupported),
+        isA<SourceFailure>().having(
+          (f) => f.kind,
+          'kind',
+          FailureKind.unsupported,
+        ),
       ),
     );
   });

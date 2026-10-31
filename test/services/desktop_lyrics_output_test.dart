@@ -6,6 +6,7 @@ import 'package:molia/services/lyrics_display/desktop_lyrics_output.dart';
 import 'package:molia/services/lyrics_display/lyrics_channel.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
+
 import '../support/settings_test_support.dart';
 
 /// 桌面输出：通道协议编解码 + 暂停/无歌词回退映射 + 原生动作事件。
@@ -18,19 +19,20 @@ void main() {
   setUp(() {
     calls = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel(channelName),
-            (call) async {
-      calls.add(call);
-      switch (call.method) {
-        case 'desktop.canDrawOverlays':
-        case 'desktop.isSupported':
-          return true;
-        case 'audioRoute.isA2dpConnected':
-          return false;
-        default:
-          return null;
-      }
-    });
+        .setMockMethodCallHandler(const MethodChannel(channelName), (
+          call,
+        ) async {
+          calls.add(call);
+          switch (call.method) {
+            case 'desktop.canDrawOverlays':
+            case 'desktop.isSupported':
+              return true;
+            case 'audioRoute.isA2dpConnected':
+              return false;
+            default:
+              return null;
+          }
+        });
   });
 
   tearDown(() {
@@ -50,16 +52,15 @@ void main() {
     bool hasLyrics = true,
     List<String> extended = const [],
     List<String> upcoming = const [],
-  }) =>
-      LyricsPresentation(
-        trackId: 'fake:1',
-        title: '歌名',
-        line: line,
-        extended: extended,
-        upcoming: upcoming,
-        isPlaying: isPlaying,
-        hasLyrics: hasLyrics,
-      );
+  }) => LyricsPresentation(
+    trackId: 'fake:1',
+    title: '歌名',
+    line: line,
+    extended: extended,
+    upcoming: upcoming,
+    isPlaying: isPlaying,
+    hasLyrics: hasLyrics,
+  );
 
   test('显示 / 配置 / 更新 / 隐藏按协议下发', () async {
     final channel = LyricsChannel();
@@ -91,13 +92,15 @@ void main() {
     await settings.setDesktopFontSize(32);
     await output.start(settings);
     await pumpEventQueue();
-    final configCall =
-        calls.lastWhere((call) => call.method == 'desktop.setConfig');
+    final configCall = calls.lastWhere(
+      (call) => call.method == 'desktop.setConfig',
+    );
     expect((configCall.arguments as Map)['fontSize'], 32);
 
     await output.apply(presentation());
-    final updateCall =
-        calls.lastWhere((call) => call.method == 'desktop.update');
+    final updateCall = calls.lastWhere(
+      (call) => call.method == 'desktop.update',
+    );
     expect((updateCall.arguments as Map)['line'], 'A');
 
     // 控制条配色随配置下发（M3E pill 的容器 / 图标色）。
@@ -123,10 +126,7 @@ void main() {
     await output.apply(presentation());
     await pumpEventQueue();
     final showCall = calls.firstWhere((call) => call.method == 'desktop.show');
-    expect(
-      (showCall.arguments as Map).containsKey('extendedSlots'),
-      isFalse,
-    );
+    expect((showCall.arguments as Map).containsKey('extendedSlots'), isFalse);
     var updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((updateCall.arguments as Map)['extendedSlots'], 1);
 
@@ -147,7 +147,9 @@ void main() {
     await output.apply(presentation());
     await pumpEventQueue();
     expect(
-        calls.map((call) => call.method), isNot(contains('desktop.setConfig')));
+      calls.map((call) => call.method),
+      isNot(contains('desktop.setConfig')),
+    );
     updateCall = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((updateCall.arguments as Map)['extendedSlots'], 2);
 
@@ -174,12 +176,13 @@ void main() {
 
   test('权限未授予：capability=needsPermission 且不 show', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel(channelName),
-            (call) async {
-      calls.add(call);
-      if (call.method == 'desktop.canDrawOverlays') return false;
-      return null;
-    });
+        .setMockMethodCallHandler(const MethodChannel(channelName), (
+          call,
+        ) async {
+          calls.add(call);
+          if (call.method == 'desktop.canDrawOverlays') return false;
+          return null;
+        });
     final output = DesktopLyricsOutput(
       channel: LyricsChannel(),
       supported: true,
@@ -199,36 +202,41 @@ void main() {
     await settings.setDesktopHideOnPause(false);
     await output.start(settings);
 
-    await output.apply(LyricsPresentation(
-      trackId: 'fake:1',
-      title: '歌名',
-      line: 'AB',
-      isPlaying: true,
-      hasLyrics: true,
-      positionMs: 1500,
-      positionAtEpochMs: 1700000000000,
-      scrollFollowsSinging: false,
-      lineStartMs: 1000,
-      lineEndMs: 3000,
-      words: const [
-        LyricWord(
-          start: Duration(milliseconds: 1000),
-          end: Duration(milliseconds: 2000),
-          text: 'A',
-        ),
-        LyricWord(
-          start: Duration(milliseconds: 2000),
-          end: Duration(milliseconds: 3000),
-          text: 'B',
-        ),
-      ],
-    ));
+    await output.apply(
+      LyricsPresentation(
+        trackId: 'fake:1',
+        title: '歌名',
+        line: 'AB',
+        isPlaying: true,
+        hasLyrics: true,
+        positionMs: 1500,
+        positionAtEpochMs: 1700000000000,
+        scrollFollowsSinging: false,
+        lineStartMs: 1000,
+        lineEndMs: 3000,
+        words: const [
+          LyricWord(
+            start: Duration(milliseconds: 1000),
+            end: Duration(milliseconds: 2000),
+            text: 'A',
+          ),
+          LyricWord(
+            start: Duration(milliseconds: 2000),
+            end: Duration(milliseconds: 3000),
+            text: 'B',
+          ),
+        ],
+      ),
+    );
     await pumpEventQueue();
     final update = calls.lastWhere((call) => call.method == 'desktop.update');
     final map = update.arguments as Map;
     expect(map['positionMs'], 1500);
-    expect(map['positionAtEpochMs'], 1700000000000,
-        reason: '位置生效时刻要下发：原生据此补偿通道传输延迟');
+    expect(
+      map['positionAtEpochMs'],
+      1700000000000,
+      reason: '位置生效时刻要下发：原生据此补偿通道传输延迟',
+    );
     expect(map['scrollFollowsSinging'], isFalse);
     expect(map['lineStartMs'], 1000);
     expect(map['lineEndMs'], 3000);
@@ -240,21 +248,23 @@ void main() {
 
     // 暂停回退为歌名：逐字时间轴必须撤下（歌名没有词轴）。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
-    await output.apply(LyricsPresentation(
-      trackId: 'fake:1',
-      title: '歌名',
-      line: 'AB',
-      isPlaying: false,
-      hasLyrics: true,
-      positionMs: 1500,
-      words: const [
-        LyricWord(
-          start: Duration(milliseconds: 1000),
-          end: Duration(milliseconds: 2000),
-          text: 'A',
-        ),
-      ],
-    ));
+    await output.apply(
+      LyricsPresentation(
+        trackId: 'fake:1',
+        title: '歌名',
+        line: 'AB',
+        isPlaying: false,
+        hasLyrics: true,
+        positionMs: 1500,
+        words: const [
+          LyricWord(
+            start: Duration(milliseconds: 1000),
+            end: Duration(milliseconds: 2000),
+            text: 'A',
+          ),
+        ],
+      ),
+    );
     await pumpEventQueue();
     final fallback = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((fallback.arguments as Map)['words'], isNull);
@@ -273,11 +283,13 @@ void main() {
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
     await output.start(settings);
 
-    await output.apply(presentation(
-      isPlaying: false,
-      extended: const ['翻译'],
-      upcoming: const ['下一行'],
-    ));
+    await output.apply(
+      presentation(
+        isPlaying: false,
+        extended: const ['翻译'],
+        upcoming: const ['下一行'],
+      ),
+    );
     final paused = calls.lastWhere((call) => call.method == 'desktop.update');
     expect((paused.arguments as Map)['line'], '歌名');
     expect((paused.arguments as Map)['extended'], isEmpty);
@@ -306,12 +318,14 @@ void main() {
 
     // keep：主行与扩展行原样保留。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.keep);
-    await output.apply(presentation(
-      isPlaying: false,
-      line: 'B',
-      extended: const ['翻译'],
-      upcoming: const ['下一行'],
-    ));
+    await output.apply(
+      presentation(
+        isPlaying: false,
+        line: 'B',
+        extended: const ['翻译'],
+        upcoming: const ['下一行'],
+      ),
+    );
     var map = await lastUpdate();
     expect(map['line'], 'B');
     expect(map['extended'], ['翻译']);
@@ -319,11 +333,13 @@ void main() {
 
     // title：主行换歌名，翻译/罗马音与后续行撤下。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.title);
-    await output.apply(presentation(
-      isPlaying: false,
-      extended: const ['翻译'],
-      upcoming: const ['下一行'],
-    ));
+    await output.apply(
+      presentation(
+        isPlaying: false,
+        extended: const ['翻译'],
+        upcoming: const ['下一行'],
+      ),
+    );
     map = await lastUpdate();
     expect(map['line'], '歌名');
     expect(map['extended'], isEmpty);
@@ -331,12 +347,14 @@ void main() {
 
     // clear：主行清空，扩展行同样撤下。
     await settings.setDesktopPauseBehavior(LyricsPauseBehavior.clear);
-    await output.apply(presentation(
-      isPlaying: false,
-      line: '',
-      extended: const ['翻译'],
-      upcoming: const ['下一行'],
-    ));
+    await output.apply(
+      presentation(
+        isPlaying: false,
+        line: '',
+        extended: const ['翻译'],
+        upcoming: const ['下一行'],
+      ),
+    );
     map = await lastUpdate();
     expect(map['line'], '');
     expect(map['extended'], isEmpty);
@@ -371,10 +389,10 @@ void main() {
     calls.clear();
     await output.apply(presentation(line: 'B'));
     await pumpEventQueue();
-    expect(
-      calls.map((call) => call.method),
-      ['desktop.show', 'desktop.update'],
-    );
+    expect(calls.map((call) => call.method), [
+      'desktop.show',
+      'desktop.update',
+    ]);
     expect((calls.last.arguments as Map)['line'], 'B');
 
     await output.stop();
@@ -412,10 +430,7 @@ void main() {
 
     await output.apply(presentation(isPlaying: false));
     await pumpEventQueue();
-    expect(
-      calls.map((call) => call.method),
-      isNot(contains('desktop.hide')),
-    );
+    expect(calls.map((call) => call.method), isNot(contains('desktop.hide')));
     expect((calls.last.arguments as Map)['line'], '歌名');
 
     await output.stop();
@@ -435,10 +450,10 @@ void main() {
     calls.clear();
     await output.apply(presentation(line: 'B'));
     await pumpEventQueue();
-    expect(
-      calls.map((call) => call.method),
-      ['desktop.show', 'desktop.update'],
-    );
+    expect(calls.map((call) => call.method), [
+      'desktop.show',
+      'desktop.update',
+    ]);
 
     await output.stop();
   });
@@ -489,8 +504,9 @@ void main() {
     fontFamily = 'Noto Sans CJK SC';
     await output.start(settings);
     await pumpEventQueue();
-    final setConfig =
-        calls.lastWhere((call) => call.method == 'desktop.setConfig');
+    final setConfig = calls.lastWhere(
+      (call) => call.method == 'desktop.setConfig',
+    );
     expect((setConfig.arguments as Map)['fontFamily'], 'Noto Sans CJK SC');
 
     // 字体没再变：重复 start 不重发（避免原生无谓重建）。
@@ -498,7 +514,9 @@ void main() {
     await output.start(settings);
     await pumpEventQueue();
     expect(
-        calls.map((call) => call.method), isNot(contains('desktop.setConfig')));
+      calls.map((call) => call.method),
+      isNot(contains('desktop.setConfig')),
+    );
 
     await output.stop();
   });

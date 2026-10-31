@@ -30,27 +30,26 @@ class TxLyricSearch {
   }
 
   /// 平台变体面：签名 POST 体（消息块与搜索共构）/ 业务码判定 / 命中解析。
-  static BuiltinLyricSearchCall _callFor(
-    String keyword,
-    int page,
-    int limit,
-  ) {
-    final bodyText = jsonEncode(TxSearch.searchBody(
-      keyword: keyword,
-      page: page,
-      limit: limit,
-      searchType: _searchTypeLyric,
-    ));
+  static BuiltinLyricSearchCall _callFor(String keyword, int page, int limit) {
+    final bodyText = jsonEncode(
+      TxSearch.searchBody(
+        keyword: keyword,
+        page: page,
+        limit: limit,
+        searchType: _searchTypeLyric,
+      ),
+    );
     return BuiltinLyricSearchCall(
       platform: 'tx',
       method: BuiltinSearchMethod.post,
       url: TxSearch.signedMusicuUrl(bodyText),
       body: bodyText,
       headers: const {'User-Agent': 'QQMusic 14090508(android 12)'},
-      isInvalid: (response) => TxSearch.moduleOf(response, _searchModule) == null
+      isInvalid: (response) =>
+          TxSearch.moduleOf(response, _searchModule) == null
           ? true
           : response['code'] != 0 ||
-              TxSearch.moduleOf(response, _searchModule)!['code'] != 0,
+                TxSearch.moduleOf(response, _searchModule)!['code'] != 0,
       parseHits: (response) =>
           parseHits(TxSearch.moduleOf(response, _searchModule)?['data']),
       totalOf: (response) =>
@@ -60,7 +59,8 @@ class TxLyricSearch {
 
   /// 命中列表 → 命中项（供单测复用；结构不符返回空列表）。
   static List<SourceLyricHit> parseHits(dynamic data) {
-    final rawList = (data is Map &&
+    final rawList =
+        (data is Map &&
             data['body'] is Map &&
             (data['body'] as Map)['song'] is Map)
         ? ((data['body'] as Map)['song'] as Map)['list']
@@ -71,10 +71,9 @@ class TxLyricSearch {
       final track = TxSearch.parseSongItem(raw);
       if (track == null) continue;
       final lyric = (raw is Map) ? raw['lyric']?.toString() ?? '' : '';
-      hits.add(SourceLyricHit(
-        track: track,
-        snippet: normalizeLyricSnippet(lyric),
-      ));
+      hits.add(
+        SourceLyricHit(track: track, snippet: normalizeLyricSnippet(lyric)),
+      );
     }
     return hits;
   }

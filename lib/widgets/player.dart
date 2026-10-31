@@ -112,23 +112,21 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   static CoverDeckMetrics _smallScreenDeckMetrics(
     double maxWidth,
     double maxHeight,
-  ) =>
-      coverDeckMetricsFor(
-        availableWidth: maxWidth,
-        availableHeight: maxHeight.isFinite
-            ? max(0.0, maxHeight - _sectionsReservedHeight)
-            : double.infinity,
-      );
+  ) => coverDeckMetricsFor(
+    availableWidth: maxWidth,
+    availableHeight: maxHeight.isFinite
+        ? max(0.0, maxHeight - _sectionsReservedHeight)
+        : double.infinity,
+  );
 
   /// 大屏封面可用高度：容器高扣掉固定占位与封面区上下留白（未约束宿主返回
   /// 无限高，纵向不参与约束）。
   static double _largeScreenDeckAvailableHeight(
     double maxHeight,
     double reserved,
-  ) =>
-      maxHeight.isFinite
-          ? max(0.0, maxHeight - reserved - _largeScreenDeckMargin * 2)
-          : double.infinity;
+  ) => maxHeight.isFinite
+      ? max(0.0, maxHeight - reserved - _largeScreenDeckMargin * 2)
+      : double.infinity;
 
   /// 完整播放器内容高度：高度贴合内容（封面堆叠 + 标题/进度排），
   /// 避免大片留白；是 [_smallScreenDeckMetrics] 的逆函数。
@@ -165,8 +163,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _trackEntrance = SingleMotionController(
-      motion:
-          SpringMotion(M3EMotion.aospSpatial.toDescription(), snapToEnd: true),
+      motion: SpringMotion(
+        M3EMotion.aospSpatial.toDescription(),
+        snapToEnd: true,
+      ),
       vsync: this,
       initialValue: 1,
     );
@@ -311,10 +311,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final track = context.select<PlaybackProvider, Track?>(
-        (provider) => provider.snapshot.current);
+      (provider) => provider.snapshot.current,
+    );
 
-    final playbackProvider =
-        Provider.of<PlaybackProvider>(context, listen: false);
+    final playbackProvider = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    );
 
     // 迷你封面换图时用上一首封面做加载占位；当前曲目没有封面时不借用，
     // 避免旧封面从新卡下面透出来（见 player_reconcile_test 的切歌占位）。
@@ -331,8 +334,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             constraints: const BoxConstraints(
               maxWidth: playbackCoverMaxLogicalEdge,
             ),
-            child:
-                _buildLargeScreenPlayerLayout(displayTrack, playbackProvider),
+            child: _buildLargeScreenPlayerLayout(
+              displayTrack,
+              playbackProvider,
+            ),
           ),
         ),
       );
@@ -344,8 +349,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: double.infinity),
-            child:
-                _buildSmallScreenPlayerLayout(displayTrack, playbackProvider),
+            child: _buildSmallScreenPlayerLayout(
+              displayTrack,
+              playbackProvider,
+            ),
           ),
         ),
       );
@@ -439,13 +446,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           playbackProvider,
           morph: _morphAttached ? widget.morph : null,
         );
-        final Widget miniLayer =
-            _buildMiniPlayer(
-              context,
-              displayTrack,
-              playbackProvider,
-              previousTrack: previousTrack,
-            );
+        final Widget miniLayer = _buildMiniPlayer(
+          context,
+          displayTrack,
+          playbackProvider,
+          previousTrack: previousTrack,
+        );
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
@@ -455,9 +461,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             final double height = lerpDouble(miniPlayerHeight, fullHeight, t)!;
             final double miniOpacity =
                 1 - Curves.easeOutCubic.transform((t / 0.45).clamp(0.0, 1.0));
-            final double fullOpacity = Curves.easeInCubic
-                .transform(((t - 0.35) / 0.65).clamp(0.0, 1.0));
-            final bool flightReady = _coverFlightActive &&
+            final double fullOpacity = Curves.easeInCubic.transform(
+              ((t - 0.35) / 0.65).clamp(0.0, 1.0),
+            );
+            final bool flightReady =
+                _coverFlightActive &&
                 _coverFlightFrom != null &&
                 _coverFlightTo != null;
             return SizedBox(
@@ -572,10 +580,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
         final t = _trackEntrance.value;
         return Transform.translate(
           offset: Offset(0, (1 - t) * 14),
-          child: Opacity(
-            opacity: t.clamp(0.0, 1.0),
-            child: child,
-          ),
+          child: Opacity(opacity: t.clamp(0.0, 1.0), child: child),
         );
       },
       child: _buildTrackInfoText(context, displayTrack, playbackProvider),
@@ -594,9 +599,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     Track? displayTrack,
     PlaybackProvider playbackProvider,
   ) {
-    final header = displayTrack?.title ??
+    final header =
+        displayTrack?.title ??
         playbackProvider.lastPlayedTrackName ??
-        'No track playing';
+        _l10n(context).noCurrentTrackPlaying;
     final artistText = displayTrack != null
         ? _artistsLabel(context, displayTrack)
         : playbackProvider.lastPlayedArtists ?? _l10n(context).unknownArtist;
@@ -614,8 +620,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   Widget _buildFavoriteButton({
     M3EIconButtonSize size = M3EIconButtonSize.sm,
     Size visualSize = const Size(44, 44),
-  }) =>
-      NowPlayingFavoriteButton(size: size, visualSize: visualSize);
+  }) => NowPlayingFavoriteButton(size: size, visualSize: visualSize);
 
   Widget _buildMiniPlayer(
     BuildContext context,
@@ -643,12 +648,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                       key: _miniCoverKey,
                       size: 48,
                       appearance: CoverAppearance.mini,
-                      content: (context, clip, iconSize) =>
-                          _buildMiniAlbumArt(
-                            track,
-                            iconSize,
-                            previousTrack: previousTrack,
-                          ),
+                      content: (context, clip, iconSize) => _buildMiniAlbumArt(
+                        track,
+                        iconSize,
+                        previousTrack: previousTrack,
+                      ),
                     ),
                   ),
                   SizedBox(width: context.isCompact ? 8 : 16),
@@ -660,13 +664,13 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                         Text(
                           track?.title ??
                               playback.lastPlayedTrackName ??
-                              'No track playing',
+                              _l10n(context).noCurrentTrackPlaying,
                           // 迷你条文本与列表页契约一致：标题 onSurface、
                           // 作者 onSurfaceVariant，强调色只给控件。
-                          style:
-                              context.emphasizedTypeScale.titleMedium.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
+                          style: context.emphasizedTypeScale.titleMedium
+                              .copyWith(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -674,10 +678,11 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                           track != null
                               ? _artistsLabel(context, track)
                               : playback.lastPlayedArtists ??
-                                  _l10n(context).unknownArtist,
+                                    _l10n(context).unknownArtist,
                           style: context.typeScale.bodyMedium.copyWith(
-                            color:
-                                Theme.of(context).colorScheme.onSurfaceVariant,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -714,12 +719,12 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       child: ValueListenableBuilder<Duration>(
         valueListenable: playback.position,
         builder: (context, position, _) {
-          final (durationMs, isPlaying) =
-              context.select<PlaybackProvider, (int, bool)>(
-            (provider) => (
-              provider.snapshot.duration.inMilliseconds,
-              provider.isPlaying,
-            ),
+          final (
+            durationMs,
+            isPlaying,
+          ) = context.select<PlaybackProvider, (int, bool)>(
+            (provider) =>
+                (provider.snapshot.duration.inMilliseconds, provider.isPlaying),
           );
           if (durationMs <= 0) {
             // 无曲目/无时长：只画静态轨道，避免不确定波浪动画抢视线。
@@ -734,8 +739,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
               ),
             );
           }
-          final double fraction =
-              (position.inMilliseconds / durationMs).clamp(0.0, 1.0);
+          final double fraction = (position.inMilliseconds / durationMs).clamp(
+            0.0,
+            1.0,
+          );
           if (!isPlaying) {
             return M3EProgressIndicator.linear(
               value: fraction,
@@ -777,10 +784,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildFavoriteButton(
-          size: size,
-          visualSize: visualSize,
-        ),
+        _buildFavoriteButton(size: size, visualSize: visualSize),
         PlaybackPreviousButton(size: size, visualSize: visualSize),
         PlaybackPlayPauseButton(size: size, visualSize: visualSize),
         PlaybackNextButton(size: size, visualSize: visualSize),
@@ -797,14 +801,15 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     final coverEdge = playbackCoverDecodeEdge(context);
     final covers = coverResolverOf(context);
     final currentUrl = covers.realOf(displayTrack).url;
-    final previousUrl =
-        previousTrack == null ? null : covers.realOf(previousTrack).url;
+    final previousUrl = previousTrack == null
+        ? null
+        : covers.realOf(previousTrack).url;
     // 只有当前曲目自己有封面时才拿上一首封面垫底；无封面曲目直接走回退，
     // 否则旧封面会从新卡下面透出来。
     final placeholderUrl =
         currentUrl != null && currentUrl.isNotEmpty && previousUrl != null
-            ? previousUrl
-            : null;
+        ? previousUrl
+        : null;
     // 与顶栏/播放页/预加载共用同一有界解码键，迷你 ⇄ 完整飞行与切歌动画
     // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
     return TrackArtwork(
@@ -828,12 +833,15 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 大屏全屏播放器：与小屏同构（三封面堆叠 → 歌名/作者 → 可拖动进度排），
   /// 封面按两轴可用空间自适应。
   Widget _buildLargeScreenPlayerLayout(
-      Track? displayTrack, PlaybackProvider playbackProvider) {
+    Track? displayTrack,
+    PlaybackProvider playbackProvider,
+  ) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         // 标题块高度预算：桌面版式是两行（歌名 + 作者），移动 / 平板大屏单行。
-        final double textSectionFixedHeight =
-            widget.desktopLayout ? 52.0 : 56.0;
+        final double textSectionFixedHeight = widget.desktopLayout
+            ? 52.0
+            : 56.0;
         const double spacingBelowArt = 2.0;
         // 桌面版式多出的传输控制排（md 播放键 56）与标题块间距 8：封面可用
         // 高度要扣掉，否则矮窗口里进度排会被挤出可视区。

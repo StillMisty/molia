@@ -118,22 +118,24 @@ enum SyncIssueAction {
 List<SyncIssueAction> syncIssueActions(SyncIssue? issue) =>
     switch (issue?.code) {
       SyncIssueCode.permissionDenied => const [
-          SyncIssueAction.useWebdav,
-          SyncIssueAction.grantPermission,
-        ],
+        SyncIssueAction.useWebdav,
+        SyncIssueAction.grantPermission,
+      ],
       // 未设口令时重试必败：只给「配置口令」，不给重试。
       SyncIssueCode.noPassphrase => const [SyncIssueAction.configurePassphrase],
       // 未配置 WebDAV 时重试同样必败：主推荐是「去配置」，重试只作次要出口。
       SyncIssueCode.notConfigured => const [
-          SyncIssueAction.retry,
-          SyncIssueAction.configureWebdav,
-        ],
+        SyncIssueAction.retry,
+        SyncIssueAction.configureWebdav,
+      ],
       SyncIssueCode.webdavDirFailed ||
       SyncIssueCode.webdavListFailed ||
       SyncIssueCode.webdavReadFailed ||
       SyncIssueCode.webdavDecryptFailed ||
-      SyncIssueCode.webdavUploadFailed =>
-        const [SyncIssueAction.configureWebdav, SyncIssueAction.retry],
+      SyncIssueCode.webdavUploadFailed => const [
+        SyncIssueAction.configureWebdav,
+        SyncIssueAction.retry,
+      ],
       SyncIssueCode.allPeersUnreachable => _allPeersUnreachableActions(issue),
       // 局域网发现 / 读取失败：手动地址与 WebDAV 是两条真实出路（权限被拒
       // 时手动地址无效，那种情况由 permissionDenied 分支覆盖）。
@@ -143,12 +145,11 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) =>
       SyncIssueCode.discoverySilent ||
       SyncIssueCode.peerReadFailed ||
       SyncIssueCode.peerDecryptFailed ||
-      SyncIssueCode.peerPushFailed =>
-        const [
-          SyncIssueAction.addManualPeer,
-          SyncIssueAction.useWebdav,
-          SyncIssueAction.retry,
-        ],
+      SyncIssueCode.peerPushFailed => const [
+        SyncIssueAction.addManualPeer,
+        SyncIssueAction.useWebdav,
+        SyncIssueAction.retry,
+      ],
       _ => const [SyncIssueAction.retry],
     };
 
@@ -156,12 +157,12 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) =>
 /// 配置与重试（传输由引擎写进 [SyncIssue.args]；缺失时按局域网处理）。
 List<SyncIssueAction> _allPeersUnreachableActions(SyncIssue? issue) =>
     issue?.args['transport'] == SyncTransportKind.webdav
-        ? const [SyncIssueAction.configureWebdav, SyncIssueAction.retry]
-        : const [
-            SyncIssueAction.addManualPeer,
-            SyncIssueAction.useWebdav,
-            SyncIssueAction.retry,
-          ];
+    ? const [SyncIssueAction.configureWebdav, SyncIssueAction.retry]
+    : const [
+        SyncIssueAction.addManualPeer,
+        SyncIssueAction.useWebdav,
+        SyncIssueAction.retry,
+      ];
 
 /// 失败详情弹层：原因文案 + 按原因给动作（重试 / 去授权 / 去配置）。
 ///
@@ -246,47 +247,39 @@ Widget _actionButton(
 
   final (String label, Future<void> Function() body) = switch (action) {
     SyncIssueAction.retry => (
-        l10n.syncRetry,
-        () => provider.syncNow(manual: true),
-      ),
-    SyncIssueAction.grantPermission => provider.lanPermissionPermanentlyDenied
-        ? (
-            l10n.syncOpenSystemSettings,
-            () => provider.openSystemSettings(),
-          )
-        : (
-            l10n.syncActionGrantPermission,
-            () => _grantLanPermission(context, provider, l10n),
-          ),
+      l10n.syncRetry,
+      () => provider.syncNow(manual: true),
+    ),
+    SyncIssueAction.grantPermission =>
+      provider.lanPermissionPermanentlyDenied
+          ? (l10n.syncOpenSystemSettings, () => provider.openSystemSettings())
+          : (
+              l10n.syncActionGrantPermission,
+              () => _grantLanPermission(context, provider, l10n),
+            ),
     SyncIssueAction.configureWebdav => (
-        l10n.syncActionConfigure,
-        () => showWebdavConfigDialog(context, provider, l10n),
-      ),
+      l10n.syncActionConfigure,
+      () => showWebdavConfigDialog(context, provider, l10n),
+    ),
     SyncIssueAction.configurePassphrase => (
-        l10n.syncActionConfigurePassphrase,
-        () => onConfigurePassphrase != null
-            ? onConfigurePassphrase()
-            : _hintSettingsPage(context, l10n),
-      ),
+      l10n.syncActionConfigurePassphrase,
+      () => onConfigurePassphrase != null
+          ? onConfigurePassphrase()
+          : _hintSettingsPage(context, l10n),
+    ),
     SyncIssueAction.addManualPeer => (
-        l10n.syncActionAddManualPeer,
-        () => showSyncManualPeerDialog(context, provider, l10n),
-      ),
+      l10n.syncActionAddManualPeer,
+      () => showSyncManualPeerDialog(context, provider, l10n),
+    ),
     SyncIssueAction.useWebdav => (
-        l10n.syncActionUseWebdav,
-        () => _useWebdav(context, provider, l10n),
-      ),
+      l10n.syncActionUseWebdav,
+      () => _useWebdav(context, provider, l10n),
+    ),
   };
   // 最后一个动作是主推荐（filled），其余为文字按钮。
   return primary
-      ? M3EButton.filled(
-          onPressed: () => run(body),
-          child: Text(label),
-        )
-      : M3EButton.text(
-          onPressed: () => run(body),
-          child: Text(label),
-        );
+      ? M3EButton.filled(onPressed: () => run(body), child: Text(label))
+      : M3EButton.text(onPressed: () => run(body), child: Text(label));
 }
 
 /// 显式申请权限；仍被拒时给「去系统设置」的下一步动作。
@@ -302,11 +295,14 @@ Future<void> _grantLanPermission(
     context,
     l10n.syncLanPermissionNeeded,
     isError: true,
-    actionLabel:
-        permanent ? l10n.syncOpenSystemSettings : l10n.syncLanPermissionGrant,
-    onAction: () => unawaited(permanent
-        ? provider.openSystemSettings()
-        : _grantLanPermission(context, provider, l10n)),
+    actionLabel: permanent
+        ? l10n.syncOpenSystemSettings
+        : l10n.syncLanPermissionGrant,
+    onAction: () => unawaited(
+      permanent
+          ? provider.openSystemSettings()
+          : _grantLanPermission(context, provider, l10n),
+    ),
   );
 }
 
@@ -367,7 +363,9 @@ Future<void> showSyncPassphraseDialog(
           onPressed: () {
             Clipboard.setData(ClipboardData(text: passphrase));
             showSyncNotice(
-                context, l10n.copiedToClipboard(l10n.syncPassphraseTitle));
+              context,
+              l10n.copiedToClipboard(l10n.syncPassphraseTitle),
+            );
           },
           child: Text(l10n.syncPassphraseCopy),
         ),

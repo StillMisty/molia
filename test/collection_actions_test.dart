@@ -24,17 +24,17 @@ class _FakeLibrary implements CollectionActionLibrary {
 
   @override
   Track trackFromPlaylistTrack(PlaylistTrack track) => _domainTrack(
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        title: track.title,
-      );
+    sourceKey: track.sourceKey,
+    songId: track.songId,
+    title: track.title,
+  );
 
   @override
   Track trackFromHistoryEntry(PlayHistoryEntry entry) => _domainTrack(
-        sourceKey: entry.sourceKey,
-        songId: entry.songId,
-        title: entry.title,
-      );
+    sourceKey: entry.sourceKey,
+    songId: entry.songId,
+    title: entry.title,
+  );
 
   @override
   bool isFavorite(String sourceKey, String songId) =>
@@ -173,34 +173,33 @@ Track _domainTrack({
   required String sourceKey,
   required String songId,
   required String title,
-}) =>
-    Track(
-      id: TrackId(sourceKey, songId),
-      title: title,
-      origin: TrackOrigin.builtin,
-    );
+}) => Track(
+  id: TrackId(sourceKey, songId),
+  title: title,
+  origin: TrackOrigin.builtin,
+);
 
 PlaylistTrack _track(String id, {String sourceKey = 'wy'}) => PlaylistTrack(
-      playlistId: 1,
-      sourceKey: sourceKey,
-      songId: id,
-      title: 'Song $id',
-      artist: 'Artist $id',
-      album: 'Album',
-      durationMs: 180000,
-      addedAt: 1,
-    );
+  playlistId: 1,
+  sourceKey: sourceKey,
+  songId: id,
+  title: 'Song $id',
+  artist: 'Artist $id',
+  album: 'Album',
+  durationMs: 180000,
+  addedAt: 1,
+);
 
 PlayHistoryEntry _history(String id) => PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: id,
-      title: 'Song $id',
-      artist: 'Artist $id',
-      album: 'Album',
-      durationMs: 180000,
-      raw: {'songId': id},
-      playedAt: 1,
-    );
+  sourceKey: 'wy',
+  songId: id,
+  title: 'Song $id',
+  artist: 'Artist $id',
+  album: 'Album',
+  durationMs: 180000,
+  raw: {'songId': id},
+  playedAt: 1,
+);
 
 CollectionLocalSong _downloaded(String id, {bool imported = false}) =>
     CollectionLocalSong.download(
@@ -223,18 +222,17 @@ CollectionView _view(
   int? playlistId,
   CollectionKind kind = CollectionKind.custom,
   String name = '合集',
-}) =>
-    CollectionView(
-      identity: CollectionIdentity(
-        selectedId: playlistId ?? 1,
-        kind: kind,
-        playlistId: playlistId,
-        displayName: name,
-      ),
-      tracks: const [],
-      visibleRows: rows,
-      hasItems: rows.isNotEmpty,
-    );
+}) => CollectionView(
+  identity: CollectionIdentity(
+    selectedId: playlistId ?? 1,
+    kind: kind,
+    playlistId: playlistId,
+    displayName: name,
+  ),
+  tracks: const [],
+  visibleRows: rows,
+  hasItems: rows.isNotEmpty,
+);
 
 void main() {
   late _FakeLibrary library;
@@ -268,10 +266,11 @@ void main() {
 
       await actions.play(view, startIndex: 2, shuffle: true);
 
-      expect(
-        handoff.played!.map((track) => track.title).toList(),
-        ['Song 1', 'Song 2', '下载 3'],
-      );
+      expect(handoff.played!.map((track) => track.title).toList(), [
+        'Song 1',
+        'Song 2',
+        '下载 3',
+      ]);
       expect(handoff.startIndex, 2);
       expect(handoff.shuffle, isTrue);
       expect(handoff.contextName, '我的合集');
@@ -324,10 +323,7 @@ void main() {
         LocalSongCollectionRow(_downloaded('3')),
       ];
 
-      await actions.setFavorite(
-        rows,
-        change: CollectionFavoriteChange.remove,
-      );
+      await actions.setFavorite(rows, change: CollectionFavoriteChange.remove);
 
       expect(library.removedFavorites.single, [
         (sourceKey: 'wy', songId: '1'),
@@ -343,10 +339,7 @@ void main() {
         HistoryCollectionRow(_history('2')),
       ];
 
-      expect(
-        actions.favoriteChange(rows),
-        CollectionFavoriteChange.remove,
-      );
+      expect(actions.favoriteChange(rows), CollectionFavoriteChange.remove);
 
       library.favorites.remove('wy:2');
       expect(actions.favoriteChange(rows), CollectionFavoriteChange.add);
@@ -366,10 +359,9 @@ void main() {
     test('写入结果原样返回（失败不被吞掉）', () async {
       library.outcome = LibraryMutationOutcome.failed(StateError('写失败'));
 
-      final outcome = await actions.setFavorite(
-        [TrackCollectionRow(_track('1'))],
-        change: CollectionFavoriteChange.add,
-      );
+      final outcome = await actions.setFavorite([
+        TrackCollectionRow(_track('1')),
+      ], change: CollectionFavoriteChange.add);
 
       expect(outcome.isFailure, isTrue);
     });
@@ -378,17 +370,11 @@ void main() {
   group('列表 / 历史删除', () {
     test('从列表移除只取列表曲目行（历史行显式忽略）', () async {
       await actions.removeFromPlaylist(
-        _view(
-          [
-            TrackCollectionRow(_track('1')),
-            HistoryCollectionRow(_history('2')),
-          ],
-          playlistId: 7,
-        ),
-        [
+        _view([
           TrackCollectionRow(_track('1')),
           HistoryCollectionRow(_history('2')),
-        ],
+        ], playlistId: 7),
+        [TrackCollectionRow(_track('1')), HistoryCollectionRow(_history('2'))],
       );
 
       expect(library.playlistRemovals.single.playlistId, 7);
@@ -417,10 +403,9 @@ void main() {
         LocalSongCollectionRow(_cached('3')),
       ]);
 
-      expect(
-        library.historyDeletions.single.map((entry) => entry.songId),
-        ['2'],
-      );
+      expect(library.historyDeletions.single.map((entry) => entry.songId), [
+        '2',
+      ]);
     });
 
     test('清空历史走同一资料库端口', () async {
@@ -442,19 +427,16 @@ void main() {
       expect(outcome.removed, 1);
       expect(outcome.cleared, 1);
       expect(outcome.failed, 0);
-      expect(
-        localData.deleted.map((record) => record.key).toList(),
-        ['wy:1', 'local:2'],
-      );
+      expect(localData.deleted.map((record) => record.key).toList(), [
+        'wy:1',
+        'local:2',
+      ]);
       expect(localData.cleared.single.id.uri, 'wy:3');
-      expect(
-        outcome.items.map((item) => item.kind).toList(),
-        [
-          CollectionLocalDeleteKind.download,
-          CollectionLocalDeleteKind.imported,
-          CollectionLocalDeleteKind.cached,
-        ],
-      );
+      expect(outcome.items.map((item) => item.kind).toList(), [
+        CollectionLocalDeleteKind.download,
+        CollectionLocalDeleteKind.imported,
+        CollectionLocalDeleteKind.cached,
+      ]);
     });
 
     test('部分失败：一条失败不阻断其余，失败计数进结果', () async {
@@ -516,22 +498,20 @@ void main() {
 
   group('排序', () {
     test('按可见行重建列表并写回落库 id', () async {
-      final view = _view(
-        [
-          TrackCollectionRow(_track('1')),
-          TrackCollectionRow(_track('2')),
-          TrackCollectionRow(_track('3')),
-        ],
-        playlistId: 9,
-      );
+      final view = _view([
+        TrackCollectionRow(_track('1')),
+        TrackCollectionRow(_track('2')),
+        TrackCollectionRow(_track('3')),
+      ], playlistId: 9);
 
       await actions.reorder(view, 2, 0);
 
       expect(library.reorders.single.playlistId, 9);
-      expect(
-        library.reorders.single.ordered.map((track) => track.songId),
-        ['3', '1', '2'],
-      );
+      expect(library.reorders.single.ordered.map((track) => track.songId), [
+        '3',
+        '1',
+        '2',
+      ]);
     });
 
     test('同下标 / 越界 / 无列表 id = 无变化且不写库', () async {
@@ -571,15 +551,17 @@ void main() {
       final copied = await actions.copyToLibrary(view, view.visibleRows);
 
       expect(copied, isTrue);
-      expect(
-        handoff.added!.map((track) => track.title).toList(),
-        ['Song 1', 'Song 2', '下载 3'],
-      );
+      expect(handoff.added!.map((track) => track.title).toList(), [
+        'Song 1',
+        'Song 2',
+        '下载 3',
+      ]);
       // 历史 / 本地行同批共用一个 addedAt；列表曲目保留自身写入时间。
-      expect(
-        handoff.added!.map((track) => track.addedAt).toList(),
-        [1, 1000, 1000],
-      );
+      expect(handoff.added!.map((track) => track.addedAt).toList(), [
+        1,
+        1000,
+        1000,
+      ]);
       expect(handoff.includeFavorites, isTrue);
       expect(handoff.includeHistory, isTrue);
     });
@@ -646,6 +628,11 @@ void main() {
       expect(command.removeFromPlaylist, isNull);
       expect(command.swap!.historyKey, (sourceKey: 'wy', songId: '2'));
       expect(command.swap!.playlistId, isNull);
+      expect(command.isFavorite, isFalse);
+      library.favorites.add('wy:2');
+      expect(command.isFavorite, isTrue);
+      await command.toggleFavorite!();
+      expect(library.removedFavorites.single.single.songId, '2');
 
       await command.deleteHistory!();
       expect(library.historyDeletions.single.single.songId, '2');

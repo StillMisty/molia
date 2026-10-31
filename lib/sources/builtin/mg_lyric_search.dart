@@ -41,11 +41,7 @@ class MgLyricSearch {
 
   /// 平台变体面：签名 GET（与单曲搜索共用 [MgSearch.searchAllRequest]）/
   /// 业务码判定 / 命中解析。
-  static BuiltinLyricSearchCall _callFor(
-    String keyword,
-    int page,
-    int limit,
-  ) {
+  static BuiltinLyricSearchCall _callFor(String keyword, int page, int limit) {
     final request = MgSearch.searchAllRequest(
       text: keyword,
       page: page,
@@ -56,8 +52,7 @@ class MgLyricSearch {
       platform: 'mg',
       url: request.url,
       headers: request.headers,
-      isInvalid: (response) =>
-          response is! Map || response['code'] != '000000',
+      isInvalid: (response) => response is! Map || response['code'] != '000000',
       parseHits: (response) {
         final lyricData = (response as Map)['lyricResultData'];
         final rawList = (lyricData is Map) ? lyricData['result'] : null;
@@ -102,7 +97,8 @@ class MgLyricSearch {
     if (highlights is List) {
       final words = [
         for (final word in highlights)
-          if (word?.toString().trim().isNotEmpty ?? false) word.toString().trim(),
+          if (word?.toString().trim().isNotEmpty ?? false)
+            word.toString().trim(),
       ];
       if (words.isNotEmpty) return words.join('、');
     }

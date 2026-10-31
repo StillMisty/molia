@@ -60,11 +60,9 @@ int resolveTrackStartIndex({
 List<PlaylistTrack> playlistTracksFrom(
   Iterable<Track> tracks, {
   required int addedAt,
-}) =>
-    [
-      for (final track in tracks)
-        PlaylistTrack.fromTrack(track, addedAt: addedAt),
-    ];
+}) => [
+  for (final track in tracks) PlaylistTrack.fromTrack(track, addedAt: addedAt),
+];
 
 /// 把一组曲目交给播放或资料库的句柄。
 ///

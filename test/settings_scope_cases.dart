@@ -45,9 +45,8 @@ void main() {
     final registry = testSettingsRegistry();
     final scope = registry.scope([kThemeMode]);
 
-    Matcher rejected() => throwsA(
-          anyOf(isA<AssertionError>(), isA<StateError>()),
-        );
+    Matcher rejected() =>
+        throwsA(anyOf(isA<AssertionError>(), isA<StateError>()));
 
     expect(() => scope.read(kPureBlackEnabled), rejected());
     expect(() => scope.write(kPureBlackEnabled, true), rejected());

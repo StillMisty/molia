@@ -11,7 +11,10 @@ import 'package:molia/sources/lx/lx_script_info.dart';
 void main() {
   group('LxNativeUtils.md5', () {
     test('matches known vector', () {
-      expect(LxNativeUtils.md5('hello world'), '5eb63bbbe01eeed093cb22bb8f5acdc3');
+      expect(
+        LxNativeUtils.md5('hello world'),
+        '5eb63bbbe01eeed093cb22bb8f5acdc3',
+      );
     });
   });
 
@@ -87,7 +90,9 @@ fLgI/d5rt6cbIlUMywIDAQAB
 
   group('LxNativeUtils.zlib', () {
     test('deflate/inflate roundtrip', () {
-      final original = Uint8List.fromList(utf8.encode('LX Music zlib roundtrip 测试'));
+      final original = Uint8List.fromList(
+        utf8.encode('LX Music zlib roundtrip 测试'),
+      );
       final deflated = LxNativeUtils.zlibDeflate(original);
       expect(deflated, isNot(equals(original)));
       final inflated = LxNativeUtils.zlibInflate(deflated);

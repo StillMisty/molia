@@ -27,7 +27,8 @@ class KgComment {
       CommentKind.latest => 'newest',
     };
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final params = 'dfid=0&mid=16249512204336365674023395779019'
+    final params =
+        'dfid=0&mid=16249512204336365674023395779019'
         '&clienttime=$timestamp&uuid=0&extdata=$hash&appid=1005'
         '&code=fc4be23b4e972707f36b8a828a93ba8a&schash=$hash&clientver=11409'
         '&p=$page&clienttoken=&pagesize=$limit&ver=10&kugouid=0';
@@ -35,8 +36,7 @@ class KgComment {
       'http://m.comment.service.kugou.com/r/v1/rank/$path'
       '?$params&signature=${kgSignatureParams(params)}',
       headers: const {
-        'User-Agent':
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 Edg/107.0.1418.24',
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36 Edg/107.0.1418.24',
       },
       retries: BuiltinTransport.defaultRetries,
       retryIf: _isInvalid,

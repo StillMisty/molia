@@ -14,37 +14,34 @@ void main() {
     String version = '1.2.3',
     int build = 42,
     List<Map<String, Object?>>? assets,
-  }) =>
-      {
-        'schema': 1,
-        'channel': channel,
-        'version': version,
-        'build': build,
-        'releasedAt': '2026-10-14T00:00:00Z',
-        'notes': '修复若干问题',
-        'notesUrl': 'https://github.com/StillMisty/molia/releases/tag/v1.2.3',
-        'assets': assets ??
-            [
-              {
-                'platform': 'linux',
-                'arch': 'x64',
-                'kind': 'tar.gz',
-                'file': 'molia-1.2.3-linux-x64.tar.gz',
-                'url':
-                    'https://github.com/StillMisty/molia/releases/download/v1.2.3/molia-1.2.3-linux-x64.tar.gz',
-                'size': 123,
-                'sha256': 'abc',
-              },
-            ],
-      };
+  }) => {
+    'schema': 1,
+    'channel': channel,
+    'version': version,
+    'build': build,
+    'releasedAt': '2026-10-14T00:00:00Z',
+    'notes': '修复若干问题',
+    'notesUrl': 'https://github.com/StillMisty/molia/releases/tag/v1.2.3',
+    'assets':
+        assets ??
+        [
+          {
+            'platform': 'linux',
+            'arch': 'x64',
+            'kind': 'tar.gz',
+            'file': 'molia-1.2.3-linux-x64.tar.gz',
+            'url': 'https://github.com/StillMisty/molia/releases/download/v1.2.3/molia-1.2.3-linux-x64.tar.gz',
+            'size': 123,
+            'sha256': 'abc',
+          },
+        ],
+  };
 
   String body(Map<String, Object?> value) => jsonEncode(value);
 
   test('合法清单解析：字段、时间与产物', () async {
     final adapter = MockDioAdapter((_) => textResponse(body(manifest())));
-    final client = UpdateManifestClient(
-      dio: createAppDio(adapter: adapter),
-    );
+    final client = UpdateManifestClient(dio: createAppDio(adapter: adapter));
 
     final release = await client.fetch(UpdateChannel.stable);
     expect(release.version, '1.2.3');
@@ -85,29 +82,31 @@ void main() {
     );
     await expectLater(
       client.fetch(UpdateChannel.stable),
-      throwsA(isA<UpdateFailureException>().having(
-        (e) => e.kind,
-        'kind',
-        UpdateFailureKind.manifestInvalid,
-      )),
+      throwsA(
+        isA<UpdateFailureException>().having(
+          (e) => e.kind,
+          'kind',
+          UpdateFailureKind.manifestInvalid,
+        ),
+      ),
     );
   });
 
   test('HTTP 非 200 归一为网络失败', () async {
     final client = UpdateManifestClient(
       dio: createAppDio(
-        adapter: MockDioAdapter(
-          (_) => textResponse('nope', statusCode: 503),
-        ),
+        adapter: MockDioAdapter((_) => textResponse('nope', statusCode: 503)),
       ),
     );
     await expectLater(
       client.fetch(UpdateChannel.stable),
-      throwsA(isA<UpdateFailureException>().having(
-        (e) => e.kind,
-        'kind',
-        UpdateFailureKind.network,
-      )),
+      throwsA(
+        isA<UpdateFailureException>().having(
+          (e) => e.kind,
+          'kind',
+          UpdateFailureKind.network,
+        ),
+      ),
     );
   });
 
@@ -118,11 +117,13 @@ void main() {
       );
       await expectLater(
         client.fetch(UpdateChannel.stable),
-        throwsA(isA<UpdateFailureException>().having(
-          (e) => e.kind,
-          'kind',
-          UpdateFailureKind.manifestInvalid,
-        )),
+        throwsA(
+          isA<UpdateFailureException>().having(
+            (e) => e.kind,
+            'kind',
+            UpdateFailureKind.manifestInvalid,
+          ),
+        ),
       );
     }
 
@@ -130,29 +131,46 @@ void main() {
     await expectInvalid(body(manifest()..['schema'] = 99));
     await expectInvalid(body(manifest()..['version'] = 'x.y'));
     await expectInvalid(body(manifest()..['build'] = null));
-    await expectInvalid(body(manifest(assets: [
-      {'platform': 'linux', 'arch': 'x64', 'kind': 'tar.gz', 'url': 'ftp://x'},
-    ])));
+    await expectInvalid(
+      body(
+        manifest(
+          assets: [
+            {
+              'platform': 'linux',
+              'arch': 'x64',
+              'kind': 'tar.gz',
+              'url': 'ftp://x',
+            },
+          ],
+        ),
+      ),
+    );
   });
 
   test('单个坏产物跳过，其余仍可用', () async {
     final client = UpdateManifestClient(
       dio: createAppDio(
         adapter: MockDioAdapter(
-          (_) => textResponse(body(manifest(assets: [
-            {
-              'platform': 'linux',
-              'arch': 'x64',
-              'kind': 'tar.gz',
-              'url': 'not a url',
-            },
-            {
-              'platform': 'windows',
-              'arch': 'x64',
-              'kind': 'zip',
-              'url': 'https://example.com/molia.zip',
-            },
-          ]))),
+          (_) => textResponse(
+            body(
+              manifest(
+                assets: [
+                  {
+                    'platform': 'linux',
+                    'arch': 'x64',
+                    'kind': 'tar.gz',
+                    'url': 'not a url',
+                  },
+                  {
+                    'platform': 'windows',
+                    'arch': 'x64',
+                    'kind': 'zip',
+                    'url': 'https://example.com/molia.zip',
+                  },
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -189,8 +207,10 @@ void main() {
       manifestUrlOverride: () => 'https://mirror.example/latest.json',
     );
     await client.fetch(UpdateChannel.stable);
-    expect(adapter.lastRequest.uri.toString(),
-        'https://mirror.example/latest.json');
+    expect(
+      adapter.lastRequest.uri.toString(),
+      'https://mirror.example/latest.json',
+    );
 
     final bad = UpdateManifestClient(
       dio: createAppDio(adapter: adapter),
@@ -198,11 +218,13 @@ void main() {
     );
     await expectLater(
       bad.fetch(UpdateChannel.stable),
-      throwsA(isA<UpdateFailureException>().having(
-        (e) => e.kind,
-        'kind',
-        UpdateFailureKind.manifestInvalid,
-      )),
+      throwsA(
+        isA<UpdateFailureException>().having(
+          (e) => e.kind,
+          'kind',
+          UpdateFailureKind.manifestInvalid,
+        ),
+      ),
     );
   });
 }

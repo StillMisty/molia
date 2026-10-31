@@ -35,10 +35,10 @@ class SecureSettingsSecretStore implements SettingsSecretStore {
   /// README「macOS: Keychain Sharing requires provisioning」）。
   static final FlutterSecureStorage _secureStorage =
       defaultTargetPlatform == TargetPlatform.macOS
-          ? const FlutterSecureStorage(
-              mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-            )
-          : const FlutterSecureStorage();
+      ? const FlutterSecureStorage(
+          mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+        )
+      : const FlutterSecureStorage();
 
   @override
   Future<String?> read(String key) async {

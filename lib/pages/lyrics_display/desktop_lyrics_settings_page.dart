@@ -78,9 +78,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                       child: Text(
                         l10n.lyricsDesktopPermissionNeeded,
                         style: context.typeScale.bodySmall.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -133,8 +131,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               title: l10n.lyricsDesktopMaxLines,
               value: settings.desktopMaxLines,
               options: [
-                for (final value in const [1, 2, 3, 4, 5])
-                  (value, '$value'),
+                for (final value in const [1, 2, 3, 4, 5]) (value, '$value'),
               ],
               onChanged: settings.setDesktopMaxLines,
             ),
@@ -161,14 +158,8 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               title: l10n.lyricsDesktopSchemeSource,
               value: settings.desktopSchemeSource,
               options: [
-                (
-                  SurfaceColorSource.appTheme,
-                  l10n.lyricsDesktopSchemeAppTheme,
-                ),
-                (
-                  SurfaceColorSource.artwork,
-                  l10n.lyricsDesktopSchemeArtwork,
-                ),
+                (SurfaceColorSource.appTheme, l10n.lyricsDesktopSchemeAppTheme),
+                (SurfaceColorSource.artwork, l10n.lyricsDesktopSchemeArtwork),
               ],
               onChanged: settings.setDesktopSchemeSource,
             ),
@@ -254,10 +245,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
                   DesktopScrollMode.followSinging,
                   l10n.lyricsDesktopScrollFollow,
                 ),
-                (
-                  DesktopScrollMode.constant,
-                  l10n.lyricsDesktopScrollConstant,
-                ),
+                (DesktopScrollMode.constant, l10n.lyricsDesktopScrollConstant),
               ],
               onChanged: settings.setDesktopScrollMode,
             ),
@@ -290,10 +278,7 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               value: settings.desktopNoLyricsBehavior,
               options: [
                 (DesktopNoLyricsBehavior.title, l10n.lyricsBehaviorTitle),
-                (
-                  DesktopNoLyricsBehavior.hide,
-                  l10n.lyricsDisplayUnsyncedHide,
-                ),
+                (DesktopNoLyricsBehavior.hide, l10n.lyricsDisplayUnsyncedHide),
               ],
               onChanged: settings.setDesktopNoLyricsBehavior,
             ),
@@ -468,21 +453,27 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
     ColorScheme scheme,
   ) {
     final fontSize = math.min(settings.desktopFontSize, 28.0);
-    final played = Color(resolveLyricColor(
-      settings.desktopPlayedColorSource,
-      settings.desktopPlayedColor,
-      scheme,
-    ));
-    final unplayed = Color(resolveLyricColor(
-      settings.desktopUnplayedColorSource,
-      settings.desktopUnplayedColor,
-      scheme,
-    ));
-    final shadow = Color(resolveLyricColor(
-      settings.desktopShadowColorSource,
-      settings.desktopShadowColor,
-      scheme,
-    ));
+    final played = Color(
+      resolveLyricColor(
+        settings.desktopPlayedColorSource,
+        settings.desktopPlayedColor,
+        scheme,
+      ),
+    );
+    final unplayed = Color(
+      resolveLyricColor(
+        settings.desktopUnplayedColorSource,
+        settings.desktopUnplayedColor,
+        scheme,
+      ),
+    );
+    final shadow = Color(
+      resolveLyricColor(
+        settings.desktopShadowColorSource,
+        settings.desktopShadowColor,
+        scheme,
+      ),
+    );
     final previewLines = <Widget>[
       Text(
         l10n.lyricsDesktopPreviewLine,

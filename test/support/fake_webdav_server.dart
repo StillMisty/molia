@@ -61,15 +61,18 @@ class FakeWebDavServer {
               ? request.uri.path
               : '${request.uri.path}/';
           final body = files.keys
-              .map((name) =>
-                  '<d:response><d:href>$prefix$name</d:href>'
-                  '${includeVersion ? '<d:propstat><d:prop><d:getetag>'
-                      '${etags[name] ?? ''}</d:getetag></d:prop></d:propstat>' : ''}'
-                  '</d:response>')
+              .map(
+                (name) =>
+                    '<d:response><d:href>$prefix$name</d:href>'
+                    '${includeVersion ? '<d:propstat><d:prop><d:getetag>'
+                              '${etags[name] ?? ''}</d:getetag></d:prop></d:propstat>' : ''}'
+                    '</d:response>',
+              )
               .join();
           request.response.write(
-              '<?xml version="1.0" encoding="utf-8"?>'
-              '<d:multistatus xmlns:d="DAV:">$body</d:multistatus>');
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<d:multistatus xmlns:d="DAV:">$body</d:multistatus>',
+          );
         case 'PUT':
           putCount++;
           final builder = BytesBuilder(copy: false);

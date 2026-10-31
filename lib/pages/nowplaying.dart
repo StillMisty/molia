@@ -120,17 +120,17 @@ class _NowPlayingState extends State<NowPlaying>
     // 请求先于挂载（壳层先发请求、页面后才挂载）：作为初始页消费，不补动画。
     final int? requested = widget.controller?.requestedTab;
     _desktopTab = requested ?? nowPlayingLyricsTabIndex;
-    _visibleTab = ValueNotifier<int>(
-      requested ?? nowPlayingLyricsTabIndex,
+    _visibleTab = ValueNotifier<int>(requested ?? nowPlayingLyricsTabIndex);
+    _pageController = PageController(
+      initialPage: requested ?? _currentPageIndex,
     );
-    _pageController =
-        PageController(initialPage: requested ?? _currentPageIndex);
     _queueScrollController = ScrollController();
     _lyricsScrollController = ScrollController();
     _infoScrollController = ScrollController();
     _expandController = SingleMotionController(
-      motion:
-          const MaterialSpringMotion.expressiveSpatialDefault(snapToEnd: true),
+      motion: const MaterialSpringMotion.expressiveSpatialDefault(
+        snapToEnd: true,
+      ),
       vsync: this,
       initialValue: 0,
     )..value = 1.0;
@@ -247,8 +247,7 @@ class _NowPlayingState extends State<NowPlaying>
     final double extent = _expandDragExtent;
     // 手指向上（dy 负）→ 展开。
     final double delta = -details.delta.dy / extent;
-    _expandController.value =
-        (_expandController.value + delta).clamp(0.0, 1.0);
+    _expandController.value = (_expandController.value + delta).clamp(0.0, 1.0);
   }
 
   void _handlePlayerDragEnd(DragEndDetails details) {
@@ -365,8 +364,9 @@ class _NowPlayingState extends State<NowPlaying>
       _cachedPages = null;
     }
 
-    _cachedIsLargeScreen ??=
-        context.layoutType(ResponsivePageType.shell).preferTwoPane;
+    _cachedIsLargeScreen ??= context
+        .layoutType(ResponsivePageType.shell)
+        .preferTwoPane;
     return _cachedIsLargeScreen!;
   }
 
@@ -415,10 +415,7 @@ class _NowPlayingState extends State<NowPlaying>
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [
-                    scheme.surface,
-                    scheme.surface.withValues(alpha: 0),
-                  ],
+                  colors: [scheme.surface, scheme.surface.withValues(alpha: 0)],
                 ),
               ),
             ),
@@ -442,10 +439,10 @@ class _NowPlayingState extends State<NowPlaying>
   /// 页索引 → 滚动控制器（新增页面时必须同步登记，否则该页
   /// 「滑到顶再下拉收起播放器」失效）。
   ScrollController _scrollControllerOf(int page) => switch (page) {
-        _queuePageIndex => _queueScrollController,
-        _infoPageIndex => _infoScrollController,
-        _ => _lyricsScrollController,
-      };
+    _queuePageIndex => _queueScrollController,
+    _infoPageIndex => _infoScrollController,
+    _ => _lyricsScrollController,
+  };
 
   /// 当前内容页是否已在顶部（未挂载/无滚动条时视为在顶）。
   bool get _contentAtTop {
@@ -499,10 +496,7 @@ class _NowPlayingState extends State<NowPlaying>
               child: SizedBox(
                 height: double.infinity,
                 child: Center(
-                  child: Player(
-                    isLargeScreen: true,
-                    morph: widget.morph,
-                  ),
+                  child: Player(isLargeScreen: true, morph: widget.morph),
                 ),
               ),
             ),
@@ -681,8 +675,10 @@ class _NowPlayingState extends State<NowPlaying>
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final double playerMaxHeight =
-              max(340.0, constraints.maxHeight - 180);
+          final double playerMaxHeight = max(
+            340.0,
+            constraints.maxHeight - 180,
+          );
           // 供播放器区域的跟手拖拽换算行程（布局期写入，不触发重建）。
           _playerMaxHeight = playerMaxHeight;
           return Column(

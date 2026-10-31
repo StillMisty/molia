@@ -16,7 +16,7 @@ class DownloadRecordAssembler {
   /// [clock] 是下载时间（`downloadedAt`）的来源；缺省墙上时钟。记录既有
   /// `downloadedAt` 的形态（分项更新 / 补发布）不重新取值。
   DownloadRecordAssembler({int Function()? clock})
-      : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+    : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final int Function() _clock;
 
@@ -52,17 +52,18 @@ class DownloadRecordAssembler {
     String? lyricPath,
     String? coverPath,
   }) {
-    final draft = _RecordDraft.forTrack(
-      track,
-      downloadedAt: existing?.downloadedAt ?? _clock(),
-    )
-      ..quality = existing?.quality ?? ''
-      ..filePath = existing?.filePath
-      ..sizeBytes = existing?.sizeBytes ?? 0
-      ..lyricPath = lyricPath ?? existing?.lyricPath
-      ..coverPath = coverPath ?? existing?.coverPath
-      ..publicUri = existing?.publicUri
-      ..imported = existing?.imported ?? false;
+    final draft =
+        _RecordDraft.forTrack(
+            track,
+            downloadedAt: existing?.downloadedAt ?? _clock(),
+          )
+          ..quality = existing?.quality ?? ''
+          ..filePath = existing?.filePath
+          ..sizeBytes = existing?.sizeBytes ?? 0
+          ..lyricPath = lyricPath ?? existing?.lyricPath
+          ..coverPath = coverPath ?? existing?.coverPath
+          ..publicUri = existing?.publicUri
+          ..imported = existing?.imported ?? false;
     return draft.build();
   }
 
@@ -75,19 +76,18 @@ class DownloadRecordAssembler {
     required String artist,
     required String album,
     int? durationMs,
-  }) =>
-      (_RecordDraft(
-        originSourceKey: kLocalSourceKey,
-        originSongId: filePath,
-        title: title,
-        artist: artist,
-        album: album,
-        durationMs: durationMs,
-        filePath: filePath,
-        sizeBytes: sizeBytes,
-        imported: true,
-        downloadedAt: _clock(),
-      )).build();
+  }) => (_RecordDraft(
+    originSourceKey: kLocalSourceKey,
+    originSongId: filePath,
+    title: title,
+    artist: artist,
+    album: album,
+    durationMs: durationMs,
+    filePath: filePath,
+    sizeBytes: sizeBytes,
+    imported: true,
+    downloadedAt: _clock(),
+  )).build();
 
   /// 补发布：只补公共副本定位，其余字段原样保留。
   DownloadedTrack republished(DownloadedTrack record, String publicUri) =>
@@ -136,23 +136,23 @@ class _RecordDraft {
 
   /// 已有记录 → 字段（补发布 / 分项更新的基底）。
   factory _RecordDraft.of(DownloadedTrack record) => _RecordDraft(
-        originSourceKey: record.originSourceKey,
-        originSongId: record.originSongId,
-        title: record.title,
-        artist: record.artist,
-        album: record.album,
-        coverUrl: record.coverUrl,
-        durationMs: record.durationMs,
-        raw: record.raw,
-        quality: record.quality,
-        filePath: record.filePath,
-        sizeBytes: record.sizeBytes,
-        lyricPath: record.lyricPath,
-        coverPath: record.coverPath,
-        publicUri: record.publicUri,
-        imported: record.imported,
-        downloadedAt: record.downloadedAt,
-      );
+    originSourceKey: record.originSourceKey,
+    originSongId: record.originSongId,
+    title: record.title,
+    artist: record.artist,
+    album: record.album,
+    coverUrl: record.coverUrl,
+    durationMs: record.durationMs,
+    raw: record.raw,
+    quality: record.quality,
+    filePath: record.filePath,
+    sizeBytes: record.sizeBytes,
+    lyricPath: record.lyricPath,
+    coverPath: record.coverPath,
+    publicUri: record.publicUri,
+    imported: record.imported,
+    downloadedAt: record.downloadedAt,
+  );
 
   String originSourceKey;
   String originSongId;
@@ -172,21 +172,21 @@ class _RecordDraft {
   int downloadedAt;
 
   DownloadedTrack build() => DownloadedTrack(
-        originSourceKey: originSourceKey,
-        originSongId: originSongId,
-        title: title,
-        artist: artist,
-        album: album,
-        coverUrl: coverUrl,
-        durationMs: durationMs,
-        raw: raw,
-        quality: quality,
-        filePath: filePath,
-        sizeBytes: sizeBytes,
-        lyricPath: lyricPath,
-        coverPath: coverPath,
-        publicUri: publicUri,
-        imported: imported,
-        downloadedAt: downloadedAt,
-      );
+    originSourceKey: originSourceKey,
+    originSongId: originSongId,
+    title: title,
+    artist: artist,
+    album: album,
+    coverUrl: coverUrl,
+    durationMs: durationMs,
+    raw: raw,
+    quality: quality,
+    filePath: filePath,
+    sizeBytes: sizeBytes,
+    lyricPath: lyricPath,
+    coverPath: coverPath,
+    publicUri: publicUri,
+    imported: imported,
+    downloadedAt: downloadedAt,
+  );
 }

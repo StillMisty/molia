@@ -175,8 +175,8 @@ class WyComment {
     return commentTextOf(ipLocation['location']);
   }
 
-  static bool _isInvalid(dynamic response) => response is! Map ||
-      response['code'] != 200;
+  static bool _isInvalid(dynamic response) =>
+      response is! Map || response['code'] != 200;
 
   static void _ensureValid(dynamic body, String reason) {
     if (body is! Map || body['code'] != 200) {
@@ -255,7 +255,7 @@ class WyComment {
 
   /// 表情还原（未知名称原样保留）。
   static String restoreEmoji(String text) => text.replaceAllMapped(
-        _emojiPattern,
-        (match) => _emojis[match[1]] ?? match[0]!,
-      );
+    _emojiPattern,
+    (match) => _emojis[match[1]] ?? match[0]!,
+  );
 }

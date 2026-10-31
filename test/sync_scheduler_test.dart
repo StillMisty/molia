@@ -29,10 +29,7 @@ void main() {
     );
   });
 
-  ({
-    SyncScheduler scheduler,
-    RecordingSyncSchedulerHost host,
-  }) build(
+  ({SyncScheduler scheduler, RecordingSyncSchedulerHost host}) build(
     FakeAsync async, {
     bool playing = false,
     bool cellular = false,
@@ -53,9 +50,8 @@ void main() {
       cellularProbe: () async => cellular,
       batteryProbe: () async => battery,
       isPlaying: () => playing,
-      clock: () => DateTime.fromMillisecondsSinceEpoch(
-        async.elapsed.inMilliseconds,
-      ),
+      clock: () =>
+          DateTime.fromMillisecondsSinceEpoch(async.elapsed.inMilliseconds),
       networkChanges: networkChanges,
       peerSightings: peerSightings,
       reconnectLadder: reconnectLadder,
@@ -67,13 +63,17 @@ void main() {
   void enableLanPeer(FakeAsync async) {
     unawaited(state.setTransportEnabled(SyncTransportKind.lan, true));
     async.flushMicrotasks();
-    unawaited(state.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      probePort: 47825,
-      verifiedAt: 1,
-    )));
+    unawaited(
+      state.rememberLanEndpoint(
+        const LanPeerEndpoint(
+          deviceId: 'devB',
+          host: '192.168.1.23',
+          httpPort: 40000,
+          probePort: 47825,
+          verifiedAt: 1,
+        ),
+      ),
+    );
     async.flushMicrotasks();
   }
 
@@ -117,8 +117,11 @@ void main() {
       async.elapse(const Duration(minutes: 40));
       expect(env.scheduler.idleBackoff, const Duration(minutes: 60));
       async.elapse(const Duration(minutes: 60));
-      expect(env.scheduler.idleBackoff, const Duration(minutes: 60),
-          reason: '退避封顶 60 分钟');
+      expect(
+        env.scheduler.idleBackoff,
+        const Duration(minutes: 60),
+        reason: '退避封顶 60 分钟',
+      );
       expect(env.host.rounds, isEmpty);
       env.scheduler.dispose();
     });
@@ -175,9 +178,8 @@ void main() {
         state: state,
         cellularProbe: () async => cellular,
         batteryProbe: () async => BatterySnapshot.unknown,
-        clock: () => DateTime.fromMillisecondsSinceEpoch(
-          async.elapsed.inMilliseconds,
-        ),
+        clock: () =>
+            DateTime.fromMillisecondsSinceEpoch(async.elapsed.inMilliseconds),
       );
       addTearDown(scheduler.dispose);
       unawaited(scheduler.start());
@@ -200,10 +202,7 @@ void main() {
 
   test('省电等级：低电量未充电暂停自动，仅手点可用', () {
     fakeAsync((async) {
-      final env = build(
-        async,
-        battery: const BatterySnapshot(level: 10),
-      );
+      final env = build(async, battery: const BatterySnapshot(level: 10));
       unawaited(env.scheduler.start());
       async.flushMicrotasks();
       expect(env.scheduler.level, SyncLevel.powerSave);
@@ -267,10 +266,7 @@ void main() {
 
   test('checkNow：省电等级不跑（自动检查受策略约束）', () {
     fakeAsync((async) {
-      final env = build(
-        async,
-        battery: const BatterySnapshot(level: 10),
-      );
+      final env = build(async, battery: const BatterySnapshot(level: 10));
       unawaited(env.scheduler.start());
       async.flushMicrotasks();
       expect(env.scheduler.powerSaveActive, isTrue);
@@ -354,8 +350,10 @@ void main() {
   test('移动数据（auto）：只同步小类别', () {
     fakeAsync((async) {
       expect(
-          SyncScheduler.smallCategories, isNot(contains(SyncCategory.covers)),
-          reason: '封面图片体积大，蜂窝下等 Wi-Fi');
+        SyncScheduler.smallCategories,
+        isNot(contains(SyncCategory.covers)),
+        reason: '封面图片体积大，蜂窝下等 Wi-Fi',
+      );
       final env = build(async, cellular: true);
       unawaited(env.scheduler.start());
       async.flushMicrotasks();
@@ -363,8 +361,7 @@ void main() {
       env.scheduler.notifyLocalChange();
       async.elapse(const Duration(seconds: 5));
       expect(env.host.rounds, hasLength(1));
-      expect(env.host.rounds.single.categories,
-          SyncScheduler.smallCategories);
+      expect(env.host.rounds.single.categories, SyncScheduler.smallCategories);
       env.scheduler.dispose();
     });
   });
@@ -399,9 +396,8 @@ void main() {
         state: state,
         cellularProbe: () async => cellular,
         batteryProbe: () async => BatterySnapshot.unknown,
-        clock: () => DateTime.fromMillisecondsSinceEpoch(
-          async.elapsed.inMilliseconds,
-        ),
+        clock: () =>
+            DateTime.fromMillisecondsSinceEpoch(async.elapsed.inMilliseconds),
       );
       addTearDown(scheduler.dispose);
       unawaited(scheduler.start());
@@ -411,14 +407,11 @@ void main() {
       async.elapse(const Duration(seconds: 5));
       expect(host.rounds.single.categories, SyncScheduler.smallCategories);
       // 小类别已外发；历史 / 统计 / 封面仍未外发（等 Wi-Fi）。
-      expect(
-        scheduler.dirtyCategories,
-        {
-          SyncCategory.statistics,
-          SyncCategory.history,
-          SyncCategory.covers,
-        },
-      );
+      expect(scheduler.dirtyCategories, {
+        SyncCategory.statistics,
+        SyncCategory.history,
+        SyncCategory.covers,
+      });
 
       // 切回 Wi-Fi：下一次去抖轮覆盖全部类别并清空待发标记。
       cellular = false;
@@ -492,8 +485,11 @@ void main() {
       expect(env.host.rounds, hasLength(1));
       expect(env.host.rounds.single.trigger, SyncTrigger.network);
       expect(env.host.rounds.single.push, isTrue);
-      expect(env.scheduler.idleBackoff, const Duration(minutes: 10),
-          reason: '换网重置空闲退避');
+      expect(
+        env.scheduler.idleBackoff,
+        const Duration(minutes: 10),
+        reason: '换网重置空闲退避',
+      );
       env.scheduler.dispose();
     });
   });
@@ -704,12 +700,8 @@ void main() {
 
 /// 记录每轮请求的假宿主（不做任何真实同步）。
 class RecordingSyncSchedulerHost implements SyncSchedulerHost {
-  final List<
-      ({
-        SyncTrigger trigger,
-        bool push,
-        Set<SyncCategory>? categories,
-      })> rounds = [];
+  final List<({SyncTrigger trigger, bool push, Set<SyncCategory>? categories})>
+  rounds = [];
 
   bool enabled = true;
 

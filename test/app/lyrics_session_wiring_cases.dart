@@ -112,8 +112,7 @@ void main() {
     final a = track('a');
     backend.emit(snapshot(a));
     await pumpEventQueue();
-    expect(service.requested, isEmpty,
-        reason: '后台没有任何歌词输出，取词只会白耗网络');
+    expect(service.requested, isEmpty, reason: '后台没有任何歌词输出，取词只会白耗网络');
 
     policy.markForeground();
     await pumpEventQueue();

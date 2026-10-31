@@ -11,8 +11,10 @@ import 'package:molia/services/update/update_service.dart';
 
 /// 更新编排的服务替身：所有外部效果都可编排。
 class FakeUpdateService implements UpdateService {
-  UpdatePlatformInfo platform =
-      const UpdatePlatformInfo(platform: 'linux', arch: 'x64');
+  UpdatePlatformInfo platform = const UpdatePlatformInfo(
+    platform: 'linux',
+    arch: 'x64',
+  );
   AppRelease? manifest;
   Object? checkError;
   Object? downloadError;
@@ -29,23 +31,23 @@ class FakeUpdateService implements UpdateService {
 
   /// 构造一个「比 1.2.2+41 新」的发布（默认清单）。
   AppRelease release(String version, int build) => AppRelease(
-        channel: UpdateChannel.stable,
-        version: version,
-        build: build,
-        // 真实清单带 notesUrl（发布页）：页面据此把「打开下载页」收进
-        // 主操作的尾部菜单。
-        notesUrl: Uri.parse('https://example.com/releases/tag/v$version'),
-        assets: [
-          ReleaseAsset(
-            platform: 'linux',
-            arch: 'x64',
-            kind: 'tar.gz',
-            url: Uri.parse('https://example.com/molia.tar.gz'),
-            file: 'molia-$version-linux-x64.tar.gz',
-            sha256: 'abc',
-          ),
-        ],
-      );
+    channel: UpdateChannel.stable,
+    version: version,
+    build: build,
+    // 真实清单带 notesUrl（发布页）：页面据此把「打开下载页」收进
+    // 主操作的尾部菜单。
+    notesUrl: Uri.parse('https://example.com/releases/tag/v$version'),
+    assets: [
+      ReleaseAsset(
+        platform: 'linux',
+        arch: 'x64',
+        kind: 'tar.gz',
+        url: Uri.parse('https://example.com/molia.tar.gz'),
+        file: 'molia-$version-linux-x64.tar.gz',
+        sha256: 'abc',
+      ),
+    ],
+  );
 
   @override
   Future<UpdatePlatformInfo> platformInfo() async => platform;
@@ -124,7 +126,8 @@ class FakeUpdatePreferences implements UpdatePreferences {
   Future<void> markChecked(DateTime at) async => lastCheckedAt = at;
 
   @override
-  Future<void> setAutoCheckEnabled(bool value) async => autoCheckEnabled = value;
+  Future<void> setAutoCheckEnabled(bool value) async =>
+      autoCheckEnabled = value;
 
   @override
   Future<void> setChannel(UpdateChannel value) async => channel = value;

@@ -408,8 +408,8 @@ class AiDjProvider extends ChangeNotifier {
   Future<void> savePreferences(AiPreferences preferences) async {
     final sanitized = preferences.copyWith(
       batchSize: AiPreferences.sanitizeBatchSize(preferences.batchSize),
-      extraPrompt: preferences.extraPrompt.length >
-              AiPreferences.extraPromptLimit
+      extraPrompt:
+          preferences.extraPrompt.length > AiPreferences.extraPromptLimit
           ? preferences.extraPrompt.substring(0, AiPreferences.extraPromptLimit)
           : preferences.extraPrompt,
       seeds: _feedback.seeds,
@@ -530,8 +530,9 @@ class AiDjProvider extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     try {
-      await _playbackProvider
-          .enqueueDomainTracks([for (final item in missing) item.track]);
+      await _playbackProvider.enqueueDomainTracks([
+        for (final item in missing) item.track,
+      ]);
       _registerSessionTracks(missing);
     } catch (e) {
       _lastError = _failureOf(e);
@@ -666,8 +667,9 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 撤销「不感兴趣」：原位插回列表并解除排除（长期记忆同步移除）。
   Future<void> undoNotInterested(String uri) async {
-    final position =
-        _notInterested.indexWhere((entry) => entry.item.track.id.uri == uri);
+    final position = _notInterested.indexWhere(
+      (entry) => entry.item.track.id.uri == uri,
+    );
     if (position < 0) return;
     final entry = _notInterested.removeAt(position);
     final label = entry.item.source.label;
@@ -753,8 +755,9 @@ class AiDjProvider extends ChangeNotifier {
     _queueBusy = true;
     notifyListeners();
     try {
-      await _playbackProvider
-          .enqueueDomainTracks([for (final item in missing) item.track]);
+      await _playbackProvider.enqueueDomainTracks([
+        for (final item in missing) item.track,
+      ]);
       _registerSessionTracks(missing);
     } catch (e) {
       _lastError = _failureOf(e);
@@ -904,9 +907,9 @@ class AiDjProvider extends ChangeNotifier {
         if (appendToQueue) {
           final missing = _missingFromQueue(stamped.items);
           if (missing.isNotEmpty) {
-            await _playbackProvider.enqueueDomainTracks(
-              [for (final item in missing) item.track],
-            );
+            await _playbackProvider.enqueueDomainTracks([
+              for (final item in missing) item.track,
+            ]);
           }
           _registerSessionTracks(stamped.items);
         }
@@ -966,9 +969,9 @@ class AiDjProvider extends ChangeNotifier {
         // 队列重叠时把同一首重复塞进队尾。
         final missing = _missingFromQueue(stamped.items);
         if (missing.isNotEmpty) {
-          await _playbackProvider.enqueueDomainTracks(
-            [for (final item in missing) item.track],
-          );
+          await _playbackProvider.enqueueDomainTracks([
+            for (final item in missing) item.track,
+          ]);
         }
         // 入队已经发生：即使此时显式操作取消了静默任务，也要补齐历史 /
         // 计数 / 种子，否则队列里会出现未登记的曲目。
@@ -984,8 +987,9 @@ class AiDjProvider extends ChangeNotifier {
             after.current != null &&
             !after.isPlaying &&
             after.currentIndex >= oldLastIndex) {
-          await _playbackProvider
-              .playLocalQueueItemById(missing.first.track.id.uri);
+          await _playbackProvider.playLocalQueueItemById(
+            missing.first.track.id.uri,
+          );
         }
         notifyListeners();
         return stamped;
@@ -1004,10 +1008,7 @@ class AiDjProvider extends ChangeNotifier {
   }
 
   /// 生成失败统一出口：按意图的失败策略分流，取消已在执行器内过滤。
-  void _onGenerationFailure(
-    AiGenerationIntent intent,
-    SourceFailure failure,
-  ) {
+  void _onGenerationFailure(AiGenerationIntent intent, SourceFailure failure) {
     if (intent.failurePolicy == AiGenerationFailurePolicy.autoFeed) {
       _recordAutoFeedFailure(failure);
       return;
@@ -1027,9 +1028,7 @@ class AiDjProvider extends ChangeNotifier {
   void _recordAutoFeedFailure(SourceFailure failure) {
     _autoFeedFailures++;
     _autoFeedError = failure;
-    _logger.warning(
-      'AI 推歌：静默补歌失败（第 $_autoFeedFailures 次）${failure.message}',
-    );
+    _logger.warning('AI 推歌：静默补歌失败（第 $_autoFeedFailures 次）${failure.message}');
     if (_autoFeedFailures >= maxConsecutiveFailures) {
       // 连续失败停止自动补歌：不打断播放、不弹提示，只留内部错误状态。
       _autoFeedHalted = true;
@@ -1048,11 +1047,7 @@ class AiDjProvider extends ChangeNotifier {
     final id = batch.id.trim().isEmpty
         ? DateTime.now().microsecondsSinceEpoch.toString()
         : batch.id;
-    return batch.copyWith(
-      id: id,
-      origin: origin,
-      preferences: preferences,
-    );
+    return batch.copyWith(id: id, origin: origin, preferences: preferences);
   }
 
   Future<void> _consumeSeeds() async {
@@ -1062,47 +1057,47 @@ class AiDjProvider extends ChangeNotifier {
   }
 
   StoredAiBatch _toStored(AiDjBatch batch) => StoredAiBatch(
-        id: batch.id,
-        items: [
-          for (final item in batch.items)
-            StoredAiBatchItem(
-              sourceKey: item.track.id.sourceKey,
-              songId: item.track.id.id,
-              title: item.track.title,
-              artist: item.track.artistLabel,
-              album: item.track.album ?? '',
-              reason: item.source.reason,
-              sourceName: item.resolvedSourceName,
-              coverUrl: item.track.artwork?.uri.toString(),
-              durationMs: item.track.duration?.inMilliseconds,
-              raw: item.track.payload,
-            ),
-        ],
-        unresolved: batch.unresolved,
-        generatedAt: batch.generatedAt,
-        origin: batch.origin,
-        preferences: batch.preferences,
-      );
+    id: batch.id,
+    items: [
+      for (final item in batch.items)
+        StoredAiBatchItem(
+          sourceKey: item.track.id.sourceKey,
+          songId: item.track.id.id,
+          title: item.track.title,
+          artist: item.track.artistLabel,
+          album: item.track.album ?? '',
+          reason: item.source.reason,
+          sourceName: item.resolvedSourceName,
+          coverUrl: item.track.artwork?.uri.toString(),
+          durationMs: item.track.duration?.inMilliseconds,
+          raw: item.track.payload,
+        ),
+    ],
+    unresolved: batch.unresolved,
+    generatedAt: batch.generatedAt,
+    origin: batch.origin,
+    preferences: batch.preferences,
+  );
 
   AiDjBatch _restoreBatch(StoredAiBatch stored) => AiDjBatch(
-        id: stored.id,
-        items: [
-          for (final item in stored.items)
-            ResolvedRecommendation(
-              source: AiRecommendation(
-                title: item.title,
-                artist: item.artist,
-                reason: item.reason,
-              ),
-              track: _trackFromStored(item),
-              sourceName: item.sourceName,
-            ),
-        ],
-        unresolved: stored.unresolved,
-        generatedAt: stored.generatedAt,
-        origin: stored.origin,
-        preferences: stored.preferences,
-      );
+    id: stored.id,
+    items: [
+      for (final item in stored.items)
+        ResolvedRecommendation(
+          source: AiRecommendation(
+            title: item.title,
+            artist: item.artist,
+            reason: item.reason,
+          ),
+          track: _trackFromStored(item),
+          sourceName: item.sourceName,
+        ),
+    ],
+    unresolved: stored.unresolved,
+    generatedAt: stored.generatedAt,
+    origin: stored.origin,
+    preferences: stored.preferences,
+  );
 
   /// 库内形状 → 可播放领域 Track（raw 原样 + 规范 id 补齐）。
   Track _trackFromStored(StoredAiBatchItem item) {
@@ -1124,8 +1119,7 @@ class AiDjProvider extends ChangeNotifier {
 
   List<ResolvedRecommendation> _missingFromQueue(
     List<ResolvedRecommendation> items,
-  ) =>
-      _radioQueue.missing(items, (item) => item.track.id.uri);
+  ) => _radioQueue.missing(items, (item) => item.track.id.uri);
 
   /// active 换批 / 删除后旧批的撤销项已无意义；先清空再通知，避免同步
   /// 监听者看到上一批的撤销芯片。
@@ -1153,14 +1147,11 @@ class AiDjProvider extends ChangeNotifier {
 
   /// 会话内未回流的收藏曲目（喜欢 = 收藏）。
   List<_SessionTrack> _pendingLikeTracks() => [
-        for (final entry in _sessionTracks.values)
-          if (!entry.likedReported &&
-              _libraryProvider.isFavorite(
-                entry.sourceKey,
-                entry.songId,
-              ))
-            entry,
-      ];
+    for (final entry in _sessionTracks.values)
+      if (!entry.likedReported &&
+          _libraryProvider.isFavorite(entry.sourceKey, entry.songId))
+        entry,
+  ];
 
   /// 喜欢标签的 prompt 形状：预览只模拟回流，实际发送才提交。
   ///
@@ -1212,7 +1203,8 @@ class AiDjProvider extends ChangeNotifier {
     final entry = _sessionTracks[uri];
     if (entry == null) return;
     final durationMs = entry.durationMs;
-    final atEnd = durationMs > 0 &&
+    final atEnd =
+        durationMs > 0 &&
         entry.maxPositionMs >= durationMs - completionToleranceMs;
     if (atEnd) return; // 听完：正向默认，不额外回流。
     final threshold = PlayStatisticsLimits.qualifiedThresholdMs(durationMs);

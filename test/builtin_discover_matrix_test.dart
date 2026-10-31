@@ -19,6 +19,7 @@ import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/crypto_utils.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/lx/lx_native_utils.dart';
+
 import 'support/mock_dio.dart';
 
 /// 按 URL 子串路由的发现请求桩：记录全部请求；未路由的请求直接失败，
@@ -30,17 +31,18 @@ class _Stub {
   final Map<String, String> routes;
   final List<Uri> requests = [];
 
-  late final BuiltinTransport transport =
-      BuiltinTransport(dio: mockDio((request) async {
-    final url = request.uri.toString();
-    requests.add(request.uri);
-    for (final entry in routes.entries) {
-      if (url.contains(entry.key)) {
-        return bytesResponse(utf8.encode(entry.value), statusCode: 200);
+  late final BuiltinTransport transport = BuiltinTransport(
+    dio: mockDio((request) async {
+      final url = request.uri.toString();
+      requests.add(request.uri);
+      for (final entry in routes.entries) {
+        if (url.contains(entry.key)) {
+          return bytesResponse(utf8.encode(entry.value), statusCode: 200);
+        }
       }
-    }
-    throw StateError('未路由的请求: $url');
-  }));
+      throw StateError('未路由的请求: $url');
+    }),
+  );
 
   void install() => BuiltinSearch.transport = transport;
 }
@@ -80,16 +82,16 @@ String _kwWbdResponse(String plainJson) {
 
 /// QQ 榜单/详情共用的最小歌曲骨架（`TxSearch.parseSongItem` 需要 file.media_mid）。
 Map<String, dynamic> _txSongItem() => {
-      'id': 1,
-      'mid': 'mid1',
-      'title': '歌',
-      'interval': 200,
-      'singer': [
-        {'name': '歌手', 'mid': 's1'},
-      ],
-      'album': {'name': '专辑', 'mid': 'a1'},
-      'file': {'media_mid': 'm1', 'size_128mp3': 1048576},
-    };
+  'id': 1,
+  'mid': 'mid1',
+  'title': '歌',
+  'interval': 200,
+  'singer': [
+    {'name': '歌手', 'mid': 's1'},
+  ],
+  'album': {'name': '专辑', 'mid': 'a1'},
+  'file': {'media_mid': 'm1', 'size_128mp3': 1048576},
+};
 
 void main() {
   late BuiltinTransport original;
@@ -224,7 +226,8 @@ void main() {
     });
 
     test('歌单搜索：伪 JSON 解析；直连失败一次即 StateError', () async {
-      const text = "{'abslist':[{'playlistid':'9','name':'歌单',"
+      const text =
+          "{'abslist':[{'playlistid':'9','name':'歌单',"
           "'nickname':'作者','pic':'http://img/x.jpg','playcnt':'12',"
           "'songnum':'3'}],'TOTAL':'1'}";
       final ok = _Stub({'search.kuwo.cn/r.s': text});
@@ -424,11 +427,7 @@ void main() {
       expect(ok.requests, hasLength(3), reason: '推荐 1 次 + 标签列表/信息 2 次');
 
       final bad = _Stub({'is_ajax=1': '{"status":0}'});
-      await _expectStateError(
-        bad,
-        () => source.playlists('', 1),
-        attempts: 3,
-      );
+      await _expectStateError(bad, () => source.playlists('', 1), attempts: 3);
     });
 
     test('歌单搜索：解析、直连失败一次即 StateError', () async {
@@ -466,7 +465,8 @@ void main() {
 
     test('歌单详情：HTML + gateway 批量信息、失败重试 3 次', () async {
       final ok = _Stub({
-        'special/single/': '<html>global.data = [{"hash":"h1","audio_id":1}];'
+        'special/single/':
+            '<html>global.data = [{"hash":"h1","audio_id":1}];'
             'global = { id: 1, name: "歌单", pic: "http://img/x.jpg" };</html>',
         'gateway.kugou.com/v2/album_audio/audio': jsonEncode({
           'status': 1,
@@ -570,7 +570,8 @@ void main() {
             },
           },
         }),
-        'category_playlist.html': '<div><a class="c_bg_link js_tag_item" '
+        'category_playlist.html':
+            '<div><a class="c_bg_link js_tag_item" '
             'data-id="3317">官方歌单</a></div>',
       });
       ok.install();
@@ -791,13 +792,17 @@ void main() {
           'data': [
             {
               'content': [
-                {'texts': ['网络热歌', '1001076096']},
+                {
+                  'texts': ['网络热歌', '1001076096'],
+                },
               ],
             },
             {
               'header': {'title': '风格'},
               'content': [
-                {'texts': ['流行', '1000001672']},
+                {
+                  'texts': ['流行', '1000001672'],
+                },
               ],
             },
           ],
@@ -818,7 +823,12 @@ void main() {
           'code': '000000',
           'data': {
             'contents': [
-              {'resType': '2021', 'resId': 11, 'txt': '歌单一', 'img': 'http://img/1.jpg'},
+              {
+                'resType': '2021',
+                'resId': 11,
+                'txt': '歌单一',
+                'img': 'http://img/1.jpg',
+              },
             ],
           },
         }),
@@ -966,33 +976,35 @@ void main() {
     final source = BuiltinDiscover.of('wy');
 
     Map<String, dynamic> wyPlaylist({required List<dynamic> trackIds}) => {
-          'name': '歌单',
-          'coverImgUrl': 'http://img/x.jpg',
-          'creator': {'nickname': '作者'},
-          'playCount': 10,
-          'description': 'd',
-          'trackIds': trackIds,
-        };
+      'name': '歌单',
+      'coverImgUrl': 'http://img/x.jpg',
+      'creator': {'nickname': '作者'},
+      'playCount': 10,
+      'description': 'd',
+      'trackIds': trackIds,
+    };
 
     Map<String, dynamic> wySong() => {
-          'id': 1,
-          'name': '歌',
-          'ar': [
-            {'name': '歌手'},
-          ],
-          'al': {'id': 9, 'name': '专辑', 'picUrl': 'http://img/x.jpg'},
-          'dt': 180000,
-          'h': {'size': 1048576},
-          'l': {'size': 524288},
-        };
+      'id': 1,
+      'name': '歌',
+      'ar': [
+        {'name': '歌手'},
+      ],
+      'al': {'id': 9, 'name': '专辑', 'picUrl': 'http://img/x.jpg'},
+      'dt': 180000,
+      'h': {'size': 1048576},
+      'l': {'size': 524288},
+    };
 
     test('榜单：歌单详情 + 批量歌曲详情、失败重试 6 次', () async {
       final ok = _Stub({
         'weapi/v3/playlist/detail': jsonEncode({
           'code': 200,
-          'playlist': wyPlaylist(trackIds: [
-            {'id': 1},
-          ]),
+          'playlist': wyPlaylist(
+            trackIds: [
+              {'id': 1},
+            ],
+          ),
         }),
         'weapi/v3/song/detail': jsonEncode({
           'code': 200,
@@ -1115,9 +1127,11 @@ void main() {
         'api/linux/forward': jsonEncode({
           'code': 200,
           'playlist': {
-            ...wyPlaylist(trackIds: [
-              {'id': 1},
-            ]),
+            ...wyPlaylist(
+              trackIds: [
+                {'id': 1},
+              ],
+            ),
             'tracks': [wySong()],
           },
           'privileges': [
@@ -1146,10 +1160,7 @@ void main() {
       final stub = _Stub({
         'api/linux/forward': jsonEncode({
           'code': 200,
-          'playlist': {
-            ...wyPlaylist(trackIds: trackIds),
-            'tracks': const [],
-          },
+          'playlist': {...wyPlaylist(trackIds: trackIds), 'tracks': const []},
           // privileges 与 trackIds 不等长 → 走按页取曲目。
           'privileges': const [],
         }),
@@ -1159,7 +1170,9 @@ void main() {
             {
               'id': 1001,
               'name': '尾曲',
-              'ar': [{'name': 'A'}],
+              'ar': [
+                {'name': 'A'},
+              ],
               'al': {'id': 9, 'picUrl': ''},
               'dt': 1000,
             },
@@ -1174,8 +1187,9 @@ void main() {
       final first = await source.playlistDetail('999', 1);
       expect(first.info.trackCount, 1001);
       // 详情壳只下载一次（key 与页无关）。
-      final forwardRequests =
-          stub.requests.where((uri) => uri.toString().contains('linux/forward'));
+      final forwardRequests = stub.requests.where(
+        (uri) => uri.toString().contains('linux/forward'),
+      );
       expect(forwardRequests, hasLength(1));
 
       final second = await source.playlistDetail('999', 2);

@@ -141,10 +141,10 @@ class NowPlayingAppTitle extends StatelessWidget {
 class NowPlayingTrackText extends StatelessWidget {
   /// 迷你位（顶栏 / 桌面底栏）。
   const NowPlayingTrackText.bar({super.key})
-      : _bar = true,
-        title = '',
-        artist = '',
-        stacked = true;
+    : _bar = true,
+      title = '',
+      artist = '',
+      stacked = true;
 
   /// 播放页标题块。
   const NowPlayingTrackText.page({
@@ -169,12 +169,12 @@ class NowPlayingTrackText extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!_bar) return _buildPageText(context);
 
-    final info = context.select<PlaybackProvider, (String?, String?)>(
-      (provider) {
-        final track = provider.snapshot.current;
-        return (track?.title, track?.artistLabel);
-      },
-    );
+    final info = context.select<PlaybackProvider, (String?, String?)>((
+      provider,
+    ) {
+      final track = provider.snapshot.current;
+      return (track?.title, track?.artistLabel);
+    });
     final (name, artists) = info;
     if (name == null || name.isEmpty) return const NowPlayingAppTitle();
     return Column(
@@ -277,7 +277,8 @@ class NowPlayingFavoriteButton extends StatelessWidget {
     );
     if (library == null || track == null) return const SizedBox.shrink();
 
-    final l10n = AppLocalizations.of(context) ??
+    final l10n =
+        AppLocalizations.of(context) ??
         lookupAppLocalizations(const Locale('zh'));
     final favorite = library.isFavorite(track.id.sourceKey, track.id.id);
     final heart = FavoriteHeart(favorite: favorite);

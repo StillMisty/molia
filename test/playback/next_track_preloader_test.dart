@@ -29,7 +29,10 @@ class _RecordingPredownloader implements AudioPredownloader {
   _RecordingPredownloader({this.onCall});
 
   final AudioPredownloadTask? Function(
-      SourceTrack track, PlayableStream stream)? onCall;
+    SourceTrack track,
+    PlayableStream stream,
+  )?
+  onCall;
   final List<(String trackId, PlayableStream stream, String? quality)> calls =
       [];
 
@@ -70,16 +73,14 @@ class _FakeCacheStorage implements CacheStorage {
   Future<int> deleteWhere(
     String dirPath, {
     required bool Function(String fileName) test,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<CacheDeleteResult> deleteMatching(
     String dirPath, {
     required String prefix,
     Duration protectAge = Duration.zero,
-  }) async =>
-      const CacheDeleteResult();
+  }) async => const CacheDeleteResult();
 
   @override
   Future<void> clear(String dirPath) async {}
@@ -99,8 +100,7 @@ class _FakeCacheStorage implements CacheStorage {
     String dirPath, {
     required int maxObjects,
     required int staleDays,
-  }) async =>
-      CacheSweepResult.failed;
+  }) async => CacheSweepResult.failed;
 }
 
 void main() {
@@ -121,10 +121,15 @@ void main() {
         preferredQuality: () => '128k',
       );
 
-      await preloader.preload(_track('b', qualities: const [
-        SourceQuality(type: '320k'),
-        SourceQuality(type: '128k'),
-      ]));
+      await preloader.preload(
+        _track(
+          'b',
+          qualities: const [
+            SourceQuality(type: '320k'),
+            SourceQuality(type: '128k'),
+          ],
+        ),
+      );
 
       expect(calls, hasLength(1));
       expect(calls.single.$2, '128k');
@@ -136,9 +141,7 @@ void main() {
       final preloader = NextTrackPreloader(
         resolver: (track, {quality}) async {
           resolved.add(track.id);
-          return PlayableStream(
-            Uri.parse('https://cdn.example/x.mp3'),
-          );
+          return PlayableStream(Uri.parse('https://cdn.example/x.mp3'));
         },
         predownloader: downloader,
         canPredownloadBytes: () => false,
@@ -153,20 +156,21 @@ void main() {
     test('解析成功后把直链交给预下载器（同音质）', () async {
       final downloader = _RecordingPredownloader();
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/x.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/x.mp3')),
         preferredQuality: () => '320k',
         predownloader: downloader,
       );
 
-      await preloader.preload(_track('b', qualities: const [
-        SourceQuality(type: '320k'),
-      ]));
+      await preloader.preload(
+        _track('b', qualities: const [SourceQuality(type: '320k')]),
+      );
 
       expect(downloader.calls, hasLength(1));
-      expect(downloader.calls.single.$2.uri.toString(),
-          'https://cdn.example/x.mp3');
+      expect(
+        downloader.calls.single.$2.uri.toString(),
+        'https://cdn.example/x.mp3',
+      );
       expect(downloader.calls.single.$3, '320k');
     });
 
@@ -224,9 +228,8 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/x.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/x.mp3')),
         predownloader: downloader,
       );
 
@@ -247,9 +250,8 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
@@ -258,10 +260,7 @@ void main() {
       expect(preloader.targetTrackId, track.id);
       expect(preloader.hasPendingTask, isTrue);
 
-      final reused = preloader.retainForPlayback(
-        track,
-        reuseInFlight: true,
-      );
+      final reused = preloader.retainForPlayback(track, reuseInFlight: true);
 
       expect(reused, isTrue);
       expect(cancelled, isEmpty);
@@ -278,9 +277,8 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
@@ -306,18 +304,14 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
       final track = _track('b');
       await preloader.preload(track);
-      final reused = preloader.retainForPlayback(
-        track,
-        reuseInFlight: false,
-      );
+      final reused = preloader.retainForPlayback(track, reuseInFlight: false);
 
       expect(reused, isFalse);
       expect(cancelled, [track.id]);
@@ -333,29 +327,22 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
       final trackB = _track('b');
       final trackC = _track('c');
       await preloader.preload(trackB);
-      expect(
-        preloader.retainForPlayback(trackB, reuseInFlight: true),
-        isTrue,
-      );
+      expect(preloader.retainForPlayback(trackB, reuseInFlight: true), isTrue);
 
       await preloader.preload(trackC);
 
       expect(cancelled, isEmpty, reason: '当前曲目的写入不能被下一首预取取消');
       expect(preloader.targetTrackId, trackC.id);
       expect(preloader.isCacheWriteInFlight(trackB), isTrue);
-      expect(
-        downloader.calls.map((call) => call.$1),
-        [trackB.id, trackC.id],
-      );
+      expect(downloader.calls.map((call) => call.$1), [trackB.id, trackC.id]);
     });
 
     test('桌面：取链途中切到该曲目，提升后仍会启动预下载', () async {
@@ -374,15 +361,10 @@ void main() {
       final track = _track('a');
       final loading = preloader.preload(track);
       // 取链尚未返回时用户就切到了这一首。
-      expect(
-        preloader.retainForPlayback(track, reuseInFlight: true),
-        isTrue,
-      );
+      expect(preloader.retainForPlayback(track, reuseInFlight: true), isTrue);
       expect(preloader.isCacheWriteInFlight(track), isTrue);
 
-      resolved.complete(
-        PlayableStream(Uri.parse('https://cdn.example/a.mp3')),
-      );
+      resolved.complete(PlayableStream(Uri.parse('https://cdn.example/a.mp3')));
       await loading;
 
       expect(downloader.calls, hasLength(1));
@@ -392,24 +374,18 @@ void main() {
     test('任务落位后释放所有权，下一次起播可以重新起 writer', () async {
       final done = Completer<void>();
       final downloader = _RecordingPredownloader(
-        onCall: (track, stream) => AudioPredownloadTask(
-          done: done.future,
-          onCancel: () {},
-        ),
+        onCall: (track, stream) =>
+            AudioPredownloadTask(done: done.future, onCancel: () {}),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
       final track = _track('a');
       await preloader.preload(track);
-      expect(
-        preloader.retainForPlayback(track, reuseInFlight: true),
-        isTrue,
-      );
+      expect(preloader.retainForPlayback(track, reuseInFlight: true), isTrue);
 
       done.complete();
       await Future<void>.delayed(Duration.zero);
@@ -427,9 +403,8 @@ void main() {
         onCall: (track, stream) => null,
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
@@ -437,10 +412,7 @@ void main() {
       await preloader.preload(track);
 
       expect(preloader.isCacheWriteInFlight(track), isFalse);
-      expect(
-        preloader.retainForPlayback(track, reuseInFlight: true),
-        isFalse,
-      );
+      expect(preloader.retainForPlayback(track, reuseInFlight: true), isFalse);
     });
 
     test('当前曲目写入在途时，重复预取同一目标不再启动第二份', () async {
@@ -451,18 +423,14 @@ void main() {
         ),
       );
       final preloader = NextTrackPreloader(
-        resolver: (track, {quality}) async => PlayableStream(
-          Uri.parse('https://cdn.example/${track.id}.mp3'),
-        ),
+        resolver: (track, {quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
         predownloader: downloader,
       );
 
       final track = _track('a');
       await preloader.preload(track);
-      expect(
-        preloader.retainForPlayback(track, reuseInFlight: true),
-        isTrue,
-      );
+      expect(preloader.retainForPlayback(track, reuseInFlight: true), isTrue);
 
       await preloader.preload(track);
 
@@ -544,9 +512,9 @@ void main() {
         isNull,
       );
 
-      SharedPreferences.setMockInitialValues(
-        {CacheService.keyAudioEnabled: false},
-      );
+      SharedPreferences.setMockInitialValues({
+        CacheService.keyAudioEnabled: false,
+      });
       final disabled = CacheAudioPredownloader(
         cacheService: CacheService(storage: storage),
         platformSupported: () => true,
@@ -571,10 +539,7 @@ void main() {
         platformSupported: () => true,
         starter: ({required uri, required targetPath, headers}) {
           started.add(targetPath);
-          return AudioPredownloadTask(
-            done: completer.future,
-            onCancel: () {},
-          );
+          return AudioPredownloadTask(done: completer.future, onCancel: () {});
         },
       );
 

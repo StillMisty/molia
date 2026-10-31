@@ -22,9 +22,9 @@ void main() {
   late BuiltinTransport originalTransport;
   late int navCalls;
 
-  Map<String, dynamic> fixture(String name) => jsonDecode(
-        File('test/fixtures/$name').readAsStringSync(),
-      ) as Map<String, dynamic>;
+  Map<String, dynamic> fixture(String name) =>
+      jsonDecode(File('test/fixtures/$name').readAsStringSync())
+          as Map<String, dynamic>;
 
   setUpAll(() => originalTransport = BuiltinSearch.transport);
 
@@ -40,31 +40,34 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) onRequest,
   ) {
     final adapter = MockDioAdapter((options) async {
-      final sessionResponse =
-          biliSessionResponse(options, onNav: () => navCalls++);
+      final sessionResponse = biliSessionResponse(
+        options,
+        onNav: () => navCalls++,
+      );
       if (sessionResponse != null) return sessionResponse;
       switch (options.uri.path) {
         default:
           return onRequest(options);
       }
     });
-    BuiltinSearch.transport =
-        BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
   Map<String, dynamic> cardFixture({String name = '周杰伦'}) => {
-        'code': 0,
-        'data': {
-          'card': {
-            'mid': '336',
-            'name': name,
-            'face': '//i0.hdslb.com/bfs/face/jay.jpg',
-            'sign': '华语流行歌手',
-            'fans': 100000,
-          },
-        },
-      };
+    'code': 0,
+    'data': {
+      'card': {
+        'mid': '336',
+        'name': name,
+        'face': '//i0.hdslb.com/bfs/face/jay.jpg',
+        'sign': '华语流行歌手',
+        'fans': 100000,
+      },
+    },
+  };
 
   test('用户搜索：mid/uname/头像/投稿数 + 分页', () async {
     final adapter = install((options) async {
@@ -79,10 +82,7 @@ void main() {
     expect(page.items, hasLength(2));
     expect(page.items.first.id, '336');
     expect(page.items.first.name, '周杰伦');
-    expect(
-      page.items.first.avatarUrl,
-      'https://i0.hdslb.com/bfs/face/jay.jpg',
-    );
+    expect(page.items.first.avatarUrl, 'https://i0.hdslb.com/bfs/face/jay.jpg');
     expect(page.items.first.songCount, 100);
     expect(page.items[1].name, '无头像UP & 测试');
     expect(page.items[1].avatarUrl, isNull);
@@ -164,10 +164,7 @@ void main() {
     expect(query['dm_img_list'], '[]');
     expect(query['dm_img_str'], isNotEmpty);
     expect(query['dm_cover_img_str'], isNotEmpty);
-    expect(
-      query['dm_img_inter'],
-      '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}',
-    );
+    expect(query['dm_img_inter'], '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}');
     expect(query['wts'], isNotEmpty);
     expect(query['w_rid'], isNotEmpty);
   });
@@ -230,9 +227,7 @@ void main() {
     expect(spaceCalls, 1);
     expect(navCalls, 1, reason: 'riskOnly 不因网络失败刷新');
     expect(
-      adapter.requests.where(
-        (r) => r.uri.path == '/x/frontend/finger/spi',
-      ),
+      adapter.requests.where((r) => r.uri.path == '/x/frontend/finger/spi'),
       hasLength(1),
     );
   });
@@ -340,8 +335,9 @@ void main() {
     expect(detail.tracks, hasLength(1));
     expect(detail.tracks.single.title, '兜底投稿');
     expect(
-      adapter.requests
-          .where((r) => r.uri.path == '/x/web-interface/wbi/search/type'),
+      adapter.requests.where(
+        (r) => r.uri.path == '/x/web-interface/wbi/search/type',
+      ),
       hasLength(1),
       reason: '空 vlist + count>0 视为风控，不返回空页',
     );
@@ -372,8 +368,9 @@ void main() {
     expect(detail.tracks, isEmpty);
     expect(detail.hasMore, isFalse);
     expect(
-      adapter.requests
-          .where((r) => r.uri.path == '/x/web-interface/wbi/search/type'),
+      adapter.requests.where(
+        (r) => r.uri.path == '/x/web-interface/wbi/search/type',
+      ),
       isEmpty,
     );
   });
@@ -416,9 +413,6 @@ void main() {
       }
     });
 
-    await expectLater(
-      BiliArtist.fetch('336'),
-      throwsA(isA<SourceFailure>()),
-    );
+    await expectLater(BiliArtist.fetch('336'), throwsA(isA<SourceFailure>()));
   });
 }

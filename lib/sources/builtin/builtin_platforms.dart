@@ -97,9 +97,7 @@ typedef BuiltinLyricAdapter = Future<BuiltinLyricResult?> Function(
 );
 
 /// 原生取图适配器：曲目 raw → 封面 URL（无字段 / 失败返回 null）。
-typedef BuiltinPicAdapter = Future<String?> Function(
-  Map<String, dynamic> raw,
-);
+typedef BuiltinPicAdapter = Future<String?> Function(Map<String, dynamic> raw);
 
 /// 评论取数适配器（[id] 已由 facade 从 raw 中按平台字段解析）。
 typedef BuiltinCommentFetch = Future<CommentPage> Function(
@@ -117,10 +115,7 @@ class BuiltinCommentAdapter {
 
   final BuiltinCommentFetch fetch;
 
-  const BuiltinCommentAdapter({
-    required this.rawIdKeys,
-    required this.fetch,
-  });
+  const BuiltinCommentAdapter({required this.rawIdKeys, required this.fetch});
 }
 
 /// 专辑取数适配器。
@@ -149,10 +144,7 @@ class BuiltinArtistAdapter {
   final BuiltinArtistSearch search;
   final BuiltinArtistFetch fetch;
 
-  const BuiltinArtistAdapter({
-    required this.search,
-    required this.fetch,
-  });
+  const BuiltinArtistAdapter({required this.search, required this.fetch});
 }
 
 /// 一个内置平台的完整声明：所有能力位都从这里的适配器是否存在推导。
@@ -194,117 +186,118 @@ class BuiltinPlatforms {
   /// 音源页渠道、搜索/取链解析与发现页共用这一份顺序；用户可在音源页
   /// 自定义排序，重置后回到这里。B 站是首个搜索 + 取链都由原生实现的平台
   /// （不需要 LX 脚本）；其余平台仍要脚本声明取链。
-  static final Map<String, BuiltinPlatform> byKey =
-      Map.unmodifiable(<String, BuiltinPlatform>{
-    'tx': BuiltinPlatform(
-      key: 'tx',
-      displayName: 'QQ音乐',
-      search: TxSearch.searchWithMeta,
-      lyricSearch: TxLyricSearch.search,
-      lyric: txBuiltinLyric,
-      pic: txBuiltinPic,
-      comments: BuiltinCommentAdapter(
-        rawIdKeys: const ['songId'],
-        fetch: TxComment.fetch,
+  static final Map<String, BuiltinPlatform> byKey = Map.unmodifiable(
+    <String, BuiltinPlatform>{
+      'tx': BuiltinPlatform(
+        key: 'tx',
+        displayName: 'QQ音乐',
+        search: TxSearch.searchWithMeta,
+        lyricSearch: TxLyricSearch.search,
+        lyric: txBuiltinLyric,
+        pic: txBuiltinPic,
+        comments: BuiltinCommentAdapter(
+          rawIdKeys: const ['songId'],
+          fetch: TxComment.fetch,
+        ),
+        album: TxAlbum.fetch,
+        artist: BuiltinArtistAdapter(
+          search: TxArtist.search,
+          fetch: TxArtist.fetch,
+        ),
+        discover: const TxDiscoverSource(),
       ),
-      album: TxAlbum.fetch,
-      artist: BuiltinArtistAdapter(
-        search: TxArtist.search,
-        fetch: TxArtist.fetch,
+      'wy': BuiltinPlatform(
+        key: 'wy',
+        displayName: '网易音乐',
+        search: WySearch.searchWithMeta,
+        lyricSearch: WyLyricSearch.search,
+        lyric: wyBuiltinLyric,
+        pic: wyBuiltinPic,
+        comments: BuiltinCommentAdapter(
+          rawIdKeys: const ['songmid', 'id'],
+          fetch: WyComment.fetch,
+        ),
+        album: WyAlbum.fetch,
+        artist: BuiltinArtistAdapter(
+          search: WyArtist.search,
+          fetch: WyArtist.fetch,
+        ),
+        discover: const WyDiscoverSource(),
       ),
-      discover: const TxDiscoverSource(),
-    ),
-    'wy': BuiltinPlatform(
-      key: 'wy',
-      displayName: '网易音乐',
-      search: WySearch.searchWithMeta,
-      lyricSearch: WyLyricSearch.search,
-      lyric: wyBuiltinLyric,
-      pic: wyBuiltinPic,
-      comments: BuiltinCommentAdapter(
-        rawIdKeys: const ['songmid', 'id'],
-        fetch: WyComment.fetch,
+      'kg': BuiltinPlatform(
+        key: 'kg',
+        displayName: '酷狗音乐',
+        search: KgSearch.searchWithMeta,
+        lyricSearch: KgLyricSearch.search,
+        lyric: kgBuiltinLyric,
+        pic: kgBuiltinPic,
+        comments: BuiltinCommentAdapter(
+          rawIdKeys: const ['hash'],
+          fetch: KgComment.fetch,
+        ),
+        album: KgAlbum.fetch,
+        artist: BuiltinArtistAdapter(
+          search: KgArtist.search,
+          fetch: KgArtist.fetch,
+        ),
+        discover: const KgDiscoverSource(),
       ),
-      album: WyAlbum.fetch,
-      artist: BuiltinArtistAdapter(
-        search: WyArtist.search,
-        fetch: WyArtist.fetch,
+      'kw': BuiltinPlatform(
+        key: 'kw',
+        displayName: '酷我音乐',
+        search: KwSearch.searchWithMeta,
+        lyricSearch: KwLyricSearch.search,
+        lyric: kwBuiltinLyric,
+        pic: kwBuiltinPic,
+        comments: BuiltinCommentAdapter(
+          rawIdKeys: const ['songmid'],
+          fetch: KwComment.fetch,
+        ),
+        album: KwAlbum.fetch,
+        artist: BuiltinArtistAdapter(
+          search: KwArtist.search,
+          fetch: KwArtist.fetch,
+        ),
+        discover: const KwDiscoverSource(),
       ),
-      discover: const WyDiscoverSource(),
-    ),
-    'kg': BuiltinPlatform(
-      key: 'kg',
-      displayName: '酷狗音乐',
-      search: KgSearch.searchWithMeta,
-      lyricSearch: KgLyricSearch.search,
-      lyric: kgBuiltinLyric,
-      pic: kgBuiltinPic,
-      comments: BuiltinCommentAdapter(
-        rawIdKeys: const ['hash'],
-        fetch: KgComment.fetch,
+      'mg': BuiltinPlatform(
+        key: 'mg',
+        displayName: '咪咕音乐',
+        search: MgSearch.searchWithMeta,
+        lyricSearch: MgLyricSearch.search,
+        lyric: mgBuiltinLyric,
+        pic: mgBuiltinPic,
+        comments: BuiltinCommentAdapter(
+          rawIdKeys: const ['songmid', 'copyrightId'],
+          fetch: MgComment.fetch,
+        ),
+        album: MgAlbum.fetch,
+        artist: BuiltinArtistAdapter(
+          search: MgArtist.search,
+          fetch: MgArtist.fetch,
+        ),
+        discover: const MgDiscoverSource(),
       ),
-      album: KgAlbum.fetch,
-      artist: BuiltinArtistAdapter(
-        search: KgArtist.search,
-        fetch: KgArtist.fetch,
+      'bili': BuiltinPlatform(
+        key: 'bili',
+        displayName: '哔哩哔哩',
+        search: BiliSearch.searchWithMeta,
+        resolve: BiliPlay.resolve,
+        lyric: biliBuiltinLyric,
+        pic: biliBuiltinPic,
+        comments: BuiltinCommentAdapter(
+          // 评论接口的 oid 只用 aid；部分 raw 只带通用 id 字段时兜底。
+          rawIdKeys: const ['aid', 'id'],
+          fetch: BiliComment.fetch,
+        ),
+        artist: BuiltinArtistAdapter(
+          search: BiliSearch.searchUsers,
+          fetch: BiliArtist.fetch,
+        ),
+        discover: const BiliDiscoverSource(),
       ),
-      discover: const KgDiscoverSource(),
-    ),
-    'kw': BuiltinPlatform(
-      key: 'kw',
-      displayName: '酷我音乐',
-      search: KwSearch.searchWithMeta,
-      lyricSearch: KwLyricSearch.search,
-      lyric: kwBuiltinLyric,
-      pic: kwBuiltinPic,
-      comments: BuiltinCommentAdapter(
-        rawIdKeys: const ['songmid'],
-        fetch: KwComment.fetch,
-      ),
-      album: KwAlbum.fetch,
-      artist: BuiltinArtistAdapter(
-        search: KwArtist.search,
-        fetch: KwArtist.fetch,
-      ),
-      discover: const KwDiscoverSource(),
-    ),
-    'mg': BuiltinPlatform(
-      key: 'mg',
-      displayName: '咪咕音乐',
-      search: MgSearch.searchWithMeta,
-      lyricSearch: MgLyricSearch.search,
-      lyric: mgBuiltinLyric,
-      pic: mgBuiltinPic,
-      comments: BuiltinCommentAdapter(
-        rawIdKeys: const ['songmid', 'copyrightId'],
-        fetch: MgComment.fetch,
-      ),
-      album: MgAlbum.fetch,
-      artist: BuiltinArtistAdapter(
-        search: MgArtist.search,
-        fetch: MgArtist.fetch,
-      ),
-      discover: const MgDiscoverSource(),
-    ),
-    'bili': BuiltinPlatform(
-      key: 'bili',
-      displayName: '哔哩哔哩',
-      search: BiliSearch.searchWithMeta,
-      resolve: BiliPlay.resolve,
-      lyric: biliBuiltinLyric,
-      pic: biliBuiltinPic,
-      comments: BuiltinCommentAdapter(
-        // 评论接口的 oid 只用 aid；部分 raw 只带通用 id 字段时兜底。
-        rawIdKeys: const ['aid', 'id'],
-        fetch: BiliComment.fetch,
-      ),
-      artist: BuiltinArtistAdapter(
-        search: BiliSearch.searchUsers,
-        fetch: BiliArtist.fetch,
-      ),
-      discover: const BiliDiscoverSource(),
-    ),
-  });
+    },
+  );
 
   /// 规范键顺序（发现页 / 默认渠道顺序）。
   static final List<String> keys = List.unmodifiable(byKey.keys);
@@ -320,8 +313,9 @@ class BuiltinPlatforms {
   );
 
   /// 搜索渠道候选顺序：与 [keys] 的规范顺序一致。
-  static final List<BuiltinPlatform> searchCandidates =
-      List.unmodifiable(byKey.values);
+  static final List<BuiltinPlatform> searchCandidates = List.unmodifiable(
+    byKey.values,
+  );
 
   /// 音乐平台 key（不含视频站 B 站），按规范顺序。
   ///
@@ -346,40 +340,49 @@ class BuiltinPlatforms {
     return Map.unmodifiable(adapters);
   }
 
-  static final Map<String, BuiltinSearchAdapter> searchAdapters =
-      _adaptersOf((platform) => platform.search);
+  static final Map<String, BuiltinSearchAdapter> searchAdapters = _adaptersOf(
+    (platform) => platform.search,
+  );
 
   static final Map<String, BuiltinLyricSearchAdapter> lyricSearchAdapters =
       _adaptersOf((platform) => platform.lyricSearch);
 
-  static final Map<String, BuiltinLyricAdapter> lyricAdapters =
-      _adaptersOf((platform) => platform.lyric);
+  static final Map<String, BuiltinLyricAdapter> lyricAdapters = _adaptersOf(
+    (platform) => platform.lyric,
+  );
 
-  static final Map<String, BuiltinPicAdapter> picAdapters =
-      _adaptersOf((platform) => platform.pic);
+  static final Map<String, BuiltinPicAdapter> picAdapters = _adaptersOf(
+    (platform) => platform.pic,
+  );
 
-  static final Map<String, BuiltinCommentAdapter> commentAdapters =
-      _adaptersOf((platform) => platform.comments);
+  static final Map<String, BuiltinCommentAdapter> commentAdapters = _adaptersOf(
+    (platform) => platform.comments,
+  );
 
-  static final Map<String, BuiltinAlbumAdapter> albumAdapters =
-      _adaptersOf((platform) => platform.album);
+  static final Map<String, BuiltinAlbumAdapter> albumAdapters = _adaptersOf(
+    (platform) => platform.album,
+  );
 
-  static final Map<String, BuiltinArtistAdapter> artistAdapters =
-      _adaptersOf((platform) => platform.artist);
+  static final Map<String, BuiltinArtistAdapter> artistAdapters = _adaptersOf(
+    (platform) => platform.artist,
+  );
 
-  static final Map<String, DiscoverSource> discoverSources =
-      _adaptersOf((platform) => platform.discover);
+  static final Map<String, DiscoverSource> discoverSources = _adaptersOf(
+    (platform) => platform.discover,
+  );
 
   static final Set<String> searchKeys = Set.unmodifiable(searchAdapters.keys);
-  static final Set<String> lyricSearchKeys =
-      Set.unmodifiable(lyricSearchAdapters.keys);
+  static final Set<String> lyricSearchKeys = Set.unmodifiable(
+    lyricSearchAdapters.keys,
+  );
   static final Set<String> lyricKeys = Set.unmodifiable(lyricAdapters.keys);
   static final Set<String> picKeys = Set.unmodifiable(picAdapters.keys);
   static final Set<String> commentKeys = Set.unmodifiable(commentAdapters.keys);
   static final Set<String> albumKeys = Set.unmodifiable(albumAdapters.keys);
   static final Set<String> artistKeys = Set.unmodifiable(artistAdapters.keys);
-  static final Set<String> discoverKeys =
-      Set.unmodifiable(discoverSources.keys);
+  static final Set<String> discoverKeys = Set.unmodifiable(
+    discoverSources.keys,
+  );
 
   static bool isSupported(String key) => byKey.containsKey(key);
 

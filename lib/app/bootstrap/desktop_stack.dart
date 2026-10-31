@@ -86,6 +86,7 @@ Future<DesktopStack> buildDesktopStack({
       quitWindow: _quitPlatformApp,
     );
   }
+
   // 定时关闭勾选「同时退出应用」时也走同一条退出路径：会话提交、音频收尾、
   // 统计落盘完成后才真正退出。provider 建好后回填（此时 quitApp 已可用）。
   playback.attachQuitApp(quitApp);
@@ -99,8 +100,10 @@ Future<DesktopStack> buildDesktopStack({
       // 隐藏后平台会停帧，休眠树若没建成就要等恢复窗口才建，托盘期省不下来。
       // endOfFrame 自带超时兜底，异常路径不把「点关闭」卡死。
       AppPresence.instance.markTrayHidden();
-      await WidgetsBinding.instance.endOfFrame
-          .timeout(const Duration(seconds: 2), onTimeout: () {});
+      await WidgetsBinding.instance.endOfFrame.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {},
+      );
       await WindowChrome.hide();
     } else {
       await quitApp();
@@ -114,7 +117,8 @@ Future<DesktopStack> buildDesktopStack({
     final track = snapshot.current;
     final brand = AppBrandingService.titleNotifier.value;
     final labels = _trayLabels();
-    final isFavorite = track != null &&
+    final isFavorite =
+        track != null &&
         libraryProvider.isFavorite(track.id.sourceKey, track.id.id);
     AppTray.setLabels(labels);
     AppTray.setPlaybackState(
@@ -150,7 +154,8 @@ Future<DesktopStack> buildDesktopStack({
   var lastPresence = AppPresence.instance.value;
   AppPresence.instance.addListener(() {
     final presence = AppPresence.instance.value;
-    final leftVisible = lastPresence == AppPresenceState.visible &&
+    final leftVisible =
+        lastPresence == AppPresenceState.visible &&
         !AppPresence.instance.isVisible;
     lastPresence = presence;
     if (leftVisible) unawaited(playback.suspendPlaybackSession());
@@ -237,9 +242,7 @@ Future<void> commitBeforeQuit({
   try {
     await commitSession().timeout(sessionTimeout);
   } on TimeoutException {
-    debugPrint(
-      '[Molia] 退出前落盘播放会话超时（${sessionTimeout.inMilliseconds}ms，继续退出）',
-    );
+    debugPrint('[Molia] 退出前落盘播放会话超时（${sessionTimeout.inMilliseconds}ms，继续退出）');
   } catch (e) {
     debugPrint('[Molia] 退出前落盘播放会话失败（继续退出）: $e');
   }
@@ -251,9 +254,7 @@ Future<void> commitBeforeQuit({
     try {
       await audioShutdown().timeout(audioTimeout);
     } on TimeoutException {
-      debugPrint(
-        '[Molia] 退出前音频收尾超时（${audioTimeout.inMilliseconds}ms，继续退出）',
-      );
+      debugPrint('[Molia] 退出前音频收尾超时（${audioTimeout.inMilliseconds}ms，继续退出）');
     } catch (e) {
       debugPrint('[Molia] 退出前音频收尾失败（继续退出）: $e');
     }
@@ -286,11 +287,13 @@ Future<void> commitBeforeQuit({
 /// 托盘菜单文案：按当前界面语言解析（未选择语言时跟随系统；与
 /// `app_shell.dart` 的品牌名解析同一规则）。
 TrayMenuLabels _trayLabels() {
-  final effective = LanguageService.localeNotifier.value ??
+  final effective =
+      LanguageService.localeNotifier.value ??
       WidgetsBinding.instance.platformDispatcher.locale;
-  final resolved = LanguageService.supportedLocales.any(
-    (supported) => supported.languageCode == effective.languageCode,
-  )
+  final resolved =
+      LanguageService.supportedLocales.any(
+        (supported) => supported.languageCode == effective.languageCode,
+      )
       ? effective
       : LanguageService.supportedLocales.first;
   final l10n = lookupAppLocalizations(resolved);

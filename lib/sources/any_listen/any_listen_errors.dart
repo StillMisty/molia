@@ -43,9 +43,9 @@ class AnyListenException implements Exception {
   bool get retryable => kind == AnyListenErrorKind.connectionFailed;
 
   factory AnyListenException.notConfigured() => const AnyListenException(
-        AnyListenErrorKind.notConfigured,
-        '未配置 any-listen 服务器地址，或未启用 any-listen 接入',
-      );
+    AnyListenErrorKind.notConfigured,
+    '未配置 any-listen 服务器地址，或未启用 any-listen 接入',
+  );
 
   static AnyListenException badResponse(String message, {Object? cause}) =>
       AnyListenException(AnyListenErrorKind.badResponse, message, cause: cause);

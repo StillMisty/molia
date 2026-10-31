@@ -49,15 +49,14 @@ BackendSnapshot _snapshot({
   bool isPlaying = true,
   Duration position = Duration.zero,
   Duration duration = Duration.zero,
-}) =>
-    BackendSnapshot(
-      current: current,
-      queue: queue,
-      currentIndex: current == null ? -1 : currentIndex,
-      isPlaying: isPlaying,
-      position: position,
-      duration: duration,
-    );
+}) => BackendSnapshot(
+  current: current,
+  queue: queue,
+  currentIndex: current == null ? -1 : currentIndex,
+  isPlaying: isPlaying,
+  position: position,
+  duration: duration,
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -127,24 +126,28 @@ void main() {
     expect(timer.value.duration, const Duration(minutes: 1));
 
     // 暂停：倒计时冻结（走真实时间也不掉）。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      isPlaying: false,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+        position: const Duration(seconds: 10),
+      ),
+    );
     await advance(tester, const Duration(minutes: 5));
     expect(timer.value.remaining, const Duration(seconds: 50));
     expect(fired, 0);
 
     // 恢复播放：继续走完剩余 50 秒。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 10),
+      ),
+    );
     await advance(tester, const Duration(seconds: 50));
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
@@ -218,19 +221,23 @@ void main() {
     expect(timer.value.duration, isNull);
 
     // 播到曲末 → 后端装载下一首（进度通道先对齐到新曲目）。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a, b],
-      duration: a.duration!,
-      position: const Duration(seconds: 29),
-    ));
-    backend.emit(_snapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      duration: b.duration!,
-      position: Duration.zero,
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a, b],
+        duration: a.duration!,
+        position: const Duration(seconds: 29),
+      ),
+    );
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+        position: Duration.zero,
+      ),
+    );
     await tester.pump();
 
     expect(fired, 1);
@@ -246,13 +253,15 @@ void main() {
     timer.setExitApp(true);
     timer.startAfterCurrentTrack();
     backend.emitTrackCompletion(a);
-    backend.emit(_snapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      duration: b.duration!,
-      position: Duration.zero,
-    ));
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+        position: Duration.zero,
+      ),
+    );
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
@@ -264,23 +273,27 @@ void main() {
 
   testWidgets('播完当前歌曲：队列末尾自然结束且勾选退出 → 退出', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: a.duration!,
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: a.duration!,
+      ),
+    );
 
     timer.setExitApp(true);
     timer.startAfterCurrentTrack();
     // 没有完成事件（旧后端 / 位置回退路径）：曲末后播放停止。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      isPlaying: false,
-      position: a.duration!,
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+        position: a.duration!,
+      ),
+    );
     await tester.pump();
     await tester.idle();
 
@@ -291,12 +304,14 @@ void main() {
   testWidgets('播完当前歌曲：熄屏后位置 tick 停在半途，仍按完成事件暂停', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a, b],
-      duration: a.duration!,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a, b],
+        duration: a.duration!,
+        position: const Duration(seconds: 10),
+      ),
+    );
 
     timer.startAfterCurrentTrack();
     expect(backend.stopAfterCurrentTrack, isTrue);
@@ -304,12 +319,14 @@ void main() {
     // 熄屏 / 后台：位置流没有继续 tick，_maxPosition 停在 10s；播放器原生
     // 完成当前曲目并准备自动切下一首。完成事件必须先于「曲目变了」判定。
     backend.emitTrackCompletion(a);
-    backend.emit(_snapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      duration: b.duration!,
-    ));
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+      ),
+    );
     await tester.pump();
 
     expect(fired, 1, reason: '不能把自然播完误判成手动切歌');
@@ -325,26 +342,30 @@ void main() {
 
     timer.startAfterCurrentTrack();
     // 中途手动切歌（远未到曲末）：不暂停，跟随新曲目。
-    backend.emit(_snapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      duration: b.duration!,
-      position: Duration.zero,
-    ));
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+        position: Duration.zero,
+      ),
+    );
     expect(fired, 0);
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
     expect(backend.stopAfterCurrentTrack, isTrue, reason: '手动切歌应继续等待新曲目');
 
     // 新曲目自然播完（队列末尾：播放停止）→ 无下一首可暂停，撤销定时。
-    backend.emit(_snapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      duration: b.duration!,
-      isPlaying: false,
-      position: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+        isPlaying: false,
+        position: const Duration(seconds: 30),
+      ),
+    );
     expect(fired, 0);
     expect(timer.value.mode, SleepTimerMode.off);
   });
@@ -368,27 +389,33 @@ void main() {
     backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startAfterCurrentTrack();
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      isPlaying: false,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+        position: const Duration(seconds: 10),
+      ),
+    );
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
 
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: const Duration(seconds: 29),
-    ));
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: Duration.zero,
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 29),
+      ),
+    );
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: Duration.zero,
+      ),
+    );
     await tester.pump();
 
     expect(fired, 1);
@@ -400,19 +427,23 @@ void main() {
     backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startAfterCurrentTrack();
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: const Duration(seconds: 29),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 29),
+      ),
+    );
     // 单曲循环重播：曲目没变，位置从曲末回到 0。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: Duration.zero,
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: Duration.zero,
+      ),
+    );
     await tester.pump();
 
     expect(fired, 1);
@@ -481,12 +512,14 @@ void main() {
     // 进程被冻结：时钟越过 deadline，期间无 tick；解冻后的第一个快照事件
     // （如自动切歌）就要到点，不等下一次 tick。
     now = now.add(const Duration(minutes: 5));
-    backend.emit(_snapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      duration: b.duration!,
-    ));
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+      ),
+    );
 
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
@@ -500,29 +533,37 @@ void main() {
     await advance(tester, const Duration(milliseconds: 500));
 
     // 暂停：剩余 = deadline - now（未到第一个 tick 也精确扣减）。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      isPlaying: false,
-      position: const Duration(milliseconds: 500),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+        position: const Duration(milliseconds: 500),
+      ),
+    );
     expect(
-        timer.value.remaining, const Duration(seconds: 59, milliseconds: 500));
+      timer.value.remaining,
+      const Duration(seconds: 59, milliseconds: 500),
+    );
 
     // 暂停期间不计时。
     await advance(tester, const Duration(hours: 2));
     expect(
-        timer.value.remaining, const Duration(seconds: 59, milliseconds: 500));
+      timer.value.remaining,
+      const Duration(seconds: 59, milliseconds: 500),
+    );
     expect(fired, 0);
 
     // 恢复播放：按冻结的剩余时长走完即到点。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: const Duration(milliseconds: 500),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(milliseconds: 500),
+      ),
+    );
     await advance(tester, const Duration(seconds: 59, milliseconds: 500));
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
@@ -559,13 +600,15 @@ void main() {
 
     // 解冻时已经是暂停态（如播放期间被来电打断）：播放时长已耗尽，
     // 定时结束并复位，不留下「恢复播放就立刻暂停」的残定时。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      isPlaying: false,
-      position: const Duration(seconds: 40),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+        position: const Duration(seconds: 40),
+      ),
+    );
 
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
@@ -603,23 +646,27 @@ void main() {
     await advance(tester, const Duration(seconds: 10));
 
     // 暂停：撤销原生定时器（避免熄屏时原生到点误暂停）。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      isPlaying: false,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        isPlaying: false,
+        position: const Duration(seconds: 10),
+      ),
+    );
     expect(alarm.cancels, greaterThan(0));
     expect(alarm.arms.length, armedBeforePause);
 
     // 恢复播放：按冻结后的剩余时长重排（token 变化，旧回调失效）。
-    backend.emit(_snapshot(
-      current: a,
-      queue: [a],
-      duration: a.duration!,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _snapshot(
+        current: a,
+        queue: [a],
+        duration: a.duration!,
+        position: const Duration(seconds: 10),
+      ),
+    );
     expect(alarm.arms.length, greaterThan(armedBeforePause));
     expect(alarm.arms.last.$1, lessThanOrEqualTo(const Duration(seconds: 50)));
     expect(alarm.arms.last.$2, isNot(firstToken));
@@ -662,7 +709,10 @@ void main() {
     foreground = false;
     localTimer.recheckDeadline(foreground: false);
     expect(localAlarm.arms.last.$3, isTrue);
-    expect(localAlarm.arms.last.$1, lessThanOrEqualTo(const Duration(minutes: 30)));
+    expect(
+      localAlarm.arms.last.$1,
+      lessThanOrEqualTo(const Duration(minutes: 30)),
+    );
 
     // 回到前台：恢复为不持锁。
     foreground = true;
@@ -688,8 +738,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
-    expect(alarm.arms.last.$3, isTrue,
-        reason: '进入后台必须立刻重新 arm 并持锁');
+    expect(alarm.arms.last.$3, isTrue, reason: '进入后台必须立刻重新 arm 并持锁');
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

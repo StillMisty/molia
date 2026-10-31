@@ -14,6 +14,7 @@ import 'package:molia/widgets/playback_selectors.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../support/fakes.dart';
 
 /// 领域端口的 ValueNotifier 实现（与数据层实现同构）。
@@ -23,8 +24,9 @@ class _TestListenable<T> extends ValueNotifier<T>
 }
 
 class FakeBackend implements PlaybackBackend {
-  final _TestListenable<BackendSnapshot> _notifier =
-      _TestListenable(BackendSnapshot.empty);
+  final _TestListenable<BackendSnapshot> _notifier = _TestListenable(
+    BackendSnapshot.empty,
+  );
 
   final List<String> calls = [];
   PlaybackRequest? lastRequest;
@@ -36,12 +38,12 @@ class FakeBackend implements PlaybackBackend {
 
   @override
   PlaybackCapabilities get capabilities => const PlaybackCapabilities(
-        seek: true,
-        next: true,
-        previous: true,
-        queue: true,
-        setMode: true,
-      );
+    seek: true,
+    next: true,
+    previous: true,
+    queue: true,
+    setMode: true,
+  );
 
   @override
   bool canHandle(Track track) => true;
@@ -58,6 +60,18 @@ class FakeBackend implements PlaybackBackend {
   @override
   Future<void> enqueueTracks(List<Track> tracks) async {
     calls.add('enqueueTracks');
+  }
+
+  @override
+  Future<bool> moveQueueIndex(int from, int to) async {
+    calls.add('moveQueueIndex:$from:$to');
+    return false;
+  }
+
+  @override
+  Future<bool> removeQueueIndex(int index) async {
+    calls.add('removeQueueIndex:$index');
+    return false;
   }
 
   @override
@@ -145,85 +159,102 @@ void main() {
       var positionNotifies = 0;
       facade.position.addListener(() => positionNotifies++);
 
-      void emitAt(int ms) => backend.emit(BackendSnapshot(
-            current: track,
-            queue: [track],
-            currentIndex: 0,
-            isPlaying: true,
-            position: Duration(milliseconds: ms),
-          ));
+      void emitAt(int ms) => backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+          position: Duration(milliseconds: ms),
+        ),
+      );
 
       // 首帧换曲（null → a）：直接对齐到 0（值未变不发）。
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+        ),
+      );
 
       // 10 次 100ms 间隔的 tick：只在累积差 ≥250ms 时发（300/600/900）。
       for (var ms = 100; ms <= 1000; ms += 100) {
         emitAt(ms);
       }
       expect(positionNotifies, 3, reason: '10 次 tick 只发 3 次（≤4Hz）');
-      expect(facade.position.value, const Duration(milliseconds: 900),
-          reason: '小于阈值的 tick 不更新通道值（最多滞后 250ms）');
+      expect(
+        facade.position.value,
+        const Duration(milliseconds: 900),
+        reason: '小于阈值的 tick 不更新通道值（最多滞后 250ms）',
+      );
 
       // 换曲（uri 变化）：即使进度回退也直接对齐，不受阈值抑制。
       final other = _track('b');
-      backend.emit(BackendSnapshot(
-        current: other,
-        queue: [other],
-        currentIndex: 0,
-        isPlaying: true,
-        position: Duration.zero,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: other,
+          queue: [other],
+          currentIndex: 0,
+          isPlaying: true,
+          position: Duration.zero,
+        ),
+      );
       expect(positionNotifies, 4);
       expect(facade.position.value, Duration.zero);
     });
 
-    test('position tick 不触发 PlaybackProvider.notifyListeners；快照变化仍通知',
-        () async {
-      final backend = FakeBackend();
-      final facade = DefaultPlaybackFacade(backend: backend);
-      final provider = buildTestPlaybackProvider(facade: facade);
-      addTearDown(provider.dispose);
+    test(
+      'position tick 不触发 PlaybackProvider.notifyListeners；快照变化仍通知',
+      () async {
+        final backend = FakeBackend();
+        final facade = DefaultPlaybackFacade(backend: backend);
+        final provider = buildTestPlaybackProvider(facade: facade);
+        addTearDown(provider.dispose);
 
-      var notifies = 0;
-      provider.addListener(() => notifies++);
+        var notifies = 0;
+        provider.addListener(() => notifies++);
 
-      final track = _track('a');
-      BackendSnapshot snapshotAt(int ms, {bool isPlaying = true}) =>
-          BackendSnapshot(
-            current: track,
-            queue: [track],
-            currentIndex: 0,
-            isPlaying: isPlaying,
-            duration: const Duration(seconds: 60),
-            position: Duration(milliseconds: ms),
-          );
+        final track = _track('a');
+        BackendSnapshot snapshotAt(int ms, {bool isPlaying = true}) =>
+            BackendSnapshot(
+              current: track,
+              queue: [track],
+              currentIndex: 0,
+              isPlaying: isPlaying,
+              duration: const Duration(seconds: 60),
+              position: Duration(milliseconds: ms),
+            );
 
-      backend.emit(snapshotAt(0));
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      final afterSnapshot = notifies;
-      expect(afterSnapshot, greaterThanOrEqualTo(1), reason: '快照变化必须通知');
+        backend.emit(snapshotAt(0));
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        final afterSnapshot = notifies;
+        expect(afterSnapshot, greaterThanOrEqualTo(1), reason: '快照变化必须通知');
 
-      // 纯 position tick（10 次 4Hz）：不得经过聚合 notifyListeners。
-      for (var ms = 250; ms <= 2500; ms += 250) {
-        backend.emit(snapshotAt(ms));
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      expect(notifies, afterSnapshot,
-          reason: 'position tick 不得触发 notifyListeners');
-      expect(provider.currentPosition, const Duration(milliseconds: 2500));
-      expect(provider.position.value, const Duration(milliseconds: 2500),
-          reason: 'position 通道一次性读取拿到最新进度');
+        // 纯 position tick（10 次 4Hz）：不得经过聚合 notifyListeners。
+        for (var ms = 250; ms <= 2500; ms += 250) {
+          backend.emit(snapshotAt(ms));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        expect(
+          notifies,
+          afterSnapshot,
+          reason: 'position tick 不得触发 notifyListeners',
+        );
+        expect(provider.currentPosition, const Duration(milliseconds: 2500));
+        expect(
+          provider.position.value,
+          const Duration(milliseconds: 2500),
+          reason: 'position 通道一次性读取拿到最新进度',
+        );
 
-      // 快照（播放状态）变化：仍通知。
-      backend.emit(snapshotAt(2500, isPlaying: false));
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      expect(notifies, greaterThan(afterSnapshot));
-    });
+        // 快照（播放状态）变化：仍通知。
+        backend.emit(snapshotAt(2500, isPlaying: false));
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        expect(notifies, greaterThan(afterSnapshot));
+      },
+    );
   });
 
   group('ProgressBarSelector', () {
@@ -234,13 +265,15 @@ void main() {
       addTearDown(provider.dispose);
 
       final track = _track('a');
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        duration: const Duration(seconds: 60),
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+          duration: const Duration(seconds: 60),
+        ),
+      );
 
       var siblingBuilds = 0;
       var barBuilds = 0;
@@ -283,14 +316,16 @@ void main() {
       final siblingBefore = siblingBuilds;
       final barBefore = barBuilds;
 
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        duration: const Duration(seconds: 60),
-        position: const Duration(milliseconds: 1500),
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+          duration: const Duration(seconds: 60),
+          position: const Duration(milliseconds: 1500),
+        ),
+      );
       await tester.pump();
 
       expect(barBuilds, greaterThan(barBefore), reason: '进度条应随 position 重建');
@@ -343,17 +378,17 @@ void main() {
       int lineIndexFor(Duration value) => value.inSeconds ~/ 5;
 
       Widget build({required bool enabled}) => MaterialApp(
-            home: PositionLineIndexBuilder(
-              position: position,
-              enabled: enabled,
-              lineIndexFor: lineIndexFor,
-              builder: (context, currentLineIndex) {
-                builds++;
-                lastIndex = currentLineIndex;
-                return Text('$currentLineIndex');
-              },
-            ),
-          );
+        home: PositionLineIndexBuilder(
+          position: position,
+          enabled: enabled,
+          lineIndexFor: lineIndexFor,
+          builder: (context, currentLineIndex) {
+            builds++;
+            lastIndex = currentLineIndex;
+            return Text('$currentLineIndex');
+          },
+        ),
+      );
 
       await tester.pumpWidget(build(enabled: false));
       expect(lastIndex, 0);
@@ -388,18 +423,17 @@ void main() {
       Widget build({
         required ValueNotifier<Duration> position,
         required bool enabled,
-      }) =>
-          MaterialApp(
-            home: PositionLineIndexBuilder(
-              position: position,
-              enabled: enabled,
-              lineIndexFor: lineIndexFor,
-              builder: (context, currentLineIndex) {
-                lastIndex = currentLineIndex;
-                return Text('$currentLineIndex');
-              },
-            ),
-          );
+      }) => MaterialApp(
+        home: PositionLineIndexBuilder(
+          position: position,
+          enabled: enabled,
+          lineIndexFor: lineIndexFor,
+          builder: (context, currentLineIndex) {
+            lastIndex = currentLineIndex;
+            return Text('$currentLineIndex');
+          },
+        ),
+      );
 
       // 禁用 → 换通道：旧通道没挂监听，新通道也不该挂。
       await tester.pumpWidget(build(position: first, enabled: false));

@@ -63,19 +63,26 @@ class DefaultPlaybackFacade implements PlaybackFacade {
       _backend.enqueueTracks(tracks);
 
   @override
-  Future<void> playTrackInContext(Track track,
-      {PlaybackContext? context}) async {
+  Future<bool> moveQueueIndex(int from, int to) =>
+      _backend.moveQueueIndex(from, to);
+
+  @override
+  Future<bool> removeQueueIndex(int index) => _backend.removeQueueIndex(index);
+
+  @override
+  Future<void> playTrackInContext(
+    Track track, {
+    PlaybackContext? context,
+  }) async {
     final queue = _snapshot.value.queue;
     final index = queue.indexWhere((item) => item.id == track.id);
     if (index >= 0) {
       await _backend.playQueueIndex(index);
       return;
     }
-    await _backend.load(PlaybackRequest(
-      tracks: [track],
-      startIndex: 0,
-      context: context,
-    ));
+    await _backend.load(
+      PlaybackRequest(tracks: [track], startIndex: 0, context: context),
+    );
   }
 
   @override
@@ -162,6 +169,7 @@ class DefaultPlaybackFacade implements PlaybackFacade {
       previous: backend.previous,
       previousOfPrevious: backend.previousOfPrevious,
       upNext: backend.upNext,
+      upNextIndices: backend.upNextIndices,
       isPlaying: backend.isPlaying,
       isLoading: backend.isLoading,
       duration: backend.duration,

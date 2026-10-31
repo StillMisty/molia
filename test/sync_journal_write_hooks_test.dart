@@ -159,7 +159,8 @@ void main() {
 
   test('会话：保存后即时追加；窗口内高频保存合并，窗口外再追加', () async {
     final store = PlaybackSessionStore(
-        clock: () => DateTime.fromMillisecondsSinceEpoch(now));
+      clock: () => DateTime.fromMillisecondsSinceEpoch(now),
+    );
     final adapter = SessionSyncAdapter(
       port: _StoreSessionPort(store),
       state: state,
@@ -168,12 +169,12 @@ void main() {
     await adapter.collect();
 
     Future<void> save() => store.saveRaw({
-          PlaybackSessionStore.savedAtKey: now,
-          'index': 0,
-          'tracks': [
-            {'sourceKey': 'kuwo', 'songId': 'song-1', 'title': '歌曲'},
-          ],
-        });
+      PlaybackSessionStore.savedAtKey: now,
+      'index': 0,
+      'tracks': [
+        {'sourceKey': 'kuwo', 'songId': 'song-1', 'title': '歌曲'},
+      ],
+    });
 
     // 第一次保存：立即追加。
     await save();

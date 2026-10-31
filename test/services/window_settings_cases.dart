@@ -10,7 +10,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     // 静态 notifier 在测试间共享：每例回到默认值再开跑。
     await WindowSettings.setRememberBounds(
-        WindowSettings.defaultRememberBounds);
+      WindowSettings.defaultRememberBounds,
+    );
     await WindowSettings.load();
   });
 
@@ -41,11 +42,13 @@ void main() {
     );
 
     await WindowSettings.setRememberBounds(
-        WindowSettings.defaultRememberBounds);
+      WindowSettings.defaultRememberBounds,
+    );
     expect(notifications, 0);
 
     await WindowSettings.setRememberBounds(
-        !WindowSettings.defaultRememberBounds);
+      !WindowSettings.defaultRememberBounds,
+    );
     expect(notifications, 1);
   });
 

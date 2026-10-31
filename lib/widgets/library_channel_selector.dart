@@ -9,7 +9,10 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 启用渠道（顺序不变）。
 List<SourceDescriptor> _enabledOf(List<SourceDescriptor> channels) {
-  return [for (final entry in channels) if (entry.enabled) entry];
+  return [
+    for (final entry in channels)
+      if (entry.enabled) entry,
+  ];
 }
 
 /// 发现页统一渠道下拉框：搜索 / 热榜 / 歌单共用同一个渠道选择。

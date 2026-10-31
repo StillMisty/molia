@@ -83,8 +83,9 @@ Future<SyncStack> buildSyncStack({
     for (final key in catalog.settings.keys)
       if (key.category == SyncCategory.sources) key.name,
   };
-  final playlistSyncAdapter =
-      PlaylistSyncAdapter(repository: library.libraryRepository);
+  final playlistSyncAdapter = PlaylistSyncAdapter(
+    repository: library.libraryRepository,
+  );
   final scriptSyncAdapter = ScriptSyncAdapter(
     repository: sourceManager.repository,
     state: syncState,
@@ -100,10 +101,12 @@ Future<SyncStack> buildSyncStack({
     // 应用远端设置后：注册表按键触发模块自绑的重载钩子。
     onApplied: catalog.settings.reloadKeys,
   );
-  final statisticsSyncAdapter =
-      StatisticsSyncAdapter(store: library.statisticsSyncStore);
-  final historySyncAdapter =
-      HistorySyncAdapter(repository: library.libraryRepository);
+  final statisticsSyncAdapter = StatisticsSyncAdapter(
+    store: library.statisticsSyncStore,
+  );
+  final historySyncAdapter = HistorySyncAdapter(
+    repository: library.libraryRepository,
+  );
   final sessionSyncAdapter = SessionSyncAdapter(
     // 远端会话写入必须经过播放会话模块：与本地保存 / 清除共用同一个 store
     // 写队列（另建 store 会在同一组 prefs 键上形成第二个写者）。
@@ -217,9 +220,7 @@ Future<SyncStack> buildSyncStack({
     // 全库指纹也走 worker（一次本地变更就要重算一遍，主 isolate 上会掉帧）。
     fingerprintPort: syncCodec,
     // 变更集基线（sync_known）：跨重启只把版本变化的胜者交给适配器。
-    known: SyncKnownRepository(
-      databaseProvider: () => MoliaDatabase.instance,
-    ),
+    known: SyncKnownRepository(databaseProvider: () => MoliaDatabase.instance),
     // 增量日志：**引擎与仓库共用同一实例**——写入点在仓库侧追加、引擎侧
     // 读窗口 / 按 ack 裁剪。漏传这一项不报错，但引擎会整体退化为
     // 「每轮全量快照」：全库指纹、整库加密推送、日志永不裁剪；
@@ -293,9 +294,8 @@ Future<SyncStack> buildSyncStack({
     pairing: pairing,
   );
   // 仅本地封面写入标脏（远端应用到 store 时走 local=false，不会回环）。
-  covers.onLocalChange = (_) => syncProvider.notifyLocalChange(
-        categories: const {SyncCategory.covers},
-      );
+  covers.onLocalChange = (_) =>
+      syncProvider.notifyLocalChange(categories: const {SyncCategory.covers});
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何
   // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。
@@ -310,9 +310,8 @@ Future<SyncStack> buildSyncStack({
   // 数据变更 → 调度器（活跃等级去抖 3–5s、空闲等级标记待外发）；所有启用
   // 类别的本地写入都要置待发标记：资料库 / 统计 / 音源 / 设置与凭证 / 会话。
   library.libraryRepository.changes.listen(
-    (change) => syncProvider.notifyLocalChange(
-      categories: change.syncCategories,
-    ),
+    (change) =>
+        syncProvider.notifyLocalChange(categories: change.syncCategories),
   );
   library.playStatisticsRepository.changes.listen(
     (_) => syncProvider.notifyLocalChange(
@@ -332,10 +331,10 @@ Future<SyncStack> buildSyncStack({
   };
   // 脚本写入（导入 / 更新 / 删除）：即时取版本并追加日志（新导入的脚本没有
   // 历史登记，只靠下一轮检测会被当成「首次登记」而不外发）。
-  sourceManager.onScriptWritten =
-      (id) => unawaited(scriptSyncAdapter.noteScriptWritten(id));
-  sourceManager.onScriptRemoved =
-      (id) => unawaited(scriptSyncAdapter.noteScriptRemoved(id));
+  sourceManager.onScriptWritten = (id) =>
+      unawaited(scriptSyncAdapter.noteScriptWritten(id));
+  sourceManager.onScriptRemoved = (id) =>
+      unawaited(scriptSyncAdapter.noteScriptRemoved(id));
   // 播放会话：高频进度落盘，只标记待发、不触发即时轮次（下次自然唤醒 /
   // 回前台 / 退后台时外发）。
   playback.sessionStore.onSaved = () {

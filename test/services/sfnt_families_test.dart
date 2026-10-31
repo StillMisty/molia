@@ -50,25 +50,19 @@ void main() {
 
     test('TTC 字体集合逐 face 解析（表偏移是文件绝对偏移）', () {
       final ttc = buildSfntCollection([
-        [
-          (platform: 3, language: 0x409, nameId: 1, text: 'Noto Sans CJK JP'),
-        ],
-        [
-          (platform: 3, language: 0x409, nameId: 1, text: 'Noto Sans CJK SC'),
-        ],
+        [(platform: 3, language: 0x409, nameId: 1, text: 'Noto Sans CJK JP')],
+        [(platform: 3, language: 0x409, nameId: 1, text: 'Noto Sans CJK SC')],
       ]);
-      expect(sfntFamilyNames(readerOf(ttc)),
-          ['Noto Sans CJK JP', 'Noto Sans CJK SC']);
+      expect(sfntFamilyNames(readerOf(ttc)), [
+        'Noto Sans CJK JP',
+        'Noto Sans CJK SC',
+      ]);
     });
 
     test('家族名去重（大小写不敏感），保持出现顺序', () {
       final ttc = buildSfntCollection([
-        [
-          (platform: 3, language: 0x409, nameId: 1, text: 'Arial'),
-        ],
-        [
-          (platform: 3, language: 0x409, nameId: 1, text: 'arial'),
-        ],
+        [(platform: 3, language: 0x409, nameId: 1, text: 'Arial')],
+        [(platform: 3, language: 0x409, nameId: 1, text: 'arial')],
       ]);
       expect(sfntFamilyNames(readerOf(ttc)), ['Arial']);
     });
@@ -104,23 +98,18 @@ void main() {
 
 /// 读取回调：越界返回短字节（解析器按「不可解析」处理）。
 SfntBytes readerOf(Uint8List bytes) => (offset, length) {
-      if (offset < 0 || length <= 0 || offset >= bytes.length) {
-        return Uint8List(0);
-      }
-      final end = offset + length;
-      return Uint8List.sublistView(
-        bytes,
-        offset,
-        end > bytes.length ? bytes.length : end,
-      );
-    };
+  if (offset < 0 || length <= 0 || offset >= bytes.length) {
+    return Uint8List(0);
+  }
+  final end = offset + length;
+  return Uint8List.sublistView(
+    bytes,
+    offset,
+    end > bytes.length ? bytes.length : end,
+  );
+};
 
-typedef NameRecord = ({
-  int platform,
-  int language,
-  int nameId,
-  String text,
-});
+typedef NameRecord = ({int platform, int language, int nameId, String text});
 
 /// 单 face 字体：12 字节头 + 1 条表目录记录 + `name` 表。
 /// `name` 表偏移（28）写进表目录，与真实文件一致。

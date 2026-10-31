@@ -18,7 +18,8 @@ import '../../domain/models/device_sync.dart';
 import 'sync_payload_binary.dart';
 import 'sync_payload_format.dart';
 
-export 'sync_payload_format.dart' show SyncPayloadCodec, SyncPayloadFormatException;
+export 'sync_payload_format.dart'
+    show SyncPayloadCodec, SyncPayloadFormatException;
 
 /// 载荷编码入口（`SyncCodec` 只依赖它，不直接接触 JSON 或列式细节）。
 abstract final class SyncPayload {
@@ -29,8 +30,8 @@ abstract final class SyncPayload {
       switch (codec) {
         SyncPayloadCodec.binary => SyncPayloadBinary.encode(envelope),
         SyncPayloadCodec.json => Uint8List.fromList(
-            utf8.encode(jsonEncode(envelope.toJson())),
-          ),
+          utf8.encode(jsonEncode(envelope.toJson())),
+        ),
         _ => throw SyncPayloadFormatException('未知载荷编码: $codec'),
       };
 
@@ -38,7 +39,9 @@ abstract final class SyncPayload {
     try {
       return switch (codec) {
         SyncPayloadCodec.binary => SyncPayloadBinary.decode(bytes),
-        SyncPayloadCodec.json => _requireEnvelope(jsonDecode(utf8.decode(bytes))),
+        SyncPayloadCodec.json => _requireEnvelope(
+          jsonDecode(utf8.decode(bytes)),
+        ),
         _ => throw SyncPayloadFormatException('未知载荷编码: $codec'),
       };
     } on SyncPayloadFormatException {

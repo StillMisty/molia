@@ -30,7 +30,7 @@ class LyricsDisplayProvider extends ChangeNotifier {
     this._themeListenable,
     this._onPlaybackCommand,
     this._mediaSessionInitFailed = false,
-  })  : _outputs = List.unmodifiable(outputs) {
+  }) : _outputs = List.unmodifiable(outputs) {
     for (final output in _outputs) {
       if (output is InteractiveLyricsOutput) {
         _subscriptions.add(output.actions.listen(_onOutputAction));
@@ -147,7 +147,8 @@ class LyricsDisplayProvider extends ChangeNotifier {
     final track = _currentTrack;
     if (track == null) return null;
     final state = _lyricsState;
-    final ready = state.status == LyricsStatus.ready &&
+    final ready =
+        state.status == LyricsStatus.ready &&
         state.lines.isNotEmpty &&
         state.trackId == track.id.uri;
     final tracked = ready

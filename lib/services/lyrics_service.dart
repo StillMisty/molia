@@ -59,9 +59,9 @@ class LyricsService {
     this._networkFallbackAllowed,
     this._nativeLyricAvailable,
     this.sameSourceTimeout = const Duration(seconds: 3),
-  })  : _providers = providers ?? LyricsSourceRegistry.standard.autoProviders,
-        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
-        _cacheService = cacheService ?? CacheService.instance;
+  }) : _providers = providers ?? LyricsSourceRegistry.standard.autoProviders,
+       _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs),
+       _cacheService = cacheService ?? CacheService.instance;
 
   /// 获取歌词（原文 + 可选翻译 / 罗马音 / 逐字）。
   ///
@@ -258,12 +258,12 @@ class LyricsService {
     // provider → 在途请求；错误在这里统一归一为 null，竞速不再处理异常。
     final pending = <LyricProvider, Future<LyricsResult?>>{
       for (final provider in _providers)
-        provider: _fetchFromProvider(provider, title, artist).catchError(
-          (Object e) {
-            _logger.warning('从 ${provider.name} 获取歌词失败: $e');
-            return null;
-          },
-        ),
+        provider: _fetchFromProvider(provider, title, artist).catchError((
+          Object e,
+        ) {
+          _logger.warning('从 ${provider.name} 获取歌词失败: $e');
+          return null;
+        }),
     };
     final firstAny = _firstNonEmpty(pending.values);
 
@@ -273,13 +273,13 @@ class LyricsService {
     return pending[preferred]!
         .timeout(sameSourceTimeout, onTimeout: () => null)
         .then((sameSource) {
-      if (sameSource != null) {
-        _logger.info('同源歌词命中: ${preferred.name}');
-        return sameSource;
-      }
-      _logger.info('同源歌词未命中 / 超时，使用跨平台回退: ${preferred.name}');
-      return firstAny;
-    });
+          if (sameSource != null) {
+            _logger.info('同源歌词命中: ${preferred.name}');
+            return sameSource;
+          }
+          _logger.info('同源歌词未命中 / 超时，使用跨平台回退: ${preferred.name}');
+          return firstAny;
+        });
   }
 
   /// 曲目来源渠道对应的自动回退 provider（没有 / 已停用时为 null）。
@@ -300,16 +300,18 @@ class LyricsService {
     var remaining = 0;
     for (final future in futures) {
       remaining++;
-      future.then((result) {
-        if (result != null && !completer.isCompleted) {
-          completer.complete(result);
-        }
-      }).whenComplete(() {
-        remaining--;
-        if (remaining == 0 && !completer.isCompleted) {
-          completer.complete(null);
-        }
-      });
+      future
+          .then((result) {
+            if (result != null && !completer.isCompleted) {
+              completer.complete(result);
+            }
+          })
+          .whenComplete(() {
+            remaining--;
+            if (remaining == 0 && !completer.isCompleted) {
+              completer.complete(null);
+            }
+          });
     }
     if (remaining == 0) completer.complete(null);
     return completer.future;

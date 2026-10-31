@@ -31,42 +31,22 @@ abstract class Breakpoints {
 /// 开关强制骨架，页面内的桌面增强（渠道栏 / 表格列 / 右键菜单）
 /// 仍按平台判定——它们只在桌面骨架里渲染，无需再逐层传开关。
 bool isDesktopPlatform() => switch (defaultTargetPlatform) {
-      TargetPlatform.linux ||
-      TargetPlatform.windows ||
-      TargetPlatform.macOS =>
-        true,
-      _ => false,
-    };
+  TargetPlatform.linux ||
+  TargetPlatform.windows ||
+  TargetPlatform.macOS => true,
+  _ => false,
+};
 
 /// 设备类型枚举
-enum DeviceType {
-  compact,
-  mobile,
-  tablet,
-  desktop,
-}
+enum DeviceType { compact, mobile, tablet, desktop }
 
 /// 页面布局分类
-enum ResponsivePageType {
-  shell,
-  browse,
-  detail,
-  modal,
-  preview,
-}
+enum ResponsivePageType { shell, browse, detail, modal, preview }
 
 /// 二级页面显示模式
-enum SecondaryPageMode {
-  fullScreen,
-  sideSheet,
-  centerDialog,
-  bottomSheet,
-}
+enum SecondaryPageMode { fullScreen, sideSheet, centerDialog, bottomSheet }
 
-enum AdaptiveModalContentLayout {
-  wrapContent,
-  fillHeight,
-}
+enum AdaptiveModalContentLayout { wrapContent, fillHeight }
 
 /// 统一的页面布局规格
 class ResponsiveLayoutSpec {
@@ -88,9 +68,7 @@ class ResponsiveLayoutSpec {
   final double modalMaxHeightFactor;
   final double defaultMinTileWidth;
 
-  EdgeInsets pagePadding({
-    double vertical = 0,
-  }) {
+  EdgeInsets pagePadding({double vertical = 0}) {
     return EdgeInsets.symmetric(
       horizontal: horizontalPadding,
       vertical: vertical,
@@ -136,12 +114,7 @@ extension ResponsiveExtension on BuildContext {
     return layoutType(ResponsivePageType.browse).horizontalPadding;
   }
 
-  T responsive<T>({
-    required T mobile,
-    T? compact,
-    T? tablet,
-    T? desktop,
-  }) {
+  T responsive<T>({required T mobile, T? compact, T? tablet, T? desktop}) {
     return switch (deviceType) {
       DeviceType.compact => compact ?? mobile,
       DeviceType.mobile => mobile,
@@ -168,11 +141,7 @@ extension ResponsiveExtension on BuildContext {
           maxWidth: double.infinity,
           horizontalPadding: padding,
           preferTwoPane: isLargeScreen,
-          modalWidth: responsive(
-            mobile: 420,
-            tablet: 520,
-            desktop: 560,
-          ),
+          modalWidth: responsive(mobile: 420, tablet: 520, desktop: 560),
           modalMaxHeightFactor: isLargeScreen ? 0.88 : 0.92,
           defaultMinTileWidth: 220,
         );
@@ -188,11 +157,7 @@ extension ResponsiveExtension on BuildContext {
           ),
           horizontalPadding: padding,
           preferTwoPane: isLargeScreen,
-          modalWidth: responsive(
-            mobile: 420,
-            tablet: 520,
-            desktop: 560,
-          ),
+          modalWidth: responsive(mobile: 420, tablet: 520, desktop: 560),
           modalMaxHeightFactor: isLargeScreen ? 0.88 : 0.92,
           defaultMinTileWidth: responsive(
             compact: 112,
@@ -225,11 +190,7 @@ extension ResponsiveExtension on BuildContext {
       case ResponsivePageType.modal:
         return ResponsiveLayoutSpec(
           type: type,
-          maxWidth: responsive(
-            mobile: 560,
-            tablet: 560,
-            desktop: 620,
-          ),
+          maxWidth: responsive(mobile: 560, tablet: 560, desktop: 620),
           horizontalPadding: responsive(
             compact: 12,
             mobile: 16,
@@ -259,11 +220,7 @@ extension ResponsiveExtension on BuildContext {
           ),
           horizontalPadding: padding,
           preferTwoPane: false,
-          modalWidth: responsive(
-            mobile: 420,
-            tablet: 560,
-            desktop: 620,
-          ),
+          modalWidth: responsive(mobile: 420, tablet: 560, desktop: 620),
           modalMaxHeightFactor: isLargeScreen ? 0.9 : 0.94,
           defaultMinTileWidth: 180,
         );
@@ -444,11 +401,7 @@ class ResponsiveNavigation {
     final resolvedMaxWidth = maxWidth ?? spec.modalWidth;
 
     if (!spec.preferTwoPane || preferredMode == SecondaryPageMode.fullScreen) {
-      return _showFullScreen<T>(
-        context: context,
-        child: body,
-        title: title,
-      );
+      return _showFullScreen<T>(context: context, child: body, title: title);
     }
 
     return _showM3ESideSheet<T>(
@@ -464,8 +417,7 @@ class ResponsiveNavigation {
   static Future<T?> showFullScreenPage<T>({
     required BuildContext context,
     required Widget child,
-  }) =>
-      _showFullScreen<T>(context: context, child: child);
+  }) => _showFullScreen<T>(context: context, child: child);
 
   /// 页面型弹层：窄屏 M3E 底部弹层，宽屏 M3EDialog 路由 + [PageModalCard]。
   ///
@@ -647,10 +599,8 @@ class ResponsiveNavigation {
     // modalMaxHeightFactor 是内容最高占屏比例；换算成 M3E 的顶部留白，
     // 保持该比例不变。
     final topMargin = screenHeight * (1 - spec.modalMaxHeightFactor);
-    final baseTheme = M3ETheme.of(context).bottomSheetTheme.copyWith(
-          compactTopMargin: topMargin,
-          wideTopMargin: topMargin,
-        );
+    final baseTheme = M3ETheme.of(context).bottomSheetTheme
+        .copyWith(compactTopMargin: topMargin, wideTopMargin: topMargin);
     final theme = sheetThemeBuilder?.call(baseTheme) ?? baseTheme;
     return M3EBottomSheet.show<T>(
       context,
@@ -697,8 +647,10 @@ class ResponsiveNavigation {
     }
 
     final body = switch (contentLayout) {
-      AdaptiveModalContentLayout.wrapContent =>
-        Flexible(fit: FlexFit.loose, child: child),
+      AdaptiveModalContentLayout.wrapContent => Flexible(
+        fit: FlexFit.loose,
+        child: child,
+      ),
       AdaptiveModalContentLayout.fillHeight => Expanded(child: child),
     };
     final theme = M3ETheme.of(context);
@@ -734,9 +686,10 @@ class ResponsiveNavigation {
                       variant: M3EIconButtonVariant.standard,
                       icon: const Icon(Icons.close_rounded),
                       // 弹层头部是通用件，l10n 可能未注册（测试 / 独立挂载）。
-                      semanticLabel: (AppLocalizations.of(context) ??
-                              lookupAppLocalizations(const Locale('zh')))
-                          .close,
+                      semanticLabel:
+                          (AppLocalizations.of(context) ??
+                                  lookupAppLocalizations(const Locale('zh')))
+                              .close,
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   if (title != null)
@@ -790,10 +743,7 @@ class ResponsivePageContainer extends StatelessWidget {
     final spec = context.layoutType(pageType);
     final resolvedMaxWidth = maxWidth ?? spec.maxWidth;
     final effectiveChild = padding != null
-        ? Padding(
-            padding: padding!,
-            child: child,
-          )
+        ? Padding(padding: padding!, child: child)
         : child;
 
     return Align(

@@ -81,8 +81,7 @@ void main() {
 
     test('wy: 网易云搜索响应解析', () {
       final json = _fixture('wy') as Map;
-      final tracks =
-          WySearch.parseItems((json['data']['resources'] as List));
+      final tracks = WySearch.parseItems((json['data']['resources'] as List));
       expect(tracks, isNotEmpty);
       _assertCommon(tracks.first, 'wy');
       expect((tracks.first.raw['songmid'] as String).isNotEmpty, isTrue);
@@ -92,8 +91,9 @@ void main() {
 
     test('mg: 咪咕搜索响应解析', () {
       final json = _fixture('mg') as Map;
-      final tracks =
-          MgSearch.parseItems((json['songResultData']['resultList'] as List));
+      final tracks = MgSearch.parseItems(
+        (json['songResultData']['resultList'] as List),
+      );
       expect(tracks, isNotEmpty);
       _assertCommon(tracks.first, 'mg');
       expect((tracks.first.raw['copyrightId'] as String).isNotEmpty, isTrue);
@@ -109,8 +109,7 @@ void main() {
       );
       expect(
         kgCoverUrlOf({
-          'album_sizable_cover':
-              'http://imge.kugou.com/stdmusic/{size}/b.jpg',
+          'album_sizable_cover': 'http://imge.kugou.com/stdmusic/{size}/b.jpg',
         }),
         'http://imge.kugou.com/stdmusic/480/b.jpg',
       );

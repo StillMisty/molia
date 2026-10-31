@@ -24,7 +24,8 @@ class SystemMediaLyricsSettingsPage extends StatefulWidget {
 }
 
 class _SystemMediaLyricsSettingsPageState
-    extends State<SystemMediaLyricsSettingsPage> with WidgetsBindingObserver {
+    extends State<SystemMediaLyricsSettingsPage>
+    with WidgetsBindingObserver {
   NotificationPermissionStatus _permission =
       NotificationPermissionStatus.unsupported;
 
@@ -59,7 +60,8 @@ class _SystemMediaLyricsSettingsPageState
     final settings = context.watch<LyricsDisplaySettings>();
     final display = context.watch<LyricsDisplayProvider>();
     final scheme = Theme.of(context).colorScheme;
-    final showPermissionHint = settings.notificationEnabled &&
+    final showPermissionHint =
+        settings.notificationEnabled &&
         _permission != NotificationPermissionStatus.granted &&
         _permission != NotificationPermissionStatus.unsupported;
     return SettingsSubPage(

@@ -27,14 +27,14 @@ import '../support/fakes.dart';
 /// FakeAsync zone 之外运行，其异步链会跨 zone，await preferencesReady 后
 /// 再 pump 会卡死（与 settings_page_test 同一约定）。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album $id',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id, 'songmid': 'mid_$id'},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album $id',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id, 'songmid': 'mid_$id'},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,6 +47,7 @@ void main() {
     WidgetTester tester,
     PlaybackProvider playback, {
     bool includeCurrent = false,
+    TextScaler textScaler = TextScaler.noScaling,
   }) async {
     final controller = ScrollController();
     addTearDown(controller.dispose);
@@ -60,10 +61,15 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(
-            body: QueueDisplay(
-              controller: controller,
-              includeCurrent: includeCurrent,
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: Scaffold(
+                body: QueueDisplay(
+                  controller: controller,
+                  includeCurrent: includeCurrent,
+                ),
+              ),
             ),
           ),
         ),
@@ -84,6 +90,7 @@ void main() {
         currentIndex: index,
         next: index + 1 < queue.length ? queue[index + 1] : null,
         upNext: queue.sublist(index + 1),
+        upNextIndices: [for (var i = index + 1; i < queue.length; i++) i],
         isPlaying: true,
         position: Duration.zero,
         duration: const Duration(seconds: 30),
@@ -94,16 +101,18 @@ void main() {
     final playback = buildTestPlaybackProvider(backend: backend);
     addTearDown(playback.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a'), _track('b')],
-      currentIndex: 0,
-      next: _track('b'),
-      upNext: [_track('b')],
-      isPlaying: true,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track('a'),
+        queue: [_track('a'), _track('b')],
+        currentIndex: 0,
+        next: _track('b'),
+        upNext: [_track('b')],
+        isPlaying: true,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await pumpQueue(tester, playback);
 
     expect(tester.takeException(), isNull);
@@ -125,16 +134,18 @@ void main() {
     final playback = buildTestPlaybackProvider(backend: backend);
     addTearDown(playback.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a'), _track('b')],
-      currentIndex: 0,
-      next: _track('b'),
-      upNext: [_track('b')],
-      isPlaying: true,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track('a'),
+        queue: [_track('a'), _track('b')],
+        currentIndex: 0,
+        next: _track('b'),
+        upNext: [_track('b')],
+        isPlaying: true,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await pumpQueue(tester, playback, includeCurrent: true);
 
     expect(tester.takeException(), isNull);
@@ -151,8 +162,11 @@ void main() {
         .widgetList<TrackRow>(find.byType(TrackRow))
         .firstWhere((row) => row.model.title == 'Title a');
     expect(currentRow.model.selected, isTrue, reason: '当前曲目行高亮');
-    expect(currentRow.surface.showCheckWhenSelected, isFalse,
-        reason: '高亮不翻选中勾');
+    expect(
+      currentRow.surface.showCheckWhenSelected,
+      isFalse,
+      reason: '高亮不翻选中勾',
+    );
     expect(currentRow.onTap, isNull, reason: '当前曲目行不可点');
 
     await drainThrottle(tester);
@@ -181,16 +195,18 @@ void main() {
     final playback = buildTestPlaybackProvider(backend: backend);
     addTearDown(playback.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: _track('a'),
-      queue: [_track('a'), _track('b')],
-      currentIndex: 0,
-      next: _track('b'),
-      upNext: [_track('b')],
-      isPlaying: true,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track('a'),
+        queue: [_track('a'), _track('b')],
+        currentIndex: 0,
+        next: _track('b'),
+        upNext: [_track('b')],
+        isPlaying: true,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await pumpQueue(tester, playback);
 
     expect(find.text('正在播放'), findsNothing);
@@ -203,11 +219,13 @@ void main() {
 
   testWidgets('恢复态：列表只列会话里当前曲目之后的曲目，点条目从该曲目恢复播放', (tester) async {
     // 先写入会话，再创建 provider（构造时即读取）。
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [_track('a'), _track('b')],
-      index: 0,
-      position: const Duration(seconds: 10),
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b')],
+        index: 0,
+        position: const Duration(seconds: 10),
+      ),
+    );
 
     final backend = FakePlaybackBackend();
     final playback = buildTestPlaybackProvider(backend: backend);
@@ -241,18 +259,20 @@ void main() {
     final b = _track('b');
     final c = _track('c');
     final d = _track('d');
-    backend.emit(BackendSnapshot(
-      current: a,
-      queue: [a, b, c, d],
-      currentIndex: 0,
-      next: d,
-      // 队列顺序（b、c、d）与实际洗牌顺序（d、c、b）不同。
-      upNext: [d, c, b],
-      isPlaying: true,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-      mode: PlayMode.shuffle,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: a,
+        queue: [a, b, c, d],
+        currentIndex: 0,
+        next: d,
+        // 队列顺序（b、c、d）与实际洗牌顺序（d、c、b）不同。
+        upNext: [d, c, b],
+        isPlaying: true,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+        mode: PlayMode.shuffle,
+      ),
+    );
     await pumpQueue(tester, playback);
 
     final titles = tester
@@ -277,14 +297,15 @@ void main() {
     expect(rows.length, lessThan(30), reason: '300 首只构建视口附近的行');
     expect(find.text('Title 299'), findsNothing);
 
-    // 列表使用固定行高：itemExtent = 行高 + 行距（M3E 列表卡片 token）。
+    // 列表使用动态行高：itemExtent = 行高 + 行距（M3E 列表卡片 token）。
     final sliver = tester.widget<SliverFixedExtentList>(
       find.byType(SliverFixedExtentList),
     );
+    final rowContext = tester.element(find.byType(TrackRow).first);
     expect(
       sliver.itemExtent,
-      TrackRow.extent +
-          TrackRow.gapOf(tester.element(find.byType(TrackRow).first)),
+      TrackRow.extentOf(rowContext, tableColumns: false) +
+          TrackRow.gapOf(rowContext),
     );
 
     await tester.scrollUntilVisible(
@@ -330,34 +351,187 @@ void main() {
     await drainThrottle(tester);
   });
 
-  testWidgets(
-    '桌面：队列行无 ⋮，右键在落点弹菜单',
-    (tester) async {
+  testWidgets('桌面：队列行无 ⋮，右键在落点弹菜单', (tester) async {
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    backend.emit(queueSnapshot([_track('a'), _track('b')]));
+    await pumpQueue(tester, playback);
+
+    expect(
+      find.byIcon(Icons.more_vert_rounded),
+      findsNothing,
+      reason: '桌面队列行入口是行表面右键，不再有行尾 ⋮',
+    );
+
+    // 右键行表面：菜单在落点展开（收藏 / 加入列表）。
+    await tester.tap(
+      find.byType(TrackRow).first,
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('收藏'), findsOneWidget);
+    expect(find.text('加入列表'), findsOneWidget);
+
+    await drainThrottle(tester);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  group('队列行动作', () {
+    Finder rowOf(String title) =>
+        find.ancestor(of: find.text(title), matching: find.byType(TrackRow));
+
+    Future<void> openMenu(WidgetTester tester, String title) async {
+      await tester.tap(
+        find.descendant(
+          of: rowOf(title),
+          matching: find.byIcon(Icons.more_vert_rounded),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('触摸端 ⋮：下一首播放 / 上移 / 下移 / 移出队列 + 公共动作', (tester) async {
       final backend = FakePlaybackBackend();
       final playback = buildTestPlaybackProvider(backend: backend);
       addTearDown(playback.dispose);
 
-      backend.emit(queueSnapshot([_track('a'), _track('b')]));
+      backend.emit(
+        BackendSnapshot(
+          current: _track('a'),
+          queue: [_track('a'), _track('b'), _track('c'), _track('d')],
+          currentIndex: 0,
+          next: _track('b'),
+          upNext: [_track('b'), _track('c'), _track('d')],
+          upNextIndices: const [1, 2, 3],
+          isPlaying: true,
+          duration: const Duration(seconds: 30),
+        ),
+      );
       await pumpQueue(tester, playback);
 
-      expect(
-        find.byIcon(Icons.more_vert_rounded),
-        findsNothing,
-        reason: '桌面队列行入口是行表面右键，不再有行尾 ⋮',
-      );
+      await openMenu(tester, 'Title d');
+      expect(find.text('下一首播放'), findsOneWidget);
+      expect(find.text('上移'), findsOneWidget);
+      expect(find.text('下移'), findsNothing, reason: '队尾没有下移');
+      expect(find.text('移出队列'), findsOneWidget);
+      // 队列行不显示「加入队列」。
+      expect(find.text('加入队列'), findsNothing);
 
-      // 右键行表面：菜单在落点展开（收藏 / 加入列表）。
-      await tester.tap(
-        find.byType(TrackRow).first,
-        buttons: kSecondaryButton,
-        kind: PointerDeviceKind.mouse,
-      );
+      await tester.tap(find.text('下一首播放'));
       await tester.pumpAndSettle();
-      expect(find.text('收藏'), findsOneWidget);
-      expect(find.text('加入列表'), findsOneWidget);
+      expect(backend.calls, contains('moveQueueIndex:3:1'));
 
       await drainThrottle(tester);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+    });
+
+    testWidgets('随机 / 列表循环回绕行只保留移除', (tester) async {
+      final backend = FakePlaybackBackend();
+      final playback = buildTestPlaybackProvider(backend: backend);
+      addTearDown(playback.dispose);
+
+      // 列表循环：当前 c（下标 2），upNext = d + 回绕的 a、b。
+      backend.emit(
+        BackendSnapshot(
+          current: _track('c'),
+          queue: [_track('a'), _track('b'), _track('c'), _track('d')],
+          currentIndex: 2,
+          next: _track('d'),
+          upNext: [_track('d'), _track('a'), _track('b')],
+          upNextIndices: const [3, 0, 1],
+          isPlaying: true,
+          duration: const Duration(seconds: 30),
+          mode: PlayMode.listLoop,
+        ),
+      );
+      await pumpQueue(tester, playback);
+
+      await openMenu(tester, 'Title a');
+      expect(find.text('移出队列'), findsOneWidget);
+      expect(find.text('下一首播放'), findsNothing);
+      expect(find.text('上移'), findsNothing);
+      expect(find.text('下移'), findsNothing);
+      await tester.tap(find.text('移出队列'));
+      await tester.pumpAndSettle();
+      expect(backend.calls, contains('removeQueueIndex:0'));
+
+      // 随机：非回绕行也只保留移除，移动不可用。
+      backend.emit(
+        BackendSnapshot(
+          current: _track('a'),
+          queue: [_track('a'), _track('b'), _track('c')],
+          currentIndex: 0,
+          next: _track('c'),
+          upNext: [_track('c'), _track('b')],
+          upNextIndices: const [2, 1],
+          isPlaying: true,
+          duration: const Duration(seconds: 30),
+          mode: PlayMode.shuffle,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openMenu(tester, 'Title c');
+      expect(find.text('移出队列'), findsOneWidget);
+      expect(find.text('下一首播放'), findsNothing);
+      expect(find.text('上移'), findsNothing);
+      expect(find.text('下移'), findsNothing);
+
+      await drainThrottle(tester);
+    });
+
+    testWidgets('未带 upNextIndices 的旧快照：不显示队列编辑动作，列表不崩', (tester) async {
+      final backend = FakePlaybackBackend();
+      final playback = buildTestPlaybackProvider(backend: backend);
+      addTearDown(playback.dispose);
+
+      backend.emit(
+        BackendSnapshot(
+          current: _track('a'),
+          queue: [_track('a'), _track('b')],
+          currentIndex: 0,
+          next: _track('b'),
+          upNext: [_track('b')],
+          isPlaying: true,
+          duration: const Duration(seconds: 30),
+        ),
+      );
+      await pumpQueue(tester, playback);
+
+      expect(tester.takeException(), isNull);
+      await openMenu(tester, 'Title b');
+      expect(find.text('移出队列'), findsNothing);
+      expect(find.text('收藏'), findsOneWidget);
+
+      await drainThrottle(tester);
+    });
+
+    testWidgets('1.3× / 1.5× 大字体：itemExtent 与行内高度同源，不裁切', (tester) async {
+      for (final scale in [1.3, 1.5]) {
+        final backend = FakePlaybackBackend();
+        final playback = buildTestPlaybackProvider(backend: backend);
+        addTearDown(playback.dispose);
+        backend.emit(queueSnapshot([for (var i = 0; i < 6; i++) _track('$i')]));
+        await pumpQueue(tester, playback, textScaler: TextScaler.linear(scale));
+
+        expect(tester.takeException(), isNull, reason: '$scale× 不应布局溢出');
+        final sliver = tester.widget<SliverFixedExtentList>(
+          find.byType(SliverFixedExtentList),
+        );
+        final context = tester.element(find.byType(TrackRow).first);
+        expect(
+          sliver.itemExtent,
+          TrackRow.extentOf(context, tableColumns: false) +
+              TrackRow.gapOf(context),
+        );
+        expect(
+          tester.getSize(find.byType(TrackRow).first).height,
+          TrackRow.extentOf(context, tableColumns: false),
+          reason: '行内 SizedBox 与 itemExtent 同源',
+        );
+
+        await drainThrottle(tester);
+      }
+    });
+  });
 }

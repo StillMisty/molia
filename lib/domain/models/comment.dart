@@ -66,16 +66,16 @@ class Comment {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        text,
-        createdAt,
-        location,
-        authorName,
-        avatarUrl,
-        likedCount,
-        quoted,
-        deepHash(replies),
-      );
+    id,
+    text,
+    createdAt,
+    location,
+    authorName,
+    avatarUrl,
+    likedCount,
+    quoted,
+    deepHash(replies),
+  );
 
   @override
   String toString() => 'Comment($id, $authorName)';
@@ -135,15 +135,10 @@ class CommentPage {
       other.hasMore == hasMore;
 
   @override
-  int get hashCode => Object.hash(
-        kind,
-        deepHash(items),
-        page,
-        limit,
-        total,
-        hasMore,
-      );
+  int get hashCode =>
+      Object.hash(kind, deepHash(items), page, limit, total, hasMore);
 
   @override
-  String toString() => 'CommentPage(${kind.name}, page=$page, ${items.length} 条)';
+  String toString() =>
+      'CommentPage(${kind.name}, page=$page, ${items.length} 条)';
 }

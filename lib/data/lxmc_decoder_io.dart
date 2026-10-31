@@ -58,9 +58,9 @@ Future<LxmcDecodedPlaylist> decodeLxmcBytesOffThread(
     _LxmcDecodeSuccess(:final playlist) => playlist,
     _LxmcDecodeFailure(:final reason) => throw LxmcDecodeException(reason),
     _LxmcDecodeCrash(:final error, :final stack) => Error.throwWithStackTrace(
-        StateError('lxmc 解码失败：$error'),
-        StackTrace.fromString(stack),
-      ),
+      StateError('lxmc 解码失败：$error'),
+      StackTrace.fromString(stack),
+    ),
   };
 }
 
@@ -178,11 +178,10 @@ LxmcDecodedTrack? _mapTrack(dynamic item) {
   final songId = _platformSongId(sourceKey, meta, item['id']);
   if (songId.isEmpty) return null;
 
-  final artist =
-      (item['singer'] ?? meta['singer'] ?? meta['artist'] ?? '').toString();
-  final album =
-      (meta['albumName'] ?? meta['album'] ?? item['albumName'] ?? '')
-          .toString();
+  final artist = (item['singer'] ?? meta['singer'] ?? meta['artist'] ?? '')
+      .toString();
+  final album = (meta['albumName'] ?? meta['album'] ?? item['albumName'] ?? '')
+      .toString();
   final cover =
       (meta['picUrl'] ?? meta['img'] ?? meta['pic'] ?? item['pic'] ?? '')
           .toString();
@@ -203,7 +202,10 @@ LxmcDecodedTrack? _mapTrack(dynamic item) {
 /// 平台取链 id：优先 `meta` 中该平台字段（[platformRawIdOf]），
 /// 兜底解析 `item.id` 的平台前缀。
 String _platformSongId(
-    String sourceKey, Map<String, dynamic> meta, Object? itemId) {
+  String sourceKey,
+  Map<String, dynamic> meta,
+  Object? itemId,
+) {
   final fromMeta = platformRawIdOf(sourceKey, meta);
   if (fromMeta.isNotEmpty) return fromMeta;
   final id = itemId?.toString().trim() ?? '';

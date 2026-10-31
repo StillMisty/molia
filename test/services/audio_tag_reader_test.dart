@@ -21,7 +21,11 @@ void main() {
         audio: _cbrFrames(),
         fileSize: 0,
       );
-      final info = readAudioTags(head, extension: '.mp3', fileSize: head.length);
+      final info = readAudioTags(
+        head,
+        extension: '.mp3',
+        fileSize: head.length,
+      );
 
       expect(info.title, '标题');
       expect(info.artist, 'Artist');
@@ -38,7 +42,11 @@ void main() {
         audio: _cbrFrames(),
         fileSize: 0,
       );
-      final info = readAudioTags(head, extension: '.mp3', fileSize: head.length);
+      final info = readAudioTags(
+        head,
+        extension: '.mp3',
+        fileSize: head.length,
+      );
 
       expect(info.title, '老标题');
       expect(info.artist, '老歌手');
@@ -53,7 +61,11 @@ void main() {
         for (var i = 0; i < 400; i++) 0x00,
       ];
       final head = _mp3(frames: const [], audio: audio, fileSize: 0);
-      final info = readAudioTags(head, extension: '.mp3', fileSize: head.length);
+      final info = readAudioTags(
+        head,
+        extension: '.mp3',
+        fileSize: head.length,
+      );
 
       // 2300 帧 × 1152 采样 / 44100Hz ≈ 60.08s。
       expect(info.durationMs, closeTo(60082, 2));
@@ -62,7 +74,11 @@ void main() {
     test('无 Xing：按首帧码率与文件大小估算（CBR）', () {
       final audio = _cbrFrames();
       final head = _mp3(frames: const [], audio: audio, fileSize: 0);
-      final info = readAudioTags(head, extension: '.mp3', fileSize: head.length);
+      final info = readAudioTags(
+        head,
+        extension: '.mp3',
+        fileSize: head.length,
+      );
 
       final audioBytes = head.length - 10; // 无标签，音频从头开始
       final expectedMs = (audioBytes * 8 * 1000 / 128000).round();
@@ -82,13 +98,13 @@ void main() {
       final head = _flac(
         sampleRate: 44100,
         totalSamples: 220500, // 5s
-        comments: {
-          'TITLE': '歌名',
-          'ARTIST': '歌手',
-          'ALBUM': '专辑',
-        },
+        comments: {'TITLE': '歌名', 'ARTIST': '歌手', 'ALBUM': '专辑'},
       );
-      final info = readAudioTags(head, extension: '.flac', fileSize: head.length);
+      final info = readAudioTags(
+        head,
+        extension: '.flac',
+        fileSize: head.length,
+      );
 
       expect(info.title, '歌名');
       expect(info.artist, '歌手');
@@ -116,7 +132,10 @@ void main() {
 
   test('不支持的格式：返回空结果（由文件名兜底）', () {
     final bytes = Uint8List.fromList(List<int>.filled(32, 0));
-    expect(readAudioTags(bytes, extension: '.m4a', fileSize: 32).isEmpty, isTrue);
+    expect(
+      readAudioTags(bytes, extension: '.m4a', fileSize: 32).isEmpty,
+      isTrue,
+    );
   });
 
   group('splitFileNameMetadata', () {
@@ -186,16 +205,19 @@ List<int> _id3TextFrame(
 }
 
 List<int> _utf16le(String text) => [
-      for (final unit in text.codeUnits) ...[unit & 0xFF, unit >> 8],
-    ];
+  for (final unit in text.codeUnits) ...[unit & 0xFF, unit >> 8],
+];
 
 /// 若干 MPEG1 Layer III 帧（128kbps / 44100Hz / 无 Xing）。
 List<int> _cbrFrames() => [
-      for (var i = 0; i < 10; i++) ...[
-        0xFF, 0xFB, 0x90, 0x00,
-        for (var j = 0; j < 410; j++) 0x00,
-      ],
-    ];
+  for (var i = 0; i < 10; i++) ...[
+    0xFF,
+    0xFB,
+    0x90,
+    0x00,
+    for (var j = 0; j < 410; j++) 0x00,
+  ],
+];
 
 /// 'fLaC' + STREAMINFO + Vorbis Comment（last）。
 Uint8List _flac({
@@ -237,23 +259,23 @@ Uint8List _flac({
 }
 
 List<int> _be32(int value) => [
-      (value >> 24) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 8) & 0xFF,
-      value & 0xFF,
-    ];
+  (value >> 24) & 0xFF,
+  (value >> 16) & 0xFF,
+  (value >> 8) & 0xFF,
+  value & 0xFF,
+];
 
 List<int> _le32(int value) => [
-      value & 0xFF,
-      (value >> 8) & 0xFF,
-      (value >> 16) & 0xFF,
-      (value >> 24) & 0xFF,
-    ];
+  value & 0xFF,
+  (value >> 8) & 0xFF,
+  (value >> 16) & 0xFF,
+  (value >> 24) & 0xFF,
+];
 
 /// ID3v2 synchsafe 大小（每字节 7 位）。
 List<int> _synchsafe(int value) => [
-      (value >> 21) & 0x7F,
-      (value >> 14) & 0x7F,
-      (value >> 7) & 0x7F,
-      value & 0x7F,
-    ];
+  (value >> 21) & 0x7F,
+  (value >> 14) & 0x7F,
+  (value >> 7) & 0x7F,
+  value & 0x7F,
+];

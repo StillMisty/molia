@@ -56,8 +56,7 @@ class UpdateProgress {
   final int bytesPerSecond;
 
   /// 0..1；未知总量时为 null（UI 显示不确定进度条）。
-  double? get fraction =>
-      total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+  double? get fraction => total > 0 ? (received / total).clamp(0.0, 1.0) : null;
 }
 
 /// 设置页「关于与更新」的状态机：检查 → 下载 → 安装。
@@ -75,7 +74,7 @@ class UpdateProvider extends ChangeNotifier {
     this._currentBuild = 0,
     this._quitApp,
     DateTime Function()? now,
-  })  : _now = now ?? DateTime.now;
+  }) : _now = now ?? DateTime.now;
 
   /// 启动静默检查的节流间隔。
   static const Duration autoCheckInterval = Duration(hours: 24);
@@ -93,8 +92,9 @@ class UpdateProvider extends ChangeNotifier {
   final Logger _logger = Logger('molia.update_provider');
 
   /// 下载进度（高频通道）。
-  final ValueNotifier<UpdateProgress> progress =
-      ValueNotifier(const UpdateProgress());
+  final ValueNotifier<UpdateProgress> progress = ValueNotifier(
+    const UpdateProgress(),
+  );
 
   UpdateStatus _status = UpdateStatus.idle;
   AppRelease? _release;
@@ -129,8 +129,7 @@ class UpdateProvider extends ChangeNotifier {
   UpdatePlatformInfo? get platform => _platform;
 
   /// 当前版本展示文案（当前版本 + 构建号）。
-  String get currentVersionLabel =>
-      '$_currentVersion+$_currentBuild';
+  String get currentVersionLabel => '$_currentVersion+$_currentBuild';
 
   /// 是否处于「有更新可用」的任一阶段（设置入口副标题据此显示）。
   bool get updateAvailable =>
@@ -277,10 +276,9 @@ class UpdateProvider extends ChangeNotifier {
         cancelToken: cancelToken,
       );
       _downloadedPath = path;
-      _downloadedKind = _release!.assetFor(
-        platform: _platform!.platform,
-        arch: _platform!.arch,
-      )?.kind;
+      _downloadedKind = _release!
+          .assetFor(platform: _platform!.platform, arch: _platform!.arch)
+          ?.kind;
       _downloadedRelease = _release;
       _setStatus(UpdateStatus.downloaded);
       await installDownloaded();
@@ -433,15 +431,17 @@ class UpdateProvider extends ChangeNotifier {
 
   void _onProgress(int received, int total) {
     final now = _now();
-    final emit = _lastProgressEmit == null ||
+    final emit =
+        _lastProgressEmit == null ||
         now.difference(_lastProgressEmit!) >= _progressThrottle ||
         (total > 0 && received >= total);
     if (!emit) return;
     _lastProgressEmit = now;
 
     final started = _downloadStartedAt;
-    final elapsedMs =
-        started == null ? 0 : now.difference(started).inMilliseconds;
+    final elapsedMs = started == null
+        ? 0
+        : now.difference(started).inMilliseconds;
     progress.value = UpdateProgress(
       received: received,
       total: total,

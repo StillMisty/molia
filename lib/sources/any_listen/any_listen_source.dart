@@ -59,9 +59,10 @@ class AnyListenSource {
     AnyListenApi? api,
     AnyListenConfigStore? configStore,
     SettingsAccess? settings,
-  })  : _api = api ?? AnyListenApi(),
-        _configStore = configStore ??
-            AnyListenConfigStore(settings: _requireSettings(settings));
+  }) : _api = api ?? AnyListenApi(),
+       _configStore =
+           configStore ??
+           AnyListenConfigStore(settings: _requireSettings(settings));
 
   /// 注入校验：debug 先断言给出调用栈，release 抛 [StateError]，保证漏注入
   /// （接线错误）以可读消息显式失败，而不是在后续使用处报 null 检查错误。
@@ -169,8 +170,9 @@ class AnyListenSource {
       return AnyListenTestResult(
         ok: true,
         serverId: id,
-        message:
-            (id == null || id.isEmpty) ? '连接成功，服务器已响应握手' : '连接成功，服务器标识：$id',
+        message: (id == null || id.isEmpty)
+            ? '连接成功，服务器已响应握手'
+            : '连接成功，服务器标识：$id',
       );
     } on AnyListenException catch (error) {
       return AnyListenTestResult(
@@ -209,7 +211,8 @@ class AnyListenSource {
       throw AnyListenException.badResponse('搜索响应不是 JSON 对象');
     }
     final container = data['data'] is Map ? data['data'] as Map : data;
-    final rawList = container['list'] ??
+    final rawList =
+        container['list'] ??
         container['data'] ??
         container['songs'] ??
         container['result'];
@@ -234,7 +237,7 @@ class AnyListenSource {
               _asText(raw['singer'] ?? raw['artist'] ?? meta['singer']) ?? '',
           album:
               _asText(meta['albumName'] ?? raw['albumName'] ?? raw['album']) ??
-                  '',
+              '',
           coverUrl: _asText(
             meta['picUrl'] ?? raw['picUrl'] ?? raw['pic'] ?? raw['img'],
           ),

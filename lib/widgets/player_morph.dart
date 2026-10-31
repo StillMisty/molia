@@ -96,9 +96,7 @@ class PlayerMorphController extends ChangeNotifier {
             .clamp(0.0, 1.0);
     // 只做窗口裁切；easing 形状由 deck 的侧槽几何统一施加（避免双重缓动）。
     // 减弱动效时 deck 直接按 1 落位。
-    return toPage
-        ? entryWindow(progress)
-        : entryWindow(1 - progress);
+    return toPage ? entryWindow(progress) : entryWindow(1 - progress);
   }
 
   void setBarHeaderHidden(bool value) {
@@ -183,19 +181,19 @@ class PlayerMorphFlight extends StatelessWidget {
     // 只有这一层重绘，不会把整条 Overlay（页面 / 顶栏）拖进 raster。
     return RepaintBoundary(
       child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        CoverFlightLayer(
-          animation: animation,
-          flight: CoverFlight(
-            otherRect: geometry.barCover,
-            pageRect: geometry.pageCover,
-            toPage: geometry.toPage,
+        clipBehavior: Clip.none,
+        children: [
+          CoverFlightLayer(
+            animation: animation,
+            flight: CoverFlight(
+              otherRect: geometry.barCover,
+              pageRect: geometry.pageCover,
+              toPage: geometry.toPage,
+            ),
+            url: url,
+            fallback: fallback,
           ),
-          url: url,
-          fallback: fallback,
-        ),
-      ],
+        ],
       ),
     );
   }

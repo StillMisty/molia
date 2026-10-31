@@ -47,17 +47,20 @@ void main() {
                     'audio': [
                       {
                         'id': 30216,
-                        'baseUrl': 'https://cdn.example/audio64.m4s'
+                        'baseUrl':
+                            'https://cdn.example/audio64.m4s'
                             '?deadline=$deadline',
                       },
                       {
                         'id': 30232,
-                        'baseUrl': 'https://cdn.example/audio128.m4s'
+                        'baseUrl':
+                            'https://cdn.example/audio128.m4s'
                             '?deadline=$deadline',
                       },
                       {
                         'id': 30280,
-                        'baseUrl': 'https://cdn.example/audio192.m4s'
+                        'baseUrl':
+                            'https://cdn.example/audio192.m4s'
                             '?deadline=$deadline',
                       },
                     ],
@@ -95,10 +98,16 @@ void main() {
       expect(capabilities.pagination, isFalse, reason: key);
       expect(capabilities.resolveUrl, isFalse, reason: key);
       // 歌词 / 封面能力来自注册表适配器，不在测试里写死六份期望。
-      expect(capabilities.lyrics, BuiltinPlatforms.lyricFor(key) != null,
-          reason: key);
-      expect(capabilities.artwork, BuiltinPlatforms.picFor(key) != null,
-          reason: key);
+      expect(
+        capabilities.lyrics,
+        BuiltinPlatforms.lyricFor(key) != null,
+        reason: key,
+      );
+      expect(
+        capabilities.artwork,
+        BuiltinPlatforms.picFor(key) != null,
+        reason: key,
+      );
     }
 
     expect(manager.searchableSources.map((o) => o.key), contains('bili'));

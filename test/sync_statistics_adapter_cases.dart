@@ -24,12 +24,17 @@ void main() {
     final records = collected[SyncCategory.statistics]!;
     expect(records, hasLength(2));
     expect(records.first.key, 'k1');
-    expect(records.first.version,
-        const SyncVersion(physical: 900, deviceId: 'devA'));
+    expect(
+      records.first.version,
+      const SyncVersion(physical: 900, deviceId: 'devA'),
+    );
     expect(records.first.data!['songId'], 's1');
     expect(records.first.data!['raw'], '{"id":1}');
-    expect(records.first.data!.containsKey('id'), isFalse,
-        reason: '本机行 id 不进线上记录');
+    expect(
+      records.first.data!.containsKey('id'),
+      isFalse,
+      reason: '本机行 id 不进线上记录',
+    );
     expect(records.first.data!.containsKey('trackId'), isFalse);
   });
 
@@ -72,8 +77,11 @@ void main() {
     final records = <SyncRecord>[
       SyncRecord(
         key: 'remote-1',
-        version:
-            const SyncVersion(physical: 9000, counter: 2, deviceId: 'devB'),
+        version: const SyncVersion(
+          physical: 9000,
+          counter: 2,
+          deviceId: 'devB',
+        ),
         data: const {
           // data 里的版本列只用于自包含备份，不是胜负判据。
           'versionPhysical': 1,
@@ -95,10 +103,7 @@ void main() {
         version: const SyncVersion(physical: 9000),
         deleted: true,
       ),
-      SyncRecord(
-        key: 'null-data',
-        version: const SyncVersion(physical: 9000),
-      ),
+      SyncRecord(key: 'null-data', version: const SyncVersion(physical: 9000)),
     ];
 
     store.applyResult = (applied: 1, skipped: 0);
@@ -106,8 +111,10 @@ void main() {
     expect(store.applied, hasLength(1));
     final event = store.applied.single;
     expect(event.syncKey, 'remote-1');
-    expect(event.version,
-        const SyncVersion(physical: 9000, counter: 2, deviceId: 'devB'));
+    expect(
+      event.version,
+      const SyncVersion(physical: 9000, counter: 2, deviceId: 'devB'),
+    );
     expect(event.sourceKey, 'wy');
     expect(event.endedAt, 200);
     expect(outcome.applied, 1);
@@ -150,20 +157,19 @@ StatisticsSyncEvent _event({
   required String syncKey,
   String songId = 's1',
   String raw = '',
-}) =>
-    StatisticsSyncEvent(
-      syncKey: syncKey,
-      version: const SyncVersion(physical: 900, deviceId: 'devA'),
-      sourceKey: 'wy',
-      songId: songId,
-      title: 'Song $songId',
-      raw: raw,
-      startedAt: 1000,
-      endedAt: 61000,
-      listenedMs: 60000,
-      maxPositionMs: 60000,
-      endReason: 'completed',
-    );
+}) => StatisticsSyncEvent(
+  syncKey: syncKey,
+  version: const SyncVersion(physical: 900, deviceId: 'devA'),
+  sourceKey: 'wy',
+  songId: songId,
+  title: 'Song $songId',
+  raw: raw,
+  startedAt: 1000,
+  endedAt: 61000,
+  listenedMs: 60000,
+  maxPositionMs: 60000,
+  endReason: 'completed',
+);
 
 class _FakeStatisticsSyncStore implements StatisticsSyncStore {
   List<StatisticsSyncEvent> events = const [];

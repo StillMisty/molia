@@ -22,13 +22,13 @@ void main() {
   tearDown(() => BuiltinSearch.transport = originalTransport);
 
   SourceTrack track(String sourceKey, Map<String, dynamic> raw) => SourceTrack(
-        sourceKey: sourceKey,
-        origin: 'builtin',
-        title: '测试',
-        artist: '歌手',
-        album: '',
-        raw: raw,
-      );
+    sourceKey: sourceKey,
+    origin: 'builtin',
+    title: '测试',
+    artist: '歌手',
+    album: '',
+    raw: raw,
+  );
 
   /// 酷我 LRCX：`TP=content` + zlib + `yeelion` XOR（与平台真实编码一致）。
   List<int> encodeLrcx(String text) {
@@ -39,10 +39,7 @@ void main() {
       xored[i] = inner[i] ^ key.codeUnitAt(i % key.length);
     }
     final compressed = zlib_impl.zlibDeflate(utf8.encode(base64.encode(xored)));
-    return [
-      ...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'),
-      ...compressed,
-    ];
+    return [...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'), ...compressed];
   }
 
   test('五平台分派：请求落到各自平台端点，命中解码结果', () async {
@@ -108,15 +105,12 @@ void main() {
     final kw = await dispatch.fetch(track('kw', {'songmid': '228908'}));
     final wy = await dispatch.fetch(track('wy', {'songmid': '1399112638'}));
     final tx = await dispatch.fetch(track('tx', {'songId': '123'}));
-    final kg = await dispatch.fetch(track('kg', {
-      'hash': 'HASH',
-      'name': '测试',
-      '_interval': 200,
-    }));
-    final mg = await dispatch.fetch(track('mg', {
-      'songmid': '1',
-      'mrcUrl': 'https://mrc.example/mrc',
-    }));
+    final kg = await dispatch.fetch(
+      track('kg', {'hash': 'HASH', 'name': '测试', '_interval': 200}),
+    );
+    final mg = await dispatch.fetch(
+      track('mg', {'songmid': '1', 'mrcUrl': 'https://mrc.example/mrc'}),
+    );
 
     expect(kw?.lyric, contains('你好'), reason: 'kw 走 LRCX 解码');
     expect(kw?.lxlyric, contains('<0,160>你'), reason: 'kw 逐字时间不可丢');
@@ -140,8 +134,10 @@ void main() {
     // kg 的 timelength 来自 `_interval` 秒（缺省 0 会让平台少返回逐字歌词）。
     expect(
       requests
-          .singleWhere((uri) =>
-              uri.host == 'lyrics.kugou.com' && uri.path.contains('search'))
+          .singleWhere(
+            (uri) =>
+                uri.host == 'lyrics.kugou.com' && uri.path.contains('search'),
+          )
           .query,
       contains('timelength=200'),
     );

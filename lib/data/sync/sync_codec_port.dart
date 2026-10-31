@@ -44,8 +44,9 @@ class InlineSyncCodecPort implements SyncCodecPort {
       codec.decrypt(bytes, passphrase);
 
   @override
-  Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records) async =>
-      syncFingerprint(records);
+  Future<String> fingerprint(
+    Map<SyncCategory, List<SyncRecord>> records,
+  ) async => syncFingerprint(records);
 
   @override
   Future<Uint8List> discoveryKey(String passphrase) async =>

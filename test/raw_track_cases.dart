@@ -49,7 +49,9 @@ void main() {
 
     test('bili 按 bvid > aid > id（收藏夹 entry 的 id 是 aid）', () {
       expect(
-          platformRawIdOf('bili', {'bvid': 'BV1', 'aid': 9, 'id': 9}), 'BV1');
+        platformRawIdOf('bili', {'bvid': 'BV1', 'aid': 9, 'id': 9}),
+        'BV1',
+      );
       expect(platformRawIdOf('bili', {'aid': 9, 'id': 9}), '9');
       expect(platformRawIdOf('bili', {'id': 9}), '9');
     });
@@ -62,9 +64,13 @@ void main() {
   group('withCanonicalId', () {
     test('补齐规范字段：wy songId → songmid、kg songId → hash', () {
       expect(
-          withCanonicalId(sourceKey: 'wy', raw: {'songId': 1})['songmid'], '1');
+        withCanonicalId(sourceKey: 'wy', raw: {'songId': 1})['songmid'],
+        '1',
+      );
       expect(
-          withCanonicalId(sourceKey: 'kg', raw: {'songId': 's'})['hash'], 's');
+        withCanonicalId(sourceKey: 'kg', raw: {'songId': 's'})['hash'],
+        's',
+      );
       expect(
         withCanonicalId(sourceKey: 'mg', raw: {'songId': 's'})['copyrightId'],
         's',
@@ -74,7 +80,9 @@ void main() {
     test('已有规范字段时返回原引用', () {
       final raw = {'songId': 's', 'songmid': 'orig'};
       expect(
-          identical(withCanonicalId(sourceKey: 'wy', raw: raw), raw), isTrue);
+        identical(withCanonicalId(sourceKey: 'wy', raw: raw), raw),
+        isTrue,
+      );
     });
 
     test('只增不删：原有字段全部保留', () {
@@ -94,7 +102,9 @@ void main() {
     test('无 id 可补 / 未登记平台：原样返回', () {
       final noId = <String, dynamic>{'name': 'x'};
       expect(
-          identical(withCanonicalId(sourceKey: 'wy', raw: noId), noId), isTrue);
+        identical(withCanonicalId(sourceKey: 'wy', raw: noId), noId),
+        isTrue,
+      );
       final custom = <String, dynamic>{'songId': 's'};
       expect(
         identical(withCanonicalId(sourceKey: 'custom', raw: custom), custom),

@@ -73,8 +73,8 @@ class ArtworkPaletteService {
     this._localFileBytesFor = _localFileBytesFromDisk,
     ArtworkPaletteSeedStore? seedStore,
     Future<CoverImageIdentity?> Function(String url)? identityFor,
-  })  : _seedStore = seedStore, // ignore: prefer_initializing_formals
-        _identityFor = identityFor ?? CoverImageIdentity.resolve;
+  }) : _seedStore = seedStore, // ignore: prefer_initializing_formals
+       _identityFor = identityFor ?? CoverImageIdentity.resolve;
 
   static const int _quantizeColorCount = 128;
 

@@ -18,11 +18,11 @@ void main() {
     vibrations = <String>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'HapticFeedback.vibrate') {
-        vibrations.add(call.arguments as String? ?? '');
-      }
-      return null;
-    });
+          if (call.method == 'HapticFeedback.vibrate') {
+            vibrations.add(call.arguments as String? ?? '');
+          }
+          return null;
+        });
     // 回到默认开关（静态状态在测试间共享，load 无持久化值即默认开启）。
     await HapticsService.load();
   });

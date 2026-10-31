@@ -51,13 +51,13 @@ void main() {
   }
 
   Track trackOf(String id) => Track(
-        id: TrackId('wy', id),
-        title: '曲目 $id',
-        artists: const [Artist(name: '歌手')],
-        album: '专辑名',
-        duration: const Duration(seconds: 245),
-        origin: TrackOrigin.builtin,
-      );
+    id: TrackId('wy', id),
+    title: '曲目 $id',
+    artists: const [Artist(name: '歌手')],
+    album: '专辑名',
+    duration: const Duration(seconds: 245),
+    origin: TrackOrigin.builtin,
+  );
 
   Album albumOf(
     int page, {
@@ -65,16 +65,15 @@ void main() {
     bool hasMore = true,
     String name = '专辑名',
     String coverUrl = 'http://img/cover.jpg',
-  }) =>
-      Album(
-        id: '32311',
-        name: name,
-        artist: '歌手',
-        coverUrl: coverUrl,
-        year: 2012,
-        tracks: [for (var i = 0; i < perPage; i++) trackOf('$page-$i')],
-        hasMore: hasMore,
-      );
+  }) => Album(
+    id: '32311',
+    name: name,
+    artist: '歌手',
+    coverUrl: coverUrl,
+    year: 2012,
+    tracks: [for (var i = 0; i < perPage; i++) trackOf('$page-$i')],
+    hasMore: hasMore,
+  );
 
   Future<void> pumpPage(
     WidgetTester tester,

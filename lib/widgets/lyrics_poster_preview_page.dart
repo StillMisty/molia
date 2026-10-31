@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -206,16 +207,16 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
     // 覆盖值为空串表示显式强制系统默认。
     final ({String? family, List<String>? fallback}) uiFont =
         switch (_posterFontOverride) {
-      null => (
-          family: context.typeScale.bodyMedium.fontFamily,
-          fallback: context.typeScale.bodyMedium.fontFamilyFallback,
-        ),
-      '' => (
-          family: SystemFontsService.platformDefaultFamily,
-          fallback: SystemFontsService.platformDefaultFontFallbacks,
-        ),
-      final family => (family: family, fallback: null),
-    };
+          null => (
+            family: context.typeScale.bodyMedium.fontFamily,
+            fallback: context.typeScale.bodyMedium.fontFamilyFallback,
+          ),
+          '' => (
+            family: SystemFontsService.platformDefaultFamily,
+            fallback: SystemFontsService.platformDefaultFontFallbacks,
+          ),
+          final family => (family: family, fallback: null),
+        };
 
     // 已有海报：保留旧图（不清 bytes），只标记重生成；首刷才进加载态。
     final bool hasPoster = _posterBytes != null;
@@ -299,8 +300,10 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
           }
         });
         if (hasPoster) {
-          Provider.of<NotificationService>(context, listen: false)
-              .showErrorSnackBar(
+          Provider.of<NotificationService>(
+            context,
+            listen: false,
+          ).showErrorSnackBar(
             AppLocalizations.of(context)!.posterGenerationFailed(e.toString()),
           );
         }
@@ -337,8 +340,10 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
         dialogTitle: l10n.save,
       );
       if (!mounted) return;
-      final notifications =
-          Provider.of<NotificationService>(context, listen: false);
+      final notifications = Provider.of<NotificationService>(
+        context,
+        listen: false,
+      );
       switch (result) {
         case SaveAsSaved(:final displayPath, :final kind):
           notifications.showSuccessSnackBar(
@@ -351,8 +356,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       }
     } catch (e) {
       if (mounted) {
-        Provider.of<NotificationService>(context, listen: false).showErrorSnackBar(
-            '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}');
+        Provider.of<NotificationService>(
+          context,
+          listen: false,
+        ).showErrorSnackBar(
+          '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}',
+        );
       }
     } finally {
       if (mounted) {
@@ -379,8 +388,12 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
       );
     } catch (e) {
       if (mounted) {
-        Provider.of<NotificationService>(context, listen: false).showErrorSnackBar(
-            '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}');
+        Provider.of<NotificationService>(
+          context,
+          listen: false,
+        ).showErrorSnackBar(
+          '${AppLocalizations.of(context)!.operationFailed}: ${e.toString()}',
+        );
       }
     } finally {
       if (mounted) {
@@ -408,10 +421,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
   Future<void> _pickPosterColor() async {
     if (_isLoading || _isOperating) return;
     HapticsService.selectionClick();
-    final picked = await showAppColorPicker(
-      context,
-      initialColor: _customSeed,
-    );
+    final picked = await showAppColorPicker(context, initialColor: _customSeed);
     if (picked == null || !mounted || picked == _customSeed) return;
     setState(() {
       _customSeed = picked;
@@ -508,8 +518,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
               width: 28,
               height: 28,
               borderRadius: BorderRadius.circular(6),
-              memCacheWidth:
-                  (28 * MediaQuery.of(context).devicePixelRatio).round(),
+              memCacheWidth: (28 * MediaQuery.of(context).devicePixelRatio)
+                  .round(),
               fallbackIconSize: 16,
             ),
             const SizedBox(width: 8),
@@ -594,10 +604,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            _hexOf(_customSeed),
-            style: context.typeScale.bodyMedium,
-          ),
+          Text(_hexOf(_customSeed), style: context.typeScale.bodyMedium),
         ],
       ),
     );
@@ -630,9 +637,7 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
                 padding: EdgeInsets.all(previewLayout.horizontalPadding),
                 child: ResponsivePageContainer(
                   pageType: ResponsivePageType.preview,
-                  child: Center(
-                    child: _buildPosterContent(theme, l10n),
-                  ),
+                  child: Center(child: _buildPosterContent(theme, l10n)),
                 ),
               ),
             ),

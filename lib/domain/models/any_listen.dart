@@ -33,11 +33,7 @@ class AnyListenConfig {
   /// 是否可用：已配置且已启用。只有此时才出现在可搜索音源列表，并发起网络请求。
   bool get isUsable => isConfigured && enabled;
 
-  AnyListenConfig copyWith({
-    String? serverUrl,
-    String? token,
-    bool? enabled,
-  }) {
+  AnyListenConfig copyWith({String? serverUrl, String? token, bool? enabled}) {
     return AnyListenConfig(
       serverUrl: serverUrl == null
           ? this.serverUrl
@@ -62,10 +58,10 @@ class AnyListenConfig {
 
   /// 归一化后的副本：地址去尾斜杠、缺协议补 `http://`。供持久化与适配器使用。
   AnyListenConfig normalizedCopy() => AnyListenConfig(
-        serverUrl: normalizeServerUrl(serverUrl),
-        token: token,
-        enabled: enabled,
-      );
+    serverUrl: normalizeServerUrl(serverUrl),
+    token: token,
+    enabled: enabled,
+  );
 
   /// 校验服务器地址，合法返回 null，否则返回可读错误文案。
   static String? validateServerUrl(String raw) {

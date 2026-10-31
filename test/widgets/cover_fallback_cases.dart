@@ -37,16 +37,16 @@ void main() {
   });
 
   Widget host() => MaterialApp(
-        home: Scaffold(
-          body: Builder(builder: (context) => buildFallbackArtwork(context)),
-        ),
-      );
+    home: Scaffold(
+      body: Builder(builder: (context) => buildFallbackArtwork(context)),
+    ),
+  );
 
   Widget defaultHost() => MaterialApp(
-        home: Scaffold(
-          body: Builder(builder: (context) => buildDefaultArtwork(context)),
-        ),
-      );
+    home: Scaffold(
+      body: Builder(builder: (context) => buildDefaultArtwork(context)),
+    ),
+  );
 
   testWidgets('未设置默认封面：回退 Molia 标志', (tester) async {
     await tester.runAsync(store.load);

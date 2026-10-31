@@ -38,8 +38,9 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   void initState() {
     super.initState();
     _provider = context.read<AiDjProvider>();
-    _extraController =
-        TextEditingController(text: _provider.preferences.extraPrompt);
+    _extraController = TextEditingController(
+      text: _provider.preferences.extraPrompt,
+    );
   }
 
   @override
@@ -51,9 +52,11 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
     if (pending != _provider.preferences.extraPrompt) {
       final provider = _provider;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        unawaited(provider.savePreferences(
-          provider.preferences.copyWith(extraPrompt: pending),
-        ));
+        unawaited(
+          provider.savePreferences(
+            provider.preferences.copyWith(extraPrompt: pending),
+          ),
+        );
       });
     }
     _extraController.dispose();
@@ -164,9 +167,8 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                   title: l10n.aiDjAutoFeedTitle,
                   subtitle: l10n.aiDjAutoFeedSubtitle,
                   value: prefs.autoFeed,
-                  onChanged: (value) => _update(
-                    _provider.preferences.copyWith(autoFeed: value),
-                  ),
+                  onChanged: (value) =>
+                      _update(_provider.preferences.copyWith(autoFeed: value)),
                 ),
                 SettingsSwitchTile(
                   key: const Key('aiDjPrefOnlyUnheardSwitch'),
@@ -193,9 +195,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                     // 推迟到本帧结束再写偏好。
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
-                      _update(
-                        _provider.preferences.copyWith(batchSize: value),
-                      );
+                      _update(_provider.preferences.copyWith(batchSize: value));
                     });
                   },
                 ),
@@ -208,9 +208,8 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
               selected: {prefs.exploration},
               labelOf: (value) => aiDjExplorationLabel(l10n, value),
               singleSelect: true,
-              onToggle: (value) => _update(
-                _provider.preferences.copyWith(exploration: value),
-              ),
+              onToggle: (value) =>
+                  _update(_provider.preferences.copyWith(exploration: value)),
             ),
             _sectionTitle(l10n.aiDjPrefsStylesGroup),
             _optionChips(
@@ -263,9 +262,8 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
               selected: {prefs.era},
               labelOf: (value) => aiDjEraLabel(l10n, value),
               singleSelect: true,
-              onToggle: (value) => _update(
-                _provider.preferences.copyWith(era: value),
-              ),
+              onToggle: (value) =>
+                  _update(_provider.preferences.copyWith(era: value)),
             ),
             _sectionTitle(l10n.aiDjPrefsExtraGroup),
             M3ETextField(
@@ -306,10 +304,7 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
             ),
             const SizedBox(height: 8),
             if (_provider.seeds.isEmpty)
-              Text(
-                l10n.aiDjSeedsEmpty,
-                style: context.typeScale.bodySmall,
-              )
+              Text(l10n.aiDjSeedsEmpty, style: context.typeScale.bodySmall)
             else
               Wrap(
                 spacing: 8,
@@ -355,10 +350,9 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
     } else {
       sections.remove(section);
     }
-    _update(latest.copyWith(
-      sections: sections,
-      acknowledgedScopes: acknowledged,
-    ));
+    _update(
+      latest.copyWith(sections: sections, acknowledgedScopes: acknowledged),
+    );
   }
 
   static List<String> _toggle(
@@ -375,15 +369,15 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
   }
 
   static IconData _scopeIcon(AiUpstreamSection section) => switch (section) {
-        AiUpstreamSection.summary => Icons.insights_rounded,
-        AiUpstreamSection.topArtists => Icons.people_alt_rounded,
-        AiUpstreamSection.topTracks => Icons.music_note_rounded,
-        AiUpstreamSection.timeAndSource => Icons.schedule_rounded,
-        AiUpstreamSection.recentEvents => Icons.history_rounded,
-        AiUpstreamSection.listenedExclusions => Icons.hearing_disabled_rounded,
-        AiUpstreamSection.favorites => Icons.favorite_rounded,
-        AiUpstreamSection.playlists => Icons.queue_music_rounded,
-      };
+    AiUpstreamSection.summary => Icons.insights_rounded,
+    AiUpstreamSection.topArtists => Icons.people_alt_rounded,
+    AiUpstreamSection.topTracks => Icons.music_note_rounded,
+    AiUpstreamSection.timeAndSource => Icons.schedule_rounded,
+    AiUpstreamSection.recentEvents => Icons.history_rounded,
+    AiUpstreamSection.listenedExclusions => Icons.hearing_disabled_rounded,
+    AiUpstreamSection.favorites => Icons.favorite_rounded,
+    AiUpstreamSection.playlists => Icons.queue_music_rounded,
+  };
 
   Widget _sectionTitle(String title) {
     return Padding(

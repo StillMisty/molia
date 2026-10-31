@@ -16,14 +16,14 @@ import 'support/fakes.dart';
 /// 真机每帧重建的节奏，会让「手势宿主被换型重建 → 识别器 dispose」的
 /// 滑到一半冻住问题在测试里完全隐形。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -48,18 +48,20 @@ void main() {
   /// 模拟后端切到指定曲目：next / previous / 再上一首 / upNext 与队列一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
-    backend.emit(BackendSnapshot(
-      current: order[index],
-      queue: order,
-      currentIndex: index,
-      next: index + 1 < order.length ? order[index + 1] : null,
-      previous: index > 0 ? order[index - 1] : null,
-      previousOfPrevious: index > 1 ? order[index - 2] : null,
-      upNext: order.sublist(index + 1),
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: order[index],
+        queue: order,
+        currentIndex: index,
+        next: index + 1 < order.length ? order[index + 1] : null,
+        previous: index > 0 ? order[index - 1] : null,
+        previousOfPrevious: index > 1 ? order[index - 2] : null,
+        upNext: order.sublist(index + 1),
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   Future<void> pumpPlayer(WidgetTester tester) async {
@@ -90,10 +92,7 @@ void main() {
           home: Scaffold(
             body: SizedBox(
               height: 900,
-              child: Player(
-                expandAnimation: expand,
-                onToggleExpand: () {},
-              ),
+              child: Player(expandAnimation: expand, onToggleExpand: () {}),
             ),
           ),
         ),
@@ -113,8 +112,7 @@ void main() {
 
   /// 中心封面相对堆叠中心的横向偏移（0 = 稳态；拖动预览/切歌期间非 0）。
   double cardDx(WidgetTester tester, Finder finder) =>
-      tester.getCenter(finder).dx -
-      tester.getCenter(coverSwipeHost()).dx;
+      tester.getCenter(finder).dx - tester.getCenter(coverSwipeHost()).dx;
 
   /// 指定封面卡最近一层 Opacity 的透明度（卡的动画透明度层）。
   double nearestOpacityOf(WidgetTester tester, Finder finder) {
@@ -210,8 +208,9 @@ void main() {
     emitFor('b');
     await pumpPlayer(tester);
 
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     // 总计 100px：必须从真实按下位置累计；若从「手势确认位置」起算
     // 只剩 70px，达不到 80 提交阈值。
     await gesture.moveBy(const Offset(-30, 0));
@@ -231,8 +230,9 @@ void main() {
     emitFor('b');
     await pumpPlayer(tester);
 
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     await gesture.moveBy(const Offset(-20, 0));
@@ -250,8 +250,9 @@ void main() {
     await pumpPlayer(tester);
 
     final double range = dragFor(tester, 1.0);
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     // 先移动一段确认横滑，再走到下一首预览，最后拖回当前附近（p≈0.15）。
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
@@ -263,23 +264,32 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget,
-        reason: '拖动预览的中心位应是下一首');
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+      reason: '拖动预览的中心位应是下一首',
+    );
 
     await gesture.up();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
 
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget,
-        reason: '回弹期间中心卡仍是预览目标（不是当前曲目）');
-    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsNothing,
-        reason: '目标槽位不得在回弹半途显示当前封面');
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+      reason: '回弹期间中心卡仍是预览目标（不是当前曲目）',
+    );
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+      findsNothing,
+      reason: '目标槽位不得在回弹半途显示当前封面',
+    );
 
     // 回弹落位：中心回当前、右槽恢复下一首，全程没有提交切歌。
     await tester.pump(const Duration(milliseconds: 700));
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget);
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+      findsOneWidget,
+    );
     expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsNothing);
     expect(
       find.byKey(PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id)),
@@ -294,15 +304,15 @@ void main() {
   testWidgets('左滑到下一首：下下张在拖动中进入右槽，落位后不重放淡入', (tester) async {
     emitFor('b'); // 队列 a,b,c,d：当前 b，右槽 c，再下一首 d
     await pumpPlayer(tester);
-    expect(
-      playback.snapshot.upNext.map((track) => track.id.id),
-      ['c', 'd'],
-      reason: '测试快照应带实际播放顺序',
-    );
+    expect(playback.snapshot.upNext.map((track) => track.id.id), [
+      'c',
+      'd',
+    ], reason: '测试快照应带实际播放顺序');
 
     final double range = dragFor(tester, 1.0);
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     await gesture.moveBy(Offset(-(range * 0.8 - 30), 0));
@@ -317,8 +327,7 @@ void main() {
       greaterThan(0.1),
       reason: 'p≈0.8 时源侧新身份应已进入淡入窗口',
     );
-    expect(cardDx(tester, dCard), greaterThan(20),
-        reason: 'd 应落在右槽位而不是中心');
+    expect(cardDx(tester, dCard), greaterThan(20), reason: 'd 应落在右槽位而不是中心');
 
     // 走满行程：源侧新身份完全淡入。
     await gesture.moveBy(Offset(-(range * 0.2), 0));
@@ -335,8 +344,11 @@ void main() {
     emitFor('c'); // 对账到预览目标：新快照的 next 正是 d
     await tester.pump();
     expect(dCard, findsOneWidget, reason: '对账切换帧不能让 d 消失');
-    expect(nearestOpacityOf(tester, dCard), closeTo(0.85, 0.02),
-        reason: '预览已渲染同一身份，不应重放 180ms 淡入');
+    expect(
+      nearestOpacityOf(tester, dCard),
+      closeTo(0.85, 0.02),
+      reason: '预览已渲染同一身份，不应重放 180ms 淡入',
+    );
 
     await tester.pump(const Duration(milliseconds: 300));
     expect(dCard, findsOneWidget);
@@ -349,8 +361,9 @@ void main() {
     await pumpPlayer(tester);
 
     final double range = dragFor(tester, 1.0);
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(30, 0));
     await tester.pump();
     await gesture.moveBy(Offset(range * 0.8 - 30, 0));
@@ -361,8 +374,7 @@ void main() {
     );
     expect(aCard, findsOneWidget, reason: '向后拖动预览应提前渲染再上一首 a');
     expect(nearestOpacityOf(tester, aCard), greaterThan(0.1));
-    expect(cardDx(tester, aCard), lessThan(-20),
-        reason: 'a 应落在左槽位而不是中心');
+    expect(cardDx(tester, aCard), lessThan(-20), reason: 'a 应落在左槽位而不是中心');
 
     await gesture.moveBy(Offset(range * 0.2, 0));
     await tester.pump();
@@ -378,8 +390,11 @@ void main() {
     emitFor('b'); // 对账到预览目标：新快照的 previous 正是 a
     await tester.pump();
     expect(aCard, findsOneWidget, reason: '对账切换帧不能让 a 消失');
-    expect(nearestOpacityOf(tester, aCard), closeTo(0.85, 0.02),
-        reason: '预览已渲染同一身份，不应重放 180ms 淡入');
+    expect(
+      nearestOpacityOf(tester, aCard),
+      closeTo(0.85, 0.02),
+      reason: '预览已渲染同一身份，不应重放 180ms 淡入',
+    );
 
     await tester.pump(const Duration(milliseconds: 300));
     expect(aCard, findsOneWidget);
@@ -395,8 +410,9 @@ void main() {
     await pumpPlayer(tester);
 
     final double range = dragFor(tester, 1.0);
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     await gesture.moveBy(Offset(-(range * 0.5 - 30), 0));
@@ -439,10 +455,12 @@ void main() {
     );
     expect(
       cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey),
-      greaterThan(cardPaintIndex(
-        tester,
-        PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id),
-      )),
+      greaterThan(
+        cardPaintIndex(
+          tester,
+          PlayerCoverDeck.sideCoverCardKey(left: false, id: c.id),
+        ),
+      ),
       reason: '回弹落位后恢复稳态层级：中心封面在上',
     );
     expect(nextCalls(), 0);
@@ -454,8 +472,9 @@ void main() {
     await pumpPlayer(tester);
 
     final double range = dragFor(tester, 1.0);
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(30, 0));
     await tester.pump();
     await gesture.moveBy(Offset(range * 0.5 - 30, 0));
@@ -497,10 +516,12 @@ void main() {
     );
     expect(
       cardPaintIndex(tester, PlayerCoverDeck.centerCoverCardKey),
-      greaterThan(cardPaintIndex(
-        tester,
-        PlayerCoverDeck.sideCoverCardKey(left: true, id: b.id),
-      )),
+      greaterThan(
+        cardPaintIndex(
+          tester,
+          PlayerCoverDeck.sideCoverCardKey(left: true, id: b.id),
+        ),
+      ),
       reason: '回弹落位后恢复稳态层级：中心封面在上',
     );
     expect(previousCalls(), 0);
@@ -534,8 +555,9 @@ void main() {
     expect(nextCalls(), 1);
 
     // 动画尾部立即再滑：提交等待期间的新拖动被拒绝，中心不得闪回旧曲目。
-    final centerPreviewC =
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id));
+    final centerPreviewC = find.byKey(
+      PlayerCoverDeck.centerCoverTrackKey(c.id),
+    );
     expect(centerPreviewC, findsOneWidget);
     await tester.timedDrag(
       coverSwipeHost(),
@@ -543,8 +565,7 @@ void main() {
       const Duration(milliseconds: 300),
     );
     expect(nextCalls(), 1);
-    expect(centerPreviewC, findsOneWidget,
-        reason: '动画尾部的新拖动不得把中心闪回旧曲目');
+    expect(centerPreviewC, findsOneWidget, reason: '动画尾部的新拖动不得把中心闪回旧曲目');
 
     // 让提交过渡落位（仍等待后端对账）：再次拖动仍应被会话拒绝，且画面
     // 不能因第二次手势出现旧中心卡/位置跳变。
@@ -564,8 +585,11 @@ void main() {
       const Duration(milliseconds: 300),
     );
     expect(nextCalls(), 1);
-    expect(cardDx(tester, center), closeTo(beforeDx, 0.5),
-        reason: '第二次拖动被拒绝，中心卡位置不得跳变');
+    expect(
+      cardDx(tester, center),
+      closeTo(beforeDx, 0.5),
+      reason: '第二次拖动被拒绝，中心卡位置不得跳变',
+    );
     expect(
       find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
       findsOneWidget,
@@ -582,8 +606,9 @@ void main() {
     emitFor('b');
     await pumpPlayer(tester);
 
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     await gesture.moveBy(const Offset(-70, 0));
@@ -600,8 +625,9 @@ void main() {
     await pumpPlayer(tester);
 
     // 左滑进入预览：-90px 超过 80 阈值但未走完行程，中心偏离稳态。
-    final gesture =
-        await tester.startGesture(tester.getCenter(coverSwipeHost()));
+    final gesture = await tester.startGesture(
+      tester.getCenter(coverSwipeHost()),
+    );
     await gesture.moveBy(const Offset(-60, 0));
     await tester.pump();
     await gesture.moveBy(const Offset(-30, 0));
@@ -612,16 +638,18 @@ void main() {
     expect(midDx, greaterThan(4), reason: '拖动应已进入预览（中心偏离稳态）');
 
     // 拖动中「下一首」变空（播放列表变化）。
-    backend.emit(BackendSnapshot(
-      current: b,
-      queue: [a, b],
-      currentIndex: 1,
-      next: null,
-      previous: a,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        next: null,
+        previous: a,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 50)); // 通知检测帧
 
     // 继续拖动并等待：预览必须保持中间态，不撤下回弹。
@@ -630,8 +658,11 @@ void main() {
     await gesture.moveBy(const Offset(-30, 0));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    expect(cardDx(tester, center), closeTo(midDx, 1),
-        reason: '预览已激活时列表变化不应打断预览（中间态不回落）');
+    expect(
+      cardDx(tester, center),
+      closeTo(midDx, 1),
+      reason: '预览已激活时列表变化不应打断预览（中间态不回落）',
+    );
 
     // 松手未达提交阈值：回弹到稳态，不提交切歌。
     await gesture.moveBy(const Offset(90, 0));
@@ -664,10 +695,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 700));
 
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget,
-        reason: '兜底回弹后中心应回到实际曲目 b');
-    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing,
-        reason: '回弹后滑出卡应撤下');
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+      findsOneWidget,
+      reason: '兜底回弹后中心应回到实际曲目 b',
+    );
+    expect(
+      find.byKey(PlayerCoverDeck.outgoingCoverCardKey),
+      findsNothing,
+      reason: '回弹后滑出卡应撤下',
+    );
     expect(cardDx(tester, center), closeTo(0, 1));
     expect(tester.takeException(), isNull);
   });

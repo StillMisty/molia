@@ -86,9 +86,7 @@ class _TrackShareSheet extends StatelessWidget {
         M3EListItem(
           leading: const Icon(Icons.link_rounded),
           headline: l10n.sharePlatformPage,
-          supportingText: pageUrl == null
-              ? l10n.platformPageUnavailable
-              : null,
+          supportingText: pageUrl == null ? l10n.platformPageUnavailable : null,
           enabled: pageUrl != null,
           onTap: pageUrl == null
               ? null

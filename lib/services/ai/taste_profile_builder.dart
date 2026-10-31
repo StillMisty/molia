@@ -32,11 +32,8 @@ class TasteProfile {
   final List<({String title, String artist})> favorites;
 
   /// 自建歌单名 + 曲目名称与歌手（仅勾选自建歌单时读取）。
-  final List<
-      ({
-        String name,
-        List<({String title, String artist})> tracks,
-      })> playlists;
+  final List<({String name, List<({String title, String artist})> tracks})>
+  playlists;
 
   /// 发送给 LLM 的已听清单（`title - artist`，最多 [TasteProfileBuilder.exclusionPromptLimit]）。
   final List<String> exclusionLabels;
@@ -59,10 +56,7 @@ class TasteProfile {
 }
 
 class TasteProfileBuilder {
-  TasteProfileBuilder({
-    required this._repository,
-    this._libraryStore,
-  });
+  TasteProfileBuilder({required this._repository, this._libraryStore});
 
   final PlayStatisticsRepository _repository;
   final LibraryStore? _libraryStore;
@@ -96,11 +90,13 @@ class TasteProfileBuilder {
     final includeSummary = sections.contains(AiUpstreamSection.summary);
     final includeTopTracks = sections.contains(AiUpstreamSection.topTracks);
     final includeTopArtists = sections.contains(AiUpstreamSection.topArtists);
-    final includeTimeAndSource =
-        sections.contains(AiUpstreamSection.timeAndSource);
+    final includeTimeAndSource = sections.contains(
+      AiUpstreamSection.timeAndSource,
+    );
     final includeRecent = sections.contains(AiUpstreamSection.recentEvents);
-    final includeExclusions =
-        sections.contains(AiUpstreamSection.listenedExclusions);
+    final includeExclusions = sections.contains(
+      AiUpstreamSection.listenedExclusions,
+    );
 
     final results = await Future.wait<Object>([
       if (includeSummary) _repository.summary(),
@@ -171,10 +167,8 @@ class TasteProfileBuilder {
     }
 
     final favorites = <({String title, String artist})>[];
-    final playlists = <({
-      String name,
-      List<({String title, String artist})> tracks,
-    })>[];
+    final playlists =
+        <({String name, List<({String title, String artist})> tracks})>[];
     if (_libraryStore != null) {
       if (sections.contains(AiUpstreamSection.favorites)) {
         favorites.addAll(await _readFavorites());
@@ -233,12 +227,8 @@ class TasteProfileBuilder {
     }
   }
 
-  Future<
-      List<
-          ({
-            String name,
-            List<({String title, String artist})> tracks,
-          })>> _readPlaylists() async {
+  Future<List<({String name, List<({String title, String artist})> tracks})>>
+  _readPlaylists() async {
     final store = _libraryStore;
     if (store == null) return const [];
     final List<PlaylistInfo> custom;
@@ -257,10 +247,8 @@ class TasteProfileBuilder {
     final tracksByPlaylist = await Future.wait([
       for (final playlist in custom) _readPlaylistTracks(store, playlist),
     ]);
-    final result = <({
-      String name,
-      List<({String title, String artist})> tracks,
-    })>[];
+    final result =
+        <({String name, List<({String title, String artist})> tracks})>[];
     var total = 0;
     for (var i = 0; i < custom.length; i++) {
       if (total >= playlistTotalTrackLimit) break;

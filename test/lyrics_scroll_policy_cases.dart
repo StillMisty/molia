@@ -107,15 +107,27 @@ void main() {
   group('偏移夹取与死区', () {
     test('夹取到可滚动范围', () {
       expect(
-        clampScrollOffset(target: -50, minScrollExtent: 0, maxScrollExtent: 1000),
+        clampScrollOffset(
+          target: -50,
+          minScrollExtent: 0,
+          maxScrollExtent: 1000,
+        ),
         0,
       );
       expect(
-        clampScrollOffset(target: 1200, minScrollExtent: 0, maxScrollExtent: 1000),
+        clampScrollOffset(
+          target: 1200,
+          minScrollExtent: 0,
+          maxScrollExtent: 1000,
+        ),
         1000,
       );
       expect(
-        clampScrollOffset(target: 400, minScrollExtent: 0, maxScrollExtent: 1000),
+        clampScrollOffset(
+          target: 400,
+          minScrollExtent: 0,
+          maxScrollExtent: 1000,
+        ),
         400,
       );
     });

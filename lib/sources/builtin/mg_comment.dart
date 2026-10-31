@@ -24,14 +24,13 @@ class MgComment {
     final lastId = kind == CommentKind.latest ? _cursorFor(songId, page) : null;
     final query = kind == CommentKind.hot
         ? 'pageSize=$limit&queryType=2&resourceId=$songId&resourceType=2'
-            '&hotCommentStart=${(page - 1) * limit}'
+              '&hotCommentStart=${(page - 1) * limit}'
         : 'pageSize=$limit&queryType=1&resourceId=$songId&resourceType=2'
-            '&commentId=${lastId ?? ''}';
+              '&commentId=${lastId ?? ''}';
     final body = await lxHttpGet(
       'https://app.c.nf.migu.cn/MIGUM3.0/user/comment/stack/v1.0?$query',
       headers: const {
-        'User-Agent':
-            'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1',
       },
       retries: BuiltinTransport.defaultRetries,
       retryIf: _isInvalid,
@@ -60,10 +59,7 @@ class MgComment {
   }
 
   /// 咪咕评论响应 → 领域模型（响应外壳：`{code, data:{comments|hotComments}}`）。
-  static List<Comment> parseItems(
-    dynamic data, {
-    required CommentKind kind,
-  }) {
+  static List<Comment> parseItems(dynamic data, {required CommentKind kind}) {
     if (data is! Map) return const [];
     final rawList = kind == CommentKind.hot
         ? data['hotComments']
@@ -100,13 +96,15 @@ class MgComment {
       if (item is! Map) continue;
       final id = commentTextOf(item['replyId']);
       if (id == null) continue;
-      replies.add(Comment(
-        id: id,
-        text: item['replyInfo']?.toString() ?? '',
-        createdAt: commentTimeFromText(item['replyTime']),
-        authorName: _userOf(item)['nickName']?.toString() ?? '',
-        avatarUrl: _avatarOf(_userOf(item)),
-      ));
+      replies.add(
+        Comment(
+          id: id,
+          text: item['replyInfo']?.toString() ?? '',
+          createdAt: commentTimeFromText(item['replyTime']),
+          authorName: _userOf(item)['nickName']?.toString() ?? '',
+          avatarUrl: _avatarOf(_userOf(item)),
+        ),
+      );
     }
     return replies;
   }

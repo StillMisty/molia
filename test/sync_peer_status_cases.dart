@@ -8,11 +8,11 @@ void main() {
   const startedAt = now - 1000;
 
   SyncRoundReport report({int started = startedAt}) => SyncRoundReport(
-        trigger: SyncTrigger.manual,
-        startedAt: started,
-        finishedAt: started + 500,
-        outcome: SyncOutcome.ok,
-      );
+    trigger: SyncTrigger.manual,
+    startedAt: started,
+    finishedAt: started + 500,
+    outcome: SyncOutcome.ok,
+  );
 
   test('connected：最近一轮有成功接触', () {
     final peer = SyncPeerState(

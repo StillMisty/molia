@@ -300,51 +300,54 @@ void main() {
     await flush();
   });
 
-  test('dispose 让 running / queued future 以 cancelled 收尾，之后 enqueue 不启动', () async {
-    final gate = Completer<void>();
-    final started = <String>[];
-    final queue = DownloadQueue((task) async {
-      started.add(task.key);
-      await gate.future;
-    });
-    final running = audio('1');
-    final queued = audio('2');
-    final runningFuture = queue.enqueue(running);
-    final queuedFuture = queue.enqueue(queued);
-    await flush();
-    expect(running.status, DownloadTaskStatus.running);
-    expect(queued.status, DownloadTaskStatus.queued);
+  test(
+    'dispose 让 running / queued future 以 cancelled 收尾，之后 enqueue 不启动',
+    () async {
+      final gate = Completer<void>();
+      final started = <String>[];
+      final queue = DownloadQueue((task) async {
+        started.add(task.key);
+        await gate.future;
+      });
+      final running = audio('1');
+      final queued = audio('2');
+      final runningFuture = queue.enqueue(running);
+      final queuedFuture = queue.enqueue(queued);
+      await flush();
+      expect(running.status, DownloadTaskStatus.running);
+      expect(queued.status, DownloadTaskStatus.queued);
 
-    final runningExpectation = expectLater(
-      runningFuture,
-      throwsA(
-        predicate(
-          (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
+      final runningExpectation = expectLater(
+        runningFuture,
+        throwsA(
+          predicate(
+            (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
+          ),
         ),
-      ),
-    );
-    final queuedExpectation = expectLater(
-      queuedFuture,
-      throwsA(
-        predicate(
-          (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
+      );
+      final queuedExpectation = expectLater(
+        queuedFuture,
+        throwsA(
+          predicate(
+            (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
+          ),
         ),
-      ),
-    );
-    queue.dispose();
-    queue.dispose(); // 幂等：不得二次 mark / dispose。
-    await runningExpectation;
-    await queuedExpectation;
-    expect(running.status, DownloadTaskStatus.cancelled);
-    expect(queued.status, DownloadTaskStatus.cancelled);
+      );
+      queue.dispose();
+      queue.dispose(); // 幂等：不得二次 mark / dispose。
+      await runningExpectation;
+      await queuedExpectation;
+      expect(running.status, DownloadTaskStatus.cancelled);
+      expect(queued.status, DownloadTaskStatus.cancelled);
 
-    final after = audio('3');
-    expect(() => queue.enqueue(after), throwsStateError);
-    gate.complete();
-    await flush();
-    expect(started, [running.key], reason: 'dispose 后 enqueue 不启动 worker');
-    expect(after.status, DownloadTaskStatus.queued);
-  });
+      final after = audio('3');
+      expect(() => queue.enqueue(after), throwsStateError);
+      gate.complete();
+      await flush();
+      expect(started, [running.key], reason: 'dispose 后 enqueue 不启动 worker');
+      expect(after.status, DownloadTaskStatus.queued);
+    },
+  );
 
   test('dispose 后恢复的 runner 不再通知队列', () async {
     final gate = Completer<void>();
@@ -356,9 +359,7 @@ void main() {
     final expectation = expectLater(
       future,
       throwsA(
-        predicate(
-          (e) => e is SourceFailure && e.kind == FailureKind.cancelled,
-        ),
+        predicate((e) => e is SourceFailure && e.kind == FailureKind.cancelled),
       ),
     );
     await flush();

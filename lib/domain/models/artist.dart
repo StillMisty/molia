@@ -87,14 +87,8 @@ class ArtistDetail {
       other.hasMore == hasMore;
 
   @override
-  int get hashCode => Object.hash(
-        id,
-        name,
-        avatarUrl,
-        description,
-        deepHash(tracks),
-        hasMore,
-      );
+  int get hashCode =>
+      Object.hash(id, name, avatarUrl, description, deepHash(tracks), hasMore);
 
   @override
   String toString() => 'ArtistDetail($id, $name, ${tracks.length} 首)';

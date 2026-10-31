@@ -81,8 +81,7 @@ void main() {
     expect(cache.maximumSizeBytes, 100 * 1024 * 1024);
   });
 
-  testWidgets('托盘隐藏：业务缓存释放回调在休眠帧后执行；最小化 / 恢复不执行',
-      (tester) async {
+  testWidgets('托盘隐藏：业务缓存释放回调在休眠帧后执行；最小化 / 恢复不执行', (tester) async {
     final presence = AppPresence();
     final cache = _FakeImageCache();
     final manager = AppMemoryManager(presence: presence, imageCache: cache);

@@ -48,13 +48,14 @@ class CollectionIdentity {
   ///
   /// 滚动偏移与合集顺序（弹层排序）共用同一套键。
   String get collectionKey => switch (kind) {
-        CollectionKind.history => LibraryCollections.historyOrderKey,
-        CollectionKind.localSongs => LibraryCollections.downloadsOrderKey,
-        CollectionKind.favorites => LibraryCollections.favoritesOrderKey,
-        CollectionKind.custom => playlistId == null
-            ? LibraryCollections.favoritesOrderKey
-            : LibraryCollections.playlistOrderKey(playlistId!),
-      };
+    CollectionKind.history => LibraryCollections.historyOrderKey,
+    CollectionKind.localSongs => LibraryCollections.downloadsOrderKey,
+    CollectionKind.favorites => LibraryCollections.favoritesOrderKey,
+    CollectionKind.custom =>
+      playlistId == null
+          ? LibraryCollections.favoritesOrderKey
+          : LibraryCollections.playlistOrderKey(playlistId!),
+  };
 
   /// 列规范：只有播放历史多一列「播放时间」。
   CollectionColumnLayout get columnLayout => kind == CollectionKind.history
@@ -350,29 +351,29 @@ class CollectionPresenter {
 
     final visibleRows = switch (identity.kind) {
       CollectionKind.history => [
-          for (final entry in filterRowsByQuery(
-            history,
-            query: query,
-            fields: (entry) => (title: entry.title, artist: entry.artist),
-          ))
-            HistoryCollectionRow(entry),
-        ],
+        for (final entry in filterRowsByQuery(
+          history,
+          query: query,
+          fields: (entry) => (title: entry.title, artist: entry.artist),
+        ))
+          HistoryCollectionRow(entry),
+      ],
       CollectionKind.localSongs => [
-          for (final song in filterRowsByQuery(
-            localSongs,
-            query: query,
-            fields: (song) => (title: song.title, artist: song.artist),
-          ))
-            LocalSongCollectionRow(song),
-        ],
+        for (final song in filterRowsByQuery(
+          localSongs,
+          query: query,
+          fields: (song) => (title: song.title, artist: song.artist),
+        ))
+          LocalSongCollectionRow(song),
+      ],
       CollectionKind.favorites || CollectionKind.custom => [
-          for (final track in _filterAndSortTracks(
-            tracks,
-            query: query,
-            sort: sort,
-          ))
-            TrackCollectionRow(track),
-        ],
+        for (final track in _filterAndSortTracks(
+          tracks,
+          query: query,
+          sort: sort,
+        ))
+          TrackCollectionRow(track),
+      ],
     };
     final hasItems = switch (identity.kind) {
       CollectionKind.history => history.isNotEmpty,
@@ -417,6 +418,7 @@ class CollectionPresenter {
       case HistoryCollectionRow(:final entry):
         return [
           const CollectionRowActionSpec(CollectionRowActionKind.addToPlaylist),
+          const CollectionRowActionSpec(CollectionRowActionKind.toggleFavorite),
           if (entry.sourceKey != kLocalSourceKey)
             const CollectionRowActionSpec(CollectionRowActionKind.swapSource),
           const CollectionRowActionSpec(
@@ -503,14 +505,14 @@ class _CollectionViewKey {
 
   @override
   int get hashCode => Object.hash(
-        selectedId,
-        kind,
-        playlistId,
-        displayName,
-        identityHashCode(source),
-        query,
-        sort,
-      );
+    selectedId,
+    kind,
+    playlistId,
+    displayName,
+    identityHashCode(source),
+    query,
+    sort,
+  );
 }
 
 class _CachedCollectionView {

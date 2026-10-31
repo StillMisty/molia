@@ -63,18 +63,18 @@ class SourceCapabilities {
 
   @override
   int get hashCode => Object.hash(
-        search,
-        pagination,
-        resolveUrl,
-        lyrics,
-        artwork,
-        collection,
-        artist,
-        lyricSearch,
-        favorite,
-        lyricsTranslation,
-        comment,
-      );
+    search,
+    pagination,
+    resolveUrl,
+    lyrics,
+    artwork,
+    collection,
+    artist,
+    lyricSearch,
+    favorite,
+    lyricsTranslation,
+    comment,
+  );
 }
 
 /// 音源描述：一个渠道的事实唯一形状。
@@ -121,14 +121,14 @@ class SourceDescriptor {
 
   @override
   int get hashCode => Object.hash(
-        key,
-        displayName,
-        kind,
-        capabilities,
-        enabled,
-        discoverable,
-        order,
-      );
+    key,
+    displayName,
+    kind,
+    capabilities,
+    enabled,
+    discoverable,
+    order,
+  );
 
   @override
   String toString() => 'SourceDescriptor($key)';

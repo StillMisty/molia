@@ -62,46 +62,46 @@ class StatisticsSyncEvent {
 
   /// 复制并替换载荷：导出缓存按曲共享同一份 JSON 字符串，避免逐事件复制。
   StatisticsSyncEvent withRaw(String value) => StatisticsSyncEvent(
-        syncKey: syncKey,
-        version: version,
-        sourceKey: sourceKey,
-        songId: songId,
-        title: title,
-        artist: artist,
-        album: album,
-        coverUrl: coverUrl,
-        durationMs: durationMs,
-        raw: value,
-        startedAt: startedAt,
-        endedAt: endedAt,
-        listenedMs: listenedMs,
-        maxPositionMs: maxPositionMs,
-        endReason: endReason,
-      );
+    syncKey: syncKey,
+    version: version,
+    sourceKey: sourceKey,
+    songId: songId,
+    title: title,
+    artist: artist,
+    album: album,
+    coverUrl: coverUrl,
+    durationMs: durationMs,
+    raw: value,
+    startedAt: startedAt,
+    endedAt: endedAt,
+    listenedMs: listenedMs,
+    maxPositionMs: maxPositionMs,
+    endReason: endReason,
+  );
 
   /// 线上载荷（事件字段 + 曲目内容同键名；记录逐条自包含）。
   ///
   /// 版本列也保留在 data 里：备份文件按自包含记录解析时仍需版本；
   /// 正常同步以记录信封的 [version] 为准。
   Map<String, Object?> toData() => {
-        'syncKey': syncKey,
-        'originDeviceId': version.deviceId,
-        'versionPhysical': version.physical,
-        'versionCounter': version.counter,
-        'startedAt': startedAt,
-        'endedAt': endedAt,
-        'listenedMs': listenedMs,
-        'maxPositionMs': maxPositionMs,
-        'endReason': endReason,
-        'sourceKey': sourceKey,
-        'songId': songId,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'coverUrl': coverUrl,
-        'durationMs': durationMs,
-        'raw': raw,
-      };
+    'syncKey': syncKey,
+    'originDeviceId': version.deviceId,
+    'versionPhysical': version.physical,
+    'versionCounter': version.counter,
+    'startedAt': startedAt,
+    'endedAt': endedAt,
+    'listenedMs': listenedMs,
+    'maxPositionMs': maxPositionMs,
+    'endReason': endReason,
+    'sourceKey': sourceKey,
+    'songId': songId,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'coverUrl': coverUrl,
+    'durationMs': durationMs,
+    'raw': raw,
+  };
 
   /// 从同步记录载荷解析；缺去重键 / 结束时间返回 null（调用方计入 skipped）。
   ///

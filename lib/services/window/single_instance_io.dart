@@ -78,9 +78,11 @@ class SingleInstance {
     final lockFile = await _lockFileHandle();
     if (lockFile == null) return SingleInstanceRole.primary;
 
-    for (var attempt = 1;
-        attempt <= SingleInstanceLock.maxAcquireAttempts;
-        attempt++) {
+    for (
+      var attempt = 1;
+      attempt <= SingleInstanceLock.maxAcquireAttempts;
+      attempt++
+    ) {
       if (await _tryCreateExclusive(lockFile)) {
         return _startPrimary(lockFile);
       }
@@ -158,13 +160,13 @@ class SingleInstance {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(
-      (line) {
-        if (line.trim() == _showCommand) unawaited(_showWindow());
-      },
-      onDone: socket.destroy,
-      onError: (Object _) => socket.destroy(),
-      cancelOnError: true,
-    );
+          (line) {
+            if (line.trim() == _showCommand) unawaited(_showWindow());
+          },
+          onDone: socket.destroy,
+          onError: (Object _) => socket.destroy(),
+          cancelOnError: true,
+        );
   }
 
   static Future<void> _showWindow() async {
@@ -237,8 +239,7 @@ class SingleInstance {
           p.normalize(p.absolute(lockDirectory.path))) {
         return null;
       }
-      final legacyLock =
-          File(p.join(legacyDirectory.path, _lockFileName));
+      final legacyLock = File(p.join(legacyDirectory.path, _lockFileName));
       if (!await legacyLock.exists()) return null;
 
       final existing = await _readLock(legacyLock);
@@ -258,9 +259,7 @@ class SingleInstance {
           }
           return null;
         case LegacyUpgradeAction.secondary:
-          _logger.info(
-            '检测到旧版本实例（pid ${existing!.pid}），请它显示窗口后退出',
-          );
+          _logger.info('检测到旧版本实例（pid ${existing!.pid}），请它显示窗口后退出');
           return SingleInstanceRole.secondary;
         case LegacyUpgradeAction.secondaryUnresponsive:
           _logger.warning(

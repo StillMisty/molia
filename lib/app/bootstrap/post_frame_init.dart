@@ -38,14 +38,14 @@ void initAfterFirstFrame({
   final dataSaverWatch = Stopwatch()..start();
   unawaited(
     local.dataSaver.startMonitoring().whenComplete(
-          () => markStartupStep('sub.dataSaver.monitor（首帧后）', dataSaverWatch),
-        ),
+      () => markStartupStep('sub.dataSaver.monitor（首帧后）', dataSaverWatch),
+    ),
   );
   final downloadWatch = Stopwatch()..start();
   unawaited(
     local.downloadService.init().whenComplete(
-          () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
-        ),
+      () => markStartupStep('sub.downloadService.init（首帧后）', downloadWatch),
+    ),
   );
   unawaited(() async {
     // 半成品清扫只可能清理本进程启动前的残留；放在首帧后不影响下载语义。

@@ -19,15 +19,15 @@ void main() {
   var now = 1000;
 
   LxScriptInfo script(String id) => LxScriptInfo(
-        id: id,
-        name: '源 $id',
-        description: '',
-        version: '1.0.0',
-        author: '',
-        homepage: '',
-        script: '/* @name 源 $id */',
-        importedAt: 500,
-      );
+    id: id,
+    name: '源 $id',
+    description: '',
+    version: '1.0.0',
+    author: '',
+    homepage: '',
+    script: '/* @name 源 $id */',
+    importedAt: 500,
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -61,16 +61,18 @@ void main() {
     expect(state.scriptStamps['a']!.version, version);
 
     // 脚本被直接改写（登记哈希与版本都没变）→ 同版本重放要修回去。
-    await repository.add(LxScriptInfo(
-      id: 'a',
-      name: '被改写',
-      description: '',
-      version: '9.9.9',
-      author: '',
-      homepage: '',
-      script: '/* @name 被改写 */',
-      importedAt: 500,
-    ));
+    await repository.add(
+      LxScriptInfo(
+        id: 'a',
+        name: '被改写',
+        description: '',
+        version: '9.9.9',
+        author: '',
+        homepage: '',
+        script: '/* @name 被改写 */',
+        importedAt: 500,
+      ),
+    );
     final repaired = await adapter.apply({
       SyncCategory.sources: [remote],
     });
@@ -88,8 +90,9 @@ void main() {
   test('本地删除一律取新戳：删除能外传，且不被陈旧远端脚本复活', () async {
     await repository.add(script('lx-a'));
     final collected = await adapter.collect();
-    final scriptRecord = collected[SyncCategory.sources]!
-        .firstWhere((record) => record.key == 'lx-a' && !record.deleted);
+    final scriptRecord = collected[SyncCategory.sources]!.firstWhere(
+      (record) => record.key == 'lx-a' && !record.deleted,
+    );
     final scriptVersion = scriptRecord.version;
     expect(state.knownScriptIds, ['lx-a']);
 
@@ -110,12 +113,14 @@ void main() {
     now = 2000;
     await repository.remove('lx-a');
     final afterDelete = await adapter.collect();
-    final tombstone = afterDelete[SyncCategory.sources]!
-        .firstWhere((record) => record.deleted && record.key == 'lx-a');
+    final tombstone = afterDelete[SyncCategory.sources]!.firstWhere(
+      (record) => record.deleted && record.key == 'lx-a',
+    );
     expect(tombstone.version.isNewerThan(scriptVersion), isTrue);
     expect(
-      tombstone.version
-          .isNewerThan(const SyncVersion(physical: 500, deviceId: 'devB')),
+      tombstone.version.isNewerThan(
+        const SyncVersion(physical: 500, deviceId: 'devB'),
+      ),
       isTrue,
     );
     expect(state.scriptTombstones['lx-a']!.version.physical, 2000);

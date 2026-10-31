@@ -6,12 +6,12 @@ import 'package:molia/services/lyrics_service.dart';
 /// 双语管道：翻译/罗马音按时间戳对齐到主行；手动选择清空扩展行。
 void main() {
   Track track() => Track(
-        id: TrackId('fake', '1'),
-        title: '歌名',
-        artists: const [Artist(name: '歌手')],
-        origin: TrackOrigin.lx,
-        payload: const {'id': '1'},
-      );
+    id: TrackId('fake', '1'),
+    title: '歌名',
+    artists: const [Artist(name: '歌手')],
+    origin: TrackOrigin.lx,
+    payload: const {'id': '1'},
+  );
 
   test('翻译/罗马音按时间戳对齐，缺失位置补空串', () async {
     final provider = LyricsProvider(
@@ -26,8 +26,11 @@ void main() {
     );
     await provider.load(track());
     expect(provider.state.status, LyricsStatus.ready);
-    expect(provider.state.lines.map((line) => line.text),
-        ['第一行', '第二行', '第三行']);
+    expect(provider.state.lines.map((line) => line.text), [
+      '第一行',
+      '第二行',
+      '第三行',
+    ]);
     expect(provider.state.translations, ['译一', '译二', '']);
     expect(provider.state.romas, ['', 'roma2', '']);
   });
@@ -105,6 +108,5 @@ class _FakeLyricsService extends LyricsService {
     String trackId, {
     Track? track,
     bool ignoreCache = false,
-  }) async =>
-      result;
+  }) async => result;
 }

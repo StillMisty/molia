@@ -51,7 +51,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '登记键名只能在 lib/data/settings/settings_keys.dart 声明：\n'
+      reason:
+          '登记键名只能在 lib/data/settings/settings_keys.dart 声明：\n'
           '${violations.join('\n')}',
     );
   });
@@ -62,9 +63,10 @@ void main() {
   });
 }
 
-List<String> _libFiles() => Directory('lib')
-    .listSync(recursive: true)
-    .whereType<File>()
-    .map((file) => file.path)
-    .where((path) => path.endsWith('.dart'))
-    .toList();
+List<String> _libFiles() =>
+    Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((file) => file.path)
+        .where((path) => path.endsWith('.dart'))
+        .toList();

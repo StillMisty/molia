@@ -56,19 +56,14 @@ sealed class CoverResolution {
 /// 真实封面：自定义或原始，**永远不会**是全局默认封面。
 final class RealCover extends CoverResolution {
   const RealCover({required this.url, required this.origin})
-      : assert(
-          (url == null) == (origin == CoverOrigin.none),
-          'RealCover 的 url 与 origin 必须同时为空 / 非空',
-        ),
-        assert(
-          origin != CoverOrigin.defaultCover,
-          '默认封面只属于展示面，不能作为真实封面',
-        );
+    : assert(
+        (url == null) == (origin == CoverOrigin.none),
+        'RealCover 的 url 与 origin 必须同时为空 / 非空',
+      ),
+      assert(origin != CoverOrigin.defaultCover, '默认封面只属于展示面，不能作为真实封面');
 
   /// 无真实封面。
-  const RealCover.none()
-      : url = null,
-        origin = CoverOrigin.none;
+  const RealCover.none() : url = null, origin = CoverOrigin.none;
 
   @override
   final String? url;
@@ -172,32 +167,24 @@ class CoverResolver {
       _index.addRevisionListener(listener);
 
   /// 真实封面（不包含默认封面）。
-  RealCover realOf(Track? track) => realForId(
-        track?.id,
-        originalUrl: track?.artwork?.uri.toString(),
-      );
+  RealCover realOf(Track? track) =>
+      realForId(track?.id, originalUrl: track?.artwork?.uri.toString());
 
   /// 展示封面（真实封面缺失时附加默认封面兜底）。
-  DisplayCover displayOf(Track? track) => displayForId(
-        track?.id,
-        originalUrl: track?.artwork?.uri.toString(),
-      );
+  DisplayCover displayOf(Track? track) =>
+      displayForId(track?.id, originalUrl: track?.artwork?.uri.toString());
 
   /// 按 [TrackId] 解析真实封面。
-  RealCover realForId(TrackId? id, {String? originalUrl}) => _real(
-        _customUrlOfId(id),
-        originalUrl,
-      );
+  RealCover realForId(TrackId? id, {String? originalUrl}) =>
+      _real(_customUrlOfId(id), originalUrl);
 
   /// 按 [TrackId] 解析展示封面。
   DisplayCover displayForId(TrackId? id, {String? originalUrl}) =>
       _display(realForId(id, originalUrl: originalUrl));
 
   /// 按字符串封面键解析真实封面（列表行 / 换源候选只有键的场景）。
-  RealCover realForKey(String? coverKey, {String? originalUrl}) => _real(
-        _customUrlOfKey(coverKey),
-        originalUrl,
-      );
+  RealCover realForKey(String? coverKey, {String? originalUrl}) =>
+      _real(_customUrlOfKey(coverKey), originalUrl);
 
   /// 按字符串封面键解析展示封面。
   DisplayCover displayForKey(String? coverKey, {String? originalUrl}) =>
@@ -220,10 +207,8 @@ class CoverResolver {
     return _index.readTrackCoverByKey(normalized);
   }
 
-  DisplayCover _display(RealCover real) => DisplayCover(
-        real: real,
-        defaultUrl: defaultCoverUrl,
-      );
+  DisplayCover _display(RealCover real) =>
+      DisplayCover(real: real, defaultUrl: defaultCoverUrl);
 
   RealCover _real(String? customUrl, String? originalUrl) {
     if (customUrl != null) {

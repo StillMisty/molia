@@ -43,8 +43,10 @@ class LocalPlaybackChain {
     Track track,
     AudioQuality? quality,
   ) async {
-    final uri =
-        await local.downloadService.localUriFor(track, quality: quality?.type);
+    final uri = await local.downloadService.localUriFor(
+      track,
+      quality: quality?.type,
+    );
     if (uri != null) return PlayableStream(uri);
     return catalog.catalogService.resolve(track, quality: quality);
   }
@@ -73,25 +75,24 @@ class LocalPlaybackChain {
 
   LocalPlaybackService buildService({
     required ValueListenable<bool> playWithOtherApps,
-  }) =>
-      LocalPlaybackService(
-        preferredQuality: preferredQuality,
-        resolver: resolveSourceStream,
-        powerPolicy: powerPolicy,
-        playWithOtherApps: playWithOtherApps,
-        // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
-        nextTrackPreloader: NextTrackPreloader(
-          resolver: resolveSourceStream,
-          preferredQuality: preferredQuality,
-          predownloader: local.audioCacheWriter,
-          // 移动端后台只预热直链：字节预取把整首下一曲提前拉到本地，是
-          // 熄屏听歌时最重的网络 / 磁盘开销。
-          canPredownloadBytes: () => powerPolicy.canPredownloadNextTrackBytes,
-        ),
-        audioCacheWriter: PlayingTrackCacheWriter(
-          predownloader: local.audioCacheWriter,
-        ),
-      );
+  }) => LocalPlaybackService(
+    preferredQuality: preferredQuality,
+    resolver: resolveSourceStream,
+    powerPolicy: powerPolicy,
+    playWithOtherApps: playWithOtherApps,
+    // 下一首预载：起播后预热直链（命中取链缓存）+ 音频字节预取到缓存。
+    nextTrackPreloader: NextTrackPreloader(
+      resolver: resolveSourceStream,
+      preferredQuality: preferredQuality,
+      predownloader: local.audioCacheWriter,
+      // 移动端后台只预热直链：字节预取把整首下一曲提前拉到本地，是
+      // 熄屏听歌时最重的网络 / 磁盘开销。
+      canPredownloadBytes: () => powerPolicy.canPredownloadNextTrackBytes,
+    ),
+    audioCacheWriter: PlayingTrackCacheWriter(
+      predownloader: local.audioCacheWriter,
+    ),
+  );
 
   LocalPlaybackBackend buildBackend({required LocalPlaybackService service}) =>
       LocalPlaybackBackend(service: service, resolver: resolveStream);

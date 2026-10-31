@@ -59,7 +59,8 @@ class UpdateDownloader {
     }
 
     final body = streamBody(response);
-    final contentLength = int.tryParse(
+    final contentLength =
+        int.tryParse(
           response.headers.value(Headers.contentLengthHeader) ?? '',
         ) ??
         -1;

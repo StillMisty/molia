@@ -54,12 +54,8 @@ class _FakeLlm extends LlmClient {
 
 /// 假音源：search 返回固定结果（其余成员不会被调用）。
 class _FakeSource implements MusicSource {
-  _FakeSource(
-    this.key,
-    this.results, {
-    String? displayName,
-    this.searchGate,
-  }) : displayName = displayName ?? key;
+  _FakeSource(this.key, this.results, {String? displayName, this.searchGate})
+    : displayName = displayName ?? key;
 
   @override
   final String key;
@@ -87,8 +83,10 @@ class _FakeSource implements MusicSource {
   SourceCapabilities get capabilities => const SourceCapabilities(search: true);
 
   @override
-  Future<SearchResult<Track>> search(SearchQuery query,
-      {CancelToken? cancel}) async {
+  Future<SearchResult<Track>> search(
+    SearchQuery query, {
+    CancelToken? cancel,
+  }) async {
     searchCalls++;
     final gate = searchGate;
     if (gate != null) await gate.future;
@@ -101,22 +99,22 @@ class _FakeSource implements MusicSource {
 
 class _FakeRegistry implements SourceRegistry {
   _FakeRegistry(List<({MusicSource source, int order, bool enabled})> entries)
-      : _entries = entries;
+    : _entries = entries;
 
   final List<({MusicSource source, int order, bool enabled})> _entries;
 
   @override
   List<SourceDescriptor> get descriptors => [
-        for (final entry in _entries)
-          SourceDescriptor(
-            key: entry.source.key,
-            displayName: entry.source.displayName,
-            kind: SourceKind.builtin,
-            capabilities: entry.source.capabilities,
-            enabled: entry.enabled,
-            order: entry.order,
-          ),
-      ];
+    for (final entry in _entries)
+      SourceDescriptor(
+        key: entry.source.key,
+        displayName: entry.source.displayName,
+        kind: SourceKind.builtin,
+        capabilities: entry.source.capabilities,
+        enabled: entry.enabled,
+        order: entry.order,
+      ),
+  ];
 
   @override
   MusicSource? byKey(String key) {
@@ -128,9 +126,9 @@ class _FakeRegistry implements SourceRegistry {
 
   @override
   Set<String> get enabledChannelKeys => {
-        for (final entry in _entries)
-          if (entry.enabled) entry.source.key,
-      };
+    for (final entry in _entries)
+      if (entry.enabled) entry.source.key,
+  };
 
   @override
   MusicSource? forTrack(Track track) => byKey(track.id.sourceKey);
@@ -151,15 +149,14 @@ Track _track(
   String artist, {
   String source = 'wy',
   Map<String, dynamic> raw = const {},
-}) =>
-    Track(
-      id: TrackId(source, id),
-      title: title,
-      artists: [Artist(name: artist)],
-      duration: const Duration(minutes: 4),
-      origin: TrackOrigin.builtin,
-      payload: raw,
-    );
+}) => Track(
+  id: TrackId(source, id),
+  title: title,
+  artists: [Artist(name: artist)],
+  duration: const Duration(minutes: 4),
+  origin: TrackOrigin.builtin,
+  payload: raw,
+);
 
 /// 提示词里是否存在某个数据段（避免把 [要求] 里引用的段名误判成数据）。
 bool _hasSection(String prompt, String label) =>
@@ -255,7 +252,9 @@ void main() {
   }
 
   Future<void> createPlaylist(
-      String name, List<(String, String)> tracks) async {
+    String name,
+    List<(String, String)> tracks,
+  ) async {
     final id = await library.createPlaylist(name);
     for (final (title, artist) in tracks) {
       await library.addTrackToPlaylist(
@@ -299,10 +298,7 @@ void main() {
         ],
       });
       service = buildService([
-        _FakeSource('wy', [
-          _track('a', '晴天', '周杰伦'),
-          _track('b', '夜曲', '周杰伦'),
-        ]),
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦'), _track('b', '夜曲', '周杰伦')]),
       ]);
 
       final batch = await service.generate(config: config, count: 20);
@@ -354,8 +350,13 @@ void main() {
 
       await expectLater(
         service.generate(config: config, count: 20),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.l10nKey, 'l10nKey', 'aiDjBadResponse')),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.l10nKey,
+            'l10nKey',
+            'aiDjBadResponse',
+          ),
+        ),
       );
     });
 
@@ -367,8 +368,13 @@ void main() {
 
       await expectLater(
         service.generate(config: config, count: 20),
-        throwsA(isA<SourceFailure>()
-            .having((f) => f.kind, 'kind', FailureKind.rateLimited)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.rateLimited,
+          ),
+        ),
       );
     });
 
@@ -440,9 +446,7 @@ void main() {
         ],
       });
 
-      final previewDefault = await service.buildPromptPreview(
-        count: 20,
-      );
+      final previewDefault = await service.buildPromptPreview(count: 20);
       expect(_hasSection(previewDefault.userPrompt, '[收藏]'), isFalse);
       expect(_hasSection(previewDefault.userPrompt, '[歌单]'), isFalse);
       expect(previewDefault.userPrompt, isNot(contains('收藏歌')));
@@ -454,10 +458,7 @@ void main() {
           AiUpstreamSection.playlists,
         },
       );
-      await service.buildPromptPreview(
-        count: 20,
-        preferences: preferences,
-      );
+      await service.buildPromptPreview(count: 20, preferences: preferences);
 
       final prompt = llm.lastUserPrompt;
       expect(prompt, isNull, reason: '预览不触发 LLM 调用');
@@ -528,9 +529,7 @@ void main() {
       service = buildService([
         _FakeSource('wy', [_track('a', '旧歌', '老歌手')]),
       ]);
-      final preferences = AiPreferences.defaults.copyWith(
-        onlyUnheard: false,
-      );
+      final preferences = AiPreferences.defaults.copyWith(onlyUnheard: false);
       final preview = await service.buildPromptPreview(
         count: 20,
         preferences: preferences,
@@ -651,10 +650,9 @@ void main() {
       }
 
       final preview = await service.buildPromptPreview(count: 10);
-      String lineOf(String label) => preview.userPrompt.split('\n').firstWhere(
-            (line) => line.startsWith('$label '),
-            orElse: () => '',
-          );
+      String lineOf(String label) => preview.userPrompt
+          .split('\n')
+          .firstWhere((line) => line.startsWith('$label '), orElse: () => '');
       final recentLine = lineOf('[最近播放]');
       final heardLine = lineOf('[已听过]');
       expect(RegExp(' - ').allMatches(recentLine).length, 50);
@@ -678,16 +676,12 @@ void main() {
     });
 
     test('提示词跟随应用语言：英文模式切换整段文案', () async {
-      service = buildService(
-        [_FakeSource('wy', const [])],
-        promptLanguage: () => AiPromptLanguage.en,
-      );
+      service = buildService([
+        _FakeSource('wy', const []),
+      ], promptLanguage: () => AiPromptLanguage.en);
       final prompt = await service.buildPromptPreview(
         count: 7,
-        preferences: const AiPreferences(
-          styles: ['pop'],
-          onlyUnheard: false,
-        ),
+        preferences: const AiPreferences(styles: ['pop'], onlyUnheard: false),
       );
 
       expect(prompt.systemPrompt, contains('music recommendation assistant'));
@@ -705,10 +699,7 @@ void main() {
     test('system 极简；user 末尾保留 JSON 样例与要求', () async {
       final prompt = await service.buildPromptPreview(count: 10);
 
-      expect(
-        prompt.systemPrompt,
-        '你是音乐推荐助手。根据用户提供的听歌数据，推荐其可能喜欢的歌曲。',
-      );
+      expect(prompt.systemPrompt, '你是音乐推荐助手。根据用户提供的听歌数据，推荐其可能喜欢的歌曲。');
       expect(prompt.userPrompt, contains('[要求]'));
       expect(prompt.userPrompt, contains('[输出 JSON]'));
       expect(prompt.userPrompt, contains('{"songs"'));
@@ -734,10 +725,7 @@ void main() {
         ],
       });
       service = buildService([
-        _FakeSource('wy', [
-          _track('a', '晴天', '周杰伦'),
-          _track('b', '新歌', '新人'),
-        ]),
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦'), _track('b', '新歌', '新人')]),
       ]);
 
       final batch = await service.generate(
@@ -814,10 +802,10 @@ void main() {
     test('先序源立即命中：不启动后序源（对冲计时器不改变原有行为）', () async {
       final s1 = _FakeSource('s1', [_track('a', '歌', '手', source: 's1')]);
       final s2 = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
-      service = buildService(
-        [s1, s2],
-        resolveHedgeDelay: const Duration(milliseconds: 50),
-      );
+      service = buildService([
+        s1,
+        s2,
+      ], resolveHedgeDelay: const Duration(milliseconds: 50));
       llm.response = jsonEncode({
         'songs': [
           {'title': '歌', 'artist': '手'},
@@ -833,16 +821,14 @@ void main() {
 
     test('慢源对冲：后序源先返回也不抢先序源最终命中', () async {
       final slowGate = Completer<void>();
-      final slow = _FakeSource(
-        's1',
-        [_track('a', '歌', '手', source: 's1')],
-        searchGate: slowGate,
-      );
+      final slow = _FakeSource('s1', [
+        _track('a', '歌', '手', source: 's1'),
+      ], searchGate: slowGate);
       final fast = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
-      service = buildService(
-        [slow, fast],
-        resolveHedgeDelay: const Duration(milliseconds: 100),
-      );
+      service = buildService([
+        slow,
+        fast,
+      ], resolveHedgeDelay: const Duration(milliseconds: 100));
       llm.response = jsonEncode({
         'songs': [
           {'title': '歌', 'artist': '手'},
@@ -872,10 +858,11 @@ void main() {
       final slow = _FakeSource('s1', const [], searchGate: slowGate);
       final fast = _FakeSource('s2', [_track('a', '歌', '手', source: 's2')]);
       final later = _FakeSource('s3', [_track('a', '歌', '手', source: 's3')]);
-      service = buildService(
-        [slow, fast, later],
-        resolveHedgeDelay: const Duration(milliseconds: 20),
-      );
+      service = buildService([
+        slow,
+        fast,
+        later,
+      ], resolveHedgeDelay: const Duration(milliseconds: 20));
       llm.response = jsonEncode({
         'songs': [
           {'title': '歌', 'artist': '手'},
@@ -883,10 +870,11 @@ void main() {
       });
 
       var done = false;
-      final pending =
-          service.generate(config: config, count: 10).whenComplete(() {
-        done = true;
-      });
+      final pending = service.generate(config: config, count: 10).whenComplete(
+        () {
+          done = true;
+        },
+      );
       await _waitUntil(() => fast.searchCalls == 1);
       await Future<void>.delayed(const Duration(milliseconds: 30));
       expect(done, isFalse, reason: '先序源仍在途，后序命中不能提前返回');
@@ -935,15 +923,9 @@ void main() {
           {'title': '歌二', 'artist': '手'},
         ],
       });
-      service = buildService(
-        [
-          _FakeSource('wy', [
-            _track('a', '歌一', '手'),
-            _track('b', '歌二', '手'),
-          ]),
-        ],
-        resolveConcurrency: 1,
-      );
+      service = buildService([
+        _FakeSource('wy', [_track('a', '歌一', '手'), _track('b', '歌二', '手')]),
+      ], resolveConcurrency: 1);
 
       await service.generate(
         config: config,
@@ -951,10 +933,11 @@ void main() {
         onProgress: progresses.add,
       );
 
-      expect(
-        progresses.map((progress) => progress.phase).toSet(),
-        {AiDjPhase.profile, AiDjPhase.model, AiDjPhase.resolving},
-      );
+      expect(progresses.map((progress) => progress.phase).toSet(), {
+        AiDjPhase.profile,
+        AiDjPhase.model,
+        AiDjPhase.resolving,
+      });
       expect(progresses.first.phase, AiDjPhase.profile);
       expect(progresses[1].phase, AiDjPhase.model);
       final resolving = [
@@ -989,8 +972,13 @@ void main() {
             if (progress.phase == AiDjPhase.model) token.cancel();
           },
         ),
-        throwsA(isA<SourceFailure>()
-            .having((failure) => failure.kind, 'kind', FailureKind.cancelled)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (failure) => failure.kind,
+            'kind',
+            FailureKind.cancelled,
+          ),
+        ),
       );
       expect(llm.calls, 1, reason: '取消后不再继续解析');
     });

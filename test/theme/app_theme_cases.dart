@@ -22,7 +22,10 @@ void main() {
 
       final lightSemantic = lightData.extension<AppSemanticColors>();
       expect(lightSemantic, isNotNull);
-      expect(lightSemantic!.success, AppSemanticColors.fromScheme(light).success);
+      expect(
+        lightSemantic!.success,
+        AppSemanticColors.fromScheme(light).success,
+      );
 
       final darkData = buildAppThemeData(dark);
       expect(darkData.brightness, Brightness.dark);
@@ -105,7 +108,9 @@ void main() {
         'Noto Sans CJK SC',
       );
       expect(
-          m3e.typography.emphasized.labelLarge.fontFamily, 'Noto Sans CJK SC');
+        m3e.typography.emphasized.labelLarge.fontFamily,
+        'Noto Sans CJK SC',
+      );
 
       // 颜色 / 组件主题仍然只来自 ThemeData（不引入第二个主题源）。
       final mapped = M3EThemeData.fromMaterial(custom);
@@ -141,8 +146,10 @@ void main() {
       // 未注入系统字体时仍走 ThemeData 的平台默认排版（Windows = Segoe UI）；
       // Windows 的真实系统字体由启动时读取 MessageFont 后显式注入。
       final data = buildAppThemeData(light);
-      final defaultFamily =
-          ThemeData(colorScheme: light).textTheme.bodyMedium?.fontFamily;
+      final defaultFamily = ThemeData(colorScheme: light)
+          .textTheme
+          .bodyMedium
+          ?.fontFamily;
       expect(data.textTheme.bodyMedium?.fontFamily, defaultFamily);
       expect(data.textTheme.bodyMedium?.fontFamilyFallback, isNull);
       // M3E 侧同步（typeScale 从 ThemeData.textTheme 映射）。
@@ -158,16 +165,16 @@ void main() {
         platformDefaultFontFallbacks: const ['Segoe UI', 'Microsoft YaHei'],
       );
       expect(system.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
-      expect(
-        system.textTheme.bodyMedium?.fontFamilyFallback,
-        const ['Segoe UI', 'Microsoft YaHei'],
-      );
+      expect(system.textTheme.bodyMedium?.fontFamilyFallback, const [
+        'Segoe UI',
+        'Microsoft YaHei',
+      ]);
       final systemM3E = M3EThemeData.fromMaterial(system).typeScale.bodyMedium;
       expect(systemM3E.fontFamily, 'Microsoft YaHei UI');
-      expect(
-        systemM3E.fontFamilyFallback,
-        const ['Segoe UI', 'Microsoft YaHei'],
-      );
+      expect(systemM3E.fontFamilyFallback, const [
+        'Segoe UI',
+        'Microsoft YaHei',
+      ]);
 
       // 自定义字体优先，且不追加系统字体的回退链（尊重用户选择）。
       final custom = buildAppThemeData(
@@ -189,12 +196,12 @@ void main() {
     testWidgets('首个方案变化直接跳变（不播启动动画）', (tester) async {
       ColorScheme? seen;
       Widget build(ColorScheme scheme) => AnimatedSchemeBuilder(
-            scheme: scheme,
-            builder: (context, animated) {
-              seen = animated;
-              return const SizedBox();
-            },
-          );
+        scheme: scheme,
+        builder: (context, animated) {
+          seen = animated;
+          return const SizedBox();
+        },
+      );
 
       await tester.pumpWidget(build(light));
       expect(seen, light);
@@ -271,8 +278,9 @@ void main() {
   });
 
   group('M3EMaterialApp 接线前提', () {
-    testWidgets('appBuilder 上下文可读到 MaterialApp theme（无需重复包 Theme）',
-        (tester) async {
+    testWidgets('appBuilder 上下文可读到 MaterialApp theme（无需重复包 Theme）', (
+      tester,
+    ) async {
       final scheme = ColorScheme.fromSeed(seedColor: Colors.teal);
       final themedData = buildAppThemeData(scheme);
       ColorScheme? observed;

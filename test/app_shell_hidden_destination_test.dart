@@ -93,27 +93,30 @@ void main() {
     addTearDown(search.dispose);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
-    final lyricsDisplay =
-        LyricsDisplaySettings(settings: testSettingsRegistry());
+    final lyricsDisplay = LyricsDisplaySettings(
+      settings: testSettingsRegistry(),
+    );
     addTearDown(lyricsDisplay.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: Track(
-        id: const TrackId('fake', 'a'),
-        title: 'Title a',
-        artists: const [Artist(name: 'Artist a')],
-        album: 'Album',
+    backend.emit(
+      BackendSnapshot(
+        current: Track(
+          id: const TrackId('fake', 'a'),
+          title: 'Title a',
+          artists: const [Artist(name: 'Artist a')],
+          album: 'Album',
+          duration: const Duration(seconds: 30),
+          // 不带封面：避免测试触发网络预取/取色。
+          origin: TrackOrigin.lx,
+          payload: const {'id': 'a'},
+        ),
+        queue: const [],
+        currentIndex: 0,
+        isPlaying: false,
+        position: Duration.zero,
         duration: const Duration(seconds: 30),
-        // 不带封面：避免测试触发网络预取/取色。
-        origin: TrackOrigin.lx,
-        payload: const {'id': 'a'},
       ),
-      queue: const [],
-      currentIndex: 0,
-      isPlaying: false,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -190,8 +193,10 @@ void main() {
       },
     );
     addTearDown(() {
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
     });
     return vibrations;
   }
@@ -218,16 +223,8 @@ void main() {
       navIndexOf(fallback),
       reason: 'chrome 必须高亮回退项',
     );
-    expect(
-      find.byType(Library),
-      findsOneWidget,
-      reason: '页面栈必须跟随同一个有效选中项',
-    );
-    expect(
-      find.byType(FavoritesPage),
-      findsNothing,
-      reason: '被隐藏的页不能继续显示',
-    );
+    expect(find.byType(Library), findsOneWidget, reason: '页面栈必须跟随同一个有效选中项');
+    expect(find.byType(FavoritesPage), findsNothing, reason: '被隐藏的页不能继续显示');
     // 页面实例仍挂在树上（只是不可见），重新可见时状态不丢。
     expect(find.byType(FavoritesPage, skipOffstage: false), findsOneWidget);
 
@@ -259,17 +256,11 @@ void main() {
       navIndexOf(ShellDestination.library),
       reason: '点击回退项后 chrome 仍高亮它',
     );
-    expect(
-      find.byType(Library),
-      findsOneWidget,
-      reason: '页面栈保持在回退页',
-    );
+    expect(find.byType(Library), findsOneWidget, reason: '页面栈保持在回退页');
     expect(find.byType(FavoritesPage), findsNothing);
-    expect(
-      vibrations,
-      ['HapticFeedbackType.lightImpact'],
-      reason: '重复点击恰一次轻震（不重复触发）',
-    );
+    expect(vibrations, [
+      'HapticFeedbackType.lightImpact',
+    ], reason: '重复点击恰一次轻震（不重复触发）');
 
     await settleTransition(tester);
     expect(selectedNavIndex(tester), navIndexOf(ShellDestination.library));

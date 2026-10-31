@@ -148,56 +148,62 @@ void main() {
       );
     });
 
-    test('MediaMetadata → MediaItemMessage，PlaybackState → PlaybackStateMessage',
-        () async {
-      final platform = _FakeAudioServicePlatform();
-      final backend = MprisMediaSessionBackend(platform: platform);
-      await backend.activate();
+    test(
+      'MediaMetadata → MediaItemMessage，PlaybackState → PlaybackStateMessage',
+      () async {
+        final platform = _FakeAudioServicePlatform();
+        final backend = MprisMediaSessionBackend(platform: platform);
+        await backend.activate();
 
-      await backend.updateMetadata(
-        const MediaMetadata(
-          title: '晴天',
-          artist: '周杰伦',
-          album: '叶惠美',
-          duration: Duration(seconds: 269),
-          artworkUri: 'https://p1.music.126.net/cover.jpg',
-        ),
-      );
-      await backend.updatePlaybackState(
-        const PlaybackState(
-          status: PlaybackStatus.playing,
-          position: Duration(seconds: 42),
-          bufferedPosition: Duration(seconds: 60),
-          repeatMode: MediaRepeatMode.one,
-          shuffleModeEnabled: true,
-        ),
-      );
+        await backend.updateMetadata(
+          const MediaMetadata(
+            title: '晴天',
+            artist: '周杰伦',
+            album: '叶惠美',
+            duration: Duration(seconds: 269),
+            artworkUri: 'https://p1.music.126.net/cover.jpg',
+          ),
+        );
+        await backend.updatePlaybackState(
+          const PlaybackState(
+            status: PlaybackStatus.playing,
+            position: Duration(seconds: 42),
+            bufferedPosition: Duration(seconds: 60),
+            repeatMode: MediaRepeatMode.one,
+            shuffleModeEnabled: true,
+          ),
+        );
 
-      expect(platform.mediaItem?.title, '晴天');
-      expect(platform.mediaItem?.artist, '周杰伦');
-      expect(platform.mediaItem?.album, '叶惠美');
-      expect(platform.mediaItem?.duration, const Duration(seconds: 269));
-      expect(
-        platform.mediaItem?.artUri,
-        Uri.parse('https://p1.music.126.net/cover.jpg'),
-      );
+        expect(platform.mediaItem?.title, '晴天');
+        expect(platform.mediaItem?.artist, '周杰伦');
+        expect(platform.mediaItem?.album, '叶惠美');
+        expect(platform.mediaItem?.duration, const Duration(seconds: 269));
+        expect(
+          platform.mediaItem?.artUri,
+          Uri.parse('https://p1.music.126.net/cover.jpg'),
+        );
 
-      expect(platform.playbackState?.playing, isTrue);
-      expect(platform.playbackState?.updatePosition, const Duration(seconds: 42));
-      expect(platform.playbackState?.bufferedPosition,
-          const Duration(seconds: 60));
-      expect(
-        platform.playbackState?.repeatMode,
-        AudioServiceRepeatModeMessage.one,
-      );
-      expect(
-        platform.playbackState?.shuffleMode,
-        AudioServiceShuffleModeMessage.all,
-      );
-    });
+        expect(platform.playbackState?.playing, isTrue);
+        expect(
+          platform.playbackState?.updatePosition,
+          const Duration(seconds: 42),
+        );
+        expect(
+          platform.playbackState?.bufferedPosition,
+          const Duration(seconds: 60),
+        );
+        expect(
+          platform.playbackState?.repeatMode,
+          AudioServiceRepeatModeMessage.one,
+        );
+        expect(
+          platform.playbackState?.shuffleMode,
+          AudioServiceShuffleModeMessage.all,
+        );
+      },
+    );
 
-    test('平台回调映射为 MediaAction 流（play/pause/stop/next/previous/seek）',
-        () async {
+    test('平台回调映射为 MediaAction 流（play/pause/stop/next/previous/seek）', () async {
       final platform = _FakeAudioServicePlatform();
       final backend = MprisMediaSessionBackend(platform: platform);
       await backend.activate();
@@ -215,10 +221,14 @@ void main() {
       await callbacks.seek(const SeekRequest(position: Duration(seconds: 9)));
       await pumpEventQueue();
 
-      expect(
-        received.map((action) => action.name),
-        ['play', 'pause', 'stop', 'skipToNext', 'skipToPrevious', 'seekTo'],
-      );
+      expect(received.map((action) => action.name), [
+        'play',
+        'pause',
+        'stop',
+        'skipToNext',
+        'skipToPrevious',
+        'seekTo',
+      ]);
       expect(received.last.seekPosition, const Duration(seconds: 9));
     });
 
@@ -246,7 +256,10 @@ void main() {
 
     test('按平台选择后端', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      expect(createSystemMediaSessionBackend(), isA<MprisMediaSessionBackend>());
+      expect(
+        createSystemMediaSessionBackend(),
+        isA<MprisMediaSessionBackend>(),
+      );
 
       for (final platform in [
         TargetPlatform.android,
@@ -286,13 +299,13 @@ void main() {
 
     test('Windows 传裸路径、其余平台传 file URI、空路径为 null', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
-      expect(
-        mediaArtworkUriForPath(r'C:\covers\a.jpg'),
-        r'C:\covers\a.jpg',
-      );
+      expect(mediaArtworkUriForPath(r'C:\covers\a.jpg'), r'C:\covers\a.jpg');
 
       debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-      expect(mediaArtworkUriForPath('/tmp/covers/a.jpg'), 'file:///tmp/covers/a.jpg');
+      expect(
+        mediaArtworkUriForPath('/tmp/covers/a.jpg'),
+        'file:///tmp/covers/a.jpg',
+      );
       expect(mediaArtworkUriForPath(''), isNull);
     });
   });

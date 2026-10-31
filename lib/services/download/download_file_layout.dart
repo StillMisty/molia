@@ -28,10 +28,7 @@ import 'download_settings.dart';
 /// [storage] 只用于「这个名字在磁盘上是否已存在」的存在性探测——与随后真正
 /// 写文件的必须是同一个文件系统视图。
 class DownloadFileLayout {
-  DownloadFileLayout({
-    required this._storage,
-    this._settings,
-  });
+  DownloadFileLayout({required this._storage, this._settings});
 
   final DownloadStorage _storage;
   final DownloadSettings? _settings;
@@ -191,11 +188,11 @@ class DownloadFileLayout {
 
   /// [record] 引用的本地文件：音频 / 歌词 / 翻译边车 / 封面（按序、跳过空值）。
   static List<String> referencedFiles(DownloadedTrack record) => [
-        if (record.filePath != null) record.filePath!,
-        if (record.lyricPath != null) record.lyricPath!,
-        if (record.translationLyricPath != null) record.translationLyricPath!,
-        if (record.coverPath != null) record.coverPath!,
-      ];
+    if (record.filePath != null) record.filePath!,
+    if (record.lyricPath != null) record.lyricPath!,
+    if (record.translationLyricPath != null) record.translationLyricPath!,
+    if (record.coverPath != null) record.coverPath!,
+  ];
 
   /// 失败下载的残留文件集：半成品 / 最终音频 / 歌词 + 翻译边车 / 封面。
   static List<String> failedDownloadFiles({
@@ -205,13 +202,7 @@ class DownloadFileLayout {
     String? coverPath,
   }) {
     final translation = translationLyricPathOf(lyricPath);
-    return [
-      ?partPath,
-      ?filePath,
-      ?lyricPath,
-      ?translation,
-      ?coverPath,
-    ];
+    return [?partPath, ?filePath, ?lyricPath, ?translation, ?coverPath];
   }
 
   // ── 扩展名与清洗 ─────────────────────────────────────────

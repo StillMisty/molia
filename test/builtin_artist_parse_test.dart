@@ -25,8 +25,11 @@ String _fixtureText(String name) =>
 void main() {
   group('kw 酷我', () {
     test('歌手搜索：id / 名字 / 头像（BASEPICPATH 拼接）/ 歌曲数 / 分页', () {
-      final page = KwArtist.parseSearch(_fixtureText('kw_search.json'),
-          page: 1, limit: 3);
+      final page = KwArtist.parseSearch(
+        _fixtureText('kw_search.json'),
+        page: 1,
+        limit: 3,
+      );
       expect(page.items, hasLength(3));
       expect(page.items.first.id, '336');
       expect(page.items.first.name, '周杰伦');
@@ -110,8 +113,11 @@ void main() {
 
   group('tx QQ 音乐', () {
     test('歌手搜索：singerMID / 头像尺寸替换 / 歌曲数 / meta.sum 分页', () {
-      final page = TxArtist.parseSearch(_fixture('tx_search.json'),
-          page: 1, limit: 3);
+      final page = TxArtist.parseSearch(
+        _fixture('tx_search.json'),
+        page: 1,
+        limit: 3,
+      );
       expect(page.items, isNotEmpty);
       expect(page.items.first.id, '0025NhlN2yWrP4');
       expect(page.items.first.name, '周杰伦');
@@ -144,8 +150,11 @@ void main() {
 
   group('wy 网易云', () {
     test('歌手搜索：id / 头像 / 歌曲数（musicSize）/ artistCount 分页', () {
-      final page = WyArtist.parseSearch(_fixture('wy_search.json'),
-          page: 1, limit: 3);
+      final page = WyArtist.parseSearch(
+        _fixture('wy_search.json'),
+        page: 1,
+        limit: 3,
+      );
       expect(page.items, isNotEmpty);
       expect(page.items.first.id, '6452');
       expect(page.items.first.name, '周杰伦');
@@ -185,8 +194,11 @@ void main() {
 
   group('mg 咪咕', () {
     test('歌手搜索：字符串 id / 方形头像 / 歌曲数 / totalCount 分页', () {
-      final page = MgArtist.parseSearch(_fixture('mg_search.json'),
-          page: 1, limit: 3);
+      final page = MgArtist.parseSearch(
+        _fixture('mg_search.json'),
+        page: 1,
+        limit: 3,
+      );
       expect(page.items, isNotEmpty);
       expect(page.items.first.id, '112');
       expect(page.items.first.name, '周杰伦');

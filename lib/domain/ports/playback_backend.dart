@@ -43,8 +43,16 @@ class PlaybackCapabilities {
       other.transferDevice == transferDevice;
 
   @override
-  int get hashCode => Object.hash(seek, next, previous, queue, setMode, favorite,
-      volume, transferDevice);
+  int get hashCode => Object.hash(
+    seek,
+    next,
+    previous,
+    queue,
+    setMode,
+    favorite,
+    volume,
+    transferDevice,
+  );
 }
 
 /// 播放后端：事件驱动状态 + 控制委托。UI 不直接依赖，由 facade 选择/转发。
@@ -82,37 +90,51 @@ abstract interface class PlaybackBackend {
   /// 可选能力：在已加载队列内按下标跳转（本地后端支持）。
   /// 不支持时抛 `SourceFailure(kind: unsupported)`。
   Future<void> playQueueIndex(int index) => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '当前播放后端不支持队列跳转',
-      );
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持队列跳转',
+  );
 
   /// 可选能力：追加曲目到当前队列末尾（AI 推歌续推等）。不支持时抛
   /// `SourceFailure(kind: unsupported)`。
   Future<void> enqueueTracks(List<Track> tracks) => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '当前播放后端不支持队列追加',
-      );
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持队列追加',
+  );
+
+  /// 可选能力：移动队列中的一项（[from] → [to]）。返回是否真的改变；
+  /// 越界 / 移动当前曲目 / 随机模式都是 no-op（false）。
+  Future<bool> moveQueueIndex(int from, int to) => throw const SourceFailure(
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持队列排序',
+  );
+
+  /// 可选能力：移除队列中的一项。返回是否真的改变；越界 / 当前曲目 /
+  /// 空队列都是 no-op（false）。
+  Future<bool> removeQueueIndex(int index) => throw const SourceFailure(
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持队列移除',
+  );
 
   /// 可选能力：以指定音质重新取链当前曲目，保持进度与播放态。
   ///
   /// 音质只在本次播放生效，不写入持久化会话。不支持时抛
   /// `SourceFailure(kind: unsupported)`。
   Future<void> setCurrentQuality(String quality) => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '当前播放后端不支持切换音质',
-      );
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持切换音质',
+  );
 
   /// 可选能力：收藏切换。不支持时抛 `SourceFailure(kind: unsupported)`。
   Future<bool> toggleFavorite(Track track) => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '当前播放后端不支持收藏',
-      );
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持收藏',
+  );
 
   /// 可选能力：设置音量。不支持时抛 `SourceFailure(kind: unsupported)`。
   Future<void> setVolume(double value) => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '当前播放后端不支持音量控制',
-      );
+    kind: FailureKind.unsupported,
+    message: '当前播放后端不支持音量控制',
+  );
 
   /// 原地更新队列曲目封面（音源补图）。不支持时抛
   /// `SourceFailure(kind: unsupported)`。

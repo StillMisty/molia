@@ -297,11 +297,11 @@ class ThemeProvider extends ChangeNotifier {
 
   /// 主题模式 / 基础配色：键默认值是唯一来源，模块只把字符串映射成枚举。
   static ThemeMode _themeModeOf(String name) => ThemeMode.values.firstWhere(
-        (mode) => mode.name == name,
-        orElse: () => ThemeMode.values.firstWhere(
-          (mode) => mode.name == kThemeMode.defaultValue,
-        ),
-      );
+    (mode) => mode.name == name,
+    orElse: () => ThemeMode.values.firstWhere(
+      (mode) => mode.name == kThemeMode.defaultValue,
+    ),
+  );
 
   static ColorBaseSource _colorBaseOf(String name) =>
       ColorBaseSource.values.firstWhere(
@@ -331,8 +331,9 @@ class ThemeProvider extends ChangeNotifier {
       final wallpaperSeed = brightness == Brightness.dark
           ? _wallpaperDarkSeed
           : _wallpaperLightSeed;
-      final monet =
-          brightness == Brightness.dark ? _monetDarkScheme : _monetLightScheme;
+      final monet = brightness == Brightness.dark
+          ? _monetDarkScheme
+          : _monetLightScheme;
       scheme = wallpaperSeed != null
           ? buildColorScheme(wallpaperSeed, brightness)
           : (monet ?? buildColorScheme(_seedColor, brightness));

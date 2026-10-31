@@ -73,7 +73,9 @@ Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
   final uri = Uri.tryParse(url.trim());
   if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
     throw const ScriptUpdateException(
-        ScriptUpdateError.downloadFailed, '更新地址不是有效的 HTTP(S) 链接');
+      ScriptUpdateError.downloadFailed,
+      '更新地址不是有效的 HTTP(S) 链接',
+    );
   }
   final ownDio = dio ?? createAppDio();
   try {
@@ -88,16 +90,21 @@ Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
         )
         .timeout(kLxScriptDownloadTimeout);
     if (response.statusCode != 200) {
-      throw ScriptUpdateException(ScriptUpdateError.downloadFailed,
-          '下载失败：HTTP ${response.statusCode}');
+      throw ScriptUpdateException(
+        ScriptUpdateError.downloadFailed,
+        '下载失败：HTTP ${response.statusCode}',
+      );
     }
     final bytes = <int>[];
-    await for (final chunk
-        in streamBody(response).stream.timeout(kLxScriptDownloadTimeout)) {
+    await for (final chunk in streamBody(
+      response,
+    ).stream.timeout(kLxScriptDownloadTimeout)) {
       bytes.addAll(chunk);
       if (bytes.length > kLxScriptMaxBytes) {
-        throw const ScriptUpdateException(ScriptUpdateError.tooLarge,
-            '脚本文件超过 1MB 上限，已中止下载');
+        throw const ScriptUpdateException(
+          ScriptUpdateError.tooLarge,
+          '脚本文件超过 1MB 上限，已中止下载',
+        );
       }
     }
     return utf8.decode(bytes, allowMalformed: true);
@@ -105,10 +112,11 @@ Future<String> downloadLxScriptText(String url, {Dio? dio}) async {
     rethrow;
   } on TimeoutException {
     throw const ScriptUpdateException(
-        ScriptUpdateError.downloadFailed, '下载超时，请检查网络后重试');
+      ScriptUpdateError.downloadFailed,
+      '下载超时，请检查网络后重试',
+    );
   } catch (e) {
-    throw ScriptUpdateException(
-        ScriptUpdateError.downloadFailed, '下载失败：$e');
+    throw ScriptUpdateException(ScriptUpdateError.downloadFailed, '下载失败：$e');
   } finally {
     if (dio == null) ownDio.close(force: true);
   }
@@ -138,15 +146,21 @@ LxScriptInfo parseDownloadedScript(String text, {required String id}) {
   final parsed = LxScriptInfo.parse(text, id: id);
   if (parsed == null) {
     if (looksLikeHtml(text)) {
-      throw const ScriptUpdateException(ScriptUpdateError.htmlPage,
-          '该地址不是脚本文件，请打开更新页手动导入');
+      throw const ScriptUpdateException(
+        ScriptUpdateError.htmlPage,
+        '该地址不是脚本文件，请打开更新页手动导入',
+      );
     }
     throw const ScriptUpdateException(
-        ScriptUpdateError.notAScript, '下载的内容不是有效的 LX 音源脚本（缺少元信息）');
+      ScriptUpdateError.notAScript,
+      '下载的内容不是有效的 LX 音源脚本（缺少元信息）',
+    );
   }
   if (!looksLikeLxScript(text)) {
     throw const ScriptUpdateException(
-        ScriptUpdateError.notAScript, '下载的内容不是有效的 LX 音源脚本（未使用 lx 接口）');
+      ScriptUpdateError.notAScript,
+      '下载的内容不是有效的 LX 音源脚本（未使用 lx 接口）',
+    );
   }
   return parsed;
 }

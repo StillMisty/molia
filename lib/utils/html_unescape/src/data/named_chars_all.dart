@@ -2103,7 +2103,7 @@ const List<String> keys = <String>[
   '&LT',
   '&gt',
   '&GT',
-  '&lt'
+  '&lt',
 ];
 
 const int maxKeyLength = 33;
@@ -4206,5 +4206,5 @@ const List<String> values = <String>[
   '<',
   '>',
   '>',
-  '<'
+  '<',
 ];

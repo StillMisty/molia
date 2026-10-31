@@ -48,6 +48,7 @@ import '../widgets/row_actions.dart';
 import '../widgets/shell_page_visibility.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/track_row.dart';
+import '../widgets/track_row_actions.dart';
 import '../widgets/track_table_header.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本页而不注册 delegate，
@@ -71,14 +72,14 @@ TrackRowColumnSpec _columnSpec(CollectionColumnLayout layout) =>
 ///   默认落在有曲目的收藏，收藏为空时回退到第一个非空列表；
 /// - 宽屏表格列：内容宽（窗口宽 − 栏宽）够时曲目 / 历史 / 本地歌曲列表
 ///   显示表头与列（播放历史多一列「播放时间」），窄窗口回落单列；
-/// - 曲目行：点击播放；行尾显示歌曲时长；左滑「加入列表 / 移除类操作」
+/// - 曲目行：点击播放；行尾显示歌曲时长；⋮ 菜单（桌面右键）提供
 ///   （「加入列表」含我的收藏 / 播放历史 / 自建列表）；长按进入多选；
 /// - 标题右侧提供随机播放 / 搜索两个图标（播放/暂停在顶栏迷你条，
 ///   整表播放走随机或点行）；搜索按钮展开搜索栏
 ///   （日常不占用行高），排序与「调整顺序」收在搜索栏的 ⋮ 菜单里；
 ///   本地歌曲合集多一个「导入本地歌曲」按钮；
 /// - 自建列表支持「调整顺序」模式：长按拖动曲目落位即持久化；
-/// - 播放历史支持单条删除（左滑）与批量删除（多选）。
+/// - 播放历史支持单条删除（⋮ 菜单）与批量删除（多选）。
 /// - 本地歌曲（下载副本 + 导入的本地文件）来自下载记录：
 ///   下载副本删除会删文件，导入项只从列表移除。
 class FavoritesPage extends StatefulWidget {
@@ -96,11 +97,14 @@ class FavoritesPage extends StatefulWidget {
 }
 
 class _FavoritesPageState extends State<FavoritesPage> {
-  /// 标题行 / 搜索行统一内容高度：点搜索展开时头部不跳高
-  /// （M3E 搜索胶囊默认高度 56，标题行按同一高度对齐）。
+  /// 标题行 / 多选栏的内容高度（M3E 56）。
+  ///
+  /// 搜索行不套这个固定高度：展开搜索后由 AppSearchBar 按系统文字缩放
+  /// 自行决定高度，大字体下才能容纳完整 hint 与输入行框。
   static const double _headerRowHeight = 56;
 
-  /// 头部（标题行 / 搜索行 / 多选栏）垂直留白：三者切换头部不跳高。
+  /// 头部（标题行 / 搜索行 / 多选栏）垂直留白：三者切换时留白一致；
+  /// 搜索行高度本身由 AppSearchBar 决定。
   static const double _headerPaddingTop = 12;
   static const double _headerPaddingBottom = 8;
 
@@ -127,9 +131,9 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 滚动簿记：按合集键保存 / 恢复滚动偏移（节流落盘 + 只恢复一次）。
   late final CollectionScrollBookkeeping _bookkeeping =
       CollectionScrollBookkeeping(
-    controllerOf: _scrollControllerForKey,
-    persist: _session.persistScrollOffsets,
-  );
+        controllerOf: _scrollControllerForKey,
+        persist: _session.persistScrollOffsets,
+      );
 
   /// 上次观察到的壳层可见性：隐藏 → 可见 = 重新进入收藏页，刷新播放历史
   /// 顺序（顺序在停留期间冻结，见 LibraryProvider）。未挂壳层的单测按可见。
@@ -502,15 +506,15 @@ class _FavoritesPageState extends State<FavoritesPage> {
   /// 本页动作的统一入口：端口按此刻 context 组装，命令 / 结果都在模块内。
   CollectionActions get _actions => CollectionActions(
     library: LibraryProviderCollectionActions(context.read<LibraryProvider>()),
-        handoff: TrackHandoffCollectionHandoff(
-          context,
-          random: widget.shuffleRandom,
-        ),
-        localData: ProviderCollectionLocalData(
+    handoff: TrackHandoffCollectionHandoff(
+      context,
+      random: widget.shuffleRandom,
+    ),
+    localData: ProviderCollectionLocalData(
       downloads: context.read<DownloadManager?>(),
-          localData: _localDataService,
-        ),
-      );
+      localData: _localDataService,
+    ),
+  );
 
   /// 从当前合集可见行的 [index] 起播（随机播放传 [shuffle]）。
   ///
@@ -1040,30 +1044,29 @@ class _FavoritesPageState extends State<FavoritesPage> {
         horizontalPadding,
         _headerPaddingBottom,
       ),
-      child: SizedBox(
-        height: _headerRowHeight,
-        child: AppSearchBar(
-          controller: _searchController,
-          focusNode: _searchFocus,
-          hintText: l10n.favoritesSearchHint,
-          leading: M3EIconButton(
-            variant: M3EIconButtonVariant.standard,
-            semanticLabel: l10n.cancel,
-            icon: const Icon(Icons.arrow_back_rounded),
-            onPressed: _exitSearch,
-          ),
-          trailing: [
-            // 本地歌曲没有排序 / 清空类动作，不显示 ⋮。
-            if (view.hasItems && !view.isLocalSongs)
-              _buildOverflowMenu(context, l10n, view),
-          ],
-          onChanged: (_) {
-            // 过滤改变可见列表：锚点随搜索词失效（选择保留）；
-            // 会话不负责重建，页面输入变化需要一次 setState。
-            _session.onQueryChanged();
-            setState(() {});
-          },
+      // 不套固定高度：AppSearchBar 会随系统文字缩放长高，父级再钉 56 会把
+      // hint 压回裁切；搜索态头部允许比标题行高。
+      child: AppSearchBar(
+        controller: _searchController,
+        focusNode: _searchFocus,
+        hintText: l10n.favoritesSearchHint,
+        leading: M3EIconButton(
+          variant: M3EIconButtonVariant.standard,
+          semanticLabel: l10n.cancel,
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: _exitSearch,
         ),
+        trailing: [
+          // 本地歌曲没有排序 / 清空类动作，不显示 ⋮。
+          if (view.hasItems && !view.isLocalSongs)
+            _buildOverflowMenu(context, l10n, view),
+        ],
+        onChanged: (_) {
+          // 过滤改变可见列表：锚点随搜索词失效（选择保留）；
+          // 会话不负责重建，页面输入变化需要一次 setState。
+          _session.onQueryChanged();
+          setState(() {});
+        },
       ),
     );
   }
@@ -1377,71 +1380,107 @@ class _FavoritesPageState extends State<FavoritesPage> {
     required bool reorderActive,
     required TrackRowColumnSpec? columnSpec,
   }) {
-    // 行尾标签与 ⋮ 菜单共用 56dp 固定槽：大字号下必须单行省略，
-    // 否则换行会被 72dp 固定行高裁切。
-    final cachedTag = switch (row) {
-      LocalSongCollectionRow(:final song) when song.isCached => Text(
-          l10n.localSongsCachedTag,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          softWrap: false,
-          style: context.typeScale.labelSmall.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      _ => null,
+    // 行尾缓存标签：非表格档保留文字；表格档塞进 56dp 固定槽，用紧凑图标
+    // （与 ⋮ 并排时不挤掉列）。多选 / 排序模式不渲染 ⋮（见 CollectionTrackRow）。
+    final table = columnSpec != null;
+    final cached = switch (row) {
+      LocalSongCollectionRow(:final song) when song.isCached => true,
+      _ => false,
     };
-    return CollectionTrackRow(
-      row: TrackRowModel(
-        title: row.title,
-        artist: row.artist,
-        coverUrl: row.artworkUrl,
-        album: row.album,
-        // 播放时间 = 毫秒时间戳的紧凑文案（与同步日志同一格式）。
-        time: switch (row) {
-          HistoryCollectionRow(:final playedAt) => syncTimeText(playedAt),
-          _ => '',
-        },
-        durationMs: row.durationMs,
-        // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
-        // local 源键，缓存行 / 历史行保留原曲键。
-        trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
-        selected: _session.isSelected(row.key),
-      ),
-      surface: TrackRowSurface(tableSpec: columnSpec),
-      trailing: reorderActive
-          ? Icon(
-              Icons.drag_handle_rounded,
+    final cachedTrailing = !cached
+        ? null
+        : table
+        ? Icon(
+            Icons.download_done_rounded,
+            size: 16,
+            semanticLabel: l10n.localSongsCachedTag,
+          )
+        : Text(
+            l10n.localSongsCachedTag,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: context.typeScale.labelSmall.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
-            )
-          : cachedTag,
-      position: calculateCardPosition(index, view.visibleCount),
-      onTap: reorderActive ? null : () => _onRowTap(view, index),
-      onTapWithModifiers: (reorderActive || !isDesktopPlatform())
-          ? null
-          : (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift),
-      onLongPress: reorderActive ? null : () => _enterSelection(row.key),
-      actions: (reorderActive || _selecting)
-          ? null
-          : _rowActions(context, l10n, view, row),
+            ),
+          );
+    return RowActionsBuilder(
+      // Sliver itemBuilder 里不能直接 select：动作构造放进独立 build。
+      actions: (rowContext) => (reorderActive || _selecting)
+          ? const <RowAction>[]
+          : _rowActions(rowContext, l10n, view, row),
+      builder: (rowContext, actions) => CollectionTrackRow(
+        row: TrackRowModel(
+          title: row.title,
+          artist: row.artist,
+          coverUrl: row.artworkUrl,
+          album: row.album,
+          // 播放时间 = 毫秒时间戳的紧凑文案（与同步日志同一格式）。
+          time: switch (row) {
+            HistoryCollectionRow(:final playedAt) => syncTimeText(playedAt),
+            _ => '',
+          },
+          durationMs: row.durationMs,
+          // 收藏键与播放 TrackId 同源（`sourceKey:songId`）；本地下载副本用
+          // local 源键，缓存行 / 历史行保留原曲键。
+          trackId: TrackId(row.favoriteKey.sourceKey, row.favoriteKey.songId),
+          selected: _session.isSelected(row.key),
+        ),
+        surface: TrackRowSurface(tableSpec: columnSpec),
+        trailing: reorderActive
+            ? Icon(
+                Icons.drag_handle_rounded,
+                color: Theme.of(rowContext).colorScheme.onSurfaceVariant,
+              )
+            : cachedTrailing,
+        position: calculateCardPosition(index, view.visibleCount),
+        onTap: reorderActive ? null : () => _onRowTap(view, index),
+        onTapWithModifiers: (reorderActive || !isDesktopPlatform())
+            ? null
+            : (ctrl, shift) => _onRowTap(view, index, ctrl: ctrl, shift: shift),
+        onLongPress: reorderActive ? null : () => _enterSelection(row.key),
+        actions: actions.isEmpty ? null : actions,
+      ),
     );
   }
 
   /// 行动作：投影器决定构成（`CollectionPresenter.rowActionsFor`），动作载荷
   /// 由 `CollectionActions.rowCommands` 按行变体归一（复制 / 换源 / 移除 /
   /// 收藏 / 删除）；页面只把回调接成提示与确认，接线缺席的动作不会出现
-  /// （见 `buildCollectionRowActions`）。
+  /// （见 `buildCollectionRowActions`）。公共动作（加入队列 / 下载 / 评论 /
+  /// 专辑 / 歌手）按能力位追加，移除 / 删除类保持在最后。
   List<RowAction> _rowActions(
     BuildContext context,
     AppLocalizations l10n,
     CollectionView view,
     CollectionRow row,
   ) {
-    return buildCollectionRowActions(
+    final primary = buildCollectionRowActions(
       l10n: l10n,
       specs: _session.rowActionsFor(row, view),
       wiring: _actionWiring(context, view, row),
     );
+    return mergeRowActions(
+      primary,
+      trackCommonActions(context, _domainTrackOf(row)),
+    );
+  }
+
+  /// 合集行 → 领域曲目（公共动作的能力位 / 平台 id 需要领域形状）。
+  ///
+  /// 与 `CollectionActions.play` 共用同一套转换（历史行还原历史曲目，
+  /// 本地歌曲行还原 local 源快照），不另造一份映射。
+  Track _domainTrackOf(CollectionRow row) {
+    final library = context.read<LibraryProvider>();
+    return switch (row) {
+      TrackCollectionRow(:final track) => library.trackFromPlaylistTrack(track),
+      HistoryCollectionRow(:final entry) => library.trackFromHistoryEntry(
+        entry,
+      ),
+      LocalSongCollectionRow(:final song) => library.trackFromPlaylistTrack(
+        song.toPlaylistTrack(addedAt: 0),
+      ),
+    };
   }
 
   CollectionRowActionWiring _actionWiring(
@@ -1457,12 +1496,12 @@ class _FavoritesPageState extends State<FavoritesPage> {
       onSwap: swap == null
           ? null
           : () => showSourceSwapPage(
-                context,
-                seed: swap.track,
-                lyricsProvider: context.read<LyricsProvider>(),
-                playlistId: swap.playlistId,
-                historyKey: swap.historyKey,
-              ),
+              context,
+              seed: swap.track,
+              lyricsProvider: context.read<LyricsProvider>(),
+              playlistId: swap.playlistId,
+              historyKey: swap.historyKey,
+            ),
       onRemoveFromPlaylist: _reported(commands.removeFromPlaylist),
       onRemoveFromFavorites: _reported(commands.removeFromFavorites),
       onToggleFavorite: _reported(commands.toggleFavorite),
@@ -1476,7 +1515,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     );
   }
 
-  /// 本地歌曲单条删除（行动作入口：触摸端左滑 / 桌面右键）：先确认再按行
+  /// 本地歌曲单条删除（行动作入口：触摸端 ⋮ / 桌面右键）：先确认再按行
   /// 来源删（下载副本删文件、导入项只移出列表、缓存行清缓存）。
   Future<void> _deleteLocalSong(CollectionLocalSong song) async {
     final actions = _actions;
@@ -1499,17 +1538,17 @@ class _FavoritesPageState extends State<FavoritesPage> {
           icon: view.isHistory
               ? Icons.history_rounded
               : view.isLocalSongs
-                  ? Icons.library_music_rounded
-                  : view.isFavorites
-                      ? Icons.favorite_border_rounded
-                      : Icons.queue_music_rounded,
+              ? Icons.library_music_rounded
+              : view.isFavorites
+              ? Icons.favorite_border_rounded
+              : Icons.queue_music_rounded,
           message: view.isHistory
               ? l10n.historyEmpty
               : view.isLocalSongs
-                  ? l10n.localSongsEmpty
-                  : view.isFavorites
-                      ? l10n.favoritesEmpty
-                      : l10n.playlistTracksEmpty,
+              ? l10n.localSongsEmpty
+              : view.isFavorites
+              ? l10n.favoritesEmpty
+              : l10n.playlistTracksEmpty,
           // 主行动只在「本页就能完成」时给：本地歌曲空态 = 导入入口（标题行按钮
           // 之外的第二入口，同一动作）。收藏 / 历史 / 自建列表空态不给按钮——
           // 收藏要先在别处收藏、历史要先有播放、自建列表要先在别处加入曲目，

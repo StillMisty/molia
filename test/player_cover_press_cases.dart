@@ -20,14 +20,14 @@ import 'support/fakes.dart';
 /// 可观察行为：卡片相邻的 Transform 缩放矩阵（不读私有字段）；存在常驻波浪
 /// 动画，不能 pumpAndSettle，按固定时长 pump 采样。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -50,16 +50,18 @@ void main() {
 
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
-    backend.emit(BackendSnapshot(
-      current: order[index],
-      queue: order,
-      currentIndex: index,
-      next: index + 1 < order.length ? order[index + 1] : null,
-      previous: index > 0 ? order[index - 1] : null,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: order[index],
+        queue: order,
+        currentIndex: index,
+        next: index + 1 < order.length ? order[index + 1] : null,
+        previous: index > 0 ? order[index - 1] : null,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   Future<void> pumpPlayer(WidgetTester tester) async {
@@ -90,10 +92,7 @@ void main() {
           home: Scaffold(
             body: SizedBox(
               height: 900,
-              child: Player(
-                expandAnimation: expand,
-                onToggleExpand: () {},
-              ),
+              child: Player(expandAnimation: expand, onToggleExpand: () {}),
             ),
           ),
         ),
@@ -112,9 +111,11 @@ void main() {
   bool hasPressedScale(WidgetTester tester, Finder card) {
     final transforms = <Transform>[
       ...tester.widgetList<Transform>(
-          find.ancestor(of: card, matching: find.byType(Transform))),
+        find.ancestor(of: card, matching: find.byType(Transform)),
+      ),
       ...tester.widgetList<Transform>(
-          find.descendant(of: card, matching: find.byType(Transform))),
+        find.descendant(of: card, matching: find.byType(Transform)),
+      ),
     ];
     return transforms.any((t) {
       final xScale = t.transform.entry(0, 0);
@@ -132,18 +133,17 @@ void main() {
     final centerGesture = await tester.startGesture(tester.getCenter(center));
     await tester.pump(); // 按压动画首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 80));
-    expect(hasPressedScale(tester, center), isTrue,
-        reason: '按下中心封面应立刻出现缩放反馈');
+    expect(hasPressedScale(tester, center), isTrue, reason: '按下中心封面应立刻出现缩放反馈');
 
     await centerGesture.cancel();
     await tester.pump(); // 回弹首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 250));
-    expect(hasPressedScale(tester, center), isFalse,
-        reason: '取消按压后应回弹到 1.0');
+    expect(hasPressedScale(tester, center), isFalse, reason: '取消按压后应回弹到 1.0');
     expect(tester.takeException(), isNull);
 
-    final left =
-        find.byKey(PlayerCoverDeck.sideCoverCardKey(left: true, id: a.id));
+    final left = find.byKey(
+      PlayerCoverDeck.sideCoverCardKey(left: true, id: a.id),
+    );
     expect(left, findsOneWidget);
 
     // 左卡外缘伸出屏幕：取屏内可见的左侧条带（中心卡覆盖不到的区域）。
@@ -152,14 +152,12 @@ void main() {
     final leftGesture = await tester.startGesture(point);
     await tester.pump(); // 按压动画首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 80));
-    expect(hasPressedScale(tester, left), isTrue,
-        reason: '按下邻位封面应立刻出现缩放反馈');
+    expect(hasPressedScale(tester, left), isTrue, reason: '按下邻位封面应立刻出现缩放反馈');
 
     await leftGesture.cancel();
     await tester.pump(); // 回弹首 tick（elapsed 0）
     await tester.pump(const Duration(milliseconds: 250));
-    expect(hasPressedScale(tester, left), isFalse,
-        reason: '取消按压后应回弹到 1.0');
+    expect(hasPressedScale(tester, left), isFalse, reason: '取消按压后应回弹到 1.0');
     expect(tester.takeException(), isNull);
   });
 }

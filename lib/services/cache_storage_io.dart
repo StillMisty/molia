@@ -23,14 +23,15 @@ class IoCacheStorage implements CacheStorage {
     this._audioDirOverride,
     this._artworkDirOverride,
     Future<Directory> Function()? supportDirectory,
-  })  : _supportDirectory = supportDirectory ?? appDataDirectory;
+  }) : _supportDirectory = supportDirectory ?? appDataDirectory;
 
   static const String audioDirName = 'audio_cache';
   static const String artworkDirName = 'artwork_cache';
 
   /// 设备存储容量通道（仅 Android 注册；其余平台按不可用处理）。
-  static const MethodChannel _deviceStorageChannel =
-      MethodChannel('top.stillmisty.molia/device_storage');
+  static const MethodChannel _deviceStorageChannel = MethodChannel(
+    'top.stillmisty.molia/device_storage',
+  );
 
   final String? _audioDirOverride;
   final String? _artworkDirOverride;
@@ -55,8 +56,9 @@ class IoCacheStorage implements CacheStorage {
   Future<int?> _queryTotalSpaceBytes() async {
     if (!Platform.isAndroid) return null;
     try {
-      final bytes =
-          await _deviceStorageChannel.invokeMethod<num>('getTotalBytes');
+      final bytes = await _deviceStorageChannel.invokeMethod<num>(
+        'getTotalBytes',
+      );
       final value = bytes?.toInt();
       return (value == null || value <= 0) ? null : value;
     } catch (_) {
@@ -71,8 +73,7 @@ class IoCacheStorage implements CacheStorage {
     if (override != null) return override;
     if (_resolvedAudioDir != null) return _resolvedAudioDir;
     final support = await _supportDirectory();
-    return _resolvedAudioDir =
-        _join(support.path, audioDirName);
+    return _resolvedAudioDir = _join(support.path, audioDirName);
   }
 
   @override
@@ -176,9 +177,9 @@ class IoCacheStorage implements CacheStorage {
 
   /// 文件名前缀匹配（只取文件名，不带目录）。
   List<File> _matchFiles(List<File> files, String prefix) => [
-        for (final file in files)
-          if (file.uri.pathSegments.last.startsWith(prefix)) file,
-      ];
+    for (final file in files)
+      if (file.uri.pathSegments.last.startsWith(prefix)) file,
+  ];
 
   @override
   Future<int> enforceAudioLimit(
@@ -240,8 +241,10 @@ class IoCacheStorage implements CacheStorage {
     if (!await dir.exists()) return const [];
     final files = <File>[];
     try {
-      await for (final entity
-          in dir.list(recursive: true, followLinks: false)) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) files.add(entity);
       }
     } catch (_) {

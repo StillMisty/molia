@@ -17,7 +17,9 @@ List<SourceArtistRef> artistRefsOfItems(dynamic items) {
     final name = decodeName(item['name']?.toString());
     if (name.isEmpty) continue;
     final id = item['id']?.toString();
-    refs.add(SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id));
+    refs.add(
+      SourceArtistRef(name: name, id: (id?.isEmpty ?? true) ? null : id),
+    );
   }
   return refs;
 }

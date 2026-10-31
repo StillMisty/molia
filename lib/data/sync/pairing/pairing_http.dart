@@ -59,11 +59,7 @@ class PairingHttpResponse {
   static PairingHttpResponse json(
     Map<String, Object?> body, {
     int statusCode = HttpStatus.ok,
-  }) =>
-      PairingHttpResponse(
-        statusCode: statusCode,
-        body: jsonEncode(body),
-      );
+  }) => PairingHttpResponse(statusCode: statusCode, body: jsonEncode(body));
 }
 
 /// 接收方 HTTP 端点：由 `LanSyncTransport` 在 `/pair/*` 路径上调用。

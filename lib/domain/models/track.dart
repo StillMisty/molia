@@ -159,9 +159,9 @@ class Track {
   /// 全空返回空串）。脚本回传面（`SourceTrack.artist`）另有 `/` 约定，
   /// 不走这里；全空的 UI 兜底文案由调用方按 l10n 提供，不进领域层。
   String get artistLabel => [
-        for (final artist in artists)
-          if (artist.name.isNotEmpty) artist.name,
-      ].join(', ');
+    for (final artist in artists)
+      if (artist.name.isNotEmpty) artist.name,
+  ].join(', ');
 
   /// 首位有效歌手名（没有歌手 / 全空返回空串）。
   String get primaryArtistName {
@@ -217,18 +217,18 @@ class Track {
 
   @override
   int get hashCode => Object.hash(
-        id,
-        title,
-        deepHash(artists),
-        album,
-        duration,
-        artwork,
-        origin,
-        deepHash(qualities),
-        deepHash(payload),
-        platformPageUrl,
-        platformAlbumId,
-      );
+    id,
+    title,
+    deepHash(artists),
+    album,
+    duration,
+    artwork,
+    origin,
+    deepHash(qualities),
+    deepHash(payload),
+    platformPageUrl,
+    platformAlbumId,
+  );
 
   @override
   String toString() => 'Track($id, $title)';

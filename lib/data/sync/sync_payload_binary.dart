@@ -69,10 +69,12 @@ abstract final class SyncPayloadBinary {
     final rowDevice = <String>[];
     final rowFlags = Uint8List(rows.length);
     for (final row in rows) {
-      rowCategories.add(categoryIndex.putIfAbsent(row.category.name, () {
-        categoryNames.add(row.category.name);
-        return categoryNames.length - 1;
-      }));
+      rowCategories.add(
+        categoryIndex.putIfAbsent(row.category.name, () {
+          categoryNames.add(row.category.name);
+          return categoryNames.length - 1;
+        }),
+      );
       rowSeqs.add(row.seq);
       rowKeys.add(row.record.key);
       rowPhysical.add(row.record.version.physical);
@@ -81,8 +83,8 @@ abstract final class SyncPayloadBinary {
     }
     for (var i = 0; i < rows.length; i++) {
       final record = rows[i].record;
-      rowFlags[i] = (record.deleted ? 0x01 : 0x00) |
-          (record.data != null ? 0x02 : 0x00);
+      rowFlags[i] =
+          (record.deleted ? 0x01 : 0x00) | (record.data != null ? 0x02 : 0x00);
     }
 
     final w = _Writer();
@@ -197,7 +199,11 @@ abstract final class SyncPayloadBinary {
       final category = rowCategoriesTable[categoryIndex];
       if (kind == 1) {
         journal.add(
-          SyncJournalEntry(seq: rowSeqs[i] as int, category: category, record: record),
+          SyncJournalEntry(
+            seq: rowSeqs[i] as int,
+            category: category,
+            record: record,
+          ),
         );
       } else {
         records.putIfAbsent(category, () => []).add(record);
@@ -302,11 +308,7 @@ abstract final class SyncPayloadBinary {
   ///
   /// [intDelta] 只对整数列生效（差分相对上一个值；类别 / seq / physical
   /// 这类近似单调的列差分后更小，由实际字节数择优）。
-  static void _writeColumn(
-    _Writer w,
-    List<Object?> cells, {
-    bool? intDelta,
-  }) {
+  static void _writeColumn(_Writer w, List<Object?> cells, {bool? intDelta}) {
     var hasPresence = false;
     var hasNulls = false;
     final present = <Object?>[];
@@ -332,10 +334,10 @@ abstract final class SyncPayloadBinary {
     final encoding = allInts
         ? (useDelta ? _Col.intsDelta : _Col.ints)
         : allBools
-            ? _Col.bools
-            : allStrings
-                ? _pickStringEncoding(strings)
-                : _Col.opaqueJson;
+        ? _Col.bools
+        : allStrings
+        ? _pickStringEncoding(strings)
+        : _Col.opaqueJson;
 
     w.u8(encoding);
     w.u8(flags);
@@ -391,8 +393,9 @@ abstract final class SyncPayloadBinary {
     int? previous;
     for (final value in values) {
       plainBytes += _varintLength(_zigzag(value));
-      deltaBytes +=
-          _varintLength(_zigzag(previous == null ? value : value - previous));
+      deltaBytes += _varintLength(
+        _zigzag(previous == null ? value : value - previous),
+      );
       previous = value;
     }
     return deltaBytes < plainBytes;
@@ -439,10 +442,13 @@ abstract final class SyncPayloadBinary {
   static List<Object?> _readColumn(_Reader r, int rowCount) {
     final encoding = r.u8();
     final flags = r.u8();
-    final presence = flags & _Col.flagPresence != 0 ? r.readBitmap(rowCount) : null;
+    final presence = flags & _Col.flagPresence != 0
+        ? r.readBitmap(rowCount)
+        : null;
     final presentCount = presence?.count ?? rowCount;
-    final nulls =
-        flags & _Col.flagNulls != 0 ? r.readBitmap(presentCount) : null;
+    final nulls = flags & _Col.flagNulls != 0
+        ? r.readBitmap(presentCount)
+        : null;
     final valueCount = presentCount - (nulls?.count ?? 0);
     final values = _readValues(r, valueCount, encoding);
     final cells = List<Object?>.filled(rowCount, _absent);
@@ -572,7 +578,9 @@ abstract final class SyncPayloadBinary {
       final length = utf8.encode(value).length;
       total += _varintLength(length) + length;
     }
-    final indexBytes = _varintLength(unique.length <= 1 ? 0 : unique.length - 1);
+    final indexBytes = _varintLength(
+      unique.length <= 1 ? 0 : unique.length - 1,
+    );
     return total + values.length * indexBytes;
   }
 

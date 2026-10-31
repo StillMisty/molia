@@ -21,8 +21,9 @@ enum NotificationPermissionStatus {
 class NotificationPermission {
   NotificationPermission._();
 
-  static const MethodChannel _channel =
-      MethodChannel('top.stillmisty.molia/notifications');
+  static const MethodChannel _channel = MethodChannel(
+    'top.stillmisty.molia/notifications',
+  );
 
   /// 每个会话至多请求一次（用户拒绝后反复弹窗属骚扰）。
   static bool _requestedThisSession = false;
@@ -66,9 +67,9 @@ class NotificationPermission {
   }
 
   static NotificationPermissionStatus _parse(String? value) => switch (value) {
-        'granted' => NotificationPermissionStatus.granted,
-        'denied' => NotificationPermissionStatus.denied,
-        'permanentlyDenied' => NotificationPermissionStatus.permanentlyDenied,
-        _ => NotificationPermissionStatus.unsupported,
-      };
+    'granted' => NotificationPermissionStatus.granted,
+    'denied' => NotificationPermissionStatus.denied,
+    'permanentlyDenied' => NotificationPermissionStatus.permanentlyDenied,
+    _ => NotificationPermissionStatus.unsupported,
+  };
 }

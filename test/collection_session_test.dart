@@ -39,25 +39,24 @@ class _FakeLibrary implements CollectionLibrary {
       );
 
   PlaylistTracksView _tracksView(int playlistId) => PlaylistTracksView(
-        tracks: tracks[playlistId],
-        state: failedTracks.contains(playlistId)
-            ? LibraryReadState.failed(StateError('tracks read failed'))
-            : loadingTracks.contains(playlistId) ||
-                    !tracks.containsKey(playlistId)
-                ? const LibraryReadState.loading()
-                : const LibraryReadState.ready(),
-      );
+    tracks: tracks[playlistId],
+    state: failedTracks.contains(playlistId)
+        ? LibraryReadState.failed(StateError('tracks read failed'))
+        : loadingTracks.contains(playlistId) || !tracks.containsKey(playlistId)
+        ? const LibraryReadState.loading()
+        : const LibraryReadState.ready(),
+  );
 
   @override
   void load(CollectionLibraryLoad request) => loads.add(request);
 
   @override
   Track trackFromHistoryEntry(PlayHistoryEntry entry) => Track(
-        id: TrackId(entry.sourceKey, entry.songId),
-        title: entry.title,
-        origin: TrackOrigin.builtin,
-        payload: entry.raw,
-      );
+    id: TrackId(entry.sourceKey, entry.songId),
+    title: entry.title,
+    origin: TrackOrigin.builtin,
+    payload: entry.raw,
+  );
 }
 
 /// 假滚动端口：只记录会话发出的意图。
@@ -86,73 +85,71 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   PlaylistInfo favorites({int trackCount = 0}) => PlaylistInfo(
-        id: 1,
-        name: '我的收藏',
-        createdAt: 0,
-        trackCount: trackCount,
-        isFavorites: true,
-      );
+    id: 1,
+    name: '我的收藏',
+    createdAt: 0,
+    trackCount: trackCount,
+    isFavorites: true,
+  );
 
   PlaylistInfo playlist(int id, {int trackCount = 0}) => PlaylistInfo(
-        id: id,
-        name: '列表 $id',
-        createdAt: 0,
-        trackCount: trackCount,
-      );
+    id: id,
+    name: '列表 $id',
+    createdAt: 0,
+    trackCount: trackCount,
+  );
 
   PlaylistTrack track(String id) => PlaylistTrack(
-        playlistId: 1,
-        sourceKey: 'wy',
-        songId: id,
-        title: 'Song $id',
-        artist: 'Artist $id',
-        album: 'Album',
-        durationMs: 180000,
-        addedAt: 1,
-      );
+    playlistId: 1,
+    sourceKey: 'wy',
+    songId: id,
+    title: 'Song $id',
+    artist: 'Artist $id',
+    album: 'Album',
+    durationMs: 180000,
+    addedAt: 1,
+  );
 
   PlayHistoryEntry history(String id, {int playedAt = 1}) => PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: id,
-        title: 'Song $id',
-        artist: 'Artist $id',
-        album: 'Album',
-        durationMs: 180000,
-        raw: {'songId': id},
-        playedAt: playedAt,
-      );
+    sourceKey: 'wy',
+    songId: id,
+    title: 'Song $id',
+    artist: 'Artist $id',
+    album: 'Album',
+    durationMs: 180000,
+    raw: {'songId': id},
+    playedAt: playedAt,
+  );
 
   CollectionSessionInput inputFor(
     _FakeLibrary library, {
     String query = '',
     CollectionDownloads downloads = const CollectionDownloads.unavailable(),
-  }) =>
-      CollectionSessionInput(
-        library: library,
-        names: const CollectionNames(
-          favorites: '我的收藏',
-          history: '播放历史',
-          localSongs: '本地歌曲',
-        ),
-        query: query,
-        downloads: downloads,
-        cacheRevision: 0,
-      );
+  }) => CollectionSessionInput(
+    library: library,
+    names: const CollectionNames(
+      favorites: '我的收藏',
+      history: '播放历史',
+      localSongs: '本地歌曲',
+    ),
+    query: query,
+    downloads: downloads,
+    cacheRevision: 0,
+  );
 
   CollectionSession buildSession({_FakeScroll? scroll}) => CollectionSession(
-        scroll: scroll,
-        loadCachedAudioTrackIds: (tracks) async => const <TrackId>{},
-      );
+    scroll: scroll,
+    loadCachedAudioTrackIds: (tracks) async => const <TrackId>{},
+  );
 
   group('恢复与校准', () {
     test('恢复上次选集；已删除的列表回退一次并落盘', () async {
       SharedPreferences.setMockInitialValues({
         LibraryCollections.selectionKey: 99,
       });
-      final library = _FakeLibrary(playlists: [
-        favorites(),
-        playlist(2, trackCount: 1),
-      ]);
+      final library = _FakeLibrary(
+        playlists: [favorites(), playlist(2, trackCount: 1)],
+      );
       final session = buildSession();
       addTearDown(session.dispose);
 
@@ -232,10 +229,7 @@ void main() {
 
       session.selection.select('h:wy:b');
       view = session.sync(inputFor(library));
-      expect(
-        session.selectedRows(view.view).map((row) => row.key),
-        ['h:wy:b'],
-      );
+      expect(session.selectedRows(view.view).map((row) => row.key), ['h:wy:b']);
 
       // 后台写入在列表前部插入新行（历史最近优先）。
       library.history = [
@@ -244,15 +238,14 @@ void main() {
         history('b', playedAt: 1),
       ];
       view = session.sync(inputFor(library));
-      expect(
-        view.view.visibleRows.map((row) => row.key),
-        ['h:wy:new', 'h:wy:a', 'h:wy:b'],
-      );
-      expect(
-        session.selectedRows(view.view).map((row) => row.key),
-        ['h:wy:b'],
-        reason: '选择跟行身份，不跟下标',
-      );
+      expect(view.view.visibleRows.map((row) => row.key), [
+        'h:wy:new',
+        'h:wy:a',
+        'h:wy:b',
+      ]);
+      expect(session.selectedRows(view.view).map((row) => row.key), [
+        'h:wy:b',
+      ], reason: '选择跟行身份，不跟下标');
       expect(session.selection.selectedCount, 1);
     });
 
@@ -281,10 +274,7 @@ void main() {
         identical(second.view.visibleRows, first.view.visibleRows),
         isTrue,
       );
-      expect(
-        session.selectedRows(second.view).map((row) => row.key),
-        ['wy:a'],
-      );
+      expect(session.selectedRows(second.view).map((row) => row.key), ['wy:a']);
     });
 
     test('行被删除 / 被过滤：选择集收缩，计数不虚高', () async {
@@ -325,16 +315,10 @@ void main() {
       await session.start();
       final view = session.sync(inputFor(library)).view;
 
-      expect(
-        session.handleRowTap('wy:b', view, ctrl: true),
-        isTrue,
-      );
+      expect(session.handleRowTap('wy:b', view, ctrl: true), isTrue);
       expect(session.selection.selectedKeys, {'wy:b'});
 
-      expect(
-        session.handleRowTap('wy:c', view, shift: true),
-        isTrue,
-      );
+      expect(session.handleRowTap('wy:c', view, shift: true), isTrue);
       expect(session.selection.selectedKeys, {'wy:b', 'wy:c'});
 
       // 已有多选下普通点击 = 切换，不点播。
@@ -491,21 +475,21 @@ void main() {
       await session.start();
 
       DownloadedTrack download(String id) => DownloadedTrack(
-            originSourceKey: 'wy',
-            originSongId: id,
-            title: '下载 $id',
-            filePath: '/downloads/$id.mp3',
-            downloadedAt: 1,
-          );
+        originSourceKey: 'wy',
+        originSongId: id,
+        title: '下载 $id',
+        filePath: '/downloads/$id.mp3',
+        downloadedAt: 1,
+      );
       CollectionDownloads downloadsOf(List<String> ids) => CollectionDownloads(
-            records: [for (final id in ids) download(id)],
-            supported: true,
-            initialized: true,
-          );
+        records: [for (final id in ids) download(id)],
+        supported: true,
+        initialized: true,
+      );
 
-      final frameA = session.sync(
-        inputFor(library, downloads: downloadsOf(['1'])),
-      ).frame;
+      final frameA = session
+          .sync(inputFor(library, downloads: downloadsOf(['1'])))
+          .frame;
       expect(frameA.playlistId, 1);
 
       // 再 sync 另一个合集 + 另一份下载快照：命令只认传回的帧。
@@ -684,10 +668,8 @@ void main() {
       SharedPreferences.setMockInitialValues({
         LibraryCollections.selectionKey: 2,
       });
-      final library = _FakeLibrary(
-        playlists: const [],
-        tracks: {},
-      )..playlistsState = LibraryReadState.failed(StateError('read'));
+      final library = _FakeLibrary(playlists: const [], tracks: {})
+        ..playlistsState = LibraryReadState.failed(StateError('read'));
       final session = buildSession();
       addTearDown(session.dispose);
       await session.start();
@@ -735,9 +717,8 @@ void main() {
     });
 
     test('历史读取失败且无缓存 → failed；重试后 ready', () async {
-      final library = _FakeLibrary(
-        playlists: [favorites()],
-      )..historyState = LibraryReadState.failed(StateError('read'));
+      final library = _FakeLibrary(playlists: [favorites()])
+        ..historyState = LibraryReadState.failed(StateError('read'));
       final session = buildSession();
       addTearDown(session.dispose);
       await session.start();

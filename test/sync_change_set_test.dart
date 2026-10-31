@@ -53,27 +53,26 @@ void main() {
   SyncEnvelope remoteEnvelope(
     List<SyncRecord> records, {
     SyncCategory category = SyncCategory.settings,
-  }) =>
-      SyncEnvelope(
-        deviceId: 'devB',
-        deviceName: 'B',
-        producedAt: 5000,
-        records: {category: records},
-      );
+  }) => SyncEnvelope(
+    deviceId: 'devB',
+    deviceName: 'B',
+    producedAt: 5000,
+    records: {category: records},
+  );
 
   SyncRecord setting(String key, int physical) => SyncRecord(
-        key: key,
-        version: SyncVersion(physical: physical, deviceId: 'devB'),
-        data: {'v': 'x'},
-      );
+    key: key,
+    version: SyncVersion(physical: physical, deviceId: 'devB'),
+    data: {'v': 'x'},
+  );
 
   SyncEngine engine({SyncKnownStore? known}) => SyncEngine(
-        state: state,
-        stamps: state.stampIssuer,
-        adapters: [adapter],
-        transports: {'lan': transport},
-        known: known,
-      );
+    state: state,
+    stamps: state.stampIssuer,
+    adapters: [adapter],
+    transports: {'lan': transport},
+    known: known,
+  );
 
   test('空闲轮：适配器 apply 调用数 0（本地视图即登记基线）', () async {
     final sync = engine();
@@ -112,10 +111,7 @@ void main() {
     adapter.reset();
     transport.available
       ..clear()
-      ..add(remoteEnvelope([
-        ...all.take(59),
-        setting('key-30', 2000),
-      ]));
+      ..add(remoteEnvelope([...all.take(59), setting('key-30', 2000)]));
     final report = await sync.syncNow();
 
     expect(adapter.applyCalls, 1);
@@ -182,13 +178,15 @@ void main() {
     );
     addTearDown(sync.dispose);
 
-    transport.available.add(remoteEnvelope([
-      SyncRecord(
-        key: 'theme_mode',
-        version: const SyncVersion(physical: 5000, deviceId: 'devB'),
-        data: const {'v': 'dark'},
-      ),
-    ]));
+    transport.available.add(
+      remoteEnvelope([
+        SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 5000, deviceId: 'devB'),
+          data: const {'v': 'dark'},
+        ),
+      ]),
+    );
     await sync.syncNow();
     expect(prefs.getString('theme_mode'), 'dark');
 
@@ -196,13 +194,15 @@ void main() {
     prefs.setString('theme_mode', 'light');
     transport.available
       ..clear()
-      ..add(remoteEnvelope([
-        SyncRecord(
-          key: 'theme_mode',
-          version: const SyncVersion(physical: 5000, deviceId: 'devB'),
-          data: const {'v': 'dark'},
-        ),
-      ]));
+      ..add(
+        remoteEnvelope([
+          SyncRecord(
+            key: 'theme_mode',
+            version: const SyncVersion(physical: 5000, deviceId: 'devB'),
+            data: const {'v': 'dark'},
+          ),
+        ]),
+      );
     await sync.syncNow();
     expect(prefs.getString('theme_mode'), 'light');
   });
@@ -253,13 +253,15 @@ void main() {
     expect(replay!.applied, 0);
 
     // 本地复活（播放晚于删除：真实时间判定）→ 墓碑被清理、本地行取新版本。
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: 's1',
-      title: 'Song',
-      raw: const {},
-      playedAt: 3000,
-    ));
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: 's1',
+        title: 'Song',
+        raw: const {},
+        playedAt: 3000,
+      ),
+    );
     expect(await repository.syncExportTombstones(['history']), isEmpty);
 
     // 对端再次重放旧墓碑：本地胜者是新版本的**行**（不是墓碑），交付给
@@ -271,8 +273,11 @@ void main() {
     final report = await sync.syncNow();
 
     expect(recorder.delivered, hasLength(1));
-    expect(recorder.delivered.single.single.deleted, isFalse,
-        reason: '交付的是本地复活的行，不是旧墓碑');
+    expect(
+      recorder.delivered.single.single.deleted,
+      isFalse,
+      reason: '交付的是本地复活的行，不是旧墓碑',
+    );
     expect(report!.applied, 0);
     expect(
       (await repository.listHistory()).map((e) => e.songId),
@@ -283,9 +288,8 @@ void main() {
   test('空闲等级端到端（蜂窝）：不拉取 / 不推送 / 不落地 / 0 字节', () {
     fakeAsync((async) {
       // 引擎与调度器共用 fake_async 时钟。
-      DateTime clock() => DateTime.fromMillisecondsSinceEpoch(
-            async.elapsed.inMilliseconds,
-          );
+      DateTime clock() =>
+          DateTime.fromMillisecondsSinceEpoch(async.elapsed.inMilliseconds);
       final sync = SyncEngine(
         state: state,
         stamps: state.stampIssuer,
@@ -353,15 +357,13 @@ void main() {
     );
     addTearDown(restarted.dispose);
     await restarted.syncNow();
-    expect(adapter.lastKeys, ['key-1'],
-        reason: '登记清空后重新交付，由适配器的新旧判定兜底');
+    expect(adapter.lastKeys, ['key-1'], reason: '登记清空后重新交付，由适配器的新旧判定兜底');
   });
 
   test('空闲等级端到端（非蜂窝）：无本地变更也周期性拉取', () {
     fakeAsync((async) {
-      DateTime clock() => DateTime.fromMillisecondsSinceEpoch(
-            async.elapsed.inMilliseconds,
-          );
+      DateTime clock() =>
+          DateTime.fromMillisecondsSinceEpoch(async.elapsed.inMilliseconds);
       final sync = SyncEngine(
         state: state,
         stamps: state.stampIssuer,
@@ -414,8 +416,9 @@ class RecordingSyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async =>
-      const {};
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async => const {};
 
   @override
   Future<SyncApplyOutcome> apply(
@@ -455,9 +458,7 @@ class RecordingAdapter implements SyncAdapter {
       inner.collect(fresh: fresh);
 
   @override
-  Future<SyncApplyOutcome> apply(
-    Map<SyncCategory, List<SyncRecord>> records,
-  ) {
+  Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records) {
     delivered.add([for (final list in records.values) ...list]);
     return inner.apply(records);
   }

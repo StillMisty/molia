@@ -86,10 +86,14 @@ class ShortcutSettings extends ChangeNotifier {
   // 默认值与登记键默认值一致（见 settings_keys.dart）：软件内开、全局关。
   bool _inAppEnabled = kShortcutsEnabled.defaultValue;
   bool _globalEnabled = kGlobalShortcutsEnabled.defaultValue;
-  ShortcutBindings _inAppBindings =
-      ShortcutBindings(ShortcutScope.inApp, const {});
-  ShortcutBindings _globalBindings =
-      ShortcutBindings(ShortcutScope.global, const {});
+  ShortcutBindings _inAppBindings = ShortcutBindings(
+    ShortcutScope.inApp,
+    const {},
+  );
+  ShortcutBindings _globalBindings = ShortcutBindings(
+    ShortcutScope.global,
+    const {},
+  );
 
   /// 组合键录制态的持有者（设置页录制行）；null = 未在录制。
   Object? _recordingOwner;
@@ -129,10 +133,14 @@ class ShortcutSettings extends ChangeNotifier {
       final globalRaw = await settings.read(kGlobalShortcutBindings);
       self._inAppEnabled = inAppEnabled;
       self._globalEnabled = globalEnabled;
-      self._inAppBindings =
-          ShortcutBindings.decode(ShortcutScope.inApp, inAppRaw);
-      self._globalBindings =
-          ShortcutBindings.decode(ShortcutScope.global, globalRaw);
+      self._inAppBindings = ShortcutBindings.decode(
+        ShortcutScope.inApp,
+        inAppRaw,
+      );
+      self._globalBindings = ShortcutBindings.decode(
+        ShortcutScope.global,
+        globalRaw,
+      );
       self.notifyListeners();
     } catch (_) {
       // 存储不可用时按默认跑（读取本身已兜底，这里只防意外）。

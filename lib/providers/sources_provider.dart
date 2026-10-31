@@ -74,10 +74,12 @@ class SourcesProvider extends ChangeNotifier {
 
   /// 默认音质可选项（值 + 通用显示名；本地化由 UI 按 value 覆盖）。
   List<SourceQualityOption> get qualityOptions => kLxQualityOrder
-      .map((value) => SourceQualityOption(
-            value: value,
-            displayName: qualityDisplayName(value),
-          ))
+      .map(
+        (value) => SourceQualityOption(
+          value: value,
+          displayName: qualityDisplayName(value),
+        ),
+      )
       .toList(growable: false);
 
   /// 用户自定义音源顺序。
@@ -220,22 +222,21 @@ class SourcesProvider extends ChangeNotifier {
   }
 
   SourceScriptInfo _toInfo(LxScriptInfo script) => SourceScriptInfo(
-        id: script.id,
-        name: script.name,
-        description: script.description,
-        version: script.version,
-        author: script.author,
-        homepage: script.homepage,
-        updateUrl: script.updateUrl,
-        importedAt: script.importedAt,
-        sources:
-            script.sources.map((key, decl) => MapEntry(key, _toDecl(decl))),
-      );
+    id: script.id,
+    name: script.name,
+    description: script.description,
+    version: script.version,
+    author: script.author,
+    homepage: script.homepage,
+    updateUrl: script.updateUrl,
+    importedAt: script.importedAt,
+    sources: script.sources.map((key, decl) => MapEntry(key, _toDecl(decl))),
+  );
 
   SourceScriptDecl _toDecl(LxSourceDecl decl) => SourceScriptDecl(
-        key: decl.key,
-        name: decl.name,
-        actions: decl.actions,
-        qualitys: decl.qualitys,
-      );
+    key: decl.key,
+    name: decl.name,
+    actions: decl.actions,
+    qualitys: decl.qualitys,
+  );
 }

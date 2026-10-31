@@ -46,14 +46,14 @@ class TrackedLine {
 
   @override
   int get hashCode => Object.hash(
-        index,
-        line,
-        Object.hashAll(extended),
-        Object.hashAll(upcoming),
-        words == null ? null : Object.hashAll(words!),
-        lineStartMs,
-        lineEndMs,
-      );
+    index,
+    line,
+    Object.hashAll(extended),
+    Object.hashAll(upcoming),
+    words == null ? null : Object.hashAll(words!),
+    lineStartMs,
+    lineEndMs,
+  );
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (identical(a, b)) return true;
@@ -155,12 +155,17 @@ class LyricLineTracker {
   }
 
   static List<String> _upcoming(
-      List<LyricLine> lines, int index, int maxLines) {
+    List<LyricLine> lines,
+    int index,
+    int maxLines,
+  ) {
     if (maxLines <= 1) return const [];
     final result = <String>[];
-    for (var i = index + 1;
-        i < lines.length && result.length < maxLines - 1;
-        i++) {
+    for (
+      var i = index + 1;
+      i < lines.length && result.length < maxLines - 1;
+      i++
+    ) {
       result.add(lines[i].text);
     }
     return result;

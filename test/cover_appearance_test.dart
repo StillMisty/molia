@@ -99,8 +99,10 @@ void main() {
       final atStart = flight.appearanceAt(0);
       expect(atStart.radius, 18);
       expect(atStart.stroke, 1);
-      expect(flight.iconSizeAt(0),
-          closeTo(pageRect.width * playerCoverFallbackIconRatio, 1e-9));
+      expect(
+        flight.iconSizeAt(0),
+        closeTo(pageRect.width * playerCoverFallbackIconRatio, 1e-9),
+      );
 
       final atEnd = flight.appearanceAt(1);
       expect(atEnd.radius, 8);
@@ -164,8 +166,7 @@ void main() {
             child: CoverCard(
               size: size,
               appearance: appearance,
-              content: (context, clip, iconSize) =>
-                  MoliaMark(size: iconSize),
+              content: (context, clip, iconSize) => MoliaMark(size: iconSize),
             ),
           ),
         ),
@@ -174,8 +175,9 @@ void main() {
 
     BoxDecoration decorationOf(WidgetTester tester) {
       final container = tester.widget<Container>(
-        find.byWidgetPredicate((widget) =>
-            widget is Container && widget.decoration is BoxDecoration),
+        find.byWidgetPredicate(
+          (widget) => widget is Container && widget.decoration is BoxDecoration,
+        ),
       );
       return container.decoration! as BoxDecoration;
     }
@@ -185,8 +187,7 @@ void main() {
       return clip.borderRadius as BorderRadius;
     }
 
-    testWidgets('播放页端：r18 + 1px 描边 + 0.28 阴影、裁剪 17、图标 0.35×边长',
-        (tester) async {
+    testWidgets('播放页端：r18 + 1px 描边 + 0.28 阴影、裁剪 17、图标 0.35×边长', (tester) async {
       await pumpCard(tester, CoverAppearance.page);
       final decoration = decorationOf(tester);
       expect(decoration.borderRadius, BorderRadius.circular(18));

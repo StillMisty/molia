@@ -58,8 +58,11 @@ void main() {
     await prefs.remove(kLxSourceOrder.name);
     await prefs.remove(kLxChannelDisabled.name);
     await preferences.load();
-    expect(preferences.preferredQuality, '320k',
-        reason: '音质键缺失回落到键默认值（合法值，与迁移前一致）');
+    expect(
+      preferences.preferredQuality,
+      '320k',
+      reason: '音质键缺失回落到键默认值（合法值，与迁移前一致）',
+    );
     expect(preferences.sourceOrder, ['wy'], reason: '空顺序表按「保留已有」处理');
     expect(preferences.disabledChannels, {'mg'}, reason: '空停用表按「保留已有」处理');
   });
@@ -182,7 +185,9 @@ void main() {
 
     expect(() => preferences.sourceOrder.add('tx'), throwsUnsupportedError);
     expect(
-        () => preferences.disabledChannels.add('tx'), throwsUnsupportedError);
+      () => preferences.disabledChannels.add('tx'),
+      throwsUnsupportedError,
+    );
   });
 
   test('写失败吞错：内存状态生效、不打断交互', () async {

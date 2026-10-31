@@ -73,7 +73,9 @@ class KgAlbum {
     final data = songs['data'];
     if (data is! Map) throw albumPlatformFailure('kg', '专辑数据结构不符');
 
-    final infoData = (info is Map && info['data'] is Map) ? info['data'] as Map : const {};
+    final infoData = (info is Map && info['data'] is Map)
+        ? info['data'] as Map
+        : const {};
     final albumName = infoData['albumname']?.toString() ?? '';
     final artist = infoData['singername']?.toString() ?? '';
     final coverUrl = kgCoverUrlOf(infoData);
@@ -114,12 +116,11 @@ class KgAlbum {
     required String albumId,
     String fallbackArtist = '',
     String? img,
-  }) =>
-      KgSearch.parseListSong(
-        raw,
-        albumName: albumName,
-        albumId: albumId,
-        fallbackArtist: fallbackArtist,
-        img: img,
-      );
+  }) => KgSearch.parseListSong(
+    raw,
+    albumName: albumName,
+    albumId: albumId,
+    fallbackArtist: fallbackArtist,
+    img: img,
+  );
 }

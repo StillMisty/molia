@@ -19,87 +19,700 @@ class TxQrc {
 
   /// QRC 固定密钥 ASCII：`!@#)(*$%123ZXC!@!@#)(NHL`。
   static final Uint8List _qrcKey = Uint8List.fromList(const [
-    0x21, 0x40, 0x23, 0x29, 0x28, 0x2a, 0x24, 0x25, 0x31, 0x32, 0x33,
-    0x5a, 0x58, 0x43, 0x21, 0x40, 0x21, 0x40, 0x23, 0x29, 0x28, 0x4e,
-    0x48, 0x4c,
+    0x21,
+    0x40,
+    0x23,
+    0x29,
+    0x28,
+    0x2a,
+    0x24,
+    0x25,
+    0x31,
+    0x32,
+    0x33,
+    0x5a,
+    0x58,
+    0x43,
+    0x21,
+    0x40,
+    0x21,
+    0x40,
+    0x23,
+    0x29,
+    0x28,
+    0x4e,
+    0x48,
+    0x4c,
   ]);
 
   /// 非标准 DES S-box（与原 C++ 插件逐字节一致，见类注释）。
   static const List<List<int>> _sbox = [
     [
-      14, 4, 13, 1, 2, 15, 11, 8, 3, 10, 6, 12, 5, 9, 0, 7, 0, 15, 7, 4,
-      14, 2, 13, 1, 10, 6, 12, 11, 9, 5, 3, 8, 4, 1, 14, 8, 13, 6, 2, 11,
-      15, 12, 9, 7, 3, 10, 5, 0, 15, 12, 8, 2, 4, 9, 1, 7, 5, 11, 3, 14,
-      10, 0, 6, 13,
+      14,
+      4,
+      13,
+      1,
+      2,
+      15,
+      11,
+      8,
+      3,
+      10,
+      6,
+      12,
+      5,
+      9,
+      0,
+      7,
+      0,
+      15,
+      7,
+      4,
+      14,
+      2,
+      13,
+      1,
+      10,
+      6,
+      12,
+      11,
+      9,
+      5,
+      3,
+      8,
+      4,
+      1,
+      14,
+      8,
+      13,
+      6,
+      2,
+      11,
+      15,
+      12,
+      9,
+      7,
+      3,
+      10,
+      5,
+      0,
+      15,
+      12,
+      8,
+      2,
+      4,
+      9,
+      1,
+      7,
+      5,
+      11,
+      3,
+      14,
+      10,
+      0,
+      6,
+      13,
     ],
     [
-      15, 1, 8, 14, 6, 11, 3, 4, 9, 7, 2, 13, 12, 0, 5, 10, 3, 13, 4, 7,
-      15, 2, 8, 15, 12, 0, 1, 10, 6, 9, 11, 5, 0, 14, 7, 11, 10, 4, 13, 1,
-      5, 8, 12, 6, 9, 3, 2, 15, 13, 8, 10, 1, 3, 15, 4, 2, 11, 6, 7, 12,
-      0, 5, 14, 9,
+      15,
+      1,
+      8,
+      14,
+      6,
+      11,
+      3,
+      4,
+      9,
+      7,
+      2,
+      13,
+      12,
+      0,
+      5,
+      10,
+      3,
+      13,
+      4,
+      7,
+      15,
+      2,
+      8,
+      15,
+      12,
+      0,
+      1,
+      10,
+      6,
+      9,
+      11,
+      5,
+      0,
+      14,
+      7,
+      11,
+      10,
+      4,
+      13,
+      1,
+      5,
+      8,
+      12,
+      6,
+      9,
+      3,
+      2,
+      15,
+      13,
+      8,
+      10,
+      1,
+      3,
+      15,
+      4,
+      2,
+      11,
+      6,
+      7,
+      12,
+      0,
+      5,
+      14,
+      9,
     ],
     [
-      10, 0, 9, 14, 6, 3, 15, 5, 1, 13, 12, 7, 11, 4, 2, 8, 13, 7, 0, 9,
-      3, 4, 6, 10, 2, 8, 5, 14, 12, 11, 15, 1, 13, 6, 4, 9, 8, 15, 3, 0,
-      11, 1, 2, 12, 5, 10, 14, 7, 1, 10, 13, 0, 6, 9, 8, 7, 4, 15, 14, 3,
-      11, 5, 2, 12,
+      10,
+      0,
+      9,
+      14,
+      6,
+      3,
+      15,
+      5,
+      1,
+      13,
+      12,
+      7,
+      11,
+      4,
+      2,
+      8,
+      13,
+      7,
+      0,
+      9,
+      3,
+      4,
+      6,
+      10,
+      2,
+      8,
+      5,
+      14,
+      12,
+      11,
+      15,
+      1,
+      13,
+      6,
+      4,
+      9,
+      8,
+      15,
+      3,
+      0,
+      11,
+      1,
+      2,
+      12,
+      5,
+      10,
+      14,
+      7,
+      1,
+      10,
+      13,
+      0,
+      6,
+      9,
+      8,
+      7,
+      4,
+      15,
+      14,
+      3,
+      11,
+      5,
+      2,
+      12,
     ],
     [
-      7, 13, 14, 3, 0, 6, 9, 10, 1, 2, 8, 5, 11, 12, 4, 15, 13, 8, 11, 5,
-      6, 15, 0, 3, 4, 7, 2, 12, 1, 10, 14, 9, 10, 6, 9, 0, 12, 11, 7, 13,
-      15, 1, 3, 14, 5, 2, 8, 4, 3, 15, 0, 6, 10, 10, 13, 8, 9, 4, 5, 11,
-      12, 7, 2, 14,
+      7,
+      13,
+      14,
+      3,
+      0,
+      6,
+      9,
+      10,
+      1,
+      2,
+      8,
+      5,
+      11,
+      12,
+      4,
+      15,
+      13,
+      8,
+      11,
+      5,
+      6,
+      15,
+      0,
+      3,
+      4,
+      7,
+      2,
+      12,
+      1,
+      10,
+      14,
+      9,
+      10,
+      6,
+      9,
+      0,
+      12,
+      11,
+      7,
+      13,
+      15,
+      1,
+      3,
+      14,
+      5,
+      2,
+      8,
+      4,
+      3,
+      15,
+      0,
+      6,
+      10,
+      10,
+      13,
+      8,
+      9,
+      4,
+      5,
+      11,
+      12,
+      7,
+      2,
+      14,
     ],
     [
-      2, 12, 4, 1, 7, 10, 11, 6, 8, 5, 3, 15, 13, 0, 14, 9, 14, 11, 2, 12,
-      4, 7, 13, 1, 5, 0, 15, 10, 3, 9, 8, 6, 4, 2, 1, 11, 10, 13, 7, 8,
-      15, 9, 12, 5, 6, 3, 0, 14, 11, 8, 12, 7, 1, 14, 2, 13, 6, 15, 0, 9,
-      10, 4, 5, 3,
+      2,
+      12,
+      4,
+      1,
+      7,
+      10,
+      11,
+      6,
+      8,
+      5,
+      3,
+      15,
+      13,
+      0,
+      14,
+      9,
+      14,
+      11,
+      2,
+      12,
+      4,
+      7,
+      13,
+      1,
+      5,
+      0,
+      15,
+      10,
+      3,
+      9,
+      8,
+      6,
+      4,
+      2,
+      1,
+      11,
+      10,
+      13,
+      7,
+      8,
+      15,
+      9,
+      12,
+      5,
+      6,
+      3,
+      0,
+      14,
+      11,
+      8,
+      12,
+      7,
+      1,
+      14,
+      2,
+      13,
+      6,
+      15,
+      0,
+      9,
+      10,
+      4,
+      5,
+      3,
     ],
     [
-      12, 1, 10, 15, 9, 2, 6, 8, 0, 13, 3, 4, 14, 7, 5, 11, 10, 15, 4, 2,
-      7, 12, 9, 5, 6, 1, 13, 14, 0, 11, 3, 8, 9, 14, 15, 5, 2, 8, 12, 3,
-      7, 0, 4, 10, 1, 13, 11, 6, 4, 3, 2, 12, 9, 5, 15, 10, 11, 14, 1, 7,
-      6, 0, 8, 13,
+      12,
+      1,
+      10,
+      15,
+      9,
+      2,
+      6,
+      8,
+      0,
+      13,
+      3,
+      4,
+      14,
+      7,
+      5,
+      11,
+      10,
+      15,
+      4,
+      2,
+      7,
+      12,
+      9,
+      5,
+      6,
+      1,
+      13,
+      14,
+      0,
+      11,
+      3,
+      8,
+      9,
+      14,
+      15,
+      5,
+      2,
+      8,
+      12,
+      3,
+      7,
+      0,
+      4,
+      10,
+      1,
+      13,
+      11,
+      6,
+      4,
+      3,
+      2,
+      12,
+      9,
+      5,
+      15,
+      10,
+      11,
+      14,
+      1,
+      7,
+      6,
+      0,
+      8,
+      13,
     ],
     [
-      4, 11, 2, 14, 15, 0, 8, 13, 3, 12, 9, 7, 5, 10, 6, 1, 13, 0, 11, 7,
-      4, 9, 1, 10, 14, 3, 5, 12, 2, 15, 8, 6, 1, 4, 11, 13, 12, 3, 7, 14,
-      10, 15, 6, 8, 0, 5, 9, 2, 6, 11, 13, 8, 1, 4, 10, 7, 9, 5, 0, 15,
-      14, 2, 3, 12,
+      4,
+      11,
+      2,
+      14,
+      15,
+      0,
+      8,
+      13,
+      3,
+      12,
+      9,
+      7,
+      5,
+      10,
+      6,
+      1,
+      13,
+      0,
+      11,
+      7,
+      4,
+      9,
+      1,
+      10,
+      14,
+      3,
+      5,
+      12,
+      2,
+      15,
+      8,
+      6,
+      1,
+      4,
+      11,
+      13,
+      12,
+      3,
+      7,
+      14,
+      10,
+      15,
+      6,
+      8,
+      0,
+      5,
+      9,
+      2,
+      6,
+      11,
+      13,
+      8,
+      1,
+      4,
+      10,
+      7,
+      9,
+      5,
+      0,
+      15,
+      14,
+      2,
+      3,
+      12,
     ],
     [
-      13, 2, 8, 4, 6, 15, 11, 1, 10, 9, 3, 14, 5, 0, 12, 7, 1, 15, 13, 8,
-      10, 3, 7, 4, 12, 5, 6, 11, 0, 14, 9, 2, 7, 11, 4, 1, 9, 12, 14, 2,
-      0, 6, 10, 13, 15, 3, 5, 8, 2, 1, 14, 7, 4, 10, 8, 13, 15, 12, 9, 0,
-      3, 5, 6, 11,
+      13,
+      2,
+      8,
+      4,
+      6,
+      15,
+      11,
+      1,
+      10,
+      9,
+      3,
+      14,
+      5,
+      0,
+      12,
+      7,
+      1,
+      15,
+      13,
+      8,
+      10,
+      3,
+      7,
+      4,
+      12,
+      5,
+      6,
+      11,
+      0,
+      14,
+      9,
+      2,
+      7,
+      11,
+      4,
+      1,
+      9,
+      12,
+      14,
+      2,
+      0,
+      6,
+      10,
+      13,
+      15,
+      3,
+      5,
+      8,
+      2,
+      1,
+      14,
+      7,
+      4,
+      10,
+      8,
+      13,
+      15,
+      12,
+      9,
+      0,
+      3,
+      5,
+      6,
+      11,
     ],
   ];
 
   static const List<int> _keyRndShift = [
-    1, 1, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    1,
+    2,
+    2,
+    2,
+    2,
+    2,
+    2,
+    1,
   ];
   static const List<int> _keyPermC = [
-    56, 48, 40, 32, 24, 16, 8, 0, 57, 49, 41, 33, 25, 17, 9, 1, 58, 50,
-    42, 34, 26, 18, 10, 2, 59, 51, 43, 35,
+    56,
+    48,
+    40,
+    32,
+    24,
+    16,
+    8,
+    0,
+    57,
+    49,
+    41,
+    33,
+    25,
+    17,
+    9,
+    1,
+    58,
+    50,
+    42,
+    34,
+    26,
+    18,
+    10,
+    2,
+    59,
+    51,
+    43,
+    35,
   ];
   static const List<int> _keyPermD = [
-    62, 54, 46, 38, 30, 22, 14, 6, 61, 53, 45, 37, 29, 21, 13, 5, 60, 52,
-    44, 36, 28, 20, 12, 4, 27, 19, 11, 3,
+    62,
+    54,
+    46,
+    38,
+    30,
+    22,
+    14,
+    6,
+    61,
+    53,
+    45,
+    37,
+    29,
+    21,
+    13,
+    5,
+    60,
+    52,
+    44,
+    36,
+    28,
+    20,
+    12,
+    4,
+    27,
+    19,
+    11,
+    3,
   ];
   static const List<int> _keyCompression = [
-    13, 16, 10, 23, 0, 4, 2, 27, 14, 5, 20, 9, 22, 18, 11, 3, 25, 7, 15,
-    6, 26, 19, 12, 1, 40, 51, 30, 36, 46, 54, 29, 39, 50, 44, 32, 47, 43,
-    48, 38, 55, 33, 52, 45, 41, 49, 35, 28, 31,
+    13,
+    16,
+    10,
+    23,
+    0,
+    4,
+    2,
+    27,
+    14,
+    5,
+    20,
+    9,
+    22,
+    18,
+    11,
+    3,
+    25,
+    7,
+    15,
+    6,
+    26,
+    19,
+    12,
+    1,
+    40,
+    51,
+    30,
+    36,
+    46,
+    54,
+    29,
+    39,
+    50,
+    44,
+    32,
+    47,
+    43,
+    48,
+    38,
+    55,
+    33,
+    52,
+    45,
+    41,
+    49,
+    35,
+    28,
+    31,
   ];
 
   /// 全部以无符号 32 位处理，与 JS `>>> 0` / C++ `uint32_t` 一致。
   static int _u32(int value) => value & 0xFFFFFFFF;
 
-  static int _bitnum(List<int> a, int b, int c) =>
-      _u32((((a[(b ~/ 32) * 4 + 3 - ((b % 32) ~/ 8)] >>> (7 - (b % 8))) & 1)
-              << c)
-          .toUnsigned(32));
+  static int _bitnum(List<int> a, int b, int c) => _u32(
+    (((a[(b ~/ 32) * 4 + 3 - ((b % 32) ~/ 8)] >>> (7 - (b % 8))) & 1) << c)
+        .toUnsigned(32),
+  );
 
   static int _bitnumIntr(int a, int b, int c) =>
       _u32(((a >>> (31 - b)) & 1) << c);
@@ -182,77 +795,85 @@ class TxQrc {
   }
 
   static void _inversePermutation(int s0, int s1, Uint8List out) {
-    out[3] = (_bitnumIntr(s1, 7, 7) |
-        _bitnumIntr(s0, 7, 6) |
-        _bitnumIntr(s1, 15, 5) |
-        _bitnumIntr(s0, 15, 4) |
-        _bitnumIntr(s1, 23, 3) |
-        _bitnumIntr(s0, 23, 2) |
-        _bitnumIntr(s1, 31, 1) |
-        _bitnumIntr(s0, 31, 0)) &
+    out[3] =
+        (_bitnumIntr(s1, 7, 7) |
+            _bitnumIntr(s0, 7, 6) |
+            _bitnumIntr(s1, 15, 5) |
+            _bitnumIntr(s0, 15, 4) |
+            _bitnumIntr(s1, 23, 3) |
+            _bitnumIntr(s0, 23, 2) |
+            _bitnumIntr(s1, 31, 1) |
+            _bitnumIntr(s0, 31, 0)) &
         0xff;
-    out[2] = (_bitnumIntr(s1, 6, 7) |
-        _bitnumIntr(s0, 6, 6) |
-        _bitnumIntr(s1, 14, 5) |
-        _bitnumIntr(s0, 14, 4) |
-        _bitnumIntr(s1, 22, 3) |
-        _bitnumIntr(s0, 22, 2) |
-        _bitnumIntr(s1, 30, 1) |
-        _bitnumIntr(s0, 30, 0)) &
+    out[2] =
+        (_bitnumIntr(s1, 6, 7) |
+            _bitnumIntr(s0, 6, 6) |
+            _bitnumIntr(s1, 14, 5) |
+            _bitnumIntr(s0, 14, 4) |
+            _bitnumIntr(s1, 22, 3) |
+            _bitnumIntr(s0, 22, 2) |
+            _bitnumIntr(s1, 30, 1) |
+            _bitnumIntr(s0, 30, 0)) &
         0xff;
-    out[1] = (_bitnumIntr(s1, 5, 7) |
-        _bitnumIntr(s0, 5, 6) |
-        _bitnumIntr(s1, 13, 5) |
-        _bitnumIntr(s0, 13, 4) |
-        _bitnumIntr(s1, 21, 3) |
-        _bitnumIntr(s0, 21, 2) |
-        _bitnumIntr(s1, 29, 1) |
-        _bitnumIntr(s0, 29, 0)) &
+    out[1] =
+        (_bitnumIntr(s1, 5, 7) |
+            _bitnumIntr(s0, 5, 6) |
+            _bitnumIntr(s1, 13, 5) |
+            _bitnumIntr(s0, 13, 4) |
+            _bitnumIntr(s1, 21, 3) |
+            _bitnumIntr(s0, 21, 2) |
+            _bitnumIntr(s1, 29, 1) |
+            _bitnumIntr(s0, 29, 0)) &
         0xff;
-    out[0] = (_bitnumIntr(s1, 4, 7) |
-        _bitnumIntr(s0, 4, 6) |
-        _bitnumIntr(s1, 12, 5) |
-        _bitnumIntr(s0, 12, 4) |
-        _bitnumIntr(s1, 20, 3) |
-        _bitnumIntr(s0, 20, 2) |
-        _bitnumIntr(s1, 28, 1) |
-        _bitnumIntr(s0, 28, 0)) &
+    out[0] =
+        (_bitnumIntr(s1, 4, 7) |
+            _bitnumIntr(s0, 4, 6) |
+            _bitnumIntr(s1, 12, 5) |
+            _bitnumIntr(s0, 12, 4) |
+            _bitnumIntr(s1, 20, 3) |
+            _bitnumIntr(s0, 20, 2) |
+            _bitnumIntr(s1, 28, 1) |
+            _bitnumIntr(s0, 28, 0)) &
         0xff;
-    out[7] = (_bitnumIntr(s1, 3, 7) |
-        _bitnumIntr(s0, 3, 6) |
-        _bitnumIntr(s1, 11, 5) |
-        _bitnumIntr(s0, 11, 4) |
-        _bitnumIntr(s1, 19, 3) |
-        _bitnumIntr(s0, 19, 2) |
-        _bitnumIntr(s1, 27, 1) |
-        _bitnumIntr(s0, 27, 0)) &
+    out[7] =
+        (_bitnumIntr(s1, 3, 7) |
+            _bitnumIntr(s0, 3, 6) |
+            _bitnumIntr(s1, 11, 5) |
+            _bitnumIntr(s0, 11, 4) |
+            _bitnumIntr(s1, 19, 3) |
+            _bitnumIntr(s0, 19, 2) |
+            _bitnumIntr(s1, 27, 1) |
+            _bitnumIntr(s0, 27, 0)) &
         0xff;
-    out[6] = (_bitnumIntr(s1, 2, 7) |
-        _bitnumIntr(s0, 2, 6) |
-        _bitnumIntr(s1, 10, 5) |
-        _bitnumIntr(s0, 10, 4) |
-        _bitnumIntr(s1, 18, 3) |
-        _bitnumIntr(s0, 18, 2) |
-        _bitnumIntr(s1, 26, 1) |
-        _bitnumIntr(s0, 26, 0)) &
+    out[6] =
+        (_bitnumIntr(s1, 2, 7) |
+            _bitnumIntr(s0, 2, 6) |
+            _bitnumIntr(s1, 10, 5) |
+            _bitnumIntr(s0, 10, 4) |
+            _bitnumIntr(s1, 18, 3) |
+            _bitnumIntr(s0, 18, 2) |
+            _bitnumIntr(s1, 26, 1) |
+            _bitnumIntr(s0, 26, 0)) &
         0xff;
-    out[5] = (_bitnumIntr(s1, 1, 7) |
-        _bitnumIntr(s0, 1, 6) |
-        _bitnumIntr(s1, 9, 5) |
-        _bitnumIntr(s0, 9, 4) |
-        _bitnumIntr(s1, 17, 3) |
-        _bitnumIntr(s0, 17, 2) |
-        _bitnumIntr(s1, 25, 1) |
-        _bitnumIntr(s0, 25, 0)) &
+    out[5] =
+        (_bitnumIntr(s1, 1, 7) |
+            _bitnumIntr(s0, 1, 6) |
+            _bitnumIntr(s1, 9, 5) |
+            _bitnumIntr(s0, 9, 4) |
+            _bitnumIntr(s1, 17, 3) |
+            _bitnumIntr(s0, 17, 2) |
+            _bitnumIntr(s1, 25, 1) |
+            _bitnumIntr(s0, 25, 0)) &
         0xff;
-    out[4] = (_bitnumIntr(s1, 0, 7) |
-        _bitnumIntr(s0, 0, 6) |
-        _bitnumIntr(s1, 8, 5) |
-        _bitnumIntr(s0, 8, 4) |
-        _bitnumIntr(s1, 16, 3) |
-        _bitnumIntr(s0, 16, 2) |
-        _bitnumIntr(s1, 24, 1) |
-        _bitnumIntr(s0, 24, 0)) &
+    out[4] =
+        (_bitnumIntr(s1, 0, 7) |
+            _bitnumIntr(s0, 0, 6) |
+            _bitnumIntr(s1, 8, 5) |
+            _bitnumIntr(s0, 8, 4) |
+            _bitnumIntr(s1, 16, 3) |
+            _bitnumIntr(s0, 16, 2) |
+            _bitnumIntr(s1, 24, 1) |
+            _bitnumIntr(s0, 24, 0)) &
         0xff;
   }
 
@@ -300,19 +921,23 @@ class TxQrc {
 
     final s = _u32(
       (_sbox[0][_sboxBit(lrgstate[0] >>> 2)] << 28) |
-          (_sbox[1][_sboxBit(((lrgstate[0] & 0x03) << 4) |
-                  (lrgstate[1] >>> 4))] <<
+          (_sbox[1][_sboxBit(
+                ((lrgstate[0] & 0x03) << 4) | (lrgstate[1] >>> 4),
+              )] <<
               24) |
-          (_sbox[2][_sboxBit(((lrgstate[1] & 0x0F) << 2) |
-                  (lrgstate[2] >>> 6))] <<
+          (_sbox[2][_sboxBit(
+                ((lrgstate[1] & 0x0F) << 2) | (lrgstate[2] >>> 6),
+              )] <<
               20) |
           (_sbox[3][_sboxBit(lrgstate[2] & 0x3F)] << 16) |
           (_sbox[4][_sboxBit(lrgstate[3] >>> 2)] << 12) |
-          (_sbox[5][_sboxBit(((lrgstate[3] & 0x03) << 4) |
-                  (lrgstate[4] >>> 4))] <<
+          (_sbox[5][_sboxBit(
+                ((lrgstate[3] & 0x03) << 4) | (lrgstate[4] >>> 4),
+              )] <<
               8) |
-          (_sbox[6][_sboxBit(((lrgstate[4] & 0x0F) << 2) |
-                  (lrgstate[5] >>> 6))] <<
+          (_sbox[6][_sboxBit(
+                ((lrgstate[4] & 0x0F) << 2) | (lrgstate[5] >>> 6),
+              )] <<
               4) |
           _sbox[7][_sboxBit(lrgstate[5] & 0x3F)],
     );
@@ -353,7 +978,11 @@ class TxQrc {
     );
   }
 
-  static void _desCrypt(List<int> input, List<Uint8List> schedule, Uint8List output) {
+  static void _desCrypt(
+    List<int> input,
+    List<Uint8List> schedule,
+    Uint8List output,
+  ) {
     var perm = _initialPermutation(input);
     var s0 = perm[0];
     var s1 = perm[1];
@@ -375,17 +1004,28 @@ class TxQrc {
       d = _u32(d | _bitnum(key, _keyPermD[i], 31 - i));
     }
     for (var i = 0; i < 16; i++) {
-      c = _u32((_u32(c << _keyRndShift[i]) | (c >>> (28 - _keyRndShift[i]))) &
-          0xFFFFFFF0);
-      d = _u32((_u32(d << _keyRndShift[i]) | (d >>> (28 - _keyRndShift[i]))) &
-          0xFFFFFFF0);
+      c = _u32(
+        (_u32(c << _keyRndShift[i]) | (c >>> (28 - _keyRndShift[i]))) &
+            0xFFFFFFF0,
+      );
+      d = _u32(
+        (_u32(d << _keyRndShift[i]) | (d >>> (28 - _keyRndShift[i]))) &
+            0xFFFFFFF0,
+      );
       final togen = mode == _desDecrypt ? 15 - i : i;
       for (var j = 0; j < 24; j++) {
-        schedule[togen][j ~/ 8] |= _bitnumIntr(c, _keyCompression[j], 7 - (j % 8));
+        schedule[togen][j ~/ 8] |= _bitnumIntr(
+          c,
+          _keyCompression[j],
+          7 - (j % 8),
+        );
       }
       for (var j = 24; j < 48; j++) {
-        schedule[togen][j ~/ 8] |=
-            _bitnumIntr(d, _keyCompression[j] - 27, 7 - (j % 8));
+        schedule[togen][j ~/ 8] |= _bitnumIntr(
+          d,
+          _keyCompression[j] - 27,
+          7 - (j % 8),
+        );
       }
     }
     return schedule;
@@ -424,11 +1064,7 @@ class TxQrc {
   ) {
     final block = Uint8List(8);
     for (var i = 0; i + 8 <= data.length; i += 8) {
-      _tripleDesCrypt(
-        Uint8List.sublistView(data, i, i + 8),
-        schedule,
-        block,
-      );
+      _tripleDesCrypt(Uint8List.sublistView(data, i, i + 8), schedule, block);
       data.setAll(i, block);
     }
     return data;
@@ -461,9 +1097,7 @@ class TxQrc {
   ///
   /// [compress] 默认使用 zlib 压缩；测试可注入原字节。
   static String encode(String text, {List<int> Function(List<int>)? compress}) {
-    final data = Uint8List.fromList(
-      utf8.encode(text),
-    );
+    final data = Uint8List.fromList(utf8.encode(text));
     final compressed = compress == null
         ? zlib_impl.zlibDeflate(data)
         : compress(data);

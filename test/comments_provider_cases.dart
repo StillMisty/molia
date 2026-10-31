@@ -25,7 +25,9 @@ void main() {
   CommentPage pageOf(CommentKind kind, int page, {int total = 45}) =>
       CommentPage.fromPage(
         kind: kind,
-        items: [for (var i = 0; i < 20; i++) commentOf('${kind.name}-$page-$i')],
+        items: [
+          for (var i = 0; i < 20; i++) commentOf('${kind.name}-$page-$i'),
+        ],
         page: page,
         limit: CommentsProvider.pageSize,
         total: total,
@@ -38,10 +40,11 @@ void main() {
   CommentsProvider build({
     SourceCapabilities caps = supportedCaps,
     Future<CommentPage> Function(CommentKind kind, int page, int limit)?
-        onComments,
+    onComments,
   }) {
     source = FakeMusicSource('wy', capabilities: caps)
-      ..onComments = onComments ?? (kind, page, limit) async => pageOf(kind, page);
+      ..onComments =
+          onComments ?? (kind, page, limit) async => pageOf(kind, page);
     registry = FakeSourceRegistry({'wy': source});
     provider = CommentsProvider(
       service: CommentsService(registry: registry),
@@ -107,15 +110,17 @@ void main() {
 
   test('首屏失败：错误态（failure 归一化）+ retry 恢复', () async {
     var shouldFail = true;
-    build(onComments: (kind, page, limit) async {
-      if (shouldFail) {
-        throw const SourceFailure(
-          kind: FailureKind.network,
-          message: 'network down',
-        );
-      }
-      return pageOf(kind, page);
-    });
+    build(
+      onComments: (kind, page, limit) async {
+        if (shouldFail) {
+          throw const SourceFailure(
+            kind: FailureKind.network,
+            message: 'network down',
+          );
+        }
+        return pageOf(kind, page);
+      },
+    );
 
     await provider.open(track);
     final failed = provider.stateOf(CommentKind.hot);
@@ -134,12 +139,17 @@ void main() {
 
   test('加载更多失败：保留已加载项 + loadMoreFailed，重试可恢复', () async {
     var failPage2 = true;
-    build(onComments: (kind, page, limit) async {
-      if (page == 2 && failPage2) {
-        throw const SourceFailure(kind: FailureKind.timeout, message: 'timeout');
-      }
-      return pageOf(kind, page);
-    });
+    build(
+      onComments: (kind, page, limit) async {
+        if (page == 2 && failPage2) {
+          throw const SourceFailure(
+            kind: FailureKind.timeout,
+            message: 'timeout',
+          );
+        }
+        return pageOf(kind, page);
+      },
+    );
 
     await provider.open(track);
     await provider.loadMore();
@@ -167,12 +177,14 @@ void main() {
 
   test('刷新失败：保留上次已知的总数（tab 计数不闪没）', () async {
     var fail = false;
-    build(onComments: (kind, page, limit) async {
-      if (fail) {
-        throw const SourceFailure(kind: FailureKind.network, message: 'down');
-      }
-      return pageOf(kind, page);
-    });
+    build(
+      onComments: (kind, page, limit) async {
+        if (fail) {
+          throw const SourceFailure(kind: FailureKind.network, message: 'down');
+        }
+        return pageOf(kind, page);
+      },
+    );
     await provider.open(track);
     expect(provider.stateOf(CommentKind.hot).total, 45);
 
@@ -187,12 +199,14 @@ void main() {
 
   test('换曲目（换会话）：不沿用上一会话的总数', () async {
     var fail = false;
-    build(onComments: (kind, page, limit) async {
-      if (fail) {
-        throw const SourceFailure(kind: FailureKind.network, message: 'down');
-      }
-      return pageOf(kind, page);
-    });
+    build(
+      onComments: (kind, page, limit) async {
+        if (fail) {
+          throw const SourceFailure(kind: FailureKind.network, message: 'down');
+        }
+        return pageOf(kind, page);
+      },
+    );
     await provider.open(track);
     expect(provider.stateOf(CommentKind.hot).total, 45);
 

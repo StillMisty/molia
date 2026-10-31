@@ -13,19 +13,18 @@ void main() {
     int? journalHead,
     bool fresh = false,
     bool expected = true,
-  }) =>
-      SyncPeerCandidate(
-        deviceId: deviceId,
-        name: '',
-        host: host,
-        port: port,
-        addresses: addresses,
-        alternateHosts: alternateHosts,
-        snapshotId: snapshotId,
-        journalHead: journalHead,
-        snapshotFresh: fresh,
-        expected: expected,
-      );
+  }) => SyncPeerCandidate(
+    deviceId: deviceId,
+    name: '',
+    host: host,
+    port: port,
+    addresses: addresses,
+    alternateHosts: alternateHosts,
+    snapshotId: snapshotId,
+    journalHead: journalHead,
+    snapshotFresh: fresh,
+    expected: expected,
+  );
 
   test('合并：本轮观测的指纹优先于上一轮记忆', () {
     final stale = candidate(snapshotId: 'old', journalHead: 3);
@@ -94,11 +93,7 @@ void main() {
       alternates: const ['2409:8a55::2', 'fe80::2'],
     );
 
-    expect(hosts, [
-      '192.168.1.10',
-      '10.0.0.2',
-      '2409:8a55::1',
-    ]);
+    expect(hosts, ['192.168.1.10', '10.0.0.2', '2409:8a55::1']);
   });
 
   test('地址排序：非 IP 字面量排最后，仍可作为兜底', () {

@@ -33,7 +33,10 @@ void main() {
   setUp(() async {
     server = FakeWebDavServer();
     await server.start();
-    network = SyncNetwork(passphrase: passphrase, webdavBaseUrl: server.baseUrl);
+    network = SyncNetwork(
+      passphrase: passphrase,
+      webdavBaseUrl: server.baseUrl,
+    );
   });
 
   tearDown(() async {
@@ -67,8 +70,11 @@ void main() {
     }
     final chunks = _names(server, 'devA', '.chunk.msync').toList()..sort();
     expect(chunks, hasLength(3), reason: '一次变更一个块（不是整窗重写）');
-    expect(_names(server, 'devA', '.snapshot.msync'), hasLength(1),
-        reason: '快照只在引导 / 硬上限重写时发布');
+    expect(
+      _names(server, 'devA', '.snapshot.msync'),
+      hasLength(1),
+      reason: '快照只在引导 / 硬上限重写时发布',
+    );
 
     // 回执往返：A 的名册里学到 B 已消费到哪（对端 ack 进入 ackedSeq）。
     for (var i = 0; i < 2; i++) {
@@ -117,7 +123,10 @@ void main() {
 }
 
 /// 某台设备的远端文件（文件名形如 `<deviceId>.<...>`）。
-Iterable<String> _names(FakeWebDavServer server, String device, String suffix) =>
-    server.files.keys.where(
-      (name) => name.startsWith('$device.') && name.endsWith(suffix),
-    );
+Iterable<String> _names(
+  FakeWebDavServer server,
+  String device,
+  String suffix,
+) => server.files.keys.where(
+  (name) => name.startsWith('$device.') && name.endsWith(suffix),
+);

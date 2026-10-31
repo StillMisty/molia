@@ -4,10 +4,7 @@ import 'package:molia/widgets/app_color_picker.dart';
 /// 任意颜色选择器的 Hex 解析契约（6 位保留透明度 / 8 位 AARRGGBB）。
 void main() {
   test('#RRGGBB：保留传入透明度', () {
-    expect(
-      parseColorHex('#FF00FF', keepAlpha: 0.5),
-      (0x80 << 24) | 0xFF00FF,
-    );
+    expect(parseColorHex('#FF00FF', keepAlpha: 0.5), (0x80 << 24) | 0xFF00FF);
     expect(parseColorHex('ff00ff', keepAlpha: 1), 0xFFFF00FF);
   });
 

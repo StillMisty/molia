@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,10 +155,7 @@ class _FakeAudioPlayer extends AudioPlayer {
   }
 }
 
-SourceTrack _track({
-  int index = 0,
-  List<SourceQuality> qualities = const [],
-}) =>
+SourceTrack _track({int index = 0, List<SourceQuality> qualities = const []}) =>
     SourceTrack(
       sourceKey: 'test',
       origin: 'builtin',
@@ -218,10 +216,9 @@ void main() {
     );
     addTearDown(service.dispose);
     await service.setMode(mode);
-    await service.playTracks(
-      [for (var i = 0; i < trackCount; i++) _track(index: i)],
-      0,
-    );
+    await service.playTracks([
+      for (var i = 0; i < trackCount; i++) _track(index: i),
+    ], 0);
     await pumpEventQueue();
     expect(service.isPlaying, isTrue);
     return (service: service, player: player);
@@ -266,9 +263,7 @@ void main() {
       preferredQuality: () => '320k',
     );
     addTearDown(service.dispose);
-    await service.playTracks([
-      _track(qualities: _switchableQualities),
-    ], 0);
+    await service.playTracks([_track(qualities: _switchableQualities)], 0);
     await pumpEventQueue();
     await service.seek(const Duration(seconds: 10));
     await service.pause();
@@ -303,9 +298,7 @@ void main() {
       preferredQuality: () => '320k',
     );
     addTearDown(service.dispose);
-    await service.playTracks([
-      _track(qualities: _switchableQualities),
-    ], 0);
+    await service.playTracks([_track(qualities: _switchableQualities)], 0);
     await pumpEventQueue();
     await service.seek(const Duration(seconds: 10));
     await pumpEventQueue();
@@ -349,8 +342,11 @@ void main() {
     await pumpEventQueue();
 
     expect(player.calls, contains('seek:0'));
-    expect(player.platformPlays, playsBefore + 1,
-        reason: 'playing 仍为 true 时直接 play() 不会下发平台请求，必须先前置暂停');
+    expect(
+      player.platformPlays,
+      playsBefore + 1,
+      reason: 'playing 仍为 true 时直接 play() 不会下发平台请求，必须先前置暂停',
+    );
     expect(service.isPlaying, isTrue);
     expect(service.position, Duration.zero);
   });
@@ -426,11 +422,11 @@ void main() {
     expect(service.currentIndex, 1);
     expect(service.isPlaying, isTrue);
     expect(service.position, Duration.zero);
-    expect(
-      player.calls,
-      ['pause', 'setAudioSource', 'play'],
-      reason: '自动切歌前先暂停，下一首的 play 必须真正下发到平台',
-    );
+    expect(player.calls, [
+      'pause',
+      'setAudioSource',
+      'play',
+    ], reason: '自动切歌前先暂停，下一首的 play 必须真正下发到平台');
     expect(player.platformPlays, playsBefore + 1);
   });
 
@@ -600,16 +596,14 @@ void main() {
   test('桌面切到正在预取的下一首：复用在途任务，不另起 writer 重下', () async {
     final predownloader = _TaskPredownloader();
     final preloader = NextTrackPreloader(
-      resolver: (track, {String? quality}) async => PlayableStream(
-        Uri.parse('https://cdn.example/${track.id}.mp3'),
-      ),
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
       predownloader: predownloader,
     );
     final player = _FakeAudioPlayer();
     final service = LocalPlaybackService(
-      resolver: (track, {String? quality}) async => PlayableStream(
-        Uri.parse('https://cdn.example/${track.id}.mp3'),
-      ),
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('https://cdn.example/${track.id}.mp3')),
       player: player,
       nextTrackPreloader: preloader,
       audioCacheWriter: PlayingTrackCacheWriter(predownloader: predownloader),
@@ -619,8 +613,11 @@ void main() {
     final tracks = [_track(index: 0), _track(index: 1)];
     await service.playTracks(tracks, 0);
     await pumpEventQueue();
-    expect(preloader.isCacheWriteInFlight(tracks[1]), isTrue,
-        reason: '起播 A 后应开始预取 B');
+    expect(
+      preloader.isCacheWriteInFlight(tracks[1]),
+      isTrue,
+      reason: '起播 A 后应开始预取 B',
+    );
 
     await service.playQueueIndex(1);
     await pumpEventQueue();
@@ -631,5 +628,142 @@ void main() {
       reason: 'B 的写入由在途预取负责，不能再起 writer 重下同一首',
     );
     expect(predownloader.cancelled, isNot(contains(tracks[1].id)));
+  });
+
+  group('队列编辑', () {
+    List<String?> titlesOf(Iterable<SourceTrack> tracks) => [
+      for (final track in tracks) track.title,
+    ];
+
+    test('移除当前曲目之后的项：队列 / 下标 / 顺序 / revision 同步', () async {
+      final started = await start(trackCount: 4);
+      final service = started.service;
+      final before = service.queueRevision;
+
+      expect(service.removeQueueIndex(2), isTrue);
+      expect(titlesOf(service.queueTracks), ['测试曲目0', '测试曲目1', '测试曲目3']);
+      expect(service.currentIndex, 0);
+      expect(service.queueRevision, before + 1);
+      expect(titlesOf(service.upNextTracks), ['测试曲目1', '测试曲目3']);
+      // 当前曲目永远不可移除。
+      expect(service.removeQueueIndex(0), isFalse);
+      expect(service.removeQueueIndex(9), isFalse);
+      expect(service.queueTracks, hasLength(3));
+    });
+
+    test('移除当前曲目之前的项：currentIndex 前移，已播放顺序重映射', () async {
+      final started = await start(mode: PlayMode.sequential, trackCount: 4);
+      final service = started.service;
+      await service.skipToNext(); // 当前 1，播放顺序记录 0
+      await service.skipToNext(); // 当前 2，播放顺序 [0, 1]
+      expect(service.currentIndex, 2);
+
+      expect(service.removeQueueIndex(0), isTrue);
+      expect(service.currentIndex, 1);
+      expect(titlesOf(service.queueTracks), ['测试曲目1', '测试曲目2', '测试曲目3']);
+      // 栈里的 0 被移除、1 → 0：上一首仍是曲目 1（不是下标 0 的曲目 2）。
+      expect(service.previousSourceTrack?.title, '测试曲目1');
+    });
+
+    test('移动跨过当前曲目：当前下标平移，顺序栈按新下标重映射', () async {
+      final started = await start(mode: PlayMode.sequential, trackCount: 4);
+      final service = started.service;
+      await service.skipToNext(); // 当前 1（b），播放顺序 [0]
+      await service.skipToNext(); // 当前 2（c），播放顺序 [0, 1]
+
+      // 把队首 a 移到最后：b / c 各前移一格，当前 c 从 2 → 1。
+      expect(service.moveQueueIndex(0, 3), isTrue);
+      expect(titlesOf(service.queueTracks), [
+        '测试曲目1',
+        '测试曲目2',
+        '测试曲目3',
+        '测试曲目0',
+      ]);
+      expect(service.currentIndex, 1);
+      expect(
+        service.previousSourceTrack?.title,
+        '测试曲目1',
+        reason: '离开的 b 下标 1 → 0',
+      );
+      // 原地 / 越界 / 移动当前曲目都是 no-op。
+      expect(service.moveQueueIndex(0, 0), isFalse);
+      expect(service.moveQueueIndex(1, 2), isFalse);
+      expect(service.moveQueueIndex(0, 9), isFalse);
+    });
+
+    test('随机模式：移动是 no-op，移除仍可用且洗牌排列同步', () async {
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+        random: math.Random(7),
+      );
+      addTearDown(service.dispose);
+      await service.setMode(PlayMode.shuffle);
+      await service.playTracks([
+        for (var i = 0; i < 4; i++) _track(index: i),
+      ], 1);
+      await pumpEventQueue();
+
+      expect(service.moveQueueIndex(0, 2), isFalse);
+      expect(service.currentIndex, 1);
+
+      final removed = service.queueTracks[3].title;
+      expect(service.removeQueueIndex(3), isTrue);
+      expect(service.queueTracks, hasLength(3));
+      expect(
+        service.queueTracks.map((track) => track.title),
+        isNot(contains(removed)),
+      );
+      expect(
+        service.upNextTracks.map((track) => track.title),
+        isNot(contains(removed)),
+        reason: '洗牌排列不能继续保留已移除下标',
+      );
+      expect(service.currentIndex, 1);
+      expect(service.removeQueueIndex(service.currentIndex), isFalse);
+    });
+
+    test('队列编辑后刷新下一首预取：旧目标取消，新目标预载', () async {
+      final predownloader = _TaskPredownloader();
+      final preloader = NextTrackPreloader(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.title}.mp3')),
+        predownloader: predownloader,
+      );
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('https://cdn.example/${track.title}.mp3')),
+        player: player,
+        nextTrackPreloader: preloader,
+      );
+      addTearDown(service.dispose);
+
+      await service.playTracks([
+        _track(index: 0),
+        _track(index: 1),
+        _track(index: 2),
+      ], 0);
+      await pumpEventQueue();
+      expect(preloader.targetTrackId, _track(index: 1).id);
+
+      // 移除原下一首：新的 next 是曲目 2，旧目标必须取消并重新预载。
+      expect(service.removeQueueIndex(1), isTrue);
+      await pumpEventQueue();
+      expect(predownloader.cancelled, contains(_track(index: 1).id));
+      expect(preloader.targetTrackId, _track(index: 2).id);
+      expect(
+        predownloader.calls.map((track) => track.id),
+        contains(_track(index: 2).id),
+      );
+
+      // no-op 不触发重新预载。
+      final callsBefore = predownloader.calls.length;
+      expect(service.removeQueueIndex(9), isFalse);
+      await pumpEventQueue();
+      expect(predownloader.calls.length, callsBefore);
+    });
   });
 }

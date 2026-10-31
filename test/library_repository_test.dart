@@ -12,6 +12,7 @@ import 'package:molia/data/lxmc_decoder_io.dart'
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -21,37 +22,35 @@ void main() {
   late MoliaDatabase db;
   late LibraryRepository repository;
 
-  Uint8List lxmcBytes(Map<String, dynamic> payload) => Uint8List.fromList(
-        gzip.encode(utf8.encode(jsonEncode(payload))),
-      );
+  Uint8List lxmcBytes(Map<String, dynamic> payload) =>
+      Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode(payload))));
 
   Map<String, dynamic> lxmcPayload(
     List<Map<String, dynamic>> list, {
     String name = 'list__name_test',
-  }) =>
-      {
-        'type': 'playListPart_v2',
-        'data': {'id': 'x', 'name': name, 'list': list},
-      };
+  }) => {
+    'type': 'playListPart_v2',
+    'data': {'id': 'x', 'name': name, 'list': list},
+  };
 
   Map<String, dynamic> track(int id, {String source = 'wy'}) => {
-        'id': '${source}_$id',
-        'name': 'Song $id',
-        'singer': 'Artist $id',
-        'source': source,
-        'interval': '03:00',
-        'meta': {
-          'songId': id,
-          'albumName': 'Album $id',
-          'picUrl': 'https://img.example/$id.jpg',
-          'qualitys': [
-            {'type': '128k', 'size': '1 MiB'},
-          ],
-          '_qualitys': {
-            '320k': {'size': '2 MiB'},
-          },
-        },
-      };
+    'id': '${source}_$id',
+    'name': 'Song $id',
+    'singer': 'Artist $id',
+    'source': source,
+    'interval': '03:00',
+    'meta': {
+      'songId': id,
+      'albumName': 'Album $id',
+      'picUrl': 'https://img.example/$id.jpg',
+      'qualitys': [
+        {'type': '128k', 'size': '1 MiB'},
+      ],
+      '_qualitys': {
+        '320k': {'size': '2 MiB'},
+      },
+    },
+  };
 
   /// 超过 isolate 阈值的错误输入：确保仓库导入走异步解码路径。
   Uint8List largeInvalidJson() {
@@ -64,13 +63,13 @@ void main() {
   }
 
   Uint8List largeWrongRoot() => lxmcBytes({
-        'type': 'playList_v2',
-        'data': {
-          'id': 'x',
-          'name': 'x',
-          'list': [for (var i = 0; i < 4000; i++) track(i)],
-        },
-      });
+    'type': 'playList_v2',
+    'data': {
+      'id': 'x',
+      'name': 'x',
+      'list': [for (var i = 0; i < 4000; i++) track(i)],
+    },
+  });
 
   setUp(() async {
     db = openMemoryDatabase();
@@ -86,21 +85,21 @@ void main() {
   });
 
   PlayHistoryEntry history(String songId, {int? playedAt}) => PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: songId,
-        title: 'Song $songId',
-        artist: 'Artist',
-        album: 'Album',
-        coverUrl: 'https://img.example/$songId.jpg',
-        durationMs: 180000,
-        raw: {
-          'songId': songId,
-          'qualitys': [
-            {'type': '320k'},
-          ],
-        },
-        playedAt: playedAt ?? DateTime.now().millisecondsSinceEpoch,
-      );
+    sourceKey: 'wy',
+    songId: songId,
+    title: 'Song $songId',
+    artist: 'Artist',
+    album: 'Album',
+    coverUrl: 'https://img.example/$songId.jpg',
+    durationMs: 180000,
+    raw: {
+      'songId': songId,
+      'qualitys': [
+        {'type': '320k'},
+      ],
+    },
+    playedAt: playedAt ?? DateTime.now().millisecondsSinceEpoch,
+  );
 
   group('play_history', () {
     test('写入 + playedAt 倒序查询 + raw 往返保真', () async {
@@ -186,12 +185,12 @@ void main() {
       );
       addTearDown(fixed.dispose);
       PlaylistTrack track(String songId) => PlaylistTrack(
-            playlistId: 0,
-            sourceKey: 'wy',
-            songId: songId,
-            title: 'Song $songId',
-            addedAt: 1,
-          );
+        playlistId: 0,
+        sourceKey: 'wy',
+        songId: songId,
+        title: 'Song $songId',
+        addedAt: 1,
+      );
 
       expect(
         await fixed.addHistoryTracks([track('1'), track('2'), track('3')]),
@@ -204,15 +203,22 @@ void main() {
 
       // 显式基准：调用方只给批内起点，偏移仍由写路径负责。
       await fixed.addHistoryTracks([track('4'), track('5')], playedAt: 2000);
-      expect(
-        (await fixed.listHistory()).map((entry) => entry.songId),
-        ['5', '4', '3', '2', '1'],
-      );
+      expect((await fixed.listHistory()).map((entry) => entry.songId), [
+        '5',
+        '4',
+        '3',
+        '2',
+        '1',
+      ]);
     });
 
     test('DB 顺序与 LibraryHistoryOrder.resortByRecency 等价', () async {
-      for (final (index, playedAt)
-          in [(0, 100), (1, 400), (2, 300), (3, 200)]) {
+      for (final (index, playedAt) in [
+        (0, 100),
+        (1, 400),
+        (2, 300),
+        (3, 200),
+      ]) {
         await repository.addHistoryEntry(
           history('${index + 1}', playedAt: playedAt),
         );
@@ -320,23 +326,24 @@ void main() {
       final source = await repository.createPlaylist('Source');
       final target = await repository.createPlaylist('Target');
       PlaylistTrack track(String songId) => PlaylistTrack(
-            playlistId: source,
-            sourceKey: 'wy',
-            songId: songId,
-            title: 'T$songId',
-            raw: {'songId': songId},
-            addedAt: 1,
-          );
+        playlistId: source,
+        sourceKey: 'wy',
+        songId: songId,
+        title: 'T$songId',
+        raw: {'songId': songId},
+        addedAt: 1,
+      );
 
       for (final songId in ['1', '2', '3']) {
         await repository.addTrackToPlaylist(source, track(songId));
       }
       // 目标列表已有 '2'：批量复制只新增 '1'、'3'。
       await repository.addTrackToPlaylist(target, track('2'));
-      final added = await repository.addTracksToPlaylist(
-        target,
-        [track('1'), track('2'), track('3')],
-      );
+      final added = await repository.addTracksToPlaylist(target, [
+        track('1'),
+        track('2'),
+        track('3'),
+      ]);
       expect(added, 2);
       expect(
         (await repository.listPlaylistTracks(target)).map((e) => e.songId),
@@ -370,17 +377,17 @@ void main() {
 
     test('导入同名列表：创建 / 复用幂等 / 空导入不落库', () async {
       PlaylistTrack imported(String songId) => PlaylistTrack(
-            playlistId: 0,
-            sourceKey: 'wy',
-            songId: songId,
-            title: 'T$songId',
-            raw: {'songId': songId},
-            addedAt: 1,
-          );
-      final first = await repository.importTracks(
-        '外部歌单',
-        [imported('1'), imported('2')],
+        playlistId: 0,
+        sourceKey: 'wy',
+        songId: songId,
+        title: 'T$songId',
+        raw: {'songId': songId},
+        addedAt: 1,
       );
+      final first = await repository.importTracks('外部歌单', [
+        imported('1'),
+        imported('2'),
+      ]);
       expect(first.added, 2);
       expect(first.total, 2);
       expect(first.playlistId, greaterThan(0));
@@ -394,16 +401,18 @@ void main() {
       expect(first.rows.map((track) => track.sortOrder), [0, 1]);
       expect(first.rows.map((track) => track.addedAt), everyElement(1));
 
-      final again = await repository.importTracks(
-        '外部歌单',
-        [imported('1'), imported('2')],
-      );
+      final again = await repository.importTracks('外部歌单', [
+        imported('1'),
+        imported('2'),
+      ]);
       expect(again.playlistId, first.playlistId);
       expect(again.added, 0);
       expect(again.created, isFalse);
       expect(again.rows, isEmpty);
-      expect(await repository.listPlaylistTracks(first.playlistId),
-          hasLength(2));
+      expect(
+        await repository.listPlaylistTracks(first.playlistId),
+        hasLength(2),
+      );
 
       final empty = await repository.importTracks('空歌单', const []);
       expect(empty.playlistId, -1);
@@ -416,15 +425,15 @@ void main() {
 
   group('换源（原位替换）', () {
     PlaylistTrack track(String songId, {String source = 'wy'}) => PlaylistTrack(
-          playlistId: 0,
-          sourceKey: source,
-          songId: songId,
-          title: 'T$songId',
-          artist: 'A$songId',
-          album: 'B$songId',
-          raw: {'songId': songId, 'origin': source},
-          addedAt: 1,
-        );
+      playlistId: 0,
+      sourceKey: source,
+      songId: songId,
+      title: 'T$songId',
+      artist: 'A$songId',
+      album: 'B$songId',
+      raw: {'songId': songId, 'origin': source},
+      addedAt: 1,
+    );
 
     test('列表：保留位置与 sortOrder/addedAt，元数据与 raw 替换', () async {
       final id = await repository.createPlaylist('L');
@@ -469,18 +478,17 @@ void main() {
       await repository.addTrackToPlaylist(id, track('2'));
       await repository.addTrackToPlaylist(id, track('900', source: 'kg'));
 
-      final ok = await repository.replacePlaylistTrack(
-        id,
-        (sourceKey: 'wy', songId: '1'),
-        track('900', source: 'kg'),
-      );
+      final ok = await repository.replacePlaylistTrack(id, (
+        sourceKey: 'wy',
+        songId: '1',
+      ), track('900', source: 'kg'));
       expect(ok, isTrue);
 
       final after = await repository.listPlaylistTracks(id);
-      expect(
-        after.map((t) => '${t.sourceKey}:${t.songId}'),
-        ['kg:900', 'wy:2'],
-      );
+      expect(after.map((t) => '${t.sourceKey}:${t.songId}'), [
+        'kg:900',
+        'wy:2',
+      ]);
     });
 
     test('列表：旧键不存在返回 false 且不广播', () async {
@@ -489,11 +497,10 @@ void main() {
       final subscription = repository.changes.listen(events.add);
       addTearDown(subscription.cancel);
 
-      final ok = await repository.replacePlaylistTrack(
-        id,
-        (sourceKey: 'wy', songId: '404'),
-        track('900', source: 'kg'),
-      );
+      final ok = await repository.replacePlaylistTrack(id, (
+        sourceKey: 'wy',
+        songId: '404',
+      ), track('900', source: 'kg'));
       expect(ok, isFalse);
       await Future<void>.delayed(Duration.zero);
       expect(events, isEmpty);
@@ -552,10 +559,10 @@ void main() {
       expect(list.last.playedAt, 100);
 
       // 目标键（wy:2）已存在：删重复行后原位替换，仍保旧 playedAt。
-      final ok2 = await repository.replaceHistoryEntry(
-        (sourceKey: 'kg', songId: '900'),
-        history('2', playedAt: 888),
-      );
+      final ok2 = await repository.replaceHistoryEntry((
+        sourceKey: 'kg',
+        songId: '900',
+      ), history('2', playedAt: 888));
       expect(ok2, isTrue);
       list = await repository.listHistory();
       expect(list.map((e) => '${e.sourceKey}:${e.songId}'), ['wy:2']);
@@ -597,7 +604,8 @@ void main() {
   group('.lxmc 导入', () {
     test('真实夹具导入 1018 首 + 重复导入幂等', () async {
       final bytes = Uint8List.fromList(
-          File('test/fixtures/lx_list_love.lxmc').readAsBytesSync());
+        File('test/fixtures/lx_list_love.lxmc').readAsBytesSync(),
+      );
       // 夹具压缩后 >64KB：走异步解码，与同步结果对齐后再落库。
       expect(bytes.length, greaterThan(lxmcDecodeIsolateThreshold));
       expect(shouldDecodeLxmcBytesOffThread(bytes), isTrue);
@@ -629,18 +637,26 @@ void main() {
       expect(again.playlistId, result.playlistId);
       expect(again.reusedPlaylist, isTrue);
       expect(again.imported, 0);
-      expect(await repository.listPlaylistTracks(result.playlistId),
-          hasLength(1018));
+      expect(
+        await repository.listPlaylistTracks(result.playlistId),
+        hasLength(1018),
+      );
       expect(await repository.listPlaylists(), hasLength(1));
     });
 
     test('合成夹具：跳过非法条目并保持顺序', () async {
       final result = await repository.importLxmcBytes(
-        lxmcBytes(lxmcPayload([
-          track(1),
-          {'id': 'wy_2', 'name': 'No source', 'meta': {'songId': 2}},
-          track(3),
-        ])),
+        lxmcBytes(
+          lxmcPayload([
+            track(1),
+            {
+              'id': 'wy_2',
+              'name': 'No source',
+              'meta': {'songId': 2},
+            },
+            track(3),
+          ]),
+        ),
       );
       expect(result.total, 2);
       expect(result.imported, 2);
@@ -652,8 +668,13 @@ void main() {
     test('无可导入曲目 → LxmcDecodeException(no_tracks)', () async {
       expect(
         () => repository.importLxmcBytes(lxmcBytes(lxmcPayload(const []))),
-        throwsA(isA<LxmcDecodeException>()
-            .having((e) => e.reason, 'reason', 'no_tracks')),
+        throwsA(
+          isA<LxmcDecodeException>().having(
+            (e) => e.reason,
+            'reason',
+            'no_tracks',
+          ),
+        ),
       );
     });
 
@@ -667,8 +688,13 @@ void main() {
         expect(shouldDecodeLxmcBytesOffThread(bytes), isTrue);
         await expectLater(
           repository.importLxmcBytes(bytes),
-          throwsA(isA<LxmcDecodeException>()
-              .having((e) => e.reason, 'reason', reason)),
+          throwsA(
+            isA<LxmcDecodeException>().having(
+              (e) => e.reason,
+              'reason',
+              reason,
+            ),
+          ),
         );
       }
     });
@@ -698,25 +724,33 @@ void main() {
 
     await repository.createPlaylist('L');
     final afterCreate = await repository.syncFingerprints(categories);
-    expect(afterCreate[SyncCategory.playlists],
-        isNot(empty[SyncCategory.playlists]));
+    expect(
+      afterCreate[SyncCategory.playlists],
+      isNot(empty[SyncCategory.playlists]),
+    );
 
     await repository.addHistoryEntry(history('1'));
     final afterHistory = await repository.syncFingerprints(categories);
-    expect(afterHistory[SyncCategory.history],
-        isNot(afterCreate[SyncCategory.history]));
+    expect(
+      afterHistory[SyncCategory.history],
+      isNot(afterCreate[SyncCategory.history]),
+    );
 
     // 缺 syncId 的行计入指纹：导出补齐后指纹随之变化（不会被缓存跳过）。
-    await db.into(db.playlists).insert(
-          PlaylistsCompanion.insert(name: '无 syncId', createdAt: 1),
-        );
+    await db
+        .into(db.playlists)
+        .insert(PlaylistsCompanion.insert(name: '无 syncId', createdAt: 1));
     final withNull = await repository.syncFingerprints(categories);
-    expect(withNull[SyncCategory.playlists],
-        isNot(afterHistory[SyncCategory.playlists]));
+    expect(
+      withNull[SyncCategory.playlists],
+      isNot(afterHistory[SyncCategory.playlists]),
+    );
     await repository.syncExportPlaylists();
     final backfilled = await repository.syncFingerprints(categories);
-    expect(backfilled[SyncCategory.playlists],
-        isNot(withNull[SyncCategory.playlists]));
+    expect(
+      backfilled[SyncCategory.playlists],
+      isNot(withNull[SyncCategory.playlists]),
+    );
   });
 
   test('同步指纹：同一物理值内 counter 变化也算变化', () async {
@@ -728,13 +762,13 @@ void main() {
     );
     addTearDown(fixed.dispose);
     final playlistId = await fixed.createPlaylist('L');
-    final first =
-        (await fixed.syncFingerprints([SyncCategory.playlists]))[
-            SyncCategory.playlists];
+    final first = (await fixed.syncFingerprints([
+      SyncCategory.playlists,
+    ]))[SyncCategory.playlists];
     await fixed.renamePlaylist(playlistId, 'L2');
-    final second =
-        (await fixed.syncFingerprints([SyncCategory.playlists]))[
-            SyncCategory.playlists];
+    final second = (await fixed.syncFingerprints([
+      SyncCategory.playlists,
+    ]))[SyncCategory.playlists];
     expect(second, isNot(first));
   });
 }

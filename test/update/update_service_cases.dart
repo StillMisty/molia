@@ -70,40 +70,38 @@ class _FakeInstaller implements UpdateInstaller {
   Future<InstallOutcome> installAndRestart({
     required String archivePath,
     required String archiveKind,
-  }) async =>
-      InstallOutcome.restartPending;
+  }) async => InstallOutcome.restartPending;
 }
 
 void main() {
   ReleaseAsset asset(String kind, String file) => ReleaseAsset(
-        platform: 'windows',
-        arch: 'x64',
-        kind: kind,
-        url: Uri.parse('https://example.com/$file'),
-        file: file,
-        sha256: 'abc',
-      );
+    platform: 'windows',
+    arch: 'x64',
+    kind: kind,
+    url: Uri.parse('https://example.com/$file'),
+    file: file,
+    sha256: 'abc',
+  );
 
   AppRelease windowsRelease() => AppRelease(
-        channel: UpdateChannel.beta,
-        version: '0.1.0-beta.2',
-        build: 2,
-        assets: [
-          asset('zip', 'molia-0.1.0-beta.2-windows-x64.zip'),
-          asset('exe', 'molia-0.1.0-beta.2-windows-x64-setup.exe'),
-        ],
-      );
+    channel: UpdateChannel.beta,
+    version: '0.1.0-beta.2',
+    build: 2,
+    assets: [
+      asset('zip', 'molia-0.1.0-beta.2-windows-x64.zip'),
+      asset('exe', 'molia-0.1.0-beta.2-windows-x64-setup.exe'),
+    ],
+  );
 
   UpdateService buildService(
     _FakeClient client,
     _FakeDownloader downloader,
     _FakeInstaller installer,
-  ) =>
-      UpdateService(
-        client: client,
-        downloader: downloader,
-        installer: installer,
-      );
+  ) => UpdateService(
+    client: client,
+    downloader: downloader,
+    installer: installer,
+  );
 
   test('安装版 Windows：优先下载 setup.exe（带 sha256 校验）', () async {
     final client = _FakeClient();
@@ -173,11 +171,13 @@ void main() {
         platform: const UpdatePlatformInfo(platform: 'linux', arch: 'x64'),
         onProgress: (_, _) {},
       ),
-      throwsA(isA<UpdateFailureException>().having(
-        (e) => e.kind,
-        'kind',
-        UpdateFailureKind.unsupported,
-      )),
+      throwsA(
+        isA<UpdateFailureException>().having(
+          (e) => e.kind,
+          'kind',
+          UpdateFailureKind.unsupported,
+        ),
+      ),
     );
   });
 

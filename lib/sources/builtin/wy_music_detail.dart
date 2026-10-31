@@ -50,13 +50,13 @@ class WyMusicDetail {
       // privilege 优先按下标对应，id 不匹配时按 id 查找（与 LX 一致）。
       Map<dynamic, dynamic>? privilege =
           index < privileges.length && privileges[index] is Map
-              ? privileges[index] as Map
-              : null;
+          ? privileges[index] as Map
+          : null;
       if (privilege == null || privilege['id'] != raw['id']) {
         privilege = privileges.whereType<Map>().firstWhere(
-              (p) => p['id'] == raw['id'],
-              orElse: () => const {},
-            );
+          (p) => p['id'] == raw['id'],
+          orElse: () => const {},
+        );
         if (privilege.isEmpty) continue;
       }
 
@@ -71,8 +71,7 @@ class WyMusicDetail {
       final albumId = album is Map ? album['id'] : null;
       final img = album is Map ? (album['picUrl'] ?? '') : '';
       final dt = raw['dt'];
-      final durationMs =
-          dt is num ? dt.toInt() : int.tryParse('$dt') ?? 0;
+      final durationMs = dt is num ? dt.toInt() : int.tryParse('$dt') ?? 0;
 
       final String singer;
       final String name;
@@ -91,19 +90,21 @@ class WyMusicDetail {
         cover = img;
       }
 
-      list.add(buildTrack(
-        songId: raw['id'],
-        name: name,
-        singer: singer,
-        artists: artistRefsOf(raw['ar']),
-        albumName: albumName,
-        albumId: albumId,
-        img: cover,
-        intervalText: formatPlayTime(durationMs / 1000),
-        duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
-        types: reversedTypes,
-        typeMap: typeMap,
-      ));
+      list.add(
+        buildTrack(
+          songId: raw['id'],
+          name: name,
+          singer: singer,
+          artists: artistRefsOf(raw['ar']),
+          albumName: albumName,
+          albumId: albumId,
+          img: cover,
+          intervalText: formatPlayTime(durationMs / 1000),
+          duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
+          types: reversedTypes,
+          typeMap: typeMap,
+        ),
+      );
     }
     return list;
   }
@@ -142,11 +143,10 @@ class WyMusicDetail {
   /// 音质列表（`types` 数组形态）：由 [buildTypes] 的映射反转得到。
   static List<Map<String, dynamic>> typeList(
     Map<String, Map<String, dynamic>> typeMap,
-  ) =>
-      [
-        for (final entry in typeMap.entries)
-          {'type': entry.key, 'size': entry.value['size']},
-      ].reversed.toList();
+  ) => [
+    for (final entry in typeMap.entries)
+      {'type': entry.key, 'size': entry.value['size']},
+  ].reversed.toList();
 
   /// 由已解析字段构建 wy 曲目（搜索 / 歌曲详情 / 歌单详情共用同一 raw 约定）。
   static SourceTrack buildTrack({

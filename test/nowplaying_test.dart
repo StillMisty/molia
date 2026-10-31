@@ -35,15 +35,15 @@ import 'support/settings_test_support.dart';
 
 /// 播放页 smoke 测试：圆点切换行常显 + Apple Music 式跟手拖拽展开/收起。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      // 不带封面：避免测试触发网络预取/取色。
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  // 不带封面：避免测试触发网络预取/取色。
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 /// 测试用壳层可见性门控：null = 不挂（独立挂载时按可见处理）。
 Widget _withShellVisibility(ValueNotifier<bool>? visibility, Widget child) {
@@ -181,11 +181,11 @@ void main() {
 
   /// 圆点里真正可点的 GestureDetector（M3ETooltip 自己也包了一层）。
   Finder dotTargets() => find.descendant(
-        of: find.byType(LyricsQueueDots),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is GestureDetector && widget.onTap != null,
-        ),
-      );
+    of: find.byType(LyricsQueueDots),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is GestureDetector && widget.onTap != null,
+    ),
+  );
 
   testWidgets('收藏按钮：写失败提示操作失败，图标保持原状态', (tester) async {
     final repository = FakeLibraryRepository();
@@ -386,8 +386,9 @@ void main() {
     addTearDown(reselect.dispose);
     await pumpNowPlaying(tester, reselect: reselect);
 
-    final Animation<double> expand =
-        tester.widget<Player>(find.byType(Player)).expandAnimation!;
+    final Animation<double> expand = tester
+        .widget<Player>(find.byType(Player))
+        .expandAnimation!;
     expect(expand.value, 1.0);
     expect(find.byType(MorphCover), findsNothing);
 

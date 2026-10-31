@@ -17,13 +17,13 @@ class AddToPlaylistSelection {
   const AddToPlaylistSelection._(this.kind, this.playlistId);
 
   const AddToPlaylistSelection.favorites()
-      : this._(AddToPlaylistTargetKind.favorites, null);
+    : this._(AddToPlaylistTargetKind.favorites, null);
 
   const AddToPlaylistSelection.history()
-      : this._(AddToPlaylistTargetKind.history, null);
+    : this._(AddToPlaylistTargetKind.history, null);
 
   const AddToPlaylistSelection.playlist(int playlistId)
-      : this._(AddToPlaylistTargetKind.playlist, playlistId);
+    : this._(AddToPlaylistTargetKind.playlist, playlistId);
 
   final AddToPlaylistTargetKind kind;
   final int? playlistId;
@@ -144,9 +144,8 @@ class _AddToPlaylistSheetState extends State<_AddToPlaylistSheet> {
                     leading: const Icon(Icons.queue_music_rounded),
                     headline: playlist.name,
                     trailingText: l10n.playlistTrackCount(playlist.trackCount),
-                    onTap: () => _pop(
-                      AddToPlaylistSelection.playlist(playlist.id),
-                    ),
+                    onTap: () =>
+                        _pop(AddToPlaylistSelection.playlist(playlist.id)),
                   ),
               ],
             ),
@@ -196,8 +195,9 @@ class _PlaylistNameDialog extends StatefulWidget {
 }
 
 class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialValue);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
   String? _error;
 
   @override
@@ -241,10 +241,7 @@ class _PlaylistNameDialogState extends State<_PlaylistNameDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        M3EButton.filled(
-          onPressed: _submit,
-          child: Text(widget.confirmLabel),
-        ),
+        M3EButton.filled(onPressed: _submit, child: Text(widget.confirmLabel)),
       ],
     );
   }

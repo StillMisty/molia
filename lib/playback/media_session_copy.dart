@@ -22,14 +22,14 @@ class MediaSessionCopy {
 
   /// 从生成的 l10n 取词：唯一来源是 `AppLocalizations`（不新增键）。
   factory MediaSessionCopy.of(AppLocalizations l10n) => MediaSessionCopy(
-        unknownArtist: l10n.unknownArtist,
-        favoriteAdd: l10n.favoriteAdd,
-        favoriteRemove: l10n.favoriteRemove,
-        playModeListLoop: l10n.playModeListLoop,
-        playModeSequential: l10n.playModeSequential,
-        playModeSingleRepeat: l10n.playModeSingleRepeat,
-        playModeShuffle: l10n.playModeShuffle,
-      );
+    unknownArtist: l10n.unknownArtist,
+    favoriteAdd: l10n.favoriteAdd,
+    favoriteRemove: l10n.favoriteRemove,
+    playModeListLoop: l10n.playModeListLoop,
+    playModeSequential: l10n.playModeSequential,
+    playModeSingleRepeat: l10n.playModeSingleRepeat,
+    playModeShuffle: l10n.playModeShuffle,
+  );
 
   /// 歌手为空时的回退文案（替代 handler 里硬编码的「未知歌手」）。
   final String unknownArtist;
@@ -48,9 +48,9 @@ class MediaSessionCopy {
 
   /// 播放顺序动作文案：反映当前模式（点按循环到下一个）。
   String playModeLabel(PlayMode mode) => switch (mode) {
-        PlayMode.listLoop => playModeListLoop,
-        PlayMode.sequential => playModeSequential,
-        PlayMode.singleRepeat => playModeSingleRepeat,
-        PlayMode.shuffle => playModeShuffle,
-      };
+    PlayMode.listLoop => playModeListLoop,
+    PlayMode.sequential => playModeSequential,
+    PlayMode.singleRepeat => playModeSingleRepeat,
+    PlayMode.shuffle => playModeShuffle,
+  };
 }

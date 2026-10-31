@@ -32,14 +32,14 @@ final _deck = coverDeckMetricsFor(
 /// 入场；偏右 = 向前入场。这里不做 pumpAndSettle（常驻波浪动画），按固定
 /// 时长采样中间态。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -64,16 +64,18 @@ void main() {
   /// 模拟后端切到指定曲目：next / previous 与队列保持一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
-    backend.emit(BackendSnapshot(
-      current: order[index],
-      queue: order,
-      currentIndex: index,
-      next: index + 1 < order.length ? order[index + 1] : null,
-      previous: index > 0 ? order[index - 1] : null,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: order[index],
+        queue: order,
+        currentIndex: index,
+        next: index + 1 < order.length ? order[index + 1] : null,
+        previous: index > 0 ? order[index - 1] : null,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   Future<void> pumpPlayer(WidgetTester tester) async {
@@ -104,10 +106,7 @@ void main() {
           home: Scaffold(
             body: SizedBox(
               height: 900,
-              child: Player(
-                expandAnimation: expand,
-                onToggleExpand: () {},
-              ),
+              child: Player(expandAnimation: expand, onToggleExpand: () {}),
             ),
           ),
         ),
@@ -126,8 +125,9 @@ void main() {
     await tester.pump(); // 动画首 tick（进度 0）
     await tester.pump(const Duration(milliseconds: 150)); // 中间态
     final deckCenter = tester.getCenter(find.byKey(Player.artworkSwipeHostKey));
-    final coverCenter =
-        tester.getCenter(find.byKey(PlayerCoverDeck.centerCoverCardKey));
+    final coverCenter = tester.getCenter(
+      find.byKey(PlayerCoverDeck.centerCoverCardKey),
+    );
     return coverCenter.dx - deckCenter.dx;
   }
 
@@ -140,8 +140,11 @@ void main() {
     // 只能靠队列下标判定方向（防止退化为「一律向前」）。
     emitFor('a');
     final offset = await sampleIncomingOffset(tester);
-    expect(offset, lessThan(-4),
-        reason: '向后切歌时进场封面应从左侧滑入，中间帧中心应偏左（实际 $offset）');
+    expect(
+      offset,
+      lessThan(-4),
+      reason: '向后切歌时进场封面应从左侧滑入，中间帧中心应偏左（实际 $offset）',
+    );
 
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Title a'), findsWidgets);
@@ -150,8 +153,11 @@ void main() {
     // 当前 A 点选 C：方向向前，从右侧滑入。
     emitFor('c');
     final forwardOffset = await sampleIncomingOffset(tester);
-    expect(forwardOffset, greaterThan(4),
-        reason: '向前切歌时进场封面应从右侧滑入，中间帧中心应偏右（实际 $forwardOffset）');
+    expect(
+      forwardOffset,
+      greaterThan(4),
+      reason: '向前切歌时进场封面应从右侧滑入，中间帧中心应偏右（实际 $forwardOffset）',
+    );
 
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text('Title c'), findsWidgets);
@@ -232,8 +238,9 @@ void main() {
     final double sideSize = _deck.artDimension * 0.78;
     final double offset = _deck.artDimension * 0.30;
     final Rect anchorSteady = morph.rectOf(morph.pageCoverKey)!;
-    final double deckDx =
-        tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey)).dx;
+    final double deckDx = tester
+        .getCenter(find.byKey(PlayerCoverDeck.swipeHostKey))
+        .dx;
 
     // reveal = 0：侧槽保持在稳态位置/倾角，只把 element 透明化；图片与布局
     // 状态保留，飞行尾段淡入时不重建 AppNetworkImage/闪占位。
@@ -252,8 +259,11 @@ void main() {
     );
     expect(nearestOpacityOf(tester, left), 0);
     expect(nearestOpacityOf(tester, right), 0);
-    expect(morph.rectOf(morph.pageCoverKey), anchorSteady,
-        reason: '侧槽淡入不得改变中心封面锚点矩形');
+    expect(
+      morph.rectOf(morph.pageCoverKey),
+      anchorSteady,
+      reason: '侧槽淡入不得改变中心封面锚点矩形',
+    );
 
     // reveal 只驱动侧槽包装层：deck 主 builder / 卡片子树不应逐帧重建。
     final previousProbe = debugOnRebuildDirtyWidget;
@@ -266,8 +276,7 @@ void main() {
     // reveal = 0.5：侧槽原位半透明，位置/倾角不变；只有透明度变化。
     morph.setPageDeckReveal(0.5);
     await tester.pump();
-    expect(coverCardRebuilds, 0,
-        reason: 'reveal 逐帧只重建 Opacity 包装，不重建卡片图片子树');
+    expect(coverCardRebuilds, 0, reason: 'reveal 逐帧只重建 Opacity 包装，不重建卡片图片子树');
     debugOnRebuildDirtyWidget = previousProbe;
     final double eased = Curves.easeOutCubic.transform(0.5);
     final Rect leftMid = renderedRect(tester, left);
@@ -277,10 +286,7 @@ void main() {
       closeTo(projectedSideWidth(sideSize, 1, -0.05), 1),
       reason: '半程侧槽卡不再缩放（左槽旋转为负，已带旋转）',
     );
-    expect(
-      rightMid.width,
-      closeTo(projectedSideWidth(sideSize, 1, 0.05), 1),
-    );
+    expect(rightMid.width, closeTo(projectedSideWidth(sideSize, 1, 0.05), 1));
     expect(
       leftMid.center.dx - deckDx,
       closeTo(-offset, 1),
@@ -297,16 +303,22 @@ void main() {
       reason: '半程只按透明度淡入',
     );
     expect(nearestOpacityOf(tester, right), closeTo(0.85 * eased, 0.01));
-    expect(morph.rectOf(morph.pageCoverKey), anchorSteady,
-        reason: '淡入过程中中心锚点必须是稳态矩形（飞行落点不能漂移）');
+    expect(
+      morph.rectOf(morph.pageCoverKey),
+      anchorSteady,
+      reason: '淡入过程中中心锚点必须是稳态矩形（飞行落点不能漂移）',
+    );
 
     // reveal = 1：稳态侧槽几何，中心锚点仍不变。
     morph.setPageDeckReveal(1);
     await tester.pump();
     final Rect leftSteady = renderedRect(tester, left);
     expect(leftSteady.center.dx - deckDx, closeTo(-offset, 1));
-    expect(tester.getSize(left).width, closeTo(sideSize, 0.01),
-        reason: '稳态侧槽卡边长保持 0.78×封面边');
+    expect(
+      tester.getSize(left).width,
+      closeTo(sideSize, 0.01),
+      reason: '稳态侧槽卡边长保持 0.78×封面边',
+    );
     expect(renderedRect(tester, right).center.dx - deckDx, closeTo(offset, 1));
     expect(morph.rectOf(morph.pageCoverKey), anchorSteady);
 
@@ -328,8 +340,10 @@ void main() {
         card.appearance.shadow,
         closeTo(CoverAppearance.page.shadow * 0.78, 1e-6),
       );
-      expect(card.appearance.clip.topLeft.x,
-          closeTo(CoverAppearance.page.clip.topLeft.x * 0.78, 1e-6));
+      expect(
+        card.appearance.clip.topLeft.x,
+        closeTo(CoverAppearance.page.clip.topLeft.x * 0.78, 1e-6),
+      );
     }
     final centerCoverCard = tester.widget<CoverCard>(
       find.descendant(
@@ -337,15 +351,20 @@ void main() {
         matching: find.byType(CoverCard),
       ),
     );
-    expect(centerCoverCard.appearance.radius, CoverAppearance.page.radius,
-        reason: '中心卡保持页面端外观');
+    expect(
+      centerCoverCard.appearance.radius,
+      CoverAppearance.page.radius,
+      reason: '中心卡保持页面端外观',
+    );
 
     // 飞行期间侧槽点击关闭：pageHeaderHidden 即「副本接管」状态。
     int previousCalls() =>
         backend.calls.where((call) => call == 'previous').length;
     // 邻位只有外侧条带可见：点左缘，避免命中压在上面的中心封面。
-    final Offset leftEdgeTap =
-        Offset(leftSteady.left + 8, leftSteady.center.dy);
+    final Offset leftEdgeTap = Offset(
+      leftSteady.left + 8,
+      leftSteady.center.dy,
+    );
     await tester.tapAt(leftEdgeTap);
     await tester.pump();
     expect(previousCalls(), 1, reason: '前提：稳态左槽可点击切上一首');
@@ -398,16 +417,18 @@ void main() {
       origin: TrackOrigin.lx,
       payload: const {'id': 'nxt'},
     );
-    backend.emit(BackendSnapshot(
-      current: current,
-      queue: [current, next],
-      currentIndex: 0,
-      next: next,
-      upNext: [next],
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: current,
+        queue: [current, next],
+        currentIndex: 0,
+        next: next,
+        upNext: [next],
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
     tester.view.physicalSize = const Size(420, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -448,19 +469,23 @@ void main() {
 
     final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
     final image = tester.widget<AppNetworkImage>(
-      find
-          .descendant(of: center, matching: find.byType(AppNetworkImage))
-          .first,
+      find.descendant(of: center, matching: find.byType(AppNetworkImage)).first,
     );
     expect(image.url, isNull, reason: '预览目标是下一首（无封面）');
-    expect(image.placeholder, isNot(isA<AppNetworkImage>()),
-        reason: '中心卡不得把当前曲目封面嵌套成占位（旧封面会从新卡下面透出）');
+    expect(
+      image.placeholder,
+      isNot(isA<AppNetworkImage>()),
+      reason: '中心卡不得把当前曲目封面嵌套成占位（旧封面会从新卡下面透出）',
+    );
     final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
     expect(
       tester
           .widget<AppNetworkImage>(
             find
-                .descendant(of: outgoing, matching: find.byType(AppNetworkImage))
+                .descendant(
+                  of: outgoing,
+                  matching: find.byType(AppNetworkImage),
+                )
                 .first,
           )
           .url,

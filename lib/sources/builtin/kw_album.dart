@@ -86,15 +86,17 @@ class KwAlbum {
     };
 
     final duration = parseSourceCount(raw['duration']) ?? 0;
-    return trackFromSourceTrack(KwSearch.buildTrack(
-      songId: songId,
-      name: decodeName((raw['name'] ?? raw['songname'])?.toString()),
-      artist: formatSinger(decodeName(raw['artist']?.toString())),
-      album: decodeName(raw['album']?.toString()),
-      albumId: raw['albumId']?.toString() ?? albumId,
-      intervalSeconds: duration,
-      types: sorted,
-      img: kwCoverUrlOf(raw) ?? fallbackCoverUrl,
-    ));
+    return trackFromSourceTrack(
+      KwSearch.buildTrack(
+        songId: songId,
+        name: decodeName((raw['name'] ?? raw['songname'])?.toString()),
+        artist: formatSinger(decodeName(raw['artist']?.toString())),
+        album: decodeName(raw['album']?.toString()),
+        albumId: raw['albumId']?.toString() ?? albumId,
+        intervalSeconds: duration,
+        types: sorted,
+        img: kwCoverUrlOf(raw) ?? fallbackCoverUrl,
+      ),
+    );
   }
 }

@@ -111,13 +111,13 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
 
     _currentProgress = widget.position.inMilliseconds.toDouble();
 
-    _progressAnimation = Tween<double>(
-      begin: _currentProgress,
-      end: _currentProgress,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: M3EMotion.standard,
-    ));
+    _progressAnimation =
+        Tween<double>(begin: _currentProgress, end: _currentProgress).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: M3EMotion.standard,
+          ),
+        );
   }
 
   @override
@@ -135,13 +135,12 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
       final display = _animationController.isAnimating
           ? _progressAnimation.value
           : _currentProgress;
-      _progressAnimation = Tween<double>(
-        begin: display,
-        end: target,
-      ).animate(CurvedAnimation(
-        parent: _animationController,
-        curve: M3EMotion.standard,
-      ));
+      _progressAnimation = Tween<double>(begin: display, end: target).animate(
+        CurvedAnimation(
+          parent: _animationController,
+          curve: M3EMotion.standard,
+        ),
+      );
       _currentProgress = target;
       _animationController.forward(from: 0);
     } else {
@@ -177,8 +176,9 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
                   linearSize: M3EProgressIndicatorSize.s,
                   strokeWidth: 4.0,
                   trackStrokeWidth: 4.0,
-                  trackColor:
-                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  trackColor: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
                   color: Theme.of(context).colorScheme.primary,
                 )
               : M3EProgressIndicator.linear(
@@ -186,8 +186,9 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
                   linearSize: M3EProgressIndicatorSize.s,
                   strokeWidth: 4.0,
                   trackStrokeWidth: 4.0,
-                  trackColor:
-                      Theme.of(context).colorScheme.surfaceContainerHighest,
+                  trackColor: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest,
                   color: Theme.of(context).colorScheme.primary,
                 ),
         );
@@ -232,15 +233,15 @@ class _MyAppState extends State<MyApp>
   /// 残留 0.97 缩放（顶栏⇄播放页飞行抓锚点时真身跳变）。
   late final BoundedSingleMotionController _tabTransition =
       BoundedSingleMotionController(
-    motion: SpringMotion(
-      M3EMotion.expressiveSpatialDefault.toDescription(),
-      snapToEnd: true,
-    ),
-    vsync: this,
-    initialValue: 1,
-    lowerBound: 0,
-    upperBound: 1,
-  );
+        motion: SpringMotion(
+          M3EMotion.expressiveSpatialDefault.toDescription(),
+          snapToEnd: true,
+        ),
+        vsync: this,
+        initialValue: 1,
+        lowerBound: 0,
+        upperBound: 1,
+      );
 
   /// 共享元素飞行控制器。
   ///
@@ -249,8 +250,10 @@ class _MyAppState extends State<MyApp>
   /// 零速度精确交接。每次飞行的起点用新抓取的锚点几何（`from: 0`），中途被
   /// 打断则直接换新飞。
   late final SingleMotionController _morphAnimation = SingleMotionController(
-    motion:
-        SpringMotion(M3EMotion.aospSpatial.toDescription(), snapToEnd: true),
+    motion: SpringMotion(
+      M3EMotion.aospSpatial.toDescription(),
+      snapToEnd: true,
+    ),
     vsync: this,
     initialValue: 1,
   );
@@ -568,10 +571,7 @@ class _MyAppState extends State<MyApp>
     // 首帧就不能亮，离开时也不能留到最后才收）。
     _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
-    final url = nowPlayingCoverUrl(
-      context,
-      context.read<PlaybackProvider>(),
-    );
+    final url = nowPlayingCoverUrl(context, context.read<PlaybackProvider>());
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
       builder: (context) => PlayerMorphFlight(
@@ -675,7 +675,8 @@ class _MyAppState extends State<MyApp>
           _ShellPageLayer(
             key: ValueKey(destination),
             selected: destination == selectedDestination,
-            outgoing: destination == _previousDestination &&
+            outgoing:
+                destination == _previousDestination &&
                 destination != selectedDestination,
             animation: _tabTransition,
             child: _pages[destination]!,
@@ -689,8 +690,9 @@ class _MyAppState extends State<MyApp>
     final shellLayout = context.layoutType(ResponsivePageType.shell);
     final isLargeScreen = shellLayout.preferTwoPane;
     final l10n = AppLocalizations.of(context)!;
-    final visibleDestinations =
-        context.watch<NavProvider>().visibleDestinations;
+    final visibleDestinations = context
+        .watch<NavProvider>()
+        .visibleDestinations;
     // 选中项被隐藏时回退到第一个可见目的地（重新显示后自动恢复）；
     // chrome、页面栈与点击判定共用同一 resolver。
     final selectedDestination = _effectiveDestination;
@@ -797,7 +799,7 @@ class _MyAppState extends State<MyApp>
                   size: defaultTargetPlatform == TargetPlatform.iOS
                       ? M3ENavBarSize.small
                       : M3ENavBarSize.medium,
-                  labelBehavior: M3ENavBarLabelBehavior.onlySelected,
+                  labelBehavior: M3ENavBarLabelBehavior.alwaysShow,
                   selectedIndex: selectedIndex,
                   onDestinationSelected: chrome.selectDestinationAt,
                   destinations: chrome.barDestinations(),
@@ -927,12 +929,10 @@ class _ShellBarHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     // 无曲目标题时信息区本来就回退应用名，不做入场动画（避免同文案
     // 位移淡入与标题淡出叠影）。
-    final hasTrackTitle = context.select<PlaybackProvider, bool>(
-      (provider) {
-        final track = provider.snapshot.current;
-        return track != null && track.title.isNotEmpty;
-      },
-    );
+    final hasTrackTitle = context.select<PlaybackProvider, bool>((provider) {
+      final track = provider.snapshot.current;
+      return track != null && track.title.isNotEmpty;
+    });
     return AnimatedBuilder(
       animation: morph,
       builder: (context, _) {
@@ -993,14 +993,14 @@ class _ShellBarHeader extends StatelessWidget {
 /// 弹簧由壳层 State 持有后分别消费；快速连切靠 motor 中途重定向续接。
 class _BarHeaderReveal extends ChangeNotifier {
   _BarHeaderReveal({required TickerProvider vsync, required bool revealed})
-      : _motion = SingleMotionController(
-          motion: SpringMotion(
-            M3EMotion.expressiveSpatialFast.toDescription(),
-            snapToEnd: true,
-          ),
-          vsync: vsync,
-          initialValue: revealed ? 1 : 0,
-        ) {
+    : _motion = SingleMotionController(
+        motion: SpringMotion(
+          M3EMotion.expressiveSpatialFast.toDescription(),
+          snapToEnd: true,
+        ),
+        vsync: vsync,
+        initialValue: revealed ? 1 : 0,
+      ) {
     _motion.addListener(notifyListeners);
   }
 
@@ -1299,9 +1299,9 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   }
 
   Future<void> _drainIncomingPairings() => _incomingPairingQueue.drain(
-        present: _presentIncomingPairing,
-        reject: _rejectIncomingPairing,
-      );
+    present: _presentIncomingPairing,
+    reject: _rejectIncomingPairing,
+  );
 
   /// 展示一条确认窗；false = 宿主 context 已不可用，交给队列统一拒绝。
   Future<bool> _presentIncomingPairing(SyncPairingRequest request) async {
@@ -1344,9 +1344,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
       // 只会把同一次 paused 写两遍。桌面不接生命周期策略（恒前台），
       // 窗口隐藏 / 系统挂起时用与退出相同的入口提交一次。
       if (!_mobileLifecycleOwnsPlaybackCommit) {
-        unawaited(
-          context.read<PlaybackProvider>().suspendPlaybackSession(),
-        );
+        unawaited(context.read<PlaybackProvider>().suspendPlaybackSession());
       }
       // 听歌统计：退后台是动作，立即落盘进行中的播放事件；播放途中不写。
       unawaited(context.read<PlayStatisticsService>().flush());
@@ -1380,8 +1378,10 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   void _syncLocalizedBranding(Locale? locale) {
     final effective =
         locale ?? WidgetsBinding.instance.platformDispatcher.locale;
-    final resolved = LanguageService.supportedLocales.any(
-            (supported) => supported.languageCode == effective.languageCode)
+    final resolved =
+        LanguageService.supportedLocales.any(
+          (supported) => supported.languageCode == effective.languageCode,
+        )
         ? effective
         : LanguageService.supportedLocales.first;
     final name = lookupAppLocalizations(resolved).appName;
@@ -1416,17 +1416,20 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
       builder: (lightDynamic, darkDynamic) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          context
-              .read<ThemeProvider>()
-              .updateMonetSchemes(lightDynamic, darkDynamic);
+          context.read<ThemeProvider>().updateMonetSchemes(
+            lightDynamic,
+            darkDynamic,
+          );
         });
         return ValueListenableBuilder<Locale?>(
           valueListenable: LanguageService.localeNotifier,
           builder: (context, locale, _) {
             // 品牌默认名统一 Molia（仍走 l10n：各语言同值，保留将来本地化的入口）。
             _syncLocalizedBranding(locale);
-            return Selector<ThemeProvider,
-                ({ColorScheme scheme, String? fontFamily})>(
+            return Selector<
+              ThemeProvider,
+              ({ColorScheme scheme, String? fontFamily})
+            >(
               selector: (context, provider) => (
                 scheme: provider.colorScheme,
                 fontFamily: provider.appFontFamily,
@@ -1438,8 +1441,9 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
               builder: (context, themeState, _) => AnimatedSchemeBuilder(
                 scheme: themeState.scheme,
                 builder: (context, animatedScheme) {
-                  final systemUiOverlayStyle =
-                      buildSystemUiOverlayStyle(animatedScheme);
+                  final systemUiOverlayStyle = buildSystemUiOverlayStyle(
+                    animatedScheme,
+                  );
                   final themedData = buildAppThemeData(
                     animatedScheme,
                     systemUiOverlayStyle: systemUiOverlayStyle,
@@ -1512,9 +1516,7 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                     // 显式包一层路由级 M3E 主题，页面才不依赖 App 级
                     // DefaultTextStyle（预测返回退场 + 主题重建的断言见
                     // lib/widgets/m3e_page_route.dart）。
-                    home: M3ERouteTheme(
-                      builder: (_) => MyApp(key: appRootKey),
-                    ),
+                    home: M3ERouteTheme(builder: (_) => MyApp(key: appRootKey)),
                   );
                 },
               ),

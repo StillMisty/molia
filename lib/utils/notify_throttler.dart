@@ -31,15 +31,12 @@ class CategorizedNotifyThrottler {
     }
 
     _hasPendingNotifications[category] = true;
-    _pendingTimers[category] ??= Timer(
-      interval - now.difference(lastTime),
-      () {
-        if (_hasPendingNotifications[category] == true) {
-          _executeNotify(category, DateTime.now());
-        }
-        _pendingTimers[category] = null;
-      },
-    );
+    _pendingTimers[category] ??= Timer(interval - now.difference(lastTime), () {
+      if (_hasPendingNotifications[category] == true) {
+        _executeNotify(category, DateTime.now());
+      }
+      _pendingTimers[category] = null;
+    });
   }
 
   void _executeNotify(String category, DateTime time) {

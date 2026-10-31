@@ -7,7 +7,7 @@ import '../providers/library_provider.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 
-/// 曲目行（行尾 ⋮ 菜单：收藏 / 加入列表）的收藏域适配层。
+/// 曲目行（行尾 ⋮ 菜单：收藏 / 加入列表 + 公共动作）的收藏域适配层。
 ///
 /// 与 [TrackMenuTile] 的分工：行渲染、菜单形状与桌面行表面右键入口都在
 /// [TrackMenuTile]，本组件只负责「行内容从哪来、收藏态怎么订阅」。歌手页 /
@@ -34,6 +34,7 @@ class FavoriteTrackTile extends StatelessWidget {
   }) {
     return FavoriteTrackTile(
       key: key,
+      track: track,
       row: TrackRowModel(
         title: track.title,
         artist: track.artistLabel,
@@ -54,6 +55,7 @@ class FavoriteTrackTile extends StatelessWidget {
   /// 通用构造：行数据与收藏源由调用方注入。
   const FavoriteTrackTile({
     super.key,
+    required this.track,
     required this.row,
     required this.position,
     this.surface = const TrackRowSurface(),
@@ -62,6 +64,9 @@ class FavoriteTrackTile extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onAddToPlaylist,
   });
+
+  /// 领域曲目：菜单公共动作的能力位与目标。
+  final Track track;
 
   /// 行数据（标题 / 歌手 / 封面 / 时长 / 当前曲目身份）。
   final TrackRowModel row;
@@ -87,6 +92,7 @@ class FavoriteTrackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TrackMenuTile(
+      track: track,
       row: row,
       surface: surface,
       position: position,

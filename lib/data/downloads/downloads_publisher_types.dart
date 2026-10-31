@@ -58,8 +58,7 @@ class NoopDownloadsPublisher implements DownloadsPublisher {
     required String displayName,
     required String mimeType,
     String relativeDir = '',
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<bool> remove(String uri) async => false;

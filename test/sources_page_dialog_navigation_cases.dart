@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:molia/pages/sources_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/source_manager.dart';
+
 import 'support/settings_test_support.dart';
 
 /// 回归：设置弹层内打开的音源页位于嵌套 Navigator 栈顶，而 `M3EDialog.show`
@@ -84,9 +85,8 @@ class _NestedHost extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Navigator(
-      onGenerateRoute: (_) => MaterialPageRoute<void>(
-        builder: (_) => const _NestedHome(),
-      ),
+      onGenerateRoute: (_) =>
+          MaterialPageRoute<void>(builder: (_) => const _NestedHome()),
     );
   }
 }
@@ -99,9 +99,9 @@ class _NestedHome extends StatelessWidget {
     return Scaffold(
       body: Center(
         child: M3EButton.filled(
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const SourcesPage()),
-          ),
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const SourcesPage())),
           child: const Text('打开音源页'),
         ),
       ),

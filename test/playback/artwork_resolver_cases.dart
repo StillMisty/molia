@@ -14,13 +14,13 @@ void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   Track track(String id, {Artwork? artwork}) => Track(
-        id: TrackId('fake', id),
-        title: 'Title $id',
-        artists: [Artist(name: 'Artist $id')],
-        artwork: artwork,
-        origin: TrackOrigin.builtin,
-        payload: {'songmid': id},
-      );
+    id: TrackId('fake', id),
+    title: 'Title $id',
+    artists: [Artist(name: 'Artist $id')],
+    artwork: artwork,
+    origin: TrackOrigin.builtin,
+    payload: {'songmid': id},
+  );
 
   test('无封面曲目起播：resolver 命中后回写队列', () async {
     final backend = FakePlaybackBackend();
@@ -35,12 +35,14 @@ void main() {
     addTearDown(provider.dispose);
 
     final item = track('a');
-    backend.emit(BackendSnapshot(
-      current: item,
-      queue: [item],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: item,
+        queue: [item],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
@@ -65,12 +67,14 @@ void main() {
       'b',
       artwork: Artwork(uri: Uri.parse('https://img.example/existing.jpg')),
     );
-    backend.emit(BackendSnapshot(
-      current: item,
-      queue: [item],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: item,
+        queue: [item],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
 
     expect(resolverCalls, 0);
@@ -86,12 +90,14 @@ void main() {
     addTearDown(provider.dispose);
 
     final item = track('c');
-    backend.emit(BackendSnapshot(
-      current: item,
-      queue: [item],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: item,
+        queue: [item],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 

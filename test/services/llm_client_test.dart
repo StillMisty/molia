@@ -6,21 +6,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/services/ai/llm_client.dart';
+
 import '../support/mock_dio.dart';
 
 /// LLM 客户端测试：地址归一、请求形状、错误归一化、超时、key 不泄露。
 void main() {
   LlmConfig config({String baseUrl = 'https://api.example.com/v1'}) =>
       LlmConfig(
-          baseUrl: baseUrl, apiKey: 'sk-test-123456', model: 'test-model');
+        baseUrl: baseUrl,
+        apiKey: 'sk-test-123456',
+        model: 'test-model',
+      );
 
   String okBody(String content) => jsonEncode({
-        'choices': [
-          {
-            'message': {'content': content}
-          }
-        ]
-      });
+    'choices': [
+      {
+        'message': {'content': content},
+      },
+    ],
+  });
 
   /// 统一走 UTF-8 字节（响应体自行解码，不受响应头 charset 影响）。
   ResponseBody ok(String content, [int status = 200]) =>
@@ -76,7 +80,9 @@ void main() {
 
     expect(content, '推荐结果');
     expect(
-        captured.uri.toString(), 'https://api.example.com/v1/chat/completions');
+      captured.uri.toString(),
+      'https://api.example.com/v1/chat/completions',
+    );
     expect(captured.headers['Authorization'], 'Bearer sk-test-123456');
     final body = jsonDecode(requestBodyText(captured)) as Map<String, dynamic>;
     expect(body['model'], 'test-model');
@@ -186,21 +192,23 @@ void main() {
     );
 
     expect(
-      (await failureOf(() => serverError.complete(
-                config: config(),
-                systemPrompt: 's',
-                userPrompt: 'u',
-              )))
-          .retryable,
+      (await failureOf(
+        () => serverError.complete(
+          config: config(),
+          systemPrompt: 's',
+          userPrompt: 'u',
+        ),
+      )).retryable,
       isTrue,
     );
     expect(
-      (await failureOf(() => clientError.complete(
-                config: config(),
-                systemPrompt: 's',
-                userPrompt: 'u',
-              )))
-          .retryable,
+      (await failureOf(
+        () => clientError.complete(
+          config: config(),
+          systemPrompt: 's',
+          userPrompt: 'u',
+        ),
+      )).retryable,
       isFalse,
     );
   });
@@ -209,26 +217,26 @@ void main() {
     final malformed = LlmClient(
       dio: mockDio((_) async => textResponse('not json', statusCode: 200)),
     );
-    final empty = LlmClient(
-      dio: mockDio((_) async => ok('  ')),
-    );
+    final empty = LlmClient(dio: mockDio((_) async => ok('  ')));
 
     expect(
-      (await failureOf(() => malformed.complete(
-                config: config(),
-                systemPrompt: 's',
-                userPrompt: 'u',
-              )))
-          .kind,
+      (await failureOf(
+        () => malformed.complete(
+          config: config(),
+          systemPrompt: 's',
+          userPrompt: 'u',
+        ),
+      )).kind,
       FailureKind.unknown,
     );
     expect(
-      (await failureOf(() => empty.complete(
-                config: config(),
-                systemPrompt: 's',
-                userPrompt: 'u',
-              )))
-          .kind,
+      (await failureOf(
+        () => empty.complete(
+          config: config(),
+          systemPrompt: 's',
+          userPrompt: 'u',
+        ),
+      )).kind,
       FailureKind.unknown,
     );
   });
@@ -258,23 +266,24 @@ void main() {
 
     await expectLater(llm.testConnection(config()), completes);
     expect(
-        captured.uri.toString(), 'https://api.example.com/v1/chat/completions');
+      captured.uri.toString(),
+      'https://api.example.com/v1/chat/completions',
+    );
     expect(captured.headers['Authorization'], 'Bearer sk-test-123456');
 
     // 推理模型只回思维链、正文为空：2xx 且带 choices 即视为连通。
     final reasoningOnly = LlmClient(
       dio: mockDio(
         (_) async => bytesResponse(
-          utf8.encode(jsonEncode({
-            'choices': [
-              {
-                'message': {
-                  'content': '',
-                  'reasoning_content': '推理模型只回了思维链',
+          utf8.encode(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {'content': '', 'reasoning_content': '推理模型只回了思维链'},
                 },
-              },
-            ],
-          })),
+              ],
+            }),
+          ),
         ),
       ),
     );
@@ -302,18 +311,20 @@ void main() {
     test('content 为 parts 数组：拼接 text 片段', () async {
       final llm = LlmClient(
         dio: mockDio(
-          (_) async => raw(jsonEncode({
-            'choices': [
-              {
-                'message': {
-                  'content': [
-                    {'type': 'text', 'text': '分'},
-                    {'type': 'text', 'text': '片'},
-                  ],
+          (_) async => raw(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {
+                    'content': [
+                      {'type': 'text', 'text': '分'},
+                      {'type': 'text', 'text': '片'},
+                    ],
+                  },
                 },
-              },
-            ],
-          })),
+              ],
+            }),
+          ),
         ),
       );
 
@@ -329,11 +340,13 @@ void main() {
     test('旧式 choices[0].text：兼容读取', () async {
       final llm = LlmClient(
         dio: mockDio(
-          (_) async => raw(jsonEncode({
-            'choices': [
-              {'text': '旧式正文'},
-            ],
-          })),
+          (_) async => raw(
+            jsonEncode({
+              'choices': [
+                {'text': '旧式正文'},
+              ],
+            }),
+          ),
         ),
       );
 
@@ -349,9 +362,11 @@ void main() {
     test('testConnection：响应不含对话结果 → unknown', () async {
       final llm = LlmClient(
         dio: mockDio(
-          (_) async => raw(jsonEncode({
-            'error': {'message': 'nope'}
-          })),
+          (_) async => raw(
+            jsonEncode({
+              'error': {'message': 'nope'},
+            }),
+          ),
         ),
       );
 

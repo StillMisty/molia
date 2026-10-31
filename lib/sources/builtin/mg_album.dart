@@ -71,14 +71,18 @@ class MgAlbum {
     final data = songs['data'];
     if (data is! Map) throw albumPlatformFailure('mg', '专辑数据结构不符');
 
-    final rawList = data['songList'] is List ? data['songList'] as List : const [];
+    final rawList = data['songList'] is List
+        ? data['songList'] as List
+        : const [];
     final tracks = <Track>[];
     for (final raw in rawList) {
       final track = parseSong(raw, albumId: albumId);
       if (track != null) tracks.add(track);
     }
 
-    final infoData = (info is Map && info['data'] is Map) ? info['data'] as Map : const {};
+    final infoData = (info is Map && info['data'] is Map)
+        ? info['data'] as Map
+        : const {};
     final total = parseSourceCount(
       infoData['totalCount'] ?? data['totalCount'],
     );
@@ -102,26 +106,28 @@ class MgAlbum {
     if (songId.isEmpty || copyrightId.isEmpty) return null;
 
     final duration = _durationOf(raw);
-    final artist = _nonEmpty(raw['singer']) ??
-        MgSearch.joinSingerNames(raw['singerList']);
-    return trackFromSourceTrack(MgSearch.buildTrack(
-      songId: songId,
-      copyrightId: copyrightId,
-      name: raw['songName']?.toString() ?? '',
-      artist: artist,
-      artists: MgSearch.artistRefsOf(raw['singerList']),
-      album: raw['album']?.toString() ?? '',
-      albumId: raw['albumId']?.toString() ?? albumId,
-      intervalText: duration > 0 ? formatPlayTime(duration) : null,
-      duration: duration > 0 ? Duration(seconds: duration) : null,
-      types: MgSearch.parseTypes(
-        raw['newRateFormats'] ?? raw['audioFormats'],
+    final artist =
+        _nonEmpty(raw['singer']) ?? MgSearch.joinSingerNames(raw['singerList']);
+    return trackFromSourceTrack(
+      MgSearch.buildTrack(
+        songId: songId,
+        copyrightId: copyrightId,
+        name: raw['songName']?.toString() ?? '',
+        artist: artist,
+        artists: MgSearch.artistRefsOf(raw['singerList']),
+        album: raw['album']?.toString() ?? '',
+        albumId: raw['albumId']?.toString() ?? albumId,
+        intervalText: duration > 0 ? formatPlayTime(duration) : null,
+        duration: duration > 0 ? Duration(seconds: duration) : null,
+        types: MgSearch.parseTypes(
+          raw['newRateFormats'] ?? raw['audioFormats'],
+        ),
+        img: _songCover(raw),
+        lrcUrl: raw['lrcUrl']?.toString(),
+        mrcUrl: raw['mrcUrl']?.toString(),
+        trcUrl: raw['trcUrl']?.toString(),
       ),
-      img: _songCover(raw),
-      lrcUrl: raw['lrcUrl']?.toString(),
-      mrcUrl: raw['mrcUrl']?.toString(),
-      trcUrl: raw['trcUrl']?.toString(),
-    ));
+    );
   }
 
   /// 时长（秒）：优先 `duration` 秒数，否则解析 `mm:ss` / `hh:mm:ss` 文本。

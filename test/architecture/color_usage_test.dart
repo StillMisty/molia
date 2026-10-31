@@ -48,7 +48,11 @@ void main() {
         }
       }
     }
-    expect(violations, isEmpty, reason: '请统一到 colorScheme 角色：\n${violations.join('\n')}');
+    expect(
+      violations,
+      isEmpty,
+      reason: '请统一到 colorScheme 角色：\n${violations.join('\n')}',
+    );
   });
 
   test('C2/C3 原始颜色字面量只允许出现在主题基建', () {
@@ -66,7 +70,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '颜色必须来自 ColorScheme / AppSemanticColors：\n${violations.join('\n')}',
+      reason:
+          '颜色必须来自 ColorScheme / AppSemanticColors：\n${violations.join('\n')}',
     );
   });
 
@@ -78,7 +83,11 @@ void main() {
         violations.add(path);
       }
     }
-    expect(violations, isEmpty, reason: '主题唯一出口是 buildAppThemeData：\n${violations.join('\n')}');
+    expect(
+      violations,
+      isEmpty,
+      reason: '主题唯一出口是 buildAppThemeData：\n${violations.join('\n')}',
+    );
   });
 }
 
@@ -96,8 +105,7 @@ List<String> _libFiles() {
 
 /// `Colors.xxx` 字面量；`Colors.transparent` 是「无色」语义，全局放行。
 /// `\b` 防止把 `AppSemanticColors.of` 误判为字面量。
-final RegExp _colorsPattern =
-    RegExp(r'\bColors\.(?!transparent\b)[A-Za-z]+');
+final RegExp _colorsPattern = RegExp(r'\bColors\.(?!transparent\b)[A-Za-z]+');
 
 /// `Color(0x...)` / `Color.fromARGB(...)` 等构造字面量。
 final RegExp _rawColorPattern = RegExp(r'Color\(0x|Color\.fromARGB');

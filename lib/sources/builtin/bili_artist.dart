@@ -76,10 +76,7 @@ class BiliArtist {
     }
 
     try {
-      final response = await _getWbi(
-        '/x/space/wbi/acc/info',
-        {'mid': mid},
-      );
+      final response = await _getWbi('/x/space/wbi/acc/info', {'mid': mid});
       final profile = _profileOf(_mapOf(response));
       if (profile != null) return profile;
       failure = artistPlatformFailure('bili', 'UP 资料不存在');
@@ -109,16 +106,13 @@ class BiliArtist {
     String name,
   ) async {
     try {
-      final response = await _getWbi(
-        '/x/space/wbi/arc/search',
-        {
-          'mid': mid,
-          'pn': page,
-          'ps': spacePageSize,
-          'order': 'pubdate',
-          ...BiliApi.spaceFingerprintParams,
-        },
-      );
+      final response = await _getWbi('/x/space/wbi/arc/search', {
+        'mid': mid,
+        'pn': page,
+        'ps': spacePageSize,
+        'order': 'pubdate',
+        ...BiliApi.spaceFingerprintParams,
+      });
       final parsed = _parseSpace(response, page: page);
       if (parsed != null) return parsed;
     } catch (_) {
@@ -167,17 +161,14 @@ class BiliArtist {
     String name,
   ) async {
     try {
-      final response = await _getWbi(
-        '/x/web-interface/wbi/search/type',
-        {
-          'search_type': 'video',
-          'keyword': name,
-          // 不能用 pubdate：按发布时间搜「UP 名」常常一条该 UP 的投稿都不
-          // 返回（实测 0 命中），totalrank 才会把该 UP 的代表作排在前面。
-          'order': 'totalrank',
-          'page': page,
-        },
-      );
+      final response = await _getWbi('/x/web-interface/wbi/search/type', {
+        'search_type': 'video',
+        'keyword': name,
+        // 不能用 pubdate：按发布时间搜「UP 名」常常一条该 UP 的投稿都不
+        // 返回（实测 0 命中），totalrank 才会把该 UP 的代表作排在前面。
+        'order': 'totalrank',
+        'page': page,
+      });
       final data = _mapOf(response);
       final result = data?['result'];
       if (result is! List) {
@@ -199,10 +190,7 @@ class BiliArtist {
       final pages = parseSourceCount(data?['numPages']);
       // 本页命中的视频可能都不属于该 UP（搜索按相关性混入其它作者），
       // 但只要还有搜索页就允许继续翻，避免第一页恰好 0 命中就提前结束。
-      return (
-        tracks: tracks,
-        hasMore: pages != null && page < pages,
-      );
+      return (tracks: tracks, hasMore: pages != null && page < pages);
     } catch (_) {
       // 回退也失败：返回空列表，UP 资料本身仍然可用。
       return (tracks: const <Track>[], hasMore: false);
@@ -210,15 +198,8 @@ class BiliArtist {
   }
 
   /// 带 WBI 签名的 GET；风控刷新一次与搜索 / 取链同一语义（client 内唯一实现）。
-  static Future<dynamic> _getWbi(
-    String path,
-    Map<String, Object?> params,
-  ) {
-    return BiliClient.shared.get(
-      path,
-      query: params,
-      auth: BiliAuth.session,
-    );
+  static Future<dynamic> _getWbi(String path, Map<String, Object?> params) {
+    return BiliClient.shared.get(path, query: params, auth: BiliAuth.session);
   }
 
   static Map? _mapOf(dynamic response) {

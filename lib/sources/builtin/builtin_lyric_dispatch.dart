@@ -20,8 +20,9 @@ import 'builtin_platforms.dart';
 
 class BuiltinLyricDispatch {
   BuiltinLyricDispatch({RequestCache? cache})
-      : _cache = cache ??
-            RequestCache(maxEntries: 64, ttl: const Duration(minutes: 5));
+    : _cache =
+          cache ??
+          RequestCache(maxEntries: 64, ttl: const Duration(minutes: 5));
 
   /// 曲目原生取词缓存（key `{track.id}:lyric`）。
   final RequestCache _cache;
@@ -32,17 +33,19 @@ class BuiltinLyricDispatch {
     final adapter = BuiltinPlatforms.lyricFor(track.sourceKey);
     if (adapter == null) return null;
     try {
-      return await _cache.getOrCreate<LxLyricResult?>('${track.id}:lyric',
-          () async {
-        final info = await adapter(track.raw);
-        if (info == null || info.isEmpty) return null;
-        return LxLyricResult(
-          lyric: info.lyric,
-          tlyric: _nonEmpty(info.tlyric),
-          rlyric: _nonEmpty(info.rlyric),
-          lxlyric: _nonEmpty(info.lxlyric),
-        );
-      });
+      return await _cache.getOrCreate<LxLyricResult?>(
+        '${track.id}:lyric',
+        () async {
+          final info = await adapter(track.raw);
+          if (info == null || info.isEmpty) return null;
+          return LxLyricResult(
+            lyric: info.lyric,
+            tlyric: _nonEmpty(info.tlyric),
+            rlyric: _nonEmpty(info.rlyric),
+            lxlyric: _nonEmpty(info.lxlyric),
+          );
+        },
+      );
     } catch (_) {
       return null;
     }

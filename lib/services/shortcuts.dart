@@ -6,7 +6,6 @@
 /// `lib/services/global_hotkeys.dart`（全局）。
 library;
 
-
 /// 快捷键命令：映射表与执行端共享的枚举（执行端 switch 穷尽覆盖）。
 enum ShortcutCommand {
   /// Space：播放 / 暂停。

@@ -8,6 +8,7 @@ import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
 import 'package:molia/widgets/empty_state.dart';
+import 'package:molia/widgets/row_extent.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -70,8 +71,12 @@ void main() {
     await repository.dispose();
   });
 
-  Future<void> pumpTab(WidgetTester tester, Widget tab,
-      {double width = 1200}) async {
+  Future<void> pumpTab(
+    WidgetTester tester,
+    Widget tab, {
+    double width = 1200,
+    TextScaler textScaler = TextScaler.noScaling,
+  }) async {
     tester.view.physicalSize = Size(width, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -93,7 +98,12 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(body: tab),
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: Scaffold(body: tab),
+            ),
+          ),
         ),
       ),
     );
@@ -107,7 +117,7 @@ void main() {
     expect(find.text('歌单'), findsNothing); // tab 名即标题：分区标题不重复出现
     expect(find.text('测试歌单'), findsOneWidget); // 歌单卡片
     // 导入入口只在详情页（列表不提供直接导入）。
-    expect(find.byIcon(Icons.download_rounded), findsNothing);
+    expect(find.byIcon(Icons.playlist_add_rounded), findsNothing);
     expect(find.text('华语'), findsWidgets); // 热门标签
     expect(find.text('全部'), findsOneWidget);
     expect(wy.tagCalls, 1);
@@ -161,7 +171,7 @@ void main() {
     await tester.tap(find.text('测试歌单'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.download_rounded));
+    await tester.tap(find.byKey(const Key('discoverImportPlaylistButton')));
     await tester.pumpAndSettle();
 
     expect(find.text('已导入 1 首'), findsOneWidget);
@@ -216,8 +226,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('歌曲A'), findsOneWidget);
-    expect(find.byIcon(Icons.play_arrow_rounded),
-        findsOneWidget); // 榜单详情同样只保留头部「播放全部」
+    expect(
+      find.byIcon(Icons.play_arrow_rounded),
+      findsOneWidget,
+    ); // 榜单详情同样只保留头部「播放全部」
     expect(wy.leaderboardCalls, greaterThan(0));
   });
 
@@ -274,11 +286,23 @@ void main() {
     wy.playlistsPerPage = 40;
     await pumpTab(tester, const DiscoverPlaylistsTab());
 
-    // 固定 extent：滚动条拇指尺寸/拖动定位精确。
+    // 动态 extent（1.0× 下 = 卡片 72 + 间距 8）：滚动条拇指尺寸/拖动定位精确。
     final sliver = tester.widget<SliverFixedExtentList>(
       find.byType(SliverFixedExtentList),
     );
-    expect(sliver.itemExtent, 80);
+    final context = tester.element(find.byType(SliverFixedExtentList));
+    final m3e = M3ETheme.of(context);
+    final cardHeight = scaledRowExtentOf(
+      context,
+      minExtent: 56,
+      styles: [m3e.typeScale.titleSmall, m3e.typeScale.bodySmall],
+      stacked: true,
+      extra: 2,
+      allowance: 4,
+      padding: 16,
+    );
+    expect(sliver.itemExtent, cardHeight + 8);
+    expect(sliver.itemExtent, 80, reason: '1.0× 默认视觉不变');
 
     // 懒加载：2400 高视口只构建视口附近的卡片（一页 40 张不会全部构建）。
     final cards = tester.widgetList<M3ECard>(find.byType(M3ECard)).length;
@@ -292,6 +316,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(wy.playlistPageCalls, contains(2));
     expect(find.text('加载更多'), findsNothing);
+  });
+
+  testWidgets('歌单 tab：1.3× / 1.5× 大字体卡片高度动态、不裁切', (tester) async {
+    for (final scale in [1.3, 1.5]) {
+      await pumpTab(
+        tester,
+        const DiscoverPlaylistsTab(),
+        textScaler: TextScaler.linear(scale),
+      );
+
+      expect(tester.takeException(), isNull, reason: '$scale× 不应布局溢出');
+      final sliver = tester.widget<SliverFixedExtentList>(
+        find.byType(SliverFixedExtentList),
+      );
+      final context = tester.element(find.byType(SliverFixedExtentList));
+      final m3e = M3ETheme.of(context);
+      final cardHeight = scaledRowExtentOf(
+        context,
+        minExtent: 56,
+        styles: [m3e.typeScale.titleSmall, m3e.typeScale.bodySmall],
+        stacked: true,
+        extra: 2,
+        allowance: 4,
+        padding: 16,
+      );
+      expect(sliver.itemExtent, cardHeight + 8);
+      expect(sliver.itemExtent, greaterThanOrEqualTo(80));
+    }
   });
 
   testWidgets('歌单 tab：加载更多失败停在当前页，底部重试恢复', (tester) async {
@@ -321,5 +373,4 @@ void main() {
     expect(wy.playlistPageCalls, [1, 2, 2]);
     expect(find.text('歌单 2-0'), findsOneWidget);
   });
-
 }

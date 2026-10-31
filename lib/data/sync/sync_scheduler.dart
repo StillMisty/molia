@@ -53,8 +53,10 @@ class SyncRunOutcome {
   /// 调用方不必再去读引擎的「最近一轮」快照来猜这一轮算不算数。
   final SyncRoundReport? report;
 
-  static const SyncRunOutcome none =
-      SyncRunOutcome(categories: {}, delivered: false);
+  static const SyncRunOutcome none = SyncRunOutcome(
+    categories: {},
+    delivered: false,
+  );
 }
 
 /// 同步调度器：按同步等级决定何时跑、跑什么范围。
@@ -91,12 +93,12 @@ class SyncScheduler {
       Duration(seconds: 60),
       Duration(seconds: 180),
     ],
-  })  : _cellularProbe = cellularProbe ?? _defaultCellularProbe,
-        _batteryProbe = batteryProbe ?? BatteryProbe().read,
-        _clock = clock ?? DateTime.now,
-        _activeWindowMs = activeWindow.inMilliseconds,
-        _idleBackoffStart = idleBackoffStart,
-        _reconnectLadder = List.unmodifiable(reconnectLadder) {
+  }) : _cellularProbe = cellularProbe ?? _defaultCellularProbe,
+       _batteryProbe = batteryProbe ?? BatteryProbe().read,
+       _clock = clock ?? DateTime.now,
+       _activeWindowMs = activeWindow.inMilliseconds,
+       _idleBackoffStart = idleBackoffStart,
+       _reconnectLadder = List.unmodifiable(reconnectLadder) {
     _backoff = idleBackoffStart;
     _lastInteractionAt = _nowMs();
   }
@@ -248,8 +250,9 @@ class SyncScheduler {
   }) {
     if (_disposed) return;
     final enabled = _state.enabledCategories;
-    final pending =
-        categories == null ? enabled : categories.intersection(enabled);
+    final pending = categories == null
+        ? enabled
+        : categories.intersection(enabled);
     _dirtyCategories.addAll(pending);
     if (!immediate) return;
     _immediateCategories.addAll(pending);
@@ -635,10 +638,7 @@ class SyncScheduler {
     _immediateCategories.removeAll(outcome.categories);
   }
 
-  Future<SyncRunOutcome> _run(
-    SyncTrigger trigger, {
-    required bool push,
-  }) async {
+  Future<SyncRunOutcome> _run(SyncTrigger trigger, {required bool push}) async {
     if (!_host.syncEnabled) return SyncRunOutcome.none;
     try {
       return await _host.runSyncRound(
@@ -646,7 +646,8 @@ class SyncScheduler {
         push: push,
         // 手动轮总是允许全量兜底（用户显式要求）；打开页面的检查轮不做
         // 全量兜底；其余自动轮按环境策略。
-        antiEntropy: trigger == SyncTrigger.manual ||
+        antiEntropy:
+            trigger == SyncTrigger.manual ||
             (trigger != SyncTrigger.check && _antiEntropyAllowed),
         onlyCategories: cellularRestricted ? smallCategories : null,
       );

@@ -129,8 +129,10 @@ void main() {
 
     expect(find.text('发现新版本 1.2.3'), findsOneWidget);
     expect(find.text('Molia 1.2.3'), findsOneWidget);
-    expect(find.byKey(const Key('settingsUpdateDownloadButton')),
-        findsOneWidget);
+    expect(
+      find.byKey(const Key('settingsUpdateDownloadButton')),
+      findsOneWidget,
+    );
 
     await tapKey(
       tester,
@@ -144,8 +146,10 @@ void main() {
   });
 
   testWidgets('Android 缺少安装权限：去授权按钮可点', (tester) async {
-    service.platform =
-        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.platform = const UpdatePlatformInfo(
+      platform: 'android',
+      arch: 'arm64',
+    );
     service.installPermission = false;
     await pumpPage(tester);
 
@@ -191,8 +195,10 @@ void main() {
   });
 
   testWidgets('缺少权限：先提示去授权，授权返回后回到可下载态', (tester) async {
-    service.platform =
-        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.platform = const UpdatePlatformInfo(
+      platform: 'android',
+      arch: 'arm64',
+    );
     service.installPermission = false;
     await pumpPage(tester);
 

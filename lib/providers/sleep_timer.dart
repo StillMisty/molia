@@ -85,10 +85,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     this._setStopAfterCurrentTrack,
     bool Function()? isForeground,
     bool exitAppByDefault = false,
-  })  : exitApp = ValueNotifier<bool>(exitAppByDefault),
-        _snapshot = snapshot,
-        _position = position,
-        _isForeground = isForeground ?? _alwaysForeground {
+  }) : exitApp = ValueNotifier<bool>(exitAppByDefault),
+       _snapshot = snapshot,
+       _position = position,
+       _isForeground = isForeground ?? _alwaysForeground {
     // 原生定时器是熄屏 / Doze 的补触发通道；平台不支持时是 no-op，纯 Dart
     // ticker 仍按原语义工作。
     _alarm = alarm ?? createSleepTimerAlarm();
@@ -148,8 +148,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// （生产环境默认勾选，测试 / 无壳宿主默认关闭）。
   final ValueNotifier<bool> exitApp;
 
-  final ValueNotifier<SleepTimerState> _state =
-      ValueNotifier<SleepTimerState>(SleepTimerState.off);
+  final ValueNotifier<SleepTimerState> _state = ValueNotifier<SleepTimerState>(
+    SleepTimerState.off,
+  );
 
   SleepTimerMode _mode = SleepTimerMode.off;
   Duration? _remaining;
@@ -492,10 +493,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   }
 
   void _publish() => _state.value = SleepTimerState(
-        mode: _mode,
-        remaining: _remaining,
-        duration: _duration,
-      );
+    mode: _mode,
+    remaining: _remaining,
+    duration: _duration,
+  );
 }
 
 /// 定时关闭 × 应用生命周期：回到前台时按绝对 deadline 补检定时关闭。

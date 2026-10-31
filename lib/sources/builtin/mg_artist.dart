@@ -70,15 +70,18 @@ class MgArtist {
       final id = raw['id']?.toString() ?? '';
       final name = decodeName(raw['name']?.toString());
       if (id.isEmpty || name.isEmpty) continue;
-      artists.add(ArtistSummary(
-        id: id,
-        name: name,
-        avatarUrl: _firstPic(raw['singerPicUrl']),
-        songCount: parseSourceCount(raw['songCount']),
-      ));
+      artists.add(
+        ArtistSummary(
+          id: id,
+          name: name,
+          avatarUrl: _firstPic(raw['singerPicUrl']),
+          songCount: parseSourceCount(raw['songCount']),
+        ),
+      );
     }
-    final total =
-        parseSourceCount(singerData is Map ? singerData['totalCount'] : null);
+    final total = parseSourceCount(
+      singerData is Map ? singerData['totalCount'] : null,
+    );
     return ArtistSearchPage(
       items: artists,
       total: total,

@@ -30,15 +30,15 @@ void main() {
   });
 
   Track track(String id, {String? artwork}) => Track(
-        id: TrackId('fake', id),
-        title: 'Title $id',
-        artists: [Artist(name: 'Artist $id')],
-        album: 'Album $id',
-        duration: const Duration(seconds: 30),
-        artwork: artwork == null ? null : Artwork(uri: Uri.parse(artwork)),
-        origin: TrackOrigin.lx,
-        payload: {'songmid': id},
-      );
+    id: TrackId('fake', id),
+    title: 'Title $id',
+    artists: [Artist(name: 'Artist $id')],
+    album: 'Album $id',
+    duration: const Duration(seconds: 30),
+    artwork: artwork == null ? null : Artwork(uri: Uri.parse(artwork)),
+    origin: TrackOrigin.lx,
+    payload: {'songmid': id},
+  );
 
   BackendSnapshot snapshot(
     Track? current, {
@@ -164,8 +164,7 @@ void main() {
     expect(log, ['widget', 'history', 'notify', 'preload']);
   });
 
-  testWidgets('预取封面：上一首 / 再上一首一并下发，供封面左槽向后拖动复用',
-      (tester) async {
+  testWidgets('预取封面：上一首 / 再上一首一并下发，供封面左槽向后拖动复用', (tester) async {
     final navigatorKey = GlobalKey<NavigatorState>();
     final observer = buildObserver(navigatorKey: navigatorKey);
     addTearDown(observer.dispose);
@@ -188,8 +187,7 @@ void main() {
     expect(preloader.preloaded.single.next, isNull);
   });
 
-  testWidgets('恢复态展示曲目：首帧后按同一路径预取，后台期跳过、回前台补一次',
-      (tester) async {
+  testWidgets('恢复态展示曲目：首帧后按同一路径预取，后台期跳过、回前台补一次', (tester) async {
     final presence = AppPresence();
     final navigatorKey = GlobalKey<NavigatorState>();
     final observer = buildObserver(
@@ -390,12 +388,9 @@ class _RecordingPreloader extends AlbumArtPreloadStrategy {
 
   /// 预取请求（当前 / 下一首 / 上一首 / 再上一首）。
   final List<
-      ({
-        Track? current,
-        Track? next,
-        Track? previous,
-        Track? previousOfPrevious,
-      })> preloaded = [];
+    ({Track? current, Track? next, Track? previous, Track? previousOfPrevious})
+  >
+  preloaded = [];
 
   @override
   Future<void> preloadForPlayback({

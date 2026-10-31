@@ -75,21 +75,21 @@ void main() {
   }
 
   PlaylistTrack track(String songId, {int addedAt = 10}) => PlaylistTrack(
-        playlistId: 0,
-        sourceKey: 'wy',
-        songId: songId,
-        title: 'T$songId',
-        artist: 'A$songId',
-        album: 'B$songId',
-        raw: {'songId': songId},
-        addedAt: addedAt,
-      );
+    playlistId: 0,
+    sourceKey: 'wy',
+    songId: songId,
+    title: 'T$songId',
+    artist: 'A$songId',
+    album: 'B$songId',
+    raw: {'songId': songId},
+    addedAt: addedAt,
+  );
 
   /// 列表内曲目按 `sortOrder` 升序（展示顺序）的键序列。
   Future<List<String>> orderedIds(int playlistId) async {
-    final rows = await (db.select(db.playlistTracks)
-          ..where((t) => t.playlistId.equals(playlistId)))
-        .get();
+    final rows = await (db.select(
+      db.playlistTracks,
+    )..where((t) => t.playlistId.equals(playlistId))).get();
     rows.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return [for (final row in rows) '${row.sourceKey}:${row.songId}'];
   }
@@ -156,7 +156,8 @@ void main() {
     expect(versions[1].isNewerThan(versions[0]), isTrue, reason: '发号严格单调');
     for (final row in rows) {
       final entry = window.singleWhere(
-        (e) => e.record.key == SyncRecordKeys.history(row.sourceKey, row.songId),
+        (e) =>
+            e.record.key == SyncRecordKeys.history(row.sourceKey, row.songId),
       );
       expect(entry.record.version, row.syncVersion);
     }
@@ -211,8 +212,14 @@ void main() {
     final row = (await db.select(db.playlistTracks).get()).single;
     expect(row.sortOrder, 0);
     expect(row.addedAt, 10);
-    expect(row.syncVersion, (await journal.window(since: head)).single.record.version);
-    expect((events.single as LibraryPlaylistTracksChange).playlistId, playlistId);
+    expect(
+      row.syncVersion,
+      (await journal.window(since: head)).single.record.version,
+    );
+    expect(
+      (events.single as LibraryPlaylistTracksChange).playlistId,
+      playlistId,
+    );
 
     final record = (await journal.window(since: head)).single.record;
     expect(record.key, SyncRecordKeys.playlistTrack(syncId, 'wy', '1'));
@@ -239,8 +246,10 @@ void main() {
       expect(await orderedIds(playlistId), ['wy:2', 'wy:3', 'wy:1']);
       // 日志的 sortOrder 与实际行一致（顶部插入是连续区间）。
       expect(
-        [for (final entry in await journal.window(since: head))
-          entry.record.data?['sortOrder']],
+        [
+          for (final entry in await journal.window(since: head))
+            entry.record.data?['sortOrder'],
+        ],
         [-2, -1],
       );
 
@@ -330,15 +339,15 @@ void main() {
     await flush();
     events.clear();
     final head = await journal.headSeq();
-    final before = (await db.select(db.playlistTracks).get())
-        .firstWhere((row) => row.songId == '1');
+    final before = (await db.select(db.playlistTracks).get()).firstWhere(
+      (row) => row.songId == '1',
+    );
 
     expect(
-      await engine.replacePlaylistTrack(
-        playlistId,
-        (sourceKey: 'wy', songId: '404'),
-        track('900'),
-      ),
+      await engine.replacePlaylistTrack(playlistId, (
+        sourceKey: 'wy',
+        songId: '404',
+      ), track('900')),
       isFalse,
     );
     await flush();
@@ -346,19 +355,22 @@ void main() {
     expect(await journal.window(since: head), isEmpty);
 
     expect(
-      await engine.replacePlaylistTrack(
-        playlistId,
-        (sourceKey: 'wy', songId: '1'),
-        track('900'),
-      ),
+      await engine.replacePlaylistTrack(playlistId, (
+        sourceKey: 'wy',
+        songId: '1',
+      ), track('900')),
       isTrue,
     );
     await flush();
-    final swapped = (await db.select(db.playlistTracks).get())
-        .firstWhere((row) => row.songId == '900');
+    final swapped = (await db.select(db.playlistTracks).get()).firstWhere(
+      (row) => row.songId == '900',
+    );
     expect(swapped.sortOrder, before.sortOrder);
     expect(swapped.addedAt, before.addedAt, reason: '换源不改变加入时间');
-    expect(swapped.syncVersion, (await journal.window(since: head)).single.record.version);
+    expect(
+      swapped.syncVersion,
+      (await journal.window(since: head)).single.record.version,
+    );
     expect(events.single, isA<LibraryPlaylistTracksChange>());
   });
 
@@ -402,10 +414,10 @@ void main() {
     final head = await journal.headSeq();
 
     expect(
-      await engine.importPlaylistTracks(
-        playlistId,
-        [track('1', addedAt: 777), track('2', addedAt: 777)],
-      ),
+      await engine.importPlaylistTracks(playlistId, [
+        track('1', addedAt: 777),
+        track('2', addedAt: 777),
+      ]),
       2,
     );
     await flush();

@@ -6,6 +6,7 @@ import 'package:molia/pages/any_listen_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/source_manager.dart';
+
 import 'support/settings_test_support.dart';
 
 void main() {
@@ -36,8 +37,9 @@ void main() {
   }
 
   testWidgets('保存：校验地址、写入 any_listen_ 前缀的 prefs', (tester) async {
-    final provider =
-        mountProvider(SourceManager(settings: testSettingsRegistry()));
+    final provider = mountProvider(
+      SourceManager(settings: testSettingsRegistry()),
+    );
     await pumpPage(tester, AnyListenPage(provider: provider));
 
     // 启用但不填地址：保存时给出提示且不落盘
@@ -58,8 +60,9 @@ void main() {
   });
 
   testWidgets('连接测试：缺少地址时给出可读提示（不发请求）', (tester) async {
-    final provider =
-        mountProvider(SourceManager(settings: testSettingsRegistry()));
+    final provider = mountProvider(
+      SourceManager(settings: testSettingsRegistry()),
+    );
     await pumpPage(tester, AnyListenPage(provider: provider));
 
     await tester.tap(find.text('连接测试').hitTestable());
@@ -85,10 +88,7 @@ void main() {
     expect(manager.anyListenAvailable, isTrue);
     expect(
       manager.anyListenConfig,
-      const AnyListenConfig(
-        serverUrl: 'http://127.0.0.1:9500',
-        enabled: true,
-      ),
+      const AnyListenConfig(serverUrl: 'http://127.0.0.1:9500', enabled: true),
     );
   });
 }

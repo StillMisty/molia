@@ -25,8 +25,8 @@ class SeekPreviewController {
     required this._trackChanges,
     required TrackId? Function() currentTrackId,
     required this._seek,
-  })  : _currentTrackId = currentTrackId,
-        _lastTrackId = currentTrackId() {
+  }) : _currentTrackId = currentTrackId,
+       _lastTrackId = currentTrackId() {
     _position.addListener(_handlePositionTick);
     _trackChanges.addListener(_handleTrackChanged);
   }

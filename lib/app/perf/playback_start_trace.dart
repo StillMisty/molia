@@ -137,8 +137,7 @@ class PlaybackStartTrace {
       fields: () => {
         'track': _trackId,
         'result': result,
-        if (resolveUs != null)
-          'resolve_ms': _ms(resolveUs),
+        if (resolveUs != null) 'resolve_ms': _ms(resolveUs),
         if (sourceUs != null) ...{
           'source_ms': _ms(sourceUs - (resolveUs ?? 0)),
           'play_ms': _ms(totalUs - sourceUs),

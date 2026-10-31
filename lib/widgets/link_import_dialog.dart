@@ -111,10 +111,7 @@ class _LinkImportDialogState extends State<_LinkImportDialog> {
           onPressed: () => Navigator.pop(context),
           child: Text(l10n.cancel),
         ),
-        M3EButton.filled(
-          onPressed: _submit,
-          child: Text(l10n.discoverOpen),
-        ),
+        M3EButton.filled(onPressed: _submit, child: Text(l10n.discoverOpen)),
       ],
     );
   }

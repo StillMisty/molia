@@ -67,13 +67,15 @@ void main() {
 
     expect(result, isA<ShortcutBindingAccepted>());
     expect(
-      ShortcutSettings.instance.inAppBindings
-          .comboFor(ShortcutCommand.togglePlayPause),
+      ShortcutSettings.instance.inAppBindings.comboFor(
+        ShortcutCommand.togglePlayPause,
+      ),
       combo,
     );
     expect(
-      ShortcutSettings.instance.inAppBindings
-          .isOverridden(ShortcutCommand.togglePlayPause),
+      ShortcutSettings.instance.inAppBindings.isOverridden(
+        ShortcutCommand.togglePlayPause,
+      ),
       isTrue,
     );
     // 存储里是「覆盖表 JSON」，读回经同一解码路径仍得同一组合。
@@ -87,8 +89,9 @@ void main() {
 
     await ShortcutSettings.reload();
     expect(
-      ShortcutSettings.instance.inAppBindings
-          .comboFor(ShortcutCommand.togglePlayPause),
+      ShortcutSettings.instance.inAppBindings.comboFor(
+        ShortcutCommand.togglePlayPause,
+      ),
       combo,
     );
   });
@@ -294,8 +297,9 @@ void main() {
 
     await ShortcutSettings.reload();
     expect(
-      ShortcutSettings.instance.inAppBindings
-          .comboFor(ShortcutCommand.togglePlayPause),
+      ShortcutSettings.instance.inAppBindings.comboFor(
+        ShortcutCommand.togglePlayPause,
+      ),
       const ShortcutCombo(key: LogicalKeyboardKey.arrowUp),
     );
 
@@ -369,19 +373,11 @@ void main() {
     );
     expect(
       settings.globalBindings.comboFor(ShortcutCommand.togglePlayPause),
-      const ShortcutCombo(
-        key: LogicalKeyboardKey.keyN,
-        ctrl: true,
-        alt: true,
-      ),
+      const ShortcutCombo(key: LogicalKeyboardKey.keyN, ctrl: true, alt: true),
     );
     expect(
       settings.globalBindings.comboFor(ShortcutCommand.nextTrack),
-      const ShortcutCombo(
-        key: LogicalKeyboardKey.space,
-        ctrl: true,
-        alt: true,
-      ),
+      const ShortcutCombo(key: LogicalKeyboardKey.space, ctrl: true, alt: true),
     );
     for (final combo in settings.globalBindings.effective.values) {
       expect(

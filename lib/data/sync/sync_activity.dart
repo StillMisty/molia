@@ -26,11 +26,11 @@ class SyncActivityEntry {
   bool get effective => bytesIn + bytesOut > 0 || applied > 0;
 
   Map<String, dynamic> toJson() => {
-        'at': at,
-        if (bytesIn > 0) 'bytesIn': bytesIn,
-        if (bytesOut > 0) 'bytesOut': bytesOut,
-        if (applied > 0) 'applied': applied,
-      };
+    'at': at,
+    if (bytesIn > 0) 'bytesIn': bytesIn,
+    if (bytesOut > 0) 'bytesOut': bytesOut,
+    if (applied > 0) 'applied': applied,
+  };
 
   static SyncActivityEntry? fromJson(Object? raw) {
     if (raw is! Map) return null;

@@ -17,7 +17,7 @@ class LyricsChannelEvent {
 /// 方法调用处理器，因此原生事件集中在此分发，输出/监测器只订阅 [events]。
 class LyricsChannel {
   LyricsChannel({MethodChannel? channel})
-      : _channel = channel ?? MethodChannel(channelName) {
+    : _channel = channel ?? MethodChannel(channelName) {
     _channel.setMethodCallHandler(_onNativeCall);
   }
 
@@ -38,10 +38,12 @@ class LyricsChannel {
 
   Future<void> _onNativeCall(MethodCall call) async {
     final raw = call.arguments;
-    _events.add(LyricsChannelEvent(
-      call.method,
-      raw is Map ? Map<String, dynamic>.from(raw) : const {},
-    ));
+    _events.add(
+      LyricsChannelEvent(
+        call.method,
+        raw is Map ? Map<String, dynamic>.from(raw) : const {},
+      ),
+    );
   }
 
   Future<bool> desktopSupported() async =>

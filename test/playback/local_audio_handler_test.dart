@@ -30,15 +30,15 @@ MediaSessionCopy _copyFor(Locale locale) =>
     MediaSessionCopy.of(lookupAppLocalizations(locale));
 
 SourceTrack _track({String? coverUrl}) => SourceTrack(
-      sourceKey: 'wy',
-      origin: 'builtin',
-      title: '晴天',
-      artist: '周杰伦',
-      album: '叶惠美',
-      coverUrl: coverUrl,
-      duration: const Duration(seconds: 269),
-      raw: const {'songmid': 186016},
-    );
+  sourceKey: 'wy',
+  origin: 'builtin',
+  title: '晴天',
+  artist: '周杰伦',
+  album: '叶惠美',
+  coverUrl: coverUrl,
+  duration: const Duration(seconds: 269),
+  raw: const {'songmid': 186016},
+);
 
 /// 记录型命令面：handler 只该把系统动作翻译成这些命令。
 ///
@@ -86,6 +86,18 @@ class _FakeCommands implements PlaybackCommandPort {
   @override
   Future<PlaybackCommandOutcome> playQueueIndex(int index) async {
     calls.add('playQueueIndex:$index');
+    return outcome;
+  }
+
+  @override
+  Future<PlaybackCommandOutcome> moveQueueIndex(int from, int to) async {
+    calls.add('moveQueueIndex:$from:$to');
+    return outcome;
+  }
+
+  @override
+  Future<PlaybackCommandOutcome> removeQueueIndex(int index) async {
+    calls.add('removeQueueIndex:$index');
     return outcome;
   }
 
@@ -169,12 +181,10 @@ void main() {
     test('标题 / 歌手 / 专辑 / 时长 / 封面原样映射', () {
       final metadata = mediaMetadataForTrack(
         _track(
-          coverUrl:
-              'http://p2.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg',
+          coverUrl: 'http://p2.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg',
         ),
         duration: const Duration(seconds: 269),
-        artworkUri:
-            'http://p2.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg',
+        artworkUri: 'http://p2.music.126.net/81BsxxhomJ4aJZYvEbyPkw==/109951165671182684.jpg',
         unknownArtist: '未知歌手',
       );
 
@@ -214,10 +224,7 @@ void main() {
         parseArtUri('https://a.com/x.jpg'),
         Uri.parse('https://a.com/x.jpg'),
       );
-      expect(
-        parseArtUri('//a.com/x.jpg'),
-        Uri.parse('https://a.com/x.jpg'),
-      );
+      expect(parseArtUri('//a.com/x.jpg'), Uri.parse('https://a.com/x.jpg'));
       expect(parseArtUri('data:image/png;base64,AAAA'), isNotNull);
       expect(parseArtUri('a.com/x.jpg'), isNull);
       expect(parseArtUri(null), isNull);
@@ -239,17 +246,18 @@ void main() {
 
       final actions = backend.lastActions!;
       expect(
-          actions.map((action) => action.name),
-          containsAll([
-            'play',
-            'pause',
-            'skipToPrevious',
-            'skipToNext',
-            'stop',
-            'seekTo',
-            favoriteActionId,
-            playModeActionId,
-          ]));
+        actions.map((action) => action.name),
+        containsAll([
+          'play',
+          'pause',
+          'skipToPrevious',
+          'skipToNext',
+          'stop',
+          'seekTo',
+          favoriteActionId,
+          playModeActionId,
+        ]),
+      );
       // 自定义动作之间的相对顺序（Android 通知按这个顺序发给系统）：收藏在前。
       final names = actions.map((action) => action.name).toList();
       expect(

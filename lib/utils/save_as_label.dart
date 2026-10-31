@@ -9,9 +9,8 @@ String savedLocationMessage(
   AppLocalizations l10n,
   SaveLocationKind kind,
   String displayPath,
-) =>
-    switch (kind) {
-      SaveLocationKind.fileSystem => l10n.savedToPath(displayPath),
-      SaveLocationKind.downloads => l10n.savedToDownloads(displayPath),
-      SaveLocationKind.filesApp => l10n.savedToFilesApp(displayPath),
-    };
+) => switch (kind) {
+  SaveLocationKind.fileSystem => l10n.savedToPath(displayPath),
+  SaveLocationKind.downloads => l10n.savedToDownloads(displayPath),
+  SaveLocationKind.filesApp => l10n.savedToFilesApp(displayPath),
+};

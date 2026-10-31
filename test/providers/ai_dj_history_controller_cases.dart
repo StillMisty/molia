@@ -14,77 +14,76 @@ AiDjBatch _batch(
   int itemCount = 3,
   DateTime? generatedAt,
   AiDjOrigin origin = AiDjOrigin.refresh,
-}) =>
-    AiDjBatch(
-      id: id,
-      items: [
-        for (var i = 0; i < itemCount; i++)
-          ResolvedRecommendation(
-            source: AiRecommendation(
-              title: '$id-$i',
-              artist: 'Artist',
-              reason: 'reason $id-$i',
-            ),
-            track: Track(
-              id: TrackId('wy', '$id-$i-${_idSeed++}'),
-              title: '$id-$i',
-              artists: const [Artist(name: 'Artist')],
-              duration: const Duration(seconds: 100),
-              origin: TrackOrigin.builtin,
-            ),
-            sourceName: '网易云音乐',
-          ),
-      ],
-      generatedAt: generatedAt ?? _now,
-      origin: origin,
-    );
+}) => AiDjBatch(
+  id: id,
+  items: [
+    for (var i = 0; i < itemCount; i++)
+      ResolvedRecommendation(
+        source: AiRecommendation(
+          title: '$id-$i',
+          artist: 'Artist',
+          reason: 'reason $id-$i',
+        ),
+        track: Track(
+          id: TrackId('wy', '$id-$i-${_idSeed++}'),
+          title: '$id-$i',
+          artists: const [Artist(name: 'Artist')],
+          duration: const Duration(seconds: 100),
+          origin: TrackOrigin.builtin,
+        ),
+        sourceName: '网易云音乐',
+      ),
+  ],
+  generatedAt: generatedAt ?? _now,
+  origin: origin,
+);
 
 StoredAiBatch _encode(AiDjBatch batch) => StoredAiBatch(
-      id: batch.id,
-      items: [
-        for (final item in batch.items)
-          StoredAiBatchItem(
-            sourceKey: item.track.id.sourceKey,
-            songId: item.track.id.id,
-            title: item.track.title,
-            artist: item.track.artistLabel,
-            album: item.track.album ?? '',
-            reason: item.source.reason,
-          ),
-      ],
-      unresolved: batch.unresolved,
-      generatedAt: batch.generatedAt,
-      origin: batch.origin,
-      preferences: batch.preferences,
-    );
+  id: batch.id,
+  items: [
+    for (final item in batch.items)
+      StoredAiBatchItem(
+        sourceKey: item.track.id.sourceKey,
+        songId: item.track.id.id,
+        title: item.track.title,
+        artist: item.track.artistLabel,
+        album: item.track.album ?? '',
+        reason: item.source.reason,
+      ),
+  ],
+  unresolved: batch.unresolved,
+  generatedAt: batch.generatedAt,
+  origin: batch.origin,
+  preferences: batch.preferences,
+);
 
 AiDjBatch _decode(StoredAiBatch stored) => AiDjBatch(
-      id: stored.id,
-      items: [
-        for (final item in stored.items)
-          ResolvedRecommendation(
-            source: AiRecommendation(
-              title: item.title,
-              artist: item.artist,
-              reason: item.reason,
-            ),
-            track: Track(
-              id: TrackId(item.sourceKey, item.songId),
-              title: item.title,
-              artists: [Artist(name: item.artist)],
-              duration: item.durationMs == null
-                  ? null
-                  : Duration(milliseconds: item.durationMs!),
-              origin: TrackOrigin.builtin,
-            ),
-            sourceName: item.sourceName,
-          ),
-      ],
-      unresolved: stored.unresolved,
-      generatedAt: stored.generatedAt,
-      origin: stored.origin,
-      preferences: stored.preferences,
-    );
+  id: stored.id,
+  items: [
+    for (final item in stored.items)
+      ResolvedRecommendation(
+        source: AiRecommendation(
+          title: item.title,
+          artist: item.artist,
+          reason: item.reason,
+        ),
+        track: Track(
+          id: TrackId(item.sourceKey, item.songId),
+          title: item.title,
+          artists: [Artist(name: item.artist)],
+          duration: item.durationMs == null
+              ? null
+              : Duration(milliseconds: item.durationMs!),
+          origin: TrackOrigin.builtin,
+        ),
+        sourceName: item.sourceName,
+      ),
+  ],
+  unresolved: stored.unresolved,
+  generatedAt: stored.generatedAt,
+  origin: stored.origin,
+  preferences: stored.preferences,
+);
 
 /// 统计批次键读取次数，验证按需加载缓存命中。
 class _CountingStore extends AiRecommendationStore {
@@ -112,8 +111,7 @@ class _ThrowingStore extends AiRecommendationStore {
   Future<void> saveBatch(
     StoredAiBatch batch, {
     bool makeActive = false,
-  }) async =>
-      throw StateError('saveBatch');
+  }) async => throw StateError('saveBatch');
 
   @override
   Future<void> setActive(String? id) async => throw StateError('setActive');
@@ -143,11 +141,9 @@ void main() {
     DateTime Function()? clock,
   }) {
     final controller = AiDjHistoryController(
-      store: store ??
-          AiRecommendationStore(
-            preferences: prefs,
-            clock: clock ?? () => _now,
-          ),
+      store:
+          store ??
+          AiRecommendationStore(preferences: prefs, clock: clock ?? () => _now),
       decode: _decode,
       encode: _encode,
       clock: clock ?? () => _now,
@@ -199,8 +195,12 @@ void main() {
     await controller.archive(_batch('a'), makeActive: true);
 
     await controller.updateActive(
-      _batch('a',
-          itemCount: 1, generatedAt: _now, origin: AiDjOrigin.manualFeed),
+      _batch(
+        'a',
+        itemCount: 1,
+        generatedAt: _now,
+        origin: AiDjOrigin.manualFeed,
+      ),
     );
 
     expect(controller.active?.items, hasLength(1));

@@ -22,19 +22,19 @@ void main() {
   final codecPort = InlineSyncCodecPort(codec);
 
   SyncEnvelope envelope(String deviceId, {String value = 'v'}) => SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceId,
-        producedAt: 1,
-        records: {
-          SyncCategory.settings: [
-            SyncRecord(
-              key: 'theme_mode',
-              version: SyncVersion(physical: 10, deviceId: deviceId),
-              data: {'v': value},
-            ),
-          ],
-        },
-      );
+    deviceId: deviceId,
+    deviceName: deviceId,
+    producedAt: 1,
+    records: {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: SyncVersion(physical: 10, deviceId: deviceId),
+          data: {'v': value},
+        ),
+      ],
+    },
+  );
 
   test('探测 → 拉取 → 推送：两台设备交换加密快照', () async {
     final envA = envelope('devA', value: 'light');
@@ -522,13 +522,10 @@ void main() {
 
     expect(client.isRunning, isTrue, reason: 'UDP 不可用不该让整个传输失败');
     expect(client.unavailableReason, isNull);
-    expect(
-        client.discoveryPorts,
-        (
-          v4: 0,
-          v6: 0,
-        ),
-        reason: '没有 UDP socket = 两族探测端口都不可用');
+    expect(client.discoveryPorts, (
+      v4: 0,
+      v6: 0,
+    ), reason: '没有 UDP socket = 两族探测端口都不可用');
 
     // 没有可直连的对端：原因码是「探测端口不可用」而不是「启动失败」。
     final empty = await client.pull();

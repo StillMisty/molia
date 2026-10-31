@@ -22,7 +22,7 @@ class AiDjHistoryController {
     required this._decode,
     required this._encode,
     DateTime Function()? clock,
-  })  : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now;
 
   /// 历史详情缓存上限（按需加载；不持久化）。
   ///

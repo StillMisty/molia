@@ -49,17 +49,11 @@ void main() {
       await writeFile('audio_cache/nested/c', 7);
       await writeFile('audio_cache/nested/deeper/d', 0);
 
-      expect(
-        await storage.usage(dir),
-        const CacheUsage(bytes: 357, count: 4),
-      );
+      expect(await storage.usage(dir), const CacheUsage(bytes: 357, count: 4));
     });
 
     test('目录不存在 / 路径不是目录：zero', () async {
-      expect(
-        await storage.usage('${tempRoot.path}/missing'),
-        CacheUsage.zero,
-      );
+      expect(await storage.usage('${tempRoot.path}/missing'), CacheUsage.zero);
 
       final file = await writeFile('plain_file', 10);
       expect(await storage.usage(file.path), CacheUsage.zero);
@@ -86,7 +80,6 @@ void main() {
       expect(await storage.usage(dir.path), CacheUsage.zero);
       expect(await storage.listFiles(dir.path), isEmpty);
     });
-
   });
 
   group('listFiles', () {
@@ -138,8 +131,11 @@ void main() {
       );
 
       // staleDays=365 先删 stale；剩余 3 个，maxObjects=2 再删最旧的 oldest。
-      final result =
-          await storage.sweepArtwork(dir, maxObjects: 2, staleDays: 365);
+      final result = await storage.sweepArtwork(
+        dir,
+        maxObjects: 2,
+        staleDays: 365,
+      );
       expect(result.deleted, 2);
       // 存活集合供调用方一次对齐索引（相对缓存目录）。
       expect(result.remainingRelativePaths, {'middle.jpg', 'newest.jpg'});
@@ -176,8 +172,11 @@ void main() {
         // 预期不可读。
       }
 
-      final locked =
-          await storage.sweepArtwork(dir.path, maxObjects: 1, staleDays: 1);
+      final locked = await storage.sweepArtwork(
+        dir.path,
+        maxObjects: 1,
+        staleDays: 1,
+      );
       expect(locked.deleted, 0);
       expect(locked.remainingRelativePaths, isNull);
     });

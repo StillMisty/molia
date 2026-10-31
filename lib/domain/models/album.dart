@@ -52,15 +52,8 @@ class Album {
       other.hasMore == hasMore;
 
   @override
-  int get hashCode => Object.hash(
-        id,
-        name,
-        artist,
-        coverUrl,
-        year,
-        deepHash(tracks),
-        hasMore,
-      );
+  int get hashCode =>
+      Object.hash(id, name, artist, coverUrl, year, deepHash(tracks), hasMore);
 
   @override
   String toString() => 'Album($id, $name, ${tracks.length} 首)';

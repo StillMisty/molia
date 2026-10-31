@@ -12,15 +12,14 @@ void main() {
     Object? value,
     bool deleted = false,
     int? deletedAt,
-  }) =>
-      SyncRecord(
-        key: key,
-        version: SyncVersion(physical: at, counter: counter, deviceId: by),
-        deleted: deleted,
-        data: deleted
-            ? (deletedAt == null ? null : {'deletedAt': deletedAt})
-            : {'v': value},
-      );
+  }) => SyncRecord(
+    key: key,
+    version: SyncVersion(physical: at, counter: counter, deviceId: by),
+    deleted: deleted,
+    data: deleted
+        ? (deletedAt == null ? null : {'deletedAt': deletedAt})
+        : {'v': value},
+  );
 
   test('逐键取新：版本物理分量大者胜', () {
     final merged = mergeRecords([
@@ -183,20 +182,41 @@ void main() {
           },
         ],
         'unknown_category': [
-          {'key': 'x', 'version': {'physical': 1}},
+          {
+            'key': 'x',
+            'version': {'physical': 1},
+          },
         ],
       },
     })!;
     final parsed = tolerant.recordsOf(SyncCategory.settings).single;
     expect(parsed.key, 'ok');
-    expect(parsed.version, const SyncVersion(physical: 2, counter: 3, deviceId: 'x'));
+    expect(
+      parsed.version,
+      const SyncVersion(physical: 2, counter: 3, deviceId: 'x'),
+    );
   });
 
   test('SyncVersion 排序：physical → counter → deviceId', () {
     const base = SyncVersion(physical: 100, counter: 1, deviceId: 'a');
-    expect(base.isNewerThan(const SyncVersion(physical: 99, counter: 9, deviceId: 'z')), isTrue);
-    expect(base.isNewerThan(const SyncVersion(physical: 100, counter: 0, deviceId: 'z')), isTrue);
-    expect(base.isNewerThan(const SyncVersion(physical: 100, counter: 1, deviceId: 'b')), isFalse);
+    expect(
+      base.isNewerThan(
+        const SyncVersion(physical: 99, counter: 9, deviceId: 'z'),
+      ),
+      isTrue,
+    );
+    expect(
+      base.isNewerThan(
+        const SyncVersion(physical: 100, counter: 0, deviceId: 'z'),
+      ),
+      isTrue,
+    );
+    expect(
+      base.isNewerThan(
+        const SyncVersion(physical: 100, counter: 1, deviceId: 'b'),
+      ),
+      isFalse,
+    );
     expect(base.isNewerThan(base), isFalse);
   });
 

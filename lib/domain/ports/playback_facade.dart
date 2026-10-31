@@ -44,6 +44,12 @@ abstract interface class PlaybackFacade {
   /// 随机模式下本轮排列不变，追加项在本轮结束后纳入新一轮洗牌。
   Future<void> enqueueTracks(List<Track> tracks);
 
+  /// 移动队列中的一项；返回是否真的改变（越界 / 当前曲目 / 随机模式 false）。
+  Future<bool> moveQueueIndex(int from, int to);
+
+  /// 移除队列中的一项；返回是否真的改变（越界 / 当前曲目 false）。
+  Future<bool> removeQueueIndex(int index);
+
   Future<void> toggle();
 
   /// 起播（幂等）：命令面用它表达系统媒体「播放」键，避免先查状态再 toggle

@@ -328,12 +328,7 @@ class _RefreshableStatus extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: child,
-        ),
-      ],
+      slivers: [SliverFillRemaining(hasScrollBody: false, child: child)],
     );
   }
 }

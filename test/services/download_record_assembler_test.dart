@@ -22,35 +22,34 @@ void main() {
     String songId = '1',
     String title = '测试歌曲',
     String artist = '歌手',
-  }) =>
-      Track(
-        id: TrackId(sourceKey, songId),
-        title: title,
-        artists: [Artist(name: artist)],
-        album: '专辑',
-        duration: const Duration(minutes: 3),
-        artwork: Artwork(uri: Uri.parse('https://img.example.com/a.jpg')),
-        origin: TrackOrigin.builtin,
-        payload: {'songmid': songId},
-      );
+  }) => Track(
+    id: TrackId(sourceKey, songId),
+    title: title,
+    artists: [Artist(name: artist)],
+    album: '专辑',
+    duration: const Duration(minutes: 3),
+    artwork: Artwork(uri: Uri.parse('https://img.example.com/a.jpg')),
+    origin: TrackOrigin.builtin,
+    payload: {'songmid': songId},
+  );
 
   DownloadedTrack makeExisting() => const DownloadedTrack(
-        originSourceKey: 'kw',
-        originSongId: '1',
-        title: '旧标题',
-        artist: '旧歌手',
-        album: '旧专辑',
-        coverUrl: 'https://img.example.com/old.jpg',
-        durationMs: 111,
-        raw: {'songmid': 'old'},
-        quality: '128k',
-        filePath: '/downloads/旧标题.mp3',
-        sizeBytes: 9,
-        lyricPath: '/downloads/lyrics/旧标题.lrc',
-        coverPath: '/downloads/covers/旧标题.jpg',
-        publicUri: 'content://old',
-        downloadedAt: 500,
-      );
+    originSourceKey: 'kw',
+    originSongId: '1',
+    title: '旧标题',
+    artist: '旧歌手',
+    album: '旧专辑',
+    coverUrl: 'https://img.example.com/old.jpg',
+    durationMs: 111,
+    raw: {'songmid': 'old'},
+    quality: '128k',
+    filePath: '/downloads/旧标题.mp3',
+    sizeBytes: 9,
+    lyricPath: '/downloads/lyrics/旧标题.lrc',
+    coverPath: '/downloads/covers/旧标题.jpg',
+    publicUri: 'content://old',
+    downloadedAt: 500,
+  );
 
   test('完整下载：曲目快照 + 本次产物，下载时间走注入时钟', () {
     final track = makeTrack();

@@ -27,36 +27,35 @@ void main() {
   });
 
   SyncEnvelope envelope(String deviceId, {String value = 'v'}) => SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceId,
-        producedAt: 1,
-        records: {
-          SyncCategory.settings: [
-            SyncRecord(
-              key: 'theme_mode',
-              version: SyncVersion(physical: 10, deviceId: deviceId),
-              data: {'v': value},
-            ),
-          ],
-        },
-      );
+    deviceId: deviceId,
+    deviceName: deviceId,
+    producedAt: 1,
+    records: {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: SyncVersion(physical: 10, deviceId: deviceId),
+          data: {'v': value},
+        ),
+      ],
+    },
+  );
 
   WebDavSyncTransport transport(
     String deviceId, {
     String password = 'secret',
     String? passphraseOverride,
     int? baseSeq,
-  }) =>
-      WebDavSyncTransport(
-        deviceId: deviceId,
-        codec: codecPort,
-        passphraseProvider: () async => passphraseOverride ?? passphrase,
-        configProvider: () =>
-            WebDavConfig(baseUrl: server.baseUrl, username: 'user'),
-        passwordProvider: () async => password,
-        journalBaseSeqProvider: baseSeq == null ? null : () async => baseSeq,
-        requestTimeout: const Duration(seconds: 5),
-      );
+  }) => WebDavSyncTransport(
+    deviceId: deviceId,
+    codec: codecPort,
+    passphraseProvider: () async => passphraseOverride ?? passphrase,
+    configProvider: () =>
+        WebDavConfig(baseUrl: server.baseUrl, username: 'user'),
+    passwordProvider: () async => password,
+    journalBaseSeqProvider: baseSeq == null ? null : () async => baseSeq,
+    requestTimeout: const Duration(seconds: 5),
+  );
 
   /// 全量快照载荷（名字里的覆盖位置 = [coverage]）。
   SyncEnvelope snapshotEnvelope(String deviceId, {required int coverage}) =>
@@ -399,25 +398,25 @@ void main() {
     await b.start();
 
     SyncJournalEntry entry(int seq, String value) => SyncJournalEntry(
-          seq: seq,
-          category: SyncCategory.settings,
-          record: SyncRecord(
-            key: 'theme_mode',
-            version: SyncVersion(physical: 10 + seq, deviceId: 'devA'),
-            data: {'v': value},
-          ),
-        );
+      seq: seq,
+      category: SyncCategory.settings,
+      record: SyncRecord(
+        key: 'theme_mode',
+        version: SyncVersion(physical: 10 + seq, deviceId: 'devA'),
+        data: {'v': value},
+      ),
+    );
     SyncEnvelope delta(List<SyncJournalEntry> entries) => SyncEnvelope(
-          deviceId: 'devA',
-          deviceName: '设备A',
-          producedAt: 1,
-          snapshotId: 'hash-${entries.last.seq}',
-          journalHead: entries.last.seq,
-          baseSeq: 0,
-          windowStart: entries.first.seq,
-          windowEnd: entries.last.seq,
-          journal: entries,
-        );
+      deviceId: 'devA',
+      deviceName: '设备A',
+      producedAt: 1,
+      snapshotId: 'hash-${entries.last.seq}',
+      journalHead: entries.last.seq,
+      baseSeq: 0,
+      windowStart: entries.first.seq,
+      windowEnd: entries.last.seq,
+      journal: entries,
+    );
 
     // 日常路径：每次变更只写一个新块（名字自带区间，写一次不再改）。
     await a.push(delta([entry(1, 'dark')]));
@@ -591,23 +590,23 @@ void main() {
     addTearDown(() => a.stop());
     await a.start();
     SyncEnvelope delta(int seq) => SyncEnvelope(
-          deviceId: 'devA',
-          producedAt: 1,
-          journalHead: seq,
-          windowStart: seq,
-          windowEnd: seq,
-          journal: [
-            SyncJournalEntry(
-              seq: seq,
-              category: SyncCategory.settings,
-              record: SyncRecord(
-                key: 'theme_mode',
-                version: SyncVersion(physical: seq, deviceId: 'devA'),
-                data: {'v': 'v$seq'},
-              ),
-            ),
-          ],
-        );
+      deviceId: 'devA',
+      producedAt: 1,
+      journalHead: seq,
+      windowStart: seq,
+      windowEnd: seq,
+      journal: [
+        SyncJournalEntry(
+          seq: seq,
+          category: SyncCategory.settings,
+          record: SyncRecord(
+            key: 'theme_mode',
+            version: SyncVersion(physical: seq, deviceId: 'devA'),
+            data: {'v': 'v$seq'},
+          ),
+        ),
+      ],
+    );
     await a.push(delta(1));
     await a.push(delta(2));
     await a.push(delta(3));

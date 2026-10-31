@@ -382,10 +382,7 @@ void main() {
 
     expect(backend.calls, contains('setCurrentQuality:flac'));
     expect(find.text('可用音质'), findsNothing);
-    expect(
-      find.descendant(of: row, matching: find.text('无损')),
-      findsOneWidget,
-    );
+    expect(find.descendant(of: row, matching: find.text('无损')), findsOneWidget);
   });
 
   testWidgets('音质行：没有可用音质时显示未知且不可点', (tester) async {
@@ -870,10 +867,7 @@ void main() {
 
     expect(playback.sleepTimer.value.duration, const Duration(minutes: 30));
     expect(notifications.snackbars, hasLength(1));
-    expect(
-      notifications.snackbars.single.$1,
-      '已开启定时关闭 · 30:00 后暂停并退出应用',
-    );
+    expect(notifications.snackbars.single.$1, '已开启定时关闭 · 30:00 后暂停并退出应用');
     expect(notifications.snackbars.single.$2, '取消');
 
     // Snackbar 的「取消」操作直接撤销定时。
@@ -886,10 +880,7 @@ void main() {
     await tester.tap(find.byKey(const Key('sleepTimerAfterTrackItem')));
     await tester.pumpAndSettle();
     expect(playback.sleepTimer.value.mode, SleepTimerMode.afterCurrentTrack);
-    expect(
-      notifications.snackbars.last.$1,
-      '已开启定时关闭 · 播完当前歌曲后暂停并退出应用',
-    );
+    expect(notifications.snackbars.last.$1, '已开启定时关闭 · 播完当前歌曲后暂停并退出应用');
   });
 
   testWidgets('定时关闭：自定义时长走 M3E time picker（初始 30 分钟）', (tester) async {

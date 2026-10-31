@@ -44,16 +44,16 @@ class PlayHistoryEntry {
   String get key => '$sourceKey:$songId';
 
   PlayHistoryEntry copyWith({int? playedAt}) => PlayHistoryEntry(
-        sourceKey: sourceKey,
-        songId: songId,
-        title: title,
-        artist: artist,
-        album: album,
-        coverUrl: coverUrl,
-        durationMs: durationMs,
-        raw: raw,
-        playedAt: playedAt ?? this.playedAt,
-      );
+    sourceKey: sourceKey,
+    songId: songId,
+    title: title,
+    artist: artist,
+    album: album,
+    coverUrl: coverUrl,
+    durationMs: durationMs,
+    raw: raw,
+    playedAt: playedAt ?? this.playedAt,
+  );
 
   @override
   String toString() => 'PlayHistoryEntry($key, $title)';
@@ -174,22 +174,17 @@ final class FavoriteToggle {
 
   /// 加入收藏（[track] 是实际落库的列表行，位置字段已由写路径填好）。
   factory FavoriteToggle.add(PlaylistTrack track) => FavoriteToggle(
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        favorite: true,
-        track: track,
-      );
+    sourceKey: track.sourceKey,
+    songId: track.songId,
+    favorite: true,
+    track: track,
+  );
 
   /// 取消收藏。
   factory FavoriteToggle.remove({
     required String sourceKey,
     required String songId,
-  }) =>
-      FavoriteToggle(
-        sourceKey: sourceKey,
-        songId: songId,
-        favorite: false,
-      );
+  }) => FavoriteToggle(sourceKey: sourceKey, songId: songId, favorite: false);
 
   final String sourceKey;
   final String songId;
@@ -266,17 +261,18 @@ final class LibraryFavoritesChange extends LibraryChange {
 /// 只外发部分类别，标记按类别维护）。
 extension LibraryChangeSyncCategories on LibraryChange {
   Set<SyncCategory> get syncCategories => switch (this) {
-        LibraryHistoryChange() => const {SyncCategory.history},
-        LibraryPlaylistsChange() => const {SyncCategory.playlists},
-        LibraryPlaylistTracksChange() ||
-        LibraryFavoritesChange() =>
-          const {SyncCategory.playlists, SyncCategory.playlistTracks},
-        LibraryImportChange() => const {
-            SyncCategory.history,
-            SyncCategory.playlists,
-            SyncCategory.playlistTracks,
-          },
-      };
+    LibraryHistoryChange() => const {SyncCategory.history},
+    LibraryPlaylistsChange() => const {SyncCategory.playlists},
+    LibraryPlaylistTracksChange() || LibraryFavoritesChange() => const {
+      SyncCategory.playlists,
+      SyncCategory.playlistTracks,
+    },
+    LibraryImportChange() => const {
+      SyncCategory.history,
+      SyncCategory.playlists,
+      SyncCategory.playlistTracks,
+    },
+  };
 }
 
 final class LibraryImportChange extends LibraryChange {

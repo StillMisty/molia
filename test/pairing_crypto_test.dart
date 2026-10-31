@@ -12,11 +12,11 @@ void main() {
   final nonceB = Uint8List.fromList(List<int>.generate(16, (i) => 100 + i));
 
   Uint8List aad({String requestId = 'req-12345678'}) => PairingCrypto.aad(
-        requestId: requestId,
-        intent: SyncPairingIntent.join,
-        initiatorDeviceId: 'devA',
-        receiverDeviceId: 'devB',
-      );
+    requestId: requestId,
+    intent: SyncPairingIntent.join,
+    initiatorDeviceId: 'devA',
+    receiverDeviceId: 'devB',
+  );
 
   test('ECDH 双方派生同一会话密钥（salt = nonceA || nonceB）', () {
     final a = PairingCrypto.generateKeyPair();
@@ -69,14 +69,14 @@ void main() {
       aad: aad(),
     );
     expect(
-      utf8.decode(
-        PairingCrypto.open(key: key, sealed: sealed, aad: aad()),
-      ),
+      utf8.decode(PairingCrypto.open(key: key, sealed: sealed, aad: aad())),
       passphrase,
     );
     // 密文里不应出现口令明文。
     expect(
-        utf8.decode(sealed, allowMalformed: true), isNot(contains(passphrase)));
+      utf8.decode(sealed, allowMalformed: true),
+      isNot(contains(passphrase)),
+    );
 
     final tampered = Uint8List.fromList(sealed);
     tampered[tampered.length - 1] ^= 0x01;
@@ -114,28 +114,26 @@ void main() {
       SyncPairingIntent intent = SyncPairingIntent.join,
       Uint8List? nonceAOverride,
       Uint8List? publicB,
-    }) =>
-        PairingCrypto.confirmationCode(
-          requestId: 'req-12345678',
-          intent: intent,
-          initiatorDeviceId: 'devA',
-          receiverDeviceId: 'devB',
-          initiatorNonce: nonceAOverride ?? nonceA,
-          receiverNonce: nonceB,
-          initiatorPublicKey: a.publicKey,
-          receiverPublicKey: publicB ?? b.publicKey,
-        );
+    }) => PairingCrypto.confirmationCode(
+      requestId: 'req-12345678',
+      intent: intent,
+      initiatorDeviceId: 'devA',
+      receiverDeviceId: 'devB',
+      initiatorNonce: nonceAOverride ?? nonceA,
+      receiverNonce: nonceB,
+      initiatorPublicKey: a.publicKey,
+      receiverPublicKey: publicB ?? b.publicKey,
+    );
 
     final initiatorCode = code();
     final receiverCode = code();
     expect(initiatorCode, hasLength(6));
     expect(initiatorCode, equals(receiverCode));
     expect(
-        code(intent: SyncPairingIntent.invite), isNot(equals(initiatorCode)));
-    expect(
-      code(nonceAOverride: Uint8List(16)),
+      code(intent: SyncPairingIntent.invite),
       isNot(equals(initiatorCode)),
     );
+    expect(code(nonceAOverride: Uint8List(16)), isNot(equals(initiatorCode)));
     // 对端公钥被替换 → 确认码变化（用户据此拒绝）。
     final c = PairingCrypto.generateKeyPair();
     addTearDown(c.destroy);
@@ -180,10 +178,7 @@ void main() {
     expect(
       proof,
       equals(
-        PairingCrypto.groupProof(
-          discoveryKey: key,
-          requestId: 'req-12345678',
-        ),
+        PairingCrypto.groupProof(discoveryKey: key, requestId: 'req-12345678'),
       ),
     );
     expect(

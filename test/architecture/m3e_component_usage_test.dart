@@ -27,9 +27,7 @@ const Map<String, Set<String>> _rawComponentAllowlist = {
   'lib/pages/sync_dialogs.dart': {'SelectableText'},
   // M3E 底部弹层 / 侧边弹层的宿主不提供 Material 祖先，透明 Material 只
   // 补 ink 绘制层（弹窗本体已全部走 M3E 组件）。
-  'lib/utils/responsive.dart': {
-    'Material',
-  },
+  'lib/utils/responsive.dart': {'Material'},
   // AI 提示词预览需要可选中复制。
   'lib/widgets/ai_dj_prompt_dialog.dart': {'SelectableText'},
   // 合集弹层可重排列表：M3E 1.2.0 未导出 reorder host，长期例外。
@@ -160,7 +158,8 @@ String _stripCommentsAndStrings(String source) {
       continue;
     }
 
-    final isRawPrefix = (char == 'r' || char == 'R') &&
+    final isRawPrefix =
+        (char == 'r' || char == 'R') &&
         (next == '"' || next == "'") &&
         (index == 0 || !RegExp(r'[A-Za-z0-9_]').hasMatch(source[index - 1]));
     if (isRawPrefix) {
@@ -214,9 +213,7 @@ void main() {
   test('裸 Material 组件只允许登记在案的文件 / 标识符', () {
     final stripped = <String, String>{
       for (final path in files)
-        path: _stripCommentsAndStrings(
-          File(path).readAsStringSync(),
-        ),
+        path: _stripCommentsAndStrings(File(path).readAsStringSync()),
     };
 
     final offenders = <String>[];
@@ -233,7 +230,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: '这些地方还在用裸 Material 组件（换 M3E 组件，或先在 '
+      reason:
+          '这些地方还在用裸 Material 组件（换 M3E 组件，或先在 '
           '_rawComponentAllowlist 登记并写清理由）：\n  '
           '${offenders.join('\n  ')}',
     );
@@ -258,7 +256,8 @@ void main() {
     expect(
       stale,
       isEmpty,
-      reason: '白名单条目已经过期，删掉它们，避免白名单掩盖新违规：\n  '
+      reason:
+          '白名单条目已经过期，删掉它们，避免白名单掩盖新违规：\n  '
           '${stale.join('\n  ')}',
     );
   });

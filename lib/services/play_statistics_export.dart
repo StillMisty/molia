@@ -34,7 +34,8 @@ Map<String, dynamic> buildPlayStatisticsExport({
   String? iso(int? epochMs) => epochMs == null
       ? null
       : DateTime.fromMillisecondsSinceEpoch(epochMs).toIso8601String();
-  String day(DateTime value) => '${value.year.toString().padLeft(4, '0')}-'
+  String day(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
       '${value.month.toString().padLeft(2, '0')}-'
       '${value.day.toString().padLeft(2, '0')}';
 

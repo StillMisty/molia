@@ -112,7 +112,7 @@ typedef AiGenerationFailureHandler = void Function(
 
 class AiGenerationExecutor {
   AiGenerationExecutor({DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+    : _clock = clock ?? DateTime.now;
 
   final DateTime Function() _clock;
   final ValueNotifier<AiGenerationState> _state =
@@ -155,22 +155,27 @@ class AiGenerationExecutor {
         cancelAutoFeed();
         epoch = ++_epoch;
         _explicitToken = token;
-        _publish(AiGenerationState(
-          busy: true,
-          progress: intent.initialProgress ??
-              AiDjProgress(phase: AiDjPhase.profile, startedAt: _clock()),
-          replacingUri: _state.value.replacingUri,
-        ));
+        _publish(
+          AiGenerationState(
+            busy: true,
+            progress:
+                intent.initialProgress ??
+                AiDjProgress(phase: AiDjPhase.profile, startedAt: _clock()),
+            replacingUri: _state.value.replacingUri,
+          ),
+        );
       case AiGenerationLane.silent:
         if (isBusy || _silentToken != null) return null;
         _silentToken = token;
       case AiGenerationLane.replace:
         if (isBusy || _state.value.replacingUri != null) return null;
-        _publish(AiGenerationState(
-          busy: _state.value.busy,
-          progress: _state.value.progress,
-          replacingUri: intent.replacingUri,
-        ));
+        _publish(
+          AiGenerationState(
+            busy: _state.value.busy,
+            progress: _state.value.progress,
+            replacingUri: intent.replacingUri,
+          ),
+        );
         if (intent.replacingUri == null) return null;
     }
 
@@ -180,11 +185,13 @@ class AiGenerationExecutor {
         intent.visible
             ? (progress) {
                 if (!_isCurrent(intent, token, epoch)) return;
-                _publish(AiGenerationState(
-                  busy: true,
-                  progress: progress,
-                  replacingUri: _state.value.replacingUri,
-                ));
+                _publish(
+                  AiGenerationState(
+                    busy: true,
+                    progress: progress,
+                    replacingUri: _state.value.replacingUri,
+                  ),
+                );
               }
             : null,
       );
@@ -227,14 +234,13 @@ class AiGenerationExecutor {
     AiGenerationIntent intent,
     AiGenerationCancelToken token,
     int? epoch,
-  ) =>
-      switch (intent.lane) {
-        AiGenerationLane.explicit => epoch == _epoch && !token.isCancelled,
-        AiGenerationLane.silent => !token.isCancelled,
-        // 换一首没有取消通道：批内竞争由提交闭包自己按 active id 判断；
-        // 只额外挡住 provider 已 dispose 的提交。
-        AiGenerationLane.replace => !_disposed,
-      };
+  ) => switch (intent.lane) {
+    AiGenerationLane.explicit => epoch == _epoch && !token.isCancelled,
+    AiGenerationLane.silent => !token.isCancelled,
+    // 换一首没有取消通道：批内竞争由提交闭包自己按 active id 判断；
+    // 只额外挡住 provider 已 dispose 的提交。
+    AiGenerationLane.replace => !_disposed,
+  };
 
   void _finish(
     AiGenerationIntent intent,
@@ -250,10 +256,12 @@ class AiGenerationExecutor {
         if (identical(_silentToken, token)) _silentToken = null;
       case AiGenerationLane.replace:
         if (_state.value.replacingUri == intent.replacingUri) {
-          _publish(AiGenerationState(
-            busy: _state.value.busy,
-            progress: _state.value.progress,
-          ));
+          _publish(
+            AiGenerationState(
+              busy: _state.value.busy,
+              progress: _state.value.progress,
+            ),
+          );
         }
     }
   }

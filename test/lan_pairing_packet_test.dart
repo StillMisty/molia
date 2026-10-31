@@ -15,18 +15,17 @@ void main() {
     int httpPort = 43210,
     List<String> addresses = const ['192.168.1.7'],
     bool hasGroup = true,
-  }) =>
-      Msp1Message(
-        type: type,
-        deviceId: deviceId,
-        name: name,
-        httpPort: httpPort,
-        probePort: 47825,
-        addresses: addresses,
-        hasGroup: hasGroup,
-        bootId: 'boot-1',
-        nonce: 'nonce-1',
-      );
+  }) => Msp1Message(
+    type: type,
+    deviceId: deviceId,
+    name: name,
+    httpPort: httpPort,
+    probePort: 47825,
+    addresses: addresses,
+    hasGroup: hasGroup,
+    bootId: 'boot-1',
+    nonce: 'nonce-1',
+  );
 
   test('probe / announce 往返：字段逐项还原，body ≤512B', () {
     for (final type in [Msp1.typeProbe, Msp1.typeAnnounce]) {
@@ -35,7 +34,8 @@ void main() {
       expect(packet[3], Msp1.version);
       expect(packet[4], type);
       expect(Msp1.headerLength, 7, reason: 'magic/version/type/bodyLen，无保留字节');
-      final bodyLength = (packet[Msp1.bodyLengthOffset] << 8) |
+      final bodyLength =
+          (packet[Msp1.bodyLengthOffset] << 8) |
           packet[Msp1.bodyLengthOffset + 1];
       expect(bodyLength, packet.length - Msp1.headerLength);
       expect(bodyLength, lessThanOrEqualTo(Msp1.maxBodyLength));
@@ -91,24 +91,27 @@ void main() {
 
     final announceWithoutHttp = _packet(
       Msp1.typeAnnounce,
-      utf8.encode(jsonEncode({
-        'id': 'devA',
-        'nonce': 'n',
-        'boot': 'b',
-        'http': 0,
-      })),
+      utf8.encode(
+        jsonEncode({'id': 'devA', 'nonce': 'n', 'boot': 'b', 'http': 0}),
+      ),
     );
-    expect(Msp1.decode(announceWithoutHttp), isNull,
-        reason: '没有 HTTP 端点的 announce 不产生不可配对候选');
+    expect(
+      Msp1.decode(announceWithoutHttp),
+      isNull,
+      reason: '没有 HTTP 端点的 announce 不产生不可配对候选',
+    );
   });
 
   test('超长字段：编码时逐级截断，body 不超 512B', () {
-    final packet = Msp1.encode(message(
-      deviceId: 'd' * Msp1.maxDeviceIdLength,
-      name: '很长的设备名' * 40,
-      addresses: [for (var i = 0; i < 40; i++) '10.0.0.$i'],
-    ));
-    final bodyLength = (packet[Msp1.bodyLengthOffset] << 8) |
+    final packet = Msp1.encode(
+      message(
+        deviceId: 'd' * Msp1.maxDeviceIdLength,
+        name: '很长的设备名' * 40,
+        addresses: [for (var i = 0; i < 40; i++) '10.0.0.$i'],
+      ),
+    );
+    final bodyLength =
+        (packet[Msp1.bodyLengthOffset] << 8) |
         packet[Msp1.bodyLengthOffset + 1];
     expect(bodyLength, lessThanOrEqualTo(Msp1.maxBodyLength));
     final decoded = Msp1.decode(packet)!;
@@ -117,10 +120,7 @@ void main() {
   });
 
   test('bodyLen 超上限：认证前就拒绝', () {
-    final packet = _packet(
-      Msp1.typeProbe,
-      Uint8List(Msp1.maxBodyLength + 1),
-    );
+    final packet = _packet(Msp1.typeProbe, Uint8List(Msp1.maxBodyLength + 1));
     expect(Msp1.decode(packet), isNull);
   });
 
@@ -138,10 +138,7 @@ void main() {
     }
     expect(global.allow('10.0.2.1', 1200), isFalse);
 
-    final bounded = MspRateLimiter(
-      perSourceLimit: 100,
-      globalLimit: 100000,
-    );
+    final bounded = MspRateLimiter(perSourceLimit: 100, globalLimit: 100000);
     for (var i = 0; i < 500; i++) {
       expect(bounded.allow('source-$i', 1000 + i), isTrue);
     }

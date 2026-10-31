@@ -15,11 +15,8 @@ const Set<String> _rawTooltipAllowlist = {
 };
 
 /// 免给 `semanticLabel` 的 M3EIconButton：图标本身带名（由调用方给的
-/// `Icon.semanticLabel`），可聚焦节点仍能念出动作名，见
-/// `collectionSwipeActions`（`lib/widgets/collection_track_list.dart`）。
-const Set<String> _iconLabelInIconAllowlist = {
-  'lib/widgets/swipe_reveal_row.dart',
-};
+/// `Icon.semanticLabel`）。当前没有例外，保留空集给后续登记。
+const Set<String> _iconLabelInIconAllowlist = {};
 
 /// 扫描 [source] 中 `name(` 调用的参数文本与行号（括号配对，跳过字符串 / 注释）。
 List<({String body, int line})> _callArguments(String source, String name) {
@@ -97,7 +94,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: '这些 M3EIconButton 还在用 tooltip（改成 semanticLabel:）：'
+      reason:
+          '这些 M3EIconButton 还在用 tooltip（改成 semanticLabel:）：'
           '\n  ${offenders.join('\n  ')}\n'
           '  提示只留给图标表达不了的文本，见本文件顶部说明。',
     );
@@ -119,7 +117,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: '这些 M3EIconButton 没有无障碍名（加 semanticLabel:）：'
+      reason:
+          '这些 M3EIconButton 没有无障碍名（加 semanticLabel:）：'
           '\n  ${offenders.join('\n  ')}\n'
           '  图标上的名只能救急，按钮自己的节点才是读屏落点。',
     );
@@ -128,8 +127,11 @@ void main() {
   test('T3 裸 Tooltip( 只允许登记在案的白名单文件', () {
     // 白名单文件改名 / 删除时，规则要跟着显形，不能静默失效。
     for (final path in _rawTooltipAllowlist) {
-      expect(files, contains(path),
-          reason: '白名单里的 $path 不存在了，更新 _rawTooltipAllowlist');
+      expect(
+        files,
+        contains(path),
+        reason: '白名单里的 $path 不存在了，更新 _rawTooltipAllowlist',
+      );
     }
     final pattern = RegExp(r'(?<![\w.])Tooltip\s*\(');
     final offenders = <String>[];
@@ -150,7 +152,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: '图标按钮的提示会随鼠标扫过弹出；要加新例外，'
+      reason:
+          '图标按钮的提示会随鼠标扫过弹出；要加新例外，'
           '先在 _rawTooltipAllowlist 登记并写清理由：\n  ${offenders.join('\n  ')}',
     );
   });

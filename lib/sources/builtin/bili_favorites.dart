@@ -27,8 +27,9 @@ class BiliFavorites {
 
   static final RegExp _digits = RegExp(r'^\d+$');
   static final RegExp _mediaListPath = RegExp(r'/medialist/detail/ml(\d+)');
-  static final RegExp _folderLink =
-      RegExp(r'(?:space\.)?bilibili\.com/(\d+)/favlist');
+  static final RegExp _folderLink = RegExp(
+    r'(?:space\.)?bilibili\.com/(\d+)/favlist',
+  );
   static final RegExp _shortLinkHost = RegExp(r'(^|\.)b23\.tv$');
 
   /// 解析收藏夹 ID：纯数字 / `fid` / `media_id` / `ml<id>` / b23 短链。

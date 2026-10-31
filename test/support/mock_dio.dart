@@ -43,13 +43,12 @@ ResponseBody textResponse(
   int statusCode = 200,
   Map<String, List<String>> headers = const {},
   String? statusMessage,
-}) =>
-    ResponseBody.fromString(
-      body,
-      statusCode,
-      headers: headers,
-      statusMessage: statusMessage,
-    );
+}) => ResponseBody.fromString(
+  body,
+  statusCode,
+  headers: headers,
+  statusMessage: statusMessage,
+);
 
 /// 字节响应（二进制接口 / 非法 UTF-8 场景）。
 ResponseBody bytesResponse(
@@ -57,13 +56,12 @@ ResponseBody bytesResponse(
   int statusCode = 200,
   Map<String, List<String>> headers = const {},
   String? statusMessage,
-}) =>
-    ResponseBody.fromBytes(
-      bytes,
-      statusCode,
-      headers: headers,
-      statusMessage: statusMessage,
-    );
+}) => ResponseBody.fromBytes(
+  bytes,
+  statusCode,
+  headers: headers,
+  statusMessage: statusMessage,
+);
 
 /// 从 [RequestOptions] 里取请求体文本。
 ///

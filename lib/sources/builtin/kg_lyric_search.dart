@@ -28,17 +28,13 @@ class KgLyricSearch {
   }
 
   /// 平台变体面：请求 / 业务码判定（`error_code != 0`）/ 命中解析。
-  static BuiltinLyricSearchCall _callFor(
-    String keyword,
-    int page,
-    int limit,
-  ) {
+  static BuiltinLyricSearchCall _callFor(String keyword, int page, int limit) {
     return BuiltinLyricSearchCall(
       platform: 'kg',
-      url: 'https://songsearch.kugou.com/lyric_search'
+      url:
+          'https://songsearch.kugou.com/lyric_search'
           '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=$limit',
-      isInvalid: (response) =>
-          response is! Map || response['error_code'] != 0,
+      isInvalid: (response) => response is! Map || response['error_code'] != 0,
       parseHits: (response) {
         final data = (response as Map)['data'];
         final rawList = (data is Map) ? data['lists'] : null;
@@ -70,16 +66,36 @@ class KgLyricSearch {
     if (songId.isEmpty || hash.isEmpty) return null;
 
     final types = <String, Map<String, dynamic>>{};
-    KgSearch.addKgQuality(types, '128k',
-        size: raw['FileSize'], hash: hash, requireHash: true);
-    KgSearch.addKgQuality(types, '320k',
-        size: raw['320Size'], hash: raw['320Hash'], requireHash: true);
-    KgSearch.addKgQuality(types, 'flac',
-        size: raw['SQSize'], hash: raw['SQHash'], requireHash: true);
+    KgSearch.addKgQuality(
+      types,
+      '128k',
+      size: raw['FileSize'],
+      hash: hash,
+      requireHash: true,
+    );
+    KgSearch.addKgQuality(
+      types,
+      '320k',
+      size: raw['320Size'],
+      hash: raw['320Hash'],
+      requireHash: true,
+    );
+    KgSearch.addKgQuality(
+      types,
+      'flac',
+      size: raw['SQSize'],
+      hash: raw['SQHash'],
+      requireHash: true,
+    );
     final res = raw['Res'];
     if (res is Map) {
-      KgSearch.addKgQuality(types, 'flac24bit',
-          size: res['FileSize'], hash: res['Hash'], requireHash: true);
+      KgSearch.addKgQuality(
+        types,
+        'flac24bit',
+        size: res['FileSize'],
+        hash: res['Hash'],
+        requireHash: true,
+      );
     }
 
     final duration = parseSourceCount(raw['TimeLength']) ?? 0;

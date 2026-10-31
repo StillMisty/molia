@@ -42,10 +42,11 @@ void main() {
       expect(first.payload['songmid'], 326696);
       expect(first.payload['albumId'], 32311);
       // privilege maxbr=999000：flac/320k/128k 三档（顺序按音质从高到低）。
-      expect(
-        first.qualities.map((quality) => quality.type).toList(),
-        ['flac', '320k', '128k'],
-      );
+      expect(first.qualities.map((quality) => quality.type).toList(), [
+        'flac',
+        '320k',
+        '128k',
+      ]);
     });
 
     test('业务码非 200：失败', () {
@@ -86,13 +87,10 @@ void main() {
 
     test('模块 subcode 非 0：失败', () {
       expect(
-        () => TxAlbum.parse(
-          {
-            'code': 0,
-            'albumSonglist': {'code': 500003, 'subcode': 860100001},
-          },
-          albumMid: '1',
-        ),
+        () => TxAlbum.parse({
+          'code': 0,
+          'albumSonglist': {'code': 500003, 'subcode': 860100001},
+        }, albumMid: '1'),
         throwsA(isA<SourceFailure>()),
       );
     });
@@ -152,12 +150,7 @@ void main() {
   group('kw 酷我', () {
     test('专辑解析：伪 JSON / N_MINFO 音质 / songnum 分页', () {
       final body = KwDiscoverSource.objStr2JSON(_fixtureText('kw'));
-      final album = KwAlbum.parse(
-        body,
-        albumId: '1433',
-        page: 1,
-        limit: 3,
-      );
+      final album = KwAlbum.parse(body, albumId: '1433', page: 1, limit: 3);
       expect(album.id, '1433');
       expect(album.name, '黑色香水');
       expect(album.artist, '曹方');
@@ -210,11 +203,8 @@ void main() {
 
     test('code 非 000000：失败', () {
       expect(
-        () => MgAlbum.parse(
-          songs: {'code': '040002'},
-          info: null,
-          albumId: '1',
-        ),
+        () =>
+            MgAlbum.parse(songs: {'code': '040002'}, info: null, albumId: '1'),
         throwsA(isA<SourceFailure>()),
       );
     });
@@ -233,8 +223,11 @@ void main() {
       await expectLater(
         BuiltinAlbums.fetch('lx_custom', '1'),
         throwsA(
-          isA<SourceFailure>()
-              .having((f) => f.kind, 'kind', FailureKind.unsupported),
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
         ),
       );
     });

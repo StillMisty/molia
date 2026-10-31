@@ -64,9 +64,7 @@ void main() {
               return textResponse(jsonEncode({'code': -404, 'message': '无'}));
             }
             if (riskOnce && playUrlCalls == 1) {
-              return textResponse(
-                jsonEncode({'code': -403, 'message': '风控'}),
-              );
+              return textResponse(jsonEncode({'code': -403, 'message': '风控'}));
             }
             if (request.uri.queryParameters['fnval'] == '1') {
               // 无 dash 的老视频：durl 单文件只有 `url` 字段。
@@ -76,7 +74,8 @@ void main() {
                   'data': {
                     'durl': [
                       {
-                        'url': 'https://cdn.example/video.m4s'
+                        'url':
+                            'https://cdn.example/video.m4s'
                             '?deadline=$deadline',
                       },
                     ],
@@ -86,10 +85,7 @@ void main() {
             }
             if (noDash) {
               return textResponse(
-                jsonEncode({
-                  'code': 0,
-                  'data': <String, dynamic>{},
-                }),
+                jsonEncode({'code': 0, 'data': <String, dynamic>{}}),
               );
             }
             return textResponse(
@@ -266,8 +262,11 @@ void main() {
     await expectLater(
       BiliPlay.resolve(const {}),
       throwsA(
-        isA<SourceFailure>()
-            .having((failure) => failure.kind, 'kind', FailureKind.unsupported),
+        isA<SourceFailure>().having(
+          (failure) => failure.kind,
+          'kind',
+          FailureKind.unsupported,
+        ),
       ),
     );
     expect(requests, isEmpty);

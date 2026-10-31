@@ -26,8 +26,22 @@ class KgLyric {
 
   /// KRC 解码用的 16 字节 key（LX `kg/util.js` 原样）。
   static const List<int> _encKey = [
-    0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47,
-    0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69,
+    0x40,
+    0x47,
+    0x61,
+    0x77,
+    0x5e,
+    0x32,
+    0x74,
+    0x47,
+    0x51,
+    0x36,
+    0x31,
+    0x2d,
+    0xce,
+    0xd2,
+    0x6e,
+    0x69,
   ];
 
   /// KRC 头部 `[id:$xxxx]` 行（LX `headExp`，仅单行匹配）。
@@ -46,7 +60,8 @@ class KgLyric {
     required String hash,
     required int timelengthSeconds,
   }) async {
-    final searchUrl = 'http://lyrics.kugou.com/search?ver=1&man=yes&client=pc'
+    final searchUrl =
+        'http://lyrics.kugou.com/search?ver=1&man=yes&client=pc'
         '&keyword=${Uri.encodeComponent(name)}'
         '&hash=$hash&timelength=$timelengthSeconds&lrctxt=1';
     final search = await lxHttpGet(
@@ -59,10 +74,12 @@ class KgLyric {
     if (candidates is! List || candidates.isEmpty) return null;
     final info = candidates.first;
     if (info is! Map) return null;
-    final fmt =
-        (info['krctype'] == 1 && info['contenttype'] != 1) ? 'krc' : 'lrc';
+    final fmt = (info['krctype'] == 1 && info['contenttype'] != 1)
+        ? 'krc'
+        : 'lrc';
 
-    final downloadUrl = 'http://lyrics.kugou.com/download?ver=1&client=pc'
+    final downloadUrl =
+        'http://lyrics.kugou.com/download?ver=1&client=pc'
         '&id=${info['id']}&accesskey=${info['accesskey']}'
         '&fmt=$fmt&charset=utf8';
     final download = await lxHttpGet(
@@ -178,8 +195,12 @@ class KgLyric {
     }
     return BuiltinLyricResult(
       lyric: lyric,
-      tlyric: tlyricLines == null ? null : decodeName(tlyricLines.join('\n')).trim(),
-      rlyric: rlyricLines == null ? null : decodeName(rlyricLines.join('\n')).trim(),
+      tlyric: tlyricLines == null
+          ? null
+          : decodeName(tlyricLines.join('\n')).trim(),
+      rlyric: rlyricLines == null
+          ? null
+          : decodeName(rlyricLines.join('\n')).trim(),
       lxlyric: lxlyric,
     );
   }
@@ -204,4 +225,3 @@ class KgLyric {
     ];
   }
 }
-

@@ -74,7 +74,8 @@ class LxEngine {
   Stream<LxUpdateAlert> get updateAlerts => _alertController.stream;
   Map<String, LxSourceDecl> get sources => Map.unmodifiable(_sources);
   LxScriptInfo? get script => _script;
-  bool get isRunning => !_dead && _isolate != null && _readyCompleter?.isCompleted == true;
+  bool get isRunning =>
+      !_dead && _isolate != null && _readyCompleter?.isCompleted == true;
 
   /// 启动引擎并运行脚本，等待脚本发送 `inited` 事件。
   Future<Map<String, LxSourceDecl>> start(
@@ -150,12 +151,10 @@ class LxEngine {
     required String quality,
     Duration timeout = const Duration(seconds: 20),
   }) async {
-    final data = await _invoke(
-      'musicUrl',
-      source,
-      {'type': quality, 'musicInfo': musicInfo},
-      timeout: timeout,
-    );
+    final data = await _invoke('musicUrl', source, {
+      'type': quality,
+      'musicInfo': musicInfo,
+    }, timeout: timeout);
     if (data is! String || data.isEmpty) {
       throw const LxEngineException('音源未返回有效的播放地址');
     }
@@ -168,12 +167,9 @@ class LxEngine {
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 20),
   }) async {
-    final data = await _invoke(
-      'lyric',
-      source,
-      {'musicInfo': musicInfo},
-      timeout: timeout,
-    );
+    final data = await _invoke('lyric', source, {
+      'musicInfo': musicInfo,
+    }, timeout: timeout);
     if (data is! Map) {
       throw const LxEngineException('音源未返回歌词');
     }
@@ -186,12 +182,9 @@ class LxEngine {
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 15),
   }) async {
-    final data = await _invoke(
-      'pic',
-      source,
-      {'musicInfo': musicInfo},
-      timeout: timeout,
-    );
+    final data = await _invoke('pic', source, {
+      'musicInfo': musicInfo,
+    }, timeout: timeout);
     if (data is! String || data.isEmpty) {
       throw const LxEngineException('音源未返回封面地址');
     }
@@ -207,17 +200,12 @@ class LxEngine {
     int limit = 20,
     Duration timeout = const Duration(seconds: 20),
   }) {
-    return _invoke(
-      action,
-      source,
-      {
-        'keyword': keyword,
-        'page': page,
-        'limit': limit,
-        'pagesize': limit,
-      },
-      timeout: timeout,
-    );
+    return _invoke(action, source, {
+      'keyword': keyword,
+      'page': page,
+      'limit': limit,
+      'pagesize': limit,
+    }, timeout: timeout);
   }
 
   Future<dynamic> _invoke(
@@ -259,8 +247,7 @@ class LxEngine {
         if (!health.alive) {
           _pending.remove(reqId);
           await dispose();
-          throw LxEngineException(
-              '音源请求超时（${timeout.inSeconds}s），引擎无响应已重启');
+          throw LxEngineException('音源请求超时（${timeout.inSeconds}s），引擎无响应已重启');
         }
         if (health.inflightHttp > 0 &&
             health.httpRemaining > Duration.zero &&
@@ -339,15 +326,18 @@ class LxEngine {
         final reqId = message['reqId']?.toString();
         if (kDebugMode) {
           debugPrint(
-              '[LxEngine] response $reqId ok=${message['ok']} error=${message['error']}');
+            '[LxEngine] response $reqId ok=${message['ok']} error=${message['error']}',
+          );
         }
         final completer = reqId == null ? null : _pending.remove(reqId);
         if (completer != null && !completer.isCompleted) {
-          completer.complete(_LxResponse(
-            ok: message['ok'] == true,
-            data: message['data'],
-            error: message['error']?.toString(),
-          ));
+          completer.complete(
+            _LxResponse(
+              ok: message['ok'] == true,
+              data: message['data'],
+              error: message['error']?.toString(),
+            ),
+          );
         }
         break;
       case 'pong':
@@ -355,27 +345,35 @@ class LxEngine {
         if (waiter != null && !waiter.isCompleted) {
           final remainingMs =
               (message['httpRemainingMs'] as num?)?.toInt() ?? 0;
-          waiter.complete(_EngineHealth(
-            alive: true,
-            inflightHttp: (message['inflightHttp'] as num?)?.toInt() ?? 0,
-            httpRemaining: Duration(milliseconds: remainingMs.clamp(0, 1 << 31)),
-          ));
+          waiter.complete(
+            _EngineHealth(
+              alive: true,
+              inflightHttp: (message['inflightHttp'] as num?)?.toInt() ?? 0,
+              httpRemaining: Duration(
+                milliseconds: remainingMs.clamp(0, 1 << 31),
+              ),
+            ),
+          );
         }
         break;
       case 'log':
         if (!_logController.isClosed) {
-          _logController.add(LxLogEntry(
-            message['level']?.toString() ?? 'log',
-            message['message']?.toString() ?? '',
-          ));
+          _logController.add(
+            LxLogEntry(
+              message['level']?.toString() ?? 'log',
+              message['message']?.toString() ?? '',
+            ),
+          );
         }
         break;
       case 'updateAlert':
         if (!_alertController.isClosed) {
-          _alertController.add(LxUpdateAlert(
-            log: message['log']?.toString() ?? '',
-            updateUrl: message['updateUrl']?.toString(),
-          ));
+          _alertController.add(
+            LxUpdateAlert(
+              log: message['log']?.toString() ?? '',
+              updateUrl: message['updateUrl']?.toString(),
+            ),
+          );
         }
         break;
     }
@@ -453,9 +451,9 @@ class _EngineHealth {
   });
 
   const _EngineHealth.dead()
-      : alive = false,
-        inflightHttp = 0,
-        httpRemaining = Duration.zero;
+    : alive = false,
+      inflightHttp = 0,
+      httpRemaining = Duration.zero;
 }
 
 void _lxIsolateEntry(List<dynamic> args) {
@@ -482,7 +480,9 @@ void _lxIsolateEntry(List<dynamic> args) {
 /// （桌面版 needle 默认 follow_max=0 不跟随、移动版底层 fetch 默认跟随），且两端
 /// 都未把脚本声明的 follow_max 透传到请求层，没有可对齐的统一定义；保持宿主既有
 /// 行为，避免改变未声明 follow_max 的存量脚本的取链结果。
-({bool? followRedirects, int? maxRedirects}) lxRedirectPolicy(Object? followMax) {
+({bool? followRedirects, int? maxRedirects}) lxRedirectPolicy(
+  Object? followMax,
+) {
   if (followMax is! num || !followMax.isFinite) {
     return (followRedirects: null, maxRedirects: null);
   }
@@ -529,14 +529,17 @@ class _LxIsolateHost {
   final Dio _dio = createAppDio();
 
   _LxIsolateHost(this._mainPort, Map<String, dynamic> config)
-      : _prelude = config['prelude'] as String,
-        _script = config['script'] as String,
-        _info = Map<String, dynamic>.from(config['info'] as Map);
+    : _prelude = config['prelude'] as String,
+      _script = config['script'] as String,
+      _info = Map<String, dynamic>.from(config['info'] as Map);
 
   void run() {
     final commandPort = ReceivePort();
     _commandPort = commandPort;
-    _mainPort.send(<String, dynamic>{'type': 'port', 'port': commandPort.sendPort});
+    _mainPort.send(<String, dynamic>{
+      'type': 'port',
+      'port': commandPort.sendPort,
+    });
     commandPort.listen(_onCommand);
     _initRuntime();
   }
@@ -560,7 +563,10 @@ class _LxIsolateHost {
       // 先注册消息通道，避免脚本初始化阶段的 inited 事件丢失
       runtime.onMessage('lx', _onJsMessage);
 
-      final preludeResult = runtime.evaluate(_prelude, sourceUrl: 'lx_prelude.js');
+      final preludeResult = runtime.evaluate(
+        _prelude,
+        sourceUrl: 'lx_prelude.js',
+      );
       if (preludeResult.isError) {
         _failInit('音源运行时加载失败: ${preludeResult.stringResult}');
         return;
@@ -610,8 +616,9 @@ class _LxIsolateHost {
 
   void _bindNativeFunctions(JavascriptRuntime runtime) {
     try {
-      final setterResult =
-          runtime.evaluate('(function(key, val){ globalThis[key] = val; })');
+      final setterResult = runtime.evaluate(
+        '(function(key, val){ globalThis[key] = val; })',
+      );
       if (setterResult.isError) return;
       final setter = setterResult.rawResult as JSInvokable;
 
@@ -627,12 +634,17 @@ class _LxIsolateHost {
       );
       bind(
         '__lxRsaEncrypt',
-        (Uint8List buffer, String key) =>
-            LxNativeUtils.rsaEncrypt(buffer, key),
+        (Uint8List buffer, String key) => LxNativeUtils.rsaEncrypt(buffer, key),
       );
       bind('__lxRandomBytes', (int size) => LxNativeUtils.randomBytes(size));
-      bind('__lxZlibInflate', (Uint8List data) => LxNativeUtils.zlibInflate(data));
-      bind('__lxZlibDeflate', (Uint8List data) => LxNativeUtils.zlibDeflate(data));
+      bind(
+        '__lxZlibInflate',
+        (Uint8List data) => LxNativeUtils.zlibInflate(data),
+      );
+      bind(
+        '__lxZlibDeflate',
+        (Uint8List data) => LxNativeUtils.zlibDeflate(data),
+      );
     } catch (e) {
       _log('warn', '绑定原生工具函数失败: $e');
     }
@@ -828,8 +840,10 @@ class _LxIsolateHost {
       if (form is Map || formData is Map) {
         final fields = (form is Map ? form : formData) as Map;
         body = fields.entries
-            .map((e) =>
-                '${Uri.encodeQueryComponent(e.key.toString())}=${Uri.encodeQueryComponent(e.value.toString())}')
+            .map(
+              (e) =>
+                  '${Uri.encodeQueryComponent(e.key.toString())}=${Uri.encodeQueryComponent(e.value.toString())}',
+            )
             .join('&');
         headers.putIfAbsent(
           'Content-Type',

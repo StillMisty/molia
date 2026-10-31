@@ -28,8 +28,10 @@ String sizeFormat(num size) {
   if (size <= 0) return '0 B';
   const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
   final value = size.toDouble();
-  final index =
-      (math.log(value) / math.ln2 / 10).floor().clamp(0, units.length - 1);
+  final index = (math.log(value) / math.ln2 / 10).floor().clamp(
+    0,
+    units.length - 1,
+  );
   return '${(value / math.pow(1024, index)).toStringAsFixed(2)} ${units[index]}';
 }
 
@@ -55,14 +57,14 @@ Uint8List aesEcbEncryptNoPadding(List<int> data, List<int> key) {
 
 /// AES-ECB + PKCS7 解密（同步；酷我 wbd 接口响应解密用）。
 Uint8List aesEcbDecryptPkcs7(List<int> data, List<int> key) {
-  final cipher = PaddedBlockCipherImpl(PKCS7Padding(), ECBBlockCipher(AESEngine()))
-    ..init(
-      false,
-      PaddedBlockCipherParameters<CipherParameters, CipherParameters>(
-        KeyParameter(Uint8List.fromList(key)),
-        null,
-      ),
-    );
+  final cipher =
+      PaddedBlockCipherImpl(PKCS7Padding(), ECBBlockCipher(AESEngine()))..init(
+        false,
+        PaddedBlockCipherParameters<CipherParameters, CipherParameters>(
+          KeyParameter(Uint8List.fromList(key)),
+          null,
+        ),
+      );
   return cipher.process(Uint8List.fromList(data));
 }
 
@@ -72,8 +74,26 @@ String hexEncode(List<int> data) =>
 const _txPart1Indexes = [23, 14, 6, 36, 16, 40, 7, 19];
 const _txPart2Indexes = [16, 1, 32, 12, 19, 27, 8, 5];
 const _txScrambleValues = [
-  89, 39, 179, 150, 218, 82, 58, 252, 177, 52,
-  186, 123, 120, 64, 242, 133, 143, 161, 121, 179,
+  89,
+  39,
+  179,
+  150,
+  218,
+  82,
+  58,
+  252,
+  177,
+  52,
+  186,
+  123,
+  120,
+  64,
+  242,
+  133,
+  143,
+  161,
+  121,
+  179,
 ];
 
 String zzcSign(String text) {
@@ -85,7 +105,8 @@ String zzcSign(String text) {
   final part2 = pick(_txPart2Indexes);
   final part3 = Uint8List(20);
   for (var i = 0; i < _txScrambleValues.length; i++) {
-    part3[i] = _txScrambleValues[i] ^
+    part3[i] =
+        _txScrambleValues[i] ^
         int.parse(hash.substring(i * 2, i * 2 + 2), radix: 16);
   }
   final b64Part = base64.encode(part3).replaceAll(RegExp(r'[\\/+=]'), '');
@@ -106,12 +127,14 @@ const kwWbdAppId = 'y67sprxhhpws';
 String kwWbdBuildParam(Map<String, dynamic> jsonData, {int? time}) {
   final key = base64.decode(kwWbdKeyBase64);
   final ts = time ?? DateTime.now().millisecondsSinceEpoch;
-  final encrypted = base64.encode(LxNativeUtils.aesEncrypt(
-    Uint8List.fromList(utf8.encode(jsonEncode(jsonData))),
-    'aes-128-ecb',
-    key,
-    null,
-  ));
+  final encrypted = base64.encode(
+    LxNativeUtils.aesEncrypt(
+      Uint8List.fromList(utf8.encode(jsonEncode(jsonData))),
+      'aes-128-ecb',
+      key,
+      null,
+    ),
+  );
   final sign = md5Hex('$kwWbdAppId$encrypted$ts').toUpperCase();
   return 'data=${Uri.encodeComponent(encrypted)}&time=$ts'
       '&appId=$kwWbdAppId&sign=$sign';
@@ -177,7 +200,9 @@ WeapiParams weapiParams(Object object, {String? secretKey}) {
   // Buffer.from(secretKey).reverse() 后左补零到 128 字节
   final reversed = Uint8List.fromList(skBytes.reversed.toList());
   final padded = Uint8List(128)..setRange(128 - reversed.length, 128, reversed);
-  final encSecKey = hexEncode(LxNativeUtils.rsaEncrypt(padded, wyWeapiPublicKey));
+  final encSecKey = hexEncode(
+    LxNativeUtils.rsaEncrypt(padded, wyWeapiPublicKey),
+  );
 
   return (params: base64.encode(second), encSecKey: encSecKey);
 }

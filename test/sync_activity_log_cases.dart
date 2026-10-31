@@ -8,26 +8,24 @@ void main() {
     int logLimit = 20,
     int activityLimit = 240,
     void Function()? onChanged,
-  }) =>
-      SyncActivityLog(
-        onChanged: onChanged ?? () {},
-        logLimit: logLimit,
-        activityLimit: activityLimit,
-      );
+  }) => SyncActivityLog(
+    onChanged: onChanged ?? () {},
+    logLimit: logLimit,
+    activityLimit: activityLimit,
+  );
 
   SyncRoundReport round({
     required int finishedAt,
     int applied = 0,
     List<SyncTransportReport> transports = const [],
-  }) =>
-      SyncRoundReport(
-        trigger: SyncTrigger.timer,
-        startedAt: finishedAt - 1,
-        finishedAt: finishedAt,
-        outcome: SyncOutcome.ok,
-        applied: applied,
-        transports: transports,
-      );
+  }) => SyncRoundReport(
+    trigger: SyncTrigger.timer,
+    startedAt: finishedAt - 1,
+    finishedAt: finishedAt,
+    outcome: SyncOutcome.ok,
+    applied: applied,
+    transports: transports,
+  );
 
   const lanOk = SyncTransportReport(
     kind: 'lan',
@@ -39,13 +37,15 @@ void main() {
   test('每轮追加日志与活动记录：新在前，lastSyncAt 跟随轮次完成时间', () {
     final state = activityLog();
     state.recordRound(round(finishedAt: 10, applied: 1));
-    state.recordRound(round(
-      finishedAt: 20,
-      applied: 2,
-      transports: const [
-        SyncTransportReport(kind: 'lan', running: true, bytesIn: 3),
-      ],
-    ));
+    state.recordRound(
+      round(
+        finishedAt: 20,
+        applied: 2,
+        transports: const [
+          SyncTransportReport(kind: 'lan', running: true, bytesIn: 3),
+        ],
+      ),
+    );
 
     expect(state.lastSyncAt, 20);
     expect(state.log.map((entry) => entry.at), [20, 10]);
@@ -59,30 +59,36 @@ void main() {
     var changes = 0;
     final state = activityLog(onChanged: () => changes++);
 
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.noPeers,
-    ));
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 1,
-      finishedAt: 2,
-      outcome: SyncOutcome.noChanges,
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.noPeers,
+      ),
+    );
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.noChanges,
+      ),
+    );
 
     expect(changes, 0, reason: '空轮次不写盘');
     expect(state.lastSyncAt, 2, reason: '本次进程内仍更新最近一轮');
     expect(state.log, hasLength(2), reason: '日志用于本次进程内展示');
     expect(state.activity, hasLength(2), reason: '活动记录口径不变');
 
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: 2,
-      finishedAt: 3,
-      outcome: SyncOutcome.noPeers,
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: 2,
+        finishedAt: 3,
+        outcome: SyncOutcome.noPeers,
+      ),
+    );
     expect(changes, 1, reason: '手动同步是用户动作');
   });
 
@@ -100,28 +106,32 @@ void main() {
 
   test('传输成功时间：只有启用且成功接触过对端的轮次才更新', () {
     final state = activityLog();
-    state.recordRound(round(
-      finishedAt: 1,
-      transports: const [
-        lanOk,
-        SyncTransportReport(kind: 'webdav', running: true), // 未启用
-      ],
-    ));
+    state.recordRound(
+      round(
+        finishedAt: 1,
+        transports: const [
+          lanOk,
+          SyncTransportReport(kind: 'webdav', running: true), // 未启用
+        ],
+      ),
+    );
     expect(state.transportLastSuccessAt('lan'), 1);
     expect(state.transportLastSuccessAt('webdav'), 0);
 
-    state.recordRound(round(
-      finishedAt: 2,
-      transports: const [
-        SyncTransportReport(
-          kind: 'lan',
-          running: true,
-          enabled: true,
-          peersSeen: 1,
-          failedPulls: 1,
-        ),
-      ],
-    ));
+    state.recordRound(
+      round(
+        finishedAt: 2,
+        transports: const [
+          SyncTransportReport(
+            kind: 'lan',
+            running: true,
+            enabled: true,
+            peersSeen: 1,
+            failedPulls: 1,
+          ),
+        ],
+      ),
+    );
     expect(state.transportLastSuccessAt('lan'), 1, reason: '失败尝试不算成功');
   });
 
@@ -155,14 +165,16 @@ void main() {
 
   test('快照往返：整体替换五类字段', () {
     final source = activityLog();
-    source.recordRound(round(
-      finishedAt: 5,
-      applied: 1,
-      transports: const [
-        lanOk,
-        SyncTransportReport(kind: 'webdav', running: true, bytesOut: 2),
-      ],
-    ));
+    source.recordRound(
+      round(
+        finishedAt: 5,
+        applied: 1,
+        transports: const [
+          lanOk,
+          SyncTransportReport(kind: 'webdav', running: true, bytesOut: 2),
+        ],
+      ),
+    );
     source.setSnapshotPushSeq('lan', 9);
 
     final target = activityLog()..applySnapshot(source.snapshot());

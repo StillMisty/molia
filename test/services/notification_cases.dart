@@ -58,18 +58,18 @@ void main() {
     calls = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      calls.add(call.method);
-      switch (call.method) {
-        case 'permissionStatus':
-          return 'denied';
-        case 'requestPermission':
-          return 'permanentlyDenied';
-        case 'openNotificationSettings':
-          return true;
-        default:
-          return null;
-      }
-    });
+          calls.add(call.method);
+          switch (call.method) {
+            case 'permissionStatus':
+              return 'denied';
+            case 'requestPermission':
+              return 'permanentlyDenied';
+            case 'openNotificationSettings':
+              return true;
+            default:
+              return null;
+          }
+        });
   });
 
   tearDown(() {

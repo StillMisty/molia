@@ -124,7 +124,10 @@ void main() {
   });
 
   test('Android 交给系统安装器：不退出进程', () async {
-    service.platform = const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.platform = const UpdatePlatformInfo(
+      platform: 'android',
+      arch: 'arm64',
+    );
     service.installOutcome = InstallOutcome.handedOff;
     final provider = buildProvider();
     await provider.init();
@@ -137,8 +140,10 @@ void main() {
   });
 
   test('缺少安装权限：先不下载，提示去授权；授权后可直接下载安装', () async {
-    service.platform =
-        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.platform = const UpdatePlatformInfo(
+      platform: 'android',
+      arch: 'arm64',
+    );
     service.installPermission = false;
     final provider = buildProvider();
     await provider.init();
@@ -166,8 +171,10 @@ void main() {
   });
 
   test('系统安装器被取消 / 权限被撤销：回到可重试态', () async {
-    service.platform =
-        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.platform = const UpdatePlatformInfo(
+      platform: 'android',
+      arch: 'arm64',
+    );
     final provider = buildProvider();
     await provider.init();
     await provider.check();
@@ -291,8 +298,10 @@ void main() {
   });
 
   test('handleAppResumed：未下载时授权返回 → 回到「下载并安装」', () async {
-    service.platform =
-        const UpdatePlatformInfo(platform: 'android', arch: 'arm64');
+    service.platform = const UpdatePlatformInfo(
+      platform: 'android',
+      arch: 'arm64',
+    );
     service.installPermission = false;
     final provider = buildProvider();
     await provider.init();

@@ -28,7 +28,8 @@ import 'sync_stamp.dart';
 ///
 /// 键名与线上记录一致——线上格式不变；`trackId` 留在查询里供导出
 /// 缓存按曲补齐载荷，写记录前会剥掉。
-const String playEventTrackSelect = 'SELECT '
+const String playEventTrackSelect =
+    'SELECT '
     'e.id, e.trackId, e.startedAt, e.endedAt, e.listenedMs, e.maxPositionMs, '
     'e.endReason, e.syncKey, e.originDeviceId, e.versionPhysical, '
     'e.versionCounter, '
@@ -56,14 +57,17 @@ Future<int> upsertPlayTrackContent(
   required String? payload,
   required int updatedAt,
 }) async {
-  final existing = await (db.select(db.playTracks)
-        ..where(
-          (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
-        )
-        ..limit(1))
-      .getSingleOrNull();
+  final existing =
+      await (db.select(db.playTracks)
+            ..where(
+              (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
+            )
+            ..limit(1))
+          .getSingleOrNull();
   if (existing == null) {
-    return db.into(db.playTracks).insert(
+    return db
+        .into(db.playTracks)
+        .insert(
           PlayTracksCompanion.insert(
             sourceKey: sourceKey,
             songId: songId,
@@ -80,8 +84,7 @@ Future<int> upsertPlayTrackContent(
   if (updatedAt >= existing.updatedAt) {
     await (db.update(
       db.playTracks,
-    )..where((t) => t.id.equals(existing.id)))
-        .write(
+    )..where((t) => t.id.equals(existing.id))).write(
       PlayTracksCompanion(
         title: Value(title),
         artist: Value(artist),
@@ -150,7 +153,7 @@ class SqliteStatisticsSyncStore
     MoliaDatabase Function()? databaseProvider,
     required this._stamps,
     this._journal,
-  })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance);
+  }) : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance);
 
   final MoliaDatabase Function() _databaseProvider;
 
@@ -221,7 +224,9 @@ class SqliteStatisticsSyncStore
         payload: jsonEncode(raw),
         updatedAt: startedAt,
       );
-      return db.into(db.playEvents).insert(
+      return db
+          .into(db.playEvents)
+          .insert(
             PlayEventsCompanion.insert(
               trackId: trackId,
               startedAt: startedAt,
@@ -248,8 +253,7 @@ class SqliteStatisticsSyncStore
     final version = _stamps.next();
     await (executor.update(
       _db.playEvents,
-    )..where((t) => t.id.equals(eventId)))
-        .write(
+    )..where((t) => t.id.equals(eventId))).write(
       PlayEventsCompanion(
         versionPhysical: Value(version.physical),
         versionCounter: Value(version.counter),
@@ -270,8 +274,7 @@ class SqliteStatisticsSyncStore
     final db = _db;
     await (executor.update(
       db.playEvents,
-    )..where((t) => t.id.isIn(eventIds)))
-        .write(
+    )..where((t) => t.id.isIn(eventIds))).write(
       PlayEventsCompanion(
         versionPhysical: Value(version.physical),
         versionCounter: Value(version.counter),
@@ -355,10 +358,12 @@ class SqliteStatisticsSyncStore
   /// 导出缓存按 id 增量更新（缓存未加载时空操作：下次导出全量读一次）。
   Future<void> _exportUpsert(int id) async {
     if (_exportRows == null) return;
-    final row = await _db.customSelect(
-      '$playEventTrackSelect WHERE e.id = ?',
-      variables: [Variable.withInt(id)],
-    ).getSingleOrNull();
+    final row = await _db
+        .customSelect(
+          '$playEventTrackSelect WHERE e.id = ?',
+          variables: [Variable.withInt(id)],
+        )
+        .getSingleOrNull();
     if (row == null || row.data['endedAt'] == null) {
       _exportRemove(id);
       return;
@@ -427,12 +432,15 @@ class SqliteStatisticsSyncStore
           payload: event.raw.isEmpty ? null : event.raw,
           updatedAt: event.startedAt,
         );
-        final existing = await (db.select(db.playEvents)
-              ..where((t) => t.syncKey.equals(event.syncKey))
-              ..limit(1))
-            .getSingleOrNull();
+        final existing =
+            await (db.select(db.playEvents)
+                  ..where((t) => t.syncKey.equals(event.syncKey))
+                  ..limit(1))
+                .getSingleOrNull();
         if (existing == null) {
-          final id = await db.into(db.playEvents).insert(
+          final id = await db
+              .into(db.playEvents)
+              .insert(
                 PlayEventsCompanion.insert(
                   trackId: trackId,
                   startedAt: event.startedAt,
@@ -454,8 +462,7 @@ class SqliteStatisticsSyncStore
           // 同版本也应用（修复被直接改写的本地事件行）；内容一致则跳过。
           await (db.update(
             db.playEvents,
-          )..where((t) => t.id.equals(existing.id)))
-              .write(
+          )..where((t) => t.id.equals(existing.id))).write(
             PlayEventsCompanion(
               endedAt: Value(endedAt),
               listenedMs: Value(event.listenedMs),
@@ -494,10 +501,12 @@ class SqliteStatisticsSyncStore
     DatabaseConnectionUser executor,
     int id,
   ) async {
-    final row = await executor.customSelect(
-      '$playEventTrackSelect WHERE e.id = ?',
-      variables: [Variable.withInt(id)],
-    ).getSingleOrNull();
+    final row = await executor
+        .customSelect(
+          '$playEventTrackSelect WHERE e.id = ?',
+          variables: [Variable.withInt(id)],
+        )
+        .getSingleOrNull();
     if (row == null || row.data['endedAt'] == null) return null;
     final syncKey = row.data['syncKey'] as String? ?? '';
     if (syncKey.isEmpty) return null;
@@ -528,28 +537,27 @@ class SqliteStatisticsSyncStore
     Map<String, Object?> row, {
     required String syncKey,
     String? raw,
-  }) =>
-      StatisticsSyncEvent(
-        syncKey: syncKey,
-        version: SyncVersion(
-          physical: (row['versionPhysical'] as num?)?.toInt() ?? 0,
-          counter: (row['versionCounter'] as num?)?.toInt() ?? 0,
-          deviceId: row['originDeviceId'] as String? ?? '',
-        ),
-        sourceKey: row['sourceKey'] as String? ?? '',
-        songId: row['songId'] as String? ?? '',
-        title: row['title'] as String? ?? '',
-        artist: row['artist'] as String? ?? '',
-        album: row['album'] as String? ?? '',
-        coverUrl: row['coverUrl'] as String?,
-        durationMs: (row['durationMs'] as num?)?.toInt(),
-        raw: raw ?? decodeStatsPayload(row['raw']),
-        startedAt: (row['startedAt'] as num?)?.toInt() ?? 0,
-        endedAt: (row['endedAt'] as num?)?.toInt(),
-        listenedMs: (row['listenedMs'] as num?)?.toInt() ?? 0,
-        maxPositionMs: (row['maxPositionMs'] as num?)?.toInt() ?? 0,
-        endReason: row['endReason'] as String?,
-      );
+  }) => StatisticsSyncEvent(
+    syncKey: syncKey,
+    version: SyncVersion(
+      physical: (row['versionPhysical'] as num?)?.toInt() ?? 0,
+      counter: (row['versionCounter'] as num?)?.toInt() ?? 0,
+      deviceId: row['originDeviceId'] as String? ?? '',
+    ),
+    sourceKey: row['sourceKey'] as String? ?? '',
+    songId: row['songId'] as String? ?? '',
+    title: row['title'] as String? ?? '',
+    artist: row['artist'] as String? ?? '',
+    album: row['album'] as String? ?? '',
+    coverUrl: row['coverUrl'] as String?,
+    durationMs: (row['durationMs'] as num?)?.toInt(),
+    raw: raw ?? decodeStatsPayload(row['raw']),
+    startedAt: (row['startedAt'] as num?)?.toInt() ?? 0,
+    endedAt: (row['endedAt'] as num?)?.toInt(),
+    listenedMs: (row['listenedMs'] as num?)?.toInt() ?? 0,
+    maxPositionMs: (row['maxPositionMs'] as num?)?.toInt() ?? 0,
+    endReason: row['endReason'] as String?,
+  );
 
   /// 同版本内容比较（全量快照修复被直接改写的行；内容一致则跳过）。
   static bool _eventMatches(PlayEventRow row, StatisticsSyncEvent event) =>

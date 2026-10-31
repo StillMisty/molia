@@ -21,6 +21,7 @@ import '../../services/app_branding_service.dart';
 import '../../services/window/window_chrome.dart';
 import '../../theme/m3e_context.dart';
 import '../../theme/motion_policy.dart';
+import '../../widgets/app_search_bar.dart';
 import '../../widgets/global_search_overlay.dart';
 import '../../widgets/molia_mark.dart';
 import '../../widgets/player_morph.dart';
@@ -97,9 +98,7 @@ class DesktopShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appBar = chrome.appBar(
-      title: _buildTitleBar(context),
-    );
+    final appBar = chrome.appBar(title: _buildTitleBar(context));
 
     return DesktopShortcuts(
       onFocusSearch: onOpenSearch,
@@ -139,7 +138,7 @@ class DesktopShell extends StatelessWidget {
                   top: GlobalSearchOverlay.barTopFor(context),
                   left: 0,
                   right: 0,
-                  height: GlobalSearchOverlay.barHeight,
+                  height: appSearchBarMinHeightOf(context),
                   child: Center(
                     child: GlobalSearchOverlay(
                       controller: searchController,
@@ -154,15 +153,15 @@ class DesktopShell extends StatelessWidget {
             // 底栏封面为起点，收起动画会把起点拖走、副本与被动画的封面错位。
             bottomNavigationBar:
                 chrome.selectedDestination == ShellDestination.nowPlaying
-                    ? null
-                    : DesktopNowPlayingBar(
-                        key: DesktopNowPlayingBar.shellKey,
-                        morph: morph,
-                        onOpenPlayer: () => chrome.onDestinationSelected(
-                          ShellDestination.nowPlaying,
-                        ),
-                        onOpenQueue: onOpenQueue,
-                      ),
+                ? null
+                : DesktopNowPlayingBar(
+                    key: DesktopNowPlayingBar.shellKey,
+                    morph: morph,
+                    onOpenPlayer: () => chrome.onDestinationSelected(
+                      ShellDestination.nowPlaying,
+                    ),
+                    onOpenQueue: onOpenQueue,
+                  ),
           ),
           // 搜索遮罩的背景模糊：整窗（含顶栏 / 底栏）淡入一层模糊，搜索视图的
           // 半透明 scrim 盖在它上方（见 [_SearchBackdropBlur]）。

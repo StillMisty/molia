@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -64,10 +65,12 @@ void main() {
 
   test('SQL 谓词与领域口径一致（fixture 驱动）', () async {
     final expected = cases
-        .where((sample) => PlayStatisticsLimits.isQualified(
-              listenedMs: sample.$1,
-              durationMs: sample.$2,
-            ))
+        .where(
+          (sample) => PlayStatisticsLimits.isQualified(
+            listenedMs: sample.$1,
+            durationMs: sample.$2,
+          ),
+        )
         .length;
 
     final summary = await repository.summary();
@@ -91,10 +94,16 @@ void main() {
     expect(PlayStatisticsLimits.qualifiedThresholdMs(0), 30000);
     expect(PlayStatisticsLimits.qualifiedThresholdMs(-5), 30000);
     expect(PlayStatisticsLimits.qualifiedThresholdMs(1000), 500);
-    expect(PlayStatisticsLimits.qualifiedThresholdMs(1001), 501,
-        reason: '奇数时长向上取整（等价 SQL 的 >= duration*0.5）');
-    expect(PlayStatisticsLimits.qualifiedThresholdMs(60000), 30000,
-        reason: '封顶 30s');
+    expect(
+      PlayStatisticsLimits.qualifiedThresholdMs(1001),
+      501,
+      reason: '奇数时长向上取整（等价 SQL 的 >= duration*0.5）',
+    );
+    expect(
+      PlayStatisticsLimits.qualifiedThresholdMs(60000),
+      30000,
+      reason: '封顶 30s',
+    );
     expect(PlayStatisticsLimits.qualifiedThresholdMs(50000), 25000);
     expect(
       PlayStatisticsLimits.isQualified(listenedMs: 30000, durationMs: null),

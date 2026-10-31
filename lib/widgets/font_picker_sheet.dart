@@ -18,13 +18,9 @@ AppLocalizations _l10n(BuildContext context) =>
 /// - [FontChoice.system]：显式使用系统默认字体；
 /// - [FontChoice.family]：使用设备上的指定字体族。
 class FontChoice {
-  const FontChoice.inherit()
-      : inherit = true,
-        family = null;
+  const FontChoice.inherit() : inherit = true, family = null;
 
-  const FontChoice.system()
-      : inherit = false,
-        family = null;
+  const FontChoice.system() : inherit = false, family = null;
 
   const FontChoice.family(String this.family) : inherit = false;
 
@@ -105,7 +101,8 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
   bool _isSelected(FontChoice choice) {
     final selected = widget.selected;
     if (selected == null) return false;
-    return choice.inherit == selected.inherit && choice.family == selected.family;
+    return choice.inherit == selected.inherit &&
+        choice.family == selected.family;
   }
 
   void _pop(FontChoice choice) => Navigator.of(context).pop(choice);
@@ -123,10 +120,7 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-            child: Text(
-              widget.title,
-              style: context.typeScale.titleMedium,
-            ),
+            child: Text(widget.title, style: context.typeScale.titleMedium),
           ),
           // 字体较多时（iOS 等）提供搜索，避免长列表滚动找字体。
           if (families != null && families.length > 15)
@@ -142,18 +136,18 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
           Flexible(
             child: switch (families) {
               null => const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: M3ELoadingIndicator()),
-                ),
+                padding: EdgeInsets.all(32),
+                child: Center(child: M3ELoadingIndicator()),
+              ),
               [] => Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    l10n.fontPickerEmpty,
-                    style: context.typeScale.bodyMedium.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  l10n.fontPickerEmpty,
+                  style: context.typeScale.bodyMedium.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
+              ),
               final list => _buildFamilyList(context, l10n, list),
             },
           ),
@@ -190,11 +184,7 @@ class _FontPickerSheetState extends State<_FontPickerSheet> {
       ),
       for (final family in families)
         if (_query.isEmpty || family.toLowerCase().contains(_query))
-          (
-            label: family,
-            family: family,
-            choice: FontChoice.family(family),
-          ),
+          (label: family, family: family, choice: FontChoice.family(family)),
     ];
     final gap = M3ETheme.of(context).listTheme.cardList.gap;
     return ListView.separated(

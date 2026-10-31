@@ -19,15 +19,15 @@ class PosterPalette {
 
   /// 按方案派生：底色 + 容器前景 + 强调歌手名。
   factory PosterPalette.fromScheme(ColorScheme scheme) => PosterPalette(
-        background: scheme.primaryContainer,
-        title: scheme.onPrimaryContainer,
-        artist: scheme.primary,
-        lyrics: scheme.onPrimaryContainer,
-        // 扩展行（翻译 / 罗马音）是次级文本：同前景降透明度。
-        extended: scheme.onPrimaryContainer.withValues(alpha: 0.75),
-        watermark: scheme.onPrimaryContainer,
-        separator: scheme.outline.withValues(alpha: 0.3),
-      );
+    background: scheme.primaryContainer,
+    title: scheme.onPrimaryContainer,
+    artist: scheme.primary,
+    lyrics: scheme.onPrimaryContainer,
+    // 扩展行（翻译 / 罗马音）是次级文本：同前景降透明度。
+    extended: scheme.onPrimaryContainer.withValues(alpha: 0.75),
+    watermark: scheme.onPrimaryContainer,
+    separator: scheme.outline.withValues(alpha: 0.3),
+  );
 
   /// 海报底色。
   final Color background;

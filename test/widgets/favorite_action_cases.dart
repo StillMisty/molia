@@ -56,7 +56,7 @@ void main() {
   Future<void> pumpHost(
     WidgetTester tester, {
     required Future<FavoriteToggleOutcome?> Function(BuildContext context)
-        action,
+    action,
   }) async {
     await tester.pumpWidget(
       MultiProvider(

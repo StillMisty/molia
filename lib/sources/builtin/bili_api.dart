@@ -121,11 +121,7 @@ String biliMixinKey(String imgKey, String subKey) {
 /// 顺序必须固定为：加 `wts` → 按键排序 → 值去掉 `!'()*` → URI 编码 →
 /// 拼 query + mixinKey → md5 得 `w_rid`。任一步换序都会与 B 站服务端算出的
 /// 签名不一致（-403）。
-String biliSignQuery(
-  Map<String, Object?> params,
-  String mixinKey,
-  int wts,
-) {
+String biliSignQuery(Map<String, Object?> params, String mixinKey, int wts) {
   final values = <String, String>{
     for (final entry in params.entries)
       if (entry.value != null)
@@ -133,8 +129,9 @@ String biliSignQuery(
     'wts': '$wts',
   };
   final keys = values.keys.toList()..sort();
-  final query =
-      keys.map((key) => '$key=${Uri.encodeComponent(values[key]!)}').join('&');
+  final query = keys
+      .map((key) => '$key=${Uri.encodeComponent(values[key]!)}')
+      .join('&');
   final wRid = md5Hex('$query$mixinKey');
   return '$query&w_rid=$wRid';
 }
@@ -156,17 +153,13 @@ class BiliAnonSession {
 
   /// 普通接口请求头（搜索 / 播放地址 / 后续的评论等）。
   Map<String, String> get apiHeaders => {
-        'User-Agent': BiliApi.browserUserAgent,
-        'Referer': BiliApi.referer,
-        'Cookie': 'buvid3=$buvid3; buvid4=$buvid4',
-      };
+    'User-Agent': BiliApi.browserUserAgent,
+    'Referer': BiliApi.referer,
+    'Cookie': 'buvid3=$buvid3; buvid4=$buvid4',
+  };
 
   /// 给 URL 追加 WBI 签名参数（[wts] 仅测试注入，生产取当前秒）。
-  String signUrl(
-    String base,
-    Map<String, Object?> params, {
-    int? wts,
-  }) {
+  String signUrl(String base, Map<String, Object?> params, {int? wts}) {
     final timestamp = wts ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final separator = base.contains('?') ? '&' : '?';
     return '$base$separator${biliSignQuery(params, mixinKey, timestamp)}';
@@ -206,9 +199,9 @@ class BiliApi {
   /// 播放直链、搜索、评论、收藏夹必须继续走 [anonymousHeaders] /
   /// [BiliAnonSession.apiHeaders]，避免把账号 Cookie 粘到播放器缓存或平台请求。
   static Map<String, String> accountHeaders(String cookie) => {
-        ...anonymousHeaders,
-        if (cookie.trim().isNotEmpty) 'Cookie': cookie.trim(),
-      };
+    ...anonymousHeaders,
+    if (cookie.trim().isNotEmpty) 'Cookie': cookie.trim(),
+  };
 
   /// UP 投稿接口（`space/wbi/arc/search`）的风控指纹参数。
   ///
@@ -217,7 +210,8 @@ class BiliApi {
   static const Map<String, String> spaceFingerprintParams = {
     'dm_img_list': '[]',
     'dm_img_str': 'V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ',
-    'dm_cover_img_str': 'QU5HTEUgKEludGVsLCBJbnRlbChSKSBVSEQgR3JhcGhpY3MgNjMw'
+    'dm_cover_img_str':
+        'QU5HTEUgKEludGVsLCBJbnRlbChSKSBVSEQgR3JhcGhpY3MgNjMw'
         'ICgweDAwMDAzRTlCKSBEaXJlY3QzRDExIHZzXzVfMCBwc181XzAsIEQzRDExKUdvb2ds'
         'ZSBJbmMuIChJbnRlbCk',
     'dm_img_inter': '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}',
@@ -242,16 +236,18 @@ class BiliApi {
         DateTime.now().difference(fetchedAt) < sessionTtl) {
       return Future.value(cached);
     }
-    return _pending ??=
-        _startSessionFetch(transport ?? BuiltinSearch.transport);
+    return _pending ??= _startSessionFetch(
+      transport ?? BuiltinSearch.transport,
+    );
   }
 
   /// 丢弃缓存并重新拉取（风控后的唯一恢复手段）。
   static Future<BiliAnonSession> refresh({BuiltinTransport? transport}) {
     _session = null;
     _fetchedAt = null;
-    return _pending ??=
-        _startSessionFetch(transport ?? BuiltinSearch.transport);
+    return _pending ??= _startSessionFetch(
+      transport ?? BuiltinSearch.transport,
+    );
   }
 
   /// 测试隔离：清空缓存与在途请求。
@@ -286,19 +282,18 @@ class BiliApi {
   static Future<BiliAnonSession> _fetchSession(
     BuiltinTransport transport,
   ) async {
-    final baseHeaders = {
-      'User-Agent': browserUserAgent,
-      'Referer': referer,
-    };
+    final baseHeaders = {'User-Agent': browserUserAgent, 'Referer': referer};
     final spi = await transport.getJson(
       '$baseUrl/x/frontend/finger/spi',
       headers: baseHeaders,
     );
     final spiData = _dataOf(spi);
-    final buvid3 =
-        spiData is Map ? spiData['b_3']?.toString().trim() ?? '' : '';
-    final buvid4 =
-        spiData is Map ? spiData['b_4']?.toString().trim() ?? '' : '';
+    final buvid3 = spiData is Map
+        ? spiData['b_3']?.toString().trim() ?? ''
+        : '';
+    final buvid4 = spiData is Map
+        ? spiData['b_4']?.toString().trim() ?? ''
+        : '';
     if (buvid3.isEmpty) {
       throw const BiliApiException(
         kind: FailureKind.unknown,
@@ -308,10 +303,7 @@ class BiliApi {
 
     final nav = await transport.getJson(
       '$baseUrl/x/web-interface/nav',
-      headers: {
-        ...baseHeaders,
-        'Cookie': 'buvid3=$buvid3; buvid4=$buvid4',
-      },
+      headers: {...baseHeaders, 'Cookie': 'buvid3=$buvid3; buvid4=$buvid4'},
     );
     // 未登录时 code 为 -101，但 data.wbi_img 仍然返回（匿名访问的正常分支）。
     final code = _codeOf(nav);

@@ -387,134 +387,132 @@ void main() {
 }
 
 SyncPersistedState _populatedState() => SyncPersistedState(
-      deviceId: 'devA',
-      deviceName: '书房-A',
-      categories: {
-        for (final category in SyncCategory.values)
-          category: category != SyncCategory.statistics,
-      },
-      transports: {'lan', 'webdav'},
-      webdav: const WebDavConfig(
-        baseUrl: 'https://dav.example.com/dav',
-        username: 'molia',
-        remoteDir: 'molia-backup',
+  deviceId: 'devA',
+  deviceName: '书房-A',
+  categories: {
+    for (final category in SyncCategory.values)
+      category: category != SyncCategory.statistics,
+  },
+  transports: {'lan', 'webdav'},
+  webdav: const WebDavConfig(
+    baseUrl: 'https://dav.example.com/dav',
+    username: 'molia',
+    remoteDir: 'molia-backup',
+  ),
+  cellularPolicy: SyncCellularPolicy.pause,
+  manualPeers: const [
+    ManualPeer(
+      host: '192.168.1.23',
+      probePort: 47825,
+      httpPort: 40000,
+      deviceId: 'devB',
+      name: '客厅',
+    ),
+    ManualPeer(host: '2409:8a55::9'),
+  ],
+  notifiedPeers: {'devB', 'devC'},
+  lanHttpPort: 41234,
+  stampBaseline: const SyncVersion(physical: 1770000000123, counter: 9),
+  settingStamps: {
+    'themeMode': const SyncStamp(
+      hash: 'h-theme',
+      version: SyncVersion(physical: 1770000000200, counter: 1),
+    ),
+    'language': const SyncStamp(version: SyncVersion(physical: 1770000000300)),
+  },
+  scriptTombstones: {
+    'user_script_1': const SyncStamp(
+      version: SyncVersion(
+        physical: 1770000000400,
+        counter: 2,
+        deviceId: 'devB',
       ),
-      cellularPolicy: SyncCellularPolicy.pause,
-      manualPeers: const [
-        ManualPeer(
-          host: '192.168.1.23',
-          probePort: 47825,
-          httpPort: 40000,
-          deviceId: 'devB',
-          name: '客厅',
-        ),
-        ManualPeer(host: '2409:8a55::9'),
-      ],
-      notifiedPeers: {'devB', 'devC'},
-      lanHttpPort: 41234,
-      stampBaseline: const SyncVersion(physical: 1770000000123, counter: 9),
-      settingStamps: {
-        'themeMode': const SyncStamp(
-          hash: 'h-theme',
-          version: SyncVersion(physical: 1770000000200, counter: 1),
-        ),
-        'language':
-            const SyncStamp(version: SyncVersion(physical: 1770000000300)),
-      },
-      scriptTombstones: {
-        'user_script_1': const SyncStamp(
-          version: SyncVersion(
-            physical: 1770000000400,
-            counter: 2,
-            deviceId: 'devB',
-          ),
-        ),
-      },
-      scriptStamps: {
-        'user_script_1': const SyncStamp(
-          hash: 'h-script',
-          version: SyncVersion(physical: 1770000000350, counter: 1),
-        ),
-      },
-      knownScriptIds: ['user_script_1', 'user_script_2'],
-      activeScriptStamp: const SyncStamp(
-        hash: 'h-active',
-        version: SyncVersion(physical: 1770000000300, counter: 3),
+    ),
+  },
+  scriptStamps: {
+    'user_script_1': const SyncStamp(
+      hash: 'h-script',
+      version: SyncVersion(physical: 1770000000350, counter: 1),
+    ),
+  },
+  knownScriptIds: ['user_script_1', 'user_script_2'],
+  activeScriptStamp: const SyncStamp(
+    hash: 'h-active',
+    version: SyncVersion(physical: 1770000000300, counter: 3),
+  ),
+  sessionStamp: const SyncStamp(
+    version: SyncVersion(physical: 1770000000250, counter: 4),
+  ),
+  coverStamps: {
+    'wy:1': const SyncStamp(
+      hash: 'h-cover',
+      version: SyncVersion(physical: 1770000000350, counter: 5),
+    ),
+  },
+  coverTombstones: {
+    'wy:2': const SyncStamp(version: SyncVersion(physical: 1770000000450)),
+  },
+  lastSyncAt: 1770000000500,
+  transportLastSuccess: {'lan': 1770000000500, 'webdav': 1770000000400},
+  snapshotPushSeq: {'lan': 12, 'webdav': 5},
+  log: const [
+    SyncLogEntry(
+      at: 1770000000500,
+      trigger: SyncTrigger.timer,
+      outcome: SyncOutcome.partial,
+      durationMs: 812,
+      applied: 4,
+      peersSeen: 2,
+      failed: 1,
+      bytesIn: 2048,
+      bytesOut: 1024,
+      transports: ['lan'],
+      error: SyncIssue(
+        code: SyncIssueCode.peerReadFailed,
+        args: {'peer': 'devB'},
+        detail: 'timeout',
       ),
-      sessionStamp: const SyncStamp(
-        version: SyncVersion(physical: 1770000000250, counter: 4),
+    ),
+    SyncLogEntry(
+      at: 1770000000400,
+      trigger: SyncTrigger.startup,
+      outcome: SyncOutcome.noPeers,
+    ),
+  ],
+  activity: const [
+    SyncActivityEntry(at: 1770000000500, bytesIn: 1, bytesOut: 2, applied: 3),
+    SyncActivityEntry(at: 1770000000400),
+  ],
+  peers: const [
+    SyncPeerState(
+      deviceId: 'devB',
+      name: '客厅',
+      transport: 'lan',
+      lastSeenAt: 1770000000500,
+      lastSuccessAt: 1770000000500,
+      lastPullAt: 1770000000400,
+      lastPushAt: 1770000000300,
+      lastError: SyncIssue(
+        code: SyncIssueCode.peerPushFailed,
+        detail: 'http 500',
       ),
-      coverStamps: {
-        'wy:1': const SyncStamp(
-          hash: 'h-cover',
-          version: SyncVersion(physical: 1770000000350, counter: 5),
-        ),
-      },
-      coverTombstones: {
-        'wy:2': const SyncStamp(version: SyncVersion(physical: 1770000000450)),
-      },
-      lastSyncAt: 1770000000500,
-      transportLastSuccess: {'lan': 1770000000500, 'webdav': 1770000000400},
-      snapshotPushSeq: {'lan': 12, 'webdav': 5},
-      log: const [
-        SyncLogEntry(
-          at: 1770000000500,
-          trigger: SyncTrigger.timer,
-          outcome: SyncOutcome.partial,
-          durationMs: 812,
-          applied: 4,
-          peersSeen: 2,
-          failed: 1,
-          bytesIn: 2048,
-          bytesOut: 1024,
-          transports: ['lan'],
-          error: SyncIssue(
-            code: SyncIssueCode.peerReadFailed,
-            args: {'peer': 'devB'},
-            detail: 'timeout',
-          ),
-        ),
-        SyncLogEntry(
-          at: 1770000000400,
-          trigger: SyncTrigger.startup,
-          outcome: SyncOutcome.noPeers,
-        ),
-      ],
-      activity: const [
-        SyncActivityEntry(
-            at: 1770000000500, bytesIn: 1, bytesOut: 2, applied: 3),
-        SyncActivityEntry(at: 1770000000400),
-      ],
-      peers: const [
-        SyncPeerState(
-          deviceId: 'devB',
-          name: '客厅',
-          transport: 'lan',
-          lastSeenAt: 1770000000500,
-          lastSuccessAt: 1770000000500,
-          lastPullAt: 1770000000400,
-          lastPushAt: 1770000000300,
-          lastError: SyncIssue(
-            code: SyncIssueCode.peerPushFailed,
-            detail: 'http 500',
-          ),
-          behindBy: 3,
-          behindBytes: 2048,
-          clockSkewMs: -120,
-          cursorSeq: 42,
-          ackedSeq: 40,
-          snapshotId: 'snap-1',
-          categories: ['settings', 'playlists'],
-          fullPulledAt: 1770000000100,
-        ),
-      ],
-      lanEndpoints: const [
-        LanPeerEndpoint(
-          deviceId: 'devB',
-          host: '192.168.1.23',
-          httpPort: 40000,
-          probePort: 47825,
-          verifiedAt: 1770000000450,
-        ),
-      ],
-    );
+      behindBy: 3,
+      behindBytes: 2048,
+      clockSkewMs: -120,
+      cursorSeq: 42,
+      ackedSeq: 40,
+      snapshotId: 'snap-1',
+      categories: ['settings', 'playlists'],
+      fullPulledAt: 1770000000100,
+    ),
+  ],
+  lanEndpoints: const [
+    LanPeerEndpoint(
+      deviceId: 'devB',
+      host: '192.168.1.23',
+      httpPort: 40000,
+      probePort: 47825,
+      verifiedAt: 1770000000450,
+    ),
+  ],
+);

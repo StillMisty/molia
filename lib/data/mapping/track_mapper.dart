@@ -80,8 +80,9 @@ String? _platformPageUrlOf(SourceTrack source) {
       final hash = rawText('hash');
       return hash.isEmpty ? null : 'https://www.kugou.com/song/#hash=$hash';
     case 'kw':
-      final rid =
-          rawText('songmid').isEmpty ? source.songId : rawText('songmid');
+      final rid = rawText('songmid').isEmpty
+          ? source.songId
+          : rawText('songmid');
       return rid.isEmpty ? null : 'https://www.kuwo.cn/play_detail/$rid';
     case 'mg':
       final copyrightId = rawText('copyrightId');

@@ -44,23 +44,23 @@ class ProgressBarSelector extends StatelessWidget {
     Duration position,
     ({int duration, bool isPlaying, bool hasTrack}) state,
     Widget? child,
-  ) builder;
+  )
+  builder;
   final Widget? child;
 
-  const ProgressBarSelector({
-    super.key,
-    required this.builder,
-    this.child,
-  });
+  const ProgressBarSelector({super.key, required this.builder, this.child});
 
   @override
   Widget build(BuildContext context) {
     final position = context.read<PlaybackProvider>().position;
-    return Selector<PlaybackProvider,
-        ({int duration, bool isPlaying, bool hasTrack})>(
+    return Selector<
+      PlaybackProvider,
+      ({int duration, bool isPlaying, bool hasTrack})
+    >(
       selector: (_, provider) => (
-        duration:
-            provider.hasTrack ? provider.snapshot.duration.inMilliseconds : 1,
+        duration: provider.hasTrack
+            ? provider.snapshot.duration.inMilliseconds
+            : 1,
         isPlaying: provider.isPlaying,
         hasTrack: provider.hasTrack,
       ),

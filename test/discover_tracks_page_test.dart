@@ -69,20 +69,20 @@ void main() {
 
   /// 元数据齐全的详情（歌手 / 专辑 / 时长）：表格列断言用。
   DiscoverDetail richDetail(int page) => DiscoverDetail(
-        info: const DiscoverPlaylist(id: 'x', name: '歌单', trackCount: 30),
-        tracks: [
-          for (var i = 0; i < 30; i++)
-            DiscoverTrack(
-              sourceKey: 'wy',
-              songId: '$page-$i',
-              title: 'P$page-$i',
-              artist: '歌手 $i',
-              album: '专辑 $i',
-              // 逐行不同时长：列断言不靠 findsNWidgets 计数。
-              durationMs: 185000 + i * 1000,
-            ),
-        ],
-      );
+    info: const DiscoverPlaylist(id: 'x', name: '歌单', trackCount: 30),
+    tracks: [
+      for (var i = 0; i < 30; i++)
+        DiscoverTrack(
+          sourceKey: 'wy',
+          songId: '$page-$i',
+          title: 'P$page-$i',
+          artist: '歌手 $i',
+          album: '专辑 $i',
+          // 逐行不同时长：列断言不靠 findsNWidgets 计数。
+          durationMs: 185000 + i * 1000,
+        ),
+    ],
+  );
 
   Future<void> pumpPage(
     WidgetTester tester,
@@ -286,5 +286,4 @@ void main() {
       reason: '继续滚动表头钉住不动',
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
 }

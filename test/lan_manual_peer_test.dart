@@ -14,19 +14,19 @@ void main() {
   final codecPort = InlineSyncCodecPort(codec);
 
   SyncEnvelope envelope(String deviceId, {String value = 'v'}) => SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceId,
-        producedAt: 1,
-        records: {
-          SyncCategory.settings: [
-            SyncRecord(
-              key: 'theme_mode',
-              version: SyncVersion(physical: 10, deviceId: deviceId),
-              data: {'v': value},
-            ),
-          ],
-        },
-      );
+    deviceId: deviceId,
+    deviceName: deviceId,
+    producedAt: 1,
+    records: {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: SyncVersion(physical: 10, deviceId: deviceId),
+          data: {'v': value},
+        ),
+      ],
+    },
+  );
 
   test('局域网权限被拒：传输不启动，原因可呈现（手动地址也救不了）', () async {
     final transport = LanSyncTransport(
@@ -123,7 +123,9 @@ void main() {
       codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      manualPeersProvider: () => const [ManualPeer(host: '127.0.0.1', probePort: 47862)],
+      manualPeersProvider: () => const [
+        ManualPeer(host: '127.0.0.1', probePort: 47862),
+      ],
       onPeerResolved: learned.add,
       probeWindow: const Duration(milliseconds: 250),
       udpPort: 47863,
@@ -160,8 +162,9 @@ void main() {
       snapshotProvider: () async => envelope('devB'),
       // 用户填的是标准端口（打不通）；实际接触经注入目标完成：应答的来源端口
       // 是 A 的动态端口，不能覆盖用户填的 47825。
-      manualPeersProvider: () =>
-          const [ManualPeer(host: '127.0.0.1', probePort: 47825)],
+      manualPeersProvider: () => const [
+        ManualPeer(host: '127.0.0.1', probePort: 47825),
+      ],
       probeTargets: const [(host: '127.0.0.1', port: 47869)],
       onPeerResolved: learned.add,
       probeWindow: const Duration(milliseconds: 250),
@@ -180,11 +183,7 @@ void main() {
     expect(learned.last.deviceId, 'devA');
     expect(learned.last.httpPort, greaterThan(0));
     expect(learned.last.httpPort, isNot(47869));
-    expect(
-      learned.last.probePort,
-      47825,
-      reason: '来源端口只用于本轮内存回发，不写回用户配置',
-    );
+    expect(learned.last.probePort, 47825, reason: '来源端口只用于本轮内存回发，不写回用户配置');
   });
 
   test('地址簿学到端口后：没有广播应答也能直连', () async {
@@ -204,8 +203,9 @@ void main() {
       codec: codecPort,
       passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devScout'),
-      manualPeersProvider: () =>
-          const [ManualPeer(host: '127.0.0.1', probePort: 47864)],
+      manualPeersProvider: () => const [
+        ManualPeer(host: '127.0.0.1', probePort: 47864),
+      ],
       onPeerResolved: (peer) => learned = peer,
       probeWindow: const Duration(milliseconds: 250),
       udpPort: 47865,

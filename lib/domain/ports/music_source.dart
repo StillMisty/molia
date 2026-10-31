@@ -107,8 +107,11 @@ abstract interface class MusicSource {
     int limit = 20,
   });
 
-  Future<CollectionPage> collection(CollectionRef ref,
-      {int page = 1, int limit = 50});
+  Future<CollectionPage> collection(
+    CollectionRef ref, {
+    int page = 1,
+    int limit = 50,
+  });
 
   /// 把任意 Track 归一化到本源的 payload（如平台 id → Track）。
   Track? adopt(Track track) => null;

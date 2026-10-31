@@ -8,13 +8,13 @@ import 'package:molia/domain/models/sync_nearby_pairing.dart';
 /// 当成「已有弹窗」直接拒绝。
 void main() {
   SyncPairingRequest request(String id) => SyncPairingRequest(
-        requestId: id,
-        peerDeviceId: 'dev-$id',
-        peerName: id,
-        intent: SyncPairingIntent.join,
-        code: '482193',
-        expiresAt: 1 << 50,
-      );
+    requestId: id,
+    peerDeviceId: 'dev-$id',
+    peerName: id,
+    intent: SyncPairingIntent.join,
+    code: '482193',
+    expiresAt: 1 << 50,
+  );
 
   test('当前窗未关闭时新请求排队，关闭后逐条展示', () async {
     final queue = IncomingPairingQueue();

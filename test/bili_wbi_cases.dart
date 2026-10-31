@@ -61,11 +61,9 @@ void main() {
     expect(query['wts'], '1702204169');
     expect(query['w_rid'], isNotEmpty);
 
-    final withExisting = session.signUrl(
-      'https://example.com/x?a=1',
-      {'b': 2},
-      wts: 1702204169,
-    );
+    final withExisting = session.signUrl('https://example.com/x?a=1', {
+      'b': 2,
+    }, wts: 1702204169);
     expect(withExisting, contains('/x?a=1&b=2&wts='));
   });
 

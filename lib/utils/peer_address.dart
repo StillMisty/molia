@@ -88,7 +88,9 @@ bool _isValidIpv6(String host) {
   return hasShortcut ? groups < 8 : groups == 8;
 }
 
-final RegExp _hostnameLabel = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$');
+final RegExp _hostnameLabel = RegExp(
+  r'^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$',
+);
 
 bool _isValidHostname(String host) {
   if (host.length > 253) return false;

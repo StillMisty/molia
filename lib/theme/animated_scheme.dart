@@ -65,9 +65,7 @@ class _AnimatedSchemeBuilderState extends State<AnimatedSchemeBuilder>
 
     final disableAnimation =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    if (_firstChange ||
-        disableAnimation ||
-        widget.duration == Duration.zero) {
+    if (_firstChange || disableAnimation || widget.duration == Duration.zero) {
       _firstChange = false;
       _from = widget.scheme;
       _to = widget.scheme;

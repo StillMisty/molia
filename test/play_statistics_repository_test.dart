@@ -9,6 +9,7 @@ import 'package:molia/data/sync/statistics_sync_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/domain/ports/statistics_sync_store.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -35,24 +36,23 @@ void main() {
     String? endReason = 'skipped',
     int? endedAt,
     String? syncKey,
-  }) =>
-      insertPlayEvent(
-        db,
-        sourceKey: sourceKey,
-        songId: songId,
-        title: title,
-        artist: artist,
-        album: album,
-        coverUrl: coverUrl,
-        durationMs: durationMs,
-        raw: raw,
-        startedAt: startedAt,
-        listenedMs: listenedMs,
-        maxPositionMs: maxPositionMs,
-        endReason: endReason,
-        endedAt: endedAt,
-        syncKey: syncKey,
-      );
+  }) => insertPlayEvent(
+    db,
+    sourceKey: sourceKey,
+    songId: songId,
+    title: title,
+    artist: artist,
+    album: album,
+    coverUrl: coverUrl,
+    durationMs: durationMs,
+    raw: raw,
+    startedAt: startedAt,
+    listenedMs: listenedMs,
+    maxPositionMs: maxPositionMs,
+    endReason: endReason,
+    endedAt: endedAt,
+    syncKey: syncKey,
+  );
 
   setUp(() async {
     db = openMemoryDatabase();
@@ -225,11 +225,7 @@ void main() {
 
       expect(summary.playCount, 1);
       expect(summary.qualifiedPlayCount, 1);
-      expect(
-        summary.firstPlayedAt,
-        base - 100000,
-        reason: '数据起始日不受范围影响',
-      );
+      expect(summary.firstPlayedAt, base - 100000, reason: '数据起始日不受范围影响');
     });
 
     test('topTracks 按有效播放排序、保留 raw、排除只有跳过的曲目', () async {
@@ -411,10 +407,16 @@ void main() {
     });
 
     test('splitArtistNames 纯函数（含中西分隔符）', () {
-      expect(
-        PlayStatisticsRepository.splitArtistNames('A, B/C&D、E;F；G，H'),
-        ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
-      );
+      expect(PlayStatisticsRepository.splitArtistNames('A, B/C&D、E;F；G，H'), [
+        'A',
+        'B',
+        'C',
+        'D',
+        'E',
+        'F',
+        'G',
+        'H',
+      ]);
       expect(PlayStatisticsRepository.splitArtistNames('  '), isEmpty);
     });
   });
@@ -532,8 +534,10 @@ void main() {
 
       final distribution = await repository.sourceDistribution();
 
-      expect(
-          distribution.map((entry) => entry.sourceKey).toList(), ['kw', 'wy']);
+      expect(distribution.map((entry) => entry.sourceKey).toList(), [
+        'kw',
+        'wy',
+      ]);
       expect(distribution.first.listenedMs, 90000);
       expect(distribution.first.playCount, 1);
     });
@@ -675,7 +679,9 @@ void main() {
     expect(exported.single.syncKey, isNotEmpty);
     // 缓存命中复用同一列表实例。
     expect(
-        identical(await statisticsSync.syncExportEvents(), exported), isTrue);
+      identical(await statisticsSync.syncExportEvents(), exported),
+      isTrue,
+    );
 
     // 增量：新事件收尾后缓存就地更新（含 syncKey / 版本）。
     final second = await repository.startEvent(
@@ -982,13 +988,15 @@ void main() {
 class _FakeStatisticsSyncWriter implements StatisticsSyncWriter {
   int nextId = 42;
   final List<
-      ({
-        String sourceKey,
-        String songId,
-        String title,
-        Map<String, dynamic> raw,
-        int startedAt,
-      })> started = [];
+    ({
+      String sourceKey,
+      String songId,
+      String title,
+      Map<String, dynamic> raw,
+      int startedAt,
+    })
+  >
+  started = [];
   void Function()? changedCallback;
 
   @override

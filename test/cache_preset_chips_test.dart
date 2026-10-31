@@ -90,8 +90,11 @@ void main() {
             ? b.top - a.bottom
             : (b.bottom <= a.top ? a.top - b.bottom : 0.0);
         if (gap > 0) wrapped = true;
-        expect(gap, greaterThanOrEqualTo(8.0),
-            reason: '同列 chip 换行后行距缺失：$a 与 $b');
+        expect(
+          gap,
+          greaterThanOrEqualTo(8.0),
+          reason: '同列 chip 换行后行距缺失：$a 与 $b',
+        );
       }
     }
     expect(wrapped, isTrue, reason: '该弹层宽度应触发预设 chip 换行，否则本测试无效');

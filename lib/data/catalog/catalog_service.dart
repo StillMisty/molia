@@ -25,8 +25,8 @@ class CatalogService {
     Duration searchTtl = const Duration(minutes: 5),
     RequestCache? resolveCache,
     Duration resolveTtl = const Duration(minutes: 10),
-  })  : _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
-        _resolveCache = resolveCache ?? RequestCache(ttl: resolveTtl);
+  }) : _searchCache = searchCache ?? RequestCache(ttl: searchTtl),
+       _resolveCache = resolveCache ?? RequestCache(ttl: resolveTtl);
 
   final SourceRegistry _registry;
   final RequestCache _searchCache;
@@ -179,8 +179,9 @@ class CatalogService {
     final payload = track.payload;
     final cached = _payloadDigests[payload];
     if (cached != null) return cached;
-    final digest =
-        crypto.md5.convert(utf8.encode(_canonicalJson(payload))).toString();
+    final digest = crypto.md5
+        .convert(utf8.encode(_canonicalJson(payload)))
+        .toString();
     _payloadDigests[payload] = digest;
     return digest;
   }
@@ -215,16 +216,20 @@ class CatalogService {
 
   /// 稳定 JSON：递归排序 Map 键（List 保持顺序），非 JSON 值降级为字符串。
   static String _canonicalJson(Object? value) => jsonEncode(
-        _canonicalize(value),
-        toEncodable: (object) => object.toString(),
-      );
+    _canonicalize(value),
+    toEncodable: (object) => object.toString(),
+  );
 
   static Object? _canonicalize(Object? value) {
     if (value is Map) {
-      final entries = value.entries
-          .map((entry) => MapEntry(entry.key.toString(), _canonicalize(entry.value)))
-          .toList()
-        ..sort((a, b) => a.key.compareTo(b.key));
+      final entries =
+          value.entries
+              .map(
+                (entry) =>
+                    MapEntry(entry.key.toString(), _canonicalize(entry.value)),
+              )
+              .toList()
+            ..sort((a, b) => a.key.compareTo(b.key));
       return {for (final entry in entries) entry.key: entry.value};
     }
     if (value is List) {

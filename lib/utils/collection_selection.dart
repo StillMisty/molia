@@ -104,11 +104,10 @@ class CollectionSelection extends ChangeNotifier {
   List<T> selectedFrom<T>(
     List<T> rows, {
     required String Function(T row) keyOf,
-  }) =>
-      [
-        for (final row in rows)
-          if (_selected.contains(keyOf(row))) row,
-      ];
+  }) => [
+    for (final row in rows)
+      if (_selected.contains(keyOf(row))) row,
+  ];
 
   /// 视图落定时同步可见行集合：丢弃已不存在行的选择，锚点失效。
   ///

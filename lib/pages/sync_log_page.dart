@@ -59,7 +59,8 @@ class SyncLogPage extends StatelessWidget {
                   key: Key('settingsSyncLogPage-${entry.at}'),
                   entry: entry,
                   onTap: syncLogEntryActionable(entry)
-                      ? () => unawaited(showSyncIssueDialog(
+                      ? () => unawaited(
+                          showSyncIssueDialog(
                             context,
                             provider: provider,
                             issue: entry.error,
@@ -67,8 +68,12 @@ class SyncLogPage extends StatelessWidget {
                             // 口令动作就在本页弹层。
                             onConfigurePassphrase: () =>
                                 showSyncPassphraseDialog(
-                                    context, provider, l10n),
-                          ))
+                                  context,
+                                  provider,
+                                  l10n,
+                                ),
+                          ),
+                        )
                       : null,
                 ),
           ],

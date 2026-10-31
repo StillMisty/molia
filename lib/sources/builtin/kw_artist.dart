@@ -31,7 +31,8 @@ class KwArtist {
     int page = 1,
     int limit = 30,
   }) async {
-    final url = 'http://search.kuwo.cn/r.s?client=kt'
+    final url =
+        'http://search.kuwo.cn/r.s?client=kt'
         '&all=${Uri.encodeComponent(keyword)}'
         '&pn=${page - 1}&rn=$limit&ft=artist'
         '&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1'
@@ -64,12 +65,14 @@ class KwArtist {
       final name = decodeName(raw['ARTIST']?.toString());
       if (id.isEmpty || name.isEmpty) continue;
       final pic = raw['PICPATH']?.toString() ?? '';
-      artists.add(ArtistSummary(
-        id: id,
-        name: name,
-        avatarUrl: pic.isEmpty ? null : '$base$pic',
-        songCount: parseSourceCount(raw['SONGNUM']),
-      ));
+      artists.add(
+        ArtistSummary(
+          id: id,
+          name: name,
+          avatarUrl: pic.isEmpty ? null : '$base$pic',
+          songCount: parseSourceCount(raw['SONGNUM']),
+        ),
+      );
     }
     final total = parseSourceCount(body['TOTAL']);
     return ArtistSearchPage(
@@ -127,8 +130,9 @@ class KwArtist {
       throw artistPlatformFailure('kw', '获取歌手歌曲失败（结构不符）');
     }
 
-    final infoData =
-        (info is Map && info['data'] is Map) ? info['data'] as Map : const {};
+    final infoData = (info is Map && info['data'] is Map)
+        ? info['data'] as Map
+        : const {};
     final name = decodeName(infoData['name']?.toString());
     final tracks = <Track>[];
     for (final raw in rawList) {
@@ -171,20 +175,22 @@ class KwArtist {
         ? fallbackArtist
         : artist.split('、').first.trim();
     final duration = parseSourceCount(raw['duration']) ?? 0;
-    return trackFromSourceTrack(KwSearch.buildTrack(
-      songId: songId,
-      name: decodeName(raw['name']?.toString()),
-      artist: artist.isEmpty ? fallbackArtist : artist,
-      // 歌手页曲目的歌手引用已知：名字取条目首位（缺省退回歌手名），id 即当前歌手。
-      artists: artistName.isEmpty
-          ? null
-          : [SourceArtistRef(name: artistName, id: artistId)],
-      album: decodeName(raw['album']?.toString()),
-      albumId: raw['albumId']?.toString() ?? '',
-      intervalSeconds: duration,
-      types: sorted,
-      img: kwCoverUrlOf(raw),
-    ));
+    return trackFromSourceTrack(
+      KwSearch.buildTrack(
+        songId: songId,
+        name: decodeName(raw['name']?.toString()),
+        artist: artist.isEmpty ? fallbackArtist : artist,
+        // 歌手页曲目的歌手引用已知：名字取条目首位（缺省退回歌手名），id 即当前歌手。
+        artists: artistName.isEmpty
+            ? null
+            : [SourceArtistRef(name: artistName, id: artistId)],
+        album: decodeName(raw['album']?.toString()),
+        albumId: raw['albumId']?.toString() ?? '',
+        intervalSeconds: duration,
+        types: sorted,
+        img: kwCoverUrlOf(raw),
+      ),
+    );
   }
 
   /// wbd 歌手接口请求（签名 GET → 解密；业务码非 200 抛 [SourceFailure]）。
@@ -206,9 +212,7 @@ class KwArtist {
     });
     final text = await lxHttpGetText(
       'https://wbd.kuwo.cn/api/bd/artist/$path?$params',
-      headers: const {
-        'User-Agent': 'kwplayercar_ar_6.0.1.0_apk_keluze.apk',
-      },
+      headers: const {'User-Agent': 'kwplayercar_ar_6.0.1.0_apk_keluze.apk'},
     );
     final decoded = kwWbdDecodeData(text);
     if (decoded is! Map || decoded['code'] != 200) {

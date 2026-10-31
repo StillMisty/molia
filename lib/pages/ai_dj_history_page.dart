@@ -119,11 +119,8 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                 itemCount: entries.length,
                 separatorBuilder: (context, index) =>
                     const SizedBox(height: 10),
-                itemBuilder: (context, index) => _entryCard(
-                  l10n,
-                  provider,
-                  entries[index],
-                ),
+                itemBuilder: (context, index) =>
+                    _entryCard(l10n, provider, entries[index]),
               ),
       ),
     );
@@ -223,9 +220,7 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
               l10n.aiDjHistoryItems(entry.itemCount),
               if (entry.unresolvedCount > 0)
                 l10n.aiDjHistoryUnresolved(entry.unresolvedCount),
-              l10n.aiDjHistorySource(
-                aiDjOriginText(l10n, entry.origin),
-              ),
+              l10n.aiDjHistorySource(aiDjOriginText(l10n, entry.origin)),
             ].join(' · '),
             style: context.typeScale.bodySmall.copyWith(
               color: scheme.onSurfaceVariant,
@@ -316,8 +311,10 @@ class _AiDjHistoryPageState extends State<AiDjHistoryPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(item.track.title,
-                                style: context.typeScale.bodyMedium),
+                            Text(
+                              item.track.title,
+                              style: context.typeScale.bodyMedium,
+                            ),
                             Text(
                               [
                                 if (item.track.artistLabel.isNotEmpty)

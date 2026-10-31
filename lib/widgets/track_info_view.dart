@@ -209,7 +209,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
         .select<PlaybackProvider, (Track?, String)>(
           (provider) =>
               (provider.snapshot.current, provider.currentQualityType),
-    );
+        );
     // 恢复态（冷启动未起播）没有真实播放，音质行只读；手动切换覆盖省流
     // 上限时不再显示「省流模式」后缀。
     final restored = context.select<PlaybackProvider, bool>(
@@ -275,7 +275,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                       : l10n.commentsUnsupported,
                   onTap: commentsSupported
                       ? () =>
-                          unawaited(openTrackComments(context, track: track))
+                            unawaited(openTrackComments(context, track: track))
                       : null,
                 ),
               // 定时关闭：与曲目无关的播放控制（队列播完后仍可取消）。
@@ -329,8 +329,8 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                   onTap: _localDataService == null
                       ? null
                       : () => unawaited(
-                            showTrackLocalDataPage(context, track: track),
-                          ),
+                          showTrackLocalDataPage(context, track: track),
+                        ),
                 ),
               ],
             ),
@@ -510,10 +510,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     final channel = key.isEmpty
         ? l10n.trackInfoChannelUnknown
         : key == kLocalSourceKey
-            ? l10n.downloadSourceLocal
-            : sourceChannelName(sources?.channels ?? const [], key);
+        ? l10n.downloadSourceLocal
+        : sourceChannelName(sources?.channels ?? const [], key);
     final id = track.id.uri;
     return id.isEmpty ? channel : '$channel · $id';
   }
-
 }

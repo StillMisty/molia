@@ -19,7 +19,7 @@ import 'track_handoff.dart';
 final class TrackHandoffCollectionHandoff implements CollectionHandoff {
   /// [random] 只用于随机播放起点（测试注入固定种子；生产不传）。
   TrackHandoffCollectionHandoff(this._context, {math.Random? random})
-      : _handoff = TrackHandoff(random: random);
+    : _handoff = TrackHandoff(random: random);
 
   final BuildContext _context;
   final TrackHandoff _handoff;
@@ -30,25 +30,23 @@ final class TrackHandoffCollectionHandoff implements CollectionHandoff {
     required int startIndex,
     required bool shuffle,
     required String contextName,
-  }) =>
-      _handoff.play(
-        _context,
-        tracks,
-        startIndex: startIndex,
-        shuffle: shuffle,
-        contextName: contextName,
-      );
+  }) => _handoff.play(
+    _context,
+    tracks,
+    startIndex: startIndex,
+    shuffle: shuffle,
+    contextName: contextName,
+  );
 
   @override
   Future<bool> addToLibrary(
     List<PlaylistTrack> tracks, {
     required bool includeFavorites,
     required bool includeHistory,
-  }) =>
-      _handoff.addPlaylistTracksToLibrary(
-        _context,
-        tracks,
-        includeFavorites: includeFavorites,
-        includeHistory: includeHistory,
-      );
+  }) => _handoff.addPlaylistTracksToLibrary(
+    _context,
+    tracks,
+    includeFavorites: includeFavorites,
+    includeHistory: includeHistory,
+  );
 }

@@ -20,13 +20,13 @@ dynamic _fixture(String name) =>
     jsonDecode(File('test/fixtures/$name.json').readAsStringSync());
 
 SourceTrack _track(String name) => SourceTrack(
-      sourceKey: 'fake',
-      origin: 'lx',
-      title: name,
-      artist: 'tester',
-      album: '',
-      raw: const {'id': 'x'},
-    );
+  sourceKey: 'fake',
+  origin: 'lx',
+  title: name,
+  artist: 'tester',
+  album: '',
+  raw: const {'id': 'x'},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

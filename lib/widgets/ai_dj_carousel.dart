@@ -277,13 +277,13 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   Widget _skeleton(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget box() => Container(
-          width: _placeholderWidth,
-          height: _placeholderWidth,
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(14),
-          ),
-        );
+      width: _placeholderWidth,
+      height: _placeholderWidth,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(14),
+      ),
+    );
     return SizedBox(
       height: _placeholderWidth,
       child: AiDjPulse(
@@ -391,10 +391,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
       ),
       // 横向滚动视图只吃 `dx`，普通滚轮的 `dy` 到不了它手里：在外面自己接
       // 指针信号，把 dy 攒够一格再翻一张。
-      child: Listener(
-        onPointerSignal: _onPointerSignal,
-        child: carousel,
-      ),
+      child: Listener(onPointerSignal: _onPointerSignal, child: carousel),
     );
   }
 
@@ -500,8 +497,9 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   /// 实际位置脱节，反而往回翻；`animateToItem` 自己夹取上下界，到尽头是空操作。
   Future<void> _stepByWheel(int direction) async {
     _wheelAnimating = true;
-    final double before =
-        _controller.hasClients ? _controller.position.pixels : 0;
+    final double before = _controller.hasClients
+        ? _controller.position.pixels
+        : 0;
     try {
       await _controller.animateToItem(_focalIndex + direction);
     } finally {

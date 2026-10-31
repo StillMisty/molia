@@ -15,10 +15,10 @@ import 'package:molia/playback/local_playback_service.dart';
 /// 最小播放器替身：只覆写服务构造与退出收尾用到的成员，不触碰平台通道。
 class _FakeAudioPlayer extends AudioPlayer {
   _FakeAudioPlayer()
-      : super(
-          // 不订阅 audio_session 的中断 / becomingNoisy 流：测试里没有插件。
-          handleInterruptions: false,
-        );
+    : super(
+        // 不订阅 audio_session 的中断 / becomingNoisy 流：测试里没有插件。
+        handleInterruptions: false,
+      );
 
   final List<String> calls = [];
   final _playerState = StreamController<PlayerState>.broadcast(sync: true);

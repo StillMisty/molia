@@ -30,8 +30,9 @@ class AppBrandingService {
   /// 用户是否自定义过名称；自定义后默认名不覆盖标题。
   static bool _customized = false;
 
-  static final ValueNotifier<String> titleNotifier =
-      ValueNotifier<String>(fallbackTitle);
+  static final ValueNotifier<String> titleNotifier = ValueNotifier<String>(
+    fallbackTitle,
+  );
 
   /// 启动时载入已保存名称（main 的 composition root 调用）。
   static Future<void> load() async {

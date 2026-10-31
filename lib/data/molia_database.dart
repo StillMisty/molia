@@ -99,9 +99,9 @@ class PlaylistTracks extends Table {
 
   @override
   List<String> get customConstraints => const [
-        'UNIQUE (playlistId, sourceKey, songId)',
-        'FOREIGN KEY (playlistId) REFERENCES playlists (id) ON DELETE CASCADE',
-      ];
+    'UNIQUE (playlistId, sourceKey, songId)',
+    'FOREIGN KEY (playlistId) REFERENCES playlists (id) ON DELETE CASCADE',
+  ];
 }
 
 /// 删除墓碑：本地删除（列表/曲目/脚本/历史）不保留原行，墓碑承担「删除也取新」
@@ -236,8 +236,8 @@ class Downloads extends Table {
 
   @override
   List<String> get customConstraints => const [
-        'UNIQUE (originSourceKey, originSongId)',
-      ];
+    'UNIQUE (originSourceKey, originSongId)',
+  ];
 }
 
 /// 统计曲目内容：元数据 + 取链参数，**每曲一行**（`UNIQUE (sourceKey, songId)`）。
@@ -448,18 +448,18 @@ class MoliaDatabase extends _$MoliaDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) => m.createAll(),
-        onUpgrade: stepByStep(
-          from1To2: (m, schema) async {
-            await m.createTable(schema.playbackSessionPayloads);
-            await m.createTable(schema.playbackSessionCursors);
-          },
-        ),
-        beforeOpen: (details) async {
-          // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
-          await customStatement('PRAGMA foreign_keys = ON');
-        },
-      );
+    onCreate: (m) => m.createAll(),
+    onUpgrade: stepByStep(
+      from1To2: (m, schema) async {
+        await m.createTable(schema.playbackSessionPayloads);
+        await m.createTable(schema.playbackSessionCursors);
+      },
+    ),
+    beforeOpen: (details) async {
+      // SQLite 外键默认关闭，这里显式开启（列表删除级联依赖它）。
+      await customStatement('PRAGMA foreign_keys = ON');
+    },
+  );
 
   @override
   Future<void> close() async {
@@ -501,53 +501,53 @@ class MoliaDatabase extends _$MoliaDatabase {
 /// 列表头的版本三元组。
 extension PlaylistSyncVersionX on Playlist {
   SyncVersion get syncVersion => SyncVersion(
-        physical: versionPhysical,
-        counter: versionCounter,
-        deviceId: deviceId,
-      );
+    physical: versionPhysical,
+    counter: versionCounter,
+    deviceId: deviceId,
+  );
 }
 
 /// 列表曲目的版本三元组。
 extension PlaylistTrackSyncVersionX on PlaylistTrackRow {
   SyncVersion get syncVersion => SyncVersion(
-        physical: versionPhysical,
-        counter: versionCounter,
-        deviceId: deviceId,
-      );
+    physical: versionPhysical,
+    counter: versionCounter,
+    deviceId: deviceId,
+  );
 }
 
 /// 播放历史的版本三元组（`playedAt` 是内容时间，不在其中）。
 extension PlayHistorySyncVersionX on PlayHistoryData {
   SyncVersion get syncVersion => SyncVersion(
-        physical: versionPhysical,
-        counter: versionCounter,
-        deviceId: deviceId,
-      );
+    physical: versionPhysical,
+    counter: versionCounter,
+    deviceId: deviceId,
+  );
 }
 
 /// 墓碑的版本三元组（`deletedAt` 是内容时间，不在其中）。
 extension SyncTombstoneSyncVersionX on SyncTombstone {
   SyncVersion get syncVersion => SyncVersion(
-        physical: versionPhysical,
-        counter: versionCounter,
-        deviceId: deviceId,
-      );
+    physical: versionPhysical,
+    counter: versionCounter,
+    deviceId: deviceId,
+  );
 }
 
 /// 统计事件的版本三元组（`endedAt` / `startedAt` 是内容时间）。
 extension PlayEventSyncVersionX on PlayEventRow {
   SyncVersion get syncVersion => SyncVersion(
-        physical: versionPhysical,
-        counter: versionCounter,
-        deviceId: originDeviceId,
-      );
+    physical: versionPhysical,
+    counter: versionCounter,
+    deviceId: originDeviceId,
+  );
 }
 
 /// 同步已知版本登记的版本三元组。
 extension SyncKnownSyncVersionX on SyncKnownData {
   SyncVersion get syncVersion => SyncVersion(
-        physical: versionPhysical,
-        counter: versionCounter,
-        deviceId: deviceId,
-      );
+    physical: versionPhysical,
+    counter: versionCounter,
+    deviceId: deviceId,
+  );
 }

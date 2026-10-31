@@ -26,10 +26,7 @@ class AudioTagInfo {
   final int? durationMs;
 
   bool get isEmpty =>
-      title == null &&
-      artist == null &&
-      album == null &&
-      durationMs == null;
+      title == null && artist == null && album == null && durationMs == null;
 }
 
 /// 解析音频头部字节；[extension] 为小写后缀（含点，如 `.mp3`）。
@@ -106,7 +103,8 @@ AudioTagInfo _readMp3(Uint8List bytes, {required int fileSize}) {
     // v2.2：3 字节帧 id + 3 字节长度。
     while (offset + 6 <= tagEnd) {
       final id = String.fromCharCodes(bytes, offset, offset + 3);
-      final frameSize = (bytes[offset + 3] << 16) |
+      final frameSize =
+          (bytes[offset + 3] << 16) |
           (bytes[offset + 4] << 8) |
           bytes[offset + 5];
       if (id.codeUnits.every((unit) => unit == 0) || frameSize <= 0) break;
@@ -175,7 +173,9 @@ String _decodeUtf16(Uint8List bytes, {bool bigEndian = false}) {
   }
   final units = <int>[];
   for (var i = start; i + 2 <= bytes.length; i += 2) {
-    units.add(be ? (bytes[i] << 8) | bytes[i + 1] : bytes[i] | (bytes[i + 1] << 8));
+    units.add(
+      be ? (bytes[i] << 8) | bytes[i + 1] : bytes[i] | (bytes[i + 1] << 8),
+    );
   }
   return String.fromCharCodes(units);
 }
@@ -199,8 +199,10 @@ int? _mp3DurationMs(
   // Xing / Info 头（首帧内的帧数，VBR 精确）。
   final searchEnd = math.min(frame.headerOffset + frameSize, bytes.length);
   for (var i = frame.headerOffset + 4; i + 12 <= searchEnd; i++) {
-    final isXing = bytes[i] == 0x58 && bytes[i + 1] == 0x69 && bytes[i + 2] == 0x6E;
-    final isInfo = bytes[i] == 0x49 && bytes[i + 1] == 0x6E && bytes[i + 2] == 0x66;
+    final isXing =
+        bytes[i] == 0x58 && bytes[i + 1] == 0x69 && bytes[i + 2] == 0x6E;
+    final isInfo =
+        bytes[i] == 0x49 && bytes[i + 1] == 0x6E && bytes[i + 2] == 0x66;
     if (!isXing && !isInfo) continue;
     final flags = _be32(bytes, i + 4);
     if (flags & 0x1 == 0) break;
@@ -219,7 +221,7 @@ int? _mp3DurationMs(
 
 /// 首个 MPEG 帧头信息；非 Layer III / 保留值 / 找不到同步字返回 null。
 ({int headerOffset, int sampleRate, int samplesPerFrame, int bitrateBps})?
-    _firstMp3Frame(Uint8List bytes, int audioStart) {
+_firstMp3Frame(Uint8List bytes, int audioStart) {
   var i = audioStart;
   while (i + 4 <= bytes.length) {
     if (bytes[i] == 0xFF && (bytes[i + 1] & 0xE0) == 0xE0) {
@@ -239,12 +241,40 @@ int? _mp3DurationMs(
           _ => const [11025, 12000, 8000],
         };
         const v1Bitrates = [
-          0, 32000, 40000, 48000, 56000, 64000, 80000, 96000,
-          112000, 128000, 160000, 192000, 224000, 256000, 320000, 0,
+          0,
+          32000,
+          40000,
+          48000,
+          56000,
+          64000,
+          80000,
+          96000,
+          112000,
+          128000,
+          160000,
+          192000,
+          224000,
+          256000,
+          320000,
+          0,
         ];
         const v2Bitrates = [
-          0, 8000, 16000, 24000, 32000, 40000, 48000, 56000,
-          64000, 80000, 96000, 112000, 128000, 144000, 160000, 0,
+          0,
+          8000,
+          16000,
+          24000,
+          32000,
+          40000,
+          48000,
+          56000,
+          64000,
+          80000,
+          96000,
+          112000,
+          128000,
+          144000,
+          160000,
+          0,
         ];
         return (
           headerOffset: i,
@@ -289,7 +319,8 @@ AudioTagInfo _readFlac(Uint8List bytes) {
     final header = bytes[offset];
     final isLast = header & 0x80 != 0;
     final type = header & 0x7F;
-    final length = (bytes[offset + 1] << 16) |
+    final length =
+        (bytes[offset + 1] << 16) |
         (bytes[offset + 2] << 8) |
         bytes[offset + 3];
     final start = offset + 4;
@@ -319,9 +350,11 @@ int? _flacDurationMs(Uint8List bytes, int start, int end) {
   if (end - start < 34) return null;
   // 块内偏移 10：min/max block(2+2) + min/max frame(3+3) 之后。
   final b = start + 10;
-  final sampleRate = (bytes[b] << 12) | (bytes[b + 1] << 4) | (bytes[b + 2] >> 4);
+  final sampleRate =
+      (bytes[b] << 12) | (bytes[b + 1] << 4) | (bytes[b + 2] >> 4);
   if (sampleRate <= 0) return null;
-  final totalSamples = ((bytes[b + 3] & 0x0F) << 32) |
+  final totalSamples =
+      ((bytes[b + 3] & 0x0F) << 32) |
       (bytes[b + 4] << 24) |
       (bytes[b + 5] << 16) |
       (bytes[b + 6] << 8) |

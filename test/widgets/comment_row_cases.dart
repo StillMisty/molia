@@ -16,12 +16,14 @@ import '../support/memory_cache_storage.dart';
 /// 永远失败的 CacheManager：统计次数，验证 CommentAvatar 只自动重试一次。
 class _CountingFailingManager extends CacheManager {
   _CountingFailingManager()
-      : super(Config(
+    : super(
+        Config(
           'comment_avatar_retry_test',
           repo: NonStoringObjectProvider(),
           fileSystem: MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   int calls = 0;
 
@@ -41,51 +43,45 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   Widget host(Widget child, {double width = 360}) => MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: width,
-              child: SingleChildScrollView(child: child),
-            ),
-          ),
+    locale: const Locale('zh'),
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      ...GlobalMaterialLocalizations.delegates,
+    ],
+    supportedLocales: const [Locale('zh')],
+    home: Scaffold(
+      body: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: width,
+          child: SingleChildScrollView(child: child),
         ),
-      );
+      ),
+    ),
+  );
 
   Comment comment(
     String id, {
     String text = '正文',
     List<Comment> replies = const [],
-  }) =>
-      Comment(
-        id: id,
-        text: text,
-        authorName: '用户$id',
-        replies: replies,
-      );
+  }) => Comment(id: id, text: text, authorName: '用户$id', replies: replies);
 
   final longText = List.filled(6, '很长的回复正文，用来验证窄屏下不会横向溢出。').join();
 
   /// 父评论 + 3 条一级回复 + 1 条二级回复：覆盖最常出现的楼中楼形状。
   Comment floor() => comment(
-        'root',
-        text: '父评论正文',
-        replies: [
-          comment(
-            'reply-1',
-            text: '一级回复 0 $longText',
-            replies: [comment('reply-1-1', text: '二级回复 $longText')],
-          ),
-          comment('reply-2', text: '一级回复 1 $longText'),
-          comment('reply-3', text: '一级回复 2 $longText'),
-        ],
-      );
+    'root',
+    text: '父评论正文',
+    replies: [
+      comment(
+        'reply-1',
+        text: '一级回复 0 $longText',
+        replies: [comment('reply-1-1', text: '二级回复 $longText')],
+      ),
+      comment('reply-2', text: '一级回复 1 $longText'),
+      comment('reply-3', text: '一级回复 2 $longText'),
+    ],
+  );
 
   for (final width in const [360.0, 320.0]) {
     testWidgets('楼中楼窄屏布局：回复在主行下方，缩进不挤占正文（$width）', (tester) async {
@@ -110,9 +106,7 @@ void main() {
   testWidgets('空头像显示人像占位，不显示品牌标志', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: Center(child: CommentAvatar(url: null, size: 36)),
-        ),
+        home: Scaffold(body: Center(child: CommentAvatar(url: null, size: 36))),
       ),
     );
 

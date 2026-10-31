@@ -27,26 +27,26 @@ import 'support/fakes.dart';
 import 'support/settings_test_support.dart';
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
-      items: [
-        for (var i = 0; i < count; i++)
-          ResolvedRecommendation(
-            source: AiRecommendation(
-              title: 'Song ${from + i}',
-              artist: 'Artist',
-              reason: 'reason ${from + i}',
-            ),
-            track: Track(
-              id: TrackId('wy', '${from + i}'),
-              title: 'Song ${from + i}',
-              artists: const [Artist(name: 'Artist')],
-              duration: const Duration(seconds: 100),
-              origin: TrackOrigin.builtin,
-            ),
-          ),
-      ],
-      unresolved: const [AiRecommendation(title: 'Ghost Song', artist: 'X')],
-      generatedAt: DateTime.now(),
-    );
+  items: [
+    for (var i = 0; i < count; i++)
+      ResolvedRecommendation(
+        source: AiRecommendation(
+          title: 'Song ${from + i}',
+          artist: 'Artist',
+          reason: 'reason ${from + i}',
+        ),
+        track: Track(
+          id: TrackId('wy', '${from + i}'),
+          title: 'Song ${from + i}',
+          artists: const [Artist(name: 'Artist')],
+          duration: const Duration(seconds: 100),
+          origin: TrackOrigin.builtin,
+        ),
+      ),
+  ],
+  unresolved: const [AiRecommendation(title: 'Ghost Song', artist: 'X')],
+  generatedAt: DateTime.now(),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -62,9 +62,8 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
       await AiSettingsStore(
-              settings:
-                  testSettingsRegistry(preferences: prefs, secrets: secrets))
-          .saveConfig(
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ).saveConfig(
         const LlmConfig(
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-test',
@@ -79,7 +78,8 @@ void main() {
       libraryProvider: libraryProvider,
       recommendationService: generator,
       settingsStore: AiSettingsStore(
-          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ),
     );
     await provider.init();
   }
@@ -96,7 +96,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<AiDjProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(
-              value: playbackProvider),
+            value: playbackProvider,
+          ),
           ChangeNotifierProvider<LibraryProvider>.value(value: libraryProvider),
         ],
         child: M3EMaterialApp(
@@ -181,20 +182,20 @@ void main() {
     await tester.pumpAndSettle();
 
     final track = _batch(0, 3).items.first.track;
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(PlayingIndicator), findsOneWidget);
 
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-    ));
+    backend.emit(
+      BackendSnapshot(current: track, queue: [track], currentIndex: 0),
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
     expect(find.byType(PlayingIndicator), findsOneWidget);
@@ -321,7 +322,9 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('aiDjApiKeyField')), 'sk-x');
     await tester.enterText(
-        find.byKey(const Key('aiDjModelField')), 'deepseek-chat');
+      find.byKey(const Key('aiDjModelField')),
+      'deepseek-chat',
+    );
     await tester.tap(find.byKey(const Key('aiDjSaveConfigButton')));
     await tester.pumpAndSettle();
 
@@ -336,12 +339,12 @@ void main() {
       userPrompt: 'USER PROMPT',
     );
     generator.batchFactory = () => _batch(0, 3).copyWith(
-          prompt: const AiPrompt(
-            systemPrompt: 'LAST SYSTEM',
-            userPrompt: 'LAST USER',
-          ),
-          rawResponse: 'RAW RESPONSE',
-        );
+      prompt: const AiPrompt(
+        systemPrompt: 'LAST SYSTEM',
+        userPrompt: 'LAST USER',
+      ),
+      rawResponse: 'RAW RESPONSE',
+    );
     await pumpProvider();
     await pumpPage(tester);
     await provider.grantConsent();
@@ -440,34 +443,30 @@ void main() {
     expect(libraryProvider.isFavorite('wy', '0'), isFalse);
   });
 
-  testWidgets(
-    '桌面：推荐行无 ⋮，右键在落点弹出同一份菜单',
-    (tester) async {
-      await pumpProvider();
-      await pumpPage(tester);
-      await provider.grantConsent();
-      await provider.setEnabled(true);
-      await tester.pumpAndSettle();
+  testWidgets('桌面：推荐行无 ⋮，右键在落点弹出同一份菜单', (tester) async {
+    await pumpProvider();
+    await pumpPage(tester);
+    await provider.grantConsent();
+    await provider.setEnabled(true);
+    await tester.pumpAndSettle();
 
-      expect(
-        find.byIcon(Icons.more_vert_rounded),
-        findsNothing,
-        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
-      );
+    expect(
+      find.byIcon(Icons.more_vert_rounded),
+      findsNothing,
+      reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+    );
 
-      await tester.tap(
-        find.byType(AiDjTrackTile).first,
-        buttons: kSecondaryButton,
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('Add to favorites'), findsOneWidget);
-      expect(find.text('Swap this one'), findsOneWidget);
-      expect(find.text('More like this'), findsOneWidget);
-      expect(find.text('Not interested'), findsOneWidget);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+    await tester.tap(
+      find.byType(AiDjTrackTile).first,
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Add to favorites'), findsOneWidget);
+    expect(find.text('Swap this one'), findsOneWidget);
+    expect(find.text('More like this'), findsOneWidget);
+    expect(find.text('Not interested'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('配置表单：自定义地址时「自定义」筛选芯片可用且选中', (tester) async {
     await pumpProvider();
@@ -478,8 +477,11 @@ void main() {
 
     final chipFinder = find.byKey(const Key('aiDjCustomPresetChip'));
     expect(chipFinder, findsOneWidget);
-    expect(tester.widget<M3EChip>(chipFinder).selected, isTrue,
-        reason: '测试配置本身就是自定义地址');
+    expect(
+      tester.widget<M3EChip>(chipFinder).selected,
+      isTrue,
+      reason: '测试配置本身就是自定义地址',
+    );
     expect(tester.widget<M3EChip>(chipFinder).onPressed, isNotNull);
 
     await tester.tap(find.text('DeepSeek'));

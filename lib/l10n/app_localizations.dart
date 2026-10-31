@@ -137,13 +137,13 @@ abstract class AppLocalizations {
   /// No description provided for @searchHint.
   ///
   /// In en, this message translates to:
-  /// **'Search songs, albums, artists...'**
+  /// **'Search songs, artists or lyrics'**
   String get searchHint;
 
   /// No description provided for @searchIdleHint.
   ///
   /// In en, this message translates to:
-  /// **'Search songs by keyword'**
+  /// **'Search songs, artists or lyrics'**
   String get searchIdleHint;
 
   /// No description provided for @clearSearch.
@@ -2179,6 +2179,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add to playlist'**
   String get addToPlaylist;
+
+  /// No description provided for @addToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to queue'**
+  String get addToQueue;
+
+  /// No description provided for @addedToQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to queue'**
+  String get addedToQueue;
+
+  /// No description provided for @playNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Play next'**
+  String get playNext;
+
+  /// No description provided for @moveQueueUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Move up'**
+  String get moveQueueUp;
+
+  /// No description provided for @moveQueueDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Move down'**
+  String get moveQueueDown;
+
+  /// No description provided for @removeFromQueue.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from queue'**
+  String get removeFromQueue;
 
   /// No description provided for @playlistReorder.
   ///
@@ -7467,6 +7503,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download complete'**
   String get downloadCompleted;
+
+  /// No description provided for @downloadStarted.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to downloads'**
+  String get downloadStarted;
 
   /// No description provided for @downloadFailed.
   ///

@@ -25,16 +25,14 @@ class MemoryCacheStorage implements CacheStorage {
   Future<int> deleteWhere(
     String dirPath, {
     required bool Function(String fileName) test,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<CacheDeleteResult> deleteMatching(
     String dirPath, {
     required String prefix,
     Duration protectAge = Duration.zero,
-  }) async =>
-      const CacheDeleteResult();
+  }) async => const CacheDeleteResult();
 
   @override
   Future<void> clear(String dirPath) async {}
@@ -44,14 +42,12 @@ class MemoryCacheStorage implements CacheStorage {
     String dirPath, {
     required int maxBytes,
     required Duration protectAge,
-  }) async =>
-      0;
+  }) async => 0;
 
   @override
   Future<CacheSweepResult> sweepArtwork(
     String dirPath, {
     required int maxObjects,
     required int staleDays,
-  }) async =>
-      CacheSweepResult.failed;
+  }) async => CacheSweepResult.failed;
 }

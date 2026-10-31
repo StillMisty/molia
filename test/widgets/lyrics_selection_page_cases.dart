@@ -38,13 +38,13 @@ void main() {
   );
 
   BackendSnapshot snapshot(Duration position) => BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        position: position,
-        duration: const Duration(minutes: 5),
-      );
+    current: track,
+    queue: [track],
+    currentIndex: 0,
+    isPlaying: true,
+    position: position,
+    duration: const Duration(minutes: 5),
+  );
 
   Future<void> pumpSelection(
     WidgetTester tester, {

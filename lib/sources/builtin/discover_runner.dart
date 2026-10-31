@@ -96,11 +96,7 @@ Future<T> runDiscoverCall<T>(DiscoverCall<T> call) {
 /// 把描述符归一到「第 tryNum 次尝试」闭包。
 Future<T?> Function(int tryNum) _attemptOf<T>(DiscoverCall<T> call) {
   switch (call) {
-    case DiscoverRequestCall<T>(
-        :final request,
-        :final isInvalid,
-        :final parse,
-      ):
+    case DiscoverRequestCall<T>(:final request, :final isInvalid, :final parse):
       return (_) async {
         final response = await request();
         if (isInvalid(response)) return null;
