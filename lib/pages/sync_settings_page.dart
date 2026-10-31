@@ -9,6 +9,7 @@ import '../domain/models/sync_nearby_pairing.dart';
 import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/nearby_scan_session.dart';
 import '../providers/sync_nearby_availability.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
@@ -49,25 +50,13 @@ class SyncSettingsPage extends StatefulWidget {
 }
 
 class _SyncSettingsPageState extends State<SyncSettingsPage> {
-  /// 本页持有的 provider：dispose 时不能再依赖 context，先存一份用于停扫描。
-  SyncProvider? _provider;
-
-  /// 附近设备空态：`startScan` 的探测波次很短，但服务端不会在「扫完仍为空」
-  /// 时再推事件；用一个本地计时把「正在查找」切换到「没有发现设备」。
-  Timer? _nearbySettleTimer;
-  bool _nearbySearchSettled = false;
+  /// 附近设备扫描会话：首帧启动 / 可用性变化 / 授权后补扫 / 1.8 秒结算与
+  /// 离开页面停扫都由它拥有；页面只读状态并转发「重新查找」。
+  late final NearbyScanSession _nearbyScan;
 
   /// 相对时间（「3 分钟前」）每 30 秒重算一次：页面可能停留很久，不能只在
   /// provider 通知时刷新；只 setState 重算文案，不额外跑同步轮次。
   Timer? _relativeTimeTimer;
-
-  /// 附近设备当前能否搜索（权限 / 开关 / 传输 / 网络 / 省电 / UDP / 配对）。
-  /// 只在 availability 变化时启停扫描，避免 provider 每次通知都重跑 startScan。
-  SyncNearbyAvailability? _nearbyAvailability;
-
-  /// 局域网传输是否真正运行：授权前开关可能已开启但传输不可用，
-  /// 授权成功后由 false → true 触发一次附近设备扫描。
-  bool _lanRunning = false;
 
   @override
   void initState() {
@@ -75,9 +64,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     // 进入设置页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址
     // （附近设备探测与手动地址兜底也走这份缓存）。
     final provider = context.read<SyncProvider>();
-    _provider = provider;
-    _nearbyAvailability = provider.nearbyAvailability;
-    _lanRunning = _isLanRunning(provider);
+    _nearbyScan = NearbyScanSession(port: SyncProviderNearbyScanPort(provider));
     _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
@@ -85,102 +72,27 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     // 打开同步页自动检查一轮：设备行显示的是「最近一轮是否真的接触成功」，
     // 不跑一轮就只能是旧状态。首帧后再触发，避免在构建期通知 provider；
     // 走调度器的 check 轮（省电 / 蜂窝暂停 / 已有轮次在跑时由调度器跳过）。
-    // 只有 availability = available 时才开始附近设备探测：不可用状态下
-    // startScan 只会立刻失败，空态应直接说明本机原因。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final current = _provider;
-      if (current == null) return;
-      unawaited(current.checkConnections());
-      if (_canScanNearby(current)) unawaited(_startNearbyScan(current));
+      unawaited(provider.checkConnections());
     });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // provider 通知会触发 didChangeDependencies：availability 变化时启停扫描
-    // （开关 / 权限 / 传输运行状态 / 蜂窝 / 省电 / UDP 端口都可能改变结论）。
-    final provider = context.watch<SyncProvider>();
-    _provider = provider;
-    final lanRunning = _isLanRunning(provider);
-    final becameRunning = lanRunning && !_lanRunning;
-    _lanRunning = lanRunning;
-    final availability = provider.nearbyAvailability;
-    final availabilityChanged = _nearbyAvailability != availability;
-    _nearbyAvailability = availability;
-    if (availabilityChanged) {
-      if (availability == SyncNearbyAvailability.available) {
-        _scheduleNearbyScan();
-      } else {
-        _cancelNearbySettle();
-        _nearbySearchSettled = false;
-        provider.stopNearbyScan();
-      }
-      return;
-    }
-    if (becameRunning && availability == SyncNearbyAvailability.available) {
-      _scheduleNearbyScan();
-    }
+    // provider 通知会触发 didChangeDependencies：扫描节拍由会话按可用性 /
+    // 局域网运行状态的差异决定，页面不再自己持有定时器与基线字段。
+    context.watch<SyncProvider>();
+    _nearbyScan.sync();
   }
 
   @override
   void dispose() {
-    _nearbySettleTimer?.cancel();
-    _nearbySettleTimer = null;
+    _nearbyScan.dispose();
     _relativeTimeTimer?.cancel();
     _relativeTimeTimer = null;
-    // 离开同步页就停止探测并清空候选：候选只服务这一页，后台不保留。
-    _provider?.stopNearbyScan();
     super.dispose();
-  }
-
-  static bool _isLanEnabled(SyncProvider provider) =>
-      provider.enabledTransports.contains(SyncTransportKind.lan);
-
-  static bool _isLanRunning(SyncProvider provider) =>
-      _isLanEnabled(provider) &&
-      (provider.transportStatus(SyncTransportKind.lan)?.running ?? false);
-
-  static bool _canScanNearby(SyncProvider provider) =>
-      provider.nearbyAvailability == SyncNearbyAvailability.available;
-
-  /// 传输开关在事件里变化：等本帧结束再探测，避免在 build / didChangeDependencies
-  /// 期间同步推流触发重入。
-  void _scheduleNearbyScan() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final provider = _provider;
-      if (provider == null || !_canScanNearby(provider)) return;
-      unawaited(_startNearbyScan(provider));
-    });
-  }
-
-  Future<void> _startNearbyScan(SyncProvider provider) async {
-    if (!_canScanNearby(provider)) return;
-    _nearbySettleTimer?.cancel();
-    if (mounted && _nearbySearchSettled) {
-      setState(() => _nearbySearchSettled = false);
-    }
-    final started = await provider.startNearbyScan();
-    if (!mounted) return;
-    if (!started) {
-      // 后台 / 蜂窝 / 省电 / 传输刚停 / 探测端口不可用 / availability 刚变化
-      // 都会拒绝扫描：直接落到「没发现 + 重试」，不能停在「正在查找」。
-      if (!_nearbySearchSettled) {
-        setState(() => _nearbySearchSettled = true);
-      }
-      return;
-    }
-    _nearbySettleTimer = Timer(const Duration(milliseconds: 1800), () {
-      if (!mounted || _nearbySearchSettled) return;
-      setState(() => _nearbySearchSettled = true);
-    });
-  }
-
-  void _cancelNearbySettle() {
-    _nearbySettleTimer?.cancel();
-    _nearbySettleTimer = null;
   }
 
   @override
@@ -388,73 +300,80 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     AppLocalizations l10n,
   ) {
     final availability = provider.nearbyAvailability;
-    return SettingsSectionCard(
-      title: l10n.syncNearbySection,
-      footer: SettingsSectionHint(text: l10n.syncNearbyFooter),
-      children: [
-        if (availability != SyncNearbyAvailability.available)
-          _nearbyUnavailableRow(context, provider, l10n, availability)
-        else
-          StreamBuilder<List<SyncNearbyDevice>>(
-            stream: provider.nearbyDevices,
-            builder: (context, snapshot) {
-              final pairedIds = {
-                for (final peer in provider.peers) peer.deviceId,
-              };
-              final devices = [
-                for (final device
-                    in snapshot.data ?? const <SyncNearbyDevice>[])
-                  if (device.deviceId != provider.deviceId &&
-                      !pairedIds.contains(device.deviceId))
-                    device,
-              ];
-              if (devices.isEmpty) {
-                return SettingsRows(
-                  children: [
-                    SettingsInfoTile(
-                      key: const Key('settingsSyncNearbyEmpty'),
-                      icon: Icons.devices_other_rounded,
-                      title: _nearbySearchSettled
-                          ? l10n.syncNearbyEmptyTitle
-                          : l10n.syncNearbySearching,
-                      subtitle: _nearbySearchSettled
-                          ? l10n.syncNearbyEmptyHint
-                          : l10n.syncNearbySearchHint,
-                    ),
-                    SettingsNavTile(
-                      key: const Key('settingsSyncNearbyRescan'),
-                      icon: Icons.refresh_rounded,
-                      title: l10n.syncNearbyRescan,
-                      subtitle: l10n.syncNearbySearchHint,
-                      onTap: () => unawaited(_startNearbyScan(provider)),
-                    ),
-                  ],
-                );
-              }
-              return SettingsRows(
-                children: [
-                  for (final device in devices)
-                    SettingsNavTile(
-                      key: Key('settingsSyncNearby-${device.deviceId}'),
-                      icon: Icons.devices_other_rounded,
-                      title: _nearbyDeviceName(device),
-                      subtitle: device.hasGroup
-                          ? '${l10n.syncNearbyTapToPair} · '
-                                '${l10n.syncNearbyHasGroup}'
-                          : l10n.syncNearbyTapToPair,
-                      onTap: () => unawaited(
-                        showSyncNearbyPairingDialog(
-                          context,
-                          provider: provider,
-                          device: device,
+    // 扫描结算只影响空态文案，单独订阅会话：定时器到点时不用重建整页，
+    // 也不会漏掉不经过 provider 通知的「正在查找 → 没有发现」切换。
+    return ValueListenableBuilder<NearbyScanState>(
+      valueListenable: _nearbyScan,
+      builder: (context, scanState, _) {
+        return SettingsSectionCard(
+          title: l10n.syncNearbySection,
+          footer: SettingsSectionHint(text: l10n.syncNearbyFooter),
+          children: [
+            if (availability != SyncNearbyAvailability.available)
+              _nearbyUnavailableRow(context, provider, l10n, availability)
+            else
+              StreamBuilder<List<SyncNearbyDevice>>(
+                stream: provider.nearbyDevices,
+                builder: (context, snapshot) {
+                  final pairedIds = {
+                    for (final peer in provider.peers) peer.deviceId,
+                  };
+                  final devices = [
+                    for (final device
+                        in snapshot.data ?? const <SyncNearbyDevice>[])
+                      if (device.deviceId != provider.deviceId &&
+                          !pairedIds.contains(device.deviceId))
+                        device,
+                  ];
+                  if (devices.isEmpty) {
+                    return SettingsRows(
+                      children: [
+                        SettingsInfoTile(
+                          key: const Key('settingsSyncNearbyEmpty'),
+                          icon: Icons.devices_other_rounded,
+                          title: scanState.settled
+                              ? l10n.syncNearbyEmptyTitle
+                              : l10n.syncNearbySearching,
+                          subtitle: scanState.settled
+                              ? l10n.syncNearbyEmptyHint
+                              : l10n.syncNearbySearchHint,
                         ),
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-      ],
+                        SettingsNavTile(
+                          key: const Key('settingsSyncNearbyRescan'),
+                          icon: Icons.refresh_rounded,
+                          title: l10n.syncNearbyRescan,
+                          subtitle: l10n.syncNearbySearchHint,
+                          onTap: () => unawaited(_nearbyScan.rescan()),
+                        ),
+                      ],
+                    );
+                  }
+                  return SettingsRows(
+                    children: [
+                      for (final device in devices)
+                        SettingsNavTile(
+                          key: Key('settingsSyncNearby-${device.deviceId}'),
+                          icon: Icons.devices_other_rounded,
+                          title: _nearbyDeviceName(device),
+                          subtitle: device.hasGroup
+                              ? '${l10n.syncNearbyTapToPair} · '
+                                    '${l10n.syncNearbyHasGroup}'
+                              : l10n.syncNearbyTapToPair,
+                          onTap: () => unawaited(
+                            showSyncNearbyPairingDialog(
+                              context,
+                              provider: provider,
+                              device: device,
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 

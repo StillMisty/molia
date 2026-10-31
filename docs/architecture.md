@@ -543,7 +543,11 @@
   状态、清空候选并返回 false。空态按 `SyncNearbyAvailability`
   分层（开关 / 权限 / 传输未启动 / 移动数据 / 省电 / UDP 两族不可用 / 可用），
   同步页只在可用时启停扫描；权限、传输与发现原因分别指向授权、同步日志与
-  手动地址 / WebDAV。
+  手动地址 / WebDAV。**页面级扫描节拍归 `NearbyScanSession`**
+  （`lib/providers/nearby_scan_session.dart`）：首帧后起扫、可用性变化与
+  LAN false→true 补扫、拒绝立即结算、成功 1.8 秒后结算、销毁停扫都在会话里；
+  `startScan` 的异步结果带代次守卫，设置页只渲染 scanning / settled 并转发
+  「重新查找」，不再自己持结算定时器。
   `LanPairingService`（`lan_pairing_service.dart`）负责协议与 pending 状态机，
   `PairingCrypto`（`pairing_crypto.dart`）负责密封与确认码，候选 / 请求模型在
   `domain/models/sync_nearby_pairing.dart`。**旧配对码（`molia-pair:*`）/
