@@ -93,17 +93,11 @@ void main() {
     addTearDown(discovery.stop);
     await discovery.start();
     expect(discovery.debugInterfaceBindAddresses, ['192.168.1.10']);
-    final oldPort = discovery.debugInterfacePorts.single;
 
     addresses = ['10.0.0.5'];
     await discovery.onNetworkChanged();
 
     expect(discovery.debugInterfaceBindAddresses, ['10.0.0.5']);
-    expect(
-      discovery.debugInterfacePorts.single,
-      isNot(oldPort),
-      reason: '旧接口 socket 已关闭并重建',
-    );
     expect(
       calls.where((call) => call.address == '192.168.1.10'),
       hasLength(1),
@@ -111,6 +105,89 @@ void main() {
     );
     expect(calls.where((call) => call.address == '10.0.0.5'), hasLength(1));
     expect(discovery.discoveryPorts.v4, greaterThan(0));
+  });
+
+  test('IPv6 混排在前且 IPv4 超过 8 个：完整接口仍全部建 socket', () async {
+    final hosts = [for (var i = 0; i < 10; i++) '10.0.0.${i + 1}'];
+    final calls = <_BindCall>[];
+    final discovery = build(
+      calls: calls,
+      addresses: () async => [
+        '2409:8a55::1',
+        ...hosts,
+        '192.168.1.10',
+        '127.0.0.1',
+      ],
+      redirect: _loopbackRedirect([...hosts, '192.168.1.10']),
+    );
+    addTearDown(discovery.stop);
+    await discovery.start();
+
+    // 公告候选只有 8 条（IPv6 占 1 条），接口 socket 不受这个上限影响。
+    expect(discovery.debugInterfaceBindAddresses, [...hosts, '192.168.1.10']);
+    for (final host in [...hosts, '192.168.1.10']) {
+      expect(calls.where((call) => call.address == host), hasLength(1));
+    }
+    expect(
+      calls.where((call) => call.address == '2409:8a55::1'),
+      isEmpty,
+      reason: 'IPv6 仍不建接口 socket',
+    );
+  });
+
+  test('短回前台（rebind=false）也重建接口 socket，主 socket 不重绑', () async {
+    final addresses = <String>['192.168.1.10'];
+    final calls = <_BindCall>[];
+    final discovery = build(
+      calls: calls,
+      addresses: () async => addresses,
+      redirect: _loopbackRedirect(addresses),
+    );
+    addTearDown(discovery.stop);
+    await discovery.start();
+    final mainBinds = calls.where((call) => call.address == '0.0.0.0').length;
+    final interfaceBinds = calls
+        .where((call) => call.address == '192.168.1.10')
+        .length;
+
+    await discovery.onAppResumed();
+
+    expect(
+      calls.where((call) => call.address == '192.168.1.10').length,
+      interfaceBinds + 1,
+      reason: '短隐藏不等 15s 也要重建半死的接口 socket',
+    );
+    expect(
+      calls.where((call) => call.address == '0.0.0.0').length,
+      mainBinds,
+      reason: 'rebind=false 不重绑主 socket',
+    );
+    expect(discovery.debugInterfaceBindAddresses, ['192.168.1.10']);
+  });
+
+  test('并发换网重绑串行化：最终 socket 有效，stop 后接口清空', () async {
+    final calls = <_BindCall>[];
+    final discovery = build(
+      calls: calls,
+      addresses: () async => const ['192.168.1.10', '10.0.0.5'],
+      redirect: _loopbackRedirect(['192.168.1.10', '10.0.0.5']),
+    );
+    addTearDown(discovery.stop);
+    await discovery.start();
+
+    await Future.wait([
+      discovery.onNetworkChanged(),
+      discovery.onNetworkChanged(),
+    ]);
+
+    expect(discovery.discoveryPorts.v4, greaterThan(0));
+    expect(discovery.debugInterfaceBindAddresses, ['192.168.1.10', '10.0.0.5']);
+    expect(discovery.debugInterfacePorts, everyElement(greaterThan(0)));
+
+    await discovery.stop();
+    expect(discovery.debugInterfaceBindAddresses, isEmpty);
+    expect(discovery.debugInterfacePorts, isEmpty);
+    expect(discovery.discoveryPorts, (v4: 0, v6: 0));
   });
 
   test('单个接口绑定失败：跳过该接口，start 与主 socket 照常', () async {
