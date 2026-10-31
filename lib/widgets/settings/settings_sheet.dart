@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../pages/settings_page.dart';
 import '../../utils/responsive.dart';
 import '../desktop_layout.dart';
+import '../m3e_page_route.dart';
 
 /// 打开设置弹层（顶栏入口与测试共用）。
 ///
@@ -171,7 +172,7 @@ class _SettingsSheetShellState extends State<_SettingsSheetShell> {
     final sheetRoute = ModalRoute.of(context);
     final navigator = Navigator(
       key: widget.navigatorKey,
-      onGenerateRoute: (settings) => MaterialPageRoute<void>(
+      onGenerateRoute: (settings) => M3EPageRoute<void>(
         settings: settings,
         builder: (_) => SettingsPage(scrollController: _sheetScrollController),
       ),

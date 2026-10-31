@@ -1,8 +1,10 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:molia/theme/app_theme.dart';
+import 'package:molia/widgets/m3e_page_route.dart';
 
 /// Android 预测返回契约：应用主题下 push 的页面必须被手势接管（跟手预览）、
 /// 可取消回位、可提交出栈。
@@ -91,6 +93,69 @@ void main() {
     await sendBack(tester, 'commitBackGesture');
     await tester.pumpAndSettle();
 
+    expect(find.text('page'), findsNothing);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('M3EPageRoute：预测返回取消 / 提交途中主题重建不抛异常', (tester) async {
+    final navigatorKey = GlobalKey<NavigatorState>();
+
+    Widget buildApp(ColorScheme scheme) {
+      final material = buildAppThemeData(scheme);
+      return M3EMaterialApp(
+        data: M3EThemeData.fromMaterial(material),
+        theme: material,
+        darkTheme: material,
+        autoTheming: false,
+        dynamicColoring: false,
+        themeAnimationStyle: AnimationStyle.noAnimation,
+        navigatorKey: navigatorKey,
+        home: M3ERouteTheme(
+          builder: (_) => const Scaffold(body: Center(child: Text('home'))),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(
+      buildApp(ColorScheme.fromSeed(seedColor: seed)),
+    );
+    navigatorKey.currentState!.push(
+      M3EPageRoute<void>(
+        builder: (_) => const Scaffold(body: Center(child: Text('page'))),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 取消路径：退场动画进行中换主题（模拟封面取色 / 系统亮度），
+    // App 级 DefaultTextStyle 会重建；页面已依赖路由级的那一层，不应断言。
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await tester.pump();
+    expect(navigatorKey.currentState!.userGestureInProgress, isTrue);
+    await tester.pumpWidget(
+      buildApp(
+        ColorScheme.fromSeed(seedColor: seed, brightness: Brightness.dark),
+      ),
+    );
+    await tester.pump();
+    await sendBack(tester, 'cancelBackGesture');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('page'), findsOneWidget);
+
+    // 提交路径：同样在退场途中换主题，页面应正常出栈。
+    await sendBack(tester, 'startBackGesture', backArgs(0));
+    await tester.pump();
+    await tester.pumpWidget(
+      buildApp(ColorScheme.fromSeed(seedColor: seed)),
+    );
+    await tester.pump();
+    await sendBack(tester, 'updateBackGestureProgress', backArgs(1));
+    await tester.pump();
+    await sendBack(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
     expect(find.text('page'), findsNothing);
     expect(find.text('home'), findsOneWidget);
   });

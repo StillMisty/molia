@@ -42,6 +42,7 @@ import '../utils/responsive.dart';
 import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/global_search_overlay.dart';
+import '../widgets/m3e_page_route.dart';
 import '../widgets/now_playing_controller.dart';
 import '../widgets/now_playing_summary.dart';
 import '../widgets/playback_selectors.dart';
@@ -1507,7 +1508,13 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
                         ),
                       );
                     },
-                    home: MyApp(key: appRootKey),
+                    // home 是 Navigator 的初始路由，不走 M3EPageRoute：
+                    // 显式包一层路由级 M3E 主题，页面才不依赖 App 级
+                    // DefaultTextStyle（预测返回退场 + 主题重建的断言见
+                    // lib/widgets/m3e_page_route.dart）。
+                    home: M3ERouteTheme(
+                      builder: (_) => MyApp(key: appRootKey),
+                    ),
                   );
                 },
               ),

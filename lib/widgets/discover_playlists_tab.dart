@@ -14,6 +14,7 @@ import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
 import 'empty_state.dart';
 import 'library_cover.dart';
+import 'm3e_page_route.dart';
 import 'paged_list_auto_load.dart';
 import 'shell_page_visibility.dart';
 
@@ -156,7 +157,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     HapticsService.lightImpact();
     final provider = _provider;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      M3EPageRoute<void>(
         builder: (_) => DiscoverTracksPage(
           title: playlist.name,
           coverUrl: playlist.coverUrl,
@@ -195,7 +196,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     if (!mounted || input == null || input.isEmpty) return;
     final provider = _provider;
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      M3EPageRoute<void>(
         builder: (_) => DiscoverTracksPage(
           title: l10n.discoverOpenPlaylist,
           importable: true,
