@@ -941,6 +941,18 @@
   `lastSeenAt`、不触发同步轮次；局域网开启且 App 前台时，点候选即发起配对
   （一次性 P-256 密钥 + 6 位确认码）。自动发现失败时，高级设置里的手动地址会
   向该地址单播 `MSP` 探测，收到应答后走同一套配对请求；手动地址不携带口令。
+- **Nearby scan session（附近设备扫描会话）** —
+  `lib/providers/nearby_scan_session.dart`：同步设置页「附近设备」卡片的
+  **页面级**扫描节拍唯一实现（随页面创建 / 销毁，后台不保留扫描）。端口
+  `NearbyScanPort` 只暴露 availability / lanRunning / `startScan` / `stopScan`
+  （生产实现包 `SyncProvider`）；`sync()` 在挂载与 provider 每次通知后比对
+  可用性与局域网运行状态：首次可用时首帧后起扫、可用性变 available 补扫、
+  变不可用立即停扫并清掉结算、LAN false→true 且可用时补扫；`startScan` 被
+  拒绝立即结算，成功则在 1.8 秒后结算（空态从「正在查找」切到「没有发现 +
+  重新查找」）。页面只读 `NearbyScanState`（scanning / settled）并转发
+  `rescan()`；定时器与 post-frame 均可注入，异步 start 带代次守卫，可用性
+  变化后迟到的结果不能把状态翻回扫描中。扫描波次（100 / 500 / 1500ms 与
+  5 秒补探）仍属配对服务，不在会话里。
 - **Pairing request（配对请求）** — `lib/data/sync/pairing/lan_pairing_service.dart`：
   `POST /molia-sync/v2/pair/request`、`GET /pair/status`、`POST /pair/complete`
   （invite 方向）。请求体 ≤8KB；pending 上限 8、TTL 60 秒、同一时间只展示一个
