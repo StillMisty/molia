@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
@@ -46,6 +47,7 @@ void main() {
   late FakeDiscoverSource wyDiscover;
   late _FakeLxEngine engine;
   late LxEngineSupervisor supervisor;
+  late SettingsRegistry discoverSettings;
   bool scriptActive = false;
 
   setUp(() {
@@ -62,6 +64,7 @@ void main() {
       playbackProvider: playback,
     );
     wyDiscover = FakeDiscoverSource();
+    discoverSettings = testSettingsRegistry();
     discover = DiscoverProvider(
       playbackProvider: playback,
       libraryProvider: library,
@@ -71,14 +74,7 @@ void main() {
           key: FakeDiscoverSource(sourceKey: key),
       },
       initialChannelKey: 'wy',
-      // 与 composition root 相同的跟随规则：可搜索渠道 → 搜索源跟随。
-      onChannelChanged: (key) {
-        if (search.sourceChannels.any(
-          (option) => option.key == key && option.capabilities.search,
-        )) {
-          search.selectSource(key);
-        }
-      },
+      settings: discoverSettings,
     );
     engine = _FakeLxEngine();
     supervisor = LxEngineSupervisor(
@@ -171,7 +167,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('无脚本：渠道下拉 + 热榜/歌单 tab；搜索 tab 自动隐藏', (tester) async {
+  testWidgets('无搜索来源：搜索 tab 隐藏；发现渠道与搜索互不影响', (tester) async {
     search = buildSearch(const []);
     await pumpLibrary(tester);
 
@@ -286,11 +282,21 @@ void main() {
   testWidgets('选中脚本扩展渠道：只保留搜索 tab；切回内置平台恢复', (tester) async {
     await activateScript(tester);
     expect(scriptActive, isTrue);
-    search = buildSearch(const []);
+    search = buildSearch(const [
+      domain.SourceDescriptor(
+        key: 'test',
+        displayName: '测试源',
+        kind: domain.SourceKind.lx,
+        capabilities: domain.SourceCapabilities(search: true),
+      ),
+    ]);
     await pumpLibrary(tester);
 
     expect(find.text('热榜'), findsOneWidget); // 默认 wy（可发现）→ 热榜/歌单
 
+    // 渠道下拉只在热榜 / 歌单 tab 显示：先切到热榜。
+    await tester.tap(find.text('热榜'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('网易音乐'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('测试源').last);
@@ -302,28 +308,15 @@ void main() {
     // 只剩搜索一个 tab 时不渲染 tab 栏，直接显示搜索内容。
     expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
 
-    // 切回内置平台恢复热榜/歌单。
-    await tester.tap(find.text('测试源').first);
+    // 搜索源渠道没有发现 tab（搜索 tab 不显示渠道下拉）：从数据面切回
+    // 内置平台，验证热榜 / 歌单恢复。
+    discover.selectChannel('wy');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('网易音乐').last);
-    await tester.pumpAndSettle();
-
     expect(discover.channelKey, 'wy');
     expect(find.text('热榜'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('搜索源跟随渠道：挂载时将搜索源同步到当前渠道', (tester) async {
-    await activateScript(
-      tester,
-      sources: {
-        'wy': const LxSourceDecl(
-          key: 'wy',
-          name: '网易音乐',
-          actions: ['musicUrl', 'search'],
-          qualitys: ['320k'],
-        ),
-      },
-    );
+  testWidgets('切换发现渠道不改搜索来源；搜索 tab 隐藏渠道下拉', (tester) async {
     search = buildSearch(const [
       domain.SourceDescriptor(
         key: 'tx',
@@ -338,12 +331,35 @@ void main() {
         capabilities: domain.SourceCapabilities(search: true),
       ),
     ]);
-    expect(search.sourceKey, 'tx'); // 注册表顺序默认第一个
-
+    search.selectSourceFilter('tx');
+    // chips 在搜索激活后的结果面里（未输入时是 AI 推荐 / 输入引导占位）。
+    search.updateSearchQuery('测试');
     await pumpLibrary(tester);
 
-    expect(search.sourceKey, 'wy'); // 已同步到渠道 wy
-  });
+    // 默认搜索 tab：来源只走 chips，顶部没有发现渠道下拉。
+    expect(find.byType(LibraryChannelSelector), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('searchSourceChip-tx')),
+      findsOneWidget,
+    );
+
+    // 到热榜 tab 才能切换发现渠道。
+    await tester.tap(find.text('热榜'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    await tester.tap(find.text('网易音乐'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('酷我音乐').last);
+    await tester.pumpAndSettle();
+
+    expect(discover.channelKey, 'kw');
+    expect(search.sourceFilter, 'tx', reason: '切渠道不改搜索来源');
+
+    await tester.tap(find.text('搜索'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibraryChannelSelector), findsNothing);
+    expect(search.sourceFilter, 'tx');
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 }
 
 /// 只暴露描述列表的假注册表（搜索源选择用）。

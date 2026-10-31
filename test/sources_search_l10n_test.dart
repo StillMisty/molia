@@ -32,6 +32,11 @@ void main() {
     'searchNoSourcesHint',
     'searchNoResultsInSource',
     'searchLoadMoreFailed',
+    'searchAllSources',
+    'searchSourcesLabel',
+    'searchGroupEmpty',
+    'searchLoadMore',
+    'searchKeyboardHint',
   ];
 
   test('音源/搜索新增键在中文中齐全', () {
@@ -70,6 +75,15 @@ void main() {
     expect(zhL10n.sourcesActiveSource('集成测试音源', '1.0.0'), '当前音源：集成测试音源 1.0.0');
     expect(zhL10n.searchNoResultsInSource('测试源'), '在「测试源」中没有找到结果');
     expect(zhL10n.searchLoadMoreFailed, '加载更多结果失败');
+    expect(zhL10n.searchAllSources, '全部来源');
+    expect(zhL10n.searchSourcesLabel, '搜索来源');
+    expect(zhL10n.searchGroupEmpty, '无结果');
+    expect(zhL10n.searchLoadMore, '加载更多');
+    expect(
+      zhL10n.searchKeyboardHint,
+      '↑↓ 选择 · Enter 播放 · Ctrl+Enter 查看全部 · Esc 关闭',
+    );
+    expect(zhL10n.searchNoSourcesHint, 'B 站可直接搜索；其它平台请在「音源管理」中导入音源脚本。');
 
     final enL10n = lookupAppLocalizations(const Locale('en'));
     expect(enL10n.sourcesTitle, 'Source Management');
