@@ -643,6 +643,128 @@ void main() {
     expect(request.tracks.single.id.uri, 'kw:l1');
   });
 
+  test('歌词类型：旧查询晚到的片段不泄漏到新查询的行', () async {
+    final oldGate = Completer<SearchResult<LyricHit>>();
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        lyricSearch: true,
+      ),
+    );
+    source.onSearch = (query) =>
+        Future.value(SearchResult(items: [_track('kw', 'song-${query.page}')]));
+    source.onSearchLyrics = (query) {
+      if (query.keyword == '旧词') return oldGate.future;
+      return Future.value(
+        SearchResult(
+          items: [
+            LyricHit(track: _track('kw', 'kept'), snippet: '新词片段'),
+            // 与旧查询重叠的曲目，但新查询没有命中片段。
+            LyricHit(track: _track('kw', 'shared')),
+          ],
+          total: 2,
+        ),
+      );
+    };
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('旧词');
+    await _waitUntil(() => !provider.isSearching);
+    provider.selectSearchKind(SearchKind.lyric);
+    await _waitUntil(() => source.lyricSearchCalls == 1);
+    expect(provider.isSearching, isTrue, reason: '旧词的歌词页仍在途');
+
+    provider.submitSearch('新词');
+    await _waitUntil(
+      () => provider.lyricResults.isNotEmpty && !provider.isSearching,
+    );
+    expect(provider.lyricResults.map((row) => row.id.uri), [
+      'kw:kept',
+      'kw:shared',
+    ]);
+    expect(provider.lyricResults.first.lyricSnippet, '新词片段');
+    expect(provider.lyricResults.last.lyricSnippet, isNull);
+
+    // 旧查询晚到：同 id 片段与旧查询专属曲目都不得进入新查询的片段表。
+    oldGate.complete(
+      SearchResult(
+        items: [
+          LyricHit(track: _track('kw', 'shared'), snippet: '旧词泄漏'),
+          LyricHit(track: _track('kw', 'old-only'), snippet: '旧词专属'),
+        ],
+        total: 2,
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(provider.lyricResults.map((row) => row.id.uri), [
+      'kw:kept',
+      'kw:shared',
+    ], reason: '旧查询的曲目不得追加到新查询');
+    expect(
+      provider.lyricResults.last.lyricSnippet,
+      isNull,
+      reason: '旧查询同 id 片段不得覆盖新查询',
+    );
+  });
+
+  test('歌词类型：追加页片段与首屏片段累计（同 id 后页覆盖）', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        lyricSearch: true,
+      ),
+    );
+    source.onSearch = (query) =>
+        Future.value(SearchResult(items: [_track('kw', 'song-${query.page}')]));
+    source.onSearchLyrics = (query) async {
+      if (query.page == 1) {
+        return SearchResult(
+          items: [
+            LyricHit(track: _track('kw', 'a'), snippet: '第一页 A'),
+            LyricHit(track: _track('kw', 'b'), snippet: '第一页 B'),
+          ],
+          hasMore: true,
+          total: 3,
+        );
+      }
+      return SearchResult(
+        items: [
+          LyricHit(track: _track('kw', 'b'), snippet: '第二页 B'),
+          LyricHit(track: _track('kw', 'c'), snippet: '第二页 C'),
+        ],
+        hasMore: false,
+        total: 3,
+      );
+    };
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('歌词');
+    await _waitUntil(() => !provider.isSearching);
+    provider.selectSearchKind(SearchKind.lyric);
+    await _waitUntil(() => provider.lyricResults.isNotEmpty);
+    await provider.loadMore();
+
+    expect(provider.lyricResults.map((row) => row.id.uri), [
+      'kw:a',
+      'kw:b',
+      'kw:c',
+    ], reason: '追加页跨页按 id 去重');
+    expect(provider.lyricResults.map((row) => row.lyricSnippet), [
+      '第一页 A',
+      '第二页 B',
+      '第二页 C',
+    ], reason: '已接受页片段累计；同 id 后页片段覆盖前页');
+  });
+
   test('歌词类型：能力位不足时分段不出现且切换被忽略', () async {
     final source = _FakeMusicSource('kw');
     final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);

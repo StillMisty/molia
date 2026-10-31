@@ -41,18 +41,37 @@ typedef PagedTrackPageLoader<T, R> = Future<PagedTrackPage<T, R>> Function(
   int page,
 );
 
+/// 已接受页的载体：在通用 [PagedResult] 上带回同页实体。
+///
+/// 实体只经 [PagedListController] 的 accepted-page 回调读取：控制器判定
+/// 请求仍为当前代际后才回调一次，包装层不再自己维护第二套代际计数器。
+class _TrackPageResult<T, R> extends PagedResult<R> {
+  const _TrackPageResult({
+    required this.entity,
+    required super.items,
+    required super.hasMore,
+    super.total,
+  });
+
+  final T entity;
+}
+
 /// 曲目分页集合：在 [PagedListController] 上补「页实体」捕获。
 ///
 /// 列表状态仍由 [PagedListController] 负责（在途请求过期丢弃、跨页去重、
-/// 首屏 / 加载更多的失败语义）；本类只把成功响应的实体记下来，让头部与列表
-/// 读同一份快照。[reset] 同时作废列表与实体的在途响应。
+/// 首屏 / 加载更多的失败语义）；本类只通过 accepted-page 回调把成功响应的
+/// 实体记下来，让头部与列表读同一份快照。过期判定只有控制器一处，[reset]
+/// 同时作废列表与实体的在途响应。
 class PagedTrackCollection<T, R> extends ValueNotifier<PagedListState<R>> {
   PagedTrackCollection({
     required this._loadPage,
     required String Function(R item) keyOf,
   }) : super(const PagedListState(hasMore: true)) {
-    _inner = PagedListController<R>(fetchPage: _fetchPage, keyOf: keyOf)
-      ..addListener(_forward);
+    _inner = PagedListController<R>(
+      fetchPage: _fetchPage,
+      keyOf: keyOf,
+      onPageAccepted: _acceptPage,
+    )..addListener(_forward);
   }
 
   final PagedTrackPageLoader<T, R> _loadPage;
@@ -60,11 +79,6 @@ class PagedTrackCollection<T, R> extends ValueNotifier<PagedListState<R>> {
 
   /// 最近一次成功响应携带的实体（[reset] 清空）。
   T? _entity;
-
-  /// 包装层的代际：重置 / 销毁后，旧响应连实体也不得回写。
-  /// [PagedListController] 只保证列表状态不被旧响应覆盖；实体捕获的过期
-  /// 判定必须和它同步，否则会出现「列表是新页、头部是旧页」。
-  int _generation = 0;
 
   /// 当前分页状态（与 [PagedListController.state] 同一个不可变值）。
   PagedListState<R> get state => value;
@@ -75,14 +89,18 @@ class PagedTrackCollection<T, R> extends ValueNotifier<PagedListState<R>> {
   T? get entity => _entity;
 
   Future<PagedResult<R>> _fetchPage(int page) async {
-    final generation = _generation;
     final result = await _loadPage(page);
-    if (generation == _generation) _entity = result.entity;
-    return PagedResult<R>(
+    return _TrackPageResult<T, R>(
+      entity: result.entity,
       items: result.items,
       hasMore: result.hasMore,
       total: result.total,
     );
+  }
+
+  /// 控制器已接受本页（请求仍为当前代际）：实体与列表同页更新。
+  void _acceptPage(PagedResult<R> page, {required bool append}) {
+    if (page is _TrackPageResult<T, R>) _entity = page.entity;
   }
 
   void _forward() => value = _inner.value;
@@ -93,15 +111,12 @@ class PagedTrackCollection<T, R> extends ValueNotifier<PagedListState<R>> {
 
   /// 作废在途请求并清空列表与实体（切换筛选条件时调用）。
   void reset() {
-    _generation++;
     _entity = null;
     _inner.reset();
   }
 
   @override
   void dispose() {
-    // 在途请求的实体也不得在销毁后回写。
-    _generation++;
     _inner
       ..removeListener(_forward)
       ..dispose();

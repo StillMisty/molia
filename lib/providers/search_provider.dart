@@ -21,6 +21,22 @@ export 'search_row.dart' show SearchRow;
 
 final _logger = Logger('molia.search_provider');
 
+/// 歌词搜索的一页：在通用 [PagedResult] 上带回本页命中的片段。
+///
+/// 片段必须随页身份一起被接受：只有控制器判定请求仍为当前会话后，才把
+/// 这页的片段并入累计表；旧查询晚到的响应不能污染新查询的行。
+class _LyricPageResult extends PagedResult<SourceTrack> {
+  const _LyricPageResult({
+    required this.snippets,
+    required super.items,
+    required super.hasMore,
+    super.total,
+  });
+
+  /// 本页命中的片段（key = 回传后的曲目 id）。
+  final Map<String, String> snippets;
+}
+
 /// 搜索状态（内部经 [CatalogService]/[SourceRegistry]）。
 ///
 /// 公开 API：`filteredResults` / `loadMore` / `sourceChannels` / 分页 / 空态；
@@ -64,14 +80,13 @@ class SearchProvider extends ChangeNotifier {
   // 歌词类型会话：曲目（与单曲同构的播放 / 收藏路径）+ 命中歌词片段并行表。
   List<SourceTrack> _lyricTracks = const [];
   List<SearchRow> _lyricRows = const [];
+
+  /// 已接受页累计的片段表（按曲目 id）；换词 / 换源时清空。
   Map<String, String> _lyricSnippets = const {};
   SourceFailure? _lyricFailure;
 
   /// 歌词分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
   String _lyricPagerQuery = '';
-
-  /// 本次歌词分页会话累计的片段表（按曲目 id），成功后随结果发布。
-  Map<String, String> _pendingLyricSnippets = {};
 
   // 分页状态：唯一状态机 PagedListController（首屏/加载更多/失败/过期守卫/去重）
   static const int _searchPageSize = 30;
@@ -112,6 +127,7 @@ class SearchProvider extends ChangeNotifier {
     _lyricPager = PagedListController<SourceTrack>(
       keyOf: (track) => track.id,
       fetchPage: _fetchLyricPage,
+      onPageAccepted: _acceptLyricPage,
     );
     _registrySubscription = _sourceRegistry?.changes.listen(
       (_) => _onSourcesChanged(),
@@ -254,7 +270,9 @@ class SearchProvider extends ChangeNotifier {
 
   void _resetLyricPagination() {
     _lyricPagerQuery = '';
-    _pendingLyricSnippets = {};
+    // 片段表属于会话：reset 使在途页过期后旧页不会再被接受，这里先清空，
+    // 新会话只从 accepted 页累计片段。
+    _lyricSnippets = const {};
     _lyricPager.reset();
   }
 
@@ -263,7 +281,6 @@ class SearchProvider extends ChangeNotifier {
     _resetLyricPagination();
     _lyricTracks = const [];
     _lyricRows = const [];
-    _lyricSnippets = const {};
     _lyricFailure = null;
   }
 
@@ -559,20 +576,33 @@ class SearchProvider extends ChangeNotifier {
       ),
     );
     // 播放需回 SourceTrack（payload 同一引用）；片段按回转过后的曲目 id
-    // 建表（与行身份严格一致，分页追加时累计）。
+    // 建表（与行身份严格一致）。片段只随本页返回，取数阶段不写共享状态：
+    // 是否接受由控制器的 accepted-page 回调判定。
     final items = <SourceTrack>[];
-    final snippets = <String, String>{..._pendingLyricSnippets};
+    final snippets = <String, String>{};
     for (final hit in result.items) {
       final track = sourceTrackFromTrack(hit.track);
       items.add(track);
       if (hit.snippet != null) snippets[track.id] = hit.snippet!;
     }
-    _pendingLyricSnippets = snippets;
-    return PagedResult(
+    return _LyricPageResult(
+      snippets: snippets,
       items: items,
       hasMore: result.hasMore,
       total: result.total,
     );
+  }
+
+  /// 接受页回调：只在这页仍属于当前歌词会话时累计片段。
+  ///
+  /// 首屏页重置片段表（换词 / 换源后不继承旧页），追加页在已有片段上合并；
+  /// 与旧行为一致，同一曲目后一页的片段覆盖前一页。
+  void _acceptLyricPage(PagedResult<SourceTrack> page, {required bool append}) {
+    if (page is! _LyricPageResult) return;
+    _lyricSnippets = Map.unmodifiable({
+      if (append) ..._lyricSnippets,
+      ...page.snippets,
+    });
   }
 
   /// 歌词搜索首屏：独立错误态（失败保留已有结果）。
@@ -588,7 +618,8 @@ class SearchProvider extends ChangeNotifier {
 
     _lyricPagerQuery = keyword;
     _lyricFailure = null;
-    _pendingLyricSnippets = {};
+    // 新关键词从空片段表开始；旧会话在途页已被 reset 作废，不会再回调。
+    _lyricSnippets = const {};
     _lyricPager.reset();
     notifyListeners();
 
@@ -598,6 +629,9 @@ class SearchProvider extends ChangeNotifier {
   }
 
   /// 把歌词分页状态机的结果映射到搜索状态（typed rows + 片段 / 失败）。
+  ///
+  /// 片段表只含已接受页（accepted-page 回调累计）；这里不再从取数阶段读
+  /// 共享暂存，避免旧查询晚到的片段混进新查询的行。
   void _applyLyricPagerState() {
     final error = _lyricPager.error;
     if (error != null) {
@@ -606,7 +640,6 @@ class SearchProvider extends ChangeNotifier {
     } else {
       _lyricFailure = null;
       _lyricTracks = _lyricPager.items;
-      _lyricSnippets = Map.unmodifiable(_pendingLyricSnippets);
       _lyricRows = List.unmodifiable([
         for (final track in _lyricTracks)
           SearchRow(
