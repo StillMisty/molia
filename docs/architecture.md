@@ -872,6 +872,17 @@ module（见下）：
   单任务 / 批量 id 分配、批量共享一条「N/N」、500ms 系统频率节流、收尾只收自己
   起过的；端口 / 设置 / 时钟可注入）。命名不再有「测试双胞胎」，测试直接打生产
   实现；
+- **任务产物写入（sidecar 唯一入口）**：`download_service.dart` 内部的
+  `_TaskArtifacts` 是单个下载任务登记 / 写产物的唯一实现——音频任务与独立
+  歌词 / 封面任务共用「登记期望路径 → `DownloadFileLayout.writeLyrics` /
+  `writeCover`」；登记覆盖未来会出现的音频最终文件 / `.part`、歌词 +
+  `.t.lrc` 翻译边车与封面，任务收尾（成功 / 失败 / 取消）统一撤销，落库前
+  孤儿扫描只认这份活跃输出（落库后由记录引用接管）。独立分项任务的
+  「`partBaseName` → 写 → `_upsertPart` → 补标签」骨架也在这里；音频的
+  best-effort（写失败返回 null，不阻断音频）与独立任务的 typed failure
+  （`downloadFailed`）、基名来源（音频路径 vs 既有记录）仍留在 runner。
+  为什么：sidecar 命名 / 孤儿保护 / 标签补写若在三条 runner 各写一份，
+  改一处必然漏另外两处；
 - **任务队列与进度通道**：音频 / 歌词 / 封面共用同一条队列，全局严格串行
   （单 worker、FIFO），`enqueue` 同步进入等待列表（批量一次入队全部，页面
   立即看到等待列表）；同 key 已有排队 / 运行任务时返回同一 future，失败 /

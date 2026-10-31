@@ -660,12 +660,7 @@ class DownloadService extends DownloadManager {
     int? partTotal;
     late final String root;
     late final String base;
-    final outputs = <String>{};
-    void registerOutput(String? path) {
-      if (path == null || path.isEmpty) return;
-      outputs.add(path);
-      _activeOutputPaths.add(path);
-    }
+    final artifacts = _TaskArtifacts(this);
 
     try {
       root = await _requireRoot();
@@ -680,8 +675,8 @@ class DownloadService extends DownloadManager {
         base = await _audioBaseName(root, track, extension);
         filePath = DownloadFileLayout.audioPath(root, base, extension);
         partPath = DownloadFileLayout.partPath(filePath);
-        registerOutput(filePath);
-        registerOutput(partPath);
+        artifacts.register(filePath);
+        artifacts.register(partPath);
         await _storage.copyFile(cached, partPath);
       } else {
         // 2) 网络下载（扩展名优先取 URL 后缀，回退音质推断）。
@@ -703,8 +698,8 @@ class DownloadService extends DownloadManager {
         base = await _audioBaseName(root, track, extension);
         filePath = DownloadFileLayout.audioPath(root, base, extension);
         partPath = DownloadFileLayout.partPath(filePath);
-        registerOutput(filePath);
-        registerOutput(partPath);
+        artifacts.register(filePath);
+        artifacts.register(partPath);
         final response = await _dio.get<ResponseBody>(
           url.toString(),
           options: Options(
@@ -767,31 +762,20 @@ class DownloadService extends DownloadManager {
       if (task.includeLyrics) {
         lyrics = await _resolveLyrics(track);
         if (lyrics != null) {
-          final expectedLyricPath = DownloadFileLayout.lyricsPath(root, base);
-          registerOutput(expectedLyricPath);
-          registerOutput(translationLyricPathOf(expectedLyricPath));
-          lyricPath = await _layout.writeLyrics(
-            root,
-            base,
-            lyric: lyrics.lyric,
-            translation: lyrics.translation,
+          lyricPath = await artifacts.writeLyrics(
+            root: root,
+            base: base,
+            lyrics: lyrics,
           );
         }
       }
       if (task.includeCover) {
         cover = await _resolveCover(track);
         if (cover != null) {
-          final expectedCoverPath = DownloadFileLayout.coverPath(
-            root,
-            base,
-            cover.url ?? '',
-          );
-          registerOutput(expectedCoverPath);
-          coverPath = await _layout.writeCover(
+          coverPath = await artifacts.writeCover(
             root: root,
             base: base,
-            coverUrl: cover.url ?? '',
-            bytes: cover.bytes,
+            cover: cover,
           );
         }
       }
@@ -854,7 +838,7 @@ class DownloadService extends DownloadManager {
       if (e is SourceFailure) rethrow;
       throw SourceFailure.from(e);
     } finally {
-      _activeOutputPaths.removeAll(outputs);
+      artifacts.close();
       _tokens.remove(key);
       // 批量中的当前曲目由批量通知统一表达（presenter 内部按 key 抑制）。
       _notifications.stopTask(key);
@@ -864,13 +848,7 @@ class DownloadService extends DownloadManager {
   /// 单独下载歌词：与音频共用同一条队列，避免分项记录写库与音频下载并发覆盖。
   Future<void> _runLyricsTask(DownloadTask task) async {
     final track = task.track;
-    final outputs = <String>{};
-    void registerOutput(String? path) {
-      if (path == null || path.isEmpty) return;
-      outputs.add(path);
-      _activeOutputPaths.add(path);
-    }
-
+    final artifacts = _TaskArtifacts(this);
     try {
       final root = await _requireRoot();
       final lyrics = await _resolveLyrics(track);
@@ -881,48 +859,16 @@ class DownloadService extends DownloadManager {
           l10nKey: 'downloadNoLyrics',
         );
       }
-      final existing = _downloadRecords.recordForTrack(track);
-      final base = await _layout.partBaseName(
-        root: root,
-        track: track,
-        audioPath: existing?.filePath,
-        existingPath: existing?.lyricPath,
-        subdir: downloadsLyricsDirName,
-        extension: 'lrc',
-      );
-      final expectedPath = DownloadFileLayout.lyricsPath(root, base);
-      registerOutput(expectedPath);
-      registerOutput(translationLyricPathOf(expectedPath));
-      final path = await _layout.writeLyrics(
-        root,
-        base,
-        lyric: lyrics.lyric,
-        translation: lyrics.translation,
-      );
-      if (path == null) {
-        throw const SourceFailure(
-          kind: FailureKind.unknown,
-          message: '歌词写入失败',
-          l10nKey: 'downloadFailed',
-        );
-      }
-      await _upsertPart(track, lyricPath: path);
-      unawaited(_embedTagsFromFiles(track));
+      await artifacts.saveLyricsPart(track, root: root, lyrics: lyrics);
     } finally {
-      _activeOutputPaths.removeAll(outputs);
+      artifacts.close();
     }
   }
 
   /// 单独下载封面：与音频共用同一条队列。
   Future<void> _runCoverTask(DownloadTask task) async {
     final track = task.track;
-    final outputs = <String>{};
-    void registerOutput(String? path) {
-      if (path == null || path.isEmpty) return;
-      outputs.add(path);
-      _activeOutputPaths.add(path);
-    }
-
+    final artifacts = _TaskArtifacts(this);
     try {
       final root = await _requireRoot();
       final cover = await _resolveCover(track);
@@ -933,34 +879,9 @@ class DownloadService extends DownloadManager {
           l10nKey: 'downloadNoArtwork',
         );
       }
-      final coverUrl = cover.url ?? '';
-      final existing = _downloadRecords.recordForTrack(track);
-      final base = await _layout.partBaseName(
-        root: root,
-        track: track,
-        audioPath: existing?.filePath,
-        existingPath: existing?.coverPath,
-        subdir: downloadsCoversDirName,
-        extension: DownloadFileLayout.coverExtension(coverUrl),
-      );
-      registerOutput(DownloadFileLayout.coverPath(root, base, coverUrl));
-      final path = await _layout.writeCover(
-        root: root,
-        base: base,
-        coverUrl: coverUrl,
-        bytes: cover.bytes,
-      );
-      if (path == null) {
-        throw const SourceFailure(
-          kind: FailureKind.unknown,
-          message: '封面写入失败',
-          l10nKey: 'downloadFailed',
-        );
-      }
-      await _upsertPart(track, coverPath: path);
-      unawaited(_embedTagsFromFiles(track));
+      await artifacts.saveCoverPart(track, root: root, cover: cover);
     } finally {
-      _activeOutputPaths.removeAll(outputs);
+      artifacts.close();
     }
   }
 
@@ -1420,6 +1341,129 @@ class DownloadService extends DownloadManager {
     _downloadRecords.dispose();
     super.dispose();
   }
+}
+
+/// 单个下载任务的产物写入器：输出登记与歌词 / 封面边车的唯一写入路径。
+///
+/// 为什么需要它：同一套 sidecar 约定（`lyrics/` 下的 `.lrc` + `.t.lrc` 翻译、
+/// `covers/`）被音频下载与独立的歌词 / 封面下载共用。三条 runner 各写一份
+/// 「先登记期望路径、再写、失败归一」时，改边车命名或孤儿保护策略必然漏一处；
+/// 这里把登记与写入绑成一条路径，runner 只保留自己的基名来源与失败语义
+/// （音频 best-effort；独立分项写失败即 typed failure）。
+class _TaskArtifacts {
+  _TaskArtifacts(this._service);
+
+  final DownloadService _service;
+
+  /// 本任务登记过的路径：收尾只撤销自己加的保护，不影响其它任务。
+  final Set<String> _outputs = <String>{};
+
+  /// 登记预计 / 已产生的输出路径：落库前孤儿扫描必须避开它们。
+  ///
+  /// 必须在写文件前登记，而不是写完再登记：写入过程中与失败回滚前路径都可能
+  /// 短暂存在，孤儿清理不能在这个窗口里删掉任务产物。
+  void register(String? path) {
+    if (path == null || path.isEmpty) return;
+    _outputs.add(path);
+    _service._activeOutputPaths.add(path);
+  }
+
+  /// 写歌词主文件 + 翻译边车；两条期望路径都先登记（翻译边车也是任务产物）。
+  ///
+  /// 返回值与 [DownloadFileLayout.writeLyrics] 一致：失败回滚后为 null，
+  /// 由调用方决定「音频 best-effort」还是「独立分项报错」。
+  Future<String?> writeLyrics({
+    required String root,
+    required String base,
+    required DownloadLyrics lyrics,
+  }) {
+    final expected = DownloadFileLayout.lyricsPath(root, base);
+    register(expected);
+    register(translationLyricPathOf(expected));
+    return _service._layout.writeLyrics(
+      root,
+      base,
+      lyric: lyrics.lyric,
+      translation: lyrics.translation,
+    );
+  }
+
+  /// 写封面文件；扩展名由封面 URL 推断，期望路径先登记再写。
+  Future<String?> writeCover({
+    required String root,
+    required String base,
+    required _ResolvedCover cover,
+  }) {
+    final coverUrl = cover.url ?? '';
+    register(DownloadFileLayout.coverPath(root, base, coverUrl));
+    return _service._layout.writeCover(
+      root: root,
+      base: base,
+      coverUrl: coverUrl,
+      bytes: cover.bytes,
+    );
+  }
+
+  /// 独立歌词任务骨架：基名 → 写边车 → 分项落库 → 补标签。
+  ///
+  /// 基名跟随已有音频（sidecar 同基名约定）或复用已有歌词路径；没有音频时
+  /// 在 `lyrics/` 内查重。写失败抛 `downloadFailed`（独立分项不吞错）。
+  Future<void> saveLyricsPart(
+    Track track, {
+    required String root,
+    required DownloadLyrics lyrics,
+  }) async {
+    final existing = _service._downloadRecords.recordForTrack(track);
+    final base = await _service._layout.partBaseName(
+      root: root,
+      track: track,
+      audioPath: existing?.filePath,
+      existingPath: existing?.lyricPath,
+      subdir: downloadsLyricsDirName,
+      extension: 'lrc',
+    );
+    final path = await writeLyrics(root: root, base: base, lyrics: lyrics);
+    if (path == null) {
+      throw const SourceFailure(
+        kind: FailureKind.unknown,
+        message: '歌词写入失败',
+        l10nKey: 'downloadFailed',
+      );
+    }
+    await _service._upsertPart(track, lyricPath: path);
+    unawaited(_service._embedTagsFromFiles(track));
+  }
+
+  /// 独立封面任务骨架：基名 → 写边车 → 分项落库 → 补标签。
+  Future<void> saveCoverPart(
+    Track track, {
+    required String root,
+    required _ResolvedCover cover,
+  }) async {
+    final existing = _service._downloadRecords.recordForTrack(track);
+    final coverUrl = cover.url ?? '';
+    final base = await _service._layout.partBaseName(
+      root: root,
+      track: track,
+      audioPath: existing?.filePath,
+      existingPath: existing?.coverPath,
+      subdir: downloadsCoversDirName,
+      extension: DownloadFileLayout.coverExtension(coverUrl),
+    );
+    final path = await writeCover(root: root, base: base, cover: cover);
+    if (path == null) {
+      throw const SourceFailure(
+        kind: FailureKind.unknown,
+        message: '封面写入失败',
+        l10nKey: 'downloadFailed',
+      );
+    }
+    await _service._upsertPart(track, coverPath: path);
+    unawaited(_service._embedTagsFromFiles(track));
+  }
+
+  /// 任务收尾（成功 / 失败 / 取消）撤销本任务的孤儿保护。
+  void close() => _service._activeOutputPaths.removeAll(_outputs);
 }
 
 /// 已解析的封面字节（下载链路内部使用）。
