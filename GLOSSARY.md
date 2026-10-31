@@ -509,11 +509,13 @@
   （抓取脚本 `tool/gen_lyric_search_fixtures.mjs`）。命中片段作为结果行副标题。
 - **Search session（搜索分页会话）** — `lib/providers/search_provider.dart` 的私有
   `_SearchSession<T>` / `_SearchPaging`：单曲 / 歌手 / 歌词各持一份「关键词 + 归一化
-  失败 + `PagedListController`」。provider 只经 `_activeSearchSession` 读当前类型的
-  页码 / 总数 / 加载态 / 失败，`loadMore` 也只走当前会话后重投影当前类型；结果投影
-  仍按类型留在 provider（`SearchRow` / `ArtistSummary` / 带歌词片段的行），因为行
-  形状不同。`reset()` 同时清关键词、失败并使在途页过期，换词 / 换源 / 清空不再各写
-  三条容易漏的路径。
+  失败 + `PagedListController`」。单曲 / 歌词的会话条目直接是领域 `Track`（`CatalogService`
+  返回什么就存什么，payload 同一引用）；歌词页是 `_LyricPageResult extends
+  PagedResult<Track>`，命中片段按 `TrackId.uri` 建表，与行身份同一口径。provider 只经
+  `_activeSearchSession` 读当前类型的页码 / 总数 / 加载态 / 失败，`loadMore` 也只走当前
+  会话后重投影当前类型；结果投影仍按类型留在 provider（`SearchRow` / `ArtistSummary` /
+  带歌词片段的行），因为行形状不同。`reset()` 同时清关键词、失败并使在途页过期，换词 /
+  换源 / 清空不再各写三条容易漏的路径。
 - **Search kind（搜索类型）** — `lib/domain/models/catalog.dart::SearchKind`
   （`song` / `artist` / `lyric`）：搜索页分段（`M3ESegmentedButton`，按能力位显隐）；
   每种类型一个 **Search session**（切类型才请求、换词清空非激活类型、换源能力不足
@@ -521,10 +523,13 @@
   `searchLyrics` 经 `CatalogService`（缓存 key `search:{source}:artist|lyric:...`，
   与单曲共用 5min 缓存实例）路由。
 - **Search row（搜索结果行）** — `lib/providers/search_row.dart` 的 `SearchRow`：
-  单曲 / 歌词搜索结果的唯一形状（领域 `Track` + 可选 `lyricSnippet`）；`SearchProvider`
-  内部保留 `SourceTrack`（raw payload 不跨 provider 边界），播放按行身份回查当前队列。
-  UI 不再解码 `Map<String, dynamic>` 或 `_sourceTrack` 私有键，收藏 / 加入列表走
-  与其他列表相同的 `Track` 入口。
+  单曲 / 歌词搜索结果的唯一形状（领域 `Track` + 可选 `lyricSnippet`）。搜索行从
+  `CatalogService` 到会话、投影、播放全程只持领域 `Track`：`SearchRow.track` 就是
+  分页条目本身（payload 原样），不再维护旁路 `SourceTrack` 列表或做
+  `Track → SourceTrack → Track` 往返。`SearchProvider.playItem` 取当前类型已发布的
+  行组成队列，按 `TrackId` 定位下标后交给 `PlaybackProvider.playDomainTracks`；行、
+  队列与播放身份同源。UI 不再解码 `Map<String, dynamic>` 或 `_sourceTrack` 私有键，
+  收藏 / 加入列表走与其他列表相同的 `Track` 入口。
 - **Search results surface（搜索结果面）** — `lib/widgets/search_results_view.dart`：
   搜索结果两种宿主（资料库结果页 / 桌面全局搜索遮罩）的唯一实现。`SearchRow` →
   `TrackRowModel` 的行映射（歌词片段副标题 / 歌手链接 / 「未知歌手」兜底）、类型分段

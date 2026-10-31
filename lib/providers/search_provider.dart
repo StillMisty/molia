@@ -6,13 +6,12 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
-import '../data/mapping/track_mapper.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind, SearchQuery;
 import '../domain/models/failure.dart';
 import '../domain/models/source.dart' show SourceDescriptor;
+import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
-import '../sources/source_track.dart';
 import 'paged_list_controller.dart';
 import 'playback_provider.dart';
 import 'search_row.dart';
@@ -25,7 +24,7 @@ final _logger = Logger('molia.search_provider');
 ///
 /// 片段必须随页身份一起被接受：只有控制器判定请求仍为当前会话后，才把
 /// 这页的片段并入累计表；旧查询晚到的响应不能污染新查询的行。
-class _LyricPageResult extends PagedResult<SourceTrack> {
+class _LyricPageResult extends PagedResult<Track> {
   const _LyricPageResult({
     required this.snippets,
     required super.items,
@@ -33,7 +32,7 @@ class _LyricPageResult extends PagedResult<SourceTrack> {
     super.total,
   });
 
-  /// 本页命中的片段（key = 回传后的曲目 id）。
+  /// 本页命中的片段（key = `TrackId.uri`，与行身份同一口径）。
   final Map<String, String> snippets;
 }
 
@@ -161,9 +160,9 @@ class _SearchSession<T> implements _SearchPaging {
 /// 搜索状态（内部经 [CatalogService]/[SourceRegistry]）。
 ///
 /// 公开 API：`filteredResults` / `loadMore` / `sourceChannels` / 分页 / 空态；
-/// 结果行统一是 [SearchRow]（领域 `Track` + 可选歌词片段）。音源侧的
-/// `SourceTrack`（含 raw payload）只在内部保留，播放时由 `playItem` 交给
-/// [PlaybackProvider]。
+/// 结果行统一是 [SearchRow]（领域 `Track` + 可选歌词片段）。搜索会话与投影
+/// 全程只存领域 `Track`（payload 同一引用），不再维护旁路 `SourceTrack` 列表：
+/// 行、队列与播放身份都来自同一个对象，少一次往返转换。
 class SearchProvider extends ChangeNotifier {
   final PlaybackProvider _playbackProvider;
 
@@ -184,26 +183,22 @@ class SearchProvider extends ChangeNotifier {
   /// 无可用音源时为空字符串（搜索结果页展示空态引导）。
   String _sourceKey = '';
 
-  /// 音源搜索结果的原始曲目（用于播放时回传给音源脚本）
-  List<SourceTrack> _sourceTracks = const [];
-
   /// 当前搜索类型（搜索页「单曲 / 歌手」分段；默认单曲）。
   SearchKind _kind = SearchKind.song;
 
   // 单曲 / 歌手 / 歌词各一个搜索会话：关键词、失败、分页控制器各一份，
   // 切类型只换读取的会话；结果投影仍按类型保留（行形状不同）。
-  late final _SearchSession<SourceTrack> _songSession;
+  late final _SearchSession<Track> _songSession;
   late final _SearchSession<ArtistSummary> _artistSession;
-  late final _SearchSession<SourceTrack> _lyricSession;
+  late final _SearchSession<Track> _lyricSession;
 
   /// 歌手类型的结果投影。
   List<ArtistSummary> _artistResults = const [];
 
-  /// 歌词类型的曲目与行投影（与单曲同构的播放 / 收藏路径）。
-  List<SourceTrack> _lyricTracks = const [];
+  /// 歌词类型的行投影（与单曲同构的播放 / 收藏路径）。
   List<SearchRow> _lyricRows = const [];
 
-  /// 已接受页累计的片段表（按曲目 id）；换词 / 换源时清空。
+  /// 已接受页累计的片段表（key = `TrackId.uri`）；换词 / 换源时清空。
   Map<String, String> _lyricSnippets = const {};
 
   // 分页状态：唯一状态机 PagedListController（首屏/加载更多/失败/过期守卫/去重）
@@ -227,9 +222,9 @@ class SearchProvider extends ChangeNotifier {
     this._catalogService,
     this._sourceRegistry,
   }) {
-    _songSession = _SearchSession<SourceTrack>(
-      PagedListController<SourceTrack>(
-        keyOf: (track) => track.id,
+    _songSession = _SearchSession<Track>(
+      PagedListController<Track>(
+        keyOf: (track) => track.id.uri,
         fetchPage: _fetchSongPage,
       ),
       'Search failed',
@@ -241,9 +236,9 @@ class SearchProvider extends ChangeNotifier {
       ),
       'Artist search failed',
     );
-    _lyricSession = _SearchSession<SourceTrack>(
-      PagedListController<SourceTrack>(
-        keyOf: (track) => track.id,
+    _lyricSession = _SearchSession<Track>(
+      PagedListController<Track>(
+        keyOf: (track) => track.id.uri,
         fetchPage: _fetchLyricPage,
         onPageAccepted: _acceptLyricPage,
       ),
@@ -376,7 +371,6 @@ class SearchProvider extends ChangeNotifier {
 
   /// 单曲结果投影清空（分页会话由 [_resetAllPaging] 负责）。
   void _clearSongResults() {
-    _sourceTracks = const [];
     _searchRows = const [];
   }
 
@@ -390,7 +384,6 @@ class SearchProvider extends ChangeNotifier {
   /// 片段表属于歌词会话：reset 使在途页过期后旧页不会再被 accepted 回调
   /// 接受，这里与行一起清空，新会话只从新页累计片段。
   void _clearLyricResults() {
-    _lyricTracks = const [];
     _lyricRows = const [];
     _lyricSnippets = const {};
   }
@@ -409,12 +402,13 @@ class SearchProvider extends ChangeNotifier {
       return;
     }
     if (kind == SearchKind.lyric) {
-      if (_lyricTracks.isEmpty && !_lyricSession.isLoading) {
+      // 用已发布的行判定「已有结果」：首屏失败时行会保留，旧行为不自动重试。
+      if (_lyricRows.isEmpty && !_lyricSession.isLoading) {
         unawaited(_performLyricSearch(query));
       }
       return;
     }
-    if (_sourceTracks.isEmpty && !_songSession.isLoading) {
+    if (_searchRows.isEmpty && !_songSession.isLoading) {
       unawaited(performSearch(query));
     }
   }
@@ -546,7 +540,10 @@ class SearchProvider extends ChangeNotifier {
   }
 
   /// pager 的取页实现：按当前音源与会话关键词请求 CatalogService。
-  Future<PagedResult<SourceTrack>> _fetchSongPage(int page) async {
+  ///
+  /// CatalogService 已返回领域 `Track`（payload 原样），直接成为分页条目：
+  /// 行、队列与播放共用同一对象，不再做 `Track → SourceTrack → Track` 往返。
+  Future<PagedResult<Track>> _fetchSongPage(int page) async {
     final catalog = _catalogService;
     if (catalog == null) {
       throw StateError('音源未初始化');
@@ -564,13 +561,8 @@ class SearchProvider extends ChangeNotifier {
       ),
       fields: () => {'source': source, 'page': page},
     );
-    final tracks = DataPathTrace.sync(
-      'search.map',
-      () => [for (final track in result.items) sourceTrackFromTrack(track)],
-      fields: () => {'items': result.items.length},
-    );
     return PagedResult(
-      items: tracks,
+      items: result.items,
       hasMore: result.hasMore,
       total: result.total,
     );
@@ -582,9 +574,8 @@ class SearchProvider extends ChangeNotifier {
   void _projectSongResults() {
     final session = _songSession;
     if (session.failure != null) return;
-    _sourceTracks = session.items;
     _searchRows = List.unmodifiable([
-      for (final track in _sourceTracks) _searchRowOf(track),
+      for (final track in session.items) SearchRow(track: track),
     ]);
   }
 
@@ -637,7 +628,7 @@ class SearchProvider extends ChangeNotifier {
   }
 
   /// pager 的取页实现：按歌词搜歌（`CatalogService.searchLyrics`，5min 缓存）。
-  Future<PagedResult<SourceTrack>> _fetchLyricPage(int page) async {
+  Future<PagedResult<Track>> _fetchLyricPage(int page) async {
     final catalog = _catalogService;
     if (catalog == null) {
       throw StateError('音源未初始化');
@@ -650,19 +641,16 @@ class SearchProvider extends ChangeNotifier {
         limit: _searchPageSize,
       ),
     );
-    // 播放需回 SourceTrack（payload 同一引用）；片段按回转过后的曲目 id
-    // 建表（与行身份严格一致）。片段只随本页返回，取数阶段不写共享状态：
+    // 片段按 `TrackId.uri` 建表（与行身份严格一致），曲目直接用命中里的领域
+    // Track（payload 同一引用）。片段只随本页返回，取数阶段不写共享状态：
     // 是否接受由控制器的 accepted-page 回调判定。
-    final items = <SourceTrack>[];
     final snippets = <String, String>{};
     for (final hit in result.items) {
-      final track = sourceTrackFromTrack(hit.track);
-      items.add(track);
-      if (hit.snippet != null) snippets[track.id] = hit.snippet!;
+      if (hit.snippet != null) snippets[hit.track.id.uri] = hit.snippet!;
     }
     return _LyricPageResult(
       snippets: snippets,
-      items: items,
+      items: [for (final hit in result.items) hit.track],
       hasMore: result.hasMore,
       total: result.total,
     );
@@ -672,7 +660,7 @@ class SearchProvider extends ChangeNotifier {
   ///
   /// 首屏页重置片段表（换词 / 换源后不继承旧页），追加页在已有片段上合并；
   /// 与旧行为一致，同一曲目后一页的片段覆盖前一页。
-  void _acceptLyricPage(PagedResult<SourceTrack> page, {required bool append}) {
+  void _acceptLyricPage(PagedResult<Track> page, {required bool append}) {
     if (page is! _LyricPageResult) return;
     _lyricSnippets = Map.unmodifiable({
       if (append) ..._lyricSnippets,
@@ -709,13 +697,9 @@ class SearchProvider extends ChangeNotifier {
   void _projectLyricResults() {
     final session = _lyricSession;
     if (session.failure != null) return;
-    _lyricTracks = session.items;
     _lyricRows = List.unmodifiable([
-      for (final track in _lyricTracks)
-        SearchRow(
-          track: trackFromSourceTrack(track),
-          lyricSnippet: _lyricSnippets[track.id],
-        ),
+      for (final track in session.items)
+        SearchRow(track: track, lyricSnippet: _lyricSnippets[track.id.uri]),
     ]);
   }
 
@@ -752,21 +736,16 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  /// 音源曲目 → 搜索结果行（领域 Track 的 payload 与 raw 同一引用）。
-  SearchRow _searchRowOf(SourceTrack track) =>
-      SearchRow(track: trackFromSourceTrack(track));
-
-  /// 播放搜索结果：本地音源曲目交给 PlaybackProvider 播放。
+  /// 播放搜索结果：已发布的领域曲目交给 PlaybackProvider 播放。
   ///
-  /// 队列取当前类型已加载的列表（单曲 / 歌词各自成队）；行身份与
-  /// `SourceTrack.id` 同源（`TrackId.uri`）。
+  /// 队列取当前类型已加载的行（单曲 / 歌词各自成队），行内就是领域 `Track`；
+  /// 播放身份与行身份同一口径（`TrackId`），不再把行转回音源曲目。
   void playItem(SearchRow row) {
-    final queue = _kind == SearchKind.lyric
-        ? List<SourceTrack>.of(_lyricTracks)
-        : List<SourceTrack>.of(_sourceTracks);
-    if (queue.isEmpty) return;
-    final index = queue.indexWhere((track) => track.id == row.id.uri);
-    _playbackProvider.playSourceTracks(
+    final rows = _kind == SearchKind.lyric ? _lyricRows : _searchRows;
+    if (rows.isEmpty) return;
+    final queue = [for (final entry in rows) entry.track];
+    final index = rows.indexWhere((entry) => entry.id == row.id);
+    _playbackProvider.playDomainTracks(
       queue,
       index < 0 ? 0 : index,
       contextName: sourceDisplayName,
