@@ -388,6 +388,33 @@ typedef LanProbeTarget = ({String host, int port});
 int resolvePresenceProbePort({required int announced, required int source}) =>
     announced > 0 ? announced : source;
 
+/// 是否为「同一 socket 重复加入同一接口组播」的平台 errno。
+///
+/// Linux / Android 98、macOS / iOS 48、Windows 10048；其余平台按 98 兜底。
+/// [operatingSystem] 取 `Platform.operatingSystem`，测试可直接注入。
+bool isMulticastAlreadyJoinedError(
+  Object error, {
+  required String operatingSystem,
+}) {
+  final int expected;
+  if (operatingSystem == 'macos' || operatingSystem == 'ios') {
+    expected = 48;
+  } else if (operatingSystem == 'windows') {
+    expected = 10048;
+  } else {
+    expected = 98;
+  }
+  final int? code;
+  if (error is SocketException) {
+    code = error.osError?.errorCode;
+  } else if (error is OSError) {
+    code = error.errorCode;
+  } else {
+    code = null;
+  }
+  return code == expected;
+}
+
 /// 发现层：UDP 绑定 / 公告 burst / presence / 事件流。
 ///
 /// 只处理发现，不碰 HTTP；传输层把 presence 与手动 / 持久化端点合并成候选。
@@ -540,11 +567,18 @@ class LanDiscovery {
   /// 按接口 IPv4 socket 的本地端口（与 [debugInterfaceBindAddresses] 同序）。
   ///
   /// 这些是系统临时端口：接口 socket 只负责从该接口发送广播 / 组播，并接收
-  /// 对端回给这个临时源端口的单播；47825 上的组播接收由主 wildcard socket
-  /// 按接口 join 承担。对外探测端口仍是 [discoveryPorts] 里的主 socket 端口。
+  /// 对端回给这个临时源端口的单播；主 socket 实际端口（标准 47825，绑定失败
+  /// 时为系统分配端口）上的组播接收由主 wildcard socket 按接口 join 承担。
+  /// 对外探测端口仍是 [discoveryPorts] 里的主 socket 端口。
   List<int> get debugInterfacePorts => List.unmodifiable([
         for (final entry in _interfaceSockets.values) entry.socket.port,
       ]);
+
+  /// IPv4 主 socket 进入按接口 join 流程的次数（测试 / 诊断）。
+  int get debugIpv4JoinRuns => _ipv4MulticastJoins.runs;
+
+  /// IPv4 主 socket 组播记账被重置的次数（短回前台会强制 +1）。
+  int get debugIpv4JoinEpoch => _ipv4MulticastJoins.generation;
 
   /// 发送一条 MSP 包；[host] 为空时走 v4 广播 + v4/v6 组播，否则单播。
   ///
@@ -572,12 +606,10 @@ class LanDiscovery {
     _broadcastCount = 0;
     _broadcastUnavailable = false;
     await _ensureKey();
-    // 先枚举本机地址：接口 socket 需要完整接口列表才能建。
+    // 先枚举本机地址：重绑会创建接口 socket 并按接口加入组播。start 与
+    // onNetworkChanged / discover 共用同一条重绑队列，不会重复 bind / join。
     await _refreshNetwork(force: true);
-    await _bindSockets(_udpPort, _udpPort);
-    await _syncInterfaceSockets();
-    await _joinIpv4Interfaces();
-    await _joinIpv6Interfaces();
+    await _rebindUdp();
     if (_udp4 == null && _udp6 == null) {
       _logger.warning('UDP 发现不可用（两族绑定均失败）：只剩手动地址直连');
     }
@@ -632,8 +664,11 @@ class LanDiscovery {
       await _rebindUdp();
     } else {
       // 短隐藏也可能让旧接口 socket 半死：主 socket 按原逻辑不重绑，但接口
-      // socket 无条件重建；组播按接口重新加入（幂等）。
+      // socket 无条件重建。组播成员关系也可能已失效，先清记账强制重新 join；
+      // 重复 join 由 isMulticastAlreadyJoinedError 兜底。
       await _syncInterfaceSockets(rebuild: true);
+      _ipv4MulticastJoins.reset();
+      _ipv6MulticastJoins.reset();
       await _joinIpv4Interfaces();
       await _joinIpv6Interfaces();
     }
@@ -1036,10 +1071,12 @@ class LanDiscovery {
       socket.broadcastEnabled = true;
       socket.multicastHops = 1;
       // 不在这里 join 组播：本 socket 绑的是临时端口，join 只服务该端口，
-      // 收不到发往 47825 的公告。47825 的组播接收由主 socket 按接口 join。
+      // 收不到发往主 socket 端口（标准 47825，绑定失败时为系统分配端口）的
+      // 公告。那里的组播接收由主 socket 按接口 join。
     } catch (e) {
-      // 该接口没有广播 / 组播发送权限：跳过发送能力，单播回包仍可用。
-      _logger.warning('接口 $host 广播能力启用失败（保留单播回包）', e);
+      // 广播设置失败不代表 socket 不可用：仍保留该接口，发送时继续尝试，
+      // 单播回包不受影响。
+      _logger.warning('接口 $host 广播设置失败（socket 保留）', e);
     }
     final subscription = socket.listen(
       (event) => _onDatagram(socket, event),
@@ -1065,7 +1102,8 @@ class LanDiscovery {
 
   /// IPv4 组播接收：主 wildcard socket 按接口加入 `224.0.0.169`。
   ///
-  /// 接口 socket 的临时端口只接收单播回包，不承担 47825 的组播接收。
+  /// 接口 socket 的临时端口只接收单播回包，不承担主 socket 实际端口
+  /// （标准 47825，绑定失败时为系统分配端口）的组播接收。
   Future<void> _joinIpv4Interfaces() => _joinMulticastByInterface(
         socket: _udp4,
         currentSocket: () => _udp4,
@@ -1100,6 +1138,7 @@ class LanDiscovery {
       tracker.reset();
       return;
     }
+    tracker.runs++;
     List<NetworkInterface> interfaces;
     try {
       interfaces = await NetworkInterface.list(
@@ -1111,10 +1150,10 @@ class LanDiscovery {
       return;
     }
     if (!_running || !identical(currentSocket(), socket)) return;
-    if (!identical(tracker.socket, socket)) {
+    if (tracker.socket != null && !identical(tracker.socket, socket)) {
       tracker.reset();
-      tracker.socket = socket;
     }
+    tracker.socket = socket;
     // 接口消失后剪掉记账：同名接口重新出现时能重新 join。
     final present = {for (final interface in interfaces) interface.name};
     tracker.interfaces.removeWhere((name) => !present.contains(name));
@@ -1125,7 +1164,10 @@ class LanDiscovery {
       } catch (e) {
         // 主 socket 绑定时已按「无指定接口」join 过一次，默认接口重复
         // join 会报 EADDRINUSE；这表示该接口已经收得到组播，按已加入记账。
-        if (!_isAlreadyJoined(e)) {
+        if (!isMulticastAlreadyJoinedError(
+          e,
+          operatingSystem: Platform.operatingSystem,
+        )) {
           // 加组失败只影响该接口的组播接收，广播发送仍保留。
           _logger.fine('$label 组播加入 ${interface.name} 失败（仅影响该接口接收）', e);
           continue;
@@ -1136,19 +1178,6 @@ class LanDiscovery {
       if (!identical(tracker.socket, socket)) return;
       tracker.interfaces.add(interface.name);
     }
-  }
-
-  /// 同一 socket 重复加入同一接口组播：Linux 98 / macOS 48 / Windows 10048。
-  static bool _isAlreadyJoined(Object error) {
-    final int? code;
-    if (error is SocketException) {
-      code = error.osError?.errorCode;
-    } else if (error is OSError) {
-      code = error.errorCode;
-    } else {
-      code = null;
-    }
-    return code == 98 || code == 48 || code == 10048;
   }
 
   void _onDatagram(RawDatagramSocket socket, RawSocketEvent event) {
@@ -1366,7 +1395,14 @@ class _MulticastJoinTracker {
   RawDatagramSocket? socket;
   final Set<String> interfaces = {};
 
+  /// 进入 join 流程的次数（测试 / 诊断）。
+  int runs = 0;
+
+  /// 记账重置次数（测试 / 诊断）。
+  int generation = 0;
+
   void reset() {
+    generation++;
     socket = null;
     interfaces.clear();
   }
