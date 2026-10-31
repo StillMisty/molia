@@ -143,7 +143,7 @@ void main() {
     expect(bili.searchCalls, 0, reason: '不可用来源不发请求');
   });
 
-  testWidgets('选中可用来源：saveManual 写入该来源的 providerName', (tester) async {
+  testWidgets('点结果只选中；底部确认后才 saveManual 写入该来源', (tester) async {
     final service = _FakeLyricsService();
     final lyricsProvider = LyricsProvider(service: service);
     addTearDown(lyricsProvider.dispose);
@@ -165,12 +165,73 @@ void main() {
     );
 
     expect(find.text('晴天'), findsOneWidget);
+    expect(find.text('点选一项后确认'), findsOneWidget);
     await tester.tap(find.text('晴天'));
+    await tester.pumpAndSettle();
+
+    expect(service.saved, isEmpty, reason: '点选不取词、不写缓存');
+    expect(find.text('已选：晴天 · QQ音乐'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+
+    await tester.tap(find.text('使用此歌词'));
     await tester.pumpAndSettle();
 
     expect(service.saved, hasLength(1));
     expect(service.saved.single.trackId, 'bili:1');
     expect(service.saved.single.provider, 'qq');
+  });
+
+  testWidgets('来源 chips：默认全部，切单源只显示该源结果且不清选中', (tester) async {
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [SongMatch(songId: '1', title: '晴天 QQ', artist: '周杰伦')],
+    );
+    final lrclib = _FakeLyricProvider(
+      'lrclib',
+      matches: [SongMatch(songId: '2', title: '晴天 LRC', artist: '周杰伦')],
+    );
+
+    await pumpView(
+      tester,
+      sources: [
+        LyricsSourceStrategy(channelKey: 'tx', provider: qq),
+        LyricsSourceStrategy(
+          channelKey: 'lrclib',
+          provider: lrclib,
+          isChannel: false,
+        ),
+      ],
+      lyricsProvider: lyricsProvider,
+    );
+
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-all')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-tx')),
+      findsOneWidget,
+    );
+    expect(find.text('晴天 QQ'), findsOneWidget);
+    expect(find.text('晴天 LRC'), findsOneWidget);
+
+    await tester.tap(find.text('晴天 QQ'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-tx')));
+    await tester.pumpAndSettle();
+    expect(find.text('晴天 QQ'), findsOneWidget);
+    expect(find.text('晴天 LRC'), findsNothing);
+    expect(
+      find.byIcon(Icons.check_circle_rounded),
+      findsOneWidget,
+      reason: '切筛选不丢选中项',
+    );
+    expect(find.text('已选：晴天 QQ · QQ音乐'), findsOneWidget);
   });
 
   testWidgets('停用渠道：歌词来源隐藏；LRCLIB 不受渠道开关影响', (tester) async {
@@ -201,9 +262,20 @@ void main() {
       lyricsProvider: lyricsProvider,
     );
 
-    expect(find.text('QQ音乐'), findsOneWidget);
-    expect(find.text('哔哩哔哩'), findsNothing, reason: '停用渠道不出现在歌词换源');
-    expect(find.text('LRCLIB'), findsOneWidget, reason: '非渠道来源不受开关影响');
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-tx')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-bili')),
+      findsNothing,
+      reason: '停用渠道不出现在歌词换源',
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-lrclib')),
+      findsOneWidget,
+      reason: '非渠道来源不受开关影响',
+    );
     expect(bili.searchCalls, 0);
   });
 
@@ -234,8 +306,16 @@ void main() {
       lyricsProvider: lyricsProvider,
     );
 
-    expect(find.text('哔哩哔哩'), findsOneWidget, reason: '来源名走 provider 标签');
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-bili')),
+      findsOneWidget,
+      reason: '来源名走 provider 标签',
+    );
     await tester.tap(find.text('晴天 翻唱'));
+    await tester.pumpAndSettle();
+    expect(service.saved, isEmpty, reason: '点选不取词');
+
+    await tester.tap(find.text('使用此歌词'));
     await tester.pumpAndSettle();
 
     expect(service.saved.single.provider, 'bili');

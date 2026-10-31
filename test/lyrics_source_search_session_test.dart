@@ -60,7 +60,10 @@ class _FakeLyricProvider extends LyricProvider {
   final LyricsPayload? payload;
   final Object? fetchError;
 
+  /// 非空时搜索直接抛错（验证失败来源与重试）。
+  Object? searchError;
   int searchCalls = 0;
+  int fetchCalls = 0;
 
   /// 非空时取词挂起，直到测试放行（用于并发点击）。
   Completer<void>? fetchGate;
@@ -78,11 +81,14 @@ class _FakeLyricProvider extends LyricProvider {
     int limit = 3,
   }) async {
     searchCalls++;
+    final error = searchError;
+    if (error != null) throw error;
     return matches.take(limit).toList();
   }
 
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
+    fetchCalls++;
     final gate = fetchGate;
     if (gate != null) await gate.future;
     if (fetchError != null) throw fetchError!;
@@ -210,8 +216,7 @@ void main() {
         .toList();
     expect(headers.map((entry) => entry.strategy!.channelKey), [
       'tx',
-      'bili',
-    ], reason: '不可用来源的分组头仍然渲染「怎么办」');
+    ], reason: '全部模式只列有结果的来源；不可用来源由状态条提示');
     expect(
       session.entries.any(
         (entry) =>
@@ -252,7 +257,7 @@ void main() {
     expect(session.stateOf('qq'), ProviderSearchState.loaded);
   });
 
-  test('选中结果：规范化文本并写入手动歌词（provider 名保留）', () async {
+  test('选中只切选中态；确认后才规范化并写入手动歌词', () async {
     final service = _FakeLyricsService();
     final qq = _FakeLyricProvider(
       'qq',
@@ -267,9 +272,17 @@ void main() {
     final session = buildSession([strategy(qq)], service: service);
 
     await session.search('晴天 周杰伦');
-    final outcome = await session.select(session.resultsOf('qq').single);
+    final result = session.resultsOf('qq').single;
+    session.select(result);
+
+    expect(session.isSelected(result), isTrue);
+    expect(qq.fetchCalls, 0, reason: '点选不取词');
+    expect(service.saved, isEmpty, reason: '点选不写缓存');
+
+    final outcome = await session.applySelected();
 
     expect(outcome, isA<LyricsSelectionSuccess>());
+    expect(qq.fetchCalls, 1);
     final selection = (outcome as LyricsSelectionSuccess).selection;
     expect(selection.lyrics, '[00:01.00]晴天');
     expect(selection.provider, 'qq');
@@ -284,16 +297,19 @@ void main() {
     expect(session.isFetchingLyric, isFalse);
   });
 
-  test('选中结果：无歌词 → notFound，取词抛错 → failed，并发点击 → busy', () async {
+  test('确认：无选中 → none，无歌词 → notFound，取词抛错 → failed，并发 → busy', () async {
     final service = _FakeLyricsService();
 
     final empty = _FakeLyricProvider('empty', matches: [sunnyDay('e-1')]);
     final emptySession = buildSession([strategy(empty)], service: service);
-    await emptySession.search('晴天 周杰伦');
     expect(
-      await emptySession.select(emptySession.resultsOf('empty').single),
-      isA<LyricsSelectionNotFound>(),
+      await emptySession.applySelected(),
+      isA<LyricsSelectionNone>(),
+      reason: '未选中时确认只 no-op',
     );
+    await emptySession.search('晴天 周杰伦');
+    emptySession.select(emptySession.resultsOf('empty').single);
+    expect(await emptySession.applySelected(), isA<LyricsSelectionNotFound>());
 
     final error = StateError('network down');
     final broken = _FakeLyricProvider(
@@ -303,9 +319,8 @@ void main() {
     );
     final brokenSession = buildSession([strategy(broken)], service: service);
     await brokenSession.search('晴天 周杰伦');
-    final failed = await brokenSession.select(
-      brokenSession.resultsOf('broken').single,
-    );
+    brokenSession.select(brokenSession.resultsOf('broken').single);
+    final failed = await brokenSession.applySelected();
     expect(failed, isA<LyricsSelectionFailed>());
     expect((failed as LyricsSelectionFailed).error, same(error));
 
@@ -317,16 +332,92 @@ void main() {
     )..fetchGate = gate;
     final slowSession = buildSession([strategy(slow)], service: service);
     await slowSession.search('晴天 周杰伦');
-    final inFlight = slowSession.select(slowSession.resultsOf('slow').single);
-    expect(
-      await slowSession.select(slowSession.resultsOf('slow').single),
-      isA<LyricsSelectionBusy>(),
-    );
+    slowSession.select(slowSession.resultsOf('slow').single);
+    final inFlight = slowSession.applySelected();
+    expect(await slowSession.applySelected(), isA<LyricsSelectionBusy>());
     gate.complete();
     expect(await inFlight, isA<LyricsSelectionSuccess>());
     expect(slowSession.isFetchingLyric, isFalse);
 
     expect(service.saved, hasLength(1), reason: '只有成功的一次写入缓存');
+  });
+
+  test('search 开始清空选中；retryFailed 只重搜失败源', () async {
+    final service = _FakeLyricsService();
+    final good = _FakeLyricProvider('good', matches: [sunnyDay('g-1')]);
+    final flaky = _FakeLyricProvider('flaky', matches: [sunnyDay('f-1')])
+      ..searchError = StateError('network down');
+    final session = buildSession([
+      strategy(good),
+      strategy(flaky),
+    ], service: service);
+
+    await session.search('晴天 周杰伦');
+    expect(session.failedStrategies.map((item) => item.provider.name), [
+      'flaky',
+    ]);
+    session.select(session.resultsOf('good').single);
+    expect(session.selected, isNotNull);
+
+    await session.search('晴天');
+    expect(session.selected, isNull, reason: '新查询不能留着旧选中项');
+
+    flaky.searchError = null;
+    final goodCalls = good.searchCalls;
+    await session.retryFailed();
+
+    expect(session.stateOf('flaky'), ProviderSearchState.loaded);
+    expect(session.resultsOf('flaky').single.match.songId, 'f-1');
+    expect(session.failedStrategies, isEmpty);
+    expect(good.searchCalls, goodCalls, reason: '重试不重搜成功来源');
+  });
+
+  test('entriesFor：全部只列有结果的来源，单源不要 header', () async {
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [
+        sunnyDay('qq-1'),
+        SongMatch(songId: 'qq-2', title: '晴天 live', artist: '周杰伦'),
+      ],
+    );
+    final bili = _FakeLyricProvider('bili');
+    final empty = _FakeLyricProvider('empty');
+    final session = buildSession([
+      strategy(qq, channelKey: 'tx'),
+      strategy(bili, channelKey: 'bili'),
+      strategy(empty, channelKey: 'wy'),
+    ]);
+
+    await session.search('晴天 周杰伦');
+
+    final all = session.entriesFor(null);
+    expect(
+      all.where((entry) => entry.type == LyricsSearchEntryType.header).length,
+      1,
+      reason: '没有结果的来源不产生空分组头',
+    );
+    expect(
+      all
+          .where((entry) => entry.type == LyricsSearchEntryType.header)
+          .single
+          .strategy!
+          .channelKey,
+      'tx',
+    );
+    expect(
+      all.where((entry) => entry.type == LyricsSearchEntryType.result).length,
+      2,
+    );
+
+    final single = session.entriesFor('tx');
+    expect(single, hasLength(2));
+    expect(
+      single.every((entry) => entry.type == LyricsSearchEntryType.result),
+      isTrue,
+      reason: '单源筛选不再重复分组头',
+    );
+    expect(session.entriesFor('bili'), isEmpty);
+    expect(session.entriesFor('unknown'), isEmpty);
   });
 
   test('最佳匹配按来源各自挑选，不串组', () async {

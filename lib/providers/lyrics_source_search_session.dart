@@ -1,8 +1,8 @@
-/// 手动歌词换源的会话状态：来源搜索 → 选中取词 → 写入手动缓存。
+/// 手动歌词换源的会话状态：来源搜索 → 选中 → 确认取词 → 写入手动缓存。
 ///
-/// 持有逐来源状态、查询代际、可用性判定、最佳匹配与「选中 → 取词 → 写缓存」
-/// 的结果类型。会话不碰 Navigator / SnackBar：`select` 只返回
-/// [LyricsSelectionOutcome]，由视图决定提示与 pop 的时机。
+/// 持有逐来源状态、查询代际、可用性判定、最佳匹配与「选中 → 确认 → 取词 →
+/// 写缓存」的结果类型。会话不碰 Navigator / SnackBar：`select` 只切选中态，
+/// `applySelected` 返回 [LyricsSelectionOutcome]，由视图决定提示与 pop 的时机。
 library;
 
 import 'dart:async';
@@ -44,7 +44,7 @@ enum ProviderSearchState {
   unavailable,
 }
 
-enum LyricsSearchEntryType { header, result, loadingPlaceholder, divider }
+enum LyricsSearchEntryType { header, result }
 
 /// 逐平台分组列表的一行；视图直接按 [type] 渲染。
 class LyricsSearchEntry {
@@ -55,15 +55,6 @@ class LyricsSearchEntry {
   const LyricsSearchEntry.result(this.result)
     : type = LyricsSearchEntryType.result,
       strategy = null;
-
-  const LyricsSearchEntry.loadingPlaceholder(this.strategy)
-    : type = LyricsSearchEntryType.loadingPlaceholder,
-      result = null;
-
-  const LyricsSearchEntry.divider()
-    : type = LyricsSearchEntryType.divider,
-      strategy = null,
-      result = null;
 
   final LyricsSearchEntryType type;
   final LyricsSourceStrategy? strategy;
@@ -98,7 +89,12 @@ final class LyricsSelectionBusy extends LyricsSelectionOutcome {
   const LyricsSelectionBusy();
 }
 
-/// 手动歌词搜索会话：来源顺序 / 可用性、逐源结果与选中写缓存。
+/// 尚未选中任何结果：底部确认按钮理论上是禁用的，走到这里只 no-op。
+final class LyricsSelectionNone extends LyricsSelectionOutcome {
+  const LyricsSelectionNone();
+}
+
+/// 手动歌词搜索会话：来源顺序 / 可用性、逐源结果、选中态与确认写缓存。
 ///
 /// 通知只在**可见状态**变化时发出：搜索开始、清空、选中态切换立即通知；
 /// 并行来源几乎同时返回时合并成一次重建（[scheduleMicrotask]），不同时刻
@@ -141,6 +137,9 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   /// 过期响应守卫：每次 [search] 自增；来源返回时 token 不同即丢弃。
   int _searchToken = 0;
 
+  /// 当前选中的结果：只表达「选中」，取词由 [applySelected] 显式触发。
+  LyricsSearchResult? _selected;
+
   bool _isFetchingLyric = false;
   bool _disposed = false;
 
@@ -156,9 +155,21 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
   bool get isFetchingLyric => _isFetchingLyric;
 
+  /// 当前选中项（未选中为 null）；视图据此画勾选与底栏摘要。
+  LyricsSearchResult? get selected => _selected;
+
+  bool isSelected(LyricsSearchResult result) => identical(_selected, result);
+
   bool get isAnyProviderLoading => _providerStates.values.any(
     (state) => state == ProviderSearchState.loading,
   );
+
+  /// 当前查询下搜索失败的来源（retry 只重搜这些，不重搜成功源）。
+  List<LyricsSourceStrategy> get failedStrategies => [
+    for (final strategy in _strategies)
+      if (stateOf(strategy.provider.name) == ProviderSearchState.error)
+        strategy,
+  ];
 
   List<LyricsSearchResult> get allResults {
     final results = <LyricsSearchResult>[];
@@ -191,34 +202,29 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   List<LyricsSearchResult> resultsOf(String providerName) =>
       _providerResults[providerName] ?? const [];
 
-  /// 分组列表行（header / result / loadingPlaceholder / divider）。
-  List<LyricsSearchEntry> get entries {
+  /// 按来源筛选的列表行。
+  ///
+  /// [channelKey] 为空串 / null = 全部：只列**有结果**的来源（header + 结果），
+  /// 没有结果的空分组不占版面；单源时只列该来源结果，header 与加载占位由
+  /// 视图的状态区承担。
+  List<LyricsSearchEntry> entriesFor(String? channelKey) {
+    final key = channelKey ?? '';
+    final all = key.isEmpty;
     final entries = <LyricsSearchEntry>[];
     for (final strategy in _strategies) {
-      final providerName = strategy.provider.name;
-      final state = stateOf(providerName);
-      final results = resultsOf(providerName);
-
-      if (state == ProviderSearchState.idle && _query.isEmpty) {
-        continue;
-      }
-
-      entries.add(LyricsSearchEntry.header(strategy));
-
+      if (!all && strategy.channelKey != key) continue;
+      final results = resultsOf(strategy.provider.name);
+      if (results.isEmpty) continue;
+      if (all) entries.add(LyricsSearchEntry.header(strategy));
       for (final result in results) {
         entries.add(LyricsSearchEntry.result(result));
-      }
-
-      if (state == ProviderSearchState.loading && results.isEmpty) {
-        entries.add(LyricsSearchEntry.loadingPlaceholder(strategy));
-      }
-
-      if (_query.isNotEmpty) {
-        entries.add(const LyricsSearchEntry.divider());
       }
     }
     return entries;
   }
+
+  /// 兼容旧读取：等价于「全部」筛选。
+  List<LyricsSearchEntry> get entries => entriesFor(null);
 
   /// 该提供者分组内与当前曲目最相近的结果（时长 / 歌名 / 歌手相似度）。
   LyricsSearchResult? bestMatchOf(LyricProvider provider) {
@@ -243,6 +249,8 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   Future<void> search(String query) async {
     final normalized = query.trim();
     final token = ++_searchToken;
+    // 新查询的候选全部换掉：旧选中项可能已不在结果里，必须同步清掉。
+    _selected = null;
 
     if (normalized.isEmpty) {
       _query = '';
@@ -276,6 +284,30 @@ class LyricsSourceSearchSession extends ChangeNotifier {
     );
   }
 
+  /// 重试当前查询下失败的来源（不重搜成功源，不改变查询与筛选）。
+  ///
+  /// 取词在途时 no-op：一次确认只做一件事，避免重试把正在写入的歌词
+  /// 与候选状态搅在一起。
+  Future<void> retryFailed() async {
+    if (_isFetchingLyric || _query.isEmpty) return;
+    final failed = failedStrategies;
+    if (failed.isEmpty) return;
+
+    final token = _searchToken;
+    for (final strategy in failed) {
+      final providerName = strategy.provider.name;
+      _clearSelectionIfProvider(providerName);
+      _providerStates[providerName] = ProviderSearchState.loading;
+      _providerResults[providerName] = const [];
+    }
+    _notifyNow();
+
+    await Future.wait([
+      for (final strategy in failed)
+        _searchProvider(strategy.provider, _query, token),
+    ]);
+  }
+
   Future<void> _searchProvider(
     LyricProvider provider,
     String query,
@@ -290,6 +322,7 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
       if (token != _searchToken) return;
 
+      _clearSelectionIfProvider(provider.name);
       _providerResults[provider.name] = [
         for (final match in matches)
           LyricsSearchResult(match: match, provider: provider),
@@ -301,16 +334,34 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
       if (token != _searchToken) return;
 
+      _clearSelectionIfProvider(provider.name);
       _providerStates[provider.name] = ProviderSearchState.error;
       _providerResults[provider.name] = const [];
       _scheduleNotify();
     }
   }
 
-  /// 选中一条结果：取词 → 规范化 → 写手动缓存。
+  /// 该来源的结果被替换 / 清空时，属于它的选中项不能再留着。
+  void _clearSelectionIfProvider(String providerName) {
+    if (_selected?.provider.name == providerName) _selected = null;
+  }
+
+  /// 选中一条候选（只切选中态，不取词）。
+  ///
+  /// 取词是确认按钮的显式动作：用户可以先比较来源 / 切换筛选，再决定
+  /// 用哪一条，避免点错一次就发一次请求并写缓存。
+  void select(LyricsSearchResult result) {
+    if (identical(_selected, result)) return;
+    _selected = result;
+    _notifyNow();
+  }
+
+  /// 对当前选中项取词 → 规范化 → 写手动缓存。
   ///
   /// 不 pop 路由、不提示；视图根据返回的 [LyricsSelectionOutcome] 处理。
-  Future<LyricsSelectionOutcome> select(LyricsSearchResult result) async {
+  Future<LyricsSelectionOutcome> applySelected() async {
+    final result = _selected;
+    if (result == null) return const LyricsSelectionNone();
     if (_isFetchingLyric) return const LyricsSelectionBusy();
 
     _isFetchingLyric = true;

@@ -668,13 +668,23 @@
   声明，未声明渠道走默认；
   `CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
   `failedSourceKeys` / `failedSourceNames` 可重试），载体是统一的「换源」页
-  （`lib/pages/source_swap_page.dart`：歌词 / 音频两个 tab，歌词侧为
-  `LyricsSourceSearchView` + `LyricsSourceSearchSession`（逐源搜索 / 过期结果 /
-  可用性 / 选中写缓存的状态机，视图只渲染与提示），音频侧为 `SourceSwapView`；
+  （`lib/pages/source_swap_page.dart`：页面级曲目条（封面 40 + 歌名 + 歌手 ·
+  当前来源）+ 歌词 / 音频两个 tab；两个 tab 共用
+  `lib/widgets/source_swap/source_swap_chrome.dart` 的搜索栏 / 来源 chips /
+  状态条 / 分组标题 / 底部操作条。搜索栏两边都可编辑，默认关键词仍由
+  `SourceSwapStrategies` 生成，提交或清空时重搜；来源固定为「全部 + 所有可搜索
+  来源」，默认全部、按来源分组（小节标题）展示，切单源只平铺该组。列表行统一走
+  `TrackRow`（歌词结果无封面时用 `placeholderIcon` 占前导槽），不再用
+  `M3EListItem`。两个 tab 都带 `AutomaticKeepAliveClientMixin`：PageView 会销毁
+  离屏页，不保活会清掉音频会话 / 歌词搜索结果。切 tab 统一收起键盘。
+  歌词侧为 `LyricsSourceSearchView` + `LyricsSourceSearchSession`（逐源搜索 /
+  过期结果 / 可用性 / 失败重试 / 选中态的状态机，视图只渲染与提示）：点结果只
+  选中，底部「使用此歌词」才取词 + `saveManual` + pop；音频侧为
+  `SourceSwapView`：点候选即试听，底部确认换源；
   入口：歌曲信息页「换源」
   默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
-  自建列表）行动作（触摸端左滑胶囊 / 桌面右键菜单）默认音频 tab）点候选即试听
-  （单曲「换源试听」上下文）、
+  自建列表）行动作（触摸端左滑胶囊 / 桌面右键菜单）默认音频 tab。音频 tab 点候选
+  即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增

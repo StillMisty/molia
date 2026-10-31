@@ -386,8 +386,9 @@
 - **Lyrics manual search session（手动歌词换源会话）** —
   `lib/providers/lyrics_source_search_session.dart`：手动换源页的搜索与选择唯一
   实现——逐来源状态 / 结果、查询代际（旧查询结果丢弃）、可用性每次读取时求值、
-  最佳匹配与「选中 → 取词 → 规范化 → `saveManual`」结果类型（成功 / 未找到 /
-  失败 / 忙）。会话不碰 Navigator 与 SnackBar；视图只渲染条目、提示并 pop。
+  失败来源重试、最佳匹配，以及「选中（只切态）→ 确认 → 取词 → 规范化 →
+  `saveManual`」的两步结果类型（成功 / 未找到 / 失败 / 忙 / 未选中）。会话不碰
+  Navigator 与 SnackBar；视图只渲染条目、提示并 pop。
 - **Word timing（逐字时间轴）** — `lib/models/lyric_line.dart`：`LyricLine.words`
   （`LyricWord`：绝对起止 + 文本）由 `lxlyric` 的 `<相对ms,时长ms>` 解析并对齐主行；
   歌词页当前行用 `KaraokeLyricText` 词级高亮（已唱 primary / 未唱 onSurface，
@@ -572,10 +573,11 @@
 
 - **Source swap（换源）** — `lib/providers/source_swap_provider.dart` + 
   `lib/widgets/source_swap_view.dart`：按种子曲目「歌名 + 歌手」在可搜索音源
-  并行检索（逐源就绪即填充、单源失败隔离），点候选即试听（单曲「换源试听」），
-  确认后原位替换。**保留种子源**（种子曲目自身按 URI 排除；同一渠道可能有
-  其它版本 / 投稿）；B 站曲目的 artists 是 UP 主、不当歌手关键词（只搜标题）
-  ——每个源的候选口径由 **Swap strategy** 声明。入口：收藏页合集
+  并行检索（逐源就绪即填充、单源失败隔离）。页面搜索栏可改关键词重搜，来源
+  默认「全部」并按来源分组展示，也可切单源；音频 tab 点候选即试听（单曲
+  「换源试听」），确认后原位替换。**保留种子源**（种子曲目自身按 URI 排除；
+  同一渠道可能有其它版本 / 投稿）；B 站曲目的 artists 是 UP 主、不当歌手关键词
+  （只搜标题）——每个源的候选口径由 **Swap strategy** 声明。入口：收藏页合集
   （收藏 / 历史 / 自建列表）行动作（移动端左滑胶囊 / 桌面右键菜单）/ 播放页
   seek 行（队列入口）；本地歌曲不含换源（本地文件无在线音源可换）。
 - **Swap strategy（换源策略）** — `lib/services/source_swap/source_swap_strategy.dart`：
