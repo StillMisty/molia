@@ -1235,6 +1235,45 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `player_morph.dart::anchorRectOf`，容器为空 = 全局坐标），祖先稳态缩放
   （暂停态 0.98、按压 0.96）不得让副本尺寸/位置错位。
 
+### 封面风格（cover styles）
+
+- **领域与设置**：`lib/domain/models/cover_style.dart` 定义 9 种 `CoverStyle`
+  （稳定 id、未知回退 `original`）与 `CoverStyleScope`（`player` / `all`）。
+  `kCoverStyle` / `kCoverStyleScope` 按 `SyncCategory.settings` 登记；
+  `CoverStyleSettings` 在 `lyrics_display_stack` 创建、初始化并绑定两个键的
+  reload 钩子，经 `provider_tree` 暴露。Provider 缺失时所有消费面回退
+  `original` / `player`，不报错。默认「原图 + 仅播放页」保持既有行为。
+- **处理管线**：`services/covers/cover_style_processor.dart` 的 `processSync`
+  在纯 Dart 中完成解码 → 烘焙方向 → 中心方形裁切 → 缩放到目标边长 →
+  风格化 → PNG；`process` 通过长驻 worker isolate 执行（消息带请求 id，
+  worker 退出时在途请求返回 null、下一次调用自动重启）。8 种非原图风格：
+  渐变素描（`oneLastKiss`：线稿 + 暗部 + 固定彩虹渐变）、纯线稿、铅笔素描、
+  浮雕、像素（固定有限调色板 + 块状）、黑白墨印（2–3 阶）、双色印刷（固定
+  两色 + 1px 套印错位）、胶片颗粒（暖色 + 噪声 + 光晕 + 暗角）。纹理全部
+  程序化生成，不复用第三方图片 / 水印。
+- **缓存与边长**：`CoverStyleCache` 以「URL + 风格 + 边长」为 key，边长先归入
+  64 / 128 / 256 / 512 / 768 五档（播放页大图封顶 768），内存 LRU 约 24MB，
+  同 key 并发请求共享一个 future；首版不落盘。原图读取走 data URL /
+  `file://` / `ArtworkCache.cachedFilePath`，网络封面沿用统一 UA / Referer 与
+  省流网关，不额外绕开封面缓存。处理失败 / 省流且无缓存返回 null，
+  `StyledCoverImage` 保持原图，不阻塞播放。
+- **展示接线**：`StyledCoverImage` 原图垫底、派生图淡入；`style=original`
+  直接走 `AppNetworkImage`（零额外层）。`PlayerCoverDeck` 的中心、左右邻位与
+  换图占位无论 scope 都应用风格；`TrackArtwork` 仅在 scope=all、调用方
+  `applyCoverStyle=true` 且有曲目身份时应用（列表 / 顶栏 / 迷你条 / 歌曲信息 /
+  AI DJ / 歌词选择）。封面选择器、海报预览与导出、默认封面行、详情页
+  专辑 / 歌手 / 歌单头图、查看原图传 false 或不在接线范围。
+- **共享飞行**：顶栏↔播放页与迷你⇄完整飞行只 `peek` 当前 URL / 风格在目标
+  边长的缓存；命中时 `MorphCover` 用派生图，未命中用原图，飞行几何与时长
+  不等待处理。落位后真身的 `StyledCoverImage` 在派生图完成时淡入，避免硬跳。
+- **性能与边界**：原图风格不建缓存、不起 isolate；派生图只服务展示层，
+  主题取色、下载 / 标签、系统媒体通知、查看原图、封面选择器、海报导出与
+  自定义封面 / 同步始终使用原始封面。小缩略图（派生边长 ≤128 桶）在线稿 /
+  铅笔 / 墨印路径加粗线条、降低细节；播放页 / 列表按可见性自然触发处理，
+  一次算好静态 PNG，切歌动画不逐帧重算。
+- **设置入口口径**：风格选择是带实时预览的专用弹层，不套用设置行「5 项以上
+  用 Dropdown」的规则（与字体选择弹层同类）；预览网格在窄屏 2 列、宽屏 3 列。
+
 ## 5. 音源引擎
 
 - `LxEngineSupervisor` 状态机：`stopped → starting → ready`；invoke 探活判定引擎无响应 /

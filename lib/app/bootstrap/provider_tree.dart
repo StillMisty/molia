@@ -95,6 +95,9 @@ List<SingleChildWidget> buildAppProviders({
     // 音频焦点偏好（设置 › 播放）：播放服务已订阅同一实例，开关即时生效。
     ChangeNotifierProvider.value(value: playback.audioFocusSettings),
     ChangeNotifierProvider.value(value: display.themeProvider),
+    // 封面风格偏好与派生图缓存：设置行 / 弹层 / 所有歌曲封面展示面共用。
+    ChangeNotifierProvider.value(value: display.coverStyleSettings),
+    ChangeNotifierProvider.value(value: display.coverStyleCache),
     // 封面取色服务（海报「跟随封面」按需查询；主题链路已在上方接线）。
     Provider<ArtworkPaletteService>.value(value: display.artworkPaletteService),
     ChangeNotifierProvider.value(value: display.navProvider),

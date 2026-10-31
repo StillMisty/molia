@@ -101,6 +101,8 @@ class NowPlayingCover extends StatelessWidget {
           // 与播放页 / 迷你条 / 预取共用同一个有界解码键：命中同一张已解码
           // 图，不在 40dp 顶栏里留一张原图。
           memCacheWidth: playbackCoverDecodeEdge(context),
+          // 顶栏 40dp：风格派生图按小缩略图桶处理，避免按 768 大图计算。
+          coverStyleEdge: 128,
         ),
       ),
     );

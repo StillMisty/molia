@@ -13,6 +13,7 @@ import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/update_provider.dart';
 import '../services/audio_focus_settings.dart';
+import '../services/covers/cover_style_settings.dart';
 import '../services/data_saver_service.dart';
 import '../services/library/library_add_settings.dart';
 import '../services/lyrics_display/lyrics_output.dart';
@@ -25,6 +26,8 @@ import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../widgets/app_color_picker.dart';
 import '../widgets/cover_picker_sheet.dart';
+import '../widgets/cover_style_labels.dart';
+import '../widgets/cover_style_sheet.dart';
 import '../widgets/desktop_layout.dart';
 import '../widgets/font_picker_sheet.dart';
 import '../widgets/settings/settings_section_grid.dart';
@@ -293,6 +296,7 @@ class _SettingsPageState extends State<SettingsPage>
   /// 「同步自定义封面」不在这里：同步类别状态只有「跨设备同步 › 同步内容」
   /// 一处入口，外观页不再放第二份快捷开关。
   Widget _coversSection(BuildContext context, AppLocalizations l10n) {
+    final coverStyleSettings = context.watch<CoverStyleSettings?>();
     return SettingsSectionCard(
       title: l10n.settingsCoversSection,
       children: [
@@ -308,6 +312,18 @@ class _SettingsPageState extends State<SettingsPage>
                 context.read<ThemeProvider>().setFollowArtworkEnabled(value),
           ),
         ),
+        // 封面风格：与「播放时跟随封面」同属展示偏好；行尾显示
+        // 「主名称 · 范围」，点开预览网格。
+        if (coverStyleSettings != null)
+          SettingsValueTile(
+            key: const Key('settingsCoverStyleItem'),
+            icon: Icons.brush_rounded,
+            title: l10n.coverStyleTitle,
+            value:
+                '${coverStyleName(l10n, coverStyleSettings.style)} · '
+                '${coverStyleScopeName(l10n, coverStyleSettings.scope)}',
+            onTap: () => unawaited(showCoverStyleSheet(context)),
+          ),
         // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
         // 不参与取色、下载与标签。
         CoverChangeBuilder(
@@ -319,6 +335,8 @@ class _SettingsPageState extends State<SettingsPage>
             trailing: TrackArtwork(
               // 只显示全局默认封面（没有曲目身份）；外层已订阅。
               listenForChanges: false,
+              // 默认封面始终按原图展示，不应用歌曲封面风格。
+              applyCoverStyle: false,
               size: 40,
               borderRadius: BorderRadius.circular(10),
               memCacheWidth: (40 * MediaQuery.of(context).devicePixelRatio)
