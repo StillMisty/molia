@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# 提交前自动格式化本次暂存的 Dart 文件。
+#
+# 只处理 `git add` 过的 *.dart；有未暂存改动的文件跳过，避免把工作区里
+# 还没准备提交的内容一起 stage。找不到 dart 时只警告不阻塞（GUI 客户端
+# 的 PATH 可能不含 Flutter SDK）。
+#
+# 启用：tool/agent/hooks.sh（等价于 git config core.hooksPath .githooks）
+set -euo pipefail
+
+dart_bin="${DART_BIN:-dart}"
+if ! command -v "$dart_bin" >/dev/null 2>&1; then
+  printf 'pre-commit: 未找到 dart，跳过自动格式化（可设 DART_BIN）\n' >&2
+  exit 0
+fi
+
+files=()
+while IFS= read -r -d '' file; do
+  files+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.dart')
+((${#files[@]})) || exit 0
+
+format_files=()
+skipped=()
+for file in "${files[@]}"; do
+  [[ -f "$file" ]] || continue
+  # 同一路径既有暂存内容又有未暂存改动：格式化会污染本次提交的边界。
+  if ! git diff --quiet -- "$file"; then
+    skipped+=("$file")
+    continue
+  fi
+  format_files+=("$file")
+done
+
+if ((${#skipped[@]})); then
+  printf 'pre-commit: 以下文件有未暂存改动，跳过自动格式化：\n' >&2
+  printf '  %s\n' "${skipped[@]}" >&2
+fi
+((${#format_files[@]})) || exit 0
+
+"$dart_bin" format "${format_files[@]}" >/dev/null
+git add -- "${format_files[@]}"
+printf 'pre-commit: 已格式化并暂存 %d 个 Dart 文件\n' "${#format_files[@]}"
