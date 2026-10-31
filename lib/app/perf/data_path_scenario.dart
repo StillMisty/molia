@@ -121,16 +121,18 @@ Future<void> _run({
       _logger.warning('scenario: 没有可搜索音源');
       return;
     }
+    // 聚合搜索默认会并行搜所有来源；性能采样固定到 mock 源，保持时序确定。
+    // 未指定 MOLIA_PERF_SOURCE 时按产品默认走全部来源。
     final option = _sourceKey.isEmpty
-        ? options.first
+        ? null
         : options.firstWhere(
             (o) => o.key == _sourceKey,
             orElse: () => options.first,
           );
-    search.selectSource(option.key);
+    search.selectSourceFilter(option?.key ?? '');
     DataPathTrace.event(
       'scenario.search.begin',
-      fields: () => {'source': option.key, 'keyword': _keyword},
+      fields: () => {'source': option?.key ?? '*', 'keyword': _keyword},
     );
 
     final searchWatch = Stopwatch()..start();
@@ -140,13 +142,20 @@ Future<void> _run({
       timeout: const Duration(seconds: 60),
     );
     final items = search.filteredResults;
+    String failureKind = '';
+    for (final group in search.songGroups) {
+      if (group.failure != null) {
+        failureKind = group.failure!.kind.name;
+        break;
+      }
+    }
     DataPathTrace.event(
       'scenario.search.done',
       fields: () => {
         'ok': searched ? 1 : 0,
         'ms': searchWatch.elapsedMilliseconds,
         'results': items.length,
-        'failure': search.failure?.kind.name ?? '',
+        'failure': failureKind,
       },
     );
     if (items.isEmpty) return;

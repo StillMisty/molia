@@ -25,6 +25,7 @@ import 'app/bootstrap/update_stack.dart';
 import 'app/perf/data_path_scenario.dart';
 import 'app/perf/frame_stats.dart';
 import 'data/molia_database.dart';
+import 'data/settings/settings_keys.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
@@ -200,6 +201,8 @@ void main() async {
     playback.playbackProvider,
     catalogService: catalog.catalogService,
     sourceRegistry: catalog.sourceRegistry,
+    // 搜索来源过滤跨重启记住（与发现渠道解耦，各自一份键）。
+    settings: catalog.settings.scope([kSearchSourceFilter]),
   );
   // 托盘期释放业务缓存（只清可重建的瞬时 / 浏览数据，不动收藏与历史）：
   // 搜索结果是本次会话的瞬时数据；列表曲目与目录分页页退出后按需重取。

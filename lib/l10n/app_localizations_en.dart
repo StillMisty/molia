@@ -931,7 +931,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchNoSourcesHint =>
-      'Import and enable a source in Source Management, or select an available source.';
+      'Bilibili works out of the box; import source scripts in Source Management for other platforms.';
 
   @override
   String searchNoResultsInSource(String source) {
@@ -949,6 +949,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchLoadMoreFailed => 'Failed to load more results';
+
+  @override
+  String get searchAllSources => 'All sources';
+
+  @override
+  String get searchSourcesLabel => 'Search sources';
+
+  @override
+  String get searchGroupEmpty => 'No results';
+
+  @override
+  String get searchLoadMore => 'Load more';
+
+  @override
+  String get searchKeyboardHint =>
+      '↑↓ Select · Enter Play · Ctrl+Enter View all · Esc Close';
 
   @override
   String get languageSettingTitle => 'App Language';

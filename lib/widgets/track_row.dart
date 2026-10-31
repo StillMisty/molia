@@ -187,6 +187,8 @@ class TrackRowSurface {
     this.coverSize = TrackRow.defaultCoverSize,
     this.tableSpec,
     this.showCheckWhenSelected = true,
+    this.showFocusRing = false,
+    this.showFocusFill = false,
   });
 
   /// 行内封面边长（队列 / 换源等紧凑列表用 40）。
@@ -197,6 +199,10 @@ class TrackRowSurface {
 
   /// 多选态下把封面翻转为勾选图标；播放队列的选中行不需要。
   final bool showCheckWhenSelected;
+
+  /// 键盘焦点环 / 焦点填充：默认关闭；搜索结果行打开。
+  final bool showFocusRing;
+  final bool showFocusFill;
 
   bool get isTable => tableSpec != null;
 }
@@ -326,6 +332,8 @@ class TrackRow extends StatelessWidget {
       onPressed: onTap,
       onLongPress: onLongPress,
       semanticLabel: semanticLabel,
+      showFocusRing: surface.showFocusRing,
+      showFocusFill: surface.showFocusFill,
       padding: EdgeInsets.symmetric(horizontal: itemTheme.horizontalPadding),
       child: SizedBox(
         height: TrackRow.extentOf(context, tableColumns: tableSpec != null),

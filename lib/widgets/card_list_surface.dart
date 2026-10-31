@@ -31,6 +31,8 @@ class CardListSurface extends StatefulWidget {
     this.color,
     this.onLongPress,
     this.semanticLabel,
+    this.showFocusRing = false,
+    this.showFocusFill = false,
     this.padding = const EdgeInsets.symmetric(horizontal: 16),
   });
 
@@ -50,6 +52,11 @@ class CardListSurface extends StatefulWidget {
 
   /// 行内边距（行高由内容决定，padding 由调用方给）。
   final EdgeInsetsGeometry padding;
+
+  /// 键盘焦点环 / 焦点填充：默认关闭（其它列表行保持既有观感）；搜索结果行
+  /// 打开，Tab 到行时能看见焦点。
+  final bool showFocusRing;
+  final bool showFocusFill;
 
   final Widget child;
 
@@ -106,9 +113,9 @@ class _CardListSurfaceState extends State<CardListSurface> {
         onPressed: widget.onPressed,
         onLongPress: widget.onLongPress,
         trackHover: true,
-        // 焦点环/焦点填充保持关闭（与既有列表行一致；键盘焦点形状仍会 morph）。
-        showFocusRing: false,
-        showFocusFill: false,
+        // 焦点环 / 焦点填充按调用方开关（搜索结果行打开，其它列表保持关闭）。
+        showFocusRing: widget.showFocusRing,
+        showFocusFill: widget.showFocusFill,
         width: double.infinity,
         animationDuration: Duration.zero,
         semanticLabel: widget.semanticLabel,

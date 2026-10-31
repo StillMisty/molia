@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../data/mapping/track_mapper.dart';
+import '../data/settings/settings_access.dart';
+import '../data/settings/settings_keys.dart';
 import '../domain/models/discover.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
@@ -37,17 +41,23 @@ class DiscoverProvider extends ChangeNotifier {
     required PlaybackProvider playbackProvider,
     required LibraryProvider libraryProvider,
     Map<String, DiscoverSource>? sources,
-    this._onChannelChanged,
+    this._settings,
     String? initialChannelKey,
   }) : _playback = playbackProvider,
        _library = libraryProvider,
        _sources = sources ?? BuiltinDiscover.sources {
-    // 默认选中规范顺序里的第一个可用平台（当前为 QQ）；测试/恢复场景可
-    // 显式指定初始渠道。
-    _channelKey =
-        initialChannelKey != null && _sources.containsKey(initialChannelKey)
-        ? initialChannelKey
+    // 测试 / 恢复场景显式指定的初始渠道优先，且不被异步恢复覆盖。
+    _hasExplicitInitialChannel =
+        initialChannelKey != null && _sources.containsKey(initialChannelKey);
+    // 默认选中规范顺序里的第一个可用平台（当前为 QQ）。
+    _channelKey = _hasExplicitInitialChannel
+        ? initialChannelKey!
         : _firstAvailableChannelKey();
+    final settings = _settings;
+    if (settings != null) {
+      settings.bindReload(kDiscoverChannelKey, _reloadChannelFromSettings);
+      unawaited(_restoreChannelFromSettings());
+    }
     // 收藏状态 / 我的列表变化时转发通知，让发现页的收藏按钮与「加入列表」
     // 弹层保持响应。历史写入（每首歌一次）不转发——发现页对历史无依赖，
     // 无脑转发会让整页（含全部 tab 与 AI 推荐卡片）随每次切歌重建。
@@ -75,8 +85,15 @@ class DiscoverProvider extends ChangeNotifier {
   final LibraryProvider _library;
   final Map<String, DiscoverSource> _sources;
 
-  /// 渠道变化回调（composition root 注入）：搜索源跟随渠道的唯一规则点。
-  final void Function(String channelKey)? _onChannelChanged;
+  /// 渠道偏好（跨重启记住）；null = 测试 / 无持久化场景。
+  final SettingsAccess? _settings;
+
+  bool _hasExplicitInitialChannel = false;
+
+  /// 恢复 / 用户选择的代际：异步读偏好不得覆盖用户刚做出的选择。
+  int _channelGeneration = 0;
+
+  bool _disposed = false;
 
   String _channelKey = '';
 
@@ -112,18 +129,52 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 切换渠道（空值或同值忽略；允许无发现能力的渠道——相关能力降级）。
   ///
-  /// 渠道变化经 [onChannelChanged] 通知组合根（搜索源跟随规则在那里，
-  /// 页面不自行同步两个 provider）。
+  /// 只影响热榜 / 歌单，不再联动搜索来源；偏好异步落盘（失败吞掉）。
   void selectChannel(String sourceKey) {
     if (sourceKey.isEmpty || sourceKey == _channelKey) return;
+    _channelGeneration++;
     _channelKey = sourceKey;
-    _onChannelChanged?.call(sourceKey);
     notifyListeners();
+    final settings = _settings;
+    if (settings == null) return;
+    unawaited(
+      settings.write(kDiscoverChannelKey, sourceKey).catchError((Object _) {}),
+    );
   }
 
-  /// 让搜索源跟随当前渠道（页面挂载 / 渠道恢复时调用一次；幂等由调用方
-  /// 的比较条件保证）。
-  void syncSearchSource() => _onChannelChanged?.call(_channelKey);
+  Future<void> _restoreChannelFromSettings() async {
+    final settings = _settings;
+    if (settings == null) return;
+    final generation = _channelGeneration;
+    try {
+      final value = (await settings.read(kDiscoverChannelKey)).trim();
+      if (_disposed ||
+          _hasExplicitInitialChannel ||
+          generation != _channelGeneration ||
+          value.isEmpty ||
+          value == _channelKey) {
+        return;
+      }
+      // 无效渠道由资料页现有的 fallback 纠正（渠道集合包含脚本源等
+      // DiscoverProvider 不认识但用户可能选过的 key）。
+      _channelKey = value;
+      notifyListeners();
+    } catch (_) {
+      // 读取失败保持默认渠道。
+    }
+  }
+
+  /// 同步应用远端值后的重载入口。
+  Future<void> _reloadChannelFromSettings() async {
+    final settings = _settings;
+    if (settings == null) return;
+    try {
+      final value = (await settings.read(kDiscoverChannelKey)).trim();
+      if (_disposed || value.isEmpty || value == _channelKey) return;
+      _channelKey = value;
+      notifyListeners();
+    } catch (_) {}
+  }
 
   bool get supportsLeaderboards => _source?.supportsLeaderboards ?? false;
   bool get supportsPlaylists => _source?.supportsPlaylists ?? false;
@@ -317,6 +368,7 @@ class DiscoverProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _library.removeListener(_onLibraryChanged);
     super.dispose();
   }

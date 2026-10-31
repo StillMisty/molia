@@ -16,6 +16,8 @@
 /// - 文本输入框聚焦时全部放行（Space / 方向键 / Esc 归文本编辑与输入法）；
 /// - 设置页正在录制新组合键时全部放行（否则录制 Space / ←→ 会先触发播放）；
 /// - Esc 有页面级 / 弹层占用登记（[EscapeClaims]）时放行（协议见 escape_claims.dart）；
+/// - 方向键 / Space / Enter 有模态 / 焦点控件占用登记（[KeyClaims]）时放行
+///   （搜索遮罩 / 搜索结果页；协议见 key_claims.dart）；
 /// - 处理器返回 false 时不消费事件，继续走正常焦点分发（聚焦的按钮 / 滑杆
 ///   仍能先响应自己的键）。
 library;
@@ -29,6 +31,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/playback_provider.dart';
 import '../../services/escape_claims.dart';
+import '../../services/key_claims.dart';
 import '../../services/shortcut_settings.dart';
 import '../../services/shortcut_actions.dart';
 import '../../services/shortcuts.dart';
@@ -110,6 +113,9 @@ class _DesktopShortcutsState extends State<DesktopShortcuts> {
     if (event.logicalKey == LogicalKeyboardKey.escape && EscapeClaims.any) {
       return false;
     }
+    // 模态 / 焦点控件登记了方向键 / Space / Enter（搜索遮罩、搜索结果区）：
+    // 让位给焦点分发，否则行激活与高亮移动会被播放 / 音量快捷键抢走。
+    if (KeyClaims.claims(event.logicalKey)) return false;
     final keyboard = HardwareKeyboard.instance;
     // 命中判定查当前生效绑定（覆盖优先、其次默认）：每次按键现取，设置页
     // 改绑 / 恢复默认立即生效，无需重建壳层。

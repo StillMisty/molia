@@ -21,13 +21,11 @@ import '../widgets/shell_reselect.dart';
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }
 
-/// 发现页（内置平台发现）：
-/// - 渠道切换只有内容区顶部下拉框一处（任何窗口宽都可用），加「搜索 / 热榜 /
-///   歌单」三个 tab；
-/// - 渠道集合 = 可搜索源 + 内置发现平台并集（顺序/启停在「音源管理」页维护），
-///   搜索、热榜、歌单全部跟随同一个渠道；
-/// - 渠道不支持某个 tab 时自动隐藏（脚本扩展源 / any-listen 无热榜/歌单；
-///   无脚本时内置平台不可搜索）；
+/// 资料库页：
+/// - 「搜索 / 热榜 / 歌单」三个 tab；搜索来源与发现渠道完全解耦；
+/// - 搜索 tab 只看 SearchProvider 是否有可搜索来源，来源选择在结果面 chips；
+/// - 热榜 / 歌单跟随内容区顶部的发现渠道下拉框（脚本扩展源 / any-listen
+///   无发现能力时自动隐藏这两个 tab）；
 /// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
 class Library extends StatefulWidget {
   const Library({super.key, this.reselect, this.showSearchRequest});
@@ -137,24 +135,14 @@ class _LibraryState extends State<Library> {
       }
     }
 
-    // 渠道失效（被停用 / 脚本删除）时校正；初始搜索源与渠道不一致时
-    // 经 DiscoverProvider.syncSearchSource 让搜索跟随渠道（规则在组合根）。
-    // 在 post-frame 执行，避免在 build 中修改 provider 状态。
+    // 渠道失效（被停用 / 脚本删除）时校正；搜索来源是独立偏好，不跟随
+    // 渠道。在 post-frame 执行，避免在 build 中修改 provider 状态。
     final needsFallback = current == null && enabledChannels.isNotEmpty;
-    final needsSearchSync =
-        current != null &&
-        current.capabilities.search &&
-        search.sourceKey != current.key;
-    if (needsFallback || needsSearchSync) {
-      final target = needsFallback ? enabledChannels.first : current!;
+    if (needsFallback) {
+      final target = enabledChannels.first;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        if (needsFallback) {
-          context.read<DiscoverProvider>().selectChannel(target.key);
-        }
-        if (needsSearchSync && target.capabilities.search) {
-          context.read<DiscoverProvider>().syncSearchSource();
-        }
+        context.read<DiscoverProvider>().selectChannel(target.key);
       });
     }
 
@@ -164,7 +152,8 @@ class _LibraryState extends State<Library> {
         current.discoverable &&
         discover.channelKey == current.key;
     final visibleTabs = <_LibraryTab>[
-      if (current != null && current.capabilities.search) _LibraryTab.search,
+      // 搜索 tab 只看搜索侧是否有可用来源；发现渠道不支持搜索也不影响它。
+      if (search.hasSearchableSources) _LibraryTab.search,
       if (discoverActive && discover.supportsLeaderboards)
         _LibraryTab.leaderboards,
       if (discoverActive && discover.supportsPlaylists) _LibraryTab.playlists,
@@ -193,29 +182,43 @@ class _LibraryState extends State<Library> {
     }
 
     final selectedIndex = _indexOf(visibleTabs);
+    final renderedTab = visibleTabs[selectedIndex];
     // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
-    _renderedTab = visibleTabs[selectedIndex];
+    _renderedTab = renderedTab;
 
-    // 渠道入口只此一处（顶部下拉框）：任何窗口宽都可切换，避免两套入口与
-    // 两套选中观感。渠道只有 1 个时下拉框不渲染（没有可选的目标）。
+    // 发现渠道入口只在热榜 / 歌单 tab 显示；搜索 tab 的来源选择只走 chips。
+    // 渠道只有 1 个时下拉框不渲染（没有可选的目标）。
     final multiChannel = enabledChannels.length >= 2;
+    final showChannelSelector =
+        multiChannel && renderedTab != _LibraryTab.search;
+    final showTabBar = visibleTabs.length >= 2;
+    final hasTopBar = showChannelSelector || showTabBar;
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
       alignment: Alignment.topCenter,
       child: Column(
         children: [
+          // 顶部工具行始终挂载：渠道下拉在搜索 tab 只做 Offstage（用户看不见），
+          // 但保留 State 让 M3E 下拉菜单的关闭动画在切 tab 时不被 dispose 打断。
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              hasTopBar ? 8 : 0,
+              16,
+              hasTopBar ? 4 : 0,
+            ),
             child: Row(
               children: [
-                if (multiChannel)
-                  LibraryChannelSelector(
+                Offstage(
+                  offstage: !showChannelSelector,
+                  child: LibraryChannelSelector(
                     channels: sources.channels,
                     selectedKey: discover.channelKey,
                     onSelected: (key) => _selectChannel(key, enabledChannels),
                   ),
-                if (visibleTabs.length >= 2) ...[
-                  if (multiChannel) const SizedBox(width: 12),
+                ),
+                if (showTabBar) ...[
+                  if (showChannelSelector) const SizedBox(width: 12),
                   Expanded(
                     child: M3ETabs(
                       // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
@@ -229,7 +232,7 @@ class _LibraryState extends State<Library> {
                           setState(() => _tab = visibleTabs[index]),
                     ),
                   ),
-                ] else
+                ] else if (showChannelSelector)
                   const Spacer(),
               ],
             ),
@@ -274,7 +277,7 @@ class _LibraryState extends State<Library> {
       }
     }
     if (entry == null) return;
-    // 搜索源跟随由 DiscoverProvider 的渠道回调统一处理（组合根注入规则）。
+    // 渠道只决定热榜 / 歌单；搜索来源是独立偏好，不在这里同步。
     context.read<DiscoverProvider>().selectChannel(entry.key);
   }
 

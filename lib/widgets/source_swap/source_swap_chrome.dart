@@ -11,6 +11,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/m3e_context.dart';
 import '../app_search_bar.dart';
+import '../source_filter_chips.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载组件而不注册 delegate，
 /// 此时回退到简体中文（与换源视图同一约定）。
@@ -60,8 +61,8 @@ class SourceSwapSourceOption {
 
 /// 「全部 + 所有可搜索来源」筛选 chips。
 ///
-/// 固定单行横向滚动：所有来源保持一行，窄屏可以左右滑动查看后面的渠道，
-/// 不再换行挤压列表高度。
+/// 焦点 / 自动滚入视野 / 选项增删由共享的 [SourceFilterChips] 承担；本类
+/// 只保留换源页原有的 Key 与文案口径。
 class SourceSwapSourceChips extends StatelessWidget {
   const SourceSwapSourceChips({
     super.key,
@@ -83,40 +84,18 @@ class SourceSwapSourceChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    return SizedBox(
-      height: 40,
-      child: SingleChildScrollView(
-        key: const Key('sourceSwapSourceChipsScroll'),
-        scrollDirection: Axis.horizontal,
-        child: M3EChipGroup(
-          groupLabel: l10n.sourceSwapSources,
-          child: Row(
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: M3EChip(
-                  key: const ValueKey<String>('sourceSwapSourceChip-all'),
-                  label: l10n.sourceSwapAllSources,
-                  type: M3EChipType.filter,
-                  selected: selectedKey.isEmpty,
-                  onPressed: enabled ? () => onSelected('') : null,
-                ),
-              ),
-              for (final source in sources)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: M3EChip(
-                    key: ValueKey<String>('sourceSwapSourceChip-${source.key}'),
-                    label: source.label,
-                    type: M3EChipType.filter,
-                    selected: selectedKey == source.key,
-                    onPressed: enabled ? () => onSelected(source.key) : null,
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
+    return SourceFilterChips(
+      options: [
+        for (final source in sources)
+          SourceFilterOption(key: source.key, label: source.label),
+      ],
+      selectedKey: selectedKey,
+      onSelected: onSelected,
+      groupLabel: l10n.sourceSwapSources,
+      allLabel: l10n.sourceSwapAllSources,
+      chipKeyPrefix: 'sourceSwapSourceChip',
+      scrollKey: const Key('sourceSwapSourceChipsScroll'),
+      enabled: enabled,
     );
   }
 }
