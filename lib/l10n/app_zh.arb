@@ -1249,7 +1249,7 @@
   "syncNearbyPermissionTitle": "需要局域网权限",
   "syncNearbyPermissionHint": "请先完成上方的局域网授权，再重新查找。",
   "syncNearbyTransportDownTitle": "局域网同步没有运行",
-  "syncNearbyTransportDownHint": "请到同步日志查看原因后重试。",
+  "syncNearbyTransportDownHint": "请查看原因后重试。",
   "syncNearbyOpenLogHint": "查看最近失败原因",
   "syncNearbyCellularTitle": "正在使用移动数据",
   "syncNearbyCellularHint": "移动数据下无法搜索，请切换到 Wi-Fi。",
@@ -1369,7 +1369,7 @@
   "syncRoundNoConnectedPeers": "本轮没有连上设备",
   "syncRoundNoRecords": "还没有连接记录",
   "syncRecheckConnections": "重新检查连接",
-  "syncRecheckConnectionsHint": "立即检查一次",
+  "syncRecheckConnectionsHint": "自动同步仍会继续",
   "syncRoundSynced": "本轮已同步 {names}",
   "@syncRoundSynced": {
     "placeholders": {

@@ -244,7 +244,7 @@ void main() {
 
   testWidgets('附近设备：局域网关闭时只说明下一步，不再放第二个开关', (tester) async {
     await pumpPage(tester);
-    final hint = find.byKey(const Key('settingsSyncNearbyLanOff'));
+    final hint = find.byKey(const Key('settingsSyncNearby-lanOff'));
     await reveal(tester, hint);
 
     expect(hint, findsOneWidget);

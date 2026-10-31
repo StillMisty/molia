@@ -165,8 +165,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     final started = await provider.startNearbyScan();
     if (!mounted) return;
     if (!started) {
-      // 后台 / 蜂窝 / 传输刚停都会拒绝扫描：直接给「没发现 + 重试」，
-      // 不能永远停在「正在查找」。
+      // 后台 / 蜂窝 / 省电 / 传输刚停 / 探测端口不可用 / availability 刚变化
+      // 都会拒绝扫描：直接落到「没发现 + 重试」，不能停在「正在查找」。
       if (!_nearbySearchSettled) {
         setState(() => _nearbySearchSettled = true);
       }
@@ -453,16 +453,12 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     AppLocalizations l10n,
     SyncNearbyAvailability availability,
   ) {
-    final copy = syncNearbyAvailabilityCopy(l10n, availability);
-    if (copy == null) return const SizedBox.shrink();
+    // 调用点只在 availability != available 时进入这里，映射必有文案。
+    final copy = syncNearbyAvailabilityCopy(l10n, availability)!;
     return SettingsRows(
       children: [
         SettingsInfoTile(
-          key: Key(
-            availability == SyncNearbyAvailability.lanOff
-                ? 'settingsSyncNearbyLanOff'
-                : 'settingsSyncNearby-${availability.name}',
-          ),
+          key: Key('settingsSyncNearby-${availability.name}'),
           icon: copy.icon,
           title: copy.title,
           subtitle: copy.subtitle,

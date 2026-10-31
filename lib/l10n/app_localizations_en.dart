@@ -2968,8 +2968,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncNearbyTransportDownTitle => 'LAN sync isn\'t running';
 
   @override
-  String get syncNearbyTransportDownHint =>
-      'Check the sync log for the reason, then try again.';
+  String get syncNearbyTransportDownHint => 'Check the reason, then try again.';
 
   @override
   String get syncNearbyOpenLogHint => 'See the latest failure reason';
@@ -3160,7 +3159,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncRecheckConnections => 'Check connections again';
 
   @override
-  String get syncRecheckConnectionsHint => 'Check once now';
+  String get syncRecheckConnectionsHint => 'Automatic sync continues';
 
   @override
   String syncRoundSynced(String names) {

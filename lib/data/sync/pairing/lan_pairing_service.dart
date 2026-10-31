@@ -268,7 +268,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     // 无发现层接线）保持原行为。
     final probePort = _probePortProvider;
     if (probePort != null && probePort() == 0) {
-      stopScan();
+      _abortScan();
       return false;
     }
     _scanning = true;
@@ -292,6 +292,15 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   @override
   void stopScan() {
+    // 用户关闭同步页 / 页面进入不可用状态：停止探测并清空候选。
+    _clearScanState();
+  }
+
+  /// startScan 自身的失败收口：端口不可用时本机发不出 MSP，必须撤回
+  /// 「正在扫描」，避免页面已显示不可用、服务却仍保留扫描状态。
+  void _abortScan() => _clearScanState();
+
+  void _clearScanState() {
     _scanning = false;
     _lastScanProbeAtMs = 0;
     _cancelScanTimers();

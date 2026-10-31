@@ -105,8 +105,8 @@ class SyncProvider extends ChangeNotifier {
   /// 是否正在主动扫描附近设备。
   bool get scanningNearby => _pairing?.scanning ?? false;
 
-  /// 附近设备卡片当前为什么能 / 不能搜索（权限 / 开关 / 传输 / 网络 / 省电 /
-  /// UDP / 配对端口）。同步页据此启停扫描，而不是在不可用状态下反复
+  /// 附近设备卡片当前为什么能 / 不能搜索（开关 / 权限 / 传输 / 网络 / 省电 /
+  /// UDP 两族都不可用）。同步页据此启停扫描，而不是在不可用状态下反复
   /// `startScan`。
   SyncNearbyAvailability get nearbyAvailability {
     final lanEnabled = enabledTransports.contains(SyncTransportKind.lan);

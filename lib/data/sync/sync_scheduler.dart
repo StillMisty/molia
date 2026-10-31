@@ -412,7 +412,8 @@ class SyncScheduler {
     _reconnectStep = 0;
   }
 
-  /// 自动同步当前是否允许（省电等级与「移动数据下暂停」策略下暂停）。
+  /// 自动同步当前是否允许：同步关闭、省电等级或「移动数据下暂停」时返回
+  /// false。
   bool get canRunAutomatically {
     if (!_host.syncEnabled) return false;
     if (powerSaveActive) return false;

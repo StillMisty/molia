@@ -2857,7 +2857,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyTransportDownTitle => '局域网同步没有运行';
 
   @override
-  String get syncNearbyTransportDownHint => '请到同步日志查看原因后重试。';
+  String get syncNearbyTransportDownHint => '请查看原因后重试。';
 
   @override
   String get syncNearbyOpenLogHint => '查看最近失败原因';
@@ -3035,7 +3035,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncRecheckConnections => '重新检查连接';
 
   @override
-  String get syncRecheckConnectionsHint => '立即检查一次';
+  String get syncRecheckConnectionsHint => '自动同步仍会继续';
 
   @override
   String syncRoundSynced(String names) {

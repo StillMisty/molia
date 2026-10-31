@@ -5439,7 +5439,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyTransportDownHint.
   ///
   /// In en, this message translates to:
-  /// **'Check the sync log for the reason, then try again.'**
+  /// **'Check the reason, then try again.'**
   String get syncNearbyTransportDownHint;
 
   /// No description provided for @syncNearbyOpenLogHint.
@@ -5739,7 +5739,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncRecheckConnectionsHint.
   ///
   /// In en, this message translates to:
-  /// **'Check once now'**
+  /// **'Automatic sync continues'**
   String get syncRecheckConnectionsHint;
 
   /// No description provided for @syncRoundSynced.
