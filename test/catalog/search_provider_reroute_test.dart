@@ -561,6 +561,57 @@ void main() {
     expect(provider.artistResults, hasLength(2));
   });
 
+  test('三会话隔离：失败与页码只属于当前类型，切回不串台', () async {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        artist: true,
+      ),
+    );
+    source.onSearch = (query) => Future.value(
+      SearchResult(
+        items: [_track('kw', 'song-${query.page}')],
+        hasMore: true,
+        total: 10,
+      ),
+    );
+    source.artistSearchError = StateError('artist boom');
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('周杰伦');
+    await _waitUntil(() => !provider.isSearching);
+    expect(provider.searchResults, isNotEmpty);
+    expect(provider.failure, isNull);
+    expect(provider.currentPage, 1);
+
+    // 歌手会话失败：只影响歌手类型的 failure，单曲结果 / 页码保持。
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(
+      () => !provider.isSearching && source.artistSearchCalls == 1,
+    );
+    expect(provider.failure, isNotNull, reason: '歌手会话的失败只在歌手类型可见');
+    expect(provider.artistResults, isEmpty);
+    expect(provider.searchResults, isNotEmpty, reason: '歌手失败不清单曲结果');
+
+    // 切回单曲：不继承歌手的失败与页码，分页继续按单曲会话走。
+    provider.selectSearchKind(SearchKind.song);
+    expect(provider.failure, isNull, reason: '切回单曲不继承歌手失败');
+    expect(provider.currentPage, 1);
+    expect(provider.searchResults.single.id.uri, 'kw:song-1');
+
+    await provider.loadMore();
+    expect(provider.currentPage, 2);
+    expect(provider.failure, isNull);
+    expect(provider.searchResults.map((row) => row.id.uri), [
+      'kw:song-1',
+      'kw:song-2',
+    ]);
+  });
+
   test('歌手类型：换关键词清空会话，切回重新搜索', () async {
     final source = _FakeMusicSource(
       'kw',
