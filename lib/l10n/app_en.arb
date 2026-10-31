@@ -434,7 +434,7 @@
   "sourcesDownloadAndImport": "Download & import",
   "searchFailed": "Search failed",
   "searchNoSourcesTitle": "No sources available",
-  "searchNoSourcesHint": "Import and enable a source in Source Management, or select an available source.",
+  "searchNoSourcesHint": "Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.",
   "searchNoResultsInSource": "No results found in “{source}”",
   "@searchNoResultsInSource": {
     "placeholders": {
@@ -447,6 +447,11 @@
   "searchKindArtists": "Artists",
   "searchKindLyrics": "Lyrics",
   "searchLoadMoreFailed": "Failed to load more results",
+  "searchAllSources": "All sources",
+  "searchSourcesLabel": "Search sources",
+  "searchGroupEmpty": "No results",
+  "searchLoadMore": "Load more",
+  "searchKeyboardHint": "↑↓ Select · Enter Open · Ctrl+Enter View all · Esc Close",
   "languageSettingTitle": "App Language",
   "languageSettingSubtitle": "Change the interface display language",
   "languageSystem": "System default",

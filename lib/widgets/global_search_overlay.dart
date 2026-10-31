@@ -1,9 +1,10 @@
 /// 桌面壳层全局搜索遮罩：全屏 scrim + 中上居中搜索条 + 就地结果面板。
 ///
-/// 与资料库页共用同一个 [SearchProvider]（不新建 provider）：关键词、分段、
-/// 结果与「查看全部结果」后的完整结果链天然同源。结果行点击复用
-/// [SearchProvider.playItem]（与资料库搜索结果同一条播放路径：当前类型已加载
-/// 结果整体进队列、从该行开始、上下文名 = 音源显示名），不复制第二套播放语义。
+/// 与资料库页共用同一个 [SearchProvider]（不新建 provider）：关键词、来源过滤、
+/// 分段、结果与「查看全部结果」后的完整结果链天然同源。结果行点击复用
+/// [SearchProvider.playItem]（与资料库搜索结果同一条播放路径：只取该行所属
+/// 来源分组的已加载结果、从该行开始、上下文名 = 来源显示名），不复制第二套
+/// 播放语义。
 ///
 /// 形态：壳层没有常驻搜索条（顶栏最左让位给品牌区），Ctrl+F / 品牌区点击经
 /// [GlobalSearchController] 打开本遮罩。宿主是一个不可见、不可点的占位盒：
@@ -19,10 +20,15 @@
 /// - 包内没有暴露动画 / 聚焦钩子，这两点只能靠自建 route 解决：开合走
 ///   「scrim 淡入 + 内容淡入 + 轻微缩放」，输入框在首帧就 autofocus。
 ///
-/// 结果列表面板内限高滚动、最多就地预览
-/// [SearchResultsView.maxDockedPreviewRows] 行，更长的列表交给资料库目的地
-/// （「查看全部结果」回调由壳层给）；行映射 / 分段 / 空错态统一在
-/// [SearchResultsView]（与资料库搜索结果页同一份实现）。
+/// 结果列表面板内限高滚动：单来源最多就地预览
+/// [SearchResultsView.maxDockedPreviewRows] 行，多来源每组最多
+/// [SearchResultsView.maxDockedRowsPerGroup] 行且总计不超过 8 行，更长的列表
+/// 交给资料库目的地（「查看全部结果」回调由壳层给）；行映射 / 来源 chips /
+/// 分组 / 空错态统一在 [SearchResultsView]（与资料库搜索结果页同一份实现）。
+///
+/// 键盘：输入框保持焦点时 ↑↓ 移动高亮、Enter 播放 / 打开高亮项、Ctrl+Enter
+/// 始终看全部结果；Tab 由 `FocusScope` 锁在遮罩内；遮罩打开期间经 [KeyClaims]
+/// 让桌面壳层把方向键 / Space / Enter 交给焦点控件。
 ///
 /// 与 M3E 搜索视图的取舍细节见 `docs/pitfalls.md` 已知坑 57。
 library;
@@ -40,6 +46,8 @@ import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
+import '../services/key_claims.dart';
+import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import 'app_search_bar.dart';
 import 'search_results_view.dart';
@@ -102,7 +110,7 @@ class GlobalSearchOverlay extends StatefulWidget {
 /// 全局搜索的壳层入口：把「打开 / 聚焦搜索」暴露给壳层（Ctrl+F / 品牌区）。
 ///
 /// 只持有当前挂载的遮罩 State；未挂载（如独立测试）时 [focus] 是 no-op。
-/// 已打开时同样 no-op——输入框本就持有焦点。
+/// 已打开时把焦点拉回输入框并全选已有文本（焦点可能停在结果行 / chips）。
 class GlobalSearchController {
   _GlobalSearchOverlayState? _overlay;
 
@@ -112,7 +120,7 @@ class GlobalSearchController {
   /// 淡入淡出由消费面自己补。
   final ValueNotifier<bool> open = ValueNotifier<bool>(false);
 
-  /// 打开搜索遮罩并聚焦输入框（搜索条自身 autofocus，首帧即拿到焦点）。
+  /// 打开搜索遮罩并聚焦输入框；已打开时重新聚焦并全选。
   void focus() => _overlay?._open();
 
   void _attach(_GlobalSearchOverlayState overlay) => _overlay = overlay;
@@ -125,8 +133,15 @@ class GlobalSearchController {
 }
 
 class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
-  /// 遮罩是否打开：Esc 占用登记的判据（见 [_claimEscape]）。
+  /// 遮罩打开：Esc / 导航键占用登记的判据。
   bool _isOpen = false;
+
+  /// 当前打开的视图 State：已打开时 Ctrl+F 用它重新聚焦并全选。
+  final GlobalKey<_GlobalSearchViewState> _viewKey = GlobalKey();
+
+  /// 遮罩打开期间接管方向键 / Space / Enter：壳层全局快捷键让位给焦点分发
+  /// （行激活 / 高亮移动 / chips 左右切换）。
+  late final KeyClaim _keyClaim;
 
   @override
   void initState() {
@@ -136,6 +151,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
     // 让位——焦点不在输入框（Tab 到结果区）时同一次 Esc 不会被两处消费
     // （协议见 escape_claims.dart）。
     EscapeClaims.add(_claimEscape);
+    _keyClaim = KeyClaims.add(keys: searchClaimedKeys, active: () => _isOpen);
   }
 
   @override
@@ -150,6 +166,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   @override
   void dispose() {
     EscapeClaims.remove(_claimEscape);
+    KeyClaims.remove(_keyClaim);
     widget.controller?._detach(this);
     super.dispose();
   }
@@ -164,12 +181,18 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
     widget.controller?.open.value = open;
   }
 
-  /// 打开搜索遮罩（Ctrl+F / 品牌区点击；已打开时是空操作）。
+  /// 打开搜索遮罩（Ctrl+F / 品牌区点击）。
   ///
-  /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`），与旧
-  /// M3E 搜索视图一致：遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
+  /// 已打开时把焦点从结果行 / chips 拉回输入框并全选已有文本，符合命令面板
+  /// 「再按一次搜索键继续输入」的肌肉记忆。
+  ///
+  /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`）：
+  /// 遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
   Future<void> _open() async {
-    if (_isOpen) return;
+    if (_isOpen) {
+      _viewKey.currentState?.focusField();
+      return;
+    }
     _setOpen(true);
     await showGeneralDialog<void>(
       context: context,
@@ -179,6 +202,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       transitionDuration: effectDurationOf(context, _openDuration),
       pageBuilder: (context, animation, secondaryAnimation) =>
           _GlobalSearchView(
+            key: _viewKey,
             restingRect: _restingRect(context),
             onViewAllResults: widget.onViewAllResults,
           ),
@@ -261,6 +285,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
 /// 面板只做展示；输入框在首帧 autofocus（打开即能打字，不丢按键）。
 class _GlobalSearchView extends StatefulWidget {
   const _GlobalSearchView({
+    super.key,
     required this.restingRect,
     required this.onViewAllResults,
   });
@@ -285,6 +310,18 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   /// 上一次已播报的内容（关键词 + 文案）：同一条消息不重复播报。
   String? _lastAnnouncement;
 
+  /// 遮罩结果高亮（[SearchPreviewItem.key]）；输入框保持焦点，↑↓ 只改高亮。
+  String? _highlightedKey;
+
+  /// 用户手动移动过高亮后，按行身份保留；未移动时结果到达自动高亮第一条。
+  bool _userMovedHighlight = false;
+
+  /// 关键词换轮次时重置高亮策略（旧行身份已不属于新查询）。
+  String? _lastQuery;
+
+  /// 关闭动作只执行一次：平台回车与祖先 Focus 可能同时到达。
+  bool _closing = false;
+
   @override
   void initState() {
     super.initState();
@@ -293,6 +330,10 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     // 结果区却为空」的自相矛盾状态。
     _search.addListener(_onSearchChanged);
     _syncFromProvider();
+    _lastQuery = _search.searchQuery;
+    _refreshHighlight(notify: false);
+    // 打开 / 重新聚焦都全选已有文本：Ctrl+F 后直接输入即替换上次关键词。
+    WidgetsBinding.instance.addPostFrameCallback((_) => focusField());
   }
 
   @override
@@ -303,8 +344,23 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     super.dispose();
   }
 
+  /// 把焦点拉回搜索框并全选已有文本（Ctrl+F 已打开时的重新聚焦入口）。
+  void focusField() {
+    if (!mounted) return;
+    _focusNode.requestFocus();
+    if (_field.text.isEmpty) return;
+    _field.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _field.text.length,
+    );
+  }
+
   void _onSearchChanged() {
+    final query = _search.searchQuery;
+    final queryChanged = query != _lastQuery;
+    _lastQuery = query;
     _syncFromProvider();
+    _refreshHighlight(notify: true, resetUserMoved: queryChanged);
     _announceResults();
   }
 
@@ -314,18 +370,65 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _field.text = query;
   }
 
+  /// 当前遮罩预览的可高亮条目（渲染与键盘共用同一份纯函数投影）。
+  List<SearchPreviewItem> get _previewItems =>
+      SearchResultsView.previewFor(_search).items;
+
+  SearchPreviewItem? get _highlightedItem {
+    final items = _previewItems;
+    if (items.isEmpty) return null;
+    final key = _highlightedKey;
+    if (key != null) {
+      for (final item in items) {
+        if (item.key == key) return item;
+      }
+    }
+    return items.first;
+  }
+
+  /// 结果到达自动高亮第一条；用户手动移动后按行身份保留。
+  void _refreshHighlight({required bool notify, bool resetUserMoved = false}) {
+    if (resetUserMoved) _userMovedHighlight = false;
+    final items = _previewItems;
+    String? next = _highlightedKey;
+    if (items.isEmpty) {
+      next = null;
+    } else if (!_userMovedHighlight ||
+        next == null ||
+        !items.any((item) => item.key == next)) {
+      next = items.first.key;
+    }
+    if (next == _highlightedKey) return;
+    _highlightedKey = next;
+    if (notify && mounted) setState(() {});
+  }
+
+  /// ↑↓ / PageUp / PageDown：跨来源分组连续移动，组标题不在条目列表里。
+  void _moveHighlight(int delta) {
+    final items = _previewItems;
+    if (items.isEmpty) return;
+    var index = items.indexWhere((item) => item.key == _highlightedKey);
+    if (index < 0) index = delta > 0 ? -1 : items.length;
+    final next = math.min(math.max(index + delta, 0), items.length - 1);
+    _userMovedHighlight = true;
+    final key = items[next].key;
+    if (key == _highlightedKey) return;
+    setState(() => _highlightedKey = key);
+  }
+
   /// 当前搜索类型已加载的结果条数（与面板列表同口径）。
   int get _resultCount => switch (_search.searchKind) {
-    SearchKind.song => _search.filteredResults.length,
+    SearchKind.song => _search.searchResults.length,
     SearchKind.artist => _search.artistResults.length,
     SearchKind.lyric => _search.lyricResults.length,
   };
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
-  /// 替换包内硬编码英文的播报：同一份「N 条结果」信息按应用语言读出。
+  /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；多来源时它会
+  /// 等到最后一个来源返回后才转 false，因此总条数只播报一次。
   void _announceResults() {
-    if (!mounted || !_search.isSearchActive || _search.isSearching) return;
+    if (!mounted || !_search.isSearchActive || _search.isSearchBusy) return;
     final message = _l10n(context).searchResultsAnnouncement(_resultCount);
     final key = '${_search.searchQuery}\u0000$message';
     if (key == _lastAnnouncement) return;
@@ -345,92 +448,177 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 「查看全部结果」：完整结果交给资料库目的地。
   void _openAllResults() {
+    if (_closing) return;
+    _closing = true;
     _close();
     widget.onViewAllResults();
   }
 
-  /// 面板内回车：立即提交（不等输入防抖）再跳资料库看完整结果。
-  void _submit(String value) {
-    _search.submitSearch(value);
-    _openAllResults();
+  /// 提交当前输入并打开完整结果页（Enter 无高亮 / Ctrl+Enter）。
+  void _submitAndOpenAll() {
+    if (_closing) return;
+    _closing = true;
+    _search.submitSearch(_field.text);
+    _close();
+    widget.onViewAllResults();
   }
 
-  /// 单曲 / 歌词行点击：与资料库搜索结果同一条播放路径
-  /// （[SearchProvider.playItem]），播放后收起遮罩。
+  /// 回车：有高亮单曲 → 播放并关闭；歌手 / 无高亮 → 提交并看全部结果。
+  void _handleEnter() {
+    if (_closing || _field.value.composing.isValid) return;
+    final item = _highlightedItem;
+    if (item is SearchPreviewTrack) {
+      _playItem(item.row);
+      return;
+    }
+    _submitAndOpenAll();
+  }
+
+  /// 单曲 / 歌词行点击：与资料库搜索结果同一条播放路径。
   void _playItem(SearchRow row) {
+    if (_closing) return;
+    _closing = true;
     _search.playItem(row);
     _close();
+  }
+
+  /// 遮罩内按键：只有输入框聚焦时拦截 ↑↓；Ctrl+Enter 始终打开完整结果。
+  ///
+  /// 输入法组合中全部放行，不抢候选词选择 / 上屏。
+  KeyEventResult _handleOverlayKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (_field.value.composing.isValid) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final ctrl = HardwareKeyboard.instance.isControlPressed;
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (event is KeyRepeatEvent) return KeyEventResult.handled;
+      if (ctrl) {
+        _submitAndOpenAll();
+        return KeyEventResult.handled;
+      }
+      if (_focusNode.hasFocus) {
+        _handleEnter();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    }
+    if (!_focusNode.hasFocus) return KeyEventResult.ignored;
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _moveHighlight(1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _moveHighlight(-1);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.pageDown) {
+      _moveHighlight(5);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.pageUp) {
+      _moveHighlight(-5);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final rect = widget.restingRect;
-    // 面板限高：条下沿到窗口底部留出边距，更长的列表交给资料库目的地。
+    final showHint = _search.isSearchActive;
+    // 面板限高：条下沿到窗口底部留出边距与底部键位提示，更长的列表交给资料库。
     final maxPanelHeight = math.max(
       0.0,
       MediaQuery.sizeOf(context).height -
           rect.bottom -
           _barPanelGap -
-          _panelBottomMargin,
+          _panelBottomMargin -
+          (showHint ? 30 : 0),
     );
 
-    return CallbackShortcuts(
-      bindings: <ShortcutActivator, VoidCallback>{
-        const SingleActivator(LogicalKeyboardKey.escape): _close,
-      },
-      // M3E 弹层不提供 Material 祖先，结果行的水波会直接崩溃；
-      // 透明 Material 只补齐 ink 绘制层，不改变观感。
-      child: Material(
-        type: MaterialType.transparency,
-        child: Stack(
-          children: [
-            Positioned(
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AppSearchBar(
-                    controller: _field,
-                    focusNode: _focusNode,
-                    hintText: l10n.searchHint,
-                    // 打开即聚焦：键盘输入不再被开合动画吞掉。
-                    autofocus: true,
-                    // 静止外边距取 M3E search bar 的 resting margin（24），
-                    // 与结果面板（满宽）错开一档，保持原搜索视图的观感。
-                    margin: 24,
-                    // 视图头部自绘关闭键：包内默认返回键会弹硬编码英文提示
-                    // （M3ESearchConstants.backButtonTooltip），不符「文案必须
-                    // 走 l10n」。图标沿用返回箭头（包内语义）：右缘的自绘清除
-                    // 键才是 X，两个 X 并排会分不清「关面板」与「清关键词」。
-                    leading: M3EIconButton(
-                      variant: M3EIconButtonVariant.standard,
-                      icon: const Icon(Icons.arrow_back_rounded),
-                      semanticLabel: l10n.searchClose,
-                      onPressed: _close,
-                    ),
-                    onChanged: _search.updateSearchQuery,
-                    onSubmitted: _submit,
-                    // Esc：焦点在输入框时由搜索栏自身就近分发（外层
-                    // CallbackShortcuts 接不到——包内输入框会先消费 Esc 并
-                    // 退化成「失焦」）；焦点在结果区时由外层绑定兜底。
-                    onEscape: _close,
+    // 模态内循环：FocusScope 默认 traversalEdgeBehavior = closedLoop，
+    // Tab / Shift+Tab 到边界时回到另一端，不逃到背后页面。
+    return FocusScope(
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: _handleOverlayKey,
+        child: CallbackShortcuts(
+          bindings: <ShortcutActivator, VoidCallback>{
+            const SingleActivator(LogicalKeyboardKey.escape): _close,
+          },
+          // M3E 弹层不提供 Material 祖先，结果行的水波会直接崩溃；
+          // 透明 Material 只补齐 ink 绘制层，不改变观感。
+          child: Material(
+            type: MaterialType.transparency,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.width,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AppSearchBar(
+                        controller: _field,
+                        focusNode: _focusNode,
+                        hintText: l10n.searchHint,
+                        // 打开即聚焦：开合动画期间按键也直达输入框。
+                        autofocus: true,
+                        // 静止外边距取 M3E search bar 的 resting margin（24），
+                        // 与结果面板（满宽）错开一档，保持原搜索视图的观感。
+                        margin: 24,
+                        // 视图头部自绘关闭键：包内默认返回键会弹硬编码英文提示
+                        // （M3ESearchConstants.backButtonTooltip），不符「文案必须
+                        // 走 l10n」。图标沿用返回箭头（包内语义）：右缘的自绘清除
+                        // 键才是 X，两个 X 并排会分不清「关面板」与「清关键词」。
+                        leading: M3EIconButton(
+                          variant: M3EIconButtonVariant.standard,
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          semanticLabel: l10n.searchClose,
+                          onPressed: _close,
+                        ),
+                        onChanged: _search.updateSearchQuery,
+                        onSubmitted: (_) => _handleEnter(),
+                        // Esc：焦点在输入框时由搜索栏自身就近分发（外层
+                        // CallbackShortcuts 接不到——包内输入框会先消费 Esc 并
+                        // 退化成「失焦」）；焦点在结果区时由外层绑定兜底。
+                        onEscape: _close,
+                      ),
+                      const SizedBox(height: _barPanelGap),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(maxHeight: maxPanelHeight),
+                        child: _GlobalSearchResults(
+                          highlightedKey: _highlightedKey,
+                          onOpenAllResults: _openAllResults,
+                          onPlayItem: _playItem,
+                        ),
+                      ),
+                      if (showHint)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: Text(
+                            l10n.searchKeyboardHint,
+                            textAlign: TextAlign.center,
+                            style: context.typeScale.bodySmall.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(height: _barPanelGap),
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: maxPanelHeight),
-                    child: _GlobalSearchResults(
-                      onOpenAllResults: _openAllResults,
-                      onPlayItem: _playItem,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -445,16 +633,19 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 /// 搜索结果页同一份实现。
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
+    required this.highlightedKey,
     required this.onOpenAllResults,
     required this.onPlayItem,
   });
 
+  final String? highlightedKey;
   final VoidCallback onOpenAllResults;
   final void Function(SearchRow row) onPlayItem;
 
   @override
   Widget build(BuildContext context) => SearchResultsView(
     variant: SearchResultsVariant.docked,
+    highlightedKey: highlightedKey,
     onPlay: onPlayItem,
     onOpenAllResults: onOpenAllResults,
   );

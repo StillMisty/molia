@@ -304,6 +304,35 @@ void main() {
   int navIndexOf(ShellDestination destination) =>
       nav.visibleDestinations.indexOf(destination);
 
+  /// 当前焦点是否仍在搜索遮罩这条 route 内（Tab 锁定的判据）。
+  bool focusInSearchRoute(WidgetTester tester) {
+    final fieldContext = tester.element(find.byType(EditableText).first);
+    final route = ModalRoute.of(fieldContext);
+    final focusContext = FocusManager.instance.primaryFocus?.context;
+    return focusContext != null && ModalRoute.of(focusContext) == route;
+  }
+
+  /// Tab 直到焦点落到结果行（按键链路随控件增删变化，按「到达为止」）。
+  Future<void> tabToSearchResult(WidgetTester tester) async {
+    for (var i = 0; i < 12; i++) {
+      final context = FocusManager.instance.primaryFocus?.context;
+      if (context?.findAncestorWidgetOfExactType<TrackRow>() != null) return;
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+    }
+    expect(
+      FocusManager.instance.primaryFocus?.context
+          ?.findAncestorWidgetOfExactType<TrackRow>(),
+      isNotNull,
+      reason: '前提：焦点已 Tab 到结果行',
+    );
+  }
+
+  List<bool> searchRowSelected(WidgetTester tester) => [
+    for (final row in tester.widgetList<TrackRow>(find.byType(TrackRow)))
+      row.model.selected,
+  ];
+
   /// 顶栏搜索用例的假曲目（不带封面：避免测试触发网络预取 / 取色）。
   Track searchTrack(String id) => Track(
     id: TrackId('kw', id),
@@ -316,12 +345,13 @@ void main() {
   );
 
   /// 装配「已有结果」的顶栏搜索用例：假音源返回两条结果并先提交一次搜索。
-  Future<void> pumpSearchShell(WidgetTester tester) async {
+  Future<({FakePlaybackBackend backend, PlaybackProvider playback})>
+  pumpSearchShell(WidgetTester tester) async {
     final source = FakeMusicSource('kw');
     source.onSearch = (query) => Future.value(
       SearchResult(items: [searchTrack('a'), searchTrack('b')], total: 2),
     );
-    await pumpShell(
+    return pumpShell(
       tester,
       desktopShell: true,
       searchSource: source,
@@ -791,6 +821,154 @@ void main() {
     expect(find.byType(TrackRow), findsNothing, reason: 'Esc 收起遮罩');
     expect(find.text(l10n.searchHint), findsNothing);
     expect(backdropBlurOpacity(tester), 0, reason: '遮罩收起后背景模糊淡出');
+  });
+
+  testWidgets('搜索遮罩键盘：结果到达自动高亮第一条，↑↓ 移动、Enter 播放高亮项', (tester) async {
+    final harness = await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
+
+    expect(searchRowSelected(tester), [true, false], reason: '结果到达自动高亮第一条');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(searchRowSelected(tester), [false, true], reason: '↑↓ 跨分组移动高亮');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    final request = harness.backend.lastRequest;
+    expect(request, isNotNull, reason: 'Enter 播放高亮行');
+    expect(request!.startIndex, 1);
+    expect(request.tracks.map((track) => track.id.uri), ['kw:a', 'kw:b']);
+    expect(find.byType(TrackRow), findsNothing, reason: '播放后收起遮罩');
+  });
+
+  testWidgets('搜索遮罩键盘：Ctrl+Enter 始终打开完整结果页', (tester) async {
+    await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await settleTransition(tester);
+
+    expect(selectedRailIndex(tester), navIndexOf(ShellDestination.library));
+    expect(
+      find.byKey(GlobalSearchOverlay.transitionKey),
+      findsNothing,
+      reason: '遮罩已收起（资料库结果页仍可显示行）',
+    );
+  });
+
+  testWidgets('Ctrl+F 已打开：焦点从结果行拉回输入框并全选', (tester) async {
+    await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
+    await tabToSearchResult(tester);
+    expect(focusInSearchRoute(tester), isTrue);
+
+    await openSearchOverlay(tester);
+    final editable = tester.widget<EditableText>(
+      find.byType(EditableText).first,
+    );
+    expect(editable.focusNode.hasFocus, isTrue, reason: '重新聚焦输入框');
+    expect(
+      editable.controller.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 5),
+      reason: '全选已有文本（hello）',
+    );
+  });
+
+  testWidgets('搜索遮罩键盘：Tab / Shift+Tab 焦点锁在遮罩 route 内', (tester) async {
+    await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
+
+    for (var i = 0; i < 24; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(focusInSearchRoute(tester), isTrue, reason: 'Tab #$i 逃出遮罩');
+    }
+    for (var i = 0; i < 12; i++) {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      expect(focusInSearchRoute(tester), isTrue, reason: 'Shift+Tab #$i 逃出遮罩');
+    }
+  });
+
+  testWidgets('搜索遮罩键盘：焦点在结果行时 Space 激活行，方向键不抢音量', (tester) async {
+    final harness = await pumpSearchShell(tester);
+    final volume = harness.playback.volume;
+    await openSearchOverlay(tester);
+
+    // 输入框聚焦时 ↑↓ 移动高亮，不触发壳层音量快捷键。
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+    await tester.pump();
+    expect(harness.playback.volume, volume, reason: '遮罩拦截 ↑↓，不调音量');
+
+    await tabToSearchResult(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+
+    expect(harness.backend.lastRequest, isNotNull, reason: 'Space 激活当前行');
+    expect(find.byType(TrackRow), findsNothing, reason: '激活后按行逻辑收起遮罩');
+  });
+
+  testWidgets('搜索遮罩键盘：IME 组合中不抢 ↑↓', (tester) async {
+    await pumpSearchShell(tester);
+    await openSearchOverlay(tester);
+    expect(searchRowSelected(tester), [true, false]);
+
+    final editable = tester.widget<EditableText>(
+      find.byType(EditableText).first,
+    );
+    editable.controller.value = const TextEditingValue(
+      text: 'hello',
+      selection: TextSelection.collapsed(offset: 2),
+      composing: TextRange(start: 0, end: 2),
+    );
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pump();
+    expect(searchRowSelected(tester), [true, false], reason: '输入法组合中不移动高亮');
+  });
+
+  testWidgets('搜索遮罩：防抖窗口不播报 0 条，完成只播报一次正确总数', (tester) async {
+    final announcements = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(
+      SystemChannels.accessibility,
+      (message) async {
+        final event = message as Map<Object?, Object?>?;
+        if (event?['type'] != 'announce') return null;
+        final data = event!['data'] as Map<Object?, Object?>;
+        announcements.add(data['message'] as String);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler(
+        SystemChannels.accessibility,
+        null,
+      ),
+    );
+
+    final source = FakeMusicSource('kw');
+    source.onSearch = (query) => Future.value(
+      SearchResult(items: [searchTrack('a'), searchTrack('b')], total: 2),
+    );
+    await pumpShell(tester, desktopShell: true, searchSource: source);
+    await openSearchOverlay(tester);
+    await tester.enterText(find.byType(EditableText).first, 'hello');
+    await tester.pump();
+
+    expect(announcements, isEmpty, reason: '防抖中不能播报 0 条');
+    expect(find.text(l10n.noResultsFound), findsNothing);
+    expect(find.byType(M3EProgressIndicator), findsWidgets);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(announcements, [
+      l10n.searchResultsAnnouncement(2),
+    ], reason: '所有来源返回后只播报一次真实总数');
   });
 
   testWidgets('搜索遮罩：结果预览最多 8 行，超出仍显示「查看全部结果」', (tester) async {

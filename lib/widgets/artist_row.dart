@@ -17,6 +17,9 @@ class ArtistRow extends StatelessWidget {
     this.subtitle,
     this.coverSize = 44,
     this.position = M3ECardPosition.single,
+    this.selected = false,
+    this.showFocusRing = false,
+    this.showFocusFill = false,
     this.onTap,
   });
 
@@ -40,6 +43,12 @@ class ArtistRow extends StatelessWidget {
 
   final double coverSize;
   final M3ECardPosition position;
+
+  /// 高亮 / 键盘焦点：搜索结果面在遮罩里高亮当前项、Tab 到行时显示焦点。
+  final bool selected;
+  final bool showFocusRing;
+  final bool showFocusFill;
+
   final VoidCallback? onTap;
 
   /// 分段列表的相邻行距（与 [TrackRow.gapOf] 同一 token）。
@@ -55,6 +64,9 @@ class ArtistRow extends StatelessWidget {
     return CardListSurface(
       position: position,
       onPressed: onTap,
+      selected: selected,
+      showFocusRing: showFocusRing,
+      showFocusFill: showFocusFill,
       semanticLabel: subtitle == null ? name : '$name, $subtitle',
       child: SizedBox(
         height: extentOf(context),

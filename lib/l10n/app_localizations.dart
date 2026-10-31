@@ -1787,7 +1787,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchNoSourcesHint.
   ///
   /// In en, this message translates to:
-  /// **'Import and enable a source in Source Management, or select an available source.'**
+  /// **'Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.'**
   String get searchNoSourcesHint;
 
   /// No description provided for @searchNoResultsInSource.
@@ -1819,6 +1819,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to load more results'**
   String get searchLoadMoreFailed;
+
+  /// No description provided for @searchAllSources.
+  ///
+  /// In en, this message translates to:
+  /// **'All sources'**
+  String get searchAllSources;
+
+  /// No description provided for @searchSourcesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search sources'**
+  String get searchSourcesLabel;
+
+  /// No description provided for @searchGroupEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No results'**
+  String get searchGroupEmpty;
+
+  /// No description provided for @searchLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get searchLoadMore;
+
+  /// No description provided for @searchKeyboardHint.
+  ///
+  /// In en, this message translates to:
+  /// **'↑↓ Select · Enter Open · Ctrl+Enter View all · Esc Close'**
+  String get searchKeyboardHint;
 
   /// No description provided for @languageSettingTitle.
   ///

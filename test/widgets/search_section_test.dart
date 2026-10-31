@@ -249,8 +249,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pages, [1, 2], reason: '触底自动取下一页');
-    expect(provider.currentPage, 2);
-    expect(provider.hasMore, isFalse);
+    final group = provider.songGroups.single;
+    expect(group.page, 2);
+    expect(group.hasMore, isFalse);
     expect(find.textContaining('加载更多'), findsNothing);
   });
 
@@ -277,7 +278,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pages, [1, 2]);
-    expect(provider.loadMoreFailed, isTrue);
+    expect(provider.songGroups.single.loadMoreFailed, isTrue);
     // 失败页脚在滚动位置下方一屏内（失败态出现后又长出来一截）：
     // 断言用 skipOffstage: false，重试前先滚到可见。
     final failureLabel = find.text('加载更多结果失败', skipOffstage: false);
@@ -293,7 +294,7 @@ void main() {
 
     expect(pages, [1, 2, 2]);
     expect(find.text('加载更多结果失败', skipOffstage: false), findsNothing);
-    expect(provider.loadMoreFailed, isFalse);
-    expect(provider.currentPage, 2);
+    expect(provider.songGroups.single.loadMoreFailed, isFalse);
+    expect(provider.songGroups.single.page, 2);
   });
 }

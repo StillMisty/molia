@@ -595,9 +595,12 @@
   截断要求 bootstrap）、`selectJournalChunks`（WebDAV 分块衔接）与
   `PeerJournalNames`（协议文件名）；引擎、局域网 / WebDAV 传输与
   `test/support/sync_network.dart` 共用同一份语义，边界条件只维护一处。
-- **渠道选择**：`DiscoverProvider.channelKey` 是渠道状态的唯一持有者；渠道变化经
-  注入的 `onChannelChanged`（组合根）同步搜索源（可搜索渠道才跟随），资料页只
-  处理「渠道被停用」的 UI 回退，不再在两个 provider 之间仲裁同步。
+- **渠道选择**：`DiscoverProvider.channelKey` 只决定热榜 / 歌单，状态与偏好
+  持久化在 `kDiscoverChannelKey`；搜索来源完全解耦，由 `kSearchSourceFilter`
+  单独持久化（默认 `''` = 全部来源）。资料页只处理「渠道被停用」的 UI 回退；
+  搜索 tab 只看 `SearchProvider.hasSearchableSources`；默认不显示发现渠道
+  下拉，仅当页面只剩搜索 tab（当前渠道无热榜 / 歌单能力）时保留渠道下拉，
+  作为切回可发现渠道的逃生口；来源选择在结果面 chips（见 ADR-0018）。
 - **内置发现**：`lib/sources/builtin/discover_source.dart` 的渠道与能力位从
   `BuiltinPlatforms.discoverSources` 派生（六平台同一份注册表）。B 站
   （`bili_discover.dart`）只有音乐榜（`bili__music_3d` / bangid `3:3`）+ 热搜 +
@@ -1097,21 +1100,24 @@ module（见下）：
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（每个 `SearchKind` 一个私有 `_SearchSession`：关键词 / 归一化失败 / `PagedListController` 各一份，经 `_activeSearchSession` 单一分派；单曲 / 歌词会话与投影只持领域 `Track`，歌词片段经 Accepted page callback 随页接受）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（每个「`SearchKind` × 来源」一个 `SearchSession`：关键词 / 归一化失败 / `PagedListController` 各一份；`SearchSourceGroup<T>` 是只读分组投影；单曲 / 歌词会话与投影只持领域 `Track`，歌词片段按来源经 Accepted page callback 随页接受）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
 歌词行高亮用 `PositionLineIndexBuilder`（仅跨行重建）；队列列表用稳定引用。
 
-搜索分页按 `SearchKind` 三个会话隔离：每个 `_SearchSession` 自己持有关键词 /
-归一化失败 / `PagedListController`，provider 只经 `_activeSearchSession` 读元数据，
-`loadMore` 后只重投影发起类型；单曲 / 歌手 / 歌词的结果投影仍按类型保留（`SearchRow` /
+搜索分页按「`SearchKind` × 来源」隔离：每个 `SearchSession` 自己持有关键词 /
+归一化失败 / `PagedListController`，查询时按目标来源并行首屏，单源失败只挂在该
+来源的 `SearchSourceGroup.failure`；`loadMore(sourceKey)` / `retry(sourceKey)` 只
+作用于该来源。分组顺序严格取 `SourceRegistry.descriptors`（`lx_source_order`），
+「全部」固定第一；`selectSourceFilter` 只过滤已加载分组，来源尚未参与本轮搜索
+时才补首屏。单曲 / 歌手 / 歌词的结果投影仍按类型保留（`SearchRow` /
 `ArtistSummary` / 带片段的行），行形状不同，不把三种结果塞进同一个泛型列表。
 单曲 / 歌词的会话条目与 `SearchRow.track` 是同一个领域 `Track`（`CatalogService`
-直接返回，payload 原样）；歌词页把命中片段按 `TrackId.uri` 随页带回。`playItem`
-取当前类型已发布的行组成队列、按 `TrackId` 定位下标，经
-`PlaybackProvider.playDomainTracks` 播放——不再做 `Track → SourceTrack → Track`
-往返，也不再维护与行平行的第二份队列。
+直接返回，payload 原样）；歌词页按来源把命中片段按 `TrackId.uri` 随页带回。
+`playItem` 取该行所属来源分组的已加载行组成队列、按 `TrackId` 定位下标，经
+`PlaybackProvider.playDomainTracks` 播放，不混平台队列——不再做
+`Track → SourceTrack → Track` 往返，也不再维护与行平行的第二份队列。
 
 歌词页可见性门控：播放页内部再包一层 `ShellPageVisibility`（nearest scope =
 壳层可见 && 当前 tab），隐藏时 `PositionLineIndexBuilder(enabled: false)` 不订阅
@@ -1279,9 +1285,13 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   摆在同一条位置（自建 route 挂在根导航器上，坐标是整窗口径）；结果与资料库共用
   同一 `SearchProvider`，空关键词时结果面留空（只剩搜索条）；结果面板与资料库搜索结果页
   共用 **Search results surface**（`lib/widgets/search_results_view.dart`）：行映射 / 分段 /
-  失败 / 空态一份实现，遮罩只选 `docked` 版式（最多预览 8 行 + 「查看全部结果」、不分页），
-  资料库结果页选 `page` 版式（表头 + 触底分页）。遮罩打开时壳层 Esc
-  让位（`EscapeClaims` 登记），另有一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出
+  来源 chips / 分组 / 失败 / 空态一份实现。来源顺序 = 渠道管理顺序（`全部` 固定第一），
+  单分组保留宽屏表格与触底自动分页，多分组每组最多预览 2 行（总计 8 行）并关表格列；
+  页面版 `page` 为分组结果 + 每组独立「加载更多」，遮罩 `docked` 以「查看全部结果」收尾。
+  遮罩键盘：输入框保持焦点，↑↓ 跨分组移动高亮、Enter 播放 / 打开高亮项、Ctrl+Enter
+  打开完整结果页、Tab 锁在遮罩内、底部提示行走 l10n `searchKeyboardHint`；遮罩打开时
+  壳层 Esc 让位（`EscapeClaims`），方向键 / Space / Enter 经 `KeyClaims` 让位，
+  另有一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出
   （自绘 scrim 只压暗，模糊由壳层补；关闭时 `Opacity` 为 0、不参与合成）。
   **不要换回 `M3ESearchAnchor`**：包内 docked 视图的目标矩形完全由锚点推导，锚点
   就在静止位置时容器变换位移为 0（开合没有过渡动画），且包内只在弹簧落定后才给
@@ -1314,7 +1324,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `ShortcutSettings.setBinding` 单点保证）。
   软件内挂载点是 `lib/app/desktop/desktop_shortcuts.dart`（`HardwareKeyboard` 处理器——
   **不要**换回顶层 `Focus.onKeyEvent`：焦点落到壳层 Focus 的祖先（route 作用域）后按键会
-  整体失效；输入框聚焦 / 录制中 / 总开关关闭时全部让位）；全局热键是
+  整体失效；输入框聚焦 / 录制中 / 总开关关闭时全部让位；方向键 / Space / Enter 有
+  `KeyClaims` 占用登记时同样让位，交给焦点控件——搜索遮罩整窗登记，搜索结果页用
+  `KeyClaimScope` 在焦点进入时登记，见 ADR-0018）；全局热键是
   `lib/services/global_hotkeys.dart`（`system_hotkeys`：Windows RegisterHotKey / macOS
   RegisterEventHotKey / Linux `org.freedesktop.portal.GlobalShortcuts` 门户，**纯 Dart +
   D-Bus、零原生依赖**；只收字母 / 数字 / F1–F12 / 空格，默认全 Ctrl+Alt 前缀且默认关闭；

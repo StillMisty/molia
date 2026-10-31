@@ -12,6 +12,7 @@ import '../../data/catalog/album_service.dart';
 import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
 import '../../data/play_statistics_repository.dart';
+import '../../data/settings/settings_keys.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../managers/artwork_cache.dart';
 import '../../providers/comments_provider.dart';
@@ -130,19 +131,12 @@ List<SingleChildWidget> buildAppProviders({
           PlayStatisticsProvider(repository: library.playStatisticsRepository),
     ),
     // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
-    // 渠道变化 → 搜索源跟随的唯一规则点（页面不自行同步两个 provider）。
+    // 渠道只决定发现内容（与搜索来源解耦），偏好跨重启记住。
     ChangeNotifierProvider(
       create: (context) => DiscoverProvider(
         playbackProvider: context.read<PlaybackProvider>(),
         libraryProvider: context.read<LibraryProvider>(),
-        onChannelChanged: (key) {
-          final search = context.read<SearchProvider>();
-          if (search.sourceChannels.any(
-            (option) => option.key == key && option.capabilities.search,
-          )) {
-            search.selectSource(key);
-          }
-        },
+        settings: catalog.settings.scope([kDiscoverChannelKey]),
       ),
     ),
     ChangeNotifierProvider.value(value: lyrics.lyricsProvider),

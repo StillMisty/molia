@@ -1,12 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+import 'support/settings_test_support.dart';
 
 /// 发现 provider 单测：多平台委托 / 错误归一化 / 播放 / 收藏 / 加入列表。
 void main() {
@@ -43,6 +46,87 @@ void main() {
     library.dispose();
     playback.dispose();
     await repository.dispose();
+  });
+
+  test('渠道偏好持久化：selectChannel 写入并跨实例恢复', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = testSettingsRegistry();
+    final sources = {
+      'wy': FakeDiscoverSource(),
+      'kg': FakeDiscoverSource(sourceKey: 'kg'),
+    };
+    final first = DiscoverProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      sources: sources,
+      settings: settings,
+    );
+    addTearDown(first.dispose);
+    first.selectChannel('kg');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kDiscoverChannelKey.name), 'kg');
+
+    final second = DiscoverProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      sources: sources,
+      settings: settings,
+    );
+    addTearDown(second.dispose);
+    for (var i = 0; i < 100 && second.channelKey != 'kg'; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(second.channelKey, 'kg', reason: '跨重启恢复发现渠道');
+  });
+
+  test('异步恢复 / 远端 reload 不覆盖用户刚选择的渠道', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = testSettingsRegistry();
+    await settings.write(kDiscoverChannelKey, 'wy');
+    final sources = {
+      'wy': FakeDiscoverSource(),
+      'kg': FakeDiscoverSource(sourceKey: 'kg'),
+      'tx': FakeDiscoverSource(sourceKey: 'tx'),
+    };
+    final provider = DiscoverProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      sources: sources,
+      settings: settings,
+    );
+    addTearDown(provider.dispose);
+    provider.selectChannel('kg');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.channelKey, 'kg', reason: '晚到的恢复不能覆盖用户选择');
+
+    await settings.write(kDiscoverChannelKey, 'wy');
+    // reload 在途时用户切到 kg：读回来的旧值不得覆盖这次选择。
+    final pendingReload = settings.reloadKeys([kDiscoverChannelKey.name]);
+    provider.selectChannel('tx');
+    await pendingReload;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.channelKey, 'tx', reason: '在途 reload 不覆盖刚做出的选择');
+  });
+
+  test('initialChannelKey 测试参数优先，不被异步恢复覆盖', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = testSettingsRegistry();
+    await settings.write(kDiscoverChannelKey, 'kg');
+    final sources = {
+      'wy': FakeDiscoverSource(),
+      'kg': FakeDiscoverSource(sourceKey: 'kg'),
+    };
+    final provider = DiscoverProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      sources: sources,
+      settings: settings,
+      initialChannelKey: 'wy',
+    );
+    addTearDown(provider.dispose);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.channelKey, 'wy');
   });
 
   test('默认选中第一个可用平台（仅 wy 时）；榜单表来自数据源；榜单曲目解析为发现曲目', () async {

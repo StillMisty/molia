@@ -7,15 +7,20 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
+import '../domain/models/failure.dart';
+import '../domain/models/source.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
+import '../theme/motion_policy.dart';
 import '../utils/responsive.dart';
 import 'artist_row.dart';
 import 'desktop_layout.dart';
+import 'key_claim_scope.dart';
 import 'paged_list_auto_load.dart';
 import 'row_actions.dart';
+import 'search_source_chips.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
@@ -27,40 +32,104 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 搜索结果面的两种宿主形态。
 enum SearchResultsVariant {
-  /// 资料库搜索结果页：分段 + 表头 + sliver 列表 + 触底分页。
+  /// 资料库搜索结果页：分段 + chips + 表头 + sliver 列表 + 触底分页。
   page,
 
-  /// 桌面全局搜索遮罩：限高面板 + 预览行 + 「查看全部结果」出口。
+  /// 桌面全局搜索遮罩：限高面板 + 分组预览行 + 「查看全部结果」出口。
   docked,
 }
 
 /// 打开歌手的页面级动作（导航归宿主：本模块不 import 页面）。
-///
-/// 参数与 `showArtistPage` 同序，宿主直接转交即可；`fallbackName` 用于
-/// 歌手详情尚未返回时的标题。
 typedef OpenSearchArtist = Future<void> Function(
   String sourceKey,
   String artistId, {
   String? fallbackName,
 });
 
+/// 遮罩预览里的一个可高亮条目（跳过分组标题）。
+sealed class SearchPreviewItem {
+  const SearchPreviewItem({required this.sourceKey});
+
+  final String sourceKey;
+
+  /// 行身份（跨刷新 / 分组插入时按它保留高亮）。
+  String get key;
+}
+
+final class SearchPreviewTrack extends SearchPreviewItem {
+  const SearchPreviewTrack({required this.row, required super.sourceKey});
+
+  final SearchRow row;
+
+  @override
+  String get key => 'track:${row.id.uri}';
+}
+
+final class SearchPreviewArtist extends SearchPreviewItem {
+  const SearchPreviewArtist({required this.artist, required super.sourceKey});
+
+  final ArtistSummary artist;
+
+  @override
+  String get key => 'artist:$sourceKey:${artist.id}';
+}
+
+/// 遮罩里一个来源的预览分组（每来源最多 2 行，总计最多 8 行）。
+class SearchPreviewGroup {
+  const SearchPreviewGroup({
+    required this.source,
+    required this.items,
+    required this.totalItems,
+    this.failure,
+    this.isLoading = false,
+    this.page = 0,
+  });
+
+  final SourceDescriptor source;
+  final List<SearchPreviewItem> items;
+
+  /// 该来源完整结果数（不受预览行数截断）。
+  final int totalItems;
+
+  final SourceFailure? failure;
+  final bool isLoading;
+  final int page;
+
+  bool get isEmpty => page > 0 && totalItems == 0 && failure == null;
+}
+
+/// 遮罩预览的唯一投影：遮罩高亮索引与渲染列表共用同一份顺序。
+class SearchPreview {
+  const SearchPreview({
+    required this.groups,
+    required this.items,
+    required this.totalItems,
+    required this.groupCount,
+  });
+
+  final List<SearchPreviewGroup> groups;
+
+  /// 扁平高亮顺序（跳过组标题）。
+  final List<SearchPreviewItem> items;
+
+  /// 所有来源的完整结果数（不是预览截断后的数量）。
+  final int totalItems;
+
+  /// 当前结果面的来源分组数（决定是否显示分组标题）。
+  final int groupCount;
+
+  bool get aggregated => groupCount > 1;
+}
+
 /// 搜索结果面：单曲 / 歌手 / 歌词三类结果在一个模块里完成映射与状态呈现。
 ///
-/// 为什么收成一个模块：资料库搜索结果页与桌面全局搜索遮罩展示的是同一份
-/// [SearchProvider] 状态、同一套 [SearchRow] → [TrackRowModel] 映射。两份实现
-/// 曾各自维护分段 / 失败 / 空态，并已出现漂移（遮罩行没有操作菜单、歌手名
-/// 没有「未知歌手」兜底）。现在两种版式只差「列表怎么滚动」与「结果交给谁」：
-/// 宿主只传 [variant] 与导航回调，行映射、状态文案、能力位判据都留在这里。
+/// 聚合搜索后一个结果面可以包含多个来源分组：
+/// - 单分组：无分组标题、保留宽屏表格列与触底自动分页；
+/// - 多分组：分组标题 + 每组独立「加载更多」，表格列关闭（与分组标题冲突）；
+/// - 遮罩版：每组最多 2 行、总计最多 8 行，单源仍最多 8 行。
 ///
-/// 版式差异：
-/// - [SearchResultsVariant.page]：整块是 `Column`（分段 / 表头 / 滚动列表），
-///   宽屏表格与触底分页只在单曲段启用；
-/// - [SearchResultsVariant.docked]：自绘面板 chrome，最多预览
-///   [maxDockedPreviewRows] 行，不分页，底部固定「查看全部结果」出口。
-///
-/// 两种版式共用行级交互：点击触感、收藏 / 加入列表菜单（触摸端行尾 ⋮、
-/// 桌面端行表面右键）。歌手链接只在页面版式提供：遮罩里行内再开一个二级页
-/// 会与遮罩路由的关闭顺序打架（页面版式直接进歌手页）。
+/// 行映射、失败 / 空态、来源 chips 与键盘高亮都在这里维护；宿主只传
+/// [variant] 与导航回调。
 class SearchResultsView extends StatefulWidget {
   const SearchResultsView({
     super.key,
@@ -69,6 +138,7 @@ class SearchResultsView extends StatefulWidget {
     this.onOpenArtist,
     this.onOpenAllResults,
     this.controller,
+    this.highlightedKey,
   }) : assert(
          variant != SearchResultsVariant.page || onOpenArtist != null,
          '页面版式需要 onOpenArtist（歌手行与行内歌手链接的导航出口）',
@@ -78,23 +148,121 @@ class SearchResultsView extends StatefulWidget {
          '遮罩版式需要 onOpenAllResults（面板底部的完整结果出口）',
        );
 
-  /// 遮罩就地预览的最大行数：更长的列表交给「查看全部结果」后的资料库
-  /// 目的地（面板不是全量结果页，堆太多行会把出口挤出视野）。
+  /// 遮罩就地预览的最大行数：更长的列表交给「查看全部结果」后的资料库。
   static const int maxDockedPreviewRows = 8;
+
+  /// 多分组时每组最多预览行数（总计仍受 [maxDockedPreviewRows] 限制）。
+  static const int maxDockedRowsPerGroup = 2;
 
   final SearchResultsVariant variant;
 
-  /// 单曲 / 歌词行点击：播放语义归宿主（搜索结果整体进队列、从该行开始）。
+  /// 单曲 / 歌词行点击：播放语义归宿主。
   final void Function(SearchRow row) onPlay;
 
-  /// 页面版式的歌手导航（歌手行与行内歌手链接共用）。
+  /// 页面版式的歌手导航。
   final OpenSearchArtist? onOpenArtist;
 
-  /// 遮罩版式的「查看全部结果」：宿主负责先关遮罩再切目的地。
+  /// 遮罩版式的「查看全部结果」。
   final VoidCallback? onOpenAllResults;
 
   /// 页面版式的滚动控制器（宿主注入：底栏重复点击回顶）；为空时自建。
   final ScrollController? controller;
+
+  /// 遮罩高亮行身份（见 [SearchPreviewItem.key]）；页面版可不传。
+  final String? highlightedKey;
+
+  /// 生成遮罩预览的唯一纯函数：遮罩控制高亮与渲染列表都读它，避免索引漂移。
+  static SearchPreview previewFor(SearchProvider search) {
+    final groups = switch (search.searchKind) {
+      SearchKind.song => search.songGroups,
+      SearchKind.artist => search.artistGroups,
+      SearchKind.lyric => search.lyricGroups,
+    };
+    final aggregated = groups.length > 1;
+    final limits = _previewLimits(groups, aggregated: aggregated);
+    var totalItems = 0;
+    final previewGroups = <SearchPreviewGroup>[];
+    final flattened = <SearchPreviewItem>[];
+    for (var index = 0; index < groups.length; index++) {
+      final group = groups[index];
+      totalItems += group.items.length;
+      final items = <SearchPreviewItem>[];
+      if (limits[index] > 0) {
+        switch (search.searchKind) {
+          case SearchKind.song || SearchKind.lyric:
+            for (final row
+                in (group as SearchSourceGroup<SearchRow>).items.take(
+                  limits[index],
+                )) {
+              items.add(
+                SearchPreviewTrack(row: row, sourceKey: group.source.key),
+              );
+            }
+          case SearchKind.artist:
+            for (final artist
+                in (group as SearchSourceGroup<ArtistSummary>).items.take(
+                  limits[index],
+                )) {
+              items.add(
+                SearchPreviewArtist(
+                  artist: artist,
+                  sourceKey: group.source.key,
+                ),
+              );
+            }
+        }
+      }
+      previewGroups.add(
+        SearchPreviewGroup(
+          source: group.source,
+          items: List.unmodifiable(items),
+          totalItems: group.items.length,
+          failure: group.failure,
+          isLoading: group.isLoading,
+          page: group.page,
+        ),
+      );
+      flattened.addAll(items);
+    }
+    return SearchPreview(
+      groups: List.unmodifiable(previewGroups),
+      items: List.unmodifiable(flattened),
+      totalItems: totalItems,
+      groupCount: groups.length,
+    );
+  }
+
+  /// 遮罩预览行预算：多来源先每个有结果的来源各 1 行，再按渠道顺序补到
+  /// 每源最多 [maxDockedRowsPerGroup] 行；所有来源都保留分组标题。
+  static List<int> _previewLimits(
+    List<SearchSourceGroup<Object>> groups, {
+    required bool aggregated,
+  }) {
+    final limits = List<int>.filled(groups.length, 0);
+    var budget = maxDockedPreviewRows;
+    if (!aggregated) {
+      if (groups.isEmpty) return limits;
+      limits[0] = math.min(maxDockedPreviewRows, groups.first.items.length);
+      return limits;
+    }
+    // 第一轮：每个有结果的来源 1 行，保证 6 个平台时不会被前 4 个吃光预算。
+    for (var index = 0; index < groups.length && budget > 0; index++) {
+      if (groups[index].items.isEmpty) continue;
+      limits[index] = 1;
+      budget--;
+    }
+    // 第二轮：按渠道顺序补齐到每源上限，仍受总预算约束。
+    for (var index = 0; index < groups.length && budget > 0; index++) {
+      final maximum = math.min(
+        maxDockedRowsPerGroup,
+        groups[index].items.length,
+      );
+      if (limits[index] >= maximum) continue;
+      limits[index]++;
+      budget--;
+    }
+    return limits;
+  }
 
   @override
   State<SearchResultsView> createState() => _SearchResultsViewState();
@@ -107,10 +275,42 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   ScrollController get _pageController =>
       widget.controller ?? (_ownedController ??= ScrollController());
 
+  /// 高亮行的 GlobalKey：结果到达 / 键盘移动后自动滚入视野。
+  final Map<String, GlobalKey> _highlightKeys = {};
+  String? _lastEnsuredKey;
+
+  @override
+  void didUpdateWidget(covariant SearchResultsView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highlightedKey != widget.highlightedKey) {
+      _lastEnsuredKey = null;
+    }
+  }
+
   @override
   void dispose() {
     _ownedController?.dispose();
     super.dispose();
+  }
+
+  GlobalKey _itemKey(String key) =>
+      _highlightKeys.putIfAbsent(key, GlobalKey.new);
+
+  /// 高亮变化后把行滚入视野；减弱动效时直接跳转。
+  void _scheduleEnsureHighlighted() {
+    final key = widget.highlightedKey;
+    if (key == null || key == _lastEnsuredKey) return;
+    _lastEnsuredKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final context = _highlightKeys[key]?.currentContext;
+      if (context == null) return;
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: effectDurationOf(context, M3EMotion.short4),
+      );
+    });
   }
 
   @override
@@ -121,48 +321,59 @@ class _SearchResultsViewState extends State<SearchResultsView> {
       SearchResultsVariant.docked =>
         search.isSearchActive
             ? _buildDocked(context, search)
-            // 无关键词：结果面留空（只留搜索条）——打开遮罩就是为了输入，
-            // 一行「输入关键词搜索歌曲」的引导是多余的。
+            // 无关键词：结果面留空（只留搜索条）。
             : const SizedBox.shrink(),
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // 页面版式（资料库搜索结果页）
-  // ---------------------------------------------------------------------------
-
   Widget _buildPage(BuildContext context, SearchProvider search) {
     final l10n = _l10n(context);
-    // 表格列的判定用窗口宽 − 实际栏宽（判据唯一在 DesktopLayout）：
-    // 不随页面结构（页内栏 / 面板）漂移。
     final layout = DesktopLayout.of(context);
     final horizontalPadding = context
         .layoutType(ResponsivePageType.browse)
         .horizontalPadding;
-    final results = search.filteredResults;
-    final artistResults = search.artistResults;
-    final lyricResults = search.lyricResults;
-    final kind = search.searchKind;
-    final isArtistKind = kind == SearchKind.artist;
-    final isLyricKind = kind == SearchKind.lyric;
-    final itemCount = isArtistKind
-        ? artistResults.length
-        : isLyricKind
-        ? lyricResults.length
-        : results.length;
-    final failure = search.failure;
+    final groups = _groupsFor(search);
+    final singleGroup = groups.length <= 1;
+    final group = groups.isEmpty ? null : groups.first;
+    final itemCount = groups.fold<int>(0, (sum, g) => sum + g.items.length);
+    final anyFailure = groups.any((g) => g.failure != null);
+    final showEmptyState =
+        itemCount == 0 && !search.isSearchBusy && !anyFailure;
+    final failure = singleGroup ? group?.failure : null;
     final kinds = search.supportedSearchKinds;
-    // 宽屏表格列只在单曲段生效：歌手 / 歌词段的行结构不同（头像行 /
-    // 歌词片段副标题），不给它们套表格。
-    final tableColumns = kind == SearchKind.song && layout.tableColumns;
+    final filterOptions = search.sourceFilterOptions;
+    final tableColumns =
+        search.searchKind == SearchKind.song &&
+        singleGroup &&
+        layout.tableColumns &&
+        group != null &&
+        group.items.isNotEmpty;
     final controller = _pageController;
+    final scrollView = CustomScrollView(
+      controller: controller,
+      slivers: [
+        if (showEmptyState)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _pageEmptyView(l10n, search),
+          )
+        else if (singleGroup)
+          ..._singleGroupSlivers(
+            context,
+            l10n,
+            search,
+            group,
+            horizontalPadding: horizontalPadding,
+            tableColumns: tableColumns,
+          )
+        else
+          ..._multiGroupSlivers(context, l10n, search, groups),
+      ],
+    );
 
-    return Column(
+    final content = Column(
       children: [
-        // 结果页顶部无独立栏（搜索框自身即状态），只留少量间距。
         const SizedBox(height: 8),
-
-        // 类型分段：仅在有多个可选类型且搜索已激活时显示。
         if (search.isSearchActive && kinds.length > 1)
           Padding(
             padding: EdgeInsets.fromLTRB(
@@ -173,180 +384,256 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             ),
             child: _kindSwitch(l10n, search, kinds),
           ),
-
-        if (search.isSearching)
+        if (filterOptions.length > 1)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              0,
+              horizontalPadding,
+              8,
+            ),
+            child: SearchSourceChips(
+              options: filterOptions,
+              selectedKey: search.sourceFilter,
+              onSelected: search.selectSourceFilter,
+            ),
+          ),
+        if (search.isSearchBusy && (singleGroup || groups.isEmpty))
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: M3EProgressIndicator.linear(),
           ),
-
-        // 有结果时的加载更多失败只停底部；没有结果才占顶部错误条。
-        if (failure != null && itemCount == 0)
-          _failure(context, l10n, search, compact: false),
-
-        // 表格列表头固定在滚动区之上：列标题不随结果滚走，列与行内
-        // 列同宽同左缘（TrackTableHeader 内部复刻行的留白结构）。
-        if (tableColumns && itemCount > 0)
+        // 单分组首屏失败才占顶部错误条；多分组的错误挂在各自分组标题。
+        if (failure != null && (group?.items.isEmpty ?? true))
+          _failure(
+            context,
+            l10n,
+            compact: false,
+            detail: failure.message,
+            onRetry: () => search.retry(group!.source.key),
+          ),
+        if (tableColumns)
           Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             child: const TrackTableHeader(),
           ),
-
         Expanded(
           child: Scrollbar(
             controller: controller,
             thumbVisibility: true,
             interactive: true,
-            child: PagedListAutoLoad(
-              hasMore: search.hasMore,
-              // 首屏失败：顶部错误条负责恢复；加载更多失败只停底部。
-              failed: failure != null && itemCount == 0,
-              isLoadingMore: search.isLoadingMore,
-              loadMoreFailed: search.loadMoreFailed,
-              onLoadMore: search.loadMore,
-              child: CustomScrollView(
-                controller: controller,
-                slivers: [
-                  if (itemCount == 0 && !search.isSearching && failure == null)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: _pageEmptyView(l10n, search),
-                    )
-                  else if (isArtistKind)
-                    SliverPadding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                      ),
-                      sliver: _ArtistResultsSliver(
-                        items: artistResults,
-                        onTap: (artist) => unawaited(
-                          widget.onOpenArtist!(
-                            search.sourceKey,
-                            artist.id,
-                            fallbackName: artist.name,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: horizontalPadding,
-                      ),
-                      sliver: _TrackResultsSliver(
-                        // 歌词类型：行的 [SearchRow.lyricSnippet] 做副标题。
-                        items: isLyricKind ? lyricResults : results,
-                        onPlay: widget.onPlay,
-                        onOpenArtist: widget.onOpenArtist,
-                        // 歌手链接能力位来自 SearchProvider 的同一份分段
-                        // 判据（渠道是否有歌手能力）；脚本源保持纯文本。
-                        artistLinksEnabled: kinds.contains(SearchKind.artist),
-                        surface: TrackRowSurface(
-                          tableSpec: tableColumns
-                              ? TrackRowColumnSpec.standard
-                              : null,
-                        ),
-                      ),
-                    ),
-
-                  // 触底自动取下一页；页脚只承担加载中 / 失败重试。
-                  if (itemCount > 0 &&
-                      search.hasSelectedSource &&
-                      (search.isLoadingMore || search.loadMoreFailed))
-                    SliverToBoxAdapter(
-                      child: PagedListFooter(
-                        isLoadingMore: search.isLoadingMore,
-                        loadMoreFailed: search.loadMoreFailed,
-                        onRetry: search.loadMore,
-                        failureLabel: l10n.searchLoadMoreFailed,
-                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            child: singleGroup
+                ? PagedListAutoLoad(
+                    hasMore: group?.hasMore ?? false,
+                    failed: failure != null && (group?.items.isEmpty ?? true),
+                    isLoadingMore: group?.isLoadingMore ?? false,
+                    loadMoreFailed: group?.loadMoreFailed ?? false,
+                    onLoadMore: () {
+                      final sourceKey = group?.source.key;
+                      if (sourceKey != null) search.loadMore(sourceKey);
+                    },
+                    child: scrollView,
+                  )
+                : scrollView,
           ),
         ),
       ],
     );
+
+    // 页面版没有模态登记：焦点进入结果区（行 / chips / 分段）时让全局
+    // 快捷键让位，Space 激活行、方向键交给焦点遍历。
+    return KeyClaimScope(child: content);
   }
 
-  /// 空状态区分：未选择/无可用音源，与「已选音源但无结果」（展示音源名）。
+  List<Widget> _singleGroupSlivers(
+    BuildContext context,
+    AppLocalizations l10n,
+    SearchProvider search,
+    SearchSourceGroup<Object>? group, {
+    required double horizontalPadding,
+    required bool tableColumns,
+  }) {
+    if (group == null) return const [];
+    final isArtistKind = search.searchKind == SearchKind.artist;
+    final slivers = <Widget>[];
+    if (group.items.isNotEmpty) {
+      final rows = group.items;
+      slivers.add(
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+          sliver: isArtistKind
+              ? _ArtistResultsSliver(
+                  items: rows.cast<ArtistSummary>(),
+                  onTap: (artist) => unawaited(
+                    widget.onOpenArtist!(
+                      group.source.key,
+                      artist.id,
+                      fallbackName: artist.name,
+                    ),
+                  ),
+                )
+              : _TrackResultsSliver(
+                  items: rows.cast<SearchRow>(),
+                  onPlay: widget.onPlay,
+                  onOpenArtist: widget.onOpenArtist,
+                  artistLinksEnabled: group.source.capabilities.artist,
+                  surface: TrackRowSurface(
+                    showFocusRing: true,
+                    showFocusFill: true,
+                    tableSpec: tableColumns
+                        ? TrackRowColumnSpec.standard
+                        : null,
+                  ),
+                ),
+        ),
+      );
+    }
+    if (group.items.isNotEmpty &&
+        (group.isLoadingMore || group.loadMoreFailed)) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: PagedListFooter(
+            isLoadingMore: group.isLoadingMore,
+            loadMoreFailed: group.loadMoreFailed,
+            onRetry: () => search.retry(group.source.key),
+            failureLabel: l10n.searchLoadMoreFailed,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          ),
+        ),
+      );
+    }
+    return slivers;
+  }
+
+  List<Widget> _multiGroupSlivers(
+    BuildContext context,
+    AppLocalizations l10n,
+    SearchProvider search,
+    List<SearchSourceGroup<Object>> groups,
+  ) {
+    final slivers = <Widget>[];
+    for (final group in groups) {
+      slivers.add(
+        SliverToBoxAdapter(
+          child: _groupHeader(
+            context,
+            l10n,
+            search,
+            source: group.source,
+            failure: group.failure,
+            isLoading: group.isLoading,
+            isEmpty: group.isEmpty,
+          ),
+        ),
+      );
+      if (group.items.isNotEmpty) {
+        slivers.add(
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            sliver: search.searchKind == SearchKind.artist
+                ? _ArtistResultsSliver(
+                    items: group.items.cast<ArtistSummary>(),
+                    onTap: (artist) => unawaited(
+                      widget.onOpenArtist!(
+                        group.source.key,
+                        artist.id,
+                        fallbackName: artist.name,
+                      ),
+                    ),
+                  )
+                : _TrackResultsSliver(
+                    items: group.items.cast<SearchRow>(),
+                    onPlay: widget.onPlay,
+                    onOpenArtist: widget.onOpenArtist,
+                    artistLinksEnabled: group.source.capabilities.artist,
+                    surface: const TrackRowSurface(
+                      showFocusRing: true,
+                      showFocusFill: true,
+                    ),
+                  ),
+          ),
+        );
+        slivers.add(
+          SliverToBoxAdapter(child: _groupFooter(l10n, search, group)),
+        );
+      }
+    }
+    return slivers;
+  }
+
+  /// 空状态区分：无可用来源 / 未输入 / 全部来源无结果 / 单源过滤无结果。
   Widget _pageEmptyView(AppLocalizations l10n, SearchProvider search) {
     final theme = Theme.of(context);
-    final selectedSourceName = _selectedSourceName(search);
-    final hasSelectedSource = selectedSourceName != null;
+    final IconData icon;
+    final String title;
+    String? hint;
+    if (!search.hasSearchableSources) {
+      icon = Icons.source_rounded;
+      title = l10n.searchNoSourcesTitle;
+      hint = l10n.searchNoSourcesHint;
+    } else if (!search.isSearchActive) {
+      icon = Icons.search_rounded;
+      title = l10n.searchIdleHint;
+    } else {
+      icon = Icons.search_off_rounded;
+      final sourceName = _selectedSourceName(search);
+      title = l10n.noResultsFound;
+      if (sourceName != null) hint = l10n.searchNoResultsInSource(sourceName);
+    }
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              hasSelectedSource
-                  ? Icons.search_off_rounded
-                  : Icons.source_rounded,
-              size: 48,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            Icon(icon, size: 48, color: theme.colorScheme.onSurfaceVariant),
             const SizedBox(height: 16),
             Text(
-              hasSelectedSource
-                  ? l10n.noResultsFound
-                  : l10n.searchNoSourcesTitle,
+              title,
+              textAlign: TextAlign.center,
               style: context.typeScale.titleMedium,
             ),
-            const SizedBox(height: 8),
-            Text(
-              selectedSourceName != null
-                  ? l10n.searchNoResultsInSource(selectedSourceName)
-                  : l10n.searchNoSourcesHint,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            if (hint != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                hint,
+                textAlign: TextAlign.center,
+                style: context.typeScale.bodyMedium.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  /// 当前选中音源的显示名；选中的 key 不在可选列表中（未选择/已失效）时
-  /// 为 null。
+  /// 当前过滤来源的显示名；`''` 或无效过滤返回 null。
   String? _selectedSourceName(SearchProvider search) {
-    for (final option in search.sourceChannels) {
-      if (option.key == search.sourceKey) return option.displayName;
+    final selected = search.sourceFilter;
+    if (selected.isEmpty) return null;
+    for (final option in search.sourceFilterOptions) {
+      if (option.key == selected) return option.displayName;
     }
     return null;
   }
 
-  // ---------------------------------------------------------------------------
-  // 遮罩版式（桌面全局搜索）
-  // ---------------------------------------------------------------------------
-
   Widget _buildDocked(BuildContext context, SearchProvider search) {
     final l10n = _l10n(context);
     final kinds = search.supportedSearchKinds;
-    final isArtistKind = search.searchKind == SearchKind.artist;
-    final isLyricKind = search.searchKind == SearchKind.lyric;
-    final results = isLyricKind ? search.lyricResults : search.filteredResults;
-    final artists = isArtistKind
-        ? search.artistResults
-        : const <ArtistSummary>[];
-    final itemCount = isArtistKind ? artists.length : results.length;
-    // 就地预览只取前 N 行：空态 / 失败 / 页脚仍按真实结果数判定（有结果
-    // 才给「查看全部结果」），只有行渲染被截断。
-    final previewCount = math.min(
-      itemCount,
-      SearchResultsView.maxDockedPreviewRows,
-    );
-    final failure = search.failure;
+    final filterOptions = search.sourceFilterOptions;
+    final preview = SearchResultsView.previewFor(search);
+    final anyFailure = preview.groups.any((group) => group.failure != null);
+    final showEmpty =
+        preview.totalItems == 0 && !search.isSearchBusy && !anyFailure;
+    final currentKeys = {for (final item in preview.items) item.key};
+    _highlightKeys.removeWhere((key, _) => !currentKeys.contains(key));
+    _scheduleEnsureHighlighted();
 
     return _panel(
       context,
       child: SingleChildScrollView(
-        // 不接 PrimaryScrollController：面板与页面里的主列表互不干扰。
         primary: false,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -357,47 +644,130 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                 child: _kindSwitch(l10n, search, kinds),
               ),
-            if (search.isSearching)
+            if (filterOptions.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+                child: SearchSourceChips(
+                  options: filterOptions,
+                  selectedKey: search.sourceFilter,
+                  onSelected: search.selectSourceFilter,
+                ),
+              ),
+            if (search.isSearchBusy && preview.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: M3EProgressIndicator.linear(),
               ),
-            // 分页失败只影响完整结果页的底部；预览面板仍可看已加载结果。
-            if (failure != null && itemCount == 0)
-              _failure(context, l10n, search, compact: true),
-            if (itemCount > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var index = 0; index < previewCount; index++)
-                      isArtistKind
-                          ? _dockedArtistRow(
-                              context,
-                              l10n,
-                              artists[index],
-                              index,
-                              previewCount,
-                            )
-                          : _dockedTrackRow(
-                              context,
-                              results[index],
-                              index,
-                              previewCount,
-                            ),
-                  ],
+            for (final group
+                in showEmpty
+                    ? const <SearchPreviewGroup>[]
+                    : preview.groups) ...[
+              if (preview.aggregated)
+                _groupHeader(
+                  context,
+                  l10n,
+                  search,
+                  source: group.source,
+                  failure: group.failure,
+                  isLoading: group.isLoading,
+                  isEmpty: group.isEmpty,
+                  compact: true,
+                )
+              else if (group.failure != null)
+                _failure(
+                  context,
+                  l10n,
+                  compact: true,
+                  detail: group.failure!.message,
+                  onRetry: () => search.retry(group.source.key),
                 ),
-              )
-            else if (!search.isSearching && failure == null)
-              _dockedEmptyView(context, l10n, search),
-            // 有结果才给「查看全部结果」：零结果时它无处可去（空态文案已说明）。
-            if (itemCount > 0) _dockedFooter(l10n),
+              if (preview.aggregated && group.failure == null && group.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                  child: Text(
+                    l10n.searchGroupEmpty,
+                    style: context.typeScale.bodySmall.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              if (group.items.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var index = 0; index < group.items.length; index++)
+                        _dockedItem(
+                          context,
+                          l10n,
+                          group.items[index],
+                          index,
+                          group.items.length,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+            if (showEmpty) _dockedEmptyView(context, l10n, search),
+            // 有结果才给「查看全部结果」：零结果时它无处可去。
+            if (preview.totalItems > 0) _dockedFooter(l10n),
           ],
         ),
       ),
     );
+  }
+
+  Widget _dockedItem(
+    BuildContext context,
+    AppLocalizations l10n,
+    SearchPreviewItem item,
+    int index,
+    int count,
+  ) {
+    final selected = item.key == widget.highlightedKey;
+    final key = _itemKey(item.key);
+    return switch (item) {
+      SearchPreviewTrack(:final row) => Padding(
+        key: key,
+        padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
+        child: _SearchResultTile(
+          key: ValueKey(row.id.uri),
+          row: row,
+          index: index,
+          count: count,
+          surface: const TrackRowSurface(
+            showFocusRing: true,
+            showFocusFill: true,
+          ),
+          showArtistLinks: false,
+          selected: selected,
+          onTap: widget.onPlay,
+          onOpenArtist: null,
+        ),
+      ),
+      SearchPreviewArtist(:final artist) => Padding(
+        key: key,
+        padding: EdgeInsets.only(bottom: ArtistRow.gapOf(context)),
+        child: ArtistRow(
+          key: ValueKey(artist.id),
+          name: artist.name,
+          avatarUrl: artist.avatarUrl,
+          subtitle: artist.songCount == null
+              ? null
+              : l10n.artistSongCount(artist.songCount!),
+          position: calculateCardPosition(index, count),
+          selected: selected,
+          showFocusRing: true,
+          showFocusFill: true,
+          onTap: () {
+            HapticsService.lightImpact();
+            widget.onOpenAllResults!();
+          },
+        ),
+      ),
+    };
   }
 
   /// 结果面板底：颜色与圆角取包内 docked 结果面同一套 token。
@@ -412,86 +782,56 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     );
   }
 
-  /// 单曲 / 歌词预览行：[TrackRow] 紧凑单列（遮罩不套宽屏表格列）。
-  ///
-  /// 行映射与页面版式共用 [_SearchResultTile]；差异只有「不渲染歌手链接」
-  /// 与面板行距。操作菜单（桌面右键）与未知歌手兜底在两种版式一致。
-  Widget _dockedTrackRow(
-    BuildContext context,
-    SearchRow row,
-    int index,
-    int count,
-  ) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
-      child: _SearchResultTile(
-        key: ValueKey(row.id.uri),
-        row: row,
-        index: index,
-        count: count,
-        surface: const TrackRowSurface(),
-        showArtistLinks: false,
-        onTap: widget.onPlay,
-        onOpenArtist: null,
-      ),
-    );
-  }
-
-  /// 歌手预览行：点击交给「查看全部结果」，而不是直接进歌手页。
-  ///
-  /// 遮罩是根导航器上的自建 route：先开歌手页会叠在遮罩上，关闭顺序与
-  /// 遮罩的 Esc / 焦点复位互相打架；完整歌手结果页已有进歌手页的链接，
-  /// 面板不重复那套入口编排。
-  Widget _dockedArtistRow(
-    BuildContext context,
-    AppLocalizations l10n,
-    ArtistSummary artist,
-    int index,
-    int count,
-  ) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: ArtistRow.gapOf(context)),
-      child: ArtistRow(
-        key: ValueKey(artist.id),
-        name: artist.name,
-        avatarUrl: artist.avatarUrl,
-        subtitle: artist.songCount == null
-            ? null
-            : l10n.artistSongCount(artist.songCount!),
-        position: calculateCardPosition(index, count),
-        onTap: () {
-          HapticsService.lightImpact();
-          widget.onOpenAllResults!();
-        },
-      ),
-    );
-  }
-
-  /// 有词无结果：一句本地化提示；无可用音源时给音源引导标题
-  /// （与资料库结果区同一套键，面板不再堆副标题）。
+  /// 有词无结果：无来源 / 单源过滤无结果 / 全部来源无结果。
   Widget _dockedEmptyView(
     BuildContext context,
     AppLocalizations l10n,
     SearchProvider search,
   ) {
     final theme = Theme.of(context);
+    final sourceName = _selectedSourceName(search);
+    final noSources = !search.hasSearchableSources;
+    final title = noSources ? l10n.searchNoSourcesTitle : l10n.noResultsFound;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
       child: Center(
         heightFactor: 1,
-        child: Text(
-          search.hasSelectedSource
-              ? l10n.noResultsFound
-              : l10n.searchNoSourcesTitle,
-          style: context.typeScale.bodyMedium.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: context.typeScale.bodyMedium.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            if (noSources) ...[
+              const SizedBox(height: 4),
+              Text(
+                l10n.searchNoSourcesHint,
+                textAlign: TextAlign.center,
+                style: context.typeScale.bodySmall.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ] else if (sourceName != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                l10n.searchNoResultsInSource(sourceName),
+                textAlign: TextAlign.center,
+                style: context.typeScale.bodySmall.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
   }
 
-  /// 底部出口：完整结果（分段 / 分页 / 歌手链接）在资料库目的地。
+  /// 底部出口：完整结果（分段 / chips / 分页 / 歌手链接）在资料库目的地。
   Widget _dockedFooter(AppLocalizations l10n) => Padding(
     padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
     child: Center(
@@ -505,12 +845,103 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     ),
   );
 
-  // ---------------------------------------------------------------------------
-  // 共用：分段 / 失败态
-  // ---------------------------------------------------------------------------
+  Widget _groupHeader(
+    BuildContext context,
+    AppLocalizations l10n,
+    SearchProvider search, {
+    required SourceDescriptor source,
+    required SourceFailure? failure,
+    required bool isLoading,
+    required bool isEmpty,
+    bool compact = false,
+  }) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(compact ? 20 : 16, compact ? 8 : 12, 12, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  source.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.typeScale.titleSmall,
+                ),
+              ),
+              if (isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: SizedBox.square(
+                    dimension: 14,
+                    child: M3EProgressIndicator.circular(
+                      size: 14,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (failure != null)
+            _failure(
+              context,
+              l10n,
+              compact: true,
+              detail: failure.message,
+              onRetry: () => search.retry(source.key),
+            )
+          else if (isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                l10n.searchGroupEmpty,
+                style: context.typeScale.bodySmall.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 
-  /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满
-  /// （内部 `Positioned.fill`，放松约束会塌成零宽）。
+  Widget _groupFooter(
+    AppLocalizations l10n,
+    SearchProvider search,
+    SearchSourceGroup<Object> group,
+  ) {
+    if (group.isLoadingMore || group.loadMoreFailed) {
+      return PagedListFooter(
+        isLoadingMore: group.isLoadingMore,
+        loadMoreFailed: group.loadMoreFailed,
+        onRetry: () => search.retry(group.source.key),
+        failureLabel: l10n.searchLoadMoreFailed,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      );
+    }
+    if (!group.hasMore) return const SizedBox(height: 12);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      child: Center(
+        child: M3EButton.text(
+          onPressed: () => search.loadMore(group.source.key),
+          child: Text(l10n.searchLoadMore),
+        ),
+      ),
+    );
+  }
+
+  /// 当前类型的分组（统一成 `Object` 便于共享分组标题 / 页脚）。
+  List<SearchSourceGroup<Object>> _groupsFor(SearchProvider search) =>
+      switch (search.searchKind) {
+        SearchKind.song => search.songGroups,
+        SearchKind.artist => search.artistGroups,
+        SearchKind.lyric => search.lyricGroups,
+      };
+
+  /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满。
   Widget _kindSwitch(
     AppLocalizations l10n,
     SearchProvider search,
@@ -525,7 +956,6 @@ class _SearchResultsViewState extends State<SearchResultsView> {
         ],
         selected: {search.searchKind},
         onSelectionChanged: (selection) {
-          // 单选：M3E 语义下重按已选中项不会清空。
           if (selection.isNotEmpty) {
             search.selectSearchKind(selection.first);
           }
@@ -540,21 +970,18 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     SearchKind.lyric => l10n.searchKindLyrics,
   };
 
-  /// 搜索失败提示：本地化标题 + 重试（重新提交当前关键词）。
-  ///
-  /// [compact] 是遮罩版式：面板窄、没有整页空间，只留一行标题 + 重试，
-  /// 不重复页面版式的失败详情（完整结果页仍可看到 message）。
+  /// 搜索失败提示：本地化标题 + 每来源独立重试。
   Widget _failure(
     BuildContext context,
-    AppLocalizations l10n,
-    SearchProvider search, {
+    AppLocalizations l10n, {
     required bool compact,
+    required VoidCallback onRetry,
+    String? detail,
   }) {
     final theme = Theme.of(context);
-    final query = search.searchQuery;
     final retry = M3EButton.icon(
       style: M3EButtonStyle.text,
-      onPressed: query.trim().isEmpty ? null : () => search.submitSearch(query),
+      onPressed: onRetry,
       icon: const Icon(Icons.refresh_rounded, size: 18),
       label: Text(l10n.retry),
     );
@@ -568,7 +995,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     );
     if (compact) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
         child: Row(
           children: [
             Icon(
@@ -600,13 +1027,13 @@ class _SearchResultsViewState extends State<SearchResultsView> {
               retry,
             ],
           ),
-          if ((search.failure?.message ?? '').isNotEmpty)
+          if ((detail ?? '').isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 28, right: 8),
               child: Text(
-                // 归一化失败的 message（平台/边界给出的可读说明），
-                // 不是原始异常字符串（见 SearchProvider.failure 注释）。
-                search.failure!.message,
+                // 归一化失败的 message（平台 / 边界给出的可读说明），
+                // 不是原始异常字符串。
+                detail!,
                 style: context.typeScale.bodySmall.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -653,11 +1080,9 @@ class _TrackResultsSliver extends StatelessWidget {
     }
 
     final gap = TrackRow.gapOf(context);
-    // 行高按档取 token（表格单行 56 / 非表格双行 72），列表固定 extent。
     final itemExtent =
         TrackRow.extentOf(context, tableColumns: surface.isTable) + gap;
     return SliverFixedExtentList.builder(
-      // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
       itemExtent: itemExtent,
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -704,7 +1129,6 @@ class _ArtistResultsSliver extends StatelessWidget {
     final l10n = _l10n(context);
     final gap = ArtistRow.gapOf(context);
     return SliverFixedExtentList.builder(
-      // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
       itemExtent: ArtistRow.extentOf(context) + gap,
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -719,6 +1143,8 @@ class _ArtistResultsSliver extends StatelessWidget {
                 ? null
                 : l10n.artistSongCount(artist.songCount!),
             position: calculateCardPosition(index, items.length),
+            showFocusRing: true,
+            showFocusFill: true,
             onTap: () {
               HapticsService.lightImpact();
               onTap(artist);
@@ -732,9 +1158,7 @@ class _ArtistResultsSliver extends StatelessWidget {
 
 /// 搜索结果行：两种版式共用的 [SearchRow] → [TrackRowModel] 映射。
 ///
-/// 入口分平台：触摸端行尾常显 ⋮；桌面端不渲染 ⋮，行表面右键在落点弹菜单
-/// （[rowActionsAtPointer]）。动作定义与其它曲目行共用
-/// [trackRowActionMenuForTrack]。
+/// 入口分平台：触摸端行尾常显 ⋮；桌面端不渲染 ⋮，行表面右键在落点弹菜单。
 class _SearchResultTile extends StatelessWidget {
   const _SearchResultTile({
     super.key,
@@ -745,6 +1169,7 @@ class _SearchResultTile extends StatelessWidget {
     required this.showArtistLinks,
     required this.onTap,
     this.onOpenArtist,
+    this.selected = false,
   });
 
   final SearchRow row;
@@ -757,13 +1182,15 @@ class _SearchResultTile extends StatelessWidget {
   /// 是否把逐名歌手渲染成歌手页链接（页面版式；遮罩版式保持纯文本）。
   final bool showArtistLinks;
 
+  /// 遮罩键盘高亮（与当前曲目高亮同一套 selected 观感）。
+  final bool selected;
+
   final void Function(SearchRow row) onTap;
   final OpenSearchArtist? onOpenArtist;
 
   @override
   Widget build(BuildContext context) {
     final actions = trackRowActionMenuForTrack(context, row.track);
-    // 歌手链接能力位（同一平台固定）：渠道有歌手能力时逐个歌手名可点。
     final sourceKey = row.id.sourceKey;
     final artistTapsEnabled = showArtistLinks && sourceKey.isNotEmpty;
     // 歌词命中片段优先做副标题（此时不渲染歌手链接：副标题让位给歌词）。
@@ -784,6 +1211,7 @@ class _SearchResultTile extends StatelessWidget {
         durationMs: row.duration?.inMilliseconds,
         album: row.albumName,
         trackId: row.id,
+        selected: selected,
       ),
       surface: surface,
       position: calculateCardPosition(index, count),
@@ -805,14 +1233,13 @@ class _SearchResultTile extends StatelessWidget {
     );
   }
 
-  /// 单列副标题的首位歌手；无歌手信息时用「未知歌手」兜底（旧口径）。
+  /// 单列副标题的首位歌手；无歌手信息时用「未知歌手」兜底。
   String _singleArtistOf(BuildContext context) {
     final name = row.primaryArtistName;
     return name.isEmpty ? _l10n(context).unknownArtist : name;
   }
 
-  /// 逐名可点的歌手链接：条目带平台内 id 且渠道能力位为真时返回；
-  /// 否则返回 null（[TrackRow] 退化为整串纯文本副标题）。
+  /// 逐名可点的歌手链接：条目带平台内 id 且渠道能力位为真时返回。
   List<TrackRowArtist>? _artistLinksOf(
     BuildContext context, {
     required bool tapsEnabled,
@@ -836,7 +1263,6 @@ class _SearchResultTile extends StatelessWidget {
         ),
       );
     }
-    // 没有任何一位带 id 时保持整串纯文本（避免半可点半不可点的割裂行）。
     return hasId ? links : null;
   }
 }

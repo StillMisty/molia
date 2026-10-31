@@ -898,7 +898,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get searchNoSourcesTitle => '当前无可用音源';
 
   @override
-  String get searchNoSourcesHint => '请在「音源管理」中导入并启用音源，或选择一个可用的音源。';
+  String get searchNoSourcesHint =>
+      'B 站无需脚本即可搜索；如不可用，请在「音源管理」中重新启用 B 站或导入其它音源脚本。';
 
   @override
   String searchNoResultsInSource(String source) {
@@ -916,6 +917,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchLoadMoreFailed => '加载更多结果失败';
+
+  @override
+  String get searchAllSources => '全部来源';
+
+  @override
+  String get searchSourcesLabel => '搜索来源';
+
+  @override
+  String get searchGroupEmpty => '无结果';
+
+  @override
+  String get searchLoadMore => '加载更多';
+
+  @override
+  String get searchKeyboardHint =>
+      '↑↓ 选择 · Enter 打开 · Ctrl+Enter 查看全部 · Esc 关闭';
 
   @override
   String get languageSettingTitle => '应用语言';

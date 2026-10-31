@@ -75,6 +75,24 @@ const kShellHomeDestination = SettingsKey<String>(
   category: SyncCategory.settings,
 );
 
+/// 全局搜索的来源过滤（跟人走）：`''` = 全部来源，否则是渠道 key。
+///
+/// 与发现页渠道完全解耦：搜索来源只在搜索 chips 里选择，且跨重启记住。
+const kSearchSourceFilter = SettingsKey<String>(
+  'search_source_filter',
+  '',
+  category: SyncCategory.settings,
+);
+
+/// 发现页当前渠道（跟人走）：`''` = 使用内置默认渠道。
+///
+/// 只决定热榜 / 歌单的来源，不联动搜索来源。
+const kDiscoverChannelKey = SettingsKey<String>(
+  'discover_channel_key',
+  '',
+  category: SyncCategory.settings,
+);
+
 /// 软件内快捷键总开关（窗口聚焦时生效；默认开）。
 const kShortcutsEnabled = SettingsKey<bool>(
   'shortcuts_enabled',
@@ -253,6 +271,8 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kShellNavOrder,
   kShellNavHidden,
   kShellHomeDestination,
+  kSearchSourceFilter,
+  kDiscoverChannelKey,
   kShortcutsEnabled,
   kGlobalShortcutsEnabled,
   kShortcutBindings,
