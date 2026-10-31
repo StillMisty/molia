@@ -362,6 +362,11 @@ class _FakeRegistry implements SourceRegistry {
   };
 
   @override
+  List<String> get orderedChannelKeys => [
+    for (final descriptor in _descriptors) descriptor.key,
+  ];
+
+  @override
   MusicSource? byKey(String key) => null;
 
   @override

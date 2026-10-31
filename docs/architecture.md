@@ -708,26 +708,39 @@
   当前来源）+ 歌词 / 音频两个 tab；两个 tab 共用
   `lib/widgets/source_swap/source_swap_chrome.dart` 的搜索栏 / 来源 chips /
   状态条 / 分组标题 / 底部操作条。搜索栏两边都可编辑，默认关键词仍由
-  `SourceSwapStrategies` 生成，提交或清空时重搜；来源固定为「全部 + 所有可搜索
-  来源」，chips 单行横向滚动、默认全部、按来源分组（小节标题）展示，切单源只
-  平铺该组；「全部」每组最多预览 3 条，超出时标题右侧「查看全部」一键切到该
-  来源查看完整结果。来源筛选由各自会话持有（音频 `SourceSwapProvider` / 歌词
-  `LyricsSourceSearchSession` 的 `activeSourceKey`，空串 = 全部），视图只渲染
-  并转发 `selectSource`，切 tab / 重建不丢筛选。列表行统一走
-  `TrackRow`（歌词结果无封面时用 `placeholderIcon` 占前导槽），不再用
-  `M3EListItem`。两个 tab 都带 `AutomaticKeepAliveClientMixin`：PageView 会销毁
-  离屏页，不保活会清掉音频会话 / 歌词搜索结果。切 tab 统一收起键盘。无来源 /
-  关键词为空 / 当前可见列表无结果且无选中时只保留空态与下一步提示，搜索栏、
-  来源 chips 与底部操作条一起隐藏；底部操作条只保留确认按钮（未选中禁用），
-  选中状态由列表行勾选反馈。写入 / 取词期间锁住搜索、筛选与候选点击，
-  避免异步结果与界面选中项错位。来源标签只从 `searchableSources` 解析；停用 /
-  非搜索脚本不在其中时 `lyricsProviderLabel` 回退源 key（已知限制）。
+  `SourceSwapStrategies` 生成，提交或清空时重搜；进入歌词 tab 不自动聚焦、
+  不全选，光标停在预填关键词末尾（搜索仍自动发起）。来源固定为「全部 + 所有
+  已启用来源」，chips 单行横向滚动、默认全部；歌词来源顺序跟随渠道管理的
+  `orderedChannelKeys`（已知渠道按表、未知渠道随后、LRCLIB 等非渠道来源固定在
+  最后）。按来源分组（小节标题）展示，切单源只平铺该组；歌词每源抓 10 条，
+  「全部」每组只预览前 3 条，超出时标题右侧「查看全部」一键切到该来源查看完整
+  10 条。组内最佳匹配（歌名 / 歌手 / 专辑 / 时长）排第一，「全部」模式只标记
+  一个全局最佳，单源模式只标记该来源最佳。来源筛选由各自会话持有（音频
+  `SourceSwapProvider` / 歌词 `LyricsSourceSearchSession` 的 `activeSourceKey`，
+  空串 = 全部），视图只渲染并转发 `selectSource`，切 tab / 重建不丢筛选。列表行
+  统一走 `TrackRow`（歌词结果无封面时用 `placeholderIcon` 占前导槽，命中时长
+  显示在行尾），不再用 `M3EListItem`。两个 tab 都带
+  `AutomaticKeepAliveClientMixin`：PageView 会销毁离屏页，不保活会清掉音频
+  会话 / 歌词搜索结果。切 tab 统一收起键盘。无来源时只保留空态与下一步提示，
+  搜索栏、来源 chips 与底部操作条一起隐藏；关键词为空时保留搜索栏、隐藏 chips
+  与底部操作条。歌词侧当前筛选无可见结果时保留搜索栏 / chips 与空态、只隐藏
+  底部操作条；音频侧保留既有「已选中项仍可确认」的行为。歌词底部操作条只在
+  当前筛选有可见结果时出现，确认按钮只在选中行当前可见时可用（选中项跨筛选
+  保留，不可见时预览与确认一起隐藏 / 禁用，切回恢复），选中状态由列表行勾选
+  反馈。写入 / 取词期间锁住搜索、筛选与候选点击，避免异步结果与界面选中项
+  错位。来源标签只从 `searchableSources` 解析；停用 / 非搜索脚本不在其中时
+  `lyricsProviderLabel` 回退源 key（已知限制）。
   歌词侧为 `LyricsSourceSearchView` + `LyricsSourceSearchSession`（按来源策略
-  叠加不可用原因 / 最佳匹配 / 取词写缓存，逐源搜索 / 查询代际 / 失败重试 /
+  叠加不可用原因 / 最佳匹配 / 预览 / 取词写缓存，逐源搜索 / 查询代际 / 失败重试 /
   选中态委托同一个 **Source fan-out session**，视图只渲染与提示）：来源筛选
   也由会话的 `activeSourceKey` 持有（空串 = 全部，跨搜索 / 选中保留），视图只
-  读筛选并转发 `selectSource`；点结果只
-  选中，底部「使用此歌词」才取词 + `saveManual` + pop；音频侧为
+  读筛选并转发 `selectSource`；点结果自动拉取该结果的前 3 行歌词预览（LRC 走
+  `parseLyrics`，纯文本按行过滤空行与 `[ti:]` 等元数据），状态分 loading /
+  ready / empty / failed 且失败可重试；预览按 provider + songId 缓存，快速连续
+  点选按请求代际丢弃旧结果，面板固定在列表与底栏之间且只在选中行可见时显示。
+  确认「使用此歌词」优先复用已完成的预览 payload，预览在途则等待，预览失败 /
+  为空时重新取词一次；点结果只选中，底部「使用此歌词」才写 `saveManual` + pop；
+  音频侧为
   `SourceSwapView`：点候选即试听，底部确认换源；
   入口：歌曲信息页「换源」
   默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /

@@ -349,11 +349,12 @@ void main() {
     ], reason: '全部模式拼接顺序与分组一致');
   });
 
-  test('searchableSources：按注册表顺序给出可搜索源', () {
+  test('searchableSources / orderedChannelKeys：分别给可搜索源与全部渠道顺序', () {
     final provider = buildProvider();
     addTearDown(provider.dispose);
 
     expect(provider.searchableSources.map((item) => item.key), ['kg', 'tx']);
+    expect(provider.orderedChannelKeys, ['kg', 'tx']);
   });
 
   test('apply（列表）：原位替换 + 队列命中跟随', () async {

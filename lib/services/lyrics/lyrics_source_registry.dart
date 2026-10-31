@@ -27,7 +27,8 @@ class LyricsSourceRegistry {
   factory LyricsSourceRegistry.forSession(BiliSession session) =>
       LyricsSourceRegistry(_standardStrategies(session));
 
-  /// 声明顺序即换源页的分组顺序（未置顶时）。
+  /// 来源声明顺序：自动回退的并行竞速顺序，也是歌词换源的默认顺序
+  /// （换源页最终按渠道管理的 `orderedChannelKeys` 重排）。
   final List<LyricsSourceStrategy> strategies;
 
   /// [LyricsService] 的名字搜索回退列表（并行竞速，首个非空即用）。
@@ -35,16 +36,6 @@ class LyricsSourceRegistry {
     for (final strategy in strategies)
       if (strategy.autoFallback) strategy.provider,
   ];
-
-  /// 换源页「歌词」tab 的来源：`preferredKey` 同源置顶，其余保持声明顺序。
-  List<LyricsSourceStrategy> manualSources({String? preferredKey}) {
-    final preferred = (preferredKey ?? '').trim();
-    if (preferred.isEmpty) return strategies;
-    return [
-      ...strategies.where((strategy) => strategy.channelKey == preferred),
-      ...strategies.where((strategy) => strategy.channelKey != preferred),
-    ];
-  }
 
   /// 标准来源集合（渠道顺序取 [BuiltinPlatforms.keys]，LRCLIB 兜底放最后）。
   ///

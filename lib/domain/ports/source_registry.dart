@@ -17,6 +17,12 @@ abstract interface class SourceRegistry {
   /// 但它们的歌词来源仍然可用）。
   Set<String> get enabledChannelKeys;
 
+  /// 按渠道管理顺序排列的全部渠道 key（含已停用项）。
+  ///
+  /// 顺序与音源管理页一致；消费方需要按渠道顺序展示非搜索来源（如歌词
+  /// 换源）时用它，不要再从 [descriptors] 推导。
+  List<String> get orderedChannelKeys;
+
   MusicSource? byKey(String key);
 
   /// 按 `track.id.sourceKey` 查找。

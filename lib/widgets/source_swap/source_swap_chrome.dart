@@ -28,7 +28,6 @@ class SourceSwapSearchField extends StatelessWidget {
     this.focusNode,
     this.onChanged,
     this.onSubmitted,
-    this.autofocus = false,
     this.enabled = true,
   });
 
@@ -36,7 +35,6 @@ class SourceSwapSearchField extends StatelessWidget {
   final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
-  final bool autofocus;
   final bool enabled;
 
   @override
@@ -45,7 +43,6 @@ class SourceSwapSearchField extends StatelessWidget {
       controller: controller,
       focusNode: focusNode,
       hintText: _l10n(context).sourceSwapSearchHint,
-      autofocus: autofocus,
       enabled: enabled,
       onChanged: onChanged,
       onSubmitted: onSubmitted,

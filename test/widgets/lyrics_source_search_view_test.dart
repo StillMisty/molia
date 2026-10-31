@@ -10,6 +10,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:molia/domain/models/source.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
@@ -41,17 +42,28 @@ class _FakeLyricsService extends LyricsService {
 }
 
 class _FakeLyricProvider extends LyricProvider {
-  _FakeLyricProvider(this.name, {this.matches = const [], this.payload});
+  _FakeLyricProvider(
+    this.name, {
+    this.matches = const [],
+    this.payload,
+    this.fetchError,
+  });
 
   @override
   final String name;
 
   final List<SongMatch> matches;
-  final LyricsPayload? payload;
+  LyricsPayload? payload;
+  Object? fetchError;
   int searchCalls = 0;
+  int fetchCalls = 0;
+  int? lastSearchLimit;
 
-  /// 非空时取词挂起，直到测试放行（验证忙碌锁）。
+  /// 非空时取词挂起，直到测试放行（验证忙碌锁 / 预览加载态）。
   Completer<void>? fetchGate;
+
+  /// 按 songId 覆盖 payload（预览与确认分别取不同结果时用）。
+  final Map<String, LyricsPayload?> payloads = {};
 
   /// 实际取词的 match id（验证写入的是确认时的旧选中项）。
   final List<String> fetchedSongIds = [];
@@ -69,15 +81,20 @@ class _FakeLyricProvider extends LyricProvider {
     int limit = 3,
   }) async {
     searchCalls++;
+    lastSearchLimit = limit;
     return matches.take(limit).toList();
   }
 
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async {
+    fetchCalls++;
     fetchedSongIds.add(match.songId);
     final gate = fetchGate;
     if (gate != null) await gate.future;
-    return payload;
+    if (fetchError != null) throw fetchError!;
+    return payloads.containsKey(match.songId)
+        ? payloads[match.songId]
+        : payload;
   }
 
   @override
@@ -94,6 +111,8 @@ void main() {
     required List<LyricsSourceStrategy> sources,
     required LyricsProvider lyricsProvider,
     Set<String>? enabledChannelKeys,
+    List<SourceDescriptor> sourceDescriptors = const [],
+    List<String>? channelOrder,
     Locale locale = const Locale('zh'),
   }) async {
     tester.view.physicalSize = const Size(800, 1200);
@@ -120,8 +139,9 @@ void main() {
               trackId: 'bili:1',
               lyricsProvider: lyricsProvider,
               sources: sources,
+              sourceDescriptors: sourceDescriptors,
               enabledChannelKeys: enabledChannelKeys,
-              autofocusSearch: false,
+              channelOrder: channelOrder,
             ),
           ),
         ),
@@ -326,6 +346,222 @@ void main() {
     );
   });
 
+  testWidgets('来源 chips 顺序跟随 channelOrder，LRCLIB 固定在最后', (tester) async {
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+    final lrclib = _FakeLyricProvider('lrclib');
+    final bili = _FakeLyricProvider('bili');
+    final wy = _FakeLyricProvider('netease');
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [SongMatch(songId: '1', title: '晴天 QQ', artist: '周杰伦')],
+    );
+
+    await pumpView(
+      tester,
+      sources: [
+        // 声明顺序故意打乱：lrclib 在前、tx 在前，都不能决定展示顺序。
+        LyricsSourceStrategy(
+          channelKey: 'lrclib',
+          provider: lrclib,
+          isChannel: false,
+        ),
+        LyricsSourceStrategy(channelKey: 'bili', provider: bili),
+        LyricsSourceStrategy(channelKey: 'wy', provider: wy),
+        LyricsSourceStrategy(channelKey: 'tx', provider: qq),
+      ],
+      // 顺序表只给已知渠道；bili 不在表里，保持声明顺序排在已知渠道之后。
+      channelOrder: const ['wy', 'tx'],
+      lyricsProvider: lyricsProvider,
+    );
+
+    double xOf(String key) =>
+        tester.getTopLeft(find.byKey(ValueKey('sourceSwapSourceChip-$key'))).dx;
+    expect(xOf('wy'), lessThan(xOf('tx')));
+    expect(xOf('tx'), lessThan(xOf('bili')));
+    expect(xOf('bili'), lessThan(xOf('lrclib')), reason: 'LRCLIB 固定在渠道之后');
+  });
+
+  testWidgets('结果行显示匹配时长；未知时长不占位', (tester) async {
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [
+        SongMatch(
+          songId: 'timed',
+          title: '晴天 有时长',
+          artist: '周杰伦',
+          duration: const Duration(minutes: 4, seconds: 5),
+        ),
+        SongMatch(songId: 'untimed', title: '晴天 无时长', artist: '周杰伦'),
+      ],
+    );
+
+    await pumpView(
+      tester,
+      sources: [LyricsSourceStrategy(channelKey: 'tx', provider: qq)],
+      lyricsProvider: lyricsProvider,
+    );
+
+    expect(find.text('4:05'), findsOneWidget);
+    expect(find.text('0:00'), findsNothing);
+    expect(qq.lastSearchLimit, 10);
+    final timedRow = tester.widget<TrackRow>(
+      find.ancestor(of: find.text('晴天 有时长'), matching: find.byType(TrackRow)),
+    );
+    expect(timedRow.model.durationMs, 245000);
+    final untimedRow = tester.widget<TrackRow>(
+      find.ancestor(of: find.text('晴天 无时长'), matching: find.byType(TrackRow)),
+    );
+    expect(untimedRow.model.durationMs, isNull);
+  });
+
+  testWidgets('选中后预览 loading → ready，LRC 只展示前 3 行', (tester) async {
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+    final gate = Completer<void>();
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [SongMatch(songId: '1', title: '晴天', artist: '周杰伦')],
+      payload: const LyricsPayload(
+        lyric:
+            '[ti:晴天]\n'
+            '[00:01.00]第一句\n'
+            '[00:02.00]第二句\n'
+            '[00:03.00]第三句\n'
+            '[00:04.00]第四句',
+      ),
+    )..fetchGate = gate;
+
+    await pumpView(
+      tester,
+      sources: [LyricsSourceStrategy(channelKey: 'tx', provider: qq)],
+      lyricsProvider: lyricsProvider,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('lyricsSourceRow-qq-1')));
+    await tester.pump();
+
+    expect(find.byKey(const Key('lyricsSourcePreview')), findsOneWidget);
+    expect(find.text('歌词预览'), findsOneWidget);
+    expect(find.text('正在获取歌词...'), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('第一句\n第二句\n第三句'), findsOneWidget);
+    expect(find.textContaining('第四句'), findsNothing);
+  });
+
+  testWidgets('预览失败：显示失败文案，重试后展示歌词', (tester) async {
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [SongMatch(songId: '1', title: '晴天', artist: '周杰伦')],
+      fetchError: StateError('preview down'),
+    );
+
+    await pumpView(
+      tester,
+      sources: [LyricsSourceStrategy(channelKey: 'tx', provider: qq)],
+      lyricsProvider: lyricsProvider,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('lyricsSourceRow-qq-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('获取歌词失败，换一个来源试试。'), findsOneWidget);
+    final retry = tester.widget<M3EIconButton>(
+      find.byKey(const Key('lyricsSourcePreviewRetry')),
+    );
+    expect(retry.semanticLabel, '重试');
+    expect((retry.icon as Icon).icon, Icons.refresh_rounded);
+
+    qq
+      ..fetchError = null
+      ..payload = const LyricsPayload(lyric: '第一行\n第二行\n第三行');
+    await tester.tap(find.byKey(const Key('lyricsSourcePreviewRetry')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第一行\n第二行\n第三行'), findsOneWidget);
+    expect(find.text('获取歌词失败，换一个来源试试。'), findsNothing);
+    expect(qq.fetchCalls, 2);
+  });
+
+  testWidgets('底栏只在当前筛选有可见结果时出现；选中不可见时确认禁用', (tester) async {
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [SongMatch(songId: '1', title: '晴天 QQ', artist: '周杰伦')],
+      payload: const LyricsPayload(lyric: '[00:01.00]晴天'),
+    );
+    final external = _FakeLyricProvider(
+      'external',
+      matches: [SongMatch(songId: 'ext-1', title: '外部结果', artist: '周杰伦')],
+    );
+    final empty = _FakeLyricProvider('empty');
+
+    await pumpView(
+      tester,
+      sources: [
+        LyricsSourceStrategy(channelKey: 'tx', provider: qq),
+        LyricsSourceStrategy(
+          channelKey: 'external',
+          provider: external,
+          isChannel: false,
+        ),
+        LyricsSourceStrategy(
+          channelKey: 'empty',
+          provider: empty,
+          isChannel: false,
+        ),
+      ],
+      lyricsProvider: lyricsProvider,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('lyricsSourceRow-qq-1')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceSwapActionBar), findsOneWidget);
+    expect(
+      tester
+          .widget<M3EButton>(find.widgetWithText(M3EButton, '使用此歌词'))
+          .onPressed,
+      isNotNull,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('sourceSwapSourceChip-external')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceSwapActionBar), findsOneWidget);
+    expect(find.byKey(const Key('lyricsSourcePreview')), findsNothing);
+    expect(
+      tester
+          .widget<M3EButton>(find.widgetWithText(M3EButton, '使用此歌词'))
+          .onPressed,
+      isNull,
+      reason: '选中项不可见时不能确认',
+    );
+
+    await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-empty')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SourceSwapActionBar), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-tx')));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(find.byKey(const Key('lyricsSourcePreview')), findsOneWidget);
+    expect(
+      tester
+          .widget<M3EButton>(find.widgetWithText(M3EButton, '使用此歌词'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
   testWidgets('停用渠道：歌词来源隐藏；非渠道来源不受开关影响', (tester) async {
     final qq = _FakeLyricProvider(
       'qq',
@@ -515,7 +751,8 @@ void main() {
     );
 
     await tester.tap(find.text('晴天 A'));
-    await tester.pumpAndSettle();
+    // 预览还挂在 fetchGate 上：loading 动画不会 settle，只推进一帧确认选中。
+    await tester.pump();
     expect(rowSelected(tester, '晴天 A'), isTrue);
 
     await tester.tap(find.text('使用此歌词'));

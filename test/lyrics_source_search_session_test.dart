@@ -57,8 +57,11 @@ class _FakeLyricProvider extends LyricProvider {
   final String name;
 
   final List<SongMatch> matches;
-  final LyricsPayload? payload;
-  final Object? fetchError;
+  LyricsPayload? payload;
+  Object? fetchError;
+
+  /// 按 songId 覆盖 payload（预览快速切换时验证旧结果被丢弃）。
+  final Map<String, LyricsPayload?> payloads = {};
 
   /// 非空时搜索直接抛错（验证失败来源与重试）。
   Object? searchError;
@@ -92,7 +95,9 @@ class _FakeLyricProvider extends LyricProvider {
     final gate = fetchGate;
     if (gate != null) await gate.future;
     if (fetchError != null) throw fetchError!;
-    return payload;
+    return payloads.containsKey(match.songId)
+        ? payloads[match.songId]
+        : payload;
   }
 
   @override
@@ -133,20 +138,27 @@ void main() {
     List<LyricsSourceStrategy> sources, {
     LyricsService? service,
     Set<String>? enabledChannelKeys,
+    List<String>? channelOrder,
+    String? album,
+    Duration? duration,
+    bool disposeOnTearDown = true,
   }) {
     final lyricsProvider = LyricsProvider(
       service: service ?? _FakeLyricsService(),
     );
-    addTearDown(lyricsProvider.dispose);
+    if (disposeOnTearDown) addTearDown(lyricsProvider.dispose);
     final session = LyricsSourceSearchSession(
       strategies: sources,
       enabledChannelKeys: enabledChannelKeys,
+      channelOrder: channelOrder,
       lyricsProvider: lyricsProvider,
       trackId: 'bili:1',
       trackTitle: '晴天',
       trackArtist: '周杰伦',
+      trackAlbum: album,
+      trackDuration: duration,
     );
-    addTearDown(session.dispose);
+    if (disposeOnTearDown) addTearDown(session.dispose);
     return session;
   }
 
@@ -265,7 +277,7 @@ void main() {
     expect(session.stateOf('qq'), ProviderSearchState.loaded);
   });
 
-  test('选中只切选中态；确认后才规范化并写入手动歌词', () async {
+  test('选中拉预览但不写缓存；确认复用预览 payload 后规范化写入手动歌词', () async {
     final service = _FakeLyricsService();
     final qq = _FakeLyricProvider(
       'qq',
@@ -284,13 +296,15 @@ void main() {
     session.select(result);
 
     expect(session.isSelected(result), isTrue);
-    expect(qq.fetchCalls, 0, reason: '点选不取词');
     expect(service.saved, isEmpty, reason: '点选不写缓存');
+    await Future<void>.delayed(Duration.zero);
+    expect(session.preview?.status, LyricsPreviewStatus.ready);
+    expect(qq.fetchCalls, 1, reason: '点选只拉预览');
 
     final outcome = await session.applySelected();
 
     expect(outcome, isA<LyricsSelectionSuccess>());
-    expect(qq.fetchCalls, 1);
+    expect(qq.fetchCalls, 1, reason: '确认复用预览 payload，不重复取词');
     final selection = (outcome as LyricsSelectionSuccess).selection;
     expect(selection.lyrics, '[00:01.00]晴天');
     expect(selection.provider, 'qq');
@@ -594,6 +608,293 @@ void main() {
       isNull,
       reason: '没有结果的来源没有最佳匹配',
     );
+  });
+
+  test('每源抓 10 条；最佳匹配排组内第一并进入全部模式前 3 条预览', () async {
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [
+        for (var index = 0; index < 12; index++)
+          if (index == 3)
+            SongMatch(
+              songId: 'best',
+              title: '晴天',
+              artist: '周杰伦',
+              album: '叶惠美',
+              duration: const Duration(minutes: 4, seconds: 29),
+            )
+          else
+            SongMatch(
+              songId: 'qq-$index',
+              title: '晴天 翻唱$index',
+              artist: '某UP主',
+              duration: Duration(minutes: 3, seconds: index),
+            ),
+      ],
+    );
+    final session = buildSession(
+      [strategy(qq)],
+      album: '叶惠美',
+      duration: const Duration(minutes: 4, seconds: 29),
+    );
+
+    await session.search('晴天 周杰伦');
+
+    expect(session.resultsOf('qq'), hasLength(10), reason: '每源最多抓 10 条');
+    expect(
+      session.resultsOf('qq').first.match.songId,
+      'best',
+      reason: '最佳匹配排到组内第一',
+    );
+    final previewResults = session.entries
+        .where((entry) => entry.type == LyricsSearchEntryType.result)
+        .toList();
+    expect(previewResults, hasLength(3), reason: '全部模式每组只预览前 3 条');
+    expect(previewResults.first.result!.match.songId, 'best');
+    expect(session.displayedCountOf('qq'), 3);
+    expect(session.hasMoreOf(session.strategies.single), isTrue);
+
+    session.selectSource('qq');
+    expect(session.displayedCountOf('qq'), 10);
+    expect(
+      session.hasMoreOf(session.strategies.single),
+      isFalse,
+      reason: '单源模式展示完整结果，不再有「查看全部」',
+    );
+  });
+
+  test('全部模式只标记一个全局最佳；单源模式只标记该来源最佳', () async {
+    final qqBest = SongMatch(
+      songId: 'qq-best',
+      title: '晴天',
+      artist: '周杰伦',
+      duration: const Duration(minutes: 4, seconds: 29),
+    );
+    final biliBest = SongMatch(
+      songId: 'bili-best',
+      title: '晴天',
+      artist: '周杰伦',
+      duration: const Duration(minutes: 4, seconds: 29),
+    );
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [
+        SongMatch(songId: 'qq-other', title: '晴天 翻唱', artist: '某UP主'),
+        qqBest,
+      ],
+    );
+    final bili = _FakeLyricProvider(
+      'bili',
+      matches: [
+        SongMatch(songId: 'bili-other', title: '晴天 现场', artist: '某UP主'),
+        biliBest,
+      ],
+    );
+    final session = buildSession([
+      strategy(qq, channelKey: 'tx'),
+      strategy(bili, channelKey: 'bili'),
+    ]);
+
+    await session.search('晴天 周杰伦');
+
+    expect(session.bestMatchOf(qq)!.match, same(qqBest));
+    expect(session.bestMatchOf(bili)!.match, same(biliBest));
+    expect(
+      session.isBestMatch(session.resultsOf('qq').first),
+      isTrue,
+      reason: '全部模式只有一个全局最佳',
+    );
+    expect(
+      session.allResults.where((result) => session.isBestMatch(result)).length,
+      1,
+    );
+
+    session.selectSource('tx');
+    expect(session.isBestMatch(session.resultsOf('qq').first), isTrue);
+    expect(session.isBestMatch(session.resultsOf('bili').first), isFalse);
+
+    session.selectSource('bili');
+    expect(session.isBestMatch(session.resultsOf('bili').first), isTrue);
+    expect(session.isBestMatch(session.resultsOf('qq').first), isFalse);
+  });
+
+  test('来源顺序跟随 channelOrder：已知渠道按表，未知渠道随后，非渠道最后', () {
+    LyricsSourceStrategy source(
+      String name,
+      String key, {
+      bool channel = true,
+    }) =>
+        strategy(_FakeLyricProvider(name), channelKey: key, isChannel: channel);
+
+    final declared = [
+      source('lrclib', 'lrclib', channel: false),
+      source('bili', 'bili'),
+      source('netease', 'wy'),
+      source('qq', 'tx'),
+      source('custom', 'custom'),
+    ];
+
+    final first = buildSession(declared, channelOrder: ['wy', 'tx', 'kg']);
+    expect(first.strategies.map((item) => item.channelKey), [
+      'wy',
+      'tx',
+      'bili',
+      'custom',
+      'lrclib',
+    ]);
+
+    final second = buildSession(declared, channelOrder: ['bili', 'wy']);
+    expect(second.strategies.map((item) => item.channelKey), [
+      'bili',
+      'wy',
+      'tx',
+      'custom',
+      'lrclib',
+    ], reason: '重新提供渠道顺序时按新顺序排列，非渠道仍最后');
+  });
+
+  test('预览：loading → ready、快速切换丢弃旧结果、缓存按 provider+songId 复用', () async {
+    final gate = Completer<void>();
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [
+        SongMatch(songId: 'A', title: '晴天 A', artist: '周杰伦'),
+        SongMatch(songId: 'B', title: '晴天 B', artist: '周杰伦'),
+      ],
+    )..fetchGate = gate;
+    qq.payloads['A'] = const LyricsPayload(
+      lyric:
+          '[ti:晴天]\n'
+          '[00:01.00]第一句\n'
+          '[00:02.00]第二句\n'
+          '[00:03.00]第三句\n'
+          '[00:04.00]第四句',
+    );
+    qq.payloads['B'] = const LyricsPayload(
+      lyric: '[ti:晴天]\n[ar:周杰伦]\n\n第一行\n第二行\n第三行\n第四行',
+    );
+    final session = buildSession([strategy(qq)]);
+
+    await session.search('晴天 周杰伦');
+    final results = session.resultsOf('qq');
+    session.select(results.first);
+    expect(session.preview?.status, LyricsPreviewStatus.loading);
+    expect(session.isSelectedVisible, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(qq.fetchCalls, 1, reason: 'A 的预览请求已经发出');
+
+    // 第一段请求还没回来就点另一条：只保留 B 的预览。
+    session.select(results.last);
+    gate.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(session.preview?.status, LyricsPreviewStatus.ready);
+    expect(session.preview!.lines, ['第一行', '第二行', '第三行']);
+    expect(qq.fetchCalls, 2, reason: '两条都发过请求，但只有当前选中项落地');
+
+    // B 已缓存：点回来不再请求；A 的结果被代际丢弃，需要重新取词。
+    session.select(results.last);
+    expect(session.preview!.lines, ['第一行', '第二行', '第三行']);
+    expect(qq.fetchCalls, 2);
+    session.select(results.first);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(session.preview!.lines, ['第一句', '第二句', '第三句']);
+    expect(qq.fetchCalls, 3);
+  });
+
+  test('预览空：状态 empty，确认时重新取词一次', () async {
+    final service = _FakeLyricsService();
+    final qq = _FakeLyricProvider('qq', matches: [sunnyDay('empty')]);
+    final session = buildSession([strategy(qq)], service: service);
+
+    await session.search('晴天 周杰伦');
+    session.select(session.resultsOf('qq').single);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(session.preview?.status, LyricsPreviewStatus.empty);
+    final outcome = await session.applySelected();
+
+    expect(outcome, isA<LyricsSelectionNotFound>());
+    expect(qq.fetchCalls, 2, reason: '预览为空时确认重新取词一次');
+    expect(service.saved, isEmpty);
+  });
+
+  test('预览失败：状态 failed、重试成功；失败后确认也会重新取词', () async {
+    final service = _FakeLyricsService();
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [SongMatch(songId: 'A', title: '晴天', artist: '周杰伦')],
+      fetchError: StateError('preview down'),
+    );
+    final session = buildSession([strategy(qq)], service: service);
+
+    await session.search('晴天 周杰伦');
+    session.select(session.resultsOf('qq').single);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(session.preview?.status, LyricsPreviewStatus.failed);
+
+    qq
+      ..fetchError = null
+      ..payload = const LyricsPayload(lyric: '[00:01.00]晴天');
+    session.retryPreview();
+    expect(session.preview?.status, LyricsPreviewStatus.loading);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(session.preview?.status, LyricsPreviewStatus.ready);
+    expect(qq.fetchCalls, 2);
+
+    // 另一轮：失败状态下直接确认，确认内部重新取词一次。
+    final broken = _FakeLyricProvider(
+      'broken',
+      matches: [SongMatch(songId: 'B', title: '晴天 B', artist: '周杰伦')],
+      fetchError: StateError('preview down'),
+    );
+    final brokenSession = buildSession([strategy(broken)], service: service);
+    await brokenSession.search('晴天 周杰伦');
+    brokenSession.select(brokenSession.resultsOf('broken').single);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(brokenSession.preview?.status, LyricsPreviewStatus.failed);
+
+    broken
+      ..fetchError = null
+      ..payload = const LyricsPayload(lyric: '[00:01.00]晴天');
+    final outcome = await brokenSession.applySelected();
+    expect(outcome, isA<LyricsSelectionSuccess>());
+    expect(broken.fetchCalls, 2);
+  });
+
+  test('dispose 后预览请求晚到：不通知、不抛错', () async {
+    final gate = Completer<void>();
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [sunnyDay('A')],
+      payload: const LyricsPayload(lyric: '[00:01.00]晴天'),
+    )..fetchGate = gate;
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+    final session = LyricsSourceSearchSession(
+      strategies: [strategy(qq)],
+      lyricsProvider: lyricsProvider,
+      trackId: 'bili:1',
+      trackTitle: '晴天',
+      trackArtist: '周杰伦',
+    );
+    await session.search('晴天 周杰伦');
+    session.select(session.resultsOf('qq').single);
+    await Future<void>.delayed(Duration.zero);
+    expect(qq.fetchCalls, 1, reason: '预览请求已经发出');
+
+    session.dispose();
+    gate.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(qq.fetchCalls, 1, reason: '请求已经发出，但结果被 dispose 丢弃');
   });
 
   test('空查询：清空查询与来源状态，并丢弃在途结果', () async {

@@ -207,6 +207,11 @@ class SourceSwapProvider extends ChangeNotifier {
   /// `descriptors` 里，但用户没有停用它们，歌词来源仍应保留。
   Set<String> get enabledChannelKeys => _sourceRegistry.enabledChannelKeys;
 
+  /// 全部渠道按渠道管理顺序排列（含停用 / 不可搜索的内置平台）。
+  ///
+  /// 歌词换源的 chips 顺序用它，不能用只含可搜索源的 [searchableSources]。
+  List<String> get orderedChannelKeys => _sourceRegistry.orderedChannelKeys;
+
   /// 空串 = 全部来源。
   String get activeSourceKey => _activeSourceKey;
   Track? get selected => _searchSession.selected;

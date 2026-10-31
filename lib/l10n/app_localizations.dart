@@ -1280,6 +1280,12 @@ abstract class AppLocalizations {
   /// **'Best match'**
   String get lyricsBestMatch;
 
+  /// No description provided for @lyricsPreviewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics preview'**
+  String get lyricsPreviewTitle;
+
   /// No description provided for @playingFrom.
   ///
   /// In en, this message translates to:

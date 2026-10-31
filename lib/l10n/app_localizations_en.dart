@@ -642,6 +642,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsBestMatch => 'Best match';
 
   @override
+  String get lyricsPreviewTitle => 'Lyrics preview';
+
+  @override
   String get playingFrom => 'PLAYING FROM';
 
   @override

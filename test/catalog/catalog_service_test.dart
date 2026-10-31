@@ -161,6 +161,9 @@ class _FakeRegistry implements SourceRegistry {
   Set<String> get enabledChannelKeys => _sources.keys.toSet();
 
   @override
+  List<String> get orderedChannelKeys => _sources.keys.toList();
+
+  @override
   MusicSource? byKey(String key) => _sources[key];
 
   @override
