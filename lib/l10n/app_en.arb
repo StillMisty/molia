@@ -576,18 +576,7 @@
   "sourceSwapEmptyHint": "Try another keyword or source",
   "sourceSwapNoSourcesHint": "Enable a source to see searchable platforms here",
   "sourceSwapLyricsConfirm": "Use these lyrics",
-  "sourceSwapSelected": "Selected: {title} · {source}",
-  "@sourceSwapSelected": {
-    "placeholders": {
-      "title": {
-        "type": "String"
-      },
-      "source": {
-        "type": "String"
-      }
-    }
-  },
-  "sourceSwapPickOne": "Pick an item to continue",
+  "sourceSwapViewAll": "View all",
   "lyricsSourceNoSources": "No lyric sources available",
   "lyricsSourceNoSourcesHint": "Enable a platform to see lyric sources here",
   "playlistAddedTo": "Added to “{name}”",

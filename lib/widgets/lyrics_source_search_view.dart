@@ -191,7 +191,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     final entries = _session.entriesFor(
       _selectedSourceKey.isEmpty ? null : _selectedSourceKey,
     );
-    // 空态只留空态 + 下一步；已选中但切到空源时仍保留底栏，摘要还能确认。
+    // 空态只留空态 + 下一步；已选中但切到空源时仍保留底栏，按钮还能确认。
     final showFooter =
         hasStrategies &&
         hasQuery &&
@@ -265,13 +265,9 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
         Expanded(child: _buildBody(context, l10n, strategies, entries)),
         if (showFooter)
           SourceSwapActionBar(
-            selectedTitle: selected?.match.title,
-            selectedSource: selected == null
-                ? null
-                : _sourceLabelOf(l10n, selected),
             confirmLabel: l10n.sourceSwapLyricsConfirm,
             busy: busy,
-            onConfirm: _confirmSelected,
+            onConfirm: selected == null ? null : _confirmSelected,
           ),
       ],
     );
@@ -415,25 +411,6 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
       }
     }
     return null;
-  }
-
-  /// 已选摘要的来源名：按 strategy.channelKey 查（provider 名可能不等于
-  /// 渠道 key，例如通用适配器 / 脚本来源），查不到才回退 provider 名。
-  String _sourceLabelOf(AppLocalizations l10n, LyricsSearchResult result) {
-    for (final strategy in _session.strategies) {
-      if (strategy.provider.name == result.provider.name) {
-        return lyricsProviderLabel(
-          l10n,
-          widget.sourceDescriptors,
-          strategy.channelKey,
-        );
-      }
-    }
-    return lyricsProviderLabel(
-      l10n,
-      widget.sourceDescriptors,
-      result.provider.name,
-    );
   }
 
   bool _isStrategyLoading(String channelKey) {

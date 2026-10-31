@@ -194,6 +194,12 @@ void main() {
       reason: '没有结果的来源仍可筛选',
     );
     expect(find.text('Title（kg）'), findsOneWidget);
+    expect(find.text('点选一项后确认'), findsNothing, reason: '底栏不再显示未选中提示');
+    expect(
+      tester.widget<M3EButton>(find.widgetWithText(M3EButton, '换源')).onPressed,
+      isNull,
+      reason: '未选中时确认按钮禁用',
+    );
 
     // 点候选 = 选中 + 立即试听（单曲「换源试听」上下文）。
     await tester.tap(find.text('Title（kg）'));
@@ -201,6 +207,11 @@ void main() {
     expect(backend.calls, contains('load'));
     expect(backend.lastRequest?.context?.name, '换源试听');
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(
+      tester.widget<M3EButton>(find.widgetWithText(M3EButton, '换源')).onPressed,
+      isNotNull,
+      reason: '选中后确认按钮可用',
+    );
 
     await tester.tap(find.widgetWithText(M3EButton, '换源'));
     await tester.pumpAndSettle();
@@ -369,6 +380,60 @@ void main() {
     expect(swap.activeSourceKey, 'kg');
   });
 
+  testWidgets('全部模式每源最多 3 条；查看全部切到该渠道', (tester) async {
+    final playlistId = await seedPlaylist(tester);
+    final seed = library.trackFromPlaylistTrack(
+      (await repository.listPlaylistTracks(playlistId)).single,
+    );
+    kg.items = [
+      for (var index = 0; index < 5; index++)
+        sourceTrack('kg', '${100 + index}', title: 'K$index'),
+    ];
+    tx.items = [
+      sourceTrack('tx', '200', title: 'T0'),
+      sourceTrack('tx', '201', title: 'T1'),
+    ];
+
+    await pumpHost(tester, seed: seed, playlistId: playlistId);
+    await openPage(tester);
+
+    // 全部模式：kg 只预览前 3 条，tx 不足 3 条全部显示。
+    for (var index = 0; index < 3; index++) {
+      expect(find.text('K$index'), findsOneWidget);
+    }
+    expect(find.text('K3'), findsNothing);
+    expect(find.text('K4'), findsNothing);
+    expect(find.text('T0'), findsOneWidget);
+    expect(find.text('T1'), findsOneWidget);
+
+    // 只有被截断的来源提供「查看全部」。
+    expect(find.byKey(const ValueKey('sourceSwapViewAll-kg')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sourceSwapViewAll-tx')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('sourceSwapViewAll-kg')));
+    await tester.pumpAndSettle();
+
+    expect(swap.activeSourceKey, 'kg');
+    expect(
+      tester
+          .widget<M3EChip>(
+            find.byKey(const ValueKey('sourceSwapSourceChip-kg')),
+          )
+          .selected,
+      isTrue,
+    );
+    for (var index = 0; index < 5; index++) {
+      expect(find.text('K$index'), findsOneWidget);
+    }
+    expect(find.text('T0'), findsNothing);
+    expect(find.byKey(const ValueKey('sourceSwapSection-kg')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sourceSwapViewAll-kg')),
+      findsNothing,
+      reason: '单源模式已展示完整结果，不再需要「查看全部」',
+    );
+  });
+
   testWidgets('搜索栏预填默认关键词，提交后按新关键词重搜', (tester) async {
     final playlistId = await seedPlaylist(tester);
     final seed = library.trackFromPlaylistTrack(
@@ -385,6 +450,12 @@ void main() {
     );
     final field = tester.widget<AppSearchBar>(audioField);
     expect(field.controller.text, 'Title Artist');
+    expect(
+      field.controller.selection.isCollapsed,
+      isTrue,
+      reason: '进入音频页不能全选预填关键词，光标应停在末尾',
+    );
+    expect(field.controller.selection.baseOffset, 'Title Artist'.length);
     expect(kg.lastQuery?.keyword, 'Title Artist');
 
     await tester.enterText(
@@ -439,7 +510,7 @@ void main() {
     expect(
       find.byType(SourceSwapActionBar),
       findsNothing,
-      reason: '有可见结果前不显示「点选一项后确认」',
+      reason: '有可见结果前不显示底部操作条',
     );
     expect(find.byKey(const Key('sourceSwapSearchFieldAudio')), findsOneWidget);
     expect(

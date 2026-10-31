@@ -266,7 +266,6 @@ void main() {
     expect(provider.activeItems.map((t) => t.id.uri), ['tx:200']);
     provider.select(provider.activeItems.single);
     expect(provider.selected?.id.uri, 'tx:200');
-    expect(provider.selectedSourceName, 'tx');
   });
 
   test('search：新关键词重搜，保留仍可搜索的筛选源', () async {

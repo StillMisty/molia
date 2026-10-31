@@ -1233,12 +1233,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourceSwapLyricsConfirm => 'Use these lyrics';
 
   @override
-  String sourceSwapSelected(String title, String source) {
-    return 'Selected: $title · $source';
-  }
-
-  @override
-  String get sourceSwapPickOne => 'Pick an item to continue';
+  String get sourceSwapViewAll => 'View all';
 
   @override
   String get lyricsSourceNoSources => 'No lyric sources available';

@@ -1191,12 +1191,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceSwapLyricsConfirm => '使用此歌词';
 
   @override
-  String sourceSwapSelected(String title, String source) {
-    return '已选：$title · $source';
-  }
-
-  @override
-  String get sourceSwapPickOne => '点选一项后确认';
+  String get sourceSwapViewAll => '查看全部';
 
   @override
   String get lyricsSourceNoSources => '没有可用的歌词来源';

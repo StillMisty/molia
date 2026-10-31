@@ -212,14 +212,27 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('晴天'), findsOneWidget);
-    expect(find.text('点选一项后确认'), findsOneWidget);
+    expect(find.text('点选一项后确认'), findsNothing);
+    expect(
+      tester
+          .widget<M3EButton>(find.widgetWithText(M3EButton, '使用此歌词'))
+          .onPressed,
+      isNull,
+      reason: '未选中时确认按钮禁用',
+    );
 
     await tester.tap(find.text('晴天'));
     await tester.pumpAndSettle();
 
     expect(lyricsService.saved, isEmpty, reason: '点结果只选中，不取词不写缓存');
-    expect(find.text('已选：晴天 · QQ音乐'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(
+      tester
+          .widget<M3EButton>(find.widgetWithText(M3EButton, '使用此歌词'))
+          .onPressed,
+      isNotNull,
+      reason: '选中后确认按钮可用',
+    );
 
     await tester.tap(find.text('使用此歌词'));
     await tester.pumpAndSettle();
@@ -258,7 +271,6 @@ void main() {
 
     expect(find.text('晴天'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
-    expect(find.text('已选：晴天 · QQ音乐'), findsOneWidget);
     expect(qq.searchCalls, 1, reason: '离屏页保持存活，回来不重搜');
     expect(lyricsService.saved, isEmpty, reason: '切 tab 不会顺手取词');
   });

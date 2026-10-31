@@ -178,17 +178,25 @@ class SourceSwapNotice extends StatelessWidget {
 /// 「全部」模式下按来源分组的小节标题。
 ///
 /// [hint] 给不可用来源（如未登录 B 站）挂在标题右侧：提示与来源同屏，
-/// 不占用全局状态条；窄屏时标题与提示各自省略，不撑破一行。
+/// 不占用全局状态条；[trailing] 给「查看全部」这类行内动作。窄屏时标题
+/// 与提示各自省略，不撑破一行。
 class SourceSwapSectionHeader extends StatelessWidget {
-  const SourceSwapSectionHeader({super.key, required this.label, this.hint});
+  const SourceSwapSectionHeader({
+    super.key,
+    required this.label,
+    this.hint,
+    this.trailing,
+  });
 
   final String label;
   final String? hint;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final hint = this.hint;
+    final trailing = this.trailing;
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 6),
       child: Semantics(
@@ -235,6 +243,7 @@ class SourceSwapSectionHeader extends StatelessWidget {
                 ),
               ),
             ],
+            if (trailing != null) ...[const SizedBox(width: 8), trailing],
           ],
         ),
       ),
@@ -242,36 +251,27 @@ class SourceSwapSectionHeader extends StatelessWidget {
   }
 }
 
-/// 底部操作条：未选提示 / 已选摘要 + 全宽确认按钮。
+/// 底部操作条：全宽确认按钮。
 ///
-/// 底部补 [MediaQuery.padding] 的安全区；忙碌时按钮内显示小 spinner 并禁用，
-/// 防止重复点击（换源 / 取词都是一次性副作用）。
+/// 未选中时 [onConfirm] 为空，按钮保持禁用；选中状态由列表行内勾选反馈，
+/// 不再重复显示摘要。底部补 [MediaQuery.padding] 的安全区；忙碌时按钮内
+/// 显示小 spinner 并禁用，防止重复点击（换源 / 取词都是一次性副作用）。
 class SourceSwapActionBar extends StatelessWidget {
   const SourceSwapActionBar({
     super.key,
     required this.confirmLabel,
     required this.onConfirm,
-    this.selectedTitle,
-    this.selectedSource,
     this.busy = false,
   });
 
   final String confirmLabel;
-  final VoidCallback? onConfirm;
 
-  /// null = 尚未选择，显示「点选一项后确认」。
-  final String? selectedTitle;
-  final String? selectedSource;
+  /// null = 尚未选择，确认按钮禁用。
+  final VoidCallback? onConfirm;
   final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
-    final hasSelection = selectedTitle != null;
-    final summary = hasSelection
-        ? l10n.sourceSwapSelected(selectedTitle!, selectedSource ?? '')
-        : l10n.sourceSwapPickOne;
     final bottomInset = MediaQuery.paddingOf(context).bottom;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -280,44 +280,29 @@ class SourceSwapActionBar extends StatelessWidget {
         const M3EDivider(),
         Padding(
           padding: EdgeInsets.fromLTRB(0, 8, 0, 16 + bottomInset),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                summary,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: context.typeScale.bodySmall.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+          child: SizedBox(
+            width: double.infinity,
+            child: M3EButton.filled(
+              onPressed: onConfirm != null && !busy ? onConfirm : null,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (busy) ...[
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: M3EProgressIndicator.circular(
+                        size: 16,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(confirmLabel),
+                ],
               ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: M3EButton.filled(
-                  onPressed: hasSelection && !busy ? onConfirm : null,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (busy) ...[
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: M3EProgressIndicator.circular(
-                            size: 16,
-                            strokeWidth: 2,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Text(confirmLabel),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ],

@@ -155,7 +155,7 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
   bool get isFetchingLyric => _isFetchingLyric;
 
-  /// 当前选中项（未选中为 null）；视图据此画勾选与底栏摘要。
+  /// 当前选中项（未选中为 null）；视图据此画勾选与确认按钮可用态。
   LyricsSearchResult? get selected => _selected;
 
   bool isSelected(LyricsSearchResult result) => identical(_selected, result);

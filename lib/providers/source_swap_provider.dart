@@ -189,17 +189,6 @@ class SourceSwapProvider extends ChangeNotifier {
   String get activeSourceKey => _activeSourceKey;
   Track? get selected => _selected;
 
-  /// 选中曲目的来源展示名（描述符已移除时回退源 key）。
-  String get selectedSourceName {
-    final selected = _selected;
-    if (selected == null) return '';
-    final sourceKey = selected.id.sourceKey;
-    for (final descriptor in searchableSources) {
-      if (descriptor.key == sourceKey) return descriptor.displayName;
-    }
-    return sourceKey;
-  }
-
   /// 当前筛选下的候选：全部 = 按分组顺序拼接，单源 = 该组候选。
   List<Track> get activeItems {
     if (_activeSourceKey.isEmpty) {

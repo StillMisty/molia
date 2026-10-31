@@ -19,6 +19,7 @@ import 'package:molia/services/notification_service.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/lyrics_source_search_view.dart';
 import 'package:molia/widgets/source_swap/source_swap_chrome.dart';
+import 'package:molia/widgets/track_row.dart';
 
 /// 记录手动选择写入了哪个 provider（不落真实缓存）。
 class _FakeLyricsService extends LyricsService {
@@ -140,6 +141,13 @@ void main() {
     );
   }
 
+  bool rowSelected(WidgetTester tester, String title) {
+    final row = tester.widget<TrackRow>(
+      find.ancestor(of: find.text(title), matching: find.byType(TrackRow)),
+    );
+    return row.model.selected;
+  }
+
   testWidgets('未登录 B 站：登录提示内联在 B 站 section header，且不发搜索请求', (tester) async {
     final qq = _FakeLyricProvider('qq');
     final bili = _FakeLyricProvider('bili');
@@ -251,12 +259,11 @@ void main() {
     );
 
     expect(find.text('晴天'), findsOneWidget);
-    expect(find.text('点选一项后确认'), findsOneWidget);
+    expect(find.text('点选一项后确认'), findsNothing);
     await tester.tap(find.text('晴天'));
     await tester.pumpAndSettle();
 
     expect(service.saved, isEmpty, reason: '点选不取词、不写缓存');
-    expect(find.text('已选：晴天 · QQ音乐'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
 
     await tester.tap(find.text('使用此歌词'));
@@ -317,7 +324,6 @@ void main() {
       findsOneWidget,
       reason: '切筛选不丢选中项',
     );
-    expect(find.text('已选：晴天 QQ · QQ音乐'), findsOneWidget);
   });
 
   testWidgets('停用渠道：歌词来源隐藏；非渠道来源不受开关影响', (tester) async {
@@ -510,7 +516,7 @@ void main() {
 
     await tester.tap(find.text('晴天 A'));
     await tester.pumpAndSettle();
-    expect(find.text('已选：晴天 A · QQ音乐'), findsOneWidget);
+    expect(rowSelected(tester, '晴天 A'), isTrue);
 
     await tester.tap(find.text('使用此歌词'));
     await tester.pump();
@@ -546,42 +552,16 @@ void main() {
       reason: '禁用搜索框时清除键也不能生效',
     );
 
-    // 点另一条候选：底栏摘要仍是 A，不会被改成 B。
+    // 点另一条候选：选中项仍是 A，不会被改成 B。
     await tester.tap(find.text('晴天 B'));
     await tester.pump();
-    expect(find.text('已选：晴天 A · QQ音乐'), findsOneWidget);
-    expect(find.text('已选：晴天 B · QQ音乐'), findsNothing);
+    expect(rowSelected(tester, '晴天 A'), isTrue);
+    expect(rowSelected(tester, '晴天 B'), isFalse);
 
     gate.complete();
     await tester.pumpAndSettle();
 
     expect(qq.fetchedSongIds, ['A'], reason: 'applySelected 写入确认时的旧选中项');
     expect(service.saved.single.provider, 'qq');
-  });
-
-  testWidgets('已选摘要按渠道 key 解析来源名（provider 名可不同）', (tester) async {
-    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
-    addTearDown(lyricsProvider.dispose);
-    // provider 名与渠道 key 不同：摘要必须按渠道 key 显示「哔哩哔哩」。
-    final custom = _FakeLyricProvider(
-      'custom_bili',
-      matches: [SongMatch(songId: '1', title: '晴天', artist: '某UP主')],
-    );
-
-    await pumpView(
-      tester,
-      sources: [
-        LyricsSourceStrategy(
-          channelKey: 'bili',
-          provider: custom,
-          unavailable: () => null,
-        ),
-      ],
-      lyricsProvider: lyricsProvider,
-    );
-
-    await tester.tap(find.text('晴天'));
-    await tester.pumpAndSettle();
-    expect(find.text('已选：晴天 · 哔哩哔哩'), findsOneWidget);
   });
 }

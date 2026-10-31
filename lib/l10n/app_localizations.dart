@@ -2342,17 +2342,11 @@ abstract class AppLocalizations {
   /// **'Use these lyrics'**
   String get sourceSwapLyricsConfirm;
 
-  /// No description provided for @sourceSwapSelected.
+  /// No description provided for @sourceSwapViewAll.
   ///
   /// In en, this message translates to:
-  /// **'Selected: {title} · {source}'**
-  String sourceSwapSelected(String title, String source);
-
-  /// No description provided for @sourceSwapPickOne.
-  ///
-  /// In en, this message translates to:
-  /// **'Pick an item to continue'**
-  String get sourceSwapPickOne;
+  /// **'View all'**
+  String get sourceSwapViewAll;
 
   /// No description provided for @lyricsSourceNoSources.
   ///

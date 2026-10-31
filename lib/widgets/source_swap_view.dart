@@ -37,6 +37,9 @@ class SourceSwapView extends StatefulWidget {
 
 class _SourceSwapViewState extends State<SourceSwapView>
     with AutomaticKeepAliveClientMixin {
+  /// 「全部」模式每个来源最多预览的候选数；完整结果需选中该来源 chip。
+  static const int _allModePreviewLimit = 3;
+
   late final SourceSwapProvider _provider;
   late final TextEditingController _searchController;
   final FocusNode _searchFocusNode = FocusNode();
@@ -63,9 +66,10 @@ class _SourceSwapViewState extends State<SourceSwapView>
       setState(() {
         _started = true;
         _searchController.text = _provider.keyword;
-        _searchController.selection = TextSelection(
-          baseOffset: 0,
-          extentOffset: _searchController.text.length,
+        // 只把光标放到末尾：进入页面时全选会让用户直接输入覆盖默认关键词，
+        // 但也会把预填文本整段高亮，像是误触。
+        _searchController.selection = TextSelection.collapsed(
+          offset: _searchController.text.length,
         );
       });
     });
@@ -91,7 +95,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
     final hasKeyword = provider.keyword.isNotEmpty;
     final showChrome = _started && !provider.noSources;
     // 空态只留空态 + 下一步：没有来源 / 关键词为空时，搜索栏、chips、底栏
-    // 一起收起，避免「点选一项后确认」出现在无候选可选的页面上。
+    // 一起收起，避免空页面上只留一个无意义的确认按钮。
     final showFooter =
         showChrome &&
         hasKeyword &&
@@ -155,13 +159,9 @@ class _SourceSwapViewState extends State<SourceSwapView>
         Expanded(child: _buildBody(context, l10n, provider, sources)),
         if (showFooter)
           SourceSwapActionBar(
-            selectedTitle: provider.selected?.title,
-            selectedSource: provider.selected == null
-                ? null
-                : provider.selectedSourceName,
             confirmLabel: l10n.sourceSwapConfirm,
             busy: _isApplying,
-            onConfirm: _confirm,
+            onConfirm: provider.selected == null ? null : _confirm,
           ),
       ],
     );
@@ -219,6 +219,18 @@ class _SourceSwapViewState extends State<SourceSwapView>
           return SourceSwapSectionHeader(
             key: ValueKey<String>('sourceSwapSection-${group.sourceKey}'),
             label: lyricsProviderLabel(l10n, sources, group.sourceKey),
+            trailing: group.items.length > _allModePreviewLimit
+                ? M3EButton.text(
+                    key: ValueKey<String>(
+                      'sourceSwapViewAll-${group.sourceKey}',
+                    ),
+                    size: M3EButtonSize.xs,
+                    onPressed: _isApplying
+                        ? null
+                        : () => provider.selectSource(group.sourceKey),
+                    child: Text(l10n.sourceSwapViewAll),
+                  )
+                : null,
           );
         }
         final track = entry.track!;
@@ -243,22 +255,27 @@ class _SourceSwapViewState extends State<SourceSwapView>
     );
   }
 
-  /// 全部模式 = 每组 header + 组内行；单源模式 = 只出该组行（无 header）。
+  /// 全部模式 = 每组 header + 组内前 [_allModePreviewLimit] 行；单源模式 =
+  /// 只出该组完整候选（无 header）。
   List<_SourceSwapListEntry> _listEntries(SourceSwapProvider provider) {
     final activeKey = provider.activeSourceKey;
+    final showingAll = activeKey.isEmpty;
     final entries = <_SourceSwapListEntry>[];
     for (final group in provider.groups) {
-      if (activeKey.isNotEmpty && group.sourceKey != activeKey) continue;
-      if (activeKey.isEmpty) {
+      if (!showingAll && group.sourceKey != activeKey) continue;
+      if (showingAll) {
         entries.add(_SourceSwapListEntry.header(group));
       }
-      for (var index = 0; index < group.items.length; index++) {
+      final count = showingAll && group.items.length > _allModePreviewLimit
+          ? _allModePreviewLimit
+          : group.items.length;
+      for (var index = 0; index < count; index++) {
         entries.add(
           _SourceSwapListEntry.track(
             group: group,
             track: group.items[index],
             index: index,
-            count: group.items.length,
+            count: count,
           ),
         );
       }
