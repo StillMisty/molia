@@ -255,16 +255,8 @@ class PlaybackObserver {
     if (repository == null) return;
     try {
       await repository.addHistoryEntry(
-        PlayHistoryEntry(
-          sourceKey: track.id.sourceKey,
-          songId: track.id.id,
-          title: track.title,
-          artist: track.artistLabel,
-          album: track.album ?? '',
-          coverUrl: track.artwork?.uri.toString(),
-          durationMs: track.duration?.inMilliseconds,
-          // raw 原样持久化（play_history.raw），供下次播放按需重新取链。
-          raw: Map<String, dynamic>.from(track.payload),
+        PlayHistoryEntry.fromTrack(
+          track,
           playedAt: DateTime.now().millisecondsSinceEpoch,
         ),
       );

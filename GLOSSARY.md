@@ -546,6 +546,12 @@
   playlists / playlistTracks(id) / favorites / import）：`changes` 广播的载荷，
   类型即失效范围；取代 `Stream<void>` + 事后回读 `lastChangeKind` /
   `lastChangePlaylistId` 的侧信道（异步边界后读到的是「最近一次」而不是「本次」）。
+- **Library row mapping（资料库行映射）** — `PlaylistTrack.fromTrack` /
+  `PlayHistoryEntry.fromTrack`（`lib/domain/models/library.dart`）：领域曲目 →
+  `playlist_tracks` / `play_history` 行的唯一字段策略（sourceKey/id、标题、
+  `artistLabel`、专辑空串回退、封面 URI、时长、payload 浅拷贝），两种行只差
+  位置与内容时间。播放观察者、换源写回、加入列表都经工厂，不再手拼行；
+  `PlaylistTrack.fromHistoryEntry` 只负责反向（历史条目 → 列表行）。
 - **Favorites（收藏）** — 领域概念 `PlaylistInfo.isFavorites`；存储层保留行名
   `__favorites__` 只在实现内部（UI 文案走 l10n，调用方不再按名字比较）。
 - **Library mutation gateway（资料库变更网关）** — `lib/providers/library_provider.dart`：
@@ -607,7 +613,8 @@
   （新渠道无需注册即可参与换源）。歌词侧的同名概念是 **Lyrics source strategy**
   （渠道 → `LyricProvider`）。
 - **Swap placement（换源写回位置）** — `SourceSwapPlacement`：`playlist`
-  （收藏/自建列表，仓库事务保 `sortOrder`/`addedAt`）、`history`（保 `playedAt`）、
+  （收藏/自建列表，仓库事务保 `sortOrder`/`addedAt`）、`history`（保 `playedAt`：
+  行与同步日志都沿用旧值，`replacement.playedAt` 不参与）、
   `queue`（仅播放队列，不落库）。库内替换与队列跟随**解耦**：队列中同 id 曲目
   命中才跟随（`PlaybackFacade.replaceQueueTrack`），未命中不算失败。
 - **Song match（歌曲匹配）** — `lib/services/song_match.dart`：LX `findMusic`
@@ -835,6 +842,10 @@
   `savedAt` / `importedAt` 与墓碑的真实删除时间是内容语义，进记录 `data`、
   **永不参与胜负判定**；历史「删除 vs 播放」由库内按真实时间比较
   （`playedAt <= deletedAt` → 删除生效，否则复活并撤墓碑，见 ADR-0003 v2 §2）。
+  换源替换历史条目是内容时间的保留规则：`LibraryWriteEngine.replaceHistoryEntry`
+  在同一事务里读出旧行 `playedAt`，行不写该列、同步日志也用旧值——
+  `replacement.playedAt` 只是调用方占位，不落库、不传播，否则本机按旧时间排序、
+  对端按换源时刻重排。
 - **Protocol v3（协议版本）** — `SyncEnvelope.protocolVersion = 3`：线上格式
   只有 v3（帧 `magic + 版本 + nonce`、载荷列式二进制，见 ADR-0003 §1），
   只写只读 v3；**没有版本闸门、协商或降级**，版本不符一律明确失败。备份导入

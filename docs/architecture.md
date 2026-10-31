@@ -673,13 +673,16 @@
   B 站空间投稿风控（`-352` / 空 `vlist` + `count>0`）回退全站视频搜索并按 mid 过滤。
 - **资料库写入**：`LibraryProvider` 是收藏 / 历史 / 列表写入的唯一入口。收藏唯一
   入口 `toggleFavoriteTrack(Track)`（播放页经它写入，不再直连 `LibraryRepository`）；
-  批量操作按 `PlaylistTrack` 规范形状（`PlaylistTrack.fromHistoryEntry` 负责历史转换）；
+  批量操作用 `PlaylistTrack` 规范形状：`PlaylistTrack.fromTrack` /
+  `PlayHistoryEntry.fromTrack` 是领域曲目 → 列表 / 历史行的唯一字段策略，
+  `PlaylistTrack.fromHistoryEntry` 只负责历史条目 → 列表行；
   「加入列表」流程唯一实现在 `lib/widgets/add_to_library.dart`（收藏页与发现页共用）；
   列表曲目读取经 `playlistTracksView` + `ensurePlaylistTracks`（页面不探测缓存内部）。
 - **曲目交接**：`lib/widgets/track_handoff.dart` 是「把一组曲目交给播放 / 资料库」
   的唯一编排；页面只提供曲目与上下文名。空列表 no-op、洗牌先落模式、起播下标
-  夹取、上下文名归一、批量 `addedAt` 都在这里；`PlaylistTrack.fromTrack` 生产代码
-  只在此调用，加入列表仍复用 `add_to_library.dart` 的目标选择流程。发现详情页
+  夹取、上下文名归一、批量 `addedAt` 都在这里；批量加入列表经
+  `PlaylistTrack.fromTrack`（单条换源写回也走同一工厂），加入列表仍复用
+  `add_to_library.dart` 的目标选择流程。发现详情页
   的 `DiscoverTrack` 经 `DiscoverProvider.domainTracksOf` 归一为领域曲目后走同一
   交接，不再维护 `playTracks` 的第二套洗牌 / 触感 / 起播口径。
 - **分页曲目集合**：`lib/widgets/paged_track_collection.dart` 是专辑 / 歌手 / 发现
@@ -725,7 +728,8 @@
   自建列表）行动作（触摸端 ⋮ / 桌面右键菜单）默认音频 tab。音频 tab 点候选
   即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
-  替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
+  替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，历史同步日志也用旧行
+  `playedAt`；目标键已存在先确认去重），
   并经 `PlaybackProvider.replaceQueueTrack` 让队列中同 id 曲目跟随换源（新增
   `PlaybackFacade.replaceQueueTrack` 端口；命中当前曲目重新取链从头播放，
   冷启动恢复会话同步替换并落盘）。

@@ -43,6 +43,26 @@ class PlayHistoryEntry {
 
   String get key => '$sourceKey:$songId';
 
+  /// 领域曲目 → 播放历史条目（播放观察者 / 换源写回共用）。
+  ///
+  /// 曲目级字段与 [PlaylistTrack.fromTrack] 同一条策略（[_trackRowFields]）：
+  /// 歌手走 `artistLabel`、payload 浅拷贝原样透传；[playedAt] 是内容时间，
+  /// 由调用方给（换源真正沿用的是旧行时间，见 `replaceHistoryEntry`）。
+  factory PlayHistoryEntry.fromTrack(Track track, {required int playedAt}) {
+    final fields = _trackRowFields(track);
+    return PlayHistoryEntry(
+      sourceKey: fields.sourceKey,
+      songId: fields.songId,
+      title: fields.title,
+      artist: fields.artist,
+      album: fields.album,
+      coverUrl: fields.coverUrl,
+      durationMs: fields.durationMs,
+      raw: fields.raw,
+      playedAt: playedAt,
+    );
+  }
+
   PlayHistoryEntry copyWith({int? playedAt}) => PlayHistoryEntry(
     sourceKey: sourceKey,
     songId: songId,
@@ -142,16 +162,17 @@ class PlaylistTrack {
     int playlistId = 0,
     required int addedAt,
   }) {
+    final fields = _trackRowFields(track);
     return PlaylistTrack(
       playlistId: playlistId,
-      sourceKey: track.id.sourceKey,
-      songId: track.id.id,
-      title: track.title,
-      artist: track.artistLabel,
-      album: track.album ?? '',
-      coverUrl: track.artwork?.uri.toString(),
-      durationMs: track.duration?.inMilliseconds,
-      raw: Map<String, dynamic>.from(track.payload),
+      sourceKey: fields.sourceKey,
+      songId: fields.songId,
+      title: fields.title,
+      artist: fields.artist,
+      album: fields.album,
+      coverUrl: fields.coverUrl,
+      durationMs: fields.durationMs,
+      raw: fields.raw,
       addedAt: addedAt,
     );
   }
@@ -159,6 +180,33 @@ class PlaylistTrack {
   @override
   String toString() => 'PlaylistTrack($key, $title)';
 }
+
+/// `playlist_tracks` / `play_history` 共用的曲目级字段策略。
+///
+/// 两种行只差位置（`playlistId` / `sortOrder`）与内容时间（`addedAt` /
+/// `playedAt`），曲目字段必须同源：歌手口径、封面 URI、时长与 payload
+/// 浅拷贝各拼一份时，播放观察者 / 换源写回会与「加入列表」悄悄漂移。
+({
+  String sourceKey,
+  String songId,
+  String title,
+  String artist,
+  String album,
+  String? coverUrl,
+  int? durationMs,
+  Map<String, dynamic> raw,
+})
+_trackRowFields(Track track) => (
+  sourceKey: track.id.sourceKey,
+  songId: track.id.id,
+  title: track.title,
+  artist: track.artistLabel,
+  album: track.album ?? '',
+  coverUrl: track.artwork?.uri.toString(),
+  durationMs: track.duration?.inMilliseconds,
+  // 浅拷贝：行对象不与领域曲目共享可变 map，平台字段原样保留。
+  raw: Map<String, dynamic>.from(track.payload),
+);
 
 /// 单次收藏切换的增量载荷：provider 据此只改缓存里的一行，不重查整表。
 ///

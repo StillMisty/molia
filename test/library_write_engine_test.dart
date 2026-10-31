@@ -201,6 +201,36 @@ void main() {
     expect((await db.select(db.playHistory).get()).single.playedAt, 200);
   });
 
+  test('历史换源：行与日志都沿用旧行 playedAt，不取 replacement', () async {
+    await engine.addHistoryEntry(history('1', playedAt: 100));
+    final head = await journal.headSeq();
+
+    // 旧键不存在：返回 false，不写日志（既有行为）。
+    expect(
+      await engine.replaceHistoryEntry((
+        sourceKey: 'wy',
+        songId: '404',
+      ), history('900', playedAt: 999)),
+      isFalse,
+    );
+    expect(await journal.window(since: head), isEmpty);
+
+    expect(
+      await engine.replaceHistoryEntry((
+        sourceKey: 'wy',
+        songId: '1',
+      ), history('900', playedAt: 999)),
+      isTrue,
+    );
+    final row = (await db.select(db.playHistory).get()).single;
+    expect(row.songId, '900');
+    // 内容时间：行保留旧值，同步日志与行同源（否则对端按换源时刻重排）。
+    expect(row.playedAt, 100);
+    final record = (await journal.window(since: head)).single.record;
+    expect(record.data?['playedAt'], 100);
+    expect(record.data?['playedAt'], row.playedAt);
+  });
+
   test('列表曲目加入：排序位 + 日志载荷带列表 syncId；重复加入不写不广播', () async {
     final playlistId = await createPlaylist();
     final syncId = (await db.select(db.playlists).get()).single.syncId!;
