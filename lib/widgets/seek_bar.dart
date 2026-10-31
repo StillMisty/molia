@@ -74,9 +74,7 @@ class SeekBar extends StatelessWidget {
     if (!faint) return base;
     // 读数不该与滑杆抢注意力：比默认 labelSmall 更淡一档。
     return base.copyWith(
-      color: Theme.of(context)
-          .colorScheme
-          .onSurfaceVariant
+      color: Theme.of(context).colorScheme.onSurfaceVariant
           .withValues(alpha: 0.6),
     );
   }
@@ -96,9 +94,9 @@ class SeekBar extends StatelessWidget {
     final bool faint = timeLabels == SeekTimeLabels.below;
     final TextStyle? style = _labelStyle(context, faint: faint);
     Widget slot(String text, TextAlign align) => SizedBox(
-          width: _labelSlotWidth,
-          child: Text(text, style: style, maxLines: 1, textAlign: align),
-        );
+      width: _labelSlotWidth,
+      child: Text(text, style: style, maxLines: 1, textAlign: align),
+    );
 
     // inline：时间与条同行，分列两侧。
     if (timeLabels == SeekTimeLabels.inline) {
@@ -160,14 +158,18 @@ class SeekBar extends StatelessWidget {
             valueListenable: position,
             builder: (context, position, _) {
               final double valueMs =
-                  (previewMs ?? position.inMilliseconds.toDouble())
-                      .clamp(0.0, maxMs);
-              final ValueChanged<double>? onChanged =
-                  enabled ? controller.preview : null;
+                  (previewMs ?? position.inMilliseconds.toDouble()).clamp(
+                    0.0,
+                    maxMs,
+                  );
+              final ValueChanged<double>? onChanged = enabled
+                  ? controller.preview
+                  : null;
               // 入参是滑杆上一帧的 value（快速单击时即点击前的位置），不可用：
               // 提交落点由 controller 记住的预览值决定。
-              final ValueChanged<double>? onChangeEnd =
-                  enabled ? (double _) => controller.commit() : null;
+              final ValueChanged<double>? onChangeEnd = enabled
+                  ? (double _) => controller.commit()
+                  : null;
               final String label = durationText(valueMs.round()) ?? '0:00';
 
               final Widget sliderBody = isPlaying
@@ -208,8 +210,9 @@ class SeekBar extends StatelessWidget {
 
               // 无效时长 / 无曲目时两档都用占位，读数不显示假值。
               final String currentLabel = enabled ? label : '--:--';
-              final String totalLabel =
-                  enabled ? (durationText(durationMs) ?? '--:--') : '--:--';
+              final String totalLabel = enabled
+                  ? (durationText(durationMs) ?? '--:--')
+                  : '--:--';
               return _decorateSlider(context, slider, currentLabel, totalLabel);
             },
           );

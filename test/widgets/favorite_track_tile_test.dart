@@ -53,7 +53,11 @@ void main() {
     id: TrackId('kw', 'a'),
     title: 'Title a',
     // 空名被过滤；多歌手按 `, ` 词表连接。
-    artists: [Artist(name: 'A'), Artist(name: ''), Artist(name: 'B')],
+    artists: [
+      Artist(name: 'A'),
+      Artist(name: ''),
+      Artist(name: 'B'),
+    ],
     album: 'Album',
     duration: Duration(seconds: 245),
     origin: TrackOrigin.builtin,
@@ -106,21 +110,21 @@ void main() {
     await pumpTile(tester);
     expect(find.byType(PlayingIndicator), findsNothing);
 
-    backend.emit(const BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(PlayingIndicator), findsOneWidget);
 
     // 同一首暂停：仍标记当前曲目，均衡器停在静态相位。
-    backend.emit(const BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-    ));
+    backend.emit(
+      const BackendSnapshot(current: track, queue: [track], currentIndex: 0),
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
     expect(find.byType(PlayingIndicator), findsOneWidget);
@@ -130,12 +134,14 @@ void main() {
       title: 'Title b',
       origin: TrackOrigin.builtin,
     );
-    backend.emit(const BackendSnapshot(
-      current: other,
-      queue: [other],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      const BackendSnapshot(
+        current: other,
+        queue: [other],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(PlayingIndicator), findsNothing);
     expect(find.byIcon(Icons.pause_rounded), findsNothing);
@@ -182,28 +188,24 @@ void main() {
     expect(added, 1);
   });
 
-  testWidgets(
-    '桌面：行内无 ⋮，右键在落点弹出同一份菜单（适配层不吞桌面入口）',
-    (tester) async {
-      await pumpTile(tester);
+  testWidgets('桌面：行内无 ⋮，右键在落点弹出同一份菜单（适配层不吞桌面入口）', (tester) async {
+    await pumpTile(tester);
 
-      expect(
-        find.byIcon(Icons.more_vert_rounded),
-        findsNothing,
-        reason: '桌面入口是行表面右键，不再有行尾 ⋮',
-      );
+    expect(
+      find.byIcon(Icons.more_vert_rounded),
+      findsNothing,
+      reason: '桌面入口是行表面右键，不再有行尾 ⋮',
+    );
 
-      await tester.tapAt(
-        tester.getRect(find.byType(TrackRow)).center,
-        buttons: kSecondaryButton,
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pumpAndSettle();
-      expect(find.text('收藏'), findsOneWidget);
-      expect(find.text('加入列表'), findsOneWidget);
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+    await tester.tapAt(
+      tester.getRect(find.byType(TrackRow)).center,
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('收藏'), findsOneWidget);
+    expect(find.text('加入列表'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('通用构造：artists 链接渲染与点击回调透传（搜索结果行契约）', (tester) async {
     var rowTaps = 0;
@@ -218,6 +220,11 @@ void main() {
         supportedLocales: const [Locale('zh')],
         home: Scaffold(
           body: FavoriteTrackTile(
+            track: const Track(
+              id: TrackId('test', 'a'),
+              title: 'Title a',
+              origin: TrackOrigin.lx,
+            ),
             row: TrackRowModel(
               title: 'Title a',
               artist: 'A、B',

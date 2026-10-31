@@ -104,8 +104,9 @@ class SourcePreferences extends ChangeNotifier {
   /// 与搜索结果中；已保存内容仍可通过内部路由取链播放。
   Future<void> setChannelEnabled(String key, bool enabled) async {
     if (key.isEmpty) return;
-    final changed =
-        enabled ? _disabledChannels.remove(key) : _disabledChannels.add(key);
+    final changed = enabled
+        ? _disabledChannels.remove(key)
+        : _disabledChannels.add(key);
     if (!changed) return;
     notifyListeners();
     await _persist(

@@ -22,8 +22,10 @@ void main() {
     });
 
     test('isUsable 需要同时「已配置」与「已启用」', () {
-      const configuredOnly =
-          AnyListenConfig(serverUrl: 'http://127.0.0.1:9500', enabled: false);
+      const configuredOnly = AnyListenConfig(
+        serverUrl: 'http://127.0.0.1:9500',
+        enabled: false,
+      );
       expect(configuredOnly.isConfigured, isTrue);
       expect(configuredOnly.isUsable, isFalse);
 
@@ -31,8 +33,10 @@ void main() {
       expect(enabledOnly.isConfigured, isFalse);
       expect(enabledOnly.isUsable, isFalse);
 
-      const usable =
-          AnyListenConfig(serverUrl: 'http://127.0.0.1:9500', enabled: true);
+      const usable = AnyListenConfig(
+        serverUrl: 'http://127.0.0.1:9500',
+        enabled: true,
+      );
       expect(usable.isUsable, isTrue);
     });
 
@@ -60,10 +64,7 @@ void main() {
         AnyListenConfig.validateServerUrl('http://127.0.0.1:9500'),
         isNull,
       );
-      expect(
-        AnyListenConfig.validateServerUrl('music.example.com'),
-        isNull,
-      );
+      expect(AnyListenConfig.validateServerUrl('music.example.com'), isNull);
     });
 
     test('copyWith：归一化地址、保留其它字段；相等性按归一化地址判定', () {
@@ -94,8 +95,9 @@ void main() {
 
   group('AnyListenConfigStore', () {
     test('空 prefs 返回默认配置（不抛异常）', () async {
-      final loaded =
-          await AnyListenConfigStore(settings: testSettingsRegistry()).load();
+      final loaded = await AnyListenConfigStore(
+        settings: testSettingsRegistry(),
+      ).load();
       expect(loaded, AnyListenConfig.empty);
     });
 
@@ -118,10 +120,9 @@ void main() {
 
     test('save 时归一化地址；clear 后恢复默认', () async {
       final store = AnyListenConfigStore(settings: testSettingsRegistry());
-      await store.save(const AnyListenConfig(
-        serverUrl: 'http://host:9500///',
-        enabled: true,
-      ));
+      await store.save(
+        const AnyListenConfig(serverUrl: 'http://host:9500///', enabled: true),
+      );
       expect((await store.load()).serverUrl, 'http://host:9500');
 
       expect(await store.clear(), isTrue);

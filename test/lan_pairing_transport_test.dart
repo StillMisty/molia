@@ -17,11 +17,8 @@ void main() {
   final codec = SyncCodec(iterations: 1000);
   final codecPort = InlineSyncCodecPort(codec);
 
-  SyncEnvelope envelope(String deviceId) => SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceId,
-        producedAt: 1,
-      );
+  SyncEnvelope envelope(String deviceId) =>
+      SyncEnvelope(deviceId: deviceId, deviceName: deviceId, producedAt: 1);
 
   test('发现 + join：真实传输完成配对，新口令可解真实载荷', () async {
     final a = await _LanPeer.start(
@@ -52,17 +49,19 @@ void main() {
       (devices) => devices.isNotEmpty,
     );
     expect(await a.service.startScan(), isTrue);
-    final probe = Msp1.encode(Msp1Message(
-      type: Msp1.typeProbe,
-      deviceId: a.id,
-      name: a.name,
-      httpPort: a.transport.httpPort,
-      probePort: a.transport.advertisedProbePort,
-      addresses: const [],
-      hasGroup: a.hasGroup,
-      bootId: 'boot-a',
-      nonce: 'probe-nonce',
-    ));
+    final probe = Msp1.encode(
+      Msp1Message(
+        type: Msp1.typeProbe,
+        deviceId: a.id,
+        name: a.name,
+        httpPort: a.transport.httpPort,
+        probePort: a.transport.advertisedProbePort,
+        addresses: const [],
+        hasGroup: a.hasGroup,
+        bootId: 'boot-a',
+        nonce: 'probe-nonce',
+      ),
+    );
     expect(
       await a.transport.sendPairingDatagram(
         probe,
@@ -158,8 +157,9 @@ void main() {
     Future<int> status(String path) async {
       final client = HttpClient();
       try {
-        final request = await client
-            .getUrl(Uri.parse('http://127.0.0.1:${b.transport.httpPort}$path'));
+        final request = await client.getUrl(
+          Uri.parse('http://127.0.0.1:${b.transport.httpPort}$path'),
+        );
         final response = await request.close();
         await response.drain<void>();
         return response.statusCode;
@@ -248,15 +248,16 @@ class _LanPeer {
       sendPacket: transport.sendPairingDatagram,
     );
     transport.attachPairing(service);
-    peer = _LanPeer(
-      id: id,
-      name: name,
-      transport: transport,
-      service: service,
-      endpoints: endpoints,
-    )
-      ..passphrase = passphrase
-      ..hasGroup = hasGroup;
+    peer =
+        _LanPeer(
+            id: id,
+            name: name,
+            transport: transport,
+            service: service,
+            endpoints: endpoints,
+          )
+          ..passphrase = passphrase
+          ..hasGroup = hasGroup;
     await transport.start();
     return peer;
   }

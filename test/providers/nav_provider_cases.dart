@@ -74,10 +74,9 @@ void main() {
       prefs.getString(kShellHomeDestination.name),
       ShellDestination.nowPlaying.name,
     );
-    expect(
-      prefs.getStringList(kShellNavHidden.name),
-      [ShellDestination.nowPlaying.name],
-    );
+    expect(prefs.getStringList(kShellNavHidden.name), [
+      ShellDestination.nowPlaying.name,
+    ]);
 
     // 出路：不一致态下仍可把存储首页重新显示（不被锁定堵死）。
     expect(await nav.setVisible(ShellDestination.nowPlaying, true), isTrue);

@@ -19,8 +19,7 @@ class KwLyric {
   KwLyric._();
 
   static const Map<String, String> _headers = {
-    'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
   };
 
   /// 逐字歌词 XOR key（`Buffer.from('yeelion')`，7 字节）。
@@ -62,8 +61,9 @@ class KwLyric {
   /// `TP=content` 二进制解码：zlib → base64 → `yeelion` XOR（lrcx=1）。
   static String? _decodeLrcx(Uint8List buf) {
     if (buf.length < 10) return null;
-    final head =
-        utf8.decode(buf.sublist(0, 10), allowMalformed: true).toLowerCase();
+    final head = utf8
+        .decode(buf.sublist(0, 10), allowMalformed: true)
+        .toLowerCase();
     if (head != 'tp=content') return null;
     final sep = _indexOfBytes(buf, const [13, 10, 13, 10]);
     if (sep < 0) return null;
@@ -112,7 +112,9 @@ class KwLyric {
     final lyric = decodeName(lyricRaw.replaceAll(_wordTimeAll, '')).trim();
     if (lyric.isEmpty || !_existTimeExp.hasMatch(lyric)) return null;
 
-    final tlyricRaw = sorted.trans.isEmpty ? null : _transformLrc(tags, sorted.trans);
+    final tlyricRaw = sorted.trans.isEmpty
+        ? null
+        : _transformLrc(tags, sorted.trans);
     return BuiltinLyricResult(
       lyric: lyric,
       tlyric: tlyricRaw == null
@@ -145,10 +147,12 @@ class KwLyric {
         final seconds = raw['time'] is num
             ? (raw['time'] as num).toDouble()
             : double.tryParse('${raw['time']}') ?? 0;
-        items.add(_KwLrcItem(
-          _formatH5Time(seconds),
-          raw['lineLyric']?.toString() ?? '',
-        ));
+        items.add(
+          _KwLrcItem(
+            _formatH5Time(seconds),
+            raw['lineLyric']?.toString() ?? '',
+          ),
+        );
       }
       final sorted = _sortLrcArr(items, guardLyricxHeuristic: false);
       final tags = <String>[];
@@ -163,8 +167,9 @@ class KwLyric {
       }
       final lyric = decodeName(_transformLrc(tags, sorted.lrc)).trim();
       if (lyric.isEmpty || !_existTimeExp.hasMatch(lyric)) return null;
-      final tlyricRaw =
-          sorted.trans.isEmpty ? null : _transformLrc(tags, sorted.trans);
+      final tlyricRaw = sorted.trans.isEmpty
+          ? null
+          : _transformLrc(tags, sorted.trans);
       return BuiltinLyricResult(
         lyric: lyric,
         tlyric: tlyricRaw == null ? null : decodeName(tlyricRaw).trim(),
@@ -240,8 +245,10 @@ class KwLyric {
       if (wordLine != null) {
         final time = wordLine.group(1)!;
         var words = wordLine.group(2) ?? '';
-        final wordTimes =
-            _wordTimeAll.allMatches(words).map((m) => m.group(0)!).toList();
+        final wordTimes = _wordTimeAll
+            .allMatches(words)
+            .map((m) => m.group(0)!)
+            .toList();
         if (wordTimes.isEmpty) continue;
         _KwWordInfo? previous;
         for (final timeStr in wordTimes) {

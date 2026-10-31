@@ -36,8 +36,8 @@ class IoSaveAs implements SaveAs {
     this._temporaryDirectory,
     bool? android,
     bool? ios,
-  })  : _isAndroid = android ?? Platform.isAndroid,
-        _isIos = ios ?? Platform.isIOS;
+  }) : _isAndroid = android ?? Platform.isAndroid,
+       _isIos = ios ?? Platform.isIOS;
 
   final DownloadsPublisher _publisher;
   final String? Function()? _customRoot;
@@ -135,11 +135,7 @@ class IoSaveAs implements SaveAs {
       return SaveAsSaved(
         path: target,
         displayPath: _isIos
-            ? p.join(
-                publicDownloadsDirName,
-                relativeDir,
-                p.basename(target),
-              )
+            ? p.join(publicDownloadsDirName, relativeDir, p.basename(target))
             : target,
         kind: _isIos ? SaveLocationKind.filesApp : SaveLocationKind.fileSystem,
       );
@@ -242,8 +238,9 @@ class IoSaveAs implements SaveAs {
           displayPath: _isIos
               ? p.join(publicDownloadsDirName, safeDir, safeName)
               : target,
-          kind:
-              _isIos ? SaveLocationKind.filesApp : SaveLocationKind.fileSystem,
+          kind: _isIos
+              ? SaveLocationKind.filesApp
+              : SaveLocationKind.fileSystem,
         );
       }
       await Directory(dir).create(recursive: true);
@@ -309,8 +306,9 @@ class IoSaveAs implements SaveAs {
     final segments = relativeDir
         .split('/')
         .map((segment) => segment.trim())
-        .where((segment) =>
-            segment.isNotEmpty && segment != '.' && segment != '..')
+        .where(
+          (segment) => segment.isNotEmpty && segment != '.' && segment != '..',
+        )
         .toList();
     return segments.join('/');
   }

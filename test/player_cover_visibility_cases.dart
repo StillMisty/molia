@@ -17,14 +17,14 @@ import 'support/fakes.dart';
 /// 落在错误位置再被动画带走。断言：隐藏期间切歌、离开时进行中的动画都立即
 /// 落位，恢复可见后不存在中间态。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,16 +47,18 @@ void main() {
 
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
-    backend.emit(BackendSnapshot(
-      current: order[index],
-      queue: order,
-      currentIndex: index,
-      next: index + 1 < order.length ? order[index + 1] : null,
-      previous: index > 0 ? order[index - 1] : null,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: order[index],
+        queue: order,
+        currentIndex: index,
+        next: index + 1 < order.length ? order[index + 1] : null,
+        previous: index > 0 ? order[index - 1] : null,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   /// 把播放器挂在可控的 TickerMode 下，模拟 tab 页的可见/隐藏切换。
@@ -95,10 +97,7 @@ void main() {
                 valueListenable: tickers,
                 builder: (context, enabled, child) =>
                     TickerMode(enabled: enabled, child: child!),
-                child: Player(
-                  expandAnimation: expand,
-                  onToggleExpand: () {},
-                ),
+                child: Player(expandAnimation: expand, onToggleExpand: () {}),
               ),
             ),
           ),
@@ -126,19 +125,29 @@ void main() {
 
     // 隐藏期间就应落位：morph 飞行在点击那一刻同步抓取封面锚点，
     // 等不到「恢复可见」那一帧的兜底落位。
-    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing,
-        reason: '隐藏期间切歌应立即落位，不能留下待播的滑出卡');
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget,
-        reason: '隐藏期间就应显示新曲目稳态');
+      find.byKey(PlayerCoverDeck.outgoingCoverCardKey),
+      findsNothing,
+      reason: '隐藏期间切歌应立即落位，不能留下待播的滑出卡',
+    );
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+      reason: '隐藏期间就应显示新曲目稳态',
+    );
 
     tickers.value = true;
     await tester.pump();
-    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing,
-        reason: '恢复可见不应重播切歌动画');
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)), findsOneWidget,
-        reason: '恢复可见应立即是稳态新曲目');
+      find.byKey(PlayerCoverDeck.outgoingCoverCardKey),
+      findsNothing,
+      reason: '恢复可见不应重播切歌动画',
+    );
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(c.id)),
+      findsOneWidget,
+      reason: '恢复可见应立即是稳态新曲目',
+    );
     expect(find.text('Title c'), findsWidgets);
 
     // 推进 400ms：不应有动画补播（滑出卡始终不出现）。
@@ -150,19 +159,27 @@ void main() {
     emitFor('b');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsOneWidget,
-        reason: '切歌动画中滑出卡应在渲染');
+    expect(
+      find.byKey(PlayerCoverDeck.outgoingCoverCardKey),
+      findsOneWidget,
+      reason: '切歌动画中滑出卡应在渲染',
+    );
 
     tickers.value = false;
     await tester.pump();
-    expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing,
-        reason: '离开播放页应立即落位，不留冻结的中间进度');
+    expect(
+      find.byKey(PlayerCoverDeck.outgoingCoverCardKey),
+      findsNothing,
+      reason: '离开播放页应立即落位，不留冻结的中间进度',
+    );
 
     tickers.value = true;
     await tester.pump();
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);
     expect(
-        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)), findsOneWidget);
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+      findsOneWidget,
+    );
     // 通知节流计时器跑完，避免测试结束时报 pending timer。
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(PlayerCoverDeck.outgoingCoverCardKey), findsNothing);

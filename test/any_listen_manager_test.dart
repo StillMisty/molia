@@ -9,6 +9,7 @@ import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart';
+
 import 'support/settings_test_support.dart';
 
 void main() {
@@ -44,8 +45,9 @@ void main() {
         expect(manager.anyListenConfig.isConfigured, c.configured);
         expect(manager.anyListenAvailable, isFalse);
         expect(
-          manager.searchableSources
-              .where((o) => o.kind == domain.SourceKind.anyListen),
+          manager.searchableSources.where(
+            (o) => o.kind == domain.SourceKind.anyListen,
+          ),
           isEmpty,
         );
 
@@ -61,8 +63,13 @@ void main() {
       // 不暴露 any-listen 内部异常类型。
       await expectLater(
         manager.searchWithMeta(AnyListenSource.sourceKey, 'x'),
-        throwsA(isA<SourceFailure>()
-            .having((e) => e.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (e) => e.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
 
       final track = SourceTrack(
@@ -75,8 +82,13 @@ void main() {
       );
       await expectLater(
         manager.resolveStream(track),
-        throwsA(isA<SourceFailure>()
-            .having((e) => e.kind, 'kind', FailureKind.unsupported)),
+        throwsA(
+          isA<SourceFailure>().having(
+            (e) => e.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
+        ),
       );
 
       // 歌词/封面契约允许失败：返回 null，不抛异常
@@ -88,49 +100,57 @@ void main() {
   });
 
   group('SourceManager × any-listen：配置与路由', () {
-    test('updateAnyListenConfig：持久化、通知、出现在列表末尾；reloadAnyListenConfig 重新加载',
-        () async {
-      final manager = SourceManager(settings: testSettingsRegistry());
-      await manager.init();
+    test(
+      'updateAnyListenConfig：持久化、通知、出现在列表末尾；reloadAnyListenConfig 重新加载',
+      () async {
+        final manager = SourceManager(settings: testSettingsRegistry());
+        await manager.init();
 
-      var notified = 0;
-      manager.addListener(() => notified++);
+        var notified = 0;
+        manager.addListener(() => notified++);
 
-      final saved = await manager.updateAnyListenConfig(const AnyListenConfig(
-        serverUrl: 'http://127.0.0.1:9500/',
-        token: 'tk',
-        enabled: true,
-      ));
+        final saved = await manager.updateAnyListenConfig(
+          const AnyListenConfig(
+            serverUrl: 'http://127.0.0.1:9500/',
+            token: 'tk',
+            enabled: true,
+          ),
+        );
 
-      expect(saved, isTrue);
-      expect(notified, greaterThan(0));
-      expect(manager.anyListenAvailable, isTrue);
-      expect(manager.anyListenConfig.serverUrl, 'http://127.0.0.1:9500');
+        expect(saved, isTrue);
+        expect(notified, greaterThan(0));
+        expect(manager.anyListenAvailable, isTrue);
+        expect(manager.anyListenConfig.serverUrl, 'http://127.0.0.1:9500');
 
-      final options = manager.searchableSources;
-      final anyListen =
-          options.where((o) => o.kind == domain.SourceKind.anyListen).toList();
-      expect(anyListen, hasLength(1));
-      expect(anyListen.single.key, AnyListenSource.sourceKey);
-      expect(anyListen.single.displayName, AnyListenSource.displayName);
-      expect(anyListen.single.capabilities.search, isTrue);
-      // 新 key 未出现在持久化顺序表中：自动排在末尾，不打乱既有排序
-      expect(options.last.key, AnyListenSource.sourceKey);
+        final options = manager.searchableSources;
+        final anyListen = options
+            .where((o) => o.kind == domain.SourceKind.anyListen)
+            .toList();
+        expect(anyListen, hasLength(1));
+        expect(anyListen.single.key, AnyListenSource.sourceKey);
+        expect(anyListen.single.displayName, AnyListenSource.displayName);
+        expect(anyListen.single.capabilities.search, isTrue);
+        // 新 key 未出现在持久化顺序表中：自动排在末尾，不打乱既有排序
+        expect(options.last.key, AnyListenSource.sourceKey);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('any_listen_server_url'), 'http://127.0.0.1:9500');
-      expect(prefs.getBool('any_listen_enabled'), isTrue);
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getString('any_listen_server_url'),
+          'http://127.0.0.1:9500',
+        );
+        expect(prefs.getBool('any_listen_enabled'), isTrue);
 
-      // 直接写 prefs（模拟外部改动）后 reload：可见性随之刷新
-      SharedPreferences.setMockInitialValues({
-        'any_listen_server_url': 'http://127.0.0.1:9500',
-        'any_listen_enabled': true,
-      });
-      await manager.reloadAnyListenConfig();
-      expect(manager.anyListenAvailable, isTrue);
+        // 直接写 prefs（模拟外部改动）后 reload：可见性随之刷新
+        SharedPreferences.setMockInitialValues({
+          'any_listen_server_url': 'http://127.0.0.1:9500',
+          'any_listen_enabled': true,
+        });
+        await manager.reloadAnyListenConfig();
+        expect(manager.anyListenAvailable, isTrue);
 
-      manager.dispose();
-    });
+        manager.dispose();
+      },
+    );
 
     test('通过 SourceManager 路由搜索/取链到本地 mock 服务器', () async {
       // 本地 HttpServer mock（不访问真实网络）
@@ -142,30 +162,33 @@ void main() {
           if (request.method == 'POST') {
             await utf8.decoder.bind(request).join();
           }
-          request.response.headers.contentType =
-              ContentType('application', 'json', charset: 'utf-8');
+          request.response.headers.contentType = ContentType(
+            'application',
+            'json',
+            charset: 'utf-8',
+          );
           switch (request.uri.path) {
             case '/api/music/search':
-              request.response.write(jsonEncode({
-                'list': [
-                  {
-                    'id': 'any-9',
-                    'name': '测试曲目',
-                    'singer': '测试歌手',
-                    'interval': '03:00',
-                    'meta': {
-                      'albumName': '测试专辑',
-                      'source': 'tx',
+              request.response.write(
+                jsonEncode({
+                  'list': [
+                    {
+                      'id': 'any-9',
+                      'name': '测试曲目',
+                      'singer': '测试歌手',
+                      'interval': '03:00',
+                      'meta': {'albumName': '测试专辑', 'source': 'tx'},
                     },
-                  }
-                ],
-                'total': 1,
-                'limit': 30,
-                'page': 1,
-              }));
+                  ],
+                  'total': 1,
+                  'limit': 30,
+                  'page': 1,
+                }),
+              );
             case '/api/music/url':
-              request.response
-                  .write(jsonEncode({'url': 'http://127.0.0.1:1/stream.mp3'}));
+              request.response.write(
+                jsonEncode({'url': 'http://127.0.0.1:1/stream.mp3'}),
+              );
             default:
               request.response
                 ..statusCode = 404
@@ -180,23 +203,24 @@ void main() {
       final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
 
-      await manager.updateAnyListenConfig(AnyListenConfig(
-        serverUrl: 'http://127.0.0.1:${server.port}',
-        enabled: true,
-      ));
+      await manager.updateAnyListenConfig(
+        AnyListenConfig(
+          serverUrl: 'http://127.0.0.1:${server.port}',
+          enabled: true,
+        ),
+      );
 
-      final result =
-          await manager.searchWithMeta(AnyListenSource.sourceKey, '测试');
+      final result = await manager.searchWithMeta(
+        AnyListenSource.sourceKey,
+        '测试',
+      );
       expect(result.tracks, hasLength(1));
       expect(result.tracks.single.title, '测试曲目');
       expect(result.tracks.single.raw['id'], 'any-9');
 
       final stream = await manager.resolveStream(result.tracks.single);
       expect(stream.uri.toString(), 'http://127.0.0.1:1/stream.mp3');
-      expect(
-        requests,
-        containsAll(['/api/music/search', '/api/music/url']),
-      );
+      expect(requests, containsAll(['/api/music/search', '/api/music/url']));
 
       manager.dispose();
       await server.close(force: true);
@@ -217,16 +241,20 @@ void main() {
 
       final manager = SourceManager(settings: testSettingsRegistry());
       await manager.init();
-      await manager.updateAnyListenConfig(AnyListenConfig(
-        serverUrl: 'http://127.0.0.1:${server.port}',
-        enabled: true,
-      ));
+      await manager.updateAnyListenConfig(
+        AnyListenConfig(
+          serverUrl: 'http://127.0.0.1:${server.port}',
+          enabled: true,
+        ),
+      );
 
       await expectLater(
         manager.searchWithMeta(AnyListenSource.sourceKey, 'x'),
-        throwsA(isA<SourceFailure>()
-            .having((e) => e.kind, 'kind', FailureKind.unauthorized)
-            .having((e) => e.retryable, 'retryable', isFalse)),
+        throwsA(
+          isA<SourceFailure>()
+              .having((e) => e.kind, 'kind', FailureKind.unauthorized)
+              .having((e) => e.retryable, 'retryable', isFalse),
+        ),
       );
 
       manager.dispose();

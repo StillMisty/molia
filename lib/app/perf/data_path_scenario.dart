@@ -30,10 +30,14 @@ import '../bootstrap/lyrics_stack.dart';
 import '../bootstrap/playback_stack.dart';
 import 'data_path_trace.dart';
 
-const bool _enabled =
-    bool.fromEnvironment('MOLIA_PERF_SCENARIO_DATA', defaultValue: false);
-const bool _nextEnabled =
-    bool.fromEnvironment('MOLIA_PERF_SCENARIO_NEXT', defaultValue: false);
+const bool _enabled = bool.fromEnvironment(
+  'MOLIA_PERF_SCENARIO_DATA',
+  defaultValue: false,
+);
+const bool _nextEnabled = bool.fromEnvironment(
+  'MOLIA_PERF_SCENARIO_NEXT',
+  defaultValue: false,
+);
 const int _nextWaitMs = int.fromEnvironment(
   'MOLIA_PERF_NEXT_WAIT_MS',
   defaultValue: 2000,
@@ -61,10 +65,10 @@ Future<void> runDataPathScenario({
   required LyricsStack lyrics,
 }) async {
   if (!_enabled) return;
-  DataPathTrace.event('scenario.start', fields: () => {
-        'keyword': _keyword,
-        'source': _sourceKey,
-      });
+  DataPathTrace.event(
+    'scenario.start',
+    fields: () => {'keyword': _keyword, 'source': _sourceKey},
+  );
   try {
     await _run(catalog: catalog, playback: playback, lyrics: lyrics);
   } catch (e, stackTrace) {
@@ -89,11 +93,14 @@ Future<void> _run({
     () => catalog.sourceManager.hasActiveSource,
     timeout: const Duration(seconds: 90),
   );
-  DataPathTrace.event('scenario.source', fields: () => {
-        'ready': sourceReady ? 1 : 0,
-        'active': catalog.sourceManager.activeSources.length,
-        'engine': catalog.sourceManager.engineReady ? 1 : 0,
-      });
+  DataPathTrace.event(
+    'scenario.source',
+    fields: () => {
+      'ready': sourceReady ? 1 : 0,
+      'active': catalog.sourceManager.activeSources.length,
+      'engine': catalog.sourceManager.engineReady ? 1 : 0,
+    },
+  );
   if (!sourceReady) return;
 
   // CPU 采样用：先保持一段空闲窗口，再开始搜索 / 播放。
@@ -107,8 +114,9 @@ Future<void> _run({
     sourceRegistry: catalog.sourceRegistry,
   );
   try {
-    final options =
-        search.sourceChannels.where((o) => o.capabilities.search).toList();
+    final options = search.sourceChannels
+        .where((o) => o.capabilities.search)
+        .toList();
     if (options.isEmpty) {
       _logger.warning('scenario: 没有可搜索音源');
       return;
@@ -120,10 +128,10 @@ Future<void> _run({
             orElse: () => options.first,
           );
     search.selectSource(option.key);
-    DataPathTrace.event('scenario.search.begin', fields: () => {
-          'source': option.key,
-          'keyword': _keyword,
-        });
+    DataPathTrace.event(
+      'scenario.search.begin',
+      fields: () => {'source': option.key, 'keyword': _keyword},
+    );
 
     final searchWatch = Stopwatch()..start();
     search.updateSearchQuery(_keyword);
@@ -132,12 +140,15 @@ Future<void> _run({
       timeout: const Duration(seconds: 60),
     );
     final items = search.filteredResults;
-    DataPathTrace.event('scenario.search.done', fields: () => {
-          'ok': searched ? 1 : 0,
-          'ms': searchWatch.elapsedMilliseconds,
-          'results': items.length,
-          'failure': search.failure?.kind.name ?? '',
-        });
+    DataPathTrace.event(
+      'scenario.search.done',
+      fields: () => {
+        'ok': searched ? 1 : 0,
+        'ms': searchWatch.elapsedMilliseconds,
+        'results': items.length,
+        'failure': search.failure?.kind.name ?? '',
+      },
+    );
     if (items.isEmpty) return;
 
     // 点第一条：走 SearchProvider → PlaybackProvider → 真实播放后端。
@@ -150,21 +161,27 @@ Future<void> _run({
           playback.playbackProvider.isPlaying,
       timeout: const Duration(seconds: 45),
     );
-    DataPathTrace.event('scenario.play.done', fields: () => {
+    DataPathTrace.event(
+      'scenario.play.done',
+      fields: () => {
+        'ok': playing ? 1 : 0,
+        'ms': playbackWatch.elapsedMilliseconds,
+        'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
+        'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
+      },
+    );
+    playbackWatch.stop();
+    // 兼容既有 `scenario.play.done`：next 口径单独记一笔首首起播。
+    if (_nextEnabled) {
+      DataPathTrace.event(
+        'scenario.play.first.done',
+        fields: () => {
           'ok': playing ? 1 : 0,
           'ms': playbackWatch.elapsedMilliseconds,
           'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
           'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
-        });
-    playbackWatch.stop();
-    // 兼容既有 `scenario.play.done`：next 口径单独记一笔首首起播。
-    if (_nextEnabled) {
-      DataPathTrace.event('scenario.play.first.done', fields: () => {
-            'ok': playing ? 1 : 0,
-            'ms': playbackWatch.elapsedMilliseconds,
-            'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
-            'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
-          });
+        },
+      );
     }
 
     // 取词对象固定在首首曲目：next 采样只关心起播，不改变歌词链路口径。
@@ -179,25 +196,25 @@ Future<void> _run({
       final before = playback.playbackProvider.snapshot.current?.id.uri ?? '';
       final nextWatch = Stopwatch()..start();
       await playback.playbackProvider.skipToNext();
-      final nextPlaying = await _waitFor(
-        () {
-          final snapshot = playback.playbackProvider.snapshot;
-          final current = snapshot.current;
-          return current != null &&
-              current.id.uri != before &&
-              !playback.playbackProvider.isLoading &&
-              playback.playbackProvider.isPlaying;
+      final nextPlaying = await _waitFor(() {
+        final snapshot = playback.playbackProvider.snapshot;
+        final current = snapshot.current;
+        return current != null &&
+            current.id.uri != before &&
+            !playback.playbackProvider.isLoading &&
+            playback.playbackProvider.isPlaying;
+      }, timeout: const Duration(seconds: 45));
+      DataPathTrace.event(
+        'scenario.play.next.done',
+        fields: () => {
+          'ok': nextPlaying ? 1 : 0,
+          'ms': nextWatch.elapsedMilliseconds,
+          'wait_ms': _nextWaitMs,
+          'from': before,
+          'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
+          'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
         },
-        timeout: const Duration(seconds: 45),
       );
-      DataPathTrace.event('scenario.play.next.done', fields: () => {
-            'ok': nextPlaying ? 1 : 0,
-            'ms': nextWatch.elapsedMilliseconds,
-            'wait_ms': _nextWaitMs,
-            'from': before,
-            'track': playback.playbackProvider.snapshot.current?.id.uri ?? '',
-            'error': playback.playbackProvider.snapshot.error?.kind.name ?? '',
-          });
     }
 
     // 取词：真实链路（原生 lyric action → 缓存 → 网络回退）。
@@ -205,12 +222,15 @@ Future<void> _run({
       final lyricsWatch = Stopwatch()..start();
       await lyrics.lyricsProvider.load(current);
       final state = lyrics.lyricsProvider.state;
-      DataPathTrace.event('scenario.lyrics.done', fields: () => {
-            'ms': lyricsWatch.elapsedMilliseconds,
-            'status': state.status.name,
-            'lines': state.lines.length,
-            'provider': state.providerName ?? '',
-          });
+      DataPathTrace.event(
+        'scenario.lyrics.done',
+        fields: () => {
+          'ms': lyricsWatch.elapsedMilliseconds,
+          'status': state.status.name,
+          'lines': state.lines.length,
+          'provider': state.providerName ?? '',
+        },
+      );
     }
 
     if (_holdSeconds > 0) {

@@ -59,8 +59,8 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
     final inApp = scope == ShortcutScope.inApp;
     final bindings = inApp ? settings.inAppBindings : settings.globalBindings;
     final enabled = inApp ? settings.inAppEnabled : settings.globalEnabled;
-    final hasOverrides =
-        ShortcutBindings.commandsOf(scope).any(bindings.isOverridden);
+    final hasOverrides = ShortcutBindings.commandsOf(scope)
+        .any(bindings.isOverridden);
     return SettingsSectionCard(
       title: inApp ? l10n.shortcutsInAppSection : l10n.shortcutsGlobalSection,
       footer: _scopeFooter(l10n, scope),
@@ -84,10 +84,11 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
         ),
         // 显示主窗口依赖窗口能力：没有实现的平台（Android / iOS）不摆死行，
         // 注册侧也按同一判定跳过（见 GlobalHotkeys）。
-        for (final command in ShortcutBindings.commandsOf(scope)
-            .where((command) =>
-                command != ShortcutCommand.showMainWindow ||
-                WindowChrome.isSupported))
+        for (final command in ShortcutBindings.commandsOf(scope).where(
+          (command) =>
+              command != ShortcutCommand.showMainWindow ||
+              WindowChrome.isSupported,
+        ))
           ShortcutRecorderTile(
             key: Key('shortcutRow_${scope.name}_${command.name}'),
             icon: _actionIcon(command),
@@ -123,8 +124,7 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
         SettingsSectionHint(text: l10n.shortcutsGlobalHint),
         // 注册失败（被别的应用占用 / 系统不支持 / 用户拒绝）时给出可见反馈：
         // lastError 由 GlobalHotkeys 逐条记录，这里只是展示，不参与判定。
-        if (scope == ShortcutScope.global &&
-            GlobalHotkeys.lastError != null)
+        if (scope == ShortcutScope.global && GlobalHotkeys.lastError != null)
           SettingsSectionHint(
             text: l10n.shortcutsGlobalFailed(GlobalHotkeys.lastError!),
           ),
@@ -170,12 +170,12 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
       case ShortcutBindingRejection.unsupportedKey:
         // 平台只接受字母 / 数字 / F1–F12 / 空格（系统 API 限制）。
         context.read<NotificationService?>()?.showSnackBar(
-              l10n.shortcutsGlobalUnsupportedKey,
-            );
+          l10n.shortcutsGlobalUnsupportedKey,
+        );
       case ShortcutBindingRejection.missingModifier:
         context.read<NotificationService?>()?.showSnackBar(
-              l10n.shortcutsGlobalNeedsModifier,
-            );
+          l10n.shortcutsGlobalNeedsModifier,
+        );
       case ShortcutBindingRejection.unknownAction:
         return;
     }
@@ -205,19 +205,19 @@ class _ShortcutSettingsPageState extends State<ShortcutSettingsPage> {
         : settings.globalBindings;
     if (bindings.conflictWith(target, exclude: command) != other) {
       context.read<NotificationService?>()?.showSnackBar(
-            l10n.shortcutsConflict(_actionLabel(l10n, other)),
-          );
+        l10n.shortcutsConflict(_actionLabel(l10n, other)),
+      );
       return;
     }
     final swapped = await settings.swapBindings(scope, command, other);
     if (!mounted) return;
     context.read<NotificationService?>()?.showSnackBar(
-          swapped
-              ? l10n.shortcutsSwapDone(_actionLabel(l10n, other))
-              // 互换本不应失败（冲突方必属同组）；真失败时退回冲突提示，
-              // 至少让用户知道绑定没有变化。
-              : l10n.shortcutsConflict(_actionLabel(l10n, other)),
-        );
+      swapped
+          ? l10n.shortcutsSwapDone(_actionLabel(l10n, other))
+          // 互换本不应失败（冲突方必属同组）；真失败时退回冲突提示，
+          // 至少让用户知道绑定没有变化。
+          : l10n.shortcutsConflict(_actionLabel(l10n, other)),
+    );
   }
 }
 
@@ -324,18 +324,18 @@ String _actionLabel(AppLocalizations l10n, ShortcutCommand command) =>
 
 /// 动作行的图标（按动作语义选型；与执行端命令一一对应）。
 IconData _actionIcon(ShortcutCommand command) => switch (command) {
-      ShortcutCommand.togglePlayPause => Icons.play_arrow_rounded,
-      ShortcutCommand.seekBackward => Icons.fast_rewind_rounded,
-      ShortcutCommand.seekForward => Icons.fast_forward_rounded,
-      ShortcutCommand.previousTrack => Icons.skip_previous_rounded,
-      ShortcutCommand.nextTrack => Icons.skip_next_rounded,
-      ShortcutCommand.volumeUp => Icons.volume_up_rounded,
-      ShortcutCommand.volumeDown => Icons.volume_down_rounded,
-      ShortcutCommand.toggleMute => Icons.volume_off_rounded,
-      ShortcutCommand.focusSearch => Icons.search_rounded,
-      ShortcutCommand.selectDestination1 => Icons.filter_1_rounded,
-      ShortcutCommand.selectDestination2 => Icons.filter_2_rounded,
-      ShortcutCommand.selectDestination3 => Icons.filter_3_rounded,
-      ShortcutCommand.closeQueuePanel => Icons.playlist_remove_rounded,
-      ShortcutCommand.showMainWindow => Icons.desktop_windows_rounded,
-    };
+  ShortcutCommand.togglePlayPause => Icons.play_arrow_rounded,
+  ShortcutCommand.seekBackward => Icons.fast_rewind_rounded,
+  ShortcutCommand.seekForward => Icons.fast_forward_rounded,
+  ShortcutCommand.previousTrack => Icons.skip_previous_rounded,
+  ShortcutCommand.nextTrack => Icons.skip_next_rounded,
+  ShortcutCommand.volumeUp => Icons.volume_up_rounded,
+  ShortcutCommand.volumeDown => Icons.volume_down_rounded,
+  ShortcutCommand.toggleMute => Icons.volume_off_rounded,
+  ShortcutCommand.focusSearch => Icons.search_rounded,
+  ShortcutCommand.selectDestination1 => Icons.filter_1_rounded,
+  ShortcutCommand.selectDestination2 => Icons.filter_2_rounded,
+  ShortcutCommand.selectDestination3 => Icons.filter_3_rounded,
+  ShortcutCommand.closeQueuePanel => Icons.playlist_remove_rounded,
+  ShortcutCommand.showMainWindow => Icons.desktop_windows_rounded,
+};

@@ -15,11 +15,10 @@ import 'package:molia/domain/ports/sync_transport.dart';
 SyncStampIssuer testStampIssuer({
   int Function()? clock,
   String deviceId = '',
-}) =>
-    SyncStampIssuer(
-      clock: clock ?? () => DateTime.now().millisecondsSinceEpoch,
-      deviceId: () => deviceId,
-    );
+}) => SyncStampIssuer(
+  clock: clock ?? () => DateTime.now().millisecondsSinceEpoch,
+  deviceId: () => deviceId,
+);
 
 /// 测试用统计同步存储：与仓储共用同一个内存库 / 发号器 / 日志。
 SqliteStatisticsSyncStore testStatisticsSyncStore(
@@ -27,12 +26,11 @@ SqliteStatisticsSyncStore testStatisticsSyncStore(
   int Function()? clock,
   String deviceId = '',
   SyncJournalRepository? journal,
-}) =>
-    SqliteStatisticsSyncStore(
-      databaseProvider: databaseProvider,
-      stamps: testStampIssuer(clock: clock, deviceId: deviceId),
-      journal: journal,
-    );
+}) => SqliteStatisticsSyncStore(
+  databaseProvider: databaseProvider,
+  stamps: testStampIssuer(clock: clock, deviceId: deviceId),
+  journal: journal,
+);
 
 /// 测试用内存密钥存储（替代 flutter_secure_storage）。
 class MemorySyncSecretStore implements SettingsSecretStore {
@@ -99,19 +97,17 @@ class CountingLibrarySyncStore implements LibrarySyncStore {
     List<PlaylistSyncRecord> playlists = const [],
     List<PlaylistTrackSyncRecord> tracks = const [],
     List<SyncTombstoneRecord> tombstones = const [],
-  }) =>
-      delegate.syncApplyLibrary(
-        playlists: playlists,
-        tracks: tracks,
-        tombstones: tombstones,
-      );
+  }) => delegate.syncApplyLibrary(
+    playlists: playlists,
+    tracks: tracks,
+    tombstones: tombstones,
+  );
 
   @override
   Future<({int applied, int skipped})> syncApplyHistory({
     List<PlayHistorySyncRecord> entries = const [],
     List<SyncTombstoneRecord> tombstones = const [],
-  }) =>
-      delegate.syncApplyHistory(entries: entries, tombstones: tombstones);
+  }) => delegate.syncApplyHistory(entries: entries, tombstones: tombstones);
 }
 
 /// 测试用内存传输：可注入远端快照、失败计数与不可用原因，并记录推送内容。///
@@ -203,8 +199,9 @@ class FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull(
-      [SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull([
+    SyncPullRequest request = SyncPullRequest.none,
+  ]) async {
     pullCount++;
     lastRequest = request;
     await onPull?.call();
@@ -215,16 +212,20 @@ class FakeSyncTransport implements SyncTransport {
       skippedUnchanged: pullSkippedUnchanged,
       failedPeers: pullFailures,
       contacted: pullContacted,
-      seenIds: seenIdsOverride ??
+      seenIds:
+          seenIdsOverride ??
           [
             for (final envelope in available)
               if (envelope.deviceId.isNotEmpty) envelope.deviceId,
           ],
       failedIssues: pullFailedIssues,
-      error: pullError ??
+      error:
+          pullError ??
           (pullFailures > 0
               ? const SyncIssue(
-                  code: SyncIssueCode.pullFailed, detail: '拉取失败（测试注入）')
+                  code: SyncIssueCode.pullFailed,
+                  detail: '拉取失败（测试注入）',
+                )
               : null),
     );
   }
@@ -240,7 +241,9 @@ class FakeSyncTransport implements SyncTransport {
         failedPeers: pushFailures,
         failedIds: pushFailedIds,
         error: const SyncIssue(
-            code: SyncIssueCode.pushFailed, detail: '推送失败（测试注入）'),
+          code: SyncIssueCode.pushFailed,
+          detail: '推送失败（测试注入）',
+        ),
       );
     }
     return SyncPushResult(
@@ -340,18 +343,19 @@ class FakeJournalStore implements SyncJournalStore {
 
   @override
   Future<SyncJournalStats> stats() async => SyncJournalStats(
-        headSeq: head,
-        baseSeq: base,
-        snapshotSeq: snapshot,
-        entries: head - base,
-        bytes: 0,
-        oldestAt: 0,
-      );
+    headSeq: head,
+    baseSeq: base,
+    snapshotSeq: snapshot,
+    entries: head - base,
+    bytes: 0,
+    oldestAt: 0,
+  );
 
   @override
-  Future<List<SyncJournalEntry>> window(
-          {int since = -1, int limit = 0}) async =>
-      const [];
+  Future<List<SyncJournalEntry>> window({
+    int since = -1,
+    int limit = 0,
+  }) async => const [];
 
   @override
   Future<int> windowBytes({int since = -1}) async => 0;
@@ -366,8 +370,7 @@ class FakeJournalStore implements SyncJournalStore {
     required int minAck,
     required int coverage,
     int? nowMs,
-  }) async =>
-      base;
+  }) async => base;
 
   @override
   Future<void> reset() async {
@@ -470,10 +473,7 @@ class FakeSyncPairingPort implements SyncPairingPort {
   }
 
   @override
-  Future<SyncPairingOutcome> respond(
-    String requestId, {
-    required bool accept,
-  }) {
+  Future<SyncPairingOutcome> respond(String requestId, {required bool accept}) {
     responses.add((requestId: requestId, accept: accept));
     final gate = respondCompleter;
     if (gate != null) return gate.future;

@@ -25,7 +25,7 @@ class DownloadNotificationPresenter {
     required this._notifications,
     this._settings,
     int Function()? clock,
-  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+  }) : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final DownloadNotifications _notifications;
   final DownloadSettings? _settings;
@@ -69,11 +69,13 @@ class DownloadNotificationPresenter {
     final id = _taskId(key);
     _sentAt.remove(id);
     _started.add(id);
-    unawaited(_notifications.start(
-      id: id,
-      title: track.title,
-      subtitle: track.artistLabel,
-    ));
+    unawaited(
+      _notifications.start(
+        id: id,
+        title: track.title,
+        subtitle: track.artistLabel,
+      ),
+    );
   }
 
   /// 收单任务通知（完成 / 失败 / 取消同一条路径：收尾并移除）。
@@ -117,24 +119,28 @@ class DownloadNotificationPresenter {
     _sentAt.remove(id);
     _started.add(id);
     if (_batchStarted) {
-      unawaited(_notifications.update(
-        id: id,
-        title: track.title,
-        subtitle: track.artistLabel,
-        index: index,
-        total: _batchTotal,
-        // max 传 0：新任务总大小未知，进度条回到不确定态。
-        progress: 0,
-        max: 0,
-      ));
+      unawaited(
+        _notifications.update(
+          id: id,
+          title: track.title,
+          subtitle: track.artistLabel,
+          index: index,
+          total: _batchTotal,
+          // max 传 0：新任务总大小未知，进度条回到不确定态。
+          progress: 0,
+          max: 0,
+        ),
+      );
     } else {
-      unawaited(_notifications.start(
-        id: id,
-        title: track.title,
-        subtitle: track.artistLabel,
-        index: index,
-        total: _batchTotal,
-      ));
+      unawaited(
+        _notifications.start(
+          id: id,
+          title: track.title,
+          subtitle: track.artistLabel,
+          index: index,
+          total: _batchTotal,
+        ),
+      );
       _batchStarted = true;
     }
   }

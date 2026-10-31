@@ -57,10 +57,9 @@ class JournalDeltaConsumption {
 /// 非空窗口取条目首尾 seq（调用方保证条目按 seq 升序）。
 ({int windowStart, int windowEnd}) journalWindowBounds(
   List<SyncJournalEntry> entries,
-) =>
-    entries.isEmpty
-        ? (windowStart: 0, windowEnd: 0)
-        : (windowStart: entries.first.seq, windowEnd: entries.last.seq);
+) => entries.isEmpty
+    ? (windowStart: 0, windowEnd: 0)
+    : (windowStart: entries.first.seq, windowEnd: entries.last.seq);
 
 /// 消费一份增量窗口，返回可应用条目、下一个游标与缺口标记（不写任何状态）。
 ///
@@ -141,11 +140,9 @@ class JournalSeqRange {
 /// [needed] 按 seq 升序（输入顺序不敏感）；[contiguous] 为 false 时调用方
 /// 必须改走全量快照。空的 `needed` 不算连续：头部已知且游标落后时没有块
 /// 可读，说明窗口已不可用。
-({List<T> needed, bool contiguous})
-    selectJournalChunks<T extends JournalSeqRange>({
-  required int cursor,
-  required Iterable<T> chunks,
-}) {
+({List<T> needed, bool contiguous}) selectJournalChunks<
+  T extends JournalSeqRange
+>({required int cursor, required Iterable<T> chunks}) {
   final ordered = [...chunks]..sort((a, b) => a.startSeq.compareTo(b.startSeq));
   final needed = [
     for (final chunk in ordered)

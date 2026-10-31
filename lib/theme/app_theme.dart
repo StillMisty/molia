@@ -32,8 +32,7 @@ ThemeData buildAppThemeData(
   String? platformDefaultFontFamily,
   List<String>? platformDefaultFontFallbacks,
 }) {
-  final useSystemFont =
-      fontFamily == null && platformDefaultFontFamily != null;
+  final useSystemFont = fontFamily == null && platformDefaultFontFamily != null;
   return ThemeData(
     colorScheme: scheme,
     useMaterial3: true,
@@ -46,9 +45,7 @@ ThemeData buildAppThemeData(
     // 桌面 = Zoom。框架默认 map 已覆盖本仓库的四个目标平台；不要再手写一份
     // 只含 Android/iOS 的 map——其余平台会回退到 Zoom，反而与默认值脱节。
     // 语义色（成功/警告）随方案亮度派生，供全 App 统一取用。
-    extensions: <ThemeExtension<dynamic>>[
-      AppSemanticColors.fromScheme(scheme),
-    ],
+    extensions: <ThemeExtension<dynamic>>[AppSemanticColors.fromScheme(scheme)],
   );
 }
 
@@ -85,9 +82,11 @@ SystemUiOverlayStyle buildSystemUiOverlayStyle(ColorScheme scheme) {
     statusBarColor: Colors.transparent,
     systemNavigationBarColor: Colors.transparent,
     systemNavigationBarDividerColor: Colors.transparent,
-    statusBarIconBrightness:
-        brightness == Brightness.dark ? Brightness.light : Brightness.dark,
-    statusBarBrightness:
-        brightness == Brightness.dark ? Brightness.dark : Brightness.light,
+    statusBarIconBrightness: brightness == Brightness.dark
+        ? Brightness.light
+        : Brightness.dark,
+    statusBarBrightness: brightness == Brightness.dark
+        ? Brightness.dark
+        : Brightness.light,
   );
 }

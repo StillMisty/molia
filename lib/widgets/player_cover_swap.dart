@@ -55,11 +55,19 @@ int resolveCoverSwapDirection({
   if (shuffle) return coverSwapForward;
 
   // 5) 队列下标符号（变化前旧下标 vs 变化后新下标）。
-  final int? fromPosition =
-      _resolveQueuePosition(queue, from.id, oldIndex, null);
+  final int? fromPosition = _resolveQueuePosition(
+    queue,
+    from.id,
+    oldIndex,
+    null,
+  );
   if (fromPosition != null) {
-    final int? toPosition =
-        _resolveQueuePosition(queue, to.id, newIndex, fromPosition);
+    final int? toPosition = _resolveQueuePosition(
+      queue,
+      to.id,
+      newIndex,
+      fromPosition,
+    );
     if (toPosition != null) {
       return toPosition >= fromPosition ? coverSwapForward : coverSwapBackward;
     }

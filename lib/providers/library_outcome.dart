@@ -21,7 +21,7 @@ class LibraryReadState {
   const LibraryReadState.ready() : this._(LibraryReadStatus.ready, null);
 
   const LibraryReadState.failed(Object error)
-      : this._(LibraryReadStatus.failed, error);
+    : this._(LibraryReadStatus.failed, error);
 
   final LibraryReadStatus status;
   final Object? error;
@@ -40,17 +40,17 @@ enum LibraryMutationStatus { applied, unchanged, failed }
 /// 页面据此决定是否清空多选与提示，不再让异常逃进 `unawaited`。
 class LibraryMutationOutcome {
   const LibraryMutationOutcome.applied([this.changed = 0])
-      : status = LibraryMutationStatus.applied,
-        error = null;
+    : status = LibraryMutationStatus.applied,
+      error = null;
 
   const LibraryMutationOutcome.unchanged()
-      : status = LibraryMutationStatus.unchanged,
-        changed = 0,
-        error = null;
+    : status = LibraryMutationStatus.unchanged,
+      changed = 0,
+      error = null;
 
   const LibraryMutationOutcome.failed(this.error)
-      : status = LibraryMutationStatus.failed,
-        changed = 0;
+    : status = LibraryMutationStatus.failed,
+      changed = 0;
 
   final LibraryMutationStatus status;
 
@@ -76,11 +76,11 @@ class FavoriteToggleOutcome {
 
   /// [isFavorite] 为切换后的状态。
   const FavoriteToggleOutcome.success(bool isFavorite)
-      : this._(isFavorite, null);
+    : this._(isFavorite, null);
 
   /// [isFavorite] 为切换前的状态（仓库没写成功，缓存保持原样）。
   const FavoriteToggleOutcome.failed(bool isFavorite, Object error)
-      : this._(isFavorite, error);
+    : this._(isFavorite, error);
 
   final bool isFavorite;
 

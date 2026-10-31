@@ -350,10 +350,7 @@ void main() {
     );
     expect(
       isMulticastAlreadyJoinedError(
-        const SocketException(
-          'in use',
-          osError: OSError('in use', 10048),
-        ),
+        const SocketException('in use', osError: OSError('in use', 10048)),
         operatingSystem: 'windows',
       ),
       isTrue,

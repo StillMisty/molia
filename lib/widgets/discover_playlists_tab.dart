@@ -16,6 +16,7 @@ import 'empty_state.dart';
 import 'library_cover.dart';
 import 'm3e_page_route.dart';
 import 'paged_list_auto_load.dart';
+import 'row_extent.dart';
 import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -55,8 +56,24 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   /// 当前已加载数据的平台（切换平台时重置并重载）。
   String? _loadedSourceKey;
 
-  /// 歌单卡片固定行高：卡片 72（封面 56 + 上下 8）+ 8 间距。
-  static const double _playlistRowExtent = 80;
+  /// 歌单卡片高度：封面 56 为最小值，标题 / 副标题按系统文字缩放增长；
+  /// 加卡片上下内边距 8+8。
+  ///
+  /// 真实 CJK 字体在 1.3× 下常比 token 行高多 2–4px（TextPainter 的字体
+  /// 回退度量），因此内容侧预留 4px 安全余量；1.0× 下仍被 56 的最小值
+  /// 覆盖，默认视觉保持 72 + 8 间距不变。
+  double _playlistCardHeight(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    return scaledRowExtentOf(
+      context,
+      minExtent: 56,
+      styles: [m3e.typeScale.titleSmall, m3e.typeScale.bodySmall],
+      stacked: true,
+      extra: 2,
+      allowance: 4,
+      padding: 16,
+    );
+  }
 
   @override
   bool get wantKeepAlive => true;
@@ -79,7 +96,8 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     return PagedResult(
       items: result.playlists,
       // total 可能是平台占位值（mg/tx 为 99999）：以「本页是否满员」判断更多。
-      hasMore: result.playlists.length >= result.limit &&
+      hasMore:
+          result.playlists.length >= result.limit &&
           (result.total <= 0 || page * result.limit < result.total),
       total: result.total,
     );
@@ -270,7 +288,9 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       return const SizedBox.shrink();
     }
     if (_loadedSourceKey != provider.channelKey) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _ensureSourceLoaded());
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _ensureSourceLoaded(),
+      );
     }
     return ValueListenableBuilder<PagedListState<DiscoverPlaylist>>(
       valueListenable: _paged,
@@ -443,8 +463,9 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                   : l10n.discoverNoContent,
               action: searching || _selectedTag.isNotEmpty
                   ? M3EButton.text(
-                      onPressed:
-                          searching ? _clearSearch : () => _selectTag(''),
+                      onPressed: searching
+                          ? _clearSearch
+                          : () => _selectTag(''),
                       child: Text(
                         searching ? l10n.clearSearch : l10n.discoverAll,
                       ),
@@ -459,8 +480,8 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       SliverPadding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         sliver: SliverFixedExtentList.builder(
-          // 固定行高（卡片 72 + 8 间距）：滚动条拇指与拖动定位精确。
-          itemExtent: _playlistRowExtent,
+          // 卡片高度随系统文字缩放；+8 为卡片间距，与 SizedBox 同源。
+          itemExtent: _playlistCardHeight(context) + 8,
           itemCount: items.length,
           itemBuilder: (context, index) =>
               _playlistCard(theme, l10n, items[index]),
@@ -489,7 +510,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SizedBox(
-        height: 72,
+        height: _playlistCardHeight(context),
         child: M3ECard(
           variant: M3ECardVariant.filled,
           onPressed: () => _openPlaylist(playlist),
@@ -523,8 +544,10 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded,
-                  color: theme.colorScheme.onSurfaceVariant),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),

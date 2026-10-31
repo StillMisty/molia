@@ -68,8 +68,9 @@ abstract final class Msp1 {
 
     final Object? raw;
     try {
-      raw =
-          jsonDecode(utf8.decode(Uint8List.sublistView(packet, headerLength)));
+      raw = jsonDecode(
+        utf8.decode(Uint8List.sublistView(packet, headerLength)),
+      );
     } catch (_) {
       return null;
     }
@@ -112,16 +113,18 @@ abstract final class Msp1 {
     var name = _clampRunes(message.name, maxNameRunes);
     var addresses = message.addresses.take(maxAddresses).toList();
 
-    List<int> build() => utf8.encode(jsonEncode({
-          'id': message.deviceId,
-          'name': name,
-          'http': message.httpPort,
-          'probe': message.probePort,
-          'addrs': addresses,
-          'group': message.hasGroup,
-          'boot': message.bootId,
-          'nonce': message.nonce,
-        }));
+    List<int> build() => utf8.encode(
+      jsonEncode({
+        'id': message.deviceId,
+        'name': name,
+        'http': message.httpPort,
+        'probe': message.probePort,
+        'addrs': addresses,
+        'group': message.hasGroup,
+        'boot': message.bootId,
+        'nonce': message.nonce,
+      }),
+    );
 
     var body = build();
     if (body.length <= maxBodyLength) return body;

@@ -124,8 +124,9 @@ class _ShortcutRecorderTileState extends State<ShortcutRecorderTile> {
     final l10n = AppLocalizations.of(context)!;
     final m3e = M3ETheme.of(context);
     final item = m3e.listTheme.item;
-    final valueText =
-        _recording ? l10n.shortcutsRecording : widget.combo.label();
+    final valueText = _recording
+        ? l10n.shortcutsRecording
+        : widget.combo.label();
     // 录制态用强调色：与「当前值」的信息文本区分开，提示正在等按键。
     final valueColor = _recording
         ? m3e.colorScheme.primary

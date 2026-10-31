@@ -49,10 +49,10 @@ void main() {
   var nowMs = 7000;
 
   LocalEndpointsService fakeEndpoints() => LocalEndpointsService(
-        enumerate: () async => const [
-          LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10'),
-        ],
-      );
+    enumerate: () async => const [
+      LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10'),
+    ],
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -170,56 +170,54 @@ void main() {
     String id, {
     String name = '',
     bool hasGroup = false,
-  }) =>
-      SyncNearbyDevice(
-        deviceId: id,
-        name: name,
-        host: '192.168.1.23',
-        httpPort: 40000,
-        probePort: ManualPeer.defaultProbePort,
-        hasGroup: hasGroup,
-        lastSeenAt: 1000,
-      );
+  }) => SyncNearbyDevice(
+    deviceId: id,
+    name: name,
+    host: '192.168.1.23',
+    httpPort: 40000,
+    probePort: ManualPeer.defaultProbePort,
+    hasGroup: hasGroup,
+    lastSeenAt: 1000,
+  );
 
   SyncPairingAttempt attempt(
     SyncPairingStatus status, {
     String requestId = 'r1',
     String code = '482193',
-  }) =>
-      SyncPairingAttempt(
-        requestId: requestId,
-        peerDeviceId: 'devC',
-        peerName: 'Device C',
-        intent: SyncPairingIntent.join,
-        code: code,
-        status: status,
-        expiresAt: 1 << 50,
-      );
+  }) => SyncPairingAttempt(
+    requestId: requestId,
+    peerDeviceId: 'devC',
+    peerName: 'Device C',
+    intent: SyncPairingIntent.join,
+    code: code,
+    status: status,
+    expiresAt: 1 << 50,
+  );
 
   void seedPeer(String deviceId, {required int lastSeenAt}) {
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: deviceId,
-          name: deviceId,
-          transport: SyncTransportKind.lan,
-          lastSeenAt: lastSeenAt,
-          cursorSeq: 3,
-          ackedSeq: 3,
-        ),
-      ],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: deviceId,
+            name: deviceId,
+            transport: SyncTransportKind.lan,
+            lastSeenAt: lastSeenAt,
+            cursorSeq: 3,
+            ackedSeq: 3,
+          ),
+        ],
+      ),
+    );
     provider.notifyListeners();
   }
 
   Future<void> emitCandidate(WidgetTester tester) async {
-    pairing.emitNearby([
-      nearbyDevice('devC', name: 'Pixel 9', hasGroup: true),
-    ]);
+    pairing.emitNearby([nearbyDevice('devC', name: 'Pixel 9', hasGroup: true)]);
     await tester.pumpAndSettle();
   }
 
@@ -326,10 +324,7 @@ void main() {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     await pumpPage(tester);
 
-    await reveal(
-      tester,
-      find.byKey(const Key('settingsSyncNearby-cellular')),
-    );
+    await reveal(tester, find.byKey(const Key('settingsSyncNearby-cellular')));
     expect(
       find.byKey(const Key('settingsSyncNearby-cellular')),
       findsOneWidget,
@@ -345,10 +340,7 @@ void main() {
     await scheduler.refreshEnvironment();
     provider.notifyListeners();
     await tester.pumpAndSettle();
-    await reveal(
-      tester,
-      find.byKey(const Key('settingsSyncNearby-powerSave')),
-    );
+    await reveal(tester, find.byKey(const Key('settingsSyncNearby-powerSave')));
     expect(
       find.byKey(const Key('settingsSyncNearby-powerSave')),
       findsOneWidget,
@@ -431,10 +423,7 @@ void main() {
       find.byKey(Key('settingsSyncNearby-${provider.deviceId}')),
       findsNothing,
     );
-    expect(
-      find.byKey(const Key('settingsSyncNearby-devPaired')),
-      findsNothing,
-    );
+    expect(find.byKey(const Key('settingsSyncNearby-devPaired')), findsNothing);
     final tile = tester.widget<SettingsNavTile>(row);
     expect(tile.title, 'Pixel 9');
     expect(
@@ -589,7 +578,9 @@ void main() {
     );
 
     expect(
-        find.text('“Pixel 9” wants to join your sync group'), findsOneWidget);
+      find.text('“Pixel 9” wants to join your sync group'),
+      findsOneWidget,
+    );
     expect(find.text('482 193'), findsOneWidget);
     expect(
       find.textContaining('the other device can read all synced data'),
@@ -684,8 +675,11 @@ void main() {
     await tester.pump();
 
     expect(pairing.responses.single.requestId, 'in-expired');
-    expect(pairing.responses.single.accept, isFalse,
-        reason: '本地计时器先到也要主动拒绝，不能等 service sweep');
+    expect(
+      pairing.responses.single.accept,
+      isFalse,
+      reason: '本地计时器先到也要主动拒绝，不能等 service sweep',
+    );
     expect(notifications.last, 'The pairing request expired');
     expect(find.text('777 666'), findsNothing);
   });
@@ -791,18 +785,22 @@ void main() {
       deviceId: 'devB',
     );
     transport.onPull = () async {
-      await state.learnManualPeer(const ManualPeer(
-        host: '192.168.1.23',
-        deviceId: 'devB',
-        httpPort: 40000,
-      ));
+      await state.learnManualPeer(
+        const ManualPeer(
+          host: '192.168.1.23',
+          deviceId: 'devB',
+          httpPort: 40000,
+        ),
+      );
     };
-    transport.available.add(SyncEnvelope(
-      deviceId: 'devB',
-      deviceName: 'Device B',
-      producedAt: 5000,
-      records: const {},
-    ));
+    transport.available.add(
+      SyncEnvelope(
+        deviceId: 'devB',
+        deviceName: 'Device B',
+        producedAt: 5000,
+        records: const {},
+      ),
+    );
     pairing.probeResult = true;
     await pumpPage(tester);
     await openManualConnect(tester);

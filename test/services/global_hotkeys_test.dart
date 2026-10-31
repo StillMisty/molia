@@ -165,11 +165,9 @@ class _RecordingRegistrar implements GlobalHotkeyRegistrar {
 
 /// 内存设置源：可改开关 / 绑定并手动通知。
 class _FakeSettings extends ChangeNotifier implements GlobalHotkeySettings {
-  _FakeSettings({
-    required this.globalEnabled,
-    ShortcutBindings? globalBindings,
-  }) : globalBindings =
-            globalBindings ?? ShortcutBindings(ShortcutScope.global, const {});
+  _FakeSettings({required this.globalEnabled, ShortcutBindings? globalBindings})
+    : globalBindings =
+          globalBindings ?? ShortcutBindings(ShortcutScope.global, const {});
 
   @override
   bool globalEnabled;

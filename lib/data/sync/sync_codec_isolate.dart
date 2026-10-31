@@ -71,7 +71,9 @@ class IsolateSyncCodecPort implements SyncCodecPort {
   }
 
   @override
-  Future<String> fingerprint(Map<SyncCategory, List<SyncRecord>> records) async {
+  Future<String> fingerprint(
+    Map<SyncCategory, List<SyncRecord>> records,
+  ) async {
     final reply = await _send(
       _CodecOp.fingerprint,
       records: records,
@@ -82,10 +84,7 @@ class IsolateSyncCodecPort implements SyncCodecPort {
 
   @override
   Future<Uint8List> discoveryKey(String passphrase) async {
-    final reply = await _send(
-      _CodecOp.discoveryKey,
-      passphrase: passphrase,
-    );
+    final reply = await _send(_CodecOp.discoveryKey, passphrase: passphrase);
     return reply.bytes!;
   }
 
@@ -116,14 +115,16 @@ class IsolateSyncCodecPort implements SyncCodecPort {
     final id = _nextId++;
     final completer = Completer<_CodecReply>();
     _pending[id] = completer;
-    worker.send(_CodecRequest(
-      id,
-      op,
-      passphrase,
-      envelope: envelope,
-      bytes: bytes,
-      records: records,
-    ));
+    worker.send(
+      _CodecRequest(
+        id,
+        op,
+        passphrase,
+        envelope: envelope,
+        bytes: bytes,
+        records: records,
+      ),
+    );
     final reply = await completer.future;
     final error = reply.error;
     if (error != null) throw SyncCryptoException(error);

@@ -23,9 +23,9 @@ void main() {
 
   late BuiltinTransport originalTransport;
 
-  Map<String, dynamic> fixture(String name) => jsonDecode(
-        File('test/fixtures/$name').readAsStringSync(),
-      ) as Map<String, dynamic>;
+  Map<String, dynamic> fixture(String name) =>
+      jsonDecode(File('test/fixtures/$name').readAsStringSync())
+          as Map<String, dynamic>;
 
   setUpAll(() => originalTransport = BuiltinSearch.transport);
 
@@ -44,8 +44,9 @@ void main() {
           return onRequest(options);
       }
     });
-    BuiltinSearch.transport =
-        BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
@@ -72,8 +73,11 @@ void main() {
     await expectLater(
       source.searchPlaylists('周杰伦', 1),
       throwsA(
-        isA<SourceFailure>()
-            .having((e) => e.kind, 'kind', FailureKind.unsupported),
+        isA<SourceFailure>().having(
+          (e) => e.kind,
+          'kind',
+          FailureKind.unsupported,
+        ),
       ),
     );
   });
@@ -103,10 +107,7 @@ void main() {
       return textResponse('{}', statusCode: 500);
     });
 
-    await expectLater(
-      source.hotSearches(),
-      throwsA(isA<SourceFailure>()),
-    );
+    await expectLater(source.hotSearches(), throwsA(isA<SourceFailure>()));
   });
 
   test('playlistDetail 委托收藏夹导入：拉全分页并带曲目', () async {

@@ -134,8 +134,10 @@ class WyLyricParser {
       final words = line.replaceFirst(_lineTime, '');
       lrcLines.add('$startTimeStr${words.replaceAll(_wordTime, '')}');
 
-      final times =
-          _wordTime.allMatches(words).map((match) => match.group(0)!).toList();
+      final times = _wordTime
+          .allMatches(words)
+          .map((match) => match.group(0)!)
+          .toList();
       if (times.isEmpty) continue;
       final converted = times.map((time) {
         final parsed = _wordTimeCaptured.firstMatch(time)!;
@@ -213,7 +215,9 @@ class WyLyricParser {
         if (lrcLineResult == null) continue;
         final t2 = getIntv(lrcLineResult.group(1)!);
         if ((t1 - t2).abs() < 100) {
-          final fixed = line.replaceFirst(_timeTag, lrcLineResult.group(0)!).trim();
+          final fixed = line
+              .replaceFirst(_timeTag, lrcLineResult.group(0)!)
+              .trim();
           if (fixed.isEmpty) continue;
           newLrc.add(fixed);
           break;
@@ -256,8 +260,9 @@ class WyLyricParser {
             rlyric = fixTimeTag(result.lyric, rlrcLines.join('\n'));
           }
         }
-        final headers =
-            lines.where((line) => _headerTime.hasMatch(line)).join('\n');
+        final headers = lines
+            .where((line) => _headerTime.hasMatch(line))
+            .join('\n');
         lyric = '$headers\n${result.lyric}';
         lxlyric = result.lxlyric;
         return WyLyricInfo(
@@ -299,18 +304,26 @@ class WyLyricParser {
     if (lrc != null && lrc.isNotEmpty) {
       // Dart 的 replaceAll 不做 `$1` 展开，必须用 replaceAllMapped。
       final newLrc = lrc.replaceAllMapped(
-          RegExp(r'\[(\d{2}:\d{2}):(\d{2})\]'), (m) => '[${m[1]}.${m[2]}]');
+        RegExp(r'\[(\d{2}:\d{2}):(\d{2})\]'),
+        (m) => '[${m[1]}.${m[2]}]',
+      );
       final newTlrc = tlrc?.replaceAllMapped(
-          RegExp(r'\[(\d{2}:\d{2}):(\d{2})\]'), (m) => '[${m[1]}.${m[2]}]');
+        RegExp(r'\[(\d{2}:\d{2}):(\d{2})\]'),
+        (m) => '[${m[1]}.${m[2]}]',
+      );
       if (newLrc != lrc || newTlrc != tlrc) {
         lrc = newLrc;
         tlrc = newTlrc;
         if (romalrc != null && romalrc.isNotEmpty) {
           romalrc = romalrc
-              .replaceAllMapped(RegExp(r'\[(\d{2}:\d{2}):(\d{2,3})\]'),
-                  (m) => '[${m[1]}.${m[2]}]')
-              .replaceAllMapped(RegExp(r'\[(\d{2}:\d{2}\.\d{2})0\]'),
-                  (m) => '[${m[1]}]');
+              .replaceAllMapped(
+                RegExp(r'\[(\d{2}:\d{2}):(\d{2,3})\]'),
+                (m) => '[${m[1]}.${m[2]}]',
+              )
+              .replaceAllMapped(
+                RegExp(r'\[(\d{2}:\d{2}\.\d{2})0\]'),
+                (m) => '[${m[1]}]',
+              );
         }
       }
     }

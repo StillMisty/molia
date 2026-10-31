@@ -20,13 +20,13 @@ void main() {
   tearDown(() => BuiltinSearch.transport = originalTransport);
 
   SourceTrack track(String sourceKey, Map<String, dynamic> raw) => SourceTrack(
-        sourceKey: sourceKey,
-        origin: 'builtin',
-        title: '测试',
-        artist: '歌手',
-        album: '',
-        raw: raw,
-      );
+    sourceKey: sourceKey,
+    origin: 'builtin',
+    title: '测试',
+    artist: '歌手',
+    album: '',
+    raw: raw,
+  );
 
   /// 网易云歌曲详情夹具（真实响应）：首曲封面在 `al.picUrl`。
   String wyDetailFixture() =>
@@ -39,8 +39,10 @@ void main() {
         requests.add(request.uri);
         switch (request.uri.host) {
           case 'artistpicserver.kuwo.cn':
-            return textResponse('https://img.example/kw-228908.jpg',
-                statusCode: 200);
+            return textResponse(
+              'https://img.example/kw-228908.jpg',
+              statusCode: 200,
+            );
           case 'media.store.kugou.com':
             return textResponse(
               jsonEncode({
@@ -88,9 +90,7 @@ void main() {
       reason: 'kg 的 {size} 占位需按 imgsize 替换',
     );
     expect(
-      await dispatch.fetch(
-        track('tx', {'albumMid': 'ALB01', 'songmid': 'x'}),
-      ),
+      await dispatch.fetch(track('tx', {'albumMid': 'ALB01', 'songmid': 'x'})),
       'https://y.gtimg.cn/music/photo_new/T002R500x500M000ALB01.jpg',
       reason: 'tx 按专辑 mid 拼 URL，不发请求',
     );
@@ -109,10 +109,12 @@ void main() {
       reason: 'wy 走歌曲详情 al.picUrl',
     );
     expect(
-      await dispatch.fetch(track('bili', {
-        'bvid': 'BV1xx411c7mD',
-        'pic': '//i1.hdslb.com/bfs/archive/cover.jpg',
-      })),
+      await dispatch.fetch(
+        track('bili', {
+          'bvid': 'BV1xx411c7mD',
+          'pic': '//i1.hdslb.com/bfs/archive/cover.jpg',
+        }),
+      ),
       'https://i1.hdslb.com/bfs/archive/cover.jpg',
       reason: 'bili 直接用搜索响应封面，只补协议头',
     );

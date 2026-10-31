@@ -11,6 +11,7 @@ import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
 import 'package:molia/models/play_mode.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../support/fakes.dart';
 
 /// 领域端口的 ValueNotifier 实现（与数据层实现同构）。
@@ -20,8 +21,9 @@ class _TestListenable<T> extends ValueNotifier<T>
 }
 
 class FakeBackend implements PlaybackBackend {
-  final _TestListenable<BackendSnapshot> _notifier =
-      _TestListenable(BackendSnapshot.empty);
+  final _TestListenable<BackendSnapshot> _notifier = _TestListenable(
+    BackendSnapshot.empty,
+  );
 
   final List<String> calls = [];
   PlaybackRequest? lastRequest;
@@ -33,12 +35,12 @@ class FakeBackend implements PlaybackBackend {
 
   @override
   PlaybackCapabilities get capabilities => const PlaybackCapabilities(
-        seek: true,
-        next: true,
-        previous: true,
-        queue: true,
-        setMode: true,
-      );
+    seek: true,
+    next: true,
+    previous: true,
+    queue: true,
+    setMode: true,
+  );
 
   @override
   bool canHandle(Track track) => true;
@@ -55,6 +57,18 @@ class FakeBackend implements PlaybackBackend {
   @override
   Future<void> enqueueTracks(List<Track> tracks) async {
     calls.add('enqueueTracks');
+  }
+
+  @override
+  Future<bool> moveQueueIndex(int from, int to) async {
+    calls.add('moveQueueIndex:$from:$to');
+    return false;
+  }
+
+  @override
+  Future<bool> removeQueueIndex(int index) async {
+    calls.add('removeQueueIndex:$index');
+    return false;
   }
 
   @override
@@ -187,40 +201,48 @@ void main() {
       var snapshotNotifies = 0;
       facade.snapshot.addListener(() => snapshotNotifies++);
 
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+        ),
+      );
       expect(snapshotNotifies, 1);
 
       // 新对象、值相等：合并重复事件。
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+        ),
+      );
       expect(snapshotNotifies, 1);
 
       // 仅 position 变化：走高频通道，不进快照。
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        position: const Duration(seconds: 2),
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+          position: const Duration(seconds: 2),
+        ),
+      );
       expect(snapshotNotifies, 1);
 
       // 播放状态变化：快照通知。
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: false,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: false,
+        ),
+      );
       expect(snapshotNotifies, 2);
     });
 
@@ -232,13 +254,15 @@ void main() {
       var positionNotifies = 0;
       facade.position.addListener(() => positionNotifies++);
 
-      void emitPosition(int ms) => backend.emit(BackendSnapshot(
-            current: track,
-            queue: [track],
-            currentIndex: 0,
-            isPlaying: true,
-            position: Duration(milliseconds: ms),
-          ));
+      void emitPosition(int ms) => backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+          position: Duration(milliseconds: ms),
+        ),
+      );
 
       emitPosition(300); // 换曲（null → a）直接对齐
       expect(positionNotifies, 1);
@@ -255,13 +279,15 @@ void main() {
 
       // 换曲后即使进度回退到 0 也直接对齐（不受阈值抑制）。
       final other = _track('b');
-      backend.emit(BackendSnapshot(
-        current: other,
-        queue: [other],
-        currentIndex: 0,
-        isPlaying: true,
-        position: Duration.zero,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: other,
+          queue: [other],
+          currentIndex: 0,
+          isPlaying: true,
+          position: Duration.zero,
+        ),
+      );
       expect(positionNotifies, 3);
       expect(facade.position.value, Duration.zero);
     });
@@ -272,12 +298,14 @@ void main() {
       final track = _track('a');
       final failure = SourceFailure.from('LxEngineException: 音源不可用');
 
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        error: failure,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          error: failure,
+        ),
+      );
 
       expect(facade.snapshot.value.error, failure);
       expect(facade.snapshot.value.error!.kind, FailureKind.scriptError);
@@ -286,56 +314,63 @@ void main() {
   });
 
   group('DefaultPlaybackFacade 控制委托', () {
-    test('load/play/pause/seek/next/previous/setMode/stop 全部委托 backend',
-        () async {
-      final backend = FakeBackend();
-      final facade = DefaultPlaybackFacade(backend: backend);
-      final track = _track('a');
+    test(
+      'load/play/pause/seek/next/previous/setMode/stop 全部委托 backend',
+      () async {
+        final backend = FakeBackend();
+        final facade = DefaultPlaybackFacade(backend: backend);
+        final track = _track('a');
 
-      final request = PlaybackRequest(
-        tracks: [track],
-        startIndex: 0,
-        context: const PlaybackContext(
-          name: '集成测试',
-          type: 'lx',
-          uri: 'lx:集成测试',
-        ),
-      );
-      await facade.playTracks(request);
-      expect(backend.calls, ['load']);
-      expect(backend.lastRequest, request);
+        final request = PlaybackRequest(
+          tracks: [track],
+          startIndex: 0,
+          context: const PlaybackContext(
+            name: '集成测试',
+            type: 'lx',
+            uri: 'lx:集成测试',
+          ),
+        );
+        await facade.playTracks(request);
+        expect(backend.calls, ['load']);
+        expect(backend.lastRequest, request);
 
-      await facade.toggle(); // 未播放 → play
-      expect(backend.calls.last, 'play');
+        await facade.toggle(); // 未播放 → play
+        expect(backend.calls.last, 'play');
 
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      ));
-      await facade.toggle(); // 播放中 → pause
-      expect(backend.calls.last, 'pause');
+        backend.emit(
+          BackendSnapshot(
+            current: track,
+            queue: [track],
+            currentIndex: 0,
+            isPlaying: true,
+          ),
+        );
+        await facade.toggle(); // 播放中 → pause
+        expect(backend.calls.last, 'pause');
 
-      await facade.seek(const Duration(seconds: 3));
-      expect(backend.calls.last, 'seek');
-      expect(facade.position.value, const Duration(seconds: 3),
-          reason: 'seek 后进度立即对齐，不等待后端 tick');
+        await facade.seek(const Duration(seconds: 3));
+        expect(backend.calls.last, 'seek');
+        expect(
+          facade.position.value,
+          const Duration(seconds: 3),
+          reason: 'seek 后进度立即对齐，不等待后端 tick',
+        );
 
-      await facade.next();
-      expect(backend.calls.last, 'next');
-      await facade.previous();
-      expect(backend.calls.last, 'previous');
-      await facade.setMode(PlayMode.shuffle);
-      expect(backend.calls.last, 'setMode:shuffle');
-      await facade.playQueueIndex(1);
-      expect(backend.calls.last, 'playQueueIndex:1');
-      await facade.setCurrentQuality('flac');
-      expect(backend.calls.last, 'setCurrentQuality:flac');
-      expect(facade.snapshot.value.quality, 'flac');
-      await facade.stop();
-      expect(backend.calls.last, 'stop');
-    });
+        await facade.next();
+        expect(backend.calls.last, 'next');
+        await facade.previous();
+        expect(backend.calls.last, 'previous');
+        await facade.setMode(PlayMode.shuffle);
+        expect(backend.calls.last, 'setMode:shuffle');
+        await facade.playQueueIndex(1);
+        expect(backend.calls.last, 'playQueueIndex:1');
+        await facade.setCurrentQuality('flac');
+        expect(backend.calls.last, 'setCurrentQuality:flac');
+        expect(facade.snapshot.value.quality, 'flac');
+        await facade.stop();
+        expect(backend.calls.last, 'stop');
+      },
+    );
 
     test('replaceQueueTrack 委托 backend（换源）', () async {
       final backend = FakeBackend();
@@ -356,11 +391,13 @@ void main() {
       final trackA = _track('a');
       final trackB = _track('b');
 
-      backend.emit(BackendSnapshot(
-        current: trackA,
-        queue: [trackA, trackB],
-        currentIndex: 0,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: trackA,
+          queue: [trackA, trackB],
+          currentIndex: 0,
+        ),
+      );
 
       await facade.playTrackInContext(trackB);
       expect(backend.calls.last, 'playQueueIndex:1');
@@ -381,21 +418,23 @@ void main() {
       final current = _track('a');
       final next = _track('b');
 
-      backend.emit(BackendSnapshot(
-        current: current,
-        queue: [previous, current, next],
-        currentIndex: 1,
-        next: next,
-        previous: previous,
-        upNext: [next],
-        isPlaying: true,
-        duration: const Duration(seconds: 42),
-        context: const PlaybackContext(
-          name: '集成测试',
-          type: 'lx',
-          uri: 'lx:集成测试',
+      backend.emit(
+        BackendSnapshot(
+          current: current,
+          queue: [previous, current, next],
+          currentIndex: 1,
+          next: next,
+          previous: previous,
+          upNext: [next],
+          isPlaying: true,
+          duration: const Duration(seconds: 42),
+          context: const PlaybackContext(
+            name: '集成测试',
+            type: 'lx',
+            uri: 'lx:集成测试',
+          ),
         ),
-      ));
+      );
 
       final snapshot = facade.snapshot.value;
       expect(snapshot.current?.id, const TrackId('fake', 'a'));
@@ -408,12 +447,14 @@ void main() {
       expect(snapshot.context?.name, '集成测试');
 
       // 队列末尾（顺序模式）→ next 为 null（由后端解析），upNext 为空。
-      backend.emit(BackendSnapshot(
-        current: next,
-        queue: [previous, current, next],
-        currentIndex: 2,
-        mode: PlayMode.sequential,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: next,
+          queue: [previous, current, next],
+          currentIndex: 2,
+          mode: PlayMode.sequential,
+        ),
+      );
       expect(facade.snapshot.value.next, isNull);
       expect(facade.snapshot.value.upNext, isEmpty);
     });
@@ -422,12 +463,14 @@ void main() {
       final backend = FakeBackend();
       final facade = DefaultPlaybackFacade(backend: backend);
       final track = _track('a');
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+        ),
+      );
       expect(facade.snapshot.value.current?.title, 'Title a');
       expect(facade.position.value, Duration.zero);
 
@@ -454,13 +497,15 @@ void main() {
       addTearDown(provider.dispose);
 
       final track = _track('a');
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: [track],
-        currentIndex: 0,
-        isPlaying: true,
-        error: SourceFailure.from('LxEngineException: boom'),
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track],
+          currentIndex: 0,
+          isPlaying: true,
+          error: SourceFailure.from('LxEngineException: boom'),
+        ),
+      );
 
       expect(provider.hasTrack, isTrue);
       expect(provider.isPlaying, isTrue);
@@ -490,11 +535,13 @@ void main() {
 
       final trackA = _track('a');
       final trackB = _track('b');
-      backend.emit(BackendSnapshot(
-        current: trackA,
-        queue: [trackA, trackB],
-        currentIndex: 0,
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: trackA,
+          queue: [trackA, trackB],
+          currentIndex: 0,
+        ),
+      );
 
       // 命中队列：跳转播放
       await provider.playLocalQueueItemById('fake:b');

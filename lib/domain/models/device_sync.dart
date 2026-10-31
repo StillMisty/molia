@@ -88,12 +88,11 @@ abstract final class SyncRecordKeys {
     String playlistSyncId,
     String sourceKey,
     String songId,
-  ) =>
-      '$playlistSyncId$_separator$sourceKey$_separator$songId';
+  ) => '$playlistSyncId$_separator$sourceKey$_separator$songId';
 
   /// 解析列表曲目复合键；格式非法返回 null。
   static ({String playlistSyncId, String sourceKey, String songId})?
-      parsePlaylistTrack(String key) {
+  parsePlaylistTrack(String key) {
     final parts = key.split(_separator);
     if (parts.length != 3) return null;
     return (playlistSyncId: parts[0], sourceKey: parts[1], songId: parts[2]);
@@ -139,10 +138,10 @@ class SyncVersion implements Comparable<SyncVersion> {
   }
 
   Map<String, Object?> toJson() => {
-        'physical': physical,
-        'counter': counter,
-        if (deviceId.isNotEmpty) 'deviceId': deviceId,
-      };
+    'physical': physical,
+    'counter': counter,
+    if (deviceId.isNotEmpty) 'deviceId': deviceId,
+  };
 
   /// 宽容解析：缺 physical 返回 null（解析方按 [zero] 兜底）。
   static SyncVersion? fromJson(Object? raw) {
@@ -196,13 +195,12 @@ class SyncRecord {
     required String key,
     required SyncVersion version,
     int? deletedAt,
-  }) =>
-      SyncRecord(
-        key: key,
-        version: version,
-        deleted: true,
-        data: deletedAt == null ? null : {'deletedAt': deletedAt},
-      );
+  }) => SyncRecord(
+    key: key,
+    version: version,
+    deleted: true,
+    data: deletedAt == null ? null : {'deletedAt': deletedAt},
+  );
 
   /// 墓碑的真实删除时间；缺省（非历史类别 / 异常数据）回退到版本物理分量。
   int get deletedAt {
@@ -214,11 +212,11 @@ class SyncRecord {
   bool isNewerThan(SyncRecord other) => version.isNewerThan(other.version);
 
   Map<String, dynamic> toJson() => {
-        'key': key,
-        if (deleted) 'deleted': true,
-        'version': version.toJson(),
-        if (data != null) 'data': data,
-      };
+    'key': key,
+    if (deleted) 'deleted': true,
+    'version': version.toJson(),
+    if (data != null) 'data': data,
+  };
 
   /// 宽容解析：缺 key 等必填字段返回 null（坏记录跳过而不是整体失败）。
   static SyncRecord? fromJson(Object? raw) {
@@ -257,10 +255,10 @@ class SyncJournalEntry {
   final SyncRecord record;
 
   Map<String, dynamic> toJson() => {
-        'seq': seq,
-        'category': category.name,
-        'record': record.toJson(),
-      };
+    'seq': seq,
+    'category': category.name,
+    'record': record.toJson(),
+  };
 
   /// 宽容解析：seq / category 非法返回 null（坏条目跳过）。
   static SyncJournalEntry? fromJson(Object? raw) {
@@ -374,20 +372,20 @@ class SyncEnvelope {
 
   /// 复制并替换内容指纹（引擎在裁剪墓碑后按最终记录集计算）。
   SyncEnvelope withSnapshotId(String snapshotId) => SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceName,
-        producedAt: producedAt,
-        snapshotId: snapshotId,
-        version: version,
-        records: records,
-        journalHead: journalHead,
-        baseSeq: baseSeq,
-        windowStart: windowStart,
-        windowEnd: windowEnd,
-        journal: journal,
-        acks: acks,
-        categories: categories,
-      );
+    deviceId: deviceId,
+    deviceName: deviceName,
+    producedAt: producedAt,
+    snapshotId: snapshotId,
+    version: version,
+    records: records,
+    journalHead: journalHead,
+    baseSeq: baseSeq,
+    windowStart: windowStart,
+    windowEnd: windowEnd,
+    journal: journal,
+    acks: acks,
+    categories: categories,
+  );
 
   Iterable<SyncRecord> recordsOf(SyncCategory category) =>
       records[category] ?? const [];
@@ -429,29 +427,27 @@ class SyncEnvelope {
   }
 
   Map<String, dynamic> toJson() => {
-        'v': version,
-        'deviceId': deviceId,
-        'deviceName': deviceName,
-        'producedAt': producedAt,
-        if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
-        if (journalHead > 0) 'journalHead': journalHead,
-        if (baseSeq > 0) 'baseSeq': baseSeq,
-        if (journal != null) ...{
-          'windowStart': windowStart,
-          'windowEnd': windowEnd,
-          'journal': [for (final entry in journal!) entry.toJson()],
-        },
-        if (acks.isNotEmpty)
-          'acks': {for (final entry in acks.entries) entry.key: entry.value},
-        if (categories.isNotEmpty) 'categories': categories,
-        'records': {
-          for (final entry in records.entries)
-            if (entry.value.isNotEmpty)
-              entry.key.name: [
-                for (final record in entry.value) record.toJson()
-              ],
-        },
-      };
+    'v': version,
+    'deviceId': deviceId,
+    'deviceName': deviceName,
+    'producedAt': producedAt,
+    if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
+    if (journalHead > 0) 'journalHead': journalHead,
+    if (baseSeq > 0) 'baseSeq': baseSeq,
+    if (journal != null) ...{
+      'windowStart': windowStart,
+      'windowEnd': windowEnd,
+      'journal': [for (final entry in journal!) entry.toJson()],
+    },
+    if (acks.isNotEmpty)
+      'acks': {for (final entry in acks.entries) entry.key: entry.value},
+    if (categories.isNotEmpty) 'categories': categories,
+    'records': {
+      for (final entry in records.entries)
+        if (entry.value.isNotEmpty)
+          entry.key.name: [for (final record in entry.value) record.toJson()],
+    },
+  };
 
   /// 宽容解析：坏记录 / 未知类别跳过；不是对象返回 null。
   static SyncEnvelope? fromJson(Object? raw) {
@@ -467,8 +463,7 @@ class SyncEnvelope {
         final list = entry.value;
         if (list is! List) continue;
         final parsed = <SyncRecord>[
-          for (final item in list)
-            ?SyncRecord.fromJson(item),
+          for (final item in list) ?SyncRecord.fromJson(item),
         ];
         if (parsed.isNotEmpty) records[category] = parsed;
       }
@@ -478,8 +473,7 @@ class SyncEnvelope {
     final rawJournal = raw['journal'];
     if (rawJournal is List) {
       journal = <SyncJournalEntry>[
-        for (final item in rawJournal)
-          ?SyncJournalEntry.fromJson(item),
+        for (final item in rawJournal) ?SyncJournalEntry.fromJson(item),
       ];
     }
     final acks = <String, int>{};
@@ -494,12 +488,15 @@ class SyncEnvelope {
     }
     return SyncEnvelope(
       deviceId: deviceId,
-      deviceName:
-          raw['deviceName'] is String ? raw['deviceName'] as String : '',
-      producedAt:
-          raw['producedAt'] is num ? (raw['producedAt'] as num).toInt() : 0,
-      snapshotId:
-          raw['snapshotId'] is String ? raw['snapshotId'] as String : '',
+      deviceName: raw['deviceName'] is String
+          ? raw['deviceName'] as String
+          : '',
+      producedAt: raw['producedAt'] is num
+          ? (raw['producedAt'] as num).toInt()
+          : 0,
+      snapshotId: raw['snapshotId'] is String
+          ? raw['snapshotId'] as String
+          : '',
       version: (raw['v'] as num?)?.toInt() ?? protocolVersion,
       records: records,
       journalHead: (raw['journalHead'] as num?)?.toInt() ?? 0,
@@ -508,7 +505,8 @@ class SyncEnvelope {
       windowEnd: (raw['windowEnd'] as num?)?.toInt() ?? 0,
       journal: journal,
       acks: acks,
-      categories: (raw['categories'] as List?)?.whereType<String>().toList() ??
+      categories:
+          (raw['categories'] as List?)?.whereType<String>().toList() ??
           const [],
     );
   }
@@ -593,14 +591,13 @@ class ManualPeer {
     int? httpPort,
     String? deviceId,
     String? name,
-  }) =>
-      ManualPeer(
-        host: host ?? this.host,
-        probePort: probePort ?? this.probePort,
-        httpPort: httpPort ?? this.httpPort,
-        deviceId: deviceId ?? this.deviceId,
-        name: name ?? this.name,
-      );
+  }) => ManualPeer(
+    host: host ?? this.host,
+    probePort: probePort ?? this.probePort,
+    httpPort: httpPort ?? this.httpPort,
+    deviceId: deviceId ?? this.deviceId,
+    name: name ?? this.name,
+  );
 
   /// 回写学到的新观测（只覆盖已知字段，避免把已有信息抹成空）。
   ///
@@ -623,12 +620,12 @@ class ManualPeer {
       );
 
   Map<String, dynamic> toJson() => {
-        'host': host,
-        if (probePort > 0) 'probePort': probePort,
-        if (httpPort > 0) 'httpPort': httpPort,
-        if (deviceId.isNotEmpty) 'deviceId': deviceId,
-        if (name.isNotEmpty) 'name': name,
-      };
+    'host': host,
+    if (probePort > 0) 'probePort': probePort,
+    if (httpPort > 0) 'httpPort': httpPort,
+    if (deviceId.isNotEmpty) 'deviceId': deviceId,
+    if (name.isNotEmpty) 'name': name,
+  };
 
   static ManualPeer? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -702,22 +699,21 @@ class LanPeerEndpoint {
     int? httpPort,
     int? probePort,
     int? verifiedAt,
-  }) =>
-      LanPeerEndpoint(
-        deviceId: deviceId ?? this.deviceId,
-        host: host ?? this.host,
-        httpPort: httpPort ?? this.httpPort,
-        probePort: probePort ?? this.probePort,
-        verifiedAt: verifiedAt ?? this.verifiedAt,
-      );
+  }) => LanPeerEndpoint(
+    deviceId: deviceId ?? this.deviceId,
+    host: host ?? this.host,
+    httpPort: httpPort ?? this.httpPort,
+    probePort: probePort ?? this.probePort,
+    verifiedAt: verifiedAt ?? this.verifiedAt,
+  );
 
   Map<String, dynamic> toJson() => {
-        'deviceId': deviceId,
-        'host': host,
-        'httpPort': httpPort,
-        if (probePort > 0) 'probePort': probePort,
-        'verifiedAt': verifiedAt,
-      };
+    'deviceId': deviceId,
+    'host': host,
+    'httpPort': httpPort,
+    if (probePort > 0) 'probePort': probePort,
+    'verifiedAt': verifiedAt,
+  };
 
   static LanPeerEndpoint? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -852,10 +848,10 @@ class SyncIssue {
   final String? detail;
 
   Map<String, Object?> toJson() => {
-        'code': code,
-        if (args.isNotEmpty) 'args': args,
-        if (detail != null && detail!.isNotEmpty) 'detail': detail,
-      };
+    'code': code,
+    if (args.isNotEmpty) 'args': args,
+    if (detail != null && detail!.isNotEmpty) 'detail': detail,
+  };
 
   /// 宽容解析：字符串按「未知原因 + 细节」处理（非结构化的持久化错误）。
   static SyncIssue? fromJson(Object? raw) {
@@ -1045,21 +1041,21 @@ class SyncTransportReport {
       (peersSeen > 0 || pulled > 0 || pushed > 0);
 
   Map<String, Object?> toJson() => {
-        'kind': kind,
-        'enabled': enabled,
-        'running': running,
-        if (unavailableReason != null) 'unavailableReason': unavailableReason,
-        'pulled': pulled,
-        'pushed': pushed,
-        if (skippedUnchanged > 0) 'skippedUnchanged': skippedUnchanged,
-        'peersSeen': peersSeen,
-        'failedPulls': failedPulls,
-        'failedPushes': failedPushes,
-        'bytesIn': bytesIn,
-        'bytesOut': bytesOut,
-        'durationMs': durationMs,
-        if (error != null) 'error': error!.toJson(),
-      };
+    'kind': kind,
+    'enabled': enabled,
+    'running': running,
+    if (unavailableReason != null) 'unavailableReason': unavailableReason,
+    'pulled': pulled,
+    'pushed': pushed,
+    if (skippedUnchanged > 0) 'skippedUnchanged': skippedUnchanged,
+    'peersSeen': peersSeen,
+    'failedPulls': failedPulls,
+    'failedPushes': failedPushes,
+    'bytesIn': bytesIn,
+    'bytesOut': bytesOut,
+    'durationMs': durationMs,
+    if (error != null) 'error': error!.toJson(),
+  };
 
   static SyncTransportReport fromJson(Object? raw) {
     if (raw is! Map) return const SyncTransportReport(kind: '', running: false);
@@ -1187,44 +1183,43 @@ class SyncPeerState {
     String? snapshotId,
     List<String>? categories,
     int? fullPulledAt,
-  }) =>
-      SyncPeerState(
-        deviceId: deviceId,
-        name: name ?? this.name,
-        transport: transport ?? this.transport,
-        lastSeenAt: lastSeenAt ?? this.lastSeenAt,
-        lastSuccessAt: lastSuccessAt ?? this.lastSuccessAt,
-        lastPullAt: lastPullAt ?? this.lastPullAt,
-        lastPushAt: lastPushAt ?? this.lastPushAt,
-        lastError: clearLastError ? null : (lastError ?? this.lastError),
-        behindBy: clearBehind ? null : (behindBy ?? this.behindBy),
-        behindBytes: clearBehind ? null : (behindBytes ?? this.behindBytes),
-        clockSkewMs: clockSkewMs ?? this.clockSkewMs,
-        cursorSeq: cursorSeq ?? this.cursorSeq,
-        ackedSeq: ackedSeq ?? this.ackedSeq,
-        snapshotId: snapshotId ?? this.snapshotId,
-        categories: categories ?? this.categories,
-        fullPulledAt: fullPulledAt ?? this.fullPulledAt,
-      );
+  }) => SyncPeerState(
+    deviceId: deviceId,
+    name: name ?? this.name,
+    transport: transport ?? this.transport,
+    lastSeenAt: lastSeenAt ?? this.lastSeenAt,
+    lastSuccessAt: lastSuccessAt ?? this.lastSuccessAt,
+    lastPullAt: lastPullAt ?? this.lastPullAt,
+    lastPushAt: lastPushAt ?? this.lastPushAt,
+    lastError: clearLastError ? null : (lastError ?? this.lastError),
+    behindBy: clearBehind ? null : (behindBy ?? this.behindBy),
+    behindBytes: clearBehind ? null : (behindBytes ?? this.behindBytes),
+    clockSkewMs: clockSkewMs ?? this.clockSkewMs,
+    cursorSeq: cursorSeq ?? this.cursorSeq,
+    ackedSeq: ackedSeq ?? this.ackedSeq,
+    snapshotId: snapshotId ?? this.snapshotId,
+    categories: categories ?? this.categories,
+    fullPulledAt: fullPulledAt ?? this.fullPulledAt,
+  );
 
   Map<String, dynamic> toJson() => {
-        'deviceId': deviceId,
-        if (name.isNotEmpty) 'name': name,
-        if (transport.isNotEmpty) 'transport': transport,
-        if (lastSeenAt > 0) 'lastSeenAt': lastSeenAt,
-        if (lastSuccessAt > 0) 'lastSuccessAt': lastSuccessAt,
-        if (lastPullAt > 0) 'lastPullAt': lastPullAt,
-        if (lastPushAt > 0) 'lastPushAt': lastPushAt,
-        if (lastError != null) 'lastError': lastError!.toJson(),
-        if (behindBy != null) 'behindBy': behindBy,
-        if (behindBytes != null) 'behindBytes': behindBytes,
-        if (clockSkewMs != null) 'clockSkewMs': clockSkewMs,
-        if (cursorSeq >= 0) 'cursorSeq': cursorSeq,
-        if (ackedSeq >= 0) 'ackedSeq': ackedSeq,
-        if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
-        if (categories.isNotEmpty) 'categories': categories,
-        if (fullPulledAt > 0) 'fullPulledAt': fullPulledAt,
-      };
+    'deviceId': deviceId,
+    if (name.isNotEmpty) 'name': name,
+    if (transport.isNotEmpty) 'transport': transport,
+    if (lastSeenAt > 0) 'lastSeenAt': lastSeenAt,
+    if (lastSuccessAt > 0) 'lastSuccessAt': lastSuccessAt,
+    if (lastPullAt > 0) 'lastPullAt': lastPullAt,
+    if (lastPushAt > 0) 'lastPushAt': lastPushAt,
+    if (lastError != null) 'lastError': lastError!.toJson(),
+    if (behindBy != null) 'behindBy': behindBy,
+    if (behindBytes != null) 'behindBytes': behindBytes,
+    if (clockSkewMs != null) 'clockSkewMs': clockSkewMs,
+    if (cursorSeq >= 0) 'cursorSeq': cursorSeq,
+    if (ackedSeq >= 0) 'ackedSeq': ackedSeq,
+    if (snapshotId.isNotEmpty) 'snapshotId': snapshotId,
+    if (categories.isNotEmpty) 'categories': categories,
+    if (fullPulledAt > 0) 'fullPulledAt': fullPulledAt,
+  };
 
   static SyncPeerState? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -1245,7 +1240,8 @@ class SyncPeerState {
       cursorSeq: (raw['cursorSeq'] as num?)?.toInt() ?? -1,
       ackedSeq: (raw['ackedSeq'] as num?)?.toInt() ?? -1,
       snapshotId: raw['snapshotId'] as String? ?? '',
-      categories: (raw['categories'] as List?)?.whereType<String>().toList() ??
+      categories:
+          (raw['categories'] as List?)?.whereType<String>().toList() ??
           const [],
       fullPulledAt: (raw['fullPulledAt'] as num?)?.toInt() ?? 0,
     );
@@ -1328,11 +1324,11 @@ class PlaylistSyncRecord {
   final SyncVersion version;
 
   Map<String, Object?> toJson() => {
-        'syncId': syncId,
-        'name': name,
-        'createdAt': createdAt,
-        'version': version.toJson(),
-      };
+    'syncId': syncId,
+    'name': name,
+    'createdAt': createdAt,
+    'version': version.toJson(),
+  };
 
   /// 宽容解析：缺失 / 类型不符按空值处理（由应用侧按需跳过并计数）。
   ///
@@ -1341,15 +1337,13 @@ class PlaylistSyncRecord {
   static PlaylistSyncRecord fromJson(
     Map<String, Object?> data, {
     SyncVersion? version,
-  }) =>
-      PlaylistSyncRecord(
-        syncId: data['syncId'] as String? ?? '',
-        name: data['name'] as String? ?? '',
-        createdAt: (data['createdAt'] as num?)?.toInt() ?? 0,
-        version: version ??
-            SyncVersion.fromJson(data['version']) ??
-            SyncVersion.zero,
-      );
+  }) => PlaylistSyncRecord(
+    syncId: data['syncId'] as String? ?? '',
+    name: data['name'] as String? ?? '',
+    createdAt: (data['createdAt'] as num?)?.toInt() ?? 0,
+    version:
+        version ?? SyncVersion.fromJson(data['version']) ?? SyncVersion.zero,
+  );
 }
 
 /// 列表曲目同步记录（合并键 = `playlistSyncId + sourceKey + songId`）。
@@ -1385,40 +1379,38 @@ class PlaylistTrackSyncRecord {
   final SyncVersion version;
 
   Map<String, Object?> toJson() => {
-        'playlistSyncId': playlistSyncId,
-        'sourceKey': sourceKey,
-        'songId': songId,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'coverUrl': coverUrl,
-        'durationMs': durationMs,
-        'raw': raw,
-        'addedAt': addedAt,
-        'sortOrder': sortOrder,
-        'version': version.toJson(),
-      };
+    'playlistSyncId': playlistSyncId,
+    'sourceKey': sourceKey,
+    'songId': songId,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'coverUrl': coverUrl,
+    'durationMs': durationMs,
+    'raw': raw,
+    'addedAt': addedAt,
+    'sortOrder': sortOrder,
+    'version': version.toJson(),
+  };
 
   static PlaylistTrackSyncRecord fromJson(
     Map<String, Object?> data, {
     SyncVersion? version,
-  }) =>
-      PlaylistTrackSyncRecord(
-        playlistSyncId: data['playlistSyncId'] as String? ?? '',
-        sourceKey: data['sourceKey'] as String? ?? '',
-        songId: data['songId'] as String? ?? '',
-        title: data['title'] as String? ?? '',
-        artist: data['artist'] as String? ?? '',
-        album: data['album'] as String? ?? '',
-        coverUrl: data['coverUrl'] as String?,
-        durationMs: (data['durationMs'] as num?)?.toInt(),
-        raw: data['raw'] as String? ?? '{}',
-        addedAt: (data['addedAt'] as num?)?.toInt() ?? 0,
-        sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
-        version: version ??
-            SyncVersion.fromJson(data['version']) ??
-            SyncVersion.zero,
-      );
+  }) => PlaylistTrackSyncRecord(
+    playlistSyncId: data['playlistSyncId'] as String? ?? '',
+    sourceKey: data['sourceKey'] as String? ?? '',
+    songId: data['songId'] as String? ?? '',
+    title: data['title'] as String? ?? '',
+    artist: data['artist'] as String? ?? '',
+    album: data['album'] as String? ?? '',
+    coverUrl: data['coverUrl'] as String?,
+    durationMs: (data['durationMs'] as num?)?.toInt(),
+    raw: data['raw'] as String? ?? '{}',
+    addedAt: (data['addedAt'] as num?)?.toInt() ?? 0,
+    sortOrder: (data['sortOrder'] as num?)?.toInt() ?? 0,
+    version:
+        version ?? SyncVersion.fromJson(data['version']) ?? SyncVersion.zero,
+  );
 }
 
 /// 播放历史同步记录（`playedAt` 是内容时间，不参与胜负判定）。
@@ -1450,36 +1442,34 @@ class PlayHistorySyncRecord {
   final SyncVersion version;
 
   Map<String, Object?> toJson() => {
-        'sourceKey': sourceKey,
-        'songId': songId,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'coverUrl': coverUrl,
-        'durationMs': durationMs,
-        'raw': raw,
-        'playedAt': playedAt,
-        'version': version.toJson(),
-      };
+    'sourceKey': sourceKey,
+    'songId': songId,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'coverUrl': coverUrl,
+    'durationMs': durationMs,
+    'raw': raw,
+    'playedAt': playedAt,
+    'version': version.toJson(),
+  };
 
   static PlayHistorySyncRecord fromJson(
     Map<String, Object?> data, {
     SyncVersion? version,
-  }) =>
-      PlayHistorySyncRecord(
-        sourceKey: data['sourceKey'] as String? ?? '',
-        songId: data['songId'] as String? ?? '',
-        title: data['title'] as String? ?? '',
-        artist: data['artist'] as String? ?? '',
-        album: data['album'] as String? ?? '',
-        coverUrl: data['coverUrl'] as String?,
-        durationMs: (data['durationMs'] as num?)?.toInt(),
-        raw: data['raw'] as String? ?? '{}',
-        playedAt: (data['playedAt'] as num?)?.toInt() ?? 0,
-        version: version ??
-            SyncVersion.fromJson(data['version']) ??
-            SyncVersion.zero,
-      );
+  }) => PlayHistorySyncRecord(
+    sourceKey: data['sourceKey'] as String? ?? '',
+    songId: data['songId'] as String? ?? '',
+    title: data['title'] as String? ?? '',
+    artist: data['artist'] as String? ?? '',
+    album: data['album'] as String? ?? '',
+    coverUrl: data['coverUrl'] as String?,
+    durationMs: (data['durationMs'] as num?)?.toInt(),
+    raw: data['raw'] as String? ?? '{}',
+    playedAt: (data['playedAt'] as num?)?.toInt() ?? 0,
+    version:
+        version ?? SyncVersion.fromJson(data['version']) ?? SyncVersion.zero,
+  );
 }
 
 /// 资料库墓碑记录（删除也取新：`category + key` + 版本三元组）。
@@ -1500,25 +1490,24 @@ class SyncTombstoneRecord {
   final int deletedAt;
 
   Map<String, Object?> toJson() => {
-        'category': category,
-        'key': key,
-        'version': version.toJson(),
-        'deletedAt': deletedAt,
-      };
+    'category': category,
+    'key': key,
+    'version': version.toJson(),
+    'deletedAt': deletedAt,
+  };
 
   static SyncTombstoneRecord fromJson(
     Map<String, Object?> data, {
     SyncVersion? version,
-  }) =>
-      SyncTombstoneRecord(
-        category: data['category'] as String? ?? '',
-        key: data['key'] as String? ?? '',
-        version: version ??
-            SyncVersion.fromJson(data['version']) ??
-            SyncVersion.zero,
-        deletedAt: (data['deletedAt'] as num?)?.toInt() ??
-            (data['version'] is Map
-                ? ((data['version'] as Map)['physical'] as num?)?.toInt() ?? 0
-                : 0),
-      );
+  }) => SyncTombstoneRecord(
+    category: data['category'] as String? ?? '',
+    key: data['key'] as String? ?? '',
+    version:
+        version ?? SyncVersion.fromJson(data['version']) ?? SyncVersion.zero,
+    deletedAt:
+        (data['deletedAt'] as num?)?.toInt() ??
+        (data['version'] is Map
+            ? ((data['version'] as Map)['physical'] as num?)?.toInt() ?? 0
+            : 0),
+  );
 }

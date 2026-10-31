@@ -17,30 +17,30 @@ import 'molia_mark.dart';
 extension ShellDestinationIcons on ShellDestination {
   /// 本地化标签（底栏 / 侧栏 / 设置页 / 顶栏标题共用）。
   String label(AppLocalizations l10n) => switch (this) {
-        ShellDestination.nowPlaying => l10n.nowPlayingLabel,
-        ShellDestination.favorites => l10n.favoritesLabel,
-        ShellDestination.library => l10n.libraryLabel,
-      };
+    ShellDestination.nowPlaying => l10n.nowPlayingLabel,
+    ShellDestination.favorites => l10n.favoritesLabel,
+    ShellDestination.library => l10n.libraryLabel,
+  };
 
   /// 未选中（inactive）态图标。
   Widget get outlinedIcon => switch (this) {
-        ShellDestination.nowPlaying => const MoliaMark(outlined: true),
-        ShellDestination.favorites => const Icon(Icons.favorite_border_rounded),
-        ShellDestination.library => const Icon(Icons.library_music_outlined),
-      };
+    ShellDestination.nowPlaying => const MoliaMark(outlined: true),
+    ShellDestination.favorites => const Icon(Icons.favorite_border_rounded),
+    ShellDestination.library => const Icon(Icons.library_music_outlined),
+  };
 
   /// 选中（active）态图标。
   Widget get filledIcon => switch (this) {
-        ShellDestination.nowPlaying => const MoliaMark(),
-        ShellDestination.favorites => const Icon(Icons.favorite_rounded),
-        ShellDestination.library => const Icon(Icons.library_music_rounded),
-      };
+    ShellDestination.nowPlaying => const MoliaMark(),
+    ShellDestination.favorites => const Icon(Icons.favorite_rounded),
+    ShellDestination.library => const Icon(Icons.library_music_rounded),
+  };
 
   /// 设置行图标块用（`IconData`）：设置行统一 `Icons.*_rounded` 且只收
   /// 字形，不能内嵌 [MoliaMark] 组件，音符用圆角音符字形代替。
   IconData get settingsIcon => switch (this) {
-        ShellDestination.nowPlaying => Icons.music_note_rounded,
-        ShellDestination.favorites => Icons.favorite_rounded,
-        ShellDestination.library => Icons.library_music_rounded,
-      };
+    ShellDestination.nowPlaying => Icons.music_note_rounded,
+    ShellDestination.favorites => Icons.favorite_rounded,
+    ShellDestination.library => Icons.library_music_rounded,
+  };
 }

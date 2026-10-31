@@ -96,7 +96,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '页面路由请改用 M3EPageRoute（lib/widgets/m3e_page_route.dart）：\n'
+      reason:
+          '页面路由请改用 M3EPageRoute（lib/widgets/m3e_page_route.dart）：\n'
           '${violations.join('\n')}',
     );
   });
@@ -141,8 +142,10 @@ List<String> _libFiles() {
     ..sort();
 }
 
-final RegExp _importPattern =
-    RegExp(r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''', multiLine: true);
+final RegExp _importPattern = RegExp(
+  r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+  multiLine: true,
+);
 
 List<String> _importsOf(String path) {
   final file = File(path);

@@ -70,10 +70,7 @@ class DesktopNowPlayingBar extends StatelessWidget {
         children: [
           Expanded(
             flex: 3,
-            child: _TrackSection(
-              morph: morph,
-              onOpenPlayer: onOpenPlayer,
-            ),
+            child: _TrackSection(morph: morph, onOpenPlayer: onOpenPlayer),
           ),
           // 中区（传输三键 + 进度排）吃右区之外的余量：右区按内容宽贴右缘，
           // 省下的空白全归进度排——进度条是这条底栏上唯一需要宽度的控件。

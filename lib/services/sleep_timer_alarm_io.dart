@@ -19,11 +19,9 @@ SleepTimerAlarm createSleepTimerAlarm() {
 /// 原生实现只负责「到点唤醒 Dart」；暂停动作仍由控制器统一执行，避免原生
 /// 与 Dart 各有一套播放状态。通道缺失（测试 / 降级平台）时静默降级为纯 Dart。
 class MethodChannelSleepTimerAlarm implements SleepTimerAlarm {
-  MethodChannelSleepTimerAlarm({
-    MethodChannel? channel,
-    bool? supported,
-  })  : _channel = channel ?? const MethodChannel(kSleepTimerAlarmChannel),
-        _supported = supported ?? (Platform.isAndroid || Platform.isIOS) {
+  MethodChannelSleepTimerAlarm({MethodChannel? channel, bool? supported})
+    : _channel = channel ?? const MethodChannel(kSleepTimerAlarmChannel),
+      _supported = supported ?? (Platform.isAndroid || Platform.isIOS) {
     _channel.setMethodCallHandler(_handleCall);
   }
 
@@ -50,11 +48,13 @@ class MethodChannelSleepTimerAlarm implements SleepTimerAlarm {
   @override
   void arm(Duration delay, int token, {bool keepAwake = true}) {
     if (!_supported || delay <= Duration.zero) return;
-    unawaited(_invoke('arm', {
-      'millis': delay.inMilliseconds,
-      'token': token,
-      'keepAwake': keepAwake,
-    }));
+    unawaited(
+      _invoke('arm', {
+        'millis': delay.inMilliseconds,
+        'token': token,
+        'keepAwake': keepAwake,
+      }),
+    );
   }
 
   @override

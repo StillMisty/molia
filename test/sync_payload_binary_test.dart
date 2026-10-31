@@ -11,9 +11,9 @@ import 'package:molia/domain/models/device_sync.dart';
 /// 列式二进制载荷测试：往返等价（与 JSON 编码对照）、边界形态、损坏拒绝。
 void main() {
   SyncEnvelope encodeBinary(SyncEnvelope envelope) => SyncPayload.decode(
-        SyncPayloadBinary.encode(envelope),
-        codec: SyncPayloadCodec.binary,
-      );
+    SyncPayloadBinary.encode(envelope),
+    codec: SyncPayloadCodec.binary,
+  );
 
   /// 规范化 JSON：映射按键排序，屏蔽键序差异（内容等价即可）。
   String canonical(Object? value) => jsonEncode(_sorted(value));
@@ -55,7 +55,10 @@ void main() {
         SyncCategory.playlistTracks: [
           SyncRecord(
             key: '__favorites__|kw|song-1',
-            version: const SyncVersion(physical: 1728640000001, deviceId: 'dev-a'),
+            version: const SyncVersion(
+              physical: 1728640000001,
+              deviceId: 'dev-a',
+            ),
             data: {
               'playlistSyncId': '__favorites__',
               'sourceKey': 'kw',
@@ -69,13 +72,19 @@ void main() {
               'addedAt': 1728640000002,
               'sortOrder': 0,
               'explicit': true,
-              'nested': {'a': [1, 2, 3], 'b': 'x'},
+              'nested': {
+                'a': [1, 2, 3],
+                'b': 'x',
+              },
               'ratio': 0.5,
             },
           ),
           SyncRecord.tombstone(
             key: '__favorites__|kw|song-2',
-            version: const SyncVersion(physical: 1728640000003, deviceId: 'dev-b'),
+            version: const SyncVersion(
+              physical: 1728640000003,
+              deviceId: 'dev-b',
+            ),
             deletedAt: 1728640000003,
           ),
         ],
@@ -102,7 +111,10 @@ void main() {
             category: SyncCategory.history,
             record: SyncRecord(
               key: 'kw|song-$seq',
-              version: SyncVersion(physical: 1728640000000 + seq, deviceId: 'dev-a'),
+              version: SyncVersion(
+                physical: 1728640000000 + seq,
+                deviceId: 'dev-a',
+              ),
               data: {'title': '曲目 $seq', 'playedAt': 1728640000000 + seq},
             ),
           ),
@@ -160,7 +172,8 @@ void main() {
             'album': '专辑',
             'coverUrl': 'https://img.example.com/cover/abcdef123456?s=300',
             'durationMs': 254000,
-            'raw': '{"songmid":"0123456789abcdef","hash":"${'f' * 32}","quality":320}',
+            'raw':
+                '{"songmid":"0123456789abcdef","hash":"${'f' * 32}","quality":320}',
             'startedAt': 1728640000000 + i * 1000,
             'listenedMs': 240000,
             'endReason': 'completed',
@@ -173,7 +186,10 @@ void main() {
       records: {SyncCategory.statistics: records},
     );
     final binary = SyncPayloadBinary.encode(envelope);
-    final jsonBytes = SyncPayload.encode(envelope, codec: SyncPayloadCodec.json);
+    final jsonBytes = SyncPayload.encode(
+      envelope,
+      codec: SyncPayloadCodec.json,
+    );
     expect(binary.length, lessThan(jsonBytes.length ~/ 2));
     expectEquivalent(envelope, encodeBinary(envelope));
   });
@@ -189,7 +205,10 @@ void main() {
           for (var i = 0; i < 1000; i++)
             SyncRecord(
               key: i.toRadixString(16).padLeft(32, '0'),
-              version: SyncVersion(physical: 1728640000000 + i, deviceId: 'dev-a'),
+              version: SyncVersion(
+                physical: 1728640000000 + i,
+                deviceId: 'dev-a',
+              ),
               data: {
                 'sourceKey': 'kw',
                 'songId': 'song-1',
@@ -198,7 +217,8 @@ void main() {
                 'album': '专辑',
                 'coverUrl': 'https://img.example.com/cover/abcdef123456?s=300',
                 'durationMs': 254000,
-                'raw': '{"songmid":"0123456789abcdef","hash":"${'f' * 32}",'
+                'raw':
+                    '{"songmid":"0123456789abcdef","hash":"${'f' * 32}",'
                     '"quality":320,"name":"夜曲"}',
                 'startedAt': 1728640000000 + i * 1000,
                 'listenedMs': 240000,
@@ -216,7 +236,8 @@ void main() {
     expect(frame.length, lessThan(compressedJson.length ~/ 3));
   });
 
-  test('空载荷 / 无 data / 空 map / 越界拒绝', () {    final empty = SyncEnvelope(deviceId: 'dev-a', producedAt: 1);
+  test('空载荷 / 无 data / 空 map / 越界拒绝', () {
+    final empty = SyncEnvelope(deviceId: 'dev-a', producedAt: 1);
     expectEquivalent(empty, encodeBinary(empty));
 
     final edge = SyncEnvelope(
@@ -241,7 +262,9 @@ void main() {
 
     final bytes = SyncPayloadBinary.encode(edge);
     expect(
-      () => SyncPayloadBinary.decode(Uint8List.sublistView(bytes, 0, bytes.length - 1)),
+      () => SyncPayloadBinary.decode(
+        Uint8List.sublistView(bytes, 0, bytes.length - 1),
+      ),
       throwsA(isA<SyncPayloadFormatException>()),
     );
     expect(

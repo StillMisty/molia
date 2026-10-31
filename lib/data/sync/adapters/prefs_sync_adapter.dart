@@ -22,8 +22,8 @@ class PrefsSyncAdapter implements SyncAdapter {
     required SettingsRegistry settings,
     this._journal,
     this.onApplied,
-  })  : _settings = settings,
-        _byName = {for (final key in settings.keys) key.name: key};
+  }) : _settings = settings,
+       _byName = {for (final key in settings.keys) key.name: key};
 
   final SyncStampLedger _state;
   final SettingsRegistry _settings;
@@ -38,15 +38,16 @@ class PrefsSyncAdapter implements SyncAdapter {
 
   @override
   Set<SyncCategory> get categories => {
-        for (final key in _settings.keys) key.category,
-      };
+    for (final key in _settings.keys) key.category,
+  };
 
   @override
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect(
-      {bool fresh = false}) async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async {
     final records = <SyncCategory, List<SyncRecord>>{};
     final changes = <SyncJournalChange>[];
     // 登记先暂存：日志追加失败时不能留下「已同步」的哈希，否则这次变更
@@ -116,14 +117,11 @@ class PrefsSyncAdapter implements SyncAdapter {
     }
     final isDefault = _canonical(value) == _canonical(key.defaultValue);
     final first = stamp == null;
-    final version =
-        first && isDefault ? SyncVersion.zero : _state.stampIssuer.next();
+    final version = first && isDefault
+        ? SyncVersion.zero
+        : _state.stampIssuer.next();
     return (
-      record: SyncRecord(
-        key: key.name,
-        version: version,
-        data: {'v': value},
-      ),
+      record: SyncRecord(key: key.name, version: version, data: {'v': value}),
       changed: !first,
       stamp: SyncStamp(hash: hash, version: version),
     );

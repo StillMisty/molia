@@ -122,18 +122,18 @@ void main() {
     var pathProviderCalls = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async {
-        pathProviderCalls++;
-        return tempRoot.path;
-      },
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async {
+            pathProviderCalls++;
+            return tempRoot.path;
+          },
+        );
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(
-        const MethodChannel('plugins.flutter.io/path_provider'),
-        null,
-      );
+            const MethodChannel('plugins.flutter.io/path_provider'),
+            null,
+          );
     });
 
     final cache = LyricsCache(prefs: prefs);
@@ -299,11 +299,11 @@ void main() {
 
   // TTL：命中不访问 Provider、0 为永不过期、过期重取并回写、缩短后立即生效。
   LyricsService serviceWith(_CountingProvider provider) => LyricsService(
-        providers: [provider],
-        prefs: prefs,
-        cacheService: cacheService,
-        lyricsCache: LyricsCache(prefs: prefs, directory: tempRoot),
-      );
+    providers: [provider],
+    prefs: prefs,
+    cacheService: cacheService,
+    lyricsCache: LyricsCache(prefs: prefs, directory: tempRoot),
+  );
 
   String cacheEntry(String lyric, int timestamp) =>
       jsonEncode({'provider': 'seeded', 'lyric': lyric, 'ts': timestamp});

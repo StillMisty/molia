@@ -10,6 +10,7 @@ import '../utils/responsive.dart';
 import 'card_list_surface.dart';
 import 'current_track_cover.dart';
 import 'playback_selectors.dart';
+import 'row_extent.dart';
 import 'track_artwork.dart';
 
 /// 曲目行里的歌手链接（名字 + 点击回调；回调为空 = 纯文本）。
@@ -225,20 +226,27 @@ class TrackRow extends StatelessWidget {
     this.onSecondaryTap,
   });
 
-  /// 非表格（双行：标题 + 副标题）行高；等于 M3E 列表 token
-  /// `M3EListItemTheme.twoLineHeight` 的默认值（测试钉住两者同值）。
+  /// 非表格（双行）档在 1.0× 文字缩放下的行高（= M3E 列表 token
+  /// `M3EListItemTheme.twoLineHeight` 的默认值）。
   ///
-  /// 为什么保留常量：队列 / 专辑 / 歌手等**没有表格档**的列表直接拿它当
-  /// `itemExtent`（它们恒为双行，没有两档可取）；带表格档的列表一律走
-  /// [extentOf]（token 同源 + 按档取高）。
+  /// 只作为「默认 token」保留；固定行高列表一律用 [extentOf] 按系统文字
+  /// 缩放动态取高，不能再拿本常量当 `itemExtent`。
   static const double extent = 72;
 
-  /// 固定行高（M3E 列表 token）：表格档是单行（标题 + 独立列）取
-  /// `minHeight`（56），非表格档是双行（标题 + 副标题）取 `twoLineHeight`
-  /// （72）。列表 `itemExtent` 用 `extentOf(context, ...) + gapOf(context)`。
+  /// 固定行高（M3E 列表 token 作为最小值）：表格档是单行（标题 + 独立列），
+  /// 非表格档是双行（标题 + 副标题）。系统文字放大时按实际字阶行高增长，
+  /// 1.0× 下仍是 56 / 72。列表 `itemExtent` 用
+  /// [extentOf] + gapOf(context)。
   static double extentOf(BuildContext context, {required bool tableColumns}) {
-    final M3EListItemTheme item = M3ETheme.of(context).listTheme.item;
-    return tableColumns ? item.minHeight : item.twoLineHeight;
+    final m3e = M3ETheme.of(context);
+    final M3EListItemTheme item = m3e.listTheme.item;
+    final type = m3e.typeScale;
+    return scaledRowExtentOf(
+      context,
+      minExtent: tableColumns ? item.minHeight : item.twoLineHeight,
+      styles: [type.bodyLarge, type.bodyMedium],
+      stacked: !tableColumns,
+    );
   }
 
   /// 行内封面默认边长（行内封面位 = 本值 + 列表 token 的槽间距）：

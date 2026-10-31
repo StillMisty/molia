@@ -78,12 +78,8 @@ TasteProfile _profile({
           endReason: PlayEventEndReason.completed,
         ),
     ],
-    exclusionLabels: [
-      for (var i = 0; i < heard; i++) '已听$i - 歌手${i % 20}',
-    ],
-    exclusionKeys: {
-      for (var i = 0; i < heard; i++) '已听$i|歌手${i % 20}',
-    },
+    exclusionLabels: [for (var i = 0; i < heard; i++) '已听$i - 歌手${i % 20}'],
+    exclusionKeys: {for (var i = 0; i < heard; i++) '已听$i|歌手${i % 20}'},
     favorites: [
       for (var i = 0; i < favorites; i++)
         (title: '收藏$i', artist: '歌手${i % 20}'),

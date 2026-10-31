@@ -16,8 +16,7 @@ MediaSessionBackend? createSystemMediaSessionBackend() {
     TargetPlatform.android ||
     TargetPlatform.iOS ||
     TargetPlatform.macOS ||
-    TargetPlatform.windows =>
-      FlutterMediaSessionBackend(),
+    TargetPlatform.windows => FlutterMediaSessionBackend(),
     TargetPlatform.linux => createMprisMediaSessionBackend(),
     _ => null,
   };

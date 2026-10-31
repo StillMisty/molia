@@ -16,6 +16,7 @@ import 'package:molia/data/downloads/downloads_publisher.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
+
 import '../test/support/settings_test_support.dart';
 
 /// 端到端集成测试：真实 App 运行时 + 真实 LX JS 引擎 + 本地 mock HTTP 服务。
@@ -65,9 +66,9 @@ void main() {
   /// 引擎调用统一上限：QuickJS isolate 偶发不响应时，把无声挂死变成
   /// 带调用名的失败，方便定位是初始化、脚本导入还是取链。
   Future<T> engineCall<T>(Future<T> future, String label) => future.timeout(
-        const Duration(seconds: 30),
-        onTimeout: () => fail('$label 超时（LX 引擎未响应）'),
-      );
+    const Duration(seconds: 30),
+    onTimeout: () => fail('$label 超时（LX 引擎未响应）'),
+  );
 
   Future<SourceManager> freshManager() async {
     // 上一个用例导入的脚本会留在应用支持目录的 `lx_sources.json`（桌面端
@@ -94,10 +95,10 @@ void main() {
   /// 有上限的 pumpAndSettle：默认 10 分钟对 agent / CI 等同挂死；30s 内
   /// 仍不落定就抛可诊断的失败（带动画/定时器未收敛的原因通常会打印 pending）。
   Future<void> settle(WidgetTester tester) => tester.pumpAndSettle(
-        const Duration(milliseconds: 100),
-        EnginePhase.sendSemanticsUpdate,
-        const Duration(seconds: 30),
-      );
+    const Duration(milliseconds: 100),
+    EnginePhase.sendSemanticsUpdate,
+    const Duration(seconds: 30),
+  );
 
   Future<void> waitFor(
     WidgetTester tester,
@@ -147,12 +148,16 @@ void main() {
     addTearDown(manager.dispose);
 
     final info = await engineCall(
-        manager.importScript(script, activate: true), 'importScript');
+      manager.importScript(script, activate: true),
+      'importScript',
+    );
     expect(info.name, '集成测试音源');
     expect(manager.hasActiveSource, isTrue);
     expect(manager.activeSources['test'], isNotNull);
-    expect(manager.activeSources['test']!.actions,
-        containsAll(['musicUrl', 'search', 'lyric']));
+    expect(
+      manager.activeSources['test']!.actions,
+      containsAll(['musicUrl', 'search', 'lyric']),
+    );
 
     final tracks = (await manager.searchWithMeta('test', 'hello')).tracks;
     expect(tracks, hasLength(3));
@@ -172,10 +177,7 @@ void main() {
     expect(lyric!.lyric, contains('[00:00.00]hello'));
 
     // 错误路径：脚本拒绝的 action
-    expect(
-      () => manager.searchWithMeta('不存在的源', 'x'),
-      throwsA(anything),
-    );
+    expect(() => manager.searchWithMeta('不存在的源', 'x'), throwsA(anything));
   });
 
   testWidgets('设置页 UI：粘贴导入音源脚本并激活', (tester) async {
@@ -216,11 +218,7 @@ void main() {
     await tester.tap(find.text('继续导入'));
 
     // 等待引擎激活（看 manager 状态；激活卡片可能在首屏视口之外）
-    await waitFor(
-      tester,
-      () => manager.hasActiveSource,
-      reason: '导入后激活失败',
-    );
+    await waitFor(tester, () => manager.hasActiveSource, reason: '导入后激活失败');
     // 滚动到激活卡片并断言 UI 展示（状态卡在列表顶部，向上滚）
     await scrollTo(tester, find.textContaining('当前音源：集成测试音源'), up: true);
     expect(find.textContaining('当前音源：集成测试音源'), findsOneWidget);
@@ -318,8 +316,10 @@ void main() {
         ),
         isNull,
       );
-      expect(await publisher.remove('content://media/external/downloads/0'),
-          isFalse);
+      expect(
+        await publisher.remove('content://media/external/downloads/0'),
+        isFalse,
+      );
       markTestSkipped('公共目录发布仅 Android：其余平台下载根目录即公共目录');
       return;
     }
@@ -394,8 +394,10 @@ Future<void> _serveAudio(HttpRequest request, Uint8List wavBytes) async {
       return;
     }
     request.response.statusCode = HttpStatus.partialContent;
-    request.response.headers
-        .set(HttpHeaders.contentRangeHeader, 'bytes $start-$end/$total');
+    request.response.headers.set(
+      HttpHeaders.contentRangeHeader,
+      'bytes $start-$end/$total',
+    );
     request.response.add(wavBytes.sublist(start, end + 1));
   } else {
     request.response.add(wavBytes);
@@ -414,15 +416,13 @@ Uint8List _buildWav() {
   final builder = BytesBuilder();
   void writeString(String value) => builder.add(utf8.encode(value));
   void writeUint32(int value) => builder.add([
-        value & 0xff,
-        (value >> 8) & 0xff,
-        (value >> 16) & 0xff,
-        (value >> 24) & 0xff,
-      ]);
-  void writeUint16(int value) => builder.add([
-        value & 0xff,
-        (value >> 8) & 0xff,
-      ]);
+    value & 0xff,
+    (value >> 8) & 0xff,
+    (value >> 16) & 0xff,
+    (value >> 24) & 0xff,
+  ]);
+  void writeUint16(int value) =>
+      builder.add([value & 0xff, (value >> 8) & 0xff]);
 
   writeString('RIFF');
   writeUint32(36 + dataSize);
@@ -445,7 +445,8 @@ Uint8List _buildWav() {
   return builder.toBytes();
 }
 
-String _buildScript(int port, String cacheTrackId) => '''
+String _buildScript(int port, String cacheTrackId) =>
+    '''
 /**
  * @name 集成测试音源
  * @description 仅用于 Molia 集成测试

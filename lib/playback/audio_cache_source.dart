@@ -15,8 +15,7 @@ AudioSource? createCachingAudioSource(
   Uri uri,
   String cacheFilePath, {
   Map<String, String> headers = const {},
-}) =>
-    platform.createCachingAudioSource(uri, cacheFilePath, headers: headers);
+}) => platform.createCachingAudioSource(uri, cacheFilePath, headers: headers);
 
 /// 拼接音频缓存文件路径（各平台分隔符差异由实现处理）。
 String audioCacheFilePath(String directory, String fileName) =>

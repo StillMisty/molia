@@ -12,6 +12,7 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/play_statistics_page.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
 import 'package:molia/services/save_as.dart';
+
 import 'support/fake_save_as.dart';
 import 'support/sync_test_support.dart';
 
@@ -32,8 +33,9 @@ void main() {
         uniqueTrackCount: 2,
         completionRate: 2 / 3,
         skipRate: 1 / 3,
-        firstPlayedAt:
-            now.subtract(const Duration(days: 40)).millisecondsSinceEpoch,
+        firstPlayedAt: now
+            .subtract(const Duration(days: 40))
+            .millisecondsSinceEpoch,
       ),
       topTracksData: [
         PlayStatTrackEntry(
@@ -174,9 +176,9 @@ class _FakeStatisticsRepository extends PlayStatisticsRepository {
     this.byWeekdayHourData = const [],
     this.sourcesData = const [],
   }) : super(
-          databaseProvider: _unusedDatabase,
-          statisticsSync: testStatisticsSyncStore(_unusedDatabase),
-        );
+         databaseProvider: _unusedDatabase,
+         statisticsSync: testStatisticsSyncStore(_unusedDatabase),
+       );
 
   static MoliaDatabase _unusedDatabase() => throw StateError('测试不访问数据库');
 
@@ -191,14 +193,16 @@ class _FakeStatisticsRepository extends PlayStatisticsRepository {
   Future<PlayStatisticsSummary> summary({int? since}) async => summaryData;
 
   @override
-  Future<List<PlayStatTrackEntry>> topTracks(
-          {int? since, int limit = 10}) async =>
-      topTracksData;
+  Future<List<PlayStatTrackEntry>> topTracks({
+    int? since,
+    int limit = 10,
+  }) async => topTracksData;
 
   @override
-  Future<List<PlayStatArtistEntry>> topArtists(
-          {int? since, int limit = 10}) async =>
-      topArtistsData;
+  Future<List<PlayStatArtistEntry>> topArtists({
+    int? since,
+    int limit = 10,
+  }) async => topArtistsData;
 
   @override
   Future<List<DayListened>> listenedByDay({int? since}) async => dailyData;
@@ -217,6 +221,5 @@ class _FakeStatisticsRepository extends PlayStatisticsRepository {
   @override
   Future<List<PlayEvent>> listEventsForExport({
     int limit = PlayStatisticsLimits.exportEventLimit,
-  }) async =>
-      const [];
+  }) async => const [];
 }

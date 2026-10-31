@@ -27,8 +27,9 @@ class TestListenable<T> extends ValueNotifier<T> implements StateListenable<T> {
 
 /// 记录调用与最后一次 load 请求的假播放后端。
 class FakePlaybackBackend implements PlaybackBackend {
-  final TestListenable<BackendSnapshot> _notifier =
-      TestListenable(BackendSnapshot.empty);
+  final TestListenable<BackendSnapshot> _notifier = TestListenable(
+    BackendSnapshot.empty,
+  );
 
   final List<String> calls = [];
   PlaybackRequest? lastRequest;
@@ -64,13 +65,13 @@ class FakePlaybackBackend implements PlaybackBackend {
 
   @override
   PlaybackCapabilities get capabilities => const PlaybackCapabilities(
-        seek: true,
-        next: true,
-        previous: true,
-        queue: true,
-        setMode: true,
-        volume: true,
-      );
+    seek: true,
+    next: true,
+    previous: true,
+    queue: true,
+    setMode: true,
+    volume: true,
+  );
 
   @override
   bool canHandle(Track track) => true;
@@ -98,6 +99,11 @@ class FakePlaybackBackend implements PlaybackBackend {
       previous: current.previous,
       previousOfPrevious: current.previousOfPrevious,
       upNext: [...current.upNext, ...tracks],
+      upNextIndices: [
+        if (current.upNextIndices.length == current.upNext.length)
+          ...current.upNextIndices,
+        for (var i = 0; i < tracks.length; i++) current.queue.length + i,
+      ],
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
       position: current.position,
@@ -107,6 +113,87 @@ class FakePlaybackBackend implements PlaybackBackend {
       quality: current.quality,
       error: current.error,
     );
+  }
+
+  /// 队列移动：记录调用并按真实队列语义推一帧快照（测试可断言 UI 跟随）。
+  @override
+  Future<bool> moveQueueIndex(int from, int to) async {
+    calls.add('moveQueueIndex:$from:$to');
+    final current = _notifier.value;
+    if (current.mode == PlayMode.shuffle ||
+        from < 0 ||
+        to < 0 ||
+        from >= current.queue.length ||
+        to >= current.queue.length ||
+        from == to ||
+        from == current.currentIndex ||
+        to == current.currentIndex) {
+      return false;
+    }
+    final queue = List<Track>.of(current.queue);
+    final track = queue.removeAt(from);
+    queue.insert(to, track);
+    var index = current.currentIndex;
+    if (from < to && index > from && index <= to) index--;
+    if (to < from && index >= to && index < from) index++;
+    _notifier.value = BackendSnapshot(
+      current: current.current,
+      queue: List<Track>.unmodifiable(queue),
+      currentIndex: index,
+      next: current.next,
+      previous: current.previous,
+      previousOfPrevious: current.previousOfPrevious,
+      upNext: current.upNext,
+      upNextIndices: current.upNextIndices,
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      position: current.position,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      quality: current.quality,
+      error: current.error,
+    );
+    return true;
+  }
+
+  /// 队列移除：记录调用并按真实队列语义推一帧快照。
+  @override
+  Future<bool> removeQueueIndex(int index) async {
+    calls.add('removeQueueIndex:$index');
+    final current = _notifier.value;
+    if (index < 0 ||
+        index >= current.queue.length ||
+        index == current.currentIndex) {
+      return false;
+    }
+    final queue = List<Track>.of(current.queue);
+    final removed = queue.removeAt(index);
+    final currentIndex = index < current.currentIndex
+        ? current.currentIndex - 1
+        : current.currentIndex;
+    _notifier.value = BackendSnapshot(
+      current: current.current,
+      queue: List<Track>.unmodifiable(queue),
+      currentIndex: currentIndex,
+      next: current.next,
+      previous: current.previous,
+      previousOfPrevious: current.previousOfPrevious,
+      upNext: [
+        for (final track in current.upNext)
+          if (track != removed) track,
+      ],
+      upNextIndices: const [],
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      position: current.position,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      quality: current.quality,
+      error: current.error,
+    );
+    return true;
   }
 
   @override
@@ -282,7 +369,8 @@ PlaybackProvider buildTestPlaybackProvider({
   Future<String?> Function(Track track)? artworkResolver,
 }) {
   // 已持有 facade（要直接观察快照 / 进度通道）时优先用它；否则按 backend 自建。
-  final playbackFacade = facade ??
+  final playbackFacade =
+      facade ??
       DefaultPlaybackFacade(backend: backend ?? FakePlaybackBackend());
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
   final registry = settings ?? SettingsRegistry(keys: kAllSettingsKeys);

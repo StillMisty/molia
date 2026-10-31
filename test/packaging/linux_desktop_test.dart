@@ -27,8 +27,9 @@ void main() {
       }
       final separator = trimmed.indexOf('=');
       if (separator <= 0) continue;
-      entries[trimmed.substring(0, separator)] =
-          trimmed.substring(separator + 1);
+      entries[trimmed.substring(0, separator)] = trimmed.substring(
+        separator + 1,
+      );
     }
 
     expect(entries['Type'], 'Application');
@@ -50,11 +51,16 @@ void main() {
       );
       expect(file.existsSync(), isTrue, reason: '缺少 ${size}x$size 图标');
       final bytes = file.readAsBytesSync();
-      expect(
-        bytes.sublist(0, 8),
-        [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
-        reason: '${size}x$size 不是 PNG',
-      );
+      expect(bytes.sublist(0, 8), [
+        0x89,
+        0x50,
+        0x4E,
+        0x47,
+        0x0D,
+        0x0A,
+        0x1A,
+        0x0A,
+      ], reason: '${size}x$size 不是 PNG');
       final header = ByteData.sublistView(bytes, 16, 24);
       expect(header.getUint32(0), size);
       expect(header.getUint32(4), size);
@@ -84,10 +90,6 @@ void main() {
     final result = await Process.run('desktop-file-validate', [
       desktopFile.path,
     ]);
-    expect(
-      result.exitCode,
-      0,
-      reason: '${result.stdout}${result.stderr}',
-    );
+    expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
   });
 }

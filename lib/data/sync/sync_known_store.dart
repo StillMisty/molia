@@ -45,19 +45,16 @@ class SyncKnownRepository implements SyncKnownStore {
     if (versions.isEmpty) return;
     final db = _databaseProvider();
     await db.batch((batch) {
-      batch.insertAllOnConflictUpdate(
-        db.syncKnown,
-        [
-          for (final entry in versions.entries)
-            SyncKnownCompanion.insert(
-              category: entry.key.category.name,
-              key: entry.key.key,
-              versionPhysical: entry.value.physical,
-              versionCounter: Value(entry.value.counter),
-              deviceId: Value(entry.value.deviceId),
-            ),
-        ],
-      );
+      batch.insertAllOnConflictUpdate(db.syncKnown, [
+        for (final entry in versions.entries)
+          SyncKnownCompanion.insert(
+            category: entry.key.category.name,
+            key: entry.key.key,
+            versionPhysical: entry.value.physical,
+            versionCounter: Value(entry.value.counter),
+            deviceId: Value(entry.value.deviceId),
+          ),
+      ]);
     });
   }
 

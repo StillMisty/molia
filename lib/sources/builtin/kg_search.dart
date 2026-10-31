@@ -28,7 +28,8 @@ class KgSearch {
 
   /// 平台变体面：请求 / 业务码判定（`error_code != 0`）/ 解析。
   static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
-    final url = 'https://songsearch.kugou.com/song_search_v2'
+    final url =
+        'https://songsearch.kugou.com/song_search_v2'
         '?keyword=${Uri.encodeComponent(keyword)}'
         '&page=$page&pagesize=$limit&userid=0&clientver=&platform=WebFilter'
         '&filter=2&iscorrection=1&privilege_filter=0&area_code=1';
@@ -80,14 +81,34 @@ class KgSearch {
 
   static SourceTrack? _parseItem(Map item) {
     final types = <String, Map<String, dynamic>>{};
-    addKgQuality(types, '128k',
-        size: item['FileSize'], hash: item['FileHash'], requireHash: true);
-    addKgQuality(types, '320k',
-        size: item['HQFileSize'], hash: item['HQFileHash'], requireHash: true);
-    addKgQuality(types, 'flac',
-        size: item['SQFileSize'], hash: item['SQFileHash'], requireHash: true);
-    addKgQuality(types, 'flac24bit',
-        size: item['ResFileSize'], hash: item['ResFileHash'], requireHash: true);
+    addKgQuality(
+      types,
+      '128k',
+      size: item['FileSize'],
+      hash: item['FileHash'],
+      requireHash: true,
+    );
+    addKgQuality(
+      types,
+      '320k',
+      size: item['HQFileSize'],
+      hash: item['HQFileHash'],
+      requireHash: true,
+    );
+    addKgQuality(
+      types,
+      'flac',
+      size: item['SQFileSize'],
+      hash: item['SQFileHash'],
+      requireHash: true,
+    );
+    addKgQuality(
+      types,
+      'flac24bit',
+      size: item['ResFileSize'],
+      hash: item['ResFileHash'],
+      requireHash: true,
+    );
 
     final singers = item['Singers'];
     final singerNames = <String>[];
@@ -157,33 +178,50 @@ class KgSearch {
 
     final parts = (raw['filename']?.toString() ?? '').split(' - ');
     final artist = parts.length > 1 ? parts.first.trim() : fallbackArtist;
-    final name =
-        (parts.length > 1 ? parts.sublist(1).join(' - ') : parts.first).trim();
+    final name = (parts.length > 1 ? parts.sublist(1).join(' - ') : parts.first)
+        .trim();
     if (name.isEmpty) return null;
 
     final types = <String, Map<String, dynamic>>{};
-    addKgQuality(types, '128k',
-        size: raw['filesize'], hash: hash, requireHash: true);
-    addKgQuality(types, '320k',
-        size: raw['320filesize'], hash: raw['320hash'], requireHash: true);
-    addKgQuality(types, 'flac',
-        size: raw['sqfilesize'], hash: raw['sqhash'], requireHash: true);
+    addKgQuality(
+      types,
+      '128k',
+      size: raw['filesize'],
+      hash: hash,
+      requireHash: true,
+    );
+    addKgQuality(
+      types,
+      '320k',
+      size: raw['320filesize'],
+      hash: raw['320hash'],
+      requireHash: true,
+    );
+    addKgQuality(
+      types,
+      'flac',
+      size: raw['sqfilesize'],
+      hash: raw['sqhash'],
+      requireHash: true,
+    );
 
     final duration = parseSourceCount(raw['duration']) ?? 0;
-    return trackFromSourceTrack(buildTrack(
-      songId: raw['audio_id']?.toString() ?? '',
-      name: decodeName(name),
-      artist: decodeName(artist),
-      artists: artists,
-      album: albumName,
-      albumId: albumId,
-      hash: hash,
-      intervalText: duration > 0 ? formatPlayTime(duration) : null,
-      duration: duration > 0 ? Duration(seconds: duration) : null,
-      types: types,
-      rawInterval: duration,
-      img: img,
-    ));
+    return trackFromSourceTrack(
+      buildTrack(
+        songId: raw['audio_id']?.toString() ?? '',
+        name: decodeName(name),
+        artist: decodeName(artist),
+        artists: artists,
+        album: albumName,
+        albumId: albumId,
+        hash: hash,
+        intervalText: duration > 0 ? formatPlayTime(duration) : null,
+        duration: duration > 0 ? Duration(seconds: duration) : null,
+        types: types,
+        rawInterval: duration,
+        img: img,
+      ),
+    );
   }
 
   /// 由已解析字段构建酷狗曲目（搜索 / 榜单 / 歌单详情共用同一 raw 约定）。
@@ -219,11 +257,13 @@ class KgSearch {
       'otherSource': null,
       'hash': hash,
       'types': types.entries
-          .map((e) => {
-                'type': e.key,
-                'size': e.value['size'],
-                'hash': e.value['hash'],
-              })
+          .map(
+            (e) => {
+              'type': e.key,
+              'size': e.value['size'],
+              'hash': e.value['hash'],
+            },
+          )
           .toList(),
       '_types': types,
       'typeUrl': <String, dynamic>{},

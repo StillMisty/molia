@@ -49,10 +49,7 @@ void main() {
       );
       expect(cache.containsKey('k'), isFalse);
 
-      expect(
-        await cache.getOrCreate('k', () async => ++calls),
-        2,
-      );
+      expect(await cache.getOrCreate('k', () async => ++calls), 2);
       expect(calls, 2);
     });
 
@@ -114,8 +111,11 @@ void main() {
       completer.complete(1);
       expect(await pending, 1);
 
-      expect(await cache.getOrCreate('k', () async => ++calls), 1,
-          reason: '完成时刻才开始计时');
+      expect(
+        await cache.getOrCreate('k', () async => ++calls),
+        1,
+        reason: '完成时刻才开始计时',
+      );
       expect(calls, 1);
     });
   });
@@ -198,7 +198,10 @@ void main() {
 
   group('RequestCache · LRU', () {
     test('超容量淘汰最久未使用条目', () async {
-      final cache = RequestCache(maxEntries: 2, ttl: const Duration(minutes: 5));
+      final cache = RequestCache(
+        maxEntries: 2,
+        ttl: const Duration(minutes: 5),
+      );
       final calls = <String, int>{};
 
       Future<String> create(String key) async {
@@ -220,7 +223,10 @@ void main() {
     });
 
     test('in-flight 条目不因容量压力被淘汰（单飞优先）', () async {
-      final cache = RequestCache(maxEntries: 1, ttl: const Duration(minutes: 5));
+      final cache = RequestCache(
+        maxEntries: 1,
+        ttl: const Duration(minutes: 5),
+      );
       final completer = Completer<String>();
       var calls = 0;
 
@@ -306,7 +312,9 @@ void main() {
     test('countPrefix 只数匹配前缀的条目（含 in-flight）', () async {
       final cache = RequestCache(ttl: const Duration(minutes: 5));
       final pending = Completer<String>();
-      unawaited(cache.getOrCreate<String>('url:wy:digest:', () => pending.future));
+      unawaited(
+        cache.getOrCreate<String>('url:wy:digest:', () => pending.future),
+      );
       await cache.getOrCreate<String>('url:wy:digest:320k', () async => 'a');
       await cache.getOrCreate<String>('url:wy:digest:flac', () async => 'b');
       await cache.getOrCreate<String>('url:wy:other:320k', () async => 'c');

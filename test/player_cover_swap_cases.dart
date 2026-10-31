@@ -6,11 +6,11 @@ import 'package:molia/widgets/player_cover_swap.dart';
 /// 逐条固定边界——队列点选双向、随机模式上一首/轮末重洗、重复 id 取最近、
 /// 无法解析兜底向前、同 id 不播。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   final a = _track('a');
@@ -63,12 +63,7 @@ void main() {
       );
       // 同时命中上一首与下一首提示时按上一首（向后）。
       expect(
-        resolveCoverSwapDirection(
-          from: b,
-          to: a,
-          prevHint: a,
-          nextHint: a,
-        ),
+        resolveCoverSwapDirection(from: b, to: a, prevHint: a, nextHint: a),
         coverSwapBackward,
       );
     });
@@ -198,10 +193,7 @@ void main() {
 
   group('规则 6：无法解析 → 兜底向前', () {
     test('无队列信息 / 新旧曲不在队列时兜底向前（即便下标向后）', () {
-      expect(
-        resolveCoverSwapDirection(from: c, to: a),
-        coverSwapForward,
-      );
+      expect(resolveCoverSwapDirection(from: c, to: a), coverSwapForward);
       expect(
         resolveCoverSwapDirection(
           from: c,

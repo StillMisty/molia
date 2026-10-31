@@ -165,7 +165,7 @@ void main() {
     expect(
       [
         for (final state in notifications)
-          (state.isLoading, state.isLoadingMore)
+          (state.isLoading, state.isLoadingMore),
       ],
       [(true, false), (false, false), (false, true), (false, false)],
     );

@@ -384,8 +384,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _autoScroll) {
         final provider = Provider.of<PlaybackProvider>(context, listen: false);
-        final latestCurrentIndex =
-            _getCurrentLineIndex(provider.currentPosition);
+        final latestCurrentIndex = _getCurrentLineIndex(
+          provider.currentPosition,
+        );
         _scrollToCurrentLine(latestCurrentIndex);
         _previousLineIndex = latestCurrentIndex;
       }
@@ -406,11 +407,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 用 listen:false 读取：本方法在 PositionLineIndexBuilder 的 build 内被
     // 调用，context.select 在该阶段会触发 provider 断言；曲目变化时外层
     // Selector（按 track uri）会重建整个歌词内容，取值仍是最新。
-    final isLocalTrack = Provider.of<PlaybackProvider>(context, listen: false)
-            .snapshot
-            .current
-            ?.id
-            .sourceKey ==
+    final isLocalTrack =
+        Provider.of<PlaybackProvider>(
+          context,
+          listen: false,
+        ).snapshot.current?.id.sourceKey ==
         kLocalSourceKey;
     return <M3EFabMenuItem>[
       // 换歌词：歌词页的快捷入口（信息页歌词来源行是数据面入口）。
@@ -485,8 +486,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     final position = _scrollController.position;
-    final renderObject =
-        _lineTextKeys[currentLineIndex].currentContext?.findRenderObject();
+    final renderObject = _lineTextKeys[currentLineIndex].currentContext
+        ?.findRenderObject();
     if (renderObject == null) {
       // 目标行还没进入构建范围：粗定位把列表带过去，下一帧再精确滚动。
       _pendingScrollIndex = currentLineIndex;
@@ -510,8 +511,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     try {
       final viewport = RenderAbstractViewport.of(renderObject);
       // 顶边对齐视口顶边时的偏移；再减去锚点距离得到目标偏移。
-      final leadingOffset =
-          viewport.getOffsetToReveal(renderObject, 0.0).offset;
+      final leadingOffset = viewport
+          .getOffsetToReveal(renderObject, 0.0)
+          .offset;
       final target = anchoredLineOffset(
         leadingOffset: leadingOffset,
         viewport: position.viewportDimension,
@@ -550,11 +552,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
 
     double ratio;
     // 曲目时长直接从播放快照读：会话状态只描述歌词，不复制播放元数据。
-    final durationMs = Provider.of<PlaybackProvider>(context, listen: false)
-        .snapshot
-        .current
-        ?.duration
-        ?.inMilliseconds;
+    final durationMs = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    ).snapshot.current?.duration?.inMilliseconds;
     if (durationMs != null && durationMs > 0) {
       ratio = lines[currentLineIndex].timestamp.inMilliseconds / durationMs;
     } else if (lines.length <= 1) {
@@ -565,7 +566,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
     ratio = ratio.isFinite ? ratio.clamp(0.0, 1.0) : 0.0;
 
     final target = clampScrollOffset(
-      target: ratio * position.maxScrollExtent -
+      target:
+          ratio * position.maxScrollExtent -
           _anchorFraction() * position.viewportDimension,
       minScrollExtent: position.minScrollExtent,
       maxScrollExtent: position.maxScrollExtent,
@@ -578,8 +580,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
   }
 
-  void _enableAutoScrollWithSuppression(
-      {Duration duration = const Duration(milliseconds: 350)}) {
+  void _enableAutoScrollWithSuppression({
+    Duration duration = const Duration(milliseconds: 350),
+  }) {
     if (!mounted) {
       return;
     }
@@ -661,8 +664,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
   Widget build(BuildContext context) {
     super.build(context);
     final l10n = AppLocalizations.of(context)!;
-    final playbackProvider =
-        Provider.of<PlaybackProvider>(context, listen: false);
+    final playbackProvider = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    );
 
     // 可见性门控：隐藏页（壳层不在前台，或播放页停在队列 / 信息 tab）不再
     // 订阅进度、不自动滚动、不跑快捷操作弹簧。nearest scope 已把「壳层可见
@@ -714,8 +719,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     // 歌词页扩展行开关：独立于输出侧（桌面 / 通知 / 蓝牙）的翻译·罗马音设置。
     final lyricsDisplaySettings = context.watch<LyricsDisplaySettings>();
 
-    final playbackProvider =
-        Provider.of<PlaybackProvider>(context, listen: false);
+    final playbackProvider = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    );
 
     if (active &&
         _autoScroll &&
@@ -743,8 +750,10 @@ class _LyricsWidgetState extends State<LyricsWidget>
     }
 
     // 行高亮 / 展开收起是 effects：减弱动效时零时长硬切。
-    final Duration lineEffectDuration =
-        effectDurationOf(context, M3EMotion.medium1);
+    final Duration lineEffectDuration = effectDurationOf(
+      context,
+      M3EMotion.medium1,
+    );
 
     return Material(
       color: Colors.transparent,
@@ -841,8 +850,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
               key: _listViewKey,
               controller: _scrollController,
               physics: const BouncingScrollPhysics(),
-              scrollCacheExtent:
-                  const ScrollCacheExtent.pixels(1000.0), // 预建附近行，减少兜底跳转
+              scrollCacheExtent: const ScrollCacheExtent.pixels(
+                1000.0,
+              ), // 预建附近行，减少兜底跳转
               padding: EdgeInsets.only(
                 top: 80 + MediaQuery.of(context).padding.top,
                 bottom: 40 + MediaQuery.of(context).padding.bottom,
@@ -853,8 +863,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                   return SizedBox(height: _tailSpace());
                 }
                 final theme = Theme.of(context);
-                final bool isWideLyricLayout =
-                    context.layoutType(ResponsivePageType.detail).preferTwoPane;
+                final bool isWideLyricLayout = context
+                    .layoutType(ResponsivePageType.detail)
+                    .preferTwoPane;
                 final line = _session.lines[index];
                 final bool lyricsSynced = _session.isSynced;
                 final bool isCurrentLine =
@@ -876,23 +887,26 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 final double lyricFontSize = isWideLyricLayout ? 24.0 : 22.0;
                 final String lineTranslation =
                     index < _session.translations.length
-                        ? _session.translations[index]
-                        : '';
-                final String lineRoma =
-                    index < _session.romas.length ? _session.romas[index] : '';
+                    ? _session.translations[index]
+                    : '';
+                final String lineRoma = index < _session.romas.length
+                    ? _session.romas[index]
+                    : '';
                 // 扩展行逐行渲染：有数据且歌词页开关打开就显示，空文本不占位
                 // （与海报 / 选择页同语义）。
                 final bool showTranslation =
                     lyricsDisplaySettings.pageTranslationEnabled &&
-                        lineTranslation.isNotEmpty;
-                final bool showRoma = lyricsDisplaySettings.pageRomaEnabled &&
+                    lineTranslation.isNotEmpty;
+                final bool showRoma =
+                    lyricsDisplaySettings.pageRomaEnabled &&
                     lineRoma.isNotEmpty;
                 // 逐字渲染：仅当前行 + 有词时间轴 + 非复制模式；
                 // 已唱/未唱用 primary/onSurface 双色，行级强调由词高亮表达。
                 // 隐藏页不挂逐字组件：它会自己订阅 position（4Hz + 补间控制器），
                 // 重新可见时由当前行重建按最新进度直接落位。
                 final List<LyricWord>? lineWords = line.words;
-                final bool useKaraoke = active &&
+                final bool useKaraoke =
+                    active &&
                     isCurrentLine &&
                     !_isCopyLyricsMode &&
                     lineWords != null &&
@@ -903,8 +917,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
                 // 默认字体——设置页选的「应用字体」（含主题注入的平台默认）会在
                 // 整段歌词行失效，与本页其它文字两种字体。这里只覆盖字号/字重/
                 // 颜色/行高，其余（字体族、回退链、排版属性）继续继承主题。
-                final TextStyle lineBaseStyle =
-                    DefaultTextStyle.of(context).style;
+                final TextStyle lineBaseStyle = DefaultTextStyle.of(context)
+                    .style;
                 // 扩展行样式：字号对齐桌面歌词规格（主字号 × 0.8），
                 // 颜色保持行角色契约的次要文本，不参与 primary 强调。
                 final TextStyle extendedLineStyle = TextStyle(
@@ -920,8 +934,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                     if (!mounted) return;
 
                     final tappedTimestamp = _session.lines[index].timestamp;
-                    playbackProvider
-                        .seekToPosition(tappedTimestamp.inMilliseconds);
+                    playbackProvider.seekToPosition(
+                      tappedTimestamp.inMilliseconds,
+                    );
 
                     bool needsScrollTrigger = false;
                     if (_isCopyLyricsMode) {
@@ -965,16 +980,18 @@ class _LyricsWidgetState extends State<LyricsWidget>
                         fontSize: lyricFontSize,
                         // M3E 没有 w600 档：当前行 w700、其余 w500，
                         // 保留「高亮行更重」的两级对照（原来 w700/w600）。
-                        fontWeight:
-                            isCurrentLine ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isCurrentLine
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                         color: baseTextColor,
                         height: 1.1,
                       ),
                       child: AnimatedOpacity(
                         duration: lineEffectDuration,
                         curve: M3EMotion.emphasizedDecelerate,
-                        opacity:
-                            lyricsSynced ? (isCurrentLine ? 1.0 : 0.8) : 1.0,
+                        opacity: lyricsSynced
+                            ? (isCurrentLine ? 1.0 : 0.8)
+                            : 1.0,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
@@ -1032,13 +1049,9 @@ class _LyricsWidgetState extends State<LyricsWidget>
                       colors: [
                         Theme.of(context).colorScheme.surface,
                         Theme.of(context).colorScheme.surface,
-                        Theme.of(context)
-                            .colorScheme
-                            .surface
+                        Theme.of(context).colorScheme.surface
                             .withValues(alpha: 0.8),
-                        Theme.of(context)
-                            .colorScheme
-                            .surface
+                        Theme.of(context).colorScheme.surface
                             .withValues(alpha: 0.0),
                       ],
                       stops: const [0.0, 0.3, 0.6, 1.0],
@@ -1053,7 +1066,8 @@ class _LyricsWidgetState extends State<LyricsWidget>
             // 切换播放器竞争。
             Positioned(
               right: _quickActionsScreenOffset,
-              bottom: _quickActionsScreenOffset +
+              bottom:
+                  _quickActionsScreenOffset +
                   MediaQuery.of(context).padding.bottom,
               child: IgnorePointer(
                 ignoring: !shouldShowQuickActions,
@@ -1129,16 +1143,14 @@ class _LyricsWidgetState extends State<LyricsWidget>
   }) {
     final bool visible = showTranslation || showRoma;
     return AnimatedSwitcher(
-      duration:
-          animate ? effectDurationOf(context, M3EMotion.short4) : Duration.zero,
+      duration: animate
+          ? effectDurationOf(context, M3EMotion.short4)
+          : Duration.zero,
       switchInCurve: M3EMotion.emphasizedDecelerate,
       switchOutCurve: M3EMotion.emphasizedAccelerate,
       layoutBuilder: (currentChild, previousChildren) => Stack(
         alignment: Alignment.topLeft,
-        children: [
-          ...previousChildren,
-          ?currentChild,
-        ],
+        children: [...previousChildren, ?currentChild],
       ),
       transitionBuilder: (child, animation) => SizeTransition(
         sizeFactor: animation,
@@ -1154,19 +1166,11 @@ class _LyricsWidgetState extends State<LyricsWidget>
               children: [
                 if (showTranslation) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    translation,
-                    textAlign: TextAlign.left,
-                    style: style,
-                  ),
+                  Text(translation, textAlign: TextAlign.left, style: style),
                 ],
                 if (showRoma) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    roma,
-                    textAlign: TextAlign.left,
-                    style: style,
-                  ),
+                  Text(roma, textAlign: TextAlign.left, style: style),
                 ],
               ],
             ),
@@ -1240,11 +1244,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
   Future<void> _showSourceSwapPage() async {
     if (!mounted) return;
 
-    final playbackProvider =
-        Provider.of<PlaybackProvider>(context, listen: false);
+    final playbackProvider = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    );
     final currentTrack = playbackProvider.snapshot.current;
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
+    final notificationService = Provider.of<NotificationService>(
+      context,
+      listen: false,
+    );
     final l10n = AppLocalizations.of(context)!;
 
     if (currentTrack == null) {
@@ -1365,11 +1373,15 @@ class _LyricsWidgetState extends State<LyricsWidget>
   Future<void> _showLyricsSelectionPage() async {
     if (!mounted) return;
 
-    final playbackProvider =
-        Provider.of<PlaybackProvider>(context, listen: false);
+    final playbackProvider = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    );
     final currentTrack = playbackProvider.snapshot.current;
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
+    final notificationService = Provider.of<NotificationService>(
+      context,
+      listen: false,
+    );
     final l10n = AppLocalizations.of(context)!;
 
     if (currentTrack == null) {

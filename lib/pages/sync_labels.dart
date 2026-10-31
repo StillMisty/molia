@@ -29,7 +29,9 @@ String syncIssueText(AppLocalizations l10n, SyncIssue issue) {
     SyncIssueCode.webdavDirFailed => l10n.syncIssueWebdavDirFailed,
     SyncIssueCode.webdavListFailed => l10n.syncIssueWebdavListFailed,
     SyncIssueCode.webdavReadFailed => l10n.syncIssueWebdavReadFailed(peer),
-    SyncIssueCode.webdavDecryptFailed => l10n.syncIssueWebdavDecryptFailed(peer),
+    SyncIssueCode.webdavDecryptFailed => l10n.syncIssueWebdavDecryptFailed(
+      peer,
+    ),
     SyncIssueCode.webdavUploadFailed => l10n.syncIssueWebdavUploadFailed,
     SyncIssueCode.deleteRemoteFailed => l10n.syncIssueDeleteRemoteFailed(peer),
     SyncIssueCode.internal => l10n.syncIssueInternal,
@@ -50,13 +52,13 @@ String syncOutcomeText(AppLocalizations l10n, SyncOutcome? outcome) =>
 
 /// 五态结论图标：各有形状，颜色只作增强（不靠颜色单独编码状态）。
 IconData syncOutcomeIcon(SyncOutcome? outcome) => switch (outcome) {
-      null => Icons.sync_problem_rounded,
-      SyncOutcome.ok => Icons.check_circle_rounded,
-      SyncOutcome.noChanges => Icons.check_circle_outline_rounded,
-      SyncOutcome.noPeers => Icons.wifi_tethering_off_rounded,
-      SyncOutcome.partial => Icons.error_outline_rounded,
-      SyncOutcome.failed => Icons.error_rounded,
-    };
+  null => Icons.sync_problem_rounded,
+  SyncOutcome.ok => Icons.check_circle_rounded,
+  SyncOutcome.noChanges => Icons.check_circle_outline_rounded,
+  SyncOutcome.noPeers => Icons.wifi_tethering_off_rounded,
+  SyncOutcome.partial => Icons.error_outline_rounded,
+  SyncOutcome.failed => Icons.error_rounded,
+};
 
 String _stringArg(SyncIssue issue, String key, {required String fallback}) {
   final value = issue.args[key];
@@ -65,7 +67,8 @@ String _stringArg(SyncIssue issue, String key, {required String fallback}) {
 }
 
 /// 同步等级文案（观测面：当前等级）。
-String syncLevelText(AppLocalizations l10n, SyncLevel? level) => switch (level) {
+String syncLevelText(AppLocalizations l10n, SyncLevel? level) =>
+    switch (level) {
       null => l10n.syncLevelUnknown,
       SyncLevel.active => l10n.syncLevelActive,
       SyncLevel.idle => l10n.syncLevelIdle,
@@ -84,40 +87,39 @@ String syncNetworkText(AppLocalizations l10n, {required bool onCellular}) =>
 ({IconData icon, String title, String subtitle})? syncNearbyAvailabilityCopy(
   AppLocalizations l10n,
   SyncNearbyAvailability availability,
-) =>
-    switch (availability) {
-      SyncNearbyAvailability.available => null,
-      SyncNearbyAvailability.permissionDenied => (
-          icon: Icons.lock_rounded,
-          title: l10n.syncNearbyPermissionTitle,
-          subtitle: l10n.syncNearbyPermissionHint,
-        ),
-      SyncNearbyAvailability.lanOff => (
-          icon: Icons.wifi_off_rounded,
-          title: l10n.syncNearbyLanOffTitle,
-          subtitle: l10n.syncNearbyLanOffHint,
-        ),
-      SyncNearbyAvailability.transportUnavailable => (
-          icon: Icons.error_outline_rounded,
-          title: l10n.syncNearbyTransportDownTitle,
-          subtitle: l10n.syncNearbyTransportDownHint,
-        ),
-      SyncNearbyAvailability.cellular => (
-          icon: Icons.signal_cellular_alt_rounded,
-          title: l10n.syncNearbyCellularTitle,
-          subtitle: l10n.syncNearbyCellularHint,
-        ),
-      SyncNearbyAvailability.powerSave => (
-          icon: Icons.battery_saver_rounded,
-          title: l10n.syncNearbyPowerSaveTitle,
-          subtitle: l10n.syncNearbyPowerSaveHint,
-        ),
-      SyncNearbyAvailability.discoveryUnavailable => (
-          icon: Icons.wifi_tethering_off_rounded,
-          title: l10n.syncNearbyDiscoveryUnavailableTitle,
-          subtitle: l10n.syncNearbyDiscoveryUnavailableHint,
-        ),
-    };
+) => switch (availability) {
+  SyncNearbyAvailability.available => null,
+  SyncNearbyAvailability.permissionDenied => (
+    icon: Icons.lock_rounded,
+    title: l10n.syncNearbyPermissionTitle,
+    subtitle: l10n.syncNearbyPermissionHint,
+  ),
+  SyncNearbyAvailability.lanOff => (
+    icon: Icons.wifi_off_rounded,
+    title: l10n.syncNearbyLanOffTitle,
+    subtitle: l10n.syncNearbyLanOffHint,
+  ),
+  SyncNearbyAvailability.transportUnavailable => (
+    icon: Icons.error_outline_rounded,
+    title: l10n.syncNearbyTransportDownTitle,
+    subtitle: l10n.syncNearbyTransportDownHint,
+  ),
+  SyncNearbyAvailability.cellular => (
+    icon: Icons.signal_cellular_alt_rounded,
+    title: l10n.syncNearbyCellularTitle,
+    subtitle: l10n.syncNearbyCellularHint,
+  ),
+  SyncNearbyAvailability.powerSave => (
+    icon: Icons.battery_saver_rounded,
+    title: l10n.syncNearbyPowerSaveTitle,
+    subtitle: l10n.syncNearbyPowerSaveHint,
+  ),
+  SyncNearbyAvailability.discoveryUnavailable => (
+    icon: Icons.wifi_tethering_off_rounded,
+    title: l10n.syncNearbyDiscoveryUnavailableTitle,
+    subtitle: l10n.syncNearbyDiscoveryUnavailableHint,
+  ),
+};
 
 /// 时间戳 → 相对时间（首屏结论行用：一句话里只给「多久以前」，
 /// 绝对时刻留给日志与名册；窗口越久粒度越粗）。
@@ -134,14 +136,17 @@ String syncRelativeTimeText(
   }
   if (elapsed < const Duration(hours: 1).inMilliseconds) {
     return l10n.syncRelativeMinutes(
-        elapsed ~/ const Duration(minutes: 1).inMilliseconds);
+      elapsed ~/ const Duration(minutes: 1).inMilliseconds,
+    );
   }
   if (elapsed < const Duration(days: 1).inMilliseconds) {
     return l10n.syncRelativeHours(
-        elapsed ~/ const Duration(hours: 1).inMilliseconds);
+      elapsed ~/ const Duration(hours: 1).inMilliseconds,
+    );
   }
   return l10n.syncRelativeDays(
-      elapsed ~/ const Duration(days: 1).inMilliseconds);
+    elapsed ~/ const Duration(days: 1).inMilliseconds,
+  );
 }
 
 int _intArg(SyncIssue issue, String key) {

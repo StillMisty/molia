@@ -31,8 +31,7 @@ class FakeDownloadStorage implements DownloadStorage {
   Future<String?> downloadsRoot() async => available ? root : null;
 
   @override
-  Future<String?> journalRoot() async =>
-      available ? journalRootPath : null;
+  Future<String?> journalRoot() async => available ? journalRootPath : null;
 
   @override
   Future<bool> fileExists(String path) async => files.containsKey(path);
@@ -48,9 +47,9 @@ class FakeDownloadStorage implements DownloadStorage {
 
   @override
   Future<List<String>> listFiles(String dirPath) async => [
-        for (final path in files.keys)
-          if (path.startsWith(dirPath)) path,
-      ];
+    for (final path in files.keys)
+      if (path.startsWith(dirPath)) path,
+  ];
 
   @override
   Future<Uint8List?> readBytes(String path) async {

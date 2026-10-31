@@ -11,13 +11,12 @@ void main() {
     int bytesIn = 0,
     int bytesOut = 0,
     int applied = 0,
-  }) =>
-      SyncActivityEntry(
-        at: at,
-        bytesIn: bytesIn,
-        bytesOut: bytesOut,
-        applied: applied,
-      );
+  }) => SyncActivityEntry(
+    at: at,
+    bytesIn: bytesIn,
+    bytesOut: bytesOut,
+    applied: applied,
+  );
 
   test('只统计 24 小时窗口内的轮次', () {
     final summary = SyncActivitySummary.fromEntries([

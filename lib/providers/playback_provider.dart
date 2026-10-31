@@ -179,13 +179,15 @@ class PlaybackProvider extends ChangeNotifier {
     this._onAutoSourceSwapped,
     required this._settings,
     bool Function()? isForeground,
-  })  : _session = sessionCoordinator,
-        _volumeStore = volumeStore ?? PlaybackVolumeStore() {
+  }) : _session = sessionCoordinator,
+       _volumeStore = volumeStore ?? PlaybackVolumeStore() {
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
     // 启动恢复开关的重载钩子（跨设备同步应用远端值后由组合根触发）：钩子挂在
     // provider 上——协调者只报告「恢复态是否变化」，UI 通知由这里发。
     _settings.bindReload(
-        kRestoreSessionEnabled, reloadRestoreSessionPreference);
+      kRestoreSessionEnabled,
+      reloadRestoreSessionPreference,
+    );
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
       categoryIntervals: {
@@ -275,8 +277,8 @@ class PlaybackProvider extends ChangeNotifier {
     final supported = track == null
         ? const <String>[]
         : track.qualities
-            .map((quality) => quality.type)
-            .where((type) => type.isNotEmpty);
+              .map((quality) => quality.type)
+              .where((type) => type.isNotEmpty);
     return pickQualityFor(supported, effective);
   }
 
@@ -324,17 +326,19 @@ class PlaybackProvider extends ChangeNotifier {
       // 的快照监听提交一次（payload / cursor 由 store 决定）。
       await DataPathTrace.async(
         'play.queue',
-        () => _facade.playTracks(PlaybackRequest(
-          tracks: [for (final track in tracks) trackFromSourceTrack(track)],
-          startIndex: index,
-          context: contextName == null
-              ? null
-              : PlaybackContext(
-                  name: contextName,
-                  type: 'lx',
-                  uri: 'lx:$contextName',
-                ),
-        )),
+        () => _facade.playTracks(
+          PlaybackRequest(
+            tracks: [for (final track in tracks) trackFromSourceTrack(track)],
+            startIndex: index,
+            context: contextName == null
+                ? null
+                : PlaybackContext(
+                    name: contextName,
+                    type: 'lx',
+                    uri: 'lx:$contextName',
+                  ),
+          ),
+        ),
         fields: () => {'tracks': tracks.length, 'index': index},
       );
       _notifyCategory('track');
@@ -356,17 +360,19 @@ class PlaybackProvider extends ChangeNotifier {
       // 同 playSourceTracks：装载（新上下文）不是会话命令。
       await DataPathTrace.async(
         'play.queue',
-        () => _facade.playTracks(PlaybackRequest(
-          tracks: List.of(tracks),
-          startIndex: index,
-          context: contextName == null
-              ? null
-              : PlaybackContext(
-                  name: contextName,
-                  type: 'lx',
-                  uri: 'lx:$contextName',
-                ),
-        )),
+        () => _facade.playTracks(
+          PlaybackRequest(
+            tracks: List.of(tracks),
+            startIndex: index,
+            context: contextName == null
+                ? null
+                : PlaybackContext(
+                    name: contextName,
+                    type: 'lx',
+                    uri: 'lx:$contextName',
+                  ),
+          ),
+        ),
         fields: () => {'tracks': tracks.length, 'index': index},
       );
       _notifyCategory('track');
@@ -381,8 +387,13 @@ class PlaybackProvider extends ChangeNotifier {
   Future<void> enqueueDomainTracks(List<Track> tracks) async {
     if (tracks.isEmpty) return;
     try {
-      // 追加只编辑队列、不换当前曲目：不是会话命令；队列变化由快照监听落盘。
-      await _facade.enqueueTracks(List.of(tracks));
+      // 恢复态没有真实队列：追加保存的会话并落盘；live 追加只编辑 facade
+      // 队列（不换当前曲目），队列变化由快照监听落盘。
+      if (_session.hasRestoredSession) {
+        await _session.enqueueRestoredTracks(List.of(tracks));
+      } else {
+        await _facade.enqueueTracks(List.of(tracks));
+      }
       _notifyCategory('queue');
     } catch (e) {
       _logger.severe('enqueueDomainTracks: 追加队列失败', e);
@@ -399,6 +410,16 @@ class PlaybackProvider extends ChangeNotifier {
     final outcome = await _session.replaceTrack(oldTrack, newTrack);
     _applyOutcome(outcome);
     return outcome.hasChanges;
+  }
+
+  /// 移动队列中的一项：live / 恢复态都由协调者路由，UI 只按变化域通知。
+  Future<void> moveQueueIndex(int from, int to) async {
+    _applyOutcome(await _session.moveQueueIndex(from, to));
+  }
+
+  /// 移除队列中的一项：live / 恢复态都由协调者路由。
+  Future<void> removeQueueIndex(int index) async {
+    _applyOutcome(await _session.removeQueueIndex(index));
   }
 
   /// 播放本地队列中指定 id 的曲目（队列面板点击）。
@@ -586,11 +607,11 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 默认播放模式：键默认值是唯一来源，模块只把字符串映射成枚举。
   static PlayMode _playModeOf(String name) => PlayMode.values.firstWhere(
-        (value) => value.name == name,
-        orElse: () => PlayMode.values.firstWhere(
-          (value) => value.name == kDefaultPlayMode.defaultValue,
-        ),
-      );
+    (value) => value.name == name,
+    orElse: () => PlayMode.values.firstWhere(
+      (value) => value.name == kDefaultPlayMode.defaultValue,
+    ),
+  );
 
   /// 启动加载默认播放模式；无曲目时应用到 facade（有曲目时不打断当前会话）。
   ///
@@ -737,17 +758,19 @@ class PlaybackProvider extends ChangeNotifier {
     if (_retriedTrackKey != key) {
       _retriedTrackKey = key;
       final index = state.currentIndex;
-      unawaited(Future<void>.microtask(() async {
-        try {
-          // 重试也是一次会话命令：阶段路由与「返回前已提交」交给协调者，
-          // 失败恢复链路不再直接写 facade（与 UI / 通知同一写入口）。
-          await _session.playQueueIndex(index);
-        } catch (e) {
-          _logger.severe('播放失败自动重试失败', e);
-        }
-        // 重试仍失败（错误快照可能值未变、不会再触发本方法）→ 自动换源。
-        _maybeAutoSwapAfterRetry(track);
-      }));
+      unawaited(
+        Future<void>.microtask(() async {
+          try {
+            // 重试也是一次会话命令：阶段路由与「返回前已提交」交给协调者，
+            // 失败恢复链路不再直接写 facade（与 UI / 通知同一写入口）。
+            await _session.playQueueIndex(index);
+          } catch (e) {
+            _logger.severe('播放失败自动重试失败', e);
+          }
+          // 重试仍失败（错误快照可能值未变、不会再触发本方法）→ 自动换源。
+          _maybeAutoSwapAfterRetry(track);
+        }),
+      );
       return;
     }
 
@@ -788,10 +811,7 @@ class PlaybackProvider extends ChangeNotifier {
       if (match == null || match.id.uri == uri) return;
       // 搜索期间可能已切歌/被手动换源：只替换仍是这首的当前曲目。
       if (_facade.snapshot.value.current?.id.uri != uri) return;
-      _rememberAutoSwapProvenance(
-        match.id.uri,
-        {...tried, match.id.sourceKey},
-      );
+      _rememberAutoSwapProvenance(match.id.uri, {...tried, match.id.sourceKey});
       // 队列替换是会话命令：live 转发由协调者完成，返回前已把换源写进会话
       // （重开应用恢复新来源，而不是等下一分钟整份刷新）。
       final outcome = await _session.replaceQueueTrack(uri, match);

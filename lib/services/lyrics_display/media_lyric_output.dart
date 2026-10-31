@@ -38,8 +38,7 @@ class MediaLyricOutput implements LyricsOutput {
   @override
   Future<void> apply(LyricsPresentation presentation) async {
     final settings = _settings;
-    if (settings == null ||
-        _capability != LyricsOutputCapability.ready) {
+    if (settings == null || _capability != LyricsOutputCapability.ready) {
       return;
     }
     final override = _composer.compose(

@@ -147,16 +147,18 @@ void main() {
     for (var i = 0; i < 10; i++) {
       final next = (i + 1) % queue.length;
       final track = queue[next];
-      backend.emit(BackendSnapshot(
-        current: track,
-        queue: queue,
-        currentIndex: next,
-        next: queue[(next + 1) % queue.length],
-        isPlaying: true,
-        position: Duration.zero,
-        duration: track.duration ?? Duration.zero,
-        upNext: queue.sublist(next + 1),
-      ));
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: queue,
+          currentIndex: next,
+          next: queue[(next + 1) % queue.length],
+          isPlaying: true,
+          position: Duration.zero,
+          duration: track.duration ?? Duration.zero,
+          upNext: queue.sublist(next + 1),
+        ),
+      );
       await pumpFrames(tester, frames: 24);
     }
     FrameStats.instance.reportNow('end');

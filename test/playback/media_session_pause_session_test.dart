@@ -39,23 +39,23 @@ import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
 SourceTrack _source(String id) => SourceTrack(
-      sourceKey: 'fake',
-      origin: 'builtin',
-      title: 'Title $id',
-      artist: 'Artist $id',
-      album: 'Album $id',
-      duration: const Duration(seconds: 30),
-      raw: {'songmid': id},
-    );
+  sourceKey: 'fake',
+  origin: 'builtin',
+  title: 'Title $id',
+  artist: 'Artist $id',
+  album: 'Album $id',
+  duration: const Duration(seconds: 30),
+  raw: {'songmid': id},
+);
 
 /// 只覆写状态的假服务（不触碰 just_audio 平台通道）：`toggle` / `toggleMode`
 /// / `stop` 与真实服务同语义（改状态 + 通知；stop 清空队列）。
 class _FakeService extends LocalPlaybackService {
   _FakeService()
-      : super(
-          resolver: (track, {String? quality}) async =>
-              PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
-        );
+    : super(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
+      );
 
   final List<SourceTrack> _queue = [];
   int _index = -1;
@@ -110,11 +110,11 @@ class _FakeService extends LocalPlaybackService {
   /// 与真实服务同源（`projectQueue`）；后端一次快照只求一次投影。
   @override
   QueueProjection<SourceTrack> get queueProjection => projectQueue(
-        _queue,
-        currentIndex: _index,
-        mode: _mode,
-        idOf: (track) => track.id,
-      );
+    _queue,
+    currentIndex: _index,
+    mode: _mode,
+    idOf: (track) => track.id,
+  );
 
   /// 起播（等价 `playTracks` 装载完成后的状态）。
   void seed(
@@ -306,8 +306,11 @@ void main() {
     expect(coldStart.hasRestoredSession, isTrue);
     expect(coldStart.hasTrack, isTrue);
     expect(coldStart.snapshot.current?.title, 'Title b');
-    expect(
-        coldStart.snapshot.queue.map((track) => track.id.id), ['a', 'b', 'c']);
+    expect(coldStart.snapshot.queue.map((track) => track.id.id), [
+      'a',
+      'b',
+      'c',
+    ]);
     expect(coldStart.currentMode, PlayMode.shuffle);
     expect(coldStart.currentPosition, const Duration(seconds: 6));
     expect(coldStart.isPlaying, isFalse, reason: '恢复态不自动起播');
@@ -375,8 +378,11 @@ void main() {
       reason: '模式是会话的一部分：命令面写入一次',
     );
     // App 内 UI 读的是同一份快照：通知改模式，界面同步跟随。
-    expect(harness.provider.currentMode, PlayMode.singleRepeat,
-        reason: '顺序 → 单曲（与 PlaybackProvider.togglePlayMode 同一顺序）');
+    expect(
+      harness.provider.currentMode,
+      PlayMode.singleRepeat,
+      reason: '顺序 → 单曲（与 PlaybackProvider.togglePlayMode 同一顺序）',
+    );
 
     final stored = await PlaybackSessionStore().load();
     expect(stored?.mode, PlayMode.singleRepeat, reason: '模式是会话的一部分');
@@ -457,19 +463,23 @@ void main() {
     await harness.provider.preferencesReady;
 
     await harness.provider.suspendPlaybackSession();
-    expect((await PlaybackSessionStore().load())?.position,
-        const Duration(seconds: 7));
+    expect(
+      (await PlaybackSessionStore().load())?.position,
+      const Duration(seconds: 7),
+    );
   });
 
   test('会话存储：写请求按调用顺序落盘，clear 不被在途保存复活', () async {
     final store = PlaybackSessionStore();
     // 在途保存（例如暂停时的强制落盘）后紧跟一次清除：
     // 串行化保证清除落在最后，用户「停止播放」后不会被旧保存写回。
-    final save = store.save(PlaybackSession(
-      tracks: [trackFromSourceTrack(_source('a'))],
-      index: 0,
-      position: const Duration(seconds: 30),
-    ));
+    final save = store.save(
+      PlaybackSession(
+        tracks: [trackFromSourceTrack(_source('a'))],
+        index: 0,
+        position: const Duration(seconds: 30),
+      ),
+    );
     final clear = store.clear();
     await store.pendingWrite;
     await save;

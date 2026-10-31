@@ -69,7 +69,8 @@ void main() {
   test('吸收超前戳：本机下一次写入必胜', () {
     // 对端时钟 +1 小时，观测后本机（时钟正常）立刻编辑。
     issuer.observe(
-        const SyncVersion(physical: 1000 + 3600 * 1000, deviceId: 'devB'));
+      const SyncVersion(physical: 1000 + 3600 * 1000, deviceId: 'devB'),
+    );
     final next = issuer.next();
     expect(
       next.isNewerThan(
@@ -185,12 +186,14 @@ void main() {
         stamps: testStampIssuer(clock: () => dbClock, deviceId: 'devA'),
       );
       addTearDown(repo.dispose);
-      await repo.addHistoryEntry(PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: 's1',
-        title: 'Song',
-        playedAt: 100,
-      ));
+      await repo.addHistoryEntry(
+        PlayHistoryEntry(
+          sourceKey: 'wy',
+          songId: 's1',
+          title: 'Song',
+          playedAt: 100,
+        ),
+      );
       final dbMax = await repo.maxVersion();
       expect(dbMax.physical, greaterThanOrEqualTo(500000));
 
@@ -204,12 +207,14 @@ void main() {
 
       // 新写入让库内最大戳继续前进（maxVersion 覆盖五张表）。
       dbClock = 1000; // 时钟回拨的设备
-      await repo.addHistoryEntry(PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: 's2',
-        title: 'Song 2',
-        playedAt: 200,
-      ));
+      await repo.addHistoryEntry(
+        PlayHistoryEntry(
+          sourceKey: 'wy',
+          songId: 's2',
+          title: 'Song 2',
+          playedAt: 200,
+        ),
+      );
       final advanced = await repo.maxVersion();
       expect(advanced.isNewerThan(dbMax), isTrue);
     });
@@ -236,12 +241,14 @@ void main() {
 
       var completed = false;
       final write = repo
-          .addHistoryEntry(PlayHistoryEntry(
-            sourceKey: 'wy',
-            songId: 's1',
-            title: 'Song',
-            playedAt: 100,
-          ))
+          .addHistoryEntry(
+            PlayHistoryEntry(
+              sourceKey: 'wy',
+              songId: 's1',
+              title: 'Song',
+              playedAt: 100,
+            ),
+          )
           .then((_) => completed = true);
       await Future<void>.delayed(Duration.zero);
       expect(completed, isFalse, reason: '种子前不得取号/落库');
@@ -268,7 +275,9 @@ void main() {
       await state.init();
       final version = state.stampIssuer.next();
       state.putSettingStamp(
-          'theme_mode', SyncStamp(hash: 'h', version: version));
+        'theme_mode',
+        SyncStamp(hash: 'h', version: version),
+      );
       await state.commit();
 
       final rebuilt = SyncStateStore(
@@ -317,8 +326,11 @@ void main() {
         },
       );
 
-      const backupVersion =
-          SyncVersion(physical: 999999, counter: 4, deviceId: 'devB');
+      const backupVersion = SyncVersion(
+        physical: 999999,
+        counter: 4,
+        deviceId: 'devB',
+      );
       final backup = jsonEncode({
         'kind': 'molia_backup',
         'v': 1,
@@ -341,10 +353,7 @@ void main() {
       await backupReader.importBackupJson(backup);
 
       // 备份里的最大戳被发号器吸收：本机下一次写入严格更大。
-      expect(
-        state.stampIssuer.next().isNewerThan(backupVersion),
-        isTrue,
-      );
+      expect(state.stampIssuer.next().isNewerThan(backupVersion), isTrue);
     });
 
     test('history 删除 vs 播放：时钟偏移下仍按真实时间判定', () async {
@@ -359,12 +368,14 @@ void main() {
       addTearDown(repo.dispose);
 
       // 播放（真实时间 1000）→ 删除（真实时间 5000）：本机删除生效。
-      await repo.addHistoryEntry(PlayHistoryEntry(
-        sourceKey: 'wy',
-        songId: 's1',
-        title: 'Song',
-        playedAt: 1000,
-      ));
+      await repo.addHistoryEntry(
+        PlayHistoryEntry(
+          sourceKey: 'wy',
+          songId: 's1',
+          title: 'Song',
+          playedAt: 1000,
+        ),
+      );
       clock = 5000; // 版本戳仍被超前基线抬着；内容时间是真实的删除时刻
       await repo.deleteHistoryEntry('wy', 's1');
       expect(await repo.listHistory(), isEmpty);

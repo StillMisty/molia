@@ -41,17 +41,17 @@ class StoredAiBatchItem {
   final Map<String, dynamic> raw;
 
   Map<String, dynamic> toJson() => {
-        'sourceKey': sourceKey,
-        'songId': songId,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'reason': reason,
-        'sourceName': sourceName,
-        'coverUrl': coverUrl,
-        'durationMs': durationMs,
-        'raw': raw,
-      };
+    'sourceKey': sourceKey,
+    'songId': songId,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'reason': reason,
+    'sourceName': sourceName,
+    'coverUrl': coverUrl,
+    'durationMs': durationMs,
+    'raw': raw,
+  };
 
   static StoredAiBatchItem? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -96,25 +96,25 @@ class StoredAiBatch {
   final AiPreferences? preferences;
 
   AiDjHistoryEntry toHistoryEntry() => AiDjHistoryEntry(
-        id: id,
-        generatedAt: generatedAt,
-        itemCount: items.length,
-        unresolvedCount: unresolved.length,
-        origin: origin,
-        preferences: preferences,
-      );
+    id: id,
+    generatedAt: generatedAt,
+    itemCount: items.length,
+    unresolvedCount: unresolved.length,
+    origin: origin,
+    preferences: preferences,
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'generatedAt': generatedAt.millisecondsSinceEpoch,
-        'origin': origin.storageValue,
-        if (preferences != null) 'preferences': preferences!.toJson(),
-        'items': [for (final item in items) item.toJson()],
-        'unresolved': [
-          for (final item in unresolved)
-            {'title': item.title, 'artist': item.artist, 'reason': item.reason},
-        ],
-      };
+    'id': id,
+    'generatedAt': generatedAt.millisecondsSinceEpoch,
+    'origin': origin.storageValue,
+    if (preferences != null) 'preferences': preferences!.toJson(),
+    'items': [for (final item in items) item.toJson()],
+    'unresolved': [
+      for (final item in unresolved)
+        {'title': item.title, 'artist': item.artist, 'reason': item.reason},
+    ],
+  };
 
   static StoredAiBatch? fromJson(Object? json) {
     if (json is! Map) return null;
@@ -172,12 +172,10 @@ class AiDjHistoryIndex {
     List<AiDjHistoryEntry>? entries,
     String? activeBatchId,
     bool clearActive = false,
-  }) =>
-      AiDjHistoryIndex(
-        entries: entries ?? this.entries,
-        activeBatchId:
-            clearActive ? null : (activeBatchId ?? this.activeBatchId),
-      );
+  }) => AiDjHistoryIndex(
+    entries: entries ?? this.entries,
+    activeBatchId: clearActive ? null : (activeBatchId ?? this.activeBatchId),
+  );
 }
 
 /// 历史删除 / 清空的结果：`ok=false` 表示存储失败，调用方保留内存状态。
@@ -185,10 +183,8 @@ typedef AiDjHistoryMutationResult = ({bool ok, AiDjHistoryIndex index});
 
 class AiRecommendationStore {
   /// [_preferences] / [clock] 仅测试注入；生产走 SharedPreferences 与系统时钟。
-  AiRecommendationStore({
-    this._preferences,
-    DateTime Function()? clock,
-  })  : _clock = clock ?? DateTime.now;
+  AiRecommendationStore({this._preferences, DateTime Function()? clock})
+    : _clock = clock ?? DateTime.now;
 
   static const String indexKey = 'ai_dj_history_index_v1';
   static const String batchKeyPrefix = 'ai_dj_history_batch_v1:';
@@ -256,7 +252,8 @@ class AiRecommendationStore {
             jsonEncode(batch.toJson()),
           );
           if (!saved) return;
-          var index = _decodeIndex(prefs.getString(indexKey)) ??
+          var index =
+              _decodeIndex(prefs.getString(indexKey)) ??
               const AiDjHistoryIndex(entries: []);
           final entries = [
             for (final entry in index.entries)
@@ -280,19 +277,19 @@ class AiRecommendationStore {
 
   /// 切换 active（只动浏览列表，不动队列）。
   Future<void> setActive(String? id) => _serialized(() async {
-        try {
-          final prefs = await _prefsOrNull();
-          if (prefs == null) return;
-          final index = _decodeIndex(prefs.getString(indexKey));
-          if (index == null) return;
-          await _writeIndex(
-            prefs,
-            index.copyWith(activeBatchId: id, clearActive: id == null),
-          );
-        } catch (_) {
-          // 失败保持原 active。
-        }
-      });
+    try {
+      final prefs = await _prefsOrNull();
+      if (prefs == null) return;
+      final index = _decodeIndex(prefs.getString(indexKey));
+      if (index == null) return;
+      await _writeIndex(
+        prefs,
+        index.copyWith(activeBatchId: id, clearActive: id == null),
+      );
+    } catch (_) {
+      // 失败保持原 active。
+    }
+  });
 
   /// 删除一批（含 active 时回退到最近一批）。
   Future<AiDjHistoryMutationResult> deleteBatch(String id) =>
@@ -302,7 +299,8 @@ class AiRecommendationStore {
           if (prefs == null) {
             return (ok: false, index: AiDjHistoryIndex.empty);
           }
-          final index = _decodeIndex(prefs.getString(indexKey)) ??
+          final index =
+              _decodeIndex(prefs.getString(indexKey)) ??
               const AiDjHistoryIndex(entries: []);
           final remaining = [
             for (final entry in index.entries)
@@ -328,41 +326,42 @@ class AiRecommendationStore {
 
   /// 清空历史：默认保留 active（及其批次键）。
   Future<AiDjHistoryMutationResult> clearHistory() => _serialized(() async {
-        try {
-          final prefs = await _prefsOrNull();
-          if (prefs == null) {
-            return (ok: false, index: AiDjHistoryIndex.empty);
+    try {
+      final prefs = await _prefsOrNull();
+      if (prefs == null) {
+        return (ok: false, index: AiDjHistoryIndex.empty);
+      }
+      final index =
+          _decodeIndex(prefs.getString(indexKey)) ??
+          const AiDjHistoryIndex(entries: []);
+      final activeId = index.activeBatchId;
+      AiDjHistoryEntry? keptEntry;
+      if (activeId != null) {
+        for (final entry in index.entries) {
+          if (entry.id == activeId) {
+            keptEntry = entry;
+            break;
           }
-          final index = _decodeIndex(prefs.getString(indexKey)) ??
-              const AiDjHistoryIndex(entries: []);
-          final activeId = index.activeBatchId;
-          AiDjHistoryEntry? keptEntry;
-          if (activeId != null) {
-            for (final entry in index.entries) {
-              if (entry.id == activeId) {
-                keptEntry = entry;
-                break;
-              }
-            }
-          }
-          final updated = AiDjHistoryIndex(
-            entries: keptEntry == null ? const [] : [keptEntry],
-            activeBatchId: keptEntry == null ? null : activeId,
-          );
-          // 同上：先写索引再删非 active 载荷，失败只留孤儿。
-          final wrote = await _writeIndex(prefs, updated);
-          if (wrote) {
-            for (final entry in index.entries) {
-              if (entry.id != activeId) {
-                await _deleteBatchKey(prefs, entry.id);
-              }
-            }
-          }
-          return (ok: wrote, index: wrote ? updated : index);
-        } catch (_) {
-          return (ok: false, index: AiDjHistoryIndex.empty);
         }
-      });
+      }
+      final updated = AiDjHistoryIndex(
+        entries: keptEntry == null ? const [] : [keptEntry],
+        activeBatchId: keptEntry == null ? null : activeId,
+      );
+      // 同上：先写索引再删非 active 载荷，失败只留孤儿。
+      final wrote = await _writeIndex(prefs, updated);
+      if (wrote) {
+        for (final entry in index.entries) {
+          if (entry.id != activeId) {
+            await _deleteBatchKey(prefs, entry.id);
+          }
+        }
+      }
+      return (ok: wrote, index: wrote ? updated : index);
+    } catch (_) {
+      return (ok: false, index: AiDjHistoryIndex.empty);
+    }
+  });
 
   AiDjHistoryIndex? _decodeIndex(String? raw) {
     if (raw == null || raw.isEmpty) return null;

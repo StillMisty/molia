@@ -38,11 +38,39 @@ class PlaybackOrder {
 
   int? popPrevious() => _indices.isEmpty ? null : _indices.removeLast();
 
+  /// 队列移除一项后的下标重映射：被移除项从栈中删除，其后下标整体前移。
+  ///
+  /// 调用方保证不会移除当前曲目；播放过的曲目仍可安全回退。
+  void removeIndex(int index) {
+    _indices.removeWhere((value) => value == index);
+    for (var i = 0; i < _indices.length; i++) {
+      if (_indices[i] > index) _indices[i]--;
+    }
+  }
+
+  /// 队列移动一项（[from] → [to]）后的下标重映射。
+  ///
+  /// 与「先删后插」的语义一致：夹在区间内的下标向移动反方向挪一格，
+  /// 被移动项本身映射到新位置。
+  void moveIndex(int from, int to) {
+    if (from == to) return;
+    for (var i = 0; i < _indices.length; i++) {
+      final value = _indices[i];
+      if (value == from) {
+        _indices[i] = to;
+      } else if (from < to && value > from && value <= to) {
+        _indices[i] = value - 1;
+      } else if (to < from && value >= to && value < from) {
+        _indices[i] = value + 1;
+      }
+    }
+  }
+
   void clear() => _indices.clear();
 
   /// 按队列还原播放顺序（最近在后）；越界下标（队列已被替换）被忽略。
   List<SourceTrack> tracksOf(List<SourceTrack> queue) => List.unmodifiable([
-        for (final index in _indices)
-          if (index >= 0 && index < queue.length) queue[index],
-      ]);
+    for (final index in _indices)
+      if (index >= 0 && index < queue.length) queue[index],
+  ]);
 }

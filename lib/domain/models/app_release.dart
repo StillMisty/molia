@@ -67,7 +67,8 @@ class ReleaseAsset {
       other.sha256 == sha256;
 
   @override
-  int get hashCode => Object.hash(platform, arch, kind, url, file, size, sha256);
+  int get hashCode =>
+      Object.hash(platform, arch, kind, url, file, size, sha256);
 
   @override
   String toString() => 'ReleaseAsset($platform/$arch/$kind, $url)';
@@ -106,7 +107,10 @@ class AppRelease {
   final DateTime? releasedAt;
 
   /// 是否比当前安装的版本更新（版本号优先，其次构建号）。
-  bool isNewerThan({required String currentVersion, required int currentBuild}) {
+  bool isNewerThan({
+    required String currentVersion,
+    required int currentBuild,
+  }) {
     final byVersion = compareAppVersions(version, currentVersion);
     if (byVersion != 0) return byVersion > 0;
     return build > currentBuild;

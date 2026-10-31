@@ -53,7 +53,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '这些位置还在用 Material textTheme（改成 context.typeScale）：'
+      reason:
+          '这些位置还在用 Material textTheme（改成 context.typeScale）：'
           '\n  ${violations.join('\n  ')}\n'
           '  取值入口见 lib/theme/m3e_context.dart；强调位用 emphasizedTypeScale。',
     );
@@ -73,7 +74,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '这些位置用了 off-token 字重（强调位改用 emphasized 字阶或 w700）：'
+      reason:
+          '这些位置用了 off-token 字重（强调位改用 emphasized 字阶或 w700）：'
           '\n  ${violations.join('\n  ')}\n'
           '  M3E 字重档位是 w400 / w500 / w700。',
     );

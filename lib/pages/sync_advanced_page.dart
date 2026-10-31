@@ -89,8 +89,7 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           icon: Icons.devices_rounded,
           title: l10n.syncDeviceNameTitle,
           subtitle: provider.deviceName,
-          onTap: () =>
-              unawaited(showSyncRenameDialog(context, provider, l10n)),
+          onTap: () => unawaited(showSyncRenameDialog(context, provider, l10n)),
         ),
         SettingsCopyTile(
           key: const Key('settingsSyncPeerSelfItem'),
@@ -118,13 +117,15 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           subtitle: endpoints == null
               ? l10n.syncNetworkAddressesCount(0)
               : endpoints.isEmpty
-                  ? l10n.syncLocalAddressesEmptyTitle
-                  : l10n.syncNetworkAddressesCount(endpoints.length),
-          onTap: () => unawaited(showSyncLocalAddressesDialog(
-            context,
-            provider: provider,
-            l10n: l10n,
-          )),
+              ? l10n.syncLocalAddressesEmptyTitle
+              : l10n.syncNetworkAddressesCount(endpoints.length),
+          onTap: () => unawaited(
+            showSyncLocalAddressesDialog(
+              context,
+              provider: provider,
+              l10n: l10n,
+            ),
+          ),
         ),
         SettingsInfoTile(
           key: const Key('settingsSyncProbePortItem'),
@@ -178,11 +179,8 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           icon: Icons.add_link_rounded,
           title: l10n.syncManualConnect,
           subtitle: l10n.syncManualConnectSubtitle,
-          onTap: () => unawaited(showSyncManualPeerDialog(
-            context,
-            provider,
-            l10n,
-          )),
+          onTap: () =>
+              unawaited(showSyncManualPeerDialog(context, provider, l10n)),
         ),
         for (final group in claimedGroups.entries)
           SettingsNavTile(
@@ -193,15 +191,17 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
                 : group.value.first.name,
             subtitle:
                 '${l10n.syncPeerAddressCount(group.value.length)} · ${l10n.syncPeerNever}',
-            onTap: () => unawaited(showSyncPeerAddressesDialog(
-              context,
-              provider: provider,
-              l10n: l10n,
-              title: group.value.first.name.isEmpty
-                  ? group.value.first.host
-                  : group.value.first.name,
-              entries: group.value,
-            )),
+            onTap: () => unawaited(
+              showSyncPeerAddressesDialog(
+                context,
+                provider: provider,
+                l10n: l10n,
+                title: group.value.first.name.isEmpty
+                    ? group.value.first.host
+                    : group.value.first.name,
+                entries: group.value,
+              ),
+            ),
           ),
         if (unclaimed.length == 1)
           _pendingManualRow(context, provider, l10n, unclaimed.single)
@@ -211,12 +211,14 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
             icon: Icons.link_rounded,
             title: l10n.syncPeerCandidatesTitle(unclaimed.length),
             subtitle: l10n.syncPeerCandidatesSubtitle,
-            onTap: () => unawaited(showSyncCandidatesDialog(
-              context,
-              provider: provider,
-              l10n: l10n,
-              candidates: unclaimed,
-            )),
+            onTap: () => unawaited(
+              showSyncCandidatesDialog(
+                context,
+                provider: provider,
+                l10n: l10n,
+                candidates: unclaimed,
+              ),
+            ),
           ),
       ],
     );
@@ -236,13 +238,15 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
       icon: Icons.link_rounded,
       title: title,
       subtitle: '${entry.host} · ${l10n.syncPeerNotContacted}',
-      onTap: () => unawaited(showSyncPeerDialog(
-        context,
-        provider: provider,
-        l10n: l10n,
-        host: entry.host,
-        title: title,
-      )),
+      onTap: () => unawaited(
+        showSyncPeerDialog(
+          context,
+          provider: provider,
+          l10n: l10n,
+          host: entry.host,
+          title: title,
+        ),
+      ),
     );
   }
 

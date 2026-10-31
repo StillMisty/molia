@@ -34,8 +34,9 @@ void main() {
     FutureOr<ResponseBody> Function(RequestOptions options) handler,
   ) {
     final adapter = MockDioAdapter(handler);
-    BuiltinSearch.transport =
-        BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
@@ -137,8 +138,9 @@ void main() {
 
     test('业务拒绝（结构不符）：失败可重试', () async {
       // kg 业务码异常（重试耗尽后由解析层判结构不符）。
-      install((options) async =>
-          textResponse('{"status":0,"errcode":1,"data":null}'));
+      install(
+        (options) async => textResponse('{"status":0,"errcode":1,"data":null}'),
+      );
 
       await expectLater(
         KgArtist.fetch('3520'),
@@ -182,8 +184,10 @@ void main() {
     });
 
     test('kg：业务码异常 → 抛 SourceFailure（失败不静默空结果）', () async {
-      install((options) async =>
-          textResponse('{"status":0,"error_code":1,"data":null}'));
+      install(
+        (options) async =>
+            textResponse('{"status":0,"error_code":1,"data":null}'),
+      );
 
       await expectLater(
         KgLyricSearch.search('雨下整夜'),
@@ -228,8 +232,10 @@ void main() {
     test('mg：searchAll lyricSong=1 签名请求 + 片段', () async {
       final adapter = install((options) async {
         expect(options.uri.host, 'jadeite.migu.cn');
-        expect(options.uri.queryParameters['searchSwitch'],
-            contains('lyricSong'));
+        expect(
+          options.uri.queryParameters['searchSwitch'],
+          contains('lyricSong'),
+        );
         expect(options.headers['sign'], isNotEmpty);
         return textResponse(fixtureText('lyric_search/mg.json'));
       });
@@ -247,8 +253,11 @@ void main() {
       await expectLater(
         BuiltinLyricSearch.searchWithMeta('script-source', '雨下整夜'),
         throwsA(
-          isA<SourceFailure>()
-              .having((f) => f.kind, 'kind', FailureKind.unsupported),
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
         ),
       );
     });

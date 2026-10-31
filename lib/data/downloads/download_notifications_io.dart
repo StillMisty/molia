@@ -19,9 +19,8 @@ const String kDownloadNotificationsChannel =
 /// 所有方法 no-op，只记日志，不崩。
 class MethodChannelDownloadNotifications implements DownloadNotifications {
   MethodChannelDownloadNotifications({MethodChannel? channel, bool? supported})
-      : _channel =
-            channel ?? const MethodChannel(kDownloadNotificationsChannel),
-        _supported = supported ?? Platform.isAndroid;
+    : _channel = channel ?? const MethodChannel(kDownloadNotificationsChannel),
+      _supported = supported ?? Platform.isAndroid;
 
   final MethodChannel _channel;
 
@@ -42,16 +41,15 @@ class MethodChannelDownloadNotifications implements DownloadNotifications {
     int? total,
     int? progress,
     int? max,
-  }) =>
-      _invoke('start', {
-        'id': id,
-        'title': title,
-        'subtitle': subtitle,
-        'index': index,
-        'total': total,
-        'progress': progress,
-        'max': max,
-      });
+  }) => _invoke('start', {
+    'id': id,
+    'title': title,
+    'subtitle': subtitle,
+    'index': index,
+    'total': total,
+    'progress': progress,
+    'max': max,
+  });
 
   @override
   Future<void> update({
@@ -62,17 +60,16 @@ class MethodChannelDownloadNotifications implements DownloadNotifications {
     int? total,
     int? progress,
     int? max,
-  }) =>
-      _invoke('update', {
-        'id': id,
-        // null 表示「不改」：原生的 update 只覆盖非空字段。
-        'title': title,
-        'subtitle': subtitle,
-        'index': index,
-        'total': total,
-        'progress': progress,
-        'max': max,
-      });
+  }) => _invoke('update', {
+    'id': id,
+    // null 表示「不改」：原生的 update 只覆盖非空字段。
+    'title': title,
+    'subtitle': subtitle,
+    'index': index,
+    'total': total,
+    'progress': progress,
+    'max': max,
+  });
 
   @override
   Future<void> stop(String id) => _invoke('stop', {'id': id});

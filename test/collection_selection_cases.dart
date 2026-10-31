@@ -125,15 +125,14 @@ void main() {
   test('selectedFrom 按可见顺序提取，未可见 / 不存在的 key 忽略', () {
     selection.select('a');
     selection.select('c');
-    expect(
-      selection.selectedFrom(['a', 'b', 'c'], keyOf: (row) => row),
-      ['a', 'c'],
-    );
-    expect(
-      selection.selectedFrom(['c', 'a'], keyOf: (row) => row),
-      ['c', 'a'],
-      reason: '提取顺序跟可见行，不跟选择顺序',
-    );
+    expect(selection.selectedFrom(['a', 'b', 'c'], keyOf: (row) => row), [
+      'a',
+      'c',
+    ]);
+    expect(selection.selectedFrom(['c', 'a'], keyOf: (row) => row), [
+      'c',
+      'a',
+    ], reason: '提取顺序跟可见行，不跟选择顺序');
     expect(selection.selectedFrom(['a'], keyOf: (row) => row), ['a']);
     expect(
       selection.selectedFrom(const <String>[], keyOf: (row) => row),
@@ -147,10 +146,10 @@ void main() {
     // 历史前插新行：a / b 仍指向原来那两行，新行不会被误选。
     selection.retainKeys(['new', 'a', 'b']);
     expect(selection.selectedKeys, {'a', 'b'});
-    expect(
-      selection.selectedFrom(['new', 'a', 'b'], keyOf: (row) => row),
-      ['a', 'b'],
-    );
+    expect(selection.selectedFrom(['new', 'a', 'b'], keyOf: (row) => row), [
+      'a',
+      'b',
+    ]);
 
     // 删除 b：选择集收缩到仍存在的行。
     selection.retainKeys(['new', 'a']);

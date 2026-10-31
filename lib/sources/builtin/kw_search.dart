@@ -27,7 +27,8 @@ class KwSearch {
 
   /// 平台变体面：请求 / 响应级重试（偶发「总数非 0 但本页为空」）/ 解析。
   static BuiltinSearchCall _callFor(String keyword, int page, int limit) {
-    final url = 'http://search.kuwo.cn/r.s?client=kt'
+    final url =
+        'http://search.kuwo.cn/r.s?client=kt'
         '&all=${Uri.encodeComponent(keyword)}'
         '&pn=${page - 1}&rn=$limit'
         '&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1'
@@ -100,9 +101,10 @@ class KwSearch {
     ];
     if (names.isEmpty) return const [];
     final ids = <String>[
-      for (final id in (rawItem['allartistid'] ?? rawItem['ARTISTID'] ?? '')
-          .toString()
-          .split('&'))
+      for (final id
+          in (rawItem['allartistid'] ?? rawItem['ARTISTID'] ?? '')
+              .toString()
+              .split('&'))
         if (id.trim().isNotEmpty) id.trim(),
     ];
     return [

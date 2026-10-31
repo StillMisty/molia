@@ -1,15 +1,19 @@
+import 'dart:async';
+
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
+import '../models/play_mode.dart';
 import '../providers/playback_provider.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'row_actions.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
+import 'track_row_actions.dart';
 
 /// 封面地址：缺失 / 空串返回 null（行内不占位）。
 String? _coverUrlOf(Track track) {
@@ -57,11 +61,34 @@ class QueueDisplay extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final cardList = M3ETheme.of(context).listTheme.cardList;
 
-    // snapshot.upNext 在同一快照内是稳定 List 实例：进度 tick / 无关通知
-    // 不会重建队列列表，仅队列快照变化时重建；shuffle 时即洗牌排列剩余。
-    final currentQueue = context.select<PlaybackProvider, List<Track>>(
-      (provider) => provider.snapshot.upNext,
-    );
+    // 队列视图一次取齐播放顺序 / 真实队列下标 / 当前下标 / 模式：record 只在
+    // 队列快照变化时失效（进度 tick / 无关通知不会重建列表）。
+    final queueState = context
+        .select<
+          PlaybackProvider,
+          ({
+            List<Track> tracks,
+            List<int> indices,
+            int currentIndex,
+            int queueLength,
+            PlayMode mode,
+          })
+        >((provider) {
+          final snapshot = provider.snapshot;
+          return (
+            tracks: snapshot.upNext,
+            indices: snapshot.upNextIndices,
+            currentIndex: snapshot.currentIndex,
+            queueLength: snapshot.queue.length,
+            mode: snapshot.mode,
+          );
+        });
+    final currentQueue = queueState.tracks;
+    // 旧快照 / 测试未填下标时不做队列编辑（真实下标未知，猜行号会移错歌）；
+    // 公共动作仍按行展示，列表本身不崩。
+    final upNextIndices = queueState.indices.length == currentQueue.length
+        ? queueState.indices
+        : const <int>[];
     // 当前曲目只归「正在播放」小节；播放页版式不订阅，避免无关重建。
     final Track? current = includeCurrent
         ? context.select<PlaybackProvider, Track?>(
@@ -121,18 +148,30 @@ class QueueDisplay extends StatelessWidget {
                 0,
               ),
               sliver: SliverFixedExtentList.builder(
-                // 行高 + 行距：固定 extent，滚动条拖动一次定位。
-                itemExtent: TrackRow.extent + cardList.gap,
+                // 行高 + 行距：与行内 SizedBox 同一动态口径（大字号不裁切）。
+                itemExtent:
+                    TrackRow.extentOf(context, tableColumns: false) +
+                    cardList.gap,
                 itemCount: currentQueue.length,
                 itemBuilder: (context, index) {
                   final track = currentQueue[index];
                   final isLast = index == currentQueue.length - 1;
+                  final queueIndex = upNextIndices.isEmpty
+                      ? null
+                      : upNextIndices[index];
                   return Column(
                     children: [
                       _QueueTrackRow(
                         track: track,
-                        position:
-                            calculateCardPosition(index, currentQueue.length),
+                        position: calculateCardPosition(
+                          index,
+                          currentQueue.length,
+                        ),
+                        queueIndex: queueIndex,
+                        currentIndex: queueState.currentIndex,
+                        queueLength: queueState.queueLength,
+                        mode: queueState.mode,
+                        playbackProvider: playbackProvider,
                         onTap: () {
                           // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
                           playbackProvider.playLocalQueueItemById(track.id.uri);
@@ -179,28 +218,40 @@ class QueueDisplay extends StatelessWidget {
   }
 }
 
-/// 队列行：行内容 + 桌面的行表面右键菜单（收藏开关 / 加入列表，
-/// 与搜索结果行共用 [trackRowActionMenuForTrack]）。
+/// 队列行：行内容 + 队列编辑动作 + 公共动作。
 ///
-/// 入口分平台：桌面端行表面右键在落点弹菜单；触摸端队列行无 ⋮、无右键
-/// （维持现状）。桌面判定挡在动作定义之前——[trackRowActionMenuForTrack]
-/// 含逐行 `select` 订阅，触摸端不需要这份订阅。
+/// 入口分平台：桌面端行表面右键在落点弹菜单；触摸端行尾常显 ⋮。
+/// 可编辑边界由真实队列下标决定（[queueIndex] 为 null = 快照未带下标，
+/// 只展示公共动作）：
+/// - 当前曲目不可编辑；
+/// - 随机模式 / 列表循环回绕到当前曲目之前的行只保留「移出队列」；
+/// - 上移 / 下移跨不过当前曲目，首行没有上移、队尾没有下移。
 class _QueueTrackRow extends StatelessWidget {
   const _QueueTrackRow({
     required this.track,
     required this.position,
+    required this.queueIndex,
+    required this.currentIndex,
+    required this.queueLength,
+    required this.mode,
+    required this.playbackProvider,
     required this.onTap,
   });
 
   final Track track;
   final M3ECardPosition position;
+
+  /// 本行在完整队列中的真实下标；null = 快照没带下标（不做编辑动作）。
+  final int? queueIndex;
+  final int currentIndex;
+  final int queueLength;
+  final PlayMode mode;
+  final PlaybackProvider playbackProvider;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final actions = isDesktopPlatform()
-        ? trackRowActionMenuForTrack(context, track)
-        : const <RowAction>[];
+    final actions = _actions(context);
     return TrackRow(
       model: TrackRowModel(
         title: track.title,
@@ -213,6 +264,65 @@ class _QueueTrackRow extends StatelessWidget {
       position: position,
       onTap: onTap,
       onSecondaryTap: rowActionsAtPointer(context, actions),
+      trailing: isDesktopPlatform() || actions.isEmpty
+          ? null
+          : RowActionMenuButton(
+              actions: actions,
+              semanticLabel: AppLocalizations.of(context)!.trackActionsTooltip,
+              compact: true,
+            ),
     );
+  }
+
+  List<RowAction> _actions(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final index = queueIndex;
+    final common = trackRowActionMenuForTrack(
+      context,
+      track,
+      includeAddToQueue: false,
+    );
+    if (index == null) return common;
+    final shuffle = mode == PlayMode.shuffle;
+    // 列表循环的 upNext 末尾会补上队首到当前之前的行：这些行已在当前曲目
+    // 之前，移动没有意义（只保留移除）。
+    final wrapped = index < currentIndex;
+    final allowed = !shuffle && !wrapped;
+    final queueActions = <RowAction>[
+      if (allowed && index != currentIndex + 1)
+        RowAction(
+          icon: Icons.playlist_play_rounded,
+          label: l10n.playNext,
+          onPressed: () => unawaited(
+            playbackProvider.moveQueueIndex(index, currentIndex + 1),
+          ),
+        ),
+      if (allowed && index > currentIndex + 1)
+        RowAction(
+          icon: Icons.arrow_upward_rounded,
+          label: l10n.moveQueueUp,
+          onPressed: () =>
+              unawaited(playbackProvider.moveQueueIndex(index, index - 1)),
+        ),
+      if (allowed && index < queueLength - 1)
+        RowAction(
+          icon: Icons.arrow_downward_rounded,
+          label: l10n.moveQueueDown,
+          onPressed: () =>
+              unawaited(playbackProvider.moveQueueIndex(index, index + 1)),
+        ),
+    ];
+    final removable = index != currentIndex;
+    if (removable) {
+      queueActions.add(
+        RowAction(
+          icon: Icons.playlist_remove_rounded,
+          label: l10n.removeFromQueue,
+          destructive: true,
+          onPressed: () => unawaited(playbackProvider.removeQueueIndex(index)),
+        ),
+      );
+    }
+    return mergeRowActions(queueActions, common);
   }
 }

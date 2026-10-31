@@ -97,16 +97,16 @@ class PagedListState<T> {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(items),
-        page,
-        total,
-        hasMore,
-        isLoading,
-        isLoadingMore,
-        failed,
-        loadMoreFailed,
-        error,
-      );
+    Object.hashAll(items),
+    page,
+    total,
+    hasMore,
+    isLoading,
+    isLoadingMore,
+    failed,
+    loadMoreFailed,
+    error,
+  );
 }
 
 /// 分页列表状态机：首屏 / 加载更多 / 失败态 / 过期响应丢弃 / 跨页去重。
@@ -126,10 +126,8 @@ class PagedListState<T> {
 ///   保留已加载项并置 [PagedListState.loadMoreFailed]；
 /// - [dispose] 使在途请求过期：销毁后不写状态、不发通知。
 class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
-  PagedListController({
-    required this._fetchPage,
-    this._keyOf,
-  })  : super(PagedListState<T>(hasMore: true));
+  PagedListController({required this._fetchPage, this._keyOf})
+    : super(PagedListState<T>(hasMore: true));
 
   final Future<PagedResult<T>> Function(int page) _fetchPage;
   final String Function(T item)? _keyOf;
@@ -183,8 +181,9 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
       final result = await _fetchPage(page);
       if (requestId == _requestId) {
         final previousCount = value.items.length;
-        final merged =
-            append ? [...value.items, ...result.items] : [...result.items];
+        final merged = append
+            ? [...value.items, ...result.items]
+            : [...result.items];
         final items = _keyOf == null ? merged : _dedupe(merged);
         // 未传 failed / loadMoreFailed / error：成功即清空失败态与异常。
         next = PagedListState<T>(

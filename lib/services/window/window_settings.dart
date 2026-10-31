@@ -24,8 +24,9 @@ class WindowSettings {
   static const bool defaultRememberBounds = true;
 
   /// 当前开关（设置页订阅；写入后立即生效，无需重启）。
-  static final ValueNotifier<bool> rememberBoundsNotifier =
-      ValueNotifier<bool>(defaultRememberBounds);
+  static final ValueNotifier<bool> rememberBoundsNotifier = ValueNotifier<bool>(
+    defaultRememberBounds,
+  );
 
   /// 是否记住窗口位置与大小（高频读取，直接走内存值）。
   static bool get rememberBounds => rememberBoundsNotifier.value;

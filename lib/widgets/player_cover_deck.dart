@@ -659,9 +659,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
   void _removeHandoffTail(Track? track) {
     if (track == null) return;
     final String trackKey = trackKeyOf(track)!;
-    _handoffTails.removeWhere(
-      (tail) => trackKeyOf(tail.track) == trackKey,
-    );
+    _handoffTails.removeWhere((tail) => trackKeyOf(tail.track) == trackKey);
   }
 
   /// 侧槽相对中心的横向偏移（占主封面边长的比例）。
@@ -778,15 +776,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         fadeSpan: _takeoverTailFadeSpan,
       );
       if (visual.opacity <= 0.01) continue;
-      _addHandoffTail(
-        tail.rebased(p0: 0, visual: visual),
-        exclude: nextTrack,
-      );
+      _addHandoffTail(tail.rebased(p0: 0, visual: visual), exclude: nextTrack);
     }
     // 旧滑出 A 若成为新中心，不能同时以 tail 重复渲染；否则保留短淡出。
-    if (!targetIsOldOutgoing &&
-        oldOutgoing != null &&
-        outgoingVisual != null) {
+    if (!targetIsOldOutgoing && oldOutgoing != null && outgoingVisual != null) {
       _addHandoffTail(
         CoverHandoffTail(
           track: oldOutgoing,
@@ -1392,10 +1385,9 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   final double p = _coverController.value;
                   final double pClamped = p.clamp(0.0, 1.0);
                   final dir = session.direction;
-                  final double sideSize =
-                      widget.artDimension * _sideSlotScale;
-                  final double offset = widget.artDimension *
-                      coverHandoffSideOffsetFactor;
+                  final double sideSize = widget.artDimension * _sideSlotScale;
+                  final double offset =
+                      widget.artDimension * coverHandoffSideOffsetFactor;
                   const double sideRotation = coverHandoffSideRotation;
                   // 侧邻位淡入进度：进入飞行最后 45% 原位淡入 / 离开前 45%
                   // 原位淡出。只有侧槽包装器订阅这个 ValueListenable；deck 主
@@ -1672,7 +1664,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                         rotation:
                             handoffCenter?.rotation ?? regularCenter.rotation,
                         scale: handoffCenter?.scale ?? regularCenter.scale,
-                        opacity: handoffCenter?.opacity ?? regularCenter.opacity,
+                        opacity:
+                            handoffCenter?.opacity ?? regularCenter.opacity,
                         interactive: !showingPreview,
                         coverKey: widget.morph?.pageCoverKey,
                         hidden: _pageCoverHidden,

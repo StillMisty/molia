@@ -8,7 +8,7 @@ import 'update_repository.dart';
 ///
 /// 走 Release 资产而不是 GitHub API：匿名 API 限流 60 次/小时/IP。
 Uri defaultUpdateManifestUri(UpdateChannel channel) => Uri.parse(
-      channel == UpdateChannel.beta
-          ? 'https://github.com/$kUpdateRepository/releases/download/beta/latest.json'
-          : 'https://github.com/$kUpdateRepository/releases/latest/download/latest.json',
-    );
+  channel == UpdateChannel.beta
+      ? 'https://github.com/$kUpdateRepository/releases/download/beta/latest.json'
+      : 'https://github.com/$kUpdateRepository/releases/latest/download/latest.json',
+);

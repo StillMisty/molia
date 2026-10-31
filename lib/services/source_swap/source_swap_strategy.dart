@@ -9,9 +9,7 @@ import '../../domain/models/track.dart';
 
 /// 单个音源的换源行为。
 class SourceSwapStrategy {
-  const SourceSwapStrategy({
-    this.seedArtistIsUploader = false,
-  });
+  const SourceSwapStrategy({this.seedArtistIsUploader = false});
 
   /// 种子曲目的 artists 是否为 UP 主（而不是歌手）。
   ///
@@ -23,12 +21,9 @@ class SourceSwapStrategy {
   ///
   /// 空段过滤（标题为空 / 歌手名为空）与历史行为一致。
   String keywordFor(Track seed) => [
-        seed.title,
-        if (!seedArtistIsUploader) ...seed.artists.map((artist) => artist.name),
-      ]
-          .map((value) => value.trim())
-          .where((value) => value.isNotEmpty)
-          .join(' ');
+    seed.title,
+    if (!seedArtistIsUploader) ...seed.artists.map((artist) => artist.name),
+  ].map((value) => value.trim()).where((value) => value.isNotEmpty).join(' ');
 }
 
 /// 按音源 key 查策略；未声明的渠道走默认策略。
@@ -36,9 +31,9 @@ class SourceSwapStrategies {
   const SourceSwapStrategies({this.byKey = const {}});
 
   /// 内置平台的换源口径（只声明与默认不同的音源）。
-  static const standard = SourceSwapStrategies(byKey: {
-    'bili': SourceSwapStrategy(seedArtistIsUploader: true),
-  });
+  static const standard = SourceSwapStrategies(
+    byKey: {'bili': SourceSwapStrategy(seedArtistIsUploader: true)},
+  );
 
   final Map<String, SourceSwapStrategy> byKey;
 

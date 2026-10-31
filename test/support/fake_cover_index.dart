@@ -8,8 +8,8 @@ class FakeCoverIndex implements CoverIndex {
     this.defaultUrl,
     Map<String, String>? customUrls,
     Map<String, Uint8List>? customBytes,
-  })  : customUrls = Map<String, String>.of(customUrls ?? const {}),
-        customBytes = Map<String, Uint8List>.of(customBytes ?? const {});
+  }) : customUrls = Map<String, String>.of(customUrls ?? const {}),
+       customBytes = Map<String, Uint8List>.of(customBytes ?? const {});
 
   String? defaultUrl;
 

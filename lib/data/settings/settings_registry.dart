@@ -18,9 +18,9 @@ class SettingsRegistry implements SettingsAccess {
     required List<SettingsKey<Object?>> keys,
     SharedPreferences? preferences,
     SettingsSecretStore? secrets,
-  })  : keys = List.unmodifiable(keys),
-        _preferencesOverride = preferences,
-        _secrets = secrets ?? const SecureSettingsSecretStore() {
+  }) : keys = List.unmodifiable(keys),
+       _preferencesOverride = preferences,
+       _secrets = secrets ?? const SecureSettingsSecretStore() {
     final names = <String>{};
     for (final key in this.keys) {
       assert(names.add(key.name), '设置键重复登记：${key.name}');
@@ -208,8 +208,8 @@ class SettingsRegistry implements SettingsAccess {
 /// 因此同步写入钩子、密钥盒与远端值的宽容转换对模块完全一致。
 class SettingsScope implements SettingsAccess {
   SettingsScope._(this._registry, List<SettingsKey<Object?>> keys)
-      : keys = List.unmodifiable(keys),
-        _names = {for (final key in keys) key.name};
+    : keys = List.unmodifiable(keys),
+      _names = {for (final key in keys) key.name};
 
   final SettingsRegistry _registry;
 
@@ -247,10 +247,7 @@ class SettingsScope implements SettingsAccess {
   }
 
   @override
-  void bindReload(
-    SettingsKey<Object?> key,
-    Future<void> Function() reload,
-  ) {
+  void bindReload(SettingsKey<Object?> key, Future<void> Function() reload) {
     _check(key);
     _registry.bindReload(key, reload);
   }

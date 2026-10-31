@@ -49,9 +49,9 @@ class SyncApplyOutcome {
   static const SyncApplyOutcome none = SyncApplyOutcome();
 
   SyncApplyOutcome operator +(SyncApplyOutcome other) => SyncApplyOutcome(
-        applied: applied + other.applied,
-        skipped: skipped + other.skipped,
-      );
+    applied: applied + other.applied,
+    skipped: skipped + other.skipped,
+  );
 }
 
 /// 类别指纹的组合键（按类别枚举序拼接，与 Map 迭代顺序无关）。

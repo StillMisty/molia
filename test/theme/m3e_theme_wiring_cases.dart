@@ -19,12 +19,16 @@ void main() {
       expect(data.colorScheme.brightness, Brightness.light);
       expect(data.colorScheme.primary, material.colorScheme.primary);
       expect(data.colorScheme.onPrimary, material.colorScheme.onPrimary);
-      expect(data.colorScheme.primaryContainer,
-          material.colorScheme.primaryContainer);
+      expect(
+        data.colorScheme.primaryContainer,
+        material.colorScheme.primaryContainer,
+      );
       expect(data.colorScheme.surface, material.colorScheme.surface);
       expect(data.colorScheme.onSurface, material.colorScheme.onSurface);
-      expect(data.colorScheme.surfaceContainerHighest,
-          material.colorScheme.surfaceContainerHighest);
+      expect(
+        data.colorScheme.surfaceContainerHighest,
+        material.colorScheme.surfaceContainerHighest,
+      );
       expect(data.useMaterial3, isTrue);
     });
 
@@ -60,9 +64,7 @@ void main() {
 
       await tester.pumpWidget(
         M3EMaterialApp(
-          data: M3EThemeData.fromMaterial(
-            ThemeData(colorScheme: colorScheme),
-          ),
+          data: M3EThemeData.fromMaterial(ThemeData(colorScheme: colorScheme)),
           home: Builder(
             builder: (context) {
               m3eData = M3ETheme.of(context);
@@ -125,8 +127,9 @@ void main() {
       expect(materialBrightness, Brightness.dark);
     });
 
-    testWidgets('autoTheming=false 时不跟随系统亮度（亮度由 ThemeProvider 决定）',
-        (tester) async {
+    testWidgets('autoTheming=false 时不跟随系统亮度（亮度由 ThemeProvider 决定）', (
+      tester,
+    ) async {
       final scheme = ColorScheme.fromSeed(seedColor: Colors.blue);
       final themedData = ThemeData(colorScheme: scheme, useMaterial3: true);
       Brightness? resolved;
@@ -152,8 +155,9 @@ void main() {
       expect(resolved, Brightness.light);
     });
 
-    testWidgets('appBuilder 生效，navigatorKey / scaffoldMessengerKey 透传',
-        (tester) async {
+    testWidgets('appBuilder 生效，navigatorKey / scaffoldMessengerKey 透传', (
+      tester,
+    ) async {
       final navigatorKey = GlobalKey<NavigatorState>();
       final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
       var appBuilderCalled = false;
@@ -180,8 +184,9 @@ void main() {
       expect(scaffoldMessengerKey.currentState, isNotNull);
     });
 
-    testWidgets('M3EPageRoute 在路由内再挂 M3ETheme，页面不依赖 App 级 DefaultTextStyle',
-        (tester) async {
+    testWidgets('M3EPageRoute 在路由内再挂 M3ETheme，页面不依赖 App 级 DefaultTextStyle', (
+      tester,
+    ) async {
       final navigatorKey = GlobalKey<NavigatorState>();
       final scheme = ColorScheme.fromSeed(seedColor: Colors.blue);
       final themedData = ThemeData(colorScheme: scheme, useMaterial3: true);
@@ -210,12 +215,14 @@ void main() {
 
       // Navigator 的 context 在 App 级 M3ETheme 之下，取到的就是 chrome 使用的
       // DefaultTextStyle；页面内若还是同一个实例，说明路由没有自己的主题层。
-      final appDefaultTextStyle =
-          DefaultTextStyle.of(navigatorKey.currentContext!);
+      final appDefaultTextStyle = DefaultTextStyle.of(
+        navigatorKey.currentContext!,
+      );
       expect(
         identical(homeDefaultTextStyle, appDefaultTextStyle),
         isFalse,
-        reason: 'home 初始路由也必须依赖 M3ERouteTheme 内的 DefaultTextStyle，'
+        reason:
+            'home 初始路由也必须依赖 M3ERouteTheme 内的 DefaultTextStyle，'
             '不能退回 App 级',
       );
       late DefaultTextStyle pageDefaultTextStyle;
@@ -235,7 +242,8 @@ void main() {
       expect(
         identical(pageDefaultTextStyle, appDefaultTextStyle),
         isFalse,
-        reason: '页面必须依赖路由内的 DefaultTextStyle，'
+        reason:
+            '页面必须依赖路由内的 DefaultTextStyle，'
             '不能退回 App 级（预测返回退场 + 主题重建会触发断言）',
       );
       expect(pageTheme.colorScheme.primary, scheme.primary);

@@ -20,7 +20,7 @@ class SyncContentPage extends StatelessWidget {
   /// 展示顺序：媒体内容在前，设置与记录居中，凭证靠后；自定义封面体积大，
   /// 入口紧跟在音源之后，方便用户单独关掉而不必翻到列表末尾。
   static const Map<SyncCategory, (IconData, String Function(AppLocalizations))>
-      _categoryOrder = {
+  _categoryOrder = {
     SyncCategory.playlists: (Icons.queue_music_rounded, _playlistsTitle),
     SyncCategory.sources: (Icons.library_music_rounded, _sourcesTitle),
     SyncCategory.covers: (Icons.image_rounded, _coversTitle),
@@ -72,8 +72,8 @@ class SyncContentPage extends StatelessWidget {
                 title: entry.value.$2(l10n),
                 // 关闭后果集中在 footer；不逐行重复同一句话。
                 subtitle: '',
-                value: provider.categories[entry.key] ??
-                    entry.key.defaultEnabled,
+                value:
+                    provider.categories[entry.key] ?? entry.key.defaultEnabled,
                 onChanged: (value) =>
                     unawaited(provider.setCategory(entry.key, value)),
               ),
@@ -89,8 +89,11 @@ class SyncContentPage extends StatelessWidget {
               title: l10n.syncCellularPauseTitle,
               subtitle: l10n.syncCellularPauseSubtitle,
               value: provider.cellularPolicy == SyncCellularPolicy.pause,
-              onChanged: (value) => unawaited(provider.setCellularPolicy(
-                  value ? SyncCellularPolicy.pause : SyncCellularPolicy.auto)),
+              onChanged: (value) => unawaited(
+                provider.setCellularPolicy(
+                  value ? SyncCellularPolicy.pause : SyncCellularPolicy.auto,
+                ),
+              ),
             ),
           ],
         ),

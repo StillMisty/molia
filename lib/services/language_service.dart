@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
@@ -19,13 +20,11 @@ class LanguageService {
   /// 应用界面语言的运行时通知源。
   ///
   /// null 表示跟随系统；MyThemedApp 订阅它，设置页切换语言后立即生效。
-  static final ValueNotifier<Locale?> localeNotifier =
-      ValueNotifier<Locale?>(null);
+  static final ValueNotifier<Locale?> localeNotifier = ValueNotifier<Locale?>(
+    null,
+  );
 
-  static const List<Locale> supportedLocales = [
-    Locale('en'),
-    Locale('zh'),
-  ];
+  static const List<Locale> supportedLocales = [Locale('en'), Locale('zh')];
 
   /// 当前生效的界面语言：用户选择优先，否则跟随系统；不支持的语言回退
   /// 支持列表首个（与媒体通知/托盘同一解析口径）。
@@ -34,8 +33,8 @@ class LanguageService {
     final effective =
         selected ?? WidgetsBinding.instance.platformDispatcher.locale;
     return supportedLocales.any(
-      (supported) => supported.languageCode == effective.languageCode,
-    )
+          (supported) => supported.languageCode == effective.languageCode,
+        )
         ? effective
         : supportedLocales.first;
   }
@@ -103,8 +102,9 @@ class LanguageService {
               ? '${locale.languageCode}-${locale.countryCode}'
               : locale.languageCode;
 
-          await _channel
-              .invokeMethod('setAppLocale', {'languageTag': languageTag});
+          await _channel.invokeMethod('setAppLocale', {
+            'languageTag': languageTag,
+          });
         }
       } catch (e) {
         logger.fine('Error setting app locale: $e');
@@ -135,8 +135,9 @@ class LanguageService {
     if (!Platform.isAndroid) return false;
 
     try {
-      final result =
-          await _channel.invokeMethod('supportsSystemLanguageSettings');
+      final result = await _channel.invokeMethod(
+        'supportsSystemLanguageSettings',
+      );
       return result as bool? ?? false;
     } catch (e) {
       logger.fine('Error checking system language support: $e');

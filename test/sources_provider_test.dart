@@ -13,6 +13,7 @@ import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart' show kLxQualityOrder;
+
 import 'support/settings_test_support.dart';
 
 /// SourcesProvider 委托回归：导入 / 激活 / 排序 / 音质 / 在线更新全部经由
@@ -40,7 +41,8 @@ void main() {
 
   Future<_Fixture> fixture({Map<String, LxSourceDecl>? sources}) async {
     final engine = _FakeLxEngine()
-      ..nextSources = sources ??
+      ..nextSources =
+          sources ??
           {
             'test': const LxSourceDecl(
               key: 'test',
@@ -53,8 +55,10 @@ void main() {
       engineFactory: () => engine,
       restartDelays: const [Duration(milliseconds: 10)],
     );
-    final manager =
-        SourceManager(engine: supervisor, settings: testSettingsRegistry());
+    final manager = SourceManager(
+      engine: supervisor,
+      settings: testSettingsRegistry(),
+    );
     await manager.init();
     final provider = SourcesProvider(manager);
     addTearDown(provider.dispose);
@@ -97,29 +101,50 @@ void main() {
   });
 
   test('channels / reorderChannel / resetChannelOrder：含内置发现平台且可排序', () async {
-    final f = await fixture(sources: {
-      'a': const LxSourceDecl(
-          key: 'a', name: 'A', actions: ['search'], qualitys: []),
-      'b': const LxSourceDecl(
-          key: 'b', name: 'B', actions: ['search'], qualitys: []),
-    });
+    final f = await fixture(
+      sources: {
+        'a': const LxSourceDecl(
+          key: 'a',
+          name: 'A',
+          actions: ['search'],
+          qualitys: [],
+        ),
+        'b': const LxSourceDecl(
+          key: 'b',
+          name: 'B',
+          actions: ['search'],
+          qualitys: [],
+        ),
+      },
+    );
     await f.provider.importScript(_script(), activate: true);
 
     // 渠道 = 脚本搜索源 + 内置发现平台并集。
     // 可搜索源在前（bili 原生可搜索），发现-only 平台在后。
-    expect(
-      f.provider.channels.map((o) => o.key).toList(),
-      ['a', 'b', 'bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
-    );
+    expect(f.provider.channels.map((o) => o.key).toList(), [
+      'a',
+      'b',
+      'bili',
+      'tx',
+      'wy',
+      'kg',
+      'kw',
+      'mg',
+    ]);
     // bili 原生搜索 + 发现（音乐榜 / 热搜）都可用，与其它发现平台同列。
-    expect(
-      f.provider.channels.where((o) => o.discoverable).map((o) => o.key),
-      ['bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
-    );
-    expect(
-      f.provider.searchableSources.map((o) => o.key).toList(),
-      ['a', 'b', 'bili'],
-    );
+    expect(f.provider.channels.where((o) => o.discoverable).map((o) => o.key), [
+      'bili',
+      'tx',
+      'wy',
+      'kg',
+      'kw',
+      'mg',
+    ]);
+    expect(f.provider.searchableSources.map((o) => o.key).toList(), [
+      'a',
+      'b',
+      'bili',
+    ]);
 
     // provider 视图与 manager 的画像快照逐项一致（canSearch / enabled 不再
     // 在两层各算一份）。
@@ -135,83 +160,110 @@ void main() {
 
     // 拖拽语义：onReorderItem 的 newIndex 已校正，直接按下标搬移。
     await f.provider.reorderChannel(1, 0);
-    expect(
-      f.provider.sourceOrder,
-      ['b', 'a', 'bili', 'tx', 'wy', 'kg', 'kw', 'mg'],
-    );
-    expect(
-      f.provider.searchableSources.map((o) => o.key).toList(),
-      ['b', 'a', 'bili'],
-    );
+    expect(f.provider.sourceOrder, [
+      'b',
+      'a',
+      'bili',
+      'tx',
+      'wy',
+      'kg',
+      'kw',
+      'mg',
+    ]);
+    expect(f.provider.searchableSources.map((o) => o.key).toList(), [
+      'b',
+      'a',
+      'bili',
+    ]);
 
     await f.provider.resetChannelOrder();
     expect(f.provider.sourceOrder, isEmpty);
-    expect(
-      f.provider.searchableSources.map((o) => o.key).toList(),
-      ['a', 'b', 'bili'],
-    );
+    expect(f.provider.searchableSources.map((o) => o.key).toList(), [
+      'a',
+      'b',
+      'bili',
+    ]);
   });
 
   test(
-      'channels / searchableSources：同一 SourceDescriptor 形状，provider 直接委托 manager',
-      () async {
-    final f = await fixture(sources: {
-      'a': const LxSourceDecl(
-          key: 'a', name: 'A', actions: ['search'], qualitys: []),
-    });
-    await f.provider.importScript(_script(), activate: true);
+    'channels / searchableSources：同一 SourceDescriptor 形状，provider 直接委托 manager',
+    () async {
+      final f = await fixture(
+        sources: {
+          'a': const LxSourceDecl(
+            key: 'a',
+            name: 'A',
+            actions: ['search'],
+            qualitys: [],
+          ),
+        },
+      );
+      await f.provider.importScript(_script(), activate: true);
 
-    // 静态类型即是领域渠道形状：两层都不再有第二种结构。
-    final List<domain.SourceDescriptor> channels = f.provider.channels;
-    final List<domain.SourceDescriptor> searchable =
-        f.provider.searchableSources;
+      // 静态类型即是领域渠道形状：两层都不再有第二种结构。
+      final List<domain.SourceDescriptor> channels = f.provider.channels;
+      final List<domain.SourceDescriptor> searchable =
+          f.provider.searchableSources;
 
-    final profiles = f.manager.sourceProfiles.channels;
-    expect(channels, hasLength(profiles.length));
-    for (var index = 0; index < profiles.length; index++) {
-      final profile = profiles[index];
-      final descriptor = channels[index];
-      expect(descriptor.key, profile.key, reason: profile.key);
-      expect(descriptor.displayName, profile.displayName, reason: profile.key);
-      expect(descriptor.capabilities, profile.capabilities,
-          reason: profile.key);
-      expect(descriptor.enabled, profile.enabled, reason: profile.key);
-      expect(descriptor.discoverable, profile.discoverable,
-          reason: profile.key);
-      expect(descriptor.order, index, reason: 'order 就是渠道列表下标');
-    }
-    // sources 层 → domain 层的 kind 映射只发生在画像投影里。
-    expect(
-      channels.firstWhere((d) => d.key == 'a').kind,
-      domain.SourceKind.lx,
-    );
-    expect(
-      channels.firstWhere((d) => d.key == 'bili').kind,
-      domain.SourceKind.builtin,
-    );
+      final profiles = f.manager.sourceProfiles.channels;
+      expect(channels, hasLength(profiles.length));
+      for (var index = 0; index < profiles.length; index++) {
+        final profile = profiles[index];
+        final descriptor = channels[index];
+        expect(descriptor.key, profile.key, reason: profile.key);
+        expect(
+          descriptor.displayName,
+          profile.displayName,
+          reason: profile.key,
+        );
+        expect(
+          descriptor.capabilities,
+          profile.capabilities,
+          reason: profile.key,
+        );
+        expect(descriptor.enabled, profile.enabled, reason: profile.key);
+        expect(
+          descriptor.discoverable,
+          profile.discoverable,
+          reason: profile.key,
+        );
+        expect(descriptor.order, index, reason: 'order 就是渠道列表下标');
+      }
+      // sources 层 → domain 层的 kind 映射只发生在画像投影里。
+      expect(
+        channels.firstWhere((d) => d.key == 'a').kind,
+        domain.SourceKind.lx,
+      );
+      expect(
+        channels.firstWhere((d) => d.key == 'bili').kind,
+        domain.SourceKind.builtin,
+      );
 
-    // provider 视图与 manager 完全一致（不再各复制一份字段）。
-    expect(channels, f.manager.channels);
-    expect(searchable, f.manager.searchableSources);
-    expect(searchable.every((d) => d.enabled), isTrue);
-    expect(searchable.every((d) => d.capabilities.search), isTrue);
-  });
+      // provider 视图与 manager 完全一致（不再各复制一份字段）。
+      expect(channels, f.manager.channels);
+      expect(searchable, f.manager.searchableSources);
+      expect(searchable.every((d) => d.enabled), isTrue);
+      expect(searchable.every((d) => d.capabilities.search), isTrue);
+    },
+  );
 
   test('capabilitiesFor：内置平台搜索能力跟随脚本可取链，与渠道 canSearch 一致', () async {
-    final f = await fixture(sources: {
-      'wy': const LxSourceDecl(
-        key: 'wy',
-        name: '网易音乐',
-        actions: ['musicUrl'],
-        qualitys: ['320k'],
-      ),
-      'plain': const LxSourceDecl(
-        key: 'plain',
-        name: '仅取链',
-        actions: ['musicUrl'],
-        qualitys: ['320k'],
-      ),
-    });
+    final f = await fixture(
+      sources: {
+        'wy': const LxSourceDecl(
+          key: 'wy',
+          name: '网易音乐',
+          actions: ['musicUrl'],
+          qualitys: ['320k'],
+        ),
+        'plain': const LxSourceDecl(
+          key: 'plain',
+          name: '仅取链',
+          actions: ['musicUrl'],
+          qualitys: ['320k'],
+        ),
+      },
+    );
     await f.provider.importScript(_script(), activate: true);
 
     // 渠道侧：内置平台在有可取链脚本时可搜索（搜索由 Dart 移植实现）。
@@ -231,18 +283,21 @@ void main() {
   });
 
   test('setChannelEnabled：停用后从可搜索列表消失，启用后恢复', () async {
-    final f = await fixture(sources: {
-      'a': const LxSourceDecl(
-          key: 'a', name: 'A', actions: ['search'], qualitys: []),
-    });
+    final f = await fixture(
+      sources: {
+        'a': const LxSourceDecl(
+          key: 'a',
+          name: 'A',
+          actions: ['search'],
+          qualitys: [],
+        ),
+      },
+    );
     await f.provider.importScript(_script(), activate: true);
 
     // bili 不依赖脚本，默认在搜索源里；分别停用验证互不影响。
     await f.provider.setChannelEnabled('a', false);
-    expect(
-      f.provider.searchableSources.map((o) => o.key).toList(),
-      ['bili'],
-    );
+    expect(f.provider.searchableSources.map((o) => o.key).toList(), ['bili']);
     final disabled = f.provider.channels.firstWhere((o) => o.key == 'a');
     expect(disabled.enabled, isFalse);
 
@@ -251,10 +306,10 @@ void main() {
 
     await f.provider.setChannelEnabled('a', true);
     await f.provider.setChannelEnabled('bili', true);
-    expect(
-      f.provider.searchableSources.map((o) => o.key).toList(),
-      ['a', 'bili'],
-    );
+    expect(f.provider.searchableSources.map((o) => o.key).toList(), [
+      'a',
+      'bili',
+    ]);
   });
 
   test('音质：qualityOptions 值/显示名 + setPreferredQuality 委托', () async {
@@ -283,7 +338,8 @@ void main() {
       f.provider.checkScriptUpdate(info.id),
       throwsA(
         predicate(
-            (e) => e is SourceScriptException && e.message.contains('更新地址')),
+          (e) => e is SourceScriptException && e.message.contains('更新地址'),
+        ),
       ),
     );
   });
@@ -322,14 +378,16 @@ void main() {
       f.provider.importFromUrl('ftp://example.com/source.js'),
       throwsA(
         predicate(
-            (e) => e is SourceScriptException && e.message.contains('HTTP(S)')),
+          (e) => e is SourceScriptException && e.message.contains('HTTP(S)'),
+        ),
       ),
     );
     await expectLater(
       f.provider.importFromUrl(server.url('/missing.js')),
       throwsA(
         predicate(
-            (e) => e is SourceScriptException && e.message.contains('404')),
+          (e) => e is SourceScriptException && e.message.contains('404'),
+        ),
       ),
     );
   });
@@ -386,24 +444,21 @@ class _FakeLxEngine implements LxEngine {
     required Map<String, dynamic> musicInfo,
     required String quality,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      'https://example.com/$source/$quality';
+  }) async => 'https://example.com/$source/$quality';
 
   @override
   Future<LxLyricResult> getLyric({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      const LxLyricResult(lyric: '[00:00.00]fake');
+  }) async => const LxLyricResult(lyric: '[00:00.00]fake');
 
   @override
   Future<String> getPic({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 15),
-  }) async =>
-      'https://example.com/pic.jpg';
+  }) async => 'https://example.com/pic.jpg';
 
   @override
   Future<dynamic> search({
@@ -413,8 +468,7 @@ class _FakeLxEngine implements LxEngine {
     int page = 1,
     int limit = 20,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<void> dispose() async {
@@ -472,10 +526,7 @@ class _TestScriptServer {
 }
 
 /// 构造带合法元信息的测试脚本（fake 引擎不执行 JS，仅用于解析元信息）。
-String _script({
-  String version = '1.0.0',
-  String? updateUrl,
-}) {
+String _script({String version = '1.0.0', String? updateUrl}) {
   final header = StringBuffer()
     ..writeln('/**')
     ..writeln(' * @name provider 测试音源')

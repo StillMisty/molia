@@ -42,9 +42,8 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
   static const double toolbarHeight = 56;
 
   @override
-  Size get preferredSize => Size.fromHeight(
-        toolbarHeight + (bottom?.preferredSize.height ?? 0),
-      );
+  Size get preferredSize =>
+      Size.fromHeight(toolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {

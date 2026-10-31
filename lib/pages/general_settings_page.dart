@@ -164,7 +164,9 @@ class _GeneralSettingsPageState extends State<GeneralSettingsPage> {
 
   /// 自定义应用名称：文本输入弹层（空白回退默认名称 Molia）。
   Future<void> _showAppTitleDialog(
-      BuildContext context, AppLocalizations l10n) async {
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
     final controller = TextEditingController(
       text: AppBrandingService.titleNotifier.value,
     );
@@ -294,17 +296,16 @@ class _BottomNavSettings extends StatelessWidget {
       enabled: !locked,
       trailing: ReorderableDragStartListener(
         index: index,
-        child: Icon(
-          Icons.drag_handle_rounded,
-          color: scheme.onSurfaceVariant,
-        ),
+        child: Icon(Icons.drag_handle_rounded, color: scheme.onSurfaceVariant),
       ),
       onChanged: (bool value) async {
         // 置灰后正常不可达；留作并发/同步改变状态时的兜底拒绝提示。
         final accepted = await nav.setVisible(destination, value);
         if (!accepted && context.mounted) {
-          Provider.of<NotificationService>(context, listen: false)
-              .showSnackBar(l10n.settingsBottomNavKeepOne);
+          Provider.of<NotificationService>(
+            context,
+            listen: false,
+          ).showSnackBar(l10n.settingsBottomNavKeepOne);
         }
       },
     );

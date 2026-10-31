@@ -26,13 +26,13 @@ Track _track(String id) {
 
 /// 顺序栈测试用曲目（队列还原）。
 SourceTrack _source(String id) => SourceTrack(
-      sourceKey: 'fake',
-      origin: 'lx',
-      title: 'Title $id',
-      artist: 'Artist',
-      album: 'Album',
-      raw: {'id': id},
-    );
+  sourceKey: 'fake',
+  origin: 'lx',
+  title: 'Title $id',
+  artist: 'Artist',
+  album: 'Album',
+  raw: {'id': id},
+);
 
 /// 播放顺序族测试面：默认播放模式（持久化 / 启动应用 / 有曲目不打断）、
 /// 顺序栈（压栈弹栈 / 上限 / 队列还原）、洗牌顺序（排列覆盖 / 轮末重洗 /
@@ -108,12 +108,14 @@ void main() {
 
     // 当前正在播放（有曲目）时切换默认模式。
     final track = _track('a');
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
     await provider.setDefaultPlayMode(PlayMode.shuffle);
 
     expect(provider.defaultPlayMode, PlayMode.shuffle);
@@ -152,8 +154,7 @@ void main() {
 
     order.record(2);
     expect(order.peekPrevious(), 2);
-    expect(order.peekPreviousOfPrevious(), 0,
-        reason: '再上一首读栈次顶，不弹出栈顶');
+    expect(order.peekPreviousOfPrevious(), 0, reason: '再上一首读栈次顶，不弹出栈顶');
     expect(order.peekPrevious(), 2);
     expect(order.popPrevious(), 2);
     expect(order.peekPrevious(), 0);
@@ -177,14 +178,47 @@ void main() {
 
     order.record(0);
     order.record(1);
-    expect(order.tracksOf(queue).map((track) => track.id), ['fake:a', 'fake:b']);
+    expect(order.tracksOf(queue).map((track) => track.id), [
+      'fake:a',
+      'fake:b',
+    ]);
 
     order.record(9); // 越界（模拟队列被替换）
-    expect(order.tracksOf(queue).map((track) => track.id), ['fake:a', 'fake:b']);
+    expect(order.tracksOf(queue).map((track) => track.id), [
+      'fake:a',
+      'fake:b',
+    ]);
 
     order.clear();
     expect(order.isEmpty, isTrue);
     expect(order.tracksOf(queue), isEmpty);
+  });
+
+  test('队列移除 / 移动后的播放顺序重映射', () {
+    final queue = [_source('a'), _source('b'), _source('c'), _source('d')];
+    final order = PlaybackOrder()
+      ..record(0)
+      ..record(1)
+      ..record(3);
+
+    order.removeIndex(1);
+    expect(order.tracksOf(queue).map((track) => track.title), [
+      'Title a',
+      'Title c',
+    ]);
+
+    order.clear();
+    order
+      ..record(0)
+      ..record(1)
+      ..record(3);
+    // 0 → 3：夹在 (0, 3] 的 1 前移成 0，3 前移成 2，0 映射到 3。
+    order.moveIndex(0, 3);
+    expect(
+      [order.peekPreviousOfPrevious(), order.peekPrevious()],
+      [0, 2],
+      reason: '记录顺序 0→3、1→0、3→2',
+    );
   });
 
   // 洗牌顺序（纯逻辑）：排列覆盖、起播置首、轮末重洗、预览稳定。
@@ -240,6 +274,42 @@ void main() {
     expect(order.peekNext(0), isNull);
   });
 
+  group('队列编辑后的洗牌排列重映射', () {
+    test('removeIndex 删下标并把其后下标前移', () {
+      final order = PlaybackShuffleOrder(random: Random(4))
+        ..reset(4, startIndex: 0);
+      final before = order.indices.toList();
+
+      order.removeIndex(1);
+
+      expect(order.indices, hasLength(3));
+      expect(order.indices.toSet(), {0, 1, 2});
+      expect(order.indices, [
+        for (final index in before)
+          if (index != 1) index > 1 ? index - 1 : index,
+      ]);
+    });
+
+    test('moveIndex 与「先删后插」同义', () {
+      final order = PlaybackShuffleOrder(random: Random(6))
+        ..reset(4, startIndex: 0);
+      final before = order.indices.toList();
+
+      order.moveIndex(0, 3);
+
+      expect(order.indices, [
+        for (final index in before)
+          if (index == 0)
+            3
+          else if (index > 0 && index <= 3)
+            index - 1
+          else
+            index,
+      ]);
+      expect(order.indices.toSet(), {0, 1, 2, 3});
+    });
+  });
+
   group('extend（队列追加）', () {
     test('老歌保持原顺序在前，追加下标随机分布在后且恰好一次', () {
       final order = PlaybackShuffleOrder(random: Random(5))
@@ -249,8 +319,7 @@ void main() {
       order.extend(3, 6);
 
       final rest = order.remainingAfter(0);
-      expect(rest.sublist(0, before.length), before,
-          reason: '当前轮先放完老歌，顺序不被打乱');
+      expect(rest.sublist(0, before.length), before, reason: '当前轮先放完老歌，顺序不被打乱');
       final appended = rest.sublist(before.length);
       expect(appended.toSet(), {3, 4, 5});
       expect(appended, hasLength(3));
@@ -278,8 +347,7 @@ void main() {
 
       order.reset(3, startIndex: 0);
       order.extend(2, 5);
-      expect(order.remainingAfter(0), hasLength(2),
-          reason: '队列长度与排列不匹配时不扩展');
+      expect(order.remainingAfter(0), hasLength(2), reason: '队列长度与排列不匹配时不扩展');
     });
   });
 }

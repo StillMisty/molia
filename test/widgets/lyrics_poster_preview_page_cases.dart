@@ -29,9 +29,9 @@ void main() {
     tempDir = Directory.systemTemp.createTempSync('molia_poster_cover_');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => tempDir.path,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => tempDir.path,
+        );
     store = CustomCoverStore(
       supportDirectory: () async => tempDir,
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
@@ -44,9 +44,9 @@ void main() {
     CustomCoverStore.overrideInstance(null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 

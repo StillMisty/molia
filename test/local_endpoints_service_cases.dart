@@ -40,8 +40,9 @@ void main() {
       LocalEndpoint(interfaceName: 'wlan0', address: '172.16.0.2'), // 私网 v4
       LocalEndpoint(interfaceName: 'wlan0', address: '10.0.0.2'), // 私网 v4
     ]);
-    final addresses =
-        (await service.list()).map((endpoint) => endpoint.address).toList();
+    final addresses = (await service.list())
+        .map((endpoint) => endpoint.address)
+        .toList();
     expect(addresses, [
       '172.16.0.2',
       '10.0.0.2',
@@ -53,10 +54,14 @@ void main() {
 
   test('hosts() 只要地址字符串；缓存一次枚举（invalidate 后重取）', () async {
     var calls = 0;
-    final service = LocalEndpointsService(enumerate: () async {
-      calls++;
-      return const [LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10')];
-    });
+    final service = LocalEndpointsService(
+      enumerate: () async {
+        calls++;
+        return const [
+          LocalEndpoint(interfaceName: 'wlan0', address: '192.168.1.10'),
+        ];
+      },
+    );
     expect(await service.hosts(), ['192.168.1.10']);
     expect(await service.hosts(), ['192.168.1.10']);
     expect(calls, 1, reason: '缓存：枚举只跑一次');
@@ -67,15 +72,17 @@ void main() {
 
   test('hostsFresh / listFresh：每次都重新枚举（传输层换网用）', () async {
     var calls = 0;
-    final service = LocalEndpointsService(enumerate: () async {
-      calls++;
-      return [
-        LocalEndpoint(
-          interfaceName: 'wlan0',
-          address: calls == 1 ? '192.168.1.10' : '192.168.1.20',
-        ),
-      ];
-    });
+    final service = LocalEndpointsService(
+      enumerate: () async {
+        calls++;
+        return [
+          LocalEndpoint(
+            interfaceName: 'wlan0',
+            address: calls == 1 ? '192.168.1.10' : '192.168.1.20',
+          ),
+        ];
+      },
+    );
     expect(await service.hostsFresh(), ['192.168.1.10']);
     expect(await service.hosts(), ['192.168.1.10'], reason: 'fresh 结果进缓存');
     expect(await service.hostsFresh(), ['192.168.1.20']);

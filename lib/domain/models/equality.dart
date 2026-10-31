@@ -34,8 +34,9 @@ bool deepEquals(Object? a, Object? b) {
 
 int deepHash(Object? value) {
   if (value is Map) {
-    return Object.hashAllUnordered(value.entries
-        .map((e) => Object.hash(deepHash(e.key), deepHash(e.value))));
+    return Object.hashAllUnordered(
+      value.entries.map((e) => Object.hash(deepHash(e.key), deepHash(e.value))),
+    );
   }
   if (value is List) {
     return Object.hashAll(value.map(deepHash));

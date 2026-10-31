@@ -12,19 +12,31 @@ import '../support/fake_download_storage.dart';
 /// `attached_pic` 均可读）；这里守住结构不回归：帧标记、BOM、音频数据保留、
 /// 重复写入不叠加标签、不支持格式返回 false。
 List<int> syntheticMp3() => <int>[
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-      for (var i = 0; i < 20; i++) ...[
-        0xFF, 0xFB, 0x90, 0x00,
-        for (var j = 0; j < 400; j++) 0x00,
-      ],
-    ];
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  for (var i = 0; i < 20; i++) ...[
+    0xFF,
+    0xFB,
+    0x90,
+    0x00,
+    for (var j = 0; j < 400; j++) 0x00,
+  ],
+];
 
 List<int> syntheticFlac() => <int>[
-      0x66, 0x4C, 0x61, 0x43, // 'fLaC'
-      0x80, 0x00, 0x00, 0x22, // STREAMINFO（last），长度 34
-      for (var i = 0; i < 34; i++) 0x00,
-      for (var i = 0; i < 200; i++) 0xAA,
-    ];
+  0x66, 0x4C, 0x61, 0x43, // 'fLaC'
+  0x80, 0x00, 0x00, 0x22, // STREAMINFO（last），长度 34
+  for (var i = 0; i < 34; i++) 0x00,
+  for (var i = 0; i < 200; i++) 0xAA,
+];
 
 String ascii(List<int> bytes) =>
     String.fromCharCodes(bytes.where((b) => b >= 32 && b < 127));

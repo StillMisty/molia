@@ -56,15 +56,17 @@ void main() {
   tearDown(() => db.close());
 
   test('播放历史：写入 / 删除各产生 1 条日志，载荷与同步导出一致', () async {
-    await library.addHistoryEntry(const PlayHistoryEntry(
-      sourceKey: 'kuwo',
-      songId: 'song-1',
-      title: '测试歌曲',
-      artist: '歌手',
-      album: '专辑',
-      playedAt: 900,
-      raw: {'rid': 42},
-    ));
+    await library.addHistoryEntry(
+      const PlayHistoryEntry(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '测试歌曲',
+        artist: '歌手',
+        album: '专辑',
+        playedAt: 900,
+        raw: {'rid': 42},
+      ),
+    );
 
     var window = await journal.window();
     expect(window, hasLength(1));
@@ -145,17 +147,18 @@ void main() {
         .where((entry) => entry.category == SyncCategory.playlistTracks)
         .toList();
     expect(trackEntries, hasLength(5));
-    expect(trackEntries.first.record.key,
-        SyncRecordKeys.playlistTrack(syncId, 'kuwo', 'song-1'));
+    expect(
+      trackEntries.first.record.key,
+      SyncRecordKeys.playlistTrack(syncId, 'kuwo', 'song-1'),
+    );
     expect(trackEntries.last.record.deleted, isTrue);
   });
 
   test('重命名老列表（缺 syncId）：补 syncId 与重命名两条日志版本递增', () async {
     // 造一条没有 syncId 的存量列表。
-    await db.into(db.playlists).insert(PlaylistsCompanion.insert(
-          name: '老列表',
-          createdAt: 1,
-        ));
+    await db
+        .into(db.playlists)
+        .insert(PlaylistsCompanion.insert(name: '老列表', createdAt: 1));
     final id = (await db.select(db.playlists).getSingle()).id;
 
     await library.renamePlaylist(id, '新名字');
@@ -264,28 +267,32 @@ void main() {
 
   test('应用远端记录不追加日志（变更由来源设备广播）', () async {
     final version = SyncVersion(physical: 9000, deviceId: 'devB');
-    await library.syncApplyHistory(entries: [
-      PlayHistorySyncRecord(
-        sourceKey: 'kuwo',
-        songId: 'song-9',
-        title: '远端歌曲',
-        artist: '',
-        album: '',
-        coverUrl: null,
-        durationMs: null,
-        raw: '{}',
-        playedAt: 900,
-        version: version,
-      ),
-    ]);
-    await library.syncApplyLibrary(tombstones: [
-      SyncTombstoneRecord(
-        category: SyncCategory.history.name,
-        key: SyncRecordKeys.history('kuwo', 'song-8'),
-        version: version,
-        deletedAt: 900,
-      ),
-    ]);
+    await library.syncApplyHistory(
+      entries: [
+        PlayHistorySyncRecord(
+          sourceKey: 'kuwo',
+          songId: 'song-9',
+          title: '远端歌曲',
+          artist: '',
+          album: '',
+          coverUrl: null,
+          durationMs: null,
+          raw: '{}',
+          playedAt: 900,
+          version: version,
+        ),
+      ],
+    );
+    await library.syncApplyLibrary(
+      tombstones: [
+        SyncTombstoneRecord(
+          category: SyncCategory.history.name,
+          key: SyncRecordKeys.history('kuwo', 'song-8'),
+          version: version,
+          deletedAt: 900,
+        ),
+      ],
+    );
     await statisticsSync.syncApplyEvents([
       const StatisticsSyncEvent(
         syncKey: 'remote-event',

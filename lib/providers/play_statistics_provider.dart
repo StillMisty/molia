@@ -175,34 +175,31 @@ class PlayStatisticsProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _load({bool silent = false}) => DataPathTrace.async(
-        'play_statistics.load',
-        () async {
-          final token = ++_loadToken;
-          if (!silent) {
-            _loading = true;
+  Future<void> _load({bool silent = false}) =>
+      DataPathTrace.async('play_statistics.load', () async {
+        final token = ++_loadToken;
+        if (!silent) {
+          _loading = true;
+          notifyListeners();
+        }
+        try {
+          // 一次快照：查询集合与范围语义都由领域层与仓库承担。
+          final snapshot = await _repository.snapshot(since: _since);
+          if (token != _loadToken) return; // 范围已切换：丢弃过期结果。
+          _snapshot = snapshot;
+          _loaded = true;
+          _failed = false;
+        } catch (e) {
+          if (token != _loadToken) return;
+          _failed = true;
+          _logger.severe('加载听歌统计失败', e);
+        } finally {
+          if (token == _loadToken) {
+            _loading = false;
             notifyListeners();
           }
-          try {
-            // 一次快照：查询集合与范围语义都由领域层与仓库承担。
-            final snapshot = await _repository.snapshot(since: _since);
-            if (token != _loadToken) return; // 范围已切换：丢弃过期结果。
-            _snapshot = snapshot;
-            _loaded = true;
-            _failed = false;
-          } catch (e) {
-            if (token != _loadToken) return;
-            _failed = true;
-            _logger.severe('加载听歌统计失败', e);
-          } finally {
-            if (token == _loadToken) {
-              _loading = false;
-              notifyListeners();
-            }
-          }
-        },
-        fields: () => {'silent': silent ? 1 : 0},
-      );
+        }
+      }, fields: () => {'silent': silent ? 1 : 0});
 
   @override
   void dispose() {

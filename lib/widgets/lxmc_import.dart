@@ -73,10 +73,7 @@ Future<LxmcImportResult?> importLxmcFavoritesFlow(BuildContext context) async {
     return null;
   } catch (e) {
     if (!messengerContext.mounted) return null;
-    M3ESnackbar.show(
-      messengerContext,
-      message: l10n.libraryImportFailed('$e'),
-    );
+    M3ESnackbar.show(messengerContext, message: l10n.libraryImportFailed('$e'));
     return null;
   }
 }

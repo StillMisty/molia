@@ -94,13 +94,9 @@ void main() {
 
     test('未同步策略：歌名 / 隐藏无当前行，首行取第 0 行', () {
       int indexOf(UnsyncedBehavior behavior) => LyricTimingPolicy.output(
-            offsetMs: 0,
-            unsyncedBehavior: behavior,
-          ).lineIndexAt(
-            lines,
-            const Duration(seconds: 1),
-            isSynced: false,
-          );
+        offsetMs: 0,
+        unsyncedBehavior: behavior,
+      ).lineIndexAt(lines, const Duration(seconds: 1), isSynced: false);
 
       expect(indexOf(UnsyncedBehavior.title), -1);
       expect(indexOf(UnsyncedBehavior.hide), -1);

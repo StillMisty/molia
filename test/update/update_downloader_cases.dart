@@ -26,9 +26,9 @@ void main() {
     tempDir = await Directory.systemTemp.createTemp('molia-download-test');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(pathProviderChannel, (call) async {
-      if (call.method == 'getTemporaryDirectory') return tempDir.path;
-      return null;
-    });
+          if (call.method == 'getTemporaryDirectory') return tempDir.path;
+          return null;
+        });
     addTearDown(() async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(pathProviderChannel, null);
@@ -38,14 +38,14 @@ void main() {
 
   /// 分块流式响应（带 Content-Length）。
   ResponseBody streamResponse(List<List<int>> chunks) => ResponseBody(
-        Stream.fromIterable(chunks.map(Uint8List.fromList)),
-        200,
-        headers: {
-          Headers.contentLengthHeader: [
-            '${chunks.fold<int>(0, (sum, chunk) => sum + chunk.length)}',
-          ],
-        },
-      );
+    Stream.fromIterable(chunks.map(Uint8List.fromList)),
+    200,
+    headers: {
+      Headers.contentLengthHeader: [
+        '${chunks.fold<int>(0, (sum, chunk) => sum + chunk.length)}',
+      ],
+    },
+  );
 
   test('下载成功：写盘 + sha256 校验 + 进度累计', () async {
     final payload = utf8.encode('molia-update-payload' * 8);
@@ -55,10 +55,7 @@ void main() {
     final downloader = UpdateDownloader(
       dio: createAppDio(
         adapter: MockDioAdapter(
-          (_) => streamResponse([
-            payload.sublist(0, 10),
-            payload.sublist(10),
-          ]),
+          (_) => streamResponse([payload.sublist(0, 10), payload.sublist(10)]),
         ),
       ),
     );
@@ -79,9 +76,9 @@ void main() {
   test('sha256 不匹配：删除文件并报校验失败', () async {
     final downloader = UpdateDownloader(
       dio: createAppDio(
-        adapter: MockDioAdapter((_) => streamResponse([
-              utf8.encode('corrupted'),
-            ])),
+        adapter: MockDioAdapter(
+          (_) => streamResponse([utf8.encode('corrupted')]),
+        ),
       ),
     );
 
@@ -92,11 +89,13 @@ void main() {
         sha256: 'deadbeef',
         onProgress: (_, _) {},
       ),
-      throwsA(isA<UpdateFailureException>().having(
-        (e) => e.kind,
-        'kind',
-        UpdateFailureKind.checksumMismatch,
-      )),
+      throwsA(
+        isA<UpdateFailureException>().having(
+          (e) => e.kind,
+          'kind',
+          UpdateFailureKind.checksumMismatch,
+        ),
+      ),
     );
     final staging = Directory('${tempDir.path}/updates');
     if (await staging.exists()) {
@@ -107,9 +106,7 @@ void main() {
   test('HTTP 非 200 归一为网络失败', () async {
     final downloader = UpdateDownloader(
       dio: createAppDio(
-        adapter: MockDioAdapter(
-          (_) => textResponse('nope', statusCode: 502),
-        ),
+        adapter: MockDioAdapter((_) => textResponse('nope', statusCode: 502)),
       ),
     );
     await expectLater(
@@ -118,11 +115,13 @@ void main() {
         targetFileName: 'molia.zip',
         onProgress: (_, _) {},
       ),
-      throwsA(isA<UpdateFailureException>().having(
-        (e) => e.kind,
-        'kind',
-        UpdateFailureKind.network,
-      )),
+      throwsA(
+        isA<UpdateFailureException>().having(
+          (e) => e.kind,
+          'kind',
+          UpdateFailureKind.network,
+        ),
+      ),
     );
   });
 
@@ -134,9 +133,7 @@ void main() {
 
     final downloader = UpdateDownloader(
       dio: createAppDio(
-        adapter: MockDioAdapter((_) => streamResponse([
-              utf8.encode('new'),
-            ])),
+        adapter: MockDioAdapter((_) => streamResponse([utf8.encode('new')])),
       ),
     );
     final path = await downloader.download(

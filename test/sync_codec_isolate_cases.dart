@@ -10,26 +10,30 @@ void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
 
   SyncEnvelope envelope({int records = 1}) => SyncEnvelope(
-        deviceId: 'dev-a',
-        deviceName: '测试设备',
-        producedAt: 1728640000000,
-        records: {
-          SyncCategory.playlistTracks: [
-            for (var i = 0; i < records; i++)
-              SyncRecord(
-                key: '__favorites__|kw|song-$i',
-                version: SyncVersion(physical: 1728640000000 + i, deviceId: 'dev-a'),
-                data: {
-                  'sourceKey': 'kw',
-                  'songId': 'song-$i',
-                  'title': '夜曲 $i',
-                  'raw': '{"songmid":"0123456789abcdef${'0' * 8}",'
-                      '"hash":"${'f' * 32}"}',
-                },
-              ),
-          ],
-        },
-      );
+    deviceId: 'dev-a',
+    deviceName: '测试设备',
+    producedAt: 1728640000000,
+    records: {
+      SyncCategory.playlistTracks: [
+        for (var i = 0; i < records; i++)
+          SyncRecord(
+            key: '__favorites__|kw|song-$i',
+            version: SyncVersion(
+              physical: 1728640000000 + i,
+              deviceId: 'dev-a',
+            ),
+            data: {
+              'sourceKey': 'kw',
+              'songId': 'song-$i',
+              'title': '夜曲 $i',
+              'raw':
+                  '{"songmid":"0123456789abcdef${'0' * 8}",'
+                  '"hash":"${'f' * 32}"}',
+            },
+          ),
+      ],
+    },
+  );
 
   test('往返：编码与解码在 worker 内完成，结果与进程内实现一致', () async {
     final port = IsolateSyncCodecPort(iterations: 2000);

@@ -35,26 +35,29 @@ class WebDavConfig {
 
   bool get isConfigured => baseUrl.trim().isNotEmpty;
 
-  WebDavConfig copyWith(
-          {String? baseUrl, String? username, String? remoteDir}) =>
-      WebDavConfig(
-        baseUrl: baseUrl ?? this.baseUrl,
-        username: username ?? this.username,
-        remoteDir: remoteDir ?? this.remoteDir,
-      );
+  WebDavConfig copyWith({
+    String? baseUrl,
+    String? username,
+    String? remoteDir,
+  }) => WebDavConfig(
+    baseUrl: baseUrl ?? this.baseUrl,
+    username: username ?? this.username,
+    remoteDir: remoteDir ?? this.remoteDir,
+  );
 
   Map<String, dynamic> toJson() => {
-        'baseUrl': baseUrl,
-        'username': username,
-        'remoteDir': remoteDir,
-      };
+    'baseUrl': baseUrl,
+    'username': username,
+    'remoteDir': remoteDir,
+  };
 
   static WebDavConfig fromJson(Object? raw) {
     if (raw is! Map) return const WebDavConfig();
     return WebDavConfig(
       baseUrl: raw['baseUrl'] is String ? raw['baseUrl'] as String : '',
       username: raw['username'] is String ? raw['username'] as String : '',
-      remoteDir: raw['remoteDir'] is String &&
+      remoteDir:
+          raw['remoteDir'] is String &&
               (raw['remoteDir'] as String).trim().isNotEmpty
           ? (raw['remoteDir'] as String).trim()
           : 'molia-sync',
@@ -107,18 +110,18 @@ class SyncLogEntry {
   final SyncIssue? error;
 
   Map<String, dynamic> toJson() => {
-        'at': at,
-        'trigger': trigger.name,
-        'outcome': outcome.name,
-        if (durationMs > 0) 'durationMs': durationMs,
-        if (applied > 0) 'applied': applied,
-        if (peersSeen > 0) 'peersSeen': peersSeen,
-        if (failed > 0) 'failed': failed,
-        if (bytesIn > 0) 'bytesIn': bytesIn,
-        if (bytesOut > 0) 'bytesOut': bytesOut,
-        if (transports.isNotEmpty) 'transports': transports,
-        if (error != null) 'error': error!.toJson(),
-      };
+    'at': at,
+    'trigger': trigger.name,
+    'outcome': outcome.name,
+    if (durationMs > 0) 'durationMs': durationMs,
+    if (applied > 0) 'applied': applied,
+    if (peersSeen > 0) 'peersSeen': peersSeen,
+    if (failed > 0) 'failed': failed,
+    if (bytesIn > 0) 'bytesIn': bytesIn,
+    if (bytesOut > 0) 'bytesOut': bytesOut,
+    if (transports.isNotEmpty) 'transports': transports,
+    if (error != null) 'error': error!.toJson(),
+  };
 
   static SyncLogEntry? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -134,7 +137,8 @@ class SyncLogEntry {
       failed: (raw['failed'] as num?)?.toInt() ?? 0,
       bytesIn: (raw['bytesIn'] as num?)?.toInt() ?? 0,
       bytesOut: (raw['bytesOut'] as num?)?.toInt() ?? 0,
-      transports: (raw['transports'] as List?)?.whereType<String>().toList() ??
+      transports:
+          (raw['transports'] as List?)?.whereType<String>().toList() ??
           const [],
       error: SyncIssue.fromJson(raw['error']),
     );
@@ -172,26 +176,28 @@ class SyncPersistedState {
     List<SyncActivityEntry> activity = const [],
     List<SyncPeerState> peers = const [],
     List<LanPeerEndpoint> lanEndpoints = const [],
-  })  : categories = Map.unmodifiable(categories ??
-            {
-              for (final category in SyncCategory.values)
-                category: category.defaultEnabled,
-            }),
-        transports = Set.unmodifiable(transports),
-        manualPeers = List.unmodifiable(manualPeers),
-        notifiedPeers = Set.unmodifiable(notifiedPeers),
-        settingStamps = Map.unmodifiable(settingStamps),
-        scriptTombstones = Map.unmodifiable(scriptTombstones),
-        scriptStamps = Map.unmodifiable(scriptStamps),
-        coverStamps = Map.unmodifiable(coverStamps),
-        coverTombstones = Map.unmodifiable(coverTombstones),
-        knownScriptIds = List.unmodifiable(knownScriptIds),
-        transportLastSuccess = Map.unmodifiable(transportLastSuccess),
-        snapshotPushSeq = Map.unmodifiable(snapshotPushSeq),
-        log = List.unmodifiable(log),
-        activity = List.unmodifiable(activity),
-        peers = List.unmodifiable(peers),
-        lanEndpoints = List.unmodifiable(lanEndpoints);
+  }) : categories = Map.unmodifiable(
+         categories ??
+             {
+               for (final category in SyncCategory.values)
+                 category: category.defaultEnabled,
+             },
+       ),
+       transports = Set.unmodifiable(transports),
+       manualPeers = List.unmodifiable(manualPeers),
+       notifiedPeers = Set.unmodifiable(notifiedPeers),
+       settingStamps = Map.unmodifiable(settingStamps),
+       scriptTombstones = Map.unmodifiable(scriptTombstones),
+       scriptStamps = Map.unmodifiable(scriptStamps),
+       coverStamps = Map.unmodifiable(coverStamps),
+       coverTombstones = Map.unmodifiable(coverTombstones),
+       knownScriptIds = List.unmodifiable(knownScriptIds),
+       transportLastSuccess = Map.unmodifiable(transportLastSuccess),
+       snapshotPushSeq = Map.unmodifiable(snapshotPushSeq),
+       log = List.unmodifiable(log),
+       activity = List.unmodifiable(activity),
+       peers = List.unmodifiable(peers),
+       lanEndpoints = List.unmodifiable(lanEndpoints);
 
   /// 设备身份的状态内副本（独立 prefs 键 / 安全存储才是损坏时的恢复来源）。
   final String deviceId;
@@ -283,62 +289,60 @@ abstract final class SyncStateCodec {
   /// 键名、写入顺序与条件字段（非空才写）是持久化契约：改这里等于改格式，
   /// 需要同时确认解码侧的默认值。
   static Map<String, dynamic> encode(SyncPersistedState state) => {
-        'v': 2,
-        'deviceId': state.deviceId,
-        'deviceName': state.deviceName,
-        'categories': {
-          for (final entry in state.categories.entries)
-            entry.key.name: entry.value,
-        },
-        'transports': state.transports.toList(),
-        'webdav': state.webdav.toJson(),
-        'cellularPolicy': state.cellularPolicy.name,
-        if (state.manualPeers.isNotEmpty)
-          'manualPeers': [for (final peer in state.manualPeers) peer.toJson()],
-        if (state.notifiedPeers.isNotEmpty)
-          'notifiedPeers': state.notifiedPeers.toList(),
-        if (state.lanHttpPort > 0) 'lanHttpPort': state.lanHttpPort,
-        // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份让状态 JSON
-        // 自描述（读取时以独立键 / 状态里的非空值为准）。
-        'stampSeq': state.stampBaseline.toJson(),
-        'settings': {
-          for (final entry in state.settingStamps.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'scriptTombstones': {
-          for (final entry in state.scriptTombstones.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'scriptStamps': {
-          for (final entry in state.scriptStamps.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'knownScripts': state.knownScriptIds,
-        if (state.activeScriptStamp != null)
-          'activeScript': state.activeScriptStamp!.toJson(),
-        if (state.sessionStamp != null)
-          'sessionStamp': state.sessionStamp!.toJson(),
-        'coverStamps': {
-          for (final entry in state.coverStamps.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'coverTombstones': {
-          for (final entry in state.coverTombstones.entries)
-            entry.key: entry.value.toJson(),
-        },
-        'lastSyncAt': state.lastSyncAt,
-        if (state.transportLastSuccess.isNotEmpty)
-          'transportLastSuccess': state.transportLastSuccess,
-        if (state.snapshotPushSeq.isNotEmpty)
-          'snapshotPush': state.snapshotPushSeq,
-        'log': [for (final entry in state.log) entry.toJson()],
-        'activity': [for (final entry in state.activity) entry.toJson()],
-        'peers': [for (final peer in state.peers) peer.toJson()],
-        if (state.lanEndpoints.isNotEmpty)
-          'lanEndpoints': [
-            for (final endpoint in state.lanEndpoints) endpoint.toJson(),
-          ],
-      };
+    'v': 2,
+    'deviceId': state.deviceId,
+    'deviceName': state.deviceName,
+    'categories': {
+      for (final entry in state.categories.entries) entry.key.name: entry.value,
+    },
+    'transports': state.transports.toList(),
+    'webdav': state.webdav.toJson(),
+    'cellularPolicy': state.cellularPolicy.name,
+    if (state.manualPeers.isNotEmpty)
+      'manualPeers': [for (final peer in state.manualPeers) peer.toJson()],
+    if (state.notifiedPeers.isNotEmpty)
+      'notifiedPeers': state.notifiedPeers.toList(),
+    if (state.lanHttpPort > 0) 'lanHttpPort': state.lanHttpPort,
+    // 设备身份同时写在独立键 deviceIdKey 里；这里保留一份让状态 JSON
+    // 自描述（读取时以独立键 / 状态里的非空值为准）。
+    'stampSeq': state.stampBaseline.toJson(),
+    'settings': {
+      for (final entry in state.settingStamps.entries)
+        entry.key: entry.value.toJson(),
+    },
+    'scriptTombstones': {
+      for (final entry in state.scriptTombstones.entries)
+        entry.key: entry.value.toJson(),
+    },
+    'scriptStamps': {
+      for (final entry in state.scriptStamps.entries)
+        entry.key: entry.value.toJson(),
+    },
+    'knownScripts': state.knownScriptIds,
+    if (state.activeScriptStamp != null)
+      'activeScript': state.activeScriptStamp!.toJson(),
+    if (state.sessionStamp != null)
+      'sessionStamp': state.sessionStamp!.toJson(),
+    'coverStamps': {
+      for (final entry in state.coverStamps.entries)
+        entry.key: entry.value.toJson(),
+    },
+    'coverTombstones': {
+      for (final entry in state.coverTombstones.entries)
+        entry.key: entry.value.toJson(),
+    },
+    'lastSyncAt': state.lastSyncAt,
+    if (state.transportLastSuccess.isNotEmpty)
+      'transportLastSuccess': state.transportLastSuccess,
+    if (state.snapshotPushSeq.isNotEmpty) 'snapshotPush': state.snapshotPushSeq,
+    'log': [for (final entry in state.log) entry.toJson()],
+    'activity': [for (final entry in state.activity) entry.toJson()],
+    'peers': [for (final peer in state.peers) peer.toJson()],
+    if (state.lanEndpoints.isNotEmpty)
+      'lanEndpoints': [
+        for (final endpoint in state.lanEndpoints) endpoint.toJson(),
+      ],
+  };
 
   /// 解码 `sync_state_v2`；载荷根本不是 JSON 对象时返回 null。
   ///
@@ -415,8 +419,9 @@ abstract final class SyncStateCodec {
 
     return SyncPersistedState(
       deviceId: raw['deviceId'] is String ? raw['deviceId'] as String : '',
-      deviceName:
-          raw['deviceName'] is String ? raw['deviceName'] as String : '',
+      deviceName: raw['deviceName'] is String
+          ? raw['deviceName'] as String
+          : '',
       categories: categories,
       transports: transports,
       webdav: WebDavConfig.fromJson(raw['webdav']),

@@ -37,26 +37,22 @@ void main() {
   group('LibraryChange → 同步类别', () {
     test('历史 / 列表 / 曲目 / 收藏 / 导入各自映射到受影响的类别', () {
       expect(LibraryChange.history().syncCategories, {SyncCategory.history});
-      expect(
-        LibraryChange.playlists().syncCategories,
-        {SyncCategory.playlists},
-      );
-      expect(
-        LibraryChange.playlistTracks(7).syncCategories,
-        {SyncCategory.playlists, SyncCategory.playlistTracks},
-      );
-      expect(
-        LibraryChange.favorites().syncCategories,
-        {SyncCategory.playlists, SyncCategory.playlistTracks},
-      );
-      expect(
-        LibraryChange.import().syncCategories,
-        {
-          SyncCategory.history,
-          SyncCategory.playlists,
-          SyncCategory.playlistTracks,
-        },
-      );
+      expect(LibraryChange.playlists().syncCategories, {
+        SyncCategory.playlists,
+      });
+      expect(LibraryChange.playlistTracks(7).syncCategories, {
+        SyncCategory.playlists,
+        SyncCategory.playlistTracks,
+      });
+      expect(LibraryChange.favorites().syncCategories, {
+        SyncCategory.playlists,
+        SyncCategory.playlistTracks,
+      });
+      expect(LibraryChange.import().syncCategories, {
+        SyncCategory.history,
+        SyncCategory.playlists,
+        SyncCategory.playlistTracks,
+      });
     });
   });
 
@@ -66,18 +62,22 @@ void main() {
     });
 
     test('相等性与 hashCode（payload 参与深比较）', () {
-      final a = _track(payload: const {
-        'id': '1',
-        'nested': {
-          'x': [1, 2],
+      final a = _track(
+        payload: const {
+          'id': '1',
+          'nested': {
+            'x': [1, 2],
+          },
         },
-      });
-      final b = _track(payload: const {
-        'id': '1',
-        'nested': {
-          'x': [1, 2],
+      );
+      final b = _track(
+        payload: const {
+          'id': '1',
+          'nested': {
+            'x': [1, 2],
+          },
         },
-      });
+      );
       expect(a, b);
       expect(a.hashCode, b.hashCode);
 
@@ -119,7 +119,10 @@ void main() {
       const multi = Track(
         id: TrackId('kw', '1'),
         title: 'Title',
-        artists: [Artist(name: ''), Artist(name: 'B')],
+        artists: [
+          Artist(name: ''),
+          Artist(name: 'B'),
+        ],
         origin: TrackOrigin.builtin,
       );
       expect(multi.primaryArtistName, 'B');
@@ -191,10 +194,7 @@ void main() {
         SourceFailure.from('TimeoutException after 0:00:20.000000').kind,
         FailureKind.timeout,
       );
-      expect(
-        SourceFailure.from('某个未知错误').kind,
-        FailureKind.unknown,
-      );
+      expect(SourceFailure.from('某个未知错误').kind, FailureKind.unknown);
     });
 
     test('内置传输失败按类型名归一化为 network（可重试）', () {
@@ -215,8 +215,10 @@ void main() {
       const b = SourceFailure(kind: FailureKind.network, message: 'm');
       expect(a, b);
       expect(a.hashCode, b.hashCode);
-      expect(a,
-          isNot(const SourceFailure(kind: FailureKind.timeout, message: 'm')));
+      expect(
+        a,
+        isNot(const SourceFailure(kind: FailureKind.timeout, message: 'm')),
+      );
     });
   });
 
@@ -230,9 +232,7 @@ void main() {
         album: 'Album',
         coverUrl: 'https://img.example/a.jpg',
         duration: const Duration(seconds: 30),
-        qualities: const [
-          SourceQuality(type: '320k', size: '8MB', hash: 'h1'),
-        ],
+        qualities: const [SourceQuality(type: '320k', size: '8MB', hash: 'h1')],
         raw: {
           'songmid': 'mid-1',
           'id': '1',
@@ -245,8 +245,11 @@ void main() {
       expect(track.origin, TrackOrigin.builtin);
       expect(track.artwork?.uri.toString(), 'https://img.example/a.jpg');
       expect(track.qualities.single.hash, 'h1');
-      expect(identical(track.payload, source.raw), isTrue,
-          reason: 'payload 必须原样透传');
+      expect(
+        identical(track.payload, source.raw),
+        isTrue,
+        reason: 'payload 必须原样透传',
+      );
 
       final back = sourceTrackFromTrack(track);
       expect(back.sourceKey, source.sourceKey);
@@ -300,24 +303,28 @@ void main() {
   });
 
   test('平台页面地址在映射层派生：bili bvid / av aid，UI 不读 payload', () {
-    final bili = trackFromSourceTrack(const SourceTrack(
-      sourceKey: 'bili',
-      origin: 'builtin',
-      title: '晴天',
-      artist: '周杰伦',
-      album: '',
-      raw: {'bvid': 'BV1xx', 'aid': 9},
-    ));
+    final bili = trackFromSourceTrack(
+      const SourceTrack(
+        sourceKey: 'bili',
+        origin: 'builtin',
+        title: '晴天',
+        artist: '周杰伦',
+        album: '',
+        raw: {'bvid': 'BV1xx', 'aid': 9},
+      ),
+    );
     expect(bili.platformPageUrl, 'https://www.bilibili.com/video/BV1xx');
 
-    final fallback = trackFromSourceTrack(const SourceTrack(
-      sourceKey: 'bili',
-      origin: 'builtin',
-      title: '晴天',
-      artist: '周杰伦',
-      album: '',
-      raw: {'aid': 9},
-    ));
+    final fallback = trackFromSourceTrack(
+      const SourceTrack(
+        sourceKey: 'bili',
+        origin: 'builtin',
+        title: '晴天',
+        artist: '周杰伦',
+        album: '',
+        raw: {'aid': 9},
+      ),
+    );
     expect(fallback.platformPageUrl, 'https://www.bilibili.com/video/av9');
   });
 
@@ -365,6 +372,15 @@ void main() {
         quality: 'flac',
       );
       expect(a, isNot(withQuality));
+
+      final withIndices = BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+        upNextIndices: const [0],
+      );
+      expect(a, isNot(withIndices));
     });
 
     test('PlaybackSnapshot：不含 position，值比较稳定', () {
@@ -406,6 +422,16 @@ void main() {
         quality: 'flac',
       );
       expect(a, isNot(withQuality));
+
+      final withIndices = PlaybackSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+        mode: PlayMode.shuffle,
+        upNextIndices: const [0],
+      );
+      expect(a, isNot(withIndices));
     });
 
     test('SearchQuery / SearchResult 相等性', () {
@@ -457,12 +483,14 @@ void main() {
       expect(bili.hashCode, sameBili.hashCode);
       expect(
         bili,
-        isNot(const SourceDescriptor(
-          key: 'bili',
-          displayName: '哔哩哔哩',
-          kind: SourceKind.builtin,
-          order: 2,
-        )),
+        isNot(
+          const SourceDescriptor(
+            key: 'bili',
+            displayName: '哔哩哔哩',
+            kind: SourceKind.builtin,
+            order: 2,
+          ),
+        ),
       );
     });
 
@@ -518,13 +546,15 @@ void main() {
       expect(page.hasMore, isTrue);
       expect(
         page,
-        isNot(CommentPage.fromPage(
-          kind: CommentKind.latest,
-          items: const [a],
-          page: 1,
-          limit: 20,
-          total: 40,
-        )),
+        isNot(
+          CommentPage.fromPage(
+            kind: CommentKind.latest,
+            items: const [a],
+            page: 1,
+            limit: 20,
+            total: 40,
+          ),
+        ),
         reason: '类型参与相等性',
       );
     });

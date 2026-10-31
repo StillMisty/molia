@@ -18,8 +18,9 @@ import 'builtin_platforms.dart';
 
 class BuiltinPicDispatch {
   BuiltinPicDispatch({RequestCache? cache})
-      : _cache = cache ??
-            RequestCache(maxEntries: 128, ttl: const Duration(minutes: 5));
+    : _cache =
+          cache ??
+          RequestCache(maxEntries: 128, ttl: const Duration(minutes: 5));
 
   /// 曲目原生取图缓存（key `{track.id}:pic`）。
   final RequestCache _cache;
@@ -30,7 +31,9 @@ class BuiltinPicDispatch {
     if (adapter == null) return null;
     try {
       return await _cache.getOrCreate<String?>(
-          '${track.id}:pic', () => adapter(track.raw));
+        '${track.id}:pic',
+        () => adapter(track.raw),
+      );
     } catch (_) {
       return null;
     }

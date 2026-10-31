@@ -22,9 +22,9 @@ void main() {
   late int? errorCode;
   late bool infoNull;
 
-  Map<String, dynamic> fixture(String name) => jsonDecode(
-        File('test/fixtures/$name').readAsStringSync(),
-      ) as Map<String, dynamic>;
+  Map<String, dynamic> fixture(String name) =>
+      jsonDecode(File('test/fixtures/$name').readAsStringSync())
+          as Map<String, dynamic>;
 
   setUpAll(() => originalTransport = BuiltinSearch.transport);
 
@@ -83,8 +83,9 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    BuiltinSearch.transport =
-        BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
@@ -154,8 +155,9 @@ void main() {
         }
         return textResponse('');
       });
-      BuiltinSearch.transport =
-          BuiltinTransport(dio: createAppDio(adapter: adapter));
+      BuiltinSearch.transport = BuiltinTransport(
+        dio: createAppDio(adapter: adapter),
+      );
 
       expect(await BiliFavorites.parseMediaId('https://b23.tv/abcdef'), '321');
       expect(redirects.first.host, 'b23.tv');
@@ -179,10 +181,7 @@ void main() {
       );
       expect(detail.tracks.first.durationMs, 121000);
       expect(detail.tracks.first.raw['aid'], '4001');
-      expect(detail.tracks.first.raw['upper'], {
-        'mid': 336,
-        'name': '周杰伦',
-      });
+      expect(detail.tracks.first.raw['upper'], {'mid': 336, 'name': '周杰伦'});
       expect(detail.tracks.first.raw['cnt_info'], {'play': 10});
       expect(detail.tracks.last.songId, 'BV1fav025');
 
@@ -246,8 +245,11 @@ void main() {
       await expectLater(
         BiliFavorites.detail('123456', 1),
         throwsA(
-          isA<SourceFailure>()
-              .having((e) => e.kind, 'kind', FailureKind.notFound),
+          isA<SourceFailure>().having(
+            (e) => e.kind,
+            'kind',
+            FailureKind.notFound,
+          ),
         ),
       );
     });
@@ -258,8 +260,11 @@ void main() {
       await expectLater(
         BiliFavorites.detail('not a link', 1),
         throwsA(
-          isA<SourceFailure>()
-              .having((e) => e.kind, 'kind', FailureKind.notFound),
+          isA<SourceFailure>().having(
+            (e) => e.kind,
+            'kind',
+            FailureKind.notFound,
+          ),
         ),
       );
       expect(adapter.requests, isEmpty);

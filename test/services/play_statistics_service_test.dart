@@ -7,7 +7,9 @@ import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/services/play_statistics_service.dart';
+
 import '../support/sync_test_support.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/memory_database.dart';
@@ -29,28 +31,26 @@ void main() {
     String title = 'Song',
     String artist = 'Artist',
     Map<String, Object?> payload = const {},
-  }) =>
-      Track(
-        id: TrackId('wy', id),
-        title: title,
-        artists: [Artist(name: artist)],
-        album: 'Album',
-        duration: duration,
-        origin: TrackOrigin.builtin,
-        payload: payload,
-      );
+  }) => Track(
+    id: TrackId('wy', id),
+    title: title,
+    artists: [Artist(name: artist)],
+    album: 'Album',
+    duration: duration,
+    origin: TrackOrigin.builtin,
+    payload: payload,
+  );
 
   PlaybackSnapshot snapshotOf(
     Track? current, {
     bool playing = true,
     SourceFailure? error,
-  }) =>
-      PlaybackSnapshot(
-        current: current,
-        isPlaying: playing,
-        duration: current?.duration ?? Duration.zero,
-        error: error,
-      );
+  }) => PlaybackSnapshot(
+    current: current,
+    isPlaying: playing,
+    duration: current?.duration ?? Duration.zero,
+    error: error,
+  );
 
   /// 从 [from] 到 [to] 按 1s 步进驱动进度 tick（正常前进，全部计入时长）。
   void tickRange(Duration from, Duration to) {
@@ -108,8 +108,10 @@ void main() {
     test('正常前进计入时长；seek 快进不计入但动作落盘', () async {
       final track = trackOf('a');
       service.onSnapshot(snapshotOf(track));
-      tickRange(const Duration(milliseconds: 300),
-          const Duration(milliseconds: 2300));
+      tickRange(
+        const Duration(milliseconds: 300),
+        const Duration(milliseconds: 2300),
+      );
 
       // seek 是动作：跳变不计入收听时长，但落盘一次（不是周期写）。
       service.onPosition(const Duration(seconds: 60));
@@ -271,14 +273,16 @@ void main() {
       service.onSnapshot(snapshotOf(track));
       tickRange(const Duration(seconds: 1), const Duration(seconds: 3));
 
-      service.onSnapshot(snapshotOf(
-        track,
-        playing: false,
-        error: const SourceFailure(
-          kind: FailureKind.playback,
-          message: 'boom',
+      service.onSnapshot(
+        snapshotOf(
+          track,
+          playing: false,
+          error: const SourceFailure(
+            kind: FailureKind.playback,
+            message: 'boom',
+          ),
         ),
-      ));
+      );
       final all = await rows();
 
       expect(all.single['endReason'], 'error');
@@ -287,14 +291,16 @@ void main() {
 
     test('错误快照不产生事件（取链失败没播起来）', () async {
       final track = trackOf('a');
-      service.onSnapshot(snapshotOf(
-        track,
-        playing: false,
-        error: const SourceFailure(
-          kind: FailureKind.network,
-          message: 'resolve failed',
+      service.onSnapshot(
+        snapshotOf(
+          track,
+          playing: false,
+          error: const SourceFailure(
+            kind: FailureKind.network,
+            message: 'resolve failed',
+          ),
         ),
-      ));
+      );
 
       expect(await rows(), isEmpty);
     });

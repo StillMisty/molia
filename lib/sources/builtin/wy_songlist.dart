@@ -58,7 +58,7 @@ class WySongList {
 
   /// 热门标签 + 完整标签目录（两个接口并行，结果缓存 5 分钟）。
   static Future<({List<DiscoverTagCategory> tags, List<DiscoverTag> hotTag})>
-      getTags() {
+  getTags() {
     return BuiltinSearch.transport.cached('wy:playlist-tags', () async {
       final results = await Future.wait([getTag(), getHotTag()]);
       return (
@@ -193,8 +193,9 @@ class WySongList {
           name: (item['name'] ?? '').toString(),
           coverUrl: _nonEmpty(item['coverImgUrl']),
           author: creator is Map ? (creator['nickname'] ?? '').toString() : '',
-          playCount:
-              item['playCount'] is num ? (item['playCount'] as num).toInt() : 0,
+          playCount: item['playCount'] is num
+              ? (item['playCount'] as num).toInt()
+              : 0,
           trackCount: item['trackCount'] is num
               ? (item['trackCount'] as num).toInt()
               : 0,
@@ -290,8 +291,9 @@ class WySongList {
               id: parsed.id,
               name: (playlist['name'] ?? '').toString(),
               coverUrl: _nonEmpty(playlist['coverImgUrl']),
-              author:
-                  creator is Map ? (creator['nickname'] ?? '').toString() : '',
+              author: creator is Map
+                  ? (creator['nickname'] ?? '').toString()
+                  : '',
               playCount: playCount is num ? playCount.toInt() : 0,
               trackCount: trackIds.length,
               description: _nonEmpty(playlist['description']),
@@ -320,13 +322,13 @@ class WySongList {
 
       Map<dynamic, dynamic>? privilege =
           index < privileges.length && privileges[index] is Map
-              ? privileges[index] as Map
-              : null;
+          ? privileges[index] as Map
+          : null;
       if (privilege == null || privilege['id'] != item['id']) {
         privilege = privileges.whereType<Map>().firstWhere(
-              (p) => p['id'] == item['id'],
-              orElse: () => const {},
-            );
+          (p) => p['id'] == item['id'],
+          orElse: () => const {},
+        );
         if (privilege.isEmpty) continue;
       }
 

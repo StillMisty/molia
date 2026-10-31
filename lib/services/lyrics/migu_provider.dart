@@ -24,14 +24,15 @@ class MiguProvider extends LyricProvider {
   }
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     try {
       final keyword = '$title $artist'.trim();
       final result = await MgSearch.searchWithMeta(keyword, limit: limit);
-      return [
-        for (final track in result.tracks.take(limit)) _toMatch(track),
-      ];
+      return [for (final track in result.tracks.take(limit)) _toMatch(track)];
     } catch (e, st) {
       _logger.severe('搜索失败', e, st);
       return [];
@@ -64,11 +65,11 @@ class MiguProvider extends LyricProvider {
 
   @override
   Future<LyricsPayload?> fetchForMatch(SongMatch match) async => _fetch(
-        songId: match.extra['songId']?.toString() ?? match.songId,
-        mrcUrl: match.extra['mrcUrl']?.toString(),
-        lrcUrl: match.extra['lrcUrl']?.toString(),
-        trcUrl: match.extra['trcUrl']?.toString(),
-      );
+    songId: match.extra['songId']?.toString() ?? match.songId,
+    mrcUrl: match.extra['mrcUrl']?.toString(),
+    lrcUrl: match.extra['lrcUrl']?.toString(),
+    trcUrl: match.extra['trcUrl']?.toString(),
+  );
 
   Future<LyricsPayload?> _fetch({
     required String songId,

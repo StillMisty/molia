@@ -10,21 +10,17 @@ void main() {
     String? album,
     int? seconds,
     String id = 'id',
-  }) =>
-      SongMatch(
-        songId: id,
-        title: title,
-        artist: artist,
-        album: album,
-        duration: seconds == null ? null : Duration(seconds: seconds),
-      );
+  }) => SongMatch(
+    songId: id,
+    title: title,
+    artist: artist,
+    album: album,
+    duration: seconds == null ? null : Duration(seconds: seconds),
+  );
 
   test('时长 ±5s 内优先；同名同歌手胜出', () {
     final best = pickBestSongMatch(
-      [
-        match('晴天', seconds: 100),
-        match('晴天', seconds: 269, id: 'correct'),
-      ],
+      [match('晴天', seconds: 100), match('晴天', seconds: 269, id: 'correct')],
       title: '晴天',
       artist: '周杰伦',
       duration: const Duration(seconds: 269),
@@ -87,9 +83,6 @@ void main() {
   test('空候选返回 null；单候选直接返回', () {
     expect(pickBestSongMatch(const [], title: 'a', artist: 'b'), isNull);
     final only = match('晴天');
-    expect(
-      pickBestSongMatch([only], title: '晴天', artist: '周杰伦')?.songId,
-      'id',
-    );
+    expect(pickBestSongMatch([only], title: '晴天', artist: '周杰伦')?.songId, 'id');
   });
 }

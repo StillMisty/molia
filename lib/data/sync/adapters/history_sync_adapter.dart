@@ -29,7 +29,9 @@ class HistorySyncAdapter implements SyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async {
     final key = syncFingerprintKey(
       await _repository.syncFingerprints(categories),
     );
@@ -47,23 +49,27 @@ class HistorySyncAdapter implements SyncAdapter {
       if (entry.sourceKey.isEmpty || entry.songId.isEmpty) continue;
       // 本地下载曲目不同步（文件是设备本机的持久副本）。
       if (entry.sourceKey == kLocalSourceKey) continue;
-      records.add(SyncRecord(
-        key: SyncRecordKeys.history(entry.sourceKey, entry.songId),
-        version: entry.version,
-        data: entry.toJson(),
-      ));
+      records.add(
+        SyncRecord(
+          key: SyncRecordKeys.history(entry.sourceKey, entry.songId),
+          version: entry.version,
+          data: entry.toJson(),
+        ),
+      );
     }
-    for (final tombstone in await _repository.syncExportTombstones(
-      [SyncCategory.history.name],
-    )) {
+    for (final tombstone in await _repository.syncExportTombstones([
+      SyncCategory.history.name,
+    ])) {
       // 本地下载曲目的墓碑同样不同步。
       final parsed = SyncRecordKeys.parseHistory(tombstone.key);
       if (parsed != null && parsed.sourceKey == kLocalSourceKey) continue;
-      records.add(SyncRecord.tombstone(
-        key: tombstone.key,
-        version: tombstone.version,
-        deletedAt: tombstone.deletedAt,
-      ));
+      records.add(
+        SyncRecord.tombstone(
+          key: tombstone.key,
+          version: tombstone.version,
+          deletedAt: tombstone.deletedAt,
+        ),
+      );
     }
     return {SyncCategory.history: records};
   }
@@ -79,12 +85,14 @@ class HistorySyncAdapter implements SyncAdapter {
       if (record.deleted) {
         final parsed = SyncRecordKeys.parseHistory(record.key);
         if (parsed != null && parsed.sourceKey == kLocalSourceKey) continue;
-        tombstones.add(SyncTombstoneRecord(
-          category: SyncCategory.history.name,
-          key: record.key,
-          version: record.version,
-          deletedAt: record.deletedAt,
-        ));
+        tombstones.add(
+          SyncTombstoneRecord(
+            category: SyncCategory.history.name,
+            key: record.key,
+            version: record.version,
+            deletedAt: record.deletedAt,
+          ),
+        );
       } else {
         final entry = PlayHistorySyncRecord.fromJson(
           record.data ?? const <String, Object?>{},

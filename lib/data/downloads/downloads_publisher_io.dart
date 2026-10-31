@@ -14,8 +14,8 @@ import 'downloads_publisher_types.dart';
 /// 发布返回 null、删除返回 false，调用方只记日志，不崩。
 class MethodChannelDownloadsPublisher implements DownloadsPublisher {
   MethodChannelDownloadsPublisher({MethodChannel? channel})
-      : _channel = channel ??
-            const MethodChannel('top.stillmisty.molia/downloads');
+    : _channel =
+          channel ?? const MethodChannel('top.stillmisty.molia/downloads');
 
   final MethodChannel _channel;
 

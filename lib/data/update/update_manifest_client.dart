@@ -21,7 +21,7 @@ class UpdateManifestClient {
     Dio? dio,
     this._manifestUrlOverride,
     this._downloadPrefix,
-  })  : _dio = dio ?? createAppDio();
+  }) : _dio = dio ?? createAppDio();
 
   /// 官方仓库（下载地址与文档同源；改这里要同步 release.yml 的发布目标）。
   static const String repository = kUpdateRepository;
@@ -191,5 +191,7 @@ class UpdateManifestClient {
     );
   }
 
-  static final RegExp _semverPattern = RegExp(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$');
+  static final RegExp _semverPattern = RegExp(
+    r'^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$',
+  );
 }

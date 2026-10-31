@@ -31,30 +31,29 @@ SyncPullRequest syncPullRequest({
   Set<String> fullPeers = const {},
   bool forceDiscovery = false,
   SyncRoundWindow? window,
-}) =>
-    SyncPullRequest(
-      plan: SyncPullPlan.fromIntents(
-        discovery: forceDiscovery
-            ? SyncPullDiscovery.full
-            : SyncPullDiscovery.knownOnly,
-        intents: [
-          for (final entry in cursors.entries)
-            SyncPeerPullIntent(
-              deviceId: entry.key,
-              cursor: entry.value,
-              forceFull: fullPeers.contains(entry.key),
-            ),
-          for (final id in fullPeers)
-            if (!cursors.containsKey(id))
-              SyncPeerPullIntent(
-                deviceId: id,
-                cursor: SyncPullRequest.noCursor,
-                forceFull: true,
-              ),
-        ],
-      ),
-      window: window,
-    );
+}) => SyncPullRequest(
+  plan: SyncPullPlan.fromIntents(
+    discovery: forceDiscovery
+        ? SyncPullDiscovery.full
+        : SyncPullDiscovery.knownOnly,
+    intents: [
+      for (final entry in cursors.entries)
+        SyncPeerPullIntent(
+          deviceId: entry.key,
+          cursor: entry.value,
+          forceFull: fullPeers.contains(entry.key),
+        ),
+      for (final id in fullPeers)
+        if (!cursors.containsKey(id))
+          SyncPeerPullIntent(
+            deviceId: id,
+            cursor: SyncPullRequest.noCursor,
+            forceFull: true,
+          ),
+    ],
+  ),
+  window: window,
+);
 
 /// 测试用同步网络：多台设备用**真实编解码**交换增量窗口 / 全量快照。
 ///

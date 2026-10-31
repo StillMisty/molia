@@ -179,16 +179,17 @@ void main() {
     expect(identical(restoredTracks, loaded.tracks), isFalse);
     repository.writes.clear();
     clockMs = 2000;
-    await restored.save(PlaybackSession(
-      tracks: restoredTracks,
-      index: 1,
-      position: const Duration(seconds: 9),
-      mode: loaded.mode,
-      context: loaded.context,
-    ));
+    await restored.save(
+      PlaybackSession(
+        tracks: restoredTracks,
+        index: 1,
+        position: const Duration(seconds: 9),
+        mode: loaded.mode,
+        context: loaded.context,
+      ),
+    );
 
-    expect(repository.writes, ['cursor'],
-        reason: '内容相同的队列不应因恢复后的第一次动作重写');
+    expect(repository.writes, ['cursor'], reason: '内容相同的队列不应因恢复后的第一次动作重写');
     final payloadAfterSave = await payloadRow();
     expect(payloadAfterSave!.updatedAt, payloadBefore.updatedAt);
     expect(payloadAfterSave.json, payloadBefore.json);
@@ -199,47 +200,52 @@ void main() {
     // 再做一次动作走 identical；换一份内容相同的新 List 也只写 cursor。
     repository.writes.clear();
     clockMs = 2500;
-    await restored.save(PlaybackSession(
-      tracks: restoredTracks,
-      index: 1,
-      position: const Duration(seconds: 10),
-      mode: loaded.mode,
-      context: loaded.context,
-    ));
+    await restored.save(
+      PlaybackSession(
+        tracks: restoredTracks,
+        index: 1,
+        position: const Duration(seconds: 10),
+        mode: loaded.mode,
+        context: loaded.context,
+      ),
+    );
     expect(repository.writes, ['cursor']);
     expect((await payloadRow())!.updatedAt, payloadBefore.updatedAt);
 
     repository.writes.clear();
     final sameContentTracks = List<Track>.of(restoredTracks);
     expect(identical(sameContentTracks, restoredTracks), isFalse);
-    await restored.save(PlaybackSession(
-      tracks: sameContentTracks,
-      index: 1,
-      position: const Duration(seconds: 11),
-      mode: loaded.mode,
-      context: loaded.context,
-    ));
+    await restored.save(
+      PlaybackSession(
+        tracks: sameContentTracks,
+        index: 1,
+        position: const Duration(seconds: 11),
+        mode: loaded.mode,
+        context: loaded.context,
+      ),
+    );
     expect(repository.writes, ['cursor']);
     expect((await payloadRow())!.updatedAt, payloadBefore.updatedAt);
 
     // 队列内容真的变了（追加一首）：必须重写 payload。
     repository.writes.clear();
     clockMs = 3000;
-    await restored.save(PlaybackSession(
-      tracks: [...restoredTracks, _track('c')],
-      index: 1,
-      position: const Duration(seconds: 9),
-      mode: loaded.mode,
-      context: loaded.context,
-    ));
+    await restored.save(
+      PlaybackSession(
+        tracks: [...restoredTracks, _track('c')],
+        index: 1,
+        position: const Duration(seconds: 9),
+        mode: loaded.mode,
+        context: loaded.context,
+      ),
+    );
     expect(repository.writes, ['saveAll', 'cursor']);
     final payloadAfterChange = await payloadRow();
     expect(payloadAfterChange!.updatedAt, 3000);
     expect(payloadAfterChange.json, contains('"id":"c"'));
   });
 
-  test('大队列（1000 首）动作落盘：50 次只写 cursor，内容变化才写 payload',
-      () async {
+  test('大队列（1000 首）动作落盘：50 次只写 cursor，内容变化才写 payload', () async {
     final value = store();
     final tracks = [for (var i = 0; i < 1000; i++) _track('$i')];
     final session = PlaybackSession(tracks: tracks, index: 0);
@@ -251,14 +257,19 @@ void main() {
     repository.writes.clear();
     for (var i = 0; i < 50; i++) {
       clockMs = 2000 + i;
-      await value.save(session.copyWith(
-        index: i % tracks.length,
-        position: Duration(seconds: i),
-      ));
+      await value.save(
+        session.copyWith(
+          index: i % tracks.length,
+          position: Duration(seconds: i),
+        ),
+      );
     }
 
-    expect(repository.writes, everyElement('cursor'),
-        reason: '50 次动作都只改 cursor，不能重写 MB 级 payload');
+    expect(
+      repository.writes,
+      everyElement('cursor'),
+      reason: '50 次动作都只改 cursor，不能重写 MB 级 payload',
+    );
     expect(repository.writes.where((write) => write == 'saveAll'), isEmpty);
     // 循环内不读 DB 大 JSON：结束后只核对一次。
     final payloadAfterActions = await payloadRow();
@@ -268,11 +279,13 @@ void main() {
     // 队列内容真实变化（追加一首）：必须重写一次 payload。
     repository.writes.clear();
     clockMs = 4000;
-    await value.save(PlaybackSession(
-      tracks: [...tracks, _track('extra')],
-      index: 0,
-    ));
-    expect(repository.writes.where((write) => write == 'saveAll'), hasLength(1));
+    await value.save(
+      PlaybackSession(tracks: [...tracks, _track('extra')], index: 0),
+    );
+    expect(
+      repository.writes.where((write) => write == 'saveAll'),
+      hasLength(1),
+    );
     final payloadAfterChange = await payloadRow();
     expect(payloadAfterChange!.updatedAt, 4000);
     expect(payloadAfterChange.json, contains('"id":"extra"'));
@@ -475,8 +488,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.containsKey('playback_session_v1'), isFalse);
     expect(prefs.containsKey('playback_session_position_v1'), isFalse);
-    expect(platform.rejected.length, firstRejects,
-        reason: '恢复后不应再被拒绝');
+    expect(platform.rejected.length, firstRejects, reason: '恢复后不应再被拒绝');
   });
 
   test('远端应用排在在途本地保存之后：同一个 pendingWrite 队列', () async {

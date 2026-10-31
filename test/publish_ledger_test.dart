@@ -35,32 +35,27 @@ void main() {
   });
 
   /// 全量快照载荷（身份 = 内容指纹）。
-  SyncEnvelope snapshot(String snapshotId) => SyncEnvelope(
-        deviceId: 'devA',
-        producedAt: 1000,
-        snapshotId: snapshotId,
-      );
+  SyncEnvelope snapshot(String snapshotId) =>
+      SyncEnvelope(deviceId: 'devA', producedAt: 1000, snapshotId: snapshotId);
 
   /// 增量窗口载荷（身份 = 窗口边界 + ack 集合）。
   SyncEnvelope delta(
     int windowStart,
     int windowEnd, {
     Map<String, int> acks = const {},
-  }) =>
-      SyncEnvelope(
-        deviceId: 'devA',
-        producedAt: 1000,
-        windowStart: windowStart,
-        windowEnd: windowEnd,
-        journal: const [],
-        acks: acks,
-      );
+  }) => SyncEnvelope(
+    deviceId: 'devA',
+    producedAt: 1000,
+    windowStart: windowStart,
+    windowEnd: windowEnd,
+    journal: const [],
+    acks: acks,
+  );
 
   PublishLedger ledger({
     String kind = SyncTransportKind.lan,
     bool live = true,
-  }) =>
-      PublishLedger(kind: kind, state: state, servesLiveSnapshot: () => live);
+  }) => PublishLedger(kind: kind, state: state, servesLiveSnapshot: () => live);
 
   /// 确实有对端收下且没有失败。
   const delivered = SyncPushResult(succeededPeers: 1);
@@ -236,7 +231,11 @@ void main() {
     // 从未发布过的文件型传输把下限钉在 0。
     expect(
       journalCoverage(
-        ledgers: [lan, fileB, ledger(kind: 'webdav-2', live: false)],
+        ledgers: [
+          lan,
+          fileB,
+          ledger(kind: 'webdav-2', live: false),
+        ],
         enabledKinds: {'lan', 'backup', 'webdav-2'},
         journalHead: 9,
       ),

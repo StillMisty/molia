@@ -21,10 +21,10 @@ class SyncActivityLogSnapshot {
     Map<String, int> snapshotPushSeq = const {},
     List<SyncLogEntry> log = const [],
     List<SyncActivityEntry> activity = const [],
-  })  : transportLastSuccess = Map.unmodifiable(transportLastSuccess),
-        snapshotPushSeq = Map.unmodifiable(snapshotPushSeq),
-        log = List.unmodifiable(log),
-        activity = List.unmodifiable(activity);
+  }) : transportLastSuccess = Map.unmodifiable(transportLastSuccess),
+       snapshotPushSeq = Map.unmodifiable(snapshotPushSeq),
+       log = List.unmodifiable(log),
+       activity = List.unmodifiable(activity);
 
   /// 最近一轮完成时间（0 = 尚未同步过）。
   final int lastSyncAt;
@@ -105,7 +105,8 @@ class SyncActivityLog {
     // 自动轮的「零对端 / 无变化」不产生可持久化的状态变化：只更新内存里的
     // 最近一轮展示，不标脏，避免每分钟把整份 sync_state_v2 重写一遍。
     // 手动轮是用户动作，即使无对端也要留下记录。
-    final silent = report.trigger != SyncTrigger.manual &&
+    final silent =
+        report.trigger != SyncTrigger.manual &&
         (report.outcome == SyncOutcome.noPeers ||
             report.outcome == SyncOutcome.noChanges);
     var changed = !silent;
@@ -169,12 +170,12 @@ class SyncActivityLog {
 
   /// 当前内存状态的持久化切片（不可变；字段由 `sync_state_codec.dart` 编码）。
   SyncActivityLogSnapshot snapshot() => SyncActivityLogSnapshot(
-        lastSyncAt: _lastSyncAt,
-        transportLastSuccess: _transportLastSuccess,
-        snapshotPushSeq: _snapshotPushSeq,
-        log: _log,
-        activity: _activity,
-      );
+    lastSyncAt: _lastSyncAt,
+    transportLastSuccess: _transportLastSuccess,
+    snapshotPushSeq: _snapshotPushSeq,
+    log: _log,
+    activity: _activity,
+  );
 
   /// 把解码出的切片写回内存（整体替换：状态 JSON 是完整视图，不是增量）。
   void applySnapshot(SyncActivityLogSnapshot snapshot) {

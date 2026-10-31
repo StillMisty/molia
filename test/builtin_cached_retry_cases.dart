@@ -7,12 +7,15 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
+
 import 'support/mock_dio.dart';
 
 void main() {
-  BuiltinTransport transport() => BuiltinTransport(dio: mockDio((_) async {
-        return textResponse('{}', statusCode: 200);
-      }));
+  BuiltinTransport transport() => BuiltinTransport(
+    dio: mockDio((_) async {
+      return textResponse('{}', statusCode: 200);
+    }),
+  );
 
   group('共享尝试循环', () {
     test('成功即返回，不重试', () async {
@@ -43,12 +46,10 @@ void main() {
 
     test('用尽次数抛 StateError（message 可定制）', () async {
       await expectLater(
-        runBuiltinAttempts<int>(
-          maxTries: 3,
-          attempt: (_) async => null,
+        runBuiltinAttempts<int>(maxTries: 3, attempt: (_) async => null),
+        throwsA(
+          isA<StateError>().having((e) => e.message, 'message', 'try max num'),
         ),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, 'message', 'try max num')),
       );
       await expectLater(
         runBuiltinAttempts<int>(
@@ -56,8 +57,13 @@ void main() {
           message: 'link try max num',
           attempt: (_) async => null,
         ),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, 'message', 'link try max num')),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'link try max num',
+          ),
+        ),
       );
     });
 
@@ -79,8 +85,8 @@ void main() {
     test('重试之间调用退避钩子，参数从 1 递增', () async {
       final delays = <int>[];
       final previous = BuiltinTransport.retryDelayOverride;
-      BuiltinTransport.retryDelayOverride =
-          (attempt) async => delays.add(attempt);
+      BuiltinTransport.retryDelayOverride = (attempt) async =>
+          delays.add(attempt);
       addTearDown(() => BuiltinTransport.retryDelayOverride = previous);
 
       var calls = 0;
@@ -102,8 +108,9 @@ void main() {
           maxTries: 3,
           attempt: (_) async => null,
         ),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, 'message', 'try max num')),
+        throwsA(
+          isA<StateError>().having((e) => e.message, 'message', 'try max num'),
+        ),
       );
       await expectLater(
         transport().cachedRetry<int>(
@@ -112,8 +119,13 @@ void main() {
           message: 'link try max num',
           attempt: (_) async => null,
         ),
-        throwsA(isA<StateError>()
-            .having((e) => e.message, 'message', 'link try max num')),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            'link try max num',
+          ),
+        ),
       );
     });
 
@@ -121,13 +133,13 @@ void main() {
       var calls = 0;
       final instance = transport();
       Future<int> fetch() => instance.cachedRetry<int>(
-            'same-key',
-            maxTries: 2,
-            attempt: (_) async {
-              calls++;
-              return 1;
-            },
-          );
+        'same-key',
+        maxTries: 2,
+        attempt: (_) async {
+          calls++;
+          return 1;
+        },
+      );
       expect(await fetch(), 1);
       expect(await fetch(), 1);
       expect(calls, 1);
@@ -137,13 +149,13 @@ void main() {
       var calls = 0;
       final instance = transport();
       Future<int> fetch() => instance.cachedRetry<int>(
-            'fail-key',
-            maxTries: 2,
-            attempt: (_) async {
-              calls++;
-              return null;
-            },
-          );
+        'fail-key',
+        maxTries: 2,
+        attempt: (_) async {
+          calls++;
+          return null;
+        },
+      );
       await expectLater(fetch(), throwsA(isA<StateError>()));
       await expectLater(fetch(), throwsA(isA<StateError>()));
       expect(calls, 4, reason: '失败不缓存：两次调用各重试 2 次');

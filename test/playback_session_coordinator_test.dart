@@ -674,6 +674,151 @@ void main() {
     expect(backend.calls.last, 'playQueueIndex:0');
   });
 
+  test('恢复态队列编辑：移除 / 移动改写保存会话并落盘', () async {
+    build(persistStore: true);
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c'), _track('d')],
+        index: 1,
+        mode: PlayMode.listLoop,
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    // 把 d 移到队首：当前 b 的下标 1 → 2。
+    expect(
+      await session.moveQueueIndex(3, 0),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+    var restored = session.resolve(facade.snapshot.value);
+    expect(restored.queue.map((track) => track.id.id), ['d', 'a', 'b', 'c']);
+    expect(restored.currentIndex, 2);
+    expect(store.saves.last.tracks.map((track) => track.id.id), [
+      'd',
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(store.saves.last.index, 2);
+
+    // 移除队首 d：当前 b 的下标 2 → 1。
+    expect(
+      await session.removeQueueIndex(0),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+    restored = session.resolve(facade.snapshot.value);
+    expect(restored.queue.map((track) => track.id.id), ['a', 'b', 'c']);
+    expect(restored.currentIndex, 1);
+    expect(restored.current?.id.id, 'b');
+    expect(store.saves.last.tracks.map((track) => track.id.id), [
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(store.saves.last.index, 1);
+
+    // 把 c 移到队首：当前 b 的下标 1 → 2。
+    expect(
+      await session.moveQueueIndex(2, 0),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+    restored = session.resolve(facade.snapshot.value);
+    expect(restored.queue.map((track) => track.id.id), ['c', 'a', 'b']);
+    expect(restored.currentIndex, 2);
+
+    // 越界 / 移除当前曲目 / 移动当前曲目是 no-op。
+    expect(await session.removeQueueIndex(9), PlaybackCommandOutcome.none);
+    expect(await session.removeQueueIndex(2), PlaybackCommandOutcome.none);
+    expect(await session.moveQueueIndex(2, 0), PlaybackCommandOutcome.none);
+  });
+
+  test('恢复态加入队列：追加保存会话并重新发布快照', () async {
+    build(persistStore: true);
+    await seedSession(
+      PlaybackSession(tracks: [_track('a'), _track('b')], index: 0),
+    );
+    expect(await session.load(), isTrue);
+
+    await session.enqueueRestoredTracks([_track('c')]);
+
+    final restored = session.resolve(facade.snapshot.value);
+    expect(restored.queue.map((track) => track.id.id), ['a', 'b', 'c']);
+    expect(restored.upNext.map((track) => track.id.id), ['b', 'c']);
+    expect(store.saves.last.tracks.map((track) => track.id.id), [
+      'a',
+      'b',
+      'c',
+    ]);
+    expect(backend.calls, isEmpty, reason: '恢复态不触碰真实后端');
+  });
+
+  test('恢复态 shuffle：移动 no-op，移除同步调整队列', () async {
+    build();
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c')],
+        index: 1,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    expect(await session.moveQueueIndex(0, 2), PlaybackCommandOutcome.none);
+    expect(
+      await session.removeQueueIndex(2),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+    final restored = session.resolve(facade.snapshot.value);
+    expect(restored.queue.map((track) => track.id.id), ['a', 'b']);
+    expect(restored.currentIndex, 1);
+  });
+
+  test('恢复态 upNext 带真实队列下标（列表循环回绕也能对齐）', () async {
+    build();
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c'), _track('d')],
+        index: 2,
+        mode: PlayMode.listLoop,
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    final restored = session.resolve(facade.snapshot.value);
+    expect(restored.upNext.map((track) => track.id.id), ['d', 'a', 'b']);
+    expect(restored.upNextIndices, [3, 0, 1]);
+  });
+
+  test('live 队列编辑：转发后端并提交会话，当前曲目不可移除', () async {
+    build(persistStore: true);
+    backend.emit(
+      _live(_track('a'), queue: [_track('a'), _track('b'), _track('c')]),
+    );
+    expect(store.saves, isNotEmpty);
+
+    expect(
+      await session.moveQueueIndex(2, 1),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+    expect(backend.calls, contains('moveQueueIndex:2:1'));
+    expect(store.saves.last.tracks.map((track) => track.id.id), [
+      'a',
+      'c',
+      'b',
+    ]);
+
+    expect(
+      await session.removeQueueIndex(2),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+    expect(backend.calls, contains('removeQueueIndex:2'));
+    expect(store.saves.last.tracks.map((track) => track.id.id), ['a', 'c']);
+
+    // 当前曲目 / 越界由后端裁决为 no-op。
+    expect(await session.removeQueueIndex(0), PlaybackCommandOutcome.none);
+    expect(await session.moveQueueIndex(0, 1), PlaybackCommandOutcome.none);
+  });
+
   test('系统停止命令：先提交当前会话再停，保留可恢复会话', () async {
     build(persistStore: true);
     final a = _track('a');
@@ -901,11 +1046,10 @@ void main() {
       await session.replaceQueueTrack('fake:a', _track('a2')),
       PlaybackCommandOutcome.none,
     );
-    expect(
-      facade.snapshot.value.queue.map((track) => track.id.id),
-      ['a', 'b'],
-      reason: '恢复阶段不能改 facade 里尚未接管的队列',
-    );
+    expect(facade.snapshot.value.queue.map((track) => track.id.id), [
+      'a',
+      'b',
+    ], reason: '恢复阶段不能改 facade 里尚未接管的队列');
     expect(backend.calls, isEmpty);
     expect(store.calls, isEmpty);
     expect(session.resolve(facade.snapshot.value).queue.first.id.id, 'a');
@@ -918,7 +1062,10 @@ void main() {
       PlaybackCommandOutcome.trackAndQueue,
     );
     expect(backend.calls, ['replaceQueueTrack:fake:a']);
-    expect(facade.snapshot.value.queue.map((track) => track.id.id), ['a2', 'b']);
+    expect(facade.snapshot.value.queue.map((track) => track.id.id), [
+      'a2',
+      'b',
+    ]);
     expect(
       session.resolve(facade.snapshot.value).queue.map((track) => track.id.id),
       ['a2', 'b'],
@@ -951,33 +1098,24 @@ void main() {
     build();
     final a = _track('a');
     final queue = [a, a];
-    backend.emit(_live(
-      a,
-      queue: queue,
-      index: 0,
-      position: const Duration(seconds: 2),
-    ));
+    backend.emit(
+      _live(a, queue: queue, index: 0, position: const Duration(seconds: 2)),
+    );
     expect(store.saves, hasLength(1));
     expect(store.saves.last.index, 0);
 
     // trackId / 队列内容 / 模式 / 上下文都没变，只有槽位从 0 → 1。
-    backend.emit(_live(
-      a,
-      queue: queue,
-      index: 1,
-      position: const Duration(seconds: 5),
-    ));
+    backend.emit(
+      _live(a, queue: queue, index: 1, position: const Duration(seconds: 5)),
+    );
     expect(store.saves, hasLength(2));
     expect(store.saves.last.index, 1);
     expect(store.saves.last.current!.id, a.id);
 
     // 同槽位继续推进：没有周期写，不能再提交。
-    backend.emit(_live(
-      a,
-      queue: queue,
-      index: 1,
-      position: const Duration(seconds: 6),
-    ));
+    backend.emit(
+      _live(a, queue: queue, index: 1, position: const Duration(seconds: 6)),
+    );
     expect(store.saves, hasLength(2));
   });
 

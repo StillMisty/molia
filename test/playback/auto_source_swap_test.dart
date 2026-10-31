@@ -50,15 +50,14 @@ void main() {
     String sourceKey,
     String id, {
     TrackOrigin origin = TrackOrigin.builtin,
-  }) =>
-      Track(
-        id: TrackId(sourceKey, id),
-        title: 'Title $id',
-        artists: [Artist(name: 'Artist')],
-        duration: const Duration(minutes: 3),
-        origin: origin,
-        payload: {'songmid': id, 'source': sourceKey},
-      );
+  }) => Track(
+    id: TrackId(sourceKey, id),
+    title: 'Title $id',
+    artists: [Artist(name: 'Artist')],
+    duration: const Duration(minutes: 3),
+    origin: origin,
+    payload: {'songmid': id, 'source': sourceKey},
+  );
 
   const failure = SourceFailure(
     kind: FailureKind.network,
@@ -88,7 +87,8 @@ void main() {
       facade: facade,
       messenger: FakeMessenger(),
       catalogService: catalogService,
-      sessionCoordinator: sessionCoordinator ??
+      sessionCoordinator:
+          sessionCoordinator ??
           buildTestSessionCoordinator(facade: facade, settings: registry),
       autoSwapSettings: settings,
       autoSwapResolver: (t, {required excludeSourceKeys}) {
@@ -100,20 +100,22 @@ void main() {
   }
 
   void emitError(Track failing) {
-    backend.emit(BackendSnapshot(
-      current: failing,
-      queue: [failing],
-      currentIndex: 0,
-      isPlaying: false,
-      error: failure,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: failing,
+        queue: [failing],
+        currentIndex: 0,
+        isPlaying: false,
+        error: failure,
+      ),
+    );
   }
 
   _RecordingCoordinator recordingCoordinator() => _RecordingCoordinator(
-        facade: facade,
-        store: PlaybackSessionStore(),
-        settings: testSettingsRegistry(),
-      );
+    facade: facade,
+    store: PlaybackSessionStore(),
+    settings: testSettingsRegistry(),
+  );
 
   test('失败 → 同源重试 → 仍失败：跨源严格换源并替换队列（静默）', () async {
     final failing = track('fake', 'a');
@@ -252,16 +254,18 @@ void main() {
     );
     addTearDown(provider.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: failing,
-      queue: [failing],
-      currentIndex: 0,
-      isPlaying: false,
-      error: const SourceFailure(
-        kind: FailureKind.cancelled,
-        message: 'cancelled',
+    backend.emit(
+      BackendSnapshot(
+        current: failing,
+        queue: [failing],
+        currentIndex: 0,
+        isPlaying: false,
+        error: const SourceFailure(
+          kind: FailureKind.cancelled,
+          message: 'cancelled',
+        ),
       ),
-    ));
+    );
     await pumpEventQueue();
     expect(calls, isEmpty);
   });

@@ -29,18 +29,18 @@ class SourceQuality {
   });
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'size': size,
-        'hash': hash,
-        if (container != null) 'container': container,
-      };
+    'type': type,
+    'size': size,
+    'hash': hash,
+    if (container != null) 'container': container,
+  };
 
   factory SourceQuality.fromJson(Map<String, dynamic> json) => SourceQuality(
-        type: json['type'] as String? ?? '',
-        size: json['size'] as String?,
-        hash: json['hash'] as String?,
-        container: json['container'] as String?,
-      );
+    type: json['type'] as String? ?? '',
+    size: json['size'] as String?,
+    hash: json['hash'] as String?,
+    container: json['container'] as String?,
+  );
 }
 
 /// 通用取键优先级（`SourceTrack.id` / `TrackId` / 发现曲目共用，不含兜底）。
@@ -163,9 +163,9 @@ class SourceArtistRef {
   const SourceArtistRef({required this.name, this.id});
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        if (id != null && id!.isNotEmpty) 'id': id,
-      };
+    'name': name,
+    if (id != null && id!.isNotEmpty) 'id': id,
+  };
 
   factory SourceArtistRef.fromJson(Map<dynamic, dynamic> json) =>
       SourceArtistRef(
@@ -209,20 +209,26 @@ List<SourceQuality> qualitiesFromRaw(Map<String, dynamic> raw) {
 
   void add(String type, Object? size, Object? hash, [Object? container]) {
     if (type.isEmpty || !seen.add(type)) return;
-    result.add(SourceQuality(
-      type: type,
-      size: size?.toString(),
-      hash: hash?.toString(),
-      container: container?.toString(),
-    ));
+    result.add(
+      SourceQuality(
+        type: type,
+        size: size?.toString(),
+        hash: hash?.toString(),
+        container: container?.toString(),
+      ),
+    );
   }
 
   final list = raw['qualitys'];
   if (list is List) {
     for (final item in list) {
       if (item is Map) {
-        add(item['type']?.toString() ?? '', item['size'], null,
-            item['container']);
+        add(
+          item['type']?.toString() ?? '',
+          item['size'],
+          null,
+          item['container'],
+        );
       }
     }
   }

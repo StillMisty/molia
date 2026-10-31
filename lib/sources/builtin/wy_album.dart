@@ -49,7 +49,9 @@ class WyAlbum {
     final id = album['id']?.toString() ?? albumId;
     final name = album['name']?.toString() ?? '';
     final artistInfo = album['artist'];
-    final artist = artistInfo is Map ? artistInfo['name']?.toString() ?? '' : '';
+    final artist = artistInfo is Map
+        ? artistInfo['name']?.toString() ?? ''
+        : '';
     final cover = _nonEmpty(album['picUrl']) ?? _nonEmpty(album['blurPicUrl']);
 
     final songs = body['songs'];
@@ -103,20 +105,21 @@ class WyAlbum {
     final dt = raw['dt'];
     final durationMs = dt is num ? dt.toInt() : int.tryParse('$dt') ?? 0;
 
-    return trackFromSourceTrack(WyMusicDetail.buildTrack(
-      songId: raw['id'],
-      name: raw['name']?.toString() ?? '',
-      singer: _joinSingers(raw['ar']),
-      artists: WyMusicDetail.artistRefsOf(raw['ar']),
-      albumName: songAlbumName,
-      albumId: songAlbumId,
-      img: songCover,
-      intervalText:
-          durationMs > 0 ? formatPlayTime(durationMs / 1000) : null,
-      duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
-      types: WyMusicDetail.typeList(typeMap),
-      typeMap: typeMap,
-    ));
+    return trackFromSourceTrack(
+      WyMusicDetail.buildTrack(
+        songId: raw['id'],
+        name: raw['name']?.toString() ?? '',
+        singer: _joinSingers(raw['ar']),
+        artists: WyMusicDetail.artistRefsOf(raw['ar']),
+        albumName: songAlbumName,
+        albumId: songAlbumId,
+        img: songCover,
+        intervalText: durationMs > 0 ? formatPlayTime(durationMs / 1000) : null,
+        duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
+        types: WyMusicDetail.typeList(typeMap),
+        typeMap: typeMap,
+      ),
+    );
   }
 
   /// 歌手名拼接（`、` 分隔，与 LX `getSinger` 一致）。

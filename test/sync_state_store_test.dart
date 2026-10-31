@@ -166,8 +166,11 @@ void main() {
 
     await reloaded.setCategory(SyncCategory.covers, false);
     final disabled = await freshStore();
-    expect(disabled.isCategoryEnabled(SyncCategory.covers), isFalse,
-        reason: '用户关闭后跨实例保持');
+    expect(
+      disabled.isCategoryEnabled(SyncCategory.covers),
+      isFalse,
+      reason: '用户关闭后跨实例保持',
+    );
   });
 
   test('所有身份备份都不存在时才生成新 id，之后跨实例保持', () async {

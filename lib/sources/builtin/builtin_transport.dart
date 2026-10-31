@@ -28,8 +28,8 @@ class BuiltinHttpException implements Exception {
 /// 覆盖 fetch 路径。
 class BuiltinTransport {
   BuiltinTransport({Dio? dio, RequestCache? cache, this.retryDelay})
-      : _dio = dio ?? createAppDio(),
-        _cache = cache ?? RequestCache(ttl: defaultCacheTtl);
+    : _dio = dio ?? createAppDio(),
+      _cache = cache ?? RequestCache(ttl: defaultCacheTtl);
 
   final Dio _dio;
 
@@ -104,8 +104,7 @@ class BuiltinTransport {
   static const int defaultRetries = 3;
 
   static const Map<String, String> defaultHeaders = {
-    'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36',
   };
 
   /// GET + JSON 解码。
@@ -257,8 +256,10 @@ class BuiltinTransport {
       );
       if (body is Map) {
         encodedBody = body.entries
-            .map((entry) =>
-                '${Uri.encodeQueryComponent(entry.key.toString())}=${Uri.encodeQueryComponent(entry.value.toString())}')
+            .map(
+              (entry) =>
+                  '${Uri.encodeQueryComponent(entry.key.toString())}=${Uri.encodeQueryComponent(entry.value.toString())}',
+            )
             .join('&');
       } else {
         encodedBody = body?.toString();
@@ -280,8 +281,10 @@ class BuiltinTransport {
     );
   }
 
-  Map<String, String> _merge(Map<String, String>? headers) =>
-      {...defaultHeaders, ...?headers};
+  Map<String, String> _merge(Map<String, String>? headers) => {
+    ...defaultHeaders,
+    ...?headers,
+  };
 
   /// 统一尝试循环：传输异常与 [retryIf] 响应都可重试；
   /// 空 body / 非法 JSON 属响应语义错误，不重试直接抛出。
@@ -328,7 +331,8 @@ class BuiltinTransport {
       return jsonDecode(text);
     } catch (_) {
       throw BuiltinHttpException(
-          'HTTP ${response.statusCode}: invalid JSON body');
+        'HTTP ${response.statusCode}: invalid JSON body',
+      );
     }
   }
 }
@@ -369,7 +373,8 @@ Future<T> runBuiltinAttempts<T>({
 }) async {
   for (var tryNum = 0; tryNum < maxTries; tryNum++) {
     if (tryNum > 0) {
-      final wait = delay ??
+      final wait =
+          delay ??
           BuiltinTransport.retryDelayOverride ??
           BuiltinTransport.retryBackoff;
       await wait(tryNum);

@@ -11,15 +11,9 @@ void main() {
         '[00:03]四\n',
       );
       expect(lines, hasLength(3));
-      expect(
-        lines[0].timestamp,
-        const Duration(seconds: 1, milliseconds: 500),
-      );
+      expect(lines[0].timestamp, const Duration(seconds: 1, milliseconds: 500));
       expect(lines[0].text, '第一行 & 二');
-      expect(
-        lines[1].timestamp,
-        const Duration(seconds: 2, milliseconds: 123),
-      );
+      expect(lines[1].timestamp, const Duration(seconds: 2, milliseconds: 123));
       expect(lines[1].text, '<三>');
       expect(lines[2].timestamp, const Duration(seconds: 3));
       expect(lines[2].text, '四');

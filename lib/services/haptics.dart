@@ -28,8 +28,9 @@ class HapticsService {
   static const bool defaultEnabled = true;
 
   /// 当前开关（设置页订阅；写入后立即生效，无需重启）。
-  static final ValueNotifier<bool> enabledNotifier =
-      ValueNotifier<bool>(defaultEnabled);
+  static final ValueNotifier<bool> enabledNotifier = ValueNotifier<bool>(
+    defaultEnabled,
+  );
 
   /// 触感是否开启（高频读取，直接走内存值）。
   static bool get enabled => enabledNotifier.value;

@@ -194,10 +194,7 @@ class _PagedTrackCollectionBodyState<R>
       );
     }
     if (state.isEmpty) {
-      return DetailPageEmpty(
-        icon: widget.emptyIcon,
-        message: widget.emptyText,
-      );
+      return DetailPageEmpty(icon: widget.emptyIcon, message: widget.emptyText);
     }
 
     final items = state.items;
@@ -234,9 +231,7 @@ class _PagedTrackCollectionBodyState<R>
               sliver: SliverFixedExtentList.builder(
                 // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
                 itemExtent:
-                    (tableColumns
-                        ? TrackRow.extentOf(context, tableColumns: true)
-                        : TrackRow.extent) +
+                    TrackRow.extentOf(context, tableColumns: tableColumns) +
                     cardList.gap,
                 itemCount: items.length,
                 itemBuilder: (context, index) {

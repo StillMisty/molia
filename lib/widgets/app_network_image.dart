@@ -190,10 +190,12 @@ class AppNetworkImage extends StatelessWidget {
     if (explicitHeight != null) return (width: null, height: explicitHeight);
 
     final dpr = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
-    final boxWidth =
-        (width != null && width!.isFinite && width! > 0) ? width! : 0.0;
-    final boxHeight =
-        (height != null && height!.isFinite && height! > 0) ? height! : 0.0;
+    final boxWidth = (width != null && width!.isFinite && width! > 0)
+        ? width!
+        : 0.0;
+    final boxHeight = (height != null && height!.isFinite && height! > 0)
+        ? height!
+        : 0.0;
     if (boxWidth <= 0 && boxHeight <= 0) {
       return (width: null, height: null);
     }
@@ -227,24 +229,23 @@ class AppNetworkImage extends StatelessWidget {
     return Container(
       width: width,
       height: height,
-      color: fallbackColor ??
+      color:
+          fallbackColor ??
           Theme.of(context).colorScheme.surfaceContainerHighest,
     );
   }
 
   Widget _fallback(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final size = fallbackIconSize ??
+    final size =
+        fallbackIconSize ??
         (width != null && width!.isFinite ? width! * 0.5 : 24.0);
     return Container(
       width: width,
       height: height,
       color: fallbackColor ?? scheme.surfaceContainerHighest,
       alignment: Alignment.center,
-      child: MoliaMark(
-        size: size,
-        color: scheme.onSurfaceVariant,
-      ),
+      child: MoliaMark(size: size, color: scheme.onSurfaceVariant),
     );
   }
 }

@@ -98,16 +98,16 @@ abstract interface class LibraryStore {
   ///
   /// [rows] 是写路径实际落库的行（已分配 `playlistId` / `sortOrder` /
   /// `addedAt`，按导入顺序）：消费方直接用它预置缓存，不要再做去重或重排。
-  Future<({
-    int playlistId,
-    int added,
-    int total,
-    bool created,
-    List<PlaylistTrack> rows,
-  })> importTracks(
-    String name,
-    List<PlaylistTrack> tracks,
-  );
+  Future<
+    ({
+      int playlistId,
+      int added,
+      int total,
+      bool created,
+      List<PlaylistTrack> rows,
+    })
+  >
+  importTracks(String name, List<PlaylistTrack> tracks);
 
   /// 释放资源（关闭变更广播）。
   Future<void> dispose();

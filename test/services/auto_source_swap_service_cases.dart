@@ -13,15 +13,14 @@ void main() {
     String title = '晴天',
     String artist = '周杰伦',
     int? seconds = 269,
-  }) =>
-      Track(
-        id: TrackId(sourceKey, id),
-        title: title,
-        artists: [Artist(name: artist)],
-        duration: seconds == null ? null : Duration(seconds: seconds),
-        origin: TrackOrigin.builtin,
-        payload: {'songmid': id, 'source': sourceKey},
-      );
+  }) => Track(
+    id: TrackId(sourceKey, id),
+    title: title,
+    artists: [Artist(name: artist)],
+    duration: seconds == null ? null : Duration(seconds: seconds),
+    origin: TrackOrigin.builtin,
+    payload: {'songmid': id, 'source': sourceKey},
+  );
 
   late FakeMusicSource wy;
   late FakeMusicSource kg;

@@ -37,8 +37,9 @@ void main() {
     );
     addTearDown(network.dispose);
 
-    final attemptFuture = a.service.attempts
-        .firstWhere((attempt) => attempt.status == SyncPairingStatus.pending);
+    final attemptFuture = a.service.attempts.firstWhere(
+      (attempt) => attempt.status == SyncPairingStatus.pending,
+    );
     final promptFuture = b.service.incomingRequests.first;
     final resultFuture = a.service.requestPairing(_nearby(b));
     final prompt = await promptFuture.timeout(const Duration(seconds: 2));
@@ -159,20 +160,24 @@ void main() {
 
     final invite = await _beginInvite(service, requestId: 'req-invite001');
     var resolved = false;
-    final respondFuture =
-        service.respond(invite.prompt.requestId, accept: true);
+    final respondFuture = service.respond(
+      invite.prompt.requestId,
+      accept: true,
+    );
     unawaited(respondFuture.whenComplete(() => resolved = true));
     await Future<void>.delayed(const Duration(milliseconds: 30));
     expect(resolved, isFalse, reason: '还没收到 complete 不能返回 accepted');
     expect(writes, isEmpty);
     expect(endpoints, isEmpty);
 
-    final response = await service.handle(PairingHttpRequest(
-      method: 'POST',
-      path: PairingHttpPaths.complete,
-      sourceHost: '10.0.0.9',
-      body: _completeBody(invite, passphrase: passA),
-    ));
+    final response = await service.handle(
+      PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.complete,
+        sourceHost: '10.0.0.9',
+        body: _completeBody(invite, passphrase: passA),
+      ),
+    );
     expect(response.statusCode, 200);
     expect(
       (jsonDecode(response.body) as Map<String, Object?>)['status'],
@@ -214,12 +219,14 @@ void main() {
     expect(writes, isEmpty);
 
     // 超时只代表「对方还没完成」：请求仍在 TTL 内，迟到的 complete 仍生效。
-    final response = await service.handle(PairingHttpRequest(
-      method: 'POST',
-      path: PairingHttpPaths.complete,
-      sourceHost: '10.0.0.9',
-      body: _completeBody(invite, passphrase: passA),
-    ));
+    final response = await service.handle(
+      PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.complete,
+        sourceHost: '10.0.0.9',
+        body: _completeBody(invite, passphrase: passA),
+      ),
+    );
     expect(response.statusCode, 200);
     expect(writes, [passA]);
   });
@@ -239,21 +246,27 @@ void main() {
     addTearDown(service.dispose);
 
     final invite = await _beginInvite(service, requestId: 'req-invite003');
-    final respondFuture =
-        service.respond(invite.prompt.requestId, accept: true);
+    final respondFuture = service.respond(
+      invite.prompt.requestId,
+      accept: true,
+    );
     await Future<void>.delayed(const Duration(milliseconds: 10));
 
-    final response = await service.handle(PairingHttpRequest(
-      method: 'POST',
-      path: PairingHttpPaths.complete,
-      sourceHost: '10.0.0.9',
-      body: utf8.encode(jsonEncode({
-        'v': 1,
-        'requestId': invite.prompt.requestId,
-        'deviceId': 'devA',
-        'sealed': _token(Uint8List(48)),
-      })),
-    ));
+    final response = await service.handle(
+      PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.complete,
+        sourceHost: '10.0.0.9',
+        body: utf8.encode(
+          jsonEncode({
+            'v': 1,
+            'requestId': invite.prompt.requestId,
+            'deviceId': 'devA',
+            'sealed': _token(Uint8List(48)),
+          }),
+        ),
+      ),
+    );
     expect(response.statusCode, 400);
     expect(
       await respondFuture.timeout(const Duration(seconds: 1)),
@@ -300,18 +313,20 @@ void main() {
     addTearDown(service.dispose);
 
     final promptFuture = service.incomingRequests.first;
-    final response = await service.handle(PairingHttpRequest(
-      method: 'POST',
-      path: PairingHttpPaths.request,
-      sourceHost: '10.0.0.9',
-      body: _requestBody(
-        requestId: 'req-join0001',
-        deviceId: 'devA',
-        deviceName: '设备A',
-        intent: SyncPairingIntent.join,
-        hasGroup: false,
+    final response = await service.handle(
+      PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.request,
+        sourceHost: '10.0.0.9',
+        body: _requestBody(
+          requestId: 'req-join0001',
+          deviceId: 'devA',
+          deviceName: '设备A',
+          intent: SyncPairingIntent.join,
+          hasGroup: false,
+        ),
       ),
-    ));
+    );
     expect(response.statusCode, 200);
     final prompt = await promptFuture.timeout(const Duration(seconds: 1));
     final stopwatch = Stopwatch()..start();
@@ -529,12 +544,14 @@ void main() {
       hasGroup: true,
     );
     addTearDown(network.dispose);
-    final response = await b.service.handle(PairingHttpRequest(
-      method: 'POST',
-      path: PairingHttpPaths.request,
-      sourceHost: '10.0.0.9',
-      body: Uint8List(pairingMaxBodyBytes + 1),
-    ));
+    final response = await b.service.handle(
+      PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.request,
+        sourceHost: '10.0.0.9',
+        body: Uint8List(pairingMaxBodyBytes + 1),
+      ),
+    );
     expect(response.statusCode, 413);
   });
 
@@ -552,18 +569,20 @@ void main() {
     expect(b.service.requestRateLimit, 2);
 
     Future<int> send(String requestId) async {
-      final response = await b.service.handle(PairingHttpRequest(
-        method: 'POST',
-        path: PairingHttpPaths.request,
-        sourceHost: '10.0.0.9',
-        body: _requestBody(
-          requestId: requestId,
-          deviceId: 'devX',
-          deviceName: '设备X',
-          intent: SyncPairingIntent.join,
-          hasGroup: false,
+      final response = await b.service.handle(
+        PairingHttpRequest(
+          method: 'POST',
+          path: PairingHttpPaths.request,
+          sourceHost: '10.0.0.9',
+          body: _requestBody(
+            requestId: requestId,
+            deviceId: 'devX',
+            deviceName: '设备X',
+            intent: SyncPairingIntent.join,
+            hasGroup: false,
+          ),
         ),
-      ));
+      );
       return response.statusCode;
     }
 
@@ -596,12 +615,14 @@ void main() {
       hasGroup: false,
       publicKey: Uint8List(65)..[0] = 0x04,
     );
-    final response = await b.service.handle(PairingHttpRequest(
-      method: 'POST',
-      path: PairingHttpPaths.request,
-      sourceHost: '10.0.0.9',
-      body: body,
-    ));
+    final response = await b.service.handle(
+      PairingHttpRequest(
+        method: 'POST',
+        path: PairingHttpPaths.request,
+        sourceHost: '10.0.0.9',
+        body: body,
+      ),
+    );
     expect(response.statusCode, 400);
     expect(prompted, isFalse);
   });
@@ -623,18 +644,20 @@ void main() {
     addTearDown(subscription.cancel);
 
     Future<void> send(String requestId, String deviceId) async {
-      await b.service.handle(PairingHttpRequest(
-        method: 'POST',
-        path: PairingHttpPaths.request,
-        sourceHost: '10.0.0.9',
-        body: _requestBody(
-          requestId: requestId,
-          deviceId: deviceId,
-          deviceName: deviceId,
-          intent: SyncPairingIntent.join,
-          hasGroup: false,
+      await b.service.handle(
+        PairingHttpRequest(
+          method: 'POST',
+          path: PairingHttpPaths.request,
+          sourceHost: '10.0.0.9',
+          body: _requestBody(
+            requestId: requestId,
+            deviceId: deviceId,
+            deviceName: deviceId,
+            intent: SyncPairingIntent.join,
+            hasGroup: false,
+          ),
         ),
-      ));
+      );
     }
 
     await send('req-first001', 'devX');
@@ -687,12 +710,14 @@ void main() {
     expect(b.service.debugSealedPayloadCount, 1);
 
     now += 1500;
-    final response = await b.service.handle(PairingHttpRequest(
-      method: 'GET',
-      path: PairingHttpPaths.status,
-      sourceHost: '10.0.0.9',
-      query: {'id': prompt.requestId},
-    ));
+    final response = await b.service.handle(
+      PairingHttpRequest(
+        method: 'GET',
+        path: PairingHttpPaths.status,
+        sourceHost: '10.0.0.9',
+        query: {'id': prompt.requestId},
+      ),
+    );
     expect(response.statusCode, 200);
     final body = jsonDecode(response.body) as Map<String, Object?>;
     expect(body['status'], SyncPairingStatus.expired.name);
@@ -721,18 +746,20 @@ void main() {
     addTearDown(subscription.cancel);
 
     Future<void> send(String requestId, String deviceId) async {
-      await b.service.handle(PairingHttpRequest(
-        method: 'POST',
-        path: PairingHttpPaths.request,
-        sourceHost: '10.0.0.9',
-        body: _requestBody(
-          requestId: requestId,
-          deviceId: deviceId,
-          deviceName: deviceId,
-          intent: SyncPairingIntent.join,
-          hasGroup: false,
+      await b.service.handle(
+        PairingHttpRequest(
+          method: 'POST',
+          path: PairingHttpPaths.request,
+          sourceHost: '10.0.0.9',
+          body: _requestBody(
+            requestId: requestId,
+            deviceId: deviceId,
+            deviceName: deviceId,
+            intent: SyncPairingIntent.join,
+            hasGroup: false,
+          ),
         ),
-      ));
+      );
     }
 
     await send('req-first001', 'devX');
@@ -1036,12 +1063,14 @@ void main() {
     addTearDown(network.dispose);
 
     Future<int> status(String id) async {
-      final response = await b.service.handle(PairingHttpRequest(
-        method: 'GET',
-        path: PairingHttpPaths.status,
-        sourceHost: '10.0.0.9',
-        query: {'id': id},
-      ));
+      final response = await b.service.handle(
+        PairingHttpRequest(
+          method: 'GET',
+          path: PairingHttpPaths.status,
+          sourceHost: '10.0.0.9',
+          query: {'id': id},
+        ),
+      );
       return response.statusCode;
     }
 
@@ -1081,7 +1110,9 @@ void main() {
     await service.start();
 
     expect(
-        await service.probeAddress('[192.168.1.7]', probePort: 47825), isTrue);
+      await service.probeAddress('[192.168.1.7]', probePort: 47825),
+      isTrue,
+    );
     expect(service.scanning, isTrue);
     expect(sent, [(host: '192.168.1.7', port: 47825)]);
 
@@ -1090,7 +1121,9 @@ void main() {
 
     expect(await service.probeAddress('not a host'), isFalse);
     expect(
-        await service.probeAddress('192.168.1.9', probePort: 70000), isFalse);
+      await service.probeAddress('192.168.1.9', probePort: 70000),
+      isFalse,
+    );
     canPrompt = false;
     expect(await service.probeAddress('192.168.1.9'), isFalse);
     expect(sent, hasLength(2));
@@ -1137,47 +1170,55 @@ void main() {
     service.onAppHidden();
     expect(service.debugSweepScheduled, isFalse);
 
-    final announce = Msp1.encode(Msp1Message(
-      type: Msp1.typeAnnounce,
-      deviceId: 'devB',
-      name: '设备B',
-      httpPort: 41001,
-      probePort: 47825,
-      addresses: const [],
-      hasGroup: false,
-      bootId: 'boot-b',
-      nonce: 'nonce-b',
-    ));
-    packets.add(LanPairingDatagram(
-      message: Msp1.decode(announce)!,
-      sourceHost: '192.168.1.9',
-      sourcePort: 47825,
-      receivedAt: now,
-    ));
+    final announce = Msp1.encode(
+      Msp1Message(
+        type: Msp1.typeAnnounce,
+        deviceId: 'devB',
+        name: '设备B',
+        httpPort: 41001,
+        probePort: 47825,
+        addresses: const [],
+        hasGroup: false,
+        bootId: 'boot-b',
+        nonce: 'nonce-b',
+      ),
+    );
+    packets.add(
+      LanPairingDatagram(
+        message: Msp1.decode(announce)!,
+        sourceHost: '192.168.1.9',
+        sourcePort: 47825,
+        receivedAt: now,
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(nearby.last, isEmpty, reason: '后台不刷新候选');
 
     canPrompt = true;
     service.onAppResumed();
     expect(service.debugSweepScheduled, isTrue);
-    packets.add(LanPairingDatagram(
-      message: Msp1.decode(announce)!,
-      sourceHost: '192.168.1.9',
-      sourcePort: 47825,
-      receivedAt: now,
-    ));
+    packets.add(
+      LanPairingDatagram(
+        message: Msp1.decode(announce)!,
+        sourceHost: '192.168.1.9',
+        sourcePort: 47825,
+        receivedAt: now,
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(nearby.last.map((d) => d.deviceId), contains('devB'));
 
     // 蜂窝下同样不再刷新（_canUsePairing=false）。
     cellular = true;
     final before = nearby.last.length;
-    packets.add(LanPairingDatagram(
-      message: Msp1.decode(announce)!,
-      sourceHost: '192.168.1.10',
-      sourcePort: 47825,
-      receivedAt: now,
-    ));
+    packets.add(
+      LanPairingDatagram(
+        message: Msp1.decode(announce)!,
+        sourceHost: '192.168.1.10',
+        sourcePort: 47825,
+        receivedAt: now,
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(nearby.last, hasLength(before), reason: '蜂窝不刷新候选');
     expect(nearby.last.single.host, '192.168.1.9');
@@ -1223,23 +1264,27 @@ void main() {
     expect(probes.single.isProbe, isTrue);
     final firstNonce = probes.single.nonce;
 
-    final announce = Msp1.encode(Msp1Message(
-      type: Msp1.typeAnnounce,
-      deviceId: 'devB',
-      name: '设备B',
-      httpPort: 41001,
-      probePort: 47825,
-      addresses: const [],
-      hasGroup: false,
-      bootId: 'boot-b',
-      nonce: 'nonce-b',
-    ));
-    packets.add(LanPairingDatagram(
-      message: Msp1.decode(announce)!,
-      sourceHost: '192.168.1.9',
-      sourcePort: 47825,
-      receivedAt: now,
-    ));
+    final announce = Msp1.encode(
+      Msp1Message(
+        type: Msp1.typeAnnounce,
+        deviceId: 'devB',
+        name: '设备B',
+        httpPort: 41001,
+        probePort: 47825,
+        addresses: const [],
+        hasGroup: false,
+        bootId: 'boot-b',
+        nonce: 'nonce-b',
+      ),
+    );
+    packets.add(
+      LanPairingDatagram(
+        message: Msp1.decode(announce)!,
+        sourceHost: '192.168.1.9',
+        sourcePort: 47825,
+        receivedAt: now,
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 40));
     expect(nearby.last.map((device) => device.deviceId), contains('devB'));
 
@@ -1253,7 +1298,10 @@ void main() {
       reason: '每次补探都使用新 nonce',
     );
     expect(probes.skip(1).every((probe) => probe.isProbe), isTrue);
-    expect(probes.skip(1).map((probe) => probe.nonce), isNot(contains(firstNonce)));
+    expect(
+      probes.skip(1).map((probe) => probe.nonce),
+      isNot(contains(firstNonce)),
+    );
     expect(
       nearby.last.map((device) => device.deviceId),
       contains('devB'),
@@ -1275,8 +1323,7 @@ void main() {
     expect(probes.length, greaterThan(beforeHidden));
   });
 
-  test('startScan：探测端口为 0 时返回 false；未注入端口 provider 保持旧行为',
-      () async {
+  test('startScan：探测端口为 0 时返回 false；未注入端口 provider 保持旧行为', () async {
     final packets = StreamController<LanPairingDatagram>.broadcast();
     var port = 0;
     final sent = <Msp1Message>[];
@@ -1319,23 +1366,27 @@ void main() {
     expect(service.scanning, isTrue);
     expect(sent, hasLength(1));
 
-    final announce = Msp1.encode(Msp1Message(
-      type: Msp1.typeAnnounce,
-      deviceId: 'devB',
-      name: '设备B',
-      httpPort: 41001,
-      probePort: 47825,
-      addresses: const [],
-      hasGroup: false,
-      bootId: 'boot-b',
-      nonce: 'nonce-b',
-    ));
-    packets.add(LanPairingDatagram(
-      message: Msp1.decode(announce)!,
-      sourceHost: '192.168.1.9',
-      sourcePort: 47825,
-      receivedAt: 1000,
-    ));
+    final announce = Msp1.encode(
+      Msp1Message(
+        type: Msp1.typeAnnounce,
+        deviceId: 'devB',
+        name: '设备B',
+        httpPort: 41001,
+        probePort: 47825,
+        addresses: const [],
+        hasGroup: false,
+        bootId: 'boot-b',
+        nonce: 'nonce-b',
+      ),
+    );
+    packets.add(
+      LanPairingDatagram(
+        message: Msp1.decode(announce)!,
+        sourceHost: '192.168.1.9',
+        sourcePort: 47825,
+        receivedAt: 1000,
+      ),
+    );
     await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(nearby.last.map((device) => device.deviceId), contains('devB'));
 
@@ -1410,13 +1461,15 @@ class _LoopbackClient implements PairingHttpClient {
     if (service == null) {
       return const PairingHttpReply(statusCode: 404, body: '');
     }
-    final response = await service.handle(PairingHttpRequest(
-      method: method,
-      path: path,
-      sourceHost: '127.0.0.1',
-      query: query ?? const {},
-      body: body ?? const [],
-    ));
+    final response = await service.handle(
+      PairingHttpRequest(
+        method: method,
+        path: path,
+        sourceHost: '127.0.0.1',
+        query: query ?? const {},
+        body: body ?? const [],
+      ),
+    );
     return PairingHttpReply(
       statusCode: response.statusCode,
       body: response.body,
@@ -1434,7 +1487,8 @@ class _FakeHttpClient implements PairingHttpClient {
     String path,
     Map<String, String>? query,
     List<int>? body,
-  ) handler;
+  )
+  handler;
   final List<String> paths = [];
   final List<String> hosts = [];
 
@@ -1652,14 +1706,14 @@ class _Device {
 }
 
 SyncNearbyDevice _nearby(_Device device) => SyncNearbyDevice(
-      deviceId: device.id,
-      name: device.name,
-      host: '127.0.0.1',
-      httpPort: device.httpPort,
-      probePort: 47825,
-      hasGroup: device.hasGroup,
-      lastSeenAt: DateTime.now().millisecondsSinceEpoch,
-    );
+  deviceId: device.id,
+  name: device.name,
+  host: '127.0.0.1',
+  httpPort: device.httpPort,
+  probePort: 47825,
+  hasGroup: device.hasGroup,
+  lastSeenAt: DateTime.now().millisecondsSinceEpoch,
+);
 
 typedef _InviteHandshake = ({
   SyncPairingRequest prompt,
@@ -1678,22 +1732,26 @@ Future<_InviteHandshake> _beginInvite(
   final keyPair = PairingCrypto.generateKeyPair();
   addTearDown(keyPair.destroy);
   final nonce = Uint8List.fromList(List<int>.generate(16, (i) => i));
-  final response = await service.handle(PairingHttpRequest(
-    method: 'POST',
-    path: PairingHttpPaths.request,
-    sourceHost: '10.0.0.9',
-    body: utf8.encode(jsonEncode({
-      'v': 1,
-      'requestId': requestId,
-      'deviceId': 'devA',
-      'deviceName': '设备A',
-      'intent': SyncPairingIntent.invite.name,
-      'publicKey': _token(keyPair.publicKey),
-      'nonce': _token(nonce),
-      'group': true,
-      'http': 42000,
-    })),
-  ));
+  final response = await service.handle(
+    PairingHttpRequest(
+      method: 'POST',
+      path: PairingHttpPaths.request,
+      sourceHost: '10.0.0.9',
+      body: utf8.encode(
+        jsonEncode({
+          'v': 1,
+          'requestId': requestId,
+          'deviceId': 'devA',
+          'deviceName': '设备A',
+          'intent': SyncPairingIntent.invite.name,
+          'publicKey': _token(keyPair.publicKey),
+          'nonce': _token(nonce),
+          'group': true,
+          'http': 42000,
+        }),
+      ),
+    ),
+  );
   expect(response.statusCode, 200);
   final map = jsonDecode(response.body) as Map<String, Object?>;
   expect(map['status'], SyncPairingStatus.pending.name);
@@ -1708,10 +1766,7 @@ Future<_InviteHandshake> _beginInvite(
 }
 
 /// 发起方按握手材料密封口令，构造 `/pair/complete` 请求体。
-Uint8List _completeBody(
-  _InviteHandshake invite, {
-  required String passphrase,
-}) {
+Uint8List _completeBody(_InviteHandshake invite, {required String passphrase}) {
   final key = PairingCrypto.deriveSessionKey(
     privateKey: invite.keyPair.privateKey,
     peerPublicKey: invite.receiverPublicKey,
@@ -1728,12 +1783,16 @@ Uint8List _completeBody(
       receiverDeviceId: 'devB',
     ),
   );
-  return Uint8List.fromList(utf8.encode(jsonEncode({
-    'v': 1,
-    'requestId': invite.prompt.requestId,
-    'deviceId': 'devA',
-    'sealed': _token(sealed),
-  })));
+  return Uint8List.fromList(
+    utf8.encode(
+      jsonEncode({
+        'v': 1,
+        'requestId': invite.prompt.requestId,
+        'deviceId': 'devA',
+        'sealed': _token(sealed),
+      }),
+    ),
+  );
 }
 
 Uint8List _decodeToken(String value) =>
@@ -1749,18 +1808,20 @@ Uint8List _requestBody({
 }) {
   final keyPair = PairingCrypto.generateKeyPair();
   final key = publicKey ?? keyPair.publicKey;
-  final body = utf8.encode(jsonEncode({
-    'v': 1,
-    'requestId': requestId,
-    'deviceId': deviceId,
-    'deviceName': deviceName,
-    'intent': intent.name,
-    'publicKey': base64UrlEncode(key).replaceAll('=', ''),
-    'nonce':
-        base64UrlEncode(List<int>.generate(16, (i) => i)).replaceAll('=', ''),
-    'group': hasGroup,
-    'http': 42000,
-  }));
+  final body = utf8.encode(
+    jsonEncode({
+      'v': 1,
+      'requestId': requestId,
+      'deviceId': deviceId,
+      'deviceName': deviceName,
+      'intent': intent.name,
+      'publicKey': base64UrlEncode(key).replaceAll('=', ''),
+      'nonce': base64UrlEncode(List<int>.generate(16, (i) => i))
+          .replaceAll('=', ''),
+      'group': hasGroup,
+      'http': 42000,
+    }),
+  );
   keyPair.destroy();
   return Uint8List.fromList(body);
 }

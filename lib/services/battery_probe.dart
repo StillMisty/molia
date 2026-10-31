@@ -29,15 +29,16 @@ class BatterySnapshot {
 /// 「未知」处理，调度器不会因此误判省电等级）。
 class BatteryProbe {
   BatteryProbe({MethodChannel? channel})
-      : _channel =
-            channel ?? const MethodChannel('top.stillmisty.molia/battery');
+    : _channel = channel ?? const MethodChannel('top.stillmisty.molia/battery');
 
   final MethodChannel _channel;
   final Logger _logger = Logger('molia.battery');
 
   Future<BatterySnapshot> read() async {
     try {
-      final result = await _channel.invokeMapMethod<String, Object?>('snapshot');
+      final result = await _channel.invokeMapMethod<String, Object?>(
+        'snapshot',
+      );
       if (result == null) return BatterySnapshot.unknown;
       return BatterySnapshot(
         level: (result['level'] as num?)?.toInt() ?? -1,

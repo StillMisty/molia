@@ -22,14 +22,8 @@ void main() {
 
   group('纯归一', () {
     test('上下文名：trim 后取列表名，空名回退入口名', () {
-      expect(
-        resolveTrackListName(name: '  专辑名  ', fallbackName: '入口名'),
-        '专辑名',
-      );
-      expect(
-        resolveTrackListName(name: '   ', fallbackName: '  入口名  '),
-        '入口名',
-      );
+      expect(resolveTrackListName(name: '  专辑名  ', fallbackName: '入口名'), '专辑名');
+      expect(resolveTrackListName(name: '   ', fallbackName: '  入口名  '), '入口名');
       expect(resolveTrackListName(name: null, fallbackName: '   '), '');
     });
 
@@ -55,7 +49,10 @@ void main() {
         const Track(
           id: TrackId('kw', 'a'),
           title: '甲曲',
-          artists: [Artist(name: '甲'), Artist(name: '乙')],
+          artists: [
+            Artist(name: '甲'),
+            Artist(name: '乙'),
+          ],
           album: '专辑',
           duration: Duration(seconds: 90),
           origin: TrackOrigin.builtin,
@@ -109,14 +106,14 @@ void main() {
     });
 
     Track trackOf(String id) => Track(
-          id: TrackId('kw', id),
-          title: '曲目 $id',
-          artists: [Artist(name: '歌手 $id')],
-          album: '专辑名',
-          duration: const Duration(seconds: 30),
-          origin: TrackOrigin.builtin,
-          payload: {'songmid': id},
-        );
+      id: TrackId('kw', id),
+      title: '曲目 $id',
+      artists: [Artist(name: '歌手 $id')],
+      album: '专辑名',
+      duration: const Duration(seconds: 30),
+      origin: TrackOrigin.builtin,
+      payload: {'songmid': id},
+    );
 
     Future<void> pumpHost(
       WidgetTester tester, {
@@ -194,12 +191,8 @@ void main() {
 
       await pumpHost(
         tester,
-        play: (context) => handoff.play(
-          context,
-          tracks,
-          shuffle: true,
-          contextName: '专辑名',
-        ),
+        play: (context) =>
+            handoff.play(context, tracks, shuffle: true, contextName: '专辑名'),
       );
 
       await tester.tap(find.text('play'));

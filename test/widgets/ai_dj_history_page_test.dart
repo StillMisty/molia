@@ -19,27 +19,27 @@ import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
-      items: [
-        for (var i = 0; i < count; i++)
-          ResolvedRecommendation(
-            source: AiRecommendation(
-              title: 'Song ${from + i}',
-              artist: 'Artist',
-              reason: 'reason ${from + i}',
-            ),
-            track: Track(
-              id: TrackId('wy', '${from + i}'),
-              title: 'Song ${from + i}',
-              artists: const [Artist(name: 'Artist')],
-              duration: const Duration(seconds: 100),
-              origin: TrackOrigin.builtin,
-            ),
-            sourceName: '网易云音乐',
-          ),
-      ],
-      unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
-      generatedAt: DateTime.now(),
-    );
+  items: [
+    for (var i = 0; i < count; i++)
+      ResolvedRecommendation(
+        source: AiRecommendation(
+          title: 'Song ${from + i}',
+          artist: 'Artist',
+          reason: 'reason ${from + i}',
+        ),
+        track: Track(
+          id: TrackId('wy', '${from + i}'),
+          title: 'Song ${from + i}',
+          artists: const [Artist(name: 'Artist')],
+          duration: const Duration(seconds: 100),
+          origin: TrackOrigin.builtin,
+        ),
+        sourceName: '网易云音乐',
+      ),
+  ],
+  unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
+  generatedAt: DateTime.now(),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,19 +54,21 @@ void main() {
   Future<void> pumpProvider() async {
     final prefs = await SharedPreferences.getInstance();
     await AiSettingsStore(
-            settings:
-                testSettingsRegistry(preferences: prefs, secrets: secrets))
-        .saveConfig(const LlmConfig(
-      baseUrl: 'https://api.example.com/v1',
-      apiKey: 'sk-test',
-      model: 'm',
-    ));
+      settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+    ).saveConfig(
+      const LlmConfig(
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-test',
+        model: 'm',
+      ),
+    );
     provider = AiDjProvider(
       playbackProvider: playbackProvider,
       libraryProvider: libraryProvider,
       recommendationService: generator,
       settingsStore: AiSettingsStore(
-          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ),
     );
     await provider.init();
   }
@@ -83,7 +85,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<AiDjProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(
-              value: playbackProvider),
+            value: playbackProvider,
+          ),
           ChangeNotifierProvider<LibraryProvider>.value(value: libraryProvider),
         ],
         child: M3EMaterialApp(
@@ -128,11 +131,7 @@ void main() {
       find.descendant(of: card(id), matching: find.text(label)).hitTestable();
 
   /// 可见动作直接点；被收进溢出菜单的动作先展开菜单。
-  Future<void> tapAction(
-    WidgetTester tester,
-    String id,
-    String label,
-  ) async {
+  Future<void> tapAction(WidgetTester tester, String id, String label) async {
     var target = action(id, label);
     if (target.evaluate().isEmpty) {
       final overflow = find.descendant(
@@ -178,10 +177,14 @@ void main() {
   testWidgets('批次卡片：时间 / 首数 / 未解析 / 来源 / 当前徽标 / 偏好摘要', (tester) async {
     await pumpWithBatches(tester);
 
-    expect(find.byKey(Key('aiDjHistoryEntry_${provider.historyEntries[0].id}')),
-        findsOneWidget);
-    expect(find.byKey(Key('aiDjHistoryEntry_${provider.historyEntries[1].id}')),
-        findsOneWidget);
+    expect(
+      find.byKey(Key('aiDjHistoryEntry_${provider.historyEntries[0].id}')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(Key('aiDjHistoryEntry_${provider.historyEntries[1].id}')),
+      findsOneWidget,
+    );
     expect(find.text('Current'), findsOneWidget);
     expect(find.textContaining('3 tracks'), findsNWidgets(2));
     expect(find.textContaining('1 not found'), findsNWidgets(2));
@@ -254,8 +257,11 @@ void main() {
     await settleAction(tester);
 
     expect(provider.activeBatchId, oldId);
-    expect(backend.lastRequest?.tracks.map((track) => track.id.id).toList(),
-        ['0', '1', '2']);
+    expect(backend.lastRequest?.tracks.map((track) => track.id.id).toList(), [
+      '0',
+      '1',
+      '2',
+    ]);
     expect(backend.lastRequest?.context?.name, kAiDjContextName);
   });
 
@@ -269,8 +275,11 @@ void main() {
     await tapAction(tester, oldId, 'Add to queue');
     await settleAction(tester);
 
-    expect(backend.lastEnqueued?.map((track) => track.id.id).toList(),
-        ['0', '1', '2']);
+    expect(backend.lastEnqueued?.map((track) => track.id.id).toList(), [
+      '0',
+      '1',
+      '2',
+    ]);
     expect(provider.activeBatchId, activeId);
   });
 

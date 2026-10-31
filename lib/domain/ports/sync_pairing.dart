@@ -50,10 +50,7 @@ abstract interface class SyncPairingPort {
   ///   [SyncPairingOutcome.accepted]；超时返回
   ///   [SyncPairingOutcome.unavailable]（已接受但对方还没完成，请求仍可在
   ///   TTL 内完成），过期 / 失败分别返回 expired / unavailable。
-  Future<SyncPairingOutcome> respond(
-    String requestId, {
-    required bool accept,
-  });
+  Future<SyncPairingOutcome> respond(String requestId, {required bool accept});
 
   /// 取消发起方尚未完成的尝试（本地动作，不再等待对端）。
   Future<void> cancelPairing(String requestId);

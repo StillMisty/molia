@@ -10,6 +10,7 @@ import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../support/settings_test_support.dart';
 
 /// 调度：启用/停用生命周期、行变化去重、自动取词、控制条动作分发。
@@ -17,21 +18,21 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   Track track() => Track(
-        id: TrackId('fake', '1'),
-        title: '歌名',
-        artists: const [Artist(name: '歌手')],
-        origin: TrackOrigin.lx,
-        payload: const {'id': '1'},
-      );
+    id: TrackId('fake', '1'),
+    title: '歌名',
+    artists: const [Artist(name: '歌手')],
+    origin: TrackOrigin.lx,
+    payload: const {'id': '1'},
+  );
 
   LyricsState readyState() => LyricsState(
-        trackId: 'fake:1',
-        status: LyricsStatus.ready,
-        lines: const [
-          LyricLine(Duration.zero, 'A'),
-          LyricLine(Duration(seconds: 5), 'B'),
-        ],
-      );
+    trackId: 'fake:1',
+    status: LyricsStatus.ready,
+    lines: const [
+      LyricLine(Duration.zero, 'A'),
+      LyricLine(Duration(seconds: 5), 'B'),
+    ],
+  );
 
   test('启用时输出启用、行变化去重、关闭时 clear', () async {
     SharedPreferences.setMockInitialValues({});
@@ -55,8 +56,11 @@ void main() {
 
     provider.updatePosition(const Duration(seconds: 1));
     await pumpEventQueue();
-    expect(output.applied.length, baseline + 1,
-        reason: '位置变化要转发给输出（逐字渐染的进度来源）');
+    expect(
+      output.applied.length,
+      baseline + 1,
+      reason: '位置变化要转发给输出（逐字渐染的进度来源）',
+    );
     expect(output.applied.last.line, 'A');
     expect(output.applied.last.positionMs, 1000);
 
@@ -170,33 +174,44 @@ void main() {
     final settings = LyricsDisplaySettings(settings: testSettingsRegistry());
     await settings.setDesktopEnabled(true);
     final output = _FakeOutput(LyricsOutputIds.desktop);
-    final provider =
-        LyricsDisplayProvider(settings: settings, outputs: [output]);
+    final provider = LyricsDisplayProvider(
+      settings: settings,
+      outputs: [output],
+    );
     await pumpEventQueue();
 
     provider.syncPlayback(PlaybackSnapshot(current: track(), isPlaying: true));
-    provider.syncLyrics(LyricsState(
-      trackId: 'fake:1',
-      status: LyricsStatus.ready,
-      lines: const [
-        LyricLine(Duration.zero, 'A', words: [
-          LyricWord(
-            start: Duration(milliseconds: 100),
-            end: Duration(milliseconds: 600),
-            text: 'A',
+    provider.syncLyrics(
+      LyricsState(
+        trackId: 'fake:1',
+        status: LyricsStatus.ready,
+        lines: const [
+          LyricLine(
+            Duration.zero,
+            'A',
+            words: [
+              LyricWord(
+                start: Duration(milliseconds: 100),
+                end: Duration(milliseconds: 600),
+                text: 'A',
+              ),
+            ],
           ),
-        ]),
-        LyricLine(Duration(seconds: 5), 'B'),
-      ],
-    ));
+          LyricLine(Duration(seconds: 5), 'B'),
+        ],
+      ),
+    );
     await pumpEventQueue();
 
     final before = DateTime.now().millisecondsSinceEpoch;
     provider.updatePosition(const Duration(milliseconds: 300));
     await pumpEventQueue();
     final follows = output.applied.last;
-    expect(follows.positionAtEpochMs, greaterThanOrEqualTo(before),
-        reason: '位置生效时刻随投送下发（输出端据此补偿传输延迟）');
+    expect(
+      follows.positionAtEpochMs,
+      greaterThanOrEqualTo(before),
+      reason: '位置生效时刻随投送下发（输出端据此补偿传输延迟）',
+    );
     expect(follows.scrollFollowsSinging, isTrue);
     expect(follows.lineStartMs, 0);
     expect(follows.lineEndMs, 5000, reason: '跟随演唱用行时间轴（下一行时间戳）');
@@ -210,20 +225,26 @@ void main() {
 
     // 脏词轴：末词越过切行时刻（9s > 下一行 5s）时，匀速跨度夹到行尾——
     // 否则切行时还没滚完，行尾永远看不到。
-    provider.syncLyrics(LyricsState(
-      trackId: 'fake:1',
-      status: LyricsStatus.ready,
-      lines: const [
-        LyricLine(Duration.zero, 'A', words: [
-          LyricWord(
-            start: Duration(milliseconds: 100),
-            end: Duration(milliseconds: 9000),
-            text: 'A',
+    provider.syncLyrics(
+      LyricsState(
+        trackId: 'fake:1',
+        status: LyricsStatus.ready,
+        lines: const [
+          LyricLine(
+            Duration.zero,
+            'A',
+            words: [
+              LyricWord(
+                start: Duration(milliseconds: 100),
+                end: Duration(milliseconds: 9000),
+                text: 'A',
+              ),
+            ],
           ),
-        ]),
-        LyricLine(Duration(seconds: 5), 'B'),
-      ],
-    ));
+          LyricLine(Duration(seconds: 5), 'B'),
+        ],
+      ),
+    );
     await pumpEventQueue();
     final clamped = output.applied.last;
     expect(clamped.scrollFollowsSinging, isFalse);
@@ -240,8 +261,10 @@ void main() {
       LyricsOutputIds.media,
       capability: LyricsOutputCapability.unsupported,
     );
-    final provider =
-        LyricsDisplayProvider(settings: settings, outputs: [output]);
+    final provider = LyricsDisplayProvider(
+      settings: settings,
+      outputs: [output],
+    );
     await pumpEventQueue();
     expect(
       provider.capabilityOf(LyricsOutputIds.media),

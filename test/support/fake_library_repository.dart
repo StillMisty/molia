@@ -49,15 +49,17 @@ class FakeLibraryRepository implements LibraryStore {
   @override
   Future<void> addHistoryEntry(PlayHistoryEntry entry) async {
     _history.removeWhere(
-        (e) => e.sourceKey == entry.sourceKey && e.songId == entry.songId);
+      (e) => e.sourceKey == entry.sourceKey && e.songId == entry.songId,
+    );
     _history.add(entry);
     _history.sort((a, b) => b.playedAt.compareTo(a.playedAt));
     _changed(const LibraryChange.history());
   }
 
   @override
-  Future<List<PlayHistoryEntry>> listHistory(
-      {int limit = kHistoryLimit}) async {
+  Future<List<PlayHistoryEntry>> listHistory({
+    int limit = kHistoryLimit,
+  }) async {
     if (failReads) throw StateError('history read failed');
     return _history.take(limit).toList();
   }
@@ -71,9 +73,7 @@ class FakeLibraryRepository implements LibraryStore {
   @override
   Future<int> deleteHistoryEntries(List<TrackKey> keys) async {
     if (keys.isEmpty) return 0;
-    final known = {
-      for (final key in keys) '${key.sourceKey}:${key.songId}',
-    };
+    final known = {for (final key in keys) '${key.sourceKey}:${key.songId}'};
     final before = _history.length;
     _history.removeWhere((e) => known.contains('${e.sourceKey}:${e.songId}'));
     final removed = before - _history.length;
@@ -87,7 +87,8 @@ class FakeLibraryRepository implements LibraryStore {
     if (entries.isEmpty) return 0;
     for (final entry in entries) {
       _history.removeWhere(
-          (e) => e.sourceKey == entry.sourceKey && e.songId == entry.songId);
+        (e) => e.sourceKey == entry.sourceKey && e.songId == entry.songId,
+      );
       _history.add(entry);
     }
     _history.sort((a, b) => b.playedAt.compareTo(a.playedAt));
@@ -99,10 +100,7 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
-  Future<int> addHistoryTracks(
-    List<PlaylistTrack> tracks, {
-    int? playedAt,
-  }) {
+  Future<int> addHistoryTracks(List<PlaylistTrack> tracks, {int? playedAt}) {
     if (tracks.isEmpty) return Future.value(0);
     final base = playedAt ?? DateTime.now().millisecondsSinceEpoch;
     return addHistoryEntries([
@@ -199,8 +197,9 @@ class FakeLibraryRepository implements LibraryStore {
     bool favoriteChange = false,
   }) async {
     final list = _tracks.putIfAbsent(playlistId, () => []);
-    final exists = list
-        .any((t) => t.sourceKey == track.sourceKey && t.songId == track.songId);
+    final exists = list.any(
+      (t) => t.sourceKey == track.sourceKey && t.songId == track.songId,
+    );
     if (exists) return false;
     list.add(track);
     _syncTrackCount(playlistId);
@@ -236,17 +235,17 @@ class FakeLibraryRepository implements LibraryStore {
     if (keys.isEmpty) return 0;
     final list = _tracks[playlistId];
     if (list == null) return 0;
-    final known = {
-      for (final key in keys) '${key.sourceKey}:${key.songId}',
-    };
+    final known = {for (final key in keys) '${key.sourceKey}:${key.songId}'};
     final before = list.length;
     list.removeWhere((t) => known.contains('${t.sourceKey}:${t.songId}'));
     final removed = before - list.length;
     if (removed > 0) {
       _syncTrackCount(playlistId);
-      _changed(favoriteChange
-          ? const LibraryChange.favorites()
-          : LibraryChange.playlistTracks(playlistId));
+      _changed(
+        favoriteChange
+            ? const LibraryChange.favorites()
+            : LibraryChange.playlistTracks(playlistId),
+      );
     }
     return removed;
   }
@@ -276,7 +275,8 @@ class FakeLibraryRepository implements LibraryStore {
     final inserted = <PlaylistTrack>[];
     for (final track in tracks) {
       final exists = list.any(
-          (t) => t.sourceKey == track.sourceKey && t.songId == track.songId);
+        (t) => t.sourceKey == track.sourceKey && t.songId == track.songId,
+      );
       if (exists) continue;
       final row = PlaylistTrack(
         playlistId: playlistId,
@@ -296,9 +296,11 @@ class FakeLibraryRepository implements LibraryStore {
     }
     if (inserted.isNotEmpty) {
       _syncTrackCount(playlistId);
-      _changed(favoriteChange
-          ? const LibraryChange.favorites()
-          : LibraryChange.playlistTracks(playlistId));
+      _changed(
+        favoriteChange
+            ? const LibraryChange.favorites()
+            : LibraryChange.playlistTracks(playlistId),
+      );
     }
     return (added: inserted.length, inserted: inserted);
   }
@@ -361,16 +363,20 @@ class FakeLibraryRepository implements LibraryStore {
     final list = _tracks[playlistId];
     if (list == null) return false;
     final oldIndex = list.indexWhere(
-        (t) => t.sourceKey == oldKey.sourceKey && t.songId == oldKey.songId);
+      (t) => t.sourceKey == oldKey.sourceKey && t.songId == oldKey.songId,
+    );
     if (oldIndex < 0) return false;
     final old = list[oldIndex];
-    final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+    final sameKey =
+        replacement.sourceKey == oldKey.sourceKey &&
         replacement.songId == oldKey.songId;
     if (!sameKey) {
       // 去重：目标键已存在时移除（身份与真实仓库事务一致）。
-      list.removeWhere((t) =>
-          t.sourceKey == replacement.sourceKey &&
-          t.songId == replacement.songId);
+      list.removeWhere(
+        (t) =>
+            t.sourceKey == replacement.sourceKey &&
+            t.songId == replacement.songId,
+      );
     }
     // 去重可能改动了旧行下标：按对象身份重新定位，保持原位置。
     final insertIndex = list.indexOf(old);
@@ -392,9 +398,11 @@ class FakeLibraryRepository implements LibraryStore {
       _favorites.add('${replacement.sourceKey}:${replacement.songId}');
     }
     _syncTrackCount(playlistId);
-    _changed(favoriteChange
-        ? const LibraryChange.favorites()
-        : LibraryChange.playlistTracks(playlistId));
+    _changed(
+      favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId),
+    );
     return true;
   }
 
@@ -405,15 +413,19 @@ class FakeLibraryRepository implements LibraryStore {
   ) async {
     if (failHistoryWrites) throw StateError('history write failed');
     final oldIndex = _history.indexWhere(
-        (e) => e.sourceKey == oldKey.sourceKey && e.songId == oldKey.songId);
+      (e) => e.sourceKey == oldKey.sourceKey && e.songId == oldKey.songId,
+    );
     if (oldIndex < 0) return false;
     final old = _history[oldIndex];
-    final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+    final sameKey =
+        replacement.sourceKey == oldKey.sourceKey &&
         replacement.songId == oldKey.songId;
     if (!sameKey) {
-      _history.removeWhere((e) =>
-          e.sourceKey == replacement.sourceKey &&
-          e.songId == replacement.songId);
+      _history.removeWhere(
+        (e) =>
+            e.sourceKey == replacement.sourceKey &&
+            e.songId == replacement.songId,
+      );
     }
     final insertIndex = _history.indexOf(old);
     _history[insertIndex] = PlayHistoryEntry(
@@ -494,11 +506,7 @@ class FakeLibraryRepository implements LibraryStore {
     for (final track in tracks) {
       _favorites.add('${track.sourceKey}:${track.songId}');
     }
-    return addTracksToPlaylist(
-      favoritesId,
-      tracks,
-      favoriteChange: true,
-    );
+    return addTracksToPlaylist(favoritesId, tracks, favoriteChange: true);
   }
 
   @override
@@ -510,18 +518,16 @@ class FakeLibraryRepository implements LibraryStore {
     for (final key in keys) {
       _favorites.remove('${key.sourceKey}:${key.songId}');
     }
-    return removeTracksFromPlaylist(
-      favorites.id,
-      keys,
-      favoriteChange: true,
-    );
+    return removeTracksFromPlaylist(favorites.id, keys, favoriteChange: true);
   }
 
   // .lxmc 导入：复用真实解码器，落库为内存。
 
   @override
-  Future<LxmcImportResult> importLxmcBytes(Uint8List bytes,
-      {String? fileName}) async {
+  Future<LxmcImportResult> importLxmcBytes(
+    Uint8List bytes, {
+    String? fileName,
+  }) async {
     final decoded = decodeLxmcBytes(bytes, fileName: fileName);
     final existing = await findPlaylistByName(decoded.name);
     final playlistId = existing?.id ?? await createPlaylist(decoded.name);
@@ -556,16 +562,16 @@ class FakeLibraryRepository implements LibraryStore {
   }
 
   @override
-  Future<({
-    int playlistId,
-    int added,
-    int total,
-    bool created,
-    List<PlaylistTrack> rows,
-  })> importTracks(
-    String name,
-    List<PlaylistTrack> tracks,
-  ) async {
+  Future<
+    ({
+      int playlistId,
+      int added,
+      int total,
+      bool created,
+      List<PlaylistTrack> rows,
+    })
+  >
+  importTracks(String name, List<PlaylistTrack> tracks) async {
     if (tracks.isEmpty) {
       return (
         playlistId: -1,

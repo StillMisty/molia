@@ -34,10 +34,9 @@ Future<void> addDiscoverTrackToPlaylist(
   DiscoverTrack track,
 ) {
   final discover = context.read<DiscoverProvider>();
-  return const TrackHandoff().addPlaylistTracksToLibrary(
-    context,
-    [discover.toPlaylistTrack(track)],
-  );
+  return const TrackHandoff().addPlaylistTracksToLibrary(context, [
+    discover.toPlaylistTrack(track),
+  ]);
 }
 
 /// 发现曲目行：点击播放；菜单支持收藏 / 加入列表（[TrackMenuTile] 的
@@ -69,7 +68,13 @@ class DiscoverTrackTile extends StatelessWidget {
     final favorite = context.select<DiscoverProvider, bool>(
       (provider) => provider.isFavorite(track),
     );
+    // 菜单公共动作需要领域 Track 的能力位 / 平台 id；转换与播放同一入口，
+    // 不另造一份映射（payload 只在这里透传，页面仍不读）。
+    final domainTrack = context.read<DiscoverProvider>().domainTracksOf([
+      track,
+    ]).single;
     return TrackMenuTile(
+      track: domainTrack,
       row: TrackRowModel(
         title: track.title,
         artist: track.artist,

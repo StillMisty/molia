@@ -134,35 +134,39 @@ void main() {
     );
     final search = SearchProvider(
       playback,
-      catalogService:
-          searchSource == null ? null : CatalogService(registry: registry),
+      catalogService: searchSource == null
+          ? null
+          : CatalogService(registry: registry),
       sourceRegistry: registry,
     );
     addTearDown(search.dispose);
     configureSearch?.call(search);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
-    final lyricsDisplay =
-        LyricsDisplaySettings(settings: testSettingsRegistry());
+    final lyricsDisplay = LyricsDisplaySettings(
+      settings: testSettingsRegistry(),
+    );
     addTearDown(lyricsDisplay.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: Track(
-        id: const TrackId('fake', 'a'),
-        title: 'Title a',
-        artists: const [Artist(name: 'Artist a')],
-        album: 'Album',
+    backend.emit(
+      BackendSnapshot(
+        current: Track(
+          id: const TrackId('fake', 'a'),
+          title: 'Title a',
+          artists: const [Artist(name: 'Artist a')],
+          album: 'Album',
+          duration: const Duration(seconds: 30),
+          // 不带封面：避免测试触发网络预取/取色。
+          origin: TrackOrigin.lx,
+          payload: const {'id': 'a'},
+        ),
+        queue: const [],
+        currentIndex: 0,
+        isPlaying: false,
+        position: Duration.zero,
         duration: const Duration(seconds: 30),
-        // 不带封面：避免测试触发网络预取/取色。
-        origin: TrackOrigin.lx,
-        payload: const {'id': 'a'},
       ),
-      queue: const [],
-      currentIndex: 0,
-      isPlaying: false,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -218,15 +222,15 @@ void main() {
 
   /// 侧栏条目：标签常显，但用例仍按图标定位（文案变化不影响点击）。
   Finder railItem(IconData outlinedIcon) => find.descendant(
-        of: find.byType(M3ENavigationRail),
-        matching: find.byIcon(outlinedIcon),
-      );
+    of: find.byType(M3ENavigationRail),
+    matching: find.byIcon(outlinedIcon),
+  );
 
   /// 侧栏「正在播放」条目：图标是 [MoliaMark]（描边 / 实心是一对）。
   Finder railPlayerItem() => find.descendant(
-        of: find.byType(M3ENavigationRail),
-        matching: find.byType(MoliaMark),
-      );
+    of: find.byType(M3ENavigationRail),
+    matching: find.byType(MoliaMark),
+  );
 
   /// 点侧栏条目并走完过渡。
   Future<void> tapRailItem(WidgetTester tester, Finder item) async {
@@ -241,8 +245,9 @@ void main() {
       tester.widget<M3ETabs>(playerTabs()).selectedIndex;
 
   Future<void> tapPlayerTab(WidgetTester tester, IconData icon) async {
-    await tester
-        .tap(find.descendant(of: playerTabs(), matching: find.byIcon(icon)));
+    await tester.tap(
+      find.descendant(of: playerTabs(), matching: find.byIcon(icon)),
+    );
     await settleTransition(tester);
   }
 
@@ -301,24 +306,21 @@ void main() {
 
   /// 顶栏搜索用例的假曲目（不带封面：避免测试触发网络预取 / 取色）。
   Track searchTrack(String id) => Track(
-        id: TrackId('kw', id),
-        title: 'Title $id',
-        artists: [Artist(name: 'Artist $id')],
-        album: 'Album',
-        duration: const Duration(minutes: 3, seconds: 5),
-        origin: TrackOrigin.builtin,
-        payload: {'songmid': id},
-      );
+    id: TrackId('kw', id),
+    title: 'Title $id',
+    artists: [Artist(name: 'Artist $id')],
+    album: 'Album',
+    duration: const Duration(minutes: 3, seconds: 5),
+    origin: TrackOrigin.builtin,
+    payload: {'songmid': id},
+  );
 
   /// 装配「已有结果」的顶栏搜索用例：假音源返回两条结果并先提交一次搜索。
   Future<void> pumpSearchShell(WidgetTester tester) async {
     final source = FakeMusicSource('kw');
     source.onSearch = (query) => Future.value(
-          SearchResult(
-            items: [searchTrack('a'), searchTrack('b')],
-            total: 2,
-          ),
-        );
+      SearchResult(items: [searchTrack('a'), searchTrack('b')], total: 2),
+    );
     await pumpShell(
       tester,
       desktopShell: true,
@@ -424,8 +426,9 @@ void main() {
   /// 播放页中心封面最近一层 Opacity 的值（飞行显隐乘在中心层同一条
   /// Opacity 上，不再嵌套第二层）。
   double pageCoverOpacity(WidgetTester tester) {
-    final element =
-        tester.element(find.byKey(PlayerCoverDeck.centerCoverCardKey));
+    final element = tester.element(
+      find.byKey(PlayerCoverDeck.centerCoverCardKey),
+    );
     double? opacity;
     element.visitAncestorElements((ancestor) {
       final widget = ancestor.widget;
@@ -463,8 +466,10 @@ void main() {
       }
       seen = true;
       lastCopy = renderedRect(tester, copy);
-      flightTarget =
-          tester.widget<PlayerMorphFlight>(flight).geometry.pageCover;
+      flightTarget = tester
+          .widget<PlayerMorphFlight>(flight)
+          .geometry
+          .pageCover;
     }
     expect(lastCopy, isNotNull, reason: '前提：进入方向出现了飞行副本');
     await settleTransition(tester);
@@ -539,10 +544,12 @@ void main() {
 
     await tester.tap(railPlayerItem());
     await tester.pump(); // 帧 1：页面落定 + 两端真身收进飞行态
-    expect(find.byType(PlayerMorphFlight), findsNothing,
-        reason: '飞行副本下一帧才挂载（终点锚点先落定）');
-    expect(pageCoverOpacity(tester), 0,
-        reason: '进入首帧页中心必须已经隐藏，不能先在原地亮着等副本');
+    expect(
+      find.byType(PlayerMorphFlight),
+      findsNothing,
+      reason: '飞行副本下一帧才挂载（终点锚点先落定）',
+    );
+    expect(pageCoverOpacity(tester), 0, reason: '进入首帧页中心必须已经隐藏，不能先在原地亮着等副本');
 
     await tester.pump(); // 帧 2：副本接管
     expect(find.byType(PlayerMorphFlight), findsOneWidget);
@@ -555,13 +562,11 @@ void main() {
       final flightGone = find.byType(PlayerMorphFlight).evaluate().isEmpty;
       if (!flightGone) {
         seenFlight = true;
-        expect(pageCoverOpacity(tester), 0,
-            reason: '飞行期间页中心真身保持隐藏');
+        expect(pageCoverOpacity(tester), 0, reason: '飞行期间页中心真身保持隐藏');
         continue;
       }
       if (seenFlight) {
-        expect(pageCoverOpacity(tester), 1,
-            reason: '副本移除的同一帧真身必须亮出（无尾段亮度下陷）');
+        expect(pageCoverOpacity(tester), 1, reason: '副本移除的同一帧真身必须亮出（无尾段亮度下陷）');
         landed = true;
         break;
       }
@@ -576,8 +581,7 @@ void main() {
 
     await tester.tap(railItem(Icons.favorite_border_rounded));
     await tester.pump(); // 帧 1：页面切出 + 页中心立即收起
-    expect(pageCoverOpacity(tester), 0,
-        reason: '离开首帧页中心就应收起，不能等副本飞走才消失');
+    expect(pageCoverOpacity(tester), 0, reason: '离开首帧页中心就应收起，不能等副本飞走才消失');
 
     await tester.pump(); // 帧 2：副本挂载
     expect(find.byType(PlayerMorphFlight), findsOneWidget, reason: '离开方向有飞行副本');
@@ -632,11 +636,7 @@ void main() {
   });
 
   testWidgets('底栏队列入口：窄窗口也始终可用（不再置灰）', (tester) async {
-    await pumpShell(
-      tester,
-      desktopShell: true,
-      size: const Size(900, 900),
-    );
+    await pumpShell(tester, desktopShell: true, size: const Size(900, 900));
     await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
     expect(
       tester
@@ -669,11 +669,7 @@ void main() {
   });
 
   testWidgets('移动骨架不回归：无底栏 Key、底部导航栏仍在', (tester) async {
-    await pumpShell(
-      tester,
-      desktopShell: false,
-      size: const Size(420, 900),
-    );
+    await pumpShell(tester, desktopShell: false, size: const Size(420, 900));
 
     expect(playingBar(), findsNothing);
     expect(find.byType(M3ENavigationBar), findsOneWidget);
@@ -800,11 +796,11 @@ void main() {
   testWidgets('搜索遮罩：结果预览最多 8 行，超出仍显示「查看全部结果」', (tester) async {
     final source = FakeMusicSource('kw');
     source.onSearch = (query) => Future.value(
-          SearchResult(
-            items: [for (var i = 0; i < 12; i++) searchTrack('$i')],
-            total: 12,
-          ),
-        );
+      SearchResult(
+        items: [for (var i = 0; i < 12; i++) searchTrack('$i')],
+        total: 12,
+      ),
+    );
     await pumpShell(
       tester,
       desktopShell: true,
@@ -966,13 +962,15 @@ void main() {
     expect(harness.backend.calls, contains('play'));
 
     // 播放中再按 → 暂停。
-    harness.backend.emit(BackendSnapshot(
-      current: harness.playback.snapshot.current,
-      queue: const [],
-      currentIndex: 0,
-      isPlaying: true,
-      duration: const Duration(seconds: 30),
-    ));
+    harness.backend.emit(
+      BackendSnapshot(
+        current: harness.playback.snapshot.current,
+        queue: const [],
+        currentIndex: 0,
+        isPlaying: true,
+        duration: const Duration(seconds: 30),
+      ),
+    );
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await tester.pump();

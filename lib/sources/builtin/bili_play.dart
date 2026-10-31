@@ -44,23 +44,13 @@ class BiliPlay {
     _requireIds(bvid, aid);
 
     final cid = await _cidFor(raw, bvid: bvid, aid: aid);
-    final response = await _playUrl(
-      bvid: bvid,
-      aid: aid,
-      cid: cid,
-      fnval: 16,
-    );
+    final response = await _playUrl(bvid: bvid, aid: aid, cid: cid, fnval: 16);
 
     final data = response is Map ? response['data'] : null;
     var audio = _pickDashAudio(data, quality);
     if (audio == null) {
       // 老视频 / 版权限制可能没有 dash：退回 `fnval=1` 的 durl 单文件。
-      final fallback = await _playUrl(
-        bvid: bvid,
-        aid: aid,
-        cid: cid,
-        fnval: 1,
-      );
+      final fallback = await _playUrl(bvid: bvid, aid: aid, cid: cid, fnval: 1);
       final fallbackData = fallback is Map ? fallback['data'] : null;
       audio = _pickDurlAudio(fallbackData);
     }
@@ -100,9 +90,9 @@ class BiliPlay {
   }
 
   static ({String bvid, String aid}) _idsOf(Map<String, dynamic> raw) => (
-        bvid: biliRawText(raw['bvid']),
-        aid: biliRawText(raw['aid'] ?? raw['avid']),
-      );
+    bvid: biliRawText(raw['bvid']),
+    aid: biliRawText(raw['aid'] ?? raw['avid']),
+  );
 
   static void _requireIds(String bvid, String aid) {
     if (bvid.isEmpty && aid.isEmpty) {
@@ -202,8 +192,9 @@ class BiliPlay {
   ///
   /// durl（`fnval=1`）文件只有 `url` 字段，和 dash 的 `baseUrl` 不是同一命名。
   static String? _audioUrlOf(Map item) {
-    final base =
-        biliRawText(item['baseUrl'] ?? item['base_url'] ?? item['url']);
+    final base = biliRawText(
+      item['baseUrl'] ?? item['base_url'] ?? item['url'],
+    );
     if (base.isNotEmpty) return base;
     final backup = item['backupUrl'] ?? item['backup_url'];
     if (backup is List) {

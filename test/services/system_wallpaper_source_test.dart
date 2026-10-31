@@ -13,16 +13,15 @@ void main() {
     Set<String> existing = const <String>{},
     Map<String, String> environment = const <String, String>{},
     List<String>? requested,
-  }) =>
-      SystemWallpaperSource(
-        platform: platform,
-        environment: environment,
-        readGsettings: (key) async {
-          requested?.add(key);
-          return gsettings[key];
-        },
-        fileExists: (path) async => existing.contains(path),
-      );
+  }) => SystemWallpaperSource(
+    platform: platform,
+    environment: environment,
+    readGsettings: (key) async {
+      requested?.add(key);
+      return gsettings[key];
+    },
+    fileExists: (path) async => existing.contains(path),
+  );
 
   group('SystemWallpaperSource.parseGsettingsValue', () {
     test('去 GVariant 引号与类型注解，percent-escape 解码为路径', () {
@@ -51,8 +50,10 @@ void main() {
         isNull,
       );
       expect(SystemWallpaperSource.parseGsettingsValue('@as []'), isNull);
-      expect(SystemWallpaperSource.parseGsettingsValue('relative/path.jpg'),
-          isNull);
+      expect(
+        SystemWallpaperSource.parseGsettingsValue('relative/path.jpg'),
+        isNull,
+      );
     });
   });
 
@@ -117,9 +118,8 @@ void main() {
 
     test('值合法但文件缺失 / 值非法 / 非零退出 → null', () async {
       expect(
-        await source(
-          gsettings: {'picture-uri': "'file:///home/u/gone.jpg'"},
-        ).resolvePath(Brightness.light),
+        await source(gsettings: {'picture-uri': "'file:///home/u/gone.jpg'"})
+            .resolvePath(Brightness.light),
         isNull,
         reason: '存在性校验失败',
       );
@@ -171,8 +171,10 @@ void main() {
 
     test('APPDATA 缺失 / 文件缺失 → null', () async {
       expect(
-        await source(platform: TargetPlatform.windows, existing: {wallpaper})
-            .resolvePath(Brightness.light),
+        await source(
+          platform: TargetPlatform.windows,
+          existing: {wallpaper},
+        ).resolvePath(Brightness.light),
         isNull,
       );
       expect(

@@ -14,8 +14,8 @@ enum LibraryAddPosition {
   /// 解析持久化值：未知值（同步来的新值 / 损坏数据）回退默认的开头。
   static LibraryAddPosition parse(String? raw) =>
       raw == LibraryAddPosition.bottom.name
-          ? LibraryAddPosition.bottom
-          : LibraryAddPosition.top;
+      ? LibraryAddPosition.bottom
+      : LibraryAddPosition.top;
 }
 
 /// 加入位置偏好：`设置 › 播放`，**默认放列表开头**（跟人走）。
@@ -29,8 +29,9 @@ class LibraryAddSettings extends ChangeNotifier {
 
   final SettingsAccess _settings;
 
-  LibraryAddPosition _position =
-      LibraryAddPosition.parse(kLibraryAddPosition.defaultValue);
+  LibraryAddPosition _position = LibraryAddPosition.parse(
+    kLibraryAddPosition.defaultValue,
+  );
   LibraryAddPosition get position => _position;
 
   /// 写入网关的布尔视图：true = 新曲目排到列表开头。

@@ -29,8 +29,11 @@ class NetEaseProvider extends LyricProvider {
   }
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     try {
       final keyword = '$title $artist';
       final tracks = await WySearch.search(keyword, limit: limit);

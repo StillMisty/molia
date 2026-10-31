@@ -65,8 +65,9 @@ class _SearchSectionState extends State<SearchSection> {
     return Consumer<SearchProvider>(
       builder: (context, searchProvider, child) {
         final l10n = _l10n(context);
-        final horizontalPadding =
-            context.layoutType(ResponsivePageType.browse).horizontalPadding;
+        final horizontalPadding = context
+            .layoutType(ResponsivePageType.browse)
+            .horizontalPadding;
         final results = searchProvider.filteredResults;
         final artistResults = searchProvider.artistResults;
         final isArtistKind = searchProvider.searchKind == SearchKind.artist;
@@ -75,8 +76,8 @@ class _SearchSectionState extends State<SearchSection> {
         final itemCount = isArtistKind
             ? artistResults.length
             : isLyricKind
-                ? lyricResults.length
-                : results.length;
+            ? lyricResults.length
+            : results.length;
         final failure = searchProvider.failure;
         final kinds = searchProvider.supportedSearchKinds;
         // 宽屏表格列只在单曲段生效：歌手 / 歌词段的行结构不同（头像行 /
@@ -93,7 +94,11 @@ class _SearchSectionState extends State<SearchSection> {
             if (searchProvider.isSearchActive && kinds.length > 1)
               Padding(
                 padding: EdgeInsets.fromLTRB(
-                    horizontalPadding, 0, horizontalPadding, 8),
+                  horizontalPadding,
+                  0,
+                  horizontalPadding,
+                  8,
+                ),
                 child: _buildKindSwitch(l10n, searchProvider, kinds),
               ),
 
@@ -140,7 +145,8 @@ class _SearchSectionState extends State<SearchSection> {
                       else if (isArtistKind)
                         SliverPadding(
                           padding: EdgeInsets.symmetric(
-                              horizontal: horizontalPadding),
+                            horizontal: horizontalPadding,
+                          ),
                           sliver: _ArtistResultsList(
                             items: artistResults,
                             onItemTap: (artist) =>
@@ -150,7 +156,8 @@ class _SearchSectionState extends State<SearchSection> {
                       else
                         SliverPadding(
                           padding: EdgeInsets.symmetric(
-                              horizontal: horizontalPadding),
+                            horizontal: horizontalPadding,
+                          ),
                           sliver: _SearchResultsList(
                             // 歌词类型：行的 [SearchRow.lyricSnippet] 做副标题（命中片段）。
                             items: isLyricKind ? lyricResults : results,
@@ -200,10 +207,7 @@ class _SearchSectionState extends State<SearchSection> {
       child: M3ESegmentedButton<SearchKind>(
         segments: [
           for (final kind in kinds)
-            M3ESegment<SearchKind>(
-              value: kind,
-              label: _kindLabel(l10n, kind),
-            ),
+            M3ESegment<SearchKind>(value: kind, label: _kindLabel(l10n, kind)),
         ],
         selected: {searchProvider.searchKind},
         onSelectionChanged: (selection) {
@@ -217,14 +221,16 @@ class _SearchSectionState extends State<SearchSection> {
   }
 
   String _kindLabel(AppLocalizations l10n, SearchKind kind) => switch (kind) {
-        SearchKind.song => l10n.searchKindSongs,
-        SearchKind.artist => l10n.searchKindArtists,
-        SearchKind.lyric => l10n.searchKindLyrics,
-      };
+    SearchKind.song => l10n.searchKindSongs,
+    SearchKind.artist => l10n.searchKindArtists,
+    SearchKind.lyric => l10n.searchKindLyrics,
+  };
 
   /// 打开歌手页（歌手条目 → 平台内歌手 id）。
   Future<void> _openArtist(
-      SearchProvider searchProvider, ArtistSummary artist) {
+    SearchProvider searchProvider,
+    ArtistSummary artist,
+  ) {
     return showArtistPage(
       context,
       searchProvider.sourceKey,
@@ -365,7 +371,7 @@ class _ArtistResultsList extends StatelessWidget {
     final gap = ArtistRow.gapOf(context);
     return SliverFixedExtentList.builder(
       // 行高 + 行距：固定 extent，长列表滚动条拖动一次定位。
-      itemExtent: ArtistRow.extent + gap,
+      itemExtent: ArtistRow.extentOf(context) + gap,
       itemCount: items.length,
       itemBuilder: (context, index) {
         final artist = items[index];
@@ -483,7 +489,8 @@ class _SearchResultTile extends StatelessWidget {
     final actions = trackRowActionMenuForTrack(context, row.track);
     // 歌手链接能力位（同一平台固定）：内置平台为真时逐个歌手名可点。
     final sourceKey = row.id.sourceKey;
-    final artistTapsEnabled = sourceKey.isNotEmpty &&
+    final artistTapsEnabled =
+        sourceKey.isNotEmpty &&
         context.select<SourceRegistry?, bool>(
           (registry) =>
               registry?.byKey(sourceKey)?.capabilities.artist ?? false,
@@ -548,19 +555,16 @@ class _SearchResultTile extends StatelessWidget {
       if (name.isEmpty) continue;
       final id = artist.id ?? '';
       if (id.isNotEmpty) hasId = true;
-      links.add(TrackRowArtist(
-        name: name,
-        onTap: id.isEmpty
-            ? null
-            : () => unawaited(
-                  showArtistPage(
-                    context,
-                    sourceKey,
-                    id,
-                    fallbackName: name,
-                  ),
+      links.add(
+        TrackRowArtist(
+          name: name,
+          onTap: id.isEmpty
+              ? null
+              : () => unawaited(
+                  showArtistPage(context, sourceKey, id, fallbackName: name),
                 ),
-      ));
+        ),
+      );
     }
     // 没有任何一位带 id 时保持整串纯文本（避免半可点半不可点的割裂行）。
     return hasId ? links : null;

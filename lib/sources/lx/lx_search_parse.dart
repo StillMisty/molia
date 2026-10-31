@@ -19,7 +19,8 @@ SourceSearchResult parseLxSearchResult(
   if (data is List) {
     rawList = data;
   } else if (data is Map) {
-    final candidate = data['list'] ??
+    final candidate =
+        data['list'] ??
         data['data'] ??
         data['songs'] ??
         data['result'] ??
@@ -28,29 +29,34 @@ SourceSearchResult parseLxSearchResult(
       rawList = candidate;
     } else if (candidate is Map) {
       // 兼容 { data: { list: [...], total: n } } 之类的两层结构
-      final nested = candidate['list'] ??
+      final nested =
+          candidate['list'] ??
           candidate['data'] ??
           candidate['songs'] ??
           candidate['result'] ??
           candidate['results'];
       rawList = nested is List ? nested : const [];
-      total = parseSourceCount(candidate['total'] ??
-          candidate['totalCount'] ??
-          candidate['total_count']);
-      isEnd = parseSourceBool(candidate['isEnd'] ??
-          candidate['is_end'] ??
-          candidate['end'] ??
-          candidate['noMore']);
+      total = parseSourceCount(
+        candidate['total'] ??
+            candidate['totalCount'] ??
+            candidate['total_count'],
+      );
+      isEnd = parseSourceBool(
+        candidate['isEnd'] ??
+            candidate['is_end'] ??
+            candidate['end'] ??
+            candidate['noMore'],
+      );
     } else {
       rawList = const [];
     }
 
     total ??= parseSourceCount(
-        data['total'] ?? data['totalCount'] ?? data['total_count']);
-    isEnd ??= parseSourceBool(data['isEnd'] ??
-        data['is_end'] ??
-        data['end'] ??
-        data['noMore']);
+      data['total'] ?? data['totalCount'] ?? data['total_count'],
+    );
+    isEnd ??= parseSourceBool(
+      data['isEnd'] ?? data['is_end'] ?? data['end'] ?? data['noMore'],
+    );
     if (isEnd == null) {
       // hasMore 语义与 isEnd 相反
       final hasMore = parseSourceBool(data['hasMore'] ?? data['has_more']);
@@ -67,16 +73,17 @@ SourceSearchResult parseLxSearchResult(
         (item['name'] ?? item['title'] ?? item['songName'])?.toString() ?? '';
     if (title.trim().isEmpty) continue;
 
-    final artist = (item['singer'] ??
-            item['artist'] ??
-            item['artists'] ??
-            item['singerName'])
-        ?.toString() ??
+    final artist =
+        (item['singer'] ??
+                item['artist'] ??
+                item['artists'] ??
+                item['singerName'])
+            ?.toString() ??
         '';
     final album =
         (item['albumName'] ?? item['album'] ?? item['album_name'])
-                ?.toString() ??
-            '';
+            ?.toString() ??
+        '';
     final cover =
         (item['img'] ?? item['pic'] ?? item['cover'] ?? item['picUrl'])
             ?.toString();
@@ -95,16 +102,18 @@ SourceSearchResult parseLxSearchResult(
 
     final raw = item.map((key, value) => MapEntry(key.toString(), value));
     final rawSource = raw['source']?.toString();
-    tracks.add(SourceTrack(
-      sourceKey: sourceKey,
-      origin: 'lx',
-      title: title,
-      artist: artist,
-      album: album,
-      coverUrl: (cover?.isNotEmpty ?? false) ? cover : null,
-      duration: duration,
-      raw: rawSource == null ? {...raw, 'source': sourceKey} : raw,
-    ));
+    tracks.add(
+      SourceTrack(
+        sourceKey: sourceKey,
+        origin: 'lx',
+        title: title,
+        artist: artist,
+        album: album,
+        coverUrl: (cover?.isNotEmpty ?? false) ? cover : null,
+        duration: duration,
+        raw: rawSource == null ? {...raw, 'source': sourceKey} : raw,
+      ),
+    );
   }
   return SourceSearchResult.fromPage(
     tracks: tracks,

@@ -61,15 +61,17 @@ class FakeDiscoverSource implements DiscoverSource {
   @override
   Future<DiscoverTags> tags() {
     tagCalls++;
-    return _guard(const DiscoverTags(
-      hotTags: [DiscoverTag(id: '华语', name: '华语')],
-      categories: [
-        DiscoverTagCategory(
-          name: '语种',
-          tags: [DiscoverTag(id: '华语', name: '华语')],
-        ),
-      ],
-    ));
+    return _guard(
+      const DiscoverTags(
+        hotTags: [DiscoverTag(id: '华语', name: '华语')],
+        categories: [
+          DiscoverTagCategory(
+            name: '语种',
+            tags: [DiscoverTag(id: '华语', name: '华语')],
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -98,9 +100,7 @@ class FakeDiscoverSource implements DiscoverSource {
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) =>
       _guard(
         DiscoverPlaylistPage(
-          playlists: [
-            DiscoverPlaylist(id: '9', name: '搜索:$keyword'),
-          ],
+          playlists: [DiscoverPlaylist(id: '9', name: '搜索:$keyword')],
           page: page,
           limit: 20,
           total: 1,
@@ -109,11 +109,11 @@ class FakeDiscoverSource implements DiscoverSource {
 
   @override
   Future<DiscoverDetail> playlistDetail(String rawId, int page) => _guard(
-        DiscoverDetail(
-          info: DiscoverPlaylist(id: rawId, name: '歌单详情'),
-          tracks: [track],
-        ),
-      );
+    DiscoverDetail(
+      info: DiscoverPlaylist(id: rawId, name: '歌单详情'),
+      tracks: [track],
+    ),
+  );
 
   @override
   Future<List<String>> hotSearches() {
@@ -128,15 +128,14 @@ SourceTrack fakeSourceTrack({
   String songId = '111',
   String title = '歌曲A',
   Map<String, dynamic>? raw,
-}) =>
-    SourceTrack(
-      sourceKey: sourceKey,
-      origin: 'builtin',
-      title: title,
-      artist: '歌手',
-      album: '专辑',
-      raw: raw ?? {'songmid': songId, 'source': sourceKey},
-    );
+}) => SourceTrack(
+  sourceKey: sourceKey,
+  origin: 'builtin',
+  title: title,
+  artist: '歌手',
+  album: '专辑',
+  raw: raw ?? {'songmid': songId, 'source': sourceKey},
+);
 
 /// 便捷：SourceTrack → DiscoverTrack（与内置平台实现同一映射）。
 DiscoverTrack fakeDiscoverTrack({
@@ -144,12 +143,6 @@ DiscoverTrack fakeDiscoverTrack({
   String songId = '111',
   String title = '歌曲A',
   Map<String, dynamic>? raw,
-}) =>
-    discoverTrackOf(
-      fakeSourceTrack(
-        sourceKey: sourceKey,
-        songId: songId,
-        title: title,
-        raw: raw,
-      ),
-    );
+}) => discoverTrackOf(
+  fakeSourceTrack(sourceKey: sourceKey, songId: songId, title: title, raw: raw),
+);

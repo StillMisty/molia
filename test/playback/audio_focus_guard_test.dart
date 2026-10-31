@@ -40,13 +40,13 @@ class _RecordingService extends LocalPlaybackService {
     Stream<void>? becomingNoisy,
     Stream<AudioDevicesChangedEvent>? devicesChanged,
   }) : super(
-          resolver: (track, {String? quality}) async =>
-              PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
-          // 注入假流：走 `_configureAudioSession` 的守卫装配，不初始化插件会话。
-          audioInterruptions: interruptions,
-          audioBecomingNoisy: becomingNoisy,
-          audioDevicesChanged: devicesChanged,
-        );
+         resolver: (track, {String? quality}) async =>
+             PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
+         // 注入假流：走 `_configureAudioSession` 的守卫装配，不初始化插件会话。
+         audioInterruptions: interruptions,
+         audioBecomingNoisy: becomingNoisy,
+         audioDevicesChanged: devicesChanged,
+       );
 
   int pauseCalls = 0;
 
@@ -57,13 +57,8 @@ class _RecordingService extends LocalPlaybackService {
   }
 }
 
-AudioDevice _device(String id, AudioDeviceType type) => AudioDevice(
-      id: id,
-      name: id,
-      isInput: false,
-      isOutput: true,
-      type: type,
-    );
+AudioDevice _device(String id, AudioDeviceType type) =>
+    AudioDevice(id: id, name: id, isInput: false, isOutput: true, type: type);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -179,8 +174,9 @@ void main() {
       await pumpEventQueue();
       expect(pause.calls, 0);
 
-      replacement
-          .add(AudioInterruptionEvent(true, AudioInterruptionType.pause));
+      replacement.add(
+        AudioInterruptionEvent(true, AudioInterruptionType.pause),
+      );
       await pumpEventQueue();
       expect(pause.calls, 1);
     });
@@ -267,9 +263,7 @@ void main() {
 
       devices.add(
         AudioDevicesChangedEvent(
-          devicesRemoved: {
-            _device('bt', AudioDeviceType.bluetoothA2dp),
-          },
+          devicesRemoved: {_device('bt', AudioDeviceType.bluetoothA2dp)},
         ),
       );
       await pumpEventQueue();
@@ -289,9 +283,7 @@ void main() {
 
       devices.add(
         AudioDevicesChangedEvent(
-          devicesRemoved: {
-            _device('speaker', AudioDeviceType.builtInSpeaker),
-          },
+          devicesRemoved: {_device('speaker', AudioDeviceType.builtInSpeaker)},
         ),
       );
       await pumpEventQueue();

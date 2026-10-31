@@ -28,7 +28,7 @@ class DataSaverService extends ChangeNotifier {
     SharedPreferences? prefs,
     this._cellularProbe,
     this._cellularChanges,
-  })  : _prefsOverride = prefs;
+  }) : _prefsOverride = prefs;
 
   // 持久化键名（设置 UI / 测试共用）
   static const String keyEnabled = 'data_saver_enabled';
@@ -118,7 +118,8 @@ class DataSaverService extends ChangeNotifier {
   Future<void> _startMonitoring() async {
     await refreshConnectivity();
     try {
-      final changes = _cellularChanges ??
+      final changes =
+          _cellularChanges ??
           Connectivity().onConnectivityChanged.map(resultsAreCellular);
       _subscription = changes.listen(
         (value) {

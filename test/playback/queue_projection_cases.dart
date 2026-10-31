@@ -185,6 +185,9 @@ void main() {
       expect(projection.previous, testCase.previous);
       expect(projection.previousOfPrevious, testCase.previousOfPrevious);
       expect(projection.upNext, testCase.upNext);
+      expect(projection.upNextIndices, [
+        for (final id in testCase.upNext) testCase.queue.indexOf(id),
+      ], reason: '队列行编辑必须拿到真实队列下标');
     });
   }
 

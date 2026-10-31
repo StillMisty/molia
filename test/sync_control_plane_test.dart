@@ -44,8 +44,11 @@ void main() {
     expect(control.enabled, isFalse);
     expect(control.deviceId, 'devA');
     expect(control.deviceName, isNotEmpty);
-    expect(control.categories[SyncCategory.covers], isTrue,
-        reason: '自定义封面默认同步');
+    expect(
+      control.categories[SyncCategory.covers],
+      isTrue,
+      reason: '自定义封面默认同步',
+    );
     expect(
       control.categories.values.every((enabled) => enabled),
       isTrue,
@@ -66,32 +69,36 @@ void main() {
 
   test('hasEstablishedGroup：名册非空即成立', () {
     expect(control.hasEstablishedGroup, isFalse);
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: 1,
-      finishedAt: 2,
-      outcome: SyncOutcome.noChanges,
-      peers: [SyncPeerState(deviceId: 'devB')],
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.noChanges,
+        peers: [SyncPeerState(deviceId: 'devB')],
+      ),
+    );
     expect(control.hasEstablishedGroup, isTrue);
   });
 
   test('hasEstablishedGroup：任一路传输成功接触过对端也成立', () {
     expect(control.hasEstablishedGroup, isFalse);
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: 1,
-      finishedAt: 2,
-      outcome: SyncOutcome.ok,
-      transports: [
-        SyncTransportReport(
-          kind: SyncTransportKind.lan,
-          running: true,
-          enabled: true,
-          pulled: 1,
-        ),
-      ],
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.ok,
+        transports: [
+          SyncTransportReport(
+            kind: SyncTransportKind.lan,
+            running: true,
+            enabled: true,
+            pulled: 1,
+          ),
+        ],
+      ),
+    );
     expect(control.transportLastSuccessAt(SyncTransportKind.lan), 2);
     expect(control.hasEstablishedGroup, isTrue);
   });
@@ -101,16 +108,21 @@ void main() {
     expect(control.peers, isEmpty);
     expect(control.transportLastSuccessAt(SyncTransportKind.lan), 0);
 
-    await state.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 41000,
-      probePort: 47825,
-      verifiedAt: 77,
-    ));
+    await state.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.23',
+        httpPort: 41000,
+        probePort: 47825,
+        verifiedAt: 77,
+      ),
+    );
 
-    expect(control.hasEstablishedGroup, isTrue,
-        reason: '配对落端点后、首轮同步前也必须算已有同步组');
+    expect(
+      control.hasEstablishedGroup,
+      isTrue,
+      reason: '配对落端点后、首轮同步前也必须算已有同步组',
+    );
   });
 
   test('init 幂等；写入类操作改状态并通知一次', () async {
@@ -247,13 +259,15 @@ void main() {
   });
 
   test('移除设备与远端清理：只经启用传输动作', () async {
-    state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: const [SyncPeerState(deviceId: 'ghost', name: '幽灵')],
-    ));
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: const [SyncPeerState(deviceId: 'ghost', name: '幽灵')],
+      ),
+    );
     await control.addManualPeer(
       const ManualPeer(host: '192.168.1.23', deviceId: 'ghost'),
     );
@@ -304,28 +318,32 @@ void main() {
   });
 
   test('重置口令：清空旧组观测、保留地址簿，设备必须重新配对', () async {
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.manual,
-      startedAt: 1,
-      finishedAt: 2,
-      outcome: SyncOutcome.ok,
-      peers: [SyncPeerState(deviceId: 'devB', name: '书房')],
-      transports: [
-        SyncTransportReport(
-          kind: SyncTransportKind.lan,
-          running: true,
-          enabled: true,
-          pulled: 1,
-        ),
-      ],
-    ));
-    await state.rememberLanEndpoint(const LanPeerEndpoint(
-      deviceId: 'devB',
-      host: '192.168.1.23',
-      httpPort: 40000,
-      probePort: 47825,
-      verifiedAt: 3,
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.manual,
+        startedAt: 1,
+        finishedAt: 2,
+        outcome: SyncOutcome.ok,
+        peers: [SyncPeerState(deviceId: 'devB', name: '书房')],
+        transports: [
+          SyncTransportReport(
+            kind: SyncTransportKind.lan,
+            running: true,
+            enabled: true,
+            pulled: 1,
+          ),
+        ],
+      ),
+    );
+    await state.rememberLanEndpoint(
+      const LanPeerEndpoint(
+        deviceId: 'devB',
+        host: '192.168.1.23',
+        httpPort: 40000,
+        probePort: 47825,
+        verifiedAt: 3,
+      ),
+    );
     state.markPeerConnectNotified('devB');
     await control.addManualPeer(
       const ManualPeer(host: '192.168.1.23', name: '书房'),
@@ -345,10 +363,16 @@ void main() {
     expect(state.lanEndpoints, isEmpty, reason: '旧端点不再可信');
     expect(control.transportLastSuccessAt(SyncTransportKind.lan), 0);
     expect(state.isPeerConnectNotified('devB'), isFalse);
-    expect(control.hasEstablishedGroup, isFalse,
-        reason: '撤销后必须回到「没有组」，新设备才能加入');
-    expect(control.manualPeers.single.host, '192.168.1.23',
-        reason: '地址簿是用户配置，不是旧组观测');
+    expect(
+      control.hasEstablishedGroup,
+      isFalse,
+      reason: '撤销后必须回到「没有组」，新设备才能加入',
+    );
+    expect(
+      control.manualPeers.single.host,
+      '192.168.1.23',
+      reason: '地址簿是用户配置，不是旧组观测',
+    );
     expect(control.manualPeers.single.name, '书房');
   });
 
@@ -382,7 +406,9 @@ void main() {
     await control.writeWebdavPassword('dav-secret');
     expect(await control.readWebdavPassword(), 'dav-secret');
     expect(
-        secrets.values[SyncStateStore.webdavPasswordSecretKey], 'dav-secret');
+      secrets.values[SyncStateStore.webdavPasswordSecretKey],
+      'dav-secret',
+    );
   });
 
   test('生命周期：只对已启用且实现 SyncLanLifecycle 的传输调用', () async {

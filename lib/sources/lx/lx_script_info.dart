@@ -6,7 +6,8 @@ import 'package:crypto/crypto.dart';
 class LxSourceDecl {
   final String key; // kw / kg / tx / wy / mg / local / 自定义 key
   final String name;
-  final List<String> actions; // musicUrl / lyric / pic / search / musicSearch ...
+  final List<String>
+  actions; // musicUrl / lyric / pic / search / musicSearch ...
   final List<String> qualitys;
 
   const LxSourceDecl({
@@ -43,10 +44,10 @@ class LxSourceDecl {
   bool get canFetchPic => supports('pic');
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'actions': actions,
-        'qualitys': qualitys,
-      };
+    'name': name,
+    'actions': actions,
+    'qualitys': qualitys,
+  };
 }
 
 /// 一个已导入的 LX 音源脚本及其元信息。
@@ -145,25 +146,27 @@ class LxScriptInfo {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'description': description,
-        'version': version,
-        'author': author,
-        'homepage': homepage,
-        'script': script,
-        'importedAt': importedAt,
-        'updateUrl': updateUrl,
-        'sources': sources.map((key, value) => MapEntry(key, value.toJson())),
-      };
+    'id': id,
+    'name': name,
+    'description': description,
+    'version': version,
+    'author': author,
+    'homepage': homepage,
+    'script': script,
+    'importedAt': importedAt,
+    'updateUrl': updateUrl,
+    'sources': sources.map((key, value) => MapEntry(key, value.toJson())),
+  };
 
   factory LxScriptInfo.fromJson(Map<String, dynamic> json) {
     final rawSources = json['sources'];
     final sources = <String, LxSourceDecl>{};
     if (rawSources is Map) {
       for (final entry in rawSources.entries) {
-        sources[entry.key.toString()] =
-            LxSourceDecl.fromJson(entry.key.toString(), entry.value);
+        sources[entry.key.toString()] = LxSourceDecl.fromJson(
+          entry.key.toString(),
+          entry.value,
+        );
       }
     }
     final updateUrl = (json['updateUrl'] as String?)?.trim();

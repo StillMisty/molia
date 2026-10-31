@@ -114,7 +114,8 @@ SyncPullDecision decideSyncPull({
       sameEvidence: false,
     );
   }
-  final upToDate = evidence.headTrusted &&
+  final upToDate =
+      evidence.headTrusted &&
       isPeerUpToDate(cursor: intent.cursor, headSeq: evidence.journalHead);
   final hasToken = evidence.token.isNotEmpty;
   final sameEvidence =

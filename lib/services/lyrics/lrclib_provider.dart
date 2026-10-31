@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:logging/logging.dart';
 
@@ -25,7 +26,11 @@ class LRCLibProvider extends LyricProvider {
   }
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist, {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     final trimmedTitle = title.trim();
     final trimmedArtist = artist.trim();
     if (trimmedTitle.isEmpty && trimmedArtist.isEmpty) {
@@ -33,10 +38,11 @@ class LRCLibProvider extends LyricProvider {
     }
 
     try {
-      final query = [trimmedTitle, trimmedArtist].where((part) => part.isNotEmpty).join(' ');
-      final params = <String, String>{
-        'q': query,
-      };
+      final query = [
+        trimmedTitle,
+        trimmedArtist,
+      ].where((part) => part.isNotEmpty).join(' ');
+      final params = <String, String>{'q': query};
       if (trimmedTitle.isNotEmpty) {
         params['track_name'] = trimmedTitle;
       }
@@ -44,8 +50,11 @@ class LRCLibProvider extends LyricProvider {
         params['artist_name'] = trimmedArtist;
       }
 
-      final uri = Uri.parse('$_baseUrl/api/search').replace(queryParameters: params);
-      final response = await _dio.getUri(uri).timeout(const Duration(seconds: 10));
+      final uri = Uri.parse('$_baseUrl/api/search')
+          .replace(queryParameters: params);
+      final response = await _dio
+          .getUri(uri)
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
         _logger.warning('LRCLIB 搜索请求失败，状态码: ${response.statusCode}');
@@ -71,11 +80,15 @@ class LRCLibProvider extends LyricProvider {
         final trackName = (item['trackName'] as String?)?.trim();
         final artistName = (item['artistName'] as String?)?.trim();
 
-        results.add(SongMatch(
-          songId: id.toString(),
-          title: trackName?.isNotEmpty == true ? trackName! : trimmedTitle,
-          artist: artistName?.isNotEmpty == true ? artistName! : trimmedArtist,
-        ));
+        results.add(
+          SongMatch(
+            songId: id.toString(),
+            title: trackName?.isNotEmpty == true ? trackName! : trimmedTitle,
+            artist: artistName?.isNotEmpty == true
+                ? artistName!
+                : trimmedArtist,
+          ),
+        );
       }
       return results;
     } catch (e, st) {
@@ -88,7 +101,9 @@ class LRCLibProvider extends LyricProvider {
   Future<String?> fetchLyric(String songId) async {
     try {
       final uri = Uri.parse('$_baseUrl/api/get/$songId');
-      final response = await _dio.getUri(uri).timeout(const Duration(seconds: 10));
+      final response = await _dio
+          .getUri(uri)
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
         _logger.warning('LRCLIB 获取歌词失败，状态码: ${response.statusCode}');

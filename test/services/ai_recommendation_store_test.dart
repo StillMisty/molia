@@ -96,27 +96,26 @@ void main() {
     DateTime? generatedAt,
     AiDjOrigin origin = AiDjOrigin.refresh,
     AiPreferences? preferences,
-  }) =>
-      StoredAiBatch(
-        id: id,
-        items: [
-          for (var i = 0; i < count; i++)
-            StoredAiBatchItem(
-              sourceKey: 'wy',
-              songId: '$id-$i',
-              title: 'Song $id-$i',
-              artist: 'Artist',
-              album: '',
-              reason: 'reason',
-              sourceName: '网易云音乐',
-              raw: {'songmid': '$id-$i'},
-            ),
-        ],
-        unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
-        generatedAt: generatedAt ?? now,
-        origin: origin,
-        preferences: preferences,
-      );
+  }) => StoredAiBatch(
+    id: id,
+    items: [
+      for (var i = 0; i < count; i++)
+        StoredAiBatchItem(
+          sourceKey: 'wy',
+          songId: '$id-$i',
+          title: 'Song $id-$i',
+          artist: 'Artist',
+          album: '',
+          reason: 'reason',
+          sourceName: '网易云音乐',
+          raw: {'songmid': '$id-$i'},
+        ),
+    ],
+    unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
+    generatedAt: generatedAt ?? now,
+    origin: origin,
+    preferences: preferences,
+  );
 
   test('索引 + 每批一键：多批保存；active 切换；详情按需加载', () async {
     await store.saveBatch(batch('a'), makeActive: true);

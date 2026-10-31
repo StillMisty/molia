@@ -21,10 +21,8 @@ import '../../domain/models/ai_dj.dart';
 import '../../domain/models/failure.dart';
 
 class LlmClient {
-  LlmClient({
-    Dio? dio,
-    this._timeout = const Duration(seconds: 30),
-  })  : _dio = dio ?? createAppDio();
+  LlmClient({Dio? dio, this._timeout = const Duration(seconds: 30)})
+    : _dio = dio ?? createAppDio();
 
   final Dio _dio;
   final Duration _timeout;
@@ -135,16 +133,16 @@ class LlmClient {
   }) async {
     final uri = chatCompletionsUri(config.baseUrl);
     Map<String, Object?> requestBody({required bool json}) => {
-          'model': config.model.trim(),
-          'messages': [
-            {'role': 'system', 'content': systemPrompt},
-            {'role': 'user', 'content': userPrompt},
-          ],
-          'temperature': temperature,
-          'max_tokens': maxTokens,
-          'stream': false,
-          if (json) 'response_format': const {'type': 'json_object'},
-        };
+      'model': config.model.trim(),
+      'messages': [
+        {'role': 'system', 'content': systemPrompt},
+        {'role': 'user', 'content': userPrompt},
+      ],
+      'temperature': temperature,
+      'max_tokens': maxTokens,
+      'stream': false,
+      if (json) 'response_format': const {'type': 'json_object'},
+    };
     final headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer ${config.apiKey.trim()}',
@@ -155,17 +153,21 @@ class LlmClient {
     Response<dynamic> response;
     try {
       response = await _dio
-          .postUri(uri,
-              data: jsonEncode(requestBody(json: tryJsonMode)),
-              options: Options(headers: headers))
+          .postUri(
+            uri,
+            data: jsonEncode(requestBody(json: tryJsonMode)),
+            options: Options(headers: headers),
+          )
           .timeout(_timeout);
       if (tryJsonMode && response.httpStatus == 400) {
         // 服务商不支持 response_format：退回一次纯提示词约束；成功才记住，
         // 下次同配置不再先发带参数的请求。
         final retry = await _dio
-            .postUri(uri,
-                data: jsonEncode(requestBody(json: false)),
-                options: Options(headers: headers))
+            .postUri(
+              uri,
+              data: jsonEncode(requestBody(json: false)),
+              options: Options(headers: headers),
+            )
             .timeout(_timeout);
         if (retry.httpStatus < 400) {
           _jsonModeUnsupportedKey = configKey;

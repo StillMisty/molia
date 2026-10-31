@@ -5,10 +5,7 @@ import 'dart:async';
 /// [done] 在下载完成、失败或被取消后都会 complete（预取永远不该影响
 /// 播放主流程，调用方不需要区分结果）。
 class AudioPredownloadTask {
-  AudioPredownloadTask({
-    required this.done,
-    required this._onCancel,
-  });
+  AudioPredownloadTask({required this.done, required this._onCancel});
 
   final Future<void> done;
   final void Function() _onCancel;

@@ -8,13 +8,12 @@ void main() {
     String artist = '周杰伦',
     String? album,
     int? seconds,
-  }) =>
-      SongMatchInfo(
-        title: title,
-        artist: artist,
-        album: album,
-        duration: seconds == null ? null : Duration(seconds: seconds),
-      );
+  }) => SongMatchInfo(
+    title: title,
+    artist: artist,
+    album: album,
+    duration: seconds == null ? null : Duration(seconds: seconds),
+  );
 
   test('严格模式：同名 + 歌手包含（阶梯 1）', () {
     final best = pickBestSongMatchBy(
@@ -147,10 +146,20 @@ void main() {
     expect(normalizeSongText("My Song (Live)!"), 'MySongLive');
     expect(sortSingerNames('B&A'), 'A、B');
     expect(sortSingerNames('A/B/C'), 'A、B、C');
-    expect(similarDuration(const Duration(seconds: 200),
-        const Duration(seconds: 205)), isTrue);
-    expect(similarDuration(const Duration(seconds: 200),
-        const Duration(seconds: 206)), isFalse);
+    expect(
+      similarDuration(
+        const Duration(seconds: 200),
+        const Duration(seconds: 205),
+      ),
+      isTrue,
+    );
+    expect(
+      similarDuration(
+        const Duration(seconds: 200),
+        const Duration(seconds: 206),
+      ),
+      isFalse,
+    );
     expect(similarDuration(null, const Duration(seconds: 206)), isTrue);
   });
 }

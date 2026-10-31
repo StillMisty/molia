@@ -26,12 +26,14 @@ Uint8List _png(int shade) {
 
 class _OfflineCacheManager extends CacheManager {
   _OfflineCacheManager()
-      : super(Config(
+    : super(
+        Config(
           'track_artwork_offline',
           repo: NonStoringObjectProvider(),
           fileSystem: MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   @override
   Stream<FileResponse> getFileStream(
@@ -81,16 +83,12 @@ void main() {
   });
 
   Widget host(Track track) => MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: TrackArtwork(
-              track: track,
-              size: 44,
-              artworkCache: artworkCache,
-            ),
-          ),
-        ),
-      );
+    home: Scaffold(
+      body: Center(
+        child: TrackArtwork(track: track, size: 44, artworkCache: artworkCache),
+      ),
+    ),
+  );
 
   AppNetworkImage imageOf(WidgetTester tester) =>
       tester.widget<AppNetworkImage>(find.byType(AppNetworkImage));
@@ -114,11 +112,15 @@ void main() {
 
   testWidgets('默认封面只作为回退：无真实封面时主图为空、回退默认图', (tester) async {
     await tester.runAsync(() => store.setDefaultCover(_png(20)));
-    await tester.pumpWidget(host(const Track(
-      id: TrackId('kw', 'none'),
-      title: 'No artwork',
-      origin: TrackOrigin.builtin,
-    )));
+    await tester.pumpWidget(
+      host(
+        const Track(
+          id: TrackId('kw', 'none'),
+          title: 'No artwork',
+          origin: TrackOrigin.builtin,
+        ),
+      ),
+    );
 
     final image = imageOf(tester);
     expect(image.url, isNull, reason: '默认封面不是真实主图');
@@ -126,11 +128,15 @@ void main() {
   });
 
   testWidgets('默认封面 revision 后回退图立即刷新', (tester) async {
-    await tester.pumpWidget(host(const Track(
-      id: TrackId('kw', 'none'),
-      title: 'No artwork',
-      origin: TrackOrigin.builtin,
-    )));
+    await tester.pumpWidget(
+      host(
+        const Track(
+          id: TrackId('kw', 'none'),
+          title: 'No artwork',
+          origin: TrackOrigin.builtin,
+        ),
+      ),
+    );
     expect(imageOf(tester).fallbackUrl, isNull);
 
     await tester.runAsync(() => store.setDefaultCover(_png(30)));

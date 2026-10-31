@@ -154,7 +154,10 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
   }
 
   /// 分区显示名（确认弹窗标题用）。
-  static String _partitionLabel(AppLocalizations l10n, CachePartition partition) {
+  static String _partitionLabel(
+    AppLocalizations l10n,
+    CachePartition partition,
+  ) {
     return switch (partition) {
       CachePartition.audio => l10n.cachePartitionAudio,
       CachePartition.lyrics => l10n.cachePartitionLyrics,
@@ -393,7 +396,8 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
       dialog: StatefulBuilder(
         builder: (context, setState) {
           final parsed = int.tryParse(controller.text.trim());
-          final valid = parsed != null &&
+          final valid =
+              parsed != null &&
               (parsed == 0 || (parsed >= min && parsed <= max));
           return M3EDialog(
             title: title,
@@ -409,8 +413,7 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                         _policyValueLabel(l10n, suggestedMb),
                       ),
                       style: context.typeScale.bodySmall.copyWith(
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -449,8 +452,9 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                         ? l10n.cacheCustomRangeError(min, max)
                         : null,
                     onChanged: (_) => setState(() {}),
-                    onSubmitted:
-                        valid ? (_) => Navigator.pop(context, parsed) : null,
+                    onSubmitted: valid
+                        ? (_) => Navigator.pop(context, parsed)
+                        : null,
                   ),
                 ],
               ),
@@ -461,8 +465,7 @@ class _CacheManagementPageState extends State<CacheManagementPage> {
                 child: Text(l10n.cancel),
               ),
               M3EButton.filled(
-                onPressed:
-                    valid ? () => Navigator.pop(context, parsed) : null,
+                onPressed: valid ? () => Navigator.pop(context, parsed) : null,
                 child: Text(l10n.saveChanges),
               ),
             ],

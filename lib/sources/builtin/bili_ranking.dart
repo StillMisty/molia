@@ -17,11 +17,7 @@ class BiliRanking {
 
   /// 唯一榜单：音乐区（rid=3）三日榜。
   static const List<DiscoverLeaderboard> boards = [
-    DiscoverLeaderboard(
-      id: 'bili__music_3d',
-      name: 'B站音乐榜',
-      bangid: '3:3',
-    ),
+    DiscoverLeaderboard(id: 'bili__music_3d', name: 'B站音乐榜', bangid: '3:3'),
   ];
 
   /// 解析 `rid:day`；省略 day 时按 3 天榜处理。只接受已接入的 3:3。

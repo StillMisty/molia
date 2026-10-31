@@ -13,8 +13,8 @@
       }
     }
   },
-  "searchHint": "Search songs, albums, artists...",
-  "searchIdleHint": "Search songs by keyword",
+  "searchHint": "Search songs, artists or lyrics",
+  "searchIdleHint": "Search songs, artists or lyrics",
   "clearSearch": "Clear search",
   "searchClose": "Close search",
   "searchResultsAnnouncement": "{count} results available",
@@ -542,6 +542,12 @@
   "playlistNameExists": "A playlist with this name already exists",
   "playlistRename": "Rename playlist",
   "addToPlaylist": "Add to playlist",
+  "addToQueue": "Add to queue",
+  "addedToQueue": "Added to queue",
+  "playNext": "Play next",
+  "moveQueueUp": "Move up",
+  "moveQueueDown": "Move down",
+  "removeFromQueue": "Remove from queue",
   "playlistReorder": "Reorder",
   "playlistReorderHint": "Long-press and drag to reorder",
   "playlistReorderDone": "Done",
@@ -2243,6 +2249,7 @@
     }
   },
   "downloadCompleted": "Download complete",
+  "downloadStarted": "Added to downloads",
   "downloadFailed": "Download failed: {message}",
   "@downloadFailed": {
     "placeholders": {

@@ -28,9 +28,10 @@ class _AiDjPulseState extends State<AiDjPulse>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _opacity = Tween<double>(begin: 0.5, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _opacity = Tween<double>(
+      begin: 0.5,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override

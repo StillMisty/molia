@@ -14,9 +14,10 @@ class FakeMusicSource implements MusicSource {
     this.key, {
     List<Track>? items,
     SourceCapabilities? capabilities,
-  })  : items = items ?? const [],
-        capabilities = capabilities ??
-            const SourceCapabilities(search: true, pagination: true);
+  }) : items = items ?? const [],
+       capabilities =
+           capabilities ??
+           const SourceCapabilities(search: true, pagination: true);
 
   @override
   final String key;
@@ -32,7 +33,7 @@ class FakeMusicSource implements MusicSource {
 
   /// 歌手搜索回调；未设置时抛 unsupported（与真实适配器行为一致）。
   Future<SearchResult<ArtistSummary>> Function(SearchQuery query)?
-      onSearchArtists;
+  onSearchArtists;
   int artistSearchCalls = 0;
 
   /// 歌词搜索回调；未设置时抛 unsupported（与真实适配器行为一致）。
@@ -42,7 +43,7 @@ class FakeMusicSource implements MusicSource {
   /// 评论取数回调（按 kind + page 返回）；未设置时抛 unsupported，
   /// 与真实适配器「无能力即 unsupported」的行为一致。
   Future<CommentPage> Function(CommentKind kind, int page, int limit)?
-      onComments;
+  onComments;
   int commentCalls = 0;
 
   /// 取链直链（设置后 [resolve] 返回该地址；与 [onResolve] 二选一）。
@@ -50,7 +51,7 @@ class FakeMusicSource implements MusicSource {
 
   /// 自定义取链回调（优先于 [resolveUrl]）。
   Future<PlayableStream> Function(Track track, AudioQuality? quality)?
-      onResolve;
+  onResolve;
 
   /// 最近一次取链请求的音质。
   AudioQuality? lastResolveQuality;
@@ -73,10 +74,9 @@ class FakeMusicSource implements MusicSource {
     lastQuery = query;
     final handler = onSearchLyrics;
     if (handler == null) {
-      return Future.error(const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '不支持歌词搜索',
-      ));
+      return Future.error(
+        const SourceFailure(kind: FailureKind.unsupported, message: '不支持歌词搜索'),
+      );
     }
     return handler(query);
   }
@@ -90,10 +90,9 @@ class FakeMusicSource implements MusicSource {
     lastQuery = query;
     final handler = onSearchArtists;
     if (handler == null) {
-      return Future.error(const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '不支持歌手搜索',
-      ));
+      return Future.error(
+        const SourceFailure(kind: FailureKind.unsupported, message: '不支持歌手搜索'),
+      );
     }
     return handler(query);
   }
@@ -174,15 +173,15 @@ class FakeSourceRegistry implements SourceRegistry {
 
   @override
   List<SourceDescriptor> get descriptors => [
-        for (var index = 0; index < _sources.length; index++)
-          SourceDescriptor(
-            key: _sources.keys.elementAt(index),
-            displayName: _sources.values.elementAt(index).displayName,
-            kind: SourceKind.builtin,
-            capabilities: _sources.values.elementAt(index).capabilities,
-            order: index,
-          ),
-      ];
+    for (var index = 0; index < _sources.length; index++)
+      SourceDescriptor(
+        key: _sources.keys.elementAt(index),
+        displayName: _sources.values.elementAt(index).displayName,
+        kind: SourceKind.builtin,
+        capabilities: _sources.values.elementAt(index).capabilities,
+        order: index,
+      ),
+  ];
 
   @override
   Set<String> get enabledChannelKeys => _sources.keys.toSet();

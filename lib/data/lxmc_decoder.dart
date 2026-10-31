@@ -21,5 +21,4 @@ LxmcDecodedPlaylist decodeLxmcBytes(Uint8List bytes, {String? fileName}) =>
 Future<LxmcDecodedPlaylist> decodeLxmcBytesOffThread(
   Uint8List bytes, {
   String? fileName,
-}) =>
-    impl.decodeLxmcBytesOffThread(bytes, fileName: fileName);
+}) => impl.decodeLxmcBytesOffThread(bytes, fileName: fileName);

@@ -8,6 +8,7 @@ import 'package:molia/services/lyrics/qq_provider.dart';
 import 'package:molia/services/lyrics/netease_provider.dart';
 import 'package:molia/services/lyrics/lyric_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'support/mock_dio.dart';
 
 void main() {
@@ -31,9 +32,9 @@ void main() {
                         'mid': 'mock-song-id',
                         'title': '你瞒我瞒',
                         'singer': [
-                          {'name': '陈柏宇'}
+                          {'name': '陈柏宇'},
                         ],
-                      }
+                      },
                     ],
                   },
                 },
@@ -42,20 +43,25 @@ void main() {
           };
           // 先编码为 UTF-8 字节，避免 QQProvider 内 utf8.decode 遇到非法字符。
           final bodyBytes = utf8.encode(jsonEncode(response));
-          return bytesResponse(bodyBytes, statusCode: 200,
-              headers: {
-                'content-type': ['application/json; charset=utf-8']
-              });
+          return bytesResponse(
+            bodyBytes,
+            statusCode: 200,
+            headers: {
+              'content-type': ['application/json; charset=utf-8'],
+            },
+          );
         }
 
         if (path.contains('fcg_query_lyric_new')) {
           final response = {'lyric': '[00:00]你瞒我瞒'};
           final bodyBytes = utf8.encode(jsonEncode(response));
-          return bytesResponse(bodyBytes,
-              statusCode: 200,
-              headers: {
-                'content-type': ['application/json']
-              });
+          return bytesResponse(
+            bodyBytes,
+            statusCode: 200,
+            headers: {
+              'content-type': ['application/json'],
+            },
+          );
         }
 
         return textResponse('Not Found', statusCode: 404);
@@ -100,7 +106,10 @@ void main() {
     test('LyricsService can get lyrics from multiple providers', () async {
       final service = LyricsService(providers: [_FakeLyricProvider()]);
       final result = await service.getLyrics(
-          'Bohemian Rhapsody', 'Queen', 'test_track_id');
+        'Bohemian Rhapsody',
+        'Queen',
+        'test_track_id',
+      );
 
       expect(result, isNotNull);
       if (result != null) {
@@ -115,8 +124,11 @@ void main() {
       final second = _CountingProvider(name: 'second', result: null);
       final service = LyricsService(providers: [first, second]);
 
-      final result =
-          await service.getLyrics('Bohemian Rhapsody', 'Queen', 'no_result');
+      final result = await service.getLyrics(
+        'Bohemian Rhapsody',
+        'Queen',
+        'no_result',
+      );
 
       expect(result, isNull);
       expect(first.calls, 1);
@@ -180,12 +192,13 @@ class _CountingProvider extends LyricProvider {
       SongMatch(songId: 'counting-$name', title: title, artist: artist);
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     calls++;
-    return [
-      SongMatch(songId: 'counting-$name', title: title, artist: artist),
-    ];
+    return [SongMatch(songId: 'counting-$name', title: title, artist: artist)];
   }
 }
 
@@ -204,8 +217,11 @@ class _FakeLyricProvider extends LyricProvider {
   }
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     return [SongMatch(songId: 'fake-id', title: title, artist: artist)];
   }
 }

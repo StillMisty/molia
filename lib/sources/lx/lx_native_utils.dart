@@ -28,8 +28,10 @@ class LxNativeUtils {
     dynamic key,
     dynamic iv,
   ) {
-    final match = RegExp(r'aes-(\d+)-(cbc|ecb)', caseSensitive: false)
-        .firstMatch(mode);
+    final match = RegExp(
+      r'aes-(\d+)-(cbc|ecb)',
+      caseSensitive: false,
+    ).firstMatch(mode);
     if (match == null) {
       throw StateError('Unsupported AES mode: $mode');
     }
@@ -39,7 +41,8 @@ class LxNativeUtils {
     final expectedKeyLen = keyBits ~/ 8;
     if (keyBytes.length != expectedKeyLen) {
       throw StateError(
-          'Invalid AES key length: ${keyBytes.length}, expected $expectedKeyLen for $mode');
+        'Invalid AES key length: ${keyBytes.length}, expected $expectedKeyLen for $mode',
+      );
     }
     final ivBytes = modeName == 'ecb' ? Uint8List(0) : _toBytes(iv);
     if (modeName == 'cbc' && ivBytes.length != 16) {
@@ -183,7 +186,8 @@ class _DerReader {
     final tag = bytes[offset++];
     if (tag != expectedTag) {
       throw FormatException(
-          'Unexpected DER tag 0x${tag.toRadixString(16)}, expected 0x${expectedTag.toRadixString(16)}');
+        'Unexpected DER tag 0x${tag.toRadixString(16)}, expected 0x${expectedTag.toRadixString(16)}',
+      );
     }
     final length = _readLength();
     final start = offset;
@@ -196,8 +200,7 @@ class _DerReader {
 
   _DerReader readSequence() => _DerReader(_readElement(0x30));
 
-  BigInt readInteger() =>
-      LxNativeUtils._bytesToBigInt(_readElement(0x02));
+  BigInt readInteger() => LxNativeUtils._bytesToBigInt(_readElement(0x02));
 
   _DerReader readBitString() {
     final content = _readElement(0x03);

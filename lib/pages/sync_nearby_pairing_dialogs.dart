@@ -48,11 +48,7 @@ Future<void> showSyncNearbyPairingDialog(
     // 返回键 / Esc 同样不能静默关窗：等待期间必须由用户显式取消，流程收口
     // （成功 / 失败已提示）后才允许关闭。
     onDismissRequest: () async => key.currentState?.dismissible ?? false,
-    dialog: _NearbyPairingDialog(
-      key: key,
-      provider: provider,
-      device: device,
-    ),
+    dialog: _NearbyPairingDialog(key: key, provider: provider, device: device),
   );
 }
 
@@ -154,8 +150,9 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     if (id != null) {
       await widget.provider.cancelPairing(id);
     } else {
-      _pendingCancel =
-          widget.provider.pairingAttempts.listen(_cancelWhenIdArrives);
+      _pendingCancel = widget.provider.pairingAttempts.listen(
+        _cancelWhenIdArrives,
+      );
       // 弹层马上关闭；把这条订阅移交给流收口，dispose 不再取消它。
       _pendingCancelHandedOff = true;
     }
@@ -176,19 +173,18 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
   static String _resultMessage(
     AppLocalizations l10n,
     SyncPairingOutcome outcome,
-  ) =>
-      switch (outcome) {
-        SyncPairingOutcome.accepted => l10n.syncNearbyJoined,
-        SyncPairingOutcome.sameGroup => l10n.syncNearbySameGroup,
-        SyncPairingOutcome.rejected => l10n.syncNearbyResultRejected,
-        SyncPairingOutcome.expired => l10n.syncNearbyResultExpired,
-        SyncPairingOutcome.conflict => l10n.syncNearbyResultConflict,
-        SyncPairingOutcome.unreachable => l10n.syncNearbyResultUnreachable,
-        SyncPairingOutcome.busy => l10n.syncNearbyResultBusy,
-        SyncPairingOutcome.unsupported => l10n.syncNearbyResultUnsupported,
-        SyncPairingOutcome.unavailable => l10n.syncNearbyResultUnavailable,
-        SyncPairingOutcome.cancelled => l10n.syncNearbyResultCancelled,
-      };
+  ) => switch (outcome) {
+    SyncPairingOutcome.accepted => l10n.syncNearbyJoined,
+    SyncPairingOutcome.sameGroup => l10n.syncNearbySameGroup,
+    SyncPairingOutcome.rejected => l10n.syncNearbyResultRejected,
+    SyncPairingOutcome.expired => l10n.syncNearbyResultExpired,
+    SyncPairingOutcome.conflict => l10n.syncNearbyResultConflict,
+    SyncPairingOutcome.unreachable => l10n.syncNearbyResultUnreachable,
+    SyncPairingOutcome.busy => l10n.syncNearbyResultBusy,
+    SyncPairingOutcome.unsupported => l10n.syncNearbyResultUnsupported,
+    SyncPairingOutcome.unavailable => l10n.syncNearbyResultUnavailable,
+    SyncPairingOutcome.cancelled => l10n.syncNearbyResultCancelled,
+  };
 
   @override
   Widget build(BuildContext context) {

@@ -42,7 +42,7 @@ class PlayingIndicator extends StatelessWidget {
 
 class _PlayingIndicatorPainter extends CustomPainter {
   _PlayingIndicatorPainter({required this.progress, required this.color})
-      : super(repaint: progress);
+    : super(repaint: progress);
 
   final Animation<double> progress;
   final Color color;
@@ -52,10 +52,14 @@ class _PlayingIndicatorPainter extends CustomPainter {
     final double strokeWidth = size.shortestSide * 0.18;
     // 圆角笔帽会在端点外各多画半个笔宽，所以线长先扣掉笔宽，让视觉高度
     // 落在槽高的 1/4..3/4（12dp 槽内约 3..9dp）。
-    final double minLength =
-        math.max(0, size.shortestSide * 0.25 - strokeWidth);
-    final double maxLength =
-        math.max(minLength, size.shortestSide * 0.75 - strokeWidth);
+    final double minLength = math.max(
+      0,
+      size.shortestSide * 0.25 - strokeWidth,
+    );
+    final double maxLength = math.max(
+      minLength,
+      size.shortestSide * 0.75 - strokeWidth,
+    );
     final double spacing = size.shortestSide * 0.28;
     final double centerX = size.width / 2;
     final double centerY = size.height / 2;
@@ -69,7 +73,8 @@ class _PlayingIndicatorPainter extends CustomPainter {
       // 相邻柱错开 1/3 周期：同一时刻总有一根在上升、一根在下降，读起来
       // 才像均衡器而不是整排一起呼吸。
       final double wave = math.sin(phase + index * math.pi * 2 / 3);
-      final double length = minLength + (maxLength - minLength) * (wave + 1) / 2;
+      final double length =
+          minLength + (maxLength - minLength) * (wave + 1) / 2;
       final double x = centerX + (index - 1) * spacing;
       canvas.drawLine(
         Offset(x, centerY - length / 2),

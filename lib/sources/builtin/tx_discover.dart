@@ -79,10 +79,7 @@ class TxDiscoverSource extends DiscoverSource {
         'toplist': {
           'module': 'musicToplist.ToplistInfoServer',
           'method': 'GetDetail',
-          'param': {
-            'topid': int.tryParse(bangid) ?? bangid,
-            'num': 300,
-          },
+          'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 300},
         },
         'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
       },
@@ -112,32 +109,34 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTagCategory>> _fetchTag() {
-    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTagCategory>>(
-      key: null,
-      request: () {
-        final data = jsonEncode({
-          'tags': {
-            'method': 'get_all_categories',
-            'param': {'qq': ''},
-            'module': 'playlist.PlaylistAllCategoriesServer',
-          },
-        });
-        return lxHttpGet(
-          'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
-          '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
-          '&needNewCode=0&data=${Uri.encodeComponent(data)}',
-        );
-      },
-      isInvalid: (body) {
-        if (body is! Map || body['code'] != 0) return true;
-        final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
-        return groups is! List;
-      },
-      parse: (body) {
-        final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
-        return filterTagInfo(groups as List);
-      },
-    ));
+    return runDiscoverCall(
+      DiscoverRequestCall<List<DiscoverTagCategory>>(
+        key: null,
+        request: () {
+          final data = jsonEncode({
+            'tags': {
+              'method': 'get_all_categories',
+              'param': {'qq': ''},
+              'module': 'playlist.PlaylistAllCategoriesServer',
+            },
+          });
+          return lxHttpGet(
+            'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
+            '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
+            '&needNewCode=0&data=${Uri.encodeComponent(data)}',
+          );
+        },
+        isInvalid: (body) {
+          if (body is! Map || body['code'] != 0) return true;
+          final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
+          return groups is! List;
+        },
+        parse: (body) {
+          final groups = ((body['tags'] as Map?)?['data'] as Map?)?['v_group'];
+          return filterTagInfo(groups as List);
+        },
+      ),
+    );
   }
 
   /// 解析标签目录（独立出来便于单元测试）。
@@ -146,17 +145,19 @@ class TxDiscoverSource extends DiscoverSource {
     for (final group in groups) {
       if (group is! Map) continue;
       final items = group['v_item'];
-      list.add(DiscoverTagCategory(
-        name: (group['group_name'] ?? '').toString(),
-        tags: [
-          for (final item in (items is List ? items : const []))
-            if (item is Map)
-              DiscoverTag(
-                id: (item['id'] ?? '').toString(),
-                name: (item['name'] ?? '').toString(),
-              ),
-        ],
-      ));
+      list.add(
+        DiscoverTagCategory(
+          name: (group['group_name'] ?? '').toString(),
+          tags: [
+            for (final item in (items is List ? items : const []))
+              if (item is Map)
+                DiscoverTag(
+                  id: (item['id'] ?? '').toString(),
+                  name: (item['name'] ?? '').toString(),
+                ),
+          ],
+        ),
+      );
     }
     return list;
   }
@@ -175,8 +176,8 @@ class TxDiscoverSource extends DiscoverSource {
     ).allMatches(html);
     final tags = <DiscoverTag>[];
     for (final item in items) {
-      final match =
-          RegExp(r'data-id="(\w+)">(.+?)<\/a>').firstMatch(item.group(0)!);
+      final match = RegExp(r'data-id="(\w+)">(.+?)<\/a>')
+          .firstMatch(item.group(0)!);
       if (match == null) continue;
       tags.add(DiscoverTag(id: match.group(1)!, name: match.group(2)!));
     }
@@ -190,97 +191,105 @@ class TxDiscoverSource extends DiscoverSource {
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
-      key: 'tx:playlists::$page',
-      request: () {
-        final data = jsonEncode({
-          'comm': {'cv': 1602, 'ct': 20},
-          'playlist': {
-            'module': 'music.playlist.PlaylistSquare',
-            'method': 'GetRecommendWhole',
-            'param': {
-              'IsReqFeed': true,
-              'FeedReq': {'From': (page - 1) * _limitList, 'Size': _limitList},
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'tx:playlists::$page',
+        request: () {
+          final data = jsonEncode({
+            'comm': {'cv': 1602, 'ct': 20},
+            'playlist': {
+              'module': 'music.playlist.PlaylistSquare',
+              'method': 'GetRecommendWhole',
+              'param': {
+                'IsReqFeed': true,
+                'FeedReq': {
+                  'From': (page - 1) * _limitList,
+                  'Size': _limitList,
+                },
+              },
             },
-          },
-        });
-        return lxHttpGet(
-          'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
-          '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
-          '&needNewCode=0&data=${Uri.encodeComponent(data)}',
-        );
-      },
-      isInvalid: (body) => body is! Map || body['code'] != 0,
-      parse: (body) {
-        final feed = ((body['playlist'] as Map?)?['data'] as Map?)?['FeedRsp'];
-        final items = (feed is Map) ? feed['List'] : null;
-        final playlists = <DiscoverPlaylist>[];
-        if (items is List) {
-          for (final item in items) {
-            if (item is! Map) continue;
-            final basic = item['Playlist'] is Map
-                ? (item['Playlist'] as Map)['basic']
-                : null;
-            if (basic is Map) playlists.add(_playlistFromBasic(basic));
+          });
+          return lxHttpGet(
+            'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
+            '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
+            '&needNewCode=0&data=${Uri.encodeComponent(data)}',
+          );
+        },
+        isInvalid: (body) => body is! Map || body['code'] != 0,
+        parse: (body) {
+          final feed =
+              ((body['playlist'] as Map?)?['data'] as Map?)?['FeedRsp'];
+          final items = (feed is Map) ? feed['List'] : null;
+          final playlists = <DiscoverPlaylist>[];
+          if (items is List) {
+            for (final item in items) {
+              if (item is! Map) continue;
+              final basic = item['Playlist'] is Map
+                  ? (item['Playlist'] as Map)['basic']
+                  : null;
+              if (basic is Map) playlists.add(_playlistFromBasic(basic));
+            }
           }
-        }
-        return DiscoverPlaylistPage(
-          playlists: playlists,
-          page: page,
-          limit: _limitList,
-          total: (feed is Map ? parseSourceCount(feed['FromLimit']) : 0) ?? 0,
-        );
-      },
-    ));
+          return DiscoverPlaylistPage(
+            playlists: playlists,
+            page: page,
+            limit: _limitList,
+            total: (feed is Map ? parseSourceCount(feed['FromLimit']) : 0) ?? 0,
+          );
+        },
+      ),
+    );
   }
 
   /// 分类歌单（`get_category_content`）。
   static Future<DiscoverPlaylistPage> _fetchCategory(String tagId, int page) {
-    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
-      key: 'tx:playlists:$tagId:$page',
-      request: () {
-        final id = int.tryParse(tagId) ?? tagId;
-        final data = jsonEncode({
-          'comm': {'cv': 1602, 'ct': 20},
-          'playlist': {
-            'method': 'get_category_content',
-            'param': {
-              'titleid': id,
-              'caller': '0',
-              'category_id': id,
-              'size': _limitList,
-              'page': page - 1,
-              'use_page': 1,
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'tx:playlists:$tagId:$page',
+        request: () {
+          final id = int.tryParse(tagId) ?? tagId;
+          final data = jsonEncode({
+            'comm': {'cv': 1602, 'ct': 20},
+            'playlist': {
+              'method': 'get_category_content',
+              'param': {
+                'titleid': id,
+                'caller': '0',
+                'category_id': id,
+                'size': _limitList,
+                'page': page - 1,
+                'use_page': 1,
+              },
+              'module': 'playlist.PlayListCategoryServer',
             },
-            'module': 'playlist.PlayListCategoryServer',
-          },
-        });
-        return lxHttpGet(
-          'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
-          '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
-          '&needNewCode=0&data=${Uri.encodeComponent(data)}',
-        );
-      },
-      isInvalid: (body) =>
-          body is! Map ||
-          body['code'] != 0 ||
-          ((body['playlist'] as Map?)?['data'] as Map?)?['content'] is! Map,
-      parse: (body) {
-        final content =
-            ((body['playlist'] as Map?)?['data'] as Map?)?['content'] as Map;
-        final items = content['v_item'];
-        return DiscoverPlaylistPage(
-          playlists: [
-            for (final item in (items is List ? items : const []))
-              if (item is Map && item['basic'] is Map)
-                _playlistFromBasic(item['basic'] as Map),
-          ],
-          page: page,
-          limit: _limitList,
-          total: parseSourceCount(content['total_cnt']) ?? 0,
-        );
-      },
-    ));
+          });
+          return lxHttpGet(
+            'https://u.y.qq.com/cgi-bin/musicu.fcg?loginUin=0&hostUin=0&format=json'
+            '&inCharset=utf-8&outCharset=utf-8&notice=0&platform=wk_v15.json'
+            '&needNewCode=0&data=${Uri.encodeComponent(data)}',
+          );
+        },
+        isInvalid: (body) =>
+            body is! Map ||
+            body['code'] != 0 ||
+            ((body['playlist'] as Map?)?['data'] as Map?)?['content'] is! Map,
+        parse: (body) {
+          final content =
+              ((body['playlist'] as Map?)?['data'] as Map?)?['content'] as Map;
+          final items = content['v_item'];
+          return DiscoverPlaylistPage(
+            playlists: [
+              for (final item in (items is List ? items : const []))
+                if (item is Map && item['basic'] is Map)
+                  _playlistFromBasic(item['basic'] as Map),
+            ],
+            page: page,
+            limit: _limitList,
+            total: parseSourceCount(content['total_cnt']) ?? 0,
+          );
+        },
+      ),
+    );
   }
 
   static DiscoverPlaylist _playlistFromBasic(Map basic) {
@@ -311,45 +320,49 @@ class TxDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('tx:playlist-search:$keyword:$page',
-        () async {
-      final body = await lxHttpGet(
-        'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
-        '?page_no=${page - 1}&num_per_page=20&format=json'
-        '&query=${Uri.encodeComponent(keyword)}'
-        '&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8',
-        headers: {'Referer': 'https://y.qq.com/portal/search.html'},
-      );
-      if (body is! Map || body['code'] != 0) {
-        throw StateError('tx 歌单搜索失败');
-      }
-      final data = body['data'];
-      final items = (data is Map) ? data['list'] : null;
-      final playlists = <DiscoverPlaylist>[];
-      if (items is List) {
-        for (final item in items) {
-          if (item is! Map) continue;
-          final creator = item['creator'];
-          playlists.add(DiscoverPlaylist(
-            id: (item['dissid'] ?? '').toString(),
-            name: decodeName((item['dissname'] ?? '').toString()),
-            coverUrl: _nonEmpty(item['imgurl']?.toString()),
-            author: creator is Map
-                ? decodeName((creator['name'] ?? '').toString())
-                : '',
-            playCount: parseSourceCount(item['listennum']) ?? 0,
-            trackCount: parseSourceCount(item['song_count']) ?? 0,
-            description: _cleanDesc(item['introduction']),
-          ));
+    return BuiltinSearch.transport.cached(
+      'tx:playlist-search:$keyword:$page',
+      () async {
+        final body = await lxHttpGet(
+          'https://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist'
+          '?page_no=${page - 1}&num_per_page=20&format=json'
+          '&query=${Uri.encodeComponent(keyword)}'
+          '&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8',
+          headers: {'Referer': 'https://y.qq.com/portal/search.html'},
+        );
+        if (body is! Map || body['code'] != 0) {
+          throw StateError('tx 歌单搜索失败');
         }
-      }
-      return DiscoverPlaylistPage(
-        playlists: playlists,
-        page: page,
-        limit: 20,
-        total: (data is Map ? parseSourceCount(data['sum']) : null) ?? 0,
-      );
-    });
+        final data = body['data'];
+        final items = (data is Map) ? data['list'] : null;
+        final playlists = <DiscoverPlaylist>[];
+        if (items is List) {
+          for (final item in items) {
+            if (item is! Map) continue;
+            final creator = item['creator'];
+            playlists.add(
+              DiscoverPlaylist(
+                id: (item['dissid'] ?? '').toString(),
+                name: decodeName((item['dissname'] ?? '').toString()),
+                coverUrl: _nonEmpty(item['imgurl']?.toString()),
+                author: creator is Map
+                    ? decodeName((creator['name'] ?? '').toString())
+                    : '',
+                playCount: parseSourceCount(item['listennum']) ?? 0,
+                trackCount: parseSourceCount(item['song_count']) ?? 0,
+                description: _cleanDesc(item['introduction']),
+              ),
+            );
+          }
+        }
+        return DiscoverPlaylistPage(
+          playlists: playlists,
+          page: page,
+          limit: 20,
+          total: (data is Map ? parseSourceCount(data['sum']) : null) ?? 0,
+        );
+      },
+    );
   }
 
   @override
@@ -369,7 +382,8 @@ class TxDiscoverSource extends DiscoverSource {
     if (RegExp(r'\d').hasMatch(rawId) && !RegExp(r'[?&:/]').hasMatch(rawId)) {
       return rawId;
     }
-    final match = RegExp(r'/playlist/(\d+)').firstMatch(rawId) ??
+    final match =
+        RegExp(r'/playlist/(\d+)').firstMatch(rawId) ??
         RegExp(r'id=(\d+)').firstMatch(rawId);
     return match?.group(1);
   }
@@ -488,51 +502,54 @@ class TxDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return runDiscoverCall(DiscoverRequestCall<List<String>>(
-      key: 'tx:hot-search',
-      request: () => lxHttpPost(
-        'https://u.y.qq.com/cgi-bin/musicu.fcg',
-        headers: {'Referer': 'https://y.qq.com/portal/player.html'},
-        body: {
-          'comm': {
-            'ct': '19',
-            'cv': '1803',
-            'guid': '0',
-            'patch': '118',
-            'psrf_access_token_expiresAt': 0,
-            'psrf_qqaccess_token': '',
-            'psrf_qqopenid': '',
-            'psrf_qqunionid': '',
-            'tmeAppID': 'qqmusic',
-            'tmeLoginType': 0,
-            'uin': '0',
-            'wid': '0',
+    return runDiscoverCall(
+      DiscoverRequestCall<List<String>>(
+        key: 'tx:hot-search',
+        request: () => lxHttpPost(
+          'https://u.y.qq.com/cgi-bin/musicu.fcg',
+          headers: {'Referer': 'https://y.qq.com/portal/player.html'},
+          body: {
+            'comm': {
+              'ct': '19',
+              'cv': '1803',
+              'guid': '0',
+              'patch': '118',
+              'psrf_access_token_expiresAt': 0,
+              'psrf_qqaccess_token': '',
+              'psrf_qqopenid': '',
+              'psrf_qqunionid': '',
+              'tmeAppID': 'qqmusic',
+              'tmeLoginType': 0,
+              'uin': '0',
+              'wid': '0',
+            },
+            'hotkey': {
+              'method': 'GetHotkeyForQQMusicPC',
+              'module': 'tencent_musicsoso_hotkey.HotkeyService',
+              'param': {'search_id': '', 'uin': 0},
+            },
           },
-          'hotkey': {
-            'method': 'GetHotkeyForQQMusicPC',
-            'module': 'tencent_musicsoso_hotkey.HotkeyService',
-            'param': {'search_id': '', 'uin': 0},
-          },
+        ),
+        isInvalid: (body) =>
+            body is! Map ||
+            body['code'] != 0 ||
+            ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'] is! List,
+        parse: (body) {
+          final vec =
+              ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey']
+                  as List;
+          return filterHotSearch(vec);
         },
       ),
-      isInvalid: (body) =>
-          body is! Map ||
-          body['code'] != 0 ||
-          ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'] is! List,
-      parse: (body) {
-        final vec =
-            ((body['hotkey'] as Map?)?['data'] as Map?)?['vec_hotkey'] as List;
-        return filterHotSearch(vec);
-      },
-    ));
+    );
   }
 
   /// 解析热搜词（独立出来便于单元测试）。
   static List<String> filterHotSearch(List<dynamic> rawList) => [
-        for (final item in rawList)
-          if (item is Map && (item['query']?.toString().isNotEmpty ?? false))
-            item['query'].toString(),
-      ];
+    for (final item in rawList)
+      if (item is Map && (item['query']?.toString().isNotEmpty ?? false))
+        item['query'].toString(),
+  ];
 
   static String? _nonEmpty(String? text) =>
       (text == null || text.isEmpty) ? null : text;

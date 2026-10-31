@@ -45,7 +45,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '整表注册表只由组合根（lib/app/bootstrap/**）构造；模块请依赖注入的 '
+      reason:
+          '整表注册表只由组合根（lib/app/bootstrap/**）构造；模块请依赖注入的 '
           'SettingsAccess / SettingsScope，不要引用 $_keyTable：\n'
           '${violations.join('\n')}',
     );
@@ -57,20 +58,17 @@ void main() {
         if (_allowedPrefixes.any(path.startsWith))
           if (_codeLines(path).any((line) => line.contains(_keyTable))) path,
     ];
-    expect(
-      seen,
-      isNotEmpty,
-      reason: '规则锚点失效（或整表常量改名 / 挪走）：先更新本扫描再提交',
-    );
+    expect(seen, isNotEmpty, reason: '规则锚点失效（或整表常量改名 / 挪走）：先更新本扫描再提交');
   });
 }
 
-List<String> _libFiles() => Directory('lib')
-    .listSync(recursive: true)
-    .whereType<File>()
-    .map((file) => file.path)
-    .where((path) => path.endsWith('.dart'))
-    .toList();
+List<String> _libFiles() =>
+    Directory('lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .map((file) => file.path)
+        .where((path) => path.endsWith('.dart'))
+        .toList();
 
 /// 每行去掉行注释（保留行号，便于定位）：注释里提及锚点不算违规。
 List<String> _codeLines(String path) =>

@@ -33,7 +33,7 @@ class LocalEndpoint {
 /// 依赖宿主网卡，不可断言）。
 class LocalEndpointsService {
   LocalEndpointsService({Future<List<LocalEndpoint>> Function()? enumerate})
-      : _enumerate = enumerate ?? _enumerateInterfaces;
+    : _enumerate = enumerate ?? _enumerateInterfaces;
 
   final Future<List<LocalEndpoint>> Function() _enumerate;
   Future<List<LocalEndpoint>>? _cached;
@@ -52,12 +52,14 @@ class LocalEndpointsService {
   }
 
   /// 只要地址字符串（局域网探测的 `addrs` 候选）。
-  Future<List<String>> hosts() async =>
-      [for (final endpoint in await list()) endpoint.address];
+  Future<List<String>> hosts() async => [
+    for (final endpoint in await list()) endpoint.address,
+  ];
 
   /// 重新枚举后的地址字符串（传输层换网 / 回前台使用）。
-  Future<List<String>> hostsFresh() async =>
-      [for (final endpoint in await listFresh()) endpoint.address];
+  Future<List<String>> hostsFresh() async => [
+    for (final endpoint in await listFresh()) endpoint.address,
+  ];
 
   /// 失效缓存：真实失效点是设置页进入（见类注释），下次读取重新枚举。
   void invalidate() => _cached = null;
@@ -84,16 +86,18 @@ class LocalEndpointsService {
       final address = normalizePeerHost(endpoint.address);
       if (!isRoutablePeerAddress(address)) continue;
       if (!seen.add(address)) continue;
-      unique.add(LocalEndpoint(
-        interfaceName: endpoint.interfaceName,
-        address: address,
-      ));
+      unique.add(
+        LocalEndpoint(interfaceName: endpoint.interfaceName, address: address),
+      );
     }
     // 稳定排序：同档位保持枚举顺序（List.sort 不保证稳定，这里按索引决平局）。
-    final ranked = <(int, int, LocalEndpoint)>[
-      for (var i = 0; i < unique.length; i++)
-        (_rank(unique[i].address), i, unique[i]),
-    ]..sort((a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2));
+    final ranked =
+        <(int, int, LocalEndpoint)>[
+          for (var i = 0; i < unique.length; i++)
+            (_rank(unique[i].address), i, unique[i]),
+        ]..sort(
+          (a, b) => a.$1 != b.$1 ? a.$1.compareTo(b.$1) : a.$2.compareTo(b.$2),
+        );
     return List.unmodifiable([for (final entry in ranked) entry.$3]);
   }
 

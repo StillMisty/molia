@@ -10,14 +10,13 @@ AudioDevice _device(
   AudioDeviceType type, {
   bool isInput = false,
   bool isOutput = true,
-}) =>
-    AudioDevice(
-      id: id,
-      name: id,
-      isInput: isInput,
-      isOutput: isOutput,
-      type: type,
-    );
+}) => AudioDevice(
+  id: id,
+  name: id,
+  isInput: isInput,
+  isOutput: isOutput,
+  type: type,
+);
 
 void main() {
   group('shouldPauseForDeviceRemoval', () {

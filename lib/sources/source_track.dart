@@ -66,21 +66,21 @@ class SourceTrack {
 
   /// 选择请求音质：优先 preferred，其次按 LX 质量顺序回退，最后取支持列表末位。
   String pickQuality(String preferred) => pickQualityFor(
-        qualities.map((q) => q.type).where((t) => t.isNotEmpty),
-        preferred,
-      );
+    qualities.map((q) => q.type).where((t) => t.isNotEmpty),
+    preferred,
+  );
 
   Map<String, dynamic> toJson() => {
-        'sourceKey': sourceKey,
-        'origin': origin,
-        'title': title,
-        'artist': artist,
-        'album': album,
-        'coverUrl': coverUrl,
-        'durationMs': duration?.inMilliseconds,
-        'qualities': qualities.map((q) => q.toJson()).toList(),
-        'raw': raw,
-      };
+    'sourceKey': sourceKey,
+    'origin': origin,
+    'title': title,
+    'artist': artist,
+    'album': album,
+    'coverUrl': coverUrl,
+    'durationMs': duration?.inMilliseconds,
+    'qualities': qualities.map((q) => q.toJson()).toList(),
+    'raw': raw,
+  };
 
   factory SourceTrack.fromJson(Map<String, dynamic> json) {
     final durationMs = json['durationMs'];
@@ -96,11 +96,14 @@ class SourceTrack {
           : null,
       qualities: ((json['qualities'] as List?) ?? const [])
           .whereType<Map>()
-          .map((e) => SourceQuality.fromJson(
-                e.map((k, v) => MapEntry(k.toString(), v)),
-              ))
+          .map(
+            (e) => SourceQuality.fromJson(
+              e.map((k, v) => MapEntry(k.toString(), v)),
+            ),
+          )
           .toList(),
-      raw: (json['raw'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ??
+      raw:
+          (json['raw'] as Map?)?.map((k, v) => MapEntry(k.toString(), v)) ??
           const {},
     );
   }

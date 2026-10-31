@@ -24,7 +24,7 @@ import 'local_file_probe.dart';
 class LocalMusicSource implements MusicSource {
   /// [fileExists] 仅测试注入（默认走平台文件探测）。
   LocalMusicSource({Future<bool> Function(String path)? fileExists})
-      : _fileExists = fileExists ?? localFileExists;
+    : _fileExists = fileExists ?? localFileExists;
 
   /// 本地音源 key（与 `kLocalSourceKey` 同值；数据层不反向依赖领域模型）。
   static const String sourceKey = 'local';
@@ -51,14 +51,10 @@ class LocalMusicSource implements MusicSource {
   Future<void> dispose() async {}
 
   @override
-  Future<SearchResult<Track>> search(
-    SearchQuery query, {
-    CancelToken? cancel,
-  }) {
-    return Future.error(const SourceFailure(
-      kind: FailureKind.unsupported,
-      message: '本地音源不支持搜索',
-    ));
+  Future<SearchResult<Track>> search(SearchQuery query, {CancelToken? cancel}) {
+    return Future.error(
+      const SourceFailure(kind: FailureKind.unsupported, message: '本地音源不支持搜索'),
+    );
   }
 
   /// 读 payload 里的文件路径回 `Uri.file(...)`；文件缺失归一化为 notFound。
@@ -96,10 +92,9 @@ class LocalMusicSource implements MusicSource {
     int page = 1,
     int limit = kCommentPageSize,
   }) {
-    return Future.error(const SourceFailure(
-      kind: FailureKind.unsupported,
-      message: '本地音源不支持评论',
-    ));
+    return Future.error(
+      const SourceFailure(kind: FailureKind.unsupported, message: '本地音源不支持评论'),
+    );
   }
 
   @override
@@ -107,10 +102,12 @@ class LocalMusicSource implements MusicSource {
     SearchQuery query, {
     CancelToken? cancel,
   }) {
-    return Future.error(const SourceFailure(
-      kind: FailureKind.unsupported,
-      message: '本地音源不支持歌词搜索',
-    ));
+    return Future.error(
+      const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '本地音源不支持歌词搜索',
+      ),
+    );
   }
 
   @override
@@ -118,10 +115,12 @@ class LocalMusicSource implements MusicSource {
     SearchQuery query, {
     CancelToken? cancel,
   }) {
-    return Future.error(const SourceFailure(
-      kind: FailureKind.unsupported,
-      message: '本地音源不支持歌手搜索',
-    ));
+    return Future.error(
+      const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '本地音源不支持歌手搜索',
+      ),
+    );
   }
 
   @override
@@ -133,14 +132,15 @@ class LocalMusicSource implements MusicSource {
     int page = 1,
     int limit = 50,
   }) {
-    return Future.error(const SourceFailure(
-      kind: FailureKind.unsupported,
-      message: '本地音源不支持集合浏览',
-    ));
+    return Future.error(
+      const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '本地音源不支持集合浏览',
+      ),
+    );
   }
 
   /// 只认自己的曲目（`local` 键）。
   @override
-  Track? adopt(Track track) =>
-      track.id.sourceKey == sourceKey ? track : null;
+  Track? adopt(Track track) => track.id.sourceKey == sourceKey ? track : null;
 }

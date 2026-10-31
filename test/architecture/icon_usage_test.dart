@@ -9,9 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// 唯一例外是导航「未选中」半对（选中/未选中成对图标按 M3 惯例：
 /// 未选中空心、选中实心）：资料库没有圆角空心字形，退用 `_outlined`；
 /// 音符不使用图标字形，由 Molia 标志组件（`lib/widgets/molia_mark.dart`）承载。
-const Set<String> _outlinedPairAllowlist = {
-  'library_music_outlined',
-};
+const Set<String> _outlinedPairAllowlist = {'library_music_outlined'};
 
 /// I2 例外：`IconSwap` 本身（配方所在处）、曲目行「缩略图 ⇄ 多选勾选」
 /// （不是按钮图标槽位切换，语义是封面被勾选态替换）、歌词页扩展行
@@ -43,7 +41,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '图标统一 `Icons.*_rounded`（例外见测试文件注释）：\n'
+      reason:
+          '图标统一 `Icons.*_rounded`（例外见测试文件注释）：\n'
           '${violations.join('\n')}',
     );
   });
@@ -59,7 +58,8 @@ void main() {
     expect(
       violations,
       isEmpty,
-      reason: '图标切换统一走 `lib/widgets/icon_swap.dart::IconSwap` '
+      reason:
+          '图标切换统一走 `lib/widgets/icon_swap.dart::IconSwap` '
           '（docs/architecture.md §6）：\n${violations.join('\n')}',
     );
   });
@@ -85,8 +85,12 @@ final RegExp _iconsPattern = RegExp(r'\bIcons\.([A-Za-z0-9_]+)');
 String _strippedSource(String path) {
   final file = File(path);
   if (!file.existsSync()) return '';
-  return file.readAsStringSync().split('\n').map((line) {
-    final index = line.indexOf('//');
-    return index < 0 ? line : line.substring(0, index);
-  }).join('\n');
+  return file
+      .readAsStringSync()
+      .split('\n')
+      .map((line) {
+        final index = line.indexOf('//');
+        return index < 0 ? line : line.substring(0, index);
+      })
+      .join('\n');
 }

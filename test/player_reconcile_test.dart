@@ -23,15 +23,15 @@ import 'support/fakes.dart';
 /// 后端调用；不读私有字段。存在常驻波浪动画，不能 pumpAndSettle，按固定
 /// 时长 pump 采样中间态。
 Track _track(String id, {String? artwork}) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      artwork: artwork == null ? null : Artwork(uri: Uri.parse(artwork)),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  artwork: artwork == null ? null : Artwork(uri: Uri.parse(artwork)),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -56,16 +56,18 @@ void main() {
   /// 模拟后端切到指定曲目：next / previous 与队列保持一致。
   void emitFor(String id) {
     final index = order.indexWhere((track) => track.id.id == id);
-    backend.emit(BackendSnapshot(
-      current: order[index],
-      queue: order,
-      currentIndex: index,
-      next: index + 1 < order.length ? order[index + 1] : null,
-      previous: index > 0 ? order[index - 1] : null,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: order[index],
+        queue: order,
+        currentIndex: index,
+        next: index + 1 < order.length ? order[index + 1] : null,
+        previous: index > 0 ? order[index - 1] : null,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   /// 自定义快照：空闲身份变化（current 不变、队列/next 变化）与同 id 换图用。
@@ -78,16 +80,18 @@ void main() {
     Track? previous,
     Track? next,
   }) {
-    backend.emit(BackendSnapshot(
-      current: current,
-      queue: queue,
-      currentIndex: index,
-      next: next,
-      previous: previous ?? (index > 0 ? queue[index - 1] : null),
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: current,
+        queue: queue,
+        currentIndex: index,
+        next: next,
+        previous: previous ?? (index > 0 ? queue[index - 1] : null),
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   Future<void> pumpPlayer(WidgetTester tester) async {
@@ -118,10 +122,7 @@ void main() {
           home: Scaffold(
             body: SizedBox(
               height: 900,
-              child: Player(
-                expandAnimation: expand,
-                onToggleExpand: () {},
-              ),
+              child: Player(expandAnimation: expand, onToggleExpand: () {}),
             ),
           ),
         ),
@@ -134,21 +135,23 @@ void main() {
 
   /// 封面堆叠内所有 Opacity 的（相对堆叠中心的横向偏移, 透明度）。
   List<({double dx, double opacity})> sampleCoverOpacities(
-      WidgetTester tester) {
-    final deckCenter =
-        tester.getCenter(find.byKey(Player.artworkSwipeHostKey));
+    WidgetTester tester,
+  ) {
+    final deckCenter = tester.getCenter(find.byKey(Player.artworkSwipeHostKey));
     final samples = <({double dx, double opacity})>[];
-    for (final element in find
-        .descendant(
-          of: find.byKey(Player.artworkSwipeHostKey),
-          matching: find.byType(Opacity),
-        )
-        .evaluate()) {
+    for (final element
+        in find
+            .descendant(
+              of: find.byKey(Player.artworkSwipeHostKey),
+              matching: find.byType(Opacity),
+            )
+            .evaluate()) {
       final widget = element.widget as Opacity;
       final renderObject = element.renderObject;
       if (renderObject is! RenderBox || !renderObject.hasSize) continue;
-      final center =
-          renderObject.localToGlobal(renderObject.size.center(Offset.zero));
+      final center = renderObject.localToGlobal(
+        renderObject.size.center(Offset.zero),
+      );
       samples.add((dx: center.dx - deckCenter.dx, opacity: widget.opacity));
     }
     samples.sort((left, right) => left.dx.compareTo(right.dx));
@@ -160,11 +163,10 @@ void main() {
     List<({double dx, double opacity})> samples,
     double dx, {
     double radius = 6,
-  }) =>
-      samples
-          .where((sample) => (sample.dx - dx).abs() < radius)
-          .map((sample) => sample.opacity)
-          .toList();
+  }) => samples
+      .where((sample) => (sample.dx - dx).abs() < radius)
+      .map((sample) => sample.opacity)
+      .toList();
 
   /// 指定封面卡最近一层 Opacity 的透明度（卡的动画透明度层）。
   double nearestOpacityOf(WidgetTester tester, Finder finder) {
@@ -201,7 +203,8 @@ void main() {
   /// 指定封面卡内渲染的图片 URL（AppNetworkImage.url；空串 = 无封面）。
   List<String?> cardImageUrls(WidgetTester tester, Finder card) => tester
       .widgetList<AppNetworkImage>(
-          find.descendant(of: card, matching: find.byType(AppNetworkImage)))
+        find.descendant(of: card, matching: find.byType(AppNetworkImage)),
+      )
       .map((image) => image.url)
       .toList();
 
@@ -236,10 +239,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 40)); // 220ms 前段
     final double outMid = nearestOpacityOf(tester, outgoing);
     final double inMid = nearestOpacityOf(tester, center);
-    expect(outMid, allOf(greaterThan(0.1), lessThan(0.9)),
-        reason: '校正中间帧旧预览卡应处于中间值（实际 $outMid）');
-    expect(inMid, allOf(greaterThan(0.1), lessThan(0.9)),
-        reason: '校正中间帧实际曲目卡应处于中间值（实际 $inMid）');
+    expect(
+      outMid,
+      allOf(greaterThan(0.1), lessThan(0.9)),
+      reason: '校正中间帧旧预览卡应处于中间值（实际 $outMid）',
+    );
+    expect(
+      inMid,
+      allOf(greaterThan(0.1), lessThan(0.9)),
+      reason: '校正中间帧实际曲目卡应处于中间值（实际 $inMid）',
+    );
     expect(outMid + inMid, closeTo(1.0, 0.01), reason: '同位置交叉淡化：透明度互补');
     expect(cardDx(tester, outgoing), closeTo(0, 0.5));
     expect(cardDx(tester, center), closeTo(0, 0.5));
@@ -249,17 +258,34 @@ void main() {
     expect(nearestOpacityOf(tester, center), closeTo(1.0, 0.01));
     expect(cardDx(tester, center), closeTo(0, 0.5));
     // 中心即实际曲目；槽位按新快照重建：左 = 播放顺序最近一首 c，右 = 空。
-    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)), findsOneWidget,
-        reason: '校正结束后中心应展示实际曲目 d');
-    expect(sideCard(left: true, track: c), findsOneWidget,
-        reason: '校正后左槽应重建为 previous c');
-    expect(nearestOpacityOf(tester, sideCard(left: true, track: c)),
-        closeTo(0.85, 0.01));
-    expect(cardDx(tester, sideCard(left: true, track: c)), closeTo(leftDx, 1.5));
-    expect(sideCard(left: false, track: c), findsNothing,
-        reason: 'c 不应同时出现在右槽');
-    expect(opacitiesNear(sampleCoverOpacities(tester), -leftDx), isEmpty,
-        reason: 'd 之后没有下一首，右槽应为空');
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)),
+      findsOneWidget,
+      reason: '校正结束后中心应展示实际曲目 d',
+    );
+    expect(
+      sideCard(left: true, track: c),
+      findsOneWidget,
+      reason: '校正后左槽应重建为 previous c',
+    );
+    expect(
+      nearestOpacityOf(tester, sideCard(left: true, track: c)),
+      closeTo(0.85, 0.01),
+    );
+    expect(
+      cardDx(tester, sideCard(left: true, track: c)),
+      closeTo(leftDx, 1.5),
+    );
+    expect(
+      sideCard(left: false, track: c),
+      findsNothing,
+      reason: 'c 不应同时出现在右槽',
+    );
+    expect(
+      opacitiesNear(sampleCoverOpacities(tester), -leftDx),
+      isEmpty,
+      reason: 'd 之后没有下一首，右槽应为空',
+    );
     expect(find.text('Title d'), findsWidgets);
 
     await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
@@ -290,7 +316,8 @@ void main() {
     // 校正中途尝试拖动：右滑（previous c 是可预览目标，这次拖动
     // 本身满足提交条件），但校正期间必须被忽略。两次移动累计超过阈值后松手。
     final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(Player.artworkSwipeHostKey)));
+      tester.getCenter(find.byKey(Player.artworkSwipeHostKey)),
+    );
     await gesture.moveBy(Offset(dragFor(tester, 0.31), 0));
     await tester.pump(const Duration(milliseconds: 60));
     await gesture.moveBy(Offset(dragFor(tester, 0.31), 0));
@@ -299,22 +326,33 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
 
     // 拖动被忽略：没有第二次提交，中心保持校正原位（未进入拖动预览）。
-    expect(backend.calls.where((call) => call == 'next').length, 1,
-        reason: '校正期间的新拖动不得再提交切歌');
+    expect(
+      backend.calls.where((call) => call == 'next').length,
+      1,
+      reason: '校正期间的新拖动不得再提交切歌',
+    );
     expect(backend.calls.where((call) => call == 'previous').length, 0);
-    expect(cardDx(tester, center), closeTo(0, 0.5),
-        reason: '校正期间不得进入拖动预览（中心不产生位移）');
+    expect(
+      cardDx(tester, center),
+      closeTo(0, 0.5),
+      reason: '校正期间不得进入拖动预览（中心不产生位移）',
+    );
     final double outMid = nearestOpacityOf(tester, outgoing);
-    expect(outMid, lessThan(outStart),
-        reason: '校正照常推进：旧预览卡继续淡出（实际 $outMid）');
-    expect(nearestOpacityOf(tester, center), closeTo(1.0 - outMid, 0.01),
-        reason: '校正交叉淡化不被打断（透明度互补）');
+    expect(outMid, lessThan(outStart), reason: '校正照常推进：旧预览卡继续淡出（实际 $outMid）');
+    expect(
+      nearestOpacityOf(tester, center),
+      closeTo(1.0 - outMid, 0.01),
+      reason: '校正交叉淡化不被打断（透明度互补）',
+    );
 
     // 校正走完：中心为实际曲目 d，旧预览卡撤下。
     await tester.pump(const Duration(milliseconds: 120));
     expect(outgoing, findsNothing, reason: '校正结束旧预览卡应撤下');
-    expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)), findsOneWidget,
-        reason: '校正结束后中心应为实际曲目 d');
+    expect(
+      find.byKey(PlayerCoverDeck.centerCoverTrackKey(d.id)),
+      findsOneWidget,
+      reason: '校正结束后中心应为实际曲目 d',
+    );
     expect(cardDx(tester, center), closeTo(0, 0.5));
 
     await tester.pump(const Duration(milliseconds: 400)); // 通知节流计时器跑完
@@ -341,8 +379,7 @@ void main() {
     emitFor('c'); // 对账到预览目标 → 无缝完成
     await tester.pump(const Duration(milliseconds: 20));
     final double after = cardDx(tester, center);
-    expect(after, lessThan(before),
-        reason: '对账匹配应从当前进度续走（起点约 72，重播会跳回满偏移）');
+    expect(after, lessThan(before), reason: '对账匹配应从当前进度续走（起点约 72，重播会跳回满偏移）');
     expect(after, greaterThan(0));
 
     await tester.pump(const Duration(milliseconds: 400));
@@ -373,10 +410,16 @@ void main() {
     await tester.pump(const Duration(milliseconds: 40)); // 180ms 前段
     final double oldMid = nearestOpacityOf(tester, oldCard);
     final double newMid = nearestOpacityOf(tester, newCard);
-    expect(oldMid, allOf(greaterThan(0.1), lessThan(0.8)),
-        reason: '旧身份应处于淡出中间值（实际 $oldMid）');
-    expect(newMid, allOf(greaterThan(0.1), lessThan(0.8)),
-        reason: '新身份应处于淡入中间值（实际 $newMid）');
+    expect(
+      oldMid,
+      allOf(greaterThan(0.1), lessThan(0.8)),
+      reason: '旧身份应处于淡出中间值（实际 $oldMid）',
+    );
+    expect(
+      newMid,
+      allOf(greaterThan(0.1), lessThan(0.8)),
+      reason: '新身份应处于淡入中间值（实际 $newMid）',
+    );
     expect(oldMid + newMid, closeTo(0.85, 0.01), reason: '同槽位交叉淡化：透明度互补');
     // 原位：全程无位移/缩放/旋转。
     expect(cardDx(tester, oldCard), closeTo(rightDx, 0.5));
@@ -399,14 +442,20 @@ void main() {
 
     await tester.pump(const Duration(milliseconds: 40));
     final double emptyMid = nearestOpacityOf(tester, emptyOldCard);
-    expect(emptyMid, allOf(greaterThan(0.1), lessThan(0.8)),
-        reason: '变空时旧身份应处于淡出中间值（实际 $emptyMid）');
+    expect(
+      emptyMid,
+      allOf(greaterThan(0.1), lessThan(0.8)),
+      reason: '变空时旧身份应处于淡出中间值（实际 $emptyMid）',
+    );
     expect(cardDx(tester, emptyOldCard), closeTo(rightDx, 0.5));
 
     await tester.pump(const Duration(milliseconds: 160));
     expect(emptyOldCard, findsNothing);
-    expect(opacitiesNear(sampleCoverOpacities(tester), rightDx), isEmpty,
-        reason: '变空后右槽不应再有封面卡');
+    expect(
+      opacitiesNear(sampleCoverOpacities(tester), rightDx),
+      isEmpty,
+      reason: '变空后右槽不应再有封面卡',
+    );
 
     await tester.pump(const Duration(milliseconds: 400));
     expect(tester.takeException(), isNull);
@@ -420,16 +469,21 @@ void main() {
     final leftCard = sideCard(left: true, track: b);
     expect(leftCard, findsOneWidget, reason: '无历史时左槽应显示队列前一位 b');
     expect(nearestOpacityOf(tester, leftCard), closeTo(0.85, 0.01));
-    expect(cardDx(tester, leftCard),
-        closeTo(sampleCoverOpacities(tester).first.dx, 0.5));
+    expect(
+      cardDx(tester, leftCard),
+      closeTo(sampleCoverOpacities(tester).first.dx, 0.5),
+    );
     expect(tester.takeException(), isNull);
 
     // 切到队首（current a）：没有可展示的上一首 → 左槽留空。
     emitCustom(current: a, queue: [a, b, c], index: 0, next: b);
     await pumpPlayer(tester);
 
-    expect(sideCard(left: true, track: a), findsNothing,
-        reason: '队首没有上一首：左槽应留空');
+    expect(
+      sideCard(left: true, track: a),
+      findsNothing,
+      reason: '队首没有上一首：左槽应留空',
+    );
     expect(sideCard(left: true, track: b), findsNothing);
     // 右槽照常显示下一首，证明堆叠已正常渲染。
     expect(sideCard(left: false, track: b), findsOneWidget);
@@ -444,8 +498,9 @@ void main() {
     // 走播放器真实喂法（displayTrack 随快照 current 变化）：封面预取已收口到
     // PlaybackObserver，播放器 build 不再有会干扰换图断言的图片副作用。
     await pumpPlayer(tester);
-    final double centerDx =
-        tester.getCenter(find.byKey(PlayerCoverDeck.swipeHostKey)).dx;
+    final double centerDx = tester
+        .getCenter(find.byKey(PlayerCoverDeck.swipeHostKey))
+        .dx;
 
     final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
     final outgoing = find.byKey(PlayerCoverDeck.outgoingArtworkCardKey);
@@ -453,9 +508,17 @@ void main() {
 
     /// 一轮换图：首帧旧图满、新图 0，中段两者中间值，250ms 后旧图撤下。
     Future<void> expectArtworkRefresh(
-        Track newTrack, String newUrl, String reason) async {
+      Track newTrack,
+      String newUrl,
+      String reason,
+    ) async {
       emitCustom(
-          current: newTrack, queue: [a, newTrack, c], index: 1, previous: a, next: c);
+        current: newTrack,
+        queue: [a, newTrack, c],
+        index: 1,
+        previous: a,
+        next: c,
+      );
       // 检测帧（先泵掉通知节流的补发窗口）：换图从 0 起步，旧图满、新图 0。
       await tester.pump(const Duration(milliseconds: 50));
       expect(outgoing, findsOneWidget, reason: '$reason：旧图卡应渲染（淡出起点）');
@@ -465,8 +528,11 @@ void main() {
       expect(tester.getCenter(outgoing).dx - centerDx, closeTo(0, 0.5));
       expect(tester.getCenter(center).dx - centerDx, closeTo(0, 0.5));
       // 旧图卡不得渲染新 URL（起点确实是被替换掉的那张图）。
-      expect(cardImageUrls(tester, outgoing), isNot(contains(newUrl)),
-          reason: '$reason：旧图卡不应渲染新 URL');
+      expect(
+        cardImageUrls(tester, outgoing),
+        isNot(contains(newUrl)),
+        reason: '$reason：旧图卡不应渲染新 URL',
+      );
 
       await tester.pump(const Duration(milliseconds: 50)); // 250ms 前段
       final double outMid = nearestOpacityOf(tester, outgoing);
@@ -478,11 +544,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250)); // 换图走完
       expect(outgoing, findsNothing, reason: '$reason：结束应撤下旧图卡');
       expect(nearestOpacityOf(tester, center), closeTo(1.0, 0.01));
-      expect(cardImageUrls(tester, center), contains(newUrl),
-          reason: '$reason：中心应展示新 URL');
-      expect(find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
-          findsOneWidget,
-          reason: '换图不改变曲目身份');
+      expect(
+        cardImageUrls(tester, center),
+        contains(newUrl),
+        reason: '$reason：中心应展示新 URL',
+      );
+      expect(
+        find.byKey(PlayerCoverDeck.centerCoverTrackKey(b.id)),
+        findsOneWidget,
+        reason: '换图不改变曲目身份',
+      );
     }
 
     // 1) 音源补图：无封面 → b1。
@@ -504,23 +575,35 @@ void main() {
     // 切到无封面的 c：中心卡（c）不得拿旧封面 b 当加载占位——否则目标图
     // 未预热时旧封面会从新卡下面透出来（连切残影的叠加来源）。
     emitCustom(
-        current: c, queue: [a, b1, c], index: 2, previous: b1, next: null);
+      current: c,
+      queue: [a, b1, c],
+      index: 2,
+      previous: b1,
+      next: null,
+    );
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
     await tester.pump(); // 动画首 tick
 
     final center = find.byKey(PlayerCoverDeck.centerCoverCardKey);
     final image = tester.widget<AppNetworkImage>(
-        find.descendant(of: center, matching: find.byType(AppNetworkImage)).first);
+      find.descendant(of: center, matching: find.byType(AppNetworkImage)).first,
+    );
     expect(image.url, isNull, reason: '新曲目 c 无封面（渲染回退占位）');
-    expect(image.placeholder, isNot(isA<AppNetworkImage>()),
-        reason: '中心卡不得用上一首封面当占位（应走曲目自己的默认封面 / 中性回退）');
+    expect(
+      image.placeholder,
+      isNot(isA<AppNetworkImage>()),
+      reason: '中心卡不得用上一首封面当占位（应走曲目自己的默认封面 / 中性回退）',
+    );
     // 滑出卡仍是旧曲目 b 自己的封面（旧封面作为动画内容保留，不是占位）。
     final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
     expect(
       tester
           .widget<AppNetworkImage>(
             find
-                .descendant(of: outgoing, matching: find.byType(AppNetworkImage))
+                .descendant(
+                  of: outgoing,
+                  matching: find.byType(AppNetworkImage),
+                )
                 .first,
           )
           .url,
@@ -559,14 +642,18 @@ void main() {
     expect(leftOldOpacity + leftNewOpacity, closeTo(0.85, 0.01));
     expect(cardDx(tester, leftOld), closeTo(leftDx, 0.5));
     expect(cardDx(tester, leftNew), closeTo(leftDx, 0.5));
-    expect(cardDx(tester, sideCard(left: false, track: d)),
-        closeTo(rightDx, 0.5));
+    expect(
+      cardDx(tester, sideCard(left: false, track: d)),
+      closeTo(rightDx, 0.5),
+    );
 
     await tester.pump(const Duration(milliseconds: 200));
     expect(leftOld, findsNothing);
     expect(nearestOpacityOf(tester, leftNew), closeTo(0.85, 0.01));
-    expect(nearestOpacityOf(tester, sideCard(left: false, track: d)),
-        closeTo(0.85, 0.01));
+    expect(
+      nearestOpacityOf(tester, sideCard(left: false, track: d)),
+      closeTo(0.85, 0.01),
+    );
 
     await tester.pump(const Duration(milliseconds: 400));
     expect(tester.takeException(), isNull);
@@ -582,7 +669,10 @@ void main() {
     emitCustom(current: b, queue: [a, b, d], index: 1, previous: a, next: d);
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧
     await tester.pump(const Duration(milliseconds: 60)); // 淡化过半
-    final double midValue = nearestOpacityOf(tester, sideCard(left: false, track: d));
+    final double midValue = nearestOpacityOf(
+      tester,
+      sideCard(left: false, track: d),
+    );
     expect(midValue, greaterThan(0.1));
 
     // 第二段变化：d → e（淡化尚未结束）。
@@ -590,8 +680,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50)); // 检测帧（接管，不重启）
     final newCard = sideCard(left: false, track: e);
     expect(newCard, findsOneWidget);
-    expect(sideCard(left: false, track: d), findsNothing,
-        reason: '淡化中的新目标变化：直接接管新身份，不保留已作废的中间身份');
+    expect(
+      sideCard(left: false, track: d),
+      findsNothing,
+      reason: '淡化中的新目标变化：直接接管新身份，不保留已作废的中间身份',
+    );
     // 不重启：新身份以当前透明度接管（透明度不回到 0），旧身份继续淡出。
     expect(nearestOpacityOf(tester, newCard), greaterThan(0.1));
     expect(cardDx(tester, newCard), closeTo(rightDx, 0.5));

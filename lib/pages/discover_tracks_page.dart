@@ -182,9 +182,10 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                 _collection.entity != null &&
                 state.items.isNotEmpty)
               M3EIconButton(
+                key: const Key('discoverImportPlaylistButton'),
                 variant: M3EIconButtonVariant.standard,
                 semanticLabel: _l10n(context).playlistImportToMine,
-                icon: const Icon(Icons.download_rounded),
+                icon: const Icon(Icons.playlist_add_rounded),
                 onPressed: _importPlaylist,
               ),
           ],
@@ -246,8 +247,8 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
                 url: cover,
                 fit: BoxFit.cover,
                 // 头部只有 96dp：按容器解码封面，避免按原图尺寸解码。
-                memCacheWidth:
-                    (96 * MediaQuery.of(context).devicePixelRatio).round(),
+                memCacheWidth: (96 * MediaQuery.of(context).devicePixelRatio)
+                    .round(),
                 placeholder: ColoredBox(
                   color: theme.colorScheme.surfaceContainerHighest,
                 ),

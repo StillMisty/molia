@@ -40,9 +40,9 @@ String trackCacheUsageLabel(
     LocalCachePart.lyrics => (data.lyricsCache, false),
     LocalCachePart.artwork => (data.artworkCache, false),
     LocalCachePart.resolveUrl => (
-        CacheUsage(bytes: 0, count: data.resolveEntries),
-        true,
-      ),
+      CacheUsage(bytes: 0, count: data.resolveEntries),
+      true,
+    ),
   };
   final writing = part == LocalCachePart.audio && data.audioWriting.count > 0
       ? l10n.trackCacheAudioWriting(formatCacheBytes(data.audioWriting.bytes))
@@ -65,13 +65,15 @@ String trackLocalDataSummaryLabel(
   bool localSource = false,
 }) {
   final quality = data.download?.quality ?? '';
-  final cachedQuality =
-      data.cachedQualities.isEmpty ? '' : data.cachedQualities.first;
+  final cachedQuality = data.cachedQualities.isEmpty
+      ? ''
+      : data.cachedQualities.first;
   switch (data.audioState) {
     case LocalPartState.downloaded:
       final record = data.download!;
-      final qualityLabel =
-          quality.isEmpty ? '' : sourceQualityLabel(l10n, quality);
+      final qualityLabel = quality.isEmpty
+          ? ''
+          : sourceQualityLabel(l10n, quality);
       return [
         l10n.downloadStatusDownloaded,
         if (qualityLabel.isNotEmpty) qualityLabel,

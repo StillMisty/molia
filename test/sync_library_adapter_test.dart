@@ -4,6 +4,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -84,11 +85,7 @@ void main() {
   });
 
   test('收藏列表使用固定 syncId', () async {
-    await repoA.toggleFavorite(
-      sourceKey: 'kw',
-      songId: 'x',
-      title: 'X',
-    );
+    await repoA.toggleFavorite(sourceKey: 'kw', songId: 'x', title: 'X');
     final playlists = await repoA.syncExportPlaylists();
     // 同步记录不带收藏概念（合并键是固定 syncId），按保留行名取。
     final favorites = playlists.firstWhere((p) => p.name == '__favorites__');
@@ -107,14 +104,12 @@ void main() {
     );
     final result = await adapterA.apply(await adapterB.collect());
     expect(result.applied, 1);
-    expect(
-      (await repoA.findPlaylistByName('改名歌单')),
-      isNotNull,
-    );
+    expect((await repoA.findPlaylistByName('改名歌单')), isNotNull);
 
     clock = 3000;
-    final currentRow = (await repoA.syncExportPlaylists())
-        .firstWhere((p) => p.name == '改名歌单');
+    final currentRow = (await repoA.syncExportPlaylists()).firstWhere(
+      (p) => p.name == '改名歌单',
+    );
     final stale = SyncEnvelope(
       deviceId: 'devC',
       producedAt: 1,
@@ -172,7 +167,10 @@ void main() {
     await adapterA.apply(await adapterB.collect());
 
     final tracksA = await repoA.listPlaylistTracks(playlistId);
-    expect(tracksA.map((t) => t.songId), containsAll(['remote-1', 'local-added']));
+    expect(
+      tracksA.map((t) => t.songId),
+      containsAll(['remote-1', 'local-added']),
+    );
   });
 
   test('换源更新版本：列表替换后的曲目可同步到对端', () async {
@@ -181,17 +179,12 @@ void main() {
     final before = (await repoA.syncExportPlaylistTracks()).single.version;
 
     clock = 2000;
-    await repoA.replacePlaylistTrack(
-      playlistId,
-      (sourceKey: 'wy', songId: 't1'),
-      track('t1', source: 'kw'),
-    );
+    await repoA.replacePlaylistTrack(playlistId, (
+      sourceKey: 'wy',
+      songId: 't1',
+    ), track('t1', source: 'kw'));
     final after = (await repoA.syncExportPlaylistTracks()).single.version;
-    expect(
-      after.isNewerThan(before),
-      isTrue,
-      reason: '换源是本地修改：版本必须前进（否则永不传播）',
-    );
+    expect(after.isNewerThan(before), isTrue, reason: '换源是本地修改：版本必须前进（否则永不传播）');
 
     final result = await adapterB.apply(await adapterA.collect());
     expect(result.applied, greaterThanOrEqualTo(1));
@@ -211,9 +204,9 @@ void main() {
     final collected = await adapterA.collect();
     final trackRecords = collected[SyncCategory.playlistTracks]!;
     expect(
-      trackRecords.where((record) => !record.deleted).map(
-            (record) => record.data!['sourceKey'],
-          ),
+      trackRecords
+          .where((record) => !record.deleted)
+          .map((record) => record.data!['sourceKey']),
       ['wy'],
     );
     expect(trackRecords.where((record) => record.deleted), isEmpty);
@@ -258,7 +251,9 @@ void main() {
     await repoA.createPlaylist('新列表');
     final third = await adapter.collect();
     expect(counting.exportCalls, greaterThan(readsAfterFirst));
-    expect(third[SyncCategory.playlists]!.length,
-        greaterThan(first[SyncCategory.playlists]!.length));
+    expect(
+      third[SyncCategory.playlists]!.length,
+      greaterThan(first[SyncCategory.playlists]!.length),
+    );
   });
 }

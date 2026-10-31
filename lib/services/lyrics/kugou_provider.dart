@@ -25,14 +25,15 @@ class KugouProvider extends LyricProvider {
   }
 
   @override
-  Future<List<SongMatch>> searchMultiple(String title, String artist,
-      {int limit = 3}) async {
+  Future<List<SongMatch>> searchMultiple(
+    String title,
+    String artist, {
+    int limit = 3,
+  }) async {
     try {
       final keyword = '$title $artist'.trim();
       final result = await KgSearch.searchWithMeta(keyword, limit: limit);
-      return [
-        for (final track in result.tracks.take(limit)) _toMatch(track),
-      ];
+      return [for (final track in result.tracks.take(limit)) _toMatch(track)];
     } catch (e, st) {
       _logger.severe('搜索失败', e, st);
       return [];

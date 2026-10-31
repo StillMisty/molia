@@ -20,14 +20,14 @@ import '../support/fakes.dart';
 /// - `PlayMode` 图标与标签只有一份映射；
 /// - seek 宿主的控制器生命周期与低频快照订阅不再由页面各写一遍。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -54,15 +54,17 @@ void main() {
     PlayMode mode = PlayMode.listLoop,
   }) {
     final track = current ?? _track('a');
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-      isPlaying: isPlaying,
-      position: position,
-      duration: duration,
-      mode: mode,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: isPlaying,
+        position: position,
+        duration: duration,
+        mode: mode,
+      ),
+    );
   }
 
   Future<void> pumpControl(WidgetTester tester, Widget child) async {
@@ -99,8 +101,10 @@ void main() {
       },
     );
     addTearDown(() {
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
       HapticsService.enabledNotifier.value = HapticsService.defaultEnabled;
     });
     return vibrations;
@@ -198,13 +202,15 @@ void main() {
 
   group('上一首 / 下一首矩阵', () {
     final List<
-        ({
-          String name,
-          Widget Function() build,
-          IconData icon,
-          String Function(AppLocalizations l10n) labelOf,
-          String call,
-        })> cases = [
+      ({
+        String name,
+        Widget Function() build,
+        IconData icon,
+        String Function(AppLocalizations l10n) labelOf,
+        String call,
+      })
+    >
+    cases = [
       (
         name: '上一首',
         build: () => const PlaybackPreviousButton(),
@@ -253,8 +259,7 @@ void main() {
     Future<void> pumpSeek(
       WidgetTester tester, {
       SeekTimeLabels timeLabels = SeekTimeLabels.inline,
-    }) =>
-        pumpControl(tester, PlaybackSeekBar(timeLabels: timeLabels));
+    }) => pumpControl(tester, PlaybackSeekBar(timeLabels: timeLabels));
 
     M3ESlider slider(WidgetTester tester) =>
         tester.widget<M3ESlider>(find.byType(M3ESlider));
@@ -335,10 +340,12 @@ void main() {
 /// 当前按钮里的播放态图标（`IconSwap` 落定后只留一份）。
 IconData searchIcon(WidgetTester tester) {
   final icons = tester
-      .widgetList<Icon>(find.descendant(
-        of: find.byType(M3EIconButton),
-        matching: find.byType(Icon),
-      ))
+      .widgetList<Icon>(
+        find.descendant(
+          of: find.byType(M3EIconButton),
+          matching: find.byType(Icon),
+        ),
+      )
       .map((icon) => icon.icon)
       .toList();
   if (icons.contains(Icons.pause_rounded)) return Icons.pause_rounded;

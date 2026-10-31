@@ -7,8 +7,9 @@ import 'package:molia/services/ai/ai_recommendation_service.dart';
 /// 可脚本化的 AI 生成器假实现（不触碰 LLM / 网络）。
 class FakeAiDjGenerator implements AiRecommendationGenerator {
   FakeAiDjGenerator({AiDjBatch Function()? batchFactory})
-      : batchFactory = batchFactory ??
-            (() => AiDjBatch(items: const [], generatedAt: DateTime.now()));
+    : batchFactory =
+          batchFactory ??
+          (() => AiDjBatch(items: const [], generatedAt: DateTime.now()));
 
   AiDjBatch Function() batchFactory;
 
@@ -74,11 +75,13 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     if (onProgress != null && emitProgress) {
       onProgress(AiDjProgress(phase: AiDjPhase.profile, startedAt: startedAt));
       onProgress(AiDjProgress(phase: AiDjPhase.model, startedAt: startedAt));
-      onProgress(AiDjProgress(
-        phase: AiDjPhase.resolving,
-        startedAt: startedAt,
-        total: count,
-      ));
+      onProgress(
+        AiDjProgress(
+          phase: AiDjPhase.resolving,
+          startedAt: startedAt,
+          total: count,
+        ),
+      );
     }
     final wait = gate;
     if (wait != null) await wait.future;
@@ -91,12 +94,14 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     final failure = error;
     if (failure != null) throw failure;
     if (onProgress != null && emitProgress) {
-      onProgress(AiDjProgress(
-        phase: AiDjPhase.resolving,
-        startedAt: startedAt,
-        done: count,
-        total: count,
-      ));
+      onProgress(
+        AiDjProgress(
+          phase: AiDjPhase.resolving,
+          startedAt: startedAt,
+          done: count,
+          total: count,
+        ),
+      );
     }
     return batchFactory();
   }
@@ -134,12 +139,14 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
         message: 'cancelled',
       );
     }
-    onProgress?.call(AiDjProgress(
-      phase: AiDjPhase.resolving,
-      startedAt: DateTime.now(),
-      total: batch.unresolved.length,
-      done: batch.unresolved.length,
-    ));
+    onProgress?.call(
+      AiDjProgress(
+        phase: AiDjPhase.resolving,
+        startedAt: DateTime.now(),
+        total: batch.unresolved.length,
+        done: batch.unresolved.length,
+      ),
+    );
     return unresolvedFactory?.call(batch) ?? batch;
   }
 
@@ -149,6 +156,5 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
   @override
   Future<AiUpstreamSummary> summarizeUpstream({
     AiPreferences preferences = AiPreferences.defaults,
-  }) async =>
-      summary;
+  }) async => summary;
 }

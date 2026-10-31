@@ -27,25 +27,25 @@ import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
-      items: [
-        for (var i = 0; i < count; i++)
-          ResolvedRecommendation(
-            source: AiRecommendation(
-              title: 'Song ${from + i}',
-              artist: 'Artist',
-              reason: 'Reason ${from + i}',
-            ),
-            track: Track(
-              id: TrackId('wy', '${from + i}'),
-              title: 'Song ${from + i}',
-              artists: const [Artist(name: 'Artist')],
-              duration: const Duration(seconds: 100),
-              origin: TrackOrigin.builtin,
-            ),
-          ),
-      ],
-      generatedAt: DateTime.now(),
-    );
+  items: [
+    for (var i = 0; i < count; i++)
+      ResolvedRecommendation(
+        source: AiRecommendation(
+          title: 'Song ${from + i}',
+          artist: 'Artist',
+          reason: 'Reason ${from + i}',
+        ),
+        track: Track(
+          id: TrackId('wy', '${from + i}'),
+          title: 'Song ${from + i}',
+          artists: const [Artist(name: 'Artist')],
+          duration: const Duration(seconds: 100),
+          origin: TrackOrigin.builtin,
+        ),
+      ),
+  ],
+  generatedAt: DateTime.now(),
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -63,9 +63,8 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
       await AiSettingsStore(
-              settings:
-                  testSettingsRegistry(preferences: prefs, secrets: secrets))
-          .saveConfig(
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ).saveConfig(
         const LlmConfig(
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-test',
@@ -80,7 +79,8 @@ void main() {
       libraryProvider: libraryProvider,
       recommendationService: generator,
       settingsStore: AiSettingsStore(
-          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ),
     );
     await provider.init();
   }
@@ -97,7 +97,8 @@ void main() {
         providers: [
           ChangeNotifierProvider<AiDjProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(
-              value: playbackProvider),
+            value: playbackProvider,
+          ),
           ChangeNotifierProvider<LibraryProvider>.value(value: libraryProvider),
         ],
         child: M3EMaterialApp(
@@ -220,8 +221,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byKey(const Key('aiDjCarousel')), findsOneWidget);
-    expect(find.byKey(const Key('aiDjPulsingSkeleton')), findsNothing,
-        reason: '已有列表不打断浏览');
+    expect(
+      find.byKey(const Key('aiDjPulsingSkeleton')),
+      findsNothing,
+      reason: '已有列表不打断浏览',
+    );
     expect(find.textContaining('Finding songs'), findsOneWidget);
     expect(find.byType(AiDjThinProgress), findsOneWidget);
     expect(find.text('Song 0'), findsOneWidget);
@@ -238,26 +242,28 @@ void main() {
     await pumpCarousel(tester);
     final activeId = provider.activeBatchId;
     await provider.startRadio();
-    backend.emit(BackendSnapshot(
-      current: Track(
-        id: const TrackId('wy', '16'),
-        title: 'Song 16',
-        artists: const [Artist(name: 'Artist')],
-        origin: TrackOrigin.builtin,
+    backend.emit(
+      BackendSnapshot(
+        current: Track(
+          id: const TrackId('wy', '16'),
+          title: 'Song 16',
+          artists: const [Artist(name: 'Artist')],
+          origin: TrackOrigin.builtin,
+        ),
+        queue: [
+          for (var i = 0; i < 20; i++)
+            Track(
+              id: TrackId('wy', '$i'),
+              title: 'Song $i',
+              artists: const [Artist(name: 'Artist')],
+              origin: TrackOrigin.builtin,
+            ),
+        ],
+        currentIndex: 16,
+        isPlaying: true,
+        context: const PlaybackContext(name: kAiDjContextName, uri: 'lx:ai'),
       ),
-      queue: [
-        for (var i = 0; i < 20; i++)
-          Track(
-            id: TrackId('wy', '$i'),
-            title: 'Song $i',
-            artists: const [Artist(name: 'Artist')],
-            origin: TrackOrigin.builtin,
-          ),
-      ],
-      currentIndex: 16,
-      isPlaying: true,
-      context: const PlaybackContext(name: kAiDjContextName, uri: 'lx:ai'),
-    ));
+    );
     generator.batchFactory = () => _batch(20, 20);
     provider.onPlaybackChanged();
     await tester.pumpAndSettle();
@@ -274,10 +280,8 @@ void main() {
   testWidgets('生成失败：展示重试卡，点击触发重新生成', (tester) async {
     await pumpProvider();
     await provider.grantConsent();
-    generator.batchFactory = () => AiDjBatch(
-          items: const [],
-          generatedAt: DateTime.now(),
-        );
+    generator.batchFactory = () =>
+        AiDjBatch(items: const [], generatedAt: DateTime.now());
     await provider.setEnabled(true);
     expect(provider.lastError, isNotNull);
 
@@ -427,24 +431,21 @@ void main() {
 
   testWidgets('焦点卡没有推荐理由：信息区整块不渲染', (tester) async {
     generator.batchFactory = () => AiDjBatch(
-          items: [
-            for (var i = 0; i < 3; i++)
-              ResolvedRecommendation(
-                source: AiRecommendation(
-                  title: 'Song $i',
-                  artist: 'Artist',
-                ),
-                track: Track(
-                  id: TrackId('wy', '$i'),
-                  title: 'Song $i',
-                  artists: const [Artist(name: 'Artist')],
-                  duration: const Duration(seconds: 100),
-                  origin: TrackOrigin.builtin,
-                ),
-              ),
-          ],
-          generatedAt: DateTime.now(),
-        );
+      items: [
+        for (var i = 0; i < 3; i++)
+          ResolvedRecommendation(
+            source: AiRecommendation(title: 'Song $i', artist: 'Artist'),
+            track: Track(
+              id: TrackId('wy', '$i'),
+              title: 'Song $i',
+              artists: const [Artist(name: 'Artist')],
+              duration: const Duration(seconds: 100),
+              origin: TrackOrigin.builtin,
+            ),
+          ),
+      ],
+      generatedAt: DateTime.now(),
+    );
     await pumpProvider();
     await provider.grantConsent();
     await provider.setEnabled(true);
@@ -489,9 +490,11 @@ void main() {
           providers: [
             ChangeNotifierProvider<AiDjProvider>.value(value: provider),
             ChangeNotifierProvider<PlaybackProvider>.value(
-                value: playbackProvider),
+              value: playbackProvider,
+            ),
             ChangeNotifierProvider<LibraryProvider>.value(
-                value: libraryProvider),
+              value: libraryProvider,
+            ),
             ChangeNotifierProvider<SearchProvider>.value(value: search),
           ],
           child: M3EMaterialApp(
@@ -510,21 +513,21 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    // 未开启：保留「输入关键词搜索歌曲」占位，推荐流不出现。
+    // 未开启：保留「输入关键词搜索歌曲、歌手或歌词」占位，推荐流不出现。
     await pumpTab();
-    expect(find.text('输入关键词搜索歌曲'), findsOneWidget);
+    expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
     expect(find.byKey(const Key('aiDjGenerateCard')), findsNothing);
 
     // 开启：占位让位给推荐流（空列表时是「生成推荐」引导卡）。
     await provider.setEnabled(true);
     await tester.pumpAndSettle();
-    expect(find.text('输入关键词搜索歌曲'), findsNothing);
+    expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsNothing);
     expect(find.byKey(const Key('aiDjGenerateCard')), findsOneWidget);
 
     // 关闭：占位回来。
     await provider.setEnabled(false);
     await tester.pumpAndSettle();
-    expect(find.text('输入关键词搜索歌曲'), findsOneWidget);
+    expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
     expect(find.byKey(const Key('aiDjGenerateCard')), findsNothing);
   });
 }

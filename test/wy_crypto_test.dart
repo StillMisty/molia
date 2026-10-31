@@ -11,10 +11,11 @@ void main() {
 
   group('weapi 向量', () {
     test('歌曲详情参数（含 encSecKey）', () {
-      final result = weapiParams(
-        {'id': 33894312, 'n': 100000, 'p': 1},
-        secretKey: secretKey,
-      );
+      final result = weapiParams({
+        'id': 33894312,
+        'n': 100000,
+        'p': 1,
+      }, secretKey: secretKey);
       expect(
         result.params,
         'FQRyBnNuUj2FOsy2/IspdBIcXiPkbBhOBJV3kWmZPRCT0H3NbLztizAokPYcZCq9'
@@ -33,7 +34,10 @@ void main() {
       final result = weapiParams(const {}, secretKey: secretKey);
       expect(result.params, 'HzoXVX52AK6zuF29+fczneY+ykxuY4S585gbSdMrV7g=');
       // encSecKey 只与 secretKey 有关，与明文无关
-      expect(result.encSecKey, weapiParams(const {}, secretKey: secretKey).encSecKey);
+      expect(
+        result.encSecKey,
+        weapiParams(const {}, secretKey: secretKey).encSecKey,
+      );
     });
 
     test('weapiForm 返回 params / encSecKey 两个表单字段', () {

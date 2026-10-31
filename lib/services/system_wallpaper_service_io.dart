@@ -28,10 +28,10 @@ class SystemWallpaperSource {
     Map<String, String>? environment,
     GsettingsValueReader? readGsettings,
     Future<bool> Function(String path)? fileExists,
-  })  : _platform = platform ?? defaultTargetPlatform,
-        _environment = environment ?? Platform.environment,
-        _readGsettings = readGsettings ?? _runGsettings,
-        _fileExists = fileExists ?? _existsOnDisk;
+  }) : _platform = platform ?? defaultTargetPlatform,
+       _environment = environment ?? Platform.environment,
+       _readGsettings = readGsettings ?? _runGsettings,
+       _fileExists = fileExists ?? _existsOnDisk;
 
   /// GNOME 背景设置 schema（GNOME / Cinnamon / MATE 同源）。
   static const String _gnomeBackgroundSchema = 'org.gnome.desktop.background';
@@ -140,10 +140,11 @@ class SystemWallpaperSource {
   }
 
   static Future<String?> _runGsettings(String key) async {
-    final result = await Process.run(
-      'gsettings',
-      <String>['get', _gnomeBackgroundSchema, key],
-    );
+    final result = await Process.run('gsettings', <String>[
+      'get',
+      _gnomeBackgroundSchema,
+      key,
+    ]);
     if (result.exitCode != 0) return null;
     return '${result.stdout}';
   }

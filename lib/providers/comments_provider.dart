@@ -67,22 +67,19 @@ class CommentsTabState {
 
   @override
   int get hashCode => Object.hash(
-        Object.hashAll(items),
-        total,
-        page,
-        hasMore,
-        isLoading,
-        isLoadingMore,
-        loadMoreFailed,
-        failure,
-      );
+    Object.hashAll(items),
+    total,
+    page,
+    hasMore,
+    isLoading,
+    isLoadingMore,
+    loadMoreFailed,
+    failure,
+  );
 }
 
 class CommentsProvider extends ChangeNotifier {
-  CommentsProvider({
-    required this._service,
-    required this._registry,
-  }) {
+  CommentsProvider({required this._service, required this._registry}) {
     for (final kind in CommentKind.values) {
       _controllers[kind] = PagedListController<Comment>(
         keyOf: (comment) => comment.id,

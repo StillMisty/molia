@@ -26,8 +26,9 @@ class AppUiMessenger implements UiMessenger {
   void showFailure(SourceFailure failure) {
     final context = navigatorKey.currentContext;
     final l10n = context == null ? null : AppLocalizations.of(context);
-    final text =
-        l10n == null ? '播放失败: ${failure.message}' : _localize(l10n, failure);
+    final text = l10n == null
+        ? '播放失败: ${failure.message}'
+        : _localize(l10n, failure);
     _notifications.showSnackBar(text, duration: const Duration(seconds: 3));
   }
 

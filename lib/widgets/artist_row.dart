@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'card_list_surface.dart';
 import 'library_cover.dart';
+import 'row_extent.dart';
 
 /// 固定行高的歌手行（搜索结果「歌手」类型；与 [TrackRow] 同一行高节奏）。
 ///
@@ -19,8 +20,17 @@ class ArtistRow extends StatelessWidget {
     this.onTap,
   });
 
-  /// 固定行高：可直接作为 `itemExtent`（与 [TrackRow.extent] 对齐）。
-  static const double extent = 72;
+  /// 行高（按系统文字缩放动态计算，M3E 双行 token 为最小值）。
+  /// 可直接作为 `itemExtent`（与 [TrackRow.extentOf] 同源）。
+  static double extentOf(BuildContext context) {
+    final m3e = M3ETheme.of(context);
+    return scaledRowExtentOf(
+      context,
+      minExtent: m3e.listTheme.item.twoLineHeight,
+      styles: [m3e.typeScale.bodyLarge, m3e.typeScale.bodyMedium],
+      stacked: true,
+    );
+  }
 
   final String name;
   final String? avatarUrl;
@@ -47,7 +57,7 @@ class ArtistRow extends StatelessWidget {
       onPressed: onTap,
       semanticLabel: subtitle == null ? name : '$name, $subtitle',
       child: SizedBox(
-        height: extent,
+        height: extentOf(context),
         child: Row(
           children: [
             ClipOval(
@@ -90,11 +100,11 @@ class ArtistRow extends StatelessWidget {
   }
 
   Widget _buildPlaceholder(M3EColorScheme scheme) => ColoredBox(
-        color: scheme.surfaceContainerHighest,
-        child: Icon(
-          Icons.person_rounded,
-          size: coverSize * 0.6,
-          color: scheme.onSurfaceVariant,
-        ),
-      );
+    color: scheme.surfaceContainerHighest,
+    child: Icon(
+      Icons.person_rounded,
+      size: coverSize * 0.6,
+      color: scheme.onSurfaceVariant,
+    ),
+  );
 }

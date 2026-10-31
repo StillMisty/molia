@@ -25,16 +25,22 @@ bool isProcessAlive(int pid) {
 bool _isProcessAliveWindows(int pid) {
   try {
     final kernel32 = DynamicLibrary.open('kernel32.dll');
-    final openProcess = kernel32.lookupFunction<
-        IntPtr Function(Uint32, Int32, Uint32),
-        int Function(int, int, int)>('OpenProcess');
-    final waitForSingleObject = kernel32.lookupFunction<
-        Uint32 Function(IntPtr, Uint32),
-        int Function(int, int)>('WaitForSingleObject');
-    final closeHandle = kernel32.lookupFunction<Int32 Function(IntPtr),
-        int Function(int)>('CloseHandle');
-    final getLastError = kernel32.lookupFunction<Uint32 Function(),
-        int Function()>('GetLastError');
+    final openProcess = kernel32
+        .lookupFunction<
+          IntPtr Function(Uint32, Int32, Uint32),
+          int Function(int, int, int)
+        >('OpenProcess');
+    final waitForSingleObject = kernel32
+        .lookupFunction<
+          Uint32 Function(IntPtr, Uint32),
+          int Function(int, int)
+        >('WaitForSingleObject');
+    final closeHandle = kernel32
+        .lookupFunction<Int32 Function(IntPtr), int Function(int)>(
+          'CloseHandle',
+        );
+    final getLastError = kernel32
+        .lookupFunction<Uint32 Function(), int Function()>('GetLastError');
 
     // SYNCHRONIZE：只需要等进程退出，不需要读它的内存。
     final handle = openProcess(0x00100000, 0, pid);
@@ -58,18 +64,18 @@ bool _isProcessAliveWindows(int pid) {
 
 bool _isProcessAlivePosix(int pid) {
   try {
-    final kill = DynamicLibrary.process().lookupFunction<
-        Int32 Function(Int32, Int32),
-        int Function(int, int)>('kill');
+    final kill = DynamicLibrary.process()
+        .lookupFunction<Int32 Function(Int32, Int32), int Function(int, int)>(
+          'kill',
+        );
     if (kill(pid, 0) == 0) return true;
 
     // errno：ESRCH(3) = 不存在；EPERM(1) = 存在但无权限（仍存活）。
     // 取值入口按 libc 分支：Linux `__errno_location`、macOS `__error`。
-    final errnoLocation = DynamicLibrary.process().lookupFunction<
-        Pointer<Int32> Function(),
-        Pointer<Int32> Function()>(
-      Platform.isMacOS ? '__error' : '__errno_location',
-    );
+    final errnoLocation = DynamicLibrary.process()
+        .lookupFunction<Pointer<Int32> Function(), Pointer<Int32> Function()>(
+          Platform.isMacOS ? '__error' : '__errno_location',
+        );
     return errnoLocation().value != 3;
   } catch (_) {
     return true;

@@ -93,7 +93,7 @@ void showFavoriteFeedback(
     message: outcome.isFailure
         ? l10n.operationFailed
         : outcome.isFavorite
-            ? l10n.favoriteAdd
-            : l10n.favoriteRemove,
+        ? l10n.favoriteAdd
+        : l10n.favoriteRemove,
   );
 }

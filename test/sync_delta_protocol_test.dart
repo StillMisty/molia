@@ -108,12 +108,14 @@ void main() {
 
     // 墓碑语义：A 删掉一条历史（删除也取新，写墓碑），再写两条把窗口推超上限；
     // C 落后于窗口起点 → bootstrap，落地后条目同样消失。
-    await a.library.addHistoryEntry(const PlayHistoryEntry(
-      sourceKey: 'kuwo',
-      songId: 'song-1',
-      title: '要删的歌',
-      playedAt: 10,
-    ));
+    await a.library.addHistoryEntry(
+      const PlayHistoryEntry(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '要删的歌',
+        playedAt: 10,
+      ),
+    );
     await a.engine.syncNow();
     await a.library.deleteHistoryEntry('kuwo', 'song-1');
     await a.engine.syncNow();
@@ -129,10 +131,7 @@ void main() {
     expect(c.prefs.getString('theme_mode'), 'system');
     // 数据完整：删除的条目在对端也不存在，且墓碑已落地（防止旧快照复活）。
     expect(await c.library.listHistory(), isEmpty);
-    expect(
-      await c.library.syncExportTombstones(['history']),
-      hasLength(1),
-    );
+    expect(await c.library.syncExportTombstones(['history']), hasLength(1));
     expect(peerOf(c, 'devA').cursorSeq, await a.journal.headSeq());
   });
 
@@ -202,12 +201,14 @@ void main() {
     int clock() => now;
     final a = await network.addDevice('devA', clock: clock);
     final b = await network.addDevice('devB', clock: clock);
-    await a.library.addHistoryEntry(const PlayHistoryEntry(
-      sourceKey: 'kuwo',
-      songId: 'song-1',
-      title: '要被篡改的歌',
-      playedAt: 10,
-    ));
+    await a.library.addHistoryEntry(
+      const PlayHistoryEntry(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '要被篡改的歌',
+        playedAt: 10,
+      ),
+    );
     await a.engine.syncNow();
     await b.engine.syncNow();
     expect(await b.library.listHistory(), hasLength(1));
@@ -239,12 +240,14 @@ void main() {
     final a = await network.addDevice('devA');
     final b = await network.addDevice('devB');
     // A 有数据但还没跑过轮次（快照按需就地构建）。
-    await a.library.addHistoryEntry(const PlayHistoryEntry(
-      sourceKey: 'kuwo',
-      songId: 'song-1',
-      title: '存量歌曲',
-      playedAt: 10,
-    ));
+    await a.library.addHistoryEntry(
+      const PlayHistoryEntry(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '存量歌曲',
+        playedAt: 10,
+      ),
+    );
 
     await b.engine.syncNow();
     expect(await b.library.listHistory(), hasLength(1));
@@ -264,12 +267,14 @@ void main() {
     int clock() => now;
     final a = await network.addDevice('devA', clock: clock);
     final b = await network.addDevice('devB', clock: clock);
-    await a.library.addHistoryEntry(const PlayHistoryEntry(
-      sourceKey: 'kuwo',
-      songId: 'song-1',
-      title: '远端标题',
-      playedAt: 10,
-    ));
+    await a.library.addHistoryEntry(
+      const PlayHistoryEntry(
+        sourceKey: 'kuwo',
+        songId: 'song-1',
+        title: '远端标题',
+        playedAt: 10,
+      ),
+    );
     await a.engine.syncNow();
     await b.engine.syncNow();
     expect((await b.library.listHistory()).single.title, '远端标题');
@@ -297,24 +302,27 @@ void main() {
     await ghost.engine.syncNow();
     // ghost 只 ack 到 0；随后离线（不再参与网络）。
     network.devices.remove('devGhost');
-    final ancient = DateTime.now().millisecondsSinceEpoch -
+    final ancient =
+        DateTime.now().millisecondsSinceEpoch -
         SyncPeerState.lostThresholdMs -
         1000;
-    a.state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: 'devGhost',
-          lastSeenAt: ancient,
-          lastSuccessAt: ancient,
-          cursorSeq: 0,
-          ackedSeq: 0,
-        ),
-      ],
-    ));
+    a.state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: 'devGhost',
+            lastSeenAt: ancient,
+            lastSuccessAt: ancient,
+            cursorSeq: 0,
+            ackedSeq: 0,
+          ),
+        ],
+      ),
+    );
 
     // 三次变更超过条数上限：失联设备的旧 ack 不参与 minAck → 正常裁剪。
     await a.setSetting('theme_mode', 'dark');
@@ -337,21 +345,24 @@ void main() {
     await a.engine.syncNow();
     await b.engine.syncNow();
     // B 只 ack 到 0；随后失联（超过 180 天无接触）。
-    a.state.recordRound(SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [
-        SyncPeerState(
-          deviceId: 'devB',
-          lastSeenAt: a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
-          lastSuccessAt: a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
-          cursorSeq: 0,
-          ackedSeq: 0,
-        ),
-      ],
-    ));
+    a.state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: 'devB',
+            lastSeenAt: a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
+            lastSuccessAt:
+                a.state.nowMs() - SyncPeerState.lostThresholdMs - 1000,
+            cursorSeq: 0,
+            ackedSeq: 0,
+          ),
+        ],
+      ),
+    );
     network.devices.remove('devB');
 
     // 三次变更超过条数上限：失联对端的旧 ack 不参与 minAck → 正常裁剪。

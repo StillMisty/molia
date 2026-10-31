@@ -25,6 +25,7 @@ tool/agent/perf.sh                       # 全链路体检：frames / startup / 
 tool/agent/cpu.sh                        # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
 tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
 tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
+tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：提交前自动格式化暂存 Dart 文件
 ```
 
 生成物（改对应源码后必跑，产物提交进仓库）：

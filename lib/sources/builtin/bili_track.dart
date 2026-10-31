@@ -98,14 +98,16 @@ SourceTrack? biliTrackFromItem(
   final titleText = biliText(title ?? item['title']);
   if (titleText.isEmpty) return null;
 
-  final authorText = biliText(_firstText([
-    author,
-    item['author'],
-    item['author_name'],
-    item['uname'],
-    upperMap['name'],
-    upperMap['uname'],
-  ]));
+  final authorText = biliText(
+    _firstText([
+      author,
+      item['author'],
+      item['author_name'],
+      item['uname'],
+      upperMap['name'],
+      upperMap['uname'],
+    ]),
+  );
   final authorId = _firstText([
     authorMid,
     item['mid'],
@@ -119,14 +121,12 @@ SourceTrack? biliTrackFromItem(
   final cidText = _firstText([cid, item['cid']]);
   if (bvidText.isEmpty && aidText.isEmpty) return null;
 
-  final coverText = biliCoverUrl(_firstText([
-    cover,
-    item['pic'],
-    item['cover'],
-    item['img'],
-  ]));
-  final durationValue =
-      biliDuration(duration ?? item['duration'] ?? item['length']);
+  final coverText = biliCoverUrl(
+    _firstText([cover, item['pic'], item['cover'], item['img']]),
+  );
+  final durationValue = biliDuration(
+    duration ?? item['duration'] ?? item['length'],
+  );
 
   final raw = <String, dynamic>{
     ...item,
@@ -137,10 +137,7 @@ SourceTrack? biliTrackFromItem(
     '_types': _biliTypes,
     if (authorText.isNotEmpty)
       kRawArtistsField: [
-        {
-          'name': authorText,
-          if (authorId.isNotEmpty) 'id': authorId,
-        },
+        {'name': authorText, if (authorId.isNotEmpty) 'id': authorId},
       ],
   };
 

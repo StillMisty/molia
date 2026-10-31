@@ -15,9 +15,8 @@ AudioPredownloadTask? startAudioPredownload({
   required Uri uri,
   required String targetPath,
   Map<String, String>? headers,
-}) =>
-    platform.startAudioPredownload(
-      uri: uri,
-      targetPath: targetPath,
-      headers: headers,
-    );
+}) => platform.startAudioPredownload(
+  uri: uri,
+  targetPath: targetPath,
+  headers: headers,
+);

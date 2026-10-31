@@ -39,8 +39,13 @@ void main() {
 
     test('addKgQuality requireHash：缺 hash 跳过', () {
       final types = <String, Map<String, dynamic>>{};
-      KgSearch.addKgQuality(types, '128k',
-          size: 1048576, hash: null, requireHash: true);
+      KgSearch.addKgQuality(
+        types,
+        '128k',
+        size: 1048576,
+        hash: null,
+        requireHash: true,
+      );
       expect(types, isEmpty);
     });
 
@@ -84,8 +89,10 @@ void main() {
     });
 
     test('fixCoverUrl：相对路径补全，空值 null，绝对路径原样', () {
-      expect(MgSearch.fixCoverUrl('/data/x.jpg'),
-          'http://d.musicapp.migu.cn/data/x.jpg');
+      expect(
+        MgSearch.fixCoverUrl('/data/x.jpg'),
+        'http://d.musicapp.migu.cn/data/x.jpg',
+      );
       expect(MgSearch.fixCoverUrl('https://img/1.jpg'), 'https://img/1.jpg');
       expect(MgSearch.fixCoverUrl(''), isNull);
       expect(MgSearch.fixCoverUrl(null), isNull);
@@ -115,8 +122,10 @@ void main() {
       );
       expect(map.keys, ['320k', '128k']);
       expect(map['320k']!['size'], '5.00 MiB');
-      expect(WyMusicDetail.typeList(map).map((e) => e['type']).toList(),
-          ['128k', '320k']);
+      expect(WyMusicDetail.typeList(map).map((e) => e['type']).toList(), [
+        '128k',
+        '320k',
+      ]);
     });
 
     test('999000 档：flac 使用传入 size（歌单详情传 null 固定）', () {
@@ -167,8 +176,10 @@ void main() {
       expect(track.raw['otherSource'], isNull);
       expect(track.raw['_types'], typeMap);
       expect(track.coverUrl, 'http://img/x.jpg');
-      expect(track.qualities.map((q) => q.type),
-          containsAll(['flac24bit', '320k', '128k']));
+      expect(
+        track.qualities.map((q) => q.type),
+        containsAll(['flac24bit', '320k', '128k']),
+      );
     });
   });
 }

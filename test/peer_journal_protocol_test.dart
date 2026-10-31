@@ -6,17 +6,18 @@ import 'package:molia/domain/models/device_sync.dart';
 /// 跳过条目，因此窗口取舍、游标消费、分块衔接与文件命名都在这里钉住。
 void main() {
   SyncJournalEntry entry(int seq) => SyncJournalEntry(
-        seq: seq,
-        category: SyncCategory.settings,
-        record: SyncRecord(
-          key: 'key-$seq',
-          version: SyncVersion(physical: seq, deviceId: 'devB'),
-          data: {'v': '$seq'},
-        ),
-      );
+    seq: seq,
+    category: SyncCategory.settings,
+    record: SyncRecord(
+      key: 'key-$seq',
+      version: SyncVersion(physical: seq, deviceId: 'devB'),
+      data: {'v': '$seq'},
+    ),
+  );
 
-  List<int> seqs(JournalDeltaConsumption result) =>
-      [for (final entry in result.accepted) entry.seq];
+  List<int> seqs(JournalDeltaConsumption result) => [
+    for (final entry in result.accepted) entry.seq,
+  ];
 
   group('窗口选择', () {
     test('游标 -1 的全新对端：回全量快照', () {
@@ -204,9 +205,7 @@ void main() {
       );
 
       expect(selection.contiguous, isTrue);
-      expect(selection.needed, const [
-        JournalSeqRange(startSeq: 1, endSeq: 3),
-      ]);
+      expect(selection.needed, const [JournalSeqRange(startSeq: 1, endSeq: 3)]);
     });
 
     test('首块晚于游标 + 1：不连续（中间缺条目）', () {
@@ -216,9 +215,7 @@ void main() {
       );
 
       expect(selection.contiguous, isFalse);
-      expect(selection.needed, const [
-        JournalSeqRange(startSeq: 4, endSeq: 5),
-      ]);
+      expect(selection.needed, const [JournalSeqRange(startSeq: 4, endSeq: 5)]);
     });
 
     test('块之间有空隙：不连续', () {
@@ -242,9 +239,7 @@ void main() {
         ],
       );
 
-      expect(selection.needed, const [
-        JournalSeqRange(startSeq: 2, endSeq: 4),
-      ]);
+      expect(selection.needed, const [JournalSeqRange(startSeq: 2, endSeq: 4)]);
       expect(selection.contiguous, isTrue);
     });
 
@@ -293,8 +288,9 @@ void main() {
         PeerJournalNames.snapshot('devA', 12),
         'devA.p2.12.snapshot.msync',
       );
-      final snapshot =
-          PeerJournalNames.parse(PeerJournalNames.snapshot('devA', 12));
+      final snapshot = PeerJournalNames.parse(
+        PeerJournalNames.snapshot('devA', 12),
+      );
       expect(snapshot?.kind, PeerJournalFileKind.snapshot);
       expect(snapshot?.coverage, 12);
     });

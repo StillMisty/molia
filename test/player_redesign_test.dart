@@ -23,14 +23,14 @@ import 'support/fakes.dart';
 ///
 /// 曲目刻意不带封面 URL：避免测试触发真实网络图片请求 / 取色路径。
 Track _track(String id) => Track(
-      id: TrackId('fake', id),
-      title: 'Title $id',
-      artists: [Artist(name: 'Artist $id')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': id},
-    );
+  id: TrackId('fake', id),
+  title: 'Title $id',
+  artists: [Artist(name: 'Artist $id')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': id},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -50,16 +50,18 @@ void main() {
     final a = _track('a');
     final b = _track('b');
     final c = _track('c');
-    backend.emit(BackendSnapshot(
-      current: b,
-      queue: [a, b, c],
-      currentIndex: 1,
-      next: c,
-      previous: a,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: b,
+        queue: [a, b, c],
+        currentIndex: 1,
+        next: c,
+        previous: a,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   }
 
   /// 挂载播放器（高度用紧约束：与既有用例的既有口径一致）。
@@ -126,8 +128,9 @@ void main() {
       }
       final renderObject = element.renderObject;
       if (renderObject is! RenderBox || !renderObject.hasSize) return false;
-      final center =
-          renderObject.localToGlobal(renderObject.size.center(Offset.zero)).dx;
+      final center = renderObject
+          .localToGlobal(renderObject.size.center(Offset.zero))
+          .dx;
       return left ? center < hostCenter : center > hostCenter;
     });
   }
@@ -137,8 +140,11 @@ void main() {
   /// 邻位中心被当前封面盖住，点击必须落在外侧条带；封面较大时条带可能
   /// 伸出屏幕，取条带外缘但钳制在屏内（左：卡左缘 +8 与屏左 +8 取大；
   /// 右：卡右缘 -8 与屏右 -8 取小）。
-  Offset sideCoverTapPoint(WidgetTester tester, Finder side,
-      {required bool left}) {
+  Offset sideCoverTapPoint(
+    WidgetTester tester,
+    Finder side, {
+    required bool left,
+  }) {
     final center = tester.getCenter(side);
     final halfWidth = tester.getSize(side).width / 2;
     final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
@@ -211,8 +217,10 @@ void main() {
       expect(button.onPressed, isNull, reason: '$icon 应在无曲目时禁用');
     }
 
-    await tester.tap(find.byIcon(Icons.play_arrow_rounded),
-        warnIfMissed: false);
+    await tester.tap(
+      find.byIcon(Icons.play_arrow_rounded),
+      warnIfMissed: false,
+    );
     await tester.pump();
     expect(backend.calls, isEmpty, reason: '禁用键不发播放命令');
   });
@@ -271,10 +279,7 @@ void main() {
             home: Scaffold(
               body: Align(
                 alignment: Alignment.topCenter,
-                child: Player(
-                  expandAnimation: expand,
-                  onToggleExpand: () {},
-                ),
+                child: Player(expandAnimation: expand, onToggleExpand: () {}),
               ),
             ),
           ),
@@ -299,11 +304,15 @@ void main() {
     addTearDown(expand.dispose);
     await pumpTopAligned(expand);
 
-    expect(centerCoverWidth(), closeTo(directArt, 0.5),
-        reason: '展开层内再算的封面尺寸必须与外层预算一致（不双扣留白）');
+    expect(
+      centerCoverWidth(),
+      closeTo(directArt, 0.5),
+      reason: '展开层内再算的封面尺寸必须与外层预算一致（不双扣留白）',
+    );
 
     // 容器底部不得留下「扣掉却不渲染」的 48dp 空白（只允许内部预留余量）。
-    final double bottomGap = tester.getRect(find.byType(Player)).bottom -
+    final double bottomGap =
+        tester.getRect(find.byType(Player)).bottom -
         tester.getRect(find.byType(SeekBar)).bottom;
     expect(bottomGap, greaterThanOrEqualTo(0));
     expect(bottomGap, lessThan(48), reason: '展开容器底部空白 $bottomGap');
@@ -314,8 +323,7 @@ void main() {
 
   /// 展开 / 收起端点与逐帧重建边界：完整层在弹簧中段保持同一 widget 实例，
   /// morph 锚点只在完整端点挂载。
-  testWidgets('展开 / 收起端点：完整层逐帧不重建，morph 锚点只在完整态挂载',
-      (tester) async {
+  testWidgets('展开 / 收起端点：完整层逐帧不重建，morph 锚点只在完整态挂载', (tester) async {
     emitThreeTracks();
     final morph = PlayerMorphController();
     addTearDown(morph.dispose);

@@ -48,18 +48,14 @@ void main() {
 
   test('词时间与行时间一致性：拼接文本等于主行文本', () {
     final lines = parseLyrics('[00:10.00]你好世界');
-    final attached = attachWordTimings(
-      lines,
-      '[00:10.00]<0,200>你好<200,300>世界',
-    );
+    final attached = attachWordTimings(lines, '[00:10.00]<0,200>你好<200,300>世界');
     final joined = attached[0].words!.map((word) => word.text).join();
     expect(joined, attached[0].text);
   });
 
   // 渲染：词级颜色随 position 推进（已唱 / 未唱 / 当前词插值）。
   testWidgets('已唱词 / 未唱词 / 当前词插值随进度更新', (tester) async {
-    final position =
-        ValueNotifier<Duration>(const Duration(milliseconds: 600));
+    final position = ValueNotifier<Duration>(const Duration(milliseconds: 600));
     addTearDown(position.dispose);
 
     final words = [
@@ -75,24 +71,23 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(Directionality(
-      textDirection: TextDirection.ltr,
-      child: KaraokeLyricText(
-        words: words,
-        position: position,
-        playedColor: Colors.red,
-        unplayedColor: Colors.grey,
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: KaraokeLyricText(
+          words: words,
+          position: position,
+          playedColor: Colors.red,
+          unplayedColor: Colors.grey,
+        ),
       ),
-    ));
+    );
 
     List<TextSpan> spans() => _spansOf(tester, words.length);
 
     // 600ms：第一个词已唱（红）；第二个词进行到 20%（灰→红插值）。
     expect(spans()[0].style!.color, Colors.red);
-    expect(
-      spans()[1].style!.color,
-      Color.lerp(Colors.grey, Colors.red, 0.2),
-    );
+    expect(spans()[1].style!.color, Color.lerp(Colors.grey, Colors.red, 0.2));
 
     // 推进到 1200ms（越过整行）：两个词都变为已唱色。
     position.value = const Duration(milliseconds: 1200);
@@ -108,8 +103,7 @@ void main() {
   });
 
   testWidgets('lead：插值目标前移，抵消补间慢一拍', (tester) async {
-    final position =
-        ValueNotifier<Duration>(const Duration(milliseconds: 600));
+    final position = ValueNotifier<Duration>(const Duration(milliseconds: 600));
     addTearDown(position.dispose);
 
     final words = [
@@ -125,16 +119,18 @@ void main() {
       ),
     ];
 
-    await tester.pumpWidget(Directionality(
-      textDirection: TextDirection.ltr,
-      child: KaraokeLyricText(
-        words: words,
-        position: position,
-        playedColor: Colors.red,
-        unplayedColor: Colors.grey,
-        lead: const Duration(milliseconds: 200),
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: KaraokeLyricText(
+          words: words,
+          position: position,
+          playedColor: Colors.red,
+          unplayedColor: Colors.grey,
+          lead: const Duration(milliseconds: 200),
+        ),
       ),
-    ));
+    );
 
     // 600 + 200 = 800ms：第二个词进行到 60%（不提前时是 20%）。
     expect(
@@ -159,8 +155,9 @@ void main() {
   });
 
   testWidgets('颜色 / 词表变化后，已唱 / 未唱 span 缓存按新输入重建', (tester) async {
-    final position =
-        ValueNotifier<Duration>(const Duration(milliseconds: 1200));
+    final position = ValueNotifier<Duration>(
+      const Duration(milliseconds: 1200),
+    );
     addTearDown(position.dispose);
 
     final words = [
@@ -180,33 +177,28 @@ void main() {
       required List<LyricWord> input,
       required Color played,
       required Color unplayed,
-    }) =>
-        Directionality(
-          textDirection: TextDirection.ltr,
-          child: KaraokeLyricText(
-            words: input,
-            position: position,
-            playedColor: played,
-            unplayedColor: unplayed,
-          ),
-        );
+    }) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: KaraokeLyricText(
+        words: input,
+        position: position,
+        playedColor: played,
+        unplayedColor: unplayed,
+      ),
+    );
 
-    await tester.pumpWidget(build(
-      input: words,
-      played: Colors.red,
-      unplayed: Colors.grey,
-    ));
+    await tester.pumpWidget(
+      build(input: words, played: Colors.red, unplayed: Colors.grey),
+    );
     expect(
       _spansOf(tester, words.length).map((span) => span.style!.color),
       everyElement(Colors.red),
     );
 
     // 同一词表换颜色：已唱 span 的缓存必须失效（不能沿用旧色）。
-    await tester.pumpWidget(build(
-      input: words,
-      played: Colors.blue,
-      unplayed: Colors.green,
-    ));
+    await tester.pumpWidget(
+      build(input: words, played: Colors.blue, unplayed: Colors.green),
+    );
     expect(
       _spansOf(tester, words.length).map((span) => span.style!.color),
       everyElement(Colors.blue),
@@ -220,11 +212,9 @@ void main() {
         text: '新',
       ),
     ];
-    await tester.pumpWidget(build(
-      input: nextWords,
-      played: Colors.blue,
-      unplayed: Colors.green,
-    ));
+    await tester.pumpWidget(
+      build(input: nextWords, played: Colors.blue, unplayed: Colors.green),
+    );
     final next = _spansOf(tester, nextWords.length).single;
     expect(next.text, '新');
     expect(next.style!.color, Colors.blue);

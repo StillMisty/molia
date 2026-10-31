@@ -178,9 +178,8 @@ class _VolumeControlState extends State<VolumeControl>
           semanticLabel: l10n.playerBarVolume,
           icon: IconSwap<bool>(
             value: off,
-            builder: (context, off) => Icon(
-              off ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-            ),
+            builder: (context, off) =>
+                Icon(off ? Icons.volume_off_rounded : Icons.volume_up_rounded),
           ),
           onPressed: _togglePanel,
         ),
@@ -265,13 +264,13 @@ class _VolumePanelState extends State<_VolumePanel> {
               M3EIconButton(
                 variant: M3EIconButtonVariant.standard,
                 size: M3EIconButtonSize.sm,
-                semanticLabel: muted ? l10n.playerBarUnmute : l10n.playerBarMute,
+                semanticLabel: muted
+                    ? l10n.playerBarUnmute
+                    : l10n.playerBarMute,
                 icon: IconSwap<bool>(
                   value: muted,
                   builder: (context, muted) => Icon(
-                    muted
-                        ? Icons.volume_off_rounded
-                        : Icons.volume_up_rounded,
+                    muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
                   ),
                 ),
                 onPressed: () => context.read<PlaybackProvider>().toggleMute(),

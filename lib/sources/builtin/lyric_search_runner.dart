@@ -54,8 +54,9 @@ Future<LyricSearchPage> runBuiltinLyricSearch(
   return LyricSearchPage(
     hits: hits,
     total: total,
-    hasMore:
-        total != null && total > 0 ? page * limit < total : hits.length >= limit,
+    hasMore: total != null && total > 0
+        ? page * limit < total
+        : hits.length >= limit,
   );
 }
 

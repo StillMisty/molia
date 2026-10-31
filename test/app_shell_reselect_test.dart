@@ -90,27 +90,30 @@ void main() {
     addTearDown(search.dispose);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
-    final lyricsDisplay =
-        LyricsDisplaySettings(settings: testSettingsRegistry());
+    final lyricsDisplay = LyricsDisplaySettings(
+      settings: testSettingsRegistry(),
+    );
     addTearDown(lyricsDisplay.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: Track(
-        id: const TrackId('fake', 'a'),
-        title: 'Title a',
-        artists: const [Artist(name: 'Artist a')],
-        album: 'Album',
+    backend.emit(
+      BackendSnapshot(
+        current: Track(
+          id: const TrackId('fake', 'a'),
+          title: 'Title a',
+          artists: const [Artist(name: 'Artist a')],
+          album: 'Album',
+          duration: const Duration(seconds: 30),
+          // 不带封面：避免测试触发网络预取/取色。
+          origin: TrackOrigin.lx,
+          payload: const {'id': 'a'},
+        ),
+        queue: const [],
+        currentIndex: 0,
+        isPlaying: false,
+        position: Duration.zero,
         duration: const Duration(seconds: 30),
-        // 不带封面：避免测试触发网络预取/取色。
-        origin: TrackOrigin.lx,
-        payload: const {'id': 'a'},
       ),
-      queue: const [],
-      currentIndex: 0,
-      isPlaying: false,
-      position: Duration.zero,
-      duration: const Duration(seconds: 30),
-    ));
+    );
 
     await tester.pumpWidget(
       MultiProvider(
@@ -184,8 +187,10 @@ void main() {
       },
     );
     addTearDown(() {
-      tester.binding.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, null);
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      );
     });
     return vibrations;
   }
@@ -199,6 +204,23 @@ void main() {
 
   int navIndexOf(ShellDestination destination) =>
       nav.visibleDestinations.indexOf(destination);
+
+  testWidgets('移动端底栏：三项文案常显（不随选中态隐藏）', (tester) async {
+    await pumpShell(tester);
+
+    final bar = find.byType(M3ENavigationBar);
+    expect(
+      tester.widget<M3ENavigationBar>(bar).labelBehavior,
+      M3ENavBarLabelBehavior.alwaysShow,
+    );
+    for (final label in ['发现', '播放', '收藏']) {
+      expect(
+        find.descendant(of: bar, matching: find.text(label)),
+        findsOneWidget,
+        reason: '$label 文案应常显',
+      );
+    }
+  });
 
   testWidgets('底栏重复点击其他目的地：仍正常切页，不动播放器', (tester) async {
     await pumpShell(tester);
@@ -227,11 +249,9 @@ void main() {
     // 收藏页已激活：重复点击 = 列表回顶，恰一次轻震。
     await tapBottomDestination(tester, ShellDestination.favorites);
     await settleTransition(tester);
-    expect(
-      vibrations,
-      ['HapticFeedbackType.lightImpact'],
-      reason: '重复点击应恰给一次轻震',
-    );
+    expect(vibrations, [
+      'HapticFeedbackType.lightImpact',
+    ], reason: '重复点击应恰给一次轻震');
 
     // 播放页已激活：重复点击 = 迷你 ⇄ 完整；页面侧不再自带触感，仍只震一次。
     await tapBottomDestination(tester, ShellDestination.nowPlaying);
@@ -241,11 +261,7 @@ void main() {
     await tapBottomDestination(tester, ShellDestination.nowPlaying);
     await settleTransition(tester);
     expect(playerHeight(tester), lessThan(100), reason: '重复点击应收起为迷你条');
-    expect(
-      vibrations,
-      ['HapticFeedbackType.lightImpact'],
-      reason: '折叠切换不应双震',
-    );
+    expect(vibrations, ['HapticFeedbackType.lightImpact'], reason: '折叠切换不应双震');
 
     // 再点一次展开，回收藏后验证飞行期间：被忽略的点击不震动
     // （展开态才有顶栏 ⇄ 页面的锚点，迷你态进入播放页本来就没有飞行）。
@@ -259,11 +275,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
     await tapBottomDestination(tester, ShellDestination.nowPlaying);
     await settleTransition(tester);
-    expect(
-      vibrations,
-      ['HapticFeedbackType.lightImpact'],
-      reason: '只有「进入播放页」那一次震动，飞行期间的重复点击被忽略',
-    );
+    expect(vibrations, [
+      'HapticFeedbackType.lightImpact',
+    ], reason: '只有「进入播放页」那一次震动，飞行期间的重复点击被忽略');
   });
 
   testWidgets('进入播放页的飞行期间重复点击：忽略', (tester) async {

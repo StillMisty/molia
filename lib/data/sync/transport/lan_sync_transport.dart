@@ -64,7 +64,7 @@ class LanSyncTransport
     this._permissionGate,
     Future<List<String>> Function()? localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
-        udpBinder,
+    udpBinder,
     this._knownPeersProvider,
     this._onPeerVerified,
     bool Function()? isCellular,
@@ -73,10 +73,10 @@ class LanSyncTransport
     int udpPort = defaultUdpPort,
     Duration probeWindow = const Duration(milliseconds: 1200),
     this._requestTimeout = const Duration(seconds: 3),
-  })  : _probeTargets = probeTargets ?? const [],
-        _isCellular = isCellular,
-        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _udpPort = udpPort {
+  }) : _probeTargets = probeTargets ?? const [],
+       _isCellular = isCellular,
+       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
+       _udpPort = udpPort {
     _discovery = LanDiscovery(
       deviceId: deviceId,
       deviceName: deviceName,
@@ -228,8 +228,7 @@ class LanSyncTransport
     Uint8List packet, {
     String? host,
     int? port,
-  }) =>
-      _discovery.sendPairingPacket(packet, host: host, port: port);
+  }) => _discovery.sendPairingPacket(packet, host: host, port: port);
 
   /// 在启动前注入配对服务；运行中替换会让 HTTP 路由与生命周期脱节。
   void attachPairing(PairingHttpHandler handler) {
@@ -431,7 +430,8 @@ class LanSyncTransport
     if (!_running) return;
     final hiddenAt = _hiddenAt;
     _hiddenAt = null;
-    final longHidden = hiddenAt != null &&
+    final longHidden =
+        hiddenAt != null &&
         _nowMs() - hiddenAt >= resumeRebindThreshold.inMilliseconds;
     if (longHidden) {
       await _ensureHttpAlive();
@@ -618,7 +618,8 @@ class LanSyncTransport
         // 端点可能被同组的另一台设备复用（旧持久化记录 / DHCP 复用）：
         // 解密后的 deviceId 才是数据的主人。不能把端点写回候选的旧 id，
         // 也不能把这次接触记到旧 id 的 seenIds 上。
-        final identityMismatch = peer.deviceId.isNotEmpty &&
+        final identityMismatch =
+            peer.deviceId.isNotEmpty &&
             envelope.deviceId.isNotEmpty &&
             peer.deviceId != envelope.deviceId;
         final fingerprint = envelope.snapshotId.isNotEmpty
@@ -759,12 +760,13 @@ class LanSyncTransport
       if (peer.port <= 0) return;
       for (var i = 0; i < peers.length; i++) {
         final existing = peers[i];
-        final sameDevice = peer.deviceId.isNotEmpty &&
+        final sameDevice =
+            peer.deviceId.isNotEmpty &&
             existing.deviceId.isNotEmpty &&
             peer.deviceId == existing.deviceId;
         final sameEndpoint =
             _normalizeHost(existing.host) == _normalizeHost(peer.host) &&
-                existing.port == peer.port;
+            existing.port == peer.port;
         if (sameDevice || sameEndpoint) {
           peers[i] = existing.merge(peer);
           return;
@@ -932,15 +934,13 @@ class LanSyncTransport
 
   Future<({Uint8List bytes, String host})?> _fetchSnapshot(
     SyncPeerCandidate peer,
-  ) =>
-      _getPayload(peer, snapshotPath);
+  ) => _getPayload(peer, snapshotPath);
 
   /// 拉取增量窗口（带本机游标；对端在游标落后于窗口起点时回全量快照）。
   Future<({Uint8List bytes, String host})?> _fetchJournal(
     SyncPeerCandidate peer,
     int since,
-  ) =>
-      _getPayload(peer, journalPath, query: {'since': '$since'});
+  ) => _getPayload(peer, journalPath, query: {'since': '$since'});
 
   /// GET 对端端点：按候选地址 → 观测源地址依次尝试（最多 3 个地址）。
   Future<({Uint8List bytes, String host})?> _getPayload(
@@ -1018,14 +1018,13 @@ class LanSyncTransport
     int port,
     String path,
     Map<String, String>? query,
-  ) =>
-      Uri(
-        scheme: 'http',
-        host: host,
-        port: port,
-        path: path,
-        queryParameters: query == null || query.isEmpty ? null : query,
-      );
+  ) => Uri(
+    scheme: 'http',
+    host: host,
+    port: port,
+    path: path,
+    queryParameters: query == null || query.isEmpty ? null : query,
+  );
 
   Future<void> _onHttpRequest(HttpRequest request) async {
     try {

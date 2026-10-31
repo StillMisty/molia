@@ -59,9 +59,11 @@ class LxScriptRepository {
           if (item is Map<String, dynamic>) {
             _scripts.add(LxScriptInfo.fromJson(item));
           } else if (item is Map) {
-            _scripts.add(LxScriptInfo.fromJson(
-              item.map((key, value) => MapEntry(key.toString(), value)),
-            ));
+            _scripts.add(
+              LxScriptInfo.fromJson(
+                item.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            );
           }
         }
       }
@@ -126,7 +128,10 @@ class LxScriptRepository {
     await _persist();
   }
 
-  Future<void> cacheSources(String id, Map<String, LxSourceDecl> sources) async {
+  Future<void> cacheSources(
+    String id,
+    Map<String, LxSourceDecl> sources,
+  ) async {
     final index = _scripts.indexWhere((s) => s.id == id);
     if (index < 0) return;
     _scripts[index] = _scripts[index].copyWith(sources: sources);
@@ -138,10 +143,12 @@ class LxScriptRepository {
     if (file == null) return;
     try {
       await file.parent.create(recursive: true);
-      await file.writeAsString(jsonEncode({
-        'activeId': _activeId,
-        'scripts': _scripts.map((s) => s.toJson()).toList(),
-      }));
+      await file.writeAsString(
+        jsonEncode({
+          'activeId': _activeId,
+          'scripts': _scripts.map((s) => s.toJson()).toList(),
+        }),
+      );
     } catch (e) {
       debugPrint('[LxScriptRepository] 保存音源失败: $e');
     }

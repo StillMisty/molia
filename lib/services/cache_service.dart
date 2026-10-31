@@ -42,9 +42,9 @@ class CacheService {
     CacheStorage? storage,
     LyricsCache? lyricsCache,
     this._audioProtectAge = const Duration(minutes: 10),
-  })  : _prefs = prefs,
-        _storage = storage ?? createPlatformCacheStorage(),
-        _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs) {
+  }) : _prefs = prefs,
+       _storage = storage ?? createPlatformCacheStorage(),
+       _lyricsCache = lyricsCache ?? LyricsCache(prefs: prefs) {
     _audioStore = AudioCacheStore(storage: _storage);
   }
 
@@ -309,8 +309,7 @@ class CacheService {
   Future<CacheUsage> audioUsageForTrack({
     required String sourceKey,
     required String songId,
-  }) =>
-      _audioStore.usageForTrack(sourceKey: sourceKey, songId: songId);
+  }) => _audioStore.usageForTrack(sourceKey: sourceKey, songId: songId);
 
   /// 单曲音频缓存「写入中」占用（半成品 / 边车）。
   ///
@@ -318,8 +317,7 @@ class CacheService {
   Future<CacheUsage> audioWritingUsageForTrack({
     required String sourceKey,
     required String songId,
-  }) =>
-      _audioStore.writingUsageForTrack(sourceKey: sourceKey, songId: songId);
+  }) => _audioStore.writingUsageForTrack(sourceKey: sourceKey, songId: songId);
 
   /// 清理单曲音频缓存（所有音质变体，含半成品）。
   ///

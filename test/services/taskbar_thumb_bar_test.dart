@@ -49,14 +49,15 @@ void main() {
   });
 
   Future<void> init() => taskbar.init(
-        labels: labels,
-        onTogglePlay: () => playCount++,
-        onPrevious: () => previousCount++,
-        onNext: () => nextCount++,
-        onToggleFavorite: () => favoriteCount++,
-      );
+    labels: labels,
+    onTogglePlay: () => playCount++,
+    onPrevious: () => previousCount++,
+    onNext: () => nextCount++,
+    onToggleFavorite: () => favoriteCount++,
+  );
 
-  Future<void> flush() => Future<void>.delayed(const Duration(milliseconds: 10));
+  Future<void> flush() =>
+      Future<void>.delayed(const Duration(milliseconds: 10));
 
   Map<Object?, Object?> argsOf(MethodCall call) =>
       call.arguments as Map<Object?, Object?>;

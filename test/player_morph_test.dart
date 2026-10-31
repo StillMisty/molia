@@ -17,14 +17,14 @@ import 'support/fakes.dart';
 /// 曲目刻意不带封面 URL：飞行副本走回退路径，不触发网络取图；
 /// 回退路径同样必须被 ClipRRect 裁剪（这也是回归项之一）。
 Track _track() => Track(
-      id: TrackId('fake', 'a'),
-      title: 'Title',
-      artists: [Artist(name: 'Artist')],
-      album: 'Album',
-      duration: const Duration(seconds: 30),
-      origin: TrackOrigin.lx,
-      payload: {'id': 'a'},
-    );
+  id: TrackId('fake', 'a'),
+  title: 'Title',
+  artists: [Artist(name: 'Artist')],
+  album: 'Album',
+  duration: const Duration(seconds: 30),
+  origin: TrackOrigin.lx,
+  payload: {'id': 'a'},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -36,14 +36,16 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(backend: backend);
-    backend.emit(BackendSnapshot(
-      current: _track(),
-      queue: [_track()],
-      currentIndex: 0,
-      isPlaying: true,
-      position: const Duration(seconds: 5),
-      duration: const Duration(seconds: 30),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: _track(),
+        queue: [_track()],
+        currentIndex: 0,
+        isPlaying: true,
+        position: const Duration(seconds: 5),
+        duration: const Duration(seconds: 30),
+      ),
+    );
   });
 
   tearDown(() => playback.dispose());

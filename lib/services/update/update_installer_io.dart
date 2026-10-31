@@ -23,8 +23,7 @@ import 'update_installer_types.dart';
 ///   [InstallOutcome.unsupported]。
 class UpdateInstaller {
   UpdateInstaller({MethodChannel? channel})
-      : _channel = channel ??
-            const MethodChannel('top.stillmisty.molia/updater');
+    : _channel = channel ?? const MethodChannel('top.stillmisty.molia/updater');
 
   final MethodChannel _channel;
   final Logger _logger = Logger('molia.update_installer');
@@ -117,11 +116,11 @@ class UpdateInstaller {
       return InstallOutcome.failed;
     }
     try {
-      await Process.start(
-        setup.path,
-        const <String>['/SILENT', '/NORESTART', '/CLOSEAPPLICATIONS'],
-        mode: ProcessStartMode.detached,
-      );
+      await Process.start(setup.path, const <String>[
+        '/SILENT',
+        '/NORESTART',
+        '/CLOSEAPPLICATIONS',
+      ], mode: ProcessStartMode.detached);
       return InstallOutcome.restartPending;
     } catch (e) {
       _logger.warning('启动安装器失败: $e');
@@ -202,8 +201,21 @@ class UpdateInstaller {
       await Process.start(
         windows ? 'cmd' : '/bin/sh',
         windows
-            ? <String>['/c', script.path, '$pid', payload.path, installDir.path, exePath]
-            : <String>[script.path, '$pid', payload.path, installDir.path, exePath],
+            ? <String>[
+                '/c',
+                script.path,
+                '$pid',
+                payload.path,
+                installDir.path,
+                exePath,
+              ]
+            : <String>[
+                script.path,
+                '$pid',
+                payload.path,
+                installDir.path,
+                exePath,
+              ],
         mode: ProcessStartMode.detached,
       );
       return InstallOutcome.restartPending;
@@ -266,9 +278,7 @@ class UpdateInstaller {
         'molia-update-${DateTime.now().millisecondsSinceEpoch}'
         '${windows ? '.bat' : '.sh'}',
       );
-      final content = windows
-          ? _windowsHelperScript
-          : _posixHelperScript;
+      final content = windows ? _windowsHelperScript : _posixHelperScript;
       await script.writeAsString(content, flush: true);
       return script;
     } catch (e) {
@@ -295,7 +305,8 @@ exit 0
 ''';
 
   /// 参数：%1 主进程 PID、%2 新版本目录、%3 安装目录、%4 可执行文件。
-  static const String _windowsHelperScript = '@echo off\r\n'
+  static const String _windowsHelperScript =
+      '@echo off\r\n'
       'set "PID=%~1"\r\n'
       'set "SRC=%~2"\r\n'
       'set "DST=%~3"\r\n'
@@ -358,16 +369,14 @@ exit 0
       Abi.fuchsiaArm64 ||
       Abi.linuxArm64 ||
       Abi.macosArm64 ||
-      Abi.windowsArm64 =>
-        'arm64',
+      Abi.windowsArm64 => 'arm64',
       Abi.androidArm || Abi.iosArm || Abi.linuxArm => 'armv7',
       Abi.androidX64 ||
       Abi.iosX64 ||
       Abi.fuchsiaX64 ||
       Abi.linuxX64 ||
       Abi.macosX64 ||
-      Abi.windowsX64 =>
-        'x64',
+      Abi.windowsX64 => 'x64',
       _ => 'any',
     };
   }

@@ -13,10 +13,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 固定设备容量的存储假件：容量可控，其余委托真实 IO 实现（指向临时目录）。
 class _FixedSpaceStorage extends IoCacheStorage {
   _FixedSpaceStorage(this.totalBytes, {required String root})
-      : super(
-          audioDirOverride: '$root/audio_cache',
-          artworkDirOverride: '$root/artwork_cache',
-        );
+    : super(
+        audioDirOverride: '$root/audio_cache',
+        artworkDirOverride: '$root/artwork_cache',
+      );
 
   final int? totalBytes;
 
@@ -491,12 +491,13 @@ void main() {
       await writeFile(audioDir, 'kw_9_flac$audioCachePredownloadSuffix', 500);
 
       expect(await service.cleanupAudioPartials(), 2);
-      final remaining = Directory(audioDir)
-          .listSync()
-          .whereType<File>()
-          .map((file) => file.uri.pathSegments.last)
-          .toList()
-        ..sort();
+      final remaining =
+          Directory(audioDir)
+              .listSync()
+              .whereType<File>()
+              .map((file) => file.uri.pathSegments.last)
+              .toList()
+            ..sort();
       expect(remaining, [complete, '$complete$audioCacheMimeSuffix']..sort());
     });
   });

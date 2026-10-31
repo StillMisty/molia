@@ -10,7 +10,9 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+
 import 'support/sync_test_support.dart';
+
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
@@ -81,10 +83,7 @@ class _CountingLibraryRepository extends LibraryRepository {
   }
 
   @override
-  Future<List<PlaylistTrack>> listPlaylistTracks(
-    int playlistId, {
-    int? limit,
-  }) {
+  Future<List<PlaylistTrack>> listPlaylistTracks(int playlistId, {int? limit}) {
     playlistTracksAttempts++;
     if (failReads) return Future.error(StateError('tracks read failed'));
     playlistTracksListCalls++;
@@ -157,10 +156,7 @@ class _CountingLibraryRepository extends LibraryRepository {
   }
 
   @override
-  Future<int> addHistoryTracks(
-    List<PlaylistTrack> tracks, {
-    int? playedAt,
-  }) {
+  Future<int> addHistoryTracks(List<PlaylistTrack> tracks, {int? playedAt}) {
     if (failHistoryWrites) {
       return Future.error(StateError('history add failed'));
     }
@@ -194,32 +190,40 @@ void main() {
   late PlaybackProvider playback;
   late LibraryProvider provider;
 
-  Uint8List lxmcBytes(List<Map<String, dynamic>> list,
-      {String name = 'list__name_test'}) {
-    return Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode({
-      'type': 'playListPart_v2',
-      'data': {'id': 'x', 'name': name, 'list': list},
-    }))));
+  Uint8List lxmcBytes(
+    List<Map<String, dynamic>> list, {
+    String name = 'list__name_test',
+  }) {
+    return Uint8List.fromList(
+      gzip.encode(
+        utf8.encode(
+          jsonEncode({
+            'type': 'playListPart_v2',
+            'data': {'id': 'x', 'name': name, 'list': list},
+          }),
+        ),
+      ),
+    );
   }
 
   Map<String, dynamic> track(int id) => {
-        'id': 'wy_$id',
-        'name': 'Song $id',
-        'singer': 'Artist $id',
-        'source': 'wy',
-        'interval': '03:00',
-        'meta': {
-          'songId': id,
-          'albumName': 'Album $id',
-          'picUrl': 'https://img.example/$id.jpg',
-          'qualitys': [
-            {'type': '320k', 'size': '2 MiB'},
-          ],
-          '_qualitys': {
-            'flac': {'size': '10 MiB', 'hash': 'h$id'},
-          },
-        },
-      };
+    'id': 'wy_$id',
+    'name': 'Song $id',
+    'singer': 'Artist $id',
+    'source': 'wy',
+    'interval': '03:00',
+    'meta': {
+      'songId': id,
+      'albumName': 'Album $id',
+      'picUrl': 'https://img.example/$id.jpg',
+      'qualitys': [
+        {'type': '320k', 'size': '2 MiB'},
+      ],
+      '_qualitys': {
+        'flac': {'size': '10 MiB', 'hash': 'h$id'},
+      },
+    },
+  };
 
   PlayHistoryEntry entry(String songId, {required int playedAt}) =>
       PlayHistoryEntry(
@@ -269,16 +273,18 @@ void main() {
     await provider.refreshHistory();
     expect(provider.history, isEmpty);
 
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '1',
-      title: 'Song 1',
-      artist: 'Artist',
-      album: 'Album',
-      durationMs: 1000,
-      raw: {'songId': 1},
-      playedAt: 1,
-    ));
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        artist: 'Artist',
+        album: 'Album',
+        durationMs: 1000,
+        raw: {'songId': 1},
+        playedAt: 1,
+      ),
+    );
     await settle();
 
     expect(provider.history, hasLength(1));
@@ -319,8 +325,10 @@ void main() {
     await repository.addHistoryEntry(entry('4', playedAt: 4));
     await repository.addHistoryEntry(entry('2', playedAt: 50));
     await settle();
-    expect([for (final item in provider.history) item.songId],
-        ['4', '3', '2', '1']);
+    expect(
+      [for (final item in provider.history) item.songId],
+      ['4', '3', '2', '1'],
+    );
 
     // 「加入列表 → 播放历史」同样只落库：内存顺序等下次重进刷新。
     await provider.addTracksToHistory([
@@ -337,29 +345,35 @@ void main() {
       ),
     ]);
     await settle();
-    expect([for (final item in provider.history) item.songId],
-        ['4', '3', '2', '1']);
+    expect(
+      [for (final item in provider.history) item.songId],
+      ['4', '3', '2', '1'],
+    );
     provider.resortHistoryByRecency();
-    expect([for (final item in provider.history) item.songId],
-        ['2', '4', '3', '1']);
+    expect(
+      [for (final item in provider.history) item.songId],
+      ['2', '4', '3', '1'],
+    );
   });
 
   test('批量加入历史：顺序由写入侧决定（后写入的在前）', () async {
     PlaylistTrack track(String songId) => PlaylistTrack(
-          playlistId: 0,
-          sourceKey: 'wy',
-          songId: songId,
-          title: 'Song $songId',
-          addedAt: 0,
-        );
+      playlistId: 0,
+      sourceKey: 'wy',
+      songId: songId,
+      title: 'Song $songId',
+      addedAt: 0,
+    );
 
     final outcome = await provider.addTracksToHistory([track('1'), track('2')]);
     expect(outcome.changed, 2);
     await settle();
     // 写路径按传入顺序盖递增 playedAt；仓库倒序查询让整批倒序出现。
     expect([for (final item in provider.history) item.songId], ['2', '1']);
-    expect(provider.history.first.playedAt,
-        greaterThan(provider.history.last.playedAt));
+    expect(
+      provider.history.first.playedAt,
+      greaterThan(provider.history.last.playedAt),
+    );
   });
 
   test('历史增量：单条写入直接打补丁，不回查仓库', () async {
@@ -426,25 +440,27 @@ void main() {
   });
 
   test('playHistory：还原 SourceTrack（raw/qualities/时长）并委托播放', () async {
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '1',
-      title: 'Song 1',
-      artist: 'Artist',
-      album: 'Album',
-      coverUrl: 'https://img.example/1.jpg',
-      durationMs: 1000,
-      raw: {
-        'songId': 1,
-        'qualitys': [
-          {'type': '320k', 'size': '2 MiB'},
-        ],
-        '_qualitys': {
-          'flac': {'size': '10 MiB', 'hash': 'h1'},
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+        artist: 'Artist',
+        album: 'Album',
+        coverUrl: 'https://img.example/1.jpg',
+        durationMs: 1000,
+        raw: {
+          'songId': 1,
+          'qualitys': [
+            {'type': '320k', 'size': '2 MiB'},
+          ],
+          '_qualitys': {
+            'flac': {'size': '10 MiB', 'hash': 'h1'},
+          },
         },
-      },
-      playedAt: 1,
-    ));
+        playedAt: 1,
+      ),
+    );
     await settle();
     await provider.refreshHistory(force: true);
 
@@ -473,8 +489,10 @@ void main() {
     );
     expect(result.imported, 2);
 
-    final tracks =
-        await provider.loadPlaylistTracks(result.playlistId, force: true);
+    final tracks = await provider.loadPlaylistTracks(
+      result.playlistId,
+      force: true,
+    );
     await provider.playPlaylistTracks(tracks, 1, contextName: 'test');
 
     final request = backend.lastRequest;
@@ -485,13 +503,15 @@ void main() {
   });
 
   test('raw 规范 id 补齐：只增不删，已有值不覆盖', () async {
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '1',
-      title: 'T',
-      raw: {'songId': 1, 'albumName': 'A'},
-      playedAt: 1,
-    ));
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'T',
+        raw: {'songId': 1, 'albumName': 'A'},
+        playedAt: 1,
+      ),
+    );
     await settle();
     await provider.refreshHistory(force: true);
     await provider.playHistory(provider.history, 0);
@@ -502,13 +522,15 @@ void main() {
     expect(payload['albumName'], 'A');
 
     // 已有规范字段时保留原值（不覆盖）。
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '2',
-      title: 'T2',
-      raw: {'songId': 2, 'songmid': 'orig'},
-      playedAt: 2,
-    ));
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'T2',
+        raw: {'songId': 2, 'songmid': 'orig'},
+        playedAt: 2,
+      ),
+    );
     await settle();
     await provider.refreshHistory(force: true);
     await provider.playHistory(provider.history, 0);
@@ -617,8 +639,7 @@ void main() {
     expect(
       (await provider.removeTracksFromFavorites([
         (sourceKey: 'wy', songId: '1'),
-      ]))
-          .changed,
+      ])).changed,
       1,
     );
     await settle();
@@ -674,11 +695,9 @@ void main() {
     repository.nextPlaylistsSnapshot = playlistsGate;
 
     // 触发无载荷校准；三个查询都被闸门挂起。
-    await repository.removeTracksFromPlaylist(
-      scratch,
-      [(sourceKey: 'wy', songId: 'x')],
-      favoriteChange: true,
-    );
+    await repository.removeTracksFromPlaylist(scratch, [
+      (sourceKey: 'wy', songId: 'x'),
+    ], favoriteChange: true);
     await Future<void>.delayed(Duration.zero);
     expect(repository.favoriteKeysCalls, 1);
 
@@ -704,10 +723,7 @@ void main() {
     expect(repository.playlistTracksListCalls, 1);
     expect(repository.playlistsListCalls, 1);
     expect(provider.isFavorite('wy', '2'), isTrue);
-    expect(
-      provider.playlists.singleWhere((p) => p.isFavorites).trackCount,
-      2,
-    );
+    expect(provider.playlists.singleWhere((p) => p.isFavorites).trackCount, 2);
     expect(
       provider.playlistTracksView(favorites.id).tracks!.map((t) => t.songId),
       ['1', '2'],
@@ -738,13 +754,15 @@ void main() {
       isEmpty,
     );
 
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '2',
-      title: 'T',
-      raw: const {},
-      playedAt: 1,
-    ));
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '2',
+        title: 'T',
+        raw: const {},
+        playedAt: 1,
+      ),
+    );
     await settle();
     expect(provider.history, isNotEmpty);
     await provider.clearHistory();
@@ -757,8 +775,10 @@ void main() {
     final result = await provider.importLxmcBytes(
       lxmcBytes([track(1), track(2)]),
     );
-    final sourceTracks =
-        await provider.loadPlaylistTracks(result.playlistId, force: true);
+    final sourceTracks = await provider.loadPlaylistTracks(
+      result.playlistId,
+      force: true,
+    );
 
     // 复制到 target；重复复制幂等。
     expect(
@@ -773,45 +793,50 @@ void main() {
     expect(targetTracks.map((t) => t.songId), ['1', '2']);
 
     // 重排：按传入顺序回写 sortOrder。
-    await provider.reorderPlaylistTracks(
-      target,
-      [targetTracks[1], targetTracks[0]],
-    );
+    await provider.reorderPlaylistTracks(target, [
+      targetTracks[1],
+      targetTracks[0],
+    ]);
     targetTracks = await provider.loadPlaylistTracks(target, force: true);
     expect(targetTracks.map((t) => t.songId), ['2', '1']);
 
     // 批量移除：缓存静默校准。
     expect(
-      (await provider.removeTracksFromPlaylist(target, [targetTracks.first]))
-          .changed,
+      (await provider.removeTracksFromPlaylist(target, [
+        targetTracks.first,
+      ])).changed,
       1,
     );
     await settle();
-    expect(provider.playlistTracksView(target).tracks?.map((t) => t.songId),
-        ['1']);
+    expect(provider.playlistTracksView(target).tracks?.map((t) => t.songId), [
+      '1',
+    ]);
 
     // 历史：复制到列表 + 批量删除（乐观更新）。
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '9',
-      title: 'H9',
-      raw: const {},
-      playedAt: 2,
-    ));
-    await repository.addHistoryEntry(PlayHistoryEntry(
-      sourceKey: 'wy',
-      songId: '8',
-      title: 'H8',
-      raw: const {},
-      playedAt: 1,
-    ));
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '9',
+        title: 'H9',
+        raw: const {},
+        playedAt: 2,
+      ),
+    );
+    await repository.addHistoryEntry(
+      PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: '8',
+        title: 'H8',
+        raw: const {},
+        playedAt: 1,
+      ),
+    );
     await settle();
     expect(
       (await provider.addTracksToPlaylist(target, [
         for (final entry in provider.history)
           PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
-      ]))
-          .changed,
+      ])).changed,
       2,
     );
     expect((await provider.deleteHistoryEntries(provider.history)).changed, 2);
@@ -822,22 +847,26 @@ void main() {
 
   test('导入同名列表 / 曲目加入历史 / 历史收藏', () async {
     final source = await provider.importLxmcBytes(lxmcBytes([track(1)]));
-    final tracks =
-        await provider.loadPlaylistTracks(source.playlistId, force: true);
+    final tracks = await provider.loadPlaylistTracks(
+      source.playlistId,
+      force: true,
+    );
 
     // 导入同名列表：首次新增，重复导入幂等复用。
-    final imported =
-        await provider.importTracksAsPlaylist(name: '外部歌单', tracks: tracks);
+    final imported = await provider.importTracksAsPlaylist(
+      name: '外部歌单',
+      tracks: tracks,
+    );
     expect(imported.added, 1);
     expect(imported.total, 1);
     expect(
-      provider.playlists.any(
-        (playlist) => playlist.id == imported.playlistId,
-      ),
+      provider.playlists.any((playlist) => playlist.id == imported.playlistId),
       isTrue,
     );
-    final again =
-        await provider.importTracksAsPlaylist(name: '外部歌单', tracks: tracks);
+    final again = await provider.importTracksAsPlaylist(
+      name: '外部歌单',
+      tracks: tracks,
+    );
     expect(again.playlistId, imported.playlistId);
     expect(again.added, 0);
 
@@ -851,8 +880,7 @@ void main() {
       (await provider.addTracksToFavorites([
         for (final entry in provider.history)
           PlaylistTrack.fromHistoryEntry(entry, addedAt: 0),
-      ]))
-          .changed,
+      ])).changed,
       1,
     );
     expect(provider.isFavorite('wy', '1'), isTrue);
@@ -946,8 +974,7 @@ void main() {
         provider.ensurePlaylistTracks(playlistId);
       }
       await Future<void>.delayed(Duration.zero);
-      expect(repository.playlistTracksAttempts, attempts,
-          reason: '失败后不能每帧重试');
+      expect(repository.playlistTracksAttempts, attempts, reason: '失败后不能每帧重试');
       expect(provider.playlistTracksView(playlistId).failed, isTrue);
 
       repository.failReads = false;
@@ -959,8 +986,7 @@ void main() {
       expect(view.tracks!.single.songId, '1');
     });
 
-    test('releaseBrowseCaches：清列表曲目 / 错误，保留收藏键、清单与历史；在途读取作废',
-        () async {
+    test('releaseBrowseCaches：清列表曲目 / 错误，保留收藏键、清单与历史；在途读取作废', () async {
       final playlistId = await repository.createPlaylist('测试列表');
       await repository.addTrackToPlaylist(
         playlistId,
@@ -996,9 +1022,11 @@ void main() {
 
       // 页面恢复重建时 ensure：旧请求仍在途，新读取不能被 loading 标记挡住。
       provider.ensurePlaylistTracks(playlistId);
-      for (var i = 0;
-          i < 50 && provider.playlistTracksView(playlistId).tracks == null;
-          i++) {
+      for (
+        var i = 0;
+        i < 50 && provider.playlistTracksView(playlistId).tracks == null;
+        i++
+      ) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
       expect(
@@ -1071,13 +1099,15 @@ void main() {
       expect(view.tracks!.map((t) => t.songId), ['BV1', 'BV2']);
       // 位置字段直接用写路径的返回值，provider 不再二次分配 sortOrder。
       expect(view.tracks!.map((t) => t.sortOrder), [0, 1]);
-      expect(provider.playlistsState.isLoading, isFalse,
-          reason: '刷新失败也要给终态，不能留在 loading');
+      expect(
+        provider.playlistsState.isLoading,
+        isFalse,
+        reason: '刷新失败也要给终态，不能留在 loading',
+      );
       expect(provider.playlists.single.trackCount, 2);
     });
 
-    test('列表刷新失败：有旧数据保持 ready，空列表才 failed（不留在 loading）',
-        () async {
+    test('列表刷新失败：有旧数据保持 ready，空列表才 failed（不留在 loading）', () async {
       await provider.refreshPlaylists();
       expect(provider.playlists, isEmpty);
       repository.failReads = true;
@@ -1092,8 +1122,11 @@ void main() {
 
       repository.failReads = true;
       await provider.refreshPlaylists(force: true);
-      expect(provider.playlistsState.isLoading, isFalse,
-          reason: '曾经成功过也不能把失败留在 loading');
+      expect(
+        provider.playlistsState.isLoading,
+        isFalse,
+        reason: '曾经成功过也不能把失败留在 loading',
+      );
       expect(provider.playlistsState.isReady, isTrue);
       expect(provider.playlists, isNotEmpty);
     });

@@ -55,12 +55,14 @@ String syncPeerSubtitle(
     SyncPeerConnectionStatus.lost => l10n.syncPeerLostSince(lastSuccessText),
     // never 只在没有任何接触证据时返回，已被上一分支覆盖；保留以满足穷尽性。
     SyncPeerConnectionStatus.never => l10n.syncPeerNever,
-    SyncPeerConnectionStatus.connected => cloud
-        ? l10n.syncPeerCloudSyncedSince(lastSuccessText)
-        : l10n.syncPeerConnectedSince(lastSuccessText),
-    SyncPeerConnectionStatus.unreachable => cloud
-        ? l10n.syncPeerCloudNotSyncedSince(lastSuccessText)
-        : l10n.syncPeerDisconnectedSince(lastSuccessText),
+    SyncPeerConnectionStatus.connected =>
+      cloud
+          ? l10n.syncPeerCloudSyncedSince(lastSuccessText)
+          : l10n.syncPeerConnectedSince(lastSuccessText),
+    SyncPeerConnectionStatus.unreachable =>
+      cloud
+          ? l10n.syncPeerCloudNotSyncedSince(lastSuccessText)
+          : l10n.syncPeerDisconnectedSince(lastSuccessText),
     // 本轮没尝试：时间本身就是状态（不再叠一个没信息量的「空闲」）。
     SyncPeerConnectionStatus.idle => l10n.syncPeerLastSuccess(lastSuccessText),
   };
@@ -83,15 +85,16 @@ String syncPeerSubtitle(
 
 /// 传输展示名（名册副标题用）。
 String syncTransportLabel(AppLocalizations l10n, String kind) => switch (kind) {
-      SyncTransportKind.lan => l10n.syncLanTitle,
-      SyncTransportKind.webdav => l10n.syncWebdavTitle,
-      _ => kind,
-    };
+  SyncTransportKind.lan => l10n.syncLanTitle,
+  SyncTransportKind.webdav => l10n.syncWebdavTitle,
+  _ => kind,
+};
 
 /// 手动地址条目副标题：探测端口（0 = 用标准端口）。
 String syncManualPeerSubtitle(AppLocalizations l10n, ManualPeer entry) {
-  final port =
-      entry.probePort > 0 ? entry.probePort : ManualPeer.defaultProbePort;
+  final port = entry.probePort > 0
+      ? entry.probePort
+      : ManualPeer.defaultProbePort;
   return '${l10n.syncPeerProbePortLabel} $port';
 }
 
@@ -331,8 +334,8 @@ Future<void> _confirmCleanupRemote(
                     syncIssueText(l10n, result.error!),
                   )
                 : result.removed
-                    ? l10n.syncPeerCleanupRemoteDone
-                    : l10n.syncPeerCleanupRemoteNone;
+                ? l10n.syncPeerCleanupRemoteDone
+                : l10n.syncPeerCleanupRemoteNone;
             showSyncNotice(context, message);
           },
           child: Text(l10n.delete),

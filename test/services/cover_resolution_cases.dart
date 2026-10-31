@@ -6,11 +6,7 @@ import 'package:molia/services/covers/cover_resolution.dart';
 
 import '../support/fake_cover_index.dart';
 
-Track _track({
-  String sourceKey = 'wy',
-  String songId = '1',
-  String? artwork,
-}) =>
+Track _track({String sourceKey = 'wy', String songId = '1', String? artwork}) =>
     Track(
       id: TrackId(sourceKey, songId),
       title: 'T',
@@ -111,19 +107,11 @@ void main() {
 
   test('读取自定义封面字节按规范键查询（下载 / 标签入口）', () async {
     final bytes = Uint8List.fromList([1, 2, 3]);
-    final index = FakeCoverIndex(
-      customBytes: {'wy:9': bytes},
-    );
+    final index = FakeCoverIndex(customBytes: {'wy:9': bytes});
     final covers = CoverResolver(index);
 
-    expect(
-      await covers.readCustomCoverBytes(_track(songId: '9')),
-      bytes,
-    );
-    expect(
-      await covers.readCustomCoverBytesForKey('local:wy:9'),
-      bytes,
-    );
+    expect(await covers.readCustomCoverBytes(_track(songId: '9')), bytes);
+    expect(await covers.readCustomCoverBytesForKey('local:wy:9'), bytes);
     expect(index.readCount, 2);
   });
 }

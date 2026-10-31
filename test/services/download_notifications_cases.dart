@@ -17,9 +17,9 @@ void main() {
     calls = [];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      calls.add(call);
-      return null;
-    });
+          calls.add(call);
+          return null;
+        });
   });
 
   tearDown(() {
@@ -56,11 +56,7 @@ void main() {
       progress: 0,
       max: 4096,
     );
-    await notifications.update(
-      id: 'track:kw:1',
-      progress: 2048,
-      max: 4096,
-    );
+    await notifications.update(id: 'track:kw:1', progress: 2048, max: 4096);
     // 批量的「不改」字段传 null，换曲目时 max 传 0（回到不确定进度条）。
     await notifications.update(
       id: 'batch',
@@ -110,13 +106,10 @@ void main() {
   test('通道异常 / 缺失：吞掉异常不抛（下载链路不受影响）', () async {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      throw PlatformException(code: 'DOWNLOAD_NOTIFICATION_ERROR');
-    });
+          throw PlatformException(code: 'DOWNLOAD_NOTIFICATION_ERROR');
+        });
     final notifications = MethodChannelDownloadNotifications(supported: true);
-    await expectLater(
-      notifications.start(id: 'batch', title: '歌名'),
-      completes,
-    );
+    await expectLater(notifications.start(id: 'batch', title: '歌名'), completes);
     await expectLater(
       notifications.update(id: 'batch', progress: 1, max: 2),
       completes,

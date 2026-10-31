@@ -58,33 +58,32 @@ void main() {
   });
 
   SyncEnvelope remote() => SyncEnvelope(
-        deviceId: 'devB',
-        deviceName: 'B',
-        producedAt: 6000,
-        journalHead: 3,
-        records: {
-          SyncCategory.settings: [
-            SyncRecord(
-              key: 'theme_mode',
-              version: const SyncVersion(physical: 9000, deviceId: 'devB'),
-              data: const {'v': 'dark'},
-            ),
-          ],
-        },
-      );
+    deviceId: 'devB',
+    deviceName: 'B',
+    producedAt: 6000,
+    journalHead: 3,
+    records: {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 9000, deviceId: 'devB'),
+          data: const {'v': 'dark'},
+        ),
+      ],
+    },
+  );
 
   Future<SyncRoundReport> run({
     SyncTrigger trigger = SyncTrigger.manual,
     bool push = true,
     bool antiEntropy = false,
     Set<SyncCategory>? onlyCategories,
-  }) =>
-      runner.runRound(
-        trigger: trigger,
-        push: push,
-        antiEntropy: antiEntropy,
-        onlyCategories: onlyCategories,
-      );
+  }) => runner.runRound(
+    trigger: trigger,
+    push: push,
+    antiEntropy: antiEntropy,
+    onlyCategories: onlyCategories,
+  );
 
   test('类别受限适配器：collect 收到本轮请求的类别集合', () async {
     final scoped = _ScopedAdapter();
@@ -108,13 +107,15 @@ void main() {
   });
 
   test('collect → pull：计划带名册游标，拉取结果进入本轮', () async {
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [SyncPeerState(deviceId: 'devB', cursorSeq: 2)],
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [SyncPeerState(deviceId: 'devB', cursorSeq: 2)],
+      ),
+    );
     orderedTransport.available.add(remote());
 
     await run(push: false);
@@ -135,11 +136,7 @@ void main() {
     expect(adapter.appliedKeys, ['theme_mode']);
     expect(report.applied, 1);
     expect(report.applyFailures, 0);
-    expect(
-      runner.peerOf('devB').cursorSeq,
-      3,
-      reason: '应用成功后游标才落进名册',
-    );
+    expect(runner.peerOf('devB').cursorSeq, 3, reason: '应用成功后游标才落进名册');
   });
 
   test('apply 失败：游标不推进，记录计入失败', () async {
@@ -191,11 +188,10 @@ void main() {
     await run();
 
     // compact 必须发生在构建 / 推送之前：裁剪下限读到的是本轮头部。
-    expect(
-      journal.events.take(2),
-      ['compact:5', 'snapshot:5'],
-      reason: '先裁日志、再标记本轮快照覆盖',
-    );
+    expect(journal.events.take(2), [
+      'compact:5',
+      'snapshot:5',
+    ], reason: '先裁日志、再标记本轮快照覆盖');
     expect(orderedTransport.events, contains('push'));
     expect(
       journal.events.indexOf('compact:5'),
@@ -210,13 +206,15 @@ void main() {
   });
 
   test('同一轮拉取失败 + 推送成功：保留失败原因，不冒充成功接触', () async {
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.ok,
-      peers: [SyncPeerState(deviceId: 'devB')],
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [SyncPeerState(deviceId: 'devB')],
+      ),
+    );
     orderedTransport
       ..pullFailures = 1
       ..peersSeenOverride = 1
@@ -230,8 +228,11 @@ void main() {
 
     expect(orderedTransport.pushed, isNotEmpty, reason: '本轮确实推送成功');
     final peer = runner.peerOf('devB');
-    expect(peer.lastError?.code, SyncIssueCode.peerReadFailed,
-        reason: '推送成功不能清掉同一轮的拉取失败');
+    expect(
+      peer.lastError?.code,
+      SyncIssueCode.peerReadFailed,
+      reason: '推送成功不能清掉同一轮的拉取失败',
+    );
     expect(peer.lastSuccessAt, 0, reason: '拉取失败不算成功接触');
     expect(peer.lastPushAt, 0, reason: '本轮只带回执，失败轮不推进 lastPushAt');
     expect(peer.lastSeenAt, 7000, reason: '本轮尝试时间仍应刷新');
@@ -285,18 +286,19 @@ class _RecordingJournal implements SyncJournalStore {
 
   @override
   Future<SyncJournalStats> stats() async => SyncJournalStats(
-        headSeq: head,
-        baseSeq: base,
-        snapshotSeq: snapshot,
-        entries: 0,
-        bytes: 0,
-        oldestAt: 0,
-      );
+    headSeq: head,
+    baseSeq: base,
+    snapshotSeq: snapshot,
+    entries: 0,
+    bytes: 0,
+    oldestAt: 0,
+  );
 
   @override
-  Future<List<SyncJournalEntry>> window(
-          {int since = -1, int limit = 0}) async =>
-      const [];
+  Future<List<SyncJournalEntry>> window({
+    int since = -1,
+    int limit = 0,
+  }) async => const [];
 
   @override
   Future<int> windowBytes({int since = -1}) async => 0;
@@ -336,9 +338,9 @@ class _ScopedAdapter implements CategoryScopedSyncAdapter {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect(
-          {bool fresh = false}) async =>
-      const {};
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async => const {};
 
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collectForCategories(
@@ -352,8 +354,7 @@ class _ScopedAdapter implements CategoryScopedSyncAdapter {
   @override
   Future<SyncApplyOutcome> apply(
     Map<SyncCategory, List<SyncRecord>> records,
-  ) async =>
-      SyncApplyOutcome.none;
+  ) async => SyncApplyOutcome.none;
 }
 
 class _RecordingAdapter implements SyncAdapter {
@@ -369,16 +370,15 @@ class _RecordingAdapter implements SyncAdapter {
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect({
     bool fresh = false,
-  }) async =>
-      const {
-        SyncCategory.settings: [
-          SyncRecord(
-            key: 'theme_mode',
-            version: SyncVersion(physical: 1000, deviceId: 'devA'),
-            data: {'v': 'light'},
-          ),
-        ],
-      };
+  }) async => const {
+    SyncCategory.settings: [
+      SyncRecord(
+        key: 'theme_mode',
+        version: SyncVersion(physical: 1000, deviceId: 'devA'),
+        data: {'v': 'light'},
+      ),
+    ],
+  };
 
   @override
   Future<SyncApplyOutcome> apply(

@@ -18,12 +18,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 纯内存 + 永远失败的 CacheManager：测试不触网、不落平台目录。
 class _OfflineCacheManager extends CacheManager {
   _OfflineCacheManager({FileSystem? fileSystem})
-      : super(Config(
+    : super(
+        Config(
           'artwork_cache_test_offline',
           repo: NonStoringObjectProvider(),
           fileSystem: fileSystem ?? MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   @override
   Stream<FileResponse> getFileStream(
@@ -39,12 +41,14 @@ class _OfflineCacheManager extends CacheManager {
 /// 记录 getSingleFile 调用的内存 CacheManager（系统媒体会话封面本地化）。
 class _RecordingCacheManager extends CacheManager {
   _RecordingCacheManager()
-      : super(Config(
+    : super(
+        Config(
           'artwork_cache_test_recording',
           repo: _MemoryRepo(),
           fileSystem: MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   int singleFileCalls = 0;
   Map<String, String>? lastHeaders;
@@ -65,12 +69,14 @@ class _RecordingCacheManager extends CacheManager {
 /// 用来覆盖「未命中 / 文件不存在 / 抛异常」三条元数据分支。
 class _StubInfoCacheManager extends CacheManager {
   _StubInfoCacheManager()
-      : super(Config(
+    : super(
+        Config(
           'artwork_cache_test_info',
           repo: _MemoryRepo(),
           fileSystem: MemoryCacheSystem(),
           fileService: HttpFileService(),
-        ));
+        ),
+      );
 
   /// 非 null 时命中该相对路径（文件是否真实存在由调用方决定）。
   String? hitRelativePath;
@@ -206,13 +212,8 @@ Future<void> _waitUntil(
 
 /// 记录封面 sweep 调用次数的真实存储（临时目录 + 真实删文件）。
 class _SweepCountingStorage extends IoCacheStorage {
-  _SweepCountingStorage({
-    required String audioDir,
-    required String artworkDir,
-  }) : super(
-          audioDirOverride: audioDir,
-          artworkDirOverride: artworkDir,
-        );
+  _SweepCountingStorage({required String audioDir, required String artworkDir})
+    : super(audioDirOverride: audioDir, artworkDirOverride: artworkDir);
 
   int sweepCalls = 0;
   int deletedFiles = 0;
@@ -257,7 +258,8 @@ void main() {
   group('headersFor：修复 CDN 403', () {
     test('126.net 带浏览器 UA + 网易云 Referer', () {
       final headers = ArtworkCache.headersFor(
-          'https://p1.music.126.net/abc.jpg?param=300y300');
+        'https://p1.music.126.net/abc.jpg?param=300y300',
+      );
       expect(headers['User-Agent'], ArtworkCache.browserUserAgent);
       expect(headers['User-Agent'], contains('Mozilla/5.0'));
       expect(headers['User-Agent'], contains('Chrome/120'));
@@ -296,8 +298,10 @@ void main() {
 
   group('imageProvider', () {
     test('provider 携带统一 headers 与共享 cacheManager', () async {
-      final cache =
-          ArtworkCache(cacheService: cacheService, managerOverride: manager);
+      final cache = ArtworkCache(
+        cacheService: cacheService,
+        managerOverride: manager,
+      );
       final provider = await cache.imageProvider(
         'https://p1.music.126.net/x.jpg',
         maxWidth: 300,
@@ -312,8 +316,10 @@ void main() {
     test('managerOrNull 返回同一 Future 实例（FutureBuilder 身份稳定）', () async {
       // 每次 build 新建 Future 会让 FutureBuilder 重置回 waiting 并渲染占位；
       // 切歌动画逐帧重建 = 整段动画深色（「切歌黑图」）。这里锁死身份稳定。
-      final cache =
-          ArtworkCache(cacheService: cacheService, managerOverride: manager);
+      final cache = ArtworkCache(
+        cacheService: cacheService,
+        managerOverride: manager,
+      );
 
       final first = cache.managerOrNull();
       final second = cache.managerOrNull();
@@ -346,8 +352,7 @@ void main() {
         return file;
       }
 
-      final stale =
-          await write('stale.jpg', age: const Duration(days: 400));
+      final stale = await write('stale.jpg', age: const Duration(days: 400));
       final keep1 = await write('keep1.jpg', age: const Duration(days: 2));
       final keep2 = await write('keep2.jpg', age: const Duration(hours: 1));
 
@@ -373,12 +378,14 @@ void main() {
       await present.writeAsBytes([1, 2, 3]);
 
       Future<void> seed(int id, String relativePath) async {
-        await repo.insert(CacheObject(
-          'https://p1.music.126.net/$relativePath',
-          relativePath: relativePath,
-          validTill: DateTime.now().add(const Duration(days: 1)),
-          id: id,
-        ));
+        await repo.insert(
+          CacheObject(
+            'https://p1.music.126.net/$relativePath',
+            relativePath: relativePath,
+            validTill: DateTime.now().add(const Duration(days: 1)),
+            id: id,
+          ),
+        );
       }
 
       await seed(1, 'present.jpg');
@@ -413,12 +420,14 @@ void main() {
 
       final service = CacheService(prefs: prefs, storage: storage);
       final repo = _MemoryRepo();
-      Future<void> seed(int id, String relativePath) => repo.insert(CacheObject(
-            'https://p1.music.126.net/$relativePath',
-            relativePath: relativePath,
-            validTill: DateTime.now().add(const Duration(days: 1)),
-            id: id,
-          ));
+      Future<void> seed(int id, String relativePath) => repo.insert(
+        CacheObject(
+          'https://p1.music.126.net/$relativePath',
+          relativePath: relativePath,
+          validTill: DateTime.now().add(const Duration(days: 1)),
+          id: id,
+        ),
+      );
       await seed(1, 'present.jpg');
       await seed(2, 'missing.jpg');
 
@@ -438,9 +447,11 @@ void main() {
 
       // 策略变更走非强制 sweep，与启动 / 5 分钟节流是同一条 _sweepNow 路径。
       await service.setArtworkStaleDays(30);
-      await _waitUntil(() async =>
-          repo.getAllCalls == 1 &&
-          await repo.get('https://p1.music.126.net/missing.jpg') == null);
+      await _waitUntil(
+        () async =>
+            repo.getAllCalls == 1 &&
+            await repo.get('https://p1.music.126.net/missing.jpg') == null,
+      );
       // 等 _sweepNow 的 finally 复位 _sweeping 再走显式入口。
       await Future<void>.delayed(const Duration(milliseconds: 50));
       expect(storage.deletedFiles, 0, reason: '本次 sweep 没删任何文件');
@@ -465,17 +476,16 @@ void main() {
       expect(fileSystem.createFileCounts['present.jpg'], isNull);
       expect(fileSystem.createFileCounts['fresh.jpg'], 2);
       expect(fileSystem.createFileCounts['missing2.jpg'], 1);
-      expect(
-        await repo.get('https://p1.music.126.net/missing2.jpg'),
-        isNull,
-      );
+      expect(await repo.get('https://p1.music.126.net/missing2.jpg'), isNull);
 
       // 分区被 UI 清理（CacheStorage 直删文件，不经过 manager）没有扫描结果，
       // 退回逐条探测，仍要清掉索引。
       await service.clear(CachePartition.artwork);
-      await _waitUntil(() async =>
-          repo.getAllCalls == 3 &&
-          await repo.get('https://p1.music.126.net/present.jpg') == null);
+      await _waitUntil(
+        () async =>
+            repo.getAllCalls == 3 &&
+            await repo.get('https://p1.music.126.net/present.jpg') == null,
+      );
       expect(fileSystem.createFileCounts['present.jpg'], 1);
       expect(fileSystem.createFileCounts['fresh.jpg'], 3);
     });
@@ -497,12 +507,14 @@ void main() {
 
       final service = CacheService(prefs: prefs, storage: storage);
       final repo = _MemoryRepo();
-      await repo.insert(CacheObject(
-        'https://p1.music.126.net/nested/present.jpg',
-        relativePath: 'nested\\present.jpg',
-        validTill: DateTime.now().add(const Duration(days: 1)),
-        id: 1,
-      ));
+      await repo.insert(
+        CacheObject(
+          'https://p1.music.126.net/nested/present.jpg',
+          relativePath: 'nested\\present.jpg',
+          validTill: DateTime.now().add(const Duration(days: 1)),
+          id: 1,
+        ),
+      );
       final fileSystem = _CountingFileSystem(MemoryCacheSystem());
       final cache = ArtworkCache(
         cacheService: service,
@@ -516,16 +528,13 @@ void main() {
         isNotNull,
         reason: '归一化后应命中存活集合，不能被当成缺失',
       );
-      expect(
-        fileSystem.createFileCalls,
-        0,
-        reason: '命中存活集合的条目不该再做文件探测',
-      );
+      expect(fileSystem.createFileCalls, 0, reason: '命中存活集合的条目不该再做文件探测');
     });
 
     test('扫描不完整且非强制 sweep 不误删索引；显式入口逐条兜底', () async {
-      final tempRoot =
-          await Directory.systemTemp.createTemp('artwork_prune_failed_');
+      final tempRoot = await Directory.systemTemp.createTemp(
+        'artwork_prune_failed_',
+      );
       addTearDown(() async {
         if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
       });
@@ -538,12 +547,14 @@ void main() {
       final repo = _MemoryRepo();
       final present = await manager.config.fileSystem.createFile('present.jpg');
       await present.writeAsBytes([1, 2, 3]);
-      await repo.insert(CacheObject(
-        'https://p1.music.126.net/present.jpg',
-        relativePath: 'present.jpg',
-        validTill: DateTime.now().add(const Duration(days: 1)),
-        id: 1,
-      ));
+      await repo.insert(
+        CacheObject(
+          'https://p1.music.126.net/present.jpg',
+          relativePath: 'present.jpg',
+          validTill: DateTime.now().add(const Duration(days: 1)),
+          id: 1,
+        ),
+      );
       final cache = ArtworkCache(
         cacheService: service,
         managerOverride: manager,
@@ -566,7 +577,9 @@ void main() {
 
   group('真实 manager（内存 repo + 临时持久目录）', () {
     test('使用持久目录写入；内部淘汰查询被置空（交给 sweep）', () async {
-      final tempRoot = await Directory.systemTemp.createTemp('artwork_manager_');
+      final tempRoot = await Directory.systemTemp.createTemp(
+        'artwork_manager_',
+      );
       addTearDown(() async {
         if (await tempRoot.exists()) await tempRoot.delete(recursive: true);
       });
@@ -585,9 +598,14 @@ void main() {
 
       final manager = await cache.manager;
       expect(manager, isA<ArtworkCacheManager>());
-      expect(manager.config.repo.getObjectsOverCapacity(0), completion(isEmpty));
       expect(
-          manager.config.repo.getOldObjects(Duration.zero), completion(isEmpty));
+        manager.config.repo.getObjectsOverCapacity(0),
+        completion(isEmpty),
+      );
+      expect(
+        manager.config.repo.getOldObjects(Duration.zero),
+        completion(isEmpty),
+      );
 
       final file = await manager.putFile(
         'https://p1.music.126.net/manager.jpg',
@@ -720,10 +738,10 @@ void main() {
       final modified = DateTime.fromMillisecondsSinceEpoch(1700000000000);
       await File(file.path).setLastModified(modified);
 
-      expect(
-        await cache.cachedFileInfo(url),
-        (sizeBytes: 5, modifiedMs: modified.millisecondsSinceEpoch),
-      );
+      expect(await cache.cachedFileInfo(url), (
+        sizeBytes: 5,
+        modifiedMs: modified.millisecondsSinceEpoch,
+      ));
     });
 
     group('未命中 / 异常', () {

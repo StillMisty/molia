@@ -21,7 +21,7 @@ class RowAction {
   final String label;
   final VoidCallback onPressed;
 
-  /// 移除 / 删除类（菜单条目走 error 语义，触摸端左滑胶囊走 error 配色）。
+  /// 移除 / 删除类（菜单条目走 error 语义，并固定排在同组动作最后）。
   final bool destructive;
 }
 
@@ -31,14 +31,14 @@ class RowAction {
 /// 菜单只需要图标与文案；配色（移除类）由菜单组件按 `isDestructive` 决定，
 /// 这里不再各页拼一套条目。
 List<M3EMenuEntry> rowMenuEntries(List<RowAction> actions) => [
-      for (var index = 0; index < actions.length; index++)
-        M3EMenuEntry(
-          label: actions[index].label,
-          leading: Icon(actions[index].icon),
-          isDestructive: actions[index].destructive,
-          value: index,
-        ),
-    ];
+  for (var index = 0; index < actions.length; index++)
+    M3EMenuEntry(
+      label: actions[index].label,
+      leading: Icon(actions[index].icon),
+      isDestructive: actions[index].destructive,
+      value: index,
+    ),
+];
 
 /// 条目选中回调（值 = [rowMenuEntries] 写入的动作下标）。
 ValueChanged<Object?> rowMenuSelection(List<RowAction> actions) =>
@@ -87,6 +87,25 @@ class RowActionMenuButton extends StatelessWidget {
   }
 }
 
+/// 行动作的动态构造器：把 `context.select` 的订阅放进行自身 build。
+///
+/// 为什么需要：Sliver 的 itemBuilder 里直接 `context.select` 会触发 provider
+/// 断言（会重建整张列表）。收藏页的行动作要按能力位逐行订阅，因此把
+/// 「构造动作」推迟到独立 widget 的 build 里；调用方只交一个纯函数。
+class RowActionsBuilder extends StatelessWidget {
+  const RowActionsBuilder({
+    super.key,
+    required this.actions,
+    required this.builder,
+  });
+
+  final List<RowAction> Function(BuildContext context) actions;
+  final Widget Function(BuildContext context, List<RowAction> actions) builder;
+
+  @override
+  Widget build(BuildContext context) => builder(context, actions(context));
+}
+
 /// 桌面端的行表面右键入口：直接交给 `TrackRow.onSecondaryTap`。
 ///
 /// 触摸平台 / 没有动作时返回 null（该行不接次级手势）。落点弹菜单的边界
@@ -99,9 +118,9 @@ void Function(Offset globalPosition)? rowActionsAtPointer(
   final entries = rowMenuEntries(actions);
   final onSelected = rowMenuSelection(actions);
   return (Offset globalPosition) => showTrackActionsMenuAtPointer(
-        context: context,
-        globalPosition: globalPosition,
-        entries: entries,
-        onSelected: onSelected,
-      );
+    context: context,
+    globalPosition: globalPosition,
+    entries: entries,
+    onSelected: onSelected,
+  );
 }

@@ -70,24 +70,20 @@ Future<FakePlaybackBackend> pumpPerfApp(
   addTearDown(repository.dispose);
   final now = DateTime.now().millisecondsSinceEpoch;
   final favoritesId = await repository.createPlaylist(_favoritesName);
-  await repository.addTracksToPlaylist(
-    favoritesId,
-    [
-      for (var i = 0; i < favoritesCount; i++)
-        PlaylistTrack(
-          playlistId: favoritesId,
-          sourceKey: 'perf',
-          songId: 'song-$i',
-          title: 'Performance Track $i',
-          artist: 'Perf Artist ${i % 100}',
-          album: 'Perf Album ${i % 40}',
-          durationMs: 180000 + i * 1000,
-          addedAt: now + i,
-          sortOrder: i,
-        ),
-    ],
-    favoriteChange: true,
-  );
+  await repository.addTracksToPlaylist(favoritesId, [
+    for (var i = 0; i < favoritesCount; i++)
+      PlaylistTrack(
+        playlistId: favoritesId,
+        sourceKey: 'perf',
+        songId: 'song-$i',
+        title: 'Performance Track $i',
+        artist: 'Perf Artist ${i % 100}',
+        album: 'Perf Album ${i % 40}',
+        durationMs: 180000 + i * 1000,
+        addedAt: now + i,
+        sortOrder: i,
+      ),
+  ], favoriteChange: true);
 
   final backend = FakePlaybackBackend();
   final playback = buildTestPlaybackProvider(
@@ -153,15 +149,17 @@ Future<FakePlaybackBackend> pumpPerfApp(
         payload: {'id': i},
       ),
   ];
-  backend.emit(BackendSnapshot(
-    current: queue.first,
-    queue: queue,
-    currentIndex: 0,
-    isPlaying: true,
-    position: const Duration(seconds: 30),
-    duration: queue.first.duration ?? Duration.zero,
-    upNext: queue.sublist(1),
-  ));
+  backend.emit(
+    BackendSnapshot(
+      current: queue.first,
+      queue: queue,
+      currentIndex: 0,
+      isPlaying: true,
+      position: const Duration(seconds: 30),
+      duration: queue.first.duration ?? Duration.zero,
+      upNext: queue.sublist(1),
+    ),
+  );
 
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;

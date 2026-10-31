@@ -44,10 +44,7 @@ void main() {
     final second = tracks[1];
     expect(second.title, '晴天');
     expect(second.coverUrl, 'https://i2.hdslb.com/bfs/archive/cover2.jpg');
-    expect(
-      second.duration,
-      const Duration(hours: 1, minutes: 2, seconds: 3),
-    );
+    expect(second.duration, const Duration(hours: 1, minutes: 2, seconds: 3));
   });
 
   test('raw 原样保留并补 bvid/aid/_types/_artists', () {
@@ -62,16 +59,16 @@ void main() {
     expect(raw['source'], 'bili');
     expect(raw['bvid'], 'BV1xx411c7mD');
     expect(raw['aid'], '987654');
-    expect(
-      (raw['_types'] as Map).keys,
-      containsAll(['192k', '128k', '64k']),
-    );
+    expect((raw['_types'] as Map).keys, containsAll(['192k', '128k', '64k']));
     expect(raw['_artists'], [
       {'name': '买辣椒也用券', 'id': '123456'},
     ]);
 
-    expect(
-        track.qualities.map((q) => q.type).toList(), ['192k', '128k', '64k']);
+    expect(track.qualities.map((q) => q.type).toList(), [
+      '192k',
+      '128k',
+      '64k',
+    ]);
     // 通用 id 优先级：bvid 在 aid 之前。
     expect(track.songId, 'BV1xx411c7mD');
     expect(track.id, 'bili:BV1xx411c7mD');
@@ -125,8 +122,10 @@ void main() {
     var navCalls = 0;
     BuiltinSearch.transport = BuiltinTransport(
       dio: mockDio((request) async {
-        final sessionResponse =
-            biliSessionResponse(request, onNav: () => navCalls++);
+        final sessionResponse = biliSessionResponse(
+          request,
+          onNav: () => navCalls++,
+        );
         if (sessionResponse != null) return sessionResponse;
         if (request.uri.path == '/x/web-interface/wbi/search/type') {
           searchCalls++;
@@ -152,8 +151,10 @@ void main() {
     var navCalls = 0;
     BuiltinSearch.transport = BuiltinTransport(
       dio: mockDio((request) async {
-        final sessionResponse =
-            biliSessionResponse(request, onNav: () => navCalls++);
+        final sessionResponse = biliSessionResponse(
+          request,
+          onNav: () => navCalls++,
+        );
         if (sessionResponse != null) return sessionResponse;
         if (request.uri.path == '/x/web-interface/wbi/search/type') {
           searchCalls++;
@@ -179,8 +180,10 @@ void main() {
     var navCalls = 0;
     BuiltinSearch.transport = BuiltinTransport(
       dio: mockDio((request) async {
-        final sessionResponse =
-            biliSessionResponse(request, onNav: () => navCalls++);
+        final sessionResponse = biliSessionResponse(
+          request,
+          onNav: () => navCalls++,
+        );
         if (sessionResponse != null) return sessionResponse;
         if (request.uri.path == '/x/web-interface/wbi/search/type') {
           searchCalls++;
@@ -206,8 +209,10 @@ void main() {
       var navCalls = 0;
       BuiltinSearch.transport = BuiltinTransport(
         dio: mockDio((request) async {
-          final sessionResponse =
-              biliSessionResponse(request, onNav: () => navCalls++);
+          final sessionResponse = biliSessionResponse(
+            request,
+            onNav: () => navCalls++,
+          );
           if (sessionResponse != null) return sessionResponse;
           if (request.uri.path == '/x/web-interface/wbi/search/type') {
             searchCalls++;
@@ -220,8 +225,11 @@ void main() {
 
       final result = await BiliSearch.searchWithMeta('起风了');
 
-      expect(result.failure, isNull,
-          reason: 'body=${body.isEmpty ? 'empty' : 'html'}');
+      expect(
+        result.failure,
+        isNull,
+        reason: 'body=${body.isEmpty ? 'empty' : 'html'}',
+      );
       expect(result.tracks, hasLength(2));
       expect(searchCalls, 2);
       expect(navCalls, 2, reason: '空 / 非 JSON 也刷新一次');
@@ -260,8 +268,10 @@ void main() {
     var navCalls = 0;
     BuiltinSearch.transport = BuiltinTransport(
       dio: mockDio((request) async {
-        final sessionResponse =
-            biliSessionResponse(request, onNav: () => navCalls++);
+        final sessionResponse = biliSessionResponse(
+          request,
+          onNav: () => navCalls++,
+        );
         if (sessionResponse != null) return sessionResponse;
         if (request.uri.path == '/x/web-interface/wbi/search/type') {
           searchCalls++;
@@ -299,9 +309,11 @@ void main() {
                 'code': 0,
                 'data': {
                   'wbi_img': {
-                    'img_url': 'https://i0.hdslb.com/bfs/wbi/'
+                    'img_url':
+                        'https://i0.hdslb.com/bfs/wbi/'
                         '7cd084941338484aae1ad9425b84077c.png',
-                    'sub_url': 'https://i0.hdslb.com/bfs/wbi/'
+                    'sub_url':
+                        'https://i0.hdslb.com/bfs/wbi/'
                         '4932caff0ff746eab6f01bf08b70ac45.png',
                   },
                 },

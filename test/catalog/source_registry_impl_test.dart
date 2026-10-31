@@ -7,6 +7,7 @@ import 'package:molia/sources/any_listen/any_listen_config.dart';
 import 'package:molia/sources/any_listen/any_listen_source.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../support/settings_test_support.dart';
 
 void main() {
@@ -45,17 +46,13 @@ void main() {
       manager.dispose();
     });
 
-    await manager.updateAnyListenConfig(AnyListenConfig(
-      serverUrl: 'http://127.0.0.1:9500',
-      enabled: true,
-    ));
+    await manager.updateAnyListenConfig(
+      AnyListenConfig(serverUrl: 'http://127.0.0.1:9500', enabled: true),
+    );
 
     final descriptors = registry.descriptors;
     final profiles = manager.sourceProfiles.searchable;
-    expect(descriptors.map((d) => d.key), [
-      'bili',
-      AnyListenSource.sourceKey,
-    ]);
+    expect(descriptors.map((d) => d.key), ['bili', AnyListenSource.sourceKey]);
     // 列表与能力位来自同一次画像快照，不能再各算一份。
     expect(descriptors.map((d) => d.key), profiles.map((p) => p.key));
     for (var index = 0; index < descriptors.length; index++) {
@@ -145,10 +142,9 @@ void main() {
     final subscription = registry.changes.listen(events.add);
     addTearDown(subscription.cancel);
 
-    await manager.updateAnyListenConfig(AnyListenConfig(
-      serverUrl: 'http://127.0.0.1:9500',
-      enabled: true,
-    ));
+    await manager.updateAnyListenConfig(
+      AnyListenConfig(serverUrl: 'http://127.0.0.1:9500', enabled: true),
+    );
     await Future<void>.delayed(Duration.zero);
     expect(events, hasLength(1), reason: 'manager 通知应转发一次');
 

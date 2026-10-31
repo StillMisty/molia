@@ -138,7 +138,8 @@ class TxSearch {
 
   /// 解析 QQ 音乐搜索响应（供搜索与单元测试复用）。
   static List<SourceTrack> parseItems(dynamic data) {
-    final songList = (data is Map &&
+    final songList =
+        (data is Map &&
             data['body'] is Map &&
             (data['body'] as Map)['song'] is Map)
         ? ((data['body'] as Map)['song'] as Map)['list']
@@ -213,8 +214,9 @@ class TxSearch {
     }
 
     final interval = rawItem['interval'];
-    final intervalSeconds =
-        interval is num ? interval.toInt() : int.tryParse('$interval') ?? 0;
+    final intervalSeconds = interval is num
+        ? interval.toInt()
+        : int.tryParse('$interval') ?? 0;
 
     final raw = <String, dynamic>{
       'singer': singer,
@@ -224,14 +226,15 @@ class TxSearch {
       'albumName': albumName,
       'albumId': albumId,
       'source': 'tx',
-      'interval':
-          intervalSeconds > 0 ? formatPlayTime(intervalSeconds) : null,
+      'interval': intervalSeconds > 0 ? formatPlayTime(intervalSeconds) : null,
       'songId': rawItem['id']?.toString() ?? '',
       'albumMid': albumId,
       'strMediaMid': file['media_mid']?.toString() ?? '',
       'songmid': rawItem['mid']?.toString() ?? '',
       'img': cover,
-      'types': types.entries.map((e) => {'type': e.key, 'size': e.value['size']}).toList(),
+      'types': types.entries
+          .map((e) => {'type': e.key, 'size': e.value['size']})
+          .toList(),
       '_types': types,
       'typeUrl': <String, dynamic>{},
     };
@@ -243,8 +246,7 @@ class TxSearch {
       artist: singer,
       album: albumName,
       coverUrl: cover.isEmpty ? null : cover,
-      duration:
-          intervalSeconds > 0 ? Duration(seconds: intervalSeconds) : null,
+      duration: intervalSeconds > 0 ? Duration(seconds: intervalSeconds) : null,
       qualities: buildQualities(types),
       raw: raw,
     );

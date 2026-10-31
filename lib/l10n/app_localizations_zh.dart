@@ -30,10 +30,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get searchHint => '搜索歌曲、专辑、艺术家...';
+  String get searchHint => '搜索歌曲、歌手或歌词';
 
   @override
-  String get searchIdleHint => '输入关键词搜索歌曲';
+  String get searchIdleHint => '输入关键词搜索歌曲、歌手或歌词';
 
   @override
   String get clearSearch => '清除搜索';
@@ -1106,6 +1106,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addToPlaylist => '加入列表';
+
+  @override
+  String get addToQueue => '加入队列';
+
+  @override
+  String get addedToQueue => '已加入队列';
+
+  @override
+  String get playNext => '下一首播放';
+
+  @override
+  String get moveQueueUp => '上移';
+
+  @override
+  String get moveQueueDown => '下移';
+
+  @override
+  String get removeFromQueue => '移出队列';
 
   @override
   String get playlistReorder => '调整顺序';
@@ -3997,6 +4015,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get downloadCompleted => '下载完成';
+
+  @override
+  String get downloadStarted => '已加入下载队列';
 
   @override
   String downloadFailed(String message) {

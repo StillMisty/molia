@@ -143,11 +143,15 @@ void main() {
 
   test('版本与内容时间分离：endedAt 更大但版本更旧的事件不覆盖', () async {
     final id = await play(songId: 'same', title: '本机', listenedMs: 60000);
-    final localKey = (await db.customSelect(
-      'SELECT syncKey FROM play_events WHERE id = ?',
-      variables: [Variable.withInt(id)],
-    ).getSingle())
-        .data['syncKey'] as String;
+    final localKey =
+        (await db
+                    .customSelect(
+                      'SELECT syncKey FROM play_events WHERE id = ?',
+                      variables: [Variable.withInt(id)],
+                    )
+                    .getSingle())
+                .data['syncKey']
+            as String;
 
     // 更旧版本 + 更大的内容时间：按版本应跳过。
     final older = await store.syncApplyEvents([
@@ -163,12 +167,15 @@ void main() {
       ),
     ]);
     expect(older, (applied: 0, skipped: 1));
-    var row = (await db.customSelect(
-      'SELECT endedAt, listenedMs, versionPhysical FROM play_events '
-      'WHERE syncKey = ?',
-      variables: [Variable.withString(localKey)],
-    ).getSingle())
-        .data;
+    var row =
+        (await db
+                .customSelect(
+                  'SELECT endedAt, listenedMs, versionPhysical FROM play_events '
+                  'WHERE syncKey = ?',
+                  variables: [Variable.withString(localKey)],
+                )
+                .getSingle())
+            .data;
     expect(row['endedAt'], 61000);
     expect(row['listenedMs'], 60000);
 
@@ -186,12 +193,15 @@ void main() {
       ),
     ]);
     expect(newer, (applied: 1, skipped: 0));
-    row = (await db.customSelect(
-      'SELECT endedAt, listenedMs, versionPhysical FROM play_events '
-      'WHERE syncKey = ?',
-      variables: [Variable.withString(localKey)],
-    ).getSingle())
-        .data;
+    row =
+        (await db
+                .customSelect(
+                  'SELECT endedAt, listenedMs, versionPhysical FROM play_events '
+                  'WHERE syncKey = ?',
+                  variables: [Variable.withString(localKey)],
+                )
+                .getSingle())
+            .data;
     expect(row['endedAt'], 5000);
     expect(row['listenedMs'], 123);
     expect(row['versionPhysical'], 2000);

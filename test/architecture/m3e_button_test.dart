@@ -15,7 +15,9 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('M3EButton 的 label 必须与 icon 同用（否则退回 child）', () {
     final offenders = <String>[];
-    final variants = RegExp(r'M3EButton\.(filled|tonal|elevated|outlined)\s*\(');
+    final variants = RegExp(
+      r'M3EButton\.(filled|tonal|elevated|outlined)\s*\(',
+    );
     for (final entity in Directory('lib').listSync(recursive: true)) {
       if (entity is! File || !entity.path.endsWith('.dart')) continue;
       final src = entity.readAsStringSync();
@@ -36,7 +38,8 @@ void main() {
         final hasLabel = RegExp(r'\blabel\s*:').hasMatch(args);
         final hasIcon = RegExp(r'\bicon\s*:').hasMatch(args);
         if (hasLabel && !hasIcon) {
-          final line = '\n'.allMatches(src.substring(0, match.start)).length + 1;
+          final line =
+              '\n'.allMatches(src.substring(0, match.start)).length + 1;
           offenders.add('${entity.path}:$line');
         }
       }
@@ -44,7 +47,8 @@ void main() {
     expect(
       offenders,
       isEmpty,
-      reason: '这些 M3EButton 用 label 但没给 icon（会渲染成空按钮）：$offenders\n'
+      reason:
+          '这些 M3EButton 用 label 但没给 icon（会渲染成空按钮）：$offenders\n'
           '  → 普通动作按钮改成 child: Text(...)，或补上 icon:。',
     );
   });

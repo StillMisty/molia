@@ -53,13 +53,13 @@ void main() {
   }
 
   Track trackOf(String id) => Track(
-        id: TrackId('wy', id),
-        title: '曲目 $id',
-        artists: const [Artist(name: '歌手', id: '6452')],
-        album: '专辑名',
-        duration: const Duration(seconds: 245),
-        origin: TrackOrigin.builtin,
-      );
+    id: TrackId('wy', id),
+    title: '曲目 $id',
+    artists: const [Artist(name: '歌手', id: '6452')],
+    album: '专辑名',
+    duration: const Duration(seconds: 245),
+    origin: TrackOrigin.builtin,
+  );
 
   ArtistDetail artistOf(
     int page, {
@@ -68,15 +68,14 @@ void main() {
     String name = '歌手名',
     String description = '简介文字',
     String avatarUrl = 'http://img/avatar.jpg',
-  }) =>
-      ArtistDetail(
-        id: '6452',
-        name: name,
-        avatarUrl: avatarUrl,
-        description: description,
-        tracks: [for (var i = 0; i < perPage; i++) trackOf('$page-$i')],
-        hasMore: hasMore,
-      );
+  }) => ArtistDetail(
+    id: '6452',
+    name: name,
+    avatarUrl: avatarUrl,
+    description: description,
+    tracks: [for (var i = 0; i < perPage; i++) trackOf('$page-$i')],
+    hasMore: hasMore,
+  );
 
   Future<void> pumpPage(
     WidgetTester tester,
@@ -103,8 +102,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('头部：名字 / 曲目数 / 简介；播放全部进入队列（上下文为歌手名）',
-      (tester) async {
+  testWidgets('头部：名字 / 曲目数 / 简介；播放全部进入队列（上下文为歌手名）', (tester) async {
     await pumpPage(tester, (page) async => artistOf(page));
 
     expect(find.text('歌手名'), findsOneWidget);
@@ -169,10 +167,7 @@ void main() {
   });
 
   testWidgets('无简介（平台不提供）：不渲染简介区', (tester) async {
-    await pumpPage(
-      tester,
-      (page) async => artistOf(page, description: ''),
-    );
+    await pumpPage(tester, (page) async => artistOf(page, description: ''));
     expect(find.text('简介文字'), findsNothing);
     expect(find.text('歌手名'), findsOneWidget);
   });
@@ -180,11 +175,8 @@ void main() {
   testWidgets('无头像：渲染占位图标', (tester) async {
     await pumpPage(
       tester,
-      (page) async => ArtistDetail(
-        id: '6452',
-        name: '歌手名',
-        tracks: [trackOf('1-0')],
-      ),
+      (page) async =>
+          ArtistDetail(id: '6452', name: '歌手名', tracks: [trackOf('1-0')]),
     );
     expect(find.byIcon(Icons.person_rounded), findsOneWidget);
   });
@@ -195,10 +187,7 @@ void main() {
     await pumpPage(tester, (page) async {
       calls.add(page);
       if (page == 2 && failSecondPage) {
-        throw const SourceFailure(
-          kind: FailureKind.network,
-          message: 'boom',
-        );
+        throw const SourceFailure(kind: FailureKind.network, message: 'boom');
       }
       return artistOf(page, hasMore: page < 2);
     });
@@ -207,8 +196,11 @@ void main() {
     await tester.drag(find.byType(CustomScrollView), const Offset(0, -800));
     await tester.pumpAndSettle();
     expect(calls, [1, 2], reason: '触底自动取下一页');
-    expect(find.text('歌手名', skipOffstage: false), findsOneWidget,
-        reason: '失败保留头部');
+    expect(
+      find.text('歌手名', skipOffstage: false),
+      findsOneWidget,
+      reason: '失败保留头部',
+    );
 
     final retry = find.text('重试', skipOffstage: false);
     expect(retry, findsOneWidget);

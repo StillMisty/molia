@@ -56,14 +56,18 @@ class WyArtist {
       final id = raw['id']?.toString() ?? '';
       final name = decodeName(raw['name']?.toString());
       if (id.isEmpty || name.isEmpty) continue;
-      artists.add(ArtistSummary(
-        id: id,
-        name: name,
-        avatarUrl: raw['picUrl']?.toString(),
-        songCount: parseSourceCount(raw['musicSize']),
-      ));
+      artists.add(
+        ArtistSummary(
+          id: id,
+          name: name,
+          avatarUrl: raw['picUrl']?.toString(),
+          songCount: parseSourceCount(raw['musicSize']),
+        ),
+      );
     }
-    final total = parseSourceCount(result is Map ? result['artistCount'] : null);
+    final total = parseSourceCount(
+      result is Map ? result['artistCount'] : null,
+    );
     return ArtistSearchPage(
       items: artists,
       total: total,

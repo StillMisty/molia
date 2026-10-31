@@ -9,17 +9,15 @@ import '../../domain/models/playback.dart';
 
 /// 一次快照对应的队列参与视图。
 class AiRadioQueue {
-  AiRadioQueue({
-    required List<String> queueUris,
-    required this.currentIndex,
-  })  : queueUris = List.unmodifiable(queueUris),
-        _queueUriSet = Set.unmodifiable(queueUris);
+  AiRadioQueue({required List<String> queueUris, required this.currentIndex})
+    : queueUris = List.unmodifiable(queueUris),
+      _queueUriSet = Set.unmodifiable(queueUris);
 
   /// 从 live 快照构造；调用方每次要用最新快照新建，不要长期缓存。
   factory AiRadioQueue.of(PlaybackSnapshot snapshot) => AiRadioQueue(
-        queueUris: [for (final track in snapshot.queue) track.id.uri],
-        currentIndex: snapshot.currentIndex,
-      );
+    queueUris: [for (final track in snapshot.queue) track.id.uri],
+    currentIndex: snapshot.currentIndex,
+  );
 
   /// 队列顺序（下标与播放快照一致）。
   final List<String> queueUris;
@@ -55,7 +53,7 @@ class AiRadioQueue {
 
   /// 只保留还不在队列里的项（不改变入参顺序）。
   List<T> missing<T>(Iterable<T> items, String Function(T) uriOf) => [
-        for (final item in items)
-          if (!contains(uriOf(item))) item,
-      ];
+    for (final item in items)
+      if (!contains(uriOf(item))) item,
+  ];
 }

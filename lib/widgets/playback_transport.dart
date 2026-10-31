@@ -31,18 +31,18 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 使用——本仓纯图标按钮不挂悬浮提示（见 `docs/architecture.md` §6）。
 extension PlayModeTransportPresentation on PlayMode {
   IconData get transportIcon => switch (this) {
-        PlayMode.shuffle => Icons.shuffle_rounded,
-        PlayMode.listLoop => Icons.repeat_rounded,
-        PlayMode.sequential => Icons.playlist_play_rounded,
-        PlayMode.singleRepeat => Icons.repeat_one_rounded,
-      };
+    PlayMode.shuffle => Icons.shuffle_rounded,
+    PlayMode.listLoop => Icons.repeat_rounded,
+    PlayMode.sequential => Icons.playlist_play_rounded,
+    PlayMode.singleRepeat => Icons.repeat_one_rounded,
+  };
 
   String transportLabel(AppLocalizations l10n) => switch (this) {
-        PlayMode.listLoop => l10n.playModeListLoop,
-        PlayMode.sequential => l10n.playModeSequential,
-        PlayMode.shuffle => l10n.playModeShuffle,
-        PlayMode.singleRepeat => l10n.playModeSingleRepeat,
-      };
+    PlayMode.listLoop => l10n.playModeListLoop,
+    PlayMode.sequential => l10n.playModeSequential,
+    PlayMode.shuffle => l10n.playModeShuffle,
+    PlayMode.singleRepeat => l10n.playModeSingleRepeat,
+  };
 }
 
 /// 播放 / 暂停：无曲目（含冷启动恢复态）禁用，其余三面共用同一契约。
@@ -63,18 +63,17 @@ class PlaybackPlayPauseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (hasTrack, isPlaying) =
-        context.select<PlaybackProvider, (bool, bool)>(
-      (provider) => (provider.hasTrack, provider.isPlaying),
-    );
+    final (hasTrack, isPlaying) = context
+        .select<PlaybackProvider, (bool, bool)>(
+          (provider) => (provider.hasTrack, provider.isPlaying),
+        );
     final l10n = _l10n(context);
     return _TransportIconButton(
       enabled: hasTrack,
       icon: IconSwap<bool>(
         value: isPlaying,
-        builder: (context, isPlaying) => Icon(
-          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-        ),
+        builder: (context, isPlaying) =>
+            Icon(isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
       ),
       semanticLabel: isPlaying ? l10n.pause : l10n.play,
       onPressed: () {
@@ -200,10 +199,7 @@ class PlaybackModeButton extends StatelessWidget {
 /// 任一 dispose 就是常驻监听 / 计时器。版式差异只有时间标签排布
 /// [timeLabels]，行的内边距 / 是否 Expanded 仍由宿主决定。
 class PlaybackSeekBar extends StatefulWidget {
-  const PlaybackSeekBar({
-    super.key,
-    this.timeLabels = SeekTimeLabels.inline,
-  });
+  const PlaybackSeekBar({super.key, this.timeLabels = SeekTimeLabels.inline});
 
   /// 时间标签排布：底栏 inline（与条同行），播放页 below（条下方）。
   final SeekTimeLabels timeLabels;
@@ -238,8 +234,10 @@ class _PlaybackSeekBarState extends State<PlaybackSeekBar> {
   Widget build(BuildContext context) {
     // 只订阅滑杆需要的低频快照字段：progress tick 走 position 通道，
     // 不把整块宿主卷进每次位置采样。
-    return Selector<PlaybackProvider,
-        ({int durationMs, bool isPlaying, bool hasTrack})>(
+    return Selector<
+      PlaybackProvider,
+      ({int durationMs, bool isPlaying, bool hasTrack})
+    >(
       selector: (_, provider) => (
         durationMs: provider.snapshot.duration.inMilliseconds,
         isPlaying: provider.isPlaying,

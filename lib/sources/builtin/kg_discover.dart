@@ -30,8 +30,9 @@ class KgDiscoverSource extends DiscoverSource {
   static const String _gatewayKey = 'OIlwieks28dk2k092lksi2UIkp';
 
   static final RegExp _listDataExp = RegExp(r'global\.data = (\[.+\]);');
-  static final RegExp _listInfoExp =
-      RegExp(r'global = {[\s\S]+?name: "(.+)"[\s\S]+?pic: "(.+)"[\s\S]+?};');
+  static final RegExp _listInfoExp = RegExp(
+    r'global = {[\s\S]+?name: "(.+)"[\s\S]+?pic: "(.+)"[\s\S]+?};',
+  );
 
   @override
   String get sourceKey => 'kg';
@@ -74,14 +75,20 @@ class KgDiscoverSource extends DiscoverSource {
     DiscoverLeaderboard(id: 'kg__65234', name: '儿歌榜', bangid: '65234'),
     DiscoverLeaderboard(id: 'kg__4681', name: '美国BillBoard榜', bangid: '4681'),
     DiscoverLeaderboard(
-        id: 'kg__25028', name: 'Beatport电子舞曲榜', bangid: '25028'),
+      id: 'kg__25028',
+      name: 'Beatport电子舞曲榜',
+      bangid: '25028',
+    ),
     DiscoverLeaderboard(id: 'kg__4680', name: '英国单曲榜', bangid: '4680'),
     DiscoverLeaderboard(id: 'kg__38623', name: '韩国Melon音乐榜', bangid: '38623'),
     DiscoverLeaderboard(id: 'kg__42807', name: 'joox本地热歌榜', bangid: '42807'),
     DiscoverLeaderboard(id: 'kg__36107', name: '小语种热歌榜', bangid: '36107'),
     DiscoverLeaderboard(id: 'kg__4673', name: '日本公信榜', bangid: '4673'),
     DiscoverLeaderboard(
-        id: 'kg__46868', name: '日本SPACE SHOWER榜', bangid: '46868'),
+      id: 'kg__46868',
+      name: '日本SPACE SHOWER榜',
+      bangid: '46868',
+    ),
     DiscoverLeaderboard(id: 'kg__42808', name: 'KKBOX风云榜', bangid: '42808'),
     DiscoverLeaderboard(id: 'kg__60171', name: '越南语榜', bangid: '60171'),
     DiscoverLeaderboard(id: 'kg__60172', name: '泰语榜', bangid: '60172'),
@@ -102,41 +109,60 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTrack>>(
-      key: 'kg:leaderboard:$bangid',
-      budget: BuiltinRetryBudget.leaderboard,
-      request: () => lxHttpGet(
-        'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108'
-        '&ranktype=1&plat=0&pagesize=$_limitSong&area_code=1&page=1'
-        '&rankid=$bangid&with_res_tag=0&show_portrait_mv=1',
+    return runDiscoverCall(
+      DiscoverRequestCall<List<DiscoverTrack>>(
+        key: 'kg:leaderboard:$bangid',
+        budget: BuiltinRetryBudget.leaderboard,
+        request: () => lxHttpGet(
+          'http://mobilecdnbj.kugou.com/api/v3/rank/song?version=9108'
+          '&ranktype=1&plat=0&pagesize=$_limitSong&area_code=1&page=1'
+          '&rankid=$bangid&with_res_tag=0&show_portrait_mv=1',
+        ),
+        isInvalid: (body) =>
+            body is! Map ||
+            body['errcode'] != 0 ||
+            body['data'] is! Map ||
+            (body['data'] as Map)['info'] is! List,
+        parse: (body) {
+          final rawList = (body['data'] as Map)['info'] as List;
+          return [
+            for (final item in rawList)
+              if (filterDataItem(item) case final track?)
+                discoverTrackOf(track),
+          ];
+        },
       ),
-      isInvalid: (body) =>
-          body is! Map ||
-          body['errcode'] != 0 ||
-          body['data'] is! Map ||
-          (body['data'] as Map)['info'] is! List,
-      parse: (body) {
-        final rawList = (body['data'] as Map)['info'] as List;
-        return [
-          for (final item in rawList)
-            if (filterDataItem(item) case final track?) discoverTrackOf(track),
-        ];
-      },
-    ));
+    );
   }
 
   /// 解析榜单曲目（`kg/leaderboard.js` filterData；独立出来便于单元测试）。
   static SourceTrack? filterDataItem(dynamic rawItem) {
     if (rawItem is! Map) return null;
     final types = <String, Map<String, dynamic>>{};
-    KgSearch.addKgQuality(types, '128k',
-        size: rawItem['filesize'], hash: rawItem['hash']);
-    KgSearch.addKgQuality(types, '320k',
-        size: rawItem['320filesize'], hash: rawItem['320hash']);
-    KgSearch.addKgQuality(types, 'flac',
-        size: rawItem['sqfilesize'], hash: rawItem['sqhash']);
-    KgSearch.addKgQuality(types, 'flac24bit',
-        size: rawItem['filesize_high'], hash: rawItem['hash_high']);
+    KgSearch.addKgQuality(
+      types,
+      '128k',
+      size: rawItem['filesize'],
+      hash: rawItem['hash'],
+    );
+    KgSearch.addKgQuality(
+      types,
+      '320k',
+      size: rawItem['320filesize'],
+      hash: rawItem['320hash'],
+    );
+    KgSearch.addKgQuality(
+      types,
+      'flac',
+      size: rawItem['sqfilesize'],
+      hash: rawItem['sqhash'],
+    );
+    KgSearch.addKgQuality(
+      types,
+      'flac24bit',
+      size: rawItem['filesize_high'],
+      hash: rawItem['hash_high'],
+    );
 
     final singers = rawItem['authors'];
     final singerNames = <String>[];
@@ -207,53 +233,56 @@ class KgDiscoverSource extends DiscoverSource {
       final group = rawData[name];
       if (group is! Map) continue;
       final items = group['data'];
-      result.add(DiscoverTagCategory(
-        name: name.toString(),
-        tags: [
-          for (final tag in (items is List ? items : const []))
-            if (tag is Map)
-              DiscoverTag(
-                id: (tag['id'] ?? '').toString(),
-                name: (tag['name'] ?? '').toString(),
-              ),
-        ],
-      ));
+      result.add(
+        DiscoverTagCategory(
+          name: name.toString(),
+          tags: [
+            for (final tag in (items is List ? items : const []))
+              if (tag is Map)
+                DiscoverTag(
+                  id: (tag['id'] ?? '').toString(),
+                  name: (tag['name'] ?? '').toString(),
+                ),
+          ],
+        ),
+      );
     }
     return result;
   }
 
   @override
   Future<DiscoverPlaylistPage> playlists(String tagId, int page) {
-    return BuiltinSearch.transport.cached('kg:playlists:$tagId:$page',
-        () async {
-      final list = await _fetchSongList(tagId, page);
-      final info = tagId.isEmpty ? null : await _fetchListInfo(tagId);
-      final total = parseSourceCount(info?['total']) ?? list.length;
-      final limit = parseSourceCount(info?['pagesize']) ?? _limitList;
-      return DiscoverPlaylistPage(
-        playlists: [
-          for (final item in list)
-            ?filterListItem(item),
-        ],
-        page: page,
-        limit: limit,
-        total: total,
-      );
-    });
+    return BuiltinSearch.transport.cached(
+      'kg:playlists:$tagId:$page',
+      () async {
+        final list = await _fetchSongList(tagId, page);
+        final info = tagId.isEmpty ? null : await _fetchListInfo(tagId);
+        final total = parseSourceCount(info?['total']) ?? list.length;
+        final limit = parseSourceCount(info?['pagesize']) ?? _limitList;
+        return DiscoverPlaylistPage(
+          playlists: [for (final item in list) ?filterListItem(item)],
+          page: page,
+          limit: limit,
+          total: total,
+        );
+      },
+    );
   }
 
   static Future<List<dynamic>> _fetchSongList(String tagId, int page) {
-    return runDiscoverCall(DiscoverRequestCall<List<dynamic>>(
-      key: null,
-      request: () => lxHttpGet(
-        // LX 默认排序 = 推荐（t=5）。
-        'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'
-        '?is_ajax=1&cdn=cdn&t=5&c=$tagId&p=$page',
+    return runDiscoverCall(
+      DiscoverRequestCall<List<dynamic>>(
+        key: null,
+        request: () => lxHttpGet(
+          // LX 默认排序 = 推荐（t=5）。
+          'http://www2.kugou.kugou.com/yueku/v9/special/getSpecial'
+          '?is_ajax=1&cdn=cdn&t=5&c=$tagId&p=$page',
+        ),
+        isInvalid: (body) =>
+            body is! Map || body['status'] != 1 || body['special_db'] is! List,
+        parse: (body) => body['special_db'] as List,
       ),
-      isInvalid: (body) =>
-          body is! Map || body['status'] != 1 || body['special_db'] is! List,
-      parse: (body) => body['special_db'] as List,
-    ));
+    );
   }
 
   static Future<Map<String, dynamic>?> _fetchListInfo(String tagId) async {
@@ -263,8 +292,9 @@ class KgDiscoverSource extends DiscoverSource {
         '?is_smarty=1&cdn=cdn&t=5&c=$tagId',
       );
       if (body is! Map || body['status'] != 1) return null;
-      final params =
-          (body['data'] is Map) ? (body['data'] as Map)['params'] : null;
+      final params = (body['data'] is Map)
+          ? (body['data'] as Map)['params']
+          : null;
       return params is Map ? params.cast<String, dynamic>() : null;
     } catch (_) {
       return null;
@@ -293,28 +323,30 @@ class KgDiscoverSource extends DiscoverSource {
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('kg:playlist-search:$keyword:$page',
-        () async {
-      final body = await lxHttpGet(
-        'http://msearchretry.kugou.com/api/v3/search/special'
-        '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
-        '&showtype=10&filter=0&version=7910&sver=2',
-      );
-      if (body is! Map || body['errcode'] != 0) {
-        throw StateError('kg 歌单搜索失败');
-      }
-      final data = body['data'];
-      final items = (data is Map) ? data['info'] : null;
-      return DiscoverPlaylistPage(
-        playlists: [
-          for (final item in (items is List ? items : const []))
-            ?filterSearchItem(item),
-        ],
-        page: page,
-        limit: 20,
-        total: (data is Map ? parseSourceCount(data['total']) : null) ?? 0,
-      );
-    });
+    return BuiltinSearch.transport.cached(
+      'kg:playlist-search:$keyword:$page',
+      () async {
+        final body = await lxHttpGet(
+          'http://msearchretry.kugou.com/api/v3/search/special'
+          '?keyword=${Uri.encodeComponent(keyword)}&page=$page&pagesize=20'
+          '&showtype=10&filter=0&version=7910&sver=2',
+        );
+        if (body is! Map || body['errcode'] != 0) {
+          throw StateError('kg 歌单搜索失败');
+        }
+        final data = body['data'];
+        final items = (data is Map) ? data['info'] : null;
+        return DiscoverPlaylistPage(
+          playlists: [
+            for (final item in (items is List ? items : const []))
+              ?filterSearchItem(item),
+          ],
+          page: page,
+          limit: 20,
+          total: (data is Map ? parseSourceCount(data['total']) : null) ?? 0,
+        );
+      },
+    );
   }
 
   /// 解析歌单搜索结果（独立出来便于单元测试）。
@@ -346,7 +378,8 @@ class KgDiscoverSource extends DiscoverSource {
   /// 从 `id_123` / `special/single/123-5-9999.html` / 纯数字中提取 specialid。
   static String? _parseSpecialId(String rawId) {
     if (rawId.startsWith('id_')) return rawId.substring(3);
-    final match = RegExp(r'/(\d+)-5-9999\.html').firstMatch(rawId) ??
+    final match =
+        RegExp(r'/(\d+)-5-9999\.html').firstMatch(rawId) ??
         RegExp(r'special/single/(\d+)').firstMatch(rawId);
     if (match != null) return match.group(1);
     if (RegExp(r'^\d+$').hasMatch(rawId)) return rawId;
@@ -354,39 +387,39 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<DiscoverDetail> _fetchDetailBySpecialId(String id) {
-    return runDiscoverCall(DiscoverRequestCall<DiscoverDetail>(
-      key: 'kg:playlist-detail:$id',
-      request: () => lxHttpGetText(
-        'http://www2.kugou.kugou.com/yueku/v9/special/single/$id-5-9999.html',
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverDetail>(
+        key: 'kg:playlist-detail:$id',
+        request: () => lxHttpGetText(
+          'http://www2.kugou.kugou.com/yueku/v9/special/single/$id-5-9999.html',
+        ),
+        isInvalid: (html) => _listDataExp.firstMatch(html as String) == null,
+        parse: (html) async {
+          final text = html as String;
+          final dataMatch = _listDataExp.firstMatch(text)!;
+          final rawList = jsonDecode(dataMatch.group(1)!) as List;
+          final hashes = <Map<String, dynamic>>[
+            for (final item in rawList)
+              if (item is Map && item['hash'] != null)
+                {'hash': item['hash'].toString()},
+          ];
+          final tracks = await _fetchMusicInfos(hashes);
+          final infoMatch = _listInfoExp.firstMatch(text);
+          return DiscoverDetail(
+            info: DiscoverPlaylist(
+              id: 'id_$id',
+              name: infoMatch?.group(1) ?? '',
+              coverUrl: infoMatch?.group(2),
+              author: '',
+              playCount: 0,
+              trackCount: tracks.length,
+              description: _parseHtmlDesc(text),
+            ),
+            tracks: [for (final track in tracks) discoverTrackOf(track)],
+          );
+        },
       ),
-      isInvalid: (html) => _listDataExp.firstMatch(html as String) == null,
-      parse: (html) async {
-        final text = html as String;
-        final dataMatch = _listDataExp.firstMatch(text)!;
-        final rawList = jsonDecode(dataMatch.group(1)!) as List;
-        final hashes = <Map<String, dynamic>>[
-          for (final item in rawList)
-            if (item is Map && item['hash'] != null)
-              {'hash': item['hash'].toString()},
-        ];
-        final tracks = await _fetchMusicInfos(hashes);
-        final infoMatch = _listInfoExp.firstMatch(text);
-        return DiscoverDetail(
-          info: DiscoverPlaylist(
-            id: 'id_$id',
-            name: infoMatch?.group(1) ?? '',
-            coverUrl: infoMatch?.group(2),
-            author: '',
-            playCount: 0,
-            trackCount: tracks.length,
-            description: _parseHtmlDesc(text),
-          ),
-          tracks: [
-            for (final track in tracks) discoverTrackOf(track),
-          ],
-        );
-      },
-    ));
+    );
   }
 
   static String? _parseHtmlDesc(String html) {
@@ -407,58 +440,59 @@ class KgDiscoverSource extends DiscoverSource {
     List<Map<String, dynamic>> hashes,
   ) {
     const maxTries = BuiltinRetryBudget.discover;
-    return runDiscoverCall(DiscoverAttemptCall<List<SourceTrack>>(
-      key: null,
-      budget: maxTries,
-      attempt: (tryNum) async {
-        final tracks = <SourceTrack>[];
-        for (var i = 0; i < hashes.length; i += _limitSong) {
-          final chunk = hashes.sublist(
-            i,
-            (i + _limitSong) > hashes.length ? hashes.length : i + _limitSong,
-          );
-          final body = await lxHttpPost(
-            'http://gateway.kugou.com/v2/album_audio/audio',
-            headers: {
-              'KG-THash': '13a3164',
-              'KG-RC': '1',
-              'KG-Fake': '0',
-              'KG-RF': '00869891',
-              'User-Agent':
-                  'Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi',
-              'x-router': 'kmr.service.kugou.com',
-            },
-            body: {
-              'area_code': '1',
-              'show_privilege': 1,
-              'show_album_info': '1',
-              'is_publish': '',
-              'appid': 1005,
-              'clientver': 11451,
-              'mid': '1',
-              'dfid': '-',
-              'clienttime': DateTime.now().millisecondsSinceEpoch,
-              'key': _gatewayKey,
-              'fields':
-                  'album_info,author_name,audio_info,ori_audio_name,base,songname',
-              'data': chunk,
-            },
-          );
-          if (body is! Map || body['status'] != 1) continue;
-          final data = body['data'];
-          if (data is! List) continue;
-          for (final group in data) {
-            if (group is! List || group.isEmpty) continue;
-            final track = filterData2Item(group[0]);
-            if (track != null) tracks.add(track);
+    return runDiscoverCall(
+      DiscoverAttemptCall<List<SourceTrack>>(
+        key: null,
+        budget: maxTries,
+        attempt: (tryNum) async {
+          final tracks = <SourceTrack>[];
+          for (var i = 0; i < hashes.length; i += _limitSong) {
+            final chunk = hashes.sublist(
+              i,
+              (i + _limitSong) > hashes.length ? hashes.length : i + _limitSong,
+            );
+            final body = await lxHttpPost(
+              'http://gateway.kugou.com/v2/album_audio/audio',
+              headers: {
+                'KG-THash': '13a3164',
+                'KG-RC': '1',
+                'KG-Fake': '0',
+                'KG-RF': '00869891',
+                'User-Agent':
+                    'Android712-AndroidPhone-11451-376-0-FeeCacheUpdate-wifi',
+                'x-router': 'kmr.service.kugou.com',
+              },
+              body: {
+                'area_code': '1',
+                'show_privilege': 1,
+                'show_album_info': '1',
+                'is_publish': '',
+                'appid': 1005,
+                'clientver': 11451,
+                'mid': '1',
+                'dfid': '-',
+                'clienttime': DateTime.now().millisecondsSinceEpoch,
+                'key': _gatewayKey,
+                'fields': 'album_info,author_name,audio_info,ori_audio_name,base,songname',
+                'data': chunk,
+              },
+            );
+            if (body is! Map || body['status'] != 1) continue;
+            final data = body['data'];
+            if (data is! List) continue;
+            for (final group in data) {
+              if (group is! List || group.isEmpty) continue;
+              final track = filterData2Item(group[0]);
+              if (track != null) tracks.add(track);
+            }
           }
-        }
-        if (tracks.isEmpty && hashes.isNotEmpty && tryNum < maxTries - 1) {
-          return null;
-        }
-        return tracks;
-      },
-    ));
+          if (tracks.isEmpty && hashes.isNotEmpty && tryNum < maxTries - 1) {
+            return null;
+          }
+          return tracks;
+        },
+      ),
+    );
   }
 
   /// 解析 gateway 歌曲信息（`kg/songList.js` filterData2；便于单元测试）。
@@ -469,19 +503,36 @@ class KgDiscoverSource extends DiscoverSource {
     if (audio is! Map) return null;
 
     final types = <String, Map<String, dynamic>>{};
-    KgSearch.addKgQuality(types, '128k',
-        size: audio['filesize'], hash: audio['hash']);
-    KgSearch.addKgQuality(types, '320k',
-        size: audio['filesize_320'], hash: audio['hash_320']);
-    KgSearch.addKgQuality(types, 'flac',
-        size: audio['filesize_flac'], hash: audio['hash_flac']);
-    KgSearch.addKgQuality(types, 'flac24bit',
-        size: audio['filesize_high'], hash: audio['hash_high']);
+    KgSearch.addKgQuality(
+      types,
+      '128k',
+      size: audio['filesize'],
+      hash: audio['hash'],
+    );
+    KgSearch.addKgQuality(
+      types,
+      '320k',
+      size: audio['filesize_320'],
+      hash: audio['hash_320'],
+    );
+    KgSearch.addKgQuality(
+      types,
+      'flac',
+      size: audio['filesize_flac'],
+      hash: audio['hash_flac'],
+    );
+    KgSearch.addKgQuality(
+      types,
+      'flac24bit',
+      size: audio['filesize_high'],
+      hash: audio['hash_high'],
+    );
 
     final name = decodeName(item['songname']?.toString());
     final singer = decodeName(item['author_name']?.toString());
-    final albumName =
-        decodeName(album is Map ? album['album_name']?.toString() : '');
+    final albumName = decodeName(
+      album is Map ? album['album_name']?.toString() : '',
+    );
     final durationMs = int.tryParse(audio['timelength']?.toString() ?? '') ?? 0;
 
     return KgSearch.buildTrack(
@@ -491,8 +542,9 @@ class KgDiscoverSource extends DiscoverSource {
       album: albumName,
       albumId: album is Map ? album['album_id']?.toString() ?? '' : '',
       hash: audio['hash']?.toString() ?? '',
-      intervalText:
-          durationMs > 0 ? formatPlayTime((durationMs / 1000).floor()) : null,
+      intervalText: durationMs > 0
+          ? formatPlayTime((durationMs / 1000).floor())
+          : null,
       duration: durationMs > 0 ? Duration(milliseconds: durationMs) : null,
       types: types,
       img: kgCoverUrlOf(album),
@@ -505,42 +557,43 @@ class KgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return runDiscoverCall(DiscoverRequestCall<List<String>>(
-      key: 'kg:hot-search',
-      request: () => lxHttpGet(
-        'http://gateway.kugou.com/api/v3/search/hot_tab'
-        '?signature=ee44edb9d7155821412d220bcaf509dd&appid=1005'
-        '&clientver=10026&plat=0',
-        headers: {
-          'dfid': '1ssiv93oVqMp27cirf2CvoF1',
-          'mid': '156798703528610303473757548878786007104',
-          'clienttime': '1584257267',
-          'x-router': 'msearch.kugou.com',
-          'user-agent':
-              'Android9-AndroidPhone-10020-130-0-searchrecommendprotocol-wifi',
-          'kg-rc': '1',
-        },
-      ),
-      isInvalid: (body) =>
-          body is! Map ||
-          body['errcode'] != 0 ||
-          body['data'] is! Map ||
-          (body['data'] as Map)['list'] is! List,
-      parse: (body) {
-        final rawList = (body['data'] as Map)['list'] as List;
-        final words = <String>[];
-        for (final item in rawList) {
-          if (item is! Map) continue;
-          final keywords = item['keywords'];
-          if (keywords is! List) continue;
-          for (final keyword in keywords) {
-            if (keyword is Map && keyword['keyword'] != null) {
-              words.add(decodeName(keyword['keyword'].toString()));
+    return runDiscoverCall(
+      DiscoverRequestCall<List<String>>(
+        key: 'kg:hot-search',
+        request: () => lxHttpGet(
+          'http://gateway.kugou.com/api/v3/search/hot_tab'
+          '?signature=ee44edb9d7155821412d220bcaf509dd&appid=1005'
+          '&clientver=10026&plat=0',
+          headers: {
+            'dfid': '1ssiv93oVqMp27cirf2CvoF1',
+            'mid': '156798703528610303473757548878786007104',
+            'clienttime': '1584257267',
+            'x-router': 'msearch.kugou.com',
+            'user-agent': 'Android9-AndroidPhone-10020-130-0-searchrecommendprotocol-wifi',
+            'kg-rc': '1',
+          },
+        ),
+        isInvalid: (body) =>
+            body is! Map ||
+            body['errcode'] != 0 ||
+            body['data'] is! Map ||
+            (body['data'] as Map)['list'] is! List,
+        parse: (body) {
+          final rawList = (body['data'] as Map)['list'] as List;
+          final words = <String>[];
+          for (final item in rawList) {
+            if (item is! Map) continue;
+            final keywords = item['keywords'];
+            if (keywords is! List) continue;
+            for (final keyword in keywords) {
+              if (keyword is Map && keyword['keyword'] != null) {
+                words.add(decodeName(keyword['keyword'].toString()));
+              }
             }
           }
-        }
-        return words;
-      },
-    ));
+          return words;
+        },
+      ),
+    );
   }
 }

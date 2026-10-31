@@ -14,6 +14,7 @@ import 'package:molia/sources/builtin/builtin_search_runner.dart';
 import 'package:molia/sources/builtin/builtin_transport.dart';
 import 'package:molia/sources/builtin/kg_search.dart';
 import 'package:molia/sources/source_track.dart';
+
 import 'support/mock_dio.dart';
 
 void main() {
@@ -150,7 +151,7 @@ void main() {
             'FileHash': 'hash1',
             'OriSongName': 'Hello',
             'Singers': [
-              {'name': 'Tester'}
+              {'name': 'Tester'},
             ],
             'Duration': 30,
             'FileSize': 1024,

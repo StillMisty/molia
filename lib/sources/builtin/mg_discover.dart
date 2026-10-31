@@ -41,7 +41,8 @@ class MgDiscoverSource extends DiscoverSource {
       'Version/4.0 Mobile Safari/534.30';
 
   static const Map<String, String> _songListHeaders = {
-    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
+    'User-Agent':
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) '
         'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 '
         'Mobile/15E148 Safari/604.1',
     'Referer': 'https://m.music.migu.cn/',
@@ -81,33 +82,35 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {
-    return runDiscoverCall(DiscoverRequestCall<List<DiscoverTrack>>(
-      key: 'mg:leaderboard:$bangid',
-      budget: BuiltinRetryBudget.leaderboard,
-      request: () => lxHttpGet(
-        'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
-        '?columnId=$bangid&needAll=0',
-        headers: {
-          'Referer': 'https://app.c.nf.migu.cn/',
-          'User-Agent': _mobileUa,
-          'channel': '0146921',
+    return runDiscoverCall(
+      DiscoverRequestCall<List<DiscoverTrack>>(
+        key: 'mg:leaderboard:$bangid',
+        budget: BuiltinRetryBudget.leaderboard,
+        request: () => lxHttpGet(
+          'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
+          '?columnId=$bangid&needAll=0',
+          headers: {
+            'Referer': 'https://app.c.nf.migu.cn/',
+            'User-Agent': _mobileUa,
+            'channel': '0146921',
+          },
+        ),
+        isInvalid: (body) {
+          if (body is! Map || body['code'] != _successCode) return true;
+          final columnInfo = body['columnInfo'];
+          final contents = (columnInfo is Map) ? columnInfo['contents'] : null;
+          return contents is! List;
+        },
+        parse: (body) {
+          final contents = (body['columnInfo'] as Map)['contents'] as List;
+          final tracks = filterMusicInfoList([
+            for (final item in contents)
+              if (item is Map && item['objectInfo'] != null) item['objectInfo'],
+          ]);
+          return [for (final track in tracks) discoverTrackOf(track)];
         },
       ),
-      isInvalid: (body) {
-        if (body is! Map || body['code'] != _successCode) return true;
-        final columnInfo = body['columnInfo'];
-        final contents = (columnInfo is Map) ? columnInfo['contents'] : null;
-        return contents is! List;
-      },
-      parse: (body) {
-        final contents = (body['columnInfo'] as Map)['contents'] as List;
-        final tracks = filterMusicInfoList([
-          for (final item in contents)
-            if (item is Map && item['objectInfo'] != null) item['objectInfo'],
-        ]);
-        return [for (final track in tracks) discoverTrackOf(track)];
-      },
-    ));
+    );
   }
 
   /// 解析榜单/搜索曲目（`mg/musicInfo.js` filterMusicInfoList）。
@@ -128,22 +131,24 @@ class MgDiscoverSource extends DiscoverSource {
       final albumName = (item['album'] ?? '').toString();
       final img = _albumImg(item['albumImgs']);
 
-      list.add(MgSearch.buildTrack(
-        songId: songId,
-        copyrightId: item['copyrightId']?.toString() ?? '',
-        name: name,
-        artist: singer,
-        artists: MgSearch.artistRefsOf(item['artists']),
-        album: albumName,
-        albumId: item['albumId']?.toString() ?? '',
-        intervalText: intervalMatch?.group(1),
-        duration: _durationFromInterval(intervalMatch?.group(1)),
-        types: types,
-        img: img,
-        lrcUrl: item['lrcUrl']?.toString(),
-        mrcUrl: item['mrcUrl']?.toString(),
-        trcUrl: item['trcUrl']?.toString(),
-      ));
+      list.add(
+        MgSearch.buildTrack(
+          songId: songId,
+          copyrightId: item['copyrightId']?.toString() ?? '',
+          name: name,
+          artist: singer,
+          artists: MgSearch.artistRefsOf(item['artists']),
+          album: albumName,
+          albumId: item['albumId']?.toString() ?? '',
+          intervalText: intervalMatch?.group(1),
+          duration: _durationFromInterval(intervalMatch?.group(1)),
+          types: types,
+          img: img,
+          lrcUrl: item['lrcUrl']?.toString(),
+          mrcUrl: item['mrcUrl']?.toString(),
+          trcUrl: item['trcUrl']?.toString(),
+        ),
+      );
     }
     return list;
   }
@@ -158,22 +163,26 @@ class MgDiscoverSource extends DiscoverSource {
       if (songId.isEmpty || !ids.add(songId)) continue;
 
       final duration = int.tryParse(item['duration']?.toString() ?? '') ?? 0;
-      list.add(MgSearch.buildTrack(
-        songId: songId,
-        copyrightId: item['copyrightId']?.toString() ?? '',
-        name: (item['songName'] ?? '').toString(),
-        artist: MgSearch.joinSingerNames(item['singerList']),
-        artists: MgSearch.artistRefsOf(item['singerList']),
-        album: (item['album'] ?? '').toString(),
-        albumId: item['albumId']?.toString() ?? '',
-        intervalText: formatPlayTime(duration),
-        duration: duration > 0 ? Duration(seconds: duration) : null,
-        types: MgSearch.parseTypes(item['audioFormats']),
-        img: MgSearch.fixCoverUrl(item['img3'] ?? item['img2'] ?? item['img1']),
-        lrcUrl: item['lrcUrl']?.toString(),
-        mrcUrl: item['mrcUrl']?.toString(),
-        trcUrl: item['trcUrl']?.toString(),
-      ));
+      list.add(
+        MgSearch.buildTrack(
+          songId: songId,
+          copyrightId: item['copyrightId']?.toString() ?? '',
+          name: (item['songName'] ?? '').toString(),
+          artist: MgSearch.joinSingerNames(item['singerList']),
+          artists: MgSearch.artistRefsOf(item['singerList']),
+          album: (item['album'] ?? '').toString(),
+          albumId: item['albumId']?.toString() ?? '',
+          intervalText: formatPlayTime(duration),
+          duration: duration > 0 ? Duration(seconds: duration) : null,
+          types: MgSearch.parseTypes(item['audioFormats']),
+          img: MgSearch.fixCoverUrl(
+            item['img3'] ?? item['img2'] ?? item['img1'],
+          ),
+          lrcUrl: item['lrcUrl']?.toString(),
+          mrcUrl: item['mrcUrl']?.toString(),
+          trcUrl: item['trcUrl']?.toString(),
+        ),
+      );
     }
     return list;
   }
@@ -223,10 +232,9 @@ class MgDiscoverSource extends DiscoverSource {
         if (item is! Map) continue;
         final texts = item['texts'];
         if (texts is! List || texts.length < 2) continue;
-        tags.add(DiscoverTag(
-          id: texts[1].toString(),
-          name: texts[0].toString(),
-        ));
+        tags.add(
+          DiscoverTag(id: texts[1].toString(), name: texts[0].toString()),
+        );
       }
       return tags;
     }
@@ -237,7 +245,8 @@ class MgDiscoverSource extends DiscoverSource {
         for (final group in rawList.skip(1))
           if (group is Map)
             DiscoverTagCategory(
-              name: (group['header'] is Map
+              name:
+                  (group['header'] is Map
                           ? (group['header'] as Map)['title']
                           : '')
                       ?.toString() ??
@@ -255,52 +264,58 @@ class MgDiscoverSource extends DiscoverSource {
 
   /// 推荐歌单（LX 默认排序 = 推荐）。
   static Future<DiscoverPlaylistPage> _fetchRecommend(int page) {
-    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
-      key: 'mg:playlists::$page',
-      request: () => lxHttpGet(
-        'https://app.c.nf.migu.cn/pc/bmw/page-data/'
-        'playlist-square-recommend/v1.0?templateVersion=2&pageNo=$page',
-        headers: _songListHeaders,
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'mg:playlists::$page',
+        request: () => lxHttpGet(
+          'https://app.c.nf.migu.cn/pc/bmw/page-data/'
+          'playlist-square-recommend/v1.0?templateVersion=2&pageNo=$page',
+          headers: _songListHeaders,
+        ),
+        isInvalid: (body) => body is! Map || body['code'] != _successCode,
+        parse: (body) {
+          final data = body['data'];
+          final contents = (data is Map) ? data['contents'] : null;
+          return DiscoverPlaylistPage(
+            playlists: filterList2(contents is List ? contents : const []),
+            page: page,
+            limit: _limitList,
+            total: 99999,
+          );
+        },
       ),
-      isInvalid: (body) => body is! Map || body['code'] != _successCode,
-      parse: (body) {
-        final data = body['data'];
-        final contents = (data is Map) ? data['contents'] : null;
-        return DiscoverPlaylistPage(
-          playlists: filterList2(contents is List ? contents : const []),
-          page: page,
-          limit: _limitList,
-          total: 99999,
-        );
-      },
-    ));
+    );
   }
 
   static Future<DiscoverPlaylistPage> _fetchTagList(String tagId, int page) {
-    return runDiscoverCall(DiscoverRequestCall<DiscoverPlaylistPage>(
-      key: 'mg:playlists:$tagId:$page',
-      request: () => lxHttpGet(
-        'https://app.c.nf.migu.cn/pc/v1.0/template/'
-        'musiclistplaza-listbytag/release?pageNumber=$page'
-        '&templateVersion=2&tagId=$tagId',
-        headers: _songListHeaders,
+    return runDiscoverCall(
+      DiscoverRequestCall<DiscoverPlaylistPage>(
+        key: 'mg:playlists:$tagId:$page',
+        request: () => lxHttpGet(
+          'https://app.c.nf.migu.cn/pc/v1.0/template/'
+          'musiclistplaza-listbytag/release?pageNumber=$page'
+          '&templateVersion=2&tagId=$tagId',
+          headers: _songListHeaders,
+        ),
+        isInvalid: (body) =>
+            body is! Map ||
+            body['code'] != _successCode ||
+            body['data'] is! Map,
+        parse: (body) {
+          final data = body['data'] as Map;
+          final contents = data['contents'];
+          final playlists = contents is List
+              ? filterList2(contents)
+              : filterList(_contentItemList(data));
+          return DiscoverPlaylistPage(
+            playlists: playlists,
+            page: page,
+            limit: _limitList,
+            total: 99999,
+          );
+        },
       ),
-      isInvalid: (body) =>
-          body is! Map || body['code'] != _successCode || body['data'] is! Map,
-      parse: (body) {
-        final data = body['data'] as Map;
-        final contents = data['contents'];
-        final playlists = contents is List
-            ? filterList2(contents)
-            : filterList(_contentItemList(data));
-        return DiscoverPlaylistPage(
-          playlists: playlists,
-          page: page,
-          limit: _limitList,
-          total: 99999,
-        );
-      },
-    ));
+    );
   }
 
   static List<dynamic> _contentItemList(Map data) {
@@ -327,14 +342,16 @@ class MgDiscoverSource extends DiscoverSource {
         if (item['resType'] != '2021') continue;
         final id = item['resId']?.toString() ?? '';
         if (id.isEmpty || !ids.add(id)) continue;
-        list.add(DiscoverPlaylist(
-          id: id,
-          name: (item['txt'] ?? '').toString(),
-          coverUrl: _nonEmpty(item['img']?.toString()),
-          playCount: 0,
-          trackCount: 0,
-          description: _nonEmpty(item['txt2']?.toString()),
-        ));
+        list.add(
+          DiscoverPlaylist(
+            id: id,
+            name: (item['txt'] ?? '').toString(),
+            coverUrl: _nonEmpty(item['img']?.toString()),
+            playCount: 0,
+            trackCount: 0,
+            description: _nonEmpty(item['txt2']?.toString()),
+          ),
+        );
       }
     }
 
@@ -352,63 +369,68 @@ class MgDiscoverSource extends DiscoverSource {
           : null;
       final playCount =
           item['barList'] is List && (item['barList'] as List).isNotEmpty
-              ? ((item['barList'] as List)[0] is Map
-                  ? ((item['barList'] as List)[0] as Map)['title']
-                  : null)
-              : null;
-      list.add(DiscoverPlaylist(
-        id: contentId?.toString() ?? '',
-        name: (item['title'] ?? '').toString(),
-        coverUrl: _nonEmpty(item['imageUrl']?.toString()),
-        playCount: parseSourceCount(playCount) ?? 0,
-        trackCount: 0,
-      ));
+          ? ((item['barList'] as List)[0] is Map
+                ? ((item['barList'] as List)[0] as Map)['title']
+                : null)
+          : null;
+      list.add(
+        DiscoverPlaylist(
+          id: contentId?.toString() ?? '',
+          name: (item['title'] ?? '').toString(),
+          coverUrl: _nonEmpty(item['imageUrl']?.toString()),
+          playCount: parseSourceCount(playCount) ?? 0,
+          trackCount: 0,
+        ),
+      );
     }
     return list;
   }
 
   @override
   Future<DiscoverPlaylistPage> searchPlaylists(String keyword, int page) {
-    return BuiltinSearch.transport.cached('mg:playlist-search:$keyword:$page',
-        () async {
-      final time = DateTime.now().millisecondsSinceEpoch.toString();
-      final sign = md5Hex(
-        '$keyword$_signatureMd5'
-        'yyapp2d16148780a1dcc7408e06336b98cfd50'
-        '$_deviceId$time',
-      );
-      final body = await lxHttpGet(
-        'https://jadeite.migu.cn/music_search/v3/search/searchAll'
-        '?isCorrect=1&isCopyright=1'
-        '&searchSwitch=%7B%22song%22%3A0%2C%22album%22%3A0%2C%22singer%22%3A0'
-        '%2C%22tagSong%22%3A0%2C%22mvSong%22%3A0%2C%22bestShow%22%3A0'
-        '%2C%22songlist%22%3A1%2C%22lyricSong%22%3A0%7D'
-        '&pageSize=20&text=${Uri.encodeComponent(keyword)}&pageNo=$page'
-        '&sort=0&sid=USS',
-        headers: {
-          'uiVersion': 'A_music_3.6.1',
-          'deviceId': _deviceId,
-          'timestamp': time,
-          'sign': sign,
-          'channel': '0146921',
-          'User-Agent': _searchUa,
-        },
-      );
-      if (body is! Map || body['code'] != _successCode) {
-        throw StateError('mg 歌单搜索失败');
-      }
-      final resultData = body['songListResultData'];
-      final items = (resultData is Map) ? resultData['result'] : null;
-      return DiscoverPlaylistPage(
-        playlists: filterSongListResult(items is List ? items : const []),
-        page: page,
-        limit: 20,
-        total: (resultData is Map
-                ? parseSourceCount(resultData['totalCount'])
-                : null) ??
-            0,
-      );
-    });
+    return BuiltinSearch.transport.cached(
+      'mg:playlist-search:$keyword:$page',
+      () async {
+        final time = DateTime.now().millisecondsSinceEpoch.toString();
+        final sign = md5Hex(
+          '$keyword$_signatureMd5'
+          'yyapp2d16148780a1dcc7408e06336b98cfd50'
+          '$_deviceId$time',
+        );
+        final body = await lxHttpGet(
+          'https://jadeite.migu.cn/music_search/v3/search/searchAll'
+          '?isCorrect=1&isCopyright=1'
+          '&searchSwitch=%7B%22song%22%3A0%2C%22album%22%3A0%2C%22singer%22%3A0'
+          '%2C%22tagSong%22%3A0%2C%22mvSong%22%3A0%2C%22bestShow%22%3A0'
+          '%2C%22songlist%22%3A1%2C%22lyricSong%22%3A0%7D'
+          '&pageSize=20&text=${Uri.encodeComponent(keyword)}&pageNo=$page'
+          '&sort=0&sid=USS',
+          headers: {
+            'uiVersion': 'A_music_3.6.1',
+            'deviceId': _deviceId,
+            'timestamp': time,
+            'sign': sign,
+            'channel': '0146921',
+            'User-Agent': _searchUa,
+          },
+        );
+        if (body is! Map || body['code'] != _successCode) {
+          throw StateError('mg 歌单搜索失败');
+        }
+        final resultData = body['songListResultData'];
+        final items = (resultData is Map) ? resultData['result'] : null;
+        return DiscoverPlaylistPage(
+          playlists: filterSongListResult(items is List ? items : const []),
+          page: page,
+          limit: 20,
+          total:
+              (resultData is Map
+                  ? parseSourceCount(resultData['totalCount'])
+                  : null) ??
+              0,
+        );
+      },
+    );
   }
 
   /// 解析歌单搜索结果（独立出来便于单元测试）。
@@ -419,14 +441,16 @@ class MgDiscoverSource extends DiscoverSource {
       final id = item['id']?.toString() ?? '';
       if (id.isEmpty) continue;
       final playNum = int.tryParse(item['playNum']?.toString() ?? '');
-      list.add(DiscoverPlaylist(
-        id: id,
-        name: (item['name'] ?? '').toString(),
-        coverUrl: _nonEmpty(item['musicListPicUrl']?.toString()),
-        author: (item['userName'] ?? '').toString(),
-        playCount: playNum ?? 0,
-        trackCount: parseSourceCount(item['musicNum']) ?? 0,
-      ));
+      list.add(
+        DiscoverPlaylist(
+          id: id,
+          name: (item['name'] ?? '').toString(),
+          coverUrl: _nonEmpty(item['musicListPicUrl']?.toString()),
+          author: (item['userName'] ?? '').toString(),
+          playCount: playNum ?? 0,
+          trackCount: parseSourceCount(item['musicNum']) ?? 0,
+        ),
+      );
     }
     return list;
   }
@@ -441,13 +465,15 @@ class MgDiscoverSource extends DiscoverSource {
         _fetchDetailInfo(id),
       ]);
       final listData = results[0] as ({List<SourceTrack> tracks, int total});
-      final info = results[1] as ({
-        String name,
-        String? img,
-        String? desc,
-        String author,
-        int playCount
-      })?;
+      final info =
+          results[1]
+              as ({
+                String name,
+                String? img,
+                String? desc,
+                String author,
+                int playCount,
+              })?;
       return DiscoverDetail(
         info: DiscoverPlaylist(
           id: id,
@@ -458,9 +484,7 @@ class MgDiscoverSource extends DiscoverSource {
           trackCount: listData.total,
           description: info?.desc,
         ),
-        tracks: [
-          for (final track in listData.tracks) discoverTrackOf(track),
-        ],
+        tracks: [for (final track in listData.tracks) discoverTrackOf(track)],
       );
     });
   }
@@ -512,13 +536,9 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<
-      ({
-        String name,
-        String? img,
-        String? desc,
-        String author,
-        int playCount
-      })?> _fetchDetailInfo(String id) async {
+    ({String name, String? img, String? desc, String author, int playCount})?
+  >
+  _fetchDetailInfo(String id) async {
     try {
       final body = await lxHttpGet(
         'https://c.musicapp.migu.cn/MIGUM3.0/resource/playlist/v2.0'
@@ -550,31 +570,33 @@ class MgDiscoverSource extends DiscoverSource {
   }
 
   static Future<List<String>> _fetchHotSearch() {
-    return runDiscoverCall(DiscoverRequestCall<List<String>>(
-      key: 'mg:hot-search',
-      request: () => lxHttpGet(
-        'http://jadeite.migu.cn:7090/music_search/v3/search/hotword',
+    return runDiscoverCall(
+      DiscoverRequestCall<List<String>>(
+        key: 'mg:hot-search',
+        request: () => lxHttpGet(
+          'http://jadeite.migu.cn:7090/music_search/v3/search/hotword',
+        ),
+        isInvalid: (body) {
+          if (body is! Map || body['code'] != _successCode) return true;
+          final data = body['data'];
+          final hotwords = (data is Map) ? data['hotwords'] : null;
+          return hotwords is! List || hotwords.isEmpty;
+        },
+        parse: (body) {
+          final hotwords = (body['data'] as Map)['hotwords'] as List;
+          final first = hotwords[0];
+          final list = (first is Map) ? first['hotwordList'] : null;
+          if (list is! List) return const [];
+          return [
+            for (final item in list)
+              if (item is Map &&
+                  item['resourceType'] == 'song' &&
+                  (item['word']?.toString().isNotEmpty ?? false))
+                item['word'].toString(),
+          ];
+        },
       ),
-      isInvalid: (body) {
-        if (body is! Map || body['code'] != _successCode) return true;
-        final data = body['data'];
-        final hotwords = (data is Map) ? data['hotwords'] : null;
-        return hotwords is! List || hotwords.isEmpty;
-      },
-      parse: (body) {
-        final hotwords = (body['data'] as Map)['hotwords'] as List;
-        final first = hotwords[0];
-        final list = (first is Map) ? first['hotwordList'] : null;
-        if (list is! List) return const [];
-        return [
-          for (final item in list)
-            if (item is Map &&
-                item['resourceType'] == 'song' &&
-                (item['word']?.toString().isNotEmpty ?? false))
-              item['word'].toString(),
-        ];
-      },
-    ));
+    );
   }
 
   static String? _nonEmpty(String? text) =>

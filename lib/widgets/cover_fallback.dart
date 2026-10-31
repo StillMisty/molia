@@ -18,11 +18,7 @@ import 'track_artwork.dart';
 ///
 /// 默认封面自身的加载失败也落到这里（[buildFallbackArtwork] 只在这里画
 /// 标志），因此不会递归重试默认封面。
-Widget _buildMoliaMark(
-  BuildContext context, {
-  Key? key,
-  double iconSize = 64,
-}) {
+Widget _buildMoliaMark(BuildContext context, {Key? key, double iconSize = 64}) {
   final scheme = Theme.of(context).colorScheme;
   return Container(
     key: key,
@@ -43,12 +39,8 @@ Widget buildFallbackArtwork(
   double iconSize = 64,
 }) {
   return CoverChangeBuilder(
-    builder: (context, covers) => _buildFallbackArtwork(
-      context,
-      covers,
-      key: key,
-      iconSize: iconSize,
-    ),
+    builder: (context, covers) =>
+        _buildFallbackArtwork(context, covers, key: key, iconSize: iconSize),
   );
 }
 
@@ -104,8 +96,9 @@ Widget _buildDefaultArtwork(
   required double iconSize,
 }) {
   final defaultCoverUrl = covers.defaultCoverUrl;
-  final lastPlayedImageUrl =
-      context.read<PlaybackProvider?>()?.lastPlayedImageUrl;
+  final lastPlayedImageUrl = context
+      .read<PlaybackProvider?>()
+      ?.lastPlayedImageUrl;
   final fallback = lastPlayedImageUrl != null
       ? AppNetworkImage(
           key: key ?? const ValueKey('last_played_image'),
@@ -113,11 +106,7 @@ Widget _buildDefaultArtwork(
           fit: fit,
           fallbackIconSize: iconSize,
           memCacheWidth: playbackCoverDecodeEdge(context),
-          errorWidget: _buildMoliaMark(
-            context,
-            key: key,
-            iconSize: iconSize,
-          ),
+          errorWidget: _buildMoliaMark(context, key: key, iconSize: iconSize),
         )
       : _buildMoliaMark(
           context,

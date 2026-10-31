@@ -13,10 +13,10 @@ import 'package:molia/sources/source_track.dart';
 /// 覆写状态的假服务：不触碰 just_audio 平台通道，只验证 backend 的映射/委托。
 class _FakeService extends LocalPlaybackService {
   _FakeService()
-      : super(
-          resolver: (track, {String? quality}) async =>
-              PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
-        );
+    : super(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('http://127.0.0.1/a.wav')),
+      );
 
   final List<SourceTrack> _queue = [];
   int _index = -1;
@@ -185,6 +185,27 @@ class _FakeService extends LocalPlaybackService {
     notifyListeners();
   }
 
+  int? lastMoveFrom;
+  int? lastMoveTo;
+  int? lastRemovedIndex;
+  bool moveResult = true;
+  bool removeResult = true;
+
+  @override
+  bool moveQueueIndex(int from, int to) {
+    calls.add('moveQueueIndex');
+    lastMoveFrom = from;
+    lastMoveTo = to;
+    return moveResult;
+  }
+
+  @override
+  bool removeQueueIndex(int index) {
+    calls.add('removeQueueIndex');
+    lastRemovedIndex = index;
+    return removeResult;
+  }
+
   @override
   Future<void> toggle() async {
     calls.add('toggle');
@@ -265,15 +286,15 @@ class _FakeService extends LocalPlaybackService {
 }
 
 SourceTrack _source(String id, {String title = 'Title'}) => SourceTrack(
-      sourceKey: 'fake',
-      origin: 'lx',
-      title: title,
-      artist: 'Artist',
-      album: 'Album',
-      coverUrl: 'https://img.example/$id.jpg',
-      duration: const Duration(seconds: 30),
-      raw: {'id': id, 'extra': 'raw-$id'},
-    );
+  sourceKey: 'fake',
+  origin: 'lx',
+  title: title,
+  artist: 'Artist',
+  album: 'Album',
+  coverUrl: 'https://img.example/$id.jpg',
+  duration: const Duration(seconds: 30),
+  raw: {'id': id, 'extra': 'raw-$id'},
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -285,9 +306,8 @@ void main() {
     service = _FakeService();
     backend = LocalPlaybackBackend(
       service: service,
-      resolver: (track, quality) async => PlayableStream(
-        Uri.parse('http://127.0.0.1/${track.id.id}.wav'),
-      ),
+      resolver: (track, quality) async =>
+          PlayableStream(Uri.parse('http://127.0.0.1/${track.id.id}.wav')),
     );
   });
 
@@ -310,9 +330,20 @@ void main() {
     expect(snapshot.current?.id.id, 'a', reason: '当前曲目不变');
   });
 
-  test(
-      '状态映射：current/queue/next/previous/previousOfPrevious/upNext/duration/context/error',
-      () {
+  test('队列编辑：转发服务并把变化结果回给调用方', () async {
+    service.seed([_source('a'), _source('b'), _source('c')], index: 0);
+
+    expect(await backend.moveQueueIndex(2, 1), isTrue);
+    expect(service.lastMoveFrom, 2);
+    expect(service.lastMoveTo, 1);
+
+    service.removeResult = false;
+    expect(await backend.removeQueueIndex(2), isFalse);
+    expect(service.lastRemovedIndex, 2);
+    expect(service.calls, contains('removeQueueIndex'));
+  });
+
+  test('状态映射：current/queue/next/previous/previousOfPrevious/upNext/duration/context/error', () {
     final a = _source('a');
     final b = _source('b');
     service.seed(
@@ -407,6 +438,7 @@ void main() {
     expect(snapshot.previous?.id.id, 'a');
     expect(snapshot.previousOfPrevious, isNull);
     expect(snapshot.upNext.map((t) => t.id.id), ['c']);
+    expect(snapshot.upNextIndices, [2]);
 
     // 列表循环队尾：下一首回绕队首，upNext 补上队首到当前之前。
     service.seed(
@@ -419,6 +451,7 @@ void main() {
     expect(snapshot.previous?.id.id, 'b');
     expect(snapshot.previousOfPrevious?.id.id, 'a');
     expect(snapshot.upNext.map((t) => t.id.id), ['a', 'b']);
+    expect(snapshot.upNextIndices, [0, 1]);
   });
 
   test('next/previous/previousOfPrevious/upNext 与投影一致：shuffle 排列与轮末', () {
@@ -528,17 +561,22 @@ void main() {
     final domainA = trackFromSourceTrack(_source('a'));
     final domainB = trackFromSourceTrack(_source('b'));
 
-    await backend.load(PlaybackRequest(
-      tracks: [domainA, domainB],
-      startIndex: 1,
-      context: const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
-    ));
+    await backend.load(
+      PlaybackRequest(
+        tracks: [domainA, domainB],
+        startIndex: 1,
+        context: const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
+      ),
+    );
 
     expect(service.playTracksCalls, 1);
     expect(service.currentSourceTrack?.id, 'fake:b');
     expect(service.currentSourceTrack?.title, 'Title');
-    expect(identical(service.currentSourceTrack?.raw, domainB.payload), isTrue,
-        reason: 'raw 必须原样回传');
+    expect(
+      identical(service.currentSourceTrack?.raw, domainB.payload),
+      isTrue,
+      reason: 'raw 必须原样回传',
+    );
     expect(backend.state.value.context?.name, 'ctx');
   });
 
@@ -631,8 +669,13 @@ void main() {
     final track = trackFromSourceTrack(_source('a'));
     await expectLater(
       backend.toggleFavorite(track),
-      throwsA(isA<SourceFailure>()
-          .having((f) => f.kind, 'kind', FailureKind.unsupported)),
+      throwsA(
+        isA<SourceFailure>().having(
+          (f) => f.kind,
+          'kind',
+          FailureKind.unsupported,
+        ),
+      ),
     );
   });
 }

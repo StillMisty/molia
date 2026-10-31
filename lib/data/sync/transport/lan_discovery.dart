@@ -130,12 +130,15 @@ abstract final class Msd1 {
       type: type,
       deviceId: deviceId,
       name: _clampRunes(
-          map['name'] is String ? map['name'] as String : '', maxNameRunes),
+        map['name'] is String ? map['name'] as String : '',
+        maxNameRunes,
+      ),
       httpPort: _port(map['http']),
       probePort: _port(map['probe']),
       addresses: _stringList(map['addrs'], maxAddresses),
-      snapshotId:
-          map['snap'] is String ? _clampRunes(map['snap'] as String, 128) : '',
+      snapshotId: map['snap'] is String
+          ? _clampRunes(map['snap'] as String, 128)
+          : '',
       journalHead: map['head'] is num ? (map['head'] as num).toInt() : null,
       categories: _stringList(map['cats'], 16),
       nonce: nonce,
@@ -149,18 +152,20 @@ abstract final class Msd1 {
     var categories = message.categories.take(16).toList();
     var snapshotId = _clampRunes(message.snapshotId, 128);
 
-    List<int> build() => utf8.encode(jsonEncode({
-          'id': message.deviceId,
-          'name': name,
-          'http': message.httpPort,
-          'probe': message.probePort,
-          'addrs': addresses,
-          'snap': snapshotId,
-          'head': message.journalHead,
-          'cats': categories,
-          'nonce': message.nonce,
-          'boot': message.bootId,
-        }));
+    List<int> build() => utf8.encode(
+      jsonEncode({
+        'id': message.deviceId,
+        'name': name,
+        'http': message.httpPort,
+        'probe': message.probePort,
+        'addrs': addresses,
+        'snap': snapshotId,
+        'head': message.journalHead,
+        'cats': categories,
+        'nonce': message.nonce,
+        'boot': message.bootId,
+      }),
+    );
 
     var body = build();
     if (body.length <= maxBodyLength) return body;
@@ -277,16 +282,16 @@ class LanPresence {
   final int epoch;
 
   LanPeerSighting toSighting() => LanPeerSighting(
-        deviceId: deviceId,
-        name: name,
-        host: host,
-        httpPort: httpPort,
-        probePort: probePort,
-        snapshotId: snapshotId,
-        journalHead: journalHead,
-        bootId: bootId,
-        observedAt: lastHeardAt,
-      );
+    deviceId: deviceId,
+    name: name,
+    host: host,
+    httpPort: httpPort,
+    probePort: probePort,
+    snapshotId: snapshotId,
+    journalHead: journalHead,
+    bootId: bootId,
+    observedAt: lastHeardAt,
+  );
 }
 
 /// `(deviceId, nonce)` 去重：广播 + 组播重复到达只产生一次 sighting。
@@ -432,15 +437,15 @@ class LanDiscovery {
     this._probeTargetsProvider,
     this._localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
-        udpBinder,
+    udpBinder,
     this._udpPort = defaultUdpPort,
     this.candidateWindow = const Duration(milliseconds: 400),
     this.fullWindow = const Duration(milliseconds: 1200),
     this.supplementaryWindow = const Duration(milliseconds: 800),
     int Function()? nowMs,
     this._isCellular,
-  })  : _udpBinder = udpBinder ?? _bindDatagram,
-        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
+  }) : _udpBinder = udpBinder ?? _bindDatagram,
+       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   static const int defaultUdpPort = ManualPeer.defaultProbePort;
 
@@ -471,7 +476,7 @@ class LanDiscovery {
   final List<LanProbeTarget> Function()? _probeTargetsProvider;
   final Future<List<String>> Function()? _localAddressesProvider;
   final Future<RawDatagramSocket> Function(InternetAddress address, int port)
-      _udpBinder;
+  _udpBinder;
   final int _udpPort;
   final int Function() _nowMs;
   final bool Function()? _isCellular;
@@ -540,9 +545,9 @@ class LanDiscovery {
   List<LanPresence> get presence => List.unmodifiable(_presence.values);
 
   ({int v4, int v6}) get discoveryPorts => (
-        v4: _running ? (_udp4?.port ?? 0) : 0,
-        v6: _running ? (_udp6?.port ?? 0) : 0,
-      );
+    v4: _running ? (_udp4?.port ?? 0) : 0,
+    v6: _running ? (_udp6?.port ?? 0) : 0,
+  );
 
   /// 拉取轮里主动广播的次数（测试断言「空闲轮 0 广播」用；公告 burst 不计）。
   int get broadcastCount => _broadcastCount;
@@ -571,8 +576,8 @@ class LanDiscovery {
   /// 时为系统分配端口）上的组播接收由主 wildcard socket 按接口 join 承担。
   /// 对外探测端口仍是 [discoveryPorts] 里的主 socket 端口。
   List<int> get debugInterfacePorts => List.unmodifiable([
-        for (final entry in _interfaceSockets.values) entry.socket.port,
-      ]);
+    for (final entry in _interfaceSockets.values) entry.socket.port,
+  ]);
 
   /// IPv4 主 socket 进入按接口 join 流程的次数（测试 / 诊断）。
   int get debugIpv4JoinRuns => _ipv4MulticastJoins.runs;
@@ -762,15 +767,17 @@ class LanDiscovery {
     // `(deviceId, nonce)` 去重，广播 + 组播重复到达只产生一次 sighting。
     final packet = _buildPacket(Msd1.typeAnnounce, nonce: nonce);
     for (final delay in burstDelaysMs) {
-      _burstTimers.add(Timer(Duration(milliseconds: delay), () {
-        if (!_running || _hidden || _isCellularNow) return;
-        _sendAnnouncement(
-          broadcast: true,
-          countBroadcast: false,
-          trackBroadcastAvailability: false,
-          packet: packet,
-        );
-      }));
+      _burstTimers.add(
+        Timer(Duration(milliseconds: delay), () {
+          if (!_running || _hidden || _isCellularNow) return;
+          _sendAnnouncement(
+            broadcast: true,
+            countBroadcast: false,
+            trackBroadcastAvailability: false,
+            packet: packet,
+          );
+        }),
+      );
     }
   }
 
@@ -812,7 +819,8 @@ class LanDiscovery {
       addresses: _ownAddresses,
       snapshotId: _snapshotIdProvider?.call() ?? '',
       journalHead: _journalHeadProvider?.call(),
-      categories: _categoriesProvider?.call() ??
+      categories:
+          _categoriesProvider?.call() ??
           [for (final category in SyncCategory.values) category.name],
       nonce: nonce ?? _newNonce(),
       bootId: bootId,
@@ -877,11 +885,7 @@ class LanDiscovery {
     }
     if (v6 != null) {
       try {
-        if (v6.send(
-              packet,
-              InternetAddress(Msd1.ipv6MulticastHost),
-              _udpPort,
-            ) >
+        if (v6.send(packet, InternetAddress(Msd1.ipv6MulticastHost), _udpPort) >
             0) {
           sent = true;
         }
@@ -1105,24 +1109,24 @@ class LanDiscovery {
   /// 接口 socket 的临时端口只接收单播回包，不承担主 socket 实际端口
   /// （标准 47825，绑定失败时为系统分配端口）的组播接收。
   Future<void> _joinIpv4Interfaces() => _joinMulticastByInterface(
-        socket: _udp4,
-        currentSocket: () => _udp4,
-        type: InternetAddressType.IPv4,
-        groupHost: Msd1.ipv4MulticastHost,
-        tracker: _ipv4MulticastJoins,
-        label: 'IPv4',
-      );
+    socket: _udp4,
+    currentSocket: () => _udp4,
+    type: InternetAddressType.IPv4,
+    groupHost: Msd1.ipv4MulticastHost,
+    tracker: _ipv4MulticastJoins,
+    label: 'IPv4',
+  );
 
   /// IPv6 组播接收按接口加入：发送侧仍只走主 v6 socket 的系统默认路由
   /// （Dart 没有跨平台的 `IPV6_MULTICAST_IF`），失败只影响该接口接收。
   Future<void> _joinIpv6Interfaces() => _joinMulticastByInterface(
-        socket: _udp6,
-        currentSocket: () => _udp6,
-        type: InternetAddressType.IPv6,
-        groupHost: Msd1.ipv6MulticastHost,
-        tracker: _ipv6MulticastJoins,
-        label: 'IPv6',
-      );
+    socket: _udp6,
+    currentSocket: () => _udp6,
+    type: InternetAddressType.IPv6,
+    groupHost: Msd1.ipv6MulticastHost,
+    tracker: _ipv6MulticastJoins,
+    label: 'IPv6',
+  );
 
   /// 主 wildcard socket 按接口 join 组播。join 与归属都绑定 socket identity：
   /// 重绑后的旧调用不能把接口名写进新 socket 的记账。
@@ -1193,12 +1197,14 @@ class LanDiscovery {
       final pairing = Msp1.decode(datagram.data);
       if (pairing == null || pairing.deviceId == deviceId) return;
       if (!_pairingDatagrams.isClosed) {
-        _pairingDatagrams.add(LanPairingDatagram(
-          message: pairing,
-          sourceHost: source,
-          sourcePort: datagram.port,
-          receivedAt: now,
-        ));
+        _pairingDatagrams.add(
+          LanPairingDatagram(
+            message: pairing,
+            sourceHost: source,
+            sourcePort: datagram.port,
+            receivedAt: now,
+          ),
+        );
       }
       return;
     }
@@ -1236,10 +1242,7 @@ class LanDiscovery {
     if (!_sightings.isClosed) _sightings.add(presence.toSighting());
 
     if (message.isAnnounce) {
-      final ack = _buildPacket(
-        Msd1.typeAck,
-        nonce: message.nonce,
-      );
+      final ack = _buildPacket(Msd1.typeAck, nonce: message.nonce);
       if (ack != null) {
         try {
           socket.send(ack, datagram.address, datagram.port);
@@ -1370,16 +1373,12 @@ class LanDiscovery {
   static Future<RawDatagramSocket> _bindDatagram(
     InternetAddress address,
     int port,
-  ) =>
-      RawDatagramSocket.bind(address, port, reuseAddress: true);
+  ) => RawDatagramSocket.bind(address, port, reuseAddress: true);
 }
 
 /// 一个按接口绑定的 IPv4 socket 及其事件订阅。
 class _InterfaceSocket {
-  _InterfaceSocket({
-    required this.socket,
-    required this.subscription,
-  });
+  _InterfaceSocket({required this.socket, required this.subscription});
 
   final RawDatagramSocket socket;
   final StreamSubscription<RawSocketEvent> subscription;

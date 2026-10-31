@@ -9,7 +9,9 @@ import 'package:molia/sources/builtin/kw_lyric.dart';
 import 'package:molia/sources/builtin/mg_lyric.dart';
 import 'package:molia/sources/builtin/tx_lyric.dart';
 import 'package:molia/sources/builtin/tx_qrc.dart';
+
 import 'support/mock_dio.dart';
+
 import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 
 /// builtin 平台歌词解码/解析单测：用合成数据做「编码 → 平台接口（MockClient）
@@ -27,8 +29,22 @@ void main() {
 
   group('kg KRC', () {
     const encKey = [
-      0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47,
-      0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69,
+      0x40,
+      0x47,
+      0x61,
+      0x77,
+      0x5e,
+      0x32,
+      0x74,
+      0x47,
+      0x51,
+      0x36,
+      0x31,
+      0x2d,
+      0xce,
+      0xd2,
+      0x6e,
+      0x69,
     ];
 
     String encodeKrc(String text) {
@@ -43,25 +59,30 @@ void main() {
     }
 
     test('search + download + KRC 解码：逐字 / 翻译 / 罗马音', () async {
-      final language = base64.encode(utf8.encode(jsonEncode({
-        'content': [
-          {
-            'type': 0,
-            'lyricContent': [
-              ['roma line 1'],
-              ['roma line 2'],
+      final language = base64.encode(
+        utf8.encode(
+          jsonEncode({
+            'content': [
+              {
+                'type': 0,
+                'lyricContent': [
+                  ['roma line 1'],
+                  ['roma line 2'],
+                ],
+              },
+              {
+                'type': 1,
+                'lyricContent': [
+                  ['译一'],
+                  ['译二'],
+                ],
+              },
             ],
-          },
-          {
-            'type': 1,
-            'lyricContent': [
-              ['译一'],
-              ['译二'],
-            ],
-          },
-        ],
-      })));
-      final krcText = '[id:\$abc123]\n'
+          }),
+        ),
+      );
+      final krcText =
+          '[id:\$abc123]\n'
           '[ti:测试]\n'
           '[language:$language]\n'
           '[0,1000]<0,500,0>你<500,500,0>好\n'
@@ -111,14 +132,12 @@ void main() {
       final compressed = zlib_impl.zlibDeflate(
         utf8.encode(base64.encode(xored)),
       );
-      return [
-        ...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'),
-        ...compressed,
-      ];
+      return [...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'), ...compressed];
     }
 
     test('TP=content + zlib + XOR：逐字换算与重复时间翻译拆分', () async {
-      const lrcx = '[kuwo:127]\n'
+      const lrcx =
+          '[kuwo:127]\n'
           '[ti:测试]\n'
           '[00:00.000]<1120,-1120>你<2400,160>好\n'
           '[00:02.250]<3150,-3150>译<6750,450>文\n'
@@ -148,8 +167,7 @@ void main() {
       final decoded = TxQrc.decode(encoded);
       expect(decoded, raw);
 
-      final wrapped =
-          '<?xml version="1.0"?><LyricInfo LyricContent="$raw"/>';
+      final wrapped = '<?xml version="1.0"?><LyricInfo LyricContent="$raw"/>';
       final info = TxLyric.parse(wrapped, null, null);
       expect(info.lyric, contains('[00:00.000]你好'));
       expect(info.lxlyric, contains('[00:00.000]<0,200>你<200,300>好'));

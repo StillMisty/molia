@@ -32,14 +32,10 @@ class WyLyricSearch {
       retries: BuiltinTransport.defaultRetries,
     );
     final ids = idsOf(body);
-    final tracks =
-        ids.isEmpty ? const <SourceTrack>[] : await WyMusicDetail.getList(ids);
-    return buildPage(
-      body: body,
-      tracks: tracks,
-      page: page,
-      limit: limit,
-    );
+    final tracks = ids.isEmpty
+        ? const <SourceTrack>[]
+        : await WyMusicDetail.getList(ids);
+    return buildPage(body: body, tracks: tracks, page: page, limit: limit);
   }
 
   /// 搜索响应里的曲目 id（用于二次补全规范 raw）；结构不符抛失败。
@@ -108,7 +104,11 @@ class WyLyricSearch {
       if (start < 0) return null;
     }
     final parts = <String>[
-      for (var index = start; index < lines.length && index < start + 3; index++)
+      for (
+        var index = start;
+        index < lines.length && index < start + 3;
+        index++
+      )
         if (_stripTags(lines[index]).trim().isNotEmpty)
           _stripTags(lines[index]).trim(),
     ];

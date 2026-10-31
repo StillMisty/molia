@@ -16,8 +16,14 @@ import 'package:molia/sources/source_track.dart';
 void main() {
   group('BuiltinDiscover 注册表', () {
     test('六平台注册且静态榜单表非空', () {
-      expect(
-          BuiltinDiscover.sourceKeys, ['tx', 'wy', 'kg', 'kw', 'mg', 'bili']);
+      expect(BuiltinDiscover.sourceKeys, [
+        'tx',
+        'wy',
+        'kg',
+        'kw',
+        'mg',
+        'bili',
+      ]);
       for (final key in BuiltinDiscover.sourceKeys) {
         final source = BuiltinDiscover.of(key);
         expect(source.sourceKey, key);
@@ -71,7 +77,8 @@ void main() {
       expect(categories.single.name, '语种');
       expect(categories.single.tags.map((t) => t.id).toList(), ['1', '2']);
 
-      const html = '<div><a class="c_bg_link js_tag_item" data-id="3317">'
+      const html =
+          '<div><a class="c_bg_link js_tag_item" data-id="3317">'
           '官方歌单</a> <a class="c_bg_link js_tag_item" data-id="3418">'
           '免费热歌</a></div>';
       final hotTags = TxDiscoverSource.filterInfoHotTag(html);
@@ -133,7 +140,8 @@ void main() {
           'album': '专辑',
           'albumid': 2,
           'duration': 200,
-          'N_MINFO': 'level:ff,bitrate:320,format:mp3,size:1.2M;'
+          'N_MINFO':
+              'level:ff,bitrate:320,format:mp3,size:1.2M;'
               'level:f,bitrate:2000,format:flac,size:20M',
         },
       ]);
@@ -155,7 +163,8 @@ void main() {
         'albumId': 5,
         'duration': 212,
         'pic': 'http://img/p.jpg',
-        'n_minfo': 'level:ff,bitrate:128,format:mp3,size:3.1M;'
+        'n_minfo':
+            'level:ff,bitrate:128,format:mp3,size:3.1M;'
             'level:f,bitrate:4000,format:flac,size:40M',
       });
       expect(track, isNotNull);
@@ -289,7 +298,7 @@ void main() {
         {
           'content': [
             {
-              'texts': ['网络热歌', '1001076096', '%E7%BD%91%E7%BB%9C']
+              'texts': ['网络热歌', '1001076096', '%E7%BD%91%E7%BB%9C'],
             },
           ],
         },
@@ -297,7 +306,7 @@ void main() {
           'header': {'title': '风格'},
           'content': [
             {
-              'texts': ['流行', '1000001672']
+              'texts': ['流行', '1000001672'],
             },
           ],
         },

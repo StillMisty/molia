@@ -51,7 +51,7 @@ class _FakeScheduler implements CollectionScrollScheduler {
 /// 假滚动控制器：只实现簿记用到的接口（挂载状态 / 偏移 / 范围 / jumpTo）。
 class _FakeScrollController extends ScrollController {
   _FakeScrollController({double maxScrollExtent = 1000})
-      : _position = _FakeScrollPosition(maxScrollExtent: maxScrollExtent);
+    : _position = _FakeScrollPosition(maxScrollExtent: maxScrollExtent);
 
   @override
   bool hasClients = true;
@@ -75,11 +75,11 @@ class _FakeScrollController extends ScrollController {
 /// 假滚动位置：只提供偏移夹取所需的范围。
 class _FakeScrollPosition extends ScrollPosition {
   _FakeScrollPosition({required this.maxScrollExtent})
-      : super(
-          physics: const ClampingScrollPhysics(),
-          context: _FakeScrollContext(),
-          keepScrollOffset: false,
-        );
+    : super(
+        physics: const ClampingScrollPhysics(),
+        context: _FakeScrollContext(),
+        keepScrollOffset: false,
+      );
 
   @override
   final double maxScrollExtent;
@@ -104,10 +104,10 @@ void main() {
   late List<Map<String, double>> persisted;
 
   CollectionScrollBookkeeping build() => CollectionScrollBookkeeping(
-        controllerOf: (_) => controller,
-        persist: (offsets) async => persisted.add(offsets),
-        scheduler: scheduler,
-      );
+    controllerOf: (_) => controller,
+    persist: (offsets) async => persisted.add(offsets),
+    scheduler: scheduler,
+  );
 
   setUp(() {
     scheduler = _FakeScheduler();

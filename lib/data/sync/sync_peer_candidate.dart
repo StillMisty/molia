@@ -67,8 +67,9 @@ class SyncPeerCandidate {
       mergedSnapshotId = other.snapshotId;
       mergedJournalHead = other.journalHead;
     } else if (snapshotFresh && other.snapshotFresh) {
-      mergedSnapshotId =
-          other.snapshotId.isNotEmpty ? other.snapshotId : snapshotId;
+      mergedSnapshotId = other.snapshotId.isNotEmpty
+          ? other.snapshotId
+          : snapshotId;
       mergedJournalHead = other.journalHead ?? journalHead;
     } else {
       mergedSnapshotId = snapshotId.isNotEmpty ? snapshotId : other.snapshotId;
@@ -81,13 +82,10 @@ class SyncPeerCandidate {
       port: port > 0 ? port : other.port,
       probePort: probePort > 0 ? probePort : other.probePort,
       addresses: _union(addresses, other.addresses),
-      alternateHosts: _union(
-        alternateHosts,
-        [
-          if (other.host.isNotEmpty && other.host != host) other.host,
-          ...other.alternateHosts,
-        ],
-      ),
+      alternateHosts: _union(alternateHosts, [
+        if (other.host.isNotEmpty && other.host != host) other.host,
+        ...other.alternateHosts,
+      ]),
       snapshotId: mergedSnapshotId,
       journalHead: mergedJournalHead,
       snapshotFresh: snapshotFresh || other.snapshotFresh,
@@ -99,10 +97,10 @@ class SyncPeerCandidate {
   /// → 其它已学到的地址；单对端最多 [maxHosts] 个，避免长时间离线设备拖慢
   /// 整轮。
   List<String> get hosts => orderPeerHosts(
-        addresses: addresses,
-        primary: host,
-        alternates: alternateHosts,
-      );
+    addresses: addresses,
+    primary: host,
+    alternates: alternateHosts,
+  );
 
   /// 去重键：认领到设备 id 后按 id，未认领（手动地址首轮）按端点。
   String get key => deviceId.isNotEmpty ? deviceId : 'host:$host:$port';
@@ -152,9 +150,7 @@ List<String> orderPeerHosts({
       final byRank = peerHostRank(a.$2).compareTo(peerHostRank(b.$2));
       return byRank != 0 ? byRank : a.$1.compareTo(b.$1);
     });
-  return [
-    for (final (_, value) in indexed.take(maxHosts)) value,
-  ];
+  return [for (final (_, value) in indexed.take(maxHosts)) value];
 }
 
 /// 地址可达性排序：IPv4 = 0，全局 / ULA IPv6 = 1，其它地址（link-local /

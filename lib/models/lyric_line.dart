@@ -1,10 +1,6 @@
 /// 一行歌词中的一个词（时间轴为绝对时间；逐字歌词渲染用）。
 class LyricWord {
-  const LyricWord({
-    required this.start,
-    required this.end,
-    required this.text,
-  });
+  const LyricWord({required this.start, required this.end, required this.text});
 
   final Duration start;
   final Duration end;
@@ -37,8 +33,9 @@ class LyricLine {
 ///
 /// 允许 1–3 位分钟（`[1:02.34]` 与 `[01:02.345]` 都算），
 /// 秒后分隔符 `.` 或 `:`；标签可位于行中。
-final RegExp lrcTimeTagRegex =
-    RegExp(r'\[(\d{1,3}):(\d{2})(?:[.:](\d{2,3}))?\]');
+final RegExp lrcTimeTagRegex = RegExp(
+  r'\[(\d{1,3}):(\d{2})(?:[.:](\d{2,3}))?\]',
+);
 
 /// 是否含至少一个 LRC 时间标签（与 [parseLyrics] 同一正则，不会互相漂移）。
 bool hasLyricTimestamps(String rawLyrics) =>
@@ -66,14 +63,16 @@ List<LyricLine> parseLyrics(String rawLyrics) {
       // 一行可能带多个时间标签（同一句重复时间轴）：全部剥离后取文本。
       final text = _decodeEntities(line.replaceAll(lrcTimeTagRegex, '').trim());
       if (text.isEmpty) continue;
-      result.add(LyricLine(
-        Duration(
-          minutes: minutes,
-          seconds: seconds,
-          milliseconds: milliseconds,
+      result.add(
+        LyricLine(
+          Duration(
+            minutes: minutes,
+            seconds: seconds,
+            milliseconds: milliseconds,
+          ),
+          text,
         ),
-        text,
-      ));
+      );
     } catch (_) {
       // 单行解析失败：跳过该行。
     }
@@ -132,19 +131,22 @@ List<LyricWord>? parseLxWords(String lineText, Duration lineTimestamp) {
   final words = <LyricWord>[];
   for (var i = 0; i < matches.length; i++) {
     final match = matches[i];
-    final start = lineTimestamp +
-        Duration(milliseconds: int.parse(match.group(1)!));
+    final start =
+        lineTimestamp + Duration(milliseconds: int.parse(match.group(1)!));
     final duration = int.parse(match.group(2)!);
     final textStart = match.end;
-    final textEnd =
-        i + 1 < matches.length ? matches[i + 1].start : lineText.length;
+    final textEnd = i + 1 < matches.length
+        ? matches[i + 1].start
+        : lineText.length;
     final text = lineText.substring(textStart, textEnd);
     if (text.isEmpty) continue;
-    words.add(LyricWord(
-      start: start,
-      end: start + Duration(milliseconds: duration),
-      text: text,
-    ));
+    words.add(
+      LyricWord(
+        start: start,
+        end: start + Duration(milliseconds: duration),
+        text: text,
+      ),
+    );
   }
   return words.isEmpty ? null : words;
 }
@@ -182,9 +184,7 @@ List<LyricLine> attachWordTimings(List<LyricLine> lines, String? lxlyric) {
   for (final line in lines) {
     final words = byTimestamp[line.timestamp.inMilliseconds];
     result.add(
-      words == null
-          ? line
-          : LyricLine(line.timestamp, line.text, words: words),
+      words == null ? line : LyricLine(line.timestamp, line.text, words: words),
     );
   }
   return result;

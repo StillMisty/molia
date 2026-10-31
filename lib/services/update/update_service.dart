@@ -60,7 +60,8 @@ class UpdateService {
     CancelToken? cancelToken,
   }) async {
     final preferredKind = await _installer.preferredArchiveKind();
-    final asset = (preferredKind == null
+    final asset =
+        (preferredKind == null
             ? null
             : release.assetOfKind(
                 platform: platform.platform,
@@ -87,11 +88,10 @@ class UpdateService {
   Future<InstallOutcome> install({
     required String archivePath,
     required String archiveKind,
-  }) =>
-      _installer.installAndRestart(
-        archivePath: archivePath,
-        archiveKind: archiveKind,
-      );
+  }) => _installer.installAndRestart(
+    archivePath: archivePath,
+    archiveKind: archiveKind,
+  );
 
   Future<bool> canInstallPackages() => _installer.canInstallPackages();
 

@@ -116,20 +116,24 @@ void main() {
         payload: const {'id': 'b'},
       ),
     ];
-    await store.save(PlaybackSession(
-      tracks: tracks,
-      index: 0,
-      position: const Duration(seconds: 1),
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: tracks,
+        index: 0,
+        position: const Duration(seconds: 1),
+      ),
+    );
     await adapter.collect();
     final full = prefs.getString('playback_session_v1');
 
     now = 9000;
-    await store.save(PlaybackSession(
-      tracks: tracks,
-      index: 1,
-      position: const Duration(seconds: 2),
-    ));
+    await store.save(
+      PlaybackSession(
+        tracks: tracks,
+        index: 1,
+        position: const Duration(seconds: 2),
+      ),
+    );
     // 整份 JSON 没有重写（同一队列列表）：savedAt / 下标来自游标键，仍要上行。
     expect(prefs.getString('playback_session_v1'), full);
 

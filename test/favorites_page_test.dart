@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
+import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/managers/artwork_cache.dart';
 import 'package:molia/models/play_mode.dart';
@@ -23,13 +24,13 @@ import 'package:molia/services/audio_cache_store.dart';
 import 'package:molia/services/cache_service.dart';
 import 'package:molia/services/cache_storage.dart';
 import 'package:molia/services/download/download_manager.dart';
+import 'package:molia/services/download/download_queue.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/sync_format.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/shell_reselect.dart';
-import 'package:molia/widgets/swipe_reveal_row.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:molia/widgets/track_table_header.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
@@ -79,6 +80,15 @@ class _StubDownloadManager extends ChangeNotifier implements DownloadManager {
   final List<DownloadedTrack> deleted = [];
 
   @override
+  bool get supported => true;
+
+  @override
+  DownloadTask? taskForTrack(Track track) => null;
+
+  @override
+  String defaultQualityFor(Track track) => '320k';
+
+  @override
   Future<void> delete(DownloadedTrack record) async {
     deleted.add(record);
     records.remove(record.key);
@@ -91,7 +101,7 @@ class _StubDownloadManager extends ChangeNotifier implements DownloadManager {
 /// 无封面缓存桩：封面占用在收藏页用例里恒为零（manager 不可用即零）。
 class _NoopArtworkCache extends ArtworkCache {
   _NoopArtworkCache()
-      : super(cacheService: CacheService(storage: MemoryCacheStorage()));
+    : super(cacheService: CacheService(storage: MemoryCacheStorage()));
 }
 
 /// 指定列表的曲目读取失败（模拟损坏行 / 数据库读错误）。
@@ -193,22 +203,22 @@ DownloadedTrack _localSong(
   int? durationMs = 180000,
   int? downloadedAt,
 }) => DownloadedTrack(
-      originSourceKey: imported ? kLocalSourceKey : 'kw',
-      originSongId: id,
-      title: title ?? '本地 $id',
-      artist: artist,
-      durationMs: durationMs,
-      filePath: '/downloads/$id.mp3',
+  originSourceKey: imported ? kLocalSourceKey : 'kw',
+  originSongId: id,
+  title: title ?? '本地 $id',
+  artist: artist,
+  durationMs: durationMs,
+  filePath: '/downloads/$id.mp3',
   // 同一批记录给稳定的下载时间：记录按时间倒序（同时间再按 key 倒序），
   // 夹具用 id 递增反推时间，保持用例里的「1 在前、2 在后」。
   downloadedAt: downloadedAt ?? 1000 - (int.tryParse(id) ?? 0),
-      imported: imported,
-    );
+  imported: imported,
+);
 
 /// 「收藏」页 widget 测试。
 ///
 /// 覆盖：快捷播放（两次点击）、搜索按钮展开/收起、排序菜单、行尾 ♥、
-/// 单曲管理（触摸端左滑 / 桌面右键菜单的移除与删除记录）、长按多选批量操作、
+/// 单曲管理（触摸端 ⋮ / 桌面右键菜单的移除与删除记录）、长按多选批量操作、
 /// 合集弹层（切换/新建/重命名/删除/拖拽排序）与常显滚动条。
 ///
 /// 使用 [FakeLibraryRepository]（内存实现）：widget 测试处于 fake-async 区，
@@ -357,11 +367,11 @@ void main() {
 
   /// 弹层内的合集行（限定在弹层 surface 内，避免与页面曲目行混淆）。
   Finder pickerRow(String name) => find.descendant(
-        of: find.byType(M3EBottomSheetSurface),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is M3EListItem && widget.headline == name,
-        ),
-      );
+    of: find.byType(M3EBottomSheetSurface),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is M3EListItem && widget.headline == name,
+    ),
+  );
 
   /// 弹层标题行的工具动作（新建 `Icons.add_rounded` / 导入
   /// `Icons.library_add_rounded`）。
@@ -399,6 +409,18 @@ void main() {
   /// 展开搜索栏（日常不占用行高）。
   Future<void> openSearch(WidgetTester tester) async {
     await tester.tap(find.byIcon(Icons.search_rounded));
+    await tester.pumpAndSettle();
+  }
+
+  /// 打开曲目行的 ⋮ 菜单（触摸端唯一入口；行尾插槽里可能还有缓存标签）。
+  Future<void> openRowMenu(WidgetTester tester, String title) async {
+    final row = find.ancestor(
+      of: find.text(title),
+      matching: find.byType(TrackRow),
+    );
+    await tester.tap(
+      find.descendant(of: row, matching: find.byIcon(Icons.more_vert_rounded)),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -473,7 +495,12 @@ void main() {
 
     // 排序入口在搜索行 ⋮ 菜单；可见顺序即播放队列顺序。
     await openSearch(tester);
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSearchBar),
+        matching: find.byIcon(Icons.more_vert_rounded),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('按标题'));
     await tester.pumpAndSettle();
@@ -729,8 +756,8 @@ void main() {
       cache: CacheService(
         storage: _FakeCacheStorage(
           files: {
-          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-              2048,
+            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+                2048,
           },
         ),
       ),
@@ -759,8 +786,8 @@ void main() {
       cache: CacheService(
         storage: _FakeCacheStorage(
           files: {
-          AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-              2048,
+            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
+                2048,
           },
         ),
       ),
@@ -835,7 +862,7 @@ void main() {
     await pumpFavorites(tester);
 
     await openCollectionPicker(tester);
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).hitTestable().last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('重命名列表'));
     await tester.pumpAndSettle();
@@ -856,7 +883,7 @@ void main() {
     await openCollectionPicker(tester);
     expect(pickerHeadlines(tester), ['我的收藏', '播放历史', 'love']);
 
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).hitTestable().last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除列表'));
     await tester.pumpAndSettle();
@@ -881,7 +908,7 @@ void main() {
     await pumpFavorites(tester);
     await openCollectionPicker(tester);
 
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).hitTestable().last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('重命名列表'));
     await tester.pumpAndSettle();
@@ -901,7 +928,7 @@ void main() {
     await pumpFavorites(tester);
     await openCollectionPicker(tester);
 
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(find.byIcon(Icons.more_vert_rounded).hitTestable().last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除列表'));
     await tester.pumpAndSettle();
@@ -933,13 +960,12 @@ void main() {
     expect(pickerRow('我的收藏'), findsOneWidget, reason: '仍停在合集弹层');
   });
 
-  testWidgets('自建列表：左滑从列表移除', (tester) async {
+  testWidgets('自建列表：⋮ 菜单从列表移除', (tester) async {
     await importLove(tester);
     await pumpFavorites(tester);
     expect(headlines(tester), ['Song 1', 'Song 2', 'Song 3']);
 
-    await tester.drag(find.text('Song 2'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Song 2');
     await tester.tap(find.byIcon(Icons.playlist_remove_rounded));
     await tester.pumpAndSettle();
     await flushLibraryReloads(tester);
@@ -951,13 +977,12 @@ void main() {
     expect(await repository.listPlaylistTracks(loveId), hasLength(2));
   });
 
-  testWidgets('我的收藏：左滑「加入列表」复制到自建列表', (tester) async {
+  testWidgets('我的收藏：⋮「加入列表」复制到自建列表', (tester) async {
     await seedFavorites(tester);
     await importLove(tester);
     await pumpFavorites(tester);
 
-    await tester.drag(find.text('Song A'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Song A');
     await tester.tap(find.byIcon(Icons.playlist_add_rounded));
     await tester.pumpAndSettle();
 
@@ -974,12 +999,11 @@ void main() {
     expect(find.text('已加入「love」'), findsOneWidget);
   });
 
-  testWidgets('我的收藏：左滑「加入列表 → 播放历史」失败时不报已加入', (tester) async {
+  testWidgets('我的收藏：⋮「加入列表 → 播放历史」失败时不报已加入', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
 
-    await tester.drag(find.text('Song A'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Song A');
     await tester.tap(find.byIcon(Icons.playlist_add_rounded));
     await tester.pumpAndSettle();
 
@@ -992,13 +1016,12 @@ void main() {
     expect(await repository.listHistory(), isEmpty);
   });
 
-  testWidgets('我的收藏：左滑「加入列表 → 自建列表」失败时不报已加入', (tester) async {
+  testWidgets('我的收藏：⋮「加入列表 → 自建列表」失败时不报已加入', (tester) async {
     await seedFavorites(tester);
     await importLove(tester);
     await pumpFavorites(tester);
 
-    await tester.drag(find.text('Song A'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Song A');
     await tester.tap(find.byIcon(Icons.playlist_add_rounded));
     await tester.pumpAndSettle();
 
@@ -1017,14 +1040,14 @@ void main() {
     );
   });
 
-  testWidgets('桌面：收藏行无左滑外壳，右键在落点弹菜单，「取消收藏」后该行消失', (tester) async {
+  testWidgets('桌面：收藏行无 ⋮，右键在落点弹菜单，「取消收藏」后该行消失', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
 
     expect(
-      find.byType(SwipeRevealRow),
+      find.byIcon(Icons.more_vert_rounded),
       findsNothing,
-      reason: '桌面不再有鼠标左滑，行动作走行表面右键',
+      reason: '桌面入口是行表面右键，不渲染行尾 ⋮',
     );
 
     // 右键行内非中心点：菜单在落点展开（加入列表 / 换源 / 取消收藏）。
@@ -1055,8 +1078,7 @@ void main() {
     // 收藏为空 → 默认回退到 love；此时还不存在「我的收藏」列表。
     expect(find.text('love'), findsOneWidget);
 
-    await tester.drag(find.text('Song 1'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Song 1');
     await tester.tap(find.byIcon(Icons.playlist_add_rounded));
     await tester.pumpAndSettle();
     await tester.tap(find.text('我的收藏'));
@@ -1164,7 +1186,12 @@ void main() {
 
     // 入口在搜索行 ⋮ 菜单；进入后搜索行收起，显示拖动提示与把手。
     await openSearch(tester);
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSearchBar),
+        matching: find.byIcon(Icons.more_vert_rounded),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('调整顺序'));
     await tester.pumpAndSettle();
@@ -1204,7 +1231,7 @@ void main() {
     expect(find.byIcon(Icons.search_rounded), findsOneWidget);
   });
 
-  testWidgets('播放历史：弹层进入历史合集，行点击播放、左滑加入我的收藏', (tester) async {
+  testWidgets('播放历史：弹层进入历史合集，行点击播放、⋮ 加入我的收藏', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     await repository.addHistoryEntry(_history('2', playedAt: 1));
     await pumpFavorites(tester);
@@ -1223,9 +1250,8 @@ void main() {
     expect(request.startIndex, 1);
     expect(request.context?.name, '播放历史');
 
-    // 左滑「加入列表 → 我的收藏」。
-    await tester.drag(find.text('Song 2'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    // ⋮ 菜单「加入列表 → 我的收藏」。
+    await openRowMenu(tester, 'Song 2');
     await tester.tap(find.byIcon(Icons.playlist_add_rounded));
     await tester.pumpAndSettle();
     await tester.tap(find.text('我的收藏'));
@@ -1252,14 +1278,32 @@ void main() {
     expect(headlines(tester), ['Song 1', 'Song 3', 'Song 2']);
   });
 
-  testWidgets('播放历史：左滑删除单条记录', (tester) async {
+  testWidgets('播放历史：⋮ 菜单收藏 / 取消收藏', (tester) async {
+    await repository.addHistoryEntry(_history('1', playedAt: 2));
+    await pumpFavorites(tester);
+    await selectCollection(tester, '播放历史');
+
+    await openRowMenu(tester, 'Song 1');
+    expect(find.text('加入列表'), findsOneWidget);
+    expect(find.text('收藏'), findsOneWidget);
+    await tester.tap(find.text('收藏'));
+    await tester.pumpAndSettle();
+    expect(await repository.favoriteKeys(), contains('wy:1'));
+
+    await openRowMenu(tester, 'Song 1');
+    expect(find.text('取消收藏'), findsOneWidget);
+    await tester.tap(find.text('取消收藏'));
+    await tester.pumpAndSettle();
+    expect(await repository.favoriteKeys(), isNot(contains('wy:1')));
+  });
+
+  testWidgets('播放历史：⋮ 菜单删除单条记录', (tester) async {
     await repository.addHistoryEntry(_history('1', playedAt: 2));
     await repository.addHistoryEntry(_history('2', playedAt: 1));
     await pumpFavorites(tester);
     await selectCollection(tester, '播放历史');
 
-    await tester.drag(find.text('Song 2'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, 'Song 2');
     await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     await flushLibraryReloads(tester);
@@ -1296,7 +1340,12 @@ void main() {
     expect(find.text('Song 1'), findsOneWidget);
 
     await openSearch(tester);
-    await tester.tap(find.byIcon(Icons.more_vert_rounded));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AppSearchBar),
+        matching: find.byIcon(Icons.more_vert_rounded),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('清空历史'));
     await tester.pumpAndSettle();
@@ -1307,6 +1356,44 @@ void main() {
 
     expect(find.text('还没有播放记录'), findsOneWidget);
     expect(await repository.listHistory(), isEmpty);
+  });
+
+  testWidgets('1.3× 搜索行随 AppSearchBar 长高，不再被固定 56 压回', (tester) async {
+    await seedFavorites(tester);
+    await pumpFavorites(
+      tester,
+      size: const Size(800, 1600),
+      textScaler: const TextScaler.linear(1.3),
+    );
+    await openSearch(tester);
+
+    final bar = tester.widget<M3ESearchBar>(find.byType(M3ESearchBar));
+    expect(bar.constraints!.minHeight, greaterThan(56));
+    expect(
+      tester.getSize(find.byType(M3ESearchBar)).height,
+      greaterThanOrEqualTo(bar.constraints!.minHeight),
+      reason: '父级不能再把搜索栏压回 56',
+    );
+    expect(find.text('搜索歌曲'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('1.3× / 1.5× 大字体：收藏行高动态，itemExtent 与行同源', (tester) async {
+    await seedFavorites(tester);
+    for (final scale in [1.3, 1.5]) {
+      await pumpFavorites(
+        tester,
+        size: const Size(800, 1600),
+        textScaler: TextScaler.linear(scale),
+      );
+
+      expect(tester.takeException(), isNull, reason: '$scale× 不应布局溢出');
+      final list = tester.widget<ListView>(find.byType(ListView));
+      final rowContext = tester.element(find.byType(TrackRow).first);
+      final extent = TrackRow.extentOf(rowContext, tableColumns: false);
+      expect(list.itemExtent, extent + TrackRow.gapOf(rowContext));
+      expect(tester.getSize(find.byType(TrackRow).first).height, extent);
+    }
   });
 
   testWidgets('大列表：固定行高懒加载，只构建视口附近行，滚动条可手拖', (tester) async {
@@ -1328,18 +1415,19 @@ void main() {
 
     // 固定行高：itemExtent 预取高度（行高 + 行距，滚动条拇指/拖动精确）。
     final list = tester.widget<ListView>(find.byType(ListView));
+    final rowContext = tester.element(find.byType(TrackRow).first);
     expect(
       list.itemExtent,
-      TrackRow.extent +
-          TrackRow.gapOf(tester.element(find.byType(TrackRow).first)),
+      TrackRow.extentOf(rowContext, tableColumns: false) +
+          TrackRow.gapOf(rowContext),
     );
 
     // 标题/歌手都单行省略：固定高度不会被换行撑高。
     final firstRowTexts = tester
         .widgetList<Text>(
           find.descendant(
-          of: find.byType(TrackRow).first,
-          matching: find.byType(Text),
+            of: find.byType(TrackRow).first,
+            matching: find.byType(Text),
           ),
         )
         .toList();
@@ -1432,8 +1520,8 @@ void main() {
   testWidgets('本地歌曲：弹层出现合集，进入后播放 / 搜索过滤', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-      _localSong('1', title: '下载的歌'),
-      _localSong('2', title: '导入的歌', imported: true),
+        _localSong('1', title: '下载的歌'),
+        _localSong('2', title: '导入的歌', imported: true),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1464,19 +1552,18 @@ void main() {
     expect(headlines(tester), ['导入的歌']);
   });
 
-  testWidgets('本地歌曲：左滑删除按来源区分（下载删文件 / 导入只移出列表）', (tester) async {
+  testWidgets('本地歌曲：⋮ 菜单删除按来源区分（下载删文件 / 导入只移出列表）', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-      _localSong('1', title: '下载的歌'),
-      _localSong('2', title: '导入的歌', imported: true),
+        _localSong('1', title: '下载的歌'),
+        _localSong('2', title: '导入的歌', imported: true),
       ],
     );
     await pumpFavorites(tester, downloads: service);
     await selectCollection(tester, '本地歌曲');
 
     // 导入项：确认文案是「从列表移除」。
-    await tester.drag(find.text('导入的歌'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, '导入的歌');
     await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     expect(find.text('从列表移除'), findsWidgets);
@@ -1486,8 +1573,7 @@ void main() {
     expect(headlines(tester), ['下载的歌']);
 
     // 下载副本：确认文案是「删除下载」。
-    await tester.drag(find.text('下载的歌'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    await openRowMenu(tester, '下载的歌');
     await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     expect(find.text('删除下载'), findsWidgets);
@@ -1500,8 +1586,8 @@ void main() {
   testWidgets('本地歌曲：长按多选删除（混合来源文案）', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-      _localSong('1', title: '下载的歌'),
-      _localSong('2', title: '导入的歌', imported: true),
+        _localSong('1', title: '下载的歌'),
+        _localSong('2', title: '导入的歌', imported: true),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1557,8 +1643,8 @@ void main() {
   testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {
     final service = _DownloadsFixture(
       seed: [
-      for (var i = 0; i < 40; i++)
-        _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
+        for (var i = 0; i < 40; i++)
+          _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
       ],
     );
     await pumpFavorites(tester, downloads: service);
@@ -1596,9 +1682,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(backend.lastRequest!.tracks.single.id.sourceKey, 'wy');
 
-    // 左滑删除：确认文案是「清除缓存」，动作只清缓存、不动下载记录。
-    await tester.drag(find.text('Song 1'), const Offset(-260, 0));
-    await tester.pumpAndSettle();
+    // ⋮ 菜单删除：确认文案是「清除缓存」，动作只清缓存、不动下载记录。
+    await openRowMenu(tester, 'Song 1');
     await tester.tap(find.byIcon(Icons.delete_rounded));
     await tester.pumpAndSettle();
     expect(find.text('清除缓存'), findsWidgets);
@@ -1706,13 +1791,13 @@ void main() {
 }
 
 Map<String, dynamic> _track(int id) => {
-      'id': 'wy_$id',
-      'name': 'Song $id',
-      'singer': 'Artist $id',
-      'source': 'wy',
-      'interval': '03:00',
-      'meta': {'songId': id, 'albumName': 'Album $id'},
-    };
+  'id': 'wy_$id',
+  'name': 'Song $id',
+  'singer': 'Artist $id',
+  'source': 'wy',
+  'interval': '03:00',
+  'meta': {'songId': id, 'albumName': 'Album $id'},
+};
 
 PlayHistoryEntry _history(String songId, {int playedAt = 1}) =>
     PlayHistoryEntry(
@@ -1732,8 +1817,8 @@ Uint8List _lxmcBytes(List<Map<String, dynamic>> list) {
     gzip.encode(
       utf8.encode(
         jsonEncode({
-    'type': 'playListPart_v2',
-    'data': {'id': 'x', 'name': 'list__name_love', 'list': list},
+          'type': 'playListPart_v2',
+          'data': {'id': 'x', 'name': 'list__name_love', 'list': list},
         }),
       ),
     ),

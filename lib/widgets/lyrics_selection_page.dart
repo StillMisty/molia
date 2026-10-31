@@ -86,8 +86,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 
   Future<void> _copyAllOriginalLyrics() async {
     final l10n = AppLocalizations.of(context)!;
-    final notificationService =
-        Provider.of<NotificationService>(context, listen: false);
+    final notificationService = Provider.of<NotificationService>(
+      context,
+      listen: false,
+    );
 
     final text = _lyricLines.map((line) => line.text).join('\n');
     await Clipboard.setData(ClipboardData(text: text));
@@ -95,12 +97,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   }
 
   // 获取当前播放行的索引（与播放页歌词共用同一时间策略：同一 200ms 提前量）
-  int _getCurrentLineIndex(Duration currentPosition) =>
-      LyricTimingPolicy.page.lineIndexAt(
-        _lyricLines,
-        currentPosition,
-        isSynced: widget.isSynced,
-      );
+  int _getCurrentLineIndex(Duration currentPosition) => LyricTimingPolicy.page
+      .lineIndexAt(_lyricLines, currentPosition, isSynced: widget.isSynced);
 
   void _deselectAllLines() {
     HapticsService.lightImpact();
@@ -119,33 +117,32 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
   }
 
   List<String> _getSelectedLyrics() => [
-        for (var i = 0; i < _lyricLines.length; i++)
-          if (_selectedIndices.contains(i)) _lyricLines[i].text,
-      ];
+    for (var i = 0; i < _lyricLines.length; i++)
+      if (_selectedIndices.contains(i)) _lyricLines[i].text,
+  ];
 
   List<PosterLyricLine> _getPosterLyricLines() => [
-        for (var i = 0; i < _lyricLines.length; i++)
-          if (_selectedIndices.contains(i))
-            PosterLyricLine(
-              text: _lyricLines[i].text,
-              // 扩展行与歌词页同一份对齐结果 + 同一对开关：歌词页看到什么，
-              // 海报就画什么。
-              translation:
-                  widget.showTranslation && i < widget.translations.length
-                      ? widget.translations[i]
-                      : '',
-              roma: widget.showRoma && i < widget.romas.length
-                  ? widget.romas[i]
-                  : '',
-            ),
-      ];
+    for (var i = 0; i < _lyricLines.length; i++)
+      if (_selectedIndices.contains(i))
+        PosterLyricLine(
+          text: _lyricLines[i].text,
+          // 扩展行与歌词页同一份对齐结果 + 同一对开关：歌词页看到什么，
+          // 海报就画什么。
+          translation: widget.showTranslation && i < widget.translations.length
+              ? widget.translations[i]
+              : '',
+          roma: widget.showRoma && i < widget.romas.length
+              ? widget.romas[i]
+              : '',
+        ),
+  ];
 
   /// 该行的扩展行文本（展示用；与歌词页一致：空文本不占位）。
   (String translation, String roma) _extendedOf(int index) {
     final translation =
         widget.showTranslation && index < widget.translations.length
-            ? widget.translations[index]
-            : '';
+        ? widget.translations[index]
+        : '';
     final roma = widget.showRoma && index < widget.romas.length
         ? widget.romas[index]
         : '';
@@ -242,8 +239,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     final l10n = AppLocalizations.of(context)!;
     final selectedLyrics = _getSelectedLyrics();
     if (selectedLyrics.isEmpty) {
-      Provider.of<NotificationService>(context, listen: false)
-          .showSnackBar(l10n.noLyricsSelected);
+      Provider.of<NotificationService>(
+        context,
+        listen: false,
+      ).showSnackBar(l10n.noLyricsSelected);
       return;
     }
 
@@ -253,8 +252,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     await Clipboard.setData(ClipboardData(text: text));
 
     if (mounted) {
-      Provider.of<NotificationService>(context, listen: false)
-          .showSnackBar(l10n.selectedLyricsCopied(selectedLyrics.length));
+      Provider.of<NotificationService>(
+        context,
+        listen: false,
+      ).showSnackBar(l10n.selectedLyricsCopied(selectedLyrics.length));
     }
   }
 
@@ -263,22 +264,28 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
     final l10n = AppLocalizations.of(context)!;
     final selectedLyrics = _getSelectedLyrics();
     if (selectedLyrics.isEmpty) {
-      Provider.of<NotificationService>(context, listen: false)
-          .showSnackBar(l10n.noLyricsSelected);
+      Provider.of<NotificationService>(
+        context,
+        listen: false,
+      ).showSnackBar(l10n.noLyricsSelected);
       return;
     }
 
     // 行数限制：超过 15 行不能生成海报
     if (selectedLyrics.length > 15) {
-      Provider.of<NotificationService>(context, listen: false)
-          .showSnackBar(l10n.posterLyricsLimitExceeded);
+      Provider.of<NotificationService>(
+        context,
+        listen: false,
+      ).showSnackBar(l10n.posterLyricsLimitExceeded);
       return;
     }
 
     final posterLyricLines = _getPosterLyricLines();
     if (posterLyricLines.isEmpty) {
-      Provider.of<NotificationService>(context, listen: false)
-          .showSnackBar(l10n.noLyricsSelected);
+      Provider.of<NotificationService>(
+        context,
+        listen: false,
+      ).showSnackBar(l10n.noLyricsSelected);
       return;
     }
 
@@ -302,8 +309,10 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
 
     final detailLayout = context.layoutType(ResponsivePageType.detail);
 
-    final playbackProvider =
-        Provider.of<PlaybackProvider>(context, listen: false);
+    final playbackProvider = Provider.of<PlaybackProvider>(
+      context,
+      listen: false,
+    );
 
     // 进度订阅走 position 独立通道：仅当高亮行号变化时重建，
     // 避免每次进度 tick 整页重建。
@@ -335,11 +344,14 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                       // 列表首项固定为歌曲信息头部（itemCount = 歌词数 + 1）
                       return Container(
                         margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color:
-                              Theme.of(context).colorScheme.secondaryContainer,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .secondaryContainer,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -361,27 +373,27 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                                 children: [
                                   Text(
                                     widget.trackTitle,
-                                    style:
-                                        context.typeScale.titleMedium.copyWith(
-                                      // 卡片底为 secondaryContainer：
-                                      // 前景必须配 onSecondaryContainer。
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondaryContainer,
-                                    ),
+                                    style: context.typeScale.titleMedium
+                                        .copyWith(
+                                          // 卡片底为 secondaryContainer：
+                                          // 前景必须配 onSecondaryContainer。
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSecondaryContainer,
+                                        ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     widget.artistName,
-                                    style:
-                                        context.typeScale.bodyMedium.copyWith(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSecondaryContainer
-                                          .withValues(alpha: 0.8),
-                                    ),
+                                    style: context.typeScale.bodyMedium
+                                        .copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSecondaryContainer
+                                              .withValues(alpha: 0.8),
+                                        ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -399,10 +411,12 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                       bool isLastInGroup = false;
 
                       if (_selectedIndices.contains(lyricIndex)) {
-                        isFirstInGroup = lyricIndex == 0 ||
+                        isFirstInGroup =
+                            lyricIndex == 0 ||
                             !_selectedIndices.contains(lyricIndex - 1);
 
-                        isLastInGroup = lyricIndex == _lyricLines.length - 1 ||
+                        isLastInGroup =
+                            lyricIndex == _lyricLines.length - 1 ||
                             !_selectedIndices.contains(lyricIndex + 1);
                       }
 
@@ -483,47 +497,45 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
       child: SizedBox(
         height: 56.0,
         child: _isLoading
-            ? const Center(
-                child: M3ELoadingIndicator(),
-              )
+            ? const Center(child: M3ELoadingIndicator())
             : _hasSelectedLyrics()
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // 取消全选：普通 tonal 图标键；动作不做额外着色
-                      //（特殊色语义只留给状态），禁用态交给 M3E 默认值。
-                      M3EIconButton(
-                        variant: M3EIconButtonVariant.tonal,
-                        size: M3EIconButtonSize.md,
-                        visualSize: const Size(56, 56),
-                        onPressed: _isLoading ? null : _deselectAllLines,
-                        icon: const Icon(Icons.close_rounded),
-                        semanticLabel: l10n.deselectAll,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: M3EButton.tonal(
-                          onPressed: _selectedIndices.length > 15 || _isLoading
-                              ? null
-                              : _shareAsPoster,
-                          icon: const Icon(Icons.image_rounded),
-                          label: Text(l10n.posterButtonLabel),
-                        ),
-                      ),
-                    ],
-                  )
-                : Center(
-                    child: Text(
-                      l10n.tapToSelectLyrics,
-                      style: context.typeScale.bodyMedium.copyWith(
-                        // 操作引导是次要文本，不用强调色。
-                        color: theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                      ),
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 取消全选：普通 tonal 图标键；动作不做额外着色
+                  //（特殊色语义只留给状态），禁用态交给 M3E 默认值。
+                  M3EIconButton(
+                    variant: M3EIconButtonVariant.tonal,
+                    size: M3EIconButtonSize.md,
+                    visualSize: const Size(56, 56),
+                    onPressed: _isLoading ? null : _deselectAllLines,
+                    icon: const Icon(Icons.close_rounded),
+                    semanticLabel: l10n.deselectAll,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: M3EButton.tonal(
+                      onPressed: _selectedIndices.length > 15 || _isLoading
+                          ? null
+                          : _shareAsPoster,
+                      icon: const Icon(Icons.image_rounded),
+                      label: Text(l10n.posterButtonLabel),
                     ),
                   ),
+                ],
+              )
+            : Center(
+                child: Text(
+                  l10n.tapToSelectLyrics,
+                  style: context.typeScale.bodyMedium.copyWith(
+                    // 操作引导是次要文本，不用强调色。
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
       ),
     );
   }

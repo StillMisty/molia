@@ -37,8 +37,8 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
     this._journal,
     bool Function()? enabled,
     Logger? logger,
-  })  : _enabled = enabled ?? (() => true),
-        _logger = logger ?? Logger('molia.sync') {
+  }) : _enabled = enabled ?? (() => true),
+       _logger = logger ?? Logger('molia.sync') {
     // 构造时开关已开启 = 不是本进程内的「刚开启」：首次收集按常规登记
     // 变化。构造时关闭、之后开启才走切换轮规则（见 [collectForCategories]）。
     _wasEnabled = _enabled();
@@ -168,17 +168,14 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
       // 的旧戳去和墓碑比大小（否则重设的封面会被对端当成陈旧记录跳过）。
       final stampUnchanged =
           tombstone == null && stamp != null && stamp.hash == data.hash;
-      final version =
-          stampUnchanged ? stamp.version : _state.stampIssuer.next();
+      final version = stampUnchanged
+          ? stamp.version
+          : _state.stampIssuer.next();
       if (!stampUnchanged) {
         registrations[key] = SyncStamp(hash: data.hash, version: version);
       }
       if (tombstone != null) removedTombstones.add(key);
-      final record = SyncRecord(
-        key: key,
-        version: version,
-        data: data.data,
-      );
+      final record = SyncRecord(key: key, version: version, data: data.data);
       records.add(record);
       // 刚开启类别的第一轮不逐张追加已有封面：控制面已重置快照发布，
       // 全量快照会携带它们。此后的首次登记 / 内容变化 / 墓碑后重设仍写
@@ -196,11 +193,13 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
     for (final entry in allTombstones.entries) {
       if (current.containsKey(entry.key)) continue;
       if (removedTombstones.contains(entry.key)) continue;
-      records.add(SyncRecord.tombstone(
-        key: entry.key,
-        version: entry.value.version,
-        deletedAt: entry.value.version.physical,
-      ));
+      records.add(
+        SyncRecord.tombstone(
+          key: entry.key,
+          version: entry.value.version,
+          deletedAt: entry.value.version.physical,
+        ),
+      );
     }
 
     // 先追加日志、后写登记：追加失败时保留旧登记，下一轮仍能检测到变更。
@@ -234,7 +233,7 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
       _base64Cache[key] = cached;
       return (
         hash: cached.hash,
-        data: _recordDataOf(cached.hash, cached.base64, entry.updatedAt)
+        data: _recordDataOf(cached.hash, cached.base64, entry.updatedAt),
       );
     }
 
@@ -272,13 +271,7 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
     String hash,
     String base64,
     int updatedAt,
-  ) =>
-      {
-        'image': base64,
-        'mime': _mime,
-        'hash': hash,
-        'updatedAt': updatedAt,
-      };
+  ) => {'image': base64, 'mime': _mime, 'hash': hash, 'updatedAt': updatedAt};
 
   @override
   Future<SyncApplyOutcome> apply(
@@ -293,8 +286,9 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
         continue;
       }
       final isDefault = record.key == SyncRecordKeys.defaultCoverKey;
-      final current =
-          isDefault ? _store.defaultEntry : _store.trackEntry(record.key);
+      final current = isDefault
+          ? _store.defaultEntry
+          : _store.trackEntry(record.key);
       final stamp = _state.coverStamps[record.key];
       final tombstone = _state.coverTombstones[record.key];
 
@@ -390,10 +384,7 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
       applied = 1;
     }
     _state.removeCoverStamp(record.key);
-    _state.putCoverTombstone(
-      record.key,
-      SyncStamp(version: record.version),
-    );
+    _state.putCoverTombstone(record.key, SyncStamp(version: record.version));
     return SyncApplyOutcome(applied: applied, skipped: applied == 0 ? 1 : 0);
   }
 

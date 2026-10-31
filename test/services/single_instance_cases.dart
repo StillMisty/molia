@@ -138,18 +138,20 @@ void main() {
       expect(SingleInstanceLock.parse('{"pid": -1, "port": 8080}'), isNull);
       expect(SingleInstanceLock.parse('{"pid": 1, "port": 0}'), isNull);
       expect(SingleInstanceLock.parse('{"pid": 1, "port": 65536}'), isNull);
-      expect(
-        SingleInstanceLock.parse('{"pid": 1, "port": 65535}'),
-        (pid: 1, port: 65535),
-      );
+      expect(SingleInstanceLock.parse('{"pid": 1, "port": 65535}'), (
+        pid: 1,
+        port: 65535,
+      ));
     });
   });
 
   group('decide', () {
     test('连得上：无论第几次尝试都判为 secondary', () {
-      for (var attempt = 1;
-          attempt <= SingleInstanceLock.maxAcquireAttempts;
-          attempt++) {
+      for (
+        var attempt = 1;
+        attempt <= SingleInstanceLock.maxAcquireAttempts;
+        attempt++
+      ) {
         expect(
           SingleInstanceLock.decide(
             connected: true,
@@ -162,9 +164,11 @@ void main() {
     });
 
     test('pid 已退出：无论第几次尝试都立即重抢（不等连接超时）', () {
-      for (var attempt = 1;
-          attempt <= SingleInstanceLock.maxAcquireAttempts;
-          attempt++) {
+      for (
+        var attempt = 1;
+        attempt <= SingleInstanceLock.maxAcquireAttempts;
+        attempt++
+      ) {
         expect(
           SingleInstanceLock.decide(
             connected: false,
@@ -178,27 +182,15 @@ void main() {
 
     test('连不上但 pid 存活：未到上限重抢，达到上限保守按主实例', () {
       expect(
-        SingleInstanceLock.decide(
-          connected: false,
-          alive: true,
-          attempt: 1,
-        ),
+        SingleInstanceLock.decide(connected: false, alive: true, attempt: 1),
         SingleInstanceAction.retryAcquire,
       );
       expect(
-        SingleInstanceLock.decide(
-          connected: false,
-          alive: true,
-          attempt: 2,
-        ),
+        SingleInstanceLock.decide(connected: false, alive: true, attempt: 2),
         SingleInstanceAction.retryAcquire,
       );
       expect(
-        SingleInstanceLock.decide(
-          connected: false,
-          alive: true,
-          attempt: 3,
-        ),
+        SingleInstanceLock.decide(connected: false, alive: true, attempt: 3),
         SingleInstanceAction.fallbackPrimary,
       );
     });

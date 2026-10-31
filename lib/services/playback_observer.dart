@@ -76,18 +76,20 @@ class PlaybackObserver {
     Future<void> Function()? requestNotificationPermission,
     AppPresence? presence,
     PlaybackPowerPolicy? mobilePowerPolicy,
-  })  : _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
-        _albumArtPreloader = albumArtPreloader ??
-            AlbumArtPreloadStrategy(
-              coverUrlResolver: coverResolver == null
-                  ? null
-                  : (track) => coverResolver.displayOf(track).url,
-            ),
-        _coverResolver = coverResolver,
-        _requestNotificationPermission = requestNotificationPermission ??
-            NotificationPermission.ensureRequested,
-        _presence = presence ?? AppPresence.instance,
-        _powerPolicy = mobilePowerPolicy {
+  }) : _widgetUpdater = widgetUpdater ?? _updateAndroidWidget,
+       _albumArtPreloader =
+           albumArtPreloader ??
+           AlbumArtPreloadStrategy(
+             coverUrlResolver: coverResolver == null
+                 ? null
+                 : (track) => coverResolver.displayOf(track).url,
+           ),
+       _coverResolver = coverResolver,
+       _requestNotificationPermission =
+           requestNotificationPermission ??
+           NotificationPermission.ensureRequested,
+       _presence = presence ?? AppPresence.instance,
+       _powerPolicy = mobilePowerPolicy {
     _ready = _loadLastPlayedTrackInfo();
   }
 

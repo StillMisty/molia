@@ -103,8 +103,8 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
                 child: isSearchActive
                     ? SearchSection(controller: widget.controller)
                     : (aiDjEnabled
-                        ? const SizedBox.shrink()
-                        : _buildIdle(context)),
+                          ? const SizedBox.shrink()
+                          : _buildIdle(context)),
               ),
             ),
           ],

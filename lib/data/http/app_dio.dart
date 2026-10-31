@@ -54,10 +54,8 @@ String bodyText(Response<dynamic> response) =>
 ///
 /// `lx_engine_native` 会把响应头原样交给音源脚本，脚本按 `headers['content-type']`
 /// 这类单值读取，所以要拍平，不能直接暴露 dio 的 `Map<String, List<String>>`。
-Map<String, String> flatResponseHeaders(Response<dynamic> response) => response
-    .headers
-    .map
-    .map((key, value) => MapEntry(key, value.join(',')));
+Map<String, String> flatResponseHeaders(Response<dynamic> response) =>
+    response.headers.map.map((key, value) => MapEntry(key, value.join(',')));
 
 /// 流式响应体（请求时显式传 `ResponseType.stream`）。
 ResponseBody streamBody(Response<dynamic> response) =>

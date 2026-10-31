@@ -16,10 +16,7 @@ import '../theme/m3e_context.dart';
 import 'ai_dj_shared.dart';
 
 /// 打开「发送给 AI 的内容」弹窗。
-Future<void> showAiDjPromptDialog(
-  BuildContext context,
-  AiDjProvider provider,
-) {
+Future<void> showAiDjPromptDialog(BuildContext context, AiDjProvider provider) {
   return M3EDialog.show<void>(
     context,
     dialog: _AiDjPromptDialog(provider: provider),
@@ -69,8 +66,10 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
     final summary = l10n.aiDjSendSummary(
       sections.isEmpty ? l10n.aiDjSectionsNone : sections,
     );
-    final bodyHeight =
-        (MediaQuery.sizeOf(context).height * 0.42).clamp(220.0, 420.0);
+    final bodyHeight = (MediaQuery.sizeOf(context).height * 0.42).clamp(
+      220.0,
+      420.0,
+    );
 
     return M3EDialog(
       key: const Key('aiDjPromptDialog'),
@@ -169,12 +168,7 @@ class _AiDjPromptDialogState extends State<_AiDjPromptDialog> {
     if (raw == null || raw.trim().isEmpty) {
       return Text(l10n.aiDjNoLastResponse);
     }
-    return _promptBlock(
-      l10n,
-      l10n.aiDjLastRawResponse,
-      raw,
-      copy: true,
-    );
+    return _promptBlock(l10n, l10n.aiDjLastRawResponse, raw, copy: true);
   }
 
   Widget _promptBlock(

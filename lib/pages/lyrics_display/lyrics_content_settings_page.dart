@@ -46,9 +46,6 @@ class LyricsContentSettingsPage extends StatelessWidget {
       LyricsSharedDisplaySection(title: l10n.lyricsDisplaySharedTitle),
     ];
     if (embedded) return SettingsSubPageList(children: children);
-    return SettingsSubPage(
-      title: l10n.lyricsContentTitle,
-      children: children,
-    );
+    return SettingsSubPage(title: l10n.lyricsContentTitle, children: children);
   }
 }

@@ -49,10 +49,7 @@ class SongCommentsPage extends StatefulWidget {
 }
 
 class _SongCommentsPageState extends State<SongCommentsPage> {
-  static const List<CommentKind> _tabs = [
-    CommentKind.hot,
-    CommentKind.latest,
-  ];
+  static const List<CommentKind> _tabs = [CommentKind.hot, CommentKind.latest];
 
   late final CommentsProvider _provider = context.read<CommentsProvider>();
 

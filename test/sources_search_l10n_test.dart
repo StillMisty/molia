@@ -46,10 +46,14 @@ void main() {
   test('日文/繁体支持已移除', () {
     expect(File('lib/l10n/app_ja.arb').existsSync(), isFalse);
     expect(File('lib/l10n/app_zh_TW.arb').existsSync(), isFalse);
-    expect(AppLocalizations.supportedLocales,
-        isNot(contains(const Locale('ja'))));
-    expect(AppLocalizations.supportedLocales,
-        isNot(contains(const Locale('zh', 'TW'))));
+    expect(
+      AppLocalizations.supportedLocales,
+      isNot(contains(const Locale('ja'))),
+    );
+    expect(
+      AppLocalizations.supportedLocales,
+      isNot(contains(const Locale('zh', 'TW'))),
+    );
   });
 
   test('生成的本地化类包含中文关键文案', () {
@@ -59,15 +63,19 @@ void main() {
     expect(zhL10n.sourcesContinueImport, '继续导入');
     expect(zhL10n.sourcesImportAction, '导入');
     expect(zhL10n.sourcesQuality320k, '320K');
-    expect(zhL10n.sourcesNoScripts,
-        '还没有导入音源脚本。社区音源可在 Github 搜索 “lx-music-source” 获取。');
-    expect(zhL10n.sourcesActiveSource('集成测试音源', '1.0.0'),
-        '当前音源：集成测试音源 1.0.0');
+    expect(
+      zhL10n.sourcesNoScripts,
+      '还没有导入音源脚本。社区音源可在 Github 搜索 “lx-music-source” 获取。',
+    );
+    expect(zhL10n.sourcesActiveSource('集成测试音源', '1.0.0'), '当前音源：集成测试音源 1.0.0');
     expect(zhL10n.searchNoResultsInSource('测试源'), '在「测试源」中没有找到结果');
     expect(zhL10n.searchLoadMoreFailed, '加载更多结果失败');
 
     final enL10n = lookupAppLocalizations(const Locale('en'));
     expect(enL10n.sourcesTitle, 'Source Management');
-    expect(enL10n.searchNoResultsInSource('Demo'), 'No results found in “Demo”');
+    expect(
+      enL10n.searchNoResultsInSource('Demo'),
+      'No results found in “Demo”',
+    );
   });
 }

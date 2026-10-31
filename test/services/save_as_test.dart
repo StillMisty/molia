@@ -23,12 +23,12 @@ void main() {
   });
 
   IoSaveAs buildDesktop({SaveFileDialog? dialog}) => IoSaveAs(
-        publisher: FakeDownloadsPublisher(supported: false),
-        customRoot: () => root.path,
-        dialog: dialog,
-        android: false,
-        ios: false,
-      );
+    publisher: FakeDownloadsPublisher(supported: false),
+    customRoot: () => root.path,
+    dialog: dialog,
+    android: false,
+    ios: false,
+  );
 
   test('桌面无对话框：直接写入另存目录的子目录', () async {
     final saveAs = buildDesktop();
@@ -59,24 +59,27 @@ void main() {
     expect(p.basename(saved.path), 'a_b_c.json');
     expect(p.dirname(saved.path), p.join(root.path, 'exports'));
     expect(
-        await Directory(p.join(root.path, 'exports', 'a')).exists(), isFalse);
+      await Directory(p.join(root.path, 'exports', 'a')).exists(),
+      isFalse,
+    );
   });
 
   test('桌面对话框选中路径：按用户选择保存', () async {
     final target = p.join(root.path, 'chosen.json');
     String? initialDirectorySeen;
     final saveAs = buildDesktop(
-      dialog: ({
-        required fileName,
-        required bytes,
-        required mimeType,
-        initialDirectory,
-        dialogTitle,
-      }) async {
-        initialDirectorySeen = initialDirectory;
-        await File(target).writeAsBytes(bytes);
-        return target;
-      },
+      dialog:
+          ({
+            required fileName,
+            required bytes,
+            required mimeType,
+            initialDirectory,
+            dialogTitle,
+          }) async {
+            initialDirectorySeen = initialDirectory;
+            await File(target).writeAsBytes(bytes);
+            return target;
+          },
     );
 
     final result = await saveAs.saveBytes(
@@ -100,8 +103,7 @@ void main() {
         required mimeType,
         initialDirectory,
         dialogTitle,
-      }) async =>
-          null,
+      }) async => null,
     );
 
     final result = await saveAs.saveBytes(
@@ -111,10 +113,7 @@ void main() {
     );
 
     expect(result, isA<SaveAsCancelled>());
-    expect(
-      await File(p.join(root.path, 'backup.json')).exists(),
-      isFalse,
-    );
+    expect(await File(p.join(root.path, 'backup.json')).exists(), isFalse);
   });
 
   test('桌面对话框不可用：回退直接写默认目录', () async {
@@ -125,8 +124,7 @@ void main() {
         required mimeType,
         initialDirectory,
         dialogTitle,
-      }) async =>
-          throw UnsupportedError('no portal'),
+      }) async => throw UnsupportedError('no portal'),
     );
 
     final result = await saveAs.saveBytes(
@@ -136,10 +134,7 @@ void main() {
     );
 
     expect(result, isA<SaveAsSaved>());
-    expect(
-      await File(p.join(root.path, 'backup.json')).exists(),
-      isTrue,
-    );
+    expect(await File(p.join(root.path, 'backup.json')).exists(), isTrue);
   });
 
   test('Android：写临时文件后经发布器进公共 Downloads', () async {

@@ -166,9 +166,5 @@ class PageData {
   final IconData icon;
   final Widget page;
 
-  PageData({
-    required this.title,
-    required this.icon,
-    required this.page,
-  });
+  PageData({required this.title, required this.icon, required this.page});
 }

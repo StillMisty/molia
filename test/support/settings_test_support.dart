@@ -26,9 +26,8 @@ SettingsRegistry testSettingsRegistry({
   Iterable<SettingsKey<Object?>>? keys,
   SharedPreferences? preferences,
   SettingsSecretStore? secrets,
-}) =>
-    SettingsRegistry(
-      keys: List.of(keys ?? kAllSettingsKeys),
-      preferences: preferences,
-      secrets: secrets ?? MemorySettingsSecretStore(),
-    );
+}) => SettingsRegistry(
+  keys: List.of(keys ?? kAllSettingsKeys),
+  preferences: preferences,
+  secrets: secrets ?? MemorySettingsSecretStore(),
+);

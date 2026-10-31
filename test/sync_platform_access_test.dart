@@ -192,32 +192,37 @@ void main() {
     });
 
     test('添加 / 学到信息合并 / 删除，跨重启保留', () async {
-      await state
-          .addManualPeer(const ManualPeer(host: '192.168.1.23', name: '书房'));
+      await state.addManualPeer(
+        const ManualPeer(host: '192.168.1.23', name: '书房'),
+      );
       expect(state.manualPeers.single.name, '书房');
 
       // 首次接触学到 deviceId 与端点端口（同名地址合并，不新增条目）；
       // 对端广播的设备名不覆盖用户命名。
-      await state.learnManualPeer(state.manualPeers.single.mergeLearned(
-        deviceId: 'devB',
-        httpPort: 41000,
-        name: '设备B',
-      ));
+      await state.learnManualPeer(
+        state.manualPeers.single.mergeLearned(
+          deviceId: 'devB',
+          httpPort: 41000,
+          name: '设备B',
+        ),
+      );
       expect(state.manualPeers, hasLength(1));
       expect(state.manualPeers.single.deviceId, 'devB');
       expect(state.manualPeers.single.httpPort, 41000);
       expect(state.manualPeers.single.name, '书房', reason: '用户命名优先');
 
       // 用户再次提交同一地址 = 显式改名。
-      await state
-          .addManualPeer(const ManualPeer(host: '192.168.1.23', name: '新名字'));
+      await state.addManualPeer(
+        const ManualPeer(host: '192.168.1.23', name: '新名字'),
+      );
       expect(state.manualPeers.single.name, '新名字');
       expect(state.manualPeers.single.deviceId, 'devB');
 
       // 未命名条目才吸收学到的名称。
       await state.addManualPeer(const ManualPeer(host: '10.0.0.9'));
-      await state
-          .learnManualPeer(const ManualPeer(host: '10.0.0.9', name: '设备C'));
+      await state.learnManualPeer(
+        const ManualPeer(host: '10.0.0.9', name: '设备C'),
+      );
       expect(
         state.manualPeers.firstWhere((p) => p.host == '10.0.0.9').name,
         '设备C',
@@ -226,8 +231,10 @@ void main() {
       // 本机端点端口持久化（对端要记住本机）。
       await state.setLanHttpPort(42000);
 
-      final reloaded =
-          SyncStateStore(preferences: prefs, secrets: MemorySyncSecretStore());
+      final reloaded = SyncStateStore(
+        preferences: prefs,
+        secrets: MemorySyncSecretStore(),
+      );
       await reloaded.init();
       expect(reloaded.manualPeers, hasLength(2));
       expect(

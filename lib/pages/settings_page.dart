@@ -152,11 +152,7 @@ class _SettingsPageState extends State<SettingsPage>
                     l10n,
                     updateProvider: updateProvider,
                   ),
-                  _dataSection(
-                    context,
-                    l10n,
-                    syncProvider: syncProvider,
-                  ),
+                  _dataSection(context, l10n, syncProvider: syncProvider),
                 ],
               ),
             ],
@@ -172,15 +168,16 @@ class _SettingsPageState extends State<SettingsPage>
       title: l10n.settingsAppearanceTitle,
       children: [
         Selector<
-            ThemeProvider,
-            ({
-              ThemeMode mode,
-              ColorBaseSource base,
-              SystemBaseColorSource systemColorSource,
-              bool pureBlack,
-              Color seed,
-              String? appFont,
-            })>(
+          ThemeProvider,
+          ({
+            ThemeMode mode,
+            ColorBaseSource base,
+            SystemBaseColorSource systemColorSource,
+            bool pureBlack,
+            Color seed,
+            String? appFont,
+          })
+        >(
           selector: (context, provider) => (
             mode: provider.themeMode,
             base: provider.baseColorSource,
@@ -215,10 +212,11 @@ class _SettingsPageState extends State<SettingsPage>
                   onChanged: (mode) {
                     // 传平台亮度：system 模式下立即按当前系统亮度生效。
                     context.read<ThemeProvider>().setThemeMode(
-                          mode,
-                          platformBrightness:
-                              MediaQuery.platformBrightnessOf(context),
-                        );
+                      mode,
+                      platformBrightness: MediaQuery.platformBrightnessOf(
+                        context,
+                      ),
+                    );
                   },
                 ),
                 // 基础配色（单选）：壁纸 / 自定义；封面取色见「封面」分区。
@@ -236,7 +234,7 @@ class _SettingsPageState extends State<SettingsPage>
                   options: [
                     (
                       ColorBaseSource.wallpaper,
-                      l10n.settingsBaseColorWallpaper
+                      l10n.settingsBaseColorWallpaper,
                     ),
                     (ColorBaseSource.custom, l10n.settingsBaseColorCustom),
                   ],
@@ -306,9 +304,8 @@ class _SettingsPageState extends State<SettingsPage>
             title: l10n.settingsFollowArtwork,
             subtitle: l10n.settingsFollowArtworkSubtitle,
             value: followArtworkEnabled,
-            onChanged: (value) => context
-                .read<ThemeProvider>()
-                .setFollowArtworkEnabled(value),
+            onChanged: (value) =>
+                context.read<ThemeProvider>().setFollowArtworkEnabled(value),
           ),
         ),
         // 默认封面：只作用于没有封面 / 远端加载失败的歌曲封面，
@@ -324,8 +321,8 @@ class _SettingsPageState extends State<SettingsPage>
               listenForChanges: false,
               size: 40,
               borderRadius: BorderRadius.circular(10),
-              memCacheWidth:
-                  (40 * MediaQuery.of(context).devicePixelRatio).round(),
+              memCacheWidth: (40 * MediaQuery.of(context).devicePixelRatio)
+                  .round(),
               fallbackIconSize: 20,
             ),
             onTap: () => unawaited(
@@ -408,20 +405,23 @@ class _SettingsPageState extends State<SettingsPage>
             selector: (context, settings) => settings.position,
             builder: (context, position, _) =>
                 SettingsChoiceRow<LibraryAddPosition>(
-              key: const Key('settingsLibraryAddPositionItem'),
-              icon: Icons.playlist_add_rounded,
-              title: l10n.settingsLibraryAddPosition,
-              subtitle: l10n.settingsLibraryAddPositionSubtitle,
-              value: position,
-              options: [
-                (LibraryAddPosition.top, l10n.settingsLibraryAddPositionTop),
-                (
-                  LibraryAddPosition.bottom,
-                  l10n.settingsLibraryAddPositionBottom,
+                  key: const Key('settingsLibraryAddPositionItem'),
+                  icon: Icons.playlist_add_rounded,
+                  title: l10n.settingsLibraryAddPosition,
+                  subtitle: l10n.settingsLibraryAddPositionSubtitle,
+                  value: position,
+                  options: [
+                    (
+                      LibraryAddPosition.top,
+                      l10n.settingsLibraryAddPositionTop,
+                    ),
+                    (
+                      LibraryAddPosition.bottom,
+                      l10n.settingsLibraryAddPositionBottom,
+                    ),
+                  ],
+                  onChanged: libraryAddSettings.setPosition,
                 ),
-              ],
-              onChanged: libraryAddSettings.setPosition,
-            ),
           ),
         // 音源默认音质：设置页唯一入口。
         if (sources != null)
@@ -592,10 +592,7 @@ class _SettingsPageState extends State<SettingsPage>
           icon: Icons.library_music_rounded,
           title: l10n.sourcesTitle,
           subtitle: l10n.settingsSourcesItemSubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const SourcesPage(),
-          ),
+          onTap: () => openSettingsSubPage(context, const SourcesPage()),
         ),
         // AI 推歌：配置与开启入口（模式生效后推荐流出在发现页）。
         SettingsNavTile(
@@ -603,10 +600,7 @@ class _SettingsPageState extends State<SettingsPage>
           icon: Icons.auto_awesome_rounded,
           title: l10n.aiDjTitle,
           subtitle: l10n.aiDjSettingsSubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const AiDjPage(),
-          ),
+          onTap: () => openSettingsSubPage(context, const AiDjPage()),
         ),
       ],
     );
@@ -629,10 +623,8 @@ class _SettingsPageState extends State<SettingsPage>
           icon: Icons.tune_rounded,
           title: l10n.settingsGeneralTitle,
           subtitle: l10n.settingsGeneralSubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const GeneralSettingsPage(),
-          ),
+          onTap: () =>
+              openSettingsSubPage(context, const GeneralSettingsPage()),
         ),
         // 快捷键：软件内 / 全局两组的总开关与绑定自定义。只在桌面平台显示
         // （移动端软件内快捷键与全局热键都不注册）。
@@ -642,10 +634,8 @@ class _SettingsPageState extends State<SettingsPage>
             icon: Icons.keyboard_rounded,
             title: l10n.settingsShortcutsTitle,
             subtitle: l10n.settingsShortcutsSubtitle,
-            onTap: () => openSettingsSubPage(
-              context,
-              const ShortcutSettingsPage(),
-            ),
+            onTap: () =>
+                openSettingsSubPage(context, const ShortcutSettingsPage()),
           ),
         // 关于与更新：版本 / 渠道 / 自动检查 / 下载安装。
         if (updateProvider != null)
@@ -654,10 +644,8 @@ class _SettingsPageState extends State<SettingsPage>
             icon: Icons.system_update_alt_rounded,
             title: l10n.settingsUpdateTitle,
             subtitle: _updateSubtitle(l10n, updateProvider),
-            onTap: () => openSettingsSubPage(
-              context,
-              const UpdateSettingsPage(),
-            ),
+            onTap: () =>
+                openSettingsSubPage(context, const UpdateSettingsPage()),
           ),
       ],
     );
@@ -677,10 +665,7 @@ class _SettingsPageState extends State<SettingsPage>
           icon: Icons.sd_storage_rounded,
           title: l10n.dataManagementTitle,
           subtitle: l10n.settingsDataSubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const DataSettingsPage(),
-          ),
+          onTap: () => openSettingsSubPage(context, const DataSettingsPage()),
         ),
         // 听歌统计：事件级采集（本机），播放次数 / 热力图 / 导出。
         // 采集开关留在数据子页（与缓存 / 导入导出同一处）。
@@ -689,10 +674,7 @@ class _SettingsPageState extends State<SettingsPage>
           icon: Icons.insights_rounded,
           title: l10n.statsTitle,
           subtitle: l10n.statsSettingsSubtitle,
-          onTap: () => openSettingsSubPage(
-            context,
-            const PlayStatisticsPage(),
-          ),
+          onTap: () => openSettingsSubPage(context, const PlayStatisticsPage()),
         ),
         if (syncProvider != null)
           SettingsNavTile(
@@ -700,10 +682,7 @@ class _SettingsPageState extends State<SettingsPage>
             icon: Icons.sync_rounded,
             title: l10n.settingsSyncTitle,
             subtitle: l10n.settingsSyncItemSubtitle,
-            onTap: () => openSettingsSubPage(
-              context,
-              const SyncSettingsPage(),
-            ),
+            onTap: () => openSettingsSubPage(context, const SyncSettingsPage()),
           ),
       ],
     );
@@ -752,7 +731,10 @@ class _SettingsPageState extends State<SettingsPage>
   /// 全局应用字体选择：来自设备已装字体（枚举见 SystemFontsService），
   /// null 表示系统默认；选择后经 ThemeProvider 立即重建全局主题。
   Future<void> _showAppFontPicker(
-      BuildContext context, AppLocalizations l10n, String? current) async {
+    BuildContext context,
+    AppLocalizations l10n,
+    String? current,
+  ) async {
     final themeProvider = context.read<ThemeProvider>();
     final choice = await showFontPickerSheet(
       context,

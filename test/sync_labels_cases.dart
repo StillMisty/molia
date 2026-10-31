@@ -28,16 +28,15 @@ void main() {
     expect(
       syncIssueText(
         zh,
-        const SyncIssue(
-          code: SyncIssueCode.applyFailed,
-          args: {'count': 3},
-        ),
+        const SyncIssue(code: SyncIssueCode.applyFailed, args: {'count': 3}),
       ),
       contains('3'),
     );
     // 对端标识缺失时用兜底文案，不出现空串 / null。
-    final peerText =
-        syncIssueText(zh, const SyncIssue(code: SyncIssueCode.peerReadFailed));
+    final peerText = syncIssueText(
+      zh,
+      const SyncIssue(code: SyncIssueCode.peerReadFailed),
+    );
     expect(peerText, contains(zh.syncPeerUnknown));
     expect(peerText, isNot(contains('null')));
   });
@@ -87,7 +86,8 @@ void main() {
     // 探测端口不可用：与广播失败同组，给手动地址 / WebDAV / 重试三条出路。
     expect(
       syncIssueActions(
-          const SyncIssue(code: SyncIssueCode.probePortUnavailable)),
+        const SyncIssue(code: SyncIssueCode.probePortUnavailable),
+      ),
       containsAll([
         SyncIssueAction.addManualPeer,
         SyncIssueAction.useWebdav,
@@ -108,23 +108,28 @@ void main() {
   });
 
   test('全不可达按传输分流：WebDAV 不给手动地址，局域网给', () {
-    final webdav = syncIssueActions(const SyncIssue(
-      code: SyncIssueCode.allPeersUnreachable,
-      args: {'transport': SyncTransportKind.webdav},
-    ));
+    final webdav = syncIssueActions(
+      const SyncIssue(
+        code: SyncIssueCode.allPeersUnreachable,
+        args: {'transport': SyncTransportKind.webdav},
+      ),
+    );
     expect(webdav, contains(SyncIssueAction.configureWebdav));
     expect(webdav, isNot(contains(SyncIssueAction.addManualPeer)));
 
-    final lan = syncIssueActions(const SyncIssue(
-      code: SyncIssueCode.allPeersUnreachable,
-      args: {'transport': SyncTransportKind.lan},
-    ));
+    final lan = syncIssueActions(
+      const SyncIssue(
+        code: SyncIssueCode.allPeersUnreachable,
+        args: {'transport': SyncTransportKind.lan},
+      ),
+    );
     expect(lan, contains(SyncIssueAction.addManualPeer));
 
     // 传输缺失（args 可能不带该参数）按局域网处理：至少给出手动地址这条路。
     expect(
       syncIssueActions(
-          const SyncIssue(code: SyncIssueCode.allPeersUnreachable)),
+        const SyncIssue(code: SyncIssueCode.allPeersUnreachable),
+      ),
       contains(SyncIssueAction.addManualPeer),
     );
   });
@@ -143,10 +148,7 @@ void main() {
       en.syncNearbyResultUnreachable,
       en.syncNearbyResultUnavailable,
     ]) {
-      expect(
-        text.toLowerCase(),
-        contains('keep molia open in the foreground'),
-      );
+      expect(text.toLowerCase(), contains('keep molia open in the foreground'));
       expect(text, contains('LAN access is granted'));
     }
   });
@@ -159,15 +161,14 @@ void main() {
       bool discoveryAvailable = true,
       bool onCellular = false,
       bool powerSaveActive = false,
-    }) =>
-        resolveSyncNearbyAvailability(
-          lanEnabled: lanEnabled,
-          permissionDenied: permissionDenied,
-          transportUnavailable: transportUnavailable,
-          discoveryAvailable: discoveryAvailable,
-          onCellular: onCellular,
-          powerSaveActive: powerSaveActive,
-        );
+    }) => resolveSyncNearbyAvailability(
+      lanEnabled: lanEnabled,
+      permissionDenied: permissionDenied,
+      transportUnavailable: transportUnavailable,
+      discoveryAvailable: discoveryAvailable,
+      onCellular: onCellular,
+      powerSaveActive: powerSaveActive,
+    );
 
     // 开关关闭只说「未开启」，不展开权限等后续原因。
     expect(
@@ -188,10 +189,7 @@ void main() {
       SyncNearbyAvailability.cellular,
       reason: '移动数据比省电更具体：先提示切 Wi-Fi',
     );
-    expect(
-      resolve(powerSaveActive: true),
-      SyncNearbyAvailability.powerSave,
-    );
+    expect(resolve(powerSaveActive: true), SyncNearbyAvailability.powerSave);
     expect(
       resolve(discoveryAvailable: false),
       SyncNearbyAvailability.discoveryUnavailable,
@@ -233,9 +231,11 @@ void main() {
     final en = _arb('app_en.arb');
     final zh = _arb('app_zh.arb');
     final keys = en.keys
-        .where((key) =>
-            !key.startsWith('@') &&
-            (key.startsWith('syncIssue') || key.startsWith('syncAction')))
+        .where(
+          (key) =>
+              !key.startsWith('@') &&
+              (key.startsWith('syncIssue') || key.startsWith('syncAction')),
+        )
         .toList();
     expect(keys, isNotEmpty);
     for (final key in keys) {

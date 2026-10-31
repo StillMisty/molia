@@ -15,14 +15,13 @@ void main() {
     required double windowWidth,
     bool desktopPlatform = true,
     double? railWidth,
-  }) =>
-      DesktopLayout(
-        isDesktopPlatform: desktopPlatform,
-        windowWidth: windowWidth,
-        // 栏宽默认取 M3E 导航轨主题折叠宽（判定不写死数值）。
-        railWidth: railWidth ?? M3ENavigationRailTheme.defaults.collapsedWidth,
-        child: const SizedBox.shrink(),
-      );
+  }) => DesktopLayout(
+    isDesktopPlatform: desktopPlatform,
+    windowWidth: windowWidth,
+    // 栏宽默认取 M3E 导航轨主题折叠宽（判定不写死数值）。
+    railWidth: railWidth ?? M3ENavigationRailTheme.defaults.collapsedWidth,
+    child: const SizedBox.shrink(),
+  );
 
   group('窗口宽语义', () {
     test('masterDetail（设置首屏两列）：899 关 / 900 开', () {
@@ -90,80 +89,73 @@ void main() {
   });
 
   group('解析与消费', () {
-    testWidgets(
-      '无壳层：of 按当前 context 回退解析（窗口宽 + 平台位）',
-      (tester) async {
-        tester.view.physicalSize = const Size(1200, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('无壳层：of 按当前 context 回退解析（窗口宽 + 平台位）', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        late DesktopLayout resolved;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
+      late DesktopLayout resolved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              resolved = DesktopLayout.of(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(resolved.windowWidth, 1200);
+      expect(resolved.isDesktopPlatform, isTrue, reason: 'variant 覆盖为 linux');
+      expect(resolved.masterDetail, isTrue);
+      expect(
+        resolved.railWidth,
+        M3ENavigationRailTheme.defaults.collapsedWidth,
+        reason: '无壳层回退：栏宽取 M3E 导航轨主题折叠宽',
+      );
+      expect(
+        M3ENavigationRailTheme.defaults.collapsedWidth,
+        96,
+        reason: '主题默认值（判定不写死数值）',
+      );
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+    testWidgets('无壳层：栏宽随 M3E 导航轨主题走（判定不硬编码 96）', (tester) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      late DesktopLayout resolved;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: M3ETheme(
+            data: M3EThemeData(
+              navigationRailTheme: const M3ENavigationRailTheme(
+                collapsedWidth: 200,
+              ),
+            ),
+            child: Builder(
               builder: (context) {
                 resolved = DesktopLayout.of(context);
                 return const SizedBox.shrink();
               },
             ),
           ),
-        );
+        ),
+      );
 
-        expect(resolved.windowWidth, 1200);
-        expect(resolved.isDesktopPlatform, isTrue, reason: 'variant 覆盖为 linux');
-        expect(resolved.masterDetail, isTrue);
-        expect(
-          resolved.railWidth,
-          M3ENavigationRailTheme.defaults.collapsedWidth,
-          reason: '无壳层回退：栏宽取 M3E 导航轨主题折叠宽',
-        );
-        expect(
-          M3ENavigationRailTheme.defaults.collapsedWidth,
-          96,
-          reason: '主题默认值（判定不写死数值）',
-        );
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.linux),
-    );
-
-    testWidgets(
-      '无壳层：栏宽随 M3E 导航轨主题走（判定不硬编码 96）',
-      (tester) async {
-        tester.view.physicalSize = const Size(1200, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        late DesktopLayout resolved;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: M3ETheme(
-              data: M3EThemeData(
-                navigationRailTheme:
-                    const M3ENavigationRailTheme(collapsedWidth: 200),
-              ),
-              child: Builder(
-                builder: (context) {
-                  resolved = DesktopLayout.of(context);
-                  return const SizedBox.shrink();
-                },
-              ),
-            ),
-          ),
-        );
-
-        // 1200 − 200 = 1000 ≥ 720：栏宽变化直接改变内容宽与判定输入。
-        expect(resolved.railWidth, 200);
-        expect(resolved.contentWidth, 1000);
-        expect(resolved.tableColumns, isTrue);
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.linux),
-    );
+      // 1200 − 200 = 1000 ≥ 720：栏宽变化直接改变内容宽与判定输入。
+      expect(resolved.railWidth, 200);
+      expect(resolved.contentWidth, 1000);
+      expect(resolved.tableColumns, isTrue);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
     testWidgets('壳层已解析：of 取最近 scope，不再看当前窗口宽', (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
@@ -195,38 +187,34 @@ void main() {
       expect(consumed.masterDetail, isFalse, reason: '页面只消费壳层解析值');
     });
 
-    testWidgets(
-      'scope：按当前 context 解析一次并包住子树',
-      (tester) async {
-        tester.view.physicalSize = const Size(1440, 800);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
+    testWidgets('scope：按当前 context 解析一次并包住子树', (tester) async {
+      tester.view.physicalSize = const Size(1440, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
 
-        late DesktopLayout consumed;
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Builder(
-              builder: (context) => DesktopLayout.scope(
-                context,
-                child: Builder(
-                  builder: (inner) {
-                    consumed = DesktopLayout.of(inner);
-                    return const SizedBox.shrink();
-                  },
-                ),
+      late DesktopLayout consumed;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => DesktopLayout.scope(
+              context,
+              child: Builder(
+                builder: (inner) {
+                  consumed = DesktopLayout.of(inner);
+                  return const SizedBox.shrink();
+                },
               ),
             ),
           ),
-        );
+        ),
+      );
 
-        expect(consumed.windowWidth, 1440);
-        expect(consumed.isDesktopPlatform, isTrue, reason: 'variant 覆盖为 linux');
-        expect(consumed.masterDetail, isTrue);
-      },
-      variant: TargetPlatformVariant.only(TargetPlatform.linux),
-    );
+      expect(consumed.windowWidth, 1440);
+      expect(consumed.isDesktopPlatform, isTrue, reason: 'variant 覆盖为 linux');
+      expect(consumed.masterDetail, isTrue);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
   });
 }

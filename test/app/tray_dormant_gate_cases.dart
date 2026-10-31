@@ -16,12 +16,14 @@ void main() {
 
   testWidgets('托盘隐藏卸载子树；恢复后重建（新元素）', (tester) async {
     var builds = 0;
-    await tester.pumpWidget(MaterialApp(
-      home: TrayDormantGate(
-        color: const Color(0xFF123456),
-        child: _CountedSubtree(onBuild: () => builds++),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TrayDormantGate(
+          color: const Color(0xFF123456),
+          child: _CountedSubtree(onBuild: () => builds++),
+        ),
       ),
-    ));
+    );
     expect(builds, 1);
 
     AppPresence.instance.markTrayHidden();
@@ -35,12 +37,14 @@ void main() {
 
   testWidgets('最小化不休眠：子树保持挂载', (tester) async {
     var builds = 0;
-    await tester.pumpWidget(MaterialApp(
-      home: TrayDormantGate(
-        color: const Color(0xFF123456),
-        child: _CountedSubtree(onBuild: () => builds++),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TrayDormantGate(
+          color: const Color(0xFF123456),
+          child: _CountedSubtree(onBuild: () => builds++),
+        ),
       ),
-    ));
+    );
 
     AppPresence.instance.markMinimized();
     await tester.pump();

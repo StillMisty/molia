@@ -93,20 +93,20 @@ class LyricsPresentation {
 
   @override
   int get hashCode => Object.hash(
-        trackId,
-        title,
-        line,
-        Object.hashAll(extended),
-        Object.hashAll(upcoming),
-        isPlaying,
-        hasLyrics,
-        words == null ? null : Object.hashAll(words!),
-        positionMs,
-        positionAtEpochMs,
-        scrollFollowsSinging,
-        lineStartMs,
-        lineEndMs,
-      );
+    trackId,
+    title,
+    line,
+    Object.hashAll(extended),
+    Object.hashAll(upcoming),
+    isPlaying,
+    hasLyrics,
+    words == null ? null : Object.hashAll(words!),
+    positionMs,
+    positionAtEpochMs,
+    scrollFollowsSinging,
+    lineStartMs,
+    lineEndMs,
+  );
 }
 
 /// 桌面悬浮窗控制条可触发的动作。

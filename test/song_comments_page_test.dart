@@ -60,7 +60,7 @@ void main() {
   void build({
     SourceCapabilities caps = supportedCaps,
     Future<CommentPage> Function(CommentKind kind, int page, int limit)?
-        onComments,
+    onComments,
   }) {
     source = FakeMusicSource('wy', capabilities: caps)
       ..onComments =
@@ -101,9 +101,7 @@ void main() {
     build(
       onComments: (kind, page, limit) async => CommentPage.fromPage(
         kind: kind,
-        items: [
-          commentOf('a', text: '第一条评论', quoted: quoted),
-        ],
+        items: [commentOf('a', text: '第一条评论', quoted: quoted)],
         page: page,
         limit: CommentsProvider.pageSize,
         total: 12,
@@ -167,15 +165,17 @@ void main() {
 
   testWidgets('错误态：展示 l10n 文案（不展示原始异常）+ 下拉恢复', (tester) async {
     var shouldFail = true;
-    build(onComments: (kind, page, limit) async {
-      if (shouldFail) {
-        throw const SourceFailure(
-          kind: FailureKind.network,
-          message: 'SocketException: boom',
-        );
-      }
-      return pageOf(kind, page);
-    });
+    build(
+      onComments: (kind, page, limit) async {
+        if (shouldFail) {
+          throw const SourceFailure(
+            kind: FailureKind.network,
+            message: 'SocketException: boom',
+          );
+        }
+        return pageOf(kind, page);
+      },
+    );
     await pumpPage(tester);
 
     expect(find.text('评论加载失败'), findsOneWidget);
@@ -223,23 +223,24 @@ void main() {
 
   testWidgets('加载更多失败：保留已加载项 + 底部重试', (tester) async {
     var failPage2 = true;
-    build(onComments: (kind, page, limit) async {
-      if (page == 2 && failPage2) {
-        throw const SourceFailure(kind: FailureKind.timeout, message: 'timeout');
-      }
-      return pageOf(kind, page);
-    });
+    build(
+      onComments: (kind, page, limit) async {
+        if (page == 2 && failPage2) {
+          throw const SourceFailure(
+            kind: FailureKind.timeout,
+            message: 'timeout',
+          );
+        }
+        return pageOf(kind, page);
+      },
+    );
     await pumpPage(tester);
 
     await tester.fling(find.byType(ListView), const Offset(0, -4000), 4000);
     await tester.pumpAndSettle();
 
     expect(find.text('加载更多评论失败'), findsOneWidget);
-    expect(
-      find.textContaining('hot 第 1 页'),
-      findsWidgets,
-      reason: '保留已加载项',
-    );
+    expect(find.textContaining('hot 第 1 页'), findsWidgets, reason: '保留已加载项');
 
     failPage2 = false;
     await tester.tap(find.byKey(const Key('commentsLoadMoreRetry')));
@@ -262,9 +263,6 @@ void main() {
       commentTimeLabel(l10n, now.subtract(const Duration(hours: 3))),
       '3 小时前',
     );
-    expect(
-      commentTimeLabel(l10n, DateTime(2024, 1, 2, 3, 4)),
-      '2024-01-02',
-    );
+    expect(commentTimeLabel(l10n, DateTime(2024, 1, 2, 3, 4)), '2024-01-02');
   });
 }

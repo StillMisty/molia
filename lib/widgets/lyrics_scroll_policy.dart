@@ -35,11 +35,11 @@ double tailSpace({
   required double upwardBias,
 }) {
   if (viewport <= 0) return 400.0;
-  final visibleHeight = (viewport - topOverlay - bottomOverlay).clamp(0.0, viewport);
-  return (visibleHeight / 2.0) +
-      bottomOverlay +
-      viewport * upwardBias +
-      8.0;
+  final visibleHeight = (viewport - topOverlay - bottomOverlay).clamp(
+    0.0,
+    viewport,
+  );
+  return (visibleHeight / 2.0) + bottomOverlay + viewport * upwardBias + 8.0;
 }
 
 /// 目标偏移夹取到可滚动范围。
@@ -47,8 +47,7 @@ double clampScrollOffset({
   required double target,
   required double minScrollExtent,
   required double maxScrollExtent,
-}) =>
-    target.clamp(minScrollExtent, maxScrollExtent);
+}) => target.clamp(minScrollExtent, maxScrollExtent);
 
 /// 激活行锚定：把目标（主行文本块）的顶边放到视口 [anchorFraction] 处的
 /// 滚动偏移。
@@ -62,13 +61,11 @@ double anchoredLineOffset({
   required double leadingOffset,
   required double viewport,
   required double anchorFraction,
-}) =>
-    leadingOffset - anchorFraction * viewport;
+}) => leadingOffset - anchorFraction * viewport;
 
 /// 是否需要跳转：位移在 [deadband]（像素）以内不动，避免抖动。
 bool shouldScrollTo({
   required double current,
   required double target,
   double deadband = 1.0,
-}) =>
-    (current - target).abs() > deadband;
+}) => (current - target).abs() > deadband;

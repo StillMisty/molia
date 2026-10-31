@@ -84,8 +84,8 @@ class AiRecommendationService implements AiRecommendationGenerator {
     AiPromptLanguage Function()? promptLanguage,
     this.resolveConcurrency = 3,
     this.resolveHedgeDelay = const Duration(milliseconds: 250),
-  })  : assert(!resolveHedgeDelay.isNegative),
-        _promptLanguage = promptLanguage ?? (() => AiPromptLanguage.zh);
+  }) : assert(!resolveHedgeDelay.isNegative),
+       _promptLanguage = promptLanguage ?? (() => AiPromptLanguage.zh);
 
   final LlmClient _llm;
   final CatalogService _catalog;
@@ -126,8 +126,8 @@ class AiRecommendationService implements AiRecommendationGenerator {
     return AiUpstreamSummary(
       recentEvents:
           preferences.sections.contains(AiUpstreamSection.recentEvents)
-              ? profile.recentEvents.length
-              : 0,
+          ? profile.recentEvents.length
+          : 0,
       topArtists: profile.topArtists.length,
       topTracks: profile.topTracks.length,
       exclusions: profile.exclusionLabels.length,
@@ -179,12 +179,14 @@ class AiRecommendationService implements AiRecommendationGenerator {
   }) async {
     final startedAt = DateTime.now();
     void progress(AiDjPhase phase, {int done = 0, int total = 0}) {
-      onProgress?.call(AiDjProgress(
-        phase: phase,
-        done: done,
-        total: total,
-        startedAt: startedAt,
-      ));
+      onProgress?.call(
+        AiDjProgress(
+          phase: phase,
+          done: done,
+          total: total,
+          startedAt: startedAt,
+        ),
+      );
     }
 
     progress(AiDjPhase.profile);
@@ -267,20 +269,24 @@ class AiRecommendationService implements AiRecommendationGenerator {
   }) async {
     if (batch.unresolved.isEmpty) return batch;
     final startedAt = DateTime.now();
-    onProgress?.call(AiDjProgress(
-      phase: AiDjPhase.resolving,
-      total: batch.unresolved.length,
-      startedAt: startedAt,
-    ));
+    onProgress?.call(
+      AiDjProgress(
+        phase: AiDjPhase.resolving,
+        total: batch.unresolved.length,
+        startedAt: startedAt,
+      ),
+    );
     final resolution = await _resolveAll(
       batch.unresolved,
       cancelToken: cancelToken,
-      onResolved: (done) => onProgress?.call(AiDjProgress(
-        phase: AiDjPhase.resolving,
-        done: done,
-        total: batch.unresolved.length,
-        startedAt: startedAt,
-      )),
+      onResolved: (done) => onProgress?.call(
+        AiDjProgress(
+          phase: AiDjPhase.resolving,
+          done: done,
+          total: batch.unresolved.length,
+          startedAt: startedAt,
+        ),
+      ),
     );
     _checkCancelled(cancelToken);
     final seen = {for (final item in batch.items) item.track.id.uri};
@@ -289,10 +295,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
       for (final item in resolution.resolved)
         if (seen.add(item.track.id.uri)) item,
     ];
-    return batch.copyWith(
-      items: items,
-      unresolved: resolution.unresolved,
-    );
+    return batch.copyWith(items: items, unresolved: resolution.unresolved);
   }
 
   /// 提示词里时段/来源/反馈/本批排除的展示上限（token 预算）。
@@ -332,14 +335,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
       if (summary.playCount == 0) {
         buffer.writeln('${copy.summaryLabel} ${copy.noListeningData}');
       } else {
-        buffer.writeln('${copy.summaryLabel} ${[
-          '${copy.summaryPlays} ${summary.playCount}',
-          '${copy.summaryQualified} ${summary.qualifiedPlayCount}',
-          '${copy.summaryCompletion} ${_percent(summary.completionRate)}',
-          '${copy.summarySkip} ${_percent(summary.skipRate)}',
-          '${copy.summaryDuration} ${copy.durationText(summary.totalListenedMs)}',
-          '${copy.summaryTracks} ${summary.uniqueTrackCount}',
-        ].join(copy.fieldSeparator)}');
+        buffer.writeln(
+          '${copy.summaryLabel} ${['${copy.summaryPlays} ${summary.playCount}', '${copy.summaryQualified} ${summary.qualifiedPlayCount}', '${copy.summaryCompletion} ${_percent(summary.completionRate)}', '${copy.summarySkip} ${_percent(summary.skipRate)}', '${copy.summaryDuration} ${copy.durationText(summary.totalListenedMs)}', '${copy.summaryTracks} ${summary.uniqueTrackCount}'].join(copy.fieldSeparator)}',
+        );
       }
     }
 
@@ -347,26 +345,19 @@ class AiRecommendationService implements AiRecommendationGenerator {
     if (preferences.styles.isNotEmpty) {
       preferenceParts.add(
         '${copy.preferencesStyles} '
-        '${[
-          for (final style in preferences.styles) copy.styleText(style)
-        ].join('/')}',
+        '${[for (final style in preferences.styles) copy.styleText(style)].join('/')}',
       );
     }
     if (preferences.scenes.isNotEmpty) {
       preferenceParts.add(
         '${copy.preferencesScenes} '
-        '${[
-          for (final scene in preferences.scenes) copy.sceneText(scene)
-        ].join('/')}',
+        '${[for (final scene in preferences.scenes) copy.sceneText(scene)].join('/')}',
       );
     }
     if (preferences.languages.isNotEmpty) {
       preferenceParts.add(
         '${copy.preferencesLanguages} '
-        '${[
-          for (final language in preferences.languages)
-            copy.languageText(language)
-        ].join('/')}',
+        '${[for (final language in preferences.languages) copy.languageText(language)].join('/')}',
       );
     }
     if (preferences.era != kAiEraAny) {
@@ -384,30 +375,21 @@ class AiRecommendationService implements AiRecommendationGenerator {
     );
 
     if (sections.contains(AiUpstreamSection.topArtists)) {
-      _writeSection(
-        buffer,
-        copy.topArtistsLabel,
-        [
-          for (final entry in profile.topArtists)
-            _artistCount(entry.artist, entry.playCount),
-        ],
-        copy.itemSeparator,
-      );
+      _writeSection(buffer, copy.topArtistsLabel, [
+        for (final entry in profile.topArtists)
+          _artistCount(entry.artist, entry.playCount),
+      ], copy.itemSeparator);
     }
     if (sections.contains(AiUpstreamSection.topTracks)) {
-      _writeSection(
-        buffer,
-        copy.topTracksLabel,
-        [
-          for (final entry in profile.topTracks)
-            _song(entry.title, entry.artist, detail: '${entry.playCount}'),
-        ],
-        copy.itemSeparator,
-      );
+      _writeSection(buffer, copy.topTracksLabel, [
+        for (final entry in profile.topTracks)
+          _song(entry.title, entry.artist, detail: '${entry.playCount}'),
+      ], copy.itemSeparator);
     }
     if (sections.contains(AiUpstreamSection.timeAndSource)) {
       if (profile.byWeekdayHour.isNotEmpty) {
-        final topSlots = [...profile.byWeekdayHour]..sort((a, b) {
+        final topSlots = [...profile.byWeekdayHour]
+          ..sort((a, b) {
             final byMinutes = b.listenedMs.compareTo(a.listenedMs);
             if (byMinutes != 0) return byMinutes;
             final byDay = a.weekday.compareTo(b.weekday);
@@ -418,19 +400,10 @@ class AiRecommendationService implements AiRecommendationGenerator {
             final byDay = a.weekday.compareTo(b.weekday);
             return byDay != 0 ? byDay : a.hour.compareTo(b.hour);
           });
-        _writeSection(
-          buffer,
-          copy.listeningHoursLabel,
-          [
-            for (final slot in slots)
-              copy.timeSlot(
-                slot.weekday,
-                slot.hour,
-                slot.listenedMs ~/ 60000,
-              ),
-          ],
-          copy.itemSeparator,
-        );
+        _writeSection(buffer, copy.listeningHoursLabel, [
+          for (final slot in slots)
+            copy.timeSlot(slot.weekday, slot.hour, slot.listenedMs ~/ 60000),
+        ], copy.itemSeparator);
       }
       final sourceItems = <String>[];
       for (final entry in profile.sources.take(promptSourceLimit)) {
@@ -438,31 +411,17 @@ class AiRecommendationService implements AiRecommendationGenerator {
         if (key.isEmpty) continue;
         sourceItems.add('$key(${copy.minutesText(entry.listenedMs ~/ 60000)})');
       }
-      _writeSection(
-        buffer,
-        copy.sourcesLabel,
-        sourceItems,
-        copy.itemSeparator,
-      );
+      _writeSection(buffer, copy.sourcesLabel, sourceItems, copy.itemSeparator);
     }
     if (sections.contains(AiUpstreamSection.favorites)) {
-      _writeSection(
-        buffer,
-        copy.favoritesLabel,
-        [
-          for (final entry in profile.favorites)
-            _song(entry.title, entry.artist),
-        ],
-        copy.itemSeparator,
-      );
+      _writeSection(buffer, copy.favoritesLabel, [
+        for (final entry in profile.favorites) _song(entry.title, entry.artist),
+      ], copy.itemSeparator);
     }
     if (sections.contains(AiUpstreamSection.playlists)) {
       final playlistItems = <String>[];
       for (final playlist in profile.playlists) {
-        final name = _text(
-          playlist.name,
-          maxLength: _promptPlaylistNameLimit,
-        );
+        final name = _text(playlist.name, maxLength: _promptPlaylistNameLimit);
         if (name.isEmpty) continue;
         final tracks = [
           for (final track in playlist.tracks) _song(track.title, track.artist),
@@ -478,31 +437,28 @@ class AiRecommendationService implements AiRecommendationGenerator {
       );
     }
     if (sections.contains(AiUpstreamSection.recentEvents)) {
-      _writeSection(
-        buffer,
-        copy.recentPlaysLabel,
-        [
-          for (final event in profile.recentEvents
-              .take(TasteProfileBuilder.recentEventLimit))
-            _song(
-              event.title,
-              event.artist,
-              detail: copy.recentDetail(
-                event.listenedMs ~/ 1000,
-                event.endReason == PlayEventEndReason.completed,
-              ),
+      _writeSection(buffer, copy.recentPlaysLabel, [
+        for (final event in profile.recentEvents.take(
+          TasteProfileBuilder.recentEventLimit,
+        ))
+          _song(
+            event.title,
+            event.artist,
+            detail: copy.recentDetail(
+              event.listenedMs ~/ 1000,
+              event.endReason == PlayEventEndReason.completed,
             ),
-        ],
-        copy.itemSeparator,
-      );
+          ),
+      ], copy.itemSeparator);
     }
     if (sections.contains(AiUpstreamSection.listenedExclusions)) {
       _writeSection(
         buffer,
         copy.alreadyHeardLabel,
         _cleanLabels(
-          profile.exclusionLabels
-              .take(TasteProfileBuilder.exclusionPromptLimit),
+          profile.exclusionLabels.take(
+            TasteProfileBuilder.exclusionPromptLimit,
+          ),
         ),
         copy.itemSeparator,
       );
@@ -570,16 +526,13 @@ class AiRecommendationService implements AiRecommendationGenerator {
     return name.isEmpty ? '' : '$name($playCount)';
   }
 
-  static String _song(
-    String title,
-    String artist, {
-    String detail = '',
-  }) {
+  static String _song(String title, String artist, {String detail = ''}) {
     final cleanTitle = _text(title, maxLength: _promptTitleLimit);
     if (cleanTitle.isEmpty) return '';
     final cleanArtist = _text(artist, maxLength: _promptArtistLimit);
-    final base =
-        cleanArtist.isEmpty ? cleanTitle : '$cleanTitle - $cleanArtist';
+    final base = cleanArtist.isEmpty
+        ? cleanTitle
+        : '$cleanTitle - $cleanArtist';
     return detail.isEmpty ? base : '$base($detail)';
   }
 
@@ -627,10 +580,10 @@ class AiRecommendationService implements AiRecommendationGenerator {
     // 整批失败（JSON Output 保证语法，不保证字段名）。
     var entries = decoded is Map
         ? (decoded['songs'] ??
-            decoded['recommendations'] ??
-            decoded['tracks'] ??
-            decoded['items'] ??
-            decoded['data'])
+              decoded['recommendations'] ??
+              decoded['tracks'] ??
+              decoded['items'] ??
+              decoded['data'])
         : decoded;
     if (entries is Map) {
       entries = entries['songs'] ?? entries['items'] ?? entries;
@@ -655,11 +608,13 @@ class AiRecommendationService implements AiRecommendationGenerator {
           entry['singer'],
           entry['artists'],
         ].map(textOf).firstWhere((value) => value.isNotEmpty, orElse: () => '');
-        result.add(AiRecommendation(
-          title: title,
-          artist: artist,
-          reason: textOf(entry['reason']),
-        ));
+        result.add(
+          AiRecommendation(
+            title: title,
+            artist: artist,
+            reason: textOf(entry['reason']),
+          ),
+        );
       }
       if (result.length >= limit) break;
     }
@@ -681,10 +636,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
       aiDjSearchableSourcesInPageOrder(_registry.descriptors);
 
   Future<
-      ({
-        List<ResolvedRecommendation> resolved,
-        List<AiRecommendation> unresolved,
-      })> _resolveAll(
+    ({List<ResolvedRecommendation> resolved, List<AiRecommendation> unresolved})
+  >
+  _resolveAll(
     List<AiRecommendation> recommendations, {
     AiGenerationCancelToken? cancelToken,
     void Function(int done)? onResolved,
@@ -714,20 +668,20 @@ class AiRecommendationService implements AiRecommendationGenerator {
         if (match == null) {
           unresolved.add(chunk[j]);
         } else {
-          resolved.add(ResolvedRecommendation(
-            source: chunk[j],
-            track: match.track,
-            sourceName: match.sourceName,
-          ));
+          resolved.add(
+            ResolvedRecommendation(
+              source: chunk[j],
+              track: match.track,
+              sourceName: match.sourceName,
+            ),
+          );
         }
       }
-      onResolved
-          ?.call(math.min(i + resolveConcurrency, recommendations.length));
+      onResolved?.call(
+        math.min(i + resolveConcurrency, recommendations.length),
+      );
     }
-    return (
-      resolved: resolved,
-      unresolved: unresolved,
-    );
+    return (resolved: resolved, unresolved: unresolved);
   }
 
   /// 按音源页顺序找歌：对冲启动 + 严格优先级接受。
@@ -745,12 +699,15 @@ class AiRecommendationService implements AiRecommendationGenerator {
     List<SourceDescriptor> sources,
   ) {
     if (sources.isEmpty) return Future.value(null);
-    final keyword = [recommendation.title, recommendation.artist]
-        .where((value) => value.trim().isNotEmpty)
-        .join(' ');
+    final keyword = [
+      recommendation.title,
+      recommendation.artist,
+    ].where((value) => value.trim().isNotEmpty).join(' ');
 
-    final results =
-        List<({Track track, String sourceName})?>.filled(sources.length, null);
+    final results = List<({Track track, String sourceName})?>.filled(
+      sources.length,
+      null,
+    );
     final completed = List<bool>.filled(sources.length, false);
     final completer = Completer<({Track track, String sourceName})?>();
     Timer? hedge;
@@ -882,8 +839,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
     var bestScore = 0.0;
     for (final track in items) {
       final title = normalizeAiText(track.title);
-      final artist =
-          normalizeAiText(track.artists.map((a) => a.name).join(' '));
+      final artist = normalizeAiText(
+        track.artists.map((a) => a.name).join(' '),
+      );
       var score = 0.0;
       if (title == targetTitle) {
         score += 0.6;

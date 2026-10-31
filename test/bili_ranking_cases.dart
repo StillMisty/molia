@@ -32,9 +32,7 @@ void main() {
 
   tearDown(() => BuiltinSearch.transport = originalTransport);
 
-  MockDioAdapter install({
-    bool fail = false,
-  }) {
+  MockDioAdapter install({bool fail = false}) {
     final adapter = MockDioAdapter((options) async {
       final sessionResponse = biliSessionResponse(options);
       if (sessionResponse != null) return sessionResponse;
@@ -48,8 +46,9 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    BuiltinSearch.transport =
-        BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
@@ -94,8 +93,11 @@ void main() {
     );
     expect(request.uri.queryParameters['rid'], '3');
     expect(request.uri.queryParameters['day'], '3');
-    expect(request.uri.queryParameters.containsKey('wts'), isFalse,
-        reason: '榜单接口不需要 WBI');
+    expect(
+      request.uri.queryParameters.containsKey('wts'),
+      isFalse,
+      reason: '榜单接口不需要 WBI',
+    );
   });
 
   test('二次调用命中缓存，不重复请求', () async {
@@ -126,8 +128,11 @@ void main() {
     await expectLater(
       BiliRanking.leaderboardTracks('4:3'),
       throwsA(
-        isA<SourceFailure>()
-            .having((e) => e.kind, 'kind', FailureKind.unsupported),
+        isA<SourceFailure>().having(
+          (e) => e.kind,
+          'kind',
+          FailureKind.unsupported,
+        ),
       ),
     );
   });

@@ -120,10 +120,7 @@ class DiscoverTags {
   /// 分类目录（用于「全部标签」弹层）。
   final List<DiscoverTagCategory> categories;
 
-  const DiscoverTags({
-    this.hotTags = const [],
-    this.categories = const [],
-  });
+  const DiscoverTags({this.hotTags = const [], this.categories = const []});
 
   bool get isEmpty => hotTags.isEmpty && categories.isEmpty;
 }

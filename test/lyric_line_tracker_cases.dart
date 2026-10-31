@@ -24,20 +24,19 @@ void main() {
     bool synced = true,
     UnsyncedBehavior unsynced = UnsyncedBehavior.title,
     int maxLines = 3,
-  }) =>
-      tracker.track(
-        lines: lines,
-        translations: translations,
-        romas: romas,
-        isSynced: synced,
-        position: position,
-        title: title,
-        offsetMs: offsetMs,
-        translationEnabled: translation,
-        romaEnabled: roma,
-        unsyncedBehavior: unsynced,
-        maxLines: maxLines,
-      );
+  }) => tracker.track(
+    lines: lines,
+    translations: translations,
+    romas: romas,
+    isSynced: synced,
+    position: position,
+    title: title,
+    offsetMs: offsetMs,
+    translationEnabled: translation,
+    romaEnabled: roma,
+    unsyncedBehavior: unsynced,
+    maxLines: maxLines,
+  );
 
   test('同步歌词：按 position 命中当前行与后续行', () {
     final result = track(const Duration(seconds: 6));
@@ -67,18 +66,18 @@ void main() {
       const LyricLine(Duration(seconds: 5), 'five'),
     ];
     TrackedLine trackWorded(Duration position) => tracker.track(
-          lines: wordedLines,
-          translations: const ['', ''],
-          romas: const ['', ''],
-          isSynced: true,
-          position: position,
-          title: title,
-          offsetMs: 0,
-          translationEnabled: false,
-          romaEnabled: false,
-          unsyncedBehavior: UnsyncedBehavior.title,
-          maxLines: 3,
-        );
+      lines: wordedLines,
+      translations: const ['', ''],
+      romas: const ['', ''],
+      isSynced: true,
+      position: position,
+      title: title,
+      offsetMs: 0,
+      translationEnabled: false,
+      romaEnabled: false,
+      unsyncedBehavior: UnsyncedBehavior.title,
+      maxLines: 3,
+    );
 
     final worded = trackWorded(const Duration(seconds: 3));
     expect(worded.index, 0);
@@ -106,10 +105,10 @@ void main() {
 
     // 预览可占满 maxLines（没有当前行占位）；maxLines=1 时显示第一句。
     expect(track(const Duration(seconds: 1), maxLines: 1).upcoming, ['two']);
-    expect(
-      track(const Duration(seconds: 1), maxLines: 2).upcoming,
-      ['two', 'five'],
-    );
+    expect(track(const Duration(seconds: 1), maxLines: 2).upcoming, [
+      'two',
+      'five',
+    ]);
   });
 
   test('正值偏移让歌词提前显示', () {
@@ -121,8 +120,11 @@ void main() {
     expect(track(const Duration(seconds: 5)).extended, ['五']);
     expect(track(const Duration(seconds: 5), roma: true).extended, ['五', 'go']);
     expect(
-      track(const Duration(seconds: 5), translation: false, roma: true)
-          .extended,
+      track(
+        const Duration(seconds: 5),
+        translation: false,
+        roma: true,
+      ).extended,
       ['go'],
     );
     expect(track(const Duration(seconds: 11)).extended, isEmpty);
@@ -130,10 +132,7 @@ void main() {
 
   test('maxLines 控制后续行数量（1 = 只显示当前行）', () {
     expect(track(const Duration(seconds: 6), maxLines: 1).upcoming, isEmpty);
-    expect(
-      track(const Duration(seconds: 6), maxLines: 2).upcoming,
-      ['ten'],
-    );
+    expect(track(const Duration(seconds: 6), maxLines: 2).upcoming, ['ten']);
   });
 
   test('未同步歌词：按策略显示歌名 / 隐藏 / 首行', () {

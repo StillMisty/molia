@@ -53,7 +53,7 @@ class LibraryWriteEngine {
     this._journal,
     this._addToTop,
     this._beforeWrite,
-  })  : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
+  }) : _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final MoliaDatabase Function() _databaseProvider;
   final SyncStampIssuer _stamps;
@@ -104,7 +104,9 @@ class LibraryWriteEngine {
     final version = _nextVersion();
     final raw = jsonEncode(entry.raw);
     await db.transaction(() async {
-      await db.into(db.playHistory).insert(
+      await db
+          .into(db.playHistory)
+          .insert(
             PlayHistoryCompanion.insert(
               sourceKey: entry.sourceKey,
               songId: entry.songId,
@@ -186,20 +188,22 @@ class LibraryWriteEngine {
     for (final entry in entries) {
       final version = _nextVersion();
       final raw = jsonEncode(entry.raw);
-      rows.add(PlayHistoryCompanion.insert(
-        sourceKey: entry.sourceKey,
-        songId: entry.songId,
-        title: entry.title,
-        artist: Value(entry.artist),
-        album: Value(entry.album),
-        coverUrl: Value(entry.coverUrl),
-        durationMs: Value(entry.durationMs),
-        raw: Value(raw),
-        playedAt: entry.playedAt,
-        versionPhysical: Value(version.physical),
-        versionCounter: Value(version.counter),
-        deviceId: Value(version.deviceId),
-      ));
+      rows.add(
+        PlayHistoryCompanion.insert(
+          sourceKey: entry.sourceKey,
+          songId: entry.songId,
+          title: entry.title,
+          artist: Value(entry.artist),
+          album: Value(entry.album),
+          coverUrl: Value(entry.coverUrl),
+          durationMs: Value(entry.durationMs),
+          raw: Value(raw),
+          playedAt: entry.playedAt,
+          versionPhysical: Value(version.physical),
+          versionCounter: Value(version.counter),
+          deviceId: Value(version.deviceId),
+        ),
+      );
       journalChanges.add((
         category: SyncCategory.history,
         record: _historySyncRecord(
@@ -217,11 +221,13 @@ class LibraryWriteEngine {
       ));
     }
     await db.transaction(() async {
-      await db.batch((batch) => batch.insertAll(
-            db.playHistory,
-            rows,
-            mode: InsertMode.insertOrReplace,
-          ));
+      await db.batch(
+        (batch) => batch.insertAll(
+          db.playHistory,
+          rows,
+          mode: InsertMode.insertOrReplace,
+        ),
+      );
       for (final entry in entries) {
         await _clearHistoryTombstone(db, entry.sourceKey, entry.songId);
       }
@@ -236,10 +242,11 @@ class LibraryWriteEngine {
     await _ensureReady();
     final db = _db;
     await db.transaction(() async {
-      final removed = await (db.delete(db.playHistory)
-            ..where((t) =>
-                t.sourceKey.equals(sourceKey) & t.songId.equals(songId)))
-          .go();
+      final removed =
+          await (db.delete(db.playHistory)..where(
+                (t) => t.sourceKey.equals(sourceKey) & t.songId.equals(songId),
+              ))
+              .go();
       if (removed > 0) {
         await _recordTombstone(
           db,
@@ -262,11 +269,13 @@ class LibraryWriteEngine {
     await db.transaction(() async {
       final tombstones = <({String key, SyncVersion version})>[];
       for (final key in keys) {
-        final count = await (db.delete(db.playHistory)
-              ..where((t) =>
-                  t.sourceKey.equals(key.sourceKey) &
-                  t.songId.equals(key.songId)))
-            .go();
+        final count =
+            await (db.delete(db.playHistory)..where(
+                  (t) =>
+                      t.sourceKey.equals(key.sourceKey) &
+                      t.songId.equals(key.songId),
+                ))
+                .go();
         removed += count;
         if (count > 0) {
           tombstones.add((
@@ -301,32 +310,38 @@ class LibraryWriteEngine {
     final raw = jsonEncode(replacement.raw);
     var updated = 0;
     await db.transaction(() async {
-      final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+      final sameKey =
+          replacement.sourceKey == oldKey.sourceKey &&
           replacement.songId == oldKey.songId;
       if (!sameKey) {
-        await (db.delete(db.playHistory)
-              ..where((t) =>
+        await (db.delete(db.playHistory)..where(
+              (t) =>
                   t.sourceKey.equals(replacement.sourceKey) &
-                  t.songId.equals(replacement.songId)))
+                  t.songId.equals(replacement.songId),
+            ))
             .go();
       }
-      updated = await (db.update(db.playHistory)
-            ..where((t) =>
-                t.sourceKey.equals(oldKey.sourceKey) &
-                t.songId.equals(oldKey.songId)))
-          .write(PlayHistoryCompanion(
-        sourceKey: Value(replacement.sourceKey),
-        songId: Value(replacement.songId),
-        title: Value(replacement.title),
-        artist: Value(replacement.artist),
-        album: Value(replacement.album),
-        coverUrl: Value(replacement.coverUrl),
-        durationMs: Value(replacement.durationMs),
-        raw: Value(raw),
-        versionPhysical: Value(version.physical),
-        versionCounter: Value(version.counter),
-        deviceId: Value(version.deviceId),
-      ));
+      updated =
+          await (db.update(db.playHistory)..where(
+                (t) =>
+                    t.sourceKey.equals(oldKey.sourceKey) &
+                    t.songId.equals(oldKey.songId),
+              ))
+              .write(
+                PlayHistoryCompanion(
+                  sourceKey: Value(replacement.sourceKey),
+                  songId: Value(replacement.songId),
+                  title: Value(replacement.title),
+                  artist: Value(replacement.artist),
+                  album: Value(replacement.album),
+                  coverUrl: Value(replacement.coverUrl),
+                  durationMs: Value(replacement.durationMs),
+                  raw: Value(raw),
+                  versionPhysical: Value(version.physical),
+                  versionCounter: Value(version.counter),
+                  deviceId: Value(version.deviceId),
+                ),
+              );
       if (updated > 0) {
         await _appendJournal(
           db,
@@ -358,18 +373,13 @@ class LibraryWriteEngine {
       if (rows.isEmpty) return;
       await db.delete(db.playHistory).go();
       final deletedAt = _nowMs();
-      await _recordTombstones(
-        db,
-        SyncCategory.history.name,
-        [
-          for (final row in rows)
-            (
-              key: SyncRecordKeys.history(row.sourceKey, row.songId),
-              version: _nextVersion(),
-            ),
-        ],
-        deletedAt: deletedAt,
-      );
+      await _recordTombstones(db, SyncCategory.history.name, [
+        for (final row in rows)
+          (
+            key: SyncRecordKeys.history(row.sourceKey, row.songId),
+            version: _nextVersion(),
+          ),
+      ], deletedAt: deletedAt);
     });
     notifyChanged(const LibraryChange.history());
   }
@@ -384,7 +394,9 @@ class LibraryWriteEngine {
     final syncId = _newSyncId(name);
     late final int id;
     await db.transaction(() async {
-      id = await db.into(db.playlists).insert(
+      id = await db
+          .into(db.playlists)
+          .insert(
             PlaylistsCompanion.insert(
               name: name,
               createdAt: now,
@@ -418,18 +430,21 @@ class LibraryWriteEngine {
       // 必须版本递增）。
       final syncId = await _ensurePlaylistSyncId(db, id);
       final version = _nextVersion();
-      final updated = await (db.update(db.playlists)..where((t) => t.id.equals(id)))
-          .write(PlaylistsCompanion(
-        name: Value(name),
-        versionPhysical: Value(version.physical),
-        versionCounter: Value(version.counter),
-        deviceId: Value(version.deviceId),
-      ));
+      final updated =
+          await (db.update(db.playlists)..where((t) => t.id.equals(id))).write(
+            PlaylistsCompanion(
+              name: Value(name),
+              versionPhysical: Value(version.physical),
+              versionCounter: Value(version.counter),
+              deviceId: Value(version.deviceId),
+            ),
+          );
       if (updated > 0 && syncId.isNotEmpty) {
-        final row = await (db.select(db.playlists)
-              ..where((t) => t.id.equals(id))
-              ..limit(1))
-            .getSingle();
+        final row =
+            await (db.select(db.playlists)
+                  ..where((t) => t.id.equals(id))
+                  ..limit(1))
+                .getSingle();
         await _appendJournal(
           db,
           SyncCategory.playlists.name,
@@ -450,9 +465,9 @@ class LibraryWriteEngine {
     final db = _db;
     final syncId = await _playlistSyncIdById(db, id);
     await db.transaction(() async {
-      await (db.delete(db.playlistTracks)
-            ..where((t) => t.playlistId.equals(id)))
-          .go();
+      await (db.delete(
+        db.playlistTracks,
+      )..where((t) => t.playlistId.equals(id))).go();
       await (db.delete(db.playlists)..where((t) => t.id.equals(id))).go();
       if (syncId != null && syncId.isNotEmpty) {
         await _recordTombstone(
@@ -484,13 +499,16 @@ class LibraryWriteEngine {
   }) async {
     await _ensureReady();
     final db = _db;
-    final existing = await (db.select(db.playlistTracks)
-          ..where((t) =>
-              t.playlistId.equals(playlistId) &
-              t.sourceKey.equals(track.sourceKey) &
-              t.songId.equals(track.songId))
-          ..limit(1))
-        .getSingleOrNull();
+    final existing =
+        await (db.select(db.playlistTracks)
+              ..where(
+                (t) =>
+                    t.playlistId.equals(playlistId) &
+                    t.sourceKey.equals(track.sourceKey) &
+                    t.songId.equals(track.songId),
+              )
+              ..limit(1))
+            .getSingleOrNull();
     if (existing != null) return false;
 
     final nextOrder = await _insertionStart(
@@ -503,7 +521,9 @@ class LibraryWriteEngine {
     final version = _nextVersion();
     var inserted = 0;
     await db.transaction(() async {
-      inserted = await db.into(db.playlistTracks).insert(
+      inserted = await db
+          .into(db.playlistTracks)
+          .insert(
             PlaylistTracksCompanion.insert(
               playlistId: playlistId,
               sourceKey: track.sourceKey,
@@ -525,13 +545,16 @@ class LibraryWriteEngine {
       if (inserted > 0) {
         final syncId = await _ensurePlaylistSyncId(db, playlistId);
         if (syncId.isNotEmpty) {
-          final row = await (db.select(db.playlistTracks)
-                ..where((t) =>
-                    t.playlistId.equals(playlistId) &
-                    t.sourceKey.equals(track.sourceKey) &
-                    t.songId.equals(track.songId))
-                ..limit(1))
-              .getSingle();
+          final row =
+              await (db.select(db.playlistTracks)
+                    ..where(
+                      (t) =>
+                          t.playlistId.equals(playlistId) &
+                          t.sourceKey.equals(track.sourceKey) &
+                          t.songId.equals(track.songId),
+                    )
+                    ..limit(1))
+                  .getSingle();
           await _appendJournal(
             db,
             SyncCategory.playlistTracks.name,
@@ -541,14 +564,19 @@ class LibraryWriteEngine {
       }
     });
     if (inserted == 0) return false;
-    notifyChanged(favoriteChange
-        ? LibraryChange.favorites(
-            toggle: FavoriteToggle.add(
-              _trackAtPosition(track,
-                  playlistId: playlistId, sortOrder: nextOrder),
-            ),
-          )
-        : LibraryChange.playlistTracks(playlistId));
+    notifyChanged(
+      favoriteChange
+          ? LibraryChange.favorites(
+              toggle: FavoriteToggle.add(
+                _trackAtPosition(
+                  track,
+                  playlistId: playlistId,
+                  sortOrder: nextOrder,
+                ),
+              ),
+            )
+          : LibraryChange.playlistTracks(playlistId),
+    );
     return true;
   }
 
@@ -583,13 +611,12 @@ class LibraryWriteEngine {
   Future<({int added, List<PlaylistTrack> rows})> importTracks(
     int playlistId,
     List<PlaylistTrack> tracks,
-  ) =>
-      _insertPlaylistTracks(
-        playlistId,
-        tracks,
-        favoriteChange: false,
-        addToTop: false,
-      );
+  ) => _insertPlaylistTracks(
+    playlistId,
+    tracks,
+    favoriteChange: false,
+    addToTop: false,
+  );
 
   /// 批量插入列表曲目的唯一实现；返回实际新增数与落库行。
   Future<({int added, List<PlaylistTrack> rows})> _insertPlaylistTracks(
@@ -601,10 +628,14 @@ class LibraryWriteEngine {
     if (tracks.isEmpty) return (added: 0, rows: const <PlaylistTrack>[]);
     await _ensureReady();
     final db = _db;
-    final knownRows = await (db.selectOnly(db.playlistTracks)
-          ..addColumns([db.playlistTracks.sourceKey, db.playlistTracks.songId])
-          ..where(db.playlistTracks.playlistId.equals(playlistId)))
-        .get();
+    final knownRows =
+        await (db.selectOnly(db.playlistTracks)
+              ..addColumns([
+                db.playlistTracks.sourceKey,
+                db.playlistTracks.songId,
+              ])
+              ..where(db.playlistTracks.playlistId.equals(playlistId)))
+            .get();
     final known = {
       for (final row in knownRows)
         '${row.read(db.playlistTracks.sourceKey)}:'
@@ -624,39 +655,42 @@ class LibraryWriteEngine {
     );
     final rows = <PlaylistTracksCompanion>[];
     final inserted = <PlaylistTrack>[];
-    final pending = <({PlaylistTrack track, SyncVersion version, int sortOrder})>[];
+    final pending =
+        <({PlaylistTrack track, SyncVersion version, int sortOrder})>[];
     for (final track in fresh) {
       final version = _nextVersion();
       final order = nextOrder++;
-      rows.add(PlaylistTracksCompanion.insert(
-        playlistId: playlistId,
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        title: track.title,
-        artist: Value(track.artist),
-        album: Value(track.album),
-        coverUrl: Value(track.coverUrl),
-        durationMs: Value(track.durationMs),
-        raw: Value(jsonEncode(track.raw)),
-        addedAt: track.addedAt,
-        sortOrder: Value(order),
-        versionPhysical: Value(version.physical),
-        versionCounter: Value(version.counter),
-        deviceId: Value(version.deviceId),
-      ));
+      rows.add(
+        PlaylistTracksCompanion.insert(
+          playlistId: playlistId,
+          sourceKey: track.sourceKey,
+          songId: track.songId,
+          title: track.title,
+          artist: Value(track.artist),
+          album: Value(track.album),
+          coverUrl: Value(track.coverUrl),
+          durationMs: Value(track.durationMs),
+          raw: Value(jsonEncode(track.raw)),
+          addedAt: track.addedAt,
+          sortOrder: Value(order),
+          versionPhysical: Value(version.physical),
+          versionCounter: Value(version.counter),
+          deviceId: Value(version.deviceId),
+        ),
+      );
       pending.add((track: track, version: version, sortOrder: order));
-      inserted.add(_trackAtPosition(
-        track,
-        playlistId: playlistId,
-        sortOrder: order,
-      ));
+      inserted.add(
+        _trackAtPosition(track, playlistId: playlistId, sortOrder: order),
+      );
     }
     await db.transaction(() async {
-      await db.batch((batch) => batch.insertAll(
-            db.playlistTracks,
-            rows,
-            mode: InsertMode.insertOrIgnore,
-          ));
+      await db.batch(
+        (batch) => batch.insertAll(
+          db.playlistTracks,
+          rows,
+          mode: InsertMode.insertOrIgnore,
+        ),
+      );
       final syncId = await _ensurePlaylistSyncId(db, playlistId);
       if (syncId.isNotEmpty && _journal != null) {
         await _journal.append(db, [
@@ -681,9 +715,11 @@ class LibraryWriteEngine {
         ]);
       }
     });
-    notifyChanged(favoriteChange
-        ? const LibraryChange.favorites()
-        : LibraryChange.playlistTracks(playlistId));
+    notifyChanged(
+      favoriteChange
+          ? const LibraryChange.favorites()
+          : LibraryChange.playlistTracks(playlistId),
+    );
     return (added: inserted.length, rows: inserted);
   }
 
@@ -697,12 +733,14 @@ class LibraryWriteEngine {
     final db = _db;
     var removed = 0;
     await db.transaction(() async {
-      removed = await (db.delete(db.playlistTracks)
-            ..where((t) =>
-                t.playlistId.equals(playlistId) &
-                t.sourceKey.equals(sourceKey) &
-                t.songId.equals(songId)))
-          .go();
+      removed =
+          await (db.delete(db.playlistTracks)..where(
+                (t) =>
+                    t.playlistId.equals(playlistId) &
+                    t.sourceKey.equals(sourceKey) &
+                    t.songId.equals(songId),
+              ))
+              .go();
       if (removed > 0) {
         final syncId = await _playlistSyncIdById(db, playlistId);
         if (syncId != null && syncId.isNotEmpty) {
@@ -717,14 +755,16 @@ class LibraryWriteEngine {
       }
     });
     if (removed > 0) {
-      notifyChanged(favoriteChange
-          ? LibraryChange.favorites(
-              toggle: FavoriteToggle.remove(
-                sourceKey: sourceKey,
-                songId: songId,
-              ),
-            )
-          : LibraryChange.playlistTracks(playlistId));
+      notifyChanged(
+        favoriteChange
+            ? LibraryChange.favorites(
+                toggle: FavoriteToggle.remove(
+                  sourceKey: sourceKey,
+                  songId: songId,
+                ),
+              )
+            : LibraryChange.playlistTracks(playlistId),
+      );
     }
     return removed;
   }
@@ -746,16 +786,22 @@ class LibraryWriteEngine {
       final syncId = await _playlistSyncIdById(db, playlistId);
       final tombstones = <({String key, SyncVersion version})>[];
       for (final key in keys) {
-        final count = await (db.delete(db.playlistTracks)
-              ..where((t) =>
-                  t.playlistId.equals(playlistId) &
-                  t.sourceKey.equals(key.sourceKey) &
-                  t.songId.equals(key.songId)))
-            .go();
+        final count =
+            await (db.delete(db.playlistTracks)..where(
+                  (t) =>
+                      t.playlistId.equals(playlistId) &
+                      t.sourceKey.equals(key.sourceKey) &
+                      t.songId.equals(key.songId),
+                ))
+                .go();
         removed += count;
         if (count > 0 && syncId != null && syncId.isNotEmpty) {
           tombstones.add((
-            key: SyncRecordKeys.playlistTrack(syncId, key.sourceKey, key.songId),
+            key: SyncRecordKeys.playlistTrack(
+              syncId,
+              key.sourceKey,
+              key.songId,
+            ),
             version: _nextVersion(),
           ));
         }
@@ -768,9 +814,11 @@ class LibraryWriteEngine {
       );
     });
     if (removed > 0) {
-      notifyChanged(favoriteChange
-          ? const LibraryChange.favorites()
-          : LibraryChange.playlistTracks(playlistId));
+      notifyChanged(
+        favoriteChange
+            ? const LibraryChange.favorites()
+            : LibraryChange.playlistTracks(playlistId),
+      );
     }
     return removed;
   }
@@ -789,9 +837,9 @@ class LibraryWriteEngine {
     final db = _db;
     await db.transaction(() async {
       final syncId = await _ensurePlaylistSyncId(db, playlistId);
-      final rows = await (db.select(db.playlistTracks)
-            ..where((t) => t.playlistId.equals(playlistId)))
-          .get();
+      final rows = await (db.select(
+        db.playlistTracks,
+      )..where((t) => t.playlistId.equals(playlistId))).get();
       final byKey = {
         for (final row in rows) '${row.sourceKey}\u0001${row.songId}': row,
       };
@@ -868,44 +916,53 @@ class LibraryWriteEngine {
     final raw = jsonEncode(replacement.raw);
     var updated = 0;
     await db.transaction(() async {
-      final sameKey = replacement.sourceKey == oldKey.sourceKey &&
+      final sameKey =
+          replacement.sourceKey == oldKey.sourceKey &&
           replacement.songId == oldKey.songId;
       if (!sameKey) {
-        await (db.delete(db.playlistTracks)
-              ..where((t) =>
+        await (db.delete(db.playlistTracks)..where(
+              (t) =>
                   t.playlistId.equals(playlistId) &
                   t.sourceKey.equals(replacement.sourceKey) &
-                  t.songId.equals(replacement.songId)))
+                  t.songId.equals(replacement.songId),
+            ))
             .go();
       }
-      updated = await (db.update(db.playlistTracks)
-            ..where((t) =>
-                t.playlistId.equals(playlistId) &
-                t.sourceKey.equals(oldKey.sourceKey) &
-                t.songId.equals(oldKey.songId)))
-          .write(PlaylistTracksCompanion(
-        sourceKey: Value(replacement.sourceKey),
-        songId: Value(replacement.songId),
-        title: Value(replacement.title),
-        artist: Value(replacement.artist),
-        album: Value(replacement.album),
-        coverUrl: Value(replacement.coverUrl),
-        durationMs: Value(replacement.durationMs),
-        raw: Value(raw),
-        versionPhysical: Value(version.physical),
-        versionCounter: Value(version.counter),
-        deviceId: Value(version.deviceId),
-      ));
+      updated =
+          await (db.update(db.playlistTracks)..where(
+                (t) =>
+                    t.playlistId.equals(playlistId) &
+                    t.sourceKey.equals(oldKey.sourceKey) &
+                    t.songId.equals(oldKey.songId),
+              ))
+              .write(
+                PlaylistTracksCompanion(
+                  sourceKey: Value(replacement.sourceKey),
+                  songId: Value(replacement.songId),
+                  title: Value(replacement.title),
+                  artist: Value(replacement.artist),
+                  album: Value(replacement.album),
+                  coverUrl: Value(replacement.coverUrl),
+                  durationMs: Value(replacement.durationMs),
+                  raw: Value(raw),
+                  versionPhysical: Value(version.physical),
+                  versionCounter: Value(version.counter),
+                  deviceId: Value(version.deviceId),
+                ),
+              );
       if (updated > 0) {
         final syncId = await _ensurePlaylistSyncId(db, playlistId);
         if (syncId.isNotEmpty) {
-          final row = await (db.select(db.playlistTracks)
-                ..where((t) =>
-                    t.playlistId.equals(playlistId) &
-                    t.sourceKey.equals(replacement.sourceKey) &
-                    t.songId.equals(replacement.songId))
-                ..limit(1))
-              .getSingle();
+          final row =
+              await (db.select(db.playlistTracks)
+                    ..where(
+                      (t) =>
+                          t.playlistId.equals(playlistId) &
+                          t.sourceKey.equals(replacement.sourceKey) &
+                          t.songId.equals(replacement.songId),
+                    )
+                    ..limit(1))
+                  .getSingle();
           await _appendJournal(
             db,
             SyncCategory.playlistTracks.name,
@@ -915,9 +972,11 @@ class LibraryWriteEngine {
       }
     });
     if (updated > 0) {
-      notifyChanged(favoriteChange
-          ? const LibraryChange.favorites()
-          : LibraryChange.playlistTracks(playlistId));
+      notifyChanged(
+        favoriteChange
+            ? const LibraryChange.favorites()
+            : LibraryChange.playlistTracks(playlistId),
+      );
     }
     return updated > 0;
   }
@@ -997,10 +1056,14 @@ class LibraryWriteEngine {
   ) async {
     await _ensureReady();
     final db = _db;
-    final knownRows = await (db.selectOnly(db.playlistTracks)
-          ..addColumns([db.playlistTracks.sourceKey, db.playlistTracks.songId])
-          ..where(db.playlistTracks.playlistId.equals(playlistId)))
-        .get();
+    final knownRows =
+        await (db.selectOnly(db.playlistTracks)
+              ..addColumns([
+                db.playlistTracks.sourceKey,
+                db.playlistTracks.songId,
+              ])
+              ..where(db.playlistTracks.playlistId.equals(playlistId)))
+            .get();
     final knownKeys = {
       for (final row in knownRows)
         '${row.read(db.playlistTracks.sourceKey)}:'
@@ -1016,30 +1079,34 @@ class LibraryWriteEngine {
       if (knownKeys.contains(key)) continue;
       knownKeys.add(key);
       final version = _nextVersion();
-      rows.add(PlaylistTracksCompanion.insert(
-        playlistId: playlistId,
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        title: track.title,
-        artist: Value(track.artist),
-        album: Value(track.album),
-        coverUrl: Value(track.coverUrl),
-        durationMs: Value(track.durationMs),
-        raw: Value(jsonEncode(track.raw)),
-        addedAt: track.addedAt,
-        sortOrder: Value(nextOrder++),
-        versionPhysical: Value(version.physical),
-        versionCounter: Value(version.counter),
-        deviceId: Value(version.deviceId),
-      ));
+      rows.add(
+        PlaylistTracksCompanion.insert(
+          playlistId: playlistId,
+          sourceKey: track.sourceKey,
+          songId: track.songId,
+          title: track.title,
+          artist: Value(track.artist),
+          album: Value(track.album),
+          coverUrl: Value(track.coverUrl),
+          durationMs: Value(track.durationMs),
+          raw: Value(jsonEncode(track.raw)),
+          addedAt: track.addedAt,
+          sortOrder: Value(nextOrder++),
+          versionPhysical: Value(version.physical),
+          versionCounter: Value(version.counter),
+          deviceId: Value(version.deviceId),
+        ),
+      );
       imported++;
     }
     if (imported > 0) {
-      await db.batch((batch) => batch.insertAll(
-            db.playlistTracks,
-            rows,
-            mode: InsertMode.insertOrIgnore,
-          ));
+      await db.batch(
+        (batch) => batch.insertAll(
+          db.playlistTracks,
+          rows,
+          mode: InsertMode.insertOrIgnore,
+        ),
+      );
     }
 
     notifyChanged(const LibraryChange.import());
@@ -1060,35 +1127,32 @@ class LibraryWriteEngine {
     required SyncVersion version,
     required int deletedAt,
     bool journal = true,
-  }) =>
-      _recordTombstone(
-        executor,
-        category,
-        key,
-        version: version,
-        deletedAt: deletedAt,
-        journal: journal,
-      );
+  }) => _recordTombstone(
+    executor,
+    category,
+    key,
+    version: version,
+    deletedAt: deletedAt,
+    journal: journal,
+  );
 
   /// 清除某条历史的删除墓碑（本地重播复活 / 应用远端更新后的复活）。
   Future<void> clearHistoryTombstone(
     DatabaseConnectionUser executor,
     String sourceKey,
     String songId,
-  ) =>
-      _clearHistoryTombstone(executor, sourceKey, songId);
+  ) => _clearHistoryTombstone(executor, sourceKey, songId);
 
   /// 补齐缺失 syncId 的行（收藏固定值；其余随机生成，只补一次）。
   ///
   /// **不发版本戳**（既有口径：导出前的就地补齐靠 syncId 计数条款补偿，
   /// 见 `syncFingerprints`；改动属同步协议议题）。
   Future<void> ensurePlaylistSyncIds(DatabaseConnectionUser executor) async {
-    final rows = await (executor.select(_db.playlists)
-          ..where((t) => t.syncId.isNull() | t.syncId.equals('')))
-        .get();
+    final rows = await (executor.select(
+      _db.playlists,
+    )..where((t) => t.syncId.isNull() | t.syncId.equals(''))).get();
     for (final row in rows) {
-      await (executor.update(_db.playlists)
-            ..where((t) => t.id.equals(row.id)))
+      await (executor.update(_db.playlists)..where((t) => t.id.equals(row.id)))
           .write(PlaylistsCompanion(syncId: Value(_newSyncId(row.name))));
     }
   }
@@ -1188,59 +1252,56 @@ class LibraryWriteEngine {
     required String raw,
     required int playedAt,
     required SyncVersion version,
-  }) =>
-      SyncRecord(
-        key: SyncRecordKeys.history(sourceKey, songId),
-        version: version,
-        data: PlayHistorySyncRecord(
-          sourceKey: sourceKey,
-          songId: songId,
-          title: title,
-          artist: artist,
-          album: album,
-          coverUrl: coverUrl,
-          durationMs: durationMs,
-          raw: raw,
-          playedAt: playedAt,
-          version: version,
-        ).toJson(),
-      );
+  }) => SyncRecord(
+    key: SyncRecordKeys.history(sourceKey, songId),
+    version: version,
+    data: PlayHistorySyncRecord(
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title,
+      artist: artist,
+      album: album,
+      coverUrl: coverUrl,
+      durationMs: durationMs,
+      raw: raw,
+      playedAt: playedAt,
+      version: version,
+    ).toJson(),
+  );
 
   SyncRecord _playlistSyncRecord({
     required String syncId,
     required String name,
     required int createdAt,
     required SyncVersion version,
-  }) =>
-      SyncRecord(
-        key: syncId,
-        version: version,
-        data: PlaylistSyncRecord(
-          syncId: syncId,
-          name: name,
-          createdAt: createdAt,
-          version: version,
-        ).toJson(),
-      );
+  }) => SyncRecord(
+    key: syncId,
+    version: version,
+    data: PlaylistSyncRecord(
+      syncId: syncId,
+      name: name,
+      createdAt: createdAt,
+      version: version,
+    ).toJson(),
+  );
 
   SyncRecord _trackSyncRecord({
     required String playlistSyncId,
     required PlaylistTrackRow row,
-  }) =>
-      _trackRecord(
-        playlistSyncId: playlistSyncId,
-        sourceKey: row.sourceKey,
-        songId: row.songId,
-        title: row.title,
-        artist: row.artist,
-        album: row.album,
-        coverUrl: row.coverUrl,
-        durationMs: row.durationMs,
-        raw: row.raw,
-        addedAt: row.addedAt,
-        sortOrder: row.sortOrder,
-        version: row.syncVersion,
-      );
+  }) => _trackRecord(
+    playlistSyncId: playlistSyncId,
+    sourceKey: row.sourceKey,
+    songId: row.songId,
+    title: row.title,
+    artist: row.artist,
+    album: row.album,
+    coverUrl: row.coverUrl,
+    durationMs: row.durationMs,
+    raw: row.raw,
+    addedAt: row.addedAt,
+    sortOrder: row.sortOrder,
+    version: row.syncVersion,
+  );
 
   SyncRecord _trackRecord({
     required String playlistSyncId,
@@ -1255,25 +1316,24 @@ class LibraryWriteEngine {
     required int addedAt,
     required int sortOrder,
     required SyncVersion version,
-  }) =>
-      SyncRecord(
-        key: SyncRecordKeys.playlistTrack(playlistSyncId, sourceKey, songId),
-        version: version,
-        data: PlaylistTrackSyncRecord(
-          playlistSyncId: playlistSyncId,
-          sourceKey: sourceKey,
-          songId: songId,
-          title: title,
-          artist: artist,
-          album: album,
-          coverUrl: coverUrl,
-          durationMs: durationMs,
-          raw: raw,
-          addedAt: addedAt,
-          sortOrder: sortOrder,
-          version: version,
-        ).toJson(),
-      );
+  }) => SyncRecord(
+    key: SyncRecordKeys.playlistTrack(playlistSyncId, sourceKey, songId),
+    version: version,
+    data: PlaylistTrackSyncRecord(
+      playlistSyncId: playlistSyncId,
+      sourceKey: sourceKey,
+      songId: songId,
+      title: title,
+      artist: artist,
+      album: album,
+      coverUrl: coverUrl,
+      durationMs: durationMs,
+      raw: raw,
+      addedAt: addedAt,
+      sortOrder: sortOrder,
+      version: version,
+    ).toJson(),
+  );
 
   /// 列表的 syncId（缺失时就地补齐并**追加日志**：对端才知道这个列表）。
   ///
@@ -1282,22 +1342,26 @@ class LibraryWriteEngine {
     DatabaseConnectionUser executor,
     int playlistId,
   ) async {
-    final row = await (executor.select(_db.playlists)
-          ..where((t) => t.id.equals(playlistId))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (executor.select(_db.playlists)
+              ..where((t) => t.id.equals(playlistId))
+              ..limit(1))
+            .getSingleOrNull();
     if (row == null) return '';
     final existing = row.syncId;
     if (existing != null && existing.isNotEmpty) return existing;
     final syncId = _newSyncId(row.name);
     final version = _nextVersion();
-    await (executor.update(_db.playlists)..where((t) => t.id.equals(playlistId)))
-        .write(PlaylistsCompanion(
-      syncId: Value(syncId),
-      versionPhysical: Value(version.physical),
-      versionCounter: Value(version.counter),
-      deviceId: Value(version.deviceId),
-    ));
+    await (executor.update(
+      _db.playlists,
+    )..where((t) => t.id.equals(playlistId))).write(
+      PlaylistsCompanion(
+        syncId: Value(syncId),
+        versionPhysical: Value(version.physical),
+        versionCounter: Value(version.counter),
+        deviceId: Value(version.deviceId),
+      ),
+    );
     await _appendJournal(
       executor,
       SyncCategory.playlists.name,
@@ -1315,10 +1379,11 @@ class LibraryWriteEngine {
     DatabaseConnectionUser executor,
     int id,
   ) async {
-    final row = await (executor.select(_db.playlists)
-          ..where((t) => t.id.equals(id))
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (executor.select(_db.playlists)
+              ..where((t) => t.id.equals(id))
+              ..limit(1))
+            .getSingleOrNull();
     return row?.syncId;
   }
 
@@ -1334,11 +1399,12 @@ class LibraryWriteEngine {
 
   Future<int?> _favoritesPlaylistId() async {
     final db = _db;
-    final row = await (db.select(db.playlists)
-          ..where((t) => t.name.equals(favoritesPlaylistRowName))
-          ..orderBy([(t) => OrderingTerm.asc(t.id)])
-          ..limit(1))
-        .getSingleOrNull();
+    final row =
+        await (db.select(db.playlists)
+              ..where((t) => t.name.equals(favoritesPlaylistRowName))
+              ..orderBy([(t) => OrderingTerm.asc(t.id)])
+              ..limit(1))
+            .getSingleOrNull();
     return row?.id;
   }
 
@@ -1359,20 +1425,19 @@ class LibraryWriteEngine {
     PlaylistTrack track, {
     required int playlistId,
     required int sortOrder,
-  }) =>
-      PlaylistTrack(
-        playlistId: playlistId,
-        sourceKey: track.sourceKey,
-        songId: track.songId,
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        coverUrl: track.coverUrl,
-        durationMs: track.durationMs,
-        raw: track.raw,
-        addedAt: track.addedAt,
-        sortOrder: sortOrder,
-      );
+  }) => PlaylistTrack(
+    playlistId: playlistId,
+    sourceKey: track.sourceKey,
+    songId: track.songId,
+    title: track.title,
+    artist: track.artist,
+    album: track.album,
+    coverUrl: track.coverUrl,
+    durationMs: track.durationMs,
+    raw: track.raw,
+    addedAt: track.addedAt,
+    sortOrder: sortOrder,
+  );
 
   /// 位置偏好（设置页；未接线按追加到末尾）。
   bool get _insertAtTop => _addToTop?.call() ?? false;
@@ -1391,10 +1456,11 @@ class LibraryWriteEngine {
   }) async {
     if (!addToTop) return _nextSortOrder(db, playlistId);
     final minSortOrder = db.playlistTracks.sortOrder.min();
-    final row = await (db.selectOnly(db.playlistTracks)
-          ..addColumns([minSortOrder])
-          ..where(db.playlistTracks.playlistId.equals(playlistId)))
-        .getSingle();
+    final row =
+        await (db.selectOnly(db.playlistTracks)
+              ..addColumns([minSortOrder])
+              ..where(db.playlistTracks.playlistId.equals(playlistId)))
+            .getSingle();
     // 空列表（min 为空）从 0 开始，保持「首行 sortOrder = 0」的旧口径。
     return (row.read(minSortOrder) ?? count) - count;
   }
@@ -1402,10 +1468,11 @@ class LibraryWriteEngine {
   /// 列表内下一个排序位（空列表从 0 开始）。
   Future<int> _nextSortOrder(MoliaDatabase db, int playlistId) async {
     final maxSortOrder = db.playlistTracks.sortOrder.max();
-    final row = await (db.selectOnly(db.playlistTracks)
-          ..addColumns([maxSortOrder])
-          ..where(db.playlistTracks.playlistId.equals(playlistId)))
-        .getSingle();
+    final row =
+        await (db.selectOnly(db.playlistTracks)
+              ..addColumns([maxSortOrder])
+              ..where(db.playlistTracks.playlistId.equals(playlistId)))
+            .getSingle();
     return (row.read(maxSortOrder) ?? -1) + 1;
   }
 
@@ -1427,10 +1494,11 @@ class LibraryWriteEngine {
     String sourceKey,
     String songId,
   ) async {
-    await (executor.delete(_db.syncTombstones)
-          ..where((t) =>
+    await (executor.delete(_db.syncTombstones)..where(
+          (t) =>
               t.category.equals(SyncCategory.history.name) &
-              t.key.equals(SyncRecordKeys.history(sourceKey, songId))))
+              t.key.equals(SyncRecordKeys.history(sourceKey, songId)),
+        ))
         .go();
   }
 }

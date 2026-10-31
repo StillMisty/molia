@@ -40,37 +40,36 @@ void main() {
     int windowStart = 1,
     int? windowEnd,
     String deviceId = 'devB',
-  }) =>
-      SyncEnvelope(
-        deviceId: deviceId,
-        deviceName: deviceId,
-        producedAt: 5000,
-        snapshotId: 'hash-${windowEnd ?? entries.length}',
-        journalHead: windowEnd ?? entries.last.seq,
-        baseSeq: baseSeq,
-        windowStart: windowStart,
-        windowEnd: windowEnd ?? entries.last.seq,
-        journal: entries,
-      );
+  }) => SyncEnvelope(
+    deviceId: deviceId,
+    deviceName: deviceId,
+    producedAt: 5000,
+    snapshotId: 'hash-${windowEnd ?? entries.length}',
+    journalHead: windowEnd ?? entries.last.seq,
+    baseSeq: baseSeq,
+    windowStart: windowStart,
+    windowEnd: windowEnd ?? entries.last.seq,
+    journal: entries,
+  );
 
   SyncJournalEntry entry(int seq, String key) => SyncJournalEntry(
-        seq: seq,
-        category: SyncCategory.settings,
-        record: SyncRecord(
-          key: key,
-          version: SyncVersion(physical: 1000 + seq, deviceId: 'devB'),
-          data: {'v': 'x'},
-        ),
-      );
+    seq: seq,
+    category: SyncCategory.settings,
+    record: SyncRecord(
+      key: key,
+      version: SyncVersion(physical: 1000 + seq, deviceId: 'devB'),
+      data: {'v': 'x'},
+    ),
+  );
 
   /// 全量快照（建立初始游标：对端的既有数据只能靠它引导）。
   SyncEnvelope fullSnapshot({int journalHead = 0}) => SyncEnvelope(
-        deviceId: 'devB',
-        deviceName: 'devB',
-        producedAt: 5000,
-        snapshotId: 'hash-full',
-        journalHead: journalHead,
-      );
+    deviceId: 'devB',
+    deviceName: 'devB',
+    producedAt: 5000,
+    snapshotId: 'hash-full',
+    journalHead: journalHead,
+  );
 
   /// 建立对端游标（先引导一次全量快照）。
   Future<void> bootstrapPeer(SyncEngine sync) async {
@@ -80,13 +79,13 @@ void main() {
   }
 
   SyncEngine engine() => SyncEngine(
-        state: state,
-        stamps: state.stampIssuer,
-        adapters: [adapter],
-        transports: {'lan': transport},
-        // 入站合流窗口缩短：单测不用等默认的 1.5s。
-        inboundWindow: const Duration(milliseconds: 10),
-      );
+    state: state,
+    stamps: state.stampIssuer,
+    adapters: [adapter],
+    transports: {'lan': transport},
+    // 入站合流窗口缩短：单测不用等默认的 1.5s。
+    inboundWindow: const Duration(milliseconds: 10),
+  );
 
   test('应用失败：游标不推进、ack 不前进，下一轮重取同一批条目', () async {
     final sync = engine();
@@ -198,8 +197,7 @@ class RecordingAdapter implements SyncAdapter {
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect({
     bool fresh = false,
-  }) async =>
-      const {};
+  }) async => const {};
 
   @override
   Future<SyncApplyOutcome> apply(

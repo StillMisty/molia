@@ -62,5 +62,4 @@ void main() {
     expect(idle.opacity, 0.0);
     expect(idle.scale, 1.0);
   });
-
 }

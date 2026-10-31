@@ -106,11 +106,11 @@ CatalogStack buildCatalogStack() {
   final artistService = ArtistService(
     fetch: (sourceKey, artistId, {required page, required limit}) =>
         sourceManager.fetchArtist(
-      sourceKey,
-      artistId,
-      page: page,
-      limit: limit,
-    ),
+          sourceKey,
+          artistId,
+          page: page,
+          limit: limit,
+        ),
   );
 
   return (

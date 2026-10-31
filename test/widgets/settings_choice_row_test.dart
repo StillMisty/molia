@@ -55,8 +55,9 @@ void main() {
     expect(size.width, 800 - 24);
     expect(size.height, greaterThan(0));
 
-    await tester
-        .tap(find.descendant(of: segmented, matching: find.text('Two')));
+    await tester.tap(
+      find.descendant(of: segmented, matching: find.text('Two')),
+    );
     await tester.pumpAndSettle();
     expect(selected, 'b');
   });
@@ -64,11 +65,8 @@ void main() {
   testWidgets('多行分组：SettingsRows 逐行下发形状（首末 16dp、内行 4dp）', (tester) async {
     // 一个分组里「单个子项产出多行」时必须逐行覆盖行位置，否则整组按
     // single 画成四角 16dp（外观分区踩过：与其它分组的内行圆角不一致）。
-    Widget tile(String title) => SettingsInfoTile(
-          icon: Icons.info_rounded,
-          title: title,
-          subtitle: '',
-        );
+    Widget tile(String title) =>
+        SettingsInfoTile(icon: Icons.info_rounded, title: title, subtitle: '');
     await pumpRow(
       tester,
       Column(
@@ -174,8 +172,9 @@ void main() {
 
     // 短标签 + 逐项图标：上勾（替换图标、不额外占宽）；长标签行不配图标
     // （图标 + 文案会截断，见 settings_page_test 的播放模式用例）。
-    final segmented =
-        tester.widget<M3ESegmentedButton<String>>(find.byType(M3ESegmentedButton<String>));
+    final segmented = tester.widget<M3ESegmentedButton<String>>(
+      find.byType(M3ESegmentedButton<String>),
+    );
     expect(segmented.showSelectedIcon, isTrue);
   });
 
@@ -193,8 +192,9 @@ void main() {
       ),
     );
 
-    final segmented =
-        tester.widget<M3ESegmentedButton<String>>(find.byType(M3ESegmentedButton<String>));
+    final segmented = tester.widget<M3ESegmentedButton<String>>(
+      find.byType(M3ESegmentedButton<String>),
+    );
     expect(segmented.showSelectedIcon, isFalse);
   });
 
@@ -275,12 +275,18 @@ void main() {
     final item = M3ETheme.of(tester.element(find.byKey(const Key('row-info'))))
         .listTheme
         .item;
-    expect(tester.getSize(find.byKey(const Key('row-info'))).height,
-        item.minHeight);
-    expect(tester.getSize(find.byKey(const Key('row-nav'))).height,
-        item.twoLineHeight);
-    expect(tester.getSize(find.byKey(const Key('row-switch'))).height,
-        item.twoLineHeight);
+    expect(
+      tester.getSize(find.byKey(const Key('row-info'))).height,
+      item.minHeight,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('row-nav'))).height,
+      item.twoLineHeight,
+    );
+    expect(
+      tester.getSize(find.byKey(const Key('row-switch'))).height,
+      item.twoLineHeight,
+    );
 
     final chevron = tester.widget<Icon>(
       find.descendant(
@@ -319,17 +325,19 @@ void main() {
 
   testWidgets('下拉行：声明宽度放不下最长选项时自动加宽，标签不折行', (tester) async {
     // 两行并排：同一字段宽度约束下，长标签（Hi-Res）必须与短标签同高（单行）。
-    SettingsDropdownRow<String> row(String value, List<(String, String)> options) =>
-        SettingsDropdownRow<String>(
-          icon: Icons.high_quality_rounded,
-          title: 'Quality',
-          value: value,
-          // 设置页默认音质行的声明宽度：M3E 字段的选中文本没有 maxLines，
-          // 窄了会把「Hi-Res」折成两行、顶高整行。
-          fieldWidth: 112,
-          options: options,
-          onChanged: (_) {},
-        );
+    SettingsDropdownRow<String> row(
+      String value,
+      List<(String, String)> options,
+    ) => SettingsDropdownRow<String>(
+      icon: Icons.high_quality_rounded,
+      title: 'Quality',
+      value: value,
+      // 设置页默认音质行的声明宽度：M3E 字段的选中文本没有 maxLines，
+      // 窄了会把「Hi-Res」折成两行、顶高整行。
+      fieldWidth: 112,
+      options: options,
+      onChanged: (_) {},
+    );
     await pumpRow(
       tester,
       Center(
@@ -353,8 +361,7 @@ void main() {
     );
   });
 
-  testWidgets('下拉行：选中值在字段与展开面板里都单行（面板口径留宽 + 单行兜底）',
-      (tester) async {
+  testWidgets('下拉行：选中值在字段与展开面板里都单行（面板口径留宽 + 单行兜底）', (tester) async {
     // 面板宽度 = 字段宽度，而面板里的选中条目还要吃面板 8×2 + 条目 16×2 内边距
     // 与对勾图标，文字又是大一号的 bodyLarge：字段只按自身口径留宽时，
     // 展开后「Hi-Res」会折行。
@@ -393,10 +400,7 @@ void main() {
     );
     final otherLabel = find.descendant(
       of: find
-          .ancestor(
-            of: find.text('320K'),
-            matching: find.byType(M3ECard),
-          )
+          .ancestor(of: find.text('320K'), matching: find.byType(M3ECard))
           .first,
       matching: find.text('320K'),
     );
@@ -409,8 +413,7 @@ void main() {
     );
   });
 
-  testWidgets('标签行：标题 1 行、副标题 2 行封顶（长文案不再折 3 行）',
-      (tester) async {
+  testWidgets('标签行：标题 1 行、副标题 2 行封顶（长文案不再折 3 行）', (tester) async {
     const longSubtitle =
         'A deliberately long supporting text that would wrap to three or '
         'even four lines if the label column did not cap the line count for '

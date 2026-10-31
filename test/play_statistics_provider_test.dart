@@ -3,6 +3,7 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/play_statistics_repository.dart';
 import 'package:molia/domain/models/play_statistics.dart';
 import 'package:molia/providers/play_statistics_provider.dart';
+
 import 'support/sync_test_support.dart';
 
 import 'support/memory_database.dart';
@@ -45,26 +46,25 @@ void main() {
     String? endReason = 'completed',
     int? endedAt,
     String? syncKey,
-  }) =>
-      insertPlayEvent(
-        db,
-        sourceKey: sourceKey,
-        songId: songId,
-        title: title,
-        artist: artist,
-        album: album,
-        coverUrl: coverUrl,
-        durationMs: durationMs,
-        raw: raw,
-        startedAt: startedAt,
-        listenedMs: listenedMs,
-        maxPositionMs: maxPositionMs,
-        endReason: endReason,
-        // 未显式给 endedAt 的行按「收尾于 startedAt + listenedMs」造（查询只看
-        // 已收尾事件）。
-        endedAt: endedAt ?? startedAt + listenedMs,
-        syncKey: syncKey,
-      );
+  }) => insertPlayEvent(
+    db,
+    sourceKey: sourceKey,
+    songId: songId,
+    title: title,
+    artist: artist,
+    album: album,
+    coverUrl: coverUrl,
+    durationMs: durationMs,
+    raw: raw,
+    startedAt: startedAt,
+    listenedMs: listenedMs,
+    maxPositionMs: maxPositionMs,
+    endReason: endReason,
+    // 未显式给 endedAt 的行按「收尾于 startedAt + listenedMs」造（查询只看
+    // 已收尾事件）。
+    endedAt: endedAt ?? startedAt + listenedMs,
+    syncKey: syncKey,
+  );
 
   setUp(() async {
     db = openMemoryDatabase();
@@ -108,10 +108,7 @@ void main() {
   test('范围切换后榜单与作息数据跟随过滤', () async {
     final now = DateTime.now();
     final old = now.subtract(const Duration(days: 100));
-    await insertEvent(
-      songId: 'old',
-      startedAt: old.millisecondsSinceEpoch,
-    );
+    await insertEvent(songId: 'old', startedAt: old.millisecondsSinceEpoch);
     await insertEvent(
       songId: 'recent',
       startedAt: now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,

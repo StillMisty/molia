@@ -10,11 +10,7 @@ class LibraryCoverThumb extends StatelessWidget {
   final String? url;
   final double size;
 
-  const LibraryCoverThumb({
-    super.key,
-    this.url,
-    this.size = 44,
-  });
+  const LibraryCoverThumb({super.key, this.url, this.size = 44});
 
   @override
   Widget build(BuildContext context) {

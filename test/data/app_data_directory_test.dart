@@ -194,8 +194,11 @@ void main() {
       File('${target.path}/artwork_cache/cover').readAsStringSync(),
       'cover-bytes',
     );
-    expect(File('${oldArtwork.path}/cover').existsSync(), isTrue,
-        reason: 'copy 回退保留旧文件');
+    expect(
+      File('${oldArtwork.path}/cover').existsSync(),
+      isTrue,
+      reason: 'copy 回退保留旧文件',
+    );
   });
 
   test('缓存迁移：非 Windows 跳过', () async {

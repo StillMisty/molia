@@ -141,7 +141,8 @@ class _LibraryState extends State<Library> {
     // 经 DiscoverProvider.syncSearchSource 让搜索跟随渠道（规则在组合根）。
     // 在 post-frame 执行，避免在 build 中修改 provider 状态。
     final needsFallback = current == null && enabledChannels.isNotEmpty;
-    final needsSearchSync = current != null &&
+    final needsSearchSync =
+        current != null &&
         current.capabilities.search &&
         search.sourceKey != current.key;
     if (needsFallback || needsSearchSync) {
@@ -158,7 +159,8 @@ class _LibraryState extends State<Library> {
     }
 
     // 当前渠道对应的发现能力（渠道不匹配时按降级处理，避免闪现旧渠道数据）。
-    final discoverActive = current != null &&
+    final discoverActive =
+        current != null &&
         current.discoverable &&
         discover.channelKey == current.key;
     final visibleTabs = <_LibraryTab>[
@@ -277,28 +279,31 @@ class _LibraryState extends State<Library> {
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {
-        _LibraryTab.search =>
-          LibrarySearchTab(controller: _searchResultsController),
-        _LibraryTab.leaderboards =>
-          DiscoverLeaderboardsTab(controller: _leaderboardsController),
-        _LibraryTab.playlists =>
-          DiscoverPlaylistsTab(controller: _playlistsController),
-      };
+    _LibraryTab.search => LibrarySearchTab(
+      controller: _searchResultsController,
+    ),
+    _LibraryTab.leaderboards => DiscoverLeaderboardsTab(
+      controller: _leaderboardsController,
+    ),
+    _LibraryTab.playlists => DiscoverPlaylistsTab(
+      controller: _playlistsController,
+    ),
+  };
 
   M3ETab _tabSpec(AppLocalizations l10n, _LibraryTab tab) => switch (tab) {
-        _LibraryTab.search => _buildTab(
-            icon: Icons.search_rounded,
-            label: l10n.libraryTabSearch,
-          ),
-        _LibraryTab.leaderboards => _buildTab(
-            icon: Icons.leaderboard_rounded,
-            label: l10n.libraryTabLeaderboards,
-          ),
-        _LibraryTab.playlists => _buildTab(
-            icon: Icons.queue_music_rounded,
-            label: l10n.libraryTabPlaylists,
-          ),
-      };
+    _LibraryTab.search => _buildTab(
+      icon: Icons.search_rounded,
+      label: l10n.libraryTabSearch,
+    ),
+    _LibraryTab.leaderboards => _buildTab(
+      icon: Icons.leaderboard_rounded,
+      label: l10n.libraryTabLeaderboards,
+    ),
+    _LibraryTab.playlists => _buildTab(
+      icon: Icons.queue_music_rounded,
+      label: l10n.libraryTabPlaylists,
+    ),
+  };
 
   /// 单个 tab：桌面端图标 + 文案，触摸端只留图标（文案走无障碍名）。
   ///

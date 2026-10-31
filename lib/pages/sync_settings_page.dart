@@ -211,12 +211,21 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     SyncProvider provider,
     AppLocalizations l10n,
   ) {
-    final lanState =
-        _transportState(context, provider, l10n, SyncTransportKind.lan);
-    final webdavState =
-        _transportState(context, provider, l10n, SyncTransportKind.webdav);
-    final webdavEnabled =
-        provider.enabledTransports.contains(SyncTransportKind.webdav);
+    final lanState = _transportState(
+      context,
+      provider,
+      l10n,
+      SyncTransportKind.lan,
+    );
+    final webdavState = _transportState(
+      context,
+      provider,
+      l10n,
+      SyncTransportKind.webdav,
+    );
+    final webdavEnabled = provider.enabledTransports.contains(
+      SyncTransportKind.webdav,
+    );
     return SettingsSectionCard(
       title: l10n.syncTransportSection,
       footer: SettingsSectionHint(
@@ -247,7 +256,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           subtitleColor: webdavState.color,
           value: webdavEnabled,
           onChanged: (value) => unawaited(
-              provider.setTransportEnabled(SyncTransportKind.webdav, value)),
+            provider.setTransportEnabled(SyncTransportKind.webdav, value),
+          ),
         ),
         // 配置入口只在 WebDAV 启用后才有意义（未启用时开关副文案已说明）。
         if (webdavEnabled)
@@ -294,7 +304,12 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           ),
         for (final peer in provider.peers)
           _peerRow(
-              context, provider, l10n, peer, manualByDevice[peer.deviceId]),
+            context,
+            provider,
+            l10n,
+            peer,
+            manualByDevice[peer.deviceId],
+          ),
         // 有名册但本轮一个都没连上：给一次受策略约束的即时检查，避免用户
         // 只能干等下一轮定时唤醒。省电 / 移动数据暂停时点了也不会跑，
         // 因此直接隐藏。
@@ -425,7 +440,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
                       title: _nearbyDeviceName(device),
                       subtitle: device.hasGroup
                           ? '${l10n.syncNearbyTapToPair} · '
-                              '${l10n.syncNearbyHasGroup}'
+                                '${l10n.syncNearbyHasGroup}'
                           : l10n.syncNearbyTapToPair,
                       onTap: () => unawaited(
                         showSyncNearbyPairingDialog(
@@ -477,9 +492,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             icon: Icons.link_rounded,
             title: l10n.syncManualConnect,
             subtitle: l10n.syncManualConnectSubtitle,
-            onTap: () => unawaited(
-              showSyncManualPeerDialog(context, provider, l10n),
-            ),
+            onTap: () =>
+                unawaited(showSyncManualPeerDialog(context, provider, l10n)),
           ),
       ],
     );
@@ -510,14 +524,16 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         nowMs: provider.nowMs,
         report: provider.lastReport,
       ),
-      onTap: () => unawaited(showSyncPeerDialog(
-        context,
-        provider: provider,
-        l10n: l10n,
-        host: manual?.host,
-        title: title,
-        peer: peer,
-      )),
+      onTap: () => unawaited(
+        showSyncPeerDialog(
+          context,
+          provider: provider,
+          l10n: l10n,
+          host: manual?.host,
+          title: title,
+          peer: peer,
+        ),
+      ),
     );
   }
 
@@ -564,11 +580,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     final conclusion = report.outcome == SyncOutcome.ok && peersSeen > 0
         ? l10n.syncStatusSyncedPeers(peersSeen)
         : syncOutcomeText(l10n, report.outcome);
-    return '$conclusion · ${syncRelativeTimeText(
-      l10n,
-      nowMs: provider.nowMs,
-      atMs: report.finishedAt,
-    )}';
+    return '$conclusion · ${syncRelativeTimeText(l10n, nowMs: provider.nowMs, atMs: report.finishedAt)}';
   }
 
   /// 内容入口副文案：全开只说「全部类别」，否则给关闭项数。
@@ -582,11 +594,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     final entries = provider.log;
     if (entries.isEmpty) return l10n.syncLogEmpty;
     final latest = entries.first;
-    return '${syncOutcomeText(l10n, latest.outcome)} · ${syncRelativeTimeText(
-      l10n,
-      nowMs: provider.nowMs,
-      atMs: latest.at,
-    )}';
+    return '${syncOutcomeText(l10n, latest.outcome)} · ${syncRelativeTimeText(l10n, nowMs: provider.nowMs, atMs: latest.at)}';
   }
 
   /// 传输副文案：只说状态词（运行中 / 已关闭 / 未配置 / 启动失败 / 缺少权限）。
@@ -623,8 +631,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       text: state,
       color: available
           ? (provider.transportLastSuccessAt(kind) > 0
-              ? semantic.success
-              : null)
+                ? semantic.success
+                : null)
           : semantic.warning,
     );
   }
@@ -636,8 +644,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     AppLocalizations l10n,
     bool value,
   ) async {
-    final enabled =
-        await provider.setTransportEnabled(SyncTransportKind.lan, value);
+    final enabled = await provider.setTransportEnabled(
+      SyncTransportKind.lan,
+      value,
+    );
     if (enabled || !value || !context.mounted) return;
     _showLanPermissionNotice(context, provider, l10n);
   }
@@ -653,11 +663,14 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       context,
       l10n.syncLanPermissionNeeded,
       isError: true,
-      actionLabel:
-          permanent ? l10n.syncOpenSystemSettings : l10n.syncLanPermissionGrant,
-      onAction: () => unawaited(permanent
-          ? provider.openSystemSettings()
-          : _setLanEnabled(context, provider, l10n, true)),
+      actionLabel: permanent
+          ? l10n.syncOpenSystemSettings
+          : l10n.syncLanPermissionGrant,
+      onAction: () => unawaited(
+        permanent
+            ? provider.openSystemSettings()
+            : _setLanEnabled(context, provider, l10n, true),
+      ),
     );
   }
 
@@ -694,9 +707,11 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           M3EButton.icon(
             key: const Key('settingsSyncLanPermissionGrant'),
             style: M3EButtonStyle.text,
-            onPressed: () => unawaited(permanent
-                ? provider.openSystemSettings()
-                : _setLanEnabled(context, provider, l10n, true)),
+            onPressed: () => unawaited(
+              permanent
+                  ? provider.openSystemSettings()
+                  : _setLanEnabled(context, provider, l10n, true),
+            ),
             icon: const Icon(Icons.lock_open_rounded, size: 18),
             label: Text(
               permanent

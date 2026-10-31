@@ -51,18 +51,18 @@ void main() {
     // 组合根的 `unawaited` 启动维护因此与生产同路径执行。
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (call) async => tempDir.path,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (call) async => tempDir.path,
+        );
     catalog = buildCatalogStack();
   });
 
   tearDownAll(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          null,
+        );
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
@@ -172,13 +172,15 @@ void main() {
     final track = _track(
       artwork: Artwork(uri: Uri.parse('https://example.com/cover.jpg')),
     );
-    backend.emit(BackendSnapshot(
-      current: track,
-      queue: [track],
-      currentIndex: 0,
-      duration: const Duration(minutes: 3),
-      position: const Duration(seconds: 1),
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        duration: const Duration(minutes: 3),
+        position: const Duration(seconds: 1),
+      ),
+    );
     expect(playback.playbackProvider.snapshot.current?.id, track.id);
     expect(playback.facade.snapshot.value.current?.id, track.id);
 
@@ -208,10 +210,9 @@ void main() {
     await scoped.write(kThemeMode, 'dark');
     expect(await catalog.settings.read(kThemeMode), 'dark');
 
-    await playback.settings.scope([kDefaultPlayMode]).write(
-      kDefaultPlayMode,
-      'shuffle',
-    );
+    await playback.settings
+        .scope([kDefaultPlayMode])
+        .write(kDefaultPlayMode, 'shuffle');
     expect(await scoped.read(kDefaultPlayMode), 'shuffle');
   });
 

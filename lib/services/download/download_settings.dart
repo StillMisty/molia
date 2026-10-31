@@ -106,10 +106,7 @@ class DownloadSettings extends ChangeNotifier {
   /// 按模板生成文件名基名（未做非法字符清洗，由下载服务统一 sanitize）。
   ///
   /// 未知占位符原样保留（用户可能想要字面量 `{}` 文本）。
-  static String applyTemplate(
-    String template,
-    Map<String, String> values,
-  ) {
+  static String applyTemplate(String template, Map<String, String> values) {
     var result = template;
     for (final entry in values.entries) {
       result = result.replaceAll('{${entry.key}}', entry.value);

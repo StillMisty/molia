@@ -54,7 +54,9 @@ void main() {
       expect(sources.keys, contains('mock'));
 
       final logs = <String>[];
-      engine.logs.listen((entry) => logs.add('${entry.level}:${entry.message}'));
+      engine.logs.listen(
+        (entry) => logs.add('${entry.level}:${entry.message}'),
+      );
 
       final data = await _probe(engine) as Map;
       expect(data['statusCode'], 200);
@@ -178,11 +180,13 @@ void main() {
           keyword: 'x',
           timeout: const Duration(milliseconds: 300),
         ),
-        throwsA(isA<LxEngineException>().having(
-          (e) => e.message,
-          'message',
-          contains('引擎无响应'),
-        )),
+        throwsA(
+          isA<LxEngineException>().having(
+            (e) => e.message,
+            'message',
+            contains('引擎无响应'),
+          ),
+        ),
       );
       expect(engine.isRunning, isFalse, reason: '死循环必须走重启路径');
 
@@ -236,7 +240,8 @@ String _buildBigBody() {
 }
 
 /// 测试脚本：把 HTTP 桥的行为原样回报给宿主，另有 hang / spin / slow 探针。
-String _probeScript(int port) => '''
+String _probeScript(int port) =>
+    '''
 const { EVENT_NAMES, request, on, send } = globalThis.lx
 const base = 'http://127.0.0.1:$port'
 const get = (url, options) => new Promise((resolve, reject) => {
@@ -317,23 +322,22 @@ Future<dynamic> _redirect(
   LxEngine engine, {
   required int hop,
   required int? followMax,
-}) =>
-    engine.search(
-      source: 'mock',
-      action: 'redirect',
-      keyword: jsonEncode({'hop': hop, 'followMax': followMax}),
-    );
+}) => engine.search(
+  source: 'mock',
+  action: 'redirect',
+  keyword: jsonEncode({'hop': hop, 'followMax': followMax}),
+);
 
 LxScriptInfo _scriptInfo(String script) => LxScriptInfo(
-      id: 'mock-script',
-      name: 'Mock 音源',
-      description: '测试用',
-      version: '1.0.0',
-      author: 'test',
-      homepage: '',
-      script: script,
-      importedAt: 0,
-    );
+  id: 'mock-script',
+  name: 'Mock 音源',
+  description: '测试用',
+  version: '1.0.0',
+  author: 'test',
+  homepage: '',
+  script: script,
+  importedAt: 0,
+);
 
 Future<void> _handleRequest(HttpRequest request) async {
   final path = request.uri.path;

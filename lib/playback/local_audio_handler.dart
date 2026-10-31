@@ -29,8 +29,7 @@ bool get isSystemMediaSessionSupported {
     TargetPlatform.iOS ||
     TargetPlatform.macOS ||
     TargetPlatform.windows ||
-    TargetPlatform.linux =>
-      true,
+    TargetPlatform.linux => true,
     _ => false,
   };
 }
@@ -142,13 +141,15 @@ class LocalAudioHandler {
     this._coverResolver,
     Future<String?> Function(String url)? artworkUriResolver,
     bool? periodicPositionStateUpdates,
-  })  : _backend = backend ??
-            createSystemMediaSessionBackend() ??
-            const NoopMediaSessionBackend(),
-        _artworkBlocked = artworkBlocked ?? (() => false),
-        _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
-        _periodicPositionStateUpdates = periodicPositionStateUpdates ??
-            defaultTargetPlatform != TargetPlatform.android {
+  }) : _backend =
+           backend ??
+           createSystemMediaSessionBackend() ??
+           const NoopMediaSessionBackend(),
+       _artworkBlocked = artworkBlocked ?? (() => false),
+       _artworkUriResolver = artworkUriResolver ?? _artworkUriFromCache,
+       _periodicPositionStateUpdates =
+           periodicPositionStateUpdates ??
+           defaultTargetPlatform != TargetPlatform.android {
     _readModel.addListener(_syncFromService);
     // 界面语言切换后通知动作文案（播放顺序 / 收藏）跟随：来源重算文案后
     // 通知 handler 重发动作，handler 自己不解析 locale。
@@ -406,13 +407,17 @@ class LocalAudioHandler {
           unawaited(_guardControl(() => seek(position)));
         }
       case playModeActionId:
-        unawaited(_guardControl(() async {
-          await customAction(action.name);
-        }));
+        unawaited(
+          _guardControl(() async {
+            await customAction(action.name);
+          }),
+        );
       case favoriteActionId:
-        unawaited(_guardControl(() async {
-          await customAction(action.name);
-        }));
+        unawaited(
+          _guardControl(() async {
+            await customAction(action.name);
+          }),
+        );
     }
   }
 
@@ -448,7 +453,8 @@ class LocalAudioHandler {
     // 播放器解析出真实时长后补发一次元数据（通知进度条的时长来源）。
     final durationChanged =
         duration > Duration.zero && duration != _lastMediaDuration;
-    final seeked = seekRevision != _lastSeekRevision ||
+    final seeked =
+        seekRevision != _lastSeekRevision ||
         (_periodicPositionStateUpdates &&
             (position - _lastPosition).abs() > const Duration(seconds: 1));
     if (!force &&
@@ -465,7 +471,8 @@ class LocalAudioHandler {
 
     final metadataNeedsRebuild =
         force || trackChanged || artworkChanged || durationChanged;
-    final stateNeedsRebuild = force ||
+    final stateNeedsRebuild =
+        force ||
         trackChanged ||
         playingChanged ||
         loadingChanged ||
@@ -542,8 +549,8 @@ class LocalAudioHandler {
       status: loading
           ? PlaybackStatus.buffering
           : playing
-              ? PlaybackStatus.playing
-              : PlaybackStatus.paused,
+          ? PlaybackStatus.playing
+          : PlaybackStatus.paused,
       position: position,
       bufferedPosition: position,
       speed: 1.0,
@@ -558,17 +565,17 @@ class LocalAudioHandler {
   }
 
   Set<MediaAction> _availableActions(PlayMode mode) => {
-        MediaAction.play,
-        MediaAction.pause,
-        MediaAction.skipToPrevious,
-        MediaAction.skipToNext,
-        MediaAction.stop,
-        MediaAction.seekTo,
-        // 收藏在前、播放顺序在后：这是自定义动作之间的相对顺序；标准三键与
-        // 自定义动作的最终位置由系统媒体控件决定（见 ADR-0010）。
-        _favoriteAction(),
-        _playModeAction(mode),
-      };
+    MediaAction.play,
+    MediaAction.pause,
+    MediaAction.skipToPrevious,
+    MediaAction.skipToNext,
+    MediaAction.stop,
+    MediaAction.seekTo,
+    // 收藏在前、播放顺序在后：这是自定义动作之间的相对顺序；标准三键与
+    // 自定义动作的最终位置由系统媒体控件决定（见 ADR-0010）。
+    _favoriteAction(),
+    _playModeAction(mode),
+  };
 
   /// 收藏动作：图标与文案反映**当前**收藏态（点按切换）。
   MediaAction _favoriteAction() {

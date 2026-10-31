@@ -59,8 +59,8 @@ class WebDavSyncTransport implements SyncTransport {
     this._journalBaseSeqProvider,
     Dio? dio,
     this._requestTimeout = const Duration(seconds: 15),
-  })  : _dio = dio,
-        _ownsDio = dio == null;
+  }) : _dio = dio,
+       _ownsDio = dio == null;
 
   /// 回执文件后缀（固定名，可变）：`<deviceId>.p2.acks.msync`。
   static const String acksSuffix = PeerJournalNames.acksSuffix;
@@ -143,8 +143,9 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<SyncPullResult> pull(
-      [SyncPullRequest request = SyncPullRequest.none]) async {
+  Future<SyncPullResult> pull([
+    SyncPullRequest request = SyncPullRequest.none,
+  ]) async {
     if (!_running) return SyncPullResult.none;
     final config = _configProvider();
     final passphrase = await _passphraseProvider();
@@ -347,9 +348,7 @@ class WebDavSyncTransport implements SyncTransport {
     // 同一设备只要有一份数据文件读成功就不算失败（回执失败 / 多块中的一块
     // 坏掉都不该把整台设备标成未连接）：这些失败只留在传输级计数 / 错误里。
     // 只有完全没读到数据的设备才保留设备级原因（读取 / 解密 / 缺快照）。
-    failedIssues.removeWhere(
-      (device, _) => dataOkDevices.contains(device),
-    );
+    failedIssues.removeWhere((device, _) => dataOkDevices.contains(device));
     for (final entry in ackFailures.entries) {
       if (dataOkDevices.contains(entry.key)) continue;
       failedIssues.putIfAbsent(entry.key, () => entry.value);
@@ -376,12 +375,12 @@ class WebDavSyncTransport implements SyncTransport {
   /// 文件级错误 → 设备级原因：保留读取 / 解密类型，`peer` 换成正被读取的
   /// 设备（文件名的前缀），详情弹层才能按设备说清失败原因。
   SyncIssue _deviceIssue(SyncIssue error, String device) => SyncIssue(
-        code: error.code == SyncIssueCode.webdavDecryptFailed
-            ? SyncIssueCode.webdavDecryptFailed
-            : SyncIssueCode.webdavReadFailed,
-        args: {...error.args, 'peer': device},
-        detail: error.detail,
-      );
+    code: error.code == SyncIssueCode.webdavDecryptFailed
+        ? SyncIssueCode.webdavDecryptFailed
+        : SyncIssueCode.webdavReadFailed,
+    args: {...error.args, 'peer': device},
+    detail: error.detail,
+  );
 
   /// 读一个远端文件并解密（版本缓存只对可变文件——回执——有意义）。
   Future<_ReadOutcome> _readEnvelope(
@@ -450,8 +449,10 @@ class WebDavSyncTransport implements SyncTransport {
         case PeerJournalFileKind.snapshot:
           final current = entry.snapshot;
           if (current == null || parsed.coverage > current.coverage) {
-            entry.snapshot =
-                _SnapshotFile(file: file, coverage: parsed.coverage);
+            entry.snapshot = _SnapshotFile(
+              file: file,
+              coverage: parsed.coverage,
+            );
           }
       }
     }
@@ -470,7 +471,9 @@ class WebDavSyncTransport implements SyncTransport {
   /// 同名块在日志重置后可能被覆盖（seq 从 1 重新开始）：对端在重置后走
   /// 「游标超前头部 → bootstrap 快照」，不会读到被覆盖的块。
   Future<void> _pruneOwnFiles(
-      WebDavConfig config, List<_RemoteFile> files) async {
+    WebDavConfig config,
+    List<_RemoteFile> files,
+  ) async {
     final baseSeq = await _journalBaseSeqProvider?.call();
     final stale = <String>[];
     final snapshots = <_SnapshotFile>[];
@@ -485,9 +488,7 @@ class WebDavSyncTransport implements SyncTransport {
             stale.add(file.name);
           }
         case PeerJournalFileKind.snapshot:
-          snapshots.add(
-            _SnapshotFile(file: file, coverage: parsed.coverage),
-          );
+          snapshots.add(_SnapshotFile(file: file, coverage: parsed.coverage));
       }
     }
     if (snapshots.length > 1) {
@@ -529,8 +530,10 @@ class WebDavSyncTransport implements SyncTransport {
       await _ensureDir(config);
       // 回执（固定名、几百字节）每次推送顺手更新：对端据此裁剪自己的日志
       // 窗口，不必读数据块；空窗口的轮次（只有 ack 变化）只写它。
-      final acksPayload =
-          await _codec.encrypt(_acksEnvelope(envelope), passphrase);
+      final acksPayload = await _codec.encrypt(
+        _acksEnvelope(envelope),
+        passphrase,
+      );
       await _putFile(config, PeerJournalNames.acks(deviceId), acksPayload);
       var bytesOut = acksPayload.length;
       // 数据：快照按覆盖位置命名、增量块按窗口区间命名——都写一次不再改。
@@ -566,16 +569,16 @@ class WebDavSyncTransport implements SyncTransport {
   /// 回执载荷：只带游标 / ack / 头部（保持「增量 + 空窗口」形态，对端按
   /// 同一套游标语义消费它）。
   SyncEnvelope _acksEnvelope(SyncEnvelope envelope) => SyncEnvelope(
-        deviceId: envelope.deviceId,
-        deviceName: envelope.deviceName,
-        producedAt: envelope.producedAt,
-        snapshotId: envelope.snapshotId,
-        journalHead: envelope.journalHead,
-        baseSeq: envelope.baseSeq,
-        journal: const [],
-        acks: envelope.acks,
-        categories: envelope.categories,
-      );
+    deviceId: envelope.deviceId,
+    deviceName: envelope.deviceName,
+    producedAt: envelope.producedAt,
+    snapshotId: envelope.snapshotId,
+    journalHead: envelope.journalHead,
+    baseSeq: envelope.baseSeq,
+    journal: const [],
+    acks: envelope.acks,
+    categories: envelope.categories,
+  );
 
   /// 显式清理某台对端的远端文件（用户动作；**不做自动删除**）。
   ///
@@ -660,7 +663,8 @@ class WebDavSyncTransport implements SyncTransport {
         'Depth': '1',
         'Content-Type': 'application/xml; charset=utf-8',
       },
-      body: '<?xml version="1.0" encoding="utf-8"?>'
+      body:
+          '<?xml version="1.0" encoding="utf-8"?>'
           '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
           '<d:getetag/><d:getlastmodified/></d:prop></d:propfind>',
     );
@@ -671,8 +675,10 @@ class WebDavSyncTransport implements SyncTransport {
     );
     final files = <_RemoteFile>[];
     for (final entry in _parsePropfind(body)) {
-      final segments =
-          entry.name.split('/').where((segment) => segment.isNotEmpty).toList();
+      final segments = entry.name
+          .split('/')
+          .where((segment) => segment.isNotEmpty)
+          .toList();
       if (segments.isEmpty) continue;
       final name = segments.last;
       // 本机文件也列出（裁剪自身旧块要看到它们）；幽灵文件按命名解析排除。
@@ -744,7 +750,10 @@ class WebDavSyncTransport implements SyncTransport {
   }
 
   Future<void> _putFile(
-      WebDavConfig config, String name, Uint8List payload) async {
+    WebDavConfig config,
+    String name,
+    Uint8List payload,
+  ) async {
     final response = await _send(
       'PUT',
       _fileUri(config, name),
@@ -763,8 +772,9 @@ class WebDavSyncTransport implements SyncTransport {
     final headers = <String, String>{};
     final password = await _passwordProvider();
     if (config.username.isNotEmpty) {
-      final token =
-          base64Encode(utf8.encode('${config.username}:${password ?? ''}'));
+      final token = base64Encode(
+        utf8.encode('${config.username}:${password ?? ''}'),
+      );
       headers['Authorization'] = 'Basic $token';
     }
     return headers;

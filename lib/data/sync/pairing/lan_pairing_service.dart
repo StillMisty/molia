@@ -79,9 +79,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     this.requestRateWindow = const Duration(seconds: 10),
     this.statusRateLimit = 240,
     this.statusRateWindow = const Duration(seconds: 10),
-  })  : _httpClient = httpClient ?? IoPairingHttpClient(),
-        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _logger = logger ?? Logger('molia.sync.pairing') {
+  }) : _httpClient = httpClient ?? IoPairingHttpClient(),
+       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
+       _logger = logger ?? Logger('molia.sync.pairing') {
     _rateLimiter = MspRateLimiter(
       perSourceLimit: requestRateLimit,
       globalLimit: requestRateLimit * 8,
@@ -195,10 +195,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (_disposed || _running) return;
     _running = true;
     _hidden = false;
-    _packetSub = _packets?.listen(
-      _onPacket,
-      onError: (Object _) {},
-    );
+    _packetSub = _packets?.listen(_onPacket, onError: (Object _) {});
     _startSweepTimer();
   }
 
@@ -283,9 +280,11 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         await _sendProbe(packet);
         continue;
       }
-      _scanTimers.add(Timer(Duration(milliseconds: delay), () {
-        unawaited(_sendProbe(packet));
-      }));
+      _scanTimers.add(
+        Timer(Duration(milliseconds: delay), () {
+          unawaited(_sendProbe(packet));
+        }),
+      );
     }
     return true;
   }
@@ -325,8 +324,11 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       _emitNearby();
     }
     try {
-      final sent =
-          await _sendPacket?.call(packet, host: normalized, port: port);
+      final sent = await _sendPacket?.call(
+        packet,
+        host: normalized,
+        port: port,
+      );
       return sent ?? false;
     } catch (e) {
       _logger.fine('单播配对探测失败', e);
@@ -377,17 +379,19 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   Future<Uint8List?> _buildProbePacket() async {
     final addresses = await _localAddresses();
     try {
-      return Msp1.encode(Msp1Message(
-        type: Msp1.typeProbe,
-        deviceId: deviceId,
-        name: _deviceName(),
-        httpPort: _httpPortProvider(),
-        probePort: _probePortProvider?.call() ?? 0,
-        addresses: addresses,
-        hasGroup: _ownHasGroup(),
-        bootId: _bootId,
-        nonce: _randomToken(16),
-      ));
+      return Msp1.encode(
+        Msp1Message(
+          type: Msp1.typeProbe,
+          deviceId: deviceId,
+          name: _deviceName(),
+          httpPort: _httpPortProvider(),
+          probePort: _probePortProvider?.call() ?? 0,
+          addresses: addresses,
+          hasGroup: _ownHasGroup(),
+          bootId: _bootId,
+          nonce: _randomToken(16),
+        ),
+      );
     } catch (e) {
       _logger.fine('构建配对探测包失败', e);
       return null;
@@ -436,17 +440,19 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   Future<Uint8List?> _buildAnnouncePacket() async {
     final addresses = await _localAddresses();
     try {
-      return Msp1.encode(Msp1Message(
-        type: Msp1.typeAnnounce,
-        deviceId: deviceId,
-        name: _deviceName(),
-        httpPort: _httpPortProvider(),
-        probePort: _probePortProvider?.call() ?? 0,
-        addresses: addresses,
-        hasGroup: _ownHasGroup(),
-        bootId: _bootId,
-        nonce: _randomToken(16),
-      ));
+      return Msp1.encode(
+        Msp1Message(
+          type: Msp1.typeAnnounce,
+          deviceId: deviceId,
+          name: _deviceName(),
+          httpPort: _httpPortProvider(),
+          probePort: _probePortProvider?.call() ?? 0,
+          addresses: addresses,
+          hasGroup: _ownHasGroup(),
+          bootId: _bootId,
+          nonce: _randomToken(16),
+        ),
+      );
     } catch (e) {
       _logger.fine('构建配对应答包失败', e);
       return null;
@@ -523,8 +529,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         (ownPassphrase == null || ownPassphrase.trim().isEmpty)) {
       ownHasGroup = false;
     }
-    final intent =
-        ownHasGroup ? SyncPairingIntent.invite : SyncPairingIntent.join;
+    final intent = ownHasGroup
+        ? SyncPairingIntent.invite
+        : SyncPairingIntent.join;
     final requestId = _randomToken(16);
     final keyPair = PairingCrypto.generateKeyPair();
     final nonce = _randomBytes(PairingCrypto.nonceLength);
@@ -550,10 +557,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       return await _pollStatus(outgoing);
     } on PairingCryptoException {
       // 公钥 / 密封数据异常不把细节回给 UI，也不写日志原文。
-      return _finish(
-        outgoing,
-        SyncPairingStatus.unavailable,
-      );
+      return _finish(outgoing, SyncPairingStatus.unavailable);
     } on _PairingUnreachable {
       return _finish(
         outgoing,
@@ -764,12 +768,14 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       plaintext: utf8.encode(own),
       aad: aad,
     );
-    final body = utf8.encode(jsonEncode({
-      'v': 1,
-      'requestId': outgoing.requestId,
-      'deviceId': deviceId,
-      'sealed': _encodeToken(sealed),
-    }));
+    final body = utf8.encode(
+      jsonEncode({
+        'v': 1,
+        'requestId': outgoing.requestId,
+        'deviceId': deviceId,
+        'sealed': _encodeToken(sealed),
+      }),
+    );
     try {
       final reply = await _httpClient.send(
         method: 'POST',
@@ -827,17 +833,17 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   @override
   Future<PairingHttpResponse> handle(PairingHttpRequest request) async {
     if (!_running) {
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.unavailable.name},
-        statusCode: 200,
-      );
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.unavailable.name,
+      }, statusCode: 200);
     }
     try {
       if (request.bodyLength > pairingMaxBodyBytes) {
-        return PairingHttpResponse.json(
-          {'v': 1, 'status': SyncPairingStatus.busy.name},
-          statusCode: 413,
-        );
+        return PairingHttpResponse.json({
+          'v': 1,
+          'status': SyncPairingStatus.busy.name,
+        }, statusCode: 413);
       }
       switch (request.path) {
         case PairingHttpPaths.request:
@@ -850,25 +856,23 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
           return const PairingHttpResponse(statusCode: 404, body: '');
       }
     } on _BadPairingRequest {
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.unavailable.name},
-        statusCode: 400,
-      );
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.unavailable.name,
+      }, statusCode: 400);
     } on PairingCryptoException {
       // 坏公钥 / 结构非法：400，不产生弹窗、不写日志原文。
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.unavailable.name},
-        statusCode: 400,
-      );
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.unavailable.name,
+      }, statusCode: 400);
     } catch (e) {
       // 请求处理可能接触口令 / 密封载荷：日志只留路径与异常类型。
-      _logger.fine(
-        '配对 HTTP 请求处理失败（${request.path}）：${e.runtimeType}',
-      );
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.unavailable.name},
-        statusCode: 500,
-      );
+      _logger.fine('配对 HTTP 请求处理失败（${request.path}）：${e.runtimeType}');
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.unavailable.name,
+      }, statusCode: 500);
     }
   }
 
@@ -876,16 +880,13 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     PairingHttpRequest request,
   ) async {
     if (request.method != 'POST') {
-      return const PairingHttpResponse(
-        statusCode: 405,
-        body: '',
-      );
+      return const PairingHttpResponse(statusCode: 405, body: '');
     }
     if (!_rateLimiter.allow(request.sourceHost, _nowMs())) {
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.busy.name},
-        statusCode: 429,
-      );
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.busy.name,
+      }, statusCode: 429);
     }
     final map = _decodeRequestMap(request.body);
     final requestId = _readId(map, 'requestId');
@@ -913,11 +914,15 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (peerDeviceId == deviceId) {
       throw const _BadPairingRequest('不能与自己配对');
     }
-    final peerName =
-        _readString(map, 'deviceName', maxLength: 128, allowEmpty: true);
+    final peerName = _readString(
+      map,
+      'deviceName',
+      maxLength: 128,
+      allowEmpty: true,
+    );
     final requestedIntent =
         SyncPairingIntent.tryParse(map['intent'] as String?) ??
-            (throw const _BadPairingRequest('配对意图缺失'));
+        (throw const _BadPairingRequest('配对意图缺失'));
     final peerPublicKey = _decodeTokenField(map, 'publicKey');
     final peerNonce = _decodeTokenField(map, 'nonce');
     if (peerNonce.length != PairingCrypto.nonceLength) {
@@ -926,14 +931,16 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     // 公钥在入队前就验证在曲线上：坏公钥不产生弹窗。
     PairingCrypto.validatePublicKey(peerPublicKey);
     final peerHasGroup = map['group'] == true;
-    final proof =
-        map['proof'] is String ? _decodeToken(map['proof'] as String) : null;
+    final proof = map['proof'] is String
+        ? _decodeToken(map['proof'] as String)
+        : null;
     final peerHttpPort = _readPort(map['http']);
     final peerProbePort = _readPort(map['probe']);
     final peerHost = request.sourceHost;
 
     final ownPassphrase = await _readPassphrase();
-    final receiverHasGroup = _ownHasGroup() &&
+    final receiverHasGroup =
+        _ownHasGroup() &&
         ownPassphrase != null &&
         ownPassphrase.trim().isNotEmpty;
 
@@ -1043,10 +1050,10 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       return const PairingHttpResponse(statusCode: 405, body: '');
     }
     if (!_statusRateLimiter.allow(request.sourceHost, _nowMs())) {
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.busy.name},
-        statusCode: 429,
-      );
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.busy.name,
+      }, statusCode: 429);
     }
     final rawId = request.query['id'];
     if (rawId == null) throw const _BadPairingRequest('缺少 requestId');
@@ -1077,10 +1084,10 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     // 「已接受但口令永远写不进来」的半完成状态。complete 仍受已接受 entry、
     // requestId、临时密钥与 request TTL 约束，后台进程不能凭空发起一次写入。
     if (!_rateLimiter.allow(request.sourceHost, _nowMs())) {
-      return PairingHttpResponse.json(
-        {'v': 1, 'status': SyncPairingStatus.busy.name},
-        statusCode: 429,
-      );
+      return PairingHttpResponse.json({
+        'v': 1,
+        'status': SyncPairingStatus.busy.name,
+      }, statusCode: 429);
     }
     final map = _decodeRequestMap(request.body);
     final requestId = _readId(map, 'requestId');
@@ -1313,15 +1320,17 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     if (next == null) return;
     next.prompted = true;
     _activePromptId = next.requestId;
-    _incomingRequests.add(SyncPairingRequest(
-      requestId: next.requestId,
-      peerDeviceId: next.peerDeviceId,
-      peerName: next.peerName,
-      intent: next.intent,
-      code: next.code,
-      expiresAt: next.expiresAt,
-      peerHasGroup: next.peerHasGroup,
-    ));
+    _incomingRequests.add(
+      SyncPairingRequest(
+        requestId: next.requestId,
+        peerDeviceId: next.peerDeviceId,
+        peerName: next.peerName,
+        intent: next.intent,
+        code: next.code,
+        expiresAt: next.expiresAt,
+        peerHasGroup: next.peerHasGroup,
+      ),
+    );
   }
 
   void _afterPromptResolved(_IncomingPairing entry) {
@@ -1414,13 +1423,15 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }) async {
     if (peerHttpPort <= 0 || peerHost.trim().isEmpty) return;
     try {
-      await _addPeerEndpoint?.call(LanPeerEndpoint(
-        deviceId: peerDeviceId,
-        host: peerHost,
-        httpPort: peerHttpPort,
-        probePort: peerProbePort,
-        verifiedAt: _nowMs(),
-      ));
+      await _addPeerEndpoint?.call(
+        LanPeerEndpoint(
+          deviceId: peerDeviceId,
+          host: peerHost,
+          httpPort: peerHttpPort,
+          probePort: peerProbePort,
+          verifiedAt: _nowMs(),
+        ),
+      );
     } catch (e) {
       _logger.fine('保存配对端点失败', e);
     }
@@ -1456,37 +1467,35 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     _OutgoingPairing outgoing, {
     required Uint8List receiverPublicKey,
     required Uint8List receiverNonce,
-  }) =>
-      PairingCrypto.confirmationCode(
-        requestId: outgoing.requestId,
-        intent: outgoing.intent,
-        initiatorDeviceId: deviceId,
-        receiverDeviceId: outgoing.device.deviceId,
-        initiatorNonce: outgoing.nonce,
-        receiverNonce: receiverNonce,
-        initiatorPublicKey: outgoing.publicKey,
-        receiverPublicKey: receiverPublicKey,
-      );
+  }) => PairingCrypto.confirmationCode(
+    requestId: outgoing.requestId,
+    intent: outgoing.intent,
+    initiatorDeviceId: deviceId,
+    receiverDeviceId: outgoing.device.deviceId,
+    initiatorNonce: outgoing.nonce,
+    receiverNonce: receiverNonce,
+    initiatorPublicKey: outgoing.publicKey,
+    receiverPublicKey: receiverPublicKey,
+  );
 
   Uint8List _aad(_OutgoingPairing outgoing) => _aadFor(
-        requestId: outgoing.requestId,
-        intent: outgoing.intent,
-        initiatorDeviceId: deviceId,
-        receiverDeviceId: outgoing.device.deviceId,
-      );
+    requestId: outgoing.requestId,
+    intent: outgoing.intent,
+    initiatorDeviceId: deviceId,
+    receiverDeviceId: outgoing.device.deviceId,
+  );
 
   Uint8List _aadFor({
     required String requestId,
     required SyncPairingIntent intent,
     required String initiatorDeviceId,
     required String receiverDeviceId,
-  }) =>
-      PairingCrypto.aad(
-        requestId: requestId,
-        intent: intent,
-        initiatorDeviceId: initiatorDeviceId,
-        receiverDeviceId: receiverDeviceId,
-      );
+  }) => PairingCrypto.aad(
+    requestId: requestId,
+    intent: intent,
+    initiatorDeviceId: initiatorDeviceId,
+    receiverDeviceId: receiverDeviceId,
+  );
 
   SyncPairingResult _finish(
     _OutgoingPairing outgoing,
@@ -1513,15 +1522,17 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   void _emitAttempt(_OutgoingPairing outgoing, SyncPairingStatus status) {
     outgoing.status = status;
     if (_attempts.isClosed || outgoing.code.isEmpty) return;
-    _attempts.add(SyncPairingAttempt(
-      requestId: outgoing.requestId,
-      peerDeviceId: outgoing.device.deviceId,
-      peerName: outgoing.device.name,
-      intent: outgoing.intent,
-      code: outgoing.code,
-      status: status,
-      expiresAt: outgoing.expiresAt,
-    ));
+    _attempts.add(
+      SyncPairingAttempt(
+        requestId: outgoing.requestId,
+        peerDeviceId: outgoing.device.deviceId,
+        peerName: outgoing.device.name,
+        intent: outgoing.intent,
+        code: outgoing.code,
+        status: status,
+        expiresAt: outgoing.expiresAt,
+      ),
+    );
   }
 
   /// 旧路径 / 不支持的请求形态：结果要能让 UI 说「对端版本不支持」。

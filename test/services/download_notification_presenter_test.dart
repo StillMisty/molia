@@ -19,19 +19,16 @@ void main() {
   var now = 1000;
 
   Track makeTrack({String title = '测试歌曲', String artist = '歌手'}) => Track(
-        id: const TrackId('kw', '1'),
-        title: title,
-        artists: artist.isEmpty ? const [] : [Artist(name: artist)],
-        origin: TrackOrigin.builtin,
-      );
+    id: const TrackId('kw', '1'),
+    title: title,
+    artists: artist.isEmpty ? const [] : [Artist(name: artist)],
+    origin: TrackOrigin.builtin,
+  );
 
-  List<DownloadNotificationEvent> updatesOf(
-    FakeDownloadNotifications port,
-  ) =>
-      [
-        for (final event in port.events)
-          if (event.method == 'update') event,
-      ];
+  List<DownloadNotificationEvent> updatesOf(FakeDownloadNotifications port) => [
+    for (final event in port.events)
+      if (event.method == 'update') event,
+  ];
 
   setUp(() {
     now = 1000;
@@ -127,7 +124,11 @@ void main() {
 
   test('批量：整批共享一条「N/N」；批内单任务被抑制、进度路由批量 id', () {
     expect(presenter.beginBatch(3), isTrue);
-    presenter.enterBatch(index: 1, key: 'kw:1', track: makeTrack(title: '第一首'));
+    presenter.enterBatch(
+      index: 1,
+      key: 'kw:1',
+      track: makeTrack(title: '第一首'),
+    );
     expect(port.methods, ['start']);
     expect(port.events.single.id, 'batch');
     expect(port.events.single.title, '第一首');
@@ -145,7 +146,11 @@ void main() {
 
     // 进入下一首：update 顺延序号，进度条回到不确定态。
     now += 600;
-    presenter.enterBatch(index: 2, key: 'tx:2', track: makeTrack(title: '第二首'));
+    presenter.enterBatch(
+      index: 2,
+      key: 'tx:2',
+      track: makeTrack(title: '第二首'),
+    );
     expect(port.events.last.method, 'update');
     expect(port.events.last.id, 'batch');
     expect(port.events.last.title, '第二首');

@@ -53,8 +53,10 @@ abstract class HtmlUnescapeBase extends Converter<String, String> {
       buf.write(data.substring(offset, nextAmp));
       offset = nextAmp;
 
-      var chunk =
-          data.substring(offset, min(data.length, offset + _chunkLength));
+      var chunk = data.substring(
+        offset,
+        min(data.length, offset + _chunkLength),
+      );
 
       // Try &#123; and &#xff;
       if (chunk.length > _minDecimalEscapeLength &&

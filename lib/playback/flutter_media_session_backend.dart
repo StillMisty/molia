@@ -11,7 +11,7 @@ import 'media_session_backend.dart';
 /// 首次开启歌词输出时决定。
 class FlutterMediaSessionBackend implements MediaSessionBackend {
   FlutterMediaSessionBackend({FlutterMediaSessionPlatform? platform})
-      : _platform = platform ?? FlutterMediaSessionPlatform.instance;
+    : _platform = platform ?? FlutterMediaSessionPlatform.instance;
 
   final FlutterMediaSessionPlatform _platform;
 

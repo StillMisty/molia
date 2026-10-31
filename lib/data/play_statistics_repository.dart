@@ -49,9 +49,9 @@ class PlayStatisticsRepository {
     int Function()? clock,
     required StatisticsSyncWriter statisticsSync,
     this._beforeWrite,
-  })  : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
-        _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
-        _sync = statisticsSync {
+  }) : _databaseProvider = databaseProvider ?? (() => MoliaDatabase.instance),
+       _clock = clock ?? (() => DateTime.now().millisecondsSinceEpoch),
+       _sync = statisticsSync {
     // 远端落地后仍需走仓库的变更流：UI 刷新与同步调度都监听这里。
     _sync.onChanged = _notifyChanged;
   }
@@ -132,8 +132,7 @@ class PlayStatisticsRepository {
   }) {
     return (_db.update(
       _db.playEvents,
-    )..where((t) => t.id.equals(id) & t.endedAt.isNull()))
-        .write(
+    )..where((t) => t.id.equals(id) & t.endedAt.isNull())).write(
       PlayEventsCompanion(
         listenedMs: Value(listenedMs),
         maxPositionMs: Value(maxPositionMs),
@@ -182,8 +181,7 @@ class PlayStatisticsRepository {
       final staleIds = [
         for (final row in await (_db.select(
           _db.playEvents,
-        )..where((t) => t.endedAt.isNull()))
-            .get())
+        )..where((t) => t.endedAt.isNull())).get())
           row.id,
       ];
       if (staleIds.isEmpty) return;
@@ -217,8 +215,9 @@ class PlayStatisticsRepository {
 
   /// 范围内汇总；[since]（epoch ms）为 null 表示全部历史。
   Future<PlayStatisticsSummary> summary({int? since}) async {
-    final row = await _db.customSelect(
-      '''
+    final row = await _db
+        .customSelect(
+          '''
       SELECT
         SUM(CASE WHEN $_countablePredicate THEN 1 ELSE 0 END) AS playCount,
         SUM(CASE WHEN $_countablePredicate AND ($_qualifiedPredicate)
@@ -234,8 +233,9 @@ class PlayStatisticsRepository {
       JOIN play_tracks pt ON pt.id = e.trackId
       WHERE endedAt IS NOT NULL${since != null ? ' AND startedAt >= ?' : ''}
     ''',
-      variables: [if (since != null) Variable.withInt(since)],
-    ).getSingle();
+          variables: [if (since != null) Variable.withInt(since)],
+        )
+        .getSingle();
     final data = row.data;
     final playCount = _intOf(data['playCount']);
     final completed = _intOf(data['completedCount']);
@@ -296,8 +296,9 @@ class PlayStatisticsRepository {
     int? since,
     int limit = 10,
   }) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         pt.sourceKey AS sourceKey,
         pt.songId AS songId,
@@ -320,11 +321,12 @@ class PlayStatisticsRepository {
       ORDER BY playCount DESC, listenedMs DESC, lastPlayedAt DESC
       LIMIT ?
     ''',
-      variables: [
-        if (since != null) Variable.withInt(since),
-        Variable.withInt(limit),
-      ],
-    ).get();
+          variables: [
+            if (since != null) Variable.withInt(since),
+            Variable.withInt(limit),
+          ],
+        )
+        .get();
     return [
       for (final row in rows)
         PlayStatTrackEntry(
@@ -352,8 +354,9 @@ class PlayStatisticsRepository {
     int? since,
     int limit = 10,
   }) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         pt.artist AS artist,
         SUM(CASE WHEN ($_qualifiedPredicate) THEN 1 ELSE 0 END) AS playCount,
@@ -365,8 +368,9 @@ class PlayStatisticsRepository {
       GROUP BY pt.artist
       HAVING playCount > 0
     ''',
-      variables: [if (since != null) Variable.withInt(since)],
-    ).get();
+          variables: [if (since != null) Variable.withInt(since)],
+        )
+        .get();
     final counts = <String, int>{};
     final listened = <String, int>{};
     for (final row in rows) {
@@ -380,18 +384,19 @@ class PlayStatisticsRepository {
         listened[name] = (listened[name] ?? 0) + listenedMs;
       }
     }
-    final entries = [
-      for (final entry in counts.entries)
-        PlayStatArtistEntry(
-          artist: entry.key,
-          playCount: entry.value,
-          listenedMs: listened[entry.key] ?? 0,
-        ),
-    ]..sort((a, b) {
-        final byCount = b.playCount.compareTo(a.playCount);
-        if (byCount != 0) return byCount;
-        return b.listenedMs.compareTo(a.listenedMs);
-      });
+    final entries =
+        [
+          for (final entry in counts.entries)
+            PlayStatArtistEntry(
+              artist: entry.key,
+              playCount: entry.value,
+              listenedMs: listened[entry.key] ?? 0,
+            ),
+        ]..sort((a, b) {
+          final byCount = b.playCount.compareTo(a.playCount);
+          if (byCount != 0) return byCount;
+          return b.listenedMs.compareTo(a.listenedMs);
+        });
     return entries.take(limit).toList();
   }
 
@@ -468,8 +473,9 @@ class PlayStatisticsRepository {
 
   /// 来源分布（`sourceKey` 维度，按时长降序）。
   Future<List<SourceListened>> sourceDistribution({int? since}) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT
         pt.sourceKey AS sourceKey,
         COALESCE(SUM(listenedMs), 0) AS listenedMs,
@@ -480,8 +486,9 @@ class PlayStatisticsRepository {
       GROUP BY pt.sourceKey
       ORDER BY listenedMs DESC, playCount DESC
     ''',
-      variables: [if (since != null) Variable.withInt(since)],
-    ).get();
+          variables: [if (since != null) Variable.withInt(since)],
+        )
+        .get();
     return [
       for (final row in rows)
         SourceListened(
@@ -496,15 +503,17 @@ class PlayStatisticsRepository {
   Future<DayPlayEvents> dayEvents(DateTime day) async {
     final start = DateTime(day.year, day.month, day.day);
     final end = start.add(const Duration(days: 1));
-    final rows = await _db.customSelect(
-      '$playEventTrackSelect WHERE $_countablePredicate '
-      'AND e.startedAt >= ? AND e.startedAt < ? '
-      'ORDER BY e.startedAt ASC, e.id ASC',
-      variables: [
-        Variable.withInt(start.millisecondsSinceEpoch),
-        Variable.withInt(end.millisecondsSinceEpoch),
-      ],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          '$playEventTrackSelect WHERE $_countablePredicate '
+          'AND e.startedAt >= ? AND e.startedAt < ? '
+          'ORDER BY e.startedAt ASC, e.id ASC',
+          variables: [
+            Variable.withInt(start.millisecondsSinceEpoch),
+            Variable.withInt(end.millisecondsSinceEpoch),
+          ],
+        )
+        .get();
     final playEvents = [for (final row in rows) _eventFromQueryRow(row.data)];
     var listenedMs = 0;
     var playCount = 0;
@@ -524,11 +533,13 @@ class PlayStatisticsRepository {
   Future<List<PlayEvent>> listEventsForExport({
     int limit = PlayStatisticsLimits.exportEventLimit,
   }) async {
-    final rows = await _db.customSelect(
-      '$playEventTrackSelect WHERE e.endedAt IS NOT NULL '
-      'ORDER BY e.startedAt DESC, e.id DESC LIMIT ?',
-      variables: [Variable.withInt(limit)],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          '$playEventTrackSelect WHERE e.endedAt IS NOT NULL '
+          'ORDER BY e.startedAt DESC, e.id DESC LIMIT ?',
+          variables: [Variable.withInt(limit)],
+        )
+        .get();
     return [for (final row in rows) _eventFromQueryRow(row.data)];
   }
 
@@ -625,8 +636,9 @@ class PlayStatisticsRepository {
   Future<List<({String title, String artist})>> listPlayedTrackNames({
     int limit = 1000,
   }) async {
-    final rows = await _db.customSelect(
-      '''
+    final rows = await _db
+        .customSelect(
+          '''
       SELECT pt.title AS title, pt.artist AS artist,
              MAX(e.startedAt) AS lastAt
       FROM play_events e
@@ -636,8 +648,9 @@ class PlayStatisticsRepository {
       ORDER BY lastAt DESC
       LIMIT ?
     ''',
-      variables: [Variable.withInt(limit)],
-    ).get();
+          variables: [Variable.withInt(limit)],
+        )
+        .get();
     return [
       for (final row in rows)
         (
@@ -670,14 +683,16 @@ class PlayStatisticsRepository {
   }
 
   Future<List<_StatRow>> _statsRows(int? since) async {
-    final rows = await _db.customSelect(
-      'SELECT e.startedAt AS startedAt, e.listenedMs AS listenedMs, '
-      'pt.durationMs AS durationMs FROM play_events e '
-      'JOIN play_tracks pt ON pt.id = e.trackId '
-      'WHERE $_countablePredicate${since != null ? ' AND e.startedAt >= ?' : ''} '
-      'ORDER BY e.startedAt ASC',
-      variables: [if (since != null) Variable.withInt(since)],
-    ).get();
+    final rows = await _db
+        .customSelect(
+          'SELECT e.startedAt AS startedAt, e.listenedMs AS listenedMs, '
+          'pt.durationMs AS durationMs FROM play_events e '
+          'JOIN play_tracks pt ON pt.id = e.trackId '
+          'WHERE $_countablePredicate${since != null ? ' AND e.startedAt >= ?' : ''} '
+          'ORDER BY e.startedAt ASC',
+          variables: [if (since != null) Variable.withInt(since)],
+        )
+        .get();
     return [
       for (final row in rows)
         _StatRow(
@@ -693,21 +708,21 @@ class PlayStatisticsRepository {
 
   /// 明细查询行（[playEventTrackSelect]：事件 + 曲目内容）→ 领域事件。
   static PlayEvent _eventFromQueryRow(Map<String, Object?> row) => PlayEvent(
-        id: (row['id'] as num?)?.toInt() ?? 0,
-        sourceKey: row['sourceKey'] as String? ?? '',
-        songId: row['songId'] as String? ?? '',
-        title: row['title'] as String? ?? '',
-        artist: row['artist'] as String? ?? '',
-        album: row['album'] as String? ?? '',
-        coverUrl: row['coverUrl'] as String?,
-        durationMs: (row['durationMs'] as num?)?.toInt(),
-        raw: _decodeRaw(row['raw']),
-        startedAt: (row['startedAt'] as num?)?.toInt() ?? 0,
-        endedAt: (row['endedAt'] as num?)?.toInt(),
-        listenedMs: (row['listenedMs'] as num?)?.toInt() ?? 0,
-        maxPositionMs: (row['maxPositionMs'] as num?)?.toInt() ?? 0,
-        endReason: PlayEventEndReason.fromStorage(row['endReason'] as String?),
-      );
+    id: (row['id'] as num?)?.toInt() ?? 0,
+    sourceKey: row['sourceKey'] as String? ?? '',
+    songId: row['songId'] as String? ?? '',
+    title: row['title'] as String? ?? '',
+    artist: row['artist'] as String? ?? '',
+    album: row['album'] as String? ?? '',
+    coverUrl: row['coverUrl'] as String?,
+    durationMs: (row['durationMs'] as num?)?.toInt(),
+    raw: _decodeRaw(row['raw']),
+    startedAt: (row['startedAt'] as num?)?.toInt() ?? 0,
+    endedAt: (row['endedAt'] as num?)?.toInt(),
+    listenedMs: (row['listenedMs'] as num?)?.toInt() ?? 0,
+    maxPositionMs: (row['maxPositionMs'] as num?)?.toInt() ?? 0,
+    endReason: PlayEventEndReason.fromStorage(row['endReason'] as String?),
+  );
 
   static int _intOf(Object? value) => (value as num?)?.toInt() ?? 0;
 

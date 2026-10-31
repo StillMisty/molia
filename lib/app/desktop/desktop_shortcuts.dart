@@ -150,9 +150,11 @@ class _DesktopShortcutsState extends State<DesktopShortcuts> {
       onSelectDestinationIndex: widget.onSelectDestinationIndex,
       onCloseQueuePanel: widget.onCloseQueuePanel,
     );
-    unawaited(actions.execute(command).catchError((Object error) {
-      _logger.warning('快捷键命令执行失败（${command.name}）：$error');
-    }));
+    unawaited(
+      actions.execute(command).catchError((Object error) {
+        _logger.warning('快捷键命令执行失败（${command.name}）：$error');
+      }),
+    );
   }
 
   @override

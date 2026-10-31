@@ -100,9 +100,9 @@ class SyncRoundRunner {
     required this._runtime,
     required this._clock,
     Logger? logger,
-  })  : _state = state,
-        _transports = transports,
-        _logger = logger ?? Logger('molia.sync') {
+  }) : _state = state,
+       _transports = transports,
+       _logger = logger ?? Logger('molia.sync') {
     // 发布台账由运行时自己建立：阶段测试直接构造 runner 也不会漏门控。
     for (final entry in transports.entries) {
       _publishLedgers[entry.key] = PublishLedger(
@@ -145,7 +145,7 @@ class SyncRoundRunner {
 
   /// 上一轮各适配器的收集结果（身份）与聚合视图。
   final Map<SyncAdapter, Map<SyncCategory, List<SyncRecord>>>
-      _lastAdapterCollect = {};
+  _lastAdapterCollect = {};
   Map<SyncCategory, List<SyncRecord>>? _lastAggregate;
   Set<SyncCategory>? _lastAggregateCategories;
 
@@ -209,7 +209,8 @@ class SyncRoundRunner {
         JournalServeMode.fullSnapshot) {
       return serveSnapshot();
     }
-    final snapshot = _lastEnvelope ??
+    final snapshot =
+        _lastEnvelope ??
         await _buildLiveSnapshot(categories: _state.enabledCategories);
     final entries = await journal.window(since: since);
     final bounds = journalWindowBounds(entries);
@@ -385,7 +386,7 @@ class SyncRoundRunner {
     );
     context.localChanged = journal == null
         ? (_localFingerprint == null ||
-            await _fingerprintOf(context.local) != _localFingerprint)
+              await _fingerprintOf(context.local) != _localFingerprint)
         : context.journalHead != _localJournalHead;
 
     // 本地视图就是适配器当前状态：以本地版本播种登记（内存内，不落库），
@@ -393,10 +394,10 @@ class SyncRoundRunner {
     final known = await _ensureKnown();
     for (final entry in context.local.entries) {
       for (final record in entry.value) {
-        known.putIfAbsent(
-          (category: entry.key, key: record.key),
-          () => record.version,
-        );
+        known.putIfAbsent((
+          category: entry.key,
+          key: record.key,
+        ), () => record.version);
       }
     }
 
@@ -430,7 +431,8 @@ class SyncRoundRunner {
     context.inboundOnly = context.trigger == SyncTrigger.incoming;
     // 强制发现：启动 / 回前台 / 换网 / 手动轮 / 打开同步页的检查轮要
     // 广播 + 组播 + 单播；其余轮次只对已有候选单播（空闲轮 0 广播）。
-    final forceDiscovery = context.trigger == SyncTrigger.manual ||
+    final forceDiscovery =
+        context.trigger == SyncTrigger.manual ||
         context.trigger == SyncTrigger.startup ||
         context.trigger == SyncTrigger.resume ||
         context.trigger == SyncTrigger.network ||
@@ -513,23 +515,22 @@ class SyncRoundRunner {
       for (final entry in context.local.entries) {
         final kept = [
           for (final record in entry.value)
-            if (!context.forcedDelivery
-                .contains((category: entry.key, key: record.key)))
+            if (!context.forcedDelivery.contains((
+              category: entry.key,
+              key: record.key,
+            )))
               record,
         ];
         if (kept.isNotEmpty) localForMerge[entry.key] = kept;
       }
-      final merged = mergeEnvelopesByCategory(
-        [
-          _envelopeFrom(localForMerge),
-          SyncEnvelope(
-            deviceId: _state.deviceId,
-            producedAt: context.startedAt,
-            records: context.remoteRecords,
-          ),
-        ],
-        categories: context.categories,
-      );
+      final merged = mergeEnvelopesByCategory([
+        _envelopeFrom(localForMerge),
+        SyncEnvelope(
+          deviceId: _state.deviceId,
+          producedAt: context.startedAt,
+          records: context.remoteRecords,
+        ),
+      ], categories: context.categories);
 
       for (final adapter in _adapters) {
         if (!adapter.ready) continue;
@@ -641,7 +642,8 @@ class SyncRoundRunner {
     // jsonEncode 的 O(全库) 工作，空闲轮不必付。
     final refreshedCount = _recordCount(refreshed);
     final prunedCount = _recordCount(pruned.records);
-    final fingerprintReusable = journal != null &&
+    final fingerprintReusable =
+        journal != null &&
         _snapshotFingerprintId != null &&
         context.journalHead == _snapshotFingerprintHead &&
         context.applied == 0 &&
@@ -751,11 +753,15 @@ class SyncRoundRunner {
       0,
       (sum, item) => sum + item.pulled,
     );
-    final anyTransport =
-        transportReports.any((item) => item.enabled && item.running);
-    final remoteCount = context.remoteRecords.values
-        .fold<int>(0, (sum, list) => sum + list.length);
-    final contact = peersSeen > 0 ||
+    final anyTransport = transportReports.any(
+      (item) => item.enabled && item.running,
+    );
+    final remoteCount = context.remoteRecords.values.fold<int>(
+      0,
+      (sum, list) => sum + list.length,
+    );
+    final contact =
+        peersSeen > 0 ||
         context.applied > 0 ||
         remoteCount > 0 ||
         failedCount + context.applyFailures > 0;
@@ -1053,8 +1059,9 @@ class SyncRoundRunner {
       );
     }
     return SyncPullPlan(
-      discovery:
-          forceDiscovery ? SyncPullDiscovery.full : SyncPullDiscovery.knownOnly,
+      discovery: forceDiscovery
+          ? SyncPullDiscovery.full
+          : SyncPullDiscovery.knownOnly,
       peers: peers,
     );
   }
@@ -1074,8 +1081,7 @@ class SyncRoundRunner {
     required Set<SyncCategory> categories,
   }) async {
     final peerSet = <SyncCategory>{
-      for (final name in peerCategories)
-        ?SyncCategory.tryParse(name),
+      for (final name in peerCategories) ?SyncCategory.tryParse(name),
     };
     if (peerSet.isEmpty) {
       // 对端未声明类别（测试注入的载荷）：按本机类别集合比较。
@@ -1150,11 +1156,7 @@ class SyncRoundRunner {
   ///
   /// 拉取成功不经过这里：`_consumePayloads` 在载荷落地时推进 `lastPullAt`。
   /// [push] 标记本次是否真的发生了推送（探测应答 / 未变跳过不传）。
-  void _touchPeerSuccess(
-    String deviceId,
-    String kind, {
-    bool push = false,
-  }) {
+  void _touchPeerSuccess(String deviceId, String kind, {bool push = false}) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
@@ -1217,8 +1219,7 @@ class SyncRoundRunner {
   Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(
     Set<SyncCategory> categories, {
     bool fresh = false,
-  }) =>
-      collect(categories, fresh: fresh);
+  }) => collect(categories, fresh: fresh);
 
   Future<Map<SyncCategory, List<SyncRecord>>> collect(
     Set<SyncCategory> categories, {
@@ -1229,7 +1230,8 @@ class SyncRoundRunner {
     // 复用，省掉每轮 O(全库) 的按类别 addAll 拷贝（列表被当作不可变使用，
     // 与适配器缓存同一约定）。
     final results = <SyncAdapter, Map<SyncCategory, List<SyncRecord>>>{};
-    var identicalToLastRound = !fresh &&
+    var identicalToLastRound =
+        !fresh &&
         _lastAggregate != null &&
         _lastAdapterCollect.length == _readyAdapterCount;
     for (final adapter in _adapters) {
@@ -1321,21 +1323,21 @@ class _TransportAccumulator {
   SyncIssue? error;
 
   SyncTransportReport build() => SyncTransportReport(
-        kind: kind,
-        enabled: enabled,
-        running: running,
-        unavailableReason: unavailableReason,
-        pulled: pulled,
-        pushed: pushed,
-        skippedUnchanged: skippedUnchanged,
-        peersSeen: peersSeen,
-        failedPulls: failedPulls,
-        failedPushes: failedPushes,
-        bytesIn: bytesIn,
-        bytesOut: bytesOut,
-        durationMs: durationMs,
-        error: error,
-      );
+    kind: kind,
+    enabled: enabled,
+    running: running,
+    unavailableReason: unavailableReason,
+    pulled: pulled,
+    pushed: pushed,
+    skippedUnchanged: skippedUnchanged,
+    peersSeen: peersSeen,
+    failedPulls: failedPulls,
+    failedPushes: failedPushes,
+    bytesIn: bytesIn,
+    bytesOut: bytesOut,
+    durationMs: durationMs,
+    error: error,
+  );
 }
 
 class _RoundAbort implements Exception {
@@ -1384,7 +1386,8 @@ SyncIssue _allPeersUnreachable(List<SyncTransportReport> reports) {
   };
   return SyncIssue(
     code: SyncIssueCode.allPeersUnreachable,
-    args:
-        failedKinds.length == 1 ? {'transport': failedKinds.single} : const {},
+    args: failedKinds.length == 1
+        ? {'transport': failedKinds.single}
+        : const {},
   );
 }

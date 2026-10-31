@@ -68,14 +68,13 @@ void main() {
     String sourceKey = 'kw',
     String id = 'a',
     List<AudioQuality> qualities = const [],
-  }) =>
-      Track(
-        id: TrackId(sourceKey, id),
-        title: 'Title $id',
-        origin: TrackOrigin.lx,
-        qualities: qualities,
-        payload: const {},
-      );
+  }) => Track(
+    id: TrackId(sourceKey, id),
+    title: 'Title $id',
+    origin: TrackOrigin.lx,
+    qualities: qualities,
+    payload: const {},
+  );
 
   group('命名', () {
     test('key 默认 quality=auto，特殊字符替换且带哈希后缀（不碰撞）', () {

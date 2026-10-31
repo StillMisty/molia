@@ -713,7 +713,7 @@
   `SourceSwapView`：点候选即试听，底部确认换源；
   入口：歌曲信息页「换源」
   默认音频 tab、歌词页 FAB menu「换歌词」默认歌词 tab、收藏页合集（收藏 / 历史 /
-  自建列表）行动作（触摸端左滑胶囊 / 桌面右键菜单）默认音频 tab。音频 tab 点候选
+  自建列表）行动作（触摸端 ⋮ / 桌面右键菜单）默认音频 tab。音频 tab 点候选
   即试听（单曲「换源试听」上下文）、
   确认后经 `LibraryProvider.replacePlaylistTrack` / `replaceHistoryEntry` 原位
   替换（仓库事务保 `sortOrder`/`addedAt`/`playedAt`，目标键已存在先确认去重），
@@ -1256,9 +1256,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   注册结果 conflict/unsupported/declined 逐条记 `lastError` 并在设置页提示）。两组共用
   `lib/services/shortcut_actions.dart` 的命令执行器。曲目行操作入口 = 桌面行表面右键在
   鼠标落点弹菜单（`lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`）、
-  触摸端行尾 ⋮ 常显（队列行维持无 ⋮）、收藏页桌面同样走右键 / 触摸端左滑胶囊
-  （同一组动作）、可点元素手型光标（M3E 自带）、收藏页桌面多选（Ctrl 点选 /
-  Shift 范围 / Esc 退出，移动端长按语义不变）。
+  触摸端所有曲目行行尾 ⋮ 常显（队列行同样有 ⋮；排序 / 多选模式不显示）、
+  收藏页桌面同样走右键（同一组动作）、可点元素手型光标（M3E 自带）、收藏页桌面
+  多选（Ctrl 点选 / Shift 范围 / Esc 退出，移动端长按语义不变）。左滑入口已删除。
   Esc 裁决：`HardwareKeyboard` 处理器**全部执行、返回值不短路**（无法靠返回值
   裁决谁消费），页面级 / 弹层经 `lib/services/escape_claims.dart` 登记「此刻的
   Esc 归我」（判定现算，隐藏页 / 已关弹层不残留占用），壳层命中 Esc 命令前先让位
@@ -1270,7 +1270,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   窗口宽 − 侧栏折叠宽」，页面不再自己量宽）：宽屏表格列（`TrackRowModel` / `TrackRowSurface` /
   `TrackTableHeader`；`tableColumns` / `tableColumnsFor`，阈值 = 内容宽 ≥ 720
   （播放历史档 812），使用点：搜索 / 收藏 / 发现详情；行高两档走
-  `TrackRow.extentOf`（表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
+  `TrackRow.extentOf`（M3E token 为最小值，按系统文字缩放动态增长；
+  1.0× 仍是表格单行 56 / 列表双行 72）；发现页表头为 pinned sliver
   （封面头部滚走后列标题仍在），搜索 / 收藏页表头固定在滚动区之上）、
   设置首屏两列（`masterDetail`：桌面 + 窗口宽 ≥ 900；列优先瀑布式，分区按
   内容量显式分列，短卡不再按行留空）、设置弹层宽屏 880 + 首屏两列
@@ -1455,8 +1456,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `itemExtent = TrackRow.extentOf(context, tableColumns: …) + gap`，
   列表一律懒构建（发现详情滚到底自动加载下一页）。不要改回 `M3EListItem`（原因见 pitfalls #20）。
   收藏页四个合集共用一份列表脚手架 `lib/widgets/collection_track_list.dart`
-  （顺序列表 / 重排模式、搜索空态、行动作形状：触摸端左滑胶囊 `SwipeRevealRow` /
-  桌面右键菜单，动作词汇 `RowAction`）；
+  （顺序列表 / 重排模式、搜索空态、行动作入口：触摸端行尾 ⋮ / 桌面右键菜单，
+  动作词汇 `RowAction`）；行高与 `itemExtent` 同源走共享
+  `lib/widgets/row_extent.dart`（大字体按字阶行高增长，M3E token 为最小值）；
   空态配方统一在 `lib/widgets/empty_state.dart`（图标 40 + 文案 + 可选行动，
   收藏 / 资料 / 发现共用，居中与页边距由调用方包一层），滚动位置簿记在
   `lib/widgets/collection_scroll_bookkeeping.dart`（调度器可注入，脱离 widget 树可单测），
@@ -1469,14 +1471,17 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `semanticLabel`；桌面端行尾无 ⋮、行表面右键在鼠标落点弹同一份菜单
   （`showTrackActionsMenuAtPointer`：零尺寸锚点 + root overlay 坐标换算，贴边由
   M3E placer 夹取）；条目一律「leading 图标 + 文案」，收藏这类开关态用图标 +
-  文案表达（选中即关菜单，不留勾选态）。动作定义（收藏 / 加入列表两条动作 +
-  领域接线）见 `lib/widgets/track_menu_tile.dart`（`trackRowActionMenu` /
-  `…ForTrack` / `…ForSearchItem`，行组件与自建行共用，领域状态由构造处
-  `select` 后传入）；收藏域的行适配（歌手页 / 专辑页）走
+  文案表达（选中即关菜单，不留勾选态）。动作定义（收藏 / 加入列表 + 公共动作
+  加入队列 / 下载 / 评论 / 专辑 / 歌手 + 队列编辑）见
+  `lib/widgets/track_menu_tile.dart` 与 `lib/widgets/track_row_actions.dart`：
+  公共动作按能力位过滤（下载只在可用且未下载 / 无进行中任务时出现），
+  菜单顺序统一、移除 / 删除类固定最后。收藏域的行适配（歌手页 / 专辑页）走
   `lib/widgets/favorite_track_tile.dart`；收藏页合集的行动作由
   `lib/widgets/collection_track_list.dart` 的 `buildCollectionRowActions` 从
-  投影器的动作声明 + 接线编译（接线缺席的动作不出现），触摸端编译成左滑胶囊
-  （`collectionSwipeActions`）、桌面端经 `rowActionsAtPointer` 作右键菜单。
+  投影器的动作声明 + 接线编译（接线缺席的动作不出现），再与公共动作合并；
+  触摸端统一经行尾 ⋮、桌面端经 `rowActionsAtPointer` 作右键菜单。队列行额外
+  提供「下一首播放 / 上移 / 下移 / 移出队列」：用 `upNextIndices` 的真实队列
+  下标发命令，随机模式与列表循环回绕行只保留「移出队列」，当前曲目不可编辑。
 - 按钮选型（按作用对象与意图，已按 M3E 实测校正）：
   - 同一批对象的 2–3 个平级动作 → `M3EButtonGroup`（`standard` 间距；命令式动作
     组级统一 `tonal`，把 `selectedIndex` 恒留空、回调里直接分发，避免留下选中态）。

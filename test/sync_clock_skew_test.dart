@@ -118,8 +118,9 @@ void main() {
   test('A 时钟 +365 天：B 的编辑仍被 A 采纳（HLC 吸收超前戳）', () async {
     // 1) A 建歌单：版本戳 = A 的超前时钟。
     await repoA.createPlaylist('歌单');
-    final aRecord = (await repoA.syncExportPlaylists())
-        .firstWhere((playlist) => playlist.name == '歌单');
+    final aRecord = (await repoA.syncExportPlaylists()).firstWhere(
+      (playlist) => playlist.name == '歌单',
+    );
     final aVersion = aRecord.version;
     expect(
       aVersion.physical,
@@ -141,16 +142,11 @@ void main() {
     // 4) B 用**正常时钟**改名：版本戳被发号器抬到 A 的超前戳之上。
     await repoB.renamePlaylist(playlistInB!.id, 'B 改名');
     await engineB.syncNow();
-    final bRecord = engineB
-        .lastEnvelope!
+    final bRecord = engineB.lastEnvelope!
         .recordsOf(SyncCategory.playlists)
         .firstWhere((record) => record.key == aRecord.syncId);
     final bVersion = bRecord.version;
-    expect(
-      bVersion.physical,
-      aVersion.physical,
-      reason: '吸收：B 的物理分量跟到 A 的超前值',
-    );
+    expect(bVersion.physical, aVersion.physical, reason: '吸收：B 的物理分量跟到 A 的超前值');
     expect(
       bVersion.counter,
       greaterThan(aVersion.counter),

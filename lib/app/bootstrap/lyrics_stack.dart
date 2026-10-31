@@ -15,15 +15,11 @@ import '../../sources/source_manager.dart';
 import 'local_data_stack.dart';
 
 /// 歌词会话栈产物。
-typedef LyricsStack = ({
-  LyricsProvider lyricsProvider,
-});
+typedef LyricsStack = ({LyricsProvider lyricsProvider});
 
 /// 装配歌词会话（与播放页共享同一实例：去重 / 预取行为不变）。
-LyricsStack buildLyricsStack({
-  required LocalDataStack local,
-}) {
-  return (lyricsProvider: LyricsProvider(service: local.lyricsService),);
+LyricsStack buildLyricsStack({required LocalDataStack local}) {
+  return (lyricsProvider: LyricsProvider(service: local.lyricsService));
 }
 
 /// B 站登录（本地扫码或同步到达）→ 清 B 站原生取词缓存 → 刷新当前歌词。
@@ -57,7 +53,8 @@ void wireNextTrackLyricsPreload({
   void syncNextTrackLyricsPreload() {
     if (powerPolicy != null && !powerPolicy.shouldLoadLyrics) return;
     final snapshot = playback.snapshot;
-    final next = snapshot.next ??
+    final next =
+        snapshot.next ??
         (snapshot.upNext.isNotEmpty ? snapshot.upNext.first : null);
     final id = next?.id.uri;
     if (next == null ||

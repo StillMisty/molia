@@ -60,11 +60,11 @@ class LxEngineSupervisor {
     ],
     this._readyWaitTimeout = const Duration(seconds: 10),
     int maxConsecutiveTimeouts = 3,
-  })  : assert(restartDelays.isNotEmpty, '至少需要一个退避间隔'),
-        assert(maxConsecutiveTimeouts > 0, '熔断阈值必须为正数'),
-        _engine = (engineFactory ?? LxEngine.new)(),
-        _restartDelays = List<Duration>.unmodifiable(restartDelays),
-        _maxConsecutiveTimeouts = maxConsecutiveTimeouts;
+  }) : assert(restartDelays.isNotEmpty, '至少需要一个退避间隔'),
+       assert(maxConsecutiveTimeouts > 0, '熔断阈值必须为正数'),
+       _engine = (engineFactory ?? LxEngine.new)(),
+       _restartDelays = List<Duration>.unmodifiable(restartDelays),
+       _maxConsecutiveTimeouts = maxConsecutiveTimeouts;
 
   /// 被包装的引擎实例（重启时复用同一实例重放 `start`）。
   final LxEngine _engine;
@@ -150,12 +150,14 @@ class LxEngineSupervisor {
     required String quality,
     Duration timeout = const Duration(seconds: 20),
   }) {
-    return _guard(() => _engine.getMusicUrl(
-          source: source,
-          musicInfo: musicInfo,
-          quality: quality,
-          timeout: timeout,
-        ));
+    return _guard(
+      () => _engine.getMusicUrl(
+        source: source,
+        musicInfo: musicInfo,
+        quality: quality,
+        timeout: timeout,
+      ),
+    );
   }
 
   Future<LxLyricResult> getLyric({
@@ -163,11 +165,13 @@ class LxEngineSupervisor {
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 20),
   }) {
-    return _guard(() => _engine.getLyric(
-          source: source,
-          musicInfo: musicInfo,
-          timeout: timeout,
-        ));
+    return _guard(
+      () => _engine.getLyric(
+        source: source,
+        musicInfo: musicInfo,
+        timeout: timeout,
+      ),
+    );
   }
 
   Future<String> getPic({
@@ -175,11 +179,13 @@ class LxEngineSupervisor {
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 15),
   }) {
-    return _guard(() => _engine.getPic(
-          source: source,
-          musicInfo: musicInfo,
-          timeout: timeout,
-        ));
+    return _guard(
+      () => _engine.getPic(
+        source: source,
+        musicInfo: musicInfo,
+        timeout: timeout,
+      ),
+    );
   }
 
   Future<dynamic> search({
@@ -190,14 +196,16 @@ class LxEngineSupervisor {
     int limit = 20,
     Duration timeout = const Duration(seconds: 20),
   }) {
-    return _guard(() => _engine.search(
-          source: source,
-          action: action,
-          keyword: keyword,
-          page: page,
-          limit: limit,
-          timeout: timeout,
-        ));
+    return _guard(
+      () => _engine.search(
+        source: source,
+        action: action,
+        keyword: keyword,
+        page: page,
+        limit: limit,
+        timeout: timeout,
+      ),
+    );
   }
 
   /// 停止引擎并取消待执行的自动重启（可再次 [start] 复用同一实例）。
@@ -238,8 +246,7 @@ class LxEngineSupervisor {
       // 引擎存活但请求没回响应：不重启（引擎侧探活已排除卡死），累计熔断。
       _consecutiveTimeouts++;
       if (_consecutiveTimeouts >= _maxConsecutiveTimeouts) {
-        await _fail(
-            '音源脚本连续 $_consecutiveTimeouts 次请求超时，已停止自动重试');
+        await _fail('音源脚本连续 $_consecutiveTimeouts 次请求超时，已停止自动重试');
       }
       rethrow;
     } catch (e) {
@@ -318,8 +325,10 @@ class LxEngineSupervisor {
       } catch (e) {
         if (_disposed || generation != _restartGeneration) return;
         if (kDebugMode) {
-          debugPrint('[LxEngineSupervisor] 自动重启失败'
-              '($_restartAttempts/${_restartDelays.length}): $e');
+          debugPrint(
+            '[LxEngineSupervisor] 自动重启失败'
+            '($_restartAttempts/${_restartDelays.length}): $e',
+          );
         }
         if (_restartAttempts >= _restartDelays.length) {
           await _fail('音源脚本连续重启 $_restartAttempts 次均失败，已停止自动重启');

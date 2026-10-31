@@ -37,11 +37,7 @@ class LyricSearchPage {
   /// 平台返回的结果总数（部分平台不返回时为 null）。
   final int? total;
 
-  const LyricSearchPage({
-    required this.hits,
-    this.hasMore = false,
-    this.total,
-  });
+  const LyricSearchPage({required this.hits, this.hasMore = false, this.total});
 
   static const LyricSearchPage empty = LyricSearchPage(hits: []);
 }

@@ -115,10 +115,7 @@ void main() {
     });
 
     test('片段：无高亮行退回首行；空数组为 null', () {
-      expect(
-        WyLyricSearch.lyricSnippetOf(['第一行', '第二行']),
-        '第一行 第二行',
-      );
+      expect(WyLyricSearch.lyricSnippetOf(['第一行', '第二行']), '第一行 第二行');
       expect(WyLyricSearch.lyricSnippetOf(const []), isNull);
       expect(WyLyricSearch.lyricSnippetOf(const ['', '  ']), isNull);
     });
@@ -147,8 +144,11 @@ void main() {
       expect(
         () => BuiltinLyricSearch.searchWithMeta('unknown', '雨下整夜'),
         throwsA(
-          isA<SourceFailure>()
-              .having((f) => f.kind, 'kind', FailureKind.unsupported),
+          isA<SourceFailure>().having(
+            (f) => f.kind,
+            'kind',
+            FailureKind.unsupported,
+          ),
         ),
       );
     });

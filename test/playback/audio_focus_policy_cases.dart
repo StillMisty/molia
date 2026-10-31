@@ -18,10 +18,7 @@ void main() {
     test('开启同时播放：iOS / macOS 仍暂停系统级中断', () {
       for (final platform in [TargetPlatform.iOS, TargetPlatform.macOS]) {
         expect(
-          shouldPauseForAudioFocus(
-            playWithOtherApps: true,
-            platform: platform,
-          ),
+          shouldPauseForAudioFocus(playWithOtherApps: true, platform: platform),
           isTrue,
           reason: '$platform 的 mixWithOthers 已挡掉其他应用音频，收到中断即来电 / Siri',
         );
@@ -59,8 +56,9 @@ void main() {
           platform: platform,
         );
         expect(
-          config.avAudioSessionCategoryOptions
-              ?.contains(AVAudioSessionCategoryOptions.mixWithOthers),
+          config.avAudioSessionCategoryOptions?.contains(
+            AVAudioSessionCategoryOptions.mixWithOthers,
+          ),
           isTrue,
           reason: '$platform',
         );

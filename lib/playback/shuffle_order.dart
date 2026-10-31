@@ -12,7 +12,7 @@ import 'dart:math' as math;
 /// - [remainingAfter]：本轮剩余播放顺序（队列页「接下来」展示用）。
 class PlaybackShuffleOrder {
   PlaybackShuffleOrder({math.Random? random})
-      : _random = random ?? math.Random();
+    : _random = random ?? math.Random();
 
   final math.Random _random;
 
@@ -61,6 +61,36 @@ class PlaybackShuffleOrder {
 
   /// 当前曲目在排列中的位置；不在排列中返回 -1。
   int positionOf(int index) => _order.indexOf(index);
+
+  /// 队列移除一项后的排列重映射：移除该下标，其后下标整体前移。
+  ///
+  /// 空排列（未洗牌 / 恢复态）保持为空；调用方保证不移除当前曲目。
+  void removeIndex(int index) {
+    if (_order.isEmpty) return;
+    _order = [
+      for (final value in _order)
+        if (value != index) value > index ? value - 1 : value,
+    ];
+  }
+
+  /// 队列移动一项（[from] → [to]）后的排列重映射。
+  ///
+  /// 移动只在非随机模式发起；这里仍按「先删后插」的重映射处理，
+  /// 防止模式切换窗口里残留排列把下标指错。
+  void moveIndex(int from, int to) {
+    if (_order.isEmpty || from == to) return;
+    _order = [
+      for (final value in _order)
+        if (value == from)
+          to
+        else if (from < to && value > from && value <= to)
+          value - 1
+        else if (to < from && value >= to && value < from)
+          value + 1
+        else
+          value,
+    ];
+  }
 
   /// 排列中的下一首（不重洗）；到本轮末尾返回 null。
   int? peekNext(int currentIndex) {

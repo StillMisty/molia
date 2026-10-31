@@ -60,10 +60,7 @@ class CacheUsage {
 /// 单曲清理（见 `CacheService.clearAudioForTrack`）用 [skipped] 区分
 /// 「本来就没缓存」与「正在边播边缓存、暂时不能删」两种空结果。
 class CacheDeleteResult {
-  const CacheDeleteResult({
-    this.deleted = CacheUsage.zero,
-    this.skipped = 0,
-  });
+  const CacheDeleteResult({this.deleted = CacheUsage.zero, this.skipped = 0});
 
   final CacheUsage deleted;
   final int skipped;
@@ -87,10 +84,7 @@ class CacheDeleteResult {
 /// 索引，不必再对每条索引逐文件 `exists()`；为 null 表示本次没有完整扫描
 /// （目录不可用 / 扫描失败），调用方不能据此判断索引条目缺失。
 class CacheSweepResult {
-  const CacheSweepResult({
-    this.deleted = 0,
-    this.remainingRelativePaths,
-  });
+  const CacheSweepResult({this.deleted = 0, this.remainingRelativePaths});
 
   /// 实际删除的文件数。
   final int deleted;
@@ -105,7 +99,8 @@ class CacheSweepResult {
   static const CacheSweepResult failed = CacheSweepResult();
 
   @override
-  String toString() => 'CacheSweepResult(deleted: $deleted, '
+  String toString() =>
+      'CacheSweepResult(deleted: $deleted, '
       'remaining: ${remainingRelativePaths?.length})';
 }
 

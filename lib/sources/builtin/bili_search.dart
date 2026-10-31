@@ -94,10 +94,7 @@ class BiliSearch {
   }
 
   /// 用户搜索响应 → 歌手页结果（供单测复用）。
-  static ArtistSearchPage parseUsers(
-    dynamic response, {
-    required int page,
-  }) {
+  static ArtistSearchPage parseUsers(dynamic response, {required int page}) {
     final data = response is Map ? response['data'] : null;
     if (data is! Map) {
       throw artistPlatformFailure('bili', '用户搜索响应非法');
@@ -110,12 +107,14 @@ class BiliSearch {
         final id = biliRawText(raw['mid']);
         final name = biliText(raw['uname']);
         if (id.isEmpty || name.isEmpty) continue;
-        items.add(ArtistSummary(
-          id: id,
-          name: name,
-          avatarUrl: biliCoverUrl(raw['upic']),
-          songCount: parseSourceCount(raw['videos']),
-        ));
+        items.add(
+          ArtistSummary(
+            id: id,
+            name: name,
+            avatarUrl: biliCoverUrl(raw['upic']),
+            songCount: parseSourceCount(raw['videos']),
+          ),
+        );
       }
     }
 

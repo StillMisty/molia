@@ -11,6 +11,7 @@ import 'package:molia/sources/lx/lx_script_repository.dart';
 import 'package:molia/sources/lx/lx_script_update.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'support/settings_test_support.dart';
 
 /// 可编程 fake 引擎：记录 start 重放并支持手动发出 updateAlert。
@@ -63,24 +64,21 @@ class _FakeLxEngine implements LxEngine {
     required Map<String, dynamic> musicInfo,
     required String quality,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      'https://example.com/$source/$quality';
+  }) async => 'https://example.com/$source/$quality';
 
   @override
   Future<LxLyricResult> getLyric({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      const LxLyricResult(lyric: '[00:00.00]fake');
+  }) async => const LxLyricResult(lyric: '[00:00.00]fake');
 
   @override
   Future<String> getPic({
     required String source,
     required Map<String, dynamic> musicInfo,
     Duration timeout = const Duration(seconds: 15),
-  }) async =>
-      'https://example.com/pic.jpg';
+  }) async => 'https://example.com/pic.jpg';
 
   @override
   Future<dynamic> search({
@@ -90,8 +88,7 @@ class _FakeLxEngine implements LxEngine {
     int page = 1,
     int limit = 20,
     Duration timeout = const Duration(seconds: 20),
-  }) async =>
-      const [];
+  }) async => const [];
 
   @override
   Future<void> dispose() async {
@@ -154,11 +151,11 @@ class _TestScriptServer {
 }
 
 LxSourceDecl _decl(String key) => LxSourceDecl(
-      key: key,
-      name: key,
-      actions: const ['musicUrl', 'search'],
-      qualitys: const ['128k', '320k'],
-    );
+  key: key,
+  name: key,
+  actions: const ['musicUrl', 'search'],
+  qualitys: const ['128k', '320k'],
+);
 
 /// 构造一个带合法元信息 + lx 用法的测试脚本。
 String _script({
@@ -197,8 +194,10 @@ Future<_Fixture> _fixture() async {
     engineFactory: () => engine,
     restartDelays: const [Duration(milliseconds: 10)],
   );
-  final manager =
-      SourceManager(engine: supervisor, settings: testSettingsRegistry());
+  final manager = SourceManager(
+    engine: supervisor,
+    settings: testSettingsRegistry(),
+  );
   await manager.init();
   addTearDown(manager.dispose);
   addTearDown(supervisor.close);
@@ -239,8 +238,9 @@ void main() {
 
   group('LxScriptInfo · updateUrl', () {
     test('parse 解析 @updateUrl；toJson/fromJson 往返保留', () {
-      final info =
-          LxScriptInfo.parse(_script(updateUrl: 'https://example.com/u.js'));
+      final info = LxScriptInfo.parse(
+        _script(updateUrl: 'https://example.com/u.js'),
+      );
       expect(info, isNotNull);
       expect(info!.updateUrl, 'https://example.com/u.js');
 
@@ -298,17 +298,19 @@ void main() {
     test('updated 未带 updateUrl 时保留原 updateUrl', () async {
       final repository = LxScriptRepository();
       await repository.init();
-      await repository.add(const LxScriptInfo(
-        id: 'script-a',
-        name: '旧',
-        description: '',
-        version: '1',
-        author: '',
-        homepage: '',
-        script: 'old',
-        importedAt: 1,
-        updateUrl: 'https://example.com/keep.js',
-      ));
+      await repository.add(
+        const LxScriptInfo(
+          id: 'script-a',
+          name: '旧',
+          description: '',
+          version: '1',
+          author: '',
+          homepage: '',
+          script: 'old',
+          importedAt: 1,
+          updateUrl: 'https://example.com/keep.js',
+        ),
+      );
 
       final replaced = await repository.replace(
         'script-a',
@@ -352,10 +354,13 @@ void main() {
     test('版本不同 → hasUpdate=true，latestScript 携带新内容', () async {
       final fixture = await _fixture();
       final url = server.url('/source.js');
-      server.text('/source.js',
-          _script(updateUrl: url, version: '2.0.0', description: 'v2'));
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      server.text(
+        '/source.js',
+        _script(updateUrl: url, version: '2.0.0', description: 'v2'),
+      );
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       final check = await fixture.manager.checkScriptUpdate(imported.id);
 
@@ -383,8 +388,9 @@ void main() {
       final fixture = await _fixture();
       final url = server.url('/source.js');
       server.text('/source.js', _script(updateUrl: url, body: '// patched'));
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       final check = await fixture.manager.checkScriptUpdate(imported.id);
 
@@ -395,11 +401,14 @@ void main() {
     test('跟随重定向后仍能检查更新', () async {
       final fixture = await _fixture();
       final url = server.url('/redirect.js');
-      server.text('/source.js',
-          _script(updateUrl: url, version: '3.0.0', description: 'v3'));
+      server.text(
+        '/source.js',
+        _script(updateUrl: url, version: '3.0.0', description: 'v3'),
+      );
       server.redirect('/redirect.js', '/source.js');
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       final check = await fixture.manager.checkScriptUpdate(imported.id);
 
@@ -413,8 +422,13 @@ void main() {
 
       await expectLater(
         fixture.manager.checkScriptUpdate(imported.id),
-        throwsA(isA<ScriptUpdateException>()
-            .having((e) => e.kind, 'kind', ScriptUpdateError.noUpdateUrl)),
+        throwsA(
+          isA<ScriptUpdateException>().having(
+            (e) => e.kind,
+            'kind',
+            ScriptUpdateError.noUpdateUrl,
+          ),
+        ),
       );
     });
 
@@ -422,13 +436,19 @@ void main() {
       final fixture = await _fixture();
       final url = server.url('/fail.js');
       server.text('/fail.js', 'boom', status: 500);
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       await expectLater(
         fixture.manager.checkScriptUpdate(imported.id),
-        throwsA(isA<ScriptUpdateException>()
-            .having((e) => e.kind, 'kind', ScriptUpdateError.downloadFailed)),
+        throwsA(
+          isA<ScriptUpdateException>().having(
+            (e) => e.kind,
+            'kind',
+            ScriptUpdateError.downloadFailed,
+          ),
+        ),
       );
     });
 
@@ -441,14 +461,17 @@ void main() {
             '<body>not a script</body></html>',
         contentType: 'text/html',
       );
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       await expectLater(
         fixture.manager.checkScriptUpdate(imported.id),
-        throwsA(isA<ScriptUpdateException>()
-            .having((e) => e.kind, 'kind', ScriptUpdateError.htmlPage)
-            .having((e) => e.message, 'message', contains('手动导入'))),
+        throwsA(
+          isA<ScriptUpdateException>()
+              .having((e) => e.kind, 'kind', ScriptUpdateError.htmlPage)
+              .having((e) => e.message, 'message', contains('手动导入')),
+        ),
       );
     });
 
@@ -456,13 +479,19 @@ void main() {
       final fixture = await _fixture();
       final url = server.url('/plain.js');
       server.text('/plain.js', "console.log('hello');\n");
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       await expectLater(
         fixture.manager.checkScriptUpdate(imported.id),
-        throwsA(isA<ScriptUpdateException>()
-            .having((e) => e.kind, 'kind', ScriptUpdateError.notAScript)),
+        throwsA(
+          isA<ScriptUpdateException>().having(
+            (e) => e.kind,
+            'kind',
+            ScriptUpdateError.notAScript,
+          ),
+        ),
       );
     });
 
@@ -470,13 +499,19 @@ void main() {
       final fixture = await _fixture();
       final url = server.url('/big.js');
       server.text('/big.js', 'a' * (kLxScriptMaxBytes + 16));
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
 
       await expectLater(
         fixture.manager.checkScriptUpdate(imported.id),
-        throwsA(isA<ScriptUpdateException>()
-            .having((e) => e.kind, 'kind', ScriptUpdateError.tooLarge)),
+        throwsA(
+          isA<ScriptUpdateException>().having(
+            (e) => e.kind,
+            'kind',
+            ScriptUpdateError.tooLarge,
+          ),
+        ),
       );
     });
   });
@@ -485,10 +520,14 @@ void main() {
     test('替换内容并保留 id + 激活态，激活中脚本重新激活（重放新脚本）', () async {
       final fixture = await _fixture();
       final url = server.url('/source.js');
-      server.text('/source.js',
-          _script(updateUrl: url, version: '2.0.0', description: 'v2'));
-      final imported = await fixture.manager
-          .importScript(_script(updateUrl: url), activate: true);
+      server.text(
+        '/source.js',
+        _script(updateUrl: url, version: '2.0.0', description: 'v2'),
+      );
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+        activate: true,
+      );
       expect(fixture.engine.startCalls, 1);
 
       // 新版本声明了额外的源：重放后 activeSources 应刷新。
@@ -504,19 +543,27 @@ void main() {
       expect(updated.script, contains('@version 2.0.0'));
       expect(fixture.manager.repository.activeId, imported.id);
       expect(fixture.engine.startCalls, 2, reason: '激活中的脚本必须重放一次');
-      expect(fixture.engine.startedScripts.last.script,
-          contains('@version 2.0.0'));
       expect(
-          fixture.manager.activeSources.keys, containsAll(['test', 'extra']));
+        fixture.engine.startedScripts.last.script,
+        contains('@version 2.0.0'),
+      );
+      expect(
+        fixture.manager.activeSources.keys,
+        containsAll(['test', 'extra']),
+      );
     });
 
     test('未激活脚本更新时不触碰引擎', () async {
       final fixture = await _fixture();
       final url = server.url('/source.js');
-      server.text('/source.js',
-          _script(updateUrl: url, version: '2.0.0', description: 'v2'));
-      final imported = await fixture.manager
-          .importScript(_script(updateUrl: url), activate: true);
+      server.text(
+        '/source.js',
+        _script(updateUrl: url, version: '2.0.0', description: 'v2'),
+      );
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+        activate: true,
+      );
       await fixture.manager.deactivate();
       final startsBefore = fixture.engine.startCalls;
 
@@ -530,10 +577,13 @@ void main() {
     test('复用 check 结果时不重复下载（服务器路由已移除仍成功）', () async {
       final fixture = await _fixture();
       final url = server.url('/source.js');
-      server.text('/source.js',
-          _script(updateUrl: url, version: '2.0.0', description: 'v2'));
-      final imported =
-          await fixture.manager.importScript(_script(updateUrl: url));
+      server.text(
+        '/source.js',
+        _script(updateUrl: url, version: '2.0.0', description: 'v2'),
+      );
+      final imported = await fixture.manager.importScript(
+        _script(updateUrl: url),
+      );
       final check = await fixture.manager.checkScriptUpdate(imported.id);
 
       // 模拟“下载后地址失效”：再次下载会 404，但复用 check 不应再请求。
@@ -550,18 +600,20 @@ void main() {
   group('SourceManager · updateAlert', () {
     test('updateUrl 记入当前激活脚本，供一键更新使用', () async {
       final fixture = await _fixture();
-      final imported =
-          await fixture.manager.importScript(_script(), activate: true);
+      final imported = await fixture.manager.importScript(
+        _script(),
+        activate: true,
+      );
       expect(fixture.manager.activeScript?.updateUrl, isNull);
 
       const alertUrl = 'https://example.com/update/source.js';
-      fixture.engine.emitAlert(const LxUpdateAlert(
-        log: '发现新版本 2.0.0',
-        updateUrl: alertUrl,
-      ));
+      fixture.engine.emitAlert(
+        const LxUpdateAlert(log: '发现新版本 2.0.0', updateUrl: alertUrl),
+      );
 
       await _waitUntil(
-          () => fixture.manager.activeScript?.updateUrl == alertUrl);
+        () => fixture.manager.activeScript?.updateUrl == alertUrl,
+      );
       expect(fixture.manager.lastUpdateAlert?.log, '发现新版本 2.0.0');
       expect(fixture.manager.repository.scripts.single.id, imported.id);
 

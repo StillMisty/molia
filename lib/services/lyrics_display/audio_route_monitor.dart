@@ -13,9 +13,9 @@ class AudioRouteMonitor extends ChangeNotifier {
     LyricsChannel? channel,
     Future<bool> Function()? probe,
     Stream<bool>? changes,
-  })  : _channelOverride = channel,
-        _probeOverride = probe,
-        _changesOverride = changes;
+  }) : _channelOverride = channel,
+       _probeOverride = probe,
+       _changesOverride = changes;
 
   final LyricsChannel? _channelOverride;
   final Future<bool> Function()? _probeOverride;
@@ -32,8 +32,10 @@ class AudioRouteMonitor extends ChangeNotifier {
         if (_probeOverride != null) {
           _set(await _probeOverride());
         }
-        _subscription = (_changesOverride ?? const Stream<bool>.empty())
-            .listen(_set, onError: (Object _) {});
+        _subscription = (_changesOverride ?? const Stream<bool>.empty()).listen(
+          _set,
+          onError: (Object _) {},
+        );
         return;
       }
       if (!LyricsChannel.isSupportedPlatform) return;

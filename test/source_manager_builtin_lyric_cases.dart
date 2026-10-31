@@ -9,6 +9,7 @@ import 'package:molia/sources/builtin/zlib_io.dart' as zlib_impl;
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_track.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'support/mock_dio.dart';
 import 'support/settings_test_support.dart';
 
@@ -33,10 +34,7 @@ void main() {
       xored[i] = inner[i] ^ key.codeUnitAt(i % key.length);
     }
     final compressed = zlib_impl.zlibDeflate(utf8.encode(base64.encode(xored)));
-    return [
-      ...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'),
-      ...compressed,
-    ];
+    return [...utf8.encode('TP=content\r\nlrcx=1\r\n\r\n'), ...compressed];
   }
 
   SourceTrack kwTrack({String? coverUrl, String songmid = '228908'}) =>

@@ -57,8 +57,9 @@ void main() {
     expect(theme.version.deviceId, 'devA');
     expect(theme.data, {'v': 'dark'});
     // 未改过、取默认值的键：零值戳、无修改者。
-    final untouched =
-        settings.firstWhere((r) => r.key == 'play_statistics_enabled');
+    final untouched = settings.firstWhere(
+      (r) => r.key == 'play_statistics_enabled',
+    );
     expect(untouched.version, SyncVersion.zero);
     expect(untouched.data, {'v': true});
 
@@ -89,25 +90,25 @@ void main() {
       kGlobalShortcutBindings,
     ]) {
       expect(byKey, contains(key.name));
-      expect(
-        byKey[key.name]!.data,
-        {'v': key.defaultValue},
-        reason: '${key.name} 首次登记应按默认值参与同步',
-      );
+      expect(byKey[key.name]!.data, {
+        'v': key.defaultValue,
+      }, reason: '${key.name} 首次登记应按默认值参与同步');
     }
   });
 
   test('本地修改检测：值变化后重新取戳', () async {
     final first = await adapter.collect();
-    final before =
-        first[SyncCategory.settings]!.firstWhere((r) => r.key == 'theme_mode');
+    final before = first[SyncCategory.settings]!.firstWhere(
+      (r) => r.key == 'theme_mode',
+    );
     expect(before.version, SyncVersion.zero);
 
     now = 5000;
     await prefs.setString('theme_mode', 'light');
     final second = await adapter.collect();
-    final after =
-        second[SyncCategory.settings]!.firstWhere((r) => r.key == 'theme_mode');
+    final after = second[SyncCategory.settings]!.firstWhere(
+      (r) => r.key == 'theme_mode',
+    );
     expect(after.version.physical, 5000);
     expect(after.version.deviceId, 'devA');
     expect(after.data, {'v': 'light'});
@@ -168,8 +169,9 @@ void main() {
 
     // 再次 collect 时该键保持远端戳（不产生新的本地变更）。
     final collected = await adapter.collect();
-    final record = collected[SyncCategory.settings]!
-        .firstWhere((r) => r.key == 'theme_mode');
+    final record = collected[SyncCategory.settings]!.firstWhere(
+      (r) => r.key == 'theme_mode',
+    );
     expect(record.version.physical, 9000);
     expect(record.version.deviceId, 'devB');
   });
@@ -194,11 +196,7 @@ void main() {
     await adapter.collect(); // 1000/0@devA
     final sameMs = SyncRecord(
       key: 'theme_mode',
-      version: const SyncVersion(
-        physical: 1000,
-        counter: 1,
-        deviceId: 'devB',
-      ),
+      version: const SyncVersion(physical: 1000, counter: 1, deviceId: 'devB'),
       data: {'v': 'light'},
     );
     final result = await adapter.apply({
@@ -230,14 +228,12 @@ void main() {
 
     final collected = await adapter.collect();
     final credentials = collected[SyncCategory.credentials]!;
-    expect(
-      credentials.firstWhere((r) => r.key == 'ai_dj_api_key').data,
-      {'v': 'sk-test'},
-    );
-    expect(
-      credentials.firstWhere((r) => r.key == 'ai_dj_base_url').data,
-      {'v': 'https://api.example.com'},
-    );
+    expect(credentials.firstWhere((r) => r.key == 'ai_dj_api_key').data, {
+      'v': 'sk-test',
+    });
+    expect(credentials.firstWhere((r) => r.key == 'ai_dj_base_url').data, {
+      'v': 'https://api.example.com',
+    });
   });
 
   test('onApplied 回调只报告实际变化的键', () async {
@@ -274,12 +270,14 @@ void main() {
     );
     // 初始登记（默认值零值戳），并模拟轮末提交把旧登记写进持久状态。
     await atomic.collect();
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 0,
-      finishedAt: 1,
-      outcome: SyncOutcome.noChanges,
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.noChanges,
+      ),
+    );
     await state.commit();
     final persistedStamp = state.settingStamps['theme_mode']!;
     expect(persistedStamp.version, SyncVersion.zero);
@@ -297,12 +295,14 @@ void main() {
 
     // 轮末提交：只应写回旧登记；新登记若已写进内存就会在这里被持久化，
     // 下一轮再也检测不到这次变化。
-    state.recordRound(const SyncRoundReport(
-      trigger: SyncTrigger.timer,
-      startedAt: 2,
-      finishedAt: 3,
-      outcome: SyncOutcome.noChanges,
-    ));
+    state.recordRound(
+      const SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 2,
+        finishedAt: 3,
+        outcome: SyncOutcome.noChanges,
+      ),
+    );
     await state.commit();
 
     final reloaded = SyncStateStore(
@@ -323,13 +323,12 @@ void main() {
 
     final collected = await nextAdapter.collect();
 
-    expect(
-      journal.changes.single.record.data,
-      {'v': 'dark'},
-      reason: '失败的那次变更必须还能被重新检测并追加',
+    expect(journal.changes.single.record.data, {
+      'v': 'dark',
+    }, reason: '失败的那次变更必须还能被重新检测并追加');
+    final record = collected[SyncCategory.settings]!.firstWhere(
+      (r) => r.key == 'theme_mode',
     );
-    final record = collected[SyncCategory.settings]!
-        .firstWhere((r) => r.key == 'theme_mode');
     expect(record.version.physical, 5000);
     expect(reloaded.settingStamps['theme_mode']!.hash, isNot(''));
   });

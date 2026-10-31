@@ -27,7 +27,7 @@ class ScriptSyncAdapter implements SyncAdapter {
     bool Function()? ready,
     this._reservedKeys = const {},
     this._onScriptsChanged,
-  })  : _ready = ready ?? (() => true);
+  }) : _ready = ready ?? (() => true);
 
   final LxScriptRepository _repository;
   final SyncStampLedger _state;
@@ -48,8 +48,9 @@ class ScriptSyncAdapter implements SyncAdapter {
   bool get ready => _ready();
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect(
-      {bool fresh = false}) async {
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async {
     if (!ready) return const {};
     final scripts = _repository.scripts;
     final currentIds = [for (final script in scripts) script.id];
@@ -111,11 +112,13 @@ class ScriptSyncAdapter implements SyncAdapter {
     } else {
       effective = stamp;
     }
-    records.add(SyncRecord(
-      key: SyncRecordKeys.activeScriptKey,
-      version: effective.version,
-      data: {'id': activeId.isEmpty ? null : activeId},
-    ));
+    records.add(
+      SyncRecord(
+        key: SyncRecordKeys.activeScriptKey,
+        version: effective.version,
+        data: {'id': activeId.isEmpty ? null : activeId},
+      ),
+    );
     final journal = _journal;
     if (journal != null && changes.isNotEmpty) {
       await journal.appendAll(changes);
@@ -183,11 +186,7 @@ class ScriptSyncAdapter implements SyncAdapter {
       await journal.appendAll([
         (
           category: SyncCategory.sources,
-          record: SyncRecord(
-            key: id,
-            version: version,
-            data: script.toJson(),
-          ),
+          record: SyncRecord(key: id, version: version, data: script.toJson()),
         ),
       ]);
     }
@@ -248,10 +247,9 @@ class ScriptSyncAdapter implements SyncAdapter {
           await _repository.setActive(target);
           changed = true;
         }
-        _state.setActiveScriptStamp(SyncStamp(
-          hash: target ?? '',
-          version: record.version,
-        ));
+        _state.setActiveScriptStamp(
+          SyncStamp(hash: target ?? '', version: record.version),
+        );
         applied++;
         continue;
       }

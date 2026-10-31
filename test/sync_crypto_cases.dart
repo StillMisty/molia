@@ -12,31 +12,31 @@ void main() {
   final codec = SyncCodec(iterations: 2000);
 
   SyncEnvelope envelope() => SyncEnvelope(
-        deviceId: 'dev-a',
-        deviceName: '测试设备',
-        producedAt: 1728640000000,
-        records: {
-          SyncCategory.settings: [
-            const SyncRecord(
-              key: 'theme_mode',
-              version: SyncVersion(physical: 100, deviceId: 'dev-a'),
-              data: {'v': 'dark'},
-            ),
-          ],
-          SyncCategory.playlists: [
-            const SyncRecord(
-              key: '__favorites__',
-              version: SyncVersion(physical: 200, deviceId: 'dev-a'),
-              data: {'name': '__favorites__'},
-            ),
-            SyncRecord.tombstone(
-              key: 'gone',
-              version: const SyncVersion(physical: 300, deviceId: 'dev-a'),
-              deletedAt: 300,
-            ),
-          ],
-        },
-      );
+    deviceId: 'dev-a',
+    deviceName: '测试设备',
+    producedAt: 1728640000000,
+    records: {
+      SyncCategory.settings: [
+        const SyncRecord(
+          key: 'theme_mode',
+          version: SyncVersion(physical: 100, deviceId: 'dev-a'),
+          data: {'v': 'dark'},
+        ),
+      ],
+      SyncCategory.playlists: [
+        const SyncRecord(
+          key: '__favorites__',
+          version: SyncVersion(physical: 200, deviceId: 'dev-a'),
+          data: {'name': '__favorites__'},
+        ),
+        SyncRecord.tombstone(
+          key: 'gone',
+          version: const SyncVersion(physical: 300, deviceId: 'dev-a'),
+          deletedAt: 300,
+        ),
+      ],
+    },
+  );
 
   test('加密 → 解密往返保持内容（含中文与墓碑）', () {
     final bytes = codec.encrypt(envelope(), passphrase);
@@ -45,10 +45,7 @@ void main() {
     expect(decoded.deviceName, '测试设备');
     expect(decoded.recordsOf(SyncCategory.settings).single.data, {'v': 'dark'});
     expect(decoded.recordsOf(SyncCategory.playlists).length, 2);
-    expect(
-      decoded.recordsOf(SyncCategory.playlists).last.deleted,
-      isTrue,
-    );
+    expect(decoded.recordsOf(SyncCategory.playlists).last.deleted, isTrue);
   });
 
   test('口令归一化：带分隔符 / 小写输入均可解密', () {
@@ -117,7 +114,10 @@ void main() {
     expect(String.fromCharCodes(bytes.sublist(0, 3)), SyncCodec.magic);
     expect(bytes[3], SyncCodec.version);
     // 帧头只有 magic + 版本 + nonce：不再携带盐与迭代数（v3 首版即协议）。
-    expect(bytes.length, greaterThan(SyncCodec.headerLength + SyncCodec.tagLength));
+    expect(
+      bytes.length,
+      greaterThan(SyncCodec.headerLength + SyncCodec.tagLength),
+    );
   });
 
   test('小载荷不压缩：帧长 = 帧头 + tag + 明文头 + 载荷（判定阈值见常量）', () {
@@ -127,7 +127,10 @@ void main() {
     final frame = codec.encrypt(small, passphrase);
     expect(
       frame.length,
-      SyncCodec.headerLength + SyncCodec.tagLength + SyncCodec.payloadHeaderLength + body.length,
+      SyncCodec.headerLength +
+          SyncCodec.tagLength +
+          SyncCodec.payloadHeaderLength +
+          body.length,
       reason: '未压缩载荷逐字节进帧（AES-GCM 不改变长度）',
     );
     expect(codec.decrypt(frame, passphrase).deviceId, 'dev-a');
@@ -151,7 +154,9 @@ void main() {
     final body = SyncPayload.encode(big);
     final frame = codec.encrypt(big, passphrase);
     expect(frame.length, lessThan(body.length ~/ 2));
-    expect(codec.decrypt(frame, passphrase).recordsOf(SyncCategory.history),
-        hasLength(64));
+    expect(
+      codec.decrypt(frame, passphrase).recordsOf(SyncCategory.history),
+      hasLength(64),
+    );
   });
 }

@@ -17,20 +17,19 @@ void main() {
     String name = '设备A',
     List<String> addresses = const ['192.168.1.7'],
     int? journalHead = 12,
-  }) =>
-      LanDiscoveryMessage(
-        type: type,
-        deviceId: deviceId,
-        name: name,
-        httpPort: 43210,
-        probePort: 47825,
-        addresses: addresses,
-        snapshotId: 'snap-1',
-        journalHead: journalHead,
-        categories: const ['settings', 'history'],
-        nonce: 'nonce-1',
-        bootId: 'boot-1',
-      );
+  }) => LanDiscoveryMessage(
+    type: type,
+    deviceId: deviceId,
+    name: name,
+    httpPort: 43210,
+    probePort: 47825,
+    addresses: addresses,
+    snapshotId: 'snap-1',
+    journalHead: journalHead,
+    categories: const ['settings', 'history'],
+    nonce: 'nonce-1',
+    bootId: 'boot-1',
+  );
 
   test('announce / ack round-trip：字段逐项还原', () {
     for (final type in [Msd1.typeAnnounce, Msd1.typeAck]) {
@@ -58,7 +57,8 @@ void main() {
     expect(utf8.decode(packet.sublist(0, 3)), 'MSD');
     expect(packet[3], Msd1.version);
     expect(packet[4], Msd1.typeAnnounce);
-    final bodyLength = (packet[Msd1.bodyLengthOffset] << 8) |
+    final bodyLength =
+        (packet[Msd1.bodyLengthOffset] << 8) |
         packet[Msd1.bodyLengthOffset + 1];
     expect(bodyLength, packet.length - Msd1.headerLength);
     expect(bodyLength, lessThanOrEqualTo(Msd1.maxBodyLength));
@@ -105,7 +105,8 @@ void main() {
       ),
       key,
     );
-    final bodyLength = (packet[Msd1.bodyLengthOffset] << 8) |
+    final bodyLength =
+        (packet[Msd1.bodyLengthOffset] << 8) |
         packet[Msd1.bodyLengthOffset + 1];
     expect(bodyLength, lessThanOrEqualTo(Msd1.maxBodyLength));
     final decoded = Msd1.decode(packet, key)!;
@@ -124,12 +125,16 @@ void main() {
   });
 
   test('旧 JSON 探测包静默丢弃：不识别、不抛错', () {
-    final legacy = Uint8List.fromList(utf8.encode(jsonEncode({
-      'm': 'molia-sync.probe',
-      'v': 1,
-      'deviceId': 'devOld',
-      'port': 1234,
-    })));
+    final legacy = Uint8List.fromList(
+      utf8.encode(
+        jsonEncode({
+          'm': 'molia-sync.probe',
+          'v': 1,
+          'deviceId': 'devOld',
+          'port': 1234,
+        }),
+      ),
+    );
     expect(legacy.first, 0x7b);
     expect(Msd1.decode(legacy, key), isNull);
   });

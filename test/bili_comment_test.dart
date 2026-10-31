@@ -50,8 +50,9 @@ void main() {
           return textResponse('{}', statusCode: 500);
       }
     });
-    BuiltinSearch.transport =
-        BuiltinTransport(dio: createAppDio(adapter: adapter));
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: createAppDio(adapter: adapter),
+    );
     return adapter;
   }
 
@@ -70,11 +71,9 @@ void main() {
     // 评论接口不能带 buvid Cookie：带 Cookie 时平台只回 3 条热评并置
     // is_end=true（实测），匿名请求才是完整的 20 条/页。
     expect(adapter.lastRequest.headers.containsKey('Cookie'), isFalse);
-    expect(
-      adapter.requests.map((request) => request.uri.path).toSet(),
-      {'/x/v2/reply/main'},
-      reason: '评论接口不需要 WBI / buvid，不应先拉会话',
-    );
+    expect(adapter.requests.map((request) => request.uri.path).toSet(), {
+      '/x/v2/reply/main',
+    }, reason: '评论接口不需要 WBI / buvid，不应先拉会话');
 
     expect(page.kind, CommentKind.hot);
     expect(page.page, 1);
@@ -255,11 +254,10 @@ void main() {
   test('BuiltinComments 调度：bili 从 raw 的 aid 取评论', () async {
     install((options) async => textResponse(fixtureText));
 
-    final page = await BuiltinComments.fetch(
-      'bili',
-      const {'bvid': 'BV1xx411c7mD', 'aid': 987654},
-      kind: CommentKind.hot,
-    );
+    final page = await BuiltinComments.fetch('bili', const {
+      'bvid': 'BV1xx411c7mD',
+      'aid': 987654,
+    }, kind: CommentKind.hot);
     expect(page.items.single.id, '111');
   });
 }

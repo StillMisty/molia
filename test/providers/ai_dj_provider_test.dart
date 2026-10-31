@@ -25,23 +25,24 @@ Track _track(int index, {Duration duration = const Duration(seconds: 100)}) =>
       origin: TrackOrigin.builtin,
     );
 
-List<Track> _tracks(int from, int count,
-        {Duration duration = const Duration(seconds: 100)}) =>
-    [for (var i = 0; i < count; i++) _track(from + i, duration: duration)];
+List<Track> _tracks(
+  int from,
+  int count, {
+  Duration duration = const Duration(seconds: 100),
+}) => [for (var i = 0; i < count; i++) _track(from + i, duration: duration)];
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
-      items: [
-        for (var i = 0; i < count; i++)
-          ResolvedRecommendation(
-            source:
-                AiRecommendation(title: 'Song ${from + i}', artist: 'Artist'),
-            track: _track(from + i),
-            sourceName: '网易云音乐',
-          ),
-      ],
-      unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
-      generatedAt: DateTime.now(),
-    );
+  items: [
+    for (var i = 0; i < count; i++)
+      ResolvedRecommendation(
+        source: AiRecommendation(title: 'Song ${from + i}', artist: 'Artist'),
+        track: _track(from + i),
+        sourceName: '网易云音乐',
+      ),
+  ],
+  unresolved: const [AiRecommendation(title: 'Ghost', artist: 'X')],
+  generatedAt: DateTime.now(),
+);
 
 /// 与控制器一致的「AI 队列」快照（上下文名）。
 BackendSnapshot _radioSnapshot({
@@ -51,17 +52,16 @@ BackendSnapshot _radioSnapshot({
   bool isPlaying = true,
   Duration position = Duration.zero,
   String? contextName = kAiDjContextName,
-}) =>
-    BackendSnapshot(
-      current: current,
-      queue: queue,
-      currentIndex: currentIndex,
-      isPlaying: isPlaying,
-      position: position,
-      context: contextName == null
-          ? null
-          : PlaybackContext(name: contextName, uri: 'lx:$contextName'),
-    );
+}) => BackendSnapshot(
+  current: current,
+  queue: queue,
+  currentIndex: currentIndex,
+  isPlaying: isPlaying,
+  position: position,
+  context: contextName == null
+      ? null
+      : PlaybackContext(name: contextName, uri: 'lx:$contextName'),
+);
 
 /// 可阻塞 enqueue 的假后端：验证「已入队后被取消仍要补齐账本」。
 class _GatedEnqueueBackend extends FakePlaybackBackend {
@@ -104,9 +104,8 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     if (withConfig) {
       await AiSettingsStore(
-              settings:
-                  testSettingsRegistry(preferences: prefs, secrets: secrets))
-          .saveConfig(
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ).saveConfig(
         const LlmConfig(
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-test',
@@ -121,7 +120,8 @@ void main() {
       libraryProvider: libraryProvider,
       recommendationService: customGenerator ?? generator,
       settingsStore: AiSettingsStore(
-          settings: testSettingsRegistry(preferences: prefs, secrets: secrets)),
+        settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+      ),
       recommendationStore: recommendationStore,
     );
     await provider.init();
@@ -137,11 +137,13 @@ void main() {
   /// 让电台进入 playing（起播当前列表）。
   Future<void> startRadio() async {
     await provider.startRadio();
-    backend.emit(_radioSnapshot(
-      current: _track(0),
-      queue: _tracks(0, 20),
-      currentIndex: 0,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(0),
+        queue: _tracks(0, 20),
+        currentIndex: 0,
+      ),
+    );
     provider.onPlaybackChanged();
   }
 
@@ -214,8 +216,9 @@ void main() {
 
   test('批次大小：保存后下一次生成 count=30，历史元数据同步', () async {
     await provider.grantConsent();
-    await provider
-        .savePreferences(provider.preferences.copyWith(batchSize: 30));
+    await provider.savePreferences(
+      provider.preferences.copyWith(batchSize: 30),
+    );
     expect(provider.preferences.batchSize, 30);
     expect(generator.calls, 0, reason: '保存偏好不自动生成');
 
@@ -244,15 +247,16 @@ void main() {
     await enableWithList();
 
     await provider.startRadio(fromIndex: 1);
-    backend.emit(_radioSnapshot(
-      current: _track(1),
-      queue: _tracks(0, 3),
-      currentIndex: 1,
-    ));
+    backend.emit(
+      _radioSnapshot(current: _track(1), queue: _tracks(0, 3), currentIndex: 1),
+    );
 
     expect(provider.status, AiDjStatus.playing);
-    expect(backend.lastRequest?.tracks.map((t) => t.title).toList(),
-        ['Song 0', 'Song 1', 'Song 2']);
+    expect(backend.lastRequest?.tracks.map((t) => t.title).toList(), [
+      'Song 0',
+      'Song 1',
+      'Song 2',
+    ]);
     expect(backend.lastRequest?.startIndex, 1);
     expect(backend.lastRequest?.context?.name, kAiDjContextName);
     expect(provider.queuedCount, 2);
@@ -261,11 +265,13 @@ void main() {
 
   test('enqueueRecommendations：只追加未入队曲目，不重复追加', () async {
     await enableWithList();
-    backend.emit(_radioSnapshot(
-      current: _track(0),
-      queue: [_track(0), ..._tracks(100, 10)],
-      currentIndex: 0,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(0),
+        queue: [_track(0), ..._tracks(100, 10)],
+        currentIndex: 0,
+      ),
+    );
 
     await provider.enqueueRecommendations();
 
@@ -293,11 +299,13 @@ void main() {
         .toList();
 
     generator.batchFactory = () => _batch(20, 20);
-    backend.emit(_radioSnapshot(
-      current: _track(16),
-      queue: _tracks(0, 20),
-      currentIndex: 16,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(16),
+        queue: _tracks(0, 20),
+        currentIndex: 16,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
@@ -324,11 +332,13 @@ void main() {
     generator.batchFactory = () => _batch(0, 20);
     backend.lastEnqueued = null;
 
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
@@ -344,11 +354,13 @@ void main() {
     await provider.startRadio();
 
     for (var index = 0; index < 4; index++) {
-      backend.emit(_radioSnapshot(
-        current: _track(index),
-        queue: _tracks(0, 20),
-        currentIndex: index,
-      ));
+      backend.emit(
+        _radioSnapshot(
+          current: _track(index),
+          queue: _tracks(0, 20),
+          currentIndex: index,
+        ),
+      );
       expect(provider.queuedCount, 3 - index);
     }
     expect(provider.queuedCount, isZero, reason: '起播的三首都已播过');
@@ -362,11 +374,13 @@ void main() {
     await provider.setEnabled(true);
     provider.dispose();
 
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     generator.calls = 0;
     generator.batchFactory = () => _batch(20, 20);
     await pumpProvider();
@@ -389,23 +403,27 @@ void main() {
     await provider.setEnabled(true);
     provider.dispose();
 
-    backend.emit(_radioSnapshot(
-      current: _track(0),
-      queue: _tracks(0, 20),
-      currentIndex: 0,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(0),
+        queue: _tracks(0, 20),
+        currentIndex: 0,
+        position: const Duration(seconds: 10),
+      ),
+    );
     await pumpProvider();
 
     expect(provider.status, AiDjStatus.playing);
     expect(provider.queuedCount, 20);
 
     provider.onPositionChanged();
-    backend.emit(_radioSnapshot(
-      current: _track(1),
-      queue: _tracks(0, 20),
-      currentIndex: 1,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(1),
+        queue: _tracks(0, 20),
+        currentIndex: 1,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
@@ -417,22 +435,26 @@ void main() {
     await startRadio();
     await provider.setAutoFeed(false);
 
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 1);
 
     await provider.setAutoFeed(true);
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-      contextName: '我的收藏',
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+        contextName: '我的收藏',
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 1);
@@ -446,11 +468,13 @@ void main() {
     generator.gate = gate;
     generator.batchFactory = () => _batch(20, 3);
 
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 2);
@@ -470,11 +494,13 @@ void main() {
       provider.preferences.copyWith(autoFeed: true),
     );
     for (var i = 0; i < 3; i++) {
-      backend.emit(_radioSnapshot(
-        current: _track(18),
-        queue: _tracks(0, 20),
-        currentIndex: 18,
-      ));
+      backend.emit(
+        _radioSnapshot(
+          current: _track(18),
+          queue: _tracks(0, 20),
+          currentIndex: 18,
+        ),
+      );
       provider.onPlaybackChanged();
       await pumpEventQueue();
     }
@@ -512,11 +538,13 @@ void main() {
     final gate = Completer<void>();
     gated.enqueueGate = gate;
 
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 2);
@@ -540,12 +568,12 @@ void main() {
 
   test('静默自动补歌不改写可见的「上次发送 / 上次返回」', () async {
     generator.batchFactory = () => _batch(0, 3).copyWith(
-          prompt: const AiPrompt(
-            systemPrompt: 'visible-system',
-            userPrompt: 'visible-user',
-          ),
-          rawResponse: 'visible-raw',
-        );
+      prompt: const AiPrompt(
+        systemPrompt: 'visible-system',
+        userPrompt: 'visible-user',
+      ),
+      rawResponse: 'visible-raw',
+    );
     await enableWithList();
     final sent = provider.lastSentPrompt;
     final raw = provider.lastRawResponse;
@@ -554,17 +582,19 @@ void main() {
 
     await startRadio();
     generator.batchFactory = () => _batch(20, 3).copyWith(
-          prompt: const AiPrompt(
-            systemPrompt: 'silent-system',
-            userPrompt: 'silent-user',
-          ),
-          rawResponse: 'silent-raw',
-        );
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+      prompt: const AiPrompt(
+        systemPrompt: 'silent-system',
+        userPrompt: 'silent-user',
+      ),
+      rawResponse: 'silent-raw',
+    );
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
@@ -581,28 +611,30 @@ void main() {
     generator.gate = gate;
     generator.batchFactory = () => _batch(6, 6);
 
-    backend.emit(_radioSnapshot(
-      current: _track(5),
-      queue: _tracks(0, 6),
-      currentIndex: 5,
-    ));
+    backend.emit(
+      _radioSnapshot(current: _track(5), queue: _tracks(0, 6), currentIndex: 5),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 2);
 
     // 生成期间队列播完。
-    backend.emit(_radioSnapshot(
-      current: _track(5),
-      queue: _tracks(0, 6),
-      currentIndex: 5,
-      isPlaying: false,
-      position: const Duration(seconds: 100),
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(5),
+        queue: _tracks(0, 6),
+        currentIndex: 5,
+        isPlaying: false,
+        position: const Duration(seconds: 100),
+      ),
+    );
     gate.complete();
     await pumpEventQueue();
 
-    expect(backend.calls.any((call) => call.startsWith('playQueueIndex:')),
-        isTrue);
+    expect(
+      backend.calls.any((call) => call.startsWith('playQueueIndex:')),
+      isTrue,
+    );
     expect(provider.status, AiDjStatus.playing);
     expect(provider.activeBatchId, provider.historyEntries.last.id);
     expect(provider.progress, isNull);
@@ -614,20 +646,20 @@ void main() {
     expect(provider.recommendations!.unresolved, hasLength(1));
 
     generator.unresolvedFactory = (batch) => batch.copyWith(
-          items: [
-            ...batch.items,
-            ResolvedRecommendation(
-              source: const AiRecommendation(
-                title: 'Ghost',
-                artist: 'X',
-                reason: '补回',
-              ),
-              track: _track(77),
-              sourceName: '网易云音乐',
-            ),
-          ],
-          unresolved: const [],
-        );
+      items: [
+        ...batch.items,
+        ResolvedRecommendation(
+          source: const AiRecommendation(
+            title: 'Ghost',
+            artist: 'X',
+            reason: '补回',
+          ),
+          track: _track(77),
+          sourceName: '网易云音乐',
+        ),
+      ],
+      unresolved: const [],
+    );
 
     await provider.retryUnresolved();
 
@@ -660,11 +692,13 @@ void main() {
     generator.error = StateError('boom');
 
     for (var i = 0; i < 3; i++) {
-      backend.emit(_radioSnapshot(
-        current: _track(18),
-        queue: _tracks(0, 20),
-        currentIndex: 18,
-      ));
+      backend.emit(
+        _radioSnapshot(
+          current: _track(18),
+          queue: _tracks(0, 20),
+          currentIndex: 18,
+        ),
+      );
       provider.onPlaybackChanged();
       await pumpEventQueue();
     }
@@ -678,11 +712,13 @@ void main() {
     expect(backend.lastEnqueued, isNull);
 
     generator.calls = 0;
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 0, reason: '停止后不再自动补歌');
@@ -695,11 +731,13 @@ void main() {
     generator.gate = gate;
     generator.batchFactory = () => _batch(20, 3);
 
-    backend.emit(_radioSnapshot(
-      current: _track(18),
-      queue: _tracks(0, 20),
-      currentIndex: 18,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(18),
+        queue: _tracks(0, 20),
+        currentIndex: 18,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
     expect(generator.calls, 2);
@@ -722,8 +760,11 @@ void main() {
     generator.batchFactory = () => _batch(30, 3);
     await provider.feedMore();
 
-    expect(
-        backend.lastEnqueued?.map((t) => t.id.id).toList(), ['30', '31', '32']);
+    expect(backend.lastEnqueued?.map((t) => t.id.id).toList(), [
+      '30',
+      '31',
+      '32',
+    ]);
     expect(provider.activeBatchId, activeId);
     expect(provider.historyEntries.first.origin, AiDjOrigin.manualFeed);
     expect(provider.progress, isNull);
@@ -752,13 +793,17 @@ void main() {
     final uri = provider.recommendations!.items[1].track.id.uri;
 
     await provider.markNotInterested(uri);
-    expect(provider.recommendations?.items.map((i) => i.track.id.id).toList(),
-        ['0', '2']);
+    expect(provider.recommendations?.items.map((i) => i.track.id.id).toList(), [
+      '0',
+      '2',
+    ]);
     expect(provider.rememberedSkippedLabels, contains('Song 1 - Artist'));
 
     await provider.undoNotInterested(uri);
     expect(
-        provider.rememberedSkippedLabels, isNot(contains('Song 1 - Artist')));
+      provider.rememberedSkippedLabels,
+      isNot(contains('Song 1 - Artist')),
+    );
 
     // 再次标记后重启：长期记忆仍在。
     await provider.markNotInterested(uri);
@@ -803,8 +848,8 @@ void main() {
     final preview = await provider.previewPrompt();
     expect(preview, isNotNull);
 
-    generator.batchFactory =
-        () => _batch(20, 3).copyWith(prompt: generator.lastActualPrompt);
+    generator.batchFactory = () =>
+        _batch(20, 3).copyWith(prompt: generator.lastActualPrompt);
     await provider.refreshRecommendations();
 
     expect(generator.lastLiked, ['Song 0 - Artist', 'Song 1 - Artist']);
@@ -901,8 +946,11 @@ void main() {
 
     await provider.playHistoryBatch(firstId);
     expect(provider.activeBatchId, firstId);
-    expect(backend.lastRequest?.tracks.map((t) => t.id.id).toList(),
-        ['0', '1', '2']);
+    expect(backend.lastRequest?.tracks.map((t) => t.id.id).toList(), [
+      '0',
+      '1',
+      '2',
+    ]);
   });
 
   test('切换当前批次清空撤销栈：旧批次撤销不会污染新批次', () async {
@@ -930,8 +978,11 @@ void main() {
     expect(provider.notInterestedItems, isEmpty);
 
     await provider.undoNotInterested(staleUri);
-    expect(provider.recommendations!.items.map((item) => item.track.id.id),
-        ['0', '1', '2']);
+    expect(provider.recommendations!.items.map((item) => item.track.id.id), [
+      '0',
+      '1',
+      '2',
+    ]);
   });
 
   test('删除 active 清空撤销栈：通知前已移除旧撤销项', () async {
@@ -1050,20 +1101,24 @@ void main() {
     await enableWithList(count: 1);
     await startRadio();
     // startRadio 用 20 首队列会触发自动补歌；换成长队列避免干扰。
-    backend.emit(_radioSnapshot(
-      current: _track(0),
-      queue: [_track(0), _track(99), ..._tracks(200, 18)],
-      currentIndex: 0,
-      position: const Duration(seconds: 10),
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(0),
+        queue: [_track(0), _track(99), ..._tracks(200, 18)],
+        currentIndex: 0,
+        position: const Duration(seconds: 10),
+      ),
+    );
     provider.onPlaybackChanged();
     provider.onPositionChanged();
 
-    backend.emit(_radioSnapshot(
-      current: _track(99),
-      queue: [_track(0), _track(99), ..._tracks(200, 18)],
-      currentIndex: 1,
-    ));
+    backend.emit(
+      _radioSnapshot(
+        current: _track(99),
+        queue: [_track(0), _track(99), ..._tracks(200, 18)],
+        currentIndex: 1,
+      ),
+    );
     provider.onPlaybackChanged();
     await pumpEventQueue();
 
@@ -1100,11 +1155,7 @@ void main() {
         AiDjPhase.resolving,
       ]),
     );
-    expect(
-      notifications,
-      2,
-      reason: '结束时再发一次；进度分片数量不影响聚合通知',
-    );
+    expect(notifications, 2, reason: '结束时再发一次；进度分片数量不影响聚合通知');
     expect(provider.progress, isNull);
     expect(provider.generationState.value.progress, isNull);
   });
@@ -1139,8 +1190,8 @@ void main() {
     await enableWithList();
     final gate = Completer<void>();
     generator.unresolvedGate = gate;
-    generator.unresolvedFactory =
-        (batch) => batch.copyWith(unresolved: const []);
+    generator.unresolvedFactory = (batch) =>
+        batch.copyWith(unresolved: const []);
 
     final future = provider.retryUnresolved();
     await pumpEventQueue();
@@ -1219,9 +1270,9 @@ void main() {
       before,
     );
     expect(
-        provider
-            .isReplacing(provider.recommendations!.items.first.track.id.uri),
-        isFalse);
+      provider.isReplacing(provider.recommendations!.items.first.track.id.uri),
+      isFalse,
+    );
   });
 
   test('取消后下一次显式生成仍能正常提交（旧 epoch 不污染）', () async {

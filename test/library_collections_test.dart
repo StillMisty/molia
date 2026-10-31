@@ -8,14 +8,13 @@ PlaylistInfo _playlist(
   String name = '列表',
   int trackCount = 0,
   bool isFavorites = false,
-}) =>
-    PlaylistInfo(
-      id: id,
-      name: name,
-      createdAt: 0,
-      trackCount: trackCount,
-      isFavorites: isFavorites,
-    );
+}) => PlaylistInfo(
+  id: id,
+  name: name,
+  createdAt: 0,
+  trackCount: trackCount,
+  isFavorites: isFavorites,
+);
 
 /// 合集策略模块（默认选择 / 顺序 / 持久化）的单一测试面。
 void main() {
@@ -81,10 +80,7 @@ void main() {
       expect(
         LibraryCollections.resolveSelection(
           selected: LibraryCollections.unset,
-          playlists: [
-            _playlist(1, isFavorites: true, trackCount: 5),
-            nonEmpty,
-          ],
+          playlists: [_playlist(1, isFavorites: true, trackCount: 5), nonEmpty],
           favoritesId: 1,
         ),
         LibraryCollections.favoritesSentinel,
@@ -151,10 +147,11 @@ void main() {
     test('saveOrder / loadOrder 往返', () async {
       final collections = LibraryCollections();
       await collections.saveOrder(['history', 'favorites', 'playlist:7']);
-      expect(
-        await collections.loadOrder(),
-        ['history', 'favorites', 'playlist:7'],
-      );
+      expect(await collections.loadOrder(), [
+        'history',
+        'favorites',
+        'playlist:7',
+      ]);
     });
 
     test('未保存时返回空列表', () async {

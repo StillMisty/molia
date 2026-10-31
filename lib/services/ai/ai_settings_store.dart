@@ -23,11 +23,7 @@ class AiSettingsStore {
       final baseUrl = await _settings.read(kAiDjBaseUrl);
       final apiKey = await _settings.read(kAiDjApiKey);
       final model = await _settings.read(kAiDjModel);
-      final config = LlmConfig(
-        baseUrl: baseUrl,
-        apiKey: apiKey,
-        model: model,
-      );
+      final config = LlmConfig(baseUrl: baseUrl, apiKey: apiKey, model: model);
       return config.isComplete ? config : null;
     } catch (_) {
       return null;

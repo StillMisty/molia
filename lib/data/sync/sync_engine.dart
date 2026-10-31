@@ -79,22 +79,26 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     required SyncRoundRunner runner,
     required this._inboundWindow,
     required this._clock,
-  })  : _runner = runner {
+  }) : _runner = runner {
     for (final entry in runner.transports.entries) {
       // 引擎只负责订阅入站流；发布台账等轮次状态由 runner 自己持有。
-      _incomingSubscriptions.add(entry.value.incoming.listen(
-        (envelope) => unawaited(onIncomingEnvelope(envelope)),
-      ));
+      _incomingSubscriptions.add(
+        entry.value.incoming.listen(
+          (envelope) => unawaited(onIncomingEnvelope(envelope)),
+        ),
+      );
       // 发现事件是可选能力（WebDAV 没有）：只订阅实现了窄接口的传输。
       final transport = entry.value;
       if (transport is SyncSightingSource) {
         final source = transport as SyncSightingSource;
-        _sightingSubscriptions.add(source.sightings.listen(
-          _onPeerSighting,
-          onError: (Object error) {
-            _logger.fine(() => '对端公告流错误: $error');
-          },
-        ));
+        _sightingSubscriptions.add(
+          source.sightings.listen(
+            _onPeerSighting,
+            onError: (Object error) {
+              _logger.fine(() => '对端公告流错误: $error');
+            },
+          ),
+        );
       }
     }
   }
@@ -217,16 +221,19 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     final prev = _sightingState[id];
     final roster = _runner.peerOf(id);
     final head = sighting.journalHead;
-    final bootChanged = prev != null &&
+    final bootChanged =
+        prev != null &&
         sighting.bootId.isNotEmpty &&
         sighting.bootId != prev.bootId;
     final previousSnapshot = prev?.snapshotId ?? roster.snapshotId;
-    final snapshotChanged = sighting.snapshotId.isNotEmpty &&
+    final snapshotChanged =
+        sighting.snapshotId.isNotEmpty &&
         sighting.snapshotId != previousSnapshot;
     final headAdvanced =
         head != null && (prev?.head == null || head > prev!.head!);
     final behind = head != null && head > roster.cursorSeq;
-    var notify = prev == null ||
+    var notify =
+        prev == null ||
         bootChanged ||
         snapshotChanged ||
         (behind && headAdvanced);
@@ -417,8 +424,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
       );
     }
     final enabled = _state.enabledCategories;
-    final categories =
-        onlyCategories == null ? enabled : onlyCategories.intersection(enabled);
+    final categories = onlyCategories == null
+        ? enabled
+        : onlyCategories.intersection(enabled);
     return SyncRunOutcome(
       categories: categories,
       delivered:
@@ -469,7 +477,9 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   }
 
   static SyncTrigger _mergeTrigger(
-      SyncTrigger? existing, SyncTrigger incoming) {
+    SyncTrigger? existing,
+    SyncTrigger incoming,
+  ) {
     if (existing == null) return incoming;
     if (existing == SyncTrigger.manual || incoming == SyncTrigger.manual) {
       return SyncTrigger.manual;
@@ -482,8 +492,7 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(
     Set<SyncCategory> categories, {
     bool fresh = false,
-  }) =>
-      _runner.collectRecords(categories, fresh: fresh);
+  }) => _runner.collectRecords(categories, fresh: fresh);
 
   /// 首次连通通知流（UI 消费：应用壳弹一次底栏提示）。
   Stream<SyncPeerState> get peerConnectedNotices => _peerConnected.stream;

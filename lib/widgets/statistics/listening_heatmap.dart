@@ -28,12 +28,12 @@ const int heatmapLevelCount = 5;
 
 /// 档位 → 颜色（唯一色阶来源；图例与格子共用）。
 Color heatmapLevelColor(ColorScheme scheme, int level) => switch (level) {
-      0 => scheme.surfaceContainerHighest,
-      1 => scheme.primary.withValues(alpha: 0.30),
-      2 => scheme.primary.withValues(alpha: 0.50),
-      3 => scheme.primary.withValues(alpha: 0.75),
-      _ => scheme.primary,
-    };
+  0 => scheme.surfaceContainerHighest,
+  1 => scheme.primary.withValues(alpha: 0.30),
+  2 => scheme.primary.withValues(alpha: 0.50),
+  3 => scheme.primary.withValues(alpha: 0.75),
+  _ => scheme.primary,
+};
 
 /// 色阶阈值：从非零值取四分位（自适应数据密度）。
 class _HeatLevels {
@@ -329,11 +329,14 @@ class _CalendarHeatmapState extends State<CalendarHeatmap> {
         // 最少窗口：不足时向左补列（补位日渲染为空方格），保证网格铺满卡片。
         final rawWeeks = _weekCount;
         final pitch = widget.cellSize + widget.cellGap;
-        final minWeeks =
-            math.max(1, ((constraints.maxWidth - _labelWidth) / pitch).ceil());
+        final minWeeks = math.max(
+          1,
+          ((constraints.maxWidth - _labelWidth) / pitch).ceil(),
+        );
         final weeks = math.max(rawWeeks, minWeeks);
-        final gridStart =
-            _gridStart.subtract(Duration(days: (weeks - rawWeeks) * 7));
+        final gridStart = _gridStart.subtract(
+          Duration(days: (weeks - rawWeeks) * 7),
+        );
 
         return SizedBox(
           height: _headerHeight + 7 * rowHeight,
@@ -546,11 +549,7 @@ class WeekdayHourHeatmap extends StatelessWidget {
                         scheme,
                         levels.levelOf(values[weekday][hour]),
                       ),
-                      tooltip: tooltipFor(
-                        weekday,
-                        hour,
-                        values[weekday][hour],
-                      ),
+                      tooltip: tooltipFor(weekday, hour, values[weekday][hour]),
                     ),
                 ],
               ),

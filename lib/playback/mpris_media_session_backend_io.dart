@@ -22,7 +22,7 @@ MediaSessionBackend? createMprisMediaSessionBackend() =>
 /// [isAvailable] = false：播放链路照常，只是没有系统媒体会话。
 class MprisMediaSessionBackend implements MediaSessionBackend {
   MprisMediaSessionBackend({AudioServicePlatform? platform})
-      : _platform = platform ?? AudioServicePlatform.instance;
+    : _platform = platform ?? AudioServicePlatform.instance;
 
   final AudioServicePlatform _platform;
   final StreamController<MediaAction> _actions =
@@ -82,9 +82,7 @@ class MprisMediaSessionBackend implements MediaSessionBackend {
   Future<void> updatePlaybackState(PlaybackState state) async {
     if (!_available) return;
     try {
-      await _platform.setState(
-        SetStateRequest(state: _playbackStateOf(state)),
-      );
+      await _platform.setState(SetStateRequest(state: _playbackStateOf(state)));
     } catch (e) {
       _degradeOnError('setState', e);
     }
@@ -136,8 +134,7 @@ PlaybackStateMessage _playbackStateOf(PlaybackState state) {
       PlaybackStatus.idle => AudioProcessingStateMessage.idle,
       PlaybackStatus.buffering => AudioProcessingStateMessage.buffering,
       PlaybackStatus.playing ||
-      PlaybackStatus.paused =>
-        AudioProcessingStateMessage.ready,
+      PlaybackStatus.paused => AudioProcessingStateMessage.ready,
       PlaybackStatus.ended => AudioProcessingStateMessage.completed,
       PlaybackStatus.error => AudioProcessingStateMessage.error,
     },
@@ -190,9 +187,7 @@ class _MprisHandlerCallbacks extends _NoopAudioHandlerCallbacks {
 
   @override
   Future<void> seek(SeekRequest request) async {
-    _backend._emit(
-      MediaAction('seekTo', seekPosition: request.position),
-    );
+    _backend._emit(MediaAction('seekTo', seekPosition: request.position));
   }
 }
 
@@ -271,8 +266,9 @@ class _NoopAudioHandlerCallbacks implements AudioHandlerCallbacks {
   Future<void> setRating(SetRatingRequest request) async {}
 
   @override
-  Future<void> setCaptioningEnabled(SetCaptioningEnabledRequest request) async {
-  }
+  Future<void> setCaptioningEnabled(
+    SetCaptioningEnabledRequest request,
+  ) async {}
 
   @override
   Future<void> setRepeatMode(SetRepeatModeRequest request) async {}
@@ -296,8 +292,9 @@ class _NoopAudioHandlerCallbacks implements AudioHandlerCallbacks {
   Future<void> onTaskRemoved(OnTaskRemovedRequest request) async {}
 
   @override
-  Future<void> onNotificationDeleted(OnNotificationDeletedRequest request) async {
-  }
+  Future<void> onNotificationDeleted(
+    OnNotificationDeletedRequest request,
+  ) async {}
 
   @override
   Future<void> onNotificationClicked(
@@ -309,8 +306,9 @@ class _NoopAudioHandlerCallbacks implements AudioHandlerCallbacks {
       const GetChildrenResponse(children: []);
 
   @override
-  Future<GetMediaItemResponse> getMediaItem(GetMediaItemRequest request) async =>
-      const GetMediaItemResponse(mediaItem: null);
+  Future<GetMediaItemResponse> getMediaItem(
+    GetMediaItemRequest request,
+  ) async => const GetMediaItemResponse(mediaItem: null);
 
   @override
   Future<SearchResponse> search(SearchRequest request) async =>

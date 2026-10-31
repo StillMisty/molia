@@ -63,20 +63,23 @@ class MgSearch {
       'yyapp2d16148780a1dcc7408e06336b98cfd50'
       '$_deviceId$time',
     );
-    final url = 'https://jadeite.migu.cn/music_search/v3/search/searchAll'
+    final url =
+        'https://jadeite.migu.cn/music_search/v3/search/searchAll'
         '?isCorrect=0&isCopyright=1'
         '&searchSwitch=${Uri.encodeComponent(jsonEncode(searchSwitch))}'
         '&pageSize=$limit&text=${Uri.encodeComponent(text)}'
         '&pageNo=$page&sort=0&sid=USS';
-    return MgSearchAllRequest(url: url, headers: {
-      'uiVersion': 'A_music_3.6.1',
-      'deviceId': _deviceId,
-      'timestamp': time,
-      'sign': sign,
-      'channel': '0146921',
-      'User-Agent':
-          'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
-    });
+    return MgSearchAllRequest(
+      url: url,
+      headers: {
+        'uiVersion': 'A_music_3.6.1',
+        'deviceId': _deviceId,
+        'timestamp': time,
+        'sign': sign,
+        'channel': '0146921',
+        'User-Agent': 'Mozilla/5.0 (Linux; U; Android 11.0.0; zh-cn; MI 11 Build/OPR1.170623.032) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Mobile Safari/534.30',
+      },
+    );
   }
 
   /// 平台变体面：签名 GET / 业务码判定（`code != '000000'`）/ 解析。
@@ -98,7 +101,8 @@ class MgSearch {
       isInvalid: invalid,
       parseItems: (response) {
         final songResult = (response as Map)['songResultData'];
-        final resultList = (songResult is Map && songResult['resultList'] is List)
+        final resultList =
+            (songResult is Map && songResult['resultList'] is List)
             ? songResult['resultList'] as List
             : const [];
         return parseItems(resultList);
@@ -148,8 +152,9 @@ class MgSearch {
     if (songId.isEmpty || copyrightId.isEmpty) return null;
 
     final duration = rawItem['duration'];
-    final durationSeconds =
-        duration is num ? duration.toInt() : int.tryParse('$duration') ?? 0;
+    final durationSeconds = duration is num
+        ? duration.toInt()
+        : int.tryParse('$duration') ?? 0;
     final name = (rawItem['name'] ?? rawItem['songName'])?.toString() ?? '';
 
     return buildTrack(
@@ -160,10 +165,10 @@ class MgSearch {
       artists: artistRefsOf(rawItem['singerList']),
       album: rawItem['album']?.toString() ?? '',
       albumId: rawItem['albumId']?.toString() ?? '',
-      intervalText:
-          durationSeconds > 0 ? formatPlayTime(durationSeconds) : null,
-      duration:
-          durationSeconds > 0 ? Duration(seconds: durationSeconds) : null,
+      intervalText: durationSeconds > 0
+          ? formatPlayTime(durationSeconds)
+          : null,
+      duration: durationSeconds > 0 ? Duration(seconds: durationSeconds) : null,
       types: parseTypes(rawItem['audioFormats']),
       img: fixCoverUrl(rawItem['img3'] ?? rawItem['img2'] ?? rawItem['img1']),
       lrcUrl: rawItem['lrcUrl']?.toString(),
@@ -180,7 +185,8 @@ class MgSearch {
     if (formats is! List) return types;
     for (final format in formats) {
       if (format is! Map) continue;
-      final size = format['size'] ??
+      final size =
+          format['size'] ??
           format['androidSize'] ??
           format['asize'] ??
           format['isize'];

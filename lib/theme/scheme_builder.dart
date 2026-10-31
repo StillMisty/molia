@@ -26,10 +26,9 @@ ColorScheme resolveSurfaceScheme(
   SurfaceColorSource source, {
   required ColorScheme appScheme,
   ColorScheme? artworkScheme,
-}) =>
-    source == SurfaceColorSource.artwork
-        ? (artworkScheme ?? appScheme)
-        : appScheme;
+}) => source == SurfaceColorSource.artwork
+    ? (artworkScheme ?? appScheme)
+    : appScheme;
 
 /// 纯黑表面覆盖：仅深色模式生效，surface 系列全部覆盖为纯黑。
 ///

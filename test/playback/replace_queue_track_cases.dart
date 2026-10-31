@@ -38,12 +38,14 @@ void main() {
 
     final old = track('a');
     final other = track('b');
-    backend.emit(BackendSnapshot(
-      current: old,
-      queue: [other, old],
-      currentIndex: 1,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: old,
+        queue: [other, old],
+        currentIndex: 1,
+        isPlaying: true,
+      ),
+    );
 
     final replacement = track('a', sourceKey: 'kg', title: '新版本');
     final hit = await provider.replaceQueueTrack(old, replacement);
@@ -60,12 +62,14 @@ void main() {
     final provider = buildTestPlaybackProvider(backend: backend);
     addTearDown(provider.dispose);
 
-    backend.emit(BackendSnapshot(
-      current: track('b'),
-      queue: [track('b')],
-      currentIndex: 0,
-      isPlaying: true,
-    ));
+    backend.emit(
+      BackendSnapshot(
+        current: track('b'),
+        queue: [track('b')],
+        currentIndex: 0,
+        isPlaying: true,
+      ),
+    );
 
     final hit = await provider.replaceQueueTrack(
       track('a'),
@@ -82,12 +86,14 @@ void main() {
   test('恢复态会话命中：替换会话队列、更新恢复快照并落盘', () async {
     final old = track('a');
     final other = track('b');
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [old, other],
-      index: 0,
-      position: const Duration(seconds: 42),
-      context: const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [old, other],
+        index: 0,
+        position: const Duration(seconds: 42),
+        context: const PlaybackContext(name: 'ctx', type: 'lx', uri: 'lx:ctx'),
+      ),
+    );
 
     final backend = FakePlaybackBackend();
     final provider = buildTestPlaybackProvider(backend: backend);
@@ -113,11 +119,13 @@ void main() {
   test('交接窗口同时命中：live 与恢复态都更新，命令只提交一次', () async {
     final old = track('a');
     final other = track('b');
-    await PlaybackSessionStore().save(PlaybackSession(
-      tracks: [old, other],
-      index: 0,
-      position: const Duration(seconds: 12),
-    ));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [old, other],
+        index: 0,
+        position: const Duration(seconds: 12),
+      ),
+    );
 
     final store = _CountingSessionStore();
     final backend = FakePlaybackBackend();

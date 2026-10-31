@@ -19,12 +19,13 @@ class TaskbarThumbBar {
   /// [channel] / [supported] 只给测试注入：Linux 测试机上 [isSupported] 为
   /// false，不注入就没法覆盖状态同步与点击分发（与下载通知同一模式）。
   TaskbarThumbBar({MethodChannel? channel, bool? supported})
-      : _channel = channel ?? _defaultChannel,
-        _supported = supported ?? Platform.isWindows;
+    : _channel = channel ?? _defaultChannel,
+      _supported = supported ?? Platform.isWindows;
 
   /// 与 `windows/runner/flutter_window.cpp` 的通道名成对出现，改一处必须改两处。
-  static const MethodChannel _defaultChannel =
-      MethodChannel('top.stillmisty.molia/taskbar');
+  static const MethodChannel _defaultChannel = MethodChannel(
+    'top.stillmisty.molia/taskbar',
+  );
 
   static final Logger _logger = Logger('molia.taskbar_thumb_bar');
 
@@ -112,8 +113,9 @@ class TaskbarThumbBar {
       'tooltipPrevious': labels.previous,
       'tooltipPlayPause': _isPlaying ? labels.pause : labels.play,
       'tooltipNext': labels.next,
-      'tooltipFavorite':
-          _isFavorite ? labels.removeFavorite : labels.addFavorite,
+      'tooltipFavorite': _isFavorite
+          ? labels.removeFavorite
+          : labels.addFavorite,
     };
     final last = _lastPayload;
     if (last != null && mapEquals(last, payload)) return;

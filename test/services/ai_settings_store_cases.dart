@@ -21,15 +21,18 @@ void main() {
     prefs = await SharedPreferences.getInstance();
     secrets = MemorySettingsSecretStore();
     store = AiSettingsStore(
-        settings: testSettingsRegistry(preferences: prefs, secrets: secrets));
+      settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+    );
   });
 
   test('配置保存 / 读取 / 清空往返（去首尾空白）', () async {
-    await store.saveConfig(const LlmConfig(
-      baseUrl: ' https://api.deepseek.com ',
-      apiKey: ' sk-abc ',
-      model: ' deepseek-chat ',
-    ));
+    await store.saveConfig(
+      const LlmConfig(
+        baseUrl: ' https://api.deepseek.com ',
+        apiKey: ' sk-abc ',
+        model: ' deepseek-chat ',
+      ),
+    );
 
     final config = await store.readConfig();
     expect(config!.baseUrl, 'https://api.deepseek.com');
@@ -52,7 +55,8 @@ void main() {
 
     expect(await store.hasConsent(), isTrue);
     final fresh = AiSettingsStore(
-        settings: testSettingsRegistry(preferences: prefs, secrets: secrets));
+      settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
+    );
     expect(await fresh.hasConsent(), isTrue);
 
     await store.revokeConsent();
@@ -76,7 +80,9 @@ void main() {
     expect((await store.readPreferences()).batchSize, 10);
     expect((await store.readPreferences()).autoFeed, isTrue);
     expect(
-        (await store.readPreferences()).sections, kAiDefaultUpstreamSections);
+      (await store.readPreferences()).sections,
+      kAiDefaultUpstreamSections,
+    );
 
     const preferences = AiPreferences(
       batchSize: 30,
@@ -88,10 +94,7 @@ void main() {
       exploration: kAiExplorationSurprise,
       onlyUnheard: false,
       extraPrompt: '想听女声',
-      sections: {
-        AiUpstreamSection.summary,
-        AiUpstreamSection.favorites,
-      },
+      sections: {AiUpstreamSection.summary, AiUpstreamSection.favorites},
       seeds: ['晴天 - 周杰伦'],
       acknowledgedScopes: {AiUpstreamSection.favorites},
     );
@@ -123,11 +126,13 @@ void main() {
   test('反馈记忆 JSON 往返、去重与上限', () async {
     expect((await store.readFeedbackMemory()).skipped, isEmpty);
 
-    await store.saveFeedbackMemory(const AiFeedbackMemory(
-      skipped: ['A', 'A', 'B'],
-      liked: ['C'],
-      seeds: ['D'],
-    ));
+    await store.saveFeedbackMemory(
+      const AiFeedbackMemory(
+        skipped: ['A', 'A', 'B'],
+        liked: ['C'],
+        seeds: ['D'],
+      ),
+    );
 
     final loaded = await store.readFeedbackMemory();
     expect(loaded.skipped, ['A', 'B']);

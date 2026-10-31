@@ -87,7 +87,8 @@ class GlobalSearchOverlay extends StatefulWidget {
   /// 遮罩内搜索条的静止宽度（宽窗目标值；窄窗由宿主约束夹取）。
   static const double barWidth = 640;
 
-  /// 静止条高：M3E docked 头部同档（56），占位盒与搜索条等高。
+  /// 1.0× 静止条高（M3E docked 头部同档）；实际占位高度用
+  /// `appSearchBarMinHeightOf(context)`，会随系统文字缩放增长。
   static const double barHeight = 56;
 
   /// 静止条纵向位置：内容区「中上」（15% 屏高）。
@@ -184,9 +185,9 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       transitionDuration: effectDurationOf(context, _openDuration),
       pageBuilder: (context, animation, secondaryAnimation) =>
           _GlobalSearchView(
-        restingRect: _restingRect(context),
-        onViewAllResults: widget.onViewAllResults,
-      ),
+            restingRect: _restingRect(context),
+            onViewAllResults: widget.onViewAllResults,
+          ),
       transitionBuilder: _buildTransition,
     );
     // 视图已被 pop（返回键 / Esc / 点结果行 / 点遮罩）：复位开合状态。
@@ -245,16 +246,17 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
       (screen.width - width) / 2,
       GlobalSearchOverlay.barTopFor(context),
       width,
-      GlobalSearchOverlay.barHeight,
+      appSearchBarMinHeightOf(context),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     // 占位盒：只提供搜索条静止位置与宽度，自己不画任何东西。
-    return const SizedBox(
+    // 高度与真实 AppSearchBar 同源；否则大字体会让结果面板按旧锚点错位。
+    return SizedBox(
       width: GlobalSearchOverlay.barWidth,
-      height: GlobalSearchOverlay.barHeight,
+      height: appSearchBarMinHeightOf(context),
     );
   }
 }
@@ -320,10 +322,10 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 当前搜索类型已加载的结果条数（与面板列表同口径）。
   int get _resultCount => switch (_search.searchKind) {
-        SearchKind.song => _search.filteredResults.length,
-        SearchKind.artist => _search.artistResults.length,
-        SearchKind.lyric => _search.lyricResults.length,
-      };
+    SearchKind.song => _search.filteredResults.length,
+    SearchKind.artist => _search.artistResults.length,
+    SearchKind.lyric => _search.lyricResults.length,
+  };
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
@@ -472,8 +474,9 @@ class _GlobalSearchResults extends StatelessWidget {
     final isArtistKind = search.searchKind == SearchKind.artist;
     final isLyricKind = search.searchKind == SearchKind.lyric;
     final results = isLyricKind ? search.lyricResults : search.filteredResults;
-    final artists =
-        isArtistKind ? search.artistResults : const <ArtistSummary>[];
+    final artists = isArtistKind
+        ? search.artistResults
+        : const <ArtistSummary>[];
     final itemCount = isArtistKind ? artists.length : results.length;
     // 就地预览只取前 [_maxPreviewRows] 行：空态 / 失败 / 页脚仍按真实结果数
     // 判定（有结果才给「查看全部结果」），只有行渲染被截断。
@@ -512,9 +515,18 @@ class _GlobalSearchResults extends StatelessWidget {
                     for (var index = 0; index < previewCount; index++)
                       isArtistKind
                           ? _buildArtistRow(
-                              context, l10n, artists[index], index, previewCount)
+                              context,
+                              l10n,
+                              artists[index],
+                              index,
+                              previewCount,
+                            )
                           : _buildTrackRow(
-                              context, results[index], index, previewCount),
+                              context,
+                              results[index],
+                              index,
+                              previewCount,
+                            ),
                   ],
                 ),
               )
@@ -566,10 +578,10 @@ class _GlobalSearchResults extends StatelessWidget {
   }
 
   String _kindLabel(AppLocalizations l10n, SearchKind kind) => switch (kind) {
-        SearchKind.song => l10n.searchKindSongs,
-        SearchKind.artist => l10n.searchKindArtists,
-        SearchKind.lyric => l10n.searchKindLyrics,
-      };
+    SearchKind.song => l10n.searchKindSongs,
+    SearchKind.artist => l10n.searchKindArtists,
+    SearchKind.lyric => l10n.searchKindLyrics,
+  };
 
   /// 单曲 / 歌词结果行：[TrackRow] 紧凑单列（docked 面板不套宽屏表格列），
   /// 歌词命中片段优先做副标题（与资料库搜索结果行同口径）。
@@ -657,8 +669,9 @@ class _GlobalSearchResults extends StatelessWidget {
           ),
           M3EButton.icon(
             style: M3EButtonStyle.text,
-            onPressed:
-                query.trim().isEmpty ? null : () => search.submitSearch(query),
+            onPressed: query.trim().isEmpty
+                ? null
+                : () => search.submitSearch(query),
             icon: const Icon(Icons.refresh_rounded, size: 18),
             label: Text(l10n.retry),
           ),
@@ -693,15 +706,15 @@ class _GlobalSearchResults extends StatelessWidget {
 
   /// 底部出口：完整结果（分段 / 分页 / 歌手链接）在资料库目的地。
   Widget _buildFooter(AppLocalizations l10n) => Padding(
-        padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-        child: Center(
-          heightFactor: 1,
-          child: M3EButton.icon(
-            style: M3EButtonStyle.text,
-            onPressed: onOpenAllResults,
-            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-            label: Text(l10n.viewAllResults),
-          ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+    child: Center(
+      heightFactor: 1,
+      child: M3EButton.icon(
+        style: M3EButtonStyle.text,
+        onPressed: onOpenAllResults,
+        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+        label: Text(l10n.viewAllResults),
+      ),
+    ),
+  );
 }

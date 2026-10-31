@@ -59,11 +59,7 @@ class ImagePreloadManager {
     if (_cachedUrls.containsKey(key)) return;
     if (_loadingUrls.contains(key)) return;
 
-    _queue.add(_PreloadTask(
-      key: key,
-      priority: priority,
-      context: context,
-    ));
+    _queue.add(_PreloadTask(key: key, priority: priority, context: context));
     _queue.sort((a, b) => b.priority.compareTo(a.priority));
 
     _processQueue();
@@ -92,7 +88,11 @@ class ImagePreloadManager {
     final coverEdge = playbackCoverDecodeEdge(context);
 
     if (currentAlbumArt != null) {
-      tasks.add((url: currentAlbumArt, priority: 100, memCacheWidth: coverEdge));
+      tasks.add((
+        url: currentAlbumArt,
+        priority: 100,
+        memCacheWidth: coverEdge,
+      ));
     }
 
     if (nextAlbumArt != null) {
@@ -161,16 +161,18 @@ class ImagePreloadManager {
       _currentConcurrent++;
       _loadingUrls.add(task.key);
 
-      _loadImage(task).then((_) {
-        _currentConcurrent--;
-        _loadingUrls.remove(task.key);
-        _processQueue();
-      }).catchError((e) {
-        _currentConcurrent--;
-        _loadingUrls.remove(task.key);
-        _logger.warning('预加载图片失败: ${task.key.url}, 错误: $e');
-        _processQueue();
-      });
+      _loadImage(task)
+          .then((_) {
+            _currentConcurrent--;
+            _loadingUrls.remove(task.key);
+            _processQueue();
+          })
+          .catchError((e) {
+            _currentConcurrent--;
+            _loadingUrls.remove(task.key);
+            _logger.warning('预加载图片失败: ${task.key.url}, 错误: $e');
+            _processQueue();
+          });
     }
   }
 

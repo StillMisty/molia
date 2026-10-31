@@ -32,7 +32,7 @@ class PlayStatisticsService {
     required this._repository,
     required this._settings,
     DateTime Function()? clock,
-  })  : _clock = clock ?? DateTime.now {
+  }) : _clock = clock ?? DateTime.now {
     _settings.bindReload(kPlayStatisticsEnabled, reloadFromPreferences);
   }
 
@@ -51,8 +51,9 @@ class PlayStatisticsService {
   final SettingsAccess _settings;
 
   /// 采集开关的可监听出口（设置页开关绑定；值随 [init]/[setEnabled] 更新）。
-  final ValueNotifier<bool> enabledNotifier =
-      ValueNotifier<bool>(kPlayStatisticsEnabled.defaultValue);
+  final ValueNotifier<bool> enabledNotifier = ValueNotifier<bool>(
+    kPlayStatisticsEnabled.defaultValue,
+  );
 
   /// 串行化所有数据库写入（保证 start → touch → finish 顺序）。
   Future<void> _writes = Future<void>.value();
@@ -300,10 +301,11 @@ class PlayStatisticsService {
 
   /// 数据库写入串行化：一次失败只记日志，不影响后续写入与播放主流程。
   void _enqueue(Future<void> Function() action) {
-    _writes = _writes.then((_) => action()).catchError(
-      (Object error, StackTrace stackTrace) {
-        _logger.severe('听歌统计写入失败', error, stackTrace);
-      },
-    );
+    _writes = _writes.then((_) => action()).catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
+      _logger.severe('听歌统计写入失败', error, stackTrace);
+    });
   }
 }

@@ -117,7 +117,8 @@ class SyncProvider extends ChangeNotifier {
       lanEnabled: lanEnabled,
       // 传输自己报告权限被拒时也算：启动路径可能还没让权限门记下
       // `needsUserAction`，但「开关已开、传输没起来」的原因是缺权限。
-      permissionDenied: lanPermissionNeedsAttention ||
+      permissionDenied:
+          lanPermissionNeedsAttention ||
           status?.unavailableReason == SyncUnavailableReason.permissionDenied,
       transportUnavailable:
           status == null || !status.running || status.unavailableReason != null,
@@ -397,7 +398,8 @@ class SyncProvider extends ChangeNotifier {
     if (value) await _controlPlane.ensurePassphrase();
     await _controlPlane.setTransportEnabled(kind, value);
     if (!value) return;
-    final shouldCheck = kind == SyncTransportKind.lan ||
+    final shouldCheck =
+        kind == SyncTransportKind.lan ||
         (kind == SyncTransportKind.webdav && _controlPlane.webdav.isConfigured);
     if (shouldCheck) unawaited(_scheduler?.checkNow());
   }

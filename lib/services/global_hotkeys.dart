@@ -56,13 +56,13 @@ typedef HotKeySpec = ({
 /// `LogicalKeyboardKey.findKeyByKeyId` 还原成逻辑键，再按
 /// [physicalKeyFor] 换算成物理键（平台编码是物理口径）。
 HotKeySpec hotKeySpecFor(ShortcutCommand command, ShortcutCombo combo) => (
-      id: command.name,
-      keyId: combo.key.keyId,
-      ctrl: combo.ctrl,
-      alt: combo.alt,
-      shift: combo.shift,
-      meta: combo.meta,
-    );
+  id: command.name,
+  keyId: combo.key.keyId,
+  ctrl: combo.ctrl,
+  alt: combo.alt,
+  shift: combo.shift,
+  meta: combo.meta,
+);
 
 /// 逻辑键 → 物理键（USB HID usage 口径）：全局热键按**物理位置**注册
 /// （布局无关——Dvorak 用户按的仍是同一个键位），`system_hotkeys` 的平台
@@ -84,7 +84,9 @@ PhysicalKeyboardKey? physicalKeyFor(LogicalKeyboardKey key) {
     );
   }
   final usage = _physicalUsageByKey[key];
-  return usage == null ? null : PhysicalKeyboardKey.findKeyByCode(_hidUsage(usage));
+  return usage == null
+      ? null
+      : PhysicalKeyboardKey.findKeyByCode(_hidUsage(usage));
 }
 
 /// HID usage → `PhysicalKeyboardKey` 的查找码：Flutter 的
@@ -290,12 +292,13 @@ class GlobalHotkeys {
   static void _onSettingsChanged() => _scheduleSync();
 
   static void _scheduleSync() {
-    _syncChain = _syncChain.then((_) => _sync()).catchError(
-      (Object error, StackTrace stackTrace) {
-        // _sync 内部逐条兜底；这里只防链断（一次异常不能让后续同步停摆）。
-        _logger.severe('全局热键同步异常', error, stackTrace);
-      },
-    );
+    _syncChain = _syncChain.then((_) => _sync()).catchError((
+      Object error,
+      StackTrace stackTrace,
+    ) {
+      // _sync 内部逐条兜底；这里只防链断（一次异常不能让后续同步停摆）。
+      _logger.severe('全局热键同步异常', error, stackTrace);
+    });
   }
 
   /// 幂等同步：先整体注销，再按当前设置注册（开关关闭时只注销）。
@@ -322,8 +325,7 @@ class GlobalHotkeys {
     var registered = 0;
     for (final entry in settings.globalBindings.effective.entries) {
       final combo = entry.value;
-      if (entry.key == ShortcutCommand.showMainWindow &&
-          !_supportsShowWindow) {
+      if (entry.key == ShortcutCommand.showMainWindow && !_supportsShowWindow) {
         continue;
       }
       if (!combo.isValidForScope(ShortcutScope.global)) {
@@ -363,9 +365,11 @@ class GlobalHotkeys {
       _logger.warning('全局热键触发但命令执行器未注入：${command.name}');
       return;
     }
-    unawaited(actions.execute(command).catchError((Object error) {
-      _logger.warning('全局热键命令执行失败（${command.name}）：$error');
-    }));
+    unawaited(
+      actions.execute(command).catchError((Object error) {
+        _logger.warning('全局热键命令执行失败（${command.name}）：$error');
+      }),
+    );
   }
 
   /// 没有窗口能力的平台（Android / iOS）上「显示主窗口」这条全局热键没有

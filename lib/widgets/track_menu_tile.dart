@@ -12,6 +12,7 @@ import 'favorite_action.dart';
 import 'row_actions.dart';
 import 'track_handoff.dart';
 import 'track_row.dart';
+import 'track_row_actions.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -26,13 +27,15 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 组件不认具体 provider，避免把 DiscoverProvider 焊进共享件。
 List<RowAction> trackRowActionMenu(
   BuildContext context, {
+  required Track track,
   required bool favorite,
   required VoidCallback onToggleFavorite,
   required VoidCallback onAddToPlaylist,
+  bool includeAddToQueue = true,
 }) {
   final l10n = _l10n(context);
   final heart = FavoriteHeart(favorite: favorite);
-  return [
+  return mergeRowActions([
     RowAction(
       icon: heart.icon,
       label: heart.label(l10n),
@@ -43,7 +46,7 @@ List<RowAction> trackRowActionMenu(
       label: l10n.addToPlaylist,
       onPressed: onAddToPlaylist,
     ),
-  ];
+  ], trackCommonActions(context, track, includeAddToQueue: includeAddToQueue));
 }
 
 /// 单曲交接句柄（模块无状态；这里只用到「加入列表」意图）。
@@ -56,15 +59,18 @@ const TrackHandoff _handoff = TrackHandoff();
 /// 不要在列表层调用后透传。
 List<RowAction> trackRowActionMenuForTrack(
   BuildContext context,
-  Track track,
-) {
+  Track track, {
+  bool includeAddToQueue = true,
+}) {
   final favorite = context.select<LibraryProvider?, bool>(
     (provider) =>
         provider?.isFavorite(track.id.sourceKey, track.id.id) ?? false,
   );
   return trackRowActionMenu(
     context,
+    track: track,
     favorite: favorite,
+    includeAddToQueue: includeAddToQueue,
     // 菜单行：成功也确认一句（动作藏在弹层里，弹层关闭后需要回执）。
     onToggleFavorite: () => unawaited(toggleLibraryFavorite(context, track)),
     // 领域曲目加入列表：与收藏页 / 发现页共用统一目标选择与反馈流程。
@@ -78,7 +84,8 @@ List<RowAction> trackRowActionMenuForTrack(
 /// 行表面右键在落点弹同一份菜单（[rowActionsAtPointer]）。
 ///
 /// 收藏域（歌手页 / 专辑页）经 [FavoriteTrackTile] 适配层使用；发现详情页
-/// 直接使用。菜单固定「收藏 / 加入列表」两条动作——各入口的语义本来就相同，
+/// 直接使用。菜单 = 「收藏 / 加入列表」+ 公共动作（加入队列 / 下载 / 评论 /
+/// 专辑 / 歌手，见 [trackCommonActions]）——各入口的语义本来就相同，
 /// 差异只在领域对象上，因此收藏态与写入流程都由调用方注入：
 /// - 收藏态用 `select` 订阅后传入（组件不认具体 provider，避免把
 ///   DiscoverProvider / LibraryProvider 焊进共享件，也避免整表重建）；
@@ -88,6 +95,7 @@ List<RowAction> trackRowActionMenuForTrack(
 class TrackMenuTile extends StatelessWidget {
   const TrackMenuTile({
     super.key,
+    required this.track,
     required this.row,
     required this.position,
     this.surface = const TrackRowSurface(),
@@ -96,6 +104,10 @@ class TrackMenuTile extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onAddToPlaylist,
   });
+
+  /// 领域曲目：公共动作（加入队列 / 下载 / 评论 / 专辑 / 歌手）的能力位
+  /// 与目标都从这里取；行数据 [row] 只负责展示。
+  final Track track;
 
   /// 行数据（标题 / 歌手 / 封面 / 时长 / 当前曲目身份）。
   final TrackRowModel row;
@@ -122,6 +134,7 @@ class TrackMenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = trackRowActionMenu(
       context,
+      track: track,
       favorite: favorite,
       onToggleFavorite: onToggleFavorite,
       onAddToPlaylist: onAddToPlaylist,

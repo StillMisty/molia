@@ -13,8 +13,8 @@ String dataSaverSubtitle(
   final status = !detectionAvailable
       ? l10n.settingsDataSaverNetworkUnknown
       : (onCellular
-          ? l10n.settingsDataSaverNetworkCellular
-          : l10n.settingsDataSaverNetworkWifi);
+            ? l10n.settingsDataSaverNetworkCellular
+            : l10n.settingsDataSaverNetworkWifi);
   return enabled
       ? '${l10n.settingsDataSaverSubtitle} · $status'
       : l10n.settingsDataSaverSubtitle;

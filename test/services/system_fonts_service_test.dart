@@ -26,10 +26,11 @@ void main() {
   <alias name="monospace" to="Droid Sans Mono" />
 </familyset>
 ''';
-      expect(
-        SystemFontsService.parseAndroidFontConfig(xml),
-        ['monospace', 'Noto Sans CJK SC', 'sans-serif'],
-      );
+      expect(SystemFontsService.parseAndroidFontConfig(xml), [
+        'monospace',
+        'Noto Sans CJK SC',
+        'sans-serif',
+      ]);
     });
 
     test('无 family/alias 时返回空列表', () {
@@ -49,16 +50,18 @@ Noto Sans CJK SC:style=Bold
 
 DejaVu Sans Mono:style=Book
 ''';
-      expect(
-        SystemFontsService.parseFcListOutput(output),
-        ['DejaVu Sans Mono', 'Noto Sans CJK SC', 'WenQuanYi Micro Hei'],
-      );
+      expect(SystemFontsService.parseFcListOutput(output), [
+        'DejaVu Sans Mono',
+        'Noto Sans CJK SC',
+        'WenQuanYi Micro Hei',
+      ]);
     });
 
     test('逗号分隔的多语言别名只取第一个', () {
       const output = 'Noto Sans CJK SC,Noto Sans SC,思源黑体\n';
-      expect(SystemFontsService.parseFcListOutput(output),
-          ['Noto Sans CJK SC']);
+      expect(SystemFontsService.parseFcListOutput(output), [
+        'Noto Sans CJK SC',
+      ]);
     });
   });
 
@@ -126,7 +129,8 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts
           .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
           .join();
       final head =
-          r'HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics' '\n'
+          r'HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics'
+          '\n'
           '    MessageFont    REG_BINARY    ';
       if (!wrap) return '$head$hex\n';
       // reg.exe 折行：按 40 字符切段，续行只含 hex。
@@ -154,8 +158,10 @@ HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts
       // Windows 上 reg.exe 输出 CRLF，续行尾部的 \r 不能破坏 hex 识别。
       expect(
         SystemFontsService.parseWindowsMessageFontOutput(
-          messageFontOutput('Microsoft YaHei UI', wrap: true)
-              .replaceAll('\n', '\r\n'),
+          messageFontOutput(
+            'Microsoft YaHei UI',
+            wrap: true,
+          ).replaceAll('\n', '\r\n'),
         ),
         'Microsoft YaHei UI',
       );
@@ -174,13 +180,11 @@ HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics
     });
 
     test('无该值 / 二进制过短时返回 null（回退引擎默认）', () {
-      expect(
-        SystemFontsService.parseWindowsMessageFontOutput(''),
-        isNull,
-      );
+      expect(SystemFontsService.parseWindowsMessageFontOutput(''), isNull);
       expect(
         SystemFontsService.parseWindowsMessageFontOutput(
-          r'HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics' '\n',
+          r'HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics'
+          '\n',
         ),
         isNull,
       );
@@ -196,7 +200,9 @@ HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics
   group('SystemFontsService.parseWindowsFontRegistryName', () {
     test('去掉结尾的类型后缀（TrueType / OpenType / 集合 / Type 1）', () {
       expect(
-        SystemFontsService.parseWindowsFontRegistryName('Arial Bold (TrueType)'),
+        SystemFontsService.parseWindowsFontRegistryName(
+          'Arial Bold (TrueType)',
+        ),
         ['Arial Bold'],
       );
       expect(
@@ -225,10 +231,9 @@ HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics
     });
 
     test('无后缀名保留原样；只剩后缀返回空', () {
-      expect(
-        SystemFontsService.parseWindowsFontRegistryName('Bahnschrift'),
-        ['Bahnschrift'],
-      );
+      expect(SystemFontsService.parseWindowsFontRegistryName('Bahnschrift'), [
+        'Bahnschrift',
+      ]);
       expect(
         SystemFontsService.parseWindowsFontRegistryName('(TrueType)'),
         isEmpty,
@@ -245,9 +250,13 @@ HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics
       SystemFontsService.debugResetCache();
       final families = await SystemFontsService.listFamilies();
       expect(families, isNotEmpty);
-      expect(families, equals(List<String>.of(families)..sort(
-            (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-          )));
+      expect(
+        families,
+        equals(
+          List<String>.of(families)
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())),
+        ),
+      );
     });
 
     test('Windows 能枚举到字体（其它平台跳过）', () async {
@@ -256,9 +265,13 @@ HKEY_CURRENT_USER\Control Panel\Desktop\WindowMetrics
       SystemFontsService.debugResetCache();
       final families = await SystemFontsService.listFamilies();
       expect(families, isNotEmpty);
-      expect(families, equals(List<String>.of(families)..sort(
-            (a, b) => a.toLowerCase().compareTo(b.toLowerCase()),
-          )));
+      expect(
+        families,
+        equals(
+          List<String>.of(families)
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())),
+        ),
+      );
       // 文件解析取的是真家族名：注册表值名里的样式后缀不应出现在列表里。
       expect(families.where((name) => name.endsWith(' (TrueType)')), isEmpty);
     });

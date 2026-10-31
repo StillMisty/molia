@@ -175,11 +175,15 @@ void main() {
     expect(
       find.descendant(
         of: playedRow,
-        matching: find.text(hexOf(resolveLyricColor(
-          settings.desktopPlayedColorSource,
-          settings.desktopPlayedColor,
-          scheme,
-        ))),
+        matching: find.text(
+          hexOf(
+            resolveLyricColor(
+              settings.desktopPlayedColorSource,
+              settings.desktopPlayedColor,
+              scheme,
+            ),
+          ),
+        ),
       ),
       findsOneWidget,
     );
@@ -196,9 +200,9 @@ void main() {
 
     expect(settings.desktopHideOnPause, isTrue);
     Finder pauseRow() => find.ancestor(
-          of: find.text('When paused'),
-          matching: find.byType(SettingsChoiceRow<LyricsPauseBehavior>),
-        );
+      of: find.text('When paused'),
+      matching: find.byType(SettingsChoiceRow<LyricsPauseBehavior>),
+    );
     // 默认整窗隐藏：回退策略不生效，行置灰但值保留。
     expect(pauseRow(), findsOneWidget);
     expect(
@@ -288,9 +292,9 @@ void main() {
     const channel = MethodChannel('top.stillmisty.molia/notifications');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      if (call.method == 'permissionStatus') return 'denied';
-      return null;
-    });
+          if (call.method == 'permissionStatus') return 'denied';
+          return null;
+        });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(channel, null);

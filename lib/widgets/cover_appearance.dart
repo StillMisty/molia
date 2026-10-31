@@ -176,11 +176,8 @@ class CoverFlight {
   Rect rectAt(double t) => Rect.lerp(fromRect, toRect, t.clamp(0.0, 1.0))!;
 
   /// 任意进度的外观。
-  CoverAppearance appearanceAt(double t) => CoverAppearance.lerp(
-        otherAppearance,
-        pageAppearance,
-        pageProgressAt(t),
-      );
+  CoverAppearance appearanceAt(double t) =>
+      CoverAppearance.lerp(otherAppearance, pageAppearance, pageProgressAt(t));
 
   /// 任意进度的回退图标尺寸：两端真身尺寸按播放页端进度插值。
   ///
@@ -188,10 +185,10 @@ class CoverFlight {
   /// 两端真身的图标事实不同（固定尺寸 vs 边长比例），固定尺寸会在起手与
   /// 交接两处各跳一次，必须插值。
   double iconSizeAt(double t) => lerpDouble(
-        otherAppearance.iconSizeFor(otherRect.width),
-        pageAppearance.iconSizeFor(pageRect.width),
-        pageProgressAt(t),
-      )!;
+    otherAppearance.iconSizeFor(otherRect.width),
+    pageAppearance.iconSizeFor(pageRect.width),
+    pageProgressAt(t),
+  )!;
 }
 
 /// 卡片内容构建器：拿到外观算好的裁剪圆角与回退图标尺寸。
@@ -321,9 +318,10 @@ class CoverFlightLayer extends StatelessWidget {
     final CoverAppearance appearance = flight.appearanceAt(t);
     final double page = flight.pageProgressAt(t);
     if (page >= 1.0) return appearance;
-    final double window = ((page - flightShadowPageRevealStart) /
-            (flightShadowPageRevealEnd - flightShadowPageRevealStart))
-        .clamp(0.0, 1.0);
+    final double window =
+        ((page - flightShadowPageRevealStart) /
+                (flightShadowPageRevealEnd - flightShadowPageRevealStart))
+            .clamp(0.0, 1.0);
     final double shadow = appearance.shadow * window;
     if (shadow == appearance.shadow) return appearance;
     return CoverAppearance(

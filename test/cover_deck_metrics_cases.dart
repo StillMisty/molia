@@ -89,14 +89,16 @@ void main() {
   });
 
   test('退化输入：空间为零 / 为负 / 两轴都无界时不给尺寸', () {
-    expect(
-      coverDeckMetricsFor(availableWidth: 0, availableHeight: 0),
-      (artDimension: 0.0, stackWidth: 0.0, stackHeight: 0.0),
-    );
-    expect(
-      coverDeckMetricsFor(availableWidth: -40, availableHeight: -40),
-      (artDimension: 0.0, stackWidth: 0.0, stackHeight: 0.0),
-    );
+    expect(coverDeckMetricsFor(availableWidth: 0, availableHeight: 0), (
+      artDimension: 0.0,
+      stackWidth: 0.0,
+      stackHeight: 0.0,
+    ));
+    expect(coverDeckMetricsFor(availableWidth: -40, availableHeight: -40), (
+      artDimension: 0.0,
+      stackWidth: 0.0,
+      stackHeight: 0.0,
+    ));
     // 两轴都无界：无处安放，0 而不是无穷（无穷尺寸会炸布局）。
     expect(
       coverDeckMetricsFor(

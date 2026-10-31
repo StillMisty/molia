@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/services/lyrics_display/media_lyric_composer.dart';
 import 'package:molia/services/lyrics_display/lyrics_output.dart';
+
 import '../support/settings_test_support.dart';
 
 /// 媒体元数据歌词合成：字段映射 / 格式 / 翻译 / A2DP 门控 / 优先级 / 暂停回退。
@@ -14,15 +15,14 @@ void main() {
     bool isPlaying = true,
     bool hasLyrics = true,
     String title = '歌名',
-  }) =>
-      LyricsPresentation(
-        trackId: 'fake:1',
-        title: title,
-        line: line,
-        extended: extended,
-        isPlaying: isPlaying,
-        hasLyrics: hasLyrics,
-      );
+  }) => LyricsPresentation(
+    trackId: 'fake:1',
+    title: title,
+    line: line,
+    extended: extended,
+    isPlaying: isPlaying,
+    hasLyrics: hasLyrics,
+  );
 
   Future<LyricsDisplaySettings> settings({
     bool notification = false,

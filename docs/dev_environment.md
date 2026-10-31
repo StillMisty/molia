@@ -1,5 +1,12 @@
 # 本地开发环境
 
+## Git hooks（提交前自动格式化）
+
+首次克隆后执行一次 `tool/agent/hooks.sh`（等价于 `git config core.hooksPath .githooks`）。
+`.githooks/pre-commit` 只格式化本次已暂存、且没有未暂存改动的 `*.dart` 文件；同一路径存在
+未暂存改动时会跳过并提示，避免把工作区内容一起 stage。找不到 `dart`（例如 GUI Git 客户端的
+PATH 不含 SDK）时只警告、不阻塞提交；可用 `DART_BIN` 指定解释器。
+
 ## macOS 桌面运行要求
 
 - **macOS 12 及以上 + Xcode**：macOS 与 iOS 目标都只用 Swift Package Manager（不跑

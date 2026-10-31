@@ -36,8 +36,8 @@ class ArtworkCache {
     CacheService? cacheService,
     this._managerOverride,
     CacheInfoRepository? repoOverride,
-  })  : _cacheService = cacheService ?? CacheService.instance,
-        _repoOverride = repoOverride {
+  }) : _cacheService = cacheService ?? CacheService.instance,
+       _repoOverride = repoOverride {
     _repo = repoOverride;
     _cacheService.addPolicyListener(_onPolicyChanged);
     _cacheService.addClearListener(_onPartitionCleared);
@@ -291,9 +291,7 @@ class ArtworkCache {
   /// 供封面取色 seed 缓存判断「同一 URL 的缓存文件内容是否变了」：只
   /// `stat()` 取大小与修改时间，不读图片字节——取色 seed 只需要内容身份，
   /// 每次启动 / 每次命中都读一遍图片字节会把封面缓存变成额外 IO 热点。
-  Future<({int sizeBytes, int modifiedMs})?> cachedFileInfo(
-    String url,
-  ) async {
+  Future<({int sizeBytes, int modifiedMs})?> cachedFileInfo(String url) async {
     if (url.isEmpty) return null;
     try {
       final manager = await managerOrNull();
@@ -439,8 +437,9 @@ class ArtworkCache {
           found = true;
         } else {
           // 快照外条目（可能是扫描后才写入的）逐条复核：确实不存在才删索引。
-          final file = await manager.config.fileSystem
-              .createFile(object.relativePath);
+          final file = await manager.config.fileSystem.createFile(
+            object.relativePath,
+          );
           found = await file.exists();
         }
         if (!found) missing.add(object.id!);
@@ -461,12 +460,11 @@ Future<ImageProvider> artworkImageProvider(
   String url, {
   int? maxWidth,
   int? maxHeight,
-}) =>
-    ArtworkCache.instance.imageProvider(
-      url,
-      maxWidth: maxWidth,
-      maxHeight: maxHeight,
-    );
+}) => ArtworkCache.instance.imageProvider(
+  url,
+  maxWidth: maxWidth,
+  maxHeight: maxHeight,
+);
 
 /// 省流模式拦截封面网络请求时抛出的错误：由 `CachedNetworkImage` 的
 /// errorWidget 回退为占位图标（本地无缓存时的预期路径）。
@@ -489,7 +487,7 @@ class ArtworkCacheManager extends CacheManager with ImageCacheManager {
     super.config, {
     required this._onUsed,
     bool Function()? networkBlocked,
-  })  : _networkBlocked = networkBlocked ?? (() => false);
+  }) : _networkBlocked = networkBlocked ?? (() => false);
 
   final VoidCallback _onUsed;
   final bool Function() _networkBlocked;
@@ -554,8 +552,7 @@ class _PolicyNeutralRepository implements CacheInfoRepository {
   Future<CacheObject> insert(
     CacheObject cacheObject, {
     bool setTouchedToNow = true,
-  }) =>
-      _inner.insert(cacheObject, setTouchedToNow: setTouchedToNow);
+  }) => _inner.insert(cacheObject, setTouchedToNow: setTouchedToNow);
 
   @override
   Future<CacheObject?> get(String key) => _inner.get(key);
@@ -567,10 +564,7 @@ class _PolicyNeutralRepository implements CacheInfoRepository {
   Future<int> deleteAll(Iterable<int> ids) => _inner.deleteAll(ids);
 
   @override
-  Future<int> update(
-    CacheObject cacheObject, {
-    bool setTouchedToNow = true,
-  }) =>
+  Future<int> update(CacheObject cacheObject, {bool setTouchedToNow = true}) =>
       _inner.update(cacheObject, setTouchedToNow: setTouchedToNow);
 
   @override

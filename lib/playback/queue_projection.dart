@@ -1,5 +1,5 @@
 /// 队列投影：把「队列 + 当前下标 + 模式 + 播放顺序」推导成快照里的
-/// `next` / `previous` / `previousOfPrevious` / `upNext` 四个字段。
+/// `next` / `previous` / `previousOfPrevious` / `upNext` / `upNextIndices`。
 ///
 /// **为什么单独成模块**：真实播放（`LocalPlaybackService`）与冷启动恢复态
 /// （`PlaybackSessionCoordinator`）原本各写一套近似——恢复态只能按下标
@@ -44,6 +44,7 @@ class QueueProjection<T> {
     this.previous,
     this.previousOfPrevious,
     this.upNext = const [],
+    this.upNextIndices = const [],
   });
 
   /// 按当前模式解析出的下一首（shuffle 为排列中的下一首，轮末为空）。
@@ -59,6 +60,10 @@ class QueueProjection<T> {
 
   /// 实际播放顺序中当前曲目之后的曲目（队列面板「接下来」）。
   final List<T> upNext;
+
+  /// [upNext] 对应在完整队列中的下标：队列行编辑命令必须用真实下标，
+  /// 不能把面板行号当队列下标（shuffle / 列表循环回绕都会错位）。
+  final List<int> upNextIndices;
 }
 
 /// 推导队列投影（纯函数；越界 / 空队列返回空投影）。
@@ -113,9 +118,11 @@ QueueProjection<T> projectQueue<T>(
   return QueueProjection<T>(
     next: next == null ? null : queue[next],
     previous: previous == null ? null : queue[previous],
-    previousOfPrevious:
-        previousOfPrevious == null ? null : queue[previousOfPrevious],
+    previousOfPrevious: previousOfPrevious == null
+        ? null
+        : queue[previousOfPrevious],
     upNext: List<T>.unmodifiable([for (final index in upNext) queue[index]]),
+    upNextIndices: List<int>.unmodifiable(upNext),
   );
 }
 

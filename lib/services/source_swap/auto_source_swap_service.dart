@@ -85,9 +85,9 @@ class AutoSourceSwapService {
   }
 
   static SongMatchInfo _infoOf(Track track) => SongMatchInfo(
-        title: track.title,
-        artist: track.artistLabel,
-        album: track.album,
-        duration: track.duration,
-      );
+    title: track.title,
+    artist: track.artistLabel,
+    album: track.album,
+    duration: track.duration,
+  );
 }

@@ -27,7 +27,7 @@ class ShortcutActions {
     this.onFocusSearch,
     this.onSelectDestinationIndex,
     this.onCloseQueuePanel,
-  })  : _showMainWindow = showMainWindow ?? WindowChrome.show;
+  }) : _showMainWindow = showMainWindow ?? WindowChrome.show;
 
   final PlaybackProvider _playback;
 

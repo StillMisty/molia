@@ -24,7 +24,8 @@ class KwLyricSearch {
     int page = 1,
     int limit = 30,
   }) async {
-    final url = 'http://search.kuwo.cn/r.s?client=kt'
+    final url =
+        'http://search.kuwo.cn/r.s?client=kt'
         '&all=${Uri.encodeComponent(keyword)}'
         '&stype=lyric&pn=${page - 1}&rn=$limit'
         '&uid=794762570&ver=kwplayer_ar_9.2.2.1&vipver=1'
@@ -53,8 +54,7 @@ class KwLyricSearch {
     final snippets = <String, String>{};
     for (final raw in body['abslist'] as List) {
       if (raw is! Map) continue;
-      final id =
-          raw['MUSICRID']?.toString().replaceFirst('MUSIC_', '') ?? '';
+      final id = raw['MUSICRID']?.toString().replaceFirst('MUSIC_', '') ?? '';
       final snippet = _normalize(raw['lrc']?.toString());
       if (id.isEmpty || snippet == null) continue;
       snippets[id] = snippet;

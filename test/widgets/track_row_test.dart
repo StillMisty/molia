@@ -440,12 +440,15 @@ void main() {
       M3ETheme.of(context).listTheme.item.twoLineHeight,
     );
 
-    // 常量为「无表格档」列表保留：值必须与双行 token 同值（防两处漂移）。
+    // 常量为「无表格档」列表保留 token 参考值；实际行高统一走 extentOf。
     expect(TrackRow.extent, 72);
     expect(TrackRow.extent, M3EListItemTheme.defaults.twoLineHeight);
 
-    // 实际渲染高度：非表格行 = 双行 token。
-    expect(tester.getSize(find.byType(TrackRow)).height, TrackRow.extent);
+    // 实际渲染高度：非表格行 = 双行 token（1.0× 下与常量同值）。
+    expect(
+      tester.getSize(find.byType(TrackRow)).height,
+      TrackRow.extentOf(context, tableColumns: false),
+    );
   });
 
   testWidgets('表格模式：标题列宽度受规范上限约束，右侧列缘不动', (tester) async {

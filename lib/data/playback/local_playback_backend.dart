@@ -29,10 +29,7 @@ class _BackendStateNotifier extends ValueNotifier<BackendSnapshot>
 /// 本地播放后端：组合 [LocalPlaybackService]，
 /// 把服务状态映射为领域 [BackendSnapshot]，并把控制委托给服务。
 class LocalPlaybackBackend implements PlaybackBackend {
-  LocalPlaybackBackend({
-    required this._service,
-    required this._resolver,
-  }) {
+  LocalPlaybackBackend({required this._service, required this._resolver}) {
     _service.addListener(_onServiceChanged);
     _state.value = _buildSnapshot();
   }
@@ -69,13 +66,13 @@ class LocalPlaybackBackend implements PlaybackBackend {
 
   @override
   PlaybackCapabilities get capabilities => const PlaybackCapabilities(
-        seek: true,
-        next: true,
-        previous: true,
-        queue: true,
-        setMode: true,
-        volume: true,
-      );
+    seek: true,
+    next: true,
+    previous: true,
+    queue: true,
+    setMode: true,
+    volume: true,
+  );
 
   /// 本地是当前唯一后端：恒可处理。
   @override
@@ -119,6 +116,22 @@ class LocalPlaybackBackend implements PlaybackBackend {
     ];
     await _service.enqueueTracks(sourceTracks);
     _emit();
+  }
+
+  /// 队列内移动一项：服务同步维护播放顺序 / 洗牌排列，返回值即是否变化。
+  @override
+  Future<bool> moveQueueIndex(int from, int to) async {
+    final changed = _service.moveQueueIndex(from, to);
+    _emit();
+    return changed;
+  }
+
+  /// 从队列移除一项：当前曲目 / 越界由服务 no-op，返回值即是否变化。
+  @override
+  Future<bool> removeQueueIndex(int index) async {
+    final changed = _service.removeQueueIndex(index);
+    _emit();
+    return changed;
   }
 
   @override
@@ -184,9 +197,9 @@ class LocalPlaybackBackend implements PlaybackBackend {
   /// 可选能力：本地后端暂不支持。
   @override
   Future<bool> toggleFavorite(Track track) async => throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '本地播放后端暂不支持收藏',
-      );
+    kind: FailureKind.unsupported,
+    message: '本地播放后端暂不支持收藏',
+  );
 
   /// 应用内音量：委托 [LocalPlaybackService.setVolume]。
   @override
@@ -239,8 +252,8 @@ class LocalPlaybackBackend implements PlaybackBackend {
     final duration = current == null
         ? Duration.zero
         : (_service.duration > Duration.zero
-            ? _service.duration
-            : (current.duration ?? Duration.zero));
+              ? _service.duration
+              : (current.duration ?? Duration.zero));
 
     return BackendSnapshot(
       current: current,
@@ -250,6 +263,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       previous: _toTrackOrNull(projection.previous),
       previousOfPrevious: _toTrackOrNull(projection.previousOfPrevious),
       upNext: List<Track>.unmodifiable(upNext),
+      upNextIndices: projection.upNextIndices,
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,
       position: _service.position,

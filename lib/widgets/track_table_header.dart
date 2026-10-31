@@ -22,10 +22,7 @@ AppLocalizations _l10n(BuildContext context) =>
 /// 槽间距 token）、行尾固定槽宽（`TrackRowColumnSpec.trailingSlotWidth`）。
 /// 调用方负责与行列表相同的横向页边距。
 class TrackTableHeader extends StatelessWidget {
-  const TrackTableHeader({
-    super.key,
-    this.spec = TrackRowColumnSpec.standard,
-  });
+  const TrackTableHeader({super.key, this.spec = TrackRowColumnSpec.standard});
 
   /// 列宽 / 列构成：与行内 [TrackRowSurface.tableSpec] 传同一份（行与表头必须
   /// 用同一个 spec —— 表头只看规范，不看单行内容）。
@@ -39,12 +36,12 @@ class TrackTableHeader extends StatelessWidget {
   /// 加上下内边距，随系统文字缩放同步放大（大字号下不裁切）。
   static double extentOf(BuildContext context) {
     final style = M3ETheme.of(context).typeScale.labelMedium;
-    final scaledSize =
-        MediaQuery.textScalerOf(context).scale(style.fontSize ?? 12);
+    final scaledSize = MediaQuery.textScalerOf(context)
+        .scale(style.fontSize ?? 12);
     // 段落行高按整像素结算：向上取整（容 1e-6 浮点尾差），避免 extent 比
     // 实际高度少零点几像素、钉住时把行尾裁掉。
-    final lineHeight =
-        (scaledSize * (style.height ?? 1.2) - 1e-6).ceilToDouble();
+    final lineHeight = (scaledSize * (style.height ?? 1.2) - 1e-6)
+        .ceilToDouble();
     return lineHeight + _verticalPadding * 2;
   }
 

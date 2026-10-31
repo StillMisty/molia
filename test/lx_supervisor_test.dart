@@ -7,6 +7,7 @@ import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'support/settings_test_support.dart';
 
 /// 可编程 fake 引擎：模拟 start 失败、invoke 超时（kill isolate）与重启。
@@ -150,22 +151,22 @@ class _FakeLxEngine implements LxEngine {
 }
 
 LxScriptInfo _scriptInfo() => const LxScriptInfo(
-      id: 'script-1',
-      name: '测试脚本',
-      description: '',
-      version: '1.0.0',
-      author: 'tester',
-      homepage: '',
-      script: '/** @name 测试脚本 */',
-      importedAt: 0,
-    );
+  id: 'script-1',
+  name: '测试脚本',
+  description: '',
+  version: '1.0.0',
+  author: 'tester',
+  homepage: '',
+  script: '/** @name 测试脚本 */',
+  importedAt: 0,
+);
 
 LxSourceDecl _decl(String key) => LxSourceDecl(
-      key: key,
-      name: key,
-      actions: const ['musicUrl', 'search', 'lyric', 'pic'],
-      qualitys: const ['128k', '320k'],
-    );
+  key: key,
+  name: key,
+  actions: const ['musicUrl', 'search', 'lyric', 'pic'],
+  qualitys: const ['128k', '320k'],
+);
 
 const _musicInfo = <String, dynamic>{'id': '1'};
 
@@ -277,8 +278,11 @@ void main() {
           throwsA(isA<LxEngineException>()),
         );
         await _waitUntil(() => supervisor.state != LxEngineState.restarting);
-        expect(supervisor.state, LxEngineState.ready,
-            reason: '第 ${i + 1} 次重启成功');
+        expect(
+          supervisor.state,
+          LxEngineState.ready,
+          reason: '第 ${i + 1} 次重启成功',
+        );
       }
 
       // 第 4 次崩溃：连续计数已达上限 → failed（不再无限重启）。
@@ -333,22 +337,29 @@ void main() {
       expect(engine.startCalls, 4, reason: '1 次初始 + 3 次重启尝试');
       expect(supervisor.restartAttempts, 3);
       expect(
-          states,
-          containsAllInOrder([
-            LxEngineState.restarting,
-            LxEngineState.failed,
-          ]));
+        states,
+        containsAllInOrder([LxEngineState.restarting, LxEngineState.failed]),
+      );
 
       final gaps = [
         for (var i = 1; i < engine.startTimes.length; i++)
           engine.startTimes[i].difference(engine.startTimes[i - 1]),
       ];
-      expect(gaps[0].inMilliseconds, greaterThanOrEqualTo(30),
-          reason: '第 1 次退避 40ms');
-      expect(gaps[1].inMilliseconds, greaterThanOrEqualTo(60),
-          reason: '第 2 次退避 80ms');
-      expect(gaps[2].inMilliseconds, greaterThanOrEqualTo(90),
-          reason: '第 3 次退避 120ms');
+      expect(
+        gaps[0].inMilliseconds,
+        greaterThanOrEqualTo(30),
+        reason: '第 1 次退避 40ms',
+      );
+      expect(
+        gaps[1].inMilliseconds,
+        greaterThanOrEqualTo(60),
+        reason: '第 2 次退避 80ms',
+      );
+      expect(
+        gaps[2].inMilliseconds,
+        greaterThanOrEqualTo(90),
+        reason: '第 3 次退避 120ms',
+      );
 
       // failed 终态：invoke 立即失败，不再自动重启。
       await expectLater(
@@ -385,8 +396,10 @@ void main() {
           throwsA(isA<LxEngineTimeoutException>()),
         );
         expect(supervisor.consecutiveTimeouts, i);
-        expect(supervisor.state,
-            i < 3 ? LxEngineState.ready : LxEngineState.failed);
+        expect(
+          supervisor.state,
+          i < 3 ? LxEngineState.ready : LxEngineState.failed,
+        );
       }
 
       expect(engine.startCalls, 1, reason: '超时不重启引擎');
@@ -468,8 +481,10 @@ void main() {
         restartDelays: const [Duration(milliseconds: 10)],
       );
       addTearDown(supervisor.close);
-      final manager =
-          SourceManager(engine: supervisor, settings: testSettingsRegistry());
+      final manager = SourceManager(
+        engine: supervisor,
+        settings: testSettingsRegistry(),
+      );
       addTearDown(manager.dispose);
       await manager.init();
 

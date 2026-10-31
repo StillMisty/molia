@@ -87,6 +87,9 @@ class BackendSnapshot {
   /// 队列面板「接下来」展示用）。
   final List<Track> upNext;
 
+  /// [upNext] 在 [queue] 中的真实下标（shuffle / 回绕时与面板行号不同）。
+  final List<int> upNextIndices;
+
   final bool isPlaying;
   final bool isLoading;
   final Duration position;
@@ -107,6 +110,7 @@ class BackendSnapshot {
     this.previous,
     this.previousOfPrevious,
     this.upNext = const [],
+    this.upNextIndices = const [],
     this.isPlaying = false,
     this.isLoading = false,
     this.position = Duration.zero,
@@ -129,6 +133,7 @@ class BackendSnapshot {
       other.previous == previous &&
       other.previousOfPrevious == previousOfPrevious &&
       deepEquals(other.upNext, upNext) &&
+      deepEquals(other.upNextIndices, upNextIndices) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
       other.position == position &&
@@ -140,22 +145,23 @@ class BackendSnapshot {
 
   @override
   int get hashCode => Object.hash(
-        current,
-        deepHash(queue),
-        currentIndex,
-        next,
-        previous,
-        previousOfPrevious,
-        deepHash(upNext),
-        isPlaying,
-        isLoading,
-        position,
-        duration,
-        mode,
-        context,
-        quality,
-        error,
-      );
+    current,
+    deepHash(queue),
+    currentIndex,
+    next,
+    previous,
+    previousOfPrevious,
+    deepHash(upNext),
+    deepHash(upNextIndices),
+    isPlaying,
+    isLoading,
+    position,
+    duration,
+    mode,
+    context,
+    quality,
+    error,
+  );
 }
 
 /// 对 UI 暴露的播放快照（低频）：曲目/队列/播放中/模式/后端/错误。
@@ -185,6 +191,9 @@ class PlaybackSnapshot {
   /// 队列面板「接下来」展示用）。
   final List<Track> upNext;
 
+  /// [upNext] 在 [queue] 中的真实下标（shuffle / 回绕时与面板行号不同）。
+  final List<int> upNextIndices;
+
   final bool isPlaying;
   final bool isLoading;
   final Duration duration;
@@ -205,6 +214,7 @@ class PlaybackSnapshot {
     this.previous,
     this.previousOfPrevious,
     this.upNext = const [],
+    this.upNextIndices = const [],
     this.isPlaying = false,
     this.isLoading = false,
     this.duration = Duration.zero,
@@ -227,6 +237,7 @@ class PlaybackSnapshot {
       other.previous == previous &&
       other.previousOfPrevious == previousOfPrevious &&
       deepEquals(other.upNext, upNext) &&
+      deepEquals(other.upNextIndices, upNextIndices) &&
       other.isPlaying == isPlaying &&
       other.isLoading == isLoading &&
       other.duration == duration &&
@@ -238,20 +249,21 @@ class PlaybackSnapshot {
 
   @override
   int get hashCode => Object.hash(
-        current,
-        deepHash(queue),
-        currentIndex,
-        next,
-        previous,
-        previousOfPrevious,
-        deepHash(upNext),
-        isPlaying,
-        isLoading,
-        duration,
-        mode,
-        context,
-        backend,
-        quality,
-        error,
-      );
+    current,
+    deepHash(queue),
+    currentIndex,
+    next,
+    previous,
+    previousOfPrevious,
+    deepHash(upNext),
+    deepHash(upNextIndices),
+    isPlaying,
+    isLoading,
+    duration,
+    mode,
+    context,
+    backend,
+    quality,
+    error,
+  );
 }
