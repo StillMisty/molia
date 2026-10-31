@@ -924,6 +924,14 @@ module（见下）：
   离线可播；收藏页「本地歌曲」合集按播放历史 × 缓存目录前缀匹配列出缓存行
   （保留原曲身份，删除 = 清缓存）。缓存可被 LRU / 用户清理移除，状态与列表随
   `CacheService.revision` 回退（不承诺持久可用）；
+- **本地数据刷新（Track local data controller）**：信息页本地数据行与
+  `track_local_data_page.dart` 共用 `lib/services/track_local_data_controller.dart`，
+  不再各自实现监听 / 防抖 / 单飞：下载记录变化防抖 300ms 合并同批目录扫描，
+  `CacheService.revision` 变化立即重载并撤销待执行防抖，加载单飞 + 尾随一次；
+  切歌 / 封面变化立即重载并同步播种 `downloadState`（避免「已下载」闪成
+  「未下载」），旧曲目在途结果按代次丢弃。页面只消费不可变
+  `TrackLocalDataState`（`data` / `audioEnabled`）；页内音质选择顺序由
+  `selectLocalDataQuality` 唯一实现（显式 → 已下载 → 命中缓存 → 偏好 → 首个可用）；
 - **音频缓存只认完整文件**：`CacheService.audioCacheIndex` /
   `audioUsageForTrack` 排除半成品（`.part` / `.predl`）与 MIME 边车
   （`.mime`）：占用展示、命中探测、「缓存曲目」列表同一口径；半成品单独统计
