@@ -461,7 +461,7 @@ void main() {
     expect(provider.filteredResults, isEmpty);
   });
 
-  test('playItem：SourceTrack 队列交给 PlaybackProvider，payload 原样保留', () async {
+  test('playItem：领域 Track 队列交给 PlaybackProvider，payload 原样保留', () async {
     final source = _FakeMusicSource('kw')
       ..onSearch = (query) => Future.value(
         SearchResult(items: [_track('kw', 'a'), _track('kw', 'b')]),
@@ -482,6 +482,49 @@ void main() {
     expect(request.tracks[1].payload['songmid'], 'b');
     expect(request.tracks[1].qualities.single.type, '320k');
     expect(request.context?.name, '酷我');
+  });
+
+  test('playItem：队列就是已加载的行，歌手 / payload 不经 SourceTrack 转换', () async {
+    final source = _FakeMusicSource('kw')
+      ..onSearch = (query) => Future.value(
+        SearchResult(
+          items: [_track('kw', 'a'), _track('kw', 'b'), _track('kw', 'c')],
+          total: 3,
+        ),
+      );
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => !provider.isSearching);
+
+    final rows = provider.filteredResults;
+    provider.playItem(rows[2]);
+    final request = backend.lastRequest!;
+
+    expect(request.startIndex, 2, reason: '按行身份定位播放下标');
+    expect(request.tracks, hasLength(rows.length));
+    for (var i = 0; i < rows.length; i++) {
+      expect(
+        identical(request.tracks[i], rows[i].track),
+        isTrue,
+        reason: '播放队列直接复用行内领域 Track，不再经 SourceTrack 转换',
+      );
+    }
+    expect(
+      [for (final track in request.tracks) track.id.uri],
+      ['kw:a', 'kw:b', 'kw:c'],
+      reason: '队列顺序与已加载行一致',
+    );
+    expect(
+      [for (final track in request.tracks) track.artists.single.name],
+      ['Artist a', 'Artist b', 'Artist c'],
+    );
+    expect(
+      [for (final track in request.tracks) track.payload['songmid']],
+      ['a', 'b', 'c'],
+    );
   });
 
   test('registry 变更：当前源失效回退到第一个；无源则清空', () async {

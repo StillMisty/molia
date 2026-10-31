@@ -1084,7 +1084,7 @@ module（见下）：
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（每个 `SearchKind` 一个私有 `_SearchSession`：关键词 / 归一化失败 / `PagedListController` 各一份，经 `_activeSearchSession` 单一分派；结果投影按类型保留，歌词片段经 Accepted page callback 随页接受）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（每个 `SearchKind` 一个私有 `_SearchSession`：关键词 / 归一化失败 / `PagedListController` 各一份，经 `_activeSearchSession` 单一分派；单曲 / 歌词会话与投影只持领域 `Track`，歌词片段经 Accepted page callback 随页接受）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
@@ -1094,6 +1094,11 @@ module（见下）：
 归一化失败 / `PagedListController`，provider 只经 `_activeSearchSession` 读元数据，
 `loadMore` 后只重投影发起类型；单曲 / 歌手 / 歌词的结果投影仍按类型保留（`SearchRow` /
 `ArtistSummary` / 带片段的行），行形状不同，不把三种结果塞进同一个泛型列表。
+单曲 / 歌词的会话条目与 `SearchRow.track` 是同一个领域 `Track`（`CatalogService`
+直接返回，payload 原样）；歌词页把命中片段按 `TrackId.uri` 随页带回。`playItem`
+取当前类型已发布的行组成队列、按 `TrackId` 定位下标，经
+`PlaybackProvider.playDomainTracks` 播放——不再做 `Track → SourceTrack → Track`
+往返，也不再维护与行平行的第二份队列。
 
 歌词页可见性门控：播放页内部再包一层 `ShellPageVisibility`（nearest scope =
 壳层可见 && 当前 tab），隐藏时 `PositionLineIndexBuilder(enabled: false)` 不订阅
