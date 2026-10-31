@@ -327,6 +327,48 @@ void main() {
       expect(disposeAccepted, 0, reason: 'dispose 作废的在途响应不回调');
     });
 
+    test('回调抛错：异常交给调用方，加载 flag 收尾且接受页已发布', () async {
+      late final PagedListController<String> controller;
+      controller = PagedListController<String>(
+        fetchPage: (page) async =>
+            PagedResult(items: ['p$page'], hasMore: page < 2),
+        onPageAccepted: (page, {required append}) =>
+            throw StateError('callback boom'),
+      );
+      addTearDown(controller.dispose);
+
+      await expectLater(controller.loadFirstPage(), throwsStateError);
+      expect(controller.items, ['p1'], reason: '接受页仍要发布');
+      expect(controller.page, 1);
+      expect(controller.isLoading, isFalse);
+      expect(controller.failed, isFalse);
+      expect(controller.error, isNull, reason: '回调异常不当作取页失败');
+
+      await expectLater(controller.loadMore(), throwsStateError);
+      expect(controller.items, ['p1', 'p2']);
+      expect(controller.page, 2);
+      expect(controller.isLoadingMore, isFalse);
+      expect(controller.hasMore, isFalse);
+    });
+
+    test('回调里 reset：reset 状态获胜，旧页不得发布', () async {
+      late final PagedListController<String> controller;
+      controller = PagedListController<String>(
+        fetchPage: (_) async =>
+            const PagedResult(items: ['stale-page'], hasMore: true),
+        onPageAccepted: (page, {required append}) => controller.reset(),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadFirstPage();
+
+      expect(controller.items, isEmpty, reason: '旧页不得复活 reset 后的列表');
+      expect(controller.page, 0);
+      expect(controller.hasMore, isTrue, reason: 'reset 初始态');
+      expect(controller.isLoading, isFalse);
+      expect(controller.isLoadingMore, isFalse);
+    });
+
     test('回调在状态发布前、load future 完成前运行', () async {
       final events = <String>[];
       late final PagedListController<String> controller;

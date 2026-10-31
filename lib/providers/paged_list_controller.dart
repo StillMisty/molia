@@ -222,11 +222,17 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
       }
     }
     if (next == null) return;
-    // 先交付本页元数据、再发布状态：调用方的 loadFirstPage / loadMore
-    // 返回时，元数据与列表已是同一页。回调放在 catch 外，避免回调自身
-    // 的异常被误判为取页失败。
-    if (accepted != null) _onPageAccepted?.call(accepted, append: append);
-    value = next.copyWith(isLoading: false, isLoadingMore: false);
+    // accepted-page 回调是公开 seam：它可能 reset（切换筛选 / 会话）或抛错。
+    // 放进 try/finally 保证加载 flag 一定收尾；发布前重新校验请求代际，
+    // 让回调里的 reset 获胜，避免旧页把刚重置的状态复活。异常不吞掉：
+    // 状态先落地，再原样抛给 loadFirstPage / loadMore 的调用方。
+    try {
+      if (accepted != null) _onPageAccepted?.call(accepted, append: append);
+    } finally {
+      if (requestId == _requestId) {
+        value = next.copyWith(isLoading: false, isLoadingMore: false);
+      }
+    }
   }
 
   List<T> _dedupe(List<T> items) {
