@@ -18,9 +18,10 @@ import '../l10n/app_localizations.dart';
 import '../providers/lyrics_provider.dart';
 import '../providers/source_swap_provider.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
+import '../utils/lyrics_provider_label.dart';
 import '../utils/responsive.dart';
+import '../widgets/detail_page/detail_page_chrome.dart';
 import '../widgets/lyrics_source_search_view.dart';
-import '../widgets/source_swap/source_swap_chrome.dart';
 import '../widgets/source_swap_view.dart';
 
 /// 换源页的默认 tab。
@@ -113,9 +114,7 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     final seed = widget.request.seed;
     final artist = seed.artistLabel;
     final selectedIndex = _tabs.indexOf(_tab);
-    final horizontalPadding = context
-        .layoutType(ResponsivePageType.detail)
-        .horizontalPadding;
+    final horizontalPadding = detailPageHorizontalPadding(context);
     // 只读一次：来源标签不随搜索通知变化，页面不应因 provider 通知整页重建。
     // 只用可搜索描述符；停用 / 非搜索脚本不在其中，标签回退源 key。
     final sourceDescriptors = context
@@ -126,35 +125,36 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     final enabledChannelKeys = context
         .read<SourceSwapProvider>()
         .enabledChannelKeys;
+    // 曲目条副标题保留「歌手 · 当前来源」：换源对象是这首歌，来源名让
+    // 用户确认正在从哪个渠道找回同一首。
+    final sourceLabel = lyricsProviderLabel(
+      l10n,
+      sourceDescriptors,
+      seed.id.sourceKey,
+    );
+    final subtitle = artist.isEmpty ? sourceLabel : '$artist · $sourceLabel';
 
-    final body = Padding(
-      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-      child: Column(
-        children: [
-          SourceSwapTrackHeader(
-            seed: seed,
-            sourceDescriptors: sourceDescriptors,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: M3ETabs(
-              // 次 tab：图标在文案左侧同一行、行高 48（换源页内的分组切换）。
-              variant: M3ETabsVariant.secondary,
-              tabs: [
-                M3ETab(
-                  icon: const Icon(Icons.lyrics_rounded),
-                  label: l10n.sourceSwapTabLyrics,
-                ),
-                M3ETab(
-                  icon: const Icon(Icons.music_note_rounded),
-                  label: l10n.sourceSwapTabAudio,
-                ),
-              ],
-              selectedIndex: selectedIndex,
-              onTabSelected: _selectTab,
+    final body = Column(
+      children: [
+        // 头部 / tab 栏自带详情页水平边距，下方内容只补一次，避免双层内缩。
+        DetailPageTrackHeader(track: seed, subtitle: subtitle),
+        DetailPageTabBar(
+          tabs: [
+            M3ETab(
+              icon: const Icon(Icons.lyrics_rounded),
+              label: l10n.sourceSwapTabLyrics,
             ),
-          ),
-          Expanded(
+            M3ETab(
+              icon: const Icon(Icons.music_note_rounded),
+              label: l10n.sourceSwapTabAudio,
+            ),
+          ],
+          selectedIndex: selectedIndex,
+          onTabSelected: _selectTab,
+        ),
+        Expanded(
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             child: M3ETabsView(
               selectedIndex: selectedIndex,
               onTabSelected: _selectTab,
@@ -181,8 +181,8 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
               ],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
     if (widget.embedded) return body;
     return Scaffold(

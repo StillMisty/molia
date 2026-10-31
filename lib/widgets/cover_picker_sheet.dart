@@ -27,6 +27,7 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../utils/responsive.dart';
 import 'cover_viewer.dart';
+import 'simple_modal_body.dart';
 import 'track_artwork.dart';
 
 /// 文件选择（测试可注入；返回未归一的原始字节）。
@@ -188,98 +189,95 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
     final viewerUrl = _viewerCoverUrl;
 
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              subtitle,
-              style: m3e.typeScale.bodyMedium.copyWith(
-                color: scheme.onSurfaceVariant,
+      child: SimpleModalBody(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        header: Text(
+          subtitle,
+          style: m3e.typeScale.bodyMedium.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        children: [
+          const SizedBox(height: 16),
+          Center(
+            child: CoverChangeBuilder(
+              builder: (context, _) => TrackArtwork(
+                key: const Key('coverPickerPreview'),
+                // 外层已订阅；默认封面模式没有曲目身份，直接展示默认图。
+                listenForChanges: false,
+                trackId: widget.trackId,
+                originalUrl: widget.originalCoverUrl,
+                width: 120,
+                height: 120,
+                // 方形预览按 cover 裁切；原图查看走 cover_viewer 的 contain。
+                fit: BoxFit.cover,
+                borderRadius: BorderRadius.circular(16),
+                memCacheWidth:
+                    (120 * MediaQuery.of(context).devicePixelRatio).round(),
+                fallbackIconSize: 48,
               ),
             ),
-            const SizedBox(height: 16),
-            Center(
-              child: CoverChangeBuilder(
-                builder: (context, _) => TrackArtwork(
-                  key: const Key('coverPickerPreview'),
-                  // 外层已订阅；默认封面模式没有曲目身份，直接展示默认图。
-                  listenForChanges: false,
-                  trackId: widget.trackId,
-                  originalUrl: widget.originalCoverUrl,
-                  width: 120,
-                  height: 120,
-                  // 方形预览按 cover 裁切；原图查看走 cover_viewer 的 contain。
-                  fit: BoxFit.cover,
-                  borderRadius: BorderRadius.circular(16),
-                  memCacheWidth:
-                      (120 * MediaQuery.of(context).devicePixelRatio).round(),
-                  fallbackIconSize: 48,
-                ),
-              ),
+          ),
+          const SizedBox(height: 20),
+          M3EButton.filled(
+            key: const Key('coverPickerChooseButton'),
+            size: M3EButtonSize.md,
+            onPressed: _busy ? null : () => unawaited(_pickImage()),
+            icon: _busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: M3EProgressIndicator.circular(
+                      size: 18,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.image_rounded),
+            label: Text(
+              _hasCustom ? l10n.coverChangeImage : l10n.coverChooseImage,
             ),
-            const SizedBox(height: 20),
-            M3EButton.filled(
-              key: const Key('coverPickerChooseButton'),
+          ),
+          if (viewerUrl != null) ...[
+            const SizedBox(height: 8),
+            M3EButton.outlined(
+              key: const Key('coverPickerViewButton'),
               size: M3EButtonSize.md,
-              onPressed: _busy ? null : () => unawaited(_pickImage()),
-              icon: _busy
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: M3EProgressIndicator.circular(
-                        size: 18,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.image_rounded),
-              label: Text(
-                _hasCustom ? l10n.coverChangeImage : l10n.coverChooseImage,
-              ),
-            ),
-            if (viewerUrl != null) ...[
-              const SizedBox(height: 8),
-              M3EButton.outlined(
-                key: const Key('coverPickerViewButton'),
-                size: M3EButtonSize.md,
-                onPressed: _busy
-                    ? null
-                    : () => unawaited(
-                          showCoverViewer(
-                            context,
-                            coverUrl: viewerUrl,
-                            title: _isDefault
+              onPressed: _busy
+                  ? null
+                  : () => unawaited(
+                      showCoverViewer(
+                        context,
+                        coverUrl: viewerUrl,
+                        title: _isDefault
+                            ? l10n.coverDefaultTitle
+                            : l10n.coverTitle,
+                        fileNameBase:
+                            widget.fileNameBase ??
+                            (_isDefault
                                 ? l10n.coverDefaultTitle
-                                : l10n.coverTitle,
-                            fileNameBase: widget.fileNameBase ??
-                                (_isDefault
-                                    ? l10n.coverDefaultTitle
-                                    : l10n.coverTitle),
-                          ),
-                        ),
-                icon: const Icon(Icons.zoom_out_map_rounded),
-                label: Text(l10n.coverViewOriginal),
-              ),
-            ],
-            if (_hasCustom) ...[
-              const SizedBox(height: 8),
-              M3EButton.outlined(
-                key: const Key('coverPickerResetButton'),
-                size: M3EButtonSize.md,
-                onPressed: _busy ? null : () => unawaited(_reset()),
-                icon: const Icon(Icons.restart_alt_rounded),
-                label: Text(
-                  _isDefault
-                      ? l10n.coverResetDefault
-                      : (_hasOriginal
+                                : l10n.coverTitle),
+                      ),
+                    ),
+              icon: const Icon(Icons.zoom_out_map_rounded),
+              label: Text(l10n.coverViewOriginal),
+            ),
+          ],
+          if (_hasCustom) ...[
+            const SizedBox(height: 8),
+            M3EButton.outlined(
+              key: const Key('coverPickerResetButton'),
+              size: M3EButtonSize.md,
+              onPressed: _busy ? null : () => unawaited(_reset()),
+              icon: const Icon(Icons.restart_alt_rounded),
+              label: Text(
+                _isDefault
+                    ? l10n.coverResetDefault
+                    : (_hasOriginal
                           ? l10n.coverResetSong
                           : l10n.coverResetToDefault),
-                ),
               ),
-            ],
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

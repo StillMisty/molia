@@ -14,9 +14,9 @@ import '../domain/models/comment.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
-import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/comment_list_view.dart';
+import '../widgets/detail_page/detail_page_chrome.dart';
 
 /// 打开评论页（[track] 为入口处的当前曲目）。
 Future<void> showSongCommentsPage(
@@ -96,33 +96,29 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
 
     final body = Column(
       children: [
-        _buildTrackHeader(context, l10n),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: M3ETabs(
-            // 次 tab：图标在文案左侧同一行、行高 48（详情页内的分组切换）。
-            variant: M3ETabsVariant.secondary,
-            tabs: [
-              M3ETab(
-                icon: const Icon(Icons.local_fire_department_rounded),
-                label: _tabLabel(
-                  l10n,
-                  CommentKind.hot,
-                  provider.stateOf(CommentKind.hot).total,
-                ),
+        // 曲目条与换源页同构：评论对象在页面级，切 tab 不重复占位。
+        DetailPageTrackHeader(track: widget.track),
+        DetailPageTabBar(
+          tabs: [
+            M3ETab(
+              icon: const Icon(Icons.local_fire_department_rounded),
+              label: _tabLabel(
+                l10n,
+                CommentKind.hot,
+                provider.stateOf(CommentKind.hot).total,
               ),
-              M3ETab(
-                icon: const Icon(Icons.schedule_rounded),
-                label: _tabLabel(
-                  l10n,
-                  CommentKind.latest,
-                  provider.stateOf(CommentKind.latest).total,
-                ),
+            ),
+            M3ETab(
+              icon: const Icon(Icons.schedule_rounded),
+              label: _tabLabel(
+                l10n,
+                CommentKind.latest,
+                provider.stateOf(CommentKind.latest).total,
               ),
-            ],
-            selectedIndex: selectedIndex,
-            onTabSelected: _selectTab,
-          ),
+            ),
+          ],
+          selectedIndex: selectedIndex,
+          onTabSelected: _selectTab,
         ),
         Expanded(
           child: M3ETabsView(
@@ -159,39 +155,5 @@ class _SongCommentsPageState extends State<SongCommentsPage> {
     return kind == CommentKind.hot
         ? l10n.commentsTabHotCount(total)
         : l10n.commentsTabLatestCount(total);
-  }
-
-  /// 头部：歌名 · 歌手（与换源页同构，明确评论对象）。
-  ///
-  /// 刷新只走列表下拉手势，头部不再放刷新按钮。
-  Widget _buildTrackHeader(
-    BuildContext context,
-    AppLocalizations l10n,
-  ) {
-    final theme = Theme.of(context);
-    final seed = widget.track;
-    final artist = seed.artistLabel;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 8),
-      child: Row(
-        children: [
-          Icon(
-            Icons.comment_rounded,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              artist.isEmpty ? seed.title : '${seed.title} · $artist',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

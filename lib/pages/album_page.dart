@@ -19,11 +19,11 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
-import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_tap_target.dart';
 import '../widgets/cover_viewer.dart';
+import '../widgets/detail_page/detail_page_chrome.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
 import '../widgets/paged_track_collection.dart';
@@ -178,6 +178,7 @@ class _AlbumPageState extends State<AlbumPage> {
       onRetry: () => unawaited(_load()),
       onLoadMore: () => unawaited(_collection.loadMore()),
       emptyText: l10n.albumEmpty,
+      emptyIcon: Icons.album_rounded,
       failureText: l10n.albumLoadFailed,
       retryText: l10n.retry,
     );
@@ -269,73 +270,45 @@ class _AlbumPageState extends State<AlbumPage> {
     int trackCount,
   ) {
     final theme = Theme.of(context);
-    final cover = album.coverUrl;
     final subtitleParts = <String>[
       if (album.artist.isNotEmpty) album.artist,
       if (album.year != null) l10n.albumYear(album.year!),
       l10n.playlistTrackCount(trackCount),
     ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeaderCover(context, l10n, album, cover, theme),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _titleOf(album),
-                      style: context.typeScale.titleLarge,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitleParts.join(' · '),
-                      style: context.typeScale.bodySmall.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+    return DetailPageHeroHeader(
+      artwork: _buildHeaderCover(
+        context,
+        l10n,
+        album,
+        album.coverUrl,
+        theme,
+      ),
+      title: _titleOf(album),
+      subtitle: subtitleParts.join(' · '),
+      action: M3ESplitButton<String>(
+        key: const Key('albumPlayAll'),
+        label: l10n.playAll,
+        leadingIcon: Icons.play_arrow_rounded,
+        style: M3EButtonStyle.filled,
+        onPressed: () => _playFrom(0),
+        items: [
+          M3ESplitButtonItem<String>(
+            value: 'shuffle',
+            child: Text(l10n.playAllShuffled),
           ),
-          const SizedBox(height: 12),
-          // 播放全部 = 主操作 + 尾部菜单（随机播放全部 / 加入列表）：
-          // 头部动作数收缩为一个 split button，主次层级保持不变。
-          M3ESplitButton<String>(
-            key: const Key('albumPlayAll'),
-            label: l10n.playAll,
-            leadingIcon: Icons.play_arrow_rounded,
-            style: M3EButtonStyle.filled,
-            onPressed: () => _playFrom(0),
-            items: [
-              M3ESplitButtonItem<String>(
-                value: 'shuffle',
-                child: Text(l10n.playAllShuffled),
-              ),
-              M3ESplitButtonItem<String>(
-                value: 'addToLibrary',
-                child: Text(l10n.addToPlaylist),
-              ),
-            ],
-            onSelected: (value) {
-              switch (value) {
-                case 'shuffle':
-                  unawaited(_playShuffled());
-                case 'addToLibrary':
-                  unawaited(_handoff.addToLibrary(context, _collection.items));
-              }
-            },
+          M3ESplitButtonItem<String>(
+            value: 'addToLibrary',
+            child: Text(l10n.addToPlaylist),
           ),
         ],
+        onSelected: (value) {
+          switch (value) {
+            case 'shuffle':
+              unawaited(_playShuffled());
+            case 'addToLibrary':
+              unawaited(_handoff.addToLibrary(context, _collection.items));
+          }
+        },
       ),
     );
   }

@@ -19,11 +19,11 @@ import '../services/covers/cover_resolution.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_records.dart';
 import '../services/track_local_data_service.dart';
-import '../theme/m3e_context.dart';
 import '../utils/lyrics_provider_label.dart';
 import '../utils/source_label.dart';
 import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
+import 'empty_state.dart';
 import 'settings/settings_tiles.dart';
 import 'cover_picker_sheet.dart';
 import 'cover_viewer.dart';
@@ -494,22 +494,9 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   }
 
   Widget _buildEmptyState(AppLocalizations l10n) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 96),
-      child: Column(
-        children: [
-          Icon(Icons.info_rounded, size: 40, color: scheme.onSurfaceVariant),
-          const SizedBox(height: 12),
-          Text(
-            l10n.trackInfoEmpty,
-            textAlign: TextAlign.center,
-            style: context.typeScale.bodyMedium.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+      child: EmptyState(icon: Icons.info_rounded, message: l10n.trackInfoEmpty),
     );
   }
 

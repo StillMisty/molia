@@ -5,6 +5,8 @@ import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/album_page.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/detail_page/detail_page_chrome.dart';
+import 'package:molia/widgets/track_row.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -105,6 +107,16 @@ void main() {
     expect(find.text('专辑名'), findsOneWidget);
     expect(find.text('歌手 · 2012 年 · 8 首'), findsOneWidget);
     expect(find.byKey(const Key('albumPlayAll')), findsOneWidget);
+
+    // 头部走统一 chrome：默认测试视口 800 宽是平板档详情页，头部封面与
+    // 列表行同一左缘（24），不再各自写死 16。
+    expect(find.byType(DetailPageHeroHeader), findsOneWidget);
+    final headerLeft = tester
+        .getTopLeft(find.byKey(const Key('albumHeaderCover')))
+        .dx;
+    final rowLeft = tester.getTopLeft(find.byType(TrackRow).first).dx;
+    expect(headerLeft, 24);
+    expect(rowLeft, headerLeft);
 
     // 「加入列表 / 随机播放全部」在主操作的尾部菜单里（split button）。
     await openSplitMenu(tester, const Key('albumPlayAll'));

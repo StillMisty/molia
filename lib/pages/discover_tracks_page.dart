@@ -9,11 +9,11 @@ import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
-import '../theme/m3e_context.dart';
 import '../widgets/app_network_image.dart';
 import '../widgets/cover_tap_target.dart';
 import '../widgets/cover_viewer.dart';
 import '../widgets/desktop_layout.dart';
+import '../widgets/detail_page/detail_page_chrome.dart';
 import '../widgets/discover_actions.dart';
 import '../widgets/paged_track_collection.dart';
 import '../widgets/track_handoff.dart';
@@ -222,6 +222,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       onRetry: () => unawaited(_load()),
       onLoadMore: () => unawaited(_collection.loadMore()),
       emptyText: l10n.discoverNoContent,
+      emptyIcon: Icons.playlist_play_rounded,
       failureText: l10n.discoverLoadFailed,
       retryText: l10n.discoverRetry,
     );
@@ -307,72 +308,29 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       if (info.playCount > 0) l10n.discoverPlayCount(info.playCountText),
       l10n.playlistTrackCount(trackCount),
     ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeaderCover(context, l10n, info, cover, theme),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      info.name.isEmpty ? widget.title : info.name,
-                      style: context.typeScale.titleLarge,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      subtitleParts.join(' · '),
-                      style: context.typeScale.bodySmall.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          if ((info.description ?? '').trim().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              info.description!.trim(),
-              style: context.typeScale.bodySmall.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            // 播放全部 = 主操作 + 尾部菜单（随机播放全部）；导入到我的列表
-            // 仍在 AppBar 的图标键上，两者不重复。
-            child: M3ESplitButton<String>(
-              key: const Key('discoverTracksPlayAll'),
-              label: l10n.playAll,
-              leadingIcon: Icons.play_arrow_rounded,
-              style: M3EButtonStyle.filled,
-              onPressed: () => _playFrom(0),
-              items: [
-                M3ESplitButtonItem<String>(
-                  value: 'shuffle',
-                  child: Text(l10n.playAllShuffled),
-                ),
-              ],
-              onSelected: (value) {
-                if (value == 'shuffle') unawaited(_playShuffled());
-              },
-            ),
+    final description = (info.description ?? '').trim();
+    return DetailPageHeroHeader(
+      artwork: _buildHeaderCover(context, l10n, info, cover, theme),
+      title: info.name.isEmpty ? widget.title : info.name,
+      subtitle: subtitleParts.join(' · '),
+      description: description.isEmpty ? null : description,
+      // 播放全部 = 主操作 + 尾部菜单（随机播放全部）；导入到我的列表
+      // 仍在 AppBar 的图标键上，两者不重复。
+      action: M3ESplitButton<String>(
+        key: const Key('discoverTracksPlayAll'),
+        label: l10n.playAll,
+        leadingIcon: Icons.play_arrow_rounded,
+        style: M3EButtonStyle.filled,
+        onPressed: () => _playFrom(0),
+        items: [
+          M3ESplitButtonItem<String>(
+            value: 'shuffle',
+            child: Text(l10n.playAllShuffled),
           ),
         ],
+        onSelected: (value) {
+          if (value == 'shuffle') unawaited(_playShuffled());
+        },
       ),
     );
   }

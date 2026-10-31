@@ -1316,6 +1316,12 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   （Scaffold / AppBar / `kSettingsPadding` 滚动正文的唯一实现），因为预测返回
   要按「子页 / 弹层首屏」分派手势归属，普通返回也要先退子页再关弹层；设置域
   之外仍走 `showSecondaryPage`。
+- **二级页详情 chrome**：详细 tab 子页（评论 / 本地数据 / 换源 / 专辑 / 歌手）统一走
+  `lib/widgets/detail_page/detail_page_chrome.dart`：detail 页边距 12/16/24/24、40 紧凑曲目头、
+  96 hero 头、次 tab 栏、统一空/错/加载态；侧滑二级页默认 720，本地数据不再单独 520；
+  根详细 tab 仍在播放页内容区，保持 16 边距。简单弹层正文统一走
+  `lib/widgets/simple_modal_body.dart`，曲目类弹层（音质 / 来源）顶部带 40 曲目头、
+  内容 16 内边距；列表型动作行统一 `M3EListItem`，封面选择保留预览 + 按钮形态。
 - **页面型弹窗**：`showPageModal` —— 窄屏 `M3EBottomSheet`，宽屏 `M3EDialog.show`
   + `PageModalCard`（`M3ECard` 取 `M3EDialogTheme` 的圆角 / elevation / scrim；
   容器色取 `surface`，与页面自带 Scaffold 的底色一致）。简单弹层（定时关闭 /

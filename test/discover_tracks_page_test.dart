@@ -6,6 +6,7 @@ import 'package:molia/pages/discover_tracks_page.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/widgets/detail_page/detail_page_chrome.dart';
 import 'package:molia/widgets/track_row.dart';
 import 'package:molia/widgets/track_table_header.dart';
 import 'package:material_ui/material_ui.dart';
@@ -136,6 +137,16 @@ void main() {
         ],
       ),
     );
+
+    // 头部与列表同一左缘（统一详情页 chrome）：默认测试视口 800 宽是平板档
+    // 详情页，两边都用 24 页边距。
+    expect(find.byType(DetailPageHeroHeader), findsOneWidget);
+    final headerLeft = tester
+        .getTopLeft(find.byKey(const Key('discoverHeaderCover')))
+        .dx;
+    final rowLeft = tester.getTopLeft(find.byType(TrackRow).first).dx;
+    expect(headerLeft, 24);
+    expect(rowLeft, headerLeft);
 
     await tester.tap(find.byKey(const Key('discoverHeaderCover')));
     await tester.pumpAndSettle();

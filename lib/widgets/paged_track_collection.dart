@@ -9,8 +9,8 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../providers/paged_list_controller.dart';
-import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import 'detail_page/detail_page_chrome.dart';
 import 'paged_list_auto_load.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
@@ -125,6 +125,7 @@ class PagedTrackCollectionBody<R> extends StatefulWidget {
     required this.emptyText,
     required this.failureText,
     required this.retryText,
+    this.emptyIcon = Icons.music_note_rounded,
     this.tableColumns = false,
     this.pinnedTableHeader = false,
   });
@@ -154,6 +155,9 @@ class PagedTrackCollectionBody<R> extends StatefulWidget {
   final String failureText;
   final String retryText;
 
+  /// 空态图标：默认单曲音符，宿主按页面语义覆盖（专辑 / 歌手 / 歌单）。
+  final IconData emptyIcon;
+
   /// 宽屏表格列（行版式与行高都按档取；判据由宿主从 DesktopLayout 解析）。
   final bool tableColumns;
 
@@ -180,31 +184,19 @@ class _PagedTrackCollectionBodyState<R>
   Widget build(BuildContext context) {
     final state = widget.state;
     if (state.isLoading) {
-      return const Center(child: M3ELoadingIndicator());
+      return const DetailPageLoading();
     }
     if (state.failed) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(widget.failureText, style: context.typeScale.bodyLarge),
-            const SizedBox(height: 12),
-            M3EButton.filled(
-              onPressed: widget.onRetry,
-              child: Text(widget.retryText),
-            ),
-          ],
-        ),
+      return DetailPageFailure(
+        message: widget.failureText,
+        retryLabel: widget.retryText,
+        onRetry: widget.onRetry,
       );
     }
     if (state.isEmpty) {
-      return Center(
-        child: Text(
-          widget.emptyText,
-          style: context.typeScale.bodyMedium.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
+      return DetailPageEmpty(
+        icon: widget.emptyIcon,
+        message: widget.emptyText,
       );
     }
 

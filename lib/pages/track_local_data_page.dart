@@ -39,6 +39,7 @@ import '../utils/download_task_label.dart';
 import '../utils/responsive.dart';
 import '../utils/source_quality_label.dart';
 import '../utils/track_local_data_label.dart';
+import '../widgets/detail_page/detail_page_chrome.dart';
 import '../widgets/download_data_saver_guard.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -52,7 +53,6 @@ Future<void> showTrackLocalDataPage(
     title: AppLocalizations.of(context)!.localDataTitle,
     body: TrackLocalDataPage(track: track, embedded: true),
     preferredMode: SecondaryPageMode.sideSheet,
-    maxWidth: 520,
   );
 }
 
@@ -403,17 +403,14 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final data = _data;
+    final horizontal = detailPageHorizontalPadding(context);
     final body = ListView(
-      padding: const EdgeInsets.all(kSettingsPadding),
+      padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 24),
       children: [
-        SettingsSectionCard(
-          children: [
-            SettingsInfoTile(
-              icon: Icons.music_note_rounded,
-              title: widget.track.title,
-              subtitle: widget.track.artistLabel,
-            ),
-          ],
+        // 曲目身份条取代原来的单行信息卡：与评论 / 换源页共用同一形态。
+        DetailPageTrackHeader(
+          track: widget.track,
+          padding: const EdgeInsets.only(top: 12, bottom: 8),
         ),
         const SizedBox(height: kSettingsSectionSpacing),
         _buildAudioSectionWidget(l10n, data),
