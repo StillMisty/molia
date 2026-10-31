@@ -165,6 +165,57 @@ void main() {
     ctx.session.dispose();
     expect(ctx.port.stopCalls, 1);
   });
+
+  test('重新查找：结算后立即重扫，不可用时不发起', () async {
+    final ctx = _SessionHarness();
+    addTearDown(ctx.session.dispose);
+    await ctx.start();
+    ctx.scheduler.elapse(settleDelay);
+    expect(ctx.session.value.scanning, isFalse);
+    expect(ctx.session.value.settled, isTrue);
+
+    // rescan 是点击动作：同步段立即调用 startScan，不走 post-frame。
+    final pending = ctx.session.rescan();
+    expect(ctx.port.startCalls, 2);
+    expect(ctx.scheduler.pendingFrames, 0, reason: '重新查找不排首帧');
+    expect(ctx.session.value.scanning, isTrue);
+    expect(ctx.session.value.settled, isFalse);
+    await pending;
+    expect(ctx.scheduler.activeTimers, hasLength(1), reason: '重新武装结算');
+
+    // 新扫描照常结算：重新查找不能变成「永远正在查找」。
+    ctx.scheduler.elapse(settleDelay);
+    expect(ctx.session.value.scanning, isFalse);
+    expect(ctx.session.value.settled, isTrue);
+
+    // 不可用时点击同款入口：不调用 startScan（它只会立即失败）。
+    ctx.port.availability = SyncNearbyAvailability.lanOff;
+    await ctx.session.rescan();
+    expect(ctx.port.startCalls, 2);
+  });
+
+  test('重复 sync 且状态未变：不重启扫描，已武装的结算照常生效', () async {
+    final ctx = _SessionHarness();
+    addTearDown(ctx.session.dispose);
+    await ctx.start();
+    expect(ctx.port.startCalls, 1);
+
+    // provider 通知很频繁：没有差异时只读状态，不能每次通知都重跑 startScan。
+    for (var i = 0; i < 3; i++) {
+      ctx.session.sync();
+    }
+    ctx.scheduler.flushFrame();
+    await flush();
+
+    expect(ctx.port.startCalls, 1);
+    expect(ctx.scheduler.pendingFrames, 0, reason: '无差异不排首帧');
+    expect(ctx.session.value.scanning, isTrue, reason: '重复 sync 不重置扫描态');
+
+    // 首次扫描武装的结算不能被空转 sync 撤销。
+    ctx.scheduler.elapse(settleDelay);
+    expect(ctx.session.value.scanning, isFalse);
+    expect(ctx.session.value.settled, isTrue);
+  });
 }
 
 /// 固定 1.8 秒窗口（与生产默认一致）的会话 + 假端口 / 假调度器。
@@ -232,6 +283,8 @@ class _FakeScheduler {
 
   Iterable<_FakeTimer> get activeTimers =>
       _timers.where((timer) => timer.active);
+
+  int get pendingFrames => _frameCallbacks.length;
 
   NearbyScanTimerCancel createTimer(Duration delay, VoidCallback callback) {
     final timer = _FakeTimer(_now + delay, callback);
