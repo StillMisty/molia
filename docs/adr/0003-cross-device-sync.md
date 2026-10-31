@@ -589,9 +589,9 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
    若将来要按接口发现，
    得为每个接口绑定独立 socket，或在加入组播 / 发送前切换
    `multicastInterface`，并处理接口上下线。
-   > **v5 修订**：IPv4 已为每个可路由接口绑定独立 socket 发送广播 / 组播
-   > （见文末第 4 条）；IPv6 发送仍受本段限制，接收已按接口加入组播
-   > （第 5 条）。
+   > **v5 修订**：IPv4 已为每个可路由接口绑定独立 socket 发送广播 / 组播，
+   > 并由主 socket 按接口 join 组播接收（见文末第 4 条）；IPv6 发送仍受本段
+   > 限制，接收已按接口加入组播（第 5 条）。
 2. **探测端口降级后广播到不了它**：标准端口 47825 绑定失败（Windows 宿主
    保留端口块 / 端口被占用）时 UDP 会改绑系统分配端口（见已知坑 46），而
    广播 / 组播仍发往固定的 47825——该设备收不到无目标广播。此时只能靠
@@ -672,12 +672,12 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
 
 ---
 
-## v5 修订（2026-10-31）：持续发现、空态分层与即时检查
+## v5 修订（2026-10-31）：持续发现、空态分层、即时检查与按接口发现
 
 > 本节只改发现路径与附近设备的体验与触发时机：`MSY/3` 载荷、`MSD/1` /
 > `MSP/1` 报文结构、数据库 schema、同步状态键与「口令即信任根」均不变。
-> 多网卡 / VPN 口径见本节第 4 / 5 条：IPv4 已按接口发送；IPv6 仅按接口加入
-> 接收，发送仍受前文「已知限制」约束。
+> 多网卡 / VPN 口径见本节第 4 / 5 条：IPv4 已按接口发送，并由主 socket 按
+> 接口加入组播接收；IPv6 仅按接口加入接收，发送仍受前文「已知限制」约束。
 
 ### 1. 扫描节奏
 
@@ -716,31 +716,42 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
 ### 4. IPv4 按接口发现
 
 - 主 socket 仍是 v4 / v6 两个 wildcard `RawDatagramSocket`（固定探测端口、
-  负责一级接收）；v5 起为 `_ownAddresses` 里每个**可路由 IPv4** 地址额外绑定
-  一个 `RawDatagramSocket`（端口 0、`reuseAddress: true`、
-  `broadcastEnabled = true`、`multicastHops = 1`），加入 `224.0.0.169`，
+  负责 47825 上的接收）。v5 起为**完整**可路由 IPv4 接口列表（去重，不受
+  公告 `addrs` 的 8 条上限影响）各绑定一个发送 socket：端口 0、
+  `reuseAddress: true`、`broadcastEnabled = true`、`multicastHops = 1`，
   事件与主 socket 共用 `_onDatagram`。回环 / link-local / IPv6 不建接口
   socket。
-- 广播 / 组播：主 v4 socket 与所有接口 socket 各向 `255.255.255.255`、
+- 发送：主 v4 socket 与所有接口 socket 各向 `255.255.255.255`、
   `224.0.0.169` 发同一 packet，任一 socket 成功即算「广播可用」。单个接口
-  绑定 / 加组失败只记警告并跳过该接口；主 socket 仍按原路径发送，因此失败
-  时回退到系统默认路由，不劣化 v3 / v4 的行为。
+  绑定失败只记警告并跳过该接口；主 socket 仍按原路径发送，因此失败时回退到
+  系统默认路由，不劣化 v3 / v4 的行为。
+- 接收：主 v4 socket 在 `_refreshNetwork` 后按
+  `NetworkInterface.list(type: IPv4)` 逐接口
+  `joinMulticast(224.0.0.169, interface)`，这才承担 47825 上的组播接收。
+  接口发送 socket 的临时端口只接收回给该源端口的单播，不 join 组播。单个
+  接口加组失败只影响该接口的组播接收，该接口的广播发送仍保留；失败只记 fine
+  日志，不影响主路径。
 - 生命周期：`start` 先枚举地址再绑主 socket，随后建接口 socket；
-  `onNetworkChanged`、回前台长隐藏重绑、`discover` 检测到静默换 IP 时，
-  主 socket 重绑后一并重建接口 socket；接口地址上下线按 `_ownAddresses`
-  增删；`stop` 统一关闭。接口重建串行化，连续换网事件不会交错绑定。
+  `onNetworkChanged`、回前台（含短隐藏 `rebind: false`）、`discover` 检测到
+  静默换 IP 时都重建接口 socket；主 socket 是否重绑仍按原回前台策略。
+  接口地址上下线按完整 IPv4 列表增删；`stop` 统一关闭。接口重建与主 socket
+  重绑各自串行化，连续换网事件不会交错绑定或泄漏订阅。
 - 接口 socket 的源端口是系统临时端口，**不进入** `discoveryPorts` /
   `advertisedProbePort`，也不写进 presence / `lanEndpoints`。接收 presence
   时 `probePort` 优先取 MSD 报文里已认证的 `probe`（主 socket 端口），仅当
   报文为 0 时回退来源端口，避免重启 / 换接口后留下打不通的端口。
+- MSP 配对探测复用同一广播路径，多网卡首次配对也从每个接口发出；MSP 没有
+  nonce 去重，重复应答由 `LanPairingService` 候选缓存按 deviceId upsert，
+  不产生额外状态。协议结构不变。
 - 不引入平台 channel / 原生代码；没有切换到 `multicastInterface`。
 
 ### 5. IPv6 范围
 
 - 接收：主 v6 socket 绑定后，按 `NetworkInterface.list(type: IPv6)` 的每个
   接口尝试 `joinMulticast(ff02::4d4f:4c49, interface)`；单个接口失败只记
-  fine 日志，不影响 IPv4 / 主路径，也不会让 `start()` 失败。已加入的接口名
-  在同一 socket 上不重复 join，重绑后重新加入。
+  fine 日志，不影响 IPv4 / 主路径，也不会让 `start()` 失败。加入记账绑定
+  socket identity：重绑后旧调用不能写入新 socket；接口消失时剪掉记账，同名
+  接口重新出现可再次加入。
 - 发送：仍只从主 v6 socket 发向 `ff02::4d4f:4c49`，出口由系统默认路由
   决定；Dart 没有跨平台的 `IPV6_MULTICAST_IF`，本版不引入平台相关实现。
   多网卡 / 全隧道 VPN 下的 IPv6 按接口发送仍是已知限制（见 v3「已知限制」），

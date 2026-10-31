@@ -492,12 +492,13 @@
   只对 presence / 手动地址 / `lanEndpoints` 做 ≤8 个单播并等 400ms，冷启动 /
   回前台 / 换网才广播（v4 `255.255.255.255` + `224.0.0.169`、v6
   `ff02::4d4f:4c49`）并等 1.2s；蜂窝 0 广播、后台 0 定时器。v4 广播 / 组播
-  同时从主 wildcard socket 与每个可路由 IPv4 接口的独立 socket 发出（多网卡 /
-  VPN 下不只依赖默认路由），单个接口绑定或加组失败只跳过该接口、主 socket
-  仍按原路径发送；接口 socket 的临时端口不对外，presence 的探测端口以认证
-  报文里的 `probe` 为准。IPv6 仅按接口加入组播接收，发送仍走主 socket 的
-  默认路由。`lanEndpoints` 只在 MAC + HTTP 解密成功后回写（32 条上限、180 天
-  淘汰、移除设备一并清理），广播被隔离时用它单播兜底。
+  从主 wildcard socket 与每个可路由 IPv4 接口的独立 socket 发出（多网卡 /
+  VPN 下不只依赖默认路由），单个接口绑定失败只跳过该接口、主 socket 仍按原
+  路径发送；47825 的组播接收由主 socket 按接口 join 承担，接口 socket 的临时
+  端口只接收回给该端口的单播，不对外；presence 的探测端口以认证报文里的
+  `probe` 为准。IPv6 由主 socket 按接口 join 组播接收，发送仍走默认路由。
+  `lanEndpoints` 只在 MAC + HTTP 解密成功后回写（32 条上限、180 天淘汰、
+  移除设备一并清理），广播被隔离时用它单播兜底。
   局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
   `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`；申请只在用户开
   局域网开关 / 点「去授权」时触发，启动与轮次只查状态不弹窗，被拒开关回退
@@ -520,8 +521,10 @@
   未连接、且自动检查未被省电 / 移动数据暂停挡住时，设备卡给「重新检查连接」
   （`checkConnections()` → `SyncTrigger.check`）。
   **配对只有一条路径**（`data/sync/pairing/**`）：`MSP/1` 局域网附近设备发现
-  （probe / announce，只做候选，不写名册、不触发同步轮次）→ 点击候选发起
-  `/molia-sync/v2/pair/*` 请求 → 双方核对 6 位确认码 → 对方接受后加入同步组。
+  （probe / announce，只做候选，不写名册、不触发同步轮次；probe 复用 MSD 的
+  广播路径，多网卡也按接口各发一份，重复应答由候选缓存按 deviceId 收敛）→
+  点击候选发起 `/molia-sync/v2/pair/*` 请求 → 双方核对 6 位确认码 → 对方接受
+  后加入同步组。
   接受 = 加入同步组 = 对方获得本机口令、可解密全部同步数据（含密钥），弹窗
   必须明示；确认码由双方临时公钥 / nonce / requestId 派生，不一致必须拒绝。
   口令只在临时 ECDH（P-256）+ HKDF-SHA256 + AES-256-GCM 密封后传输，AAD
