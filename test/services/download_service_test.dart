@@ -1212,6 +1212,116 @@ void main() {
     expect(await service.orphanFiles(), isEmpty);
   });
 
+  test('产物写入：音频与独立分项共用登记，落库前受孤儿保护', () async {
+    final publisher = _GatedDownloadsPublisher();
+    final gated = _GatedDownloadStorage();
+    storage = gated;
+    final dio = mockDio((options) {
+      if (options.uri.path.endsWith('cover.jpg')) {
+        return bytesResponse([9, 9, 9]);
+      }
+      return bytesResponse(
+        [1, 2],
+        headers: {
+          'content-length': ['2'],
+        },
+      );
+    });
+    final service = makeService(
+      dio: dio,
+      publisher: publisher,
+      lyrics: (track) async =>
+          const DownloadLyrics(lyric: '[00:01]原文', translation: '[00:01]译文'),
+      artwork: (track) async => 'https://img.example.com/cover.jpg',
+    );
+    await service.init();
+
+    /// 等任务推进到指定窗口（队列 worker 在 microtask 里启动）。
+    Future<void> waitForPending(String? Function() read, String reason) async {
+      for (var i = 0; i < 100 && read() == null; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(read(), isNotNull, reason: reason);
+    }
+
+    // 1) 音频：歌词 / 翻译 / 封面已写、记录尚未落库的窗口里，四类产物都
+    //    只能靠活跃输出集合保护。
+    final audioFuture = service.download(makeTrack());
+    await waitForPending(() => publisher.pendingSourcePath, '应进入公共副本发布前的窗口');
+    const audioPath = '/downloads/歌手 - 测试歌曲.mp3';
+    const lyricPath = '/downloads/lyrics/歌手 - 测试歌曲.lrc';
+    const translationPath = '/downloads/lyrics/歌手 - 测试歌曲.t.lrc';
+    const coverPath = '/downloads/covers/歌手 - 测试歌曲.jpg';
+    expect(service.records.recordFor('kw', '1'), isNull, reason: '尚未落库');
+    expect(
+      storage.files.keys,
+      containsAll([audioPath, lyricPath, translationPath, coverPath]),
+    );
+    expect(await service.orphanFiles(), isEmpty, reason: '活跃输出不算孤儿');
+    expect(
+      await service.deleteOrphanFiles(
+        paths: [audioPath, lyricPath, translationPath, coverPath],
+      ),
+      0,
+      reason: '音频、歌词 + 翻译边车与封面都在活跃输出集合里',
+    );
+    expect(
+      storage.files.keys,
+      containsAll([audioPath, lyricPath, translationPath, coverPath]),
+    );
+
+    publisher.gate.complete();
+    await audioFuture;
+    final audioRecord = service.records.recordFor('kw', '1')!;
+    expect(audioRecord.lyricPath, lyricPath);
+    expect(audioRecord.translationLyricPath, translationPath);
+    expect(audioRecord.coverPath, coverPath);
+    expect(await service.orphanFiles(), isEmpty);
+
+    // 2) 独立歌词：写第一笔前就登记歌词 + 翻译期望路径；此时还没有任何
+    //    记录引用它们，删除请求必须被活跃输出集合拦住。
+    final partTrack = makeTrack(sourceKey: 'tx', songId: '2', title: '第二首');
+    const partLyricPath = '/downloads/lyrics/歌手 - 第二首.lrc';
+    const partTranslationPath = '/downloads/lyrics/歌手 - 第二首.t.lrc';
+    gated.gate = Completer<void>();
+    gated.pendingWritePath = null;
+    final lyricsFuture = service.downloadLyrics(partTrack);
+    await waitForPending(() => gated.pendingWritePath, '应进入歌词写入窗口');
+    expect(gated.pendingWritePath, partLyricPath);
+    expect(
+      await service.deleteOrphanFiles(
+        paths: [partLyricPath, partTranslationPath],
+      ),
+      0,
+      reason: '写歌词前两条期望路径已登记',
+    );
+    gated.gate!.complete();
+    await lyricsFuture;
+    final lyricRecord = service.records.recordFor('tx', '2')!;
+    expect(lyricRecord.lyricPath, partLyricPath);
+    expect(lyricRecord.translationLyricPath, partTranslationPath);
+    expect(storage.files[partTranslationPath], isNotNull);
+    expect(await service.orphanFiles(), isEmpty);
+
+    // 3) 独立封面：同样先登记期望路径再写；记录里还没有封面引用。
+    const partCoverPath = '/downloads/covers/歌手 - 第二首.jpg';
+    gated.gate = Completer<void>();
+    gated.pendingWritePath = null;
+    final coverFuture = service.downloadCover(partTrack);
+    await waitForPending(() => gated.pendingWritePath, '应进入封面写入窗口');
+    expect(gated.pendingWritePath, partCoverPath);
+    expect(
+      await service.deleteOrphanFiles(paths: [partCoverPath]),
+      0,
+      reason: '写封面前期望路径已登记',
+    );
+    gated.gate!.complete();
+    await coverFuture;
+    expect(service.records.recordFor('tx', '2')!.coverPath, partCoverPath);
+    expect(storage.files[partCoverPath], [9, 9, 9]);
+    expect(await service.orphanFiles(), isEmpty);
+  });
+
   test('批量候选：跳过本地 / 已下载 / active / 重复 key，保留原入参位置', () async {
     final controller = StreamController<Uint8List>();
     final dio = mockDio(
@@ -1892,4 +2002,47 @@ class _FakeCacheStorage implements CacheStorage {
     required int maxObjects,
     required int staleDays,
   }) async => CacheSweepResult.failed;
+}
+
+/// 可暂停的公共目录发布器：观察「边车已写、记录未落库」的保护窗口。
+class _GatedDownloadsPublisher extends FakeDownloadsPublisher {
+  final Completer<void> gate = Completer<void>();
+  String? pendingSourcePath;
+
+  @override
+  Future<String?> publish({
+    required String sourcePath,
+    required String displayName,
+    required String mimeType,
+    String relativeDir = '',
+  }) async {
+    pendingSourcePath = sourcePath;
+    await gate.future;
+    return super.publish(
+      sourcePath: sourcePath,
+      displayName: displayName,
+      mimeType: mimeType,
+      relativeDir: relativeDir,
+    );
+  }
+}
+
+/// 可暂停的下载存储：观察「期望路径已登记、文件尚未写完」的保护窗口。
+class _GatedDownloadStorage extends FakeDownloadStorage {
+  Completer<void>? gate;
+  String? pendingWritePath;
+
+  @override
+  Future<void> writeString(String path, String content) async {
+    pendingWritePath = path;
+    await gate?.future;
+    await super.writeString(path, content);
+  }
+
+  @override
+  Future<void> writeBytes(String path, List<int> bytes) async {
+    pendingWritePath = path;
+    await gate?.future;
+    await super.writeBytes(path, bytes);
+  }
 }
