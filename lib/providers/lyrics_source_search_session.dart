@@ -135,11 +135,20 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
   bool _isFetchingLyric = false;
 
+  /// 当前来源筛选（空串 = 全部）：只影响展示，不重搜、不清选中。
+  ///
+  /// 由会话持有而不是视图 State：与音频换源（`SourceSwapProvider`）的
+  /// `activeSourceKey` 保持同一归属层，视图重建 / 切 tab 都不会丢筛选。
+  String _activeSourceKey = '';
+
   /// 本次会话的来源（已按同源置顶 / 渠道开关过滤）。
   List<LyricsSourceStrategy> get strategies => _strategies;
 
   /// 当前查询（已 trim；空串 = 未搜索 / 已清空）。
   String get query => _searchSession.query;
+
+  /// 当前来源筛选（空串 = 全部）。
+  String get activeSourceKey => _activeSourceKey;
 
   bool get isFetchingLyric => _isFetchingLyric;
 
@@ -185,11 +194,12 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
   /// 按来源筛选的列表行。
   ///
-  /// [channelKey] 为空串 / null = 全部：列出**有结果或有不可用原因**的来源
-  /// （header + 结果）——未登录 B 站没有结果，但 header 要挂「怎么办」提示。
-  /// 单源时只列该来源结果；header 与空态提示由视图承担。
-  List<LyricsSearchEntry> entriesFor(String? channelKey) {
-    final key = channelKey ?? '';
+  /// [channelKey] 省略 / null = 用会话当前筛选 [activeSourceKey]（空串 =
+  /// 全部）：列出**有结果或有不可用原因**的来源（header + 结果）——未登录
+  /// B 站没有结果，但 header 要挂「怎么办」提示。显式传 key 时只列该来源
+  /// 结果（不再重复分组头）；header 与空态提示由视图承担。
+  List<LyricsSearchEntry> entriesFor([String? channelKey]) {
+    final key = channelKey ?? _activeSourceKey;
     final all = key.isEmpty;
     final entries = <LyricsSearchEntry>[];
     for (final strategy in _strategies) {
@@ -211,8 +221,19 @@ class LyricsSourceSearchSession extends ChangeNotifier {
     return entries;
   }
 
-  /// 兼容旧读取：等价于「全部」筛选。
-  List<LyricsSearchEntry> get entries => entriesFor(null);
+  /// 当前筛选下的列表行。
+  List<LyricsSearchEntry> get entries => entriesFor();
+
+  /// 切换来源筛选；空串 = 全部。
+  ///
+  /// 只影响展示，不重搜、不清选中；筛选在会话内跨搜索 / 选中保留。重复
+  /// 选择同一来源不通知，避免无意义重建。
+  void selectSource(String key) {
+    if (key == _activeSourceKey) return;
+    _activeSourceKey = key;
+    // 走扇出会话的通知节拍：作废排队中的合并通知，避免筛选切换后重建两次。
+    _searchSession.notifyNow();
+  }
 
   /// 该提供者分组内与当前曲目最相近的结果（时长 / 歌名 / 歌手相似度）。
   LyricsSearchResult? bestMatchOf(LyricProvider provider) {

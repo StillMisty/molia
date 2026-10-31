@@ -82,9 +82,6 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
 
   late NotificationService _notificationService;
 
-  /// 本地来源筛选（空串 = 全部）：只影响展示，不重搜、不清选中。
-  String _selectedSourceKey = '';
-
   @override
   bool get wantKeepAlive => true;
 
@@ -188,9 +185,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     final busy = _session.isFetchingLyric;
     final hasStrategies = strategies.isNotEmpty;
     final hasQuery = _session.query.isNotEmpty;
-    final entries = _session.entriesFor(
-      _selectedSourceKey.isEmpty ? null : _selectedSourceKey,
-    );
+    final entries = _session.entries;
     // 空态只留空态 + 下一步；已选中但切到空源时仍保留底栏，按钮还能确认。
     final showFooter =
         hasStrategies &&
@@ -235,12 +230,12 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
                     ),
                   ),
               ],
-              selectedKey: _selectedSourceKey,
+              selectedKey: _session.activeSourceKey,
               enabled: !busy,
               // 切换筛选只改展示：候选与选中项都留着，用户来回比较不丢状态。
               onSelected: (key) {
                 if (busy) return;
-                setState(() => _selectedSourceKey = key);
+                _session.selectSource(key);
               },
             ),
           ),
@@ -295,10 +290,10 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     if (_session.isAnyProviderLoading && _session.allResults.isEmpty) {
       return DetailPageLoading(label: l10n.sourceSwapSearching);
     }
-    if (_selectedSourceKey.isNotEmpty &&
-        _isStrategyLoading(_selectedSourceKey) &&
+    if (_session.activeSourceKey.isNotEmpty &&
+        _isStrategyLoading(_session.activeSourceKey) &&
         _session
-            .resultsOf(_providerNameFor(_selectedSourceKey) ?? '')
+            .resultsOf(_providerNameFor(_session.activeSourceKey) ?? '')
             .isEmpty) {
       return DetailPageLoading(label: l10n.sourceSwapSearching);
     }
@@ -385,18 +380,19 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
   }
 
   Widget _buildNoResultState(AppLocalizations l10n) {
-    if (_selectedSourceKey.isEmpty) {
+    final activeSourceKey = _session.activeSourceKey;
+    if (activeSourceKey.isEmpty) {
       return DetailPageEmpty(
         icon: Icons.search_off_rounded,
         message: l10n.lyricsEmptyState,
         hint: l10n.sourceSwapEmptyHint,
       );
     }
-    final unavailable = _unavailableReasonOfChannel(_selectedSourceKey);
+    final unavailable = _unavailableReasonOfChannel(activeSourceKey);
     return DetailPageEmpty(
       icon: Icons.search_off_rounded,
       message: l10n.searchNoResultsInSource(
-        lyricsProviderLabel(l10n, widget.sourceDescriptors, _selectedSourceKey),
+        lyricsProviderLabel(l10n, widget.sourceDescriptors, activeSourceKey),
       ),
       hint: unavailable == null
           ? l10n.sourceSwapEmptyHint

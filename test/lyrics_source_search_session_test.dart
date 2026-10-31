@@ -459,6 +459,115 @@ void main() {
     expect(session.entriesFor('unknown'), isEmpty);
   });
 
+  test('来源筛选由会话持有：空串 = 全部，跨搜索 / 选中保留且只影响展示', () async {
+    final qq = _FakeLyricProvider('qq', matches: [sunnyDay('qq-1')]);
+    final wy = _FakeLyricProvider(
+      'wy',
+      matches: [SongMatch(songId: 'wy-1', title: '晴天 网易', artist: '周杰伦')],
+    );
+    final session = buildSession([
+      strategy(qq, channelKey: 'tx'),
+      strategy(wy, channelKey: 'wy'),
+    ]);
+
+    await session.search('晴天 周杰伦');
+    expect(session.activeSourceKey, isEmpty, reason: '默认全部');
+    expect(
+      session.entries
+          .where((entry) => entry.type == LyricsSearchEntryType.result)
+          .map((entry) => entry.result!.match.songId),
+      ['qq-1', 'wy-1'],
+    );
+
+    session.selectSource('tx');
+    expect(session.activeSourceKey, 'tx');
+    expect(
+      session.entries.every(
+        (entry) => entry.type == LyricsSearchEntryType.result,
+      ),
+      isTrue,
+      reason: '单源筛选不重复分组头',
+    );
+    expect(session.entries.map((entry) => entry.result!.match.songId), [
+      'qq-1',
+    ]);
+    expect(session.resultsOf('wy'), isNotEmpty, reason: '筛选只影响展示，不丢其它来源结果');
+
+    // 选中与筛选互不影响：切筛选不改选中，选中也不复位筛选。
+    session.select(session.resultsOf('qq').single);
+    expect(session.selected, isNotNull);
+    expect(session.activeSourceKey, 'tx');
+
+    await session.search('告白气球');
+    expect(session.activeSourceKey, 'tx', reason: '新搜索保留筛选');
+    expect(session.entries.map((entry) => entry.result!.match.songId), [
+      'qq-1',
+    ]);
+
+    await session.search('');
+    expect(session.activeSourceKey, 'tx', reason: '清空查询也保留筛选');
+    expect(session.entries, isEmpty);
+
+    session.selectSource('');
+    expect(session.activeSourceKey, isEmpty);
+    expect(session.entriesFor(), isEmpty, reason: '清空查询后「全部」也没有条目');
+  });
+
+  test('筛选到无结果 / 陌生来源：列表为空，分组头只在全部模式出现', () async {
+    final qq = _FakeLyricProvider('qq', matches: [sunnyDay('qq-1')]);
+    final bili = _FakeLyricProvider('bili');
+    final session = buildSession([
+      strategy(qq, channelKey: 'tx'),
+      strategy(
+        bili,
+        channelKey: 'bili',
+        unavailable: () => LyricsSourceUnavailable.biliLoginRequired,
+      ),
+    ]);
+
+    await session.search('晴天 周杰伦');
+    expect(
+      session.entries
+          .where((entry) => entry.type == LyricsSearchEntryType.header)
+          .map((entry) => entry.strategy!.channelKey),
+      ['tx', 'bili'],
+      reason: '全部模式保留未登录 B 站的提示头',
+    );
+
+    session.selectSource('bili');
+    expect(session.entries, isEmpty, reason: '单源筛选不重复分组头；未登录 B 站没有结果');
+    expect(session.unavailableReasons, [
+      LyricsSourceUnavailable.biliLoginRequired,
+    ], reason: '空态登录提示仍可读');
+
+    session.selectSource('unknown');
+    expect(session.activeSourceKey, 'unknown');
+    expect(session.entries, isEmpty, reason: '陌生 key 不匹配任何来源');
+    expect(session.resultsOf('qq'), isNotEmpty, reason: '陌生筛选只影响展示，不清其它来源结果');
+  });
+
+  test('selectSource 只在筛选变化时通知，且不改查询 / 选中', () async {
+    final qq = _FakeLyricProvider('qq', matches: [sunnyDay('qq-1')]);
+    final session = buildSession([strategy(qq, channelKey: 'tx')]);
+
+    await session.search('晴天 周杰伦');
+    final result = session.resultsOf('qq').single;
+    session.select(result);
+
+    var notifications = 0;
+    session.addListener(() => notifications++);
+
+    session.selectSource('tx');
+    expect(notifications, 1);
+    session.selectSource('tx');
+    expect(notifications, 1, reason: '同一筛选不重复通知');
+    session.selectSource('');
+    expect(notifications, 2);
+
+    expect(session.query, '晴天 周杰伦');
+    expect(session.selected, same(result), reason: '切筛选不丢选中项');
+  });
+
   test('最佳匹配按来源各自挑选，不串组', () async {
     final qq = _FakeLyricProvider(
       'qq',

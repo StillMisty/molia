@@ -711,7 +711,9 @@
   `SourceSwapStrategies` 生成，提交或清空时重搜；来源固定为「全部 + 所有可搜索
   来源」，chips 单行横向滚动、默认全部、按来源分组（小节标题）展示，切单源只
   平铺该组；「全部」每组最多预览 3 条，超出时标题右侧「查看全部」一键切到该
-  来源查看完整结果。列表行统一走
+  来源查看完整结果。来源筛选由各自会话持有（音频 `SourceSwapProvider` / 歌词
+  `LyricsSourceSearchSession` 的 `activeSourceKey`，空串 = 全部），视图只渲染
+  并转发 `selectSource`，切 tab / 重建不丢筛选。列表行统一走
   `TrackRow`（歌词结果无封面时用 `placeholderIcon` 占前导槽），不再用
   `M3EListItem`。两个 tab 都带 `AutomaticKeepAliveClientMixin`：PageView 会销毁
   离屏页，不保活会清掉音频会话 / 歌词搜索结果。切 tab 统一收起键盘。无来源 /
@@ -722,7 +724,9 @@
   非搜索脚本不在其中时 `lyricsProviderLabel` 回退源 key（已知限制）。
   歌词侧为 `LyricsSourceSearchView` + `LyricsSourceSearchSession`（按来源策略
   叠加不可用原因 / 最佳匹配 / 取词写缓存，逐源搜索 / 查询代际 / 失败重试 /
-  选中态委托同一个 **Source fan-out session**，视图只渲染与提示）：点结果只
+  选中态委托同一个 **Source fan-out session**，视图只渲染与提示）：来源筛选
+  也由会话的 `activeSourceKey` 持有（空串 = 全部，跨搜索 / 选中保留），视图只
+  读筛选并转发 `selectSource`；点结果只
   选中，底部「使用此歌词」才取词 + `saveManual` + pop；音频侧为
   `SourceSwapView`：点候选即试听，底部确认换源；
   入口：歌曲信息页「换源」
