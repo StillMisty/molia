@@ -163,6 +163,75 @@ void main() {
     expect(find.text('simple-title'), findsOneWidget);
   });
 
+  testWidgets('simple modal titleTrailing shows in sheet header', (tester) async {
+    await pumpResponsiveHarness(
+      tester,
+      width: 390,
+      child: Builder(
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () {
+              ResponsiveNavigation.showSimpleModal<void>(
+                context: context,
+                title: 'simple-title',
+                titleTrailing: const Text('trailing'),
+                forceSheet: true,
+                child: const SizedBox(
+                  height: 120,
+                  child: Center(child: Text('modal-child')),
+                ),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(M3EBottomSheetSurface), findsOneWidget);
+    expect(find.text('simple-title'), findsOneWidget);
+    expect(find.text('trailing'), findsOneWidget);
+  });
+
+  testWidgets('simple modal forceSheet stays a sheet on large screens',
+      (tester) async {
+    await pumpResponsiveHarness(
+      tester,
+      width: 1280,
+      child: Builder(
+        builder: (context) => Center(
+          child: FilledButton(
+            onPressed: () {
+              ResponsiveNavigation.showSimpleModal<void>(
+                context: context,
+                title: 'simple-title',
+                titleTrailing: const Text('trailing'),
+                forceSheet: true,
+                child: const SizedBox(
+                  height: 120,
+                  child: Center(child: Text('modal-child')),
+                ),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    // 宽屏也走底部抽屉：标题右侧插槽（M3EDialog 没有）才能显示。
+    expect(find.byType(M3EBottomSheetSurface), findsOneWidget);
+    expect(find.byType(M3EDialog), findsNothing);
+    expect(find.text('simple-title'), findsOneWidget);
+    expect(find.text('trailing'), findsOneWidget);
+  });
+
   testWidgets('secondary page uses M3ESideSheet on large screens',
       (tester) async {
     await pumpResponsiveHarness(

@@ -791,6 +791,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourcesQuality128k => '128K';
 
   @override
+  String get sourcesQuality64k => '64K';
+
+  @override
   String get sourcesQualityHint => '优先用这个音质播放，不支持时自动降级';
 
   @override
@@ -4101,6 +4104,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sleepTimerArmedAfterTrack => '已开启定时关闭 · 播完当前歌曲后暂停';
+
+  @override
+  String get sleepTimerExitApp => '同时退出应用';
+
+  @override
+  String sleepTimerArmedExitSnackbar(String time) {
+    return '已开启定时关闭 · $time 后暂停并退出应用';
+  }
+
+  @override
+  String get sleepTimerArmedAfterTrackExit => '已开启定时关闭 · 播完当前歌曲后暂停并退出应用';
 
   @override
   String get sleepTimerHourLabel => '小时';

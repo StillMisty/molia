@@ -67,6 +67,20 @@ class Artwork {
   String toString() => uri.toString();
 }
 
+/// LX 音质从高到低的顺序（与 lx-music 保持一致）。
+///
+/// 放在领域层：音源取链（`pickQualityFor`）与 UI 展示（歌曲信息页按档位
+/// 排序）共用同一份顺序，避免两端各写一份后漂移。
+const List<String> kLxQualityOrder = [
+  'flac24bit',
+  'flac',
+  'wav',
+  'ape',
+  '320k',
+  '192k',
+  '128k',
+];
+
 /// 音质条目（type 如 128k/320k/flac，size 展示用，hash 供部分平台取链）。
 class AudioQuality {
   final String type;

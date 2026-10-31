@@ -154,15 +154,26 @@ class _FakeAudioPlayer extends AudioPlayer {
   }
 }
 
-SourceTrack _track({int index = 0}) => SourceTrack(
+SourceTrack _track({
+  int index = 0,
+  List<SourceQuality> qualities = const [],
+}) =>
+    SourceTrack(
       sourceKey: 'test',
       origin: 'builtin',
       title: '测试曲目$index',
       artist: '测试歌手',
       album: '',
       duration: const Duration(seconds: 30),
+      qualities: qualities,
       raw: {'id': 'a$index'},
     );
+
+const List<SourceQuality> _switchableQualities = [
+  SourceQuality(type: '320k'),
+  SourceQuality(type: 'flac'),
+  SourceQuality(type: '128k'),
+];
 
 /// 记录预取调用：任务永不完成，取消时记录曲目 id。
 class _TaskPredownloader implements AudioPredownloader {
@@ -240,6 +251,75 @@ void main() {
     expect(player.calls, contains('seek:0'));
     expect(player.calls, contains('play'));
     expect(player.calls, isNot(contains('pause')));
+    expect(service.isPlaying, isTrue);
+  });
+
+  test('切换音质：暂停中保持进度与暂停态，同一档位不重复取链', () async {
+    final requested = <String?>[];
+    final player = _FakeAudioPlayer();
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async {
+        requested.add(quality);
+        return PlayableStream(Uri.parse('file:///tmp/molia-test.mp3'));
+      },
+      player: player,
+      preferredQuality: () => '320k',
+    );
+    addTearDown(service.dispose);
+    await service.playTracks([
+      _track(qualities: _switchableQualities),
+    ], 0);
+    await pumpEventQueue();
+    await service.seek(const Duration(seconds: 10));
+    await service.pause();
+    await pumpEventQueue();
+    expect(service.isPlaying, isFalse);
+
+    final callsBefore = requested.length;
+    await service.setCurrentQuality('320k');
+    expect(requested.length, callsBefore, reason: '同一档位不重新取链');
+
+    player.calls.clear();
+    await service.setCurrentQuality('flac');
+    await pumpEventQueue();
+
+    expect(requested.last, 'flac');
+    expect(service.currentQuality, 'flac');
+    expect(player.calls, contains('seek:10000'));
+    expect(player.calls.where((call) => call == 'play'), isEmpty);
+    expect(service.position, const Duration(seconds: 10));
+    expect(service.isPlaying, isFalse);
+  });
+
+  test('切换音质：播放中保持播放态并从原进度继续', () async {
+    final requested = <String?>[];
+    final player = _FakeAudioPlayer();
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async {
+        requested.add(quality);
+        return PlayableStream(Uri.parse('file:///tmp/molia-test.mp3'));
+      },
+      player: player,
+      preferredQuality: () => '320k',
+    );
+    addTearDown(service.dispose);
+    await service.playTracks([
+      _track(qualities: _switchableQualities),
+    ], 0);
+    await pumpEventQueue();
+    await service.seek(const Duration(seconds: 10));
+    await pumpEventQueue();
+    expect(service.isPlaying, isTrue);
+
+    player.calls.clear();
+    await service.setCurrentQuality('128k');
+    await pumpEventQueue();
+
+    expect(requested.last, '128k');
+    expect(service.currentQuality, '128k');
+    expect(player.calls, contains('seek:10000'));
+    expect(player.calls, contains('play'));
+    expect(service.position, const Duration(seconds: 10));
     expect(service.isPlaying, isTrue);
   });
 

@@ -174,6 +174,13 @@ class LocalPlaybackBackend implements PlaybackBackend {
     _emit();
   }
 
+  /// 切换当前曲目音质：服务重新取链并保持进度 / 播放态，快照带新音质。
+  @override
+  Future<void> setCurrentQuality(String quality) async {
+    await _service.setCurrentQuality(quality);
+    _emit();
+  }
+
   /// 可选能力：本地后端暂不支持。
   @override
   Future<bool> toggleFavorite(Track track) async => throw const SourceFailure(
@@ -249,6 +256,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       duration: duration,
       mode: _service.mode,
       context: _readContext(),
+      quality: _service.currentQuality,
       error: _readError(),
     );
   }

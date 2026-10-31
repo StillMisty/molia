@@ -324,7 +324,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('信息区：音质本地化 + 可用音质 + 来源（渠道 · ID）+ 专辑', (tester) async {
+  testWidgets('信息区：音质行只显示本次档位 + 来源（渠道 · ID）+ 专辑', (tester) async {
     await pumpView(tester, track: _track());
 
     expect(find.text('本次播放音质'), findsOneWidget);
@@ -334,11 +334,60 @@ void main() {
     expect(find.text('Album a'), findsOneWidget);
     // 时长已从信息卡片移除。
     expect(find.text('4:05'), findsNothing);
-    // 可用音质：本地化名 + 体积（未知类型回退原值）。
-    expect(find.text('320K (9.8MB) · 无损'), findsOneWidget);
+    // 音质行默认只显示当前档位，其它可用档位收在弹层里。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('trackInfoQualityItem')),
+        matching: find.text('320K'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('无损'), findsNothing);
     // 歌词来源：会话未加载时为「暂无歌词」。
     expect(find.text('歌词来源'), findsOneWidget);
     expect(find.text('暂无歌词'), findsOneWidget);
+  });
+
+  testWidgets('音质行：点开列出全部档位（高到低 + 统一体积），选中即切换', (tester) async {
+    await pumpView(tester, track: _track());
+    final row = find.byKey(const Key('trackInfoQualityItem'));
+
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+
+    expect(find.text('可用音质'), findsOneWidget);
+    final lossless = find.byKey(const Key('trackInfoQualityOption_flac'));
+    final standard = find.byKey(const Key('trackInfoQualityOption_320k'));
+    expect(lossless, findsOneWidget);
+    expect(standard, findsOneWidget);
+    expect(find.text('9.8 MB'), findsOneWidget);
+    // 高音质在前（与平台返回顺序无关）。
+    expect(
+      tester.getTopLeft(lossless).dy,
+      lessThan(tester.getTopLeft(standard).dy),
+    );
+
+    await tester.tap(lossless);
+    await tester.pumpAndSettle();
+
+    expect(backend.calls, contains('setCurrentQuality:flac'));
+    expect(find.text('可用音质'), findsNothing);
+    expect(
+      find.descendant(of: row, matching: find.text('无损')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('音质行：没有可用音质时显示未知且不可点', (tester) async {
+    const track = Track(
+      id: TrackId('kw', 'a'),
+      title: 'Title a',
+      origin: TrackOrigin.lx,
+    );
+    await pumpView(tester, track: track);
+
+    expect(find.text('未知'), findsOneWidget);
+    expect(find.byKey(const Key('trackInfoQualityItem')), findsNothing);
   });
 
   testWidgets('封面行：跟随歌曲 → 自定义后立即显示已自定义', (tester) async {
@@ -785,7 +834,10 @@ void main() {
 
     expect(playback.sleepTimer.value.duration, const Duration(minutes: 30));
     expect(notifications.snackbars, hasLength(1));
-    expect(notifications.snackbars.single.$1, '已开启定时关闭 · 30:00 后暂停');
+    expect(
+      notifications.snackbars.single.$1,
+      '已开启定时关闭 · 30:00 后暂停并退出应用',
+    );
     expect(notifications.snackbars.single.$2, '取消');
 
     // Snackbar 的「取消」操作直接撤销定时。
@@ -798,7 +850,10 @@ void main() {
     await tester.tap(find.byKey(const Key('sleepTimerAfterTrackItem')));
     await tester.pumpAndSettle();
     expect(playback.sleepTimer.value.mode, SleepTimerMode.afterCurrentTrack);
-    expect(notifications.snackbars.last.$1, '已开启定时关闭 · 播完当前歌曲后暂停');
+    expect(
+      notifications.snackbars.last.$1,
+      '已开启定时关闭 · 播完当前歌曲后暂停并退出应用',
+    );
   });
 
   testWidgets('定时关闭：自定义时长走 M3E time picker（初始 30 分钟）', (tester) async {

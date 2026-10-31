@@ -361,6 +361,7 @@
   "sourcesQuality320k": "320K",
   "sourcesQuality192k": "192K",
   "sourcesQuality128k": "128K",
+  "sourcesQuality64k": "64K",
   "sourcesQualityHint": "Play at this quality when available; fall back automatically otherwise",
   "sourcesSortTitle": "Channel order",
   "sourcesSortReset": "Reset",
@@ -2360,6 +2361,16 @@
     }
   },
   "sleepTimerArmedAfterTrack": "Sleep timer on · pausing after this track",
+  "sleepTimerExitApp": "Also quit the app",
+  "sleepTimerArmedExitSnackbar": "Sleep timer on · pausing and quitting in {time}",
+  "@sleepTimerArmedExitSnackbar": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerArmedAfterTrackExit": "Sleep timer on · pausing and quitting after this track",
   "sleepTimerHourLabel": "Hours",
   "sleepTimerMinuteLabel": "Minutes",
   "sleepTimerCustom": "Custom duration…",

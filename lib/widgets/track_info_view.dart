@@ -28,6 +28,7 @@ import 'settings/settings_tiles.dart';
 import 'cover_picker_sheet.dart';
 import 'cover_viewer.dart';
 import 'track_artwork.dart';
+import 'track_quality_sheet.dart';
 import 'sleep_timer_sheet.dart';
 import 'track_actions.dart';
 import 'track_share_sheet.dart';
@@ -35,12 +36,12 @@ import 'track_share_sheet.dart';
 /// 播放页第三个 tab：当前曲目操作 + 信息 + 本地数据入口。
 ///
 /// 段落顺序（按使用频度）：**操作**（评论 / 定时关闭 / 换源）→ **本地数据**
-/// （单行入口 → 两档状态 / 占用 / 下载转存与清理）→ **信息**（音质 / 可用音质 /
-/// 专辑 / 来源 / 歌词来源）。
+/// （单行入口 → 两档状态 / 占用 / 下载转存与清理）→ **信息**（音质 / 专辑 /
+/// 来源 / 歌词来源）。
 ///
 /// 口径说明：
-/// - 音质显示的是**本次请求音质**（偏好音质 × 曲目可用列表 × 省流上限 =
-///   `PlaybackProvider.currentQualityType`，展示名本地化）；取链接口不返回
+/// - 音质行只显示**本次播放档位**（`PlaybackProvider.currentQualityType`，
+///   展示名本地化）；点击后列出全部可用档位并支持切换。取链接口不返回
 ///   实际码率，因此不展示「实际音质」；
 /// - 来源行合并「渠道 + 曲目 ID」，点击进分享 / 复制弹层；歌词来源只读；
 /// - 「本地数据」页里缓存与下载是**两套东西**：清缓存永不触碰 `downloads/`，
@@ -209,6 +210,14 @@ class _TrackInfoViewState extends State<TrackInfoView> {
           (provider) =>
               (provider.snapshot.current, provider.currentQualityType),
     );
+    // 恢复态（冷启动未起播）没有真实播放，音质行只读；手动切换覆盖省流
+    // 上限时不再显示「省流模式」后缀。
+    final restored = context.select<PlaybackProvider, bool>(
+      (provider) => provider.hasRestoredSession,
+    );
+    final qualityOverridden = context.select<PlaybackProvider, bool>(
+      (provider) => provider.isCurrentQualityOverridden,
+    );
     final commentsSupported = context.select<CommentsProvider?, bool>(
       (provider) =>
           track == null ? false : (provider?.supports(track) ?? false),
@@ -232,6 +241,13 @@ class _TrackInfoViewState extends State<TrackInfoView> {
           ? provider.state.providerName
           : null,
     );
+    final hasQualities =
+        track?.qualities.any((quality) => quality.type.isNotEmpty) ?? false;
+    final qualityLabel = qualityType.isEmpty
+        ? l10n.trackInfoQualityUnknown
+        : sourceQualityLabel(l10n, qualityType);
+    final dataSaverActive = dataSaver?.active ?? false;
+    final showDataSaverHint = dataSaverActive && !qualityOverridden;
 
     return Scrollbar(
       controller: widget.controller,
@@ -319,7 +335,7 @@ class _TrackInfoViewState extends State<TrackInfoView> {
               ],
             ),
             const SizedBox(height: kSettingsSectionSpacing),
-            // 信息：封面 / 音质 / 可用音质 / 专辑 / 来源 / 歌词来源。
+            // 信息：封面 / 音质（点开切换可用档位）/ 专辑 / 来源 / 歌词来源。
             SettingsSectionCard(
               children: [
                 CoverChangeBuilder(
@@ -348,19 +364,38 @@ class _TrackInfoViewState extends State<TrackInfoView> {
                     );
                   },
                 ),
-                SettingsInfoTile(
-                  icon: Icons.graphic_eq_rounded,
-                  title: l10n.trackInfoQuality,
-                  subtitle: (dataSaver?.active ?? false)
-                      ? '${sourceQualityLabel(l10n, qualityType)} · '
-                          '${l10n.settingsDataSaverTitle}'
-                      : sourceQualityLabel(l10n, qualityType),
-                ),
-                SettingsInfoTile(
-                  icon: Icons.high_quality_rounded,
-                  title: l10n.trackInfoQualityAvailable,
-                  subtitle: _availableQualitiesLabel(l10n, track),
-                ),
+                // 音质：默认只显示本次档位，点开列出全部可用档位并切换。
+                if (!hasQualities)
+                  SettingsInfoTile(
+                    icon: Icons.high_quality_rounded,
+                    title: l10n.trackInfoQuality,
+                    subtitle: l10n.trackInfoQualityUnknown,
+                  )
+                else if (restored)
+                  SettingsInfoTile(
+                    icon: Icons.high_quality_rounded,
+                    title: l10n.trackInfoQuality,
+                    subtitle: showDataSaverHint
+                        ? '$qualityLabel · ${l10n.settingsDataSaverTitle}'
+                        : qualityLabel,
+                  )
+                else
+                  SettingsValueTile(
+                    key: const Key('trackInfoQualityItem'),
+                    icon: Icons.high_quality_rounded,
+                    title: l10n.trackInfoQuality,
+                    value: qualityLabel,
+                    subtitle: showDataSaverHint
+                        ? l10n.settingsDataSaverTitle
+                        : null,
+                    onTap: () => unawaited(
+                      showTrackQualitySheet(
+                        context,
+                        track: track,
+                        currentQuality: qualityType,
+                      ),
+                    ),
+                  ),
                 if (artistNames.isNotEmpty)
                   artistSupported
                       ? SettingsNavTile(
@@ -494,16 +529,4 @@ class _TrackInfoViewState extends State<TrackInfoView> {
     return id.isEmpty ? channel : '$channel · $id';
   }
 
-  /// 可用音质：本地化音质名（未知值回退原值），有体积时附在括号里。
-  String _availableQualitiesLabel(AppLocalizations l10n, Track track) {
-    final labels = [
-      for (final quality in track.qualities)
-        if (quality.type.isNotEmpty)
-          (quality.size ?? '').isEmpty
-              ? sourceQualityLabel(l10n, quality.type)
-              : '${sourceQualityLabel(l10n, quality.type)}'
-                  ' (${quality.size})',
-    ];
-    return labels.isEmpty ? l10n.trackInfoQualityUnknown : labels.join(' · ');
-  }
 }

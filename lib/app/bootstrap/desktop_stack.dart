@@ -8,7 +8,11 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show exit;
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'package:flutter/services.dart' show SystemNavigator;
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
 
@@ -79,9 +83,12 @@ Future<DesktopStack> buildDesktopStack({
       commitSession: playback.suspendPlaybackSession,
       shutdownAudio: shutdownAudio,
       flushStatistics: playStatisticsService.flush,
-      quitWindow: WindowChrome.quit,
+      quitWindow: _quitPlatformApp,
     );
   }
+  // 定时关闭勾选「同时退出应用」时也走同一条退出路径：会话提交、音频收尾、
+  // 统计落盘完成后才真正退出。provider 建好后回填（此时 quitApp 已可用）。
+  playback.attachQuitApp(quitApp);
 
   // 关闭请求（顶栏关闭键 / 系统关闭按钮）→ 按设置分流：隐藏到托盘或退出。
   // 无托盘宿主（GNOME 未装 AppIndicator 扩展、无面板的裸 WM）时不做隐藏：
@@ -179,6 +186,28 @@ Future<DesktopStack> buildDesktopStack({
       );
     },
   );
+}
+
+/// 平台最终退出动作（落盘由 [commitBeforeQuit] 在此之前完成）。
+///
+/// - 桌面：销毁窗口（Linux / Windows / macOS）；
+/// - Android：结束当前 Activity；
+/// - iOS：程序化退出（`SystemNavigator.pop` 对根 FlutterViewController 是
+///   no-op，必须 `exit(0)` 才能让「同时退出应用」真正生效）；
+/// - Web / 其它平台：只完成落盘与暂停，不做强制退出。
+Future<void> _quitPlatformApp() async {
+  if (kIsWeb) return;
+  if (WindowChrome.isSupported) {
+    await WindowChrome.quit();
+    return;
+  }
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    await SystemNavigator.pop();
+    return;
+  }
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    exit(0);
+  }
 }
 
 /// 退出前提交的唯一顺序：先 await 会话提交，再收尾音频设备，然后触发统计

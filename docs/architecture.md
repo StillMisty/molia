@@ -129,7 +129,9 @@
   落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
   换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`；库内 / 手动
   换源走同一实现的 `replaceTrack` + `PlaybackReplaceScope.liveAndRestored`，
-  自动换源固定 `liveOnly`），不直写 facade；壳层 paused 与桌面退出共用
+  自动换源固定 `liveOnly`），不直写 facade；音质切换（`setCurrentQuality`）
+  同样走命令面，但只重新取链当前曲目并保持进度 / 播放态，音质不写入会话，
+  恢复态返回空操作。壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后
   继续退出）。退出顺序固定为「会话落盘 → 音频收尾（暂停 + 释放播放器，有界
   500ms）→ 统计落盘（有界 500ms）→ 销毁窗口」：会话必须先把最后一段进度取
@@ -163,7 +165,9 @@
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或
   冻结时，由原生定时器到点唤醒 Dart 执行暂停；原生不可用（桌面 / 测试）
-  自动退化为纯 Dart timer。「播完当前歌曲」不靠进度通道判定曲末：
+  自动退化为纯 Dart timer。定时关闭默认勾选「同时退出应用」：到点先暂停并提交
+  会话，再走组合根统一退出路径（桌面销毁窗口 / Android 结束 Activity / iOS
+  `exit(0)`）；勾选状态仅本次运行，不落盘、不参与同步。「播完当前歌曲」不靠进度通道判定曲末：
   `LocalPlaybackService` 在 `ProcessingState.completed` 时先发
   `trackCompletions`，并通过 `setStopAfterCurrentTrack` 在自动切歌前停住；
   熄屏时位置 tick 被节流也不会把自然播完误判成手动切歌。Windows/Linux 的
@@ -1278,7 +1282,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   容器色取 `surface`，与页面自带 Scaffold 的底色一致）。简单弹层（定时关闭 /
   来源分享）用 `showSimpleModal`：窄屏底部弹层、宽屏 `M3EDialog` 本体。底部弹层
   header 因 `M3EBottomSheetHeader` 未公开导出，按 `fullScreenHeaderHeight`(64) /
-  `titleLarge` / `M3EDivider` 自绘。
+  `titleLarge` / `M3EDivider` 自绘。定时关闭的标题右侧有「同时退出应用」勾选项，
+  而 `M3EDialog` 标题是字符串、没有右侧插槽，因此它显式 `forceSheet: true`：
+  宽屏也用底部抽屉，标题行与窄屏同构。
 - **排序**：三处 `ReorderableListView`（`lib/widgets/settings/settings_reorderable_rows.dart`、
   `lib/pages/favorites.dart`、`lib/widgets/collection_track_list.dart`）是长期例外——
   material_3_expressive 1.2.0 未公开导出 `M3EListReorderHost` /
@@ -1381,8 +1387,8 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   **曲目域**
   （身份 / 渠道 / 音质 / 本地数据 / 评论）在歌曲信息页，段落顺序 =
   操作（评论 / 定时关闭 / 换源）→ 本地数据（两档状态 / 下载转存 / 缓存清理）→
-  信息（音质 / 可用音质 / 专辑 / 来源 / 歌词来源）；**播放域**（模式 / 收藏 /
-  定时）在播放器进度排 + 信息页。
+  信息（音质：只显示本次档位，点开列出全部可用档位并切换 / 专辑 / 来源 /
+  歌词来源）；**播放域**（模式 / 收藏 / 定时）在播放器进度排 + 信息页。
   曲目级操作的打开编排（能力位、守卫、换源页 tab）唯一实现在
   `lib/widgets/track_actions.dart`；单曲本地数据在
   `lib/pages/track_local_data_page.dart`（读取唯走 `TrackLocalDataService`，

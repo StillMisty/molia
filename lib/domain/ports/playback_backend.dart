@@ -93,6 +93,15 @@ abstract interface class PlaybackBackend {
         message: '当前播放后端不支持队列追加',
       );
 
+  /// 可选能力：以指定音质重新取链当前曲目，保持进度与播放态。
+  ///
+  /// 音质只在本次播放生效，不写入持久化会话。不支持时抛
+  /// `SourceFailure(kind: unsupported)`。
+  Future<void> setCurrentQuality(String quality) => throw const SourceFailure(
+        kind: FailureKind.unsupported,
+        message: '当前播放后端不支持切换音质',
+      );
+
   /// 可选能力：收藏切换。不支持时抛 `SourceFailure(kind: unsupported)`。
   Future<bool> toggleFavorite(Track track) => throw const SourceFailure(
         kind: FailureKind.unsupported,

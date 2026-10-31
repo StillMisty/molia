@@ -1598,6 +1598,12 @@ abstract class AppLocalizations {
   /// **'128K'**
   String get sourcesQuality128k;
 
+  /// No description provided for @sourcesQuality64k.
+  ///
+  /// In en, this message translates to:
+  /// **'64K'**
+  String get sourcesQuality64k;
+
   /// No description provided for @sourcesQualityHint.
   ///
   /// In en, this message translates to:
@@ -7629,6 +7635,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sleep timer on · pausing after this track'**
   String get sleepTimerArmedAfterTrack;
+
+  /// No description provided for @sleepTimerExitApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Also quit the app'**
+  String get sleepTimerExitApp;
+
+  /// No description provided for @sleepTimerArmedExitSnackbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer on · pausing and quitting in {time}'**
+  String sleepTimerArmedExitSnackbar(String time);
+
+  /// No description provided for @sleepTimerArmedAfterTrackExit.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer on · pausing and quitting after this track'**
+  String get sleepTimerArmedAfterTrackExit;
 
   /// No description provided for @sleepTimerHourLabel.
   ///

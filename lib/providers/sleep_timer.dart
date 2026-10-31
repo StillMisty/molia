@@ -78,12 +78,15 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     required StateListenable<PlaybackSnapshot> snapshot,
     required StateListenable<Duration> position,
     required this._onFire,
+    this._onExit,
     this._now = DateTime.now,
     SleepTimerAlarm? alarm,
     Stream<Track>? trackCompletions,
     this._setStopAfterCurrentTrack,
     bool Function()? isForeground,
-  })  : _snapshot = snapshot,
+    bool exitAppByDefault = false,
+  })  : exitApp = ValueNotifier<bool>(exitAppByDefault),
+        _snapshot = snapshot,
         _position = position,
         _isForeground = isForeground ?? _alwaysForeground {
     // 原生定时器是熄屏 / Doze 的补触发通道；平台不支持时是 no-op，纯 Dart
@@ -111,6 +114,13 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   final StateListenable<PlaybackSnapshot> _snapshot;
   final StateListenable<Duration> _position;
   final Future<void> Function() _onFire;
+
+  /// 到点暂停落地后，若勾选了「同时退出应用」，再执行这里。
+  ///
+  /// 只注入平台无关的退出动作；会话落盘 / 音频收尾由组合根的统一退出路径
+  /// （`buildDesktopStack` 的 `quitApp`）负责。
+  final Future<void> Function()? _onExit;
+
   final DateTime Function() _now;
   late final SleepTimerAlarm _alarm;
 
@@ -130,6 +140,13 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 
   /// 原生定时器代次：覆盖 / 取消时自增，旧回调直接丢弃。
   int _alarmToken = 0;
+
+  /// 计时结束后是否同时退出应用。
+  ///
+  /// 独立于 [SleepTimerState] 的值通道：勾选状态在定时未开启时也可修改，
+  /// 且不参与每秒 tick 的状态比较；默认值由构造参数 [exitAppByDefault] 决定
+  /// （生产环境默认勾选，测试 / 无壳宿主默认关闭）。
+  final ValueNotifier<bool> exitApp;
 
   final ValueNotifier<SleepTimerState> _state =
       ValueNotifier<SleepTimerState>(SleepTimerState.off);
@@ -212,6 +229,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _reset(notify: true);
   }
 
+  /// 设置「计时结束后同时退出应用」；已开启的定时在到点时按最新值执行。
+  void setExitApp(bool value) => exitApp.value = value;
+
   void dispose() {
     _completionSubscription?.cancel();
     _completionSubscription = null;
@@ -220,6 +240,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _position.removeListener(_onPosition);
     _cancelTicker();
     _alarm.dispose();
+    exitApp.dispose();
     _state.dispose();
   }
 
@@ -278,8 +299,13 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       return;
     }
     if (!snapshot.isPlaying && _completedArmedTrack) {
-      // 队列自然播完（最后一首结束）：没有下一首要暂停，撤销定时。
-      _reset(notify: true);
+      // 队列自然播完（最后一首结束）：没有下一首要暂停。勾选「同时退出应用」
+      // 时仍按定时到点处理（暂停对已停止的后端是幂等的），否则只撤销定时。
+      if (exitApp.value) {
+        _fire();
+      } else {
+        _reset(notify: true);
+      }
     }
   }
 
@@ -424,12 +450,33 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _publish();
   }
 
-  /// 到点：先回 off（onFire 期间状态不应还显示开启），再执行暂停。
+  /// 到点：先回 off（onFire 期间状态不应还显示开启），再执行暂停；
+  /// 勾选了「同时退出应用」时，暂停落地后再走统一退出路径。
+  ///
+  /// 暂停失败不阻止退出：用户已经选择了「到点退出」，卡在暂停上比直接退出
+  /// 更糟；两个动作各自记日志。
   void _fire() {
+    final shouldExit = exitApp.value;
     _reset(notify: true);
-    unawaited(Future<void>.sync(_onFire).catchError((Object e) {
-      _logger.warning('定时关闭到点暂停失败: $e');
-    }));
+    unawaited(() async {
+      try {
+        await _onFire();
+      } catch (e) {
+        _logger.warning('定时关闭到点暂停失败: $e');
+      }
+      if (shouldExit) await _runExit();
+    }());
+  }
+
+  /// 执行注入的退出动作；未装配（测试 / 无壳宿主）时静默跳过。
+  Future<void> _runExit() async {
+    final exit = _onExit;
+    if (exit == null) return;
+    try {
+      await exit();
+    } catch (e) {
+      _logger.warning('定时关闭到点退出应用失败: $e');
+    }
   }
 
   void _reset({required bool notify}) {

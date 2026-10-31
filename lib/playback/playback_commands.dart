@@ -108,6 +108,12 @@ abstract interface class PlaybackCommandPort {
   /// 播放队列中的指定下标（系统媒体队列跳转）。
   Future<PlaybackCommandOutcome> playQueueIndex(int index);
 
+  /// 以指定音质重新取链当前曲目，保持进度与播放态。
+  ///
+  /// 音质不进入持久化会话，因此不触发会话提交；恢复态没有真实播放，
+  /// 返回 [PlaybackCommandOutcome.none]。
+  Future<PlaybackCommandOutcome> setCurrentQuality(String quality);
+
   /// 把队列中 [trackUri] 的曲目原地替换为 [newTrack]（自动换源写回）。
   ///
   /// 只有 live 处理（[PlaybackReplaceScope.liveOnly]）：自动换源由真实播放

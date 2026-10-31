@@ -356,6 +356,15 @@ void main() {
         previousOfPrevious: track,
       );
       expect(a, isNot(withPreviousOfPrevious));
+
+      final withQuality = BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+        quality: 'flac',
+      );
+      expect(a, isNot(withQuality));
     });
 
     test('PlaybackSnapshot：不含 position，值比较稳定', () {
@@ -387,6 +396,16 @@ void main() {
         previousOfPrevious: track,
       );
       expect(a, isNot(withPreviousOfPrevious));
+
+      final withQuality = PlaybackSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: true,
+        mode: PlayMode.shuffle,
+        quality: 'flac',
+      );
+      expect(a, isNot(withQuality));
     });
 
     test('SearchQuery / SearchResult 相等性', () {

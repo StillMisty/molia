@@ -93,6 +93,10 @@ class FakeBackend implements PlaybackBackend {
       calls.add('playQueueIndex:$index');
 
   @override
+  Future<void> setCurrentQuality(String quality) async =>
+      calls.add('setCurrentQuality:$quality');
+
+  @override
   Future<bool> toggleFavorite(Track track) async => false;
 
   @override

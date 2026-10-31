@@ -85,6 +85,9 @@ class _FakeBackend implements PlaybackBackend {
   Future<void> playQueueIndex(int index) async {}
 
   @override
+  Future<void> setCurrentQuality(String quality) async {}
+
+  @override
   Future<bool> toggleFavorite(Track track) async => false;
 
   @override

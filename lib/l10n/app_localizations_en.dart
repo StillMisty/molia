@@ -819,6 +819,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourcesQuality128k => '128K';
 
   @override
+  String get sourcesQuality64k => '64K';
+
+  @override
   String get sourcesQualityHint =>
       'Play at this quality when available; fall back automatically otherwise';
 
@@ -4277,6 +4280,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get sleepTimerArmedAfterTrack =>
       'Sleep timer on · pausing after this track';
+
+  @override
+  String get sleepTimerExitApp => 'Also quit the app';
+
+  @override
+  String sleepTimerArmedExitSnackbar(String time) {
+    return 'Sleep timer on · pausing and quitting in $time';
+  }
+
+  @override
+  String get sleepTimerArmedAfterTrackExit =>
+      'Sleep timer on · pausing and quitting after this track';
 
   @override
   String get sleepTimerHourLabel => 'Hours';

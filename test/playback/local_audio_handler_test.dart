@@ -90,6 +90,12 @@ class _FakeCommands implements PlaybackCommandPort {
   }
 
   @override
+  Future<PlaybackCommandOutcome> setCurrentQuality(String quality) async {
+    calls.add('setCurrentQuality:$quality');
+    return outcome;
+  }
+
+  @override
   Future<PlaybackCommandOutcome> replaceQueueTrack(
     String trackUri,
     Track newTrack,

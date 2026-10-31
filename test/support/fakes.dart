@@ -104,6 +104,7 @@ class FakePlaybackBackend implements PlaybackBackend {
       duration: current.duration,
       mode: current.mode,
       context: current.context,
+      quality: current.quality,
       error: current.error,
     );
   }
@@ -142,6 +143,7 @@ class FakePlaybackBackend implements PlaybackBackend {
       duration: current.duration,
       mode: mode,
       context: current.context,
+      quality: current.quality,
       error: current.error,
     );
   }
@@ -152,6 +154,30 @@ class FakePlaybackBackend implements PlaybackBackend {
   @override
   Future<void> playQueueIndex(int index) async =>
       calls.add('playQueueIndex:$index');
+
+  /// 切换音质：记录调用并推一帧带新 quality 的快照（与真实后端一致）。
+  @override
+  Future<void> setCurrentQuality(String quality) async {
+    calls.add('setCurrentQuality:$quality');
+    final current = _notifier.value;
+    _notifier.value = BackendSnapshot(
+      current: current.current,
+      queue: current.queue,
+      currentIndex: current.currentIndex,
+      next: current.next,
+      previous: current.previous,
+      previousOfPrevious: current.previousOfPrevious,
+      upNext: current.upNext,
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      position: current.position,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      quality: quality,
+      error: current.error,
+    );
+  }
 
   @override
   Future<bool> toggleFavorite(Track track) async => false;
@@ -194,6 +220,7 @@ class FakePlaybackBackend implements PlaybackBackend {
       duration: current.duration,
       mode: current.mode,
       context: current.context,
+      quality: current.quality,
       error: null,
     );
   }

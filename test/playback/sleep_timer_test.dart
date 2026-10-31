@@ -67,12 +67,16 @@ void main() {
   late SleepTimerController timer;
   late DateTime now;
   late int fired;
+  late int exited;
+  late List<String> events;
   late _FakeSleepTimerAlarm alarm;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     now = DateTime(2026, 1, 1, 22);
     fired = 0;
+    exited = 0;
+    events = [];
     backend = FakePlaybackBackend();
     facade = DefaultPlaybackFacade(backend: backend);
     alarm = _FakeSleepTimerAlarm();
@@ -86,7 +90,12 @@ void main() {
       // 命令面路由与提交由 playback_session_test 覆盖。
       onFire: () async {
         fired++;
+        events.add('pause');
         await facade.pause();
+      },
+      onExit: () async {
+        exited++;
+        events.add('exit');
       },
       now: () => now,
       alarm: alarm,
@@ -143,6 +152,34 @@ void main() {
     expect(backend.calls, contains('pause'));
   });
 
+  testWidgets('倒计时到点：勾选同时退出应用 → 先暂停再退出', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setExitApp(true);
+    expect(timer.exitApp.value, isTrue);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+    await tester.pump();
+
+    expect(fired, 1);
+    expect(exited, 1);
+    expect(events, ['pause', 'exit']);
+  });
+
+  testWidgets('倒计时到点：未勾选同时退出应用 → 只暂停', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setExitApp(false);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+    await tester.pump();
+
+    expect(fired, 1);
+    expect(exited, 0);
+  });
+
   testWidgets('倒计时：取消后不再触发', (tester) async {
     final a = _track('a');
     backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
@@ -156,6 +193,19 @@ void main() {
 
     await advance(tester, const Duration(minutes: 2));
     expect(fired, 0);
+  });
+
+  testWidgets('倒计时：勾选退出后取消 → 不到点退出', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setExitApp(true);
+    timer.startCountdown(const Duration(minutes: 1));
+    timer.cancel();
+    await advance(tester, const Duration(minutes: 2));
+
+    expect(fired, 0);
+    expect(exited, 0);
   });
 
   testWidgets('播完当前歌曲：自然播完（切歌前已在曲末）→ 暂停', (tester) async {
@@ -186,6 +236,56 @@ void main() {
     expect(fired, 1);
     expect(timer.value.mode, SleepTimerMode.off);
     expect(backend.calls, contains('pause'));
+  });
+
+  testWidgets('播完当前歌曲：勾选同时退出应用 → 暂停后退出', (tester) async {
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+
+    timer.setExitApp(true);
+    timer.startAfterCurrentTrack();
+    backend.emitTrackCompletion(a);
+    backend.emit(_snapshot(
+      current: b,
+      queue: [a, b],
+      currentIndex: 1,
+      duration: b.duration!,
+      position: Duration.zero,
+    ));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+
+    expect(fired, 1);
+    expect(exited, 1);
+    expect(events, ['pause', 'exit']);
+  });
+
+  testWidgets('播完当前歌曲：队列末尾自然结束且勾选退出 → 退出', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(
+      current: a,
+      queue: [a],
+      duration: a.duration!,
+      position: a.duration!,
+    ));
+
+    timer.setExitApp(true);
+    timer.startAfterCurrentTrack();
+    // 没有完成事件（旧后端 / 位置回退路径）：曲末后播放停止。
+    backend.emit(_snapshot(
+      current: a,
+      queue: [a],
+      duration: a.duration!,
+      isPlaying: false,
+      position: a.duration!,
+    ));
+    await tester.pump();
+    await tester.idle();
+
+    expect(fired, 1);
+    expect(exited, 1);
   });
 
   testWidgets('播完当前歌曲：熄屏后位置 tick 停在半途，仍按完成事件暂停', (tester) async {
@@ -333,6 +433,17 @@ void main() {
     backend.emit(_snapshot(isPlaying: false));
     timer.startAfterCurrentTrack();
     expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  test('生产 provider：同时退出应用默认勾选（仅本次运行）', () async {
+    final playback = buildTestPlaybackProvider(backend: FakePlaybackBackend());
+    await playback.preferencesReady;
+
+    expect(playback.sleepTimer.exitApp.value, isTrue);
+    playback.sleepTimer.setExitApp(false);
+    expect(playback.sleepTimer.exitApp.value, isFalse);
+
+    playback.dispose();
   });
 
   test('stopLocalPlayback 撤销定时（定时不跨会话保留）', () async {

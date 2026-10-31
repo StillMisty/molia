@@ -162,6 +162,18 @@ class _FakeService extends LocalPlaybackService {
     notifyListeners();
   }
 
+  String? _currentQuality;
+
+  @override
+  String? get currentQuality => _currentQuality;
+
+  @override
+  Future<void> setCurrentQuality(String quality) async {
+    calls.add('setCurrentQuality:$quality');
+    _currentQuality = quality;
+    notifyListeners();
+  }
+
   final List<List<SourceTrack>> enqueued = [];
 
   @override
@@ -597,6 +609,15 @@ void main() {
     expect(snapshot.queue.map((t) => t.title), ['Title', '新版本']);
     expect(snapshot.queue.last.id, const TrackId('fake', 'b'));
     expect(snapshot.current?.id.id, 'a', reason: '未命中当前曲目时不重载');
+  });
+
+  test('setCurrentQuality：委托服务，快照带当前音质', () async {
+    service.seed([_source('a')], index: 0, playing: true);
+
+    await backend.setCurrentQuality('flac');
+
+    expect(service.calls, contains('setCurrentQuality:flac'));
+    expect(backend.state.value.quality, 'flac');
   });
 
   test('setVolume 委托服务；能力位 volume 为真', () async {

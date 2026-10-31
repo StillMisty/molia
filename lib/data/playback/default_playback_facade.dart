@@ -82,6 +82,10 @@ class DefaultPlaybackFacade implements PlaybackFacade {
   Future<void> playQueueIndex(int index) => _backend.playQueueIndex(index);
 
   @override
+  Future<void> setCurrentQuality(String quality) =>
+      _backend.setCurrentQuality(quality);
+
+  @override
   Future<void> toggle() async {
     if (_snapshot.value.isPlaying) {
       await _backend.pause();
@@ -164,6 +168,7 @@ class DefaultPlaybackFacade implements PlaybackFacade {
       mode: backend.mode,
       context: backend.context,
       backend: _backend.kind,
+      quality: backend.quality,
       error: backend.error == null ? null : SourceFailure.from(backend.error!),
     );
     if (next != _snapshot.value) {

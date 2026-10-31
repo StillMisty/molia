@@ -378,6 +378,19 @@ class PlaybackSessionCoordinator
     return PlaybackCommandOutcome.trackOnly;
   }
 
+  /// 切换当前曲目音质：以指定音质重新取链，保持进度与播放态。
+  ///
+  /// 音质不进入持久化会话（会话只存曲目 / 队列 / 进度 / 模式 / 上下文），
+  /// 因此不提交会话；恢复态没有真实播放，返回空操作。
+  @override
+  Future<PlaybackCommandOutcome> setCurrentQuality(String quality) async {
+    if (phase != PlaybackSessionPhase.live) {
+      return PlaybackCommandOutcome.none;
+    }
+    await _facade.setCurrentQuality(quality);
+    return PlaybackCommandOutcome.trackOnly;
+  }
+
   /// 自动换源写回：把 live 队列中 [trackUri] 的曲目原地替换为 [newTrack]。
   ///
   /// 只改真实播放：自动换源由真实播放失败触发，恢复态没有真实队列可换，

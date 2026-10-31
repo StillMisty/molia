@@ -110,6 +110,12 @@ class PlaybackProvider extends ChangeNotifier {
   /// 自动换源成功后的本地数据钩子（自定义封面跟随）。
   final AutoSourceSwapTrackHook? _onAutoSourceSwapped;
 
+  /// 统一退出路径（组合根在 `quitApp` 可用后经 [attachQuitApp] 回填）。
+  ///
+  /// 定时关闭勾选「同时退出应用」时，到点先暂停再走这里；未装配（测试 /
+  /// 无壳宿主）时只暂停。
+  Future<void> Function()? _quitApp;
+
   // 通知节流器 - 减少不必要的 UI 重建
   late final CategorizedNotifyThrottler _notifyThrottler;
 
@@ -201,6 +207,14 @@ class PlaybackProvider extends ChangeNotifier {
       onFire: () async {
         await _session.pause();
       },
+      // 勾选「同时退出应用」时，暂停落地后再走统一退出路径（会话提交 /
+      // 音频收尾 / 统计落盘由组合根负责）。
+      onExit: () async {
+        final quit = _quitApp;
+        if (quit != null) await quit();
+      },
+      // 生产默认勾选；仅本次运行，不落盘。
+      exitAppByDefault: true,
       // 前台屏幕亮着不持 partial wake lock；退后台 / 息屏再持有。
       isForeground: isForeground,
     );
@@ -245,12 +259,16 @@ class PlaybackProvider extends ChangeNotifier {
 
   bool get hasTrack => snapshot.current != null;
 
-  /// 当前曲目的预期音质值（LX 音质标识：`flac`/`320k`…，见 `kLxQualityOrder`）。
+  /// 当前曲目本次播放选用的音质（LX 音质标识：`flac`/`320k`…，见
+  /// `kLxQualityOrder`）。
   ///
-  /// 偏好音质 × 曲目可用音质（纯函数 [pickQualityFor]）；无曲目或曲目无
-  /// 可用音质时回退到偏好音质。省流生效（移动数据 + 已开启）时按上限取值。
-  /// UI 展示统一用 `sourceQualityLabel(l10n, type)` 本地化（歌曲信息页）。
+  /// live 优先取后端快照的实际选用值（含手动切换）；恢复态 / 尚未取链时
+  /// 按偏好音质 × 曲目可用音质（纯函数 [pickQualityFor]）派生。无曲目或
+  /// 曲目无可用音质时回退到偏好音质。省流生效（移动数据 + 已开启）时按
+  /// 上限取值。UI 展示统一用 `sourceQualityLabel(l10n, type)` 本地化。
   String get currentQualityType {
+    final actual = snapshot.quality;
+    if (actual != null && actual.isNotEmpty) return actual;
     final preferred = _sourceManager?.preferredQuality ?? '320k';
     final effective = _dataSaver?.effectiveQuality(preferred) ?? preferred;
     final track = snapshot.current;
@@ -260,6 +278,22 @@ class PlaybackProvider extends ChangeNotifier {
             .map((quality) => quality.type)
             .where((type) => type.isNotEmpty);
     return pickQualityFor(supported, effective);
+  }
+
+  /// 本次播放音质是否由用户手动选择（偏离偏好 × 省流上限的派生值）。
+  ///
+  /// 手动选择允许越过省流上限，此时歌曲信息页不再显示「省流模式」后缀，
+  /// 避免出现「在省流模式下播放无损」的矛盾提示。
+  bool get isCurrentQualityOverridden {
+    final track = snapshot.current;
+    final actual = snapshot.quality;
+    if (track == null || actual == null || actual.isEmpty) return false;
+    final preferred = _sourceManager?.preferredQuality ?? '320k';
+    final effective = _dataSaver?.effectiveQuality(preferred) ?? preferred;
+    final supported = track.qualities
+        .map((quality) => quality.type)
+        .where((type) => type.isNotEmpty);
+    return actual != pickQualityFor(supported, effective);
   }
 
   bool get isPlaying => snapshot.isPlaying;
@@ -401,6 +435,24 @@ class PlaybackProvider extends ChangeNotifier {
     _applyOutcome(
       await _session.seekToPosition(Duration(milliseconds: positionMs)),
     );
+  }
+
+  /// 切换当前曲目本次播放的音质（歌曲信息页）。
+  ///
+  /// 只接受曲目可用列表里的档位；恢复态（尚未真实播放）不生效。音质选择
+  /// 不写入会话，切歌 / 重启后回到默认音质。
+  Future<void> setCurrentQuality(String quality) async {
+    final track = snapshot.current;
+    if (track == null || quality.isEmpty) return;
+    if (!track.qualities.any((option) => option.type == quality)) return;
+    if (hasRestoredSession) return;
+    // 音质切换是一次新的取链操作：允许失败恢复重新走一次同源重试。
+    _retriedTrackKey = null;
+    try {
+      _applyOutcome(await _session.setCurrentQuality(quality));
+    } catch (e) {
+      _logger.severe('切换音质失败', e);
+    }
   }
 
   Future<void> skipToNext() async {
@@ -631,6 +683,15 @@ class PlaybackProvider extends ChangeNotifier {
   /// await，用 `unawaited` 触发同一个提交。系统媒体控制（通知暂停 / 停止 /
   /// 切播放顺序）走同一个协调者的命令面，与这里汇入同一条写队列。
   Future<void> suspendPlaybackSession() => _session.flushSession();
+
+  /// 装配统一退出路径（组合根在 `quitApp` 可用后回填）。
+  ///
+  /// 定时关闭勾选「同时退出应用」时，到点先暂停再调用它；未装配
+  /// （测试 / 无壳宿主）时只暂停。退出前的会话提交 / 音频收尾 / 统计落盘
+  /// 由组合根的同一条退出路径负责。
+  void attachQuitApp(Future<void> Function() quitApp) {
+    _quitApp = quitApp;
+  }
 
   /// 冷启动加载上次播放会话：无真实曲目时进入恢复态。
   ///

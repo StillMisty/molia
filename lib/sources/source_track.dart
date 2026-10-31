@@ -1,5 +1,7 @@
+import '../domain/models/track.dart' show kLxQualityOrder;
 import 'raw_track.dart';
 
+export '../domain/models/track.dart' show kLxQualityOrder;
 export 'raw_track.dart' show SourceQuality;
 
 /// 统一的音乐源曲目模型。
@@ -103,17 +105,6 @@ class SourceTrack {
     );
   }
 }
-
-/// LX 音质从高到低的顺序（与 lx-music 保持一致）。
-const List<String> kLxQualityOrder = [
-  'flac24bit',
-  'flac',
-  'wav',
-  'ape',
-  '320k',
-  '192k',
-  '128k',
-];
 
 /// 纯函数版音质选择（[SourceTrack.pickQuality] 与其共享同一实现）：
 /// 优先 preferred，其次按 [kLxQualityOrder] 先降后升回退，最后取支持列表末位。

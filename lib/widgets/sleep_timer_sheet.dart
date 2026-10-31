@@ -9,6 +9,7 @@ import '../providers/playback_provider.dart';
 import '../providers/sleep_timer.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 
 /// 自定义时长范围（分钟）。
@@ -43,8 +44,44 @@ Future<void> showSleepTimerSheet(BuildContext context) {
   return ResponsiveNavigation.showSimpleModal<void>(
     context: context,
     title: AppLocalizations.of(context)!.sleepTimerTitle,
+    // 标题右侧的「同时退出应用」勾选项：宽屏 M3EDialog 没有标题插槽，
+    // 统一走底部抽屉，窄屏 / 宽屏保持同一套标题行。
+    titleTrailing: _SleepTimerExitAppCheckbox(playback: playback),
+    forceSheet: true,
     child: _SleepTimerSheet(playback: playback),
   );
+}
+
+/// 标题右侧勾选项：计时结束后是否同时退出应用。
+///
+/// 默认勾选、仅本次运行（不落盘）：退出应用是强动作，状态随进程结束而消失，
+/// 下次启动仍回到默认勾选。
+class _SleepTimerExitAppCheckbox extends StatelessWidget {
+  const _SleepTimerExitAppCheckbox({required this.playback});
+
+  final PlaybackProvider playback;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final timer = playback.sleepTimer;
+    return ValueListenableBuilder<bool>(
+      valueListenable: timer.exitApp,
+      builder: (context, checked, _) => M3ECheckbox(
+        key: const Key('sleepTimerExitAppCheckbox'),
+        value: checked,
+        onChanged: (next) {
+          if (next == null) return;
+          HapticsService.lightImpact();
+          timer.setExitApp(next);
+        },
+        label: Text(
+          l10n.sleepTimerExitApp,
+          style: context.typeScale.bodyMedium,
+        ),
+      ),
+    );
+  }
 }
 
 /// 定时关闭弹层：状态 + 自定义时长入口 + 播完当前歌曲 + 关闭定时。
@@ -103,7 +140,9 @@ class _SleepTimerSheet extends StatelessWidget {
                       _showArmedFeedback(
                         context,
                         timer,
-                        l10n.sleepTimerArmedAfterTrack,
+                        timer.exitApp.value
+                            ? l10n.sleepTimerArmedAfterTrackExit
+                            : l10n.sleepTimerArmedAfterTrack,
                       );
                       Navigator.of(context).pop();
                     }
@@ -179,10 +218,13 @@ class _SleepTimerSheet extends StatelessWidget {
   ) {
     HapticsService.lightImpact();
     timer.startCountdown(duration);
+    final remaining = formatSleepTimerRemaining(duration);
     _showArmedFeedback(
       context,
       timer,
-      l10n.sleepTimerArmedSnackbar(formatSleepTimerRemaining(duration)),
+      timer.exitApp.value
+          ? l10n.sleepTimerArmedExitSnackbar(remaining)
+          : l10n.sleepTimerArmedSnackbar(remaining),
     );
     Navigator.of(context).pop();
   }

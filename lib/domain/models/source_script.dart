@@ -127,6 +127,8 @@ String qualityDisplayName(String quality) {
       return '192K';
     case '128k':
       return '128K';
+    case '64k':
+      return '64K';
     default:
       return quality;
   }

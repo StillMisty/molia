@@ -158,6 +158,18 @@ class LocalPlaybackService extends ChangeNotifier {
   String? _contextName;
   PlayMode _mode = PlayMode.listLoop;
 
+  /// 当前曲目本次播放选用的音质（解析请求值；null = 尚未取链）。
+  String? _currentQuality;
+
+  /// 用户手动选择的音质：按曲目 id 记住，自动重试仍用同一档位；
+  /// 切歌后自然回到偏好音质（不写入会话）。
+  String? _qualityOverride;
+  String? _qualityOverrideTrackId;
+
+  /// 切换音质期间抑制播放器位置回写：新源 `setAudioSource` 会先报 0，
+  /// 不能让它把进度闪回 0 或让会话落盘成 0。
+  bool _suppressPositionUpdates = false;
+
   /// 队列内容版本号：任何队列变更（装载 / 追加 / 原地替换 / 补图 / 清空）
   /// 自增。O(1) 的「队列是否真的变了」判定（位置 tick 不算变更）；
   /// `LocalPlaybackBackend` 用它判断能否复用队列的领域 `Track` 映射。
@@ -312,6 +324,7 @@ class LocalPlaybackService extends ChangeNotifier {
   }
 
   void _onPlayerPosition(Duration position) {
+    if (_suppressPositionUpdates) return;
     _position = position;
     // 位置首次前进 = 解码时钟真的在走（起播埋点的「首声」代理）。
     if (position > Duration.zero) PlaybackStartTrace.firstProgress();
@@ -321,6 +334,7 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 后台 1s 轮询：值没变不发通知（暂停 / 缓冲时避免空转唤醒 UI）。
   void _pollPlayerPosition() {
+    if (_suppressPositionUpdates) return;
     final position = _player.position;
     // 曲末兜底要先于「值没变」短路：播完后位置本来就不再变化。
     _maybeCompleteFromPosition(position);
@@ -487,6 +501,9 @@ class LocalPlaybackService extends ChangeNotifier {
   PlayMode get mode => _mode;
   String? get lastError => _lastError;
   SourceTrack? get currentSourceTrack => _currentTrack;
+
+  /// 当前曲目本次播放选用的音质（`LocalPlaybackBackend` 快照用）。
+  String? get currentQuality => _currentQuality;
 
   /// 当前曲目自然播完的事件（自动切歌 / 单曲循环重播之前发出）。
   Stream<SourceTrack> get trackCompletions => _trackCompletions.stream;
@@ -668,7 +685,36 @@ class LocalPlaybackService extends ChangeNotifier {
     await _playIndex(index);
   }
 
-  Future<void> _playIndex(int index, {bool recordHistory = true}) async {
+  /// 以指定音质重新取链当前曲目，保持进度与播放态。
+  ///
+  /// 只影响当前曲目本次播放：选择按曲目 id 记住（自动重试仍用同一档位），
+  /// 切歌后自然回到偏好音质；音质不写入播放会话。
+  Future<void> setCurrentQuality(String quality) async {
+    if (_playerDisposed || quality.isEmpty) return;
+    final track = _currentTrack;
+    if (track == null || _currentIndex < 0 || _currentIndex >= _queue.length) {
+      return;
+    }
+    final resolved = track.pickQuality(quality);
+    if (resolved == _currentQuality) return;
+    final resumeAt = _isAtTrackEnd ? Duration.zero : _position;
+    final wasPlaying = _isPlaying;
+    _qualityOverride = resolved;
+    _qualityOverrideTrackId = track.id;
+    await _playIndex(
+      _currentIndex,
+      recordHistory: false,
+      resumeAt: resumeAt,
+      autoplay: wasPlaying,
+    );
+  }
+
+  Future<void> _playIndex(
+    int index, {
+    bool recordHistory = true,
+    Duration? resumeAt,
+    bool autoplay = true,
+  }) async {
     if (index < 0 || index >= _queue.length) return;
     // 新曲目 = 用户主动选择，撤销音频中断的待续播。
     _focusGuard?.cancelPendingResume();
@@ -678,8 +724,15 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     final requestId = ++_playRequestId;
     final track = _queue[index];
-    final preferred = _preferredQuality?.call();
+    final override = _qualityOverrideTrackId == track.id ? _qualityOverride : null;
+    final preferred = override ?? _preferredQuality?.call();
     final quality = preferred == null ? null : track.pickQuality(preferred);
+    final preservePosition = resumeAt != null;
+    final startPosition = _clampResumePosition(
+      resumeAt ?? Duration.zero,
+      track.duration,
+    );
+    _suppressPositionUpdates = preservePosition;
     // 预取所有权：桌面 / 回退直接流播时，如果正在预取的就是这一首，保留
     // 在途任务（不取消、不再起 writer），落位后的缓存供重播命中。移动端
     // 边播边缓存会写同一文件，仍保持「起播前取消」。
@@ -696,9 +749,10 @@ class LocalPlaybackService extends ChangeNotifier {
 
     _currentIndex = index;
     _currentTrack = track;
+    _currentQuality = quality;
     _isLoading = true;
     _lastError = null;
-    _position = Duration.zero;
+    _position = startPosition;
     _duration = track.duration ?? Duration.zero;
     // 换曲即重新计时：上一首的末位采样不能参与新曲目的曲末判定。
     _lastEndPositionSample = null;
@@ -743,17 +797,34 @@ class LocalPlaybackService extends ChangeNotifier {
       }
 
       _duration = _player.duration ?? track.duration ?? Duration.zero;
-      // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
-      // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
-      // completed 事件；启动失败单独捕获进 lastError。
-      startTrace?.markPlayRequested();
-      unawaited(_player.play().catchError((Object e) {
-        if (requestId == _playRequestId) {
-          _lastError = e.toString();
-          _isPlaying = false;
-          notifyListeners();
+      // 切音质：新源落位后跳回原进度；切歌 / 首次起播 startPosition 为 0。
+      if (preservePosition) {
+        final target = _clampResumePosition(
+          startPosition,
+          _player.duration ?? track.duration,
+        );
+        _position = target;
+        if (target > Duration.zero) {
+          await _seekPlayer(target);
+          if (requestId != _playRequestId) return;
         }
-      }));
+      }
+      if (autoplay) {
+        // 播放启动后立即返回：just_audio 的 play() Future 在「播完/暂停」才
+        // 完成，挂在这里会拖住调用方（自动切歌完成处理器）并吞掉后续
+        // completed 事件；启动失败单独捕获进 lastError。
+        startTrace?.markPlayRequested();
+        unawaited(_player.play().catchError((Object e) {
+          if (requestId == _playRequestId) {
+            _lastError = e.toString();
+            _isPlaying = false;
+            notifyListeners();
+          }
+        }));
+      } else if (_player.playing) {
+        // 暂停中切换音质：只换源 + 对齐进度，不重新起播。
+        await _player.pause();
+      }
       // 当前曲目已起播：后台预载下一首（直链 + 音频缓存；歌词/封面由
       // 各自链路从播放快照统一触发）。此刻不会与当前取链抢 LX 引擎。
       unawaited(_nextTrackPreloader?.preload(nextSourceTrack));
@@ -766,9 +837,19 @@ class LocalPlaybackService extends ChangeNotifier {
     } finally {
       if (requestId == _playRequestId) {
         _isLoading = false;
+        _suppressPositionUpdates = false;
         notifyListeners();
       }
     }
+  }
+
+  /// 切音质时把原进度钳到新源时长内；已到曲末则从 0 开始。
+  Duration _clampResumePosition(Duration position, Duration? duration) {
+    if (position <= Duration.zero) return Duration.zero;
+    if (duration != null && duration > Duration.zero && position >= duration) {
+      return Duration.zero;
+    }
+    return position;
   }
 
   /// 设置音频源：优先边播边缓存（策略开启时），失败回退直接流播。
@@ -978,6 +1059,7 @@ class LocalPlaybackService extends ChangeNotifier {
   Future<void> stop({bool clear = true}) async {
     _playRequestId++;
     _stopAfterCurrentTrack = false;
+    _suppressPositionUpdates = false;
     _nextTrackPreloader?.cancelAll();
     _cacheWriter?.cancel();
     try {
@@ -989,6 +1071,9 @@ class LocalPlaybackService extends ChangeNotifier {
       _queueRevision++;
       _currentIndex = -1;
       _currentTrack = null;
+      _currentQuality = null;
+      _qualityOverride = null;
+      _qualityOverrideTrackId = null;
       _position = Duration.zero;
       _duration = Duration.zero;
       _contextName = null;

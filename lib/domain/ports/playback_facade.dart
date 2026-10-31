@@ -35,6 +35,11 @@ abstract interface class PlaybackFacade {
   /// 在已加载队列内按下标跳转。
   Future<void> playQueueIndex(int index);
 
+  /// 以指定音质重新取链当前曲目，保持进度与播放态。
+  ///
+  /// 只影响本次播放，不改变队列 / 进度 / 模式，也不写入持久化会话。
+  Future<void> setCurrentQuality(String quality);
+
   /// 追加曲目到当前队列末尾（不打断当前播放）：顺序模式立即可达；
   /// 随机模式下本轮排列不变，追加项在本轮结束后纳入新一轮洗牌。
   Future<void> enqueueTracks(List<Track> tracks);

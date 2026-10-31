@@ -93,6 +93,10 @@ class BackendSnapshot {
   final Duration duration;
   final PlayMode mode;
   final PlaybackContext? context;
+
+  /// 当前曲目本次播放选用的音质（解析请求值，不是实际码率）；
+  /// 无曲目 / 尚未取链时为 null。
+  final String? quality;
   final SourceFailure? error;
 
   const BackendSnapshot({
@@ -109,6 +113,7 @@ class BackendSnapshot {
     this.duration = Duration.zero,
     this.mode = PlayMode.listLoop,
     this.context,
+    this.quality,
     this.error,
   });
 
@@ -130,6 +135,7 @@ class BackendSnapshot {
       other.duration == duration &&
       other.mode == mode &&
       other.context == context &&
+      other.quality == quality &&
       other.error == error;
 
   @override
@@ -147,6 +153,7 @@ class BackendSnapshot {
         duration,
         mode,
         context,
+        quality,
         error,
       );
 }
@@ -184,6 +191,10 @@ class PlaybackSnapshot {
   final PlayMode mode;
   final PlaybackContext? context;
   final PlaybackBackendKind backend;
+
+  /// 当前曲目本次播放选用的音质（解析请求值，不是实际码率）；
+  /// 恢复态 / 尚未取链时为 null。
+  final String? quality;
   final SourceFailure? error;
 
   const PlaybackSnapshot({
@@ -200,6 +211,7 @@ class PlaybackSnapshot {
     this.mode = PlayMode.listLoop,
     this.context,
     this.backend = PlaybackBackendKind.local,
+    this.quality,
     this.error,
   });
 
@@ -221,6 +233,7 @@ class PlaybackSnapshot {
       other.mode == mode &&
       other.context == context &&
       other.backend == backend &&
+      other.quality == quality &&
       other.error == error;
 
   @override
@@ -238,6 +251,7 @@ class PlaybackSnapshot {
         mode,
         context,
         backend,
+        quality,
         error,
       );
 }

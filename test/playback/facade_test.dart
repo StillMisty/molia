@@ -96,6 +96,7 @@ class FakeBackend implements PlaybackBackend {
       duration: current.duration,
       mode: mode,
       context: current.context,
+      quality: current.quality,
       error: current.error,
     );
   }
@@ -106,6 +107,29 @@ class FakeBackend implements PlaybackBackend {
   @override
   Future<void> playQueueIndex(int index) async =>
       calls.add('playQueueIndex:$index');
+
+  @override
+  Future<void> setCurrentQuality(String quality) async {
+    calls.add('setCurrentQuality:$quality');
+    final current = _notifier.value;
+    _notifier.value = BackendSnapshot(
+      current: current.current,
+      queue: current.queue,
+      currentIndex: current.currentIndex,
+      next: current.next,
+      previous: current.previous,
+      previousOfPrevious: current.previousOfPrevious,
+      upNext: current.upNext,
+      isPlaying: current.isPlaying,
+      isLoading: current.isLoading,
+      position: current.position,
+      duration: current.duration,
+      mode: current.mode,
+      context: current.context,
+      quality: quality,
+      error: current.error,
+    );
+  }
 
   @override
   Future<bool> toggleFavorite(Track track) async => false;
@@ -306,6 +330,9 @@ void main() {
       expect(backend.calls.last, 'setMode:shuffle');
       await facade.playQueueIndex(1);
       expect(backend.calls.last, 'playQueueIndex:1');
+      await facade.setCurrentQuality('flac');
+      expect(backend.calls.last, 'setCurrentQuality:flac');
+      expect(facade.snapshot.value.quality, 'flac');
       await facade.stop();
       expect(backend.calls.last, 'stop');
     });

@@ -285,6 +285,7 @@
   "sourcesQuality320k": "320K",
   "sourcesQuality192k": "192K",
   "sourcesQuality128k": "128K",
+  "sourcesQuality64k": "64K",
   "sourcesQualityHint": "优先用这个音质播放，不支持时自动降级",
   "sourcesSortTitle": "渠道排序",
   "sourcesSortReset": "重置",
@@ -1992,6 +1993,16 @@
     }
   },
   "sleepTimerArmedAfterTrack": "已开启定时关闭 · 播完当前歌曲后暂停",
+  "sleepTimerExitApp": "同时退出应用",
+  "sleepTimerArmedExitSnackbar": "已开启定时关闭 · {time} 后暂停并退出应用",
+  "@sleepTimerArmedExitSnackbar": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "sleepTimerArmedAfterTrackExit": "已开启定时关闭 · 播完当前歌曲后暂停并退出应用",
   "sleepTimerHourLabel": "小时",
   "sleepTimerMinuteLabel": "分钟",
   "sleepTimerCustom": "自定义时长…",
