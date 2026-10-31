@@ -1008,6 +1008,7 @@ void main() {
       ],
     ));
     provider.notifyListeners();
+    expect(provider.canCheckNow, isFalse);
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncPeersRecheck')), findsNothing);
 
@@ -1017,6 +1018,7 @@ void main() {
     await provider.setCellularPolicy(SyncCellularPolicy.pause);
     await scheduler.refreshEnvironment();
     provider.notifyListeners();
+    expect(provider.canCheckNow, isFalse);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('settingsSyncPeersRecheck')), findsNothing);
     // 测试结束前释放调度器：refreshEnvironment 会排一个活跃降级定时器，

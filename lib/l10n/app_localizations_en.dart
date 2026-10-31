@@ -2958,7 +2958,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Ask the other device to open Molia and turn on LAN sync';
 
   @override
-  String get syncNearbyPermissionTitle => 'Nearby search needs LAN access';
+  String get syncNearbyPermissionTitle => 'LAN access needed';
 
   @override
   String get syncNearbyPermissionHint =>
@@ -2972,14 +2972,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Check the sync log for the reason, then try again.';
 
   @override
-  String get syncNearbyOpenLog => 'View sync log';
+  String get syncNearbyOpenLogHint => 'See the latest failure reason';
 
   @override
   String get syncNearbyCellularTitle => 'On mobile data';
 
   @override
   String get syncNearbyCellularHint =>
-      'Nearby search is unavailable on mobile data. Switch to Wi-Fi and try again.';
+      'Nearby search needs Wi-Fi. Switch and try again.';
 
   @override
   String get syncNearbyPowerSaveTitle => 'Power saver is on';
@@ -2994,14 +2994,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncNearbyDiscoveryUnavailableHint =>
-      'Automatic discovery couldn\'t start on this device. Use a manual address or WebDAV instead.';
-
-  @override
-  String get syncNearbyPairingUnavailableTitle => 'One-tap pairing unavailable';
-
-  @override
-  String get syncNearbyPairingUnavailableHint =>
-      'Pairing isn\'t ready on this device. Use a manual address or WebDAV instead.';
+      'Add a manual address or use WebDAV.';
 
   @override
   String get syncNearbyFooter =>
@@ -3167,8 +3160,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncRecheckConnections => 'Check connections again';
 
   @override
-  String get syncRecheckConnectionsHint =>
-      'Run one check now with the current network and power settings';
+  String get syncRecheckConnectionsHint => 'Check once now';
 
   @override
   String syncRoundSynced(String names) {

@@ -1305,6 +1305,9 @@ void main() {
       await service.dispose();
       await packets.close();
     });
+    final nearby = <List<SyncNearbyDevice>>[];
+    final subscription = service.nearbyDevices.listen(nearby.add);
+    addTearDown(subscription.cancel);
     await service.start();
 
     expect(await service.startScan(), isFalse);
@@ -1315,6 +1318,33 @@ void main() {
     expect(await service.startScan(), isTrue);
     expect(service.scanning, isTrue);
     expect(sent, hasLength(1));
+
+    final announce = Msp1.encode(Msp1Message(
+      type: Msp1.typeAnnounce,
+      deviceId: 'devB',
+      name: '设备B',
+      httpPort: 41001,
+      probePort: 47825,
+      addresses: const [],
+      hasGroup: false,
+      bootId: 'boot-b',
+      nonce: 'nonce-b',
+    ));
+    packets.add(LanPairingDatagram(
+      message: Msp1.decode(announce)!,
+      sourceHost: '192.168.1.9',
+      sourcePort: 47825,
+      receivedAt: 1000,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(nearby.last.map((device) => device.deviceId), contains('devB'));
+
+    // 扫描中端口降为 0：必须收回 scanning、清候选，而不是停在「正在查找」。
+    port = 0;
+    expect(await service.startScan(), isFalse);
+    expect(service.scanning, isFalse);
+    expect(nearby.last, isEmpty);
+    expect(service.debugSweepScheduled, isTrue, reason: 'sweep 服务本身仍在跑');
 
     // 旧接线没有 probePortProvider：不因端口未知拒绝扫描。
     final packetsWithoutPort = StreamController<LanPairingDatagram>.broadcast();

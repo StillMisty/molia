@@ -263,11 +263,14 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   @override
   Future<bool> startScan() async {
     if (_disposed || !_canUsePairing) return false;
-    // 配对探测端口不可用时不再假装「正在查找」：本机发不出 MSP，扫描只会
-    // 停在空的「正在查找」。provider 为 null（旧测试 / 无发现层接线）保持
-    // 原行为。
+    // 探测端口不可用时本机发不出 MSP：先收回扫描状态并清空候选，避免页面
+    // 已显示不可用、服务却仍停在「正在扫描」。provider 为 null（旧测试 /
+    // 无发现层接线）保持原行为。
     final probePort = _probePortProvider;
-    if (probePort != null && probePort() == 0) return false;
+    if (probePort != null && probePort() == 0) {
+      stopScan();
+      return false;
+    }
     _scanning = true;
     _lastScanProbeAtMs = _nowMs();
     _cancelScanTimers();
@@ -325,8 +328,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   @override
   void onAppHidden() {
     _hidden = true;
-    // 后台不再补探：sweep 本身会被取消，这里一并清掉补探基准，避免回前台
-    // 恢复时按「距上次补探已经很久」立刻多补一条。
+    // 后台不补探：sweep 本身会被取消，这里一并清掉补探基准，回前台恢复时
+    // 由 onAppResumed 补一次，不按过期间隔重复补。
     _lastScanProbeAtMs = 0;
     _cancelScanTimers();
     // 后台没有候选更新需求：停掉周期 sweep（省电，也避免隐藏期间刷新

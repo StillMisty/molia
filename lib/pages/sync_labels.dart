@@ -117,11 +117,6 @@ String syncNetworkText(AppLocalizations l10n, {required bool onCellular}) =>
           title: l10n.syncNearbyDiscoveryUnavailableTitle,
           subtitle: l10n.syncNearbyDiscoveryUnavailableHint,
         ),
-      SyncNearbyAvailability.pairingUnavailable => (
-          icon: Icons.sync_problem_rounded,
-          title: l10n.syncNearbyPairingUnavailableTitle,
-          subtitle: l10n.syncNearbyPairingUnavailableHint,
-        ),
     };
 
 /// 时间戳 → 相对时间（首屏结论行用：一句话里只给「多久以前」，

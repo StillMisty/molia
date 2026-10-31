@@ -5421,7 +5421,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyPermissionTitle.
   ///
   /// In en, this message translates to:
-  /// **'Nearby search needs LAN access'**
+  /// **'LAN access needed'**
   String get syncNearbyPermissionTitle;
 
   /// No description provided for @syncNearbyPermissionHint.
@@ -5442,11 +5442,11 @@ abstract class AppLocalizations {
   /// **'Check the sync log for the reason, then try again.'**
   String get syncNearbyTransportDownHint;
 
-  /// No description provided for @syncNearbyOpenLog.
+  /// No description provided for @syncNearbyOpenLogHint.
   ///
   /// In en, this message translates to:
-  /// **'View sync log'**
-  String get syncNearbyOpenLog;
+  /// **'See the latest failure reason'**
+  String get syncNearbyOpenLogHint;
 
   /// No description provided for @syncNearbyCellularTitle.
   ///
@@ -5457,7 +5457,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyCellularHint.
   ///
   /// In en, this message translates to:
-  /// **'Nearby search is unavailable on mobile data. Switch to Wi-Fi and try again.'**
+  /// **'Nearby search needs Wi-Fi. Switch and try again.'**
   String get syncNearbyCellularHint;
 
   /// No description provided for @syncNearbyPowerSaveTitle.
@@ -5481,20 +5481,8 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyDiscoveryUnavailableHint.
   ///
   /// In en, this message translates to:
-  /// **'Automatic discovery couldn\'t start on this device. Use a manual address or WebDAV instead.'**
+  /// **'Add a manual address or use WebDAV.'**
   String get syncNearbyDiscoveryUnavailableHint;
-
-  /// No description provided for @syncNearbyPairingUnavailableTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'One-tap pairing unavailable'**
-  String get syncNearbyPairingUnavailableTitle;
-
-  /// No description provided for @syncNearbyPairingUnavailableHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Pairing isn\'t ready on this device. Use a manual address or WebDAV instead.'**
-  String get syncNearbyPairingUnavailableHint;
 
   /// No description provided for @syncNearbyFooter.
   ///
@@ -5751,7 +5739,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncRecheckConnectionsHint.
   ///
   /// In en, this message translates to:
-  /// **'Run one check now with the current network and power settings'**
+  /// **'Check once now'**
   String get syncRecheckConnectionsHint;
 
   /// No description provided for @syncRoundSynced.

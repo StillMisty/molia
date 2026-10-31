@@ -119,14 +119,9 @@ class SyncProvider extends ChangeNotifier {
       // `needsUserAction`，但「开关已开、传输没起来」的原因是缺权限。
       permissionDenied: lanPermissionNeedsAttention ||
           status?.unavailableReason == SyncUnavailableReason.permissionDenied,
-      transportRunning: status?.running ?? false,
-      transportUnavailable: status == null ||
-          !status.running ||
-          status.unavailableReason != null,
+      transportUnavailable:
+          status == null || !status.running || status.unavailableReason != null,
       discoveryAvailable: discoveryAvailable,
-      // 配对服务与 UDP 发现共用同一批端口；没注入配对端口（或端口为 0）
-      // 时即使发现报文能收发也无法发起一键配对。
-      pairingAvailable: _pairing != null && discoveryAvailable,
       onCellular: onCellular,
       powerSaveActive: powerSaveActive,
     );
@@ -395,10 +390,16 @@ class SyncProvider extends ChangeNotifier {
   /// 打开传输成功后立刻排一次 check 轮：用户刚打开局域网 / WebDAV 时最关心
   /// 「现在能不能连上」，不必等下一次空闲唤醒；仍走调度器，省电 / 移动数据
   /// 暂停 / 同步关闭时由调度器自己拦住。关闭传输不触发。
+  ///
+  /// WebDAV 未配置时不检查：打开开关后紧接着会进配置弹层，此时跑一轮必然
+  /// 以 `not_configured` 失败，没有信息量。
   Future<void> _applyTransportEnabled(String kind, bool value) async {
     if (value) await _controlPlane.ensurePassphrase();
     await _controlPlane.setTransportEnabled(kind, value);
-    if (value) unawaited(_scheduler?.checkNow());
+    if (!value) return;
+    final shouldCheck = kind == SyncTransportKind.lan ||
+        (kind == SyncTransportKind.webdav && _controlPlane.webdav.isConfigured);
+    if (shouldCheck) unawaited(_scheduler?.checkNow());
   }
 
   Future<void> setCategory(SyncCategory category, bool value) async {
@@ -409,12 +410,6 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> setDeviceName(String value) =>
       _controlPlane.setDeviceName(value);
-
-  Future<void> setWebdavConfig(WebDavConfig config) =>
-      _controlPlane.setWebdavConfig(config);
-
-  Future<void> setWebdavPassword(String password) =>
-      _controlPlane.writeWebdavPassword(password);
 
   /// 一次写入 WebDAV 配置与密码（配置弹层的唯一保存入口）。
   ///
@@ -450,6 +445,11 @@ class SyncProvider extends ChangeNotifier {
       trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,
     );
   }
+
+  /// 调度器当前是否允许自动检查（省电 / 移动数据暂停 / 同步关闭时为 false）。
+  ///
+  /// 页面用同一个判据决定是否显示「重新检查连接」，不在 UI 复刻策略。
+  bool get canCheckNow => _scheduler?.canRunAutomatically ?? false;
 
   /// 打开同步页时检查连接状态：经调度器（省电 / 蜂窝暂停 / 同步关闭时不跑）。
   ///
@@ -537,6 +537,9 @@ class SyncProvider extends ChangeNotifier {
       } catch (e) {
         debugPrint('[Molia] 授权后启动局域网传输失败: $e');
       }
+      // 这里不单独排 check 轮：onAppResumed 随后调用 onAppVisible()，resume
+      // 轮会覆盖这次启用；再排一个 check 会和它争 `_roundRunning`，并丢掉
+      // 零对端时 resume 轮 arm 的重连阶梯。
     }
     notifyListeners();
   }

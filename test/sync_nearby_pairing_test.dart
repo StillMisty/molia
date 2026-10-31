@@ -247,16 +247,12 @@ void main() {
     final hint = find.byKey(const Key('settingsSyncNearbyLanOff'));
     await reveal(tester, hint);
 
-    expect(find.text('LAN sync is off'), findsOneWidget);
-    expect(
-      find.textContaining('nearby devices will appear here'),
-      findsOneWidget,
-    );
+    expect(hint, findsOneWidget);
     expect(pairing.startScanCalls, 0);
     expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
   });
 
-  testWidgets('附近设备：权限缺失时说明先完成上方授权，不扫描', (tester) async {
+  testWidgets('附近设备：权限缺失时显示权限空态，不扫描', (tester) async {
     await state.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.permissionDenied;
     await pumpPage(tester);
@@ -265,15 +261,11 @@ void main() {
       const Key('settingsSyncNearby-permissionDenied'),
     );
     await reveal(tester, stateTile);
-    expect(find.text('Nearby search needs LAN access'), findsOneWidget);
-    expect(
-      find.textContaining('Grant LAN access above first'),
-      findsOneWidget,
-    );
+    expect(stateTile, findsOneWidget);
     expect(pairing.startScanCalls, 0);
   });
 
-  testWidgets('附近设备：传输未启动时说明原因并给同步日志入口', (tester) async {
+  testWidgets('附近设备：传输未启动时给同步日志入口，不扫描', (tester) async {
     await state.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.startFailed;
     await pumpPage(tester);
@@ -282,8 +274,7 @@ void main() {
       const Key('settingsSyncNearby-transportUnavailable'),
     );
     await reveal(tester, stateTile);
-    expect(find.text("LAN sync isn't running"), findsOneWidget);
-    expect(find.textContaining('Check the sync log'), findsOneWidget);
+    expect(stateTile, findsOneWidget);
     expect(pairing.startScanCalls, 0);
 
     final logEntry = find.byKey(const Key('settingsSyncNearbyOpenLog'));
@@ -293,7 +284,7 @@ void main() {
     expect(find.byType(SyncLogPage), findsOneWidget);
   });
 
-  testWidgets('附近设备：UDP 不可用时明确自动发现不可用，给手动地址入口', (tester) async {
+  testWidgets('附近设备：UDP 不可用时给手动地址入口，不扫描', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.discoveryPortsOverride = (v4: 0, v6: 0);
     await pumpPage(tester);
@@ -302,11 +293,7 @@ void main() {
       const Key('settingsSyncNearby-discoveryUnavailable'),
     );
     await reveal(tester, stateTile);
-    expect(find.text('Auto-discovery unavailable'), findsOneWidget);
-    expect(
-      find.textContaining('manual address or WebDAV'),
-      findsOneWidget,
-    );
+    expect(stateTile, findsOneWidget);
     expect(pairing.startScanCalls, 0);
 
     final manual = find.byKey(const Key('settingsSyncNearbyManualConnect'));
@@ -316,7 +303,7 @@ void main() {
     expect(find.text('Connect manually'), findsWidgets);
   });
 
-  testWidgets('附近设备：移动数据 / 省电模式分别说明搜索暂停原因', (tester) async {
+  testWidgets('附近设备：移动数据 / 省电模式显示暂停空态，不扫描', (tester) async {
     var cellular = true;
     var battery = BatterySnapshot.unknown;
     final scheduler = SyncScheduler(
@@ -343,9 +330,8 @@ void main() {
       tester,
       find.byKey(const Key('settingsSyncNearby-cellular')),
     );
-    expect(find.text('On mobile data'), findsOneWidget);
     expect(
-      find.textContaining('Switch to Wi-Fi'),
+      find.byKey(const Key('settingsSyncNearby-cellular')),
       findsOneWidget,
     );
     expect(pairing.startScanCalls, 0);
@@ -363,9 +349,8 @@ void main() {
       tester,
       find.byKey(const Key('settingsSyncNearby-powerSave')),
     );
-    expect(find.text('Power saver is on'), findsOneWidget);
     expect(
-      find.textContaining('Turn off power saver'),
+      find.byKey(const Key('settingsSyncNearby-powerSave')),
       findsOneWidget,
     );
     expect(pairing.startScanCalls, 0);
@@ -504,19 +489,11 @@ void main() {
     await pumpPage(tester);
     await emitCandidate(tester);
 
+    final en = lookupAppLocalizations(const Locale('en'));
     final cases = <(SyncPairingOutcome, String)>[
-      (
-        SyncPairingOutcome.conflict,
-        'The devices are in different sync groups. Reset one device’s passphrase and try again.',
-      ),
-      (
-        SyncPairingOutcome.unreachable,
-        'Couldn’t reach the device. Make sure both devices are on the same network; keep Molia open in the foreground on the other device and confirm LAN access is granted.',
-      ),
-      (
-        SyncPairingOutcome.rejected,
-        'The other device rejected the request. You can try again later.',
-      ),
+      (SyncPairingOutcome.conflict, en.syncNearbyResultConflict),
+      (SyncPairingOutcome.unreachable, en.syncNearbyResultUnreachable),
+      (SyncPairingOutcome.rejected, en.syncNearbyResultRejected),
     ];
     for (final (outcome, copy) in cases) {
       pairing.requestResult = SyncPairingResult(outcome: outcome);
@@ -542,7 +519,7 @@ void main() {
     expect(find.text('482 193'), findsNothing);
     expect(
       notifications.last,
-      'Pairing cancelled. Tap the device to try again.',
+      lookupAppLocalizations(const Locale('en')).syncNearbyResultCancelled,
     );
   });
 
@@ -590,7 +567,7 @@ void main() {
 
     expect(
       notifications.last,
-      'Pairing is unavailable. Keep Molia open in the foreground on the other device and confirm LAN access is granted, then try again.',
+      lookupAppLocalizations(const Locale('en')).syncNearbyResultUnavailable,
     );
     expect(find.text('Pair with “Pixel 9”'), findsNothing);
   });

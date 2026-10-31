@@ -209,10 +209,15 @@ void main() {
     expect(built.transport.pullCount, 0);
     expect(built.provider.webdav.isConfigured, isTrue);
 
-    // 启用但配置为空：仍不触发（没有可跑的地址）。
-    await built.control.setTransportEnabled(SyncTransportKind.webdav, true);
+    // 关闭状态下清空配置，再打开 WebDAV：未配置不触发（避免配置弹层打开前
+    // 先跑一轮必然 not_configured 的检查）。
     await built.provider.saveWebdavConfig(const WebDavConfig(), 'secret');
+    await built.provider.setTransportEnabled(SyncTransportKind.webdav, true);
     await Future<void>.delayed(const Duration(milliseconds: 30));
+    expect(
+      built.provider.enabledTransports,
+      contains(SyncTransportKind.webdav),
+    );
     expect(built.transport.pullCount, 0);
 
     // 启用且已配置：保存后立即跑一次 check 轮。

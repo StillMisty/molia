@@ -2848,7 +2848,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyEmptyHint => '让对方打开 Molia 并开启局域网同步';
 
   @override
-  String get syncNearbyPermissionTitle => '附近搜索需要局域网权限';
+  String get syncNearbyPermissionTitle => '需要局域网权限';
 
   @override
   String get syncNearbyPermissionHint => '请先完成上方的局域网授权，再重新查找。';
@@ -2860,13 +2860,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyTransportDownHint => '请到同步日志查看原因后重试。';
 
   @override
-  String get syncNearbyOpenLog => '查看同步日志';
+  String get syncNearbyOpenLogHint => '查看最近失败原因';
 
   @override
   String get syncNearbyCellularTitle => '正在使用移动数据';
 
   @override
-  String get syncNearbyCellularHint => '移动数据下无法搜索附近设备，请切换到 Wi-Fi 后重试。';
+  String get syncNearbyCellularHint => '移动数据下无法搜索，请切换到 Wi-Fi。';
 
   @override
   String get syncNearbyPowerSaveTitle => '省电模式已开启';
@@ -2878,14 +2878,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyDiscoveryUnavailableTitle => '自动发现不可用';
 
   @override
-  String get syncNearbyDiscoveryUnavailableHint =>
-      '本机的自动发现没有启动，只能手动添加地址或改用 WebDAV。';
-
-  @override
-  String get syncNearbyPairingUnavailableTitle => '一键配对不可用';
-
-  @override
-  String get syncNearbyPairingUnavailableHint => '本机配对服务未就绪，请手动添加地址或改用 WebDAV。';
+  String get syncNearbyDiscoveryUnavailableHint => '请手动添加地址，或改用 WebDAV。';
 
   @override
   String get syncNearbyFooter =>
@@ -3042,7 +3035,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncRecheckConnections => '重新检查连接';
 
   @override
-  String get syncRecheckConnectionsHint => '按当前网络与电量状态立即检查一次';
+  String get syncRecheckConnectionsHint => '立即检查一次';
 
   @override
   String syncRoundSynced(String names) {

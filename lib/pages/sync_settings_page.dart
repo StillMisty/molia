@@ -311,14 +311,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   }
 
   /// 是否显示「重新检查连接」：名册非空、本轮报告存在且没有任何设备
-  /// connected；自动检查被省电 / 移动数据暂停策略挡住时不显示。
+  /// connected；调度器当前不允许自动检查时不显示。
   static bool _shouldOfferRecheck(SyncProvider provider) {
     if (provider.peers.isEmpty || provider.syncing) return false;
-    if (provider.powerSaveActive) return false;
-    if (provider.onCellular &&
-        provider.cellularPolicy == SyncCellularPolicy.pause) {
-      return false;
-    }
+    if (!provider.canCheckNow) return false;
     final report = provider.lastReport;
     if (report == null) return false;
     final now = provider.nowMs;
@@ -370,7 +366,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   ///
   /// 这里只展示「未配对」候选：已在名册里的设备由上面的设备卡负责状态，
   /// 同一台机器不能在两处出现两种说法。不可用时按本机原因分层（权限 /
-  /// 传输 / 移动数据 / 省电 / UDP），不再统一说成「让对方打开 Molia」。
+  /// 传输 / 移动数据 / 省电 / UDP），分别说明原因与下一步。
   Widget _nearbySection(
     BuildContext context,
     SyncProvider provider,
@@ -382,7 +378,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       footer: SettingsSectionHint(text: l10n.syncNearbyFooter),
       children: [
         if (availability != SyncNearbyAvailability.available)
-          ..._nearbyUnavailableRows(context, provider, l10n, availability)
+          _nearbyUnavailableRow(context, provider, l10n, availability)
         else
           StreamBuilder<List<SyncNearbyDevice>>(
             stream: provider.nearbyDevices,
@@ -451,49 +447,46 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   ///
   /// 「手动连接」直接打开发起方弹层：自动发现不可用时这是唯一能继续配对的
   /// 入口，和高级设置里的地址簿写的是同一份状态。
-  List<Widget> _nearbyUnavailableRows(
+  Widget _nearbyUnavailableRow(
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
     SyncNearbyAvailability availability,
   ) {
     final copy = syncNearbyAvailabilityCopy(l10n, availability);
-    if (copy == null) return const [];
-    return [
-      SettingsRows(
-        children: [
-          SettingsInfoTile(
-            key: Key(
-              availability == SyncNearbyAvailability.lanOff
-                  ? 'settingsSyncNearbyLanOff'
-                  : 'settingsSyncNearby-${availability.name}',
-            ),
-            icon: copy.icon,
-            title: copy.title,
-            subtitle: copy.subtitle,
+    if (copy == null) return const SizedBox.shrink();
+    return SettingsRows(
+      children: [
+        SettingsInfoTile(
+          key: Key(
+            availability == SyncNearbyAvailability.lanOff
+                ? 'settingsSyncNearbyLanOff'
+                : 'settingsSyncNearby-${availability.name}',
           ),
-          if (availability == SyncNearbyAvailability.transportUnavailable)
-            SettingsNavTile(
-              key: const Key('settingsSyncNearbyOpenLog'),
-              icon: Icons.receipt_long_rounded,
-              title: l10n.syncNearbyOpenLog,
-              subtitle: l10n.syncLogTitle,
-              onTap: () => openSettingsSubPage(context, const SyncLogPage()),
+          icon: copy.icon,
+          title: copy.title,
+          subtitle: copy.subtitle,
+        ),
+        if (availability == SyncNearbyAvailability.transportUnavailable)
+          SettingsNavTile(
+            key: const Key('settingsSyncNearbyOpenLog'),
+            icon: Icons.receipt_long_rounded,
+            title: l10n.syncLogTitle,
+            subtitle: l10n.syncNearbyOpenLogHint,
+            onTap: () => openSettingsSubPage(context, const SyncLogPage()),
+          ),
+        if (availability == SyncNearbyAvailability.discoveryUnavailable)
+          SettingsNavTile(
+            key: const Key('settingsSyncNearbyManualConnect'),
+            icon: Icons.link_rounded,
+            title: l10n.syncManualConnect,
+            subtitle: l10n.syncManualConnectSubtitle,
+            onTap: () => unawaited(
+              showSyncManualPeerDialog(context, provider, l10n),
             ),
-          if (availability == SyncNearbyAvailability.discoveryUnavailable ||
-              availability == SyncNearbyAvailability.pairingUnavailable)
-            SettingsNavTile(
-              key: const Key('settingsSyncNearbyManualConnect'),
-              icon: Icons.link_rounded,
-              title: l10n.syncManualConnect,
-              subtitle: l10n.syncManualConnectSubtitle,
-              onTap: () => unawaited(
-                showSyncManualPeerDialog(context, provider, l10n),
-              ),
-            ),
-        ],
-      ),
-    ];
+          ),
+      ],
+    );
   }
 
   static String _nearbyDeviceName(SyncNearbyDevice device) {

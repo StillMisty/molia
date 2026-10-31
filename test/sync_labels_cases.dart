@@ -155,33 +155,28 @@ void main() {
     SyncNearbyAvailability resolve({
       bool lanEnabled = true,
       bool permissionDenied = false,
-      bool transportRunning = true,
       bool transportUnavailable = false,
       bool discoveryAvailable = true,
-      bool pairingAvailable = true,
       bool onCellular = false,
       bool powerSaveActive = false,
     }) =>
         resolveSyncNearbyAvailability(
           lanEnabled: lanEnabled,
           permissionDenied: permissionDenied,
-          transportRunning: transportRunning,
           transportUnavailable: transportUnavailable,
           discoveryAvailable: discoveryAvailable,
-          pairingAvailable: pairingAvailable,
           onCellular: onCellular,
           powerSaveActive: powerSaveActive,
         );
 
-    // 本机未就绪 > 策略暂停 > 能力降级 > 可用。
+    // 开关关闭只说「未开启」，不展开权限等后续原因。
     expect(
-      resolve(permissionDenied: true, lanEnabled: false),
-      SyncNearbyAvailability.permissionDenied,
+      resolve(lanEnabled: false, permissionDenied: true),
+      SyncNearbyAvailability.lanOff,
     );
-    expect(resolve(lanEnabled: false), SyncNearbyAvailability.lanOff);
     expect(
-      resolve(transportRunning: false),
-      SyncNearbyAvailability.transportUnavailable,
+      resolve(permissionDenied: true),
+      SyncNearbyAvailability.permissionDenied,
     );
     expect(
       resolve(transportUnavailable: true),
@@ -198,12 +193,8 @@ void main() {
       SyncNearbyAvailability.powerSave,
     );
     expect(
-      resolve(discoveryAvailable: false, pairingAvailable: false),
+      resolve(discoveryAvailable: false),
       SyncNearbyAvailability.discoveryUnavailable,
-    );
-    expect(
-      resolve(pairingAvailable: false),
-      SyncNearbyAvailability.pairingUnavailable,
     );
     expect(resolve(), SyncNearbyAvailability.available);
 
@@ -230,6 +221,12 @@ void main() {
       titles.addAll(localeTitles);
     }
     expect(titles, hasLength((SyncNearbyAvailability.values.length - 1) * 2));
+
+    // 文案长度按 copy_style §5 收口（只约束本轮调整过的条目）。
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    expect(zh.syncNearbyPermissionTitle.length, lessThanOrEqualTo(10));
+    expect(zh.syncNearbyCellularHint.length, lessThanOrEqualTo(24));
+    expect(zh.syncNearbyDiscoveryUnavailableHint.length, lessThanOrEqualTo(24));
   });
 
   test('syncIssue* / syncAction* 键在 zh 中齐全（en 为模板）', () {
