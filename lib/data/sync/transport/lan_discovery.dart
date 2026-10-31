@@ -479,8 +479,12 @@ class LanDiscovery {
   /// 串行化接口 socket 重建：换网事件可能连续到达，不能让两次绑定交错。
   Future<void> _interfaceSyncTail = Future<void>.value();
 
-  /// 已按接口加入 IPv6 组播的接口名（同一 socket 不重复 join）。
-  final Set<String> _ipv6JoinedInterfaces = {};
+  /// 串行化主 socket 重绑：connectivity 事件与 discover 可能同时触发。
+  Future<void> _udpRebindTail = Future<void>.value();
+
+  /// 主 socket 按接口加入组播的记账（按 socket identity 失效）。
+  final _MulticastJoinTracker _ipv4MulticastJoins = _MulticastJoinTracker();
+  final _MulticastJoinTracker _ipv6MulticastJoins = _MulticastJoinTracker();
 
   Uint8List? _key;
   bool _running = false;
@@ -489,7 +493,13 @@ class LanDiscovery {
   String _interfaceFingerprint = '';
   bool _interfaceScanned = false;
   int? _lastInterfaceScanAt;
+
+  /// 公告 `addrs` 候选（≤8 条，含 IPv6）。
   List<String> _ownAddresses = const [];
+
+  /// 全部可路由 IPv4 接口（不参与 `addrs` 的 8 条上限）：每个都要建发送
+  /// socket，不能因为 IPv6 混排或接口多而被截断。
+  List<String> _interfaceIpv4Addresses = const [];
   bool _broadcastUnavailable = false;
   int _broadcastCount = 0;
   final List<Timer> _burstTimers = [];
@@ -529,8 +539,9 @@ class LanDiscovery {
 
   /// 按接口 IPv4 socket 的本地端口（与 [debugInterfaceBindAddresses] 同序）。
   ///
-  /// 这些是系统临时端口，只用于接收该接口上的广播 / 组播；对外探测端口仍是
-  /// [discoveryPorts] 里的主 socket 端口。
+  /// 这些是系统临时端口：接口 socket 只负责从该接口发送广播 / 组播，并接收
+  /// 对端回给这个临时源端口的单播；47825 上的组播接收由主 wildcard socket
+  /// 按接口 join 承担。对外探测端口仍是 [discoveryPorts] 里的主 socket 端口。
   List<int> get debugInterfacePorts => List.unmodifiable([
         for (final entry in _interfaceSockets.values) entry.socket.port,
       ]);
@@ -546,6 +557,9 @@ class LanDiscovery {
   }) async {
     if (!_running || _hidden || _isCellularNow) return false;
     if (host == null || host.trim().isEmpty) {
+      // MSP 探测与 MSD 公告复用同一广播路径：多网卡下也从每个接口各发一份，
+      // 首次配对不必依赖默认路由。MSP 没有 nonce 去重，重复应答由
+      // LanPairingService 的候选缓存按 deviceId upsert，不产生额外状态。
       return _sendBroadcast(packet, trackAvailability: false);
     }
     return _sendTo(packet, host, port ?? _udpPort);
@@ -558,10 +572,11 @@ class LanDiscovery {
     _broadcastCount = 0;
     _broadcastUnavailable = false;
     await _ensureKey();
-    // 先枚举本机地址：接口 socket 需要 _ownAddresses 才能建。
+    // 先枚举本机地址：接口 socket 需要完整接口列表才能建。
     await _refreshNetwork(force: true);
     await _bindSockets(_udpPort, _udpPort);
     await _syncInterfaceSockets();
+    await _joinIpv4Interfaces();
     await _joinIpv6Interfaces();
     if (_udp4 == null && _udp6 == null) {
       _logger.warning('UDP 发现不可用（两族绑定均失败）：只剩手动地址直连');
@@ -573,16 +588,20 @@ class LanDiscovery {
     _running = false;
     _hidden = false;
     _cancelBurst();
-    // 等在途的接口重建结束：它会在收尾时看到 _running=false 并自行关闭；
-    // 之后再把剩余 socket 统一关掉，避免停服后还冒出新的监听。
+    // 先等在途重绑（它内部会等接口重建），再收接口、主 socket：停服后不能
+    // 再挂上新监听。
+    await _udpRebindTail;
     await _interfaceSyncTail;
     await _closeInterfaceSockets();
-    _ipv6JoinedInterfaces.clear();
+    await _closeMainSockets();
+    _ipv4MulticastJoins.reset();
+    _ipv6MulticastJoins.reset();
     _presence.clear();
     _nonces.clear();
     _rateLimiter.clear();
     _pairingRateLimiter.clear();
     _ownAddresses = const [];
+    _interfaceIpv4Addresses = const [];
     _interfaceFingerprint = '';
     _interfaceScanned = false;
     _lastInterfaceScanAt = null;
@@ -590,14 +609,6 @@ class LanDiscovery {
     _key = null;
     _broadcastCount = 0;
     _broadcastUnavailable = false;
-    await _sub4?.cancel();
-    _sub4 = null;
-    await _sub6?.cancel();
-    _sub6 = null;
-    _udp4?.close();
-    _udp4 = null;
-    _udp6?.close();
-    _udp6 = null;
   }
 
   /// 更新发现密钥（口令变化时由传输层传入；MAC 计算只在主 isolate）。
@@ -620,8 +631,10 @@ class LanDiscovery {
     if (rebind) {
       await _rebindUdp();
     } else {
-      // 没重绑主 socket 也要跟上接口上下线；IPv6 组播按接口补加入。
-      await _syncInterfaceSockets();
+      // 短隐藏也可能让旧接口 socket 半死：主 socket 按原逻辑不重绑，但接口
+      // socket 无条件重建；组播按接口重新加入（幂等）。
+      await _syncInterfaceSockets(rebuild: true);
+      await _joinIpv4Interfaces();
       await _joinIpv6Interfaces();
     }
     if (_hasSockets && !_isCellularNow) _scheduleBurst();
@@ -863,8 +876,9 @@ class LanDiscovery {
   }
 
   Future<void> _bindSockets(int v4Port, int v6Port) async {
-    // 新 v6 socket 需要重新按接口加入组播（同一 socket 不重复 join）。
-    _ipv6JoinedInterfaces.clear();
+    // 新 socket 需要重新按接口加入组播；旧记账立即失效。
+    _ipv4MulticastJoins.reset();
+    _ipv6MulticastJoins.reset();
     _udp4 = await _bindFamily(InternetAddress.anyIPv4, v4Port);
     _udp6 = await _bindFamily(InternetAddress.anyIPv6, v6Port);
     final v4 = _udp4;
@@ -920,9 +934,39 @@ class LanDiscovery {
     return null;
   }
 
-  Future<void> _rebindUdp() async {
+  /// 重绑主 socket；并发调用排队执行，避免两次 `_bindSockets` 交错覆盖
+  /// `_udp4/_udp6` 并泄漏旧订阅。
+  Future<void> _rebindUdp() {
+    final next = _udpRebindTail.then((_) => _rebindUdpNow());
+    _udpRebindTail = next.catchError((Object e) {
+      _logger.warning('UDP 主 socket 重绑失败（保留现有发现能力）', e);
+    });
+    return _udpRebindTail;
+  }
+
+  Future<void> _rebindUdpNow() async {
+    if (!_running) return;
     final v4Port = _udp4?.port ?? 0;
     final v6Port = _udp6?.port ?? 0;
+    await _closeMainSockets();
+    if (!_running) return;
+    await _bindSockets(
+      v4Port > 0 ? v4Port : _udpPort,
+      v6Port > 0 ? v6Port : _udpPort,
+    );
+    if (!_running) {
+      // stop 在 bind 期间到达：不要留下 main socket 的订阅。
+      await _closeMainSockets();
+      return;
+    }
+    // Wi-Fi 重连可能 IP 不变但旧接口 socket 已死：主 socket 重绑后一并重建。
+    await _syncInterfaceSockets(rebuild: true);
+    if (!_running) return;
+    await _joinIpv4Interfaces();
+    await _joinIpv6Interfaces();
+  }
+
+  Future<void> _closeMainSockets() async {
     await _sub4?.cancel();
     _sub4 = null;
     await _sub6?.cancel();
@@ -931,17 +975,10 @@ class LanDiscovery {
     _udp4 = null;
     _udp6?.close();
     _udp6 = null;
-    await _bindSockets(
-      v4Port > 0 ? v4Port : _udpPort,
-      v6Port > 0 ? v6Port : _udpPort,
-    );
-    // Wi-Fi 重连可能 IP 不变但旧接口 socket 已死：主 socket 重绑后一并重建。
-    await _syncInterfaceSockets(rebuild: true);
-    await _joinIpv6Interfaces();
   }
 
-  /// 按 [_ownAddresses] 重建接口 socket；调用串行化，地址连续变化时不会
-  /// 出现两次绑定交错。
+  /// 按 [_interfaceIpv4Addresses] 重建接口 socket；调用串行化，地址连续
+  /// 变化时不会出现两次绑定交错。
   Future<void> _syncInterfaceSockets({bool rebuild = false}) {
     final next = _interfaceSyncTail.then((_) async {
       if (!_running) {
@@ -959,13 +996,8 @@ class LanDiscovery {
 
   Future<void> _reconcileInterfaceSockets() async {
     if (!_running) return;
-    final desired = <String>[];
-    for (final host in _ownAddresses) {
-      final address = InternetAddress.tryParse(host);
-      if (address == null || address.type != InternetAddressType.IPv4) continue;
-      if (!isRoutablePeerAddress(address.address)) continue;
-      desired.add(address.address);
-    }
+    // 用完整列表而不是公告用的 `_ownAddresses`（后者被 8 条上限截断）。
+    final desired = _interfaceIpv4Addresses;
     for (final host in [
       for (final host in _interfaceSockets.keys)
         if (!desired.contains(host)) host,
@@ -1003,10 +1035,11 @@ class LanDiscovery {
     try {
       socket.broadcastEnabled = true;
       socket.multicastHops = 1;
-      socket.joinMulticast(InternetAddress(Msd1.ipv4MulticastHost));
+      // 不在这里 join 组播：本 socket 绑的是临时端口，join 只服务该端口，
+      // 收不到发往 47825 的公告。47825 的组播接收由主 socket 按接口 join。
     } catch (e) {
-      // 该接口没有组播路由 / 权限：广播与单播仍可用，只降级组播接收。
-      _logger.warning('接口 $host 组播启用失败（保留广播与单播）', e);
+      // 该接口没有广播 / 组播发送权限：跳过发送能力，单播回包仍可用。
+      _logger.warning('接口 $host 广播能力启用失败（保留单播回包）', e);
     }
     final subscription = socket.listen(
       (event) => _onDatagram(socket, event),
@@ -1030,34 +1063,92 @@ class LanDiscovery {
     }
   }
 
+  /// IPv4 组播接收：主 wildcard socket 按接口加入 `224.0.0.169`。
+  ///
+  /// 接口 socket 的临时端口只接收单播回包，不承担 47825 的组播接收。
+  Future<void> _joinIpv4Interfaces() => _joinMulticastByInterface(
+        socket: _udp4,
+        currentSocket: () => _udp4,
+        type: InternetAddressType.IPv4,
+        groupHost: Msd1.ipv4MulticastHost,
+        tracker: _ipv4MulticastJoins,
+        label: 'IPv4',
+      );
+
   /// IPv6 组播接收按接口加入：发送侧仍只走主 v6 socket 的系统默认路由
   /// （Dart 没有跨平台的 `IPV6_MULTICAST_IF`），失败只影响该接口接收。
-  Future<void> _joinIpv6Interfaces() async {
-    final socket = _udp6;
-    if (socket == null) return;
+  Future<void> _joinIpv6Interfaces() => _joinMulticastByInterface(
+        socket: _udp6,
+        currentSocket: () => _udp6,
+        type: InternetAddressType.IPv6,
+        groupHost: Msd1.ipv6MulticastHost,
+        tracker: _ipv6MulticastJoins,
+        label: 'IPv6',
+      );
+
+  /// 主 wildcard socket 按接口 join 组播。join 与归属都绑定 socket identity：
+  /// 重绑后的旧调用不能把接口名写进新 socket 的记账。
+  Future<void> _joinMulticastByInterface({
+    required RawDatagramSocket? socket,
+    required RawDatagramSocket? Function() currentSocket,
+    required InternetAddressType type,
+    required String groupHost,
+    required _MulticastJoinTracker tracker,
+    required String label,
+  }) async {
+    if (socket == null) {
+      tracker.reset();
+      return;
+    }
     List<NetworkInterface> interfaces;
     try {
       interfaces = await NetworkInterface.list(
         includeLoopback: false,
-        type: InternetAddressType.IPv6,
+        type: type,
       );
     } catch (e) {
-      _logger.fine('枚举 IPv6 接口失败（组播接收仅走默认接口）', e);
+      _logger.fine('枚举 $label 接口失败（组播接收仅走默认接口）', e);
       return;
     }
-    if (!_running || !identical(_udp6, socket)) return;
-    for (final interface in interfaces) {
-      if (_ipv6JoinedInterfaces.contains(interface.name)) continue;
-      try {
-        socket.joinMulticast(
-          InternetAddress(Msd1.ipv6MulticastHost),
-          interface,
-        );
-        _ipv6JoinedInterfaces.add(interface.name);
-      } catch (e) {
-        _logger.fine('IPv6 组播加入 ${interface.name} 失败（仅影响该接口接收）', e);
-      }
+    if (!_running || !identical(currentSocket(), socket)) return;
+    if (!identical(tracker.socket, socket)) {
+      tracker.reset();
+      tracker.socket = socket;
     }
+    // 接口消失后剪掉记账：同名接口重新出现时能重新 join。
+    final present = {for (final interface in interfaces) interface.name};
+    tracker.interfaces.removeWhere((name) => !present.contains(name));
+    for (final interface in interfaces) {
+      if (tracker.interfaces.contains(interface.name)) continue;
+      try {
+        socket.joinMulticast(InternetAddress(groupHost), interface);
+      } catch (e) {
+        // 主 socket 绑定时已按「无指定接口」join 过一次，默认接口重复
+        // join 会报 EADDRINUSE；这表示该接口已经收得到组播，按已加入记账。
+        if (!_isAlreadyJoined(e)) {
+          // 加组失败只影响该接口的组播接收，广播发送仍保留。
+          _logger.fine('$label 组播加入 ${interface.name} 失败（仅影响该接口接收）', e);
+          continue;
+        }
+      }
+      // join 期间可能已经重绑：旧 socket 的接口名不能写进新记账。
+      if (!_running || !identical(currentSocket(), socket)) return;
+      if (!identical(tracker.socket, socket)) return;
+      tracker.interfaces.add(interface.name);
+    }
+  }
+
+  /// 同一 socket 重复加入同一接口组播：Linux 98 / macOS 48 / Windows 10048。
+  static bool _isAlreadyJoined(Object error) {
+    final int? code;
+    if (error is SocketException) {
+      code = error.osError?.errorCode;
+    } else if (error is OSError) {
+      code = error.errorCode;
+    } else {
+      code = null;
+    }
+    return code == 98 || code == 48 || code == 10048;
   }
 
   void _onDatagram(RawDatagramSocket socket, RawSocketEvent event) {
@@ -1157,12 +1248,14 @@ class LanDiscovery {
     _lastInterfaceScanAt = now;
     late final String fingerprint;
     late final List<String> addresses;
+    late final List<String> interfaceIpv4Addresses;
     try {
       final provider = _localAddressesProvider;
       if (provider != null) {
         final raw = await provider();
         fingerprint = (raw.map(normalizePeerHost).toList()..sort()).join('|');
         addresses = _limitAddresses(raw);
+        interfaceIpv4Addresses = _routableIpv4Addresses(raw);
       } else {
         final interfaces = await NetworkInterface.list(
           includeLoopback: false,
@@ -1180,6 +1273,7 @@ class LanDiscovery {
         parts.sort();
         fingerprint = parts.join('|');
         addresses = _limitAddresses(hosts);
+        interfaceIpv4Addresses = _routableIpv4Addresses(hosts);
       }
     } catch (e) {
       _logger.fine('枚举本机地址失败（公告将不带地址候选）', e);
@@ -1193,6 +1287,8 @@ class LanDiscovery {
     _interfaceScanned = true;
     _interfaceFingerprint = fingerprint;
     _ownAddresses = addresses;
+    // 接口 socket 不参与 `addrs` 的 8 条上限：IPv6 混排 / 接口多时也不能漏。
+    _interfaceIpv4Addresses = interfaceIpv4Addresses;
     if (firstScan) {
       _networkEpoch = 1;
     } else if (changed) {
@@ -1210,6 +1306,20 @@ class LanDiscovery {
       if (hosts.contains(host)) continue;
       hosts.add(host);
       if (hosts.length >= Msd1.maxAddresses) break;
+    }
+    return hosts;
+  }
+
+  /// 完整可路由 IPv4 接口列表（去重，不受公告 8 条上限约束）。
+  static List<String> _routableIpv4Addresses(Iterable<String> addresses) {
+    final hosts = <String>[];
+    for (final raw in addresses) {
+      final host = normalizePeerHost(raw);
+      if (!isRoutablePeerAddress(host)) continue;
+      final address = InternetAddress.tryParse(host);
+      if (address == null || address.type != InternetAddressType.IPv4) continue;
+      if (hosts.contains(host)) continue;
+      hosts.add(host);
     }
     return hosts;
   }
@@ -1248,5 +1358,16 @@ class _InterfaceSocket {
   Future<void> close() async {
     await subscription.cancel();
     socket.close();
+  }
+}
+
+/// 主 socket 的按接口组播加入记账；socket 一变整份作废。
+class _MulticastJoinTracker {
+  RawDatagramSocket? socket;
+  final Set<String> interfaces = {};
+
+  void reset() {
+    socket = null;
+    interfaces.clear();
   }
 }
