@@ -25,8 +25,8 @@ class LyricsSourceStrategy {
 
   /// 渠道 key（tx / wy / kg / kw / mg / bili / lrclib）。
   ///
-  /// 用于换源页「同源置顶」与分组排序；与 [LyricProvider.name] 可能不同
-  /// （QQ 的 channelKey 是 `tx`、provider 名是 `qq`），所以两者分开存。
+  /// 用于渠道管理排序、启用开关与分组筛选；与 [LyricProvider.name] 可能
+  /// 不同（QQ 的 channelKey 是 `tx`、provider 名是 `qq`），所以两者分开存。
   final String channelKey;
 
   /// 实际取词实现。

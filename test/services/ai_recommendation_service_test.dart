@@ -131,6 +131,11 @@ class _FakeRegistry implements SourceRegistry {
   };
 
   @override
+  List<String> get orderedChannelKeys => [
+    for (final entry in _entries) entry.source.key,
+  ];
+
+  @override
   MusicSource? forTrack(Track track) => byKey(track.id.sourceKey);
 
   @override

@@ -132,24 +132,6 @@ void main() {
       session.clear();
       expect(bili.unavailable!(), LyricsSourceUnavailable.biliLoginRequired);
     });
-
-    test('manualSources：同源置顶，其余保持声明顺序', () {
-      final registry = LyricsSourceRegistry.standard;
-      final declared = registry.strategies.map((s) => s.channelKey).toList();
-
-      expect(registry.manualSources().map((s) => s.channelKey), declared);
-      expect(
-        registry.manualSources(preferredKey: 'bili').map((s) => s.channelKey),
-        ['bili', ...declared.where((key) => key != 'bili')],
-      );
-      expect(
-        registry
-            .manualSources(preferredKey: 'not-a-source')
-            .map((s) => s.channelKey),
-        declared,
-        reason: '未知源不应改变顺序',
-      );
-    });
   });
 
   group('builtin lyric provider', () {

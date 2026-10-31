@@ -37,6 +37,28 @@ void main() {
     expect(registry.byKey('kw'), same(source));
   });
 
+  test('orderedChannelKeys：全部渠道按渠道管理顺序（含不可搜索项）', () async {
+    final manager = SourceManager(settings: testSettingsRegistry());
+    await manager.init();
+    final registry = SourceRegistryImpl(manager);
+    addTearDown(() {
+      registry.dispose();
+      manager.dispose();
+    });
+
+    expect(registry.orderedChannelKeys, [
+      for (final profile in manager.sourceProfiles.channels) profile.key,
+    ]);
+    expect(
+      registry.orderedChannelKeys,
+      containsAll(['bili', 'tx', 'wy', 'kg', 'kw', 'mg']),
+      reason: '不可搜索的音乐平台仍保留在渠道顺序里',
+    );
+
+    await registry.setOrder(['tx', 'bili']);
+    expect(registry.orderedChannelKeys.take(2), ['tx', 'bili']);
+  });
+
   test('descriptors：由 sourceProfiles 快照映射（key/名称/kind/order/能力）', () async {
     final manager = SourceManager(settings: testSettingsRegistry());
     await manager.init();

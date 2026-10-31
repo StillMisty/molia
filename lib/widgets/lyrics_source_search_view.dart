@@ -11,6 +11,7 @@ import '../providers/lyrics_source_search_session.dart';
 import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import '../services/notification_service.dart';
+import '../theme/m3e_context.dart';
 import '../utils/lyrics_provider_label.dart';
 import 'detail_page/detail_page_chrome.dart';
 import 'source_swap/source_swap_chrome.dart';
@@ -22,18 +23,20 @@ export '../providers/lyrics_source_search_session.dart'
 
 /// 歌词换源视图：搜索栏 + 来源筛选 + 分组结果 + 底部确认。
 ///
-/// 作为「换源」页的歌词 tab 使用（宿主页负责标题与 tab 切换）。点结果只
-/// 切换选中态，底部「使用此歌词」才取词并写缓存；成功经
+/// 作为「换源」页的歌词 tab 使用（宿主页负责标题与 tab 切换）。点结果
+/// 切换选中态并拉取前几行预览，底部「使用此歌词」才写缓存；成功经
 /// `Navigator.pop(LyricsSearchSelection)` 返回给宿主页的调用方。
 /// 搜索 / 竞态 / 写缓存在 [LyricsSourceSearchSession]，本文件只负责渲染、
 /// 焦点、提示与导航。PageView 切走会销毁离屏页，因此保持存活以保住结果。
 class LyricsSourceSearchView extends StatefulWidget {
   final String initialTrackTitle;
   final String initialArtistName;
-  final String trackId; // 保存手动选择的歌词时用
 
-  /// 当前曲目的平台 key（kw/kg/tx/wy/mg/bili）：同源来源的分组置顶。
-  final String? preferredSourceKey;
+  /// 种子曲目的专辑 / 时长：只参与最佳匹配，不直接展示。
+  final String? initialAlbum;
+  final Duration? initialDuration;
+
+  final String trackId; // 保存手动选择的歌词时用
 
   /// 歌词会话模块：手动选择结果经它写缓存并更新展示状态。
   final LyricsProvider lyricsProvider;
@@ -42,7 +45,7 @@ class LyricsSourceSearchView extends StatefulWidget {
   /// （B 站可用性绑定 `BiliSession.shared`，与生产账号服务同一份）。
   final List<LyricsSourceStrategy>? sources;
 
-  /// 可搜索渠道描述符：来源标签回退脚本显示名（不参与搜索）。
+  /// 渠道描述符：只用于来源标签查找显示名，不参与排序。
   ///
   /// 非搜索 / 已停用脚本不在其中时 `lyricsProviderLabel` 回退源 key。
   final List<SourceDescriptor> sourceDescriptors;
@@ -53,20 +56,23 @@ class LyricsSourceSearchView extends StatefulWidget {
   /// 五个音乐平台在没有 LX 脚本时不可搜索，但歌词来源仍然可用。
   final Set<String>? enabledChannelKeys;
 
-  /// 进入时是否自动聚焦搜索框（默认 tab 为歌词时聚焦，否则不抢焦点）。
-  final bool autofocusSearch;
+  /// 渠道管理里的全部渠道顺序（含停用 / 不可搜索项）。
+  ///
+  /// 会话据此排列歌词来源；null / 空表 = 保持来源声明顺序。
+  final List<String>? channelOrder;
 
   const LyricsSourceSearchView({
     super.key,
     required this.initialTrackTitle,
     required this.initialArtistName,
+    this.initialAlbum,
+    this.initialDuration,
     required this.trackId,
     required this.lyricsProvider,
-    this.preferredSourceKey,
     this.sources,
     this.sourceDescriptors = const [],
     this.enabledChannelKeys,
-    this.autofocusSearch = true,
+    this.channelOrder,
   });
 
   @override
@@ -93,36 +99,34 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
       listen: false,
     );
 
-    // 来源与顺序全部取自注册表（缺省时）：同源渠道置顶、其余按渠道声明
-    // 顺序；B 站等只有手动换源的来源也在其中（是否可用在搜索时判定）。
+    // 来源取自注册表（缺省时）；B 站等只有手动换源的来源也在其中
+    // （是否可用在搜索时判定）。顺序由 channelOrder 决定。
     final allStrategies =
-        widget.sources ??
-        LyricsSourceRegistry.standard.manualSources(
-          preferredKey: widget.preferredSourceKey,
-        );
+        widget.sources ?? LyricsSourceRegistry.standard.strategies;
 
     _session = LyricsSourceSearchSession(
       strategies: allStrategies,
       enabledChannelKeys: widget.enabledChannelKeys,
+      channelOrder: widget.channelOrder,
       lyricsProvider: widget.lyricsProvider,
       trackId: widget.trackId,
       trackTitle: widget.initialTrackTitle,
       trackArtist: widget.initialArtistName,
+      trackAlbum: widget.initialAlbum,
+      trackDuration: widget.initialDuration,
     )..addListener(_onSessionChanged);
 
     final initialQuery =
         '${widget.initialTrackTitle} ${widget.initialArtistName}'.trim();
     _searchController.text = initialQuery;
+    // 与音频 tab 一致：只把光标放到末尾，不聚焦、不全选，避免进入页面就
+    // 抢键盘 / 把预填关键词整段高亮成误触。搜索仍在首帧后自动发起。
+    _searchController.selection = TextSelection.collapsed(
+      offset: initialQuery.length,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       unawaited(_runSearch(initialQuery));
-      if (!widget.autofocusSearch) return;
-      FocusScope.of(context).requestFocus(_searchFocusNode);
-      // 选择全部文本方便替换
-      _searchController.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: _searchController.text.length,
-      );
     });
   }
 
@@ -147,7 +151,9 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
   }
 
   Future<void> _confirmSelected() async {
-    if (_session.isFetchingLyric) return;
+    // 选中项切到别的来源后不可见：按钮已禁用，这里再兜一层，避免程序化
+    // 回调把用户看不见的候选写进缓存。
+    if (_session.isFetchingLyric || !_session.isSelectedVisible) return;
 
     // 在异步调用前捕获 Navigator / 文案：await 之后只用它们提示与 pop。
     final navigator = Navigator.of(context);
@@ -181,17 +187,15 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     final strategies = _session.strategies;
     final isLoading = _session.isAnyProviderLoading;
     final failed = _session.failedStrategies;
-    final selected = _session.selected;
     final busy = _session.isFetchingLyric;
     final hasStrategies = strategies.isNotEmpty;
     final hasQuery = _session.query.isNotEmpty;
     final entries = _session.entries;
-    // 空态只留空态 + 下一步；已选中但切到空源时仍保留底栏，按钮还能确认。
-    final showFooter =
-        hasStrategies &&
-        hasQuery &&
-        (entries.any((entry) => entry.type == LyricsSearchEntryType.result) ||
-            selected != null);
+    final selectedVisible = _session.isSelectedVisible;
+    final preview = _session.preview;
+    // 底栏只在当前筛选下真有可见结果时出现；选中项切到别的来源后仍保留，
+    // 但不可见时确认按钮禁用、预览隐藏，切回来即恢复。
+    final showFooter = hasStrategies && hasQuery && _session.hasVisibleResults;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -258,11 +262,13 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
         if (isLoading && _session.allResults.isNotEmpty)
           const M3EProgressIndicator.linear(),
         Expanded(child: _buildBody(context, l10n, strategies, entries)),
+        if (selectedVisible && preview != null)
+          _buildPreviewPanel(context, l10n, preview),
         if (showFooter)
           SourceSwapActionBar(
             confirmLabel: l10n.sourceSwapLyricsConfirm,
             busy: busy,
-            onConfirm: selected == null ? null : _confirmSelected,
+            onConfirm: selectedVisible ? _confirmSelected : null,
           ),
       ],
     );
@@ -330,7 +336,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
         }
         final results = _session.resultsOf(result.provider.name);
         final resultIndex = results.indexOf(result);
-        final isBest = identical(_session.bestMatchOf(result.provider), result);
+        final visibleCount = _session.displayedCountOf(result.provider.name);
         return Padding(
           padding: EdgeInsets.only(bottom: gap),
           child: TrackRow(
@@ -340,12 +346,13 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
             model: TrackRowModel(
               title: result.match.title,
               artist: result.match.artist,
+              durationMs: result.match.duration?.inMilliseconds,
               placeholderIcon: Icons.lyrics_rounded,
               selected: _session.isSelected(result),
             ),
             surface: const TrackRowSurface(coverSize: 40),
-            position: calculateCardPosition(resultIndex, results.length),
-            trailing: isBest
+            position: calculateCardPosition(resultIndex, visibleCount),
+            trailing: _session.isBestMatch(result)
                 // 「最佳匹配」是静态徽章（不可点）：用 assist chip 的胶囊语言。
                 ? M3EChip(type: M3EChipType.assist, label: l10n.lyricsBestMatch)
                 : null,
@@ -359,11 +366,106 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     );
   }
 
+  /// 选中歌词预览：固定在列表与底栏之间，只在选中行当前可见时出现。
+  ///
+  /// 预览是「确认前看一眼」，不抢列表高度：卡片最多三行歌词，加载 / 空 /
+  /// 失败各有明确下一步（失败带重试）。
+  Widget _buildPreviewPanel(
+    BuildContext context,
+    AppLocalizations l10n,
+    LyricsPreview preview,
+  ) {
+    final scheme = Theme.of(context).colorScheme;
+    final type = context.typeScale;
+    final secondaryStyle = type.bodyMedium.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: M3ECard(
+        key: const Key('lyricsSourcePreview'),
+        variant: M3ECardVariant.filled,
+        elevation: 0,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.subject_rounded,
+                  size: 18,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.lyricsPreviewTitle,
+                  style: type.labelLarge.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            switch (preview.status) {
+              LyricsPreviewStatus.loading => Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: M3EProgressIndicator.circular(
+                      size: 16,
+                      strokeWidth: 2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(l10n.lyricsFetching, style: secondaryStyle),
+                ],
+              ),
+              LyricsPreviewStatus.ready => Text(
+                preview.lines.join('\n'),
+                maxLines: LyricsSourceSearchSession.previewLineLimit,
+                overflow: TextOverflow.ellipsis,
+                style: type.bodyMedium.copyWith(
+                  color: scheme.onSurface,
+                  height: 1.4,
+                ),
+              ),
+              LyricsPreviewStatus.empty => Text(
+                l10n.lyricsNotFoundForTrack,
+                style: secondaryStyle,
+              ),
+              LyricsPreviewStatus.failed => Row(
+                children: [
+                  Expanded(
+                    child: Text(l10n.lyricsFetchError, style: secondaryStyle),
+                  ),
+                  const SizedBox(width: 8),
+                  M3EIconButton(
+                    key: const Key('lyricsSourcePreviewRetry'),
+                    variant: M3EIconButtonVariant.standard,
+                    icon: const Icon(Icons.refresh_rounded),
+                    semanticLabel: l10n.retry,
+                    onPressed: _session.isFetchingLyric
+                        ? null
+                        : _session.retryPreview,
+                  ),
+                ],
+              ),
+            },
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(
     AppLocalizations l10n,
     LyricsSourceStrategy strategy,
   ) {
     final unavailable = _session.unavailableReasonOf(strategy);
+    final hasMore = _session.hasMoreOf(strategy);
     return SourceSwapSectionHeader(
       key: ValueKey<String>('lyricsSourceSection-${strategy.channelKey}'),
       label: lyricsProviderLabel(
@@ -376,6 +478,16 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
       hint: unavailable == null
           ? null
           : _unavailableInlineHint(l10n, unavailable),
+      trailing: hasMore
+          ? M3EButton.text(
+              key: ValueKey<String>('sourceSwapViewAll-${strategy.channelKey}'),
+              size: M3EButtonSize.xs,
+              onPressed: _session.isFetchingLyric
+                  ? null
+                  : () => _session.selectSource(strategy.channelKey),
+              child: Text(l10n.sourceSwapViewAll),
+            )
+          : null,
     );
   }
 

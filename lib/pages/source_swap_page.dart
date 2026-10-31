@@ -115,16 +115,17 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
     final artist = seed.artistLabel;
     final selectedIndex = _tabs.indexOf(_tab);
     final horizontalPadding = detailPageHorizontalPadding(context);
-    // 只读一次：来源标签不随搜索通知变化，页面不应因 provider 通知整页重建。
-    // 只用可搜索描述符；停用 / 非搜索脚本不在其中，标签回退源 key。
-    final sourceDescriptors = context
-        .read<SourceSwapProvider>()
-        .searchableSources;
+    // 只读一次：来源标签 / 渠道顺序不随搜索通知变化，页面不应因 provider
+    // 通知整页重建。标签只用可搜索描述符；停用 / 非搜索脚本不在其中，
+    // 标签回退源 key。
+    final swapProvider = context.read<SourceSwapProvider>();
+    final sourceDescriptors = swapProvider.searchableSources;
     // 歌词来源跟随渠道停用：取「已启用渠道」而不是「可搜索渠道」，
     // 五个音乐平台没有 LX 脚本时仍能用歌词来源。
-    final enabledChannelKeys = context
-        .read<SourceSwapProvider>()
-        .enabledChannelKeys;
+    final enabledChannelKeys = swapProvider.enabledChannelKeys;
+    // chips 顺序取渠道管理的全部渠道顺序：五个音乐平台即使当前不可搜索，
+    // 仍可能作为歌词来源出现，不能按 searchableSources 排到后面。
+    final channelOrder = swapProvider.orderedChannelKeys;
     // 曲目条副标题保留「歌手 · 当前来源」：换源对象是这首歌，来源名让
     // 用户确认正在从哪个渠道找回同一首。
     final sourceLabel = lyricsProviderLabel(
@@ -163,14 +164,14 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
                   LyricsSourceSearchView(
                     initialTrackTitle: seed.title,
                     initialArtistName: artist,
+                    initialAlbum: seed.album,
+                    initialDuration: seed.duration,
                     trackId: seed.id.uri,
                     lyricsProvider: widget.lyricsProvider,
-                    preferredSourceKey: seed.id.sourceKey,
                     sourceDescriptors: sourceDescriptors,
                     sources: widget.lyricsSources,
                     enabledChannelKeys: enabledChannelKeys,
-                    // 仅默认 tab 为歌词时自动聚焦：音频入口不抢键盘。
-                    autofocusSearch: widget.initialTab == SourceSwapTab.lyrics,
+                    channelOrder: channelOrder,
                   )
                 else
                   const SizedBox.shrink(),

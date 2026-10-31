@@ -622,6 +622,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsBestMatch => '最佳匹配';
 
   @override
+  String get lyricsPreviewTitle => '歌词预览';
+
+  @override
   String get playingFrom => '播放自';
 
   @override
