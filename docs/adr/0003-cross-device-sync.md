@@ -578,7 +578,8 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
 
 ### 已知限制
 
-1. **发现没有按网卡绑定 socket（v5 起 IPv4 已修正，本段保留 v3 历史口径）**：
+1. **发现没有按网卡绑定 socket（v5 起 IPv4 按接口发送 + 主 socket 按接口
+   join 接收，本段保留 v3 历史口径）**：
    `LanDiscovery` 用 v4 / v6 两个 wildcard `RawDatagramSocket` 发包，广播与
    组播的出口由系统路由表决定，没有像 LocalSend 那样为每个接口绑定 socket，
    也没有固定 `multicastInterface`。
@@ -715,8 +716,9 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
 
 ### 4. IPv4 按接口发现
 
-- 主 socket 仍是 v4 / v6 两个 wildcard `RawDatagramSocket`（固定探测端口、
-  负责 47825 上的接收）。v5 起为**完整**可路由 IPv4 接口列表（去重，不受
+- 主 socket 仍是 v4 / v6 两个 wildcard `RawDatagramSocket`（主探测端口：
+  标准 47825，绑定失败时为系统分配端口；负责该端口上的接收）。v5 起为
+  **完整**可路由 IPv4 接口列表（去重，不受
   公告 `addrs` 的 8 条上限影响）各绑定一个发送 socket：端口 0、
   `reuseAddress: true`、`broadcastEnabled = true`、`multicastHops = 1`，
   事件与主 socket 共用 `_onDatagram`。回环 / link-local / IPv6 不建接口
@@ -727,7 +729,8 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
   系统默认路由，不劣化 v3 / v4 的行为。
 - 接收：主 v4 socket 在 `_refreshNetwork` 后按
   `NetworkInterface.list(type: IPv4)` 逐接口
-  `joinMulticast(224.0.0.169, interface)`，这才承担 47825 上的组播接收。
+  `joinMulticast(224.0.0.169, interface)`，这才承担主 socket 实际端口
+  （标准 47825，绑定失败时为系统分配端口）上的组播接收。
   接口发送 socket 的临时端口只接收回给该源端口的单播，不 join 组播。单个
   接口加组失败只影响该接口的组播接收，该接口的广播发送仍保留；失败只记 fine
   日志，不影响主路径。
