@@ -37,6 +37,127 @@ class _LyricPageResult extends PagedResult<SourceTrack> {
   final Map<String, String> snippets;
 }
 
+/// 一类搜索的分页部分（与结果类型无关）：关键词、归一化失败、分页元数据。
+///
+/// provider 只通过这个接口读当前类型的状态：八个同名 getter 与 `loadMore`
+/// 的会话判定不再各写一份三向 switch；新增搜索类型时，分页 / 失败这部分
+/// 只需多一个会话实例，结果投影仍由 provider 按行形状决定。
+abstract interface class _SearchPaging {
+  /// 本会话最近一次搜索的关键词（取页回调读取；换词 / 清空时归零）。
+  String get keyword;
+
+  /// 归一化失败（UI 的唯一错误出口；成功页会清掉上一次加载更多失败）。
+  SourceFailure? get failure;
+
+  int get page;
+  int? get total;
+  bool get hasMore;
+  bool get isLoading;
+  bool get isLoadingMore;
+  bool get loadMoreFailed;
+
+  /// 开始新关键词：先作废旧会话（关键词、失败与在途页），再记下新关键词。
+  void begin(String keyword);
+
+  /// 清空会话：关键词与失败归 null，pager 状态复位并使在途页过期。
+  void reset();
+
+  /// 取首屏（调用方已 [begin]）。
+  Future<void> loadFirstPage();
+
+  /// 取下一页；失败按会话统一口径归一，由调用方决定是否重新投影。
+  Future<void> loadMore();
+
+  void dispose();
+}
+
+/// 一个搜索会话：分页控制器 + 关键词 + 归一化失败。
+///
+/// 结果投影不放进会话：单曲 / 歌手 / 歌词的行形状不同（`SearchRow` /
+/// `ArtistSummary` / 带片段的行），provider 仍按类型保留自己的结果字段；
+/// 会话只保证「这一类的关键词、页码、失败属于同一次搜索」，切类型不会串台。
+class _SearchSession<T> implements _SearchPaging {
+  /// [failureLogLabel] 只用于失败日志前缀（保留三类会话各自的可诊断文案）。
+  _SearchSession(this._pager, this._failureLogLabel);
+
+  final PagedListController<T> _pager;
+
+  /// 失败日志前缀：保留三类会话各自的可诊断文案。
+  final String _failureLogLabel;
+
+  @override
+  String keyword = '';
+
+  @override
+  SourceFailure? failure;
+
+  /// 已接受页累计后的条目（provider 做类型化投影时读取）。
+  ///
+  /// 失败时控制器仍保留已加载条目，但 provider 的失败分支不会用旧页覆盖
+  /// 已发布列表（错误条与旧结果并存）。
+  List<T> get items => _pager.items;
+
+  @override
+  int get page => _pager.page;
+
+  @override
+  int? get total => _pager.total;
+
+  @override
+  bool get hasMore => _pager.hasMore;
+
+  @override
+  bool get isLoading => _pager.isLoading;
+
+  @override
+  bool get isLoadingMore => _pager.isLoadingMore;
+
+  @override
+  bool get loadMoreFailed => _pager.loadMoreFailed;
+
+  @override
+  void begin(String keyword) {
+    reset();
+    this.keyword = keyword;
+  }
+
+  @override
+  void reset() {
+    keyword = '';
+    failure = null;
+    _pager.reset();
+  }
+
+  @override
+  Future<void> loadFirstPage() async {
+    await _pager.loadFirstPage();
+    _syncFailure();
+  }
+
+  @override
+  Future<void> loadMore() async {
+    await _pager.loadMore();
+    _syncFailure();
+  }
+
+  /// 失败归一化只在这一个出口：成功清失败，失败挂归一化对象。
+  ///
+  /// 结果投影的「失败保留旧行」由 provider 读取 [failure] 后决定；这里不
+  /// 碰投影，避免会话反过来知道三种行形状。
+  void _syncFailure() {
+    final error = _pager.error;
+    if (error == null) {
+      failure = null;
+      return;
+    }
+    _logger.fine('$_failureLogLabel: $error');
+    failure = SourceFailure.from(error);
+  }
+
+  @override
+  void dispose() => _pager.dispose();
+}
+
 /// 搜索状态（内部经 [CatalogService]/[SourceRegistry]）。
 ///
 /// 公开 API：`filteredResults` / `loadMore` / `sourceChannels` / 分页 / 空态；
@@ -55,7 +176,6 @@ class SearchProvider extends ChangeNotifier {
   StreamSubscription<void>? _registrySubscription;
 
   String _searchQuery = '';
-  SourceFailure? _failure;
 
   /// 已加载的单曲搜索结果（分页追加、pager 去重后的稳定列表）。
   List<SearchRow> _searchRows = const [];
@@ -70,33 +190,24 @@ class SearchProvider extends ChangeNotifier {
   /// 当前搜索类型（搜索页「单曲 / 歌手」分段；默认单曲）。
   SearchKind _kind = SearchKind.song;
 
-  // 歌手类型会话：与单曲各自分页 / 错误（切类型才发起请求）。
+  // 单曲 / 歌手 / 歌词各一个搜索会话：关键词、失败、分页控制器各一份，
+  // 切类型只换读取的会话；结果投影仍按类型保留（行形状不同）。
+  late final _SearchSession<SourceTrack> _songSession;
+  late final _SearchSession<ArtistSummary> _artistSession;
+  late final _SearchSession<SourceTrack> _lyricSession;
+
+  /// 歌手类型的结果投影。
   List<ArtistSummary> _artistResults = const [];
-  SourceFailure? _artistFailure;
 
-  /// 歌手分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
-  String _artistPagerQuery = '';
-
-  // 歌词类型会话：曲目（与单曲同构的播放 / 收藏路径）+ 命中歌词片段并行表。
+  /// 歌词类型的曲目与行投影（与单曲同构的播放 / 收藏路径）。
   List<SourceTrack> _lyricTracks = const [];
   List<SearchRow> _lyricRows = const [];
 
   /// 已接受页累计的片段表（按曲目 id）；换词 / 换源时清空。
   Map<String, String> _lyricSnippets = const {};
-  SourceFailure? _lyricFailure;
-
-  /// 歌词分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
-  String _lyricPagerQuery = '';
 
   // 分页状态：唯一状态机 PagedListController（首屏/加载更多/失败/过期守卫/去重）
   static const int _searchPageSize = 30;
-
-  /// 当前分页会话的关键词（pager 的 fetchPage 读取；换词/清空时重置）。
-  String _pagerQuery = '';
-
-  late final PagedListController<SourceTrack> _pager;
-  late final PagedListController<ArtistSummary> _artistPager;
-  late final PagedListController<SourceTrack> _lyricPager;
 
   Timer? _debounceTimer;
 
@@ -116,18 +227,27 @@ class SearchProvider extends ChangeNotifier {
     this._catalogService,
     this._sourceRegistry,
   }) {
-    _pager = PagedListController<SourceTrack>(
-      keyOf: (track) => track.id,
-      fetchPage: _fetchSearchPage,
+    _songSession = _SearchSession<SourceTrack>(
+      PagedListController<SourceTrack>(
+        keyOf: (track) => track.id,
+        fetchPage: _fetchSongPage,
+      ),
+      'Search failed',
     );
-    _artistPager = PagedListController<ArtistSummary>(
-      keyOf: (artist) => artist.id,
-      fetchPage: _fetchArtistPage,
+    _artistSession = _SearchSession<ArtistSummary>(
+      PagedListController<ArtistSummary>(
+        keyOf: (artist) => artist.id,
+        fetchPage: _fetchArtistPage,
+      ),
+      'Artist search failed',
     );
-    _lyricPager = PagedListController<SourceTrack>(
-      keyOf: (track) => track.id,
-      fetchPage: _fetchLyricPage,
-      onPageAccepted: _acceptLyricPage,
+    _lyricSession = _SearchSession<SourceTrack>(
+      PagedListController<SourceTrack>(
+        keyOf: (track) => track.id,
+        fetchPage: _fetchLyricPage,
+        onPageAccepted: _acceptLyricPage,
+      ),
+      'Lyric search failed',
     );
     _registrySubscription = _sourceRegistry?.changes.listen(
       (_) => _onSourcesChanged(),
@@ -156,57 +276,36 @@ class SearchProvider extends ChangeNotifier {
     ];
   }
 
+  /// 当前类型的分页会话：所有跨类型的元数据读取只在这里分派一次。
+  _SearchPaging get _activeSearchSession => switch (_kind) {
+    SearchKind.song => _songSession,
+    SearchKind.artist => _artistSession,
+    SearchKind.lyric => _lyricSession,
+  };
+
   /// 是否正在搜索当前类型（首屏加载中）。
   ///
-  /// 直接读当前类型分页控制器的加载态（不再维护镜像 flag）。
-  bool get isSearching => switch (_kind) {
-    SearchKind.song => _pager.isLoading,
-    SearchKind.artist => _artistPager.isLoading,
-    SearchKind.lyric => _lyricPager.isLoading,
-  };
+  /// 直接读当前类型分页会话的加载态（不再维护镜像 flag）。
+  bool get isSearching => _activeSearchSession.isLoading;
 
   /// 归一化失败对象（UI 的唯一错误出口：标题走 l10n，详情用 message，
   /// 不再暴露 `'Search failed: $e'` 这类原始异常字符串）。
-  SourceFailure? get failure => switch (_kind) {
-    SearchKind.song => _failure,
-    SearchKind.artist => _artistFailure,
-    SearchKind.lyric => _lyricFailure,
-  };
+  SourceFailure? get failure => _activeSearchSession.failure;
 
   /// 当前已加载到第几页（从 1 开始）。
-  int get currentPage => switch (_kind) {
-    SearchKind.song => _pager.page,
-    SearchKind.artist => _artistPager.page,
-    SearchKind.lyric => _lyricPager.page,
-  };
+  int get currentPage => _activeSearchSession.page;
 
   /// 平台返回的结果总数（部分平台/脚本不返回则为 null）。
-  int? get totalResults => switch (_kind) {
-    SearchKind.song => _pager.total,
-    SearchKind.artist => _artistPager.total,
-    SearchKind.lyric => _lyricPager.total,
-  };
+  int? get totalResults => _activeSearchSession.total;
 
   /// 是否还有下一页可加载。
-  bool get hasMore => switch (_kind) {
-    SearchKind.song => _pager.hasMore,
-    SearchKind.artist => _artistPager.hasMore,
-    SearchKind.lyric => _lyricPager.hasMore,
-  };
+  bool get hasMore => _activeSearchSession.hasMore;
 
   /// 是否正在加载下一页。
-  bool get isLoadingMore => switch (_kind) {
-    SearchKind.song => _pager.isLoadingMore,
-    SearchKind.artist => _artistPager.isLoadingMore,
-    SearchKind.lyric => _lyricPager.isLoadingMore,
-  };
+  bool get isLoadingMore => _activeSearchSession.isLoadingMore;
 
   /// 加载下一页是否失败（失败后停在当前页，由列表底部重试）。
-  bool get loadMoreFailed => switch (_kind) {
-    SearchKind.song => _pager.loadMoreFailed,
-    SearchKind.artist => _artistPager.loadMoreFailed,
-    SearchKind.lyric => _lyricPager.loadMoreFailed,
-  };
+  bool get loadMoreFailed => _activeSearchSession.loadMoreFailed;
 
   /// 「歌手」类型的结果（当前音源支持歌手能力时才有内容）。
   List<ArtistSummary> get artistResults => _artistResults;
@@ -240,48 +339,60 @@ class SearchProvider extends ChangeNotifier {
     final fallback = available.isEmpty ? '' : available.first.key;
     if (fallback != _sourceKey) {
       _sourceKey = fallback;
-      _clearSongResults();
-      _resetPagination();
-      _clearArtistSession();
-      _clearLyricSession();
+      _clearAllSearchState();
     }
     // 换源后当前类型可能不再可用（如脚本源没有歌手 / 歌词能力）：回退单曲。
     if (!supportedSearchKinds.contains(_kind)) _kind = SearchKind.song;
     notifyListeners();
   }
 
-  /// 重置分页状态（换关键词 / 换音源 / 清空搜索时调用）：过期在途请求。
-  void _resetPagination() {
-    _pagerQuery = '';
-    _pager.reset();
+  /// 三类分页会话一起归零（关键词 / 失败 / 在途页）。
+  ///
+  /// 换词 / 换源 / 清空搜索都先经过这里：以前三个 `_reset*Pagination` 各自
+  /// 维护关键词与失败，删改会话字段时容易只漏一条路径。
+  void _resetAllPaging() {
+    _songSession.reset();
+    _artistSession.reset();
+    _lyricSession.reset();
   }
 
-  void _resetArtistPagination() {
-    _artistPagerQuery = '';
-    _artistPager.reset();
+  /// 换词前的公共清理：三类分页全部作废，非激活类型的投影立即清空。
+  ///
+  /// 单曲投影保留到新首屏落地：首屏失败时错误条与旧结果并存，不闪空
+  /// （与旧行为一致；歌词片段表随歌词投影一起清）。
+  void _prepareForNewKeyword() {
+    _resetAllPaging();
+    _clearArtistResults();
+    _clearLyricResults();
   }
 
-  /// 清空歌手类型的结果与分页（与单曲路径的换词 / 换源同步）。
-  void _clearArtistSession() {
-    _resetArtistPagination();
+  /// 清空全部搜索状态（换源 / 清空搜索 / 释放内存）。
+  void _clearAllSearchState() {
+    _resetAllPaging();
+    _clearSongResults();
+    _clearArtistResults();
+    _clearLyricResults();
+  }
+
+  /// 单曲结果投影清空（分页会话由 [_resetAllPaging] 负责）。
+  void _clearSongResults() {
+    _sourceTracks = const [];
+    _searchRows = const [];
+  }
+
+  /// 歌手结果投影清空。
+  void _clearArtistResults() {
     _artistResults = const [];
-    _artistFailure = null;
   }
 
-  void _resetLyricPagination() {
-    _lyricPagerQuery = '';
-    // 片段表属于会话：reset 使在途页过期后旧页不会再被接受，这里先清空，
-    // 新会话只从 accepted 页累计片段。
-    _lyricSnippets = const {};
-    _lyricPager.reset();
-  }
-
-  /// 清空歌词类型的结果与分页（与单曲路径的换词 / 换源同步）。
-  void _clearLyricSession() {
-    _resetLyricPagination();
+  /// 歌词结果投影与片段表清空。
+  ///
+  /// 片段表属于歌词会话：reset 使在途页过期后旧页不会再被 accepted 回调
+  /// 接受，这里与行一起清空，新会话只从新页累计片段。
+  void _clearLyricResults() {
     _lyricTracks = const [];
     _lyricRows = const [];
-    _lyricFailure = null;
+    _lyricSnippets = const {};
   }
 
   /// 切换搜索类型：不支持的类型忽略；目标类型尚无结果时按当前关键词取首屏。
@@ -292,18 +403,18 @@ class SearchProvider extends ChangeNotifier {
     final query = _searchQuery.trim();
     if (query.isEmpty) return;
     if (kind == SearchKind.artist) {
-      if (_artistResults.isEmpty && !_artistPager.isLoading) {
+      if (_artistResults.isEmpty && !_artistSession.isLoading) {
         unawaited(_performArtistSearch(query));
       }
       return;
     }
     if (kind == SearchKind.lyric) {
-      if (_lyricTracks.isEmpty && !_lyricPager.isLoading) {
+      if (_lyricTracks.isEmpty && !_lyricSession.isLoading) {
         unawaited(_performLyricSearch(query));
       }
       return;
     }
-    if (_sourceTracks.isEmpty && !_pager.isLoading) {
+    if (_sourceTracks.isEmpty && !_songSession.isLoading) {
       unawaited(performSearch(query));
     }
   }
@@ -312,11 +423,7 @@ class SearchProvider extends ChangeNotifier {
   void selectSource(String key) {
     if (key == _sourceKey) return;
     _sourceKey = key;
-    _failure = null;
-    _clearSongResults();
-    _resetPagination();
-    _clearArtistSession();
-    _clearLyricSession();
+    _clearAllSearchState();
     if (!supportedSearchKinds.contains(_kind)) _kind = SearchKind.song;
     notifyListeners();
     if (_searchQuery.trim().isNotEmpty) {
@@ -333,22 +440,13 @@ class SearchProvider extends ChangeNotifier {
   List<SearchRow> get filteredResults =>
       _searchQuery.isEmpty ? const [] : _searchRows;
 
-  /// 清空单曲结果（换词 / 换源 / 清空搜索）。
-  void _clearSongResults() {
-    _sourceTracks = const [];
-    _searchRows = const [];
-  }
-
   void updateSearchQuery(String query) {
     if (query == _searchQuery) return;
 
     _debounceTimer?.cancel();
 
     _searchQuery = query;
-    _failure = null;
-    _resetPagination();
-    _clearArtistSession();
-    _clearLyricSession();
+    _prepareForNewKeyword();
 
     if (query.isEmpty) {
       _clearSongResults();
@@ -376,21 +474,17 @@ class SearchProvider extends ChangeNotifier {
   /// 提交搜索（不走防抖，立即发起）。
   void submitSearch(String query) {
     _debounceTimer?.cancel();
-    _resetPagination();
-    _clearArtistSession();
-    _clearLyricSession();
+    _prepareForNewKeyword();
 
     if (query.isEmpty) {
       _searchQuery = '';
       _clearSongResults();
-      _failure = null;
       notifyListeners();
       return;
     }
 
     if (query != _searchQuery) {
       _searchQuery = query;
-      _failure = null;
       notifyListeners();
     }
 
@@ -400,11 +494,7 @@ class SearchProvider extends ChangeNotifier {
   void clearSearch() {
     _debounceTimer?.cancel();
     _searchQuery = '';
-    _clearSongResults();
-    _failure = null;
-    _resetPagination();
-    _clearArtistSession();
-    _clearLyricSession();
+    _clearAllSearchState();
     notifyListeners();
   }
 
@@ -412,18 +502,14 @@ class SearchProvider extends ChangeNotifier {
   ///
   /// 搜索结果页随休眠门卸载，恢复时会重建；瞬时结果 / 歌词片段 / 分页会话
   /// 没有保留价值，却会连同 raw payload 一直挂到下次搜索。清空关键词与三类
-  /// 分页控制器（[PagedListController.reset] 同时使在途响应过期），并取消
+  /// 分页会话（[PagedListController.reset] 同时使在途响应过期），并取消
   /// 防抖计时器；音源选择与当前类型分段保留（那是用户偏好，不占内存）。
   void releaseSearchResults() {
     if (_disposed) return;
     _debounceTimer?.cancel();
     _debounceTimer = null;
     _searchQuery = '';
-    _failure = null;
-    _clearSongResults();
-    _resetPagination();
-    _clearArtistSession();
-    _clearLyricSession();
+    _clearAllSearchState();
     notifyListeners();
   }
 
@@ -433,35 +519,34 @@ class SearchProvider extends ChangeNotifier {
     final keyword = query.trim();
     if (keyword.isEmpty) return;
 
-    // 按当前类型分发：歌手 / 歌词走各自会话（单曲路径保持原语义）。
-    if (_kind == SearchKind.artist) {
-      return _performArtistSearch(keyword);
-    }
-    if (_kind == SearchKind.lyric) {
-      return _performLyricSearch(keyword);
-    }
+    // 按当前类型分发到各自会话（三类互不共享关键词 / 页码 / 失败）。
+    return switch (_kind) {
+      SearchKind.song => _performSongSearch(keyword),
+      SearchKind.artist => _performArtistSearch(keyword),
+      SearchKind.lyric => _performLyricSearch(keyword),
+    };
+  }
 
+  /// 单曲搜索首屏（失败保留已有行）。
+  Future<void> _performSongSearch(String keyword) async {
     // 无可用音源：展示空态引导，不发起请求。
     if (_sourceKey.isEmpty) {
-      _failure = null;
+      _songSession.reset();
       _clearSongResults();
-      _resetPagination();
       notifyListeners();
       return;
     }
 
-    _pagerQuery = keyword;
-    _failure = null;
-    _pager.reset();
+    _songSession.begin(keyword);
     notifyListeners();
 
-    await _pager.loadFirstPage();
-    _applyPagerState();
+    await _songSession.loadFirstPage();
+    _projectSongResults();
     notifyListeners();
   }
 
-  /// pager 的取页实现：按当前音源与分页会话关键词请求 CatalogService。
-  Future<PagedResult<SourceTrack>> _fetchSearchPage(int page) async {
+  /// pager 的取页实现：按当前音源与会话关键词请求 CatalogService。
+  Future<PagedResult<SourceTrack>> _fetchSongPage(int page) async {
     final catalog = _catalogService;
     if (catalog == null) {
       throw StateError('音源未初始化');
@@ -471,7 +556,11 @@ class SearchProvider extends ChangeNotifier {
       'search.page',
       () => catalog.search(
         source,
-        SearchQuery(keyword: _pagerQuery, page: page, limit: _searchPageSize),
+        SearchQuery(
+          keyword: _songSession.keyword,
+          page: page,
+          limit: _searchPageSize,
+        ),
       ),
       fields: () => {'source': source, 'page': page},
     );
@@ -487,22 +576,16 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  /// 把分页状态机的结果映射到搜索状态（typed rows / 失败 / 分页元数据）。
+  /// 单曲投影：成功页覆盖行；失败只挂错误并保留已有行（错误条与列表并存）。
   ///
-  /// 失败时保留已有结果：错误提示与列表并存，不闪空。成功页会清掉上一次
-  /// 「加载更多失败」留下的错误（重试成功后不再挂旧错误条）。
-  void _applyPagerState() {
-    final error = _pager.error;
-    if (error != null) {
-      _logger.fine('Search failed: $error');
-      _failure = SourceFailure.from(error);
-    } else {
-      _failure = null;
-      _sourceTracks = _pager.items;
-      _searchRows = List.unmodifiable([
-        for (final track in _sourceTracks) _searchRowOf(track),
-      ]);
-    }
+  /// 成功页会清掉上一次「加载更多失败」留下的错误（会话已在取页后归一化）。
+  void _projectSongResults() {
+    final session = _songSession;
+    if (session.failure != null) return;
+    _sourceTracks = session.items;
+    _searchRows = List.unmodifiable([
+      for (final track in _sourceTracks) _searchRowOf(track),
+    ]);
   }
 
   /// pager 的取页实现：歌手搜索（`CatalogService.searchArtists`，5min 缓存）。
@@ -514,7 +597,7 @@ class SearchProvider extends ChangeNotifier {
     final result = await catalog.searchArtists(
       _sourceKey,
       SearchQuery(
-        keyword: _artistPagerQuery,
+        keyword: _artistSession.keyword,
         page: page,
         limit: _searchPageSize,
       ),
@@ -532,33 +615,25 @@ class SearchProvider extends ChangeNotifier {
     if (keyword.isEmpty) return;
 
     if (_sourceKey.isEmpty) {
-      _artistFailure = null;
-      _artistResults = const [];
-      _resetArtistPagination();
+      _artistSession.reset();
+      _clearArtistResults();
       notifyListeners();
       return;
     }
 
-    _artistPagerQuery = keyword;
-    _artistFailure = null;
-    _artistPager.reset();
+    _artistSession.begin(keyword);
     notifyListeners();
 
-    await _artistPager.loadFirstPage();
-    _applyArtistPagerState();
+    await _artistSession.loadFirstPage();
+    _projectArtistResults();
     notifyListeners();
   }
 
-  /// 把歌手分页状态机的结果映射为搜索状态（结果 / 失败）。
-  void _applyArtistPagerState() {
-    final error = _artistPager.error;
-    if (error != null) {
-      _logger.fine('Artist search failed: $error');
-      _artistFailure = SourceFailure.from(error);
-    } else {
-      _artistFailure = null;
-      _artistResults = _artistPager.items;
-    }
+  /// 歌手投影：成功页覆盖结果；失败保留已有歌手行。
+  void _projectArtistResults() {
+    final session = _artistSession;
+    if (session.failure != null) return;
+    _artistResults = session.items;
   }
 
   /// pager 的取页实现：按歌词搜歌（`CatalogService.searchLyrics`，5min 缓存）。
@@ -570,7 +645,7 @@ class SearchProvider extends ChangeNotifier {
     final result = await catalog.searchLyrics(
       _sourceKey,
       SearchQuery(
-        keyword: _lyricPagerQuery,
+        keyword: _lyricSession.keyword,
         page: page,
         limit: _searchPageSize,
       ),
@@ -611,75 +686,70 @@ class SearchProvider extends ChangeNotifier {
     if (keyword.isEmpty) return;
 
     if (_sourceKey.isEmpty) {
-      _clearLyricSession();
+      _lyricSession.reset();
+      _clearLyricResults();
       notifyListeners();
       return;
     }
 
-    _lyricPagerQuery = keyword;
-    _lyricFailure = null;
+    _lyricSession.begin(keyword);
     // 新关键词从空片段表开始；旧会话在途页已被 reset 作废，不会再回调。
     _lyricSnippets = const {};
-    _lyricPager.reset();
     notifyListeners();
 
-    await _lyricPager.loadFirstPage();
-    _applyLyricPagerState();
+    await _lyricSession.loadFirstPage();
+    _projectLyricResults();
     notifyListeners();
   }
 
-  /// 把歌词分页状态机的结果映射到搜索状态（typed rows + 片段 / 失败）。
+  /// 歌词投影：typed rows + accepted-page 累计的片段 / 失败保留旧行。
   ///
   /// 片段表只含已接受页（accepted-page 回调累计）；这里不再从取数阶段读
   /// 共享暂存，避免旧查询晚到的片段混进新查询的行。
-  void _applyLyricPagerState() {
-    final error = _lyricPager.error;
-    if (error != null) {
-      _logger.fine('Lyric search failed: $error');
-      _lyricFailure = SourceFailure.from(error);
-    } else {
-      _lyricFailure = null;
-      _lyricTracks = _lyricPager.items;
-      _lyricRows = List.unmodifiable([
-        for (final track in _lyricTracks)
-          SearchRow(
-            track: trackFromSourceTrack(track),
-            lyricSnippet: _lyricSnippets[track.id],
-          ),
-      ]);
-    }
+  void _projectLyricResults() {
+    final session = _lyricSession;
+    if (session.failure != null) return;
+    _lyricTracks = session.items;
+    _lyricRows = List.unmodifiable([
+      for (final track in _lyricTracks)
+        SearchRow(
+          track: trackFromSourceTrack(track),
+          lyricSnippet: _lyricSnippets[track.id],
+        ),
+    ]);
   }
 
   /// 加载下一页当前类型（触底自动调用）。
   ///
   /// 「加载中 / 已到底 / 跨页去重」等守卫由 [PagedListController] 持有：
-  /// 换词 / 换音源时的 `_reset*Pagination` 已使在途请求过期，旧响应不会
-  /// 覆盖新状态。这里只判定会话是否可用（已选音源 + 当前会话有词）。
+  /// 换词 / 换音源时的会话 reset 已使在途请求过期，旧响应不会覆盖新状态。
+  /// 这里只判定会话是否可用（已选音源 + 当前会话有词），并只投影当前类型。
   Future<void> loadMore() async {
     if (!hasSelectedSource) return;
-    switch (_kind) {
-      case SearchKind.song:
-        if (_pagerQuery.trim().isEmpty) return;
-        // 先在途置位并通知：列表底部进度圈要在请求返回前出现
-        // （pager 的 isLoadingMore 是同步写入的）。
-        final pending = _pager.loadMore();
-        notifyListeners();
-        await pending;
-        _applyPagerState();
-      case SearchKind.artist:
-        if (_artistPagerQuery.trim().isEmpty) return;
-        final pending = _artistPager.loadMore();
-        notifyListeners();
-        await pending;
-        _applyArtistPagerState();
-      case SearchKind.lyric:
-        if (_lyricPagerQuery.trim().isEmpty) return;
-        final pending = _lyricPager.loadMore();
-        notifyListeners();
-        await pending;
-        _applyLyricPagerState();
-    }
+    // 记住发起时的类型：等待期间用户切到别的分段时，仍要投影这条会话
+    // （否则切回原类型会看到 pager 已追加、行却没更新的半截列表）。
+    final kind = _kind;
+    final session = _activeSearchSession;
+    if (session.keyword.trim().isEmpty) return;
+    // 先在途置位并通知：列表底部进度圈要在请求返回前出现
+    // （pager 的 isLoadingMore 是同步写入的）。
+    final pending = session.loadMore();
     notifyListeners();
+    await pending;
+    _projectResults(kind);
+    notifyListeners();
+  }
+
+  /// 只重新投影指定类型：失败时各投影方法保留旧行。
+  void _projectResults(SearchKind kind) {
+    switch (kind) {
+      case SearchKind.song:
+        _projectSongResults();
+      case SearchKind.artist:
+        _projectArtistResults();
+      case SearchKind.lyric:
+        _projectLyricResults();
+    }
   }
 
   /// 音源曲目 → 搜索结果行（领域 Track 的 payload 与 raw 同一引用）。
@@ -708,9 +778,9 @@ class SearchProvider extends ChangeNotifier {
     _disposed = true;
     _debounceTimer?.cancel();
     _registrySubscription?.cancel();
-    _pager.dispose();
-    _artistPager.dispose();
-    _lyricPager.dispose();
+    _songSession.dispose();
+    _artistSession.dispose();
+    _lyricSession.dispose();
     super.dispose();
   }
 }
