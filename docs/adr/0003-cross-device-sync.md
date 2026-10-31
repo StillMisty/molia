@@ -682,34 +682,36 @@ body：`id` / `name` / `http` / `probe` / `addrs` / `snap` / `head` / `cats` /
 - 补探只刷新候选，不清空已有候选；候选 TTL 仍是 15 秒，真正离线的设备自然
   过期。`startScan` 重置补探基准，`stopScan` / 退后台 / `stop` 立即停止，
   回前台恢复 sweep 并立即补一次。
-- `startScan` 在本机探测端口不可用（`advertisedProbePort == 0`）时返回 false，
-  不再显示注定为空的「正在查找」。
+- `startScan` 在本机探测端口不可用（`advertisedProbePort == 0`）时收回扫描
+  状态、清空候选并返回 false；空态直接说明本机不可用。
 
 ### 2. 空态分层
 
 - 新增 `SyncNearbyAvailability`（`lanOff` / `permissionDenied` /
-  `transportUnavailable` / `cellular` / `powerSave` / `discoveryUnavailable` /
-  `pairingUnavailable` / `available`），解析是纯函数，provider 暴露 getter，
-  文案映射在 `sync_labels.dart`。
+  `transportUnavailable` / `cellular` / `powerSave` /
+  `discoveryUnavailable` / `available`），解析是纯函数，provider 暴露 getter，
+  文案映射在 `sync_labels.dart`。开关关闭优先于权限等后续原因；UDP 两族都
+  不可用时统一归入 `discoveryUnavailable`（自动发现与配对探测都发不出去）。
 - 同步页只在 `available` 时启停扫描；权限、传输未启动、移动数据、省电、
   UDP 两族不可用分别给本机原因与下一步（授权 / 同步日志 / 切 Wi-Fi / 关省电 /
-  手动地址或 WebDAV），不再统一说成「让对方打开 Molia」。
+  手动地址或 WebDAV）。
 
 ### 3. 即时检查与页面鲜活度
 
-- 打开任一路传输成功后经调度器排一次 `SyncScheduler.checkNow()`；仍受省电 /
-  移动数据暂停与在途轮次约束，关闭传输不触发。覆盖开关、授权后自动启用与
-  `requestLanPermission` 三条路径。
+- 打开局域网成功后经调度器排一次 `SyncScheduler.checkNow()`；打开 WebDAV 只在
+  已配置时排 check，未配置时等保存配置后再检查。仍受省电 / 移动数据暂停与
+  在途轮次约束，关闭传输不触发。开关与 `requestLanPermission` 直接触发；
+  回前台授权启用由随后的 resume 轮覆盖，不额外排 check。
 - 新增 `SyncProvider.saveWebdavConfig(config, password)`：配置与密码一次写入，
   WebDAV 已启用且已配置时触发一次 check 轮；配置弹层改用该方法，避免配置与
   密码之间跑一轮必然失败的轮次。
 - 同步页每 30 秒只重算相对时间（不额外跑轮次）；名册有设备但本轮全部未连接、
-  且自动检查未被省电 / 移动数据暂停挡住时，提供「重新检查连接」入口。
+  且调度器允许自动检查时，提供「重新检查连接」入口。
 
 ### 后果（v5）
 
-- 对端晚一点打开局域网、或用户在同步页停留较久时，附近设备不再从列表消失；
-  但补探只是候选发现，不写名册、不触发同步轮次。
+- 对端晚一点打开局域网、或用户在同步页停留较久时，附近设备仍会按补探节奏
+  持续刷新候选；补探只是候选发现，不写名册、不触发同步轮次。
 - 打开传输 / 保存 WebDAV 后能更快看到连接结论；策略暂停期间仍不会绕过省电
   与移动数据限制。
 - 空态把「本机没准备好」与「对端不在线」分开，减少误导性的排查方向。

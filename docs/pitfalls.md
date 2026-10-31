@@ -403,12 +403,13 @@
       probe；同步页打开时先按 100 / 500 / 1500ms 发三轮，扫描期间复用 sweep
       定时器按 `scanRefreshInterval`（默认 5 秒）补发新 nonce 的 probe。补探
       只刷新候选、不清空已有候选（TTL 仍是 15 秒，离线设备自然过期）；探测
-      端口不可用（`advertisedProbePort == 0`）时 `startScan` 直接返回 false，
-      不显示注定为空的「正在查找」。退后台 / 关页 / 停传输会立即停 sweep、
-      清候选并把待确认请求按过期处理（不会在后台弹接受窗）；回前台恢复 sweep
-      并立即补一次。蜂窝下 0 广播。同步页只在 `SyncNearbyAvailability.available`
-      时启动扫描，空态按本机原因分层（权限 / 传输 / 移动数据 / 省电 / UDP /
-      配对端口），不要用「没发现设备」掩盖本机没在找。
+      端口不可用（`advertisedProbePort == 0`）时 `startScan` 收回扫描状态、
+      清空候选并返回 false，空态直接说明本机不可用。退后台 / 关页 / 停传输会
+      立即停 sweep、清候选并把待确认请求按过期处理（不会在后台弹接受窗）；
+      回前台恢复 sweep 并立即补一次。蜂窝下 0 广播。同步页只在
+      `SyncNearbyAvailability.available` 时启动扫描，空态按本机原因分层
+      （开关 / 权限 / 传输 / 移动数据 / 省电 / UDP），直接说明本机为什么
+      没在找。
     - **配对请求**（`lib/data/sync/pairing/lan_pairing_service.dart`）走
       `POST /molia-sync/v2/pair/request`、`GET /pair/status`、
       `POST /pair/complete`（invite 方向）：pending 上限 8、TTL 60 秒、同一

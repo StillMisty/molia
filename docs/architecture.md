@@ -482,11 +482,11 @@
   实现、可分别开关：局域网直连（`MSD/1` 二进制公告发现 + 内置 HTTP
   `/molia-sync/v2/*` 数据端点；UDP 只发现、HTTP 是数据与存活通道）与用户自备
   WebDAV（`<remoteDir>/<deviceId>.p2.*.msync` 密文文件，PROPFIND/GET/PUT/MKCOL；
-  `.p2` 是硬断代命名空间，旧文件按幽灵文件忽略、不读不删）。打开任一路传输
-  成功后经调度器排一次 `checkNow()`（仍受省电 / 移动数据暂停与在途轮次约束，
-  关闭不触发）；WebDAV 配置弹层用 `saveWebdavConfig(config, password)` 一次写
-  配置与密码，已启用且已配置时同样立即检查，避免配置与密码之间跑一轮必然
-  失败的轮次。
+  `.p2` 是硬断代命名空间，旧文件按幽灵文件忽略、不读不删）。打开局域网成功后
+  经调度器排一次 `checkNow()`；打开 WebDAV 只在已配置时排 check，未配置时等
+  保存配置后再检查（仍受省电 / 移动数据暂停与在途轮次约束，关闭不触发）。
+  WebDAV 配置弹层用 `saveWebdavConfig(config, password)` 一次写配置与密码，
+  已启用且已配置时立即检查，避免配置与密码之间跑一轮必然失败的轮次。
   局域网发现报文（`MSD/1`：magic / version / type / HMAC / bodyLen + 认证
   body）先按来源限流（20 包/10s，全局 100 包/10s）再验 MAC 再解析；正常轮
   只对 presence / 手动地址 / `lanEndpoints` 做 ≤8 个单播并等 400ms，冷启动 /
@@ -527,11 +527,11 @@
   附近设备扫描在初始 100 / 500 / 1500ms 三波之后，扫描期间复用 sweep 定时器
   按 `scanRefreshInterval`（默认 5 秒）补发新 nonce 的 probe；候选 TTL 仍是
   15 秒，补探只续期不清空。退后台 / 关页 / 停传输立即停，回前台补一次；
-  本机探测端口不可用（`advertisedProbePort == 0`）时 `startScan` 返回 false，
-  不再假装正在查找。空态按 `SyncNearbyAvailability` 分层（权限 / 开关 /
-  传输未启动 / 移动数据 / 省电 / UDP 两族不可用 / 配对端口不可用 / 可用），
+  本机探测端口不可用（`advertisedProbePort == 0`）时 `startScan` 收回扫描
+  状态、清空候选并返回 false。空态按 `SyncNearbyAvailability`
+  分层（开关 / 权限 / 传输未启动 / 移动数据 / 省电 / UDP 两族不可用 / 可用），
   同步页只在可用时启停扫描；权限、传输与发现原因分别指向授权、同步日志与
-  手动地址 / WebDAV，不把本机原因说成对端原因。
+  手动地址 / WebDAV。
   `LanPairingService`（`lan_pairing_service.dart`）负责协议与 pending 状态机，
   `PairingCrypto`（`pairing_crypto.dart`）负责密封与确认码，候选 / 请求模型在
   `domain/models/sync_nearby_pairing.dart`。**旧配对码（`molia-pair:*`）/
