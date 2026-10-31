@@ -8,6 +8,7 @@ import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/pages/source_swap_page.dart';
 import 'package:molia/providers/lyrics_provider.dart';
+import 'package:molia/widgets/app_search_bar.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -74,7 +75,10 @@ void main() {
         payload: {'songmid': id, 'source': sourceKey},
       );
 
-  Future<int> seedPlaylist(WidgetTester tester, {bool withDuplicate = false}) async {
+  Future<int> seedPlaylist(
+    WidgetTester tester, {
+    bool withDuplicate = false,
+  }) async {
     final playlistId = await repository.createPlaylist('L');
     await repository.addTrackToPlaylist(
       playlistId,
@@ -172,10 +176,22 @@ void main() {
     await pumpHost(tester, seed: seed, playlistId: playlistId);
     await openPage(tester);
 
-    // 头部 + 音源 chip（tx 无结果不产生分组）+ 候选行。
+    // 曲目条 + 全部/音源 chip（tx 无结果不产生分组）+ 候选行。
     expect(find.text('换源'), findsWidgets);
-    expect(find.byType(M3EChip), findsOneWidget);
-    expect(find.text('kg'), findsOneWidget);
+    expect(find.byType(M3EChip), findsNWidgets(3), reason: '全部 + kg + tx');
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-all')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-kg')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-tx')),
+      findsOneWidget,
+      reason: '没有结果的来源仍可筛选',
+    );
     expect(find.text('Title（kg）'), findsOneWidget);
 
     // 点候选 = 选中 + 立即试听（单曲「换源试听」上下文）。
@@ -232,7 +248,9 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.widgetWithText(M3EButton, '换源'));
-    await tester.pumpAndSettle();
+    // 确认按钮忙碌态是常驻 spinner：不能用 pumpAndSettle（永远不落定）。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('曲目已存在'), findsOneWidget);
 
     await tester.tap(
@@ -279,12 +297,89 @@ void main() {
     await pumpHost(tester, seed: seed, playlistId: playlistId);
     await openPage(tester);
 
-    expect(find.text('wy'), findsOneWidget);
-    expect(find.text('kg'), findsOneWidget);
-    // 候选列表只展示当前 chip 的分组：切到原渠道再断言结果。
-    await tester.tap(find.text('wy'));
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-wy')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-kg')),
+      findsOneWidget,
+    );
+    // 默认全部：两组都展示；切到原渠道只看该组。
+    expect(find.text('Title（kg）'), findsOneWidget);
+    expect(find.text('Title（wy 其它版本）'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-wy')));
     await tester.pumpAndSettle();
     expect(find.text('Title（wy 其它版本）'), findsOneWidget);
+    expect(find.text('Title（kg）'), findsNothing);
+  });
+
+  testWidgets('全部模式按来源分组，单源筛选只留该组', (tester) async {
+    final playlistId = await seedPlaylist(tester);
+    final seed = library.trackFromPlaylistTrack(
+      (await repository.listPlaylistTracks(playlistId)).single,
+    );
+    kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
+    tx.items = [sourceTrack('tx', '200', title: 'Title（tx）')];
+
+    await pumpHost(tester, seed: seed, playlistId: playlistId);
+    await openPage(tester);
+
+    expect(find.byKey(const ValueKey('sourceSwapSection-kg')), findsOneWidget);
+    expect(find.byKey(const ValueKey('sourceSwapSection-tx')), findsOneWidget);
+    expect(find.text('Title（kg）'), findsOneWidget);
+    expect(find.text('Title（tx）'), findsOneWidget);
+    expect(
+      tester
+          .widget<M3EChip>(
+            find.byKey(const ValueKey('sourceSwapSourceChip-all')),
+          )
+          .selected,
+      isTrue,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-kg')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('sourceSwapSection-kg')), findsNothing);
+    expect(find.text('Title（kg）'), findsOneWidget);
+    expect(find.text('Title（tx）'), findsNothing);
+    expect(swap.activeSourceKey, 'kg');
+  });
+
+  testWidgets('搜索栏预填默认关键词，提交后按新关键词重搜', (tester) async {
+    final playlistId = await seedPlaylist(tester);
+    final seed = library.trackFromPlaylistTrack(
+      (await repository.listPlaylistTracks(playlistId)).single,
+    );
+    kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
+
+    await pumpHost(tester, seed: seed, playlistId: playlistId);
+    await openPage(tester);
+
+    final field = tester.widget<AppSearchBar>(
+      find.byKey(const Key('sourceSwapSearchField')),
+    );
+    expect(field.controller.text, 'Title Artist');
+    expect(kg.lastQuery?.keyword, 'Title Artist');
+
+    await tester.enterText(
+      find.byKey(const Key('sourceSwapSearchField')),
+      '晴天 周杰伦',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(swap.keyword, '晴天 周杰伦');
+    expect(kg.lastQuery?.keyword, '晴天 周杰伦');
+    expect(kg.searchCalls, 2);
+
+    // 清空关键词：回到「输入后开始搜索」，不再显示「没有找到」。
+    await tester.enterText(find.byKey(const Key('sourceSwapSearchField')), '');
+    await tester.pumpAndSettle();
+    expect(swap.keyword, isEmpty);
+    expect(swap.groups, isEmpty);
+    expect(find.text('输入歌名或歌手开始搜索'), findsOneWidget);
   });
 
   testWidgets('全部无结果：空态提示；失败源可重试', (tester) async {
@@ -303,7 +398,7 @@ void main() {
     // 重试：失败源恢复后候选出现。
     kg.fail = false;
     kg.items = [sourceTrack('kg', '100', title: 'Title（kg）')];
-    await tester.tap(find.byKey(const Key('sourceSwapRetryFailedSources')));
+    await tester.tap(find.byKey(const Key('sourceSwapRetryFailedAudio')));
     await tester.pumpAndSettle();
     expect(find.text('Title（kg）'), findsOneWidget);
     expect(find.text('kg 搜索失败'), findsNothing);
@@ -331,13 +426,20 @@ void main() {
     await pumpHost(tester, seed: seed);
     await openPage(tester);
 
-    expect(find.byType(M3EChip), findsNWidgets(6));
-    for (final key in ['kg', 'tx', 'kw', 'wy', 'mg', 'bili']) {
-      expect(find.text(key), findsOneWidget, reason: '$key 的音源 chip 应可见');
+    expect(find.byType(M3EChip), findsNWidgets(7), reason: '全部 + 6 个来源');
+    for (final key in ['all', 'kg', 'tx', 'kw', 'wy', 'mg', 'bili']) {
+      expect(
+        find.byKey(ValueKey('sourceSwapSourceChip-$key')),
+        findsOneWidget,
+        reason: '$key 的音源 chip 应可见',
+      );
     }
     // chip 行是换行布局（不是横向 ScrollView）。
     expect(
-      find.ancestor(of: find.text('bili'), matching: find.byType(Wrap)),
+      find.ancestor(
+        of: find.byKey(const ValueKey('sourceSwapSourceChip-bili')),
+        matching: find.byType(Wrap),
+      ),
       findsWidgets,
     );
   });
