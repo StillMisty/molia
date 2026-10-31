@@ -5490,6 +5490,72 @@ abstract class AppLocalizations {
   /// **'Ask the other device to open Molia and turn on LAN sync'**
   String get syncNearbyEmptyHint;
 
+  /// No description provided for @syncNearbyPermissionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN access needed'**
+  String get syncNearbyPermissionTitle;
+
+  /// No description provided for @syncNearbyPermissionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Grant LAN access above first, then search again.'**
+  String get syncNearbyPermissionHint;
+
+  /// No description provided for @syncNearbyTransportDownTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN sync isn\'t running'**
+  String get syncNearbyTransportDownTitle;
+
+  /// No description provided for @syncNearbyTransportDownHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the reason, then try again.'**
+  String get syncNearbyTransportDownHint;
+
+  /// No description provided for @syncNearbyOpenLogHint.
+  ///
+  /// In en, this message translates to:
+  /// **'See the latest failure reason'**
+  String get syncNearbyOpenLogHint;
+
+  /// No description provided for @syncNearbyCellularTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'On mobile data'**
+  String get syncNearbyCellularTitle;
+
+  /// No description provided for @syncNearbyCellularHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby search needs Wi-Fi. Switch and try again.'**
+  String get syncNearbyCellularHint;
+
+  /// No description provided for @syncNearbyPowerSaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Power saver is on'**
+  String get syncNearbyPowerSaveTitle;
+
+  /// No description provided for @syncNearbyPowerSaveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby search is paused. Turn off power saver and try again.'**
+  String get syncNearbyPowerSaveHint;
+
+  /// No description provided for @syncNearbyDiscoveryUnavailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-discovery unavailable'**
+  String get syncNearbyDiscoveryUnavailableTitle;
+
+  /// No description provided for @syncNearbyDiscoveryUnavailableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a manual address or use WebDAV.'**
+  String get syncNearbyDiscoveryUnavailableHint;
+
   /// No description provided for @syncNearbyFooter.
   ///
   /// In en, this message translates to:
@@ -5559,7 +5625,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyResultUnreachable.
   ///
   /// In en, this message translates to:
-  /// **'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.'**
+  /// **'Couldn’t reach the device. Make sure both devices are on the same network; keep Molia open in the foreground on the other device and confirm LAN access is granted.'**
   String get syncNearbyResultUnreachable;
 
   /// No description provided for @syncNearbyResultBusy.
@@ -5577,7 +5643,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncNearbyResultUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Pairing is unavailable. Make sure both devices have LAN sync on and try again.'**
+  /// **'Pairing is unavailable. Keep Molia open in the foreground on the other device and confirm LAN access is granted, then try again.'**
   String get syncNearbyResultUnavailable;
 
   /// No description provided for @syncNearbyResultCancelled.
@@ -5735,6 +5801,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No connection records yet'**
   String get syncRoundNoRecords;
+
+  /// No description provided for @syncRecheckConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Check connections again'**
+  String get syncRecheckConnections;
+
+  /// No description provided for @syncRecheckConnectionsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic sync continues'**
+  String get syncRecheckConnectionsHint;
 
   /// No description provided for @syncRoundSynced.
   ///

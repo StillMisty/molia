@@ -9,6 +9,7 @@ import '../domain/models/sync_nearby_pairing.dart';
 import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/sync_nearby_availability.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
@@ -55,7 +56,14 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   /// 时再推事件；用一个本地计时把「正在查找」切换到「没有发现设备」。
   Timer? _nearbySettleTimer;
   bool _nearbySearchSettled = false;
-  bool _lanEnabled = false;
+
+  /// 相对时间（「3 分钟前」）每 30 秒重算一次：页面可能停留很久，不能只在
+  /// provider 通知时刷新；只 setState 重算文案，不额外跑同步轮次。
+  Timer? _relativeTimeTimer;
+
+  /// 附近设备当前能否搜索（权限 / 开关 / 传输 / 网络 / 省电 / UDP / 配对）。
+  /// 只在 availability 变化时启停扫描，避免 provider 每次通知都重跑 startScan。
+  SyncNearbyAvailability? _nearbyAvailability;
 
   /// 局域网传输是否真正运行：授权前开关可能已开启但传输不可用，
   /// 授权成功后由 false → true 触发一次附近设备扫描。
@@ -68,36 +76,41 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     // （附近设备探测与手动地址兜底也走这份缓存）。
     final provider = context.read<SyncProvider>();
     _provider = provider;
-    _lanEnabled = _isLanEnabled(provider);
+    _nearbyAvailability = provider.nearbyAvailability;
     _lanRunning = _isLanRunning(provider);
+    _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) setState(() {});
+    });
     provider.refreshLocalEndpoints();
     // 打开同步页自动检查一轮：设备行显示的是「最近一轮是否真的接触成功」，
     // 不跑一轮就只能是旧状态。首帧后再触发，避免在构建期通知 provider；
     // 走调度器的 check 轮（省电 / 蜂窝暂停 / 已有轮次在跑时由调度器跳过）。
-    // 局域网已开时同时开始附近设备探测（探测失败 / 后台由服务拒绝，空态可重试）。
+    // 只有 availability = available 时才开始附近设备探测：不可用状态下
+    // startScan 只会立刻失败，空态应直接说明本机原因。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final current = _provider;
       if (current == null) return;
       unawaited(current.checkConnections());
-      if (_isLanEnabled(current)) unawaited(_startNearbyScan(current));
+      if (_canScanNearby(current)) unawaited(_startNearbyScan(current));
     });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // provider 通知会触发 didChangeDependencies：局域网开关变化时重扫
-    // 附近设备（端口 / 地址变化由扫描端自己处理）。开关原本已开、只是
-    // 传输从不可用变为运行（例如刚授权）时也要补一次扫描。
+    // provider 通知会触发 didChangeDependencies：availability 变化时启停扫描
+    // （开关 / 权限 / 传输运行状态 / 蜂窝 / 省电 / UDP 端口都可能改变结论）。
     final provider = context.watch<SyncProvider>();
     _provider = provider;
-    final lanEnabled = _isLanEnabled(provider);
     final lanRunning = _isLanRunning(provider);
-    if (_lanEnabled != lanEnabled) {
-      _lanEnabled = lanEnabled;
-      _lanRunning = lanRunning;
-      if (lanEnabled) {
+    final becameRunning = lanRunning && !_lanRunning;
+    _lanRunning = lanRunning;
+    final availability = provider.nearbyAvailability;
+    final availabilityChanged = _nearbyAvailability != availability;
+    _nearbyAvailability = availability;
+    if (availabilityChanged) {
+      if (availability == SyncNearbyAvailability.available) {
         _scheduleNearbyScan();
       } else {
         _cancelNearbySettle();
@@ -106,15 +119,17 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       }
       return;
     }
-    final becameRunning = lanRunning && !_lanRunning;
-    _lanRunning = lanRunning;
-    if (becameRunning) _scheduleNearbyScan();
+    if (becameRunning && availability == SyncNearbyAvailability.available) {
+      _scheduleNearbyScan();
+    }
   }
 
   @override
   void dispose() {
     _nearbySettleTimer?.cancel();
     _nearbySettleTimer = null;
+    _relativeTimeTimer?.cancel();
+    _relativeTimeTimer = null;
     // 离开同步页就停止探测并清空候选：候选只服务这一页，后台不保留。
     _provider?.stopNearbyScan();
     super.dispose();
@@ -127,18 +142,22 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       _isLanEnabled(provider) &&
       (provider.transportStatus(SyncTransportKind.lan)?.running ?? false);
 
+  static bool _canScanNearby(SyncProvider provider) =>
+      provider.nearbyAvailability == SyncNearbyAvailability.available;
+
   /// 传输开关在事件里变化：等本帧结束再探测，避免在 build / didChangeDependencies
   /// 期间同步推流触发重入。
   void _scheduleNearbyScan() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final provider = _provider;
-      if (provider == null || !_isLanEnabled(provider)) return;
+      if (provider == null || !_canScanNearby(provider)) return;
       unawaited(_startNearbyScan(provider));
     });
   }
 
   Future<void> _startNearbyScan(SyncProvider provider) async {
+    if (!_canScanNearby(provider)) return;
     _nearbySettleTimer?.cancel();
     if (mounted && _nearbySearchSettled) {
       setState(() => _nearbySearchSettled = false);
@@ -146,8 +165,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     final started = await provider.startNearbyScan();
     if (!mounted) return;
     if (!started) {
-      // 后台 / 蜂窝 / 传输刚停都会拒绝扫描：直接给「没发现 + 重试」，
-      // 不能永远停在「正在查找」。
+      // 后台 / 蜂窝 / 省电 / 传输刚停 / 探测端口不可用 / availability 刚变化
+      // 都会拒绝扫描：直接落到「没发现 + 重试」，不能停在「正在查找」。
       if (!_nearbySearchSettled) {
         setState(() => _nearbySearchSettled = true);
       }
@@ -276,7 +295,33 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         for (final peer in provider.peers)
           _peerRow(
               context, provider, l10n, peer, manualByDevice[peer.deviceId]),
+        // 有名册但本轮一个都没连上：给一次受策略约束的即时检查，避免用户
+        // 只能干等下一轮定时唤醒。省电 / 移动数据暂停时点了也不会跑，
+        // 因此直接隐藏。
+        if (_shouldOfferRecheck(provider))
+          SettingsNavTile(
+            key: const Key('settingsSyncPeersRecheck'),
+            icon: Icons.refresh_rounded,
+            title: l10n.syncRecheckConnections,
+            subtitle: l10n.syncRecheckConnectionsHint,
+            onTap: () => unawaited(provider.checkConnections()),
+          ),
       ],
+    );
+  }
+
+  /// 是否显示「重新检查连接」：名册非空、本轮报告存在且没有任何设备
+  /// connected；调度器当前不允许自动检查时不显示。
+  static bool _shouldOfferRecheck(SyncProvider provider) {
+    if (provider.peers.isEmpty || provider.syncing) return false;
+    if (!provider.canCheckNow) return false;
+    final report = provider.lastReport;
+    if (report == null) return false;
+    final now = provider.nowMs;
+    return !provider.peers.any(
+      (peer) =>
+          resolveSyncPeerConnection(peer, report: report, nowMs: now) ==
+          SyncPeerConnectionStatus.connected,
     );
   }
 
@@ -317,27 +362,23 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         : l10n.syncRoundSynced(names);
   }
 
-  /// ③ 附近设备（`MSP/1` 候选）：局域网已开时自动探测，点击即配对。
+  /// ③ 附近设备（`MSP/1` 候选）：可用时自动探测，点击即配对。
   ///
   /// 这里只展示「未配对」候选：已在名册里的设备由上面的设备卡负责状态，
-  /// 同一台机器不能在两处出现两种说法。局域网关闭时只说明下一步，不重复
-  /// 放一个开关（开关只有传输卡一处）。
+  /// 同一台机器不能在两处出现两种说法。不可用时按本机原因分层（权限 /
+  /// 传输 / 移动数据 / 省电 / UDP），分别说明原因与下一步。
   Widget _nearbySection(
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
   ) {
+    final availability = provider.nearbyAvailability;
     return SettingsSectionCard(
       title: l10n.syncNearbySection,
       footer: SettingsSectionHint(text: l10n.syncNearbyFooter),
       children: [
-        if (!_isLanEnabled(provider))
-          SettingsInfoTile(
-            key: const Key('settingsSyncNearbyLanOff'),
-            icon: Icons.wifi_off_rounded,
-            title: l10n.syncNearbyLanOffTitle,
-            subtitle: l10n.syncNearbyLanOffHint,
-          )
+        if (availability != SyncNearbyAvailability.available)
+          _nearbyUnavailableRow(context, provider, l10n, availability)
         else
           StreamBuilder<List<SyncNearbyDevice>>(
             stream: provider.nearbyDevices,
@@ -397,6 +438,48 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
                 ],
               );
             },
+          ),
+      ],
+    );
+  }
+
+  /// 不可用状态的说明行 + 真实出路（查看日志 / 手动连接）。
+  ///
+  /// 「手动连接」直接打开发起方弹层：自动发现不可用时这是唯一能继续配对的
+  /// 入口，和高级设置里的地址簿写的是同一份状态。
+  Widget _nearbyUnavailableRow(
+    BuildContext context,
+    SyncProvider provider,
+    AppLocalizations l10n,
+    SyncNearbyAvailability availability,
+  ) {
+    // 调用点只在 availability != available 时进入这里，映射必有文案。
+    final copy = syncNearbyAvailabilityCopy(l10n, availability)!;
+    return SettingsRows(
+      children: [
+        SettingsInfoTile(
+          key: Key('settingsSyncNearby-${availability.name}'),
+          icon: copy.icon,
+          title: copy.title,
+          subtitle: copy.subtitle,
+        ),
+        if (availability == SyncNearbyAvailability.transportUnavailable)
+          SettingsNavTile(
+            key: const Key('settingsSyncNearbyOpenLog'),
+            icon: Icons.receipt_long_rounded,
+            title: l10n.syncLogTitle,
+            subtitle: l10n.syncNearbyOpenLogHint,
+            onTap: () => openSettingsSubPage(context, const SyncLogPage()),
+          ),
+        if (availability == SyncNearbyAvailability.discoveryUnavailable)
+          SettingsNavTile(
+            key: const Key('settingsSyncNearbyManualConnect'),
+            icon: Icons.link_rounded,
+            title: l10n.syncManualConnect,
+            subtitle: l10n.syncManualConnectSubtitle,
+            onTap: () => unawaited(
+              showSyncManualPeerDialog(context, provider, l10n),
+            ),
           ),
       ],
     );

@@ -278,7 +278,7 @@ class SyncScheduler {
     // Android 在后台不再广播网络变化：回前台必须重新探测电量与网络类型，
     // 否则「离开 Wi-Fi 后仍按 Wi-Fi 判定」。
     await refreshEnvironment();
-    if (_disposed || !_canRunAutomatically) return;
+    if (_disposed || !canRunAutomatically) return;
     final push = dirty;
     await _runAndMark(
       SyncTrigger.resume,
@@ -298,12 +298,12 @@ class SyncScheduler {
     if (_disposed) return;
     _backoff = _idleBackoffStart;
     // 空闲等级下重排唤醒：退避虽已归零，旧 timer 可能还停在 60 分钟处。
-    if (_level == SyncLevel.idle && _canRunAutomatically) _armIdle();
-    if (_visible && _canRunAutomatically && !_onCellular) {
+    if (_level == SyncLevel.idle && canRunAutomatically) _armIdle();
+    if (_visible && canRunAutomatically && !_onCellular) {
       _networkTimer?.cancel();
       _networkTimer = Timer(_networkDebounce, () {
         _networkTimer = null;
-        if (!_visible || !_canRunAutomatically || _onCellular) return;
+        if (!_visible || !canRunAutomatically || _onCellular) return;
         unawaited(_runAndMark(SyncTrigger.network, push: true));
       });
     }
@@ -315,7 +315,7 @@ class SyncScheduler {
   /// 冷却未到时延后到冷却结束，不在窗口内重复发轮次；后台 / 省电 / 蜂窝
   /// 直接忽略。
   void notifyPeerSighted() {
-    if (_disposed || !_visible || !_canRunAutomatically || _onCellular) return;
+    if (_disposed || !_visible || !canRunAutomatically || _onCellular) return;
     _peerSightTimer?.cancel();
     _peerSightTimer = Timer(_peerSightDebounce, _firePeerSight);
   }
@@ -325,7 +325,7 @@ class SyncScheduler {
     // 每次重新计算冷却：冷却计时器还在等待时又来了公告，不能排两轮。
     _peerSightCooldownTimer?.cancel();
     _peerSightCooldownTimer = null;
-    if (_disposed || !_visible || !_canRunAutomatically || _onCellular) return;
+    if (_disposed || !_visible || !canRunAutomatically || _onCellular) return;
     final now = _nowMs();
     final remaining =
         _lastDiscoveryAt + _peerSightCooldown.inMilliseconds - now;
@@ -349,7 +349,7 @@ class SyncScheduler {
     _cancelAuxiliaryTimers();
     _peerSightPending = false;
     _applyLevel(_evaluate());
-    if (!_canRunAutomatically || !dirty) return;
+    if (!canRunAutomatically || !dirty) return;
     unawaited(_runAndMark(SyncTrigger.pause, push: true));
   }
 
@@ -367,16 +367,16 @@ class SyncScheduler {
   ///
   /// 不是手动轮：同步关闭、已有轮次在跑、省电 / 蜂窝暂停策略生效时都不跑，
   /// 也不做 anti-entropy 全量兜底（只更新「最近一轮是否接触成功」）。
-  /// 「同步关闭 / 已有轮次在跑」由 [_canRunAutomatically] 与 [_runAndMark]
+  /// 「同步关闭 / 已有轮次在跑」由 [canRunAutomatically] 与 [_runAndMark]
   /// 统一拦住，这里不重复判断。
   Future<void> checkNow() async {
-    if (_disposed || !_canRunAutomatically) return;
+    if (_disposed || !canRunAutomatically) return;
     await _runAndMark(SyncTrigger.check, push: true);
   }
 
   /// 启动后首轮（受省电与蜂窝暂停策略约束）。
   Future<void> syncStartup() async {
-    if (!_canRunAutomatically) return;
+    if (!canRunAutomatically) return;
     await _runAndMark(
       SyncTrigger.startup,
       push: true,
@@ -412,8 +412,9 @@ class SyncScheduler {
     _reconnectStep = 0;
   }
 
-  /// 自动同步当前是否允许（省电等级与「移动数据下暂停」策略下暂停）。
-  bool get _canRunAutomatically {
+  /// 自动同步当前是否允许：同步关闭、省电等级或「移动数据下暂停」时返回
+  /// false。
+  bool get canRunAutomatically {
     if (!_host.syncEnabled) return false;
     if (powerSaveActive) return false;
     if (_onCellular && _state.cellularPolicy == SyncCellularPolicy.pause) {
@@ -459,11 +460,11 @@ class SyncScheduler {
       case SyncLevel.active:
         // 交互窗口过后自动降级为空闲（否则等级只会在事件到达时重估）。
         _armActiveDemote();
-        if (_immediateCategories.isNotEmpty && _canRunAutomatically) {
+        if (_immediateCategories.isNotEmpty && canRunAutomatically) {
           _armDebounce();
         }
       case SyncLevel.idle:
-        if (_canRunAutomatically) _armIdle();
+        if (canRunAutomatically) _armIdle();
       case SyncLevel.background:
       case SyncLevel.powerSave:
         break;
@@ -483,7 +484,7 @@ class SyncScheduler {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(_activeDebounce, () {
       _debounceTimer = null;
-      if (_level != SyncLevel.active || !_canRunAutomatically) return;
+      if (_level != SyncLevel.active || !canRunAutomatically) return;
       unawaited(_runAndMark(SyncTrigger.debounce, push: true));
     });
   }

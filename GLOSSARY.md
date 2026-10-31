@@ -861,7 +861,10 @@
   = HKDF(口令根密钥, info `molia-sync-discovery-v1`)；先来源限流再验 MAC 再
   解析，nonce 30 秒去重、boot 标识进程重启、presence 上限 32。公告 burst
   100/500/2000ms，正常轮只单播 ≤8 个已知端点并等 400ms，蜂窝 0 广播、
-  后台 0 定时器。
+  后台 0 定时器。IPv4 广播 / 组播从主 socket + 每个可路由 IPv4 接口 socket
+  发出；主 socket 按接口 join 组播接收，接口临时端口只收回给该端口的单播，
+  presence 的探测端口以认证报文里的 `probe` 为准。IPv6 同样由主 socket 按接口
+  加入组播接收，发送仍走主 socket 的默认接口。
 - **LanPeerEndpoint（已验证局域网端点）** — `SyncStateStore.lanEndpoints`：
   `deviceId → {host, httpPort, probePort, verifiedAt}`，只在 MAC + HTTP 解密
   成功（`onPeerVerified`）后回写；32 条上限、180 天淘汰、`removePeer` 一并

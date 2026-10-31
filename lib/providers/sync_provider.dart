@@ -17,6 +17,7 @@ import '../domain/ports/sync_pairing.dart';
 import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/peer_address.dart';
+import 'sync_nearby_availability.dart';
 
 /// 跨设备同步的 UI 门面：控制面（身份 / 开关 / 观测）+ 引擎（轮次 / 报告）
 /// + 备份（导出 / 导入）+ 恢复动作触发 + 策略转发。
@@ -103,6 +104,28 @@ class SyncProvider extends ChangeNotifier {
 
   /// 是否正在主动扫描附近设备。
   bool get scanningNearby => _pairing?.scanning ?? false;
+
+  /// 附近设备卡片当前为什么能 / 不能搜索（开关 / 权限 / 传输 / 网络 / 省电 /
+  /// UDP 两族都不可用）。同步页据此启停扫描，而不是在不可用状态下反复
+  /// `startScan`。
+  SyncNearbyAvailability get nearbyAvailability {
+    final lanEnabled = enabledTransports.contains(SyncTransportKind.lan);
+    final status = transportStatus(SyncTransportKind.lan);
+    final ports = lanDiscoveryPorts;
+    final discoveryAvailable = ports.v4 > 0 || ports.v6 > 0;
+    return resolveSyncNearbyAvailability(
+      lanEnabled: lanEnabled,
+      // 传输自己报告权限被拒时也算：启动路径可能还没让权限门记下
+      // `needsUserAction`，但「开关已开、传输没起来」的原因是缺权限。
+      permissionDenied: lanPermissionNeedsAttention ||
+          status?.unavailableReason == SyncUnavailableReason.permissionDenied,
+      transportUnavailable:
+          status == null || !status.running || status.unavailableReason != null,
+      discoveryAvailable: discoveryAvailable,
+      onCellular: onCellular,
+      powerSaveActive: powerSaveActive,
+    );
+  }
 
   /// 本机是否已有同步组（判据统一定义在 [SyncControlPlane.hasEstablishedGroup]）。
   bool get hasGroup => _controlPlane.hasEstablishedGroup;
@@ -363,9 +386,20 @@ class SyncProvider extends ChangeNotifier {
   }
 
   /// 控制面写入 + 口令兜底（不经过权限门，供授权成功后的启用路径复用）。
+  ///
+  /// 打开传输成功后立刻排一次 check 轮：用户刚打开局域网 / WebDAV 时最关心
+  /// 「现在能不能连上」，不必等下一次空闲唤醒；仍走调度器，省电 / 移动数据
+  /// 暂停 / 同步关闭时由调度器自己拦住。关闭传输不触发。
+  ///
+  /// WebDAV 未配置时不检查：打开开关后紧接着会进配置弹层，此时跑一轮必然
+  /// 以 `not_configured` 失败，没有信息量。
   Future<void> _applyTransportEnabled(String kind, bool value) async {
     if (value) await _controlPlane.ensurePassphrase();
     await _controlPlane.setTransportEnabled(kind, value);
+    if (!value) return;
+    final shouldCheck = kind == SyncTransportKind.lan ||
+        (kind == SyncTransportKind.webdav && _controlPlane.webdav.isConfigured);
+    if (shouldCheck) unawaited(_scheduler?.checkNow());
   }
 
   Future<void> setCategory(SyncCategory category, bool value) async {
@@ -377,11 +411,18 @@ class SyncProvider extends ChangeNotifier {
   Future<void> setDeviceName(String value) =>
       _controlPlane.setDeviceName(value);
 
-  Future<void> setWebdavConfig(WebDavConfig config) =>
-      _controlPlane.setWebdavConfig(config);
-
-  Future<void> setWebdavPassword(String password) =>
-      _controlPlane.writeWebdavPassword(password);
+  /// 一次写入 WebDAV 配置与密码（配置弹层的唯一保存入口）。
+  ///
+  /// 分两步写时，配置先落地会让已启用的 WebDAV 用「新地址 + 旧密码」跑一轮
+  /// 必然失败的检查；保存完成后才排一次 check 轮。未启用 / 未配置不触发。
+  Future<void> saveWebdavConfig(WebDavConfig config, String password) async {
+    await _controlPlane.setWebdavConfig(config);
+    await _controlPlane.writeWebdavPassword(password);
+    if (enabledTransports.contains(SyncTransportKind.webdav) &&
+        webdav.isConfigured) {
+      unawaited(_scheduler?.checkNow());
+    }
+  }
 
   Future<String?> readWebdavPassword() => _controlPlane.readWebdavPassword();
 
@@ -404,6 +445,11 @@ class SyncProvider extends ChangeNotifier {
       trigger: manual ? SyncTrigger.manual : SyncTrigger.timer,
     );
   }
+
+  /// 调度器当前是否允许自动检查（省电 / 移动数据暂停 / 同步关闭时为 false）。
+  ///
+  /// 页面用同一个判据决定是否显示「重新检查连接」，不在 UI 复刻策略。
+  bool get canCheckNow => _scheduler?.canRunAutomatically ?? false;
 
   /// 打开同步页时检查连接状态：经调度器（省电 / 蜂窝暂停 / 同步关闭时不跑）。
   ///
@@ -491,6 +537,9 @@ class SyncProvider extends ChangeNotifier {
       } catch (e) {
         debugPrint('[Molia] 授权后启动局域网传输失败: $e');
       }
+      // 这里不单独排 check 轮：onAppResumed 随后调用 onAppVisible()，resume
+      // 轮会覆盖这次启用；再排一个 check 会和它争 `_roundRunning`，并丢掉
+      // 零对端时 resume 轮 arm 的重连阶梯。
     }
     notifyListeners();
   }
