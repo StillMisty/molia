@@ -40,7 +40,9 @@ SEED_PORT_DEFAULT=8765
 MOCK_SOURCE_KEY="mock"
 MOCK_SOURCE_NAME="Mock 测试音源"
 MOCK_SOURCE_ID="seed-mock-source"
-ANDROID_DB_PATH="/data/data/$APP_ID/app_flutter/molia_database_v2.sqlite"
+# Drift 库走 getApplicationSupportDirectory()（Android 上即 files/）；
+# app_flutter/ 是 documents 目录，应用不会把库写在那里。
+ANDROID_DB_PATH="/data/data/$APP_ID/files/molia_database_v2.sqlite"
 ANDROID_PREFS_PATH="/data/data/$APP_ID/shared_prefs/FlutterSharedPreferences.xml"
 ANDROID_SCRIPTS_PATH="/data/data/$APP_ID/files/lx_sources.json"
 ANDROID_TMP="/data/local/tmp/molia-seed"

@@ -4,11 +4,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../providers/source_swap_provider.dart';
-import '../theme/m3e_context.dart';
+import '../utils/lyrics_provider_label.dart';
+import 'source_swap/source_swap_chrome.dart';
 import 'track_row.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -16,10 +18,12 @@ import 'track_row.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 音频换源视图：头部（原曲）→ 音源筛选 chip → 候选列表 → 底部确认。
+/// 音频换源视图：可编辑搜索栏 → 来源筛选 chip → 候选列表 → 底部确认。
 ///
 /// 供「换源」页的音频 tab 使用；会话状态在 [SourceSwapProvider]，
 /// 本组件只负责呈现与交互。挂载即发起会话、卸载即清空会话。
+/// 页面用 PageView 承载 tab：不 keep-alive 时切到歌词会把本视图 dispose，
+/// 音频会话随即被 clear，切回来得从头搜。
 @visibleForTesting
 class SourceSwapView extends StatefulWidget {
   const SourceSwapView({super.key, required this.request});
@@ -30,26 +34,46 @@ class SourceSwapView extends StatefulWidget {
   State<SourceSwapView> createState() => _SourceSwapViewState();
 }
 
-class _SourceSwapViewState extends State<SourceSwapView> {
+class _SourceSwapViewState extends State<SourceSwapView>
+    with AutomaticKeepAliveClientMixin {
   late final SourceSwapProvider _provider;
+  late final TextEditingController _searchController;
+  final FocusNode _searchFocusNode = FocusNode();
 
   /// 会话已发起（首帧微任务里 begin；发起前显示加载态，避免读到旧会话）。
   bool _started = false;
+
+  /// 确认流程（含去重追问）进行中：按钮内 spinner，防重复点击。
+  bool _isApplying = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _provider = context.read<SourceSwapProvider>();
+    _searchController = TextEditingController();
     // begin 会同步通知监听者；放到微任务里，避开本组件的首次 build。
     scheduleMicrotask(() {
       if (!mounted) return;
-      setState(() => _started = true);
       _provider.begin(widget.request);
+      if (!mounted) return;
+      setState(() {
+        _started = true;
+        _searchController.text = _provider.keyword;
+        _searchController.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _searchController.text.length,
+        );
+      });
     });
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     // 关闭即结束会话：dispose 期间 widget 树处于锁定态，通知会触发
     // markNeedsBuild 断言；推迟到微任务清空，过期在途结果由会话 id 守卫丢弃。
     scheduleMicrotask(_provider.clear);
@@ -58,59 +82,87 @@ class _SourceSwapViewState extends State<SourceSwapView> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final l10n = _l10n(context);
     final provider = context.watch<SourceSwapProvider>();
+    final sources = provider.searchableSources;
+    final failedNames = provider.failedSourceNames;
+    final hasKeyword = provider.keyword.isNotEmpty;
+    final showChrome = _started && !provider.noSources;
+    // 空态只留空态 + 下一步：没有来源 / 关键词为空时，搜索栏、chips、底栏
+    // 一起收起，避免「点选一项后确认」出现在无候选可选的页面上。
+    final showFooter =
+        showChrome &&
+        hasKeyword &&
+        (provider.activeItems.isNotEmpty || provider.selected != null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeader(context, l10n, widget.request.seed),
-        if (_started && provider.isSearching)
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
-            child: M3EProgressIndicator.linear(),
-          ),
-        Expanded(child: _buildBody(context, l10n, provider)),
-        _buildFooter(context, l10n, provider),
-      ],
-    );
-  }
-
-  Widget _buildHeader(
-    BuildContext context,
-    AppLocalizations l10n,
-    Track seed,
-  ) {
-    final theme = Theme.of(context);
-    final artist = seed.artistLabel;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
-      child: Row(
-        children: [
-          Icon(
-            Icons.swap_horiz_rounded,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(l10n.sourceSwap, style: context.typeScale.titleMedium),
-                Text(
-                  artist.isEmpty ? seed.title : '${seed.title} · $artist',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.typeScale.bodySmall.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+        if (showChrome)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SourceSwapSearchField(
+              key: const Key('sourceSwapSearchFieldAudio'),
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              enabled: !_isApplying,
+              onChanged: (value) {
+                if (_isApplying) return;
+                // 清空（清除键或手动删空）立即回到初始提示并保留焦点。
+                if (_started && value.isEmpty) {
+                  unawaited(provider.search(''));
+                }
+              },
+              onSubmitted: (value) {
+                if (!_started || _isApplying) return;
+                _searchFocusNode.unfocus();
+                unawaited(provider.search(value));
+              },
             ),
           ),
-        ],
-      ),
+        if (showChrome && hasKeyword)
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 4),
+            child: SourceSwapSourceChips(
+              sources: [
+                for (final source in sources)
+                  SourceSwapSourceOption(
+                    key: source.key,
+                    label: lyricsProviderLabel(l10n, sources, source.key),
+                  ),
+              ],
+              selectedKey: provider.activeSourceKey,
+              enabled: !_isApplying,
+              onSelected: (sourceKey) {
+                if (_isApplying) return;
+                provider.selectSource(sourceKey);
+              },
+            ),
+          ),
+        if (provider.isSearching && provider.groups.isNotEmpty)
+          const M3EProgressIndicator.linear(),
+        if (failedNames.isNotEmpty &&
+            showChrome &&
+            hasKeyword &&
+            !provider.isSearching)
+          SourceSwapNotice.failed(
+            message: l10n.sourceSwapFailedSources(failedNames.join(', ')),
+            retryKey: const Key('sourceSwapRetryFailedAudio'),
+            onRetry: _isApplying ? null : provider.retryFailed,
+          ),
+        Expanded(child: _buildBody(context, l10n, provider, sources)),
+        if (showFooter)
+          SourceSwapActionBar(
+            selectedTitle: provider.selected?.title,
+            selectedSource: provider.selected == null
+                ? null
+                : provider.selectedSourceName,
+            confirmLabel: l10n.sourceSwapConfirm,
+            busy: _isApplying,
+            onConfirm: _confirm,
+          ),
+      ],
     );
   }
 
@@ -118,70 +170,61 @@ class _SourceSwapViewState extends State<SourceSwapView> {
     BuildContext context,
     AppLocalizations l10n,
     SourceSwapProvider provider,
+    List<SourceDescriptor> sources,
   ) {
     if (!_started || (provider.isSearching && provider.groups.isEmpty)) {
-      return const Center(child: M3EProgressIndicator.circular());
+      return const SourceSwapLoadingState();
     }
     if (provider.noSources) {
-      return _emptyState(Icons.source_rounded, l10n.sourceSwapNoSources);
+      return SourceSwapEmptyState(
+        icon: Icons.source_rounded,
+        title: l10n.sourceSwapNoSources,
+        hint: l10n.sourceSwapNoSourcesHint,
+      );
     }
-    if (provider.groups.isEmpty) {
-      // 搜索已结束且无任何结果（失败源的重试入口在底部）。
-      return _emptyState(Icons.search_off_rounded, l10n.sourceSwapEmpty);
+    if (provider.keyword.isEmpty) {
+      return SourceSwapEmptyState(
+        icon: Icons.search_rounded,
+        title: l10n.sourceSwapSearchEmpty,
+      );
     }
-    return Column(
-      children: [
-        _buildSourceTabs(context, l10n, provider),
-        Expanded(child: _buildCandidates(context, provider)),
-      ],
-    );
-  }
 
-  /// 音源筛选 chip（顺序即用户音源顺序）。
-  ///
-  /// 用 [Wrap] 而不是横向滚动：B 站排在最后，横向滚动时窄屏默认看不到，
-  /// 用户很难发现还能「滑出」一个音源；换行保证所有源一眼可见。
-  Widget _buildSourceTabs(
-    BuildContext context,
-    AppLocalizations l10n,
-    SourceSwapProvider provider,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      child: M3EChipGroup(
-        groupLabel: l10n.sourceSwap,
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final group in provider.groups)
-              M3EChip(
-                label: group.displayName,
-                type: M3EChipType.filter,
-                selected: group.sourceKey == provider.activeSourceKey,
-                onPressed: () => provider.selectSource(group.sourceKey),
-              ),
-          ],
+    final entries = _listEntries(provider);
+    if (entries.isEmpty) {
+      if (provider.activeSourceKey.isEmpty) {
+        return SourceSwapEmptyState(
+          icon: Icons.search_off_rounded,
+          title: l10n.sourceSwapEmpty,
+          hint: l10n.sourceSwapEmptyHint,
+        );
+      }
+      return SourceSwapEmptyState(
+        icon: Icons.search_off_rounded,
+        title: l10n.searchNoResultsInSource(
+          lyricsProviderLabel(l10n, sources, provider.activeSourceKey),
         ),
-      ),
-    );
-  }
+        hint: l10n.sourceSwapEmptyHint,
+      );
+    }
 
-  Widget _buildCandidates(
-    BuildContext context,
-    SourceSwapProvider provider,
-  ) {
-    final items = provider.activeItems;
     final gap = TrackRow.gapOf(context);
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-      itemExtent: TrackRow.extent + gap,
-      itemCount: items.length,
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      itemCount: entries.length,
       itemBuilder: (context, index) {
-        final track = items[index];
+        final entry = entries[index];
+        final group = entry.group;
+        if (entry.track == null) {
+          return SourceSwapSectionHeader(
+            key: ValueKey<String>('sourceSwapSection-${group.sourceKey}'),
+            label: lyricsProviderLabel(l10n, sources, group.sourceKey),
+          );
+        }
+        final track = entry.track!;
         return Padding(
           padding: EdgeInsets.only(bottom: gap),
           child: TrackRow(
+            key: ValueKey<String>('sourceSwapAudioRow-${track.id.uri}'),
             model: TrackRowModel(
               title: track.title,
               artist: track.artistLabel,
@@ -191,90 +234,41 @@ class _SourceSwapViewState extends State<SourceSwapView> {
               selected: provider.selected?.id == track.id,
             ),
             surface: const TrackRowSurface(coverSize: 40),
-            position: calculateCardPosition(index, items.length),
-            onTap: () => _selectAndPreview(track),
+            position: calculateCardPosition(entry.index, entry.count),
+            onTap: _isApplying ? null : () => _selectAndPreview(track),
           ),
         );
       },
     );
   }
 
-  Widget _buildFooter(
-    BuildContext context,
-    AppLocalizations l10n,
-    SourceSwapProvider provider,
-  ) {
-    final theme = Theme.of(context);
-    final failedNames = provider.failedSourceNames;
-    final canApply = _started && provider.selected != null;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (failedNames.isNotEmpty && !provider.isSearching)
-            Row(
-              children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 18,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    // 中英都用逗号分隔：中文可读，英文也不会混入顿号。
-                    l10n.sourceSwapFailedSources(failedNames.join(', ')),
-                    style: context.typeScale.bodySmall.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                M3EIconButton(
-                  key: const Key('sourceSwapRetryFailedSources'),
-                  variant: M3EIconButtonVariant.standard,
-                  icon: const Icon(Icons.refresh_rounded),
-                  semanticLabel: l10n.retry,
-                  onPressed: provider.retryFailed,
-                ),
-              ],
-            ),
-          const SizedBox(height: 8),
-          M3EButton.filled(
-            onPressed: canApply ? _confirm : null,
-            child: Text(l10n.sourceSwapConfirm),
+  /// 全部模式 = 每组 header + 组内行；单源模式 = 只出该组行（无 header）。
+  List<_SourceSwapListEntry> _listEntries(SourceSwapProvider provider) {
+    final activeKey = provider.activeSourceKey;
+    final entries = <_SourceSwapListEntry>[];
+    for (final group in provider.groups) {
+      if (activeKey.isNotEmpty && group.sourceKey != activeKey) continue;
+      if (activeKey.isEmpty) {
+        entries.add(_SourceSwapListEntry.header(group));
+      }
+      for (var index = 0; index < group.items.length; index++) {
+        entries.add(
+          _SourceSwapListEntry.track(
+            group: group,
+            track: group.items[index],
+            index: index,
+            count: group.items.length,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _emptyState(IconData icon, String text) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+        );
+      }
+    }
+    return entries;
   }
 
   /// 选中并立即试听：单曲上下文，试听会打断当前播放。
   void _selectAndPreview(Track track) {
+    // 确认写入期间锁住选中：apply() 已捕获旧 _selected，不能再改。
+    if (_isApplying) return;
     _provider.select(track);
     unawaited(
       context.read<PlaybackProvider>().playDomainTracks(
@@ -286,6 +280,8 @@ class _SourceSwapViewState extends State<SourceSwapView> {
   }
 
   Future<void> _confirm() async {
+    if (_isApplying) return;
+    setState(() => _isApplying = true);
     final l10n = _l10n(context);
     SourceSwapApplyResult result;
     try {
@@ -317,6 +313,8 @@ class _SourceSwapViewState extends State<SourceSwapView> {
       if (!mounted) return;
       M3ESnackbar.show(context, message: l10n.sourceSwapApplyFailed);
       return;
+    } finally {
+      if (mounted) setState(() => _isApplying = false);
     }
     if (!mounted) return;
     switch (result.status) {
@@ -337,4 +335,24 @@ class _SourceSwapViewState extends State<SourceSwapView> {
         break; // 已在上面处理后重试；走到这里说明状态异常，保持弹层。
     }
   }
+}
+
+/// 音频候选列表的一行：分组标题或曲目（组内序号用于卡片形状）。
+class _SourceSwapListEntry {
+  const _SourceSwapListEntry.header(this.group)
+    : track = null,
+      index = 0,
+      count = 0;
+
+  const _SourceSwapListEntry.track({
+    required this.group,
+    required this.track,
+    required this.index,
+    required this.count,
+  });
+
+  final SourceSwapGroup group;
+  final Track? track;
+  final int index;
+  final int count;
 }

@@ -119,6 +119,7 @@ class TrackRowModel {
     this.trailingText,
     this.trackId,
     this.coverKey,
+    this.placeholderIcon,
     this.selected = false,
   });
 
@@ -161,6 +162,12 @@ class TrackRowModel {
 
   /// 实际查询键：显式 [coverKey] 优先，否则回退 [trackId]。
   String? get effectiveCoverKey => coverKey ?? trackId?.uri;
+
+  /// 无封面时的前导占位图标（歌词搜索结果这类没有图片的行）。
+  ///
+  /// 只有 [coverUrl] 与 [effectiveCoverKey] 都为空时才生效；有封面 /
+  /// 自定义封面时行为完全不变（仍走 [TrackArtwork]，包括默认封面回退）。
+  final IconData? placeholderIcon;
 
   final bool selected;
 
@@ -284,10 +291,11 @@ class TrackRow extends StatelessWidget {
     final Color contentColor = selected
         ? scheme.onSecondaryContainer
         : isCurrent
-            ? scheme.primary
-            : scheme.onSurface;
-    final Color supportingColor =
-        selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant;
+        ? scheme.primary
+        : scheme.onSurface;
+    final Color supportingColor = selected
+        ? scheme.onSecondaryContainer
+        : scheme.onSurfaceVariant;
     // 当前曲目的状态进整行语义：角标图形本身被排除语义，读屏仍能听到
     // 「正在播放 / 已暂停」。没有 l10n delegate 的组件测试省略状态词。
     final l10n = AppLocalizations.of(context);
@@ -405,8 +413,9 @@ class TrackRow extends StatelessWidget {
                 // 占走一半、右侧留白）。封顶半行宽 + 省略：窄屏/超长元信息
                 // 收缩省略，而不是把行撑溢出。
                 ConstrainedBox(
-                  constraints:
-                      BoxConstraints(maxWidth: constraints.maxWidth / 2),
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth / 2,
+                  ),
                   child: Text(
                     trailingText,
                     maxLines: 1,
@@ -496,6 +505,23 @@ class TrackRow extends StatelessWidget {
     );
   }
 
+  /// 无封面行的前导图标位：与封面同尺寸、同 10dp 圆角。
+  Widget _buildPlaceholderIcon(M3EColorScheme scheme, IconData icon) {
+    return Container(
+      width: surface.coverSize,
+      height: surface.coverSize,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(
+        icon,
+        size: surface.coverSize * 0.5,
+        color: scheme.onSurfaceVariant,
+      ),
+    );
+  }
+
   /// 缩略图 / 多选勾选翻转（M3E 列表的 selectedIcon 语义）。
   ///
   /// 当前曲目角标只在封面可见时叠加：多选勾选占住前导槽时让位给勾选图标，
@@ -510,15 +536,24 @@ class TrackRow extends StatelessWidget {
     required bool isPlaying,
   }) {
     final bool showsCheck = model.selected && surface.showCheckWhenSelected;
-    final Widget artwork = TrackArtwork(
-      coverKey: model.effectiveCoverKey,
-      originalUrl: model.coverUrl,
-      size: surface.coverSize,
-      borderRadius: BorderRadius.circular(10),
-      memCacheWidth:
-          (surface.coverSize * MediaQuery.of(context).devicePixelRatio).round(),
-      fallbackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-    );
+    final bool hasCover =
+        (model.coverUrl?.isNotEmpty ?? false) ||
+        (model.effectiveCoverKey?.isNotEmpty ?? false);
+    final IconData? placeholderIcon = model.placeholderIcon;
+    final Widget artwork = placeholderIcon != null && !hasCover
+        ? _buildPlaceholderIcon(scheme, placeholderIcon)
+        : TrackArtwork(
+            coverKey: model.effectiveCoverKey,
+            originalUrl: model.coverUrl,
+            size: surface.coverSize,
+            borderRadius: BorderRadius.circular(10),
+            memCacheWidth:
+                (surface.coverSize * MediaQuery.of(context).devicePixelRatio)
+                    .round(),
+            fallbackColor: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHighest,
+          );
     final Widget cover = isCurrent && !showsCheck
         ? CurrentTrackCover(
             cover: artwork,
@@ -544,10 +579,7 @@ class TrackRow extends StatelessWidget {
                 size: surface.coverSize * 0.7,
                 color: scheme.onSecondaryContainer,
               )
-            : KeyedSubtree(
-                key: const ValueKey<String>('cover'),
-                child: cover,
-              ),
+            : KeyedSubtree(key: const ValueKey<String>('cover'), child: cover),
       ),
     );
   }
@@ -604,11 +636,13 @@ class _ArtistLinksState extends State<_ArtistLinks> {
       }
       final recognizer = TapGestureRecognizer()..onTap = onTap;
       _recognizers.add(recognizer);
-      spans.add(TextSpan(
-        text: artist.name,
-        style: widget.linkStyle,
-        recognizer: recognizer,
-      ));
+      spans.add(
+        TextSpan(
+          text: artist.name,
+          style: widget.linkStyle,
+          recognizer: recognizer,
+        ),
+      );
     }
     return Text.rich(
       TextSpan(children: spans),

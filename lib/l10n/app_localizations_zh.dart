@@ -1170,6 +1170,41 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sourceSwapTabAudio => '音频';
 
   @override
+  String get sourceSwapAllSources => '全部';
+
+  @override
+  String get sourceSwapSources => '来源';
+
+  @override
+  String get sourceSwapSearchHint => '搜索歌名或歌手';
+
+  @override
+  String get sourceSwapSearchEmpty => '输入歌名或歌手开始搜索';
+
+  @override
+  String get sourceSwapEmptyHint => '换个关键词或来源试试';
+
+  @override
+  String get sourceSwapNoSourcesHint => '启用音源后，这里会列出可搜索的平台';
+
+  @override
+  String get sourceSwapLyricsConfirm => '使用此歌词';
+
+  @override
+  String sourceSwapSelected(String title, String source) {
+    return '已选：$title · $source';
+  }
+
+  @override
+  String get sourceSwapPickOne => '点选一项后确认';
+
+  @override
+  String get lyricsSourceNoSources => '没有可用的歌词来源';
+
+  @override
+  String get lyricsSourceNoSourcesHint => '启用对应平台后，这里会列出可用的歌词来源';
+
+  @override
   String playlistAddedTo(String name) {
     return '已加入「$name」';
   }
@@ -4321,6 +4356,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get biliAccountTileLoggedOut => '登录后可优先使用 B 站字幕歌词';
+
+  @override
+  String get biliLyricsLoginHintInline => '登录后可优先使用 B 站字幕歌词';
 
   @override
   String get biliAccountTileLoggedIn => '已登录 · B 站字幕优先作为歌词';

@@ -569,6 +569,27 @@
   "sourceSwapApplyFailed": "Failed to change source, please try again",
   "sourceSwapTabLyrics": "Lyrics",
   "sourceSwapTabAudio": "Audio",
+  "sourceSwapAllSources": "All",
+  "sourceSwapSources": "Sources",
+  "sourceSwapSearchHint": "Search title or artist",
+  "sourceSwapSearchEmpty": "Enter a title or artist to search",
+  "sourceSwapEmptyHint": "Try another keyword or source",
+  "sourceSwapNoSourcesHint": "Enable a source to see searchable platforms here",
+  "sourceSwapLyricsConfirm": "Use these lyrics",
+  "sourceSwapSelected": "Selected: {title} · {source}",
+  "@sourceSwapSelected": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      },
+      "source": {
+        "type": "String"
+      }
+    }
+  },
+  "sourceSwapPickOne": "Pick an item to continue",
+  "lyricsSourceNoSources": "No lyric sources available",
+  "lyricsSourceNoSourcesHint": "Enable a platform to see lyric sources here",
   "playlistAddedTo": "Added to “{name}”",
   "@playlistAddedTo": {
     "placeholders": {
@@ -2457,6 +2478,7 @@
   "sourcesPlatformAccounts": "Platform accounts",
   "biliAccountTitle": "Bilibili account",
   "biliAccountTileLoggedOut": "Sign in to prefer Bilibili captions as lyrics",
+  "biliLyricsLoginHintInline": "Sign in to use Bilibili captions",
   "biliAccountTileLoggedIn": "Signed in · Bilibili captions are preferred for lyrics",
   "biliAccountLoginIntro": "Playback works without signing in. After signing in, captions on Bilibili videos are used as lyrics first.",
   "biliAccountLoginAction": "Sign in with QR code",

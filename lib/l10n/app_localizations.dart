@@ -2300,6 +2300,72 @@ abstract class AppLocalizations {
   /// **'Audio'**
   String get sourceSwapTabAudio;
 
+  /// No description provided for @sourceSwapAllSources.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get sourceSwapAllSources;
+
+  /// No description provided for @sourceSwapSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources'**
+  String get sourceSwapSources;
+
+  /// No description provided for @sourceSwapSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search title or artist'**
+  String get sourceSwapSearchHint;
+
+  /// No description provided for @sourceSwapSearchEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a title or artist to search'**
+  String get sourceSwapSearchEmpty;
+
+  /// No description provided for @sourceSwapEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Try another keyword or source'**
+  String get sourceSwapEmptyHint;
+
+  /// No description provided for @sourceSwapNoSourcesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a source to see searchable platforms here'**
+  String get sourceSwapNoSourcesHint;
+
+  /// No description provided for @sourceSwapLyricsConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Use these lyrics'**
+  String get sourceSwapLyricsConfirm;
+
+  /// No description provided for @sourceSwapSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {title} · {source}'**
+  String sourceSwapSelected(String title, String source);
+
+  /// No description provided for @sourceSwapPickOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick an item to continue'**
+  String get sourceSwapPickOne;
+
+  /// No description provided for @lyricsSourceNoSources.
+  ///
+  /// In en, this message translates to:
+  /// **'No lyric sources available'**
+  String get lyricsSourceNoSources;
+
+  /// No description provided for @lyricsSourceNoSourcesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a platform to see lyric sources here'**
+  String get lyricsSourceNoSourcesHint;
+
   /// No description provided for @playlistAddedTo.
   ///
   /// In en, this message translates to:
@@ -8043,6 +8109,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sign in to prefer Bilibili captions as lyrics'**
   String get biliAccountTileLoggedOut;
+
+  /// No description provided for @biliLyricsLoginHintInline.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to use Bilibili captions'**
+  String get biliLyricsLoginHintInline;
 
   /// No description provided for @biliAccountTileLoggedIn.
   ///
