@@ -598,8 +598,9 @@
 - **渠道选择**：`DiscoverProvider.channelKey` 只决定热榜 / 歌单，状态与偏好
   持久化在 `kDiscoverChannelKey`；搜索来源完全解耦，由 `kSearchSourceFilter`
   单独持久化（默认 `''` = 全部来源）。资料页只处理「渠道被停用」的 UI 回退；
-  搜索 tab 只看 `SearchProvider.hasSearchableSources`，不显示发现渠道下拉，
-  来源选择在结果面 chips（见 ADR-0018）。
+  搜索 tab 只看 `SearchProvider.hasSearchableSources`；默认不显示发现渠道
+  下拉，仅当页面只剩搜索 tab（当前渠道无热榜 / 歌单能力）时保留渠道下拉，
+  作为切回可发现渠道的逃生口；来源选择在结果面 chips（见 ADR-0018）。
 - **内置发现**：`lib/sources/builtin/discover_source.dart` 的渠道与能力位从
   `BuiltinPlatforms.discoverSources` 派生（六平台同一份注册表）。B 站
   （`bili_discover.dart`）只有音乐榜（`bili__music_3d` / bangid `3:3`）+ 热搜 +

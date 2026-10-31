@@ -28,8 +28,9 @@
    isLoading / hasMore / isLoadingMore / loadMoreFailed / total / page）。
    UI 按来源分组渲染；扁平投影（`searchResults` / `filteredResults`）只服务
    播放、性能场景与旧消费面。
-3. **来源变化补搜**：registry 的新来源出现且当前关键词已经搜过时，自动为
-   该来源补首屏；来源移除 / 停用会 dispose 对应会话；渠道排序变化只重排
+3. **来源变化补搜**：registry 的新来源出现、当前关键词已经在当前搜索类型
+   搜过时，自动为该来源补首屏；其它类型在切过去时再补。来源移除 / 停用会
+   dispose 对应会话；渠道排序变化只重排
    分组，不重发请求；descriptors 未变化时不发请求。
 4. **来源过滤持久化**：`kSearchSourceFilter`（默认 `''` = 全部来源）跨重启
    记住；`selectSourceFilter` 只过滤已加载分组，来源尚未参与本轮搜索时才补
@@ -37,8 +38,9 @@
    「全部」固定第一。
 5. **发现渠道解耦**：`DiscoverProvider.channelKey` 只决定热榜 / 歌单，使用
    独立键 `kDiscoverChannelKey`；删除 `onChannelChanged` / `syncSearchSource`。
-   资料库搜索 tab 显隐只看 `SearchProvider.hasSearchableSources`，搜索 tab
-   不显示发现渠道下拉。
+   资料库搜索 tab 显隐只看 `SearchProvider.hasSearchableSources`；搜索 tab
+   默认不显示发现渠道下拉，仅当页面只剩搜索 tab（当前渠道没有热榜 / 歌单
+   能力）时保留渠道下拉，作为切回可发现渠道的逃生口。
 6. **单源体验不回退**：有效分组只有一个时不渲染分组标题、保留宽屏表格列
    与触底自动分页；多分组才用分组标题 + 每组独立「加载更多」。遮罩单源
    最多预览 8 行，多分组每组最多 2 行、总计 8 行。

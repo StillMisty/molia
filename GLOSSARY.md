@@ -513,7 +513,8 @@
 - **Aggregated search（跨音源聚合搜索）** — `SearchProvider` 对当前 `SearchKind`
   的每个目标来源并行发首屏，按来源分组展示；`updateSearchQuery` 仍 300ms 防抖，
   `submitSearch` 立即。换词作废所有旧会话；单源失败 / 分页 / 重试互不影响；
-  registry 出现新来源且当前关键词已搜过时自动补搜（ADR-0018）。
+  registry 出现新来源且当前类型的当前关键词已搜过时自动补搜；其它类型
+  在切换时再补（ADR-0018）。
 - **Search source group（搜索来源分组）** — `lib/providers/search_source_group.dart`
   的只读 `SearchSourceGroup<T>`：source / items / failure / isLoading / hasMore /
   isLoadingMore / loadMoreFailed / total / page。分组顺序严格取
@@ -618,7 +619,8 @@
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 只决定热榜 / 歌单，
   持久化在 `kDiscoverChannelKey`；不再联动搜索来源（`kSearchSourceFilter` 独立持久化，
   默认全部来源）。资料页只处理「渠道被停用」的 UI 回退；搜索 tab 只按
-  `SearchProvider.hasSearchableSources` 显隐，渠道下拉只在热榜 / 歌单 tab 显示。
+  `SearchProvider.hasSearchableSources` 显隐，渠道下拉默认只在热榜 / 歌单
+  tab 显示；页面只剩搜索 tab 时保留渠道下拉作为切回可发现渠道的逃生口。
 - **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
   `ensurePlaylistTracks`：页面只读 `PlaylistTracksView`（`tracks` + `LibraryReadState`
   的 loading / ready / failed）并请求加载，不再探测 `cachedTracksOf` /

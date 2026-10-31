@@ -104,9 +104,10 @@ class SearchProvider extends ChangeNotifier {
 
   /// 当前关键词已提交、但当前类型还没有真正发起搜索（防抖窗口 / 切类型）。
   ///
-  /// `_lastSearchedKeyword` 在换词、提交、切类型时先清空；`_runKindSearch`
-  /// 真正开始一轮搜索时才写入。因此它既能覆盖 300ms 防抖窗口，也能覆盖
-  /// 切类型后尚未启动的间隔，UI 不会把这段时间误判成「无结果」。
+  /// 换词 / 提交经 `_clearAllSessions` 清空 `_lastSearchedKeyword`；切类型则
+  /// 按目标 kind 是否已有本轮关键词判断。`_runKindSearch` 真正开始一轮搜索
+  /// 时才写入当前 kind。因此它既能覆盖 300ms 防抖窗口，也能覆盖切类型后
+  /// 尚未启动的间隔，UI 不会把这段时间误判成「无结果」。
   bool get isSearchPending {
     final keyword = _searchQuery.trim();
     if (keyword.isEmpty) return false;
@@ -518,13 +519,10 @@ class SearchProvider extends ChangeNotifier {
     if (!supportedSearchKinds.contains(_kind)) _kind = SearchKind.song;
 
     final keyword = _searchQuery.trim();
-    if (keyword.isNotEmpty) {
-      for (final kind in SearchKind.values) {
-        if (_lastSearchedKeyword[kind] != keyword) continue;
-        // 新来源出现且当前关键词已经搜过 → 自动补搜，脚本晚加载时也参与
-        // 本轮搜索。
-        unawaited(_ensureSessionsFor(kind, keyword));
-      }
+    if (keyword.isNotEmpty && _lastSearchedKeyword[_kind] == keyword) {
+      // 只给当前可见类型补搜：其它类型切过去时由 selectSearchKind 的
+      // _ensureSessionsFor 路径补齐，避免为不在当前页的类型发额外请求。
+      unawaited(_ensureSessionsFor(_kind, keyword));
     }
     notifyListeners();
   }
@@ -694,9 +692,15 @@ class SearchProvider extends ChangeNotifier {
   Future<void> _reloadSourceFilter() async {
     final settings = _settings;
     if (settings == null) return;
+    final generation = _sourceFilterGeneration;
     try {
       final value = (await settings.read(kSearchSourceFilter)).trim();
-      if (_disposed || value == _sourceFilterPreference) return;
+      // reload 在途时用户可能已经手动选了新来源：晚到的旧值不得覆盖。
+      if (_disposed ||
+          generation != _sourceFilterGeneration ||
+          value == _sourceFilterPreference) {
+        return;
+      }
       _applySourceFilter(value);
     } catch (_) {}
   }

@@ -26,7 +26,8 @@ class SearchSourceGroup<T> {
 
   final List<T> items;
 
-  /// 首屏归一化失败；失败时 [items] 保留上一次已发布的行（错误条与旧结果并存）。
+  /// 首屏归一化失败。首屏失败时该来源没有新页；追加页失败只体现在
+  /// [loadMoreFailed]，[items] 保留已加载的行。
   final SourceFailure? failure;
 
   /// 首屏加载中。

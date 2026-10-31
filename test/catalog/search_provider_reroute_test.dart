@@ -569,6 +569,51 @@ void main() {
     expect(provider.songGroups.map((g) => g.source.key), ['kw', 'tx']);
   });
 
+  test('新来源只补搜当前类型；切换类型时再补其它类型', () async {
+    final capabilities = const domain.SourceCapabilities(
+      search: true,
+      pagination: true,
+      artist: true,
+      lyricSearch: true,
+    );
+    final kw = _FakeMusicSource('kw', capabilities: capabilities);
+    final tx = _FakeMusicSource('tx', capabilities: capabilities);
+    final registry = _FakeRegistry(
+      {'kw': kw, 'tx': tx},
+      [_descriptor('kw', '酷我', capabilities: capabilities)],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => !provider.isSearching);
+    provider.selectSearchKind(SearchKind.artist);
+    await _waitUntil(() => _artistGroup(provider, 'kw').items.isNotEmpty);
+
+    registry.setDescriptors([
+      _descriptor('kw', '酷我', capabilities: capabilities),
+      _descriptor('tx', 'QQ音乐', capabilities: capabilities),
+    ]);
+    await _waitUntil(
+      () => provider.artistGroups.any(
+        (group) => group.source.key == 'tx' && group.items.isNotEmpty,
+      ),
+    );
+    expect(tx.artistSearchCalls, 1, reason: '当前类型（歌手）补首屏');
+    expect(tx.searchCalls, 0, reason: '不在当前类型的单曲不补搜');
+    expect(tx.lyricSearchCalls, 0, reason: '不在当前类型的歌词不补搜');
+
+    provider.selectSearchKind(SearchKind.lyric);
+    await _waitUntil(
+      () => provider.lyricGroups.any(
+        (group) => group.source.key == 'tx' && group.items.isNotEmpty,
+      ),
+    );
+    expect(tx.lyricSearchCalls, 1, reason: '切到歌词后再补该类型');
+    expect(tx.searchCalls, 0, reason: '单曲仍不补搜');
+    expect(tx.artistSearchCalls, 1, reason: '歌手不重复请求');
+  });
+
   test('渠道排序变化立即跟随；descriptors 未变化不重发请求', () async {
     final kw = _FakeMusicSource('kw');
     final tx = _FakeMusicSource('tx');
@@ -665,6 +710,26 @@ void main() {
     await settings.reloadKeys([kSearchSourceFilter.name]);
     await _waitUntil(() => provider.sourceFilter == 'kw');
     expect(provider.sourceFilter, 'kw');
+  });
+
+  test('reload 在途时手动过滤不会被晚到旧值覆盖', () async {
+    final registry = _FakeRegistry(
+      {'kw': _FakeMusicSource('kw'), 'tx': _FakeMusicSource('tx')},
+      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
+    );
+    addTearDown(registry.dispose);
+    final settings = testSettingsRegistry();
+    await settings.write(kSearchSourceFilter, 'tx');
+    final provider = buildProvider(registry, settings: settings);
+    await _waitUntil(() => provider.sourceFilter == 'tx');
+
+    // 模拟远端写入「全部来源」并触发 reload；reload 在途时用户手动选 kw。
+    await settings.write(kSearchSourceFilter, '');
+    final pendingReload = settings.reloadKeys([kSearchSourceFilter.name]);
+    provider.selectSourceFilter('kw');
+    await pendingReload;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.sourceFilter, 'kw', reason: '晚到的旧 reload 值不得覆盖用户选择');
   });
 
   test('selectSourceFilter 写入持久化（失败吞掉）', () async {
