@@ -288,6 +288,19 @@ void main() {
     expect(find.textContaining('skipped'), findsNothing);
   });
 
+  testWidgets('同步页每 30 秒刷新相对时间，不额外跑轮次', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await provider.syncNow(manual: true);
+    final pulls = transport.pullCount;
+    await pumpPage(tester);
+    expect(transportFooter(tester), contains('just now'));
+
+    nowMs += const Duration(minutes: 2).inMilliseconds;
+    await tester.pump(const Duration(seconds: 30));
+    expect(transportFooter(tester), contains('2 min ago'));
+    expect(transport.pullCount, pulls, reason: '只重算文案，不额外跑同步轮次');
+  });
+
   testWidgets('本机网络地址：卡片只留一行入口，明细在弹窗里逐条复制', (tester) async {
     final clipboard = mockClipboard(tester);
     transport.discoveryPortsOverride = (v4: 47825, v6: 47825);
@@ -899,6 +912,118 @@ void main() {
       'Synced this round: Device A, Device B and 1 more',
     );
     expect(peersFooter(tester), isNot(contains('Connected')));
+  });
+
+  testWidgets('名册有设备但本轮全部未连接：重新检查连接触发 check 轮', (tester) async {
+    final scheduler = SyncScheduler(
+      host: engine,
+      state: state,
+      cellularProbe: () async => false,
+      batteryProbe: () async => BatterySnapshot.unknown,
+    );
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      scheduler: scheduler,
+      localEndpoints: fakeEndpoints(),
+    );
+    await provider.init();
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    // 直接经引擎跑一轮拿一个稳定的本轮起点：provider 的手动轮走调度器，
+    // 可能与刚才「打开传输立即检查」的 check 轮撞车而返回 null。
+    final report = await engine.syncNow(trigger: SyncTrigger.manual);
+    final startedAt = report!.startedAt;
+    state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.check,
+      startedAt: startedAt,
+      finishedAt: startedAt + 1,
+      outcome: SyncOutcome.noPeers,
+      peers: [
+        SyncPeerState(
+          deviceId: 'offline',
+          name: 'Offline',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt - 1000,
+          lastSuccessAt: 0,
+        ),
+      ],
+    ));
+    provider.notifyListeners();
+    await pumpPage(tester);
+
+    final recheck = find.byKey(const Key('settingsSyncPeersRecheck'));
+    await tester.ensureVisible(recheck);
+    expect(recheck, findsOneWidget);
+    expect(peersFooter(tester), 'No devices connected this round');
+
+    final before = transport.pullCount;
+    await tester.tap(recheck);
+    await tester.pumpAndSettle();
+    expect(transport.pullCount, before + 1, reason: '入口走调度器 check 轮');
+    expect(provider.lastReport!.trigger, SyncTrigger.check);
+  });
+
+  testWidgets('重新检查连接：省电 / 移动数据暂停时隐藏', (tester) async {
+    var cellular = false;
+    var battery = const BatterySnapshot(
+      level: 10,
+      charging: false,
+      powerSave: true,
+    );
+    final scheduler = SyncScheduler(
+      host: engine,
+      state: state,
+      cellularProbe: () async => cellular,
+      batteryProbe: () async => battery,
+    );
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      scheduler: scheduler,
+      localEndpoints: fakeEndpoints(),
+    );
+    await provider.init();
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await scheduler.refreshEnvironment();
+    // 手动轮直接走引擎（测试只关心报告存在），不依赖调度器的暂停策略 /
+    // 与打开传输触发的 check 轮竞态。
+    final report = await engine.syncNow(trigger: SyncTrigger.manual);
+    final startedAt = report!.startedAt;
+    state.recordRound(SyncRoundReport(
+      trigger: SyncTrigger.check,
+      startedAt: startedAt,
+      finishedAt: startedAt + 1,
+      outcome: SyncOutcome.noPeers,
+      peers: [
+        SyncPeerState(
+          deviceId: 'offline',
+          name: 'Offline',
+          transport: SyncTransportKind.lan,
+          lastSeenAt: startedAt - 1000,
+        ),
+      ],
+    ));
+    provider.notifyListeners();
+    expect(provider.canCheckNow, isFalse);
+    await pumpPage(tester);
+    expect(find.byKey(const Key('settingsSyncPeersRecheck')), findsNothing);
+
+    // 移动数据 + 「暂停自动同步」：check 轮同样不会跑，入口继续隐藏。
+    cellular = true;
+    battery = BatterySnapshot.unknown;
+    await provider.setCellularPolicy(SyncCellularPolicy.pause);
+    await scheduler.refreshEnvironment();
+    provider.notifyListeners();
+    expect(provider.canCheckNow, isFalse);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settingsSyncPeersRecheck')), findsNothing);
+    // 测试结束前释放调度器：refreshEnvironment 会排一个活跃降级定时器，
+    // tearDown 晚于 testWidgets 的「无 pending timer」检查。
+    scheduler.dispose();
   });
 
   testWidgets('失联设备：名册标记 + 清理远端 / 从本机移除', (tester) async {

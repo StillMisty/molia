@@ -12,14 +12,17 @@ import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_backup.dart';
 import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_engine.dart';
+import 'package:molia/data/sync/sync_scheduler.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/pages/sync_log_page.dart';
 import 'package:molia/pages/sync_nearby_pairing_dialogs.dart';
 import 'package:molia/pages/sync_settings_page.dart';
 import 'package:molia/providers/sync_provider.dart';
+import 'package:molia/services/battery_probe.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/local_endpoints_service.dart';
 import 'package:molia/services/notification_service.dart';
@@ -62,6 +65,9 @@ void main() {
     );
     await state.init();
     transport = FakeSyncTransport();
+    // 附近设备扫描要求发现端口可用：默认给一个 v4 端口，个别不可用空态
+    // 用例再显式改成 (0, 0)。
+    transport.discoveryPortsOverride = (v4: 47825, v6: 0);
     final adapter = PrefsSyncAdapter(
       state: state,
       settings: SettingsRegistry(
@@ -238,16 +244,116 @@ void main() {
 
   testWidgets('附近设备：局域网关闭时只说明下一步，不再放第二个开关', (tester) async {
     await pumpPage(tester);
-    final hint = find.byKey(const Key('settingsSyncNearbyLanOff'));
+    final hint = find.byKey(const Key('settingsSyncNearby-lanOff'));
     await reveal(tester, hint);
 
-    expect(find.text('LAN sync is off'), findsOneWidget);
+    expect(hint, findsOneWidget);
+    expect(pairing.startScanCalls, 0);
+    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
+  });
+
+  testWidgets('附近设备：权限缺失时显示权限空态，不扫描', (tester) async {
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
+    transport.unavailableReason = SyncUnavailableReason.permissionDenied;
+    await pumpPage(tester);
+
+    final stateTile = find.byKey(
+      const Key('settingsSyncNearby-permissionDenied'),
+    );
+    await reveal(tester, stateTile);
+    expect(stateTile, findsOneWidget);
+    expect(pairing.startScanCalls, 0);
+  });
+
+  testWidgets('附近设备：传输未启动时给同步日志入口，不扫描', (tester) async {
+    await state.setTransportEnabled(SyncTransportKind.lan, true);
+    transport.unavailableReason = SyncUnavailableReason.startFailed;
+    await pumpPage(tester);
+
+    final stateTile = find.byKey(
+      const Key('settingsSyncNearby-transportUnavailable'),
+    );
+    await reveal(tester, stateTile);
+    expect(stateTile, findsOneWidget);
+    expect(pairing.startScanCalls, 0);
+
+    final logEntry = find.byKey(const Key('settingsSyncNearbyOpenLog'));
+    await reveal(tester, logEntry);
+    await tester.tap(logEntry);
+    await tester.pumpAndSettle();
+    expect(find.byType(SyncLogPage), findsOneWidget);
+  });
+
+  testWidgets('附近设备：UDP 不可用时给手动地址入口，不扫描', (tester) async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    transport.discoveryPortsOverride = (v4: 0, v6: 0);
+    await pumpPage(tester);
+
+    final stateTile = find.byKey(
+      const Key('settingsSyncNearby-discoveryUnavailable'),
+    );
+    await reveal(tester, stateTile);
+    expect(stateTile, findsOneWidget);
+    expect(pairing.startScanCalls, 0);
+
+    final manual = find.byKey(const Key('settingsSyncNearbyManualConnect'));
+    await reveal(tester, manual);
+    await tester.tap(manual);
+    await tester.pumpAndSettle();
+    expect(find.text('Connect manually'), findsWidgets);
+  });
+
+  testWidgets('附近设备：移动数据 / 省电模式显示暂停空态，不扫描', (tester) async {
+    var cellular = true;
+    var battery = BatterySnapshot.unknown;
+    final scheduler = SyncScheduler(
+      host: engine,
+      state: state,
+      cellularProbe: () async => cellular,
+      batteryProbe: () async => battery,
+    );
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      scheduler: scheduler,
+      localEndpoints: fakeEndpoints(),
+      pairing: pairing,
+    );
+    await provider.init();
+    await scheduler.refreshEnvironment();
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await pumpPage(tester);
+
+    await reveal(
+      tester,
+      find.byKey(const Key('settingsSyncNearby-cellular')),
+    );
     expect(
-      find.textContaining('nearby devices will appear here'),
+      find.byKey(const Key('settingsSyncNearby-cellular')),
       findsOneWidget,
     );
     expect(pairing.startScanCalls, 0);
-    expect(find.byKey(const Key('settingsSyncLanSwitch')), findsOneWidget);
+
+    cellular = false;
+    battery = const BatterySnapshot(
+      level: 80,
+      charging: false,
+      powerSave: true,
+    );
+    await scheduler.refreshEnvironment();
+    provider.notifyListeners();
+    await tester.pumpAndSettle();
+    await reveal(
+      tester,
+      find.byKey(const Key('settingsSyncNearby-powerSave')),
+    );
+    expect(
+      find.byKey(const Key('settingsSyncNearby-powerSave')),
+      findsOneWidget,
+    );
+    expect(pairing.startScanCalls, 0);
   });
 
   testWidgets('附近设备：页面内开启局域网即扫描，离开页面停止', (tester) async {
@@ -263,12 +369,16 @@ void main() {
     expect(pairing.stopScanCalls, greaterThan(0));
   });
 
-  testWidgets('附近设备：局域网已开但传输未运行，授权后变为运行会补扫', (tester) async {
+  testWidgets('附近设备：权限缺失时不扫描，传输恢复运行后补扫', (tester) async {
     // 直接写状态不启动传输：模拟启动时权限缺失（开关已开、传输不可用）。
     await state.setTransportEnabled(SyncTransportKind.lan, true);
     transport.unavailableReason = SyncUnavailableReason.permissionDenied;
     await pumpPage(tester);
-    expect(pairing.startScanCalls, 1);
+    expect(pairing.startScanCalls, 0, reason: '缺权限时不在不可用状态反复扫描');
+    expect(
+      find.byKey(const Key('settingsSyncNearby-permissionDenied')),
+      findsOneWidget,
+    );
 
     // 授权后传输恢复运行：即使开关没有 false → true，也要重新扫描候选。
     transport.unavailableReason = null;
@@ -276,7 +386,8 @@ void main() {
     await control.setDeviceName('授权后的设备');
     await tester.pumpAndSettle();
 
-    expect(pairing.startScanCalls, greaterThan(1));
+    expect(pairing.startScanCalls, greaterThan(0));
+    expect(pairing.scanning, isTrue);
   });
 
   testWidgets('附近设备：开局域网即扫描；空态可重新查找并落到「没有发现设备」', (tester) async {
@@ -378,19 +489,11 @@ void main() {
     await pumpPage(tester);
     await emitCandidate(tester);
 
+    final en = lookupAppLocalizations(const Locale('en'));
     final cases = <(SyncPairingOutcome, String)>[
-      (
-        SyncPairingOutcome.conflict,
-        'The devices are in different sync groups. Reset one device’s passphrase and try again.',
-      ),
-      (
-        SyncPairingOutcome.unreachable,
-        'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.',
-      ),
-      (
-        SyncPairingOutcome.rejected,
-        'The other device rejected the request. You can try again later.',
-      ),
+      (SyncPairingOutcome.conflict, en.syncNearbyResultConflict),
+      (SyncPairingOutcome.unreachable, en.syncNearbyResultUnreachable),
+      (SyncPairingOutcome.rejected, en.syncNearbyResultRejected),
     ];
     for (final (outcome, copy) in cases) {
       pairing.requestResult = SyncPairingResult(outcome: outcome);
@@ -416,7 +519,7 @@ void main() {
     expect(find.text('482 193'), findsNothing);
     expect(
       notifications.last,
-      'Pairing cancelled. Tap the device to try again.',
+      lookupAppLocalizations(const Locale('en')).syncNearbyResultCancelled,
     );
   });
 
@@ -464,7 +567,7 @@ void main() {
 
     expect(
       notifications.last,
-      'Pairing is unavailable. Make sure both devices have LAN sync on and try again.',
+      lookupAppLocalizations(const Locale('en')).syncNearbyResultUnavailable,
     );
     expect(find.text('Pair with “Pixel 9”'), findsNothing);
   });

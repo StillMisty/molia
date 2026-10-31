@@ -361,10 +361,11 @@
     `SocketException ... errno = 10013`，而 `netsh excludedportrange show`
     **看不到**这些块（上游 microsoft/WSL#40169）——排查时不要只在 netsh 里找。
     处置：`LanSyncTransport` 的 UDP 绑定先试标准端口、失败只记警告并改绑系统
-    分配端口（对端按探测包里自报的 `udpPort` 单播回来），HTTP 端点能起来时
-    传输照常运行；只有 HTTP 也起不来才是 `start_failed`，UDP 不可用时给
-    `probe_port_unavailable` + 「添加设备」手动地址直连。端口被普通进程占用
-    抛的是 `errno = 10048`，症状 / 处置相同。
+    分配端口（对端按探测包里自报的 `udpPort` 单播回来；按接口 socket 的临时
+    源端口不写回，presence 的 `probePort` 以认证报文里的 `probe` 为准），HTTP
+    端点能起来时传输照常运行；只有 HTTP 也起不来才是 `start_failed`，UDP
+    不可用时给 `probe_port_unavailable` + 「添加设备」手动地址直连。端口被
+    普通进程占用抛的是 `errno = 10048`，症状 / 处置相同。
     IPv6 相邻坑：Windows 防火墙要**单独放行 IPv6**（IPv4 规则不覆盖）；组播
     源的地址必然是 link-local，必须带 zone 才能连（Dart 的 URI 用 `%25` 表达，
     `InternetAddress` 对象自带 zone）——所以探测包交换 `addrs` 可路由候选地址，
@@ -400,8 +401,16 @@
     每来源 10 包/10s、全局 50 包/10s；「听到公告」不写 `lastSeenAt`、不触发
     同步轮次，设备行状态仍以实际同步轮次是否接触成功为准。
     - **发现时机是硬约束**：只在局域网传输运行、App 前台、非蜂窝时响应
-      probe；同步页打开时按 100 / 500 / 1500ms 发三轮探测。退后台会停 sweep、
-      清候选并把待确认请求按过期处理（不会在后台弹接受窗）；蜂窝下 0 广播。
+      probe；同步页打开时先按 100 / 500 / 1500ms 发三轮，扫描期间复用 sweep
+      定时器按 `scanRefreshInterval`（默认 5 秒）补发新 nonce 的 probe。补探
+      只刷新候选、不清空已有候选（TTL 仍是 15 秒，离线设备自然过期）；探测
+      端口不可用（`advertisedProbePort == 0`）时 `startScan` 收回扫描状态、
+      清空候选并返回 false，空态直接说明本机不可用。退后台 / 关页 / 停传输会
+      立即停 sweep、清候选并把待确认请求按过期处理（不会在后台弹接受窗）；
+      回前台恢复 sweep 并立即补一次。蜂窝下 0 广播。同步页只在
+      `SyncNearbyAvailability.available` 时启动扫描，空态按本机原因分层
+      （开关 / 权限 / 传输 / 移动数据 / 省电 / UDP），直接说明本机为什么
+      没在找。
     - **配对请求**（`lib/data/sync/pairing/lan_pairing_service.dart`）走
       `POST /molia-sync/v2/pair/request`、`GET /pair/status`、
       `POST /pair/complete`（invite 方向）：pending 上限 8、TTL 60 秒、同一
@@ -703,25 +712,31 @@
     `partial`；只有持久化端点的是「试探性对端」，连不上是常态，失败不计数。
     不要把「公告里自报的地址」直接当已验证端点，也不要把试探性失败算进
     失败对端数。
-70. **多网卡 / VPN 下广播只走默认路由，零应答不等于对端离线**：
-    `LanDiscovery` 只有 v4 / v6 两个 wildcard `RawDatagramSocket`，没有按
-    接口绑定，也没有固定 `multicastInterface`——广播 / 组播从哪块网卡出去由
-    系统路由表决定。多网卡（以太网 + Wi-Fi）、全隧道 VPN、WSL / 虚拟网卡
-    场景下，默认路由可能指向 VPN 或一块与对端不通的接口：本机地址列表里
-    有 `192.168.x`，广播却从 VPN 发出，表现为「两边都在线、广播零应答」。
-    **不能用 `255.255.255.255` 推断所有接口都收到了**，也不要因为广播 /
-    组播零应答就判定对端离线。排查顺序：
+70. **多网卡 / VPN 的发现边界：IPv4 已按接口发送，IPv6 仍走默认接口**：
+    `LanDiscovery` 的主 socket 仍是 v4 / v6 两个 wildcard
+    `RawDatagramSocket`，但 v5 起为每个可路由 IPv4 地址额外绑定一个临时端口
+    socket，广播 / 组播同时从主 socket 与这些接口 socket 发出，任一成功即算
+    发出；单个接口绑定失败只跳过该接口，主 socket 仍按原路径发送（失败回退
+    到系统默认路由）。主 socket 实际端口（标准 47825，端口降级时为系统分配）
+    的组播接收由**主 socket 按接口 join**（v4 / v6 都尝试）；接口 socket 的
+    临时端口只接收回给该端口的单播，不承担组播接收。
+    单个接口加组失败只影响该接口的组播接收，该接口的广播发送仍保留。
+    **IPv6 发送仍只从主 v6 socket 走系统路由**（Dart 没有跨平台
+    `IPV6_MULTICAST_IF`），全隧道 VPN / 多网卡下 IPv6 组播仍可能走错接口。
+    仍然不能用「广播零应答」判定对端离线：AP 隔离、防火墙只放行默认接口、
+    多网段、对端休眠都会造成同样的现象。排查顺序：
     ① 先看已同步设备的 `lanEndpoints` 单播是否成功（HTTP 拉取 / 解密成功
     才算接触），再看附近设备探测 / 手动地址能否直连；
     ② 用 `LocalEndpointsService` 的 `ifname|address` 指纹确认换网检测到的
     是预期接口，看同步日志与 `lanDiscoveryPorts`；
     ③ 再查 VPN 是否全隧道、接口 metric / 绑定顺序、防火墙是否只放行默认
     接口。手动地址（可指定地址族的探测端口）是当前最可靠的跨接口入口。
-    另：UDP 端口降级到系统分配端口后，发往固定 47825 的广播同样到不了它
-    （见 #46），此时只能靠手动地址 / 已有端点单播；未配对设备用「手动连接」
-    单播 `MSP` 探测后仍可一键配对。不要把这当成「发现协议坏了」。若将来要
-    真正按接口发现，需要为每个接口绑定 socket 或切换 `multicastInterface`，
-    并处理接口上下线。
+    另：接口 socket 的源端口是系统临时端口，不会写进 presence /
+    `lanEndpoints`；`presence.probePort` 以 MAC 认证过的 `probe`（主 socket
+    端口）为准，只有报文为 0 才回退来源端口，避免重启 / 换接口后留下打不通
+    的端口。UDP 端口降级到系统分配端口后，发往固定 47825 的广播同样到不了
+    它（见 #46），此时只能靠手动地址 / 已有端点单播；未配对设备用「手动连接」
+    单播 `MSP` 探测后仍可一键配对。不要把这当成「发现协议坏了」。
 71. **移动端息屏 / 后台不要写 `AppPresence` 来省电**：`AppPresence` 是桌面
     窗口可见性的事实源（托盘 / 最小化），`PlaybackObserver` /
     `ImagePreloadManager` / `ArtworkThemeSync` 仍据此停产封面预取、取色。

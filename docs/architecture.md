@@ -486,14 +486,24 @@
   实现、可分别开关：局域网直连（`MSD/1` 二进制公告发现 + 内置 HTTP
   `/molia-sync/v2/*` 数据端点；UDP 只发现、HTTP 是数据与存活通道）与用户自备
   WebDAV（`<remoteDir>/<deviceId>.p2.*.msync` 密文文件，PROPFIND/GET/PUT/MKCOL；
-  `.p2` 是硬断代命名空间，旧文件按幽灵文件忽略、不读不删）。
+  `.p2` 是硬断代命名空间，旧文件按幽灵文件忽略、不读不删）。打开局域网成功后
+  经调度器排一次 `checkNow()`；打开 WebDAV 只在已配置时排 check，未配置时等
+  保存配置后再检查（仍受省电 / 移动数据暂停与在途轮次约束，关闭不触发）。
+  WebDAV 配置弹层用 `saveWebdavConfig(config, password)` 一次写配置与密码，
+  已启用且已配置时立即检查，避免配置与密码之间跑一轮必然失败的轮次。
   局域网发现报文（`MSD/1`：magic / version / type / HMAC / bodyLen + 认证
   body）先按来源限流（20 包/10s，全局 100 包/10s）再验 MAC 再解析；正常轮
   只对 presence / 手动地址 / `lanEndpoints` 做 ≤8 个单播并等 400ms，冷启动 /
   回前台 / 换网才广播（v4 `255.255.255.255` + `224.0.0.169`、v6
-  `ff02::4d4f:4c49`）并等 1.2s；蜂窝 0 广播、后台 0 定时器。`lanEndpoints`
-  只在 MAC + HTTP 解密成功后回写（32 条上限、180 天淘汰、移除设备一并清理），
-  广播被隔离时用它单播兜底。
+  `ff02::4d4f:4c49`）并等 1.2s；蜂窝 0 广播、后台 0 定时器。v4 广播 / 组播
+  从主 wildcard socket 与每个可路由 IPv4 接口的独立 socket 发出（多网卡 /
+  VPN 下不只依赖默认路由），单个接口绑定失败只跳过该接口、主 socket 仍按原
+  路径发送；主 socket 实际端口（标准 47825，端口降级时为系统分配）的组播接收
+  由主 socket 按接口 join 承担，接口 socket 的临时端口只接收回给该端口的单播，
+  不对外；presence 的探测端口以认证报文里的 `probe` 为准。IPv6 由主 socket 按
+  接口 join 组播接收，发送仍走默认路由。
+  `lanEndpoints` 只在 MAC + HTTP 解密成功后回写（32 条上限、180 天淘汰、
+  移除设备一并清理），广播被隔离时用它单播兜底。
   局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请
   `ACCESS_LOCAL_NETWORK`（未授予时状态 `permission_denied`；申请只在用户开
   局域网开关 / 点「去授权」时触发，启动与轮次只查状态不弹窗，被拒开关回退
@@ -512,15 +522,28 @@
   （「开关已开而实际没有监听」是排查同步事故的主要来源）。
   同步内容子页只列类别开关，关闭后果在卡片 footer 说明一次；自定义封面
   类别（默认随同步发送）也只在这里出现，外观页不再提供第二份快捷开关。
+  同步页每 30 秒只重算一次相对时间（不额外跑轮次）；名册有设备但本轮全部
+  未连接、且自动检查未被省电 / 移动数据暂停挡住时，设备卡给「重新检查连接」
+  （`checkConnections()` → `SyncTrigger.check`）。
   **配对只有一条路径**（`data/sync/pairing/**`）：`MSP/1` 局域网附近设备发现
-  （probe / announce，只做候选，不写名册、不触发同步轮次）→ 点击候选发起
-  `/molia-sync/v2/pair/*` 请求 → 双方核对 6 位确认码 → 对方接受后加入同步组。
+  （probe / announce，只做候选，不写名册、不触发同步轮次；probe 复用 MSD 的
+  广播路径，多网卡也按接口各发一份，重复应答由候选缓存按 deviceId 收敛）→
+  点击候选发起 `/molia-sync/v2/pair/*` 请求 → 双方核对 6 位确认码 → 对方接受
+  后加入同步组。
   接受 = 加入同步组 = 对方获得本机口令、可解密全部同步数据（含密钥），弹窗
   必须明示；确认码由双方临时公钥 / nonce / requestId 派生，不一致必须拒绝。
   口令只在临时 ECDH（P-256）+ HKDF-SHA256 + AES-256-GCM 密封后传输，AAD
   绑定 requestId / intent / 双方 deviceId；pending TTL 60 秒、上限 8、每来源
   限流，且只在 App 前台 / 局域网传输运行 / 非蜂窝时探测与弹窗。双方口令相同
   用 group proof 直接补端点；都已有不同同步组则返回冲突，不静默换组。
+  附近设备扫描在初始 100 / 500 / 1500ms 三波之后，扫描期间复用 sweep 定时器
+  按 `scanRefreshInterval`（默认 5 秒）补发新 nonce 的 probe；候选 TTL 仍是
+  15 秒，补探只续期不清空。退后台 / 关页 / 停传输立即停，回前台补一次；
+  本机探测端口不可用（`advertisedProbePort == 0`）时 `startScan` 收回扫描
+  状态、清空候选并返回 false。空态按 `SyncNearbyAvailability`
+  分层（开关 / 权限 / 传输未启动 / 移动数据 / 省电 / UDP 两族不可用 / 可用），
+  同步页只在可用时启停扫描；权限、传输与发现原因分别指向授权、同步日志与
+  手动地址 / WebDAV。
   `LanPairingService`（`lan_pairing_service.dart`）负责协议与 pending 状态机，
   `PairingCrypto`（`pairing_crypto.dart`）负责密封与确认码，候选 / 请求模型在
   `domain/models/sync_nearby_pairing.dart`。**旧配对码（`molia-pair:*`）/

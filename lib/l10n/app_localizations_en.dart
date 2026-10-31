@@ -2961,6 +2961,44 @@ class AppLocalizationsEn extends AppLocalizations {
       'Ask the other device to open Molia and turn on LAN sync';
 
   @override
+  String get syncNearbyPermissionTitle => 'LAN access needed';
+
+  @override
+  String get syncNearbyPermissionHint =>
+      'Grant LAN access above first, then search again.';
+
+  @override
+  String get syncNearbyTransportDownTitle => 'LAN sync isn\'t running';
+
+  @override
+  String get syncNearbyTransportDownHint => 'Check the reason, then try again.';
+
+  @override
+  String get syncNearbyOpenLogHint => 'See the latest failure reason';
+
+  @override
+  String get syncNearbyCellularTitle => 'On mobile data';
+
+  @override
+  String get syncNearbyCellularHint =>
+      'Nearby search needs Wi-Fi. Switch and try again.';
+
+  @override
+  String get syncNearbyPowerSaveTitle => 'Power saver is on';
+
+  @override
+  String get syncNearbyPowerSaveHint =>
+      'Nearby search is paused. Turn off power saver and try again.';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableTitle =>
+      'Auto-discovery unavailable';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableHint =>
+      'Add a manual address or use WebDAV.';
+
+  @override
   String get syncNearbyFooter =>
       'Only accept devices you know. Accepting lets the other device read all synced data (including keys). If nothing appears, add an address in Advanced settings.';
 
@@ -3002,7 +3040,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncNearbyResultUnreachable =>
-      'Couldn’t reach the device. Make sure both devices are on the same network with LAN sync on.';
+      'Couldn’t reach the device. Make sure both devices are on the same network; keep Molia open in the foreground on the other device and confirm LAN access is granted.';
 
   @override
   String get syncNearbyResultBusy =>
@@ -3014,7 +3052,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncNearbyResultUnavailable =>
-      'Pairing is unavailable. Make sure both devices have LAN sync on and try again.';
+      'Pairing is unavailable. Keep Molia open in the foreground on the other device and confirm LAN access is granted, then try again.';
 
   @override
   String get syncNearbyResultCancelled =>
@@ -3119,6 +3157,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncRoundNoRecords => 'No connection records yet';
+
+  @override
+  String get syncRecheckConnections => 'Check connections again';
+
+  @override
+  String get syncRecheckConnectionsHint => 'Automatic sync continues';
 
   @override
   String syncRoundSynced(String names) {

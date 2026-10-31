@@ -8,6 +8,7 @@ import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/pages/sync_dialogs.dart';
 import 'package:molia/pages/sync_labels.dart';
+import 'package:molia/providers/sync_nearby_availability.dart';
 
 /// 失败原因码 → 文案 / 动作映射的回归。
 ///
@@ -126,6 +127,106 @@ void main() {
           const SyncIssue(code: SyncIssueCode.allPeersUnreachable)),
       contains(SyncIssueAction.addManualPeer),
     );
+  });
+
+  test('配对失败文案：提醒对端保持前台并确认局域网授权', () {
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    final en = lookupAppLocalizations(const Locale('en'));
+    for (final text in [
+      zh.syncNearbyResultUnreachable,
+      zh.syncNearbyResultUnavailable,
+    ]) {
+      expect(text, contains('保持 Molia 在前台'));
+      expect(text, contains('已授权局域网'));
+    }
+    for (final text in [
+      en.syncNearbyResultUnreachable,
+      en.syncNearbyResultUnavailable,
+    ]) {
+      expect(
+        text.toLowerCase(),
+        contains('keep molia open in the foreground'),
+      );
+      expect(text, contains('LAN access is granted'));
+    }
+  });
+
+  test('附近设备可用性：优先级与每种状态都有专属文案', () {
+    SyncNearbyAvailability resolve({
+      bool lanEnabled = true,
+      bool permissionDenied = false,
+      bool transportUnavailable = false,
+      bool discoveryAvailable = true,
+      bool onCellular = false,
+      bool powerSaveActive = false,
+    }) =>
+        resolveSyncNearbyAvailability(
+          lanEnabled: lanEnabled,
+          permissionDenied: permissionDenied,
+          transportUnavailable: transportUnavailable,
+          discoveryAvailable: discoveryAvailable,
+          onCellular: onCellular,
+          powerSaveActive: powerSaveActive,
+        );
+
+    // 开关关闭只说「未开启」，不展开权限等后续原因。
+    expect(
+      resolve(lanEnabled: false, permissionDenied: true),
+      SyncNearbyAvailability.lanOff,
+    );
+    expect(
+      resolve(permissionDenied: true),
+      SyncNearbyAvailability.permissionDenied,
+    );
+    expect(
+      resolve(transportUnavailable: true),
+      SyncNearbyAvailability.transportUnavailable,
+    );
+    expect(resolve(onCellular: true), SyncNearbyAvailability.cellular);
+    expect(
+      resolve(onCellular: true, powerSaveActive: true),
+      SyncNearbyAvailability.cellular,
+      reason: '移动数据比省电更具体：先提示切 Wi-Fi',
+    );
+    expect(
+      resolve(powerSaveActive: true),
+      SyncNearbyAvailability.powerSave,
+    );
+    expect(
+      resolve(discoveryAvailable: false),
+      SyncNearbyAvailability.discoveryUnavailable,
+    );
+    expect(resolve(), SyncNearbyAvailability.available);
+
+    // 除 available 外每种状态都有非空标题 / 副标题，且标题互不重复。
+    final titles = <String>{};
+    for (final locale in const [Locale('zh'), Locale('en')]) {
+      final l10n = lookupAppLocalizations(locale);
+      for (final availability in SyncNearbyAvailability.values) {
+        final copy = syncNearbyAvailabilityCopy(l10n, availability);
+        if (availability == SyncNearbyAvailability.available) {
+          expect(copy, isNull);
+          continue;
+        }
+        expect(copy, isNotNull, reason: '$locale/$availability');
+        expect(copy!.title, isNotEmpty, reason: '$locale/$availability');
+        expect(copy.subtitle, isNotEmpty, reason: '$locale/$availability');
+      }
+      final localeTitles = {
+        for (final availability in SyncNearbyAvailability.values)
+          if (availability != SyncNearbyAvailability.available)
+            syncNearbyAvailabilityCopy(l10n, availability)!.title,
+      };
+      expect(localeTitles, hasLength(SyncNearbyAvailability.values.length - 1));
+      titles.addAll(localeTitles);
+    }
+    expect(titles, hasLength((SyncNearbyAvailability.values.length - 1) * 2));
+
+    // 文案长度按 copy_style §5 收口（只约束本轮调整过的条目）。
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    expect(zh.syncNearbyPermissionTitle.length, lessThanOrEqualTo(10));
+    expect(zh.syncNearbyCellularHint.length, lessThanOrEqualTo(24));
+    expect(zh.syncNearbyDiscoveryUnavailableHint.length, lessThanOrEqualTo(24));
   });
 
   test('syncIssue* / syncAction* 键在 zh 中齐全（en 为模板）', () {

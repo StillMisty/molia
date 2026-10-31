@@ -2851,6 +2851,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyEmptyHint => '让对方打开 Molia 并开启局域网同步';
 
   @override
+  String get syncNearbyPermissionTitle => '需要局域网权限';
+
+  @override
+  String get syncNearbyPermissionHint => '请先完成上方的局域网授权，再重新查找。';
+
+  @override
+  String get syncNearbyTransportDownTitle => '局域网同步没有运行';
+
+  @override
+  String get syncNearbyTransportDownHint => '请查看原因后重试。';
+
+  @override
+  String get syncNearbyOpenLogHint => '查看最近失败原因';
+
+  @override
+  String get syncNearbyCellularTitle => '正在使用移动数据';
+
+  @override
+  String get syncNearbyCellularHint => '移动数据下无法搜索，请切换到 Wi-Fi。';
+
+  @override
+  String get syncNearbyPowerSaveTitle => '省电模式已开启';
+
+  @override
+  String get syncNearbyPowerSaveHint => '自动搜索已暂停，请关闭省电模式后重试。';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableTitle => '自动发现不可用';
+
+  @override
+  String get syncNearbyDiscoveryUnavailableHint => '请手动添加地址，或改用 WebDAV。';
+
+  @override
   String get syncNearbyFooter =>
       '只接受你认识的设备；接受后对方可读取全部同步数据（含密钥）。找不到时可在高级设置手动添加地址。';
 
@@ -2887,7 +2920,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyResultConflict => '两台设备已在不同的同步组，请先重置其中一台的同步口令再试。';
 
   @override
-  String get syncNearbyResultUnreachable => '连不上这台设备，请确认两台设备在同一网络且都开启了局域网同步。';
+  String get syncNearbyResultUnreachable =>
+      '连不上这台设备。请确认两台设备在同一网络，让对方保持 Molia 在前台，并确认已授权局域网。';
 
   @override
   String get syncNearbyResultBusy => '对方正在处理另一条配对请求，请稍后再试。';
@@ -2896,7 +2930,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncNearbyResultUnsupported => '这台设备暂不支持一键配对，请更新 Molia 后重试。';
 
   @override
-  String get syncNearbyResultUnavailable => '配对暂时不可用，请确认两台设备都开启了局域网同步后重试。';
+  String get syncNearbyResultUnavailable =>
+      '配对暂时不可用。请让对方保持 Molia 在前台，并确认已授权局域网后重试。';
 
   @override
   String get syncNearbyResultCancelled => '已取消配对，需要时可以重新点击设备。';
@@ -2998,6 +3033,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncRoundNoRecords => '还没有连接记录';
+
+  @override
+  String get syncRecheckConnections => '重新检查连接';
+
+  @override
+  String get syncRecheckConnectionsHint => '自动同步仍会继续';
 
   @override
   String syncRoundSynced(String names) {

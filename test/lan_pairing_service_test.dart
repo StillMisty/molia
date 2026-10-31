@@ -1182,6 +1182,195 @@ void main() {
     expect(nearby.last, hasLength(before), reason: '蜂窝不刷新候选');
     expect(nearby.last.single.host, '192.168.1.9');
   });
+
+  test('扫描常驻：周期补探不清空候选，退后台停止、回前台补一次', () async {
+    final packets = StreamController<LanPairingDatagram>.broadcast();
+    final probes = <Msp1Message>[];
+    var now = 1000;
+    final service = LanPairingService(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      readPassphrase: () async => null,
+      writePassphrase: (value) async {},
+      hasGroup: () => false,
+      canPrompt: () => true,
+      isCellular: () => false,
+      httpPortProvider: () => 41000,
+      probePortProvider: () => 47825,
+      localAddressesProvider: () async => const [],
+      packets: packets.stream,
+      sendPacket: (packet, {host, port}) async {
+        final decoded = Msp1.decode(packet);
+        if (decoded != null) probes.add(decoded);
+        return true;
+      },
+      nowMs: () => now,
+      sweepInterval: const Duration(milliseconds: 20),
+      scanRefreshInterval: const Duration(milliseconds: 60),
+      scanProbeDelaysMs: const [0],
+    );
+    addTearDown(() async {
+      await service.dispose();
+      await packets.close();
+    });
+    final nearby = <List<SyncNearbyDevice>>[];
+    final subscription = service.nearbyDevices.listen(nearby.add);
+    addTearDown(subscription.cancel);
+
+    await service.start();
+    expect(await service.startScan(), isTrue);
+    expect(probes, hasLength(1));
+    expect(probes.single.isProbe, isTrue);
+    final firstNonce = probes.single.nonce;
+
+    final announce = Msp1.encode(Msp1Message(
+      type: Msp1.typeAnnounce,
+      deviceId: 'devB',
+      name: '设备B',
+      httpPort: 41001,
+      probePort: 47825,
+      addresses: const [],
+      hasGroup: false,
+      bootId: 'boot-b',
+      nonce: 'nonce-b',
+    ));
+    packets.add(LanPairingDatagram(
+      message: Msp1.decode(announce)!,
+      sourceHost: '192.168.1.9',
+      sourcePort: 47825,
+      receivedAt: now,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    expect(nearby.last.map((device) => device.deviceId), contains('devB'));
+
+    // 距上次探测超过补探间隔：sweep 补发一条新 nonce 的 probe，候选不清空。
+    now += 1000;
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    expect(probes.length, greaterThan(1));
+    expect(
+      probes.map((probe) => probe.nonce).toSet(),
+      hasLength(probes.length),
+      reason: '每次补探都使用新 nonce',
+    );
+    expect(probes.skip(1).every((probe) => probe.isProbe), isTrue);
+    expect(probes.skip(1).map((probe) => probe.nonce), isNot(contains(firstNonce)));
+    expect(
+      nearby.last.map((device) => device.deviceId),
+      contains('devB'),
+      reason: '周期补探只刷新候选，不清空已有候选',
+    );
+
+    // 退后台立刻停止补探（sweep 定时器也取消）。
+    service.onAppHidden();
+    expect(service.debugSweepScheduled, isFalse);
+    final beforeHidden = probes.length;
+    now += 10000;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(probes.length, beforeHidden, reason: '后台不补探');
+
+    // 回前台恢复 sweep 并立刻补一次。
+    service.onAppResumed();
+    expect(service.debugSweepScheduled, isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 80));
+    expect(probes.length, greaterThan(beforeHidden));
+  });
+
+  test('startScan：探测端口为 0 时返回 false；未注入端口 provider 保持旧行为',
+      () async {
+    final packets = StreamController<LanPairingDatagram>.broadcast();
+    var port = 0;
+    final sent = <Msp1Message>[];
+    final service = LanPairingService(
+      deviceId: 'devA',
+      deviceName: () => '设备A',
+      readPassphrase: () async => null,
+      writePassphrase: (value) async {},
+      hasGroup: () => false,
+      canPrompt: () => true,
+      isCellular: () => false,
+      httpPortProvider: () => 41000,
+      probePortProvider: () => port,
+      localAddressesProvider: () async => const [],
+      packets: packets.stream,
+      sendPacket: (packet, {host, port}) async {
+        final decoded = Msp1.decode(packet);
+        if (decoded != null) sent.add(decoded);
+        return true;
+      },
+      nowMs: () => 1000,
+      sweepInterval: const Duration(milliseconds: 20),
+      scanProbeDelaysMs: const [0],
+    );
+    addTearDown(() async {
+      await service.dispose();
+      await packets.close();
+    });
+    final nearby = <List<SyncNearbyDevice>>[];
+    final subscription = service.nearbyDevices.listen(nearby.add);
+    addTearDown(subscription.cancel);
+    await service.start();
+
+    expect(await service.startScan(), isFalse);
+    expect(service.scanning, isFalse);
+    expect(sent, isEmpty);
+
+    port = 47825;
+    expect(await service.startScan(), isTrue);
+    expect(service.scanning, isTrue);
+    expect(sent, hasLength(1));
+
+    final announce = Msp1.encode(Msp1Message(
+      type: Msp1.typeAnnounce,
+      deviceId: 'devB',
+      name: '设备B',
+      httpPort: 41001,
+      probePort: 47825,
+      addresses: const [],
+      hasGroup: false,
+      bootId: 'boot-b',
+      nonce: 'nonce-b',
+    ));
+    packets.add(LanPairingDatagram(
+      message: Msp1.decode(announce)!,
+      sourceHost: '192.168.1.9',
+      sourcePort: 47825,
+      receivedAt: 1000,
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(nearby.last.map((device) => device.deviceId), contains('devB'));
+
+    // 扫描中端口降为 0：必须收回 scanning、清候选，而不是停在「正在查找」。
+    port = 0;
+    expect(await service.startScan(), isFalse);
+    expect(service.scanning, isFalse);
+    expect(nearby.last, isEmpty);
+    expect(service.debugSweepScheduled, isTrue, reason: 'sweep 服务本身仍在跑');
+
+    // 旧接线没有 probePortProvider：不因端口未知拒绝扫描。
+    final packetsWithoutPort = StreamController<LanPairingDatagram>.broadcast();
+    final legacy = LanPairingService(
+      deviceId: 'devB',
+      deviceName: () => '设备B',
+      readPassphrase: () async => null,
+      writePassphrase: (value) async {},
+      hasGroup: () => false,
+      canPrompt: () => true,
+      isCellular: () => false,
+      httpPortProvider: () => 41001,
+      localAddressesProvider: () async => const [],
+      packets: packetsWithoutPort.stream,
+      sendPacket: (packet, {host, port}) async => true,
+      nowMs: () => 1000,
+      sweepInterval: const Duration(milliseconds: 20),
+      scanProbeDelaysMs: const [0],
+    );
+    addTearDown(() async {
+      await legacy.dispose();
+      await packetsWithoutPort.close();
+    });
+    await legacy.start();
+    expect(await legacy.startScan(), isTrue);
+  });
 }
 
 class _LoopbackNetwork {
