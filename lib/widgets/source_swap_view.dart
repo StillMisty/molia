@@ -10,6 +10,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
 import '../providers/source_swap_provider.dart';
 import '../utils/lyrics_provider_label.dart';
+import 'detail_page/detail_page_chrome.dart';
 import 'source_swap/source_swap_chrome.dart';
 import 'track_row.dart';
 
@@ -173,34 +174,34 @@ class _SourceSwapViewState extends State<SourceSwapView>
     List<SourceDescriptor> sources,
   ) {
     if (!_started || (provider.isSearching && provider.groups.isEmpty)) {
-      return const SourceSwapLoadingState();
+      return DetailPageLoading(label: l10n.sourceSwapSearching);
     }
     if (provider.noSources) {
-      return SourceSwapEmptyState(
+      return DetailPageEmpty(
         icon: Icons.source_rounded,
-        title: l10n.sourceSwapNoSources,
+        message: l10n.sourceSwapNoSources,
         hint: l10n.sourceSwapNoSourcesHint,
       );
     }
     if (provider.keyword.isEmpty) {
-      return SourceSwapEmptyState(
+      return DetailPageEmpty(
         icon: Icons.search_rounded,
-        title: l10n.sourceSwapSearchEmpty,
+        message: l10n.sourceSwapSearchEmpty,
       );
     }
 
     final entries = _listEntries(provider);
     if (entries.isEmpty) {
       if (provider.activeSourceKey.isEmpty) {
-        return SourceSwapEmptyState(
+        return DetailPageEmpty(
           icon: Icons.search_off_rounded,
-          title: l10n.sourceSwapEmpty,
+          message: l10n.sourceSwapEmpty,
           hint: l10n.sourceSwapEmptyHint,
         );
       }
-      return SourceSwapEmptyState(
+      return DetailPageEmpty(
         icon: Icons.search_off_rounded,
-        title: l10n.searchNoResultsInSource(
+        message: l10n.searchNoResultsInSource(
           lyricsProviderLabel(l10n, sources, provider.activeSourceKey),
         ),
         hint: l10n.sourceSwapEmptyHint,

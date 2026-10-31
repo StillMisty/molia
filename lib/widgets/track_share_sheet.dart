@@ -23,10 +23,11 @@ import '../l10n/app_localizations.dart';
 import '../services/notification_service.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_records.dart';
-import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
 import '../utils/responsive.dart';
+import 'detail_page/detail_page_chrome.dart';
 import 'download_data_saver_guard.dart';
+import 'simple_modal_body.dart';
 
 /// 打开来源行弹层（歌曲信息页「来源」行唯一入口）。
 Future<void> showTrackShareSheet(BuildContext context, {required Track track}) {
@@ -66,80 +67,71 @@ class _TrackShareSheet extends StatelessWidget {
       }
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 4),
-            child: Text(
-              trackIdLabel,
-              style: context.typeScale.bodySmall.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          M3EListItem(
-            leading: const Icon(Icons.tag_rounded),
-            headline: l10n.trackInfoTrackId,
-            onTap: () {
-              unawaited(Clipboard.setData(ClipboardData(text: track.id.uri)));
-              message(l10n.trackInfoIdCopied);
-              Navigator.of(context).pop();
-            },
-          ),
-          M3EListItem(
-            leading: const Icon(Icons.link_rounded),
-            headline: l10n.sharePlatformPage,
-            supportingText: pageUrl == null
-                ? l10n.platformPageUnavailable
-                : null,
-            enabled: pageUrl != null,
-            onTap: pageUrl == null
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    unawaited(_shareText(context, pageUrl, message));
-                  },
-          ),
-          M3EListItem(
-            leading: const Icon(Icons.open_in_new_rounded),
-            headline: l10n.openPlatformPage,
-            enabled: pageUrl != null,
-            onTap: pageUrl == null
-                ? null
-                : () {
-                    Navigator.of(context).pop();
-                    unawaited(
-                      launchUrl(
-                        Uri.parse(pageUrl),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                    );
-                  },
-          ),
-          M3EListItem(
-            leading: const Icon(Icons.ios_share_rounded),
-            headline: record != null
-                ? l10n.shareTrackFile
-                : l10n.downloadAndShare,
-            onTap: () {
-              Navigator.of(context).pop();
-              unawaited(
-                _shareTrackFile(
-                  pageContext,
-                  record: record,
-                  records: records,
-                  downloads: downloads,
-                  message: message,
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
+    return SimpleModalBody(
+      header: DetailPageTrackHeader(
+        track: track,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
+      children: [
+        M3EListItem(
+          leading: const Icon(Icons.tag_rounded),
+          headline: l10n.trackInfoTrackId,
+          supportingText: trackIdLabel,
+          onTap: () {
+            unawaited(Clipboard.setData(ClipboardData(text: track.id.uri)));
+            message(l10n.trackInfoIdCopied);
+            Navigator.of(context).pop();
+          },
+        ),
+        M3EListItem(
+          leading: const Icon(Icons.link_rounded),
+          headline: l10n.sharePlatformPage,
+          supportingText: pageUrl == null
+              ? l10n.platformPageUnavailable
+              : null,
+          enabled: pageUrl != null,
+          onTap: pageUrl == null
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  unawaited(_shareText(context, pageUrl, message));
+                },
+        ),
+        M3EListItem(
+          leading: const Icon(Icons.open_in_new_rounded),
+          headline: l10n.openPlatformPage,
+          enabled: pageUrl != null,
+          onTap: pageUrl == null
+              ? null
+              : () {
+                  Navigator.of(context).pop();
+                  unawaited(
+                    launchUrl(
+                      Uri.parse(pageUrl),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                  );
+                },
+        ),
+        M3EListItem(
+          leading: const Icon(Icons.ios_share_rounded),
+          headline: record != null
+              ? l10n.shareTrackFile
+              : l10n.downloadAndShare,
+          onTap: () {
+            Navigator.of(context).pop();
+            unawaited(
+              _shareTrackFile(
+                pageContext,
+                record: record,
+                records: records,
+                downloads: downloads,
+                message: message,
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 

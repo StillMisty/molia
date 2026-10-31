@@ -15,6 +15,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
 import '../theme/m3e_context.dart';
 import 'comment_avatar.dart';
+import 'detail_page/detail_page_chrome.dart';
 import 'paged_list_auto_load.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -47,24 +48,29 @@ class CommentListView extends StatelessWidget {
     final provider = context.watch<CommentsProvider>();
     final state = provider.stateOf(kind);
     if (!provider.isSupported) {
-      return _EmptyState(
+      return DetailPageEmpty(
         icon: Icons.comments_disabled_rounded,
-        text: _l10n(context).commentsUnsupported,
+        message: _l10n(context).commentsUnsupported,
       );
     }
     if (state.isLoading && state.items.isEmpty) {
-      return const Center(child: M3ELoadingIndicator());
+      return const DetailPageLoading();
     }
     // 空态 / 错误态也要能下拉刷新：内容不满一屏时包一层可滚动的状态容器。
     // 错误态只保留下拉手势，不再放「重试」按钮。
     final Widget content;
     if (state.failed) {
-      content = const _RefreshableStatus(child: _ErrorState());
+      content = _RefreshableStatus(
+        child: DetailPageFailure(
+          message: _l10n(context).commentsLoadFailed,
+          hint: _l10n(context).commentsPullToRetry,
+        ),
+      );
     } else if (state.isEmpty) {
       content = _RefreshableStatus(
-        child: _EmptyState(
+        child: DetailPageEmpty(
           icon: Icons.forum_rounded,
-          text: _l10n(context).commentsEmpty,
+          message: _l10n(context).commentsEmpty,
         ),
       );
     } else {
@@ -117,7 +123,7 @@ class CommentRow extends StatelessWidget {
     super.key,
     required this.comment,
     this.depth = 0,
-    this.indent = 20,
+    this.indent = 0,
   });
 
   final Comment comment;
@@ -125,7 +131,7 @@ class CommentRow extends StatelessWidget {
   /// 嵌套层级（0 = 主评论，>0 = 楼中楼；更小头像 + 更紧的垂直留白）。
   final int depth;
 
-  /// 行左侧缩进。主评论 20，每层回复 +20；封顶后不再继续缩进。
+  /// 额外左侧缩进（不含页面边距）。主评论 0，每层回复 +20；封顶后不再继续缩进。
   ///
   /// 回复必须渲染在主行之外的全宽区域：若塞进父评论的内容列，再叠加
   /// 层级缩进，一级回复就会从屏幕一半处开始，正文被挤成窄条。
@@ -142,12 +148,13 @@ class CommentRow extends StatelessWidget {
     final nested = depth > 0;
     final avatarSize = nested ? 24.0 : 36.0;
     final replies = comment.replies.take(CommentListView.maxInlineReplies);
+    final horizontal = detailPageHorizontalPadding(context);
 
     final row = Padding(
       padding: EdgeInsets.fromLTRB(
-        indent,
+        horizontal + indent,
         nested ? 8 : 12,
-        20,
+        horizontal,
         nested ? 8 : 12,
       ),
       child: Row(
@@ -208,11 +215,7 @@ class CommentRow extends StatelessWidget {
       children: [
         row,
         for (final reply in replies)
-          CommentRow(
-            comment: reply,
-            depth: depth + 1,
-            indent: nextIndent,
-          ),
+          CommentRow(comment: reply, depth: depth + 1, indent: nextIndent),
       ],
     );
   }
@@ -315,37 +318,6 @@ class _QuotedComment extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// 空态 / 错误态的可下拉容器：内容不满一屏时也能触发刷新。
 class _RefreshableStatus extends StatelessWidget {
   const _RefreshableStatus({required this.child});
@@ -362,49 +334,6 @@ class _RefreshableStatus extends StatelessWidget {
           child: child,
         ),
       ],
-    );
-  }
-}
-
-/// 首屏错误态：文案走 l10n（不展示 `$e`），只保留下拉刷新恢复。
-class _ErrorState extends StatelessWidget {
-  const _ErrorState();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final l10n = _l10n(context);
-    final secondary = context.typeScale.bodySmall.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.error_outline_rounded,
-              size: 40,
-              color: theme.colorScheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(
-              l10n.commentsLoadFailed,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              l10n.commentsPullToRetry,
-              textAlign: TextAlign.center,
-              style: secondary,
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

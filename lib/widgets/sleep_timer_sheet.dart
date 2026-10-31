@@ -11,6 +11,7 @@ import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
+import 'simple_modal_body.dart';
 
 /// 自定义时长范围（分钟）。
 const int kSleepTimerMinMinutes = 1;
@@ -101,74 +102,76 @@ class _SleepTimerSheet extends StatelessWidget {
     final canArmAfterTrack =
         !playback.hasRestoredSession && playback.snapshot.current != null;
 
-    return SingleChildScrollView(
-      child: ValueListenableBuilder<SleepTimerState>(
-        valueListenable: timer,
-        builder: (context, state, _) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-              child: Text(
-                sleepTimerStatusLabel(l10n, state),
-                style: M3ETheme.of(context).typeScale.headlineSmall,
-              ),
-            ),
-            M3EListItem(
-              key: const Key('sleepTimerCustomItem'),
-              leading: const Icon(Icons.schedule_rounded),
-              headline: l10n.sleepTimerCustom,
-              trailingText: state.mode == SleepTimerMode.countdown &&
-                      state.duration != null
-                  ? formatSleepTimerRemaining(state.duration!)
-                  : null,
-              selected: state.mode == SleepTimerMode.countdown,
-              onTap: () =>
-                  unawaited(_pickCustomDuration(context, timer, state)),
-            ),
-            M3EListItem(
-              key: const Key('sleepTimerAfterTrackItem'),
-              leading: const Icon(Icons.music_note_rounded),
-              headline: l10n.sleepTimerAfterTrack,
-              selected: state.mode == SleepTimerMode.afterCurrentTrack,
-              enabled: canArmAfterTrack,
-              onTap: canArmAfterTrack
-                  ? () {
-                      HapticsService.lightImpact();
-                      timer.startAfterCurrentTrack();
-                      _showArmedFeedback(
-                        context,
-                        timer,
-                        timer.exitApp.value
-                            ? l10n.sleepTimerArmedAfterTrackExit
-                            : l10n.sleepTimerArmedAfterTrack,
-                      );
-                      Navigator.of(context).pop();
-                    }
-                  : null,
-            ),
-            if (state.isActive)
+    return SimpleModalBody(
+      children: [
+        // 倒计时每秒通知：只重建内层内容，不连带重建外层滚动视图。
+        ValueListenableBuilder<SleepTimerState>(
+          valueListenable: timer,
+          builder: (context, state, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: M3EButton.outlined(
-                    key: const Key('sleepTimerCancelButton'),
-                    size: M3EButtonSize.md,
-                    onPressed: () {
-                      HapticsService.lightImpact();
-                      timer.cancel();
-                      Navigator.of(context).pop();
-                    },
-                    child: Text(l10n.sleepTimerCancel),
-                  ),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Text(
+                  sleepTimerStatusLabel(l10n, state),
+                  style: M3ETheme.of(context).typeScale.headlineSmall,
                 ),
               ),
-            const SizedBox(height: 8),
-          ],
+              M3EListItem(
+                key: const Key('sleepTimerCustomItem'),
+                leading: const Icon(Icons.schedule_rounded),
+                headline: l10n.sleepTimerCustom,
+                trailingText: state.mode == SleepTimerMode.countdown &&
+                        state.duration != null
+                    ? formatSleepTimerRemaining(state.duration!)
+                    : null,
+                selected: state.mode == SleepTimerMode.countdown,
+                onTap: () =>
+                    unawaited(_pickCustomDuration(context, timer, state)),
+              ),
+              M3EListItem(
+                key: const Key('sleepTimerAfterTrackItem'),
+                leading: const Icon(Icons.music_note_rounded),
+                headline: l10n.sleepTimerAfterTrack,
+                selected: state.mode == SleepTimerMode.afterCurrentTrack,
+                enabled: canArmAfterTrack,
+                onTap: canArmAfterTrack
+                    ? () {
+                        HapticsService.lightImpact();
+                        timer.startAfterCurrentTrack();
+                        _showArmedFeedback(
+                          context,
+                          timer,
+                          timer.exitApp.value
+                              ? l10n.sleepTimerArmedAfterTrackExit
+                              : l10n.sleepTimerArmedAfterTrack,
+                        );
+                        Navigator.of(context).pop();
+                      }
+                    : null,
+              ),
+              if (state.isActive)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: M3EButton.outlined(
+                      key: const Key('sleepTimerCancelButton'),
+                      size: M3EButtonSize.md,
+                      onPressed: () {
+                        HapticsService.lightImpact();
+                        timer.cancel();
+                        Navigator.of(context).pop();
+                      },
+                      child: Text(l10n.sleepTimerCancel),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
-      ),
+      ],
     );
   }
 

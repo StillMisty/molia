@@ -12,6 +12,7 @@ import '../services/lyrics/lyrics_source_registry.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
 import '../services/notification_service.dart';
 import '../utils/lyrics_provider_label.dart';
+import 'detail_page/detail_page_chrome.dart';
 import 'source_swap/source_swap_chrome.dart';
 import 'track_row.dart';
 
@@ -283,27 +284,27 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     List<LyricsSearchEntry> entries,
   ) {
     if (strategies.isEmpty) {
-      return SourceSwapEmptyState(
+      return DetailPageEmpty(
         icon: Icons.lyrics_rounded,
-        title: l10n.lyricsSourceNoSources,
+        message: l10n.lyricsSourceNoSources,
         hint: l10n.lyricsSourceNoSourcesHint,
       );
     }
     if (_session.query.isEmpty) {
-      return SourceSwapEmptyState(
+      return DetailPageEmpty(
         icon: Icons.search_rounded,
-        title: l10n.sourceSwapSearchEmpty,
+        message: l10n.sourceSwapSearchEmpty,
       );
     }
     if (_session.isAnyProviderLoading && _session.allResults.isEmpty) {
-      return const SourceSwapLoadingState();
+      return DetailPageLoading(label: l10n.sourceSwapSearching);
     }
     if (_selectedSourceKey.isNotEmpty &&
         _isStrategyLoading(_selectedSourceKey) &&
         _session
             .resultsOf(_providerNameFor(_selectedSourceKey) ?? '')
             .isEmpty) {
-      return const SourceSwapLoadingState();
+      return DetailPageLoading(label: l10n.sourceSwapSearching);
     }
 
     final hasResult = entries.any(
@@ -389,16 +390,16 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
 
   Widget _buildNoResultState(AppLocalizations l10n) {
     if (_selectedSourceKey.isEmpty) {
-      return SourceSwapEmptyState(
+      return DetailPageEmpty(
         icon: Icons.search_off_rounded,
-        title: l10n.lyricsEmptyState,
+        message: l10n.lyricsEmptyState,
         hint: l10n.sourceSwapEmptyHint,
       );
     }
     final unavailable = _unavailableReasonOfChannel(_selectedSourceKey);
-    return SourceSwapEmptyState(
+    return DetailPageEmpty(
       icon: Icons.search_off_rounded,
-      title: l10n.searchNoResultsInSource(
+      message: l10n.searchNoResultsInSource(
         lyricsProviderLabel(l10n, widget.sourceDescriptors, _selectedSourceKey),
       ),
       hint: unavailable == null

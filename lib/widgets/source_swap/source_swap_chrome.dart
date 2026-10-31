@@ -1,97 +1,21 @@
-/// 换源页两个 tab 共用的 chrome：曲目条、搜索栏、来源 chips、状态条、
-/// 分组标题与底部确认条。
+/// 换源页两个 tab 共用的 chrome：搜索栏、来源 chips、状态条、分组标题与
+/// 底部确认条。
 ///
 /// 不读 providers：歌词侧与音频侧的会话状态分别留在各自 provider，本文件
-/// 只接收已经算好的展示数据；基础件只复用 AppSearchBar / TrackArtwork。
+/// 只接收已经算好的展示数据；基础件只复用 AppSearchBar。
 library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../domain/models/source.dart';
-import '../../domain/models/track.dart';
 import '../../l10n/app_localizations.dart';
 import '../../theme/m3e_context.dart';
-import '../../utils/lyrics_provider_label.dart';
 import '../app_search_bar.dart';
-import '../track_artwork.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载组件而不注册 delegate，
 /// 此时回退到简体中文（与换源视图同一约定）。
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
-
-/// 换源页顶部的曲目条：封面 + 歌名 + 「歌手 · 当前来源」。
-///
-/// 两个 tab 共用同一首种子曲目，把它放在页面级而不是各 tab 里，切 tab 时
-/// 不重复占位；来源名兼容内置渠道 / 脚本渠道 / LRCLIB。
-class SourceSwapTrackHeader extends StatelessWidget {
-  const SourceSwapTrackHeader({
-    super.key,
-    required this.seed,
-    this.sourceDescriptors = const [],
-  });
-
-  final Track seed;
-
-  /// 可搜索渠道描述符：脚本源显示名从这里查。
-  ///
-  /// 非搜索 / 已停用的脚本不在其中，`lyricsProviderLabel` 会回退源 key，
-  /// 这是标签解析的已知下限（不为此再维护一份全渠道列表）。
-  final List<SourceDescriptor> sourceDescriptors;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
-    final sourceLabel = lyricsProviderLabel(
-      l10n,
-      sourceDescriptors,
-      seed.id.sourceKey,
-    );
-    final artist = seed.artistLabel;
-    final subtitle = artist.isEmpty ? sourceLabel : '$artist · $sourceLabel';
-    return Padding(
-      padding: const EdgeInsets.only(top: 12, bottom: 8),
-      child: Row(
-        children: [
-          TrackArtwork(
-            track: seed,
-            size: 40,
-            borderRadius: BorderRadius.circular(10),
-            memCacheWidth: (40 * MediaQuery.of(context).devicePixelRatio)
-                .round(),
-            fallbackColor: theme.colorScheme.surfaceContainerHighest,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  seed.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.typeScale.titleMedium,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.typeScale.bodySmall.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /// 换源页统一搜索栏（AppSearchBar 包装）。
 ///
@@ -246,83 +170,6 @@ class SourceSwapNotice extends StatelessWidget {
             onPressed: onRetry,
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 搜索中且还没有任何结果的居中加载态。
-class SourceSwapLoadingState extends StatelessWidget {
-  const SourceSwapLoadingState({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const M3EProgressIndicator.circular(),
-            const SizedBox(height: 12),
-            Text(
-              _l10n(context).sourceSwapSearching,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 空态：图标 + 标题 + 可选下一步提示。
-class SourceSwapEmptyState extends StatelessWidget {
-  const SourceSwapEmptyState({
-    super.key,
-    required this.icon,
-    required this.title,
-    this.hint,
-  });
-
-  final IconData icon;
-  final String title;
-  final String? hint;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: theme.colorScheme.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            if (hint != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                hint!,
-                textAlign: TextAlign.center,
-                style: context.typeScale.bodySmall.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }

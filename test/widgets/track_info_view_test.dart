@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:molia/data/catalog/album_service.dart';
@@ -33,7 +33,9 @@ import 'package:molia/services/notification_service.dart';
 import 'package:molia/services/track_local_data_service.dart';
 import 'package:molia/utils/lyrics_provider_label.dart';
 import 'package:molia/widgets/app_network_image.dart';
+import 'package:molia/widgets/detail_page/detail_page_chrome.dart';
 import 'package:molia/widgets/settings/settings_tiles.dart';
+import 'package:molia/widgets/simple_modal_body.dart';
 import 'package:molia/widgets/track_info_view.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -356,6 +358,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('可用音质'), findsOneWidget);
+    expect(find.byType(DetailPageTrackHeader), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(DetailPageTrackHeader),
+        matching: find.text('Title a'),
+      ),
+      findsOneWidget,
+    );
     final lossless = find.byKey(const Key('trackInfoQualityOption_flac'));
     final standard = find.byKey(const Key('trackInfoQualityOption_320k'));
     expect(lossless, findsOneWidget);
@@ -653,21 +663,45 @@ void main() {
   });
 
   testWidgets('来源行：打开分享弹层，复制曲目 ID', (tester) async {
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
     await pumpView(tester, track: _track());
 
     await tester.ensureVisible(find.byKey(const Key('trackInfoSourceItem')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('trackInfoSourceItem')));
     await tester.pumpAndSettle();
+    expect(find.byType(DetailPageTrackHeader), findsOneWidget);
     expect(find.text('曲目 ID'), findsOneWidget);
     expect(find.text('分享平台页面'), findsOneWidget);
     expect(find.text('打开平台页面'), findsOneWidget);
     // 未下载：文件动作显示「下载并分享」。
     expect(find.text('下载并分享'), findsOneWidget);
+    // 原始曲目 ID 不再是独立说明文案，而是「曲目 ID」行的副标题。
+    final idRow = tester.widget<M3EListItem>(
+      find.widgetWithText(M3EListItem, '曲目 ID'),
+    );
+    expect(idRow.supportingText, 'kw:a');
 
     await tester.tap(find.text('曲目 ID'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    expect(copied, 'kw:a');
     expect(find.text('曲目 ID 已复制'), findsOneWidget);
   });
 
@@ -794,6 +828,8 @@ void main() {
 
     await tester.tap(find.byKey(const Key('trackInfoSleepTimerItem')));
     await tester.pumpAndSettle();
+    // 弹层正文走统一的简单弹层骨架。
+    expect(find.byType(SimpleModalBody), findsOneWidget);
     // 无预设 chips，时长只经自定义入口设置。
     expect(find.byKey(const Key('sleepTimerCustomItem')), findsOneWidget);
     expect(find.byKey(const Key('sleepTimerPreset_15')), findsNothing);
