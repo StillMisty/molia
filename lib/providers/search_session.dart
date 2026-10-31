@@ -1,8 +1,7 @@
 /// 单个「搜索类型 × 来源」的分页会话：关键词、归一化失败、分页控制器。
 ///
-/// 从 `search_provider.dart` 抽出的唯一目的：跨来源聚合后，每个来源都要有
-/// 自己的一份关键词 / 页码 / 失败，provider 只按来源 map 持有这些会话，
-/// 不再把三种行形状塞进同一个泛型状态。
+/// 跨来源聚合后，每个来源都有自己的关键词 / 页码 / 失败；provider 按来源
+/// map 持有会话，三种行形状仍由 provider 做类型化投影。
 library;
 
 import 'package:logging/logging.dart';
@@ -110,8 +109,15 @@ class SearchSession<T> implements SearchSessionState {
     _syncFailure();
   }
 
-  /// 失败归一化只在这一个出口：成功清失败，失败挂归一化对象。
+  /// 首屏失败才写归一化失败；加载更多失败只保留 `loadMoreFailed`。
+  ///
+  /// 追加页失败不改变已发布结果，也不应让分组标题显示「搜索失败」；底部
+  /// 页脚单独提供下一页重试。
   void _syncFailure() {
+    if (!_pager.failed) {
+      failure = null;
+      return;
+    }
     final error = _pager.error;
     if (error == null) {
       failure = null;

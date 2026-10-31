@@ -102,6 +102,20 @@ class SearchProvider extends ChangeNotifier {
 
   bool get isSearchActive => _searchQuery.isNotEmpty;
 
+  /// 当前关键词已提交、但当前类型还没有真正发起搜索（防抖窗口 / 切类型）。
+  ///
+  /// `_lastSearchedKeyword` 在换词、提交、切类型时先清空；`_runKindSearch`
+  /// 真正开始一轮搜索时才写入。因此它既能覆盖 300ms 防抖窗口，也能覆盖
+  /// 切类型后尚未启动的间隔，UI 不会把这段时间误判成「无结果」。
+  bool get isSearchPending {
+    final keyword = _searchQuery.trim();
+    if (keyword.isEmpty) return false;
+    return _lastSearchedKeyword[_kind] != keyword;
+  }
+
+  /// 搜索是否仍在进行：防抖等待或任一目标来源首屏请求在途。
+  bool get isSearchBusy => isSearchPending || isSearching;
+
   /// 所有可搜索渠道：直接返回 registry 的描述列表（顺序 = 渠道管理排序）。
   List<SourceDescriptor> get sourceChannels =>
       _sourceRegistry?.descriptors ?? const [];
@@ -149,7 +163,7 @@ class SearchProvider extends ChangeNotifier {
 
   /// 单曲 / 歌词 / 歌手结果的扁平投影（当前可见分组的已加载条目）。
   ///
-  /// 播放、性能场景与旧消费面只需要扁平列表时读取这里；分组渲染读
+  /// 播放、性能场景与扁平列表消费面读取这里；分组渲染读
   /// [songGroups] / [artistGroups] / [lyricGroups]。
   List<SearchRow> get searchResults => [
     for (final group in songGroups) ...group.items,
@@ -217,6 +231,9 @@ class SearchProvider extends ChangeNotifier {
     notifyListeners();
     final keyword = _searchQuery.trim();
     if (keyword.isEmpty) return;
+    // 防抖计时器尚未触发：它触发时按当时的 _kind 发起搜索，这里只切换
+    // 视图，避免同一关键词先按旧类型、再按新类型各请求一轮。
+    if (_debounceTimer?.isActive ?? false) return;
     if (_lastSearchedKeyword[kind] == keyword) {
       unawaited(_ensureSessionsFor(kind, keyword));
     } else {
@@ -322,10 +339,6 @@ class SearchProvider extends ChangeNotifier {
       contextName: group.source.displayName,
     );
   }
-
-  // ---------------------------------------------------------------------------
-  // 搜索执行
-  // ---------------------------------------------------------------------------
 
   /// 起一轮当前类型的搜索：换词 / 切类型 / 首次搜索共用同一条路径。
   Future<void> _runKindSearch(SearchKind kind, String keyword) async {
@@ -488,10 +501,6 @@ class SearchProvider extends ChangeNotifier {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // 来源变化
-  // ---------------------------------------------------------------------------
-
   /// registry.changes：删来源、按新顺序重排、给晚到的新来源补搜。
   ///
   /// descriptors 未变化时直接返回，避免 SourceManager 的其它通知触发重复请求。
@@ -512,8 +521,8 @@ class SearchProvider extends ChangeNotifier {
     if (keyword.isNotEmpty) {
       for (final kind in SearchKind.values) {
         if (_lastSearchedKeyword[kind] != keyword) continue;
-        // 新来源出现且当前关键词已经搜过 → 自动补搜（修复脚本晚加载时
-        // 搜索被钉在启动早期唯一可用来源的 bug）。
+        // 新来源出现且当前关键词已经搜过 → 自动补搜，脚本晚加载时也参与
+        // 本轮搜索。
         unawaited(_ensureSessionsFor(kind, keyword));
       }
     }
@@ -533,44 +542,31 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 分组投影
-  // ---------------------------------------------------------------------------
+  List<SearchSourceGroup<SearchRow>> _songGroupsFor(SearchKind kind) =>
+      _groupsFor(kind, _songSessions, (_, track) => SearchRow(track: track));
 
-  List<SearchSourceGroup<SearchRow>> _songGroupsFor(SearchKind kind) {
-    final groups = <SearchSourceGroup<SearchRow>>[];
+  List<SearchSourceGroup<ArtistSummary>> _artistGroupsFor(SearchKind kind) =>
+      _groupsFor(kind, _artistSessions, (_, artist) => artist);
+
+  List<SearchSourceGroup<SearchRow>> _lyricGroupsFor(SearchKind kind) =>
+      _groupsFor(kind, _lyricSessions, (sourceKey, track) {
+        final snippets = _lyricSnippets[sourceKey] ?? const {};
+        return SearchRow(track: track, lyricSnippet: snippets[track.id.uri]);
+      });
+
+  /// 按渠道顺序把「来源会话」投影成 UI 分组；三种搜索类型共用同一遍历。
+  List<SearchSourceGroup<R>> _groupsFor<T, R>(
+    SearchKind kind,
+    Map<String, SearchSession<T>> sessions,
+    R Function(String sourceKey, T item) project,
+  ) {
+    final groups = <SearchSourceGroup<R>>[];
     for (final descriptor in _visibleDescriptorsFor(kind)) {
-      final session = _songSessions[descriptor.key];
+      final session = sessions[descriptor.key];
       if (session == null) continue;
       groups.add(
-        _group<SearchRow>(descriptor, session, [
-          for (final track in session.items) SearchRow(track: track),
-        ]),
-      );
-    }
-    return List.unmodifiable(groups);
-  }
-
-  List<SearchSourceGroup<ArtistSummary>> _artistGroupsFor(SearchKind kind) {
-    final groups = <SearchSourceGroup<ArtistSummary>>[];
-    for (final descriptor in _visibleDescriptorsFor(kind)) {
-      final session = _artistSessions[descriptor.key];
-      if (session == null) continue;
-      groups.add(_group<ArtistSummary>(descriptor, session, session.items));
-    }
-    return List.unmodifiable(groups);
-  }
-
-  List<SearchSourceGroup<SearchRow>> _lyricGroupsFor(SearchKind kind) {
-    final groups = <SearchSourceGroup<SearchRow>>[];
-    for (final descriptor in _visibleDescriptorsFor(kind)) {
-      final session = _lyricSessions[descriptor.key];
-      if (session == null) continue;
-      final snippets = _lyricSnippets[descriptor.key] ?? const {};
-      groups.add(
-        _group<SearchRow>(descriptor, session, [
-          for (final track in session.items)
-            SearchRow(track: track, lyricSnippet: snippets[track.id.uri]),
+        _group<R>(descriptor, session, [
+          for (final item in session.items) project(descriptor.key, item),
         ]),
       );
     }
@@ -632,10 +628,6 @@ class SearchProvider extends ChangeNotifier {
       SearchKind.lyric => capabilities.lyricSearch,
     };
   }
-
-  // ---------------------------------------------------------------------------
-  // 会话生命周期 / 来源过滤持久化
-  // ---------------------------------------------------------------------------
 
   SearchSessionState? _sessionFor(SearchKind kind, String sourceKey) =>
       switch (kind) {

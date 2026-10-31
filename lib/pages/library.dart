@@ -136,8 +136,13 @@ class _LibraryState extends State<Library> {
     }
 
     // 渠道失效（被停用 / 脚本删除）时校正；搜索来源是独立偏好，不跟随
-    // 渠道。在 post-frame 执行，避免在 build 中修改 provider 状态。
-    final needsFallback = current == null && enabledChannels.isNotEmpty;
+    // 渠道。音源尚未初始化 / 脚本仍在激活时，保存的脚本渠道暂时不在
+    // enabledChannels 里：此时不能 fallback，否则会覆盖用户偏好。
+    final needsFallback =
+        current == null &&
+        enabledChannels.isNotEmpty &&
+        sources.initialized &&
+        !sources.isActivating;
     if (needsFallback) {
       final target = enabledChannels.first;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -187,10 +192,12 @@ class _LibraryState extends State<Library> {
     _renderedTab = renderedTab;
 
     // 发现渠道入口只在热榜 / 歌单 tab 显示；搜索 tab 的来源选择只走 chips。
-    // 渠道只有 1 个时下拉框不渲染（没有可选的目标）。
+    // 只剩搜索 tab（当前渠道无发现能力）时仍保留下拉，作为切回可发现渠道的
+    // 逃生口。渠道只有 1 个时下拉框不渲染（没有可选的目标）。
     final multiChannel = enabledChannels.length >= 2;
+    final hasDiscoverTabs = visibleTabs.any((tab) => tab != _LibraryTab.search);
     final showChannelSelector =
-        multiChannel && renderedTab != _LibraryTab.search;
+        multiChannel && (renderedTab != _LibraryTab.search || !hasDiscoverTabs);
     final showTabBar = visibleTabs.length >= 2;
     final hasTopBar = showChannelSelector || showTabBar;
     return ResponsivePageContainer(
@@ -211,10 +218,13 @@ class _LibraryState extends State<Library> {
               children: [
                 Offstage(
                   offstage: !showChannelSelector,
-                  child: LibraryChannelSelector(
-                    channels: sources.channels,
-                    selectedKey: discover.channelKey,
-                    onSelected: (key) => _selectChannel(key, enabledChannels),
+                  child: ExcludeFocus(
+                    excluding: !showChannelSelector,
+                    child: LibraryChannelSelector(
+                      channels: sources.channels,
+                      selectedKey: discover.channelKey,
+                      onSelected: (key) => _selectChannel(key, enabledChannels),
+                    ),
                   ),
                 ),
                 if (showTabBar) ...[

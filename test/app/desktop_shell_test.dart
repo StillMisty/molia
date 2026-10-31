@@ -932,6 +932,45 @@ void main() {
     expect(searchRowSelected(tester), [true, false], reason: '输入法组合中不移动高亮');
   });
 
+  testWidgets('搜索遮罩：防抖窗口不播报 0 条，完成只播报一次正确总数', (tester) async {
+    final announcements = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(
+      SystemChannels.accessibility,
+      (message) async {
+        final event = message as Map<Object?, Object?>?;
+        if (event?['type'] != 'announce') return null;
+        final data = event!['data'] as Map<Object?, Object?>;
+        announcements.add(data['message'] as String);
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler(
+        SystemChannels.accessibility,
+        null,
+      ),
+    );
+
+    final source = FakeMusicSource('kw');
+    source.onSearch = (query) => Future.value(
+      SearchResult(items: [searchTrack('a'), searchTrack('b')], total: 2),
+    );
+    await pumpShell(tester, desktopShell: true, searchSource: source);
+    await openSearchOverlay(tester);
+    await tester.enterText(find.byType(EditableText).first, 'hello');
+    await tester.pump();
+
+    expect(announcements, isEmpty, reason: '防抖中不能播报 0 条');
+    expect(find.text(l10n.noResultsFound), findsNothing);
+    expect(find.byType(M3EProgressIndicator), findsWidgets);
+
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(announcements, [
+      l10n.searchResultsAnnouncement(2),
+    ], reason: '所有来源返回后只播报一次真实总数');
+  });
+
   testWidgets('搜索遮罩：结果预览最多 8 行，超出仍显示「查看全部结果」', (tester) async {
     final source = FakeMusicSource('kw');
     source.onSearch = (query) => Future.value(

@@ -1787,7 +1787,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchNoSourcesHint.
   ///
   /// In en, this message translates to:
-  /// **'Bilibili works out of the box; import source scripts in Source Management for other platforms.'**
+  /// **'Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.'**
   String get searchNoSourcesHint;
 
   /// No description provided for @searchNoResultsInSource.
@@ -1847,7 +1847,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchKeyboardHint.
   ///
   /// In en, this message translates to:
-  /// **'↑↓ Select · Enter Play · Ctrl+Enter View all · Esc Close'**
+  /// **'↑↓ Select · Enter Open · Ctrl+Enter View all · Esc Close'**
   String get searchKeyboardHint;
 
   /// No description provided for @languageSettingTitle.

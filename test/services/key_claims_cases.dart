@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/services/key_claims.dart';
 import 'package:molia/widgets/key_claim_scope.dart';
 
-/// 全局快捷键让位协议：登记哪些键、判定现算、dispose 注销。
+/// 全局快捷键让位协议：登记哪些键、判定现算、焦点作用域登记与注销。
 void main() {
   setUp(KeyClaims.reset);
   tearDown(KeyClaims.reset);

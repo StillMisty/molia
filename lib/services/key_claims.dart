@@ -25,6 +25,20 @@ class KeyClaim {
   final bool Function() active;
 }
 
+/// 搜索遮罩 / 搜索结果区接管的键：方向键移动高亮、Space / Enter 激活焦点
+/// 控件、PageUp / PageDown 快速移动。壳层在命中登记时让位给焦点分发。
+final Set<LogicalKeyboardKey> searchClaimedKeys = Set.unmodifiable({
+  LogicalKeyboardKey.arrowUp,
+  LogicalKeyboardKey.arrowDown,
+  LogicalKeyboardKey.arrowLeft,
+  LogicalKeyboardKey.arrowRight,
+  LogicalKeyboardKey.pageUp,
+  LogicalKeyboardKey.pageDown,
+  LogicalKeyboardKey.space,
+  LogicalKeyboardKey.enter,
+  LogicalKeyboardKey.numpadEnter,
+});
+
 abstract final class KeyClaims {
   static final Set<KeyClaim> _claims = {};
 

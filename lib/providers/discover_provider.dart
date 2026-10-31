@@ -129,7 +129,7 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 切换渠道（空值或同值忽略；允许无发现能力的渠道——相关能力降级）。
   ///
-  /// 只影响热榜 / 歌单，不再联动搜索来源；偏好异步落盘（失败吞掉）。
+  /// 只影响热榜 / 歌单；搜索来源由独立偏好决定。偏好异步落盘（失败吞掉）。
   void selectChannel(String sourceKey) {
     if (sourceKey.isEmpty || sourceKey == _channelKey) return;
     _channelGeneration++;
@@ -168,9 +168,16 @@ class DiscoverProvider extends ChangeNotifier {
   Future<void> _reloadChannelFromSettings() async {
     final settings = _settings;
     if (settings == null) return;
+    final generation = _channelGeneration;
     try {
       final value = (await settings.read(kDiscoverChannelKey)).trim();
-      if (_disposed || value.isEmpty || value == _channelKey) return;
+      if (_disposed ||
+          _hasExplicitInitialChannel ||
+          generation != _channelGeneration ||
+          value.isEmpty ||
+          value == _channelKey) {
+        return;
+      }
       _channelKey = value;
       notifyListeners();
     } catch (_) {}
@@ -232,7 +239,8 @@ class DiscoverProvider extends ChangeNotifier {
   /// 播放发现曲目队列（测试 / 兼容入口；生产页面走 `TrackHandoff`）。
   ///
   /// 与 [domainTracksOf] 共用同一份领域曲目转换和 `playDomainTracks` 后端，
-  /// 不再走独立的源曲目播放链路。`mode` 非空时先切换播放模式。
+  /// 与 [domainTracksOf] 共用同一份领域曲目转换和播放后端。`mode` 非空时
+  /// 先切换播放模式。
   Future<void> playTracks(
     List<DiscoverTrack> tracks,
     int index, {

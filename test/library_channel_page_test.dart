@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
@@ -308,12 +310,41 @@ void main() {
     // 只剩搜索一个 tab 时不渲染 tab 栏，直接显示搜索内容。
     expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
 
-    // 搜索源渠道没有发现 tab（搜索 tab 不显示渠道下拉）：从数据面切回
-    // 内置平台，验证热榜 / 歌单恢复。
-    discover.selectChannel('wy');
+    // 只剩搜索 tab（当前渠道无发现能力）时仍保留渠道下拉逃生口。
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    await tester.tap(find.text('测试源').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('网易音乐').last);
     await tester.pumpAndSettle();
     expect(discover.channelKey, 'wy');
     expect(find.text('热榜'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('保存的脚本渠道在脚本晚加载时不被 fallback 覆盖', (tester) async {
+    search = buildSearch(const [
+      domain.SourceDescriptor(
+        key: 'test',
+        displayName: '测试源',
+        kind: domain.SourceKind.lx,
+        capabilities: domain.SourceCapabilities(search: true),
+      ),
+    ]);
+    discover.selectChannel('test');
+    await pumpLibrary(tester);
+    expect(discover.channelKey, 'test', reason: '脚本未加载时不能 fallback');
+    var prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kDiscoverChannelKey.name), 'test');
+
+    await activateScript(tester);
+    await tester.pumpAndSettle();
+    expect(discover.channelKey, 'test', reason: '激活后仍是保存的脚本渠道');
+    prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString(kDiscoverChannelKey.name), 'test');
+    expect(
+      find.byType(LibraryChannelSelector),
+      findsOneWidget,
+      reason: '只剩搜索 tab 时保留下拉逃生口',
+    );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   testWidgets('切换发现渠道不改搜索来源；搜索 tab 隐藏渠道下拉', (tester) async {
@@ -336,8 +367,19 @@ void main() {
     search.updateSearchQuery('测试');
     await pumpLibrary(tester);
 
-    // 默认搜索 tab：来源只走 chips，顶部没有发现渠道下拉。
+    // 默认搜索 tab：来源只走 chips，顶部没有发现渠道下拉；Tab 也不能落到
+    // 不可见的下拉（Offstage 本身不阻止焦点）。
     expect(find.byType(LibraryChannelSelector), findsNothing);
+    for (var i = 0; i < 12; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      expect(
+        FocusManager.instance.primaryFocus?.context
+            ?.findAncestorWidgetOfExactType<LibraryChannelSelector>(),
+        isNull,
+        reason: 'Tab #$i 落到了隐藏的渠道下拉',
+      );
+    }
     expect(
       find.byKey(const ValueKey<String>('searchSourceChip-tx')),
       findsOneWidget,

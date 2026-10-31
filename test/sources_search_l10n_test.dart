@@ -81,9 +81,12 @@ void main() {
     expect(zhL10n.searchLoadMore, '加载更多');
     expect(
       zhL10n.searchKeyboardHint,
-      '↑↓ 选择 · Enter 播放 · Ctrl+Enter 查看全部 · Esc 关闭',
+      '↑↓ 选择 · Enter 打开 · Ctrl+Enter 查看全部 · Esc 关闭',
     );
-    expect(zhL10n.searchNoSourcesHint, 'B 站可直接搜索；其它平台请在「音源管理」中导入音源脚本。');
+    expect(
+      zhL10n.searchNoSourcesHint,
+      'B 站无需脚本即可搜索；如不可用，请在「音源管理」中重新启用 B 站或导入其它音源脚本。',
+    );
 
     final enL10n = lookupAppLocalizations(const Locale('en'));
     expect(enL10n.sourcesTitle, 'Source Management');

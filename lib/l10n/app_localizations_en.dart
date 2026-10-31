@@ -931,7 +931,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchNoSourcesHint =>
-      'Bilibili works out of the box; import source scripts in Source Management for other platforms.';
+      'Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.';
 
   @override
   String searchNoResultsInSource(String source) {
@@ -964,7 +964,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchKeyboardHint =>
-      '↑↓ Select · Enter Play · Ctrl+Enter View all · Esc Close';
+      '↑↓ Select · Enter Open · Ctrl+Enter View all · Esc Close';
 
   @override
   String get languageSettingTitle => 'App Language';

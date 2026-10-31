@@ -490,6 +490,53 @@ void main() {
     expect(kw.searchCalls, 2);
   });
 
+  test('加载更多失败只置 loadMoreFailed，不写首屏 failure', () async {
+    var failPage2 = true;
+    final source = _FakeMusicSource('kw')
+      ..onSearch = (query) async {
+        if (query.page == 1) {
+          return SearchResult(
+            items: [_track('kw', 'a')],
+            hasMore: true,
+            total: 2,
+          );
+        }
+        if (failPage2) {
+          throw const SourceFailure(
+            kind: FailureKind.network,
+            message: 'page2 boom',
+          );
+        }
+        return SearchResult(
+          items: [_track('kw', 'b')],
+          hasMore: false,
+          total: 2,
+        );
+      };
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    expect(_songGroup(provider, 'kw').failure, isNull);
+
+    await provider.loadMore('kw');
+    var group = _songGroup(provider, 'kw');
+    expect(group.loadMoreFailed, isTrue);
+    expect(group.failure, isNull, reason: '追加页失败不是首屏失败');
+    expect(group.page, 1);
+    expect(group.items.map((row) => row.id.uri), ['kw:a']);
+
+    failPage2 = false;
+    await provider.retry('kw');
+    group = _songGroup(provider, 'kw');
+    expect(group.loadMoreFailed, isFalse);
+    expect(group.failure, isNull);
+    expect(group.page, 2);
+    expect(group.items.map((row) => row.id.uri), ['kw:a', 'kw:b']);
+  });
+
   test('查询期间新来源加入 → 自动补搜（启动时脚本晚加载的回归）', () async {
     final kw = _FakeMusicSource('kw')
       ..onSearch = (query) =>
@@ -974,6 +1021,64 @@ void main() {
       isFalse,
       reason: '换词清空所有来源片段',
     );
+  });
+
+  test('防抖窗口：isSearchBusy 覆盖等待期，完成后只按最终来源请求一次', () {
+    final source = _FakeMusicSource('kw');
+    final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    fakeAsync((async) {
+      provider.updateSearchQuery('hello');
+      expect(provider.isSearchPending, isTrue);
+      expect(provider.isSearchBusy, isTrue);
+      expect(provider.isSearching, isFalse);
+      expect(provider.songGroups, isEmpty);
+
+      async.elapse(const Duration(milliseconds: 299));
+      expect(source.searchCalls, 0);
+      expect(provider.isSearchBusy, isTrue, reason: '防抖等待期不能显示空结果');
+
+      async.elapse(const Duration(milliseconds: 1));
+      async.flushMicrotasks();
+      expect(source.searchCalls, 1);
+      expect(provider.isSearchBusy, isFalse);
+      expect(provider.isSearchPending, isFalse);
+      expect(provider.songGroups.single.items, isNotEmpty);
+    });
+  });
+
+  test('防抖窗口内切换类型：计时器只按最终类型请求一次', () {
+    final source = _FakeMusicSource(
+      'kw',
+      capabilities: const domain.SourceCapabilities(
+        search: true,
+        pagination: true,
+        artist: true,
+      ),
+    );
+    final registry = _FakeRegistry(
+      {'kw': source},
+      [_descriptor('kw', '酷我', capabilities: source.capabilities)],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    fakeAsync((async) {
+      provider.updateSearchQuery('hello');
+      provider.selectSearchKind(SearchKind.artist);
+      expect(provider.searchKind, SearchKind.artist);
+      expect(provider.isSearchBusy, isTrue);
+      expect(source.searchCalls, 0);
+      expect(source.artistSearchCalls, 0);
+
+      async.elapse(const Duration(milliseconds: 300));
+      async.flushMicrotasks();
+      expect(source.searchCalls, 0, reason: '旧类型不应先发一轮');
+      expect(source.artistSearchCalls, 1, reason: '最终类型只请求一次');
+      expect(provider.artistGroups.single.items, isNotEmpty);
+    });
   });
 
   test('输入防抖 300ms：连续输入只发最后一次请求（每个来源各一次）', () {

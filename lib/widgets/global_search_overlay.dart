@@ -143,18 +143,6 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   /// （行激活 / 高亮移动 / chips 左右切换）。
   late final KeyClaim _keyClaim;
 
-  static final Set<LogicalKeyboardKey> _claimedKeys = {
-    LogicalKeyboardKey.arrowUp,
-    LogicalKeyboardKey.arrowDown,
-    LogicalKeyboardKey.arrowLeft,
-    LogicalKeyboardKey.arrowRight,
-    LogicalKeyboardKey.pageUp,
-    LogicalKeyboardKey.pageDown,
-    LogicalKeyboardKey.space,
-    LogicalKeyboardKey.enter,
-    LogicalKeyboardKey.numpadEnter,
-  };
-
   @override
   void initState() {
     super.initState();
@@ -163,7 +151,7 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
     // 让位——焦点不在输入框（Tab 到结果区）时同一次 Esc 不会被两处消费
     // （协议见 escape_claims.dart）。
     EscapeClaims.add(_claimEscape);
-    _keyClaim = KeyClaims.add(keys: _claimedKeys, active: () => _isOpen);
+    _keyClaim = KeyClaims.add(keys: searchClaimedKeys, active: () => _isOpen);
   }
 
   @override
@@ -195,11 +183,11 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
 
   /// 打开搜索遮罩（Ctrl+F / 品牌区点击）。
   ///
-  /// 已打开时不再 no-op：把焦点从结果行 / chips 拉回输入框并全选已有文本，
-  /// 符合命令面板「再按一次搜索键继续输入」的肌肉记忆。
+  /// 已打开时把焦点从结果行 / chips 拉回输入框并全选已有文本，符合命令面板
+  /// 「再按一次搜索键继续输入」的肌肉记忆。
   ///
-  /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`），与旧
-  /// M3E 搜索视图一致：遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
+  /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`）：
+  /// 遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
   Future<void> _open() async {
     if (_isOpen) {
       _viewKey.currentState?.focusField();
@@ -437,10 +425,10 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
-  /// 多来源时 [SearchProvider.isSearching] 会在最后一个来源返回后才为 false，
-  /// 因此总条数只播报一次。
+  /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；多来源时它会
+  /// 等到最后一个来源返回后才转 false，因此总条数只播报一次。
   void _announceResults() {
-    if (!mounted || !_search.isSearchActive || _search.isSearching) return;
+    if (!mounted || !_search.isSearchActive || _search.isSearchBusy) return;
     final message = _l10n(context).searchResultsAnnouncement(_resultCount);
     final key = '${_search.searchQuery}\u0000$message';
     if (key == _lastAnnouncement) return;
@@ -581,7 +569,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                         controller: _field,
                         focusNode: _focusNode,
                         hintText: l10n.searchHint,
-                        // 打开即聚焦：键盘输入不再被开合动画吞掉。
+                        // 打开即聚焦：开合动画期间按键也直达输入框。
                         autofocus: true,
                         // 静止外边距取 M3E search bar 的 resting margin（24），
                         // 与结果面板（满宽）错开一档，保持原搜索视图的观感。

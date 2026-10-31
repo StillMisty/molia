@@ -124,7 +124,7 @@ class SearchPreview {
 /// 搜索结果面：单曲 / 歌手 / 歌词三类结果在一个模块里完成映射与状态呈现。
 ///
 /// 聚合搜索后一个结果面可以包含多个来源分组：
-/// - 单分组保持旧体验：无分组标题、宽屏表格列、触底自动分页；
+/// - 单分组：无分组标题、保留宽屏表格列与触底自动分页；
 /// - 多分组：分组标题 + 每组独立「加载更多」，表格列关闭（与分组标题冲突）；
 /// - 遮罩版：每组最多 2 行、总计最多 8 行，单源仍最多 8 行。
 ///
@@ -179,23 +179,21 @@ class SearchResultsView extends StatefulWidget {
       SearchKind.lyric => search.lyricGroups,
     };
     final aggregated = groups.length > 1;
-    var budget = maxDockedPreviewRows;
+    final limits = _previewLimits(groups, aggregated: aggregated);
     var totalItems = 0;
     final previewGroups = <SearchPreviewGroup>[];
     final flattened = <SearchPreviewItem>[];
-    for (final group in groups) {
+    for (var index = 0; index < groups.length; index++) {
+      final group = groups[index];
       totalItems += group.items.length;
-      final take = aggregated
-          ? math.min(maxDockedRowsPerGroup, budget)
-          : math.min(maxDockedPreviewRows, budget);
-      // 预算用完后仍保留失败分组（分组内错误 / 重试必须可见），其余跳过。
-      if (take == 0 && group.failure == null) continue;
       final items = <SearchPreviewItem>[];
-      if (take > 0) {
+      if (limits[index] > 0) {
         switch (search.searchKind) {
           case SearchKind.song || SearchKind.lyric:
             for (final row
-                in (group as SearchSourceGroup<SearchRow>).items.take(take)) {
+                in (group as SearchSourceGroup<SearchRow>).items.take(
+                  limits[index],
+                )) {
               items.add(
                 SearchPreviewTrack(row: row, sourceKey: group.source.key),
               );
@@ -203,7 +201,7 @@ class SearchResultsView extends StatefulWidget {
           case SearchKind.artist:
             for (final artist
                 in (group as SearchSourceGroup<ArtistSummary>).items.take(
-                  take,
+                  limits[index],
                 )) {
               items.add(
                 SearchPreviewArtist(
@@ -214,7 +212,6 @@ class SearchResultsView extends StatefulWidget {
             }
         }
       }
-      budget -= items.length;
       previewGroups.add(
         SearchPreviewGroup(
           source: group.source,
@@ -233,6 +230,38 @@ class SearchResultsView extends StatefulWidget {
       totalItems: totalItems,
       groupCount: groups.length,
     );
+  }
+
+  /// 遮罩预览行预算：多来源先每个有结果的来源各 1 行，再按渠道顺序补到
+  /// 每源最多 [maxDockedRowsPerGroup] 行；所有来源都保留分组标题。
+  static List<int> _previewLimits(
+    List<SearchSourceGroup<Object>> groups, {
+    required bool aggregated,
+  }) {
+    final limits = List<int>.filled(groups.length, 0);
+    var budget = maxDockedPreviewRows;
+    if (!aggregated) {
+      if (groups.isEmpty) return limits;
+      limits[0] = math.min(maxDockedPreviewRows, groups.first.items.length);
+      return limits;
+    }
+    // 第一轮：每个有结果的来源 1 行，保证 6 个平台时不会被前 4 个吃光预算。
+    for (var index = 0; index < groups.length && budget > 0; index++) {
+      if (groups[index].items.isEmpty) continue;
+      limits[index] = 1;
+      budget--;
+    }
+    // 第二轮：按渠道顺序补齐到每源上限，仍受总预算约束。
+    for (var index = 0; index < groups.length && budget > 0; index++) {
+      final maximum = math.min(
+        maxDockedRowsPerGroup,
+        groups[index].items.length,
+      );
+      if (limits[index] >= maximum) continue;
+      limits[index]++;
+      budget--;
+    }
+    return limits;
   }
 
   @override
@@ -297,10 +326,6 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     };
   }
 
-  // ---------------------------------------------------------------------------
-  // 页面版式（资料库搜索结果页）
-  // ---------------------------------------------------------------------------
-
   Widget _buildPage(BuildContext context, SearchProvider search) {
     final l10n = _l10n(context);
     final layout = DesktopLayout.of(context);
@@ -312,7 +337,8 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final group = groups.isEmpty ? null : groups.first;
     final itemCount = groups.fold<int>(0, (sum, g) => sum + g.items.length);
     final anyFailure = groups.any((g) => g.failure != null);
-    final showEmptyState = itemCount == 0 && !search.isSearching && !anyFailure;
+    final showEmptyState =
+        itemCount == 0 && !search.isSearchBusy && !anyFailure;
     final failure = singleGroup ? group?.failure : null;
     final kinds = search.supportedSearchKinds;
     final filterOptions = search.sourceFilterOptions;
@@ -372,7 +398,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
               onSelected: search.selectSourceFilter,
             ),
           ),
-        if (search.isSearching && singleGroup)
+        if (search.isSearchBusy && (singleGroup || groups.isEmpty))
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: M3EProgressIndicator.linear(),
@@ -450,9 +476,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                   items: rows.cast<SearchRow>(),
                   onPlay: widget.onPlay,
                   onOpenArtist: widget.onOpenArtist,
-                  artistLinksEnabled: search.supportedSearchKinds.contains(
-                    SearchKind.artist,
-                  ),
+                  artistLinksEnabled: group.source.capabilities.artist,
                   surface: TrackRowSurface(
                     showFocusRing: true,
                     showFocusFill: true,
@@ -521,9 +545,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                     items: group.items.cast<SearchRow>(),
                     onPlay: widget.onPlay,
                     onOpenArtist: widget.onOpenArtist,
-                    artistLinksEnabled: search.supportedSearchKinds.contains(
-                      SearchKind.artist,
-                    ),
+                    artistLinksEnabled: group.source.capabilities.artist,
                     surface: const TrackRowSurface(
                       showFocusRing: true,
                       showFocusFill: true,
@@ -597,10 +619,6 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     return null;
   }
 
-  // ---------------------------------------------------------------------------
-  // 遮罩版式（桌面全局搜索）
-  // ---------------------------------------------------------------------------
-
   Widget _buildDocked(BuildContext context, SearchProvider search) {
     final l10n = _l10n(context);
     final kinds = search.supportedSearchKinds;
@@ -608,7 +626,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final preview = SearchResultsView.previewFor(search);
     final anyFailure = preview.groups.any((group) => group.failure != null);
     final showEmpty =
-        preview.totalItems == 0 && !search.isSearching && !anyFailure;
+        preview.totalItems == 0 && !search.isSearchBusy && !anyFailure;
     final currentKeys = {for (final item in preview.items) item.key};
     _highlightKeys.removeWhere((key, _) => !currentKeys.contains(key));
     _scheduleEnsureHighlighted();
@@ -635,12 +653,15 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                   onSelected: search.selectSourceFilter,
                 ),
               ),
-            if (search.isSearching && preview.items.isEmpty)
+            if (search.isSearchBusy && preview.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: M3EProgressIndicator.linear(),
               ),
-            for (final group in preview.groups) ...[
+            for (final group
+                in showEmpty
+                    ? const <SearchPreviewGroup>[]
+                    : preview.groups) ...[
               if (preview.aggregated)
                 _groupHeader(
                   context,
@@ -823,10 +844,6 @@ class _SearchResultsViewState extends State<SearchResultsView> {
       ),
     ),
   );
-
-  // ---------------------------------------------------------------------------
-  // 共用：分组标题 / 页脚 / 分段 / 失败态
-  // ---------------------------------------------------------------------------
 
   Widget _groupHeader(
     BuildContext context,

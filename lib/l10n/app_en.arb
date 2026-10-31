@@ -434,7 +434,7 @@
   "sourcesDownloadAndImport": "Download & import",
   "searchFailed": "Search failed",
   "searchNoSourcesTitle": "No sources available",
-  "searchNoSourcesHint": "Bilibili works out of the box; import source scripts in Source Management for other platforms.",
+  "searchNoSourcesHint": "Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.",
   "searchNoResultsInSource": "No results found in “{source}”",
   "@searchNoResultsInSource": {
     "placeholders": {
@@ -451,7 +451,7 @@
   "searchSourcesLabel": "Search sources",
   "searchGroupEmpty": "No results",
   "searchLoadMore": "Load more",
-  "searchKeyboardHint": "↑↓ Select · Enter Play · Ctrl+Enter View all · Esc Close",
+  "searchKeyboardHint": "↑↓ Select · Enter Open · Ctrl+Enter View all · Esc Close",
   "languageSettingTitle": "App Language",
   "languageSettingSubtitle": "Change the interface display language",
   "languageSystem": "System default",

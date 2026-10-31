@@ -80,6 +80,35 @@ void main() {
     expect(second.channelKey, 'kg', reason: '跨重启恢复发现渠道');
   });
 
+  test('异步恢复 / 远端 reload 不覆盖用户刚选择的渠道', () async {
+    SharedPreferences.setMockInitialValues({});
+    final settings = testSettingsRegistry();
+    await settings.write(kDiscoverChannelKey, 'wy');
+    final sources = {
+      'wy': FakeDiscoverSource(),
+      'kg': FakeDiscoverSource(sourceKey: 'kg'),
+      'tx': FakeDiscoverSource(sourceKey: 'tx'),
+    };
+    final provider = DiscoverProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      sources: sources,
+      settings: settings,
+    );
+    addTearDown(provider.dispose);
+    provider.selectChannel('kg');
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.channelKey, 'kg', reason: '晚到的恢复不能覆盖用户选择');
+
+    await settings.write(kDiscoverChannelKey, 'wy');
+    // reload 在途时用户切到 kg：读回来的旧值不得覆盖这次选择。
+    final pendingReload = settings.reloadKeys([kDiscoverChannelKey.name]);
+    provider.selectChannel('tx');
+    await pendingReload;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(provider.channelKey, 'tx', reason: '在途 reload 不覆盖刚做出的选择');
+  });
+
   test('initialChannelKey 测试参数优先，不被异步恢复覆盖', () async {
     SharedPreferences.setMockInitialValues({});
     final settings = testSettingsRegistry();
