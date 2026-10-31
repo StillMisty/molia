@@ -690,7 +690,11 @@
   `SourceSwapStrategies`（`lib/services/source_swap/source_swap_strategy.dart`）
   声明，未声明渠道走默认；
   `CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
-  `failedSourceKeys` / `failedSourceNames` 可重试），载体是统一的「换源」页
+  `failedSourceKeys` / `failedSourceNames` 可重试）。搜索协议本身
+  （查询代际 / 逐源状态 / 失败重试 / 选中失效 / 通知合并）唯一实现在
+  `lib/providers/fan_out_search_session.dart` 的 **Source fan-out session**：
+  换源与歌词手动换源各自只提供 `FanOutSource` 适配器并叠加展示口径。
+  载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：页面级曲目条（封面 40 + 歌名 + 歌手 ·
   当前来源）+ 歌词 / 音频两个 tab；两个 tab 共用
   `lib/widgets/source_swap/source_swap_chrome.dart` 的搜索栏 / 来源 chips /
@@ -707,8 +711,9 @@
   选中状态由列表行勾选反馈。写入 / 取词期间锁住搜索、筛选与候选点击，
   避免异步结果与界面选中项错位。来源标签只从 `searchableSources` 解析；停用 /
   非搜索脚本不在其中时 `lyricsProviderLabel` 回退源 key（已知限制）。
-  歌词侧为 `LyricsSourceSearchView` + `LyricsSourceSearchSession`（逐源搜索 /
-  过期结果 / 可用性 / 失败重试 / 选中态的状态机，视图只渲染与提示）：点结果只
+  歌词侧为 `LyricsSourceSearchView` + `LyricsSourceSearchSession`（按来源策略
+  叠加不可用原因 / 最佳匹配 / 取词写缓存，逐源搜索 / 查询代际 / 失败重试 /
+  选中态委托同一个 **Source fan-out session**，视图只渲染与提示）：点结果只
   选中，底部「使用此歌词」才取词 + `saveManual` + pop；音频侧为
   `SourceSwapView`：点候选即试听，底部确认换源；
   入口：歌曲信息页「换源」

@@ -1,11 +1,11 @@
 /// 手动歌词换源的会话状态：来源搜索 → 选中 → 确认取词 → 写入手动缓存。
 ///
-/// 持有逐来源状态、查询代际、可用性判定、最佳匹配与「选中 → 确认 → 取词 →
-/// 写缓存」的结果类型。会话不碰 Navigator / SnackBar：`select` 只切选中态，
-/// `applySelected` 返回 [LyricsSelectionOutcome]，由视图决定提示与 pop 的时机。
+/// 搜索协议（查询代际、逐来源状态 / 结果、失败重试、选中失效）委托
+/// [FanOutSearchSession]；本类只保留来源策略、可用性判定、最佳匹配与
+/// 「选中 → 确认 → 取词 → 写缓存」的结果类型。会话不碰 Navigator /
+/// SnackBar：`select` 只切选中态，`applySelected` 返回
+/// [LyricsSelectionOutcome]，由视图决定提示与 pop 的时机。
 library;
-
-import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
@@ -13,6 +13,7 @@ import 'package:logging/logging.dart';
 import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/lyrics_match.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
+import 'fan_out_search_session.dart';
 import 'lyrics_provider.dart';
 
 final _logger = Logger('molia.lyrics_source_search_session');
@@ -33,16 +34,8 @@ class LyricsSearchSelection {
   final String provider;
 }
 
-/// 每个提供者的搜索状态。
-enum ProviderSearchState {
-  idle,
-  loading,
-  loaded,
-  error,
-
-  /// 来源当前不可用（如未登录 B 站）：不发请求，只提示「怎么办」。
-  unavailable,
-}
+/// 每个提供者的搜索状态（扇出会话的逐源状态，保留旧名字给视图 / 测试）。
+typedef ProviderSearchState = FanOutSourceStatus;
 
 enum LyricsSearchEntryType { header, result }
 
@@ -96,9 +89,8 @@ final class LyricsSelectionNone extends LyricsSelectionOutcome {
 
 /// 手动歌词搜索会话：来源顺序 / 可用性、逐源结果、选中态与确认写缓存。
 ///
-/// 通知只在**可见状态**变化时发出：搜索开始、清空、选中态切换立即通知；
-/// 并行来源几乎同时返回时合并成一次重建（[scheduleMicrotask]），不同时刻
-/// 返回的来源仍逐条通知，保留「逐源出结果」的观感。
+/// 搜索协议与通知节拍（立即通知查询 / 清空 / 选中，合并同轮来源完成）
+/// 由 [FanOutSearchSession] 统一持有；本类只叠加歌词侧的状态与流程。
 class LyricsSourceSearchSession extends ChangeNotifier {
   LyricsSourceSearchSession({
     required List<LyricsSourceStrategy> strategies,
@@ -114,10 +106,19 @@ class LyricsSourceSearchSession extends ChangeNotifier {
                enabledChannelKeys.contains(strategy.channelKey))
              strategy,
        ]) {
-    for (final strategy in _strategies) {
-      _providerStates[strategy.provider.name] = ProviderSearchState.idle;
-      _providerResults[strategy.provider.name] = const [];
-    }
+    // 查询代际 / 逐源状态 / 失败重试 / 选中失效统一交给扇出会话；本类只保留
+    // 歌词来源策略、可用性原因与「确认 → 取词 → 写缓存」的歌词侧流程。
+    _searchSession = FanOutSearchSession<LyricsSearchResult>(
+      sources: () => [
+        for (final strategy in _strategies)
+          FanOutSource<LyricsSearchResult>(
+            key: strategy.provider.name,
+            isAvailable: () => strategy.unavailable?.call() == null,
+            search: (query) => _searchProvider(strategy.provider, query),
+            sourceKeyOf: (result) => result.provider.name,
+          ),
+      ],
+    )..addListener(_notifyListeners);
   }
 
   /// 与 LX 手动换源一致：每个平台最多展示 3 条。
@@ -129,40 +130,26 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   final String _trackTitle;
   final String _trackArtist;
 
-  final Map<String, ProviderSearchState> _providerStates = {};
-  final Map<String, List<LyricsSearchResult>> _providerResults = {};
-
-  String _query = '';
-
-  /// 过期响应守卫：每次 [search] 自增；来源返回时 token 不同即丢弃。
-  int _searchToken = 0;
-
-  /// 当前选中的结果：只表达「选中」，取词由 [applySelected] 显式触发。
-  LyricsSearchResult? _selected;
+  /// 跨来源搜索的共享协议（查询代际 / 逐源状态 / 失败重试 / 选中失效）。
+  late final FanOutSearchSession<LyricsSearchResult> _searchSession;
 
   bool _isFetchingLyric = false;
-  bool _disposed = false;
-
-  /// 合并同一轮事件循环内的通知（见 [_scheduleNotify]）。
-  bool _notifyPending = false;
-  int _notifyEpoch = 0;
 
   /// 本次会话的来源（已按同源置顶 / 渠道开关过滤）。
   List<LyricsSourceStrategy> get strategies => _strategies;
 
   /// 当前查询（已 trim；空串 = 未搜索 / 已清空）。
-  String get query => _query;
+  String get query => _searchSession.query;
 
   bool get isFetchingLyric => _isFetchingLyric;
 
   /// 当前选中项（未选中为 null）；视图据此画勾选与确认按钮可用态。
-  LyricsSearchResult? get selected => _selected;
+  LyricsSearchResult? get selected => _searchSession.selected;
 
-  bool isSelected(LyricsSearchResult result) => identical(_selected, result);
+  bool isSelected(LyricsSearchResult result) =>
+      identical(_searchSession.selected, result);
 
-  bool get isAnyProviderLoading => _providerStates.values.any(
-    (state) => state == ProviderSearchState.loading,
-  );
+  bool get isAnyProviderLoading => _searchSession.isSearching;
 
   /// 当前查询下搜索失败的来源（retry 只重搜这些，不重搜成功源）。
   List<LyricsSourceStrategy> get failedStrategies => [
@@ -171,13 +158,7 @@ class LyricsSourceSearchSession extends ChangeNotifier {
         strategy,
   ];
 
-  List<LyricsSearchResult> get allResults {
-    final results = <LyricsSearchResult>[];
-    for (final strategy in _strategies) {
-      results.addAll(_providerResults[strategy.provider.name] ?? const []);
-    }
-    return results;
-  }
+  List<LyricsSearchResult> get allResults => _searchSession.allResults;
 
   /// 当前不可用的来源原因（去重、保持声明顺序）。
   ///
@@ -197,10 +178,10 @@ class LyricsSourceSearchSession extends ChangeNotifier {
       strategy.unavailable?.call();
 
   ProviderSearchState stateOf(String providerName) =>
-      _providerStates[providerName] ?? ProviderSearchState.idle;
+      _searchSession.statusOf(providerName);
 
   List<LyricsSearchResult> resultsOf(String providerName) =>
-      _providerResults[providerName] ?? const [];
+      _searchSession.resultsOf(providerName);
 
   /// 按来源筛选的列表行。
   ///
@@ -252,46 +233,12 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   /// 搜索（空查询 = 清空并回到初始提示）。
   ///
   /// 不可用来源（未登录 B 站）不发请求：状态置 unavailable，分组头直接显示
-  /// 「怎么办」。旧查询的在途响应由 [_searchToken] 丢弃。
+  /// 「怎么办」。旧查询的在途响应由扇出会话的查询代际丢弃。
   Future<void> search(String query) async {
     // 取词在途时不换查询：applySelected 已经捕获旧选中项，结果不能和
     // 界面上刚出现的新查询 / 新候选错位。
     if (_isFetchingLyric) return;
-    final normalized = query.trim();
-    final token = ++_searchToken;
-    // 新查询的候选全部换掉：旧选中项可能已不在结果里，必须同步清掉。
-    _selected = null;
-
-    if (normalized.isEmpty) {
-      _query = '';
-      for (final strategy in _strategies) {
-        final providerName = strategy.provider.name;
-        _providerStates[providerName] = ProviderSearchState.idle;
-        _providerResults[providerName] = const [];
-      }
-      _notifyNow();
-      return;
-    }
-
-    final searchable = <LyricProvider>[];
-    _query = normalized;
-    for (final strategy in _strategies) {
-      final providerName = strategy.provider.name;
-      _providerResults[providerName] = const [];
-      if (unavailableReasonOf(strategy) == null) {
-        _providerStates[providerName] = ProviderSearchState.loading;
-        searchable.add(strategy.provider);
-      } else {
-        _providerStates[providerName] = ProviderSearchState.unavailable;
-      }
-    }
-    _notifyNow();
-
-    await Future.wait(
-      searchable.map(
-        (provider) => _searchProvider(provider, normalized, token),
-      ),
-    );
+    await _searchSession.search(query);
   }
 
   /// 重试当前查询下失败的来源（不重搜成功源，不改变查询与筛选）。
@@ -299,61 +246,24 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   /// 取词在途时 no-op：一次确认只做一件事，避免重试把正在写入的歌词
   /// 与候选状态搅在一起。
   Future<void> retryFailed() async {
-    if (_isFetchingLyric || _query.isEmpty) return;
-    final failed = failedStrategies;
-    if (failed.isEmpty) return;
-
-    final token = _searchToken;
-    for (final strategy in failed) {
-      final providerName = strategy.provider.name;
-      _clearSelectionIfProvider(providerName);
-      _providerStates[providerName] = ProviderSearchState.loading;
-      _providerResults[providerName] = const [];
-    }
-    _notifyNow();
-
-    await Future.wait([
-      for (final strategy in failed)
-        _searchProvider(strategy.provider, _query, token),
-    ]);
+    if (_isFetchingLyric) return;
+    await _searchSession.retryFailed();
   }
 
-  Future<void> _searchProvider(
+  /// 单源搜索：结果包上取词实现（同一 provider 的 match + fetch 成对）。
+  Future<List<LyricsSearchResult>> _searchProvider(
     LyricProvider provider,
     String query,
-    int token,
   ) async {
-    try {
-      final matches = await provider.searchMultiple(
-        query,
-        '',
-        limit: _resultsPerProvider,
-      );
-
-      if (token != _searchToken) return;
-
-      _clearSelectionIfProvider(provider.name);
-      _providerResults[provider.name] = [
-        for (final match in matches)
-          LyricsSearchResult(match: match, provider: provider),
-      ];
-      _providerStates[provider.name] = ProviderSearchState.loaded;
-      _scheduleNotify();
-    } catch (e) {
-      _logger.fine('Provider ${provider.name} search error: $e');
-
-      if (token != _searchToken) return;
-
-      _clearSelectionIfProvider(provider.name);
-      _providerStates[provider.name] = ProviderSearchState.error;
-      _providerResults[provider.name] = const [];
-      _scheduleNotify();
-    }
-  }
-
-  /// 该来源的结果被替换 / 清空时，属于它的选中项不能再留着。
-  void _clearSelectionIfProvider(String providerName) {
-    if (_selected?.provider.name == providerName) _selected = null;
+    final matches = await provider.searchMultiple(
+      query,
+      '',
+      limit: _resultsPerProvider,
+    );
+    return [
+      for (final match in matches)
+        LyricsSearchResult(match: match, provider: provider),
+    ];
   }
 
   /// 选中一条候选（只切选中态，不取词）。
@@ -363,21 +273,19 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   void select(LyricsSearchResult result) {
     // 确认后正在取词：锁住选中，否则 applySelected 写入的和界面显示的不一致。
     if (_isFetchingLyric) return;
-    if (identical(_selected, result)) return;
-    _selected = result;
-    _notifyNow();
+    _searchSession.select(result);
   }
 
   /// 对当前选中项取词 → 规范化 → 写手动缓存。
   ///
   /// 不 pop 路由、不提示；视图根据返回的 [LyricsSelectionOutcome] 处理。
   Future<LyricsSelectionOutcome> applySelected() async {
-    final result = _selected;
+    final result = _searchSession.selected;
     if (result == null) return const LyricsSelectionNone();
     if (_isFetchingLyric) return const LyricsSelectionBusy();
 
     _isFetchingLyric = true;
-    _notifyNow();
+    _searchSession.notifyNow();
 
     try {
       final payload = await result.provider.fetchForMatch(result.match);
@@ -416,35 +324,17 @@ class LyricsSourceSearchSession extends ChangeNotifier {
       return LyricsSelectionFailed(e);
     } finally {
       _isFetchingLyric = false;
-      _notifyNow();
+      _searchSession.notifyNow();
     }
   }
 
-  /// 立即通知：搜索开始 / 清空 / 选中态切换这类整屏可见的变化。
-  void _notifyNow() {
-    if (_disposed) return;
-    // 让已排队的合并通知过期，避免紧接着再重建一次。
-    _notifyEpoch++;
-    _notifyPending = false;
-    notifyListeners();
-  }
-
-  /// 合并同一轮事件循环内的来源完成（并行搜索几乎同时返回）为一次重建；
-  /// 不同时间返回的来源仍各自通知，保留逐源填充结果的观感。
-  void _scheduleNotify() {
-    if (_disposed || _notifyPending) return;
-    _notifyPending = true;
-    final epoch = _notifyEpoch;
-    scheduleMicrotask(() {
-      if (_disposed || epoch != _notifyEpoch) return;
-      _notifyPending = false;
-      notifyListeners();
-    });
-  }
+  void _notifyListeners() => notifyListeners();
 
   @override
   void dispose() {
-    _disposed = true;
+    _searchSession
+      ..removeListener(_notifyListeners)
+      ..dispose();
     super.dispose();
   }
 }

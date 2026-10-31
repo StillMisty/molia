@@ -22,6 +22,7 @@ import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
 import '../services/source_swap/source_swap_strategy.dart';
+import 'fan_out_search_session.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
 
@@ -109,7 +110,12 @@ class SourceSwapProvider extends ChangeNotifier {
     required this._playbackProvider,
     this._strategies = SourceSwapStrategies.standard,
     this._onTrackSwapped,
-  });
+  }) {
+    // 查询代际 / 逐源状态 / 失败集合 / 选中项统一交给扇出会话；本类只保留
+    // 换源请求、写回位置与分组展示。
+    _searchSession = FanOutSearchSession<Track>(sources: _buildSearchSources)
+      ..addListener(_notifyListeners);
+  }
 
   /// 每个音源的候选上限（对齐 LX 弹窗的 25 条量级）。
   static const int perSourceLimit = 30;
@@ -125,37 +131,52 @@ class SourceSwapProvider extends ChangeNotifier {
   /// 写回成功后的曲目级本地数据钩子（自定义封面跟随；失败不影响换源）。
   final SourceSwapTrackHook? _onTrackSwapped;
 
-  /// 会话 id：换源开始/清空时自增，过期搜索结果直接丢弃。
-  int _sessionId = 0;
+  /// 跨来源搜索的共享协议（查询代际 / 逐源状态 / 失败重试 / 选中失效）。
+  late final FanOutSearchSession<Track> _searchSession;
 
   /// dispose 后仍有微任务（视图推迟 clear、异步搜索收尾）会回到这里：
   /// 统一在通知边界吞掉，避免「used after being disposed」。
   bool _disposed = false;
 
   SourceSwapRequest? _request;
-  String _keyword = '';
-  bool _isSearching = false;
   bool _noSources = false;
-  List<SourceSwapGroup> _groups = const [];
-  final Set<String> _failedSourceKeys = <String>{};
   String _activeSourceKey = '';
-  Track? _selected;
 
-  bool get isSearching => _isSearching;
+  bool get isSearching => _searchSession.isSearching;
   bool get hasSession => _request != null;
   Track? get seed => _request?.seed;
   SourceSwapPlacement? get placement => _request?.placement;
 
   /// 当前搜索关键词（begin 按策略生成默认值，之后可由搜索栏改写）。
-  String get keyword => _keyword;
+  String get keyword => _searchSession.query;
 
   /// 没有任何可搜索音源（搜索前即可判定）。
   bool get noSources => _noSources;
 
-  List<SourceSwapGroup> get groups => _groups;
-  Set<String> get failedSourceKeys => Set.unmodifiable(_failedSourceKeys);
+  /// 按来源分组的候选（只保留有结果的来源，顺序跟随注册表）。
+  List<SourceSwapGroup> get groups {
+    final names = {
+      for (final descriptor in _sourceRegistry.descriptors)
+        descriptor.key: descriptor.displayName,
+    };
+    final groups = <SourceSwapGroup>[];
+    for (final source in _searchSession.sources) {
+      final items = _searchSession.resultsOf(source.key);
+      if (items.isEmpty) continue;
+      groups.add(
+        SourceSwapGroup(
+          sourceKey: source.key,
+          displayName: names[source.key] ?? source.key,
+          items: items,
+        ),
+      );
+    }
+    return groups;
+  }
 
-  /// 可搜索且启用的音源（含种子源；种子曲目自身在 [_searchSource] 过滤）。
+  Set<String> get failedSourceKeys => _searchSession.failedKeys;
+
+  /// 可搜索且启用的音源（含种子源；种子曲目自身在 [_searchTrack] 过滤）。
   ///
   /// 来源标签也只消费这份列表；停用 / 非搜索脚本不在其中时，
   /// `lyricsProviderLabel` 会回退源 key（已知下限）。
@@ -168,14 +189,15 @@ class SourceSwapProvider extends ChangeNotifier {
   ///
   /// UI 要报出具体名字（如「哔哩哔哩」）：用户据此判断值不值得点重试。
   List<String> get failedSourceNames {
-    if (_failedSourceKeys.isEmpty) return const [];
+    final failed = _searchSession.failedKeys;
+    if (failed.isEmpty) return const [];
     final descriptors = _sourceRegistry.descriptors;
     final names = <String>[
       for (final descriptor in descriptors)
-        if (_failedSourceKeys.contains(descriptor.key)) descriptor.displayName,
+        if (failed.contains(descriptor.key)) descriptor.displayName,
     ];
     final knownKeys = {for (final descriptor in descriptors) descriptor.key};
-    names.addAll(_failedSourceKeys.where((key) => !knownKeys.contains(key)));
+    names.addAll(failed.where((key) => !knownKeys.contains(key)));
     return names;
   }
 
@@ -187,14 +209,14 @@ class SourceSwapProvider extends ChangeNotifier {
 
   /// 空串 = 全部来源。
   String get activeSourceKey => _activeSourceKey;
-  Track? get selected => _selected;
+  Track? get selected => _searchSession.selected;
 
   /// 当前筛选下的候选：全部 = 按分组顺序拼接，单源 = 该组候选。
   List<Track> get activeItems {
     if (_activeSourceKey.isEmpty) {
-      return [for (final group in _groups) ...group.items];
+      return [for (final group in groups) ...group.items];
     }
-    for (final group in _groups) {
+    for (final group in groups) {
       if (group.sourceKey == _activeSourceKey) return group.items;
     }
     return const [];
@@ -202,109 +224,53 @@ class SourceSwapProvider extends ChangeNotifier {
 
   /// 开始换源会话：记录请求并立即发起跨源搜索。
   Future<void> begin(SourceSwapRequest request) async {
-    final sessionId = ++_sessionId;
     _request = request;
-    _groups = const [];
-    _failedSourceKeys.clear();
     // 默认「全部」：视图自己按 groups 分组展示，不能自动落到第一个返回的源
     // （完成顺序不稳定，用户会看到筛选凭空跳走）。
     _activeSourceKey = '';
-    _selected = null;
-    _keyword = _strategies
-        .of(request.seed.id.sourceKey)
-        .keywordFor(request.seed);
-
-    final descriptors = searchableSources;
-    _noSources = descriptors.isEmpty;
-    _isSearching = !_noSources;
-    _notifyListeners();
-    if (descriptors.isEmpty) return;
-
-    await Future.wait([
-      for (final descriptor in descriptors)
-        _searchSource(sessionId, descriptor),
-    ]);
-    if (sessionId != _sessionId) return;
-    _isSearching = false;
-    _notifyListeners();
+    _noSources = searchableSources.isEmpty;
+    await _searchSession.search(
+      _strategies.of(request.seed.id.sourceKey).keywordFor(request.seed),
+    );
   }
 
   /// 用新关键词重搜。
   ///
   /// 空串 = 清空会话（保留请求本身，便于搜索栏重新输入）。当前筛选源仍
-  /// 可搜索时保留筛选，否则回到「全部」；旧搜索的在途结果由会话 id 丢弃。
+  /// 可搜索时保留筛选，否则回到「全部」；旧搜索的在途结果由扇出会话的
+  /// 查询代际丢弃。
   Future<void> search(String keyword) async {
     // 页面关闭后仍可能有排队回调（清空 / 提交）；没有会话就不该起搜索。
     if (_request == null) return;
     final normalized = keyword.trim();
-    final sessionId = ++_sessionId;
-    _keyword = normalized;
-    _groups = const [];
-    _failedSourceKeys.clear();
-    _selected = null;
     final descriptors = searchableSources;
     _noSources = descriptors.isEmpty;
     if (normalized.isEmpty) {
-      _isSearching = false;
       _activeSourceKey = '';
-      _notifyListeners();
-      return;
-    }
-    if (_activeSourceKey.isNotEmpty &&
+    } else if (_activeSourceKey.isNotEmpty &&
         !descriptors.any((descriptor) => descriptor.key == _activeSourceKey)) {
       _activeSourceKey = '';
     }
-    _isSearching = !_noSources;
-    _notifyListeners();
-    if (descriptors.isEmpty) return;
-
-    await Future.wait([
-      for (final descriptor in descriptors)
-        _searchSource(sessionId, descriptor),
-    ]);
-    if (sessionId != _sessionId) return;
-    _isSearching = false;
-    _notifyListeners();
+    await _searchSession.search(normalized);
   }
 
   /// 重试失败音源（成功后清空失败集合）。
   Future<void> retryFailed() async {
-    final request = _request;
-    if (request == null || _failedSourceKeys.isEmpty || _isSearching) return;
-    final sessionId = _sessionId;
-    final descriptors = searchableSources
-        .where((descriptor) => _failedSourceKeys.contains(descriptor.key))
-        .toList();
-    if (descriptors.isEmpty) {
-      // 失败源已从注册表移除：清空失败集合并通知 UI 撤掉旧提示。
-      _failedSourceKeys.clear();
-      _notifyListeners();
-      return;
-    }
-    _failedSourceKeys.clear();
-    _isSearching = true;
-    _notifyListeners();
-    await Future.wait([
-      for (final descriptor in descriptors)
-        _searchSource(sessionId, descriptor),
-    ]);
-    if (sessionId != _sessionId) return;
-    _isSearching = false;
-    _notifyListeners();
+    if (_request == null) return;
+    await _searchSession.retryFailed();
   }
 
   /// 切换来源筛选；空串 = 全部。
   void selectSource(String sourceKey) {
     if (sourceKey == _activeSourceKey) return;
     _activeSourceKey = sourceKey;
-    _notifyListeners();
+    // 走扇出会话的通知节拍：作废排队中的合并通知，避免筛选切换后重建两次。
+    _searchSession.notifyNow();
   }
 
   /// 选中候选（试听由 UI 层发起：选中与播放解耦，见弹层实现）。
   void select(Track track) {
-    if (_selected == track) return;
-    _selected = track;
-    _notifyListeners();
+    _searchSession.select(track);
   }
 
   void _notifyListeners() {
@@ -315,21 +281,18 @@ class SourceSwapProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _searchSession
+      ..removeListener(_notifyListeners)
+      ..dispose();
     super.dispose();
   }
 
-  /// 清空会话（弹层关闭时调用；过期在途结果被会话 id 守卫丢弃）。
+  /// 清空会话（弹层关闭时调用；过期在途结果被扇出会话的查询代际丢弃）。
   void clear() {
-    _sessionId++;
     _request = null;
-    _keyword = '';
-    _isSearching = false;
     _noSources = false;
-    _groups = const [];
-    _failedSourceKeys.clear();
     _activeSourceKey = '';
-    _selected = null;
-    _notifyListeners();
+    _searchSession.clear();
   }
 
   /// 应用换源：库内原位替换（列表/历史）+ 队列跟随。
@@ -341,7 +304,7 @@ class SourceSwapProvider extends ChangeNotifier {
   /// 原样（不跟随），弹层据此提示后可重试，不再把异常抛给调用方。
   Future<SourceSwapApplyResult> apply({bool removeDuplicate = false}) async {
     final request = _request;
-    final selected = _selected;
+    final selected = _searchSession.selected;
     if (request == null || selected == null) {
       return const SourceSwapApplyResult(SourceSwapApplyStatus.targetNotFound);
     }
@@ -461,56 +424,35 @@ class SourceSwapProvider extends ChangeNotifier {
     }
   }
 
-  /// 单源搜索：结果就绪即并入分组（渐进渲染）；失败记入 [failedSourceKeys]。
-  Future<void> _searchSource(int sessionId, SourceDescriptor descriptor) async {
-    try {
-      final page = await _catalogService.search(
-        descriptor.key,
-        SearchQuery(keyword: _keyword, limit: perSourceLimit),
-      );
-      if (sessionId != _sessionId) return;
-      final seedUri = _request?.seed.id.uri;
-      final seen = <String>{};
-      final items = <Track>[
-        for (final track in page.items)
-          if (track.id.uri != seedUri && seen.add(track.id.uri)) track,
-      ];
-      if (items.isEmpty) return;
-      _putGroup(
-        SourceSwapGroup(
-          sourceKey: descriptor.key,
-          displayName: descriptor.displayName,
-          items: items,
-        ),
-      );
-      _notifyListeners();
-    } catch (e) {
-      if (sessionId != _sessionId) return;
-      _logger.warning('换源搜索失败 ${descriptor.key}: $e');
-      _failedSourceKeys.add(descriptor.key);
-      _notifyListeners();
-    }
-  }
+  /// 当前可搜索来源 → 扇出会话适配器。
+  ///
+  /// 每次搜索都按注册表重新生成：渠道启停 / 脚本增减会在 provider 存活期间
+  /// 发生，适配器闭包拿到的是本轮查询对应的描述符。
+  List<FanOutSource<Track>> _buildSearchSources() => [
+    for (final descriptor in searchableSources)
+      FanOutSource<Track>(
+        key: descriptor.key,
+        search: (query) => _searchTrack(descriptor, query),
+        // 结果自己的来源 key 用于「来源结果被替换时失效选中项」。
+        sourceKeyOf: (track) => track.id.sourceKey,
+      ),
+  ];
 
-  /// 并入分组并按注册表顺序稳定排序：并行搜索完成顺序不决定「全部」模式下
-  /// 的分组顺序，否则同一批源每搜一次分组块都可能在页面上跳动。
-  void _putGroup(SourceSwapGroup group) {
-    final descriptors = searchableSources;
-    final order = <String, int>{
-      for (var index = 0; index < descriptors.length; index++)
-        descriptors[index].key: index,
-    };
-    final groups =
-        [
-          for (final existing in _groups)
-            if (existing.sourceKey != group.sourceKey) existing,
-          group,
-        ]..sort(
-          (a, b) => (order[a.sourceKey] ?? order.length).compareTo(
-            order[b.sourceKey] ?? order.length,
-          ),
-        );
-    _groups = groups;
+  /// 单源搜索：种子自身按 URI 排除，同源重复结果只留一条。
+  Future<List<Track>> _searchTrack(
+    SourceDescriptor descriptor,
+    String query,
+  ) async {
+    final page = await _catalogService.search(
+      descriptor.key,
+      SearchQuery(keyword: query, limit: perSourceLimit),
+    );
+    final seedUri = _request?.seed.id.uri;
+    final seen = <String>{};
+    return [
+      for (final track in page.items)
+        if (track.id.uri != seedUri && seen.add(track.id.uri)) track,
+    ];
   }
 
   PlaylistTrack _toPlaylistTrack(int playlistId, Track track) {
