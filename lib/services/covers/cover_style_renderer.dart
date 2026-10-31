@@ -118,8 +118,8 @@ class _Raster {
   int index(int x, int y) => y * width + x;
 }
 
-// ── 渐变素描（One Last Kiss） ────────────────────────────────────────
-
+// 小图分界按 128 桶而不是 96px：缓存桶只有 64 / 128，40dp 列表封面在
+// 2x / 3x 下会落进 128 桶；若仍按 96 判断，加粗线条 / 降细节永远不会触发。
 Uint8List _oneLastKiss(_Raster src) {
   final maps = _edgeMaps(src, src.width);
   final gray = maps.gray;
@@ -128,8 +128,8 @@ Uint8List _oneLastKiss(_Raster src) {
   final width = src.width;
   final height = src.height;
   // 低阈值让铅笔线在明亮区域也能留下轮廓；暗部另走铅笔调子。
-  final lineLow = width <= 96 ? 0.055 : 0.08;
-  final lineHigh = width <= 96 ? 0.22 : 0.3;
+  final lineLow = width <= 128 ? 0.055 : 0.08;
+  final lineHigh = width <= 128 ? 0.22 : 0.3;
   for (var y = 0; y < height; y++) {
     for (var x = 0; x < width; x++) {
       final i = src.index(x, y);
@@ -153,15 +153,13 @@ Uint8List _oneLastKiss(_Raster src) {
   return output;
 }
 
-// ── 纯线稿 ───────────────────────────────────────────────────────────
-
 Uint8List _lineArt(_Raster src) {
   final maps = _edgeMaps(src, src.width);
   final edge = maps.edge;
   final output = Uint8List(src.length * 3);
   final width = src.width;
-  final low = width <= 96 ? 0.06 : 0.1;
-  final high = width <= 96 ? 0.24 : 0.33;
+  final low = width <= 128 ? 0.06 : 0.1;
+  final high = width <= 128 ? 0.24 : 0.33;
   for (var y = 0; y < src.height; y++) {
     for (var x = 0; x < width; x++) {
       final i = src.index(x, y);
@@ -178,16 +176,14 @@ Uint8List _lineArt(_Raster src) {
   return output;
 }
 
-// ── 铅笔素描 ─────────────────────────────────────────────────────────
-
 Uint8List _pencil(_Raster src) {
   final maps = _edgeMaps(src, src.width);
   final gray = maps.gray;
   final edge = maps.edge;
   final output = Uint8List(src.length * 3);
   final width = src.width;
-  final low = width <= 96 ? 0.065 : 0.095;
-  final high = width <= 96 ? 0.26 : 0.34;
+  final low = width <= 128 ? 0.065 : 0.095;
+  final high = width <= 128 ? 0.26 : 0.34;
   for (var y = 0; y < src.height; y++) {
     for (var x = 0; x < width; x++) {
       final i = src.index(x, y);
@@ -210,8 +206,6 @@ Uint8List _pencil(_Raster src) {
   }
   return output;
 }
-
-// ── 浮雕版画 ─────────────────────────────────────────────────────────
 
 Uint8List _emboss(_Raster src) {
   final gray = _grayscale(src);
@@ -241,8 +235,6 @@ Uint8List _emboss(_Raster src) {
   }
   return output;
 }
-
-// ── 像素风 ───────────────────────────────────────────────────────────
 
 const int _pixelPaletteSize = 24;
 const List<int> _pixelPalette = [
@@ -275,7 +267,7 @@ const List<int> _pixelPalette = [
 Uint8List _pixel(_Raster src) {
   final width = src.width;
   final height = src.height;
-  final targetBlocks = width <= 96
+  final targetBlocks = width <= 128
       ? 14
       : width <= 256
       ? 20
@@ -336,8 +328,6 @@ Uint8List _pixel(_Raster src) {
   return ((best >> 16) & 0xFF, (best >> 8) & 0xFF, best & 0xFF);
 }
 
-// ── 黑白墨印 ─────────────────────────────────────────────────────────
-
 Uint8List _ink(_Raster src) {
   final gray = _grayscale(src);
   final softened = _boxBlur(
@@ -368,8 +358,6 @@ Uint8List _ink(_Raster src) {
   }
   return output;
 }
-
-// ── 双色印刷 ─────────────────────────────────────────────────────────
 
 // 固定大胆配色（不依赖主题色）：深靛蓝 + 暖黄，像两张油墨叠印。
 const int _duotoneDarkR = 27;
@@ -409,8 +397,6 @@ Uint8List _duotone(_Raster src) {
   return output;
 }
 
-// ── 胶片颗粒 ─────────────────────────────────────────────────────────
-
 Uint8List _film(_Raster src) {
   final gray = _grayscale(src);
   final width = src.width;
@@ -436,7 +422,7 @@ Uint8List _film(_Raster src) {
         red += lift;
         green += lift * 0.55;
       }
-      final grain = (_noise(x, y, 89) - 0.5) * (width <= 96 ? 30 : 22);
+      final grain = (_noise(x, y, 89) - 0.5) * (width <= 128 ? 30 : 22);
       final dx = (x - centerX) / (radius <= 0 ? 1 : radius);
       final dy = (y - centerY) / (radius <= 0 ? 1 : radius);
       final distance = math.sqrt(dx * dx + dy * dy);
@@ -453,8 +439,6 @@ Uint8List _film(_Raster src) {
   }
   return output;
 }
-
-// ── 公共像素工具 ─────────────────────────────────────────────────────
 
 Uint8List _grayscale(_Raster src) {
   final output = Uint8List(src.length);
@@ -491,12 +475,12 @@ Uint8List _grayscale(_Raster src) {
       final gy = (bottom - top) / 255;
       final gradient = math.sqrt(gx * gx + gy * gy);
       var value = highPass * 2.9 + gradient * 1.6;
-      if (edgeWidth <= 96) value *= 1.15;
+      if (edgeWidth <= 128) value *= 1.15;
       edge[i] = (value.clamp(0.0, 1.0) * 255).round();
     }
   }
-  // 小缩略图的线宽在物理像素上只有 1px，必须膨胀一次才看得见。
-  if (edgeWidth <= 96) edge = _dilate(edge, width, height);
+  // 小缩略图（64/128 桶）的线宽在物理像素上只有 1px，必须膨胀一次才看得见。
+  if (edgeWidth <= 128) edge = _dilate(edge, width, height);
   return (gray: gray, edge: edge);
 }
 

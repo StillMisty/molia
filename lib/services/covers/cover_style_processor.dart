@@ -22,9 +22,31 @@ abstract interface class CoverStyleProcessorPort {
   });
 }
 
+/// worker 启动器（单测注入：验证启动失败后的自愈路径）。
+typedef CoverStyleWorkerSpawner = Future<Isolate> Function(
+  void Function(SendPort) entryPoint,
+  SendPort message,
+  SendPort errorPort,
+);
+
+Future<Isolate> _spawnCoverStyleWorker(
+  void Function(SendPort) entryPoint,
+  SendPort message,
+  SendPort errorPort,
+) => Isolate.spawn(
+  entryPoint,
+  message,
+  debugName: 'molia-cover-style',
+  onError: errorPort,
+  onExit: errorPort,
+);
+
 /// 生产处理器：`processSync` 是纯 Dart 像素入口，`process` 走长驻 isolate。
 class CoverStyleProcessor implements CoverStyleProcessorPort {
-  CoverStyleProcessor();
+  CoverStyleProcessor({CoverStyleWorkerSpawner? spawner})
+    : _spawner = spawner ?? _spawnCoverStyleWorker;
+
+  final CoverStyleWorkerSpawner _spawner;
 
   Isolate? _isolate;
   SendPort? _worker;
@@ -47,6 +69,7 @@ class CoverStyleProcessor implements CoverStyleProcessorPort {
     if (_disposed || !style.isStylized || source.isEmpty) return null;
     try {
       final worker = await _ensureWorker();
+      if (_disposed) return null;
       final id = _nextId++;
       final completer = Completer<_RenderReply>();
       _pending[id] = completer;
@@ -84,43 +107,80 @@ class CoverStyleProcessor implements CoverStyleProcessorPort {
   Future<SendPort> _ensureWorker() {
     final ready = _worker;
     if (ready != null) return Future.value(ready);
-    return _starting ??= _start();
+    final starting = _starting;
+    if (starting != null) return starting;
+    final attempt = _start();
+    _starting = attempt;
+    // 启动失败必须清掉缓存 future，否则后续调用会永远拿到同一个失败结果，
+    // worker 再也无法重新拉起。成功时 worker 已就绪，清空也不影响复用。
+    attempt.whenComplete(() {
+      if (identical(_starting, attempt)) _starting = null;
+    }).ignore();
+    return attempt;
   }
 
   Future<SendPort> _start() async {
     final receive = ReceivePort();
+    final errors = ReceivePort();
     _inbox = receive;
     final ready = Completer<SendPort>();
-    receive.listen((message) {
-      if (message is _RenderReply) {
-        final completer = _pending.remove(message.id);
-        if (completer != null && !completer.isCompleted) {
-          completer.complete(message);
+    // 启动失败可能发生在 await ready.future 之前；先认领错误，避免
+    // completeError 在无人监听时变成未处理异步异常。
+    ready.future.ignore();
+    StreamSubscription<dynamic>? events;
+    Isolate? isolate;
+    try {
+      receive.listen((message) {
+        if (message is _RenderReply) {
+          final completer = _pending.remove(message.id);
+          if (completer != null && !completer.isCompleted) {
+            completer.complete(message);
+          }
+        } else if (message is SendPort) {
+          if (!ready.isCompleted) ready.complete(message);
         }
-      } else if (message is SendPort) {
-        if (!ready.isCompleted) ready.complete(message);
+      });
+      isolate = await _spawner(
+        _renderWorker,
+        receive.sendPort,
+        errors.sendPort,
+      );
+      _isolate = isolate;
+      if (_disposed) throw StateError('封面风格处理器已释放');
+      events = errors.listen((_) {
+        // 只处理当前 worker 的退出事件；旧 worker 的迟到事件不能清掉新 worker。
+        if (!identical(_isolate, isolate)) return;
+        _worker = null;
+        _starting = null;
+        _isolate = null;
+        _isolateEvents = null;
+        if (identical(_inbox, receive)) _inbox = null;
+        if (!ready.isCompleted) {
+          ready.completeError(StateError('封面风格 worker 启动失败'));
+        }
+        _failPending();
+        unawaited(events?.cancel());
+        errors.close();
+        receive.close();
+      });
+      _isolateEvents = events;
+      final port = await ready.future;
+      _worker = port;
+      return port;
+    } catch (error) {
+      await events?.cancel();
+      if (identical(_isolateEvents, events)) _isolateEvents = null;
+      errors.close();
+      receive.close();
+      if (identical(_inbox, receive)) _inbox = null;
+      if (isolate != null) {
+        if (identical(_isolate, isolate)) _isolate = null;
+        isolate.kill(priority: Isolate.immediate);
       }
-    });
-    final errors = ReceivePort();
-    final isolate = await Isolate.spawn(
-      _renderWorker,
-      receive.sendPort,
-      debugName: 'molia-cover-style',
-      onError: errors.sendPort,
-      onExit: errors.sendPort,
-    );
-    _isolate = isolate;
-    _isolateEvents = errors.listen((_) {
       _worker = null;
       _starting = null;
-      if (!ready.isCompleted) {
-        ready.completeError(StateError('封面风格 worker 启动失败'));
-      }
-      _failPending();
-    });
-    final port = await ready.future;
-    _worker = port;
-    return port;
+      rethrow;
+    }
   }
 
   void _failPending() {

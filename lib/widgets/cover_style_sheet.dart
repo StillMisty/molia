@@ -32,17 +32,30 @@ Future<void> showCoverStyleSheet(BuildContext context) {
   final settings = context.read<CoverStyleSettings?>();
   if (settings == null) return Future.value();
   final covers = coverResolverOf(context);
-  final track = context.read<PlaybackProvider?>()?.snapshot.current;
-  final previewUrl = covers.realOf(track).url ?? covers.defaultCoverUrl;
+  final cache = context.read<CoverStyleCache?>();
+  // 没有 PlaybackProvider 时（独立挂载 / 旧测试）保留打开瞬间的封面；
+  // 有 provider 时弹层内监听切歌，预览跟随当前曲目。
+  final initialPreviewUrl =
+      covers.realOf(context.read<PlaybackProvider?>()?.snapshot.current).url ??
+      covers.defaultCoverUrl;
   return M3EBottomSheet.show<void>(
     context,
     // 直接展开到内容高度（上限为屏幕可用高度）：9 个风格卡片在收起态
     // 只露出半屏，底部的「完成」会落在屏幕外。
     initialValue: M3EBottomSheetValue.expanded,
-    builder: (_) => CoverStyleSheet(
-      settings: settings,
-      cache: context.read<CoverStyleCache?>(),
-      previewUrl: previewUrl,
+    builder: (_) => CoverChangeBuilder(
+      builder: (context, covers) {
+        final playback = context.watch<PlaybackProvider?>();
+        final previewUrl = playback == null
+            ? initialPreviewUrl
+            : covers.realOf(playback.snapshot.current).url ??
+                  covers.defaultCoverUrl;
+        return CoverStyleSheet(
+          settings: settings,
+          cache: cache,
+          previewUrl: previewUrl,
+        );
+      },
     ),
   );
 }
@@ -91,8 +104,8 @@ class CoverStyleSheet extends StatelessWidget {
           Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-              child: AnimatedBuilder(
-                animation: settings,
+              child: ListenableBuilder(
+                listenable: settings,
                 builder: (context, _) {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -127,12 +140,46 @@ class CoverStyleSheet extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 6),
-                      Text(
-                        coverStyleScopeDescription(l10n, settings.scope),
-                        style: context.typeScale.bodySmall.copyWith(
-                          color: scheme.onSurfaceVariant,
+                      // 两条说明同时可见（选中项强调、未选中项弱化）：
+                      // 用户不必切换范围就能比较两种作用面。
+                      for (final scope in CoverStyleScope.values)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 18,
+                                child: scope == settings.scope
+                                    ? Icon(
+                                        Icons.check_rounded,
+                                        size: 14,
+                                        color: scheme.primary,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  coverStyleScopeDescription(l10n, scope),
+                                  key: Key(
+                                    'coverStyleScopeDescription_${scope.id}',
+                                  ),
+                                  style: context.typeScale.bodySmall.copyWith(
+                                    color: scope == settings.scope
+                                        ? scheme.onSurface
+                                        : scheme.onSurfaceVariant.withValues(
+                                            alpha: 0.72,
+                                          ),
+                                    fontWeight: scope == settings.scope
+                                        ? FontWeight.w500
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                       if (url == null) ...[
                         const SizedBox(height: 10),
                         Text(

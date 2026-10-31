@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -47,6 +48,9 @@ Uint8List _samplePng({int width = 64, int height = 48}) {
 }
 
 image.Image _decode(Uint8List bytes) => image.decodeImage(bytes)!;
+
+int _luma(image.Pixel pixel) =>
+    (pixel.r.toInt() * 77 + pixel.g.toInt() * 150 + pixel.b.toInt() * 29) >> 8;
 
 int _uniqueColors(image.Image source) {
   final colors = <int>{};
@@ -209,6 +213,146 @@ void main() {
       final decoded = _decode(bytes);
       expect(decoded.width, 768);
       expect(decoded.height, 768);
+    });
+
+    test('浮雕 / 铅笔为灰阶且有明暗层次', () {
+      for (final style in [CoverStyle.emboss, CoverStyle.pencil]) {
+        final decoded = _decode(
+          CoverStyleProcessor.processSync(sample, style: style, edge: 64)!,
+        );
+        var min = 255;
+        var max = 0;
+        for (final pixel in decoded) {
+          expect(pixel.r, pixel.g, reason: style.id);
+          expect(pixel.g, pixel.b, reason: style.id);
+          final luma = _luma(pixel);
+          if (luma < min) min = luma;
+          if (luma > max) max = luma;
+        }
+        expect(max - min, greaterThan(40), reason: style.id);
+      }
+    });
+
+    test('铅笔比纯线稿有更多石墨暗面', () {
+      int darkPixels(CoverStyle style) {
+        final decoded = _decode(
+          CoverStyleProcessor.processSync(sample, style: style, edge: 64)!,
+        );
+        return decoded.where((pixel) => _luma(pixel) < 200).length;
+      }
+
+      expect(
+        darkPixels(CoverStyle.pencil),
+        greaterThan(darkPixels(CoverStyle.lineArt)),
+      );
+    });
+
+    test('胶片有彩色像素且角落比中心暗', () {
+      final colorfulSource = _decode(
+        CoverStyleProcessor.processSync(
+          sample,
+          style: CoverStyle.film,
+          edge: 64,
+        )!,
+      );
+      var colorful = 0;
+      for (final pixel in colorfulSource) {
+        final maxChannel = [
+          pixel.r,
+          pixel.g,
+          pixel.b,
+        ].reduce((a, b) => a > b ? a : b);
+        final minChannel = [
+          pixel.r,
+          pixel.g,
+          pixel.b,
+        ].reduce((a, b) => a < b ? a : b);
+        if (maxChannel - minChannel > 12) colorful++;
+      }
+      expect(colorful, greaterThan(100));
+
+      // 暗角用均匀灰源验证：合成封面的四角包含亮纸白，直接比较会被内容干扰。
+      final uniform = image.Image(width: 64, height: 64);
+      for (var y = 0; y < uniform.height; y++) {
+        for (var x = 0; x < uniform.width; x++) {
+          uniform.setPixelRgb(x, y, 180, 180, 180);
+        }
+      }
+      final decoded = _decode(
+        CoverStyleProcessor.processSync(
+          Uint8List.fromList(image.encodePng(uniform)),
+          style: CoverStyle.film,
+          edge: 64,
+        )!,
+      );
+
+      double averageLuma(Iterable<image.Pixel> pixels) {
+        var total = 0;
+        var count = 0;
+        for (final pixel in pixels) {
+          total += _luma(pixel);
+          count++;
+        }
+        return total / count;
+      }
+
+      final width = decoded.width;
+      final height = decoded.height;
+      final center = averageLuma([
+        for (var y = height * 3 ~/ 8; y < height * 5 ~/ 8; y++)
+          for (var x = width * 3 ~/ 8; x < width * 5 ~/ 8; x++)
+            decoded.getPixel(x, y),
+      ]);
+      final corners = averageLuma([
+        for (var y = 0; y < 10; y++)
+          for (var x = 0; x < 10; x++) ...[
+            decoded.getPixel(x, y),
+            decoded.getPixel(width - 1 - x, y),
+            decoded.getPixel(x, height - 1 - y),
+            decoded.getPixel(width - 1 - x, height - 1 - y),
+          ],
+      ]);
+      expect(center, greaterThan(corners + 10));
+    });
+
+    test('worker 启动失败后下一次可重新拉起', () async {
+      var attempts = 0;
+      final processor = CoverStyleProcessor(
+        spawner: (entryPoint, message, errorPort) async {
+          attempts++;
+          if (attempts == 1) throw StateError('spawn failed');
+          return Isolate.spawn(
+            entryPoint,
+            message,
+            debugName: 'molia-cover-style-test',
+            onError: errorPort,
+            onExit: errorPort,
+          );
+        },
+      );
+      addTearDown(processor.dispose);
+
+      expect(
+        await processor.process(
+          _samplePng(),
+          style: CoverStyle.lineArt,
+          edge: 64,
+        ),
+        isNull,
+      );
+      expect(processor.workerReady, isFalse);
+      expect(attempts, 1);
+
+      expect(
+        await processor.process(
+          _samplePng(),
+          style: CoverStyle.lineArt,
+          edge: 64,
+        ),
+        isNotNull,
+      );
+      expect(processor.workerReady, isTrue);
+      expect(attempts, 2);
     });
 
     test('长驻 worker 可重复处理（不逐张 spawn）', () async {

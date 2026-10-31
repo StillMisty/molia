@@ -98,6 +98,8 @@ Future<CoverStyleSettings> _settings({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  final zh = lookupAppLocalizations(const Locale('zh'));
+
   final track = Track(
     id: const TrackId('kw', 'a'),
     title: 'Title',
@@ -375,6 +377,53 @@ void main() {
       return sheet;
     }
 
+    Future<void> pumpLauncher(
+      WidgetTester tester,
+      CoverStyleSettings settings,
+      PlaybackProvider playback,
+    ) async {
+      final themedData = ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      );
+      await tester.pumpWidget(
+        // Provider 必须包在 MaterialApp 外层（与生产组合根一致），弹层的
+        // root overlay 才能读到 PlaybackProvider 并跟随切歌。
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+            ChangeNotifierProvider<CoverStyleSettings>.value(value: settings),
+            ChangeNotifierProvider<CoverStyleCache>.value(value: _fakeCache()),
+            Provider<CustomCoverStore>.value(value: store),
+          ],
+          child: M3EMaterialApp(
+            data: M3EThemeData.fromMaterial(themedData),
+            theme: themedData,
+            darkTheme: themedData,
+            autoTheming: false,
+            dynamicColoring: false,
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: const [Locale('zh')],
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: Center(
+                  child: M3EButton.filled(
+                    key: const Key('openCoverStyleSheet'),
+                    onPressed: () => unawaited(showCoverStyleSheet(context)),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     testWidgets('选择风格 / 切换范围立即写入，卡片保持选中', (tester) async {
       final settings = await _settings();
       await pumpSheet(tester, settings, previewUrl: previewFileUrl);
@@ -388,12 +437,41 @@ void main() {
         );
       }
 
+      final playerDescription = tester.widget<Text>(
+        find.byKey(const Key('coverStyleScopeDescription_player')),
+      );
+      final allDescription = tester.widget<Text>(
+        find.byKey(const Key('coverStyleScopeDescription_all')),
+      );
+      expect(find.text(zh.coverStyleScopePlayerSubtitle), findsOneWidget);
+      expect(find.text(zh.coverStyleScopeAllSubtitle), findsOneWidget);
+      final selectedColor = playerDescription.style!.color;
+      final unselectedColor = allDescription.style!.color;
+      expect(selectedColor, isNot(unselectedColor));
+
       // 先切范围：分段控件在网格上方，ensureVisible 滚动到风格卡后会被
       // 滚出视口（点击落到屏幕外）。
-      await tester.tap(find.text('所有歌曲封面'));
+      await tester.tap(find.text(zh.coverStyleScopeAll));
       await tester.pump();
       expect(settings.scope, CoverStyleScope.all);
-      expect(find.text('列表、顶栏、迷你条也会变化'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const Key('coverStyleScopeDescription_all')),
+            )
+            .style!
+            .color,
+        selectedColor,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const Key('coverStyleScopeDescription_player')),
+            )
+            .style!
+            .color,
+        unselectedColor,
+      );
 
       await tester.ensureVisible(
         find.byKey(const Key('coverStyleCard_oneLastKiss')),
@@ -419,52 +497,62 @@ void main() {
       final settings = await _settings();
       final playback = buildTestPlaybackProvider();
       addTearDown(playback.dispose);
-      final themedData = ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      );
-      await tester.pumpWidget(
-        M3EMaterialApp(
-          data: M3EThemeData.fromMaterial(themedData),
-          theme: themedData,
-          darkTheme: themedData,
-          autoTheming: false,
-          dynamicColoring: false,
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            ...GlobalMaterialLocalizations.delegates,
-          ],
-          supportedLocales: const [Locale('zh')],
-          home: MultiProvider(
-            providers: [
-              ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
-              ChangeNotifierProvider<CoverStyleSettings>.value(value: settings),
-              ChangeNotifierProvider<CoverStyleCache>.value(
-                value: _fakeCache(),
-              ),
-              Provider<CustomCoverStore>.value(value: store),
-            ],
-            child: Builder(
-              builder: (context) => Scaffold(
-                body: Center(
-                  child: M3EButton.filled(
-                    key: const Key('openCoverStyleSheet'),
-                    onPressed: () => unawaited(showCoverStyleSheet(context)),
-                    child: const Text('open'),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
+      await pumpLauncher(tester, settings, playback);
       await tester.tap(find.byKey(const Key('openCoverStyleSheet')));
       await tester.pumpAndSettle();
       expect(find.byType(CoverStyleSheet), findsOneWidget);
       await tester.tap(find.byKey(const Key('coverStyleDone')));
       await tester.pumpAndSettle();
       expect(find.byType(CoverStyleSheet), findsNothing);
+    });
+
+    testWidgets('切歌后预览跟随当前曲目', (tester) async {
+      final settings = await _settings();
+      final backend = FakePlaybackBackend();
+      final playback = buildTestPlaybackProvider(backend: backend);
+      addTearDown(playback.dispose);
+      final nextTrack = Track(
+        id: const TrackId('kw', 'b'),
+        title: 'Next',
+        origin: TrackOrigin.builtin,
+        artwork: Artwork(uri: Uri.parse('https://img.example/b.jpg')),
+      );
+      backend.emit(
+        BackendSnapshot(
+          current: track,
+          queue: [track, nextTrack],
+          currentIndex: 0,
+          next: nextTrack,
+          isPlaying: true,
+          position: Duration.zero,
+          duration: const Duration(seconds: 30),
+        ),
+      );
+      await pumpLauncher(tester, settings, playback);
+      await tester.tap(find.byKey(const Key('openCoverStyleSheet')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CoverStyleSheet>(find.byType(CoverStyleSheet)).previewUrl,
+        track.artwork!.uri.toString(),
+      );
+
+      backend.emit(
+        BackendSnapshot(
+          current: nextTrack,
+          queue: [track, nextTrack],
+          currentIndex: 1,
+          previous: track,
+          isPlaying: true,
+          position: Duration.zero,
+          duration: const Duration(seconds: 30),
+        ),
+      );
+      // 快照通知经 PlaybackProvider 的合并节流（~188ms）后落地。
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        tester.widget<CoverStyleSheet>(find.byType(CoverStyleSheet)).previewUrl,
+        nextTrack.artwork!.uri.toString(),
+      );
     });
   });
 }
