@@ -50,7 +50,9 @@ void main() {
     await tester.pumpWidget(
       ChangeNotifierProvider<PlaybackProvider>.value(
         value: playback,
-        child: MaterialApp(home: Scaffold(body: Center(child: child))),
+        child: MaterialApp(
+          home: Scaffold(body: Center(child: child)),
+        ),
       ),
     );
     if (settle) {
@@ -95,17 +97,14 @@ void main() {
   }
 
   M3ECard cardOf(WidgetTester tester) => tester.widget<M3ECard>(
-        find.descendant(
-          of: find.byType(TrackRow),
-          matching: find.byType(M3ECard),
-        ),
-      );
+    find.descendant(of: find.byType(TrackRow), matching: find.byType(M3ECard)),
+  );
 
   testWidgets('当前曲目：封面状态角标 + 标题主色，选中时让位给勾选', (tester) async {
     await pumpRow(tester, isCurrent: true, isPlaying: true);
     expect(find.byType(PlayingIndicator), findsOneWidget);
-    final scheme =
-        M3ETheme.of(tester.element(find.byType(TrackRow))).colorScheme;
+    final scheme = M3ETheme.of(tester.element(find.byType(TrackRow)))
+        .colorScheme;
     expect(
       tester.widget<Text>(find.text('Title')).style?.color,
       scheme.primary,
@@ -182,8 +181,9 @@ void main() {
 
   testWidgets('press：morph 到 16dp，松开回静止形状', (tester) async {
     await pumpRow(tester);
-    final gesture =
-        await tester.startGesture(tester.getCenter(find.byType(TrackRow)));
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byType(TrackRow)),
+    );
     await tester.pumpAndSettle();
     expect(cardOf(tester).borderRadius, BorderRadius.circular(16));
 
@@ -196,9 +196,67 @@ void main() {
     await pumpRow(tester, selected: true);
     final card = cardOf(tester);
     expect(card.borderRadius, BorderRadius.circular(16));
-    final M3EColorScheme scheme =
-        M3ETheme.of(tester.element(find.byType(TrackRow))).colorScheme;
+    final M3EColorScheme scheme = M3ETheme.of(
+      tester.element(find.byType(TrackRow)),
+    ).colorScheme;
     expect(card.color, scheme.secondaryContainer);
+  });
+
+  testWidgets('无封面 + placeholderIcon：图标位与封面同尺寸，选中时让位给勾选', (tester) async {
+    Future<void> pump({String? coverKey, bool selected = false}) async {
+      await pumpContents(
+        tester,
+        SizedBox(
+          width: 360,
+          child: TrackRow(
+            model: TrackRowModel(
+              title: 'Title',
+              artist: 'Artist',
+              coverKey: coverKey,
+              placeholderIcon: Icons.lyrics_rounded,
+              selected: selected,
+            ),
+            surface: const TrackRowSurface(coverSize: 40),
+            position: M3ECardPosition.single,
+            onTap: () {},
+          ),
+        ),
+      );
+    }
+
+    await pump();
+    final icon = tester.widget<Icon>(find.byIcon(Icons.lyrics_rounded));
+    final scheme = M3ETheme.of(tester.element(find.byType(TrackRow)))
+        .colorScheme;
+    expect(icon.color, scheme.onSurfaceVariant);
+    expect(icon.size, 20, reason: '封面 40 的一半');
+    final box = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.byIcon(Icons.lyrics_rounded),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    expect(
+      (box.decoration! as BoxDecoration).color,
+      scheme.surfaceContainerHighest,
+    );
+    expect(
+      (box.decoration! as BoxDecoration).borderRadius,
+      BorderRadius.circular(10),
+    );
+
+    await pump(coverKey: 'kg:cover');
+    expect(
+      find.byIcon(Icons.lyrics_rounded),
+      findsNothing,
+      reason: '有自定义封面键时走封面渲染，不显示占位图标',
+    );
+
+    await pump(selected: true);
+    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.lyrics_rounded), findsNothing);
   });
 
   testWidgets('多选：封面 ⇄ 勾选切换保持前导槽宽，标题不横移', (tester) async {
@@ -275,8 +333,9 @@ void main() {
     expect(trailingRect.right, rowRight - 16);
 
     // 标题列吃满剩余宽度：右缘紧邻行尾文本左侧的 12dp 间距。
-    final double titleRight =
-        tester.getTopRight(find.textContaining('A very long track')).dx;
+    final double titleRight = tester
+        .getTopRight(find.textContaining('A very long track'))
+        .dx;
     expect(titleRight, trailingRect.left - 12);
   });
 
@@ -323,16 +382,12 @@ void main() {
         model: TrackRowModel(
           title: 'Title',
           artist: 'Row Artist',
-          artists: [
-            TrackRowArtist(name: 'Link A', onTap: () {}),
-          ],
+          artists: [TrackRowArtist(name: 'Link A', onTap: () {})],
           artistNames: const ['Col Artist'],
           album: 'Col Album',
           durationMs: 185000,
         ),
-        surface: const TrackRowSurface(
-          tableSpec: TrackRowColumnSpec.standard,
-        ),
+        surface: const TrackRowSurface(tableSpec: TrackRowColumnSpec.standard),
         position: M3ECardPosition.single,
         onTap: () {},
       ),
@@ -586,51 +641,47 @@ void main() {
     expect(secondaryTaps, isEmpty);
   });
 
-  testWidgets(
-    '桌面：行表面右键回调带回落的全局坐标，主键仍是行点击',
-    (tester) async {
-      var rowTaps = 0;
-      final secondaryTaps = <Offset>[];
-      await tester.pumpWidget(
-        ChangeNotifierProvider<PlaybackProvider>.value(
-          value: playback,
-          child: MaterialApp(
-            home: Scaffold(
-              body: Center(
-                child: TrackRow(
-                  model: const TrackRowModel(title: 'Title'),
-                  position: M3ECardPosition.single,
-                  onTap: () => rowTaps++,
-                  onSecondaryTap: secondaryTaps.add,
-                ),
+  testWidgets('桌面：行表面右键回调带回落的全局坐标，主键仍是行点击', (tester) async {
+    var rowTaps = 0;
+    final secondaryTaps = <Offset>[];
+    await tester.pumpWidget(
+      ChangeNotifierProvider<PlaybackProvider>.value(
+        value: playback,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: TrackRow(
+                model: const TrackRowModel(title: 'Title'),
+                position: M3ECardPosition.single,
+                onTap: () => rowTaps++,
+                onSecondaryTap: secondaryTaps.add,
               ),
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final rowRect = tester.getRect(find.byType(TrackRow));
-      final target = Offset(rowRect.left + 37, rowRect.top + 21);
-      await tester.tapAt(
-        target,
-        buttons: kSecondaryButton,
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pump();
+    final rowRect = tester.getRect(find.byType(TrackRow));
+    final target = Offset(rowRect.left + 37, rowRect.top + 21);
+    await tester.tapAt(
+      target,
+      buttons: kSecondaryButton,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
 
-      expect(secondaryTaps, hasLength(1));
-      expect(secondaryTaps.single.dx, moreOrLessEquals(target.dx));
-      expect(secondaryTaps.single.dy, moreOrLessEquals(target.dy));
-      expect(rowTaps, 0, reason: '右键不触发行播放');
+    expect(secondaryTaps, hasLength(1));
+    expect(secondaryTaps.single.dx, moreOrLessEquals(target.dx));
+    expect(secondaryTaps.single.dy, moreOrLessEquals(target.dy));
+    expect(rowTaps, 0, reason: '右键不触发行播放');
 
-      await tester.tap(find.byType(TrackRow));
-      await tester.pump();
-      expect(rowTaps, 1, reason: '主键仍归行表面');
-      expect(secondaryTaps, hasLength(1));
-    },
-    variant: TargetPlatformVariant.only(TargetPlatform.linux),
-  );
+    await tester.tap(find.byType(TrackRow));
+    await tester.pump();
+    expect(rowTaps, 1, reason: '主键仍归行表面');
+    expect(secondaryTaps, hasLength(1));
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
   group('列规范', () {
     const specs = [TrackRowColumnSpec.standard, TrackRowColumnSpec.history];
@@ -665,7 +716,8 @@ void main() {
       for (final spec in specs) {
         // 封面之后的槽位：标题 / 歌手 / 专辑 /（时间）/ 时长 / 行尾。
         final cells = spec.hasTimeColumn ? 6.0 : 5.0;
-        final columns = spec.artistWidth +
+        final columns =
+            spec.artistWidth +
             spec.albumWidth +
             spec.durationWidth +
             (spec.hasTimeColumn ? spec.timeWidth : 0) +

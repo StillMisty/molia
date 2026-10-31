@@ -1211,6 +1211,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sourceSwapTabAudio => 'Audio';
 
   @override
+  String get sourceSwapAllSources => 'All';
+
+  @override
+  String get sourceSwapSources => 'Sources';
+
+  @override
+  String get sourceSwapSearchHint => 'Search title or artist';
+
+  @override
+  String get sourceSwapSearchEmpty => 'Enter a title or artist to search';
+
+  @override
+  String get sourceSwapEmptyHint => 'Try another keyword or source';
+
+  @override
+  String get sourceSwapNoSourcesHint =>
+      'Enable a source to see searchable platforms here';
+
+  @override
+  String get sourceSwapLyricsConfirm => 'Use these lyrics';
+
+  @override
+  String sourceSwapSelected(String title, String source) {
+    return 'Selected: $title · $source';
+  }
+
+  @override
+  String get sourceSwapPickOne => 'Pick an item to continue';
+
+  @override
+  String get lyricsSourceNoSources => 'No lyric sources available';
+
+  @override
   String playlistAddedTo(String name) {
     return 'Added to “$name”';
   }
