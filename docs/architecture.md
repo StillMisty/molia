@@ -1183,6 +1183,14 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   `ThemeProvider` 是唯一主题源（`autoTheming/dynamicColoring` 关闭）。
   `buildM3EThemeData` 把应用字体同步到 baseline + emphasized 两套 typeScale
   （`M3EThemeData.fromMaterial` 只映射 baseline）。
+- 页面主题边界：页面内容统一用 `lib/widgets/m3e_page_route.dart` 的
+  `M3EPageRoute` / `M3ERouteTheme`，在 Navigator 之下、路由内容之上再挂一层
+  `M3ETheme`；App 级 `M3EMaterialApp` 的 `M3ETheme` 只服务 Navigator 之上的
+  chrome 与弹层 / 弹窗。**禁止新增直接 `MaterialPageRoute` 的页面路由**
+  （`test/architecture/layering_test.dart` 扫描 `lib/**` 强制）。原因：Android
+  预测返回退场与主题重建（封面取色 / 亮度切换）交错时，页面内 `Text` 若依赖
+  App 级 `DefaultTextStyle`，失效元素会残留在其依赖表里并触发「不是我们的后代」
+  断言；路由级主题随路由生灭，退场时页面依赖与页面一起销毁。
 - 桌面骨架（`lib/app/desktop/**`，仅 linux/windows/macOS；移动骨架逐像素不变）：
   两套骨架的导航 / 顶栏共享 spec 在 `lib/app/shell_chrome.dart`（目的地 → 图标 /
   标签映射、设置按钮、窗口控件、标题槽左缘 / 拖动区只一份；骨架各自适配渲染），

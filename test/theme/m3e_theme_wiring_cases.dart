@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:molia/widgets/m3e_page_route.dart';
 
 /// 主题接线测试：验证 App 壳经 `M3EMaterialApp` 承载后，
 /// ThemeProvider 的 ColorScheme 能正确映射为 M3EThemeData，且
@@ -177,6 +178,68 @@ void main() {
       expect(find.byKey(const Key('m3e-app-builder')), findsOneWidget);
       expect(navigatorKey.currentState, isNotNull);
       expect(scaffoldMessengerKey.currentState, isNotNull);
+    });
+
+    testWidgets('M3EPageRoute 在路由内再挂 M3ETheme，页面不依赖 App 级 DefaultTextStyle',
+        (tester) async {
+      final navigatorKey = GlobalKey<NavigatorState>();
+      final scheme = ColorScheme.fromSeed(seedColor: Colors.blue);
+      final themedData = ThemeData(colorScheme: scheme, useMaterial3: true);
+      final data = M3EThemeData.fromMaterial(themedData);
+      late DefaultTextStyle homeDefaultTextStyle;
+
+      await tester.pumpWidget(
+        M3EMaterialApp(
+          data: data,
+          theme: themedData,
+          darkTheme: themedData,
+          navigatorKey: navigatorKey,
+          autoTheming: false,
+          dynamicColoring: false,
+          // home 不走 M3EPageRoute（初始路由由 MaterialApp 创建），
+          // 与 App 壳一样显式包一层路由级主题。这里同时捕获 home 内的
+          // DefaultTextStyle，防止 home 包装被回退成直接挂 MyApp。
+          home: M3ERouteTheme(
+            builder: (context) {
+              homeDefaultTextStyle = DefaultTextStyle.of(context);
+              return const Scaffold(body: Center(child: Text('home')));
+            },
+          ),
+        ),
+      );
+
+      // Navigator 的 context 在 App 级 M3ETheme 之下，取到的就是 chrome 使用的
+      // DefaultTextStyle；页面内若还是同一个实例，说明路由没有自己的主题层。
+      final appDefaultTextStyle =
+          DefaultTextStyle.of(navigatorKey.currentContext!);
+      expect(
+        identical(homeDefaultTextStyle, appDefaultTextStyle),
+        isFalse,
+        reason: 'home 初始路由也必须依赖 M3ERouteTheme 内的 DefaultTextStyle，'
+            '不能退回 App 级',
+      );
+      late DefaultTextStyle pageDefaultTextStyle;
+      late M3EThemeData pageTheme;
+
+      navigatorKey.currentState!.push(
+        M3EPageRoute<void>(
+          builder: (context) {
+            pageDefaultTextStyle = DefaultTextStyle.of(context);
+            pageTheme = M3ETheme.of(context);
+            return const Scaffold(body: Center(child: Text('page')));
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        identical(pageDefaultTextStyle, appDefaultTextStyle),
+        isFalse,
+        reason: '页面必须依赖路由内的 DefaultTextStyle，'
+            '不能退回 App 级（预测返回退场 + 主题重建会触发断言）',
+      );
+      expect(pageTheme.colorScheme.primary, scheme.primary);
+      expect(pageTheme.brightness, scheme.brightness);
     });
   });
 }

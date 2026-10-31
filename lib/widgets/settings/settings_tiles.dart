@@ -10,6 +10,7 @@ import '../../services/notification_service.dart';
 import '../../utils/color_hex.dart';
 import '../../utils/responsive.dart';
 import '../card_list_surface.dart';
+import '../m3e_page_route.dart';
 
 /// 设置页统一间距常量。
 const double kSettingsPadding = 16.0;
@@ -41,7 +42,7 @@ const double _autoFieldWidthSlack = 2.0;
 /// 弹层）；独立挂载（测试等）时等价普通页面 push。
 Future<T?> openSettingsSubPage<T>(BuildContext context, Widget page) {
   return Navigator.of(context).push<T>(
-    MaterialPageRoute<T>(builder: (_) => page),
+    M3EPageRoute<T>(builder: (_) => page),
   );
 }
 

@@ -17,6 +17,7 @@ import '../providers/sources_provider.dart';
 import '../services/bili_account_service.dart';
 import '../theme/app_semantic_colors.dart';
 import '../widgets/card_list_surface.dart';
+import '../widgets/m3e_page_route.dart';
 import '../widgets/settings/settings_reorderable_rows.dart';
 import '../widgets/settings/settings_subpage.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -60,7 +61,7 @@ class _SourcesPageState extends State<SourcesPage> {
           icon: const Icon(Icons.cloud_rounded),
           onPressed: () {
             Navigator.of(context).push(
-              MaterialPageRoute<void>(
+              M3EPageRoute<void>(
                 builder: (_) =>
                     AnyListenPage(provider: context.read<SourcesProvider>()),
               ),

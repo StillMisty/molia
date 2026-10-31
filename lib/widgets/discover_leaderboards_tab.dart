@@ -8,6 +8,7 @@ import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
 import 'empty_state.dart';
+import 'm3e_page_route.dart';
 import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -53,7 +54,7 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
     HapticsService.lightImpact();
     final provider = context.read<DiscoverProvider>();
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      M3EPageRoute<void>(
         builder: (_) => DiscoverTracksPage(
           title: board.name,
           loader: (_) async {

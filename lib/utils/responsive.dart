@@ -6,6 +6,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../l10n/app_localizations.dart';
+import '../widgets/m3e_page_route.dart';
 import '../widgets/page_modal.dart';
 
 /// 响应式设计断点常量
@@ -564,7 +565,7 @@ class ResponsiveNavigation {
     String? title,
   }) {
     return Navigator.of(context).push<T>(
-      MaterialPageRoute(
+      M3EPageRoute(
         builder: (context) => title != null
             ? Scaffold(
                 appBar: M3EAppBar.top(

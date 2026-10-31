@@ -74,6 +74,33 @@ void main() {
     expect(offenders, isEmpty, reason: offenders.join('\n'));
   });
 
+  test('页面路由统一走 M3EPageRoute（除路由实现文件外禁止 MaterialPageRoute）', () {
+    // 页面文本必须依赖路由内的 DefaultTextStyle，而不是 App 级
+    // DefaultTextStyle：预测返回退场 + 主题重建时后者会持有已失效的页面
+    // 元素依赖并触发框架断言（见 lib/widgets/m3e_page_route.dart）。
+    const routeImplementation = 'lib/widgets/m3e_page_route.dart';
+    final violations = <String>[];
+    for (final path in files) {
+      if (path == routeImplementation) continue;
+      final lines = File(path).readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        final trimmed = lines[i].trimLeft();
+        // 注释里可以讨论 MaterialPageRoute；只拦截代码形式。
+        if (trimmed.startsWith('//')) continue;
+        if (trimmed.contains('MaterialPageRoute(') ||
+            trimmed.contains('MaterialPageRoute<')) {
+          violations.add('$path:${i + 1}  ${lines[i].trim()}');
+        }
+      }
+    }
+    expect(
+      violations,
+      isEmpty,
+      reason: '页面路由请改用 M3EPageRoute（lib/widgets/m3e_page_route.dart）：\n'
+          '${violations.join('\n')}',
+    );
+  });
+
   test('domain 层保持纯 Dart（R1）', () {
     final offenders = <String>[];
     for (final path in files.where((path) => path.startsWith('lib/domain/'))) {

@@ -23,6 +23,7 @@ import '../services/save_as.dart';
 import '../theme/m3e_context.dart';
 import '../utils/save_as_label.dart';
 import 'app_network_image.dart';
+import 'm3e_page_route.dart';
 
 /// 查看器关闭后的意图：调用方据此打开封面选择弹层。
 enum CoverViewerAction { editCover }
@@ -42,7 +43,7 @@ Future<CoverViewerAction?> showCoverViewer(
 }) {
   assert(coverUrl.isNotEmpty, '封面查看器需要非空封面地址');
   return Navigator.of(context, rootNavigator: true).push<CoverViewerAction>(
-    MaterialPageRoute<CoverViewerAction>(
+    M3EPageRoute<CoverViewerAction>(
       builder: (_) => CoverViewerPage(
         coverUrl: coverUrl,
         title: title,
