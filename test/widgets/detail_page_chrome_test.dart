@@ -3,6 +3,9 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/widgets/app_network_image.dart';
+import 'package:molia/widgets/cover_viewer.dart';
+import 'package:molia/widgets/detail_page/detail_cover_header.dart';
 import 'package:molia/widgets/detail_page/detail_page_chrome.dart';
 import 'package:molia/widgets/track_artwork.dart';
 
@@ -216,5 +219,157 @@ void main() {
     await tester.tap(find.widgetWithText(M3EButton, '重试'));
     await tester.pump();
     expect(retries, 1);
+  });
+
+  testWidgets('详情页封面头：方形 / 圆形裁切与无封面占位', (tester) async {
+    Finder inHeader(Finder matching) =>
+        find.descendant(of: find.byType(DetailCoverHeader), matching: matching);
+
+    // 方形无封面：占位图标可见，但不挂可点层（key 不存在）。
+    await pump(
+      tester,
+      const DetailCoverHeader(
+        coverUrl: null,
+        shape: DetailCoverShape.square,
+        fallbackIcon: Icons.album_rounded,
+        coverKey: Key('albumHeaderCover'),
+        title: '专辑名',
+        subtitle: '歌手 · 2026 · 8 首',
+      ),
+    );
+    expect(find.byIcon(Icons.album_rounded), findsOneWidget);
+    expect(find.byKey(const Key('albumHeaderCover')), findsNothing);
+    expect(inHeader(find.byType(ClipRRect)), findsOneWidget);
+    expect(inHeader(find.byType(ClipOval)), findsNothing);
+
+    // 方形有封面：方形裁切 + 可点层。
+    await pump(
+      tester,
+      const DetailCoverHeader(
+        coverUrl: 'file:///tmp/album-cover.jpg',
+        shape: DetailCoverShape.square,
+        fallbackIcon: Icons.album_rounded,
+        coverKey: Key('albumHeaderCover'),
+        title: '专辑名',
+        subtitle: '歌手 · 2026 · 8 首',
+      ),
+    );
+    expect(find.byKey(const Key('albumHeaderCover')), findsOneWidget);
+    expect(inHeader(find.byType(ClipRRect)), findsOneWidget);
+    expect(inHeader(find.byType(ClipOval)), findsNothing);
+    expect(
+      tester
+          .widget<AppNetworkImage>(inHeader(find.byType(AppNetworkImage)))
+          .memCacheWidth,
+      96,
+      reason: '按 96dp 容器解码，不把原图整张留在内存',
+    );
+
+    // 圆形无封面：ClipOval + 歌手占位图，可点层同样不出现。
+    await pump(
+      tester,
+      const DetailCoverHeader(
+        coverUrl: '',
+        shape: DetailCoverShape.circle,
+        fallbackIcon: Icons.person_rounded,
+        coverKey: Key('artistHeaderAvatar'),
+        title: '歌手名',
+        subtitle: '8 首歌曲',
+      ),
+    );
+    expect(find.byIcon(Icons.person_rounded), findsOneWidget);
+    expect(find.byKey(const Key('artistHeaderAvatar')), findsNothing);
+    expect(inHeader(find.byType(ClipOval)), findsOneWidget);
+    expect(inHeader(find.byType(ClipRRect)), findsNothing);
+  });
+
+  testWidgets('详情页封面头：点击封面打开查看器并带上副标题 / 保存基名', (tester) async {
+    await pump(
+      tester,
+      const DetailCoverHeader(
+        coverUrl: 'file:///tmp/artist-avatar.jpg',
+        shape: DetailCoverShape.circle,
+        fallbackIcon: Icons.person_rounded,
+        coverKey: Key('artistHeaderAvatar'),
+        title: '歌手名',
+        subtitle: '8 首歌曲',
+        viewerSubtitle: '平台歌手名',
+        viewerFileNameBase: '歌手名 - 现场',
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('artistHeaderAvatar')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('coverViewerPage')), findsOneWidget);
+    final viewer = tester.widget<CoverViewerPage>(find.byType(CoverViewerPage));
+    expect(viewer.title, '封面');
+    expect(viewer.subtitle, '平台歌手名');
+    expect(viewer.fileNameBase, '歌手名 - 现场');
+  });
+
+  testWidgets('播放全部分裂按钮：主操作 / 随机播放 / 可选加入列表', (tester) async {
+    var plays = 0;
+    var shuffles = 0;
+    var additions = 0;
+
+    await pump(
+      tester,
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailPlayAllSplitButton(
+            key: const Key('albumPlayAll'),
+            onPlay: () => plays++,
+            onShuffle: () => shuffles++,
+            onAddToLibrary: () => additions++,
+          ),
+        ],
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('albumPlayAll')));
+    await tester.pump();
+    expect(plays, 1);
+
+    Future<void> openMenu() async {
+      final rect = tester.getRect(find.byKey(const Key('albumPlayAll')));
+      await tester.tapAt(Offset(rect.right - 16, rect.center.dy));
+      await tester.pumpAndSettle();
+    }
+
+    await openMenu();
+    expect(find.text('随机播放全部'), findsOneWidget);
+    expect(find.text('加入列表'), findsOneWidget);
+    await tester.tap(find.text('随机播放全部'));
+    await tester.pumpAndSettle();
+    expect(shuffles, 1);
+
+    await openMenu();
+    await tester.tap(find.text('加入列表'));
+    await tester.pumpAndSettle();
+    expect(additions, 1);
+
+    // 不传 onAddToLibrary：尾部菜单只留随机播放（发现详情的导入在 AppBar）。
+    await pump(
+      tester,
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DetailPlayAllSplitButton(
+            key: const Key('discoverTracksPlayAll'),
+            onPlay: () {},
+            onShuffle: () {},
+          ),
+        ],
+      ),
+    );
+    final rect = tester.getRect(find.byKey(const Key('discoverTracksPlayAll')));
+    await tester.tapAt(Offset(rect.right - 16, rect.center.dy));
+    await tester.pumpAndSettle();
+    expect(find.text('随机播放全部'), findsOneWidget);
+    expect(find.text('加入列表'), findsNothing);
   });
 }

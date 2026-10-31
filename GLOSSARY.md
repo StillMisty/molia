@@ -270,6 +270,14 @@
   （`flutter_cache_manager` 会把原 URL 缓存键覆盖成缩小图），避免把 96px
   缩略图当原图保存；下载经 `cover_bytes_downloader.dart`（统一 UA / Referer、
   8MB 上限、缓存回填）。
+- **Detail cover header（详情页封面头）** — `lib/widgets/detail_page/detail_cover_header.dart`：
+  专辑 / 歌手 / 发现详情三页共用的 96dp 封面头（`DetailCoverHeader`）与
+  「播放全部」分裂按钮（`DetailPlayAllSplitButton`）。封面按 96dp 容器计算
+  `memCacheWidth`；方形用 16 圆角、圆形用 `ClipOval`，`CoverTapTarget` 只在封面
+  非空时出现并与裁切同形，查看器副标题 / 保存基名缺省跟随标题。按钮尾部菜单顺序
+  固定为「随机播放全部」在前、「加入列表」仅在 `onAddToLibrary` 非空时出现
+  （发现详情的导入入口留在 AppBar）。页面只给封面地址、形状、回退图标与查看器
+  元数据，不再各写一套；否则漏掉解码尺寸或改错保存文件名只会出现在某一个入口。
 
 ## 应用壳与导航
 

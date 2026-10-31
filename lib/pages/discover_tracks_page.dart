@@ -8,12 +8,8 @@ import '../domain/models/discover.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/discover_provider.dart';
 import '../providers/paged_list_controller.dart';
-import '../services/haptics.dart';
-import '../widgets/app_network_image.dart';
-import '../widgets/cover_tap_target.dart';
-import '../widgets/cover_viewer.dart';
 import '../widgets/desktop_layout.dart';
-import '../widgets/detail_page/detail_page_chrome.dart';
+import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/discover_actions.dart';
 import '../widgets/paged_track_collection.dart';
 import '../widgets/track_handoff.dart';
@@ -229,77 +225,12 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
     );
   }
 
-  /// 头部封面：方形裁切；有图时点击看原图 / 保存原图。
-  Widget _buildHeaderCover(
-    BuildContext context,
-    AppLocalizations l10n,
-    DiscoverPlaylist info,
-    String? cover,
-    ThemeData theme,
-  ) {
-    final image = ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        width: 96,
-        height: 96,
-        child: (cover?.isNotEmpty ?? false)
-            ? AppNetworkImage(
-                url: cover,
-                fit: BoxFit.cover,
-                // 头部只有 96dp：按容器解码封面，避免按原图尺寸解码。
-                memCacheWidth: (96 * MediaQuery.of(context).devicePixelRatio)
-                    .round(),
-                placeholder: ColoredBox(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                ),
-                errorWidget: ColoredBox(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                  child: Icon(
-                    Icons.queue_music_rounded,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              )
-            : ColoredBox(
-                color: theme.colorScheme.surfaceContainerHighest,
-                child: Icon(
-                  Icons.queue_music_rounded,
-                  size: 40,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-      ),
-    );
-    if (cover == null || cover.isEmpty) return image;
-    final name = info.name.isEmpty ? widget.title : info.name;
-    return CoverTapTarget(
-      key: const Key('discoverHeaderCover'),
-      size: 96,
-      borderRadius: BorderRadius.circular(16),
-      semanticLabel: l10n.coverLabel,
-      onPressed: () {
-        HapticsService.lightImpact();
-        unawaited(
-          showCoverViewer(
-            context,
-            coverUrl: cover,
-            title: l10n.coverLabel,
-            subtitle: name,
-            fileNameBase: name,
-          ),
-        );
-      },
-      child: image,
-    );
-  }
-
   Widget _buildHeader(
     BuildContext context,
     DiscoverDetail detail,
     int loadedCount,
   ) {
     final l10n = _l10n(context);
-    final theme = Theme.of(context);
     final info = detail.info;
     final cover = info.coverUrl ?? widget.coverUrl;
     // 分页加载中显示平台总数；无总数（榜单）时退回已加载数量。
@@ -310,28 +241,20 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       l10n.playlistTrackCount(trackCount),
     ];
     final description = (info.description ?? '').trim();
-    return DetailPageHeroHeader(
-      artwork: _buildHeaderCover(context, l10n, info, cover, theme),
+    return DetailCoverHeader(
+      coverKey: const Key('discoverHeaderCover'),
+      coverUrl: cover,
+      shape: DetailCoverShape.square,
+      fallbackIcon: Icons.queue_music_rounded,
       title: info.name.isEmpty ? widget.title : info.name,
       subtitle: subtitleParts.join(' · '),
       description: description.isEmpty ? null : description,
-      // 播放全部 = 主操作 + 尾部菜单（随机播放全部）；导入到我的列表
-      // 仍在 AppBar 的图标键上，两者不重复。
-      action: M3ESplitButton<String>(
+      // 查看器副标题 / 保存基名就是页标题（平台名缺失时已回退入口标题）。
+      action: DetailPlayAllSplitButton(
         key: const Key('discoverTracksPlayAll'),
-        label: l10n.playAll,
-        leadingIcon: Icons.play_arrow_rounded,
-        style: M3EButtonStyle.filled,
-        onPressed: () => _playFrom(0),
-        items: [
-          M3ESplitButtonItem<String>(
-            value: 'shuffle',
-            child: Text(l10n.playAllShuffled),
-          ),
-        ],
-        onSelected: (value) {
-          if (value == 'shuffle') unawaited(_playShuffled());
-        },
+        onPlay: () => _playFrom(0),
+        onShuffle: () => unawaited(_playShuffled()),
+        // 导入到我的列表仍在 AppBar 的图标键上，头部不重复提供。
       ),
     );
   }
