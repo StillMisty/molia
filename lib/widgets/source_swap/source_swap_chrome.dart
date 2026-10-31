@@ -139,8 +139,8 @@ class SourceSwapSourceOption {
 
 /// 「全部 + 所有可搜索来源」筛选 chips。
 ///
-/// 用 [Wrap] 而不是横向滚动：来源可能排到第 7 个（5 个内置平台 + B 站 +
-/// 脚本源），横向滚动时窄屏默认看不到最后一个，用户很难发现还能滑出来。
+/// 固定单行横向滚动：所有来源保持一行，窄屏可以左右滑动查看后面的渠道，
+/// 不再换行挤压列表高度。
 class SourceSwapSourceChips extends StatelessWidget {
   const SourceSwapSourceChips({
     super.key,
@@ -162,34 +162,45 @@ class SourceSwapSourceChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
-    return M3EChipGroup(
-      groupLabel: l10n.sourceSwapSources,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          M3EChip(
-            key: const ValueKey<String>('sourceSwapSourceChip-all'),
-            label: l10n.sourceSwapAllSources,
-            type: M3EChipType.filter,
-            selected: selectedKey.isEmpty,
-            onPressed: enabled ? () => onSelected('') : null,
+    return SizedBox(
+      height: 40,
+      child: SingleChildScrollView(
+        key: const Key('sourceSwapSourceChipsScroll'),
+        scrollDirection: Axis.horizontal,
+        child: M3EChipGroup(
+          groupLabel: l10n.sourceSwapSources,
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: M3EChip(
+                  key: const ValueKey<String>('sourceSwapSourceChip-all'),
+                  label: l10n.sourceSwapAllSources,
+                  type: M3EChipType.filter,
+                  selected: selectedKey.isEmpty,
+                  onPressed: enabled ? () => onSelected('') : null,
+                ),
+              ),
+              for (final source in sources)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: M3EChip(
+                    key: ValueKey<String>('sourceSwapSourceChip-${source.key}'),
+                    label: source.label,
+                    type: M3EChipType.filter,
+                    selected: selectedKey == source.key,
+                    onPressed: enabled ? () => onSelected(source.key) : null,
+                  ),
+                ),
+            ],
           ),
-          for (final source in sources)
-            M3EChip(
-              key: ValueKey<String>('sourceSwapSourceChip-${source.key}'),
-              label: source.label,
-              type: M3EChipType.filter,
-              selected: selectedKey == source.key,
-              onPressed: enabled ? () => onSelected(source.key) : null,
-            ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// 状态条：失败源（error 图标 + 文案 + 重试）或不可用来源（info 图标 + 提示）。
+/// 失败源状态条：error 图标 + 文案 + 重试。
 ///
 /// 失败重试按 tab 传不同 [retryKey]：两个 tab 同时存活时同名 Key 会让
 /// 页面测试的 finder 撞车，也方便读屏定位到具体哪一侧的重试。
@@ -199,15 +210,9 @@ class SourceSwapNotice extends StatelessWidget {
     required this.message,
     this.onRetry,
     this.retryKey,
-  }) : _isError = true;
-
-  const SourceSwapNotice.info({super.key, required this.message})
-    : _isError = false,
-      onRetry = null,
-      retryKey = null;
+  });
 
   final String message;
-  final bool _isError;
   final VoidCallback? onRetry;
   final Key? retryKey;
 
@@ -215,17 +220,14 @@ class SourceSwapNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = _l10n(context);
-    final color = _isError
-        ? theme.colorScheme.error
-        : theme.colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           Icon(
-            _isError ? Icons.error_outline_rounded : Icons.info_outline_rounded,
+            Icons.error_outline_rounded,
             size: 18,
-            color: color,
+            color: theme.colorScheme.error,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -236,14 +238,13 @@ class SourceSwapNotice extends StatelessWidget {
               ),
             ),
           ),
-          if (_isError)
-            M3EIconButton(
-              key: retryKey,
-              variant: M3EIconButtonVariant.standard,
-              icon: const Icon(Icons.refresh_rounded),
-              semanticLabel: l10n.retry,
-              onPressed: onRetry,
-            ),
+          M3EIconButton(
+            key: retryKey,
+            variant: M3EIconButtonVariant.standard,
+            icon: const Icon(Icons.refresh_rounded),
+            semanticLabel: l10n.retry,
+            onPressed: onRetry,
+          ),
         ],
       ),
     );
@@ -328,25 +329,66 @@ class SourceSwapEmptyState extends StatelessWidget {
 }
 
 /// 「全部」模式下按来源分组的小节标题。
+///
+/// [hint] 给不可用来源（如未登录 B 站）挂在标题右侧：提示与来源同屏，
+/// 不占用全局状态条；窄屏时标题与提示各自省略，不撑破一行。
 class SourceSwapSectionHeader extends StatelessWidget {
-  const SourceSwapSectionHeader({super.key, required this.label});
+  const SourceSwapSectionHeader({super.key, required this.label, this.hint});
 
   final String label;
+  final String? hint;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hint = this.hint;
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 6),
       child: Semantics(
         header: true,
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: context.typeScale.titleSmall.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.typeScale.titleSmall.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (hint != null) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                // B 站提示比标题长：给提示 2/3 宽度，标题仍能完整显示
+                // 「哔哩哔哩」；窄屏只省略提示尾部，不挤掉来源名。
+                flex: 2,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        hint,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: context.typeScale.bodySmall.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );

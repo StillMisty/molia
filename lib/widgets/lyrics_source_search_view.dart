@@ -259,10 +259,6 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
             retryKey: const Key('sourceSwapRetryFailedLyrics'),
             onRetry: isLoading || busy ? null : _session.retryFailed,
           ),
-        // 不可用来源（未登录 B 站）是搜索后的状态：初始空查询不弹提示。
-        if (hasQuery)
-          for (final reason in _session.unavailableReasons)
-            SourceSwapNotice.info(message: _unavailableHint(l10n, reason)),
         if (isLoading && _session.allResults.isNotEmpty)
           const M3EProgressIndicator.linear(),
         Expanded(child: _buildBody(context, l10n, strategies, entries)),
@@ -310,24 +306,23 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
       return const SourceSwapLoadingState();
     }
 
-    if (entries.isEmpty) {
-      if (_selectedSourceKey.isEmpty) {
-        return SourceSwapEmptyState(
-          icon: Icons.search_off_rounded,
-          title: l10n.lyricsEmptyState,
-          hint: l10n.sourceSwapEmptyHint,
-        );
-      }
-      return SourceSwapEmptyState(
-        icon: Icons.search_off_rounded,
-        title: l10n.searchNoResultsInSource(
-          lyricsProviderLabel(
-            l10n,
-            widget.sourceDescriptors,
-            _selectedSourceKey,
-          ),
-        ),
-        hint: l10n.sourceSwapEmptyHint,
+    final hasResult = entries.any(
+      (entry) => entry.type == LyricsSearchEntryType.result,
+    );
+    if (!hasResult) {
+      // 全部模式可能只剩「未登录 B 站」这类 header（提示挂在标题右侧）：
+      // header 留在顶部，空态放下面，不能把 header-only 当普通列表渲染。
+      final headers = [
+        for (final entry in entries)
+          if (entry.type == LyricsSearchEntryType.header)
+            _buildSectionHeader(l10n, entry.strategy!),
+      ];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ...headers,
+          Expanded(child: _buildNoResultState(l10n)),
+        ],
       );
     }
 
@@ -339,16 +334,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
         final entry = entries[index];
         final result = entry.result;
         if (result == null) {
-          return SourceSwapSectionHeader(
-            key: ValueKey<String>(
-              'lyricsSourceSection-${entry.strategy!.channelKey}',
-            ),
-            label: lyricsProviderLabel(
-              l10n,
-              widget.sourceDescriptors,
-              entry.strategy!.channelKey,
-            ),
-          );
+          return _buildSectionHeader(l10n, entry.strategy!);
         }
         final results = _session.resultsOf(result.provider.name);
         final resultIndex = results.indexOf(result);
@@ -379,6 +365,51 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
         );
       },
     );
+  }
+
+  Widget _buildSectionHeader(
+    AppLocalizations l10n,
+    LyricsSourceStrategy strategy,
+  ) {
+    final unavailable = _session.unavailableReasonOf(strategy);
+    return SourceSwapSectionHeader(
+      key: ValueKey<String>('lyricsSourceSection-${strategy.channelKey}'),
+      label: lyricsProviderLabel(
+        l10n,
+        widget.sourceDescriptors,
+        strategy.channelKey,
+      ),
+      hint: unavailable == null ? null : _unavailableHint(l10n, unavailable),
+    );
+  }
+
+  Widget _buildNoResultState(AppLocalizations l10n) {
+    if (_selectedSourceKey.isEmpty) {
+      return SourceSwapEmptyState(
+        icon: Icons.search_off_rounded,
+        title: l10n.lyricsEmptyState,
+        hint: l10n.sourceSwapEmptyHint,
+      );
+    }
+    final unavailable = _unavailableReasonOfChannel(_selectedSourceKey);
+    return SourceSwapEmptyState(
+      icon: Icons.search_off_rounded,
+      title: l10n.searchNoResultsInSource(
+        lyricsProviderLabel(l10n, widget.sourceDescriptors, _selectedSourceKey),
+      ),
+      hint: unavailable == null
+          ? l10n.sourceSwapEmptyHint
+          : _unavailableHint(l10n, unavailable),
+    );
+  }
+
+  LyricsSourceUnavailable? _unavailableReasonOfChannel(String channelKey) {
+    for (final strategy in _session.strategies) {
+      if (strategy.channelKey == channelKey) {
+        return _session.unavailableReasonOf(strategy);
+      }
+    }
+    return null;
   }
 
   /// 已选摘要的来源名：按 strategy.channelKey 查（provider 名可能不等于

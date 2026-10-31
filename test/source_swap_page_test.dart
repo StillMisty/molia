@@ -457,7 +457,7 @@ void main() {
     expect(find.byType(SourceSwapActionBar), findsOneWidget);
   });
 
-  testWidgets('6 个音源 chip 全部渲染（Wrap 换行，不用横向滚动）', (tester) async {
+  testWidgets('6 个音源 chip 单行横向滚动', (tester) async {
     final bili = FakeMusicSource('bili');
     sources
       ..clear()
@@ -487,13 +487,24 @@ void main() {
         reason: '$key 的音源 chip 应可见',
       );
     }
-    // chip 行是换行布局（不是横向 ScrollView）。
+    // 所有 chip 一次构建，放在单行横向滚动容器里（不是 Wrap）。
+    final scroll = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('sourceSwapSourceChipsScroll')),
+    );
+    expect(scroll.scrollDirection, Axis.horizontal);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('sourceSwapSourceChipsScroll')),
+        matching: find.byKey(const ValueKey('sourceSwapSourceChip-bili')),
+      ),
+      findsOneWidget,
+    );
     expect(
       find.ancestor(
         of: find.byKey(const ValueKey('sourceSwapSourceChip-bili')),
         matching: find.byType(Wrap),
       ),
-      findsWidgets,
+      findsNothing,
     );
   });
 }

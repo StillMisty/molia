@@ -167,14 +167,14 @@ void main() {
   SongMatch sunnyDay(String songId, {String artist = '周杰伦'}) =>
       SongMatch(songId: songId, title: '晴天', artist: artist);
 
-  test('渠道开关过滤：停用渠道不进会话，LRCLIB 不受影响', () {
+  test('渠道开关过滤：停用渠道不进会话，非渠道来源不受影响', () {
     final session = buildSession(
       [
         strategy(_FakeLyricProvider('enabled'), channelKey: 'enabled'),
         strategy(_FakeLyricProvider('disabled'), channelKey: 'disabled'),
         strategy(
-          _FakeLyricProvider('lrclib'),
-          channelKey: 'lrclib',
+          _FakeLyricProvider('external'),
+          channelKey: 'external',
           isChannel: false,
         ),
       ],
@@ -183,7 +183,7 @@ void main() {
 
     expect(session.strategies.map((strategy) => strategy.channelKey), [
       'enabled',
-      'lrclib',
+      'external',
     ]);
   });
 
@@ -216,7 +216,8 @@ void main() {
         .toList();
     expect(headers.map((entry) => entry.strategy!.channelKey), [
       'tx',
-    ], reason: '全部模式只列有结果的来源；不可用来源由状态条提示');
+      'bili',
+    ], reason: '不可用来源即使没有结果也要出 header 挂登录提示');
     expect(
       session.entries.any(
         (entry) =>
@@ -229,6 +230,13 @@ void main() {
     // 登录状态变化不需要重建会话：可用性在读取时求值。
     loggedIn = true;
     expect(session.unavailableReasonOf(session.strategies.last), isNull);
+    expect(
+      session.entries
+          .where((entry) => entry.type == LyricsSearchEntryType.header)
+          .map((entry) => entry.strategy!.channelKey),
+      ['tx'],
+      reason: '登录后 B 站不再有不可用原因，空结果不强行出标题',
+    );
   });
 
   test('旧查询的结果晚到：丢弃，不覆盖当前查询', () async {
@@ -405,7 +413,7 @@ void main() {
     expect(good.searchCalls, goodCalls, reason: '重试不重搜成功来源');
   });
 
-  test('entriesFor：全部只列有结果的来源，单源不要 header', () async {
+  test('entriesFor：全部列出有结果或有不可用原因的来源，单源不要 header', () async {
     final qq = _FakeLyricProvider(
       'qq',
       matches: [
@@ -417,7 +425,11 @@ void main() {
     final empty = _FakeLyricProvider('empty');
     final session = buildSession([
       strategy(qq, channelKey: 'tx'),
-      strategy(bili, channelKey: 'bili'),
+      strategy(
+        bili,
+        channelKey: 'bili',
+        unavailable: () => LyricsSourceUnavailable.biliLoginRequired,
+      ),
       strategy(empty, channelKey: 'wy'),
     ]);
 
@@ -425,17 +437,11 @@ void main() {
 
     final all = session.entriesFor(null);
     expect(
-      all.where((entry) => entry.type == LyricsSearchEntryType.header).length,
-      1,
-      reason: '没有结果的来源不产生空分组头',
-    );
-    expect(
       all
           .where((entry) => entry.type == LyricsSearchEntryType.header)
-          .single
-          .strategy!
-          .channelKey,
-      'tx',
+          .map((entry) => entry.strategy!.channelKey),
+      ['tx', 'bili'],
+      reason: '有结果的 tx 与未登录 B 站都出 header；普通空来源不出',
     );
     expect(
       all.where((entry) => entry.type == LyricsSearchEntryType.result).length,

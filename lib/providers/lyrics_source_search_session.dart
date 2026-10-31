@@ -204,9 +204,9 @@ class LyricsSourceSearchSession extends ChangeNotifier {
 
   /// 按来源筛选的列表行。
   ///
-  /// [channelKey] 为空串 / null = 全部：只列**有结果**的来源（header + 结果），
-  /// 没有结果的空分组不占版面；单源时只列该来源结果，header 与加载占位由
-  /// 视图的状态区承担。
+  /// [channelKey] 为空串 / null = 全部：列出**有结果或有不可用原因**的来源
+  /// （header + 结果）——未登录 B 站没有结果，但 header 要挂「怎么办」提示。
+  /// 单源时只列该来源结果；header 与空态提示由视图承担。
   List<LyricsSearchEntry> entriesFor(String? channelKey) {
     final key = channelKey ?? '';
     final all = key.isEmpty;
@@ -214,8 +214,15 @@ class LyricsSourceSearchSession extends ChangeNotifier {
     for (final strategy in _strategies) {
       if (!all && strategy.channelKey != key) continue;
       final results = resultsOf(strategy.provider.name);
-      if (results.isEmpty) continue;
-      if (all) entries.add(LyricsSearchEntry.header(strategy));
+      if (!all) {
+        for (final result in results) {
+          entries.add(LyricsSearchEntry.result(result));
+        }
+        continue;
+      }
+      final unavailable = unavailableReasonOf(strategy);
+      if (results.isEmpty && unavailable == null) continue;
+      entries.add(LyricsSearchEntry.header(strategy));
       for (final result in results) {
         entries.add(LyricsSearchEntry.result(result));
       }

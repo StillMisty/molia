@@ -673,7 +673,8 @@
   `lib/widgets/source_swap/source_swap_chrome.dart` 的搜索栏 / 来源 chips /
   状态条 / 分组标题 / 底部操作条。搜索栏两边都可编辑，默认关键词仍由
   `SourceSwapStrategies` 生成，提交或清空时重搜；来源固定为「全部 + 所有可搜索
-  来源」，默认全部、按来源分组（小节标题）展示，切单源只平铺该组。列表行统一走
+  来源」，chips 单行横向滚动、默认全部、按来源分组（小节标题）展示，切单源只
+  平铺该组。列表行统一走
   `TrackRow`（歌词结果无封面时用 `placeholderIcon` 占前导槽），不再用
   `M3EListItem`。两个 tab 都带 `AutomaticKeepAliveClientMixin`：PageView 会销毁
   离屏页，不保活会清掉音频会话 / 歌词搜索结果。切 tab 统一收起键盘。无来源 /
@@ -698,8 +699,9 @@
   （`lib/services/lyrics/lyrics_source_registry.dart`）——五个音乐平台 + LRCLIB
   参与自动名字回退；`BuiltinPlatforms` 中同时有 `search` + `lyric` 适配器的渠道
   自动获得通用 `BuiltinLyricProvider`（当前为 B 站 CC/AI 字幕），新增渠道无需改
-  UI。B 站字幕需登录：未登录时该来源只显示提示、不发搜索请求；且只进手动换源，
-  不参与自动回退。停用渠道从其歌词来源中隐藏（LRCLIB 不是渠道，不受影响）。
+  UI。B 站字幕需登录：未登录时该来源不发搜索请求，登录提示挂在 B 站分组标题
+  右侧（单源筛选到 B 站且无结果时放进空态提示）；且只进手动换源，不参与自动
+  回退。停用渠道从其歌词来源中隐藏（LRCLIB 不是渠道，不受影响）。
   **自动换源**：播放失败同源重试仍失败后，组合根注入的 `AutoSourceSwapService.findMatch`
   用 `lib/services/song_match.dart`（LX `findMusic` 判定的唯一实现，与歌词搜索
   回退共用）**严格匹配**（时长 ±5s、版本词一致）跨源找回并静默替换队列曲目

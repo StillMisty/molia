@@ -139,7 +139,7 @@ void main() {
     );
   }
 
-  testWidgets('未登录 B 站：显示登录提示，且不发搜索请求', (tester) async {
+  testWidgets('未登录 B 站：登录提示内联在 B 站 section header，且不发搜索请求', (tester) async {
     final qq = _FakeLyricProvider('qq');
     final bili = _FakeLyricProvider('bili');
     final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
@@ -154,9 +154,47 @@ void main() {
       lyricsProvider: lyricsProvider,
     );
 
-    expect(find.text('登录后可优先使用 B 站字幕歌词'), findsOneWidget);
+    final biliHeader = find.byKey(const ValueKey('lyricsSourceSection-bili'));
+    expect(biliHeader, findsOneWidget, reason: '无结果也要保留 B 站标题挂提示');
+    expect(
+      find.descendant(of: biliHeader, matching: find.text('登录后可优先使用 B 站字幕歌词')),
+      findsOneWidget,
+    );
+    expect(find.byType(SourceSwapNotice), findsNothing, reason: '登录提示不再走全局状态条');
+    expect(
+      find.text('暂时没找到歌词，换个来源试试？'),
+      findsOneWidget,
+      reason: 'header-only 时下方仍给空态',
+    );
     expect(qq.searchCalls, 1);
     expect(bili.searchCalls, 0, reason: '不可用来源不发请求');
+  });
+
+  testWidgets('单源筛选未登录 B 站：空态 hint 显示登录提示', (tester) async {
+    final qq = _FakeLyricProvider('qq');
+    final bili = _FakeLyricProvider('bili');
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+
+    await pumpView(
+      tester,
+      sources: [
+        LyricsSourceStrategy(channelKey: 'tx', provider: qq),
+        biliStrategy(bili),
+      ],
+      lyricsProvider: lyricsProvider,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-bili')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('在「哔哩哔哩」中没有找到结果'), findsOneWidget);
+    expect(find.text('登录后可优先使用 B 站字幕歌词'), findsOneWidget);
+    expect(
+      find.text('换个关键词或来源试试'),
+      findsNothing,
+      reason: '单源不可用时用登录提示替代通用空态提示',
+    );
   });
 
   testWidgets('点结果只选中；底部确认后才 saveManual 写入该来源', (tester) async {
@@ -205,9 +243,9 @@ void main() {
       'qq',
       matches: [SongMatch(songId: '1', title: '晴天 QQ', artist: '周杰伦')],
     );
-    final lrclib = _FakeLyricProvider(
-      'lrclib',
-      matches: [SongMatch(songId: '2', title: '晴天 LRC', artist: '周杰伦')],
+    final external = _FakeLyricProvider(
+      'external',
+      matches: [SongMatch(songId: '2', title: '晴天 外部', artist: '周杰伦')],
     );
 
     await pumpView(
@@ -215,8 +253,8 @@ void main() {
       sources: [
         LyricsSourceStrategy(channelKey: 'tx', provider: qq),
         LyricsSourceStrategy(
-          channelKey: 'lrclib',
-          provider: lrclib,
+          channelKey: 'external',
+          provider: external,
           isChannel: false,
         ),
       ],
@@ -232,7 +270,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('晴天 QQ'), findsOneWidget);
-    expect(find.text('晴天 LRC'), findsOneWidget);
+    expect(find.text('晴天 外部'), findsOneWidget);
 
     await tester.tap(find.text('晴天 QQ'));
     await tester.pumpAndSettle();
@@ -241,7 +279,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sourceSwapSourceChip-tx')));
     await tester.pumpAndSettle();
     expect(find.text('晴天 QQ'), findsOneWidget);
-    expect(find.text('晴天 LRC'), findsNothing);
+    expect(find.text('晴天 外部'), findsNothing);
     expect(
       find.byIcon(Icons.check_circle_rounded),
       findsOneWidget,
@@ -250,15 +288,15 @@ void main() {
     expect(find.text('已选：晴天 QQ · QQ音乐'), findsOneWidget);
   });
 
-  testWidgets('停用渠道：歌词来源隐藏；LRCLIB 不受渠道开关影响', (tester) async {
+  testWidgets('停用渠道：歌词来源隐藏；非渠道来源不受开关影响', (tester) async {
     final qq = _FakeLyricProvider(
       'qq',
       matches: [SongMatch(songId: '1', title: '晴天 QQ', artist: '周杰伦')],
     );
     final bili = _FakeLyricProvider('bili');
-    final lrclib = _FakeLyricProvider(
-      'lrclib',
-      matches: [SongMatch(songId: '2', title: '晴天 LRC', artist: '周杰伦')],
+    final external = _FakeLyricProvider(
+      'external',
+      matches: [SongMatch(songId: '2', title: '晴天 外部', artist: '周杰伦')],
     );
     final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
     addTearDown(lyricsProvider.dispose);
@@ -269,8 +307,8 @@ void main() {
         LyricsSourceStrategy(channelKey: 'tx', provider: qq),
         biliStrategy(bili),
         LyricsSourceStrategy(
-          channelKey: 'lrclib',
-          provider: lrclib,
+          channelKey: 'external',
+          provider: external,
           isChannel: false,
         ),
       ],
@@ -288,7 +326,7 @@ void main() {
       reason: '停用渠道不出现在歌词换源',
     );
     expect(
-      find.byKey(const ValueKey('sourceSwapSourceChip-lrclib')),
+      find.byKey(const ValueKey('sourceSwapSourceChip-external')),
       findsOneWidget,
       reason: '非渠道来源不受开关影响',
     );
@@ -326,6 +364,15 @@ void main() {
       find.byKey(const ValueKey('sourceSwapSourceChip-bili')),
       findsOneWidget,
       reason: '来源名走 provider 标签',
+    );
+    expect(
+      find.byKey(const ValueKey('lyricsSourceSection-bili')),
+      findsOneWidget,
+    );
+    expect(
+      find.text('登录后可优先使用 B 站字幕歌词'),
+      findsNothing,
+      reason: '已登录时标题右侧不能出现登录提示',
     );
     await tester.tap(find.text('晴天 翻唱'));
     await tester.pumpAndSettle();

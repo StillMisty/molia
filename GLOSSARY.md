@@ -379,7 +379,8 @@
   `BuiltinPlatforms` 中同时有 `search` + `lyric` 适配器的渠道自动获得通用
   `BuiltinLyricProvider`（当前为 B 站），新增渠道无需改 UI。B 站字幕只进手动
   换源（`autoFallback=false`：视频结果不是歌曲，自动竞速容易拿错），未登录时
-  返回 `biliLoginRequired`，换源页只显示登录提示、不发搜索请求；手动选择写
+  返回 `biliLoginRequired`，换源页把登录提示挂在 B 站分组标题右侧（单源筛选到
+  B 站且无结果时放进空态提示），不发搜索请求；手动选择写
   `provider='bili'` + `manual=true`，不会被登录后的原生刷新覆盖。`forSession`
   同时把可用性闭包与 B 站字幕 provider 绑到注入的 `BiliSession`；`standard`
   只是生产共享会话的默认绑定。
