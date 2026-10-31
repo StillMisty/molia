@@ -4317,6 +4317,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get biliAccountTileLoggedOut => '登录后可优先使用 B 站字幕歌词';
 
   @override
+  String get biliLyricsLoginHintInline => '登录后可优先使用 B 站字幕歌词';
+
+  @override
   String get biliAccountTileLoggedIn => '已登录 · B 站字幕优先作为歌词';
 
   @override

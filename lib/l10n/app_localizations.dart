@@ -8032,6 +8032,12 @@ abstract class AppLocalizations {
   /// **'Sign in to prefer Bilibili captions as lyrics'**
   String get biliAccountTileLoggedOut;
 
+  /// No description provided for @biliLyricsLoginHintInline.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to use Bilibili captions'**
+  String get biliLyricsLoginHintInline;
+
   /// No description provided for @biliAccountTileLoggedIn.
   ///
   /// In en, this message translates to:

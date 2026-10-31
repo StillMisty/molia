@@ -4507,6 +4507,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Sign in to prefer Bilibili captions as lyrics';
 
   @override
+  String get biliLyricsLoginHintInline => 'Sign in to use Bilibili captions';
+
+  @override
   String get biliAccountTileLoggedIn =>
       'Signed in · Bilibili captions are preferred for lyrics';
 

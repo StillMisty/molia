@@ -379,7 +379,11 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
         widget.sourceDescriptors,
         strategy.channelKey,
       ),
-      hint: unavailable == null ? null : _unavailableHint(l10n, unavailable),
+      // 标题右侧空间有限，用 locale 专属的短提示（中文仍为完整文案）；
+      // 单源空态另有完整提示。
+      hint: unavailable == null
+          ? null
+          : _unavailableInlineHint(l10n, unavailable),
     );
   }
 
@@ -455,6 +459,18 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     return switch (reason) {
       LyricsSourceUnavailable.biliLoginRequired =>
         l10n.biliAccountTileLoggedOut,
+    };
+  }
+
+  /// 分组标题右侧的单行提示：英文用短句，避免标题行被省略号截断；
+  /// 中文保持完整口径。
+  static String _unavailableInlineHint(
+    AppLocalizations l10n,
+    LyricsSourceUnavailable reason,
+  ) {
+    return switch (reason) {
+      LyricsSourceUnavailable.biliLoginRequired =>
+        l10n.biliLyricsLoginHintInline,
     };
   }
 }

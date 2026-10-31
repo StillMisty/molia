@@ -2066,6 +2066,7 @@
   "sourcesPlatformAccounts": "平台账号",
   "biliAccountTitle": "哔哩哔哩账号",
   "biliAccountTileLoggedOut": "登录后可优先使用 B 站字幕歌词",
+  "biliLyricsLoginHintInline": "登录后可优先使用 B 站字幕歌词",
   "biliAccountTileLoggedIn": "已登录 · B 站字幕优先作为歌词",
   "biliAccountLoginIntro": "不登录也能正常播放；登录后，B 站视频自带的字幕会优先作为歌词。",
   "biliAccountLoginAction": "扫码登录",

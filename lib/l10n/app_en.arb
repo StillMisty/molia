@@ -2465,6 +2465,7 @@
   "sourcesPlatformAccounts": "Platform accounts",
   "biliAccountTitle": "Bilibili account",
   "biliAccountTileLoggedOut": "Sign in to prefer Bilibili captions as lyrics",
+  "biliLyricsLoginHintInline": "Sign in to use Bilibili captions",
   "biliAccountTileLoggedIn": "Signed in · Bilibili captions are preferred for lyrics",
   "biliAccountLoginIntro": "Playback works without signing in. After signing in, captions on Bilibili videos are used as lyrics first.",
   "biliAccountLoginAction": "Sign in with QR code",

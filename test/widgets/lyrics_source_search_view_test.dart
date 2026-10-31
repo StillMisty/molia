@@ -93,6 +93,7 @@ void main() {
     required List<LyricsSourceStrategy> sources,
     required LyricsProvider lyricsProvider,
     Set<String>? enabledChannelKeys,
+    Locale locale = const Locale('zh'),
   }) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -105,12 +106,12 @@ void main() {
       Provider<NotificationService>.value(
         value: NotificationService(),
         child: MaterialApp(
-          locale: const Locale('zh'),
+          locale: locale,
           localizationsDelegates: const [
             AppLocalizations.delegate,
             ...GlobalMaterialLocalizations.delegates,
           ],
-          supportedLocales: const [Locale('zh')],
+          supportedLocales: [locale],
           home: Scaffold(
             body: LyricsSourceSearchView(
               initialTrackTitle: '晴天',
@@ -168,6 +169,37 @@ void main() {
     );
     expect(qq.searchCalls, 1);
     expect(bili.searchCalls, 0, reason: '不可用来源不发请求');
+  });
+
+  testWidgets('英文 B 站标题右侧用短提示，不占满整行', (tester) async {
+    final qq = _FakeLyricProvider('qq');
+    final bili = _FakeLyricProvider('bili');
+    final lyricsProvider = LyricsProvider(service: _FakeLyricsService());
+    addTearDown(lyricsProvider.dispose);
+
+    await pumpView(
+      tester,
+      locale: const Locale('en'),
+      sources: [
+        LyricsSourceStrategy(channelKey: 'tx', provider: qq),
+        biliStrategy(bili),
+      ],
+      lyricsProvider: lyricsProvider,
+    );
+
+    final biliHeader = find.byKey(const ValueKey('lyricsSourceSection-bili'));
+    expect(
+      find.descendant(
+        of: biliHeader,
+        matching: find.text('Sign in to use Bilibili captions'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Sign in to prefer Bilibili captions as lyrics'),
+      findsNothing,
+      reason: '标题右侧用短句，避免英文长提示被省略号截断',
+    );
   });
 
   testWidgets('单源筛选未登录 B 站：空态 hint 显示登录提示', (tester) async {
