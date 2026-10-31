@@ -509,6 +509,15 @@
   内部保留 `SourceTrack`（raw payload 不跨 provider 边界），播放按行身份回查当前队列。
   UI 不再解码 `Map<String, dynamic>` 或 `_sourceTrack` 私有键，收藏 / 加入列表走
   与其他列表相同的 `Track` 入口。
+- **Search results surface（搜索结果面）** — `lib/widgets/search_results_view.dart`：
+  搜索结果两种宿主（资料库结果页 / 桌面全局搜索遮罩）的唯一实现。`SearchRow` →
+  `TrackRowModel` 的行映射（歌词片段副标题 / 歌手链接 / 「未知歌手」兜底）、类型分段
+  （按能力位显隐）、失败 / 空态 / 加载态、曲目行操作菜单（触摸端 ⋮ / 桌面右键）都只在
+  这里维护；宿主只传 `SearchResultsVariant`（`page` / `docked`）、滚动控制器与导航回调
+  （播放 / 打开歌手 / 查看全部）。`page` 版式拥有表头与触底分页，`docked` 版式最多
+  预览 8 行并以「查看全部结果」出口收尾、不分页；遮罩里的歌手行仍走「查看全部结果」
+  而不是直接进歌手页（自建 route 先关遮罩再导航，顺序与焦点复位归遮罩）。收成一层
+  之前，两份实现各自维护行映射，遮罩副本漏掉了操作菜单与未知歌手兜底。
 - **Builtin platform failure（内置平台失败助手）** — `builtin_search.dart::builtinPlatformFailure`：
   专辑 / 歌手 / 歌词等内置接口「业务拒绝 / 字段缺失」的统一失败（`unknown` + 可重试），
   各模块旧助手（`albumPlatformFailure` / `artistPlatformFailure`）委托同一实现。
