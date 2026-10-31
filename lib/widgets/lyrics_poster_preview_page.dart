@@ -513,6 +513,8 @@ class _LyricsPosterPreviewPageState extends State<LyricsPosterPreviewPage> {
               // 缩略图主图只认真实封面；默认封面仅作加载失败回退。海报
               // 生成仍走 [_displayCoverUrl]（含默认封面占位）。
               listenForChanges: false,
+              // 海报导出始终用原图，设置行缩略图也不应用展示风格。
+              applyCoverStyle: false,
               trackId: trackId,
               originalUrl: widget.albumCoverUrl,
               width: 28,

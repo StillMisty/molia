@@ -279,6 +279,37 @@
   （发现详情的导入入口留在 AppBar）。页面只给封面地址、形状、回退图标与查看器
   元数据，不再各写一套；否则漏掉解码尺寸或改错保存文件名只会出现在某一个入口。
 
+## 封面风格（cover styles）
+
+- **CoverStyle（封面风格）** — `lib/domain/models/cover_style.dart`：9 种展示风格
+  （`original` / `oneLastKiss` / `lineArt` / `pencil` / `emboss` / `pixel` / `ink` /
+  `duotone` / `film`）。稳定 id 用于持久化与同步，未知 id 一律回退 `original`；
+  `original` 不派生任何图片，是默认值。`oneLastKiss` 的专业名是
+  **gradient-mapped pencil sketch**（灰度线稿 + 暗部铅笔调子 + 固定彩虹渐变）。
+- **CoverStyleScope（作用范围）** — `player`（默认，仅播放页大封面与左右邻位）/
+  `all`（所有歌曲封面：列表、顶栏、迷你条、歌曲信息、AI DJ、歌词选择等经
+  `TrackArtwork` 的展示面）。专辑 / 歌手 / 歌单头图、封面选择器、海报预览与
+  导出、默认封面行、查看原图始终使用原图。
+- **CoverStyleSettings（封面风格偏好）** — `lib/services/covers/cover_style_settings.dart`：
+  `kCoverStyle` / `kCoverStyleScope` 两个「跟人走」设置键的唯一状态（默认
+  `original` + `player`）；跨设备同步应用远端值后经 `bindReload` 重载。
+- **CoverStyleProcessor（封面风格处理器）** — `lib/services/covers/cover_style_processor.dart`：
+  纯 Dart `processSync` + 长驻 worker isolate。解码 / 中心方形裁切 / 缩放 /
+  像素风格化 / PNG 编码都在 worker；失败返回 null，主 isolate 不阻塞。
+- **CoverStyleCache（封面风格缓存）** — `lib/services/covers/cover_style_cache.dart`：
+  按「封面 URL + 风格 + 边长」做内存 LRU，边长分桶 64 / 128 / 256 / 512 / 768
+  （播放页上限 768），约 24MB 字节预算，并发去重；首版不落盘。原图读取支持
+  data URL / `file://` / 网络封面（网络走 `ArtworkCache.cachedFilePath`，
+  省流网关与统一请求头照常生效），失败 / 省流无缓存回退原图。
+- **StyledCoverImage（风格封面展示）** — `lib/widgets/styled_cover_image.dart`：
+  原图垫底 + 派生图淡入；`original` 直接走既有 `AppNetworkImage` 路径，零额外
+  开销；尊重减弱动效。默认封面、主题取色、下载 / 标签、系统媒体通知、查看
+  原图与海报导出都不消费派生图。
+- **性能边界** — 只有选定非原图风格才处理；播放页 / 列表按可见性自然触发；
+  一次算好静态 PNG，不随切歌动画逐帧重算；共享飞行副本只优先使用已缓存的
+  派生图，没算好时用原图，不阻塞起手 / 落位；落位后由 `StyledCoverImage`
+  淡入。小缩略图（边长 ≤96）加粗线条 / 降低细节，避免 40dp 封面糊成一团。
+
 ## 应用壳与导航
 
 - **Bootstrap stack（组合根 stack builder）** — `lib/app/bootstrap/**`：接线圈按子系统分组的 module（catalog / 本地数据 / 资料库 / playback / sync / AI / 歌词显示 / 桌面 / 更新 / Provider 树 / 首帧收尾），每个的 interface 是「依赖进、装好的子系统出」；初始化顺序与前向引用（媒体会话、歌词服务、同步引擎）关在 builder 内，`lib/main.dart` 只做顺序调用 + `runApp`（唯一 composition root）。

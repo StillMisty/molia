@@ -205,6 +205,8 @@ class _CoverPickerSheetState extends State<CoverPickerSheet> {
                 key: const Key('coverPickerPreview'),
                 // 外层已订阅；默认封面模式没有曲目身份，直接展示默认图。
                 listenForChanges: false,
+                // 选择器始终看真实封面原图，不应用展示风格。
+                applyCoverStyle: false,
                 trackId: widget.trackId,
                 originalUrl: widget.originalCoverUrl,
                 width: 120,

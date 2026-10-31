@@ -6,9 +6,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/cover_style.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
+import '../services/covers/cover_style_cache.dart';
+import '../services/covers/cover_style_settings.dart';
 import '../theme/m3e_context.dart';
 import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
@@ -452,6 +455,19 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           playbackProvider,
           previousTrack: previousTrack,
         );
+        // 飞行副本的封面 URL / 风格图在页面构建时抓一次：弹簧逐帧只改几何。
+        final String? flightUrl = coverResolverOf(context)
+            .realOf(displayTrack)
+            .url;
+        final styleSettings = context.read<CoverStyleSettings?>();
+        final flightStyle = styleSettings?.style ?? CoverStyle.original;
+        final styledFlightBytes = flightUrl == null || !flightStyle.isStylized
+            ? null
+            : context.read<CoverStyleCache?>()?.peek(
+                flightUrl,
+                flightStyle,
+                CoverStyleCache.bucketFor(playbackCoverDecodeEdge(context)),
+              );
         return AnimatedBuilder(
           animation: expand,
           builder: (context, _) {
@@ -524,7 +540,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
                           otherAppearance: CoverAppearance.mini,
                           toPage: true,
                         ),
-                        url: coverResolverOf(context).realOf(displayTrack).url,
+                        url: flightUrl,
+                        imageBytes: styledFlightBytes,
                         fallbackUrl: coverResolverOf(context).defaultCoverUrl,
                         // 两真身都是回退占位（全局默认封面 / Molia 标志）。
                         fallback: (context, iconSize) =>
@@ -817,6 +834,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
       fit: BoxFit.cover,
       fallbackIconSize: iconSize,
       memCacheWidth: coverEdge,
+      // 迷你条 48dp：派生图按小缩略图桶处理（线条加粗、细节降级）。
+      coverStyleEdge: 128,
       placeholder: placeholderUrl == null
           ? null
           : AppNetworkImage(

@@ -56,10 +56,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/cover_style.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
+import '../services/covers/cover_style_cache.dart';
+import '../services/covers/cover_style_settings.dart';
 import '../services/haptics.dart';
 import '../theme/motion_policy.dart';
 import '../utils/playback_cover_decode.dart';
@@ -69,6 +72,7 @@ import 'cover_fallback.dart';
 import 'cover_handoff.dart';
 import 'player_cover_session.dart';
 import 'player_morph.dart';
+import 'styled_cover_image.dart';
 import 'track_artwork.dart';
 
 /// 曲目封面 URL / 稳定 key 与卡片外观定义在
@@ -1977,21 +1981,26 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       appearance: appearance,
       content: (context, clip, iconSize) {
         final coverEdge = playbackCoverDecodeEdge(context);
+        final style =
+            context.watch<CoverStyleSettings?>()?.style ?? CoverStyle.original;
+        // 播放页两种 scope 都应用风格；换图占位也走同一风格，避免切歌时
+        // 旧图是原图、新图是风格图造成硬跳。
         final placeholder = placeholderUrl != null && placeholderUrl != url
-            ? AppNetworkImage(
-                url: placeholderUrl,
-                fit: BoxFit.cover,
-                fallbackIconSize: iconSize,
-                memCacheWidth: coverEdge,
+            ? _buildCoverImage(
+                context,
+                placeholderUrl,
+                style: style,
+                iconSize: iconSize,
+                coverEdge: coverEdge,
               )
             : fallback;
-        return AppNetworkImage(
-          url: url,
+        return _buildCoverImage(
+          context,
+          url,
+          style: style,
+          iconSize: iconSize,
+          coverEdge: coverEdge,
           fallbackUrl: _coverResolver.defaultCoverUrl,
-          fit: BoxFit.cover,
-          // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
-          fallbackIconSize: iconSize,
-          memCacheWidth: coverEdge,
           placeholder: placeholder,
           // 缺图槽位也走同一回退（默认封面 → Molia 标志），不展示
           // 「最近播放」封面冒充当前曲目。
@@ -1999,6 +2008,43 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
               fallback ?? buildFallbackArtwork(context, iconSize: iconSize),
         );
       },
+    );
+  }
+
+  /// 播放页封面图片：原图路径保持既有 [AppNetworkImage] 零开销；
+  /// 选定风格后交给 [StyledCoverImage]（原图垫底 + 派生图淡入）。
+  Widget _buildCoverImage(
+    BuildContext context,
+    String? url, {
+    required CoverStyle style,
+    required double iconSize,
+    required int coverEdge,
+    String? fallbackUrl,
+    Widget? placeholder,
+    Widget? errorWidget,
+  }) {
+    if (style == CoverStyle.original) {
+      return AppNetworkImage(
+        url: url,
+        fallbackUrl: fallbackUrl,
+        fit: BoxFit.cover,
+        // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
+        fallbackIconSize: iconSize,
+        memCacheWidth: coverEdge,
+        placeholder: placeholder,
+        errorWidget: errorWidget,
+      );
+    }
+    return StyledCoverImage(
+      url: url,
+      fallbackUrl: fallbackUrl,
+      style: style,
+      edge: CoverStyleCache.bucketFor(coverEdge),
+      fit: BoxFit.cover,
+      fallbackIconSize: iconSize,
+      memCacheWidth: coverEdge,
+      placeholder: placeholder,
+      errorWidget: errorWidget,
     );
   }
 
