@@ -19,12 +19,8 @@ import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/paged_list_controller.dart';
-import '../services/haptics.dart';
 import '../utils/responsive.dart';
-import '../widgets/app_network_image.dart';
-import '../widgets/cover_tap_target.dart';
-import '../widgets/cover_viewer.dart';
-import '../widgets/detail_page/detail_page_chrome.dart';
+import '../widgets/detail_page/detail_cover_header.dart';
 import '../widgets/favorite_action.dart';
 import '../widgets/favorite_track_tile.dart';
 import '../widgets/paged_track_collection.dart';
@@ -203,109 +199,30 @@ class _ArtistPageState extends State<ArtistPage> {
     );
   }
 
-  /// 头部头像：方形裁切；有图时点击看原图 / 保存原图。
-  Widget _buildHeaderAvatar(
-    BuildContext context,
-    AppLocalizations l10n,
-    ArtistDetail artist,
-    String? avatar,
-    ThemeData theme,
-  ) {
-    final image = ClipOval(
-      child: SizedBox(
-        width: 96,
-        height: 96,
-        child: (avatar?.isNotEmpty ?? false)
-            ? AppNetworkImage(
-                url: avatar,
-                fit: BoxFit.cover,
-                // 头部只有 96dp：按容器解码头像，避免按原图尺寸解码。
-                memCacheWidth: (96 * MediaQuery.of(context).devicePixelRatio)
-                    .round(),
-                placeholder: ColoredBox(
-                  color: theme.colorScheme.surfaceContainerHighest,
-                ),
-                errorWidget: _buildAvatarPlaceholder(theme),
-              )
-            : _buildAvatarPlaceholder(theme),
-      ),
-    );
-    if (avatar == null || avatar.isEmpty) return image;
-    return CoverTapTarget(
-      key: const Key('artistHeaderAvatar'),
-      size: 96,
-      // 圆形头像：交互层与 ClipOval 同一形状。
-      borderRadius: BorderRadius.circular(48),
-      semanticLabel: l10n.coverLabel,
-      onPressed: () {
-        HapticsService.lightImpact();
-        unawaited(
-          showCoverViewer(
-            context,
-            coverUrl: avatar,
-            title: l10n.coverLabel,
-            subtitle: artist.name,
-            fileNameBase: artist.name,
-          ),
-        );
-      },
-      child: image,
-    );
-  }
-
   Widget _buildHeader(
     BuildContext context,
     AppLocalizations l10n,
     ArtistDetail artist,
     int trackCount,
   ) {
-    final theme = Theme.of(context);
     final description = artist.description.trim();
-    return DetailPageHeroHeader(
-      artwork: _buildHeaderAvatar(
-        context,
-        l10n,
-        artist,
-        artist.avatarUrl,
-        theme,
-      ),
+    return DetailCoverHeader(
+      coverKey: const Key('artistHeaderAvatar'),
+      coverUrl: artist.avatarUrl,
+      shape: DetailCoverShape.circle,
+      fallbackIcon: Icons.person_rounded,
       title: _titleOf(artist),
       subtitle: l10n.artistSongCount(trackCount),
       description: description.isEmpty ? null : description,
-      action: M3ESplitButton<String>(
+      viewerSubtitle: artist.name,
+      viewerFileNameBase: artist.name,
+      action: DetailPlayAllSplitButton(
         key: const Key('artistPlayAll'),
-        label: l10n.playAll,
-        leadingIcon: Icons.play_arrow_rounded,
-        style: M3EButtonStyle.filled,
-        onPressed: () => _playFrom(0),
-        items: [
-          M3ESplitButtonItem<String>(
-            value: 'shuffle',
-            child: Text(l10n.playAllShuffled),
-          ),
-          M3ESplitButtonItem<String>(
-            value: 'addToLibrary',
-            child: Text(l10n.addToPlaylist),
-          ),
-        ],
-        onSelected: (value) {
-          switch (value) {
-            case 'shuffle':
-              unawaited(_playShuffled());
-            case 'addToLibrary':
-              unawaited(_handoff.addToLibrary(context, _collection.items));
-          }
-        },
+        onPlay: () => _playFrom(0),
+        onShuffle: () => unawaited(_playShuffled()),
+        onAddToLibrary: () =>
+            unawaited(_handoff.addToLibrary(context, _collection.items)),
       ),
     );
   }
-
-  Widget _buildAvatarPlaceholder(ThemeData theme) => ColoredBox(
-    color: theme.colorScheme.surfaceContainerHighest,
-    child: Icon(
-      Icons.person_rounded,
-      size: 40,
-      color: theme.colorScheme.onSurfaceVariant,
-    ),
-  );
 }

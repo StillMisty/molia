@@ -1359,6 +1359,14 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   根详细 tab 仍在播放页内容区，保持 16 边距。简单弹层正文统一走
   `lib/widgets/simple_modal_body.dart`，曲目类弹层（音质 / 来源）顶部带 40 曲目头、
   内容 16 内边距；列表型动作行统一 `M3EListItem`，封面选择保留预览 + 按钮形态。
+- **详情页封面头与播放全部**：专辑 / 歌手 / 发现详情的 96dp 封面头与「播放全部」
+  分裂按钮收在 `lib/widgets/detail_page/detail_cover_header.dart`
+  （`DetailCoverHeader` / `DetailPlayAllSplitButton`）。封面一律按 96dp 容器算
+  `memCacheWidth`；方形 16 圆角、圆形 `ClipOval`，`CoverTapTarget` 只在封面非空时
+  出现并与裁切同形，点击经 `showCoverViewer`（副标题 / 保存基名缺省跟随标题）。
+  按钮尾部菜单顺序固定为「随机播放全部」在前，「加入列表」仅在 `onAddToLibrary`
+  非空时出现——发现详情的导入入口留在 AppBar，不做事头双入口。页面不再各自拼
+  封面与菜单：漏掉解码尺寸或改错菜单顺序不可能只发生在某一个入口。
 - **页面型弹窗**：`showPageModal` —— 窄屏 `M3EBottomSheet`，宽屏 `M3EDialog.show`
   + `PageModalCard`（`M3ECard` 取 `M3EDialogTheme` 的圆角 / elevation / scrim；
   容器色取 `surface`，与页面自带 Scaffold 的底色一致）。简单弹层（定时关闭 /
