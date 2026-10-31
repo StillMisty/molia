@@ -1224,7 +1224,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   **全局搜索**是 Ctrl+F / 品牌区打开的全屏遮罩（`lib/widgets/global_search_overlay.dart`）：
   壳层在内容区中上放一个隐形占位盒，遮罩打开时实测它的矩形，把搜索条与结果面板
   摆在同一条位置（自建 route 挂在根导航器上，坐标是整窗口径）；结果与资料库共用
-  同一 `SearchProvider`，空关键词时结果面留空（只剩搜索条）；遮罩打开时壳层 Esc
+  同一 `SearchProvider`，空关键词时结果面留空（只剩搜索条）；结果面板与资料库搜索结果页
+  共用 **Search results surface**（`lib/widgets/search_results_view.dart`）：行映射 / 分段 /
+  失败 / 空态一份实现，遮罩只选 `docked` 版式（最多预览 8 行 + 「查看全部结果」、不分页），
+  资料库结果页选 `page` 版式（表头 + 触底分页）。遮罩打开时壳层 Esc
   让位（`EscapeClaims` 登记），另有一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出
   （自绘 scrim 只压暗，模糊由壳层补；关闭时 `Opacity` 为 0、不参与合成）。
   **不要换回 `M3ESearchAnchor`**：包内 docked 视图的目标矩形完全由锚点推导，锚点

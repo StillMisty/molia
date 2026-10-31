@@ -19,8 +19,10 @@
 /// - 包内没有暴露动画 / 聚焦钩子，这两点只能靠自建 route 解决：开合走
 ///   「scrim 淡入 + 内容淡入 + 轻微缩放」，输入框在首帧就 autofocus。
 ///
-/// 结果列表面板内限高滚动、最多就地预览 [_maxPreviewRows] 行，更长的列表
-/// 交给资料库目的地（「查看全部结果」回调由壳层给）。
+/// 结果列表面板内限高滚动、最多就地预览
+/// [SearchResultsView.maxDockedPreviewRows] 行，更长的列表交给资料库目的地
+/// （「查看全部结果」回调由壳层给）；行映射 / 分段 / 空错态统一在
+/// [SearchResultsView]（与资料库搜索结果页同一份实现）。
 ///
 /// 与 M3E 搜索视图的取舍细节见 `docs/pitfalls.md` 已知坑 57。
 library;
@@ -34,17 +36,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/escape_claims.dart';
-import '../services/haptics.dart';
-import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import 'app_search_bar.dart';
-import 'artist_row.dart';
-import 'track_row.dart';
+import 'search_results_view.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
 /// 此时回退到简体中文，与中文正式环境文案一致（口径同 `search_section.dart`）。
@@ -56,10 +54,6 @@ const double _barPanelGap = 2;
 
 /// 面板与窗口底缘的最小留白：结果再多也不贴底。
 const double _panelBottomMargin = 24;
-
-/// 结果面板最多就地预览的行数：更长的列表交给「查看全部结果」后的资料库
-/// 目的地（面板不是全量结果页，堆太多行只会把底部的出口挤出视野）。
-const int _maxPreviewRows = 8;
 
 /// 开合时长：scrim（路由 barrier）与内容同一拍，取 M3E effects `short4`。
 ///
@@ -443,16 +437,12 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   }
 }
 
-/// 面板内容：类型分段 + 结果列表 + 底部「查看全部结果」。
+/// 面板内容（宿主）：结果面统一交给 [SearchResultsView] 的 docked 版式。
 ///
-/// 直接订阅 [SearchProvider]：结果在防抖之后异步到达，面板内容必须自己订阅
-/// provider 才会实时刷新。
-///
-/// 两个版式约束：
-/// - 整块内容是一个滚动视图：高度贴合内容，超出可用高度就整体滚动；固定高度的
-///   子项（分段 / 底部出口）在 Flex 里遇到更小的可用高度时必然溢出，滚动视图
-///   在任何可用高度下都只会裁掉内容，不会出现 RenderFlex 溢出。
-/// - 面板底自绘（[_buildPanel]）：空态（无关键词）就只剩搜索条。
+/// 本宿主只保留导航编排：行点击 = 播放并收起遮罩；「查看全部结果」= 先关
+/// 遮罩再切目的地（遮罩是根导航器上的自建 route，顺序反了会在遮罩上叠页）。
+/// 行映射 / 分段 / 失败 / 空态 / 8 行预览上限都在统一搜索结果面里，与资料库
+/// 搜索结果页同一份实现。
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
     required this.onOpenAllResults,
@@ -463,258 +453,9 @@ class _GlobalSearchResults extends StatelessWidget {
   final void Function(SearchRow row) onPlayItem;
 
   @override
-  Widget build(BuildContext context) {
-    final l10n = _l10n(context);
-    final search = context.watch<SearchProvider>();
-    // 无关键词：结果面留空（只留搜索条）——打开遮罩就是为了输入，一行
-    // 「输入关键词搜索歌曲」的引导是多余的。
-    if (!search.isSearchActive) return const SizedBox.shrink();
-
-    final kinds = search.supportedSearchKinds;
-    final isArtistKind = search.searchKind == SearchKind.artist;
-    final isLyricKind = search.searchKind == SearchKind.lyric;
-    final results = isLyricKind ? search.lyricResults : search.filteredResults;
-    final artists = isArtistKind
-        ? search.artistResults
-        : const <ArtistSummary>[];
-    final itemCount = isArtistKind ? artists.length : results.length;
-    // 就地预览只取前 [_maxPreviewRows] 行：空态 / 失败 / 页脚仍按真实结果数
-    // 判定（有结果才给「查看全部结果」），只有行渲染被截断。
-    final previewCount = math.min(itemCount, _maxPreviewRows);
-    final failure = search.failure;
-
-    return _buildPanel(
-      context,
-      child: SingleChildScrollView(
-        // 不接 PrimaryScrollController：面板与页面里的主列表互不干扰。
-        primary: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (kinds.length > 1)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: _buildKindSwitch(l10n, search, kinds),
-              ),
-            if (search.isSearching)
-              const Padding(
-                padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
-                child: M3EProgressIndicator.linear(),
-              ),
-            // 分页失败只影响完整结果页的底部；预览面板仍可看已加载结果。
-            if (failure != null && itemCount == 0)
-              _buildFailure(context, l10n, search),
-            if (itemCount > 0)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (var index = 0; index < previewCount; index++)
-                      isArtistKind
-                          ? _buildArtistRow(
-                              context,
-                              l10n,
-                              artists[index],
-                              index,
-                              previewCount,
-                            )
-                          : _buildTrackRow(
-                              context,
-                              results[index],
-                              index,
-                              previewCount,
-                            ),
-                  ],
-                ),
-              )
-            else if (!search.isSearching && failure == null)
-              _buildEmpty(context, l10n, search),
-            // 有结果才给「查看全部结果」：零结果时它无处可去（空态文案已说明）。
-            if (itemCount > 0) _buildFooter(l10n),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// 结果面板底：颜色与圆角取包内 docked 结果面同一套 token。
-  Widget _buildPanel(BuildContext context, {required Widget child}) {
-    final m3e = M3ETheme.of(context);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: m3e.searchViewTheme.containedContainerColor(m3e.colorScheme),
-        borderRadius: M3EShapes.radiusExtraLarge,
-      ),
-      child: ClipRRect(borderRadius: M3EShapes.radiusExtraLarge, child: child),
-    );
-  }
-
-  /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满
-  /// （内部 `Positioned.fill`，放松约束会塌成零宽）。
-  Widget _buildKindSwitch(
-    AppLocalizations l10n,
-    SearchProvider search,
-    List<SearchKind> kinds,
-  ) {
-    return SizedBox(
-      width: double.infinity,
-      child: M3ESegmentedButton<SearchKind>(
-        segments: [
-          for (final kind in kinds)
-            M3ESegment<SearchKind>(value: kind, label: _kindLabel(l10n, kind)),
-        ],
-        selected: {search.searchKind},
-        onSelectionChanged: (selection) {
-          // 单选：M3E 语义下重按已选中项不会清空。
-          if (selection.isNotEmpty) {
-            search.selectSearchKind(selection.first);
-          }
-        },
-      ),
-    );
-  }
-
-  String _kindLabel(AppLocalizations l10n, SearchKind kind) => switch (kind) {
-    SearchKind.song => l10n.searchKindSongs,
-    SearchKind.artist => l10n.searchKindArtists,
-    SearchKind.lyric => l10n.searchKindLyrics,
-  };
-
-  /// 单曲 / 歌词结果行：[TrackRow] 紧凑单列（docked 面板不套宽屏表格列），
-  /// 歌词命中片段优先做副标题（与资料库搜索结果行同口径）。
-  Widget _buildTrackRow(
-    BuildContext context,
-    SearchRow row,
-    int index,
-    int count,
-  ) {
-    final snippet = row.lyricSnippet ?? '';
-    return Padding(
-      padding: EdgeInsets.only(bottom: TrackRow.gapOf(context)),
-      child: TrackRow(
-        key: ValueKey(row.id.uri),
-        model: TrackRowModel(
-          title: row.title,
-          artist: snippet.isNotEmpty ? snippet : row.primaryArtistName,
-          coverUrl: row.coverUrl,
-          durationMs: row.duration?.inMilliseconds,
-          trackId: row.id,
-        ),
-        position: calculateCardPosition(index, count),
-        onTap: () {
-          HapticsService.lightImpact();
-          onPlayItem(row);
-        },
-      ),
-    );
-  }
-
-  /// 歌手结果行：[ArtistRow] 只做展示；点击收起面板、跳资料库搜索页
-  /// —— 那里有完整歌手结果与进歌手页的链接，面板不重复那套入口编排。
-  Widget _buildArtistRow(
-    BuildContext context,
-    AppLocalizations l10n,
-    ArtistSummary artist,
-    int index,
-    int count,
-  ) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: ArtistRow.gapOf(context)),
-      child: ArtistRow(
-        key: ValueKey(artist.id),
-        name: artist.name,
-        avatarUrl: artist.avatarUrl,
-        subtitle: artist.songCount == null
-            ? null
-            : l10n.artistSongCount(artist.songCount!),
-        position: calculateCardPosition(index, count),
-        onTap: () {
-          HapticsService.lightImpact();
-          onOpenAllResults();
-        },
-      ),
-    );
-  }
-
-  /// 搜索失败：本地化标题 + 重试（与资料库结果区同一重试入口）。
-  Widget _buildFailure(
-    BuildContext context,
-    AppLocalizations l10n,
-    SearchProvider search,
-  ) {
-    final theme = Theme.of(context);
-    final query = search.searchQuery;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 8, 4),
-      child: Row(
-        children: [
-          Icon(
-            Icons.error_outline_rounded,
-            size: 20,
-            color: theme.colorScheme.error,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              l10n.searchFailed,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: context.typeScale.titleSmall.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          ),
-          M3EButton.icon(
-            style: M3EButtonStyle.text,
-            onPressed: query.trim().isEmpty
-                ? null
-                : () => search.submitSearch(query),
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            label: Text(l10n.retry),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 有词无结果：一句本地化提示；无可用音源时给音源引导标题
-  /// （与资料库结果区同一套键，面板不再堆副标题）。
-  Widget _buildEmpty(
-    BuildContext context,
-    AppLocalizations l10n,
-    SearchProvider search,
-  ) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 28),
-      child: Center(
-        heightFactor: 1,
-        child: Text(
-          search.hasSelectedSource
-              ? l10n.noResultsFound
-              : l10n.searchNoSourcesTitle,
-          style: context.typeScale.bodyMedium.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 底部出口：完整结果（分段 / 分页 / 歌手链接）在资料库目的地。
-  Widget _buildFooter(AppLocalizations l10n) => Padding(
-    padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
-    child: Center(
-      heightFactor: 1,
-      child: M3EButton.icon(
-        style: M3EButtonStyle.text,
-        onPressed: onOpenAllResults,
-        icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-        label: Text(l10n.viewAllResults),
-      ),
-    ),
+  Widget build(BuildContext context) => SearchResultsView(
+    variant: SearchResultsVariant.docked,
+    onPlay: onPlayItem,
+    onOpenAllResults: onOpenAllResults,
   );
 }
