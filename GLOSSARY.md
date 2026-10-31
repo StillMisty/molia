@@ -1061,6 +1061,7 @@
 
 ## 缓存
 - **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（单曲 `load`、列表批量 `loadMany`、只要「已缓存」音频档的批量 `cachedAudioTrackIds`，`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。
+- **Track local data controller（本地数据刷新控制器）** — `lib/services/track_local_data_controller.dart`：单曲本地数据「什么时候读、读到的结果要不要采纳」的唯一实现。下载记录变化防抖 300ms（同批记录合并成一次目录扫描），`CacheService.revision` 变化立即重载并撤销待执行防抖；加载单飞 + 尾随一次（加载中再来的请求只补跑一次）；切歌 / 封面变化立即用 `TrackLocalDataService.downloadState` 同步播种（避免「已下载」闪成「未下载」），旧曲目的在途结果按代次丢弃。状态是不可变 `TrackLocalDataState`（`data` / `audioEnabled`），经 `ValueListenable` 发布；消费面：`TrackInfoView` 的本地数据行与 `TrackLocalDataPage`。页面音质选择顺序也在这里唯一实现（`selectLocalDataQuality`：显式选择 → 已下载音质 → 命中缓存 → 偏好 → 首个可用）。
 - **转存（Save a copy）** — 把已缓存的一档「固化」成持久下载：拷贝缓存内容到 `downloads/`（不触网）+ 落库，动作文案「转存到本地文件夹」。缓存命中时下载动作本身就是转存；转存后状态从「已缓存」变「已下载」。
 - **Audio cache store（音频缓存约定模块）** — `lib/services/audio_cache_store.dart`：音频缓存目录磁盘约定的唯一实现（写入 / 读取两侧 key 命名、完整文件判据、完整文件索引、命中路径、按曲目的已缓存音质、半成品清扫）。`CacheService` 的实例方法（索引 / 占用 / 清理）是策略面的薄委托；键名与完整判据不再有第二处门面（测试同样只经本模块）。文件存在性由调用方注入（命中探测与其后的拷贝必须同一文件系统视图）。旧命名文件不再自动迁移或清理，留在磁盘但无法命中（只计入缓存目录总量）。见 ADR-0008。
 - **音频缓存键** — 缓存文件名 `{sourceKey}_{songId}_{quality}`（Audio cache store 的 `keyForSource` / `keyForTrack`）。`songId` 必须与 `TrackId.id` 同源（`SourceTrack.songId`，不带 `sourceKey:` 前缀）——写入侧与读取侧同名是硬约束，否则文件写了也没人找得到。

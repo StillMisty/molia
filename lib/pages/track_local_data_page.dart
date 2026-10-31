@@ -32,6 +32,7 @@ import '../services/download/download_records.dart';
 import '../services/haptics.dart';
 import '../services/notification_service.dart';
 import '../services/save_as.dart';
+import '../services/track_local_data_controller.dart';
 import '../services/track_local_data_service.dart';
 import '../theme/m3e_context.dart';
 import '../utils/download_failure_label.dart';
@@ -81,14 +82,13 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   CacheService? _cacheService;
   DownloadRecords? _records;
   DownloadManager? _downloads;
-  TrackLocalData? _data;
+
+  /// 本地数据的监听 / 防抖 / 单飞 / 切歌守卫在这里，与信息页共用同一套语义。
+  TrackLocalDataController? _controller;
 
   /// 当前曲目的音频任务（排队 / 运行 / 失败）：进度只订阅它，不整页扫盘。
   DownloadTask? _task;
   bool _busy = false;
-
-  /// 音频缓存开关（关闭时音频行给出状态说明）。
-  bool _audioEnabled = true;
 
   /// 当前选中的下载音质（缺省 = 偏好音质 × 曲目可用音质，命中缓存优先）。
   String? _quality;
@@ -98,14 +98,26 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _service = context.read<TrackLocalDataService?>();
-    _cacheService = context.read<CacheService?>() ?? CacheService.instance;
+    final service = context.read<TrackLocalDataService?>();
+    final cacheService = context.read<CacheService?>() ?? CacheService.instance;
     final records = context.read<DownloadRecords?>();
-    if (!identical(_records, records)) {
-      if (_listening) _records?.removeListener(_onRecordsChanged);
+    if (_controller == null ||
+        !identical(_service, service) ||
+        !identical(_cacheService, cacheService) ||
+        !identical(_records, records)) {
+      _controller?.dispose();
+      _service = service;
+      _cacheService = cacheService;
       _records = records;
-      if (_listening) records?.addListener(_onRecordsChanged);
+      _controller = TrackLocalDataController(
+        service: service,
+        cacheService: cacheService,
+        downloadRecords: records,
+      );
     }
+    // 页面始终绑定一首曲目：构造后立即加载（控制器内部单飞 / 去重）。
+    _controller!.setTrack(widget.track);
+
     final downloads = context.read<DownloadManager?>();
     if (!identical(_downloads, downloads)) {
       if (_listening) _downloads?.taskChanges.removeListener(_onTasksChanged);
@@ -113,38 +125,30 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       _task = null;
       if (_listening) downloads?.taskChanges.addListener(_onTasksChanged);
     }
-    _data ??= _service?.downloadState(widget.track);
     if (!_listening) {
       _listening = true;
-      // 缓存内容（清缓存 / LRU / 边播边缓存落成）与下载记录（转存 / 删除）
-      // 变化才重算本页状态；任务进度只重建音频区。
-      _cacheService?.revision.addListener(_onChanged);
-      _records?.addListener(_onRecordsChanged);
       _downloads?.taskChanges.addListener(_onTasksChanged);
-      unawaited(_reload());
     }
+    _syncTask();
+  }
+
+  @override
+  void didUpdateWidget(covariant TrackLocalDataPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.track == widget.track) return;
+    // 同一页面实例换曲目（测试 / 复用）：旧音质选择不再适用。
+    _quality = null;
+    _controller?.setTrack(widget.track);
     _syncTask();
   }
 
   @override
   void dispose() {
     if (_listening) {
-      _cacheService?.revision.removeListener(_onChanged);
-      _records?.removeListener(_onRecordsChanged);
       _downloads?.taskChanges.removeListener(_onTasksChanged);
     }
+    _controller?.dispose();
     super.dispose();
-  }
-
-  void _onChanged() {
-    if (!mounted) return;
-    unawaited(_reload());
-  }
-
-  /// 下载记录变化：重算两档状态。
-  void _onRecordsChanged() {
-    if (!mounted) return;
-    unawaited(_reload());
   }
 
   /// 任务结构变化（入队 / 完成 / 失败 / 取消）：切换音频区订阅的任务。
@@ -157,25 +161,6 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     _task = _downloads?.taskForTrack(widget.track);
   }
 
-  Future<void> _reload() async {
-    final service = _service;
-    if (service == null) return;
-    try {
-      final results = await Future.wait([
-        service.load(widget.track),
-        _cacheService?.audioEnabled() ?? Future.value(true),
-      ]);
-      if (!mounted) return;
-      setState(() {
-        _data = results[0] as TrackLocalData;
-        _audioEnabled = results[1] as bool;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _data = _service?.downloadState(widget.track));
-    }
-  }
-
   /// 可选音质（LX 标识，去重保序）。
   List<String> get _qualities {
     final types = <String>[];
@@ -186,22 +171,14 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     return types;
   }
 
-  /// 当前选中音质：显式选择 → 已下载记录的音质 → 命中缓存的音质 →
-  /// 偏好音质 → 首个可用音质。
-  String get _selectedQuality {
-    final explicit = _quality;
-    if (explicit != null && explicit.isNotEmpty) return explicit;
-    final data = _data;
-    final downloadedQuality = data?.download?.quality ?? '';
-    if (downloadedQuality.isNotEmpty) return downloadedQuality;
-    if (data != null && data.cachedQualities.isNotEmpty) {
-      return data.cachedQualities.first;
-    }
-    final preferred = _downloads?.defaultQualityFor(widget.track) ?? '';
-    if (preferred.isNotEmpty) return preferred;
-    final qualities = _qualities;
-    return qualities.isEmpty ? '' : qualities.first;
-  }
+  /// 当前选中音质：顺序的唯一实现在 [selectLocalDataQuality]。
+  String _selectedQualityFor(TrackLocalData? data) => selectLocalDataQuality(
+    explicitChoice: _quality,
+    downloadedQuality: data?.download?.quality ?? '',
+    cachedQualities: data?.cachedQualities ?? const <String>[],
+    preferredQuality: _downloads?.defaultQualityFor(widget.track) ?? '',
+    availableQualities: _qualities,
+  );
 
   /// 下载 / 转存音频（缓存命中时由下载服务直接拷贝，不触网）。
   ///
@@ -212,10 +189,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     if (downloads == null) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
+    final quality = _selectedQualityFor(_controller?.value.data);
     await _runDownload(
       () => downloads.download(
         widget.track,
-        quality: _selectedQuality.isEmpty ? null : _selectedQuality,
+        quality: quality.isEmpty ? null : quality,
         includeLyrics: true,
         includeCover: true,
       ),
@@ -248,7 +226,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       await action();
       if (!mounted) return;
       _showMessage(done);
-      await _reload();
+      await _controller?.refreshNow();
     } on SourceFailure catch (failure) {
       if (!mounted || failure.kind == FailureKind.cancelled) return;
       _showMessage(downloadFailureLabel(l10n, failure));
@@ -295,7 +273,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     setState(() => _busy = true);
     try {
       await downloads.delete(record);
-      if (mounted) await _reload();
+      if (mounted) await _controller?.refreshNow();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -347,7 +325,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       final result = await service.clear(widget.track, part);
       if (!mounted) return;
       _showMessage(trackCacheClearResultLabel(l10n, result));
-      await _reload();
+      await _controller?.refreshNow();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -384,7 +362,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       }
       if (!mounted) return;
       _showMessage(l10n.trackCacheClearAll);
-      await _reload();
+      await _controller?.refreshNow();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -402,48 +380,57 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final data = _data;
-    final horizontal = detailPageHorizontalPadding(context);
-    final body = ListView(
-      padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 24),
-      children: [
-        // 曲目身份条取代原来的单行信息卡：与评论 / 换源页共用同一形态。
-        DetailPageTrackHeader(
-          track: widget.track,
-          padding: const EdgeInsets.only(top: 12, bottom: 8),
-        ),
-        const SizedBox(height: kSettingsSectionSpacing),
-        _buildAudioSectionWidget(l10n, data),
-        const SizedBox(height: kSettingsSectionSpacing),
-        _buildExtrasSection(l10n, data),
-        const SizedBox(height: kSettingsSectionSpacing),
-        _buildCacheSection(l10n, data),
-      ],
-    );
-    if (widget.embedded) return body;
-    return Scaffold(
-      appBar: M3EAppBar.top(
-        title: Text(l10n.localDataTitle),
-        automaticallyImplyLeading: true,
-      ),
-      body: body,
+    return ValueListenableBuilder<TrackLocalDataState>(
+      valueListenable: _controller!,
+      builder: (context, localData, _) {
+        final data = localData.data;
+        final horizontal = detailPageHorizontalPadding(context);
+        final body = ListView(
+          padding: EdgeInsets.fromLTRB(horizontal, 0, horizontal, 24),
+          children: [
+            // 曲目身份条取代原来的单行信息卡：与评论 / 换源页共用同一形态。
+            DetailPageTrackHeader(
+              track: widget.track,
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+            ),
+            const SizedBox(height: kSettingsSectionSpacing),
+            _buildAudioSectionWidget(l10n, data, localData.audioEnabled),
+            const SizedBox(height: kSettingsSectionSpacing),
+            _buildExtrasSection(l10n, data),
+            const SizedBox(height: kSettingsSectionSpacing),
+            _buildCacheSection(l10n, data, localData.audioEnabled),
+          ],
+        );
+        if (widget.embedded) return body;
+        return Scaffold(
+          appBar: M3EAppBar.top(
+            title: Text(l10n.localDataTitle),
+            automaticallyImplyLeading: true,
+          ),
+          body: body,
+        );
+      },
     );
   }
 
   /// 音频区只订阅当前任务：进度 / 状态变化不重建整页（缓存占用等）。
-  Widget _buildAudioSectionWidget(AppLocalizations l10n, TrackLocalData? data) {
+  Widget _buildAudioSectionWidget(
+    AppLocalizations l10n,
+    TrackLocalData? data,
+    bool audioEnabled,
+  ) {
     final task = _task;
     if (task == null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildAudioSection(l10n, data, null),
+        children: _buildAudioSection(l10n, data, null, audioEnabled),
       );
     }
     return ListenableBuilder(
       listenable: task,
       builder: (context, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildAudioSection(l10n, data, _task),
+        children: _buildAudioSection(l10n, data, _task, audioEnabled),
       ),
     );
   }
@@ -452,10 +439,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     AppLocalizations l10n,
     TrackLocalData? data,
     DownloadTask? task,
+    bool audioEnabled,
   ) {
     final downloads = _downloads;
     final qualities = _qualities;
-    final selected = _selectedQuality;
+    final selected = _selectedQualityFor(data);
     final state = data?.audioState ?? LocalPartState.none;
     final downloaded = state == LocalPartState.downloaded;
     final supported = downloads != null && downloads.supported;
@@ -491,7 +479,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
                 active ? Icons.downloading_rounded : Icons.download_rounded,
             },
             title: localPartStateLabel(l10n, state),
-            subtitle: _audioSubtitle(l10n, data, task),
+            subtitle: _audioSubtitle(l10n, data, task, audioEnabled),
           ),
           ..._buildAudioActions(l10n, data, task, supported),
         ],
@@ -505,6 +493,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     AppLocalizations l10n,
     TrackLocalData? data,
     DownloadTask? task,
+    bool audioEnabled,
   ) {
     if (data == null) return l10n.cacheUsageComputing;
     final record = data.download;
@@ -542,7 +531,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       // 桌面：播放侧不写缓存（另有后台字节下载，见设置页说明）。
       return l10n.localDataAudioPlatformHint;
     }
-    if (!_audioEnabled) return l10n.cacheAudioDisabled;
+    if (!audioEnabled) return l10n.cacheAudioDisabled;
     return l10n.downloadStatusNotDownloaded;
   }
 
@@ -647,7 +636,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     );
   }
 
-  Widget _buildCacheSection(AppLocalizations l10n, TrackLocalData? data) {
+  Widget _buildCacheSection(
+    AppLocalizations l10n,
+    TrackLocalData? data,
+    bool audioEnabled,
+  ) {
     return SettingsSectionCard(
       title: l10n.localDataCacheSection,
       children: [
@@ -658,7 +651,7 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
             headline: localDataPartLabel(l10n, part),
             supportingText: data == null
                 ? l10n.cacheUsageComputing
-                : _cachePartSubtitle(l10n, part, data),
+                : _cachePartSubtitle(l10n, part, data, audioEnabled),
             trailing: M3EIconButton(
               variant: M3EIconButtonVariant.standard,
               icon: const Icon(Icons.delete_outline_rounded),
@@ -707,10 +700,11 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
     AppLocalizations l10n,
     LocalCachePart part,
     TrackLocalData data,
+    bool audioEnabled,
   ) {
     final label = trackCacheUsageLabel(l10n, part, data);
     if (part != LocalCachePart.audio) return label;
-    if (!_audioEnabled) return l10n.cacheAudioDisabled;
+    if (!audioEnabled) return l10n.cacheAudioDisabled;
     return label;
   }
 

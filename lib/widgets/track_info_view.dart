@@ -18,6 +18,7 @@ import '../services/cache_service.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/data_saver_service.dart';
 import '../services/download/download_records.dart';
+import '../services/track_local_data_controller.dart';
 import '../services/track_local_data_service.dart';
 import '../utils/lyrics_provider_label.dart';
 import '../utils/source_label.dart';
@@ -66,45 +67,31 @@ class TrackInfoView extends StatefulWidget {
 class _TrackInfoViewState extends State<TrackInfoView> {
   PlaybackProvider? _playback;
   TrackLocalDataService? _localDataService;
-  CacheService? _cacheServiceRevision;
+  CacheService? _cacheService;
   DownloadRecords? _downloads;
 
-  /// 当前已加载本地数据的曲目；用于切歌重载与过期结果丢弃。
-  TrackId? _dataForTrack;
-
-  /// 本地数据对应的封面地址（封面补取回写曲目后需重算封面占用）。
-  String? _dataArtwork;
-
-  TrackLocalData? _localData;
-  bool _listening = false;
-
-  /// 下载记录变化触发的本地数据重算防抖。
-  ///
-  /// 下载完成 / 删除会连续触发记录通知，而一次重算要递归列音频缓存目录并
-  /// 统计每个文件；300ms 窗口把同一批变化合并成一次扫描。任务进度已拆到
-  /// `DownloadTask`，不再经过这里。
-  static const Duration _reloadDebounce = Duration(milliseconds: 300);
-  Timer? _reloadTimer;
-
-  /// 本地数据加载单飞：加载中再收到请求只补跑一次（用最新当前曲目）。
-  bool _loadInFlight = false;
-  bool _loadQueued = false;
+  /// 本地数据的监听 / 防抖 / 单飞 / 切歌守卫都在控制器里，两个消费面共用。
+  TrackLocalDataController? _localDataController;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _localDataService = context.read<TrackLocalDataService?>();
-    _cacheServiceRevision =
-        context.read<CacheService?>() ?? CacheService.instance;
+    final service = context.read<TrackLocalDataService?>();
+    final cacheService = context.read<CacheService?>() ?? CacheService.instance;
     final downloads = context.read<DownloadRecords?>();
-    if (!identical(_downloads, downloads)) {
-      _downloads?.removeListener(_onDownloadRecordsChanged);
+    if (_localDataController == null ||
+        !identical(_localDataService, service) ||
+        !identical(_cacheService, cacheService) ||
+        !identical(_downloads, downloads)) {
+      _localDataController?.dispose();
+      _localDataService = service;
+      _cacheService = cacheService;
       _downloads = downloads;
-      downloads?.addListener(_onDownloadRecordsChanged);
-    }
-    if (!_listening) {
-      _listening = true;
-      _cacheServiceRevision?.revision.addListener(_onLocalDataChanged);
+      _localDataController = TrackLocalDataController(
+        service: service,
+        cacheService: cacheService,
+        downloadRecords: downloads,
+      );
     }
     final playback = context.read<PlaybackProvider?>();
     if (playback != null && !identical(_playback, playback)) {
@@ -117,85 +104,14 @@ class _TrackInfoViewState extends State<TrackInfoView> {
   @override
   void dispose() {
     _playback?.removeListener(_syncTrack);
-    _downloads?.removeListener(_onDownloadRecordsChanged);
-    if (_listening) {
-      _cacheServiceRevision?.revision.removeListener(_onLocalDataChanged);
-    }
-    _cancelReloadTimer();
-    _loadQueued = false;
+    _localDataController?.dispose();
     super.dispose();
   }
 
-  /// 下载记录变化 / 完成 / 删除：防抖后重算，避免同批记录通知重复扫缓存目录。
-  void _onDownloadRecordsChanged() {
-    if (!mounted) return;
-    _reloadTimer?.cancel();
-    _reloadTimer = Timer(_reloadDebounce, () {
-      _reloadTimer = null;
-      unawaited(_requestLocalDataReload());
-    });
-  }
-
-  /// 缓存修订等即时变化：丢弃待执行的防抖，立即重算。
-  void _onLocalDataChanged() {
-    if (!mounted) return;
-    _cancelReloadTimer();
-    unawaited(_requestLocalDataReload());
-  }
-
-  void _cancelReloadTimer() {
-    _reloadTimer?.cancel();
-    _reloadTimer = null;
-  }
-
-  /// 本地数据加载单飞 + 尾随一次：并发触发不叠加磁盘扫描。
-  ///
-  /// 加载期间收到的请求只记一个标记；当前加载结束后按最新当前曲目补跑
-  /// 一次。切歌时在途结果由 [_loadLocalData] 的过期守卫丢弃。
-  Future<void> _requestLocalDataReload() async {
-    if (_loadInFlight) {
-      _loadQueued = true;
-      return;
-    }
-    _loadInFlight = true;
-    try {
-      do {
-        _loadQueued = false;
-        if (!mounted) return;
-        final track = _playback?.snapshot.current;
-        if (track != null) await _loadLocalData(track);
-      } while (_loadQueued && mounted);
-    } finally {
-      _loadInFlight = false;
-    }
-  }
-
-  /// 切歌（含自动连播）时重载本地数据；封面补取回写（同 id、换封面）也重算。
+  /// 切歌（含自动连播）与封面补取回写都会走到这里；控制器负责比对曲目 /
+  /// 封面并决定是否立即重载。
   void _syncTrack() {
-    final track = _playback?.snapshot.current;
-    final artwork = track?.artwork?.uri.toString();
-    if (track?.id == _dataForTrack && artwork == _dataArtwork) return;
-    // 切歌 / 封面变化要立即看到新曲目的本地数据：丢弃进度触发的防抖。
-    _cancelReloadTimer();
-    _dataForTrack = track?.id;
-    _dataArtwork = artwork;
-    // 下载档同步种子：避免首帧把「已下载」闪成「未下载」。
-    _localData = track == null ? null : _localDataService?.downloadState(track);
-    if (track != null) unawaited(_requestLocalDataReload());
-  }
-
-  Future<void> _loadLocalData(Track? track) async {
-    final service = _localDataService;
-    if (service == null || track == null) return;
-    try {
-      final data = await service.load(track);
-      if (!mounted || _dataForTrack != track.id) return;
-      setState(() => _localData = data);
-    } catch (_) {
-      // 占用查询失败按「无缓存」呈现；清理本身仍可尝试。
-      if (!mounted || _dataForTrack != track.id) return;
-      setState(() => _localData = _localDataService?.downloadState(track));
-    }
+    _localDataController?.setTrack(_playback?.snapshot.current);
   }
 
   @override
@@ -313,26 +229,30 @@ class _TrackInfoViewState extends State<TrackInfoView> {
           ] else ...[
             const SizedBox(height: kSettingsSectionSpacing),
             // 本地数据：单行入口（两档状态 / 音质选择 / 转存与清理在页内）。
-            SettingsSectionCard(
-              children: [
-                SettingsNavTile(
-                  key: const Key('trackInfoLocalDataItem'),
-                  icon: Icons.storage_rounded,
-                  title: l10n.localDataTitle,
-                  subtitle: _localData == null
-                      ? l10n.cacheUsageComputing
-                      : trackLocalDataSummaryLabel(
-                          l10n,
-                          _localData!,
-                          localSource: track.id.sourceKey == kLocalSourceKey,
-                        ),
-                  onTap: _localDataService == null
-                      ? null
-                      : () => unawaited(
-                          showTrackLocalDataPage(context, track: track),
-                        ),
-                ),
-              ],
+            // 只订阅控制器状态，进度 / 记录变化不重建信息区其它行。
+            ValueListenableBuilder<TrackLocalDataState>(
+              valueListenable: _localDataController!,
+              builder: (context, localData, _) => SettingsSectionCard(
+                children: [
+                  SettingsNavTile(
+                    key: const Key('trackInfoLocalDataItem'),
+                    icon: Icons.storage_rounded,
+                    title: l10n.localDataTitle,
+                    subtitle: localData.data == null
+                        ? l10n.cacheUsageComputing
+                        : trackLocalDataSummaryLabel(
+                            l10n,
+                            localData.data!,
+                            localSource: track.id.sourceKey == kLocalSourceKey,
+                          ),
+                    onTap: _localDataService == null
+                        ? null
+                        : () => unawaited(
+                            showTrackLocalDataPage(context, track: track),
+                          ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: kSettingsSectionSpacing),
             // 信息：封面 / 音质（点开切换可用档位）/ 专辑 / 来源 / 歌词来源。
