@@ -676,7 +676,11 @@
   来源」，默认全部、按来源分组（小节标题）展示，切单源只平铺该组。列表行统一走
   `TrackRow`（歌词结果无封面时用 `placeholderIcon` 占前导槽），不再用
   `M3EListItem`。两个 tab 都带 `AutomaticKeepAliveClientMixin`：PageView 会销毁
-  离屏页，不保活会清掉音频会话 / 歌词搜索结果。切 tab 统一收起键盘。
+  离屏页，不保活会清掉音频会话 / 歌词搜索结果。切 tab 统一收起键盘。无来源 /
+  关键词为空 / 当前可见列表无结果且无选中时只保留空态与下一步提示，搜索栏、
+  来源 chips 与底部操作条一起隐藏。写入 / 取词期间锁住搜索、筛选与候选点击，
+  避免异步结果与界面选中项错位。来源标签只从 `searchableSources` 解析；停用 /
+  非搜索脚本不在其中时 `lyricsProviderLabel` 回退源 key（已知限制）。
   歌词侧为 `LyricsSourceSearchView` + `LyricsSourceSearchSession`（逐源搜索 /
   过期结果 / 可用性 / 失败重试 / 选中态的状态机，视图只渲染与提示）：点结果只
   选中，底部「使用此歌词」才取词 + `saveManual` + pop；音频侧为

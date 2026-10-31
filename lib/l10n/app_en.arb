@@ -589,6 +589,7 @@
   },
   "sourceSwapPickOne": "Pick an item to continue",
   "lyricsSourceNoSources": "No lyric sources available",
+  "lyricsSourceNoSourcesHint": "Enable a platform to see lyric sources here",
   "playlistAddedTo": "Added to “{name}”",
   "@playlistAddedTo": {
     "placeholders": {

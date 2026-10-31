@@ -4,6 +4,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/playback_provider.dart';
@@ -86,29 +87,41 @@ class _SourceSwapViewState extends State<SourceSwapView>
     final provider = context.watch<SourceSwapProvider>();
     final sources = provider.searchableSources;
     final failedNames = provider.failedSourceNames;
+    final hasKeyword = provider.keyword.isNotEmpty;
+    final showChrome = _started && !provider.noSources;
+    // 空态只留空态 + 下一步：没有来源 / 关键词为空时，搜索栏、chips、底栏
+    // 一起收起，避免「点选一项后确认」出现在无候选可选的页面上。
+    final showFooter =
+        showChrome &&
+        hasKeyword &&
+        (provider.activeItems.isNotEmpty || provider.selected != null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: SourceSwapSearchField(
-            controller: _searchController,
-            focusNode: _searchFocusNode,
-            onChanged: (value) {
-              // 清空（清除键或手动删空）立即回到初始提示并保留焦点。
-              if (_started && value.isEmpty) {
-                unawaited(provider.search(''));
-              }
-            },
-            onSubmitted: (value) {
-              if (!_started) return;
-              _searchFocusNode.unfocus();
-              unawaited(provider.search(value));
-            },
+        if (showChrome)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SourceSwapSearchField(
+              key: const Key('sourceSwapSearchFieldAudio'),
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              enabled: !_isApplying,
+              onChanged: (value) {
+                if (_isApplying) return;
+                // 清空（清除键或手动删空）立即回到初始提示并保留焦点。
+                if (_started && value.isEmpty) {
+                  unawaited(provider.search(''));
+                }
+              },
+              onSubmitted: (value) {
+                if (!_started || _isApplying) return;
+                _searchFocusNode.unfocus();
+                unawaited(provider.search(value));
+              },
+            ),
           ),
-        ),
-        if (sources.isNotEmpty)
+        if (showChrome && hasKeyword)
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 4),
             child: SourceSwapSourceChips(
@@ -116,35 +129,39 @@ class _SourceSwapViewState extends State<SourceSwapView>
                 for (final source in sources)
                   SourceSwapSourceOption(
                     key: source.key,
-                    label: lyricsProviderLabel(
-                      l10n,
-                      provider.channels,
-                      source.key,
-                    ),
+                    label: lyricsProviderLabel(l10n, sources, source.key),
                   ),
               ],
               selectedKey: provider.activeSourceKey,
-              onSelected: provider.selectSource,
+              enabled: !_isApplying,
+              onSelected: (sourceKey) {
+                if (_isApplying) return;
+                provider.selectSource(sourceKey);
+              },
             ),
           ),
         if (provider.isSearching && provider.groups.isNotEmpty)
           const M3EProgressIndicator.linear(),
-        if (failedNames.isNotEmpty && !provider.isSearching)
+        if (failedNames.isNotEmpty &&
+            showChrome &&
+            hasKeyword &&
+            !provider.isSearching)
           SourceSwapNotice.failed(
             message: l10n.sourceSwapFailedSources(failedNames.join(', ')),
             retryKey: const Key('sourceSwapRetryFailedAudio'),
-            onRetry: provider.retryFailed,
+            onRetry: _isApplying ? null : provider.retryFailed,
           ),
-        Expanded(child: _buildBody(context, l10n, provider)),
-        SourceSwapActionBar(
-          selectedTitle: provider.selected?.title,
-          selectedSource: provider.selected == null
-              ? null
-              : provider.selectedSourceName,
-          confirmLabel: l10n.sourceSwapConfirm,
-          busy: _isApplying,
-          onConfirm: _confirm,
-        ),
+        Expanded(child: _buildBody(context, l10n, provider, sources)),
+        if (showFooter)
+          SourceSwapActionBar(
+            selectedTitle: provider.selected?.title,
+            selectedSource: provider.selected == null
+                ? null
+                : provider.selectedSourceName,
+            confirmLabel: l10n.sourceSwapConfirm,
+            busy: _isApplying,
+            onConfirm: _confirm,
+          ),
       ],
     );
   }
@@ -153,6 +170,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
     BuildContext context,
     AppLocalizations l10n,
     SourceSwapProvider provider,
+    List<SourceDescriptor> sources,
   ) {
     if (!_started || (provider.isSearching && provider.groups.isEmpty)) {
       return const SourceSwapLoadingState();
@@ -183,11 +201,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
       return SourceSwapEmptyState(
         icon: Icons.search_off_rounded,
         title: l10n.searchNoResultsInSource(
-          lyricsProviderLabel(
-            l10n,
-            provider.channels,
-            provider.activeSourceKey,
-          ),
+          lyricsProviderLabel(l10n, sources, provider.activeSourceKey),
         ),
         hint: l10n.sourceSwapEmptyHint,
       );
@@ -203,11 +217,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
         if (entry.track == null) {
           return SourceSwapSectionHeader(
             key: ValueKey<String>('sourceSwapSection-${group.sourceKey}'),
-            label: lyricsProviderLabel(
-              l10n,
-              provider.channels,
-              group.sourceKey,
-            ),
+            label: lyricsProviderLabel(l10n, sources, group.sourceKey),
           );
         }
         final track = entry.track!;
@@ -225,7 +235,7 @@ class _SourceSwapViewState extends State<SourceSwapView>
             ),
             surface: const TrackRowSurface(coverSize: 40),
             position: calculateCardPosition(entry.index, entry.count),
-            onTap: () => _selectAndPreview(track),
+            onTap: _isApplying ? null : () => _selectAndPreview(track),
           ),
         );
       },
@@ -257,6 +267,8 @@ class _SourceSwapViewState extends State<SourceSwapView>
 
   /// 选中并立即试听：单曲上下文，试听会打断当前播放。
   void _selectAndPreview(Track track) {
+    // 确认写入期间锁住选中：apply() 已捕获旧 _selected，不能再改。
+    if (_isApplying) return;
     _provider.select(track);
     unawaited(
       context.read<PlaybackProvider>().playDomainTracks(

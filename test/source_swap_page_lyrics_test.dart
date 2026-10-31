@@ -199,7 +199,10 @@ void main() {
 
     expect(find.text('原曲'), findsOneWidget);
     expect(find.text('周杰伦 · 网易云音乐'), findsOneWidget);
-    expect(find.byKey(const Key('sourceSwapSearchField')), findsOneWidget);
+    expect(
+      find.byKey(const Key('sourceSwapSearchFieldLyrics')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('sourceSwapSourceChip-all')),
       findsOneWidget,

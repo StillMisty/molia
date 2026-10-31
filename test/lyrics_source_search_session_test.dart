@@ -342,6 +342,39 @@ void main() {
     expect(service.saved, hasLength(1), reason: '只有成功的一次写入缓存');
   });
 
+  test('取词在途：select 与 search 都不改当前选中/查询/结果', () async {
+    final service = _FakeLyricsService();
+    final gate = Completer<void>();
+    final qq = _FakeLyricProvider(
+      'qq',
+      matches: [
+        sunnyDay('A'),
+        SongMatch(songId: 'B', title: '晴天 B', artist: '周杰伦'),
+      ],
+      payload: const LyricsPayload(lyric: '[00:01.00]晴天'),
+    )..fetchGate = gate;
+    final session = buildSession([strategy(qq)], service: service);
+
+    await session.search('晴天 周杰伦');
+    final results = session.resultsOf('qq');
+    session.select(results.first);
+    final pending = session.applySelected();
+    expect(session.isFetchingLyric, isTrue);
+
+    // 界面上可能排队的回调：都不能改选中项 / 清掉结果。
+    session.select(results.last);
+    await session.search('另一首歌');
+
+    expect(session.isSelected(results.first), isTrue);
+    expect(session.query, '晴天 周杰伦');
+    expect(session.resultsOf('qq'), hasLength(2));
+
+    gate.complete();
+    expect(await pending, isA<LyricsSelectionSuccess>());
+    expect(qq.fetchCalls, 1, reason: '只取确认时的 A');
+    expect(service.saved, hasLength(1));
+  });
+
   test('search 开始清空选中；retryFailed 只重搜失败源', () async {
     final service = _FakeLyricsService();
     final good = _FakeLyricProvider('good', matches: [sunnyDay('g-1')]);

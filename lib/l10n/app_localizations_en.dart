@@ -1244,6 +1244,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lyricsSourceNoSources => 'No lyric sources available';
 
   @override
+  String get lyricsSourceNoSourcesHint =>
+      'Enable a platform to see lyric sources here';
+
+  @override
   String playlistAddedTo(String name) {
     return 'Added to “$name”';
   }

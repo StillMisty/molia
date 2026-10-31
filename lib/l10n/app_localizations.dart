@@ -2360,6 +2360,12 @@ abstract class AppLocalizations {
   /// **'No lyric sources available'**
   String get lyricsSourceNoSources;
 
+  /// No description provided for @lyricsSourceNoSourcesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable a platform to see lyric sources here'**
+  String get lyricsSourceNoSourcesHint;
+
   /// No description provided for @playlistAddedTo.
   ///
   /// In en, this message translates to:

@@ -247,6 +247,9 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   /// 不可用来源（未登录 B 站）不发请求：状态置 unavailable，分组头直接显示
   /// 「怎么办」。旧查询的在途响应由 [_searchToken] 丢弃。
   Future<void> search(String query) async {
+    // 取词在途时不换查询：applySelected 已经捕获旧选中项，结果不能和
+    // 界面上刚出现的新查询 / 新候选错位。
+    if (_isFetchingLyric) return;
     final normalized = query.trim();
     final token = ++_searchToken;
     // 新查询的候选全部换掉：旧选中项可能已不在结果里，必须同步清掉。
@@ -351,6 +354,8 @@ class LyricsSourceSearchSession extends ChangeNotifier {
   /// 取词是确认按钮的显式动作：用户可以先比较来源 / 切换筛选，再决定
   /// 用哪一条，避免点错一次就发一次请求并写缓存。
   void select(LyricsSearchResult result) {
+    // 确认后正在取词：锁住选中，否则 applySelected 写入的和界面显示的不一致。
+    if (_isFetchingLyric) return;
     if (identical(_selected, result)) return;
     _selected = result;
     _notifyNow();

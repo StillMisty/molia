@@ -111,7 +111,7 @@ class _AppSearchBarState extends State<AppSearchBar> {
   void _handleTextChanged() => setState(() {});
 
   void _clear() {
-    if (widget.controller.text.isEmpty) return;
+    if (!widget.enabled || widget.controller.text.isEmpty) return;
     widget.controller.clear();
     widget.onChanged?.call('');
   }
@@ -136,7 +136,9 @@ class _AppSearchBarState extends State<AppSearchBar> {
       onSubmitted: widget.onSubmitted,
       onEscape: widget.onEscape,
       trailing: <Widget>[
-        if (widget.controller.text.isNotEmpty)
+        // 禁用输入框时清除键也必须消失：否则点了 X 仍会改文本并触发
+        // onChanged，绕过调用方的忙碌锁。
+        if (widget.enabled && widget.controller.text.isNotEmpty)
           M3EIconButton(
             variant: M3EIconButtonVariant.standard,
             icon: const Icon(Icons.close_rounded),

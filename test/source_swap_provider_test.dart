@@ -5,7 +5,6 @@ import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
-import 'package:molia/domain/models/source.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
@@ -195,6 +194,38 @@ void main() {
     expect(provider.activeSourceKey, isEmpty, reason: '重试不改变「全部」筛选');
   });
 
+  test('retryFailed：失败源已从注册表移除时清空失败集并通知 UI', () async {
+    kg.fail = true;
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+    await provider.begin(
+      SourceSwapRequest(
+        seed: track('wy', '1'),
+        placement: SourceSwapPlacement.queue,
+      ),
+    );
+    expect(provider.failedSourceKeys, {'kg'});
+
+    sources.remove('kg');
+    var notifications = 0;
+    provider.addListener(() => notifications++);
+    await provider.retryFailed();
+
+    expect(provider.failedSourceKeys, isEmpty);
+    expect(notifications, greaterThan(0), reason: 'UI 要收到通知撤掉旧失败提示');
+  });
+
+  test('search：没有会话时不启动搜索', () async {
+    final provider = buildProvider();
+    addTearDown(provider.dispose);
+
+    await provider.search('Title Artist');
+
+    expect(provider.keyword, isEmpty);
+    expect(provider.groups, isEmpty);
+    expect(provider.isSearching, isFalse);
+  });
+
   test('failedSourceNames：按注册表顺序给出展示名，描述符缺失时回退 key', () async {
     kg.fail = true;
     tx.fail = true;
@@ -319,16 +350,10 @@ void main() {
     ], reason: '全部模式拼接顺序与分组一致');
   });
 
-  test('channels / searchableSources：不可搜索渠道只进标题标签', () async {
-    final noSearch = FakeMusicSource(
-      'radio',
-      capabilities: const SourceCapabilities(),
-    );
-    sources['radio'] = noSearch;
+  test('searchableSources：按注册表顺序给出可搜索源', () {
     final provider = buildProvider();
     addTearDown(provider.dispose);
 
-    expect(provider.channels.map((item) => item.key), ['kg', 'tx', 'radio']);
     expect(provider.searchableSources.map((item) => item.key), ['kg', 'tx']);
   });
 

@@ -1202,6 +1202,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lyricsSourceNoSources => '没有可用的歌词来源';
 
   @override
+  String get lyricsSourceNoSourcesHint => '启用对应平台后，这里会列出可用的歌词来源';
+
+  @override
   String playlistAddedTo(String name) {
     return '已加入「$name」';
   }

@@ -412,6 +412,7 @@
   "sourceSwapSelected": "已选：{title} · {source}",
   "sourceSwapPickOne": "点选一项后确认",
   "lyricsSourceNoSources": "没有可用的歌词来源",
+  "lyricsSourceNoSourcesHint": "启用对应平台后，这里会列出可用的歌词来源",
   "playlistAddedTo": "已加入「{name}」",
   "playlistAlreadyContains": "已在列表中",
   "playlistImportToMine": "导入到我的列表",

@@ -155,13 +155,12 @@ class SourceSwapProvider extends ChangeNotifier {
   List<SourceSwapGroup> get groups => _groups;
   Set<String> get failedSourceKeys => Set.unmodifiable(_failedSourceKeys);
 
-  /// 当前注册表的渠道描述符：仅用于曲目条 / 来源标签解析（脚本源显示名），
-  /// 不要拿来当候选来源；候选来源见 [searchableSources]。
-  List<SourceDescriptor> get channels => _sourceRegistry.descriptors;
-
   /// 可搜索且启用的音源（含种子源；种子曲目自身在 [_searchSource] 过滤）。
+  ///
+  /// 来源标签也只消费这份列表；停用 / 非搜索脚本不在其中时，
+  /// `lyricsProviderLabel` 会回退源 key（已知下限）。
   List<SourceDescriptor> get searchableSources => [
-    for (final descriptor in channels)
+    for (final descriptor in _sourceRegistry.descriptors)
       if (descriptor.enabled && descriptor.capabilities.search) descriptor,
   ];
 
@@ -195,7 +194,7 @@ class SourceSwapProvider extends ChangeNotifier {
     final selected = _selected;
     if (selected == null) return '';
     final sourceKey = selected.id.sourceKey;
-    for (final descriptor in channels) {
+    for (final descriptor in searchableSources) {
       if (descriptor.key == sourceKey) return descriptor.displayName;
     }
     return sourceKey;
@@ -246,6 +245,8 @@ class SourceSwapProvider extends ChangeNotifier {
   /// 空串 = 清空会话（保留请求本身，便于搜索栏重新输入）。当前筛选源仍
   /// 可搜索时保留筛选，否则回到「全部」；旧搜索的在途结果由会话 id 丢弃。
   Future<void> search(String keyword) async {
+    // 页面关闭后仍可能有排队回调（清空 / 提交）；没有会话就不该起搜索。
+    if (_request == null) return;
     final normalized = keyword.trim();
     final sessionId = ++_sessionId;
     _keyword = normalized;
@@ -285,7 +286,12 @@ class SourceSwapProvider extends ChangeNotifier {
     final descriptors = searchableSources
         .where((descriptor) => _failedSourceKeys.contains(descriptor.key))
         .toList();
-    if (descriptors.isEmpty) return;
+    if (descriptors.isEmpty) {
+      // 失败源已从注册表移除：清空失败集合并通知 UI 撤掉旧提示。
+      _failedSourceKeys.clear();
+      _notifyListeners();
+      return;
+    }
     _failedSourceKeys.clear();
     _isSearching = true;
     _notifyListeners();

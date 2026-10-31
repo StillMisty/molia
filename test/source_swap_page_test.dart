@@ -9,6 +9,7 @@ import 'package:molia/providers/source_swap_provider.dart';
 import 'package:molia/pages/source_swap_page.dart';
 import 'package:molia/providers/lyrics_provider.dart';
 import 'package:molia/widgets/app_search_bar.dart';
+import 'package:molia/widgets/source_swap/source_swap_chrome.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
@@ -253,6 +254,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('曲目已存在'), findsOneWidget);
 
+    // 确认流程（含去重追问）期间锁住搜索与来源切换。
+    final field = tester.widget<AppSearchBar>(
+      find.descendant(
+        of: find.byKey(const Key('sourceSwapSearchFieldAudio')),
+        matching: find.byType(AppSearchBar),
+      ),
+    );
+    expect(field.enabled, isFalse);
+    expect(
+      tester
+          .widget<M3EChip>(
+            find.byKey(const ValueKey('sourceSwapSourceChip-kg')),
+          )
+          .onPressed,
+      isNull,
+    );
+
     await tester.tap(
       find.descendant(
         of: find.byType(M3EDialog),
@@ -267,7 +285,7 @@ void main() {
     expect(tracks.map((t) => '${t.sourceKey}:${t.songId}'), ['kg:100']);
   });
 
-  testWidgets('没有任何可搜索音源：空态 + 确认禁用', (tester) async {
+  testWidgets('没有任何可搜索音源：只留空态，搜索栏/chips/底栏都隐藏', (tester) async {
     final playlistId = await seedPlaylist(tester);
     final seed = library.trackFromPlaylistTrack(
       (await repository.listPlaylistTracks(playlistId)).single,
@@ -278,10 +296,14 @@ void main() {
     await openPage(tester);
 
     expect(find.text('没有可用的音源'), findsOneWidget);
-    final confirm = tester.widget<M3EButton>(
-      find.widgetWithText(M3EButton, '换源'),
+    expect(find.text('启用音源后，这里会列出可搜索的平台'), findsOneWidget);
+    expect(find.byKey(const Key('sourceSwapSearchFieldAudio')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-all')),
+      findsNothing,
     );
-    expect(confirm.onPressed, isNull);
+    expect(find.byType(SourceSwapActionBar), findsNothing);
+    expect(find.widgetWithText(M3EButton, '换源'), findsNothing);
   });
 
   testWidgets('非 B 站种子：原渠道保留为候选 chip', (tester) async {
@@ -357,14 +379,16 @@ void main() {
     await pumpHost(tester, seed: seed, playlistId: playlistId);
     await openPage(tester);
 
-    final field = tester.widget<AppSearchBar>(
-      find.byKey(const Key('sourceSwapSearchField')),
+    final audioField = find.descendant(
+      of: find.byKey(const Key('sourceSwapSearchFieldAudio')),
+      matching: find.byType(AppSearchBar),
     );
+    final field = tester.widget<AppSearchBar>(audioField);
     expect(field.controller.text, 'Title Artist');
     expect(kg.lastQuery?.keyword, 'Title Artist');
 
     await tester.enterText(
-      find.byKey(const Key('sourceSwapSearchField')),
+      find.byKey(const Key('sourceSwapSearchFieldAudio')),
       '晴天 周杰伦',
     );
     await tester.testTextInput.receiveAction(TextInputAction.search);
@@ -375,11 +399,29 @@ void main() {
     expect(kg.searchCalls, 2);
 
     // 清空关键词：回到「输入后开始搜索」，不再显示「没有找到」。
-    await tester.enterText(find.byKey(const Key('sourceSwapSearchField')), '');
+    await tester.enterText(
+      find.byKey(const Key('sourceSwapSearchFieldAudio')),
+      '',
+    );
     await tester.pumpAndSettle();
     expect(swap.keyword, isEmpty);
     expect(swap.groups, isEmpty);
     expect(find.text('输入歌名或歌手开始搜索'), findsOneWidget);
+    expect(
+      find.byKey(const Key('sourceSwapSearchFieldAudio')),
+      findsOneWidget,
+      reason: '关键词为空时搜索框仍可重新输入',
+    );
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-all')),
+      findsNothing,
+      reason: '无关键词时隐藏来源 chips',
+    );
+    expect(
+      find.byType(SourceSwapActionBar),
+      findsNothing,
+      reason: '无关键词时隐藏底部操作条',
+    );
   });
 
   testWidgets('全部无结果：空态提示；失败源可重试', (tester) async {
@@ -394,6 +436,16 @@ void main() {
 
     expect(find.text('没有找到这首歌'), findsOneWidget);
     expect(find.text('kg 搜索失败'), findsOneWidget);
+    expect(
+      find.byType(SourceSwapActionBar),
+      findsNothing,
+      reason: '有可见结果前不显示「点选一项后确认」',
+    );
+    expect(find.byKey(const Key('sourceSwapSearchFieldAudio')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('sourceSwapSourceChip-all')),
+      findsOneWidget,
+    );
 
     // 重试：失败源恢复后候选出现。
     kg.fail = false;
@@ -402,6 +454,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Title（kg）'), findsOneWidget);
     expect(find.text('kg 搜索失败'), findsNothing);
+    expect(find.byType(SourceSwapActionBar), findsOneWidget);
   });
 
   testWidgets('6 个音源 chip 全部渲染（Wrap 换行，不用横向滚动）', (tester) async {

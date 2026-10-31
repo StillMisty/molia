@@ -41,8 +41,10 @@ class LyricsSourceSearchView extends StatefulWidget {
   /// （B 站可用性绑定 `BiliSession.shared`，与生产账号服务同一份）。
   final List<LyricsSourceStrategy>? sources;
 
-  /// 当前渠道描述符：来源标签回退脚本显示名（不参与搜索）。
-  final List<SourceDescriptor> channels;
+  /// 可搜索渠道描述符：来源标签回退脚本显示名（不参与搜索）。
+  ///
+  /// 非搜索 / 已停用脚本不在其中时 `lyricsProviderLabel` 回退源 key。
+  final List<SourceDescriptor> sourceDescriptors;
 
   /// 已启用的渠道 key（停用的渠道不显示歌词来源）；null = 不过滤。
   ///
@@ -61,7 +63,7 @@ class LyricsSourceSearchView extends StatefulWidget {
     required this.lyricsProvider,
     this.preferredSourceKey,
     this.sources,
-    this.channels = const [],
+    this.sourceDescriptors = const [],
     this.enabledChannelKeys,
     this.autofocusSearch = true,
   });
@@ -182,25 +184,42 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     final isLoading = _session.isAnyProviderLoading;
     final failed = _session.failedStrategies;
     final selected = _session.selected;
+    final busy = _session.isFetchingLyric;
+    final hasStrategies = strategies.isNotEmpty;
+    final hasQuery = _session.query.isNotEmpty;
+    final entries = _session.entriesFor(
+      _selectedSourceKey.isEmpty ? null : _selectedSourceKey,
+    );
+    // 空态只留空态 + 下一步；已选中但切到空源时仍保留底栏，摘要还能确认。
+    final showFooter =
+        hasStrategies &&
+        hasQuery &&
+        (entries.any((entry) => entry.type == LyricsSearchEntryType.result) ||
+            selected != null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: SourceSwapSearchField(
-            controller: _searchController,
-            focusNode: _searchFocusNode,
-            onChanged: (value) {
-              // 清空（清除键或手动删空）：回到初始提示并保留焦点。
-              if (value.isEmpty) unawaited(_runSearch(''));
-            },
-            onSubmitted: (value) {
-              unawaited(_runSearch(value));
-            },
+        if (hasStrategies)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SourceSwapSearchField(
+              key: const Key('sourceSwapSearchFieldLyrics'),
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              enabled: !busy,
+              onChanged: (value) {
+                if (busy) return;
+                // 清空（清除键或手动删空）：回到初始提示并保留焦点。
+                if (value.isEmpty) unawaited(_runSearch(''));
+              },
+              onSubmitted: (value) {
+                if (busy) return;
+                unawaited(_runSearch(value));
+              },
+            ),
           ),
-        ),
-        if (strategies.isNotEmpty)
+        if (hasStrategies && hasQuery)
           Padding(
             padding: const EdgeInsets.only(top: 8, bottom: 4),
             child: SourceSwapSourceChips(
@@ -210,54 +229,53 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
                     key: strategy.channelKey,
                     label: lyricsProviderLabel(
                       l10n,
-                      widget.channels,
+                      widget.sourceDescriptors,
                       strategy.channelKey,
                     ),
                   ),
               ],
               selectedKey: _selectedSourceKey,
+              enabled: !busy,
               // 切换筛选只改展示：候选与选中项都留着，用户来回比较不丢状态。
-              onSelected: (key) => setState(() => _selectedSourceKey = key),
+              onSelected: (key) {
+                if (busy) return;
+                setState(() => _selectedSourceKey = key);
+              },
             ),
           ),
-        if (failed.isNotEmpty)
+        if (hasQuery && failed.isNotEmpty)
           SourceSwapNotice.failed(
             message: l10n.sourceSwapFailedSources(
               failed
                   .map(
                     (strategy) => lyricsProviderLabel(
                       l10n,
-                      widget.channels,
+                      widget.sourceDescriptors,
                       strategy.channelKey,
                     ),
                   )
                   .join(', '),
             ),
             retryKey: const Key('sourceSwapRetryFailedLyrics'),
-            onRetry: isLoading || _session.isFetchingLyric
-                ? null
-                : _session.retryFailed,
+            onRetry: isLoading || busy ? null : _session.retryFailed,
           ),
-        // 不可用来源（未登录 B 站）是持续状态：有结果时不占用分组头，
-        // 由这条提示统一说明「怎么办」。
-        for (final reason in _session.unavailableReasons)
-          SourceSwapNotice.info(message: _unavailableHint(l10n, reason)),
+        // 不可用来源（未登录 B 站）是搜索后的状态：初始空查询不弹提示。
+        if (hasQuery)
+          for (final reason in _session.unavailableReasons)
+            SourceSwapNotice.info(message: _unavailableHint(l10n, reason)),
         if (isLoading && _session.allResults.isNotEmpty)
           const M3EProgressIndicator.linear(),
-        Expanded(child: _buildBody(context, l10n, strategies)),
-        SourceSwapActionBar(
-          selectedTitle: selected?.match.title,
-          selectedSource: selected == null
-              ? null
-              : lyricsProviderLabel(
-                  l10n,
-                  widget.channels,
-                  selected.provider.name,
-                ),
-          confirmLabel: l10n.sourceSwapLyricsConfirm,
-          busy: _session.isFetchingLyric,
-          onConfirm: _confirmSelected,
-        ),
+        Expanded(child: _buildBody(context, l10n, strategies, entries)),
+        if (showFooter)
+          SourceSwapActionBar(
+            selectedTitle: selected?.match.title,
+            selectedSource: selected == null
+                ? null
+                : _sourceLabelOf(l10n, selected),
+            confirmLabel: l10n.sourceSwapLyricsConfirm,
+            busy: busy,
+            onConfirm: _confirmSelected,
+          ),
       ],
     );
   }
@@ -266,12 +284,13 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
     BuildContext context,
     AppLocalizations l10n,
     List<LyricsSourceStrategy> strategies,
+    List<LyricsSearchEntry> entries,
   ) {
     if (strategies.isEmpty) {
       return SourceSwapEmptyState(
         icon: Icons.lyrics_rounded,
         title: l10n.lyricsSourceNoSources,
-        hint: l10n.sourceSwapNoSourcesHint,
+        hint: l10n.lyricsSourceNoSourcesHint,
       );
     }
     if (_session.query.isEmpty) {
@@ -291,9 +310,6 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
       return const SourceSwapLoadingState();
     }
 
-    final entries = _session.entriesFor(
-      _selectedSourceKey.isEmpty ? null : _selectedSourceKey,
-    );
     if (entries.isEmpty) {
       if (_selectedSourceKey.isEmpty) {
         return SourceSwapEmptyState(
@@ -305,7 +321,11 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
       return SourceSwapEmptyState(
         icon: Icons.search_off_rounded,
         title: l10n.searchNoResultsInSource(
-          lyricsProviderLabel(l10n, widget.channels, _selectedSourceKey),
+          lyricsProviderLabel(
+            l10n,
+            widget.sourceDescriptors,
+            _selectedSourceKey,
+          ),
         ),
         hint: l10n.sourceSwapEmptyHint,
       );
@@ -325,7 +345,7 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
             ),
             label: lyricsProviderLabel(
               l10n,
-              widget.channels,
+              widget.sourceDescriptors,
               entry.strategy!.channelKey,
             ),
           );
@@ -351,11 +371,32 @@ class _LyricsSourceSearchViewState extends State<LyricsSourceSearchView>
                 // 「最佳匹配」是静态徽章（不可点）：用 assist chip 的胶囊语言。
                 ? M3EChip(type: M3EChipType.assist, label: l10n.lyricsBestMatch)
                 : null,
-            // 点行只选中，取词交给底部确认。
-            onTap: () => _session.select(result),
+            // 点行只选中，取词交给底部确认；取词期间锁住选中。
+            onTap: _session.isFetchingLyric
+                ? null
+                : () => _session.select(result),
           ),
         );
       },
+    );
+  }
+
+  /// 已选摘要的来源名：按 strategy.channelKey 查（provider 名可能不等于
+  /// 渠道 key，例如通用适配器 / 脚本来源），查不到才回退 provider 名。
+  String _sourceLabelOf(AppLocalizations l10n, LyricsSearchResult result) {
+    for (final strategy in _session.strategies) {
+      if (strategy.provider.name == result.provider.name) {
+        return lyricsProviderLabel(
+          l10n,
+          widget.sourceDescriptors,
+          strategy.channelKey,
+        );
+      }
+    }
+    return lyricsProviderLabel(
+      l10n,
+      widget.sourceDescriptors,
+      result.provider.name,
     );
   }
 

@@ -29,19 +29,26 @@ class SourceSwapTrackHeader extends StatelessWidget {
   const SourceSwapTrackHeader({
     super.key,
     required this.seed,
-    this.channels = const [],
+    this.sourceDescriptors = const [],
   });
 
   final Track seed;
 
-  /// 当前渠道描述符：脚本源显示名从这里查，查不到回退源 key。
-  final List<SourceDescriptor> channels;
+  /// 可搜索渠道描述符：脚本源显示名从这里查。
+  ///
+  /// 非搜索 / 已停用的脚本不在其中，`lyricsProviderLabel` 会回退源 key，
+  /// 这是标签解析的已知下限（不为此再维护一份全渠道列表）。
+  final List<SourceDescriptor> sourceDescriptors;
 
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final theme = Theme.of(context);
-    final sourceLabel = lyricsProviderLabel(l10n, channels, seed.id.sourceKey);
+    final sourceLabel = lyricsProviderLabel(
+      l10n,
+      sourceDescriptors,
+      seed.id.sourceKey,
+    );
     final artist = seed.artistLabel;
     final subtitle = artist.isEmpty ? sourceLabel : '$artist · $sourceLabel';
     return Padding(
@@ -86,10 +93,10 @@ class SourceSwapTrackHeader extends StatelessWidget {
   }
 }
 
-/// 换源页统一搜索栏（AppSearchBar 包装 + 固定测试 key）。
+/// 换源页统一搜索栏（AppSearchBar 包装）。
 ///
-/// `Key` 放在 AppSearchBar 上：两个 tab 同时存活时 finder 会命中两个，
-/// 页面测试再按 tab 视图做 descendant 限定。
+/// Key 由调用方给（音频 / 歌词各一个）：两个 tab 同时存活时固定 Key 会让
+/// finder 命中两个；[enabled] 在确认 / 取词期间锁住输入。
 class SourceSwapSearchField extends StatelessWidget {
   const SourceSwapSearchField({
     super.key,
@@ -98,7 +105,7 @@ class SourceSwapSearchField extends StatelessWidget {
     this.onChanged,
     this.onSubmitted,
     this.autofocus = false,
-    this.trailing = const <Widget>[],
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -106,19 +113,18 @@ class SourceSwapSearchField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
   final bool autofocus;
-  final List<Widget> trailing;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
     return AppSearchBar(
-      key: const Key('sourceSwapSearchField'),
       controller: controller,
       focusNode: focusNode,
       hintText: _l10n(context).sourceSwapSearchHint,
       autofocus: autofocus,
+      enabled: enabled,
       onChanged: onChanged,
       onSubmitted: onSubmitted,
-      trailing: trailing,
     );
   }
 }
@@ -141,6 +147,7 @@ class SourceSwapSourceChips extends StatelessWidget {
     required this.sources,
     required this.selectedKey,
     required this.onSelected,
+    this.enabled = true,
   });
 
   final List<SourceSwapSourceOption> sources;
@@ -148,6 +155,9 @@ class SourceSwapSourceChips extends StatelessWidget {
   /// 空串 = 全部。
   final String selectedKey;
   final ValueChanged<String> onSelected;
+
+  /// 异步写入 / 取词期间禁用切换；选中态仍按 [selectedKey] 显示。
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +173,7 @@ class SourceSwapSourceChips extends StatelessWidget {
             label: l10n.sourceSwapAllSources,
             type: M3EChipType.filter,
             selected: selectedKey.isEmpty,
-            onPressed: () => onSelected(''),
+            onPressed: enabled ? () => onSelected('') : null,
           ),
           for (final source in sources)
             M3EChip(
@@ -171,7 +181,7 @@ class SourceSwapSourceChips extends StatelessWidget {
               label: source.label,
               type: M3EChipType.filter,
               selected: selectedKey == source.key,
-              onPressed: () => onSelected(source.key),
+              onPressed: enabled ? () => onSelected(source.key) : null,
             ),
         ],
       ),
@@ -269,20 +279,18 @@ class SourceSwapLoadingState extends StatelessWidget {
   }
 }
 
-/// 空态：图标 + 标题 + 可选下一步提示 + 可选动作。
+/// 空态：图标 + 标题 + 可选下一步提示。
 class SourceSwapEmptyState extends StatelessWidget {
   const SourceSwapEmptyState({
     super.key,
     required this.icon,
     required this.title,
     this.hint,
-    this.action,
   });
 
   final IconData icon;
   final String title;
   final String? hint;
-  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -312,7 +320,6 @@ class SourceSwapEmptyState extends StatelessWidget {
                 ),
               ),
             ],
-            if (action != null) ...[const SizedBox(height: 16), action!],
           ],
         ),
       ),

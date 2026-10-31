@@ -117,7 +117,10 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
         .layoutType(ResponsivePageType.detail)
         .horizontalPadding;
     // 只读一次：来源标签不随搜索通知变化，页面不应因 provider 通知整页重建。
-    final channels = context.read<SourceSwapProvider>().channels;
+    // 只用可搜索描述符；停用 / 非搜索脚本不在其中，标签回退源 key。
+    final sourceDescriptors = context
+        .read<SourceSwapProvider>()
+        .searchableSources;
     // 歌词来源跟随渠道停用：取「已启用渠道」而不是「可搜索渠道」，
     // 五个音乐平台没有 LX 脚本时仍能用歌词来源。
     final enabledChannelKeys = context
@@ -128,7 +131,10 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: Column(
         children: [
-          SourceSwapTrackHeader(seed: seed, channels: channels),
+          SourceSwapTrackHeader(
+            seed: seed,
+            sourceDescriptors: sourceDescriptors,
+          ),
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: M3ETabs(
@@ -160,7 +166,7 @@ class _SourceSwapPageState extends State<SourceSwapPage> {
                     trackId: seed.id.uri,
                     lyricsProvider: widget.lyricsProvider,
                     preferredSourceKey: seed.id.sourceKey,
-                    channels: channels,
+                    sourceDescriptors: sourceDescriptors,
                     sources: widget.lyricsSources,
                     enabledChannelKeys: enabledChannelKeys,
                     // 仅默认 tab 为歌词时自动聚焦：音频入口不抢键盘。
