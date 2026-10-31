@@ -297,8 +297,11 @@ class LibraryWriteEngine {
 
   /// 换源：播放历史**原位替换**条目（保留 `playedAt` 与时间排序）。
   ///
-  /// 旧键不存在返回 false；目标键行已存在时先删（历史唯一键语义），
-  /// 保留旧行的 `playedAt`——换源不改变「何时听的」。
+  /// 内容时间的唯一规则：换源不改变「何时听的」——本事务先读出旧行
+  /// `playedAt`，行不写该列，同步日志也用它；[PlayHistoryEntry.playedAt]
+  /// 不参与落库与传播（否则本机历史按旧时间排序，对端却按换源时刻重排）。
+  ///
+  /// 旧键不存在返回 false；目标键行已存在时先删（历史唯一键语义）。
   /// 换源是一次本地修改：版本三列经发号器取新值，改动才能同步到对端。
   Future<bool> replaceHistoryEntry(
     TrackKey oldKey,
@@ -310,6 +313,13 @@ class LibraryWriteEngine {
     final raw = jsonEncode(replacement.raw);
     var updated = 0;
     await db.transaction(() async {
+      final oldRow =
+          await (db.select(db.playHistory)..where(
+                (t) =>
+                    t.sourceKey.equals(oldKey.sourceKey) &
+                    t.songId.equals(oldKey.songId),
+              ))
+              .getSingleOrNull();
       final sameKey =
           replacement.sourceKey == oldKey.sourceKey &&
           replacement.songId == oldKey.songId;
@@ -342,7 +352,7 @@ class LibraryWriteEngine {
                   deviceId: Value(version.deviceId),
                 ),
               );
-      if (updated > 0) {
+      if (updated > 0 && oldRow != null) {
         await _appendJournal(
           db,
           SyncCategory.history.name,
@@ -355,7 +365,8 @@ class LibraryWriteEngine {
             coverUrl: replacement.coverUrl,
             durationMs: replacement.durationMs,
             raw: raw,
-            playedAt: replacement.playedAt,
+            // 与行内保留值同源：内容时间不因换源改写。
+            playedAt: oldRow.playedAt,
             version: version,
           ),
         );

@@ -313,6 +313,9 @@ class SourceSwapProvider extends ChangeNotifier {
       sourceKey: selected.id.sourceKey,
       songId: selected.id.id,
     );
+    // 写回行的时间字段（加入 / 播放历史）用同一次取时；历史侧真正的内容
+    // 时间仍由仓库沿用旧行（见 LibraryWriteEngine.replaceHistoryEntry）。
+    final now = DateTime.now().millisecondsSinceEpoch;
 
     switch (request.placement) {
       case SourceSwapPlacement.playlist:
@@ -336,7 +339,11 @@ class SourceSwapProvider extends ChangeNotifier {
           applied = await _libraryProvider.replacePlaylistTrack(
             playlistId,
             seedKey,
-            _toPlaylistTrack(playlistId, selected),
+            PlaylistTrack.fromTrack(
+              selected,
+              playlistId: playlistId,
+              addedAt: now,
+            ),
           );
         } catch (e) {
           debugPrint('[SourceSwap] 换源写回列表失败: $e');
@@ -359,7 +366,7 @@ class SourceSwapProvider extends ChangeNotifier {
         try {
           applied = await _libraryProvider.replaceHistoryEntry(
             historyKey,
-            _toHistoryEntry(selected),
+            PlayHistoryEntry.fromTrack(selected, playedAt: now),
           );
         } catch (e) {
           debugPrint('[SourceSwap] 换源写回历史失败: $e');
@@ -453,35 +460,5 @@ class SourceSwapProvider extends ChangeNotifier {
       for (final track in page.items)
         if (track.id.uri != seedUri && seen.add(track.id.uri)) track,
     ];
-  }
-
-  PlaylistTrack _toPlaylistTrack(int playlistId, Track track) {
-    return PlaylistTrack(
-      playlistId: playlistId,
-      sourceKey: track.id.sourceKey,
-      songId: track.id.id,
-      title: track.title,
-      artist: track.artistLabel,
-      album: track.album ?? '',
-      coverUrl: track.artwork?.uri.toString(),
-      durationMs: track.duration?.inMilliseconds,
-      // payload 原样透传（取链依赖平台字段）；浅拷贝避免与领域对象共享引用。
-      raw: Map<String, dynamic>.from(track.payload),
-      addedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-  }
-
-  PlayHistoryEntry _toHistoryEntry(Track track) {
-    return PlayHistoryEntry(
-      sourceKey: track.id.sourceKey,
-      songId: track.id.id,
-      title: track.title,
-      artist: track.artistLabel,
-      album: track.album ?? '',
-      coverUrl: track.artwork?.uri.toString(),
-      durationMs: track.duration?.inMilliseconds,
-      raw: Map<String, dynamic>.from(track.payload),
-      playedAt: DateTime.now().millisecondsSinceEpoch,
-    );
   }
 }

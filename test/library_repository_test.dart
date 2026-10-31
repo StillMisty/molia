@@ -558,6 +558,12 @@ void main() {
       // 换源不改「何时听的」：沿用旧行 playedAt（忽略 replacement 传入值）。
       expect(list.last.playedAt, 100);
 
+      // 同步面与行同源：导出记录也带旧 playedAt，另一台设备不会按换源时刻重排。
+      final exported = (await repository.syncExportHistory()).singleWhere(
+        (entry) => entry.songId == '900',
+      );
+      expect(exported.toJson()['playedAt'], 100);
+
       // 目标键（wy:2）已存在：删重复行后原位替换，仍保旧 playedAt。
       final ok2 = await repository.replaceHistoryEntry((
         sourceKey: 'kg',

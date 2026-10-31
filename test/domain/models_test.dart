@@ -162,6 +162,83 @@ void main() {
     });
   });
 
+  group('资料库行映射（Track → PlaylistTrack / PlayHistoryEntry）', () {
+    Track richTrack() => Track(
+      id: const TrackId('kw', 'mid-1'),
+      title: 'Title',
+      artists: const [
+        Artist(name: 'A'),
+        Artist(name: ''),
+        Artist(name: 'B'),
+      ],
+      album: 'Album',
+      duration: const Duration(minutes: 3, seconds: 5),
+      artwork: Artwork(uri: Uri.parse('https://img.example/a.jpg')),
+      origin: TrackOrigin.builtin,
+      payload: {
+        'songmid': 'mid-1',
+        'nested': {'a': 1},
+      },
+    );
+
+    test('两条行工厂共用曲目字段策略（歌手 / 封面 / 时长 / payload 浅拷贝）', () {
+      final track = richTrack();
+      final row = PlaylistTrack.fromTrack(track, playlistId: 7, addedAt: 10);
+      final entry = PlayHistoryEntry.fromTrack(track, playedAt: 20);
+
+      expect(row.sourceKey, 'kw');
+      expect(row.songId, 'mid-1');
+      expect(row.title, 'Title');
+      expect(row.artist, 'A, B');
+      expect(row.album, 'Album');
+      expect(row.coverUrl, 'https://img.example/a.jpg');
+      expect(row.durationMs, 185000);
+      expect(row.playlistId, 7);
+      expect(row.addedAt, 10);
+
+      // 历史行与列表行同源；内容时间由调用方给。
+      expect(entry.sourceKey, row.sourceKey);
+      expect(entry.songId, row.songId);
+      expect(entry.title, row.title);
+      expect(entry.artist, row.artist);
+      expect(entry.album, row.album);
+      expect(entry.coverUrl, row.coverUrl);
+      expect(entry.durationMs, row.durationMs);
+      expect(entry.playedAt, 20);
+
+      // payload 浅拷贝：内容相等、引用不同（含两条行之间）。
+      expect(row.raw, track.payload);
+      expect(entry.raw, track.payload);
+      expect(identical(row.raw, track.payload), isFalse);
+      expect(identical(entry.raw, track.payload), isFalse);
+      expect(identical(row.raw, entry.raw), isFalse);
+      row.raw['songmid'] = 'changed';
+      expect(track.payload['songmid'], 'mid-1');
+    });
+
+    test('缺省字段：专辑空串、无封面 / 时长、空 payload', () {
+      const track = Track(
+        id: TrackId('lx', 'x'),
+        title: 'T',
+        origin: TrackOrigin.lx,
+      );
+      final row = PlaylistTrack.fromTrack(track, addedAt: 1);
+      final entry = PlayHistoryEntry.fromTrack(track, playedAt: 2);
+
+      for (final album in [row.album, entry.album]) {
+        expect(album, '');
+      }
+      for (final cover in [row.coverUrl, entry.coverUrl]) {
+        expect(cover, isNull);
+      }
+      for (final duration in [row.durationMs, entry.durationMs]) {
+        expect(duration, isNull);
+      }
+      expect(row.raw, isEmpty);
+      expect(entry.raw, isEmpty);
+    });
+  });
+
   group('SourceFailure.from 归一化', () {
     test('TimeoutException → timeout / retryable', () {
       final failure = SourceFailure.from(TimeoutException('超时'));
