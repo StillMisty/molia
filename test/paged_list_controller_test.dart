@@ -213,4 +213,144 @@ void main() {
     expect(notifications, 1);
     expect(controller.items, isEmpty);
   });
+
+  group('accepted-page 回调', () {
+    test('每个成功页回调一次：首屏 append=false，追加 append=true', () async {
+      final calls = <(String, bool)>[];
+      final controller = PagedListController<String>(
+        fetchPage: (page) async => PagedResult(
+          items: page == 1 ? ['a', 'b'] : ['b', 'c'],
+          hasMore: page < 2,
+        ),
+        keyOf: (item) => item,
+        onPageAccepted: (page, {required append}) =>
+            calls.add((page.items.join(','), append)),
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadFirstPage();
+      await controller.loadMore();
+
+      expect(calls, [('a,b', false), ('b,c', true)], reason: '回调收到当页原始结果');
+      expect(controller.items, ['a', 'b', 'c'], reason: '状态仍按 key 去重合并');
+    });
+
+    test('过期响应不回调', () async {
+      final gate = Completer<void>();
+      final accepted = <String>[];
+      var calls = 0;
+      final controller = PagedListController<String>(
+        fetchPage: (_) async {
+          calls++;
+          if (calls == 1) {
+            await gate.future;
+            return const PagedResult(items: ['stale'], hasMore: false);
+          }
+          return const PagedResult(items: ['fresh'], hasMore: false);
+        },
+        onPageAccepted: (page, {required append}) =>
+            accepted.add(page.items.single),
+      );
+      addTearDown(controller.dispose);
+
+      final stale = controller.loadFirstPage();
+      controller.reset();
+      await controller.loadFirstPage();
+      expect(accepted, ['fresh']);
+
+      gate.complete();
+      await stale;
+      expect(accepted, ['fresh'], reason: 'reset 前的响应即使晚到也不得回调');
+    });
+
+    test('失败页不回调：加载更多 / 首屏失败，重试成功才回调', () async {
+      var accepted = 0;
+      var fail = false;
+      final controller = PagedListController<String>(
+        fetchPage: (page) async {
+          if (fail) throw StateError('boom');
+          return PagedResult(items: ['p$page'], hasMore: page < 2);
+        },
+        onPageAccepted: (page, {required append}) => accepted++,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadFirstPage();
+      expect(accepted, 1);
+
+      fail = true;
+      await controller.loadMore();
+      expect(controller.loadMoreFailed, isTrue);
+      expect(accepted, 1, reason: '加载更多失败不回调');
+
+      await controller.loadFirstPage();
+      expect(controller.failed, isTrue);
+      expect(accepted, 1, reason: '首屏失败不回调');
+
+      fail = false;
+      await controller.loadFirstPage();
+      expect(accepted, 2, reason: '重试成功才回调');
+    });
+
+    test('reset / dispose 自身不回调，之后到达的在途响应也不回调', () async {
+      final resetGate = Completer<void>();
+      var resetAccepted = 0;
+      final resetController = PagedListController<String>(
+        fetchPage: (_) async {
+          await resetGate.future;
+          return const PagedResult(items: ['late'], hasMore: false);
+        },
+        onPageAccepted: (page, {required append}) => resetAccepted++,
+      );
+      final afterReset = resetController.loadFirstPage();
+      resetController.reset();
+      expect(resetAccepted, 0);
+      resetGate.complete();
+      await afterReset;
+      expect(resetAccepted, 0, reason: 'reset 作废的在途响应不回调');
+      resetController.dispose();
+
+      final disposeGate = Completer<void>();
+      var disposeAccepted = 0;
+      final disposeController = PagedListController<String>(
+        fetchPage: (_) async {
+          await disposeGate.future;
+          return const PagedResult(items: ['late'], hasMore: false);
+        },
+        onPageAccepted: (page, {required append}) => disposeAccepted++,
+      );
+      final afterDispose = disposeController.loadFirstPage();
+      disposeController.dispose();
+      expect(disposeAccepted, 0);
+      disposeGate.complete();
+      await afterDispose;
+      expect(disposeAccepted, 0, reason: 'dispose 作废的在途响应不回调');
+    });
+
+    test('回调在状态发布前、load future 完成前运行', () async {
+      final events = <String>[];
+      late final PagedListController<String> controller;
+      controller = PagedListController<String>(
+        fetchPage: (_) async {
+          events.add('fetch');
+          return const PagedResult(items: ['a'], hasMore: false);
+        },
+        onPageAccepted: (page, {required append}) {
+          events.add('accepted');
+          expect(controller.items, isEmpty, reason: '新状态尚未发布');
+          expect(controller.isLoading, isTrue);
+          expect(page.items, ['a']);
+          expect(append, isFalse);
+        },
+      );
+      addTearDown(controller.dispose);
+
+      await controller.loadFirstPage();
+      events.add('resolved');
+
+      expect(events, ['fetch', 'accepted', 'resolved']);
+      expect(controller.items, ['a']);
+      expect(controller.isLoading, isFalse);
+    });
+  });
 }

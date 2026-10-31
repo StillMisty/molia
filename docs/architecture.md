@@ -684,9 +684,11 @@
   交接，不再维护 `playTracks` 的第二套洗牌 / 触感 / 起播口径。
 - **分页曲目集合**：`lib/widgets/paged_track_collection.dart` 是专辑 / 歌手 / 发现
   详情页的分页曲目骨架。`PagedTrackCollection<T,R>` 在 `PagedListController` 上
-  捕获同页实体（`reset` 同时作废列表与实体），`PagedTrackCollectionBody<R>` 收口
-  loading / 首屏失败 / 空态 / 列表 / 页脚 / 可选钉住表头 / 表格档行高；页面只保留
-  头部、行与播放动作。
+  捕获同页实体：取页返回携带实体的 `PagedResult` 子类型，实体只在控制器的
+  **Accepted page callback（已接受页回调）** 中更新（过期 / 失败 / reset / dispose
+  不回调），`reset` 同时清空实体；过期判定只留在控制器一处，集合不再自维护
+  代际计数器。`PagedTrackCollectionBody<R>` 收口 loading / 首屏失败 / 空态 /
+  列表 / 页脚 / 可选钉住表头 / 表格档行高；页面只保留头部、行与播放动作。
 - **换源**：`SourceSwapProvider`（`lib/providers/source_swap_provider.dart`）是
   跨音源搜索 + 原位替换的唯一状态机：按种子曲目「歌名 + 歌手」在可搜索音源
   并行检索（**保留种子源**，种子曲目自身按 URI 排除——同一渠道可能有其它版本 /
@@ -1055,7 +1057,7 @@ module（见下）：
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（按 `SearchKind` 三会话，分页状态机 `PagedListController` 以状态值发布）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（按 `SearchKind` 三会话，分页状态机 `PagedListController` 以状态值发布，歌词片段经 Accepted page callback 随页接受）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；

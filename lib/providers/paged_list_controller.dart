@@ -9,6 +9,15 @@ class PagedResult<T> {
   final int? total;
 }
 
+/// 已接受页回调：请求仍为当前代际的成功页，在状态发布前调用一次。
+///
+/// `append` 区分首屏（false）与加载更多（true）；[PagedResult] 可以是取页
+/// 实现返回的子类型，用来携带同页元数据（页实体 / 歌词片段）。
+typedef PagedPageAccepted<T> = void Function(
+  PagedResult<T> page, {
+  required bool append,
+});
+
 /// 分页列表的不可变只读状态：持有方以一个值消费（`Selector` /
 /// `ValueListenableBuilder` 或直接读 [PagedListController.state]）。
 @immutable
@@ -124,13 +133,20 @@ class PagedListState<T> {
 ///   忽略 page、每次都返回整表，靠这条推断停住（防死循环）；
 /// - 首屏失败清空列表并置 [PagedListState.failed]（可重试）；加载更多失败
 ///   保留已加载项并置 [PagedListState.loadMoreFailed]；
+/// - 每次成功且仍为当前请求的页，在发布新状态前调用一次 [onPageAccepted]；
+///   过期响应、失败、[reset] 与 [dispose] 都不调用——持有方的同页元数据
+///   与列表共用这一道过期守卫，不再各自维护代际；
 /// - [dispose] 使在途请求过期：销毁后不写状态、不发通知。
 class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
-  PagedListController({required this._fetchPage, this._keyOf})
-    : super(PagedListState<T>(hasMore: true));
+  PagedListController({
+    required this._fetchPage,
+    this._keyOf,
+    this._onPageAccepted,
+  }) : super(PagedListState<T>(hasMore: true));
 
   final Future<PagedResult<T>> Function(int page) _fetchPage;
   final String Function(T item)? _keyOf;
+  final PagedPageAccepted<T>? _onPageAccepted;
 
   /// 单调递增的请求 id：reset / dispose 后自增，使在途请求过期。
   int _requestId = 0;
@@ -177,6 +193,7 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
     final requestId = _requestId;
     // 本次请求的结果状态（null = 过期响应，整体丢弃，不覆盖新状态）。
     PagedListState<T>? next;
+    PagedResult<T>? accepted;
     try {
       final result = await _fetchPage(page);
       if (requestId == _requestId) {
@@ -193,6 +210,7 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
           // 追加去重后无新增：平台忽略 page 时据此停止翻页（防死循环）。
           hasMore: result.hasMore && (!append || items.length > previousCount),
         );
+        accepted = result;
       }
     } catch (e) {
       if (requestId == _requestId) {
@@ -204,6 +222,10 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
       }
     }
     if (next == null) return;
+    // 先交付本页元数据、再发布状态：调用方的 loadFirstPage / loadMore
+    // 返回时，元数据与列表已是同一页。回调放在 catch 外，避免回调自身
+    // 的异常被误判为取页失败。
+    if (accepted != null) _onPageAccepted?.call(accepted, append: append);
     value = next.copyWith(isLoading: false, isLoadingMore: false);
   }
 
