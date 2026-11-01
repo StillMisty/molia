@@ -873,12 +873,15 @@
   skip / delta / full 统一由 `decideSyncPull` 判定，「只有本轮新鲜证据能跳过」
   只有这一处实现。
 - **Sync round runner（轮次编排）** — `lib/data/sync/sync_round.dart`：
-  `SyncRoundRunner.runRound` 只剩线性编排，阶段 collect / pull /
-  consume + apply / publish + compact / report 与轮次上下文都是本文件的私有
-  实现；测试经 `runRound` + 假传输 / 假适配器驱动整轮，不能绕过顺序直接调
-  阶段。语义保留：应用成功才推进游标、forced delivery、缺口二次拉取、
-  anti-entropy、入站轮；`SyncEngine` 只留公共门面（调度器宿主 / 服务端语义 /
-  入站合流 / 公告过滤）。
+  `SyncRoundRunner.runRound` 只剩线性编排：输入是 `SyncRoundRequest`（触发 /
+  外发 / anti-entropy / 类别 / 窗口），六个阶段 collect / pull / consume /
+  apply / publish / report 各返回一个结果值（`SyncRoundCollected` /
+  `SyncRoundPulled` / `SyncRoundConsumed` / `SyncRoundApplied` /
+  `SyncRoundPublished`），下一阶段只读这些值与显式传入的轮次累计器，不读
+  上一阶段写过的共享字段。阶段入口标 `@visibleForTesting`，测试可逐段驱动；
+  生产调用方仍只经 `runRound`。语义保留：应用成功才推进游标、forced delivery、
+  缺口二次拉取、anti-entropy、入站轮；`SyncEngine` 只留公共门面（调度器宿主 /
+  服务端语义 / 入站合流 / 公告过滤）。
 - **Sync book（同步状态的窄接口与单一提交）** — `lib/data/sync/sync_book.dart`：
   按用途声明 `SyncStampLedger`（适配器）/ `SyncPublicationState`（发布台账）/
   `SyncRoundState`（轮次）/ `SyncEngineState`（引擎）/ `SyncTransportState` /

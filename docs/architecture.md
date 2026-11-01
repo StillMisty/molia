@@ -419,10 +419,13 @@
   引擎（`lib/data/sync/sync_engine.dart`）只保留公共门面：调度器宿主 / 服务端
   语义（`serveSnapshot` / `serveJournal`）/ 入站合流 / 公告过滤。轮次内的阶段
   由**轮次编排器**（`sync_round.dart` 的 `SyncRoundRunner`）线性编排：`runRound`
-  = collect → pull → consume + apply → publish + compact → report；轮次上下文与
-  阶段都是该文件的私有实现，测试只能经 `runRound` + 假传输 / 假适配器驱动整轮
-  （避免绕过顺序直接调阶段）。应用成功才推进游标、forced delivery、缺口二次
-  拉取、anti-entropy 与入站轮语义都不变。同步状态的依赖按用途收窄为
+  = collect → pull → consume + apply → publish + compact → report。输入是
+  `SyncRoundRequest`，六个阶段各返回一个结果值（`SyncRoundCollected` /
+  `SyncRoundPulled` / `SyncRoundConsumed` / `SyncRoundApplied` /
+  `SyncRoundPublished`），下一阶段只读这些值与显式传入的轮次累计器，不读上一
+  阶段写过的共享字段；阶段入口标 `@visibleForTesting`，测试可逐段驱动，生产
+  仍只经 `runRound`。应用成功才推进游标、forced delivery、缺口二次拉取、
+  anti-entropy 与入站轮语义都不变。同步状态的依赖按用途收窄为
   `sync_book.dart` 的窄接口（登记 / 发布覆盖 / 轮次 / 引擎 / 运行时 / 调度 /
   备份），`SyncStateStore` 仍是唯一实现与持久化所有者：所有写入先改内存 +
   标脏，`commit()` 是唯一落盘出口（轮内台账 / 首连提示 / 端点记账只标脏，

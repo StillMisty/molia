@@ -1,19 +1,22 @@
-/// 一轮同步的阶段编排与轮次上下文。
+/// 一轮同步的阶段编排：输入 / 每阶段产物都是显式值，阶段之间不共享可变上下文。
 ///
 /// 为什么拆出来：`SyncEngine._runRound` 曾在一个方法里做十二件事（口令、
 /// 传输启动、收集、anti-entropy、拉取、游标消费、缺口兜底、合并、应用、
 /// 裁日志、构建快照、推送、五态报告）。任何一步的局部变量都要在几百行里
 /// 传递，阶段之间靠大段注释维持顺序，既难改也难单测。
 ///
-/// 现在对外只有 [SyncRoundRunner.runRound] 的线性编排与三个服务端动作；
-/// 阶段与轮次上下文都是本文件的私有实现（[_RoundContext] / [_collectStage]
-/// 等），测试通过假传输 / 假适配器驱动 `runRound`，不能绕过顺序直接调阶段。
+/// 现在 [SyncRoundRunner.runRound] 只顺序调用六个阶段并组装报告；每个阶段
+/// 返回一个结果值（[SyncRoundCollected] / [SyncRoundPulled] /
+/// [SyncRoundConsumed] / [SyncRoundApplied] / [SyncRoundPublished]），下一阶段
+/// 只读这些值，不读上一阶段写过的共享字段。阶段入口标了 `@visibleForTesting`，
+/// 测试可以逐段驱动，生产调用方仍只经 [SyncRoundRunner.runRound]。
 /// 同步语义（应用成功才推进游标、forced delivery、缺口二次拉取、
 /// anti-entropy、入站轮、名册失败记账、报告五态）逐条保留。
 library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
@@ -30,16 +33,16 @@ import 'sync_stamp.dart';
 import 'sync_book.dart';
 import 'sync_transport_runtime.dart';
 
-/// 一轮同步的可变上下文：输入 + 各阶段产出。
-class _RoundContext {
-  _RoundContext({
+/// 一轮同步的输入：只由调用方决定，阶段只读。
+class SyncRoundRequest {
+  SyncRoundRequest({
     required this.trigger,
     required this.push,
     required this.antiEntropy,
     required this.onlyCategories,
     required this.startedAt,
-    required this.window,
-  });
+    SyncRoundWindow? window,
+  }) : window = window ?? SyncRoundWindow(startedAt: startedAt);
 
   final SyncTrigger trigger;
   final bool push;
@@ -49,45 +52,110 @@ class _RoundContext {
 
   /// pull 与 push 共享的显式窗口。
   final SyncRoundWindow window;
+}
 
-  // ---- collect ----
-  String passphrase = '';
-  int journalHead = 0;
-  Set<SyncCategory> categories = const {};
-  Map<SyncCategory, List<SyncRecord>> local = const {};
-  bool localChanged = false;
-  Map<String, _TransportAccumulator> accumulators = const {};
-  Set<String> fullFor = const {};
-  bool inboundOnly = false;
+/// collect 阶段的产物：本轮本地视图、变更判定与逐传输累计器。
+class SyncRoundCollected {
+  const SyncRoundCollected({
+    required this.journalHead,
+    required this.categories,
+    required this.local,
+    required this.localChanged,
+    required this.transports,
+  });
 
-  // ---- pull / consume ----
-  final List<(String, SyncEnvelope)> pulledEntries = [];
-  final Map<SyncCategory, List<SyncRecord>> remoteRecords = {};
-  final Set<SyncKnownKey> forcedDelivery = {};
-  final Map<String, int> pendingCursors = {};
-  List<SyncEnvelope> inboundSnapshot = const [];
-  bool pullContact = false;
+  /// 收集本地视图**之前**读取的日志头部：本轮快照覆盖到的位置不会漏掉
+  /// 随后发生的写入。
+  final int journalHead;
 
-  // ---- apply ----
-  int applied = 0;
-  int applyFailures = 0;
-  bool inboundRestored = false;
+  final Set<SyncCategory> categories;
+  final Map<SyncCategory, List<SyncRecord>> local;
+  final bool localChanged;
 
-  // ---- publish ----
-  int journalBase = 0;
-  int? snapshotSeq;
-  Map<SyncCategory, List<SyncRecord>> refreshed = const {};
-  SyncEnvelope? outgoing;
-  int succeededPushes = 0;
+  /// 逐传输累计器：本轮 pull / consume / publish 共用同一份计数。
+  final Map<String, SyncTransportAccumulator> transports;
+}
 
-  // ---- report ----
-  SyncRoundReport? report;
+/// pull 阶段的产物：待消费载荷与需要全量兜底的对端。
+class SyncRoundPulled {
+  const SyncRoundPulled({
+    required this.entries,
+    required this.fullFor,
+    required this.inboundSnapshot,
+    required this.pullContact,
+  });
+
+  /// 待消费的载荷（传输标识，`''` = 入站队列）。
+  final List<(String, SyncEnvelope)> entries;
+
+  /// anti-entropy / 缺口要求取全量快照的对端。
+  final Set<String> fullFor;
+
+  /// 已从入站队列取走的快照：应用失败时放回队列，不能丢对端推来的数据。
+  final List<SyncEnvelope> inboundSnapshot;
+
+  /// 本轮是否真的接触过远端（含零快照的目录可读）。
+  final bool pullContact;
+}
+
+/// consume 阶段的产物：待应用的远端记录、强制交付键与待提交游标。
+class SyncRoundConsumed {
+  const SyncRoundConsumed({
+    required this.remoteRecords,
+    required this.forcedDelivery,
+    required this.pendingCursors,
+    required this.pullContact,
+  });
+
+  final Map<SyncCategory, List<SyncRecord>> remoteRecords;
+
+  /// 请求全量的对端带来的记录：合并时剔除本地同版本记录，让权威视图胜出
+  /// （同版本但内容不一致 = 本地被直接改写，不能按「先出现者胜」保留）。
+  final Set<SyncKnownKey> forcedDelivery;
+
+  /// 待提交游标：应用成功后才落进名册，失败轮下轮按原游标重取。
+  final Map<String, int> pendingCursors;
+
+  final bool pullContact;
+}
+
+/// apply 阶段的产物：本轮落地量与失败数。
+class SyncRoundApplied {
+  const SyncRoundApplied({required this.applied, required this.applyFailures});
+
+  final int applied;
+  final int applyFailures;
+}
+
+/// publish 阶段的产物：本轮成功推送的对端数（报告据此判定五态）。
+class SyncRoundPublished {
+  const SyncRoundPublished({required this.succeededPushes});
+
+  final int succeededPushes;
+}
+
+/// 一轮内的对端失败观测：跨 pull / consume / publish 共享。
+///
+/// 同一轮的所有阶段必须拿到同一个实例（分段测试也一样），否则「拉取失败
+/// 压住随后只带回执的载荷」与「推送失败保留到名册重建」会各自失效。
+/// 拉取失败的设备即使随后只带回执也不能算成功接触（否则设备详情会把拉取
+/// 失败显示成已连接）；推送失败的设备在名册重建时保留失败状态。
+class SyncRoundPeerFailures {
+  final Set<String> pushFailures = {};
+  final Set<String> pullFailures = {};
+
+  /// 从本机移除设备时同步清掉本轮观测，避免后续载荷把已移除的设备标成失败。
+  void forget(String deviceId) {
+    pushFailures.remove(deviceId);
+    pullFailures.remove(deviceId);
+  }
 }
 
 /// 一轮的编排器：拥有名册观测、收集缓存、发布台账与 inbound 队列。
 ///
 /// 引擎（`SyncEngine`）只保留公共门面（调度器宿主 / 服务端语义 / 入站合流 /
-/// 公告过滤）；轮次内的状态与阶段全部私有，外部只能跑整轮或读服务端动作。
+/// 公告过滤）；轮次内的阶段只通过显式输入 / 结果值传递数据，跨轮缓存
+/// （收集复用、快照指纹、发布台账）仍归这个长期对象。
 class SyncRoundRunner {
   SyncRoundRunner({
     required SyncRoundState state,
@@ -155,12 +223,9 @@ class SyncRoundRunner {
   /// 入站快照队列（引擎的合流计时器把载荷放进来，轮次消费）。
   final List<SyncEnvelope> _inbound = [];
 
-  /// 本轮推送失败过的对端：名册重建时据此保留失败状态。
-  final Set<String> _peersFailedThisRound = {};
-
-  /// 本轮拉取失败过的对端：同一轮即使收到只带回执的载荷，也不能把失败
-  /// 伪装成成功接触（成功时间不前进、上次失败原因保留）。
-  final Set<String> _peersPullFailedThisRound = {};
+  /// 在途轮次的对端失败观测：只服务 `forgetPeer` 的轮内移除，阶段经参数
+  /// 拿到同一份观测，不从这里读。
+  SyncRoundPeerFailures? _activePeerFailures;
 
   /// 内存名册（本轮观测优先；落库状态在 [_allPeers] 里合并进来）。
   final Map<String, SyncPeerState> _peersById = {};
@@ -273,8 +338,7 @@ class SyncRoundRunner {
   void forgetPeer(String deviceId) {
     if (deviceId.isEmpty) return;
     _peersById.remove(deviceId);
-    _peersFailedThisRound.remove(deviceId);
-    _peersPullFailedThisRound.remove(deviceId);
+    _activePeerFailures?.forget(deviceId);
   }
 
   SyncPeerState peerOf(String deviceId) {
@@ -325,74 +389,88 @@ class SyncRoundRunner {
     Set<SyncCategory>? onlyCategories,
   }) async {
     final startedAt = _nowMs();
-    final context = _RoundContext(
+    final request = SyncRoundRequest(
       trigger: trigger,
       push: push,
       antiEntropy: antiEntropy,
       onlyCategories: onlyCategories,
       startedAt: startedAt,
-      window: SyncRoundWindow(startedAt: startedAt),
     );
+    final peerFailures = SyncRoundPeerFailures();
+    _activePeerFailures = peerFailures;
     try {
-      await _collectStage(context);
-      await _pullStage(context);
-      await _consumeStage(context);
-      await _applyStage(context);
-      await _publishStage(context);
-      context.report = await _reportStage(context);
-      _logger.fine(() => '同步一轮完成：${context.report}');
+      final collected = await collectStage(request);
+      final pulled = await pullStage(request, collected, peerFailures);
+      final consumed = await consumeStage(
+        request,
+        collected,
+        pulled,
+        peerFailures,
+      );
+      final applied = await applyStage(request, collected, pulled, consumed);
+      final published = await publishStage(
+        request,
+        collected,
+        applied,
+        peerFailures,
+      );
+      final report = await reportStage(
+        request,
+        collected,
+        consumed,
+        applied,
+        published,
+      );
+      _logger.fine(() => '同步一轮完成：$report');
+      return report;
     } on _RoundAbort catch (abort) {
       // 用户可行动的明确状态（未设置口令）：不按内部异常处理。
       _logger.warning('同步一轮未完成：${abort.issue}');
-      context.report = SyncRoundReport(
-        trigger: trigger,
-        startedAt: context.startedAt,
+      return SyncRoundReport(
+        trigger: request.trigger,
+        startedAt: request.startedAt,
         finishedAt: _nowMs(),
         outcome: SyncOutcome.failed,
         error: abort.issue,
       );
     } catch (e, stackTrace) {
       _logger.warning('同步一轮失败', e, stackTrace);
-      context.report = SyncRoundReport(
-        trigger: trigger,
-        startedAt: context.startedAt,
+      return SyncRoundReport(
+        trigger: request.trigger,
+        startedAt: request.startedAt,
         finishedAt: _nowMs(),
         outcome: SyncOutcome.failed,
         error: SyncIssue(code: SyncIssueCode.internal, detail: '$e'),
       );
+    } finally {
+      _activePeerFailures = null;
     }
-    return context.report!;
   }
 
   /// 阶段 1：口令、传输、本地视图、变更判定、名册登记基线。
-  Future<void> _collectStage(_RoundContext context) async {
+  @visibleForTesting
+  Future<SyncRoundCollected> collectStage(SyncRoundRequest request) async {
     final passphrase = await _state.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       throw const _RoundAbort(SyncIssue(code: SyncIssueCode.noPassphrase));
     }
-    context.passphrase = passphrase;
     await _runtime.ensureRunning();
-    _peersFailedThisRound.clear();
-    _peersPullFailedThisRound.clear();
 
     final journal = _journal;
     // 日志头部在收集本地视图**之前**读取：本轮快照覆盖到的位置不会漏掉
     // 随后发生的写入（写入的 seq 必然大于它，走下一份增量）。
-    context.journalHead = journal == null ? 0 : await journal.headSeq();
-    context.categories = context.onlyCategories ?? _state.enabledCategories;
-    context.local = await collect(
-      context.categories,
-      fresh: context.antiEntropy,
-    );
-    context.localChanged = journal == null
+    final journalHead = journal == null ? 0 : await journal.headSeq();
+    final categories = request.onlyCategories ?? _state.enabledCategories;
+    final local = await collect(categories, fresh: request.antiEntropy);
+    final localChanged = journal == null
         ? (_localFingerprint == null ||
-              await _fingerprintOf(context.local) != _localFingerprint)
-        : context.journalHead != _localJournalHead;
+              await _fingerprintOf(local) != _localFingerprint)
+        : journalHead != _localJournalHead;
 
     // 本地视图就是适配器当前状态：以本地版本播种登记（内存内，不落库），
     // 空闲轮不向适配器交付任何记录；远端胜者版本更高时仍会交付。
     final known = await _ensureKnown();
-    for (final entry in context.local.entries) {
+    for (final entry in local.entries) {
       for (final record in entry.value) {
         known.putIfAbsent((
           category: entry.key,
@@ -403,15 +481,15 @@ class SyncRoundRunner {
 
     // 传输运行状态先落进报告：入站轮不拉取，但「开关开着但没在工作」同样
     // 要可见，且「本轮有没有可用传输」的判定不依赖拉取动作。
-    context.accumulators = {
+    final accumulators = {
       for (final kind in _transports.keys)
-        kind: _TransportAccumulator(
+        kind: SyncTransportAccumulator(
           kind,
           enabled: _state.enabledTransports.contains(kind),
         ),
     };
     for (final entry in _transports.entries) {
-      final accumulator = context.accumulators[entry.key]!;
+      final accumulator = accumulators[entry.key]!;
       if (!accumulator.enabled) continue;
       accumulator
         ..running = entry.value.isRunning
@@ -423,99 +501,144 @@ class SyncRoundRunner {
         );
       }
     }
+    return SyncRoundCollected(
+      journalHead: journalHead,
+      categories: categories,
+      local: local,
+      localChanged: localChanged,
+      transports: accumulators,
+    );
   }
 
   /// 阶段 2：anti-entropy 名单 + 一次拉取（入站轮不主动拉）。
-  Future<void> _pullStage(_RoundContext context) async {
+  @visibleForTesting
+  Future<SyncRoundPulled> pullStage(
+    SyncRoundRequest request,
+    SyncRoundCollected collected,
+    SyncRoundPeerFailures peerFailures,
+  ) async {
     // 入站轮只消费收到的快照：不主动拉取任何对端。
-    context.inboundOnly = context.trigger == SyncTrigger.incoming;
+    final inboundOnly = request.trigger == SyncTrigger.incoming;
     // 强制发现：启动 / 回前台 / 换网 / 手动轮 / 打开同步页的检查轮要
     // 广播 + 组播 + 单播；其余轮次只对已有候选单播（空闲轮 0 广播）。
     final forceDiscovery =
-        context.trigger == SyncTrigger.manual ||
-        context.trigger == SyncTrigger.startup ||
-        context.trigger == SyncTrigger.resume ||
-        context.trigger == SyncTrigger.network ||
-        context.trigger == SyncTrigger.check;
+        request.trigger == SyncTrigger.manual ||
+        request.trigger == SyncTrigger.startup ||
+        request.trigger == SyncTrigger.resume ||
+        request.trigger == SyncTrigger.network ||
+        request.trigger == SyncTrigger.check;
 
     // anti-entropy：对端内容指纹与本机不一致、且本机没有它的新条目时，
     // 主动取一次全量快照修复静默分歧（LWW 只保证「有新数据时收敛」）。
-    context.fullFor = context.antiEntropy
-        ? await _antiEntropyPeers(context.local, context.categories)
+    final fullFor = request.antiEntropy
+        ? await _antiEntropyPeers(collected.local, collected.categories)
         : const <String>{};
-    if (!context.inboundOnly) {
-      context.pullContact = await _pullInto(
-        context.accumulators,
+    final entries = <(String, SyncEnvelope)>[];
+    var pullContact = false;
+    if (!inboundOnly) {
+      pullContact = await _pullInto(
+        collected.transports,
         SyncPullRequest(
-          plan: _pullPlan(
-            fullPeers: context.fullFor,
-            forceDiscovery: forceDiscovery,
-          ),
-          window: context.window,
+          plan: _pullPlan(fullPeers: fullFor, forceDiscovery: forceDiscovery),
+          window: request.window,
         ),
-        context.pulledEntries,
+        entries,
+        peerFailures,
       );
     }
 
     // 入站轮同样消费收到的快照；窗口缺口只对被推来「不完整窗口」的对端
     // 做定向 bootstrap，不是全量广播。
-    context.inboundSnapshot = _takeInbound();
-    for (final envelope in context.inboundSnapshot) {
-      context.pulledEntries.add(('', envelope));
+    final inboundSnapshot = _takeInbound();
+    for (final envelope in inboundSnapshot) {
+      entries.add(('', envelope));
     }
+    return SyncRoundPulled(
+      entries: entries,
+      fullFor: fullFor,
+      inboundSnapshot: inboundSnapshot,
+      pullContact: pullContact,
+    );
   }
 
   /// 阶段 3：消费载荷（游标 / ack / 缺口）+ 缺口二次拉取。
-  Future<void> _consumeStage(_RoundContext context) async {
+  @visibleForTesting
+  Future<SyncRoundConsumed> consumeStage(
+    SyncRoundRequest request,
+    SyncRoundCollected collected,
+    SyncRoundPulled pulled,
+    SyncRoundPeerFailures peerFailures,
+  ) async {
     // 待提交的游标（应用成功后才落进名册 / ack）：apply 失败时不推进，
     // 下轮按原游标重取，避免「未落地的变更被永久跳过」。
-    var fullPeers = await _consumePayloads(
-      context.pulledEntries,
-      context.remoteRecords,
-      context.forcedDelivery,
-      context.pendingCursors,
-      requestedFull: context.fullFor,
-      antiEntropy: context.antiEntropy,
-      local: context.local,
-      categories: context.categories,
+    final remoteRecords = <SyncCategory, List<SyncRecord>>{};
+    final forcedDelivery = <SyncKnownKey>{};
+    final pendingCursors = <String, int>{};
+    final fullPeers = await _consumePayloads(
+      pulled.entries,
+      remoteRecords,
+      forcedDelivery,
+      pendingCursors,
+      requestedFull: pulled.fullFor,
+      antiEntropy: request.antiEntropy,
+      local: collected.local,
+      categories: collected.categories,
+      peerFailures: peerFailures,
     );
-    if (fullPeers.isEmpty) return;
-    // 窗口缺口（条目已被对端裁剪 / 载荷不完整）或指纹不一致：同一轮内
-    // 立刻改取全量快照（幂等；最多两遍，避免无限往返）。
-    final secondEntries = <(String, SyncEnvelope)>[];
-    final contacted = await _pullInto(
-      context.accumulators,
-      SyncPullRequest(
-        plan: _pullPlan(fullPeers: fullPeers),
-        window: context.window,
-      ),
-      secondEntries,
-    );
-    context.pullContact = context.pullContact || contacted;
-    context.pulledEntries.addAll(secondEntries);
-    fullPeers = await _consumePayloads(
-      secondEntries,
-      context.remoteRecords,
-      context.forcedDelivery,
-      context.pendingCursors,
-      requestedFull: fullPeers,
-      antiEntropy: false,
-      local: context.local,
-      categories: context.categories,
+    var pullContact = pulled.pullContact;
+    if (fullPeers.isNotEmpty) {
+      // 窗口缺口（条目已被对端裁剪 / 载荷不完整）或指纹不一致：同一轮内
+      // 立刻改取全量快照（幂等；最多两遍，避免无限往返）。
+      final secondEntries = <(String, SyncEnvelope)>[];
+      final contacted = await _pullInto(
+        collected.transports,
+        SyncPullRequest(
+          plan: _pullPlan(fullPeers: fullPeers),
+          window: request.window,
+        ),
+        secondEntries,
+        peerFailures,
+      );
+      pullContact = pullContact || contacted;
+      await _consumePayloads(
+        secondEntries,
+        remoteRecords,
+        forcedDelivery,
+        pendingCursors,
+        requestedFull: fullPeers,
+        antiEntropy: false,
+        local: collected.local,
+        categories: collected.categories,
+        peerFailures: peerFailures,
+      );
+    }
+    return SyncRoundConsumed(
+      remoteRecords: remoteRecords,
+      forcedDelivery: forcedDelivery,
+      pendingCursors: pendingCursors,
+      pullContact: pullContact,
     );
   }
 
   /// 阶段 4：合并 + 只交付版本变化的胜者 + 应用成功才提交游标。
-  Future<void> _applyStage(_RoundContext context) async {
+  @visibleForTesting
+  Future<SyncRoundApplied> applyStage(
+    SyncRoundRequest request,
+    SyncRoundCollected collected,
+    SyncRoundPulled pulled,
+    SyncRoundConsumed consumed,
+  ) async {
     final known = await _ensureKnown();
+    var applied = 0;
+    var applyFailures = 0;
     try {
       // 强制交付的键：合并时剔除本地同版本记录，让权威视图胜出
       // （同版本但内容不一致 = 本地被直接改写，不能按「先出现者胜」保留）。
       final localForMerge = <SyncCategory, List<SyncRecord>>{};
-      for (final entry in context.local.entries) {
+      for (final entry in collected.local.entries) {
         final kept = [
           for (final record in entry.value)
-            if (!context.forcedDelivery.contains((
+            if (!consumed.forcedDelivery.contains((
               category: entry.key,
               key: record.key,
             )))
@@ -527,10 +650,10 @@ class SyncRoundRunner {
         _envelopeFrom(localForMerge),
         SyncEnvelope(
           deviceId: _state.deviceId,
-          producedAt: context.startedAt,
-          records: context.remoteRecords,
+          producedAt: request.startedAt,
+          records: consumed.remoteRecords,
         ),
-      ], categories: context.categories);
+      ], categories: collected.categories);
 
       for (final adapter in _adapters) {
         if (!adapter.ready) continue;
@@ -541,7 +664,7 @@ class SyncRoundRunner {
           if (winners == null || winners.isEmpty) continue;
           for (final record in winners.values) {
             final key = (category: category, key: record.key);
-            if (!context.forcedDelivery.contains(key) &&
+            if (!consumed.forcedDelivery.contains(key) &&
                 known[key] == record.version) {
               continue;
             }
@@ -551,7 +674,7 @@ class SyncRoundRunner {
         if (subset.isEmpty) continue;
         try {
           final outcome = await adapter.apply(subset);
-          context.applied += outcome.applied;
+          applied += outcome.applied;
           // 交付成功才登记（含适配器跳过的项）：适配器对同一状态的判定
           // 是确定的，重复交付只会重复消耗；登记落库后跨重启不再重放。
           final delivered = <SyncKnownKey, SyncVersion>{};
@@ -569,20 +692,18 @@ class SyncRoundRunner {
         } catch (e) {
           // 应用失败 = 对端推来的记录没有落地：计入本轮失败并把入站快照放回
           // 队列（下轮重试），不静默丢数据。
-          context.applyFailures++;
+          applyFailures++;
           _logger.warning('应用 ${adapter.runtimeType} 失败', e);
         }
       }
     } catch (e) {
       // 入站快照是对端花网络推过来的：本轮失败不能丢，放回队列下轮消费。
-      _restoreInbound(context.inboundSnapshot);
-      context.inboundRestored = true;
+      _restoreInbound(pulled.inboundSnapshot);
       rethrow;
     }
 
-    if (context.applyFailures > 0 && !context.inboundRestored) {
-      _restoreInbound(context.inboundSnapshot);
-      context.inboundRestored = true;
+    if (applyFailures > 0) {
+      _restoreInbound(pulled.inboundSnapshot);
     }
 
     // 游标只在**全部落地成功**后提交：失败轮不推进也不 ack（对端据此不会
@@ -592,17 +713,24 @@ class SyncRoundRunner {
     // 引擎在 `runRound` 返回后提交一次（UI 命令与传输绑定等生命周期事件仍
     // 可即时提交）。旧实现每轮在 apply 后与 finally 各保存一次，活跃期 4s
     // 去抖轮会把整份 sync_state_v2 写两遍，属于写放大回归。
-    if (context.applyFailures == 0) {
-      for (final entry in context.pendingCursors.entries) {
+    if (applyFailures == 0) {
+      for (final entry in consumed.pendingCursors.entries) {
         final peer = _peersById[entry.key];
         if (peer == null) continue;
         _peersById[entry.key] = peer.copyWith(cursorSeq: entry.value);
       }
     }
+    return SyncRoundApplied(applied: applied, applyFailures: applyFailures);
   }
 
   /// 阶段 5：裁日志 + 构建本轮外发视图 + 推送。
-  Future<void> _publishStage(_RoundContext context) async {
+  @visibleForTesting
+  Future<SyncRoundPublished> publishStage(
+    SyncRoundRequest request,
+    SyncRoundCollected collected,
+    SyncRoundApplied applied,
+    SyncRoundPeerFailures peerFailures,
+  ) async {
     final journal = _journal;
     var journalBase = 0;
     int? snapshotSeq;
@@ -613,7 +741,7 @@ class SyncRoundRunner {
         coverage: journalCoverage(
           ledgers: _publishLedgers.values,
           enabledKinds: _state.enabledTransports,
-          journalHead: context.journalHead,
+          journalHead: collected.journalHead,
         ),
         nowMs: now,
       );
@@ -621,15 +749,13 @@ class SyncRoundRunner {
       journalBase = await journal.baseSeq();
       if (snapshotSeq < 0) {
         // 首次构建全量快照：内容覆盖到本轮头部（引擎随后按需发布）。
-        await journal.markSnapshotBuilt(context.journalHead);
-        snapshotSeq = context.journalHead;
+        await journal.markSnapshotBuilt(collected.journalHead);
+        snapshotSeq = collected.journalHead;
       }
     }
-    context.journalBase = journalBase;
-    context.snapshotSeq = snapshotSeq;
 
     // 推送合并后的本地视图（重新收集，包含刚应用的远端记录）。
-    final refreshed = await collect(context.categories);
+    final refreshed = await collect(collected.categories);
     final pruned = _envelopeFrom(refreshed).pruneTombstones(
       now: _nowMs(),
       tombstoneRetentionMs: tombstoneRetentionMs,
@@ -645,15 +771,15 @@ class SyncRoundRunner {
     final fingerprintReusable =
         journal != null &&
         _snapshotFingerprintId != null &&
-        context.journalHead == _snapshotFingerprintHead &&
-        context.applied == 0 &&
+        collected.journalHead == _snapshotFingerprintHead &&
+        applied.applied == 0 &&
         prunedCount == refreshedCount;
     final snapshotId = fingerprintReusable
         ? _snapshotFingerprintId!
         : await _fingerprintOf(pruned.records);
     _snapshotFingerprintId = snapshotId;
-    _snapshotFingerprintHead = context.journalHead;
-    _localJournalHead = context.journalHead;
+    _snapshotFingerprintHead = collected.journalHead;
+    _localJournalHead = collected.journalHead;
     // 未注入日志时保留整视图指纹：下一轮的变更判定用它。
     if (journal == null) {
       _localFingerprint = await _fingerprintOf(refreshed);
@@ -663,16 +789,14 @@ class SyncRoundRunner {
       deviceName: pruned.deviceName,
       producedAt: pruned.producedAt,
       records: pruned.records,
-      journalHead: context.journalHead,
+      journalHead: collected.journalHead,
       baseSeq: journalBase,
       acks: _acks(),
       // 本载荷覆盖的类别（蜂窝小类别轮只含小类别）：anti-entropy 按它
       // 只在双方共享的类别上比对指纹。
-      categories: [for (final category in context.categories) category.name],
+      categories: [for (final category in collected.categories) category.name],
     ).withSnapshotId(snapshotId);
     _lastEnvelope = outgoing;
-    context.refreshed = refreshed;
-    context.outgoing = outgoing;
 
     // 增量窗口：只带变更（对端按自己的游标过滤应用）。窗口为空但 ack
     // 有推进时也要外发：对端据此 compact 自己的日志。
@@ -689,9 +813,10 @@ class SyncRoundRunner {
       return delta;
     }
 
-    if (!context.push) return;
+    if (!request.push) return const SyncRoundPublished(succeededPushes: 0);
+    var succeededPushes = 0;
     for (final entry in _transports.entries) {
-      final accumulator = context.accumulators[entry.key]!;
+      final accumulator = collected.transports[entry.key]!;
       final transport = entry.value;
       if (!transport.isRunning ||
           !_state.enabledTransports.contains(entry.key)) {
@@ -705,11 +830,11 @@ class SyncRoundRunner {
           transport,
           outgoing,
           accumulator,
-          context.window,
+          request.window,
         );
-        context.succeededPushes += result.succeededPeers;
+        succeededPushes += result.succeededPeers;
         await ledger.mark(result);
-        _recordPushPeers(result, entry.key);
+        _recordPushPeers(result, entry.key, peerFailures);
       }
       // 2) 增量窗口：内容或 ack 有变化才推（对端未变不传、不解密）。
       final deltaEnvelope = await buildDelta();
@@ -718,27 +843,35 @@ class SyncRoundRunner {
           transport,
           deltaEnvelope,
           accumulator,
-          context.window,
+          request.window,
         );
-        context.succeededPushes += result.succeededPeers;
+        succeededPushes += result.succeededPeers;
         await ledger.mark(result);
-        _recordPushPeers(result, entry.key);
+        _recordPushPeers(result, entry.key, peerFailures);
       }
     }
 
     // 本地变更但本轮 LAN 推送零对端：单次定向公告，唤醒对端来拉（只单播，
     // 不广播）。失败只记日志：公告是「加速」而不是正确性前提。
-    if (context.localChanged &&
+    if (collected.localChanged &&
         _state.enabledTransports.contains(SyncTransportKind.lan) &&
-        (context.accumulators[SyncTransportKind.lan]?.pushed ?? 0) == 0) {
+        (collected.transports[SyncTransportKind.lan]?.pushed ?? 0) == 0) {
       unawaited(_runtime.announceLocalChange(SyncTransportKind.lan));
     }
+    return SyncRoundPublished(succeededPushes: succeededPushes);
   }
 
   /// 阶段 6：五态判定与报告（不写状态；引擎在 `runRound` 返回后落报告 / 通知）。
-  Future<SyncRoundReport> _reportStage(_RoundContext context) async {
+  @visibleForTesting
+  Future<SyncRoundReport> reportStage(
+    SyncRoundRequest request,
+    SyncRoundCollected collected,
+    SyncRoundConsumed consumed,
+    SyncRoundApplied applied,
+    SyncRoundPublished published,
+  ) async {
     final transportReports = [
-      for (final accumulator in context.accumulators.values)
+      for (final accumulator in collected.transports.values)
         accumulator.build(),
     ];
     final failedCount = transportReports.fold<int>(
@@ -756,32 +889,32 @@ class SyncRoundRunner {
     final anyTransport = transportReports.any(
       (item) => item.enabled && item.running,
     );
-    final remoteCount = context.remoteRecords.values.fold<int>(
+    final remoteCount = consumed.remoteRecords.values.fold<int>(
       0,
       (sum, list) => sum + list.length,
     );
     final contact =
         peersSeen > 0 ||
-        context.applied > 0 ||
+        applied.applied > 0 ||
         remoteCount > 0 ||
-        failedCount + context.applyFailures > 0;
+        failedCount + applied.applyFailures > 0;
     final outcome = _resolveOutcome(
       anyTransport: anyTransport,
       contact: contact,
-      pullContact: context.pullContact,
-      failed: failedCount + context.applyFailures,
+      pullContact: consumed.pullContact,
+      failed: failedCount + applied.applyFailures,
       succeededPulls: succeededPulls,
-      succeededPushes: context.succeededPushes,
-      applied: context.applied,
-      localChanged: context.localChanged,
+      succeededPushes: published.succeededPushes,
+      applied: applied.applied,
+      localChanged: collected.localChanged,
     );
     final transportError = transportReports
         .map((item) => item.error)
         .firstWhere((value) => value != null, orElse: () => null);
-    final applyError = context.applyFailures > 0
+    final applyError = applied.applyFailures > 0
         ? SyncIssue(
             code: SyncIssueCode.applyFailed,
-            args: {'count': context.applyFailures},
+            args: {'count': applied.applyFailures},
           )
         : null;
     final error = switch (outcome) {
@@ -793,12 +926,12 @@ class SyncRoundRunner {
       _ => null,
     };
     return SyncRoundReport(
-      trigger: context.trigger,
-      startedAt: context.startedAt,
+      trigger: request.trigger,
+      startedAt: request.startedAt,
       finishedAt: _nowMs(),
       outcome: outcome,
-      applied: context.applied,
-      applyFailures: context.applyFailures,
+      applied: applied.applied,
+      applyFailures: applied.applyFailures,
       transports: transportReports,
       peers: await _roster(),
       remoteRecords: remoteCount,
@@ -809,9 +942,10 @@ class SyncRoundRunner {
   // ---- 拉取实现 ----
 
   Future<bool> _pullInto(
-    Map<String, _TransportAccumulator> accumulators,
+    Map<String, SyncTransportAccumulator> accumulators,
     SyncPullRequest request,
     List<(String, SyncEnvelope)> out,
+    SyncRoundPeerFailures peerFailures,
   ) async {
     var contact = false;
     for (final entry in _transports.entries) {
@@ -856,7 +990,7 @@ class SyncRoundRunner {
       // lastSuccessAt：在线但长期没有内容变化的对端不该被误标失联。
       for (final id in result.seenIds) {
         if (result.failedIssues.containsKey(id)) continue;
-        _touchPeerSuccess(id, entry.key);
+        _touchPeerSuccess(id, entry.key, peerFailures);
       }
       // 失败只刷新「最近尝试」与 lastError，不动 lastSuccessAt；原因逐设备
       // 来自传输，不能拿整轮第一条错误顶替其它设备。
@@ -864,6 +998,7 @@ class SyncRoundRunner {
         _touchPeerFailure(
           failure.key,
           entry.key,
+          peerFailures,
           pull: true,
           issue: failure.value,
         );
@@ -878,7 +1013,7 @@ class SyncRoundRunner {
   Future<SyncPushResult> _pushEnvelope(
     SyncTransport transport,
     SyncEnvelope envelope,
-    _TransportAccumulator accumulator,
+    SyncTransportAccumulator accumulator,
     SyncRoundWindow window,
   ) async {
     final watch = Stopwatch()..start();
@@ -901,14 +1036,19 @@ class SyncRoundRunner {
     return result;
   }
 
-  void _recordPushPeers(SyncPushResult result, String kind) {
+  void _recordPushPeers(
+    SyncPushResult result,
+    String kind,
+    SyncRoundPeerFailures peerFailures,
+  ) {
     for (final id in result.succeededIds) {
-      _touchPeerSuccess(id, kind, push: true);
+      _touchPeerSuccess(id, kind, peerFailures, push: true);
     }
     for (final id in result.failedIds) {
       _touchPeerFailure(
         id,
         kind,
+        peerFailures,
         issue: const SyncIssue(code: SyncIssueCode.pushFailed),
       );
     }
@@ -923,6 +1063,7 @@ class SyncRoundRunner {
     required bool antiEntropy,
     required Map<SyncCategory, List<SyncRecord>> local,
     required Set<SyncCategory> categories,
+    required SyncRoundPeerFailures peerFailures,
   }) async {
     final fullPeers = <String>{};
     final now = _nowMs();
@@ -1009,8 +1150,8 @@ class SyncRoundRunner {
         }
       }
 
-      final pullFailed = _peersPullFailedThisRound.contains(peerId);
-      final failed = _peersFailedThisRound.contains(peerId) || pullFailed;
+      final pullFailed = peerFailures.pullFailures.contains(peerId);
+      final failed = peerFailures.pushFailures.contains(peerId) || pullFailed;
       _peersById[peerId] = existing.copyWith(
         name: envelope.deviceName.isNotEmpty ? envelope.deviceName : null,
         transport: kind.isNotEmpty ? kind : null,
@@ -1156,16 +1297,21 @@ class SyncRoundRunner {
   ///
   /// 拉取成功不经过这里：`_consumePayloads` 在载荷落地时推进 `lastPullAt`。
   /// [push] 标记本次是否真的发生了推送（探测应答 / 未变跳过不传）。
-  void _touchPeerSuccess(String deviceId, String kind, {bool push = false}) {
+  void _touchPeerSuccess(
+    String deviceId,
+    String kind,
+    SyncRoundPeerFailures peerFailures, {
+    bool push = false,
+  }) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     final now = _nowMs();
     if (push) {
-      _peersFailedThisRound.remove(deviceId);
+      peerFailures.pushFailures.remove(deviceId);
       // 同一轮已经拉取失败：推送成功只说明「对方能收」，不代表「本机能读」。
       // 不能清 lastError / 推进 lastSuccessAt，否则设备详情会把拉取失败
       // 显示成已连接。lastPushAt 也不推进：本轮只带回执，不代表数据已拉通。
-      if (_peersPullFailedThisRound.contains(deviceId)) {
+      if (peerFailures.pullFailures.contains(deviceId)) {
         _peersById[deviceId] = existing.copyWith(
           transport: kind,
           lastSeenAt: now,
@@ -1174,8 +1320,8 @@ class SyncRoundRunner {
       }
     } else {
       // 探测应答 / 未变跳过：一次成功接触，清掉两类失败标记。
-      _peersFailedThisRound.remove(deviceId);
-      _peersPullFailedThisRound.remove(deviceId);
+      peerFailures.pushFailures.remove(deviceId);
+      peerFailures.pullFailures.remove(deviceId);
     }
     _peersById[deviceId] = existing.copyWith(
       transport: kind,
@@ -1192,16 +1338,17 @@ class SyncRoundRunner {
   /// 载荷；推送失败要在本轮结束重建名册时保留失败状态。
   void _touchPeerFailure(
     String deviceId,
-    String kind, {
+    String kind,
+    SyncRoundPeerFailures peerFailures, {
     required SyncIssue issue,
     bool pull = false,
   }) {
     if (deviceId.isEmpty) return;
     final existing = _peersById[deviceId] ?? SyncPeerState(deviceId: deviceId);
     if (pull) {
-      _peersPullFailedThisRound.add(deviceId);
+      peerFailures.pullFailures.add(deviceId);
     } else {
-      _peersFailedThisRound.add(deviceId);
+      peerFailures.pushFailures.add(deviceId);
     }
     _peersById[deviceId] = existing.copyWith(
       transport: kind,
@@ -1304,8 +1451,8 @@ class SyncRoundRunner {
 }
 
 /// 一轮内可变的传输累计器（构造报告时转成不可变的 [SyncTransportReport]）。
-class _TransportAccumulator {
-  _TransportAccumulator(this.kind, {required this.enabled});
+class SyncTransportAccumulator {
+  SyncTransportAccumulator(this.kind, {required this.enabled});
 
   final String kind;
   final bool enabled;
