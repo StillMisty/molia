@@ -82,7 +82,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   ]);
   final navProvider = NavProvider(settings: navSettings);
   // 封面风格：两个键跟人走（同步应用远端设置后 reload）；派生图缓存只在
-  // 内存，默认「原图 + 仅播放页」时完全不创建任何派生任务。
+  // 内存，默认「原图 + 仅播放中」时完全不创建任何派生任务。
   final coverStyleSettings = CoverStyleSettings(
     settings: catalog.settings.scope([kCoverStyle, kCoverStyleScope]),
   );

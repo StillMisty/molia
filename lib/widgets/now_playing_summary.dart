@@ -95,6 +95,8 @@ class NowPlayingCover extends StatelessWidget {
         appearance: appearance,
         content: (context, clip, iconSize) => TrackArtwork(
           track: track,
+          // 顶栏始终展示当前曲目；避免再订阅一次播放状态。
+          isCurrentTrack: true,
           borderRadius: clip,
           // 与飞行副本共用同一外观源（图标态飞行起点必须与真身同尺寸）。
           fallbackIconSize: iconSize,

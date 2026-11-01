@@ -187,22 +187,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coverStyleTitle => '封面风格';
 
   @override
-  String get coverStyleSheetSubtitle => '选一种画风，立即应用到歌曲封面';
+  String get coverStyleSheetSubtitle => '选一种画风，立即应用到封面';
 
   @override
   String get coverStyleScopeTitle => '应用范围';
 
   @override
-  String get coverStyleScopePlayer => '仅播放页';
+  String get coverStyleScopePlayer => '仅播放中';
 
   @override
-  String get coverStyleScopePlayerSubtitle => '只改播放页的大封面，列表保持原图';
+  String get coverStyleScopePlayerSubtitle => '只改正在播放的歌曲封面，其他封面保持原图';
 
   @override
-  String get coverStyleScopeAll => '所有歌曲封面';
+  String get coverStyleScopeAll => '所有封面图片';
 
   @override
-  String get coverStyleScopeAllSubtitle => '列表、顶栏、迷你条也会变化';
+  String get coverStyleScopeAllSubtitle => '歌曲、专辑、歌手、歌单封面都会变化';
 
   @override
   String get coverStyleDone => '完成';

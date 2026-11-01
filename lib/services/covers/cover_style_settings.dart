@@ -8,7 +8,7 @@ import '../../domain/models/cover_style.dart';
 ///
 /// 两个键都按「跟人走」登记（[SyncCategory.settings]），跨设备同步应用远端
 /// 设置后由 [bindReload] 触发 [init] 重载。非法持久化值回退默认：
-/// 风格 = 原图、范围 = 仅播放页——即「不改变既有默认行为」。
+/// 风格 = 原图、范围 = 仅播放中——即「不改变既有默认行为」。
 class CoverStyleSettings extends ChangeNotifier {
   CoverStyleSettings({required this._settings}) {
     _settings.bindReload(kCoverStyle, init);
@@ -25,7 +25,7 @@ class CoverStyleSettings extends ChangeNotifier {
   /// 当前风格（默认 [CoverStyle.original]）。
   CoverStyle get style => _style;
 
-  /// 当前作用范围（默认 [CoverStyleScope.player]）。
+  /// 当前作用范围（默认 [CoverStyleScope.player]，仅当前播放曲目）。
   CoverStyleScope get scope => _scope;
 
   /// 读取持久化值（失败 / 缺项保持默认；不抛异常）。

@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 import '../domain/models/cover_style.dart';
 import '../domain/models/track.dart';
 import '../managers/artwork_cache.dart';
+import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
 import '../services/covers/cover_style_cache.dart';
 import '../services/covers/cover_style_settings.dart';
@@ -133,6 +134,7 @@ class TrackArtwork extends StatelessWidget {
     this.showDefaultCover = true,
     this.listenForChanges = true,
     this.applyCoverStyle = true,
+    this.isCurrentTrack,
     this.coverStyleEdge,
     this.coverStyleCache,
     this.artworkCache,
@@ -171,10 +173,16 @@ class TrackArtwork extends StatelessWidget {
   /// 外层已有 [CoverChangeBuilder] 时置 false，避免重复订阅同一变更信号。
   final bool listenForChanges;
 
-  /// 是否允许应用「封面风格」：仅 scope=all 且存在曲目身份时生效。
+  /// 是否允许应用「封面风格」：scope=all，或 scope=player 且是当前曲目时生效。
   ///
   /// 封面选择器 / 海报预览 / 默认封面行等非展示面传 false；默认 true。
   final bool applyCoverStyle;
+
+  /// 是否当前播放曲目；null = 按 [track] / [trackId] 与播放快照推断。
+  ///
+  /// 列表行只有 [coverKey] 时由宿主显式传入（如 `TrackRow` 的 isCurrent），
+  /// 避免为了判断身份再订阅一次播放状态。
+  final bool? isCurrentTrack;
 
   /// 风格派生图的物理边长（可空：按显示尺寸 / 解码宽度推导后分桶）。
   ///
@@ -210,16 +218,37 @@ class TrackArtwork extends StatelessWidget {
     return covers.displayForKey(null, originalUrl: originalUrl);
   }
 
-  /// 当前是否应用封面风格：scope=all + 调用方允许 + 有曲目身份。
+  /// 当前是否应用封面风格：调用方允许 + 有曲目身份 + 范围命中。
   ///
-  /// Provider 缺失（独立挂载 / 旧测试）一律回退原图，不抛异常。
+  /// `all` 处理所有封面；`player` 只处理当前播放曲目（播放页中心、顶栏、
+  /// 迷你条、列表当前行等）。Provider 缺失（独立挂载 / 旧测试）一律回退
+  /// 原图，不抛异常。
   CoverStyle _coverStyleOf(BuildContext context) {
     if (!applyCoverStyle || !_hasQueryKey) return CoverStyle.original;
     final settings = context.watch<CoverStyleSettings?>();
-    if (settings == null || settings.scope != CoverStyleScope.all) {
+    if (settings == null || !settings.style.isStylized) {
       return CoverStyle.original;
     }
-    return settings.style;
+    return switch (settings.scope) {
+      CoverStyleScope.all => settings.style,
+      CoverStyleScope.player =>
+        _isCurrentTrack(context) ? settings.style : CoverStyle.original,
+    };
+  }
+
+  /// 是否当前播放曲目。
+  ///
+  /// 显式 [isCurrentTrack] 优先；否则按 [track] / [trackId] 与播放快照比较。
+  /// 只有 coverKey 的列表行无法从封面键反推曲目身份，必须由宿主给出。
+  bool _isCurrentTrack(BuildContext context) {
+    final explicit = isCurrentTrack;
+    if (explicit != null) return explicit;
+    if (track == null && trackId == null) return false;
+    final current = context.watch<PlaybackProvider?>()?.snapshot.current;
+    if (current == null) return false;
+    final item = track;
+    if (item != null) return item.id == current.id;
+    return trackId == current.id;
   }
 
   /// 派生图边长：显式覆盖 > 显示尺寸 × DPR > 解码宽度 > 播放页统一边长。

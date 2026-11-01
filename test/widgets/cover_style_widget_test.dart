@@ -26,6 +26,8 @@ import 'package:molia/services/covers/cover_style_settings.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/widgets/app_network_image.dart';
 import 'package:molia/widgets/cover_style_sheet.dart';
+import 'package:molia/widgets/detail_page/detail_cover_header.dart';
+import 'package:molia/widgets/library_cover.dart';
 import 'package:molia/widgets/player_cover_deck.dart';
 import 'package:molia/widgets/styled_cover_image.dart';
 import 'package:molia/widgets/track_artwork.dart';
@@ -107,6 +109,13 @@ void main() {
     artwork: Artwork(uri: Uri.parse('https://img.example/original.jpg')),
   );
 
+  final otherTrack = Track(
+    id: const TrackId('kw', 'b'),
+    title: 'Other',
+    origin: TrackOrigin.builtin,
+    artwork: Artwork(uri: Uri.parse('https://img.example/other.jpg')),
+  );
+
   late Directory tempDir;
   late CustomCoverStore store;
   late ArtworkCache artworkCache;
@@ -137,6 +146,7 @@ void main() {
     Widget child, {
     CoverStyleSettings? settings,
     CoverStyleCache? cache,
+    PlaybackProvider? playback,
   }) {
     return MaterialApp(
       home: MultiProvider(
@@ -146,18 +156,40 @@ void main() {
             ChangeNotifierProvider<CoverStyleSettings>.value(value: settings),
           if (cache != null)
             ChangeNotifierProvider<CoverStyleCache>.value(value: cache),
+          if (playback != null)
+            ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
         ],
         child: Scaffold(body: Center(child: child)),
       ),
     );
   }
 
+  PlaybackProvider playbackWith(Track? current) {
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+    if (current != null) {
+      backend.emit(
+        BackendSnapshot(
+          current: current,
+          queue: [current],
+          currentIndex: 0,
+          isPlaying: true,
+          position: Duration.zero,
+          duration: const Duration(seconds: 30),
+        ),
+      );
+    }
+    return playback;
+  }
+
   group('TrackArtwork 风格接线', () {
-    testWidgets('scope=player 保持原图路径', (tester) async {
+    testWidgets('scope=player 且不是当前曲目时保持原图', (tester) async {
       final settings = await _settings(
         style: CoverStyle.lineArt,
         scope: CoverStyleScope.player,
       );
+      final playback = playbackWith(otherTrack);
       await tester.pumpWidget(
         host(
           TrackArtwork(
@@ -168,6 +200,7 @@ void main() {
           ),
           settings: settings,
           cache: _fakeCache(),
+          playback: playback,
         ),
       );
       expect(find.byType(StyledCoverImage), findsNothing);
@@ -175,6 +208,80 @@ void main() {
         find.byType(AppNetworkImage),
       );
       expect(image.url, track.artwork!.uri.toString());
+    });
+
+    testWidgets('scope=player 且是当前曲目时使用选定风格', (tester) async {
+      final settings = await _settings(
+        style: CoverStyle.lineArt,
+        scope: CoverStyleScope.player,
+      );
+      final playback = playbackWith(track);
+      await tester.pumpWidget(
+        host(
+          TrackArtwork(
+            track: track,
+            size: 44,
+            artworkCache: artworkCache,
+            coverStyleCache: _fakeCache(),
+          ),
+          settings: settings,
+          cache: _fakeCache(),
+          playback: playback,
+        ),
+      );
+      final styled = tester.widget<StyledCoverImage>(
+        find.byType(StyledCoverImage),
+      );
+      expect(styled.style, CoverStyle.lineArt);
+    });
+
+    testWidgets('显式 isCurrentTrack 时无需播放 Provider', (tester) async {
+      final settings = await _settings(
+        style: CoverStyle.ink,
+        scope: CoverStyleScope.player,
+      );
+      await tester.pumpWidget(
+        host(
+          TrackArtwork(
+            track: track,
+            size: 44,
+            isCurrentTrack: true,
+            artworkCache: artworkCache,
+            coverStyleCache: _fakeCache(),
+          ),
+          settings: settings,
+          cache: _fakeCache(),
+        ),
+      );
+      final styled = tester.widget<StyledCoverImage>(
+        find.byType(StyledCoverImage),
+      );
+      expect(styled.style, CoverStyle.ink);
+    });
+
+    testWidgets('列表当前行（coverKey）显式 isCurrentTrack 时使用风格', (tester) async {
+      final settings = await _settings(
+        style: CoverStyle.pixel,
+        scope: CoverStyleScope.player,
+      );
+      await tester.pumpWidget(
+        host(
+          TrackArtwork(
+            coverKey: track.id.uri,
+            originalUrl: track.artwork!.uri.toString(),
+            isCurrentTrack: true,
+            size: 44,
+            artworkCache: artworkCache,
+            coverStyleCache: _fakeCache(),
+          ),
+          settings: settings,
+          cache: _fakeCache(),
+        ),
+      );
+      final styled = tester.widget<StyledCoverImage>(
+        find.byType(StyledCoverImage),
+      );
+      expect(styled.style, CoverStyle.pixel);
     });
 
     testWidgets('scope=all 使用选定风格', (tester) async {
@@ -238,7 +345,10 @@ void main() {
   });
 
   group('PlayerCoverDeck 风格接线', () {
-    testWidgets('中心与左右邻位都使用当前风格（scope=player 也生效）', (tester) async {
+    Future<void> pumpDeck(
+      WidgetTester tester, {
+      required CoverStyleScope scope,
+    }) async {
       final backend = FakePlaybackBackend();
       final playback = buildTestPlaybackProvider(backend: backend);
       addTearDown(playback.dispose);
@@ -266,10 +376,7 @@ void main() {
           duration: const Duration(seconds: 30),
         ),
       );
-      final settings = await _settings(
-        style: CoverStyle.pencil,
-        scope: CoverStyleScope.player,
-      );
+      final settings = await _settings(style: CoverStyle.pencil, scope: scope);
       await tester.pumpWidget(
         MaterialApp(
           home: MultiProvider(
@@ -300,6 +407,19 @@ void main() {
         ),
       );
       await tester.pump();
+    }
+
+    testWidgets('scope=player 只处理中心封面', (tester) async {
+      await pumpDeck(tester, scope: CoverStyleScope.player);
+      final styled = tester.widgetList<StyledCoverImage>(
+        find.byType(StyledCoverImage),
+      );
+      expect(styled.length, 1);
+      expect(styled.single.style, CoverStyle.pencil);
+    });
+
+    testWidgets('scope=all 中心与左右邻位都使用当前风格', (tester) async {
+      await pumpDeck(tester, scope: CoverStyleScope.all);
       final styled = tester.widgetList<StyledCoverImage>(
         find.byType(StyledCoverImage),
       );
@@ -334,6 +454,66 @@ void main() {
             ),
           ),
         ),
+      );
+      await tester.pump();
+      expect(find.byType(StyledCoverImage), findsNothing);
+    });
+  });
+
+  group('非曲目封面范围接线', () {
+    Widget covers() => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DetailCoverHeader(
+          coverUrl: 'https://img.example/album.jpg',
+          shape: DetailCoverShape.square,
+          fallbackIcon: Icons.album_rounded,
+          coverKey: const Key('albumHeaderCover'),
+          title: 'Album',
+          subtitle: 'Artist',
+        ),
+        const LibraryCoverThumb(
+          url: 'https://img.example/playlist.jpg',
+          size: 56,
+        ),
+      ],
+    );
+
+    testWidgets('scope=all 时专辑头图与歌单卡片使用风格', (tester) async {
+      final settings = await _settings(
+        style: CoverStyle.lineArt,
+        scope: CoverStyleScope.all,
+      );
+      await tester.pumpWidget(
+        host(covers(), settings: settings, cache: _fakeCache()),
+      );
+      await tester.pump();
+      final styled = tester.widgetList<StyledCoverImage>(
+        find.byType(StyledCoverImage),
+      );
+      expect(styled.length, 2);
+      expect(styled.every((item) => item.style == CoverStyle.lineArt), isTrue);
+    });
+
+    testWidgets('scope=player 时非曲目封面保持原图', (tester) async {
+      final settings = await _settings(
+        style: CoverStyle.lineArt,
+        scope: CoverStyleScope.player,
+      );
+      await tester.pumpWidget(
+        host(covers(), settings: settings, cache: _fakeCache()),
+      );
+      await tester.pump();
+      expect(find.byType(StyledCoverImage), findsNothing);
+    });
+
+    testWidgets('scope=all 但风格为原图时不创建派生图', (tester) async {
+      final settings = await _settings(
+        style: CoverStyle.original,
+        scope: CoverStyleScope.all,
+      );
+      await tester.pumpWidget(
+        host(covers(), settings: settings, cache: _fakeCache()),
       );
       await tester.pump();
       expect(find.byType(StyledCoverImage), findsNothing);

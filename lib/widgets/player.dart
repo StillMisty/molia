@@ -831,6 +831,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     // 才能复用同一张已解码图（原图解码会按封面源尺寸占 15MB/张）。
     return TrackArtwork(
       track: displayTrack,
+      // 迷你条展示播放器当前曲目（停止时回退最近播放）；不再重复判断身份。
+      isCurrentTrack: true,
       fit: BoxFit.cover,
       fallbackIconSize: iconSize,
       memCacheWidth: coverEdge,

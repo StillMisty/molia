@@ -1932,6 +1932,8 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             artDimension,
             artworkUrlOverride: artworkUrlOverride,
             fallback: fallback,
+            // 滑出 / 尾卡都是中心封面的延续，跟随中心的范围判定。
+            isCenter: true,
           );
     if (slotKey != null) {
       card = KeyedSubtree(key: slotKey, child: card);
@@ -1973,6 +1975,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     Widget? fallback,
     String? placeholderUrl,
     String? artworkUrlOverride,
+    bool isCenter = false,
   }) {
     final url = artworkUrlOverride ?? _realCoverUrlOf(track);
     return CoverCard(
@@ -1981,10 +1984,12 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       appearance: appearance,
       content: (context, clip, iconSize) {
         final coverEdge = playbackCoverDecodeEdge(context);
-        final style =
-            context.watch<CoverStyleSettings?>()?.style ?? CoverStyle.original;
-        // 播放页两种 scope 都应用风格；换图占位也走同一风格，避免切歌时
-        // 旧图是原图、新图是风格图造成硬跳。
+        final settings = context.watch<CoverStyleSettings?>();
+        // 中心卡与换图占位始终应用；左右邻位只在「所有封面图片」范围下应用，
+        // 避免「仅播放中」把上一首 / 下一首也处理掉。
+        final style = isCenter || settings?.scope == CoverStyleScope.all
+            ? settings?.style ?? CoverStyle.original
+            : CoverStyle.original;
         final placeholder = placeholderUrl != null && placeholderUrl != url
             ? _buildCoverImage(
                 context,
@@ -2092,6 +2097,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   track,
                   artDimension,
                   fallback: buildFallbackArtwork(context),
+                  isCenter: true,
                 ),
               ),
             ),

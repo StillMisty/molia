@@ -5,6 +5,7 @@
 /// 收在一处是为了让「有封面才可点 / 按 96dp 解码 / 查看器标题与保存基名」
 /// 这份策略只有一份实现：各页自己写时，漏掉 `memCacheWidth` 或改错保存
 /// 文件名只会出现在某一个入口，很难在视觉上发现。
+/// 展示是否派生风格图由 [ScopedCoverImage] 按作用范围决定；查看原图始终原图。
 library;
 
 import 'dart:async';
@@ -14,9 +15,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/haptics.dart';
-import '../app_network_image.dart';
 import '../cover_tap_target.dart';
 import '../cover_viewer.dart';
+import '../scoped_cover_image.dart';
 import 'detail_page_chrome.dart';
 
 /// 头部封面裁切：方形（16 圆角缩略图）或圆形（歌手头像）。
@@ -93,7 +94,7 @@ class DetailCoverHeader extends StatelessWidget {
     Widget artwork = SizedBox.square(
       dimension: _coverSize,
       child: hasCover
-          ? AppNetworkImage(
+          ? ScopedCoverImage(
               url: coverUrl,
               fit: BoxFit.cover,
               // 头部只有 96dp：按容器解码，避免把整张原图留在内存里。

@@ -191,24 +191,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coverStyleSheetSubtitle =>
-      'Pick a look and apply it to song covers right away';
+      'Pick a look and apply it to covers right away';
 
   @override
   String get coverStyleScopeTitle => 'Applies to';
 
   @override
-  String get coverStyleScopePlayer => 'Player only';
+  String get coverStyleScopePlayer => 'Playing only';
 
   @override
   String get coverStyleScopePlayerSubtitle =>
-      'Only the large player cover changes; lists keep the original';
+      'Only the playing song\'s cover changes; others stay original';
 
   @override
-  String get coverStyleScopeAll => 'All song covers';
+  String get coverStyleScopeAll => 'All covers';
 
   @override
   String get coverStyleScopeAllSubtitle =>
-      'Lists, the top bar and the mini player change too';
+      'Song, album, artist and playlist covers change';
 
   @override
   String get coverStyleDone => 'Done';

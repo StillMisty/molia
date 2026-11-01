@@ -108,6 +108,7 @@ class AiDjTrackTile extends StatelessWidget {
             builder: (context) {
               final artwork = TrackArtwork(
                 track: track,
+                isCurrentTrack: isCurrent,
                 size: 44,
                 borderRadius: BorderRadius.circular(10),
                 memCacheWidth: (44 * MediaQuery.of(context).devicePixelRatio)
