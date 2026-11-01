@@ -200,7 +200,7 @@ void main() {
     });
   });
 
-  test('省电等级：低电量未充电暂停自动，仅手点可用', () {
+  test('省电等级：低电量未充电暂停自动', () {
     fakeAsync((async) {
       final env = build(async, battery: const BatterySnapshot(level: 10));
       unawaited(env.scheduler.start());
@@ -216,12 +216,6 @@ void main() {
       unawaited(env.scheduler.syncStartup());
       async.flushMicrotasks();
       expect(env.host.rounds, isEmpty);
-
-      // 手动同步不受省电限制。
-      unawaited(env.scheduler.syncNow());
-      async.flushMicrotasks();
-      expect(env.host.rounds, hasLength(1));
-      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
       env.scheduler.dispose();
     });
   });
@@ -274,11 +268,6 @@ void main() {
       unawaited(env.scheduler.checkNow());
       async.flushMicrotasks();
       expect(env.host.rounds, isEmpty);
-
-      // 手动同步仍不受限制（检查轮不能把「手动」一起关掉）。
-      unawaited(env.scheduler.syncNow());
-      async.flushMicrotasks();
-      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
       env.scheduler.dispose();
     });
   });
@@ -304,16 +293,16 @@ void main() {
       unawaited(env.scheduler.start());
       async.flushMicrotasks();
 
-      unawaited(env.scheduler.syncNow());
+      unawaited(env.scheduler.syncStartup());
       async.flushMicrotasks();
       unawaited(env.scheduler.checkNow());
       async.flushMicrotasks();
-      expect(env.host.rounds, isEmpty, reason: '手动轮仍在等 gate');
+      expect(env.host.rounds, isEmpty, reason: '启动轮仍在等 gate');
 
       env.host.roundGate!.complete();
       async.flushMicrotasks();
       expect(env.host.rounds, hasLength(1));
-      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
+      expect(env.host.rounds.single.trigger, SyncTrigger.startup);
       env.scheduler.dispose();
     });
   });
@@ -366,7 +355,7 @@ void main() {
     });
   });
 
-  test('移动数据（pause）：暂停自动同步，仅手点可用', () {
+  test('移动数据（pause）：暂停自动同步', () {
     fakeAsync((async) {
       unawaited(state.setCellularPolicy(SyncCellularPolicy.pause));
       final env = build(async, cellular: true);
@@ -377,12 +366,6 @@ void main() {
       async.elapse(const Duration(hours: 2));
       expect(env.host.rounds, isEmpty);
       expect(env.scheduler.hasPendingTimer, isFalse);
-
-      unawaited(env.scheduler.syncNow());
-      async.flushMicrotasks();
-      expect(env.host.rounds, hasLength(1));
-      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
-      expect(env.host.rounds.single.categories, isNull);
       env.scheduler.dispose();
     });
   });
@@ -594,7 +577,7 @@ void main() {
     });
   });
 
-  test('重连阶梯：后台取消且零定时器；手动同步不 arm', () {
+  test('重连阶梯：后台取消且零定时器', () {
     fakeAsync((async) {
       enableLanPeer(async);
       final env = build(async);
@@ -611,16 +594,6 @@ void main() {
       expect(env.scheduler.hasPendingTimer, isFalse, reason: '后台零定时');
       async.elapse(const Duration(hours: 1));
       expect(env.host.rounds, isEmpty);
-
-      // 回前台 + 手动同步：resume 轮允许重新 arm，manual 自己不再 arm。
-      env.scheduler.onAppVisible();
-      async.flushMicrotasks();
-      // resume 轮零对端 → 阶梯重新 arm；先取消它，验证 manual 不 arm。
-      env.scheduler.onAppHidden();
-      async.flushMicrotasks();
-      unawaited(env.scheduler.syncNow());
-      async.flushMicrotasks();
-      expect(env.host.rounds.last.trigger, SyncTrigger.manual);
       env.scheduler.dispose();
     });
   });
@@ -676,9 +649,9 @@ void main() {
       async.flushMicrotasks();
 
       env.host.roundGate = Completer<void>();
-      unawaited(env.scheduler.syncNow());
+      unawaited(env.scheduler.syncStartup());
       async.flushMicrotasks();
-      expect(env.host.rounds, isEmpty, reason: '手动轮正在跑');
+      expect(env.host.rounds, isEmpty, reason: '启动轮正在跑');
 
       env.scheduler.notifyPeerSighted();
       async.elapse(const Duration(seconds: 1));
@@ -687,7 +660,7 @@ void main() {
       env.host.roundGate!.complete();
       async.flushMicrotasks();
       expect(env.host.rounds, hasLength(1));
-      expect(env.host.rounds.single.trigger, SyncTrigger.manual);
+      expect(env.host.rounds.single.trigger, SyncTrigger.startup);
 
       // pending 的公告在本轮结束后重新走 1s 去抖并补跑。
       async.elapse(const Duration(seconds: 1));

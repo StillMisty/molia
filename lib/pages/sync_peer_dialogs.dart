@@ -509,7 +509,7 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
     }
     final contacted = await widget.provider.contactManualPeer(host);
     if (!mounted) return;
-    // 接触成功 / 本轮没有真正跑（null = 调度器忙 / 同步关闭）都关闭弹层：
+    // 接触成功 / 本轮没有真正跑（null = 同步关闭 / 没有传输）都关闭弹层：
     // 地址已入簿，只有本轮明确没连上才留在弹层里让用户改地址。
     final message = switch (contacted) {
       null => l10n.syncPeerContactQueued,

@@ -420,7 +420,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
         delivered: false,
         contacted: contacted,
         contactedLan: contactedLan,
-        report: report,
       );
     }
     final enabled = _state.enabledCategories;
@@ -433,7 +432,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
           report.outcome != SyncOutcome.failed && report.failedCount == 0,
       contacted: contacted,
       contactedLan: contactedLan,
-      report: report,
     );
   }
 
