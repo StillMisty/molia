@@ -27,6 +27,7 @@ import 'package:molia/widgets/source_swap/source_swap_chrome.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 class _FakeLyricsService extends LyricsService {
   _FakeLyricsService() : super(providers: const []);
@@ -161,6 +162,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<SourceSwapProvider>.value(value: swap),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),

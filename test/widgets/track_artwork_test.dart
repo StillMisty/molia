@@ -7,6 +7,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/domain/models/track.dart';
@@ -67,7 +68,6 @@ void main() {
       supportDirectory: () async => tempDir,
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
-    CustomCoverStore.overrideInstance(store);
     // 固定走内存 CacheManager：避免共享单例在未解析时调用 path_provider，
     // 也避免真实缓存清理计时器留在 fake async 里导致用例顺序相关。
     artworkCache = ArtworkCache(
@@ -78,14 +78,20 @@ void main() {
   });
 
   tearDown(() async {
-    CustomCoverStore.overrideInstance(null);
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
-  Widget host(Track track) => MaterialApp(
-    home: Scaffold(
-      body: Center(
-        child: TrackArtwork(track: track, size: 44, artworkCache: artworkCache),
+  Widget host(Track track) => Provider<CustomCoverStore>.value(
+    value: store,
+    child: MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: TrackArtwork(
+            track: track,
+            size: 44,
+            artworkCache: artworkCache,
+          ),
+        ),
       ),
     ),
   );

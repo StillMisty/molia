@@ -17,6 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 播放页 smoke 测试：封面手势（点中间播放/暂停、点邻位切歌）、
 /// 可拖动进度滑杆、迷你/完整连续过渡与共享封面飞行。
@@ -82,6 +83,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -268,6 +270,7 @@ void main() {
         MultiProvider(
           providers: [
             ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+            coverStoreProvider(),
           ],
           child: MaterialApp(
             locale: const Locale('zh'),
@@ -347,6 +350,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

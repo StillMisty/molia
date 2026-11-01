@@ -69,9 +69,6 @@ class CoverStyleCache extends ChangeNotifier {
   }) : _processor = processor ?? CoverStyleProcessor(),
        _sourceLoader = sourceLoader ?? loadCoverStyleSource;
 
-  /// 全局默认实例（生产由组合根 provider 注入；测试可注入独立实例）。
-  static final CoverStyleCache instance = CoverStyleCache();
-
   /// 约 24MB 的派生图预算：只影响展示缓存，不影响原图封面缓存策略。
   static const int defaultMaxBytes = 24 * 1024 * 1024;
 

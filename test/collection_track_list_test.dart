@@ -17,6 +17,8 @@ import 'package:molia/widgets/track_row.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'support/cover_test_support.dart';
+
 /// 行动作流程桩：本组只断言动作构成 / 图标 / 文案，不触发真实写入。
 Future<void> _noop() async {}
 
@@ -29,14 +31,16 @@ Future<void> pumpHost(WidgetTester tester, Widget child) async {
     tester.view.resetDevicePixelRatio();
   });
   await tester.pumpWidget(
-    MaterialApp(
-      locale: const Locale('zh'),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        ...GlobalMaterialLocalizations.delegates,
-      ],
-      supportedLocales: const [Locale('zh')],
-      home: Scaffold(body: child),
+    withCoverStore(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        supportedLocales: const [Locale('zh')],
+        home: Scaffold(body: child),
+      ),
     ),
   );
   await tester.pumpAndSettle();

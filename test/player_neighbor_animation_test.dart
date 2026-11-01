@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 切歌视觉：窗口化交叉淡化（仅透明度、原位）、320ms、滑出卡全程渲染、
 /// 进场卡透明度随进度连续升到 1.0。
@@ -76,6 +77,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

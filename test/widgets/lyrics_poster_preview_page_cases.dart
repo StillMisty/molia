@@ -11,6 +11,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/widgets/lyrics_poster_preview_page.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -37,11 +38,9 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
     await store.load();
-    CustomCoverStore.overrideInstance(store);
   });
 
   tearDown(() {
-    CustomCoverStore.overrideInstance(null);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('plugins.flutter.io/path_provider'),
@@ -66,21 +65,24 @@ void main() {
     );
 
     await tester.pumpWidget(
-      M3EMaterialApp(
-        data: M3EThemeData.fromMaterial(themedData),
-        theme: themedData,
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        home: LyricsPosterPreviewPage(
-          lyrics: '第一行\n第二行',
-          trackTitle: 'Title',
-          artistName: 'Artist',
-          albumCoverUrl: original.uri.toString(),
-          trackId: trackId,
+      Provider<CustomCoverStore>.value(
+        value: store,
+        child: M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(themedData),
+          theme: themedData,
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: LyricsPosterPreviewPage(
+            lyrics: '第一行\n第二行',
+            trackTitle: 'Title',
+            artistName: 'Artist',
+            albumCoverUrl: original.uri.toString(),
+            trackId: trackId,
+          ),
         ),
       ),
     );

@@ -13,6 +13,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
 
 /// 队列显示：只列出当前曲目之后的曲目；当前曲目由上方播放器承载，不在列表重复。
@@ -52,8 +53,11 @@ void main() {
     final controller = ScrollController();
     addTearDown(controller.dispose);
     await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
+        ],
         child: MaterialApp(
           locale: const Locale('zh'),
           localizationsDelegates: const [

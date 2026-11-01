@@ -25,6 +25,7 @@ import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
+import '../support/cover_test_support.dart';
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
   items: [
@@ -95,6 +96,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<AiDjProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(
             value: playbackProvider,
@@ -488,6 +490,7 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
+            coverStoreProvider(),
             ChangeNotifierProvider<AiDjProvider>.value(value: provider),
             ChangeNotifierProvider<PlaybackProvider>.value(
               value: playbackProvider,

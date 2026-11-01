@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 发现详情页：滚到底自动加载下一页（无限滚动），行懒构建 + 固定行高。
 void main() {
@@ -100,6 +101,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
         ],

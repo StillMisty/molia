@@ -95,9 +95,10 @@ Future<LocalDataStack> buildLocalDataStack({
   );
 
   // 自定义封面（每曲 + 默认）：设备本地文件 + prefs 索引。启动只读索引 /
-  // 剔除丢失文件，不解码图片；下载与播放共用同一实例。
+  // 剔除丢失文件，不解码图片。这里构造本进程唯一实例，后续 UI 走 Provider，
+  // 下载 / 播放 / 同步 / 取色走构造参数。
   final customCoversWatch = Stopwatch()..start();
-  final customCovers = CustomCoverStore.instance;
+  final customCovers = CustomCoverStore();
   await customCovers.load();
   markStartupStep('sub.customCovers.load', customCoversWatch);
 

@@ -179,7 +179,6 @@ void main() async {
     library: library,
     messenger: AppUiMessenger(notifications),
     powerPolicy: powerPolicy,
-    customCovers: local.customCovers,
     mediaSessionFactory: (service, session) => initSystemMediaSession(
       service,
       // handler 只翻译动作；恢复态回落、阶段路由与提交都在会话命令面。

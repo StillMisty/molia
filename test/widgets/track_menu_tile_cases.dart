@@ -15,6 +15,7 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
 
 /// 只记录下载命令的窄实现（公共下载动作测试）。
@@ -62,27 +63,29 @@ void main() {
     VoidCallback? onToggleFavorite,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        home: Scaffold(
-          body: Center(
-            child: TrackMenuTile(
-              track: const Track(
-                id: TrackId('test', 'a'),
-                title: 'Title',
-                origin: TrackOrigin.lx,
+      withCoverStore(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Scaffold(
+            body: Center(
+              child: TrackMenuTile(
+                track: const Track(
+                  id: TrackId('test', 'a'),
+                  title: 'Title',
+                  origin: TrackOrigin.lx,
+                ),
+                row: const TrackRowModel(title: 'Title', artist: 'Artist'),
+                position: M3ECardPosition.single,
+                onTap: () {},
+                favorite: false,
+                onToggleFavorite: onToggleFavorite ?? () {},
+                onAddToPlaylist: () {},
               ),
-              row: const TrackRowModel(title: 'Title', artist: 'Artist'),
-              position: M3ECardPosition.single,
-              onTap: () {},
-              favorite: false,
-              onToggleFavorite: onToggleFavorite ?? () {},
-              onAddToPlaylist: () {},
             ),
           ),
         ),
@@ -185,6 +188,7 @@ void main() {
       await tester.pumpWidget(
         MultiProvider(
           providers: [
+            coverStoreProvider(),
             if (playback != null)
               ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
             if (records != null)

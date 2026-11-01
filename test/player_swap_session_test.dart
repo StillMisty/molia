@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 封面堆叠尺寸：与播放器同一预算口径（封面边 240 → 堆叠 360 × 254.4）。
 final _deck = coverDeckMetricsFor(
@@ -116,6 +117,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           home: Scaffold(

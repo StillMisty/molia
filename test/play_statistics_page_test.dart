@@ -15,6 +15,7 @@ import 'package:molia/services/save_as.dart';
 
 import 'support/fake_save_as.dart';
 import 'support/sync_test_support.dart';
+import 'support/cover_test_support.dart';
 
 /// 听歌统计页冒烟测试：有数据渲染、空态与窄屏无溢出。
 ///
@@ -94,6 +95,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           Provider<PlayStatisticsRepository>.value(value: repository),
           ChangeNotifierProvider<PlayStatisticsProvider>.value(value: provider),
           if (saveAs != null) Provider<SaveAs>.value(value: saveAs),

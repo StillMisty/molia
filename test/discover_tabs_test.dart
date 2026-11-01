@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 已渲染 chip 占了几行（按 chip 顶边 y 去重）：断言全量渲染（超过两行）用。
 int _chipRows(WidgetTester tester) {
@@ -87,6 +88,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
           ChangeNotifierProvider<DiscoverProvider>.value(value: discover),

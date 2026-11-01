@@ -27,6 +27,7 @@ import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
 import 'support/settings_test_support.dart';
+import 'support/cover_test_support.dart';
 
 /// 壳层「有效选中项」的运行时隐藏测试（挂载真实应用壳 `MyApp`）。
 ///
@@ -121,6 +122,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
           ChangeNotifierProvider<SourcesProvider>.value(value: sources),

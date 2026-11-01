@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/widgets/cover_fallback.dart';
 import 'package:molia/widgets/molia_mark.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 回退封面：默认封面优先，默认封面自身失败时回到 Molia 标志且不递归。
@@ -28,23 +29,27 @@ void main() {
       supportDirectory: () async => tempDir,
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
-    CustomCoverStore.overrideInstance(store);
   });
 
   tearDown(() {
-    CustomCoverStore.overrideInstance(null);
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  Widget host() => MaterialApp(
-    home: Scaffold(
-      body: Builder(builder: (context) => buildFallbackArtwork(context)),
+  Widget host() => Provider<CustomCoverStore>.value(
+    value: store,
+    child: MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (context) => buildFallbackArtwork(context)),
+      ),
     ),
   );
 
-  Widget defaultHost() => MaterialApp(
-    home: Scaffold(
-      body: Builder(builder: (context) => buildDefaultArtwork(context)),
+  Widget defaultHost() => Provider<CustomCoverStore>.value(
+    value: store,
+    child: MaterialApp(
+      home: Scaffold(
+        body: Builder(builder: (context) => buildDefaultArtwork(context)),
+      ),
     ),
   );
 

@@ -18,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 换源页（音频 tab）：候选渲染 / 试听 / 原位替换 / 重复确认 / 空态与失败重试。
 void main() {
@@ -124,6 +125,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<SourceSwapProvider>.value(value: swap),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),

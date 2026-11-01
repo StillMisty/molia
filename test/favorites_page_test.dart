@@ -44,6 +44,7 @@ import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
 import 'support/memory_cache_storage.dart';
+import 'support/cover_test_support.dart';
 
 /// 下载记录 / 删除动作的测试夹具：记录用真实模块（验证 revision 驱动），
 /// 管理面只实现收藏页真正用到的 `delete`。
@@ -272,6 +273,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(
             value: libraryProvider ?? provider,
@@ -1121,6 +1123,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: provider),
           ChangeNotifierProvider<DiscoverProvider>.value(value: discover),

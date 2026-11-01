@@ -34,6 +34,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'fake_library_repository.dart';
 import 'fake_music_source.dart';
 import 'fakes.dart';
+import 'cover_test_support.dart';
 import 'settings_test_support.dart';
 
 const String _favoritesName = '__favorites__';
@@ -171,6 +172,7 @@ Future<FakePlaybackBackend> pumpPerfApp(
   await tester.pumpWidget(
     MultiProvider(
       providers: [
+        coverStoreProvider(),
         ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
         ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ChangeNotifierProvider<SourcesProvider>.value(value: sources),

@@ -31,6 +31,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 import 'support/settings_test_support.dart';
 
 /// 播放页 smoke 测试：圆点切换行常显 + Apple Music 式跟手拖拽展开/收起。
@@ -107,6 +108,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
           // 播放页内嵌 LyricsWidget：歌词会话模块由 composition root 提供，
           // 测试同样注入（真实 LyricsService 在测试 HTTP mock 下快速失败）。
           ChangeNotifierProvider(create: (_) => LyricsProvider()),
@@ -212,6 +214,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ],
         child: MaterialApp(
