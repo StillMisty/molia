@@ -55,7 +55,7 @@ const kCoverStyle = SettingsKey<String>(
   category: SyncCategory.settings,
 );
 
-/// 封面风格作用范围（跟人走）：`player` = 仅播放页，`all` = 所有歌曲封面。
+/// 封面风格作用范围（跟人走）：`player` = 仅播放中，`all` = 所有封面图片。
 const kCoverStyleScope = SettingsKey<String>(
   'cover_style_scope',
   'player',

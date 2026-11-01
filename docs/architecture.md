@@ -1265,10 +1265,12 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 
 - **领域与设置**：`lib/domain/models/cover_style.dart` 定义 9 种 `CoverStyle`
   （稳定 id、未知回退 `original`）与 `CoverStyleScope`（`player` / `all`）。
-  `kCoverStyle` / `kCoverStyleScope` 按 `SyncCategory.settings` 登记；
-  `CoverStyleSettings` 在 `lyrics_display_stack` 创建、初始化并绑定两个键的
-  reload 钩子，经 `provider_tree` 暴露。Provider 缺失时所有消费面回退
-  `original` / `player`，不报错。默认「原图 + 仅播放页」保持既有行为。
+  `player` 只处理当前播放曲目的封面，`all` 处理所有封面图片；两个 id 都保持
+  稳定以兼容已同步设置。`kCoverStyle` / `kCoverStyleScope` 按
+  `SyncCategory.settings` 登记；`CoverStyleSettings` 在 `lyrics_display_stack`
+  创建、初始化并绑定两个键的 reload 钩子，经 `provider_tree` 暴露。Provider
+  缺失时所有消费面回退 `original` / `player`，不报错。默认「原图 + 仅播放中」
+  保持既有行为。
 - **处理管线**：`services/covers/cover_style_processor.dart` 的 `processSync`
   在纯 Dart 中完成解码 → 烘焙方向 → 中心方形裁切 → 缩放到目标边长 →
   风格化 → PNG；`process` 通过长驻 worker isolate 执行（消息带请求 id，
@@ -1287,19 +1289,22 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   省流网关，不额外绕开封面缓存。处理失败 / 省流且无缓存返回 null，
   `StyledCoverImage` 保持原图，不阻塞播放。
 - **展示接线**：`StyledCoverImage` 原图垫底、派生图淡入；`style=original`
-  直接走 `AppNetworkImage`（零额外层）。`PlayerCoverDeck` 的中心、左右邻位与
-  换图占位无论 scope 都应用风格；`TrackArtwork` 仅在 scope=all、调用方
-  `applyCoverStyle=true` 且有曲目身份时应用（列表 / 顶栏 / 迷你条 / 歌曲信息 /
-  AI DJ / 歌词选择）。封面选择器、海报预览与导出、默认封面行、详情页
-  专辑 / 歌手 / 歌单头图、查看原图传 false 或不在接线范围。
+  直接走 `AppNetworkImage`（零额外层）。`PlayerCoverDeck` 的中心、换图占位与
+  滑出卡始终应用风格，左右邻位只在 scope=all 时应用；`TrackArtwork` 在
+  scope=all，或 scope=player 且是当前播放曲目时应用（列表 / 顶栏 / 迷你条 /
+  歌曲信息 / AI DJ / 歌词选择；当前行由宿主显式传 `isCurrentTrack`）。专辑 /
+  歌手 / 歌单 / 发现头图、歌单卡片、歌手头像经 `ScopedCoverImage` 在
+  scope=all 时应用。封面选择器、海报预览与导出、默认封面行、查看原图、系统
+  媒体通知 / 任务栏缩略图始终使用原图。
 - **共享飞行**：顶栏↔播放页与迷你⇄完整飞行只 `peek` 当前 URL / 风格在目标
   边长的缓存；命中时 `MorphCover` 用派生图，未命中用原图，飞行几何与时长
-  不等待处理。落位后真身的 `StyledCoverImage` 在派生图完成时淡入，避免硬跳。
+  不等待处理。`player` 下两端都是当前曲目封面，`all` 下两端也都派生，飞行
+  副本与真身一致；落位后真身的 `StyledCoverImage` 在派生图完成时淡入。
 - **性能与边界**：原图风格不建缓存、不起 isolate；派生图只服务展示层，
   主题取色、下载 / 标签、系统媒体通知、查看原图、封面选择器、海报导出与
-  自定义封面 / 同步始终使用原始封面。小缩略图（派生边长 ≤128 桶）在线稿 /
-  铅笔 / 墨印路径加粗线条、降低细节；播放页 / 列表按可见性自然触发处理，
-  一次算好静态 PNG，切歌动画不逐帧重算。
+  自定义封面 / 同步始终使用原始封面。`player` 只处理当前曲目，`all` 按可见性
+  处理所有封面图片；小缩略图（派生边长 ≤128 桶）在线稿 / 铅笔 / 墨印路径
+  加粗线条、降低细节；一次算好静态 PNG，切歌动画不逐帧重算。
 - **设置入口口径**：风格选择是带实时预览的专用弹层，不套用设置行「5 项以上
   用 Dropdown」的规则（与字体选择弹层同类）；预览网格在窄屏 2 列、宽屏 3 列。
 

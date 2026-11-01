@@ -358,6 +358,8 @@ class _LyricsSelectionPageState extends State<LyricsSelectionPage> {
                           children: [
                             TrackArtwork(
                               trackId: widget.trackId,
+                              // 歌词选择页固定为当前曲目。
+                              isCurrentTrack: true,
                               originalUrl: widget.albumCoverUrl,
                               width: 60,
                               height: 60,

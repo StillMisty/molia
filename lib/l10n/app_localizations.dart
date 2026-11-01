@@ -443,7 +443,7 @@ abstract class AppLocalizations {
   /// No description provided for @coverStyleSheetSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Pick a look and apply it to song covers right away'**
+  /// **'Pick a look and apply it to covers right away'**
   String get coverStyleSheetSubtitle;
 
   /// No description provided for @coverStyleScopeTitle.
@@ -455,25 +455,25 @@ abstract class AppLocalizations {
   /// No description provided for @coverStyleScopePlayer.
   ///
   /// In en, this message translates to:
-  /// **'Player only'**
+  /// **'Playing only'**
   String get coverStyleScopePlayer;
 
   /// No description provided for @coverStyleScopePlayerSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Only the large player cover changes; lists keep the original'**
+  /// **'Only the playing song\'s cover changes; others stay original'**
   String get coverStyleScopePlayerSubtitle;
 
   /// No description provided for @coverStyleScopeAll.
   ///
   /// In en, this message translates to:
-  /// **'All song covers'**
+  /// **'All covers'**
   String get coverStyleScopeAll;
 
   /// No description provided for @coverStyleScopeAllSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Lists, the top bar and the mini player change too'**
+  /// **'Song, album, artist and playlist covers change'**
   String get coverStyleScopeAllSubtitle;
 
   /// No description provided for @coverStyleDone.

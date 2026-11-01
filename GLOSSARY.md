@@ -299,10 +299,12 @@
   固定彩虹渐变；不再给整张图蒙渐变。其余风格分别用 color-dodge 铅笔
   （GIMP / OpenCV pencilSketch 思路）、旋转网点墨印（GPUImage Halftone 思路）、
   octree + Floyd–Steinberg 像素、双色 gradient map、split-tone 胶片。
-- **CoverStyleScope（作用范围）** — `player`（默认，仅播放页大封面与左右邻位）/
-  `all`（所有歌曲封面：列表、顶栏、迷你条、歌曲信息、AI DJ、歌词选择等经
-  `TrackArtwork` 的展示面）。专辑 / 歌手 / 歌单头图、封面选择器、海报预览与
-  导出、默认封面行、查看原图始终使用原图。
+- **CoverStyleScope（作用范围）** — `player`（默认，仅当前播放曲目的封面：
+  播放页中心、顶栏、迷你条、列表当前行、歌曲信息、AI DJ 当前项、歌词选择等；
+  播放页左右邻位与其他曲目保持原图）/ `all`（所有封面图片：歌曲封面与专辑 /
+  歌手 / 歌单 / 发现头图、歌单卡片、歌手头像）。封面选择器、海报预览与导出、
+  默认封面行、查看原图、系统媒体通知 / 任务栏缩略图始终使用原图。`player` 是
+  兼容已同步设置的稳定 id，语义按当前曲目解析。
 - **CoverStyleSettings（封面风格偏好）** — `lib/services/covers/cover_style_settings.dart`：
   `kCoverStyle` / `kCoverStyleScope` 两个「跟人走」设置键的唯一状态（默认
   `original` + `player`）；跨设备同步应用远端值后经 `bindReload` 重载。
@@ -321,10 +323,15 @@
   原图垫底 + 派生图淡入；`original` 直接走既有 `AppNetworkImage` 路径，零额外
   开销；尊重减弱动效。默认封面、主题取色、下载 / 标签、系统媒体通知、查看
   原图与海报导出都不消费派生图。
-- **性能边界** — 只有选定非原图风格才处理；播放页 / 列表按可见性自然触发；
-  一次算好静态 PNG，不随切歌动画逐帧重算；共享飞行副本只优先使用已缓存的
-  派生图，没算好时用原图，不阻塞起手 / 落位；落位后由 `StyledCoverImage`
-  淡入。小缩略图（派生边长 ≤128 桶）加粗线条 / 降低细节，避免 40dp 封面糊成一团。
+- **ScopedCoverImage（非曲目封面展示）** — `lib/widgets/scoped_cover_image.dart`：
+  专辑 / 歌手 / 歌单 / 发现封面与歌手头像的唯一入口；只有 scope=all 且风格
+  非原图时派生，否则回退 `AppNetworkImage`。Provider 缺失 / 缓存不可用时
+  保持原图。
+- **性能边界** — 只有选定非原图风格才处理；`player` 只处理当前曲目，`all`
+  按可见性处理所有封面图片；一次算好静态 PNG，不随切歌动画逐帧重算；共享飞行
+  副本只优先使用已缓存的派生图，没算好时用原图，不阻塞起手 / 落位；落位后由
+  `StyledCoverImage` 淡入。小缩略图（派生边长 ≤128 桶）加粗线条 / 降低细节，
+  避免 40dp 封面糊成一团。
 
 ## 应用壳与导航
 

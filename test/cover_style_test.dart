@@ -506,7 +506,7 @@ void main() {
       return settings;
     }
 
-    test('默认原图 + 仅播放页', () async {
+    test('默认原图 + 仅播放中', () async {
       final settings = buildSettings();
       await settings.init();
       expect(settings.style, CoverStyle.original);
