@@ -246,10 +246,7 @@ Widget _actionButton(
   }
 
   final (String label, Future<void> Function() body) = switch (action) {
-    SyncIssueAction.retry => (
-      l10n.syncRetry,
-      () => provider.syncNow(manual: true),
-    ),
+    SyncIssueAction.retry => (l10n.syncRetry, () => provider.syncNow()),
     SyncIssueAction.grantPermission =>
       provider.lanPermissionPermanentlyDenied
           ? (l10n.syncOpenSystemSettings, () => provider.openSystemSettings())

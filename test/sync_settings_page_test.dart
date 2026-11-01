@@ -139,6 +139,24 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// 换成注入调度器的 provider（生产接线形态）；返回时已 init。
+  Future<void> useSchedulerProvider() async {
+    provider.dispose();
+    provider = SyncProvider(
+      engine: engine,
+      controlPlane: control,
+      backup: backup,
+      scheduler: SyncScheduler(
+        host: engine,
+        state: state,
+        cellularProbe: () async => false,
+        batteryProbe: () async => BatterySnapshot.unknown,
+      ),
+      localEndpoints: fakeEndpoints(),
+    );
+    await provider.init();
+  }
+
   /// 从首屏进入子页（内容 / 日志）。
   Future<void> openSubPage(WidgetTester tester, String key) async {
     await tester.tap(find.byKey(Key(key)));
@@ -285,7 +303,7 @@ void main() {
 
     // 跑一轮（页面无手动主操作，这里直接驱动 provider）：无对端 →
     // 结论「No peer found」+ 相对时间「just now」。
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await tester.pumpAndSettle();
     final footer = transportFooter(tester);
     expect(footer, contains('No other device found'));
@@ -296,7 +314,7 @@ void main() {
 
   testWidgets('同步页每 30 秒刷新相对时间，不额外跑轮次', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     final pulls = transport.pullCount;
     await pumpPage(tester);
     expect(transportFooter(tester), contains('just now'));
@@ -523,6 +541,120 @@ void main() {
     expect(provider.lastReport, isNull, reason: 'null 不冒充任何一轮结论');
   });
 
+  test('syncNow：同步关闭时返回 null（null 只表示没有一轮真正跑）', () async {
+    expect(provider.enabled, isFalse);
+    expect(await provider.syncNow(), isNull);
+    expect(provider.lastReport, isNull);
+  });
+
+  test('手动同步：注入调度器时仍加入轮次链，等补跑轮报告而不是 null', () async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await useSchedulerProvider();
+    expect(provider.hasScheduler, isTrue);
+
+    // 先完成一轮，留下「上一轮报告」——手动请求不能拿它冒充。
+    final previous = await provider.syncNow();
+    expect(previous, isNotNull);
+
+    // 自动轮在途：拉取卡住，模拟一轮还没跑完。
+    final gate = Completer<void>();
+    transport.onPull = () => gate.future;
+    final inFlight = engine.syncNow(trigger: SyncTrigger.timer);
+    final queued = provider.syncNow();
+
+    var completed = false;
+    unawaited(queued.then((_) => completed = true));
+    await pumpEventQueue();
+    expect(provider.syncing, isTrue);
+    expect(completed, isFalse, reason: '手动请求在途时排队，不立即返回 null');
+
+    gate.complete();
+    await inFlight;
+    final report = await queued;
+
+    expect(report, isNotNull, reason: '有调度器也必须等到补跑轮报告');
+    expect(identical(report, previous), isFalse, reason: '不得把上一轮报告当成本轮结果');
+    expect(report!.trigger, SyncTrigger.manual, reason: '补跑轮用排队时合并的手动触发');
+    expect(report.startedAt, greaterThanOrEqualTo(previous!.finishedAt));
+  });
+
+  test('手动同步：允许 anti-entropy，指纹分歧的对端本轮强制全量', () async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    // 越过 anti-entropy 的 10 分钟节流窗口，构造「指纹与本机不一致」的对端。
+    nowMs = 700000;
+    state.recordRound(
+      SyncRoundReport(
+        trigger: SyncTrigger.timer,
+        startedAt: 0,
+        finishedAt: 1,
+        outcome: SyncOutcome.ok,
+        peers: [
+          SyncPeerState(
+            deviceId: 'devB',
+            name: 'Device B',
+            transport: SyncTransportKind.lan,
+            lastSeenAt: 1,
+            lastSuccessAt: 1,
+            snapshotId: 'divergent-snapshot',
+            categories: const ['settings'],
+          ),
+        ],
+      ),
+    );
+
+    final report = await provider.syncNow();
+
+    expect(report, isNotNull);
+    expect(
+      transport.lastRequest!.plan.forcesFull('devB'),
+      isTrue,
+      reason: '手动轮允许全量兜底（显式请求修复静默分歧）',
+    );
+  });
+
+  test('contactManualPeer：轮次在途时排队等补跑轮，不返回 null', () async {
+    await provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await provider.addManualPeer('192.168.1.23');
+    await useSchedulerProvider();
+
+    var pulls = 0;
+    final gate = Completer<void>();
+    transport.onPull = () async {
+      pulls++;
+      if (pulls == 1) {
+        // 在途轮：卡住，模拟一轮还没跑完。
+        await gate.future;
+        return;
+      }
+      // 补跑轮：对端应答，地址簿学到身份，本轮算接触成功。
+      await state.learnManualPeer(
+        const ManualPeer(
+          host: '192.168.1.23',
+          deviceId: 'devB',
+          httpPort: 40000,
+        ),
+      );
+      transport.available.add(
+        SyncEnvelope(
+          deviceId: 'devB',
+          deviceName: 'Device B',
+          producedAt: 5000,
+          records: const {},
+        ),
+      );
+    };
+    final inFlight = engine.syncNow(trigger: SyncTrigger.timer);
+    final contacted = provider.contactManualPeer('192.168.1.23');
+
+    await pumpEventQueue();
+    expect(provider.syncing, isTrue);
+
+    gate.complete();
+    await inFlight;
+
+    expect(await contacted, isTrue, reason: '排队后按补跑轮判定接触成功，不是「没有真正跑」的 null');
+  });
+
   testWidgets('设备地址清单：逐条列出，可更新（保留身份）与删除', (tester) async {
     final clipboard = mockClipboard(tester);
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
@@ -650,7 +782,7 @@ void main() {
         },
       ),
     );
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await pumpPage(tester);
 
     expect(find.text('Device B'), findsOneWidget);
@@ -716,7 +848,7 @@ void main() {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     final gate = Completer<void>();
     transport.onPull = () => gate.future;
-    final inFlight = provider.syncNow(manual: true);
+    final inFlight = provider.syncNow();
 
     await pumpPage(tester);
     expect(peersFooter(tester), 'Syncing…');
@@ -734,7 +866,7 @@ void main() {
     nowMs = DateTime.now().millisecondsSinceEpoch;
     // 先跑一轮拿到「本轮起点」（页面本身不注入调度器，不会自动再跑）。
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     final startedAt = provider.lastReport!.startedAt;
 
     final now = provider.nowMs;
@@ -870,7 +1002,7 @@ void main() {
 
   testWidgets('设备区脚注：只有云端设备时不说「已连接」', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     final startedAt = provider.lastReport!.startedAt;
     state.recordRound(
       SyncRoundReport(
@@ -900,7 +1032,7 @@ void main() {
 
   testWidgets('设备区脚注：局域网 + 云端混合只按「已同步」汇总', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     final startedAt = provider.lastReport!.startedAt;
     state.recordRound(
       SyncRoundReport(
@@ -1104,7 +1236,7 @@ void main() {
         records: const {},
       ),
     );
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncPeer-devB')), findsOneWidget);
     expect(provider.manualPeers, isEmpty);
@@ -1141,7 +1273,7 @@ void main() {
         records: const {},
       ),
     );
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
 
     await pumpPage(tester);
     // devB 在地址簿里有用户命名 → 用它；devC 无命名 → 用对端自报名。
@@ -1159,7 +1291,7 @@ void main() {
   testWidgets('同步在途时保存设备：等补跑轮给出结论，不拿上一轮报告冒充', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     // 先完成一轮，留下历史报告（旧实现会把这份旧报告当成本轮结果）。
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
 
     var pulls = 0;
     final gate = Completer<void>();
@@ -1187,7 +1319,7 @@ void main() {
         ),
       );
     };
-    final inFlight = provider.syncNow(manual: true);
+    final inFlight = provider.syncNow();
     await pumpPage(tester);
     await openManualConnect(tester);
 
@@ -1247,7 +1379,7 @@ void main() {
   testWidgets('日志与诊断子页：24h 动态行与环境行', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     // 手动一轮：日志里出现一条无对端轮次（0 字节、0 落地）。
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await pumpPage(tester);
     expect(find.byKey(const Key('settingsSyncActivityItem')), findsNothing);
 
@@ -1264,7 +1396,7 @@ void main() {
   testWidgets('日志子页：完整日志（超过 6 条不截断），入口副文案跟随', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     for (var i = 0; i < 7; i++) {
-      await provider.syncNow(manual: true);
+      await provider.syncNow();
     }
     await pumpPage(tester);
 
@@ -1281,7 +1413,7 @@ void main() {
     await pumpPage(tester);
     expect(find.text('No records yet'), findsOneWidget);
 
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await tester.pumpAndSettle();
     expect(find.text('No records yet'), findsNothing);
     final logTile = tester.widget<SettingsNavTile>(
@@ -1518,7 +1650,7 @@ void main() {
   testWidgets('失败行按原因给可点动作：手动地址 / WebDAV / 重试', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
     transport.pullError = const SyncIssue(code: SyncIssueCode.discoverySilent);
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await pumpPage(tester);
 
     await openSubPage(tester, 'settingsSyncLogItem');
@@ -1546,7 +1678,7 @@ void main() {
     transport.pullError = const SyncIssue(
       code: SyncIssueCode.probePortUnavailable,
     );
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await pumpPage(tester);
 
     await openSubPage(tester, 'settingsSyncLogItem');
@@ -1604,7 +1736,7 @@ void main() {
         records: const {},
       ),
     );
-    await provider.syncNow(manual: true);
+    await provider.syncNow();
     await pumpPage(tester);
 
     final finder = find.byKey(const Key('settingsSyncLanSwitch'));

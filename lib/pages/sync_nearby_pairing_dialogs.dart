@@ -128,7 +128,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     final message = _resultMessage(l10n, result.outcome);
     showSyncNoticeAndClose(context, message);
     if (result.isSuccess) {
-      unawaited(widget.provider.syncNow(manual: true));
+      unawaited(widget.provider.syncNow());
     }
   }
 
@@ -372,7 +372,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
     showSyncNoticeAndClose(context, message);
     if (outcome == SyncPairingOutcome.accepted ||
         outcome == SyncPairingOutcome.sameGroup) {
-      unawaited(widget.provider.syncNow(manual: true));
+      unawaited(widget.provider.syncNow());
     }
   }
 
