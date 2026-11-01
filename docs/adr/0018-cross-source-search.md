@@ -1,8 +1,9 @@
 # ADR-0018：跨音源聚合搜索、来源排序与键盘模型
 
 - 状态：已采纳（2026-10）
-- 相关：`lib/providers/search_provider.dart`、`lib/providers/search_session.dart`、
-  `lib/providers/search_source_group.dart`、`lib/widgets/search_results_view.dart`、
+- 相关：`lib/providers/search_provider.dart`、`lib/providers/source_fan_out.dart`、
+  `lib/providers/search_branch.dart`、`lib/providers/search_source_group.dart`、
+  `lib/widgets/search_results_view.dart`、
   `lib/widgets/global_search_overlay.dart`、`lib/services/key_claims.dart`、
   `lib/data/settings/settings_keys.dart`、`docs/architecture.md`
 
@@ -21,7 +22,8 @@
 ## 决策
 
 1. **每个「搜索类型 × 来源」一个会话**：`SearchProvider` 不再持有单一
-   `sourceKey`，而是按 `SearchKind` 维护 `Map<String, SearchSession<T>>`。
+   `sourceKey`，而是按 `SearchKind` 各持一条扇出会话，会话内每个来源一个
+   分页执行体（`PagedFanOutRun`）。
    每个来源复用 `PagedListController` 的首屏 / 加载更多 / 失败 / 过期响应 /
    跨页去重语义；查询按来源并行 fan-out，单源失败只挂在该来源分组。
 2. **只读分组投影**：新增 `SearchSourceGroup<T>`（source / items / failure /
