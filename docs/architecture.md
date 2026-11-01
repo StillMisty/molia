@@ -1246,11 +1246,14 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
 - **处理管线**：`services/covers/cover_style_processor.dart` 的 `processSync`
   在纯 Dart 中完成解码 → 烘焙方向 → 中心方形裁切 → 缩放到目标边长 →
   风格化 → PNG；`process` 通过长驻 worker isolate 执行（消息带请求 id，
-  worker 退出时在途请求返回 null、下一次调用自动重启）。8 种非原图风格：
-  渐变素描（`oneLastKiss`：线稿 + 暗部 + 固定彩虹渐变）、纯线稿、铅笔素描、
-  浮雕、像素（固定有限调色板 + 块状）、黑白墨印（2–3 阶）、双色印刷（固定
-  两色 + 1px 套印错位）、胶片颗粒（暖色 + 噪声 + 光晕 + 暗角）。纹理全部
-  程序化生成，不复用第三方图片 / 水印。
+  worker 退出时在途请求返回 null、下一次调用自动重启）。算法参考成熟开源实现
+  后重写（guided filter / color dodge / rotated halftone / octree quantization），
+  不复用第三方代码或素材：渐变素描 = guided filter + Sobel 线稿 + 固定彩虹
+  渐变；纯线稿 = 同一套线稿掩码；铅笔素描 = color dodge + 线稿找回结构；
+  浮雕 = 平滑亮度上的方向性压印；像素 = 块平均 + octree 量化 +
+  Floyd–Steinberg 抖动 + 最近邻放大；黑白墨印 = 旋转网点；双色印刷 = 两色
+  gradient map + posterize + 套印偏移；胶片颗粒 = split toning + 高光扩散 +
+  颗粒 + 暗角。纹理全部程序化生成，不复用第三方图片 / 水印。
 - **缓存与边长**：`CoverStyleCache` 以「URL + 风格 + 边长」为 key，边长先归入
   64 / 128 / 256 / 512 / 768 五档（播放页大图封顶 768），内存 LRU 约 24MB，
   同 key 并发请求共享一个 future；首版不落盘。原图读取走 data URL /

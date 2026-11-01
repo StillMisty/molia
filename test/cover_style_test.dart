@@ -166,14 +166,14 @@ void main() {
           edge: 64,
         )!,
       );
-      // 64px 下块大小 5：同一块内相邻像素颜色相同。
+      // 64px 下块大小 3：同一块内相邻像素颜色相同。
       final a = decoded.getPixel(1, 1);
-      final b = decoded.getPixel(4, 4);
+      final b = decoded.getPixel(2, 2);
       expect((a.r, a.g, a.b), (b.r, b.g, b.b));
-      expect(_uniqueColors(decoded), lessThanOrEqualTo(24));
+      expect(_uniqueColors(decoded), lessThanOrEqualTo(32));
     });
 
-    test('双色印刷只用两种固定颜色', () {
+    test('双色印刷是两色渐变，不是剪影 / 灰阶', () {
       final decoded = _decode(
         CoverStyleProcessor.processSync(
           sample,
@@ -181,7 +181,18 @@ void main() {
           edge: 64,
         )!,
       );
-      expect(_uniqueColors(decoded), 2);
+      expect(_uniqueColors(decoded), greaterThan(2));
+      // 暗部偏靛蓝、亮部偏暖黄；只要两个方向都存在，就说明渐变映射生效。
+      expect(
+        decoded.any((pixel) => pixel.b > pixel.r),
+        isTrue,
+        reason: '应有靛蓝暗部',
+      );
+      expect(
+        decoded.any((pixel) => pixel.r > pixel.b),
+        isTrue,
+        reason: '应有暖黄亮部',
+      );
     });
 
     test('非法字节返回 null', () {
@@ -233,17 +244,20 @@ void main() {
       }
     });
 
-    test('铅笔比纯线稿有更多石墨暗面', () {
-      int darkPixels(CoverStyle style) {
+    test('铅笔比纯线稿有更多中间调石墨', () {
+      int midtones(CoverStyle style) {
         final decoded = _decode(
           CoverStyleProcessor.processSync(sample, style: style, edge: 64)!,
         );
-        return decoded.where((pixel) => _luma(pixel) < 200).length;
+        return decoded.where((pixel) {
+          final luma = _luma(pixel);
+          return luma > 40 && luma < 215;
+        }).length;
       }
 
       expect(
-        darkPixels(CoverStyle.pencil),
-        greaterThan(darkPixels(CoverStyle.lineArt)),
+        midtones(CoverStyle.pencil),
+        greaterThan(midtones(CoverStyle.lineArt)),
       );
     });
 
