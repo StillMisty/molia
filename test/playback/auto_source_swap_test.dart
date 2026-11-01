@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
+import 'package:molia/models/play_mode.dart';
+import 'package:molia/playback/playback_commands.dart';
+import 'package:molia/playback/playback_error_recovery.dart';
 import 'package:molia/playback/playback_session_coordinator.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/playback_session_store.dart';
@@ -39,6 +44,86 @@ class _RecordingCoordinator extends PlaybackSessionCoordinator {
     replacedUris.add(trackUri);
     return super.replaceQueueTrack(trackUri, newTrack);
   }
+}
+
+/// 恢复策略直测用的命令面替身：只记录写入，不碰真实播放 / 会话。
+class _RecordingCommands implements PlaybackCommandPort {
+  final List<int> playedIndexes = [];
+  final List<({String uri, Track track})> replacements = [];
+
+  /// 非空时对应命令抛错（验证失败路径不会卡住守卫）。
+  Object? playError;
+  Object? replaceError;
+
+  @override
+  Future<PlaybackCommandOutcome> playQueueIndex(int index) async {
+    playedIndexes.add(index);
+    final error = playError;
+    if (error != null) throw error;
+    return PlaybackCommandOutcome.trackOnly;
+  }
+
+  @override
+  Future<PlaybackCommandOutcome> replaceQueueTrack(
+    String trackUri,
+    Track newTrack,
+  ) async {
+    replacements.add((uri: trackUri, track: newTrack));
+    final error = replaceError;
+    if (error != null) throw error;
+    return PlaybackCommandOutcome.trackAndQueue;
+  }
+
+  @override
+  Future<PlaybackCommandOutcome> play() async => PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> pause() async => PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> togglePlayPause() async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> skipToNext() async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> skipToPrevious() async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> moveQueueIndex(int from, int to) async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> removeQueueIndex(int index) async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> setCurrentQuality(String quality) async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> seekToPosition(Duration position) async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> setPlayMode(PlayMode mode) async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> togglePlayMode() async =>
+      PlaybackCommandOutcome.none;
+
+  @override
+  Future<PlaybackCommandOutcome> stop() async => PlaybackCommandOutcome.none;
+}
+
+class _SnapshotBox {
+  _SnapshotBox(this.value);
+
+  PlaybackSnapshot value;
 }
 
 /// 播放失败自动换源：同源重试 → 严格找回 → 队列替换；开关/守卫/级联有界。
@@ -295,5 +380,259 @@ void main() {
     expect(provider.snapshot.current?.id.uri, 'tx:a');
     expect(calls.map((call) => call.uri), ['fake:a', 'kg:a']);
     expect(calls.last.exclude, {'fake', 'kg'});
+  });
+
+  group('PlaybackErrorRecovery（策略模块直测）', () {
+    const networkFailure = SourceFailure(
+      kind: FailureKind.network,
+      message: 'boom',
+      retryable: true,
+    );
+
+    PlaybackSnapshot failureSnapshot(Track failing, {SourceFailure? error}) =>
+        PlaybackSnapshot(
+          current: failing,
+          queue: [failing],
+          currentIndex: 0,
+          error: error ?? networkFailure,
+        );
+
+    ({
+      PlaybackErrorRecovery recovery,
+      _RecordingCommands commands,
+      _SnapshotBox box,
+      List<({String uri, Set<String> exclude})> calls,
+      List<PlaybackCommandOutcome> outcomes,
+      List<(Track, Track)> swapped,
+    })
+    buildRecovery({
+      Future<Track?> Function(Track seed, Set<String> exclude)? resolver,
+      SourceSwapSettings? swapSettings,
+      int provenanceCap = 64,
+    }) {
+      final commands = _RecordingCommands();
+      final box = _SnapshotBox(PlaybackSnapshot.empty);
+      final calls = <({String uri, Set<String> exclude})>[];
+      final outcomes = <PlaybackCommandOutcome>[];
+      final swapped = <(Track, Track)>[];
+      final recovery = PlaybackErrorRecovery(
+        commands: commands,
+        readSnapshot: () => box.value,
+        onOutcome: outcomes.add,
+        autoSwapSettings:
+            swapSettings ??
+            SourceSwapSettings(settings: testSettingsRegistry()),
+        autoSwapResolver: (seed, {required excludeSourceKeys}) {
+          calls.add((uri: seed.id.uri, exclude: {...excludeSourceKeys}));
+          return resolver?.call(seed, excludeSourceKeys) ??
+              Future<Track?>.value(null);
+        },
+        onAutoSourceSwapped: (oldTrack, newTrack) async {
+          swapped.add((oldTrack, newTrack));
+        },
+        provenanceCap: provenanceCap,
+      );
+      return (
+        recovery: recovery,
+        commands: commands,
+        box: box,
+        calls: calls,
+        outcomes: outcomes,
+        swapped: swapped,
+      );
+    }
+
+    test('同一曲目只同源重试一次，切音质后重新允许', () async {
+      final failing = track('fake', 'a');
+      final h = buildRecovery();
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.commands.playedIndexes, [0]);
+      expect(h.calls, hasLength(1), reason: '重试后仍失败，进入自动换源');
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.commands.playedIndexes, [0], reason: '同一曲目 key 不再同源重试');
+      expect(h.calls, hasLength(2), reason: '直接尝试自动换源');
+
+      h.recovery.resetRetryGuard();
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.commands.playedIndexes, [0, 0], reason: '切音质是新的取链动作');
+    });
+
+    test('同源重试命令失败：错误仍在时仍尝试自动换源', () async {
+      final failing = track('fake', 'a');
+      final replacement = track('kg', 'a');
+      final h = buildRecovery(resolver: (seed, exclude) async => replacement);
+      h.commands.playError = StateError('play failed');
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      expect(h.commands.playedIndexes, [0]);
+      expect(h.calls.single.exclude, {'fake'});
+      expect(h.commands.replacements.single.uri, 'fake:a');
+      expect(h.swapped, hasLength(1));
+      expect(h.swapped.single.$2, same(replacement));
+      expect(h.outcomes.single, PlaybackCommandOutcome.trackAndQueue);
+    });
+
+    test('换源命令失败：不调用同步钩子、不发通知，守卫释放可再试', () async {
+      final failing = track('fake', 'a');
+      final replacement = track('kg', 'a');
+      final h = buildRecovery(resolver: (seed, exclude) async => replacement);
+      h.commands.replaceError = StateError('write failed');
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      expect(h.commands.replacements, hasLength(1));
+      expect(h.swapped, isEmpty);
+      expect(h.outcomes, isEmpty);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(
+        h.commands.replacements,
+        hasLength(2),
+        reason: '失败后并发守卫已释放，下一次失败仍会尝试换源',
+      );
+    });
+
+    test('本地文件与 cancelled / unsupported 失败不换源', () async {
+      final local = track('local', 'a', origin: TrackOrigin.localFile);
+      final localH = buildRecovery(
+        resolver: (seed, exclude) async => track('kg', 'a'),
+      );
+      localH.box.value = failureSnapshot(local);
+      localH.recovery.onPlaybackError(localH.box.value);
+      await pumpEventQueue();
+
+      expect(localH.commands.playedIndexes, [0], reason: '本地文件仍同源重试');
+      expect(localH.calls, isEmpty);
+      expect(localH.commands.replacements, isEmpty);
+
+      for (final kind in [FailureKind.cancelled, FailureKind.unsupported]) {
+        final failing = track('fake', 'a');
+        final h = buildRecovery(
+          resolver: (seed, exclude) async => track('kg', 'a'),
+        );
+        h.box.value = failureSnapshot(
+          failing,
+          error: SourceFailure(kind: kind, message: kind.name),
+        );
+        h.recovery.onPlaybackError(h.box.value);
+        await pumpEventQueue();
+
+        expect(h.calls, isEmpty, reason: '${kind.name} 不换源');
+        expect(h.commands.replacements, isEmpty);
+      }
+    });
+
+    test('搜索期间切歌：丢弃结果，不替换队列', () async {
+      final failing = track('fake', 'a');
+      final other = track('tx', 'z');
+      final replacement = track('kg', 'a');
+      final gate = Completer<Track?>();
+      final h = buildRecovery(resolver: (seed, exclude) => gate.future);
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.calls, hasLength(1), reason: '重试后已进入跨源搜索');
+
+      h.box.value = failureSnapshot(other);
+      gate.complete(replacement);
+      await pumpEventQueue();
+
+      expect(h.commands.replacements, isEmpty);
+      expect(h.swapped, isEmpty);
+      expect(h.outcomes, isEmpty);
+    });
+
+    test('同一曲目换源并发只跑一次', () async {
+      final failing = track('fake', 'a');
+      final gate = Completer<Track?>();
+      final h = buildRecovery(resolver: (seed, exclude) => gate.future);
+      h.box.value = failureSnapshot(failing);
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.calls, hasLength(1));
+
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.calls, hasLength(1), reason: '并发守卫吃掉重复触发');
+
+      gate.complete(null);
+      await pumpEventQueue();
+    });
+
+    test('级联每源至多一次：已尝试来源随候选传递', () async {
+      final seed = track('s0', 'a');
+      final first = track('s1', 'a');
+      final second = track('s2', 'a');
+      final h = buildRecovery(
+        resolver: (track, exclude) async {
+          if (track.id.uri == 's0:a') return first;
+          if (track.id.uri == 's1:a') return second;
+          return null;
+        },
+      );
+
+      h.box.value = failureSnapshot(seed);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.calls.single.exclude, {'s0'});
+      expect(h.commands.replacements.single.uri, 's0:a');
+
+      h.box.value = failureSnapshot(first);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.calls.last.uri, 's1:a');
+      expect(h.calls.last.exclude, {'s0', 's1'});
+
+      h.box.value = failureSnapshot(second);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+      expect(h.calls.last.uri, 's2:a');
+      expect(h.calls.last.exclude, {'s0', 's1', 's2'});
+      expect(h.commands.replacements, hasLength(2), reason: '无匹配后停止级联');
+    });
+
+    test('provenance 超过 cap 淘汰最早条目', () async {
+      final a0 = track('s0', 'a');
+      final a1 = track('s1', 'a');
+      final b0 = track('s0', 'b');
+      final b1 = track('s1', 'b');
+      final h = buildRecovery(
+        provenanceCap: 1,
+        resolver: (track, exclude) async {
+          if (track.id.uri == 's0:a') return a1;
+          if (track.id.uri == 's0:b') return b1;
+          return null;
+        },
+      );
+
+      h.box.value = failureSnapshot(a0);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      h.box.value = failureSnapshot(b0);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      h.box.value = failureSnapshot(a1);
+      h.recovery.onPlaybackError(h.box.value);
+      await pumpEventQueue();
+
+      expect(h.calls.last.uri, 's1:a');
+      expect(h.calls.last.exclude, {'s1'}, reason: '最早条目已被 cap 淘汰');
+    });
   });
 }

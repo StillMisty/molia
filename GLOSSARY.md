@@ -38,6 +38,12 @@
   （`current/previous/next/upNext/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
   是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSessionCoordinator`
   构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
+- **Playback error recovery（播放失败恢复）** — `lib/playback/playback_error_recovery.dart`：
+  播放失败后的唯一策略模块：失效该曲目取链缓存 → 同一曲目 key 只同源重试一次 →
+  仍失败则自动换源。写入只经 `PlaybackCommandPort`（`playQueueIndex` /
+  `replaceQueueTrack`），阶段路由与「返回前已提交」仍在
+  `PlaybackSessionCoordinator`；`PlaybackProvider` 只把失败快照转发进来，并按命令
+  结果通知 UI。切音质是一次新的取链动作，`resetRetryGuard` 重新允许同源重试。
 - **Playback stream headers（流请求头契约）** — `lib/domain/ports/music_source.dart::PlayableStream`：取链返回 `uri + headers + expiresIn`，`headers` 是**全路径契约**，不是取链层的局部细节。`SourceManagerMusicSource.resolve` / `CatalogService.resolve` 原样保留，`LocalPlaybackService` 同时传给 `AudioSource.uri` 与 `LockCachingAudioSource`，`NextTrackPreloader` / `AudioPredownloader` / 桌面 `PlayingTrackCacheWriter` / 下载复用同一份；任一处丢掉 headers（B 站直链需要 `Referer` + 浏览器 UA）都会变成 403 / 播放失败。新增取链实现时先看这条。
 - **Play mode（播放模式）** — `lib/models/play_mode.dart`：列表循环（队尾回队首）、
   顺序播放（播完即停）、单曲循环、随机播放；`PlayMode.next` 是按钮与系统媒体动作
@@ -699,11 +705,12 @@
   两种消费面：歌词搜索（非严格，未命中回退首候选）与自动换源（严格，未命中
   返回 null —— 宁可不换，不换错）。
 - **Auto source swap（自动换源）** — `lib/services/source_swap/auto_source_swap_service.dart`
-  + `PlaybackProvider` 的失败恢复链路：同源重试仍失败后跨源严格找回并**静默**
-  替换队列曲目（对齐 LX）；替换经 `PlaybackCommandPort.replaceQueueTrack`
+  + `lib/playback/playback_error_recovery.dart` 的恢复策略：同源重试仍失败后跨源严格
+  找回并**静默**替换队列曲目（对齐 LX）；替换经 `PlaybackCommandPort.replaceQueueTrack`
   （live 由协调者转发 facade 并返回前提交会话，恢复态 / 未命中 no-op——自动换源
   只由真实播放失败触发，不改保存的恢复会话）；provenance（每个曲目的已尝试来源）
-  保证级联每源至多一次、有界；开关 `SourceSwapSettings`（默认开，设置 › 播放）。
+  保证级联每源至多一次、有界（上限 64 条）；开关 `SourceSwapSettings`（默认开，
+  设置 › 播放）。本地文件与 cancelled / unsupported 失败不换源。
 
 ## 听歌统计
 - **Listening statistics snapshot（统计快照）** — `ListeningStatisticsSnapshot`：
