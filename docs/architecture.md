@@ -505,6 +505,12 @@
   由主 socket 按接口 join 承担，接口 socket 的临时端口只接收回给该端口的单播，
   不对外；presence 的探测端口以认证报文里的 `probe` 为准。IPv6 由主 socket 按
   接口 join 组播接收，发送仍走默认路由。
+  局域网三件套（`LanSyncTransport` / `LanDiscovery` / `LanPairingService`）共享
+  一个 **LAN runtime**（`lan_runtime.dart::LanRuntime`）：设备身份、口令与发现
+  密钥、权限 / 蜂窝判定、本机地址、已知与手动对端、端点回写、换网事件与 UDP
+  端口偏好只声明一次；本机 HTTP / 探测端口由绑定者回填，公告与配对读同一份。
+  组合根只构造一个实例，不再把同一组闭包分别传给传输和配对；单测也只替换
+  socket binder / 时钟 / 报文流与发送器 / HTTP 客户端这些真正的适配器。
   `lanEndpoints` 只在 MAC + HTTP 解密成功后回写（32 条上限、180 天淘汰、
   移除设备一并清理），广播被隔离时用它单播兜底。
   局域网在移动端有平台准入：Android 17 / API 37 起必须声明并运行时申请

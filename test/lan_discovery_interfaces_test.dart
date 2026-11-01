@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
 import 'package:molia/data/sync/transport/lan_discovery.dart';
 
+import 'support/lan_runtime.dart';
+
 /// 按接口 IPv4 发现：绑定范围、地址变化、失败降级与稳定探测端口。
 void main() {
   const passphrase = 'ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345-6789';
@@ -18,14 +20,16 @@ void main() {
     Set<String> failing = const {},
   }) {
     return LanDiscovery(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
-      discoveryKeyProvider: () async => key,
-      httpPortProvider: () => 43210,
-      probePortProvider: () => 47825,
-      localAddressesProvider: addresses,
+      runtime: lanRuntime(
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        codec: codec,
+        httpPort: 43210,
+        udpPort: 0,
+        localAddresses: addresses,
+      ),
       udpBinder: _binder(calls, redirect: redirect, failing: failing),
-      udpPort: 0,
     );
   }
 

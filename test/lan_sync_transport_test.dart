@@ -12,6 +12,7 @@ import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/utils/peer_address.dart';
 
+import 'support/lan_runtime.dart';
 import 'support/sync_network.dart';
 
 /// 局域网直连传输测试：回环上的探测、拉取、推送与口令不匹配跳过。
@@ -40,22 +41,28 @@ void main() {
     final envA = envelope('devA', value: 'light');
     final envB = envelope('devB', value: 'dark');
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47891,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envA,
-      udpPort: 47891,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        udpPort: 47892,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envB,
       probeTargets: const [(host: '127.0.0.1', port: 47891)],
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47892,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -84,22 +91,28 @@ void main() {
 
   test('pull 发现的对端在随后的 push 里仍是预期对端（失败计数不丢）', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47974,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       probeTargets: const [(host: '127.0.0.1', port: 47975)],
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47974,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        udpPort: 47975,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      udpPort: 47975,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -129,22 +142,28 @@ void main() {
 
   test('口令不同的对端返回空结果（解密失败静默跳过）', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47893,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      udpPort: 47893,
     );
     final transportC = LanSyncTransport(
-      deviceId: 'devC',
-      deviceName: () => '设备C',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devC',
+        deviceName: '设备C',
+        passphrase: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
+        udpPort: 47894,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
       snapshotProvider: () async => envelope('devC'),
       probeTargets: const [(host: '127.0.0.1', port: 47893)],
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47894,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -162,28 +181,34 @@ void main() {
   test('解密失败归属到具体设备：不进 seenIds，但失败不伪装成成功', () async {
     var portA = 0;
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => portA = port,
+        localAddresses: () async => const [],
+        udpPort: 47881,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      onHttpPortBound: (port) => portA = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47881,
     );
     final transportC = LanSyncTransport(
-      deviceId: 'devC',
-      deviceName: () => '设备C',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devC',
+        deviceName: '设备C',
+        passphrase: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
+        // 手动地址是「预期对端」：发现层拿不到对端（口令不同 MAC 验不过），
+        // 仍能走 HTTP 直连并由解密失败触发归属。
+        manualPeers: () => [
+          ManualPeer(host: '127.0.0.1', httpPort: portA, deviceId: 'devA'),
+        ],
+        localAddresses: () async => const [],
+        udpPort: 47882,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ',
       snapshotProvider: () async => envelope('devC'),
-      // 手动地址是「预期对端」：发现层拿不到对端（口令不同 MAC 验不过），
-      // 仍能走 HTTP 直连并由解密失败触发归属。
-      manualPeersProvider: () => [
-        ManualPeer(host: '127.0.0.1', httpPort: portA, deviceId: 'devA'),
-      ],
-      localAddressesProvider: () async => const [],
-      udpPort: 47882,
       probeWindow: const Duration(milliseconds: 100),
     );
     addTearDown(() async {
@@ -208,23 +233,26 @@ void main() {
 
   test('试探性端点读取失败：有失败归属，但不计入 failedPeers / partial', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        // 只有持久化端点（没有本轮 manual / presence）：失败不计数，但 UI
+        // 仍要知道是哪台没连上。
+        knownPeers: () => const [
+          LanPeerEndpoint(
+            deviceId: 'devGhost',
+            host: '127.0.0.1',
+            httpPort: 1,
+            verifiedAt: 1,
+          ),
+        ],
+        localAddresses: () async => const [],
+        udpPort: 47883,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      // 只有持久化端点（没有本轮 manual / presence）：失败不计数，但 UI
-      // 仍要知道是哪台没连上。
-      knownPeersProvider: () => const [
-        LanPeerEndpoint(
-          deviceId: 'devGhost',
-          host: '127.0.0.1',
-          httpPort: 1,
-          verifiedAt: 1,
-        ),
-      ],
-      localAddressesProvider: () async => const [],
-      udpPort: 47883,
       probeWindow: const Duration(milliseconds: 100),
     );
     addTearDown(transport.stop);
@@ -243,23 +271,29 @@ void main() {
     var envA = envelope('devA', value: 'light').withSnapshotId('hash-1');
     var ownSnapshotId = 'hash-1';
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47896,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envA,
       snapshotIdProvider: () => ownSnapshotId,
-      udpPort: 47896,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        udpPort: 47897,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47896)],
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47897,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -331,25 +365,31 @@ void main() {
     }
 
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47898,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'full'),
       journalProvider: serve,
       snapshotIdProvider: () => 'hash-full',
       journalHeadProvider: () => 3,
-      udpPort: 47898,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        udpPort: 47899,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47898)],
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47899,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -381,14 +421,17 @@ void main() {
   test('HTTP 路径：只服务 /molia-sync/v2/*，旧 v1 路径 404', () async {
     var httpPort = 0;
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => httpPort = port,
+        localAddresses: () async => const [],
+        udpPort: 47956,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      onHttpPortBound: (port) => httpPort = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47956,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -415,12 +458,15 @@ void main() {
 
   test('未启动时 pull/push 为空操作；start/stop 幂等', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devX',
-      deviceName: () => 'X',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devX',
+        deviceName: 'X',
+        passphrase: passphrase,
+        udpPort: 47895,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devX'),
-      udpPort: 47895,
     );
     expect((await transport.pull()).envelopes, isEmpty);
     await transport.push(envelope('devX'));
@@ -445,25 +491,31 @@ void main() {
     addTearDown(occupant.close);
 
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47941,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       probeTargets: const [(host: '127.0.0.1', port: 47942)],
       probeWindow: const Duration(milliseconds: 250),
-      localAddressesProvider: () async => const [],
-      udpPort: 47941,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47942,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'dark'),
       probeWindow: const Duration(milliseconds: 250),
-      localAddressesProvider: () async => const [],
-      udpPort: 47942,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -488,14 +540,17 @@ void main() {
   test('UDP 两族都不可用：手动地址 HTTP 直连照常；无对端时报 probePortUnavailable', () async {
     var serverHttpPort = 0;
     final server = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => serverHttpPort = port,
+        localAddresses: () async => const [],
+        udpPort: 47943,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'dark'),
-      onHttpPortBound: (port) => serverHttpPort = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47943,
     );
     addTearDown(server.stop);
     await server.start();
@@ -507,15 +562,18 @@ void main() {
 
     final manual = <ManualPeer>[];
     final client = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        manualPeers: () => manual,
+        localAddresses: () async => const [],
+        udpPort: 47944,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       udpBinder: unavailable,
-      manualPeersProvider: () => manual,
-      localAddressesProvider: () async => const [],
-      udpPort: 47944,
     );
     addTearDown(client.stop);
     await client.start();
@@ -541,24 +599,30 @@ void main() {
 
   test('IPv6 单播探测（::1）：学习对端并拉取', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47945,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
-      localAddressesProvider: () async => const [],
-      udpPort: 47945,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47946,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '::1', port: 47945)],
       probeWindow: const Duration(milliseconds: 250),
-      localAddressesProvider: () async => const [],
-      udpPort: 47946,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -577,27 +641,33 @@ void main() {
   test('手动 IPv6 对端：方括号写法归一 + HTTP 直连拉取', () async {
     var serverHttpPort = 0;
     final server = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => serverHttpPort = port,
+        localAddresses: () async => const [],
+        udpPort: 47947,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
-      onHttpPortBound: (port) => serverHttpPort = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47947,
     );
     final client = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        manualPeers: () => [
+          ManualPeer(host: '[::1]', probePort: 47947, httpPort: serverHttpPort),
+        ],
+        localAddresses: () async => const [],
+        udpPort: 47948,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      manualPeersProvider: () => [
-        ManualPeer(host: '[::1]', probePort: 47947, httpPort: serverHttpPort),
-      ],
       probeWindow: const Duration(milliseconds: 250),
-      localAddressesProvider: () async => const [],
-      udpPort: 47948,
     );
     addTearDown(() async {
       await server.stop();
@@ -612,25 +682,31 @@ void main() {
 
   test('非回复探测也登记对端：B 探测 A 后，A 反向也能发现并拉取 B', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47949,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       probeWindow: const Duration(milliseconds: 250),
-      localAddressesProvider: () async => const [],
-      udpPort: 47949,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47950,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'dark'),
       probeTargets: const [(host: '127.0.0.1', port: 47949)],
       probeWindow: const Duration(milliseconds: 250),
-      localAddressesProvider: () async => const [],
-      udpPort: 47950,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -650,10 +726,14 @@ void main() {
 
   test('v6 独立降级：v4 仍绑首选端口，分族端口各自如实上报', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47955,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       // 模拟 IPv6 栈不可用（禁用 / 无 v6 地址）：只让 v6 绑定失败。
       udpBinder: (address, port) {
@@ -662,7 +742,6 @@ void main() {
         }
         return RawDatagramSocket.bind(address, port, reuseAddress: true);
       },
-      udpPort: 47955,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -688,24 +767,27 @@ void main() {
     });
 
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        // 注入的 provider 不做过滤（真实的 LocalEndpointsService 会过滤）：
+        // 传输侧必须用同一判定再兜一遍。
+        localAddresses: () async => const [
+          '127.0.0.1',
+          '169.254.10.1',
+          'fe80::1%eth0',
+          'not-an-ip',
+          '10.0.0.5',
+          '10.0.0.5',
+        ],
+        udpPort: 47954,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      // 注入的 provider 不做过滤（真实的 LocalEndpointsService 会过滤）：
-      // 传输侧必须用同一判定再兜一遍。
-      localAddressesProvider: () async => const [
-        '127.0.0.1',
-        '169.254.10.1',
-        'fe80::1%eth0',
-        'not-an-ip',
-        '10.0.0.5',
-        '10.0.0.5',
-      ],
       probeTargets: const [(host: '127.0.0.1', port: 47953)],
       probeWindow: const Duration(milliseconds: 200),
-      udpPort: 47954,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -723,26 +805,32 @@ void main() {
 
   test('候选地址优先尝试：不可达的候选回落到观测源地址', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        // TEST-NET-3：保留给文档的地址，保证不可达。
+        localAddresses: () async => const ['192.0.2.10'],
+        udpPort: 47951,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
-      // TEST-NET-3：保留给文档的地址，保证不可达。
-      localAddressesProvider: () async => const ['192.0.2.10'],
-      udpPort: 47951,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47952,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47951)],
       probeWindow: const Duration(milliseconds: 250),
       requestTimeout: const Duration(milliseconds: 150),
-      localAddressesProvider: () async => const [],
-      udpPort: 47952,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -760,35 +848,41 @@ void main() {
   test('已知端点直连：有候选不广播；第二次未变跳过且 0 广播', () async {
     var serverHttpPort = 0;
     final server = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => serverHttpPort = port,
+        localAddresses: () async => const [],
+        udpPort: 47961,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
       snapshotIdProvider: () => 'snap-1',
-      onHttpPortBound: (port) => serverHttpPort = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47961,
     );
     final verified = <LanPeerEndpoint>[];
     final client = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        knownPeers: () => [
+          LanPeerEndpoint(
+            deviceId: 'devA',
+            host: '127.0.0.1',
+            httpPort: serverHttpPort,
+            probePort: 47961,
+            verifiedAt: 1,
+          ),
+        ],
+        rememberPeerEndpoint: (endpoint) async => verified.add(endpoint),
+        localAddresses: () async => const [],
+        udpPort: 47962,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      knownPeersProvider: () => [
-        LanPeerEndpoint(
-          deviceId: 'devA',
-          host: '127.0.0.1',
-          httpPort: serverHttpPort,
-          probePort: 47961,
-          verifiedAt: 1,
-        ),
-      ],
-      onPeerVerified: verified.add,
-      localAddressesProvider: () async => const [],
-      udpPort: 47962,
     );
     addTearDown(() async {
       await server.stop();
@@ -816,14 +910,17 @@ void main() {
     var addresses = <String>['10.0.0.5'];
     final networkChanges = StreamController<void>();
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => addresses,
+        networkChanges: networkChanges.stream,
+        udpPort: 47963,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      localAddressesProvider: () async => addresses,
-      networkChanges: networkChanges.stream,
-      udpPort: 47963,
     );
     addTearDown(() async {
       await transport.stop();
@@ -846,33 +943,39 @@ void main() {
   test('蜂窝：0 广播 / 组播；已知端点仍可直连 HTTP', () async {
     var serverHttpPort = 0;
     final server = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => serverHttpPort = port,
+        localAddresses: () async => const [],
+        udpPort: 47964,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
-      onHttpPortBound: (port) => serverHttpPort = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47964,
     );
     final client = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        knownPeers: () => [
+          LanPeerEndpoint(
+            deviceId: 'devA',
+            host: '127.0.0.1',
+            httpPort: serverHttpPort,
+            probePort: 47964,
+            verifiedAt: 1,
+          ),
+        ],
+        isCellular: () => true,
+        localAddresses: () async => const [],
+        udpPort: 47965,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      knownPeersProvider: () => [
-        LanPeerEndpoint(
-          deviceId: 'devA',
-          host: '127.0.0.1',
-          httpPort: serverHttpPort,
-          probePort: 47964,
-          verifiedAt: 1,
-        ),
-      ],
-      isCellular: () => true,
-      localAddressesProvider: () async => const [],
-      udpPort: 47965,
     );
     addTearDown(() async {
       await server.stop();
@@ -889,13 +992,16 @@ void main() {
 
   test('旧 JSON 包静默丢弃；合法 MSD/1 公告才产生 sighting', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47966,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      localAddressesProvider: () async => const [],
-      udpPort: 47966,
     );
     final sightings = <LanPeerSighting>[];
     final subscription = transport.sightings.listen(sightings.add);
@@ -954,14 +1060,17 @@ void main() {
 
   test('蜂窝 + 无已知端点：不误报 discoverySilent', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        isCellular: () => true,
+        localAddresses: () async => const [],
+        udpPort: 47967,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      isCellular: () => true,
-      localAddressesProvider: () async => const [],
-      udpPort: 47967,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -974,13 +1083,16 @@ void main() {
 
   test('后台 + 无候选：不误报 discoverySilent / broadcastUnavailable', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47968,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      localAddressesProvider: () async => const [],
-      udpPort: 47968,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -995,33 +1107,39 @@ void main() {
   test('端点被另一台设备复用：按解密后的 deviceId 记 seen，不回调旧 id', () async {
     var serverHttpPort = 0;
     final server = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        onHttpPortBound: (port) => serverHttpPort = port,
+        localAddresses: () async => const [],
+        udpPort: 47969,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB', value: 'real'),
-      onHttpPortBound: (port) => serverHttpPort = port,
-      localAddressesProvider: () async => const [],
-      udpPort: 47969,
     );
     final verified = <LanPeerEndpoint>[];
     final client = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        knownPeers: () => [
+          LanPeerEndpoint(
+            deviceId: 'devWrong',
+            host: '127.0.0.1',
+            httpPort: serverHttpPort,
+            verifiedAt: 1,
+          ),
+        ],
+        rememberPeerEndpoint: (endpoint) async => verified.add(endpoint),
+        localAddresses: () async => const [],
+        udpPort: 47970,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      knownPeersProvider: () => [
-        LanPeerEndpoint(
-          deviceId: 'devWrong',
-          host: '127.0.0.1',
-          httpPort: serverHttpPort,
-          verifiedAt: 1,
-        ),
-      ],
-      onPeerVerified: verified.add,
-      localAddressesProvider: () async => const [],
-      udpPort: 47970,
     );
     addTearDown(() async {
       await server.stop();
@@ -1041,15 +1159,18 @@ void main() {
     var now = 1000;
     var probeAlive = true;
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47971,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
       httpProbe: (port) async => probeAlive,
       nowMs: () => now,
-      localAddressesProvider: () async => const [],
-      udpPort: 47971,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -1075,17 +1196,20 @@ void main() {
   test('connectivity 事件无条件重绑 UDP（接口指纹未变）', () async {
     var binds = 0;
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const ['10.0.0.5'],
+        udpPort: 47972,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      localAddressesProvider: () async => const ['10.0.0.5'],
       udpBinder: (address, port) {
         binds++;
         return RawDatagramSocket.bind(address, port, reuseAddress: true);
       },
-      udpPort: 47972,
     );
     addTearDown(transport.stop);
     await transport.start();
@@ -1117,12 +1241,17 @@ void main() {
       if (datagram != null) packets.add(datagram.data);
     });
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => addresses,
+        isCellular: () => cellular,
+        udpPort: 47973,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      localAddressesProvider: () async => addresses,
       udpBinder: (address, port) {
         binds++;
         return RawDatagramSocket.bind(address, port, reuseAddress: true);
@@ -1130,8 +1259,6 @@ void main() {
       probeTargets: const [(host: '127.0.0.1', port: 47974)],
       probeWindow: const Duration(milliseconds: 150),
       nowMs: () => now,
-      isCellular: () => cellular,
-      udpPort: 47973,
     );
     addTearDown(() async {
       await transport.stop();
@@ -1173,27 +1300,33 @@ void main() {
   test('上一轮 presence 无本轮 ack：指纹命中缓存也不能跳过 GET', () async {
     final envA = envelope('devA', value: 'light').withSnapshotId('hash-1');
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        localAddresses: () async => const [],
+        udpPort: 47977,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envA,
       snapshotIdProvider: () => 'hash-1',
-      localAddressesProvider: () async => const [],
-      udpPort: 47977,
     );
     var cellular = false;
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        isCellular: () => cellular,
+        localAddresses: () async => const [],
+        udpPort: 47978,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47977)],
       probeWindow: const Duration(milliseconds: 250),
-      isCellular: () => cellular,
-      localAddressesProvider: () async => const [],
-      udpPort: 47978,
     );
     addTearDown(() async {
       await transportA.stop();

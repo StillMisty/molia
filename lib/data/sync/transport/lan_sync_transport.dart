@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 import '../../../domain/models/device_sync.dart';
 import '../../../domain/ports/sync_transport.dart';
 import '../../../utils/peer_address.dart';
+import '../lan_runtime.dart';
 import '../pairing/pairing_http.dart';
 import '../sync_codec_port.dart';
 import '../sync_crypto.dart';
@@ -47,59 +48,37 @@ import 'lan_pairing_packet.dart';
 class LanSyncTransport
     implements SyncTransport, SyncSightingSource, SyncLanLifecycle {
   LanSyncTransport({
-    required this.deviceId,
-    required String Function() deviceName,
+    required this.runtime,
     required this._codec,
-    required this._passphraseProvider,
     required this._snapshotProvider,
     this._journalProvider,
     String Function()? snapshotIdProvider,
     int Function()? journalHeadProvider,
     List<({String host, int port})>? probeTargets,
-    this._manualPeersProvider,
-    this._onPeerResolved,
-    this._httpPortProvider,
-    this._onHttpPortBound,
     this._httpProbe,
-    this._permissionGate,
-    Future<List<String>> Function()? localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
     udpBinder,
-    this._knownPeersProvider,
-    this._onPeerVerified,
-    bool Function()? isCellular,
     int Function()? nowMs,
-    this._networkChanges,
-    int udpPort = defaultUdpPort,
     Duration probeWindow = const Duration(milliseconds: 1200),
     this._requestTimeout = const Duration(seconds: 3),
   }) : _probeTargets = probeTargets ?? const [],
-       _isCellular = isCellular,
-       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
-       _udpPort = udpPort {
+       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch) {
     _discovery = LanDiscovery(
-      deviceId: deviceId,
-      deviceName: deviceName,
-      discoveryKeyProvider: _ensureDiscoveryKey,
-      httpPortProvider: () => _http?.port ?? 0,
-      probePortProvider: () => _discovery.advertisedProbePort,
+      runtime: runtime,
       snapshotIdProvider: snapshotIdProvider,
       journalHeadProvider: journalHeadProvider,
-      knownPeersProvider: _knownEndpoints,
+      // 探测目标 = 测试注入 + 运行时的手动 / 已知对端：只有传输知道这几种
+      // 来源如何合并，发现层只消费合并后的列表。
       probeTargetsProvider: _probeTargetList,
-      localAddressesProvider: localAddressesProvider,
       udpBinder: udpBinder,
-      udpPort: udpPort,
       candidateWindow: probeWindow < const Duration(milliseconds: 400)
           ? probeWindow
           : const Duration(milliseconds: 400),
       fullWindow: probeWindow,
       nowMs: _nowMs,
-      isCellular: isCellular,
     );
   }
 
-  static const int defaultUdpPort = ManualPeer.defaultProbePort;
   static const String snapshotPath = '/molia-sync/v2/snapshot';
   static const String journalPath = '/molia-sync/v2/journal';
 
@@ -121,9 +100,8 @@ class LanSyncTransport
   /// 快照体积上限（含大量统计事件时留足余量；超出视为异常数据丢弃）。
   static const int maxSnapshotBytes = 32 * 1024 * 1024;
 
-  final String deviceId;
+  final LanRuntime runtime;
   final SyncCodecPort _codec;
-  final Future<String?> Function() _passphraseProvider;
   final Future<SyncEnvelope> Function() _snapshotProvider;
 
   /// 增量窗口提供者：`since` = 请求方游标；返回该游标之后的窗口，或游标
@@ -133,38 +111,12 @@ class LanSyncTransport
   /// 测试注入：向指定地址单播探测（空 = 仅广播 / 组播，生产路径）。
   final List<({String host, int port})> _probeTargets;
 
-  /// 手动对端地址簿（发现失败时的兜底）。
-  final List<ManualPeer> Function()? _manualPeersProvider;
-
-  /// 首次接触学到 deviceId / httpPort / 名称后回写地址簿。
-  final void Function(ManualPeer learned)? _onPeerResolved;
-
-  /// 本机 HTTP 端口持久化：端口每次随机会让对端记不住本机。
-  final int Function()? _httpPortProvider;
-  final void Function(int port)? _onHttpPortBound;
-
   /// 测试注入：HTTP 端点存活探测（默认走 loopback TCP connect）。
   final Future<bool> Function(int port)? _httpProbe;
-
-  /// 局域网权限门：返回 false 时传输不启动（原因 = permission_denied）。
-  final Future<bool> Function()? _permissionGate;
-
-  /// 已通过验证的持久化端点（#42 注入；本 issue 先支持）。
-  final List<LanPeerEndpoint> Function()? _knownPeersProvider;
-
-  /// 验证成功后回写端点（#42 注入；本 issue 先支持）。
-  final void Function(LanPeerEndpoint verified)? _onPeerVerified;
-
-  /// 当前是否蜂窝网络（蜂窝下 0 广播 / 组播，只直连已知端点）。
-  final bool Function()? _isCellular;
 
   /// 可注入时钟（测试 nonce 去重 / 限流窗口）。
   final int Function() _nowMs;
 
-  /// `connectivity_plus` 原始事件（#42 接线；本 issue 支持注入测试）。
-  final Stream<void>? _networkChanges;
-
-  final int _udpPort;
   final Duration _requestTimeout;
 
   late final LanDiscovery _discovery;
@@ -201,6 +153,9 @@ class LanSyncTransport
 
   @override
   String get kind => SyncTransportKind.lan;
+
+  /// 设备身份（运行时唯一来源）。
+  String get deviceId => runtime.deviceId;
 
   @override
   bool get isRunning => _running;
@@ -269,7 +224,7 @@ class LanSyncTransport
 
     // 权限在前：Android 17 起局域网默认阻断，没有权限时绑定 / 收发包都会失败，
     // 直接给用户可行动的状态（授权 或 转 WebDAV），不做无意义的尝试。
-    final gate = _permissionGate;
+    final gate = runtime.permissionGate;
     if (gate != null && !await gate()) {
       _unavailableReason = SyncUnavailableReason.permissionDenied;
       _startError = '局域网访问权限未授予';
@@ -279,7 +234,7 @@ class LanSyncTransport
 
     // HTTP 是载荷通道（拉取 / 推送 / 手动直连全靠它）：它起不来才是真的
     // 传输失败，原因留在 [unavailableReason] 供 UI 呈现。
-    final rememberedPort = _httpPortProvider?.call() ?? 0;
+    final rememberedPort = runtime.preferredHttpPort?.call() ?? 0;
     final opened = await _openHttpWithLiveness(rememberedPort);
     if (opened == null) {
       _startError = '局域网 HTTP 端点绑定失败';
@@ -288,17 +243,20 @@ class LanSyncTransport
       return;
     }
     _http = opened;
+    runtime.bindHttpPort(opened.port);
     _running = true;
     _hiddenAt = null;
     _startError = null;
     _unavailableReason = null;
-    if (opened.port != rememberedPort) _onHttpPortBound?.call(opened.port);
+    if (opened.port != rememberedPort) {
+      runtime.onHttpPortBound?.call(opened.port);
+    }
 
     _sightingSub = _discovery.sightings.listen((sighting) {
       _everDiscoveredPeer = true;
       _resolveManualPeer(sighting);
     });
-    _networkSub = _networkChanges?.listen((_) {
+    _networkSub = runtime.networkChanges?.listen((_) {
       unawaited(onNetworkChanged());
     }, onError: (Object _) {});
 
@@ -422,6 +380,7 @@ class LanSyncTransport
     _everDiscoveredPeer = false;
     await _http?.close(force: true);
     _http = null;
+    runtime.bindHttpPort(0);
   }
 
   /// 回前台：隐藏超过 15s 才重绑 UDP + 探活 HTTP；随后公告 burst。
@@ -475,6 +434,7 @@ class LanSyncTransport
     final port = http.port;
     await http.close(force: true);
     _http = null;
+    runtime.bindHttpPort(0);
     var rebound = await _tryBindHttp(port);
     var alive = rebound != null && await _probeHttp(rebound.port);
     if (!alive) {
@@ -499,7 +459,8 @@ class LanSyncTransport
     }
     rebound.listen(_onHttpRequest);
     _http = rebound;
-    if (rebound.port != port) _onHttpPortBound?.call(rebound.port);
+    runtime.bindHttpPort(rebound.port);
+    if (rebound.port != port) runtime.onHttpPortBound?.call(rebound.port);
   }
 
   @override
@@ -514,7 +475,7 @@ class LanSyncTransport
         ),
       );
     }
-    final passphrase = await _passphraseProvider();
+    final passphrase = await runtime.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       return const SyncPullResult(
         error: SyncIssue(code: SyncIssueCode.noPassphrase),
@@ -688,7 +649,7 @@ class LanSyncTransport
     if (_discovery.broadcastUnavailable) {
       return const SyncIssue(code: SyncIssueCode.broadcastUnavailable);
     }
-    final manual = _manualPeersProvider?.call() ?? const <ManualPeer>[];
+    final manual = runtime.manualPeers?.call() ?? const <ManualPeer>[];
     if (_everDiscoveredPeer && manual.isEmpty) {
       return const SyncIssue(code: SyncIssueCode.discoverySilent);
     }
@@ -701,7 +662,7 @@ class LanSyncTransport
     SyncRoundWindow? window,
   }) async {
     if (!_running) return SyncPushResult.none;
-    final passphrase = await _passphraseProvider();
+    final passphrase = await runtime.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       return const SyncPushResult(
         error: SyncIssue(code: SyncIssueCode.noPassphrase),
@@ -775,7 +736,7 @@ class LanSyncTransport
       peers.add(peer);
     }
 
-    for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
+    for (final manual in runtime.manualPeers?.call() ?? const <ManualPeer>[]) {
       if (manual.httpPort <= 0) continue;
       if (manual.deviceId == deviceId) continue;
       add(
@@ -809,7 +770,7 @@ class LanSyncTransport
       );
     }
     for (final endpoint
-        in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
+        in runtime.knownPeers?.call() ?? const <LanPeerEndpoint>[]) {
       if (endpoint.deviceId == deviceId) continue;
       add(
         SyncPeerCandidate(
@@ -825,64 +786,45 @@ class LanSyncTransport
     return peers;
   }
 
-  /// 已知端点（持久化 + 手动地址簿里学到 HTTP 端口的条目）。
-  List<LanPeerEndpoint> _knownEndpoints() {
-    final endpoints = <LanPeerEndpoint>[];
-    for (final endpoint
-        in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
-      if (endpoint.deviceId == deviceId) continue;
-      endpoints.add(endpoint);
-    }
-    for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
-      if (manual.httpPort <= 0 || manual.deviceId == deviceId) continue;
-      endpoints.add(
-        LanPeerEndpoint(
-          deviceId: manual.deviceId,
-          host: normalizePeerHost(manual.host),
-          httpPort: manual.httpPort,
-          probePort: manual.probePort,
-          verifiedAt: 0,
-        ),
-      );
-    }
-    return endpoints;
-  }
-
   /// 单播探测目标：测试注入 + 手动地址簿 + 已知端点（发现层再并入 presence）。
   List<LanProbeTarget> _probeTargetList() {
     final targets = <LanProbeTarget>[];
     for (final target in _probeTargets) {
       targets.add((host: normalizePeerHost(target.host), port: target.port));
     }
-    for (final manual in _manualPeersProvider?.call() ?? const <ManualPeer>[]) {
+    for (final manual in runtime.manualPeers?.call() ?? const <ManualPeer>[]) {
       if (manual.deviceId == deviceId) continue;
       targets.add((
         host: normalizePeerHost(manual.host),
-        port: manual.probePort > 0 ? manual.probePort : _udpPort,
+        port: manual.probePort > 0 ? manual.probePort : runtime.udpPort,
       ));
     }
     for (final endpoint
-        in _knownPeersProvider?.call() ?? const <LanPeerEndpoint>[]) {
+        in runtime.knownPeers?.call() ?? const <LanPeerEndpoint>[]) {
       if (endpoint.deviceId == deviceId) continue;
       targets.add((
         host: normalizePeerHost(endpoint.host),
-        port: endpoint.probePort > 0 ? endpoint.probePort : _udpPort,
+        port: endpoint.probePort > 0 ? endpoint.probePort : runtime.udpPort,
       ));
     }
     return targets;
   }
 
-  bool get _isCellularNow => _isCellular?.call() ?? false;
+  bool get _isCellularNow => runtime.isCellular?.call() ?? false;
 
   Future<Uint8List> _ensureDiscoveryKey() async {
-    final passphrase = await _passphraseProvider();
+    final passphrase = await runtime.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       throw const SyncCryptoException('同步口令为空');
     }
     if (_keyPassphrase == passphrase && _cachedDiscoveryKey != null) {
       return _cachedDiscoveryKey!;
     }
-    final key = await _codec.discoveryKey(passphrase);
+    final derive = runtime.discoveryKey;
+    if (derive == null) {
+      throw const SyncCryptoException('未配置发现密钥派生');
+    }
+    final key = await derive(passphrase);
     _keyPassphrase = passphrase;
     _cachedDiscoveryKey = key;
     return key;
@@ -894,15 +836,20 @@ class LanSyncTransport
     // 只持久化可路由地址：link-local / 带 zone / 回环是当前链路或同机的
     // 临时观测，写进端点表下次换网必然失效。
     if (!isRoutablePeerAddress(normalized)) return;
-    _onPeerVerified?.call(
-      LanPeerEndpoint(
-        deviceId: peer.deviceId,
-        host: normalized,
-        httpPort: peer.port,
-        probePort: peer.probePort,
-        verifiedAt: _nowMs(),
-      ),
-    );
+    final remember = runtime.rememberPeerEndpoint;
+    if (remember != null) {
+      unawaited(
+        remember(
+          LanPeerEndpoint(
+            deviceId: peer.deviceId,
+            host: normalized,
+            httpPort: peer.port,
+            probePort: peer.probePort,
+            verifiedAt: _nowMs(),
+          ),
+        ),
+      );
+    }
   }
 
   /// 手动条目首次接触（或地址 / 端点端口变化）后回写学到的信息。
@@ -910,7 +857,7 @@ class LanSyncTransport
   /// **观测到的来源端口不写回**：来源端口随 NAT / 对端重启变化，写回会把
   /// 用户配置的探测端口改成一个下次不一定存在的动态端口。
   void _resolveManualPeer(LanPeerSighting sighting) {
-    final manualPeers = _manualPeersProvider?.call() ?? const <ManualPeer>[];
+    final manualPeers = runtime.manualPeers?.call() ?? const <ManualPeer>[];
     final peerHost = _normalizeHost(sighting.host);
     for (final entry in manualPeers) {
       if (_normalizeHost(entry.host) != peerHost) continue;
@@ -918,7 +865,7 @@ class LanSyncTransport
           entry.httpPort == sighting.httpPort) {
         return;
       }
-      _onPeerResolved?.call(
+      runtime.onPeerResolved?.call(
         entry.mergeLearned(
           httpPort: sighting.httpPort,
           deviceId: sighting.deviceId,
@@ -1037,7 +984,7 @@ class LanSyncTransport
       if (path != snapshotPath && path != journalPath) {
         request.response.statusCode = HttpStatus.notFound;
       } else if (request.method == 'GET') {
-        final passphrase = await _passphraseProvider();
+        final passphrase = await runtime.readPassphrase();
         if (passphrase == null || passphrase.trim().isEmpty) {
           request.response.statusCode = HttpStatus.serviceUnavailable;
         } else {
@@ -1053,7 +1000,7 @@ class LanSyncTransport
         if (bytes == null) {
           request.response.statusCode = HttpStatus.badRequest;
         } else {
-          final passphrase = await _passphraseProvider();
+          final passphrase = await runtime.readPassphrase();
           if (passphrase == null || passphrase.trim().isEmpty) {
             request.response.statusCode = HttpStatus.serviceUnavailable;
           } else {

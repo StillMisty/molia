@@ -23,6 +23,7 @@ import '../../data/sync/adapters/prefs_sync_adapter.dart';
 import '../../data/sync/adapters/script_sync_adapter.dart';
 import '../../data/sync/adapters/session_sync_adapter.dart';
 import '../../data/sync/adapters/statistics_sync_adapter.dart';
+import '../../data/sync/lan_runtime.dart';
 import '../../data/sync/pairing/lan_pairing_service.dart';
 import '../../data/sync/sync_adapter.dart';
 import '../../data/sync/sync_backup.dart';
@@ -130,11 +131,51 @@ Future<SyncStack> buildSyncStack({
   // 局域网权限门（Android 17 起局域网默认阻断）：申请与状态都在这里，
   // 传输启动前先过门；权限被拒时手动地址也无效（网关级阻断）。
   final lanPermission = LocalNetworkPermission.production();
-  final lanSyncTransport = LanSyncTransport(
+  // 控制面在传输之后才建（它要持有传输列表），但配对写口令必须走控制面
+  // （缓存与安全存储一起更新）。这里先声明、用惰性闭包接线；真正的调用都
+  // 发生在启动之后，不会读到未赋值的槽位。
+  late final SyncControlPlane syncControlPlane;
+  // 本机局域网事实的唯一实例：传输 / 发现 / 配对都读这一份，组合根不再把
+  // 端口、地址、蜂窝与端点回写分别传给三者。
+  final lanRuntime = LanRuntime(
     deviceId: syncState.deviceId,
     deviceName: () => syncState.deviceName,
+    readPassphrase: () => syncControlPlane.readPassphrase(),
+    writePassphrase: (passphrase) => syncControlPlane.setPassphrase(passphrase),
+    ensurePassphrase: () => syncControlPlane.ensurePassphrase(),
+    // 「已有同步组」判据只在控制面定义一份（名册非空或任一路传输真正
+    // 接触成功过）；只有自动生成、从未同步过的口令不算组。
+    hasGroup: () => syncControlPlane.hasEstablishedGroup,
+    discoveryKey: syncCodec.discoveryKey,
+    // 启动 / 每轮同步只查询权限，不弹窗；权限窗只由用户打开局域网开关
+    // 或点「去授权」触发（见 SyncProvider.setTransportEnabled）。
+    permissionGate: () async {
+      try {
+        return await lanPermission.refresh();
+      } catch (e) {
+        debugPrint('[Molia] 查询局域网权限失败: $e');
+        return false;
+      }
+    },
+    // 蜂窝下发现层不发任何 UDP（只直连已知端点）。
+    isCellular: () => dataSaver.onCellular,
+    // 换网 / 回前台重新枚举地址（不用进程缓存：旧 IP 会让探测包打空）。
+    localAddresses: localEndpoints.hostsFresh,
+    // 已验证端点：广播被隔离时靠单播直连；MAC + HTTP 解密成功后才回写。
+    knownPeers: () => syncState.lanEndpoints,
+    manualPeers: () => syncState.manualPeers,
+    rememberPeerEndpoint: syncState.rememberLanEndpoint,
+    onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
+    // 原始 connectivity 事件：Wi-Fi 换网但蜂窝布尔值不变时也要重绑 socket。
+    networkChanges: dataSaver.networkEvents,
+    preferredHttpPort: () => syncState.lanHttpPort,
+    onHttpPortBound: (port) => unawaited(syncState.setLanHttpPort(port)),
+    // 发现层由传输创建；绑定前端口未知，先按「已接线但不可用」处理。
+    probePort: 0,
+  );
+  final lanSyncTransport = LanSyncTransport(
+    runtime: lanRuntime,
     codec: syncCodec,
-    passphraseProvider: syncState.readPassphrase,
     // 全量快照：最近一轮的快照；本轮还没跑过时就地收集一份（避免对端
     // 拿到空快照后游标推进到 0）。
     snapshotProvider: () async =>
@@ -155,30 +196,6 @@ Future<SyncStack> buildSyncStack({
     // 探测应答携带最近一轮快照的内容指纹与日志头部：对端据此跳过未变的 GET。
     snapshotIdProvider: () => engineRef?.lastEnvelope?.snapshotId ?? '',
     journalHeadProvider: () => engineRef?.lastEnvelope?.journalHead ?? 0,
-    // 启动 / 每轮同步只查询权限，不弹窗；权限窗只由用户打开局域网开关
-    // 或点「去授权」触发（见 SyncProvider.setTransportEnabled）。
-    permissionGate: () async {
-      try {
-        return await lanPermission.refresh();
-      } catch (e) {
-        debugPrint('[Molia] 查询局域网权限失败: $e');
-        return false;
-      }
-    },
-    manualPeersProvider: () => syncState.manualPeers,
-    onPeerResolved: (learned) => unawaited(syncState.learnManualPeer(learned)),
-    httpPortProvider: () => syncState.lanHttpPort,
-    onHttpPortBound: (port) => unawaited(syncState.setLanHttpPort(port)),
-    // 换网 / 回前台重新枚举地址（不用进程缓存：旧 IP 会让探测包打空）。
-    localAddressesProvider: localEndpoints.hostsFresh,
-    // 已验证端点：广播被隔离时靠单播直连；MAC + HTTP 解密成功后才回写。
-    knownPeersProvider: () => syncState.lanEndpoints,
-    onPeerVerified: (endpoint) =>
-        unawaited(syncState.rememberLanEndpoint(endpoint)),
-    // 蜂窝下发现层不发任何 UDP（只直连已知端点）。
-    isCellular: () => dataSaver.onCellular,
-    // 原始 connectivity 事件：Wi-Fi 换网但蜂窝布尔值不变时也要重绑 socket。
-    networkChanges: dataSaver.networkEvents,
   );
   final webdavSyncTransport = WebDavSyncTransport(
     deviceId: syncState.deviceId,
@@ -235,7 +252,7 @@ Future<SyncStack> buildSyncStack({
   assert(syncEngine.incrementalEnabled, '同步引擎必须注入 library.syncJournal');
   // 控制面与引擎共享同一个状态存储：设置页的开关 / 身份写入就是引擎下一轮
   // 读到的状态，不存在第二份内存副本。
-  final syncControlPlane = SyncControlPlane(
+  syncControlPlane = SyncControlPlane(
     state: syncState,
     transports: syncTransports,
     runtime: syncTransportRuntime,
@@ -262,22 +279,9 @@ Future<SyncStack> buildSyncStack({
   // 局域网一键配对（Phase 2a 后端）：与局域网传输同生命周期。前台 + 非省电
   // 才应答探测 / 弹接受窗；口令写入必须经控制面（缓存与安全存储一起更新）。
   final pairing = LanPairingService(
-    deviceId: syncState.deviceId,
-    deviceName: () => syncState.deviceName,
-    readPassphrase: syncControlPlane.readPassphrase,
-    writePassphrase: syncControlPlane.setPassphrase,
-    ensurePassphrase: syncControlPlane.ensurePassphrase,
-    // 「已有同步组」判据只在控制面定义一份（名册非空或任一路传输真正
-    // 接触成功过）；只有自动生成、从未同步过的口令不算组。
-    hasGroup: () => syncControlPlane.hasEstablishedGroup,
+    runtime: lanRuntime,
     canPrompt: () =>
         (isForeground?.call() ?? true) && !scheduler.powerSaveActive,
-    isCellular: () => dataSaver.onCellular,
-    httpPortProvider: () => lanSyncTransport.httpPort,
-    probePortProvider: () => lanSyncTransport.advertisedProbePort,
-    localAddressesProvider: localEndpoints.hostsFresh,
-    addPeerEndpoint: syncState.rememberLanEndpoint,
-    discoveryKeyProvider: syncCodec.discoveryKey,
     packets: lanSyncTransport.pairingDatagrams,
     sendPacket: lanSyncTransport.sendPairingDatagram,
     nowMs: syncState.nowMs,

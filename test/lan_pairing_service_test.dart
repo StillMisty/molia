@@ -13,6 +13,8 @@ import 'package:molia/data/sync/sync_passphrase.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 
+import 'support/lan_runtime.dart';
+
 /// 配对服务状态机：join / invite / both-none / conflict / sameGroup /
 /// reject / timeout / 前台不可用 / body 上限 / 限流 / 单弹窗。
 void main() {
@@ -566,7 +568,7 @@ void main() {
       requestRateLimit: 2,
     );
     addTearDown(network.dispose);
-    expect(b.service.requestRateLimit, 2);
+    expect(b.service.policy.requestRateLimit, 2);
 
     Future<int> send(String requestId) async {
       final response = await b.service.handle(
@@ -1085,23 +1087,22 @@ void main() {
     final sent = <({String? host, int? port})>[];
     var canPrompt = true;
     final service = LanPairingService(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
-      readPassphrase: () async => null,
-      writePassphrase: (value) async {},
-      hasGroup: () => false,
+      runtime: lanRuntime(
+        deviceId: 'devA',
+        deviceName: '设备A',
+        httpPort: 41000,
+        probePort: 47825,
+        localAddresses: () async => const [],
+        isCellular: () => false,
+      ),
       canPrompt: () => canPrompt,
-      isCellular: () => false,
-      httpPortProvider: () => 41000,
-      probePortProvider: () => 47825,
-      localAddressesProvider: () async => const [],
       packets: packets.stream,
       sendPacket: (packet, {host, port}) async {
         sent.add((host: host, port: port));
         return true;
       },
       nowMs: () => 1000,
-      sweepInterval: const Duration(milliseconds: 50),
+      policy: const LanPairingPolicy(sweepInterval: Duration(milliseconds: 50)),
     );
     addTearDown(() async {
       await service.dispose();
@@ -1136,24 +1137,25 @@ void main() {
     var cellular = false;
     var now = 1000;
     final service = LanPairingService(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
-      readPassphrase: () async => null,
-      writePassphrase: (value) async {},
-      hasGroup: () => false,
+      runtime: lanRuntime(
+        deviceId: 'devA',
+        deviceName: '设备A',
+        httpPort: 41000,
+        probePort: 47825,
+        localAddresses: () async => const [],
+        isCellular: () => cellular,
+      ),
       canPrompt: () => canPrompt,
-      isCellular: () => cellular,
-      httpPortProvider: () => 41000,
-      probePortProvider: () => 47825,
-      localAddressesProvider: () async => const [],
       packets: packets.stream,
       sendPacket: (packet, {host, port}) async {
         sent.add((host: host, port: port));
         return true;
       },
       nowMs: () => now,
-      sweepInterval: const Duration(milliseconds: 20),
-      scanProbeDelaysMs: const [1000],
+      policy: const LanPairingPolicy(
+        sweepInterval: Duration(milliseconds: 20),
+        scanProbeDelaysMs: [1000],
+      ),
     );
     addTearDown(() async {
       await service.dispose();
@@ -1229,16 +1231,15 @@ void main() {
     final probes = <Msp1Message>[];
     var now = 1000;
     final service = LanPairingService(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
-      readPassphrase: () async => null,
-      writePassphrase: (value) async {},
-      hasGroup: () => false,
+      runtime: lanRuntime(
+        deviceId: 'devA',
+        deviceName: '设备A',
+        httpPort: 41000,
+        probePort: 47825,
+        localAddresses: () async => const [],
+        isCellular: () => false,
+      ),
       canPrompt: () => true,
-      isCellular: () => false,
-      httpPortProvider: () => 41000,
-      probePortProvider: () => 47825,
-      localAddressesProvider: () async => const [],
       packets: packets.stream,
       sendPacket: (packet, {host, port}) async {
         final decoded = Msp1.decode(packet);
@@ -1246,9 +1247,11 @@ void main() {
         return true;
       },
       nowMs: () => now,
-      sweepInterval: const Duration(milliseconds: 20),
-      scanRefreshInterval: const Duration(milliseconds: 60),
-      scanProbeDelaysMs: const [0],
+      policy: const LanPairingPolicy(
+        sweepInterval: Duration(milliseconds: 20),
+        scanRefreshInterval: Duration(milliseconds: 60),
+        scanProbeDelaysMs: [0],
+      ),
     );
     addTearDown(() async {
       await service.dispose();
@@ -1327,17 +1330,17 @@ void main() {
     final packets = StreamController<LanPairingDatagram>.broadcast();
     var port = 0;
     final sent = <Msp1Message>[];
-    final service = LanPairingService(
+    final runtime = lanRuntime(
       deviceId: 'devA',
-      deviceName: () => '设备A',
-      readPassphrase: () async => null,
-      writePassphrase: (value) async {},
-      hasGroup: () => false,
-      canPrompt: () => true,
+      deviceName: '设备A',
+      httpPort: 41000,
+      probePort: port,
+      localAddresses: () async => const [],
       isCellular: () => false,
-      httpPortProvider: () => 41000,
-      probePortProvider: () => port,
-      localAddressesProvider: () async => const [],
+    );
+    final service = LanPairingService(
+      runtime: runtime,
+      canPrompt: () => true,
       packets: packets.stream,
       sendPacket: (packet, {host, port}) async {
         final decoded = Msp1.decode(packet);
@@ -1345,8 +1348,10 @@ void main() {
         return true;
       },
       nowMs: () => 1000,
-      sweepInterval: const Duration(milliseconds: 20),
-      scanProbeDelaysMs: const [0],
+      policy: const LanPairingPolicy(
+        sweepInterval: Duration(milliseconds: 20),
+        scanProbeDelaysMs: [0],
+      ),
     );
     addTearDown(() async {
       await service.dispose();
@@ -1362,6 +1367,7 @@ void main() {
     expect(sent, isEmpty);
 
     port = 47825;
+    runtime.bindProbePort(port);
     expect(await service.startScan(), isTrue);
     expect(service.scanning, isTrue);
     expect(sent, hasLength(1));
@@ -1392,6 +1398,7 @@ void main() {
 
     // 扫描中端口降为 0：必须收回 scanning、清候选，而不是停在「正在查找」。
     port = 0;
+    runtime.bindProbePort(port);
     expect(await service.startScan(), isFalse);
     expect(service.scanning, isFalse);
     expect(nearby.last, isEmpty);
@@ -1400,20 +1407,21 @@ void main() {
     // 旧接线没有 probePortProvider：不因端口未知拒绝扫描。
     final packetsWithoutPort = StreamController<LanPairingDatagram>.broadcast();
     final legacy = LanPairingService(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
-      readPassphrase: () async => null,
-      writePassphrase: (value) async {},
-      hasGroup: () => false,
+      runtime: lanRuntime(
+        deviceId: 'devB',
+        deviceName: '设备B',
+        httpPort: 41001,
+        localAddresses: () async => const [],
+        isCellular: () => false,
+      ),
       canPrompt: () => true,
-      isCellular: () => false,
-      httpPortProvider: () => 41001,
-      localAddressesProvider: () async => const [],
       packets: packetsWithoutPort.stream,
       sendPacket: (packet, {host, port}) async => true,
       nowMs: () => 1000,
-      sweepInterval: const Duration(milliseconds: 20),
-      scanProbeDelaysMs: const [0],
+      policy: const LanPairingPolicy(
+        sweepInterval: Duration(milliseconds: 20),
+        scanProbeDelaysMs: [0],
+      ),
     );
     addTearDown(() async {
       await legacy.dispose();
@@ -1529,40 +1537,44 @@ Future<LanPairingService> _startService({
 }) async {
   var ownPassphrase = passphrase;
   final service = LanPairingService(
-    deviceId: deviceId,
-    deviceName: () => deviceId,
-    readPassphrase: () async => ownPassphrase,
-    writePassphrase: (value) async {
-      ownPassphrase = value;
-      writes?.add(value);
-    },
-    ensurePassphrase: () async {
-      final existing = ownPassphrase;
-      if (existing != null && SyncPassphrase.normalize(existing).length >= 16) {
-        return existing;
-      }
-      final generated = SyncPassphrase.generate();
-      ownPassphrase = generated;
-      writes?.add(generated);
-      return generated;
-    },
-    hasGroup: () => hasGroup,
+    runtime: lanRuntime(
+      deviceId: deviceId,
+      readPassphrase: () async => ownPassphrase,
+      writePassphrase: (value) async {
+        ownPassphrase = value;
+        writes?.add(value);
+      },
+      ensurePassphrase: () async {
+        final existing = ownPassphrase;
+        if (existing != null &&
+            SyncPassphrase.normalize(existing).length >= 16) {
+          return existing;
+        }
+        final generated = SyncPassphrase.generate();
+        ownPassphrase = generated;
+        writes?.add(generated);
+        return generated;
+      },
+      hasGroup: () => hasGroup,
+      isCellular: () => cellular,
+      httpPort: httpPort,
+      probePort: probePort,
+      rememberPeerEndpoint: (endpoint) async {
+        endpoints?.add(endpoint);
+      },
+      discoveryKey: (value) async =>
+          SyncCodec(iterations: 1000).discoveryKey(value),
+    ),
     canPrompt: () => canPrompt,
-    isCellular: () => cellular,
-    httpPortProvider: () => httpPort,
-    probePortProvider: () => probePort,
-    addPeerEndpoint: (endpoint) async {
-      endpoints?.add(endpoint);
-    },
-    discoveryKeyProvider: (value) async =>
-        SyncCodec(iterations: 1000).discoveryKey(value),
     httpClient: client,
     nowMs: nowMs ?? () => DateTime.now().millisecondsSinceEpoch,
-    requestTtl: requestTtl,
-    inviteCompleteTimeout: inviteCompleteTimeout,
-    statusPollInterval: pollInterval,
-    sweepInterval: const Duration(milliseconds: 50),
     logger: Logger('molia.test.pairing.$deviceId'),
+    policy: LanPairingPolicy(
+      requestTtl: requestTtl,
+      inviteCompleteTimeout: inviteCompleteTimeout,
+      statusPollInterval: pollInterval,
+      sweepInterval: const Duration(milliseconds: 50),
+    ),
   );
   await service.start();
   return service;
@@ -1665,39 +1677,44 @@ class _Device {
     final logger = Logger('molia.test.pairing.$id');
     logger.onRecord.listen(device.logs.add);
     device.service = LanPairingService(
-      deviceId: id,
-      deviceName: () => device.name,
-      readPassphrase: () async => device.passphrase,
-      writePassphrase: (value) async => device.passphrase = value,
-      ensurePassphrase: () async {
-        final existing = device.passphrase;
-        if (existing != null &&
-            SyncPassphrase.normalize(existing).length >= 16) {
-          return existing;
-        }
-        final generated = SyncPassphrase.generate();
-        device.passphrase = generated;
-        return generated;
-      },
-      hasGroup: () => device.hasGroup,
+      runtime: lanRuntime(
+        deviceId: id,
+        deviceName: device.name,
+        readPassphrase: () async => device.passphrase,
+        writePassphrase: (value) async => device.passphrase = value,
+        ensurePassphrase: () async {
+          final existing = device.passphrase;
+          if (existing != null &&
+              SyncPassphrase.normalize(existing).length >= 16) {
+            return existing;
+          }
+          final generated = SyncPassphrase.generate();
+          device.passphrase = generated;
+          return generated;
+        },
+        hasGroup: () => device.hasGroup,
+        isCellular: () => device.cellular,
+        httpPort: device.httpPort,
+        probePort: device.probePort,
+        localAddresses: () async => device.localAddresses,
+        rememberPeerEndpoint: (endpoint) async =>
+            device.endpoints.add(endpoint),
+        discoveryKey: (value) async => device.codec.discoveryKey(value),
+      ),
       canPrompt: () => device.canPrompt,
-      isCellular: () => device.cellular,
-      httpPortProvider: () => device.httpPort,
-      probePortProvider: () => device.probePort,
-      localAddressesProvider: () async => device.localAddresses,
-      addPeerEndpoint: (endpoint) async => device.endpoints.add(endpoint),
-      discoveryKeyProvider: (value) async => device.codec.discoveryKey(value),
       httpClient: network.client,
       nowMs: clock ?? () => DateTime.now().millisecondsSinceEpoch,
-      requestTtl: requestTtl,
-      inviteCompleteTimeout: inviteCompleteTimeout,
-      statusPollInterval: pollInterval,
-      sweepInterval: const Duration(milliseconds: 50),
-      requestRateLimit: requestRateLimit,
-      statusRateLimit: statusRateLimit,
-      maxRequests: maxRequests,
-      maxPending: maxPending,
       logger: logger,
+      policy: LanPairingPolicy(
+        requestTtl: requestTtl,
+        inviteCompleteTimeout: inviteCompleteTimeout,
+        statusPollInterval: pollInterval,
+        sweepInterval: const Duration(milliseconds: 50),
+        requestRateLimit: requestRateLimit,
+        statusRateLimit: statusRateLimit,
+        maxRequests: maxRequests,
+        maxPending: maxPending,
+      ),
     );
     network.services[port] = device.service;
     await device.service.start();
