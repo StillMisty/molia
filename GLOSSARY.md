@@ -285,7 +285,10 @@
   （`original` / `oneLastKiss` / `lineArt` / `pencil` / `emboss` / `pixel` / `ink` /
   `duotone` / `film`）。稳定 id 用于持久化与同步，未知 id 一律回退 `original`；
   `original` 不派生任何图片，是默认值。`oneLastKiss` 的专业名是
-  **gradient-mapped pencil sketch**（灰度线稿 + 暗部铅笔调子 + 固定彩虹渐变）。
+  **gradient-mapped pencil sketch**：guided filter 降噪后的 Sobel 线稿，白纸 +
+  固定彩虹渐变；不再给整张图蒙渐变。其余风格分别用 color-dodge 铅笔
+  （GIMP / OpenCV pencilSketch 思路）、旋转网点墨印（GPUImage Halftone 思路）、
+  octree + Floyd–Steinberg 像素、双色 gradient map、split-tone 胶片。
 - **CoverStyleScope（作用范围）** — `player`（默认，仅播放页大封面与左右邻位）/
   `all`（所有歌曲封面：列表、顶栏、迷你条、歌曲信息、AI DJ、歌词选择等经
   `TrackArtwork` 的展示面）。专辑 / 歌手 / 歌单头图、封面选择器、海报预览与
