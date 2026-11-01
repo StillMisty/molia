@@ -126,10 +126,12 @@
   改变会话的命令（暂停 / seek / 切歌 / 模式 /
   停止 / 换源）返回前等 `pendingWrite`（已提交语义）；系统媒体 handler 与 UI 共用
   `PlaybackCommandPort`（`lib/playback/playback_commands.dart`），恢复态回落与
-  落盘时机只在协调者实现一次，handler 不直写服务；provider 的失败重试与自动
-  换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`；库内 / 手动
+  落盘时机只在协调者实现一次，handler 不直写服务；失败恢复策略
+  `PlaybackErrorRecovery`（`lib/playback/playback_error_recovery.dart`）的同源重试与
+  自动换源写回也走这条命令面（`playQueueIndex` / `replaceQueueTrack`；库内 / 手动
   换源走同一实现的 `replaceTrack` + `PlaybackReplaceScope.liveAndRestored`，
-  自动换源固定 `liveOnly`），不直写 facade；音质切换（`setCurrentQuality`）
+  自动换源固定 `liveOnly`），不直写 facade；provider 只把失败快照转给恢复模块并按
+  命令结果通知 UI。音质切换（`setCurrentQuality`）
   同样走命令面，但只重新取链当前曲目并保持进度 / 播放态，音质不写入会话，
   恢复态返回空操作。壳层 paused 与桌面退出共用
   `PlaybackProvider.suspendPlaybackSession()`（桌面 `quitApp` 有界等待 2s 后

@@ -9,13 +9,13 @@ import '../data/catalog/catalog_service.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
 import '../data/mapping/track_mapper.dart';
-import '../domain/models/failure.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/playback_facade.dart';
 import '../domain/ports/state_listenable.dart';
 import '../domain/ports/ui_messenger.dart';
 import '../models/play_mode.dart';
+import '../playback/playback_error_recovery.dart';
 import '../playback/playback_session_coordinator.dart';
 import '../services/data_saver_service.dart';
 import '../services/playback_observer.dart';
@@ -27,20 +27,6 @@ import '../utils/notify_throttler.dart';
 import 'sleep_timer.dart';
 
 final _logger = Logger('molia.playback_provider');
-
-/// 自动换源解析器：在其它音源严格找回同一首歌（组合根注入）。
-///
-/// [excludeSourceKeys] 为已尝试来源（provenance，由 provider 维护）。
-typedef AutoSourceSwapResolver = Future<Track?> Function(
-  Track track, {
-  required Set<String> excludeSourceKeys,
-});
-
-/// 自动换源成功后同步曲目级本地数据（如自定义封面）。
-typedef AutoSourceSwapTrackHook = Future<void> Function(
-  Track oldTrack,
-  Track newTrack,
-);
 
 /// 领域 [StateListenable] → Flutter [ValueListenable] 适配器。
 ///
@@ -75,11 +61,12 @@ class _StateValueListenable<T> implements ValueListenable<T> {
 /// - 应用内音量 / 静音是设备本地状态：不进 [PlaybackSnapshot]（快照 `==`
 ///   契约与低频语义不能动、音量也不是播放事件），变化直接 `notifyListeners`
 ///   且不新增节流类别；
-/// - 只保留命令 / 队列 / 模式 / 失败恢复：命令一律转给
+/// - 只保留命令 / 队列 / 模式与快照投影：命令一律转给
 ///   [PlaybackSessionCoordinator]（恢复态与 live 的交接、恢复态快照构造与会话
-///   落盘都在那里，本类不再持有恢复态分支）；持久化 / 写库 / 桌面小组件 /
-///   封面预取与补取 / 历史等副作用由 [PlaybackObserver] 承担（组合根创建并
-///   挂接），本类只转发 [suspendPlaybackSession] 与最后播放信息读取。
+///   落盘都在那里，本类不再持有恢复态分支）；失败恢复策略（同源重试一次 →
+///   自动换源）在 [PlaybackErrorRecovery]，本类只转发失败快照；持久化 / 写库 /
+///   桌面小组件 / 封面预取与补取 / 历史等副作用由 [PlaybackObserver] 承担
+///   （组合根创建并挂接），本类只转发 [suspendPlaybackSession] 与最后播放信息读取。
 ///
 /// 不经过命令面的写入口（都不是会话命令，见各处注释）：装载队列
 /// `_facade.playTracks`（新播放上下文，由快照监听落盘）、追加队列
@@ -91,9 +78,6 @@ class PlaybackProvider extends ChangeNotifier {
   final UiMessenger _messenger;
   final SourceManager? _sourceManager;
 
-  /// 取链缓存失效入口（播放失败时按 sourceKey 失效，下一次播放重试）。
-  final CatalogService? _catalogService;
-
   /// 省流模式（可选注入）：音质标签读取（`currentQualityType`）。
   final DataSaverService? _dataSaver;
 
@@ -101,14 +85,8 @@ class PlaybackProvider extends ChangeNotifier {
   /// 桌面小组件 / 历史 / 会话落盘 / 封面预取与补取由它承担。
   final PlaybackObserver? _observer;
 
-  /// 自动换源开关（设置 › 播放，默认开）；null = 关闭该能力。
-  final SourceSwapSettings? _autoSwapSettings;
-
-  /// 自动换源解析器（组合根注入 `AutoSourceSwapService.findMatch`）。
-  final AutoSourceSwapResolver? _autoSwapResolver;
-
-  /// 自动换源成功后的本地数据钩子（自定义封面跟随）。
-  final AutoSourceSwapTrackHook? _onAutoSourceSwapped;
+  /// 播放失败恢复策略（同源重试一次 → 自动换源）：写入只经会话协调者。
+  late final PlaybackErrorRecovery _errorRecovery;
 
   /// 统一退出路径（组合根在 `quitApp` 可用后经 [attachQuitApp] 回填）。
   ///
@@ -143,17 +121,6 @@ class PlaybackProvider extends ChangeNotifier {
   /// 已展示过的播放错误（避免同一错误反复弹提示）。
   String? _lastShownError;
 
-  /// 已自动重试过的曲目 key（同一操作只重试一次，避免失败循环）。
-  String? _retriedTrackKey;
-
-  /// 自动换源：每个曲目 uri 的**已尝试来源**（含种子源；换源后的候选继承
-  /// 并追加自身来源），级联每个来源至多一次、有界；cap 防止长期泄漏。
-  final Map<String, Set<String>> _autoSwapTriedSources = {};
-  static const int _autoSwapProvenanceCap = 64;
-
-  /// 正在自动换源的曲目 uri（防并发重复触发）。
-  final Set<String> _autoSwapping = {};
-
   /// 默认播放模式（设置页配置；启动时无曲目即应用为初始模式）。
   PlayMode _defaultPlayMode = _playModeOf(kDefaultPlayMode.defaultValue);
 
@@ -170,17 +137,26 @@ class PlaybackProvider extends ChangeNotifier {
     required this._messenger,
     required PlaybackSessionCoordinator sessionCoordinator,
     this._sourceManager,
-    this._catalogService,
+    CatalogService? catalogService,
     this._dataSaver,
     this._observer,
     PlaybackVolumeStore? volumeStore,
-    this._autoSwapSettings,
-    this._autoSwapResolver,
-    this._onAutoSourceSwapped,
+    SourceSwapSettings? autoSwapSettings,
+    AutoSourceSwapResolver? autoSwapResolver,
+    AutoSourceSwapTrackHook? onAutoSourceSwapped,
     required this._settings,
     bool Function()? isForeground,
   }) : _session = sessionCoordinator,
        _volumeStore = volumeStore ?? PlaybackVolumeStore() {
+    _errorRecovery = PlaybackErrorRecovery(
+      commands: _session,
+      readSnapshot: () => _facade.snapshot.value,
+      onOutcome: _applyOutcome,
+      catalogService: catalogService,
+      autoSwapSettings: autoSwapSettings,
+      autoSwapResolver: autoSwapResolver,
+      onAutoSourceSwapped: onAutoSourceSwapped,
+    );
     _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
     // 启动恢复开关的重载钩子（跨设备同步应用远端值后由组合根触发）：钩子挂在
     // provider 上——协调者只报告「恢复态是否变化」，UI 通知由这里发。
@@ -318,6 +294,31 @@ class PlaybackProvider extends ChangeNotifier {
     List<SourceTrack> tracks,
     int index, {
     String? contextName,
+  }) => _playTracks(
+    [for (final track in tracks) trackFromSourceTrack(track)],
+    index,
+    contextName: contextName,
+    logLabel: 'playSourceTracks',
+  );
+
+  /// 播放领域曲目（AI 推歌：解析结果已是领域 [Track]）。
+  Future<void> playDomainTracks(
+    List<Track> tracks,
+    int index, {
+    String? contextName,
+  }) => _playTracks(
+    List.of(tracks),
+    index,
+    contextName: contextName,
+    logLabel: 'playDomainTracks',
+  );
+
+  /// 装载新队列的唯一实现：构造请求、跟踪数据路径、发一次通知。
+  Future<void> _playTracks(
+    List<Track> tracks,
+    int index, {
+    required String logLabel,
+    String? contextName,
   }) async {
     if (tracks.isEmpty) return;
     try {
@@ -328,7 +329,7 @@ class PlaybackProvider extends ChangeNotifier {
         'play.queue',
         () => _facade.playTracks(
           PlaybackRequest(
-            tracks: [for (final track in tracks) trackFromSourceTrack(track)],
+            tracks: tracks,
             startIndex: index,
             context: contextName == null
                 ? null
@@ -344,41 +345,7 @@ class PlaybackProvider extends ChangeNotifier {
       _notifyCategory('track');
       _notifyCategory('queue');
     } catch (e) {
-      _logger.severe('playSourceTracks: 播放失败', e);
-      rethrow;
-    }
-  }
-
-  /// 播放领域曲目（AI 推歌：解析结果已是领域 [Track]）。
-  Future<void> playDomainTracks(
-    List<Track> tracks,
-    int index, {
-    String? contextName,
-  }) async {
-    if (tracks.isEmpty) return;
-    try {
-      // 同 playSourceTracks：装载（新上下文）不是会话命令。
-      await DataPathTrace.async(
-        'play.queue',
-        () => _facade.playTracks(
-          PlaybackRequest(
-            tracks: List.of(tracks),
-            startIndex: index,
-            context: contextName == null
-                ? null
-                : PlaybackContext(
-                    name: contextName,
-                    type: 'lx',
-                    uri: 'lx:$contextName',
-                  ),
-          ),
-        ),
-        fields: () => {'tracks': tracks.length, 'index': index},
-      );
-      _notifyCategory('track');
-      _notifyCategory('queue');
-    } catch (e) {
-      _logger.severe('playDomainTracks: 播放失败', e);
+      _logger.severe('$logLabel: 播放失败', e);
       rethrow;
     }
   }
@@ -468,7 +435,7 @@ class PlaybackProvider extends ChangeNotifier {
     if (!track.qualities.any((option) => option.type == quality)) return;
     if (hasRestoredSession) return;
     // 音质切换是一次新的取链操作：允许失败恢复重新走一次同源重试。
-    _retriedTrackKey = null;
+    _errorRecovery.resetRetryGuard();
     try {
       _applyOutcome(await _session.setCurrentQuality(quality));
     } catch (e) {
@@ -688,13 +655,14 @@ class PlaybackProvider extends ChangeNotifier {
     _notifyCategory('default');
   }
 
-  /// 曲目切换时：失败提示与恢复见 [_maybeShowPlaybackError]
-  /// / [_maybeRecoverFromPlaybackError]。写入类副作用（最后播放 / 播放上下文 /
+  /// 曲目切换时：失败提示在 [_maybeShowPlaybackError]，同源重试 / 自动换源
+  /// 策略在 [PlaybackErrorRecovery]。写入类副作用（最后播放 / 播放上下文 /
   /// 小组件 / 历史 / 会话落盘 / 预取 / 补封面）在 [PlaybackObserver]，恢复态
   /// 撤下与 live 交接在会话协调者。
   void _handlePlaybackSnapshot() {
-    _maybeShowPlaybackError();
-    _maybeRecoverFromPlaybackError();
+    final snapshot = _facade.snapshot.value;
+    _maybeShowPlaybackError(snapshot);
+    _errorRecovery.onPlaybackError(snapshot);
   }
 
   /// 挂起 / 退出前提交当前播放会话：应用壳 paused 与桌面退出共用这一个入口。
@@ -737,108 +705,8 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  /// 播放失败恢复：失效失败曲目的取链缓存，自动重试一次；
-  /// 重试仍失败（或重试成功后再次失败）→ 尝试自动换源。
-  ///
-  /// 同一曲目 key 只做一次同源重试（`_retriedTrackKey` 守卫），失败不缓存，
-  /// 下一次播放自然会重新取链，不会形成失败循环。自动换源的级联有界见
-  /// [_tryAutoSourceSwap]。
-  void _maybeRecoverFromPlaybackError() {
-    final state = _facade.snapshot.value;
-    final failure = state.error;
-    final track = state.current;
-    if (failure == null || track == null) return;
-    if (state.currentIndex < 0) return;
-
-    // 失败即失效该曲目的取链缓存（失败本身不入缓存，下次播放重新取链）。
-    // 只清这一首：一条过期 URL 不应让同音源其它曲目全部重新取链。
-    _catalogService?.invalidateResolveForTrack(track);
-
-    final key = track.id.uri;
-    if (_retriedTrackKey != key) {
-      _retriedTrackKey = key;
-      final index = state.currentIndex;
-      unawaited(
-        Future<void>.microtask(() async {
-          try {
-            // 重试也是一次会话命令：阶段路由与「返回前已提交」交给协调者，
-            // 失败恢复链路不再直接写 facade（与 UI / 通知同一写入口）。
-            await _session.playQueueIndex(index);
-          } catch (e) {
-            _logger.severe('播放失败自动重试失败', e);
-          }
-          // 重试仍失败（错误快照可能值未变、不会再触发本方法）→ 自动换源。
-          _maybeAutoSwapAfterRetry(track);
-        }),
-      );
-      return;
-    }
-
-    // 同源重试已发生过（重试成功后中途再失败等）：直接尝试自动换源。
-    unawaited(_tryAutoSourceSwap(track, failure));
-  }
-
-  /// 同源重试完成后的判定：错误仍在且仍是同一首 → 尝试自动换源。
-  void _maybeAutoSwapAfterRetry(Track track) {
-    final state = _facade.snapshot.value;
-    if (state.error == null) return;
-    if (state.current?.id.uri != track.id.uri) return;
-    unawaited(_tryAutoSourceSwap(track, state.error!));
-  }
-
-  /// 自动换源：跨音源严格找回同一首并原地替换队列曲目（静默，对齐 LX）。
-  ///
-  /// 守卫：
-  /// - 开关关闭 / 未注入解析器 / 本地文件 / cancelled·unsupported 失败 → 跳过；
-  /// - provenance（[_autoSwapTriedSources]）记录已尝试来源，候选继承后追加
-  ///   自身来源：级联每个来源至多一次、必然收敛；
-  /// - [_autoSwapping] 防并发重复；换源前复查当前曲目仍是失败的那首。
-  Future<void> _tryAutoSourceSwap(Track track, SourceFailure failure) async {
-    final settings = _autoSwapSettings;
-    final resolver = _autoSwapResolver;
-    if (settings == null || resolver == null || !settings.autoEnabled) return;
-    if (track.origin == TrackOrigin.localFile) return;
-    if (failure.kind == FailureKind.cancelled ||
-        failure.kind == FailureKind.unsupported) {
-      return;
-    }
-    final uri = track.id.uri;
-    if (!_autoSwapping.add(uri)) return;
-    try {
-      final tried = _autoSwapTriedSources[uri] ?? <String>{};
-      tried.add(track.id.sourceKey);
-      final match = await resolver(track, excludeSourceKeys: tried);
-      if (match == null || match.id.uri == uri) return;
-      // 搜索期间可能已切歌/被手动换源：只替换仍是这首的当前曲目。
-      if (_facade.snapshot.value.current?.id.uri != uri) return;
-      _rememberAutoSwapProvenance(match.id.uri, {...tried, match.id.sourceKey});
-      // 队列替换是会话命令：live 转发由协调者完成，返回前已把换源写进会话
-      // （重开应用恢复新来源，而不是等下一分钟整份刷新）。
-      final outcome = await _session.replaceQueueTrack(uri, match);
-      if (outcome.hasChanges) {
-        try {
-          await _onAutoSourceSwapped?.call(track, match);
-        } catch (e) {
-          _logger.warning('自动换源后同步本地数据失败: $e');
-        }
-      }
-      _applyOutcome(outcome);
-    } catch (e) {
-      _logger.warning('自动换源失败: $e');
-    } finally {
-      _autoSwapping.remove(uri);
-    }
-  }
-
-  void _rememberAutoSwapProvenance(String uri, Set<String> tried) {
-    if (_autoSwapTriedSources.length >= _autoSwapProvenanceCap) {
-      _autoSwapTriedSources.remove(_autoSwapTriedSources.keys.first);
-    }
-    _autoSwapTriedSources[uri] = tried;
-  }
-
-  void _maybeShowPlaybackError() {
-    final failure = _facade.snapshot.value.error;
+  void _maybeShowPlaybackError(PlaybackSnapshot snapshot) {
+    final failure = snapshot.error;
     if (failure == null || failure.message == _lastShownError) return;
     _lastShownError = failure.message;
     _messenger.showFailure(failure);
