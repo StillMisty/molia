@@ -33,18 +33,17 @@
 ///   日志，下载本身与既有语义完全不变；歌词/封面这类秒级分项动作不发通知
 ///   （无进度可言，闪一下反而吵）。
 ///
-/// 本文件只做编排（下载一首 / 一批）；五个 module 各有一份唯一实现：
+/// 本文件只做编排（下载一首 / 一批）；各 module 各有一份唯一实现：
 /// - 任务队列：`download_queue.dart`（严格串行 FIFO / 去重 / 取消 / 重试 /
 ///   进度通道）；
 /// - 提交日志：`download_journal.dart`（rename 前写 pending、启动恢复）；
 /// - 命名 / 放置：`download_file_layout.dart`（模板 + sanitize + ` (2)` 去重 +
 ///   sidecar 路径约定）；
+/// - 任务产物：`download_task_artifacts.dart`（活跃输出登记 + sidecar 写入）；
 /// - 记录装配：`download_record_assembler.dart`（部分状态 → `DownloadedTrack`）；
 /// - 通知 presenter：`download_notification_presenter.dart`（id 分配 / 批量
 ///   共享一条 / 系统频率节流 / 收尾不残留；端口由组合根注入）。
 library;
-
-import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -77,16 +76,10 @@ import 'download_queue.dart';
 import 'download_record_assembler.dart';
 import 'download_records.dart';
 import 'download_settings.dart';
+import 'download_task_artifacts.dart';
 
 export 'download_queue.dart';
-
-/// 下载时取词结果（主歌词 + 可选翻译；罗马音/逐字不落盘）。
-class DownloadLyrics {
-  const DownloadLyrics({required this.lyric, this.translation});
-
-  final String lyric;
-  final String? translation;
-}
+export 'download_task_artifacts.dart' show DownloadLyrics;
 
 /// 下载时原生取词（组合根注入：`LyricsService.getLyrics` 适配，缓存优先）。
 typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
@@ -186,7 +179,11 @@ class DownloadService extends DownloadManager {
 
   /// 运行中任务已产生 / 即将产生的输出路径（音频 / `.part` / 歌词 / 翻译 /
   /// 封面）。落库前这些文件还不算「记录引用」，孤儿扫描必须避开它们。
-  final Set<String> _activeOutputPaths = <String>{};
+  final DownloadActiveOutputs _activeOutputs = DownloadActiveOutputs();
+
+  /// 产物写入器需要的记录端口（记录查询 / 分项 upsert 的适配）。
+  late final DownloadArtifactRecords _artifactRecords =
+      _ServiceDownloadArtifactRecords(this);
 
   /// 任务队列（严格串行单 worker；完成 / 取消即移除，失败保留供重试）。
   ///
@@ -331,7 +328,7 @@ class DownloadService extends DownloadManager {
   Set<String> _protectedPaths() => {
     for (final record in _downloadRecords.downloads)
       ...DownloadFileLayout.referencedFiles(record),
-    ..._activeOutputPaths,
+    ..._activeOutputs.paths,
   };
 
   /// 应用会写入下载根目录的文件格式（孤儿候选的安全白名单）。
@@ -654,13 +651,13 @@ class DownloadService extends DownloadManager {
     String? lyricPath;
     String? coverPath;
     DownloadLyrics? lyrics;
-    _ResolvedCover? cover;
+    DownloadResolvedCover? cover;
     DownloadedTrack? pending;
     var journalWritten = false;
     int? partTotal;
     late final String root;
     late final String base;
-    final artifacts = _TaskArtifacts(this);
+    final artifacts = _newArtifacts();
 
     try {
       root = await _requireRoot();
@@ -848,7 +845,7 @@ class DownloadService extends DownloadManager {
   /// 单独下载歌词：与音频共用同一条队列，避免分项记录写库与音频下载并发覆盖。
   Future<void> _runLyricsTask(DownloadTask task) async {
     final track = task.track;
-    final artifacts = _TaskArtifacts(this);
+    final artifacts = _newArtifacts();
     try {
       final root = await _requireRoot();
       final lyrics = await _resolveLyrics(track);
@@ -868,7 +865,7 @@ class DownloadService extends DownloadManager {
   /// 单独下载封面：与音频共用同一条队列。
   Future<void> _runCoverTask(DownloadTask task) async {
     final track = task.track;
-    final artifacts = _TaskArtifacts(this);
+    final artifacts = _newArtifacts();
     try {
       final root = await _requireRoot();
       final cover = await _resolveCover(track);
@@ -884,6 +881,14 @@ class DownloadService extends DownloadManager {
       artifacts.close();
     }
   }
+
+  /// 单个任务的产物写入器：活跃输出 / 布局 / 记录 / 标签端口显式注入。
+  DownloadTaskArtifacts _newArtifacts() => DownloadTaskArtifacts(
+    outputs: _activeOutputs,
+    layout: _layout,
+    records: _artifactRecords,
+    embedTags: _embedTagsFromFiles,
+  );
 
   /// 取消当前曲目的下载（UI 入口）：先撤排队任务，运行中再撤 dio 请求。
   @override
@@ -1172,14 +1177,14 @@ class DownloadService extends DownloadManager {
   /// 封面字节：自定义封面优先；否则曲目主图 + 降级链先查缓存，未命中再
   /// 取图并回填缓存。全局默认封面不参与下载（它只是展示占位）：
   /// [CoverResolver.realOf] 永远不会返回默认封面。
-  Future<_ResolvedCover?> _resolveCover(Track track) async {
+  Future<DownloadResolvedCover?> _resolveCover(Track track) async {
     final covers = _coverResolver;
     final real = covers?.realOf(track);
     if (covers != null && real?.isCustom == true) {
       try {
         final bytes = await covers.readCustomCoverBytes(track);
         if (bytes != null && bytes.isNotEmpty) {
-          return _ResolvedCover(
+          return DownloadResolvedCover(
             bytes: bytes,
             url: null,
             mimeType: 'image/jpeg',
@@ -1203,7 +1208,7 @@ class DownloadService extends DownloadManager {
       for (final url in urls) {
         final bytes = await cache.bytesOf(url);
         if (bytes != null && bytes.isNotEmpty) {
-          return _ResolvedCover(
+          return DownloadResolvedCover(
             bytes: bytes,
             url: url,
             mimeType: _mimeTypeForPath(url),
@@ -1229,10 +1234,10 @@ class DownloadService extends DownloadManager {
     return _downloadCoverBytes(effective);
   }
 
-  Future<_ResolvedCover?> _downloadCoverBytes(String url) async {
+  Future<DownloadResolvedCover?> _downloadCoverBytes(String url) async {
     final bytes = await downloadCoverBytes(_dio, url, cache: _artworkCache);
     if (bytes == null) return null;
-    return _ResolvedCover(
+    return DownloadResolvedCover(
       bytes: bytes,
       url: url,
       mimeType: _mimeTypeForPath(url),
@@ -1343,138 +1348,20 @@ class DownloadService extends DownloadManager {
   }
 }
 
-/// 单个下载任务的产物写入器：输出登记与歌词 / 封面边车的唯一写入路径。
-///
-/// 为什么需要它：同一套 sidecar 约定（`lyrics/` 下的 `.lrc` + `.t.lrc` 翻译、
-/// `covers/`）被音频下载与独立的歌词 / 封面下载共用。三条 runner 各写一份
-/// 「先登记期望路径、再写、失败归一」时，改边车命名或孤儿保护策略必然漏一处；
-/// 这里把登记与写入绑成一条路径，runner 只保留自己的基名来源与失败语义
-/// （音频 best-effort；独立分项写失败即 typed failure）。
-class _TaskArtifacts {
-  _TaskArtifacts(this._service);
+/// 记录端口的服务侧适配：产物写入器只经接口查询记录 / 做分项 upsert。
+class _ServiceDownloadArtifactRecords implements DownloadArtifactRecords {
+  _ServiceDownloadArtifactRecords(this._service);
 
   final DownloadService _service;
 
-  /// 本任务登记过的路径：收尾只撤销自己加的保护，不影响其它任务。
-  final Set<String> _outputs = <String>{};
+  @override
+  DownloadedTrack? recordForTrack(Track track) =>
+      _service._downloadRecords.recordForTrack(track);
 
-  /// 登记预计 / 已产生的输出路径：落库前孤儿扫描必须避开它们。
-  ///
-  /// 必须在写文件前登记，而不是写完再登记：写入过程中与失败回滚前路径都可能
-  /// 短暂存在，孤儿清理不能在这个窗口里删掉任务产物。
-  void register(String? path) {
-    if (path == null || path.isEmpty) return;
-    _outputs.add(path);
-    _service._activeOutputPaths.add(path);
-  }
-
-  /// 写歌词主文件 + 翻译边车；两条期望路径都先登记（翻译边车也是任务产物）。
-  ///
-  /// 返回值与 [DownloadFileLayout.writeLyrics] 一致：失败回滚后为 null，
-  /// 由调用方决定「音频 best-effort」还是「独立分项报错」。
-  Future<String?> writeLyrics({
-    required String root,
-    required String base,
-    required DownloadLyrics lyrics,
-  }) {
-    final expected = DownloadFileLayout.lyricsPath(root, base);
-    register(expected);
-    register(translationLyricPathOf(expected));
-    return _service._layout.writeLyrics(
-      root,
-      base,
-      lyric: lyrics.lyric,
-      translation: lyrics.translation,
-    );
-  }
-
-  /// 写封面文件；扩展名由封面 URL 推断，期望路径先登记再写。
-  Future<String?> writeCover({
-    required String root,
-    required String base,
-    required _ResolvedCover cover,
-  }) {
-    final coverUrl = cover.url ?? '';
-    register(DownloadFileLayout.coverPath(root, base, coverUrl));
-    return _service._layout.writeCover(
-      root: root,
-      base: base,
-      coverUrl: coverUrl,
-      bytes: cover.bytes,
-    );
-  }
-
-  /// 独立歌词任务骨架：基名 → 写边车 → 分项落库 → 补标签。
-  ///
-  /// 基名跟随已有音频（sidecar 同基名约定）或复用已有歌词路径；没有音频时
-  /// 在 `lyrics/` 内查重。写失败抛 `downloadFailed`（独立分项不吞错）。
-  Future<void> saveLyricsPart(
+  @override
+  Future<void> upsertPart(
     Track track, {
-    required String root,
-    required DownloadLyrics lyrics,
-  }) async {
-    final existing = _service._downloadRecords.recordForTrack(track);
-    final base = await _service._layout.partBaseName(
-      root: root,
-      track: track,
-      audioPath: existing?.filePath,
-      existingPath: existing?.lyricPath,
-      subdir: downloadsLyricsDirName,
-      extension: 'lrc',
-    );
-    final path = await writeLyrics(root: root, base: base, lyrics: lyrics);
-    if (path == null) {
-      throw const SourceFailure(
-        kind: FailureKind.unknown,
-        message: '歌词写入失败',
-        l10nKey: 'downloadFailed',
-      );
-    }
-    await _service._upsertPart(track, lyricPath: path);
-    unawaited(_service._embedTagsFromFiles(track));
-  }
-
-  /// 独立封面任务骨架：基名 → 写边车 → 分项落库 → 补标签。
-  Future<void> saveCoverPart(
-    Track track, {
-    required String root,
-    required _ResolvedCover cover,
-  }) async {
-    final existing = _service._downloadRecords.recordForTrack(track);
-    final coverUrl = cover.url ?? '';
-    final base = await _service._layout.partBaseName(
-      root: root,
-      track: track,
-      audioPath: existing?.filePath,
-      existingPath: existing?.coverPath,
-      subdir: downloadsCoversDirName,
-      extension: DownloadFileLayout.coverExtension(coverUrl),
-    );
-    final path = await writeCover(root: root, base: base, cover: cover);
-    if (path == null) {
-      throw const SourceFailure(
-        kind: FailureKind.unknown,
-        message: '封面写入失败',
-        l10nKey: 'downloadFailed',
-      );
-    }
-    await _service._upsertPart(track, coverPath: path);
-    unawaited(_service._embedTagsFromFiles(track));
-  }
-
-  /// 任务收尾（成功 / 失败 / 取消）撤销本任务的孤儿保护。
-  void close() => _service._activeOutputPaths.removeAll(_outputs);
-}
-
-/// 已解析的封面字节（下载链路内部使用）。
-class _ResolvedCover {
-  const _ResolvedCover({
-    required this.bytes,
-    required this.url,
-    required this.mimeType,
-  });
-
-  final Uint8List bytes;
-  final String? url;
-  final String mimeType;
+    String? lyricPath,
+    String? coverPath,
+  }) => _service._upsertPart(track, lyricPath: lyricPath, coverPath: coverPath);
 }

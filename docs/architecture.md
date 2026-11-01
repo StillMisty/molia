@@ -869,10 +869,10 @@
 （下载一首 / 一批：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库），
 `download_queue.dart` 是任务队列（严格串行 FIFO / 去重 / 取消 / 重试 /
 进度通道）；组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流
-上限；任务队列、命名 / 放置、记录装配、提交日志与通知 presenter 是五个独立
-module（见下）：
+上限；任务队列、命名 / 放置、任务产物、记录装配、提交日志与通知 presenter
+是独立 module（见下）：
 
-- **模块拆分**：`DownloadService` 只做编排，五个 module 各有一份唯一实现——
+- **模块拆分**：`DownloadService` 只做编排，各 module 各有一份唯一实现——
   `lib/services/download/download_records.dart`（记录只读面：记录表 / 排序
   列表 / `initialized` / `supported` / `revision` 的唯一持有者；收藏、单曲
   本地数据与分享只依赖它，下载进度不经过这里）、
@@ -887,19 +887,24 @@ module（见下）：
   基名 → sanitize → 磁盘与记录双重查重的 ` (2)` 去重 → 音频 / `.part` /
   `lyrics/` + `.t.lrc` 翻译边车 / `covers/` 路径约定与 sidecar 写入回滚 →
   扩展名推断（B 站 `.m4s` 音频归一为 `.m4a`） → 记录引用文件集，删除 / 失败清理 / 孤儿判定共用）、
+  `lib/services/download/download_task_artifacts.dart`（任务产物：活跃输出登记 +
+  歌词 / 封面 sidecar 写入、独立分项的基名 → 写 → 分项落库 → 补标签骨架；
+  输出登记 / 布局 / 记录 / 标签端口都可注入，不依赖完整下载服务）、
   `lib/services/download/download_record_assembler.dart`（记录装配：部分状态 →
   `DownloadedTrack` 16 字段的唯一装配点，四种形态各一个意图方法）、
   `lib/services/download/download_notification_presenter.dart`（通知 presenter：
   单任务 / 批量 id 分配、批量共享一条「N/N」、500ms 系统频率节流、收尾只收自己
   起过的；端口 / 设置 / 时钟可注入）。命名不再有「测试双胞胎」，测试直接打生产
   实现；
-- **任务产物写入（sidecar 唯一入口）**：`download_service.dart` 内部的
-  `_TaskArtifacts` 是单个下载任务登记 / 写产物的唯一实现——音频任务与独立
+- **任务产物写入（sidecar 唯一入口）**：`download_task_artifacts.dart` 的
+  `DownloadTaskArtifacts` 是单个下载任务登记 / 写产物的唯一实现——音频任务与独立
   歌词 / 封面任务共用「登记期望路径 → `DownloadFileLayout.writeLyrics` /
   `writeCover`」；登记覆盖未来会出现的音频最终文件 / `.part`、歌词 +
-  `.t.lrc` 翻译边车与封面，任务收尾（成功 / 失败 / 取消）统一撤销，落库前
-  孤儿扫描只认这份活跃输出（落库后由记录引用接管）。独立分项任务的
-  「`partBaseName` → 写 → `_upsertPart` → 补标签」骨架也在这里；音频的
+  `.t.lrc` 翻译边车与封面，任务收尾（成功 / 失败 / 取消）只撤销本任务登记的那些，
+  落库前孤儿扫描只认这份活跃输出（落库后由记录引用接管）。依赖经
+  `DownloadOutputRegistry` / `DownloadFileLayout` / `DownloadArtifactRecords` /
+  `DownloadTagEmbedder` 注入，写入器不持有 `DownloadService`；独立分项任务的
+  「`partBaseName` → 写 → 分项落库 → 补标签」骨架也在这里；音频的
   best-effort（写失败返回 null，不阻断音频）与独立任务的 typed failure
   （`downloadFailed`）、基名来源（音频路径 vs 既有记录）仍留在 runner。
   为什么：sidecar 命名 / 孤儿保护 / 标签补写若在三条 runner 各写一份，
