@@ -1291,4 +1291,197 @@ void main() {
       expect(applied.changed, 1);
     });
   });
+
+  group('读取模式与收藏补丁', () {
+    test('历史读取：显式替换并显示 loading，静默合并且保持加载态', () async {
+      for (final id in ['1', '2', '3']) {
+        await repository.addHistoryEntry(entry(id, playedAt: int.parse(id)));
+      }
+      await provider.refreshHistory(force: true);
+      expect(
+        [for (final item in provider.history) item.songId],
+        ['3', '2', '1'],
+      );
+
+      // 静默：批量写入（无单条载荷）触发整表重载；查询挂起时保持旧列表与
+      // ready，不显示 loading。
+      final quietGate = Completer<List<PlayHistoryEntry>>();
+      repository.nextHistorySnapshot = quietGate;
+      await repository.addHistoryEntries([entry('2', playedAt: 9)]);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.historyState.isLoading, isFalse);
+      expect(
+        [for (final item in provider.history) item.songId],
+        ['3', '2', '1'],
+      );
+
+      // 仓库顺序已变成 [2,3,1]：静默合并保留已有条目的相对顺序，只换内容。
+      quietGate.complete([
+        entry('2', playedAt: 9),
+        entry('3', playedAt: 3),
+        entry('1', playedAt: 1),
+      ]);
+      await settle();
+      expect(
+        [for (final item in provider.history) item.songId],
+        ['3', '2', '1'],
+      );
+      expect(provider.history[1].playedAt, 9);
+
+      // 显式：查询前先翻 loading，落地后直接采用仓库顺序。
+      final explicitGate = Completer<List<PlayHistoryEntry>>();
+      repository.nextHistorySnapshot = explicitGate;
+      final pending = provider.refreshHistory(force: true);
+      expect(provider.historyState.isLoading, isTrue);
+      explicitGate.complete([
+        entry('2', playedAt: 9),
+        entry('3', playedAt: 3),
+        entry('1', playedAt: 1),
+      ]);
+      await pending;
+      expect(provider.historyState.isReady, isTrue);
+      expect(
+        [for (final item in provider.history) item.songId],
+        ['2', '3', '1'],
+      );
+    });
+
+    test('列表读取：显式翻 loading，静默保留旧清单且不翻转加载态', () async {
+      await provider.refreshPlaylists();
+      expect(provider.playlists, isEmpty);
+
+      // 列表变化走全量失效 + 静默重载：清单查询与收藏校准都挂起，期间页面
+      // 仍看到旧清单与 ready。
+      final playlistsGate = Completer<List<PlaylistInfo>>();
+      final keysGate = Completer<Set<String>>();
+      repository.nextPlaylistsSnapshot = playlistsGate;
+      repository.nextFavoriteKeysSnapshot = keysGate;
+      final id = await repository.createPlaylist('L');
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.playlistsState.isLoading, isFalse);
+      expect(provider.playlists, isEmpty);
+
+      keysGate.complete(const <String>{});
+      playlistsGate.complete([PlaylistInfo(id: id, name: 'L', createdAt: 0)]);
+      await settle();
+      expect(provider.playlists.map((playlist) => playlist.name), ['L']);
+      expect(provider.playlistsState.isReady, isTrue);
+
+      // 显式：查询前先翻 loading，旧清单保持可见。
+      final explicitGate = Completer<List<PlaylistInfo>>();
+      repository.nextPlaylistsSnapshot = explicitGate;
+      final pending = provider.refreshPlaylists(force: true);
+      expect(provider.playlistsState.isLoading, isTrue);
+      expect(provider.playlists.map((playlist) => playlist.name), ['L']);
+      explicitGate.complete([
+        PlaylistInfo(id: id, name: 'L', createdAt: 0),
+        PlaylistInfo(id: id + 1, name: 'M', createdAt: 0),
+      ]);
+      await pending;
+      expect(provider.playlistsState.isReady, isTrue);
+      expect(provider.playlists.map((playlist) => playlist.name), ['L', 'M']);
+    });
+
+    test('列表曲目读取：静默重载只刷新已缓存列表', () async {
+      final cachedId = await repository.createPlaylist('已缓存');
+      final freshId = await repository.createPlaylist('未缓存');
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      await provider.loadPlaylistTracks(cachedId, force: true);
+      expect(provider.playlistTracksView(cachedId).tracks, isEmpty);
+
+      await repository.addTrackToPlaylist(
+        cachedId,
+        PlaylistTrack(
+          playlistId: cachedId,
+          sourceKey: 'wy',
+          songId: '1',
+          title: 'Song 1',
+          addedAt: 0,
+        ),
+      );
+      await settle();
+      expect(
+        provider.playlistTracksView(cachedId).tracks!.map((t) => t.songId),
+        ['1'],
+      );
+
+      // 未缓存列表不因仓库变更被顺手读进缓存：首次读取仍由显式入口负责。
+      await repository.addTrackToPlaylist(
+        freshId,
+        PlaylistTrack(
+          playlistId: freshId,
+          sourceKey: 'wy',
+          songId: '2',
+          title: 'Song 2',
+          addedAt: 0,
+        ),
+      );
+      await settle();
+      expect(provider.playlistTracksView(freshId).tracks, isNull);
+      expect(provider.playlistTracksView(freshId).loading, isTrue);
+
+      final tracks = await provider.loadPlaylistTracks(freshId);
+      expect(tracks.map((t) => t.songId), ['2']);
+      expect(provider.playlistTracksView(freshId).ready, isTrue);
+    });
+
+    test('收藏补丁幂等：一次切换只递增一次版本', () async {
+      // 先建好收藏列表，版本基线之后不再夹带建列表 / 全量校准的递增。
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'seed',
+        title: 'Seed',
+      );
+      await settle();
+      final before = provider.favoritesRevision;
+
+      final added = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      expect(added.isFavorite, isTrue);
+      await settle();
+      expect(provider.favoritesRevision, before + 1);
+
+      final removed = await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      expect(removed.isFavorite, isFalse);
+      await settle();
+      expect(provider.favoritesRevision, before + 2);
+    });
+
+    test('批量取消收藏：缓存行与计数立即补丁，不等整表校准', () async {
+      await provider.toggleFavorite(
+        sourceKey: 'wy',
+        songId: '1',
+        title: 'Song 1',
+      );
+      await settle();
+      await provider.refreshPlaylists(force: true);
+      await provider.ensureFavoritesLoaded(force: true);
+      final favorites = provider.playlists.singleWhere((p) => p.isFavorites);
+      await provider.loadPlaylistTracks(favorites.id, force: true);
+      expect(provider.playlists.single.trackCount, 1);
+
+      // 冻结随后的整表校准：断言只反映本地补丁，不是回读结果。
+      final gate = Completer<Set<String>>();
+      repository.nextFavoriteKeysSnapshot = gate;
+      final outcome = await provider.removeTracksFromFavorites([
+        (sourceKey: 'wy', songId: '1'),
+      ]);
+      expect(outcome.changed, 1);
+      expect(provider.isFavorite('wy', '1'), isFalse);
+      expect(provider.playlistTracksView(favorites.id).tracks, isEmpty);
+      expect(provider.playlists.single.trackCount, 0);
+
+      gate.complete(const <String>{});
+      await settle();
+      expect(provider.playlists.single.trackCount, 0);
+    });
+  });
 }
