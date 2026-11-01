@@ -26,6 +26,7 @@ import 'package:logging/logging.dart';
 
 import '../../../domain/models/device_sync.dart';
 import '../../../utils/peer_address.dart';
+import '../lan_runtime.dart';
 import '../sync_crypto.dart';
 import 'lan_pairing_packet.dart';
 
@@ -425,29 +426,19 @@ bool isMulticastAlreadyJoinedError(
 /// 只处理发现，不碰 HTTP；传输层把 presence 与手动 / 持久化端点合并成候选。
 class LanDiscovery {
   LanDiscovery({
-    required this.deviceId,
-    required this._deviceName,
-    required this._discoveryKeyProvider,
-    required this._httpPortProvider,
-    this._probePortProvider,
+    required this.runtime,
     this._snapshotIdProvider,
     this._journalHeadProvider,
     this._categoriesProvider,
-    this._knownPeersProvider,
     this._probeTargetsProvider,
-    this._localAddressesProvider,
     Future<RawDatagramSocket> Function(InternetAddress address, int port)?
     udpBinder,
-    this._udpPort = defaultUdpPort,
     this.candidateWindow = const Duration(milliseconds: 400),
     this.fullWindow = const Duration(milliseconds: 1200),
     this.supplementaryWindow = const Duration(milliseconds: 800),
     int Function()? nowMs,
-    this._isCellular,
   }) : _udpBinder = udpBinder ?? _bindDatagram,
        _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
-
-  static const int defaultUdpPort = ManualPeer.defaultProbePort;
 
   /// presence 上限（防伪造公告灌爆内存）。
   static const int maxPeers = 32;
@@ -464,26 +455,22 @@ class LanDiscovery {
   /// 进程启动随机 boot id（同进程多实例共用；对端据此识别重启）。
   static final String bootId = _base64Url(_randomBytes(8));
 
-  final String deviceId;
-  final String Function() _deviceName;
-  final Future<Uint8List> Function() _discoveryKeyProvider;
-  final int Function() _httpPortProvider;
-  final int Function()? _probePortProvider;
+  final LanRuntime runtime;
   final String Function()? _snapshotIdProvider;
   final int Function()? _journalHeadProvider;
   final List<String> Function()? _categoriesProvider;
-  final List<LanPeerEndpoint> Function()? _knownPeersProvider;
   final List<LanProbeTarget> Function()? _probeTargetsProvider;
-  final Future<List<String>> Function()? _localAddressesProvider;
   final Future<RawDatagramSocket> Function(InternetAddress address, int port)
   _udpBinder;
-  final int _udpPort;
   final int Function() _nowMs;
-  final bool Function()? _isCellular;
 
   final Duration candidateWindow;
   final Duration fullWindow;
   final Duration supplementaryWindow;
+
+  String get deviceId => runtime.deviceId;
+  int get _udpPort => runtime.udpPort;
+  bool get _isCellularNow => runtime.isCellular?.call() ?? false;
 
   final Logger _logger = Logger('molia.sync.discovery');
   final StreamController<LanPeerSighting> _sightings =
@@ -653,8 +640,14 @@ class LanDiscovery {
 
   Future<void> _ensureKey() async {
     if (_key != null) return;
+    final derive = runtime.discoveryKey;
+    if (derive == null) return;
     try {
-      _key = await _discoveryKeyProvider();
+      final passphrase = await runtime.readPassphrase();
+      if (passphrase == null || passphrase.trim().isEmpty) {
+        throw const SyncCryptoException('同步口令为空');
+      }
+      _key = await derive(passphrase);
     } catch (e) {
       _logger.warning('派生局域网发现密钥失败（收到公告时无法认证）', e);
     }
@@ -745,8 +738,7 @@ class LanDiscovery {
   }
 
   /// 已通过验证的持久化端点（公告 burst / 单播探测目标来源）。
-  List<LanPeerEndpoint> get knownPeers =>
-      _knownPeersProvider?.call() ?? const [];
+  List<LanPeerEndpoint> get knownPeers => runtime.knownEndpoints;
 
   List<LanProbeTarget> get probeTargets =>
       _probeTargetsProvider?.call() ?? const [];
@@ -755,8 +747,6 @@ class LanDiscovery {
       _presence.isNotEmpty ||
       knownPeers.any((peer) => peer.httpPort > 0) ||
       probeTargets.isNotEmpty;
-
-  bool get _isCellularNow => _isCellular?.call() ?? false;
 
   bool get _hasSockets => _udp4 != null || _udp6 != null;
 
@@ -813,9 +803,9 @@ class LanDiscovery {
     return LanDiscoveryMessage(
       type: type,
       deviceId: deviceId,
-      name: _deviceName(),
-      httpPort: _httpPortProvider(),
-      probePort: _probePortProvider?.call() ?? advertisedProbePort,
+      name: runtime.deviceName(),
+      httpPort: runtime.httpPort,
+      probePort: advertisedProbePort,
       addresses: _ownAddresses,
       snapshotId: _snapshotIdProvider?.call() ?? '',
       journalHead: _journalHeadProvider?.call(),
@@ -920,6 +910,7 @@ class LanDiscovery {
     _ipv6MulticastJoins.reset();
     _udp4 = await _bindFamily(InternetAddress.anyIPv4, v4Port);
     _udp6 = await _bindFamily(InternetAddress.anyIPv6, v6Port);
+    _syncRuntimeProbePort();
     final v4 = _udp4;
     final v6 = _udp6;
     if (v4 != null) {
@@ -1014,7 +1005,12 @@ class LanDiscovery {
     _udp4 = null;
     _udp6?.close();
     _udp6 = null;
+    _syncRuntimeProbePort();
   }
+
+  /// 对外探测端口只有一格（协议限制）：绑定 / 关闭后立即回填运行时，
+  /// 配对服务不再向发现层借闭包读端口。
+  void _syncRuntimeProbePort() => runtime.bindProbePort(advertisedProbePort);
 
   /// 按 [_interfaceIpv4Addresses] 重建接口 socket；调用串行化，地址连续
   /// 变化时不会出现两次绑定交错。
@@ -1282,7 +1278,7 @@ class LanDiscovery {
     late final List<String> addresses;
     late final List<String> interfaceIpv4Addresses;
     try {
-      final provider = _localAddressesProvider;
+      final provider = runtime.localAddresses;
       if (provider != null) {
         final raw = await provider();
         fingerprint = (raw.map(normalizePeerHost).toList()..sort()).join('|');

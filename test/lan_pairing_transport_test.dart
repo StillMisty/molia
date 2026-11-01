@@ -10,6 +10,8 @@ import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 
+import 'support/lan_runtime.dart';
+
 /// 回环端到端：两个真实 `LanSyncTransport` 走 UDP 发现 + HTTP 配对。
 void main() {
   const passA = 'AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH';
@@ -211,19 +213,9 @@ class _LanPeer {
     final pairingCodec = SyncCodec(iterations: 1000);
     final endpoints = <LanPeerEndpoint>[];
     late final _LanPeer peer;
-    final transport = LanSyncTransport(
+    final runtime = lanRuntime(
       deviceId: id,
-      deviceName: () => name,
-      codec: codec,
-      passphraseProvider: () async => peer.passphrase,
-      snapshotProvider: () async => envelope(),
-      localAddressesProvider: () async => const [],
-      udpPort: udpPort,
-      probeWindow: const Duration(milliseconds: 300),
-    );
-    final service = LanPairingService(
-      deviceId: id,
-      deviceName: () => name,
+      deviceName: name,
       readPassphrase: () async => peer.passphrase,
       writePassphrase: (value) async => peer.passphrase = value,
       ensurePassphrase: () async {
@@ -237,13 +229,22 @@ class _LanPeer {
         return generated;
       },
       hasGroup: () => peer.hasGroup,
-      canPrompt: () => true,
       isCellular: () => false,
-      httpPortProvider: () => transport.httpPort,
-      probePortProvider: () => transport.advertisedProbePort,
-      localAddressesProvider: () async => const [],
-      addPeerEndpoint: (endpoint) async => endpoints.add(endpoint),
-      discoveryKeyProvider: (value) async => pairingCodec.discoveryKey(value),
+      localAddresses: () async => const [],
+      rememberPeerEndpoint: (endpoint) async => endpoints.add(endpoint),
+      discoveryKey: (value) async => pairingCodec.discoveryKey(value),
+      udpPort: udpPort,
+      probePort: 0,
+    );
+    final transport = LanSyncTransport(
+      runtime: runtime,
+      codec: codec,
+      snapshotProvider: () async => envelope(),
+      probeWindow: const Duration(milliseconds: 300),
+    );
+    final service = LanPairingService(
+      runtime: runtime,
+      canPrompt: () => true,
       packets: transport.pairingDatagrams,
       sendPacket: transport.sendPairingDatagram,
     );

@@ -5,6 +5,8 @@ import 'package:molia/data/sync/transport/lan_sync_transport.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 
+import 'support/lan_runtime.dart';
+
 /// 局域网真实 socket 用例：权限门与手动对端地址簿（**不加**
 /// `TestWidgetsFlutterBinding`——它会把 HttpClient 桩成 400，HTTP 快照拿不到）。
 void main() {
@@ -30,13 +32,16 @@ void main() {
 
   test('局域网权限被拒：传输不启动，原因可呈现（手动地址也救不了）', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => 'A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: 'A',
+        passphrase: passphrase,
+        permissionGate: () async => false,
+        udpPort: 47861,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      permissionGate: () async => false,
-      udpPort: 47861,
     );
     addTearDown(transport.stop);
 
@@ -53,13 +58,16 @@ void main() {
 
   test('stop 清掉启动失败原因：关闭后状态面不残留', () async {
     final transport = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => 'A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: 'A',
+        passphrase: passphrase,
+        permissionGate: () async => false,
+        udpPort: 47862,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      permissionGate: () async => false,
-      udpPort: 47862,
     );
 
     await transport.start();
@@ -73,22 +81,28 @@ void main() {
 
   test('此前发现过、本轮零应答：给出 discoverySilent（提示网络隔离）', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47867,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      udpPort: 47867,
     );
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        udpPort: 47868,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
       probeTargets: const [(host: '127.0.0.1', port: 47867)],
       probeWindow: const Duration(milliseconds: 150),
-      udpPort: 47868,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -109,26 +123,32 @@ void main() {
 
   test('手动对端：单播探测认领 deviceId 与端点端口', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47862,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
-      udpPort: 47862,
     );
     final learned = <ManualPeer>[];
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        manualPeers: () => const [
+          ManualPeer(host: '127.0.0.1', probePort: 47862),
+        ],
+        onPeerResolved: learned.add,
+        udpPort: 47863,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      manualPeersProvider: () => const [
-        ManualPeer(host: '127.0.0.1', probePort: 47862),
-      ],
-      onPeerResolved: learned.add,
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47863,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -146,29 +166,35 @@ void main() {
 
   test('探测学到的来源端口不写回地址簿：用户填的 probePort 保持不变', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47869,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA'),
-      udpPort: 47869,
     );
     final learned = <ManualPeer>[];
     final transportB = LanSyncTransport(
-      deviceId: 'devB',
-      deviceName: () => '设备B',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devB',
+        deviceName: '设备B',
+        passphrase: passphrase,
+        // 用户填的是标准端口（打不通）；实际接触经注入目标完成：应答的来源端口
+        // 是 A 的动态端口，不能覆盖用户填的 47825。
+        manualPeers: () => const [
+          ManualPeer(host: '127.0.0.1', probePort: 47825),
+        ],
+        onPeerResolved: learned.add,
+        udpPort: 47870,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devB'),
-      // 用户填的是标准端口（打不通）；实际接触经注入目标完成：应答的来源端口
-      // 是 A 的动态端口，不能覆盖用户填的 47825。
-      manualPeersProvider: () => const [
-        ManualPeer(host: '127.0.0.1', probePort: 47825),
-      ],
       probeTargets: const [(host: '127.0.0.1', port: 47869)],
-      onPeerResolved: learned.add,
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47870,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -188,27 +214,33 @@ void main() {
 
   test('地址簿学到端口后：没有广播应答也能直连', () async {
     final transportA = LanSyncTransport(
-      deviceId: 'devA',
-      deviceName: () => '设备A',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devA',
+        deviceName: '设备A',
+        passphrase: passphrase,
+        udpPort: 47864,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devA', value: 'light'),
-      udpPort: 47864,
     );
     // 先接触一次拿到 A 的真实端点端口（模拟上一次同步学到的地址簿）。
     ManualPeer? learned;
     final scout = LanSyncTransport(
-      deviceId: 'devScout',
-      deviceName: () => 'Scout',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devScout',
+        deviceName: 'Scout',
+        passphrase: passphrase,
+        manualPeers: () => const [
+          ManualPeer(host: '127.0.0.1', probePort: 47864),
+        ],
+        onPeerResolved: (peer) => learned = peer,
+        udpPort: 47865,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devScout'),
-      manualPeersProvider: () => const [
-        ManualPeer(host: '127.0.0.1', probePort: 47864),
-      ],
-      onPeerResolved: (peer) => learned = peer,
       probeWindow: const Duration(milliseconds: 250),
-      udpPort: 47865,
     );
     addTearDown(() async {
       await transportA.stop();
@@ -222,14 +254,17 @@ void main() {
     // 新实例：地址簿端点已知，但探测端口指向没人监听的端口（模拟广播/探测都
     // 不可用的网络）——纯单播直连仍然成立。
     final transportC = LanSyncTransport(
-      deviceId: 'devC',
-      deviceName: () => '设备C',
+      runtime: lanRuntime(
+        codec: codec,
+        deviceId: 'devC',
+        deviceName: '设备C',
+        passphrase: passphrase,
+        manualPeers: () => [learned!.copyWith(probePort: 47999)],
+        udpPort: 47866,
+      ),
       codec: codecPort,
-      passphraseProvider: () async => passphrase,
       snapshotProvider: () async => envelope('devC'),
-      manualPeersProvider: () => [learned!.copyWith(probePort: 47999)],
       probeWindow: const Duration(milliseconds: 150),
-      udpPort: 47866,
     );
     addTearDown(transportC.stop);
     await transportC.start();

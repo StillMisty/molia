@@ -16,7 +16,7 @@
 ///
 /// 策略：
 /// - 只在前台、非蜂窝、局域网传输运行时发送 / 应答配对包；
-/// - 同步页扫描期间按 [scanRefreshInterval] 复用 sweep 定时器补发 probe，
+/// - 同步页扫描期间按 [LanPairingPolicy.scanRefreshInterval] 复用 sweep 定时器补发 probe，
 ///   候选 TTL 仍是 15 秒；探测端口为 0 时 [startScan] 直接失败；
 /// - 后台 / 锁屏 / 省电（组合根把省电并入 `canPrompt`）返回 unavailable；
 /// - pending ≤8、TTL 60s、同一时间一个可见弹窗、每来源请求限流。
@@ -33,6 +33,7 @@ import '../../../domain/models/device_sync.dart';
 import '../../../domain/models/sync_nearby_pairing.dart';
 import '../../../domain/ports/sync_pairing.dart';
 import '../../../utils/peer_address.dart';
+import '../lan_runtime.dart';
 import '../sync_passphrase.dart';
 import '../transport/lan_pairing_packet.dart';
 import 'pairing_crypto.dart';
@@ -45,27 +46,12 @@ typedef PairingPacketSender = Future<bool> Function(
   int? port,
 });
 
-/// `SyncPairingPort` 的局域网实现。
-class LanPairingService implements SyncPairingPort, PairingHttpHandler {
-  LanPairingService({
-    required this.deviceId,
-    required this._deviceName,
-    required this._readPassphrase,
-    required this._writePassphrase,
-    this._ensurePassphrase,
-    required this._hasGroup,
-    required this._canPrompt,
-    required this._isCellular,
-    required this._httpPortProvider,
-    this._probePortProvider,
-    this._localAddressesProvider,
-    this._addPeerEndpoint,
-    this._discoveryKeyProvider,
-    this._packets,
-    this._sendPacket,
-    PairingHttpClient? httpClient,
-    int Function()? nowMs,
-    Logger? logger,
+/// 配对服务的时序与限流参数。
+///
+/// 这些旋钮属于配对协议自己的节拍，不与发现层的公告 burst / 传输的请求
+/// 预算共享；集中成一个值后构造点只表达依赖，不再摊开 13 个默认值。
+class LanPairingPolicy {
+  const LanPairingPolicy({
     this.requestTtl = const Duration(seconds: 60),
     this.inviteCompleteTimeout = const Duration(seconds: 5),
     this.statusPollInterval = const Duration(milliseconds: 500),
@@ -79,46 +65,12 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     this.requestRateWindow = const Duration(seconds: 10),
     this.statusRateLimit = 240,
     this.statusRateWindow = const Duration(seconds: 10),
-  }) : _httpClient = httpClient ?? IoPairingHttpClient(),
-       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
-       _logger = logger ?? Logger('molia.sync.pairing') {
-    _rateLimiter = MspRateLimiter(
-      perSourceLimit: requestRateLimit,
-      globalLimit: requestRateLimit * 8,
-      window: requestRateWindow,
-    );
-    // 状态轮询是发起方的正常读取（500ms 一次），不能和「新建请求」共用
-    // 10/10s 的限流；单独给一份宽松得多的预算，仍按来源隔离。
-    _statusRateLimiter = MspRateLimiter(
-      perSourceLimit: statusRateLimit,
-      globalLimit: statusRateLimit * 8,
-      window: statusRateWindow,
-    );
-  }
-
-  final String deviceId;
-  final String Function() _deviceName;
-  final Future<String?> Function() _readPassphrase;
-  final Future<void> Function(String passphrase) _writePassphrase;
-  final Future<String> Function()? _ensurePassphrase;
-  final bool Function() _hasGroup;
-  final bool Function() _canPrompt;
-  final bool Function() _isCellular;
-  final int Function() _httpPortProvider;
-  final int Function()? _probePortProvider;
-  final Future<List<String>> Function()? _localAddressesProvider;
-  final Future<void> Function(LanPeerEndpoint endpoint)? _addPeerEndpoint;
-  final Future<Uint8List> Function(String passphrase)? _discoveryKeyProvider;
-  final Stream<LanPairingDatagram>? _packets;
-  final PairingPacketSender? _sendPacket;
-  final PairingHttpClient _httpClient;
-  final int Function() _nowMs;
-  final Logger _logger;
+  });
 
   final Duration requestTtl;
 
   /// invite 接受后等待发起方 `/pair/complete` 的上限；超过只说明「对方还
-  /// 没完成」，请求仍可在 [requestTtl] 内完成，因此不按失败处理。
+  /// 没完成」，请求仍可在 [LanPairingPolicy.requestTtl] 内完成，因此不按失败处理。
   final Duration inviteCompleteTimeout;
   final Duration statusPollInterval;
   final Duration httpTimeout;
@@ -134,6 +86,47 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   final Duration requestRateWindow;
   final int statusRateLimit;
   final Duration statusRateWindow;
+}
+
+/// `SyncPairingPort` 的局域网实现。
+class LanPairingService implements SyncPairingPort, PairingHttpHandler {
+  LanPairingService({
+    required this.runtime,
+    required this._canPrompt,
+    this._packets,
+    this._sendPacket,
+    PairingHttpClient? httpClient,
+    int Function()? nowMs,
+    Logger? logger,
+    this.policy = const LanPairingPolicy(),
+  }) : _httpClient = httpClient ?? IoPairingHttpClient(),
+       _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch),
+       _logger = logger ?? Logger('molia.sync.pairing') {
+    _rateLimiter = MspRateLimiter(
+      perSourceLimit: policy.requestRateLimit,
+      globalLimit: policy.requestRateLimit * 8,
+      window: policy.requestRateWindow,
+    );
+    // 状态轮询是发起方的正常读取（500ms 一次），不能和「新建请求」共用
+    // 10/10s 的限流；单独给一份宽松得多的预算，仍按来源隔离。
+    _statusRateLimiter = MspRateLimiter(
+      perSourceLimit: policy.statusRateLimit,
+      globalLimit: policy.statusRateLimit * 8,
+      window: policy.statusRateWindow,
+    );
+  }
+
+  final LanRuntime runtime;
+  final bool Function() _canPrompt;
+  final Stream<LanPairingDatagram>? _packets;
+  final PairingPacketSender? _sendPacket;
+  final PairingHttpClient _httpClient;
+  final int Function() _nowMs;
+  final Logger _logger;
+  final LanPairingPolicy policy;
+
+  /// 设备身份（运行时唯一来源）。
+  String get deviceId => runtime.deviceId;
 
   late final MspRateLimiter _rateLimiter;
   late final MspRateLimiter _statusRateLimiter;
@@ -201,7 +194,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   void _startSweepTimer() {
     _sweepTimer?.cancel();
-    _sweepTimer = Timer.periodic(sweepInterval, (_) => _sweep());
+    _sweepTimer = Timer.periodic(policy.sweepInterval, (_) => _sweep());
   }
 
   @override
@@ -244,12 +237,14 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     await _attempts.close();
   }
 
+  bool get _isCellularNow => runtime.isCellular?.call() ?? false;
+
   bool get _canUsePairing =>
-      _running && !_hidden && _canPrompt() && !_isCellular();
+      _running && !_hidden && _canPrompt() && !_isCellularNow;
 
   bool _ownHasGroup() {
     try {
-      return _hasGroup();
+      return runtime.hasGroup();
     } catch (_) {
       return false;
     }
@@ -261,10 +256,10 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   Future<bool> startScan() async {
     if (_disposed || !_canUsePairing) return false;
     // 探测端口不可用时本机发不出 MSP：先收回扫描状态并清空候选，避免页面
-    // 已显示不可用、服务却仍停在「正在扫描」。provider 为 null（旧测试 /
-    // 无发现层接线）保持原行为。
-    final probePort = _probePortProvider;
-    if (probePort != null && probePort() == 0) {
+    // 已显示不可用、服务却仍停在「正在扫描」。运行时没有发现层接线
+    // （probePort 为 null）保持原行为。
+    final probePort = runtime.probePort;
+    if (probePort != null && probePort == 0) {
       _abortScan();
       return false;
     }
@@ -275,7 +270,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     _emitNearby();
     final packet = await _buildProbePacket();
     if (!_scanning || packet == null) return false;
-    for (final delay in scanProbeDelaysMs) {
+    for (final delay in policy.scanProbeDelaysMs) {
       if (delay <= 0) {
         await _sendProbe(packet);
         continue;
@@ -383,9 +378,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         Msp1Message(
           type: Msp1.typeProbe,
           deviceId: deviceId,
-          name: _deviceName(),
-          httpPort: _httpPortProvider(),
-          probePort: _probePortProvider?.call() ?? 0,
+          name: runtime.deviceName(),
+          httpPort: runtime.httpPort,
+          probePort: runtime.probePort ?? 0,
           addresses: addresses,
           hasGroup: _ownHasGroup(),
           bootId: _bootId,
@@ -444,9 +439,9 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         Msp1Message(
           type: Msp1.typeAnnounce,
           deviceId: deviceId,
-          name: _deviceName(),
-          httpPort: _httpPortProvider(),
-          probePort: _probePortProvider?.call() ?? 0,
+          name: runtime.deviceName(),
+          httpPort: runtime.httpPort,
+          probePort: runtime.probePort ?? 0,
           addresses: addresses,
           hasGroup: _ownHasGroup(),
           bootId: _bootId,
@@ -461,7 +456,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
   Future<List<String>> _localAddresses() async {
     try {
-      return await _localAddressesProvider?.call() ?? const [];
+      return await runtime.localAddresses?.call() ?? const [];
     } catch (_) {
       return const [];
     }
@@ -484,11 +479,12 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     _trimRequests(now);
   }
 
-  /// 扫描期补探：复用 sweep 定时器，按 [scanRefreshInterval] 补发新 nonce 的
-  /// probe。只刷新候选，不碰已有候选（TTL 仍由 [_candidates.sweep] 负责）。
+  /// 扫描期补探：复用 sweep 定时器，按 [LanPairingPolicy.scanRefreshInterval]
+  /// 补发新 nonce 的 probe。只刷新候选，不碰已有候选（TTL 仍由
+  /// [_candidates.sweep] 负责）。
   void _refreshScanProbe(int now) {
     if (!_scanning || !_canUsePairing) return;
-    final interval = scanRefreshInterval.inMilliseconds;
+    final interval = policy.scanRefreshInterval.inMilliseconds;
     if (interval <= 0) return;
     if (now - _lastScanProbeAtMs < interval) return;
     _lastScanProbeAtMs = now;
@@ -520,7 +516,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
 
     String? ownPassphrase;
     try {
-      ownPassphrase = await _readPassphrase();
+      ownPassphrase = await runtime.readPassphrase();
     } catch (_) {
       ownPassphrase = null;
     }
@@ -542,7 +538,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       keyPair: keyPair,
       publicKey: Uint8List.fromList(keyPair.publicKey),
       nonce: nonce,
-      expiresAt: _nowMs() + requestTtl.inMilliseconds,
+      expiresAt: _nowMs() + policy.requestTtl.inMilliseconds,
       ownHasGroup: ownHasGroup,
     );
     _outgoing[requestId] = outgoing;
@@ -583,13 +579,13 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       'v': 1,
       'requestId': outgoing.requestId,
       'deviceId': deviceId,
-      'deviceName': _deviceName(),
+      'deviceName': runtime.deviceName(),
       'intent': outgoing.intent.name,
       'publicKey': _encodeToken(outgoing.publicKey),
       'nonce': _encodeToken(outgoing.nonce),
       'group': ownHasGroup,
-      'http': _httpPortProvider(),
-      'probe': _probePortProvider?.call() ?? 0,
+      'http': runtime.httpPort,
+      'probe': runtime.probePort ?? 0,
       if (proof != null) 'proof': _encodeToken(proof),
     };
     final bytes = utf8.encode(jsonEncode(body));
@@ -602,7 +598,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
           port: outgoing.device.httpPort,
           path: PairingHttpPaths.request,
           body: bytes,
-          timeout: httpTimeout,
+          timeout: policy.httpTimeout,
         );
         return (reply: reply, host: host);
       } catch (e) {
@@ -664,7 +660,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       if (now >= outgoing.expiresAt) {
         return _finish(outgoing, SyncPairingStatus.expired);
       }
-      await Future<void>.delayed(statusPollInterval);
+      await Future<void>.delayed(policy.statusPollInterval);
       if (outgoing.cancelled) break;
       PairingHttpReply reply;
       try {
@@ -674,7 +670,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
           port: outgoing.device.httpPort,
           path: PairingHttpPaths.status,
           query: {'id': outgoing.requestId},
-          timeout: httpTimeout,
+          timeout: policy.httpTimeout,
         );
       } catch (_) {
         // 连续失败说明对端不可达：不要陪跑到 60s，尽早给用户结论。
@@ -753,13 +749,13 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       if (SyncPassphrase.normalize(passphrase).length < 16) {
         return _finish(outgoing, SyncPairingStatus.unavailable);
       }
-      await _writePassphrase(passphrase);
+      await runtime.writePassphrase(passphrase);
       await _rememberOutgoingEndpoint(outgoing);
       return _finish(outgoing, SyncPairingStatus.accepted);
     }
 
     // invite：发起方已有组，接受后把本机口令密封交给接收方。
-    final own = await _readPassphrase();
+    final own = await runtime.readPassphrase();
     if (own == null || SyncPassphrase.normalize(own).length < 16) {
       return _finish(outgoing, SyncPairingStatus.unavailable);
     }
@@ -783,7 +779,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         port: outgoing.device.httpPort,
         path: PairingHttpPaths.complete,
         body: body,
-        timeout: httpTimeout,
+        timeout: policy.httpTimeout,
       );
       if (reply.statusCode != 200) {
         return _finish(
@@ -903,7 +899,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       });
     }
 
-    if (_pendingCount >= maxPending) {
+    if (_pendingCount >= policy.maxPending) {
       return PairingHttpResponse.json({
         'v': 1,
         'status': SyncPairingStatus.busy.name,
@@ -938,7 +934,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     final peerProbePort = _readPort(map['probe']);
     final peerHost = request.sourceHost;
 
-    final ownPassphrase = await _readPassphrase();
+    final ownPassphrase = await runtime.readPassphrase();
     final receiverHasGroup =
         _ownHasGroup() &&
         ownPassphrase != null &&
@@ -1003,7 +999,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         'status': SyncPairingStatus.unavailable.name,
       });
     }
-    if (_pendingCount >= maxPending) {
+    if (_pendingCount >= policy.maxPending) {
       return PairingHttpResponse.json({
         'v': 1,
         'status': SyncPairingStatus.busy.name,
@@ -1028,7 +1024,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       peerNonce: peerNonce,
       keyPair: keyPair,
       createdAt: _nowMs(),
-      expiresAt: _nowMs() + requestTtl.inMilliseconds,
+      expiresAt: _nowMs() + policy.requestTtl.inMilliseconds,
     );
     entry.code = PairingCrypto.confirmationCode(
       requestId: requestId,
@@ -1147,7 +1143,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       if (SyncPassphrase.normalize(passphrase).length < 16) {
         throw const _BadPairingRequest('口令无效');
       }
-      await _writePassphrase(passphrase);
+      await runtime.writePassphrase(passphrase);
       entry.completed = true;
       entry.clearSecrets();
       await _rememberEndpointFromRequest(
@@ -1203,7 +1199,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         );
         // 密封载荷只给发起方留一个 TTL 的读取窗口；过期后必须清掉，
         // 不能靠原请求的 pending TTL（接受可能发生在 59s）。
-        entry.sealedExpiresAt = _nowMs() + requestTtl.inMilliseconds;
+        entry.sealedExpiresAt = _nowMs() + policy.requestTtl.inMilliseconds;
         entry.status = SyncPairingStatus.accepted;
         // sealed 要留给发起方轮询读取；只释放临时私钥。
         entry.clearKeyPair();
@@ -1224,7 +1220,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         // 补发 complete，所以按 unavailable 交回 UI 提示「已接受，但对方
         // 还没完成」，同时释放等待方。
         return await completion.future.timeout(
-          inviteCompleteTimeout,
+          policy.inviteCompleteTimeout,
           onTimeout: () {
             entry.complete(SyncPairingOutcome.unavailable);
             return SyncPairingOutcome.unavailable;
@@ -1261,14 +1257,14 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   Future<String> _ensureOwnPassphrase() async {
-    final existing = await _readPassphrase();
+    final existing = await runtime.readPassphrase();
     if (existing != null && SyncPassphrase.normalize(existing).length >= 16) {
       return existing;
     }
-    final ensure = _ensurePassphrase;
+    final ensure = runtime.ensurePassphrase;
     if (ensure != null) return ensure();
     final generated = SyncPassphrase.generate();
-    await _writePassphrase(generated);
+    await runtime.writePassphrase(generated);
     return generated;
   }
 
@@ -1285,8 +1281,8 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         body['publicKey'] = _encodeToken(keyPair.publicKey);
         body['nonce'] = _encodeToken(entry.localNonce);
       }
-      body['http'] = _httpPortProvider();
-      body['probe'] = _probePortProvider?.call() ?? 0;
+      body['http'] = runtime.httpPort;
+      body['probe'] = runtime.probePort ?? 0;
     } else if (entry.status == SyncPairingStatus.accepted &&
         entry.intent == SyncPairingIntent.join &&
         entry.sealed != null) {
@@ -1374,7 +1370,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   /// 为一条新请求腾出位置：请求表有界（防伪造请求无限增长）。优先移除最旧
   /// 的终态请求；pending 最多 8 条，不会把仍在等待的请求挤掉。
   void _makeRoomForRequest() {
-    while (_requests.length >= maxRequests) {
+    while (_requests.length >= policy.maxRequests) {
       String? oldestId;
       var oldestAt = 1 << 62;
       for (final entry in _requests.entries) {
@@ -1399,17 +1395,18 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }
 
   void _trimRequests(int nowMs) {
-    if (_requests.length <= maxRequests) return;
+    if (_requests.length <= policy.maxRequests) return;
     final removable = <String>[];
     for (final entry in _requests.entries) {
       if (entry.value.status == SyncPairingStatus.pending) continue;
-      if (nowMs - entry.value.expiresAt < requestTtl.inMilliseconds * 2) {
+      if (nowMs - entry.value.expiresAt <
+          policy.requestTtl.inMilliseconds * 2) {
         continue;
       }
       removable.add(entry.key);
     }
     for (final id in removable) {
-      if (_requests.length <= maxRequests) break;
+      if (_requests.length <= policy.maxRequests) break;
       // 裁剪同样要释放密封载荷 / 临时私钥：不能只把索引从表里摘掉。
       _discardEntry(id);
     }
@@ -1423,7 +1420,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   }) async {
     if (peerHttpPort <= 0 || peerHost.trim().isEmpty) return;
     try {
-      await _addPeerEndpoint?.call(
+      await runtime.rememberPeerEndpoint?.call(
         LanPeerEndpoint(
           deviceId: peerDeviceId,
           host: peerHost,
@@ -1448,7 +1445,7 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
   // ---- 辅助 ----
 
   Future<Uint8List> _discoveryKey(String passphrase) {
-    final provider = _discoveryKeyProvider;
+    final provider = runtime.discoveryKey;
     if (provider == null) {
       throw const PairingCryptoException('未配置发现密钥派生');
     }

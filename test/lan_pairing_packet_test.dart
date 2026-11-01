@@ -4,6 +4,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/transport/lan_discovery.dart';
+
+import 'support/lan_runtime.dart';
+
 import 'package:molia/data/sync/transport/lan_pairing_packet.dart';
 
 /// `MSP/1` 编解码 / 限流 / 候选缓存，以及与 MSD presence 的隔离。
@@ -250,15 +253,18 @@ void main() {
     const udpPort = 48041;
     var keyDerivations = 0;
     final discovery = LanDiscovery(
-      deviceId: 'devLocal',
-      deviceName: () => '本机',
-      discoveryKeyProvider: () async {
-        keyDerivations++;
-        throw StateError('无口令');
-      },
-      httpPortProvider: () => 40000,
-      localAddressesProvider: () async => const [],
-      udpPort: udpPort,
+      runtime: lanRuntime(
+        deviceId: 'devLocal',
+        deviceName: '本机',
+        passphrase: 'unused',
+        discoveryKey: (passphrase) async {
+          keyDerivations++;
+          throw StateError('无口令');
+        },
+        httpPort: 40000,
+        udpPort: udpPort,
+        localAddresses: () async => const [],
+      ),
       nowMs: () => DateTime.now().millisecondsSinceEpoch,
     );
     final sender = await RawDatagramSocket.bind(

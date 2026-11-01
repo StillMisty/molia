@@ -917,6 +917,14 @@
   唯一拥有 ensure / start / stop / resume / hidden / announce 的模块；组合根把
   同一实例注入引擎与控制面（`sync_stack.dart`），两边不再各写一份
   `_ensureTransportsRunning`。
+- **LAN runtime（本机局域网事实）** — `lib/data/sync/lan_runtime.dart::LanRuntime`：
+  局域网三件套（`LanSyncTransport` / `LanDiscovery` / `LanPairingService`）共享的
+  唯一「这台机器」值：设备身份与名称、口令读写 / 生成、发现密钥、权限门、蜂窝
+  判定、本机地址、已知 / 手动对端、端点回写、换网事件与 UDP 端口偏好。本机
+  HTTP / 探测端口是运行期事实——HTTP 由传输、UDP 由发现层在绑定后经
+  `bindHttpPort` / `bindProbePort` 回填，公告与配对读同一份，组合根不再把同一组
+  闭包分别传给传输和配对。socket binder、时钟、报文流 / 发送器、HTTP 客户端
+  仍是各模块自己的测试替身。
 - **Peer candidate（局域网对端候选）** — `lib/data/sync/sync_peer_candidate.dart`：
   候选观测的字段级合并（本轮 presence 优先旧记忆，旧指纹不能覆盖新指纹）与
   HTTP 地址尝试顺序（IPv4 → 全局 / ULA IPv6 → 观测源地址 → link-local 兜底，
@@ -989,10 +997,12 @@
   后台 0 定时器。IPv4 广播 / 组播从主 socket + 每个可路由 IPv4 接口 socket
   发出；主 socket 按接口 join 组播接收，接口临时端口只收回给该端口的单播，
   presence 的探测端口以认证报文里的 `probe` 为准。IPv6 同样由主 socket 按接口
-  加入组播接收，发送仍走主 socket 的默认接口。
+  加入组播接收，发送仍走主 socket 的默认接口。机器事实全部来自 **LAN runtime**，
+  构造参数只剩快照证据、窗口、时钟与 socket binder；绑定 / 关闭主 socket 时
+  把对外探测端口回填运行时。
 - **LanPeerEndpoint（已验证局域网端点）** — `SyncStateStore.lanEndpoints`：
   `deviceId → {host, httpPort, probePort, verifiedAt}`，只在 MAC + HTTP 解密
-  成功（`onPeerVerified`）后回写；32 条上限、180 天淘汰、`removePeer` 一并
+  成功（`LanRuntime.rememberPeerEndpoint`）后回写；32 条上限、180 天淘汰、`removePeer` 一并
   清理。只有持久化端点的对端是「试探性对端」，失败不计数；手动地址与本轮
   presence 是「预期对端」。
 - **Sync adapter（同步适配器）** — 类别到本地存储的读写桥
@@ -1077,7 +1087,9 @@
   requestId 为随机 128-bit；口令只在临时 ECDH（P-256）+ HKDF-SHA256 +
   AES-256-GCM 密封后传输，AAD 绑定 requestId / intent / 双方 deviceId；同组用
   discovery key 的 HMAC 证明识别（直接补端点、不弹窗），双方都有不同同步组则
-  返回冲突、不交换口令。
+  返回冲突、不交换口令。服务依赖收成 `LanRuntime` + MSP 报文流 / 发送器 +
+  HTTP 客户端 + 时钟 + `LanPairingPolicy`（时序 / 限流），不再逐项重列身份、
+  口令与端口。
 - **Confirmation code（确认码）** — 由双方临时公钥、nonce 与 requestId 派生的
   6 位数字（展示为 `482 193`）：发起方与接收方显示同一个码，由用户口述核对；
   码不一致必须拒绝。确认码不经过口令，也不作为后续认证凭据。
