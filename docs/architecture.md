@@ -704,8 +704,9 @@
   `CatalogService.search` 复用 5min 缓存；逐源就绪即填充，单源失败进
   `failedSourceKeys` / `failedSourceNames` 可重试）。搜索协议本身
   （查询代际 / 逐源状态 / 失败重试 / 选中失效 / 通知合并）唯一实现在
-  `lib/providers/fan_out_search_session.dart` 的 **Source fan-out session**：
-  换源与歌词手动换源各自只提供 `FanOutSource` 适配器并叠加展示口径。
+  `lib/providers/source_fan_out.dart` 的 **Source fan-out session**：
+  换源、歌词手动换源与搜索页各自只提供 `FanOutSource` / `FanOutRun`
+  适配器并叠加展示口径。
   载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：页面级曲目条（封面 40 + 歌名 + 歌手 ·
   当前来源）+ 歌词 / 音频两个 tab；两个 tab 共用
@@ -1100,14 +1101,15 @@ module（见下）：
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（每个「`SearchKind` × 来源」一个 `SearchSession`：关键词 / 归一化失败 / `PagedListController` 各一份；`SearchSourceGroup<T>` 是只读分组投影；单曲 / 歌词会话与投影只持领域 `Track`，歌词片段按来源经 Accepted page callback 随页接受）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（每个「`SearchKind` × 来源」一个 `PagedFanOutRun`：关键词 / 归一化失败 / `PagedListController` 各一份，查询代际 / 失败重试 / 通知由 `FanOutSearchSession` 统一；`SearchSourceGroup<T>` 是只读分组投影；单曲 / 歌词投影只持领域 `Track`，歌词片段随 `LyricHit` 条目入库）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
 歌词行高亮用 `PositionLineIndexBuilder`（仅跨行重建）；队列列表用稳定引用。
 
-搜索分页按「`SearchKind` × 来源」隔离：每个 `SearchSession` 自己持有关键词 /
-归一化失败 / `PagedListController`，查询时按目标来源并行首屏，单源失败只挂在该
+搜索分页按「`SearchKind` × 来源」隔离：每个 `PagedFanOutRun` 自己持有关键词 /
+归一化失败 / `PagedListController`，查询代际 / 逐源失败重试 / 通知合并由
+`FanOutSearchSession` 统一；查询时按目标来源并行首屏，单源失败只挂在该
 来源的 `SearchSourceGroup.failure`；`loadMore(sourceKey)` / `retry(sourceKey)` 只
 作用于该来源。分组顺序严格取 `SourceRegistry.descriptors`（`lx_source_order`），
 「全部」固定第一；`selectSourceFilter` 只过滤已加载分组，来源尚未参与本轮搜索

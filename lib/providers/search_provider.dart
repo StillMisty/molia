@@ -8,23 +8,33 @@ import '../data/catalog/catalog_service.dart';
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_keys.dart';
 import '../domain/models/artist.dart';
-import '../domain/models/catalog.dart' show SearchKind, SearchQuery;
+import '../domain/models/catalog.dart' show LyricHit, SearchKind, SearchQuery;
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
+import 'paged_fan_out_run.dart';
 import 'paged_list_controller.dart';
 import 'playback_provider.dart';
+import 'search_branch.dart';
 import 'search_row.dart';
-import 'search_session.dart';
 import 'search_source_group.dart';
+import 'source_fan_out.dart';
 
 export 'search_row.dart' show SearchRow;
 export 'search_source_group.dart' show SearchSourceGroup;
 
+/// 单源取页：来源 key + 本轮关键词 + 页码（三种搜索类型共用）。
+typedef _PageFetcher<T> = Future<PagedResult<T>> Function(
+  String sourceKey,
+  String keyword,
+  int page,
+);
+
 /// 跨音源聚合搜索状态（内部经 [CatalogService] / [SourceRegistry]）。
 ///
-/// 每个「搜索类型 × 来源」持有一个独立的 [SearchSession]：
-/// - 换词清空所有旧会话，晚到的旧响应由 `PagedListController` 的代际丢弃；
+/// 每个「搜索类型 × 来源」是一个分页执行体，查询代际 / 逐源状态 / 失败 /
+/// 通知节拍统一由 [FanOutSearchSession] 持有：
+/// - 换词清空所有旧执行体，晚到的旧响应由查询代际与分页控制器丢弃；
 /// - 每个来源独立分页 / 失败 / 加载态，一个平台失败不影响其它平台；
 /// - 分组顺序永远直接读 `SourceRegistry.descriptors`（音源管理的渠道排序），
 ///   provider 不按内置规范顺序重排。
@@ -51,15 +61,13 @@ class SearchProvider extends ChangeNotifier {
   /// 过滤偏好的异步恢复代际：用户手动选择后，晚到的 prefs 读取不得覆盖。
   int _sourceFilterGeneration = 0;
 
-  final Map<String, SearchSession<Track>> _songSessions = {};
-  final Map<String, SearchSession<ArtistSummary>> _artistSessions = {};
-  final Map<String, SearchSession<Track>> _lyricSessions = {};
+  /// 三种搜索类型各一份分页分支（行形状不同，类型留在分支里）。
+  late final SearchBranch<Track, SearchRow> _songs;
+  late final SearchBranch<ArtistSummary, ArtistSummary> _artists;
+  late final SearchBranch<LyricHit, SearchRow> _lyrics;
 
-  /// 歌词片段按来源保存（key = sourceKey，内层 key = `TrackId.uri`）。
-  final Map<String, Map<String, String>> _lyricSnippets = {};
-
-  /// 每种类型最近一次真正搜过的关键词：音源晚加载时据此补搜该来源。
-  final Map<SearchKind, String> _lastSearchedKeyword = {};
+  /// 按类型索引的规范控制面：查询 / 分页 / 重试只经这一份。
+  late final Map<SearchKind, FanOutSearchControl> _controls;
 
   /// 最近一次读到的渠道快照：registry.changes 在描述未变化时不得重复发请求。
   List<SourceDescriptor> _lastDescriptors = const [];
@@ -69,13 +77,15 @@ class SearchProvider extends ChangeNotifier {
   Timer? _debounceTimer;
 
   bool _disposed = false;
-  bool _notifyScheduled = false;
+
+  /// 批量清空各分支时先暂停转发：一次输入不应触发三次重建。
+  bool _relaySearchChanges = true;
 
   /// 输入防抖：300ms 是「停止输入到发请求」的折中。
   ///
   /// 原值 500ms 在 perf 场景里占首屏搜索墙钟的 90%+（mock 本地音源 1.5ms
   /// 返回，500ms 全是防抖等待）。300ms 仍能跨过中文输入法的组合键停顿，
-  /// 且在途请求由 pager 的 reset 过期丢弃，不会因为请求变多而闪旧结果。
+  /// 且在途请求由执行体的 reset 过期丢弃，不会因为请求变多而闪旧结果。
   static const _debounceTime = Duration(milliseconds: 300);
 
   SearchProvider(
@@ -84,6 +94,41 @@ class SearchProvider extends ChangeNotifier {
     this._sourceRegistry,
     this._settings,
   }) {
+    _songs = _buildBranch<Track, SearchRow>(
+      kind: SearchKind.song,
+      failureLogLabel: (sourceKey) => 'Search failed ($sourceKey)',
+      fetchPage: _fetchSongPage,
+      project: (track) => SearchRow(track: track),
+      keyOf: (track) => track.id.uri,
+    );
+    _artists = _buildBranch<ArtistSummary, ArtistSummary>(
+      kind: SearchKind.artist,
+      failureLogLabel: (sourceKey) => 'Artist search failed ($sourceKey)',
+      fetchPage: _fetchArtistPage,
+      project: (artist) => artist,
+      keyOf: (artist) => artist.id,
+    );
+    _lyrics = _buildBranch<LyricHit, SearchRow>(
+      kind: SearchKind.lyric,
+      failureLogLabel: (sourceKey) => 'Lyric search failed ($sourceKey)',
+      fetchPage: _fetchLyricPage,
+      project: (hit) => SearchRow(track: hit.track, lyricSnippet: hit.snippet),
+      keyOf: (hit) => hit.track.id.uri,
+      // 同曲目在后续页再次命中时，片段跟随后页（与按页累计片段同口径），
+      // 行身份与位置仍取首次出现。
+      mergeDuplicate: (existing, incoming) => LyricHit(
+        track: existing.track,
+        snippet: incoming.snippet ?? existing.snippet,
+      ),
+    );
+    _controls = {
+      for (final branch in [_songs, _artists, _lyrics])
+        branch.kind: branch.session,
+    };
+    for (final control in _controls.values) {
+      control.addListener(_onSearchChanged);
+    }
+
     final settings = _settings;
     if (settings != null) {
       settings.bindReload(kSearchSourceFilter, _reloadSourceFilter);
@@ -104,14 +149,14 @@ class SearchProvider extends ChangeNotifier {
 
   /// 当前关键词已提交、但当前类型还没有真正发起搜索（防抖窗口 / 切类型）。
   ///
-  /// 换词 / 提交经 `_clearAllSessions` 清空 `_lastSearchedKeyword`；切类型则
-  /// 按目标 kind 是否已有本轮关键词判断。`_runKindSearch` 真正开始一轮搜索
-  /// 时才写入当前 kind。因此它既能覆盖 300ms 防抖窗口，也能覆盖切类型后
-  /// 尚未启动的间隔，UI 不会把这段时间误判成「无结果」。
+  /// 换词 / 提交清空所有分支的查询；切类型则按目标类型会话的查询是否已是
+  /// 当前关键词判断。真正开始一轮搜索时会话才写入关键词，因此它既能覆盖
+  /// 300ms 防抖窗口，也能覆盖切类型后尚未启动的间隔，UI 不会把这段时间
+  /// 误判成「无结果」。
   bool get isSearchPending {
     final keyword = _searchQuery.trim();
     if (keyword.isEmpty) return false;
-    return _lastSearchedKeyword[_kind] != keyword;
+    return _controls[_kind]!.query != keyword;
   }
 
   /// 搜索是否仍在进行：防抖等待或任一目标来源首屏请求在途。
@@ -149,18 +194,20 @@ class SearchProvider extends ChangeNotifier {
 
   /// 单曲 / 歌词结果按来源分组（顺序 = 渠道管理排序，过滤后）。
   List<SearchSourceGroup<SearchRow>> get songGroups =>
-      _songGroupsFor(SearchKind.song);
+      _songs.groups(_targetsFor(SearchKind.song));
 
   List<SearchSourceGroup<ArtistSummary>> get artistGroups =>
-      _artistGroupsFor(SearchKind.artist);
+      _artists.groups(_targetsFor(SearchKind.artist));
 
   List<SearchSourceGroup<SearchRow>> get lyricGroups =>
-      _lyricGroupsFor(SearchKind.lyric);
+      _lyrics.groups(_targetsFor(SearchKind.lyric));
 
   /// 当前类型是否任一目标来源首屏加载中。
-  bool get isSearching => _visibleDescriptorsFor(
-    _kind,
-  ).any((descriptor) => _sessionFor(_kind, descriptor.key)?.isLoading ?? false);
+  bool get isSearching {
+    final control = _controls[_kind]!;
+    return _targetsFor(_kind)
+        .any((descriptor) => control.isLoading(descriptor.key));
+  }
 
   /// 单曲 / 歌词 / 歌手结果的扁平投影（当前可见分组的已加载条目）。
   ///
@@ -185,42 +232,17 @@ class SearchProvider extends ChangeNotifier {
   /// 每来源独立分页：加载该来源的下一页。
   ///
   /// 「加载中 / 已到底 / 跨页去重」守卫仍由 [PagedListController] 持有；
-  /// 换词 / 来源移除时的会话 dispose 已使在途请求过期。
-  Future<void> loadMore(String sourceKey) async {
-    final session = _sessionFor(_kind, sourceKey);
-    if (session == null || session.keyword.trim().isEmpty) return;
-    final pending = session.loadMore();
-    notifyListeners();
-    await pending;
-    _notifySoon();
-  }
+  /// 换词 / 来源移除时的执行体 dispose 已使在途请求过期。
+  Future<void> loadMore(String sourceKey) =>
+      _controls[_kind]!.loadMore(sourceKey);
 
   /// 首屏失败重载首屏；加载更多失败重试下一页（每来源独立）。
-  Future<void> retry(String sourceKey) async {
-    final session = _sessionFor(_kind, sourceKey);
-    if (session == null) return;
-    final Future<void> pending;
-    if (session.loadMoreFailed) {
-      pending = session.loadMore();
-    } else if (session.failure != null) {
-      pending = session.loadFirstPage();
-    } else {
-      return;
-    }
-    notifyListeners();
-    await pending;
-    _notifySoon();
-  }
+  Future<void> retry(String sourceKey) => _controls[_kind]!.retry(sourceKey);
 
   /// 重试当前类型所有失败来源（首屏失败与加载更多失败一起处理）。
-  Future<void> retryFailed() async {
-    final keys = [
-      for (final group in _groupsForKind(_kind))
-        if (group.failure != null || group.loadMoreFailed) group.source.key,
-    ];
-    if (keys.isEmpty) return;
-    await Future.wait([for (final key in keys) retry(key)]);
-  }
+  Future<void> retryFailed() => _controls[_kind]!.retryFailed(
+    onlyKeys: {for (final descriptor in _targetsFor(_kind)) descriptor.key},
+  );
 
   /// 切换搜索类型：不支持的类型忽略。
   ///
@@ -235,10 +257,11 @@ class SearchProvider extends ChangeNotifier {
     // 防抖计时器尚未触发：它触发时按当时的 _kind 发起搜索，这里只切换
     // 视图，避免同一关键词先按旧类型、再按新类型各请求一轮。
     if (_debounceTimer?.isActive ?? false) return;
-    if (_lastSearchedKeyword[kind] == keyword) {
-      unawaited(_ensureSessionsFor(kind, keyword));
+    final control = _controls[kind]!;
+    if (control.query == keyword) {
+      unawaited(control.ensureSources());
     } else {
-      unawaited(_runKindSearch(kind, keyword));
+      unawaited(control.search(keyword));
     }
   }
 
@@ -264,12 +287,12 @@ class SearchProvider extends ChangeNotifier {
     _debounceTimer?.cancel();
 
     _searchQuery = query;
-    _clearAllSessions();
+    _clearAllRuns();
     notifyListeners();
 
     if (query.isEmpty) return;
 
-    // 防抖：只有最后一次输入会触发搜索；在途请求由会话 dispose 过期丢弃。
+    // 防抖：只有最后一次输入会触发搜索；在途请求由执行体 dispose 过期丢弃。
     // 计时从本次输入到真正发请求，用来判断「感知慢」里防抖占多少。
     final debounceWatch = DataPathTrace.enabled ? (Stopwatch()..start()) : null;
     _debounceTimer = Timer(_debounceTime, () {
@@ -288,7 +311,7 @@ class SearchProvider extends ChangeNotifier {
   void submitSearch(String query) {
     _debounceTimer?.cancel();
     _searchQuery = query;
-    _clearAllSessions();
+    _clearAllRuns();
     notifyListeners();
     if (query.isEmpty) return;
     unawaited(performSearch(query));
@@ -297,19 +320,19 @@ class SearchProvider extends ChangeNotifier {
   void clearSearch() {
     _debounceTimer?.cancel();
     _searchQuery = '';
-    _clearAllSessions();
+    _clearAllRuns();
     notifyListeners();
   }
 
   /// 释放搜索结果（托盘隐藏时由内存守卫调用）。
   ///
-  /// 清空关键词、所有来源会话与歌词片段；来源过滤偏好（用户偏好）保留。
+  /// 清空关键词与所有来源执行体；来源过滤偏好（用户偏好）保留。
   void releaseSearchResults() {
     if (_disposed) return;
     _debounceTimer?.cancel();
     _debounceTimer = null;
     _searchQuery = '';
-    _clearAllSessions();
+    _clearAllRuns();
     notifyListeners();
   }
 
@@ -318,7 +341,7 @@ class SearchProvider extends ChangeNotifier {
     if (keyword.isEmpty) return;
     // 防抖计时器触发时可能已有更新的提交；以 provider 当前关键词为准。
     if (keyword != _searchQuery.trim()) return;
-    await _runKindSearch(_kind, keyword);
+    await _controls[_kind]!.search(keyword);
   }
 
   /// 播放搜索结果：队列只取该行所属来源分组的已加载结果，不混平台队列。
@@ -341,167 +364,6 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  /// 起一轮当前类型的搜索：换词 / 切类型 / 首次搜索共用同一条路径。
-  Future<void> _runKindSearch(SearchKind kind, String keyword) async {
-    _lastSearchedKeyword[kind] = keyword;
-    _disposeKindSessions(kind);
-    if (kind == SearchKind.lyric) _lyricSnippets.clear();
-
-    final targets = _targetDescriptors(kind);
-    if (targets.isEmpty) {
-      notifyListeners();
-      return;
-    }
-    final pending = <Future<void>>[];
-    for (final descriptor in targets) {
-      pending.add(_createAndLoad(kind, descriptor, keyword));
-    }
-    // 会话已同步创建并置为 loading：先发一次通知让分组标题出现 spinner。
-    notifyListeners();
-    await Future.wait(pending);
-  }
-
-  /// 当前关键词下补齐缺失来源的首屏（不重发已有来源的请求）。
-  Future<void> _ensureSessionsFor(SearchKind kind, String keyword) async {
-    final targets = _targetDescriptors(kind);
-    final pending = <Future<void>>[];
-    for (final descriptor in targets) {
-      if (_sessionFor(kind, descriptor.key) != null) continue;
-      pending.add(_createAndLoad(kind, descriptor, keyword));
-    }
-    if (pending.isEmpty) return;
-    notifyListeners();
-    await Future.wait(pending);
-  }
-
-  Future<void> _createAndLoad(
-    SearchKind kind,
-    SourceDescriptor descriptor,
-    String keyword,
-  ) {
-    final sourceKey = descriptor.key;
-    switch (kind) {
-      case SearchKind.song:
-        late final SearchSession<Track> session;
-        session = SearchSession<Track>(
-          PagedListController<Track>(
-            keyOf: (track) => track.id.uri,
-            fetchPage: (page) => _fetchSongPage(sourceKey, session, page),
-          ),
-          'Search failed ($sourceKey)',
-        )..begin(keyword);
-        _songSessions[sourceKey] = session;
-        return session.loadFirstPage().whenComplete(_notifySoon);
-      case SearchKind.artist:
-        late final SearchSession<ArtistSummary> session;
-        session = SearchSession<ArtistSummary>(
-          PagedListController<ArtistSummary>(
-            keyOf: (artist) => artist.id,
-            fetchPage: (page) => _fetchArtistPage(sourceKey, session, page),
-          ),
-          'Artist search failed ($sourceKey)',
-        )..begin(keyword);
-        _artistSessions[sourceKey] = session;
-        return session.loadFirstPage().whenComplete(_notifySoon);
-      case SearchKind.lyric:
-        late final SearchSession<Track> session;
-        session = SearchSession<Track>(
-          PagedListController<Track>(
-            keyOf: (track) => track.id.uri,
-            fetchPage: (page) => _fetchLyricPage(sourceKey, session, page),
-            onPageAccepted: (page, {required append}) =>
-                _acceptLyricPage(sourceKey, page, append: append),
-          ),
-          'Lyric search failed ($sourceKey)',
-        )..begin(keyword);
-        _lyricSessions[sourceKey] = session;
-        return session.loadFirstPage().whenComplete(_notifySoon);
-    }
-  }
-
-  Future<PagedResult<Track>> _fetchSongPage(
-    String sourceKey,
-    SearchSession<Track> session,
-    int page,
-  ) async {
-    final catalog = _catalogService;
-    if (catalog == null) throw StateError('音源未初始化');
-    final result = await DataPathTrace.async(
-      'search.page',
-      () => catalog.search(
-        sourceKey,
-        SearchQuery(
-          keyword: session.keyword,
-          page: page,
-          limit: _searchPageSize,
-        ),
-      ),
-      fields: () => {'source': sourceKey, 'page': page},
-    );
-    return PagedResult(
-      items: result.items,
-      hasMore: result.hasMore,
-      total: result.total,
-    );
-  }
-
-  Future<PagedResult<ArtistSummary>> _fetchArtistPage(
-    String sourceKey,
-    SearchSession<ArtistSummary> session,
-    int page,
-  ) async {
-    final catalog = _catalogService;
-    if (catalog == null) throw StateError('音源未初始化');
-    final result = await catalog.searchArtists(
-      sourceKey,
-      SearchQuery(keyword: session.keyword, page: page, limit: _searchPageSize),
-    );
-    return PagedResult(
-      items: result.items,
-      hasMore: result.hasMore,
-      total: result.total,
-    );
-  }
-
-  Future<PagedResult<Track>> _fetchLyricPage(
-    String sourceKey,
-    SearchSession<Track> session,
-    int page,
-  ) async {
-    final catalog = _catalogService;
-    if (catalog == null) throw StateError('音源未初始化');
-    final result = await catalog.searchLyrics(
-      sourceKey,
-      SearchQuery(keyword: session.keyword, page: page, limit: _searchPageSize),
-    );
-    final snippets = <String, String>{};
-    for (final hit in result.items) {
-      if (hit.snippet != null) snippets[hit.track.id.uri] = hit.snippet!;
-    }
-    return LyricPageResult(
-      snippets: snippets,
-      items: [for (final hit in result.items) hit.track],
-      hasMore: result.hasMore,
-      total: result.total,
-    );
-  }
-
-  /// 接受页回调：只在这页仍属于该来源当前歌词会话时累计片段。
-  void _acceptLyricPage(
-    String sourceKey,
-    PagedResult<Track> page, {
-    required bool append,
-  }) {
-    if (page is! LyricPageResult) return;
-    final previous = append
-        ? (_lyricSnippets[sourceKey] ?? const {})
-        : const {};
-    _lyricSnippets[sourceKey] = Map.unmodifiable({
-      ...previous,
-      ...page.snippets,
-    });
-  }
-
   /// registry.changes：删来源、按新顺序重排、给晚到的新来源补搜。
   ///
   /// descriptors 未变化时直接返回，避免 SourceManager 的其它通知触发重复请求。
@@ -511,93 +373,23 @@ class SearchProvider extends ChangeNotifier {
     _lastDescriptors = next;
 
     final keys = {for (final descriptor in next) descriptor.key};
-    _removeMissing(_songSessions, keys);
-    _removeMissing(_artistSessions, keys);
-    _removeMissing(_lyricSessions, keys);
-    _lyricSnippets.removeWhere((key, _) => !keys.contains(key));
+    for (final control in _controls.values) {
+      control.retainSources(keys);
+    }
 
     if (!supportedSearchKinds.contains(_kind)) _kind = SearchKind.song;
 
     final keyword = _searchQuery.trim();
-    if (keyword.isNotEmpty && _lastSearchedKeyword[_kind] == keyword) {
+    final current = _controls[_kind]!;
+    if (keyword.isNotEmpty && current.query == keyword) {
       // 只给当前可见类型补搜：其它类型切过去时由 selectSearchKind 的
-      // _ensureSessionsFor 路径补齐，避免为不在当前页的类型发额外请求。
-      unawaited(_ensureSessionsFor(_kind, keyword));
+      // ensureSources 路径补齐，避免为不在当前页的类型发额外请求。
+      unawaited(current.ensureSources());
     }
     notifyListeners();
   }
 
-  void _removeMissing<T>(
-    Map<String, SearchSession<T>> sessions,
-    Set<String> keys,
-  ) {
-    final missing = [
-      for (final key in sessions.keys)
-        if (!keys.contains(key)) key,
-    ];
-    for (final key in missing) {
-      sessions.remove(key)?.dispose();
-    }
-  }
-
-  List<SearchSourceGroup<SearchRow>> _songGroupsFor(SearchKind kind) =>
-      _groupsFor(kind, _songSessions, (_, track) => SearchRow(track: track));
-
-  List<SearchSourceGroup<ArtistSummary>> _artistGroupsFor(SearchKind kind) =>
-      _groupsFor(kind, _artistSessions, (_, artist) => artist);
-
-  List<SearchSourceGroup<SearchRow>> _lyricGroupsFor(SearchKind kind) =>
-      _groupsFor(kind, _lyricSessions, (sourceKey, track) {
-        final snippets = _lyricSnippets[sourceKey] ?? const {};
-        return SearchRow(track: track, lyricSnippet: snippets[track.id.uri]);
-      });
-
-  /// 按渠道顺序把「来源会话」投影成 UI 分组；三种搜索类型共用同一遍历。
-  List<SearchSourceGroup<R>> _groupsFor<T, R>(
-    SearchKind kind,
-    Map<String, SearchSession<T>> sessions,
-    R Function(String sourceKey, T item) project,
-  ) {
-    final groups = <SearchSourceGroup<R>>[];
-    for (final descriptor in _visibleDescriptorsFor(kind)) {
-      final session = sessions[descriptor.key];
-      if (session == null) continue;
-      groups.add(
-        _group<R>(descriptor, session, [
-          for (final item in session.items) project(descriptor.key, item),
-        ]),
-      );
-    }
-    return List.unmodifiable(groups);
-  }
-
-  SearchSourceGroup<T> _group<T>(
-    SourceDescriptor descriptor,
-    SearchSessionState session,
-    List<T> items,
-  ) => SearchSourceGroup<T>(
-    source: descriptor,
-    items: List.unmodifiable(items),
-    failure: session.failure,
-    isLoading: session.isLoading,
-    hasMore: session.hasMore,
-    isLoadingMore: session.isLoadingMore,
-    loadMoreFailed: session.loadMoreFailed,
-    total: session.total,
-    page: session.page,
-  );
-
-  Iterable<SearchSourceGroup<Object>> _groupsForKind(SearchKind kind) =>
-      switch (kind) {
-        SearchKind.song => songGroups,
-        SearchKind.artist => artistGroups,
-        SearchKind.lyric => lyricGroups,
-      };
-
-  List<SourceDescriptor> _visibleDescriptorsFor(SearchKind kind) =>
-      _targetDescriptors(kind);
-
-  List<SourceDescriptor> _targetDescriptors(SearchKind kind) {
+  Iterable<SourceDescriptor> _targetsFor(SearchKind kind) {
     final options = [
       for (final descriptor in sourceChannels)
         if (_supports(kind, descriptor)) descriptor,
@@ -627,48 +419,110 @@ class SearchProvider extends ChangeNotifier {
     };
   }
 
-  SearchSessionState? _sessionFor(SearchKind kind, String sourceKey) =>
-      switch (kind) {
-        SearchKind.song => _songSessions[sourceKey],
-        SearchKind.artist => _artistSessions[sourceKey],
-        SearchKind.lyric => _lyricSessions[sourceKey],
-      };
-
-  void _disposeKindSessions(SearchKind kind) {
-    switch (kind) {
-      case SearchKind.song:
-        _disposeSessions(_songSessions);
-        break;
-      case SearchKind.artist:
-        _disposeSessions(_artistSessions);
-        break;
-      case SearchKind.lyric:
-        _disposeSessions(_lyricSessions);
-        _lyricSnippets.clear();
-        break;
-    }
+  SearchBranch<T, R> _buildBranch<T, R>({
+    required SearchKind kind,
+    required String Function(String sourceKey) failureLogLabel,
+    required _PageFetcher<T> fetchPage,
+    required R Function(T item) project,
+    String Function(T item)? keyOf,
+    T Function(T existing, T incoming)? mergeDuplicate,
+  }) {
+    return SearchBranch<T, R>(
+      kind: kind,
+      project: project,
+      session: FanOutSearchSession<T>(
+        sources: () => [
+          for (final descriptor in _targetsFor(kind))
+            FanOutSource<T>.paged(
+              key: descriptor.key,
+              openRun: (keyword) => PagedFanOutRun<T>(
+                failureLogLabel: failureLogLabel(descriptor.key),
+                fetchPage: (page) => fetchPage(descriptor.key, keyword, page),
+                keyOf: keyOf,
+                mergeDuplicate: mergeDuplicate,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
-  void _disposeSessions<T>(Map<String, SearchSession<T>> sessions) {
-    for (final session in sessions.values) {
-      session.dispose();
-    }
-    sessions.clear();
+  Future<PagedResult<Track>> _fetchSongPage(
+    String sourceKey,
+    String keyword,
+    int page,
+  ) async {
+    final catalog = _catalogService;
+    if (catalog == null) throw StateError('音源未初始化');
+    final result = await DataPathTrace.async(
+      'search.page',
+      () => catalog.search(
+        sourceKey,
+        SearchQuery(keyword: keyword, page: page, limit: _searchPageSize),
+      ),
+      fields: () => {'source': sourceKey, 'page': page},
+    );
+    return PagedResult(
+      items: result.items,
+      hasMore: result.hasMore,
+      total: result.total,
+    );
   }
 
-  void _clearAllSessions() {
-    _disposeSessions(_songSessions);
-    _disposeSessions(_artistSessions);
-    _disposeSessions(_lyricSessions);
-    _lyricSnippets.clear();
-    _lastSearchedKeyword.clear();
+  Future<PagedResult<ArtistSummary>> _fetchArtistPage(
+    String sourceKey,
+    String keyword,
+    int page,
+  ) async {
+    final catalog = _catalogService;
+    if (catalog == null) throw StateError('音源未初始化');
+    final result = await catalog.searchArtists(
+      sourceKey,
+      SearchQuery(keyword: keyword, page: page, limit: _searchPageSize),
+    );
+    return PagedResult(
+      items: result.items,
+      hasMore: result.hasMore,
+      total: result.total,
+    );
+  }
+
+  Future<PagedResult<LyricHit>> _fetchLyricPage(
+    String sourceKey,
+    String keyword,
+    int page,
+  ) async {
+    final catalog = _catalogService;
+    if (catalog == null) throw StateError('音源未初始化');
+    final result = await catalog.searchLyrics(
+      sourceKey,
+      SearchQuery(keyword: keyword, page: page, limit: _searchPageSize),
+    );
+    return PagedResult(
+      items: result.items,
+      hasMore: result.hasMore,
+      total: result.total,
+    );
+  }
+
+  void _clearAllRuns() {
+    final relay = _relaySearchChanges;
+    _relaySearchChanges = false;
+    try {
+      for (final control in _controls.values) {
+        control.clear();
+      }
+    } finally {
+      _relaySearchChanges = relay;
+    }
   }
 
   void _applySourceFilter(String value) {
     _sourceFilterPreference = value;
     final keyword = _searchQuery.trim();
-    if (keyword.isNotEmpty && _lastSearchedKeyword[_kind] == keyword) {
-      unawaited(_ensureSessionsFor(_kind, keyword));
+    final current = _controls[_kind]!;
+    if (keyword.isNotEmpty && current.query == keyword) {
+      unawaited(current.ensureSources());
     }
     notifyListeners();
   }
@@ -705,14 +559,9 @@ class SearchProvider extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// 同一轮事件循环内的多来源完成通知合并为一次。
-  void _notifySoon() {
-    if (_disposed || _notifyScheduled) return;
-    _notifyScheduled = true;
-    scheduleMicrotask(() {
-      _notifyScheduled = false;
-      if (!_disposed) notifyListeners();
-    });
+  void _onSearchChanged() {
+    if (_disposed || !_relaySearchChanges) return;
+    notifyListeners();
   }
 
   @override
@@ -720,10 +569,10 @@ class SearchProvider extends ChangeNotifier {
     _disposed = true;
     _debounceTimer?.cancel();
     _registrySubscription?.cancel();
-    _disposeSessions(_songSessions);
-    _disposeSessions(_artistSessions);
-    _disposeSessions(_lyricSessions);
-    _lyricSnippets.clear();
+    for (final control in _controls.values) {
+      control.removeListener(_onSearchChanged);
+      control.dispose();
+    }
     super.dispose();
   }
 }

@@ -16,8 +16,8 @@ import '../models/lyric_line.dart';
 import '../services/lyrics/lyric_provider.dart';
 import '../services/lyrics/lyrics_match.dart';
 import '../services/lyrics/lyrics_source_strategy.dart';
-import 'fan_out_search_session.dart';
 import 'lyrics_provider.dart';
+import 'source_fan_out.dart';
 
 final _logger = Logger('molia.lyrics_source_search_session');
 

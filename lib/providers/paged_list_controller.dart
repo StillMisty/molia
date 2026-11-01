@@ -129,6 +129,8 @@ class PagedListState<T> {
 /// 语义：
 /// - 过期响应（reset / 新请求之后的返回）直接丢弃，不覆盖新状态；
 /// - 提供 [keyOf] 时按 key 跨页去重（部分平台分页边界会重复返回）；
+///   重复 key 默认保留先到的条目，提供 `mergeDuplicate` 时由调用方合并
+///   （歌词片段这类同页元数据跟随后页）；
 /// - 追加页去重后无新增 → [PagedListState.hasMore] 置 false：部分平台
 ///   忽略 page、每次都返回整表，靠这条推断停住（防死循环）；
 /// - 首屏失败清空列表并置 [PagedListState.failed]（可重试）；加载更多失败
@@ -142,11 +144,13 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
     required this._fetchPage,
     this._keyOf,
     this._onPageAccepted,
+    this._mergeDuplicate,
   }) : super(PagedListState<T>(hasMore: true));
 
   final Future<PagedResult<T>> Function(int page) _fetchPage;
   final String Function(T item)? _keyOf;
   final PagedPageAccepted<T>? _onPageAccepted;
+  final T Function(T existing, T incoming)? _mergeDuplicate;
 
   /// 单调递增的请求 id：reset / dispose 后自增，使在途请求过期。
   int _requestId = 0;
@@ -236,11 +240,19 @@ class PagedListController<T> extends ValueNotifier<PagedListState<T>> {
   }
 
   List<T> _dedupe(List<T> items) {
-    final seen = <String>{};
-    return [
-      for (final item in items)
-        if (seen.add(_keyOf!(item))) item,
-    ];
+    final seen = <String, int>{};
+    final result = <T>[];
+    for (final item in items) {
+      final key = _keyOf!(item);
+      final index = seen[key];
+      if (index == null) {
+        seen[key] = result.length;
+        result.add(item);
+      } else if (_mergeDuplicate case final merge?) {
+        result[index] = merge(result[index], item);
+      }
+    }
+    return result;
   }
 
   @override

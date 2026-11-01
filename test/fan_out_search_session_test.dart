@@ -1,11 +1,12 @@
 /// 跨来源扇出搜索协议：查询代际、失败重试、不可用来源、稳定排序、选中失效、
-/// 通知合并与 dispose 安全。两个消费面（换源 / 手动歌词换源）共用这份实现。
+/// 通知合并与 dispose 安全。三个消费面（换源 / 手动歌词换源 / 搜索页）共用
+/// 这份实现。
 library;
 
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/providers/fan_out_search_session.dart';
+import 'package:molia/providers/source_fan_out.dart';
 
 /// 最简结果类型：只带来源 key 与平台内 id。
 class _Hit {
@@ -25,6 +26,7 @@ class _Source {
   final String key;
   bool available;
   int calls = 0;
+  String? lastQuery;
   Future<List<_Hit>> Function(String query)? onSearch;
   final List<Completer<List<_Hit>>> pending = [];
 
@@ -33,6 +35,7 @@ class _Source {
     isAvailable: () => available,
     search: (query) {
       calls++;
+      lastQuery = query;
       return onSearch!(query);
     },
     sourceKeyOf: (hit) => hit.source,
@@ -211,6 +214,50 @@ void main() {
 
     session.select(session.resultsOf('a').single);
     expect(notifications, 3, reason: '选中变化立即通知');
+  });
+
+  test('ensureSources 给当前关键词补开新来源，不重发已有来源', () async {
+    final a = _Source('a')..onSearch = (_) async => [const _Hit('a', '1')];
+    final b = _Source('b')..onSearch = (_) async => [const _Hit('b', '2')];
+    final declared = <_Source>[a];
+    final session = FanOutSearchSession<_Hit>(
+      sources: () => [for (final source in declared) source.adapter],
+    );
+    addTearDown(session.dispose);
+
+    await session.search('晴天');
+    expect(a.calls, 1);
+    expect(b.calls, 0);
+
+    // 注册表晚到的新来源：只补开它，已有来源不重发。
+    declared.add(b);
+    await session.ensureSources();
+
+    expect(a.calls, 1, reason: '已有来源不重复请求');
+    expect(b.calls, 1);
+    expect(b.lastQuery, '晴天');
+    expect(session.resultsOf('b').single.id, '2');
+  });
+
+  test('retryFailed 只在给定来源内重试（搜索页过滤视图）', () async {
+    var aFails = true;
+    final a = _Source('a')
+      ..onSearch = (_) async {
+        if (aFails) throw StateError('boom');
+        return [const _Hit('a', '1')];
+      };
+    final b = _Source('b')..onSearch = (_) async => throw StateError('boom');
+    final session = buildSession([a, b]);
+
+    await session.search('晴天');
+    expect(session.failedKeys, {'a', 'b'});
+
+    aFails = false;
+    await session.retryFailed(onlyKeys: {'a'});
+
+    expect(a.calls, 2);
+    expect(b.calls, 1, reason: '不在给定来源内不重试');
+    expect(session.failedKeys, {'b'}, reason: '未重试的失败来源保留在集合里');
   });
 
   test('dispose 后到达的结果与后续调用都安全', () async {

@@ -22,9 +22,9 @@ import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
 import '../services/source_swap/source_swap_strategy.dart';
-import 'fan_out_search_session.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
+import 'source_fan_out.dart';
 
 final _logger = Logger('molia.source_swap_provider');
 
