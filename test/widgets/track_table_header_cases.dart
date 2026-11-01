@@ -4,6 +4,8 @@ import 'package:molia/widgets/track_table_header.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../support/cover_test_support.dart';
+
 /// 宽屏表格表头：列标题与列构成由行内同一份 `TrackRowColumnSpec` 决定，
 /// 左缘与行内列逐列对齐（对齐靠行内网格的 token 复刻：表面内边距、封面位、
 /// 列间距、行尾槽宽）。
@@ -19,31 +21,33 @@ void main() {
     TrackRowColumnSpec spec,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: TrackTableHeader(spec: spec),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: TrackRow(
-                  model: const TrackRowModel(
-                    title: 'Title',
-                    artistNames: ['Col Artist'],
-                    album: 'Col Album',
-                    time: '10-18',
-                    durationMs: 185000,
-                  ),
-                  surface: TrackRowSurface(tableSpec: spec),
-                  position: M3ECardPosition.first,
-                  onTap: () {},
+      withCoverStore(
+        MaterialApp(
+          home: Scaffold(
+            body: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: TrackTableHeader(spec: spec),
                 ),
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: TrackRow(
+                    model: const TrackRowModel(
+                      title: 'Title',
+                      artistNames: ['Col Artist'],
+                      album: 'Col Album',
+                      time: '10-18',
+                      durationMs: 185000,
+                    ),
+                    surface: TrackRowSurface(tableSpec: spec),
+                    position: M3ECardPosition.first,
+                    onTap: () {},
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

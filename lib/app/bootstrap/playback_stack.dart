@@ -25,7 +25,6 @@ import '../../playback/playback_session_coordinator.dart';
 import '../../providers/playback_provider.dart';
 import '../../providers/sleep_timer.dart';
 import '../../services/audio_focus_settings.dart';
-import '../../services/covers/custom_cover_store.dart';
 import '../../services/playback_observer.dart';
 import '../../services/playback_session_store.dart';
 import '../app_shell.dart';
@@ -83,12 +82,11 @@ Future<PlaybackStack> buildPlaybackStack({
   MediaSessionFactory? mediaSessionFactory,
   PlaybackBackend? backend,
   PlaybackPowerPolicy? powerPolicy,
-  CustomCoverStore? customCovers,
 }) async {
   final sourceManager = catalog.sourceManager;
   final dataSaver = local.dataSaver;
   final policy = powerPolicy ?? PlaybackPowerPolicy();
-  final covers = customCovers ?? local.customCovers;
+  final covers = local.customCovers;
 
   // 音频焦点偏好必须在建播放器之前读好：默认开（与其他应用同时播放），
   // 但用户可能已关闭；首次中断不应按错的策略处理。

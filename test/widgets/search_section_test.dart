@@ -19,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
+import '../support/cover_test_support.dart';
 
 /// 搜索结果区：类型分段（单曲 / 歌手）按能力位显隐；歌手条目进歌手页。
 void main() {
@@ -82,6 +83,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<SearchProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           Provider<ArtistService>.value(

@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
+import '../support/cover_test_support.dart';
 
 /// 收藏曲目行（歌手页 / 专辑页 / 搜索结果共用的唯一适配层）：
 /// 行内容词表（[Track.artistLabel]）+ 收藏态订阅 + 操作菜单动作接线
@@ -72,6 +73,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ],
@@ -211,33 +213,35 @@ void main() {
     var rowTaps = 0;
     final tapped = <String>[];
     await tester.pumpWidget(
-      MaterialApp(
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        home: Scaffold(
-          body: FavoriteTrackTile(
-            track: const Track(
-              id: TrackId('test', 'a'),
-              title: 'Title a',
-              origin: TrackOrigin.lx,
+      withCoverStore(
+        MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Scaffold(
+            body: FavoriteTrackTile(
+              track: const Track(
+                id: TrackId('test', 'a'),
+                title: 'Title a',
+                origin: TrackOrigin.lx,
+              ),
+              row: TrackRowModel(
+                title: 'Title a',
+                artist: 'A、B',
+                artists: [
+                  TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
+                  const TrackRowArtist(name: 'B'),
+                ],
+              ),
+              position: M3ECardPosition.single,
+              onTap: () => rowTaps++,
+              favoriteOf: (_) => false,
+              onToggleFavorite: () {},
+              onAddToPlaylist: () {},
             ),
-            row: TrackRowModel(
-              title: 'Title a',
-              artist: 'A、B',
-              artists: [
-                TrackRowArtist(name: 'A', onTap: () => tapped.add('A')),
-                const TrackRowArtist(name: 'B'),
-              ],
-            ),
-            position: M3ECardPosition.single,
-            onTap: () => rowTaps++,
-            favoriteOf: (_) => false,
-            onToggleFavorite: () {},
-            onAddToPlaylist: () {},
           ),
         ),
       ),

@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 专辑页：头部元信息 / 播放全部 / 加入列表 / 滚到底分页 / 空态 / 失败重试。
 void main() {
@@ -83,6 +84,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ],

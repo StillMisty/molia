@@ -11,6 +11,7 @@ import 'package:molia/models/lyric_line.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/widgets/lyrics_selection_page.dart';
 
+import '../support/cover_test_support.dart';
 import '../support/fakes.dart';
 
 /// 歌词选择页的当前行高亮：与播放页共用同一时间策略（200ms 视觉提前量）。
@@ -64,24 +65,26 @@ void main() {
       colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
     );
     await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
-        child: M3EMaterialApp(
-          data: M3EThemeData.fromMaterial(themedData),
-          theme: themedData,
-          locale: const Locale('zh'),
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            ...GlobalMaterialLocalizations.delegates,
-          ],
-          supportedLocales: const [Locale('zh')],
-          home: Scaffold(
-            body: LyricsSelectionPage(
-              lyrics: lyrics,
-              isSynced: isSynced,
-              trackTitle: track.title,
-              artistName: 'Artist',
-              embedded: true,
+      withCoverStore(
+        ChangeNotifierProvider<PlaybackProvider>.value(
+          value: playback,
+          child: M3EMaterialApp(
+            data: M3EThemeData.fromMaterial(themedData),
+            theme: themedData,
+            locale: const Locale('zh'),
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: const [Locale('zh')],
+            home: Scaffold(
+              body: LyricsSelectionPage(
+                lyrics: lyrics,
+                isSynced: isSynced,
+                trackTitle: track.title,
+                artistName: 'Artist',
+                embedded: true,
+              ),
             ),
           ),
         ),

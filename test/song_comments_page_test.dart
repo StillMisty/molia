@@ -11,6 +11,7 @@ import 'package:molia/providers/comments_provider.dart';
 import 'package:molia/widgets/comment_list_view.dart';
 import 'package:provider/provider.dart';
 
+import 'support/cover_test_support.dart';
 import 'support/fake_music_source.dart';
 
 /// 评论页：tab 切换（带计数）/ 分页 / 刷新 / 空态 / 错误态 / 评论行字段。
@@ -80,8 +81,11 @@ void main() {
 
   Future<void> pumpPage(WidgetTester tester) async {
     await tester.pumpWidget(
-      ChangeNotifierProvider<CommentsProvider>.value(
-        value: provider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<CommentsProvider>.value(value: provider),
+          coverStoreProvider(),
+        ],
         child: MaterialApp(
           locale: const Locale('zh'),
           localizationsDelegates: const [

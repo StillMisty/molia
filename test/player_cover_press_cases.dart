@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 封面按压反馈：按下立即缩小（0.96）、抬起/取消回弹。
 ///
@@ -81,6 +82,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

@@ -232,6 +232,7 @@ void main() {
       library: library,
       playback: playback,
       dataSaver: local.dataSaver,
+      customCovers: local.customCovers,
     );
     addTearDown(sync.provider.dispose);
 

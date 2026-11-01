@@ -9,6 +9,8 @@ import 'package:molia/widgets/detail_page/detail_cover_header.dart';
 import 'package:molia/widgets/detail_page/detail_page_chrome.dart';
 import 'package:molia/widgets/track_artwork.dart';
 
+import '../support/cover_test_support.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -31,16 +33,18 @@ void main() {
       tester.view.resetDevicePixelRatio();
     });
     await tester.pumpWidget(
-      M3EMaterialApp(
-        data: M3EThemeData.fromMaterial(ThemeData()),
-        theme: ThemeData(),
-        locale: const Locale('zh'),
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          ...GlobalMaterialLocalizations.delegates,
-        ],
-        supportedLocales: const [Locale('zh')],
-        home: Scaffold(body: child),
+      withCoverStore(
+        M3EMaterialApp(
+          data: M3EThemeData.fromMaterial(ThemeData()),
+          theme: ThemeData(),
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: Scaffold(body: child),
+        ),
       ),
     );
   }

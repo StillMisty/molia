@@ -244,6 +244,9 @@ void main() {
   late _FakeDownloadManager downloadService;
   late _FakeLocalDataService localDataService;
 
+  /// 只读默认存储：歌曲信息页始终经 Provider 读取封面解析器。
+  late CustomCoverStore coverStore;
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
@@ -251,6 +254,7 @@ void main() {
     downloadRecords = _TestDownloadRecords();
     downloadService = _FakeDownloadManager(downloadRecords);
     localDataService = _FakeLocalDataService(downloads: downloadRecords);
+    coverStore = CustomCoverStore();
   });
 
   tearDown(() => playback.dispose());
@@ -264,6 +268,7 @@ void main() {
     ArtistService? artistService,
     NotificationService? notifications,
     DataSaverService? dataSaver,
+    CustomCoverStore? customCovers,
   }) async {
     backend.emit(
       BackendSnapshot(
@@ -292,6 +297,7 @@ void main() {
             Provider<NotificationService>.value(value: notifications),
           if (dataSaver != null)
             ChangeNotifierProvider<DataSaverService>.value(value: dataSaver),
+          Provider<CustomCoverStore>.value(value: customCovers ?? coverStore),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -406,13 +412,11 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
     await tester.runAsync(store.load);
-    CustomCoverStore.overrideInstance(store);
     addTearDown(() {
-      CustomCoverStore.overrideInstance(null);
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
-    await pumpView(tester, track: _track());
+    await pumpView(tester, track: _track(), customCovers: store);
     final l10n = lookupAppLocalizations(const Locale('zh'));
     expect(find.byKey(const Key('trackInfoCoverItem')), findsOneWidget);
     expect(find.text(l10n.coverTitle), findsOneWidget);
@@ -438,9 +442,7 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
     await tester.runAsync(store.load);
-    CustomCoverStore.overrideInstance(store);
     addTearDown(() {
-      CustomCoverStore.overrideInstance(null);
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
@@ -450,7 +452,11 @@ void main() {
       () => store.setDefaultCover(Uint8List.fromList(image.encodePng(source))),
     );
 
-    await pumpView(tester, track: _track(artworkUrl: remote));
+    await pumpView(
+      tester,
+      track: _track(artworkUrl: remote),
+      customCovers: store,
+    );
 
     final thumbnail = tester.widget<AppNetworkImage>(
       find.descendant(

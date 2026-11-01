@@ -25,12 +25,10 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     tempDir = await Directory.systemTemp.createTemp('molia_custom_covers_');
     store = buildStore();
-    CustomCoverStore.overrideInstance(store);
     await store.load();
   });
 
   tearDown(() async {
-    CustomCoverStore.overrideInstance(null);
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 

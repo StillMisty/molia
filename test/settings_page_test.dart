@@ -128,6 +128,9 @@ void main() {
             value: audioFocusSettings,
           ),
           Provider<PlayStatisticsService>.value(value: playStatisticsService),
+          // 设置页的外观分区读取封面解析器（默认封面行）；生产由组合根注入，
+          // 用例需要真实自定义封面时经 extraProviders 覆盖成自己的存储。
+          Provider<CustomCoverStore>.value(value: CustomCoverStore()),
           ...extraProviders,
         ],
         child: M3EMaterialApp(
@@ -1278,13 +1281,14 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
     await tester.runAsync(store.load);
-    CustomCoverStore.overrideInstance(store);
     addTearDown(() {
-      CustomCoverStore.overrideInstance(null);
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
-    await pumpSettingsPage(tester);
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [Provider<CustomCoverStore>.value(value: store)],
+    );
     final row = find.byKey(const Key('settingsDefaultCoverItem'));
     expect(row, findsOneWidget);
     expect(find.text('Default cover'), findsOneWidget);

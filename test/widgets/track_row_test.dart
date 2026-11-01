@@ -35,10 +35,14 @@ void main() {
   late FakePlaybackBackend backend;
   late PlaybackProvider playback;
 
+  /// 只读默认存储：曲目行始终经 Provider 读取封面解析器。
+  late CustomCoverStore coverStore;
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     backend = FakePlaybackBackend();
     playback = buildTestPlaybackProvider(backend: backend);
+    coverStore = CustomCoverStore();
   });
   tearDown(() => playback.dispose());
 
@@ -46,10 +50,14 @@ void main() {
     WidgetTester tester,
     Widget child, {
     bool settle = true,
+    CustomCoverStore? customCovers,
   }) async {
     await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          Provider<CustomCoverStore>.value(value: customCovers ?? coverStore),
+        ],
         child: MaterialApp(
           home: Scaffold(body: Center(child: child)),
         ),
@@ -575,8 +583,11 @@ void main() {
     var rowTaps = 0;
     var actionTaps = 0;
     await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          Provider<CustomCoverStore>.value(value: coverStore),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Center(
@@ -610,8 +621,11 @@ void main() {
     var actionTaps = 0;
     final secondaryTaps = <Offset>[];
     await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          Provider<CustomCoverStore>.value(value: coverStore),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Center(
@@ -648,8 +662,11 @@ void main() {
     var rowTaps = 0;
     final secondaryTaps = <Offset>[];
     await tester.pumpWidget(
-      ChangeNotifierProvider<PlaybackProvider>.value(
-        value: playback,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          Provider<CustomCoverStore>.value(value: coverStore),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Center(
@@ -756,11 +773,9 @@ void main() {
         supportDirectory: () async => tempDir,
         clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
       );
-      CustomCoverStore.overrideInstance(store);
     });
 
     tearDown(() {
-      CustomCoverStore.overrideInstance(null);
       if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
     });
 
@@ -792,6 +807,7 @@ void main() {
           ),
           onTap: () {},
         ),
+        customCovers: store,
       );
       expect(filePathOfCover(tester), first);
 
@@ -817,6 +833,7 @@ void main() {
           model: const TrackRowModel(title: 'No artwork'),
           onTap: () {},
         ),
+        customCovers: store,
       );
       expect(filePathOfCover(tester), defaultPath);
     });
@@ -835,6 +852,7 @@ void main() {
           model: const TrackRowModel(title: 'Downloaded', trackId: local),
           onTap: () {},
         ),
+        customCovers: store,
       );
       expect(filePathOfCover(tester), store.trackCoverPath(original));
     });

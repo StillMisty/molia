@@ -65,7 +65,7 @@ class StyledCoverImage extends StatefulWidget {
   final ArtworkCache? artworkCache;
   final void Function(Object error)? onError;
 
-  /// 测试可注入缓存；缺省读 Provider，再回退全局单例。
+  /// 测试可注入缓存；缺省读 Provider（组合根注入的唯一实例），无需全局回退。
   final CoverStyleCache? cache;
 
   /// 派生图物理边长；缺省按显示尺寸 / 解码宽度推导后分桶。
@@ -111,10 +111,14 @@ class _StyledCoverImageState extends State<StyledCoverImage> {
   }
 
   void _bindCache() {
-    final cache =
-        widget.cache ??
-        context.read<CoverStyleCache?>() ??
-        CoverStyleCache.instance;
+    final cache = widget.cache ?? context.read<CoverStyleCache?>();
+    // 生产由组合根 Provider 注入；缺失是接线错误，不能用进程级缓存兜底
+    // （那会让「忘记挂 Provider」在测试与降级宿主里静默成立）。
+    assert(
+      cache != null,
+      'StyledCoverImage 缺少 CoverStyleCache：请用 Provider 注入组合根的实例，'
+      '或在测试里传 cache 参数。',
+    );
     if (identical(cache, _cache)) return;
     _cache?.removeListener(_onCacheChanged);
     _cache = cache;

@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fake_music_source.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 发现页搜索结果列表（与收藏页同形曲目行）组件测试。
 ///
@@ -98,6 +99,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
           ChangeNotifierProvider<SearchProvider>.value(value: search),

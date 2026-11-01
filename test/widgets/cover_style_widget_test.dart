@@ -119,7 +119,6 @@ void main() {
       supportDirectory: () async => tempDir,
       clock: () => DateTime.fromMillisecondsSinceEpoch(1000),
     );
-    CustomCoverStore.overrideInstance(store);
     artworkCache = ArtworkCache(
       cacheService: CacheService(storage: MemoryCacheStorage()),
       managerOverride: _OfflineCacheManager(),
@@ -131,7 +130,6 @@ void main() {
   });
 
   tearDown(() async {
-    CustomCoverStore.overrideInstance(null);
     if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 

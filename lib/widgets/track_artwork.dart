@@ -1,7 +1,7 @@
 /// 封面渲染适配器：widget 层唯一订阅封面变化并渲染解析结果的地方。
 ///
 /// 解析策略在 `services/covers/cover_resolution.dart`，这里只做两件事：
-/// - 从 Provider（或全局单例）取 [CoverResolver]，**只订阅一次**变更信号，
+/// - 从 Provider 取 [CoverResolver]，**只订阅一次**变更信号，
 ///   自定义 / 默认封面替换后自动重建；
 /// - 把展示封面拆成「真实主图 + 默认回退」交给 [AppNetworkImage]，保持原有
 ///   网络 / 本地文件、占位与失败回退语义不变。
@@ -29,14 +29,13 @@ import '../utils/playback_cover_decode.dart';
 import 'app_network_image.dart';
 import 'styled_cover_image.dart';
 
-/// 当前 Provider 树里的封面存储（没有注入时回退全局单例）。
+/// 当前 Provider 树里的封面存储（组合根注入的唯一实例）。
 ///
-/// 全 App 的 singleton 回退只在这里与组合根出现；widget 层其余位置都走
-/// [coverResolverOf] / 这个 helper。
+/// 没有 Provider 视为组合根接线错误：`read` 直接抛错，不再回退进程级单例。
 CustomCoverStore coverStoreOf(BuildContext context) =>
-    context.read<CustomCoverStore?>() ?? CustomCoverStore.instance;
+    context.read<CustomCoverStore>();
 
-/// 当前 Provider 树里的封面解析器（没有注入时回退全局存储单例）。
+/// 当前 Provider 树里的封面解析器（解析器由存储持有，规则只一份）。
 CoverResolver coverResolverOf(BuildContext context) =>
     coverStoreOf(context).resolution;
 
@@ -182,7 +181,7 @@ class TrackArtwork extends StatelessWidget {
   /// 迷你条 / 顶栏等小缩略图显式传小边长，避免按播放页 768 处理。
   final int? coverStyleEdge;
 
-  /// 测试可注入封面风格缓存（缺省读 Provider / 全局单例）。
+  /// 测试可注入封面风格缓存（缺省读 Provider）。
   final CoverStyleCache? coverStyleCache;
 
   /// 测试可注入自定义 ArtworkCache（透传 [AppNetworkImage]）。

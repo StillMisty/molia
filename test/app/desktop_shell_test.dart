@@ -43,6 +43,7 @@ import '../support/fake_library_repository.dart';
 import '../support/fake_music_source.dart';
 import '../support/fakes.dart';
 import '../support/settings_test_support.dart';
+import '../support/cover_test_support.dart';
 
 /// 桌面骨架（`MyApp(desktopShell: true)`）的挂载测试。
 ///
@@ -171,6 +172,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
           ChangeNotifierProvider<SourcesProvider>.value(value: sources),

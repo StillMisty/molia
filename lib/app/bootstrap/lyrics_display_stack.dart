@@ -52,15 +52,18 @@ typedef LyricsDisplayStack = ({
 ///
 /// [powerPolicy] 与播放栈共享同一实例：桌面歌词开关变化要即时反映到
 /// 位置采样（后台开着悬浮窗仍按 5Hz，关掉后降为 1s）。
+///
+/// [customCovers] 是本地数据栈构造的唯一存储；取色接线与启动预解析都用它的
+/// 解析器，不再读进程级单例。
 Future<LyricsDisplayStack> buildLyricsDisplayStack({
   required CatalogStack catalog,
   required PlaybackProvider playback,
   required LyricsProvider lyricsProvider,
   required LocalAudioHandler? audioHandler,
   required PlaybackPowerPolicy powerPolicy,
-  CustomCoverStore? customCovers,
+  required CustomCoverStore customCovers,
 }) async {
-  final covers = (customCovers ?? CustomCoverStore.instance).resolution;
+  final covers = customCovers.resolution;
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
   // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键。
   final themeSettings = catalog.settings.scope([
@@ -84,7 +87,7 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     settings: catalog.settings.scope([kCoverStyle, kCoverStyleScope]),
   );
   await coverStyleSettings.init();
-  final coverStyleCache = CoverStyleCache.instance;
+  final coverStyleCache = CoverStyleCache();
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   // seed 持久化按封面内容身份（URL + 文件大小 + 修改时间），设备本地派生
   // 缓存，不参与同步；启动命中时不必再解码封面。

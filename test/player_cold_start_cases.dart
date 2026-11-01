@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 import 'support/settings_test_support.dart';
 
 /// 冷启动恢复态：播放页首帧的封面堆叠必须已经按队列（上一首 / 当前 /
@@ -73,6 +74,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
           // 空提供者列表：本测试只关心首帧封面，不触发歌词网络兜底。
           ChangeNotifierProvider(
             create: (_) =>

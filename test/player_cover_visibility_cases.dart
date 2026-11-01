@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 页面可见性（TickerMode）与切歌动画的边界：页面不可见时动画 ticker 被
 /// 静音，若让会话冻结在中间进度，回到播放页会重播动画（或跳到结尾），而
@@ -82,6 +83,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

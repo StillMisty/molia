@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 
 /// 封面左右滑动切歌：必须用「move 之间 pump 帧」的拖动（timedDrag 或手动
 /// 逐帧）来测——`tester.drag` 在同一次事件循环里发完 down/move/up，跳过了
@@ -81,6 +82,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),

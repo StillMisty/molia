@@ -63,8 +63,8 @@ Future<SyncStack> buildSyncStack({
   required PlaybackStack playback,
   required DataSaverService dataSaver,
 
-  /// 自定义封面存储（生产 = local stack 的已加载实例；测试可省略）。
-  CustomCoverStore? customCovers,
+  /// 自定义封面存储（本地数据栈构造的唯一实例，经 Provider / 构造参数传递）。
+  required CustomCoverStore customCovers,
 
   /// 前台判定由组合根提供（`WidgetsBinding.instance.lifecycleState`）；
   /// 数据层不直接依赖 Flutter 生命周期。
@@ -72,7 +72,7 @@ Future<SyncStack> buildSyncStack({
 }) async {
   final sourceManager = catalog.sourceManager;
   final syncState = library.syncState;
-  final covers = customCovers ?? CustomCoverStore.instance;
+  final covers = customCovers;
   // 编解码在 worker isolate 里跑（载荷编码 / 压缩 / PBKDF2 / AES 都是纯计算，
   // 放主 isolate 会让 UI 在首轮与整库快照时卡住数秒）。
   final syncCodec = IsolateSyncCodecPort();

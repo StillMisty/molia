@@ -22,6 +22,8 @@ import 'package:molia/widgets/lyrics_source_search_view.dart';
 import 'package:molia/widgets/source_swap/source_swap_chrome.dart';
 import 'package:molia/widgets/track_row.dart';
 
+import '../support/cover_test_support.dart';
+
 /// 记录手动选择写入了哪个 provider（不落真实缓存）。
 class _FakeLyricsService extends LyricsService {
   _FakeLyricsService() : super(providers: const []);
@@ -123,25 +125,27 @@ void main() {
     });
 
     await tester.pumpWidget(
-      Provider<NotificationService>.value(
-        value: NotificationService(),
-        child: MaterialApp(
-          locale: locale,
-          localizationsDelegates: const [
-            AppLocalizations.delegate,
-            ...GlobalMaterialLocalizations.delegates,
-          ],
-          supportedLocales: [locale],
-          home: Scaffold(
-            body: LyricsSourceSearchView(
-              initialTrackTitle: '晴天',
-              initialArtistName: '周杰伦',
-              trackId: 'bili:1',
-              lyricsProvider: lyricsProvider,
-              sources: sources,
-              sourceDescriptors: sourceDescriptors,
-              enabledChannelKeys: enabledChannelKeys,
-              channelOrder: channelOrder,
+      withCoverStore(
+        Provider<NotificationService>.value(
+          value: NotificationService(),
+          child: MaterialApp(
+            locale: locale,
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              ...GlobalMaterialLocalizations.delegates,
+            ],
+            supportedLocales: [locale],
+            home: Scaffold(
+              body: LyricsSourceSearchView(
+                initialTrackTitle: '晴天',
+                initialArtistName: '周杰伦',
+                trackId: 'bili:1',
+                lyricsProvider: lyricsProvider,
+                sources: sources,
+                sourceDescriptors: sourceDescriptors,
+                enabledChannelKeys: enabledChannelKeys,
+                channelOrder: channelOrder,
+              ),
             ),
           ),
         ),

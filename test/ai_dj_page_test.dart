@@ -24,6 +24,7 @@ import 'package:molia/widgets/playing_indicator.dart';
 import 'support/fake_ai_generator.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
+import 'support/cover_test_support.dart';
 import 'support/settings_test_support.dart';
 
 AiDjBatch _batch(int from, int count) => AiDjBatch(
@@ -94,6 +95,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          coverStoreProvider(),
           ChangeNotifierProvider<AiDjProvider>.value(value: provider),
           ChangeNotifierProvider<PlaybackProvider>.value(
             value: playbackProvider,

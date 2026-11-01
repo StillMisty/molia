@@ -93,7 +93,8 @@ class CustomCoverEntry {
   }
 }
 
-/// 自定义封面存储（单例入口 [instance]；测试可 [overrideInstance]）。
+/// 自定义封面存储：本进程唯一实例由组合根构造（`local_data_stack.dart`），
+/// 再经 Provider（UI）与构造参数（下载 / 同步 / 取色）向下传递。
 ///
 /// 只负责写入 / 持久化 / 同步落地与只读索引；「哪张封面优先」由
 /// [resolution]（`cover_resolution.dart`）决定，UI / 下载 / 取色不再调用
@@ -110,20 +111,9 @@ class CustomCoverStore implements cover_resolution.CoverIndex {
        _migrateLegacy = supportDirectory == null || legacyDirectory != null,
        _clock = clock ?? DateTime.now;
 
-  static CustomCoverStore _instance = CustomCoverStore();
-
-  /// 全应用共享实例（与 `ArtworkCache.instance` 同一模式）。
-  static CustomCoverStore get instance => _instance;
-
   /// 本存储的封面解析器（唯一解析入口；组合根与 widget 适配器共用）。
   late final cover_resolution.CoverResolver resolution =
       cover_resolution.CoverResolver(this);
-
-  /// 测试替换实例；传 null 恢复默认实例。
-  @visibleForTesting
-  static void overrideInstance(CustomCoverStore? store) {
-    _instance = store ?? CustomCoverStore();
-  }
 
   static const String prefsKey = 'custom_cover_index_v1';
   static const String directoryName = 'custom_covers';
