@@ -495,6 +495,95 @@ class LibraryWriteEngine {
 
   // ── 列表曲目 ─────────────────────────────────────────────
 
+  /// 列表曲目行的唯一构造处：曲目字段、位置字段与版本列同一口径。
+  ///
+  /// 单条加入与批量加入都经这里；[sortOrder] 由调用方按位置偏好算好。
+  /// 返回落库行与领域行（领域行带真实 `playlistId` / `sortOrder`，供变更
+  /// 载荷与返回行使用）。
+  ({PlaylistTracksCompanion row, PlaylistTrack track}) _playlistTrackRow(
+    int playlistId,
+    PlaylistTrack track, {
+    required int sortOrder,
+    required SyncVersion version,
+  }) => (
+    row: PlaylistTracksCompanion.insert(
+      playlistId: playlistId,
+      sourceKey: track.sourceKey,
+      songId: track.songId,
+      title: track.title,
+      artist: Value(track.artist),
+      album: Value(track.album),
+      coverUrl: Value(track.coverUrl),
+      durationMs: Value(track.durationMs),
+      raw: Value(jsonEncode(track.raw)),
+      addedAt: track.addedAt,
+      sortOrder: Value(sortOrder),
+      versionPhysical: Value(version.physical),
+      versionCounter: Value(version.counter),
+      deviceId: Value(version.deviceId),
+    ),
+    track: _trackAtPosition(
+      track,
+      playlistId: playlistId,
+      sortOrder: sortOrder,
+    ),
+  );
+
+  /// 列表曲目写入后的增量日志：syncId 缺失时就地补齐，与数据写入同事务。
+  ///
+  /// 单条与批量共用：日志记录来自调用方已经构造好的落库行（与行版本同源）。
+  Future<void> _appendPlaylistTrackJournal(
+    DatabaseConnectionUser executor,
+    int playlistId,
+    List<({PlaylistTrack track, SyncVersion version})> inserted,
+  ) async {
+    if (inserted.isEmpty) return;
+    final syncId = await _ensurePlaylistSyncId(executor, playlistId);
+    if (syncId.isEmpty) return;
+    final journal = _journal;
+    if (journal == null) return;
+    await journal.append(executor, [
+      for (final item in inserted)
+        (
+          category: SyncCategory.playlistTracks,
+          record: _trackRecord(
+            playlistSyncId: syncId,
+            sourceKey: item.track.sourceKey,
+            songId: item.track.songId,
+            title: item.track.title,
+            artist: item.track.artist,
+            album: item.track.album,
+            coverUrl: item.track.coverUrl,
+            durationMs: item.track.durationMs,
+            raw: jsonEncode(item.track.raw),
+            addedAt: item.track.addedAt,
+            sortOrder: item.track.sortOrder,
+            version: item.version,
+          ),
+        ),
+    ]);
+  }
+
+  /// 列表曲目写入后的唯一广播口径。
+  ///
+  /// 收藏列表的单条加入带 [FavoriteToggle]（provider 就地插入一行）；批量
+  /// 收藏 / 取消无法用单条表达，广播空载荷让 provider 走整表校准。
+  void _notifyPlaylistTracksWrite(
+    int playlistId, {
+    required bool favoriteChange,
+    PlaylistTrack? added,
+  }) {
+    if (!favoriteChange) {
+      notifyChanged(LibraryChange.playlistTracks(playlistId));
+      return;
+    }
+    notifyChanged(
+      added == null
+          ? const LibraryChange.favorites()
+          : LibraryChange.favorites(toggle: FavoriteToggle.add(added)),
+    );
+  }
+
   /// 加入列表（`(playlistId, sourceKey, songId)` 唯一，重复加入返回 false）。
   ///
   /// [favoriteChange] 为 true 时（收藏切换内部调用）变更类型标记为
@@ -530,63 +619,28 @@ class LibraryWriteEngine {
     );
 
     final version = _nextVersion();
+    final built = _playlistTrackRow(
+      playlistId,
+      track,
+      sortOrder: nextOrder,
+      version: version,
+    );
     var inserted = 0;
     await db.transaction(() async {
       inserted = await db
           .into(db.playlistTracks)
-          .insert(
-            PlaylistTracksCompanion.insert(
-              playlistId: playlistId,
-              sourceKey: track.sourceKey,
-              songId: track.songId,
-              title: track.title,
-              artist: Value(track.artist),
-              album: Value(track.album),
-              coverUrl: Value(track.coverUrl),
-              durationMs: Value(track.durationMs),
-              raw: Value(jsonEncode(track.raw)),
-              addedAt: track.addedAt,
-              sortOrder: Value(nextOrder),
-              versionPhysical: Value(version.physical),
-              versionCounter: Value(version.counter),
-              deviceId: Value(version.deviceId),
-            ),
-            mode: InsertMode.insertOrIgnore,
-          );
+          .insert(built.row, mode: InsertMode.insertOrIgnore);
       if (inserted > 0) {
-        final syncId = await _ensurePlaylistSyncId(db, playlistId);
-        if (syncId.isNotEmpty) {
-          final row =
-              await (db.select(db.playlistTracks)
-                    ..where(
-                      (t) =>
-                          t.playlistId.equals(playlistId) &
-                          t.sourceKey.equals(track.sourceKey) &
-                          t.songId.equals(track.songId),
-                    )
-                    ..limit(1))
-                  .getSingle();
-          await _appendJournal(
-            db,
-            SyncCategory.playlistTracks.name,
-            _trackSyncRecord(playlistSyncId: syncId, row: row),
-          );
-        }
+        await _appendPlaylistTrackJournal(db, playlistId, [
+          (track: built.track, version: version),
+        ]);
       }
     });
     if (inserted == 0) return false;
-    notifyChanged(
-      favoriteChange
-          ? LibraryChange.favorites(
-              toggle: FavoriteToggle.add(
-                _trackAtPosition(
-                  track,
-                  playlistId: playlistId,
-                  sortOrder: nextOrder,
-                ),
-              ),
-            )
-          : LibraryChange.playlistTracks(playlistId),
+    _notifyPlaylistTracksWrite(
+      playlistId,
+      favoriteChange: favoriteChange,
+      added: built.track,
     );
     return true;
   }
@@ -666,33 +720,18 @@ class LibraryWriteEngine {
     );
     final rows = <PlaylistTracksCompanion>[];
     final inserted = <PlaylistTrack>[];
-    final pending =
-        <({PlaylistTrack track, SyncVersion version, int sortOrder})>[];
+    final pending = <({PlaylistTrack track, SyncVersion version})>[];
     for (final track in fresh) {
       final version = _nextVersion();
-      final order = nextOrder++;
-      rows.add(
-        PlaylistTracksCompanion.insert(
-          playlistId: playlistId,
-          sourceKey: track.sourceKey,
-          songId: track.songId,
-          title: track.title,
-          artist: Value(track.artist),
-          album: Value(track.album),
-          coverUrl: Value(track.coverUrl),
-          durationMs: Value(track.durationMs),
-          raw: Value(jsonEncode(track.raw)),
-          addedAt: track.addedAt,
-          sortOrder: Value(order),
-          versionPhysical: Value(version.physical),
-          versionCounter: Value(version.counter),
-          deviceId: Value(version.deviceId),
-        ),
+      final built = _playlistTrackRow(
+        playlistId,
+        track,
+        sortOrder: nextOrder++,
+        version: version,
       );
-      pending.add((track: track, version: version, sortOrder: order));
-      inserted.add(
-        _trackAtPosition(track, playlistId: playlistId, sortOrder: order),
-      );
+      rows.add(built.row);
+      inserted.add(built.track);
+      pending.add((track: built.track, version: version));
     }
     await db.transaction(() async {
       await db.batch(
@@ -702,35 +741,9 @@ class LibraryWriteEngine {
           mode: InsertMode.insertOrIgnore,
         ),
       );
-      final syncId = await _ensurePlaylistSyncId(db, playlistId);
-      if (syncId.isNotEmpty && _journal != null) {
-        await _journal.append(db, [
-          for (final item in pending)
-            (
-              category: SyncCategory.playlistTracks,
-              record: _trackRecord(
-                playlistSyncId: syncId,
-                sourceKey: item.track.sourceKey,
-                songId: item.track.songId,
-                title: item.track.title,
-                artist: item.track.artist,
-                album: item.track.album,
-                coverUrl: item.track.coverUrl,
-                durationMs: item.track.durationMs,
-                raw: jsonEncode(item.track.raw),
-                addedAt: item.track.addedAt,
-                sortOrder: item.sortOrder,
-                version: item.version,
-              ),
-            ),
-        ]);
-      }
+      await _appendPlaylistTrackJournal(db, playlistId, pending);
     });
-    notifyChanged(
-      favoriteChange
-          ? const LibraryChange.favorites()
-          : LibraryChange.playlistTracks(playlistId),
-    );
+    _notifyPlaylistTracksWrite(playlistId, favoriteChange: favoriteChange);
     return (added: inserted.length, rows: inserted);
   }
 
