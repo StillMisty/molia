@@ -10,6 +10,9 @@ typedef DownloadNotificationEvent = ({
   int? total,
   int? progress,
   int? max,
+
+  /// 仅 start 有值：通知渠道（update / stop 不携带渠道）。
+  DownloadNotificationChannel? channel,
 });
 
 /// 内存下载通知（下载服务测试用）：记录生命周期调用，可控制支持与否。
@@ -35,6 +38,7 @@ class FakeDownloadNotifications implements DownloadNotifications {
     int? total,
     int? progress,
     int? max,
+    DownloadNotificationChannel channel = DownloadNotificationChannel.downloads,
   }) async {
     if (!supported) return;
     events.add((
@@ -46,6 +50,7 @@ class FakeDownloadNotifications implements DownloadNotifications {
       total: total,
       progress: progress,
       max: max,
+      channel: channel,
     ));
   }
 
@@ -69,6 +74,7 @@ class FakeDownloadNotifications implements DownloadNotifications {
       total: total,
       progress: progress,
       max: max,
+      channel: null,
     ));
   }
 
@@ -84,6 +90,7 @@ class FakeDownloadNotifications implements DownloadNotifications {
       total: null,
       progress: null,
       max: null,
+      channel: null,
     ));
   }
 }

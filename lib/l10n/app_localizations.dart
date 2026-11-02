@@ -6798,6 +6798,12 @@ abstract class AppLocalizations {
   /// **'Release date unknown'**
   String get updateReleaseDateUnknown;
 
+  /// No description provided for @updatePackageSizeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Package size'**
+  String get updatePackageSizeTitle;
+
   /// No description provided for @updateCancelDownload.
   ///
   /// In en, this message translates to:
@@ -6833,6 +6839,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Install now'**
   String get updateInstallNow;
+
+  /// No description provided for @updateInstallSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated to {version}'**
+  String updateInstallSucceeded(String version);
+
+  /// No description provided for @updateInstallIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Last update didn\'t finish'**
+  String get updateInstallIncomplete;
+
+  /// No description provided for @updateInstallIncompleteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates again, or download the installer manually'**
+  String get updateInstallIncompleteHint;
 
   /// No description provided for @updateDownloadAndInstall.
   ///

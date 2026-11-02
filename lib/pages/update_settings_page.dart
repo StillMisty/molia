@@ -63,10 +63,13 @@ class _UpdateSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final busy =
         provider.status == UpdateStatus.checking ||
-        provider.status == UpdateStatus.downloading;
+        provider.status == UpdateStatus.downloading ||
+        provider.status == UpdateStatus.installing;
+    final installResult = provider.installResult;
     return SettingsSectionCard(
       title: l10n.updateSettingsSection,
       children: [
+        if (installResult != null) _installResultTile(installResult),
         SettingsChoiceRow<UpdateChannel>(
           key: const Key('settingsUpdateChannelItem'),
           icon: Icons.alt_route_rounded,
@@ -103,6 +106,25 @@ class _UpdateSection extends StatelessWidget {
       ],
     );
   }
+
+  Widget _installResultTile(UpdateInstallResult result) {
+    return switch (result) {
+      UpdateInstallResult.succeeded => SettingsInfoTile(
+        key: const Key('settingsUpdateInstallResultItem'),
+        icon: Icons.check_circle_rounded,
+        title: l10n.updateInstallSucceeded(
+          provider.installResultVersion ?? provider.currentVersionLabel,
+        ),
+        subtitle: '',
+      ),
+      UpdateInstallResult.incomplete => SettingsInfoTile(
+        key: const Key('settingsUpdateInstallResultItem'),
+        icon: Icons.error_outline_rounded,
+        title: l10n.updateInstallIncomplete,
+        subtitle: l10n.updateInstallIncompleteHint,
+      ),
+    };
+  }
 }
 
 /// 新版本：版本信息 + 发布说明 + 进度 + 操作按钮。
@@ -118,6 +140,8 @@ class _ReleaseSection extends StatelessWidget {
     final theme = Theme.of(context);
     final m3e = M3ETheme.of(context);
     final releasedAt = release.releasedAt;
+    // 与真正下载共用同一次产物选择：Windows 便携版这里显示的是 zip 大小。
+    final size = provider.releaseAsset?.size;
 
     return SettingsSectionCard(
       title: l10n.updateReleaseSection,
@@ -132,6 +156,13 @@ class _ReleaseSection extends StatelessWidget {
                   DateFormat('yyyy-MM-dd').format(releasedAt),
                 ),
         ),
+        if (size != null)
+          SettingsInfoTile(
+            key: const Key('settingsUpdateSizeItem'),
+            icon: Icons.inventory_2_rounded,
+            title: l10n.updatePackageSizeTitle,
+            subtitle: _formatPackageSize(size),
+          ),
         if (release.notes.isNotEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(
@@ -531,6 +562,15 @@ String updateFailureText(AppLocalizations l10n, UpdateFailureKind? kind) {
     case UpdateFailureKind.installFailed:
       return l10n.updateErrorInstall;
   }
+}
+
+/// 安装包大小：MB 一位小数 / KB 整数 / B（单位跨语言一致，不单独走 l10n）。
+String _formatPackageSize(int bytes) {
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  if (bytes >= 1024) return '${(bytes / 1024).round()} KB';
+  return '$bytes B';
 }
 
 /// 下载进度文案（百分比 + 已下载 MB + 速度）。

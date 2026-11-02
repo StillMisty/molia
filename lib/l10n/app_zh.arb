@@ -1618,12 +1618,16 @@
   "updateReleaseTitle": "Molia {version}",
   "updateReleaseDate": "发布于 {date}",
   "updateReleaseDateUnknown": "发布时间未知",
+  "updatePackageSizeTitle": "安装包大小",
   "updateCancelDownload": "取消下载",
   "updateInstallingHint": "已交给安装程序，按系统提示完成即可。",
   "updateIosHint": "iOS 通过 App Store 更新，应用内不提供安装。",
   "updateMacosHint": "macOS 版本请从发布页手动下载安装，应用内不提供自动更新。",
   "updateGrantInstallPermission": "去授权",
   "updateInstallNow": "立即安装",
+  "updateInstallSucceeded": "已更新到 {version}",
+  "updateInstallIncomplete": "上次更新未完成",
+  "updateInstallIncompleteHint": "请重新检查更新，或手动下载安装包",
   "updateDownloadAndInstall": "下载并安装",
   "updateOpenDownloadPage": "打开下载页",
   "updateAdvancedSection": "高级",
@@ -1683,6 +1687,13 @@
   "@updateReleaseDate": {
     "placeholders": {
       "date": {
+        "type": "String"
+      }
+    }
+  },
+  "@updateInstallSucceeded": {
+    "placeholders": {
+      "version": {
         "type": "String"
       }
     }

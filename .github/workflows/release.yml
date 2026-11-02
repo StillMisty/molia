@@ -359,14 +359,26 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # 固定 tag `beta` 指向最新测试版：客户端取
-          # releases/download/beta/latest.json，无需 GitHub API。
-          gh release delete beta --cleanup-tag --yes || true
+          # 固定 release tag `beta`：客户端取 releases/download/beta/latest.json，
+          # 无需 GitHub API。latest.json 资产原地覆盖以指向最新测试版；
+          # 不删除重建 release，避免删除到重建之间该 URL 出现 404。
           mkdir -p beta-dist
           cp dist/latest.json beta-dist/
-          gh release create beta \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "Beta channel" \
-            --notes "测试渠道滚动清单（latest.json 指向最新测试版）。" \
-            beta-dist/latest.json
+          if gh release view beta --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload beta beta-dist/latest.json \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+            gh release edit beta \
+              --prerelease \
+              --title "Beta channel" \
+              --notes "测试渠道滚动清单（latest.json 指向最新测试版）。" \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create beta \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "Beta channel" \
+              --notes "测试渠道滚动清单（latest.json 指向最新测试版）。" \
+              --repo "$GITHUB_REPOSITORY" \
+              beta-dist/latest.json
+          fi

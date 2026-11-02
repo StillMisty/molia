@@ -34,8 +34,9 @@ Flutter `3.47.9`、JDK 27、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工�
    必须显式 `-s` + `-m`：签名只能挂在附注标签（tag 对象）上，裸 `git tag` 签不签取决于
    本机 `tag.gpgSign`（没配 → 未签名轻量标签；配了 → 附注签名标签并要求消息）；`-m` 免开编辑器。
 4. 看 `release.yml` 跑完：版本校验 → 矩阵构建 → 汇总产物 + sha256 + `latest.json`
-   → GitHub Release；测试版为 prerelease，并另滚动 `beta` 标签（流水线用 GitHub API
-   创建的轻量标签）供客户端取清单。
+   → GitHub Release；测试版为 prerelease，并原地覆盖滚动 `beta` release 的
+   `latest.json`（不删除 release、不动 tag target），避免删除重建期间客户端取
+   清单 404。
 
 完成判据：Release 页出现该 tag，资产含全部平台产物 + `latest.json` + `SHA256SUMS.txt`。
 
@@ -44,6 +45,8 @@ Flutter `3.47.9`、JDK 27、Android NDK `30.0.16248370` 与 `AGENTS.md` 的工�
 - 客户端按固定地址取清单（无需 GitHub API，不受匿名限流）：
   - 稳定版 `https://github.com/StillMisty/molia/releases/latest/download/latest.json`
   - 测试版 `https://github.com/StillMisty/molia/releases/download/beta/latest.json`
+- `beta` 是滚动 release：流水线原地 clobber 其中的 `latest.json`，不删除
+  release；客户端地址和 tag target 都保持不变。
 - 构建号（Android versionCode 与更新新旧判定）取 `github.run_number`，单调递增，
   保证覆盖安装永远被系统接受。
 

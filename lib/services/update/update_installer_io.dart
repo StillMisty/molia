@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'update_installer_types.dart';
 
@@ -186,6 +187,7 @@ class UpdateInstaller {
       final payload = await _resolvePayloadRoot(staging);
       // 压缩包不再需要：助手脚本只负责把 payload 搬到安装目录。
       await _deleteQuietly(archive);
+      final logPath = await _installLogPath();
 
       final script = await _writeHelperScript(
         sourceDir: payload,
@@ -199,15 +201,25 @@ class UpdateInstaller {
       }
 
       await Process.start(
-        windows ? 'cmd' : '/bin/sh',
+        windows ? 'powershell' : '/bin/sh',
         windows
             ? <String>[
-                '/c',
+                '-NoProfile',
+                '-NonInteractive',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-File',
                 script.path,
+                '-TargetPid',
                 '$pid',
+                '-Source',
                 payload.path,
+                '-Destination',
                 installDir.path,
+                '-Executable',
                 exePath,
+                '-LogPath',
+                logPath,
               ]
             : <String>[
                 script.path,
@@ -215,7 +227,11 @@ class UpdateInstaller {
                 payload.path,
                 installDir.path,
                 exePath,
+                logPath,
               ],
+        // 脚本必须从系统临时目录启动：进程 cwd 若落在安装目录里，替换
+        // 脚本就无法删除 / 重命名正在使用的目录。
+        workingDirectory: Directory.systemTemp.path,
         mode: ProcessStartMode.detached,
       );
       return InstallOutcome.restartPending;
@@ -224,6 +240,25 @@ class UpdateInstaller {
       await _deleteQuietly(staging);
       return InstallOutcome.failed;
     }
+  }
+
+  /// 安装日志：应用支持目录的 `updates/install.log`；拿不到目录时退回
+  /// 系统临时目录（日志只用于排障，不能反过来阻断安装）。
+  Future<String> _installLogPath() async {
+    Directory dir;
+    try {
+      final support = await getApplicationSupportDirectory();
+      dir = Directory(p.join(support.path, 'updates'));
+      await dir.create(recursive: true);
+    } catch (_) {
+      dir = Directory(p.join(Directory.systemTemp.path, 'molia-updates'));
+      try {
+        await dir.create(recursive: true);
+      } catch (_) {
+        // 脚本里还会再尝试创建一次目录。
+      }
+    }
+    return p.join(dir.path, 'install.log');
   }
 
   /// 解压到 staging；`tar` 同时支持 tar.gz 与 zip（Windows 10+ 自带 bsdtar），
@@ -276,7 +311,7 @@ class UpdateInstaller {
       final script = File(
         '${Directory.systemTemp.path}${Platform.pathSeparator}'
         'molia-update-${DateTime.now().millisecondsSinceEpoch}'
-        '${windows ? '.bat' : '.sh'}',
+        '${windows ? '.ps1' : '.sh'}',
       );
       final content = windows ? _windowsHelperScript : _posixHelperScript;
       await script.writeAsString(content, flush: true);
@@ -287,40 +322,215 @@ class UpdateInstaller {
     }
   }
 
-  /// 参数：$1 主进程 PID、$2 新版本目录、$3 安装目录、$4 可执行文件。
+  /// 参数：$1 主进程 PID、$2 新版本目录、$3 安装目录、$4 可执行文件、
+  /// $5 日志文件。
+  ///
+  /// 脚本内容保持纯 ASCII：Linux 用 `/bin/sh`，不依赖应用进程存活。
   static const String _posixHelperScript = r'''#!/bin/sh
-# Molia 更新助手：等主进程退出 → 覆盖安装目录 → 重启应用。
-pid="$1"; src="$2"; dst="$3"; exe="$4"
+# Molia update helper: wait for the app, replace files, restart on success.
+pid="$1"; src="$2"; dst="$3"; exe="$4"; log="$5"
+backup="${dst}.molia-backup"
+
+mkdir -p "$(dirname "$log")" 2>/dev/null || true
+log_line() {
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >> "$log" 2>/dev/null || true
+}
+
+start_exe() {
+  candidate="$exe"
+  if [ ! -e "$candidate" ] && [ -e "$backup/$(basename "$exe")" ]; then
+    candidate="$backup/$(basename "$exe")"
+  fi
+  "$candidate" >/dev/null 2>&1 &
+}
+
+rollback() {
+  log_line "update failed: $1; rolling back"
+  rm -rf "$dst"
+  if [ -e "$dst" ]; then
+    log_line "rollback failed: cannot remove install dir"
+  elif mv "$backup" "$dst" 2>/dev/null; then
+    log_line "rollback completed"
+  else
+    log_line "rollback failed"
+  fi
+  start_exe
+}
+
+log_line "helper started: pid=$pid"
 i=0
 while kill -0 "$pid" 2>/dev/null; do
   i=$((i+1))
-  [ "$i" -ge 240 ] && break
+  if [ "$i" -ge 240 ]; then
+    log_line "timeout waiting for pid $pid; abort"
+    exit 0
+  fi
   sleep 0.5
 done
 sleep 0.4
-cp -a "$src"/. "$dst"/ 2>/dev/null || cp -R "$src"/. "$dst"/
+
+src_exe="$src/$(basename "$exe")"
+if [ ! -e "$src_exe" ]; then
+  log_line "payload missing executable; restarting old app"
+  start_exe
+  exit 1
+fi
+
+rm -rf "$backup"
+if ! cp -a "$dst" "$backup" 2>/dev/null; then
+  log_line "backup failed; restarting old app"
+  start_exe
+  exit 1
+fi
+
+if ! cp -a "$src"/. "$dst"/ 2>/dev/null; then
+  rollback "copy failed"
+  exit 1
+fi
+
+if [ ! -x "$exe" ]; then
+  rollback "executable missing or not executable after copy"
+  exit 1
+fi
+
+rm -rf "$backup"
 rm -rf "$src"
-"$exe" >/dev/null 2>&1 &
+log_line "update completed"
+start_exe
 exit 0
 ''';
 
-  /// 参数：%1 主进程 PID、%2 新版本目录、%3 安装目录、%4 可执行文件。
-  static const String _windowsHelperScript =
-      '@echo off\r\n'
-      'set "PID=%~1"\r\n'
-      'set "SRC=%~2"\r\n'
-      'set "DST=%~3"\r\n'
-      'set "EXE=%~4"\r\n'
-      ':wait\r\n'
-      'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul\r\n'
-      'if not errorlevel 1 (\r\n'
-      '  timeout /t 1 /nobreak >nul\r\n'
-      '  goto wait\r\n'
-      ')\r\n'
-      'robocopy "%SRC%" "%DST%" /E /NFL /NDL /NJH /NJS >nul\r\n'
-      'start "" "%EXE%"\r\n'
-      'rmdir /s /q "%SRC%"\r\n'
-      'del "%~f0"\r\n';
+  /// 参数由 Dart 侧以命名参数传入（-TargetPid / -Source / -Destination /
+  /// -Executable / -LogPath）。PowerShell 5.1 按 ANSI 读取无 BOM 脚本，
+  /// 所以内容必须保持纯 ASCII。
+  static const String _windowsHelperScript = r'''param(
+    [Parameter(Mandatory=$true)][int]$TargetPid,
+    [Parameter(Mandatory=$true)][string]$Source,
+    [Parameter(Mandatory=$true)][string]$Destination,
+    [Parameter(Mandatory=$true)][string]$Executable,
+    [Parameter(Mandatory=$true)][string]$LogPath
+)
+
+$ErrorActionPreference = 'Stop'
+$backup = "$Destination.molia-backup"
+
+function Write-Log {
+    param([string]$Message)
+    try {
+        $dir = Split-Path -Parent $LogPath
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+        $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
+        Add-Content -LiteralPath $LogPath -Value $line -ErrorAction Stop
+    } catch {
+    }
+}
+
+function Start-App {
+    $candidate = $Executable
+    if (-not (Test-Path -LiteralPath $candidate)) {
+        $backupExe = Join-Path $backup (Split-Path -Leaf $Executable)
+        if (Test-Path -LiteralPath $backupExe) {
+            $candidate = $backupExe
+        }
+    }
+    try {
+        Start-Process -FilePath $candidate -WorkingDirectory (Split-Path -Parent $candidate) -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Log "restart failed: $($_.Exception.Message)"
+    }
+}
+
+function Remove-Path-Quiet {
+    param([string]$Path)
+    try {
+        if (Test-Path -LiteralPath $Path) {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+        }
+    } catch {
+        Write-Log "remove failed: $Path - $($_.Exception.Message)"
+    }
+}
+
+function Invoke-Rollback {
+    param([string]$Reason)
+    Write-Log "update failed: $Reason; rolling back"
+    try {
+        Remove-Path-Quiet $Destination
+        if (Test-Path -LiteralPath $Destination) {
+            throw "cannot remove partially updated directory"
+        }
+        if (Test-Path -LiteralPath $backup) {
+            Move-Item -LiteralPath $backup -Destination $Destination -Force -ErrorAction Stop
+            Write-Log "rollback completed"
+        } else {
+            Write-Log "rollback failed: backup missing"
+        }
+    } catch {
+        Write-Log "rollback failed: $($_.Exception.Message)"
+    }
+    Start-App
+}
+
+Write-Log "helper started: pid=$TargetPid source=$Source destination=$Destination"
+
+$deadline = (Get-Date).AddSeconds(120)
+while ($true) {
+    $running = Get-Process -Id $TargetPid -ErrorAction SilentlyContinue
+    if ($null -eq $running) {
+        break
+    }
+    if ((Get-Date) -ge $deadline) {
+        Write-Log "timeout waiting for pid $TargetPid; abort"
+        exit 0
+    }
+    Start-Sleep -Milliseconds 500
+}
+Start-Sleep -Milliseconds 400
+
+$sourceExe = Join-Path $Source (Split-Path -Leaf $Executable)
+if (-not (Test-Path -LiteralPath $sourceExe)) {
+    Write-Log "payload missing executable; restarting old app"
+    Start-App
+    exit 1
+}
+
+# Backup failure must abort before touching the install directory.
+if (Test-Path -LiteralPath $backup) {
+    try {
+        Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction Stop
+    } catch {
+        Write-Log "remove old backup failed: $($_.Exception.Message); restarting old app"
+        Start-App
+        exit 1
+    }
+}
+try {
+    New-Item -ItemType Directory -Path $backup -Force -ErrorAction Stop | Out-Null
+    Get-ChildItem -LiteralPath $Destination -Force | Copy-Item -Destination $backup -Recurse -Force -ErrorAction Stop
+} catch {
+    Write-Log "backup failed: $($_.Exception.Message); restarting old app"
+    Start-App
+    exit 1
+}
+
+try {
+    Get-ChildItem -LiteralPath $Source -Force | Copy-Item -Destination $Destination -Recurse -Force -ErrorAction Stop
+    if (-not (Test-Path -LiteralPath $Executable)) {
+        throw "executable missing after copy: $Executable"
+    }
+} catch {
+    Invoke-Rollback $_.Exception.Message
+    exit 1
+}
+
+Remove-Path-Quiet $backup
+Remove-Path-Quiet $Source
+Write-Log "update completed"
+Start-App
+exit 0
+''';
 
   Future<bool> _isWritable(Directory dir) async {
     final probe = File(

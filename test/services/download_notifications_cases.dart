@@ -31,6 +31,11 @@ void main() {
     const notifications = NoopDownloadNotifications();
     expect(notifications.supported, isFalse);
     await notifications.start(id: 'track:kw:1', title: '歌名');
+    await notifications.start(
+      id: 'app-update',
+      title: 'Molia',
+      channel: DownloadNotificationChannel.update,
+    );
     await notifications.update(id: 'track:kw:1', progress: 1, max: 2);
     await notifications.stop('track:kw:1');
     expect(calls, isEmpty);
@@ -81,6 +86,8 @@ void main() {
       'total': null,
       'progress': 0,
       'max': 4096,
+      // 不传 channel 的旧调用保持「下载」渠道。
+      'channel': 'downloads',
     });
     expect(calls[1].arguments, {
       'id': 'track:kw:1',
@@ -101,6 +108,26 @@ void main() {
       'max': 0,
     });
     expect(calls[3].arguments, {'id': 'track:kw:1'});
+  });
+
+  test('start 渠道：update 显式传递；update 方法不携带渠道', () async {
+    final notifications = MethodChannelDownloadNotifications(supported: true);
+
+    await notifications.start(
+      id: 'app-update',
+      title: 'Molia',
+      subtitle: '1.2.3',
+      progress: 0,
+      channel: DownloadNotificationChannel.update,
+    );
+    await notifications.update(id: 'app-update', progress: 1, max: 2);
+
+    expect(calls[0].arguments, containsPair('channel', 'update'));
+    // 渠道在 start 时落到原生任务状态，update 不再重复传。
+    expect(
+      (calls[1].arguments as Map<Object?, Object?>).containsKey('channel'),
+      isFalse,
+    );
   });
 
   test('通道异常 / 缺失：吞掉异常不抛（下载链路不受影响）', () async {

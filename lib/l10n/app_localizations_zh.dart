@@ -3627,6 +3627,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get updateReleaseDateUnknown => '发布时间未知';
 
   @override
+  String get updatePackageSizeTitle => '安装包大小';
+
+  @override
   String get updateCancelDownload => '取消下载';
 
   @override
@@ -3643,6 +3646,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get updateInstallNow => '立即安装';
+
+  @override
+  String updateInstallSucceeded(String version) {
+    return '已更新到 $version';
+  }
+
+  @override
+  String get updateInstallIncomplete => '上次更新未完成';
+
+  @override
+  String get updateInstallIncompleteHint => '请重新检查更新，或手动下载安装包';
 
   @override
   String get updateDownloadAndInstall => '下载并安装';

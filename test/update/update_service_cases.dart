@@ -27,18 +27,21 @@ class _FakeDownloader implements UpdateDownloader {
   Uri? lastUrl;
   String? lastFileName;
   String? lastSha256;
+  int? lastExpectedSize;
 
   @override
   Future<String> download({
     required Uri url,
     required String targetFileName,
     String? sha256,
+    int? expectedSize,
     required void Function(int received, int total) onProgress,
     CancelToken? cancelToken,
   }) async {
     lastUrl = url;
     lastFileName = targetFileName;
     lastSha256 = sha256;
+    lastExpectedSize = expectedSize;
     onProgress(1, 1);
     return '/tmp/$targetFileName';
   }
@@ -74,24 +77,36 @@ class _FakeInstaller implements UpdateInstaller {
 }
 
 void main() {
-  ReleaseAsset asset(String kind, String file) => ReleaseAsset(
-    platform: 'windows',
-    arch: 'x64',
-    kind: kind,
-    url: Uri.parse('https://example.com/$file'),
-    file: file,
-    sha256: 'abc',
-  );
+  ReleaseAsset asset(String kind, String file, {required int size}) =>
+      ReleaseAsset(
+        platform: 'windows',
+        arch: 'x64',
+        kind: kind,
+        url: Uri.parse('https://example.com/$file'),
+        file: file,
+        size: size,
+        sha256: 'abc',
+      );
 
-  AppRelease windowsRelease() => AppRelease(
-    channel: UpdateChannel.beta,
-    version: '0.1.0-beta.2',
-    build: 2,
-    assets: [
-      asset('zip', 'molia-0.1.0-beta.2-windows-x64.zip'),
-      asset('exe', 'molia-0.1.0-beta.2-windows-x64-setup.exe'),
-    ],
-  );
+  AppRelease windowsRelease({bool setupFirst = false}) {
+    final zip = asset(
+      'zip',
+      'molia-0.1.0-beta.2-windows-x64.zip',
+      size: 12 * 1024 * 1024,
+    );
+    final setup = asset(
+      'exe',
+      'molia-0.1.0-beta.2-windows-x64-setup.exe',
+      size: 8 * 1024 * 1024,
+    );
+    return AppRelease(
+      channel: UpdateChannel.beta,
+      version: '0.1.0-beta.2',
+      build: 2,
+      // 真实清单按文件名排序：`-setup.exe` 会排在 `.zip` 前。
+      assets: setupFirst ? [setup, zip] : [zip, setup],
+    );
+  }
 
   UpdateService buildService(
     _FakeClient client,
@@ -112,7 +127,7 @@ void main() {
       _FakeInstaller(preferredKind: 'exe'),
     );
 
-    final path = await service.download(
+    final result = await service.download(
       release: windowsRelease(),
       platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
       onProgress: (_, _) {},
@@ -121,7 +136,9 @@ void main() {
     expect(downloader.lastFileName, 'molia-0.1.0-beta.2-windows-x64-setup.exe');
     expect(downloader.lastUrl?.path, contains('-setup.exe'));
     expect(downloader.lastSha256, 'abc');
-    expect(path, endsWith('-setup.exe'));
+    expect(downloader.lastExpectedSize, 8 * 1024 * 1024);
+    expect(result.path, endsWith('-setup.exe'));
+    expect(result.asset.kind, 'exe');
   });
 
   test('便携版 Windows：优先下载 zip', () async {
@@ -132,13 +149,53 @@ void main() {
       _FakeInstaller(preferredKind: 'zip'),
     );
 
-    await service.download(
+    final result = await service.download(
       release: windowsRelease(),
       platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
       onProgress: (_, _) {},
     );
 
     expect(downloader.lastFileName, 'molia-0.1.0-beta.2-windows-x64.zip');
+    expect(downloader.lastExpectedSize, 12 * 1024 * 1024);
+    expect(result.path, endsWith('.zip'));
+    expect(result.asset.kind, 'zip');
+  });
+
+  test('selectAsset：与下载同一套类别选择（setupFirst + preferred zip → zip）', () async {
+    final service = buildService(
+      _FakeClient(),
+      _FakeDownloader(),
+      _FakeInstaller(preferredKind: 'zip'),
+    );
+
+    final selected = await service.selectAsset(
+      release: windowsRelease(setupFirst: true),
+      platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
+    );
+
+    expect(selected?.kind, 'zip');
+    expect(selected?.size, 12 * 1024 * 1024);
+  });
+
+  test('便携版 Windows：setup.exe 排在 zip 前也返回 zip 产物的真实类别', () async {
+    final downloader = _FakeDownloader();
+    final service = buildService(
+      _FakeClient(),
+      downloader,
+      _FakeInstaller(preferredKind: 'zip'),
+    );
+
+    final result = await service.download(
+      release: windowsRelease(setupFirst: true),
+      platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
+      onProgress: (_, _) {},
+    );
+
+    // 选择逻辑只保留服务内这一份：返回值必须与下载的文件一致，
+    // 调用方不能按清单顺序（assetFor）再猜一次。
+    expect(downloader.lastFileName, 'molia-0.1.0-beta.2-windows-x64.zip');
+    expect(result.asset.file, downloader.lastFileName);
+    expect(result.asset.kind, 'zip');
   });
 
   test('偏好类别缺失时回退该平台任意产物（不失败）', () async {
@@ -149,13 +206,15 @@ void main() {
       _FakeInstaller(preferredKind: 'tar.gz'),
     );
 
-    await service.download(
+    final result = await service.download(
       release: windowsRelease(),
       platform: const UpdatePlatformInfo(platform: 'windows', arch: 'x64'),
       onProgress: (_, _) {},
     );
 
     expect(downloader.lastFileName, isNotNull);
+    // 偏好类别（tar.gz）不存在：回退第一个适配产物（zip），返回值同类。
+    expect(result.asset.kind, 'zip');
   });
 
   test('没有适配产物：抛 unsupported', () async {

@@ -21,13 +21,45 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 
 private const val TAG = "MoliaDownloadNotify"
-private const val NOTIFICATION_CHANNEL_ID = "molia_downloads"
+private const val CHANNEL_UPDATE = "update"
 
-/// 下载通知中心：任务状态 + 通知构建 + 前台服务（dataSync）启停。
+/// 通知渠道：歌曲下载与应用更新分开（用户可在系统设置里分别开关）。
+///
+/// Dart 侧 `DownloadNotificationChannel.wireName` 与 [fromWire] 对齐；渠道
+/// 名称 / 描述 / 状态文案都走 Android 资源（en / zh），Dart 不拼通知字符串。
+private enum class NotificationChannelSpec(
+    val id: String,
+    val nameRes: Int,
+    val descriptionRes: Int,
+    val statusRes: Int,
+) {
+    Downloads(
+        id = "molia_downloads",
+        nameRes = R.string.download_notification_channel_name,
+        descriptionRes = R.string.download_notification_channel_description,
+        statusRes = R.string.download_notification_downloading,
+    ),
+    Update(
+        id = "molia_updates",
+        nameRes = R.string.update_notification_channel_name,
+        descriptionRes = R.string.update_notification_channel_description,
+        statusRes = R.string.update_notification_downloading,
+    );
+
+    companion object {
+        /// 旧调用不传 channel 时保持「歌曲下载」语义。
+        fun fromWire(value: String?): NotificationChannelSpec =
+            if (value == CHANNEL_UPDATE) Update else Downloads
+    }
+}
+
+/// 下载类任务通知中心（歌曲下载 / 应用更新）：任务状态 + 通知构建 +
+/// 前台服务（dataSync）启停。
 ///
 /// 分工（Dart 侧见 `lib/data/downloads/download_notifications*.dart`）：
-/// - Dart 只传生命周期（start / update / stop）与结构化数据（曲目名 / 歌手 /
-///   批量位置 / 进度）；静态文案用本应用的 Android 资源（en / zh）组装；
+/// - Dart 只传生命周期（start / update / stop）与结构化数据——歌曲下载是
+///   曲目名 / 歌手 / 批量位置 / 进度，应用更新是应用显示名 / 版本号 / 进度；
+///   静态文案用本应用的 Android 资源（en / zh）组装；
 /// - 本文件负责通知与前台服务，**失败一律 no-op 只记日志**：通知发不出来不影响
 ///   下载本身（下载在 Dart 侧继续跑）。
 ///
@@ -72,7 +104,7 @@ object DownloadNotifications {
         running?.stopNow()
     }
 
-    /// 开始 / 复用一条通知（同一 id = 同一条；批量任务共享一个 id）。
+    /// 开始 / 复用一条通知（同一 id = 同一条；批量歌曲共享一个 id）。
     fun start(
         context: Context,
         id: String,
@@ -82,13 +114,19 @@ object DownloadNotifications {
         total: Int?,
         progress: Int?,
         max: Int?,
+        channel: String? = null,
     ) {
         if (id.isEmpty()) return
         if (!canNotify(context)) {
             Log.i(TAG, "通知不可用（权限 / 已关闭），跳过: $id")
             return
         }
-        val state = tasks.getOrPut(id) { DownloadTaskState(title) }
+        val taskChannel = NotificationChannelSpec.fromWire(channel)
+        val state = tasks.getOrPut(id) {
+            DownloadTaskState(title, taskChannel)
+        }
+        // 同一 id 被复用（如重新下载）时跟随最新的渠道参数。
+        state.channel = taskChannel
         if (title.isNotEmpty()) state.title = title
         state.subtitle = subtitle
         if (index != null) state.index = index
@@ -116,7 +154,8 @@ object DownloadNotifications {
         if (index != null) state.index = index
         if (total != null) state.total = total
         if (progress != null) state.progress = progress
-        // max 0 = 「总大小未知」：进度条回到不确定态（批量换曲目时用）。
+        // max 0 = 「总大小未知」：进度条回到不确定态（批量换曲目 / 应用更新
+        // 尚未拿到总大小时用）。
         if (max != null) state.max = max
         refresh(context)
     }
@@ -154,28 +193,32 @@ object DownloadNotifications {
     /// 「前台服务契约占位」通知：任务在服务起来前就收尾时的兜底
     /// （`startForegroundService` 之后必须调用一次 `startForeground`，
     /// 否则会撞 `ForegroundServiceDidNotStartInTimeException`）。
-    fun placeholderNotification(context: Context): Notification =
-        NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+    fun placeholderNotification(context: Context): Notification {
+        val downloads = NotificationChannelSpec.Downloads
+        return NotificationCompat.Builder(context, downloads.id)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(context.getString(R.string.download_notification_channel_name))
-            .setContentText(context.getString(R.string.download_notification_downloading))
+            .setContentTitle(context.getString(downloads.nameRes))
+            .setContentText(context.getString(downloads.statusRes))
             .setProgress(0, 0, true)
             .build()
+    }
 
     const val placeholderNotificationId: Int = PLACEHOLDER_ID
 
     /// 建通道（每次重建：名称 / 描述跟随当前应用语言；重要性只允许下调）。
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            context.getString(R.string.download_notification_channel_name),
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = context.getString(R.string.download_notification_channel_description)
-            setShowBadge(false)
+        for (spec in NotificationChannelSpec.entries) {
+            val channel = NotificationChannel(
+                spec.id,
+                context.getString(spec.nameRes),
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = context.getString(spec.descriptionRes)
+                setShowBadge(false)
+            }
+            manager.createNotificationChannel(channel)
         }
-        manager.createNotificationChannel(channel)
     }
 
     /// 通知是否可用：API 33+ 的 POST_NOTIFICATIONS + 用户在本应用上的通知开关。
@@ -230,7 +273,8 @@ object DownloadNotifications {
 
     private fun build(context: Context, state: DownloadTaskState): Notification {
         val batch = state.index != null && state.total != null
-        val status = context.getString(R.string.download_notification_downloading)
+        val channel = state.channel
+        val status = context.getString(channel.statusRes)
         val contentTitle = if (batch) {
             context.getString(
                 R.string.download_notification_batch_title,
@@ -240,12 +284,12 @@ object DownloadNotifications {
         } else {
             state.title
         }
-        val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, channel.id)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.md_theme_primary))
             .setContentTitle(contentTitle)
             .setContentText(state.subtitle.ifEmpty { status })
-            // 批量时副标题显示当前曲目；单任务时就是「正在下载」状态。
+            // 歌曲批量时副标题显示当前曲目；单任务 / 应用更新时就是下载状态。
             .setSubText(if (batch) state.title else status)
             .setContentIntent(openAppIntent(context))
             .setOngoing(true)
@@ -284,8 +328,13 @@ object DownloadNotifications {
     }
 }
 
-/// 一条下载通知的状态（Dart 侧传结构化数据，文案在 Android 侧组装）。
-private class DownloadTaskState(var title: String) {
+/// 一条下载类任务通知的状态（歌曲下载 / 应用更新共用；Dart 侧传结构化数据，
+/// 文案在 Android 侧组装）。
+private class DownloadTaskState(
+    var title: String,
+    /// 任务所属渠道：start 时记住，build / 状态文案都按它选。
+    var channel: NotificationChannelSpec,
+) {
     var subtitle: String = ""
     var index: Int? = null
     var total: Int? = null

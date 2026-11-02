@@ -286,6 +286,7 @@ class MainActivity : FlutterActivity() {
                         total = call.argument<Int>("total"),
                         progress = call.argument<Int>("progress"),
                         max = call.argument<Int>("max"),
+                        channel = call.argument<String>("channel"),
                     )
                     "update" -> DownloadNotifications.update(
                         context = this,

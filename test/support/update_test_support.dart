@@ -18,14 +18,28 @@ class FakeUpdateService implements UpdateService {
   AppRelease? manifest;
   Object? checkError;
   Object? downloadError;
+  Object? installError;
   InstallOutcome installOutcome = InstallOutcome.handedOff;
   bool installPermission = true;
   String downloadPath = '/tmp/updates/molia-1.2.3-linux-x64.tar.gz';
+
+  /// 指定 download 返回的产物（模拟服务已按安装形态选好）；null 时按
+  /// `assetFor` 回退，与真实服务的「找不到偏好类别」分支一致。
+  ReleaseAsset? downloadAsset;
   UpdateChannel? lastCheckChannel;
   int downloadCalls = 0;
 
+  /// install 实际收到的产物类别（验证调用方用的是下载结果而不是二次猜）。
+  String? lastInstallKind;
+
   /// 非空时 check 会等待该 Completer（测试「检查中」界面态用）。
   Completer<void>? checkGate;
+
+  /// 非空时 download 会等待该 Completer（测试「下载中改配置」界面态用）。
+  Completer<void>? downloadGate;
+
+  /// 每次 onProgress 前调用（测试推进可控时钟，验证速度计算）。
+  void Function(int received, int total)? onProgressHook;
   int openPermissionCalls = 0;
   int installCalls = 0;
 
@@ -44,6 +58,7 @@ class FakeUpdateService implements UpdateService {
         kind: 'tar.gz',
         url: Uri.parse('https://example.com/molia.tar.gz'),
         file: 'molia-$version-linux-x64.tar.gz',
+        size: 12 * 1024 * 1024,
         sha256: 'abc',
       ),
     ],
@@ -51,6 +66,14 @@ class FakeUpdateService implements UpdateService {
 
   @override
   Future<UpdatePlatformInfo> platformInfo() async => platform;
+
+  @override
+  Future<ReleaseAsset?> selectAsset({
+    required AppRelease release,
+    required UpdatePlatformInfo platform,
+  }) async =>
+      downloadAsset ??
+      release.assetFor(platform: platform.platform, arch: platform.arch);
 
   @override
   Future<UpdateCheckResult> check({
@@ -74,7 +97,7 @@ class FakeUpdateService implements UpdateService {
   }
 
   @override
-  Future<String> download({
+  Future<DownloadedUpdate> download({
     required AppRelease release,
     required UpdatePlatformInfo platform,
     required void Function(int received, int total) onProgress,
@@ -82,10 +105,26 @@ class FakeUpdateService implements UpdateService {
   }) async {
     final error = downloadError;
     if (error != null) throw error;
+    final gate = downloadGate;
+    if (gate != null) await gate.future;
+    // 替身不实现真实的产物选择：默认清单只有 linux 产物，Android 等
+    // provider 用例只关心流程，找不到匹配时退回第一个产物即可。
+    final asset =
+        downloadAsset ??
+        release.assetFor(platform: platform.platform, arch: platform.arch) ??
+        (release.assets.isEmpty ? null : release.assets.first);
+    if (asset == null) {
+      throw const UpdateFailureException(
+        UpdateFailureKind.unsupported,
+        '清单没有适配产物',
+      );
+    }
     downloadCalls++;
+    onProgressHook?.call(5, 10);
     onProgress(5, 10);
+    onProgressHook?.call(10, 10);
     onProgress(10, 10);
-    return downloadPath;
+    return DownloadedUpdate(path: downloadPath, asset: asset);
   }
 
   @override
@@ -94,6 +133,9 @@ class FakeUpdateService implements UpdateService {
     required String archiveKind,
   }) async {
     installCalls++;
+    lastInstallKind = archiveKind;
+    final error = installError;
+    if (error != null) throw error;
     return installOutcome;
   }
 
@@ -118,12 +160,42 @@ class FakeUpdatePreferences implements UpdatePreferences {
   String downloadPrefix = '';
   @override
   DateTime? lastCheckedAt;
+  @override
+  PendingUpdate? pendingUpdate;
+
+  /// pending 写入 / 清除次数（provider 生命周期断言用）。
+  int markPendingCalls = 0;
+  int clearPendingCalls = 0;
+
+  /// check 写「上次检查时间」时的闸门（测试写偏好期间的代际竞态）。
+  Completer<void>? markCheckedStarted;
+  Completer<void>? markCheckedGate;
 
   @override
   Future<void> load() async {}
 
   @override
-  Future<void> markChecked(DateTime at) async => lastCheckedAt = at;
+  Future<void> markChecked(DateTime at) async {
+    markCheckedStarted?.complete();
+    final gate = markCheckedGate;
+    if (gate != null) await gate.future;
+    lastCheckedAt = at;
+  }
+
+  @override
+  Future<void> markPendingUpdate({
+    required String version,
+    required int build,
+  }) async {
+    markPendingCalls++;
+    pendingUpdate = PendingUpdate(version: version, build: build);
+  }
+
+  @override
+  Future<void> clearPendingUpdate() async {
+    clearPendingCalls++;
+    pendingUpdate = null;
+  }
 
   @override
   Future<void> setAutoCheckEnabled(bool value) async =>
