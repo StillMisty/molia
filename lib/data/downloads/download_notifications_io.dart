@@ -9,7 +9,8 @@ import 'download_notifications_types.dart';
 const String kDownloadNotificationsChannel =
     'top.stillmisty.molia/download_notifications';
 
-/// Android 下载通知实现：MethodChannel → 前台服务 + 系统通知。
+/// Android 下载类任务通知实现（歌曲下载 / 应用更新）：
+/// MethodChannel → 前台服务 + 系统通知。
 ///
 /// 通道实现见 `android/app/src/main/kotlin/top/stillmisty/molia/
 /// DownloadNotificationService.kt` 的 `DownloadNotifications` 对象
@@ -41,6 +42,7 @@ class MethodChannelDownloadNotifications implements DownloadNotifications {
     int? total,
     int? progress,
     int? max,
+    DownloadNotificationChannel channel = DownloadNotificationChannel.downloads,
   }) => _invoke('start', {
     'id': id,
     'title': title,
@@ -49,6 +51,7 @@ class MethodChannelDownloadNotifications implements DownloadNotifications {
     'total': total,
     'progress': progress,
     'max': max,
+    'channel': channel.wireName,
   });
 
   @override
@@ -80,7 +83,7 @@ class MethodChannelDownloadNotifications implements DownloadNotifications {
       await _channel.invokeMethod<void>(method, arguments);
     } catch (e) {
       // 通道缺失 / 原生失败：按「没有通知」处理，下载本身不受影响。
-      _logger.warning('下载通知 $method 失败（忽略）: $e');
+      _logger.warning('下载 / 更新通知 $method 失败（忽略）: $e');
     }
   }
 }

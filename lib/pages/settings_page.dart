@@ -706,8 +706,11 @@ class _SettingsPageState extends State<SettingsPage>
     );
   }
 
-  /// 更新入口副标题：优先「可更新至 x.y.z」，否则显示当前版本。
+  /// 更新入口副标题：上次安装未完成优先，其次「可更新至 x.y.z」，否则当前版本。
   String _updateSubtitle(AppLocalizations l10n, UpdateProvider provider) {
+    if (provider.installResult == UpdateInstallResult.incomplete) {
+      return l10n.updateInstallIncomplete;
+    }
     final version = provider.release?.version;
     if (provider.updateAvailable && version != null && version.isNotEmpty) {
       return l10n.settingsUpdateAvailable(version);

@@ -7,4 +7,9 @@
     <string name="download_notification_channel_description">离线歌曲的下载进度</string>
     <string name="download_notification_downloading">正在下载…</string>
     <string name="download_notification_batch_title">批量下载 %1$d/%2$d</string>
+
+    <!-- 应用更新通知（复用同一个 dataSync 前台服务，渠道独立） -->
+    <string name="update_notification_channel_name">应用更新</string>
+    <string name="update_notification_channel_description">应用更新包的下载进度</string>
+    <string name="update_notification_downloading">正在下载更新…</string>
 </resources>

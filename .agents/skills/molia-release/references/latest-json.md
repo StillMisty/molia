@@ -25,6 +25,10 @@
 }
 ```
 
+beta 滚动清单由发布流水线原地 clobber `beta` release 中的 `latest.json`
+（release 不删除、tag target 不变），客户端地址
+`releases/download/beta/latest.json` 始终有效。
+
 客户端约定：
 
 - `channel` 必须与请求渠道一致（防止镜像串渠道）；

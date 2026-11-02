@@ -21,6 +21,7 @@ import 'package:molia/providers/nav_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/providers/theme_provider.dart';
+import 'package:molia/providers/update_provider.dart';
 import 'package:molia/services/audio_focus_settings.dart';
 import 'package:molia/services/covers/custom_cover_store.dart';
 import 'package:molia/services/data_saver_service.dart';
@@ -35,6 +36,7 @@ import 'package:molia/services/play_statistics_service.dart';
 import 'package:molia/services/shortcut_bindings.dart';
 import 'package:molia/services/shortcut_settings.dart';
 import 'package:molia/services/shortcuts.dart';
+import 'package:molia/services/update/update_preferences.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/tray_settings.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -50,6 +52,7 @@ import 'package:molia/data/settings/settings_keys.dart';
 
 import 'support/notification_recorder.dart';
 import 'support/sync_test_support.dart';
+import 'support/update_test_support.dart';
 
 import 'support/settings_test_support.dart';
 
@@ -267,6 +270,34 @@ void main() {
       (ByteData? _) {},
     );
   }
+
+  testWidgets('更新入口副标题：上次未完成优先于「可更新至」', (tester) async {
+    final service = FakeUpdateService();
+    final preferences = FakeUpdatePreferences()
+      ..pendingUpdate = const PendingUpdate(version: '1.2.4', build: 43);
+    final update = UpdateProvider(
+      service: service,
+      preferences: preferences,
+      currentVersion: '1.2.2',
+      currentBuild: 41,
+    );
+    addTearDown(update.dispose);
+    await update.init();
+    // 静默检查保留回执，同时有可更新版本：首屏仍应显示「上次未完成」。
+    await update.check(silent: true);
+    expect(update.installResult, UpdateInstallResult.incomplete);
+    expect(update.updateAvailable, isTrue);
+
+    await pumpSettingsPage(
+      tester,
+      extraProviders: [
+        ChangeNotifierProvider<UpdateProvider>.value(value: update),
+      ],
+    );
+
+    expect(find.byKey(const Key('settingsUpdateItem')), findsOneWidget);
+    expect(find.text("Last update didn't finish"), findsOneWidget);
+  });
 
   testWidgets('震动反馈：行在通用子页，默认开，关闭后即时生效并持久化', (tester) async {
     await pumpSettingsPage(tester);

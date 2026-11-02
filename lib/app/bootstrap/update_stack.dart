@@ -7,10 +7,13 @@
 /// 都不参与首帧内容（见 `post_frame_init.dart`）。
 library;
 
+import '../../data/downloads/download_notifications.dart';
 import '../../data/update/update_downloader.dart';
 import '../../data/update/update_manifest_client.dart';
 import '../../providers/update_provider.dart';
+import '../../services/notification_permission.dart';
 import '../../services/update/update_installer.dart';
+import '../../services/update/update_notification_presenter.dart';
 import '../../services/update/update_preferences.dart';
 import '../../services/update/update_service.dart';
 
@@ -35,6 +38,12 @@ UpdateStack buildUpdateStack({required Future<void> Function() quitApp}) {
       installer: UpdateInstaller(),
     ),
     preferences: updatePreferences,
+    notificationPresenter: UpdateNotificationPresenter(
+      notifications: createDownloadNotifications(),
+    ),
+    // 更新下载走 Android dataSync 前台服务；权限请求仅作用于通知，拒绝
+    // 不阻断下载（provider 内 best-effort 调用）。
+    ensureNotificationPermission: NotificationPermission.ensureRequested,
     quitApp: quitApp,
   );
 

@@ -3782,6 +3782,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateReleaseDateUnknown => 'Release date unknown';
 
   @override
+  String get updatePackageSizeTitle => 'Package size';
+
+  @override
   String get updateCancelDownload => 'Cancel';
 
   @override
@@ -3801,6 +3804,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateInstallNow => 'Install now';
+
+  @override
+  String updateInstallSucceeded(String version) {
+    return 'Updated to $version';
+  }
+
+  @override
+  String get updateInstallIncomplete => 'Last update didn\'t finish';
+
+  @override
+  String get updateInstallIncompleteHint =>
+      'Check for updates again, or download the installer manually';
 
   @override
   String get updateDownloadAndInstall => 'Download and install';

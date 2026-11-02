@@ -10,6 +10,8 @@ import 'package:molia/pages/update_settings_page.dart';
 import 'package:molia/providers/update_provider.dart';
 import 'package:molia/services/language_service.dart';
 import 'package:molia/services/update/update_installer_types.dart';
+import 'package:molia/services/update/update_preferences.dart';
+import 'package:molia/widgets/settings/settings_tiles.dart';
 
 import '../support/update_test_support.dart';
 
@@ -106,6 +108,26 @@ void main() {
     expect(find.text('下载并安装'), findsNothing);
   });
 
+  testWidgets('上次更新未完成：更新卡片顶部显示回执', (tester) async {
+    preferences.pendingUpdate = const PendingUpdate(
+      version: '1.2.4',
+      build: 43,
+    );
+    await provider.init();
+    expect(provider.installResult, UpdateInstallResult.incomplete);
+
+    await pumpPage(tester);
+
+    expect(
+      find.byKey(const Key('settingsUpdateInstallResultItem')),
+      findsOneWidget,
+    );
+    expect(find.text('上次更新未完成'), findsOneWidget);
+    expect(find.text('请重新检查更新，或手动下载安装包'), findsOneWidget);
+    // 回执消费后清掉 pending，避免每次启动重复提示。
+    expect(preferences.pendingUpdate, isNull);
+  });
+
   testWidgets('发布卡：打开发布页收进主操作的尾部菜单', (tester) async {
     await pumpPage(tester);
 
@@ -129,6 +151,10 @@ void main() {
 
     expect(find.text('发现新版本 1.2.3'), findsOneWidget);
     expect(find.text('Molia 1.2.3'), findsOneWidget);
+    // 发布卡显示当前实际产物的安装包大小（默认 linux tar.gz = 12 MB）。
+    expect(find.byKey(const Key('settingsUpdateSizeItem')), findsOneWidget);
+    expect(find.text('安装包大小'), findsOneWidget);
+    expect(find.text('12.0 MB'), findsOneWidget);
     expect(
       find.byKey(const Key('settingsUpdateDownloadButton')),
       findsOneWidget,
@@ -143,6 +169,11 @@ void main() {
     // 桌面替换脚本已启动 → 安装中提示；provider 记录进度完成。
     expect(find.textContaining('已交给安装程序'), findsOneWidget);
     expect(provider.progress.value.received, 10);
+    // 安装中不允许再触发「检查更新」（provider 已 guard，UI 同步禁用）。
+    final checkTile = tester.widget<SettingsNavTile>(
+      find.byKey(const Key('settingsUpdateCheckItem')),
+    );
+    expect(checkTile.onTap, isNull);
   });
 
   testWidgets('Android 缺少安装权限：去授权按钮可点', (tester) async {
