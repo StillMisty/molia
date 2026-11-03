@@ -116,6 +116,25 @@ void main() {
     expect(bytes.last, 0xAA);
   });
 
+  test('重写走流式读取，不调用整文件 readBytes', () async {
+    final guarded = _NoFullReadStorage();
+    for (final (path, bytes) in [
+      ('/downloads/a.mp3', syntheticMp3()),
+      ('/downloads/a.flac', syntheticFlac()),
+    ]) {
+      guarded.files[path] = Uint8List.fromList(bytes);
+      final ok = await embedDownloadTags(
+        storage: guarded,
+        filePath: path,
+        title: 'Title',
+        artist: 'Artist',
+        album: 'Album',
+      );
+      expect(ok, isTrue, reason: path);
+      expect(guarded.files[path], isNotEmpty);
+    }
+  });
+
   test('不支持格式：返回 false（sidecar 保留）', () async {
     const path = '/downloads/a.m4a';
     final ok = await embed(path);
@@ -165,4 +184,12 @@ bool _containsSequence(List<int> haystack, List<int> needle) {
     if (match) return true;
   }
   return false;
+}
+
+/// 禁止整文件 readBytes：验证标签重写只走 readHead / readRange / readStream。
+class _NoFullReadStorage extends FakeDownloadStorage {
+  @override
+  Future<Uint8List?> readBytes(String path) async {
+    throw StateError('标签重写不应整文件读入：$path');
+  }
 }

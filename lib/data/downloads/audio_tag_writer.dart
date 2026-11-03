@@ -21,7 +21,14 @@ import 'download_storage.dart';
 
 final _logger = Logger('molia.audio_tag_writer');
 
+/// 标签重写产物：新前缀（ID3v2 / FLAC 元数据）+ 原音频帧起始偏移。
+typedef _PreparedTags = ({Uint8List prefix, int audioStart});
+
 /// 把下载元数据写入音频文件标签；不支持 / 失败返回 false。
+///
+/// 重写走「新标签前缀 + 原文件从音频帧起点流式拷贝」：不把整首歌读进内存，
+/// 也不在 UI isolate 上做整文件 `BytesBuilder` 拼接。磁盘字节仍是「读一次
+/// 原音频 + 写一次新文件」，但大 FLAC 不再产生几十 MB 的临时 Uint8List。
 Future<bool> embedDownloadTags({
   required DownloadStorage storage,
   required String filePath,
@@ -33,46 +40,82 @@ Future<bool> embedDownloadTags({
   String coverMimeType = 'image/jpeg',
 }) async {
   final extension = p.extension(filePath).toLowerCase();
-  final existing = await storage.readBytes(filePath);
-  if (existing == null || existing.isEmpty) return false;
+  if (extension != '.mp3' && extension != '.flac') return false;
   final text = lyrics?.trim();
+  final lyricText = (text == null || text.isEmpty) ? null : text;
+  final tempPath = '$filePath$downloadPartSuffix';
   try {
-    final Uint8List? rewritten = switch (extension) {
-      '.mp3' => _writeId3v23(
-        existing,
+    final _PreparedTags? prepared = switch (extension) {
+      '.mp3' => await _prepareMp3Tags(
+        storage,
+        filePath,
         title: title,
         artist: artist,
         album: album,
-        lyrics: (text == null || text.isEmpty) ? null : text,
+        lyrics: lyricText,
         coverBytes: coverBytes,
         coverMimeType: coverMimeType,
       ),
-      '.flac' => _writeFlacComments(
-        existing,
+      '.flac' => await _prepareFlacTags(
+        storage,
+        filePath,
         title: title,
         artist: artist,
         album: album,
-        lyrics: (text == null || text.isEmpty) ? null : text,
+        lyrics: lyricText,
         coverBytes: coverBytes,
         coverMimeType: coverMimeType,
       ),
       _ => null,
     };
-    if (rewritten == null) return false;
-    // 原子替换：先写同目录临时文件再改名，避免写坏已完成的下载文件。
-    final tempPath = '$filePath$downloadPartSuffix';
-    await storage.writeBytes(tempPath, rewritten);
+    if (prepared == null) return false;
+    final audio = await storage.readStream(
+      filePath,
+      start: prepared.audioStart,
+    );
+    await storage.writeStream(tempPath, _prepend(prepared.prefix, audio));
     await storage.rename(tempPath, filePath);
     return true;
   } catch (e) {
+    // 半成品不能留在下载目录：否则下次下载会被当成可续传的 `.part`。
+    await storage.deleteQuietly(tempPath);
     _logger.warning('音频标签写入失败（保留 sidecar）: $e');
     return false;
   }
 }
 
-/// 写入 ID3v2.3 标签并前置到音频数据之前（替换已有 ID3v2 标签）。
-Uint8List _writeId3v23(
-  Uint8List file, {
+Stream<List<int>> _prepend(Uint8List prefix, Stream<List<int>> rest) async* {
+  if (prefix.isNotEmpty) yield prefix;
+  yield* rest;
+}
+
+Future<_PreparedTags?> _prepareMp3Tags(
+  DownloadStorage storage,
+  String filePath, {
+  required String title,
+  required String artist,
+  required String album,
+  required String? lyrics,
+  required Uint8List? coverBytes,
+  required String coverMimeType,
+}) async {
+  final head = await storage.readHead(filePath, 10);
+  if (head == null || head.isEmpty) return null;
+  return (
+    prefix: _buildId3v23Tag(
+      title: title,
+      artist: artist,
+      album: album,
+      lyrics: lyrics,
+      coverBytes: coverBytes,
+      coverMimeType: coverMimeType,
+    ),
+    audioStart: _id3v2AudioStart(head),
+  );
+}
+
+/// 新 ID3v2.3 标签（不含音频数据）。
+Uint8List _buildId3v23Tag({
   required String title,
   required String artist,
   required String album,
@@ -80,7 +123,6 @@ Uint8List _writeId3v23(
   required Uint8List? coverBytes,
   required String coverMimeType,
 }) {
-  final audio = _stripId3v2(file);
   final frames = BytesBuilder();
   if (title.isNotEmpty) frames.add(_id3TextFrame('TIT2', title));
   if (artist.isNotEmpty) frames.add(_id3TextFrame('TPE1', artist));
@@ -95,25 +137,22 @@ Uint8List _writeId3v23(
     ..add(const [0x03, 0x00]) // v2.3, revision 0
     ..addByte(0x00) // flags：无 unsynchronisation / extended header
     ..add(_syncSafe(framesBytes.length));
-  final out = BytesBuilder()
-    ..add(header.takeBytes())
-    ..add(framesBytes)
-    ..add(audio);
-  return out.takeBytes();
+  return (BytesBuilder()
+        ..add(header.takeBytes())
+        ..add(framesBytes))
+      .takeBytes();
 }
 
-/// 去掉文件开头的 ID3v2 标签（若存在），返回纯音频数据。
-Uint8List _stripId3v2(Uint8List file) {
-  if (file.length < 10) return file;
-  if (file[0] != 0x49 || file[1] != 0x44 || file[2] != 0x33) return file;
+/// 原文件音频帧起点：跳过开头的 ID3v2 标签（若存在）。
+int _id3v2AudioStart(Uint8List head) {
+  if (head.length < 10) return 0;
+  if (head[0] != 0x49 || head[1] != 0x44 || head[2] != 0x33) return 0;
   final size =
-      (file[6] & 0x7F) << 21 |
-      (file[7] & 0x7F) << 14 |
-      (file[8] & 0x7F) << 7 |
-      (file[9] & 0x7F);
-  final total = 10 + size;
-  if (total >= file.length) return Uint8List(0);
-  return Uint8List.sublistView(file, total);
+      (head[6] & 0x7F) << 21 |
+      (head[7] & 0x7F) << 14 |
+      (head[8] & 0x7F) << 7 |
+      (head[9] & 0x7F);
+  return 10 + size;
 }
 
 /// ID3v2.3 文本帧：UTF-16LE + BOM（中文安全；v2.3 不支持 UTF-8）。
@@ -184,42 +223,45 @@ Uint8List _syncSafe(int value) => Uint8List.fromList([
 ]);
 
 /// 重写 FLAC 元数据块：替换 VORBIS_COMMENT（4）与 PICTURE（6），其余原样保留。
-Uint8List? _writeFlacComments(
-  Uint8List file, {
+///
+/// 只读取元数据块（4 字节头 + 非注释/图片块内容），音频帧由调用方从
+/// [audioStart] 流式拷贝；STREAMINFO 必须在最前。
+Future<_PreparedTags?> _prepareFlacTags(
+  DownloadStorage storage,
+  String filePath, {
   required String title,
   required String artist,
   required String album,
   required String? lyrics,
   required Uint8List? coverBytes,
   required String coverMimeType,
-}) {
-  if (file.length < 8 ||
-      file[0] != 0x66 ||
-      file[1] != 0x4C ||
-      file[2] != 0x61 ||
-      file[3] != 0x43) {
+}) async {
+  final magic = await storage.readHead(filePath, 4);
+  if (magic == null ||
+      magic.length < 4 ||
+      magic[0] != 0x66 ||
+      magic[1] != 0x4C ||
+      magic[2] != 0x61 ||
+      magic[3] != 0x43) {
     return null; // 'fLaC'
   }
   final blocks = <_FlacBlock>[];
   var offset = 4;
   var last = false;
   while (!last) {
-    if (offset + 4 > file.length) return null;
-    final header = file[offset];
-    last = header & 0x80 != 0;
-    final type = header & 0x7F;
-    final length =
-        (file[offset + 1] << 16) | (file[offset + 2] << 8) | file[offset + 3];
+    final header = await storage.readRange(filePath, offset, 4);
+    if (header == null || header.length < 4) return null;
+    last = header[0] & 0x80 != 0;
+    final type = header[0] & 0x7F;
+    final length = (header[1] << 16) | (header[2] << 8) | header[3];
     final start = offset + 4;
-    final end = start + length;
-    if (end > file.length) return null;
-    // 已有注释 / 图片块由新写的替换，其余块（STREAMINFO / SEEKTABLE…）保留。
     if (type != 4 && type != 6) {
-      blocks.add(_FlacBlock(type, Uint8List.sublistView(file, start, end)));
+      final data = await storage.readRange(filePath, start, length);
+      if (data == null || data.length < length) return null;
+      blocks.add(_FlacBlock(type, data));
     }
-    offset = end;
+    offset = start + length;
   }
-  final audio = Uint8List.sublistView(file, offset);
 
   final newBlocks = <_FlacBlock>[];
   // STREAMINFO 必须是第一个块：把它顶到最前（原顺序里它本来就是第一个）。
@@ -250,8 +292,7 @@ Uint8List? _writeFlacComments(
     out.add([(length >> 16) & 0xFF, (length >> 8) & 0xFF, length & 0xFF]);
     out.add(block.data);
   }
-  out.add(audio);
-  return out.takeBytes();
+  return (prefix: out.takeBytes(), audioStart: offset);
 }
 
 /// Vorbis Comment 块：vendor + 键值对（UTF-8，`KEY=value`）。

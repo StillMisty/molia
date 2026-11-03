@@ -183,6 +183,31 @@ class IoDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<Uint8List?> readRange(String path, int start, int length) async {
+    if (start < 0 || length < 0) return null;
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      final handle = await file.open();
+      try {
+        await handle.setPosition(start);
+        return await handle.read(length);
+      } finally {
+        await handle.close();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<Stream<List<int>>> readStream(String path, {int start = 0}) async {
+    final file = File(path);
+    if (!await file.exists()) return const Stream<List<int>>.empty();
+    return file.openRead(start < 0 ? 0 : start);
+  }
+
+  @override
   Future<void> writeStream(
     String path,
     Stream<List<int>> stream, {

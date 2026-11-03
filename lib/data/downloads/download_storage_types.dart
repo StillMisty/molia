@@ -61,6 +61,12 @@ abstract interface class DownloadStorage {
   /// 文件短于 [length] 时返回全部；不存在 / 不可读返回 null。
   Future<Uint8List?> readHead(String path, int length);
 
+  /// 读取 [start, start + length) 范围；越界按实际可读字节返回，不存在返回 null。
+  Future<Uint8List?> readRange(String path, int start, int length);
+
+  /// 从 [start] 开始的流式读取（标签重写时原样拷贝音频帧，不整文件进内存）。
+  Future<Stream<List<int>>> readStream(String path, {int start = 0});
+
   /// 流式写入文件（父目录自动创建）。
   ///
   /// [total] 为预期总字节（响应头 Content-Length，未知时 null）；

@@ -66,6 +66,24 @@ class FakeDownloadStorage implements DownloadStorage {
   }
 
   @override
+  Future<Uint8List?> readRange(String path, int start, int length) async {
+    final bytes = files[path];
+    if (bytes == null || start < 0 || length < 0 || start > bytes.length) {
+      return null;
+    }
+    final end = (start + length).clamp(start, bytes.length);
+    return Uint8List.fromList(bytes.sublist(start, end));
+  }
+
+  @override
+  Future<Stream<List<int>>> readStream(String path, {int start = 0}) async {
+    final bytes = files[path];
+    if (bytes == null) return const Stream<List<int>>.empty();
+    final offset = start.clamp(0, bytes.length);
+    return Stream.value(Uint8List.fromList(bytes.sublist(offset)));
+  }
+
+  @override
   Future<void> writeStream(
     String path,
     Stream<List<int>> stream, {
