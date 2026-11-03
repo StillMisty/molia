@@ -178,28 +178,31 @@ void main() {
       expect(decoded['v'], ArtworkPaletteSeedStore.formatVersion);
     });
 
-    test('超过 32 条淘汰最旧；改写同 key 会刷新 LRU 位置', () async {
-      final prefs = _RecordingPrefs();
-      final store = ArtworkPaletteSeedStore(preferences: prefs);
-      const max = ArtworkPaletteSeedStore.maxEntries;
+    test(
+      '超过 ${ArtworkPaletteSeedStore.maxEntries} 条淘汰最旧；改写同 key 会刷新 LRU 位置',
+      () async {
+        final prefs = _RecordingPrefs();
+        final store = ArtworkPaletteSeedStore(preferences: prefs);
+        const max = ArtworkPaletteSeedStore.maxEntries;
 
-      for (var i = 0; i < max; i++) {
-        await store.write('k$i', i + 1);
-      }
-      // 同 key 新 seed：先删再插到末尾，k1 成为最旧条目。
-      await store.write('k0', 999);
-      await store.write('k$max', max + 1);
+        for (var i = 0; i < max; i++) {
+          await store.write('k$i', i + 1);
+        }
+        // 同 key 新 seed：先删再插到末尾，k1 成为最旧条目。
+        await store.write('k0', 999);
+        await store.write('k$max', max + 1);
 
-      expect(await store.read('k0'), 999);
-      expect(await store.read('k1'), isNull, reason: 'k1 应被淘汰');
-      expect(await store.read('k2'), 3);
-      expect(await store.read('k$max'), max + 1);
+        expect(await store.read('k0'), 999);
+        expect(await store.read('k1'), isNull, reason: 'k1 应被淘汰');
+        expect(await store.read('k2'), 3);
+        expect(await store.read('k$max'), max + 1);
 
-      final entries = _entriesOf(prefs);
-      expect(entries.length, max);
-      expect(entries.keys.first, 'k2');
-      expect(entries.keys.last, 'k$max');
-    });
+        final entries = _entriesOf(prefs);
+        expect(entries.length, max);
+        expect(entries.keys.first, 'k2');
+        expect(entries.keys.last, 'k$max');
+      },
+    );
 
     test('相同 seed 不重复写', () async {
       final prefs = _RecordingPrefs();

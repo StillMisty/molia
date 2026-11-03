@@ -33,9 +33,9 @@ class ArtworkPaletteSeedStore {
   /// `buildColorScheme` 的取色与配色生成逻辑。
   static const int formatVersion = 1;
 
-  /// 最多保留的封面条目数。封面内容身份是 URL 派生值，32 条足够覆盖最近
-  /// 播放 / 浏览过的封面，同时把 JSON 控制在几 KB。
-  static const int maxEntries = 32;
+  /// 最多保留的封面条目数。封面内容身份是 URL 派生值；128 条覆盖更长的
+  /// 播放 / 浏览历史，减少重播旧封面时重新解码整图取色。JSON 仍只有几 KB。
+  static const int maxEntries = 128;
 
   /// 防抖模式下的合并窗口：连续切歌的多个封面会落成一次整文件写入。
   static const Duration writeDebounce = Duration(seconds: 2);

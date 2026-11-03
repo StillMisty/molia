@@ -417,6 +417,48 @@ void main() {
       expect(processor.calls, 1);
     });
 
+    test('同一封面多风格 / 多尺寸只读一次源字节', () async {
+      var loads = 0;
+      final cache = CoverStyleCache(
+        processor: _FakeProcessor(
+          output: Uint8List.fromList(List<int>.filled(8, 7)),
+        ),
+        sourceLoader: (_) async {
+          loads++;
+          return Uint8List.fromList([1, 2, 3]);
+        },
+      );
+
+      await cache.obtain('a', CoverStyle.lineArt, edge: 64);
+      await cache.obtain('a', CoverStyle.ink, edge: 64);
+      await cache.obtain('a', CoverStyle.lineArt, edge: 128);
+
+      expect(loads, 1, reason: '源字节应被多风格 / 多尺寸复用');
+      expect(cache.sourceByteCount, 3);
+    });
+
+    test('源字节 LRU：超预算后再次请求会重新读盘', () async {
+      var loads = 0;
+      final cache = CoverStyleCache(
+        processor: _FakeProcessor(
+          output: Uint8List.fromList(List<int>.filled(8, 7)),
+        ),
+        sourceLoader: (_) async {
+          loads++;
+          return Uint8List.fromList([1, 2, 3]);
+        },
+        sourceMaxBytes: 6,
+      );
+
+      await cache.obtain('a', CoverStyle.lineArt, edge: 64);
+      await cache.obtain('b', CoverStyle.lineArt, edge: 64);
+      await cache.obtain('c', CoverStyle.lineArt, edge: 64);
+      expect(cache.sourceByteCount, 6);
+      await cache.obtain('a', CoverStyle.ink, edge: 64);
+
+      expect(loads, 4, reason: 'a 已被淘汰，需要重新读取');
+    });
+
     test('LRU：命中刷新顺序，超预算淘汰最久未用', () async {
       final cache = CoverStyleCache(
         processor: _FakeProcessor(

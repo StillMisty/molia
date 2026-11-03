@@ -66,11 +66,15 @@ class CoverStyleCache extends ChangeNotifier {
     CoverStyleProcessorPort? processor,
     CoverStyleSourceLoader? sourceLoader,
     this.maxBytes = defaultMaxBytes,
+    this.sourceMaxBytes = defaultSourceMaxBytes,
   }) : _processor = processor ?? CoverStyleProcessor(),
        _sourceLoader = sourceLoader ?? loadCoverStyleSource;
 
   /// 约 24MB 的派生图预算：只影响展示缓存，不影响原图封面缓存策略。
   static const int defaultMaxBytes = 24 * 1024 * 1024;
+
+  /// 原始封面字节预算：同一封面多风格预览时只读一次盘。
+  static const int defaultSourceMaxBytes = 12 * 1024 * 1024;
 
   /// 边长分桶（物理像素）。播放页大图上限 768。
   static const List<int> edgeBuckets = [64, 128, 256, 512, 768];
@@ -78,13 +82,21 @@ class CoverStyleCache extends ChangeNotifier {
   final CoverStyleProcessorPort _processor;
   final CoverStyleSourceLoader _sourceLoader;
   final int maxBytes;
+  final int sourceMaxBytes;
 
   final LinkedHashMap<String, Uint8List> _entries = LinkedHashMap();
   final Map<String, Future<Uint8List?>> _inflight = {};
   int _byteCount = 0;
 
+  final LinkedHashMap<String, Uint8List> _sources = LinkedHashMap();
+  final Map<String, Future<Uint8List?>> _sourceInflight = {};
+  int _sourceByteCount = 0;
+
   /// 当前缓存字节数（测试 / 诊断用）。
   int get byteCount => _byteCount;
+
+  /// 当前源字节缓存占用（测试 / 诊断用）。
+  int get sourceByteCount => _sourceByteCount;
 
   /// 当前条目数（测试 / 诊断用）。
   int get entryCount => _entries.length;
@@ -142,7 +154,7 @@ class CoverStyleCache extends ChangeNotifier {
     String key,
   ) async {
     try {
-      final source = await _sourceLoader(url);
+      final source = await _loadSource(url);
       if (source == null || source.isEmpty) return null;
       final rendered = await _processor.process(
         source,
@@ -154,6 +166,43 @@ class CoverStyleCache extends ChangeNotifier {
       return rendered;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// 同一 URL 的源字节只读一次盘：风格选择面板会连续请求 8 种风格，
+  /// 每一种都重新读整张封面会把磁盘 I/O 放大数倍。
+  Future<Uint8List?> _loadSource(String url) {
+    final cached = _sources.remove(url);
+    if (cached != null) {
+      _sources[url] = cached; // 触碰 LRU 顺序
+      return Future.value(cached);
+    }
+    final inflight = _sourceInflight[url];
+    if (inflight != null) return inflight;
+    final future = _readSource(url);
+    _sourceInflight[url] = future;
+    future.whenComplete(() {
+      if (identical(_sourceInflight[url], future)) _sourceInflight.remove(url);
+    });
+    return future;
+  }
+
+  Future<Uint8List?> _readSource(String url) async {
+    final source = await _sourceLoader(url);
+    if (source == null || source.isEmpty) return null;
+    _putSource(url, source);
+    return source;
+  }
+
+  void _putSource(String url, Uint8List bytes) {
+    final previous = _sources.remove(url);
+    if (previous != null) _sourceByteCount -= previous.length;
+    _sources[url] = bytes;
+    _sourceByteCount += bytes.length;
+    while (_sourceByteCount > sourceMaxBytes && _sources.isNotEmpty) {
+      final oldest = _sources.keys.first;
+      final removed = _sources.remove(oldest);
+      if (removed != null) _sourceByteCount -= removed.length;
     }
   }
 
@@ -170,11 +219,13 @@ class CoverStyleCache extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 清空所有派生图（测试 / 内存压力场景）。
+  /// 清空所有派生图与源字节（测试 / 内存压力场景）。
   void clear() {
-    if (_entries.isEmpty) return;
+    final hadEntries = _entries.isNotEmpty;
     _entries.clear();
     _byteCount = 0;
-    notifyListeners();
+    _sources.clear();
+    _sourceByteCount = 0;
+    if (hadEntries) notifyListeners();
   }
 }
