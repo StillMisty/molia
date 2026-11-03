@@ -568,8 +568,10 @@
   （抓取脚本 `tool/gen_lyric_search_fixtures.mjs`）。命中片段作为结果行副标题。
 - **Single-channel search（单渠道搜索）** — `SearchProvider` 只搜
   `DiscoverProvider.channelKey` 对应的当前渠道；`activeSourceKey` / `activeSource` /
-  `hasActiveSearchSource` 是唯一渠道状态，`setActiveSource` 切渠道时清空旧结果并按
-  当前关键词重搜。`updateSearchQuery` 仍 300ms 防抖，`submitSearch` 立即；当前渠道
+  `hasActiveSearchSource` 是唯一渠道状态（后者 = `supportedSearchKinds.isNotEmpty`，
+  已注册但能力位全 false 的渠道仍算不可搜索），`setActiveSource` 切渠道时清空旧结果
+  并按当前关键词重搜；脚本晚到后能力补齐也会主动补搜。`updateSearchQuery` 仍 300ms
+  防抖，`submitSearch` 立即；当前渠道
   不可搜索时清空结果、不发请求，由 UI 展示「当前渠道不支持搜索」空态（ADR-0019）。
 - **Search source group（当前渠道结果投影）** — `lib/providers/search_source_group.dart`
   的只读 `SearchSourceGroup<T>`：source / items / failure / isLoading / hasMore /
@@ -669,12 +671,15 @@
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是全局唯一的渠道
   偏好，同时决定热榜 / 歌单与搜索，持久化在 `kDiscoverChannelKey`。资料页只处理
   「渠道被停用」的 UI 回退；顶部渠道下拉在所有 tab（含搜索）左侧常显；当前渠道
-  不支持搜索时隐藏搜索 tab，Ctrl+F 显示「当前渠道不支持搜索」空态。
+  任一搜索能力（song / artist / lyricSearch）都没有时才隐藏搜索 tab，Ctrl+F 显示
+  「当前渠道不支持搜索」空态。
 - **Leaderboard cover（榜单封面）** — `DiscoverProvider.loadLeaderboardCover` 按
-  board.id 缓存 / single-flight；平台轻量接口优先（wy `coverImgUrl`、tx `topInfo`、
-  kg `rank/info.imgurl`、kw `bang_info.pic`、mg `columnInfo.columnPicUrl`），失败或
-  缺失时用首曲封面兜底（B 站榜单即此路径），都没有则平台色 + 榜单图标占位。磁贴
-  只给可见项按需加载；榜单详情页复用同一份缓存 / future，封面未就绪不阻塞曲目首屏。
+  board.id 缓存成功结果 / single-flight（失败不缓存，可下次重试）；平台轻量接口优先
+  （wy `coverImgUrl`、tx `topInfo`、kg `rank/info.imgurl`、kw `bang_info.pic`、
+  mg `columnInfo.columnPicUrl`），接口正常但字段缺失时用首曲封面兜底（B 站榜单即此
+  路径）；有轻量接口的渠道请求异常时不回退完整曲目列表，避免并发拉全量榜单。都没有
+  则平台色 + 榜单图标占位。磁贴只给可见项按需加载；榜单详情页复用同一份缓存 /
+  future，封面未就绪不阻塞曲目首屏。
 - **Playlist tracks view（列表曲目视图）** — `LibraryProvider.playlistTracksView` +
   `ensurePlaylistTracks`：页面只读 `PlaylistTracksView`（`tracks` + `LibraryReadState`
   的 loading / ready / failed）并请求加载，不再探测 `cachedTracksOf` /

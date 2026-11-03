@@ -252,6 +252,7 @@ class _LeaderboardCoverState extends State<_LeaderboardCover> {
       'wy' => (scheme.primaryContainer, scheme.onPrimaryContainer),
       'tx' => (scheme.secondaryContainer, scheme.onSecondaryContainer),
       'kg' => (scheme.tertiaryContainer, scheme.onTertiaryContainer),
+      'kw' => (scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
       'mg' => (scheme.primaryContainer, scheme.onPrimaryContainer),
       'bili' => (scheme.secondaryContainer, scheme.onSecondaryContainer),
       _ => (scheme.surfaceContainerHighest, scheme.onSurfaceVariant),

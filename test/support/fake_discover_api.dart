@@ -64,6 +64,9 @@ class FakeDiscoverSource implements DiscoverSource {
   }
 
   @override
+  bool get hasLeaderboardCoverEndpoint => false;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     leaderboardCalls++;
     if (!coverlessLeaderboardTracks) return _guard([track]);

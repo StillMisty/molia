@@ -54,8 +54,8 @@ class SearchProvider extends ChangeNotifier {
   /// 当前搜索渠道（与 `DiscoverProvider.channelKey` 同源）。
   ///
   /// 允许是当前版本不可搜索的渠道（脚本未加载 / 渠道无搜索能力）：
-  /// 此时 [activeSource] 为 null、[hasActiveSearchSource] 为 false，UI 显示
-  /// 不支持搜索的空态，而不是回退去搜别的渠道。
+  /// 此时 [hasActiveSearchSource] 为 false（activeSource 可能已注册但能力位
+  /// 全 false），UI 显示不支持搜索的空态，而不是回退去搜别的渠道。
   String _activeSourceKey = '';
 
   /// 三种搜索类型各一份分页分支（行形状不同，类型留在分支里）。
@@ -141,7 +141,7 @@ class SearchProvider extends ChangeNotifier {
   /// 当前渠道 key（`''` = 尚未确定；不是「全部来源」）。
   String get activeSourceKey => _activeSourceKey;
 
-  /// 当前渠道的搜索描述；渠道当前不可搜索（无能力 / 脚本未加载）时为 null。
+  /// 当前渠道的搜索描述；渠道未注册 / 脚本未加载时为 null。
   SourceDescriptor? get activeSource {
     for (final descriptor in sourceChannels) {
       if (descriptor.key == _activeSourceKey) return descriptor;
@@ -150,7 +150,10 @@ class SearchProvider extends ChangeNotifier {
   }
 
   /// 当前渠道是否真的可搜索（Ctrl+F / 空态的唯一判据）。
-  bool get hasActiveSearchSource => activeSource != null;
+  ///
+  /// 不能用 `activeSource != null`：已注册但 search / artist / lyricSearch
+  /// 全为 false 的渠道也要按「不支持搜索」处理。
+  bool get hasActiveSearchSource => supportedSearchKinds.isNotEmpty;
 
   /// 当前关键词已提交、但当前类型还没有真正发起搜索（防抖窗口 / 切类型）。
   ///
@@ -387,22 +390,37 @@ class SearchProvider extends ChangeNotifier {
     _ensureKindSupported();
 
     final keyword = _searchQuery.trim();
-    final current = _controls[_kind]!;
-    if (keyword.isNotEmpty && current.query == keyword) {
-      // 当前渠道晚到（例如脚本加载完成）时补首屏；其它类型在切过去时由
-      // selectSearchKind 的 ensureSources 路径补齐。
-      unawaited(current.ensureSources());
+    if (keyword.isNotEmpty &&
+        supportedSearchKinds.isNotEmpty &&
+        !(_debounceTimer?.isActive ?? false)) {
+      final current = _controls[_kind]!;
+      if (current.query == keyword) {
+        // 当前渠道晚到（例如脚本加载完成）时补首屏；其它类型在切过去时由
+        // selectSearchKind 的 ensureSources 路径补齐。
+        unawaited(current.ensureSources());
+      } else {
+        // 切到暂不可搜索的渠道时 setActiveSource 已清空执行体（query 为空）；
+        // 能力补齐后必须主动按当前关键词重搜，不能等用户重新输入。
+        unawaited(current.search(keyword));
+      }
     }
     notifyListeners();
   }
 
-  /// 默认渠道：第一个可搜索来源；都不支持搜索时退回第一个可用描述。
+  /// 默认渠道：第一个具备任一搜索能力的来源；都不支持搜索时退回第一个描述。
   String _defaultActiveSourceKey() {
     final channels = sourceChannels;
     for (final descriptor in channels) {
-      if (descriptor.capabilities.search) return descriptor.key;
+      if (_hasAnySearchCapability(descriptor)) return descriptor.key;
     }
     return channels.isEmpty ? '' : channels.first.key;
+  }
+
+  static bool _hasAnySearchCapability(SourceDescriptor descriptor) {
+    final capabilities = descriptor.capabilities;
+    return capabilities.search ||
+        capabilities.artist ||
+        capabilities.lyricSearch;
   }
 
   /// 当前 kind 不被渠道支持时回退到第一个支持的 kind（优先 song）。

@@ -98,6 +98,7 @@ void main() {
     Widget view, {
     double width = 1200,
     TextScaler textScaler = TextScaler.noScaling,
+    SearchProvider? provider,
   }) async {
     tester.view.physicalSize = Size(width, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -111,7 +112,9 @@ void main() {
           coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
-          ChangeNotifierProvider<SearchProvider>.value(value: search),
+          ChangeNotifierProvider<SearchProvider>.value(
+            value: provider ?? search,
+          ),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -450,6 +453,49 @@ void main() {
     await tester.pump();
     expect(openedAll, 1, reason: '底部出口交给宿主的「查看全部结果」');
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('已注册但无搜索能力：页面版 / 遮罩版都显示 unsupported', (tester) async {
+    final script = FakeMusicSource(
+      'script',
+      capabilities: const SourceCapabilities(),
+    );
+    final scriptRegistry = FakeSourceRegistry({'script': script});
+    final provider = SearchProvider(
+      playback,
+      catalogService: CatalogService(registry: scriptRegistry),
+      sourceRegistry: scriptRegistry,
+    );
+    addTearDown(provider.dispose);
+    expect(provider.activeSource, isNotNull);
+    expect(provider.hasActiveSearchSource, isFalse);
+
+    for (final variant in [
+      SearchResultsVariant.page,
+      SearchResultsVariant.docked,
+    ]) {
+      await pumpView(
+        tester,
+        SearchResultsView(
+          variant: variant,
+          onPlay: (_) {},
+          onOpenArtist: variant == SearchResultsVariant.page
+              ? (sourceKey, artistId, {fallbackName}) async {}
+              : null,
+          onOpenAllResults: variant == SearchResultsVariant.docked
+              ? () {}
+              : null,
+        ),
+        provider: provider,
+      );
+      expect(
+        find.text(l10n.searchChannelUnsupported),
+        findsOneWidget,
+        reason: '$variant 必须命中 unsupported 空态',
+      );
+      expect(find.text(l10n.searchIdleHint), findsNothing);
+      expect(find.text(l10n.searchNoSourcesTitle), findsNothing);
+    }
+  });
 
   testWidgets('页面版式：当前渠道不支持搜索显示专用空态', (tester) async {
     await pumpView(

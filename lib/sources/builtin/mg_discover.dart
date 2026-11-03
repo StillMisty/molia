@@ -77,6 +77,9 @@ class MgDiscoverSource extends DiscoverSource {
   ];
 
   @override
+  bool get hasLeaderboardCoverEndpoint => true;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return _fetchLeaderboard(bangid);
   }

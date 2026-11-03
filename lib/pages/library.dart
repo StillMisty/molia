@@ -19,6 +19,14 @@ import '../widgets/shell_page_visibility.dart';
 import '../widgets/settings/settings_sheet.dart';
 import '../widgets/shell_reselect.dart';
 
+/// 当前渠道是否具备任一搜索能力（单曲 / 歌手 / 按歌词搜歌）。
+///
+/// 不能用 `capabilities.search` 单判：渠道可能只有歌手或歌词搜索能力。
+bool sourceSupportsAnySearch(SourceDescriptor source) {
+  final capabilities = source.capabilities;
+  return capabilities.search || capabilities.artist || capabilities.lyricSearch;
+}
+
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }
 
@@ -189,9 +197,12 @@ class _LibraryState extends State<Library> {
         current != null &&
         current.discoverable &&
         discover.channelKey == current.key;
+    final currentSupportsSearch =
+        current != null && sourceSupportsAnySearch(current);
     final visibleTabs = <_LibraryTab>[
-      // 搜索 tab 跟随当前渠道：渠道不支持搜索就隐藏（Ctrl+F 仍可打开）。
-      if (current != null && current.capabilities.search) _LibraryTab.search,
+      // 搜索 tab 跟随当前渠道：任一搜索能力（单曲 / 歌手 / 歌词）都显示；
+      // 完全无搜索能力才隐藏（Ctrl+F 仍可打开并显示 unsupported 空态）。
+      if (currentSupportsSearch) _LibraryTab.search,
       if (discoverActive && discover.supportsLeaderboards)
         _LibraryTab.leaderboards,
       if (discoverActive && discover.supportsPlaylists) _LibraryTab.playlists,

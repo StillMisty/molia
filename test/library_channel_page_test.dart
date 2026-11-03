@@ -168,6 +168,26 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  test('当前渠道任一搜索能力都视为可显示搜索 tab', () {
+    bool supports(domain.SourceCapabilities capabilities) =>
+        sourceSupportsAnySearch(
+          domain.SourceDescriptor(
+            key: 'test',
+            displayName: '测试',
+            kind: domain.SourceKind.builtin,
+            capabilities: capabilities,
+          ),
+        );
+
+    expect(supports(const domain.SourceCapabilities(search: true)), isTrue);
+    expect(supports(const domain.SourceCapabilities(artist: true)), isTrue);
+    expect(
+      supports(const domain.SourceCapabilities(lyricSearch: true)),
+      isTrue,
+    );
+    expect(supports(const domain.SourceCapabilities()), isFalse);
+  });
+
   testWidgets('无搜索来源：搜索 tab 隐藏；发现渠道与搜索互不影响', (tester) async {
     search = buildSearch(const []);
     await pumpLibrary(tester);

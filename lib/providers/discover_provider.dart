@@ -213,7 +213,7 @@ class DiscoverProvider extends ChangeNotifier {
   /// 按需加载榜单封面：先问平台的轻量接口，失败再用首曲封面兜底。
   ///
   /// 只由可见磁贴触发（SliverGrid 懒构建），不会在打开热榜 tab 时并发拉
-  /// 全部榜单的完整曲目列表；结果（包括 null）按 board.id 缓存。
+  /// 全部榜单的完整曲目列表；成功封面按 board.id 缓存，失败不缓存以便重试。
   Future<String?> loadLeaderboardCover(DiscoverLeaderboard board) {
     if (_leaderboardCovers.containsKey(board.id)) {
       return Future.value(_leaderboardCovers[board.id]);
@@ -225,13 +225,14 @@ class DiscoverProvider extends ChangeNotifier {
     late final Future<String?> request;
     request = _resolveLeaderboardCover(source, board)
         .then((value) {
-          _leaderboardCovers[board.id] = value;
+          // 只缓存成功结果：失败 / 无封面时下一次调用可以重试，避免一次
+          // 瞬时网络错误把占位钉死到本次会话结束。
+          if (value != null && value.isNotEmpty) {
+            _leaderboardCovers[board.id] = value;
+          }
           return value;
         })
-        .catchError((Object _) {
-          _leaderboardCovers[board.id] = null;
-          return null;
-        })
+        .catchError((Object _) => null)
         .whenComplete(() {
           _leaderboardCoverLoads.remove(board.id);
         });
@@ -243,12 +244,16 @@ class DiscoverProvider extends ChangeNotifier {
     DiscoverSource source,
     DiscoverLeaderboard board,
   ) async {
+    var directFailed = false;
     try {
       final direct = (await source.leaderboardCover(board.bangid))?.trim();
       if (direct != null && direct.isNotEmpty) return direct;
     } catch (_) {
-      // 平台没有轻量封面接口 / 请求失败：继续用首曲封面兜底。
+      directFailed = true;
     }
+    // 有轻量封面接口但请求异常：不回退完整曲目列表，避免网络异常时多个
+    // 可见磁贴同时拉整张榜单；等下一次可见 / 详情页打开时再重试。
+    if (directFailed && source.hasLeaderboardCoverEndpoint) return null;
     try {
       final tracks = await source.leaderboardTracks(board.bangid);
       for (final track in tracks) {

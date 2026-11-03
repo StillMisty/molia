@@ -573,6 +573,73 @@ void main() {
     expect(kw.searchCalls, 1, reason: '不回到旧渠道补搜');
   });
 
+  test('已注册但无搜索能力：hasActiveSearchSource 为 false', () async {
+    final script = _FakeMusicSource('script');
+    final registry = _FakeRegistry(
+      {'script': script},
+      [
+        _descriptor(
+          'script',
+          '脚本源',
+          capabilities: const domain.SourceCapabilities(),
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    expect(provider.activeSourceKey, 'script');
+    expect(provider.activeSource, isNotNull, reason: '渠道已注册');
+    expect(provider.hasActiveSearchSource, isFalse, reason: '能力位全 false');
+    expect(provider.supportedSearchKinds, isEmpty);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => !provider.isSearching);
+    expect(provider.songGroups, isEmpty);
+    expect(script.searchCalls, 0);
+  });
+
+  test('已有查询时切到暂不可搜索渠道，能力补齐后自动补搜', () async {
+    final kw = _FakeMusicSource('kw');
+    final script = _FakeMusicSource('script');
+    final registry = _FakeRegistry(
+      {'kw': kw, 'script': script},
+      [
+        _descriptor('kw', '酷我'),
+        _descriptor(
+          'script',
+          '脚本源',
+          capabilities: const domain.SourceCapabilities(),
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    expect(kw.searchCalls, 1);
+
+    provider.setActiveSource('script');
+    expect(provider.hasActiveSearchSource, isFalse);
+    expect(provider.songGroups, isEmpty, reason: '切渠道已清空旧结果');
+
+    // 脚本晚到：同一个 key 变为可搜索，当前关键词仍在 provider 上。
+    registry.setDescriptors([
+      _descriptor('kw', '酷我'),
+      _descriptor('script', '脚本源'),
+    ]);
+    await _waitUntil(
+      () =>
+          script.searchCalls == 1 &&
+          provider.songGroups.length == 1 &&
+          provider.songGroups.single.source.key == 'script' &&
+          provider.songGroups.single.items.isNotEmpty,
+    );
+    expect(provider.searchResults.single.id.uri, 'script:hello-1');
+    expect(kw.searchCalls, 1, reason: '不回到旧渠道补搜');
+  });
+
   test('supportedSearchKinds 只看当前渠道；不支持的类型自动回退（优先 song）', () async {
     final kw = _FakeMusicSource(
       'kw',

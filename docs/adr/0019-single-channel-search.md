@@ -26,16 +26,18 @@ ADR-0018 把搜索做成「当前搜索类型 × 所有可搜索来源」的并�
    `kDiscoverChannelKey`）同时决定热榜 / 歌单与搜索。`SearchProvider` 不再
    持有来源过滤偏好，`kSearchSourceFilter` 与来源 chips 全部删除。
 2. **搜索只搜当前渠道**：`SearchProvider.activeSourceKey` 与
-   `DiscoverProvider.channelKey` 同源；`activeSource` / `hasActiveSearchSource`
-   由当前 registry 描述推导。`supportedSearchKinds` 只看当前渠道能力位，
-   当前类型不被支持时回退到第一个支持的 kind（优先 `song`）。
+   `DiscoverProvider.channelKey` 同源；`hasActiveSearchSource` 以
+   `supportedSearchKinds.isNotEmpty` 为准（已注册但 search / artist /
+   lyricSearch 全 false 的渠道仍算不可搜索）。`supportedSearchKinds` 只看当前
+   渠道能力位，当前类型不被支持时回退到第一个支持的 kind（优先 `song`）。
 3. **切换渠道即重搜**：`setActiveSource` 清空所有旧结果并按当前关键词在
    新渠道重搜；空 key 回到第一个可搜索渠道，**不再表示「全部来源」**。
    当前渠道不可搜索（脚本未加载 / 无搜索能力）时不发请求，等 registry
-   出现该渠道后按当前关键词补首屏。
+   出现该渠道后按当前关键词补首屏（即使切渠道时已清空执行体，也要主动重搜）。
 4. **发现页渠道常显**：顶部渠道下拉在搜索 / 热榜 / 歌单所有 tab 左侧常显
-   （手机 icon-only tab、桌面 icon + 文案，保持单行）。当前渠道不支持搜索时
-   隐藏搜索 tab；当前渠道既不能搜索也没有发现内容时保留顶部下拉，正文显示
+   （手机 icon-only tab、桌面 icon + 文案，保持单行）。当前渠道任一搜索能力
+   （song / artist / lyricSearch）都没有时才隐藏搜索 tab；当前渠道既不能搜索
+   也没有发现内容时保留顶部下拉，正文显示
    「当前渠道没有可用内容」；只有全部渠道停用才显示设置引导。
 5. **Ctrl+F 组合搜索条**：遮罩顶部是一颗外层搜索胶囊，内部左侧渠道下拉、
    中间细分割线、右侧输入 + 清除键；删除回退箭头，关闭仍用 Esc / 点击遮罩。
