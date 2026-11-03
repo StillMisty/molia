@@ -1,6 +1,8 @@
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
+import 'package:molia/domain/models/download.dart';
+import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -142,6 +144,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   }
 
+  /// 挂载独立的收藏按钮（最小宿主：只依赖播放 provider 与资料库）。
+  Future<void> pumpFavoriteButton(
+    WidgetTester tester,
+    LibraryProvider library,
+    Track track,
+  ) async {
+    backend.emit(
+      BackendSnapshot(
+        current: track,
+        queue: [track],
+        currentIndex: 0,
+        isPlaying: false,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+      ),
+    );
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
+          coverStoreProvider(),
+          ChangeNotifierProvider<LibraryProvider>.value(value: library),
+        ],
+        child: MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            ...GlobalMaterialLocalizations.delegates,
+          ],
+          supportedLocales: const [Locale('zh')],
+          home: const Scaffold(body: Center(child: NowPlayingFavoriteButton())),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
   double playerHeight(WidgetTester tester) =>
       tester.getSize(find.byType(Player)).height;
 
@@ -246,6 +285,69 @@ void main() {
       findsOneWidget,
       reason: '图标不因失败翻转',
     );
+  });
+
+  testWidgets('收藏按钮：本地缓存行成功收藏后图标变实心', (tester) async {
+    final repository = FakeLibraryRepository();
+    addTearDown(repository.dispose);
+    final library = LibraryProvider(
+      repository: repository,
+      playbackProvider: playback,
+    );
+    addTearDown(library.dispose);
+
+    // 缓存行保留原曲身份；空 raw 时播放 id 回退「标题-歌手」，收藏键必须
+    // 与播放页读的是同一个 TrackId。
+    final track = library.trackFromHistoryEntry(
+      const PlayHistoryEntry(
+        sourceKey: 'wy',
+        songId: 'cached-1',
+        title: '缓存行',
+        artist: '本地歌手',
+        raw: <String, dynamic>{},
+        playedAt: 1,
+      ),
+    );
+    await pumpFavoriteButton(tester, library, track);
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    await tester.tap(find.byType(M3EIconButton));
+    await tester.pumpAndSettle();
+
+    expect(library.isFavorite(track.id.sourceKey, track.id.id), isTrue);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+  });
+
+  testWidgets('收藏按钮：本地下载副本成功收藏后图标变实心', (tester) async {
+    final repository = FakeLibraryRepository();
+    addTearDown(repository.dispose);
+    final library = LibraryProvider(
+      repository: repository,
+      playbackProvider: playback,
+    );
+    addTearDown(library.dispose);
+
+    const record = DownloadedTrack(
+      originSourceKey: 'tx',
+      originSongId: 'abc',
+      title: '下载副本',
+      artist: '歌手',
+      filePath: '/tmp/a.mp3',
+      downloadedAt: 1,
+    );
+    final track = library.trackFromPlaylistTrack(
+      record.toPlaylistTrack(addedAt: 1),
+    );
+    expect(track.id.sourceKey, kLocalSourceKey);
+
+    await pumpFavoriteButton(tester, library, track);
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    await tester.tap(find.byType(M3EIconButton));
+    await tester.pumpAndSettle();
+
+    expect(library.isFavorite(track.id.sourceKey, track.id.id), isTrue);
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
   });
 
   testWidgets('切换行：小圆点常显，无收起/展开按钮', (tester) async {

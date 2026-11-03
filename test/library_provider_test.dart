@@ -730,6 +730,75 @@ void main() {
     );
   });
 
+  test('收藏键整表读取在途时收藏：旧快照不能覆盖刚写入的键', () async {
+    // 先建好收藏列表并完成首轮加载，避免本轮 toggle 又触发列表创建
+    // （列表创建会启动另一次校准，测不到 ensure 的在途覆盖）。
+    await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: 'seed',
+      title: 'Seed',
+      raw: {'songId': 'seed'},
+    );
+    await settle();
+    await provider.refreshPlaylists(force: true);
+    await provider.ensureFavoritesLoaded(force: true);
+    await settle();
+
+    final staleKeys = await repository.favoriteKeys();
+    repository.favoriteKeysCalls = 0;
+    final gate = Completer<Set<String>>();
+    repository.nextFavoriteKeysSnapshot = gate;
+
+    // 启动一次仍在途的整表读取（对应启动时收藏页的 ensureFavoritesLoaded）。
+    final ensure = provider.ensureFavoritesLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(repository.favoriteKeysCalls, 1);
+
+    // 读取未落地时收藏新曲目：立即打补丁并记录待重放状态。
+    final outcome = await provider.toggleFavorite(
+      sourceKey: 'wy',
+      songId: '1',
+      title: 'Song 1',
+      raw: {'songId': 1},
+    );
+    expect(outcome.isFailure, isFalse);
+    expect(outcome.isFavorite, isTrue);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.isFavorite('wy', '1'), isTrue);
+
+    // 不含新曲目的旧快照最后落地：重放后键必须保留。
+    gate.complete(staleKeys);
+    await ensure;
+    await settle();
+
+    expect(
+      provider.isFavorite('wy', '1'),
+      isTrue,
+      reason: '在途旧快照不能覆盖已落库的收藏（播放页心形会回空心）',
+    );
+  });
+
+  test('收藏键两个在途读取：后发起的快照优先，旧快照不能回滚', () async {
+    final staleGate = Completer<Set<String>>();
+    repository.nextFavoriteKeysSnapshot = staleGate;
+    final staleRead = provider.ensureFavoritesLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+
+    final freshGate = Completer<Set<String>>();
+    repository.nextFavoriteKeysSnapshot = freshGate;
+    final freshRead = provider.ensureFavoritesLoaded(force: true);
+    await Future<void>.delayed(Duration.zero);
+
+    // 后发起的读取先落地，旧读取最后落地：旧结果必须丢弃。
+    freshGate.complete({'wy:fresh'});
+    await freshRead;
+    staleGate.complete({});
+    await staleRead;
+
+    expect(provider.isFavorite('wy', 'fresh'), isTrue);
+    expect(provider.isFavorite('wy', 'stale'), isFalse);
+  });
+
   test('导入后列表缓存刷新，重复导入幂等', () async {
     final first = await provider.importLxmcBytes(lxmcBytes([track(1)]));
     expect(first.imported, 1);

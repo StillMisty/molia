@@ -29,6 +29,12 @@ import 'playback_provider.dart';
 /// 资料库整表读取的意图：静默校准保持当前数据可见，显式读取可以翻 loading。
 enum _LoadMode { quiet, explicit }
 
+/// 读取期间记录的收藏切换：最终状态 + 新增行（仅收藏时有值）。
+///
+/// 行必须一起重放：旧列表快照落地后会删掉新增行，只补键会让收藏列表
+/// 少一首（键已收藏、列表里却没有）。
+typedef _PendingFavoriteState = ({bool favorite, PlaylistTrack? track});
+
 /// 列表曲目读取视图：页面只读读取阶段，不探测缓存内部。
 class PlaylistTracksView {
   const PlaylistTracksView({required this.tracks, required this.state});
@@ -102,14 +108,24 @@ class LibraryProvider extends ChangeNotifier {
   /// 查询期间到达、尚未合并进内存的单条历史写入（按到达顺序）。
   List<PlayHistoryEntry> _pendingHistoryEntries = const [];
 
-  /// 收藏全量校准进行中的数量。
+  /// 收藏键读取代际：每次整表读取自增，只有最新一代能写回缓存。
   ///
-  /// 校准的 `favoriteKeys` / 列表 / 计数来自多个 await，期间的本地 toggle
-  /// 可能落在旧快照之外。计数器归零后重放队列，保证最终状态包含本地写入。
+  /// 启动时的 [ensureFavoritesLoaded] 与变更后的静默校准可能重叠；旧读取的
+  /// 快照落地时可能早于一次收藏写入。直接覆盖会让 UI 回到旧状态（真机表现：
+  /// 收藏已入库、收藏列表也有，但播放页心形仍是空心，重启后才恢复）。
+  int _favoriteKeysReadGeneration = 0;
+
+  /// 收藏键整表读取进行中的数量。
+  ///
+  /// 读取期间的本地 toggle 必须记录，等最后一个读取落地后重放：旧快照可能
+  /// 早于这次写入。计数器归零前不能清空待重放状态。
   int _favoritesCalibrationsInFlight = 0;
 
-  /// 校准期间到达的收藏切换（立即打补丁，同时排队等待重放）。
-  final List<FavoriteToggle> _pendingFavoriteToggles = [];
+  /// 读取期间发生的收藏切换（key → 最新状态与新增行）。
+  ///
+  /// 同一个 key 只保留最后一次状态：先收藏再取消时重放「取消」，不能把
+  /// 已被删除的 key 重新加回来；新增行跟着最终状态一起保留。
+  final Map<String, _PendingFavoriteState> _pendingFavoriteStates = {};
 
   bool _disposed = false;
   Future<void>? _pendingReload;
@@ -343,15 +359,27 @@ class LibraryProvider extends ChangeNotifier {
 
   /// 单曲收藏切换的内存补丁（不查库）。
   ///
-  /// [toggle] 来自写入侧，必定对应一次真实落库。校准进行中时先排队：校准的
-  /// 多个快照可能早于这次写入，立即打补丁后仍会被旧结果覆盖；等最后一个校准
-  /// 结束再重放一次同样的幂等补丁。重放期间计数不再排队（计数器已归零）。
+  /// [toggle] 来自写入侧，必定对应一次真实落库。校准进行中时先记录最终
+  /// 状态：读取快照可能早于这次写入，立即打补丁后仍会被旧结果覆盖；等最后
+  /// 一个读取结束再重放一次（幂等）。重放期间计数器已归零，不会再记录。
   void _applyFavoriteToggle(FavoriteToggle toggle) {
-    if (_favoritesCalibrationsInFlight > 0) {
-      _pendingFavoriteToggles.add(toggle);
-    }
+    _recordFavoriteState(toggle.key, toggle.favorite, track: toggle.track);
     _patchFavoriteToggle(toggle);
     _notify();
+  }
+
+  /// 记录读取期间的收藏切换（只保留同一 key 的最后状态）。
+  ///
+  /// 没有读取在途时不需要记录：后续读取一定发生在这次写入之后，快照本身
+  /// 就包含它。同一 key 已有记录时保留已有新增行：调用方先补键、变更事件
+  /// 后到（带落库行）的路径不能把行丢掉。
+  void _recordFavoriteState(String key, bool favorite, {PlaylistTrack? track}) {
+    if (_favoritesCalibrationsInFlight <= 0) return;
+    final previous = _pendingFavoriteStates[key];
+    _pendingFavoriteStates[key] = (
+      favorite: favorite,
+      track: favorite ? (track ?? previous?.track) : null,
+    );
   }
 
   /// 单曲切换载荷 → 收藏补丁（立即应用与校准后重放共用）。
@@ -455,16 +483,51 @@ class LibraryProvider extends ChangeNotifier {
     _playlistsRevision++;
   }
 
-  /// 校准结束时重放期间排队的 toggle；只在最后一个校准落地后调用。
+  /// 校准结束时重放期间记录的切换；只在最后一个读取落地后调用。
   void _finishFavoritesCalibration() {
     if (_favoritesCalibrationsInFlight > 0) _favoritesCalibrationsInFlight--;
     if (_favoritesCalibrationsInFlight > 0) return;
-    if (_pendingFavoriteToggles.isEmpty) return;
-    final queued = List<FavoriteToggle>.of(_pendingFavoriteToggles);
-    _pendingFavoriteToggles.clear();
-    // 重放走补丁本体而不是 _applyFavoriteToggle：不会再次入队。
-    for (final toggle in queued) {
-      _patchFavoriteToggle(toggle);
+    if (_pendingFavoriteStates.isEmpty) return;
+    final states = Map<String, _PendingFavoriteState>.of(
+      _pendingFavoriteStates,
+    );
+    _pendingFavoriteStates.clear();
+    // 重放走补丁本体而不是 _applyFavoriteToggle：不会再次记录。
+    // 同一 key 只保留最后状态，先收藏再取消不会把 key 加回来；行跟着
+    // 最终状态一起重放，旧列表快照删掉的行要补回来。
+    _patchFavorites(
+      add: [
+        for (final entry in states.entries)
+          if (entry.value.favorite) entry.key,
+      ],
+      remove: [
+        for (final entry in states.entries)
+          if (!entry.value.favorite) entry.key,
+      ],
+      rows: [
+        for (final entry in states.entries)
+          if (entry.value.track != null) entry.value.track!,
+      ],
+    );
+  }
+
+  /// 收藏键整表读取的唯一实现：只允许最新一次读取写回缓存。
+  ///
+  /// 返回实际写回的读取代际；旧代际的结果直接丢弃（null）。为什么需要代际：
+  /// 启动 ensure 与变更后的静默校准会重叠，旧读取最后落地时数据库里可能已经
+  /// 有更新的收藏写入，覆盖会让播放页心形回到空心。
+  Future<int?> _readFavoriteKeys() async {
+    final generation = ++_favoriteKeysReadGeneration;
+    try {
+      final keys = await _repository.favoriteKeys();
+      if (_disposed || generation != _favoriteKeysReadGeneration) return null;
+      _favoriteKeys = keys;
+      _favoriteKeysAuthoritative = true;
+      _favoritesLoaded = true;
+      return generation;
+    } catch (e) {
+      debugPrint('[Library] 刷新收藏状态失败: $e');
+      return null;
     }
   }
 
@@ -568,31 +631,29 @@ class LibraryProvider extends ChangeNotifier {
     'library.favorites.refresh',
     () async {
       _favoritesRevision++;
-      // 新一次整表校准覆盖此前的本地 toggle（都已落库）：旧队列丢弃，
-      // 避免校准后重放已被后续删除的 toggle。校准期间的新 toggle 会重新入队。
-      _pendingFavoriteToggles.clear();
+      // 这次校准由「无载荷的收藏变化」（批量 / 同步 / 导入）或列表结构变化
+      // 触发：数据库已经是这些变化之后的状态，旧的在途 toggle 状态已被覆盖，
+      // 清掉待重放状态，让本轮快照 + 之后的新 toggle 决定最终结果。
+      _pendingFavoriteStates.clear();
       _favoritesCalibrationsInFlight++;
       final generation = _browseGeneration;
       try {
-        try {
-          _favoriteKeys = await _repository.favoriteKeys();
-          _favoriteKeysAuthoritative = true;
-          _favoritesLoaded = true;
-        } catch (e) {
-          debugPrint('[Library] 刷新收藏状态失败: $e');
-        }
+        final keyGeneration = await _readFavoriteKeys();
         final favoritesId = _favoritesPlaylistId;
         // 收藏键照常校准（托盘释放保留它）；曲目缓存已在释放时清空，
         // 这一轮结果不再写回，等页面重新 ensure 时读取。
-        if (generation == _browseGeneration &&
+        if (keyGeneration != null &&
+            keyGeneration == _favoriteKeysReadGeneration &&
+            generation == _browseGeneration &&
             favoritesId != null &&
             _tracksByPlaylist.containsKey(favoritesId)) {
           try {
             final tracks = await _repository
                 .listPlaylistTracks(favoritesId)
                 .timeout(_readTimeout);
-            // 请求期间可能托盘释放：这一份不再写回已清空的缓存。
-            if (generation == _browseGeneration) {
+            // 请求期间可能托盘释放或已有更新的收藏读取：这一份不再写回。
+            if (generation == _browseGeneration &&
+                keyGeneration == _favoriteKeysReadGeneration) {
               _tracksByPlaylist[favoritesId] = tracks;
             }
           } catch (e) {
@@ -666,16 +727,19 @@ class LibraryProvider extends ChangeNotifier {
     await _loadPlaylists(_LoadMode.explicit);
   }
 
+  /// 收藏键整表读取（首屏 / 导入后 / 失败重试）。
+  ///
+  /// 与静默校准共用同一套读取代际与在途切换重放：读取期间用户点了收藏，
+  /// 旧快照落地后不会被覆盖（否则数据库已收藏，播放页心形仍是空心）。
   Future<void> ensureFavoritesLoaded({bool force = false}) async {
     if (_favoritesLoaded && !force) return;
     _favoritesRevision++;
+    _favoritesCalibrationsInFlight++;
     try {
-      _favoriteKeys = await _repository.favoriteKeys();
-      _favoriteKeysAuthoritative = true;
-      _favoritesLoaded = true;
+      await _readFavoriteKeys();
+    } finally {
+      _finishFavoritesCalibration();
       _notify();
-    } catch (e) {
-      debugPrint('[Library] 加载收藏状态失败: $e');
     }
   }
 
@@ -1146,6 +1210,9 @@ class LibraryProvider extends ChangeNotifier {
       favorite = next;
       // 立即更新本地键集合，UI 无需等待 changes 流的下一次重载。
       final key = '$sourceKey:$songId';
+      // 有整表读取在途时记录最终状态：读取快照可能早于这次写入，落地后
+      // 需要把它重放回去（否则库里有收藏、播放页心形仍空心）。
+      _recordFavoriteState(key, favorite);
       _patchFavorites(add: [if (favorite) key], remove: [if (!favorite) key]);
       _notify();
       return FavoriteToggleOutcome.success(favorite);
