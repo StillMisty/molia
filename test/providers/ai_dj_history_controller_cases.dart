@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/domain/models/track.dart';
@@ -87,7 +89,7 @@ AiDjBatch _decode(StoredAiBatch stored) => AiDjBatch(
 
 /// 统计批次键读取次数，验证按需加载缓存命中。
 class _CountingStore extends AiRecommendationStore {
-  _CountingStore({super.preferences, super.clock});
+  _CountingStore({super.preferences, super.clock, super.directoryProvider});
 
   int loadBatchCalls = 0;
 
@@ -129,11 +131,24 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late SharedPreferences prefs;
+  late Directory tempDir;
+
+  AiRecommendationStore newStore({DateTime Function()? clock}) =>
+      AiRecommendationStore(
+        preferences: prefs,
+        clock: clock ?? () => _now,
+        directoryProvider: () async => tempDir,
+      );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
+    tempDir = await Directory.systemTemp.createTemp('molia-ai-history-');
     _idSeed = 0;
+  });
+
+  tearDown(() async {
+    if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
   AiDjHistoryController buildController({
@@ -141,9 +156,7 @@ void main() {
     DateTime Function()? clock,
   }) {
     final controller = AiDjHistoryController(
-      store:
-          store ??
-          AiRecommendationStore(preferences: prefs, clock: clock ?? () => _now),
+      store: store ?? newStore(clock: clock),
       decode: _decode,
       encode: _encode,
       clock: clock ?? () => _now,
@@ -152,7 +165,7 @@ void main() {
   }
 
   test('init 加载索引 + active，详情仍按需加载', () async {
-    final store = AiRecommendationStore(preferences: prefs, clock: () => _now);
+    final store = newStore();
     await store.saveBatch(_encode(_batch('a')), makeActive: true);
     await store.saveBatch(
       _encode(_batch('b', generatedAt: _now.add(const Duration(minutes: 1)))),
@@ -169,7 +182,7 @@ void main() {
   });
 
   test('archive：makeActive 切换 active；inactive 只写历史', () async {
-    final store = AiRecommendationStore(preferences: prefs, clock: () => _now);
+    final store = newStore();
     final controller = buildController(store: store);
     await controller.init();
 
@@ -189,7 +202,7 @@ void main() {
   });
 
   test('updateActive：原位更新当前批并同步索引元数据', () async {
-    final store = AiRecommendationStore(preferences: prefs, clock: () => _now);
+    final store = newStore();
     final controller = buildController(store: store);
     await controller.init();
     await controller.archive(_batch('a'), makeActive: true);
@@ -212,7 +225,11 @@ void main() {
   });
 
   test('load：active 直接返回；历史详情缓存命中后不再读存储', () async {
-    final store = _CountingStore(preferences: prefs, clock: () => _now);
+    final store = _CountingStore(
+      preferences: prefs,
+      clock: () => _now,
+      directoryProvider: () async => tempDir,
+    );
     await store.saveBatch(_encode(_batch('a')), makeActive: true);
     await store.saveBatch(_encode(_batch('b')));
     final controller = buildController(store: store);
@@ -232,7 +249,7 @@ void main() {
   });
 
   test('setActive：只切换浏览批次；找不到时保持原 active', () async {
-    final store = AiRecommendationStore(preferences: prefs, clock: () => _now);
+    final store = newStore();
     final controller = buildController(store: store);
     await controller.init();
     await controller.archive(_batch('a'), makeActive: true);
@@ -250,7 +267,7 @@ void main() {
   });
 
   test('delete：删除 active 回退最近一批；删最后一批清空 active', () async {
-    final store = AiRecommendationStore(preferences: prefs, clock: () => _now);
+    final store = newStore();
     final controller = buildController(store: store);
     await controller.init();
     await controller.archive(_batch('a'), makeActive: true);
@@ -271,7 +288,7 @@ void main() {
   });
 
   test('clear：只保留 active 及其批次键', () async {
-    final store = AiRecommendationStore(preferences: prefs, clock: () => _now);
+    final store = newStore();
     final controller = buildController(store: store);
     await controller.init();
     await controller.archive(_batch('a'), makeActive: true);

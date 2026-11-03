@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/ai_dj.dart';
 import 'package:molia/services/ai/ai_recommendation_store.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 推荐历史持久化：索引 / 多批、删除回退、保留策略、损坏降级。
@@ -82,12 +87,31 @@ void main() {
 
   late SharedPreferences prefs;
   late AiRecommendationStore store;
+  late Directory tempDir;
   final now = DateTime(2026, 10, 21, 12);
+
+  File batchFile(String id) =>
+      File(p.join(tempDir.path, '${sha1.convert(utf8.encode(id))}.json'));
+
+  AiRecommendationStore buildStore({
+    SharedPreferences? preferences,
+    DateTime Function()? clock,
+    Future<Directory> Function()? directoryProvider,
+  }) => AiRecommendationStore(
+    preferences: preferences,
+    clock: clock ?? () => now,
+    directoryProvider: directoryProvider ?? () async => tempDir,
+  );
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
-    store = AiRecommendationStore(preferences: prefs, clock: () => now);
+    tempDir = await Directory.systemTemp.createTemp('molia-ai-history-');
+    store = buildStore(preferences: prefs);
+  });
+
+  tearDown(() async {
+    if (await tempDir.exists()) await tempDir.delete(recursive: true);
   });
 
   StoredAiBatch batch(
@@ -135,9 +159,11 @@ void main() {
     expect(index.entries.map((entry) => entry.id), ['c', 'b', 'a']);
     expect(index.activeBatchId, 'c');
     expect(index.entries[1].origin, AiDjOrigin.autoFeed);
+    expect(await batchFile('a').exists(), isTrue);
     expect(
       prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'),
-      isNotNull,
+      isNull,
+      reason: '批次只进文件，prefs 只保留索引',
     );
     expect((await store.loadBatch('b'))!.items.single.sourceName, '网易云音乐');
   });
@@ -153,17 +179,33 @@ void main() {
         origin: AiDjOrigin.refresh,
       ),
     );
-    for (final key in [
-      '${AiRecommendationStore.batchKeyPrefix}a',
-      '${AiRecommendationStore.batchKeyPrefix}b',
-      AiRecommendationStore.indexKey,
-    ]) {
-      final raw = prefs.getString(key);
-      expect(raw, isNotNull);
-      expect(raw!.contains('rawResponse'), isFalse);
+    final payloads = [
+      prefs.getString(AiRecommendationStore.indexKey)!,
+      await batchFile('a').readAsString(),
+      await batchFile('b').readAsString(),
+    ];
+    for (final raw in payloads) {
+      expect(raw.contains('rawResponse'), isFalse);
       expect(raw.contains('systemPrompt'), isFalse);
       expect(raw.contains('userPrompt'), isFalse);
     }
+    for (final id in ['a', 'b']) {
+      expect(
+        prefs.getString('${AiRecommendationStore.batchKeyPrefix}$id'),
+        isNull,
+      );
+    }
+  });
+
+  test('保存批次只写索引到 prefs，不产生旧批次键', () async {
+    await store.saveBatch(batch('a'), makeActive: true);
+    await store.saveBatch(
+      batch('b', generatedAt: now.add(const Duration(minutes: 1))),
+    );
+
+    expect(prefs.getKeys(), {AiRecommendationStore.indexKey});
+    expect(await batchFile('a').exists(), isTrue);
+    expect(await batchFile('b').exists(), isTrue);
   });
 
   test('删除 active：回退到最近一批；删除最后一批清空 active', () async {
@@ -177,7 +219,7 @@ void main() {
     expect(afterDelete.ok, isTrue);
     expect(afterDelete.index.activeBatchId, 'a');
     expect(afterDelete.index.entries.map((entry) => entry.id), ['a']);
-    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);
+    expect(await batchFile('b').exists(), isFalse);
 
     final empty = await store.deleteBatch('a');
     expect(empty.ok, isTrue);
@@ -195,15 +237,16 @@ void main() {
       for (final key in prefs.getKeys()) key: prefs.get(key)!,
     };
     final failing = _FailingIndexPrefs(values);
-    final failingStore = AiRecommendationStore(
-      preferences: failing,
-      clock: () => now,
-    );
+    final failingStore = buildStore(preferences: failing);
 
     final failed = await failingStore.deleteBatch('a');
 
     expect(failed.ok, isFalse);
-    expect(failingStore.loadBatch('a'), isNotNull, reason: '索引没写成功，批次载荷不能先被删掉');
+    expect(
+      await failingStore.loadBatch('a'),
+      isNotNull,
+      reason: '索引没写成功，批次载荷不能先被删掉',
+    );
     expect(
       (await failingStore.loadIndex()).entries.map((entry) => entry.id),
       containsAll(['a', 'b']),
@@ -213,7 +256,7 @@ void main() {
     final ok = await failingStore.deleteBatch('a');
 
     expect(ok.ok, isTrue);
-    expect(values['${AiRecommendationStore.batchKeyPrefix}a'], isNull);
+    expect(await batchFile('a').exists(), isFalse);
   });
 
   test('清空历史的写序：索引写失败时保留非 active 载荷', () async {
@@ -225,16 +268,13 @@ void main() {
       for (final key in prefs.getKeys()) key: prefs.get(key)!,
     };
     final failing = _FailingIndexPrefs(values);
-    final failingStore = AiRecommendationStore(
-      preferences: failing,
-      clock: () => now,
-    );
+    final failingStore = buildStore(preferences: failing);
 
     final failed = await failingStore.clearHistory();
 
     expect(failed.ok, isFalse);
     expect(
-      failingStore.loadBatch('b'),
+      await failingStore.loadBatch('b'),
       isNotNull,
       reason: '索引没写成功，非 active 载荷不能先被删掉',
     );
@@ -243,11 +283,11 @@ void main() {
     final ok = await failingStore.clearHistory();
 
     expect(ok.ok, isTrue);
-    expect(values['${AiRecommendationStore.batchKeyPrefix}b'], isNull);
-    expect(values['${AiRecommendationStore.batchKeyPrefix}a'], isNotNull);
+    expect(await batchFile('b').exists(), isFalse);
+    expect(await batchFile('a').exists(), isTrue);
   });
 
-  test('清空历史保留 active 与其批次键', () async {
+  test('清空历史保留 active 与其批次载荷', () async {
     await store.saveBatch(batch('a'), makeActive: true);
     await store.saveBatch(
       batch('b', generatedAt: now.add(const Duration(minutes: 1))),
@@ -261,12 +301,9 @@ void main() {
     expect(result.ok, isTrue);
     expect(result.index.entries.map((entry) => entry.id), ['a']);
     expect(result.index.activeBatchId, 'a');
-    expect(
-      prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'),
-      isNotNull,
-    );
-    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}b'), isNull);
-    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}c'), isNull);
+    expect(await batchFile('a').exists(), isTrue);
+    expect(await batchFile('b').exists(), isFalse);
+    expect(await batchFile('c').exists(), isFalse);
   });
 
   test('保留策略：最多 20 批，active 永不自动清理', () async {
@@ -284,11 +321,8 @@ void main() {
     expect(index.entries, hasLength(20));
     expect(index.activeBatchId, 'old-active');
     expect(index.entries.any((entry) => entry.id == 'old-active'), isTrue);
-    // 最老的非 active 批次键被同步删除。
-    expect(
-      prefs.getString('${AiRecommendationStore.batchKeyPrefix}b0'),
-      isNull,
-    );
+    // 最老的非 active 批次文件被同步删除。
+    expect(await batchFile('b0').exists(), isFalse);
   });
 
   test('保留策略：最多 400 首', () async {
@@ -320,21 +354,101 @@ void main() {
 
     final index = await store.loadIndex();
     expect(index.entries.map((entry) => entry.id), ['new']);
-    expect(
-      prefs.getString('${AiRecommendationStore.batchKeyPrefix}old'),
-      isNull,
-    );
+    expect(await batchFile('old').exists(), isFalse);
   });
 
   test('损坏索引 / 批次降级为空，不抛异常', () async {
     await prefs.setString(AiRecommendationStore.indexKey, 'not-json{{{');
     expect((await store.loadIndex()).entries, isEmpty);
 
-    await prefs.setString(
-      '${AiRecommendationStore.batchKeyPrefix}bad',
-      '{"items":',
-    );
+    await batchFile('bad').writeAsString('{"items":');
     expect(await store.loadBatch('bad'), isNull);
     expect(await store.loadBatch('missing'), isNull);
+  });
+
+  test('启动迁移：旧 prefs 批次转文件后删键，loadBatch 也兜底', () async {
+    final indexed = batch('indexed');
+    await prefs.setString(
+      AiRecommendationStore.indexKey,
+      jsonEncode({
+        'activeBatchId': indexed.id,
+        'entries': [indexed.toHistoryEntry().toJson()],
+      }),
+    );
+    await prefs.setString(
+      '${AiRecommendationStore.batchKeyPrefix}indexed',
+      jsonEncode(indexed.toJson()),
+    );
+
+    final migrated = buildStore(preferences: prefs);
+    final index = await migrated.loadIndex();
+
+    expect(index.entries.single.id, 'indexed');
+    expect(index.activeBatchId, 'indexed');
+    expect(await batchFile('indexed').exists(), isTrue);
+    expect(
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}indexed'),
+      isNull,
+      reason: '迁移成功才删旧键',
+    );
+    expect((await migrated.loadBatch('indexed'))!.id, 'indexed');
+
+    // 索引迁移之后才出现的孤儿旧键（例如旧版本晚写），loadBatch 仍要兜底。
+    final lazy = batch(
+      'lazy',
+      generatedAt: now.add(const Duration(minutes: 1)),
+    );
+    await prefs.setString(
+      '${AiRecommendationStore.batchKeyPrefix}lazy',
+      jsonEncode(lazy.toJson()),
+    );
+
+    expect((await migrated.loadBatch('lazy'))!.id, 'lazy');
+    expect(await batchFile('lazy').exists(), isTrue);
+    expect(
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}lazy'),
+      isNull,
+    );
+
+    // 幂等：再次读取不改变索引 / 文件。
+    expect((await migrated.loadIndex()).entries.single.id, 'indexed');
+    expect(await batchFile('lazy').exists(), isTrue);
+  });
+
+  test('迁移失败保留旧键，下次读取再试', () async {
+    final raw = jsonEncode(batch('a').toJson());
+    await prefs.setString('${AiRecommendationStore.batchKeyPrefix}a', raw);
+
+    final unavailable = buildStore(
+      preferences: prefs,
+      directoryProvider: () async => throw const FileSystemException('nope'),
+    );
+    await unavailable.loadIndex();
+    expect(
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'),
+      isNotNull,
+      reason: '目录不可用时不能删掉唯一的旧副本',
+    );
+
+    final retry = buildStore(preferences: prefs);
+    await retry.loadIndex();
+    expect(await batchFile('a').exists(), isTrue);
+    expect(prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'), isNull);
+  });
+
+  test('目录不可用时退回旧 prefs 键，历史仍可读写', () async {
+    final fallback = buildStore(
+      preferences: prefs,
+      directoryProvider: () async => throw const FileSystemException('nope'),
+    );
+
+    await fallback.saveBatch(batch('a'), makeActive: true);
+
+    expect(
+      prefs.getString('${AiRecommendationStore.batchKeyPrefix}a'),
+      isNotNull,
+    );
+    expect((await fallback.loadBatch('a'))!.id, 'a');
+    expect((await fallback.loadIndex()).activeBatchId, 'a');
   });
 }
