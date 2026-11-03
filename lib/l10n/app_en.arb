@@ -267,6 +267,7 @@
   "libraryTabPlaylists": "Playlists",
   "libraryChannelSelect": "Select channel",
   "libraryNoChannels": "All channels are disabled. Enable channels in Source Management.",
+  "discoverChannelUnavailable": "Nothing is available on this channel. Try another channel.",
   "libraryLoadFailed": "Couldn't load your library",
   "languageEnglish": "English",
   "languageSimplifiedChinese": "简体中文",
@@ -467,6 +468,7 @@
   "searchFailed": "Search failed",
   "searchNoSourcesTitle": "No sources available",
   "searchNoSourcesHint": "Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.",
+  "searchChannelUnsupported": "This channel doesn't support search. Try another channel.",
   "searchNoResultsInSource": "No results found in “{source}”",
   "@searchNoResultsInSource": {
     "placeholders": {
@@ -479,7 +481,6 @@
   "searchKindArtists": "Artists",
   "searchKindLyrics": "Lyrics",
   "searchLoadMoreFailed": "Failed to load more results",
-  "searchAllSources": "All sources",
   "searchSourcesLabel": "Search sources",
   "searchGroupEmpty": "No results",
   "searchLoadMore": "Load more",

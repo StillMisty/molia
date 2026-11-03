@@ -636,6 +636,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'All channels are disabled. Enable channels in Source Management.';
 
   @override
+  String get discoverChannelUnavailable =>
+      'Nothing is available on this channel. Try another channel.';
+
+  @override
   String get libraryLoadFailed => 'Couldn\'t load your library';
 
   @override
@@ -1038,6 +1042,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.';
 
   @override
+  String get searchChannelUnsupported =>
+      'This channel doesn\'t support search. Try another channel.';
+
+  @override
   String searchNoResultsInSource(String source) {
     return 'No results found in “$source”';
   }
@@ -1053,9 +1061,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchLoadMoreFailed => 'Failed to load more results';
-
-  @override
-  String get searchAllSources => 'All sources';
 
   @override
   String get searchSourcesLabel => 'Search sources';

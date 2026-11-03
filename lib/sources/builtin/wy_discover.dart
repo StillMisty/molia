@@ -16,10 +16,17 @@ class WyDiscoverSource extends DiscoverSource {
   List<DiscoverLeaderboard> get leaderboards => WyLeaderboard.boards;
 
   @override
+  bool get hasLeaderboardCoverEndpoint => true;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) async {
     final tracks = await WyLeaderboard.getTracks(bangid);
     return [for (final track in tracks) discoverTrackOf(track)];
   }
+
+  @override
+  Future<String?> leaderboardCover(String bangid) =>
+      WyLeaderboard.getCover(bangid);
 
   @override
   Future<DiscoverTags> tags() async {

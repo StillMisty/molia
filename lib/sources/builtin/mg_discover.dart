@@ -77,8 +77,49 @@ class MgDiscoverSource extends DiscoverSource {
   ];
 
   @override
+  bool get hasLeaderboardCoverEndpoint => true;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return _fetchLeaderboard(bangid);
+  }
+
+  /// 榜单封面：`columnInfo.columnPicUrl`（其次 small / recommend / 自定义图）。
+  @override
+  Future<String?> leaderboardCover(String bangid) {
+    return BuiltinSearch.transport.cached(
+      'mg:leaderboard-cover:$bangid',
+      () async {
+        final body = await lxHttpGet(
+          'https://app.c.nf.migu.cn/MIGUM2.0/v1.0/content/querycontentbyId.do'
+          '?columnId=$bangid&needAll=0',
+          headers: {
+            'Referer': 'https://app.c.nf.migu.cn/',
+            'User-Agent': _mobileUa,
+            'channel': '0146921',
+          },
+        );
+        if (body is! Map || body['code'] != _successCode) {
+          throw StateError('mg 榜单封面获取失败');
+        }
+        final info = body['columnInfo'];
+        if (info is! Map) throw StateError('mg 榜单封面解析失败');
+        for (final key in const [
+          'columnPicUrl',
+          'columnSmallpicUrl',
+          'recommendPicUrl',
+        ]) {
+          final url = MgSearch.fixCoverUrl(info[key]);
+          if (url != null && url.isNotEmpty) return url;
+        }
+        final custom = info['customizedPicUrls'];
+        if (custom is List && custom.isNotEmpty) {
+          final url = MgSearch.fixCoverUrl(custom.first);
+          if (url != null && url.isNotEmpty) return url;
+        }
+        throw StateError('mg 榜单封面为空');
+      },
+    );
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {

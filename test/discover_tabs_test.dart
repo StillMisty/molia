@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/domain/models/discover.dart';
 import 'package:molia/l10n/app_localizations.dart';
@@ -8,8 +10,10 @@ import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/discover_layout.dart';
 import 'package:molia/widgets/discover_leaderboards_tab.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
+import 'package:molia/widgets/detail_page/detail_cover_header.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/library_cover.dart';
+import 'package:molia/widgets/scoped_cover_image.dart';
 import 'package:molia/widgets/row_extent.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -85,9 +89,10 @@ void main() {
     WidgetTester tester,
     Widget tab, {
     double width = 1200,
+    double height = 2400,
     TextScaler textScaler = TextScaler.noScaling,
   }) async {
-    tester.view.physicalSize = Size(width, 2400);
+    tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -121,76 +126,67 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('发现页内容栏：宽屏左对齐限宽 960，手机整行铺满', (tester) async {
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    Future<void> pump(double width) async {
-      tester.view.physicalSize = Size(width, 800);
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: DiscoverContentFrame(
-              child: SizedBox.expand(key: Key('discoverContent')),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
-
-    await pump(1200);
-    final wide = tester.getRect(find.byKey(const Key('discoverContent')));
+  testWidgets('发现页全宽自适应：搜索栏 / 网格不再受 960 / 1600 上限', (tester) async {
+    await pumpTab(tester, const DiscoverPlaylistsTab(), width: 1600);
+    final gutter = discoverGutterOf(tester.element(find.byType(AppSearchBar)));
+    expect(gutter, 24);
     expect(
-      wide.width,
-      discoverContentMaxWidth + 48,
-      reason: '960 + 两侧 24 gutter',
+      tester.getSize(find.byType(AppSearchBar)).width,
+      1600 - gutter * 2,
+      reason: '搜索栏铺满可用内容宽，不再被 960 夹窄',
     );
-    expect(wide.left, 0, reason: '宽屏左对齐，不再居中');
+    expect(tester.getTopLeft(find.byType(AppSearchBar)).dx, gutter);
+    expect(
+      _gridColumns(tester, const Key('discoverPlaylistGrid')),
+      discoverPlaylistColumns(1600 - gutter * 2),
+    );
 
-    // 更宽的 1600 窗口也不放宽内容栏：仍是 960 + 两侧 gutter。
-    await pump(1600);
-    final wider = tester.getRect(find.byKey(const Key('discoverContent')));
-    expect(wider.width, discoverContentMaxWidth + 48);
-    expect(wider.left, 0);
-
-    await pump(400);
-    final phone = tester.getRect(find.byKey(const Key('discoverContent')));
-    expect(phone.width, 400, reason: '手机保持整行铺满');
+    await pumpTab(tester, const DiscoverPlaylistsTab(), width: 2560);
+    expect(
+      tester.getSize(find.byType(AppSearchBar)).width,
+      2560 - gutter * 2,
+      reason: '更宽窗口继续铺满',
+    );
+    expect(
+      _gridColumns(tester, const Key('discoverPlaylistGrid')),
+      6,
+      reason: '全宽后列数夹到上限 6',
+    );
   });
 
-  test('网格列数按列距感知公式，断点处实际列宽不低于最小值', () {
-    // 600 起歌单网格；960 内容栏内最多 4 列。
+  test('网格列数按列距感知公式，全宽最多 6 列', () {
+    // 600 起歌单网格；全宽后列数随内容宽增长，最多 6 列。
     expect(discoverPlaylistColumns(600), 2);
     expect(discoverPlaylistColumns(960), 4);
+    expect(discoverPlaylistColumns(1552), 6);
+    expect(discoverPlaylistColumns(2512), 6);
     expect(
       (600 - discoverGridGap) / 2,
       greaterThanOrEqualTo(discoverPlaylistTileMinWidth),
       reason: '600 宽 2 列时实际列宽约 294',
     );
     expect(
-      (960 - discoverGridGap * 3) / 4,
+      (1552 - discoverGridGap * 5) / 6,
       greaterThanOrEqualTo(discoverPlaylistTileMinWidth),
-      reason: '960 宽 4 列时实际列宽约 231',
+      reason: '1552 宽 6 列时实际列宽约 248',
     );
 
-    // 热榜手机 2 列；720 / 960 两个边界都先满足 240 最小列宽。
+    // 热榜手机 2 列；宽屏按 240 最小列宽增长，最多 6 列。
     expect(discoverLeaderboardColumns(400), 2);
     expect(discoverLeaderboardColumns(600), 2);
     expect(discoverLeaderboardColumns(720), 2);
     expect(discoverLeaderboardColumns(960), 3);
+    expect(discoverLeaderboardColumns(1552), 6);
+    expect(discoverLeaderboardColumns(2512), 6);
     expect(
       (720 - discoverGridGap) / 2,
       greaterThanOrEqualTo(discoverLeaderboardTileMinWidth),
       reason: '720 宽 2 列时实际列宽约 354',
     );
     expect(
-      (960 - discoverGridGap * 2) / 3,
+      (1552 - discoverGridGap * 5) / 6,
       greaterThanOrEqualTo(discoverLeaderboardTileMinWidth),
-      reason: '960 宽 3 列时实际列宽约 312',
+      reason: '1552 宽 6 列时实际列宽约 248',
     );
   });
 
@@ -340,32 +336,33 @@ void main() {
     );
     expect(find.byType(M3EChip), findsNothing, reason: '不再渲染 chip 云');
     expect(find.text('榜单 0'), findsOneWidget);
-    expect(find.byIcon(Icons.leaderboard_rounded), findsNWidgets(6));
+    expect(find.byType(ScopedCoverImage), findsNWidgets(6));
     expect(tester.widget<Text>(find.text('榜单 0')).maxLines, 2);
     // 序号由网格位置表达，不在磁贴上伪造排名。
     expect(find.text('1'), findsNothing);
 
     await pumpTab(tester, const DiscoverLeaderboardsTab());
-    expect(
-      _gridColumns(tester, const Key('discoverLeaderboardGrid')),
-      discoverLeaderboardColumns(discoverContentMaxWidth),
+    final defaultColumns = _gridColumns(
+      tester,
+      const Key('discoverLeaderboardGrid'),
     );
     expect(
-      _gridColumns(tester, const Key('discoverLeaderboardGrid')),
-      greaterThan(2),
+      defaultColumns,
+      discoverLeaderboardColumns(1200 - 48),
+      reason: '列数按实际全宽内容宽计算',
     );
+    expect(defaultColumns, greaterThan(2));
 
-    // 1600 宽屏仍以 960 内容栏为准：3 列，实际磁贴宽 312。
+    // 1600 宽屏：内容宽 1552，列数到 6；磁贴宽度与列数、列距同源。
     await pumpTab(tester, const DiscoverLeaderboardsTab(), width: 1600);
     final columns1600 = _gridColumns(
       tester,
       const Key('discoverLeaderboardGrid'),
     );
-    expect(columns1600, 3);
+    expect(columns1600, 6);
     expect(
       tester.getSize(find.byType(M3ECard).first).width,
-      (discoverContentMaxWidth - discoverGridGap * (columns1600 - 1)) /
-          columns1600,
+      (1600 - 48 - discoverGridGap * (columns1600 - 1)) / columns1600,
       reason: '磁贴宽度与列数、列距同源',
     );
   });
@@ -397,7 +394,7 @@ void main() {
         discoverLeaderboardTileExtentOf(gridContext),
         reason: '$scale× 磁贴高度按 2 行标题 + 内边距动态计算',
       );
-      expect(delegate.mainAxisExtent, greaterThanOrEqualTo(64));
+      expect(delegate.mainAxisExtent, greaterThanOrEqualTo(72));
     }
   });
 
@@ -416,7 +413,7 @@ void main() {
     expect(find.text('收起'), findsNothing);
     expect(
       _gridColumns(tester, const Key('discoverLeaderboardGrid')),
-      discoverLeaderboardColumns(discoverContentMaxWidth),
+      discoverLeaderboardColumns(1200 - 48),
       reason: '宽屏按内容宽加列，不再等宽铺 chip',
     );
     final cards = find.descendant(
@@ -433,6 +430,95 @@ void main() {
     expect(find.text('榜单 29'), findsOneWidget);
     expect(find.text('展开全部'), findsNothing);
     expect(_cardRows(tester, cards), greaterThan(2));
+  });
+
+  testWidgets('热榜磁贴：按需加载平台封面，懒构建不拉全量曲目', (tester) async {
+    wy.leaderboards = [
+      for (var i = 0; i < 30; i++)
+        DiscoverLeaderboard(id: 'b$i', name: '榜单 $i', bangid: '$i'),
+    ];
+    await pumpTab(
+      tester,
+      const DiscoverLeaderboardsTab(),
+      width: 400,
+      height: 800,
+    );
+
+    expect(wy.leaderboardCoverCalls, greaterThan(0));
+    expect(wy.leaderboardCoverCalls, lessThan(30), reason: '只给可见磁贴按需加载封面');
+    expect(wy.leaderboardCalls, 0, reason: '打开热榜 tab 不并发拉 30 个榜单的完整曲目列表');
+    expect(find.text('榜单 0'), findsOneWidget);
+  });
+
+  testWidgets('热榜磁贴：无平台封面时用首曲封面兜底', (tester) async {
+    wy.leaderboardCoverUrl = null;
+    await pumpTab(tester, const DiscoverLeaderboardsTab());
+
+    expect(wy.leaderboardCalls, 1, reason: '轻量封面缺失才回退拉首屏曲目');
+    final cover = tester.widget<ScopedCoverImage>(
+      find.descendant(
+        of: find.byKey(const Key('discoverLeaderboardGrid')),
+        matching: find.byType(ScopedCoverImage),
+      ),
+    );
+    expect(cover.url, wy.track.coverUrl);
+  });
+
+  testWidgets('热榜磁贴：封面失败显示平台色占位，不阻塞列表', (tester) async {
+    wy
+      ..failLeaderboardCover = true
+      ..coverlessLeaderboardTracks = true;
+    await pumpTab(tester, const DiscoverLeaderboardsTab());
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('热歌榜'), findsOneWidget);
+    expect(find.byIcon(Icons.leaderboard_rounded), findsOneWidget);
+    expect(find.byType(ScopedCoverImage), findsNothing);
+  });
+
+  testWidgets('热榜详情：已加载封面传给头部', (tester) async {
+    await pumpTab(tester, const DiscoverLeaderboardsTab());
+    await tester.tap(find.text('热歌榜'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discoverHeaderCover')), findsOneWidget);
+    final header = tester.widget<DetailCoverHeader>(
+      find.byType(DetailCoverHeader),
+    );
+    expect(header.coverUrl, 'file:///tmp/board-cover.jpg');
+    expect(find.text('歌曲A'), findsOneWidget);
+  });
+
+  testWidgets('热榜详情：封面未就绪不阻塞曲目，到达后更新头部', (tester) async {
+    final gate = Completer<String?>();
+    wy.leaderboardCoverGate = gate;
+    await pumpTab(tester, const DiscoverLeaderboardsTab());
+    await tester.tap(find.text('热歌榜'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('歌曲A'), findsOneWidget, reason: '曲目首屏不被封面阻塞');
+    expect(find.byKey(const Key('discoverHeaderCover')), findsNothing);
+
+    gate.complete('file:///tmp/late-board-cover.jpg');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('discoverHeaderCover')), findsOneWidget);
+    final header = tester.widget<DetailCoverHeader>(
+      find.byType(DetailCoverHeader),
+    );
+    expect(header.coverUrl, 'file:///tmp/late-board-cover.jpg');
+  });
+
+  testWidgets('热榜详情：封面失败回退图标且曲目列表正常', (tester) async {
+    wy
+      ..failLeaderboardCover = true
+      ..coverlessLeaderboardTracks = true;
+    await pumpTab(tester, const DiscoverLeaderboardsTab());
+    await tester.tap(find.text('热歌榜'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('discoverHeaderCover')), findsNothing);
+    expect(find.byIcon(Icons.queue_music_rounded), findsOneWidget);
+    expect(find.text('歌曲A'), findsOneWidget);
   });
 
   testWidgets('歌单 tab：空态用共享 EmptyState + 文案 + 主行动', (tester) async {
@@ -521,7 +607,8 @@ void main() {
     final delegate =
         tester.widget<SliverGrid>(grid).gridDelegate
             as SliverGridDelegateWithFixedCrossAxisCount;
-    final contentWidth = discoverContentMaxWidth;
+    final contentWidth = tester.getSize(find.byType(AppSearchBar)).width;
+    expect(contentWidth, 1200 - 48, reason: '全宽内容宽 = 窗口宽 − 两侧 gutter');
     final tileWidth =
         (contentWidth - discoverGridGap * (delegate.crossAxisCount - 1)) /
         delegate.crossAxisCount;
@@ -535,23 +622,19 @@ void main() {
     expect(tester.widget<Text>(find.text('测试歌单')).maxLines, 2);
     expect(tester.widget<Text>(find.text('作者 · 2 首')).maxLines, 1);
 
-    // 1600 宽屏仍以 960 内容栏为准：搜索栏宽 960、左缘与内容栏同 gutter。
+    // 1600 宽屏：搜索栏铺满 1552，歌单网格到 6 列。
     await pumpTab(tester, const DiscoverPlaylistsTab(), width: 1600);
     expect(
       _gridColumns(tester, const Key('discoverPlaylistGrid')),
-      4,
-      reason: '960 内容栏下歌单最多 4 列',
+      6,
+      reason: '全宽 1552 下歌单列数到上限 6',
     );
-    expect(
-      tester.getSize(find.byType(AppSearchBar)).width,
-      discoverContentMaxWidth,
-    );
+    expect(tester.getSize(find.byType(AppSearchBar)).width, 1552);
     expect(tester.getTopLeft(find.byType(AppSearchBar)).dx, 24);
     final columns1600 = _gridColumns(tester, const Key('discoverPlaylistGrid'));
     expect(
       tester.getSize(find.byType(M3ECard).first).width,
-      (discoverContentMaxWidth - discoverGridGap * (columns1600 - 1)) /
-          columns1600,
+      (1552 - discoverGridGap * (columns1600 - 1)) / columns1600,
       reason: '卡片宽度与列数、列距同源',
     );
 
@@ -608,7 +691,7 @@ void main() {
         find.byKey(const Key('discoverPlaylistGrid')),
       );
       final gutter = discoverGutterOf(gridContext);
-      final contentWidth = discoverContentMaxWidth;
+      final contentWidth = tester.getSize(find.byType(AppSearchBar)).width;
       final tileWidth =
           (contentWidth - discoverGridGap * (delegate.crossAxisCount - 1)) /
           delegate.crossAxisCount;

@@ -80,43 +80,41 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
           });
         }
 
-        return DiscoverContentFrame(
-          child: Column(
-            children: [
-              Padding(
-                // 搜索栏自己管横向边距：空闲时与内容栏同 gutter，聚焦时
-                // 向两侧弹性展开 4px（保留原有手感），这里只留纵向。
-                padding: const EdgeInsets.only(
-                  top: discoverPageTopPadding,
-                  bottom: discoverSectionGap,
-                ),
-                child: AppSearchBar(
-                  controller: _searchController,
-                  focusNode: _searchFocusNode,
-                  hintText: _l10n(context).searchHint,
-                  constraints: discoverSearchBarConstraints(context),
-                  margin: gutter,
-                  focusedMargin: gutter > 4 ? gutter - 4 : 0,
-                  expandOnFocus: true,
-                  onSubmitted: (value) {
-                    searchProvider.submitSearch(value);
-                    _searchFocusNode.unfocus();
-                  },
-                ),
+        return Column(
+          children: [
+            Padding(
+              // 搜索栏自己管横向边距：空闲时与内容栏同 gutter，聚焦时
+              // 向两侧弹性展开 4px（保留原有手感），这里只留纵向。
+              padding: const EdgeInsets.only(
+                top: discoverPageTopPadding,
+                bottom: discoverSectionGap,
               ),
-              // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
-              if (!isSearchActive) const AiDjCarousel(),
-              Expanded(
-                child: RepaintBoundary(
-                  child: isSearchActive
-                      ? SearchSection(controller: widget.controller)
-                      : (aiDjEnabled
-                            ? const SizedBox.shrink()
-                            : _buildIdle(context)),
-                ),
+              child: AppSearchBar(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                hintText: _l10n(context).searchHint,
+                constraints: discoverSearchBarConstraints(context),
+                margin: gutter,
+                focusedMargin: gutter > 4 ? gutter - 4 : 0,
+                expandOnFocus: true,
+                onSubmitted: (value) {
+                  searchProvider.submitSearch(value);
+                  _searchFocusNode.unfocus();
+                },
               ),
-            ],
-          ),
+            ),
+            // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
+            if (!isSearchActive) const AiDjCarousel(),
+            Expanded(
+              child: RepaintBoundary(
+                child: isSearchActive
+                    ? SearchSection(controller: widget.controller)
+                    : (aiDjEnabled
+                          ? const SizedBox.shrink()
+                          : _buildIdle(context)),
+              ),
+            ),
+          ],
         );
       },
     );

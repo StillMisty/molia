@@ -1,6 +1,9 @@
 # ADR-0018：跨音源聚合搜索、来源排序与键盘模型
 
-- 状态：已采纳（2026-10）
+- 状态：部分被 ADR-0019 取代（2026-11）
+  - 跨源聚合、来源过滤 / `kSearchSourceFilter`、来源 chips、Ctrl+F 多来源
+    预览被 ADR-0019 的单渠道搜索取代；
+  - 仍保留：查询代际 / 逐源执行体协议、结果行类型化投影、键盘命令面板模型。
 - 相关：`lib/providers/search_provider.dart`、`lib/providers/source_fan_out.dart`、
   `lib/providers/search_branch.dart`、`lib/providers/search_source_group.dart`、
   `lib/widgets/search_results_view.dart`、

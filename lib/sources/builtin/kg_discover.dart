@@ -104,8 +104,33 @@ class KgDiscoverSource extends DiscoverSource {
   ];
 
   @override
+  bool get hasLeaderboardCoverEndpoint => true;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return _fetchLeaderboard(bangid);
+  }
+
+  /// 榜单封面：`rank/info` 的 `imgurl`（`{size}` 占位统一到 480）。
+  @override
+  Future<String?> leaderboardCover(String bangid) {
+    return BuiltinSearch.transport.cached(
+      'kg:leaderboard-cover:$bangid',
+      () async {
+        final body = await lxHttpGet(
+          'http://mobilecdnbj.kugou.com/api/v3/rank/info'
+          '?rankid=$bangid&with_res_tag=0',
+        );
+        if (body is! Map || body['status'] != 1 || body['data'] is! Map) {
+          throw StateError('kg 榜单封面获取失败');
+        }
+        final url = kgCoverUrlOf(body['data']);
+        if (url == null || url.isEmpty) {
+          throw StateError('kg 榜单封面为空');
+        }
+        return url;
+      },
+    );
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {

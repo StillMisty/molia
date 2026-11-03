@@ -134,13 +134,30 @@ List<SingleChildWidget> buildAppProviders({
           PlayStatisticsProvider(repository: library.playStatisticsRepository),
     ),
     // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
-    // 渠道只决定发现内容（与搜索来源解耦），偏好跨重启记住。
+    // 渠道同时决定发现内容与搜索，是全局唯一的渠道偏好（跨重启记住）。
+    //
+    // 必须 eager 创建：搜索 provider 在 runApp 前就存在，桌面壳可能从未
+    // 打开过资料页；创建时把当前渠道同步给搜索，之后监听渠道变化继续同步。
     ChangeNotifierProvider(
-      create: (context) => DiscoverProvider(
-        playbackProvider: context.read<PlaybackProvider>(),
-        libraryProvider: context.read<LibraryProvider>(),
-        settings: catalog.settings.scope([kDiscoverChannelKey]),
-      ),
+      lazy: false,
+      create: (context) {
+        final discover = DiscoverProvider(
+          playbackProvider: context.read<PlaybackProvider>(),
+          libraryProvider: context.read<LibraryProvider>(),
+          settings: catalog.settings.scope([kDiscoverChannelKey]),
+        );
+        final search = context.read<SearchProvider>();
+        var syncedChannel = discover.channelKey;
+        void syncSearchChannel() {
+          if (discover.channelKey == syncedChannel) return;
+          syncedChannel = discover.channelKey;
+          search.setActiveSource(syncedChannel);
+        }
+
+        discover.addListener(syncSearchChannel);
+        search.setActiveSource(syncedChannel);
+        return discover;
+      },
     ),
     ChangeNotifierProvider.value(value: lyrics.lyricsProvider),
     // 歌词显示：配置（设置页读写）+ 调度（桌面/通知/蓝牙输出）。

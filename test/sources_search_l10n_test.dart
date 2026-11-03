@@ -30,9 +30,9 @@ void main() {
     'searchFailed',
     'searchNoSourcesTitle',
     'searchNoSourcesHint',
+    'searchChannelUnsupported',
     'searchNoResultsInSource',
     'searchLoadMoreFailed',
-    'searchAllSources',
     'searchSourcesLabel',
     'searchGroupEmpty',
     'searchLoadMore',
@@ -75,7 +75,8 @@ void main() {
     expect(zhL10n.sourcesActiveSource('集成测试音源', '1.0.0'), '当前音源：集成测试音源 1.0.0');
     expect(zhL10n.searchNoResultsInSource('测试源'), '在「测试源」中没有找到结果');
     expect(zhL10n.searchLoadMoreFailed, '加载更多结果失败');
-    expect(zhL10n.searchAllSources, '全部来源');
+    expect(zhL10n.searchChannelUnsupported, '当前渠道不支持搜索，换一个渠道试试');
+    expect(zhL10n.discoverChannelUnavailable, '当前渠道没有可用内容，换一个渠道试试');
     expect(zhL10n.searchSourcesLabel, '搜索来源');
     expect(zhL10n.searchGroupEmpty, '无结果');
     expect(zhL10n.searchLoadMore, '加载更多');

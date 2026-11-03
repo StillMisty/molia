@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -20,6 +19,7 @@ import 'package:molia/sources/lx/lx_engine_supervisor.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
+import 'package:molia/widgets/discover_layout.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
@@ -168,6 +168,76 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('发现页渠道下拉：长名称单行、选中项行高稳定', (tester) async {
+    const longName = '一个非常非常长、窄弹窗里必须省略而不能换行的渠道名称';
+    domain.SourceDescriptor descriptor(String key, String name) =>
+        domain.SourceDescriptor(
+          key: key,
+          displayName: name,
+          kind: domain.SourceKind.builtin,
+          capabilities: const domain.SourceCapabilities(search: true),
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        supportedLocales: const [Locale('zh')],
+        home: Scaffold(
+          body: Center(
+            child: LibraryChannelSelector(
+              channels: [
+                descriptor('long', longName),
+                descriptor('kw', '酷我音乐'),
+              ],
+              selectedKey: 'long',
+              onSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(longName));
+    await tester.pumpAndSettle();
+
+    Finder itemCard(String label) => find
+        .ancestor(of: find.text(label).last, matching: find.byType(M3ECard))
+        .first;
+    final text = tester.widget<Text>(find.text(longName).last);
+    expect(text.maxLines, 1);
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(
+      tester.getSize(itemCard(longName)).height,
+      tester.getSize(itemCard('酷我音乐')).height,
+      reason: '选中项多一个 check icon 不能改变行高',
+    );
+  });
+
+  test('当前渠道任一搜索能力都视为可显示搜索 tab', () {
+    bool supports(domain.SourceCapabilities capabilities) =>
+        sourceSupportsAnySearch(
+          domain.SourceDescriptor(
+            key: 'test',
+            displayName: '测试',
+            kind: domain.SourceKind.builtin,
+            capabilities: capabilities,
+          ),
+        );
+
+    expect(supports(const domain.SourceCapabilities(search: true)), isTrue);
+    expect(supports(const domain.SourceCapabilities(artist: true)), isTrue);
+    expect(
+      supports(const domain.SourceCapabilities(lyricSearch: true)),
+      isTrue,
+    );
+    expect(supports(const domain.SourceCapabilities()), isFalse);
+  });
 
   testWidgets('无搜索来源：搜索 tab 隐藏；发现渠道与搜索互不影响', (tester) async {
     search = buildSearch(const []);
@@ -417,7 +487,7 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('切换发现渠道不改搜索来源；搜索 tab 隐藏渠道下拉', (tester) async {
+  testWidgets('搜索 tab 也显示渠道下拉；切渠道同时改搜索当前渠道', (tester) async {
     search = buildSearch(const [
       domain.SourceDescriptor(
         key: 'tx',
@@ -431,46 +501,64 @@ void main() {
         kind: domain.SourceKind.builtin,
         capabilities: domain.SourceCapabilities(search: true),
       ),
+      domain.SourceDescriptor(
+        key: 'kw',
+        displayName: '酷我音乐',
+        kind: domain.SourceKind.builtin,
+        capabilities: domain.SourceCapabilities(search: true),
+      ),
     ]);
-    search.selectSourceFilter('tx');
-    // chips 在搜索激活后的结果面里（未输入时是 AI 推荐 / 输入引导占位）。
+    // 搜索激活后结果面不再有来源 chips；当前渠道由资料页下拉决定。
     search.updateSearchQuery('测试');
     await pumpLibrary(tester);
 
-    // 默认搜索 tab：来源只走 chips，顶部没有发现渠道下拉；Tab 也不能落到
-    // 不可见的下拉（Offstage 本身不阻止焦点）。
-    expect(find.byType(LibraryChannelSelector), findsNothing);
-    for (var i = 0; i < 12; i++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      expect(
-        FocusManager.instance.primaryFocus?.context
-            ?.findAncestorWidgetOfExactType<LibraryChannelSelector>(),
-        isNull,
-        reason: 'Tab #$i 落到了隐藏的渠道下拉',
-      );
-    }
-    expect(
-      find.byKey(const ValueKey<String>('searchSourceChip-tx')),
-      findsOneWidget,
-    );
-
-    // 到热榜 tab 才能切换发现渠道。
-    await tester.tap(find.text('热榜'));
-    await tester.pumpAndSettle();
+    // 默认搜索 tab：渠道下拉仍在 tab 左侧（不再 Offstage / 隐藏）。
     expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    expect(search.activeSourceKey, 'wy', reason: '资料页把当前渠道同步给搜索');
+    final selector = tester.getRect(find.byType(LibraryChannelSelector));
+    final tabs = tester.getRect(find.byType(M3ETabs));
+    expect(
+      selector.right,
+      lessThanOrEqualTo(tabs.left),
+      reason: '渠道下拉在 tab 左侧',
+    );
+    final gutter = discoverGutterOf(tester.element(find.byType(M3ETabs)));
+    expect(
+      tabs.width,
+      1200 - gutter * 2 - selector.width - 12,
+      reason: 'tab 栏吃满渠道下拉之后的剩余宽度',
+    );
+    expect(tabs.right, 1200 - gutter, reason: 'tab 栏右缘贴内容右缘');
+
+    // 搜索 tab 上直接切渠道：发现与搜索一起切。
     await tester.tap(find.text('网易音乐'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('酷我音乐').last);
     await tester.pumpAndSettle();
 
     expect(discover.channelKey, 'kw');
-    expect(search.sourceFilter, 'tx', reason: '切渠道不改搜索来源');
+    expect(search.activeSourceKey, 'kw');
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    await tester.tap(find.text('搜索'));
+  testWidgets('当前渠道无搜索/发现内容：顶部下拉仍可见，正文提示换渠道', (tester) async {
+    // 保存的脚本渠道尚未加载：当前渠道不在 enabledChannels 里，搜索与发现
+    // 都无从展示；此时不能误报「所有渠道都已停用」。
+    search = buildSearch(const []);
+    discover.selectChannel('test');
+    await pumpLibrary(tester);
+
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    expect(find.text('当前渠道没有可用内容，换一个渠道试试'), findsOneWidget);
+    expect(find.text('所有渠道都已停用，请在「音源管理」中启用渠道。'), findsNothing);
+
+    // 下拉仍可切回可发现渠道。
+    await tester.tap(find.text('选择渠道'));
     await tester.pumpAndSettle();
-    expect(find.byType(LibraryChannelSelector), findsNothing);
-    expect(search.sourceFilter, 'tx');
+    await tester.tap(find.text('网易音乐').last);
+    await tester.pumpAndSettle();
+    expect(discover.channelKey, 'wy');
+    expect(find.text('热榜'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 }
 

@@ -121,18 +121,18 @@ Future<void> _run({
       _logger.warning('scenario: 没有可搜索音源');
       return;
     }
-    // 聚合搜索默认会并行搜所有来源；性能采样固定到 mock 源，保持时序确定。
-    // 未指定 MOLIA_PERF_SOURCE 时按产品默认走全部来源。
+    // 单渠道搜索：固定到 mock 源保持时序确定；未指定 MOLIA_PERF_SOURCE
+    // 时取第一个可搜索渠道（与产品默认一致，不再有「全部来源」）。
     final option = _sourceKey.isEmpty
-        ? null
+        ? options.first
         : options.firstWhere(
             (o) => o.key == _sourceKey,
             orElse: () => options.first,
           );
-    search.selectSourceFilter(option?.key ?? '');
+    search.setActiveSource(option.key);
     DataPathTrace.event(
       'scenario.search.begin',
-      fields: () => {'source': option?.key ?? '*', 'keyword': _keyword},
+      fields: () => {'source': search.activeSourceKey, 'keyword': _keyword},
     );
 
     final searchWatch = Stopwatch()..start();

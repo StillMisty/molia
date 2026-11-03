@@ -1,15 +1,18 @@
 /// 桌面壳层全局搜索遮罩：全屏 scrim + 中上居中搜索条 + 就地结果面板。
 ///
-/// 与资料库页共用同一个 [SearchProvider]（不新建 provider）：关键词、来源过滤、
+/// 与资料库页共用同一个 [SearchProvider]（不新建 provider）：关键词、渠道、
 /// 分段、结果与「查看全部结果」后的完整结果链天然同源。结果行点击复用
-/// [SearchProvider.playItem]（与资料库搜索结果同一条播放路径：只取该行所属
-/// 来源分组的已加载结果、从该行开始、上下文名 = 来源显示名），不复制第二套
-/// 播放语义。
+/// [SearchProvider.playItem]（与资料库搜索结果同一条播放路径：只取当前渠道的
+/// 已加载结果、从该行开始、上下文名 = 渠道显示名），不复制第二套播放语义。
 ///
 /// 形态：壳层没有常驻搜索条（顶栏最左让位给品牌区），Ctrl+F / 品牌区点击经
 /// [GlobalSearchController] 打开本遮罩。宿主是一个不可见、不可点的占位盒：
 /// 只有位置与尺寸有意义——遮罩打开时实测它的矩形，把搜索条与结果面板摆在
 /// 同一位置（route 挂在根导航器上、坐标是整窗口径，所以顶栏高度不用写死在这里）。
+///
+/// 搜索条是 [ChannelSearchBar]：左侧渠道下拉（与发现页同一个当前渠道）、
+/// 中间细分割线、右侧输入 + 清除键；选择渠道会同时切发现内容与搜索，并把
+/// 焦点还给输入框。当前渠道不支持搜索时，面板显示专用空态，下拉仍可切换。
 ///
 /// **为什么自建 route，而不是 M3E 的 search view**：
 /// - 包内 docked 视图的目标矩形完全由锚点矩形推导（`_dockedRect` 的 x / y / 宽
@@ -20,11 +23,10 @@
 /// - 包内没有暴露动画 / 聚焦钩子，这两点只能靠自建 route 解决：开合走
 ///   「scrim 淡入 + 内容淡入 + 轻微缩放」，输入框在首帧就 autofocus。
 ///
-/// 结果列表面板内限高滚动：单来源最多就地预览
-/// [SearchResultsView.maxDockedPreviewRows] 行，多来源每组最多
-/// [SearchResultsView.maxDockedRowsPerGroup] 行且总计不超过 8 行，更长的列表
-/// 交给资料库目的地（「查看全部结果」回调由壳层给）；行映射 / 来源 chips /
-/// 分组 / 空错态统一在 [SearchResultsView]（与资料库搜索结果页同一份实现）。
+/// 结果列表面板内限高滚动：当前渠道最多就地预览
+/// [SearchResultsView.maxDockedPreviewRows] 行，更长的列表交给资料库目的地
+/// （「查看全部结果」回调由壳层给）；行映射 / 失败 / 空态统一在
+/// [SearchResultsView]（与资料库搜索结果页同一份实现）。
 ///
 /// 键盘：输入框保持焦点时 ↑↓ 移动高亮、Enter 播放 / 打开高亮项、Ctrl+Enter
 /// 始终看全部结果；Tab 由 `FocusScope` 锁在遮罩内；遮罩打开期间经 [KeyClaims]
@@ -44,12 +46,15 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
+import '../providers/discover_provider.dart';
 import '../providers/search_provider.dart';
+import '../providers/sources_provider.dart';
 import '../services/escape_claims.dart';
 import '../services/key_claims.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
 import 'app_search_bar.dart';
+import 'channel_search_bar.dart';
 import 'search_results_view.dart';
 
 /// AppLocalizations 查找：测试等场景可能直接挂载本组件而不注册 delegate，
@@ -189,6 +194,11 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`）：
   /// 遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
   Future<void> _open() async {
+    // 全局只有一个当前渠道：打开前把搜索同步到发现页的渠道（组合根 / 资料页
+    // 也会同步，这里兜底独立挂载与测试）。同一渠道是 no-op，不会清结果。
+    context.read<SearchProvider>().setActiveSource(
+      context.read<DiscoverProvider>().channelKey,
+    );
     if (_isOpen) {
       _viewKey.currentState?.focusField();
       return;
@@ -304,6 +314,9 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   /// 遮罩与结果行共用的控制器（本视图独占；打开时用 provider 的词种上）。
   final TextEditingController _field = TextEditingController();
   final FocusNode _focusNode = FocusNode(debugLabel: 'globalSearchField');
+  final FocusNode _channelFocusNode = FocusNode(
+    debugLabel: 'globalSearchChannelDropdown',
+  );
 
   late final SearchProvider _search = context.read<SearchProvider>();
 
@@ -341,18 +354,45 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _search.removeListener(_onSearchChanged);
     _field.dispose();
     _focusNode.dispose();
+    _channelFocusNode.dispose();
     super.dispose();
   }
 
   /// 把焦点拉回搜索框并全选已有文本（Ctrl+F 已打开时的重新聚焦入口）。
-  void focusField() {
+  ///
+  /// 切渠道时传 `selectAll: false`：只还焦点，不打断用户继续编辑的光标。
+  void focusField({bool selectAll = true}) {
     if (!mounted) return;
     _focusNode.requestFocus();
-    if (_field.text.isEmpty) return;
+    if (!selectAll || _field.text.isEmpty) return;
     _field.selection = TextSelection(
       baseOffset: 0,
       extentOffset: _field.text.length,
     );
+  }
+
+  /// 渠道下拉选择：发现内容与搜索一起切，然后把焦点还给输入框。
+  void _selectChannel(String key) {
+    context.read<DiscoverProvider>().selectChannel(key);
+    _search.setActiveSource(key);
+    // 下拉关闭动画期间包内 focus trap 仍在，立即 requestFocus 会被拒绝。
+    // 逐帧重试：关闭动画结束时 focus trap 释放，这一帧就能把焦点交给输入框。
+    var attempts = 0;
+    void restoreFocus() {
+      if (!mounted) return;
+      _channelFocusNode.unfocus();
+      focusField(selectAll: false);
+      if (_focusNode.hasFocus || ++attempts >= 30) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        restoreFocus();
+        WidgetsBinding.instance.scheduleFrame();
+      });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      restoreFocus();
+      WidgetsBinding.instance.scheduleFrame();
+    });
   }
 
   void _onSearchChanged() {
@@ -528,6 +568,12 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
+    final sources = context.watch<SourcesProvider>();
+    final discover = context.watch<DiscoverProvider>();
+    final enabledChannels = [
+      for (final channel in sources.channels)
+        if (channel.enabled) channel,
+    ];
     final rect = widget.restingRect;
     final showHint = _search.isSearchActive;
     // 面板限高：条下沿到窗口底部留出边距与底部键位提示，更长的列表交给资料库。
@@ -565,25 +611,16 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      AppSearchBar(
+                      ChannelSearchBar(
                         controller: _field,
                         focusNode: _focusNode,
+                        channelFocusNode: _channelFocusNode,
                         hintText: l10n.searchHint,
                         // 打开即聚焦：开合动画期间按键也直达输入框。
                         autofocus: true,
-                        // 静止外边距取 M3E search bar 的 resting margin（24），
-                        // 与结果面板（满宽）错开一档，保持原搜索视图的观感。
-                        margin: 24,
-                        // 视图头部自绘关闭键：包内默认返回键会弹硬编码英文提示
-                        // （M3ESearchConstants.backButtonTooltip），不符「文案必须
-                        // 走 l10n」。图标沿用返回箭头（包内语义）：右缘的自绘清除
-                        // 键才是 X，两个 X 并排会分不清「关面板」与「清关键词」。
-                        leading: M3EIconButton(
-                          variant: M3EIconButtonVariant.standard,
-                          icon: const Icon(Icons.arrow_back_rounded),
-                          semanticLabel: l10n.searchClose,
-                          onPressed: _close,
-                        ),
+                        channels: enabledChannels,
+                        selectedKey: discover.channelKey,
+                        onChannelSelected: _selectChannel,
                         onChanged: _search.updateSearchQuery,
                         onSubmitted: (_) => _handleEnter(),
                         // Esc：焦点在输入框时由搜索栏自身就近分发（外层

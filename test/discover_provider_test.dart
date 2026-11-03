@@ -139,6 +139,20 @@ void main() {
     expect(tracks.single.songId, '111');
   });
 
+  test('榜单封面失败不缓存，下一次调用可重试', () async {
+    source
+      ..leaderboardCoverUrl = null
+      ..coverlessLeaderboardTracks = true;
+    final board = discover.leaderboards.single;
+
+    expect(await discover.loadLeaderboardCover(board), isNull);
+    expect(source.leaderboardCoverCalls, 1);
+    expect(discover.leaderboardCoverOf(board), isNull);
+
+    expect(await discover.loadLeaderboardCover(board), isNull);
+    expect(source.leaderboardCoverCalls, 2, reason: '失败不缓存，允许下次重试');
+  });
+
   test('错误归一化为 DiscoverFailure（SourceFailure 包装）', () async {
     source.fail = true;
     await expectLater(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:molia/domain/models/discover.dart';
 import 'package:molia/sources/builtin/discover_source.dart';
 import 'package:molia/sources/source_track.dart';
@@ -21,8 +23,17 @@ class FakeDiscoverSource implements DiscoverSource {
 
   bool fail = false;
   int leaderboardCalls = 0;
+  int leaderboardCoverCalls = 0;
   int hotSearchCalls = 0;
   int tagCalls = 0;
+
+  /// 榜单封面：默认给一个可直接断言的 URL；设为 null 时走首曲封面兜底。
+  String? leaderboardCoverUrl = 'file:///tmp/board-cover.jpg';
+  bool failLeaderboardCover = false;
+  Completer<String?>? leaderboardCoverGate;
+
+  /// 为 true 时榜单曲目不带封面（用于「封面失败占位」用例）。
+  bool coverlessLeaderboardTracks = false;
 
   /// 歌单分页测试开关：总页数 × 每页条数（默认单页单条，保持既有用例数据）。
   int playlistPages = 1;
@@ -53,9 +64,34 @@ class FakeDiscoverSource implements DiscoverSource {
   }
 
   @override
+  bool get hasLeaderboardCoverEndpoint => false;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     leaderboardCalls++;
-    return _guard([track]);
+    if (!coverlessLeaderboardTracks) return _guard([track]);
+    return _guard([
+      DiscoverTrack(
+        sourceKey: track.sourceKey,
+        songId: track.songId,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        durationMs: track.durationMs,
+        raw: track.raw,
+      ),
+    ]);
+  }
+
+  @override
+  Future<String?> leaderboardCover(String bangid) {
+    leaderboardCoverCalls++;
+    final gate = leaderboardCoverGate;
+    if (gate != null) return gate.future;
+    if (failLeaderboardCover) {
+      return Future.error(StateError('mock cover failure'));
+    }
+    return Future.value(leaderboardCoverUrl);
   }
 
   @override

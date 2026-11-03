@@ -4,8 +4,6 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/settings/settings_access.dart';
-import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
@@ -23,7 +21,6 @@ import 'package:molia/providers/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
-import '../support/settings_test_support.dart';
 
 class _TestListenable<T> extends ValueNotifier<T>
     implements StateListenable<T> {
@@ -56,11 +53,7 @@ class _FakeBackend implements PlaybackBackend {
   void setStopAfterCurrentTrack(bool enabled) {}
 
   @override
-  Future<void> enqueueTracks(List<Track> tracks) async {
-    lastEnqueued = tracks;
-  }
-
-  List<Track>? lastEnqueued;
+  Future<void> enqueueTracks(List<Track> tracks) async {}
 
   @override
   Future<bool> moveQueueIndex(int from, int to) async => false;
@@ -346,21 +339,17 @@ void main() {
     playbackProvider.dispose();
   });
 
-  SearchProvider buildProvider(
-    _FakeRegistry registry, {
-    SettingsAccess? settings,
-  }) {
+  SearchProvider buildProvider(_FakeRegistry registry) {
     final provider = SearchProvider(
       playbackProvider,
       catalogService: CatalogService(registry: registry),
       sourceRegistry: registry,
-      settings: settings,
     );
     addTearDown(provider.dispose);
     return provider;
   }
 
-  test('sourceChannels 直接是 registry.descriptors，默认「全部来源」', () {
+  test('sourceChannels 直接是 registry.descriptors，默认 active 为第一个来源', () {
     final registry = _FakeRegistry(
       {'kw': _FakeMusicSource('kw'), 'tx': _FakeMusicSource('tx')},
       [
@@ -374,71 +363,33 @@ void main() {
     final options = provider.sourceChannels;
     expect(identical(options, registry.descriptors), isTrue);
     expect(options.map((o) => o.key), ['kw', 'tx']);
-    expect(provider.sourceFilter, isEmpty, reason: '默认全部来源');
-    expect(provider.sourceFilterOptions.map((o) => o.key), ['kw', 'tx']);
+    expect(provider.activeSourceKey, 'kw');
+    expect(provider.activeSource?.displayName, '酷我');
+    expect(provider.hasActiveSearchSource, isTrue);
     expect(provider.hasSearchableSources, isTrue);
+    expect(provider.supportedSearchKinds, [SearchKind.song]);
   });
 
-  test('并行 fan-out：每个来源各取首屏，分组顺序 = descriptors 顺序', () async {
-    final slow = Completer<SearchResult<Track>>();
-    final kw = _FakeMusicSource('kw')
-      ..onSearch = (query) =>
-          Future.value(SearchResult(items: [_track('kw', 'a')], total: 1));
-    final tx = _FakeMusicSource('tx')..onSearch = (query) => slow.future;
+  test('submitSearch 只搜当前渠道，不再并行其它来源', () async {
+    final kw = _FakeMusicSource('kw');
+    final tx = _FakeMusicSource('tx');
     final registry = _FakeRegistry(
       {'kw': kw, 'tx': tx},
-      [_descriptor('tx', 'QQ音乐'), _descriptor('kw', '酷我')],
-    );
-    addTearDown(registry.dispose);
-    final provider = buildProvider(registry);
-
-    provider.submitSearch('hello');
-    expect(kw.searchCalls, 1);
-    expect(tx.searchCalls, 1, reason: '两个来源首屏并行发起');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
-
-    expect(provider.isSearching, isTrue, reason: 'tx 仍在途');
-    expect(provider.songGroups.map((g) => g.source.key), ['tx', 'kw']);
-    expect(provider.songGroups.first.source.displayName, 'QQ音乐');
-    expect(provider.songGroups.last.items.single.id.uri, 'kw:a');
-    expect(provider.searchResults.map((row) => row.id.uri), ['kw:a']);
-
-    slow.complete(SearchResult(items: [_track('tx', 'b')], total: 1));
-    await _waitUntil(() => !provider.isSearching);
-    expect(provider.songGroups.map((g) => g.source.key), ['tx', 'kw']);
-    expect(provider.searchResults.map((row) => row.id.uri), ['tx:b', 'kw:a']);
-  });
-
-  test('单源失败隔离：一个平台失败不影响其它平台', () async {
-    final broken = _FakeMusicSource('kw')..searchError = StateError('boom');
-    final healthy = _FakeMusicSource('tx')
-      ..onSearch = (query) =>
-          Future.value(SearchResult(items: [_track('tx', 'ok')], total: 1));
-    final registry = _FakeRegistry(
-      {'kw': broken, 'tx': healthy},
       [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
     );
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(
-      () =>
-          _songGroup(provider, 'kw').failure != null &&
-          _songGroup(provider, 'tx').items.isNotEmpty,
-    );
+    await _waitUntil(() => !provider.isSearching);
 
-    final failed = _songGroup(provider, 'kw');
-    expect(failed.failure, isNotNull);
-    expect(failed.failure!.message, contains('boom'));
-    expect(failed.failure!.kind, FailureKind.unknown);
-    expect(failed.items, isEmpty);
-    expect(_songGroup(provider, 'tx').items, hasLength(1));
-    expect(provider.searchResults, hasLength(1));
-    expect(provider.isSearching, isFalse);
+    expect(kw.searchCalls, 1);
+    expect(tx.searchCalls, 0, reason: '非当前渠道不参与搜索');
+    expect(provider.songGroups.single.source.key, 'kw');
+    expect(provider.searchResults.map((row) => row.id.uri), ['kw:hello-1']);
   });
 
-  test('每来源独立分页 / 去重；一个来源到底不影响另一个', () async {
+  test('单源分页 / 跨页去重 / 到底守卫', () async {
     final kw = _FakeMusicSource('kw')
       ..onSearch = (query) => Future.value(
         query.page == 1
@@ -453,41 +404,51 @@ void main() {
                 total: 4,
               ),
       );
-    final tx = _FakeMusicSource('tx')
-      ..onSearch = (query) => Future.value(
-        SearchResult(
-          items: [_track('tx', 'x')],
-          hasMore: query.page < 3,
-          total: 3,
-        ),
-      );
-    final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
+    final registry = _FakeRegistry({'kw': kw}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(
-      () =>
-          _songGroup(provider, 'kw').items.length == 2 &&
-          _songGroup(provider, 'tx').items.length == 1,
-    );
-    expect(provider.songGroups.map((g) => g.page), [1, 1]);
+    await _waitUntil(() => _songGroup(provider, 'kw').items.length == 2);
+    expect(provider.songGroups.single.page, 1);
 
     await provider.loadMore('kw');
-    final kwGroup = _songGroup(provider, 'kw');
-    expect(kwGroup.page, 2);
-    expect(kwGroup.hasMore, isFalse);
-    expect(kwGroup.total, 4);
-    expect(kwGroup.items.map((row) => row.id.uri), ['kw:a', 'kw:b', 'kw:c']);
-    expect(tx.searchCalls, 1, reason: '只加载被请求来源的下一页');
-    expect(_songGroup(provider, 'tx').page, 1);
+    final group = _songGroup(provider, 'kw');
+    expect(group.page, 2);
+    expect(group.hasMore, isFalse);
+    expect(group.total, 4);
+    expect(group.items.map((row) => row.id.uri), ['kw:a', 'kw:b', 'kw:c']);
 
     // 已经到底：再次 loadMore 不再发请求。
     await provider.loadMore('kw');
     expect(kw.searchCalls, 2);
+  });
+
+  test('首屏失败：failure 归一化并可重试', () async {
+    var fail = true;
+    final kw = _FakeMusicSource('kw')
+      ..onSearch = (query) async {
+        if (fail) {
+          throw const SourceFailure(kind: FailureKind.network, message: 'boom');
+        }
+        return SearchResult(items: [_track('kw', 'ok')]);
+      };
+    final registry = _FakeRegistry({'kw': kw}, [_descriptor('kw', '酷我')]);
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => _songGroup(provider, 'kw').failure != null);
+    final group = _songGroup(provider, 'kw');
+    expect(group.failure!.message, contains('boom'));
+    expect(group.failure!.kind, FailureKind.network);
+    expect(group.items, isEmpty);
+
+    fail = false;
+    await provider.retry('kw');
+    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    expect(_songGroup(provider, 'kw').failure, isNull);
+    expect(_songGroup(provider, 'kw').items.single.id.uri, 'kw:ok');
   });
 
   test('加载更多失败只置 loadMoreFailed，不写首屏 failure', () async {
@@ -537,7 +498,7 @@ void main() {
     expect(group.items.map((row) => row.id.uri), ['kw:a', 'kw:b']);
   });
 
-  test('查询期间新来源加入 → 自动补搜（启动时脚本晚加载的回归）', () async {
+  test('切换当前渠道：清空旧结果并按当前关键词重搜', () async {
     final kw = _FakeMusicSource('kw')
       ..onSearch = (query) =>
           Future.value(SearchResult(items: [_track('kw', 'a')], total: 1));
@@ -546,6 +507,38 @@ void main() {
           Future.value(SearchResult(items: [_track('tx', 'b')], total: 1));
     final registry = _FakeRegistry(
       {'kw': kw, 'tx': tx},
+      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    expect(provider.songGroups.single.source.key, 'kw');
+
+    provider.setActiveSource('tx');
+    expect(provider.activeSourceKey, 'tx');
+    expect(provider.searchQuery, 'hello', reason: '切渠道保留关键词');
+    await _waitUntil(
+      () =>
+          provider.songGroups.length == 1 &&
+          provider.songGroups.single.source.key == 'tx' &&
+          provider.songGroups.single.items.isNotEmpty,
+    );
+    expect(provider.searchResults.map((row) => row.id.uri), ['tx:b']);
+    expect(kw.searchCalls, 1);
+    expect(tx.searchCalls, 1);
+
+    // 空 key 回到第一个可搜索渠道，不是「全部来源」。
+    provider.setActiveSource('');
+    expect(provider.activeSourceKey, 'kw');
+  });
+
+  test('切到不支持搜索的渠道：清空结果、不发请求，稍后可搜索时补搜', () async {
+    final kw = _FakeMusicSource('kw');
+    final tx = _FakeMusicSource('tx');
+    final registry = _FakeRegistry(
+      {'kw': kw, 'tx': tx},
       [_descriptor('kw', '酷我')],
     );
     addTearDown(registry.dispose);
@@ -553,199 +546,101 @@ void main() {
 
     provider.submitSearch('hello');
     await _waitUntil(() => !provider.isSearching);
-    expect(provider.songGroups.map((g) => g.source.key), ['kw']);
-    expect(tx.searchCalls, 0);
+    expect(kw.searchCalls, 1);
 
+    provider.setActiveSource('tx');
+    expect(provider.activeSourceKey, 'tx');
+    expect(provider.hasActiveSearchSource, isFalse);
+    expect(provider.supportedSearchKinds, isEmpty);
+    expect(provider.songGroups, isEmpty, reason: '旧渠道结果已清空');
+
+    provider.submitSearch('hello');
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    expect(tx.searchCalls, 0, reason: '当前渠道不支持搜索');
+
+    // 脚本 / 来源晚到：同一个 key 变为可搜索后按当前关键词补首屏。
     registry.setDescriptors([
       _descriptor('kw', '酷我'),
       _descriptor('tx', 'QQ音乐'),
     ]);
     await _waitUntil(
       () =>
-          provider.songGroups.length == 2 &&
-          _songGroup(provider, 'tx').items.isNotEmpty,
+          provider.songGroups.length == 1 &&
+          provider.songGroups.single.source.key == 'tx' &&
+          provider.songGroups.single.items.isNotEmpty,
     );
-    expect(tx.searchCalls, 1, reason: '新来源按当前关键词补首屏');
-    expect(provider.songGroups.map((g) => g.source.key), ['kw', 'tx']);
+    expect(tx.searchCalls, 1);
+    expect(kw.searchCalls, 1, reason: '不回到旧渠道补搜');
   });
 
-  test('新来源只补搜当前类型；切换类型时再补其它类型', () async {
-    final capabilities = const domain.SourceCapabilities(
-      search: true,
-      pagination: true,
-      artist: true,
-      lyricSearch: true,
-    );
-    final kw = _FakeMusicSource('kw', capabilities: capabilities);
-    final tx = _FakeMusicSource('tx', capabilities: capabilities);
+  test('已注册但无搜索能力：hasActiveSearchSource 为 false', () async {
+    final script = _FakeMusicSource('script');
     final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [_descriptor('kw', '酷我', capabilities: capabilities)],
+      {'script': script},
+      [
+        _descriptor(
+          'script',
+          '脚本源',
+          capabilities: const domain.SourceCapabilities(),
+        ),
+      ],
+    );
+    addTearDown(registry.dispose);
+    final provider = buildProvider(registry);
+
+    expect(provider.activeSourceKey, 'script');
+    expect(provider.activeSource, isNotNull, reason: '渠道已注册');
+    expect(provider.hasActiveSearchSource, isFalse, reason: '能力位全 false');
+    expect(provider.supportedSearchKinds, isEmpty);
+
+    provider.submitSearch('hello');
+    await _waitUntil(() => !provider.isSearching);
+    expect(provider.songGroups, isEmpty);
+    expect(script.searchCalls, 0);
+  });
+
+  test('已有查询时切到暂不可搜索渠道，能力补齐后自动补搜', () async {
+    final kw = _FakeMusicSource('kw');
+    final script = _FakeMusicSource('script');
+    final registry = _FakeRegistry(
+      {'kw': kw, 'script': script},
+      [
+        _descriptor('kw', '酷我'),
+        _descriptor(
+          'script',
+          '脚本源',
+          capabilities: const domain.SourceCapabilities(),
+        ),
+      ],
     );
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => !provider.isSearching);
-    provider.selectSearchKind(SearchKind.artist);
-    await _waitUntil(() => _artistGroup(provider, 'kw').items.isNotEmpty);
+    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    expect(kw.searchCalls, 1);
 
+    provider.setActiveSource('script');
+    expect(provider.hasActiveSearchSource, isFalse);
+    expect(provider.songGroups, isEmpty, reason: '切渠道已清空旧结果');
+
+    // 脚本晚到：同一个 key 变为可搜索，当前关键词仍在 provider 上。
     registry.setDescriptors([
-      _descriptor('kw', '酷我', capabilities: capabilities),
-      _descriptor('tx', 'QQ音乐', capabilities: capabilities),
+      _descriptor('kw', '酷我'),
+      _descriptor('script', '脚本源'),
     ]);
     await _waitUntil(
-      () => provider.artistGroups.any(
-        (group) => group.source.key == 'tx' && group.items.isNotEmpty,
-      ),
+      () =>
+          script.searchCalls == 1 &&
+          provider.songGroups.length == 1 &&
+          provider.songGroups.single.source.key == 'script' &&
+          provider.songGroups.single.items.isNotEmpty,
     );
-    expect(tx.artistSearchCalls, 1, reason: '当前类型（歌手）补首屏');
-    expect(tx.searchCalls, 0, reason: '不在当前类型的单曲不补搜');
-    expect(tx.lyricSearchCalls, 0, reason: '不在当前类型的歌词不补搜');
-
-    provider.selectSearchKind(SearchKind.lyric);
-    await _waitUntil(
-      () => provider.lyricGroups.any(
-        (group) => group.source.key == 'tx' && group.items.isNotEmpty,
-      ),
-    );
-    expect(tx.lyricSearchCalls, 1, reason: '切到歌词后再补该类型');
-    expect(tx.searchCalls, 0, reason: '单曲仍不补搜');
-    expect(tx.artistSearchCalls, 1, reason: '歌手不重复请求');
+    expect(provider.searchResults.single.id.uri, 'script:hello-1');
+    expect(kw.searchCalls, 1, reason: '不回到旧渠道补搜');
   });
 
-  test('渠道排序变化立即跟随；descriptors 未变化不重发请求', () async {
-    final kw = _FakeMusicSource('kw');
-    final tx = _FakeMusicSource('tx');
-    final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
-    addTearDown(registry.dispose);
-    final provider = buildProvider(registry);
-
-    provider.submitSearch('hello');
-    await _waitUntil(() => !provider.isSearching);
-    expect(kw.searchCalls, 1);
-    expect(tx.searchCalls, 1);
-
-    registry.setDescriptors([
-      _descriptor('tx', 'QQ音乐'),
-      _descriptor('kw', '酷我'),
-    ]);
-    await _waitUntil(() => provider.songGroups.first.source.key == 'tx');
-    expect(provider.songGroups.map((g) => g.source.key), ['tx', 'kw']);
-    expect(kw.searchCalls, 1, reason: '同一来源会话保留');
-    expect(tx.searchCalls, 1);
-
-    registry.setDescriptors([
-      _descriptor('tx', 'QQ音乐'),
-      _descriptor('kw', '酷我'),
-    ]);
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(kw.searchCalls, 1);
-    expect(tx.searchCalls, 1);
-  });
-
-  test('来源移除：分组与会话一起移除，其它来源保留', () async {
-    final kw = _FakeMusicSource('kw');
-    final tx = _FakeMusicSource('tx');
-    final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
-    addTearDown(registry.dispose);
-    final provider = buildProvider(registry);
-
-    provider.submitSearch('hello');
-    await _waitUntil(() => provider.songGroups.length == 2);
-
-    registry.setDescriptors([_descriptor('kw', '酷我')]);
-    await _waitUntil(() => provider.songGroups.length == 1);
-    expect(provider.songGroups.single.source.key, 'kw');
-    expect(provider.searchResults, hasLength(1));
-  });
-
-  test('来源过滤只过滤已加载分组，不重发请求', () async {
-    final kw = _FakeMusicSource('kw');
-    final tx = _FakeMusicSource('tx');
-    final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
-    addTearDown(registry.dispose);
-    final provider = buildProvider(registry);
-
-    provider.submitSearch('hello');
-    await _waitUntil(() => !provider.isSearching);
-    expect(provider.songGroups, hasLength(2));
-
-    provider.selectSourceFilter('tx');
-    await Future<void>.delayed(Duration.zero);
-    expect(provider.sourceFilter, 'tx');
-    expect(provider.songGroups.map((g) => g.source.key), ['tx']);
-    expect(provider.searchResults.map((row) => row.id.uri), ['tx:hello-1']);
-    expect(kw.searchCalls, 1, reason: '过滤不重发');
-    expect(tx.searchCalls, 1);
-
-    provider.selectSourceFilter('');
-    expect(provider.songGroups, hasLength(2));
-  });
-
-  test('过滤偏好持久化恢复；远端 reload 同步过滤值', () async {
-    final registry = _FakeRegistry(
-      {'kw': _FakeMusicSource('kw'), 'tx': _FakeMusicSource('tx')},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
-    addTearDown(registry.dispose);
-    final settings = testSettingsRegistry();
-    await settings.write(kSearchSourceFilter, 'tx');
-
-    final provider = buildProvider(registry, settings: settings);
-    await _waitUntil(() => provider.sourceFilter == 'tx');
-    expect(provider.sourceFilter, 'tx');
-
-    await settings.write(kSearchSourceFilter, 'kw');
-    // 同步适配器应用远端值后经组合根触发 reload 钩子。
-    await settings.reloadKeys([kSearchSourceFilter.name]);
-    await _waitUntil(() => provider.sourceFilter == 'kw');
-    expect(provider.sourceFilter, 'kw');
-  });
-
-  test('reload 在途时手动过滤不会被晚到旧值覆盖', () async {
-    final registry = _FakeRegistry(
-      {'kw': _FakeMusicSource('kw'), 'tx': _FakeMusicSource('tx')},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
-    addTearDown(registry.dispose);
-    final settings = testSettingsRegistry();
-    await settings.write(kSearchSourceFilter, 'tx');
-    final provider = buildProvider(registry, settings: settings);
-    await _waitUntil(() => provider.sourceFilter == 'tx');
-
-    // 模拟远端写入「全部来源」并触发 reload；reload 在途时用户手动选 kw。
-    await settings.write(kSearchSourceFilter, '');
-    final pendingReload = settings.reloadKeys([kSearchSourceFilter.name]);
-    provider.selectSourceFilter('kw');
-    await pendingReload;
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(provider.sourceFilter, 'kw', reason: '晚到的旧 reload 值不得覆盖用户选择');
-  });
-
-  test('selectSourceFilter 写入持久化（失败吞掉）', () async {
-    final registry = _FakeRegistry(
-      {'kw': _FakeMusicSource('kw')},
-      [_descriptor('kw', '酷我')],
-    );
-    addTearDown(registry.dispose);
-    final provider = buildProvider(registry, settings: testSettingsRegistry());
-    provider.selectSourceFilter('kw');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString(kSearchSourceFilter.name), 'kw');
-  });
-
-  test('类型切换只搜支持该类型的来源；能力位取来源并集', () async {
+  test('supportedSearchKinds 只看当前渠道；不支持的类型自动回退（优先 song）', () async {
     final kw = _FakeMusicSource(
       'kw',
       capabilities: const domain.SourceCapabilities(
@@ -774,71 +669,40 @@ void main() {
 
     provider.submitSearch('周杰伦');
     await _waitUntil(() => !provider.isSearching);
-    expect(kw.searchCalls, 1);
-    expect(script.searchCalls, 1);
-
     provider.selectSearchKind(SearchKind.artist);
     await _waitUntil(() => _artistGroup(provider, 'kw').items.isNotEmpty);
-    expect(kw.artistSearchCalls, 1);
-    expect(script.artistSearchCalls, 0, reason: '脚本源无歌手能力，不参与');
-    expect(provider.artistGroups.map((g) => g.source.key), ['kw']);
-    // 分组元数据（总数 / 页码）来自该来源会话。
-    final artistGroup = _artistGroup(provider, 'kw');
-    expect(artistGroup.total, 42);
-    expect(artistGroup.hasMore, isTrue);
+    expect(provider.searchKind, SearchKind.artist);
 
-    provider.selectSearchKind(SearchKind.lyric);
-    await _waitUntil(() => _lyricGroup(provider, 'kw').items.isNotEmpty);
-    expect(kw.lyricSearchCalls, 1);
-    expect(script.lyricSearchCalls, 0);
-    expect(_lyricGroup(provider, 'kw').items.single.lyricSnippet, '命中歌词 周杰伦');
-
-    // 切回单曲命中已有会话，不重复请求。
-    provider.selectSearchKind(SearchKind.song);
-    await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(kw.searchCalls, 1);
+    provider.setActiveSource('script');
+    expect(provider.searchKind, SearchKind.song, reason: '脚本源无歌手能力 → 回退单曲');
+    expect(provider.supportedSearchKinds, [SearchKind.song]);
+    expect(provider.artistGroups, isEmpty, reason: '旧渠道的歌手结果已清空');
+    await _waitUntil(() => _songGroup(provider, 'script').items.isNotEmpty);
+    expect(script.artistSearchCalls, 0);
     expect(script.searchCalls, 1);
   });
 
-  test('过滤到不支持当前类型的来源时临时按全部处理，切回恢复偏好', () async {
-    final kw = _FakeMusicSource(
-      'kw',
-      capabilities: const domain.SourceCapabilities(
-        search: true,
-        pagination: true,
-        artist: true,
-      ),
-    );
-    final script = _FakeMusicSource('script');
+  test('来源移除：当前渠道分组一起移除；其它渠道不自动接管', () async {
+    final kw = _FakeMusicSource('kw');
+    final tx = _FakeMusicSource('tx');
     final registry = _FakeRegistry(
-      {'kw': kw, 'script': script},
-      [
-        _descriptor('kw', '酷我', capabilities: kw.capabilities),
-        _descriptor('script', '脚本源'),
-      ],
+      {'kw': kw, 'tx': tx},
+      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
     );
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
-    provider.submitSearch('周杰伦');
-    await _waitUntil(() => !provider.isSearching);
-    provider.selectSourceFilter('script');
-    expect(provider.sourceFilter, 'script');
+    provider.submitSearch('hello');
+    await _waitUntil(() => provider.songGroups.length == 1);
 
-    provider.selectSearchKind(SearchKind.artist);
-    await _waitUntil(
-      () => provider.artistGroups.any((g) => g.source.key == 'kw'),
-    );
-    expect(provider.sourceFilter, isEmpty, reason: '演员类型下 script 不支持');
-    expect(provider.artistGroups.map((g) => g.source.key), ['kw']);
-    expect(script.artistSearchCalls, 0);
-
-    provider.selectSearchKind(SearchKind.song);
-    expect(provider.sourceFilter, 'script', reason: '持久化偏好保留');
-    expect(provider.songGroups.map((g) => g.source.key), ['script']);
+    registry.setDescriptors([_descriptor('tx', 'QQ音乐')]);
+    await _waitUntil(() => provider.songGroups.isEmpty);
+    expect(provider.activeSourceKey, 'kw');
+    expect(provider.hasActiveSearchSource, isFalse);
+    expect(tx.searchCalls, 0, reason: '当前渠道消失时不自动改搜其它渠道');
   });
 
-  test('retryFailed：只重试当前类型所有失败来源，互不阻塞', () async {
+  test('retryFailed 只重试当前渠道', () async {
     var fail = true;
     final kw = _FakeMusicSource('kw')
       ..onSearch = (query) async {
@@ -862,26 +726,17 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(
-      () =>
-          _songGroup(provider, 'kw').failure != null &&
-          _songGroup(provider, 'tx').failure != null,
-    );
-    expect(provider.songGroups.every((group) => group.failure != null), isTrue);
+    await _waitUntil(() => _songGroup(provider, 'kw').failure != null);
+    expect(provider.songGroups.single.source.key, 'kw');
 
     fail = false;
     await provider.retryFailed();
-    await _waitUntil(
-      () =>
-          _songGroup(provider, 'kw').items.isNotEmpty &&
-          _songGroup(provider, 'tx').items.isNotEmpty,
-    );
-    expect(provider.songGroups.every((group) => group.failure == null), isTrue);
+    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
     expect(kw.searchCalls, 2);
-    expect(tx.searchCalls, 2);
+    expect(tx.searchCalls, 0);
   });
 
-  test('playItem：队列只取该行所属来源，contextName = 来源展示名', () async {
+  test('playItem：队列只取当前渠道的已加载结果，contextName = 渠道名', () async {
     final kw = _FakeMusicSource('kw')
       ..onSearch = (query) => Future.value(
         SearchResult(items: [_track('kw', 'a'), _track('kw', 'b')]),
@@ -898,27 +753,21 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(
-      () =>
-          _songGroup(provider, 'kw').items.length == 2 &&
-          _songGroup(provider, 'tx').items.length == 2,
-    );
+    await _waitUntil(() => _songGroup(provider, 'kw').items.length == 2);
 
-    final txGroup = _songGroup(provider, 'tx');
-    provider.playItem(txGroup.items[1]);
+    provider.playItem(_songGroup(provider, 'kw').items[1]);
     final request = backend.lastRequest!;
     expect(request.startIndex, 1);
-    expect(request.context?.name, 'QQ音乐');
-    expect(request.tracks.map((track) => track.id.uri), ['tx:x', 'tx:y']);
+    expect(request.context?.name, '酷我');
+    expect(request.tracks.map((track) => track.id.uri), ['kw:a', 'kw:b']);
     expect(
-      request.tracks.every((track) => track.id.sourceKey == 'tx'),
+      request.tracks.every((track) => track.id.sourceKey == 'kw'),
       isTrue,
       reason: '不混平台队列',
     );
-    expect(identical(request.tracks[0], txGroup.items[0].track), isTrue);
   });
 
-  test('releaseSearchResults：清空所有来源会话与片段，保留过滤偏好', () async {
+  test('releaseSearchResults：清空结果与关键词，保留当前渠道', () async {
     final kw = _FakeMusicSource(
       'kw',
       capabilities: const domain.SourceCapabilities(
@@ -928,20 +777,9 @@ void main() {
         lyricSearch: true,
       ),
     );
-    final tx = _FakeMusicSource(
-      'tx',
-      capabilities: const domain.SourceCapabilities(
-        search: true,
-        pagination: true,
-        lyricSearch: true,
-      ),
-    );
     final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [
-        _descriptor('kw', '酷我', capabilities: kw.capabilities),
-        _descriptor('tx', 'QQ音乐', capabilities: tx.capabilities),
-      ],
+      {'kw': kw},
+      [_descriptor('kw', '酷我', capabilities: kw.capabilities)],
     );
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
@@ -950,13 +788,6 @@ void main() {
     await _waitUntil(() => !provider.isSearching);
     provider.selectSearchKind(SearchKind.artist);
     await _waitUntil(() => _artistGroup(provider, 'kw').items.isNotEmpty);
-    provider.selectSearchKind(SearchKind.lyric);
-    await _waitUntil(
-      () =>
-          _lyricGroup(provider, 'kw').items.isNotEmpty &&
-          _lyricGroup(provider, 'tx').items.isNotEmpty,
-    );
-    provider.selectSourceFilter('tx');
 
     provider.releaseSearchResults();
     expect(provider.searchQuery, isEmpty);
@@ -967,7 +798,7 @@ void main() {
     expect(provider.artistGroups, isEmpty);
     expect(provider.lyricGroups, isEmpty);
     expect(provider.isSearching, isFalse);
-    expect(provider.sourceFilter, 'tx', reason: '过滤偏好保留');
+    expect(provider.activeSourceKey, 'kw', reason: '渠道偏好保留');
   });
 
   test('换词作废旧会话：旧查询晚到响应不写回新查询', () async {
@@ -992,7 +823,7 @@ void main() {
     expect(_songGroup(provider, 'kw').items.single.id.uri, 'kw:new');
   });
 
-  test('歌词片段按来源保存；换词清空，追加页同 id 后页覆盖', () async {
+  test('歌词片段按渠道保存；换词清空，追加页同 id 后页覆盖', () async {
     final kw =
         _FakeMusicSource(
             'kw',
@@ -1029,28 +860,9 @@ void main() {
               total: 3,
             );
           };
-    final tx =
-        _FakeMusicSource(
-            'tx',
-            capabilities: const domain.SourceCapabilities(
-              search: true,
-              pagination: true,
-              lyricSearch: true,
-            ),
-          )
-          ..onSearchLyrics = (query) => Future.value(
-            SearchResult(
-              items: query.keyword == '歌词'
-                  ? [LyricHit(track: _track('tx', 't'), snippet: 'TX 片段')]
-                  : const [],
-            ),
-          );
     final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [
-        _descriptor('kw', '酷我', capabilities: kw.capabilities),
-        _descriptor('tx', 'QQ音乐', capabilities: tx.capabilities),
-      ],
+      {'kw': kw},
+      [_descriptor('kw', '酷我', capabilities: kw.capabilities)],
     );
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
@@ -1058,16 +870,11 @@ void main() {
     provider.submitSearch('歌词');
     await _waitUntil(() => !provider.isSearching);
     provider.selectSearchKind(SearchKind.lyric);
-    await _waitUntil(
-      () =>
-          _lyricGroup(provider, 'kw').items.length == 2 &&
-          _lyricGroup(provider, 'tx').items.isNotEmpty,
-    );
+    await _waitUntil(() => _lyricGroup(provider, 'kw').items.length == 2);
     expect(_lyricGroup(provider, 'kw').items.map((row) => row.lyricSnippet), [
       '第一页 A',
       '第一页 B',
     ]);
-    expect(_lyricGroup(provider, 'tx').items.single.lyricSnippet, 'TX 片段');
 
     await provider.loadMore('kw');
     expect(_lyricGroup(provider, 'kw').items.map((row) => row.lyricSnippet), [
@@ -1079,16 +886,9 @@ void main() {
     provider.submitSearch('第二词');
     await _waitUntil(() => _lyricGroup(provider, 'kw').items.isNotEmpty);
     expect(_lyricGroup(provider, 'kw').items.single.lyricSnippet, '新片段');
-    expect(
-      provider.lyricGroups.any(
-        (group) => group.items.any((row) => row.lyricSnippet == 'TX 片段'),
-      ),
-      isFalse,
-      reason: '换词清空所有来源片段',
-    );
   });
 
-  test('防抖窗口：isSearchBusy 覆盖等待期，完成后只按最终来源请求一次', () {
+  test('防抖窗口：isSearchBusy 覆盖等待期，完成后只请求一次', () {
     final source = _FakeMusicSource('kw');
     final registry = _FakeRegistry({'kw': source}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
@@ -1146,13 +946,9 @@ void main() {
     });
   });
 
-  test('输入防抖 300ms：连续输入只发最后一次请求（每个来源各一次）', () {
+  test('输入防抖 300ms：连续输入只发最后一次请求', () {
     final kw = _FakeMusicSource('kw');
-    final tx = _FakeMusicSource('tx');
-    final registry = _FakeRegistry(
-      {'kw': kw, 'tx': tx},
-      [_descriptor('kw', '酷我'), _descriptor('tx', 'QQ音乐')],
-    );
+    final registry = _FakeRegistry({'kw': kw}, [_descriptor('kw', '酷我')]);
     addTearDown(registry.dispose);
     final provider = buildProvider(registry);
 
@@ -1167,7 +963,6 @@ void main() {
       async.elapse(const Duration(milliseconds: 1));
       async.flushMicrotasks();
       expect(kw.searchCalls, 1);
-      expect(tx.searchCalls, 1);
       expect(provider.searchQuery, 'ab');
     });
   });
@@ -1193,7 +988,9 @@ void main() {
 
     expect(provider.sourceChannels, isEmpty);
     expect(provider.hasSearchableSources, isFalse);
-    expect(provider.sourceFilter, isEmpty);
+    expect(provider.activeSourceKey, isEmpty);
+    expect(provider.hasActiveSearchSource, isFalse);
+    expect(provider.supportedSearchKinds, isEmpty);
 
     provider.submitSearch('hello');
     await _waitUntil(() => !provider.isSearching);

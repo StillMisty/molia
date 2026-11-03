@@ -5,8 +5,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../app/perf/data_path_trace.dart';
 import '../data/catalog/catalog_service.dart';
-import '../data/settings/settings_access.dart';
-import '../data/settings/settings_keys.dart';
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show LyricHit, SearchKind, SearchQuery;
 import '../domain/models/source.dart' show SourceDescriptor;
@@ -30,14 +28,15 @@ typedef _PageFetcher<T> = Future<PagedResult<T>> Function(
   int page,
 );
 
-/// 跨音源聚合搜索状态（内部经 [CatalogService] / [SourceRegistry]）。
+/// 当前渠道的单源搜索状态（内部经 [CatalogService] / [SourceRegistry]）。
 ///
-/// 每个「搜索类型 × 来源」是一个分页执行体，查询代际 / 逐源状态 / 失败 /
-/// 通知节拍统一由 [FanOutSearchSession] 持有：
+/// 全局只有一个搜索渠道：`DiscoverProvider.channelKey` 是唯一渠道偏好，
+/// 组合根 / 资料页把它同步到 [activeSourceKey]。每个搜索类型各持一条分页
+/// 分支；查询代际 / 失败 / 通知节拍统一由 [FanOutSearchSession] 持有：
 /// - 换词清空所有旧执行体，晚到的旧响应由查询代际与分页控制器丢弃；
-/// - 每个来源独立分页 / 失败 / 加载态，一个平台失败不影响其它平台；
-/// - 分组顺序永远直接读 `SourceRegistry.descriptors`（音源管理的渠道排序），
-///   provider 不按内置规范顺序重排。
+/// - 当前渠道独立分页 / 失败 / 加载态；
+/// - 渠道切换时清空旧结果并按当前关键词重搜；不支持搜索的渠道不发请求，
+///   由 UI 展示「当前渠道不支持搜索」空态。
 class SearchProvider extends ChangeNotifier {
   final PlaybackProvider _playbackProvider;
 
@@ -47,19 +46,17 @@ class SearchProvider extends ChangeNotifier {
   /// 音源注册表：描述列表与变更通知来源（可为 null：无音源）。
   final SourceRegistry? _sourceRegistry;
 
-  /// 搜索来源过滤偏好（跨重启记住）；null = 测试 / 无持久化场景。
-  final SettingsAccess? _settings;
-
   StreamSubscription<void>? _registrySubscription;
 
   String _searchQuery = '';
   SearchKind _kind = SearchKind.song;
 
-  /// 持久化的过滤偏好（原始值）；有效值见 [sourceFilter]。
-  String _sourceFilterPreference = '';
-
-  /// 过滤偏好的异步恢复代际：用户手动选择后，晚到的 prefs 读取不得覆盖。
-  int _sourceFilterGeneration = 0;
+  /// 当前搜索渠道（与 `DiscoverProvider.channelKey` 同源）。
+  ///
+  /// 允许是当前版本不可搜索的渠道（脚本未加载 / 渠道无搜索能力）：
+  /// 此时 [hasActiveSearchSource] 为 false（activeSource 可能已注册但能力位
+  /// 全 false），UI 显示不支持搜索的空态，而不是回退去搜别的渠道。
+  String _activeSourceKey = '';
 
   /// 三种搜索类型各一份分页分支（行形状不同，类型留在分支里）。
   late final SearchBranch<Track, SearchRow> _songs;
@@ -92,7 +89,6 @@ class SearchProvider extends ChangeNotifier {
     this._playbackProvider, {
     this._catalogService,
     this._sourceRegistry,
-    this._settings,
   }) {
     _songs = _buildBranch<Track, SearchRow>(
       kind: SearchKind.song,
@@ -129,11 +125,6 @@ class SearchProvider extends ChangeNotifier {
       control.addListener(_onSearchChanged);
     }
 
-    final settings = _settings;
-    if (settings != null) {
-      settings.bindReload(kSearchSourceFilter, _reloadSourceFilter);
-      unawaited(_restoreSourceFilter());
-    }
     _registrySubscription = _sourceRegistry?.changes.listen(
       (_) => _onSourcesChanged(),
     );
@@ -146,6 +137,23 @@ class SearchProvider extends ChangeNotifier {
   SearchKind get searchKind => _kind;
 
   bool get isSearchActive => _searchQuery.isNotEmpty;
+
+  /// 当前渠道 key（`''` = 尚未确定；不是「全部来源」）。
+  String get activeSourceKey => _activeSourceKey;
+
+  /// 当前渠道的搜索描述；渠道未注册 / 脚本未加载时为 null。
+  SourceDescriptor? get activeSource {
+    for (final descriptor in sourceChannels) {
+      if (descriptor.key == _activeSourceKey) return descriptor;
+    }
+    return null;
+  }
+
+  /// 当前渠道是否真的可搜索（Ctrl+F / 空态的唯一判据）。
+  ///
+  /// 不能用 `activeSource != null`：已注册但 search / artist / lyricSearch
+  /// 全为 false 的渠道也要按「不支持搜索」处理。
+  bool get hasActiveSearchSource => supportedSearchKinds.isNotEmpty;
 
   /// 当前关键词已提交、但当前类型还没有真正发起搜索（防抖窗口 / 切类型）。
   ///
@@ -166,33 +174,23 @@ class SearchProvider extends ChangeNotifier {
   List<SourceDescriptor> get sourceChannels =>
       _sourceRegistry?.descriptors ?? const [];
 
-  /// 当前类型支持且已启用的来源（顺序严格取 [sourceChannels]）。
-  List<SourceDescriptor> get sourceFilterOptions => [
-    for (final descriptor in sourceChannels)
-      if (_supports(_kind, descriptor)) descriptor,
-  ];
-
-  /// 有效过滤值：`''` = 全部。
+  /// 当前渠道支持且已启用的搜索类型（只读 [activeSource] 的能力位）。
   ///
-  /// 持久化偏好可能与当前类型的能力集不匹配（例如过滤到只有单曲能力的
-  /// 脚本源后切到「歌手」）：此时临时按全部处理，偏好本身保留，切回支持的
-  /// 类型后自动恢复。
-  String get sourceFilter => _effectiveFilterFor(_kind);
-
-  /// 当前类型支持的搜索类型（启用来源能力位的并集）。
+  /// 当前渠道不可搜索时返回空列表；搜索页据此隐藏类型分段。
   List<SearchKind> get supportedSearchKinds {
-    final channels = sourceChannels;
+    final source = activeSource;
+    if (source == null) return const [];
     return [
-      SearchKind.song,
-      if (channels.any((d) => d.capabilities.artist)) SearchKind.artist,
-      if (channels.any((d) => d.capabilities.lyricSearch)) SearchKind.lyric,
+      if (_supports(SearchKind.song, source)) SearchKind.song,
+      if (_supports(SearchKind.artist, source)) SearchKind.artist,
+      if (_supports(SearchKind.lyric, source)) SearchKind.lyric,
     ];
   }
 
-  /// 是否存在可搜索来源（空态引导与资料库搜索 tab 显隐的唯一判据）。
+  /// 是否存在可搜索来源（区别「全应用无音源」与「当前渠道不支持搜索」）。
   bool get hasSearchableSources => sourceChannels.isNotEmpty;
 
-  /// 单曲 / 歌词结果按来源分组（顺序 = 渠道管理排序，过滤后）。
+  /// 单曲 / 歌词结果分组（单渠道，最多一组）。
   List<SearchSourceGroup<SearchRow>> get songGroups =>
       _songs.groups(_targetsFor(SearchKind.song));
 
@@ -239,15 +237,14 @@ class SearchProvider extends ChangeNotifier {
   /// 首屏失败重载首屏；加载更多失败重试下一页（每来源独立）。
   Future<void> retry(String sourceKey) => _controls[_kind]!.retry(sourceKey);
 
-  /// 重试当前类型所有失败来源（首屏失败与加载更多失败一起处理）。
+  /// 重试当前渠道失败的首屏 / 追加页。
   Future<void> retryFailed() => _controls[_kind]!.retryFailed(
     onlyKeys: {for (final descriptor in _targetsFor(_kind)) descriptor.key},
   );
 
-  /// 切换搜索类型：不支持的类型忽略。
+  /// 切换搜索类型：当前渠道不支持的类型忽略。
   ///
-  /// 目标类型尚未搜过当前关键词时按所有支持该类型的来源并行补首屏；已搜过
-  /// 则只补当前过滤值下缺失的来源（不重复请求已有会话）。
+  /// 目标类型尚未搜过当前关键词时给当前渠道补首屏；已搜过则不重复请求。
   void selectSearchKind(SearchKind kind) {
     if (kind == _kind || !supportedSearchKinds.contains(kind)) return;
     _kind = kind;
@@ -265,20 +262,32 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  /// 只过滤已加载分组，不重发请求；该来源尚未参与本轮搜索时才补首屏。
-  void selectSourceFilter(String key) {
+  /// 切换搜索渠道：清空旧渠道结果，并按当前关键词在新渠道重搜。
+  ///
+  /// 允许切到当前不可搜索的渠道（脚本未加载 / 无搜索能力）：此时只清空，
+  /// 不发请求；等 registry 出现该渠道后由 [_onSourcesChanged] 补搜。
+  /// 空 key = 回到第一个可搜索渠道，绝不表示「全部来源」。
+  void setActiveSource(String key) {
     final normalized = key.trim();
-    if (normalized.isNotEmpty &&
-        !sourceFilterOptions.any((option) => option.key == normalized)) {
+    if (normalized.isEmpty) {
+      final fallback = _defaultActiveSourceKey();
+      if (fallback == _activeSourceKey) return;
+      _switchActiveSource(fallback);
       return;
     }
-    _sourceFilterGeneration++;
-    _applySourceFilter(normalized);
-    final settings = _settings;
-    if (settings == null) return;
-    unawaited(
-      settings.write(kSearchSourceFilter, normalized).catchError((Object _) {}),
-    );
+    if (normalized == _activeSourceKey) return;
+    _switchActiveSource(normalized);
+  }
+
+  void _switchActiveSource(String key) {
+    _activeSourceKey = key;
+    _ensureKindSupported();
+    // 旧渠道的结果不属于新渠道：先清空所有类型，再按当前关键词重搜。
+    _clearAllRuns();
+    notifyListeners();
+    final keyword = _searchQuery.trim();
+    if (keyword.isEmpty || supportedSearchKinds.isEmpty) return;
+    unawaited(_controls[_kind]!.search(keyword));
   }
 
   void updateSearchQuery(String query) {
@@ -326,7 +335,7 @@ class SearchProvider extends ChangeNotifier {
 
   /// 释放搜索结果（托盘隐藏时由内存守卫调用）。
   ///
-  /// 清空关键词与所有来源执行体；来源过滤偏好（用户偏好）保留。
+  /// 清空关键词与所有渠道执行体；当前渠道（用户偏好）保留。
   void releaseSearchResults() {
     if (_disposed) return;
     _debounceTimer?.cancel();
@@ -364,7 +373,7 @@ class SearchProvider extends ChangeNotifier {
     );
   }
 
-  /// registry.changes：删来源、按新顺序重排、给晚到的新来源补搜。
+  /// registry.changes：删来源、给晚到的当前渠道补搜。
   ///
   /// descriptors 未变化时直接返回，避免 SourceManager 的其它通知触发重复请求。
   void _onSourcesChanged() {
@@ -377,37 +386,56 @@ class SearchProvider extends ChangeNotifier {
       control.retainSources(keys);
     }
 
-    if (!supportedSearchKinds.contains(_kind)) _kind = SearchKind.song;
+    if (_activeSourceKey.isEmpty) _activeSourceKey = _defaultActiveSourceKey();
+    _ensureKindSupported();
 
     final keyword = _searchQuery.trim();
-    final current = _controls[_kind]!;
-    if (keyword.isNotEmpty && current.query == keyword) {
-      // 只给当前可见类型补搜：其它类型切过去时由 selectSearchKind 的
-      // ensureSources 路径补齐，避免为不在当前页的类型发额外请求。
-      unawaited(current.ensureSources());
+    if (keyword.isNotEmpty &&
+        supportedSearchKinds.isNotEmpty &&
+        !(_debounceTimer?.isActive ?? false)) {
+      final current = _controls[_kind]!;
+      if (current.query == keyword) {
+        // 当前渠道晚到（例如脚本加载完成）时补首屏；其它类型在切过去时由
+        // selectSearchKind 的 ensureSources 路径补齐。
+        unawaited(current.ensureSources());
+      } else {
+        // 切到暂不可搜索的渠道时 setActiveSource 已清空执行体（query 为空）；
+        // 能力补齐后必须主动按当前关键词重搜，不能等用户重新输入。
+        unawaited(current.search(keyword));
+      }
     }
     notifyListeners();
   }
 
-  Iterable<SourceDescriptor> _targetsFor(SearchKind kind) {
-    final options = [
-      for (final descriptor in sourceChannels)
-        if (_supports(kind, descriptor)) descriptor,
-    ];
-    final filter = _effectiveFilterFor(kind);
-    if (filter.isEmpty) return options;
-    return [
-      for (final descriptor in options)
-        if (descriptor.key == filter) descriptor,
-    ];
+  /// 默认渠道：第一个具备任一搜索能力的来源；都不支持搜索时退回第一个描述。
+  String _defaultActiveSourceKey() {
+    final channels = sourceChannels;
+    for (final descriptor in channels) {
+      if (_hasAnySearchCapability(descriptor)) return descriptor.key;
+    }
+    return channels.isEmpty ? '' : channels.first.key;
   }
 
-  String _effectiveFilterFor(SearchKind kind) {
-    if (_sourceFilterPreference.isEmpty) return '';
-    final options = sourceChannels.where((d) => _supports(kind, d));
-    return options.any((d) => d.key == _sourceFilterPreference)
-        ? _sourceFilterPreference
-        : '';
+  static bool _hasAnySearchCapability(SourceDescriptor descriptor) {
+    final capabilities = descriptor.capabilities;
+    return capabilities.search ||
+        capabilities.artist ||
+        capabilities.lyricSearch;
+  }
+
+  /// 当前 kind 不被渠道支持时回退到第一个支持的 kind（优先 song）。
+  void _ensureKindSupported() {
+    final kinds = supportedSearchKinds;
+    if (kinds.contains(_kind)) return;
+    _kind = kinds.contains(SearchKind.song)
+        ? SearchKind.song
+        : (kinds.isEmpty ? SearchKind.song : kinds.first);
+  }
+
+  Iterable<SourceDescriptor> _targetsFor(SearchKind kind) {
+    final source = activeSource;
+    if (source == null || !_supports(kind, source)) return const [];
+    return [source];
   }
 
   static bool _supports(SearchKind kind, SourceDescriptor descriptor) {
@@ -515,48 +543,6 @@ class SearchProvider extends ChangeNotifier {
     } finally {
       _relaySearchChanges = relay;
     }
-  }
-
-  void _applySourceFilter(String value) {
-    _sourceFilterPreference = value;
-    final keyword = _searchQuery.trim();
-    final current = _controls[_kind]!;
-    if (keyword.isNotEmpty && current.query == keyword) {
-      unawaited(current.ensureSources());
-    }
-    notifyListeners();
-  }
-
-  Future<void> _restoreSourceFilter() async {
-    final settings = _settings;
-    if (settings == null) return;
-    final generation = _sourceFilterGeneration;
-    try {
-      final raw = await settings.read(kSearchSourceFilter);
-      if (_disposed || generation != _sourceFilterGeneration) return;
-      final value = raw.trim();
-      if (value == _sourceFilterPreference) return;
-      _applySourceFilter(value);
-    } catch (_) {
-      // 读取失败保持默认「全部来源」。
-    }
-  }
-
-  /// 同步应用远端值后的重载入口。
-  Future<void> _reloadSourceFilter() async {
-    final settings = _settings;
-    if (settings == null) return;
-    final generation = _sourceFilterGeneration;
-    try {
-      final value = (await settings.read(kSearchSourceFilter)).trim();
-      // reload 在途时用户可能已经手动选了新来源：晚到的旧值不得覆盖。
-      if (_disposed ||
-          generation != _sourceFilterGeneration ||
-          value == _sourceFilterPreference) {
-        return;
-      }
-      _applySourceFilter(value);
-    } catch (_) {}
   }
 
   void _onSearchChanged() {

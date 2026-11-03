@@ -88,8 +88,48 @@ class KwDiscoverSource extends DiscoverSource {
   ];
 
   @override
+  bool get hasLeaderboardCoverEndpoint => true;
+
+  @override
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid) {
     return _fetchLeaderboard(bangid);
+  }
+
+  /// 榜单封面：`bang_info` 的 `data.pic`（榜单官方封面图）。
+  @override
+  Future<String?> leaderboardCover(String bangid) {
+    return BuiltinSearch.transport.cached('kw:leaderboard-cover:$bangid', () async {
+      final body = {
+        'uid': '',
+        'devId': '',
+        'sFrom': 'kuwo_sdk',
+        'user_type': 'AP',
+        'carSource': 'kwplayercar_ar_6.0.1.0_apk_keluze.apk',
+        'id': bangid,
+        'pn': 0,
+        'rn': 1,
+      };
+      final url =
+          'https://wbd.kuwo.cn/api/bd/bang/bang_info?${kwWbdBuildParam(body)}';
+      final text = await lxHttpGetText(url);
+      dynamic decoded;
+      try {
+        decoded = kwWbdDecodeData(text);
+      } catch (_) {
+        throw StateError('kw 榜单封面解码失败');
+      }
+      if (decoded is! Map ||
+          decoded['code'] != 200 ||
+          decoded['data'] is! Map) {
+        throw StateError('kw 榜单封面获取失败');
+      }
+      final data = decoded['data'] as Map;
+      for (final key in const ['pic', 'cover', 'img']) {
+        final value = data[key]?.toString().trim() ?? '';
+        if (value.isNotEmpty) return value;
+      }
+      throw StateError('kw 榜单封面为空');
+    });
   }
 
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) {

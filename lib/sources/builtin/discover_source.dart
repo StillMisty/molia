@@ -18,6 +18,19 @@ abstract class DiscoverSource {
   /// 榜单曲目（[bangid] 为平台原始榜单 id）。
   Future<List<DiscoverTrack>> leaderboardTracks(String bangid);
 
+  /// 榜单封面（轻量请求；平台没有榜单封面时返回 null）。
+  ///
+  /// 默认 null：发现页会用第一首曲目的封面兜底；平台能直接给出榜单封面时
+  /// 覆写本方法，避免为了一个缩略图拉完整曲目列表。
+  Future<String?> leaderboardCover(String bangid) async => null;
+
+  /// 是否有轻量榜单封面接口。
+  ///
+  /// 为 true 时，封面请求异常不再回退完整曲目列表（网络异常时 30 个可见
+  /// 磁贴并发拉全量榜单压力太大）；只有接口正常返回空字段才用首曲封面兜底。
+  /// 为 false（如 B 站）时直接走首曲封面。
+  bool get hasLeaderboardCoverEndpoint => false;
+
   /// 歌单标签（热门 + 分类目录）。
   Future<DiscoverTags> tags();
 
