@@ -1322,6 +1322,36 @@ abstract class AppLocalizations {
   /// **'Current queue is empty'**
   String get currentQueueEmpty;
 
+  /// No description provided for @queueNoUpcoming.
+  ///
+  /// In en, this message translates to:
+  /// **'No more tracks are queued'**
+  String get queueNoUpcoming;
+
+  /// No description provided for @queueSingleRepeat.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat one: the current track replays when it ends'**
+  String get queueSingleRepeat;
+
+  /// No description provided for @queueSingleRepeatHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat one: the current track replays; the queue won\'t advance automatically'**
+  String get queueSingleRepeatHint;
+
+  /// No description provided for @queueShuffleRoundEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'This shuffle round is done; the next track starts a new round'**
+  String get queueShuffleRoundEnd;
+
+  /// No description provided for @queueShuffleRestored.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle order is generated when playback starts'**
+  String get queueShuffleRestored;
+
   /// No description provided for @nowPlayingSection.
   ///
   /// In en, this message translates to:

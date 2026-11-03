@@ -666,6 +666,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get currentQueueEmpty => 'Current queue is empty';
 
   @override
+  String get queueNoUpcoming => 'No more tracks are queued';
+
+  @override
+  String get queueSingleRepeat =>
+      'Repeat one: the current track replays when it ends';
+
+  @override
+  String get queueSingleRepeatHint =>
+      'Repeat one: the current track replays; the queue won\'t advance automatically';
+
+  @override
+  String get queueShuffleRoundEnd =>
+      'This shuffle round is done; the next track starts a new round';
+
+  @override
+  String get queueShuffleRestored =>
+      'Shuffle order is generated when playback starts';
+
+  @override
   String get nowPlayingSection => 'Playing';
 
   @override

@@ -643,6 +643,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get currentQueueEmpty => '当前队列为空';
 
   @override
+  String get queueNoUpcoming => '后面没有待播曲目';
+
+  @override
+  String get queueSingleRepeat => '单曲循环中，播完会重播当前曲目';
+
+  @override
+  String get queueSingleRepeatHint => '单曲循环中：播完当前曲目会重播，队列不会自动前进';
+
+  @override
+  String get queueShuffleRoundEnd => '这一轮随机播放完了，下一首会重新开始一轮';
+
+  @override
+  String get queueShuffleRestored => '开始播放后会生成随机播放顺序';
+
+  @override
   String get nowPlayingSection => '正在播放';
 
   @override
