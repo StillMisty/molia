@@ -405,6 +405,11 @@ class MoliaDatabase extends _$MoliaDatabase {
         db.execute('PRAGMA synchronous = NORMAL');
         // 并发写（同步引擎 / 播放写入 / 统计 touch）等锁的上限。
         db.execute('PRAGMA busy_timeout = 5000');
+        // 统计 / 列表排序会在临时 B-tree 上落盘（SQLite 默认 temp_store=FILE）；
+        // 20k 条播放事件的聚合会读写临时文件。放内存换掉这部分磁盘 I/O，
+        // 4MB 页缓存只影响本连接，远小于图片 / 音频缓存的量级。
+        db.execute('PRAGMA temp_store = MEMORY');
+        db.execute('PRAGMA cache_size = -4096');
       },
       isolateSetup: () {
         sqlite3.sqlite3.tempDirectory = tempDirectory.path;

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/services/artwork_palette_seed_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -224,6 +226,59 @@ void main() {
         expect(await store.read('k$i'), 1000 + i);
       }
       expect(_entriesOf(prefs).length, count);
+    });
+
+    test('immediate: false 合并多次封面写入；read 先看 pending；flush 一次落盘', () async {
+      final prefs = _RecordingPrefs();
+      final store = ArtworkPaletteSeedStore(preferences: prefs);
+
+      await store.write('cover:a', 1, immediate: false);
+      await store.write('cover:b', 2, immediate: false);
+      await store.write('cover:c', 3, immediate: false);
+
+      expect(prefs.setStringCalls, 0, reason: '防抖窗口内不落盘');
+      expect(await store.read('cover:a'), 1, reason: 'read 必须看到 pending 值');
+      expect(await store.read('cover:c'), 3);
+
+      await store.flush();
+
+      expect(prefs.setStringCalls, 1, reason: '多个封面合并成一次整键写入');
+      expect(_entriesOf(prefs), {'cover:a': 1, 'cover:b': 2, 'cover:c': 3});
+    });
+
+    test('防抖计时到点自动合并落盘', () {
+      fakeAsync((async) {
+        final prefs = _RecordingPrefs();
+        final store = ArtworkPaletteSeedStore(preferences: prefs);
+
+        unawaited(store.write('cover:a', 1, immediate: false));
+        unawaited(store.write('cover:b', 2, immediate: false));
+        async.flushMicrotasks();
+        expect(prefs.setStringCalls, 0);
+
+        async.elapse(ArtworkPaletteSeedStore.writeDebounce);
+        async.flushMicrotasks();
+
+        expect(prefs.setStringCalls, 1);
+        expect(_entriesOf(prefs), {'cover:a': 1, 'cover:b': 2});
+      });
+    });
+
+    test('clear 取消 pending 写入，不再把旧值写回', () async {
+      final prefs = _RecordingPrefs();
+      final store = ArtworkPaletteSeedStore(preferences: prefs);
+
+      await store.write('a', 1, immediate: false);
+      await store.write('b', 2, immediate: false);
+      await store.clear();
+      await store.flush();
+
+      expect(await store.read('a'), isNull);
+      expect(prefs.setStringCalls, 0, reason: 'clear 后 flush 不应写 pending');
+      expect(
+        prefs.values.containsKey(ArtworkPaletteSeedStore.storageKey),
+        isFalse,
+      );
     });
 
     test('clear 清空缓存，之后可再次写入', () async {

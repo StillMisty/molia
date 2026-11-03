@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
@@ -46,7 +48,9 @@ class LyricsSharedDisplaySection extends StatelessWidget {
           max: 500,
           divisions: 20,
           // 滑杆步进 50ms：够用且不与歌词时间戳的精度纠缠。
-          onChanged: (value) => settings.setOffsetMs((value / 50).round() * 50),
+          onChanged: (value) =>
+              settings.setOffsetMs((value / 50).round() * 50, persist: false),
+          onChangeEnd: (_) => unawaited(settings.flushPersistence()),
         ),
         SettingsChoiceRow<UnsyncedBehavior>(
           icon: Icons.help_outline_rounded,

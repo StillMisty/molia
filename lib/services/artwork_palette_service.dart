@@ -239,11 +239,26 @@ class ArtworkPaletteService {
       identity?.cacheKey ?? 'url:$url';
 
   /// 派生缓存写入不阻塞首帧 / 切歌；写失败由 store 自己记日志吞掉。
+  ///
+  /// 生产路径走防抖：连续切歌时多个封面合并成一次整文件写入（prefs 每次
+  /// 写入都会重写整个文件），对取色结果没有实时性要求。
   void _writeSeed(CoverImageIdentity? identity, ArtworkPalette palette) {
     final seedStore = _seedStore;
     if (seedStore == null || identity == null) return;
-    unawaited(seedStore.write(identity.cacheKey, palette.seed.toARGB32()));
+    unawaited(
+      seedStore.write(
+        identity.cacheKey,
+        palette.seed.toARGB32(),
+        immediate: false,
+      ),
+    );
   }
+
+  /// 把防抖中的 seed 写入落盘（退后台 / 托盘 / 最小化前由组合根调用）。
+  ///
+  /// seed 是派生缓存，丢了只会让下次启动多取一次色；这里仍尽量在窗口不可见
+  /// 时落盘，避免用户连续切歌后立刻退出丢掉整批记录。
+  Future<void> flushSeedCache() => _seedStore?.flush() ?? Future<void>.value();
 
   /// 起始身份为 null 时的补写：取图完成后本地文件通常已可 stat。
   Future<void> _writeSeedAfterLateIdentity(

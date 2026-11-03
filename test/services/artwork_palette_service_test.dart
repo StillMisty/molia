@@ -103,7 +103,7 @@ class _FakeSeedStore extends ArtworkPaletteSeedStore {
   Future<int?> read(String cacheKey) async => entries[cacheKey];
 
   @override
-  Future<void> write(String cacheKey, int seed) async {
+  Future<void> write(String cacheKey, int seed, {bool immediate = true}) async {
     entries[cacheKey] = seed;
   }
 }

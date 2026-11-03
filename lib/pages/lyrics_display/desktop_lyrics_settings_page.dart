@@ -100,8 +100,11 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               min: LyricsDisplaySettings.fontSizeRange.first,
               max: LyricsDisplaySettings.fontSizeRange.last,
               divisions: 36,
-              onChanged: (value) =>
-                  settings.setDesktopFontSize(value.roundToDouble()),
+              onChanged: (value) => settings.setDesktopFontSize(
+                value.roundToDouble(),
+                persist: false,
+              ),
+              onChangeEnd: (_) => unawaited(settings.flushPersistence()),
             ),
             SettingsSliderRow(
               icon: Icons.opacity_rounded,
@@ -111,8 +114,11 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               min: LyricsDisplaySettings.opacityRange.first * 100,
               max: LyricsDisplaySettings.opacityRange.last * 100,
               divisions: 16,
-              onChanged: (value) =>
-                  settings.setDesktopOpacity((value / 100).clamp(0.2, 1.0)),
+              onChanged: (value) => settings.setDesktopOpacity(
+                (value / 100).clamp(0.2, 1.0),
+                persist: false,
+              ),
+              onChangeEnd: (_) => unawaited(settings.flushPersistence()),
             ),
             SettingsSliderRow(
               icon: Icons.width_normal_rounded,
@@ -122,7 +128,9 @@ class DesktopLyricsSettingsPage extends StatelessWidget {
               min: LyricsDisplaySettings.widthRange.first,
               max: LyricsDisplaySettings.widthRange.last,
               divisions: 12,
-              onChanged: (value) => settings.setDesktopWidthPercent(value),
+              onChanged: (value) =>
+                  settings.setDesktopWidthPercent(value, persist: false),
+              onChangeEnd: (_) => unawaited(settings.flushPersistence()),
             ),
             // 显示行数（默认 1 = 只显示当前行；旧的「仅显示当前行」开关已合并到这里）。
             // 保持 dropdown：选项多、文案是纯数字，下拉比分段更省横向空间。

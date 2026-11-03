@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_access.dart';
+import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/services/lyrics_display/lyrics_display_settings.dart';
 import 'package:molia/theme/scheme_builder.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -198,4 +202,145 @@ void main() {
       LyricsDisplaySettings.defaultBluetoothUpdateIntervalMs,
     );
   });
+
+  group('连续滑杆防抖落盘', () {
+    test('persist: false 的连续更新合并为一次 flush 写入，且写最新状态', () async {
+      final access = _RecordingSettingsAccess();
+      final s = LyricsDisplaySettings(settings: access);
+
+      await s.setOffsetMs(50, persist: false);
+      await s.setOffsetMs(150, persist: false);
+      await s.setDesktopFontSize(30, persist: false);
+      await s.setDesktopOpacity(0.6, persist: false);
+      await s.setDesktopWidthPercent(70, persist: false);
+
+      expect(access.writes, isEmpty, reason: '防抖窗口内不落盘');
+      expect(s.offsetMs, 150);
+
+      await s.flushPersistence();
+
+      expect(access.writes, [kLyricsDisplaySettings.name]);
+      final json = jsonDecode(
+        access.raw(kLyricsDisplaySettings.name)!,
+      ) as Map<String, dynamic>;
+      expect(json['offsetMs'], 150);
+      expect(json['desktop.fontSize'], 30);
+      expect(json['desktop.opacity'], 0.6);
+      expect(json['desktop.widthPercent'], 70);
+    });
+
+    test('没有待写状态时 flush 不重复整文件写入', () async {
+      final access = _RecordingSettingsAccess();
+      final s = LyricsDisplaySettings(settings: access);
+
+      await s.setOffsetMs(50);
+      expect(access.writes, [kLyricsDisplaySettings.name]);
+
+      await s.flushPersistence();
+      expect(access.writes, hasLength(1), reason: '已落盘状态不应再次写入');
+      s.dispose();
+    });
+
+    test('防抖计时到点只写一次；dispose 不重复写已落盘状态', () {
+      fakeAsync((async) {
+        final access = _RecordingSettingsAccess();
+        final s = LyricsDisplaySettings(settings: access);
+
+        unawaited(s.setOffsetMs(50, persist: false));
+        unawaited(s.setOffsetMs(100, persist: false));
+        async.flushMicrotasks();
+        expect(access.writes, isEmpty);
+
+        async.elapse(LyricsDisplaySettings.persistenceDebounce);
+        async.flushMicrotasks();
+
+        expect(access.writes, [kLyricsDisplaySettings.name]);
+        final json = jsonDecode(
+          access.raw(kLyricsDisplaySettings.name)!,
+        ) as Map<String, dynamic>;
+        expect(json['offsetMs'], 100);
+
+        s.dispose();
+        async.flushMicrotasks();
+        expect(access.writes, hasLength(1));
+      });
+    });
+
+    test('离散设置仍立即落盘，并覆盖滑杆留下的防抖计时', () {
+      fakeAsync((async) {
+        final access = _RecordingSettingsAccess();
+        final s = LyricsDisplaySettings(settings: access);
+
+        unawaited(s.setOffsetMs(50, persist: false));
+        unawaited(s.setTranslationEnabled(false));
+        async.flushMicrotasks();
+
+        expect(access.writes, [kLyricsDisplaySettings.name]);
+        final json = jsonDecode(
+          access.raw(kLyricsDisplaySettings.name)!,
+        ) as Map<String, dynamic>;
+        expect(json['translationEnabled'], isFalse);
+        expect(json['offsetMs'], 50, reason: '立即写包含尚未落盘的滑杆状态');
+
+        // 已取消的防抖计时不应再追加一次整文件写入。
+        async.elapse(LyricsDisplaySettings.persistenceDebounce * 2);
+        async.flushMicrotasks();
+        expect(access.writes, hasLength(1));
+
+        s.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('dispose 取消未到期的防抖计时并补写 pending 状态', () {
+      fakeAsync((async) {
+        final access = _RecordingSettingsAccess();
+        final s = LyricsDisplaySettings(settings: access);
+
+        unawaited(s.setOffsetMs(75, persist: false));
+        async.flushMicrotasks();
+        expect(access.writes, isEmpty);
+
+        s.dispose();
+        async.flushMicrotasks();
+
+        expect(access.writes, [kLyricsDisplaySettings.name]);
+        final json = jsonDecode(
+          access.raw(kLyricsDisplaySettings.name)!,
+        ) as Map<String, dynamic>;
+        expect(json['offsetMs'], 75);
+
+        async.elapse(LyricsDisplaySettings.persistenceDebounce * 2);
+        async.flushMicrotasks();
+        expect(access.writes, hasLength(1), reason: '释放后计时已取消');
+      });
+    });
+  });
+}
+
+/// 记录写入次数与最新 JSON 的设置访问面（不触碰 SharedPreferences）。
+class _RecordingSettingsAccess implements SettingsAccess {
+  final Map<String, Object?> values = {};
+  final List<String> writes = [];
+
+  String? raw(String key) => values[key] as String?;
+
+  @override
+  Future<T> read<T extends Object?>(SettingsKey<T> key) async =>
+      (values[key.name] as T?) ?? key.defaultValue;
+
+  @override
+  Future<void> write<T extends Object?>(SettingsKey<T> key, T value) {
+    writes.add(key.name);
+    values[key.name] = value;
+    return Future.value();
+  }
+
+  @override
+  Future<void> clear(SettingsKey<Object?> key) async {
+    values.remove(key.name);
+  }
+
+  @override
+  void bindReload(SettingsKey<Object?> key, Future<void> Function() reload) {}
 }

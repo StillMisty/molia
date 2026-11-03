@@ -65,7 +65,8 @@ abstract final class DesktopControlKeys {
 /// 歌词显示配置：歌词页（应用内）+ 输出侧共享项 + 桌面歌词 / 通知栏·锁屏 / 蓝牙三组。
 ///
 /// - 持久化为单 JSON 键（`lyrics_display_settings_v1`，跟人走），读取时与
-///   默认值合并，新增键按默认值补齐；
+///   默认值合并，新增键按默认值补齐；写入按调用顺序串行，连续滑杆用防抖
+///   合并（见 [persistenceDebounce]），离散设置仍立即落盘；
 /// - 模型平台无关：颜色为 ARGB int、宽度为百分比、字号为逻辑字号
 ///   （Android 侧按 sp 解释，未来桌面窗口按逻辑 px 解释）；
 /// - 悬浮窗位置由原生侧自行持久化（系统级窗口状态），不进本模型。
@@ -156,7 +157,23 @@ class LyricsDisplaySettings extends ChangeNotifier {
   static const List<int> maxLinesRange = [1, 5];
   static const List<int> updateIntervalOptions = [0, 1000, 2000];
 
+  /// 连续滑杆停手后等待多久再落盘。
+  ///
+  /// prefs 每次写入都会重写整个文件（见 `docs/pitfalls.md` #93）；拖动滑杆时
+  /// 每一帧都落盘既浪费磁盘 IO，也会让整份设置 JSON 反复排队。400ms 足够
+  /// 把一次拖动的几十次更新合并成一次，又不会让用户感觉设置没保存。
+  static const Duration persistenceDebounce = Duration(milliseconds: 400);
+
   final SettingsAccess _settings;
+
+  /// 连续滑杆的防抖计时；离散开关 / 下拉仍立即写。
+  Timer? _persistTimer;
+
+  /// 写队列尾：写入按调用顺序串行，避免旧 JSON 在新 JSON 之后落盘。
+  Future<void>? _writeTail;
+
+  /// 是否有尚未落盘的状态（dispose 只在有脏数据时补写）。
+  bool _dirty = false;
 
   bool _loaded = false;
   bool get loaded => _loaded;
@@ -275,11 +292,15 @@ class LyricsDisplaySettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setOffsetMs(int value) async {
+  /// 调整全局歌词偏移。
+  ///
+  /// [persist] 为 false 时只更新内存并安排防抖落盘（滑杆拖动用）；
+  /// 默认 true 保持其它调用方的立即写入语义。
+  Future<void> setOffsetMs(int value, {bool persist = true}) async {
     final clamped = value.clamp(offsetRange.first, offsetRange.last);
     if (clamped == _offsetMs) return;
     _offsetMs = clamped;
-    _commit();
+    _commit(persist: persist);
   }
 
   Future<void> setTranslationEnabled(bool value) async {
@@ -318,18 +339,18 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _commit();
   }
 
-  Future<void> setDesktopFontSize(double value) async {
+  Future<void> setDesktopFontSize(double value, {bool persist = true}) async {
     final clamped = value.clamp(fontSizeRange.first, fontSizeRange.last);
     if (clamped == _desktopFontSize) return;
     _desktopFontSize = clamped;
-    _commit();
+    _commit(persist: persist);
   }
 
-  Future<void> setDesktopOpacity(double value) async {
+  Future<void> setDesktopOpacity(double value, {bool persist = true}) async {
     final clamped = value.clamp(opacityRange.first, opacityRange.last);
     if (clamped == _desktopOpacity) return;
     _desktopOpacity = clamped;
-    _commit();
+    _commit(persist: persist);
   }
 
   Future<void> setDesktopPlayedColor(int value) async {
@@ -374,11 +395,14 @@ class LyricsDisplaySettings extends ChangeNotifier {
     _commit();
   }
 
-  Future<void> setDesktopWidthPercent(double value) async {
+  Future<void> setDesktopWidthPercent(
+    double value, {
+    bool persist = true,
+  }) async {
     final clamped = value.clamp(widthRange.first, widthRange.last);
     if (clamped == _desktopWidthPercent) return;
     _desktopWidthPercent = clamped;
-    _commit();
+    _commit(persist: persist);
   }
 
   Future<void> setDesktopMaxLines(int value) async {
@@ -727,14 +751,63 @@ class LyricsDisplaySettings extends ChangeNotifier {
     );
   }
 
-  void _commit() {
-    notifyListeners();
-    unawaited(_persist());
+  /// 立即写入当前 JSON（不等待防抖计时）。
+  ///
+  /// 滑杆松手 / 页面切换 / 应用进入后台前调用；取消未到期的防抖写入，
+  /// 保证最终落盘的是最新状态。
+  Future<void> flushPersistence() {
+    final hadPendingTimer = _persistTimer != null;
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    // 已经落盘 / 没有待写状态时不再整文件重写：滑杆松手、页面切换都会调
+    // 这里，不能把「确认」变成一次多余写。
+    if (!_dirty && !hadPendingTimer) return Future<void>.value();
+    return _enqueuePersist();
   }
 
-  Future<void> _persist() async {
+  @override
+  void dispose() {
+    _persistTimer?.cancel();
+    _persistTimer = null;
+    if (_dirty) {
+      // ChangeNotifier 没有异步释放钩子：best-effort 排入写队列，不等待完成。
+      unawaited(_enqueuePersist());
+    }
+    super.dispose();
+  }
+
+  void _commit({bool persist = true}) {
+    _dirty = true;
+    notifyListeners();
+    if (persist) {
+      // 离散设置立即落盘；同时取消滑杆留下的防抖写，避免重复整文件重写。
+      _persistTimer?.cancel();
+      _persistTimer = null;
+      unawaited(_enqueuePersist());
+      return;
+    }
+    _persistTimer?.cancel();
+    _persistTimer = Timer(persistenceDebounce, () {
+      _persistTimer = null;
+      unawaited(_enqueuePersist());
+    });
+  }
+
+  Future<void> _enqueuePersist() {
+    _dirty = false;
+    // 在入队时快照 JSON：写队列串行执行，旧快照不会排到新快照之后。
+    final payload = jsonEncode(toJson());
+    final previous = _writeTail;
+    final next = previous == null
+        ? _write(payload)
+        : previous.then((_) => _write(payload));
+    _writeTail = next;
+    return next;
+  }
+
+  Future<void> _write(String payload) async {
     try {
-      await _settings.write(kLyricsDisplaySettings, jsonEncode(toJson()));
+      await _settings.write(kLyricsDisplaySettings, payload);
     } catch (_) {
       // 存储不可用不阻塞 UI（与迁移前一致）；下一次提交会重试。
     }

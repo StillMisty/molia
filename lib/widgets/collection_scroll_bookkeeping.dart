@@ -2,18 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-/// 合集滚动簿记的调度缝：节流计时 + 帧后回调。
+/// 合集滚动簿记的调度缝：防抖计时 + 帧后回调。
 ///
 /// 生产用真实 [Timer] 与 `WidgetsBinding.addPostFrameCallback`（默认实现）；
 /// 测试注入假实现手动推进，簿记状态机因此可脱离时钟与帧单测。
 abstract interface class CollectionScrollScheduler {
-  /// 是否有未到期的节流计时。
+  /// 是否有未到期的防抖计时。
   bool get isTimerArmed;
 
-  /// 武装一次节流计时（到点执行 [callback]）。
+  /// 武装一次防抖计时（到点执行 [callback]；重复武装覆盖旧计时）。
   void armTimer(Duration delay, VoidCallback callback);
 
-  /// 取消未到期的节流计时（无则空操作）。
+  /// 取消未到期的防抖计时（无则空操作）。
   void cancelTimer();
 
   /// 当前帧布局完成后执行一次 [callback]（`addPostFrameCallback` 语义）。
@@ -23,8 +23,8 @@ abstract interface class CollectionScrollScheduler {
 /// 合集滚动簿记：按合集键保存 / 恢复列表滚动偏移的唯一实现。
 ///
 /// 从收藏页抽出的状态机（收藏 / 自建列表 / 播放历史 / 本地歌曲共用）：
-/// - **保存**：滚动事件节流落盘（默认 500ms，≤2 次/秒；偏移未变不写），
-///   切换合集与释放前 `flush` 立即落盘；
+/// - **保存**：滚动事件防抖落盘（默认 500ms；每次滚动重新计时，用户停手后
+///   只写一次；偏移未变不写），切换合集与释放前 `flush` 立即落盘；
 /// - **恢复**：内容就绪后按当前合集键调度一次（帧后执行）；合集已切换 /
 ///   列表尚未挂载则不算恢复，交给下一次调度；同一合集只恢复一次；偏移
 ///   夹取到可滚动范围。
@@ -36,11 +36,11 @@ class CollectionScrollBookkeeping {
     required this.controllerOf,
     required this.persist,
     CollectionScrollScheduler? scheduler,
-    this.throttle = defaultThrottle,
+    this.debounce = defaultDebounce,
   }) : _scheduler = scheduler ?? _TimerScheduler();
 
-  /// 滚动落盘节流间隔：首次滚动计时、之后每个窗口至多一次。
-  static const Duration defaultThrottle = Duration(milliseconds: 500);
+  /// 滚动落盘防抖间隔：每次滚动重新计时，停手一个窗口后才写。
+  static const Duration defaultDebounce = Duration(milliseconds: 500);
 
   /// 合集键 → 该合集的滚动控制器（收藏 / 自建列表共用一个控制器）。
   final ScrollController Function(String collectionKey) controllerOf;
@@ -48,7 +48,7 @@ class CollectionScrollBookkeeping {
   /// 落盘回调（合集键 → 偏移）；写失败由调用方决定（收藏页静默）。
   final Future<void> Function(Map<String, double> offsets) persist;
 
-  final Duration throttle;
+  final Duration debounce;
   final CollectionScrollScheduler _scheduler;
 
   /// 各合集已保存的偏移（合集键 → offset）。
@@ -82,10 +82,14 @@ class CollectionScrollBookkeeping {
   /// 落定当前合集键：保存与恢复都只作用于它（页面在 build 里同步）。
   void activate(String key) => _activeKey = key;
 
-  /// 滚动事件入口：节流落盘（节流窗口内不重复计时）。
+  /// 滚动事件入口：防抖落盘（每次滚动都重新计时，停手后才写）。
+  ///
+  /// 不用「窗口内忽略」的节流：连续滚动会每 500ms 写一次 prefs，而 prefs
+  /// 每次写入都是整文件重写（见 `docs/pitfalls.md` #93）；重新计时让一次
+  /// 手势最多只产生一次落盘。
   void saveFromScroll() {
-    if (_disposed || _scheduler.isTimerArmed) return;
-    _scheduler.armTimer(throttle, flush);
+    if (_disposed) return;
+    _scheduler.armTimer(debounce, flush);
   }
 
   /// 内容就绪后调度一次偏移恢复（帧后执行，布局完成才跳转）。
@@ -115,6 +119,9 @@ class CollectionScrollBookkeeping {
   /// 立即落盘当前合集偏移（切换合集 / 释放前；偏移未变不重复写）。
   void flush() {
     if (_disposed) return;
+    // 显式 flush（切换合集 / dispose）必须撤掉在飞计时：否则计时到点后会
+    // 按新的 activeKey 再写一次，把旧手势的偏移记到用户没滚过的合集上。
+    _scheduler.cancelTimer();
     final key = _activeKey;
     if (key == null) return;
     final controller = controllerOf(key);

@@ -33,6 +33,7 @@ import 'playback/playback_power_policy.dart';
 import 'providers/library_provider.dart';
 import 'providers/search_provider.dart';
 import 'services/app_logging.dart';
+import 'services/app_presence.dart';
 import 'services/global_hotkeys.dart';
 import 'services/notification_service.dart';
 import 'services/shortcut_actions.dart';
@@ -297,12 +298,26 @@ void main() async {
   // 前台恢复：拉一次（有本地变更时一并推送）并复查更新安装权限——从
   // 「安装未知应用」系统授权页返回后要把按钮从「去授权」切回「立即安装」；
   // 退后台 / 锁屏：同步调度器取消全部定时器并尽力推一次。
+  // 连续滑杆 / 封面 seed 用的是防抖写：窗口不可见或退后台前补一次，
+  // 避免用户拖完就关窗口时丢掉最后一段（派生缓存丢得起，设置 JSON 不该丢）。
+  void flushDeferredWrites() {
+    unawaited(display.lyricsDisplaySettings.flushPersistence());
+    unawaited(display.artworkPaletteService.flushSeedCache());
+  }
+
   // 移动端前后台同时喂 `PlaybackPowerPolicy`（桌面不接：托盘 / 最小化另有
   // `AppPresence`，且桌面播放保持前台节拍）；`onPause` / `onHide` 是同一动作。
-  void onMobileBackground() {
+  void onAppBackground() {
+    flushDeferredWrites();
     if (mobilePowerPolicy) powerPolicy.markBackground();
     sync.provider.onAppHidden();
   }
+
+  // 桌面托盘 / 最小化不一定走 `AppLifecycleState`：窗口层置位 `AppPresence`
+  // 时也补一次；`minimized` 同样算不可见（用户随时可能从任务栏恢复）。
+  AppPresence.instance.addListener(() {
+    if (!AppPresence.instance.isVisible) flushDeferredWrites();
+  });
 
   AppLifecycleListener(
     onResume: () {
@@ -310,8 +325,8 @@ void main() async {
       unawaited(sync.provider.onAppResumed());
       unawaited(update.provider.handleAppResumed());
     },
-    onPause: onMobileBackground,
-    onHide: onMobileBackground,
+    onPause: onAppBackground,
+    onHide: onAppBackground,
   );
 
   runApp(

@@ -11,7 +11,7 @@ class _FakeScheduler implements CollectionScrollScheduler {
   VoidCallback? _timerCallback;
   final List<VoidCallback> frames = [];
 
-  /// 已武装的节流间隔（重复武装会被覆盖，用 armedCount 断言次数）。
+  /// 已武装的防抖间隔（重复武装会被覆盖，用 armedCount 断言次数）。
   Duration? armedDelay;
   int armedCount = 0;
 
@@ -31,7 +31,7 @@ class _FakeScheduler implements CollectionScrollScheduler {
   @override
   void afterFrame(VoidCallback callback) => frames.add(callback);
 
-  /// 节流计时到点。
+  /// 防抖计时到点。
   void fireTimer() {
     final callback = _timerCallback;
     _timerCallback = null;
@@ -115,10 +115,10 @@ void main() {
     persisted = [];
   });
 
-  group('保存（节流 + 只写变化）', () {
-    test('默认节流 ≤2 次/秒；滚动事件武装一次并到点落盘', () {
+  group('保存（防抖 + 只写变化）', () {
+    test('默认防抖 500ms；滚动事件到点后落盘', () {
       expect(
-        CollectionScrollBookkeeping.defaultThrottle,
+        CollectionScrollBookkeeping.defaultDebounce,
         const Duration(milliseconds: 500),
       );
       final bookkeeping = build()..activate('favorites');
@@ -126,7 +126,7 @@ void main() {
 
       bookkeeping.saveFromScroll();
       expect(scheduler.armedDelay, const Duration(milliseconds: 500));
-      expect(persisted, isEmpty, reason: '节流窗口内不写');
+      expect(persisted, isEmpty, reason: '防抖窗口内不写');
 
       scheduler.fireTimer();
       expect(persisted, [
@@ -134,14 +134,58 @@ void main() {
       ]);
     });
 
-    test('节流窗口内重复滚动不重复计时', () {
+    test('连续滚动每次重新计时，停手前不写、停手后只写一次', () {
+      final bookkeeping = build()..activate('favorites');
+      controller.offset = 60;
+
+      bookkeeping.saveFromScroll();
+      controller.offset = 80;
+      bookkeeping.saveFromScroll();
+      controller.offset = 120;
+      bookkeeping.saveFromScroll();
+
+      expect(scheduler.armedCount, 3, reason: '每个滚动事件都重新武装');
+      expect(persisted, isEmpty, reason: '用户尚未停手，不应整文件重写');
+
+      scheduler.fireTimer();
+      expect(persisted, [
+        {'favorites': 120},
+      ]);
+    });
+
+    test('跨两个停顿窗口各写一次（不是整个会话只写一次）', () {
       final bookkeeping = build()..activate('favorites');
 
+      controller.offset = 100;
       bookkeeping.saveFromScroll();
-      bookkeeping.saveFromScroll();
-      bookkeeping.saveFromScroll();
+      scheduler.fireTimer();
 
-      expect(scheduler.armedCount, 1);
+      controller.offset = 200;
+      bookkeeping.saveFromScroll();
+      scheduler.fireTimer();
+
+      expect(persisted, [
+        {'favorites': 100},
+        {'favorites': 200},
+      ]);
+    });
+
+    test('flush 取消防抖计时；切换合集后旧计时不会写新合集', () {
+      final bookkeeping = build()..activate('favorites');
+      controller.offset = 100;
+      bookkeeping.saveFromScroll();
+      expect(scheduler.isTimerArmed, isTrue);
+
+      bookkeeping.flush();
+      expect(persisted, [
+        {'favorites': 100},
+      ]);
+      expect(scheduler.isTimerArmed, isFalse, reason: '显式 flush 应撤掉在飞计时');
+
+      bookkeeping.activate('playlist:1');
+      controller.offset = 0;
+      scheduler.fireTimer();
+      expect(persisted, hasLength(1), reason: '旧手势不应写到新合集');
     });
 
     test('偏移未变不重复落盘', () {

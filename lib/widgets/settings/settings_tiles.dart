@@ -827,6 +827,7 @@ class SettingsSliderRow extends StatelessWidget {
     required this.min,
     required this.max,
     required this.onChanged,
+    this.onChangeEnd,
     this.divisions,
   });
 
@@ -841,6 +842,9 @@ class SettingsSliderRow extends StatelessWidget {
   final double max;
   final int? divisions;
   final ValueChanged<double> onChanged;
+
+  /// 拖动结束回调（松手 / 键盘调整完成）：用于把防抖中的连续值立即落盘。
+  final ValueChanged<double>? onChangeEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -875,6 +879,7 @@ class SettingsSliderRow extends StatelessWidget {
             size: M3ESliderSize.xs,
             trackThickness: 6,
             onChanged: onChanged,
+            onChangeEnd: onChangeEnd,
           ),
         ],
       ),

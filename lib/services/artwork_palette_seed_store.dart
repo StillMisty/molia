@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:logging/logging.dart';
@@ -13,7 +14,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - 只存本机，不登记 `SettingsRegistry`，不参与同步 / 备份；换设备或清数据
 ///   的代价只是下次启动多取一次色；
 /// - 读取失败、版本不符、JSON 损坏都按「没有记录」处理，不阻断启动；
-/// - 单键 JSON + 最多 [maxEntries] 条 LRU，避免 prefs 里散落大量小键。
+/// - 单键 JSON + 最多 [maxEntries] 条 LRU，避免 prefs 里散落大量小键；
+/// - 生产写入可以走防抖（[write] 的 `immediate: false`）：prefs 每次写都会
+///   重写整个文件，连续切歌时把多个封面合并成一次写入。
 class ArtworkPaletteSeedStore {
   /// [preferences] 仅测试注入；生产环境懒加载 `SharedPreferences` 单例。
   ArtworkPaletteSeedStore({SharedPreferences? preferences})
@@ -34,6 +37,9 @@ class ArtworkPaletteSeedStore {
   /// 播放 / 浏览过的封面，同时把 JSON 控制在几 KB。
   static const int maxEntries = 32;
 
+  /// 防抖模式下的合并窗口：连续切歌的多个封面会落成一次整文件写入。
+  static const Duration writeDebounce = Duration(seconds: 2);
+
   final SharedPreferences? _preferencesOverride;
 
   final Logger _logger = Logger('molia.artwork_palette_seed_store');
@@ -41,12 +47,26 @@ class ArtworkPaletteSeedStore {
   /// 写队列尾：所有写 / 清请求按调用顺序串行，后一个能看到前一个的结果。
   Future<void>? _pendingWrite;
 
+  /// 尚未落盘的条目（防抖写入 / 立即写入都先记在这里，读取优先看它）。
+  ///
+  /// 插入顺序即 LRU 顺序；更新已有 key 时先删再插，与落盘逻辑一致。
+  final Map<String, int> _pending = {};
+
+  Timer? _writeTimer;
+
+  /// pending 代际：`clear` 后旧的在飞 flush 不得清理新一轮 pending。
+  int _generation = 0;
+
   /// 读取 [cacheKey] 的 seed；无记录 / 记录无效 / 存储不可用返回 null。
   ///
   /// 不等待写队列：`SharedPreferences.setString` 会先同步更新进程内缓存，
   /// 紧跟在写之后发起的读取已经能看到新值；让它排在一次慢写入后面只会
   /// 拖慢启动路径。
   Future<int?> read(String cacheKey) async {
+    // 尚未落盘的值先返回：否则刚写过的封面在 flush 前会看起来「没有缓存」，
+    // 上层会重复取色。
+    final pending = _pending[cacheKey];
+    if (pending != null) return pending;
     try {
       final prefs = await _resolvePreferences();
       return _decode(prefs.getString(storageKey))[cacheKey];
@@ -60,16 +80,47 @@ class ArtworkPaletteSeedStore {
   /// 写入 [cacheKey] 的 seed（内容变化时同 key 先删再插到 LRU 末尾，
   /// 超出上限淘汰最旧）。
   ///
+  /// [immediate] 为 true（默认）时等待本次写入落盘，保持既有调用方 / 测试
+  /// 的语义；为 false 时只记入内存并安排 [writeDebounce] 后合并写入，
+  /// 适合连续切歌的生产路径。[flush] 可提前落盘。
+  ///
   /// 相同 seed 不重复落盘，也不刷新 LRU 顺序：封面不变时每次启动 / 切歌
   /// 都会调用，重复整键 JSON 写入没有收益。写失败只记日志，不向调用方抛出。
-  Future<void> write(String cacheKey, int seed) {
-    return _enqueueWrite(() async {
+  Future<void> write(String cacheKey, int seed, {bool immediate = true}) {
+    final remembered = _remember(cacheKey, seed);
+    if (immediate) {
+      _writeTimer?.cancel();
+      _writeTimer = null;
+      return flush();
+    }
+    if (!remembered) return Future.value();
+    _writeTimer?.cancel();
+    _writeTimer = Timer(writeDebounce, () {
+      _writeTimer = null;
+      unawaited(flush());
+    });
+    return Future.value();
+  }
+
+  /// 立即写入所有 pending 条目（取消防抖计时）。
+  Future<void> flush() {
+    _writeTimer?.cancel();
+    _writeTimer = null;
+    final snapshot = Map<String, int>.of(_pending);
+    final generation = _generation;
+    if (snapshot.isEmpty) return Future.value();
+    final write = _enqueueWrite(() async {
       final prefs = await _resolvePreferences();
       final entries = _decode(prefs.getString(storageKey));
-      if (entries[cacheKey] == seed) return;
-      // 同 key 先删再插：即使内容变了，也要刷新它在 LRU 里的位置。
-      entries.remove(cacheKey);
-      entries[cacheKey] = seed;
+      var changed = false;
+      for (final entry in snapshot.entries) {
+        if (entries[entry.key] == entry.value) continue;
+        // 同 key 先删再插：内容变了要刷新它在 LRU 里的位置。
+        entries.remove(entry.key);
+        entries[entry.key] = entry.value;
+        changed = true;
+      }
+      if (!changed) return;
       while (entries.length > maxEntries) {
         entries.remove(entries.keys.first);
       }
@@ -78,10 +129,26 @@ class ArtworkPaletteSeedStore {
         _logger.warning('封面取色缓存写入被平台拒绝');
       }
     });
+    // 写成功（或失败被吞掉）后只清理「仍是本次快照值」的条目：
+    // 期间又写入的新值 / clear 之后的新一轮 pending 继续保留。
+    return write.whenComplete(() {
+      if (_generation != generation) return;
+      for (final entry in snapshot.entries) {
+        if (_pending[entry.key] == entry.value) {
+          _pending.remove(entry.key);
+        }
+      }
+    });
   }
 
   /// 清空本机缓存（派生数据，只影响下次取色成本）。
+  ///
+  /// 同时取消未到期的防抖写入并丢弃 pending，避免刚清空又被旧快照写回来。
   Future<void> clear() {
+    _writeTimer?.cancel();
+    _writeTimer = null;
+    _generation++;
+    _pending.clear();
     return _enqueueWrite(() async {
       final prefs = await _resolvePreferences();
       final removed = await prefs.remove(storageKey);
@@ -89,6 +156,14 @@ class ArtworkPaletteSeedStore {
         _logger.warning('清除封面取色缓存被平台拒绝');
       }
     });
+  }
+
+  /// 记入 pending；返回该 key 的值是否发生变化（相同 seed 不重复调度）。
+  bool _remember(String cacheKey, int seed) {
+    if (_pending[cacheKey] == seed) return false;
+    _pending.remove(cacheKey);
+    _pending[cacheKey] = seed;
+    return true;
   }
 
   /// 懒加载：注入的 prefs 优先，生产环境才触碰平台通道。

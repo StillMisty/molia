@@ -6,7 +6,7 @@
 /// 脚本化驱动。
 ///
 /// 承担的副作用（顺序与节流与从 PlaybackProvider 抽出前逐一对应）：
-/// - 最后播放信息（SharedPreferences 三键；UI 经 provider getter 读取）；
+/// - 最后播放信息（SharedPreferences 单 JSON 键；UI 经 provider getter 读取）；
 /// - 桌面小组件（[PlaybackWidgetUpdater]，默认实现仅 Android 生效）；
 /// - 封面预取（[ImagePreloadManager]）；
 /// - 播放历史（[LibraryStore]）；
@@ -19,6 +19,7 @@
 library;
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform;
@@ -93,9 +94,16 @@ class PlaybackObserver {
     _ready = _loadLastPlayedTrackInfo();
   }
 
-  static const String _lastPlayedImageKey = 'last_played_image_url';
-  static const String _lastPlayedTrackNameKey = 'last_played_track_name';
-  static const String _lastPlayedArtistsKey = 'last_played_artists';
+  /// 最后播放信息单键：三项放进一份 JSON，一次 `setString` 完成。
+  ///
+  /// prefs 每次写都会重写整个文件（`docs/pitfalls.md` #93），原先三个键
+  /// 在切歌时最多触发三次整文件重写；合并后每首歌最多一次。
+  static const String _lastPlayedTrackKey = 'last_played_track_v1';
+
+  // v1 前的旧三键：只读一次做一次迁移，之后删除。
+  static const String _legacyLastPlayedImageKey = 'last_played_image_url';
+  static const String _legacyLastPlayedTrackNameKey = 'last_played_track_name';
+  static const String _legacyLastPlayedArtistsKey = 'last_played_artists';
 
   final PlaybackFacade _facade;
   final DataSaverService? _dataSaver;
@@ -137,6 +145,16 @@ class PlaybackObserver {
   String? _lastPlayedImageUrl;
   String? _lastPlayedTrackName;
   String? _lastPlayedArtists;
+
+  // 最近一次确认落盘的值：与展示字段分开，写失败后下一次切歌还能重试，
+  // 不会因为「内存已经是新值」而误判成无需写入。
+  String? _persistedLastPlayedImageUrl;
+  String? _persistedLastPlayedTrackName;
+  String? _persistedLastPlayedArtists;
+
+  /// 最后播放信息写入队列：初始化读取与切歌写入按顺序执行，避免初始化
+  /// 读到的旧值覆盖刚写入的新值。
+  Future<void> _lastPlayedWriteTail = Future<void>.value();
 
   /// 已处理过的当前曲目（用于去重持久化 / 写库 / 预加载）。
   String? _processedTrackId;
@@ -266,15 +284,69 @@ class PlaybackObserver {
   }
 
   /// 读取「最后播放」信息（构造时发起；[ready] 暴露给组合根 / provider）。
+  ///
+  /// 新键读取失败 / 不存在时回退旧三键（只显示一次），并顺手迁移成单键，
+  /// 避免旧数据一直残留导致后续设置写入继续重写几份重复值。
   Future<void> _loadLastPlayedTrackInfo() async {
     try {
       final sp = await SharedPreferences.getInstance();
-      _lastPlayedImageUrl = sp.getString(_lastPlayedImageKey);
-      _lastPlayedTrackName = sp.getString(_lastPlayedTrackNameKey);
-      _lastPlayedArtists = sp.getString(_lastPlayedArtistsKey);
+      final raw = sp.getString(_lastPlayedTrackKey);
+      if (raw != null) {
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map) {
+            _applyLastPlayedJson(decoded);
+            _markLastPlayedPersisted();
+            _logger.fine(
+              '已加载最后播放歌曲信息: $_lastPlayedTrackName - $_lastPlayedArtists',
+            );
+            return;
+          }
+        } catch (_) {
+          // 新键损坏：继续尝试旧三键，至少恢复一次展示。
+        }
+      }
+
+      final imageUrl = sp.getString(_legacyLastPlayedImageKey);
+      final trackName = sp.getString(_legacyLastPlayedTrackNameKey);
+      final artists = sp.getString(_legacyLastPlayedArtistsKey);
+      if (imageUrl == null && trackName == null && artists == null) return;
+      _lastPlayedImageUrl = imageUrl;
+      _lastPlayedTrackName = trackName;
+      _lastPlayedArtists = artists;
+      if (await _migrateLegacyLastPlayed(sp)) {
+        _markLastPlayedPersisted();
+      }
       _logger.fine('已加载最后播放歌曲信息: $_lastPlayedTrackName - $_lastPlayedArtists');
     } catch (e) {
       _logger.severe('加载最后播放歌曲信息失败', e);
+    }
+  }
+
+  void _applyLastPlayedJson(Map<dynamic, dynamic> json) {
+    _lastPlayedImageUrl = _stringOf(json['imageUrl']);
+    _lastPlayedTrackName = _stringOf(json['trackName']);
+    _lastPlayedArtists = _stringOf(json['artists']);
+  }
+
+  /// 旧三键 → 单 JSON 键；失败只记日志，下次启动再试。
+  Future<bool> _migrateLegacyLastPlayed(SharedPreferences sp) async {
+    try {
+      final written = await sp.setString(
+        _lastPlayedTrackKey,
+        _lastPlayedJson(),
+      );
+      if (!written) {
+        _logger.warning('最后播放信息迁移写入被平台拒绝（下次启动重试）');
+        return false;
+      }
+      await sp.remove(_legacyLastPlayedImageKey);
+      await sp.remove(_legacyLastPlayedTrackNameKey);
+      await sp.remove(_legacyLastPlayedArtistsKey);
+      return true;
+    } catch (e) {
+      _logger.warning('最后播放信息迁移失败（下次启动重试）: $e');
+      return false;
     }
   }
 
@@ -282,26 +354,51 @@ class PlaybackObserver {
     String? imageUrl,
     String? trackName,
     String? artists,
-  }) async {
-    if (imageUrl == null && trackName == null && artists == null) return;
-    try {
-      final sp = await SharedPreferences.getInstance();
-      if (imageUrl != null && imageUrl != _lastPlayedImageUrl) {
-        await sp.setString(_lastPlayedImageKey, imageUrl);
-        _lastPlayedImageUrl = imageUrl;
+  }) {
+    final task = _lastPlayedWriteTail.then((_) async {
+      // 初始化读取可能还没完成：先让它落定，避免旧值在稍后覆盖这次写入。
+      await _ready;
+      final nextImageUrl = imageUrl ?? _lastPlayedImageUrl;
+      final nextTrackName = trackName ?? _lastPlayedTrackName;
+      final nextArtists = artists ?? _lastPlayedArtists;
+      if (nextImageUrl == _persistedLastPlayedImageUrl &&
+          nextTrackName == _persistedLastPlayedTrackName &&
+          nextArtists == _persistedLastPlayedArtists) {
+        return;
       }
-      if (trackName != null && trackName != _lastPlayedTrackName) {
-        await sp.setString(_lastPlayedTrackNameKey, trackName);
-        _lastPlayedTrackName = trackName;
+      _lastPlayedImageUrl = nextImageUrl;
+      _lastPlayedTrackName = nextTrackName;
+      _lastPlayedArtists = nextArtists;
+      // 在 await 前快照：期间即使有恢复态展示更新，也不会把本次要写的值
+      // 换掉（写入队列保证一次只有一个写者）。
+      final payload = _lastPlayedJson();
+      try {
+        final sp = await SharedPreferences.getInstance();
+        final written = await sp.setString(_lastPlayedTrackKey, payload);
+        if (!written) {
+          _logger.warning('保存最后播放歌曲信息被平台拒绝');
+          return;
+        }
+        _markLastPlayedPersisted();
+        _logger.fine('已保存最后播放歌曲信息: $nextTrackName - $nextArtists');
+      } catch (e) {
+        _logger.severe('保存最后播放歌曲信息失败', e);
       }
-      if (artists != null && artists != _lastPlayedArtists) {
-        await sp.setString(_lastPlayedArtistsKey, artists);
-        _lastPlayedArtists = artists;
-      }
-      _logger.fine('已保存最后播放歌曲信息: $trackName - $artists');
-    } catch (e) {
-      _logger.severe('保存最后播放歌曲信息失败', e);
-    }
+    });
+    _lastPlayedWriteTail = task;
+    return task;
+  }
+
+  String _lastPlayedJson() => jsonEncode({
+    'imageUrl': _lastPlayedImageUrl,
+    'trackName': _lastPlayedTrackName,
+    'artists': _lastPlayedArtists,
+  });
+
+  void _markLastPlayedPersisted() {
+    _persistedLastPlayedImageUrl = _lastPlayedImageUrl;
+    _persistedLastPlayedTrackName = _lastPlayedTrackName;
+    _persistedLastPlayedArtists = _lastPlayedArtists;
   }
 
   void _persistLastPlayedTrackInfo(Track track) {
@@ -424,6 +521,9 @@ class PlaybackObserver {
       'isPlaying': live.isPlaying,
     });
   }
+
+  static String? _stringOf(Object? value) =>
+      value is String && value.isNotEmpty ? value : null;
 
   /// 封面地址是否指向本地文件（省流模式无需拦截）。
   ///

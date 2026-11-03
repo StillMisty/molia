@@ -128,7 +128,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     loadCachedAudioTrackIds: _loadCachedAudioTrackIds,
   );
 
-  /// 滚动簿记：按合集键保存 / 恢复滚动偏移（节流落盘 + 只恢复一次）。
+  /// 滚动簿记：按合集键保存 / 恢复滚动偏移（防抖落盘 + 只恢复一次）。
   late final CollectionScrollBookkeeping _bookkeeping =
       CollectionScrollBookkeeping(
         controllerOf: _scrollControllerForKey,
@@ -223,7 +223,7 @@ class _FavoritesPageState extends State<FavoritesPage> {
     _session.removeListener(_onSessionChanged);
     _searchController.dispose();
     _searchFocus.dispose();
-    // 释放前排空最后一次滚动位置（簿记内部取消节流计时并落盘）。
+    // 释放前排空最后一次滚动位置（簿记内部取消防抖计时并落盘）。
     _bookkeeping.dispose();
     _session.dispose();
     _listController.dispose();
@@ -1658,7 +1658,7 @@ class _HeaderCrossFadeState extends State<_HeaderCrossFade>
   }
 }
 
-/// 会话 → 页面滚动簿记的适配：控制器与节流落盘都留在页面，会话只决定
+/// 会话 → 页面滚动簿记的适配：控制器与防抖落盘都留在页面，会话只决定
 /// 合集键和恢复时机（见 `CollectionScrollPort`）。
 class _PageScrollPort implements CollectionScrollPort {
   _PageScrollPort(this._page);

@@ -414,6 +414,10 @@ void main() {
             playedAt: 1,
           ),
         );
+    final tempStore = await first.customSelect('PRAGMA temp_store').getSingle();
+    expect(tempStore.data['temp_store'], 2, reason: '临时表 / 排序走内存，不落盘');
+    final cacheSize = await first.customSelect('PRAGMA cache_size').getSingle();
+    expect(cacheSize.data['cache_size'], -4096, reason: '页缓存上限 4MB');
     await first.close();
 
     final second = MoliaDatabase(MoliaDatabase.openAt(file, directory));

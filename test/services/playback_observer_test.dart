@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/library.dart';
@@ -11,6 +13,9 @@ import 'package:molia/services/data_saver_service.dart';
 import 'package:molia/services/playback_observer.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// 仅测试用：统计最后播放 JSON 的落盘次数（不是 lib 的依赖）。
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 import '../support/fake_library_repository.dart';
 import '../support/fake_cover_index.dart';
@@ -157,11 +162,71 @@ void main() {
     expect(observer.lastPlayedArtists, 'Artist a');
     expect(observer.lastPlayedImageUrl, 'https://img.example/a.jpg');
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('last_played_track_name'), 'Title a');
+    final lastPlayed = jsonDecode(
+      prefs.getString('last_played_track_v1')!,
+    ) as Map<String, dynamic>;
+    expect(lastPlayed['trackName'], 'Title a');
+    expect(lastPlayed['artists'], 'Artist a');
+    expect(lastPlayed['imageUrl'], 'https://img.example/a.jpg');
 
     // 顺序：widget → history 同步发起；通知权限在播放态判定后发起；
     // 预取在微任务中执行（跨 async gap 不用 context），落在最后。
     expect(log, ['widget', 'history', 'notify', 'preload']);
+  });
+
+  test('最后播放信息：值未变不写，切歌只写一次 JSON', () async {
+    final store = _CountingLastPlayedPrefsStore();
+    final previous = SharedPreferencesStorePlatform.instance;
+    SharedPreferencesStorePlatform.instance = store;
+    SharedPreferences.resetStatic();
+    addTearDown(() {
+      SharedPreferencesStorePlatform.instance = previous;
+      SharedPreferences.resetStatic();
+    });
+
+    final observer = buildObserver();
+    addTearDown(observer.dispose);
+    await observer.ready;
+
+    final a = track('a', artwork: 'https://img.example/a.jpg');
+    backend.emit(snapshot(a));
+    await pumpEventQueue();
+    expect(store.writes, 1);
+
+    observer.refreshCoverPresentation();
+    await pumpEventQueue();
+    expect(store.writes, 1, reason: '同一曲目 / 同一封面不应重复写');
+
+    final b = track('b', artwork: 'https://img.example/b.jpg');
+    backend.emit(snapshot(b));
+    await pumpEventQueue();
+    expect(store.writes, 2, reason: '切歌只写一次单键 JSON');
+  });
+
+  test('旧三键回退显示一次，并迁移为单键 JSON', () async {
+    SharedPreferences.setMockInitialValues({
+      'last_played_image_url': 'https://img.example/old.jpg',
+      'last_played_track_name': 'Old Title',
+      'last_played_artists': 'Old Artist',
+    });
+    final observer = buildObserver();
+    addTearDown(observer.dispose);
+    await observer.ready;
+
+    expect(observer.lastPlayedTrackName, 'Old Title');
+    expect(observer.lastPlayedArtists, 'Old Artist');
+    expect(observer.lastPlayedImageUrl, 'https://img.example/old.jpg');
+
+    final prefs = await SharedPreferences.getInstance();
+    final migrated = jsonDecode(
+      prefs.getString('last_played_track_v1')!,
+    ) as Map<String, dynamic>;
+    expect(migrated['trackName'], 'Old Title');
+    expect(migrated['artists'], 'Old Artist');
+    expect(migrated['imageUrl'], 'https://img.example/old.jpg');
+    expect(prefs.getString('last_played_image_url'), isNull);
+    expect(prefs.getString('last_played_track_name'), isNull);
+    expect(prefs.getString('last_played_artists'), isNull);
   });
 
   testWidgets('预取封面：上一首 / 再上一首一并下发，供封面左槽向后拖动复用', (tester) async {
@@ -408,5 +473,18 @@ class _RecordingPreloader extends AlbumArtPreloadStrategy {
       previous: previousTrack,
       previousOfPrevious: previousOfPreviousTrack,
     ));
+  }
+}
+
+/// 统计最后播放单键写入次数；其余键交给默认内存实现。
+class _CountingLastPlayedPrefsStore extends InMemorySharedPreferencesStore {
+  _CountingLastPlayedPrefsStore() : super.empty();
+
+  int writes = 0;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (key.endsWith('last_played_track_v1')) writes++;
+    return super.setValue(valueType, key, value);
   }
 }

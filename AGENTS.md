@@ -24,6 +24,7 @@ tool/agent/startup.sh                    # 启动耗时采样（release 冷启�
 tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（见 docs/performance-audit-2026-10.md）
 tool/agent/cpu.sh                        # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
 tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
+tool/agent/io.sh                         # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）
 tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
 tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：提交前自动格式化暂存 Dart 文件
 ```
