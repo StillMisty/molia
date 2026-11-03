@@ -73,8 +73,17 @@ jobs:
           set -euo pipefail
           # 与 android/app/build.gradle 的 ndkVersion / AGENTS.md 工具链表一致。
           ndk_version=30.0.16248370
+          # path_provider_android / shared_preferences_android 经 jni 在 Gradle 里
+          # 构建 libdartjni，那个模块用 flutter.ndkVersion，即 Flutter 3.47.9 的
+          # 默认 28.2.13676358。runner 镜像不保证预装它，缺了 AGP 会在配置期临时
+          # 下载，网络抖动就直接失败（beta.37 的 Premature EOF）；显式安装，
+          # 让构建只依赖本步骤。
+          jni_ndk_version=28.2.13676358
           yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager --install "ndk;$ndk_version"
+          sdkmanager --install "ndk;$ndk_version" "ndk;$jni_ndk_version"
+          for v in "$ndk_version" "$jni_ndk_version"; do
+            test -d "$ANDROID_HOME/ndk/$v" || { echo "::error::NDK $v 未安装"; exit 1; }
+          done
           # 原生资产（hook）构建由 native_toolchain_c 解析 NDK，优先读 ANDROID_NDK /
           # ANDROID_NDK_HOME；runner 镜像预置的这两项指向默认 NDK 27.x，其 armv7
           # 工具链不完整（链接期找不到 crtbegin_so.o / -llog / -landroid），
