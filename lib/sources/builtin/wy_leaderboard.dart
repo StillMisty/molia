@@ -182,6 +182,33 @@ class WyLeaderboard {
     return _fetch(bangid);
   }
 
+  /// 榜单封面：`playlist/detail` 的 `playlist.coverImgUrl`。
+  ///
+  /// 只发一次详情请求，不批量补歌曲详情；失败交给发现页占位 / 首曲封面兜底。
+  static Future<String?> getCover(String bangid) {
+    return BuiltinSearch.transport.cached(
+      'wy:leaderboard-cover:$bangid',
+      () async {
+        final body = await lxHttpPost(
+          'https://music.163.com/weapi/v3/playlist/detail',
+          form: true,
+          body: weapiForm({'id': bangid, 'n': 1, 'p': 1}),
+        );
+        if (body is! Map || body['code'] != 200 || body['playlist'] is! Map) {
+          throw StateError('wy 榜单封面获取失败');
+        }
+        final playlist = body['playlist'] as Map;
+        final url = (playlist['coverImgUrl'] ?? playlist['coverUrl'])
+            ?.toString()
+            .trim();
+        if (url == null || url.isEmpty) {
+          throw StateError('wy 榜单封面为空');
+        }
+        return url;
+      },
+    );
+  }
+
   /// 与 LX 一致：详情失败重试至多 6 次，歌曲详情失败同样重试。
   static Future<List<SourceTrack>> _fetch(String bangid) {
     return runDiscoverCall(

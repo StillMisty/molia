@@ -613,6 +613,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get libraryNoChannels => '所有渠道都已停用，请在「音源管理」中启用渠道。';
 
   @override
+  String get discoverChannelUnavailable => '当前渠道没有可用内容，换一个渠道试试';
+
+  @override
   String get libraryLoadFailed => '资料库加载失败';
 
   @override
@@ -998,6 +1001,9 @@ class AppLocalizationsZh extends AppLocalizations {
       'B 站无需脚本即可搜索；如不可用，请在「音源管理」中重新启用 B 站或导入其它音源脚本。';
 
   @override
+  String get searchChannelUnsupported => '当前渠道不支持搜索，换一个渠道试试';
+
+  @override
   String searchNoResultsInSource(String source) {
     return '在「$source」中没有找到结果';
   }
@@ -1013,9 +1019,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get searchLoadMoreFailed => '加载更多结果失败';
-
-  @override
-  String get searchAllSources => '全部来源';
 
   @override
   String get searchSourcesLabel => '搜索来源';

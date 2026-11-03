@@ -23,10 +23,9 @@ import '../widgets/shell_reselect.dart';
 enum _LibraryTab { search, leaderboards, playlists }
 
 /// 资料库页：
-/// - 「搜索 / 热榜 / 歌单」三个 tab；搜索来源与发现渠道完全解耦；
-/// - 搜索 tab 只看 SearchProvider 是否有可搜索来源，来源选择在结果面 chips；
-/// - 热榜 / 歌单跟随内容区顶部的发现渠道下拉框（脚本扩展源 / any-listen
-///   无发现能力时自动隐藏这两个 tab）；
+/// - 「搜索 / 热榜 / 歌单」三个 tab；全局只有一个当前渠道；
+/// - 顶部渠道下拉在所有 tab（含搜索）左侧常显，同时决定热榜 / 歌单与搜索；
+/// - 当前渠道不支持搜索时隐藏搜索 tab；热榜 / 歌单按渠道能力隐藏；
 /// - 个人内容（播放历史 / 我的列表 / 导入收藏）在收藏页。
 class Library extends StatefulWidget {
   const Library({super.key, this.reselect, this.showSearchRequest});
@@ -136,9 +135,9 @@ class _LibraryState extends State<Library> {
       }
     }
 
-    // 渠道失效（被停用 / 脚本删除）时校正；搜索来源是独立偏好，不跟随
-    // 渠道。音源尚未初始化 / 脚本仍在激活时，保存的脚本渠道暂时不在
-    // enabledChannels 里：此时不能 fallback，否则会覆盖用户偏好。
+    // 渠道失效（被停用 / 脚本删除）时校正；音源尚未初始化 / 脚本仍在激活时，
+    // 保存的脚本渠道暂时不在 enabledChannels 里：此时不能 fallback，否则会
+    // 覆盖用户偏好。
     final needsFallback =
         current == null &&
         enabledChannels.isNotEmpty &&
@@ -152,24 +151,12 @@ class _LibraryState extends State<Library> {
       });
     }
 
-    // 当前渠道对应的发现能力（渠道不匹配时按降级处理，避免闪现旧渠道数据）。
-    final discoverActive =
-        current != null &&
-        current.discoverable &&
-        discover.channelKey == current.key;
-    final visibleTabs = <_LibraryTab>[
-      // 搜索 tab 只看搜索侧是否有可用来源；发现渠道不支持搜索也不影响它。
-      if (search.hasSearchableSources) _LibraryTab.search,
-      if (discoverActive && discover.supportsLeaderboards)
-        _LibraryTab.leaderboards,
-      if (discoverActive && discover.supportsPlaylists) _LibraryTab.playlists,
-    ];
-
-    if (visibleTabs.isEmpty) {
-      // 页面级空态版式：在可用高度里居中（Center），外边距 24。主行动只打开
-      // 设置首屏：渠道开关在设置里的「音源管理」子页维护。
+    // 全部渠道停用：没有任何可展示的渠道，保留原来的设置引导。
+    if (enabledChannels.isEmpty) {
       return ResponsivePageContainer(
         pageType: ResponsivePageType.browse,
+        // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
+        maxWidth: double.infinity,
         alignment: Alignment.topCenter,
         child: Center(
           child: Padding(
@@ -187,77 +174,97 @@ class _LibraryState extends State<Library> {
       );
     }
 
+    // 资料页独立挂载 / 测试时也把当前渠道同步给搜索：全局只允许一个渠道，
+    // 不依赖组合根是否已接线。切换渠道在 _selectChannel 里同步调用。
+    final currentKey = current?.key;
+    if (currentKey != null && search.activeSourceKey != currentKey) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<SearchProvider>().setActiveSource(currentKey);
+      });
+    }
+
+    // 当前渠道对应的发现能力（渠道不匹配时按降级处理，避免闪现旧渠道数据）。
+    final discoverActive =
+        current != null &&
+        current.discoverable &&
+        discover.channelKey == current.key;
+    final visibleTabs = <_LibraryTab>[
+      // 搜索 tab 跟随当前渠道：渠道不支持搜索就隐藏（Ctrl+F 仍可打开）。
+      if (current != null && current.capabilities.search) _LibraryTab.search,
+      if (discoverActive && discover.supportsLeaderboards)
+        _LibraryTab.leaderboards,
+      if (discoverActive && discover.supportsPlaylists) _LibraryTab.playlists,
+    ];
+
+    // 顶部工具行与三个 tab 共用页边距：渠道下拉、tab、搜索栏和内容栏
+    // 都从同一条 gutter 起排。
+    final gutter = discoverGutterOf(context);
+    final multiChannel = enabledChannels.length >= 2;
+    final showTabBar = visibleTabs.length >= 2;
     final selectedIndex = _indexOf(visibleTabs);
+
+    if (visibleTabs.isEmpty) {
+      // 当前渠道既不能搜索也没有发现内容：顶部渠道下拉仍保留（可切到其它
+      // 渠道），正文只提示当前渠道没有内容，不误报「所有渠道都已停用」。
+      return ResponsivePageContainer(
+        pageType: ResponsivePageType.browse,
+        // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
+        maxWidth: double.infinity,
+        alignment: Alignment.topCenter,
+        child: Column(
+          children: [
+            _topBar(
+              l10n: l10n,
+              channels: sources.channels,
+              selectedKey: discover.channelKey,
+              visibleTabs: const [],
+              selectedIndex: 0,
+              multiChannel: multiChannel,
+              showTabBar: false,
+              gutter: gutter,
+              onSelected: (key) => _selectChannel(key, enabledChannels),
+            ),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: EmptyState(
+                    icon: Icons.explore_off_rounded,
+                    message: l10n.discoverChannelUnavailable,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final renderedTab = visibleTabs[selectedIndex];
     // 布局期写入（不触发重建）：重复点击回顶要滚「真正在渲染」的那个列表。
     _renderedTab = renderedTab;
 
-    // 发现渠道入口只在热榜 / 歌单 tab 显示；搜索 tab 的来源选择只走 chips。
-    // 只剩搜索 tab（当前渠道无发现能力）时仍保留下拉，作为切回可发现渠道的
-    // 逃生口。渠道只有 1 个时下拉框不渲染（没有可选的目标）。
-    final multiChannel = enabledChannels.length >= 2;
-    final hasDiscoverTabs = visibleTabs.any((tab) => tab != _LibraryTab.search);
-    final showChannelSelector =
-        multiChannel && (renderedTab != _LibraryTab.search || !hasDiscoverTabs);
-    final showTabBar = visibleTabs.length >= 2;
-    final hasTopBar = showChannelSelector || showTabBar;
-    // 顶部工具行与三个 tab 共用页边距：渠道下拉、tab、搜索栏和内容栏
-    // 都从同一条 gutter 起排。
-    final gutter = discoverGutterOf(context);
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
+      // 发现页全宽自适应：不再受 browse 的 1600 桌面上限约束。
+      maxWidth: double.infinity,
       alignment: Alignment.topCenter,
       child: Column(
         children: [
-          // 顶部工具行始终挂载：渠道下拉在搜索 tab 只做 Offstage（用户看不见），
-          // 但保留 State 让 M3E 下拉菜单的关闭动画在切 tab 时不被 dispose 打断。
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              gutter,
-              hasTopBar ? 8 : 0,
-              gutter,
-              hasTopBar ? 4 : 0,
-            ),
-            child: Row(
-              children: [
-                Offstage(
-                  offstage: !showChannelSelector,
-                  child: ExcludeFocus(
-                    excluding: !showChannelSelector,
-                    child: LibraryChannelSelector(
-                      channels: sources.channels,
-                      selectedKey: discover.channelKey,
-                      onSelected: (key) => _selectChannel(key, enabledChannels),
-                    ),
-                  ),
-                ),
-                if (showTabBar) ...[
-                  if (showChannelSelector) const SizedBox(width: 12),
-                  Expanded(
-                    child: M3ETabs(
-                      // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
-                      // 内容页共用这一行分组切换（不是顶层导航）。
-                      variant: M3ETabsVariant.secondary,
-                      // 触摸端等分铺满剩余宽；桌面按自然宽度靠左排列，
-                      // 不把三个 tab 拉成三块大留白。
-                      alignment: isDesktopPlatform()
-                          ? M3ETabsAlignment.leading
-                          : M3ETabsAlignment.fill,
-                      tabs: [
-                        for (final tab in visibleTabs) _tabSpec(l10n, tab),
-                      ],
-                      selectedIndex: selectedIndex,
-                      onTabSelected: (index) =>
-                          setState(() => _tab = visibleTabs[index]),
-                    ),
-                  ),
-                ] else if (showChannelSelector)
-                  const Spacer(),
-              ],
-            ),
+          _topBar(
+            l10n: l10n,
+            channels: sources.channels,
+            selectedKey: discover.channelKey,
+            visibleTabs: visibleTabs,
+            selectedIndex: selectedIndex,
+            multiChannel: multiChannel,
+            showTabBar: showTabBar,
+            gutter: gutter,
+            onSelected: (key) => _selectChannel(key, enabledChannels),
           ),
           Expanded(
-            child: visibleTabs.length >= 2
+            child: showTabBar
                 ? M3ETabsView(
                     selectedIndex: selectedIndex,
                     onTabSelected: (index) =>
@@ -272,6 +279,61 @@ class _LibraryState extends State<Library> {
                   )
                 : _tabContent(visibleTabs.first),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// 顶部工具行：渠道下拉在所有 tab（含搜索）左侧常显，tab 在右。
+  ///
+  /// 渠道只有 1 个时下拉框不渲染（[LibraryChannelSelector] 自己返回空盒），
+  /// 单行布局保持不变。
+  Widget _topBar({
+    required AppLocalizations l10n,
+    required List<SourceDescriptor> channels,
+    required String selectedKey,
+    required List<_LibraryTab> visibleTabs,
+    required int selectedIndex,
+    required bool multiChannel,
+    required bool showTabBar,
+    required double gutter,
+    required ValueChanged<String> onSelected,
+  }) {
+    final hasTopBar = multiChannel || showTabBar;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        gutter,
+        hasTopBar ? 8 : 0,
+        gutter,
+        hasTopBar ? 4 : 0,
+      ),
+      child: Row(
+        children: [
+          LibraryChannelSelector(
+            channels: channels,
+            selectedKey: selectedKey,
+            onSelected: onSelected,
+          ),
+          if (showTabBar) ...[
+            if (multiChannel) const SizedBox(width: 12),
+            Expanded(
+              child: M3ETabs(
+                // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
+                // 内容页共用这一行分组切换（不是顶层导航）。
+                variant: M3ETabsVariant.secondary,
+                // 触摸端等分铺满剩余宽；桌面按自然宽度靠左排列，
+                // 不把三个 tab 拉成三块大留白。
+                alignment: isDesktopPlatform()
+                    ? M3ETabsAlignment.leading
+                    : M3ETabsAlignment.fill,
+                tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
+                selectedIndex: selectedIndex,
+                onTabSelected: (index) =>
+                    setState(() => _tab = visibleTabs[index]),
+              ),
+            ),
+          ] else if (multiChannel)
+            const Spacer(),
         ],
       ),
     );
@@ -296,8 +358,10 @@ class _LibraryState extends State<Library> {
       }
     }
     if (entry == null) return;
-    // 渠道只决定热榜 / 歌单；搜索来源是独立偏好，不在这里同步。
+    // 全局只有一个当前渠道：发现内容与搜索一起切；搜索侧会清空旧结果并按
+    // 当前关键词在新渠道重搜（不支持搜索的渠道只清空，由空态兜底）。
     context.read<DiscoverProvider>().selectChannel(entry.key);
+    context.read<SearchProvider>().setActiveSource(entry.key);
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {

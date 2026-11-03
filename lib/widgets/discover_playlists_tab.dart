@@ -293,95 +293,91 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
         (_) => _ensureSourceLoaded(),
       );
     }
-    return DiscoverContentFrame(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final gutter = discoverGutterOf(context);
-          final contentWidth = discoverContentWidthOf(
-            context,
-            constraints.maxWidth,
-          );
-          return ValueListenableBuilder<PagedListState<DiscoverPlaylist>>(
-            valueListenable: _paged,
-            // 分页状态是不可变值：歌单区按最新快照重建（宿主注入的滚动控制器不变）。
-            builder: (context, state, _) {
-              final l10n = _l10n(context);
-              final theme = Theme.of(context);
-              return Scrollbar(
-                controller: _scrollController,
-                thumbVisibility: true,
-                interactive: true,
-                child: PagedListAutoLoad(
-                  hasMore: state.hasMore,
-                  failed: state.failed,
-                  isLoadingMore: state.isLoadingMore,
-                  loadMoreFailed: state.loadMoreFailed,
-                  onLoadMore: () => unawaited(_paged.loadMore()),
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    slivers: [
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                            top: discoverPageTopPadding,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: gutter,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gutter = discoverGutterOf(context);
+        final contentWidth = discoverContentWidthOf(
+          context,
+          constraints.maxWidth,
+        );
+        return ValueListenableBuilder<PagedListState<DiscoverPlaylist>>(
+          valueListenable: _paged,
+          // 分页状态是不可变值：歌单区按最新快照重建（宿主注入的滚动控制器不变）。
+          builder: (context, state, _) {
+            final l10n = _l10n(context);
+            final theme = Theme.of(context);
+            return Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              interactive: true,
+              child: PagedListAutoLoad(
+                hasMore: state.hasMore,
+                failed: state.failed,
+                isLoadingMore: state.isLoadingMore,
+                loadMoreFailed: state.loadMoreFailed,
+                onLoadMore: () => unawaited(_paged.loadMore()),
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.only(
+                          top: discoverPageTopPadding,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: gutter),
+                              child: AppSearchBar(
+                                controller: _searchController,
+                                focusNode: _searchFocusNode,
+                                hintText: l10n.discoverPlaylistSearchHint,
+                                // 搜索栏铺满内容栏，不再居中在默认 720 里。
+                                constraints: discoverSearchBarConstraints(
+                                  context,
                                 ),
-                                child: AppSearchBar(
-                                  controller: _searchController,
-                                  focusNode: _searchFocusNode,
-                                  hintText: l10n.discoverPlaylistSearchHint,
-                                  // 搜索栏铺满内容栏，不再居中在默认 720 里。
-                                  constraints: discoverSearchBarConstraints(
-                                    context,
+                                // 「打开歌单」也是「给一个歌单」的入口，放在搜索
+                                // 行栏尾：入口跟随搜索行，不另占一行。
+                                trailing: [
+                                  M3EIconButton(
+                                    variant: M3EIconButtonVariant.standard,
+                                    semanticLabel: l10n.discoverOpenPlaylist,
+                                    icon: const Icon(Icons.link_rounded),
+                                    onPressed: _openLinkDialog,
                                   ),
-                                  // 「打开歌单」也是「给一个歌单」的入口，放在搜索
-                                  // 行栏尾：入口跟随搜索行，不另占一行。
-                                  trailing: [
-                                    M3EIconButton(
-                                      variant: M3EIconButtonVariant.standard,
-                                      semanticLabel: l10n.discoverOpenPlaylist,
-                                      icon: const Icon(Icons.link_rounded),
-                                      onPressed: _openLinkDialog,
-                                    ),
-                                  ],
-                                  onChanged: (value) {
-                                    // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
-                                    if (value.trim().isEmpty) _clearSearch();
-                                  },
-                                  onSubmitted: _submitSearch,
-                                ),
+                                ],
+                                onChanged: (value) {
+                                  // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
+                                  if (value.trim().isEmpty) _clearSearch();
+                                },
+                                onSubmitted: _submitSearch,
                               ),
-                              const SizedBox(height: discoverSectionGap),
-                              _buildTagChips(l10n, gutter),
-                              const SizedBox(height: discoverSectionGap),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(height: discoverSectionGap),
+                            _buildTagChips(l10n, gutter),
+                            const SizedBox(height: discoverSectionGap),
+                          ],
                         ),
                       ),
-                      ..._buildPlaylistSlivers(
-                        l10n,
-                        theme,
-                        state,
-                        gutter: gutter,
-                        contentWidth: contentWidth,
-                      ),
-                      const SliverToBoxAdapter(
-                        child: SizedBox(height: discoverPageBottomPadding),
-                      ),
-                    ],
-                  ),
+                    ),
+                    ..._buildPlaylistSlivers(
+                      l10n,
+                      theme,
+                      state,
+                      gutter: gutter,
+                      contentWidth: contentWidth,
+                    ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: discoverPageBottomPadding),
+                    ),
+                  ],
                 ),
-              );
-            },
-          );
-        },
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

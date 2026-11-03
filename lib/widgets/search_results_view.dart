@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,8 +6,6 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
-import '../domain/models/failure.dart';
-import '../domain/models/source.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/search_provider.dart';
 import '../services/haptics.dart';
@@ -20,7 +17,6 @@ import 'desktop_layout.dart';
 import 'key_claim_scope.dart';
 import 'paged_list_auto_load.dart';
 import 'row_actions.dart';
-import 'search_source_chips.dart';
 import 'track_menu_tile.dart';
 import 'track_row.dart';
 import 'track_table_header.dart';
@@ -32,10 +28,10 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 搜索结果面的两种宿主形态。
 enum SearchResultsVariant {
-  /// 资料库搜索结果页：分段 + chips + 表头 + sliver 列表 + 触底分页。
+  /// 资料库搜索结果页：分段 + 表头 + sliver 列表 + 触底分页。
   page,
 
-  /// 桌面全局搜索遮罩：限高面板 + 分组预览行 + 「查看全部结果」出口。
+  /// 桌面全局搜索遮罩：限高面板 + 预览行 + 「查看全部结果」出口。
   docked,
 }
 
@@ -74,62 +70,25 @@ final class SearchPreviewArtist extends SearchPreviewItem {
   String get key => 'artist:$sourceKey:${artist.id}';
 }
 
-/// 遮罩里一个来源的预览分组（每来源最多 2 行，总计最多 8 行）。
-class SearchPreviewGroup {
-  const SearchPreviewGroup({
-    required this.source,
-    required this.items,
-    required this.totalItems,
-    this.failure,
-    this.isLoading = false,
-    this.page = 0,
-  });
-
-  final SourceDescriptor source;
-  final List<SearchPreviewItem> items;
-
-  /// 该来源完整结果数（不受预览行数截断）。
-  final int totalItems;
-
-  final SourceFailure? failure;
-  final bool isLoading;
-  final int page;
-
-  bool get isEmpty => page > 0 && totalItems == 0 && failure == null;
-}
-
 /// 遮罩预览的唯一投影：遮罩高亮索引与渲染列表共用同一份顺序。
 class SearchPreview {
-  const SearchPreview({
-    required this.groups,
-    required this.items,
-    required this.totalItems,
-    required this.groupCount,
-  });
+  const SearchPreview({required this.items, required this.totalItems});
 
-  final List<SearchPreviewGroup> groups;
-
-  /// 扁平高亮顺序（跳过组标题）。
+  /// 扁平高亮顺序（单渠道最多 [SearchResultsView.maxDockedPreviewRows] 行）。
   final List<SearchPreviewItem> items;
 
-  /// 所有来源的完整结果数（不是预览截断后的数量）。
+  /// 当前渠道的完整结果数（不是预览截断后的数量）。
   final int totalItems;
-
-  /// 当前结果面的来源分组数（决定是否显示分组标题）。
-  final int groupCount;
-
-  bool get aggregated => groupCount > 1;
 }
 
 /// 搜索结果面：单曲 / 歌手 / 歌词三类结果在一个模块里完成映射与状态呈现。
 ///
-/// 聚合搜索后一个结果面可以包含多个来源分组：
-/// - 单分组：无分组标题、保留宽屏表格列与触底自动分页；
-/// - 多分组：分组标题 + 每组独立「加载更多」，表格列关闭（与分组标题冲突）；
-/// - 遮罩版：每组最多 2 行、总计最多 8 行，单源仍最多 8 行。
+/// 全局只有一个搜索渠道，所以结果面最多一个来源分组：
+/// - 页面版：类型分段 + 宽屏表格列 + 触底自动分页；
+/// - 遮罩版：最多预览 8 行，以「查看全部结果」出口收尾；当前渠道不支持
+///   搜索时显示专用空态。
 ///
-/// 行映射、失败 / 空态、来源 chips 与键盘高亮都在这里维护；宿主只传
-/// [variant] 与导航回调。
+/// 行映射、失败 / 空态与键盘高亮都在这里维护；宿主只传 [variant] 与导航回调。
 class SearchResultsView extends StatefulWidget {
   const SearchResultsView({
     super.key,
@@ -151,9 +110,6 @@ class SearchResultsView extends StatefulWidget {
   /// 遮罩就地预览的最大行数：更长的列表交给「查看全部结果」后的资料库。
   static const int maxDockedPreviewRows = 8;
 
-  /// 多分组时每组最多预览行数（总计仍受 [maxDockedPreviewRows] 限制）。
-  static const int maxDockedRowsPerGroup = 2;
-
   final SearchResultsVariant variant;
 
   /// 单曲 / 歌词行点击：播放语义归宿主。
@@ -171,97 +127,45 @@ class SearchResultsView extends StatefulWidget {
   /// 遮罩高亮行身份（见 [SearchPreviewItem.key]）；页面版可不传。
   final String? highlightedKey;
 
+  /// 当前渠道在当前搜索类型下的唯一分组（无渠道 / 不支持该类型时为 null）。
+  static SearchSourceGroup<Object>? groupOf(SearchProvider search) =>
+      switch (search.searchKind) {
+        SearchKind.song =>
+          search.songGroups.isEmpty ? null : search.songGroups.first,
+        SearchKind.artist =>
+          search.artistGroups.isEmpty ? null : search.artistGroups.first,
+        SearchKind.lyric =>
+          search.lyricGroups.isEmpty ? null : search.lyricGroups.first,
+      };
+
   /// 生成遮罩预览的唯一纯函数：遮罩控制高亮与渲染列表都读它，避免索引漂移。
   static SearchPreview previewFor(SearchProvider search) {
-    final groups = switch (search.searchKind) {
-      SearchKind.song => search.songGroups,
-      SearchKind.artist => search.artistGroups,
-      SearchKind.lyric => search.lyricGroups,
-    };
-    final aggregated = groups.length > 1;
-    final limits = _previewLimits(groups, aggregated: aggregated);
-    var totalItems = 0;
-    final previewGroups = <SearchPreviewGroup>[];
-    final flattened = <SearchPreviewItem>[];
-    for (var index = 0; index < groups.length; index++) {
-      final group = groups[index];
-      totalItems += group.items.length;
-      final items = <SearchPreviewItem>[];
-      if (limits[index] > 0) {
-        switch (search.searchKind) {
-          case SearchKind.song || SearchKind.lyric:
-            for (final row
-                in (group as SearchSourceGroup<SearchRow>).items.take(
-                  limits[index],
-                )) {
-              items.add(
-                SearchPreviewTrack(row: row, sourceKey: group.source.key),
-              );
-            }
-          case SearchKind.artist:
-            for (final artist
-                in (group as SearchSourceGroup<ArtistSummary>).items.take(
-                  limits[index],
-                )) {
-              items.add(
-                SearchPreviewArtist(
-                  artist: artist,
-                  sourceKey: group.source.key,
-                ),
-              );
-            }
+    final group = groupOf(search);
+    if (group == null) {
+      return const SearchPreview(items: [], totalItems: 0);
+    }
+    final items = <SearchPreviewItem>[];
+    switch (search.searchKind) {
+      case SearchKind.song || SearchKind.lyric:
+        for (final row in (group as SearchSourceGroup<SearchRow>).items.take(
+          maxDockedPreviewRows,
+        )) {
+          items.add(SearchPreviewTrack(row: row, sourceKey: group.source.key));
         }
-      }
-      previewGroups.add(
-        SearchPreviewGroup(
-          source: group.source,
-          items: List.unmodifiable(items),
-          totalItems: group.items.length,
-          failure: group.failure,
-          isLoading: group.isLoading,
-          page: group.page,
-        ),
-      );
-      flattened.addAll(items);
+      case SearchKind.artist:
+        for (final artist
+            in (group as SearchSourceGroup<ArtistSummary>).items.take(
+              maxDockedPreviewRows,
+            )) {
+          items.add(
+            SearchPreviewArtist(artist: artist, sourceKey: group.source.key),
+          );
+        }
     }
     return SearchPreview(
-      groups: List.unmodifiable(previewGroups),
-      items: List.unmodifiable(flattened),
-      totalItems: totalItems,
-      groupCount: groups.length,
+      items: List.unmodifiable(items),
+      totalItems: group.items.length,
     );
-  }
-
-  /// 遮罩预览行预算：多来源先每个有结果的来源各 1 行，再按渠道顺序补到
-  /// 每源最多 [maxDockedRowsPerGroup] 行；所有来源都保留分组标题。
-  static List<int> _previewLimits(
-    List<SearchSourceGroup<Object>> groups, {
-    required bool aggregated,
-  }) {
-    final limits = List<int>.filled(groups.length, 0);
-    var budget = maxDockedPreviewRows;
-    if (!aggregated) {
-      if (groups.isEmpty) return limits;
-      limits[0] = math.min(maxDockedPreviewRows, groups.first.items.length);
-      return limits;
-    }
-    // 第一轮：每个有结果的来源 1 行，保证 6 个平台时不会被前 4 个吃光预算。
-    for (var index = 0; index < groups.length && budget > 0; index++) {
-      if (groups[index].items.isEmpty) continue;
-      limits[index] = 1;
-      budget--;
-    }
-    // 第二轮：按渠道顺序补齐到每源上限，仍受总预算约束。
-    for (var index = 0; index < groups.length && budget > 0; index++) {
-      final maximum = math.min(
-        maxDockedRowsPerGroup,
-        groups[index].items.length,
-      );
-      if (limits[index] >= maximum) continue;
-      limits[index]++;
-      budget--;
-    }
-    return limits;
   }
 
   @override
@@ -319,10 +223,11 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     return switch (widget.variant) {
       SearchResultsVariant.page => _buildPage(context, search),
       SearchResultsVariant.docked =>
-        search.isSearchActive
-            ? _buildDocked(context, search)
-            // 无关键词：结果面留空（只留搜索条）。
-            : const SizedBox.shrink(),
+        // 当前渠道不支持搜索时，即使还没输入关键词也要显示专用空态；
+        // 可搜索且无词时结果面留空（只留搜索条）。
+        !search.isSearchActive && search.hasActiveSearchSource
+            ? const SizedBox.shrink()
+            : _buildDocked(context, search),
     };
   }
 
@@ -332,19 +237,14 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final horizontalPadding = context
         .layoutType(ResponsivePageType.browse)
         .horizontalPadding;
-    final groups = _groupsFor(search);
-    final singleGroup = groups.length <= 1;
-    final group = groups.isEmpty ? null : groups.first;
-    final itemCount = groups.fold<int>(0, (sum, g) => sum + g.items.length);
-    final anyFailure = groups.any((g) => g.failure != null);
+    final group = SearchResultsView.groupOf(search);
+    final itemCount = group?.items.length ?? 0;
+    final failure = group?.failure;
     final showEmptyState =
-        itemCount == 0 && !search.isSearchBusy && !anyFailure;
-    final failure = singleGroup ? group?.failure : null;
+        itemCount == 0 && !search.isSearchBusy && failure == null;
     final kinds = search.supportedSearchKinds;
-    final filterOptions = search.sourceFilterOptions;
     final tableColumns =
         search.searchKind == SearchKind.song &&
-        singleGroup &&
         layout.tableColumns &&
         group != null &&
         group.items.isNotEmpty;
@@ -357,7 +257,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             hasScrollBody: false,
             child: _pageEmptyView(l10n, search),
           )
-        else if (singleGroup)
+        else
           ..._singleGroupSlivers(
             context,
             l10n,
@@ -365,14 +265,6 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             group,
             horizontalPadding: horizontalPadding,
             tableColumns: tableColumns,
-          )
-        else
-          ..._multiGroupSlivers(
-            context,
-            l10n,
-            search,
-            groups,
-            horizontalPadding: horizontalPadding,
           ),
       ],
     );
@@ -390,26 +282,12 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             ),
             child: _kindSwitch(l10n, search, kinds),
           ),
-        if (filterOptions.length > 1)
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              0,
-              horizontalPadding,
-              8,
-            ),
-            child: SearchSourceChips(
-              options: filterOptions,
-              selectedKey: search.sourceFilter,
-              onSelected: search.selectSourceFilter,
-            ),
-          ),
-        if (search.isSearchBusy && (singleGroup || groups.isEmpty))
+        if (search.isSearchBusy)
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: M3EProgressIndicator.linear(),
           ),
-        // 单分组首屏失败才占顶部错误条；多分组的错误挂在各自分组标题。
+        // 首屏失败才占顶部错误条；追加页失败只停底部页脚。
         if (failure != null && (group?.items.isEmpty ?? true))
           _failure(
             context,
@@ -429,26 +307,24 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             controller: controller,
             thumbVisibility: true,
             interactive: true,
-            child: singleGroup
-                ? PagedListAutoLoad(
-                    hasMore: group?.hasMore ?? false,
-                    failed: failure != null && (group?.items.isEmpty ?? true),
-                    isLoadingMore: group?.isLoadingMore ?? false,
-                    loadMoreFailed: group?.loadMoreFailed ?? false,
-                    onLoadMore: () {
-                      final sourceKey = group?.source.key;
-                      if (sourceKey != null) search.loadMore(sourceKey);
-                    },
-                    child: scrollView,
-                  )
-                : scrollView,
+            child: PagedListAutoLoad(
+              hasMore: group?.hasMore ?? false,
+              failed: failure != null && (group?.items.isEmpty ?? true),
+              isLoadingMore: group?.isLoadingMore ?? false,
+              loadMoreFailed: group?.loadMoreFailed ?? false,
+              onLoadMore: () {
+                final sourceKey = group?.source.key;
+                if (sourceKey != null) search.loadMore(sourceKey);
+              },
+              child: scrollView,
+            ),
           ),
         ),
       ],
     );
 
-    // 页面版没有模态登记：焦点进入结果区（行 / chips / 分段）时让全局
-    // 快捷键让位，Space 激活行、方向键交给焦点遍历。
+    // 页面版没有模态登记：焦点进入结果区（行 / 分段）时让全局快捷键让位，
+    // Space 激活行、方向键交给焦点遍历。
     return KeyClaimScope(child: content);
   }
 
@@ -517,87 +393,30 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     return slivers;
   }
 
-  List<Widget> _multiGroupSlivers(
-    BuildContext context,
-    AppLocalizations l10n,
-    SearchProvider search,
-    List<SearchSourceGroup<Object>> groups, {
-    required double horizontalPadding,
-  }) {
-    final slivers = <Widget>[];
-    for (final group in groups) {
-      slivers.add(
-        SliverToBoxAdapter(
-          child: _groupHeader(
-            context,
-            l10n,
-            search,
-            source: group.source,
-            failure: group.failure,
-            isLoading: group.isLoading,
-            isEmpty: group.isEmpty,
-            horizontalPadding: horizontalPadding,
-          ),
-        ),
-      );
-      if (group.items.isNotEmpty) {
-        slivers.add(
-          SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-            sliver: search.searchKind == SearchKind.artist
-                ? _ArtistResultsSliver(
-                    items: group.items.cast<ArtistSummary>(),
-                    onTap: (artist) => unawaited(
-                      widget.onOpenArtist!(
-                        group.source.key,
-                        artist.id,
-                        fallbackName: artist.name,
-                      ),
-                    ),
-                  )
-                : _TrackResultsSliver(
-                    items: group.items.cast<SearchRow>(),
-                    onPlay: widget.onPlay,
-                    onOpenArtist: widget.onOpenArtist,
-                    artistLinksEnabled: group.source.capabilities.artist,
-                    surface: const TrackRowSurface(
-                      showFocusRing: true,
-                      showFocusFill: true,
-                    ),
-                  ),
-          ),
-        );
-        slivers.add(
-          SliverToBoxAdapter(
-            child: _groupFooter(
-              l10n,
-              search,
-              group,
-              horizontalPadding: horizontalPadding,
-            ),
-          ),
-        );
-      }
-    }
-    return slivers;
-  }
-
-  /// 空状态区分：无可用来源 / 未输入 / 全部来源无结果 / 单源过滤无结果。
+  /// 空状态区分：无可用来源 / 当前渠道不支持搜索 / 未输入 / 当前渠道无结果。
   Widget _pageEmptyView(AppLocalizations l10n, SearchProvider search) {
     final theme = Theme.of(context);
     final IconData icon;
     final String title;
     String? hint;
-    if (!search.hasSearchableSources) {
+    final unsupported =
+        !search.hasActiveSearchSource && search.activeSourceKey.isNotEmpty;
+    if (unsupported) {
+      icon = Icons.search_off_rounded;
+      title = l10n.searchChannelUnsupported;
+    } else if (!search.hasSearchableSources) {
       icon = Icons.source_rounded;
       title = l10n.searchNoSourcesTitle;
       hint = l10n.searchNoSourcesHint;
+    } else if (!search.hasActiveSearchSource) {
+      icon = Icons.search_off_rounded;
+      title = l10n.searchChannelUnsupported;
     } else if (!search.isSearchActive) {
       icon = Icons.search_rounded;
       title = l10n.searchIdleHint;
     } else {
       icon = Icons.search_off_rounded;
-      final sourceName = _selectedSourceName(search);
+      final sourceName = search.activeSource?.displayName;
       title = l10n.noResultsFound;
       if (sourceName != null) hint = l10n.searchNoResultsInSource(sourceName);
     }
@@ -630,22 +449,12 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     );
   }
 
-  /// 当前过滤来源的显示名；`''` 或无效过滤返回 null。
-  String? _selectedSourceName(SearchProvider search) {
-    final selected = search.sourceFilter;
-    if (selected.isEmpty) return null;
-    for (final option in search.sourceFilterOptions) {
-      if (option.key == selected) return option.displayName;
-    }
-    return null;
-  }
-
   Widget _buildDocked(BuildContext context, SearchProvider search) {
     final l10n = _l10n(context);
     final kinds = search.supportedSearchKinds;
-    final filterOptions = search.sourceFilterOptions;
+    final group = SearchResultsView.groupOf(search);
     final preview = SearchResultsView.previewFor(search);
-    final anyFailure = preview.groups.any((group) => group.failure != null);
+    final anyFailure = group?.failure != null;
     final showEmpty =
         preview.totalItems == 0 && !search.isSearchBusy && !anyFailure;
     final currentKeys = {for (final item in preview.items) item.key};
@@ -665,72 +474,37 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                 child: _kindSwitch(l10n, search, kinds),
               ),
-            if (filterOptions.length > 1)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-                child: SearchSourceChips(
-                  options: filterOptions,
-                  selectedKey: search.sourceFilter,
-                  onSelected: search.selectSourceFilter,
-                ),
-              ),
             if (search.isSearchBusy && preview.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: M3EProgressIndicator.linear(),
               ),
-            for (final group
-                in showEmpty
-                    ? const <SearchPreviewGroup>[]
-                    : preview.groups) ...[
-              if (preview.aggregated)
-                _groupHeader(
-                  context,
-                  l10n,
-                  search,
-                  source: group.source,
-                  failure: group.failure,
-                  isLoading: group.isLoading,
-                  isEmpty: group.isEmpty,
-                  compact: true,
-                )
-              else if (group.failure != null)
-                _failure(
-                  context,
-                  l10n,
-                  compact: true,
-                  detail: group.failure!.message,
-                  onRetry: () => search.retry(group.source.key),
+            if (!showEmpty && group?.failure != null)
+              _failure(
+                context,
+                l10n,
+                compact: true,
+                detail: group!.failure!.message,
+                onRetry: () => search.retry(group.source.key),
+              ),
+            if (!showEmpty && preview.items.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (var index = 0; index < preview.items.length; index++)
+                      _dockedItem(
+                        context,
+                        l10n,
+                        preview.items[index],
+                        index,
+                        preview.items.length,
+                      ),
+                  ],
                 ),
-              if (preview.aggregated && group.failure == null && group.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                  child: Text(
-                    l10n.searchGroupEmpty,
-                    style: context.typeScale.bodySmall.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              if (group.items.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (var index = 0; index < group.items.length; index++)
-                        _dockedItem(
-                          context,
-                          l10n,
-                          group.items[index],
-                          index,
-                          group.items.length,
-                        ),
-                    ],
-                  ),
-                ),
-            ],
+              ),
             if (showEmpty) _dockedEmptyView(context, l10n, search),
             // 有结果才给「查看全部结果」：零结果时它无处可去。
             if (preview.totalItems > 0) _dockedFooter(l10n),
@@ -803,16 +577,20 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     );
   }
 
-  /// 有词无结果：无来源 / 单源过滤无结果 / 全部来源无结果。
+  /// 空态：当前渠道不支持搜索 / 全应用无来源 / 当前渠道无结果。
   Widget _dockedEmptyView(
     BuildContext context,
     AppLocalizations l10n,
     SearchProvider search,
   ) {
     final theme = Theme.of(context);
-    final sourceName = _selectedSourceName(search);
-    final noSources = !search.hasSearchableSources;
-    final title = noSources ? l10n.searchNoSourcesTitle : l10n.noResultsFound;
+    final sourceName = search.activeSource?.displayName;
+    final unsupported =
+        !search.hasActiveSearchSource && search.activeSourceKey.isNotEmpty;
+    final noSources = !search.hasSearchableSources && !unsupported;
+    final title = unsupported
+        ? l10n.searchChannelUnsupported
+        : (noSources ? l10n.searchNoSourcesTitle : l10n.noResultsFound);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
       child: Center(
@@ -836,7 +614,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-            ] else if (sourceName != null) ...[
+            ] else if (!unsupported && sourceName != null) ...[
               const SizedBox(height: 4),
               Text(
                 l10n.searchNoResultsInSource(sourceName),
@@ -852,7 +630,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     );
   }
 
-  /// 底部出口：完整结果（分段 / chips / 分页 / 歌手链接）在资料库目的地。
+  /// 底部出口：完整结果（分段 / 分页 / 歌手链接）在资料库目的地。
   Widget _dockedFooter(AppLocalizations l10n) => Padding(
     padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
     child: Center(
@@ -865,114 +643,6 @@ class _SearchResultsViewState extends State<SearchResultsView> {
       ),
     ),
   );
-
-  Widget _groupHeader(
-    BuildContext context,
-    AppLocalizations l10n,
-    SearchProvider search, {
-    required SourceDescriptor source,
-    required SourceFailure? failure,
-    required bool isLoading,
-    required bool isEmpty,
-    bool compact = false,
-    double horizontalPadding = 16,
-  }) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        compact ? 20 : horizontalPadding,
-        compact ? 8 : 12,
-        compact ? 12 : horizontalPadding,
-        4,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  source.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.typeScale.titleSmall,
-                ),
-              ),
-              if (isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: SizedBox.square(
-                    dimension: 14,
-                    child: M3EProgressIndicator.circular(
-                      size: 14,
-                      strokeWidth: 2,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          if (failure != null)
-            _failure(
-              context,
-              l10n,
-              compact: true,
-              detail: failure.message,
-              onRetry: () => search.retry(source.key),
-            )
-          else if (isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                l10n.searchGroupEmpty,
-                style: context.typeScale.bodySmall.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _groupFooter(
-    AppLocalizations l10n,
-    SearchProvider search,
-    SearchSourceGroup<Object> group, {
-    required double horizontalPadding,
-  }) {
-    if (group.isLoadingMore || group.loadMoreFailed) {
-      return PagedListFooter(
-        isLoadingMore: group.isLoadingMore,
-        loadMoreFailed: group.loadMoreFailed,
-        onRetry: () => search.retry(group.source.key),
-        failureLabel: l10n.searchLoadMoreFailed,
-        padding: EdgeInsets.fromLTRB(
-          horizontalPadding,
-          8,
-          horizontalPadding,
-          16,
-        ),
-      );
-    }
-    if (!group.hasMore) return const SizedBox(height: 12);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(horizontalPadding, 4, horizontalPadding, 16),
-      child: Center(
-        child: M3EButton.text(
-          onPressed: () => search.loadMore(group.source.key),
-          child: Text(l10n.searchLoadMore),
-        ),
-      ),
-    );
-  }
-
-  /// 当前类型的分组（统一成 `Object` 便于共享分组标题 / 页脚）。
-  List<SearchSourceGroup<Object>> _groupsFor(SearchProvider search) =>
-      switch (search.searchKind) {
-        SearchKind.song => search.songGroups,
-        SearchKind.artist => search.artistGroups,
-        SearchKind.lyric => search.lyricGroups,
-      };
 
   /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满。
   Widget _kindSwitch(

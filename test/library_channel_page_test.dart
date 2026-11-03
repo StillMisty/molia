@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/settings/settings_keys.dart';
@@ -417,7 +416,7 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('切换发现渠道不改搜索来源；搜索 tab 隐藏渠道下拉', (tester) async {
+  testWidgets('搜索 tab 也显示渠道下拉；切渠道同时改搜索当前渠道', (tester) async {
     search = buildSearch(const [
       domain.SourceDescriptor(
         key: 'tx',
@@ -431,46 +430,57 @@ void main() {
         kind: domain.SourceKind.builtin,
         capabilities: domain.SourceCapabilities(search: true),
       ),
+      domain.SourceDescriptor(
+        key: 'kw',
+        displayName: '酷我音乐',
+        kind: domain.SourceKind.builtin,
+        capabilities: domain.SourceCapabilities(search: true),
+      ),
     ]);
-    search.selectSourceFilter('tx');
-    // chips 在搜索激活后的结果面里（未输入时是 AI 推荐 / 输入引导占位）。
+    // 搜索激活后结果面不再有来源 chips；当前渠道由资料页下拉决定。
     search.updateSearchQuery('测试');
     await pumpLibrary(tester);
 
-    // 默认搜索 tab：来源只走 chips，顶部没有发现渠道下拉；Tab 也不能落到
-    // 不可见的下拉（Offstage 本身不阻止焦点）。
-    expect(find.byType(LibraryChannelSelector), findsNothing);
-    for (var i = 0; i < 12; i++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-      expect(
-        FocusManager.instance.primaryFocus?.context
-            ?.findAncestorWidgetOfExactType<LibraryChannelSelector>(),
-        isNull,
-        reason: 'Tab #$i 落到了隐藏的渠道下拉',
-      );
-    }
+    // 默认搜索 tab：渠道下拉仍在 tab 左侧（不再 Offstage / 隐藏）。
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    expect(search.activeSourceKey, 'wy', reason: '资料页把当前渠道同步给搜索');
+    final selector = tester.getRect(find.byType(LibraryChannelSelector));
+    final tabs = tester.getRect(find.byType(M3ETabs));
     expect(
-      find.byKey(const ValueKey<String>('searchSourceChip-tx')),
-      findsOneWidget,
+      selector.right,
+      lessThanOrEqualTo(tabs.left),
+      reason: '渠道下拉在 tab 左侧',
     );
 
-    // 到热榜 tab 才能切换发现渠道。
-    await tester.tap(find.text('热榜'));
-    await tester.pumpAndSettle();
-    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    // 搜索 tab 上直接切渠道：发现与搜索一起切。
     await tester.tap(find.text('网易音乐'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('酷我音乐').last);
     await tester.pumpAndSettle();
 
     expect(discover.channelKey, 'kw');
-    expect(search.sourceFilter, 'tx', reason: '切渠道不改搜索来源');
+    expect(search.activeSourceKey, 'kw');
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-    await tester.tap(find.text('搜索'));
+  testWidgets('当前渠道无搜索/发现内容：顶部下拉仍可见，正文提示换渠道', (tester) async {
+    // 保存的脚本渠道尚未加载：当前渠道不在 enabledChannels 里，搜索与发现
+    // 都无从展示；此时不能误报「所有渠道都已停用」。
+    search = buildSearch(const []);
+    discover.selectChannel('test');
+    await pumpLibrary(tester);
+
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    expect(find.text('当前渠道没有可用内容，换一个渠道试试'), findsOneWidget);
+    expect(find.text('所有渠道都已停用，请在「音源管理」中启用渠道。'), findsNothing);
+
+    // 下拉仍可切回可发现渠道。
+    await tester.tap(find.text('选择渠道'));
     await tester.pumpAndSettle();
-    expect(find.byType(LibraryChannelSelector), findsNothing);
-    expect(search.sourceFilter, 'tx');
+    await tester.tap(find.text('网易音乐').last);
+    await tester.pumpAndSettle();
+    expect(discover.channelKey, 'wy');
+    expect(find.text('热榜'), findsOneWidget);
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 }
 

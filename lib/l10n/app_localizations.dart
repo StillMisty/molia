@@ -1262,6 +1262,12 @@ abstract class AppLocalizations {
   /// **'All channels are disabled. Enable channels in Source Management.'**
   String get libraryNoChannels;
 
+  /// No description provided for @discoverChannelUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is available on this channel. Try another channel.'**
+  String get discoverChannelUnavailable;
+
   /// No description provided for @libraryLoadFailed.
   ///
   /// In en, this message translates to:
@@ -1982,6 +1988,12 @@ abstract class AppLocalizations {
   /// **'Bilibili works without a script; if unavailable, re-enable it or import source scripts in Source Management.'**
   String get searchNoSourcesHint;
 
+  /// No description provided for @searchChannelUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This channel doesn\'t support search. Try another channel.'**
+  String get searchChannelUnsupported;
+
   /// No description provided for @searchNoResultsInSource.
   ///
   /// In en, this message translates to:
@@ -2011,12 +2023,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed to load more results'**
   String get searchLoadMoreFailed;
-
-  /// No description provided for @searchAllSources.
-  ///
-  /// In en, this message translates to:
-  /// **'All sources'**
-  String get searchAllSources;
 
   /// No description provided for @searchSourcesLabel.
   ///

@@ -37,6 +37,10 @@ class DiscoverTracksPage extends StatefulWidget {
   /// 打开时已知的封面（歌单卡片点击进入时避免头部闪烁）。
   final String? coverUrl;
 
+  /// 打开后才解析出的封面（榜单磁贴的按需封面）：不阻塞曲目首屏，
+  /// 完成后再更新头部；失败 / 为空保持 [coverUrl] 或 fallback 图标。
+  final Future<String?>? coverFuture;
+
   final DiscoverTracksLoader loader;
 
   /// 是否提供「导入到我的列表」（歌单支持；榜单不提供）。
@@ -47,6 +51,7 @@ class DiscoverTracksPage extends StatefulWidget {
     required this.title,
     required this.loader,
     this.coverUrl,
+    this.coverFuture,
     this.importable = false,
   });
 
@@ -232,7 +237,7 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
   ) {
     final l10n = _l10n(context);
     final info = detail.info;
-    final cover = info.coverUrl ?? widget.coverUrl;
+    final fallbackCover = info.coverUrl ?? widget.coverUrl;
     // 分页加载中显示平台总数；无总数（榜单）时退回已加载数量。
     final int trackCount = info.trackCount > 0 ? info.trackCount : loadedCount;
     final subtitleParts = <String>[
@@ -241,7 +246,8 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
       l10n.playlistTrackCount(trackCount),
     ];
     final description = (info.description ?? '').trim();
-    return DetailCoverHeader(
+
+    Widget header(String? cover) => DetailCoverHeader(
       coverKey: const Key('discoverHeaderCover'),
       coverUrl: cover,
       shape: DetailCoverShape.square,
@@ -256,6 +262,14 @@ class _DiscoverTracksPageState extends State<DiscoverTracksPage> {
         onShuffle: () => unawaited(_playShuffled()),
         // 导入到我的列表仍在 AppBar 的图标键上，头部不重复提供。
       ),
+    );
+
+    final coverFuture = widget.coverFuture;
+    if (coverFuture == null) return header(fallbackCover);
+    return FutureBuilder<String?>(
+      future: coverFuture,
+      initialData: fallbackCover,
+      builder: (context, snapshot) => header(snapshot.data ?? fallbackCover),
     );
   }
 }

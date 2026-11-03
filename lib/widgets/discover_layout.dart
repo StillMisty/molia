@@ -1,7 +1,9 @@
-/// 发现页布局断点：gutter、内容栏宽度、歌单 / 榜单网格列数与卡片高度。
+/// 发现页布局断点：gutter、内容宽度与歌单 / 榜单网格列数与卡片高度。
 ///
-/// 搜索 / 热榜 / 歌单三个 tab 必须共用同一套页边距与内容栏：断点数字只在
+/// 搜索 / 热榜 / 歌单三个 tab 必须共用同一套页边距与列数公式：断点数字只在
 /// 本文件维护，tab 内不要再写 16 / 600 / 200 之类的布局常量。
+///
+/// 内容栏**不再设最大宽度**：全宽自适应，列数随实际可用宽度增长（最多 6 列）。
 library;
 
 import 'dart:math' as math;
@@ -11,9 +13,6 @@ import 'package:material_ui/material_ui.dart';
 
 import '../utils/responsive.dart';
 import 'row_extent.dart';
-
-/// 发现页内容栏最大宽度：宽屏左对齐，不再把内容居中在默认 720 里。
-const double discoverContentMaxWidth = 960;
 
 /// 发现页宽屏判定（内容宽度）：歌单切网格、热榜加列都用这一档。
 const double discoverWideBreakpoint = 600;
@@ -29,8 +28,7 @@ const double discoverGridGap = 12;
 
 /// 网格列数上下限。
 ///
-/// 6 只是保护上限：当前 960 内容栏下歌单实际最多 4 列、热榜最多 3 列，
-/// 达不到 6；保留给未来更宽的内容栏。
+/// 6 是全宽自适应下的保护上限：超宽窗口也不会无限增加列数。
 const int discoverGridMinColumns = 2;
 const int discoverGridMaxColumns = 6;
 
@@ -72,11 +70,11 @@ int _gridColumnsFor(double contentWidth, double minTileWidth) {
   return columns.clamp(discoverGridMinColumns, discoverGridMaxColumns);
 }
 
-/// 歌单网格列数：每列至少 200，最少 2 列；当前 960 内容栏下最多 4 列。
+/// 歌单网格列数：每列至少 200，最少 2 列；全宽后最多 6 列。
 int discoverPlaylistColumns(double contentWidth) =>
     _gridColumnsFor(contentWidth, discoverPlaylistTileMinWidth);
 
-/// 热榜磁贴列数：手机固定 2 列；宽屏每列至少 240，当前 960 内容栏下最多 3 列。
+/// 热榜磁贴列数：手机固定 2 列；宽屏每列至少 240，全宽后最多 6 列。
 int discoverLeaderboardColumns(double contentWidth) {
   if (!discoverIsWide(contentWidth)) {
     return discoverGridMinColumns;
@@ -107,20 +105,20 @@ double discoverPlaylistTileExtentOf(BuildContext context, double tileWidth) {
   return 24 + cover + text;
 }
 
-/// 热榜磁贴高度：2 行标题 + 上下内边距 10+10，最小 64。
+/// 热榜磁贴高度：56dp 封面 + 上下内边距 8+8，标题两行时随文字缩放增长。
 double discoverLeaderboardTileExtentOf(BuildContext context) {
   final m3e = M3ETheme.of(context);
   return scaledRowExtentOf(
     context,
-    minExtent: 44,
+    minExtent: 56,
     styles: [m3e.typeScale.titleSmall, m3e.typeScale.titleSmall],
     stacked: true,
     allowance: 4,
-    padding: 20,
+    padding: 16,
   );
 }
 
-/// 搜索栏约束：取消 M3E 默认 720 上限，让搜索栏铺满内容栏（最多 960）。
+/// 搜索栏约束：取消 M3E 默认 720 上限，让搜索栏铺满可用内容宽。
 BoxConstraints discoverSearchBarConstraints(BuildContext context) {
   final barTheme = M3ETheme.of(context).searchBarTheme;
   return BoxConstraints(
@@ -128,33 +126,4 @@ BoxConstraints discoverSearchBarConstraints(BuildContext context) {
     maxWidth: double.infinity,
     minHeight: barTheme.minHeight,
   );
-}
-
-/// 发现页内容栏：宽屏左对齐并限制最大宽度，手机保持整行铺满。
-///
-/// 只限制宽度、不补贴边距：各 tab 自己按 [discoverGutterOf] 给搜索栏与
-/// sliver 留 gutter，搜索栏、标签和内容才能落在同一条竖线上。
-class DiscoverContentFrame extends StatelessWidget {
-  const DiscoverContentFrame({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final gutter = discoverGutterOf(context);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth.isFinite
-            ? math.min(
-                constraints.maxWidth,
-                discoverContentMaxWidth + gutter * 2,
-              )
-            : discoverContentMaxWidth + gutter * 2;
-        return Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(width: width, child: child),
-        );
-      },
-    );
-  }
 }

@@ -99,9 +99,10 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 当前渠道 key（默认规范顺序里的第一个可用平台，当前为 QQ）。
   ///
-  /// 资料页的渠道集合是「可搜索源 + 内置发现平台」的并集：脚本扩展源 /
-  /// any-listen 等没有内置发现能力的渠道也可选，此时 `supports*` 全部为
-  /// false，UI 自动隐藏热榜 / 歌单（含热搜词）。
+  /// 这是全局唯一的渠道偏好：同时决定热榜 / 歌单与搜索（Ctrl+F / 搜索 tab
+  /// 都只搜当前渠道）。资料页的渠道集合是「可搜索源 + 内置发现平台」的并集：
+  /// 脚本扩展源 / any-listen 等没有内置发现能力的渠道也可选，此时
+  /// `supports*` 全部为 false，UI 自动隐藏热榜 / 歌单（含热搜词）。
   String get channelKey => _channelKey;
 
   String _firstAvailableChannelKey() {
@@ -129,7 +130,8 @@ class DiscoverProvider extends ChangeNotifier {
 
   /// 切换渠道（空值或同值忽略；允许无发现能力的渠道——相关能力降级）。
   ///
-  /// 只影响热榜 / 歌单；搜索来源由独立偏好决定。偏好异步落盘（失败吞掉）。
+  /// 同时决定热榜 / 歌单与搜索：组合根 / 资料页监听 channelKey 变化，把
+  /// 同一个 key 同步给 SearchProvider.setActiveSource。偏好异步落盘（失败吞掉）。
   void selectChannel(String sourceKey) {
     if (sourceKey.isEmpty || sourceKey == _channelKey) return;
     _channelGeneration++;
@@ -197,6 +199,67 @@ class DiscoverProvider extends ChangeNotifier {
   bool _hotSearchLoading = false;
 
   List<String> get hotSearches => _hotSearchesBySource[_channelKey] ?? const [];
+
+  /// 已解析的榜单封面（按 board.id 缓存；null = 已失败 / 无封面）。
+  final Map<String, String?> _leaderboardCovers = {};
+
+  /// 进行中的榜单封面请求（按 board.id single-flight）。
+  final Map<String, Future<String?>> _leaderboardCoverLoads = {};
+
+  /// 已缓存的榜单封面；未加载 / 失败返回 null。
+  String? leaderboardCoverOf(DiscoverLeaderboard board) =>
+      _leaderboardCovers[board.id];
+
+  /// 按需加载榜单封面：先问平台的轻量接口，失败再用首曲封面兜底。
+  ///
+  /// 只由可见磁贴触发（SliverGrid 懒构建），不会在打开热榜 tab 时并发拉
+  /// 全部榜单的完整曲目列表；结果（包括 null）按 board.id 缓存。
+  Future<String?> loadLeaderboardCover(DiscoverLeaderboard board) {
+    if (_leaderboardCovers.containsKey(board.id)) {
+      return Future.value(_leaderboardCovers[board.id]);
+    }
+    final existing = _leaderboardCoverLoads[board.id];
+    if (existing != null) return existing;
+    final source = _source;
+    if (source == null) return Future.value(null);
+    late final Future<String?> request;
+    request = _resolveLeaderboardCover(source, board)
+        .then((value) {
+          _leaderboardCovers[board.id] = value;
+          return value;
+        })
+        .catchError((Object _) {
+          _leaderboardCovers[board.id] = null;
+          return null;
+        })
+        .whenComplete(() {
+          _leaderboardCoverLoads.remove(board.id);
+        });
+    _leaderboardCoverLoads[board.id] = request;
+    return request;
+  }
+
+  Future<String?> _resolveLeaderboardCover(
+    DiscoverSource source,
+    DiscoverLeaderboard board,
+  ) async {
+    try {
+      final direct = (await source.leaderboardCover(board.bangid))?.trim();
+      if (direct != null && direct.isNotEmpty) return direct;
+    } catch (_) {
+      // 平台没有轻量封面接口 / 请求失败：继续用首曲封面兜底。
+    }
+    try {
+      final tracks = await source.leaderboardTracks(board.bangid);
+      for (final track in tracks) {
+        final cover = track.coverUrl?.trim() ?? '';
+        if (cover.isNotEmpty) return cover;
+      }
+    } catch (_) {
+      // 首曲也失败：磁贴保留平台色占位，不阻塞列表。
+    }
+    return null;
+  }
 
   /// 加载当前平台热搜词（幂等；失败静默，不影响搜索）。
   Future<void> loadHotSearches({bool force = false}) async {

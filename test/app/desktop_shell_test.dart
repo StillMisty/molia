@@ -29,6 +29,7 @@ import 'package:molia/services/shortcuts.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/widgets/cover_appearance.dart';
+import 'package:molia/widgets/channel_search_bar.dart';
 import 'package:molia/widgets/global_search_overlay.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/now_playing_controller.dart';
@@ -76,8 +77,9 @@ void main() {
   /// 装配与组合根同源的 provider 树并挂载壳层（骨架同 `app_shell_reselect_test`；
   /// provider 在测试体内创建：偏好加载的 Future 必须在 fake-async 区内解析）。
   ///
-  /// [searchSource] 非空时给搜索 provider 接上假音源（顶栏搜索用例预置结果），
-  /// [configureSearch] 在挂载前配置搜索状态（如先提交一次搜索），
+  /// [searchSource] / [searchSources] 给搜索 provider 接上假音源（顶栏搜索
+  /// 用例预置结果），[configureSearch] 在挂载前配置搜索状态（如先提交一次
+  /// 搜索），[enabledChannelKeys] 限定资料页 / 遮罩下拉里启用的渠道。
   /// [seedLibrary] 在挂载前向假资料库写入数据（如预置收藏）。
   /// 返回假后端与 provider：快捷键用例据此断言后端收到的播放命令。
   Future<({FakePlaybackBackend backend, PlaybackProvider playback})> pumpShell(
@@ -85,6 +87,9 @@ void main() {
     required bool desktopShell,
     Size size = const Size(1440, 900),
     FakeMusicSource? searchSource,
+    Map<String, FakeMusicSource> searchSources = const {},
+    String? searchChannelKey,
+    Set<String>? enabledChannelKeys,
     void Function(SearchProvider search)? configureSearch,
     Future<void> Function(FakeLibraryRepository repository)? seedLibrary,
   }) async {
@@ -119,6 +124,14 @@ void main() {
     );
     addTearDown(library.dispose);
     final sourceManager = SourceManager(settings: testSettingsRegistry());
+    if (enabledChannelKeys != null) {
+      for (final key in const ['wy', 'tx', 'kg', 'kw', 'mg', 'bili']) {
+        await sourceManager.setChannelEnabled(
+          key,
+          enabledChannelKeys.contains(key),
+        );
+      }
+    }
     final sources = SourcesProvider(sourceManager);
     addTearDown(() {
       sources.dispose();
@@ -130,17 +143,28 @@ void main() {
       sources: const {},
     );
     addTearDown(discover.dispose);
-    final registry = FakeSourceRegistry(
-      searchSource == null ? const {} : {'kw': searchSource},
-    );
+    final sourcesMap = <String, FakeMusicSource>{...searchSources};
+    final singleSource = searchSource;
+    if (singleSource != null) {
+      sourcesMap[singleSource.key] = singleSource;
+    }
+    final channelKey =
+        searchChannelKey ?? (sourcesMap.isEmpty ? null : sourcesMap.keys.first);
+    final registry = FakeSourceRegistry(sourcesMap);
     final search = SearchProvider(
       playback,
-      catalogService: searchSource == null
+      catalogService: sourcesMap.isEmpty
           ? null
           : CatalogService(registry: registry),
       sourceRegistry: registry,
     );
     addTearDown(search.dispose);
+    // 测试里 DiscoverProvider 没有发现数据源，默认渠道会落到内置第一个；
+    // 显式对齐到搜索渠道，模拟组合根 / 资料页的同步。
+    if (channelKey != null) {
+      discover.selectChannel(channelKey);
+      search.setActiveSource(channelKey);
+    }
     configureSearch?.call(search);
     final lyrics = LyricsProvider();
     addTearDown(lyrics.dispose);
@@ -336,8 +360,8 @@ void main() {
   ];
 
   /// 顶栏搜索用例的假曲目（不带封面：避免测试触发网络预取 / 取色）。
-  Track searchTrack(String id) => Track(
-    id: TrackId('kw', id),
+  Track searchTrack(String id, {String sourceKey = 'kw'}) => Track(
+    id: TrackId(sourceKey, id),
     title: 'Title $id',
     artists: [Artist(name: 'Artist $id')],
     album: 'Album',
@@ -823,6 +847,135 @@ void main() {
     expect(find.byType(TrackRow), findsNothing, reason: 'Esc 收起遮罩');
     expect(find.text(l10n.searchHint), findsNothing);
     expect(backdropBlurOpacity(tester), 0, reason: '遮罩收起后背景模糊淡出');
+  });
+
+  testWidgets('Ctrl+F：搜索条内渠道下拉，切换后重搜并重新聚焦', (tester) async {
+    final kw = FakeMusicSource('kw')
+      ..onSearch = (query) =>
+          Future.value(SearchResult(items: [searchTrack('a')], total: 1));
+    final tx = FakeMusicSource('tx')
+      ..onSearch = (query) => Future.value(
+        SearchResult(items: [searchTrack('b', sourceKey: 'tx')], total: 1),
+      );
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      searchSources: {'kw': kw, 'tx': tx},
+      searchChannelKey: 'kw',
+      configureSearch: (search) => search.submitSearch('hello'),
+    );
+    await openSearchOverlay(tester);
+
+    expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(GlobalSearchOverlay.transitionKey),
+        matching: find.byIcon(Icons.arrow_back_rounded),
+      ),
+      findsNothing,
+      reason: '回退箭头已删除，关闭仍用 Esc / 点遮罩',
+    );
+    expect(
+      find.descendant(
+        of: find.byType(TrackRow),
+        matching: find.text('Title a'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(TrackRow),
+        matching: find.text('Title b'),
+      ),
+      findsNothing,
+    );
+
+    await tester.tap(find.byKey(ChannelSearchBar.channelDropdownKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('QQ音乐').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(TrackRow),
+        matching: find.text('Title b'),
+      ),
+      findsOneWidget,
+      reason: '切渠道后按当前关键词重搜',
+    );
+    expect(
+      find.descendant(
+        of: find.byType(TrackRow),
+        matching: find.text('Title a'),
+      ),
+      findsNothing,
+      reason: '旧渠道结果已清空',
+    );
+    final editable = tester.widget<EditableText>(
+      find.byType(EditableText).first,
+    );
+    expect(editable.focusNode.hasFocus, isTrue, reason: '选择渠道后焦点还给输入框');
+    expect(editable.controller.text, 'hello');
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Ctrl+F：当前渠道不支持搜索显示空态，下拉仍可切换', (tester) async {
+    final kw = FakeMusicSource('kw')
+      ..onSearch = (query) =>
+          Future.value(SearchResult(items: [searchTrack('a')], total: 1));
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      searchSources: {'kw': kw},
+      searchChannelKey: 'kg',
+    );
+    await openSearchOverlay(tester);
+
+    expect(find.text(l10n.searchChannelUnsupported), findsOneWidget);
+    expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsOneWidget);
+
+    await tester.tap(find.byKey(ChannelSearchBar.channelDropdownKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('酷我音乐').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(EditableText).first, 'hello');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(TrackRow),
+        matching: find.text('Title a'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text(l10n.searchChannelUnsupported), findsNothing);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Ctrl+F：单渠道时下拉隐藏，输入占满搜索条', (tester) async {
+    final kw = FakeMusicSource('kw')
+      ..onSearch = (query) =>
+          Future.value(SearchResult(items: [searchTrack('a')], total: 1));
+    await pumpShell(
+      tester,
+      desktopShell: true,
+      searchSources: {'kw': kw},
+      searchChannelKey: 'kw',
+      enabledChannelKeys: {'kw'},
+      configureSearch: (search) => search.submitSearch('hello'),
+    );
+    await openSearchOverlay(tester);
+
+    expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsNothing);
+    expect(find.byType(M3ESearchBar), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
   });
 
   testWidgets('搜索遮罩键盘：结果到达自动高亮第一条，↑↓ 移动、Enter 播放高亮项', (tester) async {

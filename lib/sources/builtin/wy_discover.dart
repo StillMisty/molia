@@ -22,6 +22,10 @@ class WyDiscoverSource extends DiscoverSource {
   }
 
   @override
+  Future<String?> leaderboardCover(String bangid) =>
+      WyLeaderboard.getCover(bangid);
+
+  @override
   Future<DiscoverTags> tags() async {
     final result = await WySongList.getTags();
     return DiscoverTags(hotTags: result.hotTag, categories: result.tags);

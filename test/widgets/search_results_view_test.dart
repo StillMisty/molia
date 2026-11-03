@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,9 +26,9 @@ import '../support/cover_test_support.dart';
 
 /// 统一搜索结果面（`SearchResultsView`）的两种版式：
 ///
-/// - 页面版式的行映射：歌手链接、未知歌手兜底、触摸端行尾操作菜单；
-/// - 遮罩版式的行映射与版式：同样的未知歌手兜底 / 桌面右键菜单、8 行预览
-///   上限与「查看全部结果」底部出口。
+/// - 页面版式：单渠道行映射、歌手链接、未知歌手兜底、宽屏表格列；
+/// - 遮罩版式：同样的行映射、8 行预览上限、「查看全部结果」出口与失败重试；
+/// - 当前渠道不支持搜索时的专用空态（页面版 / 遮罩版）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -98,7 +97,7 @@ void main() {
     WidgetTester tester,
     Widget view, {
     double width = 1200,
-    SearchProvider? provider,
+    TextScaler textScaler = TextScaler.noScaling,
   }) async {
     tester.view.physicalSize = Size(width, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -112,9 +111,7 @@ void main() {
           coverStoreProvider(),
           ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
           ChangeNotifierProvider<LibraryProvider>.value(value: library),
-          ChangeNotifierProvider<SearchProvider>.value(
-            value: provider ?? search,
-          ),
+          ChangeNotifierProvider<SearchProvider>.value(value: search),
         ],
         child: MaterialApp(
           locale: const Locale('zh'),
@@ -123,74 +120,21 @@ void main() {
             ...GlobalMaterialLocalizations.delegates,
           ],
           supportedLocales: const [Locale('zh')],
-          home: Scaffold(body: view),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-  }
-
-  /// 多来源搜索结果面：每个 FakeMusicSource 一条渠道（顺序 = map 插入顺序）。
-  SearchProvider buildMultiSourceSearch(Map<String, FakeMusicSource> sources) {
-    final registry = FakeSourceRegistry(sources);
-    final provider = SearchProvider(
-      playback,
-      catalogService: CatalogService(registry: registry),
-      sourceRegistry: registry,
-    );
-    addTearDown(provider.dispose);
-    return provider;
-  }
-
-  testWidgets('来源 chips：键盘焦点落到可视区外时自动滚入视野', (tester) async {
-    final sources = <String, FakeMusicSource>{
-      for (var i = 0; i < 8; i++)
-        's$i': FakeMusicSource('s$i')
-          ..onSearch = (query) => Future.value(
-            SearchResult(items: [track('x$i', sourceKey: 's$i')]),
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+              child: Scaffold(body: view),
+            ),
           ),
-    };
-    final provider = buildMultiSourceSearch(sources);
-    await pumpView(
-      tester,
-      SearchResultsView(
-        variant: SearchResultsVariant.page,
-        onPlay: (_) {},
-        onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
-      ),
-      width: 400,
-      provider: provider,
-    );
-
-    // chips 横向溢出；Tab 到最后一个 chip，焦点变化应触发 ensureVisible。
-    for (var i = 0; i < 9; i++) {
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
-    final scrollable = tester.state<ScrollableState>(
-      find.descendant(
-        of: find.byKey(const Key('searchSourceChipsScroll')),
-        matching: find.byType(Scrollable),
-      ),
-    );
-    expect(scrollable.position.pixels, greaterThan(0));
-  });
-
-  testWidgets('多分组页面：chips 顺序跟渠道、无表格列、分组标题 + 每组加载更多', (tester) async {
-    final kw = FakeMusicSource('kw')
-      ..onSearch = (query) => Future.value(
-        SearchResult(items: [track('a'), track('b')], hasMore: true, total: 12),
-      );
-    final tx = FakeMusicSource('tx')
-      ..onSearch = (query) => Future.value(
-        SearchResult(
-          items: [track('x', sourceKey: 'tx')],
-          hasMore: false,
-          total: 1,
         ),
-      );
-    final provider = buildMultiSourceSearch({'kw': kw, 'tx': tx});
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('页面版式：单源结果行 + 宽屏表格列，无来源分组标题', (tester) async {
+    source.onSearch = (query) async =>
+        SearchResult(items: [track('a'), track('b')], hasMore: true, total: 12);
     await pumpView(
       tester,
       SearchResultsView(
@@ -198,63 +142,20 @@ void main() {
         onPlay: (_) {},
         onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
       ),
-      width: 1400,
-      provider: provider,
     );
-    provider.submitSearch('hello');
+    search.submitSearch('hello');
     await tester.pumpAndSettle();
 
-    expect(find.byType(TrackTableHeader), findsNothing, reason: '多分组关闭表格列');
-    expect(find.text('kw'), findsWidgets, reason: '分组标题');
-    expect(find.text('tx'), findsWidgets);
-    expect(find.byType(TrackRow), findsNWidgets(3));
-
-    // 来源 chips 顺序严格跟 registry.descriptors；「全部」固定第一。
-    final all = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('searchSourceChip-all')),
-    );
-    final kwChip = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('searchSourceChip-kw')),
-    );
-    final txChip = tester.getTopLeft(
-      find.byKey(const ValueKey<String>('searchSourceChip-tx')),
-    );
-    expect(all.dx, lessThan(kwChip.dx));
-    expect(kwChip.dx, lessThan(txChip.dx));
-
-    // 两个分组都有「加载更多」：kw 还有下一页，tx 到底不显示。
-    expect(find.text(l10n.searchLoadMore), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey<String>('searchSourceChip-tx')));
-    await tester.pumpAndSettle();
-    expect(find.text('Title a'), findsNothing);
-    expect(find.text('Title x'), findsOneWidget);
-    expect(kw.searchCalls, 1, reason: '过滤不重发请求');
-    expect(tx.searchCalls, 1);
+    expect(find.byType(TrackTableHeader), findsOneWidget, reason: '单源保留宽屏表格');
+    expect(find.byType(TrackRow), findsNWidgets(2));
+    expect(find.text('kw'), findsNothing, reason: '单源不再渲染分组标题');
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('多分组遮罩：每组最多 2 行、总计 8 行；失败分组显示重试', (tester) async {
-    final sources = <String, FakeMusicSource>{};
-    for (final key in ['a', 'b', 'c', 'd', 'e']) {
-      sources[key] = FakeMusicSource(key)
-        ..onSearch = (query) => Future.value(
-          SearchResult(
-            items: [
-              for (var i = 0; i < 5; i++) track('$key$i', sourceKey: key),
-            ],
-          ),
-        );
-    }
-    var aFails = true;
-    sources['a']!.onSearch = (query) async {
-      if (aFails) {
-        throw const SourceFailure(kind: FailureKind.network, message: 'a boom');
-      }
-      return SearchResult(
-        items: [for (var i = 0; i < 5; i++) track('a$i', sourceKey: 'a')],
-      );
-    };
-    final provider = buildMultiSourceSearch(sources);
+  testWidgets('遮罩版式：最多预览 8 行，超出仍显示「查看全部结果」', (tester) async {
+    source.onSearch = (query) async => SearchResult(
+      items: [for (var i = 0; i < 12; i++) track('$i')],
+      total: 12,
+    );
     await pumpView(
       tester,
       SearchResultsView(
@@ -263,23 +164,15 @@ void main() {
         onOpenAllResults: () {},
       ),
       width: 900,
-      provider: provider,
     );
-    provider.submitSearch('hello');
+    search.submitSearch('hello');
     await tester.pumpAndSettle();
 
-    // a 失败无行；b/c/d/e 各 2 行，总数 8 行上限。
+    final preview = SearchResultsView.previewFor(search);
+    expect(preview.items, hasLength(8));
+    expect(preview.totalItems, 12);
     expect(find.byType(TrackRow), findsNWidgets(8));
-    expect(find.text(l10n.searchFailed), findsOneWidget);
-    expect(find.text(l10n.retry), findsOneWidget);
     expect(find.text(l10n.viewAllResults), findsOneWidget);
-    // 失败来源仍占一个分组标题。
-    expect(find.text('a'), findsWidgets);
-
-    aFails = false;
-    await tester.tap(find.text(l10n.retry));
-    await tester.pumpAndSettle();
-    expect(find.text('Title a0'), findsOneWidget, reason: '失败分组独立重试');
   });
 
   testWidgets('遮罩高亮：selected 行按 highlightedKey 渲染', (tester) async {
@@ -365,26 +258,20 @@ void main() {
     expect(find.byType(TrackRow), findsNWidgets(2));
   });
 
-  testWidgets('多分组加载更多失败：分组标题不报错，footer 提供重试', (tester) async {
+  testWidgets('加载更多失败：保留结果，底部页脚重试', (tester) async {
     var failPage2 = true;
-    final kw = FakeMusicSource('kw')
-      ..onSearch = (query) async {
-        if (query.page == 1) {
-          return SearchResult(items: [track('a1')], hasMore: true, total: 2);
-        }
-        if (failPage2) {
-          throw const SourceFailure(
-            kind: FailureKind.network,
-            message: 'page2 boom',
-          );
-        }
-        return SearchResult(items: [track('a2')], hasMore: false, total: 2);
-      };
-    final tx = FakeMusicSource('tx')
-      ..onSearch = (query) => Future.value(
-        SearchResult(items: [track('x', sourceKey: 'tx')], total: 1),
-      );
-    final provider = buildMultiSourceSearch({'kw': kw, 'tx': tx});
+    source.onSearch = (query) async {
+      if (query.page == 1) {
+        return SearchResult(items: [track('a1')], hasMore: true, total: 2);
+      }
+      if (failPage2) {
+        throw const SourceFailure(
+          kind: FailureKind.network,
+          message: 'page2 boom',
+        );
+      }
+      return SearchResult(items: [track('a2')], hasMore: false, total: 2);
+    };
     await pumpView(
       tester,
       SearchResultsView(
@@ -392,40 +279,33 @@ void main() {
         onPlay: (_) {},
         onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
       ),
-      provider: provider,
     );
-    provider.submitSearch('hello');
+    search.submitSearch('hello');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text(l10n.searchLoadMore));
+    await search.loadMore('kw');
     await tester.pumpAndSettle();
-    expect(provider.songGroups.first.loadMoreFailed, isTrue);
-    expect(provider.songGroups.first.failure, isNull);
+    expect(search.songGroups.single.loadMoreFailed, isTrue);
+    expect(search.songGroups.single.failure, isNull);
     expect(find.text(l10n.searchFailed), findsNothing, reason: '不是首屏失败');
     expect(find.text(l10n.searchLoadMoreFailed), findsOneWidget);
 
     failPage2 = false;
     await tester.tap(find.text(l10n.retry));
     await tester.pumpAndSettle();
-    expect(provider.songGroups.first.loadMoreFailed, isFalse);
+    expect(search.songGroups.single.loadMoreFailed, isFalse);
     expect(find.text('Title a2'), findsOneWidget);
     expect(find.text(l10n.searchFailed), findsNothing);
   });
 
-  testWidgets('6 个来源：公平预览每源至少 1 行，所有分组标题都在', (tester) async {
-    final sources = <String, FakeMusicSource>{};
-    for (var i = 0; i < 6; i++) {
-      final key = 's$i';
-      sources[key] = FakeMusicSource(key)
-        ..onSearch = (query) => Future.value(
-          SearchResult(
-            items: [
-              for (var j = 0; j < 5; j++) track('${key}_$j', sourceKey: key),
-            ],
-          ),
-        );
-    }
-    final provider = buildMultiSourceSearch(sources);
+  testWidgets('首屏失败：错误条提供重试，恢复后渲染结果', (tester) async {
+    var fail = true;
+    source.onSearch = (query) async {
+      if (fail) {
+        throw const SourceFailure(kind: FailureKind.network, message: 'boom');
+      }
+      return SearchResult(items: [track('a')], total: 1);
+    };
     await pumpView(
       tester,
       SearchResultsView(
@@ -434,77 +314,27 @@ void main() {
         onOpenAllResults: () {},
       ),
       width: 900,
-      provider: provider,
     );
-    provider.submitSearch('hello');
+    search.submitSearch('hello');
     await tester.pumpAndSettle();
+    expect(find.text(l10n.searchFailed), findsOneWidget);
 
-    final preview = SearchResultsView.previewFor(provider);
-    expect(preview.groups, hasLength(6));
-    expect(preview.items.length, lessThanOrEqualTo(8));
-    expect(
-      preview.groups.every((group) => group.items.isNotEmpty),
-      isTrue,
-      reason: '6 个来源不能被前 4 个吃光预算',
-    );
-    expect(find.byType(TrackRow), findsNWidgets(preview.items.length));
-    for (final key in sources.keys) {
-      expect(find.text(key), findsWidgets, reason: '$key 的分组标题必须保留');
-    }
+    fail = false;
+    await tester.tap(find.text(l10n.retry));
+    await tester.pumpAndSettle();
+    expect(find.text('Title a'), findsOneWidget);
+    expect(find.text(l10n.searchFailed), findsNothing);
   });
 
-  testWidgets('超过 8 个来源：标题全部保留，预览行仍受总预算限制', (tester) async {
-    final sources = <String, FakeMusicSource>{};
-    for (var i = 0; i < 10; i++) {
-      final key = 's$i';
-      sources[key] = FakeMusicSource(key)
-        ..onSearch = (query) => Future.value(
-          SearchResult(items: [track('$key-0', sourceKey: key)]),
-        );
-    }
-    final provider = buildMultiSourceSearch(sources);
-    provider.submitSearch('hello');
-    await tester.pumpAndSettle();
-
-    final preview = SearchResultsView.previewFor(provider);
-    expect(preview.groups, hasLength(10));
-    expect(preview.items.length, 8);
-    expect(preview.groups.every((group) => group.totalItems > 0), isTrue);
-  });
-
-  testWidgets('歌手链接按分组来源能力位，不按全局能力并集', (tester) async {
-    final kw =
-        FakeMusicSource(
-            'kw',
-            capabilities: const SourceCapabilities(
-              search: true,
-              pagination: true,
-              artist: true,
-            ),
-          )
-          ..onSearch = (query) => Future.value(
-            SearchResult(
-              items: [
-                track(
-                  'a',
-                  artists: const [Artist(name: 'KwArtist', id: '11')],
-                ),
-              ],
-            ),
-          );
-    final script = FakeMusicSource('script')
-      ..onSearch = (query) => Future.value(
-        SearchResult(
-          items: [
-            track(
-              'b',
-              sourceKey: 'script',
-              artists: const [Artist(name: 'ScriptArtist', id: '22')],
-            ),
-          ],
+  testWidgets('歌手链接按当前渠道能力位', (tester) async {
+    source.onSearch = (query) async => SearchResult(
+      items: [
+        track(
+          'a',
+          artists: const [Artist(name: 'KwArtist', id: '11')],
         ),
-      );
-    final provider = buildMultiSourceSearch({'kw': kw, 'script': script});
+      ],
+    );
     final opened = <(String, String)>[];
     await pumpView(
       tester,
@@ -515,32 +345,13 @@ void main() {
           opened.add((sourceKey, artistId));
         },
       ),
-      provider: provider,
     );
-    provider.submitSearch('hello');
+    search.submitSearch('hello');
     await tester.pumpAndSettle();
 
-    // 多分组路径：有 artist 能力的来源可点，无能力的来源是纯文本。
     await tester.tapOnText(find.textRange.ofSubstring('KwArtist'));
     await tester.pump();
     expect(opened, [('kw', '11')]);
-    await tester.tapOnText(find.textRange.ofSubstring('ScriptArtist'));
-    await tester.pump();
-    expect(opened, hasLength(1), reason: 'script 无歌手能力，不渲染链接');
-
-    // 过滤到 script → 单分组路径同样按来源能力位。
-    provider.selectSourceFilter('script');
-    await tester.pumpAndSettle();
-    await tester.tapOnText(find.textRange.ofSubstring('ScriptArtist'));
-    await tester.pump();
-    expect(opened, hasLength(1));
-
-    // 过滤到 kw → 单分组路径仍可点。
-    provider.selectSourceFilter('kw');
-    await tester.pumpAndSettle();
-    await tester.tapOnText(find.textRange.ofSubstring('KwArtist'));
-    await tester.pump();
-    expect(opened, hasLength(2));
   });
 
   testWidgets('页面版式：歌手链接 / 未知歌手兜底 / 触摸端行尾操作菜单', (tester) async {
@@ -549,8 +360,6 @@ void main() {
         track(
           'a',
           artists: const [Artist(name: '周杰伦', id: '336')],
-          // 领域 Track 经 SourceTrack 往返后，歌手 id 只保留在 raw 的
-          // `_artists`（与真实平台解析同一口径）。
           payload: const {
             'songmid': 'a',
             '_artists': [
@@ -577,11 +386,8 @@ void main() {
     search.submitSearch('hello');
     await tester.pumpAndSettle();
 
-    // 行内歌手名是链接（渠道有歌手能力位 + 条目带平台内 id）。
     expect(find.text('周杰伦'), findsOneWidget);
-    // 无歌手信息的行回退 l10n「未知歌手」。
     expect(find.text('未知歌手'), findsOneWidget);
-    // Text.rich 的点击要落在 span 的字形上（盒子中心可能是行尾空白）。
     await tester.tapOnText(find.textRange.ofSubstring('周杰伦'));
     await tester.pump();
     expect(openedArtists, [('kw', '336', '周杰伦')]);
@@ -590,7 +396,6 @@ void main() {
     await tester.pump();
     expect(played, ['kw:b'], reason: '点击行交给宿主的播放语义');
 
-    // 触摸端：每行常显 ⋮，菜单动作与其它曲目行同一份定义。
     expect(find.byIcon(Icons.more_vert_rounded), findsNWidgets(2));
     await tester.tap(find.byIcon(Icons.more_vert_rounded).first);
     await tester.pumpAndSettle();
@@ -598,14 +403,13 @@ void main() {
     expect(find.text('加入列表'), findsOneWidget);
   });
 
-  testWidgets('遮罩版式：行映射 + 桌面右键菜单 + 8 行上限 + 查看全部结果出口', (tester) async {
+  testWidgets('遮罩版式：行映射 + 桌面右键菜单 + 查看全部结果出口', (tester) async {
     source.onSearch = (query) async => SearchResult(
       items: [
-        // 第 1 行没有歌手：遮罩也要有「未知歌手」兜底。
         track('0', artists: const []),
-        for (var i = 1; i < 12; i++) track('$i'),
+        for (var i = 1; i < 3; i++) track('$i'),
       ],
-      total: 12,
+      total: 3,
     );
     final played = <String>[];
     var openedAll = 0;
@@ -621,12 +425,11 @@ void main() {
     search.submitSearch('hello');
     await tester.pumpAndSettle();
 
-    expect(find.byType(TrackRow), findsNWidgets(8), reason: '遮罩只就地预览前 8 行');
+    expect(find.byType(TrackRow), findsNWidgets(3));
     expect(find.text('未知歌手'), findsOneWidget);
     expect(find.text(l10n.viewAllResults), findsOneWidget);
-
-    // 桌面端：行尾没有 ⋮，行表面右键在落点弹同一份操作菜单。
     expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+
     final rowRect = tester.getRect(find.byType(TrackRow).first);
     await tester.tapAt(
       Offset(rowRect.left + 40, rowRect.center.dy),
@@ -647,4 +450,76 @@ void main() {
     await tester.pump();
     expect(openedAll, 1, reason: '底部出口交给宿主的「查看全部结果」');
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
+  testWidgets('页面版式：当前渠道不支持搜索显示专用空态', (tester) async {
+    await pumpView(
+      tester,
+      SearchResultsView(
+        variant: SearchResultsVariant.page,
+        onPlay: (_) {},
+        onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
+      ),
+    );
+    search.setActiveSource('wy');
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.searchChannelUnsupported), findsOneWidget);
+    expect(find.text(l10n.searchIdleHint), findsNothing);
+    expect(find.text(l10n.searchNoSourcesTitle), findsNothing);
+  });
+
+  testWidgets('遮罩版式：无关键词也会显示当前渠道不支持搜索', (tester) async {
+    await pumpView(
+      tester,
+      SearchResultsView(
+        variant: SearchResultsVariant.docked,
+        onPlay: (_) {},
+        onOpenAllResults: () {},
+      ),
+      width: 900,
+    );
+    search.setActiveSource('wy');
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.searchChannelUnsupported), findsOneWidget);
+  });
+
+  testWidgets('页面版式：当前渠道无结果时带渠道名提示', (tester) async {
+    source.onSearch = (query) async => const SearchResult(items: []);
+    await pumpView(
+      tester,
+      SearchResultsView(
+        variant: SearchResultsVariant.page,
+        onPlay: (_) {},
+        onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
+      ),
+    );
+    search.submitSearch('hello');
+    await tester.pumpAndSettle();
+
+    expect(find.text(l10n.noResultsFound), findsOneWidget);
+    expect(find.text(l10n.searchNoResultsInSource('kw')), findsOneWidget);
+  });
+
+  testWidgets('1.5× 大字体：页面版式不溢出', (tester) async {
+    source.onSearch = (query) async => SearchResult(
+      items: [for (var i = 0; i < 3; i++) track('$i')],
+      total: 3,
+    );
+    await pumpView(
+      tester,
+      SearchResultsView(
+        variant: SearchResultsVariant.page,
+        onPlay: (_) {},
+        onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
+      ),
+      width: 400,
+      textScaler: const TextScaler.linear(1.5),
+    );
+    search.submitSearch('hello');
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(TrackRow), findsNWidgets(3));
+  });
 }

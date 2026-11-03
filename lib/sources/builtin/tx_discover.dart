@@ -71,6 +71,68 @@ class TxDiscoverSource extends DiscoverSource {
     );
   }
 
+  /// 榜单封面：`GetDetail` 的 `data.topInfo`（`headPicUrl` / `frontPicUrl`
+  /// / `musichallPicUrl` 等）；缺失时退回首曲封面。只请求 1 条曲目。
+  @override
+  Future<String?> leaderboardCover(String bangid) {
+    return BuiltinSearch.transport.cached(
+      'tx:leaderboard-cover:$bangid',
+      () async {
+        final body = await lxHttpPost(
+          'https://u.y.qq.com/cgi-bin/musicu.fcg',
+          headers: {'User-Agent': _msieUa},
+          body: {
+            'toplist': {
+              'module': 'musicToplist.ToplistInfoServer',
+              'method': 'GetDetail',
+              'param': {'topid': int.tryParse(bangid) ?? bangid, 'num': 1},
+            },
+            'comm': {'uin': 0, 'format': 'json', 'ct': 20, 'cv': 1859},
+          },
+        );
+        if (body is! Map || body['code'] != 0) {
+          throw StateError('tx 榜单封面获取失败');
+        }
+        final data = (body['toplist'] as Map?)?['data'];
+        if (data is! Map) throw StateError('tx 榜单封面解析失败');
+        final topInfo = data['data'];
+        if (topInfo is Map) {
+          for (final key in const [
+            'headPicUrl',
+            'frontPicUrl',
+            'mbHeadPicUrl',
+            'mbFrontPicUrl',
+            'musichallPicUrl',
+            'picUrl',
+            'toplistNamePicUrl',
+          ]) {
+            final url = _nonEmpty(topInfo[key]?.toString());
+            if (url != null) return url;
+          }
+          final songs = topInfo['song'];
+          final cover = _firstSongCover(songs);
+          if (cover != null) return cover;
+        }
+        final cover = _firstSongCover(data['songInfoList']);
+        if (cover != null) return cover;
+        throw StateError('tx 榜单封面为空');
+      },
+    );
+  }
+
+  static String? _firstSongCover(dynamic songs) {
+    if (songs is! List || songs.isEmpty) return null;
+    final first = songs.first;
+    if (first is! Map) return null;
+    final direct = _nonEmpty(first['cover']?.toString());
+    if (direct != null) return direct;
+    final albumMid = _nonEmpty(first['albumMid']?.toString());
+    if (albumMid != null) {
+      return 'https://y.gtimg.cn/music/photo_new/T002R500x500M000$albumMid.jpg';
+    }
+    return null;
+  }
+
   static Future<List<DiscoverTrack>> _fetchLeaderboard(String bangid) async {
     final body = await lxHttpPost(
       'https://u.y.qq.com/cgi-bin/musicu.fcg',

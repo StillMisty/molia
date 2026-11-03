@@ -616,26 +616,29 @@
   截断要求 bootstrap）、`selectJournalChunks`（WebDAV 分块衔接）与
   `PeerJournalNames`（协议文件名）；引擎、局域网 / WebDAV 传输与
   `test/support/sync_network.dart` 共用同一份语义，边界条件只维护一处。
-- **渠道选择**：`DiscoverProvider.channelKey` 只决定热榜 / 歌单，状态与偏好
-  持久化在 `kDiscoverChannelKey`；搜索来源完全解耦，由 `kSearchSourceFilter`
-  单独持久化（默认 `''` = 全部来源）。资料页只处理「渠道被停用」的 UI 回退；
-  搜索 tab 只看 `SearchProvider.hasSearchableSources`；默认不显示发现渠道
-  下拉，仅当页面只剩搜索 tab（当前渠道无热榜 / 歌单能力）时保留渠道下拉，
-  作为切回可发现渠道的逃生口；来源选择在结果面 chips（见 ADR-0018）。
-- **发现页布局**：`lib/widgets/discover_layout.dart` 集中 gutter / 内容栏 /
+- **渠道选择**：`DiscoverProvider.channelKey` 是全局唯一的渠道偏好，同时决定
+  热榜 / 歌单与搜索，持久化在 `kDiscoverChannelKey`（`kSearchSourceFilter` /
+  来源 chips 已删除，见 ADR-0019）。资料页只处理「渠道被停用」的 UI 回退；
+  顶部渠道下拉在所有 tab（含搜索）左侧常显；当前渠道不支持搜索时隐藏搜索
+  tab，Ctrl+F 仍可打开并显示「当前渠道不支持搜索」空态。
+- **发现页布局**：`lib/widgets/discover_layout.dart` 集中 gutter / 内容宽度 /
   网格断点。搜索、热榜、歌单三个 tab 共用
   `ResponsivePageType.browse` 的页边距（compact 12 / 手机 16 / 平板桌面 24），
-  宽屏内容栏最大 960 且左对齐，手机整行铺满。顶部工具行保持单行：渠道下拉在
-  左（宽度 `(屏宽 × 0.32).clamp(104, 148)`），tab 在右；触摸端 tab 只留图标
+  内容栏**全宽自适应**（资料页 `ResponsivePageContainer` 传
+  `maxWidth: double.infinity`，不再有 960 / 1600 上限），手机 / 桌面都铺满
+  可用内容宽。顶部工具行保持单行：渠道下拉在左（宽度
+  `(屏宽 × 0.32).clamp(104, 148)`），tab 在右；触摸端 tab 只留图标
   （文案走语义名），桌面用 `M3ETabsAlignment.leading` 按自然宽度排列。歌单内容宽
   < 600 用 56dp 封面紧凑列表，≥ 600 切封面网格：列数按含列距的
-  `floor((内容宽 + 12) / (200 + 12))` 计算（夹在 2–6），当前 960 内容栏下
-  实际最多 4 列；间距 12，方形封面 = 卡片宽 − 16，标题最多 2 行 / 副标题
+  `floor((内容宽 + 12) / (200 + 12))` 计算（夹在 2–6），全宽后最多 6 列；
+  间距 12，方形封面 = 卡片宽 − 16，标题最多 2 行 / 副标题
   1 行，卡片高度按 `row_extent` 的行高测量（覆盖 1.3× / 1.5×）；热门标签
   自然高度横向滚动（chip 自身高度仍由 M3EChip 主题决定）。热榜用 `M3ECard`
   磁贴网格（手机 2 列，宽屏 `floor((内容宽 + 12) / (240 + 12))` 夹在 2–6，
-  当前 960 内容栏下实际最多 3 列），全部榜单直接展示、不伪造排名数字。
-  搜索 tab 空态使用共享 `EmptyState`，AI 推歌轮播的 gutter 与内容栏同源。
+  全宽后最多 6 列），磁贴左侧是 56dp 榜单封面（平台轻量封面优先、失败用
+  首曲封面 / 平台色占位），全部榜单直接展示、不伪造排名数字。榜单详情页
+  复用同一份封面缓存；封面未就绪不阻塞曲目首屏。搜索 tab 空态使用共享
+  `EmptyState`，AI 推歌轮播的 gutter 与内容栏同源。
 - **内置发现**：`lib/sources/builtin/discover_source.dart` 的渠道与能力位从
   `BuiltinPlatforms.discoverSources` 派生（六平台同一份注册表）。B 站
   （`bili_discover.dart`）只有音乐榜（`bili__music_3d` / bangid `3:3`）+ 热搜 +
@@ -1141,23 +1144,23 @@
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（每个「`SearchKind` × 来源」一个 `PagedFanOutRun`：关键词 / 归一化失败 / `PagedListController` 各一份，查询代际 / 失败重试 / 通知由 `FanOutSearchSession` 统一；`SearchSourceGroup<T>` 是只读分组投影；单曲 / 歌词投影只持领域 `Track`，歌词片段随 `LyricHit` 条目入库）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（当前渠道每个 `SearchKind` 一个 `PagedFanOutRun`：关键词 / 归一化失败 / `PagedListController` 各一份，查询代际 / 失败重试 / 通知由 `FanOutSearchSession` 统一；`SearchSourceGroup<T>` 是当前渠道的只读投影；单曲 / 歌词投影只持领域 `Track`，歌词片段随 `LyricHit` 条目入库）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
 歌词行高亮用 `PositionLineIndexBuilder`（仅跨行重建）；队列列表用稳定引用。
 
-搜索分页按「`SearchKind` × 来源」隔离：每个 `PagedFanOutRun` 自己持有关键词 /
-归一化失败 / `PagedListController`，查询代际 / 逐源失败重试 / 通知合并由
-`FanOutSearchSession` 统一；查询时按目标来源并行首屏，单源失败只挂在该
-来源的 `SearchSourceGroup.failure`；`loadMore(sourceKey)` / `retry(sourceKey)` 只
-作用于该来源。分组顺序严格取 `SourceRegistry.descriptors`（`lx_source_order`），
-「全部」固定第一；`selectSourceFilter` 只过滤已加载分组，来源尚未参与本轮搜索
-时才补首屏。单曲 / 歌手 / 歌词的结果投影仍按类型保留（`SearchRow` /
-`ArtistSummary` / 带片段的行），行形状不同，不把三种结果塞进同一个泛型列表。
+搜索分页按 `SearchKind` 隔离：当前渠道每种类型一个 `PagedFanOutRun`，自己持有
+关键词 / 归一化失败 / `PagedListController`，查询代际 / 失败重试 / 通知合并由
+`FanOutSearchSession` 统一；`SearchProvider.activeSourceKey` 与
+`DiscoverProvider.channelKey` 同源，`loadMore(sourceKey)` / `retry(sourceKey)`
+只作用于当前渠道。`supportedSearchKinds` 只看当前渠道能力位，切渠道时清空旧
+结果并按当前关键词重搜；当前类型不支持时回退到第一个支持的 kind（优先 song）。
+单曲 / 歌手 / 歌词的结果投影仍按类型保留（`SearchRow` / `ArtistSummary` /
+带片段的行），行形状不同，不把三种结果塞进同一个泛型列表。
 单曲 / 歌词的会话条目与 `SearchRow.track` 是同一个领域 `Track`（`CatalogService`
-直接返回，payload 原样）；歌词页按来源把命中片段按 `TrackId.uri` 随页带回。
-`playItem` 取该行所属来源分组的已加载行组成队列、按 `TrackId` 定位下标，经
+直接返回，payload 原样）；歌词页按当前渠道把命中片段按 `TrackId.uri` 随页带回。
+`playItem` 取当前渠道的已加载行组成队列、按 `TrackId` 定位下标，经
 `PlaybackProvider.playDomainTracks` 播放，不混平台队列——不再做
 `Track → SourceTrack → Track` 往返，也不再维护与行平行的第二份队列。
 
@@ -1374,10 +1377,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   摆在同一条位置（自建 route 挂在根导航器上，坐标是整窗口径）；结果与资料库共用
   同一 `SearchProvider`，空关键词时结果面留空（只剩搜索条）；结果面板与资料库搜索结果页
   共用 **Search results surface**（`lib/widgets/search_results_view.dart`）：行映射 / 分段 /
-  来源 chips / 分组 / 失败 / 空态一份实现。来源顺序 = 渠道管理顺序（`全部` 固定第一），
-  单分组保留宽屏表格与触底自动分页，多分组每组最多预览 2 行（总计 8 行）并关表格列；
-  页面版 `page` 为分组结果 + 每组独立「加载更多」，遮罩 `docked` 以「查看全部结果」收尾。
-  遮罩键盘：输入框保持焦点，↑↓ 跨分组移动高亮、Enter 播放 / 打开高亮项、Ctrl+Enter
+  失败 / 空态一份实现。搜索条是 `ChannelSearchBar`：左侧渠道下拉（与发现页同一个
+  当前渠道）、细分割线、右侧输入 + 清除键；选择渠道会同时切发现内容与搜索，并把
+  焦点还给输入框；当前渠道不支持搜索时面板显示专用空态。结果面只有当前渠道一组，
+  保留宽屏表格与触底自动分页，遮罩最多预览 8 行并以「查看全部结果」收尾。
+  遮罩键盘：输入框保持焦点，↑↓ 移动高亮、Enter 播放 / 打开高亮项、Ctrl+Enter
   打开完整结果页、Tab 锁在遮罩内、底部提示行走 l10n `searchKeyboardHint`；遮罩打开时
   壳层 Esc 让位（`EscapeClaims`），方向键 / Space / Enter 经 `KeyClaims` 让位，
   另有一层整窗 `BackdropFilter` 跟遮罩开合淡入淡出
