@@ -19,6 +19,7 @@ import 'package:molia/sources/lx/lx_engine_supervisor.dart';
 import 'package:molia/sources/lx/lx_engine_types.dart';
 import 'package:molia/sources/lx/lx_script_info.dart';
 import 'package:molia/sources/source_manager.dart';
+import 'package:molia/widgets/discover_layout.dart';
 import 'package:molia/widgets/discover_playlists_tab.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/library_channel_selector.dart';
@@ -167,6 +168,56 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('发现页渠道下拉：长名称单行、选中项行高稳定', (tester) async {
+    const longName = '一个非常非常长、窄弹窗里必须省略而不能换行的渠道名称';
+    domain.SourceDescriptor descriptor(String key, String name) =>
+        domain.SourceDescriptor(
+          key: key,
+          displayName: name,
+          kind: domain.SourceKind.builtin,
+          capabilities: const domain.SourceCapabilities(search: true),
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        supportedLocales: const [Locale('zh')],
+        home: Scaffold(
+          body: Center(
+            child: LibraryChannelSelector(
+              channels: [
+                descriptor('long', longName),
+                descriptor('kw', '酷我音乐'),
+              ],
+              selectedKey: 'long',
+              onSelected: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(longName));
+    await tester.pumpAndSettle();
+
+    Finder itemCard(String label) => find
+        .ancestor(of: find.text(label).last, matching: find.byType(M3ECard))
+        .first;
+    final text = tester.widget<Text>(find.text(longName).last);
+    expect(text.maxLines, 1);
+    expect(text.overflow, TextOverflow.ellipsis);
+    expect(
+      tester.getSize(itemCard(longName)).height,
+      tester.getSize(itemCard('酷我音乐')).height,
+      reason: '选中项多一个 check icon 不能改变行高',
+    );
+  });
 
   test('当前渠道任一搜索能力都视为可显示搜索 tab', () {
     bool supports(domain.SourceCapabilities capabilities) =>
@@ -471,6 +522,13 @@ void main() {
       lessThanOrEqualTo(tabs.left),
       reason: '渠道下拉在 tab 左侧',
     );
+    final gutter = discoverGutterOf(tester.element(find.byType(M3ETabs)));
+    expect(
+      tabs.width,
+      1200 - gutter * 2 - selector.width - 12,
+      reason: 'tab 栏吃满渠道下拉之后的剩余宽度',
+    );
+    expect(tabs.right, 1200 - gutter, reason: 'tab 栏右缘贴内容右缘');
 
     // 搜索 tab 上直接切渠道：发现与搜索一起切。
     await tester.tap(find.text('网易音乐'));

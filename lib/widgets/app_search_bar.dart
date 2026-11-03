@@ -124,7 +124,7 @@ class _AppSearchBarState extends State<AppSearchBar> {
 
   @override
   Widget build(BuildContext context) {
-    final layout = _searchBarLayoutFor(context, widget.constraints);
+    final layout = appSearchBarLayoutFor(context, widget.constraints);
 
     return M3ESearchBar(
       controller: widget.controller,
@@ -171,11 +171,14 @@ class _AppSearchBarState extends State<AppSearchBar> {
 double appSearchBarMinHeightOf(
   BuildContext context, {
   BoxConstraints? constraints,
-}) => _searchBarLayoutFor(context, constraints).constraints.minHeight;
+}) => appSearchBarLayoutFor(context, constraints).constraints.minHeight;
 
 /// 搜索栏内部布局：约束与文字样式必须一起算（只调其中一个仍会被内层行框裁）。
+///
+/// 组合搜索条（`ChannelSearchBar`）复用同一份自适应高度与文字样式，
+/// 避免自定义 TextField 在 1.3× / 1.5× 下被裁切。
 ({BoxConstraints constraints, TextStyle hintStyle, TextStyle inputStyle})
-_searchBarLayoutFor(BuildContext context, BoxConstraints? override) {
+appSearchBarLayoutFor(BuildContext context, BoxConstraints? override) {
   // M3ESearchBar 的 56dp minHeight 按 1.0× 字阶设计；真实 CJK 字体放大后
   // hint 的 ascent 会顶出 pill 上缘（1.3× 实测 2–4px 被裁）。这里用真实
   // 字体行高测量把额外行高同时补到约束、输入框与 hintStyle：

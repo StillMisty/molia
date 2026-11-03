@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
+import 'channel_dropdown.dart';
 import 'discover_layout.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -58,6 +59,7 @@ class LibraryChannelSelector extends StatelessWidget {
         showChipAnimation: false,
         // 渠道较多（多脚本 / any-listen）时提供搜索过滤。
         searchEnabled: entries.length > 8,
+        itemBuilder: channelDropdownItemBuilder(context),
         fieldStyle: M3EDropdownFieldStyle(
           hintText: _l10n(context).libraryChannelSelect,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

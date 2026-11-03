@@ -314,6 +314,9 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   /// 遮罩与结果行共用的控制器（本视图独占；打开时用 provider 的词种上）。
   final TextEditingController _field = TextEditingController();
   final FocusNode _focusNode = FocusNode(debugLabel: 'globalSearchField');
+  final FocusNode _channelFocusNode = FocusNode(
+    debugLabel: 'globalSearchChannelDropdown',
+  );
 
   late final SearchProvider _search = context.read<SearchProvider>();
 
@@ -351,6 +354,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     _search.removeListener(_onSearchChanged);
     _field.dispose();
     _focusNode.dispose();
+    _channelFocusNode.dispose();
     super.dispose();
   }
 
@@ -371,14 +375,23 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _selectChannel(String key) {
     context.read<DiscoverProvider>().selectChannel(key);
     _search.setActiveSource(key);
-    // 下拉关闭时会把焦点留在自己的 field 上：包的关闭动作也排在同帧的
-    // post-frame 回调里，且晚于 onSelectionChanged；这里再让一帧，确保
-    // 最后落到搜索输入框。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // 下拉关闭动画期间包内 focus trap 仍在，立即 requestFocus 会被拒绝。
+    // 逐帧重试：关闭动画结束时 focus trap 释放，这一帧就能把焦点交给输入框。
+    var attempts = 0;
+    void restoreFocus() {
+      if (!mounted) return;
+      _channelFocusNode.unfocus();
+      focusField(selectAll: false);
+      if (_focusNode.hasFocus || ++attempts >= 30) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        focusField(selectAll: false);
+        restoreFocus();
+        WidgetsBinding.instance.scheduleFrame();
       });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      restoreFocus();
+      WidgetsBinding.instance.scheduleFrame();
     });
   }
 
@@ -601,6 +614,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                       ChannelSearchBar(
                         controller: _field,
                         focusNode: _focusNode,
+                        channelFocusNode: _channelFocusNode,
                         hintText: l10n.searchHint,
                         // 打开即聚焦：开合动画期间按键也直达输入框。
                         autofocus: true,

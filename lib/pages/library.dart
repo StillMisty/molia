@@ -332,11 +332,9 @@ class _LibraryState extends State<Library> {
                 // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
                 // 内容页共用这一行分组切换（不是顶层导航）。
                 variant: M3ETabsVariant.secondary,
-                // 触摸端等分铺满剩余宽；桌面按自然宽度靠左排列，
-                // 不把三个 tab 拉成三块大留白。
-                alignment: isDesktopPlatform()
-                    ? M3ETabsAlignment.leading
-                    : M3ETabsAlignment.fill,
+                // 触摸端 / 桌面都等分铺满渠道下拉之后的剩余宽度，tab 栏
+                // 右缘与内容右缘对齐。
+                alignment: M3ETabsAlignment.fill,
                 tabs: [for (final tab in visibleTabs) _tabSpec(l10n, tab)],
                 selectedIndex: selectedIndex,
                 onTabSelected: (index) =>

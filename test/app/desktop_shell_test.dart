@@ -875,6 +875,15 @@ void main() {
       findsNothing,
       reason: '回退箭头已删除，关闭仍用 Esc / 点遮罩',
     );
+    expect(find.byType(M3ESearchBar), findsNothing, reason: '组合条是单层自定义输入');
+    expect(
+      find.descendant(
+        of: find.byType(ChannelSearchBar),
+        matching: find.byIcon(Icons.search_rounded),
+      ),
+      findsNothing,
+      reason: '渠道下拉占据搜索图标位置',
+    );
     expect(
       find.descendant(
         of: find.byType(TrackRow),
@@ -1250,7 +1259,7 @@ void main() {
     // 在上一轮结果上。图标 X 与左侧的关闭箭头区分开；窗口控件里也有一个 X
     // （窗口关闭键），定位收在搜索条内。
     final clearButton = find.descendant(
-      of: find.byType(M3ESearchBar),
+      of: find.byType(ChannelSearchBar),
       matching: find.byIcon(Icons.close_rounded),
     );
     expect(clearButton, findsOneWidget);

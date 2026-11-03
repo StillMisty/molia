@@ -355,8 +355,8 @@
 - **Global search overlay（搜索遮罩）** — `lib/widgets/global_search_overlay.dart`：桌面顶栏
   不再挂搜索条，最左是**品牌区**（`MoliaMark` + 应用名，整块可点）——品牌区与 Ctrl+F
   都经 `GlobalSearchController.focus()` 打开遮罩；已打开时再次 Ctrl+F 重新聚焦输入框
-  并全选。搜索条是 `ChannelSearchBar`：左侧渠道下拉（与发现页同一个当前渠道）、
-  细分割线、右侧输入 + 清除键；选择渠道会同时切发现内容与搜索，并把焦点还给输入框。
+  并全选。搜索条是 `ChannelSearchBar`：单层胶囊，左侧渠道下拉直接占据搜索图标
+  位置，右侧裸输入 + 清除键；选择渠道会同时切发现内容与搜索，并把焦点还给输入框。
   结果只搜当前渠道，与资料库同一条播放语义；输入框保持焦点时 ↑↓ 移动高亮、
   Enter 播放 / 打开高亮项、Ctrl+Enter
   看全部结果，Tab 锁在遮罩内，底部提示行 `searchKeyboardHint`。空关键词时结果面留空；
@@ -670,7 +670,8 @@
   归一为领域曲目后走同一交接。
 - **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是全局唯一的渠道
   偏好，同时决定热榜 / 歌单与搜索，持久化在 `kDiscoverChannelKey`。资料页只处理
-  「渠道被停用」的 UI 回退；顶部渠道下拉在所有 tab（含搜索）左侧常显；当前渠道
+  「渠道被停用」的 UI 回退；顶部渠道下拉在所有 tab（含搜索）左侧常显，tab 栏
+  用 `M3ETabsAlignment.fill` 吃满剩余宽度；当前渠道
   任一搜索能力（song / artist / lyricSearch）都没有时才隐藏搜索 tab，Ctrl+F 显示
   「当前渠道不支持搜索」空态。
 - **Leaderboard cover（榜单封面）** — `DiscoverProvider.loadLeaderboardCover` 按
