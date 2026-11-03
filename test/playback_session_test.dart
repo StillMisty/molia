@@ -259,6 +259,68 @@ void main() {
     expect(provider.currentPosition, Duration.zero);
   });
 
+  test('恢复态列表循环：队尾下一首回队首', () async {
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c')],
+        index: 2,
+        mode: PlayMode.listLoop,
+      ),
+    );
+
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    await provider.skipToNext();
+    expect(backend.lastRequest?.startIndex, 0);
+    expect(backend.lastRequest?.tracks.map((track) => track.id.id), [
+      'a',
+      'b',
+      'c',
+    ]);
+  });
+
+  test('恢复态列表循环：队首上一首回队尾', () async {
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c')],
+        index: 0,
+        mode: PlayMode.listLoop,
+      ),
+    );
+
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    await provider.skipToPrevious();
+    expect(backend.lastRequest?.startIndex, 2);
+  });
+
+  test('恢复态随机：下一首开启新的一轮，不再按队列下标 +1', () async {
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c')],
+        index: 0,
+        mode: PlayMode.shuffle,
+      ),
+    );
+
+    final backend = FakePlaybackBackend();
+    final provider = buildTestPlaybackProvider(backend: backend);
+    addTearDown(provider.dispose);
+    await provider.preferencesReady;
+
+    await provider.skipToNext();
+    final startIndex = backend.lastRequest?.startIndex;
+    expect(startIndex, isNotNull);
+    expect(startIndex, isNot(0), reason: '新排列把当前曲目置首，下一首不能还是它');
+    expect(backend.state.value.mode, PlayMode.shuffle);
+  });
+
   test('重启后恢复态仍可调整播放模式，恢复播放沿用所选模式', () async {
     await PlaybackSessionStore().save(
       PlaybackSession(

@@ -962,3 +962,9 @@
     回车。搜索遮罩的按键处理器在 `TextEditingValue.composing.isValid` 时必须整体放行，
     `onSubmitted` 也要做同样判断；否则候选词上屏会被当成提交 / 播放，用户会丢字或
     直接关掉遮罩。
+97. **队列面板点行必须用真实队列下标，空态不能拿 `upNext` 是否为空当判据**：队列
+    允许同一 `TrackId` 出现多次（加入队列不查重），按 id `indexWhere` 会把第 2 项
+    解析成第 1 项；点击必须走 `upNextIndices` 的真实下标
+    （`PlaybackProvider.playQueueIndex`）。同理，「当前队列为空」只在没有当前曲目
+    时成立：最后一首、随机轮末、单曲循环都可能有当前曲目但 `upNext` 为空，空态要
+    按 `hasTrack` + 模式分支（列表循环 / 单曲循环 / 随机恢复态各有自己的说法）。

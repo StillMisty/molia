@@ -87,18 +87,22 @@ void main() {
   Future<void> drainThrottle(WidgetTester tester) =>
       tester.pump(const Duration(milliseconds: 400));
 
-  BackendSnapshot queueSnapshot(List<Track> queue, {int index = 0}) =>
-      BackendSnapshot(
-        current: queue[index],
-        queue: queue,
-        currentIndex: index,
-        next: index + 1 < queue.length ? queue[index + 1] : null,
-        upNext: queue.sublist(index + 1),
-        upNextIndices: [for (var i = index + 1; i < queue.length; i++) i],
-        isPlaying: true,
-        position: Duration.zero,
-        duration: const Duration(seconds: 30),
-      );
+  BackendSnapshot queueSnapshot(
+    List<Track> queue, {
+    int index = 0,
+    PlayMode mode = PlayMode.listLoop,
+  }) => BackendSnapshot(
+    current: queue[index],
+    queue: queue,
+    currentIndex: index,
+    next: index + 1 < queue.length ? queue[index + 1] : null,
+    upNext: queue.sublist(index + 1),
+    upNextIndices: [for (var i = index + 1; i < queue.length; i++) i],
+    isPlaying: true,
+    position: Duration.zero,
+    duration: const Duration(seconds: 30),
+    mode: mode,
+  );
 
   testWidgets('只列出当前曲目之后的曲目：当前曲目不重复出现在列表（圆角封面/统一字号）', (tester) async {
     final backend = FakePlaybackBackend();
@@ -284,6 +288,132 @@ void main() {
         .map((row) => row.model.title)
         .toList();
     expect(titles, ['Title d', 'Title c', 'Title b']);
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('重复曲目点行按真实下标播放，不串到第一项', (tester) async {
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    final duplicate = _track('dup');
+    backend.emit(
+      BackendSnapshot(
+        current: _track('current'),
+        queue: [_track('current'), duplicate, duplicate],
+        currentIndex: 0,
+        next: duplicate,
+        upNext: [duplicate, duplicate],
+        upNextIndices: const [1, 2],
+        isPlaying: true,
+        position: Duration.zero,
+        duration: const Duration(seconds: 30),
+        mode: PlayMode.sequential,
+      ),
+    );
+    await pumpQueue(tester, playback);
+
+    expect(find.text('Title dup'), findsNWidgets(2));
+    // 点第二项：必须按真实队列下标 2 播放，不能按 id 反查到第 1 项。
+    await tester.tap(find.text('Title dup').at(1));
+    await tester.pump();
+
+    expect(backend.calls, contains('playQueueIndex:2'));
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('没有当前曲目：仍显示真正的队列空态', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    await pumpQueue(tester, playback);
+
+    expect(find.text(l10n.currentQueueEmpty), findsOneWidget);
+    expect(find.text(l10n.queueNoUpcoming), findsNothing);
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('最后一首 / 随机轮末 / 单曲循环：尾态按模式区分，不再误报空队列', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+
+    Future<void> expectEndText(
+      BackendSnapshot snapshot,
+      String expected,
+    ) async {
+      final backend = FakePlaybackBackend();
+      final playback = buildTestPlaybackProvider(backend: backend);
+      addTearDown(playback.dispose);
+      backend.emit(snapshot);
+      await pumpQueue(tester, playback);
+
+      expect(find.text(l10n.currentQueueEmpty), findsNothing);
+      expect(find.text(expected), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await drainThrottle(tester);
+    }
+
+    // 顺序播放最后一首：后面没有待播，不是队列为空。
+    await expectEndText(
+      queueSnapshot([_track('a')], mode: PlayMode.sequential),
+      l10n.queueNoUpcoming,
+    );
+    // 随机一轮播完：下一首会重新开始一轮。
+    await expectEndText(
+      queueSnapshot(
+        [_track('a'), _track('b')],
+        index: 1,
+        mode: PlayMode.shuffle,
+      ),
+      l10n.queueShuffleRoundEnd,
+    );
+    // 单曲循环：播完重播当前曲目。
+    await expectEndText(
+      queueSnapshot([_track('a')], mode: PlayMode.singleRepeat),
+      l10n.queueSingleRepeat,
+    );
+  });
+
+  testWidgets('恢复态随机：不预览具体顺序，尾态说明开始播放后生成', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    await PlaybackSessionStore().save(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b')],
+        index: 0,
+        mode: PlayMode.shuffle,
+      ),
+    );
+
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+    await playback.preferencesReady;
+    await pumpQueue(tester, playback);
+
+    expect(find.text(l10n.currentQueueEmpty), findsNothing);
+    expect(find.text(l10n.queueShuffleRestored), findsOneWidget);
+
+    await drainThrottle(tester);
+  });
+
+  testWidgets('单曲循环列表非空：尾部提示不会自动前进', (tester) async {
+    final l10n = lookupAppLocalizations(const Locale('zh'));
+    final backend = FakePlaybackBackend();
+    final playback = buildTestPlaybackProvider(backend: backend);
+    addTearDown(playback.dispose);
+
+    backend.emit(
+      queueSnapshot([_track('a'), _track('b')], mode: PlayMode.singleRepeat),
+    );
+    await pumpQueue(tester, playback);
+
+    expect(find.text(l10n.queueSingleRepeatHint), findsOneWidget);
+    expect(find.text(l10n.queueSingleRepeat), findsNothing);
 
     await drainThrottle(tester);
   });

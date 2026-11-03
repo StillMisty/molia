@@ -21,11 +21,40 @@ String? _coverUrlOf(Track track) {
   return url == null || url.isEmpty ? null : url;
 }
 
+/// 队列没有待播行时的尾态文案。
+///
+/// `upNext` 为空不等于「队列为空」：最后一首、随机轮末、单曲循环都有当前
+/// 曲目，只是后面没有待播项。恢复态没有持久化洗牌排列，随机顺序要等真正
+/// 开始播放才生成，不能用「当前队列为空」误导。
+String _emptyQueueText({
+  required AppLocalizations l10n,
+  required bool hasTrack,
+  required bool restored,
+  required int queueLength,
+  required PlayMode mode,
+}) {
+  if (!hasTrack) return l10n.currentQueueEmpty;
+  switch (mode) {
+    // 单曲循环优先说「会重播当前」：即使队列只有一首，这比「没有待播」
+    // 更准确（自动播完本来就回到当前曲目）。
+    case PlayMode.singleRepeat:
+      return l10n.queueSingleRepeat;
+    case PlayMode.shuffle:
+      if (queueLength <= 1) return l10n.queueNoUpcoming;
+      return restored ? l10n.queueShuffleRestored : l10n.queueShuffleRoundEnd;
+    case PlayMode.sequential:
+    case PlayMode.listLoop:
+      return l10n.queueNoUpcoming;
+  }
+}
+
 /// 播放队列：只列出当前曲目之后的曲目。
 ///
 /// 当前播放曲目由上方播放器承载（封面/标题/进度），列表里不重复这一行；
-/// 桌面队列面板（[QueueDisplay.includeCurrent]）需要在面板顶部展示当前曲目，
-/// 此时在列表之前补一段高亮、不可点的「正在播放」小节。
+/// 需要内嵌当前行的宿主（测试 / 未来的内嵌面板）可传
+/// [QueueDisplay.includeCurrent]，此时在列表之前补一段高亮、不可点的
+/// 「正在播放」小节。生产版式（播放页 / 桌面右栏）都不传，当前曲目由播放器
+/// 承载。
 /// 懒加载：`SliverFixedExtentList` + [TrackRow] 固定行高，队列再长也只构建
 /// 视口附近的行、只请求视口内的封面；固定 extent 让滚动条拇指尺寸与拖动
 /// 定位精确（`interactive` + `thumbVisibility`，可手按住拖动）。
@@ -48,9 +77,10 @@ class QueueDisplay extends StatelessWidget {
   /// 内容顶部额外留白（播放页圆点过渡带 / 桌面版式 tab 栏下的内容间距）。
   final double topPadding;
 
-  /// 队列面板（桌面右栏）用：顶部补一行「正在播放」（当前曲目，高亮、不可点）。
+  /// 是否在顶部补一行「正在播放」（当前曲目，高亮、不可点）。
   ///
-  /// 播放页版面里当前曲目由播放器承载，保持 false 不重复展示。
+  /// 生产版式里当前曲目由播放器承载，保持 false 不重复展示；只有测试 /
+  /// 未来的内嵌面板需要把当前曲目也嵌进列表时传 true。
   final bool includeCurrent;
 
   /// 「正在播放」小节与队列列表之间的空气：比行距大，避免两段视觉上粘成一段。
@@ -61,8 +91,10 @@ class QueueDisplay extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final cardList = M3ETheme.of(context).listTheme.cardList;
 
-    // 队列视图一次取齐播放顺序 / 真实队列下标 / 当前下标 / 模式：record 只在
-    // 队列快照变化时失效（进度 tick / 无关通知不会重建列表）。
+    // 队列视图一次取齐播放顺序 / 真实队列下标 / 当前下标 / 模式 / 是否有
+    // 当前曲目：record 只在队列快照变化时失效（进度 tick / 无关通知不会重建
+    // 列表）。hasTrack 不能从 upNext 是否为空反推——最后一首 / 随机轮末 /
+    // 单曲循环都有当前曲目，只是后面没有待播项。
     final queueState = context
         .select<
           PlaybackProvider,
@@ -72,6 +104,8 @@ class QueueDisplay extends StatelessWidget {
             int currentIndex,
             int queueLength,
             PlayMode mode,
+            bool hasTrack,
+            bool restored,
           })
         >((provider) {
           final snapshot = provider.snapshot;
@@ -81,6 +115,8 @@ class QueueDisplay extends StatelessWidget {
             currentIndex: snapshot.currentIndex,
             queueLength: snapshot.queue.length,
             mode: snapshot.mode,
+            hasTrack: snapshot.current != null,
+            restored: provider.hasRestoredSession,
           );
         });
     final currentQueue = queueState.tracks;
@@ -173,8 +209,19 @@ class QueueDisplay extends StatelessWidget {
                         mode: queueState.mode,
                         playbackProvider: playbackProvider,
                         onTap: () {
-                          // 本地音源曲目：交给本地播放队列（恢复态自动续播）。
-                          playbackProvider.playLocalQueueItemById(track.id.uri);
+                          // 用真实队列下标定位：随机排列 / 列表循环回绕时
+                          // 面板行号与队列下标不同，重复曲目按 id 反查会
+                          // 串到第一项（队列允许同一首出现多次）。
+                          final index = queueIndex;
+                          if (index != null) {
+                            unawaited(playbackProvider.playQueueIndex(index));
+                          } else {
+                            unawaited(
+                              playbackProvider.playLocalQueueItemById(
+                                track.id.uri,
+                              ),
+                            );
+                          }
                         },
                       ),
                       if (!isLast) SizedBox(height: cardList.gap),
@@ -184,16 +231,39 @@ class QueueDisplay extends StatelessWidget {
               ),
             )
           else if (current == null)
-            // 空态只在整块面板没有任何行时出现：「正在播放」段存在时队列为空
-            // 只是「播放顺序走完」，不是空面板（空态文案会误导）。
+            // 「正在播放」小节存在时不显示空态；播放页 / 桌面右栏的当前曲目
+            // 由播放器承载，此时按「有没有当前曲目 + 模式」给出真实的尾态
+            // 文案：最后一首 / 单曲循环 / 随机轮末都不是「队列为空」。
             SliverFillRemaining(
               hasScrollBody: false,
               child: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    l10n.currentQueueEmpty,
+                    _emptyQueueText(
+                      l10n: l10n,
+                      hasTrack: queueState.hasTrack,
+                      restored: queueState.restored,
+                      queueLength: queueState.queueLength,
+                      mode: queueState.mode,
+                    ),
                     textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          // 单曲循环时列表仍列着后面的歌，但自动播完会重播当前曲目；尾部
+          // 补一句口径，避免把「接下来」误读成会自动前进。
+          if (queueState.mode == PlayMode.singleRepeat &&
+              currentQueue.isNotEmpty)
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              sliver: SliverToBoxAdapter(
+                child: Text(
+                  l10n.queueSingleRepeatHint,
+                  textAlign: TextAlign.center,
+                  style: context.typeScale.bodySmall.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),

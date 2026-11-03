@@ -367,18 +367,19 @@ void main() {
     expect(backend.calls, isEmpty);
   });
 
-  test('恢复期命令路由：越界切歌 no-op；点队列条目从该曲目恢复播放', () async {
+  test('恢复期命令路由：顺序模式队尾切歌 no-op；点队列条目从该曲目恢复播放', () async {
     build();
     await seedSession(
       PlaybackSession(
         tracks: [_track('a'), _track('b')],
         index: 1,
         position: const Duration(seconds: 10),
+        mode: PlayMode.sequential,
       ),
     );
     expect(await session.load(), isTrue);
 
-    // 队尾：越界 no-op。
+    // 顺序模式队尾：越界 no-op（列表循环会在下面单独覆盖回绕）。
     expect(await session.skipToNext(), PlaybackCommandOutcome.none);
     expect(backend.calls, isEmpty);
     expect(session.phase, PlaybackSessionPhase.restored);

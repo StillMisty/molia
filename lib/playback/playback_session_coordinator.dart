@@ -30,7 +30,9 @@ import '../models/play_mode.dart';
 import '../services/playback_session_store.dart';
 import 'playback_commands.dart';
 import 'playback_power_policy.dart';
+import 'queue_navigation.dart';
 import 'queue_projection.dart';
+import 'shuffle_order.dart';
 
 // provider 仍只 import 协调者：命令结果与命令面同源，避免再添一个 import。
 export 'playback_commands.dart'
@@ -329,12 +331,36 @@ class PlaybackSessionCoordinator
   /// 下一首：恢复态 = 从下一下标立即恢复播放（越界 no-op）。
   ///
   /// 恢复态切歌语义上「切歌」包含起播——只移动下标会与队列条目点击不一致。
+  /// 模式口径与 live 对齐：列表循环队尾回队首；随机没有持久化排列，按当前
+  /// 曲目为起点开启新的一轮（队列面板此时不预览具体顺序，空态文案会说
+  /// 「开始播放后会生成随机播放顺序」）。
   @override
   Future<PlaybackCommandOutcome> skipToNext() async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
-      final next = session.index + 1;
-      if (next >= session.tracks.length) return PlaybackCommandOutcome.none;
+      final length = session.tracks.length;
+      if (length == 0 || session.index < 0 || session.index >= length) {
+        return PlaybackCommandOutcome.none;
+      }
+      final int? next;
+      switch (session.mode) {
+        case PlayMode.shuffle:
+          if (length == 1) {
+            next = session.index;
+          } else {
+            // 没有持久化排列：以当前曲目置首生成新一轮，取排列第二项；
+            // 不再按队列下标 +1 冒充随机下一首。
+            final order = PlaybackShuffleOrder()
+              ..reset(length, startIndex: session.index);
+            next = order.next(session.index);
+          }
+        case PlayMode.listLoop:
+          next = nextQueueIndex(session.index, length, wrap: true);
+        case PlayMode.sequential:
+        case PlayMode.singleRepeat:
+          next = nextQueueIndex(session.index, length, wrap: false);
+      }
+      if (next == null) return PlaybackCommandOutcome.none;
       return resume(startIndex: next);
     }
     await _facade.next();
@@ -344,12 +370,19 @@ class PlaybackSessionCoordinator
   }
 
   /// 上一首：恢复态 = 从上一下标立即恢复播放（越界 no-op）。
+  ///
+  /// 列表循环队首回队尾；其余模式按队列前一位（恢复态没有持久化播放顺序
+  /// 栈，这是与 live 的已知近似）。
   @override
   Future<PlaybackCommandOutcome> skipToPrevious() async {
     if (phase == PlaybackSessionPhase.restored) {
       final session = _restoredSession!;
-      final previous = session.index - 1;
-      if (previous < 0) return PlaybackCommandOutcome.none;
+      final previous = previousQueueIndex(
+        session.index,
+        session.tracks.length,
+        wrap: session.mode == PlayMode.listLoop,
+      );
+      if (previous == null) return PlaybackCommandOutcome.none;
       return resume(startIndex: previous);
     }
     await _facade.previous();

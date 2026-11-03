@@ -389,11 +389,21 @@ class PlaybackProvider extends ChangeNotifier {
     _applyOutcome(await _session.removeQueueIndex(index));
   }
 
-  /// 播放本地队列中指定 id 的曲目（队列面板点击）。
+  /// 播放本地队列中指定 id 的曲目（AI 推歌按记住的曲目 id 定位）。
   ///
   /// 恢复态下 facade 队列为空：命中会话队列则从该曲目恢复播放。
+  /// 队列允许重复曲目，这里只取第一个命中项；队列面板点击必须走
+  /// [playQueueIndex] 传真实下标，否则第二项会被解析成第一项。
   Future<void> playLocalQueueItemById(String trackId) async {
     _applyOutcome(await _session.playQueueItemById(trackId));
+  }
+
+  /// 播放队列中指定下标的曲目（队列面板点击）。
+  ///
+  /// 用真实队列下标定位：随机排列 / 列表循环回绕时面板行号与队列下标不同，
+  /// 重复曲目也不能按 id 反查（会串到第一项）。
+  Future<void> playQueueIndex(int index) async {
+    _applyOutcome(await _session.playQueueIndex(index));
   }
 
   /// 停止本地播放并清空状态（同时丢弃恢复会话，避免下次启动又出现）。
