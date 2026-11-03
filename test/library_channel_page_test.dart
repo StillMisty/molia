@@ -292,6 +292,33 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+  testWidgets('触摸端 360 窄屏：顶部工具行（渠道 + 图标 tab）不溢出', (tester) async {
+    search = buildSearch(const []);
+    await pumpLibrary(tester, width: 360);
+
+    expect(tester.takeException(), isNull, reason: '360 宽工具行不应 RenderFlex 溢出');
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(M3ETabs),
+        matching: find.byIcon(Icons.leaderboard_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(M3ETabs),
+        matching: find.byIcon(Icons.queue_music_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(find.byType(LibraryChannelSelector)).width,
+      closeTo(360 * 0.32, 0.01),
+      reason: '360 × 0.32 = 115.2，落在 104–148 区间',
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   testWidgets('桌面端：tab 显示文案，点文字即可切换', (tester) async {
     search = buildSearch(const []);
     wyDiscover.playlistsPerPage = 1;

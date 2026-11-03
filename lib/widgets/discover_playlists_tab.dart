@@ -387,7 +387,8 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
 
   Widget _buildTagChips(AppLocalizations l10n, double gutter) {
     if (_hotTags.isEmpty) return const SizedBox.shrink();
-    // 不套固定高度：大字体下 chip 会按真实行高增长，横向滚动条自然加高。
+    // 去掉外层固定 40 高度：chip 高度交给 M3EChip 主题（当前 32），外层不再
+    // 额外限制；1.5× 的 labelLarge 仍在主题高度内，横向滚动条也不会切掉 chip。
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: EdgeInsets.symmetric(horizontal: gutter),

@@ -28,6 +28,9 @@ const double discoverLeaderboardTileMinWidth = 240;
 const double discoverGridGap = 12;
 
 /// 网格列数上下限。
+///
+/// 6 只是保护上限：当前 960 内容栏下歌单实际最多 4 列、热榜最多 3 列，
+/// 达不到 6；保留给未来更宽的内容栏。
 const int discoverGridMinColumns = 2;
 const int discoverGridMaxColumns = 6;
 
@@ -60,19 +63,25 @@ bool discoverIsWide(double contentWidth) =>
 bool discoverUsesPlaylistGrid(double contentWidth) =>
     discoverIsWide(contentWidth);
 
-/// 歌单网格列数：每列至少 200，最少 2 列、最多 6 列。
-int discoverPlaylistColumns(double contentWidth) {
-  final columns = (contentWidth / discoverPlaylistTileMinWidth).floor();
+/// 列数公式必须把 (列数 − 1) 个 gap 算进去，否则实际列宽会低于声明的最小值：
+/// 可用列宽 = (内容宽 − gap × (列数 − 1)) / 列数 ≥ 最小列宽。
+int _gridColumnsFor(double contentWidth, double minTileWidth) {
+  final columns =
+      ((contentWidth + discoverGridGap) / (minTileWidth + discoverGridGap))
+          .floor();
   return columns.clamp(discoverGridMinColumns, discoverGridMaxColumns);
 }
 
-/// 热榜磁贴列数：手机固定 2 列；宽屏每列至少 240，夹在 2–6 列。
+/// 歌单网格列数：每列至少 200，最少 2 列；当前 960 内容栏下最多 4 列。
+int discoverPlaylistColumns(double contentWidth) =>
+    _gridColumnsFor(contentWidth, discoverPlaylistTileMinWidth);
+
+/// 热榜磁贴列数：手机固定 2 列；宽屏每列至少 240，当前 960 内容栏下最多 3 列。
 int discoverLeaderboardColumns(double contentWidth) {
   if (!discoverIsWide(contentWidth)) {
     return discoverGridMinColumns;
   }
-  final columns = (contentWidth / discoverLeaderboardTileMinWidth).floor();
-  return columns.clamp(discoverGridMinColumns, discoverGridMaxColumns);
+  return _gridColumnsFor(contentWidth, discoverLeaderboardTileMinWidth);
 }
 
 /// 歌单网格卡片高度（含 4px 字体回退安全余量）。

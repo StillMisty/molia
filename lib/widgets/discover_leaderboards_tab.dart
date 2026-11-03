@@ -92,55 +92,61 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
             constraints.maxWidth,
           );
           final columns = discoverLeaderboardColumns(contentWidth);
-          return Scrollbar(
-            controller: _controller,
-            thumbVisibility: true,
-            interactive: true,
-            child: CustomScrollView(
+          // 可见标题已交给 tab 名，网格仍要有分组语义：读屏进入列表时先读
+          // 到「热榜」，否则只剩一串孤立的榜单按钮。
+          return Semantics(
+            container: true,
+            label: l10n.discoverLeaderboards,
+            child: Scrollbar(
               controller: _controller,
-              slivers: [
-                if (boards.isEmpty)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        gutter,
-                        discoverPageTopPadding + 4,
-                        gutter,
-                        16,
-                      ),
-                      child: EmptyState(
-                        icon: Icons.leaderboard_rounded,
-                        message: l10n.discoverNoContent,
-                      ),
-                    ),
-                  )
-                else
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(
-                      gutter,
-                      discoverPageTopPadding,
-                      gutter,
-                      0,
-                    ),
-                    sliver: SliverGrid.builder(
-                      key: const Key('discoverLeaderboardGrid'),
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns,
-                        crossAxisSpacing: discoverGridGap,
-                        mainAxisSpacing: discoverGridGap,
-                        mainAxisExtent: discoverLeaderboardTileExtentOf(
-                          context,
+              thumbVisibility: true,
+              interactive: true,
+              child: CustomScrollView(
+                controller: _controller,
+                slivers: [
+                  if (boards.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          gutter,
+                          discoverPageTopPadding + 4,
+                          gutter,
+                          16,
+                        ),
+                        child: EmptyState(
+                          icon: Icons.leaderboard_rounded,
+                          message: l10n.discoverNoContent,
                         ),
                       ),
-                      itemCount: boards.length,
-                      itemBuilder: (context, index) =>
-                          _leaderboardTile(context, boards[index]),
+                    )
+                  else
+                    SliverPadding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        discoverPageTopPadding,
+                        gutter,
+                        0,
+                      ),
+                      sliver: SliverGrid.builder(
+                        key: const Key('discoverLeaderboardGrid'),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: columns,
+                          crossAxisSpacing: discoverGridGap,
+                          mainAxisSpacing: discoverGridGap,
+                          mainAxisExtent: discoverLeaderboardTileExtentOf(
+                            context,
+                          ),
+                        ),
+                        itemCount: boards.length,
+                        itemBuilder: (context, index) =>
+                            _leaderboardTile(context, boards[index]),
+                      ),
                     ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: discoverPageBottomPadding),
                   ),
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: discoverPageBottomPadding),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         },
