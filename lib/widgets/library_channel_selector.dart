@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
+import 'discover_layout.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
@@ -41,7 +42,8 @@ class LibraryChannelSelector extends StatelessWidget {
     final entries = _enabledOf(channels);
     if (entries.length < 2) return const SizedBox.shrink();
     return SizedBox(
-      width: 132,
+      // 窄屏别挤掉 tab，宽屏也别让渠道名一直截断：按屏宽取 32%。
+      width: discoverChannelSelectorWidth(context),
       child: M3EDropdownMenu<String>(
         items: [
           for (final entry in entries)

@@ -36,6 +36,7 @@ import '../theme/m3e_context.dart';
 import '../utils/responsive.dart';
 import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
+import 'discover_layout.dart';
 import 'track_artwork.dart';
 
 class AiDjCarousel extends StatefulWidget {
@@ -99,6 +100,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
           return const SizedBox.shrink();
         }
         final l10n = AppLocalizations.of(context)!;
+        final gutter = discoverGutterOf(context);
         final list = provider.recommendations;
         final hasCards = list != null && list.items.isNotEmpty;
         if (hasCards && !_carouselVisible) {
@@ -112,7 +114,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
+              padding: EdgeInsets.fromLTRB(gutter, 4, 8, 0),
               child: Row(
                 children: [
                   Expanded(
@@ -160,7 +162,9 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                 return Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: discoverGutterOf(context),
+                      ),
                       child: AiDjThinProgress(value: progress.fraction),
                     ),
                     const SizedBox(height: 6),
@@ -239,7 +243,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(horizontal: discoverGutterOf(context)),
       child: M3ECard(
         key: key,
         variant: M3ECardVariant.filled,
@@ -290,7 +294,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
         child: ListView(
           scrollDirection: Axis.horizontal,
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: EdgeInsets.symmetric(horizontal: discoverGutterOf(context)),
           children: [
             box(),
             const SizedBox(width: 10),
@@ -409,9 +413,10 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
     if (reason.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final gutter = discoverGutterOf(context);
     return Padding(
       key: const Key('aiDjReasonPanel'),
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+      padding: EdgeInsets.fromLTRB(gutter, 6, gutter, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

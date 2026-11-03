@@ -9,6 +9,7 @@ import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../utils/responsive.dart';
 import '../utils/scroll_to_top.dart';
+import '../widgets/discover_layout.dart';
 import '../widgets/discover_leaderboards_tab.dart';
 import '../widgets/discover_playlists_tab.dart';
 import '../widgets/empty_state.dart';
@@ -200,6 +201,9 @@ class _LibraryState extends State<Library> {
         multiChannel && (renderedTab != _LibraryTab.search || !hasDiscoverTabs);
     final showTabBar = visibleTabs.length >= 2;
     final hasTopBar = showChannelSelector || showTabBar;
+    // 顶部工具行与三个 tab 共用页边距：渠道下拉、tab、搜索栏和内容栏
+    // 都从同一条 gutter 起排。
+    final gutter = discoverGutterOf(context);
     return ResponsivePageContainer(
       pageType: ResponsivePageType.browse,
       alignment: Alignment.topCenter,
@@ -209,9 +213,9 @@ class _LibraryState extends State<Library> {
           // 但保留 State 让 M3E 下拉菜单的关闭动画在切 tab 时不被 dispose 打断。
           Padding(
             padding: EdgeInsets.fromLTRB(
-              16,
+              gutter,
               hasTopBar ? 8 : 0,
-              16,
+              gutter,
               hasTopBar ? 4 : 0,
             ),
             child: Row(
@@ -234,6 +238,11 @@ class _LibraryState extends State<Library> {
                       // 次 tab：图标在文案左侧同一行、行高 48；渠道下拉框与
                       // 内容页共用这一行分组切换（不是顶层导航）。
                       variant: M3ETabsVariant.secondary,
+                      // 触摸端等分铺满剩余宽；桌面按自然宽度靠左排列，
+                      // 不把三个 tab 拉成三块大留白。
+                      alignment: isDesktopPlatform()
+                          ? M3ETabsAlignment.leading
+                          : M3ETabsAlignment.fill,
                       tabs: [
                         for (final tab in visibleTabs) _tabSpec(l10n, tab),
                       ],

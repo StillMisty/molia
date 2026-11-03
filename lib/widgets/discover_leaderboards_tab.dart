@@ -7,6 +7,8 @@ import '../l10n/app_localizations.dart';
 import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
+import '../theme/m3e_context.dart';
+import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'm3e_page_route.dart';
 import 'shell_page_visibility.dart';
@@ -14,13 +16,11 @@ import 'shell_page_visibility.dart';
 AppLocalizations _l10n(BuildContext context) =>
     AppLocalizations.of(context) ?? lookupAppLocalizations(const Locale('zh'));
 
-/// 榜单 chip 云的列距 / 行距。
-const double _chipGap = 8;
-
-/// 资料页「热榜」tab：当前渠道的榜单 chips（点击进入榜单曲目页）。
+/// 资料页「热榜」tab：当前渠道的榜单磁贴（点击进入榜单曲目页）。
 ///
 /// 渠道可能有 30+ 榜单，全部直接铺开——热榜本身就是「挑一个榜看」，折叠
-/// 反而多一步；chip 云交给 `Wrap` 自然换行，没有展开 / 收起入口。
+/// 反而多一步；磁贴网格交给 sliver 懒构建，手机 2 列、宽屏按内容宽加列，
+/// 没有展开 / 收起入口。磁贴不伪造排名数字，只用统一榜单图标 + 榜单名。
 class DiscoverLeaderboardsTab extends StatefulWidget {
   const DiscoverLeaderboardsTab({super.key, this.controller});
 
@@ -83,35 +83,91 @@ class _DiscoverLeaderboardsTabState extends State<DiscoverLeaderboardsTab>
     final l10n = _l10n(context);
     final boards = provider.leaderboards;
 
-    return SingleChildScrollView(
-      controller: _controller,
-      padding: const EdgeInsets.only(top: 12, bottom: 32),
-      child: boards.isEmpty
-          // 滚动内容里的空态版式：页面对齐的 16/16 外边距。
-          ? Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              child: EmptyState(
-                icon: Icons.leaderboard_rounded,
-                message: l10n.discoverNoContent,
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: M3EChipGroup(
-                groupLabel: l10n.discoverLeaderboards,
-                child: Wrap(
-                  spacing: _chipGap,
-                  runSpacing: _chipGap,
-                  children: [
-                    for (final board in boards)
-                      M3EChip(
-                        label: board.name,
-                        onPressed: () => _openBoard(board),
+    return DiscoverContentFrame(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = discoverGutterOf(context);
+          final contentWidth = discoverContentWidthOf(
+            context,
+            constraints.maxWidth,
+          );
+          final columns = discoverLeaderboardColumns(contentWidth);
+          return Scrollbar(
+            controller: _controller,
+            thumbVisibility: true,
+            interactive: true,
+            child: CustomScrollView(
+              controller: _controller,
+              slivers: [
+                if (boards.isEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        gutter,
+                        discoverPageTopPadding + 4,
+                        gutter,
+                        16,
                       ),
-                  ],
+                      child: EmptyState(
+                        icon: Icons.leaderboard_rounded,
+                        message: l10n.discoverNoContent,
+                      ),
+                    ),
+                  )
+                else
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      gutter,
+                      discoverPageTopPadding,
+                      gutter,
+                      0,
+                    ),
+                    sliver: SliverGrid.builder(
+                      key: const Key('discoverLeaderboardGrid'),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        crossAxisSpacing: discoverGridGap,
+                        mainAxisSpacing: discoverGridGap,
+                        mainAxisExtent: discoverLeaderboardTileExtentOf(
+                          context,
+                        ),
+                      ),
+                      itemCount: boards.length,
+                      itemBuilder: (context, index) =>
+                          _leaderboardTile(context, boards[index]),
+                    ),
+                  ),
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: discoverPageBottomPadding),
                 ),
-              ),
+              ],
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _leaderboardTile(BuildContext context, DiscoverLeaderboard board) {
+    final scheme = Theme.of(context).colorScheme;
+    return M3ECard(
+      variant: M3ECardVariant.filled,
+      onPressed: () => _openBoard(board),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.leaderboard_rounded, color: scheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              board.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: context.typeScale.titleSmall,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

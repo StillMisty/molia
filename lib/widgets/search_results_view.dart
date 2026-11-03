@@ -367,7 +367,13 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             tableColumns: tableColumns,
           )
         else
-          ..._multiGroupSlivers(context, l10n, search, groups),
+          ..._multiGroupSlivers(
+            context,
+            l10n,
+            search,
+            groups,
+            horizontalPadding: horizontalPadding,
+          ),
       ],
     );
 
@@ -410,6 +416,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             l10n,
             compact: false,
             detail: failure.message,
+            horizontalPadding: horizontalPadding,
             onRetry: () => search.retry(group!.source.key),
           ),
         if (tableColumns)
@@ -497,7 +504,12 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             loadMoreFailed: group.loadMoreFailed,
             onRetry: () => search.retry(group.source.key),
             failureLabel: l10n.searchLoadMoreFailed,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              16,
+              horizontalPadding,
+              32,
+            ),
           ),
         ),
       );
@@ -509,8 +521,9 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     BuildContext context,
     AppLocalizations l10n,
     SearchProvider search,
-    List<SearchSourceGroup<Object>> groups,
-  ) {
+    List<SearchSourceGroup<Object>> groups, {
+    required double horizontalPadding,
+  }) {
     final slivers = <Widget>[];
     for (final group in groups) {
       slivers.add(
@@ -523,13 +536,14 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             failure: group.failure,
             isLoading: group.isLoading,
             isEmpty: group.isEmpty,
+            horizontalPadding: horizontalPadding,
           ),
         ),
       );
       if (group.items.isNotEmpty) {
         slivers.add(
           SliverPadding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
             sliver: search.searchKind == SearchKind.artist
                 ? _ArtistResultsSliver(
                     items: group.items.cast<ArtistSummary>(),
@@ -554,7 +568,14 @@ class _SearchResultsViewState extends State<SearchResultsView> {
           ),
         );
         slivers.add(
-          SliverToBoxAdapter(child: _groupFooter(l10n, search, group)),
+          SliverToBoxAdapter(
+            child: _groupFooter(
+              l10n,
+              search,
+              group,
+              horizontalPadding: horizontalPadding,
+            ),
+          ),
         );
       }
     }
@@ -854,10 +875,16 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     required bool isLoading,
     required bool isEmpty,
     bool compact = false,
+    double horizontalPadding = 16,
   }) {
     final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(compact ? 20 : 16, compact ? 8 : 12, 12, 4),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 20 : horizontalPadding,
+        compact ? 8 : 12,
+        compact ? 12 : horizontalPadding,
+        4,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -910,20 +937,26 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   Widget _groupFooter(
     AppLocalizations l10n,
     SearchProvider search,
-    SearchSourceGroup<Object> group,
-  ) {
+    SearchSourceGroup<Object> group, {
+    required double horizontalPadding,
+  }) {
     if (group.isLoadingMore || group.loadMoreFailed) {
       return PagedListFooter(
         isLoadingMore: group.isLoadingMore,
         loadMoreFailed: group.loadMoreFailed,
         onRetry: () => search.retry(group.source.key),
         failureLabel: l10n.searchLoadMoreFailed,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        padding: EdgeInsets.fromLTRB(
+          horizontalPadding,
+          8,
+          horizontalPadding,
+          16,
+        ),
       );
     }
     if (!group.hasMore) return const SizedBox(height: 12);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 4, horizontalPadding, 16),
       child: Center(
         child: M3EButton.text(
           onPressed: () => search.loadMore(group.source.key),
@@ -976,6 +1009,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     AppLocalizations l10n, {
     required bool compact,
     required VoidCallback onRetry,
+    double horizontalPadding = 16,
     String? detail,
   }) {
     final theme = Theme.of(context);
@@ -1011,7 +1045,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
       );
     }
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: EdgeInsets.fromLTRB(horizontalPadding, 0, horizontalPadding, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -264,6 +264,49 @@ void main() {
     semantics.dispose();
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+  testWidgets('触摸端 320 窄屏：顶部工具行（渠道 + 图标 tab）不溢出', (tester) async {
+    search = buildSearch(const []);
+    await pumpLibrary(tester, width: 320);
+
+    expect(tester.takeException(), isNull, reason: '窄屏工具行不应 RenderFlex 溢出');
+    expect(find.byType(LibraryChannelSelector), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(M3ETabs),
+        matching: find.byIcon(Icons.leaderboard_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(M3ETabs),
+        matching: find.byIcon(Icons.queue_music_rounded),
+      ),
+      findsOneWidget,
+    );
+    // 渠道下拉宽度随屏宽收缩，但不会小于 104。
+    expect(
+      tester.getSize(find.byType(LibraryChannelSelector)).width,
+      104,
+      reason: '320 × 0.32 夹到最小 104',
+    );
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+  testWidgets('桌面端：tab 显示文案，点文字即可切换', (tester) async {
+    search = buildSearch(const []);
+    wyDiscover.playlistsPerPage = 1;
+    await pumpLibrary(tester);
+
+    expect(find.text('热榜'), findsOneWidget);
+    expect(find.text('歌单'), findsOneWidget);
+
+    await tester.tap(find.text('歌单'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DiscoverPlaylistsTab), findsOneWidget);
+    expect(find.text('测试歌单'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
   testWidgets('全部渠道停用：展示空态引导', (tester) async {
     search = buildSearch(const []);
     await pumpLibrary(tester);

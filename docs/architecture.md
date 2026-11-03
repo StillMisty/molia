@@ -622,6 +622,19 @@
   搜索 tab 只看 `SearchProvider.hasSearchableSources`；默认不显示发现渠道
   下拉，仅当页面只剩搜索 tab（当前渠道无热榜 / 歌单能力）时保留渠道下拉，
   作为切回可发现渠道的逃生口；来源选择在结果面 chips（见 ADR-0018）。
+- **发现页布局**：`lib/widgets/discover_layout.dart` 集中 gutter / 内容栏 /
+  网格断点。搜索、热榜、歌单三个 tab 共用
+  `ResponsivePageType.browse` 的页边距（compact 12 / 手机 16 / 平板桌面 24），
+  宽屏内容栏最大 960 且左对齐，手机整行铺满。顶部工具行保持单行：渠道下拉在
+  左（宽度 `(屏宽 × 0.32).clamp(104, 148)`），tab 在右；触摸端 tab 只留图标
+  （文案走语义名），桌面用 `M3ETabsAlignment.leading` 按自然宽度排列。歌单内容宽
+  < 600 用 56dp 封面紧凑列表，≥ 600 切封面网格：列数
+  `clamp(floor(内容宽 / 200), 2, 6)`、间距 12，方形封面 = 卡片宽 − 16，
+  标题最多 2 行 / 副标题 1 行，卡片高度按 `row_extent` 的行高测量（覆盖
+  1.3× / 1.5×）；热门标签自然高度横向滚动。热榜用 `M3ECard` 磁贴网格
+  （手机 2 列，宽屏 `clamp(floor(内容宽 / 240), 2, 6)`），全部榜单直接展示、
+  不伪造排名数字。搜索 tab 空态使用共享 `EmptyState`，AI 推歌轮播的 gutter
+  与内容栏同源。
 - **内置发现**：`lib/sources/builtin/discover_source.dart` 的渠道与能力位从
   `BuiltinPlatforms.discoverSources` 派生（六平台同一份注册表）。B 站
   （`bili_discover.dart`）只有音乐榜（`bili__music_3d` / bangid `3:3`）+ 热搜 +

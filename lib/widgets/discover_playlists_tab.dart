@@ -12,6 +12,7 @@ import '../providers/paged_list_controller.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import 'app_search_bar.dart';
+import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'library_cover.dart';
 import 'm3e_page_route.dart';
@@ -292,111 +293,136 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
         (_) => _ensureSourceLoaded(),
       );
     }
-    return ValueListenableBuilder<PagedListState<DiscoverPlaylist>>(
-      valueListenable: _paged,
-      // 分页状态是不可变值：歌单区按最新快照重建（宿主注入的滚动控制器不变）。
-      builder: (context, state, _) {
-        final l10n = _l10n(context);
-        final theme = Theme.of(context);
-        return Scrollbar(
-          controller: _scrollController,
-          thumbVisibility: true,
-          interactive: true,
-          child: PagedListAutoLoad(
-            hasMore: state.hasMore,
-            failed: state.failed,
-            isLoadingMore: state.isLoadingMore,
-            loadMoreFailed: state.loadMoreFailed,
-            onLoadMore: () => unawaited(_paged.loadMore()),
-            child: CustomScrollView(
-              controller: _scrollController,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: AppSearchBar(
-                            controller: _searchController,
-                            focusNode: _searchFocusNode,
-                            hintText: l10n.discoverPlaylistSearchHint,
-                            // 「打开歌单」也是「给一个歌单」的入口，放在搜索
-                            // 行栏尾：入口跟随搜索行，不另占一行。
-                            trailing: [
-                              M3EIconButton(
-                                variant: M3EIconButtonVariant.standard,
-                                semanticLabel: l10n.discoverOpenPlaylist,
-                                icon: const Icon(Icons.link_rounded),
-                                onPressed: _openLinkDialog,
+    return DiscoverContentFrame(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final gutter = discoverGutterOf(context);
+          final contentWidth = discoverContentWidthOf(
+            context,
+            constraints.maxWidth,
+          );
+          return ValueListenableBuilder<PagedListState<DiscoverPlaylist>>(
+            valueListenable: _paged,
+            // 分页状态是不可变值：歌单区按最新快照重建（宿主注入的滚动控制器不变）。
+            builder: (context, state, _) {
+              final l10n = _l10n(context);
+              final theme = Theme.of(context);
+              return Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                interactive: true,
+                child: PagedListAutoLoad(
+                  hasMore: state.hasMore,
+                  failed: state.failed,
+                  isLoadingMore: state.isLoadingMore,
+                  loadMoreFailed: state.loadMoreFailed,
+                  onLoadMore: () => unawaited(_paged.loadMore()),
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.only(
+                            top: discoverPageTopPadding,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: gutter,
+                                ),
+                                child: AppSearchBar(
+                                  controller: _searchController,
+                                  focusNode: _searchFocusNode,
+                                  hintText: l10n.discoverPlaylistSearchHint,
+                                  // 搜索栏铺满内容栏，不再居中在默认 720 里。
+                                  constraints: discoverSearchBarConstraints(
+                                    context,
+                                  ),
+                                  // 「打开歌单」也是「给一个歌单」的入口，放在搜索
+                                  // 行栏尾：入口跟随搜索行，不另占一行。
+                                  trailing: [
+                                    M3EIconButton(
+                                      variant: M3EIconButtonVariant.standard,
+                                      semanticLabel: l10n.discoverOpenPlaylist,
+                                      icon: const Icon(Icons.link_rounded),
+                                      onPressed: _openLinkDialog,
+                                    ),
+                                  ],
+                                  onChanged: (value) {
+                                    // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
+                                    if (value.trim().isEmpty) _clearSearch();
+                                  },
+                                  onSubmitted: _submitSearch,
+                                ),
                               ),
+                              const SizedBox(height: discoverSectionGap),
+                              _buildTagChips(l10n, gutter),
+                              const SizedBox(height: discoverSectionGap),
                             ],
-                            onChanged: (value) {
-                              // 提交式搜索：仅当清空（清除键或手动删空）时回到全部歌单。
-                              if (value.trim().isEmpty) _clearSearch();
-                            },
-                            onSubmitted: _submitSearch,
                           ),
                         ),
-                        const SizedBox(height: 8),
-                        _buildTagChips(l10n),
-                        const SizedBox(height: 8),
-                      ],
-                    ),
+                      ),
+                      ..._buildPlaylistSlivers(
+                        l10n,
+                        theme,
+                        state,
+                        gutter: gutter,
+                        contentWidth: contentWidth,
+                      ),
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: discoverPageBottomPadding),
+                      ),
+                    ],
                   ),
                 ),
-                ..._buildPlaylistSlivers(l10n, theme, state),
-                const SliverToBoxAdapter(child: SizedBox(height: 32)),
-              ],
-            ),
-          ),
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildTagChips(AppLocalizations l10n) {
+  Widget _buildTagChips(AppLocalizations l10n, double gutter) {
     if (_hotTags.isEmpty) return const SizedBox.shrink();
-    return SizedBox(
-      height: 40,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: M3EChipGroup(
-          groupLabel: l10n.discoverHotTags,
-          child: Row(
-            children: [
+    // 不套固定高度：大字体下 chip 会按真实行高增长，横向滚动条自然加高。
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.symmetric(horizontal: gutter),
+      child: M3EChipGroup(
+        groupLabel: l10n.discoverHotTags,
+        child: Row(
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: M3EChip(
+                type: M3EChipType.filter,
+                label: l10n.discoverAll,
+                selected: _selectedTag.isEmpty,
+                onPressed: () => _selectTag(''),
+              ),
+            ),
+            for (final tag in _hotTags)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: M3EChip(
                   type: M3EChipType.filter,
-                  label: l10n.discoverAll,
-                  selected: _selectedTag.isEmpty,
-                  onPressed: () => _selectTag(''),
+                  label: tag.name,
+                  selected: _selectedTag == tag.id,
+                  onPressed: () => _selectTag(tag.id),
                 ),
               ),
-              for (final tag in _hotTags)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: M3EChip(
-                    type: M3EChipType.filter,
-                    label: tag.name,
-                    selected: _selectedTag == tag.id,
-                    onPressed: () => _selectTag(tag.id),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: M3EChip(
-                  label: l10n.discoverAllTags,
-                  leading: const Icon(Icons.category_rounded, size: 18),
-                  onPressed: _showAllTags,
-                ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: M3EChip(
+                label: l10n.discoverAllTags,
+                leading: const Icon(Icons.category_rounded, size: 18),
+                onPressed: _showAllTags,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -405,8 +431,10 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
   List<Widget> _buildPlaylistSlivers(
     AppLocalizations l10n,
     ThemeData theme,
-    PagedListState<DiscoverPlaylist> state,
-  ) {
+    PagedListState<DiscoverPlaylist> state, {
+    required double gutter,
+    required double contentWidth,
+  }) {
     final items = state.items;
     if (state.isLoading && items.isEmpty) {
       return const [
@@ -422,7 +450,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       return [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 16),
             child: Row(
               children: [
                 Expanded(
@@ -447,13 +475,13 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
       ];
     }
     if (items.isEmpty) {
-      // 滚动内容里的空态版式：页面对齐的 16/16 外边距；主行动给能立刻
-      // 脱困的动作（清搜索 / 回「全部」标签），无筛选时没有可执行动作。
+      // 滚动内容里的空态版式：与搜索栏同 gutter；主行动给能立刻脱困的
+      // 动作（清搜索 / 回「全部」标签），无筛选时没有可执行动作。
       final searching = _query.isNotEmpty;
       return [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            padding: EdgeInsets.symmetric(horizontal: gutter, vertical: 16),
             child: EmptyState(
               icon: searching
                   ? Icons.search_off_rounded
@@ -476,10 +504,45 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
         ),
       ];
     }
+    final grid = discoverUsesPlaylistGrid(contentWidth);
+    final footer = state.isLoadingMore || state.loadMoreFailed
+        ? SliverToBoxAdapter(
+            child: PagedListFooter(
+              isLoadingMore: state.isLoadingMore,
+              loadMoreFailed: state.loadMoreFailed,
+              onRetry: () => unawaited(_paged.loadMore()),
+              padding: EdgeInsets.fromLTRB(gutter, 16, gutter, 8),
+            ),
+          )
+        : null;
+    if (grid) {
+      final columns = discoverPlaylistColumns(contentWidth);
+      final tileWidth =
+          (contentWidth - discoverGridGap * (columns - 1)) / columns;
+      return [
+        SliverPadding(
+          padding: EdgeInsets.symmetric(horizontal: gutter),
+          sliver: SliverGrid.builder(
+            key: const Key('discoverPlaylistGrid'),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: discoverGridGap,
+              mainAxisSpacing: discoverGridGap,
+              mainAxisExtent: discoverPlaylistTileExtentOf(context, tileWidth),
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) =>
+                _playlistGridCard(theme, l10n, items[index], tileWidth),
+          ),
+        ),
+        ?footer,
+      ];
+    }
     return [
       SliverPadding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(horizontal: gutter),
         sliver: SliverFixedExtentList.builder(
+          key: const Key('discoverPlaylistList'),
           // 卡片高度随系统文字缩放；+8 为卡片间距，与 SizedBox 同源。
           itemExtent: _playlistCardHeight(context) + 8,
           itemCount: items.length,
@@ -487,15 +550,15 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
               _playlistCard(theme, l10n, items[index]),
         ),
       ),
-      if (state.isLoadingMore || state.loadMoreFailed)
-        SliverToBoxAdapter(
-          child: PagedListFooter(
-            isLoadingMore: state.isLoadingMore,
-            loadMoreFailed: state.loadMoreFailed,
-            onRetry: () => unawaited(_paged.loadMore()),
-          ),
-        ),
+      ?footer,
     ];
+  }
+
+  String _playlistSubtitle(AppLocalizations l10n, DiscoverPlaylist playlist) {
+    return [
+      if (playlist.author.isNotEmpty) playlist.author,
+      if (playlist.trackCount > 0) l10n.playlistTrackCount(playlist.trackCount),
+    ].join(' · ');
   }
 
   Widget _playlistCard(
@@ -503,10 +566,7 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
     AppLocalizations l10n,
     DiscoverPlaylist playlist,
   ) {
-    final subtitle = [
-      if (playlist.author.isNotEmpty) playlist.author,
-      if (playlist.trackCount > 0) l10n.playlistTrackCount(playlist.trackCount),
-    ].join(' · ');
+    final subtitle = _playlistSubtitle(l10n, playlist);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SizedBox(
@@ -551,6 +611,58 @@ class _DiscoverPlaylistsTabState extends State<DiscoverPlaylistsTab>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// 宽屏封面网格：方形封面（卡片宽 − 16）+ 2 行标题 + 1 行副标题。
+  Widget _playlistGridCard(
+    ThemeData theme,
+    AppLocalizations l10n,
+    DiscoverPlaylist playlist,
+    double tileWidth,
+  ) {
+    final type = context.typeScale;
+    final cover = tileWidth - 16;
+    final titleLine = scaledLineHeightOf(context, type.titleSmall);
+    final subtitleLine = scaledLineHeightOf(context, type.bodySmall);
+    final subtitle = _playlistSubtitle(l10n, playlist);
+    return M3ECard(
+      variant: M3ECardVariant.filled,
+      onPressed: () => _openPlaylist(playlist),
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox.square(
+            dimension: cover,
+            child: LibraryCoverThumb(url: playlist.coverUrl, size: cover),
+          ),
+          const SizedBox(height: 8),
+          // 固定 2 行标题区 + 1 行副标题区：同行卡片文字基线一致，
+          // 1 行标题不会把副标题顶到不同高度。
+          SizedBox(
+            height: titleLine * 2,
+            child: Text(
+              playlist.name,
+              style: type.titleSmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(height: 2),
+          SizedBox(
+            height: subtitleLine,
+            child: Text(
+              subtitle,
+              style: type.bodySmall.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

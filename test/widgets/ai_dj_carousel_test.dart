@@ -19,6 +19,7 @@ import 'package:molia/providers/search_provider.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_carousel.dart';
 import 'package:molia/widgets/ai_dj_waiting.dart';
+import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/library_search_tab.dart';
 
 import '../support/fake_ai_generator.dart';
@@ -519,6 +520,7 @@ void main() {
     // 未开启：保留「输入关键词搜索歌曲、歌手或歌词」占位，推荐流不出现。
     await pumpTab();
     expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
+    expect(find.byType(EmptyState), findsOneWidget, reason: '未搜索空态用共享配方');
     expect(find.byKey(const Key('aiDjGenerateCard')), findsNothing);
 
     // 开启：占位让位给推荐流（空列表时是「生成推荐」引导卡）。

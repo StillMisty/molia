@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../providers/search_provider.dart';
-import '../theme/m3e_context.dart';
 import 'ai_dj_carousel.dart';
 import 'app_search_bar.dart';
+import 'discover_layout.dart';
+import 'empty_state.dart';
 import 'search_section.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -69,6 +70,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
         final aiDjEnabled = context.select<AiDjProvider?, bool>(
           (provider) => provider?.enabled ?? false,
         );
+        final gutter = discoverGutterOf(context);
 
         // provider 清空搜索时同步清空输入框（须等构建结束再动控制器）
         if (!isSearchActive && _searchController.text.isNotEmpty) {
@@ -78,65 +80,56 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
           });
         }
 
-        return Column(
-          children: [
-            Padding(
-              // 横向边距由搜索栏自己管（16 → 聚焦 12 弹性展开），这里只留纵向。
-              padding: const EdgeInsets.only(top: 12, bottom: 8),
-              child: AppSearchBar(
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                hintText: _l10n(context).searchHint,
-                margin: 16,
-                focusedMargin: 12,
-                expandOnFocus: true,
-                onSubmitted: (value) {
-                  searchProvider.submitSearch(value);
-                  _searchFocusNode.unfocus();
-                },
+        return DiscoverContentFrame(
+          child: Column(
+            children: [
+              Padding(
+                // 搜索栏自己管横向边距：空闲时与内容栏同 gutter，聚焦时
+                // 向两侧弹性展开 4px（保留原有手感），这里只留纵向。
+                padding: const EdgeInsets.only(
+                  top: discoverPageTopPadding,
+                  bottom: discoverSectionGap,
+                ),
+                child: AppSearchBar(
+                  controller: _searchController,
+                  focusNode: _searchFocusNode,
+                  hintText: _l10n(context).searchHint,
+                  constraints: discoverSearchBarConstraints(context),
+                  margin: gutter,
+                  focusedMargin: gutter > 4 ? gutter - 4 : 0,
+                  expandOnFocus: true,
+                  onSubmitted: (value) {
+                    searchProvider.submitSearch(value);
+                    _searchFocusNode.unfocus();
+                  },
+                ),
               ),
-            ),
-            // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
-            if (!isSearchActive) const AiDjCarousel(),
-            Expanded(
-              child: RepaintBoundary(
-                child: isSearchActive
-                    ? SearchSection(controller: widget.controller)
-                    : (aiDjEnabled
-                          ? const SizedBox.shrink()
-                          : _buildIdle(context)),
+              // 浏览态：AI 推歌推荐流（搜索激活时让位给结果区）。
+              if (!isSearchActive) const AiDjCarousel(),
+              Expanded(
+                child: RepaintBoundary(
+                  child: isSearchActive
+                      ? SearchSection(controller: widget.controller)
+                      : (aiDjEnabled
+                            ? const SizedBox.shrink()
+                            : _buildIdle(context)),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
   }
 
-  /// 未搜索时的空态：提示输入关键词。
+  /// 未搜索时的空态：提示输入关键词（共享 EmptyState 配方）。
   Widget _buildIdle(BuildContext context) {
-    final l10n = _l10n(context);
-    final theme = Theme.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.search_rounded,
-              size: 56,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              l10n.searchIdleHint,
-              textAlign: TextAlign.center,
-              style: context.typeScale.bodyMedium.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+        child: EmptyState(
+          icon: Icons.search_rounded,
+          message: _l10n(context).searchIdleHint,
         ),
       ),
     );
