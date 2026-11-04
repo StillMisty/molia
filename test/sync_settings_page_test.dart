@@ -35,7 +35,7 @@ import 'support/sync_test_support.dart';
 
 /// 同步设置页：首屏 = 传输方式（局域网 / WebDAV，开关即总闸）/ 已配对设备 /
 /// 附近设备 / 内容 · 日志 · 高级；设备名、口令、地址与端口在「高级设置」子页
-/// （`SyncAdvancedPage`）。旧配对码（复制 / 粘贴 / 扫码）入口已删除。
+/// （`SyncAdvancedPage`）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -266,7 +266,6 @@ void main() {
     // 设备 / 附近设备 / 内容入口不依赖总开关：始终可见。
     expect(find.byKey(const Key('settingsSyncPeersEmpty')), findsOneWidget);
     expect(find.text('Nearby devices'), findsOneWidget);
-    // 旧配对码入口（复制 / 粘贴 / 扫码）已删除。
     expect(find.byKey(const Key('settingsSyncPasteCodeItem')), findsNothing);
     expect(find.byKey(const Key('settingsSyncScanCodeItem')), findsNothing);
     expect(find.byKey(const Key('settingsSyncContentItem')), findsOneWidget);
@@ -419,7 +418,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    // 口令由附近设备配对自动传递：手输口令 / 粘贴配对码路径已删除。
+    // 口令由附近设备配对自动传递，页面上没有手输入口。
     expect(
       find.byKey(const Key('settingsSyncPassphraseJoinItem')),
       findsNothing,
@@ -1290,7 +1289,7 @@ void main() {
 
   testWidgets('同步在途时保存设备：等补跑轮给出结论，不拿上一轮报告冒充', (tester) async {
     await provider.setTransportEnabled(SyncTransportKind.lan, true);
-    // 先完成一轮，留下历史报告（旧实现会把这份旧报告当成本轮结果）。
+    // 先完成一轮，留下历史报告，供补跑用例判断返回的是哪一份。
     await provider.syncNow();
 
     var pulls = 0;
@@ -1385,7 +1384,7 @@ void main() {
 
     await openSubPage(tester, 'settingsSyncLogItem');
     expect(find.text('Last 24 hours'), findsOneWidget);
-    expect(find.textContaining('1 runs, 0 with changes'), findsOneWidget);
+    expect(find.textContaining('1 syncs · 0 with updates'), findsOneWidget);
     // 环境行：未注入调度器 → 等级「未运行」；非移动数据；非省电。
     expect(
       find.textContaining('not running · Wi-Fi / other · power save off'),
@@ -1656,7 +1655,10 @@ void main() {
     await openSubPage(tester, 'settingsSyncLogItem');
     // 零应答（区别于从未发现）：日志行可点开下一步动作。
     expect(find.byType(SyncLogRow), findsOneWidget);
-    expect(find.textContaining('the network may be isolated'), findsWidgets);
+    expect(
+      find.textContaining('Make sure Molia is open and LAN sync is on'),
+      findsWidgets,
+    );
     await tester.tap(find.byType(SyncLogRow));
     await tester.pumpAndSettle();
 

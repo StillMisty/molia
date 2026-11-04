@@ -5363,7 +5363,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncActivityRounds.
   ///
   /// In en, this message translates to:
-  /// **'{rounds} runs, {effective} with changes · {bytes} transferred'**
+  /// **'{rounds} syncs · {effective} with updates · {bytes} transferred'**
   String syncActivityRounds(int rounds, int effective, String bytes);
 
   /// No description provided for @syncActivityEnvironment.
@@ -6435,7 +6435,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssueBroadcastUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'Auto-discovery failed (blocked by network policy)'**
+  /// **'Auto-discovery failed. Add the device address manually.'**
   String get syncIssueBroadcastUnavailable;
 
   /// No description provided for @syncIssueProbePortUnavailable.
@@ -6447,7 +6447,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncIssueDiscoverySilent.
   ///
   /// In en, this message translates to:
-  /// **'No other device found (the network may be isolated)'**
+  /// **'No other device found. Make sure Molia is open and LAN sync is on for the other device.'**
   String get syncIssueDiscoverySilent;
 
   /// No description provided for @syncIssueWebdavDirFailed.

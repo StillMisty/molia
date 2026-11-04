@@ -2804,7 +2804,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncActivityRounds(int rounds, int effective, String bytes) {
-    return '运行 $rounds 次，其中 $effective 次有变化 · 流量 $bytes';
+    return '同步 $rounds 次 · $effective 次有更新 · 上传下载 $bytes';
   }
 
   @override
@@ -3416,13 +3416,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get syncIssueBroadcastUnavailable => '自动发现失败（被网络策略拦截）';
+  String get syncIssueBroadcastUnavailable => '自动发现失败，请手动添加设备地址';
 
   @override
   String get syncIssueProbePortUnavailable => '自动发现不可用，请用「添加设备」手动填写地址';
 
   @override
-  String get syncIssueDiscoverySilent => '没有发现其它设备（可能被网络隔离）';
+  String get syncIssueDiscoverySilent => '没有发现其它设备，请确认对方已打开 Molia 并开启局域网同步';
 
   @override
   String get syncIssueWebdavDirFailed => 'WebDAV 目录不可用';

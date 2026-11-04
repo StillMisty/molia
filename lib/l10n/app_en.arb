@@ -1454,7 +1454,7 @@
   "syncTriggerManual": "manual",
   "syncActivitySection": "Activity",
   "syncActivityTitle": "Last 24 hours",
-  "syncActivityRounds": "{rounds} runs, {effective} with changes · {bytes} transferred",
+  "syncActivityRounds": "{rounds} syncs · {effective} with updates · {bytes} transferred",
   "@syncActivityRounds": {
     "placeholders": {
       "rounds": {
@@ -1873,9 +1873,9 @@
       }
     }
   },
-  "syncIssueBroadcastUnavailable": "Auto-discovery failed (blocked by network policy)",
+  "syncIssueBroadcastUnavailable": "Auto-discovery failed. Add the device address manually.",
   "syncIssueProbePortUnavailable": "Auto-discovery unavailable; add a device address manually",
-  "syncIssueDiscoverySilent": "No other device found (the network may be isolated)",
+  "syncIssueDiscoverySilent": "No other device found. Make sure Molia is open and LAN sync is on for the other device.",
   "syncIssueWebdavDirFailed": "WebDAV folder unavailable",
   "syncIssueWebdavListFailed": "Failed to read the WebDAV folder",
   "syncIssueWebdavReadFailed": "{peer}: failed to read sync data",

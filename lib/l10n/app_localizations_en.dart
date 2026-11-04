@@ -2916,7 +2916,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncActivityRounds(int rounds, int effective, String bytes) {
-    return '$rounds runs, $effective with changes · $bytes transferred';
+    return '$rounds syncs · $effective with updates · $bytes transferred';
   }
 
   @override
@@ -3563,7 +3563,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncIssueBroadcastUnavailable =>
-      'Auto-discovery failed (blocked by network policy)';
+      'Auto-discovery failed. Add the device address manually.';
 
   @override
   String get syncIssueProbePortUnavailable =>
@@ -3571,7 +3571,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get syncIssueDiscoverySilent =>
-      'No other device found (the network may be isolated)';
+      'No other device found. Make sure Molia is open and LAN sync is on for the other device.';
 
   @override
   String get syncIssueWebdavDirFailed => 'WebDAV folder unavailable';
