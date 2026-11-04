@@ -2,15 +2,16 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 托盘 / 显示器原生依赖的隔离（与 `window_chrome` 的约束同源，见
-/// docs/pitfalls.md #30）：`tray_manager` / `nativeapi` 的 Dart 代码 import
-/// `dart:io` 与 `dart:ffi`，全仓只允许在桌面 IO 实现里出现。
+/// 托盘 / 显示器 / 窗口 chrome 原生依赖的隔离（与 `window_chrome` 的约束
+/// 同源，见 docs/pitfalls.md #30）：`tray_manager` / `nativeapi` 的 Dart 代码
+/// import `dart:io` 与 `dart:ffi`，全仓只允许在桌面 IO 实现里出现。
 ///
 /// UI / 组合根一律经 `lib/services/window/app_tray.dart` 入口（直接导出 io 实现）。
 void main() {
   const allowedPaths = <String>{
     'lib/services/window/app_tray_io.dart',
     'lib/services/window/display_areas_io.dart',
+    'lib/services/window/window_chrome_io.dart',
   };
   const packagePrefixes = <String>[
     'package:tray_manager/',

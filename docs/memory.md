@@ -17,7 +17,7 @@ Windows `EmptyWorkingSet`），让释放体现在系统观测上。实测：Linu
 
 ## 2. 背景：托盘态本来在占什么
 
-- 「关闭时最小化到托盘」= `WindowChrome.hide()`：只是 `window_manager.hide()`，
+- 「关闭时最小化到托盘」= `WindowChrome.hide()`：只是 `Window.hide()`，
   没有任何内存释放路径；
 - 窗口隐藏后平台停止出帧（Linux：GTK withdrawn → `AppLifecycleState.hidden` →
   `framesEnabled=false`），任何「等回到前台再重建」的清理都拿不到托盘期收益；
@@ -173,7 +173,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
 
 ## 6. 未验证 / 已知代价
 
-- **Windows** 已实机验证（§4.4）；`window_manager` 的隐藏事件与
+- **Windows** 已实机验证（§4.4）；nativeapi 的隐藏事件与
   `AppLifecycleState.hidden` 语义在本次往返中正常。
 - `EmptyWorkingSet` 只降工作集（物理驻留），「提交大小」不会跟着大降；播放中
   剩余的大头是引擎 / Dart 堆 / libmpv。若以提交为准继续优化，需要 Phase 3
