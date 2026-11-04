@@ -158,7 +158,7 @@ void main() {
     expect(find.text('Title a'), findsOneWidget);
     expect(find.text('Artist a'), findsOneWidget);
     expect(find.text('3:05'), findsNWidgets(3));
-    // 分页改为触底自动加载：结果尾部不再有「加载更多」按钮。
+    // 分页由触底自动加载：结果尾部没有「加载更多」按钮。
     expect(find.textContaining('加载更多'), findsNothing);
   });
 

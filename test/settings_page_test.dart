@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart'
-    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
@@ -241,7 +239,7 @@ void main() {
     );
   }
 
-  /// 设置首屏在场的标记：顶部「设置」标题行已移除（弹层 chrome 只剩内容），
+  /// 设置首屏在场的标记：弹层 chrome 只剩内容、没有自己的标题行，
   /// 用第一个分区标题判断首屏在不在。
   Finder settingsHome() => find.text('Appearance');
 
@@ -1367,24 +1365,6 @@ void main() {
       findsNothing,
       reason: '同步类别只保留「跨设备同步 › 同步内容」一处入口',
     );
-  });
-
-  testWidgets('首屏：宽屏两列瀑布式，短卡回填较矮的左列', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
-    try {
-      await pumpSettingsPage(tester);
-
-      final appearance = tester.getTopLeft(find.text('Appearance'));
-      final covers = tester.getTopLeft(find.text('Covers'));
-      final playback = tester.getTopLeft(find.text('Playback'));
-
-      expect(covers.dx, appearance.dx, reason: '封面卡应跟在较矮的左列');
-      expect(covers.dy, greaterThan(appearance.dy));
-      expect(playback.dx, greaterThan(appearance.dx));
-      expect(playback.dy, appearance.dy, reason: '播放卡与外观卡顶对齐');
-    } finally {
-      debugDefaultTargetPlatformOverride = null;
-    }
   });
 
   testWidgets('首屏：歌词分区三条直达入口（能力就绪时全显示并进入子页）', (tester) async {

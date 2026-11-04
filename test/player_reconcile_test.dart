@@ -498,7 +498,7 @@ void main() {
     final b2 = _track('b', artwork: 'https://img.example/b2.jpg');
     emitCustom(current: b, queue: [a, b, c], index: 1, previous: a, next: c);
     // 走播放器真实喂法（displayTrack 随快照 current 变化）：封面预取已收口到
-    // PlaybackObserver，播放器 build 不再有会干扰换图断言的图片副作用。
+    // PlaybackObserver，播放器 build 没有会干扰换图断言的图片副作用。
     await pumpPlayer(tester);
     final double centerDx = tester
         .getCenter(find.byKey(PlayerCoverDeck.swipeHostKey))

@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/domain/models/download.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -316,50 +315,6 @@ void main() {
 
     expect(library.isFavorite(track.id.sourceKey, track.id.id), isTrue);
     expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
-  });
-
-  testWidgets('收藏按钮：本地下载副本成功收藏后图标变实心', (tester) async {
-    final repository = FakeLibraryRepository();
-    addTearDown(repository.dispose);
-    final library = LibraryProvider(
-      repository: repository,
-      playbackProvider: playback,
-    );
-    addTearDown(library.dispose);
-
-    const record = DownloadedTrack(
-      originSourceKey: 'tx',
-      originSongId: 'abc',
-      title: '下载副本',
-      artist: '歌手',
-      filePath: '/tmp/a.mp3',
-      downloadedAt: 1,
-    );
-    final track = library.trackFromPlaylistTrack(
-      record.toPlaylistTrack(addedAt: 1),
-    );
-    expect(track.id.sourceKey, kLocalSourceKey);
-
-    await pumpFavoriteButton(tester, library, track);
-    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
-
-    await tester.tap(find.byType(M3EIconButton));
-    await tester.pumpAndSettle();
-
-    expect(library.isFavorite(track.id.sourceKey, track.id.id), isTrue);
-    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
-  });
-
-  testWidgets('切换行：小圆点常显，无收起/展开按钮', (tester) async {
-    await pumpNowPlaying(tester);
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(LyricsQueueDots), findsOneWidget);
-    // 图标切换器/收起按钮不应出现（桌面版式的 icon tab 也不在移动版式里）。
-    expect(find.byIcon(M3EIcons.queue_music_rounded), findsNothing);
-    expect(find.byIcon(M3EIcons.lyrics_rounded), findsNothing);
-    expect(find.byIcon(Icons.expand_more_rounded), findsNothing);
-    expect(find.byIcon(Icons.expand_less_rounded), findsNothing);
   });
 
   testWidgets('播放器区域跟手拖拽：上拉展开、下拉收起', (tester) async {

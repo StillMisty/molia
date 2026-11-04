@@ -1,9 +1,7 @@
 /// 下载文件命名 / 放置模块：模板 → 基名 → 去重 → sidecar 路径的唯一实现。
 ///
-/// 这里打的是**生产实现**（下载链路真正调用的 `DownloadFileLayout`）——
-/// 此前 `DownloadService.baseNameFor` 是 `_baseNameFor` 的手写双胞胎，两者在
-/// 「无歌手」时命名不同（双胞胎只留歌名），测的不是生产路径；双胞胎已删除，
-/// 命名行为在这里钉住。
+/// 这里打的是**生产实现**（下载链路真正调用的 `DownloadFileLayout`）；
+/// 命名行为在这里钉住，测试与生产不各维护一份基名逻辑。
 ///
 /// 真依赖（`FakeDownloadStorage` + 真 `DownloadSettings`）：只经公开接口断言
 /// 基名 / 路径 / 写入结果，不读私有字段。

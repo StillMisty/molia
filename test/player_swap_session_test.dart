@@ -231,10 +231,10 @@ void main() {
     expect(before, greaterThan(4), reason: '前提：第一次切歌中心卡仍在侧槽入场途中');
 
     // 弹簧途中切到 c：新会话的滑出卡就是上一段的中位卡 b，必须以它当前
-    // 位置为起点（旧实现按新会话 -offset*p 重画，会瞬移约一个侧槽宽）。
+    // 位置为起点；不能按新会话公式重画，否则会瞬移约一个侧槽宽。
     emitFor('c');
     // 让 provider 的 track 通知节流（16ms）落地；只推进这一小段，让接管帧
-    // 的滑出卡仍应落在上一帧中心卡附近（旧实现会瞬移约一个侧槽宽）。
+    // 的滑出卡仍应落在上一帧中心卡附近，不能瞬移约一个侧槽宽。
     await tester.pump(const Duration(milliseconds: 20));
     await tester.pump();
     final outgoing = find.byKey(PlayerCoverDeck.outgoingCoverCardKey);
@@ -372,7 +372,7 @@ void main() {
     );
 
     // 同方向继续切 c：restart 从 B 的捕获位置起滑向左槽，不能把 p 归零后
-    // 从中心重新起跳（旧实现的落位式跳变）；新中心 C 也应接住 source
+    // 从中心重新起跳，不能落位式跳变；新中心 C 也应接住 source
     // neighbor 的低透明度，而不是直接跳到 0.85。
     emitFor('c');
     await tester.pump(const Duration(milliseconds: 20));
@@ -483,7 +483,7 @@ void main() {
     final double beforeA = offsetOf(tester, centerA);
 
     // 再反向 A→B restart：新滑出卡 A 必须接住刚才 restart 中心 A 的实际
-    // 视觉（旧实现会退回公式位置，跳一下）。
+    // 视觉，不能退回公式位置跳一下。
     emitFor('b');
     await tester.pump(const Duration(milliseconds: 20));
     await tester.pump();

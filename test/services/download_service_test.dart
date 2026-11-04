@@ -117,7 +117,7 @@ void main() {
     throw StateError('任务未开始运行');
   }
 
-  /// 任务列表（运行 → 等待 → 失败），替代已删除的测试专用 `tasks` 成员。
+  /// 任务列表（运行 → 等待 → 失败）。
   List<DownloadTask> audioTasksOf(DownloadService service) => [
     ...service.taskGroups.running,
     ...service.taskGroups.queued,

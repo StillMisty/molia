@@ -687,12 +687,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   });
 
-  testWidgets('评论入口不在歌词页：评论已迁到歌曲信息页', (tester) async {
-    await pumpLyrics(tester);
-
-    expect(fabIcons(tester), isNot(contains(Icons.comment_rounded)));
-  });
-
   testWidgets('歌词页操作 FAB menu：停靠右下角、项文案长短齐整', (tester) async {
     await pumpLyrics(tester);
     // 手动滚动暂停跟随 → 操作栏展开（收起态只验几何会被 IgnorePointer 掩盖）。

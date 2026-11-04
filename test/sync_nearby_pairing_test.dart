@@ -32,7 +32,6 @@ import 'support/notification_recorder.dart';
 import 'support/sync_test_support.dart';
 
 /// 附近设备一键配对：附近卡片 / 发起方确认码 / 接收方确认窗 / 手动地址兜底。
-/// 旧配对码（复制 / 粘贴 / 扫码）路径已删除，这里只覆盖现行入口。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

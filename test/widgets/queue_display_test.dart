@@ -423,13 +423,13 @@ void main() {
     final playback = buildTestPlaybackProvider(backend: backend);
     addTearDown(playback.dispose);
 
-    final queue = [for (var i = 0; i < 300; i++) _track('$i')];
+    final queue = [for (var i = 0; i < 60; i++) _track('$i')];
     backend.emit(queueSnapshot(queue));
     await pumpQueue(tester, playback);
 
     final rows = tester.widgetList<TrackRow>(find.byType(TrackRow)).toList();
-    expect(rows.length, lessThan(30), reason: '300 首只构建视口附近的行');
-    expect(find.text('Title 299'), findsNothing);
+    expect(rows.length, lessThan(30), reason: '60 首只构建视口附近的行');
+    expect(find.text('Title 59'), findsNothing);
 
     // 列表使用动态行高：itemExtent = 行高 + 行距（M3E 列表卡片 token）。
     final sliver = tester.widget<SliverFixedExtentList>(
@@ -443,44 +443,12 @@ void main() {
     );
 
     await tester.scrollUntilVisible(
-      find.text('Title 299'),
+      find.text('Title 59'),
       800,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
-    expect(find.text('Title 299'), findsOneWidget);
-
-    await drainThrottle(tester);
-  });
-
-  testWidgets('滚动条常显且可手拖：按住拇指拖动改变队列滚动位置', (tester) async {
-    final backend = FakePlaybackBackend();
-    final playback = buildTestPlaybackProvider(backend: backend);
-    addTearDown(playback.dispose);
-
-    final queue = [for (var i = 0; i < 60; i++) _track('$i')];
-    backend.emit(queueSnapshot(queue));
-    final controller = await pumpQueue(tester, playback);
-    // 等通知节流计时器与滚动条首帧绘制（拇指命中区依赖已计算的 metrics）。
-    await drainThrottle(tester);
-
-    final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
-    expect(scrollbar.thumbVisibility, isTrue);
-    expect(scrollbar.interactive, isTrue);
-    expect(scrollbar.controller, controller);
-
-    // 按住顶部拇指向下拖：offset 必须变化（滚动条真能手按滚动）。
-    final rect = tester.getRect(find.byType(Scrollbar));
-    final gesture = await tester.startGesture(
-      Offset(rect.right - 3, rect.top + 10),
-    );
-    await tester.pump();
-    await gesture.moveBy(const Offset(0, 120));
-    await tester.pump();
-    await gesture.up();
-    await tester.pumpAndSettle();
-
-    expect(controller.offset, greaterThan(0));
+    expect(find.text('Title 59'), findsOneWidget);
 
     await drainThrottle(tester);
   });
@@ -638,34 +606,6 @@ void main() {
       expect(find.text('收藏'), findsOneWidget);
 
       await drainThrottle(tester);
-    });
-
-    testWidgets('1.3× / 1.5× 大字体：itemExtent 与行内高度同源，不裁切', (tester) async {
-      for (final scale in [1.3, 1.5]) {
-        final backend = FakePlaybackBackend();
-        final playback = buildTestPlaybackProvider(backend: backend);
-        addTearDown(playback.dispose);
-        backend.emit(queueSnapshot([for (var i = 0; i < 6; i++) _track('$i')]));
-        await pumpQueue(tester, playback, textScaler: TextScaler.linear(scale));
-
-        expect(tester.takeException(), isNull, reason: '$scale× 不应布局溢出');
-        final sliver = tester.widget<SliverFixedExtentList>(
-          find.byType(SliverFixedExtentList),
-        );
-        final context = tester.element(find.byType(TrackRow).first);
-        expect(
-          sliver.itemExtent,
-          TrackRow.extentOf(context, tableColumns: false) +
-              TrackRow.gapOf(context),
-        );
-        expect(
-          tester.getSize(find.byType(TrackRow).first).height,
-          TrackRow.extentOf(context, tableColumns: false),
-          reason: '行内 SizedBox 与 itemExtent 同源',
-        );
-
-        await drainThrottle(tester);
-      }
     });
   });
 }

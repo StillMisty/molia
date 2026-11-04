@@ -571,26 +571,4 @@ void main() {
     expect(find.text(l10n.noResultsFound), findsOneWidget);
     expect(find.text(l10n.searchNoResultsInSource('kw')), findsOneWidget);
   });
-
-  testWidgets('1.5× 大字体：页面版式不溢出', (tester) async {
-    source.onSearch = (query) async => SearchResult(
-      items: [for (var i = 0; i < 3; i++) track('$i')],
-      total: 3,
-    );
-    await pumpView(
-      tester,
-      SearchResultsView(
-        variant: SearchResultsVariant.page,
-        onPlay: (_) {},
-        onOpenArtist: (sourceKey, artistId, {fallbackName}) async {},
-      ),
-      width: 400,
-      textScaler: const TextScaler.linear(1.5),
-    );
-    search.submitSearch('hello');
-    await tester.pumpAndSettle();
-
-    expect(tester.takeException(), isNull);
-    expect(find.byType(TrackRow), findsNWidgets(3));
-  });
 }

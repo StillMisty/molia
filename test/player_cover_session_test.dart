@@ -2,7 +2,7 @@
 ///
 /// 会话与封面堆叠模块之间只有 [CoverSwapHost] 意图接口：这里用记录型假宿主
 /// 断言「时机」——阶段迁移、方向判定、对账延后、兜底与两条非视觉路径都能
-/// 脱离 widget 树验证（旧实现只能靠 pump deck 观测中间帧）。
+/// 脱离 widget 树验证。
 library;
 
 import 'package:flutter_test/flutter_test.dart';

@@ -106,7 +106,7 @@ void main() {
         entries: const [],
       );
 
-      // 旧实现的基线夹取：-1 表示「还没消费」，空窗口不推进到任何真实 seq，
+      // 基线夹取：-1 表示「还没消费」，空窗口不推进到任何真实 seq，
       // 但游标从 -1 走到 0，下次仍从 seq 1 开始。
       expect(result.accepted, isEmpty);
       expect(result.nextCursor, 0);

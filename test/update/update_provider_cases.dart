@@ -289,7 +289,7 @@ void main() {
 
     expect(provider.progress.value.received, 10);
     expect(provider.progress.value.total, 10);
-    // 旧实现会把 10 字节都算到 1 秒内（10 B/s）；新实现基准是首个 5。
+    // 速度基准是首个 5 字节回调，不会把 10 字节都算到 1 秒内（10 B/s）。
     expect(provider.progress.value.bytesPerSecond, 5);
   });
 

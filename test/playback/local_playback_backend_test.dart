@@ -84,8 +84,8 @@ class _FakeService extends LocalPlaybackService {
   @override
   String? get contextName => _contextName;
 
-  /// 与真实服务同源（`projectQueue`）；旧实现覆写三个 getter 各自算一份，
-  /// 生产侧改用一次性投影后由本 getter 统一供数。
+  /// 与真实服务同源（`projectQueue`）；生产侧用一次性投影，由本 getter
+  /// 统一供数。
   @override
   QueueProjection<SourceTrack> get queueProjection {
     projectionBuilds++;

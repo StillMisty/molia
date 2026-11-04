@@ -478,7 +478,7 @@ void main() {
     expect(transport.isRunning, isFalse);
   });
 
-  // ---- 端口降级 / 双栈 / 候选地址交换（Windows 保留端口场景） ----
+  // 端口降级 / 双栈 / 候选地址交换（Windows 保留端口场景）
 
   test('首选探测端口被占用：UDP 降级到系统分配端口，传输照常运行且双向可达', () async {
     // 占位 socket 不设 SO_REUSEADDR：transport 的 reuseAddress 绑定会失败
@@ -842,8 +842,6 @@ void main() {
     final pulled = (await transportB.pull()).envelopes;
     expect(pulled.single.deviceId, 'devA');
   });
-
-  // ---- MSD/1 发现层改造 ----
 
   test('已知端点直连：有候选不广播；第二次未变跳过且 0 广播', () async {
     var serverHttpPort = 0;

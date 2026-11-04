@@ -739,7 +739,7 @@ void main() {
 
   test('在途轮次期间发起的请求：返回补跑轮报告，而不是上一轮', () async {
     transport.available.add(remoteTheme('dark'));
-    // 先完成一轮，留下一份「上一轮报告」（旧实现排队时原样返回它）。
+    // 先完成一轮，留下一份「上一轮报告」。
     final previous = await engine.syncNow(trigger: SyncTrigger.timer);
     expect(previous, isNotNull);
 

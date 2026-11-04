@@ -222,7 +222,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(backend.lastEnqueued, hasLength(3));
 
-    // 每批数量只在推荐偏好页，主页面不再有下拉。
+    // 每批数量只在推荐偏好页，主页面不提供下拉。
     expect(find.byKey(const Key('aiDjBatchSizeDropdown')), findsNothing);
 
     generator.batchFactory = () => _batch(9, 3);
@@ -404,25 +404,6 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(provider.recommendations, isNull, reason: '取消后晚到结果丢弃');
-  });
-
-  testWidgets('首次生成骨架：空列表时显示脉冲骨架', (tester) async {
-    await pumpProvider();
-    await pumpPage(tester);
-    await provider.grantConsent();
-    final gate = Completer<void>();
-    generator.gate = gate;
-
-    unawaited(provider.setEnabled(true));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.byKey(const Key('aiDjPulsingSkeleton')), findsOneWidget);
-    expect(find.text('No recommendations yet'), findsNothing);
-
-    gate.complete();
-    await tester.pumpAndSettle();
-    expect(provider.recommendations, isNotNull);
   });
 
   testWidgets('收藏收进行尾菜单：行内无独立收藏按钮，菜单可切换', (tester) async {

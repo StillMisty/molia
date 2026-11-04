@@ -96,7 +96,7 @@ void main() {
       final replyX = tester.getTopLeft(find.textContaining('一级回复 0')).dx;
       final nestedX = tester.getTopLeft(find.textContaining('二级回复')).dx;
 
-      // 旧实现把回复塞进父评论内容列并叠加缩进，一级回复正文会从 ~152px 开始。
+      // 回复在主行下方独立成列，一级回复不应被父评论头像列挤到右侧。
       expect(parentX, lessThan(80));
       expect(replyX, lessThan(110), reason: '一级回复不应被父评论头像列挤到右侧');
       expect(nestedX, lessThan(130), reason: '二级回复只再缩进 20px');

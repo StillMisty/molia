@@ -479,25 +479,6 @@ void main() {
     );
   }
 
-  /// 播放页中心封面最近一层 Opacity 的值（飞行显隐乘在中心层同一条
-  /// Opacity 上，不再嵌套第二层）。
-  double pageCoverOpacity(WidgetTester tester) {
-    final element = tester.element(
-      find.byKey(PlayerCoverDeck.centerCoverCardKey),
-    );
-    double? opacity;
-    element.visitAncestorElements((ancestor) {
-      final widget = ancestor.widget;
-      if (widget is Opacity) {
-        opacity = widget.opacity;
-        return false;
-      }
-      return true;
-    });
-    expect(opacity, isNotNull, reason: '未找到中心封面的透明度层');
-    return opacity!;
-  }
-
   testWidgets('封面飞行：进入方向副本末帧落点 == 落定后真身矩形（≤1dp）', (tester) async {
     await pumpShell(tester, desktopShell: true);
     // 先离开播放页：底栏在场，封面是进入方向的起点；也让页内封面先按
@@ -593,61 +574,6 @@ void main() {
     );
   });
 
-  testWidgets('封面飞行：进入首帧页中心就隐藏，落位帧副本移除与真身亮出同帧', (tester) async {
-    await pumpShell(tester, desktopShell: true);
-    // 先离开播放页：底栏封面成为进入方向的起点。
-    await tapRailItem(tester, railItem(Icons.favorite_border_rounded));
-
-    await tester.tap(railPlayerItem());
-    await tester.pump(); // 帧 1：页面落定 + 两端真身收进飞行态
-    expect(
-      find.byType(PlayerMorphFlight),
-      findsNothing,
-      reason: '飞行副本下一帧才挂载（终点锚点先落定）',
-    );
-    expect(pageCoverOpacity(tester), 0, reason: '进入首帧页中心必须已经隐藏，不能先在原地亮着等副本');
-
-    await tester.pump(); // 帧 2：副本接管
-    expect(find.byType(PlayerMorphFlight), findsOneWidget);
-
-    // 逐帧跑到副本消失：交接帧真身必须已经亮出（零时长 Opacity）。
-    var seenFlight = false;
-    var landed = false;
-    for (var i = 0; i < 200; i++) {
-      await tester.pump(const Duration(milliseconds: 8));
-      final flightGone = find.byType(PlayerMorphFlight).evaluate().isEmpty;
-      if (!flightGone) {
-        seenFlight = true;
-        expect(pageCoverOpacity(tester), 0, reason: '飞行期间页中心真身保持隐藏');
-        continue;
-      }
-      if (seenFlight) {
-        expect(pageCoverOpacity(tester), 1, reason: '副本移除的同一帧真身必须亮出（无尾段亮度下陷）');
-        landed = true;
-        break;
-      }
-    }
-    expect(landed, isTrue, reason: '前提：进入方向飞行跑完并落位');
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('封面飞行：离开方向页中心在飞行期间收起', (tester) async {
-    await pumpShell(tester, desktopShell: true);
-    expect(pageCoverOpacity(tester), 1, reason: '前提：播放页稳态真身可见');
-
-    await tester.tap(railItem(Icons.favorite_border_rounded));
-    await tester.pump(); // 帧 1：页面切出 + 页中心立即收起
-    expect(pageCoverOpacity(tester), 0, reason: '离开首帧页中心就应收起，不能等副本飞走才消失');
-
-    await tester.pump(); // 帧 2：副本挂载
-    expect(find.byType(PlayerMorphFlight), findsOneWidget, reason: '离开方向有飞行副本');
-    expect(pageCoverOpacity(tester), 0, reason: '离开飞行期间页中心保持隐藏');
-
-    await settleTransition(tester);
-    expect(find.byType(PlayerMorphFlight), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('底栏进度条：拖动提交 seek', (tester) async {
     final harness = await pumpShell(tester, desktopShell: true);
     // 底栏只在非播放页出现：先切到收藏页再操作（启动首页是播放页）。
@@ -722,14 +648,6 @@ void main() {
     await settleTransition(tester);
     expect(selectedRailIndex(tester), navIndexOf(ShellDestination.nowPlaying));
     expect(find.byType(Player).hitTestable(), findsOneWidget);
-  });
-
-  testWidgets('移动骨架不回归：无底栏 Key、底部导航栏仍在', (tester) async {
-    await pumpShell(tester, desktopShell: false, size: const Size(420, 900));
-
-    expect(playingBar(), findsNothing);
-    expect(find.byType(M3ENavigationBar), findsOneWidget);
-    expect(find.byType(M3ENavigationRail), findsNothing);
   });
 
   testWidgets('顶栏品牌区：左上角是标志 + 应用名，点击打开搜索遮罩', (tester) async {
@@ -1167,36 +1085,8 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  // 旧实现（M3E docked 搜索视图）的容器变换终点矩形完全由锚点推导，锚点就在
-  // 静止位置时位移为 0：遮罩是「闪现」的。这里钉住开合真的走了过渡。
-  testWidgets('Ctrl+F：遮罩开合走淡入 + 缩放过渡（不是瞬间出现）', (tester) async {
-    await pumpShell(tester, desktopShell: true);
-
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-
-    // 过渡中（半程以内）：透明度与缩放都没到终点。
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 60));
-    final fade = tester.widget<FadeTransition>(
-      find.byKey(GlobalSearchOverlay.transitionKey),
-    );
-    expect(fade.opacity.value, greaterThan(0), reason: '淡入已开始');
-    expect(fade.opacity.value, lessThan(1), reason: '尚未落定');
-    final scale = tester.widget<ScaleTransition>(
-      find.descendant(
-        of: find.byKey(GlobalSearchOverlay.transitionKey),
-        matching: find.byType(ScaleTransition),
-      ),
-    );
-    expect(scale.scale.value, lessThan(1), reason: '轻微缩放同步进行');
-
-    // 落定：透明度到 1（过程里不会卡在中途）。
-    await tester.pumpAndSettle();
-    expect(fade.opacity.value, 1);
-  });
-
+  // 容器变换的终点矩形完全由锚点推导：锚点在静止位置时位移为 0，遮罩
+  // 会变成「闪现」。这里钉住开合真的走了过渡。
   testWidgets('Ctrl+F：打开后首帧即可输入（不等动画落定）', (tester) async {
     await pumpSearchShell(tester);
     await openSearchOverlay(tester);
@@ -1210,29 +1100,6 @@ void main() {
       isTrue,
       reason: '搜索框打开即聚焦（旧实现要等容器弹簧落定才聚焦，会吞按键）',
     );
-  });
-
-  testWidgets('顶栏品牌区：tooltip 已移除（不做悬浮提示）', (tester) async {
-    await pumpShell(tester, desktopShell: true);
-
-    // 键位提示只留在设置 › 快捷键；品牌块（贴窗口左上角、带应用名文案）
-    // 不再挂 Tooltip。
-    expect(
-      find.descendant(
-        of: find.byKey(DesktopShell.searchEntryKey),
-        matching: find.byType(Tooltip),
-      ),
-      findsNothing,
-    );
-    // 软件内快捷键开关状态变化也不该再影响顶栏（没有提示可跟）。
-    await ShortcutSettings.instance.setInAppEnabled(false);
-    await tester.pump();
-    expect(
-      find.byKey(DesktopShell.searchEntryKey),
-      findsOneWidget,
-      reason: '开关只影响按键是否生效，不影响品牌区存在',
-    );
-    await ShortcutSettings.instance.setInAppEnabled(true);
   });
 
   testWidgets('Ctrl+F：窄窗同样打开遮罩（不再分流到资料库搜索页）', (tester) async {

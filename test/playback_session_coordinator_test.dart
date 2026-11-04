@@ -577,7 +577,7 @@ void main() {
     expect(backend.calls, ['play']);
     expect(store.saves, hasLength(2), reason: '播放是动作，提交一次进度');
 
-    // 已在播：幂等，不再下发（旧 handler 的 hasTrack && !isPlaying 口径）。
+    // 已在播：幂等，不下发播放命令。
     backend.emit(_live(a, playing: true, position: const Duration(seconds: 1)));
     expect(await session.play(), PlaybackCommandOutcome.none);
     expect(backend.calls, ['play']);

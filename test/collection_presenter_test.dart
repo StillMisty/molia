@@ -470,7 +470,7 @@ void main() {
         [add(), removeFavorite()],
         reason: '本地音源不提供换源',
       );
-      // 自建列表 id 尚未落定：只有加入列表（与旧实现一致）。
+      // 自建列表 id 尚未落定：只提供加入列表。
       expect(
         presenter.rowActionsFor(
           trackRow,

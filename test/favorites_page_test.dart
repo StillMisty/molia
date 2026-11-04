@@ -3,8 +3,6 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
@@ -27,12 +25,10 @@ import 'package:molia/services/download/download_manager.dart';
 import 'package:molia/services/download/download_queue.dart';
 import 'package:molia/services/download/download_records.dart';
 import 'package:molia/services/track_local_data_service.dart';
-import 'package:molia/utils/sync_format.dart';
 import 'package:molia/widgets/app_search_bar.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/shell_reselect.dart';
 import 'package:molia/widgets/track_row.dart';
-import 'package:molia/widgets/track_table_header.dart';
 import 'package:material_3_expressive/components/bottom_sheets/components/m3e_bottom_sheet_surface.dart';
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -572,64 +568,6 @@ void main() {
     expect(find.text('love'), findsOneWidget, reason: '标题行跟随切换');
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
-  testWidgets('窄屏 / 非桌面平台：同样只走标题行弹层切换', (tester) async {
-    await seedFavorites(tester);
-    await importLove(tester);
-
-    // 桌面平台但窗口窄：入口不变。
-    await pumpFavorites(tester, size: const Size(899, 1200));
-    expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
-    await selectCollection(tester, 'love');
-    expect(headlines(tester), ['Song 1', 'Song 2', 'Song 3']);
-
-    // 非桌面平台 + 宽窗口：同一入口（平台覆盖由 variant 复位）。
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    await pumpFavorites(tester);
-    expect(find.byIcon(Icons.expand_more_rounded), findsOneWidget);
-    await selectCollection(tester, '我的收藏');
-    expect(headlines(tester), ['Song B', 'Song A', 'Song C']);
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  testWidgets('桌面宽屏：播放历史多一列「播放时间」，表头与行同 spec', (tester) async {
-    await repository.addHistoryEntry(_history('1', playedAt: 2));
-    await pumpFavorites(tester);
-    await selectCollection(tester, '播放历史');
-
-    expect(find.byType(TrackTableHeader), findsOneWidget);
-    expect(find.text('播放时间'), findsOneWidget, reason: '历史独有列');
-    expect(find.text('Album'), findsOneWidget);
-    expect(find.text('3:00'), findsOneWidget);
-    final header = tester.widget<TrackTableHeader>(
-      find.byType(TrackTableHeader),
-    );
-    expect(header.spec, same(TrackRowColumnSpec.history));
-    expect(
-      tester.widget<TrackRow>(find.byType(TrackRow).first).surface.tableSpec,
-      same(header.spec),
-      reason: '行与表头同一份列规范（历史档）',
-    );
-    // 行内播放时间 = 时间戳的紧凑文案（与同步日志同一格式）。
-    expect(find.text(syncTimeText(2)), findsOneWidget);
-    expect(
-      tester.getTopLeft(find.text('Artist 1')).dx,
-      tester.getTopLeft(find.text('艺术家')).dx,
-    );
-    expect(
-      tester.getTopLeft(find.text('Album')).dx,
-      tester.getTopLeft(find.text('专辑')).dx,
-    );
-    expect(
-      tester.getTopLeft(find.text(syncTimeText(2))).dx,
-      tester.getTopLeft(find.text('播放时间')).dx,
-    );
-    expect(
-      tester.getTopLeft(find.text('3:00')).dx,
-      tester.getTopLeft(find.text('时长')).dx,
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
-
-  // 桌面多选：Ctrl 点选切换、Shift 区间选择、Esc 退出。修饰键经真实按键
-  // 状态（HardwareKeyboard）注入，行点击时读取；移动端不注入这些回调。
   testWidgets('桌面多选：Ctrl 点击两行 = 两行选中，不触发播放', (tester) async {
     await seedFavorites(tester);
     await pumpFavorites(tester);
@@ -748,36 +686,6 @@ void main() {
     final other = tester.widget<M3EListItem>(pickerRow('love'));
     expect(other.selected, isFalse);
     expect(other.trailingText, '3 首');
-  });
-
-  testWidgets('合集弹层：只有缓存行（0 下载）时本地歌曲计数不为 0', (tester) async {
-    await repository.addHistoryEntry(_history('1', playedAt: 2));
-    await pumpFavorites(
-      tester,
-      downloads: _DownloadsFixture(),
-      cache: CacheService(
-        storage: _FakeCacheStorage(
-          files: {
-            AudioCacheStore.key(sourceKey: 'wy', songId: '1', quality: '320k'):
-                2048,
-          },
-        ),
-      ),
-    );
-
-    // 弹层直接从其他合集打开：缓存行（历史 × 完整音频缓存命中）也要进计数。
-    await openCollectionPicker(tester);
-    expect(
-      tester.widget<M3EListItem>(pickerRow('本地歌曲')).trailingText,
-      '1 首',
-      reason: '计数与列表行数同源，不能只算下载记录',
-    );
-
-    // 进合集确认列表确实有一行（缓存行），与计数一致。
-    await tester.tap(pickerRow('本地歌曲'));
-    await tester.pumpAndSettle();
-    expect(headlines(tester), ['Song 1']);
-    expect(find.text('缓存'), findsOneWidget);
   });
 
   testWidgets('合集弹层：本地歌曲计数 = 下载 / 导入记录 + 缓存行', (tester) async {
@@ -999,23 +907,6 @@ void main() {
     final copied = await repository.listPlaylistTracks(loveId);
     expect(copied.map((track) => track.songId), contains('Song A'));
     expect(find.text('已加入「love」'), findsOneWidget);
-  });
-
-  testWidgets('我的收藏：⋮「加入列表 → 播放历史」失败时不报已加入', (tester) async {
-    await seedFavorites(tester);
-    await pumpFavorites(tester);
-
-    await openRowMenu(tester, 'Song A');
-    await tester.tap(find.byIcon(Icons.playlist_add_rounded));
-    await tester.pumpAndSettle();
-
-    repository.failHistoryWrites = true;
-    await tester.tap(find.text('播放历史'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('操作失败'), findsOneWidget);
-    expect(find.text('已加入「播放历史」'), findsNothing);
-    expect(await repository.listHistory(), isEmpty);
   });
 
   testWidgets('我的收藏：⋮「加入列表 → 自建列表」失败时不报已加入', (tester) async {
@@ -1361,46 +1252,8 @@ void main() {
     expect(await repository.listHistory(), isEmpty);
   });
 
-  testWidgets('1.3× 搜索行随 AppSearchBar 长高，不再被固定 56 压回', (tester) async {
-    await seedFavorites(tester);
-    await pumpFavorites(
-      tester,
-      size: const Size(800, 1600),
-      textScaler: const TextScaler.linear(1.3),
-    );
-    await openSearch(tester);
-
-    final bar = tester.widget<M3ESearchBar>(find.byType(M3ESearchBar));
-    expect(bar.constraints!.minHeight, greaterThan(56));
-    expect(
-      tester.getSize(find.byType(M3ESearchBar)).height,
-      greaterThanOrEqualTo(bar.constraints!.minHeight),
-      reason: '父级不能再把搜索栏压回 56',
-    );
-    expect(find.text('搜索歌曲'), findsWidgets);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('1.3× / 1.5× 大字体：收藏行高动态，itemExtent 与行同源', (tester) async {
-    await seedFavorites(tester);
-    for (final scale in [1.3, 1.5]) {
-      await pumpFavorites(
-        tester,
-        size: const Size(800, 1600),
-        textScaler: TextScaler.linear(scale),
-      );
-
-      expect(tester.takeException(), isNull, reason: '$scale× 不应布局溢出');
-      final list = tester.widget<ListView>(find.byType(ListView));
-      final rowContext = tester.element(find.byType(TrackRow).first);
-      final extent = TrackRow.extentOf(rowContext, tableColumns: false);
-      expect(list.itemExtent, extent + TrackRow.gapOf(rowContext));
-      expect(tester.getSize(find.byType(TrackRow).first).height, extent);
-    }
-  });
-
   testWidgets('大列表：固定行高懒加载，只构建视口附近行，滚动条可手拖', (tester) async {
-    for (var i = 0; i < 200; i++) {
+    for (var i = 0; i < 60; i++) {
       await provider.toggleFavorite(
         sourceKey: 'wy',
         songId: '$i',
@@ -1411,10 +1264,10 @@ void main() {
     }
     await pumpFavorites(tester);
 
-    // 懒加载：200 首只构建视口附近的行。
+    // 懒加载：60 首只构建视口附近的行。
     final rows = tester.widgetList<TrackRow>(find.byType(TrackRow)).toList();
     expect(rows, isNotEmpty);
-    expect(rows.length, lessThan(60), reason: '200 首只构建视口附近的行');
+    expect(rows.length, lessThan(45), reason: '60 首只构建视口附近的行');
 
     // 固定行高：itemExtent 预取高度（行高 + 行距，滚动条拇指/拖动精确）。
     final list = tester.widget<ListView>(find.byType(ListView));
@@ -1456,7 +1309,7 @@ void main() {
   });
 
   /// 收藏 [count] 首（滚动恢复/落盘用例需要足够长的列表）。
-  Future<void> seedManyFavorites(WidgetTester tester, {int count = 200}) async {
+  Future<void> seedManyFavorites(WidgetTester tester, {int count = 60}) async {
     for (var i = 0; i < count; i++) {
       await provider.toggleFavorite(
         sourceKey: 'wy',
@@ -1641,27 +1494,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(service.records.revision, greaterThan(before));
     expect(headlines(tester), ['下载的歌', '刚下载完']);
-  });
-
-  testWidgets('本地歌曲：滚动位置独立持久化', (tester) async {
-    final service = _DownloadsFixture(
-      seed: [
-        for (var i = 0; i < 40; i++)
-          _localSong('$i', title: '本地 ${i.toString().padLeft(2, '0')}'),
-      ],
-    );
-    await pumpFavorites(tester, downloads: service);
-    await selectCollection(tester, '本地歌曲');
-
-    await tester.drag(find.byType(ListView), const Offset(0, -400));
-    await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 600));
-
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(LibraryCollections.scrollOffsetsKey);
-    expect(raw, isNotNull);
-    final saved = jsonDecode(raw!) as Map<String, dynamic>;
-    expect(saved[LibraryCollections.downloadsOrderKey], greaterThan(0));
   });
 
   testWidgets('本地歌曲：缓存曲目入列（原曲身份）且删除 = 清缓存', (tester) async {

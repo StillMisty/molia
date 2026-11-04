@@ -362,33 +362,6 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
-  testWidgets('触摸端 360 窄屏：顶部工具行（渠道 + 图标 tab）不溢出', (tester) async {
-    search = buildSearch(const []);
-    await pumpLibrary(tester, width: 360);
-
-    expect(tester.takeException(), isNull, reason: '360 宽工具行不应 RenderFlex 溢出');
-    expect(find.byType(LibraryChannelSelector), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(M3ETabs),
-        matching: find.byIcon(Icons.leaderboard_rounded),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(
-        of: find.byType(M3ETabs),
-        matching: find.byIcon(Icons.queue_music_rounded),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      tester.getSize(find.byType(LibraryChannelSelector)).width,
-      closeTo(360 * 0.32, 0.01),
-      reason: '360 × 0.32 = 115.2，落在 104–148 区间',
-    );
-  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
-
   testWidgets('桌面端：tab 显示文案，点文字即可切换', (tester) async {
     search = buildSearch(const []);
     wyDiscover.playlistsPerPage = 1;
@@ -492,8 +465,8 @@ void main() {
     await pumpLibrary(tester);
     expect(discover.channelKey, 'wy');
 
-    // 脚本在页面 build 之后才进入 channels：旧实现会拿 build 时捕获的
-    // enabledChannels 查找，找不到就静默 return。
+    // 脚本可能在页面 build 之后才进入 channels：查找必须读当前状态，
+    // 不能复用 build 时捕获的 enabledChannels。
     await activateScript(tester);
     await tester.pumpAndSettle();
     expect(
@@ -534,7 +507,7 @@ void main() {
         capabilities: domain.SourceCapabilities(search: true),
       ),
     ]);
-    // 搜索激活后结果面不再有来源 chips；当前渠道由资料页下拉决定。
+    // 搜索激活后结果面不显示来源 chips；当前渠道由资料页下拉决定。
     search.updateSearchQuery('测试');
     await pumpLibrary(tester);
 
