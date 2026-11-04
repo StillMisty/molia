@@ -1611,7 +1611,7 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   - 子页手势：弹层 `predictiveBackShrinkX/Y` 归 0，只显示与 push 一致的
     FadeForwards 页面退场；提交只退子页，弹层保留（guard 读 coordinator 返回 false）。
   - 首屏手势：弹层正常收缩，提交关闭设置。
-  护栏见 `test/settings_page_test.dart` 的「子页预测返回由页面接管」「根导航器上方
+  护栏见 `test/settings_page_slow.dart` 的「子页预测返回由页面接管」「根导航器上方
   dialog」两组用例；协议本身由 `test/settings_sheet_back_coordinator_test.dart`
   直接覆盖（含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；

@@ -134,7 +134,7 @@
 25. **M3E 分段按钮与下拉菜单的两个暗坑**（设置页行组件已收口）：
     `M3ESegmentedButton` 内部是 `Stack + Positioned.fill + Row(mainAxisSize.min)`，
     放松约束的父级（`Align` / `Row` 尾位）会塌成零宽并溢出，必须给显式/紧约束宽度
-    （用 `SettingsChoiceRow`；回归见 `test/widgets/settings_choice_row_test.dart`）。
+    （用 `SettingsChoiceRow`；回归见 `test/widgets/settings_choice_row_slow.dart`）。
     `M3EDropdownMenu` 单选必须设 `fieldStyle.hintText`，否则未选中时显示包内英文兜底
     `Select`（用 `SettingsDropdownRow`，它统一填标题提示）。
 26. **新 worktree 的 Android 构建先对齐 Gradle wrapper**：`/android/gradle/` 被
@@ -454,7 +454,7 @@
     而引擎测试各自注入 journal（或不需要）、组合根冒烟测试又没覆盖
     `buildSyncStack`——缺陷因此长期不可见。教训与契约：
     - 「可选注入的降级路径」必须有**组合根级**断言（现由
-      `SyncEngine.incrementalEnabled` + `test/app/bootstrap_smoke_test.dart`
+      `SyncEngine.incrementalEnabled` + `test/app/bootstrap_smoke_slow.dart`
       的 `syncStack` 用例守住），不能只靠单元测试；
     - 新增此类「注入了才走快路」的参数时，同步补一条组合根断言；
     - 症状排查入口：同步日志页每轮 `durationMs` 与 `bytesOut`（全量模式下
@@ -514,7 +514,7 @@
       消费要经 `GestureBinding.instance.pointerSignalResolver` 占住这次信号（否则同一次
       滚轮顺带把外层竖向页面带走，哪怕这一格还没攒够）、翻卡动画进行中与贴边方向不要
       消费（让给外层滚动）、按累计阈值 + 动画去重（一次惯性连翻好几张）。
-    回归：`test/widgets/ai_dj_carousel_test.dart`（发现页卡片流两个平台形态都覆盖）。
+    回归：`test/widgets/ai_dj_carousel_slow.dart`（发现页卡片流两个平台形态都覆盖）。
 55. **`M3EMenu` 只能贴锚点组件的矩形弹出，按鼠标落点弹要绕开 `M3EMenu.entries`**：
     `anchorBuilder` 锚定的是某个 widget 的矩形；行表面右键只拿到一个坐标，没有对应
     组件。按落点弹用 `showM3EMenu` + 零尺寸 `Rect.fromLTWH(x, y, 0, 0)` 作锚点
@@ -554,7 +554,7 @@
     （`_tryFocusViewField` 挂在弹簧的 TickerFuture 上），Ctrl+F 之后立刻打字的按键
     会被吞掉（实测 5 个字符丢 2 个）。包内没有暴露动画 / 聚焦钩子，遮罩要动效与
     「打开即可输入」只能自建 route（出现 / 消失自己走 scrim 淡入 + 内容淡入轻微缩放，
-    输入框首帧 autofocus）。回归：`test/app/desktop_shell_test.dart` 的
+    输入框首帧 autofocus）。回归：`test/app/desktop_shell_slow.dart` 的
     「遮罩开合走淡入 + 缩放过渡」「打开后首帧即可输入」两条。
 
 58. **局部 `DefaultTextStyle` / `AnimatedDefaultTextStyle` 是「替换」不是合并**：
@@ -563,7 +563,7 @@
     「设置里选了字体，只有这块内容不跟随」（歌词行曾整段中招）。局部样式必须从环境
     派生：`DefaultTextStyle.of(context).style.copyWith(…)`，只覆盖要改的属性；
     `Text(style:)` / `Text.rich` 是**合并**，本身安全，但在被替换过的环境样式下也会
-    一起丢字体——先修替换点。回归：`test/widgets/lyrics_widget_test.dart` 的
+    一起丢字体——先修替换点。回归：`test/widgets/lyrics_widget_slow.dart` 的
     「歌词行跟随应用字体：主行 / 逐字 / 翻译 / 罗马音」。
 59. **Windows 任务栏的图标与名字来自「应用身份」，不是现取 exe 资源**：任务栏上有
     三条取图路径，互不共享——按钮走窗口图标（类图标 / `WM_SETICON`）、悬浮预览
@@ -671,7 +671,7 @@
     `PeerJournalNames.parse` 识别，**不列出、不读取、也不被 `deleteRemote`
     删除**（云端会一直留着）。不要为了「兼容」补迁移 / 双协议分支：混版本
     本来就不互相发现，补一条旧路径反而会把旧数据重新放进新协议的语义里。
-    回归：`test/sync_state_store_test.dart`、`test/sync_nearby_pairing_test.dart`、
+    回归：`test/sync_state_store_test.dart`、`test/sync_nearby_pairing_slow.dart`、
     `test/lan_pairing_transport_test.dart`、`test/lan_sync_transport_test.dart`
     的旧路径 / 旧状态 / 一键配对用例。
 67. **`MSD/1` 发现认证有固定顺序：先来源限流 → 验 MAC → 再解析 JSON**：
