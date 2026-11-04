@@ -91,8 +91,7 @@ shell 按 AUMID 解析并**缓存**的应用身份图标——旧构建（2026-1
 ## 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：全绿（2322 条），含 `test/services/taskbar_thumb_bar_slow.dart`
-  的通道契约（字段名 / 按钮 id / 幂等 / 非 Windows 空操作）；
+- `flutter test --no-pub`：全绿；
 - `tool/agent/test.sh linux`：端到端通过（非 Windows 平台空操作，托盘 / 窗口用例不受影响）；
 - CI 试构建（`gh workflow run ci.yml --ref feat/windows-taskbar`，run 39144947225）：
   `Analyze / Test` 与 `Windows 试构建` 两个 job 全绿——Windows runner 的 C++ 编译通过、

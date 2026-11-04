@@ -68,7 +68,6 @@ flutter test --no-pub
 - `test/playback/playback_power_policy_cases.dart`：后台门控组合与幂等通知；
 - `test/services/playback_observer_test.dart`：移动端后台不预取封面、回前台补；
 - `test/services/artwork_palette_service_test.dart`：后台无悬浮窗不取色、开悬浮窗允许；
-- `test/app/lyrics_session_wiring_cases.dart`：后台无输出不取词、回前台补、有输出照常；
 - `test/playback/next_track_preloader_test.dart`：直链仍预热、字节预取可门控；
 - `test/playback/sleep_timer_test.dart`：前台 arm 不持锁、退后台重排持锁。
 

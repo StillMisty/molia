@@ -16,8 +16,7 @@ compileSdk/targetSdk 37，minSdk 35；NDK 30.0.16248370。这里是版本来源�
 
 ```bash
 flutter analyze --no-pub   # 必须 0 error / 0 warning
-flutter test --no-pub      # 默认快全集（忽略 *_slow.dart，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
-flutter test --no-pub test/favorites_page_slow.dart  # 慢用例按需单跑（UI / 动画 / 平台专项）
+flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
 tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
 tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
 tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/history/session/mock-source/status/clear/restore
@@ -90,8 +89,6 @@ sources/playback。
 - 测试按模块聚合：小用例并入同模块 `*_test.dart`，`*_cases.dart` 只作为聚合套件的用例库
   （不被 `flutter test` 单独发现）。每个测试文件都有独立的 engine/kernel 装载开销（~1s，
   与文件大小无关），拆得越碎全量越慢；
-- 默认 `flutter test` 只跑核心不变量与快速回归；UI / 动画 / 平台专项等慢用例以
-  `*_slow.dart` 存放，不参与默认发现，改动相关模块时按文件显式跑；
 - Git：功能分支（主分支 `main`），提交 `type(scope): 描述`；密钥不进仓库。
 
 ## 领域文档与技能

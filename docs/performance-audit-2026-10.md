@@ -185,8 +185,7 @@ work >16.7ms**；`totalSpan` 的 20ms+ 是帧请求到呈现的延迟（约 1% �
   评论区头像等没有传，按原图解码。
 
 现改为：本地封面包 `ResizeImage.resizeIfNeeded`；远端封面在调用方没给
-尺寸时按 `width/height × devicePixelRatio` 兜底。单测
-`test/widgets/app_network_image_slow.dart` 覆盖两条路径。
+尺寸时按 `width/height × devicePixelRatio` 兜底。
 
 这不会改变显示内容，收益主要在解码 CPU 与图片内存；Windows 同口径复测
 （多轮）没有帧回退：work p95 2.5–2.6ms、p99 3.0–3.7ms、jank 0。
