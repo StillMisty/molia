@@ -925,6 +925,11 @@ void main() {
     );
     expect(editable.focusNode.hasFocus, isTrue, reason: '选择渠道后焦点还给输入框');
     expect(editable.controller.text, 'hello');
+    expect(
+      editable.controller.selection,
+      const TextSelection.collapsed(offset: 5),
+      reason: '切渠道后不保留打开时的全选，光标落在末尾',
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();

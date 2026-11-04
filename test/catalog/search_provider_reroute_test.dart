@@ -553,6 +553,8 @@ void main() {
     expect(provider.hasActiveSearchSource, isFalse);
     expect(provider.supportedSearchKinds, isEmpty);
     expect(provider.songGroups, isEmpty, reason: '旧渠道结果已清空');
+    expect(provider.isSearchPending, isFalse, reason: '不可搜索渠道不能永久 pending');
+    expect(provider.isSearchBusy, isFalse);
 
     provider.submitSearch('hello');
     await Future<void>.delayed(const Duration(milliseconds: 10));

@@ -234,7 +234,7 @@ class _LibraryState extends State<Library> {
               multiChannel: multiChannel,
               showTabBar: false,
               gutter: gutter,
-              onSelected: (key) => _selectChannel(key, enabledChannels),
+              onSelected: _selectChannel,
             ),
             Expanded(
               child: Center(
@@ -272,7 +272,7 @@ class _LibraryState extends State<Library> {
             multiChannel: multiChannel,
             showTabBar: showTabBar,
             gutter: gutter,
-            onSelected: (key) => _selectChannel(key, enabledChannels),
+            onSelected: _selectChannel,
           ),
           Expanded(
             child: showTabBar
@@ -358,19 +358,13 @@ class _LibraryState extends State<Library> {
     return index >= 0 ? index : 0;
   }
 
-  void _selectChannel(String key, List<SourceDescriptor> enabledChannels) {
-    SourceDescriptor? entry;
-    for (final candidate in enabledChannels) {
-      if (candidate.key == key) {
-        entry = candidate;
-        break;
-      }
-    }
-    if (entry == null) return;
-    // 全局只有一个当前渠道：发现内容与搜索一起切；搜索侧会清空旧结果并按
-    // 当前关键词在新渠道重搜（不支持搜索的渠道只清空，由空态兜底）。
-    context.read<DiscoverProvider>().selectChannel(entry.key);
-    context.read<SearchProvider>().setActiveSource(entry.key);
+  void _selectChannel(String key) {
+    if (key.isEmpty) return;
+    // 不再用 build 时捕获的 enabledChannels 做二次查找：脚本渠道可能在
+    // 页面 build 之后才加入列表，旧快照会找不到 entry 而静默忽略选择。
+    // 下拉本身只列启用渠道；这里直接切发现内容与搜索。
+    context.read<DiscoverProvider>().selectChannel(key);
+    context.read<SearchProvider>().setActiveSource(key);
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {

@@ -514,6 +514,31 @@ void main() {
     expect(find.text(l10n.searchNoSourcesTitle), findsNothing);
   });
 
+  testWidgets('有查询时切到不可搜索渠道：遮罩空态且不永久 loading', (tester) async {
+    source.onSearch = (query) async =>
+        SearchResult(items: [track('a')], total: 1);
+    await pumpView(
+      tester,
+      SearchResultsView(
+        variant: SearchResultsVariant.docked,
+        onPlay: (_) {},
+        onOpenAllResults: () {},
+      ),
+      width: 900,
+    );
+    search.submitSearch('hello');
+    await tester.pumpAndSettle();
+    expect(search.hasActiveSearchSource, isTrue);
+
+    search.setActiveSource('wy');
+    await tester.pumpAndSettle();
+
+    expect(search.isSearchPending, isFalse);
+    expect(search.isSearchBusy, isFalse);
+    expect(find.text(l10n.searchChannelUnsupported), findsOneWidget);
+    expect(find.byType(M3EProgressIndicator), findsNothing);
+  });
+
   testWidgets('遮罩版式：无关键词也会显示当前渠道不支持搜索', (tester) async {
     await pumpView(
       tester,
