@@ -210,7 +210,9 @@ class AiRecommendationStore {
 
   final SharedPreferences? _preferences;
   final DateTime Function() _clock;
-  final Future<Directory> Function()? _directoryProvider;
+
+  /// 覆盖批次文件目录；返回 null 表示「没有文件后端」，调用方退回 prefs。
+  final Future<Directory?> Function()? _directoryProvider;
 
   /// 目录解析只算一次：解析失败后本实例退回旧 prefs 键，避免每次读写都
   /// 重复调用 path_provider（也避免测试里反复走平台通道）。
@@ -590,7 +592,9 @@ class AiRecommendationStore {
 
   Future<Directory?> _resolveBatchDirectory() async {
     try {
-      return await (_directoryProvider ?? _defaultBatchDirectory)();
+      final provider = _directoryProvider;
+      if (provider != null) return await provider();
+      return await _defaultBatchDirectory();
     } catch (_) {
       // path_provider 不可用（单元测试 / 极简平台）：调用方退回旧 prefs 键。
       return null;

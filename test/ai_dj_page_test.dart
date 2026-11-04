@@ -21,6 +21,7 @@ import 'package:molia/services/ai/ai_settings_store.dart';
 import 'package:molia/widgets/ai_dj_track_tile.dart';
 import 'package:molia/widgets/playing_indicator.dart';
 
+import 'support/ai_dj_test_support.dart';
 import 'support/fake_ai_generator.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
@@ -81,6 +82,7 @@ void main() {
       settingsStore: AiSettingsStore(
         settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
       ),
+      recommendationStore: testAiRecommendationStore(preferences: prefs),
     );
     await provider.init();
   }

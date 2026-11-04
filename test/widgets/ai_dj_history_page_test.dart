@@ -13,6 +13,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 
+import '../support/ai_dj_test_support.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -69,6 +70,7 @@ void main() {
       settingsStore: AiSettingsStore(
         settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
       ),
+      recommendationStore: testAiRecommendationStore(preferences: prefs),
     );
     await provider.init();
   }
@@ -118,11 +120,16 @@ void main() {
   }
 
   /// 页面动作是 unawaited 的 provider 调用：让真实异步（存储 / 播放）收尾。
+  ///
+  /// 存储链路要多轮「真实事件循环 + 假时钟」交替才会推进完（单轮 runAsync
+  /// 只推开第一层 await），因此循环几轮再 settle。
   Future<void> settleAction(WidgetTester tester) async {
-    await tester.pump();
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 20)),
-    );
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
     await tester.pumpAndSettle();
   }
 

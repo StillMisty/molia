@@ -12,6 +12,7 @@ import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/services/ai/ai_settings_store.dart';
 
+import 'support/ai_dj_test_support.dart';
 import 'support/fake_ai_generator.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
@@ -48,6 +49,7 @@ void main() {
       settingsStore: AiSettingsStore(
         settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
       ),
+      recommendationStore: testAiRecommendationStore(preferences: prefs),
     );
     await provider.init();
   }

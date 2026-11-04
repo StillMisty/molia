@@ -22,6 +22,7 @@ import 'package:molia/widgets/ai_dj_waiting.dart';
 import 'package:molia/widgets/empty_state.dart';
 import 'package:molia/widgets/library_search_tab.dart';
 
+import '../support/ai_dj_test_support.dart';
 import '../support/fake_ai_generator.dart';
 import '../support/fake_library_repository.dart';
 import '../support/fakes.dart';
@@ -83,6 +84,7 @@ void main() {
       settingsStore: AiSettingsStore(
         settings: testSettingsRegistry(preferences: prefs, secrets: secrets),
       ),
+      recommendationStore: testAiRecommendationStore(preferences: prefs),
     );
     await provider.init();
   }

@@ -970,3 +970,11 @@
     （`PlaybackProvider.playQueueIndex`）。同理，「当前队列为空」只在没有当前曲目
     时成立：最后一首、随机轮末、单曲循环都可能有当前曲目但 `upNext` 为空，空态要
     按 `hasTrack` + 模式分支（列表循环 / 单曲循环 / 随机恢复态各有自己的说法）。
+98. **`testWidgets` 里不要触发真实平台通道 / 文件 IO**：假时钟下 path_provider
+    这类平台通道的回复要走真实事件循环，测试体 `await` 它永远等不到。AI 推荐
+    历史改成文件后端后，`setEnabled` / 删除历史在组件测试里直接挂住（整套表现
+    为卡住或「did not complete」）。组件测试用
+    `test/support/ai_dj_test_support.dart` 的 `testAiRecommendationStore`
+    （显式声明没有文件目录，批次退回已 mock 的 SharedPreferences）。由界面发起
+    的 unawaited 存储动作也要留足「真实事件循环 + 假时钟」交替轮次
+    （`settleAction` 循环推进），单轮 `runAsync` 只推开第一层 await。
