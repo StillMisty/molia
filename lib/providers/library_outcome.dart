@@ -67,10 +67,10 @@ class LibraryMutationOutcome {
 
 /// 一次收藏切换的结果。
 ///
-/// 为什么不是 `bool`：旧接口把仓库异常直接抛给调用方，UI 侧要么 `unawaited`
-/// 吞掉、要么变成未处理异步错误；失败时调用方也拿不到「现在到底收没收藏」。
-/// 这里成功携带切换后的状态、失败携带切换前的状态：页面只按结果提示，图标
-/// 仍由 provider 的真实缓存决定，不会因一次失败翻转。
+/// 为什么不是 `bool`：收藏切换会写仓库，异常直接抛给调用方时，UI 只能
+/// `unawaited` 吞掉或留下未处理异步错误，失败时也拿不到「现在到底收没
+/// 收藏」。这里成功携带切换后的状态、失败携带切换前的状态：页面只按结果
+/// 提示，图标仍由 provider 的真实缓存决定，不会因一次失败翻转。
 class FavoriteToggleOutcome {
   const FavoriteToggleOutcome._(this.isFavorite, this.error);
 

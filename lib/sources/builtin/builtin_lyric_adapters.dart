@@ -1,9 +1,8 @@
 /// 内置平台「曲目 raw → 原生歌词」适配器集合。
 ///
-/// 原来这些字段派发写在 `BuiltinLyricDispatch._fetchFor` 的六路 switch 里，
-/// 导致「平台有没有取词实现」只有派发函数知道，`SourceCapabilities.lyrics`
-/// 只能按「是不是内置平台」一刀切。现在每个实现登记成注册表条目
-/// （[BuiltinPlatforms]），能力位与派发共用同一份事实。
+/// 每个平台实现登记成 [BuiltinPlatforms] 的注册表条目，能力位与派发共用
+/// 同一份事实：平台有没有取词实现，`SourceCapabilities.lyrics` 与派发结果
+/// 不会分叉。
 ///
 /// 适配器只做字段挑选与结果归一；平台实现自己的失败语义保持不变
 /// （返回 null / 抛错都由 `BuiltinLyricDispatch` 统一收口为 null）。

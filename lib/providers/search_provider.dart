@@ -80,8 +80,8 @@ class SearchProvider extends ChangeNotifier {
 
   /// 输入防抖：300ms 是「停止输入到发请求」的折中。
   ///
-  /// 原值 500ms 在 perf 场景里占首屏搜索墙钟的 90%+（mock 本地音源 1.5ms
-  /// 返回，500ms 全是防抖等待）。300ms 仍能跨过中文输入法的组合键停顿，
+  /// 500ms 在 perf 场景里占首屏搜索墙钟的 90%+（mock 本地音源 1.5ms
+  /// 返回，其余全是防抖等待）。300ms 仍能跨过中文输入法的组合键停顿，
   /// 且在途请求由执行体的 reset 过期丢弃，不会因为请求变多而闪旧结果。
   static const _debounceTime = Duration(milliseconds: 300);
 

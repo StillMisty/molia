@@ -254,8 +254,8 @@ class SyncStateStore
   @override
   int snapshotPushSeq(String kind) => _activityLog.snapshotPushSeq(kind);
 
-  /// 只改内存 + 标脏：发布台账在推送循环里逐载荷记账，由轮末提交统一落盘
-  /// （旧实现每次 mark 都写一次整份状态 JSON，多传输 / 多载荷时写放大）。
+  /// 只改内存 + 标脏：发布台账在推送循环里逐载荷记账，由轮末提交统一落盘，
+  /// 避免多传输 / 多载荷时反复写整份状态 JSON。
   @override
   void setSnapshotPushSeq(String kind, int seq) =>
       _activityLog.setSnapshotPushSeq(kind, seq);

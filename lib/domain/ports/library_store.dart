@@ -11,7 +11,6 @@ abstract interface class LibraryStore {
   /// 变更广播：事件类型即失效范围（见 [LibraryChange]）。
   Stream<LibraryChange> get changes;
 
-  // ── 播放历史 ─────────────────────────────────────────────
   Future<void> addHistoryEntry(PlayHistoryEntry entry);
   Future<int> addHistoryEntries(List<PlayHistoryEntry> entries);
 
@@ -29,15 +28,12 @@ abstract interface class LibraryStore {
   );
   Future<void> clearHistory();
 
-  // ── 列表集合 ─────────────────────────────────────────────
   Future<int> createPlaylist(String name);
   Future<PlaylistInfo?> findPlaylistByName(String name);
   Future<PlaylistInfo?> playlistById(int id);
   Future<List<PlaylistInfo>> listPlaylists();
   Future<void> renamePlaylist(int id, String name);
   Future<void> deletePlaylist(int id);
-
-  // ── 列表曲目 ─────────────────────────────────────────────
 
   /// 列表内曲目，保持展示顺序。
   ///
@@ -73,7 +69,6 @@ abstract interface class LibraryStore {
     bool favoriteChange = false,
   });
 
-  // ── 收藏 ─────────────────────────────────────────────────
   Future<Set<String>> favoriteKeys();
   Future<bool> toggleFavorite({
     required String sourceKey,
@@ -88,7 +83,6 @@ abstract interface class LibraryStore {
   Future<int> addFavorites(List<PlaylistTrack> tracks);
   Future<int> removeFavorites(List<TrackKey> keys);
 
-  // ── 导入 ─────────────────────────────────────────────────
   Future<LxmcImportResult> importLxmcBytes(Uint8List bytes, {String? fileName});
 
   /// 把曲目导入同名列表（不存在则创建；重复导入幂等）。

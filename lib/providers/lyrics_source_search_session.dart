@@ -37,7 +37,7 @@ class LyricsSearchSelection {
   final String provider;
 }
 
-/// 每个提供者的搜索状态（扇出会话的逐源状态，保留旧名字给视图 / 测试）。
+/// 每个提供者的搜索状态（扇出会话的逐源状态；视图与测试沿用此名）。
 typedef ProviderSearchState = FanOutSourceStatus;
 
 enum LyricsSearchEntryType { header, result }

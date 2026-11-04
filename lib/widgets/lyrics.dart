@@ -80,7 +80,7 @@ class _LyricsWidgetState extends State<LyricsWidget>
   /// 当前曲目的会话状态（曲目变化由组合根经 `ensureForTrack` 推进）。
   LyricsState get _session => _lyricsProvider?.state ?? LyricsState.idle;
 
-  /// 会话是否正在加载（渲染侧读取，不再维护标志位）。
+  /// 会话是否正在加载（渲染侧直接读该状态）。
   bool get _isLoading => _session.status == LyricsStatus.loading;
   late final ScrollController _scrollController =
       widget.controller ?? ScrollController();

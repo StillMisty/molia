@@ -456,7 +456,7 @@ class TrackRow extends StatelessWidget {
 
     if (!isDesktopPlatform()) return row;
     if (onSecondaryTap != null) {
-      // 桌面：右键 = 行操作菜单（在落点弹出，行尾不再有 ⋮ 锚点）。外挂一个
+      // 桌面：右键 = 行操作菜单（在落点弹出，行尾没有 ⋮ 锚点）。外挂一个
       // 只声明次级手势的 GestureDetector：主键 / 长按仍归 CardListSurface
       // （M3ECard 的 InkWell 不声明次级手势），两边在竞技场里各认各的按钮，
       // 互不抢手势。

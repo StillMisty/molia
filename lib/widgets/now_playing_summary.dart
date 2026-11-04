@@ -253,7 +253,7 @@ class NowPlayingTrackText extends StatelessWidget {
 ///
 /// 反馈只靠图标态（已收藏 primary / 未收藏 onSurfaceVariant），不弹提示；
 /// 写路径唯一 `LibraryProvider.toggleFavoriteTrack`，宿主不再各自拿仓库。
-/// 没有资料库或当前曲目时整块隐藏（与旧实现一致）。
+/// 没有资料库或当前曲目时整块隐藏。
 ///
 /// 尺寸仍由宿主给出：同一契约在底栏是 44 视觉格，播放页迷你条要缩到
 /// 36/40，版式差异不属于契约。

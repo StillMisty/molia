@@ -34,8 +34,6 @@ class DownloadFileLayout {
   final DownloadSettings? _settings;
   final Logger _logger = Logger('molia.download_file_layout');
 
-  // ── 命名 ────────────────────────────────────────────────
-
   /// 曲目文件名基名：按下载设置模板（默认 `{artist} - {title}`）生成并清洗。
   ///
   /// 未知占位符原样保留（用户可能想要字面量 `{}` 文本，见
@@ -115,7 +113,7 @@ class DownloadFileLayout {
     return candidate;
   }
 
-  // ── 放置（路径约定）──────────────────────────────────────
+  // 放置（路径约定）
 
   /// 音频最终路径（下载根目录下）。
   static String audioPath(String root, String base, String extension) =>
@@ -184,7 +182,7 @@ class DownloadFileLayout {
     }
   }
 
-  // ── 记录引用的文件集（删除 / 清理 / 孤儿判定共用）─────────
+  // 记录引用的文件集（删除 / 清理 / 孤儿判定共用）
 
   /// [record] 引用的本地文件：音频 / 歌词 / 翻译边车 / 封面（按序、跳过空值）。
   static List<String> referencedFiles(DownloadedTrack record) => [
@@ -204,8 +202,6 @@ class DownloadFileLayout {
     final translation = translationLyricPathOf(lyricPath);
     return [?partPath, ?filePath, ?lyricPath, ?translation, ?coverPath];
   }
-
-  // ── 扩展名与清洗 ─────────────────────────────────────────
 
   /// 可下载 / 可导入的音频后缀（小写、不含点）。
   ///

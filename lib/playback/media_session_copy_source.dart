@@ -1,7 +1,7 @@
 /// 生产文案来源：把全局界面语言解析成 [MediaSessionCopy]。
 ///
 /// 只有组合根（系统媒体会话装配）使用它：handler 只收到一个
-/// `ValueListenable<MediaSessionCopy>`，不再直接读 `LanguageService`。语言
+/// `ValueListenable<MediaSessionCopy>`，不直接读 `LanguageService`。语言
 /// 变化时 notifier 重算并通知 handler 重发通知动作文案。
 library;
 
@@ -14,8 +14,8 @@ import 'media_session_copy.dart';
 
 /// 跟随界面语言的文案源（与 `LanguageService.localeNotifier` 同生命周期）。
 ///
-/// 组合根在 `runApp` 前创建一次并注入 handler；进程内不再释放（与语言服务
-/// 的全局 notifier 一致）。测试直接注入自己的 `ValueNotifier<MediaSessionCopy>`。
+/// 组合根在 `runApp` 前创建一次并注入 handler；与语言服务的全局 notifier
+/// 同寿命，进程内不释放。测试直接注入自己的 `ValueNotifier<MediaSessionCopy>`。
 class LocalizedMediaSessionCopy extends ValueNotifier<MediaSessionCopy> {
   LocalizedMediaSessionCopy()
     : super(MediaSessionCopy.of(_currentLocalizations())) {

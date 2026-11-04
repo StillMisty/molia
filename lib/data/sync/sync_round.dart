@@ -244,7 +244,7 @@ class SyncRoundRunner {
       _fingerprintPort?.fingerprint(records) ??
       Future.value(syncFingerprint(records));
 
-  // ---- 入站队列（引擎的合流计时器与轮次共享） ----
+  // 入站队列（引擎的合流计时器与轮次共享）
 
   List<SyncEnvelope> get inbound => _inbound;
 
@@ -260,7 +260,7 @@ class SyncRoundRunner {
     _inbound.insertAll(0, envelopes);
   }
 
-  // ---- 服务端语义（局域网端点 / WebDAV 日志文件） ----
+  // 服务端语义（局域网端点 / WebDAV 日志文件）
 
   Future<SyncEnvelope> serveJournal({required int since}) async {
     final journal = _journal;
@@ -333,8 +333,6 @@ class SyncRoundRunner {
     unawaited(_runtime.stopAll());
   }
 
-  // ---- 名册 ----
-
   void forgetPeer(String deviceId) {
     if (deviceId.isEmpty) return;
     _peersById.remove(deviceId);
@@ -379,8 +377,6 @@ class SyncRoundRunner {
       ..addEntries(recent.map((peer) => MapEntry(peer.deviceId, peer)));
     return recent;
   }
-
-  // ---- 轮次编排 ----
 
   Future<SyncRoundReport> runRound({
     required SyncTrigger trigger,
@@ -711,8 +707,7 @@ class SyncRoundRunner {
     //
     // 这里只改内存名册：轮内的游标 / 台账 / 名册 / 登记一律不落盘，统一由
     // 引擎在 `runRound` 返回后提交一次（UI 命令与传输绑定等生命周期事件仍
-    // 可即时提交）。旧实现每轮在 apply 后与 finally 各保存一次，活跃期 4s
-    // 去抖轮会把整份 sync_state_v2 写两遍，属于写放大回归。
+    // 可即时提交），避免活跃期 4s 去抖轮反复写整份 sync_state_v2。
     if (applyFailures == 0) {
       for (final entry in consumed.pendingCursors.entries) {
         final peer = _peersById[entry.key];
@@ -939,8 +934,6 @@ class SyncRoundRunner {
     );
   }
 
-  // ---- 拉取实现 ----
-
   Future<bool> _pullInto(
     Map<String, SyncTransportAccumulator> accumulators,
     SyncPullRequest request,
@@ -985,7 +978,7 @@ class SyncRoundRunner {
         ..error ??= result.error;
       contact = contact || result.contacted;
       // 失败优先于同名成功：传输明确报告某台设备读取失败时，即使它同时
-      // 出现在 seenIds（旧实现 / 回执文件成功），也不能算成功接触。
+      // 出现在 seenIds（例如回执文件写入成功），也不能算成功接触。
       // 任何成功接触（含未变跳过 / 探测应答）都更新「最近接触」与
       // lastSuccessAt：在线但长期没有内容变化的对端不该被误标失联。
       for (final id in result.seenIds) {
@@ -1359,8 +1352,6 @@ class SyncRoundRunner {
       lastError: issue,
     );
   }
-
-  // ---- 收集 ----
 
   /// 完整备份模块的收集入口（与一轮同步同一份类别过滤与缓存语义）。
   Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(

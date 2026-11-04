@@ -15,9 +15,9 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 桌面全局搜索的组合搜索条：单层胶囊，渠道下拉占据原搜索图标位置。
 ///
-/// 多渠道时整条是一个 M3E 风格胶囊：左侧 tonal 渠道 chip → 输入 → 清除键；
-/// 不再嵌套第二层 [AppSearchBar]，也不显示搜索图标。单渠道时没有可切换
-/// 目标，回退到 [AppSearchBar]（左侧搜索图标 + 输入占满）。
+/// 多渠道时整条是一个 M3E 风格胶囊：左侧 tonal 渠道 chip → 输入 → 清除键，
+/// 不嵌套第二层 [AppSearchBar]，也不显示搜索图标。单渠道时没有可切换目标，
+/// 回退到 [AppSearchBar]（左侧搜索图标 + 输入占满）。
 class ChannelSearchBar extends StatelessWidget {
   const ChannelSearchBar({
     super.key,

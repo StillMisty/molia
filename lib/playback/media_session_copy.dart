@@ -31,7 +31,7 @@ class MediaSessionCopy {
     playModeShuffle: l10n.playModeShuffle,
   );
 
-  /// 歌手为空时的回退文案（替代 handler 里硬编码的「未知歌手」）。
+  /// 歌手为空时的回退文案。
   final String unknownArtist;
 
   final String favoriteAdd;

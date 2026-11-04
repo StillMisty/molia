@@ -4,9 +4,8 @@ import '../models/sync_pull_plan.dart';
 /// 一轮的显式时间窗口（pull 与 push 共用同一个起点）。
 ///
 /// 局域网按 `presence.lastHeardAt >= 窗口起点` 判定「本轮听到的对端」：
-/// 过去这个起点藏在传输的 `_roundStartedAt` 字段里，由 pull 写入、push 读取，
-/// push 的正确性隐式依赖「本轮刚跑过 pull」。改成由引擎每轮创建一次并显式
-/// 传给两个动作后，传输不再保存跨动作状态，单独调用 push 也有确定语义。
+/// 起点由引擎每轮创建一次并显式传给两个动作，传输不保存跨动作状态，
+/// 单独调用 push 也有确定语义。
 class SyncRoundWindow {
   const SyncRoundWindow({required this.startedAt});
 

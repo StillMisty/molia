@@ -87,8 +87,8 @@ class _SleepTimerExitAppCheckbox extends StatelessWidget {
 
 /// 定时关闭弹层：状态 + 自定义时长入口 + 播完当前歌曲 + 关闭定时。
 ///
-/// 不再提供预设档位 chips：时长只经 [M3ETimePicker] 设置，弹层保持单一
-/// 决策路径，避免「档位选中态 / 自定义 / 播完当前歌曲」三块并列。
+/// 时长只经 [M3ETimePicker] 设置，弹层保持单一决策路径，避免「档位选中态 /
+/// 自定义 / 播完当前歌曲」三块并列。
 class _SleepTimerSheet extends StatelessWidget {
   const _SleepTimerSheet({required this.playback});
 

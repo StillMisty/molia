@@ -40,8 +40,7 @@ import 'sync_peer_dialogs.dart';
 ///
 /// 信任模型：口令即信任根，持有口令的设备完全互信（ADR-0003）。同步何时跑
 /// 由调度器声明式决定，页面不提供「立即同步」这类手动主操作。配对只有一条
-/// 路径：附近设备走 `MSP/1` 发现 + 6 位确认码，点击即发起；旧配对码
-/// （复制 / 粘贴 / 扫码）已删除，不识别、不迁移。
+/// 路径：附近设备走 `MSP/1` 发现 + 6 位确认码，点击即发起。
 class SyncSettingsPage extends StatefulWidget {
   const SyncSettingsPage({super.key});
 

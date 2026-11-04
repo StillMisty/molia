@@ -1,15 +1,13 @@
 /// 音源画像（SourceProfiles）：一次回答「这个源能做什么」。
 ///
-/// 之前同一份「源 × 能力」事实散在四处：`BuiltinPlatforms`（内置平台适配器）、
-/// 激活脚本的 `LxSourceDecl`（action 声明）、`AnyListenSource.isUsable`、以及
-/// `SourceManager.channels` / `_isBuiltinSearchable` 各自再算一遍的可见性与
-/// 路由门。加一个平台要在能力位、渠道、搜索门、歌词/封面派发之间反复对齐。
-///
-/// 本模块把这些输入组合成每个 key 一份不可变 [SourceProfile]：
+/// 每个 key 一份不可变 [SourceProfile]，由四类输入组合而成：
+/// [BuiltinPlatforms]（内置平台适配器）、激活脚本的 `LxSourceDecl`
+/// （action 声明）、`AnyListenSource.isUsable`，以及渠道可见性与路由门。
+/// 能力位 / 渠道 / 搜索门 / 歌词与封面派发读同一份画像，不会各自再算一遍。
 /// - 身份：key / 显示名 / kind；
 /// - 偏好：`enabled`（停用开关）与派生 `visible`（进不进渠道列表）；
 /// - 能力：`SourceCapabilities` 是唯一答案，`searchable` / `canResolveUrl`
-///   直接读能力位，不再维护第二份布尔值；
+///   直接读能力位，没有第二份布尔值；
 /// - 排序：渠道顺序由 `SourcePreferences.sourceOrder` 决定，未登记的 key
 ///   保持原有相对顺序追加。
 ///

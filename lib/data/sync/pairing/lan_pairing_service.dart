@@ -250,8 +250,6 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     }
   }
 
-  // ---- 扫描与 MSP ----
-
   @override
   Future<bool> startScan() async {
     if (_disposed || !_canUsePairing) return false;
@@ -499,8 +497,6 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
       return true;
     });
   }
-
-  // ---- 发起方 ----
 
   @override
   Future<SyncPairingResult> requestPairing(SyncNearbyDevice device) async {
@@ -823,8 +819,6 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
     outgoing.cancelled = true;
     _emitAttempt(outgoing, SyncPairingStatus.cancelled);
   }
-
-  // ---- 接收方 HTTP ----
 
   @override
   Future<PairingHttpResponse> handle(PairingHttpRequest request) async {
@@ -1441,8 +1435,6 @@ class LanPairingService implements SyncPairingPort, PairingHttpHandler {
         peerHttpPort: outgoing.device.httpPort,
         peerProbePort: outgoing.device.probePort,
       );
-
-  // ---- 辅助 ----
 
   Future<Uint8List> _discoveryKey(String passphrase) {
     final provider = runtime.discoveryKey;

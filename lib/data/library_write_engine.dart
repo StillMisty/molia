@@ -80,7 +80,7 @@ class LibraryWriteEngine {
 
   SyncVersion _nextVersion() => _stamps.next();
 
-  // ── 变更事件（五步的最后一步）────────────────────────────
+  // 变更事件（五步的最后一步）
 
   /// 资料库变更广播（事件类型即失效范围，见 [LibraryChange]）。
   Stream<LibraryChange> get changes => _changes.stream;
@@ -92,8 +92,6 @@ class LibraryWriteEngine {
 
   /// 释放资源（关闭变更广播）。
   Future<void> dispose() => _changes.close();
-
-  // ── 播放历史 ─────────────────────────────────────────────
 
   /// 写入/更新时间播放记录（唯一键 `(sourceKey, songId)`），并裁剪到上限。
   ///
@@ -395,8 +393,6 @@ class LibraryWriteEngine {
     notifyChanged(const LibraryChange.history());
   }
 
-  // ── 列表集合 ─────────────────────────────────────────────
-
   Future<int> createPlaylist(String name) async {
     await _ensureReady();
     final db = _db;
@@ -492,8 +488,6 @@ class LibraryWriteEngine {
     });
     notifyChanged(const LibraryChange.playlists());
   }
-
-  // ── 列表曲目 ─────────────────────────────────────────────
 
   /// 列表曲目行的唯一构造处：曲目字段、位置字段与版本列同一口径。
   ///
@@ -1005,8 +999,6 @@ class LibraryWriteEngine {
     return updated > 0;
   }
 
-  // ── 收藏 ─────────────────────────────────────────────────
-
   /// 切换收藏；返回切换后的状态（true = 已收藏）。
   Future<bool> toggleFavorite({
     required String sourceKey,
@@ -1063,8 +1055,6 @@ class LibraryWriteEngine {
     if (playlistId == null) return 0;
     return removeTracksFromPlaylist(playlistId, keys, favoriteChange: true);
   }
-
-  // ── 导入 ─────────────────────────────────────────────────
 
   /// 批量导入列表曲目（跳过重复、追加到末尾；返回实际新增数）。
   ///
@@ -1137,7 +1127,7 @@ class LibraryWriteEngine {
     return imported;
   }
 
-  // ── 同步面复用的写入原语 ─────────────────────────────────
+  // 同步面复用的写入原语
   //
   // 仓库的同步面（应用远端记录）不走五步仪式：版本由远端给（不取号）、
   // 变更由来源设备广播（不追 journal）。墓碑行形状与 syncId 补齐口径
@@ -1181,7 +1171,7 @@ class LibraryWriteEngine {
     }
   }
 
-  // ── 仪式零件（五步的内部实现）────────────────────────────
+  // 仪式零件（五步的内部实现）
 
   /// 记录一条删除墓碑（单条；批量删除走 [_recordTombstones]）。
   Future<void> _recordTombstone(

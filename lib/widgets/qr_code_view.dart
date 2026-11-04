@@ -1,10 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:qr/qr.dart';
 
-/// 二维码视图：`qr` 的轻量绘制，替代只在一处使用的 `qr_flutter`。
+/// 二维码视图：用 `qr` 轻量绘制，只在登录弹层使用，不引入额外组件依赖。
 ///
-/// 与旧 `QrImageView` 的默认口径一致：纠错级别 Low、方形码点、无码点间隙、
-/// 内容四周留 10 逻辑像素白边（页面外层还有一圈背景色 padding）。
+/// 渲染口径：纠错级别 Low、方形码点、无码点间隙、内容四周留 10 逻辑像素
+/// 白边（页面外层还有一圈背景色 padding）。
 class QrCodeView extends StatelessWidget {
   const QrCodeView({
     super.key,

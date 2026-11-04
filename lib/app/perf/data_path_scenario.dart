@@ -122,7 +122,7 @@ Future<void> _run({
       return;
     }
     // 单渠道搜索：固定到 mock 源保持时序确定；未指定 MOLIA_PERF_SOURCE
-    // 时取第一个可搜索渠道（与产品默认一致，不再有「全部来源」）。
+    // 时取第一个可搜索渠道（产品默认没有「全部来源」）。
     final option = _sourceKey.isEmpty
         ? options.first
         : options.firstWhere(

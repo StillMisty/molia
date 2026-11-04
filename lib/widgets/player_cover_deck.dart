@@ -526,7 +526,7 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     _session.setVisible(TickerMode.valuesOf(context).enabled);
   }
 
-  // ── CoverSwapHost：会话的效果宿主 ────────────────────────
+  // CoverSwapHost：会话的效果宿主
   //
   // 会话决定「什么时候」，这里决定「怎么做」：控制器编排、post-frame 调度、
   // 播放命令与父级联动都在这一侧；排序不变量（例如「settling 前先把进度钉回

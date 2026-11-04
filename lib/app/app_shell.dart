@@ -1206,9 +1206,8 @@ final GlobalKey appRootKey = GlobalKey(debugLabel: 'appRoot');
 /// 应用壳接收方配对请求的串行队列。
 ///
 /// 服务在一条请求被应答后会立刻推出下一条（`_presentNext`），而应用壳的
-/// 确认窗这时可能还在关闭动画里：旧实现看到 `_incomingPairingOpen` 仍为真，
-/// 会把第二条直接拒绝。现在先入队，等当前窗真正关闭（`present` 返回）后
-/// 再逐条展示；宿主 context 已不存在时由 [reject] 统一给出拒绝结论。
+/// 确认窗这时可能还在关闭动画里：先入队，等当前窗真正关闭（`present`
+/// 返回）后再逐条展示；宿主 context 已不存在时由 [reject] 统一给出拒绝结论。
 @visibleForTesting
 class IncomingPairingQueue {
   final List<SyncPairingRequest> _pending = [];

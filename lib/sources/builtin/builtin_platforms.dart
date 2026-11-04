@@ -1,11 +1,8 @@
 /// 内置平台的唯一注册表：平台键 / 显示名 / 各能力族适配器的声明处。
 ///
-/// 之前同一份「平台 × 能力族」矩阵散落在
-/// `album_source` / `artist_source` / `comment_source` / `lyric_search` /
-/// `builtin_search` / `discover_source` 的 `supportedKeys` 与各路 switch 里，
-/// 每加一个平台要改七处，且 `SourceManager.capabilitiesFor` 无法与路由门
-/// 保持同一事实。现在只在这里新增/删除平台条目；各 facade 只做参数校验与
-/// 错误语义转换。
+/// 平台键 / 显示名 / 能力族适配器只在这里声明；各 facade 只做参数校验与
+/// 错误语义转换。新增平台时登记一个条目，`SourceManager.capabilitiesFor`
+/// 与路由门自动保持同一事实。
 ///
 /// 能力族保持类型化，刻意不做 `Object` 通用适配器：
 /// - 搜索失败语义是 `SourceSearchResult.failed`（由平台 runner 产出）；
@@ -15,7 +12,7 @@
 ///
 /// 原生歌词 / 封面也在这里登记（`lyric` / `pic`）：它们是
 /// `SourceCapabilities.lyrics` / `artwork` 的唯一事实来源，派发
-/// （`BuiltinLyricDispatch` / `BuiltinPicDispatch`）只查表，不再维护 switch。
+/// （`BuiltinLyricDispatch` / `BuiltinPicDispatch`）只查表。
 library;
 
 import '../../domain/models/album.dart';

@@ -17,7 +17,7 @@ library;
 import '../../domain/models/device_sync.dart';
 import 'settings_key.dart';
 
-// ── 跟人走：主题 / 外观 ──────────────────────────────────────────────
+// 跟人走：主题 / 外观
 const kThemeMode = SettingsKey<String>(
   'theme_mode',
   'system',
@@ -62,7 +62,7 @@ const kCoverStyleScope = SettingsKey<String>(
   category: SyncCategory.settings,
 );
 
-// ── 跟人走：壳 / 语言 / 歌词显示 / 播放偏好 ──────────────────────────
+// 跟人走：壳 / 语言 / 歌词显示 / 播放偏好
 const kAppDisplayTitle = SettingsKey<String?>(
   'app_display_title',
   null,
@@ -161,7 +161,7 @@ const kLyricsDisplaySettings = SettingsKey<String?>(
   category: SyncCategory.settings,
 );
 
-// ── 跟人走：AI 推歌开关与偏好（连接信息见凭证区） ────────────────────
+// 跟人走：AI 推歌开关与偏好（连接信息见凭证区）
 const kAiDjEnabled = SettingsKey<bool>(
   'ai_dj_enabled',
   false,
@@ -182,14 +182,14 @@ const kAiDjFeedbackMemory = SettingsKey<String>(
   category: SyncCategory.settings,
 );
 
-// ── 跟人走：自动换源（播放失败后的自动行为） ────────────────────────
+// 跟人走：自动换源（播放失败后的自动行为）
 const kSourceSwapAutoEnabled = SettingsKey<bool>(
   'source_swap_auto_enabled',
   true,
   category: SyncCategory.settings,
 );
 
-// ── 跟人走：资料库（加入收藏 / 列表的位置） ──────────────────────────
+// 跟人走：资料库（加入收藏 / 列表的位置）
 
 /// 新曲目加入收藏 / 自建列表时放的位置：`top` = 列表开头（默认），
 /// `bottom` = 列表末尾。
@@ -199,7 +199,7 @@ const kLibraryAddPosition = SettingsKey<String>(
   category: SyncCategory.settings,
 );
 
-// ── 音源：LX 质量 / 顺序 / 停用与 any-listen 连接 ─────────────────────
+// 音源：LX 质量 / 顺序 / 停用与 any-listen 连接
 const kLxDefaultQuality = SettingsKey<String>(
   'lx_default_quality',
   '320k',
@@ -226,7 +226,7 @@ const kAnyListenEnabled = SettingsKey<bool>(
   category: SyncCategory.sources,
 );
 
-// ── 凭证：随快照加密传输 ────────────────────────────────────────────
+// 凭证：随快照加密传输
 const kAnyListenToken = SettingsKey<String>(
   'any_listen_token',
   '',

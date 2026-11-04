@@ -182,7 +182,7 @@ class CoverSwapSession extends ChangeNotifier {
   /// 方向判定「变化前」当前曲目的队列下标（-1 = 未知）。
   int _hintIndex = -1;
 
-  // ── 只读视图（build 与手势门控读取） ─────────────────────
+  // 只读视图（build 与手势门控读取）
 
   CoverSwapPhase get phase => _phase;
   int get direction => _direction;
@@ -213,8 +213,6 @@ class CoverSwapSession extends ChangeNotifier {
 
   /// 是否已提交切歌、等待后端对账。
   bool get awaitingReconcile => _phase == CoverSwapPhase.committed;
-
-  // ── 输入 ───────────────────────────────────────────────
 
   /// 页面可见性（TickerMode）翻转：任一方向都立即落位到稳态。
   ///
@@ -423,8 +421,6 @@ class CoverSwapSession extends ChangeNotifier {
     notifyListeners();
     _host.adoptSteadySlots();
   }
-
-  // ── 内部迁移 ───────────────────────────────────────────
 
   /// 检测到展示曲目切换：拖动提交走对账；隐藏态直接落位；其余播入场动画。
   void _swapTo({

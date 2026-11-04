@@ -60,8 +60,6 @@ class DownloadNotificationPresenter {
   /// 单任务通知 id：一条下载一条通知，收尾时按同一 id 移除。
   static String _taskId(String key) => 'track:$key';
 
-  // ── 单任务 ─────────────────────────────────────────────
-
   /// 起单任务通知（批量中的当前曲目由批量通知统一表达，避免 N 条通知连闪）。
   void startTask(String key, Track track) {
     if (!_enabled) return;
@@ -88,8 +86,6 @@ class DownloadNotificationPresenter {
     if (!_started.remove(id)) return;
     unawaited(_notifications.stop(id));
   }
-
-  // ── 批量 ───────────────────────────────────────────────
 
   /// 开始批量：返回 true 表示本批起了「N/N」通知。
   ///
@@ -155,8 +151,6 @@ class DownloadNotificationPresenter {
     _batchStarted = false;
     _batchActiveKey = null;
   }
-
-  // ── 进度 ───────────────────────────────────────────────
 
   /// 进度 → 通知（单任务或批量：按「当前曲目是否属于批量」路由）。
   ///

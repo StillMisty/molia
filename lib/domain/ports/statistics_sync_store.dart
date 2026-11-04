@@ -138,7 +138,7 @@ class StatisticsSyncEvent {
 ///
 /// 统计仓库只负责事件采集与查询；导出缓存、本地曲目过滤与
 /// 按 `syncKey` 合并都收在实现里。适配器只做「类型化记录 ↔ SyncRecord」，
-/// 不再接触列名与版本列。
+/// 不接触列名与版本列。
 abstract interface class StatisticsSyncStore {
   /// 导出变更的廉价指纹（导出内容只可能在少数写入点变化）。
   Future<String> syncFingerprint();

@@ -68,8 +68,7 @@ class LocalSongsInput {
   /// 重算签名 = 历史键 + 下载记录键 + 记录 revision + 缓存 revision。
   ///
   /// 顺序敏感：历史在重新进入合集时会按最近播放重排（停留期间冻结）、下载
-  /// 记录顺序变化也值得重算，与页面原实现保持同一口径（签名相同则零等待
-  /// 复用上一轮结果）。
+  /// 记录顺序变化也值得重算；签名相同则零等待复用上一轮结果。
   int get signature => Object.hash(
     Object.hashAll([for (final entry in history) entry.key]),
     Object.hashAll([for (final record in downloads) record.key]),
@@ -122,9 +121,8 @@ class LocalSongsCollection extends ChangeNotifier {
 
   /// 当前可见行：下载 / 导入记录在前，缓存行在后；同一曲目下载优先。
   ///
-  /// 缓存行来自上一轮落定结果（与页面原实现一致：新输入加载期间旧缓存行
-  /// 保持可见，避免列表整段闪空）；下载记录始终取当前输入，删除下载后
-  /// 立即消失。
+  /// 缓存行来自上一轮落定结果（新输入加载期间旧缓存行保持可见，避免列表
+  /// 整段闪空）；下载记录始终取当前输入，删除下载后立即消失。
   ///
   /// 输入没变时返回上一份列表本身：presenter 按源列表引用判断视图是否可
   /// 复用，行为算出的新列表会让本地歌曲视图每帧重新投影、选择集每帧重扫。

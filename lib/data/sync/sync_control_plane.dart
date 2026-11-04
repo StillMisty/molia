@@ -44,7 +44,7 @@ class SyncControlPlane extends ChangeNotifier {
 
   bool _initialized = false;
 
-  // ---- 只读观测面（UI 只经这些 getter，不接触状态存储） ----
+  // 只读观测面（UI 只经这些 getter，不接触状态存储）
 
   bool get enabled => _state.enabled;
   String get deviceId => _state.deviceId;
@@ -108,8 +108,6 @@ class SyncControlPlane extends ChangeNotifier {
     );
   }
 
-  // ---- 初始化与传输运行时 ----
-
   /// 状态存储初始化（幂等）。首次成功后通知一次：设置页在首帧后打开时
   /// 才能看到设备 id / 口令。
   Future<void> init() async {
@@ -142,7 +140,7 @@ class SyncControlPlane extends ChangeNotifier {
     _runtime.onAppHidden();
   }
 
-  // ---- 设置写入（改状态 + 通知 UI；传输开关额外负责起停） ----
+  // 设置写入（改状态 + 通知 UI；传输开关额外负责起停）
 
   Future<void> setCategory(SyncCategory category, bool value) async {
     if (value && !_state.isCategoryEnabled(category)) {
@@ -189,7 +187,7 @@ class SyncControlPlane extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---- 手动对端地址簿（局域网发现失败时的兜底） ----
+  // 手动对端地址簿（局域网发现失败时的兜底）
 
   /// 添加手动对端（地址 + 可选名称）；重复地址按地址合并。
   ///
@@ -257,7 +255,7 @@ class SyncControlPlane extends ChangeNotifier {
     return (removed: removed, error: firstError);
   }
 
-  // ---- 敏感配置与口令（口令即信任根，生命周期只在这里） ----
+  // 敏感配置与口令（口令即信任根，生命周期只在这里）
 
   Future<String?> readWebdavPassword() => _state.readWebdavPassword();
 

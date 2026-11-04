@@ -350,8 +350,8 @@ abstract final class BuiltinRetryBudget {
   /// 比默认多一次，不要按默认 3 收紧。
   static const int leaderboard = 4;
 
-  /// 网易云榜单：与 LX 原实现一致（详情 + 批量歌曲详情两段都可能抖动），
-  /// 沿用 6 次；收紧会改变首屏失败率。
+  /// 网易云榜单：详情 + 批量歌曲详情两段都可能抖动，沿用 LX 的 6 次；
+  /// 收紧会改变首屏失败率。
   static const int wyLeaderboard = 6;
 }
 

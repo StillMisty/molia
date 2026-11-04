@@ -409,7 +409,7 @@ final class CollectionActions {
 
   /// 拖动排序落位：M3E 宿主给的是「直接移动」语义（曲目落在目标下标）。
   ///
-  /// 用当前可见的有序列表整体重建（与页面原实现同一口径），写回由资料库网关
+  /// 用当前可见的有序列表整体重建，写回由资料库网关
   /// 事务重写 `sortOrder`；本地缓存顺序也由网关按同一列表回写。
   Future<LibraryMutationOutcome> reorder(
     CollectionView view,

@@ -129,8 +129,6 @@ class UpdateInstaller {
     }
   }
 
-  // ── Android ─────────────────────────────────────────────────────────
-
   Future<InstallOutcome> _installAndroid(String archivePath) async {
     final String? status;
     try {
@@ -151,8 +149,6 @@ class UpdateInstaller {
       _ => InstallOutcome.failed,
     };
   }
-
-  // ── 桌面（Linux / Windows）──────────────────────────────────────────
 
   Future<InstallOutcome> _installOnDesktop({
     required String archivePath,

@@ -1230,7 +1230,7 @@ class AiDjProvider extends ChangeNotifier {
   /// 只把生成状态的离散变化（忙碌位 / 行内替换）转成聚合通知。
   ///
   /// 进度分片由 `generationState` 自己通知窄订阅者；如果这里每个分片都
-  /// `notifyListeners`，页面与轮播会整块重建（重构前的行为）。
+  /// `notifyListeners`，页面与轮播会整块重建。
   void _onGenerationStateChanged() {
     final state = _generation.stateValue;
     if (state.busy == _lastGenerationBusy &&

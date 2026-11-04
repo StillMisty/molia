@@ -149,8 +149,6 @@ class PlaybackSessionCoordinator
   PlayMode? _observedMode;
   PlaybackContext? _observedContext;
 
-  // ── 出口 ───────────────────────────────────────────────
-
   /// 快照出口：恢复态返回协调者构造的恢复快照，其余原样透传 [live]。
   ///
   /// 恢复态快照的构造只在本模块发生（播放后端与恢复态不再各拼一份）。
@@ -185,7 +183,7 @@ class PlaybackSessionCoordinator
   @visibleForTesting
   PlaybackSession? get lastWrittenSession => _lastWrittenSession;
 
-  // ── 装载（冷启动 / 跨设备同步） ─────────────────────────
+  // 装载（冷启动 / 跨设备同步）
 
   /// 冷启动装载上次播放会话；返回是否进入了恢复态（调用方据此刷新 UI）。
   ///
@@ -232,8 +230,6 @@ class PlaybackSessionCoordinator
     return load();
   }
 
-  // ── 设置 ───────────────────────────────────────────────
-
   /// 设置「启动时恢复上次播放」；返回恢复态是否被撤下（调用方据此刷新 UI）。
   ///
   /// 关闭时立即撤下尚未开始播放的恢复态（真实播放不受影响）；会话仍持续
@@ -277,7 +273,7 @@ class PlaybackSessionCoordinator
     return true;
   }
 
-  // ── 命令（按阶段路由；UI 与系统媒体会话共用） ────────────
+  // 命令（按阶段路由；UI 与系统媒体会话共用）
 
   /// 播放：恢复态 = 用保存的队列 / 下标重新取链并跳回保存进度；
   /// live = 暂停时才起播（幂等，不会把系统「播放」键变成暂停）。
@@ -288,7 +284,7 @@ class PlaybackSessionCoordinator
   Future<PlaybackCommandOutcome> play() async {
     if (phase == PlaybackSessionPhase.restored) return resume();
     final live = _facade.snapshot.value;
-    // 无曲目 / 已在播：与旧 handler 的 `hasTrack && !isPlaying` 判定同语义。
+    // 无曲目 / 已在播：不下发播放命令。
     if (live.current == null || live.isPlaying) {
       return PlaybackCommandOutcome.none;
     }
@@ -745,7 +741,7 @@ class PlaybackSessionCoordinator
     }
   }
 
-  // ── 落盘（PlaybackSessionStore 的唯一写者） ──────────────
+  // 落盘（PlaybackSessionStore 的唯一写者）
 
   // 跨设备同步端口：远端应用 / 删除也必须经过本模块持有的 store，
   // 与本地 save / clear 共用同一个 pendingWrite 队列（顺序即调用顺序）。
@@ -875,8 +871,6 @@ class PlaybackSessionCoordinator
     mode: live.mode,
     context: live.context,
   );
-
-  // ── 恢复态内部 ─────────────────────────────────────────
 
   /// 用会话构造恢复态展示快照：当前 / 队列 / 下标 / 模式齐备，isPlaying=false。
   ///

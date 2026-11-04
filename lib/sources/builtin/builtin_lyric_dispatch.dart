@@ -1,13 +1,13 @@
 /// 内置平台原生取词的派发入口（wy / tx / kg / kw / mg / bili）。
 ///
 /// 平台矩阵只在 [BuiltinPlatforms] 声明：本文件按 `lyric` 适配器查表，
-/// 不再维护六路 switch。这样 `SourceCapabilities.lyrics` 与真实派发共用
-/// 同一条目——平台没登记取词适配器时，能力位为 false，派发也自然返回 null。
+/// `SourceCapabilities.lyrics` 与真实派发共用同一条目——平台没登记取词
+/// 适配器时，能力位为 false，派发返回 null。
 ///
 /// 结果归一化（空歌词 → null）与 5 分钟 TTL 缓存（key `{track.id}:lyric`）
-/// 仍只在这里实现；`SourceManager.fetchLyric` 的脚本回退只调用 [fetch]。
+/// 只在这里实现；`SourceManager.fetchLyric` 的脚本回退只调用 [fetch]。
 ///
-/// 失败语义与迁移前逐条一致：
+/// 失败语义：
 /// - 非内置平台 / 平台缺少取词所需字段 → null；
 /// - 取词链路抛错 → null（交由上层歌词源继续回退）；失败不进缓存
 ///   （下次调用会重试，见 `RequestCache` 的契约）。
