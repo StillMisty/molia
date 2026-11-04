@@ -8104,6 +8104,12 @@ abstract class AppLocalizations {
   /// **'Minutes'**
   String get sleepTimerMinuteLabel;
 
+  /// No description provided for @sleepTimerModeSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Timer mode'**
+  String get sleepTimerModeSection;
+
   /// No description provided for @sleepTimerCustom.
   ///
   /// In en, this message translates to:

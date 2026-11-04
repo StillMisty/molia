@@ -4348,6 +4348,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sleepTimerMinuteLabel => '分钟';
 
   @override
+  String get sleepTimerModeSection => '定时方式';
+
+  @override
   String get sleepTimerCustom => '自定义时长…';
 
   @override

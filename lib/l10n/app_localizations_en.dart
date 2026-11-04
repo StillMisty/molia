@@ -4540,6 +4540,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sleepTimerMinuteLabel => 'Minutes';
 
   @override
+  String get sleepTimerModeSection => 'Timer mode';
+
+  @override
   String get sleepTimerCustom => 'Custom duration…';
 
   @override

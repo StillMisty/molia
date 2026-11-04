@@ -2453,6 +2453,7 @@
   "sleepTimerArmedAfterTrackExit": "Sleep timer on · pausing and quitting after this track",
   "sleepTimerHourLabel": "Hours",
   "sleepTimerMinuteLabel": "Minutes",
+  "sleepTimerModeSection": "Timer mode",
   "sleepTimerCustom": "Custom duration…",
   "sleepTimerCustomTitle": "Custom duration",
   "sleepTimerCustomInvalid": "Duration must be between 1 minute and 10 hours",

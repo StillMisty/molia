@@ -66,20 +66,95 @@ class _SleepTimerExitAppCheckbox extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final timer = playback.sleepTimer;
-    return ValueListenableBuilder<bool>(
-      valueListenable: timer.exitApp,
-      builder: (context, checked, _) => M3ECheckbox(
-        key: const Key('sleepTimerExitAppCheckbox'),
-        value: checked,
-        onChanged: (next) {
-          if (next == null) return;
-          HapticsService.lightImpact();
-          timer.setExitApp(next);
-        },
-        label: Text(
-          l10n.sleepTimerExitApp,
-          style: context.typeScale.bodyMedium,
+    final theme = M3ETheme.of(context);
+    // 默认 48 的触控槽 + 8 的标签间距，在标题行里会显得勾选框和文字分家。
+    // 收成 40 槽、标签紧贴状态层；整行（含标签）仍是可点区域。
+    return M3ETheme(
+      data: theme.copyWith(
+        checkboxTheme: theme.checkboxTheme.copyWith(
+          boxSize: 20,
+          hitSize: 40,
+          targetSize: 40,
+          labelGap: 0,
         ),
+      ),
+      child: ValueListenableBuilder<bool>(
+        valueListenable: timer.exitApp,
+        builder: (context, checked, _) => M3ECheckbox(
+          key: const Key('sleepTimerExitAppCheckbox'),
+          value: checked,
+          onChanged: (next) {
+            if (next == null) return;
+            HapticsService.lightImpact();
+            timer.setExitApp(next);
+          },
+          // 标题行只有 64：标签限宽单行省略，英文 / 大字号下先牺牲文案，
+          // 不挤压左侧「定时关闭」标题；极窄屏再收一档，保住标题完整。
+          label: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: context.isCompact ? 96 : 132),
+            child: Text(
+              l10n.sleepTimerExitApp,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: context.typeScale.bodyMedium,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 状态卡片：定时未开启 / 剩余倒计时 / 播完当前歌曲，作为正文的视觉锚点。
+///
+/// 倒计时数字用等宽数字，避免每秒刷新时宽度抖动；非倒计时模式文案较长，
+/// 用较小字阶并允许两行。
+class _SleepTimerStatusCard extends StatelessWidget {
+  const _SleepTimerStatusCard({required this.state});
+
+  final SleepTimerState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = M3ETheme.of(context).colorScheme;
+    final countdown = state.mode == SleepTimerMode.countdown;
+    final active = state.isActive;
+    return M3ECard(
+      key: const Key('sleepTimerStatusCard'),
+      variant: M3ECardVariant.filled,
+      focusable: false,
+      showFocusRing: false,
+      trackHover: false,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Row(
+        children: [
+          Icon(
+            Icons.bedtime_rounded,
+            color: active ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              sleepTimerStatusLabel(l10n, state),
+              key: const Key('sleepTimerStatusText'),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  (countdown
+                          ? context.typeScale.headlineSmall
+                          : context.typeScale.titleMedium)
+                      .copyWith(
+                        color: active
+                            ? scheme.onSurface
+                            : scheme.onSurfaceVariant,
+                        fontFeatures: countdown
+                            ? const [FontFeature.tabularFigures()]
+                            : null,
+                      ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -98,11 +173,15 @@ class _SleepTimerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final timer = playback.sleepTimer;
+    final scheme = M3ETheme.of(context).colorScheme;
     // 恢复态（冷启动未起播）没有真实播放曲目：不能承诺「播完当前歌曲」。
     final canArmAfterTrack =
         !playback.hasRestoredSession && playback.snapshot.current != null;
 
     return SimpleModalBody(
+      // 底部多留一档：移动端弹层叠在应用底栏之上，视口会比内容高度短一点；
+      // 只留默认 8 时最后一行（「播完当前歌曲后暂停」）会被裁掉下沿。
+      padding: const EdgeInsets.only(bottom: 24),
       children: [
         // 倒计时每秒通知：只重建内层内容，不连带重建外层滚动视图。
         ValueListenableBuilder<SleepTimerState>(
@@ -113,9 +192,16 @@ class _SleepTimerSheet extends StatelessWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: _SleepTimerStatusCard(state: state),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
                 child: Text(
-                  sleepTimerStatusLabel(l10n, state),
-                  style: M3ETheme.of(context).typeScale.headlineSmall,
+                  l10n.sleepTimerModeSection,
+                  key: const Key('sleepTimerModeSection'),
+                  style: context.typeScale.titleSmall.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
               M3EListItem(
@@ -131,6 +217,7 @@ class _SleepTimerSheet extends StatelessWidget {
                 onTap: () =>
                     unawaited(_pickCustomDuration(context, timer, state)),
               ),
+              const M3EDivider(inset: M3EDividerInset.middle),
               M3EListItem(
                 key: const Key('sleepTimerAfterTrackItem'),
                 leading: const Icon(Icons.music_note_rounded),

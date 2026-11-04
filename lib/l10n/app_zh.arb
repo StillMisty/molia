@@ -2085,6 +2085,7 @@
   "sleepTimerArmedAfterTrackExit": "已开启定时关闭 · 播完当前歌曲后暂停并退出应用",
   "sleepTimerHourLabel": "小时",
   "sleepTimerMinuteLabel": "分钟",
+  "sleepTimerModeSection": "定时方式",
   "sleepTimerCustom": "自定义时长…",
   "sleepTimerCustomTitle": "自定义时长",
   "sleepTimerCustomInvalid": "时长需在 1 分钟到 10 小时之间",
