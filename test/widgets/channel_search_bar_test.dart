@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:molia/domain/models/source.dart';
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/widgets/channel_search_bar.dart';
+import 'package:molia/widgets/discover_layout.dart';
 
 /// 组合搜索条：单层胶囊、渠道下拉占搜索图标位、单渠道回退标准搜索栏。
 void main() {
@@ -78,6 +79,7 @@ void main() {
     expect(find.byKey(ChannelSearchBar.channelDropdownKey), findsNothing);
     expect(find.byType(M3ESearchBar), findsOneWidget);
     expect(find.byIcon(Icons.search_rounded), findsOneWidget);
+    expect(find.text('酷我音乐'), findsNothing, reason: '单渠道没有 chip');
   });
 
   testWidgets('多渠道：单层胶囊、无第二层搜索栏与搜索图标', (tester) async {
@@ -106,6 +108,73 @@ void main() {
     expect(
       tester.getRect(dropdown).right,
       lessThanOrEqualTo(tester.getRect(find.byType(TextField)).left),
+    );
+  });
+
+  testWidgets('渠道 chip：secondaryContainer 填充、无描边、四周内缩', (tester) async {
+    await pumpBar(
+      tester,
+      channels: [channel('kw', '酷我音乐'), channel('tx', 'QQ音乐')],
+    );
+    final context = tester.element(find.byType(ChannelSearchBar));
+    final scheme = M3ETheme.of(context).colorScheme;
+    final barRect = tester.getRect(find.byType(M3ECard).first);
+    final selectedText = find.text('酷我音乐');
+    final chipFinder = find
+        .ancestor(of: selectedText, matching: find.byType(Material))
+        .first;
+    final chip = tester.widget<Material>(chipFinder);
+    final chipRect = tester.getRect(chipFinder);
+    final text = tester.widget<Text>(selectedText);
+
+    expect(chip.color, scheme.secondaryContainer);
+    expect(text.style?.color, scheme.onSecondaryContainer);
+    expect(
+      chip.shape,
+      isA<RoundedRectangleBorder>().having(
+        (shape) => shape.side,
+        'side',
+        BorderSide.none,
+      ),
+    );
+    expect(chipRect.left - barRect.left, greaterThanOrEqualTo(5));
+    expect(chipRect.top - barRect.top, greaterThanOrEqualTo(5));
+    expect(barRect.bottom - chipRect.bottom, greaterThanOrEqualTo(5));
+    expect(
+      chipRect.height,
+      closeTo(barRect.height - 12, 0.5),
+      reason: '1× 下 chip 填满搜索条减掉上下 6dp 的剩余高度',
+    );
+    final selectorWidth = discoverChannelSelectorWidth(context);
+    expect(
+      barRect.left + selectorWidth - chipRect.right,
+      greaterThanOrEqualTo(3),
+      reason: 'chip 在左侧选择区内右侧留约 4dp',
+    );
+  });
+
+  testWidgets('渠道 chip：1.5× 字体与长名称仍不贴边、不裁切', (tester) async {
+    const longName = '一个非常非常长、窄搜索条里必须省略而不能换行的渠道名称';
+    await pumpBar(
+      tester,
+      channels: [channel('long', longName), channel('kw', '酷我音乐')],
+      width: 360,
+      textScaler: const TextScaler.linear(1.5),
+    );
+
+    expect(tester.takeException(), isNull);
+    final barRect = tester.getRect(find.byType(M3ECard).first);
+    final chipFinder = find
+        .ancestor(of: find.text(longName), matching: find.byType(Material))
+        .first;
+    final chipRect = tester.getRect(chipFinder);
+    expect(chipRect.top - barRect.top, greaterThanOrEqualTo(5));
+    expect(barRect.bottom - chipRect.bottom, greaterThanOrEqualTo(5));
+    expect(chipRect.left - barRect.left, greaterThanOrEqualTo(5));
+    expect(
+      chipRect.height,
+      lessThan(barRect.height),
+      reason: '放大字体后 chip 仍完整落在搜索条内',
     );
   });
 

@@ -15,9 +15,9 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 桌面全局搜索的组合搜索条：单层胶囊，渠道下拉占据原搜索图标位置。
 ///
-/// 多渠道时整条是一个 M3E 风格胶囊：左侧渠道下拉（透明、无边框）→ 输入 →
-/// 清除键；不再嵌套第二层 [AppSearchBar]，也不显示搜索图标。单渠道时没有
-/// 可切换目标，回退到 [AppSearchBar]（左侧搜索图标 + 输入占满）。
+/// 多渠道时整条是一个 M3E 风格胶囊：左侧 tonal 渠道 chip → 输入 → 清除键；
+/// 不再嵌套第二层 [AppSearchBar]，也不显示搜索图标。单渠道时没有可切换
+/// 目标，回退到 [AppSearchBar]（左侧搜索图标 + 输入占满）。
 class ChannelSearchBar extends StatelessWidget {
   const ChannelSearchBar({
     super.key,
@@ -82,7 +82,7 @@ class ChannelSearchBar extends StatelessWidget {
 
     final m3e = M3ETheme.of(context);
     final barTheme = m3e.searchBarTheme;
-    final scheme = Theme.of(context).colorScheme;
+    final chipScheme = m3e.colorScheme;
     final layout = appSearchBarLayoutFor(context, null);
     final selectorWidth = math.min(
       148.0,
@@ -112,41 +112,66 @@ class ChannelSearchBar extends StatelessWidget {
                 children: [
                   SizedBox(
                     width: selectorWidth,
-                    child: Semantics(
-                      container: true,
-                      label: l10n.searchSourcesLabel,
-                      child: M3EDropdownMenu<String>(
-                        key: channelDropdownKey,
-                        focusNode: channelFocusNode,
-                        items: [
-                          for (final channel in channels)
-                            M3EDropdownItem<String>(
-                              label: channel.displayName,
-                              value: channel.key,
-                              selected: channel.key == selectedKey,
+                    child: Padding(
+                      // 左/上/下 6、右 4：chip 不贴搜索条边缘；右侧与输入区
+                      // 再隔 4（输入区自身左 padding 4）= 约 8dp 间距。
+                      padding: const EdgeInsets.fromLTRB(6, 6, 4, 6),
+                      // 下拉内部是 mainAxisSize.min 的 Column，给死高度也不会
+                      // 撑满；改用 Align 在剩余高度里居中，chip 高度随字体缩放
+                      // 自然增长，1.5× 时仍保持上下对称内缩。
+                      child: Align(
+                        alignment: Alignment.center,
+                        child: Semantics(
+                          container: true,
+                          label: l10n.searchSourcesLabel,
+                          child: M3EDropdownMenu<String>(
+                            key: channelDropdownKey,
+                            focusNode: channelFocusNode,
+                            items: [
+                              for (final channel in channels)
+                                M3EDropdownItem<String>(
+                                  label: channel.displayName,
+                                  value: channel.key,
+                                  selected: channel.key == selectedKey,
+                                ),
+                            ],
+                            singleSelect: true,
+                            // 单选用纯文本展示（默认 chip 模式点击会取消选中）。
+                            showChipAnimation: false,
+                            searchEnabled: channels.length > 8,
+                            itemBuilder: channelDropdownItemBuilder(context),
+                            fieldStyle: M3EDropdownFieldStyle(
+                              // tonal chip：secondaryContainer 填充，无描边。
+                              backgroundColor: chipScheme.secondaryContainer,
+                              foregroundColor: chipScheme.onSecondaryContainer,
+                              border: BorderSide.none,
+                              focusedBorder: BorderSide.none,
+                              borderRadius: BorderRadius.circular(999),
+                              margin: EdgeInsets.zero,
+                              // 10 + 10：1× 下 chip 自然高度约 44，正好填满
+                              // 56dp 搜索条减掉上下 6dp 的剩余高度。
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                              hintText: l10n.searchSourcesLabel,
+                              hintStyle: m3e.typeScale.bodyMedium.copyWith(
+                                color: chipScheme.onSecondaryContainer,
+                              ),
+                              selectedTextStyle: m3e.typeScale.bodyMedium
+                                  .copyWith(
+                                    color: chipScheme.onSecondaryContainer,
+                                  ),
                             ),
-                        ],
-                        singleSelect: true,
-                        // 单选用纯文本展示（默认 chip 模式点击会取消选中）。
-                        showChipAnimation: false,
-                        searchEnabled: channels.length > 8,
-                        itemBuilder: channelDropdownItemBuilder(context),
-                        fieldStyle: M3EDropdownFieldStyle(
-                          // 透明 + 无边框：整条搜索胶囊是唯一可见底色。
-                          backgroundColor: Colors.transparent,
-                          foregroundColor: scheme.onSurface,
-                          border: BorderSide.none,
-                          focusedBorder: BorderSide.none,
-                          padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                          hintText: l10n.searchSourcesLabel,
+                            dropdownStyle: M3EDropdownPanelStyle(
+                              noItemsFoundText: l10n.noItemsFound,
+                            ),
+                            onSelectionChanged: (items) {
+                              if (items.isEmpty) return;
+                              onChannelSelected(items.first.value);
+                            },
+                          ),
                         ),
-                        dropdownStyle: M3EDropdownPanelStyle(
-                          noItemsFoundText: l10n.noItemsFound,
-                        ),
-                        onSelectionChanged: (items) {
-                          if (items.isEmpty) return;
-                          onChannelSelected(items.first.value);
-                        },
                       ),
                     ),
                   ),
