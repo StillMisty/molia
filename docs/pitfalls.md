@@ -978,3 +978,11 @@
     （显式声明没有文件目录，批次退回已 mock 的 SharedPreferences）。由界面发起
     的 unawaited 存储动作也要留足「真实事件循环 + 假时钟」交替轮次
     （`settleAction` 循环推进），单轮 `runAsync` 只推开第一层 await。
+99. **切歌先 `stop()` 旧源后，新源未落位时不能直接 `play()`**：just_audio 的
+    `stop()` 会保留当前 audio source；取链失败或用户在装载期间点播放时，
+    `play()` 会把停掉的旧曲目重新拉起来，界面却已经显示新曲目。
+    `LocalPlaybackService` 用 `_sourceUnloaded` 标记这个空窗：装载中忽略播放键，
+    装载失败后按当前曲目重新取链；音频焦点归还的自动续播也跳过。手动切歌在
+    `_playIndex` 取链前先 `_player.stop()`（同时完成暂停与卸载），音质切换与
+    曲末自动切歌不额外卸载。回归用例见
+    `test/playback/local_playback_service_test.dart`。

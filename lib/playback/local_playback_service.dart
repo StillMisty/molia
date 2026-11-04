@@ -191,6 +191,13 @@ class LocalPlaybackService extends ChangeNotifier {
   bool _isPlaying = false;
   bool _isLoading = false;
 
+  /// 旧源已停、新源尚未落位（手动切歌卸载后的空窗）。
+  ///
+  /// just_audio 的 [AudioPlayer.stop] 会保留当前 audio source：这个窗口里
+  /// 直接 `play()` 会把停掉的旧曲目重新拉起来（界面却已经显示新曲目）。
+  /// 装载中忽略播放键；装载失败后按当前曲目重新取链。
+  bool _sourceUnloaded = false;
+
   /// 上一次播放器处理状态：完成处理只在「进入 completed」时触发一次。
   ///
   /// 播完后 playing 仍可能为 true，暂停 / seek 会再次上报 completed；按
@@ -489,7 +496,14 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 焦点归还后的续播（只在守卫确认「本次中断由它暂停」时调用）。
   Future<void> _resumeAfterAudioFocus() async {
-    if (_playerDisposed || _currentTrack == null || _player.playing) return;
+    // 切歌卸载后的空窗 / 装载中不能续播：`play()` 会把停掉的旧源拉起来。
+    if (_playerDisposed ||
+        _currentTrack == null ||
+        _player.playing ||
+        _isLoading ||
+        _sourceUnloaded) {
+      return;
+    }
     _resumeCurrentTrack();
   }
 
@@ -765,14 +779,20 @@ class LocalPlaybackService extends ChangeNotifier {
       recordHistory: false,
       resumeAt: resumeAt,
       autoplay: wasPlaying,
+      unloadCurrent: false,
     );
   }
 
+  /// 播放队列下标：手动切歌 / 换源 / 切音质 / 曲末自动切歌共用。
+  ///
+  /// [unloadCurrent] 为 true 时在取链前停掉并卸载旧源（手动切歌）；
+  /// 音质切换要保持进度、曲末自动切歌的旧源已经播完，这两条路径传 false。
   Future<void> _playIndex(
     int index, {
     bool recordHistory = true,
     Duration? resumeAt,
     bool autoplay = true,
+    bool unloadCurrent = true,
   }) async {
     if (index < 0 || index >= _queue.length) return;
     // 新曲目 = 用户主动选择，撤销音频中断的待续播。
@@ -783,6 +803,8 @@ class LocalPlaybackService extends ChangeNotifier {
     }
     final requestId = ++_playRequestId;
     final track = _queue[index];
+    final previousTrack = _currentTrack;
+    final unloadBeforeLoad = unloadCurrent && previousTrack != null;
     final override = _qualityOverrideTrackId == track.id
         ? _qualityOverride
         : null;
@@ -793,7 +815,7 @@ class LocalPlaybackService extends ChangeNotifier {
       resumeAt ?? Duration.zero,
       track.duration,
     );
-    _suppressPositionUpdates = preservePosition;
+    _suppressPositionUpdates = preservePosition || unloadBeforeLoad;
     // 预取所有权：桌面 / 回退直接流播时，如果正在预取的就是这一首，保留
     // 在途任务（不取消、不再起 writer），落位后的缓存供重播命中。移动端
     // 边播边缓存会写同一文件，仍保持「起播前取消」。
@@ -818,9 +840,20 @@ class LocalPlaybackService extends ChangeNotifier {
     _duration = track.duration ?? Duration.zero;
     // 换曲即重新计时：上一首的末位采样不能参与新曲目的曲末判定。
     _lastEndPositionSample = null;
+    if (unloadBeforeLoad) {
+      // 切歌立即停声：旧源若在取链期间继续播，会出现「界面已显示新歌、
+      // 耳朵还在旧歌」，等新源落位再硬切更突兀。stop() 同时置 playing=false
+      // 并释放解码器，等价于「暂停 + 卸载」一次完成。
+      _isPlaying = false;
+      _sourceUnloaded = true;
+    }
     notifyListeners();
 
     try {
+      if (unloadBeforeLoad) {
+        await _unloadCurrentSource();
+        if (requestId != _playRequestId) return;
+      }
       final stream = await _resolver(track, quality: quality);
       if (requestId != _playRequestId) return;
       startTrace?.markResolved();
@@ -832,6 +865,8 @@ class LocalPlaybackService extends ChangeNotifier {
         headers: stream.headers,
       );
       if (requestId != _playRequestId) return;
+      // 新源已落位：旧源空窗结束，播放键恢复正常语义。
+      _sourceUnloaded = false;
       startTrace?.markSourceSet(
         cachePath: cachePath,
         prefetched: prefetchOwnsCache,
@@ -897,6 +932,25 @@ class LocalPlaybackService extends ChangeNotifier {
         _isLoading = false;
         _suppressPositionUpdates = false;
         notifyListeners();
+      }
+    }
+  }
+
+  /// 切歌前暂停并卸载旧源。
+  ///
+  /// [AudioPlayer.stop] 会立即把 playing 置 false 并释放解码器 / 平台播放器，
+  /// 不能只靠后面的 `setAudioSource` 隐式换源：否则旧曲目会在整个取链期间
+  /// 继续出声。失败只记日志——随后仍要尝试加载新源，stop 失败时再补一次
+  /// pause 尽量止声。
+  Future<void> _unloadCurrentSource() async {
+    try {
+      await _player.stop();
+    } catch (e) {
+      debugPrint('[LocalPlayback] 切歌前卸载旧源失败: $e');
+      try {
+        await _player.pause();
+      } catch (e2) {
+        debugPrint('[LocalPlayback] 切歌前暂停旧源失败: $e2');
       }
     }
   }
@@ -1007,6 +1061,17 @@ class LocalPlaybackService extends ChangeNotifier {
     // 错走成暂停（第一次点没反应，第二次才重启）。
     if (_isPlaying) {
       await pause();
+      return;
+    }
+    // 切歌卸载后新源还没落位：不能直接 play()，否则 just_audio 会把停掉的
+    // 旧源重新拉起来。装载中忽略；装载失败则按当前曲目重新取链。
+    if (_isLoading) return;
+    if (_sourceUnloaded) {
+      await _playIndex(
+        _currentIndex,
+        recordHistory: false,
+        unloadCurrent: false,
+      );
       return;
     }
     // 用户主动续播：撤销任何中断待续播，避免焦点归还时重复动播放器。
@@ -1127,6 +1192,8 @@ class LocalPlaybackService extends ChangeNotifier {
       await _player.stop();
     } catch (_) {}
     _isPlaying = false;
+    // 显式 stop 不是切歌空窗：底层保留当前源，后续 play() 按正常续播处理。
+    _sourceUnloaded = false;
     if (clear) {
       _queue.clear();
       _queueRevision++;
@@ -1259,7 +1326,9 @@ class LocalPlaybackService extends ChangeNotifier {
           // 返回，桌面 media_kit 的 load(play:) 也不保证真正起播（已知坑
           // 77/78）。先显式暂停，让下一首的 play() 一定下发到平台。
           await _pauseBeforeTrackSwitch();
-          await _playIndex(index);
+          // 旧曲目已经播完，不再额外卸载：避免为释放播放器再拆建一次平台
+          // 播放器，平白拉长曲间空档。
+          await _playIndex(index, unloadCurrent: false);
         }
       }
     } finally {

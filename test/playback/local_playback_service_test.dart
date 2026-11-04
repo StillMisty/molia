@@ -236,6 +236,114 @@ void main() {
     expect(service.position, const Duration(seconds: 30));
   });
 
+  test('手动切歌：先暂停卸载旧源，再取链与加载新源', () async {
+    final player = _FakeAudioPlayer();
+    final tracks = [_track(index: 0), _track(index: 1)];
+    var stoppedBeforeResolve = false;
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async {
+        if (track.id == tracks[1].id) {
+          stoppedBeforeResolve = player.calls.contains('stop');
+        }
+        return PlayableStream(Uri.parse('file:///tmp/molia-test.mp3'));
+      },
+      player: player,
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks(tracks, 0);
+    await pumpEventQueue();
+    expect(service.isPlaying, isTrue);
+
+    player.calls.clear();
+    await service.skipToNext();
+    await pumpEventQueue();
+
+    expect(stoppedBeforeResolve, isTrue, reason: '取链前旧源必须已停止');
+    expect(player.calls, ['stop', 'setAudioSource', 'play']);
+    expect(service.currentIndex, 1);
+    expect(service.isPlaying, isTrue);
+  });
+
+  test('切歌装载期间点播放：不会把停掉的旧源重新拉起来', () async {
+    final player = _FakeAudioPlayer();
+    final tracks = [_track(index: 0), _track(index: 1)];
+    Completer<PlayableStream>? pending;
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) {
+        if (track.id == tracks[1].id) {
+          pending = Completer<PlayableStream>();
+          return pending!.future;
+        }
+        return Future.value(
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        );
+      },
+      player: player,
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks(tracks, 0);
+    await pumpEventQueue();
+
+    final switching = service.skipToNext();
+    await pumpEventQueue();
+    expect(service.isLoading, isTrue, reason: '新源尚未落位');
+    expect(service.isPlaying, isFalse);
+    expect(player.calls, contains('stop'));
+    expect(pending, isNotNull);
+
+    // 装载空窗里点播放：不能直接 play() 旧源。
+    player.calls.clear();
+    await service.toggle();
+    expect(player.calls, isEmpty);
+
+    pending!.complete(PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')));
+    await switching;
+    await pumpEventQueue();
+
+    expect(service.currentIndex, 1);
+    expect(service.isPlaying, isTrue);
+    expect(player.calls, contains('setAudioSource'));
+    expect(player.calls, contains('play'));
+  });
+
+  test('切歌取链失败后点播放：按当前曲目重新装载，不恢复旧源', () async {
+    final player = _FakeAudioPlayer();
+    final tracks = [_track(index: 0), _track(index: 1)];
+    var failNext = true;
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async {
+        if (failNext && track.id == tracks[1].id) {
+          failNext = false;
+          throw StateError('取链失败');
+        }
+        return PlayableStream(Uri.parse('file:///tmp/molia-test.mp3'));
+      },
+      player: player,
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks(tracks, 0);
+    await pumpEventQueue();
+
+    player.calls.clear();
+    await service.skipToNext();
+    await pumpEventQueue();
+    expect(service.currentIndex, 1);
+    expect(service.isPlaying, isFalse);
+    expect(service.lastError, isNotNull);
+    expect(player.calls, ['stop'], reason: '取链失败时不能继续加载 / 播放');
+
+    player.calls.clear();
+    await service.toggle();
+    await pumpEventQueue();
+
+    expect(player.calls, ['setAudioSource', 'play']);
+    expect(service.currentIndex, 1);
+    expect(service.isPlaying, isTrue);
+  });
+
   test('曲末暂停后第一次点播放从 0 重播，而不是被当成暂停', () async {
     final (:service, :player) = await start(mode: PlayMode.sequential);
     player.complete();
@@ -312,6 +420,7 @@ void main() {
     expect(service.currentQuality, '128k');
     expect(player.calls, contains('seek:10000'));
     expect(player.calls, contains('play'));
+    expect(player.calls, isNot(contains('stop')), reason: '音质切换保持进度，不能卸载播放器');
     expect(service.position, const Duration(seconds: 10));
     expect(service.isPlaying, isTrue);
   });
