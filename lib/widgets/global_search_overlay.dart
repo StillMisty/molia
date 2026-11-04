@@ -375,6 +375,10 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _selectChannel(String key) {
     context.read<DiscoverProvider>().selectChannel(key);
     _search.setActiveSource(key);
+    final textLength = _field.text.length;
+    final selection = _field.selection;
+    final wasSelectAll =
+        textLength > 0 && selection.start == 0 && selection.end == textLength;
     // 下拉关闭动画期间包内 focus trap 仍在，立即 requestFocus 会被拒绝。
     // 逐帧重试：关闭动画结束时 focus trap 释放，这一帧就能把焦点交给输入框。
     var attempts = 0;
@@ -382,6 +386,11 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
       if (!mounted) return;
       _channelFocusNode.unfocus();
       focusField(selectAll: false);
+      // 打开遮罩时的「全选」不应在切渠道后保留：把光标放到末尾，下一次
+      // 输入是追加而不是整词替换；用户原有的局部选区保持不变。
+      if (wasSelectAll) {
+        _field.selection = TextSelection.collapsed(offset: textLength);
+      }
       if (_focusNode.hasFocus || ++attempts >= 30) return;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         restoreFocus();

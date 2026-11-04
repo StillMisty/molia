@@ -487,6 +487,32 @@ void main() {
     );
   }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
 
+  testWidgets('脚本渠道晚加入后，从顶部下拉选中仍生效', (tester) async {
+    search = buildSearch(const []);
+    await pumpLibrary(tester);
+    expect(discover.channelKey, 'wy');
+
+    // 脚本在页面 build 之后才进入 channels：旧实现会拿 build 时捕获的
+    // enabledChannels 查找，找不到就静默 return。
+    await activateScript(tester);
+    await tester.pumpAndSettle();
+    expect(
+      sources.channels.any((channel) => channel.key == 'test'),
+      isTrue,
+      reason: '前提：脚本渠道已加入渠道列表',
+    );
+
+    await tester.tap(find.text('网易音乐'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('测试源').last);
+    await tester.pumpAndSettle();
+
+    expect(discover.channelKey, 'test');
+    expect(search.activeSourceKey, 'test');
+    expect(find.text('热榜'), findsNothing, reason: '脚本渠道无发现能力');
+    expect(find.text('输入关键词搜索歌曲、歌手或歌词'), findsOneWidget);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+
   testWidgets('搜索 tab 也显示渠道下拉；切渠道同时改搜索当前渠道', (tester) async {
     search = buildSearch(const [
       domain.SourceDescriptor(

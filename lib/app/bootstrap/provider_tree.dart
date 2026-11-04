@@ -5,6 +5,7 @@
 /// （PlaybackProvider / LibraryProvider / SearchProvider …），顺序不能随意调整。
 library;
 
+import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
@@ -45,6 +46,19 @@ import 'local_data_stack.dart';
 import 'playback_stack.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
+
+/// 首帧后把发现页当前渠道同步给搜索。
+///
+/// `DiscoverProvider` 是 `lazy: false`，create 发生在 build 期；这里必须延后
+/// 到 post-frame，避免 `SearchProvider.notifyListeners` 标脏正在构建的树。
+void scheduleInitialChannelSync(
+  DiscoverProvider discover,
+  SearchProvider search,
+) {
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    search.setActiveSource(discover.channelKey);
+  });
+}
 
 /// 组装 Provider 树（顺序敏感，见文件头）。
 List<SingleChildWidget> buildAppProviders({
@@ -155,7 +169,9 @@ List<SingleChildWidget> buildAppProviders({
         }
 
         discover.addListener(syncSearchChannel);
-        search.setActiveSource(syncedChannel);
+        // 不能在 provider create（build 期）同步 setActiveSource：它会
+        // notifyListeners，debug 下会触发 setState during build 红屏。
+        scheduleInitialChannelSync(discover, search);
         return discover;
       },
     ),

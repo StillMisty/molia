@@ -163,7 +163,7 @@ class SearchProvider extends ChangeNotifier {
   /// 误判成「无结果」。
   bool get isSearchPending {
     final keyword = _searchQuery.trim();
-    if (keyword.isEmpty) return false;
+    if (keyword.isEmpty || !hasActiveSearchSource) return false;
     return _controls[_kind]!.query != keyword;
   }
 
