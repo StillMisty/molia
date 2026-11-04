@@ -1,6 +1,6 @@
 /// 窗口几何恢复的纯逻辑：保存值的可用性校验与离屏回退。
 ///
-/// 与插件 IO 分离（nativeapi / window_manager 的调用都在 `*_io.dart`）：
+/// 与插件 IO 分离（nativeapi / nativeapi_flutter 的调用都在 `*_io.dart`）：
 /// 这里只做矩形运算，便于单测覆盖「显示器拔掉 / 分辨率变化后窗口落在屏幕外」
 /// 的边界。
 library;

@@ -5,7 +5,21 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:logging/logging.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:nativeapi/nativeapi.dart'
+    show
+        Application,
+        TitleBarStyle,
+        Window,
+        WindowCloseRequestedEvent,
+        WindowEvent,
+        WindowManager,
+        WindowMaximizedEvent,
+        WindowMinimizedEvent,
+        WindowMovedEvent,
+        WindowResizedEvent,
+        WindowRestoredEvent;
+import 'package:nativeapi_flutter/nativeapi_flutter.dart'
+    show RectToNative, RectangleToRect, SizeToNative;
 
 import '../app_presence.dart';
 import 'display_areas_io.dart';
@@ -14,10 +28,10 @@ import 'window_bounds.dart';
 import 'window_bounds_store.dart';
 import 'window_settings.dart';
 
-/// 桌面（Linux / Windows / macOS）：window_manager 实现。
+/// 桌面（Linux / Windows / macOS）：nativeapi 窗口实现。
 ///
-/// 插件方法只在 [isSupported] 为真时调用：其余平台（Android / iOS）没有注册
-/// 插件实现，触达插件 API 会撞 MissingPluginException。
+/// 原生 API 只在 [isSupported] 为真时调用：其余平台（Android / iOS）没有桌面
+/// 窗口，[WindowChrome] 的初始化与窗口监听都是空操作。
 ///
 /// 标题栏口径按平台分开：Linux / Windows 隐藏原生标题栏、由 UI 自画窗口按钮
 /// （[usesCustomTitleBar]）；macOS 保留原生标题栏与红绿灯（系统习惯），窗口
@@ -37,7 +51,20 @@ class WindowChrome {
   static final Logger _logger = Logger('molia.window_chrome');
 
   static final ValueNotifier<bool> _maximized = ValueNotifier<bool>(false);
-  static final _MaximizedStateListener _listener = _MaximizedStateListener();
+
+  /// 当前主窗口的原生句柄；[ensureInitialized] 解析后一直复用。
+  static Window? _window;
+
+  /// 是否拦截原生关闭请求（窗口关闭键 / 系统关闭按钮）。
+  static bool _preventClose = false;
+
+  /// 正在执行 [quit]：跳过关闭回调，避免 `close()` 递归。
+  static bool _destroying = false;
+
+  /// 原生状态镜像：nativeapi 用同一个 [WindowRestoredEvent] 表示「退出最大化」
+  /// 和「从最小化恢复」，需要知道事件前处于哪种状态。
+  static bool _windowMaximized = false;
+  static bool _windowMinimized = false;
 
   /// 窗口几何持久化（设备本地键，键名只出现在 store 文件里）。
   static final WindowBoundsStore _boundsStore = WindowBoundsStore();
@@ -62,19 +89,21 @@ class WindowChrome {
     _onCloseRequested = handler;
   }
 
-  /// 创建窗口（Linux / Windows 隐藏原生标题栏；macOS 保留原生标题栏）
-  /// 并恢复几何。Linux / Windows 在 `waitUntilReadyToShow` 期间不显示，首帧
-  /// 就绪后再调 [show] 把窗口亮出来；macOS 的窗口随 NIB 显示（隐藏窗口会
-  /// 停帧），[show] 在那里是幂等的重复调用。
+  /// 初始化窗口（Linux / Windows 隐藏原生标题栏；macOS 保留原生标题栏）
+  /// 并恢复几何。
   ///
-  /// Linux / Windows 的 `titleBarStyle: hidden` 之后系统标题栏与系统按钮都不
+  /// 窗口由原生 runner 在 Dart 启动前创建，这里直接取当前窗口设置属性。
+  /// Linux / Windows 在首帧回调前不显示，首帧后再由 [show] 亮出来；macOS 的
+  /// 窗口随 NIB 显示（隐藏窗口会停帧），[show] 在那里是幂等的重复调用。
+  ///
+  /// Linux / Windows 的 `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不
   /// 复存在，窗口拖动全靠 UI 侧的 [WindowDragArea]，不要在别处再隐藏标题栏。
   /// macOS 走 `normal`：红绿灯与标题由系统绘制，UI 只保留拖动区（不显示
   /// [usesCustomTitleBar] 的三键）。
   ///
-  /// 同时打开 `preventClose`：原生关闭不再销毁窗口，而是转到
-  /// [WindowListener.onWindowClose]，由注入的策略决定「隐藏到托盘」还是
-  /// 「退出」。真正退出走 [quit]（先解除拦截再销毁）。
+  /// 关闭请求不再交给插件的 preventClose：监听
+  /// [WindowCloseRequestedEvent] 并 cancel，由注入的策略决定「隐藏到托盘」
+  /// 还是「退出」。真正退出走 [quit]（先解除拦截再 close）。
   ///
   /// **为什么显示推迟到首帧**：runApp 之前要装完整套子系统（数据库 / 播放 /
   /// 主题预解析，几百 ms 起），先显示窗口会让用户盯着一块空白窗等待
@@ -83,30 +112,58 @@ class WindowChrome {
   /// 启动异常时窗口也一定会出现。
   static Future<void> ensureInitialized() async {
     if (!isSupported) return;
-    await windowManager.ensureInitialized();
-    windowManager.addListener(_listener);
+    final window = _resolveWindow();
+    if (window == null) {
+      _logger.warning('桌面窗口尚未就绪，跳过窗口初始化');
+      return;
+    }
+    _window = window;
+    try {
+      // 与 0.5.x 的 waitUntilReadyToShow 对齐：先把窗口从全屏 / 最大化 /
+      // 最小化态拉回普通态，再套用本次启动的尺寸与几何。
+      if (window.isFullScreen) window.isFullScreen = false;
+      if (window.isMaximized) window.unmaximize();
+      if (window.isMinimized) window.restore();
+      _windowMaximized = false;
+      _windowMinimized = false;
+      _maximized.value = false;
+      window.titleBarStyle = usesCustomTitleBar
+          ? TitleBarStyle.hidden
+          : TitleBarStyle.normal;
+      // 最小尺寸与桌面骨架的折叠阈值配套：再窄时侧栏 + 播放器列 + 队列
+      // 面板会把内容区挤成破版式，直接在原生层拦住（初始 1280×800 见
+      // 原生 runner 默认值）。
+      window.minimumSize = kMinimumWindowSize.toNative();
+      // 先打开关闭拦截再挂监听：nativeapi 只有在窗口有监听者时才会投递
+      // WindowCloseRequestedEvent。
+      _preventClose = true;
+      window.addListener(_onWindowEvent);
+    } catch (error) {
+      // 窗口初始化失败不阻断启动：runner 仍会显示默认窗口。
+      _logger.warning('窗口初始化失败：$error');
+    }
     if (Platform.isMacOS) _installReopenHandler();
-    await windowManager.setPreventClose(true);
-    await windowManager.waitUntilReadyToShow(
-      WindowOptions(
-        titleBarStyle: usesCustomTitleBar
-            ? TitleBarStyle.hidden
-            : TitleBarStyle.normal,
-        // 最小尺寸与桌面骨架的折叠阈值配套：再窄时侧栏 + 播放器列 + 队列
-        // 面板会把内容区挤成破版式，直接在原生层拦住（初始 1280×800 见
-        // 原生 runner 默认值）。
-        minimumSize: const Size(900, 600),
-      ),
-    );
-    // 显示前先摆好位置：show() 后再 setBounds 会肉眼可见地跳一下。
+    // 显示前先摆好位置：show() 后再设置 bounds 会肉眼可见地跳一下。
     await _restoreSavedGeometry();
     await _applyLinuxWindowIcon();
+  }
+
+  /// 取 runner 创建的主窗口：正常情况下 `getCurrent()` 直接命中；极端情况下
+  /// 退回应用主窗口。两者都没有时返回 null，由调用方降级。
+  static Window? _resolveWindow() {
+    try {
+      return WindowManager.instance.getCurrent() ??
+          Application.instance.getPrimaryWindow();
+    } catch (error) {
+      _logger.warning('读取桌面窗口失败：$error');
+      return null;
+    }
   }
 
   /// 恢复上次关闭时的窗口几何与最大化状态。
   ///
   /// 开关关闭时什么都不恢复。几何与最大化**分开读**：最大化期间不写几何
-  /// （`getBounds` 在最大化态返回最大化矩形，存进去会丢还原尺寸），所以
+  /// （`bounds` 在最大化态返回最大化矩形，存进去会丢还原尺寸），所以
   /// 「首启就最大化 → 退出」这种会话只有标记可读，不能因为几何缺失就跳过
   /// 最大化恢复。
   ///
@@ -119,15 +176,15 @@ class WindowChrome {
       _restoreMaximized = await _boundsStore.loadMaximized();
       final saved = await _boundsStore.load();
       if (saved == null) return;
+      final window = _window;
+      if (window == null) return;
       final areas = DesktopDisplayAreas.read();
       if (areas == null) return;
-      await windowManager.setBounds(
-        resolveRestoredBounds(
-          saved: saved.bounds,
-          displayVisibleAreas: areas.visibleAreas,
-          primaryVisibleArea: areas.primary,
-        ),
-      );
+      window.bounds = resolveRestoredBounds(
+        saved: saved.bounds,
+        displayVisibleAreas: areas.visibleAreas,
+        primaryVisibleArea: areas.primary,
+      ).toNative();
     } catch (error) {
       // 恢复失败不阻断启动：窗口按系统默认位置显示。
       _logger.warning('窗口几何恢复失败：$error');
@@ -146,10 +203,12 @@ class WindowChrome {
 
   static Future<void> _saveBoundsNow() async {
     try {
-      // 最大化态不覆盖 bounds（getBounds 返回最大化矩形，存了会丢还原尺寸）；
+      final window = _window;
+      if (window == null) return;
+      // 最大化态不覆盖 bounds（bounds 返回最大化矩形，存了会丢还原尺寸）；
       // 最大化标记由 maximize 事件即时保存。
-      if (await windowManager.isMaximized()) return;
-      await _boundsStore.saveBounds(await windowManager.getBounds());
+      if (window.isMaximized) return;
+      await _boundsStore.saveBounds(window.bounds.toRect());
     } catch (error) {
       _logger.warning('窗口几何保存失败：$error');
     }
@@ -175,13 +234,19 @@ class WindowChrome {
   /// Linux 运行期窗口图标（X11 的 WM_HINTS；Wayland 没有窗口图标协议，
   /// dock 图标靠随包安装的 .desktop，见 `linux/packaging/README.md`）。
   ///
-  /// window_manager 的 Dart 侧把参数前缀到 `data/flutter_assets/`（发布包与
-  /// 调试 bundle 都存在该路径）；插件文档标着 windows 专用，但 Linux 实现
-  /// 走 `gtk_window_set_icon_from_file`，此处按实现使用。
+  /// nativeapi 的 `Application.setIcon` 需要 bundle 内绝对路径：发布包与调试
+  /// bundle 都把资产放在 `<exe>/data/flutter_assets/`。
   static Future<void> _applyLinuxWindowIcon() async {
     if (!Platform.isLinux) return;
     try {
-      await windowManager.setIcon('assets/icons/app_icon.png');
+      final executableDirectory = File(Platform.resolvedExecutable).parent.path;
+      final assetPath = [
+        executableDirectory,
+        'data',
+        'flutter_assets',
+        'assets/icons/app_icon.png',
+      ].join(Platform.pathSeparator);
+      Application.instance.setIcon(assetPath);
     } catch (_) {
       // 图标失败不影响窗口本身：忽略（Wayland / 资产缺失时不致命）。
     }
@@ -189,17 +254,19 @@ class WindowChrome {
 
   static Future<void> minimize() async {
     if (!isSupported) return;
-    await windowManager.minimize();
+    _window?.minimize();
   }
 
-  /// 最大化 ⇄ 还原：以原生 `isMaximized()` 为准，不读 [maximized] 缓存
+  /// 最大化 ⇄ 还原：以原生 `isMaximized` 为准，不读 [maximized] 缓存
   /// （窗口管理器的手势/快捷键也能改变状态，缓存可能滞后一帧）。
   static Future<void> toggleMaximize() async {
     if (!isSupported) return;
-    if (await windowManager.isMaximized()) {
-      await windowManager.unmaximize();
+    final window = _window;
+    if (window == null) return;
+    if (window.isMaximized) {
+      window.unmaximize();
     } else {
-      await windowManager.maximize();
+      window.maximize();
     }
   }
 
@@ -207,7 +274,7 @@ class WindowChrome {
   /// 由注入的关闭策略决定实际行为（隐藏到托盘 / 退出）。
   static Future<void> close() async {
     if (!isSupported) return;
-    await windowManager.close();
+    _window?.close();
   }
 
   /// 隐藏窗口（「关闭时最小化到托盘」）：进程与播放继续，任务栏/Tab 列表里
@@ -218,7 +285,7 @@ class WindowChrome {
   static Future<void> hide() async {
     if (!isSupported) return;
     AppPresence.instance.markTrayHidden();
-    await windowManager.hide();
+    _window?.hide();
   }
 
   /// 设置窗口标题（任务栏 / 窗口列表 / Alt-Tab 显示）。
@@ -229,7 +296,7 @@ class WindowChrome {
   static Future<void> setTitle(String title) async {
     if (!isSupported || title.isEmpty) return;
     try {
-      await windowManager.setTitle(title);
+      _window?.title = title;
     } catch (error) {
       // 标题只是锦上添花：失败不影响任何功能。
       _logger.fine('设置窗口标题失败：$error');
@@ -239,7 +306,7 @@ class WindowChrome {
   /// 显示并聚焦窗口（首帧后 reveal / 托盘「显示主窗口」/ 单实例请求）。
   ///
   /// 幂等：重复调用只是再次 show + focus；恢复的最大化状态在这里补一次
-  /// （见 [_restoreSavedGeometry]——`getBounds` 在最大化态返回最大化矩形，
+  /// （见 [_restoreSavedGeometry]——`bounds` 在最大化态返回最大化矩形，
   /// 所以几何与最大化分两步恢复）。
   ///
   /// **托盘恢复的白闪**：隐藏期间帧是停的，`AppPresence.markVisible()` 只把
@@ -278,6 +345,8 @@ class WindowChrome {
 
   static Future<void> show() async {
     if (!isSupported) return;
+    final window = _window;
+    if (window == null) return;
     // 只有「关闭到托盘后的恢复」才走首帧后显示。启动首帧时 runner 已经挂了
     // 自己的 next-frame callback（Show），这里再设一次会覆盖它——Windows 上
     // 实测会在首帧后崩（ucrtbase 0xc0000409）。
@@ -285,19 +354,23 @@ class WindowChrome {
     AppPresence.instance.markVisible();
     // Dock 点击恢复时窗口可能在最小化态：先还原再显示（macOS 的
     // `makeKeyAndOrderFront` 不会自动把窗口从 Dock 里拉回来）。
-    if (await windowManager.isMinimized()) await windowManager.restore();
+    if (window.isMinimized) window.restore();
     if (fromTray && Platform.isWindows) {
       await _showWindowsAfterFirstFrame();
     } else if (fromTray && Platform.isLinux) {
       await _showLinuxWithOpacity();
     } else {
-      await windowManager.show();
+      window.show();
     }
-    await windowManager.focus();
+    window.focus();
     if (_restoreMaximized) {
       _restoreMaximized = false;
-      await windowManager.maximize();
+      window.maximize();
     }
+  }
+
+  static void _showWindow() {
+    _window?.show();
   }
 
   /// Windows：原生侧 cloak → ShowWindow → 首帧回调 uncloak。
@@ -310,11 +383,11 @@ class WindowChrome {
           .invokeMethod<void>('showAfterFirstFrame')
           .timeout(const Duration(milliseconds: 800));
     } on MissingPluginException {
-      await windowManager.show();
+      _showWindow();
     } on PlatformException {
-      await windowManager.show();
+      _showWindow();
     } on TimeoutException {
-      await windowManager.show();
+      _showWindow();
     }
   }
 
@@ -323,15 +396,17 @@ class WindowChrome {
   /// 隐藏期帧停，`show()` 之后才会重新出帧；等两帧落定再恢复不透明。
   /// 合成器不支持透明度时保持原行为（直接可见），不阻塞恢复。
   static Future<void> _showLinuxWithOpacity() async {
+    final window = _window;
+    if (window == null) return;
     var opacitySet = false;
     try {
-      await windowManager.setOpacity(0);
+      window.opacity = 0;
       opacitySet = true;
     } catch (_) {
       // 平台 / 合成器不支持：按原路径直接显示。
     }
     try {
-      await windowManager.show();
+      window.show();
       if (opacitySet) {
         await _waitFrame();
         await _waitFrame();
@@ -339,7 +414,7 @@ class WindowChrome {
     } finally {
       if (opacitySet) {
         try {
-          await windowManager.setOpacity(1);
+          window.opacity = 1;
         } catch (_) {
           // 恢复失败不影响窗口可用性；下一轮 show 会再设置。
         }
@@ -351,95 +426,102 @@ class WindowChrome {
       .timeout(const Duration(milliseconds: 500), onTimeout: () {});
 
   /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
-  /// 先释放单实例锁、解除关闭拦截，再销毁窗口；退出前的落盘由调用方负责。
+  /// 先释放单实例锁、解除关闭拦截，再关闭窗口；退出前的落盘由调用方负责。
   static Future<void> quit() async {
     if (!isSupported) return;
     // 正常退出路径顺带释放锁：下次启动能直接抢到（强杀残留由陈旧锁清理兜底）。
     await SingleInstance.release();
-    await windowManager.setPreventClose(false);
-    await windowManager.destroy();
+    _destroying = true;
+    _preventClose = false;
+    final window = _window;
+    if (window != null && Window.isCloseSupported() && window.close()) {
+      return;
+    }
+    // 原生 close 不可用 / 被拒绝时退回应用级退出。
+    try {
+      Application.instance.quit(0);
+    } catch (error) {
+      _logger.warning('退出应用失败：$error');
+    }
+  }
+
+  /// 原生窗口事件 → 最大化标记 / 几何落盘 / 关闭策略。
+  ///
+  /// nativeapi 用同一个 [WindowRestoredEvent] 表示「退出最大化」和「从最小化
+  /// 恢复」，只能靠事件前的状态区分（与 0.5.x 兼容层同一口径）。
+  static void _onWindowEvent(WindowEvent event) {
+    switch (event) {
+      case WindowCloseRequestedEvent():
+        // 先同步 cancel，再交给异步策略：事件返回后 nativeapi 才会决定
+        // 是否真正关闭窗口。
+        if (_preventClose) event.request.cancel();
+        if (_destroying) return;
+        final handler = _onCloseRequested;
+        if (handler == null) {
+          unawaited(quit());
+        } else {
+          unawaited(Future.sync(handler));
+        }
+      case WindowMaximizedEvent():
+        _windowMaximized = true;
+        _maximized.value = true;
+        // 最大化时 bounds 是最大化矩形：只记标记，不覆盖还原尺寸。
+        _persistMaximized(true);
+      case WindowRestoredEvent():
+        if (_windowMinimized) {
+          _windowMinimized = false;
+          // 从最小化恢复不代表退出最大化（最大化的窗口最小化后再恢复仍是
+          // 最大化），因此重新查询真实状态而不是直接置 false。
+          AppPresence.instance.markVisible();
+          final maximized = _window?.isMaximized ?? false;
+          _windowMaximized = maximized;
+          _maximized.value = maximized;
+          return;
+        }
+        if (!_windowMaximized) return;
+        _windowMaximized = false;
+        _maximized.value = false;
+        _persistMaximized(false);
+        // 还原几何在事件后已生效，按正常保存路径重新记一次。
+        _scheduleBoundsSave();
+      case WindowMinimizedEvent():
+        _windowMinimized = true;
+        // 最小化只置「最小化」态：界面状态保留（内存守卫只停后台解码类工作，
+        // 不清缓存，保证最小化↔恢复跟手）。
+        //
+        // 已是托盘隐藏时不降级：个别平台在原生隐藏时也会补一个最小化事件，
+        // 若覆盖成「最小化」，托盘休眠与缓存清理就会被跳过。
+        if (!AppPresence.instance.isVisible) return;
+        AppPresence.instance.markMinimized();
+      case WindowMovedEvent():
+      case WindowResizedEvent():
+        _scheduleBoundsSave();
+      default:
+        break;
+    }
   }
 
   /// 窗口当前是否可见（仅诊断/测试用）。
   @visibleForTesting
   static Future<bool> isVisible() async {
     if (!isSupported) return false;
-    return windowManager.isVisible();
+    return _window?.isVisible ?? false;
   }
 
   /// 原生标题栏高度（仅诊断/测试用）：隐藏标题栏后必须为 0。
   @visibleForTesting
   static Future<int> debugTitleBarHeight() async {
     if (!isSupported) return 0;
-    return windowManager.getTitleBarHeight();
-  }
-}
-
-/// 原生窗口状态 → [WindowChrome.maximized]；几何变更 → 防抖落盘；
-/// 关闭请求 → 组合根策略。
-class _MaximizedStateListener extends WindowListener {
-  @override
-  void onWindowMaximize() {
-    WindowChrome._maximized.value = true;
-    // 最大化时 getBounds 是最大化矩形：只记标记，不覆盖还原尺寸。
-    WindowChrome._persistMaximized(true);
-  }
-
-  @override
-  void onWindowUnmaximize() {
-    WindowChrome._maximized.value = false;
-    WindowChrome._persistMaximized(false);
-    // 还原几何在事件后已生效，按正常保存路径重新记一次。
-    WindowChrome._scheduleBoundsSave();
-  }
-
-  @override
-  void onWindowMove() => WindowChrome._scheduleBoundsSave();
-
-  @override
-  void onWindowResize() => WindowChrome._scheduleBoundsSave();
-
-  /// 关闭请求：`preventClose` 打开后原生关闭不会销毁窗口，这里把控制权交回
-  /// Dart 策略；未注入策略（如集成测试直接调 ensureInitialized）时保持
-  /// 历史行为——直接退出，避免窗口关闭键变成「点了没反应」。
-  @override
-  void onWindowClose() {
-    final handler = WindowChrome._onCloseRequested;
-    if (handler == null) {
-      unawaited(WindowChrome.quit());
-    } else {
-      unawaited(Future.sync(handler));
-    }
-  }
-
-  /// 从最小化恢复不代表退出最大化（最大化的窗口最小化后再恢复仍是最大化），
-  /// 因此重新查询真实状态而不是直接置 false。
-  @override
-  void onWindowRestore() {
-    AppPresence.instance.markVisible();
-    if (!WindowChrome.isSupported) return;
-    unawaited(
-      windowManager.isMaximized().then((maximized) {
-        WindowChrome._maximized.value = maximized;
-      }),
-    );
-  }
-
-  /// 最小化只置「最小化」态：界面状态保留（内存守卫只停后台解码类工作，
-  /// 不清缓存，保证最小化↔恢复跟手）。
-  ///
-  /// 已是托盘隐藏时不降级：个别平台在原生隐藏时也会补一个最小化事件，
-  /// 若覆盖成「最小化」，托盘休眠与缓存清理就会被跳过。
-  @override
-  void onWindowMinimize() {
-    if (!AppPresence.instance.isVisible) return;
-    AppPresence.instance.markMinimized();
+    final window = _window;
+    if (window == null) return 0;
+    final height = window.contentBounds.y - window.bounds.y;
+    return height < 0 ? 0 : height.round();
   }
 }
 
 /// 窗口拖动区：隐藏标题栏后按住空白处拖动窗口。
 ///
-/// 语义同 window_manager 的 `DragToMoveArea`：pan 起始即交给原生
+/// 语义同 nativeapi_flutter 的 `DragToMoveArea`：pan 起始即交给原生
 /// `startDragging()`（translucent 让顶栏的空白区域也能命中拖动，
 /// 按钮/标题自身的点击手势不受影响——pan 与 tap 在手势竞技场按位移区分）。
 class WindowDragArea extends StatelessWidget {
@@ -451,7 +533,7 @@ class WindowDragArea extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onPanStart: (_) => windowManager.startDragging(),
+      onPanStart: (_) => WindowChrome._window?.startDragging(),
       child: child,
     );
   }

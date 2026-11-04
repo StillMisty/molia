@@ -74,6 +74,12 @@ Linux/Windows 桌面端此前保留系统标题栏：窗口最小化/最大化/�
      `AppBar.preferredHeightFor(context, appBar.preferredSize)`
      （当前 = 56 工具栏 + 10 波浪进度），与 Scaffold 原本的算法一致。
 
+（2026-11-04 修订：`window_manager 0.6.0` 已发布到 pub，并改为基于 nativeapi
+重写；本应用不再直接依赖 `window_manager`，窗口 chrome 改为直接使用
+nativeapi 的 `Window` / `WindowManager` / 窗口事件 API，以及
+`nativeapi_flutter` 的几何转换。此前排除 `nativeapi_flutter` 的「Linux 拖动
+未实现」理由也随之作废。）
+
 ## 后果
 
 - Linux/Windows：系统标题栏消失，顶栏右侧多出三个窗口按钮（最小化 /

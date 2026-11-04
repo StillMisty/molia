@@ -166,24 +166,24 @@
     集成测试先构建应用，bundle 内原生库自然可用。若未来单测要真跑引擎，先构建一次
     （如 `flutter build linux --debug`）再以
     `LIBQUICKJSC_TEST_PATH=<abs>/libquickjs_c_bridge_plugin.so flutter test ...` 运行。
-30. **桌面窗口 chrome 只在 `lib/services/window/` 里碰 window_manager**：
-    `window_manager` 的 Dart 代码 import `dart:io`，散布进 UI 会把平台实现拖进
-    其它平台的构建/测试；统一经 `window_chrome.dart` 收口
-    （全仓库只有 `window_chrome_io.dart` 一处 import 该包，非桌面平台按不支持处理），
-    同 `system_fonts_service.dart` 模式。
+30. **桌面窗口 chrome 只在 `lib/services/window/` 里碰窗口原生 API**：
+    `nativeapi` / `nativeapi_flutter` 的 Dart 代码 import `dart:io` / `dart:ffi`，
+    散布进 UI 会把平台实现拖进其它平台的构建/测试；统一经 `window_chrome.dart`
+    收口（原生包只允许出现在三个桌面 IO 实现里，见
+    `test/architecture/tray_import_test.dart`），同 `system_fonts_service.dart` 模式。
     `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
-     UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
-     也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
+    UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
+    也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
     另：`flutter test` 在 Linux / macOS 本机跑时 `WindowChrome.isSupported` 为 true 属预期
     （单测里顶栏只在 `usesCustomTitleBar` 为 true 的 Linux / Windows 构建出三个
-    窗口按钮，按钮本身不发起插件调用；macOS 保留原生红绿灯）；除
+    窗口按钮，按钮本身不发起原生调用；macOS 保留原生红绿灯）；除
     `ensureInitialized()`（仅 `main()` 与集成测试调用）外，任何构建期/测试期路径
-    都不得调用插件 API，否则撞 `MissingPluginException`。
+    都不得调用窗口原生 API，否则在无桌面窗口 / 无原生库的测试环境会抛错。
 31. **Linux 无系统钥匙串时 `flutter_secure_storage` 会抛异常，读取必须容错**：
     WSLg / 容器 / 无 keyring 的最小桌面没有 `org.freedesktop.secrets`，
     libsecret 抛 `PlatformException(Libsecret error, ... is not activatable)`。
     `SyncProvider.init()`（`runApp` 之前）读同步口令时会直接撞上：
-    未捕获 → `main()` 在 `runApp` 前终止 → **窗口已由 window_manager 显示、
+    未捕获 → `main()` 在 `runApp` 前终止 → **窗口已由原生 runner 显示、
     但没有首帧，表现为永久黑窗（进程还活着）**。现在的契约：
     `SecureSettingsSecretStore.read` 把读取失败降级为「未设置」（返回 null +
     只记一次日志），`main.dart` 再兜一层包住 `syncProvider.init()`。
@@ -267,8 +267,9 @@
     `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致（Wayland 靠 app_id ↔ 文件名
     匹配 dock 图标），`Icon=` 必须与 hicolor 文件名一致；不要手改那批 PNG，
     再生成命令见 `linux/packaging/README.md`；X11 的运行期窗口图标走
-    `assets/icons/app_icon.png`（`WindowChrome` 调 window_manager 的 `setIcon`，
-    与 hicolor 集合同源），Wayland 下该调用无效也不报错。契约由
+    `assets/icons/app_icon.png`（`WindowChrome` 调 nativeapi 的
+    `Application.setIcon`，与 hicolor 集合同源），Wayland 下该调用无效也不报错。
+    契约由
     `test/packaging/linux_desktop_test.dart` 守住。
 
 39. **桌面歌词位置样本不能按到达时刻重设基准**：位置样本经 Dart（≤4Hz）→ 通道 →
@@ -299,7 +300,7 @@
     第二实例连上主实例的 loopback 端口发 `show` 后 `exit(0)`——因此
     `SingleInstance.isSupported` 必须与 `WindowChrome.isSupported` 同一平台面：
     窗口能力缺失的平台（Android / iOS）上若仍拦第二实例，用户会「点了图标什么都不发生」。
-    macOS 现在有窗口能力（原生标题栏 + `window_manager` 隐藏 / 恢复），单实例一并启用；
+    macOS 现在有窗口能力（原生标题栏 + nativeapi 窗口 API 隐藏 / 恢复），单实例一并启用；
     Dock 图标点击走 `AppDelegate.applicationShouldHandleReopen` → 窗口通道 `reopen`
     → `WindowChrome.show()`，不能只靠 AppKit 显示窗口：托盘休眠期间界面是占位树，
     原生直接显示会是一扇空窗。
@@ -798,11 +799,13 @@
     `frozen` 分支必须用 `PowerManager.isInteractive` 兜底：设备已经交互就清
     `frozen` + `pending` 并立即 `render`；`setFrozen(false)` 也先
     `finishPendingRoll()`。不要用「屏幕广播一定到达」作为解冻前提。
-76. **`window_manager.destroy()` 在 Windows 上只调用 `PostQuitMessage(0)`**：
-    它不销毁窗口、也不清理插件 / 引擎资源，真正的销毁发生在 `wWinMain` 返回、
-    栈上 `FlutterWindow` 析构时。因此退出流程不能只 `destroy()`：必须先自己
+76. **退出流程必须在关闭窗口前停音频并落盘**：
+    窗口 chrome 迁移到 nativeapi 后，关闭走 nativeapi 的 close request：确认关闭后
+    `Window.close()` 在 Windows 上触发 WM_CLOSE → DestroyWindow → WM_DESTROY
+    → `PostQuitMessage(0)`；窗口 / 引擎 / `FlutterWindow` 的析构仍发生在
+    `wWinMain` 返回时。因此退出流程不能只调 `WindowChrome.quit()`：必须先自己
     停音频（暂停 + 释放播放器，留一点时间让设备缓冲排空）、把会话进度与统计
-    落盘，再 `destroy()`；否则进程在 libmpv / WASAPI 还在出数据时结束，Windows
+    落盘，再关闭窗口；否则进程在 libmpv / WASAPI 还在出数据时结束，Windows
     上会听到「突然断掉 / 爆一声」。任务栏「结束任务」是系统强杀、不执行应用
     退出代码，所以那条路径反而听不到，不能拿它当「没问题」的对照。另外
     `windows/runner/main.cpp` 的 `CoUninitialize()` 必须排在窗口析构之后（用

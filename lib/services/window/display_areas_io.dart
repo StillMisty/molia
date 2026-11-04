@@ -4,12 +4,13 @@ import 'package:nativeapi/nativeapi.dart' as na;
 
 /// 桌面显示器可见区（Dock / 任务栏之外的部分）。
 ///
-/// 与 window_manager 的窗口几何对接：nativeapi 的 `Display.workArea` 与
-/// screen_retriever 的 `visiblePosition + visibleSize` 同口径（0.3.0 的兼容层
-/// 就是直接映射这两个字段），因此可以直接用来校验 / 恢复窗口位置。
+/// 与窗口几何对接：nativeapi 的 `Display.workArea` 即显示器可见区（旧
+/// screen_retriever 的 `visiblePosition + visibleSize` 同口径），因此可以直接
+/// 用来校验 / 恢复窗口位置。
 ///
-/// FFI 只在本文件出现：托盘实现（`app_tray_io.dart`）与这里各自持有
-/// nativeapi 的调用面，其它窗口代码只消费纯 [Rect]。
+/// FFI 只出现在桌面窗口服务里：托盘（`app_tray_io.dart`）、窗口 chrome
+/// （`window_chrome_io.dart`）与这里各自持有 nativeapi 的调用面，其它代码只
+/// 消费纯 [Rect]。
 class DesktopDisplayAreas {
   const DesktopDisplayAreas({
     required this.visibleAreas,
