@@ -49,15 +49,15 @@ class _StateValueListenable<T> implements ValueListenable<T> {
       _source.removeListener(listener);
 }
 
-/// UI 播放状态唯一入口：包装 [PlaybackFacade]。
+/// UI 播放状态唯一入口：读 [PlaybackSessionCoordinator] 的展示投影、命令转给协调者。
 ///
-/// 对外只暴露领域 [PlaybackSnapshot]（真实播放来自 facade；冷启动恢复态
-/// 由 [PlaybackSessionCoordinator] 构造覆盖快照）与高频 position 通道。
+/// 对外只暴露领域 [PlaybackSnapshot]（协调者 [PlaybackSessionCoordinator.displaySnapshot]：
+/// 真实播放来自 facade，冷启动恢复态由协调者构造覆盖快照）与高频 position 通道。
 /// 所有播放均走本地音源。
 ///
 /// 职责边界（docs/architecture.md §2.1）：
 /// - 错误提示走注入的 [UiMessenger]（不依赖 `main.dart`）；
-/// - 状态从 facade 快照/进度通道订阅；
+/// - UI 状态读协调者展示投影；定时关闭 / 失败恢复订阅 live 投影；
 /// - 应用内音量 / 静音是设备本地状态：不进 [PlaybackSnapshot]（快照 `==`
 ///   契约与低频语义不能动、音量也不是播放事件），变化直接 `notifyListeners`
 ///   且不新增节流类别；
@@ -150,7 +150,7 @@ class PlaybackProvider extends ChangeNotifier {
        _volumeStore = volumeStore ?? PlaybackVolumeStore() {
     _errorRecovery = PlaybackErrorRecovery(
       commands: _session,
-      readSnapshot: () => _facade.snapshot.value,
+      readSnapshot: () => _session.liveSnapshot,
       onOutcome: _applyOutcome,
       catalogService: catalogService,
       autoSwapSettings: autoSwapSettings,
@@ -173,12 +173,13 @@ class PlaybackProvider extends ChangeNotifier {
       defaultInterval: const Duration(milliseconds: 50),
     );
     _positionChannel = _StateValueListenable<Duration>(_session.position);
-    // 定时关闭：判定用 facade 原始通道（恢复态覆盖值不是真实播放进度）；
-    // 到点暂停走命令面——与通知 / UI 暂停共享阶段路由与提交语义，直接写
-    // facade 会绕过「返回前已落盘」，熄屏到点后进程被回收就丢最后进度。
+    // 定时关闭：判定用真实播放通道（协调者的 live 投影；恢复态的展示快照 /
+    // 保存进度不是真实播放进度）。到点暂停走命令面——与通知 / UI 暂停共享
+    // 阶段路由与提交语义，直接写 facade 会绕过「返回前已落盘」，熄屏到点后
+    // 进程被回收就丢最后进度。
     sleepTimer = SleepTimerController(
-      snapshot: _facade.snapshot,
-      position: _facade.position,
+      snapshot: _session.liveSnapshotChannel,
+      position: _session.livePosition,
       trackCompletions: _facade.trackCompletions,
       setStopAfterCurrentTrack: _facade.setStopAfterCurrentTrack,
       // 定时关闭只关心「暂停已落地」，路由结果对倒计时没有 UI 语义。
@@ -200,7 +201,9 @@ class PlaybackProvider extends ChangeNotifier {
     // 曲末自己停住（`_pauseAtTrackEnd` 推 playing→paused 快照），会话协调者
     // 的快照监听提交一次（payload / cursor 由 store 决定）——那条路径已经
     // 提交；这里共用 onFire 的 pause 对已在曲末停住的后端是幂等的。
-    _facade.snapshot.addListener(_onFacadeSnapshot);
+    // 订阅协调者的 live 投影（当前实现即 facade 快照通道）：provider 不再
+    // 直接认识 facade 的快照对象，恢复态覆盖由协调者负责。
+    _session.liveSnapshotChannel.addListener(_onLiveSnapshot);
     // position 走独立 ValueListenable 通道（_positionChannel）：进度 tick
     // 只重建进度条/歌词行，不触发整 Provider 重建（会话只在动作时落盘，
     // 进度 tick 不写库）。
@@ -216,8 +219,11 @@ class PlaybackProvider extends ChangeNotifier {
     _handlePlaybackSnapshot();
   }
 
-  /// UI 状态唯一入口：真实播放取 facade 快照；冷启动恢复态取会话快照。
-  PlaybackSnapshot get snapshot => _session.resolve(_facade.snapshot.value);
+  /// UI 状态唯一入口：读协调者的展示投影（恢复态感知）。
+  ///
+  /// 真实播放接管后它原样透传 facade；恢复态返回协调者构造的恢复快照。
+  /// provider 不再自己判断该用哪一份。
+  PlaybackSnapshot get snapshot => _session.displaySnapshot;
 
   /// 是否有可恢复的上次播放会话（无真实曲目时才生效）。
   bool get hasRestoredSession => _session.hasRestoredSession;
@@ -570,7 +576,9 @@ class PlaybackProvider extends ChangeNotifier {
       _defaultPlayMode = mode;
       _notifyCategory('default');
     }
-    final snapshot = _facade.snapshot.value;
+    // 只依据真实播放判断「是否已有当前曲目」：恢复态保存的曲目并未起播，
+    // 不能因为它压掉默认模式的落地（否则下次真正播放仍是旧默认模式）。
+    final snapshot = _session.liveSnapshot;
     if (snapshot.current == null && snapshot.mode != mode) {
       await _facade.setMode(mode);
       _notifyCategory('track');
@@ -599,7 +607,8 @@ class PlaybackProvider extends ChangeNotifier {
       final name = await _settings.read(kDefaultPlayMode);
       final mode = _playModeOf(name);
       _defaultPlayMode = mode;
-      final snapshot = _facade.snapshot.value;
+      // 与 setDefaultPlayMode 同口径：恢复态保存的曲目不算真实播放。
+      final snapshot = _session.liveSnapshot;
       if (snapshot.current == null && snapshot.mode != mode) {
         await _facade.setMode(mode);
       }
@@ -648,9 +657,9 @@ class PlaybackProvider extends ChangeNotifier {
     }
   }
 
-  /// facade 低频快照变化：处理失败并通知 UI（曲目/队列）；副作用扇出在
+  /// 真实播放快照变化：处理失败并通知 UI（曲目/队列）；副作用扇出在
   /// [PlaybackObserver] 的同源监听里，恢复态交接在 [PlaybackSessionCoordinator]。
-  void _onFacadeSnapshot() {
+  void _onLiveSnapshot() {
     _handlePlaybackSnapshot();
     _notifyCategory('track');
     _notifyCategory('queue');
@@ -670,7 +679,8 @@ class PlaybackProvider extends ChangeNotifier {
   /// 小组件 / 历史 / 会话落盘 / 预取 / 补封面）在 [PlaybackObserver]，恢复态
   /// 撤下与 live 交接在会话协调者。
   void _handlePlaybackSnapshot() {
-    final snapshot = _facade.snapshot.value;
+    // 错误恢复只处理真实播放的失败：恢复快照里的 error 不是本次播放产生的。
+    final snapshot = _session.liveSnapshot;
     _maybeShowPlaybackError(snapshot);
     _errorRecovery.onPlaybackError(snapshot);
   }
@@ -729,7 +739,7 @@ class PlaybackProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _facade.snapshot.removeListener(_onFacadeSnapshot);
+    _session.liveSnapshotChannel.removeListener(_onLiveSnapshot);
     sleepTimer.dispose();
     _sourceManager?.removeListener(_onSourceManagerChanged);
     _dataSaver?.removeListener(_onDataSaverChanged);

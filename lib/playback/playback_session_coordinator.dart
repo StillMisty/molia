@@ -62,10 +62,18 @@ typedef RestoredTrackReporter = void Function(Track track);
 
 /// 播放会话模块：队列 + 下标 + 进度 + 模式 + 上下文的一次完整生命周期。
 ///
-/// 输入是 facade（真实播放的事实来源与命令出口），输出是 [resolve]（UI 快照）+
-/// [position]（进度通道）；持久化对上层透明（[flushSession] 只承诺「写完了」）。
+/// 输入是 facade（真实播放的事实来源与命令出口），输出是读面（[displaySnapshot] /
+/// [liveSnapshot] / [position] / [livePosition]）与写面（命令 / [flushSession]）；
+/// 持久化对上层透明（[flushSession] 只承诺「写完了」）。
 /// 组合根创建它并注入 provider / 系统媒体会话——两边都只经 [PlaybackCommandPort]
 /// 写入，phase 路由、恢复态回落与「返回即已提交」只在这里实现一份。
+///
+/// 读面刻意分成两个命名投影，而不是让消费方各自判断「恢复态还是 live」：
+/// - [displaySnapshot] / [position]：展示用，恢复态返回本模块构造的恢复快照与
+///   保存进度，真实播放接管后原样透传 facade；
+/// - [liveSnapshot] / [liveSnapshotChannel] / [livePosition]：只反映真实播放，
+///   恢复态下为空。定时关闭、失败恢复、默认播放模式必须看这一面——恢复数据
+///   并未起播，拿它当播放事实会过早暂停 / 误触发恢复 / 压掉默认模式。
 class PlaybackSessionCoordinator
     implements PlaybackSessionSyncPort, PlaybackCommandPort {
   PlaybackSessionCoordinator({
@@ -149,13 +157,34 @@ class PlaybackSessionCoordinator
   PlayMode? _observedMode;
   PlaybackContext? _observedContext;
 
-  /// 快照出口：恢复态返回协调者构造的恢复快照，其余原样透传 [live]。
+  /// 展示快照（恢复态感知）：恢复态返回本模块构造的恢复快照，其余原样透传
+  /// facade。
   ///
-  /// 恢复态快照的构造只在本模块发生（播放后端与恢复态不再各拼一份）。
-  PlaybackSnapshot resolve(PlaybackSnapshot live) => _restoredSnapshot ?? live;
+  /// UI 只读这一面：恢复态构造只在本模块发生（播放后端与恢复态不再各拼一份），
+  /// 消费方不需要、也不应该自己判断「恢复态还是 live」。
+  PlaybackSnapshot get displaySnapshot =>
+      _restoredSnapshot ?? _facade.snapshot.value;
 
-  /// 高频进度通道：恢复态显示上次保存的进度，点播放后交还底层。
+  /// 真实播放快照：只读 facade，不含恢复态覆盖（恢复态下 current 为 null）。
+  ///
+  /// 供错误恢复 / 默认播放模式等「只对真正起播的事实做决策」的消费方读取；
+  /// 与 [liveSnapshotChannel] 同源，二者都不会被恢复数据污染。
+  PlaybackSnapshot get liveSnapshot => _facade.snapshot.value;
+
+  /// 真实播放快照通道：定时关闭等长驻订阅方直接挂这里。
+  ///
+  /// 恢复态没有真实播放，恢复快照的变化不会经这个通道发出（它只由 facade
+  /// 推送）；需要展示恢复态的消费方应读 [displaySnapshot]。
+  StateListenable<PlaybackSnapshot> get liveSnapshotChannel => _facade.snapshot;
+
+  /// 高频展示进度通道：恢复态显示上次保存的进度，点播放后交还底层。
   StateListenable<Duration> get position => _position;
+
+  /// 真实播放进度通道：只转发 facade，恢复态下仍是底层进度（通常为 0）。
+  ///
+  /// 定时关闭按它判定真实播放进度；展示进度条的 [position] 在恢复态会被
+  /// 保存进度覆盖，不能用于这条判断。
+  StateListenable<Duration> get livePosition => _facade.position;
 
   /// 当前阶段（三阶段状态机，见 [PlaybackSessionPhase]）。
   PlaybackSessionPhase get phase {
@@ -654,7 +683,7 @@ class PlaybackSessionCoordinator
   /// facade），系统通知与 App 内按钮因此不会各切各的。
   @override
   Future<PlaybackCommandOutcome> togglePlayMode() {
-    final current = resolve(_facade.snapshot.value).mode;
+    final current = displaySnapshot.mode;
     return setPlayMode(current.next);
   }
 

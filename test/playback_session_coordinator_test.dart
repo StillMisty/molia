@@ -2,8 +2,9 @@
 /// 路由、恢复态与 live 的交接、以及「PlaybackSessionStore 唯一写者」的落盘
 /// 口径（动作落盘、无周期写、flush 可 await）。
 ///
-/// 假后端 + 真实 facade + 记录型假 store：断言只经公开接口（resolve / phase /
-/// 命令路由结果 / position）与注入的假入口，不读私有字段。
+/// 假后端 + 真实 facade + 记录型假 store：断言只经公开接口（displaySnapshot /
+/// liveSnapshot / phase / 命令路由结果 / position / livePosition）与注入的假入口，
+/// 不读私有字段。
 library;
 
 import 'dart:async';
@@ -258,7 +259,7 @@ void main() {
     expect(session.hasRestoredSession, isTrue);
 
     // 恢复态出口：协调者构造的恢复快照（facade 此时还是空的）。
-    final restored = session.resolve(facade.snapshot.value);
+    final restored = session.displaySnapshot;
     expect(restored.current?.id.id, 'b');
     expect(restored.queue.map((track) => track.id.id), ['a', 'b']);
     expect(restored.currentIndex, 1);
@@ -275,13 +276,75 @@ void main() {
     backend.emit(_live(live, position: const Duration(seconds: 3)));
     expect(session.phase, PlaybackSessionPhase.live);
     expect(session.hasRestoredSession, isFalse);
-    expect(session.resolve(facade.snapshot.value).current?.id.id, 'c');
+    expect(session.displaySnapshot.current?.id.id, 'c');
     expect(session.position.value, const Duration(seconds: 3));
 
     // 停止播放（真实后端随后清空队列）：回 idle。
     await session.stopPlayback();
     backend.emit(BackendSnapshot.empty);
     expect(session.phase, PlaybackSessionPhase.idle);
+  });
+
+  test('读面投影：恢复态 display 是保存快照，live 面为空；接管后两者同源', () async {
+    build();
+    const savedPosition = Duration(seconds: 20);
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b')],
+        index: 1,
+        position: savedPosition,
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    // 展示面：保存的曲目 / 队列 / 进度；真实播放面：什么都还没有。
+    expect(session.displaySnapshot.current?.id.id, 'b');
+    expect(session.displaySnapshot.currentIndex, 1);
+    expect(session.displaySnapshot.isPlaying, isFalse);
+    expect(session.liveSnapshot.current, isNull);
+    expect(session.liveSnapshotChannel.value.current, isNull);
+
+    // 展示进度是保存进度；真实播放进度仍是底层（0）。两个通道必须分开，
+    // 定时关闭 / 失败恢复不能拿恢复进度当播放事实。
+    expect(session.position.value, savedPosition);
+    expect(session.livePosition.value, Duration.zero);
+
+    // 真实播放接管：两个投影都指向 live，展示进度交还底层。
+    final live = _track('c');
+    backend.emit(_live(live, position: const Duration(seconds: 3)));
+    expect(session.displaySnapshot.current?.id.id, 'c');
+    expect(session.liveSnapshot.current?.id.id, 'c');
+    expect(session.liveSnapshotChannel.value.current?.id.id, 'c');
+    expect(session.position.value, const Duration(seconds: 3));
+    expect(session.livePosition.value, const Duration(seconds: 3));
+  });
+
+  test('恢复播放后展示面回落到 live，不再返回旧恢复快照', () async {
+    build(backendOverride: _LoadingBackend());
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a')],
+        index: 0,
+        position: const Duration(seconds: 20),
+      ),
+    );
+    expect(await session.load(), isTrue);
+    expect(session.displaySnapshot.current?.id.id, 'a');
+    expect(session.displaySnapshot.isPlaying, isFalse);
+
+    expect(await session.resume(), PlaybackCommandOutcome.trackAndQueue);
+
+    // 恢复数据丢弃：展示面与 live 面同源（曲目 / 进度都来自真实播放）。
+    expect(session.hasRestoredSession, isFalse);
+    expect(session.displaySnapshot.current?.id.id, 'a');
+    expect(session.liveSnapshot.current?.id.id, 'a');
+    expect(
+      identical(session.displaySnapshot, session.liveSnapshot),
+      isTrue,
+      reason: '恢复态已撤下，展示面应原样透传 facade',
+    );
+    expect(session.position.value, const Duration(seconds: 20));
+    expect(session.livePosition.value, const Duration(seconds: 20));
   });
 
   test('恢复态列表循环：next / previous / previousOfPrevious / upNext 按队列回绕', () async {
@@ -295,7 +358,7 @@ void main() {
     );
     expect(await session.load(), isTrue);
 
-    final restored = session.resolve(facade.snapshot.value);
+    final restored = session.displaySnapshot;
     expect(restored.next?.id.id, 'a');
     expect(restored.previous?.id.id, 'b');
     expect(restored.previousOfPrevious?.id.id, 'a');
@@ -313,7 +376,7 @@ void main() {
     );
     expect(await session.load(), isTrue);
 
-    final restored = session.resolve(facade.snapshot.value);
+    final restored = session.displaySnapshot;
     // 洗牌排列不落盘：恢复态不知道「下一首」，不能用 b 的下标 +1 冒充 c。
     expect(restored.next, isNull);
     expect(restored.upNext, isEmpty);
@@ -451,7 +514,7 @@ void main() {
     expect(recorder.playedIndexes, [1]);
     expect(backend.calls, ['playQueueIndex:1']);
     expect(store.calls, ['save', 'save'], reason: '下标变化只提交一次 cursor');
-    expect(session.resolve(facade.snapshot.value).currentIndex, 1);
+    expect(session.displaySnapshot.currentIndex, 1);
 
     // 未命中：不解析下标、不转发、不再提交。
     expect(
@@ -477,7 +540,7 @@ void main() {
     // 模式：后端先落地（shuffle 洗牌顺序依赖装载前模式），会话同步改写。
     await session.setPlayMode(PlayMode.shuffle);
     expect(backend.calls, ['setMode']);
-    expect(session.resolve(facade.snapshot.value).mode, PlayMode.shuffle);
+    expect(session.displaySnapshot.mode, PlayMode.shuffle);
     expect(store.saves.last.mode, PlayMode.shuffle);
 
     // 换源命中恢复队列：原地替换并落盘（facade 队列为空，不转发）。
@@ -487,7 +550,7 @@ void main() {
     );
     expect(backend.calls, ['setMode']);
     expect(store.saves.last.tracks.first.id.id, 'a2');
-    expect(session.resolve(facade.snapshot.value).queue.first.id.id, 'a2');
+    expect(session.displaySnapshot.queue.first.id.id, 'a2');
 
     // 未命中：不落盘、不转发，返回空操作。
     final saves = store.saves.length;
@@ -642,7 +705,7 @@ void main() {
     await session.togglePlayMode();
 
     expect(backend.calls, ['setMode']);
-    expect(session.resolve(facade.snapshot.value).mode, PlayMode.singleRepeat);
+    expect(session.displaySnapshot.mode, PlayMode.singleRepeat);
     expect(store.saves.last.mode, PlayMode.singleRepeat);
   });
 
@@ -691,7 +754,7 @@ void main() {
       await session.moveQueueIndex(3, 0),
       const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
     );
-    var restored = session.resolve(facade.snapshot.value);
+    var restored = session.displaySnapshot;
     expect(restored.queue.map((track) => track.id.id), ['d', 'a', 'b', 'c']);
     expect(restored.currentIndex, 2);
     expect(store.saves.last.tracks.map((track) => track.id.id), [
@@ -707,7 +770,7 @@ void main() {
       await session.removeQueueIndex(0),
       const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
     );
-    restored = session.resolve(facade.snapshot.value);
+    restored = session.displaySnapshot;
     expect(restored.queue.map((track) => track.id.id), ['a', 'b', 'c']);
     expect(restored.currentIndex, 1);
     expect(restored.current?.id.id, 'b');
@@ -723,7 +786,7 @@ void main() {
       await session.moveQueueIndex(2, 0),
       const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
     );
-    restored = session.resolve(facade.snapshot.value);
+    restored = session.displaySnapshot;
     expect(restored.queue.map((track) => track.id.id), ['c', 'a', 'b']);
     expect(restored.currentIndex, 2);
 
@@ -742,7 +805,7 @@ void main() {
 
     await session.enqueueRestoredTracks([_track('c')]);
 
-    final restored = session.resolve(facade.snapshot.value);
+    final restored = session.displaySnapshot;
     expect(restored.queue.map((track) => track.id.id), ['a', 'b', 'c']);
     expect(restored.upNext.map((track) => track.id.id), ['b', 'c']);
     expect(store.saves.last.tracks.map((track) => track.id.id), [
@@ -769,7 +832,7 @@ void main() {
       await session.removeQueueIndex(2),
       const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
     );
-    final restored = session.resolve(facade.snapshot.value);
+    final restored = session.displaySnapshot;
     expect(restored.queue.map((track) => track.id.id), ['a', 'b']);
     expect(restored.currentIndex, 1);
   });
@@ -785,7 +848,7 @@ void main() {
     );
     expect(await session.load(), isTrue);
 
-    final restored = session.resolve(facade.snapshot.value);
+    final restored = session.displaySnapshot;
     expect(restored.upNext.map((track) => track.id.id), ['d', 'a', 'b']);
     expect(restored.upNextIndices, [3, 0, 1]);
   });
@@ -984,7 +1047,7 @@ void main() {
       PlaybackCommandOutcome.none,
     );
     expect(backend.calls, isEmpty);
-    expect(session.resolve(facade.snapshot.value).current?.id.id, 'a');
+    expect(session.displaySnapshot.current?.id.id, 'a');
 
     // live：uri 不在队列 → no-op（不转发、不落盘）。
     backend.emit(_live(a, position: const Duration(seconds: 1)));
@@ -1053,7 +1116,7 @@ void main() {
     ], reason: '恢复阶段不能改 facade 里尚未接管的队列');
     expect(backend.calls, isEmpty);
     expect(store.calls, isEmpty);
-    expect(session.resolve(facade.snapshot.value).queue.first.id.id, 'a');
+    expect(session.displaySnapshot.queue.first.id.id, 'a');
 
     // 交接窗口：facade 已有队列但还没有当前曲目，恢复态仍然保留。此时两处
     // 都含同一个 uri——各自换成新来源，命令只产生一次写请求。
@@ -1067,10 +1130,10 @@ void main() {
       'a2',
       'b',
     ]);
-    expect(
-      session.resolve(facade.snapshot.value).queue.map((track) => track.id.id),
-      ['a2', 'b'],
-    );
+    expect(session.displaySnapshot.queue.map((track) => track.id.id), [
+      'a2',
+      'b',
+    ]);
     expect(store.calls, ['save'], reason: 'live 不可保存时只写恢复会话一次');
     expect(store.saves.single.tracks.map((track) => track.id.id), ['a2', 'b']);
     // 返回即已落盘：冷启动恢复的是换源后的队列。
@@ -1243,7 +1306,7 @@ void main() {
     expect(await session.load(), isFalse);
     expect(session.hasRestoredSession, isFalse);
     expect(session.phase, PlaybackSessionPhase.live);
-    expect(session.resolve(facade.snapshot.value).current?.id.id, 'c');
+    expect(session.displaySnapshot.current?.id.id, 'c');
   });
 
   test('装载跳过恢复：开关关闭时不装载，会话数据保留', () async {
@@ -1348,7 +1411,7 @@ void main() {
     expect(await session.reloadRestoreSessionPreference(), isTrue);
     expect(session.restoreSessionEnabled, isTrue);
     expect(session.hasRestoredSession, isTrue);
-    expect(session.resolve(facade.snapshot.value).current?.id.id, 'a');
+    expect(session.displaySnapshot.current?.id.id, 'a');
 
     // 已装载：再 reload 值未变 → 不报告变化。
     expect(await session.reloadRestoreSessionPreference(), isFalse);
@@ -1382,12 +1445,12 @@ void main() {
     await seedSession(PlaybackSession(tracks: [_track('b')], index: 0));
     expect(await session.reloadFromStore(), isTrue);
     expect(session.hasRestoredSession, isTrue);
-    expect(session.resolve(facade.snapshot.value).current?.id.id, 'b');
+    expect(session.displaySnapshot.current?.id.id, 'b');
 
     // 真实播放中：恢复数据不覆盖它。
     backend.emit(_live(_track('c')));
     expect(await session.reloadFromStore(), isFalse);
-    expect(session.resolve(facade.snapshot.value).current?.id.id, 'c');
+    expect(session.displaySnapshot.current?.id.id, 'c');
   });
 
   test('恢复曲目展示回调：装载时报告恢复曲目（不落盘、不写历史）', () async {

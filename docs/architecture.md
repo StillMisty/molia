@@ -97,10 +97,13 @@
   播放顺序栈 `PlaybackOrder` 记录实际播放过的下标，供快照 `previous`）；
   `DefaultPlaybackFacade` 合并快照通知（`==` 去重）、把进度拆到独立 `position`
   `ValueNotifier`（≥250ms 去重、换曲/seek 直接对齐、**不进快照**）、错误归一化。
-  `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道：
-  真实播放取 facade 快照；冷启动恢复态由 `PlaybackSessionCoordinator`
-  （`lib/playback/`）构造覆盖快照（`isPlaying=false`）。next / previous /
-  previousOfPrevious / upNext 的唯一推导是
+  `PlaybackProvider` 对外只暴露领域 `PlaybackSnapshot` + position 通道，两者都读
+  `PlaybackSessionCoordinator`（`lib/playback/`）的展示投影：真实播放取 facade，
+  冷启动恢复态取协调者构造的恢复快照（`isPlaying=false`）/ 保存进度。
+  协调者另持有只反映真实播放的 live 投影（`liveSnapshot` / `liveSnapshotChannel` /
+  `livePosition`，恢复态下为空）：UI 读展示面，定时关闭 / 失败恢复 / 默认播放模式
+  读 live 面——「恢复态还是 live」的判断只在协调者内部，消费方不再各自分叉。
+  next / previous / previousOfPrevious / upNext 的唯一推导是
   `lib/playback/queue_projection.dart::projectQueue`（真实播放与恢复态
   共用）：恢复态没有洗牌排列与播放顺序栈，显式留空 `QueueOrder`——shuffle 的
   next 为 null、upNext 为空（不拿下标近似），previous / previousOfPrevious
@@ -114,7 +117,10 @@
   播放会话模块是**恢复态 ↔ live 的唯一交接点与 `PlaybackSessionStore` 的唯一
   写者**：三阶段状态机 `idle / restored / live`，命令按阶段路由（provider 不再
   分叉，只按 `PlaybackCommandOutcome` 的变化域决定通知类别）；恢复态快照与进度
-  覆盖值在这里构造。会话只存在**主库** `molia_database_v2.sqlite` 的两张单行表
+  覆盖值在这里构造。读面同样由它持有：`displaySnapshot` / `position` 是恢复态感知的
+  展示投影，`liveSnapshot` / `liveSnapshotChannel` / `livePosition` 只反映真实播放，
+  provider 的定时关闭与失败恢复因此不会把恢复数据当成播放事实。会话只存在**主库**
+  `molia_database_v2.sqlite` 的两张单行表
   （`playback_session_payloads` 整份队列 JSON / `playback_session_cursors`
   index + position + savedAt），没有独立 session DB、cursor 文件或 prefs 会话：
   - 只在**具体动作**落盘：播放 / 暂停、seek 落点（拖拽只在结束提交）、切歌 /

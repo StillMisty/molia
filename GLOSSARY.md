@@ -36,8 +36,10 @@
 
 - **Playback snapshot（播放快照）** — `lib/domain/models/playback.dart`：UI 播放状态的唯一形状
   （`current/previous/next/upNext/context/mode/isPlaying/...`）。`PlaybackProvider.snapshot`
-  是其唯一出口：真实播放来自 facade，冷启动恢复态由 `PlaybackSessionCoordinator`
-  构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。
+  读 `PlaybackSessionCoordinator.displaySnapshot`：真实播放来自 facade，冷启动恢复态由
+  协调者构造覆盖快照（唯一构造点）；历史兼容 map 形状已删除。协调者同时持有只反映
+  真实播放的 `liveSnapshot` / `livePosition` 投影（恢复态下为空），供定时关闭、失败
+  恢复、默认播放模式使用——消费方不再自己判断「恢复态还是 live」。
 - **Playback error recovery（播放失败恢复）** — `lib/playback/playback_error_recovery.dart`：
   播放失败后的唯一策略模块：失效该曲目取链缓存 → 同一曲目 key 只同源重试一次 →
   仍失败则自动换源。写入只经 `PlaybackCommandPort`（`playQueueIndex` /
@@ -76,8 +78,10 @@
   恢复态（冷启动未起播）与真实播放（live）之间的唯一交接点，也是
   `PlaybackSessionStore` 的唯一写者。三阶段状态机 `idle → restored → live`（装载进恢复态，
   facade 有当前曲目即接管为 live，停止播放 / 关闭恢复开关回 idle）；命令按阶段路由
-  （provider 不再分叉，只消费 `PlaybackCommandOutcome` 的变化域），恢复态展示快照与
-  进度覆盖值在这里构造。
+  （provider 不再分叉，只消费 `PlaybackCommandOutcome` 的变化域）。**读面也归它**：
+  `displaySnapshot` / `position` 是恢复态感知的展示投影（恢复态返回保存的曲目与进度，
+  接管后透传 facade），`liveSnapshot` / `liveSnapshotChannel` / `livePosition` 只反映
+  真实播放（恢复态为空）。UI 读展示面，定时关闭 / 失败恢复 / 默认播放模式读 live 面。
   落盘口径收在一处：整份会话（曲目切换 / 暂停 / `flushSession` 强制）、轻量进度键
   （`savePosition`，前台 1s / 后台 15s 节流，满 1min 整份刷新）、`clear`，串行化由 store 的
   `pendingWrite` 承担。改变会话的命令（暂停 / seek / 切歌 / 模式 / 停止 / 换源）返回前
