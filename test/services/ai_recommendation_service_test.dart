@@ -31,6 +31,7 @@ class _FakeLlm extends LlmClient {
   String? lastUserPrompt;
   String? lastSystemPrompt;
   bool? lastJsonMode;
+  int? lastMaxTokens;
   int calls = 0;
 
   @override
@@ -46,6 +47,7 @@ class _FakeLlm extends LlmClient {
     lastUserPrompt = userPrompt;
     lastSystemPrompt = systemPrompt;
     lastJsonMode = jsonMode;
+    lastMaxTokens = maxTokens;
     final failure = error;
     if (failure != null) throw failure;
     return response;
@@ -416,6 +418,7 @@ void main() {
       );
 
       expect(llm.lastJsonMode, isTrue);
+      expect(llm.lastMaxTokens, 4096);
       expect(llm.lastUserPrompt, contains('[本批排除]'));
       expect(llm.lastUserPrompt, contains('已在该列表'));
     });
@@ -425,15 +428,7 @@ void main() {
       await addFavorite('收藏歌', '收藏人');
       await createPlaylist('通勤', [('歌单一', '歌手一'), ('歌单二', '歌手二')]);
 
-      final summary = await service.summarizeUpstream(
-        preferences: const AiPreferences(
-          sections: {
-            ...kAiDefaultUpstreamSections,
-            AiUpstreamSection.favorites,
-            AiUpstreamSection.playlists,
-          },
-        ),
-      );
+      final summary = await service.summarizeUpstream();
 
       expect(summary.recentEvents, 1);
       expect(summary.favorites, 1);
@@ -442,7 +437,7 @@ void main() {
   });
 
   group('发送范围与提示词', () {
-    test('默认不发送收藏 / 歌单；开启后只发歌名、歌手与歌单名', () async {
+    test('默认发送收藏 / 歌单；关闭后不再上行，且只发歌名与歌手', () async {
       await addFavorite('收藏歌', '收藏人');
       await createPlaylist('通勤', [('歌单一', '歌手一')]);
       llm.response = jsonEncode({
@@ -452,33 +447,35 @@ void main() {
       });
 
       final previewDefault = await service.buildPromptPreview(count: 20);
-      expect(_hasSection(previewDefault.userPrompt, '[收藏]'), isFalse);
-      expect(_hasSection(previewDefault.userPrompt, '[歌单]'), isFalse);
-      expect(previewDefault.userPrompt, isNot(contains('收藏歌')));
+
+      expect(llm.lastUserPrompt, isNull, reason: '预览不触发 LLM 调用');
+      expect(_hasSection(previewDefault.userPrompt, '[收藏]'), isTrue);
+      expect(previewDefault.userPrompt, contains('收藏歌'));
+      expect(previewDefault.userPrompt, contains('收藏人'));
+      expect(_hasSection(previewDefault.userPrompt, '[歌单]'), isTrue);
+      expect(previewDefault.userPrompt, contains('通勤'));
+      expect(previewDefault.userPrompt, contains('歌单一'));
+      expect(previewDefault.userPrompt, isNot(contains('secret-raw')));
+      expect(previewDefault.userPrompt, isNot(contains('cover')));
 
       const preferences = AiPreferences(
         sections: {
-          ...kAiDefaultUpstreamSections,
-          AiUpstreamSection.favorites,
-          AiUpstreamSection.playlists,
+          AiUpstreamSection.summary,
+          AiUpstreamSection.topArtists,
+          AiUpstreamSection.topTracks,
+          AiUpstreamSection.timeAndSource,
+          AiUpstreamSection.recentEvents,
+          AiUpstreamSection.listenedExclusions,
         },
       );
-      await service.buildPromptPreview(count: 20, preferences: preferences);
-
-      final prompt = llm.lastUserPrompt;
-      expect(prompt, isNull, reason: '预览不触发 LLM 调用');
       final preview = await service.buildPromptPreview(
         count: 20,
         preferences: preferences,
       );
-      expect(_hasSection(preview.userPrompt, '[收藏]'), isTrue);
-      expect(preview.userPrompt, contains('收藏歌'));
-      expect(preview.userPrompt, contains('收藏人'));
-      expect(_hasSection(preview.userPrompt, '[歌单]'), isTrue);
-      expect(preview.userPrompt, contains('通勤'));
-      expect(preview.userPrompt, contains('歌单一'));
-      expect(preview.userPrompt, isNot(contains('secret-raw')));
-      expect(preview.userPrompt, isNot(contains('cover')));
+      expect(_hasSection(preview.userPrompt, '[收藏]'), isFalse);
+      expect(_hasSection(preview.userPrompt, '[歌单]'), isFalse);
+      expect(preview.userPrompt, isNot(contains('收藏歌')));
+      expect(preview.userPrompt, isNot(contains('歌单一')));
     });
 
     test('关闭提交范围后对应字段从 prompt 消失；全部关闭仍可仅按偏好生成', () async {
@@ -502,8 +499,6 @@ void main() {
         '[常听歌手]',
         '[常听歌曲]',
         '[常听时段]',
-        '[收听来源]',
-        '[最近播放]',
         '[已听过]',
         '[收藏]',
         '[歌单]',
@@ -550,7 +545,7 @@ void main() {
       expect(batch.items, hasLength(1), reason: '关闭后不本地强制排除');
     });
 
-    test('只推荐没听过的开启、排除清单关闭：本地过滤生效但不发送清单', () async {
+    test('只推荐没听过的开启、播放记录关闭：本地过滤生效但不发送已听清单', () async {
       await insertPlayed('晴天', '周杰伦');
       llm.response = jsonEncode({
         'songs': [
@@ -563,7 +558,9 @@ void main() {
       final preferences = AiPreferences.defaults.copyWith(
         sections: {
           for (final section in AiPreferences.defaults.sections)
-            if (section != AiUpstreamSection.listenedExclusions) section,
+            if (section != AiUpstreamSection.listenedExclusions &&
+                section != AiUpstreamSection.recentEvents)
+              section,
         },
       );
 
@@ -604,9 +601,129 @@ void main() {
       expect(batch.unresolved, isEmpty);
     });
 
+    test('默认发送收藏：进入提示词，同时仍参与本地排除', () async {
+      await addFavorite('晴天', '周杰伦');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+
+      final preview = await service.buildPromptPreview(count: 20);
+      final batch = await service.generate(config: config, count: 20);
+
+      expect(_hasSection(preview.userPrompt, '[收藏]'), isTrue);
+      expect(preview.userPrompt, contains('晴天 - 周杰伦'));
+      expect(batch.items, isEmpty);
+      expect(batch.unresolved, isEmpty);
+    });
+
+    test('关闭收藏发送范围：仍本地排除，但收藏内容不上行', () async {
+      await addFavorite('晴天', '周杰伦');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+      final preferences = AiPreferences.defaults.copyWith(
+        sections: {
+          for (final section in AiPreferences.defaults.sections)
+            if (section != AiUpstreamSection.favorites) section,
+        },
+      );
+
+      final preview = await service.buildPromptPreview(
+        count: 20,
+        preferences: preferences,
+      );
+      final batch = await service.generate(
+        config: config,
+        count: 20,
+        preferences: preferences,
+      );
+
+      expect(_hasSection(preview.userPrompt, '[收藏]'), isFalse);
+      expect(preview.userPrompt, isNot(contains('晴天 - 周杰伦')));
+      expect(batch.items, isEmpty);
+      expect(batch.unresolved, isEmpty);
+    });
+
+    test('收藏超过发送上限时仍参与本地排除', () async {
+      for (var i = 0; i < TasteProfileBuilder.favoritesLimit; i++) {
+        await addFavorite('收藏$i', '歌手$i');
+      }
+      // 第 101 首不会被发送，但必须在本地排除。
+      await addFavorite('晴天', '周杰伦');
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+
+      final batch = await service.generate(config: config, count: 20);
+
+      expect(batch.items, isEmpty);
+      expect(batch.unresolved, isEmpty);
+    });
+
+    test('解析命中后按收藏稳定键再排除（标题写法不同也拦住）', () async {
+      await library.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'a',
+        title: '完全不同的标题',
+        artist: '不同歌手',
+      );
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+
+      final batch = await service.generate(config: config, count: 20);
+
+      expect(batch.items, isEmpty, reason: 'sourceKey:songId 命中收藏');
+      expect(batch.unresolved, isEmpty);
+    });
+
+    test('解析命中后在另一音源已收藏 → 丢弃', () async {
+      await library.toggleFavorite(
+        sourceKey: 'tx',
+        songId: 'fav-1',
+        title: '晴天',
+        artist: '周杰伦',
+      );
+      // 歌手写法不同 → 标题/歌手键不命中预过滤；解析后的真实曲目
+      // 仍是收藏里的「晴天 - 周杰伦」，由解析后二次过滤拦住。
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': 'Jay Chou'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+
+      final batch = await service.generate(config: config, count: 20);
+
+      expect(batch.items, isEmpty, reason: '按解析后的曲目标题/歌手匹配跨源收藏');
+      expect(batch.unresolved, isEmpty);
+    });
+
     test('预览与实际请求共用同一份 userPrompt', () async {
       await insertPlayed('旧歌', '老歌手');
-      const preferences = AiPreferences(styles: ['jazz'], batchSize: 30);
+      const preferences = AiPreferences(styles: ['jazz'], batchSize: 48);
       llm.response = jsonEncode({
         'songs': [
           {'title': '新歌', 'artist': '新人'},
@@ -649,7 +766,7 @@ void main() {
       expect(prompt.userPrompt, contains('晴天 - 周杰伦'));
     });
 
-    test('最近播放只发 50 条；已听清单只发 100 但本地仍排除全部', () async {
+    test('最近播放与已听清单合并为一份去重列表，本地仍排除全部', () async {
       for (var i = 0; i < 150; i++) {
         await insertPlayed('旧歌$i', '歌手$i', startedAt: 1000 + i);
       }
@@ -658,10 +775,9 @@ void main() {
       String lineOf(String label) => preview.userPrompt
           .split('\n')
           .firstWhere((line) => line.startsWith('$label '), orElse: () => '');
-      final recentLine = lineOf('[最近播放]');
       final heardLine = lineOf('[已听过]');
-      expect(RegExp(' - ').allMatches(recentLine).length, 50);
       expect(RegExp(' - ').allMatches(heardLine).length, 100);
+      expect(lineOf('[最近播放]'), isEmpty);
       expect(preview.userPrompt, contains('旧歌149 - 歌手149'));
       expect(preview.userPrompt, isNot(contains('旧歌0 - 歌手0')));
 
@@ -690,28 +806,30 @@ void main() {
       );
 
       expect(prompt.systemPrompt, contains('music recommendation assistant'));
+      expect(prompt.systemPrompt, contains('{"songs"'));
+      expect(prompt.systemPrompt, contains('max 60 characters'));
       expect(prompt.userPrompt, contains('[Preferences]'));
       expect(prompt.userPrompt, contains('styles pop'));
       expect(prompt.userPrompt, contains('repeats allowed'));
       expect(prompt.userPrompt, contains('[Requirements]'));
-      expect(prompt.userPrompt, contains('[Output JSON]'));
-      expect(prompt.userPrompt, contains('max 60 characters'));
       expect(prompt.userPrompt, contains('Recommend 7 songs.'));
       expect(prompt.userPrompt, isNot(contains('[偏好]')));
       expect(prompt.userPrompt, isNot(contains('请推荐')));
     });
 
-    test('system 极简；user 末尾保留 JSON 样例与要求', () async {
+    test('system 承载 JSON 契约；user 末尾保留要求与请求', () async {
       final prompt = await service.buildPromptPreview(count: 10);
 
-      expect(prompt.systemPrompt, '你是音乐推荐助手。根据用户提供的听歌数据，推荐其可能喜欢的歌曲。');
+      expect(prompt.systemPrompt, contains('音乐推荐助手'));
+      expect(prompt.systemPrompt, contains('JSON'));
+      expect(prompt.systemPrompt, contains('{"songs"'));
+      expect(prompt.systemPrompt, contains('Markdown'));
       expect(prompt.userPrompt, contains('[要求]'));
-      expect(prompt.userPrompt, contains('[输出 JSON]'));
-      expect(prompt.userPrompt, contains('{"songs"'));
-      expect(prompt.userPrompt, isNot(contains('Markdown')));
+      expect(prompt.userPrompt, isNot(contains('[输出 JSON]')));
+      expect(prompt.userPrompt, isNot(contains('{"songs"')));
     });
 
-    test('可用渠道写入要求行，减少本地搜不到的推荐', () async {
+    test('不再把可用渠道写入提示词', () async {
       service = buildService([
         _FakeSource('wy', const [], displayName: '网易云音乐'),
         _FakeSource('tx', const [], displayName: 'QQ音乐'),
@@ -719,7 +837,8 @@ void main() {
 
       final prompt = await service.buildPromptPreview(count: 10);
 
-      expect(prompt.userPrompt, contains('可用渠道：网易云音乐/QQ音乐'));
+      expect(prompt.userPrompt, isNot(contains('可用渠道')));
+      expect(prompt.userPrompt, isNot(contains('网易云音乐')));
     });
 
     test('额外排除键在本地兜底过滤（即使模型返回同一首）', () async {
@@ -1009,45 +1128,75 @@ void main() {
       expect(retried.id, first.id);
       expect(llm.calls, 1, reason: '重试不重新调 LLM');
     });
+
+    test('重新找未解析时命中的已收藏曲目也会被过滤', () async {
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '晴天', 'artist': '周杰伦'},
+        ],
+      });
+      service = buildService([_FakeSource('wy', const [])]);
+      final first = await service.generate(config: config, count: 1);
+      expect(first.unresolved, hasLength(1));
+
+      await library.toggleFavorite(
+        sourceKey: 'wy',
+        songId: 'a',
+        title: '晴天',
+        artist: '周杰伦',
+      );
+      service = buildService([
+        _FakeSource('wy', [_track('a', '晴天', '周杰伦')]),
+      ]);
+      final retried = await service.resolveUnresolved(batch: first);
+
+      expect(retried.items, isEmpty);
+      expect(retried.unresolved, isEmpty);
+    });
   });
 
-  group('parseRecommendations 容错解析', () {
-    test('JSON 前后夹带文字 / 代码块也能解析', () {
+  group('parseRecommendations（JSON Output 契约）', () {
+    test('解析 {"songs":[...]} 约定形状', () {
       final parsed = AiRecommendationService.parseRecommendations(
+        '{"songs":[{"title":"A","artist":"B","reason":"好"},'
+        '{"title":"C","artist":"D","reason":""}]}',
+      );
+      expect(parsed.map((r) => r.title), ['A', 'C']);
+      expect(parsed.first.artist, 'B');
+      expect(parsed.first.reason, '好');
+    });
+
+    test('非纯 JSON / 包装键 / 尾逗号 / 截断不再本地提取', () {
+      const contents = [
         '好的，这是推荐：\n```json\n{"songs":[{"title":"A","artist":"B"}]}\n```',
-      );
-      expect(parsed.single.title, 'A');
-      expect(parsed.single.artist, 'B');
+        '[{"title":"A","artist":"B"}]',
+        '{"recommendations":[{"title":"A","artist":"B"}]}',
+        '{"songs":[{"title":"A","artist":"B"},]}',
+        '{"songs":[{"title":"A","artist":"B"},{"title":"C"',
+        '推荐如下：\n1. 晴天 - 周杰伦',
+      ];
+      for (final content in contents) {
+        expect(
+          AiRecommendationService.parseRecommendations(content),
+          isEmpty,
+          reason: content,
+        );
+      }
     });
 
-    test('裸数组与字符串条目', () {
-      final parsed = AiRecommendationService.parseRecommendations(
-        '[{"song":"歌名","singer":"歌手"}, "另一首"]',
-      );
-      expect(parsed.map((r) => r.title), ['歌名', '另一首']);
-      expect(parsed.first.artist, '歌手');
-      expect(parsed.first.reason, '');
-    });
-
-    test('去重空标题、截断上限', () {
+    test('空标题丢弃、限制条数', () {
       final parsed = AiRecommendationService.parseRecommendations(
         '{"songs":[{"title":""},{"title":"a"},{"title":"b"},{"title":"c"}]}',
         limit: 2,
       );
       expect(parsed.map((r) => r.title), ['a', 'b']);
     });
+  });
 
-    test('兼容 recommendations / data 包装与嵌套 items', () {
-      final recommendations = AiRecommendationService.parseRecommendations(
-        '{"recommendations":[{"title":"A","artist":"B"}]}',
-      );
-      expect(recommendations.single.title, 'A');
-
-      final nested = AiRecommendationService.parseRecommendations(
-        '{"data":{"items":[{"title":"C","artist":"D"}]}}',
-      );
-      expect(nested.single.title, 'C');
-    });
+  test('JSON Output 批量越大输出预算越高（上限 8192）', () {
+    expect(AiRecommendationService.outputTokenBudget(24), 4096);
+    expect(AiRecommendationService.outputTokenBudget(48), greaterThan(4096));
+    expect(AiRecommendationService.outputTokenBudget(96), 8192);
   });
 
   group('pickBestMatch 打分', () {

@@ -2114,7 +2114,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjConsentBody =>
-      '开启后会把听歌画像（统计汇总、最近 50 条播放、已听曲目）发送给你配置的 AI 服务用于生成推荐；数据直达该服务，不经过本应用，应用不含内置 Key。\n关闭后停止推荐；清除配置即断开连接。';
+      '开启后会把听歌画像（统计汇总、最近 50 条播放、已听曲目、收藏歌曲与自建歌单）发送给你配置的 AI 服务用于生成推荐；数据直达该服务，不经过本应用，应用不含内置 Key。\n关闭后停止推荐；清除配置即断开连接。';
 
   @override
   String get aiDjAgree => '同意并开启';
@@ -2246,13 +2246,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjNotInterested => '不感兴趣';
 
   @override
-  String get aiDjFeedbackTitle => '本轮反馈';
+  String get aiDjFeedbackTitle => '反馈与记忆';
 
   @override
   String get aiDjFeedbackLiked => '喜欢';
 
   @override
   String get aiDjFeedbackSkipped => '跳过';
+
+  @override
+  String aiDjFeedbackSummary(int round, int memory) {
+    return '本轮 $round 条 · 长期 $memory 条';
+  }
+
+  @override
+  String get aiDjFeedbackEmpty => '暂无反馈记录';
 
   @override
   String get aiDjUpstreamTitle => '本次发送的数据';
@@ -2454,10 +2462,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjGenerationStatus => '正在生成推荐';
 
   @override
+  String aiDjGeneratingCount(int count) {
+    return '正在挑选 $count 首';
+  }
+
+  @override
   String get aiDjPhaseProfile => '整理听歌偏好';
 
   @override
   String get aiDjPhaseModel => 'AI 正在选歌';
+
+  @override
+  String get aiDjPhaseResolvingShort => '本地找歌';
 
   @override
   String aiDjPhaseResolving(int done, int total) {
@@ -2620,9 +2636,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjPrefsDataScope => '发送范围';
 
   @override
-  String get aiDjScopeHint => '关闭的项不会发送；收藏和歌单默认关闭。';
-
-  @override
   String get aiDjScopeSummary => '汇总统计';
 
   @override
@@ -2632,13 +2645,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiDjScopeTopTracks => '常听歌曲';
 
   @override
-  String get aiDjScopeTimeAndSource => '时段与来源分布';
+  String get aiDjScopeTimeAndSource => '常听时段';
 
   @override
-  String get aiDjScopeRecentEvents => '最近播放明细';
+  String get aiDjScopeRecentEvents => '最近播放';
 
   @override
-  String get aiDjScopeListenedExclusions => '已听歌曲排除清单';
+  String get aiDjScopeListenedExclusions => '已听过';
 
   @override
   String get aiDjScopeFavorites => '收藏歌曲';
@@ -2648,20 +2661,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get aiDjScopeFavoritesConfirm =>
-      '会读取收藏歌曲的歌名与歌手（最多 100 首），用来避免推荐已经收藏的歌。';
+      '会把收藏歌曲的歌名与歌手（最多 100 首）发送给 AI 服务，用来避免推荐已经收藏的歌。';
 
   @override
   String get aiDjScopePlaylistsConfirm =>
-      '会读取自建歌单的名称与曲目歌名、歌手（最多 10 个歌单），用来避免重复推荐。';
+      '会把自建歌单的名称与曲目歌名、歌手（最多 10 个歌单）发送给 AI 服务，用来避免重复推荐。';
 
   @override
   String get aiDjSeedsTitle => '多来点这种';
 
   @override
   String get aiDjSeedsHint => '下一批生成成功后会清空';
-
-  @override
-  String get aiDjSeedsEmpty => '还没有「多来点这种」';
 
   @override
   String get aiDjClearMemory => '清空 AI 记忆';

@@ -241,6 +241,48 @@ void main() {
     );
   });
 
+  test('空正文按 JSON Output 最佳实践重试一次', () async {
+    var calls = 0;
+    final llm = LlmClient(
+      dio: mockDio((_) async {
+        calls++;
+        return ok(calls == 1 ? '   ' : '{"songs":[]}');
+      }),
+    );
+
+    final content = await llm.complete(
+      config: config(),
+      systemPrompt: 's',
+      userPrompt: 'u',
+      jsonMode: true,
+    );
+
+    expect(content, '{"songs":[]}');
+    expect(calls, 2, reason: '第一次正文只有空格，应重试一次');
+  });
+
+  test('连续两次空正文才报 aiDjBadResponse', () async {
+    var calls = 0;
+    final llm = LlmClient(
+      dio: mockDio((_) async {
+        calls++;
+        return ok('  ');
+      }),
+    );
+
+    final failure = await failureOf(
+      () => llm.complete(
+        config: config(),
+        systemPrompt: 's',
+        userPrompt: 'u',
+        jsonMode: true,
+      ),
+    );
+
+    expect(calls, 2, reason: '空正文最多重试一次');
+    expect(failure.l10nKey, 'aiDjBadResponse');
+  });
+
   test('超时 → timeout（可重试）', () async {
     final llm = LlmClient(
       dio: mockDio((_) => Completer<ResponseBody>().future),

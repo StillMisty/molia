@@ -1061,7 +1061,7 @@
   "aiDjStopClearQueue": "Clear queue & stop",
   "aiDjStopDialogTitle": "Exit AI DJ?",
   "aiDjConsentTitle": "Before you start",
-  "aiDjConsentBody": "When enabled, your listening profile (stats summary, the latest 50 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.",
+  "aiDjConsentBody": "When enabled, your listening profile (stats summary, the latest 50 plays, songs already heard, favorite tracks, and your playlists) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.",
   "aiDjAgree": "Agree & start",
   "aiDjConfigTitle": "AI service",
   "aiDjBaseUrl": "Base URL",
@@ -1165,9 +1165,21 @@
   "aiDjItemActions": "Recommendation actions",
   "aiDjReplaceItem": "Swap this one",
   "aiDjNotInterested": "Not interested",
-  "aiDjFeedbackTitle": "This round",
+  "aiDjFeedbackTitle": "Feedback & memory",
   "aiDjFeedbackLiked": "Liked",
   "aiDjFeedbackSkipped": "Skipped",
+  "aiDjFeedbackSummary": "This round {round} · long-term {memory}",
+  "@aiDjFeedbackSummary": {
+    "placeholders": {
+      "round": {
+        "type": "int"
+      },
+      "memory": {
+        "type": "int"
+      }
+    }
+  },
+  "aiDjFeedbackEmpty": "No feedback yet",
   "aiDjUpstreamTitle": "Data sent this time",
   "aiDjUpstreamBody": "Latest {events} plays · {artists} frequent artists · {exclusions} already-heard songs excluded",
   "@aiDjUpstreamBody": {
@@ -1291,8 +1303,17 @@
   },
   "aiDjAutoFeedResume": "Resume auto-fill",
   "aiDjGenerationStatus": "Generating recommendations",
+  "aiDjGeneratingCount": "Picking {count} songs",
+  "@aiDjGeneratingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "aiDjPhaseProfile": "Reading your taste",
   "aiDjPhaseModel": "AI is picking songs",
+  "aiDjPhaseResolvingShort": "Finding songs",
   "aiDjPhaseResolving": "Finding songs {done}/{total}",
   "@aiDjPhaseResolving": {
     "placeholders": {
@@ -1362,20 +1383,18 @@
   "aiDjPrefsResetBody": "Styles, scenes and sending scope return to defaults; saved recommendations are not affected.",
   "aiDjPrefsResetDone": "Default preferences restored",
   "aiDjPrefsDataScope": "What gets sent",
-  "aiDjScopeHint": "Unchecked items are not sent; favorites and playlists are off by default.",
   "aiDjScopeSummary": "Listening summary",
   "aiDjScopeTopArtists": "Frequent artists",
   "aiDjScopeTopTracks": "Frequent tracks",
-  "aiDjScopeTimeAndSource": "Time and source breakdown",
+  "aiDjScopeTimeAndSource": "Listening hours",
   "aiDjScopeRecentEvents": "Recent plays",
-  "aiDjScopeListenedExclusions": "Already-heard exclusion list",
+  "aiDjScopeListenedExclusions": "Already heard",
   "aiDjScopeFavorites": "Favorite tracks",
   "aiDjScopePlaylists": "Your playlists",
-  "aiDjScopeFavoritesConfirm": "This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.",
-  "aiDjScopePlaylistsConfirm": "This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.",
+  "aiDjScopeFavoritesConfirm": "This sends the titles and artists of up to 100 favorite tracks to the AI service so they are not recommended again.",
+  "aiDjScopePlaylistsConfirm": "This sends the names, titles and artists of up to 10 of your playlists to the AI service so they are not recommended again.",
   "aiDjSeedsTitle": "More like these",
   "aiDjSeedsHint": "Cleared after the next successful batch",
-  "aiDjSeedsEmpty": "No “More like this” picks yet",
   "aiDjClearMemory": "Clear AI memory",
   "aiDjClearMemoryTitle": "Clear AI memory?",
   "aiDjClearMemoryBody": "This deletes long-term “not interested”, “liked” and “more like these” entries. This round's feedback is cleared too.",

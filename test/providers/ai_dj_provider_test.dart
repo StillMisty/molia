@@ -171,7 +171,7 @@ void main() {
     expect(provider.hasConfig, isTrue);
     expect(provider.consentGranted, isFalse);
     expect(provider.enabled, isFalse);
-    expect(provider.preferences.batchSize, 10);
+    expect(provider.preferences.batchSize, 24);
     expect(provider.preferences.autoFeed, isTrue);
     expect(provider.historyEntries, isEmpty);
 
@@ -214,20 +214,20 @@ void main() {
     expect(provider.recommendations!.items.first.track.id.id, '20');
   });
 
-  test('批次大小：保存后下一次生成 count=30，历史元数据同步', () async {
+  test('批次大小：保存后下一次生成 count=48，历史元数据同步', () async {
     await provider.grantConsent();
     await provider.savePreferences(
-      provider.preferences.copyWith(batchSize: 30),
+      provider.preferences.copyWith(batchSize: 48),
     );
-    expect(provider.preferences.batchSize, 30);
+    expect(provider.preferences.batchSize, 48);
     expect(generator.calls, 0, reason: '保存偏好不自动生成');
 
-    generator.batchFactory = () => _batch(0, 30);
+    generator.batchFactory = () => _batch(0, 48);
     await provider.setEnabled(true);
 
-    expect(generator.lastCount, 30);
-    expect(provider.recommendations!.preferences!.batchSize, 30);
-    expect(provider.historyEntries.single.itemCount, 30);
+    expect(generator.lastCount, 48);
+    expect(provider.recommendations!.preferences!.batchSize, 48);
+    expect(provider.historyEntries.single.itemCount, 48);
   });
 
   test('偏好保存后不自动生成，active 保持不变', () async {

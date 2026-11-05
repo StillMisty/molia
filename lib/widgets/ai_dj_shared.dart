@@ -4,11 +4,13 @@ library;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:provider/provider.dart';
 
 import '../domain/models/failure.dart';
 import '../domain/models/ai_dj.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
+import '../services/notification_service.dart';
 
 /// 首次开启前的隐私确认：未确认则弹窗，确认后落库；返回是否已确认。
 Future<bool> ensureAiDjConsent(
@@ -78,6 +80,74 @@ String aiDjUpdatedText(AppLocalizations l10n, DateTime time) {
     return l10n.aiDjUpdatedYesterday(hhmm);
   }
   return l10n.aiDjUpdatedDate(time.month, time.day);
+}
+
+/// 本轮反馈分组：手动「不感兴趣」同时也会进入 skipped 标签，展示时去重。
+({
+  List<ResolvedRecommendation> notInterested,
+  List<String> skipped,
+  List<String> liked,
+})
+aiDjRoundFeedback(AiDjProvider provider) {
+  final notInterested = provider.notInterestedItems;
+  final manualLabels = {for (final item in notInterested) item.source.label};
+  return (
+    notInterested: notInterested,
+    skipped: [
+      for (final label in provider.skippedLabels)
+        if (!manualLabels.contains(label)) label,
+    ],
+    liked: provider.likedLabels,
+  );
+}
+
+/// 反馈入口行摘要：本轮 / 长期条数；全空时显示空态文案。
+String aiDjFeedbackSummary(AppLocalizations l10n, AiDjProvider provider) {
+  final round = aiDjRoundFeedback(provider);
+  final roundCount =
+      round.notInterested.length + round.skipped.length + round.liked.length;
+  final memoryCount =
+      provider.rememberedSkippedLabels.length +
+      provider.rememberedLikedLabels.length +
+      provider.seeds.length;
+  if (roundCount == 0 && memoryCount == 0) return l10n.aiDjFeedbackEmpty;
+  return l10n.aiDjFeedbackSummary(roundCount, memoryCount);
+}
+
+/// 清空 AI 记忆：确认 → 清空 → 提示（反馈弹窗与偏好页共用）。
+Future<void> confirmAndClearAiDjMemory(
+  BuildContext context,
+  AiDjProvider provider,
+) async {
+  final l10n = AppLocalizations.of(context)!;
+  final navigator = Navigator.of(context, rootNavigator: true);
+  final confirmed = await M3EDialog.show<bool>(
+    context,
+    dialog: M3EDialog(
+      title: l10n.aiDjClearMemoryTitle,
+      content: Text(l10n.aiDjClearMemoryBody),
+      actions: [
+        M3EButton.text(
+          onPressed: () => navigator.pop(false),
+          child: Text(l10n.cancel),
+        ),
+        M3EButton.filled(
+          key: const Key('aiDjClearMemoryConfirm'),
+          onPressed: () => navigator.pop(true),
+          child: Text(l10n.aiDjClearMemory),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  await provider.clearFeedbackMemory();
+  if (!context.mounted) return;
+  final notifications = context.read<NotificationService?>();
+  if (notifications == null) {
+    M3ESnackbar.show(context, message: l10n.aiDjMemoryCleared);
+  } else {
+    notifications.showSuccessSnackBar(l10n.aiDjMemoryCleared);
+  }
 }
 
 /// 历史批次来源标签。

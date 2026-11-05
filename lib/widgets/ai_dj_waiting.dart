@@ -6,6 +6,93 @@ library;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../domain/models/ai_dj.dart';
+import '../l10n/app_localizations.dart';
+import '../theme/m3e_context.dart';
+
+/// 生成阶段步进：整理偏好 → AI 选歌 → 本地找歌。
+///
+/// 生成卡只显示一个总标题时，用户无法判断卡在「等模型」还是「找歌」；
+/// 三步并排（当前步强调、已完成打勾）能把等待原因说清楚。
+class AiDjPhaseSteps extends StatelessWidget {
+  const AiDjPhaseSteps({super.key, required this.progress});
+
+  final AiDjProgress progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final scheme = Theme.of(context).colorScheme;
+    final currentIndex = AiDjPhase.values.indexOf(progress.phase);
+    final steps = [
+      l10n.aiDjPhaseProfile,
+      l10n.aiDjPhaseModel,
+      progress.phase == AiDjPhase.resolving && progress.total > 0
+          ? l10n.aiDjPhaseResolving(progress.done, progress.total)
+          : l10n.aiDjPhaseResolvingShort,
+    ];
+    return Wrap(
+      spacing: 6,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        for (var i = 0; i < steps.length; i++) ...[
+          if (i > 0)
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 14,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+          _PhaseStep(
+            label: steps[i],
+            state: i < currentIndex
+                ? _PhaseStepState.done
+                : i == currentIndex
+                ? _PhaseStepState.current
+                : _PhaseStepState.pending,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+enum _PhaseStepState { done, current, pending }
+
+class _PhaseStep extends StatelessWidget {
+  const _PhaseStep({required this.label, required this.state});
+
+  final String label;
+  final _PhaseStepState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = switch (state) {
+      _PhaseStepState.done || _PhaseStepState.current => scheme.primary,
+      _PhaseStepState.pending => scheme.onSurfaceVariant.withValues(alpha: 0.6),
+    };
+    final icon = switch (state) {
+      _PhaseStepState.done => Icons.check_circle_rounded,
+      _PhaseStepState.current => Icons.radio_button_checked_rounded,
+      _PhaseStepState.pending => Icons.radio_button_unchecked_rounded,
+    };
+    final style =
+        (state == _PhaseStepState.current
+                ? context.emphasizedTypeScale.labelMedium
+                : context.typeScale.labelMedium)
+            .copyWith(color: color);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: style),
+      ],
+    );
+  }
+}
+
 /// 让子树做呼吸式明暗变化（骨架 / 状态卡）。
 class AiDjPulse extends StatefulWidget {
   const AiDjPulse({super.key, required this.child});
