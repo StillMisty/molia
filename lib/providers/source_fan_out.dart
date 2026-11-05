@@ -122,10 +122,10 @@ class FanOutSource<R> {
       SingleShotFanOutRun<R>(key: key, search: () => _search!(query));
 }
 
-/// 搜索页需要的扇出控制面（不含结果类型）。
+/// 扇出搜索的控制面（不含结果类型）。
 ///
-/// 三种搜索分支的行形状不同，provider 只经这一份接口调度查询 / 分页 /
-/// 重试；类型化结果由 `SearchBranch` 的投影读取。
+/// 消费面只经这一份接口调度查询 / 分页 / 重试；类型化结果由消费面自己的
+/// 投影读取。
 abstract interface class FanOutSearchControl {
   /// 当前查询（已 trim；空串 = 未搜索 / 已清空）。
   String get query;

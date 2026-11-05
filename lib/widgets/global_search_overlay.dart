@@ -467,15 +467,15 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 当前搜索类型已加载的结果条数（与面板列表同口径）。
   int get _resultCount => switch (_search.searchKind) {
-    SearchKind.song => _search.searchResults.length,
-    SearchKind.artist => _search.artistResults.length,
-    SearchKind.lyric => _search.lyricResults.length,
+    SearchKind.song => _search.songResults.items.length,
+    SearchKind.artist => _search.artistResults.items.length,
+    SearchKind.lyric => _search.lyricResults.items.length,
   };
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
-  /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；多来源时它会
-  /// 等到最后一个来源返回后才转 false，因此总条数只播报一次。
+  /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；单渠道首屏返回后
+  /// 才转 false，因此总条数只播报一次。
   void _announceResults() {
     if (!mounted || !_search.isSearchActive || _search.isSearchBusy) return;
     final message = _l10n(context).searchResultsAnnouncement(_resultCount);
