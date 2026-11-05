@@ -142,13 +142,7 @@ Future<void> _run({
       timeout: const Duration(seconds: 60),
     );
     final items = search.filteredResults;
-    String failureKind = '';
-    for (final group in search.songGroups) {
-      if (group.failure != null) {
-        failureKind = group.failure!.kind.name;
-        break;
-      }
-    }
+    final failureKind = search.songResults.failure?.kind.name ?? '';
     DataPathTrace.event(
       'scenario.search.done',
       fields: () => {

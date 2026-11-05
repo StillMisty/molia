@@ -574,30 +574,25 @@
   并按当前关键词重搜；脚本晚到后能力补齐也会主动补搜。`updateSearchQuery` 仍 300ms
   防抖，`submitSearch` 立即；当前渠道
   不可搜索时清空结果、不发请求，由 UI 展示「当前渠道不支持搜索」空态（ADR-0019）。
-- **Search source group（当前渠道结果投影）** — `lib/providers/search_source_group.dart`
-  的只读 `SearchSourceGroup<T>`：source / items / failure / isLoading / hasMore /
-  isLoadingMore / loadMoreFailed / total / page。当前实现最多只有当前渠道一组；
-  扁平投影 `searchResults` / `filteredResults` 只用于播放与性能场景。
-- **Search branch（搜索类型分支）** — `lib/providers/search_branch.dart` 的
-  `SearchBranch<T, R>`：一种搜索类型的「共享扇出会话 + 条目 → UI 行投影」。
-  当前渠道的每种搜索类型是一个 **Paged fan-out run**
-  （`lib/providers/paged_fan_out_run.dart`：在 `PagedListController` 上补失败归一
-  与状态快照），查询代际 / 状态 / 失败重试 / 通知节拍由
-  **Source fan-out session** 统一持有。三种行形状（`SearchRow` / `ArtistSummary` /
-  带歌词片段的 `SearchRow`）只经 `R` 型参数出现在分支里；provider 按 `SearchKind`
-  索引控制面，三种行形状各自类型化读取。歌词片段随 `LyricHit` 条目一起
-  入库（同曲目在后续页再次命中时片段跟随后页），行与片段同一来源。
+- **Search results module（单渠道结果模块）** — `lib/providers/search_results.dart`：
+  `SearchResults<T>` 是某一搜索类型（单曲 / 歌手 / 歌词）的不可变快照（keyword /
+  items / failure / page / total / hasMore / isLoading / isLoadingMore /
+  loadMoreFailed / isEmpty），`SearchResultsController<T>` 是唯一状态机：持有
+  `PagedListController`、当前关键词、失败归一（同一异常只记一次日志）与迟到渠道
+  补首屏（`ensureFirstPage`）。`search(keyword)` / `loadMore()` / `retry()` /
+  `clear()` 都没有来源参数；首屏失败重试首屏，追加页失败重试下一页。provider
+  按 `SearchKind` 各持一个控制器，UI 只读对应类型的快照。
 - **Search kind（搜索类型）** — `lib/domain/models/catalog.dart::SearchKind`
   （`song` / `artist` / `lyric`）：搜索页分段（`M3ESegmentedButton`，按当前渠道能力位
-  显隐）；每种类型一个 **Paged fan-out run**（切类型才请求、换词清空所有类型），互不
-  共享关键词 / 页码 / 失败。当前渠道不支持目标类型时回退到第一个支持的 kind（优先
-  song）。端口 `MusicSource.searchArtists` / `searchLyrics` 经 `CatalogService`
+  显隐）；每种类型一个 **Search results module** 控制器（切类型才请求、换词清空所有
+  类型），互不共享关键词 / 页码 / 失败。当前渠道不支持目标类型时回退到第一个支持的
+  kind（优先 song）。端口 `MusicSource.searchArtists` / `searchLyrics` 经 `CatalogService`
   （缓存 key `search:{source}:artist|lyric:...`，与单曲共用 5min 缓存实例）路由。
 - **Search row（搜索结果行）** — `lib/providers/search_row.dart` 的 `SearchRow`：
   单曲 / 歌词搜索结果的唯一形状（领域 `Track` + 可选 `lyricSnippet`）。搜索行从
   `CatalogService` 到会话、投影、播放全程只持领域 `Track`：`SearchRow.track` 就是
   分页条目本身（payload 原样），不再维护旁路 `SourceTrack` 列表或做
-  `Track → SourceTrack → Track` 往返。`SearchProvider.playItem` 取该行所属来源分组的已加载行组成队列（不混平台），
+  `Track → SourceTrack → Track` 往返。`SearchProvider.playItem` 取当前渠道该类型的已加载行组成队列（不混平台），
   按 `TrackId` 定位下标后交给 `PlaybackProvider.playDomainTracks`；行、队列与播放
   身份同源。UI 不再解码 `Map<String, dynamic>` 或 `_sourceTrack` 私有键，
   收藏 / 加入列表走与其他列表相同的 `Track` 入口。
@@ -606,9 +601,9 @@
   `TrackRowModel` 的行映射（歌词片段副标题 / 歌手链接 / 「未知歌手」兜底）、类型分段
   （按当前渠道能力位显隐）、失败重试 / 空态 / 加载态、曲目行操作菜单（触摸端 ⋮ /
   桌面右键）都只在这里维护；宿主只传 `SearchResultsVariant`（`page` / `docked`）、
-  滚动控制器、高亮 key 与导航回调（播放 / 打开歌手 / 查看全部）。结果面只有当前渠道
-  一组，保留表头与触底自动分页；`docked` 最多预览 8 行，以「查看全部结果」出口收尾；
-  遮罩里的歌手行仍走「查看全部结果」而不是直接进歌手页。
+  滚动控制器、高亮 key 与导航回调（播放 / 打开歌手 / 查看全部）。结果面只呈现
+  当前类型的一份结果快照，保留表头与触底自动分页；`docked` 最多预览 8 行，以
+  「查看全部结果」出口收尾；遮罩里的歌手行仍走「查看全部结果」而不是直接进歌手页。
 - **Builtin platform failure（内置平台失败助手）** — `builtin_search.dart::builtinPlatformFailure`：
   专辑 / 歌手 / 歌词等内置接口「业务拒绝 / 字段缺失」的统一失败（`unknown` + 可重试），
   各模块旧助手（`albumPlatformFailure` / `artistPlatformFailure`）委托同一实现。
@@ -695,13 +690,13 @@
   idle / loading / loaded / error / unavailable 状态、逐源结果、失败集合与只重试
   失败源、选中项随所属来源结果替换而失效、dispose 安全）。通知节拍也在这里统一：
   查询开始 / 清空 / 选中变化立即通知，同一轮事件循环内的来源完成合并为一次通知。
-  来源适配器是 `FanOutSource`，逐源执行体是 `FanOutRun`——单发（换源 / 手动歌词
-  换源）与分页（搜索页）共用同一轮查询的生命周期。三个消费面只叠加自己的口径：
-  **Source swap** 提供音源描述符、种子 URI 排除与分组，**Lyrics manual search
-  session** 提供歌词来源策略、不可用原因与最佳匹配，**Search branch** 提供搜索类型
-  的取页与行投影。来源筛选归消费面自己的会话（`activeSourceKey`，空串 = 全部），
-  视图只渲染并转发 `selectSource`，两侧没有「一个在 provider、一个在 widget
-  State」的差异。
+  来源适配器是 `FanOutSource`，逐源执行体是 `FanOutRun`；协议同时支持单发与
+  分页执行体，当前生产消费面使用单发（换源 / 手动歌词换源）。两个消费面只叠加
+  自己的口径：**Source swap** 提供音源描述符、种子 URI 排除与分组，**Lyrics
+  manual search session** 提供歌词来源策略、不可用原因与最佳匹配；搜索页已改走
+  **Search results module**（单渠道），不再经过扇出会话。来源筛选归消费面自己的
+  会话（`activeSourceKey`，空串 = 全部），视图只渲染并转发 `selectSource`，两侧
+  没有「一个在 provider、一个在 widget State」的差异。
 - **Source swap（换源）** — `lib/providers/source_swap_provider.dart` + 
   `lib/widgets/source_swap_view.dart`：按种子曲目「歌名 + 歌手」在可搜索音源
   并行检索（逐源就绪即填充、单源失败隔离；搜索协议见
@@ -1211,7 +1206,7 @@
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词读写、用量与清理的唯一实现。默认构造 / 未接入实例保持旧的 SharedPreferences 行为（不碰 `path_provider` 与文件 IO，widget 测试与降级平台依赖它）；生产组合根用 `LyricsCache.appSupport()` 显式接入文件后端：`<appSupport>/lyrics_cache/{md5(trackId)}.json`（一条一文件、临时文件 + rename 原子写）。旧版 prefs 条目不再懒迁移，历史 `manual_lyrics_cache_*` 键也不再特殊处理（不读、不清）；目录不可用时回退 prefs。TTL 策略属于 `CacheService`（取词时读取）。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
 - **ArtworkCache 进程级单例（已登记的例外）** — `lib/managers/artwork_cache.dart::ArtworkCache.instance` 仍是全局单例。消费面跨越封面子系统之外的展示与平台出口：`AppNetworkImage` / `CoverAppearance` 的默认取图、`CoverStyleCache` 的原图读取、`ArtworkPaletteService`、`CoverImageIdentity`、系统媒体会话封面路径与 `ImagePreloadManager`；启动时 `local_data_stack` 还要对同一实例设置省流网关（`networkImageBlocked`）。把这些消费面全部改成构造注入会牵动页面级 widget 默认参数与平台回调，超出本次封面 seam 的边界。移除前允许继续使用，但只作为**封面字节缓存**，不得作为封面解析 / 选择的回退——「这一首用哪张封面」仍只由 `CoverResolver` / `CustomCoverStore` 决定。
-- **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。跨页重复 key 默认保留先到条目，`mergeDuplicate` 可让调用方合并（歌词片段跟随后页）。成功且仍为当前请求的页经 **Accepted page callback** 交付同页元数据（页实体），不再让消费方另写过期判定。消费面：`SearchProvider`（当前渠道每个 `SearchKind` 一个 **Paged fan-out run**）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
+- **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。跨页重复 key 默认保留先到条目，`mergeDuplicate` 可让调用方合并（歌词片段跟随后页）。成功且仍为当前请求的页经 **Accepted page callback** 交付同页元数据（页实体），不再让消费方另写过期判定。消费面：`SearchProvider`（每个 `SearchKind` 一个 **Search results module** 控制器）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
 - **Accepted page callback（已接受页回调）** — `PagedListController.onPageAccepted`：每次取页成功且请求仍为当前代际时调用一次（首屏 `append=false`、加载更多 `append=true`），在发布新状态之前执行；过期响应、失败、`reset` 与 `dispose` 一律不调用。`fetchPage` 可返回 `PagedResult` 子类型携带同页元数据（详情页实体），持有方只在回调里更新，`loadFirstPage` / `loadMore` 返回后元数据与列表同页。价值在于过期守卫只有控制器一处：消费方不再维护第二套代际计数器，也不会在取数阶段提前写共享状态。
 - **Paged track collection（分页曲目集合）** — `lib/widgets/paged_track_collection.dart`：
   详情页的分页曲目集合与控制器的唯一实现。`PagedTrackCollection<T,R>` 在

@@ -127,45 +127,40 @@ class SearchResultsView extends StatefulWidget {
   /// 遮罩高亮行身份（见 [SearchPreviewItem.key]）；页面版可不传。
   final String? highlightedKey;
 
-  /// 当前渠道在当前搜索类型下的唯一分组（无渠道 / 不支持该类型时为 null）。
-  static SearchSourceGroup<Object>? groupOf(SearchProvider search) =>
+  /// 当前渠道在当前搜索类型下的结果快照（三种行形状按 kind 类型化）。
+  static SearchResults<Object> resultsOf(SearchProvider search) =>
       switch (search.searchKind) {
-        SearchKind.song =>
-          search.songGroups.isEmpty ? null : search.songGroups.first,
-        SearchKind.artist =>
-          search.artistGroups.isEmpty ? null : search.artistGroups.first,
-        SearchKind.lyric =>
-          search.lyricGroups.isEmpty ? null : search.lyricGroups.first,
+        SearchKind.song => search.songResults,
+        SearchKind.artist => search.artistResults,
+        SearchKind.lyric => search.lyricResults,
       };
 
   /// 生成遮罩预览的唯一纯函数：遮罩控制高亮与渲染列表都读它，避免索引漂移。
   static SearchPreview previewFor(SearchProvider search) {
-    final group = groupOf(search);
-    if (group == null) {
-      return const SearchPreview(items: [], totalItems: 0);
-    }
     final items = <SearchPreviewItem>[];
+    final sourceKey = search.activeSourceKey;
     switch (search.searchKind) {
       case SearchKind.song || SearchKind.lyric:
-        for (final row in (group as SearchSourceGroup<SearchRow>).items.take(
-          maxDockedPreviewRows,
-        )) {
-          items.add(SearchPreviewTrack(row: row, sourceKey: group.source.key));
+        final results = search.searchKind == SearchKind.song
+            ? search.songResults
+            : search.lyricResults;
+        for (final row in results.items.take(maxDockedPreviewRows)) {
+          items.add(SearchPreviewTrack(row: row, sourceKey: sourceKey));
         }
+        return SearchPreview(
+          items: List.unmodifiable(items),
+          totalItems: results.items.length,
+        );
       case SearchKind.artist:
-        for (final artist
-            in (group as SearchSourceGroup<ArtistSummary>).items.take(
-              maxDockedPreviewRows,
-            )) {
-          items.add(
-            SearchPreviewArtist(artist: artist, sourceKey: group.source.key),
-          );
+        final results = search.artistResults;
+        for (final artist in results.items.take(maxDockedPreviewRows)) {
+          items.add(SearchPreviewArtist(artist: artist, sourceKey: sourceKey));
         }
+        return SearchPreview(
+          items: List.unmodifiable(items),
+          totalItems: results.items.length,
+        );
     }
-    return SearchPreview(
-      items: List.unmodifiable(items),
-      totalItems: group.items.length,
-    );
   }
 
   @override
@@ -237,17 +232,16 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final horizontalPadding = context
         .layoutType(ResponsivePageType.browse)
         .horizontalPadding;
-    final group = SearchResultsView.groupOf(search);
-    final itemCount = group?.items.length ?? 0;
-    final failure = group?.failure;
+    final results = SearchResultsView.resultsOf(search);
+    final itemCount = results.items.length;
+    final failure = results.failure;
     final showEmptyState =
         itemCount == 0 && !search.isSearchBusy && failure == null;
     final kinds = search.supportedSearchKinds;
     final tableColumns =
         search.searchKind == SearchKind.song &&
         layout.tableColumns &&
-        group != null &&
-        group.items.isNotEmpty;
+        itemCount > 0;
     final controller = _pageController;
     final scrollView = CustomScrollView(
       controller: controller,
@@ -258,11 +252,9 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             child: _pageEmptyView(l10n, search),
           )
         else
-          ..._singleGroupSlivers(
-            context,
+          ..._resultSlivers(
             l10n,
             search,
-            group,
             horizontalPadding: horizontalPadding,
             tableColumns: tableColumns,
           ),
@@ -288,14 +280,14 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             child: M3EProgressIndicator.linear(),
           ),
         // 首屏失败才占顶部错误条；追加页失败只停底部页脚。
-        if (failure != null && (group?.items.isEmpty ?? true))
+        if (failure != null && itemCount == 0)
           _failure(
             context,
             l10n,
             compact: false,
             detail: failure.message,
             horizontalPadding: horizontalPadding,
-            onRetry: () => search.retry(group!.source.key),
+            onRetry: () => unawaited(search.retry()),
           ),
         if (tableColumns)
           Padding(
@@ -308,14 +300,11 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             thumbVisibility: true,
             interactive: true,
             child: PagedListAutoLoad(
-              hasMore: group?.hasMore ?? false,
-              failed: failure != null && (group?.items.isEmpty ?? true),
-              isLoadingMore: group?.isLoadingMore ?? false,
-              loadMoreFailed: group?.loadMoreFailed ?? false,
-              onLoadMore: () {
-                final sourceKey = group?.source.key;
-                if (sourceKey != null) search.loadMore(sourceKey);
-              },
+              hasMore: results.hasMore,
+              failed: failure != null && itemCount == 0,
+              isLoadingMore: results.isLoadingMore,
+              loadMoreFailed: results.loadMoreFailed,
+              onLoadMore: () => unawaited(search.loadMore()),
               child: scrollView,
             ),
           ),
@@ -328,57 +317,50 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     return KeyClaimScope(child: content);
   }
 
-  List<Widget> _singleGroupSlivers(
-    BuildContext context,
+  List<Widget> _resultSlivers(
     AppLocalizations l10n,
-    SearchProvider search,
-    SearchSourceGroup<Object>? group, {
+    SearchProvider search, {
     required double horizontalPadding,
     required bool tableColumns,
   }) {
-    if (group == null) return const [];
-    final isArtistKind = search.searchKind == SearchKind.artist;
+    final results = SearchResultsView.resultsOf(search);
+    if (results.items.isEmpty) return const [];
     final slivers = <Widget>[];
-    if (group.items.isNotEmpty) {
-      final rows = group.items;
-      slivers.add(
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-          sliver: isArtistKind
-              ? _ArtistResultsSliver(
-                  items: rows.cast<ArtistSummary>(),
-                  onTap: (artist) => unawaited(
-                    widget.onOpenArtist!(
-                      group.source.key,
-                      artist.id,
-                      fallbackName: artist.name,
-                    ),
-                  ),
-                )
-              : _TrackResultsSliver(
-                  items: rows.cast<SearchRow>(),
-                  onPlay: widget.onPlay,
-                  onOpenArtist: widget.onOpenArtist,
-                  artistLinksEnabled: group.source.capabilities.artist,
-                  surface: TrackRowSurface(
-                    showFocusRing: true,
-                    showFocusFill: true,
-                    tableSpec: tableColumns
-                        ? TrackRowColumnSpec.standard
-                        : null,
-                  ),
-                ),
-        ),
-      );
+    switch (search.searchKind) {
+      case SearchKind.song:
+        slivers.add(
+          _trackResultsSliver(
+            search,
+            search.songResults,
+            horizontalPadding: horizontalPadding,
+            tableColumns: tableColumns,
+          ),
+        );
+      case SearchKind.lyric:
+        slivers.add(
+          _trackResultsSliver(
+            search,
+            search.lyricResults,
+            horizontalPadding: horizontalPadding,
+            tableColumns: false,
+          ),
+        );
+      case SearchKind.artist:
+        slivers.add(
+          _artistResultsSliver(
+            search,
+            search.artistResults,
+            horizontalPadding: horizontalPadding,
+          ),
+        );
     }
-    if (group.items.isNotEmpty &&
-        (group.isLoadingMore || group.loadMoreFailed)) {
+    if (results.isLoadingMore || results.loadMoreFailed) {
       slivers.add(
         SliverToBoxAdapter(
           child: PagedListFooter(
-            isLoadingMore: group.isLoadingMore,
-            loadMoreFailed: group.loadMoreFailed,
-            onRetry: () => search.retry(group.source.key),
+            isLoadingMore: results.isLoadingMore,
+            loadMoreFailed: results.loadMoreFailed,
+            onRetry: () => unawaited(search.retry()),
             failureLabel: l10n.searchLoadMoreFailed,
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
@@ -391,6 +373,45 @@ class _SearchResultsViewState extends State<SearchResultsView> {
       );
     }
     return slivers;
+  }
+
+  Widget _trackResultsSliver(
+    SearchProvider search,
+    SearchResults<SearchRow> results, {
+    required double horizontalPadding,
+    required bool tableColumns,
+  }) {
+    return SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      sliver: _TrackResultsSliver(
+        items: results.items,
+        onPlay: widget.onPlay,
+        onOpenArtist: widget.onOpenArtist,
+        artistLinksEnabled: search.activeSource?.capabilities.artist ?? false,
+        surface: TrackRowSurface(
+          showFocusRing: true,
+          showFocusFill: true,
+          tableSpec: tableColumns ? TrackRowColumnSpec.standard : null,
+        ),
+      ),
+    );
+  }
+
+  Widget _artistResultsSliver(
+    SearchProvider search,
+    SearchResults<ArtistSummary> results, {
+    required double horizontalPadding,
+  }) {
+    final sourceKey = search.activeSourceKey;
+    return SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      sliver: _ArtistResultsSliver(
+        items: results.items,
+        onTap: (artist) => unawaited(
+          widget.onOpenArtist!(sourceKey, artist.id, fallbackName: artist.name),
+        ),
+      ),
+    );
   }
 
   /// 空状态区分：无可用来源 / 当前渠道不支持搜索 / 未输入 / 当前渠道无结果。
@@ -452,9 +473,9 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   Widget _buildDocked(BuildContext context, SearchProvider search) {
     final l10n = _l10n(context);
     final kinds = search.supportedSearchKinds;
-    final group = SearchResultsView.groupOf(search);
+    final results = SearchResultsView.resultsOf(search);
     final preview = SearchResultsView.previewFor(search);
-    final anyFailure = group?.failure != null;
+    final anyFailure = results.failure != null;
     final showEmpty =
         preview.totalItems == 0 && !search.isSearchBusy && !anyFailure;
     final currentKeys = {for (final item in preview.items) item.key};
@@ -479,13 +500,13 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: M3EProgressIndicator.linear(),
               ),
-            if (!showEmpty && group?.failure != null)
+            if (!showEmpty && results.failure != null)
               _failure(
                 context,
                 l10n,
                 compact: true,
-                detail: group!.failure!.message,
-                onRetry: () => search.retry(group.source.key),
+                detail: results.failure!.message,
+                onRetry: () => unawaited(search.retry()),
               ),
             if (!showEmpty && preview.items.isNotEmpty)
               Padding(

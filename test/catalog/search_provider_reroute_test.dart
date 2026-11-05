@@ -312,17 +312,6 @@ Future<void> _waitUntil(bool Function() predicate) async {
   expect(predicate(), isTrue, reason: '等待条件超时');
 }
 
-SearchSourceGroup<SearchRow> _songGroup(SearchProvider provider, String key) =>
-    provider.songGroups.firstWhere((group) => group.source.key == key);
-
-SearchSourceGroup<ArtistSummary> _artistGroup(
-  SearchProvider provider,
-  String key,
-) => provider.artistGroups.firstWhere((group) => group.source.key == key);
-
-SearchSourceGroup<SearchRow> _lyricGroup(SearchProvider provider, String key) =>
-    provider.lyricGroups.firstWhere((group) => group.source.key == key);
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -385,8 +374,8 @@ void main() {
 
     expect(kw.searchCalls, 1);
     expect(tx.searchCalls, 0, reason: '非当前渠道不参与搜索');
-    expect(provider.songGroups.single.source.key, 'kw');
-    expect(provider.searchResults.map((row) => row.id.uri), ['kw:hello-1']);
+    expect(provider.activeSourceKey, 'kw');
+    expect(provider.songResults.items.map((row) => row.id.uri), ['kw:hello-1']);
   });
 
   test('单源分页 / 跨页去重 / 到底守卫', () async {
@@ -409,18 +398,18 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.length == 2);
-    expect(provider.songGroups.single.page, 1);
+    await _waitUntil(() => provider.songResults.items.length == 2);
+    expect(provider.songResults.page, 1);
 
-    await provider.loadMore('kw');
-    final group = _songGroup(provider, 'kw');
-    expect(group.page, 2);
-    expect(group.hasMore, isFalse);
-    expect(group.total, 4);
-    expect(group.items.map((row) => row.id.uri), ['kw:a', 'kw:b', 'kw:c']);
+    await provider.loadMore();
+    final results = provider.songResults;
+    expect(results.page, 2);
+    expect(results.hasMore, isFalse);
+    expect(results.total, 4);
+    expect(results.items.map((row) => row.id.uri), ['kw:a', 'kw:b', 'kw:c']);
 
     // 已经到底：再次 loadMore 不再发请求。
-    await provider.loadMore('kw');
+    await provider.loadMore();
     expect(kw.searchCalls, 2);
   });
 
@@ -438,17 +427,18 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').failure != null);
-    final group = _songGroup(provider, 'kw');
-    expect(group.failure!.message, contains('boom'));
-    expect(group.failure!.kind, FailureKind.network);
-    expect(group.items, isEmpty);
+    await _waitUntil(() => provider.songResults.failure != null);
+    var results = provider.songResults;
+    expect(results.failure!.message, contains('boom'));
+    expect(results.failure!.kind, FailureKind.network);
+    expect(results.items, isEmpty);
 
     fail = false;
-    await provider.retry('kw');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
-    expect(_songGroup(provider, 'kw').failure, isNull);
-    expect(_songGroup(provider, 'kw').items.single.id.uri, 'kw:ok');
+    await provider.retry();
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
+    results = provider.songResults;
+    expect(results.failure, isNull);
+    expect(results.items.single.id.uri, 'kw:ok');
   });
 
   test('加载更多失败只置 loadMoreFailed，不写首屏 failure', () async {
@@ -479,23 +469,23 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
-    expect(_songGroup(provider, 'kw').failure, isNull);
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
+    expect(provider.songResults.failure, isNull);
 
-    await provider.loadMore('kw');
-    var group = _songGroup(provider, 'kw');
-    expect(group.loadMoreFailed, isTrue);
-    expect(group.failure, isNull, reason: '追加页失败不是首屏失败');
-    expect(group.page, 1);
-    expect(group.items.map((row) => row.id.uri), ['kw:a']);
+    await provider.loadMore();
+    var results = provider.songResults;
+    expect(results.loadMoreFailed, isTrue);
+    expect(results.failure, isNull, reason: '追加页失败不是首屏失败');
+    expect(results.page, 1);
+    expect(results.items.map((row) => row.id.uri), ['kw:a']);
 
     failPage2 = false;
-    await provider.retry('kw');
-    group = _songGroup(provider, 'kw');
-    expect(group.loadMoreFailed, isFalse);
-    expect(group.failure, isNull);
-    expect(group.page, 2);
-    expect(group.items.map((row) => row.id.uri), ['kw:a', 'kw:b']);
+    await provider.retry();
+    results = provider.songResults;
+    expect(results.loadMoreFailed, isFalse);
+    expect(results.failure, isNull);
+    expect(results.page, 2);
+    expect(results.items.map((row) => row.id.uri), ['kw:a', 'kw:b']);
   });
 
   test('切换当前渠道：清空旧结果并按当前关键词重搜', () async {
@@ -513,17 +503,16 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
-    expect(provider.songGroups.single.source.key, 'kw');
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
+    expect(provider.activeSourceKey, 'kw');
 
     provider.setActiveSource('tx');
     expect(provider.activeSourceKey, 'tx');
     expect(provider.searchQuery, 'hello', reason: '切渠道保留关键词');
     await _waitUntil(
       () =>
-          provider.songGroups.length == 1 &&
-          provider.songGroups.single.source.key == 'tx' &&
-          provider.songGroups.single.items.isNotEmpty,
+          provider.activeSourceKey == 'tx' &&
+          provider.songResults.items.isNotEmpty,
     );
     expect(provider.searchResults.map((row) => row.id.uri), ['tx:b']);
     expect(kw.searchCalls, 1);
@@ -552,7 +541,8 @@ void main() {
     expect(provider.activeSourceKey, 'tx');
     expect(provider.hasActiveSearchSource, isFalse);
     expect(provider.supportedSearchKinds, isEmpty);
-    expect(provider.songGroups, isEmpty, reason: '旧渠道结果已清空');
+    expect(provider.songResults.page, 0);
+    expect(provider.songResults.items, isEmpty, reason: '旧渠道结果已清空');
     expect(provider.isSearchPending, isFalse, reason: '不可搜索渠道不能永久 pending');
     expect(provider.isSearchBusy, isFalse);
 
@@ -567,9 +557,8 @@ void main() {
     ]);
     await _waitUntil(
       () =>
-          provider.songGroups.length == 1 &&
-          provider.songGroups.single.source.key == 'tx' &&
-          provider.songGroups.single.items.isNotEmpty,
+          provider.activeSourceKey == 'tx' &&
+          provider.songResults.items.isNotEmpty,
     );
     expect(tx.searchCalls, 1);
     expect(kw.searchCalls, 1, reason: '不回到旧渠道补搜');
@@ -597,7 +586,8 @@ void main() {
 
     provider.submitSearch('hello');
     await _waitUntil(() => !provider.isSearching);
-    expect(provider.songGroups, isEmpty);
+    expect(provider.songResults.page, 0);
+    expect(provider.songResults.items, isEmpty);
     expect(script.searchCalls, 0);
   });
 
@@ -619,12 +609,13 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
     expect(kw.searchCalls, 1);
 
     provider.setActiveSource('script');
     expect(provider.hasActiveSearchSource, isFalse);
-    expect(provider.songGroups, isEmpty, reason: '切渠道已清空旧结果');
+    expect(provider.songResults.page, 0);
+    expect(provider.songResults.items, isEmpty, reason: '切渠道已清空旧结果');
 
     // 脚本晚到：同一个 key 变为可搜索，当前关键词仍在 provider 上。
     registry.setDescriptors([
@@ -634,9 +625,8 @@ void main() {
     await _waitUntil(
       () =>
           script.searchCalls == 1 &&
-          provider.songGroups.length == 1 &&
-          provider.songGroups.single.source.key == 'script' &&
-          provider.songGroups.single.items.isNotEmpty,
+          provider.activeSourceKey == 'script' &&
+          provider.songResults.items.isNotEmpty,
     );
     expect(provider.searchResults.single.id.uri, 'script:hello-1');
     expect(kw.searchCalls, 1, reason: '不回到旧渠道补搜');
@@ -672,19 +662,20 @@ void main() {
     provider.submitSearch('周杰伦');
     await _waitUntil(() => !provider.isSearching);
     provider.selectSearchKind(SearchKind.artist);
-    await _waitUntil(() => _artistGroup(provider, 'kw').items.isNotEmpty);
+    await _waitUntil(() => provider.artistResults.items.isNotEmpty);
     expect(provider.searchKind, SearchKind.artist);
 
     provider.setActiveSource('script');
     expect(provider.searchKind, SearchKind.song, reason: '脚本源无歌手能力 → 回退单曲');
     expect(provider.supportedSearchKinds, [SearchKind.song]);
-    expect(provider.artistGroups, isEmpty, reason: '旧渠道的歌手结果已清空');
-    await _waitUntil(() => _songGroup(provider, 'script').items.isNotEmpty);
+    expect(provider.artistResults.page, 0);
+    expect(provider.artistResults.items, isEmpty, reason: '旧渠道的歌手结果已清空');
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
     expect(script.artistSearchCalls, 0);
     expect(script.searchCalls, 1);
   });
 
-  test('来源移除：当前渠道分组一起移除；其它渠道不自动接管', () async {
+  test('来源移除：当前渠道结果一起移除；其它渠道不自动接管', () async {
     final kw = _FakeMusicSource('kw');
     final tx = _FakeMusicSource('tx');
     final registry = _FakeRegistry(
@@ -695,10 +686,10 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => provider.songGroups.length == 1);
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
 
     registry.setDescriptors([_descriptor('tx', 'QQ音乐')]);
-    await _waitUntil(() => provider.songGroups.isEmpty);
+    await _waitUntil(() => provider.songResults.items.isEmpty);
     expect(provider.activeSourceKey, 'kw');
     expect(provider.hasActiveSearchSource, isFalse);
     expect(tx.searchCalls, 0, reason: '当前渠道消失时不自动改搜其它渠道');
@@ -728,12 +719,12 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').failure != null);
-    expect(provider.songGroups.single.source.key, 'kw');
+    await _waitUntil(() => provider.songResults.failure != null);
+    expect(provider.activeSourceKey, 'kw');
 
     fail = false;
     await provider.retryFailed();
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
     expect(kw.searchCalls, 2);
     expect(tx.searchCalls, 0);
   });
@@ -755,9 +746,9 @@ void main() {
     final provider = buildProvider(registry);
 
     provider.submitSearch('hello');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.length == 2);
+    await _waitUntil(() => provider.songResults.items.length == 2);
 
-    provider.playItem(_songGroup(provider, 'kw').items[1]);
+    provider.playItem(provider.songResults.items[1]);
     final request = backend.lastRequest!;
     expect(request.startIndex, 1);
     expect(request.context?.name, '酷我');
@@ -789,16 +780,16 @@ void main() {
     provider.submitSearch('周杰伦');
     await _waitUntil(() => !provider.isSearching);
     provider.selectSearchKind(SearchKind.artist);
-    await _waitUntil(() => _artistGroup(provider, 'kw').items.isNotEmpty);
+    await _waitUntil(() => provider.artistResults.items.isNotEmpty);
 
     provider.releaseSearchResults();
     expect(provider.searchQuery, isEmpty);
     expect(provider.searchResults, isEmpty);
-    expect(provider.artistResults, isEmpty);
-    expect(provider.lyricResults, isEmpty);
-    expect(provider.songGroups, isEmpty);
-    expect(provider.artistGroups, isEmpty);
-    expect(provider.lyricGroups, isEmpty);
+    expect(provider.artistResults.items, isEmpty);
+    expect(provider.lyricResults.items, isEmpty);
+    expect(provider.songResults.page, 0);
+    expect(provider.artistResults.page, 0);
+    expect(provider.lyricResults.page, 0);
     expect(provider.isSearching, isFalse);
     expect(provider.activeSourceKey, 'kw', reason: '渠道偏好保留');
   });
@@ -819,10 +810,10 @@ void main() {
     provider.submitSearch('旧词');
     expect(provider.isSearching, isTrue);
     provider.submitSearch('新词');
-    await _waitUntil(() => _songGroup(provider, 'kw').items.isNotEmpty);
+    await _waitUntil(() => provider.songResults.items.isNotEmpty);
     oldGate.complete(SearchResult(items: [_track('kw', 'old')], total: 1));
     await Future<void>.delayed(const Duration(milliseconds: 10));
-    expect(_songGroup(provider, 'kw').items.single.id.uri, 'kw:new');
+    expect(provider.songResults.items.single.id.uri, 'kw:new');
   });
 
   test('歌词片段按渠道保存；换词清空，追加页同 id 后页覆盖', () async {
@@ -872,22 +863,22 @@ void main() {
     provider.submitSearch('歌词');
     await _waitUntil(() => !provider.isSearching);
     provider.selectSearchKind(SearchKind.lyric);
-    await _waitUntil(() => _lyricGroup(provider, 'kw').items.length == 2);
-    expect(_lyricGroup(provider, 'kw').items.map((row) => row.lyricSnippet), [
+    await _waitUntil(() => provider.lyricResults.items.length == 2);
+    expect(provider.lyricResults.items.map((row) => row.lyricSnippet), [
       '第一页 A',
       '第一页 B',
     ]);
 
-    await provider.loadMore('kw');
-    expect(_lyricGroup(provider, 'kw').items.map((row) => row.lyricSnippet), [
+    await provider.loadMore();
+    expect(provider.lyricResults.items.map((row) => row.lyricSnippet), [
       '第一页 A',
       '第二页 B',
       '第二页 C',
     ]);
 
     provider.submitSearch('第二词');
-    await _waitUntil(() => _lyricGroup(provider, 'kw').items.isNotEmpty);
-    expect(_lyricGroup(provider, 'kw').items.single.lyricSnippet, '新片段');
+    await _waitUntil(() => provider.lyricResults.items.isNotEmpty);
+    expect(provider.lyricResults.items.single.lyricSnippet, '新片段');
   });
 
   test('防抖窗口：isSearchBusy 覆盖等待期，完成后只请求一次', () {
@@ -901,7 +892,8 @@ void main() {
       expect(provider.isSearchPending, isTrue);
       expect(provider.isSearchBusy, isTrue);
       expect(provider.isSearching, isFalse);
-      expect(provider.songGroups, isEmpty);
+      expect(provider.songResults.page, 0);
+      expect(provider.songResults.items, isEmpty);
 
       async.elapse(const Duration(milliseconds: 299));
       expect(source.searchCalls, 0);
@@ -912,7 +904,7 @@ void main() {
       expect(source.searchCalls, 1);
       expect(provider.isSearchBusy, isFalse);
       expect(provider.isSearchPending, isFalse);
-      expect(provider.songGroups.single.items, isNotEmpty);
+      expect(provider.songResults.items, isNotEmpty);
     });
   });
 
@@ -944,7 +936,7 @@ void main() {
       async.flushMicrotasks();
       expect(source.searchCalls, 0, reason: '旧类型不应先发一轮');
       expect(source.artistSearchCalls, 1, reason: '最终类型只请求一次');
-      expect(provider.artistGroups.single.items, isNotEmpty);
+      expect(provider.artistResults.items, isNotEmpty);
     });
   });
 
@@ -997,6 +989,7 @@ void main() {
     provider.submitSearch('hello');
     await _waitUntil(() => !provider.isSearching);
     expect(provider.searchResults, isEmpty);
-    expect(provider.songGroups, isEmpty);
+    expect(provider.songResults.page, 0);
+    expect(provider.songResults.items, isEmpty);
   });
 }

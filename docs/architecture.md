@@ -750,8 +750,8 @@
   `failedSourceKeys` / `failedSourceNames` 可重试）。搜索协议本身
   （查询代际 / 逐源状态 / 失败重试 / 选中失效 / 通知合并）唯一实现在
   `lib/providers/source_fan_out.dart` 的 **Source fan-out session**：
-  换源、歌词手动换源与搜索页各自只提供 `FanOutSource` / `FanOutRun`
-  适配器并叠加展示口径。
+  换源与歌词手动换源各自只提供 `FanOutSource` / `FanOutRun` 适配器并叠加
+  展示口径（搜索页是单渠道，另走 **Search results module**）。
   载体是统一的「换源」页
   （`lib/pages/source_swap_page.dart`：页面级曲目条（封面 40 + 歌名 + 歌手 ·
   当前来源）+ 歌词 / 音频两个 tab；两个 tab 共用
@@ -1151,21 +1151,22 @@
 | 播放进度 | ≤4Hz | `PlaybackProvider.position`（ValueListenable） | `ValueListenableBuilder`（进度条/歌词行） |
 | 定时关闭剩余 | 1Hz（仅倒计时且播放中） | `PlaybackProvider.sleepTimer`（ValueListenable） | `ValueListenableBuilder`（歌曲信息页/弹层） |
 | 曲目/播放/队列/模式 | 事件级 | facade 快照（值变才发） | `Selector`（不可变对象/record） |
-| 搜索结果/分页 | 交互级 | `SearchProvider`（当前渠道每个 `SearchKind` 一个 `PagedFanOutRun`：关键词 / 归一化失败 / `PagedListController` 各一份，查询代际 / 失败重试 / 通知由 `FanOutSearchSession` 统一；`SearchSourceGroup<T>` 是当前渠道的只读投影；单曲 / 歌词投影只持领域 `Track`，歌词片段随 `LyricHit` 条目入库）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
+| 搜索结果/分页 | 交互级 | `SearchProvider`（当前渠道每个 `SearchKind` 一个 `SearchResultsController<T>`：关键词 / 归一化失败 / `PagedListController` 各一份，`SearchResults<T>` 是唯一只读快照；单曲 / 歌词快照只持领域 `Track`，歌词片段随 `LyricHit` 条目入库）；详情页用 `PagedTrackCollection` 捕获同页实体 | 局部 select |
 | 音源列表/顺序 | 事件级 | `SourceRegistry.changes` | 选择器/管理页 |
 
 硬性规则：高频数值禁止进聚合 `notifyListeners`；`select` 禁止返回 `Map`/`List` 引用；
 歌词行高亮用 `PositionLineIndexBuilder`（仅跨行重建）；队列列表用稳定引用。
 
-搜索分页按 `SearchKind` 隔离：当前渠道每种类型一个 `PagedFanOutRun`，自己持有
-关键词 / 归一化失败 / `PagedListController`，查询代际 / 失败重试 / 通知合并由
-`FanOutSearchSession` 统一；`SearchProvider.activeSourceKey` 与
-`DiscoverProvider.channelKey` 同源，`loadMore(sourceKey)` / `retry(sourceKey)`
-只作用于当前渠道。`supportedSearchKinds` 只看当前渠道能力位，切渠道时清空旧
-结果并按当前关键词重搜；当前类型不支持时回退到第一个支持的 kind（优先 song）。
-单曲 / 歌手 / 歌词的结果投影仍按类型保留（`SearchRow` / `ArtistSummary` /
+搜索分页按 `SearchKind` 隔离：当前渠道每种类型一个 `SearchResultsController`，
+自己持有关键词 / 归一化失败 / `PagedListController`；`SearchResults<T>` 是 provider
+对外暴露的唯一不可变快照，`loadMore()` / `retry()` 不再带来源参数。
+`SearchProvider.activeSourceKey` 与 `DiscoverProvider.channelKey` 同源，
+`supportedSearchKinds` 只看当前渠道能力位，切渠道时清空旧结果并按当前关键词重搜；
+当前类型不支持时回退到第一个支持的 kind（优先 song）。控制器对同一异常只归一化
+一次；渠道晚到由 `ensureFirstPage()` 补首屏，当前渠道不可搜索时只记关键词、不发
+请求。单曲 / 歌手 / 歌词的结果快照仍按类型保留（`SearchRow` / `ArtistSummary` /
 带片段的行），行形状不同，不把三种结果塞进同一个泛型列表。
-单曲 / 歌词的会话条目与 `SearchRow.track` 是同一个领域 `Track`（`CatalogService`
+单曲 / 歌词的结果条目与 `SearchRow.track` 是同一个领域 `Track`（`CatalogService`
 直接返回，payload 原样）；歌词页按当前渠道把命中片段按 `TrackId.uri` 随页带回。
 `playItem` 取当前渠道的已加载行组成队列、按 `TrackId` 定位下标，经
 `PlaybackProvider.playDomainTracks` 播放，不混平台队列——不再做
