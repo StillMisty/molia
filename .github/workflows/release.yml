@@ -15,14 +15,10 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # pubspec.lock 锁定的是 pub.dev；工作流必须同源，否则 pub 会重写 lock。
-  PUB_HOSTED_URL: https://pub.dev
-
 jobs:
   prepare:
     name: 解析 tag / 校验版本
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.parse.outputs.version }}
       channel: ${{ steps.parse.outputs.channel }}
@@ -60,7 +56,7 @@ jobs:
   android:
     name: Android APK / AAB
     needs: prepare
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       # 插件模块（quickjs / jni / cmake）互不依赖，开跨项目并行；
@@ -227,8 +223,9 @@ jobs:
   linux:
     name: Linux x64
     needs: prepare
-    # 22.04 构建以兼容更老的 glibc；运行仍需系统 libmpv（见 .agents/skills/molia-release/references/platforms.md）。
-    runs-on: ubuntu-22.04
+    # 统一 ubuntu-latest；glibc 基线随 runner 镜像，老发行版兼容性需单独确认。
+    # 运行仍需系统 libmpv（见 .agents/skills/molia-release/references/platforms.md）。
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -327,7 +324,7 @@ jobs:
   publish:
     name: 发布 Release + latest.json
     needs: [prepare, android, windows, linux, ios, macos]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8

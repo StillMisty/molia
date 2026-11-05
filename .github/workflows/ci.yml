@@ -13,16 +13,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # pubspec.lock 锁定的是 pub.dev；CI 必须同源，否则 pub 会重写 lock。
-  # 不再用国内镜像：其 US 边缘会返回与 lock 内容哈希不符的归档。
-  PUB_HOSTED_URL: https://pub.dev
-
 jobs:
   analyze-test:
     name: Analyze / Test
-    # 明确固定 runner 版本（ubuntu-latest 正在迁移到 Ubuntu 26，避免被动换基线）。
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
