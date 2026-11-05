@@ -113,7 +113,7 @@ run_frames_windows() {
   windows_powershell "\
     \$ErrorActionPreference = 'Stop'; \
     Set-Location '$WIN_PROJECT'; \
-    \$env:PUB_HOSTED_URL = 'https://pub.flutter-io.cn'; \
+    \$env:PUB_HOSTED_URL = 'https://pub.dev'; \
     & '$WIN_FLUTTER' drive \
       --profile \
       --driver='$FRAME_TEST_DRIVER' \
