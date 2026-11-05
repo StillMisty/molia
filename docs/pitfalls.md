@@ -988,3 +988,12 @@
     `_playIndex` 取链前先 `_player.stop()`（同时完成暂停与卸载），音质切换与
     曲末自动切歌不额外卸载。回归用例见
     `test/playback/local_playback_service_test.dart`。
+100. **APK 与 AAB 必须复用同一份 AOT，且不要给 gen_snapshot 加 `--strip`**：
+    release 构建先 `flutter build apk --split-per-abi`，再 `flutter build appbundle`；
+    两次命令必须使用完全相同的 `--target-platform` / `--obfuscate` /
+    `--split-debug-info`，Gradle 的 `compileFlutterBuildRelease` 才会 UP-TO-DATE，
+    AAB 不再重新编译 3 个 ABI（实测 173s → 28s）。APK 侧不要加
+    `--extra-gen-snapshot-options=--strip`：gen_snapshot 提前 strip 后 AAB 里
+    生成不出 `libapp.so.sym`，`flutter build appbundle` 的符号校验会直接失败。
+    AGP 打包 release 时本来就会 strip 原生库，去掉该参数后 APK 里的 `libapp.so`
+    体积实测不变；AAB 因开启 Dart obfuscation 反而从 98.5MB 降到 90.1MB。

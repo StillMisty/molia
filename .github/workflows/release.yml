@@ -61,6 +61,10 @@ jobs:
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      # 插件模块（quickjs / jni / cmake）互不依赖，开跨项目并行；
+      # 不启用 Gradle 缓存：tag 构建对 Actions cache 只读，没有 main 预热不会命中。
+      GRADLE_OPTS: "-Dorg.gradle.parallel=true"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -120,15 +124,20 @@ jobs:
       - name: 构建 APK / AAB
         run: |
           set -euo pipefail
+          # APK / AAB 必须共用同一组 AOT 参数，第二次 Gradle 才会 UP-TO-DATE；
+          # 否则 AAB 会重新编译 3 个 ABI（实测多 ~145s）。
+          # 不要加 --extra-gen-snapshot-options=--strip：AAB 需要 libapp.so.sym，
+          # gen_snapshot 提前 strip 会让 flutter build appbundle 的符号校验失败；
+          # AGP 打包 release 时本来就会 strip 原生库，去掉后 APK 体积实测不变。
           flags=(
             --release
             --build-name "${{ needs.prepare.outputs.version }}"
             --build-number "${{ needs.prepare.outputs.build }}"
+            --target-platform android-arm,android-arm64,android-x64
+            --split-debug-info=build/symbols
+            --obfuscate
           )
-          flutter build apk "${flags[@]}" --split-per-abi \
-            --split-debug-info=build/symbols \
-            --obfuscate \
-            --extra-gen-snapshot-options=--strip
+          flutter build apk "${flags[@]}" --split-per-abi
           flutter build appbundle "${flags[@]}"
       - name: 校验 release 资源（shrinkResources 不能删掉通知图标，见已知坑 34）
         run: |
