@@ -1,18 +1,18 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/widgets/settings/settings_sheet.dart';
+import 'package:molia/widgets/modal_page_navigator.dart';
 
 void main() {
-  group('SettingsSheetBackCoordinator', () {
+  group('ModalNavigatorBackCoordinator', () {
     test('默认：弹层保持收缩，预测返回未激活', () {
-      final coordinator = SettingsSheetBackCoordinator();
+      final coordinator = ModalNavigatorBackCoordinator();
 
       expect(coordinator.sheetShrinksOnPredictiveBack, isTrue);
       expect(coordinator.predictiveBackActive, isFalse);
     });
 
     test('子页手势：弹层不收缩，接管后激活', () {
-      final coordinator = SettingsSheetBackCoordinator();
+      final coordinator = ModalNavigatorBackCoordinator();
 
       coordinator.beginPredictiveBack(
         canPopInnerRoute: true,
@@ -24,7 +24,7 @@ void main() {
     });
 
     test('首屏手势：弹层收缩，不由内层路由接管', () {
-      final coordinator = SettingsSheetBackCoordinator();
+      final coordinator = ModalNavigatorBackCoordinator();
 
       coordinator.beginPredictiveBack(canPopInnerRoute: false);
 
@@ -33,7 +33,7 @@ void main() {
     });
 
     test('弹层上方还有表面：缩放归零但内层不接管（active 保持 false）', () {
-      final coordinator = SettingsSheetBackCoordinator();
+      final coordinator = ModalNavigatorBackCoordinator();
 
       coordinator.beginPredictiveBack(canPopInnerRoute: true);
 
@@ -47,7 +47,7 @@ void main() {
 
     test('end 在整轮分发后才重置 active，收缩归属保留到下一次手势', () {
       fakeAsync((async) {
-        final coordinator = SettingsSheetBackCoordinator();
+        final coordinator = ModalNavigatorBackCoordinator();
         coordinator.beginPredictiveBack(
           canPopInnerRoute: true,
           handledByInnerRoute: true,
@@ -75,7 +75,7 @@ void main() {
 
     test('下一次首屏手势重新固定收缩归属', () {
       fakeAsync((async) {
-        final coordinator = SettingsSheetBackCoordinator();
+        final coordinator = ModalNavigatorBackCoordinator();
         coordinator.beginPredictiveBack(
           canPopInnerRoute: true,
           handledByInnerRoute: true,

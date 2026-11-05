@@ -37,6 +37,7 @@ import '../utils/responsive.dart';
 import 'ai_dj_shared.dart';
 import 'ai_dj_waiting.dart';
 import 'discover_layout.dart';
+import 'modal_page_navigator.dart';
 import 'track_artwork.dart';
 
 class AiDjCarousel extends StatefulWidget {
@@ -525,11 +526,13 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
   }
 
   void _openPage(BuildContext context) {
-    ResponsiveNavigation.showPageModal(
-      context: context,
-      // 页面自带 Scaffold / AppBar，弹层只提供卡片容器：关闭走遮罩 /
-      // Esc / 下滑 / 系统返回。
-      child: const AiDjPage(),
+    // 带内部 Navigator：AI 页里的推荐偏好 / 历史 push 在同一弹层内切换，
+    // 不会再叠一个新的 sheet。
+    unawaited(
+      showPageModalWithNavigator(
+        context: context,
+        initialPageBuilder: (context, _) => const AiDjPage(),
+      ),
     );
   }
 }

@@ -415,8 +415,9 @@
   滚到焦点位（`M3ECarouselController.animateToItem`）；卡片流下方信息区只显示
   焦点卡的推荐理由（歌名 / 歌手由卡片槽位承担，不在信息区重复），理由为空 /
   焦点越界不渲染（`aiDjReasonPanel`）。「查看全部」进 AI 页的弹层不带关闭 X
-  （`showCloseButton: false`：页面自己的标题栏已有返回，避免双层 chrome，
-  关闭走遮罩 / Esc / 下滑 / 系统返回）。功能未启用时整条隐藏；播放页不再有
+  （`showCloseButton: false`：避免双层 chrome；AI 页首屏在标题栏显示自己的
+  关闭按钮，子页用返回键，关闭也可走遮罩 / Esc / 下滑 / 系统返回）。
+  功能未启用时整条隐藏；播放页不再有
   AI 徽标。首次开启隐私确认；定位与边界见 ADR-0002。启用后搜索 tab 的
   「输入关键词搜索歌曲」空占位让位给推荐流（关闭时保留占位）。
 - **跨设备数据同步（可选，默认关闭）**：同步歌单 / 收藏 / 音源脚本与配置 /
@@ -1611,8 +1612,10 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   大范围绝对量（缓存上限）→ Value + 输入弹层（带常用预设）；
   子页（音源 / 歌词显示〔二级：歌词页 / 歌词输出 / 桌面歌词 / 通知·锁屏 / 蓝牙〕/
   AI 推歌 / 通用 / 数据与存储 / 缓存 / 统计）经设置弹层壳
-  （`lib/widgets/settings/settings_sheet.dart`）的内部 Navigator 在同一弹层内
-  push（`openSettingsSubPage`）；省流模式不单开
+  （`lib/widgets/settings/settings_sheet.dart`，内部 Navigator 由
+  `lib/widgets/modal_page_navigator.dart` 提供）在同一弹层内 push
+  （`openSettingsSubPage`）；发现页打开的 AI 页弹层也使用同一个壳，
+  AI 页内部的推荐偏好 / 历史同样在弹层内 push；省流模式不单开
   子页，开关与生效子项并回首屏「播放」分区。音源管理页（`sources_page.dart`）
   与 any-listen 页同样使用这套设置行组件与分段卡片行距。系统返回先退子页、
   再关弹层：窄屏底部弹层由 `showPageModal(onDismissRequest:)` guard 读取
@@ -1632,17 +1635,17 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   「无预览」的普通返回，故依赖下限 1.1.7（当前 1.2.0；原因见 `pubspec.yaml` 注释）。
   二级页宽屏侧滑走 `M3ESideSheet.show`、页面型弹窗走 `M3EDialog.show` 路由，scrim /
   弹簧 / 键盘 inset / 关闭手势都由 M3E 宿主处理；自建 route 只剩全局搜索遮罩。
-  嵌套 Navigator（设置弹层内层）由
-  `settings_sheet.dart` 的 `_SettingsPageTransitionsBuilder` 做**手势归属**判定：内层 Android
+  嵌套 Navigator（设置 / AI 页弹层内层）由
+  `modal_page_navigator.dart` 的 `ModalPageNavigatorTransitionsBuilder` 做**手势归属**判定：内层 Android
   过渡保持 fade-forwards 并附一个预测返回 detector，只在
   `内层路由 isCurrent && popGestureEnabled && 内层 Navigator 还能 pop &&
   弹层路由仍是顶层` 时接管。框架会把一次手势派发给**所有**返回 true 的观察者，
   不做归属判定就会和内层子页 / 最上层 dialog 各退一级。归属结果经
-  `SettingsSheetBackCoordinator` 传给弹层的动态 `M3EBottomSheetTheme`：
+  `ModalNavigatorBackCoordinator` 传给弹层的动态 `M3EBottomSheetTheme`：
   - 子页手势：弹层 `predictiveBackShrinkX/Y` 归 0，只显示与 push 一致的
     FadeForwards 页面退场；提交只退子页，弹层保留（guard 读 coordinator 返回 false）。
-  - 首屏手势：弹层正常收缩，提交关闭设置。
-  协议本身由 `test/settings_sheet_back_coordinator_test.dart` 直接覆盖
+  - 首屏手势：弹层正常收缩，提交关闭弹层。
+  协议本身由 `test/modal_page_navigator_test.dart` 直接覆盖
   （含微任务重置时机）。
 - 图标：统一圆角风格 `Icons.*_rounded`（不用 `Icons.adaptive.*`，不混 `_outlined`/基础实心）；
   唯一例外 `library_music_outlined`（资料库未选中半对；音符图标已改用 `MoliaMark` 组件）。

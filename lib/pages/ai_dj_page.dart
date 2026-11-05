@@ -26,13 +26,13 @@ import '../providers/playback_provider.dart';
 import '../services/ai/ai_generation_executor.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
-import '../utils/responsive.dart';
 import '../widgets/ai_dj_prompt_dialog.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/ai_dj_track_tile.dart';
 import '../widgets/ai_dj_waiting.dart';
 import '../widgets/card_list_surface.dart';
 import '../widgets/settings/settings_subpage.dart';
+import '../widgets/settings/settings_tiles.dart';
 import '../widgets/track_row.dart';
 
 class AiDjPage extends StatefulWidget {
@@ -97,6 +97,17 @@ class _AiDjPageState extends State<AiDjPage> {
     return SettingsSubPage.body(
       title: l10n.aiDjTitle,
       safeArea: true,
+      // 从发现页进入时 AI 页是弹层内层 Navigator 的首屏，没有可 pop 的内层
+      // 路由；补一个关闭按钮，否则桌面端只剩遮罩/Esc 可退。
+      leading: Navigator.of(context).canPop()
+          ? null
+          : M3EIconButton(
+              key: const Key('aiDjCloseButton'),
+              variant: M3EIconButtonVariant.standard,
+              icon: const Icon(Icons.close_rounded),
+              semanticLabel: l10n.close,
+              onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+            ),
       actions: [
         M3EIconButton(
           key: const Key('aiDjHistoryButton'),
@@ -676,13 +687,10 @@ class _AiDjPageState extends State<AiDjPage> {
     });
   }
 
+  /// 子页 push 到最近的 Navigator：设置入口下是设置弹层的内部 Navigator，
+  /// 发现页入口下是 AI 页自己的内部 Navigator；不再叠新的 sheet。
   void _openPage(Widget page) {
-    ResponsiveNavigation.showPageModal(
-      context: context,
-      // 页面自带 Scaffold / AppBar，弹层只提供卡片容器：关闭走遮罩 /
-      // Esc / 下滑 / 系统返回。
-      child: page,
-    );
+    unawaited(openSettingsSubPage(context, page));
   }
 
   /// 开启功能（不接管播放；列表缺失时生成一批）。

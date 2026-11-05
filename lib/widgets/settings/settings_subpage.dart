@@ -5,7 +5,8 @@ import 'settings_tiles.dart';
 
 /// 设置子页的统一 chrome：M3E 顶栏 + 统一内边距的滚动正文。
 ///
-/// 设置子页活在设置弹层壳的内层 Navigator 里（见 `settings_sheet.dart`），
+/// 设置子页活在设置弹层壳的内层 Navigator 里（见 `settings_sheet.dart` 与
+/// `modal_page_navigator.dart`），
 /// 不能像根导航器上的二级页那样交给 `ResponsiveNavigation.showSecondaryPage`：
 /// 预测返回要按「子页 / 弹层首屏」分派手势归属（子页手势只退子页，首屏手势才
 /// 让弹层收缩），普通返回也必须先退子页、再关弹层。这套所有权在设置弹层，
@@ -16,6 +17,7 @@ class SettingsSubPage extends StatelessWidget {
   const SettingsSubPage({
     super.key,
     required this.title,
+    this.leading,
     this.actions,
     required this.children,
     this.safeArea = false,
@@ -27,12 +29,16 @@ class SettingsSubPage extends StatelessWidget {
   const SettingsSubPage.body({
     super.key,
     required this.title,
+    this.leading,
     this.actions,
     required this.body,
     this.safeArea = false,
   }) : children = null;
 
   final String title;
+
+  /// 自定义返回/关闭按钮；缺省由 [M3EAppBar] 按当前 Navigator 栈自动推断。
+  final Widget? leading;
   final List<Widget>? actions;
   final List<Widget>? children;
   final Widget? body;
@@ -46,6 +52,7 @@ class SettingsSubPage extends StatelessWidget {
     return Scaffold(
       appBar: M3EAppBar.top(
         title: Text(title),
+        leading: leading,
         automaticallyImplyLeading: true,
         actions: actions,
       ),
