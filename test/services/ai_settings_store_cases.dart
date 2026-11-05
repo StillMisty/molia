@@ -77,7 +77,7 @@ void main() {
   });
 
   test('推荐偏好 JSON 往返与默认值（非法值回退）', () async {
-    expect((await store.readPreferences()).batchSize, 10);
+    expect((await store.readPreferences()).batchSize, 24);
     expect((await store.readPreferences()).autoFeed, isTrue);
     expect(
       (await store.readPreferences()).sections,
@@ -85,7 +85,7 @@ void main() {
     );
 
     const preferences = AiPreferences(
-      batchSize: 30,
+      batchSize: 48,
       autoFeed: false,
       styles: ['pop', 'jazz'],
       scenes: ['commute'],
@@ -101,7 +101,7 @@ void main() {
     await store.savePreferences(preferences);
 
     final loaded = await store.readPreferences();
-    expect(loaded.batchSize, 30);
+    expect(loaded.batchSize, 48);
     expect(loaded.autoFeed, isFalse);
     expect(loaded.styles, ['pop', 'jazz']);
     expect(loaded.scenes, ['commute']);
@@ -118,9 +118,56 @@ void main() {
     expect(loaded.acknowledgedScopes, {AiUpstreamSection.favorites});
 
     await prefs.setString(kAiDjPreferences.name, jsonEncode({'batchSize': 7}));
-    expect((await store.readPreferences()).batchSize, 10);
+    expect((await store.readPreferences()).batchSize, 24);
+    await prefs.setString(kAiDjPreferences.name, jsonEncode({'batchSize': 50}));
+    expect((await store.readPreferences()).batchSize, 48);
     await prefs.setString(kAiDjPreferences.name, 'not-json{{{');
-    expect((await store.readPreferences()).batchSize, 10);
+    expect((await store.readPreferences()).batchSize, 24);
+  });
+
+  test('旧默认发送范围升级为新默认；自定义/确认过的保持原样', () {
+    Map<String, Object?> legacyJson({
+      List<AiUpstreamSection> acknowledged = const [],
+      int? version,
+    }) => {
+      'sectionsVersion': ?version,
+      'sections': [
+        for (final section in kAiLegacyDefaultUpstreamSections)
+          section.storageValue,
+      ],
+      'acknowledgedScopes': [
+        for (final section in acknowledged) section.storageValue,
+      ],
+    };
+
+    expect(
+      AiPreferences.tryFromJson(legacyJson()).sections,
+      kAiDefaultUpstreamSections,
+      reason: '从未改过发送范围：旧默认六项升级为含收藏/歌单的新默认',
+    );
+    expect(
+      AiPreferences.tryFromJson(
+        legacyJson(acknowledged: [AiUpstreamSection.favorites]),
+      ).sections,
+      kAiLegacyDefaultUpstreamSections,
+      reason: '明确确认过收藏后关闭：不重新打开',
+    );
+    expect(
+      AiPreferences.tryFromJson(legacyJson(version: kAiSectionsVersion))
+          .sections,
+      kAiLegacyDefaultUpstreamSections,
+      reason: '新版保存过的关闭状态不再迁移',
+    );
+    expect(
+      AiPreferences.tryFromJson({
+        'sections': [
+          AiUpstreamSection.summary.storageValue,
+          AiUpstreamSection.favorites.storageValue,
+        ],
+      }).sections,
+      {AiUpstreamSection.summary, AiUpstreamSection.favorites},
+      reason: '自定义发送范围保持原样',
+    );
   });
 
   test('反馈记忆 JSON 往返、去重与上限', () async {

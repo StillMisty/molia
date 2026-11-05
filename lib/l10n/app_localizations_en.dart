@@ -2208,7 +2208,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjConsentBody =>
-      'When enabled, your listening profile (stats summary, the latest 50 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.';
+      'When enabled, your listening profile (stats summary, the latest 50 plays, songs already heard, favorite tracks, and your playlists) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.';
 
   @override
   String get aiDjAgree => 'Agree & start';
@@ -2341,13 +2341,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjNotInterested => 'Not interested';
 
   @override
-  String get aiDjFeedbackTitle => 'This round';
+  String get aiDjFeedbackTitle => 'Feedback & memory';
 
   @override
   String get aiDjFeedbackLiked => 'Liked';
 
   @override
   String get aiDjFeedbackSkipped => 'Skipped';
+
+  @override
+  String aiDjFeedbackSummary(int round, int memory) {
+    return 'This round $round · long-term $memory';
+  }
+
+  @override
+  String get aiDjFeedbackEmpty => 'No feedback yet';
 
   @override
   String get aiDjUpstreamTitle => 'Data sent this time';
@@ -2555,10 +2563,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjGenerationStatus => 'Generating recommendations';
 
   @override
+  String aiDjGeneratingCount(int count) {
+    return 'Picking $count songs';
+  }
+
+  @override
   String get aiDjPhaseProfile => 'Reading your taste';
 
   @override
   String get aiDjPhaseModel => 'AI is picking songs';
+
+  @override
+  String get aiDjPhaseResolvingShort => 'Finding songs';
 
   @override
   String aiDjPhaseResolving(int done, int total) {
@@ -2725,10 +2741,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjPrefsDataScope => 'What gets sent';
 
   @override
-  String get aiDjScopeHint =>
-      'Unchecked items are not sent; favorites and playlists are off by default.';
-
-  @override
   String get aiDjScopeSummary => 'Listening summary';
 
   @override
@@ -2738,13 +2750,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiDjScopeTopTracks => 'Frequent tracks';
 
   @override
-  String get aiDjScopeTimeAndSource => 'Time and source breakdown';
+  String get aiDjScopeTimeAndSource => 'Listening hours';
 
   @override
   String get aiDjScopeRecentEvents => 'Recent plays';
 
   @override
-  String get aiDjScopeListenedExclusions => 'Already-heard exclusion list';
+  String get aiDjScopeListenedExclusions => 'Already heard';
 
   @override
   String get aiDjScopeFavorites => 'Favorite tracks';
@@ -2754,20 +2766,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aiDjScopeFavoritesConfirm =>
-      'This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.';
+      'This sends the titles and artists of up to 100 favorite tracks to the AI service so they are not recommended again.';
 
   @override
   String get aiDjScopePlaylistsConfirm =>
-      'This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.';
+      'This sends the names, titles and artists of up to 10 of your playlists to the AI service so they are not recommended again.';
 
   @override
   String get aiDjSeedsTitle => 'More like these';
 
   @override
   String get aiDjSeedsHint => 'Cleared after the next successful batch';
-
-  @override
-  String get aiDjSeedsEmpty => 'No “More like this” picks yet';
 
   @override
   String get aiDjClearMemory => 'Clear AI memory';

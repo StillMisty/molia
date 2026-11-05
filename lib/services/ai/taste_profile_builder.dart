@@ -1,9 +1,13 @@
 /// 听歌画像构建：把统计仓库与资料库的数据整理成 LLM 提示词输入。
 ///
 /// 上行内容按 [AiPreferences.sections] 裁剪：聚合指标 + Top 艺人与曲目 +
-/// 时段/来源分布 + 最近事件明细 + 已听排除清单，可选收藏歌曲与自建歌单。
+/// 时段分布 + 合并后的已听清单，可选收藏歌曲与自建歌单。
 /// **不含 raw payload、封面、播放链接、设备信息**；数量上限集中在这里
 /// （token 预算），资料库读取失败降级为空、不阻塞生成。
+///
+/// 本地排除与上行范围解耦：已听 / 收藏始终参与本地去重（收藏即使没勾选
+/// 上行也只读本地、不发网络）；提示词只发送勾选范围内的清单，避免把范围外
+/// 的数据带出去。
 ///
 /// 已听清单拆成两个上限：本地去重仍读 [exclusionLookupLimit] 首，提示词只
 /// 发送最近 [exclusionPromptLimit] 首。本地过滤保证不会重复推荐，发送清单
@@ -25,10 +29,9 @@ class TasteProfile {
   final List<PlayStatTrackEntry> topTracks;
   final List<PlayStatArtistEntry> topArtists;
   final List<WeekdayHourListened> byWeekdayHour;
-  final List<SourceListened> sources;
   final List<PlayEvent> recentEvents;
 
-  /// 收藏歌曲的名称与歌手（仅勾选收藏时读取；上限 [favoritesLimit]）。
+  /// 发送给 LLM 的收藏歌曲（仅勾选收藏时填充；上限 [favoritesLimit]）。
   final List<({String title, String artist})> favorites;
 
   /// 自建歌单名 + 曲目名称与歌手（仅勾选自建歌单时读取）。
@@ -38,20 +41,30 @@ class TasteProfile {
   /// 发送给 LLM 的已听清单（`title - artist`，最多 [TasteProfileBuilder.exclusionPromptLimit]）。
   final List<String> exclusionLabels;
 
-  /// 本地去重键（最多 [TasteProfileBuilder.exclusionLookupLimit]，不受发送上限影响）。
+  /// 本地去重键（已听 / 收藏 / 歌单，不受发送上限影响）。
   final Set<String> exclusionKeys;
+
+  /// 收藏曲目的稳定键（`sourceKey:songId`），解析命中后按真实曲目再排除一次。
+  ///
+  /// 收藏读取与上行范围解耦：即使没勾选「收藏」，这些键也用于本地过滤，
+  /// 只是不会进入提示词。
+  final Set<String> favoriteTrackKeys;
+
+  /// 收藏曲目的规范化键（[aiTrackKey]），覆盖同一首歌换音源的情况。
+  final Set<String> favoriteLabelKeys;
 
   const TasteProfile({
     required this.summary,
     required this.topTracks,
     required this.topArtists,
     required this.byWeekdayHour,
-    required this.sources,
     required this.recentEvents,
     required this.exclusionLabels,
     required this.exclusionKeys,
     this.favorites = const [],
     this.playlists = const [],
+    this.favoriteTrackKeys = const {},
+    this.favoriteLabelKeys = const {},
   });
 }
 
@@ -75,8 +88,14 @@ class TasteProfileBuilder {
   /// 提示词里发送的已听清单上限。
   static const int exclusionPromptLimit = 100;
 
-  /// 收藏歌曲上限。
+  /// 发送给 LLM 的收藏歌曲上限。
   static const int favoritesLimit = 100;
+
+  /// 本地收藏排除读取上限。
+  ///
+  /// 收藏不发上行时也要避免推荐已收藏曲目；超出上限的部分仍有
+  /// `sourceKey:songId` 稳定键兜底（同音源精确命中）。
+  static const int favoritesExclusionLimit = 2000;
 
   /// 自建歌单上限 / 每单曲目上限 / 歌单曲目总上限。
   static const int playlistLimit = 10;
@@ -103,7 +122,6 @@ class TasteProfileBuilder {
       if (includeTopTracks) _repository.topTracks(limit: topTracksLimit),
       if (includeTopArtists) _repository.topArtists(limit: topArtistsLimit),
       if (includeTimeAndSource) _repository.listenedByWeekdayHour(),
-      if (includeTimeAndSource) _repository.sourceDistribution(),
       if (includeRecent)
         _repository.listEventsForExport(limit: recentEventLimit),
       if (preferences.onlyUnheard || includeExclusions)
@@ -126,10 +144,6 @@ class TasteProfileBuilder {
     if (includeTimeAndSource) {
       byWeekdayHour = results[cursor++] as List<WeekdayHourListened>;
     }
-    List<SourceListened> sources = const [];
-    if (includeTimeAndSource) {
-      sources = results[cursor++] as List<SourceListened>;
-    }
     List<PlayEvent> recentEvents = const [];
     if (includeRecent) {
       recentEvents = results[cursor++] as List<PlayEvent>;
@@ -141,47 +155,55 @@ class TasteProfileBuilder {
 
     final labels = <String>[];
     final keys = <String>{};
-    void addExclusion(
-      String title,
-      String artist, {
-      bool excludeLocally = true,
-    }) {
+    final favoriteLabels = <String>{};
+
+    // 本地排除与上行文案分开：收藏/歌单在各自段落发送，不再混进
+    // [已听过]，避免同一首歌在提示词里重复出现。
+    void addLocalKey(String title, String artist) {
       final key = aiTrackKey(title, artist);
       if (key == '|' || key.isEmpty) return;
-      if (excludeLocally) keys.add(key);
+      keys.add(key);
+    }
+
+    void addPromptLabel(String title, String artist) {
       if (labels.length >= exclusionPromptLimit) return;
       final label = artist.isEmpty ? title : '$title - $artist';
-      if (!labels.contains(label)) labels.add(label);
+      if (label.isNotEmpty && !labels.contains(label)) labels.add(label);
     }
 
     // 勾选「已听歌曲排除清单」就发送清单；是否在本地强制过滤由
     // 「只推荐没听过的」单独决定（两个开关语义独立）。
     if (includeExclusions || preferences.onlyUnheard) {
       for (final entry in played) {
-        addExclusion(
-          entry.title,
-          entry.artist,
-          excludeLocally: preferences.onlyUnheard,
-        );
+        if (preferences.onlyUnheard) {
+          addLocalKey(entry.title, entry.artist);
+        }
+        if (includeExclusions) {
+          addPromptLabel(entry.title, entry.artist);
+        }
       }
     }
 
-    final favorites = <({String title, String artist})>[];
+    // 收藏始终参与本地排除（即使上行范围没勾选收藏），只有勾选时才把
+    // 歌名/歌手写进提示词。排除读取上限高于发送上限，避免「收藏了却还推」。
+    final favoriteTracks = await _readFavorites(limit: favoritesExclusionLimit);
+    final favoritesSent = sections.contains(AiUpstreamSection.favorites);
+    for (final entry in favoriteTracks) {
+      addLocalKey(entry.title, entry.artist);
+      favoriteLabels.add(aiTrackKey(entry.title, entry.artist));
+    }
+    favoriteLabels.removeWhere((key) => key == '|' || key.isEmpty);
+    final favorites = favoritesSent
+        ? favoriteTracks.take(favoritesLimit).toList()
+        : const <({String title, String artist})>[];
+
     final playlists =
         <({String name, List<({String title, String artist})> tracks})>[];
-    if (_libraryStore != null) {
-      if (sections.contains(AiUpstreamSection.favorites)) {
-        favorites.addAll(await _readFavorites());
-        for (final entry in favorites) {
-          addExclusion(entry.title, entry.artist);
-        }
-      }
-      if (sections.contains(AiUpstreamSection.playlists)) {
-        playlists.addAll(await _readPlaylists());
-        for (final playlist in playlists) {
-          for (final entry in playlist.tracks) {
-            addExclusion(entry.title, entry.artist);
-          }
+    if (sections.contains(AiUpstreamSection.playlists)) {
+      playlists.addAll(await _readPlaylists());
+      for (final playlist in playlists) {
+        for (final entry in playlist.tracks) {
+          addLocalKey(entry.title, entry.artist);
         }
       }
     }
@@ -191,16 +213,33 @@ class TasteProfileBuilder {
       topTracks: topTracks,
       topArtists: topArtists,
       byWeekdayHour: byWeekdayHour,
-      sources: sources,
       recentEvents: recentEvents,
       exclusionLabels: labels,
       exclusionKeys: keys,
       favorites: favorites,
       playlists: playlists,
+      favoriteTrackKeys: await _readFavoriteTrackKeys(),
+      favoriteLabelKeys: favoriteLabels,
     );
   }
 
-  Future<List<({String title, String artist})>> _readFavorites() async {
+  /// 收藏排除快照（[AiRecommendationService.resolveUnresolved] 二次过滤用）。
+  ///
+  /// 与 [build] 共用同一读取路径；只读本地资料库，不发往任何服务。
+  Future<({Set<String> trackKeys, Set<String> labelKeys})>
+  favoriteExclusions() async {
+    final tracks = await _readFavorites(limit: favoritesExclusionLimit);
+    final labelKeys = <String>{};
+    for (final entry in tracks) {
+      final key = aiTrackKey(entry.title, entry.artist);
+      if (key != '|' && key.isNotEmpty) labelKeys.add(key);
+    }
+    return (trackKeys: await _readFavoriteTrackKeys(), labelKeys: labelKeys);
+  }
+
+  Future<List<({String title, String artist})>> _readFavorites({
+    required int limit,
+  }) async {
     final store = _libraryStore;
     if (store == null) return const [];
     try {
@@ -213,17 +252,26 @@ class TasteProfileBuilder {
         }
       }
       if (favorites == null) return const [];
-      // 上限下推到存储层，避免为了 100 首把整张收藏表读进内存。
-      final tracks = await store.listPlaylistTracks(
-        favorites.id,
-        limit: favoritesLimit,
-      );
+      // 上限下推到存储层，避免把整张收藏表读进内存。
+      final tracks = await store.listPlaylistTracks(favorites.id, limit: limit);
       return [
         for (final track in tracks) (title: track.title, artist: track.artist),
       ];
     } catch (e) {
       _logger.warning('AI 推歌：读取收藏失败，按空处理 $e');
       return const [];
+    }
+  }
+
+  /// 收藏稳定键（全量）；读取失败按空处理，不阻塞生成。
+  Future<Set<String>> _readFavoriteTrackKeys() async {
+    final store = _libraryStore;
+    if (store == null) return const {};
+    try {
+      return await store.favoriteKeys();
+    } catch (e) {
+      _logger.warning('AI 推歌：读取收藏键失败，按空处理 $e');
+      return const {};
     }
   }
 

@@ -57,8 +57,12 @@ class LlmClient {
   ///
   /// [jsonMode] 为 true 时请求 `response_format: {"type":"json_object"}`；
   /// 若服务商不认该参数（HTTP 400），自动退回一次不带参数的请求（提示词
-  /// 本身已要求纯 JSON，解析侧也容错），并按 `baseUrl|model` 记住该服务商，
-  /// 后续不再重复发送带参数的探测请求。
+  /// 本身已要求纯 JSON），并按 `baseUrl|model` 记住该服务商，后续不再重复
+  /// 发送带参数的探测请求。
+  ///
+  /// JSON Output 下服务端会把无法识别为 JSON 的内容替换成空格，`content`
+  /// 可能只剩空白（`finish_reason` 仍可能是 stop）。按 DeepSeek 官方建议，
+  /// 空正文自动重试一次，仍为空才报错。
   Future<String> complete({
     required LlmConfig config,
     required String systemPrompt,
@@ -67,29 +71,31 @@ class LlmClient {
     int maxTokens = 4096,
     bool jsonMode = false,
   }) async {
-    final decoded = await _chatCompletions(
-      config: config,
-      systemPrompt: systemPrompt,
-      userPrompt: userPrompt,
-      temperature: temperature,
-      maxTokens: maxTokens,
-      jsonMode: jsonMode,
-    );
-    final content = extractAssistantContent(decoded);
-    if (content == null || content.trim().isEmpty) {
+    const maxAttempts = 2;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      final decoded = await _chatCompletions(
+        config: config,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        jsonMode: jsonMode,
+      );
+      final content = extractAssistantContent(decoded);
+      if (content != null && content.trim().isNotEmpty) return content;
       // 推理模型会把输出预算花在思维链上、正文留空：生成侧必须拿到正文，
       // 记下 finish_reason 以便区分「模型没答」与「解析坏了」。
       _logger.warning(
-        'AI 响应无正文（finish_reason: ${finishReasonOf(decoded) ?? '未知'}）',
-      );
-      throw const SourceFailure(
-        kind: FailureKind.unknown,
-        message: 'AI 服务返回空内容',
-        l10nKey: 'aiDjBadResponse',
-        retryable: true,
+        'AI 响应无正文（第 $attempt/$maxAttempts 次，'
+        'finish_reason: ${finishReasonOf(decoded) ?? '未知'}）',
       );
     }
-    return content;
+    throw const SourceFailure(
+      kind: FailureKind.unknown,
+      message: 'AI 服务返回空内容',
+      l10nKey: 'aiDjBadResponse',
+      retryable: true,
+    );
   }
 
   /// 连接测试：发一条极小请求验证地址/Key/模型可用。

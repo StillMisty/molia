@@ -325,8 +325,29 @@ enum AiUpstreamSection {
   }
 }
 
-/// 默认发送范围：现有统计项全开，收藏与自建歌单默认关（opt-in）。
+/// 默认发送范围：全部开启（含收藏与自建歌单）。
 const Set<AiUpstreamSection> kAiDefaultUpstreamSections = {
+  AiUpstreamSection.summary,
+  AiUpstreamSection.topArtists,
+  AiUpstreamSection.topTracks,
+  AiUpstreamSection.timeAndSource,
+  AiUpstreamSection.recentEvents,
+  AiUpstreamSection.listenedExclusions,
+  AiUpstreamSection.favorites,
+  AiUpstreamSection.playlists,
+};
+
+/// 发送范围版本：2 = 收藏 / 自建歌单默认发送。
+///
+/// 旧版偏好没有该字段（按 1 处理），只在「旧默认六项 + 从未确认过收藏/歌单」
+/// 时做一次升级；新版已保存过的偏好不再重复迁移。
+const int kAiSectionsVersion = 2;
+
+/// 旧版默认发送范围（收藏 / 自建歌单 opt-in）。
+///
+/// 只用于识别「从未改过发送范围」的存量偏好：旧默认六项在升级时提升为新
+/// 默认；自定义过、或明确确认过收藏/歌单的用户保持原样。
+const Set<AiUpstreamSection> kAiLegacyDefaultUpstreamSections = {
   AiUpstreamSection.summary,
   AiUpstreamSection.topArtists,
   AiUpstreamSection.topTracks,
@@ -335,11 +356,11 @@ const Set<AiUpstreamSection> kAiDefaultUpstreamSections = {
   AiUpstreamSection.listenedExclusions,
 };
 
-/// 批次大小选项（默认 10）。
-const List<int> kAiBatchSizeOptions = [10, 20, 30, 50];
+/// 批次大小选项（默认 24）。
+const List<int> kAiBatchSizeOptions = [24, 48, 96];
 
 /// 默认每批数量。
-const int kAiDefaultBatchSize = 10;
+const int kAiDefaultBatchSize = 24;
 
 /// 探索度选项（稳定 token；文案在 l10n）。
 const String kAiExplorationSafe = 'safe';
@@ -436,8 +457,11 @@ class AiPreferences {
   /// 补充要求字数上限。
   static const int extraPromptLimit = 120;
 
-  static int sanitizeBatchSize(int value) =>
-      kAiBatchSizeOptions.contains(value) ? value : kAiDefaultBatchSize;
+  static int sanitizeBatchSize(int value) {
+    if (kAiBatchSizeOptions.contains(value)) return value;
+    // 旧选项迁移：10/20/30 → 24，50 → 48（保留「大批次」意图）。
+    return value == 50 ? 48 : kAiDefaultBatchSize;
+  }
 
   AiPreferences copyWith({
     int? batchSize,
@@ -477,6 +501,8 @@ class AiPreferences {
     'exploration': exploration,
     'onlyUnheard': onlyUnheard,
     'extraPrompt': extraPrompt,
+    // 版本只用于发送范围迁移；旧版本缺省按 1 处理。
+    'sectionsVersion': kAiSectionsVersion,
     'sections': [for (final section in sections) section.storageValue],
     'seeds': seeds,
     'acknowledgedScopes': [
@@ -503,6 +529,21 @@ class AiPreferences {
         if (section != null) acknowledged.add(section);
       }
     }
+    var resolvedSections = rawSections is List
+        ? sections
+        : kAiDefaultUpstreamSections;
+    final sectionsVersion = (json['sectionsVersion'] as num?)?.toInt() ?? 1;
+    // 旧默认是「收藏 / 歌单 opt-in」。六项全开且从未确认过收藏/歌单，说明
+    // 用户没动过发送范围：升级为新默认；自定义过或明确关过的保持原样。
+    // 新版写入了 sectionsVersion，用户之后手动关掉两项也不会被再次升级。
+    if (rawSections is List &&
+        sectionsVersion < kAiSectionsVersion &&
+        resolvedSections.length == kAiLegacyDefaultUpstreamSections.length &&
+        resolvedSections.containsAll(kAiLegacyDefaultUpstreamSections) &&
+        !acknowledged.contains(AiUpstreamSection.favorites) &&
+        !acknowledged.contains(AiUpstreamSection.playlists)) {
+      resolvedSections = kAiDefaultUpstreamSections;
+    }
     final era = json['era']?.toString() ?? kAiEraAny;
     final exploration =
         json['exploration']?.toString() ?? kAiExplorationBalanced;
@@ -525,7 +566,7 @@ class AiPreferences {
       extraPrompt: extraPrompt.length > extraPromptLimit
           ? extraPrompt.substring(0, extraPromptLimit)
           : extraPrompt,
-      sections: rawSections is List ? sections : kAiDefaultUpstreamSections,
+      sections: resolvedSections,
       seeds: _aiStringList(json['seeds']),
       acknowledgedScopes: acknowledged,
     );
@@ -703,9 +744,6 @@ class AiUpstreamSummary {
   final int favorites;
   final int playlists;
 
-  /// 本次实际使用的找歌渠道名（按解析顺序）。
-  final List<String> sourceNames;
-
   const AiUpstreamSummary({
     required this.recentEvents,
     required this.topArtists,
@@ -713,7 +751,6 @@ class AiUpstreamSummary {
     required this.exclusions,
     this.favorites = 0,
     this.playlists = 0,
-    this.sourceNames = const [],
   });
 
   /// 上游数据为空（没有听歌统计）时也允许生成（画像为空）。

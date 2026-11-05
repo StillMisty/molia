@@ -23,7 +23,9 @@ String normalizeAiText(String value) {
   // 括号内容（版本/feat 后缀）。
   text = text.replaceAll(RegExp(r'[\(\[（【][^\)\]）】]*[\)\]）】]'), '');
   text = text.replaceAll(RegExp(r'\s+'), '');
-  text = text.replaceAll(RegExp('''[-–—·,，.。!！?？'"“”‘’~〜]'''), '');
+  // 多歌手的连接符（`/`、`&`、`、`）与常见标点不参与比较，
+  // 避免同一组歌手因来源不同写成 `A/B`、`A & B`、`A、B` 而漏匹配。
+  text = text.replaceAll(RegExp('''[-–—·,，.。!！?？'"“”‘’~〜/&＆、;；_]'''), '');
   return text;
 }
 

@@ -4085,7 +4085,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjConsentBody.
   ///
   /// In en, this message translates to:
-  /// **'When enabled, your listening profile (stats summary, the latest 50 plays, and songs already heard) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.'**
+  /// **'When enabled, your listening profile (stats summary, the latest 50 plays, songs already heard, favorite tracks, and your playlists) is sent to the AI service you configure to generate recommendations. Data goes directly to that service, not through this app, and no built-in key is provided.\nTurning the mode off stops recommendations; clearing the config disconnects it.'**
   String get aiDjConsentBody;
 
   /// No description provided for @aiDjAgree.
@@ -4313,7 +4313,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjFeedbackTitle.
   ///
   /// In en, this message translates to:
-  /// **'This round'**
+  /// **'Feedback & memory'**
   String get aiDjFeedbackTitle;
 
   /// No description provided for @aiDjFeedbackLiked.
@@ -4327,6 +4327,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Skipped'**
   String get aiDjFeedbackSkipped;
+
+  /// No description provided for @aiDjFeedbackSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'This round {round} · long-term {memory}'**
+  String aiDjFeedbackSummary(int round, int memory);
+
+  /// No description provided for @aiDjFeedbackEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No feedback yet'**
+  String get aiDjFeedbackEmpty;
 
   /// No description provided for @aiDjUpstreamTitle.
   ///
@@ -4694,6 +4706,12 @@ abstract class AppLocalizations {
   /// **'Generating recommendations'**
   String get aiDjGenerationStatus;
 
+  /// No description provided for @aiDjGeneratingCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Picking {count} songs'**
+  String aiDjGeneratingCount(int count);
+
   /// No description provided for @aiDjPhaseProfile.
   ///
   /// In en, this message translates to:
@@ -4705,6 +4723,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AI is picking songs'**
   String get aiDjPhaseModel;
+
+  /// No description provided for @aiDjPhaseResolvingShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding songs'**
+  String get aiDjPhaseResolvingShort;
 
   /// No description provided for @aiDjPhaseResolving.
   ///
@@ -5018,12 +5042,6 @@ abstract class AppLocalizations {
   /// **'What gets sent'**
   String get aiDjPrefsDataScope;
 
-  /// No description provided for @aiDjScopeHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Unchecked items are not sent; favorites and playlists are off by default.'**
-  String get aiDjScopeHint;
-
   /// No description provided for @aiDjScopeSummary.
   ///
   /// In en, this message translates to:
@@ -5045,7 +5063,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjScopeTimeAndSource.
   ///
   /// In en, this message translates to:
-  /// **'Time and source breakdown'**
+  /// **'Listening hours'**
   String get aiDjScopeTimeAndSource;
 
   /// No description provided for @aiDjScopeRecentEvents.
@@ -5057,7 +5075,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjScopeListenedExclusions.
   ///
   /// In en, this message translates to:
-  /// **'Already-heard exclusion list'**
+  /// **'Already heard'**
   String get aiDjScopeListenedExclusions;
 
   /// No description provided for @aiDjScopeFavorites.
@@ -5075,13 +5093,13 @@ abstract class AppLocalizations {
   /// No description provided for @aiDjScopeFavoritesConfirm.
   ///
   /// In en, this message translates to:
-  /// **'This reads the titles and artists of up to 100 favorite tracks so they are not recommended again.'**
+  /// **'This sends the titles and artists of up to 100 favorite tracks to the AI service so they are not recommended again.'**
   String get aiDjScopeFavoritesConfirm;
 
   /// No description provided for @aiDjScopePlaylistsConfirm.
   ///
   /// In en, this message translates to:
-  /// **'This reads the names, titles and artists of up to 10 of your playlists so they are not recommended again.'**
+  /// **'This sends the names, titles and artists of up to 10 of your playlists to the AI service so they are not recommended again.'**
   String get aiDjScopePlaylistsConfirm;
 
   /// No description provided for @aiDjSeedsTitle.
@@ -5095,12 +5113,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cleared after the next successful batch'**
   String get aiDjSeedsHint;
-
-  /// No description provided for @aiDjSeedsEmpty.
-  ///
-  /// In en, this message translates to:
-  /// **'No “More like this” picks yet'**
-  String get aiDjSeedsEmpty;
 
   /// No description provided for @aiDjClearMemory.
   ///

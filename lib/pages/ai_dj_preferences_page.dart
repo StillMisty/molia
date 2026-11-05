@@ -1,7 +1,7 @@
 /// AI 推荐偏好页：即时保存（所见即所得），没有保存按钮。
 ///
 /// 分组：生成（批次大小 / 自动补歌 / 只推荐没听过的 / 探索度）、风格、场景、
-/// 语言、年代、补充要求、发送范围、「多来点这种」种子。
+/// 语言、年代、补充要求、发送范围、反馈与记忆入口。
 /// 找歌渠道不在这里出现：解析统一按音源页渠道顺序使用全部可搜索渠道。
 library;
 
@@ -16,6 +16,7 @@ import '../l10n/app_localizations.dart';
 import '../providers/ai_dj_provider.dart';
 import '../services/notification_service.dart';
 import '../theme/m3e_context.dart';
+import '../widgets/ai_dj_feedback_dialog.dart';
 import '../widgets/ai_dj_shared.dart';
 import '../widgets/settings/settings_tiles.dart';
 
@@ -280,7 +281,6 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
             const SizedBox(height: 24),
             SettingsSectionCard(
               title: l10n.aiDjPrefsDataScope,
-              footer: SettingsSectionHint(text: l10n.aiDjScopeHint),
               children: [
                 for (final section in AiUpstreamSection.values)
                   SettingsSwitchTile(
@@ -295,30 +295,25 @@ class _AiDjPreferencesPageState extends State<AiDjPreferencesPage> {
                   ),
               ],
             ),
-            _sectionTitle(l10n.aiDjSeedsTitle),
-            Text(
-              l10n.aiDjSeedsHint,
-              style: context.typeScale.bodySmall.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 8),
-            if (_provider.seeds.isEmpty)
-              Text(l10n.aiDjSeedsEmpty, style: context.typeScale.bodySmall)
-            else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final seed in _provider.seeds)
-                    M3EChip(
-                      key: Key('aiDjPrefSeed_$seed'),
-                      type: M3EChipType.input,
-                      label: l10n.aiDjSeedLabel(seed),
-                      onDeleted: () => unawaited(_provider.removeSeed(seed)),
+            const SizedBox(height: 24),
+            SettingsSectionCard(
+              children: [
+                SettingsNavTile(
+                  key: const Key('aiDjPrefFeedbackTile'),
+                  icon: Icons.feedback_rounded,
+                  title: l10n.aiDjFeedbackTitle,
+                  subtitle: aiDjFeedbackSummary(l10n, _provider),
+                  onTap: () => unawaited(
+                    showAiDjFeedbackDialog(
+                      context,
+                      _provider,
+                      onClearMemory: () =>
+                          confirmAndClearAiDjMemory(context, _provider),
                     ),
-                ],
-              ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             Align(
               alignment: AlignmentDirectional.centerStart,

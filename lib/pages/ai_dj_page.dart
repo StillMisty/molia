@@ -1,4 +1,4 @@
-/// AI 推歌页：当前推荐 + 偏好入口 + 历史入口 + 发送透明化 + 反馈 + 配置。
+/// AI 推歌页：当前推荐 + 偏好入口 + 历史入口 + 发送透明化 + 配置。
 ///
 /// 定位（对齐「个性推荐」）：**当前推荐是主体**——持久、可浏览、可随时播放；
 /// 「推歌（电台）」是列表上的一个动作（播放全部即接管队列并自动续歌）。
@@ -114,7 +114,6 @@ class _AiDjPageState extends State<AiDjPage> {
             if (provider.enabled) ...[
               _preferencesSection(l10n, provider),
               ..._recommendationsSection(context, l10n, provider),
-              ..._feedbackSection(l10n, provider),
               ..._sendingSection(l10n, provider),
             ],
             ..._configSection(l10n, provider),
@@ -397,13 +396,14 @@ class _AiDjPageState extends State<AiDjPage> {
           if (progress == null) return const SizedBox.shrink();
           return _GenerationCard(
             progress: progress,
+            targetCount: provider.preferences.batchSize,
             onCancel: provider.cancelGeneration,
           );
         },
       ),
       if (provider.progress != null && items.isEmpty) ...[
         const SizedBox(height: 12),
-        AiDjPulsingSkeleton(rows: 5),
+        AiDjPulsingSkeleton(rows: 6),
       ] else if (batch == null || items.isEmpty)
         _emptyRecommendations(l10n, provider)
       else ...[
@@ -483,110 +483,6 @@ class _AiDjPageState extends State<AiDjPage> {
         ),
       ],
     );
-  }
-
-  List<Widget> _feedbackSection(AppLocalizations l10n, AiDjProvider provider) {
-    final notInterested = provider.notInterestedItems;
-    final manualLabels = {for (final item in notInterested) item.source.label};
-    final autoSkipped = [
-      for (final label in provider.skippedLabels)
-        if (!manualLabels.contains(label)) label,
-    ];
-    final liked = provider.likedLabels;
-    final rememberedSkipped = provider.rememberedSkippedLabels;
-    final rememberedLiked = provider.rememberedLikedLabels;
-    final seeds = provider.seeds;
-    if (notInterested.isEmpty &&
-        autoSkipped.isEmpty &&
-        liked.isEmpty &&
-        rememberedSkipped.isEmpty &&
-        rememberedLiked.isEmpty &&
-        seeds.isEmpty) {
-      return const [];
-    }
-    return [
-      const SizedBox(height: _sectionGap),
-      _sectionHeader(
-        l10n.aiDjFeedbackTitle,
-        trailing: M3EButton.text(
-          key: const Key('aiDjClearMemoryButton'),
-          onPressed: () => _clearMemory(provider),
-          child: Text(l10n.aiDjClearMemory),
-        ),
-      ),
-      if (rememberedSkipped.isNotEmpty || rememberedLiked.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(l10n.aiDjFeedbackMemory, style: context.typeScale.labelMedium),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final label in rememberedSkipped.take(10))
-              M3EChip(
-                type: M3EChipType.assist,
-                label: '${l10n.aiDjFeedbackSkipped} · $label',
-              ),
-            for (final label in rememberedLiked.take(10))
-              M3EChip(
-                type: M3EChipType.assist,
-                label: '${l10n.aiDjFeedbackLiked} · $label',
-              ),
-          ],
-        ),
-      ],
-      if (autoSkipped.isNotEmpty ||
-          liked.isNotEmpty ||
-          notInterested.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(l10n.aiDjFeedbackThisRound, style: context.typeScale.labelMedium),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final item in notInterested)
-              M3EChip(
-                key: Key('aiDjNotInterested_${item.track.id.uri}'),
-                type: M3EChipType.input,
-                label: '${l10n.aiDjNotInterested} · ${item.source.label}',
-                onDeleted: () =>
-                    unawaited(provider.undoNotInterested(item.track.id.uri)),
-                onPressed: () =>
-                    unawaited(provider.undoNotInterested(item.track.id.uri)),
-              ),
-            for (final label in autoSkipped.take(10))
-              M3EChip(
-                type: M3EChipType.assist,
-                label: '${l10n.aiDjFeedbackSkipped} · $label',
-              ),
-            for (final label in liked.take(10))
-              M3EChip(
-                type: M3EChipType.assist,
-                label: '${l10n.aiDjFeedbackLiked} · $label',
-              ),
-          ],
-        ),
-      ],
-      if (seeds.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(l10n.aiDjSeedsTitle, style: context.typeScale.labelMedium),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final seed in seeds)
-              M3EChip(
-                key: Key('aiDjSeed_$seed'),
-                type: M3EChipType.input,
-                label: l10n.aiDjSeedLabel(seed),
-                onDeleted: () => unawaited(provider.removeSeed(seed)),
-              ),
-          ],
-        ),
-      ],
-    ];
   }
 
   List<Widget> _sendingSection(AppLocalizations l10n, AiDjProvider provider) {
@@ -872,33 +768,6 @@ class _AiDjPageState extends State<AiDjPage> {
     }
   }
 
-  Future<void> _clearMemory(AiDjProvider provider) async {
-    final l10n = AppLocalizations.of(context)!;
-    final navigator = Navigator.of(context, rootNavigator: true);
-    final confirmed = await M3EDialog.show<bool>(
-      context,
-      dialog: M3EDialog(
-        title: l10n.aiDjClearMemoryTitle,
-        content: Text(l10n.aiDjClearMemoryBody),
-        actions: [
-          M3EButton.text(
-            onPressed: () => navigator.pop(false),
-            child: Text(l10n.cancel),
-          ),
-          M3EButton.filled(
-            key: const Key('aiDjClearMemoryConfirm'),
-            onPressed: () => navigator.pop(true),
-            child: Text(l10n.aiDjClearMemory),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await provider.clearFeedbackMemory();
-    if (!mounted) return;
-    _notify(l10n.aiDjMemoryCleared);
-  }
-
   Future<void> _saveConfig() async {
     final l10n = AppLocalizations.of(context)!;
     final config = LlmConfig(
@@ -985,9 +854,14 @@ class _AiDjPageState extends State<AiDjPage> {
 ///
 /// 静默自动补歌永远不实例化本组件（provider 不设置 progress）。
 class _GenerationCard extends StatefulWidget {
-  const _GenerationCard({required this.progress, required this.onCancel});
+  const _GenerationCard({
+    required this.progress,
+    required this.targetCount,
+    required this.onCancel,
+  });
 
   final AiDjProgress progress;
+  final int targetCount;
   final VoidCallback onCancel;
 
   @override
@@ -1046,12 +920,16 @@ class _GenerationCardState extends State<_GenerationCard> {
                       l10n.aiDjGenerationStatus,
                       style: context.typeScale.titleSmall,
                     ),
+                    const SizedBox(height: 4),
+                    AiDjPhaseSteps(progress: progress),
                     const SizedBox(height: 2),
                     Text(
-                      [
-                        aiDjPhaseText(l10n, progress),
-                        l10n.aiDjWaitingSeconds(seconds),
-                      ].join(' · '),
+                      progress.phase == AiDjPhase.resolving
+                          ? l10n.aiDjWaitingSeconds(seconds)
+                          : [
+                              l10n.aiDjGeneratingCount(widget.targetCount),
+                              l10n.aiDjWaitingSeconds(seconds),
+                            ].join(' · '),
                       style: context.typeScale.bodySmall.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),

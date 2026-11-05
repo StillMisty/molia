@@ -370,14 +370,14 @@
   （Top 曲目可点播）；导出 JSON 面向 AI 消费（全量汇总 + 最近明细、不含 raw）。
   与 `play_history`（最近播放，500 条上限）是两套数据。
 - **AI 推歌（Phase 2，可选，默认关闭）**：`lib/services/ai/**` 是唯一数据出口与
-  网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 最近 50 条明细 +
-  可选收藏/歌单，上限集中；提示词用紧凑行格式并按应用语言切换文案）、
+  网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 合并去重后的已听清单
+  + 可选收藏/歌单，上限集中；提示词用紧凑行格式并按应用语言切换文案）、
   `LlmClient`（OpenAI-compatible，请求带
   `response_format: json_object`（不支持时自动退回），错误归一化
   `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
-  容错 JSON → 规范化去重 → `CatalogService.search` 按音源页顺序遍历全部可搜索
-  渠道解析，命中无封面时经音源 `artwork()` 补取；预览与实际共用同一
-  `buildPrompt`）。
+  严格 JSON Output 解析 → 规范化去重 → `CatalogService.search` 按音源页顺序
+  遍历全部可搜索渠道解析，命中无封面时经音源 `artwork()` 补取；预览与实际
+  共用同一 `buildPrompt`）。
   `AiDjProvider` 负责推歌会话、通知与对外门面；生成编排收在
   **生成执行器** `AiGenerationExecutor`（`lib/services/ai/ai_generation_executor.dart`）：
   token / epoch / 取消 / 忙碌位 / 可见进度唯一持有，三条 lane——显式（可见、
@@ -398,16 +398,18 @@
   旧批留在历史；手动补批与
   低水位**静默补歌**只追加队列 + 写历史（`manualFeed` / `autoFeed`），不切换
   active、不显示进度，自动补歌连续 3 次失败停止（显式操作优先并可取消）；
-  历史可播放 / 加队列 / 设为当前 / 删除。生成偏好（批次大小 10/20/30/50，
-  默认 10；自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 /
+  历史可播放 / 加队列 / 设为当前 / 删除。生成偏好（批次大小 24/48/96，
+  默认 24；自动补歌、风格 / 场景 / 语言 / 年代 / 探索度 / 只推荐没听过的 /
   补充要求、发送范围）持久化在 `kAiDjPreferences`，偏好页即时保存、不自动
   生成；找歌渠道不在 UI 暴露，解析按音源页顺序遍历全部可搜索渠道。反馈记忆
   持久化在 `kAiDjFeedbackMemory`（不感兴趣 / 喜欢 / 种子，重启保留，种子成功
-  生成后消费）。显式生成有 profile → model → resolving 阶段进度与取消，
-  首屏脉冲骨架、轮播细进度条；自动补歌不进入任何进度/提示 UI。发送透明化
+  生成后消费）。显式生成有 profile → model → resolving 三步进度（生成卡
+  步进 + 目标数量 + 等待秒数）与取消，首屏脉冲骨架、轮播细进度条；自动补歌
+  不进入任何进度/提示 UI。发送透明化
   收成弹窗（发送范围、本次预览、上次发送与仅存内存的原始返回）。
-  反馈面板含长期记忆与本轮反馈、清空 AI 记忆。发现页 `AiDjCarousel` 只展示
-  active 批次，用 carousel 原生槽位展示歌名/歌手
+  反馈与记忆也收成弹窗，入口行放在推荐偏好页（只显示条数摘要，弹窗内分
+  本轮反馈 / 长期记忆 / 多来点这种，并提供清空 AI 记忆）。发现页
+  `AiDjCarousel` 只展示 active 批次，用 carousel 原生槽位展示歌名/歌手
   （`applyDynamicTextContentTransform: false`）：桌面端鼠标拖拽跟手（松手吸附）、
   滚轮翻卡（自接指针信号把 `dy` 转成步进，横向滚动视图默认只吃 `dx`），点卡
   滚到焦点位（`M3ECarouselController.animateToItem`）；卡片流下方信息区只显示
