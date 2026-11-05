@@ -15,9 +15,9 @@ AppLocalizations _l10n(BuildContext context) =>
 
 /// 桌面全局搜索的组合搜索条：单层胶囊，渠道下拉占据原搜索图标位置。
 ///
-/// 多渠道时整条是一个 M3E 风格胶囊：左侧 tonal 渠道 chip → 输入 → 清除键，
-/// 不嵌套第二层 [AppSearchBar]，也不显示搜索图标。单渠道时没有可切换目标，
-/// 回退到 [AppSearchBar]（左侧搜索图标 + 输入占满）。
+/// 多渠道时整条是一个 M3E 风格胶囊：左侧透明背景 + outline 描边的渠道 chip
+/// → 输入 → 清除键；不再嵌套第二层 [AppSearchBar]，也不显示搜索图标。
+/// 单渠道时没有可切换目标，回退到 [AppSearchBar]（左侧搜索图标 + 输入占满）。
 class ChannelSearchBar extends StatelessWidget {
   const ChannelSearchBar({
     super.key,
@@ -141,11 +141,16 @@ class ChannelSearchBar extends StatelessWidget {
                             searchEnabled: channels.length > 8,
                             itemBuilder: channelDropdownItemBuilder(context),
                             fieldStyle: M3EDropdownFieldStyle(
-                              // tonal chip：secondaryContainer 填充，无描边。
-                              backgroundColor: chipScheme.secondaryContainer,
-                              foregroundColor: chipScheme.onSecondaryContainer,
-                              border: BorderSide.none,
-                              focusedBorder: BorderSide.none,
+                              // 透明背景：露出外层搜索胶囊底色，只用描边区分
+                              // chip；聚焦 / 展开时描边略强。
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: chipScheme.onSurface,
+                              border: BorderSide(
+                                color: chipScheme.outlineVariant,
+                              ),
+                              focusedBorder: BorderSide(
+                                color: chipScheme.outline,
+                              ),
                               borderRadius: BorderRadius.circular(999),
                               margin: EdgeInsets.zero,
                               // 10 + 10：1× 下 chip 自然高度约 44，正好填满
@@ -156,12 +161,10 @@ class ChannelSearchBar extends StatelessWidget {
                               ),
                               hintText: l10n.searchSourcesLabel,
                               hintStyle: m3e.typeScale.bodyMedium.copyWith(
-                                color: chipScheme.onSecondaryContainer,
+                                color: chipScheme.onSurface,
                               ),
                               selectedTextStyle: m3e.typeScale.bodyMedium
-                                  .copyWith(
-                                    color: chipScheme.onSecondaryContainer,
-                                  ),
+                                  .copyWith(color: chipScheme.onSurface),
                             ),
                             dropdownStyle: M3EDropdownPanelStyle(
                               noItemsFoundText: l10n.noItemsFound,
