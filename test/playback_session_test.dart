@@ -658,6 +658,8 @@ void main() {
     expect(store.saves, hasLength(1), reason: '进度 tick 不重写整份会话');
 
     // 极短倒计时：ticker 周期固定 1s，第一次 tick 即越过 deadline 到点。
+    // 这里要验证到点立即暂停并提交进度，先关掉「等本曲播完」。
+    provider.sleepTimer.setWaitForTrackEnd(false);
     provider.sleepTimer.startCountdown(const Duration(milliseconds: 10));
     // 留 200ms 给命令面暂停 + 写队列排空（真实时间，无法注入时钟）。
     await Future<void>.delayed(const Duration(milliseconds: 1200));

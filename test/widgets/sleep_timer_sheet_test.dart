@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:molia/l10n/app_localizations.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/providers/sleep_timer.dart';
 import 'package:molia/widgets/sleep_timer_sheet.dart';
 
 import '../support/fakes.dart';
@@ -24,6 +25,13 @@ void main() {
   });
 
   tearDown(() => playback.dispose());
+
+  void setScreenSize(WidgetTester tester, Size size) {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
 
   Future<BuildContext> pumpHost(WidgetTester tester) async {
     late BuildContext host;
@@ -56,37 +64,59 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('标题栏勾选保留，正文按定时方式分组', (tester) async {
+  testWidgets('无顶栏勾选/关闭按钮，正文为滑杆和两个默认勾选', (tester) async {
+    setScreenSize(tester, const Size(390, 844));
     final host = await pumpHost(tester);
     await openSheet(tester, host);
 
-    expect(find.byKey(const Key('sleepTimerExitAppCheckbox')), findsOneWidget);
-    expect(find.byKey(const Key('sleepTimerStatusCard')), findsOneWidget);
-    expect(find.text('定时方式'), findsOneWidget);
-    expect(find.byKey(const Key('sleepTimerCustomItem')), findsOneWidget);
-    expect(find.byKey(const Key('sleepTimerAfterTrackItem')), findsOneWidget);
-    expect(find.byKey(const Key('sleepTimerCancelButton')), findsNothing);
+    expect(find.byIcon(Icons.close_rounded), findsNothing);
+    expect(find.byKey(const Key('sleepTimerDurationSlider')), findsOneWidget);
+    expect(find.byKey(const Key('sleepTimerStatusText')), findsOneWidget);
+    expect(find.byKey(const Key('sleepTimerCustomItem')), findsNothing);
+    expect(find.byKey(const Key('sleepTimerAfterTrackItem')), findsNothing);
+    expect(find.text('定时方式'), findsNothing);
 
-    final before = playback.sleepTimer.exitApp.value;
-    await tester.tap(find.byKey(const Key('sleepTimerExitAppCheckbox')));
+    final exit = find.byKey(const Key('sleepTimerExitAppCheckbox'));
+    final wait = find.byKey(const Key('sleepTimerWaitForTrackCheckbox'));
+    expect(exit, findsOneWidget);
+    expect(wait, findsOneWidget);
+    expect(tester.widget<M3ECheckbox>(exit).value, isTrue);
+    expect(tester.widget<M3ECheckbox>(wait).value, isTrue);
+
+    // 一左一右：同一水平线，退出应用在左、本曲播完在右。
+    final exitCenter = tester.getCenter(exit);
+    final waitCenter = tester.getCenter(wait);
+    expect(exitCenter.dy, closeTo(waitCenter.dy, 0.5));
+    expect(exitCenter.dx, lessThan(waitCenter.dx));
+
+    await tester.tap(exit);
     await tester.pump();
-    expect(playback.sleepTimer.exitApp.value, isNot(before));
+    await tester.tap(wait);
+    await tester.pump();
+    expect(playback.sleepTimer.exitApp.value, isFalse);
+    expect(playback.sleepTimer.waitForTrackEnd.value, isFalse);
 
     Navigator.of(host).pop();
     await tester.pumpAndSettle();
   });
 
-  testWidgets('倒计时状态显示剩余时间与关闭按钮，窄屏不溢出', (tester) async {
-    tester.view.physicalSize = const Size(320, 640);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    playback.sleepTimer.startCountdown(const Duration(minutes: 30));
+  testWidgets('滑杆松手开始倒计时，窄屏不溢出', (tester) async {
+    setScreenSize(tester, const Size(320, 640));
     final host = await pumpHost(tester);
     await openSheet(tester, host);
 
-    expect(find.text('剩余 30:00'), findsOneWidget);
+    expect(find.text('30 分钟'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byKey(const Key('sleepTimerDurationSlider')),
+      const Offset(120, 0),
+    );
+    await tester.pump();
+
+    expect(playback.sleepTimer.value.mode, SleepTimerMode.countdown);
+    expect(playback.sleepTimer.value.duration, isNotNull);
+    expect(find.textContaining('剩余'), findsOneWidget);
     expect(find.byKey(const Key('sleepTimerCancelButton')), findsOneWidget);
     expect(tester.takeException(), isNull);
 

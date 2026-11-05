@@ -90,7 +90,7 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 统一退出路径（组合根在 `quitApp` 可用后经 [attachQuitApp] 回填）。
   ///
-  /// 定时关闭勾选「同时退出应用」时，到点先暂停再走这里；未装配（测试 /
+  /// 定时关闭勾选「退出应用」时，到点先暂停再走这里；未装配（测试 /
   /// 无壳宿主）时只暂停。
   Future<void> Function()? _quitApp;
 
@@ -186,14 +186,15 @@ class PlaybackProvider extends ChangeNotifier {
       onFire: () async {
         await _session.pause();
       },
-      // 勾选「同时退出应用」时，暂停落地后再走统一退出路径（会话提交 /
+      // 勾选「退出应用」时，暂停落地后再走统一退出路径（会话提交 /
       // 音频收尾 / 统计落盘由组合根负责）。
       onExit: () async {
         final quit = _quitApp;
         if (quit != null) await quit();
       },
-      // 生产默认勾选；仅本次运行，不落盘。
+      // 两个选项生产默认勾选；仅本次运行，不落盘。
       exitAppByDefault: true,
+      waitForTrackEndByDefault: true,
       // 前台屏幕亮着不持 partial wake lock；退后台 / 息屏再持有。
       isForeground: isForeground,
     );
@@ -695,7 +696,7 @@ class PlaybackProvider extends ChangeNotifier {
 
   /// 装配统一退出路径（组合根在 `quitApp` 可用后回填）。
   ///
-  /// 定时关闭勾选「同时退出应用」时，到点先暂停再调用它；未装配
+  /// 定时关闭勾选「退出应用」时，到点先暂停再调用它；未装配
   /// （测试 / 无壳宿主）时只暂停。退出前的会话提交 / 音频收尾 / 统计落盘
   /// 由组合根的同一条退出路径负责。
   void attachQuitApp(Future<void> Function() quitApp) {

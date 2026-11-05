@@ -4327,50 +4327,31 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get sleepTimerAfterTrack => '播完当前歌曲后暂停';
+  String get sleepTimerAfterTrack => '本曲播完';
 
   @override
-  String get sleepTimerCancel => '关闭定时';
+  String get sleepTimerWaitForTrack => '本曲播完再停';
 
   @override
-  String sleepTimerArmedSnackbar(String time) {
-    return '已开启定时关闭 · $time 后暂停';
+  String get sleepTimerExitApp => '退出应用';
+
+  @override
+  String get sleepTimerCancel => '取消定时';
+
+  @override
+  String sleepTimerDurationMinutes(int minutes) {
+    return '$minutes 分钟';
   }
 
   @override
-  String get sleepTimerArmedAfterTrack => '已开启定时关闭 · 播完当前歌曲后暂停';
-
-  @override
-  String get sleepTimerExitApp => '同时退出应用';
-
-  @override
-  String sleepTimerArmedExitSnackbar(String time) {
-    return '已开启定时关闭 · $time 后暂停并退出应用';
+  String sleepTimerDurationHours(int hours) {
+    return '$hours 小时';
   }
 
   @override
-  String get sleepTimerArmedAfterTrackExit => '已开启定时关闭 · 播完当前歌曲后暂停并退出应用';
-
-  @override
-  String get sleepTimerHourLabel => '小时';
-
-  @override
-  String get sleepTimerMinuteLabel => '分钟';
-
-  @override
-  String get sleepTimerModeSection => '定时方式';
-
-  @override
-  String get sleepTimerCustom => '自定义时长…';
-
-  @override
-  String get sleepTimerCustomTitle => '自定义时长';
-
-  @override
-  String get sleepTimerCustomInvalid => '时长需在 1 分钟到 10 小时之间';
-
-  @override
-  String get sleepTimerCustomConfirm => '设定';
+  String sleepTimerDurationHoursMinutes(int hours, int minutes) {
+    return '$hours 小时 $minutes 分';
+  }
 
   @override
   String get trayShowWindow => '显示主窗口';

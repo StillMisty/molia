@@ -4516,53 +4516,31 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get sleepTimerAfterTrack => 'Pause after current track';
+  String get sleepTimerAfterTrack => 'After this track';
 
   @override
-  String get sleepTimerCancel => 'Turn off timer';
+  String get sleepTimerWaitForTrack => 'Finish track';
 
   @override
-  String sleepTimerArmedSnackbar(String time) {
-    return 'Sleep timer on · pausing in $time';
+  String get sleepTimerExitApp => 'Quit app';
+
+  @override
+  String get sleepTimerCancel => 'Cancel timer';
+
+  @override
+  String sleepTimerDurationMinutes(int minutes) {
+    return '$minutes min';
   }
 
   @override
-  String get sleepTimerArmedAfterTrack =>
-      'Sleep timer on · pausing after this track';
-
-  @override
-  String get sleepTimerExitApp => 'Also quit the app';
-
-  @override
-  String sleepTimerArmedExitSnackbar(String time) {
-    return 'Sleep timer on · pausing and quitting in $time';
+  String sleepTimerDurationHours(int hours) {
+    return '$hours h';
   }
 
   @override
-  String get sleepTimerArmedAfterTrackExit =>
-      'Sleep timer on · pausing and quitting after this track';
-
-  @override
-  String get sleepTimerHourLabel => 'Hours';
-
-  @override
-  String get sleepTimerMinuteLabel => 'Minutes';
-
-  @override
-  String get sleepTimerModeSection => 'Timer mode';
-
-  @override
-  String get sleepTimerCustom => 'Custom duration…';
-
-  @override
-  String get sleepTimerCustomTitle => 'Custom duration';
-
-  @override
-  String get sleepTimerCustomInvalid =>
-      'Duration must be between 1 minute and 10 hours';
-
-  @override
-  String get sleepTimerCustomConfirm => 'Set';
+  String sleepTimerDurationHoursMinutes(int hours, int minutes) {
+    return '$hours h $minutes min';
+  }
 
   @override
   String get trayShowWindow => 'Show window';

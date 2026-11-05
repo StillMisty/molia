@@ -8065,86 +8065,44 @@ abstract class AppLocalizations {
   /// No description provided for @sleepTimerAfterTrack.
   ///
   /// In en, this message translates to:
-  /// **'Pause after current track'**
+  /// **'After this track'**
   String get sleepTimerAfterTrack;
 
-  /// No description provided for @sleepTimerCancel.
+  /// No description provided for @sleepTimerWaitForTrack.
   ///
   /// In en, this message translates to:
-  /// **'Turn off timer'**
-  String get sleepTimerCancel;
-
-  /// No description provided for @sleepTimerArmedSnackbar.
-  ///
-  /// In en, this message translates to:
-  /// **'Sleep timer on · pausing in {time}'**
-  String sleepTimerArmedSnackbar(String time);
-
-  /// No description provided for @sleepTimerArmedAfterTrack.
-  ///
-  /// In en, this message translates to:
-  /// **'Sleep timer on · pausing after this track'**
-  String get sleepTimerArmedAfterTrack;
+  /// **'Finish track'**
+  String get sleepTimerWaitForTrack;
 
   /// No description provided for @sleepTimerExitApp.
   ///
   /// In en, this message translates to:
-  /// **'Also quit the app'**
+  /// **'Quit app'**
   String get sleepTimerExitApp;
 
-  /// No description provided for @sleepTimerArmedExitSnackbar.
+  /// No description provided for @sleepTimerCancel.
   ///
   /// In en, this message translates to:
-  /// **'Sleep timer on · pausing and quitting in {time}'**
-  String sleepTimerArmedExitSnackbar(String time);
+  /// **'Cancel timer'**
+  String get sleepTimerCancel;
 
-  /// No description provided for @sleepTimerArmedAfterTrackExit.
+  /// No description provided for @sleepTimerDurationMinutes.
   ///
   /// In en, this message translates to:
-  /// **'Sleep timer on · pausing and quitting after this track'**
-  String get sleepTimerArmedAfterTrackExit;
+  /// **'{minutes} min'**
+  String sleepTimerDurationMinutes(int minutes);
 
-  /// No description provided for @sleepTimerHourLabel.
+  /// No description provided for @sleepTimerDurationHours.
   ///
   /// In en, this message translates to:
-  /// **'Hours'**
-  String get sleepTimerHourLabel;
+  /// **'{hours} h'**
+  String sleepTimerDurationHours(int hours);
 
-  /// No description provided for @sleepTimerMinuteLabel.
+  /// No description provided for @sleepTimerDurationHoursMinutes.
   ///
   /// In en, this message translates to:
-  /// **'Minutes'**
-  String get sleepTimerMinuteLabel;
-
-  /// No description provided for @sleepTimerModeSection.
-  ///
-  /// In en, this message translates to:
-  /// **'Timer mode'**
-  String get sleepTimerModeSection;
-
-  /// No description provided for @sleepTimerCustom.
-  ///
-  /// In en, this message translates to:
-  /// **'Custom duration…'**
-  String get sleepTimerCustom;
-
-  /// No description provided for @sleepTimerCustomTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Custom duration'**
-  String get sleepTimerCustomTitle;
-
-  /// No description provided for @sleepTimerCustomInvalid.
-  ///
-  /// In en, this message translates to:
-  /// **'Duration must be between 1 minute and 10 hours'**
-  String get sleepTimerCustomInvalid;
-
-  /// No description provided for @sleepTimerCustomConfirm.
-  ///
-  /// In en, this message translates to:
-  /// **'Set'**
-  String get sleepTimerCustomConfirm;
+  /// **'{hours} h {minutes} min'**
+  String sleepTimerDurationHoursMinutes(int hours, int minutes);
 
   /// No description provided for @trayShowWindow.
   ///

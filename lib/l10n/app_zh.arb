@@ -2081,34 +2081,37 @@
       }
     }
   },
-  "sleepTimerAfterTrack": "播完当前歌曲后暂停",
-  "sleepTimerCancel": "关闭定时",
-  "sleepTimerArmedSnackbar": "已开启定时关闭 · {time} 后暂停",
-  "@sleepTimerArmedSnackbar": {
+  "sleepTimerAfterTrack": "本曲播完",
+  "sleepTimerWaitForTrack": "本曲播完再停",
+  "sleepTimerExitApp": "退出应用",
+  "sleepTimerCancel": "取消定时",
+  "sleepTimerDurationMinutes": "{minutes} 分钟",
+  "@sleepTimerDurationMinutes": {
     "placeholders": {
-      "time": {
-        "type": "String"
+      "minutes": {
+        "type": "int"
       }
     }
   },
-  "sleepTimerArmedAfterTrack": "已开启定时关闭 · 播完当前歌曲后暂停",
-  "sleepTimerExitApp": "同时退出应用",
-  "sleepTimerArmedExitSnackbar": "已开启定时关闭 · {time} 后暂停并退出应用",
-  "@sleepTimerArmedExitSnackbar": {
+  "sleepTimerDurationHours": "{hours} 小时",
+  "@sleepTimerDurationHours": {
     "placeholders": {
-      "time": {
-        "type": "String"
+      "hours": {
+        "type": "int"
       }
     }
   },
-  "sleepTimerArmedAfterTrackExit": "已开启定时关闭 · 播完当前歌曲后暂停并退出应用",
-  "sleepTimerHourLabel": "小时",
-  "sleepTimerMinuteLabel": "分钟",
-  "sleepTimerModeSection": "定时方式",
-  "sleepTimerCustom": "自定义时长…",
-  "sleepTimerCustomTitle": "自定义时长",
-  "sleepTimerCustomInvalid": "时长需在 1 分钟到 10 小时之间",
-  "sleepTimerCustomConfirm": "设定",
+  "sleepTimerDurationHoursMinutes": "{hours} 小时 {minutes} 分",
+  "@sleepTimerDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "trayShowWindow": "显示主窗口",
   "trayPrevious": "上一首",
   "trayNext": "下一首",

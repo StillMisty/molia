@@ -19,7 +19,7 @@ enum SleepTimerMode {
   /// 倒计时（仅播放时计时）：到点暂停。
   countdown,
 
-  /// 播完当前歌曲后暂停。
+  /// 等当前曲目自然播完再暂停（倒计时到点后的等待阶段也用它）。
   afterCurrentTrack,
 }
 
@@ -39,7 +39,7 @@ class SleepTimerState {
   /// 剩余播放时长（仅倒计时模式非空；暂停期间冻结）。
   final Duration? remaining;
 
-  /// 武装时的启动时长（仅倒计时非空）：档位 chip 选中态用；取消 / 到点归零。
+  /// 武装时的启动时长（倒计时非空；到点后进入「等本曲播完」时保留）。
   ///
   /// 与每秒变化的 [remaining] 同通道发布，但只在武装 / 取消时改变。
   final Duration? duration;
@@ -85,7 +85,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     this._setStopAfterCurrentTrack,
     bool Function()? isForeground,
     bool exitAppByDefault = false,
+    bool waitForTrackEndByDefault = false,
   }) : exitApp = ValueNotifier<bool>(exitAppByDefault),
+       waitForTrackEnd = ValueNotifier<bool>(waitForTrackEndByDefault),
        _snapshot = snapshot,
        _position = position,
        _isForeground = isForeground ?? _alwaysForeground {
@@ -115,7 +117,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   final StateListenable<Duration> _position;
   final Future<void> Function() _onFire;
 
-  /// 到点暂停落地后，若勾选了「同时退出应用」，再执行这里。
+  /// 到点暂停落地后，若勾选了「退出应用」，再执行这里。
   ///
   /// 只注入平台无关的退出动作；会话落盘 / 音频收尾由组合根的统一退出路径
   /// （`buildDesktopStack` 的 `quitApp`）负责。
@@ -141,12 +143,18 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 原生定时器代次：覆盖 / 取消时自增，旧回调直接丢弃。
   int _alarmToken = 0;
 
-  /// 计时结束后是否同时退出应用。
+  /// 计时结束后是否退出应用。
   ///
   /// 独立于 [SleepTimerState] 的值通道：勾选状态在定时未开启时也可修改，
   /// 且不参与每秒 tick 的状态比较；默认值由构造参数 [exitAppByDefault] 决定
   /// （生产环境默认勾选，测试 / 无壳宿主默认关闭）。
   final ValueNotifier<bool> exitApp;
+
+  /// 倒计时到点后是否等当前曲目自然播完再暂停。
+  ///
+  /// 与 [exitApp] 一样独立于状态通道：未开启定时时也能修改；生产环境默认
+  /// 勾选、仅本次运行，不落盘、不参与同步。
+  final ValueNotifier<bool> waitForTrackEnd;
 
   final ValueNotifier<SleepTimerState> _state = ValueNotifier<SleepTimerState>(
     SleepTimerState.off,
@@ -155,7 +163,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   SleepTimerMode _mode = SleepTimerMode.off;
   Duration? _remaining;
 
-  /// 武装时的启动时长（仅倒计时非空）；chip 选中态用。
+  /// 武装时的启动时长（倒计时非空；到点后等本曲播完时保留）。
   Duration? _duration;
 
   /// 到点时刻（绝对时间；仅「倒计时 + 播放中」非空，暂停时折算回 [_remaining]）。
@@ -170,6 +178,9 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 
   /// 武装的曲目 uri（播完当前歌曲模式）。
   String? _armedTrackUri;
+
+  /// 当前等待是否由倒计时到点触发（用于取消「本曲播完再停」时立即暂停）。
+  bool _waitingAfterDeadline = false;
 
   /// 武装曲目观测到的最大进度：曲目切换时进度通道会先对齐到新曲目（≈0），
   /// 取最大值才不会被清零（自然播完判定 + 单曲循环判定共用）。
@@ -198,6 +209,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _setStopAfterCurrentTrack?.call(false);
     _mode = SleepTimerMode.countdown;
     _armedTrackUri = null;
+    _waitingAfterDeadline = false;
     _duration = duration;
     _remaining = duration;
     // 覆盖旧定时：旧 deadline 必须先失效，否则 _syncTicker 会按它立刻到点。
@@ -209,18 +221,29 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
 
   /// 开启「播完当前歌曲后暂停」；无真实播放曲目时为无操作。
   void startAfterCurrentTrack() {
+    _startAfterTrackWait();
+  }
+
+  /// 进入等待阶段：后端自然播完时停住，完成事件负责复位定时。
+  ///
+  /// [keepDuration] 让倒计时到点后的等待保留启动时长，重新打开弹层时滑杆
+  /// 仍停在原位置；[afterDeadline] 标记这轮等待来自倒计时。
+  void _startAfterTrackWait({
+    Duration? keepDuration,
+    bool afterDeadline = false,
+  }) {
     final uri = _snapshot.value.current?.id.uri;
     if (uri == null) return;
     _mode = SleepTimerMode.afterCurrentTrack;
     _armedTrackUri = uri;
-    // 后端在自然播完时停住，不自动切下一首；完成事件负责复位定时。
     _setStopAfterCurrentTrack?.call(true);
-    _duration = null;
+    _duration = keepDuration;
     _remaining = null;
     _deadlineAt = null;
     _cancelTicker();
     _cancelAlarm();
     _maxPosition = _position.value;
+    _waitingAfterDeadline = afterDeadline;
     _publish();
   }
 
@@ -230,8 +253,22 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _reset(notify: true);
   }
 
-  /// 设置「计时结束后同时退出应用」；已开启的定时在到点时按最新值执行。
+  /// 设置「计时结束后退出应用」；已开启的定时在到点时按最新值执行。
   void setExitApp(bool value) => exitApp.value = value;
+
+  /// 设置「到点后等当前曲目播完再暂停」。
+  ///
+  /// 如果已经处于倒计时到点后的等待阶段，取消勾选立即暂停——否则用户会看到
+  /// 勾选已取消、却还在等下一首播完。
+  void setWaitForTrackEnd(bool value) {
+    if (waitForTrackEnd.value == value) return;
+    waitForTrackEnd.value = value;
+    if (!value &&
+        _waitingAfterDeadline &&
+        _mode == SleepTimerMode.afterCurrentTrack) {
+      _fireNow();
+    }
+  }
 
   void dispose() {
     _completionSubscription?.cancel();
@@ -242,6 +279,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _cancelTicker();
     _alarm.dispose();
     exitApp.dispose();
+    waitForTrackEnd.dispose();
     _state.dispose();
   }
 
@@ -266,7 +304,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
   /// 把定时重新武装到下一首。
   void _onTrackCompleted(Track _) {
     if (_mode != SleepTimerMode.afterCurrentTrack) return;
-    _fire();
+    _fireNow();
   }
 
   void _onPosition() {
@@ -275,7 +313,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
         _completedArmedTrack &&
         position + _restartGap < _maxPosition) {
       // 单曲循环：曲目没换，位置从曲末回跳 = 已播完一轮。
-      _fire();
+      _fireNow();
       return;
     }
     if (position > _maxPosition) _maxPosition = position;
@@ -291,7 +329,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     if (uri != _armedTrackUri) {
       if (_completedArmedTrack) {
         // 自然播完（下一首已装载）：到点暂停。
-        _fire();
+        _fireNow();
         return;
       }
       // 手动切歌 / 自动换源替换：跟随新曲目继续等待「这一首播完」。
@@ -300,10 +338,10 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       return;
     }
     if (!snapshot.isPlaying && _completedArmedTrack) {
-      // 队列自然播完（最后一首结束）：没有下一首要暂停。勾选「同时退出应用」
+      // 队列自然播完（最后一首结束）：没有下一首要暂停。勾选「退出应用」
       // 时仍按定时到点处理（暂停对已停止的后端是幂等的），否则只撤销定时。
       if (exitApp.value) {
-        _fire();
+        _fireNow();
       } else {
         _reset(notify: true);
       }
@@ -347,12 +385,12 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       final expired = _freeze();
       _cancelTicker();
       _cancelAlarm();
-      if (expired) _fire();
+      if (expired) _onCountdownDeadline();
       return;
     }
     if (_deadlinePassed) {
       // 已经越过 deadline（冻结期间到点后重新获得调度）：立即补触发。
-      _fire();
+      _onCountdownDeadline();
       return;
     }
     if (_ticker == null) {
@@ -372,7 +410,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     if (deadline == null) return;
     final remaining = deadline.difference(_now());
     if (remaining <= Duration.zero) {
-      _fire();
+      _onCountdownDeadline();
       return;
     }
     _alarmToken++;
@@ -399,7 +437,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
       _armAlarm();
       return;
     }
-    _fire();
+    _onCountdownDeadline();
   }
 
   /// 把绝对 deadline 折算成剩余播放时长（暂停冻结），并清除 deadline。
@@ -444,19 +482,34 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     final now = _now();
     if (!now.isBefore(deadline)) {
       // tick 迟到（合帧 / 冻结后的首个回调）同样算到点：不等下一次 tick。
-      _fire();
+      _onCountdownDeadline();
       return;
     }
     _remaining = deadline.difference(now);
     _publish();
   }
 
-  /// 到点：先回 off（onFire 期间状态不应还显示开启），再执行暂停；
-  /// 勾选了「同时退出应用」时，暂停落地后再走统一退出路径。
+  /// 倒计时到点：勾选「本曲播完再停」且当前有真实播放曲目时，转入等待阶段；
+  /// 否则立即暂停（无曲目 / 已暂停 / 曲目已播完时等待没有意义）。
+  void _onCountdownDeadline() {
+    if (_mode != SleepTimerMode.countdown) return;
+    final snapshot = _snapshot.value;
+    if (waitForTrackEnd.value &&
+        snapshot.isPlaying &&
+        snapshot.current != null &&
+        !_completedArmedTrack) {
+      _startAfterTrackWait(keepDuration: _duration, afterDeadline: true);
+      return;
+    }
+    _fireNow();
+  }
+
+  /// 真正到点：先回 off（onFire 期间状态不应还显示开启），再执行暂停；
+  /// 勾选了「退出应用」时，暂停落地后再走统一退出路径。
   ///
   /// 暂停失败不阻止退出：用户已经选择了「到点退出」，卡在暂停上比直接退出
   /// 更糟；两个动作各自记日志。
-  void _fire() {
+  void _fireNow() {
     final shouldExit = exitApp.value;
     _reset(notify: true);
     unawaited(() async {
@@ -486,6 +539,7 @@ class SleepTimerController implements ValueListenable<SleepTimerState> {
     _remaining = null;
     _duration = null;
     _armedTrackUri = null;
+    _waitingAfterDeadline = false;
     _deadlineAt = null;
     _cancelTicker();
     _cancelAlarm();

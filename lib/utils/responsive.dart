@@ -469,24 +469,16 @@ class ResponsiveNavigation {
   /// [child] 是弹窗正文（自带内边距与滚动内容）；宽屏由 M3EDialog 负责
   /// 标题栏与滚动、窄屏由 [_buildSheetContent] 提供标题栏。
   ///
-  /// [titleTrailing] 是标题右侧的附属控件（如定时关闭的「同时退出应用」
-  /// 勾选项）。M3EDialog 的标题是字符串、没有右侧插槽，因此带
-  /// [titleTrailing] 时必须同时传 [forceSheet]（宽屏也走底部抽屉）。
-  ///
-  /// [forceSheet] 为 true 时宽屏也使用底部弹层，而不是 M3EDialog。
+  /// [showCloseButton] 只影响底部弹层的标题行；定时关闭不显示关闭按钮，
+  /// 靠下滑 / 点遮罩 / 系统返回关闭。
   static Future<T?> showSimpleModal<T>({
     required BuildContext context,
     required String title,
     required Widget child,
-    Widget? titleTrailing,
-    bool forceSheet = false,
+    bool showCloseButton = true,
     bool barrierDismissible = true,
   }) {
-    assert(
-      titleTrailing == null || forceSheet,
-      'titleTrailing 需要 forceSheet：M3EDialog 标题没有右侧插槽。',
-    );
-    if (!forceSheet && context.isLargeScreen) {
+    if (context.isLargeScreen) {
       return M3EDialog.show<T>(
         context,
         dialog: Builder(
@@ -504,7 +496,7 @@ class ResponsiveNavigation {
       context: context,
       child: child,
       title: title,
-      titleTrailing: titleTrailing,
+      showCloseButton: showCloseButton,
       // 正文自带滚动：按内容展开（页面型弹层才用 fillHeight），不要撑满整屏。
       contentLayout: AdaptiveModalContentLayout.wrapContent,
       pageType: ResponsivePageType.modal,
@@ -586,7 +578,6 @@ class ResponsiveNavigation {
     required Widget child,
     required ResponsivePageType pageType,
     String? title,
-    Widget? titleTrailing,
     bool showCloseButton = true,
     bool showDragHandle = true,
     Future<bool> Function()? onDismissRequest,
@@ -618,7 +609,6 @@ class ResponsiveNavigation {
           context: context,
           child: child,
           title: title,
-          titleTrailing: titleTrailing,
           showCloseButton: showCloseButton,
           showDragHandle: showDragHandle,
           drawDragHandle: false, // M3E 弹层自带拖拽把手，避免双层
@@ -632,17 +622,13 @@ class ResponsiveNavigation {
     required BuildContext context,
     required Widget child,
     String? title,
-    Widget? titleTrailing,
     bool showCloseButton = true,
     bool showDragHandle = false,
     bool drawDragHandle = true,
     AdaptiveModalContentLayout contentLayout =
         AdaptiveModalContentLayout.fillHeight,
   }) {
-    if (title == null &&
-        titleTrailing == null &&
-        !showCloseButton &&
-        !showDragHandle) {
+    if (title == null && !showCloseButton && !showDragHandle) {
       return child;
     }
 
@@ -670,7 +656,7 @@ class ResponsiveNavigation {
               ),
             ),
           ),
-        if (title != null || titleTrailing != null || showCloseButton) ...[
+        if (title != null || showCloseButton) ...[
           // M3EBottomSheetHeader 在 material_3_expressive 1.2.0 未公开导出，
           // 这里按同一套 token 自绘：高度取 bottomSheetTheme 的
           // fullScreenHeaderHeight（默认 64）、标题用 typeScale.titleLarge，
@@ -678,7 +664,10 @@ class ResponsiveNavigation {
           SizedBox(
             height: theme.bottomSheetTheme.fullScreenHeaderHeight,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              // 无关闭按钮时标题从 16 起排，避免贴边；有按钮时留给 48 槽。
+              padding: EdgeInsets.symmetric(
+                horizontal: showCloseButton ? 8 : 16,
+              ),
               child: Row(
                 children: [
                   if (showCloseButton)
@@ -704,10 +693,6 @@ class ResponsiveNavigation {
                       ),
                     ),
                   if (title == null) const Spacer(),
-                  if (titleTrailing != null) ...[
-                    const SizedBox(width: 8),
-                    titleTrailing,
-                  ],
                 ],
               ),
             ),

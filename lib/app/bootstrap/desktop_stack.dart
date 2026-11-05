@@ -87,7 +87,7 @@ Future<DesktopStack> buildDesktopStack({
     );
   }
 
-  // 定时关闭勾选「同时退出应用」时也走同一条退出路径：会话提交、音频收尾、
+  // 定时关闭勾选「退出应用」时也走同一条退出路径：会话提交、音频收尾、
   // 统计落盘完成后才真正退出。provider 建好后回填（此时 quitApp 已可用）。
   playback.attachQuitApp(quitApp);
 
@@ -198,7 +198,7 @@ Future<DesktopStack> buildDesktopStack({
 /// - 桌面：销毁窗口（Linux / Windows / macOS）；
 /// - Android：结束当前 Activity；
 /// - iOS：程序化退出（`SystemNavigator.pop` 对根 FlutterViewController 是
-///   no-op，必须 `exit(0)` 才能让「同时退出应用」真正生效）；
+///   no-op，必须 `exit(0)` 才能让「退出应用」真正生效）；
 /// - Web / 其它平台：只完成落盘与暂停，不做强制退出。
 Future<void> _quitPlatformApp() async {
   if (kIsWeb) return;

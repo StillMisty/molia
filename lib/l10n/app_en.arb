@@ -2449,34 +2449,37 @@
       }
     }
   },
-  "sleepTimerAfterTrack": "Pause after current track",
-  "sleepTimerCancel": "Turn off timer",
-  "sleepTimerArmedSnackbar": "Sleep timer on · pausing in {time}",
-  "@sleepTimerArmedSnackbar": {
+  "sleepTimerAfterTrack": "After this track",
+  "sleepTimerWaitForTrack": "Finish track",
+  "sleepTimerExitApp": "Quit app",
+  "sleepTimerCancel": "Cancel timer",
+  "sleepTimerDurationMinutes": "{minutes} min",
+  "@sleepTimerDurationMinutes": {
     "placeholders": {
-      "time": {
-        "type": "String"
+      "minutes": {
+        "type": "int"
       }
     }
   },
-  "sleepTimerArmedAfterTrack": "Sleep timer on · pausing after this track",
-  "sleepTimerExitApp": "Also quit the app",
-  "sleepTimerArmedExitSnackbar": "Sleep timer on · pausing and quitting in {time}",
-  "@sleepTimerArmedExitSnackbar": {
+  "sleepTimerDurationHours": "{hours} h",
+  "@sleepTimerDurationHours": {
     "placeholders": {
-      "time": {
-        "type": "String"
+      "hours": {
+        "type": "int"
       }
     }
   },
-  "sleepTimerArmedAfterTrackExit": "Sleep timer on · pausing and quitting after this track",
-  "sleepTimerHourLabel": "Hours",
-  "sleepTimerMinuteLabel": "Minutes",
-  "sleepTimerModeSection": "Timer mode",
-  "sleepTimerCustom": "Custom duration…",
-  "sleepTimerCustomTitle": "Custom duration",
-  "sleepTimerCustomInvalid": "Duration must be between 1 minute and 10 hours",
-  "sleepTimerCustomConfirm": "Set",
+  "sleepTimerDurationHoursMinutes": "{hours} h {minutes} min",
+  "@sleepTimerDurationHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
   "trayShowWindow": "Show window",
   "trayPrevious": "Previous track",
   "trayNext": "Next track",

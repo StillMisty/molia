@@ -155,7 +155,7 @@ void main() {
     expect(backend.calls, contains('pause'));
   });
 
-  testWidgets('倒计时到点：勾选同时退出应用 → 先暂停再退出', (tester) async {
+  testWidgets('倒计时到点：勾选退出应用 → 先暂停再退出', (tester) async {
     final a = _track('a');
     backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
 
@@ -170,7 +170,7 @@ void main() {
     expect(events, ['pause', 'exit']);
   });
 
-  testWidgets('倒计时到点：未勾选同时退出应用 → 只暂停', (tester) async {
+  testWidgets('倒计时到点：未勾选退出应用 → 只暂停', (tester) async {
     final a = _track('a');
     backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
 
@@ -245,7 +245,7 @@ void main() {
     expect(backend.calls, contains('pause'));
   });
 
-  testWidgets('播完当前歌曲：勾选同时退出应用 → 暂停后退出', (tester) async {
+  testWidgets('播完当前歌曲：勾选退出应用 → 暂停后退出', (tester) async {
     final a = _track('a');
     final b = _track('b');
     backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
@@ -466,13 +466,136 @@ void main() {
     expect(timer.value.mode, SleepTimerMode.off);
   });
 
-  test('生产 provider：同时退出应用默认勾选（仅本次运行）', () async {
+  testWidgets('倒计时到点：勾选本曲播完再停 → 曲目播完才暂停', (tester) async {
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+
+    timer.setWaitForTrackEnd(true);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+
+    expect(fired, 0, reason: '到点后还在等本曲播完，不应立即暂停');
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+    expect(timer.value.duration, const Duration(minutes: 1));
+    expect(backend.stopAfterCurrentTrack, isTrue);
+
+    backend.emitTrackCompletion(a);
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+        position: Duration.zero,
+      ),
+    );
+    await tester.pump();
+
+    expect(fired, 1);
+    expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('倒计时到点：等本曲播完 + 退出应用 → 曲末暂停后退出', (tester) async {
+    final a = _track('a');
+    final b = _track('b');
+    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+
+    timer.setWaitForTrackEnd(true);
+    timer.setExitApp(true);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+
+    expect(fired, 0);
+    expect(exited, 0);
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+
+    backend.emitTrackCompletion(a);
+    backend.emit(
+      _snapshot(
+        current: b,
+        queue: [a, b],
+        currentIndex: 1,
+        duration: b.duration!,
+        position: Duration.zero,
+      ),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+
+    expect(fired, 1);
+    expect(exited, 1);
+    expect(events, ['pause', 'exit']);
+  });
+
+  testWidgets('倒计时到点：未勾选等待 → 立即暂停', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setWaitForTrackEnd(false);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+
+    expect(fired, 1);
+    expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('倒计时到点：无真实曲目时等待勾选退化为立即暂停', (tester) async {
+    backend.emit(_snapshot(isPlaying: true));
+
+    timer.setWaitForTrackEnd(true);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+
+    expect(fired, 1);
+    expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('等待阶段取消本曲播完再停 → 立即暂停', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setWaitForTrackEnd(true);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+    expect(fired, 0);
+
+    timer.setWaitForTrackEnd(false);
+    await tester.pump();
+
+    expect(fired, 1);
+    expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  testWidgets('等待阶段取消定时 → 不再暂停', (tester) async {
+    final a = _track('a');
+    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+
+    timer.setWaitForTrackEnd(true);
+    timer.startCountdown(const Duration(minutes: 1));
+    await advance(tester, const Duration(minutes: 1));
+    expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
+
+    timer.cancel();
+    backend.emitTrackCompletion(a);
+    await tester.pump();
+
+    expect(fired, 0);
+    expect(timer.value.mode, SleepTimerMode.off);
+  });
+
+  test('生产 provider：退出应用 / 本曲播完再停默认勾选（仅本次运行）', () async {
     final playback = buildTestPlaybackProvider(backend: FakePlaybackBackend());
     await playback.preferencesReady;
 
     expect(playback.sleepTimer.exitApp.value, isTrue);
+    expect(playback.sleepTimer.waitForTrackEnd.value, isTrue);
     playback.sleepTimer.setExitApp(false);
+    playback.sleepTimer.setWaitForTrackEnd(false);
     expect(playback.sleepTimer.exitApp.value, isFalse);
+    expect(playback.sleepTimer.waitForTrackEnd.value, isFalse);
 
     playback.dispose();
   });

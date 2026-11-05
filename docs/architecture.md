@@ -180,14 +180,15 @@
   （`lib/services/sleep_timer_alarm*.dart` → Android `SleepTimerChannelHandler` /
   iOS `SleepTimerChannelHandler.swift`）：熄屏 / Doze 下 Dart timer 被节流或
   冻结时，由原生定时器到点唤醒 Dart 执行暂停；原生不可用（桌面 / 测试）
-  自动退化为纯 Dart timer。定时关闭默认勾选「同时退出应用」：到点先暂停并提交
-  会话，再走组合根统一退出路径（桌面销毁窗口 / Android 结束 Activity / iOS
-  `exit(0)`）；勾选状态仅本次运行，不落盘、不参与同步。「播完当前歌曲」不靠进度通道判定曲末：
-  `LocalPlaybackService` 在 `ProcessingState.completed` 时先发
-  `trackCompletions`，并通过 `setStopAfterCurrentTrack` 在自动切歌前停住；
-  熄屏时位置 tick 被节流也不会把自然播完误判成手动切歌。Windows/Linux 的
-  media_kit 自然 EOF 可能不上报 completed，桌面后端另以曲末位置采样与曲末
-  解码错误兜底（见已知坑 78）。
+  自动退化为纯 Dart timer。定时关闭默认勾选「退出应用」与「本曲播完再停」：
+  倒计时到点后先等当前曲目自然播完（无曲目 / 已暂停 / 曲目已播完则立即），
+  再暂停并提交会话，勾选退出时走组合根统一退出路径（桌面销毁窗口 / Android
+  结束 Activity / iOS `exit(0)`）；两个勾选都仅本次运行，不落盘、不参与同步。
+  「本曲播完再停」不靠进度通道判定曲末：`LocalPlaybackService` 在
+  `ProcessingState.completed` 时先发 `trackCompletions`，并通过
+  `setStopAfterCurrentTrack` 在自动切歌前停住；熄屏时位置 tick 被节流也不会
+  把自然播完误判成手动切歌。Windows/Linux 的 media_kit 自然 EOF 可能不上报
+  completed，桌面后端另以曲末位置采样与曲末解码错误兜底（见已知坑 78）。
 - **移动端后台功耗策略**：`PlaybackPowerPolicy`
   （`lib/playback/playback_power_policy.dart`）回答「播放链路与后台工作要不要按
   前台节拍工作」，与 `AppPresence`（桌面窗口可见性）**完全独立**：移动端退后台
@@ -1556,9 +1557,9 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   容器色取 `surface`，与页面自带 Scaffold 的底色一致）。简单弹层（定时关闭 /
   来源分享）用 `showSimpleModal`：窄屏底部弹层、宽屏 `M3EDialog` 本体。底部弹层
   header 因 `M3EBottomSheetHeader` 未公开导出，按 `fullScreenHeaderHeight`(64) /
-  `titleLarge` / `M3EDivider` 自绘。定时关闭的标题右侧有「同时退出应用」勾选项，
-  而 `M3EDialog` 标题是字符串、没有右侧插槽，因此它显式 `forceSheet: true`：
-  宽屏也用底部抽屉，标题行与窄屏同构。
+  `titleLarge` / `M3EDivider` 自绘。定时关闭的标题栏只有标题（不显示关闭按钮，
+  靠下滑 / 点遮罩 / 系统返回关闭）；两个勾选都在正文，因此不再需要标题右侧插槽，
+  宽屏恢复普通 `M3EDialog`。
 - **排序**：三处 `ReorderableListView`（`lib/widgets/settings/settings_reorderable_rows.dart`、
   `lib/pages/favorites.dart`、`lib/widgets/collection_track_list.dart`）是长期例外——
   material_3_expressive 1.2.0 未公开导出 `M3EListReorderHost` /
