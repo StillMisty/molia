@@ -11,11 +11,12 @@
    QuickJS 桥接库不会被打进 bundle，曾需仓库在 `linux/CMakeLists.txt` 显式补装。
    可迁移经验：再遇「上游 CMake 不打包 .so」，先核对其变量名是否为
    `flutter_<包名>_bundled_libraries`。
-   现用 quickjs_engine：包内 CMake 会把 `libquickjs_c_bridge_plugin.so` 正确打进 bundle，
-   但它 0.1.6 的 Linux 插件头（`linux/include/quickjs_engine/quickjs_engine_plugin.h`）
+   现用 quickjs_engine：包内 CMake 会把 `libquickjs_c_bridge_plugin.so` 正确打进 bundle。
+   0.1.6 及更早的 Linux 插件头（`linux/include/quickjs_engine/quickjs_engine_plugin.h`）
    漏了 Flutter 官方模板里的 `#ifdef FLUTTER_PLUGIN_IMPL` 导出宏块，
    `FLUTTER_PLUGIN_EXPORT` 未定义 → Linux 直接编译失败（上游 CI 无 Linux 任务，故未暴露）。
-   `linux/CMakeLists.txt` 末端按官方模板补了同一个宏、只作用于该插件目标；上游修好后删掉。
+   本仓库曾在 `linux/CMakeLists.txt` 末端按官方模板补同一个宏；0.1.7 已修，
+   补丁已删除，升级时不要再加回。
 2. **引擎不启用内置 fetch**：脚本的网络请求必须统一走 `lx.request` 桥接（安全边界，见 #8）。
    quickjs_engine 的 `getJavascriptRuntime()` 其 `xhr` 默认 true、会装 fetch/XHR，
    所以本引擎不调它，直接建 `QuickJsRuntime2`——`console` / `setTimeout` / `sendMessage`

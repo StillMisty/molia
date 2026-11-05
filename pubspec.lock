@@ -197,10 +197,10 @@ packages:
     dependency: transitive
     description:
       name: cnativeapi
-      sha256: "3c9e30d513cdc8ecb116f3017308f2480828c766e45aa00083c3d15d621e5d57"
+      sha256: c43703998995e132b0656d2b8a95ed2bedc6b22ccee2c827bcdc075e0330e319
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.5.8"
+    version: "0.5.10"
   code_assets:
     dependency: transitive
     description:
@@ -800,18 +800,18 @@ packages:
     dependency: "direct main"
     description:
       name: nativeapi
-      sha256: "87b0912bde3c9b7e0649c5e12047baf2bf179d3844a9b984313e897872120267"
+      sha256: "118045bb549cb6fabad472a3a22a537e7310bbf20097350f5027808b4a5853ce"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.5.8"
+    version: "0.5.10"
   nativeapi_flutter:
     dependency: "direct main"
     description:
       name: nativeapi_flutter
-      sha256: b62a42b8a86538119ba67b8eab8328eb89d69ac4a2142d623d08ac163faa9cd8
+      sha256: "357a405c69212f5157da1bd3be183a53c2b841d0de0eb51f4a3947913712aec4"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.5.8"
+    version: "0.5.10"
   nested:
     dependency: transitive
     description:
@@ -1016,10 +1016,10 @@ packages:
     dependency: "direct main"
     description:
       name: quickjs_engine
-      sha256: "7915cd1698b3ceac0db48913c84305167458c3f3ae29a3add8d1b81340450ccb"
+      sha256: "76fd249a53e5505111596231d4667c464bb8f19d029dde53f5d13f37b6a6bffb"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.1.6"
+    version: "0.1.7"
   recase:
     dependency: transitive
     description:
@@ -1205,10 +1205,10 @@ packages:
     dependency: "direct main"
     description:
       name: sqlite3
-      sha256: "5340531ad17f386ae444873f643f281060b6238cc702edeee6b1e90bc4c6874e"
+      sha256: b1ec21d306ddbec59a88ae3682ad81728561f7105db78fea0fdd67f06911a519
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.8.0"
+    version: "3.9.0"
   sqlparser:
     dependency: transitive
     description:
@@ -1325,10 +1325,10 @@ packages:
     dependency: "direct main"
     description:
       name: tray_manager
-      sha256: bc433331d714919a8d40b6575c084be78de56dbe2327c11ce995fca4ec51bbff
+      sha256: "30c67f4f27a9b2ad56606b369b75256fd9ef25851b66788597d4df3fbbfa536a"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.8.2"
+    version: "0.8.3"
   typed_data:
     dependency: transitive
     description:
