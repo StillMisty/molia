@@ -1,10 +1,6 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../data/mapping/track_mapper.dart';
-import '../data/settings/settings_access.dart';
-import '../data/settings/settings_keys.dart';
 import '../domain/models/discover.dart';
 import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
@@ -14,6 +10,7 @@ import '../sources/builtin/builtin_search.dart';
 import '../sources/builtin/discover_source.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
+import 'channel_selection.dart';
 import 'library_outcome.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
@@ -40,24 +37,16 @@ class DiscoverProvider extends ChangeNotifier {
   DiscoverProvider({
     required PlaybackProvider playbackProvider,
     required LibraryProvider libraryProvider,
+    required ChannelSelection selection,
     Map<String, DiscoverSource>? sources,
-    this._settings,
-    String? initialChannelKey,
   }) : _playback = playbackProvider,
        _library = libraryProvider,
+       // 公开参数名保持 selection，字段仍按本类惯例私有。
+       // ignore: prefer_initializing_formals
+       _selection = selection,
        _sources = sources ?? BuiltinDiscover.sources {
-    // 测试 / 恢复场景显式指定的初始渠道优先，且不被异步恢复覆盖。
-    _hasExplicitInitialChannel =
-        initialChannelKey != null && _sources.containsKey(initialChannelKey);
-    // 默认选中规范顺序里的第一个可用平台（当前为 QQ）。
-    _channelKey = _hasExplicitInitialChannel
-        ? initialChannelKey!
-        : _firstAvailableChannelKey();
-    final settings = _settings;
-    if (settings != null) {
-      settings.bindReload(kDiscoverChannelKey, _reloadChannelFromSettings);
-      unawaited(_restoreChannelFromSettings());
-    }
+    // 渠道只有 ChannelSelection 一份：发现内容只订阅它，不自己保存 / 恢复。
+    _selection.addListener(_onChannelSelectionChanged);
     // 收藏状态 / 我的列表变化时转发通知，让发现页的收藏按钮与「加入列表」
     // 弹层保持响应。历史写入（每首歌一次）不转发——发现页对历史无依赖，
     // 无脑转发会让整页（含全部 tab 与 AI 推荐卡片）随每次切歌重建。
@@ -83,33 +72,22 @@ class DiscoverProvider extends ChangeNotifier {
 
   final PlaybackProvider _playback;
   final LibraryProvider _library;
+  final ChannelSelection _selection;
   final Map<String, DiscoverSource> _sources;
-
-  /// 渠道偏好（跨重启记住）；null = 测试 / 无持久化场景。
-  final SettingsAccess? _settings;
-
-  bool _hasExplicitInitialChannel = false;
-
-  /// 恢复 / 用户选择的代际：异步读偏好不得覆盖用户刚做出的选择。
-  int _channelGeneration = 0;
 
   bool _disposed = false;
 
-  String _channelKey = '';
-
-  /// 当前渠道 key（默认规范顺序里的第一个可用平台，当前为 QQ）。
+  /// 当前渠道 key（由 [ChannelSelection] 唯一持有，默认规范顺序第一个平台）。
   ///
-  /// 这是全局唯一的渠道偏好：同时决定热榜 / 歌单与搜索（Ctrl+F / 搜索 tab
-  /// 都只搜当前渠道）。资料页的渠道集合是「可搜索源 + 内置发现平台」的并集：
-  /// 脚本扩展源 / any-listen 等没有内置发现能力的渠道也可选，此时
-  /// `supports*` 全部为 false，UI 自动隐藏热榜 / 歌单（含热搜词）。
-  String get channelKey => _channelKey;
+  /// 同时决定热榜 / 歌单与搜索（Ctrl+F / 搜索 tab 都只搜当前渠道）。资料页的
+  /// 渠道集合是「可搜索源 + 内置发现平台」的并集：脚本扩展源 / any-listen 等
+  /// 没有内置发现能力的渠道也可选，此时 `supports*` 全部为 false，UI 自动
+  /// 隐藏热榜 / 歌单（含热搜词）。
+  String get channelKey => _selection.key;
 
-  String _firstAvailableChannelKey() {
-    for (final key in BuiltinDiscover.sourceKeys) {
-      if (_sources.containsKey(key)) return key;
-    }
-    return BuiltinDiscover.sourceKeys.first;
+  void _onChannelSelectionChanged() {
+    if (_disposed) return;
+    notifyListeners();
   }
 
   /// 可用平台（保持内置注册顺序，注入的假数据源同样适用）。
@@ -123,67 +101,16 @@ class DiscoverProvider extends ChangeNotifier {
       BuiltinSearch.displayName(sourceKey);
 
   /// 当前渠道对应的发现数据源；无发现能力（非内置平台）时为 null。
-  DiscoverSource? get _source => _sources[_channelKey];
+  DiscoverSource? get _source => _sources[channelKey];
 
   /// 当前渠道是否具备发现能力（热榜 / 歌单 / 热搜）。
   bool get hasDiscoverSource => _source != null;
 
   /// 切换渠道（空值或同值忽略；允许无发现能力的渠道——相关能力降级）。
   ///
-  /// 同时决定热榜 / 歌单与搜索：组合根 / 资料页监听 channelKey 变化，把
-  /// 同一个 key 同步给 SearchProvider.setActiveSource。偏好异步落盘（失败吞掉）。
-  void selectChannel(String sourceKey) {
-    if (sourceKey.isEmpty || sourceKey == _channelKey) return;
-    _channelGeneration++;
-    _channelKey = sourceKey;
-    notifyListeners();
-    final settings = _settings;
-    if (settings == null) return;
-    unawaited(
-      settings.write(kDiscoverChannelKey, sourceKey).catchError((Object _) {}),
-    );
-  }
-
-  Future<void> _restoreChannelFromSettings() async {
-    final settings = _settings;
-    if (settings == null) return;
-    final generation = _channelGeneration;
-    try {
-      final value = (await settings.read(kDiscoverChannelKey)).trim();
-      if (_disposed ||
-          _hasExplicitInitialChannel ||
-          generation != _channelGeneration ||
-          value.isEmpty ||
-          value == _channelKey) {
-        return;
-      }
-      // 无效渠道由资料页现有的 fallback 纠正（渠道集合包含脚本源等
-      // DiscoverProvider 不认识但用户可能选过的 key）。
-      _channelKey = value;
-      notifyListeners();
-    } catch (_) {
-      // 读取失败保持默认渠道。
-    }
-  }
-
-  /// 同步应用远端值后的重载入口。
-  Future<void> _reloadChannelFromSettings() async {
-    final settings = _settings;
-    if (settings == null) return;
-    final generation = _channelGeneration;
-    try {
-      final value = (await settings.read(kDiscoverChannelKey)).trim();
-      if (_disposed ||
-          _hasExplicitInitialChannel ||
-          generation != _channelGeneration ||
-          value.isEmpty ||
-          value == _channelKey) {
-        return;
-      }
-      _channelKey = value;
-      notifyListeners();
-    } catch (_) {}
-  }
+  /// 只委托给 [ChannelSelection]：搜索也读同一实例，不再需要调用方同步两份
+  /// 渠道状态。偏好持久化与失败吞错在 selection 内。
+  void selectChannel(String sourceKey) => _selection.select(sourceKey);
 
   bool get supportsLeaderboards => _source?.supportsLeaderboards ?? false;
   bool get supportsPlaylists => _source?.supportsPlaylists ?? false;
@@ -198,7 +125,7 @@ class DiscoverProvider extends ChangeNotifier {
   final Map<String, List<String>> _hotSearchesBySource = {};
   bool _hotSearchLoading = false;
 
-  List<String> get hotSearches => _hotSearchesBySource[_channelKey] ?? const [];
+  List<String> get hotSearches => _hotSearchesBySource[channelKey] ?? const [];
 
   /// 已解析的榜单封面（按 board.id 缓存；null = 已失败 / 无封面）。
   final Map<String, String?> _leaderboardCovers = {};
@@ -271,13 +198,13 @@ class DiscoverProvider extends ChangeNotifier {
     final source = _source;
     if (source == null || !source.supportsHotSearch) return;
     if (_hotSearchLoading) return;
-    if (!force && _hotSearchesBySource.containsKey(_channelKey)) return;
-    final key = _channelKey;
+    if (!force && _hotSearchesBySource.containsKey(channelKey)) return;
+    final key = channelKey;
     _hotSearchLoading = true;
     try {
       final words = await source.hotSearches();
       _hotSearchesBySource[key] = words;
-      if (key == _channelKey) notifyListeners();
+      if (key == channelKey) notifyListeners();
     } catch (e) {
       debugPrint('[Discover] 加载热搜词失败($key): $e');
     } finally {
@@ -403,7 +330,7 @@ class DiscoverProvider extends ChangeNotifier {
       throw DiscoverFailure(
         SourceFailure(
           kind: FailureKind.unsupported,
-          message: '渠道「$_channelKey」不支持发现内容',
+          message: '渠道「$channelKey」不支持发现内容',
         ),
       );
     }
@@ -445,6 +372,7 @@ class DiscoverProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _selection.removeListener(_onChannelSelectionChanged);
     _library.removeListener(_onLibraryChanged);
     super.dispose();
   }

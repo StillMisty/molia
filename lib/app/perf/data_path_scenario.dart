@@ -24,6 +24,7 @@ import 'dart:io' show exit;
 
 import 'package:logging/logging.dart';
 
+import '../../providers/channel_selection.dart';
 import '../../providers/search_provider.dart';
 import '../bootstrap/catalog_stack.dart';
 import '../bootstrap/lyrics_stack.dart';
@@ -108,28 +109,34 @@ Future<void> _run({
     await Future<void>.delayed(Duration(seconds: _startDelaySeconds));
   }
 
+  final options = [
+    for (final option in catalog.sourceRegistry.descriptors)
+      if (option.capabilities.search) option,
+  ];
+  if (options.isEmpty) {
+    _logger.warning('scenario: 没有可搜索音源');
+    return;
+  }
+  // 单渠道搜索：固定到 mock 源保持时序确定；未指定 MOLIA_PERF_SOURCE
+  // 时取第一个可搜索渠道（产品默认没有「全部来源」）。
+  final option = _sourceKey.isEmpty
+      ? options.first
+      : options.firstWhere(
+          (o) => o.key == _sourceKey,
+          orElse: () => options.first,
+        );
+  final selection = ChannelSelection(
+    validKeys: () => [for (final option in options) option.key],
+    defaultKey: () => option.key,
+  );
   final search = SearchProvider(
     playback.playbackProvider,
+    selection: selection,
     catalogService: catalog.catalogService,
     sourceRegistry: catalog.sourceRegistry,
   );
   try {
-    final options = search.sourceChannels
-        .where((o) => o.capabilities.search)
-        .toList();
-    if (options.isEmpty) {
-      _logger.warning('scenario: 没有可搜索音源');
-      return;
-    }
-    // 单渠道搜索：固定到 mock 源保持时序确定；未指定 MOLIA_PERF_SOURCE
-    // 时取第一个可搜索渠道（产品默认没有「全部来源」）。
-    final option = _sourceKey.isEmpty
-        ? options.first
-        : options.firstWhere(
-            (o) => o.key == _sourceKey,
-            orElse: () => options.first,
-          );
-    search.setActiveSource(option.key);
+    selection.select(option.key);
     DataPathTrace.event(
       'scenario.search.begin',
       fields: () => {'source': search.activeSourceKey, 'keyword': _keyword},
@@ -241,6 +248,7 @@ Future<void> _run({
     }
   } finally {
     search.dispose();
+    selection.dispose();
   }
 }
 

@@ -5,7 +5,6 @@
 /// （PlaybackProvider / LibraryProvider / SearchProvider …），顺序不能随意调整。
 library;
 
-import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
@@ -13,9 +12,9 @@ import '../../data/catalog/album_service.dart';
 import '../../data/catalog/artist_service.dart';
 import '../../data/catalog/catalog_service.dart';
 import '../../data/play_statistics_repository.dart';
-import '../../data/settings/settings_keys.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../managers/artwork_cache.dart';
+import '../../providers/channel_selection.dart';
 import '../../providers/comments_provider.dart';
 import '../../providers/discover_provider.dart';
 import '../../providers/library_provider.dart';
@@ -47,19 +46,6 @@ import 'playback_stack.dart';
 import 'sync_stack.dart';
 import 'update_stack.dart';
 
-/// 首帧后把发现页当前渠道同步给搜索。
-///
-/// `DiscoverProvider` 是 `lazy: false`，create 发生在 build 期；这里必须延后
-/// 到 post-frame，避免 `SearchProvider.notifyListeners` 标脏正在构建的树。
-void scheduleInitialChannelSync(
-  DiscoverProvider discover,
-  SearchProvider search,
-) {
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    search.setActiveSource(discover.channelKey);
-  });
-}
-
 /// 组装 Provider 树（顺序敏感，见文件头）。
 List<SingleChildWidget> buildAppProviders({
   required CatalogStack catalog,
@@ -67,6 +53,7 @@ List<SingleChildWidget> buildAppProviders({
   required LibraryStack library,
   required PlaybackStack playback,
   required LibraryProvider libraryProvider,
+  required ChannelSelection channelSelection,
   required SearchProvider searchProvider,
   required DesktopStack desktop,
   required AiStack ai,
@@ -115,6 +102,8 @@ List<SingleChildWidget> buildAppProviders({
     // 封面取色服务（海报「跟随封面」按需查询；主题链路已在上方接线）。
     Provider<ArtworkPaletteService>.value(value: display.artworkPaletteService),
     ChangeNotifierProvider.value(value: display.navProvider),
+    // 当前渠道（发现内容 + 搜索共用）：组合根创建，页面 / 弹层只读同一实例。
+    ChangeNotifierProvider.value(value: channelSelection),
     // 搜索：组合根创建（托盘内存守卫按生命周期注册释放回调），这里只挂树。
     ChangeNotifierProvider.value(value: searchProvider),
     // 资料库（收藏/历史/列表）：顶层创建（AI 推歌读取收藏作为反馈）。
@@ -148,32 +137,14 @@ List<SingleChildWidget> buildAppProviders({
           PlayStatisticsProvider(repository: library.playStatisticsRepository),
     ),
     // 发现页：热榜 / 歌单 / 热搜；播放与收藏复用上面两个 provider。
-    // 渠道同时决定发现内容与搜索，是全局唯一的渠道偏好（跨重启记住）。
-    //
-    // 必须 eager 创建：搜索 provider 在 runApp 前就存在，桌面壳可能从未
-    // 打开过资料页；创建时把当前渠道同步给搜索，之后监听渠道变化继续同步。
+    // 渠道由 ChannelSelection 唯一持有，发现内容只订阅它，不再向搜索同步。
     ChangeNotifierProvider(
       lazy: false,
-      create: (context) {
-        final discover = DiscoverProvider(
-          playbackProvider: context.read<PlaybackProvider>(),
-          libraryProvider: context.read<LibraryProvider>(),
-          settings: catalog.settings.scope([kDiscoverChannelKey]),
-        );
-        final search = context.read<SearchProvider>();
-        var syncedChannel = discover.channelKey;
-        void syncSearchChannel() {
-          if (discover.channelKey == syncedChannel) return;
-          syncedChannel = discover.channelKey;
-          search.setActiveSource(syncedChannel);
-        }
-
-        discover.addListener(syncSearchChannel);
-        // 不能在 provider create（build 期）同步 setActiveSource：它会
-        // notifyListeners，debug 下会触发 setState during build 红屏。
-        scheduleInitialChannelSync(discover, search);
-        return discover;
-      },
+      create: (context) => DiscoverProvider(
+        playbackProvider: context.read<PlaybackProvider>(),
+        libraryProvider: context.read<LibraryProvider>(),
+        selection: channelSelection,
+      ),
     ),
     ChangeNotifierProvider.value(value: lyrics.lyricsProvider),
     // 歌词显示：配置（设置页读写）+ 调度（桌面/通知/蓝牙输出）。

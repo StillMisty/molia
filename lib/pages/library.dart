@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../l10n/app_localizations.dart';
+import '../providers/channel_selection.dart';
 import '../providers/discover_provider.dart';
-import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../utils/responsive.dart';
 import '../utils/scroll_to_top.dart';
@@ -125,9 +125,6 @@ class _LibraryState extends State<Library> {
     final discover = visible
         ? context.watch<DiscoverProvider>()
         : context.read<DiscoverProvider>();
-    final search = visible
-        ? context.watch<SearchProvider>()
-        : context.read<SearchProvider>();
 
     // 仅启用项可被选中/展示；停用项保留在「音源管理」页以便再次启用。
     final enabledChannels = [
@@ -144,18 +141,17 @@ class _LibraryState extends State<Library> {
     }
 
     // 渠道失效（被停用 / 脚本删除）时校正；音源尚未初始化 / 脚本仍在激活时，
-    // 保存的脚本渠道暂时不在 enabledChannels 里：此时不能 fallback，否则会
-    // 覆盖用户偏好。
+    // 保存的脚本渠道暂时不在 enabledChannels 里：此时不能回退，否则会覆盖
+    // 用户偏好。规则由 ChannelSelection 统一实现，这里只保留旧触发时机。
     final needsFallback =
         current == null &&
         enabledChannels.isNotEmpty &&
         sources.initialized &&
         !sources.isActivating;
     if (needsFallback) {
-      final target = enabledChannels.first;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        context.read<DiscoverProvider>().selectChannel(target.key);
+        context.read<ChannelSelection>().ensureValid();
       });
     }
 
@@ -180,16 +176,6 @@ class _LibraryState extends State<Library> {
           ),
         ),
       );
-    }
-
-    // 资料页独立挂载 / 测试时也把当前渠道同步给搜索：全局只允许一个渠道，
-    // 不依赖组合根是否已接线。切换渠道在 _selectChannel 里同步调用。
-    final currentKey = current?.key;
-    if (currentKey != null && search.activeSourceKey != currentKey) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        context.read<SearchProvider>().setActiveSource(currentKey);
-      });
     }
 
     // 当前渠道对应的发现能力（渠道不匹配时按降级处理，避免闪现旧渠道数据）。
@@ -362,9 +348,8 @@ class _LibraryState extends State<Library> {
     if (key.isEmpty) return;
     // 不再用 build 时捕获的 enabledChannels 做二次查找：脚本渠道可能在
     // 页面 build 之后才加入列表，旧快照会找不到 entry 而静默忽略选择。
-    // 下拉本身只列启用渠道；这里直接切发现内容与搜索。
-    context.read<DiscoverProvider>().selectChannel(key);
-    context.read<SearchProvider>().setActiveSource(key);
+    // 渠道只有一份状态，发现内容与搜索都随 ChannelSelection 更新。
+    context.read<ChannelSelection>().select(key);
   }
 
   Widget _tabContent(_LibraryTab tab) => switch (tab) {

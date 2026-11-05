@@ -14,6 +14,7 @@ import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/l10n/app_localizations.dart';
+import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/lyrics_provider.dart';
@@ -105,9 +106,16 @@ Future<FakePlaybackBackend> pumpPerfApp(
     sources.dispose();
     sourceManager.dispose();
   });
+  const searchChannels = ['kw'];
+  final selection = ChannelSelection(
+    validKeys: () => searchChannels,
+    defaultKey: () => searchChannels.first,
+  );
+  addTearDown(selection.dispose);
   final discover = DiscoverProvider(
     playbackProvider: playback,
     libraryProvider: library,
+    selection: selection,
     sources: const {},
   );
   addTearDown(discover.dispose);
@@ -129,6 +137,7 @@ Future<FakePlaybackBackend> pumpPerfApp(
   final registry = FakeSourceRegistry({'kw': searchSource});
   final search = SearchProvider(
     playback,
+    selection: selection,
     catalogService: CatalogService(registry: registry),
     sourceRegistry: registry,
   );
@@ -176,6 +185,7 @@ Future<FakePlaybackBackend> pumpPerfApp(
         ChangeNotifierProvider<PlaybackProvider>.value(value: playback),
         ChangeNotifierProvider<LibraryProvider>.value(value: library),
         ChangeNotifierProvider<SourcesProvider>.value(value: sources),
+        ChangeNotifierProvider<ChannelSelection>.value(value: selection),
         ChangeNotifierProvider<DiscoverProvider>.value(value: discover),
         ChangeNotifierProvider<SearchProvider>.value(value: search),
         ChangeNotifierProvider<LyricsProvider>.value(value: lyrics),

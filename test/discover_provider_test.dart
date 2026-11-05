@@ -1,15 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_access.dart';
 import 'package:molia/domain/models/failure.dart';
+import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/discover_provider.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:molia/sources/builtin/discover_source.dart';
 
 import 'support/fake_discover_api.dart';
 import 'support/fake_library_repository.dart';
 import 'support/fakes.dart';
-import 'support/settings_test_support.dart';
 
 /// 发现 provider 单测：多平台委托 / 错误归一化 / 播放 / 收藏 / 加入列表。
 void main() {
@@ -21,6 +21,32 @@ void main() {
   late LibraryProvider library;
   late FakeDiscoverSource source;
   late DiscoverProvider discover;
+
+  /// 发现页的渠道集合只来自内置发现数据源；默认取规范顺序第一个可用项。
+  DiscoverProvider buildDiscover({
+    required Map<String, DiscoverSource> sources,
+    SettingsAccess? settings,
+    String? initialKey,
+  }) {
+    final keys = [
+      for (final key in BuiltinDiscover.sourceKeys)
+        if (sources.containsKey(key)) key,
+    ];
+    final selection = ChannelSelection(
+      settings: settings,
+      validKeys: () => keys,
+      defaultKey: () =>
+          keys.isEmpty ? BuiltinDiscover.sourceKeys.first : keys.first,
+      initialKey: initialKey,
+    );
+    addTearDown(selection.dispose);
+    return DiscoverProvider(
+      playbackProvider: playback,
+      libraryProvider: library,
+      sources: sources,
+      selection: selection,
+    );
+  }
 
   setUp(() {
     repository = FakeLibraryRepository();
@@ -34,11 +60,7 @@ void main() {
       playbackProvider: playback,
     );
     source = FakeDiscoverSource();
-    discover = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: {'wy': source},
-    );
+    discover = buildDiscover(sources: {'wy': source});
   });
 
   tearDown(() async {
@@ -48,85 +70,18 @@ void main() {
     await repository.dispose();
   });
 
-  test('渠道偏好持久化：selectChannel 写入并跨实例恢复', () async {
-    SharedPreferences.setMockInitialValues({});
-    final settings = testSettingsRegistry();
+  test('渠道切换委托给 ChannelSelection（持久化 / 恢复见 channel_selection_test）', () {
     final sources = {
       'wy': FakeDiscoverSource(),
       'kg': FakeDiscoverSource(sourceKey: 'kg'),
     };
-    final first = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: sources,
-      settings: settings,
-    );
-    addTearDown(first.dispose);
-    first.selectChannel('kg');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString(kDiscoverChannelKey.name), 'kg');
-
-    final second = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: sources,
-      settings: settings,
-    );
-    addTearDown(second.dispose);
-    for (var i = 0; i < 100 && second.channelKey != 'kg'; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
-    expect(second.channelKey, 'kg', reason: '跨重启恢复发现渠道');
-  });
-
-  test('异步恢复 / 远端 reload 不覆盖用户刚选择的渠道', () async {
-    SharedPreferences.setMockInitialValues({});
-    final settings = testSettingsRegistry();
-    await settings.write(kDiscoverChannelKey, 'wy');
-    final sources = {
-      'wy': FakeDiscoverSource(),
-      'kg': FakeDiscoverSource(sourceKey: 'kg'),
-      'tx': FakeDiscoverSource(sourceKey: 'tx'),
-    };
-    final provider = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: sources,
-      settings: settings,
-    );
+    final provider = buildDiscover(sources: sources);
     addTearDown(provider.dispose);
-    provider.selectChannel('kg');
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(provider.channelKey, 'kg', reason: '晚到的恢复不能覆盖用户选择');
-
-    await settings.write(kDiscoverChannelKey, 'wy');
-    // reload 在途时用户切到 kg：读回来的旧值不得覆盖这次选择。
-    final pendingReload = settings.reloadKeys([kDiscoverChannelKey.name]);
-    provider.selectChannel('tx');
-    await pendingReload;
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(provider.channelKey, 'tx', reason: '在途 reload 不覆盖刚做出的选择');
-  });
-
-  test('initialChannelKey 测试参数优先，不被异步恢复覆盖', () async {
-    SharedPreferences.setMockInitialValues({});
-    final settings = testSettingsRegistry();
-    await settings.write(kDiscoverChannelKey, 'kg');
-    final sources = {
-      'wy': FakeDiscoverSource(),
-      'kg': FakeDiscoverSource(sourceKey: 'kg'),
-    };
-    final provider = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: sources,
-      settings: settings,
-      initialChannelKey: 'wy',
-    );
-    addTearDown(provider.dispose);
-    await Future<void>.delayed(const Duration(milliseconds: 20));
     expect(provider.channelKey, 'wy');
+
+    provider.selectChannel('kg');
+    expect(provider.channelKey, 'kg');
+    expect(provider.hasDiscoverSource, isTrue);
   });
 
   test('默认选中第一个可用平台（仅 wy 时）；榜单表来自数据源；榜单曲目解析为发现曲目', () async {
@@ -264,11 +219,7 @@ void main() {
     expect(source.hotSearchCalls, 1); // 幂等，不重复请求
 
     final failing = FakeDiscoverSource()..fail = true;
-    final discover2 = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: {'wy': failing},
-    );
+    final discover2 = buildDiscover(sources: {'wy': failing});
     addTearDown(discover2.dispose);
     await discover2.loadHotSearches();
     expect(discover2.hotSearches, isEmpty);
@@ -276,11 +227,7 @@ void main() {
 
   test('平台切换：数据源紧随，热搜按平台分别缓存', () async {
     final tx = FakeDiscoverSource(sourceKey: 'tx');
-    final multi = DiscoverProvider(
-      playbackProvider: playback,
-      libraryProvider: library,
-      sources: {'wy': source, 'tx': tx},
-    );
+    final multi = buildDiscover(sources: {'wy': source, 'tx': tx});
     addTearDown(multi.dispose);
     expect(multi.sourceKeys, ['tx', 'wy']);
     expect(multi.channelKey, 'tx', reason: '默认选中规范顺序第一个可用平台');

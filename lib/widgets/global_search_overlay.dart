@@ -46,7 +46,7 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
-import '../providers/discover_provider.dart';
+import '../providers/channel_selection.dart';
 import '../providers/search_provider.dart';
 import '../providers/sources_provider.dart';
 import '../services/escape_claims.dart';
@@ -194,11 +194,6 @@ class _GlobalSearchOverlayState extends State<GlobalSearchOverlay> {
   /// 路由由根导航器承载（`showGeneralDialog` 默认 `useRootNavigator`）：
   /// 遮罩盖在壳层之上，顶栏 / 底栏一起压暗。
   Future<void> _open() async {
-    // 全局只有一个当前渠道：打开前把搜索同步到发现页的渠道（组合根 / 资料页
-    // 也会同步，这里兜底独立挂载与测试）。同一渠道是 no-op，不会清结果。
-    context.read<SearchProvider>().setActiveSource(
-      context.read<DiscoverProvider>().channelKey,
-    );
     if (_isOpen) {
       _viewKey.currentState?.focusField();
       return;
@@ -373,8 +368,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 
   /// 渠道下拉选择：发现内容与搜索一起切，然后把焦点还给输入框。
   void _selectChannel(String key) {
-    context.read<DiscoverProvider>().selectChannel(key);
-    _search.setActiveSource(key);
+    context.read<ChannelSelection>().select(key);
     final textLength = _field.text.length;
     final selection = _field.selection;
     final wasSelectAll =
@@ -578,7 +572,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   Widget build(BuildContext context) {
     final l10n = _l10n(context);
     final sources = context.watch<SourcesProvider>();
-    final discover = context.watch<DiscoverProvider>();
+    final selection = context.watch<ChannelSelection>();
     final enabledChannels = [
       for (final channel in sources.channels)
         if (channel.enabled) channel,
@@ -628,7 +622,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                         // 打开即聚焦：开合动画期间按键也直达输入框。
                         autofocus: true,
                         channels: enabledChannels,
-                        selectedKey: discover.channelKey,
+                        selectedKey: selection.key,
                         onChannelSelected: _selectChannel,
                         onChanged: _search.updateSearchQuery,
                         onSubmitted: (_) => _handleEnter(),

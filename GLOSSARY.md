@@ -571,12 +571,12 @@
   `builtin/lyric_search_runner.dart`；kw 伪 JSON 容错与 wy ids → detail 保留自定义
   流程）。真实响应快照在 `test/fixtures/lyric_search/`
   （抓取脚本 `tool/gen_lyric_search_fixtures.mjs`）。命中片段作为结果行副标题。
-- **Single-channel search（单渠道搜索）** — `SearchProvider` 只搜
-  `DiscoverProvider.channelKey` 对应的当前渠道；`activeSourceKey` / `activeSource` /
-  `hasActiveSearchSource` 是唯一渠道状态（后者 = `supportedSearchKinds.isNotEmpty`，
-  已注册但能力位全 false 的渠道仍算不可搜索），`setActiveSource` 切渠道时清空旧结果
-  并按当前关键词重搜；脚本晚到后能力补齐也会主动补搜。`updateSearchQuery` 仍 300ms
-  防抖，`submitSearch` 立即；当前渠道
+- **Single-channel search（单渠道搜索）** — `SearchProvider` 只搜当前渠道；
+  `activeSourceKey` / `activeSource` 直接读 **Channel selection module**（不再维护
+  第二份渠道状态），`hasActiveSearchSource` = `supportedSearchKinds.isNotEmpty`
+  （已注册但能力位全 false 的渠道仍算不可搜索）。渠道变化由模块通知 provider
+  清空旧结果并按当前关键词重搜；脚本晚到后能力补齐也会主动补搜。
+  `updateSearchQuery` 仍 300ms 防抖，`submitSearch` 立即；当前渠道
   不可搜索时清空结果、不发请求，由 UI 展示「当前渠道不支持搜索」空态（ADR-0019）。
 - **Search results module（单渠道结果模块）** — `lib/providers/search_results.dart`：
   `SearchResults<T>` 是某一搜索类型（单曲 / 歌手 / 歌词）的不可变快照（keyword /
@@ -668,9 +668,20 @@
   `setPlayMode → playDomainTracks` 与 `PlaylistTrack.fromTrack`（生产代码唯一
   调用点）；发现详情经 `DiscoverProvider.domainTracksOf` 把 `DiscoverTrack`
   归一为领域曲目后走同一交接。
-- **Channel selection（渠道选择）** — `DiscoverProvider.channelKey` 是全局唯一的渠道
-  偏好，同时决定热榜 / 歌单与搜索，持久化在 `kDiscoverChannelKey`。资料页只处理
-  「渠道被停用」的 UI 回退；顶部渠道下拉在所有 tab（含搜索）左侧常显，tab 栏
+- **Channel selection module（渠道选择模块）** — `lib/providers/channel_selection.dart`：
+  全局当前渠道的唯一持有者（key / `kDiscoverChannelKey` 持久化 / 跨设备 reload /
+  失效回退规则）。`DiscoverProvider.channelKey` 与 `SearchProvider.activeSourceKey`
+  都是它的只读投影，UI（资料页下拉 / Ctrl+F chip）切换只调 `select`。异步恢复
+  与 reload 带代际守卫，不覆盖用户刚做出的选择；`ensureValid` 只在有效 key
+  列表非空时把失效项换到第一个有效项，音源未初始化 / 脚本激活中（有效列表为空）
+  不回退，避免冲掉保存的脚本渠道。`initialKey` 显式指定时不被异步恢复覆盖。
+  模块不订阅音源状态：回退规则由资料页在渠道缺失且音源就绪时触发，不随音源
+  通知自动改渠道。
+- **Channel selection（渠道选择）** — 当前渠道只有 Channel selection module 一份
+  状态，同时决定热榜 / 歌单与搜索；发现内容与搜索都订阅同一实例，不再由组合根 /
+  资料页 / Ctrl+F 手工同步两份 key。停用 / 删除后的回退规则在模块 `ensureValid`，
+  触发时机仍是资料页（渠道缺失且音源就绪时 post-frame）；搜索侧保持失效 key、
+  只清空结果，不自动改搜其它渠道。顶部渠道下拉在所有 tab（含搜索）左侧常显，tab 栏
   用 `M3ETabsAlignment.fill` 吃满剩余宽度；当前渠道
   任一搜索能力（song / artist / lyricSearch）都没有时才隐藏搜索 tab，Ctrl+F 显示
   「当前渠道不支持搜索」空态。

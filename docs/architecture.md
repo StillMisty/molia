@@ -627,11 +627,16 @@
   截断要求 bootstrap）、`selectJournalChunks`（WebDAV 分块衔接）与
   `PeerJournalNames`（协议文件名）；引擎、局域网 / WebDAV 传输与
   `test/support/sync_network.dart` 共用同一份语义，边界条件只维护一处。
-- **渠道选择**：`DiscoverProvider.channelKey` 是全局唯一的渠道偏好，同时决定
-  热榜 / 歌单与搜索，持久化在 `kDiscoverChannelKey`（`kSearchSourceFilter` /
-  来源 chips 已删除，见 ADR-0019）。资料页只处理「渠道被停用」的 UI 回退；
-  顶部渠道下拉在所有 tab（含搜索）左侧常显；当前渠道不支持搜索时隐藏搜索
-  tab，Ctrl+F 仍可打开并显示「当前渠道不支持搜索」空态。
+- **渠道选择**：`lib/providers/channel_selection.dart` 的 `ChannelSelection` 是全局
+  唯一的渠道状态（持久化 `kDiscoverChannelKey`，`kSearchSourceFilter` / 来源 chips
+  已删除，见 ADR-0019）；`DiscoverProvider.channelKey` 与
+  `SearchProvider.activeSourceKey` 都读同一实例，组合根不再在发现 → 搜索之间
+  手工同步。资料页下拉与 Ctrl+F chip 只调 `ChannelSelection.select`；停用 / 删除
+  后的回退规则在模块 `ensureValid`，触发时机仍属于资料页：渠道缺失且音源就绪时
+  post-frame 调用一次（有效 key 列表为空——音源未初始化 / 脚本激活中——不回退）。
+  模块不订阅音源状态，搜索侧也不会因来源消失自动改搜其它渠道。顶部渠道下拉在
+  所有 tab（含搜索）左侧常显；当前渠道不支持搜索时隐藏搜索 tab，Ctrl+F 仍可打开
+  并显示「当前渠道不支持搜索」空态。
 - **发现页布局**：`lib/widgets/discover_layout.dart` 集中 gutter / 内容宽度 /
   网格断点。搜索、热榜、歌单三个 tab 共用
   `ResponsivePageType.browse` 的页边距（compact 12 / 手机 16 / 平板桌面 24），
@@ -1166,8 +1171,11 @@
 搜索分页按 `SearchKind` 隔离：当前渠道每种类型一个 `SearchResultsController`，
 自己持有关键词 / 归一化失败 / `PagedListController`；`SearchResults<T>` 是 provider
 对外暴露的唯一不可变快照，`loadMore()` / `retry()` 不再带来源参数。
-`SearchProvider.activeSourceKey` 与 `DiscoverProvider.channelKey` 同源，
-`supportedSearchKinds` 只看当前渠道能力位，切渠道时清空旧结果并按当前关键词重搜；
+`SearchProvider.activeSourceKey` 与 `DiscoverProvider.channelKey` 都读同一个
+`ChannelSelection`（唯一渠道所有者），搜索侧订阅它：切渠道时清空旧结果并按当前
+关键词重搜；`supportedSearchKinds` 只看当前渠道能力位；渠道失效回退规则在
+selection 的 `ensureValid`（资料页触发），持久化 / 跨设备重载也在 selection 内，
+provider 不再持有第二份 key；
 当前类型不支持时回退到第一个支持的 kind（优先 song）。控制器对同一异常只归一化
 一次；渠道晚到由 `ensureFirstPage()` 补首屏，当前渠道不可搜索时只记关键词、不发
 请求。单曲 / 歌手 / 歌词的结果快照仍按类型保留（`SearchRow` / `ArtistSummary` /

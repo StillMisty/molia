@@ -25,12 +25,15 @@ import 'app/bootstrap/update_stack.dart';
 import 'app/perf/data_path_scenario.dart';
 import 'app/perf/frame_stats.dart';
 import 'data/molia_database.dart';
+import 'data/settings/settings_keys.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
 import 'playback/playback_power_policy.dart';
+import 'providers/channel_selection.dart';
 import 'providers/library_provider.dart';
 import 'providers/search_provider.dart';
+import 'sources/builtin/discover_source.dart';
 import 'services/app_logging.dart';
 import 'services/app_presence.dart';
 import 'services/global_hotkeys.dart';
@@ -194,10 +197,27 @@ void main() async {
     repository: library.libraryRepository,
     playbackProvider: playback.playbackProvider,
   );
+  // 当前渠道的唯一所有者：发现内容与搜索共用，持久化 / 跨设备重载 /
+  // 失效回退规则都在模块内（页面与 Ctrl+F 不再手工同步两份渠道）。
+  final channelSelection = ChannelSelection(
+    settings: catalog.settings.scope([kDiscoverChannelKey]),
+    validKeys: () {
+      final manager = catalog.sourceManager;
+      // 音源未初始化 / 脚本激活中时有效集合为空：不允许回退，否则会覆盖
+      // 用户保存的脚本渠道偏好。
+      if (!manager.initialized || manager.isActivating) return const [];
+      return [
+        for (final channel in manager.channels)
+          if (channel.enabled) channel.key,
+      ];
+    },
+    defaultKey: () => BuiltinDiscover.sourceKeys.first,
+  );
   // 搜索 provider 由组合根创建（原先在 Provider 树里懒建）：只为了在创建时
   // 注册托盘期的缓存释放回调；挂树仍是同一个实例（`provider_tree.dart`）。
   final searchProvider = SearchProvider(
     playback.playbackProvider,
+    selection: channelSelection,
     catalogService: catalog.catalogService,
     sourceRegistry: catalog.sourceRegistry,
   );
@@ -334,6 +354,7 @@ void main() async {
         library: library,
         playback: playback,
         libraryProvider: libraryProvider,
+        channelSelection: channelSelection,
         searchProvider: searchProvider,
         desktop: desktop,
         ai: ai,

@@ -16,6 +16,7 @@ import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/source_registry.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/models/play_mode.dart';
+import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -317,6 +318,7 @@ void main() {
 
   late _FakeBackend backend;
   late PlaybackProvider playbackProvider;
+  late ChannelSelection selection;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -328,9 +330,31 @@ void main() {
     playbackProvider.dispose();
   });
 
+  /// 与生产组合根同形：搜索只读一个 ChannelSelection；默认仍取第一个可
+  /// 搜索渠道（都不支持搜索时退回第一个描述）。
   SearchProvider buildProvider(_FakeRegistry registry) {
+    selection = ChannelSelection(
+      validKeys: () => [
+        for (final descriptor in registry.descriptors)
+          if (descriptor.enabled) descriptor.key,
+      ],
+      defaultKey: () {
+        final channels = registry.descriptors;
+        for (final descriptor in channels) {
+          final capabilities = descriptor.capabilities;
+          if (capabilities.search ||
+              capabilities.artist ||
+              capabilities.lyricSearch) {
+            return descriptor.key;
+          }
+        }
+        return channels.isEmpty ? '' : channels.first.key;
+      },
+    );
+    addTearDown(selection.dispose);
     final provider = SearchProvider(
       playbackProvider,
+      selection: selection,
       catalogService: CatalogService(registry: registry),
       sourceRegistry: registry,
     );
@@ -506,7 +530,7 @@ void main() {
     await _waitUntil(() => provider.songResults.items.isNotEmpty);
     expect(provider.activeSourceKey, 'kw');
 
-    provider.setActiveSource('tx');
+    selection.select('tx');
     expect(provider.activeSourceKey, 'tx');
     expect(provider.searchQuery, 'hello', reason: '切渠道保留关键词');
     await _waitUntil(
@@ -518,9 +542,9 @@ void main() {
     expect(kw.searchCalls, 1);
     expect(tx.searchCalls, 1);
 
-    // 空 key 回到第一个可搜索渠道，不是「全部来源」。
-    provider.setActiveSource('');
-    expect(provider.activeSourceKey, 'kw');
+    // 空 key 忽略（不再表示「全部来源」，也不会把当前渠道换掉）。
+    selection.select('');
+    expect(provider.activeSourceKey, 'tx');
   });
 
   test('切到不支持搜索的渠道：清空结果、不发请求，稍后可搜索时补搜', () async {
@@ -537,7 +561,7 @@ void main() {
     await _waitUntil(() => !provider.isSearching);
     expect(kw.searchCalls, 1);
 
-    provider.setActiveSource('tx');
+    selection.select('tx');
     expect(provider.activeSourceKey, 'tx');
     expect(provider.hasActiveSearchSource, isFalse);
     expect(provider.supportedSearchKinds, isEmpty);
@@ -612,7 +636,7 @@ void main() {
     await _waitUntil(() => provider.songResults.items.isNotEmpty);
     expect(kw.searchCalls, 1);
 
-    provider.setActiveSource('script');
+    selection.select('script');
     expect(provider.hasActiveSearchSource, isFalse);
     expect(provider.songResults.page, 0);
     expect(provider.songResults.items, isEmpty, reason: '切渠道已清空旧结果');
@@ -665,7 +689,7 @@ void main() {
     await _waitUntil(() => provider.artistResults.items.isNotEmpty);
     expect(provider.searchKind, SearchKind.artist);
 
-    provider.setActiveSource('script');
+    selection.select('script');
     expect(provider.searchKind, SearchKind.song, reason: '脚本源无歌手能力 → 回退单曲');
     expect(provider.supportedSearchKinds, [SearchKind.song]);
     expect(provider.artistResults.page, 0);
@@ -977,7 +1001,12 @@ void main() {
   });
 
   test('无音源：空态行为不变', () async {
-    final provider = SearchProvider(playbackProvider);
+    selection = ChannelSelection(
+      validKeys: () => const [],
+      defaultKey: () => '',
+    );
+    addTearDown(selection.dispose);
+    final provider = SearchProvider(playbackProvider, selection: selection);
     addTearDown(provider.dispose);
 
     expect(provider.sourceChannels, isEmpty);

@@ -9,6 +9,7 @@ import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind, SearchQuery;
 import '../domain/models/source.dart' show SourceDescriptor;
 import '../domain/ports/source_registry.dart';
+import 'channel_selection.dart';
 import 'paged_list_controller.dart';
 import 'playback_provider.dart';
 import 'search_results.dart';
@@ -26,9 +27,8 @@ typedef _PageFetcher<T> = Future<PagedResult<T>> Function(
 
 /// 当前渠道的单源搜索状态（内部经 [CatalogService] / [SourceRegistry]）。
 ///
-/// 全局只有一个搜索渠道：`DiscoverProvider.channelKey` 是唯一渠道偏好，
-/// 组合根 / 资料页把它同步到 [activeSourceKey]。每个搜索类型各持一条
-/// [SearchResultsController]：
+/// 全局只有一个搜索渠道：搜索与发现内容读同一个 [ChannelSelection]，不各自
+/// 保存渠道偏好。每个搜索类型各持一条 [SearchResultsController]：
 /// - 换词清空该类型旧结果，晚到的旧响应由查询代际与分页控制器丢弃；
 /// - 当前渠道独立分页 / 失败 / 加载态；
 /// - 渠道切换时清空所有类型并按当前关键词重搜；不支持搜索的渠道不发请求，
@@ -42,17 +42,13 @@ class SearchProvider extends ChangeNotifier {
   /// 音源注册表：描述列表与变更通知来源（可为 null：无音源）。
   final SourceRegistry? _sourceRegistry;
 
+  /// 全局当前渠道的唯一所有者（发现内容读同一个实例）。
+  final ChannelSelection _selection;
+
   StreamSubscription<void>? _registrySubscription;
 
   String _searchQuery = '';
   SearchKind _kind = SearchKind.song;
-
-  /// 当前搜索渠道（与 `DiscoverProvider.channelKey` 同源）。
-  ///
-  /// 允许是当前版本不可搜索的渠道（脚本未加载 / 渠道无搜索能力）：
-  /// 此时 [hasActiveSearchSource] 为 false（activeSource 可能已注册但能力位
-  /// 全 false），UI 显示不支持搜索的空态，而不是回退去搜别的渠道。
-  String _activeSourceKey = '';
 
   /// 三种搜索类型各一份结果控制器（行形状不同，类型留在控制器里）。
   late final SearchResultsController<SearchRow> _songs;
@@ -83,24 +79,27 @@ class SearchProvider extends ChangeNotifier {
 
   SearchProvider(
     this._playbackProvider, {
+    required ChannelSelection selection,
     this._catalogService,
     this._sourceRegistry,
-  }) {
+  }) : // 公开参数名保持 selection，字段仍按本类惯例私有。
+       // ignore: prefer_initializing_formals
+       _selection = selection {
     _songs = _buildController<SearchRow>(
       kind: SearchKind.song,
-      failureLogLabel: () => 'Search failed ($_activeSourceKey)',
+      failureLogLabel: () => 'Search failed ($activeSourceKey)',
       fetchPage: _fetchSongPage,
       keyOf: (row) => row.id.uri,
     );
     _artists = _buildController<ArtistSummary>(
       kind: SearchKind.artist,
-      failureLogLabel: () => 'Artist search failed ($_activeSourceKey)',
+      failureLogLabel: () => 'Artist search failed ($activeSourceKey)',
       fetchPage: _fetchArtistPage,
       keyOf: (artist) => artist.id,
     );
     _lyrics = _buildController<SearchRow>(
       kind: SearchKind.lyric,
-      failureLogLabel: () => 'Lyric search failed ($_activeSourceKey)',
+      failureLogLabel: () => 'Lyric search failed ($activeSourceKey)',
       fetchPage: _fetchLyricPage,
       keyOf: (row) => row.id.uri,
       // 同曲目在后续页再次命中时，片段跟随后页（与按页累计片段同口径），
@@ -119,6 +118,9 @@ class SearchProvider extends ChangeNotifier {
       control.addListener(_onSearchChanged);
     }
 
+    // 渠道变化可能来自任意入口（资料页 / Ctrl+F / 失效回退），统一在这里
+    // 清空旧结果并按当前关键词重搜。
+    _selection.addListener(_onChannelChanged);
     _registrySubscription = _sourceRegistry?.changes.listen(
       (_) => _onSourcesChanged(),
     );
@@ -133,12 +135,17 @@ class SearchProvider extends ChangeNotifier {
   bool get isSearchActive => _searchQuery.isNotEmpty;
 
   /// 当前渠道 key（`''` = 尚未确定；不是「全部来源」）。
-  String get activeSourceKey => _activeSourceKey;
+  ///
+  /// 直接读 [ChannelSelection]：允许是当前版本不可搜索的渠道（脚本未加载 /
+  /// 渠道无搜索能力），此时 [hasActiveSearchSource] 为 false（activeSource
+  /// 可能已注册但能力位全 false），UI 显示不支持搜索的空态，而不是回退去搜
+  /// 别的渠道。
+  String get activeSourceKey => _selection.key;
 
   /// 当前渠道的搜索描述；渠道未注册 / 脚本未加载时为 null。
   SourceDescriptor? get activeSource {
     for (final descriptor in sourceChannels) {
-      if (descriptor.key == _activeSourceKey) return descriptor;
+      if (descriptor.key == activeSourceKey) return descriptor;
     }
     return null;
   }
@@ -232,25 +239,13 @@ class SearchProvider extends ChangeNotifier {
     }
   }
 
-  /// 切换搜索渠道：清空旧渠道结果，并按当前关键词在新渠道重搜。
+  /// 渠道切换：清空旧渠道结果，并按当前关键词在新渠道重搜。
   ///
-  /// 允许切到当前不可搜索的渠道（脚本未加载 / 无搜索能力）：此时只清空，
-  /// 不发请求；等 registry 出现该渠道后由 [_onSourcesChanged] 补搜。
-  /// 空 key = 回到第一个可搜索渠道，绝不表示「全部来源」。
-  void setActiveSource(String key) {
-    final normalized = key.trim();
-    if (normalized.isEmpty) {
-      final fallback = _defaultActiveSourceKey();
-      if (fallback == _activeSourceKey) return;
-      _switchActiveSource(fallback);
-      return;
-    }
-    if (normalized == _activeSourceKey) return;
-    _switchActiveSource(normalized);
-  }
-
-  void _switchActiveSource(String key) {
-    _activeSourceKey = key;
+  /// key 已由 [ChannelSelection] 写入；这里只做搜索侧反应。允许切到当前
+  /// 不可搜索的渠道（脚本未加载 / 无搜索能力）：此时只清空，不发请求；等
+  /// registry 出现该渠道后由 [_onSourcesChanged] 补搜。
+  void _onChannelChanged() {
+    if (_disposed) return;
     _ensureKindSupported();
     // 旧渠道的结果不属于新渠道：先清空所有类型，再按当前关键词重搜。
     _clearAll();
@@ -328,7 +323,7 @@ class SearchProvider extends ChangeNotifier {
     final results = _kind == SearchKind.lyric ? lyricResults : songResults;
     final items = results.items;
     // 行不属于当前渠道（旧结果）时不播，避免用错渠道的队列。
-    if (items.isEmpty || row.id.sourceKey != _activeSourceKey) return;
+    if (items.isEmpty || row.id.sourceKey != activeSourceKey) return;
     final index = items.indexWhere((entry) => entry.id == row.id);
     _playbackProvider.playDomainTracks(
       [for (final entry in items) entry.track],
@@ -345,9 +340,9 @@ class SearchProvider extends ChangeNotifier {
     if (listEquals(_lastDescriptors, next)) return;
     _lastDescriptors = next;
 
-    if (_activeSourceKey.isEmpty) _activeSourceKey = _defaultActiveSourceKey();
     // 当前渠道被移除 / 能力位全部关闭：旧结果不再属于任何可展示目标。
-    // 渠道 key 保留（用户偏好），等它回来后再按当前关键词重新补首屏。
+    // 渠道 key 保留（用户偏好），等它回来后再按当前关键词重新补首屏；
+    // 失效回退由资料页在音源就绪后触发，搜索侧不自动改搜其它渠道。
     if (!hasActiveSearchSource) _clearAll();
     _ensureKindSupported();
 
@@ -361,28 +356,12 @@ class SearchProvider extends ChangeNotifier {
         // selectSearchKind 的 ensureFirstPage 路径补齐。
         unawaited(current.ensureFirstPage());
       } else {
-        // 切到暂不可搜索的渠道时 setActiveSource 已清空控制器（keyword 为空）；
+        // 切到暂不可搜索的渠道时渠道切换已清空控制器（keyword 为空）；
         // 能力补齐后必须主动按当前关键词重搜，不能等用户重新输入。
         unawaited(current.search(keyword));
       }
     }
     notifyListeners();
-  }
-
-  /// 默认渠道：第一个具备任一搜索能力的来源；都不支持搜索时退回第一个描述。
-  String _defaultActiveSourceKey() {
-    final channels = sourceChannels;
-    for (final descriptor in channels) {
-      if (_hasAnySearchCapability(descriptor)) return descriptor.key;
-    }
-    return channels.isEmpty ? '' : channels.first.key;
-  }
-
-  static bool _hasAnySearchCapability(SourceDescriptor descriptor) {
-    final capabilities = descriptor.capabilities;
-    return capabilities.search ||
-        capabilities.artist ||
-        capabilities.lyricSearch;
   }
 
   /// 当前 kind 不被渠道支持时回退到第一个支持的 kind（优先 song）。
@@ -415,7 +394,7 @@ class SearchProvider extends ChangeNotifier {
   }) {
     return SearchResultsController<R>(
       failureLogLabel: failureLogLabel,
-      fetchPage: (keyword, page) => fetchPage(_activeSourceKey, keyword, page),
+      fetchPage: (keyword, page) => fetchPage(activeSourceKey, keyword, page),
       canSearch: () {
         final source = activeSource;
         return source != null && _supports(kind, source);
@@ -507,6 +486,7 @@ class SearchProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _debounceTimer?.cancel();
+    _selection.removeListener(_onChannelChanged);
     _registrySubscription?.cancel();
     for (final control in _controls.values) {
       control.removeListener(_onSearchChanged);
