@@ -18,6 +18,19 @@ import '../domain/ports/sync_transport.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/peer_address.dart';
 import 'sync_nearby_availability.dart';
+import 'sync_peer_view.dart';
+
+/// 手动地址表单的保存结果（地址入簿 → 探测 → 立即接触）。
+///
+/// [probeSent] = 未配对设备已发出附近设备探测，后续在「附近设备」里点选配对；
+/// 其余状态与设置页文案一一对应；[unreachable] 只表示本轮明确没连上。
+enum SyncManualPeerOutcome {
+  probeSent,
+  contactQueued,
+  added,
+  updated,
+  unreachable,
+}
 
 /// 跨设备同步的 UI 门面：控制面（身份 / 开关 / 观测）+ 引擎（轮次 / 报告）
 /// + 备份（导出 / 导入）+ 恢复动作触发 + 策略转发。
@@ -61,19 +74,11 @@ class SyncProvider extends ChangeNotifier {
   /// 是否有一轮同步正在跑（设置页据此显示「正在同步…」并避免重复触发）。
   bool get syncing => _engine.syncing;
 
-  /// 是否注入了调度器（组合根断言用）。
-  ///
-  /// 生产接线必须注入调度器：自动同步、策略转发与打开同步页的检查轮都经它；
-  /// 测试可以省略（省略时相关入口按无操作处理），但不能让生产漏接退化成
-  /// 「只有手动同步」还无人发现。
-  bool get hasScheduler => _scheduler != null;
-
   String get deviceId => _controlPlane.deviceId;
   String get deviceName => _controlPlane.deviceName;
   Map<SyncCategory, bool> get categories => _controlPlane.categories;
   Set<String> get enabledTransports => _controlPlane.enabledTransports;
   WebDavConfig get webdav => _controlPlane.webdav;
-  int get lastSyncAt => _controlPlane.lastSyncAt;
   List<SyncLogEntry> get log => _controlPlane.log;
 
   /// 设备名册（不含本机；按最近接触时间倒序）。
@@ -81,6 +86,17 @@ class SyncProvider extends ChangeNotifier {
 
   /// 手动对端地址簿（发现失败时的兜底）。
   List<ManualPeer> get manualPeers => _controlPlane.manualPeers;
+
+  /// 设备区的一次性只读投影：名册顺序、手动命名与连接状态。
+  ///
+  /// 每次读取按当前快照重建（纯计算、廉价）；设置页在同一个 build 里只取
+  /// 一份，名册行 / footer / 重检条件读到的是同一时刻的结论。
+  SyncPeerView get peerView => SyncPeerView.from(
+    peers: peers,
+    manualPeers: manualPeers,
+    lastReport: lastReport,
+    nowMs: nowMs,
+  );
 
   /// 本机局域网探测端口（分族 v4 / v6；0 = 该族未运行 / 不可用）。
   ///
@@ -215,6 +231,55 @@ class SyncProvider extends ChangeNotifier {
     name: name,
   );
 
+  /// 手动地址表单的唯一命令：地址入簿 → 附近设备探测 → 立即接触。
+  ///
+  /// 顺序与结果解释原先散在 `sync_peer_dialogs.dart` 的 `_submit` 里：
+  /// 已认领身份的地址（编辑态自身或地址簿同址条目）跳过「探测后即关闭」，
+  /// 直接进入接触；未配对地址探测成功时只提示「已发出附近设备探测」，
+  /// 后续在附近设备卡里点选配对。接触返回 null = 同步关闭 / 没有传输
+  /// （没有一轮真正跑），按「稍后」处理；false 才表示本轮明确没连上。
+  Future<SyncManualPeerOutcome> saveManualPeer({
+    required String host,
+    int probePort = 0,
+    String name = '',
+    ManualPeer? editing,
+  }) async {
+    final normalized = normalizePeerHost(host);
+    final trimmedName = name.trim();
+    // 与旧弹层的 `_isKnownPairedHost` 同一判据：编辑态自身已认领身份，
+    // 或地址簿里同一地址已有 deviceId（重复添加已配对设备）。
+    final paired =
+        (editing?.deviceId.isNotEmpty ?? false) ||
+        manualPeers.any(
+          (entry) => entry.host == normalized && entry.deviceId.isNotEmpty,
+        );
+    final added = editing == null
+        ? await addManualPeer(
+            normalized,
+            name: trimmedName,
+            probePort: probePort,
+          )
+        : false;
+    if (editing != null) {
+      await moveManualPeer(
+        editing.host,
+        toHost: normalized,
+        probePort: probePort,
+        name: trimmedName,
+      );
+    }
+    final probed = await probeAddress(normalized, probePort: probePort);
+    if (!paired && probed) return SyncManualPeerOutcome.probeSent;
+    final contacted = await contactManualPeer(normalized);
+    if (contacted == null) return SyncManualPeerOutcome.contactQueued;
+    if (contacted) {
+      return editing == null && added
+          ? SyncManualPeerOutcome.added
+          : SyncManualPeerOutcome.updated;
+    }
+    return SyncManualPeerOutcome.unreachable;
+  }
+
   /// 本机可路由地址（设置页地址列表展示用；服务内部缓存枚举结果）。
   Future<List<LocalEndpoint>> localEndpoints() => _endpoints.list();
 
@@ -235,15 +300,6 @@ class SyncProvider extends ChangeNotifier {
   /// 显式清理某台设备的远端文件（不做自动删除）。
   Future<({bool removed, SyncIssue? error})> cleanupRemote(String deviceId) =>
       _controlPlane.cleanupRemote(deviceId);
-
-  /// 名册里已失联的设备（超过失联阈值无接触；只提示与提供处置动作）。
-  List<SyncPeerState> get lostPeers {
-    final now = _controlPlane.nowMs();
-    return [
-      for (final peer in peers)
-        if (peer.isLostAt(now)) peer,
-    ];
-  }
 
   /// 立刻跑一轮并判断该手动地址是否接触成功。
   ///

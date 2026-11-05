@@ -15,6 +15,7 @@ import '../domain/models/device_sync.dart';
 import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/sync_peer_view.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
@@ -25,25 +26,15 @@ import '../widgets/settings/settings_tiles.dart';
 import 'sync_labels.dart';
 import 'sync_notices.dart';
 
-/// 对端展示名：用户命名优先，对端自报名仅兜底，都没有用短设备 id。
-String syncPeerDisplayName(SyncPeerState peer, ManualPeer? manual) {
-  final userNamed = manual?.name.trim() ?? '';
-  if (userNamed.isNotEmpty) return userNamed;
-  return peer.name.isEmpty ? shortDeviceId(peer.deviceId) : peer.name;
-}
-
 /// 对端副标题：状态词 + 上次成功 + 传输 / 落后 / 时钟偏移。
 ///
 /// 行首必须是可读结论（已连接 / 未连接 / 云端已同步 / 上次同步 / 还没连上 /
 /// 已失联），失败原因不铺在行里——详情弹层会给出上次尝试与最近失败。
-String syncPeerSubtitle(
-  AppLocalizations l10n,
-  SyncPeerState peer,
-  ManualPeer? manual, {
-  required int nowMs,
-  SyncRoundReport? report,
-}) {
-  final status = resolveSyncPeerConnection(peer, report: report, nowMs: nowMs);
+/// 连接结论取自设备区投影，不在渲染时重复解析。
+String syncPeerSubtitle(AppLocalizations l10n, SyncPeerRow row) {
+  final peer = row.peer;
+  final manual = row.manual;
+  final status = row.connection;
   final lastSuccess = peer.lastSuccessAt;
   final cloud = peer.transport == SyncTransportKind.webdav;
   final lastSuccessText = lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
@@ -482,40 +473,28 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
       _busy = true;
     });
     final editing = widget.editing;
-    // 已认领过身份的地址 = 已配对设备换地址 / 重连：沿用原来的「立即接触」。
-    final paired = _isKnownPairedHost(host, editing);
-    final added = editing == null
-        ? await widget.provider.addManualPeer(
-            host,
-            name: _name.text,
-            probePort: port,
-          )
-        : false;
-    if (editing != null) {
-      await widget.provider.moveManualPeer(
-        editing.host,
-        toHost: host,
-        probePort: port,
-        name: _name.text.trim(),
-      );
-    }
-    // 同一路径也发一条附近设备探测：未配对设备会以候选形式出现在「附近
-    // 设备」，点击即走一键配对，不需要在这里输入 / 粘贴配对信息。
-    final probed = await widget.provider.probeAddress(host, probePort: port);
+    // 只有 unreachable 分支需要「重复添加」提示；命令的成功结果已能区分
+    // added / updated，这里提前记下同址条目，保持旧弹层的提示语义。
+    final duplicate =
+        editing == null &&
+        widget.provider.manualPeers.any((entry) => entry.host == host);
+    final outcome = await widget.provider.saveManualPeer(
+      host: host,
+      probePort: port,
+      name: _name.text,
+      editing: editing,
+    );
     if (!mounted) return;
-    if (!paired && probed) {
-      showSyncNoticeAndClose(context, l10n.syncNearbyManualProbeSent);
-      return;
-    }
-    final contacted = await widget.provider.contactManualPeer(host);
-    if (!mounted) return;
-    // 接触成功 / 本轮没有真正跑（null = 同步关闭 / 没有传输）都关闭弹层：
-    // 地址已入簿，只有本轮明确没连上才留在弹层里让用户改地址。
-    final message = switch (contacted) {
-      null => l10n.syncPeerContactQueued,
-      true when editing != null => l10n.syncPeerAddressUpdated,
-      true => added ? l10n.syncPeerAdded : l10n.syncPeerUpdated,
-      false => null,
+    // 接触成功 / 本轮没有真正跑（contactQueued = 同步关闭 / 没有传输）都
+    // 关闭弹层：地址已入簿，只有本轮明确没连上才留在弹层里让用户改地址。
+    final message = switch (outcome) {
+      SyncManualPeerOutcome.probeSent => l10n.syncNearbyManualProbeSent,
+      SyncManualPeerOutcome.contactQueued => l10n.syncPeerContactQueued,
+      SyncManualPeerOutcome.added => l10n.syncPeerAdded,
+      SyncManualPeerOutcome.updated when editing != null =>
+        l10n.syncPeerAddressUpdated,
+      SyncManualPeerOutcome.updated => l10n.syncPeerUpdated,
+      SyncManualPeerOutcome.unreachable => null,
     };
     if (message != null) {
       showSyncNoticeAndClose(context, message);
@@ -523,18 +502,9 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
     }
     setState(() {
       _busy = false;
-      _duplicate = editing == null && !added;
+      _duplicate = duplicate;
       _contactError = l10n.syncPeerUnreachable;
     });
-  }
-
-  /// 该地址是否已认领过设备身份（编辑态自身或地址簿里的同地址条目）。
-  bool _isKnownPairedHost(String host, ManualPeer? editing) {
-    if (editing != null && editing.deviceId.isNotEmpty) return true;
-    for (final entry in widget.provider.manualPeers) {
-      if (entry.host == host && entry.deviceId.isNotEmpty) return true;
-    }
-    return false;
   }
 
   /// 删除该地址（仅编辑态）：从地址簿移除，二次确认（不影响其它设备）。

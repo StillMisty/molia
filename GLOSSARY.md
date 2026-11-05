@@ -1102,6 +1102,13 @@
   「高级设置」子页；「落后条数」由增量协议填充。**移除设备只清本机名册与
   该设备的地址簿条目，不撤销授权**：对方仍持有口令并在线时会重新出现；真正
   撤销需更换口令。没有「本地忽略 / 屏蔽」这一层。
+- **Sync peer view（对端投影）** — `lib/providers/sync_peer_view.dart`：
+  `SyncPeerView.from(peers, manualPeers, lastReport, nowMs)` 把名册与手动地址簿
+  投影成不可变行（`SyncPeerRow` = 对端 + 手动条目 + 连接状态 + 展示名），行顺序
+  与名册一致，`connected` / `lost` / `hasConnected` 从同一份行派生；
+  `SyncProvider.peerView` 是唯一读口。设置页设备区一次构建只读一份，名册行 /
+  footer / 「重新检查连接」不再各自调用 `resolveSyncPeerConnection`。纯值对象，
+  不是 `ChangeNotifier`。
 - **Nearby devices（附近设备）** — `lib/pages/sync_settings_page.dart`：同步设置页
   首屏顺序固定为「传输方式 → 已配对设备 → 附近设备 → 同步内容 / 日志 / 高级
   设置」，设备名、口令、网络地址、端口与地址簿在 `sync_advanced_page.dart`。
@@ -1171,7 +1178,9 @@
   未配对设备通过单播 `MSP` 探测出现在「附近设备」，点击后走同一套配对请求；
   学习路径只更新身份与端口（不动地址集合）。地址簿可能累积多条地址（双栈 /
   多网卡 / 换过 IP），设备详情里可逐条更新（`moveManualPeer`，身份与已学端口
-  保留）或删除；地址以 deviceId 关联。
+  保留）或删除；地址以 deviceId 关联。手动地址表单的保存唯一命令是
+   `SyncProvider.saveManualPeer`（地址归一 → 入簿 / 移动 → 附近设备探测 →
+   立即接触，返回 `SyncManualPeerOutcome`）；弹层只把类型化结果映射成提示。
 - **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
   五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
   计数一律是本轮变更量（不随数据量增长）。

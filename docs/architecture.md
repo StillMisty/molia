@@ -556,7 +556,11 @@
   类别（默认随同步发送）也只在这里出现，外观页不再提供第二份快捷开关。
   同步页每 30 秒只重算一次相对时间（不额外跑轮次）；名册有设备但本轮全部
   未连接、且自动检查未被省电 / 移动数据暂停挡住时，设备卡给「重新检查连接」
-  （`checkConnections()` → `SyncTrigger.check`）。
+  （`checkConnections()` → `SyncTrigger.check`）。设备区连接状态由
+  `SyncProvider.peerView`（`lib/providers/sync_peer_view.dart`）一次投影：
+  名册行 / footer / 重检条件共用同一份不可变行，页面不再各自循环调用
+  `resolveSyncPeerConnection`。手动地址表单的「入簿 → 探测 → 接触」唯一命令是
+  `SyncProvider.saveManualPeer`，弹层只把 `SyncManualPeerOutcome` 映射成文案。
   **配对只有一条路径**（`data/sync/pairing/**`）：`MSP/1` 局域网附近设备发现
   （probe / announce，只做候选，不写名册、不触发同步轮次；probe 复用 MSD 的
   广播路径，多网卡也按接口各发一份，重复应答由候选缓存按 deviceId 收敛）→

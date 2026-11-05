@@ -6,11 +6,11 @@ import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_nearby_pairing.dart';
-import '../domain/models/sync_peer_status.dart';
 import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/nearby_scan_session.dart';
 import '../providers/sync_nearby_availability.dart';
+import '../providers/sync_peer_view.dart';
 import '../providers/sync_provider.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
@@ -196,35 +196,24 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     SyncProvider provider,
     AppLocalizations l10n,
   ) {
-    final manualByDevice = <String, ManualPeer>{
-      for (final entry in provider.manualPeers)
-        if (entry.deviceId.isNotEmpty) entry.deviceId: entry,
-    };
+    // 一次构建只读一份投影：名册行、footer 与重检条件不再各自循环名册。
+    final view = provider.peerView;
     return SettingsSectionCard(
       title: l10n.syncPeersSection,
-      footer: SettingsSectionHint(
-        text: _peersFooter(provider, l10n, manualByDevice),
-      ),
+      footer: SettingsSectionHint(text: _peersFooter(provider, view, l10n)),
       children: [
-        if (provider.peers.isEmpty)
+        if (view.rows.isEmpty)
           SettingsInfoTile(
             key: const Key('settingsSyncPeersEmpty'),
             icon: Icons.devices_other_rounded,
             title: l10n.syncPeersEmptyTitle,
             subtitle: l10n.syncPeersEmptySubtitle,
           ),
-        for (final peer in provider.peers)
-          _peerRow(
-            context,
-            provider,
-            l10n,
-            peer,
-            manualByDevice[peer.deviceId],
-          ),
+        for (final row in view.rows) _peerTile(context, provider, l10n, row),
         // 有名册但本轮一个都没连上：给一次受策略约束的即时检查，避免用户
         // 只能干等下一轮定时唤醒。省电 / 移动数据暂停时点了也不会跑，
         // 因此直接隐藏。
-        if (_shouldOfferRecheck(provider))
+        if (_shouldOfferRecheck(provider, view))
           SettingsNavTile(
             key: const Key('settingsSyncPeersRecheck'),
             icon: Icons.refresh_rounded,
@@ -238,17 +227,11 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
 
   /// 是否显示「重新检查连接」：名册非空、本轮报告存在且没有任何设备
   /// connected；调度器当前不允许自动检查时不显示。
-  static bool _shouldOfferRecheck(SyncProvider provider) {
-    if (provider.peers.isEmpty || provider.syncing) return false;
+  static bool _shouldOfferRecheck(SyncProvider provider, SyncPeerView view) {
+    if (view.rows.isEmpty || provider.syncing) return false;
     if (!provider.canCheckNow) return false;
-    final report = provider.lastReport;
-    if (report == null) return false;
-    final now = provider.nowMs;
-    return !provider.peers.any(
-      (peer) =>
-          resolveSyncPeerConnection(peer, report: report, nowMs: now) ==
-          SyncPeerConnectionStatus.connected,
-    );
+    if (!view.hasReport) return false;
+    return !view.hasConnected;
   }
 
   /// 设备区脚注：同步中给「正在同步…」，完成后给本轮已同步设备名（最多
@@ -260,26 +243,14 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   /// 有名册但没有报告时只能说「还没有连接记录」，不能断言本轮没连上。
   static String _peersFooter(
     SyncProvider provider,
+    SyncPeerView view,
     AppLocalizations l10n,
-    Map<String, ManualPeer> manualByDevice,
   ) {
     if (provider.syncing) return l10n.syncSyncing;
-    final report = provider.lastReport;
-    if (report == null) {
-      return provider.peers.isEmpty
-          ? l10n.syncPeersHint
-          : l10n.syncRoundNoRecords;
+    if (!view.hasReport) {
+      return view.rows.isEmpty ? l10n.syncPeersHint : l10n.syncRoundNoRecords;
     }
-    final synced = [
-      for (final peer in provider.peers)
-        if (resolveSyncPeerConnection(
-              peer,
-              report: report,
-              nowMs: provider.nowMs,
-            ) ==
-            SyncPeerConnectionStatus.connected)
-          syncPeerDisplayName(peer, manualByDevice[peer.deviceId]),
-    ];
+    final synced = [for (final row in view.connected) row.displayName];
     if (synced.isEmpty) return l10n.syncRoundNoConnectedPeers;
     final names = synced.take(2).join(l10n.syncPeerNameSeparator);
     final remaining = synced.length - 2;
@@ -423,25 +394,20 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   }
 
   /// 名册行：手动添加的对端可点开详情（含删除），广播发现的只读。
-  Widget _peerRow(
+  Widget _peerTile(
     BuildContext context,
     SyncProvider provider,
     AppLocalizations l10n,
-    SyncPeerState peer,
-    ManualPeer? manual,
+    SyncPeerRow row,
   ) {
-    final title = syncPeerDisplayName(peer, manual);
+    final peer = row.peer;
+    final manual = row.manual;
+    final title = row.displayName;
     return SettingsNavTile(
       key: Key('settingsSyncPeer-${peer.deviceId}'),
       icon: manual == null ? Icons.sync_alt_rounded : Icons.link_rounded,
       title: title,
-      subtitle: syncPeerSubtitle(
-        l10n,
-        peer,
-        manual,
-        nowMs: provider.nowMs,
-        report: provider.lastReport,
-      ),
+      subtitle: syncPeerSubtitle(l10n, row),
       onTap: () => unawaited(
         showSyncPeerDialog(
           context,
