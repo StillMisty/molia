@@ -355,8 +355,8 @@
 - **Global search overlay（搜索遮罩）** — `lib/widgets/global_search_overlay.dart`：桌面顶栏
   不再挂搜索条，最左是**品牌区**（`MoliaMark` + 应用名，整块可点）——品牌区与 Ctrl+F
   都经 `GlobalSearchController.focus()` 打开遮罩；已打开时再次 Ctrl+F 重新聚焦输入框
-  并全选。搜索条是 `ChannelSearchBar`：单层胶囊，左侧 tonal 渠道 chip
-  （`secondaryContainer` 填充）直接占据搜索图标位置，右侧裸输入 + 清除键；
+  并全选。搜索条是 `ChannelSearchBar`：单层胶囊，左侧透明背景 + 描边的渠道
+  chip 直接占据搜索图标位置，右侧裸输入 + 清除键；
   选择渠道会同时切发现内容与搜索，并把焦点还给输入框。
   结果只搜当前渠道，与资料库同一条播放语义；输入框保持焦点时 ↑↓ 移动高亮、
   Enter 播放 / 打开高亮项、Ctrl+Enter

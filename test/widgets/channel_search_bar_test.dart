@@ -111,7 +111,7 @@ void main() {
     );
   });
 
-  testWidgets('渠道 chip：secondaryContainer 填充、无描边、四周内缩', (tester) async {
+  testWidgets('渠道 chip：透明背景 + outlineVariant 描边、四周内缩', (tester) async {
     await pumpBar(
       tester,
       channels: [channel('kw', '酷我音乐'), channel('tx', 'QQ音乐')],
@@ -127,15 +127,17 @@ void main() {
     final chipRect = tester.getRect(chipFinder);
     final text = tester.widget<Text>(selectedText);
 
-    expect(chip.color, scheme.secondaryContainer);
-    expect(text.style?.color, scheme.onSecondaryContainer);
+    expect(chip.color, Colors.transparent, reason: '露出外层搜索胶囊底色');
+    expect(text.style?.color, scheme.onSurface);
     expect(
       chip.shape,
-      isA<RoundedRectangleBorder>().having(
-        (shape) => shape.side,
-        'side',
-        BorderSide.none,
-      ),
+      isA<RoundedRectangleBorder>()
+          .having(
+            (shape) => shape.side.color,
+            'side color',
+            scheme.outlineVariant,
+          )
+          .having((shape) => shape.side.width, 'side width', greaterThan(0)),
     );
     expect(chipRect.left - barRect.left, greaterThanOrEqualTo(5));
     expect(chipRect.top - barRect.top, greaterThanOrEqualTo(5));
