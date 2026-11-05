@@ -929,15 +929,21 @@
 （下载一首 / 一批：取链 / 缓存拷贝 / 分项 / 标签 / 发布 / 落库），
 `download_queue.dart` 是任务队列（严格串行 FIFO / 去重 / 取消 / 重试 /
 进度通道）；组合根（`main.dart`）注入取链 / 取词 / 取图 / 缓存 / 设置与省流
-上限；任务队列、命名 / 放置、任务产物、记录装配、提交日志与通知 presenter
-是独立 module（见下）：
+上限；任务队列、命名 / 放置、任务产物、记录装配、记录写入、文件维护、提交
+日志与通知 presenter 是独立 module（见下）：
 
 - **模块拆分**：`DownloadService` 只做编排，各 module 各有一份唯一实现——
   `lib/services/download/download_records.dart`（记录只读面：记录表 / 排序
   列表 / `initialized` / `supported` / `revision` 的唯一持有者；收藏、单曲
   本地数据与分享只依赖它，下载进度不经过这里）、
+  `lib/services/download/download_record_store.dart`（记录写入：drift 行 →
+  内存记录 → marker 的唯一顺序；完成 / 恢复走 `clearJournal`，删除同时清
+  残留 marker；不是 `ChangeNotifier`，读模型仍是 `DownloadRecords`）、
   `lib/services/download/download_manager.dart`（命令面：管理页 / 本地数据页 /
-  分享 / 导入使用的窄接口，唯一实现是 `DownloadService`）、
+  分享 / 导入使用的窄接口，只含任务与下载命令，唯一实现是 `DownloadService`）、
+  `lib/services/download/download_maintenance.dart`（文件维护面：目录展示 /
+  `.part` 清扫 / 孤儿回收 / 补发布的窄接口，唯一实现也是 `DownloadService`；
+  与命令面分开注册，页面按需读取）、
   `lib/services/download/download_queue.dart`（下载任务队列：`DownloadTask`
   进度 / 状态、单 worker FIFO、同 key 去重、排队 / 运行取消、失败保留重试；
   不持久化、无跨重启恢复）、
@@ -1042,7 +1048,9 @@
   歌词或只含封面；`publicUri` 存 Android 公共副本定位；`imported` 标记
   **本地导入**：就地引用用户文件、删除只移行）存原音源曲目键 +
   自包含快照 + 原 raw + 音频路径/音质/大小 + 歌词/封面路径；
-  `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；
+  `DownloadsRepository` 负责行 ↔ `DownloadedTrack` 映射；所有写入统一经
+  `DownloadRecordStore`（先写仓库再更新内存记录，完成 / 恢复后清 marker，
+  删除时连残留 marker 一起清），服务不再自己拼这三步；
   半成品 `.part` → 原子改名 → 落库，播放取链只认数据库记录；启动时先恢复
   提交日志，再清扫崩溃遗留 `.part`；
 - **下载提交日志 / 崩溃恢复**：`lib/services/download/download_journal.dart`
@@ -1105,7 +1113,9 @@
   （已下载 / 已缓存 · 可离线使用 / 下载中 / 未下载）+ 动作（下载 / 转存到本地
   文件夹 / 取消 / 分享导出 / 删除下载）+ 歌词/封面各自下载或转存 + 缓存占用
   四项（音频 / 歌词 / 封面 / 取链）逐项清理与全部清理；
-  下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储）：
+  下载管理页（`lib/pages/downloads_manage_page.dart`，设置 › 数据与存储；
+  任务 / 批量 / 删除读 `DownloadManager`，目录 / 清扫 / 孤儿 / 补发布读
+  `DownloadMaintenance`）：
   **任务区只展示运行 / 等待 / 失败**（运行在前；等待超过 20 首折叠成「还有
   N 首等待中」），任务区订阅队列结构、每行只订阅自己的 `DownloadTask` 进度，
   不再整页 10Hz 重建；失败区给出原因 + 单条重试 / 移除 + 顶部全部重试；

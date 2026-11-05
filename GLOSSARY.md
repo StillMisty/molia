@@ -1264,14 +1264,26 @@
 - **Download records（下载记录只读面）** — `lib/services/download/download_records.dart`：
   下载记录表、排序列表缓存、`initialized` / `supported` 与 `revision` 的唯一
   持有者；收藏 / 单曲本地数据 / 分享只依赖它，下载进度永远不经过这里（进度属于
-  `DownloadTask`）。
+  `DownloadTask`）。写入只经 Download record store，页面不得自行改表。
+- **Download record store（下载记录存储）** — `lib/services/download/download_record_store.dart`：
+  一条下载记录的三处写入（drift 行 → 内存记录 → 提交日志 marker）的唯一实现。
+  `save` 先落库再更新 `DownloadRecords`（UI 不会先看到未持久化的记录），
+  `clearJournal` 用于完成 / 恢复路径；`deleteRecord` 删库行、内存记录与可能
+  残留的 marker（删除即视为没有未完成提交）；`markPending` / `pending` /
+  `removePending` 把崩溃恢复窗口收在同一处。它不是 `ChangeNotifier`，可监听
+  读模型仍是 `DownloadRecords`。
 - **Download manager（下载命令面）** — `lib/services/download/download_manager.dart`：
-  管理页 / 本地数据页 / 分享 / 导入使用的窄命令接口；`DownloadService` 是唯一
-  实现，队列 / journal / 文件放置仍只有一份。
+  管理页 / 本地数据页 / 分享 / 导入使用的窄命令接口（任务 / 下载 / 取消 / 删除 /
+  导入 / 取链查询）；`DownloadService` 是唯一实现，队列 / journal / 文件放置
+  仍只有一份。文件维护不在这里，见 Download maintenance。
+- **Download maintenance（下载文件维护面）** — `lib/services/download/download_maintenance.dart`：
+  目录展示 / `.part` 清扫 / 孤儿扫描与删除 / Android 公共副本补发布的窄接口，
+  唯一实现是 `DownloadService`。与命令面分开注册：管理页任务区只依赖
+  `DownloadManager`，设置页看下载目录只需要维护端口。
 - **Download record assembler（下载记录装配模块）** — `lib/services/download/download_record_assembler.dart`：部分状态 → `DownloadedTrack`（16 字段）的唯一装配点，四种形态各一个意图方法：`forAudioDownload`（完整下载 + 分项合并 / 公共副本回退）、`forPartialDownload`（分项更新保留已有音频与另一分项）、`forLocalImport`（就地引用）、`republished`（补发布只补定位）。`downloadedAt` 走注入时钟，记录既有时间不重取；`DownloadService` 不再感知记录字段。
 - **Download notification presenter（下载通知 presenter 模块）** — `lib/services/download/download_notification_presenter.dart`：下载生命周期 → 系统通知 start / update / stop 的唯一实现（单任务 id `track:{key}`、批量共享 `batch`「N/N」、500ms 系统频率节流「首片 / 窗口 / 完成突破」、收尾只收自己起过的——中途关掉开关也不残留）；端口（`DownloadNotifications`）/ 设置开关 / 时钟都可注入，编排与其测试不依赖 Android。批量并发调用不抢占（同一时刻只有一条批量通知）。
 - **Download task（下载任务）** — `DownloadTask`（`lib/services/download/download_queue.dart`）：一条任务的唯一状态载体，键 = `track.id.uri`（分项任务追加 `#lyrics` / `#cover`），持有曲目 / 任务种类 / 音质 / 是否带歌词封面 / 批量位置，以及状态（queued / running / completed / failed / cancelled）、进度与失败原因。进度只由任务自己 notify（100ms 合并，首个分片 / 100% / 终态立即送达），队列与服务不在进度时通知；音频失败任务保留供本次进程重试，完成 / 取消即移出队列。
 - **Download queue（下载队列）** — `DownloadQueue`（`lib/services/download/download_queue.dart`）：下载任务全局严格串行 FIFO 的唯一实现（单 worker，`scheduleMicrotask` 启动）。`enqueue` 同步进等待列表（批量一次入队全部）；同 key 已有排队 / 运行任务返回同一 future，失败 / 取消再入队则替换；`cancelQueued` 撤排队任务，运行中由服务取消 dio `CancelToken`；失败音频保留、分项失败自动移除，重试会新建不带批量位置的任务。**不持久化、无跨重启恢复**，重启只保留既有 `.part` 清扫。
 - **Download journal（下载提交日志）** — `lib/services/download/download_journal.dart`：文件型 write-ahead journal，只覆盖「音频 `.part` 写完 → rename → DB 落库」这段提交窗口。位置是应用支持目录 `download_journal/`（`DownloadStorage.journalRoot()`），与下载根 / 公共目录解耦；marker 为 `<md5(key)>.json`，`.tmp` + rename 原子写；写入失败会在 rename 前中止下载，不把没有恢复保障的文件落成最终文件。音频 `.part` 写完后、rename 前写 pending `DownloadedTrack`，最终落库后删除；启动时 `init` 在 `.part` 清扫前恢复：文件存在则补库，已有音频记录或文件不存在则删 marker（仅歌词 / 封面的分项记录不算已落库），补库失败保留 marker 下次再试。它**不是队列持久化**：排队 / 失败任务与并发语义完全不变，重启仍清空。
 - **Download progress channel（下载进度通道）** — 下载进度的消费面：`DownloadTask`（UI，100ms 合并）与系统通知 presenter（逐分块上报、500ms 节流）两条独立通道；`DownloadService` 仍是 `ChangeNotifier`，但只通知记录 / 能力 / 初始化变化，不再转发进度。旧 `progressForTrack` 作为 `taskForTrack(track)?.progress` 的兼容入口保留。
-- **Download management page（下载管理页）** — `lib/pages/downloads_manage_page.dart`（设置 › 数据与存储）：任务区只展示运行 / 等待 / 失败（等待超 20 首折叠），任务区订阅 `taskChanges`、每行订阅自己的任务；失败区可单条重试 / 移除与全部重试；**不展示已完成列表**（已完成在收藏 › 本地歌曲）。批量下载只入队不锁页；文件维护（`.part` 清扫 / 孤儿回收 / Android 补发布）单独 busy；孤儿扫描只认应用格式（音频 / `.lrc` / 封面图片），确认弹层展示数量与文件名；省流生效时下载前先确认。
+- **Download management page（下载管理页）** — `lib/pages/downloads_manage_page.dart`（设置 › 数据与存储）：任务区只展示运行 / 等待 / 失败（等待超 20 首折叠），任务区订阅 `taskChanges`、每行订阅自己的任务；失败区可单条重试 / 移除与全部重试；**不展示已完成列表**（已完成在收藏 › 本地歌曲）。批量下载只入队不锁页；文件维护（`.part` 清扫 / 孤儿回收 / Android 补发布）经 `DownloadMaintenance` 单独 busy；孤儿扫描只认应用格式（音频 / `.lrc` / 封面图片），确认弹层展示数量与文件名；省流生效时下载前先确认。

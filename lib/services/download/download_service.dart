@@ -41,6 +41,8 @@
 ///   sidecar 路径约定）；
 /// - 任务产物：`download_task_artifacts.dart`（活跃输出登记 + sidecar 写入）；
 /// - 记录装配：`download_record_assembler.dart`（部分状态 → `DownloadedTrack`）；
+/// - 记录写入：`download_record_store.dart`（drift 行 + 内存记录 + marker
+///   三步的唯一写入顺序）；
 /// - 通知 presenter：`download_notification_presenter.dart`（id 分配 / 批量
 ///   共享一条 / 系统频率节流 / 收尾不残留；端口由组合根注入）。
 library;
@@ -70,10 +72,12 @@ import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
 import 'download_journal.dart';
+import 'download_maintenance.dart';
 import 'download_manager.dart';
 import 'download_notification_presenter.dart';
 import 'download_queue.dart';
 import 'download_record_assembler.dart';
+import 'download_record_store.dart';
 import 'download_records.dart';
 import 'download_settings.dart';
 import 'download_task_artifacts.dart';
@@ -88,10 +92,10 @@ typedef DownloadLyricsResolver = Future<DownloadLyrics?> Function(Track track);
 typedef DownloadArtworkResolver = Future<String?> Function(Track track);
 
 /// 本地下载服务（`ChangeNotifier`：UI 用 `Selector` 订阅状态）。
-class DownloadService extends DownloadManager {
+class DownloadService extends DownloadManager implements DownloadMaintenance {
   DownloadService({
     required this._catalog,
-    required this._repository,
+    required DownloadsRepository repository,
     required DownloadStorage storage,
     Dio? dio,
     this._lyricsResolver,
@@ -111,17 +115,19 @@ class DownloadService extends DownloadManager {
        _clock = clock,
        _layout = DownloadFileLayout(storage: storage, settings: settings),
        _assembler = DownloadRecordAssembler(clock: clock),
-       _journal = DownloadJournal(storage),
+       _recordStore = DownloadRecordStore(
+         repository: repository,
+         journal: DownloadJournal(storage),
+       ),
        _notifications = DownloadNotificationPresenter(
          notifications: notifications ?? createDownloadNotifications(),
          settings: settings,
          clock: clock,
        ) {
-    _downloadRecords.addListener(_forwardRecords);
+    _recordStore.records.addListener(_forwardRecords);
   }
 
   final CatalogService _catalog;
-  final DownloadsRepository _repository;
   final DownloadStorage _storage;
   final Dio _dio;
   final DownloadLyricsResolver? _lyricsResolver;
@@ -151,9 +157,6 @@ class DownloadService extends DownloadManager {
   /// `download_record_assembler.dart`）。
   final DownloadRecordAssembler _assembler;
 
-  /// 下载提交日志：rename 前写 pending，落库后删除（崩溃恢复用）。
-  final DownloadJournal _journal;
-
   /// 通知 presenter 模块：id 分配、批量共享、系统频率节流与收尾不残留的
   /// 唯一实现（见 `download_notification_presenter.dart`；端口由组合根注入
   /// `createDownloadNotifications()`，未注入 / 非 Android 时整体 no-op）。
@@ -161,18 +164,18 @@ class DownloadService extends DownloadManager {
 
   final Logger _logger = Logger('molia.download_service');
 
-  /// 下载记录唯一持有者：记录表 / 排序列表 / 就绪与能力位都只在这里。
+  /// 记录写入模块：drift 仓库 + 内存记录 + 提交日志的唯一写入顺序。
   ///
-  /// 服务只负责把 drift 写入与记录写入保持同一顺序；页面经 Provider 读取
-  /// [records]，不感知下载队列与文件布局。
-  final DownloadRecords _downloadRecords = DownloadRecords();
+  /// 服务只表达「保存 / 删除 / 待恢复」；页面经 Provider 读取 [records]，
+  /// 不感知下载队列与文件布局。
+  final DownloadRecordStore _recordStore;
 
   /// 记录通知转发：管理面监听者（能力位 / 就绪态）可只依赖
   /// [DownloadManager]；记录消费者直接监听 [records]。
   late final VoidCallback _forwardRecords = notifyListeners;
 
   /// 下载记录只读入口（组合根挂 Provider；测试直接读）。
-  DownloadRecords get records => _downloadRecords;
+  DownloadRecords get records => _recordStore.records;
 
   /// 运行中任务的 dio 取消令牌（只给网络下载用；排队取消由队列处理）。
   final Map<String, CancelToken> _tokens = {};
@@ -205,7 +208,7 @@ class DownloadService extends DownloadManager {
   /// 下载目录是否可用（无文件系统 / 目录解析失败时为 false，UI 隐藏下载
   /// 入口）。
   @override
-  bool get supported => _downloadRecords.supported;
+  bool get supported => _recordStore.records.supported;
 
   /// 是否支持发布公共 Downloads 副本（仅 Android；UI 据此显隐发布设置 /
   /// 补发布入口）。
@@ -218,7 +221,7 @@ class DownloadService extends DownloadManager {
 
   /// 记录是否已加载（启动时 [init] 一次）。
   @override
-  bool get initialized => _downloadRecords.initialized;
+  bool get initialized => _recordStore.records.initialized;
 
   /// 任务结构变化（增删 / 状态切换）：页面任务区只监听这里。
   @override
@@ -326,7 +329,7 @@ class DownloadService extends DownloadManager {
 
   /// 当前不能被当作孤儿删除的路径：记录引用 + 运行中任务的输出。
   Set<String> _protectedPaths() => {
-    for (final record in _downloadRecords.downloads)
+    for (final record in _recordStore.records.downloads)
       ...DownloadFileLayout.referencedFiles(record),
     ..._activeOutputs.paths,
   };
@@ -386,7 +389,9 @@ class DownloadService extends DownloadManager {
     for (var index = 0; index < items.length; index++) {
       final track = items[index];
       if (track.id.sourceKey == kLocalSourceKey) continue;
-      if (_downloadRecords.recordForTrack(track)?.hasAudio ?? false) continue;
+      if (_recordStore.records.recordForTrack(track)?.hasAudio ?? false) {
+        continue;
+      }
       // active 任务不 join 批次：与页面「已加入数」口径一致。
       if (taskForTrack(track)?.isActive ?? false) continue;
       if (!seen.add(track.id.uri)) continue;
@@ -497,11 +502,10 @@ class DownloadService extends DownloadManager {
   Future<void> _init() async {
     try {
       final supported = await _storage.downloadsRoot() != null;
-      _downloadRecords.setSupported(supported);
+      _recordStore.records.setSupported(supported);
       // 存储不可用时不触碰数据库：本机下载整体关闭。
       if (supported) {
-        final records = await _repository.listAll();
-        _downloadRecords.replaceAll(records);
+        await _recordStore.load();
         // 先恢复「文件已 rename、记录未落库」的提交，再清扫 .part；否则
         // 恢复失败时 .part 与 marker 会被重复处理。
         await _recoverPendingDownloads();
@@ -512,7 +516,7 @@ class DownloadService extends DownloadManager {
     } catch (e) {
       _logger.warning('下载初始化失败: $e');
     } finally {
-      _downloadRecords.markInitialized();
+      _recordStore.records.markInitialized();
     }
   }
 
@@ -522,29 +526,27 @@ class DownloadService extends DownloadManager {
   /// 崩溃在 rename 前（交给 `.part` 清扫），已有同 key 记录说明落库成功但
   /// marker 未删。两种情况都只删 marker，不覆盖已有记录。
   Future<void> _recoverPendingDownloads() async {
-    final entries = await _journal.readAll();
+    final entries = await _recordStore.pending();
     var recovered = 0;
     for (final entry in entries) {
       final record = entry.record;
       try {
-        final existing = _downloadRecords.recordFor(
+        final existing = _recordStore.records.recordFor(
           record.originSourceKey,
           record.originSongId,
         );
         // 只有「已有音频」才说明落库成功。分项记录（仅歌词 / 封面）不能
         // 代表音频已落库，marker 仍要用来恢复音频。
         if (existing != null && existing.hasAudio) {
-          await _journal.removePath(entry.markerPath);
+          await _recordStore.removePending(entry.markerPath);
           continue;
         }
         final path = record.filePath;
         if (path == null || path.isEmpty || !await _storage.fileExists(path)) {
-          await _journal.removePath(entry.markerPath);
+          await _recordStore.removePending(entry.markerPath);
           continue;
         }
-        await _repository.insert(record);
-        _downloadRecords.put(record);
-        await _journal.removePath(entry.markerPath);
+        await _recordStore.save(record, clearJournal: true);
         recovered++;
       } catch (e) {
         // 保留 marker：下次启动再试；不能因为一条坏记录阻断整个初始化。
@@ -556,7 +558,7 @@ class DownloadService extends DownloadManager {
 
   /// 等待记录加载完成；已就绪时是同步空操作，不额外占用事件循环。
   Future<void> _ensureReady() async {
-    if (!_downloadRecords.initialized) await ready;
+    if (!_recordStore.records.initialized) await ready;
   }
 
   /// 下载 [track] 的音频（原音源曲目）；完成后自动落库。
@@ -577,7 +579,7 @@ class DownloadService extends DownloadManager {
   }) async {
     await _ensureReady();
     _guardDownloadable(track);
-    final existing = _downloadRecords.recordFor(
+    final existing = _recordStore.records.recordFor(
       track.id.sourceKey,
       track.id.id,
     );
@@ -739,9 +741,12 @@ class DownloadService extends DownloadManager {
         quality: resolvedQuality,
         filePath: targetPath,
         sizeBytes: size,
-        previous: _downloadRecords.recordFor(track.id.sourceKey, track.id.id),
+        previous: _recordStore.records.recordFor(
+          track.id.sourceKey,
+          track.id.id,
+        ),
       );
-      final journalOk = await _journal.write(pending);
+      final journalOk = await _recordStore.markPending(pending);
       if (!journalOk) {
         throw const SourceFailure(
           kind: FailureKind.unknown,
@@ -808,14 +813,12 @@ class DownloadService extends DownloadManager {
         publicUri: publicUri,
         previous: pending,
       );
-      await _repository.insert(record);
-      _downloadRecords.put(record);
+      await _recordStore.save(record, clearJournal: true);
       _logger.info('下载完成: $key -> $filePath (${record.sizeLabel})');
-      await _journal.remove(key);
       journalWritten = false;
     } catch (e) {
       if (journalWritten) {
-        await _journal.remove(key);
+        await _recordStore.removePendingByKey(key);
         journalWritten = false;
       }
       await _cleanupFailedDownload(
@@ -905,8 +908,7 @@ class DownloadService extends DownloadManager {
   /// 本地导入（`imported`）是就地引用：只移除记录，**不动用户原文件**。
   @override
   Future<void> delete(DownloadedTrack record) async {
-    await _repository.delete(record.originSourceKey, record.originSongId);
-    _downloadRecords.remove(record.key);
+    await _recordStore.deleteRecord(record);
     if (!record.imported) {
       // 记录引用的文件集（音频 / 歌词 / 翻译边车 / 封面）：约定见放置模块。
       for (final path in DownloadFileLayout.referencedFiles(record)) {
@@ -932,7 +934,7 @@ class DownloadService extends DownloadManager {
     await _ensureReady();
     var imported = 0;
     var skipped = 0;
-    if (!_downloadRecords.supported) return (0, paths.length);
+    if (!_recordStore.records.supported) return (0, paths.length);
     for (final rawPath in paths) {
       final path = p.normalize(rawPath.trim());
       // 后缀不带点（`audioExtensions` 约定）；标签解析要带点的原始后缀。
@@ -960,8 +962,7 @@ class DownloadService extends DownloadManager {
         album: tags.album ?? '',
         durationMs: tags.durationMs,
       );
-      await _repository.insert(record);
-      _downloadRecords.put(record);
+      await _recordStore.save(record);
       imported++;
     }
     return (imported, skipped);
@@ -976,7 +977,7 @@ class DownloadService extends DownloadManager {
     await _ensureReady();
     var published = 0;
     var failed = 0;
-    for (final record in _downloadRecords.downloads) {
+    for (final record in _recordStore.records.downloads) {
       // 本地导入是就地引用：不发布到公共 Downloads（文件本来就在用户目录）。
       if (record.imported) continue;
       final audio = record.filePath;
@@ -993,8 +994,7 @@ class DownloadService extends DownloadManager {
         continue;
       }
       final updated = _assembler.republished(record, uri);
-      await _repository.insert(updated);
-      _downloadRecords.put(updated);
+      await _recordStore.save(updated);
       published++;
     }
     return (published, failed);
@@ -1010,7 +1010,10 @@ class DownloadService extends DownloadManager {
   Future<Uri?> localUriFor(Track track, {String? quality}) async {
     if (track.id.sourceKey == kLocalSourceKey) return null;
     await _ensureReady();
-    final record = _downloadRecords.recordFor(track.id.sourceKey, track.id.id);
+    final record = _recordStore.records.recordFor(
+      track.id.sourceKey,
+      track.id.id,
+    );
     final path = record?.filePath;
     if (path != null && path.isNotEmpty && await _storage.fileExists(path)) {
       return Uri.file(path);
@@ -1106,7 +1109,7 @@ class DownloadService extends DownloadManager {
     String? lyricPath,
     String? coverPath,
   }) async {
-    final existing = _downloadRecords.recordFor(
+    final existing = _recordStore.records.recordFor(
       track.id.sourceKey,
       track.id.id,
     );
@@ -1116,14 +1119,13 @@ class DownloadService extends DownloadManager {
       lyricPath: lyricPath,
       coverPath: coverPath,
     );
-    await _repository.insert(record);
-    _downloadRecords.put(record);
+    await _recordStore.save(record);
   }
 
   /// 已有音频时把（sidecar 里的）歌词 / 封面补写进标签。
   Future<void> _embedTagsFromFiles(Track track) async {
     if (!(_settings?.embedTags ?? true)) return;
-    final record = _downloadRecords.recordForTrack(track);
+    final record = _recordStore.records.recordForTrack(track);
     final audioPath = record?.filePath;
     if (record == null || audioPath == null) return;
     String? lyrics;
@@ -1298,7 +1300,7 @@ class DownloadService extends DownloadManager {
         desiredBase: _layout.baseNameFor(track),
         extension: extension,
         reservedPaths: [
-          for (final record in _downloadRecords.downloads) record.filePath,
+          for (final record in _recordStore.records.downloads) record.filePath,
         ],
       );
 
@@ -1342,8 +1344,8 @@ class DownloadService extends DownloadManager {
     }
     _tokens.clear();
     _queue.dispose();
-    _downloadRecords.removeListener(_forwardRecords);
-    _downloadRecords.dispose();
+    _recordStore.records.removeListener(_forwardRecords);
+    _recordStore.records.dispose();
     super.dispose();
   }
 }
@@ -1356,7 +1358,7 @@ class _ServiceDownloadArtifactRecords implements DownloadArtifactRecords {
 
   @override
   DownloadedTrack? recordForTrack(Track track) =>
-      _service._downloadRecords.recordForTrack(track);
+      _service._recordStore.records.recordForTrack(track);
 
   @override
   Future<void> upsertPart(

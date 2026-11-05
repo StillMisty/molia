@@ -28,6 +28,7 @@ import '../../services/ai/ai_settings_store.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/cache_service.dart';
 import '../../services/covers/custom_cover_store.dart';
+import '../../services/download/download_maintenance.dart';
 import '../../services/download/download_manager.dart';
 import '../../services/download/download_records.dart';
 import '../../services/notification_service.dart';
@@ -170,6 +171,9 @@ List<SingleChildWidget> buildAppProviders({
     // 下载命令面：管理页 / 本地数据页 / 分享弹层 / 导入流程只依赖窄接口。
     // 队列 / 提交日志 / 文件放置仍只有 DownloadService 一份实现。
     ChangeNotifierProvider<DownloadManager>.value(value: downloadService),
+    // 下载文件维护面：目录展示 / 半成品清扫 / 孤儿回收 / 补发布。与命令面
+    // 分开注册，页面不需要为看目录而拿到整个下载服务。
+    Provider<DownloadMaintenance>.value(value: downloadService),
     // 下载设置：保存位置 / 文件名格式 / 标签嵌入（设置页读写）。
     ChangeNotifierProvider.value(value: local.downloadSettings),
     Provider<NotificationService>.value(value: notifications),

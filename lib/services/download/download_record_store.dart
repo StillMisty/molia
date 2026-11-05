@@ -1,0 +1,74 @@
+/// 下载记录写入的唯一入口：内存记录表 + drift 仓库 + 崩溃恢复提交日志。
+///
+/// 为什么单独一层：一条记录要在三处保持一致——drift 行、UI 读取的内存表、
+/// 以及「文件已 rename、记录未落库」窗口里的提交日志 marker。原先每次写入
+/// 由 `DownloadService` 手写这三步，新增一个写入点就可能漏掉顺序或 marker；
+/// 收口后调用方只表达意图（保存 / 删除 / 待恢复），顺序由这里保证。
+///
+/// 本类不是 [ChangeNotifier]：可监听的读模型是 [records]，页面直接订阅它。
+library;
+
+import '../../data/downloads/downloads_repository.dart';
+import '../../domain/models/download.dart';
+import 'download_journal.dart';
+import 'download_records.dart';
+
+/// 下载记录存储（由 `DownloadService` 持有并调用）。
+class DownloadRecordStore {
+  DownloadRecordStore({
+    required this._repository,
+    required this._journal,
+    DownloadRecords? records,
+  }) : _records = records ?? DownloadRecords();
+
+  final DownloadsRepository _repository;
+  final DownloadJournal _journal;
+  final DownloadRecords _records;
+
+  /// 内存记录表 / 可监听读模型（UI 只订阅它）。
+  DownloadRecords get records => _records;
+
+  /// 启动时把 drift 全表灌进内存表。
+  Future<void> load() async {
+    _records.replaceAll(await _repository.listAll());
+  }
+
+  /// 保存一条记录（落库 → 更新内存 → 可选清 marker）。
+  ///
+  /// 先写仓库再更新内存：UI 永远不会先看到一条实际没落库的记录。[clearJournal]
+  /// 用于「marker 只在文件已就位、记录未落库的窗口存在」的完成路径。
+  Future<void> save(DownloadedTrack record, {bool clearJournal = false}) async {
+    await _repository.insert(record);
+    records.put(record);
+    if (clearJournal) await _journal.remove(record.key);
+  }
+
+  /// 删除一条记录（库行 → 内存 → marker）。
+  ///
+  /// 删除意味着「这首已经不在本地」：顺手清掉可能残留的 marker，避免下次
+  /// 启动把一条已删除的下载又恢复回来。清 marker 失败不影响删除结果。
+  Future<void> deleteRecord(DownloadedTrack record) async {
+    await _repository.delete(record.originSourceKey, record.originSongId);
+    records.remove(record.key);
+    await _journal.remove(record.key);
+  }
+
+  /// 在音频 rename 前写一条 pending marker。
+  ///
+  /// 返回 false 表示这次提交没有崩溃保护，调用方必须在 rename 前中止。
+  Future<bool> markPending(DownloadedTrack record) => _journal.write(record);
+
+  /// 读取全部有效 pending marker（启动恢复用）。
+  Future<List<({String markerPath, DownloadedTrack record})>> pending() =>
+      _journal.readAll();
+
+  /// 删除读取时拿到的 marker（已有记录 / 文件不存在等只清理场景）。
+  Future<void> removePending(String markerPath) =>
+      _journal.removePath(markerPath);
+
+  /// 按记录键丢弃 marker（下载失败 / 取消时只持有键）。
+  ///
+  /// 与 [removePending] 的差别只是入参形态：marker 路径由 journal 约定，
+  /// 调用方不必知道 `<md5(key)>.json` 的细节。
+  Future<void> removePendingByKey(String key) => _journal.remove(key);
+}

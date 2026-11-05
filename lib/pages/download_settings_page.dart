@@ -14,6 +14,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../l10n/app_localizations.dart';
+import '../services/download/download_maintenance.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_settings.dart';
 import '../services/notification_permission.dart';
@@ -39,6 +40,7 @@ class DownloadSettingsPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final settings = context.watch<DownloadSettings>();
     final downloads = context.watch<DownloadManager?>();
+    final maintenance = context.read<DownloadMaintenance?>();
     final saveAs = context.read<SaveAs?>();
     return SettingsSubPage(
       title: l10n.downloadSettingsTitle,
@@ -116,7 +118,9 @@ class DownloadSettingsPage extends StatelessWidget {
         // 「下载」）”；桌面 / iOS 的下载根本身就是另存目录。
         SettingsSectionCard(
           children: [
-            if (downloads == null || !downloads.supported)
+            if (downloads == null ||
+                maintenance == null ||
+                !downloads.supported)
               SettingsInfoTile(
                 key: const Key('downloadLocationInfoItem'),
                 icon: Icons.download_rounded,
@@ -127,7 +131,7 @@ class DownloadSettingsPage extends StatelessWidget {
               )
             else ...[
               FutureBuilder<String?>(
-                future: downloads.rootPath(),
+                future: maintenance.rootPath(),
                 builder: (context, snapshot) => SettingsInfoTile(
                   key: const Key('downloadLocationInfoItem'),
                   icon: _isAndroid

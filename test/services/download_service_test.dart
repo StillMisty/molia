@@ -814,7 +814,11 @@ void main() {
         isTrue,
         reason: '不动原文件',
       );
-      expect(storage.deleted, isEmpty, reason: '不触发任何删除');
+      expect(
+        storage.deleted.where((path) => !path.startsWith('/download_journal/')),
+        isEmpty,
+        reason: '不触发任何用户文件删除（只清理可能残留的提交 marker）',
+      );
     });
 
     test('补发布：跳过导入项', () async {

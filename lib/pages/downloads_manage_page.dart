@@ -21,6 +21,7 @@ import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../services/download/download_maintenance.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_queue.dart';
 import '../services/notification_service.dart';
@@ -46,17 +47,18 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   /// 维护动作（清扫 / 补发布 / 孤儿删除）单独占用，不影响下载操作。
   bool _busy = false;
 
-  /// 下载根目录 Future：只在服务实例变化时重建，记录 / 任务变化不重新解析。
-  DownloadManager? _rootService;
+  /// 下载根目录 Future：只在维护端口实例变化时重建，记录 / 任务变化不重新
+  /// 解析。
+  DownloadMaintenance? _rootMaintenance;
   Future<String?>? _rootPath;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final downloads = context.read<DownloadManager?>();
-    if (!identical(downloads, _rootService)) {
-      _rootService = downloads;
-      _rootPath = downloads?.rootPath() ?? Future<String?>.value();
+    final maintenance = context.read<DownloadMaintenance?>();
+    if (!identical(maintenance, _rootMaintenance)) {
+      _rootMaintenance = maintenance;
+      _rootPath = maintenance?.rootPath() ?? Future<String?>.value();
     }
   }
 
@@ -64,6 +66,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final downloads = context.watch<DownloadManager?>();
+    final maintenance = context.read<DownloadMaintenance?>();
     final queueLength = context.select<PlaybackProvider, int>(
       (provider) => provider.snapshot.queue.length,
     );
@@ -119,9 +122,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               icon: Icons.cleaning_services_rounded,
               title: l10n.downloadsCleanupParts,
               subtitle: l10n.downloadsCleanupPartsSubtitle,
-              onTap: _busy || downloads == null
+              onTap: _busy || maintenance == null
                   ? null
-                  : () => unawaited(_cleanupParts(downloads)),
+                  : () => unawaited(_cleanupParts(maintenance)),
             ),
             SettingsNavTile(
               key: const Key('downloadsCleanupOrphansItem'),
@@ -129,9 +132,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
               title: l10n.downloadsCleanupOrphans,
               subtitle: l10n.downloadsCleanupOrphansSubtitle,
               isDestructive: true,
-              onTap: _busy || downloads == null
+              onTap: _busy || maintenance == null
                   ? null
-                  : () => unawaited(_cleanupOrphans(downloads)),
+                  : () => unawaited(_cleanupOrphans(maintenance)),
             ),
             // 公共目录补发布只在 Android 有语义（其余平台下载根目录本身
             // 就是公共目录）。
@@ -141,9 +144,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                 icon: Icons.public_rounded,
                 title: l10n.downloadsPublishPublic,
                 subtitle: l10n.downloadsPublishPublicSubtitle,
-                onTap: _busy || downloads == null
+                onTap: _busy || maintenance == null
                     ? null
-                    : () => unawaited(_publishPublic(downloads)),
+                    : () => unawaited(_publishPublic(maintenance)),
               ),
             FutureBuilder<String?>(
               future: _rootPath,
@@ -440,11 +443,12 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 补发布：把还没有公共副本的下载拷进系统「下载」目录（Android）。
-  Future<void> _publishPublic(DownloadManager downloads) async {
+  Future<void> _publishPublic(DownloadMaintenance maintenance) async {
     final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
-      final (published, failed) = await downloads.publishMissingPublicCopies();
+      final (published, failed) = await maintenance
+          .publishMissingPublicCopies();
       if (!mounted) return;
       _showMessage(l10n.downloadsPublishPublicDone(published, failed));
     } finally {
@@ -452,11 +456,11 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     }
   }
 
-  Future<void> _cleanupParts(DownloadManager downloads) async {
+  Future<void> _cleanupParts(DownloadMaintenance maintenance) async {
     final l10n = AppLocalizations.of(context)!;
     setState(() => _busy = true);
     try {
-      final count = await downloads.cleanupIncompleteDownloads();
+      final count = await maintenance.cleanupIncompleteDownloads();
       if (!mounted) return;
       _showMessage(l10n.downloadsCleanupPartsDone(count));
     } finally {
@@ -465,9 +469,9 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 孤儿清理：先扫描可识别文件并展示数量 / 前几个文件名，确认后再删。
-  Future<void> _cleanupOrphans(DownloadManager downloads) async {
+  Future<void> _cleanupOrphans(DownloadMaintenance maintenance) async {
     final l10n = AppLocalizations.of(context)!;
-    final orphans = await downloads.orphanFiles();
+    final orphans = await maintenance.orphanFiles();
     if (!mounted) return;
     if (orphans.isEmpty) {
       _showMessage(l10n.downloadsCleanupOrphansNone);
@@ -525,7 +529,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {
-      final count = await downloads.deleteOrphanFiles(paths: orphans);
+      final count = await maintenance.deleteOrphanFiles(paths: orphans);
       if (!mounted) return;
       _showMessage(l10n.downloadsCleanupOrphansDone(count));
     } finally {

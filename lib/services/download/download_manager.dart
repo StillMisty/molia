@@ -3,7 +3,8 @@
 ///
 /// 队列 / 提交日志 / 文件放置 / 记录装配仍只有 `DownloadService` 一份实现；
 /// 本接口只把页面真正用到的命令收口，便于 widget 测试替换为小假件。记录读取
-/// 不在这里：只读消费方直接依赖 `DownloadRecords`。
+/// 不在这里：只读消费方直接依赖 `DownloadRecords`；文件维护（目录 / 清扫 /
+/// 孤儿 / 补发布）也不在这里：见 [DownloadMaintenance]。
 library;
 
 import 'package:flutter/foundation.dart';
@@ -34,9 +35,6 @@ abstract class DownloadManager extends ChangeNotifier {
 
   /// 加载已有下载记录并探测存储可用性（幂等）。
   Future<void> init();
-
-  /// 当前解析出的下载根目录（不可用返回 null）。
-  Future<String?> rootPath();
 
   /// 任务结构变化（增删 / 状态切换）。
   Listenable get taskChanges;
@@ -84,18 +82,6 @@ abstract class DownloadManager extends ChangeNotifier {
 
   /// 导入本地音频文件（就地引用）。
   Future<(int, int)> importLocalFiles(Iterable<String> paths);
-
-  /// 把已有音频补发布到公共 Downloads。
-  Future<(int, int)> publishMissingPublicCopies();
-
-  /// 清扫崩溃遗留的半成品（`*.part`）。
-  Future<int> cleanupIncompleteDownloads();
-
-  /// 无记录引用的孤儿文件。
-  Future<List<String>> orphanFiles();
-
-  /// 删除孤儿文件。
-  Future<int> deleteOrphanFiles({Iterable<String>? paths});
 
   /// 缺省下载音质：偏好音质 × 曲目可用音质。
   String defaultQualityFor(Track track);
