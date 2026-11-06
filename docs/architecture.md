@@ -374,8 +374,9 @@
   网络层——`TasteProfileBuilder`（按发送范围读聚合画像 + 合并去重后的已听清单
   + 可选收藏/歌单，上限集中；提示词用紧凑行格式并按应用语言切换文案）、
   `LlmClient`（OpenAI-compatible，请求带
-  `response_format: json_object`（不支持时自动退回），错误归一化
-  `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
+  `response_format: json_object`（不支持时自动退回），生成请求不固定
+  `max_tokens`（交给服务端默认预算，避免推理模型的思维链耗尽输出），
+  错误归一化 `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
   严格 JSON Output 解析 → 规范化去重 → `CatalogService.search` 按音源页顺序
   遍历全部可搜索渠道解析，命中无封面时经音源 `artwork()` 补取；预览与实际
   共用同一 `buildPrompt`）。
@@ -405,8 +406,9 @@
   生成；找歌渠道不在 UI 暴露，解析按音源页顺序遍历全部可搜索渠道。反馈记忆
   持久化在 `kAiDjFeedbackMemory`（不感兴趣 / 喜欢 / 种子，重启保留，种子成功
   生成后消费）。显式生成有 profile → model → resolving 三步进度（生成卡
-  步进 + 目标数量 + 等待秒数）与取消，首屏脉冲骨架、轮播细进度条；自动补歌
-  不进入任何进度/提示 UI。发送透明化
+  按阶段显示目标数量 / 已找到数量 / 等待秒数；找歌按每首完成推进，100ms
+  节流；单源探测 10s 超时；进度条平滑动画与语义）与取消，首屏脉冲骨架、
+  轮播细进度条（首次生成也显示）；自动补歌不进入任何进度/提示 UI。发送透明化
   收成弹窗（发送范围、本次预览、上次发送与仅存内存的原始返回）。
   反馈与记忆也收成弹窗，入口行放在推荐偏好页（只显示条数摘要，弹窗内分
   本轮反馈 / 长期记忆 / 多来点这种，并提供清空 AI 记忆）。发现页

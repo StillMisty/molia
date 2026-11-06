@@ -4742,6 +4742,18 @@ abstract class AppLocalizations {
   /// **'Waiting {seconds}s'**
   String aiDjWaitingSeconds(int seconds);
 
+  /// No description provided for @aiDjResolvingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding songs'**
+  String get aiDjResolvingTitle;
+
+  /// No description provided for @aiDjProgressFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Found {count}'**
+  String aiDjProgressFound(int count);
+
   /// No description provided for @aiDjCancelGeneration.
   ///
   /// In en, this message translates to:

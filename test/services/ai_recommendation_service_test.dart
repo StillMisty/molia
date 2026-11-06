@@ -40,7 +40,7 @@ class _FakeLlm extends LlmClient {
     required String systemPrompt,
     required String userPrompt,
     double temperature = 0.8,
-    int maxTokens = 4096,
+    int? maxTokens,
     bool jsonMode = false,
   }) async {
     calls++;
@@ -224,6 +224,7 @@ void main() {
     Map<String, ({int order, bool enabled})> config = const {},
     int resolveConcurrency = 3,
     Duration resolveHedgeDelay = const Duration(milliseconds: 250),
+    Duration resolveTimeout = const Duration(seconds: 10),
     AiPromptLanguage Function()? promptLanguage,
   }) {
     final registry = _FakeRegistry([
@@ -244,6 +245,7 @@ void main() {
       ),
       resolveConcurrency: resolveConcurrency,
       resolveHedgeDelay: resolveHedgeDelay,
+      resolveTimeout: resolveTimeout,
       promptLanguage: promptLanguage,
     );
   }
@@ -418,7 +420,7 @@ void main() {
       );
 
       expect(llm.lastJsonMode, isTrue);
-      expect(llm.lastMaxTokens, 4096);
+      expect(llm.lastMaxTokens, isNull, reason: '不限制 max_tokens，交给服务端预算');
       expect(llm.lastUserPrompt, contains('[本批排除]'));
       expect(llm.lastUserPrompt, contains('已在该列表'));
     });
@@ -1071,9 +1073,58 @@ void main() {
       expect(resolving.first.done, 0);
       expect(resolving.map((progress) => progress.done).toList(), [0, 1, 2]);
       expect(resolving.every((progress) => progress.total == 2), isTrue);
+      expect(resolving.every((progress) => progress.targetCount == 2), isTrue);
       expect(resolving.first.fraction, 0);
       expect(resolving.last.fraction, 1);
+      expect(resolving.last.resolved, 2);
+      expect(resolving.last.unresolved, 0);
       expect(progresses[1].fraction, isNull);
+    });
+
+    test('找歌进度区分命中 / 未命中，最终数量正确', () async {
+      final progresses = <AiDjProgress>[];
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '命中', 'artist': '歌手'},
+          {'title': '缺失', 'artist': '歌手'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '命中', '歌手')]),
+      ], resolveConcurrency: 2);
+
+      await service.generate(
+        config: config,
+        count: 2,
+        onProgress: progresses.add,
+      );
+
+      final resolving = [
+        for (final progress in progresses)
+          if (progress.phase == AiDjPhase.resolving) progress,
+      ];
+      expect(resolving.last.done, 2);
+      expect(resolving.last.resolved, 1);
+      expect(resolving.last.unresolved, 1);
+      expect(resolving.last.fraction, 1);
+    });
+
+    test('单音源超时按未命中处理，进度能结束', () async {
+      final gate = Completer<void>();
+      llm.response = jsonEncode({
+        'songs': [
+          {'title': '歌', 'artist': '手'},
+        ],
+      });
+      service = buildService([
+        _FakeSource('wy', [_track('a', '歌', '手')], searchGate: gate),
+      ], resolveTimeout: const Duration(milliseconds: 30));
+
+      final batch = await service.generate(config: config, count: 1);
+
+      expect(batch.items, isEmpty);
+      expect(batch.unresolved, hasLength(1));
+      gate.complete();
     });
 
     test('取消令牌：抛 cancelled，不返回批次', () async {
@@ -1191,12 +1242,6 @@ void main() {
       );
       expect(parsed.map((r) => r.title), ['a', 'b']);
     });
-  });
-
-  test('JSON Output 批量越大输出预算越高（上限 8192）', () {
-    expect(AiRecommendationService.outputTokenBudget(24), 4096);
-    expect(AiRecommendationService.outputTokenBudget(48), greaterThan(4096));
-    expect(AiRecommendationService.outputTokenBudget(96), 8192);
   });
 
   group('pickBestMatch 打分', () {

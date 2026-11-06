@@ -902,6 +902,13 @@ class _GenerationCardState extends State<_GenerationCard> {
         .difference(widget.progress.startedAt)
         .inSeconds;
     final progress = widget.progress;
+    final title = aiDjProgressTitle(l10n, progress);
+    final subtitle = aiDjProgressSubtitle(
+      l10n,
+      progress,
+      fallbackTargetCount: widget.targetCount,
+      seconds: seconds,
+    );
     return M3ECard(
       key: const Key('aiDjGenerationCard'),
       variant: M3ECardVariant.filled,
@@ -924,20 +931,12 @@ class _GenerationCardState extends State<_GenerationCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      l10n.aiDjGenerationStatus,
-                      style: context.typeScale.titleSmall,
-                    ),
+                    Text(title, style: context.typeScale.titleSmall),
                     const SizedBox(height: 4),
                     AiDjPhaseSteps(progress: progress),
                     const SizedBox(height: 2),
                     Text(
-                      progress.phase == AiDjPhase.resolving
-                          ? l10n.aiDjWaitingSeconds(seconds)
-                          : [
-                              l10n.aiDjGeneratingCount(widget.targetCount),
-                              l10n.aiDjWaitingSeconds(seconds),
-                            ].join(' · '),
+                      subtitle,
                       style: context.typeScale.bodySmall.copyWith(
                         color: scheme.onSurfaceVariant,
                       ),
@@ -955,7 +954,13 @@ class _GenerationCardState extends State<_GenerationCard> {
             ],
           ),
           const SizedBox(height: 10),
-          AiDjThinProgress(value: progress.fraction),
+          AiDjThinProgress(
+            value: progress.fraction,
+            semanticLabel: title,
+            semanticValue: progress.fraction == null
+                ? null
+                : '${progress.done}/${progress.total}',
+          ),
         ],
       ),
     );

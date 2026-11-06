@@ -157,7 +157,7 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
               valueListenable: provider.generationState,
               builder: (context, generation, _) {
                 final progress = generation.progress;
-                if (progress == null || !hasCards) {
+                if (progress == null) {
                   return const SizedBox.shrink();
                 }
                 return Column(
@@ -166,7 +166,13 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
                       padding: EdgeInsets.symmetric(
                         horizontal: discoverGutterOf(context),
                       ),
-                      child: AiDjThinProgress(value: progress.fraction),
+                      child: AiDjThinProgress(
+                        value: progress.fraction,
+                        semanticLabel: aiDjProgressTitle(l10n, progress),
+                        semanticValue: progress.fraction == null
+                            ? null
+                            : '${progress.done}/${progress.total}',
+                      ),
                     ),
                     const SizedBox(height: 6),
                   ],

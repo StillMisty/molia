@@ -1083,6 +1083,15 @@
       }
     }
   },
+  "aiDjResolvingTitle": "正在本地找歌",
+  "aiDjProgressFound": "已找到 {count} 首",
+  "@aiDjProgressFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "aiDjCancelGeneration": "停止",
   "aiDjReplacing": "正在换…",
   "aiDjPrefsGenerationGroup": "生成",

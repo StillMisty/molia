@@ -1333,6 +1333,15 @@
       }
     }
   },
+  "aiDjResolvingTitle": "Finding songs",
+  "aiDjProgressFound": "Found {count}",
+  "@aiDjProgressFound": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "aiDjCancelGeneration": "Stop",
   "aiDjReplacing": "Swapping…",
   "aiDjPrefsGenerationGroup": "Generation",

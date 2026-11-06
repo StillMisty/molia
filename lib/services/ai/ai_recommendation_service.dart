@@ -85,7 +85,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
     AiPromptLanguage Function()? promptLanguage,
     this.resolveConcurrency = 3,
     this.resolveHedgeDelay = const Duration(milliseconds: 250),
+    this.resolveTimeout = const Duration(seconds: 10),
   }) : assert(!resolveHedgeDelay.isNegative),
+       assert(resolveTimeout > Duration.zero),
        _promptLanguage = promptLanguage ?? (() => AiPromptLanguage.zh);
 
   final LlmClient _llm;
@@ -105,6 +107,12 @@ class AiRecommendationService implements AiRecommendationGenerator {
   /// 也要等先序源确认无命中；先序源命中时取消后续启动（已发出的请求无法撤销，
   /// 结果直接丢弃）。
   final Duration resolveHedgeDelay;
+
+  /// 单曲单音源探测的超时。
+  ///
+  /// 慢/挂起的音源不能把整批进度卡住：超时按该音源未命中处理，继续后续
+  /// 音源并推进进度。底层请求无法取消，晚到结果由 [Future.timeout] 忽略。
+  final Duration resolveTimeout;
 
   /// 连接测试（地址/Key/模型），失败抛 [SourceFailure]。
   @override
@@ -173,12 +181,21 @@ class AiRecommendationService implements AiRecommendationGenerator {
     void Function(AiDjProgress progress)? onProgress,
   }) async {
     final startedAt = DateTime.now();
-    void progress(AiDjPhase phase, {int done = 0, int total = 0}) {
+    void progress(
+      AiDjPhase phase, {
+      int done = 0,
+      int total = 0,
+      int resolved = 0,
+      int unresolved = 0,
+    }) {
       onProgress?.call(
         AiDjProgress(
           phase: phase,
           done: done,
           total: total,
+          targetCount: count,
+          resolved: resolved,
+          unresolved: unresolved,
           startedAt: startedAt,
         ),
       );
@@ -200,11 +217,12 @@ class AiRecommendationService implements AiRecommendationGenerator {
     );
 
     progress(AiDjPhase.model);
+    // 不传 max_tokens：DeepSeek 等推理模型会把它计入思维链，固定预算容易
+    // 在 JSON 输出前耗尽；交给服务端默认预算更稳。
     final raw = await _llm.complete(
       config: config,
       systemPrompt: prompt.systemPrompt,
       userPrompt: prompt.userPrompt,
-      maxTokens: outputTokenBudget(count),
       jsonMode: true,
     );
     _checkCancelled(cancelToken);
@@ -235,8 +253,13 @@ class AiRecommendationService implements AiRecommendationGenerator {
     final resolution = await _resolveAll(
       candidates,
       cancelToken: cancelToken,
-      onResolved: (done) =>
-          progress(AiDjPhase.resolving, done: done, total: candidates.length),
+      onProgress: (done, resolved, unresolved) => progress(
+        AiDjPhase.resolving,
+        done: done,
+        total: candidates.length,
+        resolved: resolved,
+        unresolved: unresolved,
+      ),
     );
     _checkCancelled(cancelToken);
 
@@ -267,10 +290,12 @@ class AiRecommendationService implements AiRecommendationGenerator {
   }) async {
     if (batch.unresolved.isEmpty) return batch;
     final startedAt = DateTime.now();
+    final targetCount = batch.unresolved.length;
     onProgress?.call(
       AiDjProgress(
         phase: AiDjPhase.resolving,
-        total: batch.unresolved.length,
+        total: targetCount,
+        targetCount: targetCount,
         startedAt: startedAt,
       ),
     );
@@ -280,11 +305,14 @@ class AiRecommendationService implements AiRecommendationGenerator {
     final resolution = await _resolveAll(
       batch.unresolved,
       cancelToken: cancelToken,
-      onResolved: (done) => onProgress?.call(
+      onProgress: (done, resolved, unresolved) => onProgress?.call(
         AiDjProgress(
           phase: AiDjPhase.resolving,
           done: done,
-          total: batch.unresolved.length,
+          total: targetCount,
+          targetCount: targetCount,
+          resolved: resolved,
+          unresolved: unresolved,
           startedAt: startedAt,
         ),
       ),
@@ -307,12 +335,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
   static const int promptTimeSlotLimit = 12;
   static const int promptFeedbackLimit = 20;
   static const int promptExcludeLimit = 50;
-
-  /// JSON Output 的输出 token 预算：给足空间，避免批量大时 JSON 被截断。
-  ///
-  /// 单批 ≤24 首用 4096；更大批次按每首约 96 tokens 递增，上限 8192。
-  static int outputTokenBudget(int count) =>
-      math.min(8192, math.max(4096, 512 + count * 96));
 
   /// 单条文本的长度上限：防止异常长的歌名/歌手破坏提示词结构。
   static const int _promptTitleLimit = 80;
@@ -592,7 +614,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
   _resolveAll(
     List<AiRecommendation> recommendations, {
     AiGenerationCancelToken? cancelToken,
-    void Function(int done)? onResolved,
+    void Function(int done, int resolved, int unresolved)? onProgress,
   }) async {
     final sources = _searchableSources();
     if (recommendations.isEmpty) {
@@ -603,6 +625,23 @@ class AiRecommendationService implements AiRecommendationGenerator {
     }
     final resolved = <ResolvedRecommendation>[];
     final unresolved = <AiRecommendation>[];
+    var done = 0;
+    var resolvedCount = 0;
+    var unresolvedCount = 0;
+    var lastProgressAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+    // 每首完成就回调，但最多 10Hz：本地搜索很快时不必为每一首都重建卡片。
+    // 最后一首强制发送，保证进度一定到 total。
+    void report({required bool force}) {
+      final now = DateTime.now();
+      if (!force &&
+          now.difference(lastProgressAt) < const Duration(milliseconds: 100)) {
+        return;
+      }
+      lastProgressAt = now;
+      onProgress?.call(done, resolvedCount, unresolvedCount);
+    }
+
     for (var i = 0; i < recommendations.length; i += resolveConcurrency) {
       _checkCancelled(cancelToken);
       final chunk = recommendations.sublist(
@@ -611,7 +650,16 @@ class AiRecommendationService implements AiRecommendationGenerator {
       );
       final results = await Future.wait([
         for (final recommendation in chunk)
-          _resolveOne(recommendation, sources),
+          _resolveOne(recommendation, sources).then((match) {
+            done++;
+            if (match == null) {
+              unresolvedCount++;
+            } else {
+              resolvedCount++;
+            }
+            report(force: done == recommendations.length);
+            return match;
+          }),
       ]);
       _checkCancelled(cancelToken);
       for (var j = 0; j < chunk.length; j++) {
@@ -628,9 +676,6 @@ class AiRecommendationService implements AiRecommendationGenerator {
           );
         }
       }
-      onResolved?.call(
-        math.min(i + resolveConcurrency, recommendations.length),
-      );
     }
     return (resolved: resolved, unresolved: unresolved);
   }
@@ -770,10 +815,9 @@ class AiRecommendationService implements AiRecommendationGenerator {
     SourceDescriptor descriptor,
   ) async {
     try {
-      final result = await _catalog.search(
-        descriptor.key,
-        SearchQuery(keyword: keyword, limit: 10),
-      );
+      final result = await _catalog
+          .search(descriptor.key, SearchQuery(keyword: keyword, limit: 10))
+          .timeout(resolveTimeout);
       final best = pickBestMatch(recommendation, result.items);
       if (best == null) return null;
       return (
@@ -781,7 +825,8 @@ class AiRecommendationService implements AiRecommendationGenerator {
         sourceName: descriptor.displayName,
       );
     } catch (_) {
-      // 单音源失败（引擎重启/网络）：按用户渠道顺序换下一个；全失败判未解析。
+      // 单音源失败 / 超时（引擎重启/网络）：按用户渠道顺序换下一个；
+      // 全失败判未解析。超时不能让整批进度卡在这个音源上。
       return null;
     }
   }

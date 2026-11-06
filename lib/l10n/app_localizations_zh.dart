@@ -2486,6 +2486,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get aiDjResolvingTitle => '正在本地找歌';
+
+  @override
+  String aiDjProgressFound(int count) {
+    return '已找到 $count 首';
+  }
+
+  @override
   String get aiDjCancelGeneration => '停止';
 
   @override

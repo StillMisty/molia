@@ -249,6 +249,14 @@ class AiDjProgress {
   /// 解析阶段已完成 / 总数；profile / model 阶段均为 0。
   final int done;
   final int total;
+
+  /// 本次请求的目标数量；偏好中途改动时仍按开始时的快照展示。
+  final int targetCount;
+
+  /// 解析阶段已命中 / 未命中的数量；profile / model 阶段均为 0。
+  final int resolved;
+  final int unresolved;
+
   final DateTime startedAt;
 
   const AiDjProgress({
@@ -256,15 +264,27 @@ class AiDjProgress {
     required this.startedAt,
     this.done = 0,
     this.total = 0,
+    this.targetCount = 0,
+    this.resolved = 0,
+    this.unresolved = 0,
   });
 
-  AiDjProgress copyWith({AiDjPhase? phase, int? done, int? total}) =>
-      AiDjProgress(
-        phase: phase ?? this.phase,
-        done: done ?? this.done,
-        total: total ?? this.total,
-        startedAt: startedAt,
-      );
+  AiDjProgress copyWith({
+    AiDjPhase? phase,
+    int? done,
+    int? total,
+    int? targetCount,
+    int? resolved,
+    int? unresolved,
+  }) => AiDjProgress(
+    phase: phase ?? this.phase,
+    done: done ?? this.done,
+    total: total ?? this.total,
+    targetCount: targetCount ?? this.targetCount,
+    resolved: resolved ?? this.resolved,
+    unresolved: unresolved ?? this.unresolved,
+    startedAt: startedAt,
+  );
 
   /// 解析进度（0..1）；profile / model 或总数为 0 时为 null。
   double? get fraction {

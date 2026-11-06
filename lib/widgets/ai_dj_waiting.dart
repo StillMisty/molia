@@ -178,9 +178,18 @@ class AiDjPulsingSkeleton extends StatelessWidget {
 
 /// 细进度条（0..1；未知时显示不确定态滑动动画，受减弱动效约束）。
 class AiDjThinProgress extends StatefulWidget {
-  const AiDjThinProgress({super.key, this.value});
+  const AiDjThinProgress({
+    super.key,
+    this.value,
+    this.semanticLabel,
+    this.semanticValue,
+  });
 
   final double? value;
+
+  /// 读屏用的进度名称与当前值（如「正在生成推荐」/「8/24」）。
+  final String? semanticLabel;
+  final String? semanticValue;
 
   @override
   State<AiDjThinProgress> createState() => _AiDjThinProgressState();
@@ -232,7 +241,7 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
     final scheme = Theme.of(context).colorScheme;
     final fraction = (widget.value ?? 0).clamp(0.0, 1.0);
     final disabled = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    return ClipRRect(
+    final bar = ClipRRect(
       borderRadius: BorderRadius.circular(2),
       child: SizedBox(
         height: 3,
@@ -241,11 +250,18 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
           children: [
             ColoredBox(color: scheme.surfaceContainerHighest),
             if (widget.value != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: fraction,
-                  child: ColoredBox(color: scheme.primary),
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(begin: 0, end: fraction),
+                duration: disabled
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                builder: (context, value, _) => Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: value,
+                    child: ColoredBox(color: scheme.primary),
+                  ),
                 ),
               )
             else if (disabled)
@@ -273,6 +289,15 @@ class _AiDjThinProgressState extends State<AiDjThinProgress>
           ],
         ),
       ),
+    );
+    if (widget.semanticLabel == null && widget.semanticValue == null) {
+      return bar;
+    }
+    return Semantics(
+      container: true,
+      label: widget.semanticLabel,
+      value: widget.semanticValue,
+      child: bar,
     );
   }
 }

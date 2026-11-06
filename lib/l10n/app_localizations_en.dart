@@ -2587,6 +2587,14 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get aiDjResolvingTitle => 'Finding songs';
+
+  @override
+  String aiDjProgressFound(int count) {
+    return 'Found $count';
+  }
+
+  @override
   String get aiDjCancelGeneration => 'Stop';
 
   @override

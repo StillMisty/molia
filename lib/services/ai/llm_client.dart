@@ -68,7 +68,7 @@ class LlmClient {
     required String systemPrompt,
     required String userPrompt,
     double temperature = 0.8,
-    int maxTokens = 4096,
+    int? maxTokens,
     bool jsonMode = false,
   }) async {
     const maxAttempts = 2;
@@ -134,7 +134,7 @@ class LlmClient {
     required String systemPrompt,
     required String userPrompt,
     required double temperature,
-    required int maxTokens,
+    required int? maxTokens,
     bool jsonMode = false,
   }) async {
     final uri = chatCompletionsUri(config.baseUrl);
@@ -145,7 +145,9 @@ class LlmClient {
         {'role': 'user', 'content': userPrompt},
       ],
       'temperature': temperature,
-      'max_tokens': maxTokens,
+      // 不传时交给服务端默认预算：推理模型会把 max_tokens 算进思维链，
+      // 固定小预算可能在 JSON 输出前就耗尽。
+      'max_tokens': ?maxTokens,
       'stream': false,
       if (json) 'response_format': const {'type': 'json_object'},
     };

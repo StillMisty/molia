@@ -634,6 +634,7 @@ class AiDjProvider extends ChangeNotifier {
           phase: AiDjPhase.resolving,
           startedAt: DateTime.now(),
           total: batch.unresolved.length,
+          targetCount: batch.unresolved.length,
         ),
       ),
       invoke: (token, onProgress) => _recommendationService.resolveUnresolved(

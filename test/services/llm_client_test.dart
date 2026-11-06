@@ -92,6 +92,29 @@ void main() {
     expect(messages.first['role'], 'system');
   });
 
+  test('默认不发送 max_tokens；显式传入才发送', () async {
+    final bodies = <Map<String, dynamic>>[];
+    final llm = LlmClient(
+      dio: mockDio((request) async {
+        bodies.add(
+          jsonDecode(requestBodyText(request)) as Map<String, dynamic>,
+        );
+        return ok('ok');
+      }),
+    );
+
+    await llm.complete(config: config(), systemPrompt: 's', userPrompt: 'u');
+    await llm.complete(
+      config: config(),
+      systemPrompt: 's',
+      userPrompt: 'u',
+      maxTokens: 64,
+    );
+
+    expect(bodies[0].containsKey('max_tokens'), isFalse);
+    expect(bodies[1]['max_tokens'], 64);
+  });
+
   test('response_format 400 后记住不支持，下次不再先发带参请求', () async {
     final bodies = <Map<String, dynamic>>[];
     final llm = LlmClient(

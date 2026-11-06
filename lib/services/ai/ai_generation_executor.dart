@@ -160,7 +160,11 @@ class AiGenerationExecutor {
             busy: true,
             progress:
                 intent.initialProgress ??
-                AiDjProgress(phase: AiDjPhase.profile, startedAt: _clock()),
+                AiDjProgress(
+                  phase: AiDjPhase.profile,
+                  targetCount: intent.count,
+                  startedAt: _clock(),
+                ),
             replacingUri: _state.value.replacingUri,
           ),
         );
