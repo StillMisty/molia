@@ -55,6 +55,15 @@ android {
 
     packaging {
         jniLibs {
+            // nativeapi 的 C++ 核（cnativeapi）只被桌面 IO 实现使用：
+            // lib/services/window/*_io.dart 与 lib/services/global_hotkeys_io.dart，
+            // Android 侧所有入口都有 Platform.isLinux/Windows/macOS 守卫，运行期
+            // 不会 dlopen 它。但 Dart hooks 仍会为 Android 编译并打包 native
+            // asset（Dart tree-shaking 管不到 native asset），故在此显式剔除。
+            // 将来 Android 真要调 nativeapi 时必须删掉这条排除并补测试；
+            // 切勿顺手剔除 libsqlite3.so（docs/pitfalls.md #28）、quickjs、
+            // dartjni 等运行期真正需要的库。
+            excludes += ['**/libcnativeapi.so']
             // 发布 APK 为直接分发（无 Play/AAB 的分发侧压缩），压缩 native 库以减小下载体积
             useLegacyPackaging = true
         }
