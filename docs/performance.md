@@ -55,9 +55,11 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
 - Android 模式会构建 release APK 并按设备 ABI 安装（`am start -W -S` 冷启动 + logcat
   抓埋点）；汇总表里多一行 `Activity TotalTime`——那是 `am -W` 的系统口径（进程起到首帧
   绘制），与应用自己的「首帧」不是同一把尺。
-- 脚本只删 `build/linux/x64/release/bundle`（install 产物），保留中间产物做增量构建。
-  **不要** `rm -rf build/linux/x64/release`：那会连带删掉 media_kit_libs_linux
-  下载的 `mimalloc-2.1.2.tar.gz`，而它的下载在受限网络下会失败（CMake 只报
+- 脚本会删 `build/flutter_assets` 与 `build/linux/x64/release/bundle`（install
+  产物）；`linux/flutter/ephemeral` 只在引擎明显不是 release（>20MB，常见于
+  跑过 `--analyze-size`）时删。保留中间产物做增量构建。**不要** `rm -rf
+  build/linux/x64/release`：那会连带删掉 media_kit_libs_linux 下载的
+  `mimalloc-2.1.2.tar.gz`，而它的下载在受限网络下会失败（CMake 只报
   "Integrity check failed"，实际是 0 字节文件）。真遇到时手动放一份 MD5 为
   `5179c8f5cf1237d2300e2d8559a7bc55` 的 tarball 到该目录即可。
 
@@ -310,3 +312,52 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 模拟器复测见 `docs/performance-audit-2026-11.md`。复测入口为
 `tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
 `cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
+
+## 10. Linux 打包体积（2026-11）
+
+入口：`tool/agent/perf.sh size linux`。它先清 `build/flutter_assets`、
+`linux/flutter/ephemeral` 和 bundle，再用 `--split-debug-info=build/symbols/linux`
+构建，调用 `tool/strip_linux_bundle.sh` 剥第三方插件库，最后量 bundle 与
+bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为十进制
+（字节 / 1e6），tar.gz 字节含 gzip 时间戳，不同轮次有 ±几十 B 抖动。
+
+| 项 | 脏构建（kernel_blob 残留，未 split） | 干净（未 split） | + split-debug-info | + strip |
+| --- | ---: | ---: | ---: | ---: |
+| bundle | 173,081,543 B（173.08MB） | 44,279,631 B（44.28MB） | 40,937,295 B（40.94MB） | **40,039,415 B（40.04MB）** |
+| bundle tar.gz | 54,514,787 B（54.51MB） | 17,608,748 B（17.61MB） | 16,125,908 B（16.13MB） | **15,933,414 B（15.93MB）** |
+| `libapp.so` | 19,186,568 B（19.19MB） | 同左 | **15,844,232 B（15.84MB）** | 同左 |
+| `kernel_blob.bin` | 128,801,912 B（128.80MB） | 无 | 无 | 无 |
+| `libflutter_linux_gtk.so` | 17,256,536 B（17.26MB） | 同左 | 同左 | 同左 |
+| symbols（单独 zip） | 无 | 无 | 7,747,000 B（7.75MB） | 同左 |
+
+- **split-debug-info（CI 真实收益）**：`libapp.so` 19.19MB → 15.84MB
+  （−3,342,336 B，−17.4%）；bundle 同步 −3.34MB；tar.gz −1.48MB。符号
+  7.75MB 单独打 `molia-<版本>-linux-symbols.zip`，不混进用户下载的 tar.gz；
+  需要 symbolicate 时解压后跑
+  `flutter symbolize -i <stack> -d build/symbols/linux/app.linux-x64.symbols`。
+- **strip（CI 真实收益）**：`tool/strip_linux_bundle.sh` 只处理白名单里的 9 个
+  第三方插件 / 原生库，`--strip-unneeded` 共 −897,880 B（−0.90MB；tar.gz
+  约 −0.19MB）。大头：`libcnativeapi.so` −641,216 B、`libsqlite3.so`
+  −98,160 B、`libquickjs_c_bridge_plugin.so` −72,824 B、
+  `libflutter_secure_storage_linux_plugin.so` −52,184 B。`libapp.so` 与
+  `libflutter_linux_gtk.so` 明确跳过；脚本用 `file` / `ldd` 校验剥离前后
+  依赖集合不变，重复执行 0 字节变化（幂等）。
+- **clean 与脏构建不是 CI 收益**：`build/flutter_assets` 是本地 debug /
+  `flutter test` 的产物，release 只负责把目录原样 install，不会删除其中的
+  `kernel_blob.bin`。CI 是干净 checkout，不会带 128.8MB 的 kernel_blob；
+  这段修复的是本地 `perf.sh size` / `startup.sh` 的体积与启动口径。同理，
+  `--analyze-size` 会把非 release 引擎留在 `linux/flutter/ephemeral`（本机
+  残留实测 43,377,848 B ≈ 41MB，正常 release 17,256,536 B），之后的 release
+  构建可能继续沿用；`perf.sh size` 无条件重建 ephemeral，`startup.sh` 在检测
+  到 >20MB 时删除并在日志里说明。
+- **对 CI 产物的净效果**：以干净未 split 的 tar.gz 17.61MB 为参照，split +
+  strip 后 15.93MB（约 −1.68MB / −9.5%）；bundle 44.28MB → 40.04MB（约
+  −4.24MB）。symbols zip 不计入 tar.gz 体积（它是单独的调试资产）。
+- **测量陷阱**：
+  1. `build/flutter_assets` 残留：debug/profile 的 `kernel_blob.bin`（本机
+     128.8MB）会被 release install 原样带走；`perf.sh size linux` /
+     `startup.sh` 构建前都清该目录，构建后 `linux_assert_release_bundle`
+     再校验没有 `data/flutter_assets/kernel_blob.bin`。
+  2. `--analyze-size` 残留：`linux/flutter/ephemeral/libflutter_linux_gtk.so`
+     会是约 42MB 的非 release 引擎；正常 release 约 17MB。脚本以 20MB 为
+     阈值，超过就直接报错 / 重建，避免把「分析构建」当成发布体积或启动基线。

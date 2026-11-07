@@ -232,7 +232,7 @@ jobs:
       - name: 系统依赖
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgtk-3-dev libsecret-1-dev libx11-dev libxi-dev ninja-build libglu1-mesa
+          sudo apt-get install -y --no-install-recommends libgtk-3-dev libsecret-1-dev libx11-dev libxi-dev ninja-build libglu1-mesa binutils file zip
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.9
@@ -244,8 +244,17 @@ jobs:
         run: |
           set -euo pipefail
           v="${{ needs.prepare.outputs.version }}"
+          # split-debug-info：libapp.so 去掉调试图符号（实测 19.19MB -> 15.84MB），
+          # 符号单独 zip；不要混进用户下载的 tar.gz。
           flutter build linux --release \
-            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}"
+            --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}" \
+            --split-debug-info=build/symbols/linux
+          if [[ -e build/linux/x64/release/bundle/data/flutter_assets/kernel_blob.bin ]]; then
+            echo "::error::release bundle 含 kernel_blob.bin（build/flutter_assets 残留 debug 产物）"
+            exit 1
+          fi
+          # 只 strip 第三方插件库；libapp.so / libflutter_linux_gtk.so 保持原样。
+          tool/strip_linux_bundle.sh build/linux/x64/release/bundle
           stage="dist/molia-$v-linux-x64"
           mkdir -p "$stage"
           cp -a build/linux/x64/release/bundle/. "$stage"/
@@ -255,10 +264,14 @@ jobs:
           install -m 0755 linux/packaging/install.sh linux/packaging/uninstall.sh "$stage"/
           tar -czf "dist/molia-$v-linux-x64.tar.gz" -C dist "molia-$v-linux-x64"
           rm -rf "$stage"
+          (cd build/symbols/linux && \
+            zip -qr "$GITHUB_WORKSPACE/dist/molia-$v-linux-symbols.zip" .)
       - uses: actions/upload-artifact@v7
         with:
           name: release-linux
-          path: dist/*.tar.gz
+          path: |
+            dist/*.tar.gz
+            dist/*-linux-symbols.zip
           if-no-files-found: error
 
   ios:

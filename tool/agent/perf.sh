@@ -782,9 +782,61 @@ case "$cmd" in
       linux)
         require_flutter
         out_dir="$(new_out_dir linux-size)"
-        log "构建 release Linux bundle"
-        flutter build linux --release 2>&1 | tee "$out_dir/build.log"
-        du -sh build/linux/x64/release/bundle >"$out_dir/summary.md"
+        bundle="$LINUX_RELEASE_BUNDLE"
+        symbols_dir="$PROJECT_DIR/build/symbols/linux"
+        symbols="$symbols_dir/app.linux-x64.symbols"
+        summary="$out_dir/summary.md"
+
+        # 体积只认干净 release：debug 的 kernel_blob / 非 release 引擎都会
+        # 被 install 原样带进 bundle，先清掉再构建。
+        log "清理 release 构建输入（flutter_assets / ephemeral / bundle；保留 mimalloc 缓存）"
+        linux_clean_release_inputs
+
+        log "构建 release Linux bundle（--split-debug-info=build/symbols/linux）"
+        ( cd "$PROJECT_DIR" && flutter build linux --release \
+            --split-debug-info=build/symbols/linux ) 2>&1 |
+          tee "$out_dir/build.log"
+
+        linux_assert_release_bundle "$bundle"
+        [[ -f "$symbols" ]] || die "找不到符号文件：$symbols"
+
+        bundle_before="$(du -sb "$bundle" | cut -f1)"
+        log "strip 第三方插件库（libapp.so / libflutter_linux_gtk.so 保留）"
+        "$PROJECT_DIR/tool/strip_linux_bundle.sh" "$bundle" 2>&1 |
+          tee "$out_dir/strip.log"
+        bundle_after="$(du -sb "$bundle" | cut -f1)"
+
+        tar_path="$out_dir/molia-linux-bundle.tar.gz"
+        tar -czf "$tar_path" -C "$(dirname "$bundle")" "$(basename "$bundle")"
+        tar_bytes="$(stat -c%s "$tar_path")"
+
+        {
+          echo "# Linux 体积"
+          echo
+          echo '| 项 | 字节 |'
+          echo '| --- | ---: |'
+          echo "| bundle（strip 前） | $bundle_before |"
+          echo "| bundle（strip 后） | $bundle_after |"
+          echo "| bundle tar.gz | $tar_bytes |"
+          echo "| libapp.so | $(stat -c%s "$bundle/lib/libapp.so") |"
+          echo "| libflutter_linux_gtk.so | $(stat -c%s "$bundle/lib/libflutter_linux_gtk.so") |"
+          echo "| symbols | $(stat -c%s "$symbols") |"
+          echo
+          echo "symbols: $symbols"
+          echo "tar: $tar_path"
+        } >"$summary"
+        cat "$summary"
+
+        {
+          echo
+          echo "## bundle 最大文件（10）"
+          echo '```'
+          find "$bundle" -type f -printf '%s\t%P\n' | sort -nr | head -10 |
+            while IFS=$'\t' read -r size rel; do
+              printf '%10d  %s\n' "$size" "$rel"
+            done
+          echo '```'
+        } | tee -a "$summary"
         log "结果目录：$out_dir"
         ;;
       *) usage ;;
