@@ -274,6 +274,73 @@ void main() {
     expect(order.peekNext(0), isNull);
   });
 
+  test('adopt 复制外部列表并保留排列', () {
+    final external = [2, 0, 1];
+    final order = PlaybackShuffleOrder(random: Random(8))..adopt(external);
+
+    expect(order.indices, [2, 0, 1]);
+    expect(order.positionOf(2), 0);
+    expect(order.peekNext(2), 0);
+    expect(order.remainingAfter(2), [0, 1]);
+
+    // 外部列表之后被改写 / 复用，不能影响内部排列。
+    external
+      ..[0] = 0
+      ..[1] = 1
+      ..[2] = 2;
+    external.add(9);
+    expect(order.indices, [2, 0, 1]);
+    expect(order.remainingAfter(2), [0, 1]);
+  });
+
+  group('isValidShuffleOrder', () {
+    test('合法排列：长度相等、覆盖队列且包含当前曲目', () {
+      expect(
+        isValidShuffleOrder(const [2, 0, 1], length: 3, currentIndex: 0),
+        isTrue,
+      );
+      expect(
+        isValidShuffleOrder(const [0, 1, 2], length: 3, currentIndex: 2),
+        isTrue,
+      );
+    });
+
+    test('长度不符 / 重复 / 越界都拒绝', () {
+      expect(
+        isValidShuffleOrder(const [0, 1], length: 3, currentIndex: 0),
+        isFalse,
+      );
+      expect(
+        isValidShuffleOrder(const [0, 0, 2], length: 3, currentIndex: 0),
+        isFalse,
+      );
+      expect(
+        isValidShuffleOrder(const [0, 1, 3], length: 3, currentIndex: 0),
+        isFalse,
+      );
+      expect(
+        isValidShuffleOrder(const [-1, 1, 2], length: 3, currentIndex: 1),
+        isFalse,
+      );
+    });
+
+    test('缺少当前曲目 / 当前下标本身越界都拒绝', () {
+      // 等长排列若缺当前曲目，必然靠重复或越界顶替，不能采用。
+      expect(
+        isValidShuffleOrder(const [1, 2, 2], length: 3, currentIndex: 0),
+        isFalse,
+      );
+      expect(
+        isValidShuffleOrder(const [0, 1, 2], length: 3, currentIndex: 3),
+        isFalse,
+      );
+      expect(
+        isValidShuffleOrder(const [0, 1, 2], length: 3, currentIndex: -1),
+        isFalse,
+      );
+    });
+  });
+
   group('队列编辑后的洗牌排列重映射', () {
     test('removeIndex 删下标并把其后下标前移', () {
       final order = PlaybackShuffleOrder(random: Random(4))

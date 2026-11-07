@@ -1352,12 +1352,6 @@ abstract class AppLocalizations {
   /// **'This shuffle round is done; the next track starts a new round'**
   String get queueShuffleRoundEnd;
 
-  /// No description provided for @queueShuffleRestored.
-  ///
-  /// In en, this message translates to:
-  /// **'Shuffle order is generated when playback starts'**
-  String get queueShuffleRestored;
-
   /// No description provided for @nowPlayingSection.
   ///
   /// In en, this message translates to:

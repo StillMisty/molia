@@ -997,3 +997,15 @@
     生成不出 `libapp.so.sym`，`flutter build appbundle` 的符号校验会直接失败。
     AGP 打包 release 时本来就会 strip 原生库，去掉该参数后 APK 里的 `libapp.so`
     体积实测不变；AAB 因开启 Dart obfuscation 反而从 98.5MB 降到 90.1MB。
+101. **恢复态随机播放不能把洗牌排列留空**：`PlaybackSessionCoordinator` 装载恢复态
+    时必须生成并持有一份会话内洗牌顺序（当前曲目置首，不落盘），恢复快照的
+    next / upNext 与恢复播放共用这一份。留空会让播放页右侧「下一首」首帧为空；
+    点播放后 `LocalPlaybackService` 重新洗牌，live 快照突然有了 next，
+    `PlayerCoverDeck._refreshIdleSlots()` 把 null → 非空视为槽位身份变化，启动
+    180ms 交叉淡化且过渡期以当前封面作占位——冷启动表现为封面「先空、再出现
+    当前封面副本、最后淡成真正的下一首」。正确做法：协调者
+    `_ensureRestoredShuffleOrder` 按会话队列长度生成，`PlaybackRequest.shuffleIndices`
+    把它交给 `LocalPlaybackService.playTracks` 复用；恢复态追加 / 移除队列项时同步
+    `extend` / `removeIndex`，模式切换时清空让 publish 重新 ensure；顺序不落盘
+    （每次冷启动仍是新的一轮随机顺序）。回归用例见
+    `test/playback_session_coordinator_test.dart` 的「恢复态 shuffle → 恢复播放」。

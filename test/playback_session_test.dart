@@ -300,7 +300,7 @@ void main() {
     expect(backend.lastRequest?.startIndex, 2);
   });
 
-  test('恢复态随机：下一首开启新的一轮，不再按队列下标 +1', () async {
+  test('恢复态随机：展示本轮顺序，skipToNext 沿用同一排列', () async {
     await PlaybackSessionStore().save(
       PlaybackSession(
         tracks: [_track('a'), _track('b'), _track('c')],
@@ -314,10 +314,22 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
+    // 恢复态装载时就有本轮排列：右槽 next / 队列「接下来」不再为空。
+    final restored = provider.snapshot;
+    expect(restored.next, isNotNull);
+    expect(restored.next!.id, isNot(restored.current!.id));
+    expect(restored.upNext, hasLength(2));
+    final restoredOrder = [restored.currentIndex, ...restored.upNextIndices];
+    expect(restoredOrder.toSet(), {0, 1, 2});
+
     await provider.skipToNext();
-    final startIndex = backend.lastRequest?.startIndex;
-    expect(startIndex, isNotNull);
-    expect(startIndex, isNot(0), reason: '新排列把当前曲目置首，下一首不能还是它');
+    final request = backend.lastRequest!;
+    // 恢复态展示的下一首就是起播下标，且排列原样交给后端复用：
+    // 不再每次按队列下标 +1，也不会重新洗一轮换掉右槽。
+    expect(request.startIndex, restoredOrder[1]);
+    expect(request.startIndex, isNot(0));
+    expect(request.shuffleIndices, restoredOrder);
+    expect(request.shuffleIndices, contains(request.startIndex));
     expect(backend.state.value.mode, PlayMode.shuffle);
   });
 

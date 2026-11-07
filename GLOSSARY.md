@@ -61,9 +61,11 @@
   `projectQueue` 是 `next` / `previous` / `previousOfPrevious` / `upNext` /
   `upNextIndices` 的唯一实现，`LocalPlaybackService` 与恢复态共用；`upNextIndices`
   是队列面板行的真实队列下标（shuffle / 列表循环回绕时与面板行号不同，队列编辑
-  必须用它）。恢复态没有洗牌排列 / 播放顺序栈时显式留空 `QueueOrder`：shuffle 的
+  必须用它）。调用方没有洗牌排列 / 播放顺序栈时仍可传空 `QueueOrder`：shuffle 的
   `next` 为 null、`upNext` 为空（不拿下标近似），`previous` / `previousOfPrevious`
-  按队列前一位依次回退。
+  按队列前一位依次回退。恢复态由 `PlaybackSessionCoordinator` 装载时生成一份
+  会话内本轮洗牌顺序（当前曲目置首、不落盘）并传入，因此恢复态 shuffle 的
+  next / upNext 与恢复播放共用同一顺序；每次冷启动仍是新的一轮。
 - **Resolved next（下一首解析）** — `PlaybackSnapshot.next`：后端按当前模式解析的下一首
   （shuffle 在单曲内稳定，切歌/切模式重抽）；peek（展示）与 commit（执行）两个语义
   在服务内显式分开（`queueProjection` / `_commitNextIndex`），轮末重洗只发生在 commit。
@@ -874,7 +876,8 @@
   越界与空操作返回 no-op；移除 / 移动发生在当前曲目之前时同步调整 currentIndex，
   并重映射 `PlaybackOrder` 与 `PlaybackShuffleOrder` 下标。移动只在非随机模式
   提供，随机 / 列表循环回绕行只允许移除。live 改 facade 后提交会话；恢复态
-  改保存的会话并重新发布快照。
+  改保存的会话并重新发布快照（会话内洗牌排列同步移除 / 扩展，避免 upNextIndices
+  指到已移除曲目或漏掉追加曲目）。
 
 ## 跨设备同步
 

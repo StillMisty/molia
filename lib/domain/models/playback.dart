@@ -39,11 +39,18 @@ class PlaybackRequest {
   final PlaybackContext? context;
   final String? preferredQuality;
 
+  /// 恢复态展示过的本轮洗牌排列（队列下标）。
+  ///
+  /// null = 后端自己新洗牌；仅在 shuffle 模式生效。恢复播放带上它，后端的
+  /// `next` / `upNext` 才与冷启动恢复快照同源，不会在接管瞬间换下一首。
+  final List<int>? shuffleIndices;
+
   const PlaybackRequest({
     required this.tracks,
     this.startIndex = 0,
     this.context,
     this.preferredQuality,
+    this.shuffleIndices,
   });
 
   @override
@@ -52,11 +59,17 @@ class PlaybackRequest {
       deepEquals(other.tracks, tracks) &&
       other.startIndex == startIndex &&
       other.context == context &&
-      other.preferredQuality == preferredQuality;
+      other.preferredQuality == preferredQuality &&
+      deepEquals(other.shuffleIndices, shuffleIndices);
 
   @override
-  int get hashCode =>
-      Object.hash(deepHash(tracks), startIndex, context, preferredQuality);
+  int get hashCode => Object.hash(
+    deepHash(tracks),
+    startIndex,
+    context,
+    preferredQuality,
+    deepHash(shuffleIndices),
+  );
 }
 
 /// 播放后端的状态快照（低频事件驱动）。

@@ -282,7 +282,6 @@
   "queueSingleRepeat": "Repeat one: the current track replays when it ends",
   "queueSingleRepeatHint": "Repeat one: the current track replays; the queue won't advance automatically",
   "queueShuffleRoundEnd": "This shuffle round is done; the next track starts a new round",
-  "queueShuffleRestored": "Shuffle order is generated when playback starts",
   "nowPlayingSection": "Playing",
   "nowPlayingPaused": "Paused",
   "searchLyrics": "Search Lyrics",

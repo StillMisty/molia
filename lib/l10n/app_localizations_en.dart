@@ -685,10 +685,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'This shuffle round is done; the next track starts a new round';
 
   @override
-  String get queueShuffleRestored =>
-      'Shuffle order is generated when playback starts';
-
-  @override
   String get nowPlayingSection => 'Playing';
 
   @override

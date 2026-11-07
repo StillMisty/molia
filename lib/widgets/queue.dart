@@ -24,12 +24,11 @@ String? _coverUrlOf(Track track) {
 /// 队列没有待播行时的尾态文案。
 ///
 /// `upNext` 为空不等于「队列为空」：最后一首、随机轮末、单曲循环都有当前
-/// 曲目，只是后面没有待播项。恢复态没有持久化洗牌排列，随机顺序要等真正
-/// 开始播放才生成，不能用「当前队列为空」误导。
+/// 曲目，只是后面没有待播项；随机恢复态也有本轮顺序，只有真正到轮末
+/// （或队列只剩一首）才没有待播行。
 String _emptyQueueText({
   required AppLocalizations l10n,
   required bool hasTrack,
-  required bool restored,
   required int queueLength,
   required PlayMode mode,
 }) {
@@ -41,7 +40,7 @@ String _emptyQueueText({
       return l10n.queueSingleRepeat;
     case PlayMode.shuffle:
       if (queueLength <= 1) return l10n.queueNoUpcoming;
-      return restored ? l10n.queueShuffleRestored : l10n.queueShuffleRoundEnd;
+      return l10n.queueShuffleRoundEnd;
     case PlayMode.sequential:
     case PlayMode.listLoop:
       return l10n.queueNoUpcoming;
@@ -105,7 +104,6 @@ class QueueDisplay extends StatelessWidget {
             int queueLength,
             PlayMode mode,
             bool hasTrack,
-            bool restored,
           })
         >((provider) {
           final snapshot = provider.snapshot;
@@ -116,7 +114,6 @@ class QueueDisplay extends StatelessWidget {
             queueLength: snapshot.queue.length,
             mode: snapshot.mode,
             hasTrack: snapshot.current != null,
-            restored: provider.hasRestoredSession,
           );
         });
     final currentQueue = queueState.tracks;
@@ -243,7 +240,6 @@ class QueueDisplay extends StatelessWidget {
                     _emptyQueueText(
                       l10n: l10n,
                       hasTrack: queueState.hasTrack,
-                      restored: queueState.restored,
                       queueLength: queueState.queueLength,
                       mode: queueState.mode,
                     ),
