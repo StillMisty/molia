@@ -15,8 +15,9 @@
 可见行为无影响：装配期串行等待改并行、同步/更新两个可选子系统初始化后移到首帧之后。
 Windows 干净启动应用内首帧 **318–338ms**、墙钟进程起→窗口可见
 **1.36–1.45s**，其中约 1.0–1.1s 是引擎 / 进程 / DLL 固定成本；强杀或更新后
-残留的陈旧单实例锁曾额外等待 **~2.1s**（首帧 2.66s → 0.32s），已改为 OS 级
-pid 存活判定（§5.6）。
+残留的陈旧单实例锁曾额外等待 **~2.1s**（首帧 2.66s → 0.32s）；§5.6 曾用 OS 级
+pid 存活判定缩短这段，2026-11 起改为 OS 文件锁（进程退出自动释放，见 ADR-0020），
+不再有陈旧锁判定。
 
 改完后剩下的 **~207ms 里有 ~190ms 是进程外的固定成本**：
 GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们自己 Dart 侧
@@ -109,9 +110,11 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
   2ms、`sub.desktop.build` 0ms、`sub.lyricsDisplay.build` 114–116ms；
 - 应用内首帧与墙钟的差 ≈ **1.0–1.1s**，是进程启动、Flutter 引擎 / Impeller、
   插件 DLL（含 ~30MB libmpv）加载的固定成本；干净启动的 327→338ms 在噪声内；
-- 强杀 / 更新器终止应用会在 `single_instance.lock` 留下已退出进程的 pid，旧逻辑
+- 强杀 / 更新器终止应用曾在 `single_instance.lock` 留下已退出进程的 pid，旧逻辑
   仍去连它的 loopback 端口，等满 2s 超时 + 300ms 重抢才继续，额外 **~2.1s**；
-  §5.6 的 OS 存活判定修掉这段（dev54 日志「锁进程 … 已退出，立即重抢」）。
+  §5.6 的 OS 存活判定先修掉这段（dev54 日志「锁进程 … 已退出，立即重抢」）。
+  当前实现已改为 OS 文件锁 + sidecar metadata（ADR-0020），pid 存活判定只保留给
+  旧 Roaming 升级守卫。
 
 ## 5. 逐项：改了什么、实测多少
 
@@ -171,6 +174,10 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 播放页共享元素飞行的首帧行为）。
 
 ### 5.6 Windows 陈旧单实例锁 + 装配并行（2026-10-21）
+
+> 2026-11 起单实例改为 OS 文件锁 + sidecar metadata（ADR-0020），不再有陈旧锁
+> 判定；本节保留为当时的性能记录，`process_liveness` 目前只服务于旧 Roaming
+> 升级守卫。
 
 - **陈旧锁**：`SingleInstance.acquire()` 抢锁失败后读锁里的 pid / port，旧逻辑直接
   `Socket.connect`；pid 已退出时 Windows 仍可能等满 `_connectTimeout=2s`，随后

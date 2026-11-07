@@ -301,16 +301,22 @@
     `WindowChrome.ensureInitialized()` 只建窗（隐藏标题栏 + 恢复几何）不 `show`，
     窗口由 `main()` 的首帧回调 `WindowChrome.show()` 亮出（runApp 前的装配有几百 ms，
     先显示会让用户盯空白窗），并挂 5s 超时兜底（装配异常时窗口也一定出现）。
-    强制单实例（`lib/services/window/single_instance*.dart`）在窗口创建**之前**抢锁，
-    第二实例连上主实例的 loopback 端口发 `show` 后 `exit(0)`——因此
+    强制单实例是**两层**：Windows / Linux runner 的 mutex / GApplication 负责
+    引擎启动前退出第二实例并请求激活；Dart 文件锁（`single_instance*.dart`）是
+    每用户跨会话的最终仲裁 + macOS 直接执行二进制的兜底。因此
     `SingleInstance.isSupported` 必须与 `WindowChrome.isSupported` 同一平台面：
     窗口能力缺失的平台（Android / iOS）上若仍拦第二实例，用户会「点了图标什么都不发生」。
-    macOS 现在有窗口能力（原生标题栏 + nativeapi 窗口 API 隐藏 / 恢复），单实例一并启用；
-    Dock 图标点击走 `AppDelegate.applicationShouldHandleReopen` → 窗口通道 `reopen`
-    → `WindowChrome.show()`，不能只靠 AppKit 显示窗口：托盘休眠期间界面是占位树，
-    原生直接显示会是一扇空窗。
-    开发/测试实例用 `MOLIA_SINGLE_INSTANCE_DISABLED=1` 放行（`tool/agent/_common.sh`
-    已默认导出），否则本机开着应用时 `flutter run` / 集成测试会被单实例逻辑静默退出。
+    所有原生激活最终都转窗口通道 `reopen` → `WindowChrome.show()`，不能只让平台
+    直接显示原生窗口：托盘休眠期间界面是占位树，原生直接显示会是一扇空窗。
+    - macOS：Dock 点击走 `AppDelegate.applicationShouldHandleReopen`；
+    - Linux：`GApplication::activate`；
+    - Windows：隐藏宿主窗口收到单实例 mutex 的注册消息。
+
+    单实例锁不再删除：`single_instance.lock` 只由 OS 文件锁占用，pid / port 在
+    `single_instance.json`；提前删锁或 `release()` 会让第二实例在旧进程还在写会话 /
+    设置时启动（见 ADR-0020）。开发/测试实例用 `MOLIA_SINGLE_INSTANCE_DISABLED=1`
+    放行（`tool/agent/_common.sh` 已默认导出）；Windows / Linux runner 也读同一
+    环境变量，否则 `flutter run` / 集成测试会被原生快速路径提前退出。
 42. **窗口几何记忆里「最大化」与「几何」必须分开读写**：最大化期间
     `getBounds()` 返回的是最大化矩形，写进 bounds 会丢掉还原尺寸，所以保存路径在
     最大化态只写 `window_maximized` 标记、不写几何；相应地恢复路径也不能

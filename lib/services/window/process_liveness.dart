@@ -1,8 +1,8 @@
-/// 进程存活探测：只用于单实例陈旧锁的快速判定。
+/// 进程存活探测：单实例 metadata 的快速校验。
 ///
-/// 强杀 / 更新器终止应用会留下 `single_instance.lock`；若直接连旧的 loopback
-/// 端口，Windows 上可能要等满 2s 连接超时才开始重抢，首帧被白等。先问操作
-/// 系统「这个 pid 还在不在」，pid 已退出就立刻清锁重抢。
+/// 新锁协议（ADR-0020）由 OS 文件锁判断所有权，不再依赖 pid 清陈旧锁；这里
+/// 只用来避免向已退出的 pid / 失效端口发显示请求，以及给 Windows 旧 Roaming
+/// 锁的升级守卫做存活判定。
 ///
 /// 窗口能力只在 Linux / Windows / macOS 使用（`WindowChrome.isSupported`）；
 /// 其它平台保守返回 true，不参与该路径。

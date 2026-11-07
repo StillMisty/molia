@@ -356,6 +356,7 @@
 
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
+- **Single instance（桌面单实例）** — `lib/services/window/single_instance*.dart` + 两个 runner：每用户一个 primary。Dart 用 OS 文件锁（`single_instance.lock`，进程崩溃自动释放）+ sidecar `single_instance.json`（pid / port）做跨会话最终仲裁；Windows runner 的命名 mutex / Linux runner 的 GApplication 只负责同会话「引擎启动前退出 + 激活」，原生激活统一经窗口通道 `reopen` → `WindowChrome.show()`（托盘休眠树不能由原生直接显示）。失败路径：锁不可用按 primary 继续，锁冲突但无 metadata 短暂等待后按 secondary 退出。`MOLIA_SINGLE_INSTANCE_DISABLED=1` 同时关闭 runner 与 Dart 两层。见 ADR-0020、`docs/pitfalls.md` #41。
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条 + 搜索遮罩，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。
 
 - **Global search overlay（搜索遮罩）** — `lib/widgets/global_search_overlay.dart`：桌面顶栏
