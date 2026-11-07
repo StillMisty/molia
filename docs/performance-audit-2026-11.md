@@ -140,7 +140,9 @@ Linux 修复前的 239–258ms 音源搜索已在 §7 的私有 D-Bus 修复后�
 里主要是 374ms 防抖 + 243ms 首播 resolve 尾巴。Xvfb 首屏软件光栅仍会放大
 帧 / 起播时延，但不影响“搜索请求本身”的结论。Android 搜索（372ms）与
 2026-10 的 325–449ms 同量级，起播总时长 507ms 也在模拟器抖动内
-（2026-10：363–416ms）。
+（2026-10：363–416ms）。Android 最终复跑（`perf-android-data-20261107-214537`）
+在已有音频缓存时 `cache_path=file`，起播 93ms、搜索 305ms；上表 507ms 是首次
+`caching` 口径，不能把 93ms 当成冷起播收益。
 
 ## 6. CPU / IO
 
@@ -202,6 +204,7 @@ Linux release（Xvfb，1440×900）：
   - `startup-android-20261107-200007` / `-205326`
   - `perf-android-20261107-201336`
   - `perf-android-data-20261107-203847`
+  - `perf-android-data-20261107-214537`（preflight 修复后复跑）
 
 ## 9. 未覆盖 / 下一步
 
