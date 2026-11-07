@@ -40,6 +40,28 @@ die() { printf '[agent] ERROR: %s\n' "$*" >&2; exit 1; }
 # 是否有图形显示（Linux 桌面运行需要；test.sh 默认套 xvfb-run，app.sh 无显示时套）
 has_display() { [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; }
 
+# 停应用：按可执行名精确匹配，避免 `pkill -f <长路径>` 把调用它的 shell 一起
+# 杀掉（agent 手动调试时踩过）。脚本统一走这里。
+kill_app() {
+  command -v pkill >/dev/null 2>&1 || return 0
+  pkill -x "$APP_BINARY" 2>/dev/null || true
+}
+
+# Linux 显示前缀：默认无条件 Xvfb，避免 WSLg 下把窗口弹到 Windows 桌面；
+# 传 1 表示用当前真实显示（脚本的 --window）。调用方展开
+# `"${LINUX_DISPLAY_PREFIX[@]}"`；GDK_BACKEND / WAYLAND_DISPLAY 的细节见
+# test.sh：只改 DISPLAY 不够，GDK 见到 WAYLAND_DISPLAY 会优先连真实合成器。
+linux_display_prefix() {
+  local real_display="${1:-0}"
+  LINUX_DISPLAY_PREFIX=()
+  if ((real_display)); then
+    return 0
+  fi
+  command -v xvfb-run >/dev/null 2>&1 ||
+    die "缺少 xvfb-run（装 xorg-server-xvfb，或显式使用 --window 跑真实显示）"
+  LINUX_DISPLAY_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
+}
+
 # 列出已连接设备（序列号）
 adb_devices() {
   "$ADB" devices | awk 'NR>1 && $2=="device" {print $1}'

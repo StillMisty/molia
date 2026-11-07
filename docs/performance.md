@@ -22,6 +22,10 @@ pid 存活判定（§5.6）。
 GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们自己 Dart 侧
 的装配只剩 ~20ms。
 
+**改动门槛**：性能改动必须给同机、同口径的 A/B（原始日志目录）；只做结构解耦 /
+补埋点而没有可测收益时，提交说明与文档要标明，不冒充性能提升；既无收益又无结构
+必要的改动回退，不留在仓库里。
+
 ## 2. 测量方法
 
 - **只用 release 产物**：debug 的首帧含 JIT / 断言开销，历史 debug 数据在 1.5–2.4s，
@@ -55,6 +59,24 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
   下载的 `mimalloc-2.1.2.tar.gz`，而它的下载在受限网络下会失败（CMake 只报
   "Integrity check failed"，实际是 0 字节文件）。真遇到时手动放一份 MD5 为
   `5179c8f5cf1237d2300e2d8559a7bc55` 的 tarball 到该目录即可。
+
+### 3.1 跑测前置条件（2026-11 补充）
+
+- **Linux 默认无头**：`perf.sh` / `startup.sh` / `test.sh` 默认套 Xvfb，
+  不会把窗口弹到 WSLg；只有显式 `--window` 才用当前真实显示。手动跑时也要
+  `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`，只 unset `DISPLAY` 不够。
+- **WSL / 容器要私有 D-Bus**：`perf.sh data/cpu linux` 已自动套
+  `dbus-run-session`。没有 keyring / NetworkManager 时，系统会话总线会让
+  同步初始化（安全存储 / 电量网络探针）卡 40s+，症状是 `scenario.source`
+  迟迟不出现、搜索看起来超时。
+- **Android data/cpu 用 release 包**：需要 `adb root`（release 包不可
+  `run-as`）；首次安装后 `perf.sh` 会先启动一次应用创建私有数据目录，再注入
+  mock 音源。直接手跑 `seed.sh mock-source` 前也要先启动应用一次。
+- **Xvfb 首屏软件光栅会放大帧 / 起播**：Linux headless 的 `raster` 可能到
+  数百 ms，不要把该场景的帧 / 首播时延当成真实 GPU 基线；搜索请求本身已由
+  私有 D-Bus 隔离。
+- **隔离 HOME 的窗口 bounds**：`perf.sh` 每次固定 1440×900；复用大窗口会让
+  Xvfb 软件光栅把 CPU / 帧数据拉满，实测出现过 98% 平台线程。
 
 ## 4. 结果（中位数，ms）
 

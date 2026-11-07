@@ -81,11 +81,9 @@ run_one() { # platform
   local device prefix=()
   if [[ "$platform" == "linux" ]]; then
     device="linux"
+    linux_display_prefix "$((headless == 0))"
+    prefix=("${LINUX_DISPLAY_PREFIX[@]}")
     if (( headless )); then
-      command -v xvfb-run >/dev/null 2>&1 ||
-        die "缺少 xvfb-run：先装 xvfb（pacman -S xorg-server-xvfb / apt install xvfb），或用 --window 在真实显示上跑"
-      # GDK_BACKEND=x11 + 去掉 WAYLAND_DISPLAY：否则 WSLg 下 GTK 会绕过 Xvfb 连真实合成器弹窗
-      prefix=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
       log "headless: xvfb-run -a（不弹窗；--window 可切回真实显示）"
     elif ! has_display; then
       log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑（启动报错看日志）"
@@ -128,8 +126,8 @@ run_one() { # platform
   # 收尾兜底：桌面测试 App 是 flutter test 的子进程，异常路径下可能没被带走；
   # 它持有 stdout 会让 tee / 脚本一直不返回。正常退出时它也已走 tearDownAll
   # 的 exit(0)，这里再补一刀是幂等的。
-  if [[ "$platform" == "linux" ]] && command -v pkill >/dev/null 2>&1; then
-    pkill -f "$PROJECT_DIR/build/linux/x64/debug/bundle/molia" >/dev/null 2>&1 || true
+  if [[ "$platform" == "linux" ]]; then
+    kill_app
   fi
 
   if ((rc == 124)); then

@@ -12,7 +12,18 @@
 #   tool/agent/perf.sh size android|linux
 #   tool/agent/perf.sh all linux|android
 #
+# 全局选项:
+#   --window    Linux 在真实显示上跑（默认 Xvfb 无头，不会弹到 WSLg）
+#   --no-build  复用已有产物（data/cpu 的 release APK / Linux bundle；见各命令）
+#
 # 说明:
+# - Linux 默认无条件 Xvfb；`--window` 才用当前 DISPLAY。只改 DISPLAY 不够，
+#   脚本会同时 unset WAYLAND_DISPLAY + GDK_BACKEND=x11（同 test.sh）；
+# - data/cpu linux 自动套私有 `dbus-run-session`：WSL / 容器没有 keyring 或
+#   NetworkManager 时，系统会话总线会让同步初始化（安全存储 / 探针）卡 40s+，
+#   看起来像搜索超时；
+# - Android data/cpu 用 release 包注入 mock 源：需要 `adb root`（release 包
+#   不可 run-as）；首次安装会先启动一次应用创建私有目录再 seed；
 # - frames 走 `flutter drive --profile` + integration_test/perf_flows_test.dart，
 #   只读 `molia.frame` 汇总行（FrameStats opt-in，正常包无开销）；
 # - Windows 目标必须用 Windows 侧 Flutter（WSL 的 Flutter 不能构建 Windows），
@@ -31,6 +42,19 @@ WIN_PERF_OUT_WIN="${MOLIA_WIN_PERF_OUT:-C:\\Users\\Still\\AppData\\Local\\Temp\\
 WIN_PERF_OUT_WSL="/mnt/c/Users/Still/AppData/Local/Temp/molia-perf/frames.jsonl"
 WIN_TEMP_WSL="/mnt/c/Users/Still/AppData/Local/Temp/molia-perf"
 FRAME_TIMEOUT="${MOLIA_PERF_TIMEOUT:-1800}"
+
+PERF_WINDOW=0
+PERF_NO_BUILD=0
+_global_args=()
+for _arg in "$@"; do
+  case "$_arg" in
+    --window) PERF_WINDOW=1 ;;
+    --no-build) PERF_NO_BUILD=1 ;;
+    *) _global_args+=("$_arg") ;;
+  esac
+done
+set -- "${_global_args[@]}"
+unset _arg _global_args
 
 usage() {
   sed -n '/^# 用法:/,/^# 说明:/p' "$0" | sed -e 's/^# \{0,1\}//' -e '$d' >&2
@@ -220,14 +244,38 @@ build_perf_linux() { # out_dir hold_seconds start_delay_seconds
 
 LINUX_RUN_PREFIX=()
 linux_run_prefix() {
-  LINUX_RUN_PREFIX=()
-  if has_display; then
-    return 0
+  linux_display_prefix "$PERF_WINDOW"
+  LINUX_RUN_PREFIX=("${LINUX_DISPLAY_PREFIX[@]}")
+  if ((PERF_WINDOW)); then
+    if has_display; then
+      log "window: 使用当前显示（可能弹到 WSLg）"
+    else
+      log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑"
+    fi
+  else
+    log "headless: xvfb-run -a（--window 可切回真实显示）"
   fi
-  command -v xvfb-run >/dev/null 2>&1 ||
-    die "缺少 xvfb-run（--window 可在真实显示上跑）"
-  # 只改 DISPLAY 不够：GDK 见到 WAYLAND_DISPLAY 会优先连真实合成器。
-  LINUX_RUN_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
+}
+
+# data/cpu 的 release 进程需要隔离的会话总线：WSL / 容器没有 keyring 或
+# NetworkManager 时，系统会话总线会让同步初始化（安全存储 / 电量网络探针）
+# 卡 40s+，表现为 scenario.source 迟迟不出现、搜索超时。
+PERF_DBUS_PREFIX=()
+perf_dbus_prefix() {
+  PERF_DBUS_PREFIX=()
+  if command -v dbus-run-session >/dev/null 2>&1; then
+    PERF_DBUS_PREFIX=(dbus-run-session --)
+  else
+    log "警告：缺少 dbus-run-session；WSL 下可能因系统总线缺服务而卡住"
+  fi
+}
+
+require_scenario_done() { # log_file label
+  local log="$1" label="$2"
+  grep -q 'molia.perf:.*scenario.done' "$log" 2>/dev/null && return 0
+  log "数据场景未完成（$label），日志尾部："
+  tail -40 "$log" >&2 || true
+  die "未采到 scenario.done；本轮数据不可用（检查 dbus / adb root / mock 音源）"
 }
 
 run_data_linux() {
@@ -235,16 +283,47 @@ run_data_linux() {
   local out="$1"
   prepare_perf_home
   seed_mock_source linux "$out"
-  build_perf_linux "$out" 1 0
+  if ((PERF_NO_BUILD)); then
+    log "复用已有 perf release（--no-build）"
+  else
+    build_perf_linux "$out" 1 0
+  fi
   local exe="build/linux/x64/release/bundle/$APP_BINARY"
   [[ -x "$PROJECT_DIR/$exe" ]] || die "找不到 release 产物：$exe"
   linux_run_prefix
+  perf_dbus_prefix
   log "运行数据链路场景（Linux release / Xvfb）"
   ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${LINUX_RUN_PREFIX[@]}" \
-      timeout --signal=TERM --kill-after=5 300 "./$exe" ) \
+      "${PERF_DBUS_PREFIX[@]}" timeout --signal=TERM --kill-after=5 300 "./$exe" ) \
     >"$out/run.log" 2>&1 || true
+  require_scenario_done "$out/run.log" linux
   report_data "$out"
   log "结果目录：$out"
+}
+
+ensure_android_root() { # serial
+  local serial="$1" uid
+  uid="$("$ADB" -s "$serial" shell id -u 2>/dev/null | tr -d '\r')"
+  [[ "$uid" == "0" ]] ||
+    die "perf data/cpu 需要 root（release 包不可 run-as）：先执行 '$ADB -s $serial root'"
+}
+
+# 首次安装后应用私有目录还不存在：seed 会在 stat / cp 阶段失败。先启动一次
+# 应用让系统建好 files / shared_prefs，再 force-stop，随后 seed。
+ensure_android_app_data() { # serial
+  local serial="$1" dir="/data/data/$APP_ID"
+  if "$ADB" -s "$serial" shell "test -d '$dir/files'" >/dev/null 2>&1; then
+    return 0
+  fi
+  log "首次安装：先启动一次应用创建私有数据目录"
+  "$ADB" -s "$serial" shell am start -W -S -n "$APP_ID/.MainActivity" \
+    >/dev/null 2>&1 || true
+  local deadline=$(( $(date +%s) + 20 ))
+  while ! "$ADB" -s "$serial" shell "test -d '$dir/files'" >/dev/null 2>&1; do
+    (( $(date +%s) > deadline )) && die "应用数据目录未创建：$dir/files"
+    sleep 0.5
+  done
+  "$ADB" -s "$serial" shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
 }
 
 run_data_android() { # out_dir [serial]
@@ -255,6 +334,7 @@ run_data_android() { # out_dir [serial]
   [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
   DEVICE_ID="$serial"
   adb_dev() { "$ADB" -s "$serial" "$@"; }
+  ensure_android_root "$serial"
 
   local abi target abi_name
   abi="$(adb_dev shell getprop ro.product.cpu.abi | tr -d '\r')"
@@ -266,13 +346,17 @@ run_data_android() { # out_dir [serial]
   esac
   local apk="build/app/outputs/flutter-apk/app-$abi_name-release.apk"
 
-  log "构建 perf release APK（$abi）"
-  ( cd "$PROJECT_DIR" && flutter build apk --release \
-      --target-platform "$target" --split-per-abi \
-      "${PERF_DART_DEFINES[@]}" \
-      --dart-define=MOLIA_PERF_HOLD_SECONDS=1 \
-      --dart-define=MOLIA_PERF_START_DELAY_SECONDS=0 ) \
-    2>&1 | tee "$out/build.log"
+  if ((PERF_NO_BUILD)); then
+    log "复用已有 perf release APK（--no-build）"
+  else
+    log "构建 perf release APK（$abi）"
+    ( cd "$PROJECT_DIR" && flutter build apk --release \
+        --target-platform "$target" --split-per-abi \
+        "${PERF_DART_DEFINES[@]}" \
+        --dart-define=MOLIA_PERF_HOLD_SECONDS=1 \
+        --dart-define=MOLIA_PERF_START_DELAY_SECONDS=0 ) \
+      2>&1 | tee "$out/build.log"
+  fi
   [[ -f "$PROJECT_DIR/$apk" ]] || die "找不到 APK：$apk"
   log "安装到 $serial"
   if ! adb_dev install -r "$apk" >/dev/null 2>&1; then
@@ -280,6 +364,7 @@ run_data_android() { # out_dir [serial]
     adb_dev install "$apk" >/dev/null 2>&1 || die "安装失败：$apk"
   fi
   # 安装之后再注入：签名不一致触发的重装会清空应用数据。
+  ensure_android_app_data "$serial"
   seed_mock_source android "$out" "$serial"
   adb_dev logcat -c >/dev/null 2>&1 || true
   log "运行数据链路场景（Android / $serial）"
@@ -294,6 +379,7 @@ run_data_android() { # out_dir [serial]
   done
   adb_dev logcat -d 2>/dev/null | grep -a 'molia.perf' >"$out/data.log" || true
   adb_dev shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+  require_scenario_done "$out/data.log" android
   report_data "$out"
   log "结果目录：$out"
 }
@@ -373,13 +459,18 @@ run_cpu_linux() {
   prepare_perf_home
   seed_mock_source linux "$out"
   # 12s 空闲窗口 + 播放后保持 30s：同一次进程里采两段 CPU。
-  build_perf_linux "$out" 30 12
+  if ((PERF_NO_BUILD)); then
+    log "复用已有 perf release（--no-build）"
+  else
+    build_perf_linux "$out" 30 12
+  fi
   local exe="build/linux/x64/release/bundle/$APP_BINARY"
   [[ -x "$PROJECT_DIR/$exe" ]] || die "找不到 release 产物：$exe"
   linux_run_prefix
+  perf_dbus_prefix
   local log="$out/run.log"
   ( cd "$PROJECT_DIR" && env -u XDG_DATA_HOME HOME="$PERF_HOME" "${LINUX_RUN_PREFIX[@]}" \
-      timeout --signal=TERM --kill-after=5 180 "./$exe" ) >"$log" 2>&1 &
+      "${PERF_DBUS_PREFIX[@]}" timeout --signal=TERM --kill-after=5 180 "./$exe" ) >"$log" 2>&1 &
   local runner=$!
   local deadline=$(( $(date +%s) + 90 ))
   while :; do
@@ -400,6 +491,13 @@ run_cpu_linux() {
     (( $(date +%s) > deadline )) && break
     sleep 0.5
   done
+  if ! grep -q 'molia.perf:.*scenario.play.done' "$log" 2>/dev/null; then
+    log "播放场景未完成，日志尾部："
+    tail -40 "$log" >&2 || true
+    kill "$runner" >/dev/null 2>&1 || true
+    wait "$runner" >/dev/null 2>&1 || true
+    die "未采到 scenario.play.done；本轮 CPU 数据不可用"
+  fi
   log "播放采样（pid=$pid）"
   cpu_sample_linux "$out" playing "$pid"
   wait "$runner" >/dev/null 2>&1 || true
@@ -428,6 +526,7 @@ run_cpu_android() { # out_dir [serial]
   [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
   DEVICE_ID="$serial"
   adb_dev() { "$ADB" -s "$serial" "$@"; }
+  ensure_android_root "$serial"
 
   local abi target abi_name
   abi="$(adb_dev shell getprop ro.product.cpu.abi | tr -d '\r')"
@@ -438,16 +537,22 @@ run_cpu_android() { # out_dir [serial]
     *) die "未知 ABI：$abi" ;;
   esac
   local apk="build/app/outputs/flutter-apk/app-$abi_name-release.apk"
-  log "构建 perf release APK（$abi）"
-  ( cd "$PROJECT_DIR" && flutter build apk --release \
-      --target-platform "$target" --split-per-abi \
-      "${PERF_DART_DEFINES[@]}" \
-      --dart-define=MOLIA_PERF_HOLD_SECONDS=30 \
-      --dart-define=MOLIA_PERF_START_DELAY_SECONDS=12 ) \
-    2>&1 | tee "$out/build.log"
+  if ((PERF_NO_BUILD)); then
+    log "复用已有 perf release APK（--no-build）"
+  else
+    log "构建 perf release APK（$abi）"
+    ( cd "$PROJECT_DIR" && flutter build apk --release \
+        --target-platform "$target" --split-per-abi \
+        "${PERF_DART_DEFINES[@]}" \
+        --dart-define=MOLIA_PERF_HOLD_SECONDS=30 \
+        --dart-define=MOLIA_PERF_START_DELAY_SECONDS=12 ) \
+      2>&1 | tee "$out/build.log"
+  fi
+  [[ -f "$PROJECT_DIR/$apk" ]] || die "找不到 APK：$apk"
   adb_dev install -r "$apk" >/dev/null 2>&1 ||
     { adb_dev uninstall "$APP_ID" >/dev/null 2>&1 || true; adb_dev install "$apk" >/dev/null 2>&1; } ||
     die "安装失败：$apk"
+  ensure_android_app_data "$serial"
   seed_mock_source android "$out" "$serial"
   adb_dev logcat -c >/dev/null 2>&1 || true
   adb_dev shell am start -W -S -n "$APP_ID/.MainActivity" >/dev/null 2>&1 || true
@@ -463,6 +568,10 @@ run_cpu_android() { # out_dir [serial]
     (( $(date +%s) > deadline )) && break
     sleep 1
   done
+  if ! adb_dev logcat -d 2>/dev/null | grep -q 'molia.perf:.*scenario.play.done'; then
+    adb_dev shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+    die "未采到 scenario.play.done；本轮 Android CPU 数据不可用"
+  fi
   log "播放采样（Android）"
   "$PROJECT_DIR/tool/agent/cpu.sh" android "$serial" --duration 8 \
     >"$out/cpu-playing.txt" 2>&1 || true
@@ -557,6 +666,7 @@ shift || true
 
 case "$cmd" in
   frames)
+    ((PERF_NO_BUILD)) && die "frames 暂不支持 --no-build：flutter drive 会重建 profile 产物"
     [[ $# -ge 1 ]] || usage
     platform="$1"; shift
     case "$platform" in
@@ -605,7 +715,10 @@ case "$cmd" in
     platform="${1:-linux}"
     case "$platform" in
       linux|android)
-        exec "$PROJECT_DIR/tool/agent/startup.sh" "$platform" "${@:2}"
+        startup_args=("$platform" "${@:2}")
+        ((PERF_WINDOW)) && startup_args+=(--window)
+        ((PERF_NO_BUILD)) && startup_args+=(--no-build)
+        exec "$PROJECT_DIR/tool/agent/startup.sh" "${startup_args[@]}"
         ;;
       windows)
         windows_sync
@@ -646,6 +759,7 @@ case "$cmd" in
     esac
     ;;
   size)
+    ((PERF_NO_BUILD)) && die "size 不支持 --no-build：该命令就是要重新构建产物"
     platform="${1:-android}"
     case "$platform" in
       android)
@@ -678,12 +792,14 @@ case "$cmd" in
     ;;
   all)
     platform="${1:-linux}"
-    "$0" startup "$platform"
+    all_flags=()
+    ((PERF_WINDOW)) && all_flags+=(--window)
+    "$0" startup "$platform" "${all_flags[@]}"
     "$0" size "$platform"
     if [[ "$platform" == android ]]; then
       "$0" frames android
     else
-      "$0" frames linux
+      "$0" frames linux "${all_flags[@]}"
     fi
     ;;
   *) usage ;;

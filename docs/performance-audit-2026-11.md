@@ -18,9 +18,11 @@
 - **音源初始化不再等待同步初始化**：音源脚本与搜索 / 播放入口只依赖本地
   脚本仓库；同步仍等戳种子，传输 / 首轮在两边就绪后起。Android
   `sub.sourceManager.init` 105ms、`sub.sync.start` 181ms，互不阻塞。
-- Linux 无头数据链路的首搜延迟（~250ms）**不是产品回归**：同场景首屏
-  Xvfb 软件光栅 p95 达 **330ms**（`raster` 不可用于真实 GPU 结论），
-  隐藏窗口 / 把 LX 任务泵改快都不能消除它，不据此改应用代码。
+- Linux 无头首搜的 ~250ms 根因是**系统会话总线缺 keyring / NetworkManager**：
+  `startSync` 的安全存储 / 探针在系统总线上等 40s+，搜索请求被拖住。`perf.sh`
+  改为私有 `dbus-run-session` 后，同机 `search.source` **0.45ms**、搜索端到端
+  **630ms**；这不是产品 Dart 回归。首播仍有 ~243ms 的 resolve 尾巴（首次
+  起播 / 引擎预热），与搜索无关。
 - Android 模拟器 `mobile-nowplaying-leave-return` 出现 build jank
   （p99 17.32ms、jank16=2、worst 97.66ms），但同场景第二个窗口恢复干净；
   没有真机 raster，仍不外推。
@@ -28,12 +30,11 @@
 ## 2. 测量口径
 
 ```bash
-# Linux：全部无头，禁止弹 WSLg 窗口
-env -u DISPLAY -u WAYLAND_DISPLAY GDK_BACKEND=x11 tool/agent/startup.sh --runs 5
-env -u DISPLAY -u WAYLAND_DISPLAY GDK_BACKEND=x11 tool/agent/perf.sh frames linux
-env -u DISPLAY -u WAYLAND_DISPLAY GDK_BACKEND=x11 dbus-run-session -- \
-  tool/agent/perf.sh data linux
-env -u DISPLAY -u WAYLAND_DISPLAY GDK_BACKEND=x11 tool/agent/perf.sh cpu linux
+# Linux：默认无头，禁止弹 WSLg 窗口（脚本内部已套 Xvfb / 私有 D-Bus）
+tool/agent/startup.sh --runs 5
+tool/agent/perf.sh frames linux
+tool/agent/perf.sh data linux
+tool/agent/perf.sh cpu linux
 
 # Android：模拟器 headless
 tool/agent/startup.sh android --runs 5
@@ -98,7 +99,7 @@ tool/agent/perf.sh data android
 | 连续切歌 | 136 | 0.56 | 1.05 | 6.93 | 0 / 0 | 8.81 |
 | 进播放页 | 62 | 0.87 | 1.67 | 6.20 | 0 / 0 | 6.85 |
 | 播放页 ⇄ 收藏 ×3 | 48 | 1.13 | 1.98 | 4.13 | 0 / 0 | 4.36 |
-| 迷你条展开 / 收起 | 52 | 0.96 | 3.16 | 5.03 | 0 / 0 | 5.83 |
+| 迷你条展开 / 收起（控制器驱动） | 21 | 1.20 | 3.47 | 3.87 | 0 / 0 | 5.69 |
 
 与 2026-10 的 Linux build p95（2.14 / 2.07 / 0.98 / 1.81ms）同量级，
 没有发现需要继续压的 UI 工作量。
@@ -119,26 +120,27 @@ tool/agent/perf.sh data android
   raster 复测」结论。
 - `mobile-mini-expand` 场景本轮在模拟器失败：下拉 420 后播放器高度仍为
   394.8（期望 72），没有产生该场景的完整帧数据。属于测试手势/时序问题，
-  不是帧耗时回归；下一轮跑真机前先修测试再采数。
+  已改为直接驱动播放页的 `SingleMotionController`（Linux 已通过，21 帧），
+  Android 真机/模拟器未复跑。
 
 ## 5. 数据链路（mock 音源）
 
-| 口径 | Linux headless | Android emulator |
+| 口径 | Linux headless（修复后） | Android emulator |
 | --- | ---: | ---: |
-| 搜索端到端 | 599–798ms | 372ms |
-| ├ 防抖 | 351–387ms | 321ms |
-| ├ 音源搜索 | 239–258ms | 2.06ms |
-| 起播 queue→首声 | 786–1251ms | 507ms |
-| ├ resolve | 14–251ms | 110ms |
-| ├ setAudioSource | 528–999ms | 396ms |
-| 歌词（缓存命中） | 12–17ms | 82ms |
+| 搜索端到端 | 630ms（修复前 599–798ms） | 372ms |
+| ├ 防抖 | 374ms（修复前 351–387ms） | 321ms |
+| ├ 音源搜索 | **0.45ms**（修复前 239–258ms） | 2.06ms |
+| 起播 queue→首声 | 752ms（修复前 786–1251ms） | 507ms |
+| ├ resolve | 243ms | 110ms |
+| ├ setAudioSource | 509ms | 396ms |
+| 歌词（缓存命中） | 8ms | 82ms |
 | 歌词缓存写 | — | 134–142ms |
 
-Linux 无头下首搜的 ~250ms 与 Xvfb 首屏软件光栅重叠（同轮 14 帧里
-`raster p95=330ms`、`worst=490ms`）；隐藏窗口、把 LX 任务泵从 250ms 改
-25ms 都不能消除，因此**不把这段算到应用 Dart 侧**。Android 搜索
-（372ms）与 2026-10 的 325–449ms 同量级，起播总时长 507ms 也在模拟器
-抖动内（2026-10：363–416ms）。
+Linux 修复前的 239–258ms 音源搜索已在 §7 的私有 D-Bus 修复后消失；630ms
+里主要是 374ms 防抖 + 243ms 首播 resolve 尾巴。Xvfb 首屏软件光栅仍会放大
+帧 / 起播时延，但不影响“搜索请求本身”的结论。Android 搜索（372ms）与
+2026-10 的 325–449ms 同量级，起播总时长 507ms 也在模拟器抖动内
+（2026-10：363–416ms）。
 
 ## 6. CPU / IO
 
@@ -169,18 +171,33 @@ Linux release（Xvfb，1440×900）：
    首帧后埋点，便于确认统计收尾 / 裁剪不回到首帧路径。
 5. `tool/agent/perf.sh`：`prepare_perf_home` 每次把隔离 HOME 的窗口 bounds
    固定为 1440×900，避免 Xvfb 复用大窗口导致 CPU / 帧数据失真。
+6. `tool/agent/_common.sh` + `perf.sh` / `startup.sh` / `test.sh`：统一
+   `linux_display_prefix`；`perf.sh` 默认无条件 Xvfb，新增 `--window` 切真实
+   显示；`kill_app` 用 `pkill -x`，避免误杀调用脚本的 shell。
+7. `tool/agent/perf.sh`：Linux `data` / `cpu` 自动套私有 `dbus-run-session`，
+   并在缺失 `scenario.done` / `scenario.play.done` 时非零退出；`--no-build`
+   可复用已有 release 产物。
+8. `tool/agent/perf.sh` + `seed.sh`：Android `data/cpu` 先检查 `adb root`，
+   首次安装先启动应用创建私有目录再 seed；`seed.sh` 遇到空 / 损坏
+   `lx_sources.json` 回退为空脚本表，不再抛 Python traceback。
+9. `integration_test/perf_flows_test.dart`：`mobile-mini-expand` 改为直接驱动
+   播放页的 `SingleMotionController` 并轮询高度，避免测试坐标落在滚动区 /
+   slider pan 上导致场景无效。
 
 ## 8. 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
 - `flutter test --no-pub`：2526 passed / 11 skipped；
-- `tool/agent/test.sh linux`：见本轮执行日志；
+- `tool/agent/test.sh linux`：通过；`perf_flows_test.dart` 单跑通过；
+- `tool/agent/perf.sh frames linux`：通过，`mobile-mini-expand` 产出 21 帧；
+- `tool/agent/perf.sh data linux`：默认无头 + 私有 D-Bus，`scenario.done`
+  正常，`search.source` 0.45ms；
 - Android release 启动 A/B：5 次冷启动（上方 §3.2）；
 - Linux 数据 / 帧 / CPU：Xvfb 无头，原始结果目录：
   - `startup-linux-20261107-205809`（最终）
   - `startup-linux-20261107-192133`（改动前）
-  - `perf-linux-20261107-192300`
-  - `perf-linux-data-20261107-204841`
+  - `perf-linux-20261107-213741`（最终帧）
+  - `perf-linux-data-20261107-212648`（最终数据）
   - `perf-linux-cpu-20261107-195111`
   - `startup-android-20261107-200007` / `-205326`
   - `perf-android-20261107-201336`
@@ -188,11 +205,12 @@ Linux release（Xvfb，1440×900）：
 
 ## 9. 未覆盖 / 下一步
 
-- **真实 Android 设备**：`mobile-nowplaying-leave-return` 的 raster 与
-  `mobile-mini-expand` 手势时序；模拟器数据只做相对比较。
+- **真实 Android 设备**：`mobile-nowplaying-leave-return` 的 raster；
+  `mobile-mini-expand` 已改为控制器驱动，不再被手势时序阻塞。
 - **Windows**：本轮按用户要求跳过；恢复范围后补 `startup windows` /
   `frames windows --real`。
 - **托盘内存 / 提交大小**：本轮没有做 Linux 托盘往返（Xvfb 无托盘宿主），
   Windows 实机数据仍以 `docs/memory.md` 为准。
-- **Linux 无头数据链路**：首搜 250ms 已归因为 Xvfb 首屏软件光栅，不再改
-  应用代码；需要真实 GPU 桌面时再按 `frames windows --real` 口径复测。
+- **Linux 无头数据链路**：首搜 250ms 的根因是系统会话总线缺 keyring /
+  NetworkManager，已由 `perf.sh` 的私有 `dbus-run-session` 修复；首播仍有
+  ~243ms resolve 尾巴，等真实 GPU / 真机再决定是否做播放器预打开。
