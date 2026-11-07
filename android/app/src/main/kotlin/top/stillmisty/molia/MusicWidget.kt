@@ -191,6 +191,12 @@ class MusicWidget : AppWidgetProvider() {
                     Glide.with(context.applicationContext)
                         .asBitmap()
                         .load(albumArtUrl)
+                        // 小组件封面只有 64dp（约 4x 余量 256px）。不限制尺寸时，
+                        // 2000×2000 封面按原图解码约 16MB，还会经 RemoteViews
+                        // 跨进程传给桌面；256×256 足够清晰且显著压低内存峰值。
+                        .override(256, 256)
+                        .centerCrop()
+                        .dontAnimate()
                         .into(object : CustomTarget<Bitmap>() {
                             override fun onResourceReady(
                                 resource: Bitmap,
