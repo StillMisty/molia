@@ -22,7 +22,7 @@ Windows `EmptyWorkingSet`），让释放体现在系统观测上。实测：Linu
 - 窗口隐藏后平台停止出帧（Linux：GTK withdrawn → `AppLifecycleState.hidden` →
   `framesEnabled=false`），任何「等回到前台再重建」的清理都拿不到托盘期收益；
 - 三块本可回收的内存：
-  1. **Flutter 图片缓存**（默认 100 MiB / 1000 张）全仓没有清理入口；托盘听歌
+  1. **Flutter 图片缓存**（默认 100 MiB / 1000 张；2026-11-07 起显式 64 MiB，见 §8）全仓没有清理入口；托盘听歌
      时还在持续解码：`PlaybackObserver` 每次切歌预取「当前 + 下一首 + 队列 5 首」
      封面，`ArtworkThemeSync` 每次切歌解一张全尺寸封面取色，直到缓存打满；
   2. **常驻页面**：播放 / 收藏 / 资料库三页在 `Offstage` 下仍挂载，页面
@@ -212,3 +212,51 @@ fixture 的 heap 是 `209.5 → 205.8MB`，两者下降几乎相同，说明这�
 上本批新增释放**不可分辨**——主要仍是既有的图片缓存 / 界面卸载。真实
 raw payload / 多列表详情场景请按 §4 的隔离 HOME + 真实库复测，不要把
 3.6MB 当成线上收益，也不要对外宣称这批已经实测省了内存。
+
+## 8. 2026-11-07：显式图片预算 / Android 后台回收 / 浏览缓存 LRU
+
+### 8.1 改了什么
+
+| 位置 | 行为 |
+| --- | --- |
+| `lib/main.dart` | `ensureInitialized()` 后、`AppMemoryManager` 首次访问前把全局 `imageCache.maximumSizeBytes` 显式设为 64 MiB（`kFullImageCacheLimitBytes`）；注册 `WidgetsBindingObserver.didHaveMemoryPressure` |
+| `lib/managers/app_memory_manager.dart` | 完整上限 `kFullImageCacheLimitBytes = 64 MiB`，托盘 / 后台保持 16 MiB；`onAppBackground()` / `onAppForeground()` 供移动端生命周期使用（不写 `AppPresence`）：退后台 30s 后 `imageCache.clear()`（**不** `clearLiveImages()`）+ 上限压到 16 MiB，回前台取消计时并恢复 64 MiB；token + 重复事件幂等 |
+| 同上 | `addLowMemoryReleaser()` / `onMemoryPressure()`：只有系统低内存才释放浏览 / 搜索 / 目录缓存；Android 的 `TRIM_MEMORY_UI_HIDDEN` 也会映射成 `didHaveMemoryPressure`，用 1s 去抖 + 退后台过渡窗口取消，避免每次切后台清列表 |
+| `lib/providers/library_provider.dart` | `_tracksByPlaylist` 改 LRU，上限 5 个列表；`playlistTracksView` / `ensurePlaylistTracks` 触碰最近使用，淘汰时跳过当前展示列表；`releaseBrowseCaches()` 语义不变（全清） |
+| `test/managers/app_memory_manager_test.dart`、`test/library_provider_test.dart` | 覆盖 64 / 16 / 64、30s 延迟、快速往返、重复退后台、dispose、低内存与 UI_HIDDEN 区分、LRU 淘汰与 release |
+
+为什么移动端不 `clearLiveImages()`：Android 退后台不卸载 widget 树，当前封面仍被
+`Image` 持有；清 live 会让回前台第一帧封面空白。`imageCache.clear()` 只清
+pending / keepAlive，当前展示的封面不受影响。
+
+### 8.2 恢复语义与代价
+
+- 回前台恢复 64 MiB 上限；当前 live 封面 / 正在显示的列表仍在，不触发重建。
+- 被清掉的 keepAlive 封面按需重新解码（列表首次滚回可见区可能短暂占位或重新
+  读磁盘缓存）；代价是一次解码 CPU，换来后台 30s 后缓存不再常驻。
+- 浏览列表 LRU 最多保留 5 个；切回更早的列表会重读数据库（有 loading 态），
+  不丢收藏 / 历史 / 列表清单。
+- 系统低内存释放后同理：恢复时搜索 / 目录 / 列表按需重取。
+- 移动端退后台 30s 内切回：不清理，保持跟手。
+
+### 8.3 验证与实测
+
+- `flutter analyze --no-pub`：0 error / 0 warning；
+- `flutter test --no-pub`：全绿（2547 通过 / 11 跳过；新增 / 更新用例见 §8.1）；
+- Android 模拟器（x86_64，API 37，release x64）`adb shell dumpsys meminfo`：
+  - 基线：环境里已安装的 beta.43 release（默认 100 MiB、无移动端后台清理）。
+    冷启动 10s `PSS 113.3 MB / RSS 250.5 MB`，Home 5s `110.7 / 245.8`，
+    35s `110.0 / 245.1`。
+  - 本改动（64 MiB + 30s 清理）：冷启动 10s `PSS 114.6 / RSS 253.1`，
+    Home 5s `111.2 / 246.3`，35s `110.5 / 245.6`，回前台 `110.8 / 246.3`。
+  - 这两次都是**没有封面进入 imageCache** 的空列表 fixture：同刻
+    `molia.memory` 显示 `imageCache=0.0MB/64MB`，30s 清理只把上限 64→16，
+    没有可释放的缓存。因此 PSS / RSS 差异落在 1–2 MB 噪声内，**不能据此
+    宣称省了内存**；可确认的是预算切换与生命周期日志按设计发生。
+  - 有封面 fixture（收藏 30 张 1000×1000 远端封面、QQ 音乐发现页滚动）：
+    本改动侧 `molia.memory` 仍显示 `imageCache=0.0MB`（封面以 live 图片 /
+    样式缓存形态存在，未进 keepAlive），未能得到可信的缓存差额；基线侧同一
+    fixture 的 release 包因 `libflutter.so` 加载失败无法启动（已装回本改动
+    包），未完成 A/B。真机 / 真实库场景仍需复测。
+- Linux release + Xvfb `/proc/<pid>/smaps_rollup`：未测。本次改动不触碰桌面
+  托盘路径（§3 的既有回收逻辑与数据不变），时间用于 Android 模拟器验证。
