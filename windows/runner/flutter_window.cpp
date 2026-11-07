@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "single_instance.h"
 #include "taskbar_thumb_bar.h"
 #include "utils.h"
 
@@ -61,6 +62,27 @@ std::string ActionName(TaskbarThumbBar::Action action) {
       return "next";
   }
   return std::string();
+}
+
+// 单实例宿主窗口只接收注册消息；收到后请 FlutterWindow 转 Dart 恢复窗口。
+LRESULT CALLBACK InstanceHostWndProc(HWND window,
+                                     UINT const message,
+                                     WPARAM const wparam,
+                                     LPARAM const lparam) noexcept {
+  if (message == WM_NCCREATE) {
+    auto* create_struct = reinterpret_cast<CREATESTRUCTW*>(lparam);
+    SetWindowLongPtrW(
+        window, GWLP_USERDATA,
+        reinterpret_cast<LONG_PTR>(create_struct->lpCreateParams));
+  } else if (message == single_instance::ActivateMessage()) {
+    auto* flutter_window = reinterpret_cast<FlutterWindow*>(
+        GetWindowLongPtrW(window, GWLP_USERDATA));
+    if (flutter_window != nullptr) {
+      flutter_window->RequestActivate();
+    }
+    return 0;
+  }
+  return DefWindowProcW(window, message, wparam, lparam);
 }
 
 }  // namespace
@@ -138,6 +160,9 @@ bool FlutterWindow::OnCreate() {
         }
       });
 
+  // 单实例宿主窗口必须早于托盘隐藏创建：第二实例启动时靠它找到本进程。
+  CreateInstanceHostWindow();
+
   thumb_bar_ = std::make_unique<TaskbarThumbBar>();
   thumb_bar_->Attach(
       GetHandle(),
@@ -177,7 +202,38 @@ bool FlutterWindow::OnCreate() {
   return true;
 }
 
+void FlutterWindow::CreateInstanceHostWindow() {
+  const std::wstring& class_name = single_instance::HostWindowClassName();
+  HINSTANCE instance = GetModuleHandleW(nullptr);
+
+  WNDCLASSW window_class{};
+  window_class.hInstance = instance;
+  window_class.lpfnWndProc = InstanceHostWndProc;
+  window_class.lpszClassName = class_name.c_str();
+  // 同一进程只建一次；失败（类已存在）不影响后续 CreateWindowExW。
+  RegisterClassW(&window_class);
+
+  instance_host_window_ = ::CreateWindowExW(
+      0, class_name.c_str(), L"Molia", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
+      instance, this);
+  if (instance_host_window_ != nullptr) {
+    SetWindowLongPtrW(instance_host_window_, GWLP_USERDATA,
+                      reinterpret_cast<LONG_PTR>(this));
+  }
+}
+
+void FlutterWindow::RequestActivate() {
+  if (window_channel_ == nullptr) {
+    return;
+  }
+  window_channel_->InvokeMethod("reopen", nullptr);
+}
+
 void FlutterWindow::OnDestroy() {
+  if (instance_host_window_ != nullptr) {
+    ::DestroyWindow(instance_host_window_);
+    instance_host_window_ = nullptr;
+  }
   // 通道先于引擎销毁，并显式摘掉处理函数：MethodChannel 的析构**不会**注销
   // 注册到 messenger 的回调（句柄归 messenger 所有，见 method_channel.h），
   // 不摘会在退出路径上回调到已析构的窗口。

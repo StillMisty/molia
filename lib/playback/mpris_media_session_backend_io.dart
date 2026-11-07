@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audio_service_mpris/audio_service_mpris.dart';
 import 'package:audio_service_platform_interface/audio_service_platform_interface.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_media_session/flutter_media_session.dart';
@@ -38,14 +39,27 @@ class MprisMediaSessionBackend implements MediaSessionBackend {
   Future<void> activate() async {
     if (_activated) return;
     _activated = true;
+    // 1.0.0-beta 的能力位默认全 false（CanControl=false 会让系统媒体控件
+    // 变灰），必须在 configure 前声明；dBusName 决定 MPRIS 总线名，
+    // desktopEntry 必须是已安装 .desktop 的文件名（与 linux/CMakeLists.txt
+    // 的 APPLICATION_ID 一致），Wayland 门户靠它认领应用身份。
+    AudioServiceMpris.init(
+      dBusName: 'top.stillmisty.molia.media',
+      identity: 'Molia',
+      desktopEntry: 'top.stillmisty.molia',
+      canControl: true,
+      canPlay: true,
+      canPause: true,
+      canGoNext: true,
+      canGoPrevious: true,
+    );
     _platform.setHandlerCallbacks(_MprisHandlerCallbacks(this));
     try {
       await _platform.configure(
         ConfigureRequest(
           config: AudioServiceConfigMessage(
-            // MPRIS 用 channel id 生成总线名
-            // `org.mpris.MediaPlayer2.<id>.instance<pid>`，用独立命名空间
-            // 避免与其它实例 / 旧 audio_service 配置撞名。
+            // Linux 的总线名由上面的 dBusName 决定；channel id 仍保留给
+            // 平台接口的同名配置项，用独立命名空间避免与旧配置撞名。
             androidNotificationChannelId: 'top.stillmisty.molia.media',
             androidNotificationChannelName: 'Molia',
             androidNotificationChannelDescription: '播放控制与歌词',

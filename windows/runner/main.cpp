@@ -7,6 +7,7 @@
 
 #include "flutter_window.h"
 #include "shell_identity.h"
+#include "single_instance.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -15,6 +16,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
+  }
+
+  // 单实例快速路径：第二实例在这里退出，不初始化 COM / Flutter 引擎。
+  // 主实例的隐藏宿主窗口收到激活消息后经 window/reopen 调 Dart。
+  if (!single_instance::AcquireOrActivate()) {
+    return EXIT_SUCCESS;
   }
 
   // Initialize COM, so that it is available for use in the library and/or

@@ -12,6 +12,7 @@ import 'package:molia/services/app_logging.dart';
 import 'package:molia/widgets/collection_track_list.dart';
 import 'package:molia/widgets/molia_mark.dart';
 import 'package:molia/widgets/player.dart';
+import 'package:motor/motor.dart';
 
 import '../test/support/perf_app_harness.dart';
 
@@ -119,6 +120,21 @@ void main() {
     }
   }
 
+  /// 泵帧直到播放器高度满足条件：模拟器上动画/手势落定比桌面慢，
+  /// 固定 45 帧会在慢一档的机器上提前断言。
+  Future<void> pumpUntilPlayerHeight(
+    WidgetTester tester,
+    Finder player,
+    bool Function(double height) matches, {
+    int maxFrames = 180,
+  }) async {
+    for (var i = 0; i < maxFrames; i++) {
+      if (matches(tester.getSize(player).height)) return;
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    fail('播放器高度未在 ${maxFrames * 16}ms 内达到预期');
+  }
+
   testWidgets('桌面壳：收藏滚动 / 切页 / 连续切歌', (tester) async {
     final backend = await pumpPerfApp(
       tester,
@@ -222,21 +238,33 @@ void main() {
       greaterThan(miniPlayerHeight),
       reason: '播放页应处于展开态',
     );
+    final expand = tester.widget<Player>(player).expandAnimation;
+    expect(expand, isA<SingleMotionController>(), reason: '移动壳缺少展开控制器');
+    final controller = expand! as SingleMotionController;
     for (var i = 0; i < 2; i++) {
-      // 播放器区域下拉收起（超过半程），再点迷你条整条展开。
-      await tester.drag(player, const Offset(0, 420));
-      await pumpFrames(tester, frames: 45);
+      // 这里测的是展开 / 收起动画的帧成本，不是手势命中：直接驱动播放页的
+      // 同一个控制器，避免测试坐标落在滚动区 / 滑杆 pan 上导致场景无效。
+      controller.animateTo(0);
+      await pumpUntilPlayerHeight(
+        tester,
+        player,
+        (height) => height <= miniPlayerHeight + 1,
+      );
       expect(
         tester.getSize(player).height,
         closeTo(miniPlayerHeight, 1),
-        reason: '下拉应把播放器收成迷你条',
+        reason: '收起动画应把播放器停在迷你条',
       );
-      await tester.tap(player);
-      await pumpFrames(tester, frames: 60);
+      controller.animateTo(1);
+      await pumpUntilPlayerHeight(
+        tester,
+        player,
+        (height) => height > miniPlayerHeight + 1,
+      );
       expect(
         tester.getSize(player).height,
         greaterThan(miniPlayerHeight),
-        reason: '点迷你条应展开完整播放页',
+        reason: '展开动画应回到完整播放页',
       );
     }
     FrameStats.instance.reportNow('end');

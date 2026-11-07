@@ -9,6 +9,10 @@
   `android/app/src/main/AndroidManifest.xml`、`windows/runner/main.cpp`、
   `windows/installer/molia.iss`、issue #34、`docs/pitfalls.md` #18 / #34
 
+> 2026-11 更新：`audio_service_mpris` 已升到 `1.0.0-beta.3`（`dbus ^0.8`，并补
+> MPRIS Seek / SetPosition），`connectivity_plus` 随之升到 `7.3.2`；下文关于
+> `7.3.1` 固定的版本号只保留历史语境。
+
 ## 背景
 
 此前系统媒体会话由 `audio_service` 提供，平台覆盖只有 Android / iOS / macOS / Web：

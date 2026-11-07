@@ -82,17 +82,16 @@ setup_linux() {
   fi
   [[ -x "$exe" ]] || die "找不到 release 产物：$exe"
 
-  prefix=()
+  linux_display_prefix "$((headless == 0))"
+  prefix=("${LINUX_DISPLAY_PREFIX[@]}")
   if (( headless )); then
-    command -v xvfb-run >/dev/null 2>&1 || die "缺少 xvfb-run（--window 可跳过）"
-    # 只改 DISPLAY 不够：GDK 见到 WAYLAND_DISPLAY 会优先连真实合成器（同 test.sh）
-    prefix=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
+    log "headless: xvfb-run -a（--window 可切回真实显示）"
   elif ! has_display; then
     log "警告：--window 但未检测到 DISPLAY/WAYLAND_DISPLAY，仍直接跑（启动报错看日志）"
   fi
 
   sampling_run() { # $1=轮次 $2=日志路径
-    pkill -f "$PROJECT_DIR/$exe" >/dev/null 2>&1 || true
+    kill_app
     local cmd=("${prefix[@]}" timeout --signal=TERM --kill-after=5 "$timeout_s" "./$exe")
     "${cmd[@]}" >"$2" 2>&1 &
     local runner_pid=$!
@@ -106,7 +105,7 @@ setup_linux() {
     sleep 1
     kill "$runner_pid" >/dev/null 2>&1 || true
     wait "$runner_pid" >/dev/null 2>&1 || true
-    pkill -f "$PROJECT_DIR/$exe" >/dev/null 2>&1 || true
+    kill_app
   }
 
   # 从各轮日志里取「首帧」那行，供平台无关的收尾检查用

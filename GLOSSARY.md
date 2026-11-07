@@ -350,12 +350,13 @@
   （`lib/utils/scroll_to_top.dart::animateScrollToTop`）。壳层不消费状态，但重复点击
   命中时统一给一次轻震（`lib/services/haptics.dart`，可在设置里全局关闭）；页面不重复给触感。
 
-- **Shortcut scopes（快捷键分组）** — `lib/services/shortcut_bindings.dart`：`ShortcutScope.inApp`（软件内，窗口聚焦时生效，`lib/app/desktop/desktop_shortcuts.dart` 用 `HardwareKeyboard` 处理器挂载）与 `ShortcutScope.global`（全局，系统级热键，`lib/services/global_hotkeys.dart` 经 `system_hotkeys` 注册）。两组都可开关（`kShortcutsEnabled` 默认开 / `kGlobalShortcutsEnabled` 默认关）、可自定义（`kShortcutBindings` / `kGlobalShortcutBindings` 存 JSON 覆盖，跟人走），录制到冲突组合 / 单行回默认撞上被占用的默认组合时可在确认后互换两者生效组合（`ShortcutSettings.swapBindings`）；命令执行语义唯一实现在 `lib/services/shortcut_actions.dart`。
+- **Shortcut scopes（快捷键分组）** — `lib/services/shortcut_bindings.dart`：`ShortcutScope.inApp`（软件内，窗口聚焦时生效，`lib/app/desktop/desktop_shortcuts.dart` 用 `HardwareKeyboard` 处理器挂载）与 `ShortcutScope.global`（全局，系统级热键，`lib/services/global_hotkeys.dart` 经 `nativeapi.ShortcutManager` 注册）。两组都可开关（`kShortcutsEnabled` 默认开 / `kGlobalShortcutsEnabled` 默认关）、可自定义（`kShortcutBindings` / `kGlobalShortcutBindings` 存 JSON 覆盖，跟人走），录制到冲突组合 / 单行回默认撞上被占用的默认组合时可在确认后互换两者生效组合（`ShortcutSettings.swapBindings`）；命令执行语义唯一实现在 `lib/services/shortcut_actions.dart`。
 
 - **Escape claims（Esc 占用登记）** — `lib/services/escape_claims.dart`：页面级 / 弹层把「此刻的 Esc 归我」提前告诉桌面壳层的唯一协议（`add` / `remove` / `any`；判定现算，隐藏页 / 已关弹层不残留占用，dispose 注销）。壳层 `desktop_shortcuts.dart` 命中 Esc 命令前查登记，有登记方即让位（返回 false、不消费事件）——`HardwareKeyboard` 处理器全部执行、返回值不短路，无法靠返回值裁决谁消费。**同源规则**：登记判定必须与登记方自己的按键处理器同一条件方法，否则出现「壳层让位但登记方不处理」的按键黑洞或双重消费；登记方自己接 Esc 时也不依赖焦点位置（音量弹层即此）。
 
 - **Haptics（触感模块）** — `lib/services/haptics.dart`：全应用触感唯一入口（lightImpact / mediumImpact / selectionClick），带设备本地开关（默认开；关闭后不触碰平台通道）。所有调用点经它；M3E 包内自带的触感（swipe action / 排序等）不在此覆盖范围。
 
+- **Single instance（桌面单实例）** — `lib/services/window/single_instance*.dart` + 两个 runner：每用户一个 primary。Dart 用 OS 文件锁（`single_instance.lock`，进程崩溃自动释放）+ sidecar `single_instance.json`（pid / port）做跨会话最终仲裁；Windows runner 的命名 mutex / Linux runner 的 GApplication 只负责同会话「引擎启动前退出 + 激活」，原生激活统一经窗口通道 `reopen` → `WindowChrome.show()`（托盘休眠树不能由原生直接显示）。失败路径：锁不可用按 primary 继续，锁冲突但无 metadata 短暂等待后按 secondary 退出。`MOLIA_SINGLE_INSTANCE_DISABLED=1` 同时关闭 runner 与 Dart 两层。见 ADR-0020、`docs/pitfalls.md` #41。
 - **Desktop shell（桌面骨架）** — `lib/app/desktop/**`：仅 linux/windows/macOS 生效的壳层版式（顶栏工具条 + 恒折叠侧栏 + 常驻底栏播放条 + 搜索遮罩，播放页里整条让位），由 `lib/app/app_shell.dart` 按平台分流（`MyApp(desktopShell:)` 可强制，测试用）；移动骨架与共享逻辑（页面栈 / 共享元素飞行 / 重复点击通道 / `NowPlayingController`）仍在 `app_shell.dart`，两套骨架同源。
 
 - **Global search overlay（搜索遮罩）** — `lib/widgets/global_search_overlay.dart`：桌面顶栏

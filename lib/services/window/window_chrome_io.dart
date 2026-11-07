@@ -23,7 +23,6 @@ import 'package:nativeapi_flutter/nativeapi_flutter.dart'
 
 import '../app_presence.dart';
 import 'display_areas_io.dart';
-import 'single_instance.dart';
 import 'window_bounds.dart';
 import 'window_bounds_store.dart';
 import 'window_settings.dart';
@@ -142,7 +141,9 @@ class WindowChrome {
       // 窗口初始化失败不阻断启动：runner 仍会显示默认窗口。
       _logger.warning('窗口初始化失败：$error');
     }
-    if (Platform.isMacOS) _installReopenHandler();
+    // 三个桌面平台都可能从原生收到「恢复窗口」请求：macOS 是 Dock 点击，
+    // Linux 是 GApplication::activate，Windows 是单实例 mutex 的激活消息。
+    if (isSupported) _installReopenHandler();
     // 显示前先摆好位置：show() 后再设置 bounds 会肉眼可见地跳一下。
     await _restoreSavedGeometry();
     await _applyLinuxWindowIcon();
@@ -318,13 +319,16 @@ class WindowChrome {
     'top.stillmisty.molia/window',
   );
 
-  /// 是否已接管 macOS 的 Dock「重新打开」回调（进程内只需一次）。
+  /// 是否已接管原生的「重新打开」回调（进程内只需一次）。
   static bool _reopenHandlerInstalled = false;
 
-  /// macOS：Dock 图标点击时 AppKit 只负责把应用带到前台；窗口在托盘休眠态
-  /// 下是 `orderOut` 的，直接显示会是一扇停在休眠占位的空窗。原生
-  /// `AppDelegate.applicationShouldHandleReopen` 经这条通道回到 Dart，统一走
-  /// [show]（markVisible + 重建界面 + 恢复最大化）。
+  /// 原生激活请求统一回到 Dart 的 [show]（markVisible + 重建界面 + 恢复
+  /// 最大化），不能只让平台直接显示原生窗口：托盘休眠期间界面树是占位，
+  /// 原生直接显示会是一扇空窗。
+  ///
+  /// - macOS：`AppDelegate.applicationShouldHandleReopen`（Dock 点击）；
+  /// - Linux：`my_application_activate`（GApplication 单实例重复激活）；
+  /// - Windows：隐藏宿主窗口收到单实例激活消息。
   ///
   /// 与 Windows 的 Dart → 原生 `showAfterFirstFrame` 共用通道名，但方向相反
   /// （这是原生 → Dart），互不冲突。
@@ -426,11 +430,12 @@ class WindowChrome {
       .timeout(const Duration(milliseconds: 500), onTimeout: () {});
 
   /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
-  /// 先释放单实例锁、解除关闭拦截，再关闭窗口；退出前的落盘由调用方负责。
+  /// 解除关闭拦截后关闭窗口；退出前的落盘由调用方负责。
+  ///
+  /// 单实例锁不在这里释放：它由 OS 在进程退出时自动关闭。提前释放会让
+  /// 第二实例在旧进程还在写播放会话 / 设置时抢锁启动。
   static Future<void> quit() async {
     if (!isSupported) return;
-    // 正常退出路径顺带释放锁：下次启动能直接抢到（强杀残留由陈旧锁清理兜底）。
-    await SingleInstance.release();
     _destroying = true;
     _preventClose = false;
     final window = _window;

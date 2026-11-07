@@ -5,8 +5,6 @@
 /// 凭证属于同步类别，远端应用后按登记键触发配置回读。
 library;
 
-import 'dart:async';
-
 import '../../data/settings/settings_keys.dart';
 import '../../providers/ai_dj_provider.dart';
 import '../../providers/library_provider.dart';
@@ -71,7 +69,8 @@ AiStack buildAiStack({
     kAiDjFeedbackMemory,
     aiDjProvider.reloadPreferences,
   );
-  unawaited(aiDjProvider.init());
+  // init 读安全存储 / 历史批次，由首帧后的 `post_frame_init.dart` 触发：
+  // AI 页与推荐流不在首帧内容里，不必和窗口 / 播放装配抢首帧前的平台通道。
   playback.addListener(aiDjProvider.onPlaybackChanged);
   playback.position.addListener(aiDjProvider.onPositionChanged);
 

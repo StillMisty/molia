@@ -8,7 +8,7 @@
 
 ## 工具链
 
-Flutter / Dart 3.47.9 / 3.13.7；JDK 27+；Gradle 9.8.2 / AGP 9.5.0 / Kotlin 2.4.21；
+Flutter / Dart 3.47.9 / 3.13.7；JDK 27+；Gradle 9.9.0 / AGP 9.5.0 / Kotlin 2.4.21；
 compileSdk/targetSdk 37，minSdk 35；NDK 30.0.16248370。这里是版本来源，改 CI / 发布工作流前先改本行。
 最低支持：iOS 18 / macOS 12（Xcode；macOS 走 just_audio 原生 AVPlayer，不需要 libmpv）。
 
@@ -21,7 +21,7 @@ tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托�
 tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
 tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/history/session/mock-source/status/clear/restore
 tool/agent/startup.sh                    # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
-tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（见 docs/performance-audit-2026-10.md）
+tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（最新基线与跑法见 docs/performance.md）
 tool/agent/cpu.sh                        # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
 tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + molia.memory 转换日志；见 docs/memory.md）
 tool/agent/io.sh                         # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）

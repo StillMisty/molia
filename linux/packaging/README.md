@@ -13,7 +13,10 @@
 **为什么必须有 `.desktop`**：Wayland 没有「窗口图标」协议，dock / 应用菜单只能
 按 `app_id ↔ .desktop 文件名` 匹配（两者都是 `top.stillmisty.molia`，与
 `linux/CMakeLists.txt` 的 `APPLICATION_ID` 一致）；不装就是通用图标。X11 侧另有
-`StartupWMClass` 供窗口匹配。
+`StartupWMClass` 供窗口匹配。应用用同一个 `APPLICATION_ID` 注册
+`GApplication` 单实例 / D-Bus 激活；从桌面条目或直接执行二进制重复启动都会把
+`activate` 转发给已有实例，并带上 startup notification token（Wayland 聚焦）。
+没有 session bus 时回退非唯一模式，由 Dart 文件锁兜底（ADR-0020）。
 
 ## 图标再生成（品牌更新时）
 

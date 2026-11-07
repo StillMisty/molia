@@ -18,6 +18,10 @@ class FlutterWindow : public Win32Window {
   explicit FlutterWindow(const flutter::DartProject& project);
   virtual ~FlutterWindow();
 
+  // 单实例激活：主实例收到第二实例的消息后调用，转 Dart 的
+  // WindowChrome.show()（含托盘休眠树重建与最大化恢复）。
+  void RequestActivate();
+
  protected:
   // Win32Window:
   bool OnCreate() override;
@@ -46,6 +50,11 @@ class FlutterWindow : public Win32Window {
   bool SetWindowCloaked(bool cloak);
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>>
       window_channel_;
+
+  // 单实例宿主窗口：隐藏的顶层窗口，只用来接收第二实例的注册消息。
+  // 它必须早于 Flutter 窗口的托盘隐藏存在，否则第二实例找不到通知目标。
+  void CreateInstanceHostWindow();
+  HWND instance_host_window_ = nullptr;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

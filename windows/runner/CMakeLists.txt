@@ -10,6 +10,7 @@ add_executable(${BINARY_NAME} WIN32
   "flutter_window.cpp"
   "main.cpp"
   "shell_identity.cpp"
+  "single_instance.cpp"
   "taskbar_thumb_bar.cpp"
   "utils.cpp"
   "win32_window.cpp"
@@ -38,6 +39,10 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 # SetCurrentProcessExplicitAppUserModelID（SMTC 应用身份，见 main.cpp）。
 target_link_libraries(${BINARY_NAME} PRIVATE "shell32.lib")
+# 单实例 mutex 的用户 SID（ConvertSidToStringSidW）与前台激活
+# （AllowSetForegroundWindow）。
+target_link_libraries(${BINARY_NAME} PRIVATE "advapi32.lib")
+target_link_libraries(${BINARY_NAME} PRIVATE "user32.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.

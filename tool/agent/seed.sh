@@ -564,7 +564,14 @@ PY
     "$MOCK_SOURCE_NAME" <<'PY'
 import json, sys, time
 path, script_path, script_id, source_key, source_name = sys.argv[1:6]
-data = json.load(open(path, encoding="utf-8"))
+# 进程被强杀 / 旧版本写坏时可能是空文件或非 JSON：不能因此阻断注入，
+# 按「没有既有脚本」处理（备份已在上面保留原文件）。
+try:
+    data = json.load(open(path, encoding="utf-8"))
+except (OSError, ValueError):
+    data = {}
+if not isinstance(data, dict):
+    data = {}
 script = open(script_path, encoding="utf-8").read()
 entry = {
     "id": script_id,

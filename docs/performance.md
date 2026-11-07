@@ -15,12 +15,17 @@
 可见行为无影响：装配期串行等待改并行、同步/更新两个可选子系统初始化后移到首帧之后。
 Windows 干净启动应用内首帧 **318–338ms**、墙钟进程起→窗口可见
 **1.36–1.45s**，其中约 1.0–1.1s 是引擎 / 进程 / DLL 固定成本；强杀或更新后
-残留的陈旧单实例锁曾额外等待 **~2.1s**（首帧 2.66s → 0.32s），已改为 OS 级
-pid 存活判定（§5.6）。
+残留的陈旧单实例锁曾额外等待 **~2.1s**（首帧 2.66s → 0.32s）；§5.6 曾用 OS 级
+pid 存活判定缩短这段，2026-11 起改为 OS 文件锁（进程退出自动释放，见 ADR-0020），
+不再有陈旧锁判定。
 
 改完后剩下的 **~207ms 里有 ~190ms 是进程外的固定成本**：
 GTK 建窗 ~46ms + libmpv `dlopen` ~39ms + 引擎与首帧渲染 ~100ms；我们自己 Dart 侧
 的装配只剩 ~20ms。
+
+**改动门槛**：性能改动必须给同机、同口径的 A/B（原始日志目录）；只做结构解耦 /
+补埋点而没有可测收益时，提交说明与文档要标明，不冒充性能提升；既无收益又无结构
+必要的改动回退，不留在仓库里。
 
 ## 2. 测量方法
 
@@ -56,6 +61,24 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
   "Integrity check failed"，实际是 0 字节文件）。真遇到时手动放一份 MD5 为
   `5179c8f5cf1237d2300e2d8559a7bc55` 的 tarball 到该目录即可。
 
+### 3.1 跑测前置条件（2026-11 补充）
+
+- **Linux 默认无头**：`perf.sh` / `startup.sh` / `test.sh` 默认套 Xvfb，
+  不会把窗口弹到 WSLg；只有显式 `--window` 才用当前真实显示。手动跑时也要
+  `env -u WAYLAND_DISPLAY GDK_BACKEND=x11`，只 unset `DISPLAY` 不够。
+- **WSL / 容器要私有 D-Bus**：`perf.sh data/cpu linux` 已自动套
+  `dbus-run-session`。没有 keyring / NetworkManager 时，系统会话总线会让
+  同步初始化（安全存储 / 电量网络探针）卡 40s+，症状是 `scenario.source`
+  迟迟不出现、搜索看起来超时。
+- **Android data/cpu 用 release 包**：需要 `adb root`（release 包不可
+  `run-as`）；首次安装后 `perf.sh` 会先启动一次应用创建私有数据目录，再注入
+  mock 音源。直接手跑 `seed.sh mock-source` 前也要先启动应用一次。
+- **Xvfb 首屏软件光栅会放大帧 / 起播**：Linux headless 的 `raster` 可能到
+  数百 ms，不要把该场景的帧 / 首播时延当成真实 GPU 基线；搜索请求本身已由
+  私有 D-Bus 隔离。
+- **隔离 HOME 的窗口 bounds**：`perf.sh` 每次固定 1440×900；复用大窗口会让
+  Xvfb 软件光栅把 CPU / 帧数据拉满，实测出现过 98% 平台线程。
+
 ## 4. 结果（中位数，ms）
 
 | 阶段 | 基线 | 依赖升级后 | 并行化 + 后移后 | 撤掉预热实验后（现状） |
@@ -87,9 +110,11 @@ tool/agent/startup.sh --window        # Linux：在真实显示上跑（WSLg 会
   2ms、`sub.desktop.build` 0ms、`sub.lyricsDisplay.build` 114–116ms；
 - 应用内首帧与墙钟的差 ≈ **1.0–1.1s**，是进程启动、Flutter 引擎 / Impeller、
   插件 DLL（含 ~30MB libmpv）加载的固定成本；干净启动的 327→338ms 在噪声内；
-- 强杀 / 更新器终止应用会在 `single_instance.lock` 留下已退出进程的 pid，旧逻辑
+- 强杀 / 更新器终止应用曾在 `single_instance.lock` 留下已退出进程的 pid，旧逻辑
   仍去连它的 loopback 端口，等满 2s 超时 + 300ms 重抢才继续，额外 **~2.1s**；
-  §5.6 的 OS 存活判定修掉这段（dev54 日志「锁进程 … 已退出，立即重抢」）。
+  §5.6 的 OS 存活判定先修掉这段（dev54 日志「锁进程 … 已退出，立即重抢」）。
+  当前实现已改为 OS 文件锁 + sidecar metadata（ADR-0020），pid 存活判定只保留给
+  旧 Roaming 升级守卫。
 
 ## 5. 逐项：改了什么、实测多少
 
@@ -149,6 +174,10 @@ I/O 空档。试法：在后台 isolate 里先 `DynamicLibrary.open` 一次（�
 播放页共享元素飞行的首帧行为）。
 
 ### 5.6 Windows 陈旧单实例锁 + 装配并行（2026-10-21）
+
+> 2026-11 起单实例改为 OS 文件锁 + sidecar metadata（ADR-0020），不再有陈旧锁
+> 判定；本节保留为当时的性能记录，`process_liveness` 目前只服务于旧 Roaming
+> 升级守卫。
 
 - **陈旧锁**：`SingleInstance.acquire()` 抢锁失败后读锁里的 pid / port，旧逻辑直接
   `Socket.connect`；pid 已退出时 Windows 仍可能等满 `_connectTimeout=2s`，随后
@@ -277,6 +306,7 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 ## 9. 运行时体检（2026-10）
 
 启动之外的帧、交互、数据链路、CPU、内存与体积基线见
-`docs/performance-audit-2026-10.md`；复测入口为 `tool/agent/perf.sh`
-（`frames` / `memory` / `size` / `startup` / `data` / `cpu`），Windows
-真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
+`docs/performance-audit-2026-10.md`；2026-11 的 Linux（Xvfb 无头）+ Android
+模拟器复测见 `docs/performance-audit-2026-11.md`。复测入口为
+`tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
+`cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
