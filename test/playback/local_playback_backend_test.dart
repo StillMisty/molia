@@ -48,6 +48,9 @@ class _FakeService extends LocalPlaybackService {
   int stopCalls = 0;
   final List<String> calls = [];
 
+  /// 最近一次 playTracks 收到的洗牌排列（断言 load 透传恢复态顺序）。
+  List<int>? lastShuffleIndices;
+
   @override
   bool get hasTrack => _index >= 0 && _index < _queue.length;
 
@@ -144,9 +147,11 @@ class _FakeService extends LocalPlaybackService {
     List<SourceTrack> tracks,
     int index, {
     String? contextName,
+    List<int>? shuffleIndices,
   }) async {
     playTracksCalls++;
     calls.add('playTracks');
+    lastShuffleIndices = shuffleIndices;
     seed(
       tracks,
       index: index.clamp(0, tracks.length - 1),
@@ -578,6 +583,26 @@ void main() {
       reason: 'raw 必须原样回传',
     );
     expect(backend.state.value.context?.name, 'ctx');
+    expect(service.lastShuffleIndices, isNull, reason: '未提供排列时不伪造');
+  });
+
+  test('load 透传恢复态洗牌排列给 playTracks', () async {
+    final tracks = [
+      trackFromSourceTrack(_source('a')),
+      trackFromSourceTrack(_source('b')),
+      trackFromSourceTrack(_source('c')),
+    ];
+
+    await backend.load(
+      PlaybackRequest(
+        tracks: tracks,
+        startIndex: 1,
+        shuffleIndices: const [1, 2, 0],
+      ),
+    );
+
+    expect(service.playTracksCalls, 1);
+    expect(service.lastShuffleIndices, [1, 2, 0]);
   });
 
   test('解析器端口：Track → PlayableStream', () async {

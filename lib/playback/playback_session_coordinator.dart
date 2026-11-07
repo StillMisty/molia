@@ -119,6 +119,13 @@ class PlaybackSessionCoordinator
   /// 恢复态展示快照：[_restoredSession] 的唯一构造结果（null = 无恢复态）。
   PlaybackSnapshot? _restoredSnapshot;
 
+  /// 恢复态的本轮洗牌顺序（会话内，不落盘）。
+  ///
+  /// 冷启动时按保存队列生成，恢复快照的 next / upNext 与恢复播放共用同一份：
+  /// 右槽首帧就有下一首，点播放后后端沿用该排列，不会因重新洗牌换掉邻位。
+  /// 每次冷启动都是新的一轮随机顺序；只有恢复态（shuffle / 队列长度 > 1）持有。
+  PlaybackShuffleOrder? _restoredShuffleOrder;
+
   /// 恢复态进度：点播放时 seek 回的目标（也是进度通道的覆盖值）。
   Duration _restoredPosition = Duration.zero;
 
@@ -227,6 +234,13 @@ class PlaybackSessionCoordinator
       final session = await _store.load();
       if (session == null || session.current == null) return false;
       if (_facade.snapshot.value.current != null) return false;
+      // 同步 reload 可能反复装载同一会话：同一份恢复队列（模式 / 光标 /
+      // 队列顺序都一致）时保留已有排列，避免每次重载都换一轮随机顺序
+      //（右槽邻位会跟着跳）；同长度同模式的另一份远端会话必须重新生成。
+      final previous = _restoredSession;
+      if (previous == null || !_isSameRestoredDeck(previous, session)) {
+        _restoredShuffleOrder = null;
+      }
       _restoredSession = session;
       _restoredPosition = session.position;
       _position.setRestored(session.position);
@@ -356,9 +370,8 @@ class PlaybackSessionCoordinator
   /// 下一首：恢复态 = 从下一下标立即恢复播放（越界 no-op）。
   ///
   /// 恢复态切歌语义上「切歌」包含起播——只移动下标会与队列条目点击不一致。
-  /// 模式口径与 live 对齐：列表循环队尾回队首；随机没有持久化排列，按当前
-  /// 曲目为起点开启新的一轮（队列面板此时不预览具体顺序，空态文案会说
-  /// 「开始播放后会生成随机播放顺序」）。
+  /// 模式口径与 live 对齐：列表循环队尾回队首；随机沿用装载时生成本轮排列的
+  /// 下一首，只有走到本轮末尾才重洗新一轮（与恢复快照展示的顺序同源）。
   @override
   Future<PlaybackCommandOutcome> skipToNext() async {
     if (phase == PlaybackSessionPhase.restored) {
@@ -373,11 +386,13 @@ class PlaybackSessionCoordinator
           if (length == 1) {
             next = session.index;
           } else {
-            // 没有持久化排列：以当前曲目置首生成新一轮，取排列第二项；
-            // 不再按队列下标 +1 冒充随机下一首。
-            final order = PlaybackShuffleOrder()
-              ..reset(length, startIndex: session.index);
-            next = order.next(session.index);
+            // 沿用恢复态已展示的本轮排列，不再每次新建一轮：右槽与队列面板
+            // 的「接下来」必须和真正起播的顺序一致；轮末 next 才重洗。
+            _ensureRestoredShuffleOrder();
+            final order = _restoredShuffleOrder;
+            next = order == null
+                ? session.index
+                : (order.peekNext(session.index) ?? order.next(session.index));
           }
         case PlayMode.listLoop:
           next = nextQueueIndex(session.index, length, wrap: true);
@@ -422,7 +437,10 @@ class PlaybackSessionCoordinator
   Future<void> enqueueRestoredTracks(List<Track> tracks) async {
     final session = _restoredSession;
     if (session == null || tracks.isEmpty) return;
+    final oldLength = session.tracks.length;
     _restoredSession = session.copyWith(tracks: [...session.tracks, ...tracks]);
+    // 排列与队列保持等长（后续 ensure 的长度检查据此判断是否可用）。
+    _restoredShuffleOrder?.extend(oldLength, _restoredSession!.tracks.length);
     _publishRestoredSnapshot();
     await _store.save(_restoredSession!);
   }
@@ -494,6 +512,8 @@ class PlaybackSessionCoordinator
         return PlaybackCommandOutcome.none;
       }
       final tracks = List<Track>.of(session.tracks)..removeAt(index);
+      // 排列下标与队列同源：移除后其后下标前移，否则 upNextIndices 会指错行。
+      _restoredShuffleOrder?.removeIndex(index);
       _restoredSession = session.copyWith(
         tracks: tracks,
         index: index < session.index ? session.index - 1 : session.index,
@@ -670,7 +690,12 @@ class PlaybackSessionCoordinator
     await _facade.setMode(mode);
     final session = _restoredSession;
     if (session != null) {
+      final modeChanged = session.mode != mode;
       _restoredSession = session.copyWith(mode: mode);
+      // 只有进入 / 离开随机才需要重新决定排列：无变化的 setMode 不能白换
+      // 一轮随机顺序（右槽邻位会跟着跳）；交给 publish 的 ensure 统一生成 /
+      // 置空。
+      if (modeChanged) _restoredShuffleOrder = null;
       _publishRestoredSnapshot();
       await _store.save(_restoredSession!);
       return PlaybackCommandOutcome.trackOnly;
@@ -739,11 +764,20 @@ class PlaybackSessionCoordinator
       // 会话模式先落地：shuffle 需要在装载队列前生效（决定洗牌顺序）；
       // 也保证实际播放模式与恢复态 UI 显示的一致。
       await _facade.setMode(session.mode);
+      // 恢复播放必须复用恢复快照展示过的本轮排列：后端若重新洗牌，live 的
+      // next 会与右槽当前渲染的曲目不同，槽位身份变化触发 180ms 交叉淡化。
+      // 顺序只存在内存里，每次都复制一份交给后端，不落盘、也不共享可变列表。
+      _ensureRestoredShuffleOrder();
+      final shuffleIndices =
+          session.mode == PlayMode.shuffle && _restoredShuffleOrder != null
+          ? List<int>.of(_restoredShuffleOrder!.indices)
+          : null;
       await _facade.playTracks(
         PlaybackRequest(
           tracks: session.tracks,
           startIndex: index,
           context: session.context,
+          shuffleIndices: shuffleIndices,
         ),
       );
       // 装载期间用户主动 seek（拖进度条/点歌词行）优先于保存进度。
@@ -903,21 +937,25 @@ class PlaybackSessionCoordinator
 
   /// 用会话构造恢复态展示快照：当前 / 队列 / 下标 / 模式齐备，isPlaying=false。
   ///
-  /// 队列投影与真实播放共用 `projectQueue`；恢复态没有播放顺序栈、也没有
-  /// 持久化洗牌排列，因此显式传空 [QueueOrder]——shuffle 的 next 为 null、
-  /// upNext 为空（不拿队列下标冒充洗牌顺序），previous / previousOfPrevious
-  /// 按队列前一位依次回退。
+  /// 队列投影与真实播放共用 `projectQueue`；恢复态没有播放顺序栈，
+  /// previous / previousOfPrevious 按队列前一位依次回退。洗牌排列不落盘，
+  /// 但装载时生成一份会话内的本轮顺序（当前曲目置首）并传进投影，
+  /// next / upNext 因此从首帧起就是已知的；恢复播放复用同一份顺序。
   void _publishRestoredSnapshot() {
     final session = _restoredSession;
     final current = session?.current;
     if (session == null || current == null) {
       _restoredSnapshot = null;
+      // 防御性 hygiene：没有可展示的恢复会话时，不留下与任何会话无关的排列。
+      _restoredShuffleOrder = null;
       return;
     }
+    _ensureRestoredShuffleOrder();
     final projection = projectQueue(
       session.tracks,
       currentIndex: session.index,
       mode: session.mode,
+      order: QueueOrder(shuffleIndices: _restoredShuffleOrder?.indices),
       idOf: (track) => track.id,
     );
     _restoredSnapshot = PlaybackSnapshot(
@@ -937,6 +975,27 @@ class PlaybackSessionCoordinator
     );
   }
 
+  /// 确保恢复态持有一份长度匹配的本轮洗牌排列。
+  ///
+  /// 无恢复会话 / 非 shuffle / 单曲队列不需要排列（置空）；同步 reload 或
+  /// 追加后长度仍匹配时保留现有排列，避免无意义地换一轮随机顺序。
+  /// 排列只在会话内存在、不写入持久化会话，因此每次冷启动都是新的一轮。
+  void _ensureRestoredShuffleOrder() {
+    final session = _restoredSession;
+    if (session == null ||
+        session.mode != PlayMode.shuffle ||
+        session.tracks.length <= 1) {
+      _restoredShuffleOrder = null;
+      return;
+    }
+    final order = _restoredShuffleOrder;
+    if (order != null && order.indices.length == session.tracks.length) {
+      return;
+    }
+    _restoredShuffleOrder = PlaybackShuffleOrder()
+      ..reset(session.tracks.length, startIndex: session.index);
+  }
+
   /// 撤下恢复数据：真实播放接管 / 停止播放 / 关闭恢复开关时调用。
   ///
   /// [keepPosition] 为 true 时保留进度通道的恢复进度（恢复播放的 seek 尚未
@@ -944,6 +1003,7 @@ class PlaybackSessionCoordinator
   void _dropRestoredSession({bool keepPosition = false}) {
     _restoredSession = null;
     _restoredSnapshot = null;
+    _restoredShuffleOrder = null;
     if (keepPosition) return;
     _restoredPosition = Duration.zero;
     _position.setRestored(null);
@@ -1006,6 +1066,25 @@ bool _sameTrackList(List<Track>? a, List<Track>? b) {
   if (a == null || b == null || a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
     if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// 两次装载是否对应同一份恢复队列（决定能否沿用会话内洗牌排列）。
+///
+/// 只比较会影响排列含义的字段：模式（shuffle 与否）、当前下标、队列长度与
+/// 逐位置的曲目 id。为什么不能只看「模式 + 长度」：跨设备同步可能用另一份
+/// 同长度同模式的会话覆盖本地，沿用旧排列会让右槽 / 队列「接下来」指向与
+/// 保存队列无关的顺序。比较 id 而不是整份 Track：标题 / 封面 / payload 变化
+/// 不改变排列语义，重复曲目也由逐位置比较保证队列顺序一致。
+bool _isSameRestoredDeck(PlaybackSession previous, PlaybackSession session) {
+  if (previous.mode != session.mode ||
+      previous.index != session.index ||
+      previous.tracks.length != session.tracks.length) {
+    return false;
+  }
+  for (var i = 0; i < previous.tracks.length; i++) {
+    if (previous.tracks[i].id != session.tracks[i].id) return false;
   }
   return true;
 }

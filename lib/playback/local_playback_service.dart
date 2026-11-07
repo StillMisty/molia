@@ -649,21 +649,37 @@ class LocalPlaybackService extends ChangeNotifier {
     }
   }
 
+  /// 装载新队列并从 [index] 起播。
+  ///
+  /// [shuffleIndices] 是恢复态展示过的本轮洗牌排列（[PlaybackRequest] 透传）：
+  /// 恢复快照的 next / upNext 已按它渲染，后端必须沿用同一份，否则接管瞬间
+  /// 「下一首」会换人，播放页右槽触发 180ms 槽位淡化。非法 / 未提供时按
+  /// [index] 置首重新洗牌。
   Future<void> playTracks(
     List<SourceTrack> tracks,
     int index, {
     String? contextName,
+    List<int>? shuffleIndices,
   }) async {
     if (tracks.isEmpty) return;
     _queue
       ..clear()
       ..addAll(tracks);
     _queueRevision++;
-    // 新队列 = 新会话：播放顺序从头开始；shuffle 以起播曲目置首重洗。
+    // 新队列 = 新会话：播放顺序从头开始；shuffle 优先沿用恢复态的排列。
     _order.clear();
     final safeIndex = index.clamp(0, tracks.length - 1);
     if (_mode == PlayMode.shuffle) {
-      _shuffleOrder.reset(_queue.length, startIndex: safeIndex);
+      if (shuffleIndices != null &&
+          isValidShuffleOrder(
+            shuffleIndices,
+            length: _queue.length,
+            currentIndex: safeIndex,
+          )) {
+        _shuffleOrder.adopt(shuffleIndices);
+      } else {
+        _shuffleOrder.reset(_queue.length, startIndex: safeIndex);
+      }
     } else {
       _shuffleOrder.clear();
     }

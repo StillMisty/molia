@@ -3,14 +3,17 @@
 ///
 /// **为什么单独成模块**：真实播放（`LocalPlaybackService`）与冷启动恢复态
 /// （`PlaybackSessionCoordinator`）原本各写一套近似——恢复态只能按下标
-/// `±1` 推，洗牌顺序还原不了；「排除与当前同 id 的上一首」也复制了两份。
-/// 投影收成纯函数后，两处对同一个 [PlaybackSnapshot] 形状只有一种口径。
+/// `±1` 推，洗牌顺序还要另起一套逻辑；「排除与当前同 id 的上一首」也复制了
+/// 两份。投影收成纯函数后，两处对同一个 [PlaybackSnapshot] 形状只有一种口径。
 ///
-/// **恢复态的限制**：洗牌排列与播放顺序栈都不落盘，恢复态调用时把
-/// [QueueOrder.shuffleIndices] / [QueueOrder.previousIndex] 留空——此时
-/// shuffle 的 `next` 为 null、`upNext` 为空（「不知道」不伪装成线性下一首），
-/// `previous` / `previousOfPrevious` 只按队列前一位依次回退。要消除这层限制
-/// 需要先持久化洗牌顺序（产品决策，本轮不做）。
+/// **恢复态的限制**：播放顺序栈不落盘，恢复态调用时把
+/// [QueueOrder.previousIndex] / [QueueOrder.previousOfPreviousIndex] 留空，
+/// previous / previousOfPrevious 只按队列前一位依次回退。洗牌排列虽然也不
+/// 落盘，但 `PlaybackSessionCoordinator` 装载恢复态时会生成一份**会话内**的
+/// 本轮顺序（当前曲目置首）并通过 [QueueOrder.shuffleIndices] 传入，因此
+/// 恢复态 shuffle 的 next / upNext 与恢复播放共用同一顺序，不再为空。
+/// 调用方确实没有排列时仍可传 null（next 为 null、upNext 为空——「不知道」
+/// 不伪装成线性下一首），这是 [QueueOrder] 保留的 null 语义。
 library;
 
 import '../models/play_mode.dart';
@@ -19,8 +22,9 @@ import 'queue_navigation.dart';
 /// 投影用的播放顺序。
 ///
 /// 字段的 `null` 都是有意义的事实（无顺序），不是「用下标近似」：
-/// - [shuffleIndices]：本轮洗牌排列（队列下标，当前曲目在其中）；恢复态没有
-///   持久化它，传 null。
+/// - [shuffleIndices]：本轮洗牌排列（队列下标，当前曲目在其中）；调用方
+///   没有排列时传 null（shuffle 的 next / upNext 为空）。恢复态由
+///   `PlaybackSessionCoordinator` 装载时生成本轮顺序后传入。
 /// - [previousIndex]：实际播放顺序栈的最近一首；新会话 / 恢复态没有栈，
 ///   传 null（`previous` 才回退到队列前一位）。
 /// - [previousOfPreviousIndex]：播放顺序栈的次近一首；栈不足两项时为 null，

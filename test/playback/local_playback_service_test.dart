@@ -739,6 +739,60 @@ void main() {
     expect(predownloader.cancelled, isNot(contains(tracks[1].id)));
   });
 
+  group('恢复态洗牌排列', () {
+    Future<LocalPlaybackService> startShuffle(
+      int startIndex, {
+      List<int>? shuffleIndices,
+    }) async {
+      final player = _FakeAudioPlayer();
+      final service = LocalPlaybackService(
+        resolver: (track, {String? quality}) async =>
+            PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+        player: player,
+        random: math.Random(11),
+      );
+      addTearDown(service.dispose);
+      await service.setMode(PlayMode.shuffle);
+      await service.playTracks(
+        [for (var i = 0; i < 3; i++) _track(index: i)],
+        startIndex,
+        shuffleIndices: shuffleIndices,
+      );
+      await pumpEventQueue();
+      return service;
+    }
+
+    test('playTracks 采用传入的本轮排列：next / upNext 与恢复快照同源', () async {
+      final service = await startShuffle(0, shuffleIndices: const [0, 2, 1]);
+
+      expect(service.currentIndex, 0);
+      expect(service.nextSourceTrack?.title, '测试曲目2');
+      expect(service.upNextTracks.map((track) => track.title), [
+        '测试曲目2',
+        '测试曲目1',
+      ]);
+      expect(service.queueProjection.upNextIndices, [2, 1]);
+    });
+
+    test('非法排列回退为新的一轮：覆盖全队列且当前曲目置首', () async {
+      // 重复下标（且缺少当前曲目）不能采用，必须回退为新洗牌。
+      final service = await startShuffle(1, shuffleIndices: const [0, 0, 2]);
+
+      final current = service.currentIndex;
+      final upNextIndices = service.queueProjection.upNextIndices;
+      expect(current, 1);
+      expect(upNextIndices, hasLength(2));
+      expect({current, ...upNextIndices}, {0, 1, 2});
+      expect(upNextIndices.toSet(), hasLength(2), reason: '一轮内不能重复');
+      expect(upNextIndices, isNot(contains(current)));
+      expect(
+        {current, ...upNextIndices},
+        {0, 1, 2},
+        reason: '新排列把当前曲目置首，剩下两首全在 upNext',
+      );
+    });
+  });
+
   group('队列编辑', () {
     List<String?> titlesOf(Iterable<SourceTrack> tracks) => [
       for (final track in tracks) track.title,

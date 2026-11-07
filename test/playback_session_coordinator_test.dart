@@ -60,6 +60,28 @@ BackendSnapshot _live(
   );
 }
 
+/// 恢复态 shuffle 快照应是一份完整的本轮排列：
+/// next 非空且不是当前曲目，upNext 覆盖其余全部曲目，真实下标去重后与
+/// 当前下标构成 `0..length-1` 的排列。
+void _expectCompleteShuffleRound(PlaybackSnapshot restored) {
+  final length = restored.queue.length;
+  expect(restored.next, isNotNull);
+  expect(restored.next!.id, isNot(restored.current!.id));
+  expect(restored.upNext, hasLength(length - 1));
+  expect(restored.upNextIndices, hasLength(length - 1));
+  expect(
+    restored.upNext.map((track) => track.id).toSet(),
+    hasLength(length - 1),
+  );
+  expect(restored.next!.id, restored.upNext.first.id);
+  for (var i = 0; i < restored.upNext.length; i++) {
+    final queueIndex = restored.upNextIndices[i];
+    expect(restored.upNext[i].id, restored.queue[queueIndex].id);
+  }
+  final order = [restored.currentIndex, ...restored.upNextIndices];
+  expect(order.toSet(), {for (var i = 0; i < length; i++) i});
+}
+
 /// 记录写入口径的假 store（[persist] 为 true 时同时写真实存储，
 /// 用于验证 clear 与在途写入的先后）。
 class _RecordingSessionStore extends PlaybackSessionStore {
@@ -169,6 +191,38 @@ class _QueueJumpBackend extends FakePlaybackBackend {
   }
 }
 
+/// 按 [PlaybackRequest.shuffleIndices] 推 live 快照的假后端：复现真实后端
+/// 恢复播放后 next / upNext 来自恢复态展示过的排列，而不是重新洗牌。
+class _ShuffleAwareBackend extends FakePlaybackBackend {
+  @override
+  Future<void> load(PlaybackRequest request) async {
+    await super.load(request);
+    final index = request.startIndex.clamp(0, request.tracks.length - 1);
+    final track = request.tracks[index];
+    final order = request.shuffleIndices;
+    final position = order?.indexOf(index) ?? -1;
+    final upNextIndices = position < 0
+        ? const <int>[]
+        : order!.sublist(position + 1);
+    emit(
+      BackendSnapshot(
+        current: track,
+        queue: request.tracks,
+        currentIndex: index,
+        next: upNextIndices.isEmpty
+            ? null
+            : request.tracks[upNextIndices.first],
+        upNext: [for (final i in upNextIndices) request.tracks[i]],
+        upNextIndices: List<int>.of(upNextIndices),
+        isPlaying: true,
+        duration: track.duration ?? Duration.zero,
+        mode: state.value.mode,
+        context: request.context,
+      ),
+    );
+  }
+}
+
 /// 记录队列播放路由：`playQueueItemById` 必须先解析成下标再走 `playQueueIndex`。
 class _RecordingQueueCoordinator extends PlaybackSessionCoordinator {
   _RecordingQueueCoordinator({
@@ -264,7 +318,7 @@ void main() {
     expect(restored.queue.map((track) => track.id.id), ['a', 'b']);
     expect(restored.currentIndex, 1);
     expect(restored.previous?.id.id, 'a');
-    expect(restored.next, isNull);
+    _expectCompleteShuffleRound(restored);
     expect(restored.mode, PlayMode.shuffle);
     expect(restored.isPlaying, isFalse);
     expect(restored.context?.name, '收藏');
@@ -365,7 +419,7 @@ void main() {
     expect(restored.upNext.map((track) => track.id.id), ['a', 'b']);
   });
 
-  test('恢复态 shuffle：没有洗牌顺序时 next / upNext 为空，不按下标近似', () async {
+  test('恢复态 shuffle：装载时生成本轮顺序，next / upNext 从首帧起已知', () async {
     build();
     await seedSession(
       PlaybackSession(
@@ -377,12 +431,103 @@ void main() {
     expect(await session.load(), isTrue);
 
     final restored = session.displaySnapshot;
-    // 洗牌排列不落盘：恢复态不知道「下一首」，不能用 b 的下标 +1 冒充 c。
-    expect(restored.next, isNull);
-    expect(restored.upNext, isEmpty);
+    // 洗牌排列不落盘，但恢复态在内存里生成本轮顺序：next / upNext 是真实
+    // 排列结果，而不是用 b 的下标 +1 冒充 c。
+    _expectCompleteShuffleRound(restored);
+    expect(restored.next?.id.id, isNot('b'));
+    expect(restored.upNext, hasLength(2));
     // 上一首不依赖洗牌顺序：回退队列前一位。
     expect(restored.previous?.id.id, 'a');
     expect(restored.previousOfPrevious, isNull);
+
+    // 同一会话重复装载（同步 reload 等）保留同一轮排列，右槽不换人。
+    final before = restored.upNextIndices;
+    expect(await session.load(), isTrue);
+    expect(session.displaySnapshot.upNextIndices, before);
+  });
+
+  test('恢复态 shuffle：setPlayMode 同模式保留本轮排列', () async {
+    build();
+    await seedSession(
+      PlaybackSession(
+        tracks: [
+          _track('a'),
+          _track('b'),
+          _track('c'),
+          _track('d'),
+          _track('e'),
+        ],
+        index: 2,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    expect(await session.load(), isTrue);
+    _expectCompleteShuffleRound(session.displaySnapshot);
+    final before = List<int>.of(session.displaySnapshot.upNextIndices);
+
+    expect(
+      await session.setPlayMode(PlayMode.shuffle),
+      PlaybackCommandOutcome.trackOnly,
+    );
+
+    // 模式没变：不能白换一轮随机顺序（右槽邻位会跟着跳）。
+    expect(session.displaySnapshot.mode, PlayMode.shuffle);
+    expect(session.displaySnapshot.upNextIndices, before);
+  });
+
+  test('恢复态 shuffle 追加队列：老歌保持本轮顺序，追加项进入剩余', () async {
+    build();
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b')],
+        index: 0,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    expect(await session.load(), isTrue);
+    expect(session.displaySnapshot.upNextIndices, [1]);
+
+    await session.enqueueRestoredTracks([_track('c')]);
+
+    final restored = session.displaySnapshot;
+    expect(restored.queue.map((track) => track.id.id), ['a', 'b', 'c']);
+    expect(restored.currentIndex, 0);
+    // extend 把追加下标接在本轮末尾：老歌 b 仍是下一首，c 排在它后面。
+    expect(restored.upNextIndices, [1, 2]);
+    expect(restored.upNext.map((track) => track.id.id), ['b', 'c']);
+    expect(restored.upNext, hasLength(2));
+    for (var i = 0; i < restored.upNext.length; i++) {
+      expect(
+        restored.upNext[i].id,
+        restored.queue[restored.upNextIndices[i]].id,
+      );
+    }
+    _expectCompleteShuffleRound(restored);
+  });
+
+  test('恢复态 shuffle → 恢复播放：live 右槽 next 与恢复快照一致', () async {
+    build(backendOverride: _ShuffleAwareBackend());
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c')],
+        index: 1,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    final restored = session.displaySnapshot;
+    _expectCompleteShuffleRound(restored);
+    final restoredNext = restored.next!;
+    final expectedOrder = [restored.currentIndex, ...restored.upNextIndices];
+
+    expect(await session.resume(), PlaybackCommandOutcome.trackAndQueue);
+
+    // 恢复态撤下后 live 的 next 仍是同一首：播放页右槽身份不变，
+    // 不会触发 null → 非空的 180ms 槽位交叉淡化。
+    expect(session.hasRestoredSession, isFalse);
+    expect(session.displaySnapshot.next?.id, restoredNext.id);
+    expect(backend.lastRequest?.shuffleIndices, expectedOrder);
   });
 
   test('恢复态停止播放：撤下恢复数据、清空持久化会话', () async {
@@ -835,6 +980,30 @@ void main() {
     final restored = session.displaySnapshot;
     expect(restored.queue.map((track) => track.id.id), ['a', 'b']);
     expect(restored.currentIndex, 1);
+    _expectCompleteShuffleRound(restored);
+  });
+
+  test('恢复态 shuffle 移除队列项：upNextIndices 重映射为合法真实下标', () async {
+    build();
+    await seedSession(
+      PlaybackSession(
+        tracks: [_track('a'), _track('b'), _track('c'), _track('d')],
+        index: 1,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    expect(await session.load(), isTrue);
+
+    // 移除当前曲目之前的 a：当前下标 1 → 0，排列里的 0 被删、其余前移。
+    expect(
+      await session.removeQueueIndex(0),
+      const PlaybackCommandOutcome(changed: {PlaybackDomain.queue}),
+    );
+
+    final restored = session.displaySnapshot;
+    expect(restored.queue.map((track) => track.id.id), ['b', 'c', 'd']);
+    expect(restored.currentIndex, 0);
+    _expectCompleteShuffleRound(restored);
   });
 
   test('恢复态 upNext 带真实队列下标（列表循环回绕也能对齐）', () async {

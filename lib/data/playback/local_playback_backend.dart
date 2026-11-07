@@ -104,6 +104,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       sourceTracks,
       index,
       contextName: request.context?.name,
+      shuffleIndices: request.shuffleIndices,
     );
     _emit();
   }

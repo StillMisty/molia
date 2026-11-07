@@ -658,9 +658,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get queueShuffleRoundEnd => '这一轮随机播放完了，下一首会重新开始一轮';
 
   @override
-  String get queueShuffleRestored => '开始播放后会生成随机播放顺序';
-
-  @override
   String get nowPlayingSection => '正在播放';
 
   @override

@@ -5,6 +5,7 @@ import 'dart:math' as math;
 ///
 /// 语义：
 /// - [reset]：生成 `0..length-1` 的随机排列，把起播下标置于首位；
+/// - [adopt]：直接采用调用方已有的排列（恢复态展示过的本轮顺序）；
 /// - [peekNext]：当前曲目在排列中的下一首；到达本轮末尾返回 null
 ///   （**不重洗**，保证「下一首」预览在同一曲目内稳定、可重复读取）；
 /// - [next]：排列下一首；到达末尾时自动重洗新一轮（当前曲目置首），
@@ -37,6 +38,12 @@ class PlaybackShuffleOrder {
     _order = order;
   }
 
+  /// 采用外部已有的排列（恢复态展示过的本轮顺序 / 后端复用）。
+  ///
+  /// 复制传入列表而不是持有引用：调用方之后修改自己的列表（或复用一个
+  /// 可变缓冲区）不能悄悄改掉正在展示、正在播放的顺序。
+  void adopt(List<int> indices) => _order = List<int>.of(indices);
+
   /// 清空（停止播放 / 切出 shuffle）。
   void clear() => _order = const [];
 
@@ -64,7 +71,7 @@ class PlaybackShuffleOrder {
 
   /// 队列移除一项后的排列重映射：移除该下标，其后下标整体前移。
   ///
-  /// 空排列（未洗牌 / 恢复态）保持为空；调用方保证不移除当前曲目。
+  /// 空排列（未洗牌）保持为空；调用方保证不移除当前曲目。
   void removeIndex(int index) {
     if (_order.isEmpty) return;
     _order = [
@@ -119,4 +126,28 @@ class PlaybackShuffleOrder {
     if (position < 0 || position + 1 >= _order.length) return const [];
     return _order.sublist(position + 1);
   }
+}
+
+/// 校验一份外部洗牌排列能否直接用于长度 [length] 的队列。
+///
+/// 恢复播放会把恢复态展示过的排列随请求交给后端复用；来自持久化 / 同步 /
+/// 旧版本的排列可能已与当前队列错位（长度变化、重复、越界、当前曲目不在
+/// 排列里）。这类排列一旦被采用，`peekNext` / `positionOf` 会指到错误曲目
+/// 甚至越界，因此后端只接受完整排列，其余情况回退为新洗牌。
+///
+/// 返回 true 当且仅当：长度等于 [length]、每个下标都在 `0..length-1` 且
+/// 无重复（即恰好覆盖整个队列）、[currentIndex] 也在排列中。
+bool isValidShuffleOrder(
+  List<int> indices, {
+  required int length,
+  required int currentIndex,
+}) {
+  if (indices.length != length) return false;
+  if (currentIndex < 0 || currentIndex >= length) return false;
+  final seen = List<bool>.filled(length, false);
+  for (final index in indices) {
+    if (index < 0 || index >= length || seen[index]) return false;
+    seen[index] = true;
+  }
+  return seen[currentIndex];
 }
