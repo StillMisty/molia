@@ -62,6 +62,48 @@ linux_display_prefix() {
   LINUX_DISPLAY_PREFIX=(env -u WAYLAND_DISPLAY GDK_BACKEND=x11 xvfb-run -a)
 }
 
+# ---- Linux release 构建卫生（perf.sh / startup.sh 共用）--------------------
+# release install 会原样复制 build/flutter_assets，debug/profile 留下的
+# kernel_blob.bin 会一直带进 bundle；--analyze-size 还会把非 release 引擎
+# 留在 linux/flutter/ephemeral（正常 release 约 17MB，污染时约 42MB）。
+LINUX_RELEASE_BUNDLE="$PROJECT_DIR/build/linux/x64/release/bundle"
+LINUX_RELEASE_ENGINE_MAX_BYTES=$((20 * 1024 * 1024))
+
+# 体积测量 / 发布打包用：三处都可能被上一次不同模式的构建污染，全部重建。
+# 只删这三个路径，保留 build/linux/x64/release 其余内容——media_kit 的
+# mimalloc tarball 在那里，受限网络下重新下载会失败。
+linux_clean_release_inputs() {
+  rm -rf "$PROJECT_DIR/build/flutter_assets" \
+         "$PROJECT_DIR/linux/flutter/ephemeral" \
+         "$LINUX_RELEASE_BUNDLE"
+}
+
+# 启动采样用：只清 install 产物与 assets；正常引擎保留给增量构建，
+# 只有明显不是 release 的引擎（--analyze-size 等）才删 ephemeral。
+linux_clean_release_inputs_incremental() {
+  rm -rf "$PROJECT_DIR/build/flutter_assets" "$LINUX_RELEASE_BUNDLE"
+  local engine="$PROJECT_DIR/linux/flutter/ephemeral/libflutter_linux_gtk.so"
+  if [[ -f "$engine" ]] &&
+     (( $(stat -c%s "$engine") > LINUX_RELEASE_ENGINE_MAX_BYTES )); then
+    log "linux/flutter/ephemeral 引擎 $(du -h "$engine" | cut -f1) 不是 release（通常约 17MB），删掉后重建"
+    rm -rf "$PROJECT_DIR/linux/flutter/ephemeral"
+  fi
+}
+
+# 构建后校验：脏产物直接失败，避免把体积 / 启动数据记到错误基线。
+linux_assert_release_bundle() {
+  local bundle="${1:-$LINUX_RELEASE_BUNDLE}"
+  [[ ! -e "$bundle/data/flutter_assets/kernel_blob.bin" ]] ||
+    die "release bundle 含 kernel_blob.bin：build/flutter_assets 残留 debug 产物（删掉后重新构建）"
+  local engine="$bundle/lib/libflutter_linux_gtk.so"
+  [[ -f "$engine" ]] || die "bundle 缺少 libflutter_linux_gtk.so：$bundle"
+  local bytes
+  bytes="$(stat -c%s "$engine")"
+  if (( bytes > LINUX_RELEASE_ENGINE_MAX_BYTES )); then
+    die "libflutter_linux_gtk.so $((bytes / 1024 / 1024))MB 超过 20MB：linux/flutter/ephemeral 是非 release 引擎（常见于跑过 --analyze-size）；删掉 linux/flutter/ephemeral 后重新构建"
+  fi
+}
+
 # 列出已连接设备（序列号）
 adb_devices() {
   "$ADB" devices | awk 'NR>1 && $2=="device" {print $1}'

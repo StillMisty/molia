@@ -73,13 +73,17 @@ setup_linux() {
   [[ -n "$timeout_s" ]] || timeout_s=60
   exe="build/linux/x64/release/bundle/$APP_BINARY"
   if (( do_build )); then
-    # 只删 bundle：install 产物目录，历史上有 debug 的 kernel_blob.bin 残留在此
-    # （release 不该有，会污染体积与启动观感）。中间产物保留做增量构建，也避免
-    # media_kit_libs_linux 的 mimalloc 重新下载（受限网络下会失败）。
-    rm -rf build/linux/x64/release/bundle
+    # bundle 和 build/flutter_assets 都要清：release install 会原样复制后者，
+    # debug 留下的 kernel_blob.bin 会一直带进 release bundle。正常引擎保留给
+    # 增量构建，只有 --analyze-size 留下的非 release 引擎才删 ephemeral；三处
+    # 之外不碰 build/linux/x64/release，避免 mimalloc tarball 重新下载。
+    linux_clean_release_inputs_incremental
     log "构建 release：flutter build linux --release"
     flutter build linux --release || die "release 构建失败"
   fi
+  # --no-build 也要校验：复用的产物如果被 debug / analyze-size 污染，
+  # 采样结果同样不可用。
+  linux_assert_release_bundle
   [[ -x "$exe" ]] || die "找不到 release 产物：$exe"
 
   linux_display_prefix "$((headless == 0))"
