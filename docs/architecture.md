@@ -1469,10 +1469,11 @@ position、不自动滚动 / 不起快捷操作弹簧，重新可见时同步一
   整体失效；输入框聚焦 / 录制中 / 总开关关闭时全部让位；方向键 / Space / Enter 有
   `KeyClaims` 占用登记时同样让位，交给焦点控件——搜索遮罩整窗登记，搜索结果页用
   `KeyClaimScope` 在焦点进入时登记，见 ADR-0018）；全局热键是
-  `lib/services/global_hotkeys.dart`（`system_hotkeys`：Windows RegisterHotKey / macOS
-  RegisterEventHotKey / Linux `org.freedesktop.portal.GlobalShortcuts` 门户，**纯 Dart +
-  D-Bus、零原生依赖**；只收字母 / 数字 / F1–F12 / 空格，默认全 Ctrl+Alt 前缀且默认关闭；
-  注册结果 conflict/unsupported/declined 逐条记 `lastError` 并在设置页提示）。两组共用
+  `lib/services/global_hotkeys.dart`（`nativeapi.ShortcutManager`：Windows
+  RegisterHotKey / macOS Carbon RegisterEventHotKey / Linux X11 或
+  `org.freedesktop.portal.GlobalShortcuts` 门户；Wayland 的绑定由桌面决定；
+  只收字母 / 数字 / F1–F12 / 空格，默认全 Ctrl+Alt 前缀且默认关闭；注册失败
+  原因逐条记 `lastError` 并在设置页提示）。两组共用
   `lib/services/shortcut_actions.dart` 的命令执行器。曲目行操作入口 = 桌面行表面右键在
   鼠标落点弹菜单（`lib/widgets/track_actions_menu.dart::showTrackActionsMenuAtPointer`）、
   触摸端所有曲目行行尾 ⋮ 常显（队列行同样有 ⋮；排序 / 多选模式不显示）、

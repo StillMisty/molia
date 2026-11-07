@@ -2,9 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// 托盘 / 显示器 / 窗口 chrome 原生依赖的隔离（与 `window_chrome` 的约束
-/// 同源，见 docs/pitfalls.md #30）：`tray_manager` / `nativeapi` 的 Dart 代码
-/// import `dart:io` 与 `dart:ffi`，全仓只允许在桌面 IO 实现里出现。
+/// 托盘 / 显示器 / 窗口 chrome / 全局热键原生依赖的隔离（与 `window_chrome`
+/// 的约束同源，见 docs/pitfalls.md #30）：`tray_manager` / `nativeapi` 的 Dart
+/// 代码 import `dart:io` 与 `dart:ffi`，全仓只允许在桌面 IO 实现里出现。
 ///
 /// UI / 组合根一律经 `lib/services/window/app_tray.dart` 入口（直接导出 io 实现）。
 void main() {
@@ -12,6 +12,7 @@ void main() {
     'lib/services/window/app_tray_io.dart',
     'lib/services/window/display_areas_io.dart',
     'lib/services/window/window_chrome_io.dart',
+    'lib/services/global_hotkeys_io.dart',
   };
   const packagePrefixes = <String>[
     'package:tray_manager/',
@@ -19,7 +20,7 @@ void main() {
     'package:nativeapi_flutter/',
   ];
 
-  test('托盘 / 显示器原生包只出现在桌面 IO 实现', () {
+  test('桌面原生包只出现在桌面 IO 实现', () {
     final files = Directory('lib')
         .listSync(recursive: true)
         .whereType<File>()
@@ -49,6 +50,10 @@ void main() {
     );
     expect(
       File('lib/services/window/display_areas_io.dart').readAsStringSync(),
+      contains('package:nativeapi/'),
+    );
+    expect(
+      File('lib/services/global_hotkeys_io.dart').readAsStringSync(),
       contains('package:nativeapi/'),
     );
   });

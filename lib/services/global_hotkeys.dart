@@ -6,137 +6,35 @@
 /// 另一套挂载点（`lib/app/desktop/desktop_shortcuts.dart`，只在窗口聚焦时
 /// 生效），两组互不感知。
 ///
-/// 平台面（`system_hotkeys`）：macOS 走 `RegisterEventHotKey`、Windows 走
-/// `RegisterHotKey`、Linux 走 `org.freedesktop.portal.GlobalShortcuts`
-/// 桌面门户（**纯 Dart + D-Bus，无原生构建依赖，X11 / Wayland 同样可用**）。
-/// 注册结果逐条回报（conflict / unsupported / declined），本层把非成功结果
-/// 记进 [GlobalHotkeys.lastError] 供设置页提示；其余平台整体空操作。
+/// 平台面：`nativeapi.ShortcutManager`（macOS Carbon `RegisterEventHotKey`、
+/// Windows `RegisterHotKey`、Linux X11 / `org.freedesktop.portal.GlobalShortcuts`
+/// 桌面门户；Wayland 的绑定由桌面决定）。注册结果逐条回报，本层把失败
+/// 原因记进 [GlobalHotkeys.lastError] 供设置页提示；其余平台整体空操作。
 ///
-/// 为什么不用 hotkey_manager：它的 Linux 实现硬链接 keybinder-3.0（构建期
-/// 需要 dev 包、运行期需要 .so，缺失直接起不来），且只在 X11 下生效；门户
-/// 方案零系统依赖，且在 Wayland 下是唯一正路。
+/// 为什么不用 hotkey_manager：nativeapi 已经是桌面窗口与托盘的直接依赖，
+/// `ShortcutManager` 提供门户的异步注册、取消与注册丢失事件，本层只需要
+/// 「命令名 ↔ 回调」的薄映射；hotkey_manager 0.3.0 也基于它，再包一层只会
+/// 多一个依赖和一套错误码。注册失败原因由 nativeapi 的 errorMessage 直接
+/// 透传（不再有 system_hotkeys 的 conflict/unsupported/declined 枚举）。
 library;
 
 import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart'
-    show LogicalKeyboardKey, PhysicalKeyboardKey;
-import 'package:system_hotkeys/system_hotkeys.dart';
-import 'package:system_hotkeys_linux/system_hotkeys_linux.dart';
 import 'package:logging/logging.dart';
 
-import 'window/window_chrome.dart';
+import 'global_hotkeys_io.dart';
+import 'global_hotkeys_types.dart';
 import 'shortcut_actions.dart';
 import 'shortcut_bindings.dart';
 import 'shortcut_settings.dart';
 import 'shortcuts.dart';
+import 'window/window_chrome.dart';
+
+export 'global_hotkeys_types.dart';
 
 final _logger = Logger('molia.global_hotkeys');
-
-/// Linux 桌面文件 / 门户会话用的应用 id（与 `linux/packaging` 的 .desktop 一致）。
-const String kLinuxApplicationId = 'top.stillmisty.molia';
-
-/// 一条系统热键的注册参数（纯数据）：`system_hotkeys.HotKey` 的字段映射，
-/// 单测只断言它、不触达平台插件。
-typedef HotKeySpec = ({
-  /// 注册身份（系统侧按它回报按下事件）：用命令名，稳定且可读。
-  String id,
-  int keyId,
-  bool ctrl,
-  bool alt,
-  bool shift,
-  bool meta,
-});
-
-/// 组合 → 注册参数（纯映射）。
-///
-/// `keyId` 是 `LogicalKeyboardKey.keyId`：注册端经
-/// `LogicalKeyboardKey.findKeyByKeyId` 还原成逻辑键，再按
-/// [physicalKeyFor] 换算成物理键（平台编码是物理口径）。
-HotKeySpec hotKeySpecFor(ShortcutCommand command, ShortcutCombo combo) => (
-  id: command.name,
-  keyId: combo.key.keyId,
-  ctrl: combo.ctrl,
-  alt: combo.alt,
-  shift: combo.shift,
-  meta: combo.meta,
-);
-
-/// 逻辑键 → 物理键（USB HID usage 口径）：全局热键按**物理位置**注册
-/// （布局无关——Dvorak 用户按的仍是同一个键位），`system_hotkeys` 的平台
-/// 编码（HID / Windows VK / macOS 虚拟键）也是物理口径。
-///
-/// 只覆盖可绑定的键集（字母 / 数字 / 方向 / 空格 / 功能键与常见符号）；
-/// 映射不到返回 null，注册端据此报错（进 [GlobalHotkeys.lastError]）。
-PhysicalKeyboardKey? physicalKeyFor(LogicalKeyboardKey key) {
-  final id = key.keyId;
-  // 字母：逻辑 id 是 ASCII 小写（0x61..0x7A）→ HID 0x04..0x1D。
-  if (id >= 0x61 && id <= 0x7A) {
-    return PhysicalKeyboardKey.findKeyByCode(_hidUsage(0x04 + (id - 0x61)));
-  }
-  // 数字：逻辑 id 是 ASCII（0x30..0x39）→ HID 0x1E..0x27（1 起、0 收尾）。
-  if (id >= 0x30 && id <= 0x39) {
-    final digit = id - 0x30;
-    return PhysicalKeyboardKey.findKeyByCode(
-      _hidUsage(digit == 0 ? 0x27 : 0x1E + digit - 1),
-    );
-  }
-  final usage = _physicalUsageByKey[key];
-  return usage == null
-      ? null
-      : PhysicalKeyboardKey.findKeyByCode(_hidUsage(usage));
-}
-
-/// HID usage → `PhysicalKeyboardKey` 的查找码：Flutter 的
-/// `findKeyByCode` 按**完整 id**（USB HID 页前缀 0x0007 + usage）索引，
-/// 只传 usage 会查不到（表里的常量都是 `0x0007xxxx`）。
-int _hidUsage(int usage) => 0x00070000 | usage;
-
-/// 非字母数字键的 USB HID usage（USB HID Usage Tables §10 Keyboard/Keypad）。
-final Map<LogicalKeyboardKey, int> _physicalUsageByKey = {
-  LogicalKeyboardKey.space: 0x2C,
-  LogicalKeyboardKey.escape: 0x29,
-  LogicalKeyboardKey.enter: 0x28,
-  LogicalKeyboardKey.arrowRight: 0x4F,
-  LogicalKeyboardKey.arrowLeft: 0x50,
-  LogicalKeyboardKey.arrowDown: 0x51,
-  LogicalKeyboardKey.arrowUp: 0x52,
-  LogicalKeyboardKey.f1: 0x3A,
-  LogicalKeyboardKey.f2: 0x3B,
-  LogicalKeyboardKey.f3: 0x3C,
-  LogicalKeyboardKey.f4: 0x3D,
-  LogicalKeyboardKey.f5: 0x3E,
-  LogicalKeyboardKey.f6: 0x3F,
-  LogicalKeyboardKey.f7: 0x40,
-  LogicalKeyboardKey.f8: 0x41,
-  LogicalKeyboardKey.f9: 0x42,
-  LogicalKeyboardKey.f10: 0x43,
-  LogicalKeyboardKey.f11: 0x44,
-  LogicalKeyboardKey.f12: 0x45,
-  LogicalKeyboardKey.minus: 0x2D,
-  LogicalKeyboardKey.equal: 0x2E,
-  LogicalKeyboardKey.bracketLeft: 0x2F,
-  LogicalKeyboardKey.bracketRight: 0x30,
-  LogicalKeyboardKey.backslash: 0x31,
-  LogicalKeyboardKey.semicolon: 0x33,
-  LogicalKeyboardKey.quote: 0x34,
-  LogicalKeyboardKey.backquote: 0x35,
-  LogicalKeyboardKey.comma: 0x36,
-  LogicalKeyboardKey.period: 0x37,
-  LogicalKeyboardKey.slash: 0x38,
-};
-
-/// 系统热键注册器（seam）：生产实现包 system_hotkeys 的平台调用，
-/// 测试注入假实现，避免在单测里触达平台通道。
-abstract interface class GlobalHotkeyRegistrar {
-  /// 注册一条系统级热键；[onPressed] 在用户按下（不含长按重复）时触发。
-  Future<void> register(HotKeySpec spec, VoidCallback onPressed);
-
-  /// 注销本层注册过的全部热键；未注册任何一条时也必须是安全操作。
-  Future<void> unregisterAll();
-}
 
 /// 全局热键设置的最小读取面：本层只消费「开关 + 全局绑定表」，不感知
 /// 设置存储；生产实现是 `ShortcutSettings.instance`（薄适配），测试注入
@@ -147,62 +45,6 @@ abstract interface class GlobalHotkeySettings implements Listenable {
 
   /// 当前全局绑定表（覆盖优先，含未覆盖的默认项）。
   ShortcutBindings get globalBindings;
-}
-
-/// `system_hotkeys` 生产实现：按「命令名 = 注册 id」逐条绑定，按下事件经
-/// [SystemHotkeys.events] 流回到本层的回调表（插件不提供逐条回调）。
-class _SystemHotkeysRegistrar implements GlobalHotkeyRegistrar {
-  _SystemHotkeysRegistrar() {
-    _eventSubscription = SystemHotkeys.events.listen((event) {
-      _callbacks[event.id]?.call();
-    });
-  }
-
-  final Map<String, VoidCallback> _callbacks = {};
-  StreamSubscription<HotKeyEvent>? _eventSubscription;
-
-  @override
-  Future<void> register(HotKeySpec spec, VoidCallback onPressed) async {
-    // 全局热键用**物理键**：布局无关（Dvorak 用户按的仍是同一个物理位置），
-    // 与 system_hotkeys 的平台编码（USB HID / VK）口径一致。
-    final logical = LogicalKeyboardKey.findKeyByKeyId(spec.keyId);
-    final physical = logical == null ? null : physicalKeyFor(logical);
-    if (physical == null) {
-      throw ArgumentError.value(spec.keyId, 'spec.keyId', '未知按键');
-    }
-    final id = spec.id;
-    _callbacks[id] = onPressed;
-    final result = await SystemHotkeys.register(
-      id,
-      HotKey(
-        key: physical,
-        modifiers: {
-          if (spec.ctrl) HotKeyModifier.control,
-          if (spec.alt) HotKeyModifier.alt,
-          if (spec.shift) HotKeyModifier.shift,
-          if (spec.meta) HotKeyModifier.meta,
-        },
-      ),
-      description: id,
-    );
-    if (result != HotKeyResult.bound) {
-      _callbacks.remove(id);
-      throw StateError('系统未接受该组合（${result.name}）');
-    }
-  }
-
-  @override
-  Future<void> unregisterAll() async {
-    _callbacks.clear();
-    await SystemHotkeys.unregisterAll();
-  }
-
-  /// 测试收尾 / 进程退出：释放事件订阅（生产只在应用生命周期内存在一次）。
-  void dispose() {
-    unawaited(_eventSubscription?.cancel());
-    _eventSubscription = null;
-    _callbacks.clear();
-  }
 }
 
 /// [GlobalHotkeySettings] 的生产实现：薄适配 `ShortcutSettings` 单例。
@@ -229,7 +71,7 @@ class _ShortcutSettingsView implements GlobalHotkeySettings {
 class GlobalHotkeys {
   GlobalHotkeys._();
 
-  /// 平台面：三桌面平台有 `system_hotkeys` 实现；移动端等无实现的平台空操作
+  /// 平台面：三桌面平台有 nativeapi 实现；移动端等无实现的平台空操作
   /// （单条注册失败不在这里判定，见 [lastError]）。
   static bool get isSupported =>
       Platform.isLinux || Platform.isWindows || Platform.isMacOS;
@@ -238,7 +80,7 @@ class GlobalHotkeys {
   static String? get lastError => _lastError;
   static String? _lastError;
 
-  /// 测试注入：替换平台注册器（默认 `system_hotkeys` 实现）。
+  /// 测试注入：替换平台注册器（默认 nativeapi 实现）。
   @visibleForTesting
   static GlobalHotkeyRegistrar? registrarOverride;
 
@@ -268,24 +110,12 @@ class GlobalHotkeys {
   static Future<void> attach() async {
     if (_attached || !isSupported) return;
     _attached = true;
-    _registerLinuxApplicationId();
     final settings = settingsOverride ?? const _ShortcutSettingsView();
     _settings = settings;
-    _registrar = registrarOverride ?? _SystemHotkeysRegistrar();
+    _registrar = registrarOverride ?? NativeGlobalHotkeyRegistrar();
     settings.addListener(_onSettingsChanged);
     _scheduleSync();
     await _syncChain;
-  }
-
-  /// Linux：把应用 id 交给门户实现（GNOME 的 GlobalShortcuts 会话要求应用
-  /// 身份与 `.desktop` 文件一致，否则整组注册被拒）。其余平台空操作。
-  static void _registerLinuxApplicationId() {
-    if (!Platform.isLinux) return;
-    try {
-      SystemHotkeysLinux.registerWith(applicationId: kLinuxApplicationId);
-    } catch (error) {
-      _logger.warning('设置 Linux 门户应用 id 失败：$error');
-    }
   }
 
   /// 设置变更（开关 / 绑定）：重新走一轮「先注销再注册」。
@@ -303,9 +133,9 @@ class GlobalHotkeys {
 
   /// 幂等同步：先整体注销，再按当前设置注册（开关关闭时只注销）。
   ///
-  /// 先清后建是唯一安全的顺序：同一组合重复注册在系统层会失败或留下陈旧
-  /// 回调（`system_hotkeys` 的 Dart 侧对同一组合不去重）；注销失败则放弃本轮
-  /// 注册——在未知的残留注册上叠加会得到重复或指向旧动作的按键。
+  /// 先清后建是唯一安全的顺序：同一 accelerator 重复注册在系统层会失败或
+  /// 留下陈旧回调（nativeapi 对同一 accelerator 只保留一个注册）；注销失败
+  /// 则放弃本轮注册——在未知的残留注册上叠加会得到重复或指向旧动作的按键。
   static Future<void> _sync() async {
     final settings = _settings;
     final registrar = _registrar;

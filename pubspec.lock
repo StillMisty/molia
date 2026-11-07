@@ -53,10 +53,10 @@ packages:
     dependency: "direct main"
     description:
       name: audio_service_mpris
-      sha256: "8cb2ff2237f4cd2fd27f16451ed35b3aedc12df8a384435327c67a9f4d557ef4"
+      sha256: c0f7a6b6a16dd8a1e1d48627f504e46b347d1266c3e4bc7f822d998f17510826
       url: "https://pub.dev"
     source: hosted
-    version: "0.2.1"
+    version: "1.0.0-beta.3"
   audio_service_platform_interface:
     dependency: "direct main"
     description:
@@ -221,10 +221,10 @@ packages:
     dependency: "direct main"
     description:
       name: connectivity_plus
-      sha256: "762c99f890ca8bf87f7337236f99edd42793843bc6c3631da294a76653a54bd0"
+      sha256: d7749fd36d8b404a4935612b94eca7c3ce3705377ab678e24ff2a4301436f741
       url: "https://pub.dev"
     source: hosted
-    version: "7.3.1"
+    version: "7.3.2"
   connectivity_plus_platform_interface:
     dependency: transitive
     description:
@@ -277,10 +277,10 @@ packages:
     dependency: transitive
     description:
       name: dbus
-      sha256: a48d5da28e89bd02196e80d81ed8d7954923d00a0f4a68cc20b575038f023383
+      sha256: f7db8504e715b835f5ebe5fe74604ccd961d504c73389a5d8e81bafc2e2f3612
       url: "https://pub.dev"
     source: hosted
-    version: "0.7.15"
+    version: "0.8.0"
   dio:
     dependency: "direct main"
     description:
@@ -824,10 +824,10 @@ packages:
     dependency: transitive
     description:
       name: nm
-      sha256: "2c9aae4127bdc8993206464fcc063611e0e36e72018696cd9631023a31b24254"
+      sha256: "2ae480aa3379716b8bb58dfebb168e2919394c92b629efaaa0baaa5d140786e6"
       url: "https://pub.dev"
     source: hosted
-    version: "0.5.0"
+    version: "0.6.0"
   objective_c:
     dependency: transitive
     description:
@@ -1265,46 +1265,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.6.1"
-  system_hotkeys:
-    dependency: "direct main"
-    description:
-      name: system_hotkeys
-      sha256: "1b9e81cc28986f500ae2ddf10696825a70d45f964542d66a036fdcffc83e0d04"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  system_hotkeys_linux:
-    dependency: "direct main"
-    description:
-      name: system_hotkeys_linux
-      sha256: "9503fd4e9a903573c9b4cd95f6e31ce36f49a97ca528d2109bf7be834a7ebc46"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.1"
-  system_hotkeys_macos:
-    dependency: transitive
-    description:
-      name: system_hotkeys_macos
-      sha256: "6fd6d2f9dc6c793bfa6dd4f42f72b89b3f6d279f98b5fe35b26d46605eff0253"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  system_hotkeys_platform_interface:
-    dependency: transitive
-    description:
-      name: system_hotkeys_platform_interface
-      sha256: "495b003705658097120b55cd0f6c9e6b6bf41d3fb236058ca05983d1ff833610"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
-  system_hotkeys_windows:
-    dependency: transitive
-    description:
-      name: system_hotkeys_windows
-      sha256: a85b8d79e961cbba1d1b8a18d5fdddc751cff1800d2a5d82bed2832f4d18400f
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.0"
   term_glyph:
     dependency: transitive
     description:

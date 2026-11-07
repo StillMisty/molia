@@ -48,7 +48,8 @@
    结论不变（macOS 仍是纯死重量）。曲末判定也不走 media_kit 的位置兜底。
 6. **系统能力复用现有实现**：系统媒体会话走 `flutter_media_session` 的 macOS
    实现（与 iOS / Windows 同一后端），全局热键走 `system_hotkeys` 的
-   `RegisterEventHotKey`，中文字体解析已有 macOS 分支。
+   `RegisterEventHotKey`（现由 `nativeapi.ShortcutManager` 承接，见
+   `docs/architecture.md`），中文字体解析已有 macOS 分支。
 7. **发布产物 = ad-hoc 签名、未公证的 zip**：`release.yml` 增加 macOS job，
    `flutter build macos --release` 后用 `ditto` 打包 `Molia.app` 为
    `molia-<version>-macos-<arch>-unsigned.zip`；文件名带 `unsigned`，按现有

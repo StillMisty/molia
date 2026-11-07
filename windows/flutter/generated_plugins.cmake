@@ -10,7 +10,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   media_kit_libs_windows_audio
   quickjs_engine
   share_plus
-  system_hotkeys_windows
   url_launcher_windows
 )
 

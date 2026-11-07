@@ -140,10 +140,10 @@
     `Select`（用 `SettingsDropdownRow`，它统一填标题提示）。
 26. **新 worktree 的 Android 构建先对齐 Gradle wrapper**：`/android/gradle/` 被
     .gitignore 排除，新 worktree 里 Flutter 会按 SDK 模板生成 Gradle 9.3.1，而本项目
-    AGP 要求 ≥ 9.6（工具链表为 9.8.2）。构建前把
+    AGP 要求 ≥ 9.6（工具链表为 9.9.0）。构建前把
     `android/gradle/wrapper/gradle-wrapper.properties` 的 distributionUrl 改为
-    `gradle-9.8.2-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
-    失败（Gradle 9.8.2 + JDK 27 已验证可用）。
+    `gradle-9.9.0-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
+    失败（Gradle 9.9.0 + JDK 27 已验证可用）。
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有
@@ -170,8 +170,12 @@
 30. **桌面窗口 chrome 只在 `lib/services/window/` 里碰窗口原生 API**：
     `nativeapi` / `nativeapi_flutter` 的 Dart 代码 import `dart:io` / `dart:ffi`，
     散布进 UI 会把平台实现拖进其它平台的构建/测试；统一经 `window_chrome.dart`
-    收口（原生包只允许出现在三个桌面 IO 实现里，见
-    `test/architecture/tray_import_test.dart`），同 `system_fonts_service.dart` 模式。
+    / `global_hotkeys.dart` 收口（原生包只允许出现在四个桌面 IO 实现里：
+    `app_tray_io` / `display_areas_io` / `window_chrome_io` /
+    `global_hotkeys_io`，见 `test/architecture/tray_import_test.dart`），同
+    `system_fonts_service.dart` 模式。全局热键的 Wayland 门户身份来自 GTK
+    `application-id`（`linux/runner/my_application.cc`），必须与安装的
+    `.desktop` 文件名一致；不要在 Dart 侧另写一套应用 id。
     `TitleBarStyle.hidden` 之后系统标题栏与系统按钮都不复存在，窗口拖动只能靠
     UI 侧的 `WindowDragArea`（已包在壳层顶栏外层）——不要在别处再隐藏标题栏，
     也不要把顶栏的拖动区摘掉，否则窗口再也拖不动。
@@ -1009,3 +1013,10 @@
     `extend` / `removeIndex`，模式切换时清空让 publish 重新 ensure；顺序不落盘
     （每次冷启动仍是新的一轮随机顺序）。回归用例见
     `test/playback_session_coordinator_test.dart` 的「恢复态 shuffle → 恢复播放」。
+
+102. **`audio_service_mpris` 1.0.0-beta 的 MPRIS 能力位默认全 false**：
+    `AudioServiceMpris.init` 的 `canControl` 默认 `false`，且 `canPlay` /
+    `canPause` / `canGoNext` / `canGoPrevious` 都会被 `canControl` 强制关掉。
+    必须在 `AudioServicePlatform.configure` 前显式 `init(canControl: true, ...)`，
+    否则 KDE / GNOME 的媒体控件会整组变灰（`lib/playback/mpris_media_session_backend_io.dart`
+    已处理；升级该包时先确认默认值有没有变）。

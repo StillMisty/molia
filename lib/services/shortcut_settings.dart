@@ -12,7 +12,6 @@ library;
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:system_hotkeys/system_hotkeys.dart' show HotKey;
 
 import '../data/settings/settings_access.dart';
 import '../data/settings/settings_key.dart';
@@ -268,13 +267,13 @@ class ShortcutSettings extends ChangeNotifier {
 
   /// 该组合在系统级是否可注册（仅全局分组有意义）。
   ///
-  /// `system_hotkeys` 只接受字母 / 数字 / F1–F12 / 空格（macOS 与 Windows 的
-  /// 系统 API 限制）；其余键（方向键、标点）注册必返回 `unsupported`，
-  /// 在写入前拦掉，避免用户存下一个永远不会生效的绑定。
+  /// 全局分组只接受字母 / 数字 / F1–F12 / 空格（macOS、Windows、Linux 三套
+  /// 系统热键 API 的安全交集）；其余键（方向键、标点）注册必失败，在写入前
+  /// 拦掉，避免用户存下一个永远不会生效的绑定。
   static bool isComboSupported(ShortcutScope scope, ShortcutCombo combo) {
     if (scope != ShortcutScope.global) return true;
     final physical = physicalKeyFor(combo.key);
-    return physical != null && HotKey.isSupportedKey(physical);
+    return physical != null && isSupportedGlobalKey(physical);
   }
 
   /// 整组恢复默认（清空全部覆盖）。
