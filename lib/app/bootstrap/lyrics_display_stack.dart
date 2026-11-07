@@ -20,8 +20,6 @@ import '../../playback/playback_power_policy.dart';
 import '../../data/settings/settings_keys.dart';
 import '../../services/artwork_palette_seed_store.dart';
 import '../../services/artwork_palette_service.dart';
-import '../../services/covers/cover_style_cache.dart';
-import '../../services/covers/cover_style_settings.dart';
 import '../../services/covers/custom_cover_store.dart';
 import '../../services/lyrics_display/audio_route_monitor.dart';
 import '../../services/lyrics_display/desktop_lyrics_output.dart';
@@ -40,8 +38,6 @@ typedef LyricsDisplayStack = ({
   ThemeProvider themeProvider,
   NavProvider navProvider,
   ArtworkPaletteService artworkPaletteService,
-  CoverStyleSettings coverStyleSettings,
-  CoverStyleCache coverStyleCache,
   LyricsDisplaySettings lyricsDisplaySettings,
   LyricsDisplayProvider lyricsDisplay,
 });
@@ -81,13 +77,6 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     kShellHomeDestination,
   ]);
   final navProvider = NavProvider(settings: navSettings);
-  // 封面风格：两个键跟人走（同步应用远端设置后 reload）；派生图缓存只在
-  // 内存，默认「原图 + 仅播放中」时完全不创建任何派生任务。
-  final coverStyleSettings = CoverStyleSettings(
-    settings: catalog.settings.scope([kCoverStyle, kCoverStyleScope]),
-  );
-  await coverStyleSettings.init();
-  final coverStyleCache = CoverStyleCache();
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   // seed 持久化按封面内容身份（URL + 文件大小 + 修改时间），设备本地派生
   // 缓存，不参与同步；启动命中时不必再解码封面。
@@ -270,8 +259,6 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
     themeProvider: themeProvider,
     navProvider: navProvider,
     artworkPaletteService: artworkPaletteService,
-    coverStyleSettings: coverStyleSettings,
-    coverStyleCache: coverStyleCache,
     lyricsDisplaySettings: lyricsDisplaySettings,
     lyricsDisplay: lyricsDisplay,
   );

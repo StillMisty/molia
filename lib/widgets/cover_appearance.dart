@@ -16,7 +16,6 @@
 ///   因此飞行中图片边缘恰好等于描边带内缘：既不留缝，也不探入带内。
 library;
 
-import 'dart:typed_data';
 import 'dart:ui' show lerpDouble;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -288,7 +287,6 @@ class CoverFlightLayer extends StatelessWidget {
     required this.animation,
     required this.flight,
     required this.url,
-    this.imageBytes,
     this.fallbackUrl,
     this.fallback,
   });
@@ -305,11 +303,6 @@ class CoverFlightLayer extends StatelessWidget {
 
   /// 飞行期间展示的封面 URL（由调用方在抓取锚点的同一刻确定）。
   final String? url;
-
-  /// 已缓存的封面风格派生图；命中时优先于 [url]，未命中传 null 走原图。
-  ///
-  /// 飞行只做「尽力而为」：派生图没算好就用原图，绝不阻塞起手 / 落位。
-  final Uint8List? imageBytes;
 
   /// 无封面 / 加载失败时的回退图（全局默认封面）。
   final String? fallbackUrl;
@@ -348,7 +341,6 @@ class CoverFlightLayer extends StatelessWidget {
     // 内容自身不再裁一次，避免双重裁剪的边缘发黑）。
     final Widget image = MorphCover(
       url: url,
-      imageBytes: imageBytes,
       fallbackUrl: fallbackUrl,
       borderRadius: BorderRadius.zero,
       // 回退图标尺寸必须逐帧插值，但图片子树本身要稳定：把「按进度算图标
@@ -406,7 +398,6 @@ class MorphCover extends StatefulWidget {
   const MorphCover({
     super.key,
     required this.url,
-    this.imageBytes,
     this.fallbackUrl,
     required this.borderRadius,
     this.fallback,
@@ -415,9 +406,6 @@ class MorphCover extends StatefulWidget {
   });
 
   final String? url;
-
-  /// 已缓存的风格派生图（优先于 [url]；null = 用原图，不阻塞飞行）。
-  final Uint8List? imageBytes;
 
   /// 无封面 / 加载失败时的回退图（如全局默认封面）。
   final String? fallbackUrl;
@@ -460,7 +448,6 @@ class _MorphCoverState extends State<MorphCover> {
   void didUpdateWidget(covariant MorphCover oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.url != widget.url ||
-        oldWidget.imageBytes != widget.imageBytes ||
         oldWidget.fallbackUrl != widget.fallbackUrl ||
         oldWidget.artworkCache != widget.artworkCache) {
       _decodeEdge = playbackCoverDecodeEdge(context);
@@ -469,14 +456,6 @@ class _MorphCoverState extends State<MorphCover> {
   }
 
   void _resolveProvider() {
-    final styledBytes = widget.imageBytes;
-    if (styledBytes != null && styledBytes.isNotEmpty) {
-      // 派生图已经是目标边长、方形裁切的静态图：同步 provider 命中
-      // ImageCache 时首帧即出图，飞行期间不重新解码原图。
-      _usingFallback = false;
-      _provider = MemoryImage(styledBytes);
-      return;
-    }
     final primary = widget.url;
     final fallback = widget.fallbackUrl;
     final hasPrimary = primary != null && primary.isNotEmpty;

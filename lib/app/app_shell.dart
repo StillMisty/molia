@@ -16,7 +16,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/cover_style.dart';
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_nearby_pairing.dart';
 import '../l10n/app_localizations.dart';
@@ -30,8 +29,6 @@ import '../providers/playback_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
-import '../services/covers/cover_style_cache.dart';
-import '../services/covers/cover_style_settings.dart';
 import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
 import '../services/language_service.dart';
@@ -41,7 +38,6 @@ import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
 import '../theme/app_theme.dart';
 import '../theme/motion_policy.dart';
-import '../utils/playback_cover_decode.dart';
 import '../utils/responsive.dart';
 import '../widgets/cover_fallback.dart';
 import '../widgets/desktop_layout.dart';
@@ -576,24 +572,12 @@ class _MyAppState extends State<MyApp>
     _morph.setPageHeaderHidden(true);
     _morphGeometry = geometry;
     final url = nowPlayingCoverUrl(context, context.read<PlaybackProvider>());
-    // 飞行副本优先用已缓存的风格图；没算好就用原图，绝不阻塞起手 / 落位。
-    final styleSettings = context.read<CoverStyleSettings?>();
-    final style = styleSettings?.style ?? CoverStyle.original;
-    final styleCache = context.read<CoverStyleCache?>();
-    final styledBytes = url == null || !style.isStylized
-        ? null
-        : styleCache?.peek(
-            url,
-            style,
-            CoverStyleCache.bucketFor(playbackCoverDecodeEdge(context)),
-          );
     final token = ++_morphToken;
     _morphEntry = OverlayEntry(
       builder: (context) => PlayerMorphFlight(
         animation: _morphAnimation,
         geometry: geometry,
         url: url,
-        imageBytes: styledBytes,
         fallback: (context, iconSize) =>
             buildFallbackArtwork(context, iconSize: iconSize),
       ),

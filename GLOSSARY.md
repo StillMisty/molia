@@ -294,50 +294,7 @@
   固定为「随机播放全部」在前、「加入列表」仅在 `onAddToLibrary` 非空时出现
   （发现详情的导入入口留在 AppBar）。页面只给封面地址、形状、回退图标与查看器
   元数据，不再各写一套；否则漏掉解码尺寸或改错保存文件名只会出现在某一个入口。
-
-## 封面风格（cover styles）
-
-- **CoverStyle（封面风格）** — `lib/domain/models/cover_style.dart`：9 种展示风格
-  （`original` / `oneLastKiss` / `lineArt` / `pencil` / `emboss` / `pixel` / `ink` /
-  `duotone` / `film`）。稳定 id 用于持久化与同步，未知 id 一律回退 `original`；
-  `original` 不派生任何图片，是默认值。`oneLastKiss` 的专业名是
-  **gradient-mapped pencil sketch**：guided filter 降噪后的 Sobel 线稿，白纸 +
-  固定彩虹渐变；不再给整张图蒙渐变。其余风格分别用 color-dodge 铅笔
-  （GIMP / OpenCV pencilSketch 思路）、旋转网点墨印（GPUImage Halftone 思路）、
-  octree + Floyd–Steinberg 像素、双色 gradient map、split-tone 胶片。
-- **CoverStyleScope（作用范围）** — `player`（默认，仅当前播放曲目的封面：
-  播放页中心、顶栏、迷你条、列表当前行、歌曲信息、AI DJ 当前项、歌词选择等；
-  播放页左右邻位与其他曲目保持原图）/ `all`（所有封面图片：歌曲封面与专辑 /
-  歌手 / 歌单 / 发现头图、歌单卡片、歌手头像）。封面选择器、海报预览与导出、
-  默认封面行、查看原图、系统媒体通知 / 任务栏缩略图始终使用原图。`player` 是
-  兼容已同步设置的稳定 id，语义按当前曲目解析。
-- **CoverStyleSettings（封面风格偏好）** — `lib/services/covers/cover_style_settings.dart`：
-  `kCoverStyle` / `kCoverStyleScope` 两个「跟人走」设置键的唯一状态（默认
-  `original` + `player`）；跨设备同步应用远端值后经 `bindReload` 重载。
-- **CoverStyleProcessor（封面风格处理器）** — `lib/services/covers/cover_style_processor.dart`：
-  纯 Dart `processSync` + 长驻 worker isolate。解码 / 中心方形裁切 / 缩放 /
-  像素风格化 / PNG 编码都在 worker；失败返回 null，主 isolate 不阻塞。
-- **CoverStyleCache（封面风格缓存）** — `lib/services/covers/cover_style_cache.dart`：
-  按「封面 URL + 风格 + 边长」做内存 LRU，边长分桶 64 / 128 / 256 / 512 / 768
-  （播放页上限 768），约 24MB 字节预算，并发去重；首版不落盘。实例由
-  `lib/app/bootstrap/lyrics_display_stack.dart` 构造一次并挂
-  `ChangeNotifierProvider`；`StyledCoverImage` 只从构造参数或 Provider 获取，
-  缺 Provider 在 debug 断言失败并保持原图，不回退全局缓存。原图读取支持
-  data URL / `file://` / 网络封面（网络走 `ArtworkCache.cachedFilePath`，
-  省流网关与统一请求头照常生效），失败 / 省流无缓存回退原图。
-- **StyledCoverImage（风格封面展示）** — `lib/widgets/styled_cover_image.dart`：
-  原图垫底 + 派生图淡入；`original` 直接走既有 `AppNetworkImage` 路径，零额外
-  开销；尊重减弱动效。默认封面、主题取色、下载 / 标签、系统媒体通知、查看
-  原图与海报导出都不消费派生图。
-- **ScopedCoverImage（非曲目封面展示）** — `lib/widgets/scoped_cover_image.dart`：
-  专辑 / 歌手 / 歌单 / 发现封面与歌手头像的唯一入口；只有 scope=all 且风格
-  非原图时派生，否则回退 `AppNetworkImage`。Provider 缺失 / 缓存不可用时
-  保持原图。
-- **性能边界** — 只有选定非原图风格才处理；`player` 只处理当前曲目，`all`
-  按可见性处理所有封面图片；一次算好静态 PNG，不随切歌动画逐帧重算；共享飞行
-  副本只优先使用已缓存的派生图，没算好时用原图，不阻塞起手 / 落位；落位后由
-  `StyledCoverImage` 淡入。小缩略图（派生边长 ≤128 桶）加粗线条 / 降低细节，
-  避免 40dp 封面糊成一团。
+- **封面始终展示原图** — 派生图只存在于主题取色与海报导出。
 
 ## 应用壳与导航
 
@@ -1233,7 +1190,7 @@
 - **半成品（partial）** — 音频缓存目录里未落成的文件：just_audio 边下载边写 `*.part`、字节预取写 `*.predl`、MIME 边车 `*.mime`。它们占磁盘但不是可播放缓存：索引 / 占用 / 命中一律排除（判据在 Audio cache store），单独计为「写入中」，启动时清扫（写入者在本进程内，重启后残留必为孤儿）。
 - **Lyrics cache（歌词缓存模块）** — `lib/services/lyrics_cache.dart`：歌词读写、用量与清理的唯一实现。默认构造 / 未接入实例保持旧的 SharedPreferences 行为（不碰 `path_provider` 与文件 IO，widget 测试与降级平台依赖它）；生产组合根用 `LyricsCache.appSupport()` 显式接入文件后端：`<appSupport>/lyrics_cache/{md5(trackId)}.json`（一条一文件、临时文件 + rename 原子写）。旧版 prefs 条目不再懒迁移，历史 `manual_lyrics_cache_*` 键也不再特殊处理（不读、不清）；目录不可用时回退 prefs。TTL 策略属于 `CacheService`（取词时读取）。
 - **Artwork index（封面索引）** — flutter_cache_manager 的元数据存储；`CacheStorage` 直接删文件后，由 `ArtworkCache` 的 `_pruneMissingEntries` 同步清理失效条目（索引不指向缺失文件）。
-- **ArtworkCache 进程级单例（已登记的例外）** — `lib/managers/artwork_cache.dart::ArtworkCache.instance` 仍是全局单例。消费面跨越封面子系统之外的展示与平台出口：`AppNetworkImage` / `CoverAppearance` 的默认取图、`CoverStyleCache` 的原图读取、`ArtworkPaletteService`、`CoverImageIdentity`、系统媒体会话封面路径与 `ImagePreloadManager`；启动时 `local_data_stack` 还要对同一实例设置省流网关（`networkImageBlocked`）。把这些消费面全部改成构造注入会牵动页面级 widget 默认参数与平台回调，超出本次封面 seam 的边界。移除前允许继续使用，但只作为**封面字节缓存**，不得作为封面解析 / 选择的回退——「这一首用哪张封面」仍只由 `CoverResolver` / `CustomCoverStore` 决定。
+- **ArtworkCache 进程级单例（已登记的例外）** — `lib/managers/artwork_cache.dart::ArtworkCache.instance` 仍是全局单例。消费面跨越封面子系统之外的展示与平台出口：`AppNetworkImage` / `CoverAppearance` 的默认取图、`ArtworkPaletteService`、`CoverImageIdentity`、系统媒体会话封面路径与 `ImagePreloadManager`；启动时 `local_data_stack` 还要对同一实例设置省流网关（`networkImageBlocked`）。把这些消费面全部改成构造注入会牵动页面级 widget 默认参数与平台回调，超出本次封面 seam 的边界。移除前允许继续使用，但只作为**封面字节缓存**，不得作为封面解析 / 选择的回退——「这一首用哪张封面」仍只由 `CoverResolver` / `CustomCoverStore` 决定。
 - **Paged list controller（分页列表状态机）** — `lib/providers/paged_list_controller.dart`：首屏 / 加载更多 / 失败态（首屏清空可重试 vs 追加保留）/ 过期响应丢弃（`reset` 与 `dispose` 都使在途请求过期）/ 跨页去重 / 「追加页去重后无新增即 `hasMore=false`」推断的唯一实现；状态以一个值发布（`PagedListState<T>`，一次请求只发终态），持有方提供 `fetchPage`（平台特有的「取满即结束 / 达到总数」判断留在取数回调）。跨页重复 key 默认保留先到条目，`mergeDuplicate` 可让调用方合并（歌词片段跟随后页）。成功且仍为当前请求的页经 **Accepted page callback** 交付同页元数据（页实体），不再让消费方另写过期判定。消费面：`SearchProvider`（每个 `SearchKind` 一个 **Search results module** 控制器）、评论热门 / 最新 tab、发现页歌单 tab 与曲目页、专辑页、歌手页——不再各自手写 flag 机。
 - **Accepted page callback（已接受页回调）** — `PagedListController.onPageAccepted`：每次取页成功且请求仍为当前代际时调用一次（首屏 `append=false`、加载更多 `append=true`），在发布新状态之前执行；过期响应、失败、`reset` 与 `dispose` 一律不调用。`fetchPage` 可返回 `PagedResult` 子类型携带同页元数据（详情页实体），持有方只在回调里更新，`loadFirstPage` / `loadMore` 返回后元数据与列表同页。价值在于过期守卫只有控制器一处：消费方不再维护第二套代际计数器，也不会在取数阶段提前写共享状态。
 - **Paged track collection（分页曲目集合）** — `lib/widgets/paged_track_collection.dart`：

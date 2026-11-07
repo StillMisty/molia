@@ -8,8 +8,6 @@
 /// `CoverFlight` / `CoverFlightLayer`）——本文件只负责锚点捕获与飞行生命周期。
 library;
 
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:material_ui/material_ui.dart';
 
@@ -162,7 +160,6 @@ class PlayerMorphFlight extends StatelessWidget {
     required this.animation,
     required this.geometry,
     this.url,
-    this.imageBytes,
     this.fallback,
   });
 
@@ -174,9 +171,6 @@ class PlayerMorphFlight extends StatelessWidget {
 
   /// 飞行期间展示的封面 URL（宿主在抓取锚点的同一刻确定，飞行中不换图）。
   final String? url;
-
-  /// 已缓存的风格派生图；null = 用原图，不阻塞飞行。
-  final Uint8List? imageBytes;
 
   /// 未命中缓存/无封面时的回退（拿到插值后的图标尺寸）。
   final Widget Function(BuildContext context, double iconSize)? fallback;
@@ -197,7 +191,6 @@ class PlayerMorphFlight extends StatelessWidget {
               toPage: geometry.toPage,
             ),
             url: url,
-            imageBytes: imageBytes,
             fallback: fallback,
           ),
         ],

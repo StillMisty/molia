@@ -8,10 +8,10 @@ import '../pages/discover_tracks_page.dart';
 import '../providers/discover_provider.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
+import 'app_network_image.dart';
 import 'discover_layout.dart';
 import 'empty_state.dart';
 import 'm3e_page_route.dart';
-import 'scoped_cover_image.dart';
 import 'shell_page_visibility.dart';
 
 AppLocalizations _l10n(BuildContext context) =>
@@ -227,7 +227,7 @@ class _LeaderboardCoverState extends State<_LeaderboardCover> {
             return placeholder;
           }
           final size = 56.0;
-          return ScopedCoverImage(
+          return AppNetworkImage(
             url: url,
             width: size,
             height: size,
