@@ -254,8 +254,8 @@ pending / keepAlive，当前展示的封面不受影响。
     没有可释放的缓存。因此 PSS / RSS 差异落在 1–2 MB 噪声内，**不能据此
     宣称省了内存**；可确认的是预算切换与生命周期日志按设计发生。
   - 有封面 fixture（收藏 30 张 1000×1000 远端封面、QQ 音乐发现页滚动）：
-    本改动侧 `molia.memory` 仍显示 `imageCache=0.0MB`（封面以 live 图片 /
-    样式缓存形态存在，未进 keepAlive），未能得到可信的缓存差额；基线侧同一
+    本改动侧 `molia.memory` 仍显示 `imageCache=0.0MB`（封面以 live 图片
+    形态存在，未进 keepAlive），未能得到可信的缓存差额；基线侧同一
     fixture 的 release 包因 `libflutter.so` 加载失败无法启动（已装回本改动
     包），未完成 A/B。真机 / 真实库场景仍需复测。
 - Linux release + Xvfb `/proc/<pid>/smaps_rollup`：未测。本次改动不触碰桌面
