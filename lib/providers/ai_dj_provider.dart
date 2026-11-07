@@ -267,14 +267,24 @@ class AiDjProvider extends ChangeNotifier {
   AiRadioQueue get _radioQueue => AiRadioQueue.of(_playbackProvider.snapshot);
 
   Future<void> init() async {
-    _config = await _settingsStore.readConfig();
-    _consentGranted = await _settingsStore.hasConsent();
-    _enabled = await _settingsStore.readEnabled();
-    _preferences = await _settingsStore.readPreferences();
-    _feedback = await _settingsStore.readFeedbackMemory();
-    _preferences = _preferences.copyWith(seeds: _feedback.seeds);
+    // 配置 / 确认 / 开关 / 偏好 / 反馈记忆互不依赖：并行读。其中配置走安全
+    // 存储（Android Keystore / 桌面 keyring），串行会把多次冷读叠加到启动尾巴。
+    // 历史索引 / active 批次也不依赖设置：同样并行起步，最后再统一接状态。
+    final historyReady = _history.init();
+    final (config, consentGranted, enabled, preferences, feedback) = await (
+      _settingsStore.readConfig(),
+      _settingsStore.hasConsent(),
+      _settingsStore.readEnabled(),
+      _settingsStore.readPreferences(),
+      _settingsStore.readFeedbackMemory(),
+    ).wait;
+    _config = config;
+    _consentGranted = consentGranted;
+    _enabled = enabled;
+    _preferences = preferences.copyWith(seeds: feedback.seeds);
+    _feedback = feedback;
 
-    await _history.init();
+    await historyReady;
     // 冷启动恢复的 AI 队列继续自动补歌，不需要用户再点一次播放。
     final adopted = _adoptRestoredRadioIfNeeded();
     notifyListeners();

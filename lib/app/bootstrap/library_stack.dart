@@ -210,6 +210,7 @@ void wireNotificationFavorite({
 void startLibraryAfterFirstFrame(LibraryStack library) {
   unawaited(_seedStampBaseline(library));
 
+  final maintenanceWatch = Stopwatch()..start();
   unawaited(() async {
     await library.syncState.stampSeedReady;
     try {
@@ -218,5 +219,6 @@ void startLibraryAfterFirstFrame(LibraryStack library) {
     } catch (e) {
       debugPrint('[Molia] 统计启动维护失败（继续运行）: $e');
     }
+    markStartupStep('sub.stats.maintenance（首帧后）', maintenanceWatch);
   }());
 }

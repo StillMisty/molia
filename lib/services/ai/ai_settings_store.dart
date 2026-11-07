@@ -18,11 +18,16 @@ class AiSettingsStore {
   final SettingsAccess _settings;
 
   /// 读取配置；缺项/读取失败返回 null（调用方引导填写）。
+  ///
+  /// 三个键互不依赖：并行读，避免安全存储在 Android Keystore / 桌面 keyring
+  /// 上的多次串行等待叠加到启动尾巴。
   Future<LlmConfig?> readConfig() async {
     try {
-      final baseUrl = await _settings.read(kAiDjBaseUrl);
-      final apiKey = await _settings.read(kAiDjApiKey);
-      final model = await _settings.read(kAiDjModel);
+      final (baseUrl, apiKey, model) = await (
+        _settings.read(kAiDjBaseUrl),
+        _settings.read(kAiDjApiKey),
+        _settings.read(kAiDjModel),
+      ).wait;
       final config = LlmConfig(baseUrl: baseUrl, apiKey: apiKey, model: model);
       return config.isComplete ? config : null;
     } catch (_) {

@@ -277,6 +277,7 @@ Linux 本机 microbenchmark（非端到端启动采样，绝对值只用于比�
 ## 9. 运行时体检（2026-10）
 
 启动之外的帧、交互、数据链路、CPU、内存与体积基线见
-`docs/performance-audit-2026-10.md`；复测入口为 `tool/agent/perf.sh`
-（`frames` / `memory` / `size` / `startup` / `data` / `cpu`），Windows
-真实窗口帧用 `tool/agent/perf.sh frames windows --real`。
+`docs/performance-audit-2026-10.md`；2026-11 的 Linux（Xvfb 无头）+ Android
+模拟器复测见 `docs/performance-audit-2026-11.md`。复测入口为
+`tool/agent/perf.sh`（`frames` / `memory` / `size` / `startup` / `data` /
+`cpu`），Windows 真实窗口帧用 `tool/agent/perf.sh frames windows --real`。

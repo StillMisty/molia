@@ -383,6 +383,7 @@ void main() async {
       local: local,
       library: library,
       desktop: desktop,
+      ai: ai,
       update: update,
       sync: sync,
     );

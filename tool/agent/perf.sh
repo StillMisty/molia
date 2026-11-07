@@ -167,6 +167,30 @@ fi
 
 prepare_perf_home() {
   mkdir -p "$PERF_HOME/.local/share/$APP_ID" "$RUN_DIR"
+  # headless Xvfb 会按持久化的窗口 bounds 建窗：隔离 HOME 复用上一次的大窗口
+  # （曾出现 3492×3012）时，软件光栅 / 平台线程会被无谓拉满，帧与 CPU 数据
+  # 全部失真。每次 perf 前固定到 1440×900，保证跨轮可比。
+  local prefs="$PERF_HOME/.local/share/$APP_ID/shared_preferences.json"
+  python3 - "$prefs" <<'PY' || true
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+if not path.exists():
+    raise SystemExit
+try:
+    data = json.loads(path.read_text())
+except Exception:
+    raise SystemExit
+if not isinstance(data, dict):
+    raise SystemExit
+data['flutter.window_bounds_x'] = 0.0
+data['flutter.window_bounds_y'] = 0.0
+data['flutter.window_bounds_width'] = 1440.0
+data['flutter.window_bounds_height'] = 900.0
+path.write_text(json.dumps(data, ensure_ascii=False))
+PY
 }
 
 seed_mock_source() { # platform out_dir [serial]
