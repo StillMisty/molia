@@ -4,8 +4,9 @@
 /// 1. [TasteProfileBuilder] 按发送范围构建画像（收藏/歌单可关闭），
 ///    提示词用紧凑行格式、按应用语言切换文案；收藏始终参与本地排除；
 /// 2. [LlmClient] 单轮补全，启用 JSON Output；
-/// 3. 严格按 `{"songs":[...]}` 契约解析（非 JSON / 空正文不猜测，
-///    空正文由客户端按 DeepSeek 官方建议重试）；
+/// 3. 按 `{"songs":[...]}` 契约解析：先严格 JSON，失败后只做结构恢复
+///    （代码围栏 / 前后说明 / 裸数组 / 包装键 / 尾逗号 / 截断后的完整对象），
+///    不从纯文本里猜测；空正文由客户端按 DeepSeek 官方建议重试并回退；
 /// 4. 与已听排除清单、批内规范化去重；
 /// 5. 按音源页顺序遍历全部可搜索渠道解析，失败项作为 unresolved 返回
 ///    （页面折叠展示，可只重新搜索、不重新调 LLM）；
@@ -15,8 +16,9 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
+
+import 'package:logging/logging.dart';
 
 import '../../data/catalog/catalog_service.dart';
 import '../../domain/models/ai_dj.dart';
@@ -26,6 +28,7 @@ import '../../domain/models/source.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/source_registry.dart';
 import 'ai_prompt_text.dart';
+import 'ai_response_parser.dart';
 import 'ai_text.dart';
 import 'llm_client.dart';
 import 'taste_profile_builder.dart';
@@ -38,6 +41,7 @@ abstract interface class AiRecommendationGenerator {
   /// [excludeLabels] 是本次生成额外排除（如「换一首」/上一批已有曲目），
   /// [excludeKeys] 是同一批排除项的规范化键，用于本地兜底过滤，不进入
   /// 反馈回流。[onProgress] 只在显式生成时传入；静默补歌不传。
+  /// [onRawResponse] 在每次拿到 LLM 正文后立即回调（解析失败也能诊断）。
   Future<AiDjBatch> generate({
     required LlmConfig config,
     required int count,
@@ -48,6 +52,7 @@ abstract interface class AiRecommendationGenerator {
     List<String> excludeKeys = const [],
     AiGenerationCancelToken? cancelToken,
     void Function(AiDjProgress progress)? onProgress,
+    void Function(String raw)? onRawResponse,
   });
 
   /// 预览与 [generate] 相同输入下实际会发送的提示词（不触发 LLM 调用）。
@@ -94,6 +99,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
   final CatalogService _catalog;
   final SourceRegistry _registry;
   final TasteProfileBuilder _profileBuilder;
+  final Logger _logger = Logger('molia.ai_recommendation_service');
 
   /// 每次生成/预览时现取应用语言；设置页切换语言后下一次立即生效。
   final AiPromptLanguage Function() _promptLanguage;
@@ -179,6 +185,7 @@ class AiRecommendationService implements AiRecommendationGenerator {
     List<String> excludeKeys = const [],
     AiGenerationCancelToken? cancelToken,
     void Function(AiDjProgress progress)? onProgress,
+    void Function(String raw)? onRawResponse,
   }) async {
     final startedAt = DateTime.now();
     void progress(
@@ -225,10 +232,22 @@ class AiRecommendationService implements AiRecommendationGenerator {
       userPrompt: prompt.userPrompt,
       jsonMode: true,
     );
+    onRawResponse?.call(raw);
     _checkCancelled(cancelToken);
 
-    final parsed = parseRecommendations(raw, limit: count);
+    final parseResult = parseAiRecommendations(raw, limit: count);
+    final parsed = parseResult.recommendations;
+    if (parseResult.recovered) {
+      _logger.warning(
+        'AI 推荐 JSON 走了容错解析（长度 ${raw.length}，'
+        '截断 ${parseResult.truncated}）',
+      );
+    }
     if (parsed.isEmpty) {
+      _logger.warning(
+        'AI 推荐 JSON 解析为空（长度 ${raw.length}，'
+        '截断 ${parseResult.truncated}）',
+      );
       throw const SourceFailure(
         kind: FailureKind.unknown,
         message: '模型未返回可解析的推荐',
@@ -564,45 +583,11 @@ class AiRecommendationService implements AiRecommendationGenerator {
 
   static String _percent(double value) => '${(value * 100).round()}%';
 
-  /// 解析 JSON Output：只接受提示词约定的 `{"songs":[...]}`。
-  ///
-  /// DeepSeek JSON Output 会保证 content 是合法 JSON（无法识别的内容会被
-  /// 替换成空格），所以不再从正文里提取/修补 JSON；空正文由 [LlmClient]
-  /// 按官方建议重试。
+  /// 解析 LLM 返回的推荐 JSON（容错实现见 [parseAiRecommendations]）。
   static List<AiRecommendation> parseRecommendations(
     String content, {
     int limit = 20,
-  }) {
-    if (limit <= 0) return const [];
-    final text = content.trim();
-    if (text.isEmpty) return const [];
-
-    dynamic decoded;
-    try {
-      decoded = jsonDecode(text);
-    } catch (_) {
-      return const [];
-    }
-    if (decoded is! Map) return const [];
-    final songs = decoded['songs'];
-    if (songs is! List) return const [];
-
-    final result = <AiRecommendation>[];
-    for (final entry in songs) {
-      if (entry is! Map) continue;
-      final title = entry['title']?.toString().trim() ?? '';
-      if (title.isEmpty) continue;
-      result.add(
-        AiRecommendation(
-          title: title,
-          artist: entry['artist']?.toString().trim() ?? '',
-          reason: entry['reason']?.toString().trim() ?? '',
-        ),
-      );
-      if (result.length >= limit) break;
-    }
-    return result;
-  }
+  }) => parseAiRecommendations(content, limit: limit).recommendations;
 
   /// 解析渠道：按音源页顺序遍历全部可搜索渠道，不设数量上限。
   List<SourceDescriptor> _searchableSources() =>

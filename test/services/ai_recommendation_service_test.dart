@@ -1206,7 +1206,7 @@ void main() {
     });
   });
 
-  group('parseRecommendations（JSON Output 契约）', () {
+  group('parseRecommendations（容错 JSON）', () {
     test('解析 {"songs":[...]} 约定形状', () {
       final parsed = AiRecommendationService.parseRecommendations(
         '{"songs":[{"title":"A","artist":"B","reason":"好"},'
@@ -1217,22 +1217,64 @@ void main() {
       expect(parsed.first.reason, '好');
     });
 
-    test('非纯 JSON / 包装键 / 尾逗号 / 截断不再本地提取', () {
+    test('代码围栏 / 前后说明 / 裸数组 / 包装键 / 尾逗号都能恢复', () {
       const contents = [
         '好的，这是推荐：\n```json\n{"songs":[{"title":"A","artist":"B"}]}\n```',
         '[{"title":"A","artist":"B"}]',
         '{"recommendations":[{"title":"A","artist":"B"}]}',
+        '{"data":{"songs":[{"title":"A","artist":"B"}]}}',
         '{"songs":[{"title":"A","artist":"B"},]}',
-        '{"songs":[{"title":"A","artist":"B"},{"title":"C"',
-        '推荐如下：\n1. 晴天 - 周杰伦',
       ];
       for (final content in contents) {
-        expect(
-          AiRecommendationService.parseRecommendations(content),
-          isEmpty,
-          reason: content,
-        );
+        final parsed = AiRecommendationService.parseRecommendations(content);
+        expect(parsed.map((r) => r.title), ['A'], reason: content);
+        expect(parsed.single.artist, 'B', reason: content);
       }
+    });
+
+    test('截断时保留已完整的歌曲对象', () {
+      final parsed = AiRecommendationService.parseRecommendations(
+        '{"songs":[{"title":"A","artist":"B"},'
+        '{"title":"C","artist":"D"},{"title":"E","artist":',
+      );
+      expect(parsed.map((r) => r.title), ['A', 'C']);
+    });
+
+    test('null 标题不变成字符串 "null"，字段别名可用', () {
+      final nullTitle = AiRecommendationService.parseRecommendations(
+        '{"songs":[{"title":null,"artist":"X"},'
+        '{"title":"A","artist":null,"reason":null}]}',
+      );
+      expect(nullTitle.single.title, 'A');
+      expect(nullTitle.single.artist, '');
+      expect(nullTitle.single.reason, '');
+
+      final aliases = AiRecommendationService.parseRecommendations(
+        '{"songs":[{"name":"A","artists":[{"name":"B"},{"name":"C"}],'
+        '"why":"好听"}]}',
+      );
+      expect(aliases.single.title, 'A');
+      expect(aliases.single.artist, 'B、C');
+      expect(aliases.single.reason, '好听');
+    });
+
+    test('二次编码的 JSON 字符串也能解', () {
+      final content = jsonEncode(
+        jsonEncode({
+          'songs': [
+            {'title': 'A', 'artist': 'B'},
+          ],
+        }),
+      );
+      final parsed = AiRecommendationService.parseRecommendations(content);
+      expect(parsed.single.title, 'A');
+    });
+
+    test('纯文本列表不猜测', () {
+      expect(
+        AiRecommendationService.parseRecommendations('推荐如下：\n1. 晴天 - 周杰伦'),
+        isEmpty,
+      );
     });
 
     test('空标题丢弃、限制条数', () {

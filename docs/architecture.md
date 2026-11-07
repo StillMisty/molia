@@ -378,10 +378,12 @@
   `LlmClient`（OpenAI-compatible，请求带
   `response_format: json_object`（不支持时自动退回），生成请求不固定
   `max_tokens`（交给服务端默认预算，避免推理模型的思维链耗尽输出），
-  错误归一化 `SourceFailure`，Key 不进 message）、`AiRecommendationService`（提示词 →
-  严格 JSON Output 解析 → 规范化去重 → `CatalogService.search` 按音源页顺序
-  遍历全部可搜索渠道解析，命中无封面时经音源 `artwork()` 补取；预览与实际
-  共用同一 `buildPrompt`）。
+  生成超时 180s / 连接测试 30s，JSON 模式连续空正文时回退纯提示词，
+  错误归一化 `SourceFailure`，Key 不进 message）、`AiRecommendationService`
+  （提示词 → JSON Output + 容错解析（代码围栏 / 包装键 / 尾逗号 / 截断完整
+  对象）→ 规范化去重 → `CatalogService.search` 按音源页顺序遍历全部可搜索
+  渠道解析，命中无封面时经音源 `artwork()` 补取；预览与实际共用同一
+  `buildPrompt`）。
   `AiDjProvider` 负责推歌会话、通知与对外门面；生成编排收在
   **生成执行器** `AiGenerationExecutor`（`lib/services/ai/ai_generation_executor.dart`）：
   token / epoch / 取消 / 忙碌位 / 可见进度唯一持有，三条 lane——显式（可见、

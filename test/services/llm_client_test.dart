@@ -284,7 +284,7 @@ void main() {
     expect(calls, 2, reason: '第一次正文只有空格，应重试一次');
   });
 
-  test('连续两次空正文才报 aiDjBadResponse', () async {
+  test('JSON 模式两次空正文后回退纯提示词，仍为空才报 aiDjBadResponse', () async {
     var calls = 0;
     final llm = LlmClient(
       dio: mockDio((_) async {
@@ -302,14 +302,42 @@ void main() {
       ),
     );
 
-    expect(calls, 2, reason: '空正文最多重试一次');
+    expect(calls, 3, reason: '两次 JSON 模式 + 一次纯提示词回退');
     expect(failure.l10nKey, 'aiDjBadResponse');
+  });
+
+  test('JSON 模式空正文后，纯提示词回退能拿到内容', () async {
+    final bodies = <Map<String, dynamic>>[];
+    var calls = 0;
+    final llm = LlmClient(
+      dio: mockDio((request) async {
+        calls++;
+        bodies.add(
+          jsonDecode(requestBodyText(request)) as Map<String, dynamic>,
+        );
+        if (calls <= 2) return ok('  ');
+        return ok('```json\n{"songs":[]}\n```');
+      }),
+    );
+
+    final content = await llm.complete(
+      config: config(),
+      systemPrompt: 's',
+      userPrompt: 'u',
+      jsonMode: true,
+    );
+
+    expect(content, '```json\n{"songs":[]}\n```');
+    expect(calls, 3);
+    expect(bodies[0].containsKey('response_format'), isTrue);
+    expect(bodies[1].containsKey('response_format'), isTrue);
+    expect(bodies[2].containsKey('response_format'), isFalse);
   });
 
   test('超时 → timeout（可重试）', () async {
     final llm = LlmClient(
       dio: mockDio((_) => Completer<ResponseBody>().future),
-      timeout: const Duration(milliseconds: 50),
+      generationTimeout: const Duration(milliseconds: 50),
     );
 
     final failure = await failureOf(
@@ -318,6 +346,18 @@ void main() {
 
     expect(failure.kind, FailureKind.timeout);
     expect(failure.retryable, isTrue);
+  });
+
+  test('连接测试使用 connectionTimeout，生成超时不参与', () async {
+    final llm = LlmClient(
+      dio: mockDio((_) => Completer<ResponseBody>().future),
+      connectionTimeout: const Duration(milliseconds: 50),
+      generationTimeout: const Duration(seconds: 10),
+    );
+
+    final failure = await failureOf(() => llm.testConnection(config()));
+
+    expect(failure.kind, FailureKind.timeout);
   });
 
   test('testConnection 走同一请求路径：2xx + choices 即通过（正文为空也算通）', () async {

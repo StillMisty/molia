@@ -57,6 +57,7 @@ class FakeAiDjGenerator implements AiRecommendationGenerator {
     List<String> excludeKeys = const [],
     AiGenerationCancelToken? cancelToken,
     void Function(AiDjProgress progress)? onProgress,
+    void Function(String raw)? onRawResponse,
   }) async {
     calls++;
     lastCount = count;

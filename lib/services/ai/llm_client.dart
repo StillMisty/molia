@@ -21,11 +21,23 @@ import '../../domain/models/ai_dj.dart';
 import '../../domain/models/failure.dart';
 
 class LlmClient {
-  LlmClient({Dio? dio, this._timeout = const Duration(seconds: 30)})
-    : _dio = dio ?? createAppDio();
+  LlmClient({
+    Dio? dio,
+    this.connectionTimeout = const Duration(seconds: 30),
+    this.generationTimeout = const Duration(seconds: 180),
+  }) : _dio = dio ?? createAppDio();
 
   final Dio _dio;
-  final Duration _timeout;
+
+  /// 连接测试的整请求超时（只验证地址/Key/模型能否走通）。
+  final Duration connectionTimeout;
+
+  /// 生成推荐的整请求超时。
+  ///
+  /// 推理模型（DeepSeek thinking）在 24 首批次下实测可达 20–30s，96 首可达
+  /// 45s+；30s 会把正常生成误判成失败。这里留足预算，用户仍可随时取消。
+  final Duration generationTimeout;
+
   final Logger _logger = Logger('molia.llm_client');
 
   /// 已确认不支持 `response_format` 的 `baseUrl|model`。
@@ -62,7 +74,8 @@ class LlmClient {
   ///
   /// JSON Output 下服务端会把无法识别为 JSON 的内容替换成空格，`content`
   /// 可能只剩空白（`finish_reason` 仍可能是 stop）。按 DeepSeek 官方建议，
-  /// 空正文自动重试一次，仍为空才报错。
+  /// 空正文自动重试一次；仍为空且 [jsonMode] 时再回退一次纯提示词请求，
+  /// 避免 JSON 模式本身把正文清空。
   Future<String> complete({
     required LlmConfig config,
     required String systemPrompt,
@@ -80,6 +93,7 @@ class LlmClient {
         temperature: temperature,
         maxTokens: maxTokens,
         jsonMode: jsonMode,
+        timeout: generationTimeout,
       );
       final content = extractAssistantContent(decoded);
       if (content != null && content.trim().isNotEmpty) return content;
@@ -88,6 +102,26 @@ class LlmClient {
       _logger.warning(
         'AI 响应无正文（第 $attempt/$maxAttempts 次，'
         'finish_reason: ${finishReasonOf(decoded) ?? '未知'}）',
+      );
+    }
+    if (jsonMode) {
+      final fallback = await _chatCompletions(
+        config: config,
+        systemPrompt: systemPrompt,
+        userPrompt: userPrompt,
+        temperature: temperature,
+        maxTokens: maxTokens,
+        jsonMode: false,
+        timeout: generationTimeout,
+      );
+      final content = extractAssistantContent(fallback);
+      if (content != null && content.trim().isNotEmpty) {
+        _logger.warning('AI JSON 模式正文为空，已回退纯提示词拿到内容');
+        return content;
+      }
+      _logger.warning(
+        'AI 回退纯提示词仍无正文（finish_reason: '
+        '${finishReasonOf(fallback) ?? '未知'}）',
       );
     }
     throw const SourceFailure(
@@ -114,6 +148,7 @@ class LlmClient {
       userPrompt: userPrompt,
       temperature: 0,
       maxTokens: 64,
+      timeout: connectionTimeout,
     );
     if (!hasChoices(decoded)) {
       _logger.warning(
@@ -135,6 +170,7 @@ class LlmClient {
     required String userPrompt,
     required double temperature,
     required int? maxTokens,
+    required Duration timeout,
     bool jsonMode = false,
   }) async {
     final uri = chatCompletionsUri(config.baseUrl);
@@ -166,7 +202,7 @@ class LlmClient {
             data: jsonEncode(requestBody(json: tryJsonMode)),
             options: Options(headers: headers),
           )
-          .timeout(_timeout);
+          .timeout(timeout);
       if (tryJsonMode && response.httpStatus == 400) {
         // 服务商不支持 response_format：退回一次纯提示词约束；成功才记住，
         // 下次同配置不再先发带参数的请求。
@@ -176,7 +212,7 @@ class LlmClient {
               data: jsonEncode(requestBody(json: false)),
               options: Options(headers: headers),
             )
-            .timeout(_timeout);
+            .timeout(timeout);
         if (retry.httpStatus < 400) {
           _jsonModeUnsupportedKey = configKey;
         }

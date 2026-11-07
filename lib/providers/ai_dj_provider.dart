@@ -589,6 +589,7 @@ class AiDjProvider extends ChangeNotifier {
         excludeLabels: excludes.labels,
         excludeKeys: excludes.keys,
         cancelToken: token,
+        onRawResponse: (raw) => _lastRawResponse = raw,
       ),
       commit: (generated) async {
         if (generated.items.isEmpty) {
@@ -894,6 +895,7 @@ class AiDjProvider extends ChangeNotifier {
         excludeKeys: excludes.keys,
         cancelToken: token,
         onProgress: onProgress,
+        onRawResponse: (raw) => _lastRawResponse = raw,
       ),
       commit: (batch) async {
         if (batch.items.isEmpty) {
@@ -955,6 +957,7 @@ class AiDjProvider extends ChangeNotifier {
         excludeLabels: excludes.labels,
         excludeKeys: excludes.keys,
         cancelToken: token,
+        onRawResponse: (raw) => _lastRawResponse = raw,
       ),
       commit: (batch) async {
         if (batch.items.isEmpty) {
