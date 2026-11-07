@@ -1114,6 +1114,56 @@ void main() {
       );
     });
 
+    test('浏览缓存 LRU：超过上限淘汰最久未访问，当前列表不被淘汰', () async {
+      final ids = <int>[];
+      for (var i = 0; i <= LibraryProvider.kPlaylistTracksCacheLimit; i++) {
+        final id = await repository.createPlaylist('LRU $i');
+        ids.add(id);
+        await repository.addTrackToPlaylist(
+          id,
+          PlaylistTrack(
+            playlistId: id,
+            sourceKey: 'wy',
+            songId: 'lru$i',
+            title: 'LRU $i',
+            addedAt: i,
+          ),
+        );
+      }
+      await settle();
+
+      // 填满上限后逐个读入，最后访问的列表是队尾。
+      for (var i = 0; i < LibraryProvider.kPlaylistTracksCacheLimit; i++) {
+        await provider.loadPlaylistTracks(ids[i]);
+        expect(provider.playlistTracksView(ids[i]).tracks, hasLength(1));
+      }
+      // 再看一眼当前列表（A）：A 变成最近访问，B 成为最久未访问。
+      provider.playlistTracksView(ids[0]);
+
+      // 打开第 6 个列表：触发淘汰，应该淘汰 B 而不是当前列表 A。
+      await provider.loadPlaylistTracks(ids.last);
+      expect(
+        provider.playlistTracksView(ids[0]).tracks,
+        isNotNull,
+        reason: '当前正在看的列表不能被淘汰',
+      );
+      expect(
+        provider.playlistTracksView(ids[1]).tracks,
+        isNull,
+        reason: '最久未访问的列表让位给新列表',
+      );
+      expect(
+        provider.playlistTracksView(ids.last).tracks!.single.songId,
+        'lru5',
+      );
+
+      // releaseBrowseCaches 语义不变：全部清空。
+      provider.releaseBrowseCaches();
+      for (final id in ids) {
+        expect(provider.playlistTracksView(id).tracks, isNull);
+      }
+    });
+
     test('列表曲目读取超时 → failed（不再无限 loading）', () async {
       final playlistId = await repository.createPlaylist('测试列表');
       await provider.refreshPlaylists();

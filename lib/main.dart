@@ -51,6 +51,15 @@ final _startupLog = Logger('molia.startup');
 void _markStartup(String stage, Stopwatch watch) =>
     _startupLog.info('$stage：${watch.elapsedMilliseconds}ms');
 
+/// 系统低内存信号：只有在这种情况下释放可重建的浏览 / 搜索 / 目录缓存。
+///
+/// 普通退后台不释放列表——恢复时用户会看到空列表并被迫重读；系统明确报告
+/// 内存压力时才值得用「恢复后重读」换一次释放。
+class _MemoryPressureObserver with WidgetsBindingObserver {
+  @override
+  void didHaveMemoryPressure() => AppMemoryManager.instance.onMemoryPressure();
+}
+
 /// 唯一 composition root：只做「平台装配 + 按顺序调用各 stack builder +
 /// runApp + 首帧回调」，子系统内部接线见 `lib/app/bootstrap/**`。
 ///
@@ -74,6 +83,13 @@ void main() async {
 
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 图片缓存预算：显式收敛到 64 MiB（Flutter 默认 100 MiB 对移动端过大；
+  // 桌面托盘 / 移动端后台还会临时压到 16 MiB）。必须在
+  // `AppMemoryManager.instance` 首次访问之前设置：守卫构造时捕获这个值
+  // 作为恢复上限。所有平台统一口径，避免各平台恢复出不同预算。
+  PaintingBinding.instance.imageCache.maximumSizeBytes =
+      kFullImageCacheLimitBytes;
+
   // 日志装配（package:logging 的 handler / level 只在这里和测试配置里设一次）
   initAppLogging();
 
@@ -83,6 +99,8 @@ void main() async {
   // 托盘期内存守卫：窗口隐藏 / 最小化 / 恢复时清理或恢复图片缓存预算
   // （`molia.memory` 日志是托盘内存回归的观测点）。
   AppMemoryManager.instance.attach();
+  // 系统低内存：只释放可重建的浏览 / 搜索 / 目录缓存（见 onMemoryPressure）。
+  WidgetsBinding.instance.addObserver(_MemoryPressureObserver());
 
   // 窗口行为偏好（设备本地）/ 系统 UI 字体 / 单实例锁互不依赖：并行等待
   // （串行是几段相加，并行取最大值）。都完成才建窗，语义与拆分前一致。
@@ -221,16 +239,23 @@ void main() async {
     catalogService: catalog.catalogService,
     sourceRegistry: catalog.sourceRegistry,
   );
-  // 托盘期释放业务缓存（只清可重建的瞬时 / 浏览数据，不动收藏与历史）：
+  // 托盘期 / 系统低内存时释放可重建的业务缓存（不动收藏与历史）：
   // 搜索结果是本次会话的瞬时数据；列表曲目与目录分页页退出后按需重取。
+  // 普通退后台不释放（恢复时会空列表），只有托盘隐藏与系统低内存才触发。
   // 只注册释放入口，AppMemoryManager 不反向依赖这些类型。
-  AppMemoryManager.instance
-    ..addReleaser(libraryProvider.releaseBrowseCaches)
-    ..addReleaser(searchProvider.releaseSearchResults)
-    ..addReleaser(catalog.catalogService.clearSearchCache)
-    ..addReleaser(catalog.albumService.clearCache)
-    ..addReleaser(catalog.artistService.clearCache)
-    ..addReleaser(catalog.commentsService.clearCache);
+  final reclaimableCaches = <void Function()>[
+    libraryProvider.releaseBrowseCaches,
+    searchProvider.releaseSearchResults,
+    catalog.catalogService.clearSearchCache,
+    catalog.albumService.clearCache,
+    catalog.artistService.clearCache,
+    catalog.commentsService.clearCache,
+  ];
+  for (final releaser in reclaimableCaches) {
+    AppMemoryManager.instance
+      ..addReleaser(releaser)
+      ..addLowMemoryReleaser(releaser);
+  }
   // 系统媒体会话的「收藏」动作：通知点击 ↔ 曲库（与托盘 / 任务栏按钮同一
   // 写入路径）。必须在 provider 建好之后接线（handler 先于它创建）。
   wireNotificationFavorite(
@@ -326,7 +351,12 @@ void main() async {
   // `AppPresence`，且桌面播放保持前台节拍）；`onPause` / `onHide` 是同一动作。
   void onAppBackground() {
     flushDeferredWrites();
-    if (mobilePowerPolicy) powerPolicy.markBackground();
+    if (mobilePowerPolicy) {
+      powerPolicy.markBackground();
+      // 移动端 30s 后回收图片缓存；快速切回时 onAppForeground 会取消。
+      // 桌面托盘走 AppPresence，生命周期不触发这里。
+      AppMemoryManager.instance.onAppBackground();
+    }
     sync.provider.onAppHidden();
   }
 
@@ -338,7 +368,10 @@ void main() async {
 
   AppLifecycleListener(
     onResume: () {
-      if (mobilePowerPolicy) powerPolicy.markForeground();
+      if (mobilePowerPolicy) {
+        powerPolicy.markForeground();
+        AppMemoryManager.instance.onAppForeground();
+      }
       unawaited(sync.provider.onAppResumed());
       unawaited(update.provider.handleAppResumed());
     },
