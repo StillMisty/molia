@@ -561,8 +561,6 @@ class TrackRow extends StatelessWidget {
         : TrackArtwork(
             coverKey: model.effectiveCoverKey,
             originalUrl: model.coverUrl,
-            // 列表行只有 coverKey；当前行在「仅播放中」范围下也要跟随风格。
-            isCurrentTrack: isCurrent,
             size: surface.coverSize,
             borderRadius: BorderRadius.circular(10),
             memCacheWidth:

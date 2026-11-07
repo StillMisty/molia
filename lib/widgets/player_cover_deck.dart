@@ -56,13 +56,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:motor/motor.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/cover_style.dart';
 import '../domain/models/playback.dart';
 import '../domain/models/track.dart';
 import '../providers/playback_provider.dart';
 import '../services/covers/cover_resolution.dart';
-import '../services/covers/cover_style_cache.dart';
-import '../services/covers/cover_style_settings.dart';
 import '../services/haptics.dart';
 import '../theme/motion_policy.dart';
 import '../utils/playback_cover_decode.dart';
@@ -72,7 +69,6 @@ import 'cover_fallback.dart';
 import 'cover_handoff.dart';
 import 'player_cover_session.dart';
 import 'player_morph.dart';
-import 'styled_cover_image.dart';
 import 'track_artwork.dart';
 
 /// 曲目封面 URL / 稳定 key 与卡片外观定义在
@@ -1932,8 +1928,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
             artDimension,
             artworkUrlOverride: artworkUrlOverride,
             fallback: fallback,
-            // 滑出 / 尾卡都是中心封面的延续，跟随中心的范围判定。
-            isCenter: true,
           );
     if (slotKey != null) {
       card = KeyedSubtree(key: slotKey, child: card);
@@ -1975,7 +1969,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     Widget? fallback,
     String? placeholderUrl,
     String? artworkUrlOverride,
-    bool isCenter = false,
   }) {
     final url = artworkUrlOverride ?? _realCoverUrlOf(track);
     return CoverCard(
@@ -1984,17 +1977,10 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
       appearance: appearance,
       content: (context, clip, iconSize) {
         final coverEdge = playbackCoverDecodeEdge(context);
-        final settings = context.watch<CoverStyleSettings?>();
-        // 中心卡与换图占位始终应用；左右邻位只在「所有封面图片」范围下应用，
-        // 避免「仅播放中」把上一首 / 下一首也处理掉。
-        final style = isCenter || settings?.scope == CoverStyleScope.all
-            ? settings?.style ?? CoverStyle.original
-            : CoverStyle.original;
         final placeholder = placeholderUrl != null && placeholderUrl != url
             ? _buildCoverImage(
                 context,
                 placeholderUrl,
-                style: style,
                 iconSize: iconSize,
                 coverEdge: coverEdge,
               )
@@ -2002,7 +1988,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
         return _buildCoverImage(
           context,
           url,
-          style: style,
           iconSize: iconSize,
           coverEdge: coverEdge,
           fallbackUrl: _coverResolver.defaultCoverUrl,
@@ -2016,36 +2001,21 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
     );
   }
 
-  /// 播放页封面图片：原图路径保持既有 [AppNetworkImage] 零开销；
-  /// 选定风格后交给 [StyledCoverImage]（原图垫底 + 派生图淡入）。
+  /// 播放页封面图片：始终走 [AppNetworkImage] 展示原图。
   Widget _buildCoverImage(
     BuildContext context,
     String? url, {
-    required CoverStyle style,
     required double iconSize,
     required int coverEdge,
     String? fallbackUrl,
     Widget? placeholder,
     Widget? errorWidget,
   }) {
-    if (style == CoverStyle.original) {
-      return AppNetworkImage(
-        url: url,
-        fallbackUrl: fallbackUrl,
-        fit: BoxFit.cover,
-        // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
-        fallbackIconSize: iconSize,
-        memCacheWidth: coverEdge,
-        placeholder: placeholder,
-        errorWidget: errorWidget,
-      );
-    }
-    return StyledCoverImage(
+    return AppNetworkImage(
       url: url,
       fallbackUrl: fallbackUrl,
-      style: style,
-      edge: CoverStyleCache.bucketFor(coverEdge),
       fit: BoxFit.cover,
+      // 与顶栏↔播放页飞行共享同一外观源（图标态落点必须与真身同尺寸）。
       fallbackIconSize: iconSize,
       memCacheWidth: coverEdge,
       placeholder: placeholder,
@@ -2097,7 +2067,6 @@ class _PlayerCoverDeckState extends State<PlayerCoverDeck>
                   track,
                   artDimension,
                   fallback: buildFallbackArtwork(context),
-                  isCenter: true,
                 ),
               ),
             ),

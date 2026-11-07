@@ -1,12 +1,12 @@
 import 'package:material_ui/material_ui.dart';
 
-import 'scoped_cover_image.dart';
+import 'app_network_image.dart';
 
 /// 通用封面缩略图（歌手 / 歌单 / 专辑头像与非曲目行）。
 ///
 /// **不再承担曲目封面策略**：曲目行请用 `TrackArtwork`（自定义封面 +
 /// 默认封面 + 变更订阅都在适配器内）。这里只按给定 URL 渲染方块缩略图，
-/// 是否派生风格图由 [ScopedCoverImage] 按作用范围决定。
+/// 始终展示原图。
 class LibraryCoverThumb extends StatelessWidget {
   final String? url;
   final double size;
@@ -15,7 +15,7 @@ class LibraryCoverThumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ScopedCoverImage(
+    return AppNetworkImage(
       url: url,
       width: size,
       height: size,

@@ -46,22 +46,6 @@ const kSeedColor = SettingsKey<int>(
   category: SyncCategory.settings,
 );
 
-/// 封面风格（跟人走）：稳定 id 见 `domain/models/cover_style.dart`。
-///
-/// 默认 `original` = 完全不派生图片，保持既有默认行为；非法值回退原图。
-const kCoverStyle = SettingsKey<String>(
-  'cover_style',
-  'original',
-  category: SyncCategory.settings,
-);
-
-/// 封面风格作用范围（跟人走）：`player` = 仅播放中，`all` = 所有封面图片。
-const kCoverStyleScope = SettingsKey<String>(
-  'cover_style_scope',
-  'player',
-  category: SyncCategory.settings,
-);
-
 // 跟人走：壳 / 语言 / 歌词显示 / 播放偏好
 const kAppDisplayTitle = SettingsKey<String?>(
   'app_display_title',
@@ -274,8 +258,6 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kFollowArtworkEnabled,
   kPureBlackEnabled,
   kSeedColor,
-  kCoverStyle,
-  kCoverStyleScope,
   kAppDisplayTitle,
   kSelectedLanguage,
   kShellNavOrder,
