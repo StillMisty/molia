@@ -90,6 +90,7 @@ tool/agent/emu.sh stop     # 停止模拟器（app.sh stop 只停 flutter run）
 
 ```bash
 tool/agent/seed.sh android favorites 3   # 注入 __favorites__ + 3 首固定样例（含超长标题）
+tool/agent/seed.sh android covers 30     # 注入带 30 张本地 file:// 封面的收藏（内存采样用）
 tool/agent/seed.sh android history 5     # 注入最近播放 5 条
 tool/agent/seed.sh android session       # 写恢复会话（3 首 mock 曲目 / 下标 1 / 进度 20s）
 tool/agent/seed.sh android mock-source   # 生成 mock LX 脚本 + WAV，起宿主机 http 服务并激活音源
@@ -104,10 +105,18 @@ tool/agent/seed.sh android restore       # 用最近一次备份还原（第一�
   脚本直接写 `lx_sources.json` 并置 activeId（绕开应用内 Import from URL）。
 - Android 写入前自动 `force-stop`（SharedPreferences 有内存缓存，运行中写入会被覆盖）；
   Linux 请先退出应用，且会改动 `~/.local/share/top.stillmisty.molia/` 下的真实数据。
-- 数据位置：Android `/data/data/top.stillmisty.molia/{app_flutter/molia_database_v2.sqlite,
-  shared_prefs/FlutterSharedPreferences.xml, files/lx_sources.json}`；
+- DB 读取会把主库 + `-wal` / `-shm` 一起拉到本地并 checkpoint 成单文件，避免
+  release 包的 schema 只在 WAL 里时被读成空库；写回前会先备份第一次注入前的
+  有效库，0 表空备份会被替换。`favorites` / `covers` 支持 1000 首量级。
+- 数据位置：Android `/data/data/top.stillmisty.molia/files/molia_database_v2.sqlite`、
+  `shared_prefs/FlutterSharedPreferences.xml`、`files/lx_sources.json`；
   Linux `~/.local/share/top.stillmisty.molia/`（DB 同处）。
   同目录的旧 `molia_database.sqlite` 保留但不读。
+- 新 worktree 首次 Android / 体积构建先跑
+  `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`：会补分支、签名、
+  Gradle wrapper 与 native assets hooks 缓存（受限网络下 sqlite3 下载会卡）。
+- APK 内容明细：`python3 tool/agent/apk_size.py [--check] <apk>`；不依赖 `unzip`。
+  内存采样：`tool/agent/perf.sh memory android`（先 `adb root`）。
 
 ### Android 集成测试
 

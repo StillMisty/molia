@@ -12,7 +12,7 @@ tool/agent/app.sh run -d linux # Linux 桌面热重载（免模拟器；无 DISP
 tool/agent/app.sh reload       # 热重载；restart 热重启；status 看 pid / 设备 / VM Service / 日志路径
 tool/agent/shot.sh [name]      # 截图 → /tmp/opencode/molia/shots/*.png（可直接读图）
 tool/agent/ui.sh layout|tap|swipe|text|key|launch|force-stop
-tool/agent/seed.sh android|linux <cmd>  # 数据注入：favorites/history/session/mock-source/status/clear/restore
+tool/agent/seed.sh android|linux <cmd>  # 数据注入：favorites/covers/history/session/mock-source/status/clear/restore
 tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter run）
 ```
 
@@ -25,3 +25,5 @@ tool/agent/emu.sh stop         # 停止模拟器（app.sh stop 只停 flutter ru
 - 视觉定位：`shot.sh --annotate` 生成带编号标注的截图，再 `ui.sh resolve 截图.png "#3"` 得到坐标；
   输入文本前确保输入框已聚焦；
 - 模拟器默认 16 KB 页；镜像、AVD 与 WSL 限制等细节见 `docs/dev_environment.md`（权威出处）。
+- 新 worktree / seed 的 WAL 与大数据量 / `covers` 封面 fixture / Android 内存采样：
+  见 `molia-perf-tooling` skill。

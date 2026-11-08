@@ -138,12 +138,13 @@
     （用 `SettingsChoiceRow`）。
     `M3EDropdownMenu` 单选必须设 `fieldStyle.hintText`，否则未选中时显示包内英文兜底
     `Select`（用 `SettingsDropdownRow`，它统一填标题提示）。
-26. **新 worktree 的 Android 构建先对齐 Gradle wrapper**：`/android/gradle/` 被
-    .gitignore 排除，新 worktree 里 Flutter 会按 SDK 模板生成 Gradle 9.3.1，而本项目
-    AGP 要求 ≥ 9.6（工具链表为 9.9.0）。构建前把
-    `android/gradle/wrapper/gradle-wrapper.properties` 的 distributionUrl 改为
-    `gradle-9.9.0-bin.zip`；另注意 JDK 27 + Gradle 9.3.1 会因 class file 71 直接
-    失败（Gradle 9.9.0 + JDK 27 已验证可用）。
+26. **新 worktree 的 Android 构建先对齐前置条件**：`android/gradle/`、`android/key.properties`、
+    `*.jks` 与 `.dart_tool/hooks_runner/` 都被 .gitignore 排除。新 worktree 里先跑
+    `tool/agent/worktree_prepare.sh <worktree-dir> [branch]`，它会补 Gradle wrapper
+    （项目要求 9.9.0，Flutter 默认模板可能生成 9.3.1，AGP 要求 ≥ 9.6）、release 签名和
+    sqlite3/cnativeapi 的 native assets hooks 缓存；另外它会把 OpenCode `worktree_create`
+    的 detached HEAD 切到分支。JDK 27 + Gradle 9.3.1 会因 class file 71 直接失败
+    （Gradle 9.9.0 + JDK 27 已验证可用）。
 27. **16 KB 页对齐是发布硬条件，而且属于「依赖带进来的属性」**：Android 15+ 的 16 KB
     内核设备要求 64 位 .so 的 ELF 段按 16 KB 对齐（Google Play 自 2027-02 起强制）。
     构建侧已满足（AGP ≥ 8.5.1 管 zip 页对齐、NDK r28+ 默认 16 KB 段对齐），但本项目没有

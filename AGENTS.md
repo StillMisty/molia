@@ -19,7 +19,7 @@ flutter analyze --no-pub   # 必须 0 error / 0 warning
 flutter test --no-pub      # 全量（默认集，本机 <30s）；单文件：flutter test test/lx_core_test.dart --no-pub
 tool/agent/test.sh linux   # 端到端（真实引擎 + 设置页 + 窗口/托盘，不含播放）；Xvfb 无窗口，桌面看门狗勿删
 tool/agent/test.sh android # 同一套跑模拟器（先 emu.sh start）；--window / --timeout 见脚本
-tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/history/session/mock-source/status/clear/restore
+tool/agent/seed.sh android|linux <cmd>   # 数据注入：favorites/covers/history/session/mock-source/status/clear/restore
 tool/agent/startup.sh                    # 启动耗时采样（release 冷启动 N 次取中位；基线与结论见 docs/performance.md）
 tool/agent/perf.sh                       # 全链路体检：frames / startup / data / cpu / memory / size（最新基线与跑法见 docs/performance.md）
 tool/agent/cpu.sh                        # 按线程 CPU 采样（平台 / Dart UI / raster / IO / 音频；被 perf.sh cpu 调用）
@@ -27,6 +27,8 @@ tool/agent/memory.sh                     # 托盘内存采样（RSS 曲线 + mol
 tool/agent/io.sh                         # 磁盘写入采样（prefs mtime 计数 + DB/WAL 大小 + /proc IO 差分）
 tool/agent/memory.ps1                    # Windows 托盘内存采样（专用工作集 / 提交大小；见 docs/memory.md）
 tool/agent/hooks.sh                      # 启用 .githooks/pre-commit：提交前自动格式化暂存 Dart 文件
+tool/agent/worktree_prepare.sh <dir> [branch]  # 新 worktree：分支 / 签名 / Gradle / hooks 缓存
+python3 tool/agent/apk_size.py --check <apk>   # APK 分组体积与 native 库约束（无需 unzip）
 ```
 
 生成物（改对应源码后必跑，产物提交进仓库）：
@@ -95,4 +97,6 @@ sources/playback。
 
 - Issues 与规格走 GitHub issues（`gh` CLI，`docs/agents/issue-tracker.md`）；标签见
   `docs/agents/triage-labels.md`；术语与决策见 `GLOSSARY.md` + `docs/adr/`（`docs/agents/domain.md`）；
+- 包体积 / 内存 / worktree / seed / APK 明细的完整口径与踩坑见
+  `.agents/skills/molia-perf-tooling/SKILL.md`；
 - `.agents/skills/` 为第三方内容勿手改；更新走 `npx skills update` + `dart run skills@ get --all`。

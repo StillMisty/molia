@@ -258,5 +258,11 @@ pending / keepAlive，当前展示的封面不受影响。
     形态存在，未进 keepAlive），未能得到可信的缓存差额；基线侧同一
     fixture 的 release 包因 `libflutter.so` 加载失败无法启动（已装回本改动
     包），未完成 A/B。真机 / 真实库场景仍需复测。
+- **采样入口（2026-11-08 补充）**：`tool/agent/perf.sh memory android` 会构建
+  普通 release、`seed.sh android covers 30` 注入 30 张本地封面，然后采「空闲 /
+  后台 35s / 回前台」。本机 x86_64 模拟器复测：PSS `136.4 → 129.6 → 128.9MB`，
+  `molia.memory` 记录上限 `64MB → 16MB → 64MB`；封面以 live 图片存在，未进入
+  `ImageCache.currentSizeBytes`，因此不能把这约 6.8MB 全归因于图片缓存，真机 /
+  真实库仍需复测。
 - Linux release + Xvfb `/proc/<pid>/smaps_rollup`：未测。本次改动不触碰桌面
   托盘路径（§3 的既有回收逻辑与数据不变），时间用于 Android 模拟器验证。

@@ -362,8 +362,8 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
      会是约 42MB 的非 release 引擎；正常 release 约 17MB。脚本以 20MB 为
      阈值，超过就直接报错 / 重建，避免把「分析构建」当成发布体积或启动基线。
 - **合并封面风格移除后的最终产物**（2026-11-08，同一套 split + strip）：bundle
-  39,908,239 B（39.91MB）、tar.gz 15,879,980 B（15.88MB）、`libapp.so`
-  15,713,160 B、symbols 7,701,888 B。与上表的差异来自封面风格代码 / 未使用
+  39,908,239 B（39.91MB）、tar.gz 15,879,476 B（15.88MB）、`libapp.so`
+  15,713,160 B、symbols 7,678,048 B。与上表的差异来自封面风格代码 / 未使用
   `package:image` 路径被移除；上表仍保留 split / strip 的独立 A/B 口径。
 
 ## 11. Android 打包体积（2026-11）
@@ -384,6 +384,10 @@ bundle-only tar.gz。下表同机实测（Linux x64 / Flutter 3.47.9）；MB 为
 | armeabi-v7a | 17,232,022 B | 16,687,828 B | **−544,194 B（−3.16%）** |
 
 合并封面风格移除后的最终发布参数产物（`--split-per-abi --split-debug-info
---obfuscate`）：arm64 **15,240,656 B**、x86_64 **15,510,390 B**、armv7
-**15,116,936 B**。该组数字与上表不是同一构建参数，不能把差额全归因到 native
+--obfuscate`）：arm64 **15,240,828 B**、x86_64 **15,510,302 B**、armv7
+**15,116,932 B**。该组数字与上表不是同一构建参数，不能把差额全归因到 native
 library 剔除；分组收益以 A/B 表为准。
+
+APK 内容明细用 `python3 tool/agent/apk_size.py --check <apk>`（`perf.sh size
+android` 已自动调用）；不需要 `unzip`，并会拦住 `libmpv.so` /
+`libmediakitandroidhelper.so` / `libcnativeapi.so` 回流。
