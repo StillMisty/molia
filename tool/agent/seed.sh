@@ -8,6 +8,7 @@
 # 命令:
 #   status               打印三份数据的路径与摘要（不写入）
 #   favorites [N]        注入 __favorites__ + N 首固定样例（默认 3，含超长标题）
+#   covers [N]           注入 __favorites__ + N 首带本地 file:// 封面的样例（默认 30）
 #   history [N]          注入最近播放 N 条（默认 5，最近在上）
 #   session              写恢复会话（3 首 mock 曲目，下标 1，进度 20s）
 #   mock-source [--port P]  生成 mock LX 脚本 + WAV，起宿主机 http 服务，
@@ -20,14 +21,14 @@
 # 说明:
 # - 依赖：bash + python3 + adb（android）/ 本机文件（linux）；
 # - 任何写入前把原文件备份到 $RUN_DIR/seed-backup/<时间戳>/；
-# - DB 注入要求数据库已存在（应用至少启动过一次生成库）；写库前会清掉
-#   `-wal` / `-shm` 旁挂文件，否则残留 WAL 会在应用下次打开时重放旧页面、
-#   盖掉刚注入的数据；
+# - DB 注入要求数据库已存在（应用至少启动过一次生成库）；读取时把主库 +
+#   `-wal` / `-shm` 一起拉到本地、checkpoint 成单文件再改，避免 release 包
+#   的 schema 只存在 WAL 里被读成空库；写回后清掉设备旁挂文件；
 # - Android 写入前自动 force-stop 应用（SharedPreferences 有内存缓存，
 #   运行中写入会被覆盖）；Linux 请先退出正在运行的应用；
 # - Android 上的 mock 音频 URL 用 127.0.0.1:<port> + `adb reverse`（模拟器→
 #   宿主机 NAT 的 10.0.2.2 在应用进程内实测会超时），Linux 直接用 127.0.0.1;
-# - DB 路径：Android /data/data/$APP_ID/app_flutter/molia_database_v2.sqlite，
+# - DB 路径：Android /data/data/$APP_ID/files/molia_database_v2.sqlite，
 #   Linux 优先 $HOME/Documents（xdg 文档目录），缺省回退
 #   ~/.local/share/$APP_ID/molia_database_v2.sqlite。
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_common.sh"
@@ -63,7 +64,7 @@ case "$platform" in
 esac
 
 case "$cmd" in
-  status|favorites|history|session|mock-source|lang|clear|restore) ;;
+  status|favorites|covers|history|session|mock-source|lang|clear|restore) ;;
   *) usage ;;
 esac
 
@@ -180,14 +181,16 @@ backup_file() {
 
 # ---------- 注入内容 ----------
 
-# 固定样例曲目（JSON：sourceKey/songId/title/artist/album/durationMs），
-# 其中第一首超长标题用于列表行宽验证。
+# 固定样例曲目（JSON：sourceKey/songId/title/artist/album/durationMs/coverUrl），
+# 其中第一首超长标题用于列表行宽验证；cover_base 非空时生成唯一 file:// 封面，
+# 供 imageCache / 内存采样使用。
 seed_tracks_json() {
-  local n="$1"
-  python3 - "$n" "$MOCK_SOURCE_KEY" <<'PY'
+  local n="$1" cover_base="${2:-}"
+  python3 - "$n" "$MOCK_SOURCE_KEY" "$cover_base" <<'PY'
 import json, sys
 n = int(sys.argv[1])
 source = sys.argv[2]
+cover_base = sys.argv[3]
 base = [
     {
         "songId": "seed-1",
@@ -206,9 +209,88 @@ for i in range(n):
         item["songId"] = f"seed-{i + 1}"
         item["title"] = f"{item['title']}（样例 {i + 1}）"
     item["sourceKey"] = source
+    item["coverUrl"] = (
+        f"{cover_base}/cover-{i + 1}.png" if cover_base else None
+    )
     tracks.append(item)
 print(json.dumps(tracks, ensure_ascii=False))
 PY
+}
+
+# seed_mkdir_remote <远端目录>：在 Android 应用私有目录 / Linux 支持目录建目录。
+seed_mkdir_remote() {
+  local remote="$1"
+  if [[ "$platform" == android ]]; then
+    if adb_is_root; then
+      "$ADB" -s "$DEVICE_ID" shell "mkdir -p '$remote'" >/dev/null
+      # root 新建的目录归 root；应用进程读不到，必须交还应用 uid。
+      local owner
+      owner="$("$ADB" -s "$DEVICE_ID" shell \
+        "stat -c '%u:%g' '/data/data/$APP_ID/files'" | tr -d '\r')"
+      [[ -z "$owner" ]] ||
+        "$ADB" -s "$DEVICE_ID" shell "chown -R '$owner' '$remote'" >/dev/null
+    else
+      "$ADB" -s "$DEVICE_ID" shell \
+        "run-as $APP_ID mkdir -p '$remote'" >/dev/null
+    fi
+  else
+    mkdir -p "$remote"
+  fi
+}
+
+# seed_cover_files <N>：生成 N 张唯一 URL 的 1000×1000 本地封面并推到应用目录，
+# 输出末尾不含斜杠的 file:// 目录前缀，供 seed_tracks_json 拼每首 coverUrl。
+#
+# 单张 PNG 用纯 Python 生成（不依赖 Pillow）；用同一张图复制 N 份，
+# 目的是填 Flutter ImageCache（解码后的像素内存），不是图片内容多样性。
+seed_cover_files() {
+  local n="${1:-30}"
+  local local_dir="$RUN_DIR/seed-covers"
+  local remote_dir
+  mkdir -p "$local_dir"
+  python3 - "$n" "$local_dir" <<'PY'
+import struct
+import sys
+import zlib
+
+n = int(sys.argv[1])
+out = sys.argv[2]
+width = height = 1000
+
+def chunk(tag, data):
+    return (
+        struct.pack('>I', len(data))
+        + tag
+        + data
+        + struct.pack('>I', zlib.crc32(tag + data) & 0xFFFFFFFF)
+    )
+
+raw = bytearray()
+for y in range(height):
+    raw.append(0)  # filter: none
+    for x in range(width):
+        raw += bytes(((x * 255) // width, (y * 255) // height, 96, 255))
+png = (
+    b'\x89PNG\r\n\x1a\n'
+    + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0))
+    + chunk(b'IDAT', zlib.compress(bytes(raw), 6))
+    + chunk(b'IEND', b'')
+)
+for i in range(n):
+    with open(f'{out}/cover-{i + 1}.png', 'wb') as handle:
+        handle.write(png)
+PY
+  if [[ "$platform" == android ]]; then
+    remote_dir="/data/user/0/$APP_ID/files/seed_covers"
+  else
+    remote_dir="$HOME/.local/share/$APP_ID/seed_covers"
+  fi
+  seed_mkdir_remote "$remote_dir"
+  local i
+  for ((i = 1; i <= n; i++)); do
+    seed_push "$local_dir/cover-$i.png" "$remote_dir/cover-$i.png"
+  done
+  printf 'file://%s' "$remote_dir"
 }
 
 # ---------- DB 注入 ----------
@@ -221,51 +303,125 @@ PY
 seed_drop_sqlite_sidecars() {
   local remote="$1"
   if [[ "$platform" == android ]]; then
-    "$ADB" -s "$DEVICE_ID" shell \
-      "run-as $APP_ID rm -f '$remote-wal' '$remote-shm'" >/dev/null 2>&1 || true
+    if adb_is_root; then
+      "$ADB" -s "$DEVICE_ID" shell \
+        "rm -f '$remote-wal' '$remote-shm'" >/dev/null 2>&1 || true
+    else
+      "$ADB" -s "$DEVICE_ID" shell \
+        "run-as $APP_ID rm -f '$remote-wal' '$remote-shm'" >/dev/null 2>&1 || true
+    fi
   else
     rm -f "$remote-wal" "$remote-shm"
   fi
 }
 
+# seed_pull_db <远端主库> <本地主库>：主库 + WAL/SHM 一起拉。
+#
+# release 包 force-stop 后 schema 往往还在 -wal 里（主库只有 4KB）：只
+# cat 主库会得到一个 0 表的空库，后续报「no such table」。三件套凑齐后
+# 本地打开即可重放，再 checkpoint 成单文件。
+seed_pull_db() {
+  local remote="$1" local="$2"
+  rm -f "$local" "$local-wal" "$local-shm"
+  seed_pull "$remote" "$local" || return 1
+  seed_pull "$remote-wal" "$local-wal" >/dev/null 2>&1 || true
+  seed_pull "$remote-shm" "$local-shm" >/dev/null 2>&1 || true
+}
+
+# seed_checkpoint_db <本地库>：WAL 重放 + 截断，留下自洽单文件。
+seed_checkpoint_db() {
+  local path="$1"
+  python3 - "$path" <<'PY'
+import os
+import sqlite3
+import sys
+
+path = sys.argv[1]
+conn = sqlite3.connect(path)
+try:
+    conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+    conn.commit()
+finally:
+    conn.close()
+for suffix in ('-wal', '-shm'):
+    try:
+        os.remove(path + suffix)
+    except FileNotFoundError:
+        pass
+PY
+}
+
+# seed_db_is_valid <本地库>：有业务表且 schemaVersion > 0。
+seed_db_is_valid() {
+  local path="$1"
+  python3 - "$path" <<'PY'
+import sqlite3
+import sys
+
+try:
+    conn = sqlite3.connect(sys.argv[1])
+    version = conn.execute('PRAGMA user_version').fetchone()[0]
+    tables = conn.execute(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table'"
+    ).fetchone()[0]
+    conn.close()
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if version > 0 and tables > 0 else 1)
+PY
+}
+
 seed_db() {
-  local mode="$1" count="$2"
+  local mode="$1" count="$2" cover_base="${3:-}"
   local remote tmp backup
   if [[ "$platform" == android ]]; then
     remote="$ANDROID_DB_PATH"
   else
     remote="$(linux_db_path)"
   fi
-  seed_drop_sqlite_sidecars "$remote"
   mkdir -p "$SEED_BACKUP_DIR/latest"
-  backup="$(backup_file "$SEED_BACKUP_DIR/latest" "$remote" "molia_database_v2.sqlite")"
-  [[ -n "$backup" ]] && log "已备份数据库 → $backup"
   # 工作副本 = 当前文件（可能已被上一次注入改过）。库由应用首启建出：
   # 缺库时不再自建表——脚本维护的 DDL 会随 schema 演进失配（v5 起
   # playlist 版本列取代了 updatedAt/updatedBy），且只会造出缺表缺列的
   # 半成品库（drift 以 user_version 判定版本，不会走 onCreate 补表）。
   tmp="$SEED_BACKUP_DIR/work.sqlite"
-  if ! seed_pull "$remote" "$tmp"; then
+  if ! seed_pull_db "$remote" "$tmp"; then
     if [[ "$mode" == "clear" ]]; then
       log "未找到现有数据库（$remote）：无需清除"
       return 0
     fi
     die "未找到现有数据库（$remote）：先启动一次应用生成库，再执行注入"
   fi
+  seed_checkpoint_db "$tmp"
+  if ! seed_db_is_valid "$tmp"; then
+    die "数据库无有效 schema（$remote）：请确认应用已完成初始化；旧备份不会覆盖"
+  fi
 
-  local tracks
-  tracks="$(seed_tracks_json "$count")"
-  python3 - "$tmp" "$mode" "$tracks" <<'PY'
+  # 备份 = 第一次注入前的自洽单文件；旧版本可能留下 0 表空备份，允许修复。
+  backup="$SEED_BACKUP_DIR/latest/molia_database_v2.sqlite"
+  if [[ ! -f "$backup" ]] || ! seed_db_is_valid "$backup"; then
+    cp "$tmp" "$backup"
+    log "已备份数据库 → $backup"
+  fi
+
+  local tracks tracks_file
+  tracks="$(seed_tracks_json "$count" "$cover_base")"
+  # tracks 走临时文件：1000 首 JSON 约 150KB，作为 argv 会 Argument list too
+  # long；也不能和 here-doc 抢 stdin（python 的脚本本身从 stdin 读）。
+  tracks_file="$RUN_DIR/seed-tracks.json"
+  printf '%s' "$tracks" >"$tracks_file"
+  python3 - "$tmp" "$mode" "$tracks_file" <<'PY'
 import json, sqlite3, sys, time
-path, mode, tracks_json = sys.argv[1], sys.argv[2], sys.argv[3]
-tracks = json.loads(tracks_json)
+path, mode, tracks_path = sys.argv[1], sys.argv[2], sys.argv[3]
+with open(tracks_path, encoding='utf-8') as handle:
+    tracks = json.load(handle)
 now = int(time.time() * 1000)
 conn = sqlite3.connect(path)
 cur = conn.cursor()
 
-# 列集与 drift schema v5 对齐：版本列（versionPhysical/versionCounter/deviceId）
+# 列集与当前 drift schema（v2）对齐：版本列（versionPhysical/versionCounter/deviceId）
 # 走表默认值，这里不写，与本地写引擎落下的行形状一致。
-if mode == "favorites":
+if mode in ("favorites", "covers"):
     row = cur.execute(
         "SELECT id FROM playlists WHERE name = '__favorites__' ORDER BY id LIMIT 1"
     ).fetchone()
@@ -285,7 +441,7 @@ if mode == "favorites":
             "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (
                 pid, t["sourceKey"], t["songId"], t["title"], t["artist"],
-                t["album"], None, t["durationMs"],
+                t["album"], t.get("coverUrl"), t["durationMs"],
                 json.dumps({"songId": t["songId"]}, ensure_ascii=False),
                 now + i, i,
             ),
@@ -312,12 +468,18 @@ elif mode == "clear":
     cur.execute("DELETE FROM play_history")
 
 conn.commit()
+try:
+    conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+    conn.commit()
+finally:
+    conn.close()
 print(f"written mode={mode} tracks={len(tracks)}")
-conn.close()
 PY
+  rm -f "$tracks_file"
 
+  rm -f "$tmp-wal" "$tmp-shm"
   seed_push "$tmp" "$remote"
-  # 推入的是自洽单文件：再清一次旁挂文件，防止旧 WAL 在应用下次打开时重放。
+  # 推入前已 checkpoint 成单文件；清掉设备旧旁挂文件，防止旧页面重放。
   seed_drop_sqlite_sidecars "$remote"
   log "已写入数据库 → $remote"
 }
@@ -697,6 +859,8 @@ seed_restore() {
     esac
     force_stop_app
     seed_push "$f" "$remote"
+    [[ "$name" == "molia_database_v2.sqlite" ]] &&
+      seed_drop_sqlite_sidecars "$remote"
     log "已恢复 $remote ← $f"
   done
   (( found )) || die "备份目录里没有可恢复的文件"
@@ -715,6 +879,12 @@ case "$cmd" in
     require_device
     force_stop_app
     seed_db favorites "${1:-3}"
+    ;;
+  covers)
+    require_device
+    force_stop_app
+    cover_base="$(seed_cover_files "${1:-30}")"
+    seed_db covers "${1:-30}" "$cover_base"
     ;;
   history)
     require_device
