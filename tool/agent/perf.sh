@@ -8,7 +8,7 @@
 #   tool/agent/perf.sh data linux|android      # 搜索/起播/取词端到端时延（mock 音源）
 #   MOLIA_PERF_SCENARIO_NEXT=1 tool/agent/perf.sh data linux  # 追加下一首起播采样
 #   tool/agent/perf.sh cpu linux|android       # 空闲/播放 CPU（按线程）
-#   tool/agent/perf.sh memory linux|windows
+#   tool/agent/perf.sh memory linux|windows|android
 #   tool/agent/perf.sh size android|linux
 #   tool/agent/perf.sh all linux|android
 #
@@ -518,6 +518,86 @@ run_cpu_linux() {
   log "结果目录：$out"
 }
 
+run_memory_android() { # out_dir [serial]
+  require_flutter
+  ensure_adb
+  local out="$1" serial="${2:-}"
+  [[ -n "$serial" ]] || serial="$(running_emulator)"
+  [[ -n "$serial" ]] || die "没有运行中的模拟器（先 tool/agent/emu.sh start）"
+  DEVICE_ID="$serial"
+  adb_dev() { "$ADB" -s "$serial" "$@"; }
+  ensure_android_root "$serial"
+
+  local abi target abi_name
+  abi="$(adb_dev shell getprop ro.product.cpu.abi | tr -d '\r')"
+  case "$abi" in
+    x86_64) target=android-x64; abi_name=x86_64 ;;
+    arm64-v8a) target=android-arm64; abi_name=arm64-v8a ;;
+    armeabi-v7a) target=android-arm; abi_name=armeabi-v7a ;;
+    *) die "未知 ABI：$abi" ;;
+  esac
+  local apk="build/app/outputs/flutter-apk/app-$abi_name-release.apk"
+  if ((PERF_NO_BUILD)); then
+    log "复用已有 release APK（--no-build）"
+  else
+    log "构建 release APK（$abi，普通包，不启用 perf scenario）"
+    ( cd "$PROJECT_DIR" && flutter build apk --release \
+        --target-platform "$target" --split-per-abi ) 2>&1 |
+      tee "$out/build.log"
+  fi
+  [[ -f "$PROJECT_DIR/$apk" ]] || die "找不到 APK：$apk"
+  adb_dev install -r "$apk" >/dev/null 2>&1 ||
+    { adb_dev uninstall "$APP_ID" >/dev/null 2>&1 || true; adb_dev install "$apk" >/dev/null 2>&1; } ||
+    die "安装失败：$apk"
+  ensure_android_app_data "$serial"
+
+  local covers="${MOLIA_PERF_COVERS:-30}"
+  log "注入 $covers 张本地封面 + 收藏 fixture"
+  DEVICE_ID="$serial" "$PROJECT_DIR/tool/agent/seed.sh" android covers "$covers" \
+    >"$out/seed.log" 2>&1 || die "注入封面 fixture 失败（见 $out/seed.log）"
+
+  adb_dev logcat -c >/dev/null 2>&1 || true
+  log "冷启动并采样空闲内存"
+  adb_dev shell am start -W -S -n "$APP_ID/.MainActivity" >/dev/null 2>&1 || true
+  sleep 10
+  adb_dev shell dumpsys meminfo "$APP_ID" >"$out/mem-idle.txt" 2>/dev/null || true
+
+  log "退后台 35s（覆盖 30s 图片缓存回收）"
+  adb_dev shell input keyevent KEYCODE_HOME >/dev/null 2>&1 || true
+  sleep 35
+  adb_dev shell dumpsys meminfo "$APP_ID" >"$out/mem-background.txt" 2>/dev/null || true
+  adb_dev logcat -d 2>/dev/null | grep -a 'molia.memory' >"$out/memory.log" || true
+
+  log "回前台并采样"
+  adb_dev shell am start -n "$APP_ID/.MainActivity" >/dev/null 2>&1 || true
+  sleep 8
+  adb_dev shell dumpsys meminfo "$APP_ID" >"$out/mem-resume.txt" 2>/dev/null || true
+  adb_dev shell am force-stop "$APP_ID" >/dev/null 2>&1 || true
+
+  {
+    echo '# Android 内存体检（模拟器）'
+    echo
+    echo "设备：$serial（$abi）；fixture：$covers 张本地封面；每段是原始 dumpsys meminfo。"
+    echo
+    for pair in '空闲:mem-idle.txt' '后台 35s:mem-background.txt' '回前台:mem-resume.txt'; do
+      label="${pair%%:*}"
+      file="$out/${pair#*:}"
+      echo "## $label"
+      echo '```'
+      grep -E 'TOTAL PSS|TOTAL RSS|Native Heap|Dalvik Heap|Code|Private Other|Unknown' \
+        "$file" 2>/dev/null || true
+      echo '```'
+      echo
+    done
+    echo '## molia.memory'
+    echo '```'
+    cat "$out/memory.log" 2>/dev/null || true
+    echo '```'
+  } >"$out/summary.md"
+  cat "$out/summary.md"
+  log "结果目录：$out"
+}
+
 run_cpu_android() { # out_dir [serial]
   require_flutter
   ensure_adb
@@ -742,6 +822,10 @@ case "$cmd" in
     platform="${1:-linux}"
     case "$platform" in
       linux) exec "$PROJECT_DIR/tool/agent/memory.sh" "${@:2}" ;;
+      android)
+        out_dir="$(new_out_dir android-memory)"
+        run_memory_android "$out_dir" "${2:-}"
+        ;;
       windows)
         command -v powershell.exe >/dev/null 2>&1 || die "没有 powershell.exe"
         out_dir="$(new_out_dir windows-memory)"
@@ -765,6 +849,8 @@ case "$cmd" in
       android)
         require_flutter
         out_dir="$(new_out_dir android-size)"
+        # 清掉上一次不同参数 / fat APK，避免体积报告混入旧产物。
+        rm -f build/app/outputs/flutter-apk/*release*.apk
         log "构建 release APK（split-per-abi）"
         flutter build apk --release --split-per-abi \
           --split-debug-info=build/symbols --obfuscate \
@@ -773,10 +859,18 @@ case "$cmd" in
         {
           echo "# Android 体积"
           echo
-          find build/app/outputs/flutter-apk -maxdepth 1 -name '*.apk' \
+          find build/app/outputs/flutter-apk -maxdepth 1 -name '*release*.apk' \
             -printf '%f %s\n' | sort
         } >"$out_dir/summary.md"
-        du -h build/app/outputs/flutter-apk/*.apk >>"$out_dir/summary.md" || true
+        # 不依赖 unzip：按 ABI 打印 lib/、dex、assets 明细，并校验
+        # media_kit / nativeapi 的禁止库与 sqlite3 / quickjs 必需库。
+        for apk in build/app/outputs/flutter-apk/*release*.apk; do
+          [[ -f "$apk" ]] || continue
+          python3 "$PROJECT_DIR/tool/agent/apk_size.py" --check "$apk" \
+            >>"$out_dir/summary.md" 2>"$out_dir/check.log" ||
+            die "APK native 库约束失败（见 $out_dir/check.log）"
+        done
+        cat "$out_dir/summary.md"
         log "结果目录：$out_dir"
         ;;
       linux)

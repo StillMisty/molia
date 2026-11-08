@@ -136,6 +136,13 @@ jobs:
           )
           flutter build apk "${flags[@]}" --split-per-abi
           flutter build appbundle "${flags[@]}"
+      - name: 校验 native 库集合（体积 / 运行期必需库）
+        run: |
+          set -euo pipefail
+          for apk in build/app/outputs/flutter-apk/app-*-release.apk; do
+            [[ -f "$apk" ]] || continue
+            python3 tool/agent/apk_size.py --check "$apk"
+          done
       - name: 校验 release 资源（shrinkResources 不能删掉通知图标，见已知坑 34）
         run: |
           set -euo pipefail
@@ -249,10 +256,8 @@ jobs:
           flutter build linux --release \
             --build-name "$v" --build-number "${{ needs.prepare.outputs.build }}" \
             --split-debug-info=build/symbols/linux
-          if [[ -e build/linux/x64/release/bundle/data/flutter_assets/kernel_blob.bin ]]; then
-            echo "::error::release bundle 含 kernel_blob.bin（build/flutter_assets 残留 debug 产物）"
-            exit 1
-          fi
+          # 统一守卫：kernel_blob 残留 / 非 release 引擎都直接失败。
+          tool/agent/check_linux_bundle.sh build/linux/x64/release/bundle
           # 只 strip 第三方插件库；libapp.so / libflutter_linux_gtk.so 保持原样。
           tool/strip_linux_bundle.sh build/linux/x64/release/bundle
           stage="dist/molia-$v-linux-x64"

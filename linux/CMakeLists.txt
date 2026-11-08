@@ -124,6 +124,15 @@ install(CODE "
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
 
+# release install 会原样复制 build/flutter_assets；历史 debug / flutter test
+# 留下的 kernel_blob.bin 不应进入发布包（曾把 40MB bundle 污染到 186MB）。
+# 在安装后显式删除，普通 `flutter build linux --release` 也能自愈。
+if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
+  install(CODE "
+    file(REMOVE \"${INSTALL_BUNDLE_DATA_DIR}/${FLUTTER_ASSET_DIR_NAME}/kernel_blob.bin\")
+    " COMPONENT Runtime)
+endif()
+
 # Install the AOT library on non-Debug builds only.
 if(NOT CMAKE_BUILD_TYPE MATCHES "Debug")
   install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
