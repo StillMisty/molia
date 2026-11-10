@@ -199,10 +199,17 @@ class PlaybackModeButton extends StatelessWidget {
 /// 任一 dispose 就是常驻监听 / 计时器。版式差异只有时间标签排布
 /// [timeLabels]，行的内边距 / 是否 Expanded 仍由宿主决定。
 class PlaybackSeekBar extends StatefulWidget {
-  const PlaybackSeekBar({super.key, this.timeLabels = SeekTimeLabels.inline});
+  const PlaybackSeekBar({
+    super.key,
+    this.timeLabels = SeekTimeLabels.inline,
+    this.wavy = false,
+  });
 
   /// 时间标签排布：底栏 inline（与条同行），播放页 below（条下方）。
   final SeekTimeLabels timeLabels;
+
+  /// 是否启用波浪滑杆：只有播放页显式开启（见 [SeekBar.wavy]）。
+  final bool wavy;
 
   @override
   State<PlaybackSeekBar> createState() => _PlaybackSeekBarState();
@@ -250,6 +257,7 @@ class _PlaybackSeekBarState extends State<PlaybackSeekBar> {
         isPlaying: state.isPlaying,
         hasTrack: state.hasTrack,
         timeLabels: widget.timeLabels,
+        wavy: widget.wavy,
       ),
     );
   }

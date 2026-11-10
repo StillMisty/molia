@@ -263,6 +263,12 @@ Future<SyncStack> buildSyncStack({
     adapters: syncAdapters,
     stamps: syncState.stampIssuer,
     collect: syncEngine.collectRecords,
+    // 完整备份导出后放掉整库导出缓存：备份是低频动作，事件 / 各适配器的
+    // 上轮记录没必要在导出后继续常驻；下一次同步按需重读。
+    onExported: () {
+      library.statisticsSyncStore.releaseExportCaches();
+      syncEngine.releaseIdleCaches();
+    },
     clock: () => DateTime.fromMillisecondsSinceEpoch(syncState.nowMs()),
   );
   // 蜂窝判定用调度器默认的真实探针（connectivity_plus）：省流服务的 onCellular

@@ -11,7 +11,7 @@ import '../sync_adapter.dart';
 /// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），版本 =
 /// 发号器给的三元组（收尾时取号）；`endedAt`（何时结束）是内容时间、
 /// **不参与胜负判定**。删除不参与同步。
-class StatisticsSyncAdapter implements SyncAdapter {
+class StatisticsSyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
   StatisticsSyncAdapter({required this._store});
 
   final StatisticsSyncStore _store;
@@ -51,6 +51,13 @@ class StatisticsSyncAdapter implements SyncAdapter {
           ),
       ],
     };
+  }
+
+  /// 释放上轮记录缓存：下一次 collect 按指纹重新导出（幂等）。
+  @override
+  void releaseCaches() {
+    _cacheKey = null;
+    _cached = null;
   }
 
   @override

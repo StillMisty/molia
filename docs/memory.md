@@ -266,3 +266,37 @@ pending / keepAlive，当前展示的封面不受影响。
   真实库仍需复测。
 - Linux release + Xvfb `/proc/<pid>/smaps_rollup`：未测。本次改动不触碰桌面
   托盘路径（§3 的既有回收逻辑与数据不变），时间用于 Android 模拟器验证。
+
+## 9. 2026-11-11：托盘缓存释放第二批 / 延迟 trim / 播放页动画收口
+
+### 9.1 改了什么
+
+| 位置 | 行为 |
+| --- | --- |
+| `lib/managers/app_memory_manager.dart` | 托盘隐藏完成后再延迟 `kTrayLateTrimDelay = 2s` 调一次平台 trim：第一次发生在原生窗口 hide 之前，窗口 / 引擎收尾 touch 的页需要再归还一次；恢复或再次隐藏用 token 取消。`releaseToOs` 可注入，便于测试计数 |
+| `lib/main.dart` + `lib/data/sync/**` | 托盘 / 低内存 releaser 增加：统计导出缓存、同步轮次 `_lastEnvelope` / 收集 / 聚合缓存、统计 / 播放列表 / 历史 / 封面适配器的上轮记录缓存、内置平台响应 / 原生取词 / 取图缓存、封面补取缓存。完整备份导出后也立即释放这些缓存；在途轮次不释放，下一次 collect 按需重建 |
+| `lib/sources/builtin/**`、`lib/services/covers/cover_backfill_service.dart` | 新增幂等 `clearCache()`：只清已完成结果，不动平台 / 脚本注册表；在途请求的 identity 校验阻止旧结果写回 |
+| `lib/widgets/ai_dj_carousel.dart` | AI 推荐卡封面按 `256 × DPR` 解码，不再按原图；布局仍由 carousel 槽位决定 |
+| `lib/app/tray_dormant_gate.dart` | 改为 `childBuilder`：托盘隐藏期间不构造整棵 `MaterialApp` 配置（原先 child 实参在 build 前已求值） |
+| `lib/widgets/seek_bar.dart`、`app_shell.dart`、`player.dart`、`current_track_cover.dart` | wavy 进度只保留在播放页（显式 `wavy: true`）；顶栏 / 迷你条 / 列表均衡器静态；最小化时 `AppPresenceTickerMode` 静音 ticker（只停动画，不清缓存 / 不改变最小化语义） |
+| `lib/data/playback/local_playback_backend.dart`、`queue_projection.dart` | 队列投影按 `(queueRevision, index, mode, playbackOrderRevision, shuffleOrderRevision)` 缓存；位置 tick 不再跑 O(N) 投影与 `upNext` 映射（CPU，不是内存回收） |
+| `lib/managers/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
+| `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |
+| `lib/data/molia_database.dart` | `journal_size_limit = 4MB`、`wal_autocheckpoint = 1000`，限制 WAL 高水位 |
+
+### 9.2 验证
+
+- `flutter analyze --no-pub`：0 error / 0 warning；
+- `flutter test --no-pub`：**2580 passed / 11 skipped**（新增：延迟 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate）；
+- Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
+  - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
+  - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
+  - 这是 debug + Xvfb 的进程 RSS，绝对值不代表 release；断言的是 `imageCache` 归零、上限 16MiB、`liveImageCount == 0`、恢复 64MiB 与窗口 hide/show 往返。
+- 写次数由单测断言：窗口几何 4→1、音量 + 静音 2→1、导航 3→1；封面元数据 touch-only 0 次写。绝对磁盘字节未测。
+
+### 9.3 未覆盖 / 下一步
+
+- **Windows 200MB 未复现 / 未复测**：本轮按用户要求在 Linux 验证清理逻辑；Windows release 的专用工作集与 `molia.memory` 仍需在真实 Windows 上跑 `tool/agent/memory.ps1` / `perf.sh memory windows`，不能把 Linux 的差额当成 Windows 收益。
+- **最小化不省内存**：产品语义保持不变；只静音 ticker（动画不跑），页面 / 图片 / 浏览缓存仍保留。
+- **同步 journal 的 session 整队列 payload**（单行可达 2MB、占本地 journal 94%）未改；需要单独设计「cursor 小记录 + 队列内容哈希去重」，本轮只释放内存缓存，不改变写放大。
+- `molia.memory` 仍只有 RSS + imageCache；Windows 专用工作集 / 提交大小日志未加。

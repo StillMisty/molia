@@ -83,6 +83,13 @@ const int kFullImageCacheLimitBytes = 64 * 1024 * 1024;
 /// 重新堆到完整预算。
 const int kTrayImageCacheLimitBytes = 16 * 1024 * 1024;
 
+/// 托盘隐藏后第二次系统 trim 的延迟。
+///
+/// 第一次 trim 发生在休眠帧落定、原生窗口尚未隐藏时；`Window.hide()` 的
+/// 引擎收尾和窗口层释放还会 touch 一批页，单次 trim 会被这些页重新填回。
+/// 隐藏后补一次只处理「可换出的空闲页」，不重复清业务缓存。
+const Duration kTrayLateTrimDelay = Duration(seconds: 2);
+
 /// 移动端退后台多久后清理：给短暂切走 / 快速切回留出跟手恢复的窗口。
 const Duration kMobileBackgroundTrimDelay = Duration(seconds: 30);
 
@@ -169,9 +176,13 @@ void _releaseFreedMemoryToOs() {
 
 /// 托盘期内存守卫（单例入口 [AppMemoryManager.instance]）。
 class AppMemoryManager {
-  AppMemoryManager({AppPresence? presence, ImageCacheTarget? imageCache})
-    : _presence = presence ?? AppPresence.instance,
-      _cache = imageCache ?? const PaintingImageCache() {
+  AppMemoryManager({
+    AppPresence? presence,
+    ImageCacheTarget? imageCache,
+    void Function()? releaseToOs,
+  }) : _presence = presence ?? AppPresence.instance,
+       _cache = imageCache ?? const PaintingImageCache(),
+       _releaseToOs = releaseToOs ?? _releaseFreedMemoryToOs {
     _fullLimitBytes = _cache.maximumSizeBytes;
   }
 
@@ -183,6 +194,9 @@ class AppMemoryManager {
   final AppPresence _presence;
   final ImageCacheTarget _cache;
 
+  /// 把 allocator / 工作集里的空闲页交还系统；测试可注入计数替身。
+  final void Function() _releaseToOs;
+
   /// attach 时的原始上限（恢复时还原；不硬编码 100 MiB，跟随 Flutter 默认
   /// 或未来的显式配置）。`main.dart` 在首次访问本类之前把全局图片缓存设为
   /// [kFullImageCacheLimitBytes]，因此生产环境捕获的就是 64 MiB。
@@ -190,6 +204,10 @@ class AppMemoryManager {
 
   /// 清理代数：隐藏→恢复快速往返时让在途清理作废。
   int _trimToken = 0;
+
+  /// 隐藏后第二次 trim：第一次发生在原生窗口隐藏前，收尾 touch 的页需要
+  /// 再归还一次。恢复 / 再次隐藏时取消。
+  Timer? _trayLateTrimTimer;
 
   /// 移动端后台清理计时与代数：`onAppBackground` 起 30s 计时，
   /// `onAppForeground` 取消并让在途回调作废。
@@ -322,11 +340,13 @@ class AppMemoryManager {
   void _releaseLowMemoryCaches() {
     _runReleasers(_lowMemoryReleasers, failureMessage: '低内存业务缓存释放失败');
     _cache.clear();
-    _releaseFreedMemoryToOs();
+    _releaseToOs();
     _log('系统低内存清理完成');
   }
 
   void dispose() {
+    _trayLateTrimTimer?.cancel();
+    _trayLateTrimTimer = null;
     _mobileTrimToken++;
     _mobileTrimTimer?.cancel();
     _mobileTrimTimer = null;
@@ -356,6 +376,8 @@ class AppMemoryManager {
 
   void _restoreLimit({String phase = '窗口可见'}) {
     _trimToken++;
+    _trayLateTrimTimer?.cancel();
+    _trayLateTrimTimer = null;
     if (_cache.maximumSizeBytes != _fullLimitBytes) {
       _cache.maximumSizeBytes = _fullLimitBytes;
     }
@@ -382,8 +404,22 @@ class AppMemoryManager {
       kTrayImageCacheLimitBytes,
     );
     // 清完再 trim：不然日志里的 RSS / 工作集还是「已释放未归还」的那笔数。
-    _releaseFreedMemoryToOs();
+    _releaseToOs();
     _log('托盘隐藏完成');
+    _scheduleTrayLateTrim(token);
+  }
+
+  /// 隐藏后第二次 trim：原生窗口 hide 与引擎收尾还会 touch 一批页，第一次
+  /// trim 之后它们可能重新回到工作集。只归还空闲页，不重复清缓存 / 不跑
+  /// 业务 releaser；恢复或再次隐藏时由 token 作废。
+  void _scheduleTrayLateTrim(int token) {
+    _trayLateTrimTimer?.cancel();
+    _trayLateTrimTimer = Timer(kTrayLateTrimDelay, () {
+      _trayLateTrimTimer = null;
+      if (token != _trimToken || !_presence.isTrayHidden) return;
+      _releaseToOs();
+      _log('托盘隐藏延迟 trim');
+    });
   }
 
   /// 移动端后台 30s 后的清理。
@@ -398,7 +434,7 @@ class AppMemoryManager {
       _fullLimitBytes,
       kTrayImageCacheLimitBytes,
     );
-    _releaseFreedMemoryToOs();
+    _releaseToOs();
     _log('移动端后台清理完成');
   }
 

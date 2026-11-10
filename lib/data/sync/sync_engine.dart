@@ -173,6 +173,11 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
   /// 全量快照（局域网 `GET /snapshot` 与 bootstrap 兜底）。
   Future<SyncEnvelope> serveSnapshot() => _runner.serveSnapshot();
 
+  /// 托盘隐藏 / 系统低内存时释放轮次间可重建的收集 / 快照缓存。
+  ///
+  /// 在途轮次返回 false（本轮仍在使用），下一次触发再清；幂等。
+  bool releaseIdleCaches() => _runner.releaseIdleCaches();
+
   int _nowMs() => _clock().millisecondsSinceEpoch;
 
   Future<void> init() async {

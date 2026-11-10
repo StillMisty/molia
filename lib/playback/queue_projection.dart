@@ -70,6 +70,90 @@ class QueueProjection<T> {
   final List<int> upNextIndices;
 }
 
+/// 队列投影的缓存键：只有会改变投影结果的状态才参与。
+///
+/// 位置 tick（~400ms）只改 `BackendSnapshot.position`，队列 / 下标 / 模式 /
+/// 播放顺序 / 洗牌排列都不变；用这个键命中缓存后，快照重建不再跑 O(N) 的
+/// `projectQueue` 与 upNext 映射。
+///
+/// [playbackOrderRevision] / [shuffleOrderRevision] 是播放顺序栈与洗牌排列
+/// 的内容版本号：它们可能在队列与当前下标都不变时被修改（例如同一首上弹栈），
+/// 必须一起参与键。
+class QueueProjectionKey {
+  const QueueProjectionKey({
+    required this.queueRevision,
+    required this.currentIndex,
+    required this.mode,
+    this.playbackOrderRevision = 0,
+    this.shuffleOrderRevision = 0,
+  });
+
+  /// 队列内容版本（`LocalPlaybackService.queueRevision`）。
+  final int queueRevision;
+
+  /// 当前曲目下标。
+  final int currentIndex;
+
+  /// 播放模式。
+  final PlayMode mode;
+
+  /// 播放顺序栈的内容版本（previous / previousOfPrevious 的输入）。
+  final int playbackOrderRevision;
+
+  /// 洗牌排列的内容版本（shuffle 的 next / upNext 的输入）。
+  final int shuffleOrderRevision;
+
+  @override
+  bool operator ==(Object other) =>
+      other is QueueProjectionKey &&
+      other.queueRevision == queueRevision &&
+      other.currentIndex == currentIndex &&
+      other.mode == mode &&
+      other.playbackOrderRevision == playbackOrderRevision &&
+      other.shuffleOrderRevision == shuffleOrderRevision;
+
+  @override
+  int get hashCode => Object.hash(
+    queueRevision,
+    currentIndex,
+    mode,
+    playbackOrderRevision,
+    shuffleOrderRevision,
+  );
+}
+
+/// 记忆化队列投影：键不变时复用同一份 [QueueProjection] 实例。
+///
+/// 复用实例（而不是只复用值）很重要：快照 `==` 对 `upNext` / `upNextIndices`
+/// 的深比较会先走 `identical` 短路，位置 tick 的整份快照比较因此是 O(1)，
+/// 而不是每个 tick 都遍历一遍大队列。
+class QueueProjectionCache<T> {
+  QueueProjectionKey? _key;
+  QueueProjection<T>? _projection;
+
+  /// 当前缓存键；从未计算过为 null。
+  QueueProjectionKey? get key => _key;
+
+  /// 命中 [key] 时返回上一份投影，否则调用 [compute] 并记住结果。
+  QueueProjection<T> resolve({
+    required QueueProjectionKey key,
+    required QueueProjection<T> Function() compute,
+  }) {
+    final cached = _projection;
+    if (cached != null && key == _key) return cached;
+    final projection = compute();
+    _key = key;
+    _projection = projection;
+    return projection;
+  }
+
+  /// 释放缓存（停止播放 / 队列整体替换后不再需要旧投影时调用）。
+  void clear() {
+    _key = null;
+    _projection = null;
+  }
+}
+
 /// 推导队列投影（纯函数；越界 / 空队列返回空投影）。
 ///
 /// [idOf] 决定「同一首」的判据（真实播放用 `SourceTrack.id`，恢复态用

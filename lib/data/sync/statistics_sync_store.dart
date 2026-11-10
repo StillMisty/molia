@@ -182,6 +182,9 @@ class SqliteStatisticsSyncStore
   /// 导出变更计数（[syncFingerprint] 的廉价指纹来源）。
   int _syncRevision = 0;
 
+  /// 导出缓存代数：释放时递增，让释放前已在途的全量加载不把结果写回。
+  int _exportGeneration = 0;
+
   MoliaDatabase get _db => _databaseProvider();
 
   /// 本机设备 id（与发号器同一来源，保证事件来源与版本一致）。
@@ -304,6 +307,15 @@ class SqliteStatisticsSyncStore
     _exportInvalidate();
   }
 
+  /// 释放进程内的导出缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// 幂等：只把缓存置空，下一次导出按需全量重读。在途加载不会被取消——
+  /// 等待方仍拿到自己那份完整列表；但释放前开始的全量加载不再把结果写回
+  /// 缓存（[_exportGeneration] 守卫），避免刚清完又被旧任务填满。
+  /// [_syncRevision] 不动：它是跨设备可见的变更指纹，回退会让对端误判
+  /// 「内容未变」而跳过 anti-entropy。
+  void releaseExportCaches() => _exportInvalidate();
+
   /// 同步导出的廉价指纹（本进程内的导出变更计数）。
   ///
   /// 跨进程一致本就无需要求：适配器的缓存不跨进程，重启后首次 collect
@@ -315,21 +327,30 @@ class SqliteStatisticsSyncStore
   Future<List<StatisticsSyncEvent>> syncExportEvents() async {
     final cached = _exportList;
     if (cached != null) return cached;
-    final rows = await _loadExportRows();
-    _exportRows = rows;
-    final payloads = _exportPayloads ?? const <int, String>{};
+    final generation = _exportGeneration;
+    final loaded = await _loadExportRows();
     // 按曲补齐载荷：同一份字符串按引用共享（只复制记录对象）；本地下载
     // 曲目的事件在导出侧过滤（文件是设备本机副本，对端无法复现）。
-    _exportList = List.unmodifiable([
-      for (final entry in rows.values)
+    final list = List<StatisticsSyncEvent>.unmodifiable([
+      for (final entry in loaded.rows.values)
         if (!entry.event.isLocal)
-          entry.event.withRaw(payloads[entry.trackId] ?? ''),
+          entry.event.withRaw(loaded.payloads[entry.trackId] ?? ''),
     ]);
-    return _exportList!;
+    // 加载期间发生过释放：结果照常返回给本次调用方，但不回填缓存。
+    if (generation == _exportGeneration) {
+      _exportRows = loaded.rows;
+      _exportPayloads = loaded.payloads;
+      _exportList = list;
+    }
+    return list;
   }
 
   /// 全量加载导出缓存；只在首次导出 / 缓存失效后执行。
-  Future<Map<int, _CachedEvent>> _loadExportRows() async {
+  ///
+  /// 行与载荷一起返回而不是直接写字段：调用方可能在本方法 await 期间
+  /// 触发 [releaseExportCaches]，由调用方按代数决定是否回填。
+  Future<({Map<int, _CachedEvent> rows, Map<int, String> payloads})>
+  _loadExportRows() async {
     final db = _db;
     final rows = await db
         .customSelect('$playEventTrackSelect WHERE e.endedAt IS NOT NULL')
@@ -351,19 +372,21 @@ class SqliteStatisticsSyncStore
         ),
       );
     }
-    _exportPayloads = payloads;
-    return result;
+    return (rows: result, payloads: payloads);
   }
 
   /// 导出缓存按 id 增量更新（缓存未加载时空操作：下次导出全量读一次）。
   Future<void> _exportUpsert(int id) async {
     if (_exportRows == null) return;
+    final generation = _exportGeneration;
     final row = await _db
         .customSelect(
           '$playEventTrackSelect WHERE e.id = ?',
           variables: [Variable.withInt(id)],
         )
         .getSingleOrNull();
+    // 查询期间缓存被释放：丢弃这次增量结果，下次导出全量重读。
+    if (generation != _exportGeneration || _exportRows == null) return;
     if (row == null || row.data['endedAt'] == null) {
       _exportRemove(id);
       return;
@@ -390,6 +413,9 @@ class SqliteStatisticsSyncStore
   }
 
   void _exportInvalidate() {
+    // 代数同样覆盖「增量写入 / 远端应用导致的整表失效」：失效前开始的全量
+    // 加载不能把旧视图写回缓存，否则下一次导出会漏掉刚落地的事件。
+    _exportGeneration++;
     _exportRows = null;
     _exportList = null;
     _exportPayloads = null;

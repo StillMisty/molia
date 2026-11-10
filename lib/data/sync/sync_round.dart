@@ -236,6 +236,30 @@ class SyncRoundRunner {
 
   SyncEnvelope? get lastEnvelope => _lastEnvelope;
 
+  /// 释放轮次之间可重建的收集 / 快照缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// [_lastEnvelope] 是上一轮外发的整份本地快照（含全部记录），
+  /// [_lastAdapterCollect] / [_lastAggregate] 是下一轮 collect 的复用缓存；
+  /// 轮次结束后它们只影响「下次少算一遍」，置空不改变同步语义（下次
+  /// `serveSnapshot` / `collect` 会按需重建）。
+  ///
+  /// 在途轮次不释放：返回 false，交给下一次触发。轮内清掉会让本轮后续阶段
+  /// 读不到已构建的快照 / 聚合结果，且 `serveSnapshot` 可能与本轮 collect
+  /// 并发改写同一批列表。幂等：重复调用只做置空。
+  bool releaseIdleCaches() {
+    if (_activePeerFailures != null) return false;
+    _lastEnvelope = null;
+    _lastAdapterCollect.clear();
+    _lastAggregate = null;
+    _lastAggregateCategories = null;
+    // 适配器自己还持有上一轮记录缓存（列表 / 历史 / 统计 / 封面 base64）：
+    // 只清 runner 的聚合视图不会真正释放这些列表，必须让持有者一起放掉。
+    for (final adapter in _adapters) {
+      if (adapter is SyncAdapterCacheReleaser) adapter.releaseCaches();
+    }
+    return true;
+  }
+
   Map<String, SyncTransport> get transports => _transports;
 
   int _nowMs() => _clock().millisecondsSinceEpoch;

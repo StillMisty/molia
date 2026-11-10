@@ -72,6 +72,8 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   final themeProvider = ThemeProvider(settings: themeSettings);
   // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
   final navSettings = catalog.settings.scope([
+    kShellNavLayout,
+    // 旧键只读兜底：升级后首次启动仍能恢复导航定制，下次编辑写新键。
     kShellNavOrder,
     kShellNavHidden,
     kShellHomeDestination,

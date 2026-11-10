@@ -29,6 +29,7 @@ class SyncBackup {
     required this._adapters,
     required this._stamps,
     required this._collect,
+    this.onExported,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -43,6 +44,13 @@ class SyncBackup {
   final SyncStampIssuer _stamps;
   final SyncRecordCollector _collect;
   final DateTime Function() _clock;
+
+  /// 导出完成后的释放钩子（组合根接统计导出缓存）。
+  ///
+  /// 完整备份会把整库记录读进内存；导出是低频动作，拿到 JSON 后缓存没有
+  /// 继续常驻的理由，下一次同步按需重读即可。
+  final void Function()? onExported;
+
   final Logger _logger = Logger('molia.sync');
 
   int _nowMs() => _clock().millisecondsSinceEpoch;
@@ -56,12 +64,19 @@ class SyncBackup {
     final categories = _backupCategories(includeCredentials);
     final records = await _collect(categories);
     final envelope = _envelopeFrom(records);
-    return const JsonEncoder.withIndent('  ').convert({
+    final json = const JsonEncoder.withIndent('  ').convert({
       'kind': backupKind,
       'v': backupVersion,
       'producedAt': _nowMs(),
       'envelope': envelope.toJson(),
     });
+    // JSON 已经成形，缓存可以放掉；钩子失败不能把一次成功的导出变成失败。
+    try {
+      onExported?.call();
+    } catch (e) {
+      _logger.warning('备份导出后的缓存释放失败', e);
+    }
+    return json;
   }
 
   /// 导入完整备份：与本地数据逐键合并（LWW，不做整体覆盖）。

@@ -25,12 +25,14 @@ void main() {
   late PrefsSyncAdapter adapter;
   late SyncBackup backup;
   var now = 7000;
+  var exportReleaseCalls = 0;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     secrets = MemorySyncSecretStore();
     now = 7000;
+    exportReleaseCalls = 0;
     state = SyncStateStore(
       preferences: prefs,
       secrets: secrets,
@@ -50,6 +52,7 @@ void main() {
       state: state,
       adapters: [adapter],
       stamps: state.stampIssuer,
+      onExported: () => exportReleaseCalls++,
       clock: () => DateTime.fromMillisecondsSinceEpoch(now),
       collect: (categories) async {
         final collected = await adapter.collect();
@@ -94,6 +97,11 @@ void main() {
     expect(json, contains('SESSDATA=bili-login'));
     // 内层 envelope 是协议 v3（记录带版本对象；协议自始为 v3）。
     expect(jsonDecode(json)['envelope']['v'], SyncEnvelope.protocolVersion);
+  });
+
+  test('导出完成：调用缓存释放钩子', () async {
+    await backup.exportBackupJson();
+    expect(exportReleaseCalls, 1);
   });
 
   test('导出：includeCredentials=false 时显式排除全部凭证', () async {

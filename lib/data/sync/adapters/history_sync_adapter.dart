@@ -13,7 +13,7 @@ import '../sync_adapter.dart';
 ///
 /// 本地下载曲目（`sourceKey = local`）不同步：文件是设备本机的持久副本，
 /// 导出与应用两侧都过滤（含其墓碑）。
-class HistorySyncAdapter implements SyncAdapter {
+class HistorySyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
   HistorySyncAdapter({required this._repository});
 
   final LibrarySyncStore _repository;
@@ -72,6 +72,13 @@ class HistorySyncAdapter implements SyncAdapter {
       );
     }
     return {SyncCategory.history: records};
+  }
+
+  /// 释放上轮记录缓存：下一次 collect 按指纹重新导出（幂等）。
+  @override
+  void releaseCaches() {
+    _cacheKey = null;
+    _cached = null;
   }
 
   @override

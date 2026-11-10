@@ -112,6 +112,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(releases, 1);
+    // 收尾恢复：延迟 trim 计时不能在测试结束时仍挂着。
+    presence.markVisible();
   });
 
   testWidgets('隐藏→恢复快速往返：不触发业务缓存释放', (tester) async {
@@ -149,6 +151,7 @@ void main() {
 
     expect(releases, 1);
     expect(cache.clearCount, 1);
+    presence.markVisible();
   });
 
   testWidgets('移动端退后台 30s：清图片缓存但不清 live，上限压到 16 MiB，回前台恢复', (tester) async {
@@ -312,5 +315,41 @@ void main() {
 
     expect(cache.clearCount, 1);
     expect(cache.maximumSizeBytes, kTrayImageCacheLimitBytes);
+    presence.markVisible();
+  });
+
+  testWidgets('托盘隐藏后延迟补一次 trim；恢复 / 快速往返取消', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    var releases = 0;
+    final manager = AppMemoryManager(
+      presence: presence,
+      imageCache: cache,
+      releaseToOs: () => releases++,
+    );
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+    expect(releases, 1, reason: '休眠帧后先 trim 一次');
+
+    await tester.pump(kTrayLateTrimDelay);
+    expect(releases, 2, reason: '窗口 hide 收尾 touch 的页再归还一次');
+
+    // 恢复后计时作废，不再多跑。
+    presence.markVisible();
+    await tester.pump(kTrayLateTrimDelay);
+    expect(releases, 2);
+
+    // 隐藏后立刻恢复：第一次 trim 已发生，延迟 trim 必须被 token 取消。
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+    expect(releases, 3);
+    presence.markVisible();
+    await tester.pump(kTrayLateTrimDelay);
+    expect(releases, 3, reason: '快速往返不留下补跑的 trim');
   });
 }

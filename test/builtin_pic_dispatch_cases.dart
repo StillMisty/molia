@@ -188,6 +188,30 @@ void main() {
     expect(requests, isEmpty);
   });
 
+  test('clearCache：清空后重新取图，重复调用安全', () async {
+    final song = track('wy', {'songmid': 1399112638});
+    var calls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        calls++;
+        return textResponse(wyDetailFixture(), statusCode: 200);
+      }),
+    );
+
+    const cover =
+        'https://p2.music.126.net/pE_xbRjFKTza8i7CKfmDuQ==/109951164447654929.jpg';
+    final dispatch = BuiltinPicDispatch();
+    expect(await dispatch.fetch(song), cover);
+    expect(await dispatch.fetch(song), cover);
+    expect(calls, 1, reason: '成功后命中缓存');
+
+    dispatch
+      ..clearCache()
+      ..clearCache();
+    expect(await dispatch.fetch(song), cover);
+    expect(calls, 2, reason: '清空后重新请求');
+  });
+
   test('缓存：失败不进缓存、成功命中缓存', () async {
     // 取 wy 链路：平台拒绝时 `getList` 抛错（异常路径不缓存）；
     // kw/mg/kg 内部把失败吞成 null，那是「成功返回无结果」，与本用例无关。

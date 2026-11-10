@@ -43,6 +43,15 @@ import 'track_artwork.dart';
 class AiDjCarousel extends StatefulWidget {
   const AiDjCarousel({super.key});
 
+  /// 封面解码上界（逻辑像素）：卡片宽度随槽位伸缩，给 256 留足放大余量，
+  /// 又不至于像原图那样把 1000+ px 的封面按全分辨率常驻图片缓存。
+  /// 只约束解码尺寸，不参与布局（宽高仍由 carousel 槽位决定）。
+  static const double coverDecodeExtent = 256;
+
+  /// 推荐卡封面解码宽度：256 逻辑像素 × 当前 DPR（只用于 memCacheWidth）。
+  static int coverMemCacheWidth(BuildContext context) =>
+      (coverDecodeExtent * MediaQuery.devicePixelRatioOf(context)).round();
+
   @override
   State<AiDjCarousel> createState() => _AiDjCarouselState();
 }
@@ -345,6 +354,9 @@ class _AiDjCarouselState extends State<AiDjCarousel> {
             image: TrackArtwork(
               track: batch.items[i].track,
               fit: BoxFit.cover,
+              // 卡片流以前按原图解码（大封面一次就是数 MB）：这里只给解码
+              // 上界，宽高交给 carousel 槽位，视觉布局不变。
+              memCacheWidth: AiDjCarousel.coverMemCacheWidth(context),
               fallbackColor: scheme.surfaceContainerHighest,
               fallbackIconSize: 32,
             ),

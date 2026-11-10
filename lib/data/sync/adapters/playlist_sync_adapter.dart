@@ -12,7 +12,7 @@ import '../sync_adapter.dart';
 ///
 /// 本地下载曲目（`sourceKey = local`）不同步：文件是设备本机的持久副本，
 /// 导出与应用两侧都过滤（含其墓碑），避免把「本机路径」带到其它设备。
-class PlaylistSyncAdapter implements SyncAdapter {
+class PlaylistSyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
   PlaylistSyncAdapter({required this._repository});
 
   final LibrarySyncStore _repository;
@@ -108,6 +108,13 @@ class PlaylistSyncAdapter implements SyncAdapter {
         ..._tombstonesFor(tombstones, false),
       ],
     };
+  }
+
+  /// 释放上轮记录缓存：下一次 collect 按指纹重新导出（幂等）。
+  @override
+  void releaseCaches() {
+    _cacheKey = null;
+    _cached = null;
   }
 
   @override

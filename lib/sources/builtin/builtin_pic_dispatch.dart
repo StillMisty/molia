@@ -25,6 +25,12 @@ class BuiltinPicDispatch {
   /// 曲目原生取图缓存（key `{track.id}:pic`）。
   final RequestCache _cache;
 
+  /// 释放全部原生取图缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// 只清已完成结果，不动平台注册表；在途请求照常返回给原等待方，但不会
+  /// 写回已清空的缓存（[RequestCache] identity 校验），重复调用安全。
+  void clearCache() => _cache.clear();
+
   /// 内置平台原生封面回退（不支持 / 失败返回 null）。
   Future<String?> fetch(SourceTrack track) async {
     final adapter = BuiltinPlatforms.picFor(track.sourceKey);

@@ -30,7 +30,8 @@ import '../sync_stamp.dart';
 ///   [CustomCoverStore.maxSyncBytes] 只跳过同步并记一次日志，本地封面继续
 ///   可用；接收侧在 base64 解码前先按长度拒绝超限记录；
 /// - 远端应用只写封面存储与登记，不触发本地变更回调（不会形成同步回环）。
-class CoverSyncAdapter implements CategoryScopedSyncAdapter {
+class CoverSyncAdapter
+    implements CategoryScopedSyncAdapter, SyncAdapterCacheReleaser {
   CoverSyncAdapter({
     required this._store,
     required this._state,
@@ -91,6 +92,16 @@ class CoverSyncAdapter implements CategoryScopedSyncAdapter {
 
   @override
   bool get ready => _store.isLoaded;
+
+  /// 释放 base64 缓存与「已提示」集合：下一次 collect 按需重读文件。
+  ///
+  /// 不清同步登记 / 类别开关状态（[._wasEnabled] 等），否则会误判
+  /// off → on 的切换轮；重复调用安全。
+  @override
+  void releaseCaches() {
+    _base64Cache.clear();
+    _unsyncableLogged.clear();
+  }
 
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) =>

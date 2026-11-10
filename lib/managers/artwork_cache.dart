@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/painting.dart' show PaintingBinding;
 import 'package:flutter/widgets.dart' show ImageProvider, VoidCallback;
 // flutter_cache_manager 是 cached_network_image 的传递依赖；封面缓存门面
@@ -536,6 +537,12 @@ class ArtworkCacheManager extends CacheManager with ImageCacheManager {
 /// / `stalePeriod` 自行删除文件；封面淘汰改由 [CacheService.enforceArtworkPolicy]
 /// 的 sweep 按运行期策略统一执行，因此这里禁用其内部淘汰，避免双重淘汰与
 /// 策略变更后的过度删除。
+///
+/// 测试入口：按生产装配包装真实仓库，验证「只 touch 不写」策略。
+@visibleForTesting
+CacheInfoRepository wrapArtworkRepository(CacheInfoRepository repo) =>
+    _PolicyNeutralRepository(repo);
+
 class _PolicyNeutralRepository implements CacheInfoRepository {
   _PolicyNeutralRepository(this._inner);
 
@@ -544,9 +551,26 @@ class _PolicyNeutralRepository implements CacheInfoRepository {
   @override
   Future<bool> open() => _inner.open();
 
+  /// 命中缓存时 flutter_cache_manager 会立刻用「只改了 touched」的对象回调
+  /// 这里；JSON 元数据仓库每次写都要重写整个文件。内容字段没变就跳过写入，
+  /// 直接返回旧对象——封面淘汰按文件 mtime，不依赖 touched。
   @override
-  Future<dynamic> updateOrInsert(CacheObject cacheObject) =>
-      _inner.updateOrInsert(cacheObject);
+  Future<dynamic> updateOrInsert(CacheObject cacheObject) async {
+    final existing = await _inner.get(cacheObject.key);
+    if (existing != null && _sameContent(existing, cacheObject)) {
+      return existing;
+    }
+    return _inner.updateOrInsert(cacheObject);
+  }
+
+  static bool _sameContent(CacheObject a, CacheObject b) =>
+      a.url == b.url &&
+      a.key == b.key &&
+      a.relativePath == b.relativePath &&
+      a.validTill == b.validTill &&
+      a.eTag == b.eTag &&
+      a.length == b.length &&
+      a.id == b.id;
 
   @override
   Future<CacheObject> insert(

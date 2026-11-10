@@ -79,6 +79,23 @@ void main() {
     expect(again.skipped, 2);
   });
 
+  test('releaseCaches：清空记录缓存，下一次 collect 重新导出', () async {
+    await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
+    final first = await adapterA.collect();
+    final cached = await adapterA.collect();
+    expect(identical(cached, first), isTrue, reason: '指纹未变复用缓存');
+
+    adapterA
+      ..releaseCaches()
+      ..releaseCaches();
+    final rebuilt = await adapterA.collect();
+    expect(identical(rebuilt, first), isFalse, reason: '释放后重新读取');
+    expect(
+      rebuilt[SyncCategory.history]!.map((record) => record.key),
+      first[SyncCategory.history]!.map((record) => record.key),
+    );
+  });
+
   test('版本取新：B 的同曲目更新记录回流 A', () async {
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000, title: '旧标题'));
     await adapterB.apply(await adapterA.collect());

@@ -165,6 +165,34 @@ void main() {
     expect(requests, isEmpty);
   });
 
+  test('clearCache：清空后重新取词，重复调用安全', () async {
+    final song = track('wy', {'songmid': '77'});
+    var calls = 0;
+    BuiltinSearch.transport = BuiltinTransport(
+      dio: mockDio((request) async {
+        calls++;
+        return textResponse(
+          jsonEncode({
+            'code': 200,
+            'lrc': {'lyric': '[00:00.000]你好'},
+          }),
+          statusCode: 200,
+        );
+      }),
+    );
+
+    final dispatch = BuiltinLyricDispatch();
+    expect((await dispatch.fetch(song))?.lyric, contains('你好'));
+    expect((await dispatch.fetch(song))?.lyric, contains('你好'));
+    expect(calls, 1, reason: '成功后命中缓存');
+
+    dispatch
+      ..clearCache()
+      ..clearCache();
+    expect((await dispatch.fetch(song))?.lyric, contains('你好'));
+    expect(calls, 2, reason: '清空后重新请求');
+  });
+
   test('缓存：失败不进缓存、成功命中缓存', () async {
     final song = track('wy', {'songmid': '42'});
     var calls = 0;

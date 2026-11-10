@@ -19,6 +19,13 @@ class PlaybackShuffleOrder {
 
   List<int> _order = const [];
 
+  /// 排列内容版本号：重置 / 采用 / 扩展 / 重映射 / 清空 / 轮末重洗都自增。
+  ///
+  /// 队列投影缓存用它判断 shuffle 的 next / upNext 是否需要重算。
+  int _revision = 0;
+
+  int get revision => _revision;
+
   bool get isEmpty => _order.isEmpty;
 
   /// 本轮排列的只读视图（队列投影用；不复制、不暴露可写引用）。
@@ -26,6 +33,7 @@ class PlaybackShuffleOrder {
 
   /// 生成新排列（新队列 / 进入 shuffle / 新一轮），[startIndex] 置于首位。
   void reset(int length, {int startIndex = 0}) {
+    _revision++;
     if (length <= 0) {
       _order = const [];
       return;
@@ -42,10 +50,17 @@ class PlaybackShuffleOrder {
   ///
   /// 复制传入列表而不是持有引用：调用方之后修改自己的列表（或复用一个
   /// 可变缓冲区）不能悄悄改掉正在展示、正在播放的顺序。
-  void adopt(List<int> indices) => _order = List<int>.of(indices);
+  void adopt(List<int> indices) {
+    _revision++;
+    _order = List<int>.of(indices);
+  }
 
   /// 清空（停止播放 / 切出 shuffle）。
-  void clear() => _order = const [];
+  void clear() {
+    if (_order.isEmpty) return;
+    _revision++;
+    _order = const [];
+  }
 
   /// 队列追加后扩展排列（enqueue 场景）：
   /// 新下标随机插入排列尾部——当前轮先放完老歌再放追加歌，轮末
@@ -63,6 +78,7 @@ class PlaybackShuffleOrder {
       newLength - oldLength,
       (index) => oldLength + index,
     )..shuffle(_random);
+    _revision++;
     _order = [..._order, ...appended];
   }
 
@@ -74,6 +90,7 @@ class PlaybackShuffleOrder {
   /// 空排列（未洗牌）保持为空；调用方保证不移除当前曲目。
   void removeIndex(int index) {
     if (_order.isEmpty) return;
+    _revision++;
     _order = [
       for (final value in _order)
         if (value != index) value > index ? value - 1 : value,
@@ -86,6 +103,7 @@ class PlaybackShuffleOrder {
   /// 防止模式切换窗口里残留排列把下标指错。
   void moveIndex(int from, int to) {
     if (_order.isEmpty || from == to) return;
+    _revision++;
     _order = [
       for (final value in _order)
         if (value == from)

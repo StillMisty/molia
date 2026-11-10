@@ -33,6 +33,7 @@ import 'playback/playback_power_policy.dart';
 import 'providers/channel_selection.dart';
 import 'providers/library_provider.dart';
 import 'providers/search_provider.dart';
+import 'sources/builtin/builtin_search.dart';
 import 'sources/builtin/discover_source.dart';
 import 'services/app_logging.dart';
 import 'services/app_presence.dart';
@@ -239,23 +240,6 @@ void main() async {
     catalogService: catalog.catalogService,
     sourceRegistry: catalog.sourceRegistry,
   );
-  // 托盘期 / 系统低内存时释放可重建的业务缓存（不动收藏与历史）：
-  // 搜索结果是本次会话的瞬时数据；列表曲目与目录分页页退出后按需重取。
-  // 普通退后台不释放（恢复时会空列表），只有托盘隐藏与系统低内存才触发。
-  // 只注册释放入口，AppMemoryManager 不反向依赖这些类型。
-  final reclaimableCaches = <void Function()>[
-    libraryProvider.releaseBrowseCaches,
-    searchProvider.releaseSearchResults,
-    catalog.catalogService.clearSearchCache,
-    catalog.albumService.clearCache,
-    catalog.artistService.clearCache,
-    catalog.commentsService.clearCache,
-  ];
-  for (final releaser in reclaimableCaches) {
-    AppMemoryManager.instance
-      ..addReleaser(releaser)
-      ..addLowMemoryReleaser(releaser);
-  }
   // 系统媒体会话的「收藏」动作：通知点击 ↔ 曲库（与托盘 / 任务栏按钮同一
   // 写入路径）。必须在 provider 建好之后接线（handler 先于它创建）。
   wireNotificationFavorite(
@@ -333,6 +317,31 @@ void main() async {
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
   );
   _markStartup('同步栈', startup);
+  // 托盘期 / 系统低内存时释放可重建的业务缓存（不动收藏、历史、脚本与
+  // 当前播放队列）：搜索结果是本次会话的瞬时数据；列表曲目与目录分页页
+  // 退出后按需重取；内置平台响应 / 原生取词取图 / 封面补取 / 统计导出
+  // 都是可重读的派生缓存，同步轮次的收集与快照缓存也只在轮间复用。
+  // 普通退后台不释放（恢复时会空列表），只有托盘隐藏与系统低内存才触发。
+  // 只注册释放入口，AppMemoryManager 不反向依赖这些类型。
+  final reclaimableCaches = <void Function()>[
+    libraryProvider.releaseBrowseCaches,
+    searchProvider.releaseSearchResults,
+    catalog.catalogService.clearSearchCache,
+    catalog.albumService.clearCache,
+    catalog.artistService.clearCache,
+    catalog.commentsService.clearCache,
+    library.statisticsSyncStore.releaseExportCaches,
+    BuiltinSearch.clearCachedResponses,
+    catalog.sourceManager.releaseBuiltinLyricCache,
+    catalog.sourceManager.releaseBuiltinPicCache,
+    local.coverBackfill.clearCache,
+    sync.engine.releaseIdleCaches,
+  ];
+  for (final releaser in reclaimableCaches) {
+    AppMemoryManager.instance
+      ..addReleaser(releaser)
+      ..addLowMemoryReleaser(releaser);
+  }
   // ⑪ 应用内更新（纯构造；包信息 / 偏好 / 平台信息读取后移到首帧）。
   final update = buildUpdateStack(quitApp: desktop.quitApp);
   _markStartup('更新栈（装配完成）', startup);

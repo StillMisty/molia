@@ -17,9 +17,18 @@ class PlaybackOrder {
 
   final List<int> _indices = [];
 
+  /// 内容版本号：任何压栈 / 弹栈 / 重映射 / 清空都自增。
+  ///
+  /// 队列投影缓存用它判断 previous / previousOfPrevious 是否需要重算——
+  /// 栈变化不一定伴随当前下标变化。
+  int _revision = 0;
+
+  int get revision => _revision;
+
   bool get isEmpty => _indices.isEmpty;
 
   void record(int index) {
+    _revision++;
     _indices.add(index);
     if (_indices.length > maxEntries) {
       _indices.removeAt(0);
@@ -36,12 +45,17 @@ class PlaybackOrder {
   int? peekPreviousOfPrevious() =>
       _indices.length < 2 ? null : _indices[_indices.length - 2];
 
-  int? popPrevious() => _indices.isEmpty ? null : _indices.removeLast();
+  int? popPrevious() {
+    if (_indices.isEmpty) return null;
+    _revision++;
+    return _indices.removeLast();
+  }
 
   /// 队列移除一项后的下标重映射：被移除项从栈中删除，其后下标整体前移。
   ///
   /// 调用方保证不会移除当前曲目；播放过的曲目仍可安全回退。
   void removeIndex(int index) {
+    _revision++;
     _indices.removeWhere((value) => value == index);
     for (var i = 0; i < _indices.length; i++) {
       if (_indices[i] > index) _indices[i]--;
@@ -54,6 +68,7 @@ class PlaybackOrder {
   /// 被移动项本身映射到新位置。
   void moveIndex(int from, int to) {
     if (from == to) return;
+    _revision++;
     for (var i = 0; i < _indices.length; i++) {
       final value = _indices[i];
       if (value == from) {
@@ -66,7 +81,11 @@ class PlaybackOrder {
     }
   }
 
-  void clear() => _indices.clear();
+  void clear() {
+    if (_indices.isEmpty) return;
+    _revision++;
+    _indices.clear();
+  }
 
   /// 按队列还原播放顺序（最近在后）；越界下标（队列已被替换）被忽略。
   List<SourceTrack> tracksOf(List<SourceTrack> queue) => List.unmodifiable([

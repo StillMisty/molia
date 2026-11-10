@@ -59,6 +59,12 @@ class BuiltinLyricDispatch {
     _cache.invalidatePrefix('$sourceKey:');
   }
 
+  /// 释放全部原生取词缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// 只清已完成结果，不动平台注册表；在途请求照常返回给原等待方，但不会
+  /// 写回已清空的缓存（[RequestCache] identity 校验），重复调用安全。
+  void clearCache() => _cache.clear();
+
   static String? _nonEmpty(String? value) {
     final trimmed = value?.trim();
     return (trimmed == null || trimmed.isEmpty) ? null : trimmed;

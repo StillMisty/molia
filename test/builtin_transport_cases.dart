@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -171,6 +172,47 @@ void main() {
     final result = await KwSearch.searchWithMeta('hello');
     expect(calls, 2);
     expect(result.tracks, hasLength(1));
+  });
+
+  test('clearCache：清空结果缓存，在途结果不复活，可重复调用', () async {
+    var calls = 0;
+    final transport = BuiltinTransport(
+      dio: mockDio((_) async => textResponse('{}', statusCode: 200)),
+    );
+
+    Future<String> load() => transport.cached('demo', () async {
+      calls++;
+      return 'value-$calls';
+    });
+
+    expect(await load(), 'value-1');
+    expect(await load(), 'value-1', reason: '命中缓存');
+    expect(calls, 1);
+
+    transport
+      ..clearCache()
+      ..clearCache();
+    expect(await load(), 'value-2', reason: '清空后重新取数');
+    expect(calls, 2);
+
+    // 在途请求仍返回给原等待方，但不会把结果写回已清空的缓存。
+    final gate = Completer<String>();
+    final pending = transport.cached('inflight', () {
+      calls++;
+      return gate.future;
+    });
+    transport.clearCache();
+    gate.complete('old');
+    expect(await pending, 'old');
+    expect(
+      await transport.cached('inflight', () async {
+        calls++;
+        return 'new';
+      }),
+      'new',
+      reason: '旧任务不回填缓存',
+    );
+    expect(calls, 4);
   });
 
   test('发现适配器 fetch：WyHotSearch 走注入客户端且结果被缓存', () async {

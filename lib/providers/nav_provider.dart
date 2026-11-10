@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 
@@ -12,9 +14,17 @@ final logger = Logger('molia.nav_provider');
 /// 底栏渲染与选中映射，不移动 IndexedStack 子节点，页面状态天然保持。
 enum ShellDestination { nowPlaying, favorites, library }
 
+typedef _NavLayout = ({
+  List<ShellDestination> order,
+  Set<ShellDestination> hidden,
+  ShellDestination home,
+});
+
 /// 底部导航定制：顺序 + 显示/隐藏 + 启动首页，SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
   NavProvider({required this._settings}) {
+    _settings.bindReload(kShellNavLayout, reloadFromPreferences);
+    // 旧键仍绑定重载：只在没有新布局时兜底读取，绑定保证远端旧值也能生效。
     _settings.bindReload(kShellNavOrder, reloadFromPreferences);
     _settings.bindReload(kShellNavHidden, reloadFromPreferences);
     _settings.bindReload(kShellHomeDestination, reloadFromPreferences);
@@ -104,6 +114,22 @@ class NavProvider extends ChangeNotifier {
 
   Future<void> _loadPreferences() async {
     try {
+      final layout = _decodeLayout(await _settings.read(kShellNavLayout));
+      if (layout != null) {
+        _order = layout.order;
+        _hidden
+          ..clear()
+          ..addAll(layout.hidden);
+        // 至少保留 1 个可见目的地。
+        if (visibleDestinations.isEmpty) {
+          _hidden.remove(_order.first);
+        }
+        _homeDestination = layout.home;
+        notifyListeners();
+        return;
+      }
+
+      // 旧版三键兜底：只读，不改写存储（下次编辑会写成新 JSON 键）。
       final names = await _settings.read(kShellNavOrder);
       if (names.isNotEmpty) {
         _order = _orderOf(names);
@@ -124,6 +150,28 @@ class NavProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       logger.severe('加载底部导航偏好失败: $e');
+    }
+  }
+
+  /// 解析新 JSON 键；损坏 / 缺字段返回 null，交给旧键 / 默认值兜底。
+  static _NavLayout? _decodeLayout(String raw) {
+    if (raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return null;
+      final order = decoded['order'];
+      final hidden = decoded['hidden'];
+      final home = decoded['home'];
+      if (order is! List || hidden is! List || home is! String) return null;
+      final orderNames = order.whereType<String>().toList(growable: false);
+      if (orderNames.isEmpty) return null;
+      return (
+        order: _orderOf(orderNames),
+        hidden: _hiddenOf(hidden.whereType<String>().toList(growable: false)),
+        home: _homeOf(home),
+      );
+    } on FormatException {
+      return null;
     }
   }
 
@@ -159,15 +207,15 @@ class NavProvider extends ChangeNotifier {
 
   Future<void> _persist() async {
     try {
+      // 一次 setString 替代旧版三次写：桌面偏好每次写入都会重写整个文件。
       await _settings.write(
-        kShellNavOrder,
-        _order.map((destination) => destination.name).toList(),
+        kShellNavLayout,
+        jsonEncode({
+          'order': _order.map((destination) => destination.name).toList(),
+          'hidden': _hidden.map((destination) => destination.name).toList(),
+          'home': _homeDestination.name,
+        }),
       );
-      await _settings.write(
-        kShellNavHidden,
-        _hidden.map((destination) => destination.name).toList(),
-      );
-      await _settings.write(kShellHomeDestination, _homeDestination.name);
     } catch (e) {
       logger.severe('保存底部导航偏好失败: $e');
     }

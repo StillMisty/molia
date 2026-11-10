@@ -84,6 +84,27 @@ void main() {
     expect(again.applied, 0);
   });
 
+  test('releaseCaches：清空记录缓存，下一次 collect 重新导出', () async {
+    await repoA.toggleFavorite(
+      sourceKey: 'wy',
+      songId: 'fav-1',
+      title: 'Favorite',
+    );
+    final first = await adapterA.collect();
+    final cached = await adapterA.collect();
+    expect(identical(cached, first), isTrue, reason: '指纹未变复用缓存');
+
+    adapterA
+      ..releaseCaches()
+      ..releaseCaches();
+    final rebuilt = await adapterA.collect();
+    expect(identical(rebuilt, first), isFalse, reason: '释放后重新读取');
+    expect(
+      rebuilt[SyncCategory.playlists]!.map((record) => record.key),
+      first[SyncCategory.playlists]!.map((record) => record.key),
+    );
+  });
+
   test('收藏列表使用固定 syncId', () async {
     await repoA.toggleFavorite(sourceKey: 'kw', songId: 'x', title: 'X');
     final playlists = await repoA.syncExportPlaylists();

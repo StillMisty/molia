@@ -418,6 +418,22 @@ void main() {
     expect(tempStore.data['temp_store'], 2, reason: '临时表 / 排序走内存，不落盘');
     final cacheSize = await first.customSelect('PRAGMA cache_size').getSingle();
     expect(cacheSize.data['cache_size'], -4096, reason: '页缓存上限 4MB');
+    final journalSize = await first
+        .customSelect('PRAGMA journal_size_limit')
+        .getSingle();
+    expect(
+      journalSize.data['journal_size_limit'],
+      4194304,
+      reason: 'WAL 截断上限 4MB',
+    );
+    final autocheckpoint = await first
+        .customSelect('PRAGMA wal_autocheckpoint')
+        .getSingle();
+    expect(
+      autocheckpoint.data['wal_autocheckpoint'],
+      1000,
+      reason: 'WAL 约 4MB 自动 checkpoint',
+    );
     await first.close();
 
     final second = MoliaDatabase(MoliaDatabase.openAt(file, directory));

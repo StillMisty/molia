@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/providers/playback_provider.dart';
+import 'package:molia/services/playback_volume_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
@@ -28,6 +31,40 @@ void main() {
 
     await harness.provider.preferencesReady;
     expect(harness.backend.volumes, [1.0], reason: '后端构造默认 1.0，启动加载后仍要显式下发一次');
+  });
+
+  test('音量与静音合并为单键写入，读取往返一致', () async {
+    final prefs = await SharedPreferences.getInstance();
+    final store = PlaybackVolumeStore(preferences: prefs);
+
+    await store.save(volume: 0.35, muted: true);
+
+    expect(prefs.getKeys(), {PlaybackVolumeStore.keyState});
+    expect(jsonDecode(prefs.getString(PlaybackVolumeStore.keyState)!), {
+      'volume': 0.35,
+      'muted': true,
+    });
+    final loaded = await PlaybackVolumeStore(preferences: prefs).load();
+    expect(loaded.volume, closeTo(0.35, 1e-9));
+    expect(loaded.muted, isTrue);
+  });
+
+  test('旧版音量 / 静音两键只读兜底', () async {
+    SharedPreferences.setMockInitialValues({
+      PlaybackVolumeStore.keyVolume: 0.25,
+      PlaybackVolumeStore.keyMuted: true,
+    });
+    final prefs = await SharedPreferences.getInstance();
+    final store = PlaybackVolumeStore(preferences: prefs);
+
+    final loaded = await store.load();
+    expect(loaded.volume, closeTo(0.25, 1e-9));
+    expect(loaded.muted, isTrue);
+    expect(
+      prefs.getString(PlaybackVolumeStore.keyState),
+      isNull,
+      reason: '只读兜底不迁移写；下次保存才写新键',
+    );
   });
 
   test('setVolume 更新值并下发到后端，通知 UI', () async {

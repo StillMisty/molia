@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
@@ -10,9 +11,11 @@ import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:molia/managers/app_memory_manager.dart';
 import 'package:molia/pages/sources_page.dart';
 import 'package:molia/providers/sources_provider.dart';
 import 'package:molia/data/downloads/downloads_publisher.dart';
+import 'package:molia/services/app_presence.dart';
 import 'package:molia/services/window/app_tray.dart';
 import 'package:molia/services/window/window_chrome.dart';
 import 'package:molia/sources/source_manager.dart';
@@ -254,6 +257,76 @@ void main() {
     expect(await WindowChrome.isVisible(), isFalse, reason: '隐藏后窗口不应可见');
     await WindowChrome.show();
     expect(await WindowChrome.isVisible(), isTrue, reason: '显示后窗口应恢复可见');
+  });
+
+  testWidgets('桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原', (tester) async {
+    // 托盘隐藏走真实窗口路径（WindowChrome.hide 先置 AppPresence 再隐藏原生
+    // 窗口），这里用真实引擎 + 真实 ImageCache 验证内存守卫确实接上了。
+    if (!WindowChrome.isSupported) return;
+    await WindowChrome.ensureInitialized();
+
+    // 失败时不能把窗口留在隐藏态：后续用例与 tearDownAll 的强退都假定窗口
+    // 可见；图片缓存也清掉，避免测试图污染其它用例。
+    addTearDown(() async {
+      await WindowChrome.show();
+      PaintingBinding.instance.imageCache.clear();
+    });
+
+    final imageCache = PaintingBinding.instance.imageCache;
+    // 顺序与 main.dart 一致：守卫在构造时捕获 _fullLimitBytes，测试进程不跑
+    // main，必须在首次访问单例前设成完整档，否则恢复值会是 Flutter 默认的
+    // 100 MiB 而不是 64 MiB。
+    imageCache.maximumSizeBytes = kFullImageCacheLimitBytes;
+    AppMemoryManager.instance.attach();
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    final context = tester.element(find.byType(MaterialApp));
+
+    // 编一张 ~4 MiB 的 PNG（1000×1000）：足够让 currentSizeBytes 明显非零，
+    // 又小于托盘档 16 MiB，便于验证「清空」而不是被上限自然淘汰。
+    final recorder = ui.PictureRecorder();
+    Canvas(recorder).drawRect(
+      const Rect.fromLTWH(0, 0, 1000, 1000),
+      Paint()..color = const Color(0xFF3366CC),
+    );
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(1000, 1000);
+    picture.dispose();
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    await precacheImage(MemoryImage(data!.buffer.asUint8List()), context);
+    // 等 precache 的 post-frame 回调摘掉监听器，图片落到 keepAlive 再取基线。
+    await tester.pump();
+    expect(imageCache.currentSizeBytes, greaterThan(0), reason: '预缓存后图片缓存应有占用');
+
+    final rssBefore = ProcessInfo.currentRss;
+    await WindowChrome.hide();
+    // 守卫在休眠帧结束后清理；Linux 隐藏后帧可能停，内部有 2s 超时兜底，
+    // 所以等状态与缓存同时到位，而不是假设下一帧就完成。
+    await waitFor(
+      tester,
+      () =>
+          AppPresence.instance.isTrayHidden &&
+          imageCache.currentSizeBytes == 0 &&
+          imageCache.maximumSizeBytes == kTrayImageCacheLimitBytes,
+      reason: '托盘隐藏后未清理图片缓存 / 未压低上限',
+    );
+    expect(imageCache.liveImageCount, 0, reason: '休眠树换上后不应再有 live 图片');
+
+    final rssAfter = ProcessInfo.currentRss;
+    // 绝对内存受 Xvfb / debug 构建影响很大，只作观测日志，不做阈值断言。
+    debugPrint(
+      '[tray-memory-test] '
+      'rss_before=${(rssBefore / (1024 * 1024)).toStringAsFixed(1)}MB '
+      'rss_after=${(rssAfter / (1024 * 1024)).toStringAsFixed(1)}MB',
+    );
+
+    await WindowChrome.show();
+    expect(
+      imageCache.maximumSizeBytes,
+      kFullImageCacheLimitBytes,
+      reason: '显示窗口后应恢复完整图片缓存预算',
+    );
   });
 
   testWidgets('桌面托盘：创建 / 更新 / 销毁冒烟（无面板环境不得崩）', (tester) async {

@@ -24,11 +24,12 @@ enum SeekTimeLabels {
 /// - 预览值优先于 position 通道：拖动中与提交等待期不被旧值回拽；
 /// - 松手提交不看滑杆回调的入参（快速单击时它是上一帧的旧位置），落点由
 ///   [SeekPreviewController.commit] 按预览值决定；
-/// - 播放中用波浪滑杆，暂停切平直：波浪动画不会停，与暂停态自相矛盾；
+/// - 波浪形态显式 opt-in（[wavy]）：内部是 `repeat()` 的无限动画，只留给
+///   播放页主场；列表 / 顶栏 / 迷你条默认平直，不随显示刷新率空转；
 /// - 时间文字两档排布见 [SeekTimeLabels]，颜色 / 对齐也收在
 ///   [_labelStyle] / [_decorateSlider]；无效值兜 `0:00` / `--:--`；
-/// - 外层 `RepaintBoundary` 是硬需求：波浪滑杆内部是 `repeat()` 的无限
-///   动画，不隔离的话播放中每次波形重绘都会把宿主整块卷进同一图层重光栅化。
+/// - 外层 `RepaintBoundary` 在波浪形态下是硬需求：不隔离的话每次波形重绘
+///   都会把宿主整块卷进同一图层重光栅化；平直形态保留它也只是零成本隔离。
 class SeekBar extends StatelessWidget {
   const SeekBar({
     super.key,
@@ -38,6 +39,7 @@ class SeekBar extends StatelessWidget {
     required this.isPlaying,
     required this.hasTrack,
     required this.timeLabels,
+    this.wavy = false,
   });
 
   /// 时间标签槽宽：两档排布共用，等宽数字下 `12:34` 也不会被截。
@@ -65,6 +67,12 @@ class SeekBar extends StatelessWidget {
 
   /// 时间文字排布（见 [SeekTimeLabels]）。
   final SeekTimeLabels timeLabels;
+
+  /// 是否使用波浪滑杆（仅播放页显式开启）。
+  ///
+  /// 波浪是 60fps 无限动画，放在列表 / 底栏 / 迷你条会让整机持续出帧；
+  /// 暂停时即使传 true 也回落到平直滑杆（波浪不会停，会像还在播放）。
+  final bool wavy;
 
   /// tabular figures：等宽数字避免每秒文本宽度变化把滑杆左右推挤。
   TextStyle? _labelStyle(BuildContext context, {required bool faint}) {
@@ -172,7 +180,7 @@ class SeekBar extends StatelessWidget {
                   : null;
               final String label = durationText(valueMs.round()) ?? '0:00';
 
-              final Widget sliderBody = isPlaying
+              final Widget sliderBody = wavy && isPlaying
                   ? M3ESlider.wavy(
                       value: valueMs,
                       min: 0,

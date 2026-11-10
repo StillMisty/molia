@@ -503,14 +503,51 @@ void main() {
     expect(snapshot.previousOfPrevious?.id.id, 'a');
   });
 
-  test('一次快照只求一次队列投影', () {
+  test('位置 tick 不重算队列投影（缓存键未变）', () {
     service.seed([_source('a'), _source('b'), _source('c')], index: 1);
 
     service.projectionBuilds = 0;
     service.change(position: const Duration(seconds: 2));
 
-    expect(service.projectionBuilds, 1);
+    expect(service.projectionBuilds, 0);
     expect(backend.state.value.position, const Duration(seconds: 2));
+  });
+
+  test('大队列：位置 tick 复用投影 / upNext，只有下标 / 模式 / 队列变化才重算', () async {
+    // 2000 首足以让 O(N) 投影与 upNext 映射在计数上明显；测试只观察次数，
+    // 不依赖具体耗时。
+    final tracks = [for (var i = 0; i < 2000; i++) _source('$i')];
+    service.seed(tracks, index: 1000, mode: PlayMode.listLoop);
+
+    final initial = backend.state.value;
+    service.projectionBuilds = 0;
+
+    for (var i = 1; i <= 50; i++) {
+      service.change(position: Duration(milliseconds: i * 400));
+    }
+
+    final afterTicks = backend.state.value;
+    expect(service.projectionBuilds, 0, reason: '位置 tick 不得重算投影');
+    expect(afterTicks.position, const Duration(milliseconds: 20000));
+    expect(identical(afterTicks.queue, initial.queue), isTrue);
+    expect(identical(afterTicks.upNext, initial.upNext), isTrue);
+    expect(identical(afterTicks.upNextIndices, initial.upNextIndices), isTrue);
+
+    // 下标变化：一次重算，随后再次位置 tick 继续复用。
+    await backend.playQueueIndex(1001);
+    expect(service.projectionBuilds, 1);
+    final afterIndex = backend.state.value;
+    service.change(position: const Duration(seconds: 21));
+    expect(service.projectionBuilds, 1);
+    expect(identical(backend.state.value.upNext, afterIndex.upNext), isTrue);
+
+    // 模式变化：一次重算。
+    await backend.setMode(PlayMode.shuffle);
+    expect(service.projectionBuilds, 2);
+
+    // 队列内容变化：一次重算。
+    await backend.enqueueTracks([trackFromSourceTrack(_source('extra'))]);
+    expect(service.projectionBuilds, 3);
   });
 
   test('队列映射按 queueRevision 复用：位置 / 播放态变化不重建', () {

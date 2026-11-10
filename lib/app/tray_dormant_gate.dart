@@ -14,27 +14,33 @@ import 'package:flutter/widgets.dart';
 import '../services/app_presence.dart';
 
 class TrayDormantGate extends StatelessWidget {
-  const TrayDormantGate({super.key, required this.color, required this.child});
+  const TrayDormantGate({
+    super.key,
+    required this.color,
+    required this.childBuilder,
+  });
 
   /// 休眠占位底色：取当前主题 surface——隐藏前还会渲染这一帧，中性色比
   /// 黑 / 白闪一下更不显眼。
   final Color color;
 
-  final Widget child;
+  /// 可见时才构建整棵应用树。
+  ///
+  /// 不能传 `child`：Widget 实参在调用 build 前就会求值，托盘隐藏期间任何
+  /// 上层重建（语言、主题、同步提示）都会把整棵 MaterialApp 配置重新构造
+  /// 一遍，即使它不会被挂载。改成 builder 后隐藏期间只保留占位。
+  final WidgetBuilder childBuilder;
 
   @override
   Widget build(BuildContext context) {
-    // child 由 ValueListenableBuilder 透传：休眠期间不进树（子树整体卸载），
-    // 恢复时作为新元素重新挂载，页面状态从持久化恢复。
     return ValueListenableBuilder<AppPresenceState>(
       valueListenable: AppPresence.instance,
-      builder: (context, presence, child) {
+      builder: (context, presence, _) {
         if (presence == AppPresenceState.trayHidden) {
           return ColoredBox(color: color, child: const SizedBox.expand());
         }
-        return child!;
+        return childBuilder(context);
       },
-      child: child,
     );
   }
 }

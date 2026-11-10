@@ -496,6 +496,14 @@ class SourceManager extends ChangeNotifier {
     _builtinLyricFallback.invalidateSource(sourceKey);
   }
 
+  /// 托盘隐藏 / 系统低内存：释放内置平台原生取词缓存。
+  ///
+  /// 只动结果缓存，脚本仓库 / 引擎 / 渠道偏好都不在这里清；幂等。
+  void releaseBuiltinLyricCache() => _builtinLyricFallback.clearCache();
+
+  /// 托盘隐藏 / 系统低内存：释放内置平台原生取图缓存（同上，幂等）。
+  void releaseBuiltinPicCache() => _builtinPicFallback.clearCache();
+
   /// 获取曲目评论（内置平台；脚本扩展源 / any-listen 无评论能力）。
   ///
   /// 失败统一归一化为 [SourceFailure]（业务拒绝 → unknown/retryable，

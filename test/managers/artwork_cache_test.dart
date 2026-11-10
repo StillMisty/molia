@@ -178,6 +178,19 @@ class _MemoryRepo implements CacheInfoRepository {
   Future<void> deleteDataFile() async {}
 }
 
+/// 记录 `updateOrInsert` 调用的内存 repo：验证元数据代理是否真的跳过写入。
+class _RecordingRepo extends _MemoryRepo {
+  int updateOrInsertCalls = 0;
+
+  void resetCounts() => updateOrInsertCalls = 0;
+
+  @override
+  Future<dynamic> updateOrInsert(CacheObject cacheObject) {
+    updateOrInsertCalls++;
+    return super.updateOrInsert(cacheObject);
+  }
+}
+
 /// 按路径统计 `createFile` 调用的 FileSystem 包装：`createFile` 是逐条
 /// `exists()` 的必经入口，用来验证存活集合内的条目零探测、集合外候选才复核。
 class _CountingFileSystem implements FileSystem {
@@ -572,6 +585,81 @@ void main() {
       expect(storage.sweepCalls, 2);
       expect(repo.getAllCalls, 1);
       expect(await repo.get('https://p1.music.126.net/present.jpg'), isNotNull);
+    });
+  });
+
+  group('封面元数据：只 touch 时跳过写入', () {
+    test('内容字段未变不调用内部写入；validTill / eTag / 新 key 才写', () async {
+      final repo = _RecordingRepo();
+      final wrapper = wrapArtworkRepository(repo);
+      final validTill = DateTime.fromMillisecondsSinceEpoch(1700000000000);
+      const url = 'https://p1.music.126.net/touch.jpg';
+      final original = CacheObject(
+        url,
+        key: 'touch-key',
+        relativePath: 'touch.jpg',
+        validTill: validTill,
+        eTag: 'v1',
+        id: 1,
+        length: 3,
+      );
+      await repo.insert(original);
+      repo.resetCounts();
+
+      // flutter_cache_manager 命中后只改 touched：内容字段全部相同。
+      final touchedOnly = CacheObject(
+        url,
+        key: original.key,
+        relativePath: original.relativePath,
+        validTill: validTill,
+        eTag: 'v1',
+        id: 1,
+        length: 3,
+        touched: DateTime.now(),
+      );
+      final result = await wrapper.updateOrInsert(touchedOnly);
+
+      expect(repo.updateOrInsertCalls, 0, reason: 'touch 不是内容变化，不该重写元数据文件');
+      expect(identical(result, original), isTrue, reason: '直接返回索引里的旧对象');
+
+      await wrapper.updateOrInsert(
+        CacheObject(
+          url,
+          key: original.key,
+          relativePath: original.relativePath,
+          validTill: validTill.add(const Duration(minutes: 1)),
+          eTag: 'v1',
+          id: 1,
+          length: 3,
+          touched: DateTime.now(),
+        ),
+      );
+      expect(repo.updateOrInsertCalls, 1, reason: '有效期变化必须落盘');
+
+      await wrapper.updateOrInsert(
+        CacheObject(
+          url,
+          key: original.key,
+          relativePath: original.relativePath,
+          validTill: validTill,
+          eTag: 'v2',
+          id: 1,
+          length: 3,
+          touched: DateTime.now(),
+        ),
+      );
+      expect(repo.updateOrInsertCalls, 2, reason: 'eTag 变化必须落盘');
+
+      await wrapper.updateOrInsert(
+        CacheObject(
+          url,
+          key: 'new-key',
+          relativePath: 'new.jpg',
+          validTill: validTill,
+          id: 2,
+        ),
+      );
+      expect(repo.updateOrInsertCalls, 3, reason: '新 key 必须走插入');
     });
   });
 

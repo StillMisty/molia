@@ -214,6 +214,9 @@ Linux release（Xvfb，1440×900）：
   `frames windows --real`。
 - **托盘内存 / 提交大小**：本轮没有做 Linux 托盘往返（Xvfb 无托盘宿主），
   Windows 实机数据仍以 `docs/memory.md` 为准。
+- **2026-11-11 资源收口**：托盘缓存释放第二批 / 延迟 trim / wavy 收口 /
+  prefs 与 WAL 写入合并，见 `docs/memory.md` §9；Linux 集成 5 passed / 1 skipped，
+  Windows 实机与同步 journal 写放大仍未覆盖。
 - **Linux 无头数据链路**：首搜 250ms 的根因是系统会话总线缺 keyring /
   NetworkManager，已由 `perf.sh` 的私有 `dbus-run-session` 修复；首播仍有
   ~243ms resolve 尾巴，等真实 GPU / 真机再决定是否做播放器预打开。

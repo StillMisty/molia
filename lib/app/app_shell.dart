@@ -51,6 +51,7 @@ import '../widgets/player_morph.dart';
 import '../widgets/settings/settings_sheet.dart';
 import '../widgets/shell_reselect.dart';
 import '../widgets/shell_page_visibility.dart';
+import 'app_presence_ticker_mode.dart';
 import 'desktop/desktop_shell.dart';
 import 'shell_chrome.dart';
 import 'tray_dormant_gate.dart';
@@ -64,30 +65,27 @@ bool get _mobileLifecycleOwnsPlaybackCommit =>
     defaultTargetPlatform == TargetPlatform.android ||
     defaultTargetPlatform == TargetPlatform.iOS;
 
-/// 顶栏进度条槽高（= M3E 波浪进度条容器高 `wavyContainerHeight`，振幅有空间）。
+/// 顶栏进度条槽高。
 ///
-/// 高度必须由消费面钉死：`ShellAppBar` 的底部槽只按 `preferredSize` 分配高度，
-/// 子级自己再声明一次槽高，平直态（暂停）与波浪态（10dp）才同槽心；否则
-/// 平直态自身只有 4dp 高、中心比波浪态低 3dp，play/pause 切换整条跳变。
+/// 进度条本体只有 4dp；槽固定为 10dp，顶栏总高与历史版式 / 播放页锚点保持
+/// 一致，不随播放态或进度条形态变化（避免 play/pause 时整条顶栏跳变）。
 const double _shellBarProgressHeight = 10;
 
-/// 顶栏底部进度条：播放中波浪、暂停平直（波浪动画不会停，会像还在播放）。
+/// 顶栏底部进度条：恒为平直形态。
 ///
-/// 槽高固定为 [_shellBarProgressHeight]：两种形态同槽心，play/pause 切换
-/// 不跳（底部槽的高度语义见常量注释）。
+/// 顶栏在列表 / 收藏等页面常驻，波浪是 60fps 无限动画，不应在用户读列表时
+/// 持续出帧；波浪只留给播放页主场的进度滑杆。
+///
+/// 槽高固定为 [_shellBarProgressHeight]，与旧版波浪容器同槽心。
 class ProgressIndicator extends StatefulWidget {
   /// 当前进度（来自 provider.position 单一时钟，无自外推）。
   final Duration position;
   final double duration;
 
-  /// 是否正在播放：暂停时用非波浪进度条（波浪动画会一直动，像还在播放）。
-  final bool isPlaying;
-
   const ProgressIndicator({
     super.key,
     required this.position,
     required this.duration,
-    this.isPlaying = true,
   });
 
   @override
@@ -166,31 +164,18 @@ class _ProgressIndicatorState extends State<ProgressIndicator>
             ? (displayProgress / widget.duration).clamp(0.0, 1.0)
             : null;
 
-        // 暂停时切到平直进度条：波浪动画不会停，与暂停状态矛盾。
-        // 固定槽高见 [_shellBarProgressHeight]：两种形态同槽心，不跳变。
+        // 顶栏恒用平直进度条：波浪只留给播放页，避免列表常驻时持续出帧。
+        // 槽高见 [_shellBarProgressHeight]，与旧版波浪容器同槽心。
         return SizedBox(
           height: _shellBarProgressHeight,
-          child: widget.isPlaying
-              ? M3EProgressIndicator.linearWavy(
-                  value: fraction,
-                  linearSize: M3EProgressIndicatorSize.s,
-                  strokeWidth: 4.0,
-                  trackStrokeWidth: 4.0,
-                  trackColor: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest,
-                  color: Theme.of(context).colorScheme.primary,
-                )
-              : M3EProgressIndicator.linear(
-                  value: fraction,
-                  linearSize: M3EProgressIndicatorSize.s,
-                  strokeWidth: 4.0,
-                  trackStrokeWidth: 4.0,
-                  trackColor: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+          child: M3EProgressIndicator.linear(
+            value: fraction,
+            linearSize: M3EProgressIndicatorSize.s,
+            strokeWidth: 4.0,
+            trackStrokeWidth: 4.0,
+            trackColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+            color: Theme.of(context).colorScheme.primary,
+          ),
         );
       },
     );
@@ -761,8 +746,7 @@ class _MyAppState extends State<MyApp>
         ],
       ],
       bottom: PreferredSize(
-        // 波浪进度条需要振幅空间（M3E 默认 wavyContainerHeight=10）；
-        // 高度同时由 `_shellBarProgressHeight` 钉在进度条自身，见该常量注释。
+        // 顶栏进度条槽高（见 `_shellBarProgressHeight`）；波浪只留给播放页。
         preferredSize: const Size.fromHeight(_shellBarProgressHeight),
         child: _ShellBarProgress(morph: _morph),
       ),
@@ -1169,8 +1153,6 @@ class _ShellBarProgress extends StatelessWidget {
             return ProgressIndicator(
               position: position,
               duration: state.duration.toDouble(),
-              // 暂停时顶栏进度也切平直（波浪动画看起来像还在播放）。
-              isPlaying: state.isPlaying,
             );
           },
         ),
@@ -1396,9 +1378,14 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     // 外层 TrayDormantGate：关闭到托盘时整棵界面（含 MaterialApp）换成
     // 休眠占位，恢复时重建（见 tray_dormant_gate.dart）。
+    //
+    // 最小化时树仍挂载（保留页面状态与内存，恢复要跟手），但整棵界面里的
+    // 装饰动画不应继续按显示刷新率出帧：TickerMode 只静音 ticker，不清缓存、
+    // 不改播放语义。托盘隐藏仍由 TrayDormantGate 卸载，二者互不替代。
     return TrayDormantGate(
       color: context.read<ThemeProvider>().colorScheme.surface,
-      child: _buildApp(context),
+      childBuilder: (context) =>
+          AppPresenceTickerMode(child: _buildApp(context)),
     );
   }
 

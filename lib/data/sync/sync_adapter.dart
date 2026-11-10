@@ -26,6 +26,15 @@ abstract interface class SyncAdapter {
   Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records);
 }
 
+/// 可选能力：释放适配器为「上轮 collect 复用」保留的内存缓存。
+///
+/// 只清可由存储重新导出的派生缓存（记录列表 / base64 等），不清持久化
+/// 数据、同步登记或用户内容；实现必须幂等。引擎在轮间（托盘隐藏 / 系统
+/// 低内存）通过类型检查调用，避免把释放逻辑写进每个适配器的存储层。
+abstract interface class SyncAdapterCacheReleaser implements SyncAdapter {
+  void releaseCaches();
+}
+
 /// 类别受限适配器：收集时额外拿到「本轮请求的类别集合」。
 ///
 /// 封面这类收集成本高（读文件 + 哈希 + base64）的适配器实现本接口：类别

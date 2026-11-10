@@ -110,6 +110,23 @@ void main() {
     expect(journal.changes, hasLength(1));
   });
 
+  test('releaseCaches：清空 base64 缓存，下一次 collect 重新读文件', () async {
+    await store.setTrackCover(trackId, jpeg(1));
+    final first = (await adapter.collect())[SyncCategory.covers]!.single;
+    // 缓存命中时删掉文件也能继续产出（证明 base64 来自内存）。
+    File(store.trackCoverPath(trackId)!).deleteSync();
+    final cached = (await adapter.collect())[SyncCategory.covers]!.single;
+    expect(base64Decode(cached.data!['image'] as String), jpeg(1));
+    expect(cached.version, first.version);
+
+    adapter
+      ..releaseCaches()
+      ..releaseCaches();
+    // 文件已删除：不再有内存缓存可复用，本轮读不到封面 → 不产出记录。
+    final after = (await adapter.collect())[SyncCategory.covers]!;
+    expect(after, isEmpty, reason: '释放后重新读盘（文件已删）');
+  });
+
   test('内容变化：取新版本并追加日志，旧版本不会继续外发', () async {
     await store.setTrackCover(trackId, jpeg(1));
     final before = (await adapter.collect())[SyncCategory.covers]!.single;

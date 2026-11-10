@@ -75,6 +75,13 @@ class BuiltinTransport {
   Future<T> cached<T>(String key, Future<T> Function() create) =>
       _cache.getOrCreate(key, create);
 
+  /// 释放已完成的响应缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// 只清结果缓存，不动 `Dio` / 平台注册表；在途请求仍会把结果返回给原
+  /// 等待方，但不会再写回缓存（[RequestCache] 的 identity 校验），因此
+  /// 重复调用安全。下一次发现 / 搜索按需重新取数。
+  void clearCache() => _cache.clear();
+
   /// 缓存 + 重试的合并入口（发现适配器的唯一取数方式）。
   ///
   /// 尝试循环本身在 [runBuiltinAttempts]（唯一实现）；这里只负责把成功结果

@@ -207,6 +207,36 @@ void main() {
     expect(row['versionPhysical'], 2000);
   });
 
+  test('释放导出缓存：幂等，下一次导出重新全量读取', () async {
+    await play(raw: const {'id': 's1'});
+
+    final first = await store.syncExportEvents();
+    expect(first.single.raw, '{"id":"s1"}');
+
+    store
+      ..releaseExportCaches()
+      ..releaseExportCaches();
+    final second = await store.syncExportEvents();
+    expect(second, hasLength(1));
+    expect(second.single.raw, '{"id":"s1"}');
+    expect(identical(second, first), isFalse, reason: '缓存已释放，重新读库');
+    expect(identical(await store.syncExportEvents(), second), isTrue);
+  });
+
+  test('释放与在途全量加载并发：结果仍完整，旧任务不回填缓存', () async {
+    await play(raw: const {'id': 's1'});
+
+    // 全量加载已开始（等待查询），此时托盘隐藏触发释放。
+    final pending = store.syncExportEvents();
+    store.releaseExportCaches();
+    final raced = await pending;
+    expect(raced.single.raw, '{"id":"s1"}', reason: '在途调用仍拿到完整列表');
+
+    final next = await store.syncExportEvents();
+    expect(next.single.raw, '{"id":"s1"}');
+    expect(identical(next, raced), isFalse, reason: '释放前开始的加载不把结果写回缓存');
+  });
+
   test('应用同一远端事件两次：第二次幂等跳过，行数不增', () async {
     const event = StatisticsSyncEvent(
       syncKey: 'remote-1',

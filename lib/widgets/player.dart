@@ -547,7 +547,8 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
   /// 进度排：收藏（左）+ 可拖动波浪进度（中）+ 播放模式（右）。
   ///
   /// 拖动期间本地预览、松手才提交 seek；控制器生命周期与低频快照订阅都在
-  /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。
+  /// `PlaybackSeekBar` 内，这里只决定版式与时间标签档位。波浪只在这一处
+  /// （播放页主场）开启，底栏 / 迷你条默认平直，避免全局 60fps 装饰动画。
   Widget _buildSeekBar() {
     return Padding(
       // 纵向不留内边距：上方 2dp 由外层排布给（小屏 / 大屏两套版式都是
@@ -562,7 +563,10 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
           const SizedBox(width: 4),
           // 播放页版式：时间挪到条下方，横向空间全给进度条。
           const Expanded(
-            child: PlaybackSeekBar(timeLabels: SeekTimeLabels.below),
+            child: PlaybackSeekBar(
+              timeLabels: SeekTimeLabels.below,
+              wavy: true,
+            ),
           ),
           const SizedBox(width: 4),
           // 与收藏同一套简单图标按钮；模式图标 / 标签由共享模块唯一映射。
@@ -712,26 +716,21 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
     );
   }
 
-  /// 迷你条底部细进度线。
+  /// 迷你条底部细进度线（平直常显）。
   ///
-  /// 播放中用波浪线（与全屏滑杆一致）；暂停时切平直线——波浪动画不会停，
-  /// 会让人以为还在播放。外层 `RepaintBoundary` 把无限波浪动画的重绘限制在
-  /// 进度线面积内（理由同全屏滑杆）。
+  /// 不跟播放态切波浪：迷你条可能一直挂在列表底部，波浪是无限 60fps 动画，
+  /// 会在用户读列表时持续出帧；进度本身仍随 position 通道更新。
   Widget _buildMiniProgress(BuildContext context, PlaybackProvider playback) {
     final scheme = Theme.of(context).colorScheme;
     return RepaintBoundary(
       child: ValueListenableBuilder<Duration>(
         valueListenable: playback.position,
         builder: (context, position, _) {
-          final (
-            durationMs,
-            isPlaying,
-          ) = context.select<PlaybackProvider, (int, bool)>(
-            (provider) =>
-                (provider.snapshot.duration.inMilliseconds, provider.isPlaying),
+          final int durationMs = context.select<PlaybackProvider, int>(
+            (provider) => provider.snapshot.duration.inMilliseconds,
           );
           if (durationMs <= 0) {
-            // 无曲目/无时长：只画静态轨道，避免不确定波浪动画抢视线。
+            // 无曲目/无时长：只画静态轨道。
             return Center(
               child: Container(
                 width: double.infinity,
@@ -747,17 +746,7 @@ class _PlayerState extends State<Player> with TickerProviderStateMixin {
             0.0,
             1.0,
           );
-          if (!isPlaying) {
-            return M3EProgressIndicator.linear(
-              value: fraction,
-              linearSize: M3EProgressIndicatorSize.s,
-              strokeWidth: 3,
-              trackStrokeWidth: 3,
-              trackColor: scheme.surfaceContainerHighest,
-              color: scheme.primary,
-            );
-          }
-          return M3EProgressIndicator.linearWavy(
+          return M3EProgressIndicator.linear(
             value: fraction,
             linearSize: M3EProgressIndicatorSize.s,
             strokeWidth: 3,

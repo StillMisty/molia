@@ -69,6 +69,12 @@ class CoverBackfillService {
         });
   }
 
+  /// 释放封面补取结果缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// 只清已完成结果：在途补取照常返回给原等待方，空结果仍按原逻辑
+  /// invalidate，不会把旧值写回已清空的缓存；重复调用安全。
+  void clearCache() => _cache.clear();
+
   Future<String?> _fetch(Track track, {required bool allowCrossChannel}) async {
     final native = _notEmpty(await _safeNative(track));
     if (native != null) return native;

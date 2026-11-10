@@ -391,6 +391,72 @@ void main() {
     );
   });
 
+  test('轮间缓存释放：清空快照 / 聚合缓存，幂等且下一轮照常重建', () async {
+    orderedTransport.available.add(remote());
+    await run();
+
+    expect(runner.lastEnvelope, isNotNull);
+    expect(runner.releaseIdleCaches(), isTrue);
+    expect(runner.lastEnvelope, isNull);
+    expect(runner.releaseIdleCaches(), isTrue, reason: '重复释放幂等');
+
+    await run(push: false);
+    expect(runner.lastEnvelope, isNotNull, reason: '释放后下一轮照常构建快照');
+  });
+
+  test('轮间释放会清掉适配器自己的记录缓存，下一次 collect 重新导出', () async {
+    final caching = _CachingAdapter();
+    final cachingRunner = SyncRoundRunner(
+      state: state,
+      adapters: [caching],
+      transports: const {},
+      stamps: state.stampIssuer,
+      known: InMemorySyncKnownStore(),
+      runtime: SyncTransportRuntime(state: state, transports: const {}),
+      clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
+    );
+    addTearDown(cachingRunner.dispose);
+
+    await cachingRunner.collect({SyncCategory.settings});
+    await cachingRunner.collect({SyncCategory.settings});
+    expect(caching.collectCalls, 1, reason: '指纹未变复用适配器缓存');
+
+    expect(cachingRunner.releaseIdleCaches(), isTrue);
+    expect(caching.cached, isNull, reason: '适配器缓存一并释放');
+    await cachingRunner.collect({SyncCategory.settings});
+    expect(caching.collectCalls, 2, reason: '释放后重新导出');
+  });
+
+  test('轮内不释放：collect 阶段调用释放返回 false', () async {
+    var released = false;
+    late SyncRoundRunner probeRunner;
+    final probe = _ReleaseProbeAdapter(() {
+      released = true;
+      expect(
+        probeRunner.releaseIdleCaches(),
+        isFalse,
+        reason: '在途轮次仍在使用收集 / 快照缓存',
+      );
+    });
+    probeRunner = SyncRoundRunner(
+      state: state,
+      adapters: [probe],
+      transports: const {},
+      stamps: state.stampIssuer,
+      known: InMemorySyncKnownStore(),
+      runtime: SyncTransportRuntime(state: state, transports: const {}),
+      clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
+    );
+    addTearDown(probeRunner.dispose);
+
+    await probeRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+    );
+    expect(released, isTrue);
+  });
+
   test('同一轮拉取失败 + 推送成功：保留失败原因，不冒充成功接触', () async {
     state.recordRound(
       const SyncRoundReport(
@@ -565,6 +631,66 @@ class _ScopedAdapter implements CategoryScopedSyncAdapter {
   Future<SyncApplyOutcome> apply(
     Map<SyncCategory, List<SyncRecord>> records,
   ) async => SyncApplyOutcome.none;
+}
+
+/// 带「上轮记录缓存」的适配器：验证轮间释放会清掉适配器自己的缓存。
+class _CachingAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
+  int collectCalls = 0;
+  String? _cacheKey;
+  Map<SyncCategory, List<SyncRecord>>? cached;
+
+  @override
+  Set<SyncCategory> get categories => const {SyncCategory.settings};
+
+  @override
+  bool get ready => true;
+
+  @override
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({
+    bool fresh = false,
+  }) async {
+    if (!fresh &&
+        cached != null &&
+        _cacheKey == syncFingerprintKey(const {SyncCategory.settings: 'v1'})) {
+      return cached!;
+    }
+    collectCalls++;
+    _cacheKey = syncFingerprintKey(const {SyncCategory.settings: 'v1'});
+    cached = {
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 1000, deviceId: 'devA'),
+          data: const {'v': 'light'},
+        ),
+      ],
+    };
+    return cached!;
+  }
+
+  @override
+  void releaseCaches() {
+    _cacheKey = null;
+    cached = null;
+  }
+
+  @override
+  Future<SyncApplyOutcome> apply(
+    Map<SyncCategory, List<SyncRecord>> records,
+  ) async => SyncApplyOutcome.none;
+}
+
+/// 在 collect 阶段插入回调：验证「轮内释放」被拒绝。
+class _ReleaseProbeAdapter extends _RecordingAdapter {
+  _ReleaseProbeAdapter(this.onCollect);
+
+  final void Function() onCollect;
+
+  @override
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) {
+    onCollect();
+    return super.collect(fresh: fresh);
+  }
 }
 
 class _RecordingAdapter implements SyncAdapter {

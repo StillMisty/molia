@@ -6,8 +6,9 @@ import 'playing_indicator.dart';
 
 /// 当前曲目封面：封面右下角叠播放状态角标。
 ///
-/// 播放中是三柱均衡器动画，暂停时同一个均衡器停在静态相位；角标始终只作
-/// 状态标识，避免被读成可点击的播放控件。
+/// 播放中默认是三柱均衡器**静态相位**；只有调用方显式传 [animate] 才起伏
+/// （播放页主场）。列表行 / 迷你条是常驻装饰，不应为了「正在播放」在整页
+/// 静态时持续 60fps 出帧。
 ///
 /// 封面内容由调用方给出（曲目行走 [TrackArtwork]）；这里只负责角标与固定
 /// 方形槽，保证状态切换不改变行内网格。
@@ -17,6 +18,7 @@ class CurrentTrackCover extends StatefulWidget {
     required this.cover,
     required this.size,
     required this.isPlaying,
+    this.animate = false,
   });
 
   /// 已解析的封面（`TrackArtwork` 或同等尺寸的图片组件）。
@@ -24,6 +26,9 @@ class CurrentTrackCover extends StatefulWidget {
 
   final double size;
   final bool isPlaying;
+
+  /// 是否播放起伏动画：默认 false（列表 / 迷你条只作状态标识）。
+  final bool animate;
 
   /// 角标直径：40 / 44 封面共用同一档，图标再小一圈。
   static const double badgeSize = 18;
@@ -70,13 +75,14 @@ class _CurrentTrackCoverState extends State<CurrentTrackCover>
     _syncAnimation();
   }
 
-  /// 只有「正在播放 + 未减弱动效」才跑 ticker；暂停时停在当前相位。
+  /// 只有「正在播放 + 调用方显式要动画 + 未减弱动效」才跑 ticker；
+  /// 暂停或列表场景停在当前相位。
   ///
   /// 暂停后不能保留 ticker 空转：角标仍留在屏幕上，继续起伏就会违反
   /// 「暂停时完全不动」。不重置相位则让暂停那一刻原地冻结，恢复播放时也从
   /// 同一相位续跑。
   void _syncAnimation() {
-    if (widget.isPlaying && !_reduceMotion) {
+    if (widget.isPlaying && widget.animate && !_reduceMotion) {
       if (!_controller.isAnimating) {
         _controller.repeat();
       }

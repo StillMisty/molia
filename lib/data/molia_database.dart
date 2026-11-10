@@ -403,6 +403,12 @@ class MoliaDatabase extends _$MoliaDatabase {
         // 本地单文件库：同步提交降为 NORMAL，进程崩溃窗口可接受，
         // 避免每次写都 fsync 整个 WAL。
         db.execute('PRAGMA synchronous = NORMAL');
+        // WAL 默认 checkpoint 后不回收，长期运行会涨到几百 MB；把上限压到
+        // 4MB，checkpoint 后截断，避免磁盘占用与后续写入的额外 I/O。
+        db.execute('PRAGMA journal_size_limit = 4194304');
+        // WAL 超过 1000 页（约 4MB）自动 checkpoint：默认值即 1000，这里
+        // 显式钉住，避免平台编译差异换成更大的阈值。
+        db.execute('PRAGMA wal_autocheckpoint = 1000');
         // 并发写（同步引擎 / 播放写入 / 统计 touch）等锁的上限。
         db.execute('PRAGMA busy_timeout = 5000');
         // 统计 / 列表排序会在临时 B-tree 上落盘（SQLite 默认 temp_store=FILE）；

@@ -223,4 +223,72 @@ void main() {
       expect(projection.upNext, isEmpty);
     }
   });
+
+  test('投影缓存只在键变化时重算，命中时复用同一实例', () {
+    final cache = QueueProjectionCache<String>();
+    var computes = 0;
+    QueueProjection<String> resolve(QueueProjectionKey key) => cache.resolve(
+      key: key,
+      compute: () {
+        computes++;
+        return QueueProjection(next: 'next-$computes');
+      },
+    );
+
+    const base = QueueProjectionKey(
+      queueRevision: 1,
+      currentIndex: 0,
+      mode: PlayMode.listLoop,
+    );
+
+    final first = resolve(base);
+    expect(resolve(base), same(first));
+    expect(computes, 1);
+
+    // 位置 tick 不参与键：同键继续命中。
+    expect(cache.key, base);
+
+    final byIndex = resolve(
+      const QueueProjectionKey(
+        queueRevision: 1,
+        currentIndex: 1,
+        mode: PlayMode.listLoop,
+      ),
+    );
+    expect(byIndex, isNot(same(first)));
+    expect(computes, 2);
+
+    resolve(
+      const QueueProjectionKey(
+        queueRevision: 2,
+        currentIndex: 1,
+        mode: PlayMode.listLoop,
+      ),
+    );
+    resolve(
+      const QueueProjectionKey(
+        queueRevision: 2,
+        currentIndex: 1,
+        mode: PlayMode.shuffle,
+      ),
+    );
+    resolve(
+      const QueueProjectionKey(
+        queueRevision: 2,
+        currentIndex: 1,
+        mode: PlayMode.shuffle,
+        playbackOrderRevision: 1,
+      ),
+    );
+    resolve(
+      const QueueProjectionKey(
+        queueRevision: 2,
+        currentIndex: 1,
+        mode: PlayMode.shuffle,
+        playbackOrderRevision: 1,
+        shuffleOrderRevision: 1,
+      ),
+    );
+    expect(computes, 6, reason: '队列 / 下标 / 模式 / 两个顺序版本各触发一次');
+  });
 }

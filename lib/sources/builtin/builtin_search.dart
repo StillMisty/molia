@@ -25,6 +25,12 @@ class BuiltinSearch {
   /// 内置请求传输：测试注入 `MockClient` 覆盖 fetch 路径（唯一入口）。
   static BuiltinTransport transport = BuiltinTransport();
 
+  /// 释放共享传输的响应缓存（托盘隐藏 / 系统低内存）。
+  ///
+  /// 取当前 [transport] 而不是持有旧实例：测试会替换静态实例，释放入口
+  /// 始终作用于正在使用的那个。只清结果缓存，不碰平台 / 脚本注册表。
+  static void clearCachedResponses() => transport.clearCache();
+
   /// 分页搜索（返回曲目与 total/hasMore 等分页信息）。
   static Future<SourceSearchResult> searchWithMeta(
     String sourceKey,

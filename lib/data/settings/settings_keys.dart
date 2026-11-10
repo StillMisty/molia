@@ -57,6 +57,16 @@ const kSelectedLanguage = SettingsKey<String?>(
   null,
   category: SyncCategory.settings,
 );
+
+/// 导航定制（顺序 / 隐藏 / 首页）合并成一个 JSON：桌面 shared_preferences
+/// 每次 set* 都重写整个偏好文件，三键写三次；合并后一次编辑只落盘一次。
+const kShellNavLayout = SettingsKey<String>(
+  'shell_nav_layout_v1',
+  '',
+  category: SyncCategory.settings,
+);
+
+// 旧版三键：只读兜底（升级后首次启动仍能恢复用户的导航定制），不再写入。
 const kShellNavOrder = SettingsKey<List<String>>('shell_nav_order', [
   'library',
   'nowPlaying',
@@ -260,6 +270,7 @@ const List<SettingsKey<Object?>> kAllSettingsKeys = [
   kSeedColor,
   kAppDisplayTitle,
   kSelectedLanguage,
+  kShellNavLayout,
   kShellNavOrder,
   kShellNavHidden,
   kShellHomeDestination,

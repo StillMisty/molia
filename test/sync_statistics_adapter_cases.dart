@@ -54,6 +54,19 @@ void main() {
     expect(store.exportCalls, 3, reason: '指纹变化重新导出');
   });
 
+  test('releaseCaches：清空记录缓存，下一次 collect 重新导出', () async {
+    store.events = [_event(syncKey: 'k1')];
+    await adapter.collect();
+    await adapter.collect();
+    expect(store.exportCalls, 1, reason: '指纹未变复用缓存');
+
+    adapter
+      ..releaseCaches()
+      ..releaseCaches();
+    await adapter.collect();
+    expect(store.exportCalls, 2, reason: '释放后重新导出');
+  });
+
   test('collect → apply 往返：类型化事件字段不丢失', () async {
     store.events = [_event(syncKey: 'k1', songId: 's1', raw: '{"a":1}')];
     final collected = await adapter.collect();

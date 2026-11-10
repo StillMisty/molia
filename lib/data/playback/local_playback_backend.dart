@@ -8,6 +8,7 @@ import '../../domain/ports/playback_backend.dart';
 import '../../domain/ports/state_listenable.dart';
 import '../../models/play_mode.dart';
 import '../../playback/local_playback_service.dart';
+import '../../playback/queue_projection.dart';
 import '../../sources/source_track.dart';
 import '../mapping/track_mapper.dart';
 
@@ -53,6 +54,15 @@ class LocalPlaybackBackend implements PlaybackBackend {
   /// List 省掉 O(N) 的映射与包装，也让快照 `==` 的深比较走对象相等的快路径。
   List<Track>? _cachedQueue;
   int? _cachedQueueRevision;
+
+  /// 队列投影缓存：位置 tick 不改变投影输入，命中后复用同一份
+  /// `QueueProjection`（含 upNext / upNextIndices），不再跑 O(N) 推导。
+  final QueueProjectionCache<SourceTrack> _projectionCache =
+      QueueProjectionCache<SourceTrack>();
+
+  /// 与投影同键的领域 `upNext` 映射；复用同一 List 实例让快照 `==` 的
+  /// 深比较走 `identical` 短路。
+  List<Track> _cachedUpNext = const [];
 
   String? _cachedErrorRaw;
   SourceFailure? _cachedError;
@@ -243,12 +253,27 @@ class LocalPlaybackBackend implements PlaybackBackend {
     // 一次投影复用 next / previous / previousOfPrevious / upNext：四个 getter
     // 各自都会重算整份投影（shuffle 下含 O(N) 的排列查找与 upNext 列表），
     // 位置 tick 触发的快照重建里重复计算纯属浪费。
-    final projection = _service.queueProjection;
+    //
+    // 投影只由队列内容 / 当前下标 / 模式 / 播放顺序 / 洗牌排列决定；位置与
+    // 播放态 tick 命中缓存，不重算、也不重建 upNext 映射。
+    final projectionKey = QueueProjectionKey(
+      queueRevision: _service.queueRevision,
+      currentIndex: index,
+      mode: _service.mode,
+      playbackOrderRevision: _service.playbackOrderRevision,
+      shuffleOrderRevision: _service.shuffleOrderRevision,
+    );
+    final bool projectionChanged = _projectionCache.key != projectionKey;
+    final projection = _projectionCache.resolve(
+      key: projectionKey,
+      compute: () => _service.queueProjection,
+    );
+    if (projectionChanged) {
+      _cachedUpNext = List<Track>.unmodifiable([
+        for (final source in projection.upNext) _toTrack(source),
+      ]);
+    }
     final current = currentSource == null ? null : _toTrack(currentSource);
-
-    final upNext = <Track>[
-      for (final source in projection.upNext) _toTrack(source),
-    ];
 
     final duration = current == null
         ? Duration.zero
@@ -263,7 +288,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       next: _toTrackOrNull(projection.next),
       previous: _toTrackOrNull(projection.previous),
       previousOfPrevious: _toTrackOrNull(projection.previousOfPrevious),
-      upNext: List<Track>.unmodifiable(upNext),
+      upNext: _cachedUpNext,
       upNextIndices: projection.upNextIndices,
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,

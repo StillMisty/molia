@@ -181,6 +181,14 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 复用上一份队列映射，避免每次通知都重跑全队列转换。
   int get queueRevision => _queueRevision;
 
+  /// 播放顺序栈的内容版本：快照投影缓存键的一部分。
+  ///
+  /// 位置 tick 不会改它；只有真实切歌 / 回退 / 队列重映射才变。
+  int get playbackOrderRevision => _order.revision;
+
+  /// 洗牌排列的内容版本：快照投影缓存键的一部分（轮末重洗也会自增）。
+  int get shuffleOrderRevision => _shuffleOrder.revision;
+
   /// 已播放顺序（最近一首在后，栈顶供 previous 弹出）；存队列下标，
   /// 队列仅在 `playTracks` 时整体替换并同步清空。
   final PlaybackOrder _order = PlaybackOrder();
