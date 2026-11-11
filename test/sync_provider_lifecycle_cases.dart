@@ -10,6 +10,7 @@ import 'package:molia/data/sync/transport/local_network_permission.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 import 'package:molia/providers/sync_provider.dart';
+import 'package:molia/providers/sync_ui_state.dart';
 import 'package:molia/services/battery_probe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -67,7 +68,7 @@ void main() {
     addTearDown(provider.dispose);
 
     // 有本地变更才会在退后台时跑 pause 轮。
-    provider.notifyLocalChange();
+    scheduler.notifyLocalChange();
     provider.onAppHidden();
 
     await transport.pulled.future.timeout(const Duration(seconds: 2));
@@ -142,13 +143,19 @@ void main() {
     built.transport.onPull = () async {
       if (!pulled.isCompleted) pulled.complete();
     };
-    await built.provider.setTransportEnabled(SyncTransportKind.lan, true);
+    await built.provider.commands.setTransportEnabled(
+      SyncTransportId.lan,
+      true,
+    );
     await pulled.future.timeout(const Duration(seconds: 2));
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    expect(built.provider.lastReport?.trigger, SyncTrigger.check);
+    expect(built.provider.state.lastReport?.trigger, SyncTrigger.check);
     final beforeClose = built.transport.pullCount;
-    await built.provider.setTransportEnabled(SyncTransportKind.lan, false);
+    await built.provider.commands.setTransportEnabled(
+      SyncTransportId.lan,
+      false,
+    );
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(built.transport.pullCount, beforeClose, reason: '关闭传输不触发检查轮');
   });
@@ -172,13 +179,16 @@ void main() {
     built.transport.onPull = () async {
       if (!pulled.isCompleted) pulled.complete();
     };
-    expect(await built.provider.requestLanPermission(), isTrue);
+    expect(await built.provider.commands.requestLanPermission(), isTrue);
     await pulled.future.timeout(const Duration(seconds: 2));
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     expect(requested, 1);
-    expect(built.provider.enabledTransports, contains(SyncTransportKind.lan));
-    expect(built.provider.lastReport?.trigger, SyncTrigger.check);
+    expect(
+      built.provider.state.enabledTransports,
+      contains(SyncTransportId.lan),
+    );
+    expect(built.provider.state.lastReport?.trigger, SyncTrigger.check);
   });
 
   test('保存 WebDAV 配置：启用且已配置才检查，关闭 / 未配置不触发', () async {
@@ -190,22 +200,28 @@ void main() {
     addTearDown(built.engine.dispose);
 
     // 未启用：保存配置和密码不触发检查轮。
-    await built.provider.saveWebdavConfig(
+    await built.provider.commands.saveWebdavConfig(
       const WebDavConfig(baseUrl: 'https://dav.example.com/dav'),
       'secret',
     );
     await Future<void>.delayed(const Duration(milliseconds: 30));
     expect(built.transport.pullCount, 0);
-    expect(built.provider.webdav.isConfigured, isTrue);
+    expect(built.provider.state.webdav.isConfigured, isTrue);
 
     // 关闭状态下清空配置，再打开 WebDAV：未配置不触发（避免配置弹层打开前
     // 先跑一轮必然 not_configured 的检查）。
-    await built.provider.saveWebdavConfig(const WebDavConfig(), 'secret');
-    await built.provider.setTransportEnabled(SyncTransportKind.webdav, true);
+    await built.provider.commands.saveWebdavConfig(
+      const WebDavConfig(),
+      'secret',
+    );
+    await built.provider.commands.setTransportEnabled(
+      SyncTransportId.webdav,
+      true,
+    );
     await Future<void>.delayed(const Duration(milliseconds: 30));
     expect(
-      built.provider.enabledTransports,
-      contains(SyncTransportKind.webdav),
+      built.provider.state.enabledTransports,
+      contains(SyncTransportId.webdav),
     );
     expect(built.transport.pullCount, 0);
 
@@ -214,13 +230,13 @@ void main() {
     built.transport.onPull = () async {
       if (!pulled.isCompleted) pulled.complete();
     };
-    await built.provider.saveWebdavConfig(
+    await built.provider.commands.saveWebdavConfig(
       const WebDavConfig(baseUrl: 'https://dav.example.com/dav'),
       'secret',
     );
     await pulled.future.timeout(const Duration(seconds: 2));
     await Future<void>.delayed(const Duration(milliseconds: 20));
-    expect(built.provider.lastReport?.trigger, SyncTrigger.check);
+    expect(built.provider.state.lastReport?.trigger, SyncTrigger.check);
   });
 
   test('回前台：局域网关闭且从未申请过时不查询权限，避免误显示警告', () async {

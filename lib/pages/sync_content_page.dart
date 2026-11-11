@@ -58,6 +58,8 @@ class SyncContentPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
+    final state = provider.state;
+    final commands = provider.commands;
     return SettingsSubPage(
       title: l10n.syncContentSection,
       children: [
@@ -72,10 +74,9 @@ class SyncContentPage extends StatelessWidget {
                 title: entry.value.$2(l10n),
                 // 关闭后果集中在 footer；不逐行重复同一句话。
                 subtitle: '',
-                value:
-                    provider.categories[entry.key] ?? entry.key.defaultEnabled,
+                value: state.categories[entry.key] ?? entry.key.defaultEnabled,
                 onChanged: (value) =>
-                    unawaited(provider.setCategory(entry.key, value)),
+                    unawaited(commands.setCategory(entry.key, value)),
               ),
           ],
         ),
@@ -88,9 +89,9 @@ class SyncContentPage extends StatelessWidget {
               icon: Icons.signal_cellular_off_rounded,
               title: l10n.syncCellularPauseTitle,
               subtitle: l10n.syncCellularPauseSubtitle,
-              value: provider.cellularPolicy == SyncCellularPolicy.pause,
+              value: state.cellularPolicy == SyncCellularPolicy.pause,
               onChanged: (value) => unawaited(
-                provider.setCellularPolicy(
+                commands.setCellularPolicy(
                   value ? SyncCellularPolicy.pause : SyncCellularPolicy.auto,
                 ),
               ),

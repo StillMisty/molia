@@ -12,6 +12,8 @@ import '../providers/nearby_scan_session.dart';
 import '../providers/sync_nearby_availability.dart';
 import '../providers/sync_peer_view.dart';
 import '../providers/sync_provider.dart';
+import '../providers/sync_commands.dart';
+import '../providers/sync_ui_state.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
 import '../utils/device_id.dart';
@@ -67,13 +69,13 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     _relativeTimeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) setState(() {});
     });
-    provider.refreshLocalEndpoints();
+    provider.commands.endpoints.refresh();
     // 打开同步页自动检查一轮：设备行显示的是「最近一轮是否真的接触成功」，
     // 不跑一轮就只能是旧状态。首帧后再触发，避免在构建期通知 provider；
     // 走调度器的 check 轮（省电 / 蜂窝暂停 / 已有轮次在跑时由调度器跳过）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(provider.checkConnections());
+      unawaited(provider.commands.checkConnections());
     });
   }
 
@@ -98,16 +100,18 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
+    final state = provider.state;
+    final commands = provider.commands;
     return SettingsSubPage(
       title: l10n.settingsSyncTitle,
       children: [
-        _transportsSection(context, provider, l10n),
+        _transportsSection(context, provider, state, commands, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
-        _peersSection(context, provider, l10n),
+        _peersSection(context, provider, state, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
-        _nearbySection(context, provider, l10n),
+        _nearbySection(context, provider, state, l10n),
         const SizedBox(height: kSettingsSectionSpacing),
-        _entriesSection(context, provider, l10n),
+        _entriesSection(context, state, l10n),
       ],
     );
   }
@@ -120,29 +124,26 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Widget _transportsSection(
     BuildContext context,
     SyncProvider provider,
+    SyncUiState state,
+    SyncCommands commands,
     AppLocalizations l10n,
   ) {
-    final lanState = _transportState(
-      context,
-      provider,
-      l10n,
-      SyncTransportKind.lan,
-    );
+    final lanState = _transportState(context, state, l10n, SyncTransportId.lan);
     final webdavState = _transportState(
       context,
-      provider,
+      state,
       l10n,
-      SyncTransportKind.webdav,
+      SyncTransportId.webdav,
     );
-    final webdavEnabled = provider.enabledTransports.contains(
-      SyncTransportKind.webdav,
+    final webdavEnabled = state.enabledTransports.contains(
+      SyncTransportId.webdav,
     );
     return SettingsSectionCard(
       title: l10n.syncTransportSection,
       footer: SettingsSectionHint(
-        text: provider.enabledTransports.isEmpty
+        text: state.enabledTransports.isEmpty
             ? l10n.syncTransportAllOffHint
-            : _statusSubtitle(provider, l10n),
+            : _statusSubtitle(state, l10n),
       ),
       children: [
         SettingsSwitchTile(
@@ -151,14 +152,14 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           title: l10n.syncLanTitle,
           subtitle: lanState.text,
           subtitleColor: lanState.color,
-          value: provider.enabledTransports.contains(SyncTransportKind.lan),
+          value: state.enabledTransports.contains(SyncTransportId.lan),
           onChanged: (value) =>
               unawaited(_setLanEnabled(context, provider, l10n, value)),
         ),
         // 权限未授予时给常驻、可行动的入口（与桌面歌词未授权提示同款）：
         // 拒绝后开关会回到关闭，但警告行保留「去授权」，不用再开一次开关。
-        if (provider.lanPermissionNeedsAttention)
-          _lanPermissionNotice(context, provider, l10n),
+        if (state.lanPermissionNeedsAttention)
+          _lanPermissionNotice(context, provider, state, l10n),
         SettingsSwitchTile(
           switchKey: const Key('settingsSyncWebdavSwitch'),
           icon: Icons.cloud_rounded,
@@ -167,7 +168,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           subtitleColor: webdavState.color,
           value: webdavEnabled,
           onChanged: (value) => unawaited(
-            provider.setTransportEnabled(SyncTransportKind.webdav, value),
+            commands.setTransportEnabled(SyncTransportId.webdav, value),
           ),
         ),
         // 配置入口只在 WebDAV 启用后才有意义（未启用时开关副文案已说明）。
@@ -176,8 +177,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             key: const Key('settingsSyncWebdavConfigItem'),
             icon: Icons.settings_rounded,
             title: l10n.syncWebdavConfigTitle,
-            subtitle: provider.webdav.isConfigured
-                ? provider.webdav.baseUrl
+            subtitle: state.webdav.isConfigured
+                ? state.webdav.baseUrl
                 : l10n.syncWebdavNotConfigured,
             onTap: () =>
                 unawaited(showWebdavConfigDialog(context, provider, l10n)),
@@ -194,13 +195,14 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Widget _peersSection(
     BuildContext context,
     SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
   ) {
     // 一次构建只读一份投影：名册行、footer 与重检条件不再各自循环名册。
-    final view = provider.peerView;
+    final view = state.peerView;
     return SettingsSectionCard(
       title: l10n.syncPeersSection,
-      footer: SettingsSectionHint(text: _peersFooter(provider, view, l10n)),
+      footer: SettingsSectionHint(text: _peersFooter(state, view, l10n)),
       children: [
         if (view.rows.isEmpty)
           SettingsInfoTile(
@@ -213,13 +215,13 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
         // 有名册但本轮一个都没连上：给一次受策略约束的即时检查，避免用户
         // 只能干等下一轮定时唤醒。省电 / 移动数据暂停时点了也不会跑，
         // 因此直接隐藏。
-        if (_shouldOfferRecheck(provider, view))
+        if (_shouldOfferRecheck(state, view))
           SettingsNavTile(
             key: const Key('settingsSyncPeersRecheck'),
             icon: Icons.refresh_rounded,
             title: l10n.syncRecheckConnections,
             subtitle: l10n.syncRecheckConnectionsHint,
-            onTap: () => unawaited(provider.checkConnections()),
+            onTap: () => unawaited(provider.commands.checkConnections()),
           ),
       ],
     );
@@ -227,9 +229,9 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
 
   /// 是否显示「重新检查连接」：名册非空、本轮报告存在且没有任何设备
   /// connected；调度器当前不允许自动检查时不显示。
-  static bool _shouldOfferRecheck(SyncProvider provider, SyncPeerView view) {
-    if (view.rows.isEmpty || provider.syncing) return false;
-    if (!provider.canCheckNow) return false;
+  static bool _shouldOfferRecheck(SyncUiState state, SyncPeerView view) {
+    if (view.rows.isEmpty || state.syncing) return false;
+    if (!state.canCheckNow) return false;
     if (!view.hasReport) return false;
     return !view.hasConnected;
   }
@@ -242,11 +244,11 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   /// 的状态，不做全局 App 状态条。空名册且从未跑过一轮时保留原来的配对引导；
   /// 有名册但没有报告时只能说「还没有连接记录」，不能断言本轮没连上。
   static String _peersFooter(
-    SyncProvider provider,
+    SyncUiState state,
     SyncPeerView view,
     AppLocalizations l10n,
   ) {
-    if (provider.syncing) return l10n.syncSyncing;
+    if (state.syncing) return l10n.syncSyncing;
     if (!view.hasReport) {
       return view.rows.isEmpty ? l10n.syncPeersHint : l10n.syncRoundNoRecords;
     }
@@ -267,9 +269,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Widget _nearbySection(
     BuildContext context,
     SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
   ) {
-    final availability = provider.nearbyAvailability;
+    final availability = state.nearbyAvailability;
     // 扫描结算只影响空态文案，单独订阅会话：定时器到点时不用重建整页，
     // 也不会漏掉不经过 provider 通知的「正在查找 → 没有发现」切换。
     return ValueListenableBuilder<NearbyScanState>(
@@ -283,15 +286,15 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
               _nearbyUnavailableRow(context, provider, l10n, availability)
             else
               StreamBuilder<List<SyncNearbyDevice>>(
-                stream: provider.nearbyDevices,
+                stream: state.nearbyDevices,
                 builder: (context, snapshot) {
                   final pairedIds = {
-                    for (final peer in provider.peers) peer.deviceId,
+                    for (final peer in state.peers) peer.deviceId,
                   };
                   final devices = [
                     for (final device
                         in snapshot.data ?? const <SyncNearbyDevice>[])
-                      if (device.deviceId != provider.deviceId &&
+                      if (device.deviceId != state.deviceId &&
                           !pairedIds.contains(device.deviceId))
                         device,
                   ];
@@ -424,7 +427,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   /// ④ 同步内容 / 日志 / 高级设置（「同步什么」「发生了什么」与底层明细）。
   Widget _entriesSection(
     BuildContext context,
-    SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
   ) {
     return SettingsSectionCard(
@@ -433,14 +436,14 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           key: const Key('settingsSyncContentItem'),
           icon: Icons.tune_rounded,
           title: l10n.syncContentSection,
-          subtitle: _contentSubtitle(provider, l10n),
+          subtitle: _contentSubtitle(state, l10n),
           onTap: () => openSettingsSubPage(context, const SyncContentPage()),
         ),
         SettingsNavTile(
           key: const Key('settingsSyncLogItem'),
           icon: Icons.receipt_long_rounded,
           title: l10n.syncLogTitle,
-          subtitle: _logSubtitle(provider, l10n),
+          subtitle: _logSubtitle(state, l10n),
           onTap: () => openSettingsSubPage(context, const SyncLogPage()),
         ),
         // 高级：设备名 / 口令 / 地址与端口 / 地址簿。
@@ -457,28 +460,28 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
 
   /// 传输卡片 footer：五态结论 + 相对时间（如「未发现对端 · 3 分钟前」）；
   /// 未跑过任何一轮时只说「尚未同步」。
-  static String _statusSubtitle(SyncProvider provider, AppLocalizations l10n) {
-    final report = provider.lastReport;
+  static String _statusSubtitle(SyncUiState state, AppLocalizations l10n) {
+    final report = state.lastReport;
     if (report == null) return l10n.syncNever;
     final peersSeen = report.peersSeen;
     final conclusion = report.outcome == SyncOutcome.ok && peersSeen > 0
         ? l10n.syncStatusSyncedPeers(peersSeen)
         : syncOutcomeText(l10n, report.outcome);
-    return '$conclusion · ${syncRelativeTimeText(l10n, nowMs: provider.nowMs, atMs: report.finishedAt)}';
+    return '$conclusion · ${syncRelativeTimeText(l10n, nowMs: state.nowMs, atMs: report.finishedAt)}';
   }
 
   /// 内容入口副文案：全开只说「全部类别」，否则给关闭项数。
-  static String _contentSubtitle(SyncProvider provider, AppLocalizations l10n) {
-    final off = provider.categories.values.where((on) => !on).length;
+  static String _contentSubtitle(SyncUiState state, AppLocalizations l10n) {
+    final off = state.categories.values.where((on) => !on).length;
     return off == 0 ? l10n.syncContentAllOn : l10n.syncContentOffCount(off);
   }
 
   /// 日志入口副文案：最近一轮结论 + 时间；没有记录时说「暂无记录」。
-  static String _logSubtitle(SyncProvider provider, AppLocalizations l10n) {
-    final entries = provider.log;
+  static String _logSubtitle(SyncUiState state, AppLocalizations l10n) {
+    final entries = state.log;
     if (entries.isEmpty) return l10n.syncLogEmpty;
     final latest = entries.first;
-    return '${syncOutcomeText(l10n, latest.outcome)} · ${syncRelativeTimeText(l10n, nowMs: provider.nowMs, atMs: latest.at)}';
+    return '${syncOutcomeText(l10n, latest.outcome)} · ${syncRelativeTimeText(l10n, nowMs: state.nowMs, atMs: latest.at)}';
   }
 
   /// 传输副文案：只说状态词（运行中 / 已关闭 / 未配置 / 启动失败 / 缺少权限）。
@@ -489,19 +492,19 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   /// 不进首屏（日志子页的失败行里有）。
   static ({String text, Color? color}) _transportState(
     BuildContext context,
-    SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
-    String kind,
+    SyncTransportId id,
   ) {
-    final status = provider.transportStatus(kind);
-    if (status == null) {
+    final status = state.transports[id];
+    if (status == null || !status.configured) {
       return (text: l10n.syncTransportNotConfigured, color: null);
     }
     if (!status.enabled) {
       return (text: l10n.syncTransportDisabled, color: null);
     }
     final semantic = AppSemanticColors.of(context);
-    final state = switch (status.unavailableReason) {
+    final text = switch (status.unavailableReason) {
       SyncUnavailableReason.notConfigured => l10n.syncTransportNotConfigured,
       // 启动类失败只说「启动失败」；原因码细节在日志子页的失败弹层里。
       SyncUnavailableReason.startFailed => l10n.syncTransportStartFailed,
@@ -510,13 +513,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
       _ =>
         status.running ? l10n.syncTransportRunning : l10n.syncTransportStopped,
     };
-    final available = status.running && status.unavailableReason == null;
     return (
-      text: state,
-      color: available
-          ? (provider.transportLastSuccessAt(kind) > 0
-                ? semantic.success
-                : null)
+      text: text,
+      color: status.available
+          ? (status.lastSuccessAt > 0 ? semantic.success : null)
           : semantic.warning,
     );
   }
@@ -528,8 +528,8 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     AppLocalizations l10n,
     bool value,
   ) async {
-    final enabled = await provider.setTransportEnabled(
-      SyncTransportKind.lan,
+    final enabled = await provider.commands.setTransportEnabled(
+      SyncTransportId.lan,
       value,
     );
     if (enabled || !value || !context.mounted) return;
@@ -542,7 +542,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
     SyncProvider provider,
     AppLocalizations l10n,
   ) {
-    final permanent = provider.lanPermissionPermanentlyDenied;
+    final permanent = provider.state.lanPermissionPermanentlyDenied;
     showSyncNotice(
       context,
       l10n.syncLanPermissionNeeded,
@@ -552,7 +552,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
           : l10n.syncLanPermissionGrant,
       onAction: () => unawaited(
         permanent
-            ? provider.openSystemSettings()
+            ? provider.commands.openSystemSettings()
             : _setLanEnabled(context, provider, l10n, true),
       ),
     );
@@ -565,9 +565,10 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
   Widget _lanPermissionNotice(
     BuildContext context,
     SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
   ) {
-    final permanent = provider.lanPermissionPermanentlyDenied;
+    final permanent = state.lanPermissionPermanentlyDenied;
     final theme = Theme.of(context);
     return Padding(
       key: const Key('settingsSyncLanPermissionItem'),
@@ -593,7 +594,7 @@ class _SyncSettingsPageState extends State<SyncSettingsPage> {
             style: M3EButtonStyle.text,
             onPressed: () => unawaited(
               permanent
-                  ? provider.openSystemSettings()
+                  ? provider.commands.openSystemSettings()
                   : _setLanEnabled(context, provider, l10n, true),
             ),
             icon: const Icon(Icons.lock_open_rounded, size: 18),

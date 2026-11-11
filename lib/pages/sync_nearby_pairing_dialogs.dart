@@ -90,7 +90,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
   @override
   void initState() {
     super.initState();
-    _attempts = widget.provider.pairingAttempts.listen(_onAttempt);
+    _attempts = widget.provider.state.pairingAttempts.listen(_onAttempt);
     unawaited(_start());
   }
 
@@ -112,7 +112,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
   Future<void> _start() async {
     SyncPairingResult result;
     try {
-      result = await widget.provider.requestPairing(widget.device);
+      result = await widget.provider.commands.pairing.request(widget.device);
     } catch (_) {
       // 配对是可选子系统：请求抛异常也要给用户一个结论并收口弹层，
       // 不能停在「正在联系对方」让后台请求悬着。
@@ -127,7 +127,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     final message = _resultMessage(l10n, result.outcome);
     showSyncNoticeAndClose(context, message);
     if (result.isSuccess) {
-      unawaited(widget.provider.syncNow());
+      unawaited(widget.provider.commands.syncNow());
     }
   }
 
@@ -147,9 +147,9 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
     _finished = true;
     final id = _requestId;
     if (id != null) {
-      await widget.provider.cancelPairing(id);
+      await widget.provider.commands.pairing.cancel(id);
     } else {
-      _pendingCancel = widget.provider.pairingAttempts.listen(
+      _pendingCancel = widget.provider.state.pairingAttempts.listen(
         _cancelWhenIdArrives,
       );
       // 弹层马上关闭；把这条订阅移交给流收口，dispose 不再取消它。
@@ -163,7 +163,7 @@ class _NearbyPairingDialogState extends State<_NearbyPairingDialog> {
   void _cancelWhenIdArrives(SyncPairingAttempt attempt) {
     if (attempt.peerDeviceId != widget.device.deviceId) return;
     if (attempt.status != SyncPairingStatus.pending) return;
-    unawaited(widget.provider.cancelPairing(attempt.requestId));
+    unawaited(widget.provider.commands.pairing.cancel(attempt.requestId));
     unawaited(_pendingCancel?.cancel());
     _pendingCancel = null;
     _pendingCancelHandedOff = false;
@@ -265,7 +265,7 @@ Future<void> showSyncIncomingPairingDialog(
   final l10n = AppLocalizations.of(hostContext);
   if (l10n == null) {
     // 没有本地化 / 宿主 context 也必须给发起方一个结论，不能悬着。
-    await provider.respondPairing(request.requestId, accept: false);
+    await provider.commands.pairing.respond(request.requestId, accept: false);
     return;
   }
   await M3EDialog.show<void>(
@@ -310,7 +310,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
   @override
   void initState() {
     super.initState();
-    final remaining = _request.expiresAt - widget.provider.nowMs;
+    final remaining = _request.expiresAt - widget.provider.state.nowMs;
     _expiry = Timer(
       Duration(milliseconds: remaining > 0 ? remaining : 0),
       () => unawaited(_onExpired()),
@@ -330,7 +330,10 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
     // 释放服务里的 active prompt（对已过期条目是幂等的），否则服务端可能
     // 仍占着唯一的待确认槽位，后续请求要等它自己的定时器才推进。
     try {
-      await widget.provider.respondPairing(_request.requestId, accept: false);
+      await widget.provider.commands.pairing.respond(
+        _request.requestId,
+        accept: false,
+      );
     } catch (_) {
       // 过期收口不因服务异常卡住弹层。
     }
@@ -346,7 +349,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
     });
     SyncPairingOutcome outcome;
     try {
-      outcome = await widget.provider.respondPairing(
+      outcome = await widget.provider.commands.pairing.respond(
         _request.requestId,
         accept: accept,
       );
@@ -371,7 +374,7 @@ class _IncomingPairingDialogState extends State<_IncomingPairingDialog> {
     showSyncNoticeAndClose(context, message);
     if (outcome == SyncPairingOutcome.accepted ||
         outcome == SyncPairingOutcome.sameGroup) {
-      unawaited(widget.provider.syncNow());
+      unawaited(widget.provider.commands.syncNow());
     }
   }
 
