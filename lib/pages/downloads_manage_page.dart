@@ -15,12 +15,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
-import '../domain/models/failure.dart';
 import '../domain/models/library.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/library_provider.dart';
 import '../providers/playback_provider.dart';
+import '../services/download/download_intent.dart';
 import '../services/download/download_maintenance.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_queue.dart';
@@ -93,7 +93,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
                           .read<PlaybackProvider>()
                           .snapshot
                           .queue;
-                      unawaited(_batchDownload(downloads, queue));
+                      unawaited(_batchDownload(queue));
                     },
             ),
             SettingsNavTile(
@@ -323,20 +323,17 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
   }
 
   /// 批量下载：省流确认 → 一次性入队 → 立即提示；页面不锁。
-  Future<void> _batchDownload(
-    DownloadManager downloads,
-    List<Track> queue,
-  ) async {
+  ///
+  /// 候选过滤（本地 / 已下载 / 进行中 / 重复）由意图层的 `startBatch` 转交
+  /// 下载服务唯一实现，页面不再先算一遍候选。
+  Future<void> _batchDownload(List<Track> queue) async {
     final l10n = AppLocalizations.of(context)!;
-    final candidates = downloads.batchCandidates(queue);
-    if (candidates.isEmpty) {
-      _showMessage(l10n.downloadsNothingToAdd);
-      return;
-    }
+    final launcher = context.read<DownloadLauncher?>();
+    if (launcher == null) return;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     try {
-      final (done, failed) = await downloads.downloadBatch(
-        [for (final candidate in candidates) candidate.track],
+      final result = await launcher.startBatch(
+        queue,
         onEnqueued: (enqueued) {
           if (!mounted) return;
           _showMessage(
@@ -346,13 +343,13 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
           );
         },
       );
+      // 没有候选时 onEnqueued 已提示过，不再补一条「0 成功 0 失败」。
+      if (!mounted || result.enqueued == 0) return;
+      _showMessage(l10n.downloadsBatchDone(result.done, result.failed));
+    } catch (error) {
       if (!mounted) return;
-      _showMessage(l10n.downloadsBatchDone(done, failed));
-    } on SourceFailure catch (failure) {
-      if (!mounted || failure.kind == FailureKind.cancelled) return;
-      _showMessage(downloadFailureLabel(l10n, failure));
-    } catch (_) {
-      if (mounted) _showMessage(l10n.downloadFailed(''));
+      final message = downloadFailureMessage(l10n, error);
+      if (message != null) _showMessage(message);
     }
   }
 
@@ -405,7 +402,7 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     final domainTracks = [
       for (final track in tracks) library.trackFromPlaylistTrack(track),
     ];
-    await _batchDownload(downloads, domainTracks);
+    await _batchDownload(domainTracks);
   }
 
   /// 重试单条失败任务（失败再次落回失败区，并提示原因）。
@@ -417,14 +414,10 @@ class _DownloadsManagePageState extends State<DownloadsManagePage> {
     final l10n = AppLocalizations.of(context)!;
     try {
       await downloads.retryTask(task);
-    } on SourceFailure catch (failure) {
-      if (!notifyFailure || !mounted || failure.kind == FailureKind.cancelled) {
-        return;
-      }
-      _showMessage(downloadFailureLabel(l10n, failure));
-    } catch (_) {
+    } catch (error) {
       if (!notifyFailure || !mounted) return;
-      _showMessage(l10n.downloadFailed(''));
+      final message = downloadFailureMessage(l10n, error);
+      if (message != null) _showMessage(message);
     }
   }
 

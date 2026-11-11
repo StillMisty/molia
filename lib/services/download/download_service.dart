@@ -44,8 +44,12 @@
 /// - 记录写入：`download_record_store.dart`（drift 行 + 内存记录 + marker
 ///   三步的唯一写入顺序）；
 /// - 通知 presenter：`download_notification_presenter.dart`（id 分配 / 批量
-///   共享一条 / 系统频率节流 / 收尾不残留；端口由组合根注入）。
+///   共享一条 / 系统频率节流 / 收尾不残留；端口由组合根注入）；
+/// - 下载意图：`download_intent.dart`（单曲 / 批量的资格判定、默认音质与
+///   类型化结果入口；曲目菜单 / 分享 / 本地数据页 / 管理页共用）。
 library;
+
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -71,6 +75,7 @@ import '../covers/cover_bytes_downloader.dart';
 import '../covers/cover_resolution.dart';
 import '../../sources/source_track.dart' show pickQualityFor;
 import 'download_file_layout.dart';
+import 'download_intent.dart';
 import 'download_journal.dart';
 import 'download_maintenance.dart';
 import 'download_manager.dart';
@@ -388,12 +393,14 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
     final candidates = <({int index, Track track})>[];
     for (var index = 0; index < items.length; index++) {
       final track = items[index];
-      if (track.id.sourceKey == kLocalSourceKey) continue;
-      if (_recordStore.records.recordForTrack(track)?.hasAudio ?? false) {
-        continue;
-      }
-      // active 任务不 join 批次：与页面「已加入数」口径一致。
-      if (taskForTrack(track)?.isActive ?? false) continue;
+      // 资格判定与单曲意图共用同一实现（本地 / 已下载 / 进行中）。
+      final status = downloadIntentStatusOf(
+        track,
+        records: _recordStore.records,
+        supported: supported,
+        task: taskForTrack(track),
+      );
+      if (status != DownloadIntentStatus.ready) continue;
       if (!seen.add(track.id.uri)) continue;
       candidates.add((index: index, track: track));
     }
@@ -577,18 +584,46 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
     bool includeLyrics = true,
     bool includeCover = true,
   }) async {
-    await _ensureReady();
-    _guardDownloadable(track);
-    final existing = _recordStore.records.recordFor(
-      track.id.sourceKey,
-      track.id.id,
+    final task = await enqueueDownload(
+      track,
+      quality: quality,
+      includeLyrics: includeLyrics,
+      includeCover: includeCover,
     );
-    if (existing?.hasAudio ?? false) {
-      throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '该曲目已下载',
-        l10nKey: 'downloadAlreadyExists',
-      );
+    await task.done;
+  }
+
+  /// 入队音频下载并立即返回任务对象（意图层据此渲染「已开始」）。
+  ///
+  /// 资格判定与 `DownloadLauncher` 共用 [downloadIntentStatusOf]：本地 /
+  /// 已下载在这里再兜一次底（调用方可能绕过意图层），不重复维护规则。
+  @override
+  Future<DownloadTask> enqueueDownload(
+    Track track, {
+    String? quality,
+    bool includeLyrics = true,
+    bool includeCover = true,
+  }) async {
+    await _ensureReady();
+    // supported 不在这里判：根目录可能在初始化后失效，统一由 _requireRoot
+    // 给出与旧行为一致的 downloadUnsupported。
+    final status = downloadIntentStatusOf(
+      track,
+      records: _recordStore.records,
+      supported: true,
+    );
+    switch (status) {
+      case DownloadIntentStatus.unsupported:
+        throw downloadLocalTrackFailure;
+      case DownloadIntentStatus.alreadyDownloaded:
+        throw const SourceFailure(
+          kind: FailureKind.unsupported,
+          message: '该曲目已下载',
+          l10nKey: 'downloadAlreadyExists',
+        );
+      case DownloadIntentStatus.ready:
+      case DownloadIntentStatus.active:
+        break;
     }
     await _requireRoot();
     final task = DownloadTask(
@@ -598,7 +633,11 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
       includeLyrics: includeLyrics,
       includeCover: includeCover,
     );
-    return _queue.enqueue(task);
+    // 已有同 key 活动任务时队列返回它的 future；入队已同步完成，先挂一个
+    // ignore 监听，避免调用方只拿任务对象、晚些才 await 时出现未处理错误。
+    _queue.enqueue(task).ignore();
+    // 队列可能因同 key 活动任务而保留旧任务：返回真正在队列里的那个。
+    return _queue.taskFor(task.key) ?? task;
   }
 
   /// 单独下载歌词（缓存优先）；无歌词抛 `downloadNoLyrics`。
@@ -1082,24 +1121,15 @@ class DownloadService extends DownloadManager implements DownloadMaintenance {
   }
 
   void _guardDownloadable(Track track) {
-    if (track.id.sourceKey == kLocalSourceKey) {
-      throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '本地曲目无需下载',
-        l10nKey: 'downloadLocalTrack',
-      );
+    if (track.id.sourceKey == kLocalSourceKey ||
+        track.origin == TrackOrigin.localFile) {
+      throw downloadLocalTrackFailure;
     }
   }
 
   Future<String> _requireRoot() async {
     final root = await _storage.downloadsRoot();
-    if (root == null) {
-      throw const SourceFailure(
-        kind: FailureKind.unsupported,
-        message: '当前平台不支持下载',
-        l10nKey: 'downloadUnsupported',
-      );
-    }
+    if (root == null) throw downloadUnsupportedFailure;
     return root;
   }
 

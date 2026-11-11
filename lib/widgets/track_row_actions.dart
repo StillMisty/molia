@@ -11,16 +11,13 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/download.dart' show kLocalSourceKey;
-import '../domain/models/failure.dart';
 import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/comments_provider.dart';
 import '../providers/playback_provider.dart';
-import '../services/download/download_manager.dart';
-import '../services/download/download_records.dart';
+import '../services/download/download_intent.dart';
 import '../utils/download_failure_label.dart';
 import 'download_data_saver_guard.dart';
 import 'row_actions.dart';
@@ -57,18 +54,12 @@ List<RowAction> trackCommonActions(
     }
   }
 
-  final downloads = context.read<DownloadManager?>();
-  final downloadSupported = context.select<DownloadManager?, bool>(
-    (manager) => manager?.supported ?? false,
+  // 入口可见性也由意图层给出：本地 / 已下载 / 进行中统一隐藏，UI 不再
+  // 分别读 supported / DownloadRecords / DownloadTask。
+  final canDownload = context.select<DownloadLauncher?, bool>(
+    (launcher) => launcher?.statusOf(track) == DownloadIntentStatus.ready,
   );
-  final downloaded = context.select<DownloadRecords?, bool>(
-    (records) => records?.recordForTrack(track)?.hasAudio ?? false,
-  );
-  final isLocal =
-      track.id.sourceKey == kLocalSourceKey ||
-      track.origin == TrackOrigin.localFile;
-  final hasActiveTask = downloads?.taskForTrack(track)?.isActive ?? false;
-  if (downloadSupported && !isLocal && !downloaded && !hasActiveTask) {
+  if (canDownload) {
     actions.add(
       RowAction(
         icon: Icons.download_rounded,
@@ -155,43 +146,49 @@ Future<void> _enqueueTrack(BuildContext context, Track track) async {
 /// 直接按默认音质下载：保留省流确认，成功 / 失败都有回执。
 ///
 /// 与本地数据页不同，菜单入口不跳页：入队后立即确认一句，失败在任务结束时
-/// 补提示。`download` 的 Future 挂在 unawaited 外层时必须自行 catch，
-/// 否则失败任务会变成未处理异步错误（DownloadTask.done 以错误完成）。
+/// 补提示。`DownloadTask.done` 挂在 unawaited 外层时必须自行 catch，
+/// 否则失败任务会变成未处理异步错误。
 Future<void> _downloadTrack(BuildContext context, Track track) async {
-  final downloads = context.read<DownloadManager?>();
-  if (downloads == null || !downloads.supported) return;
+  final launcher = context.read<DownloadLauncher?>();
+  if (launcher == null) return;
   final l10n = _l10n(context);
   if (!await confirmDownloadOnDataSaver(context)) return;
   if (!context.mounted) return;
-  final already =
-      context.read<DownloadRecords?>()?.recordForTrack(track)?.hasAudio ??
-      false;
-  if (already) {
-    M3ESnackbar.show(context, message: l10n.downloadAlreadyExists);
-    return;
-  }
-  if (downloads.taskForTrack(track)?.isActive ?? false) {
-    M3ESnackbar.show(context, message: l10n.downloadStatusDownloading);
-    return;
-  }
-  final quality = downloads.defaultQualityFor(track);
+  final DownloadStartResult result;
   try {
-    final task = downloads.download(
-      track,
-      quality: quality.isEmpty ? null : quality,
-      includeLyrics: true,
-      includeCover: true,
-    );
-    if (context.mounted) {
-      M3ESnackbar.show(context, message: l10n.downloadStarted);
+    result = await launcher.start(track);
+  } catch (error) {
+    final message = downloadFailureMessage(l10n, error);
+    if (message != null && context.mounted) {
+      M3ESnackbar.show(context, message: message);
     }
-    await task;
-  } on SourceFailure catch (failure) {
-    if (!context.mounted || failure.kind == FailureKind.cancelled) return;
-    M3ESnackbar.show(context, message: downloadFailureLabel(l10n, failure));
-  } catch (e) {
-    if (context.mounted) {
-      M3ESnackbar.show(context, message: l10n.downloadFailed(e.toString()));
-    }
+    return;
+  }
+  switch (result) {
+    case DownloadStarted(:final task):
+      if (context.mounted) {
+        M3ESnackbar.show(context, message: l10n.downloadStarted);
+      }
+      try {
+        await task.done;
+      } catch (error) {
+        if (!context.mounted) return;
+        final message = downloadFailureMessage(l10n, error);
+        if (message != null) {
+          M3ESnackbar.show(context, message: message);
+        }
+      }
+    case DownloadAlreadyDownloaded():
+      if (context.mounted) {
+        M3ESnackbar.show(context, message: l10n.downloadAlreadyExists);
+      }
+    case DownloadAlreadyActive():
+      if (context.mounted) {
+        M3ESnackbar.show(context, message: l10n.downloadStatusDownloading);
+      }
+    case DownloadUnsupported(:final reason):
+      if (context.mounted) {
+        M3ESnackbar.show(context, message: downloadFailureLabel(l10n, reason));
+      }
   }
 }
