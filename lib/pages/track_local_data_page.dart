@@ -21,11 +21,11 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../domain/models/download.dart';
-import '../domain/models/failure.dart';
 import '../domain/models/track.dart';
 import '../l10n/app_localizations.dart';
 import '../services/audio_cache_platform.dart';
 import '../services/cache_service.dart';
+import '../services/download/download_intent.dart';
 import '../services/download/download_manager.dart';
 import '../services/download/download_queue.dart';
 import '../services/download/download_records.dart';
@@ -185,17 +185,15 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
   /// 只入队，不占用整页 `_busy`：任务进度经 [DownloadTask] 单独更新，页面
   /// 在排队 / 下载期间仍可操作。省流生效时先确认。
   Future<void> _downloadAudio() async {
-    final downloads = _downloads;
-    if (downloads == null) return;
+    final launcher = context.read<DownloadLauncher?>();
+    if (launcher == null) return;
     final l10n = AppLocalizations.of(context)!;
     if (!await confirmDownloadOnDataSaver(context) || !mounted) return;
     final quality = _selectedQualityFor(_controller?.value.data);
-    await _runDownload(
-      () => downloads.download(
+    await _runDownloadIntent(
+      () => launcher.start(
         widget.track,
         quality: quality.isEmpty ? null : quality,
-        includeLyrics: true,
-        includeCover: true,
       ),
       done: l10n.downloadCompleted,
     );
@@ -227,11 +225,53 @@ class _TrackLocalDataPageState extends State<TrackLocalDataPage> {
       if (!mounted) return;
       _showMessage(done);
       await _controller?.refreshNow();
-    } on SourceFailure catch (failure) {
-      if (!mounted || failure.kind == FailureKind.cancelled) return;
-      _showMessage(downloadFailureLabel(l10n, failure));
-    } catch (e) {
-      if (mounted) _showMessage(l10n.downloadFailed(e.toString()));
+    } catch (error) {
+      if (!mounted) return;
+      final message = downloadFailureMessage(l10n, error);
+      if (message != null) _showMessage(message);
+    }
+  }
+
+  /// 下载意图 → 页面回执：开始后等任务结束，已下载 / 进行中 / 不支持按
+  /// 类型化结果各给一句，不再在这里判断资格或翻译异常。
+  Future<void> _runDownloadIntent(
+    Future<DownloadStartResult> Function() action, {
+    required String done,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
+    HapticsService.lightImpact();
+    final DownloadStartResult result;
+    try {
+      result = await action();
+    } catch (error) {
+      if (!mounted) return;
+      final message = downloadFailureMessage(l10n, error);
+      if (message != null) _showMessage(message);
+      return;
+    }
+    switch (result) {
+      case DownloadStarted(:final task):
+        try {
+          await task.done;
+        } catch (error) {
+          if (!mounted) return;
+          final message = downloadFailureMessage(l10n, error);
+          if (message != null) _showMessage(message);
+          return;
+        }
+        if (!mounted) return;
+        _showMessage(done);
+        await _controller?.refreshNow();
+      case DownloadAlreadyDownloaded():
+        if (!mounted) return;
+        _showMessage(l10n.downloadAlreadyExists);
+        await _controller?.refreshNow();
+      case DownloadAlreadyActive():
+        if (!mounted) return;
+        _showMessage(l10n.downloadStatusDownloading);
+      case DownloadUnsupported(:final reason):
+        if (!mounted) return;
+        _showMessage(downloadFailureLabel(l10n, reason));
     }
   }
 

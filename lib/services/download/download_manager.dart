@@ -54,8 +54,19 @@ abstract class DownloadManager extends ChangeNotifier {
   /// 取消当前曲目的下载（排队或运行中）。
   void cancelTrack(Track track);
 
-  /// 下载音频（可同时带离线歌词 / 封面）。
+  /// 下载音频（可同时带离线歌词 / 封面），完成后 Future 才结束。
   Future<void> download(
+    Track track, {
+    String? quality,
+    bool includeLyrics = true,
+    bool includeCover = true,
+  });
+
+  /// 入队音频下载并立即返回任务对象（不等待任务完成）。
+  ///
+  /// 下载意图层用它拿 `DownloadStarted(task)`；[download] 是「入队并等完成」
+  /// 的便捷形态。已有同 key 活动任务时返回队列里的那个任务。
+  Future<DownloadTask> enqueueDownload(
     Track track, {
     String? quality,
     bool includeLyrics = true,
