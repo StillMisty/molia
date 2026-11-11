@@ -32,9 +32,7 @@ class PlayStatisticsService {
     required this._repository,
     required this._settings,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now {
-    _settings.bindReload(kPlayStatisticsEnabled, reloadFromPreferences);
-  }
+  }) : _clock = clock ?? DateTime.now;
 
   /// 正常前进的单次 tick 最大计入时长；更大的位置跳变视为 seek，不计入。
   static const Duration maxCountedDelta = Duration(seconds: 2);

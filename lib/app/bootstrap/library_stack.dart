@@ -13,6 +13,7 @@ import '../../data/library_repository.dart';
 import '../../data/molia_database.dart';
 import '../../data/play_statistics_repository.dart';
 import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_module.dart';
 import '../../data/settings/settings_registry.dart';
 import '../../data/sync/statistics_sync_store.dart';
 import '../../data/sync/sync_journal.dart';
@@ -65,9 +66,14 @@ Future<LibraryStack> buildLibraryStack({
   );
   // 加入收藏 / 列表的位置偏好（默认放开头）：写入网关按它取新曲目的排序位，
   // 设置页读写同一实例（跟人走，随设置同步）。
-  final libraryAddSettings = LibraryAddSettings(
-    settings: catalog.settings.scope([kLibraryAddPosition]),
+  late final LibraryAddSettings libraryAddSettings;
+  final libraryAddScope = catalog.settings.mount(
+    SettingsModule(
+      keys: [kLibraryAddPosition],
+      reload: () => libraryAddSettings.init(),
+    ),
   );
+  libraryAddSettings = LibraryAddSettings(settings: libraryAddScope);
   // 资料库仓库：播放历史 / 我的列表 / 收藏；播放开始时由播放观察者写历史，
   // 资料库页经 LibraryProvider 读取（内存缓存）。版本戳与内容时间分开注入
   // （发号器唯一、时钟管内容时间；见 ADR-0003 v2 §2）。
@@ -101,15 +107,27 @@ Future<LibraryStack> buildLibraryStack({
     statisticsSync: statisticsSyncStore,
     beforeWrite: () => syncState.stampSeedReady,
   );
-  final playStatisticsService = PlayStatisticsService(
+  late final PlayStatisticsService playStatisticsService;
+  final statisticsScope = catalog.settings.mount(
+    SettingsModule(
+      keys: [kPlayStatisticsEnabled],
+      reload: () => playStatisticsService.reloadFromPreferences(),
+    ),
+  );
+  playStatisticsService = PlayStatisticsService(
     repository: playStatisticsRepository,
-    settings: catalog.settings.scope([kPlayStatisticsEnabled]),
+    settings: statisticsScope,
   );
   // 换源偏好（自动换源开关，默认开）与自动换源解析服务：
   // 播放失败同源重试仍失败时，经注入的 resolver 跨音源严格找回并替换。
-  final sourceSwapSettings = SourceSwapSettings(
-    settings: catalog.settings.scope([kSourceSwapAutoEnabled]),
+  late final SourceSwapSettings sourceSwapSettings;
+  final sourceSwapScope = catalog.settings.mount(
+    SettingsModule(
+      keys: [kSourceSwapAutoEnabled],
+      reload: () => sourceSwapSettings.init(),
+    ),
   );
+  sourceSwapSettings = SourceSwapSettings(settings: sourceSwapScope);
   // 统计服务 init / 换源偏好 init / 加入位置偏好 init 互不依赖：并行执行。
   // 全库最大戳查询要打开 drift 库（含迁移），不参与首帧内容，后移到
   // `startLibraryAfterFirstFrame`。写入方经 `beforeWrite` 等 `stampSeedReady`，

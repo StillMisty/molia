@@ -146,7 +146,7 @@ class ShortcutSettings extends ChangeNotifier {
     }
   }
 
-  /// 同步应用远端设置后的重载（组合根 `bindReload` 的钩子）。
+  /// 同步应用远端设置后的重载（组合根 mount 时绑定的钩子）。
   static Future<void> reload() => load();
 
   /// 软件内快捷键总开关（默认开）。

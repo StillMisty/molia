@@ -23,11 +23,6 @@ typedef _NavLayout = ({
 /// 底部导航定制：顺序 + 显示/隐藏 + 启动首页，SharedPreferences 持久化。
 class NavProvider extends ChangeNotifier {
   NavProvider({required this._settings}) {
-    _settings.bindReload(kShellNavLayout, reloadFromPreferences);
-    // 旧键仍绑定重载：只在没有新布局时兜底读取，绑定保证远端旧值也能生效。
-    _settings.bindReload(kShellNavOrder, reloadFromPreferences);
-    _settings.bindReload(kShellNavHidden, reloadFromPreferences);
-    _settings.bindReload(kShellHomeDestination, reloadFromPreferences);
     _preferencesReady = _loadPreferences();
   }
 

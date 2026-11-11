@@ -340,7 +340,4 @@ class _RecordingSettingsAccess implements SettingsAccess {
   Future<void> clear(SettingsKey<Object?> key) async {
     values.remove(key.name);
   }
-
-  @override
-  void bindReload(SettingsKey<Object?> key, Future<void> Function() reload) {}
 }

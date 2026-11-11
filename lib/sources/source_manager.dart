@@ -5,7 +5,6 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../data/settings/settings_access.dart';
-import '../data/settings/settings_keys.dart';
 import 'any_listen/any_listen_config.dart';
 import 'any_listen/any_listen_errors.dart';
 import 'any_listen/any_listen_source.dart';
@@ -78,11 +77,6 @@ class SourceManager extends ChangeNotifier {
       _anyListenSource = AnyListenSource(settings: settings) {
     _preferences = SourcePreferences(_settings)..addListener(notifyListeners);
     _engine.onStateChanged = _onEngineStateChanged;
-    // 应用远端设置后的定向重载：渠道偏好（自绑于 SourcePreferences）/
-    // any-listen 连接。
-    _settings.bindReload(kAnyListenServerUrl, reloadAnyListenConfig);
-    _settings.bindReload(kAnyListenToken, reloadAnyListenConfig);
-    _settings.bindReload(kAnyListenEnabled, reloadAnyListenConfig);
   }
 
   bool _initialized = false;
@@ -196,7 +190,7 @@ class SourceManager extends ChangeNotifier {
   }
 
   /// 重新读取渠道偏好（顺序 / 停用 / 音质）。跨设备同步应用远端设置后由
-  /// 组合根经 [SettingsRegistry.bindReload] 触发；先重置为默认再加载，
+  /// 组合根挂载的 reload 触发；先重置为默认再加载，
   /// 保证远端「清空」也能生效。状态与重载实现见 [SourcePreferences]。
   Future<void> reloadPreferences() => _preferences.reload();
 

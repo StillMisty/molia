@@ -18,6 +18,7 @@ import '../../providers/theme_provider.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/playback_power_policy.dart';
 import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_module.dart';
 import '../../services/artwork_palette_seed_store.dart';
 import '../../services/artwork_palette_service.dart';
 import '../../services/covers/custom_cover_store.dart';
@@ -61,24 +62,37 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
 }) async {
   final covers = customCovers.resolution;
   // 主题实例提前创建：封面覆盖 / 桌面歌词「跟随主题」「跟随封面」的颜色
-  // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键。
-  final themeSettings = catalog.settings.scope([
-    kThemeMode,
-    kColorBase,
-    kFollowArtworkEnabled,
-    kPureBlackEnabled,
-    kSeedColor,
-  ]);
-  final themeProvider = ThemeProvider(settings: themeSettings);
+  // 都从 ThemeProvider 取（取色链路在下方接线）。作用域 = 主题自己的 5 个键，
+  // 一次挂载同时绑定「远端应用后整表重读」。
+  late final ThemeProvider themeProvider;
+  final themeSettings = catalog.settings.mount(
+    SettingsModule(
+      keys: [
+        kThemeMode,
+        kColorBase,
+        kFollowArtworkEnabled,
+        kPureBlackEnabled,
+        kSeedColor,
+      ],
+      reload: () => themeProvider.reloadFromPreferences(),
+    ),
+  );
+  themeProvider = ThemeProvider(settings: themeSettings);
   // 导航偏好提前创建：跨设备同步应用远端设置后需要定向重载。
-  final navSettings = catalog.settings.scope([
-    kShellNavLayout,
-    // 旧键只读兜底：升级后首次启动仍能恢复导航定制，下次编辑写新键。
-    kShellNavOrder,
-    kShellNavHidden,
-    kShellHomeDestination,
-  ]);
-  final navProvider = NavProvider(settings: navSettings);
+  late final NavProvider navProvider;
+  final navSettings = catalog.settings.mount(
+    SettingsModule(
+      keys: [
+        kShellNavLayout,
+        // 旧键只读兜底：升级后首次启动仍能恢复导航定制，下次编辑写新键。
+        kShellNavOrder,
+        kShellNavHidden,
+        kShellHomeDestination,
+      ],
+      reload: () => navProvider.reloadFromPreferences(),
+    ),
+  );
+  navProvider = NavProvider(settings: navSettings);
   // 封面取色服务：全局主题、桌面歌词、海报共用的唯一取色入口。
   // seed 持久化按封面内容身份（URL + 文件大小 + 修改时间），设备本地派生
   // 缓存，不参与同步；启动命中时不必再解码封面。
@@ -94,9 +108,14 @@ Future<LyricsDisplayStack> buildLyricsDisplayStack({
   );
   // 歌词显示（桌面歌词 / 通知·锁屏 / 蓝牙）：配置 + 输出 + 调度。
   // 输出端能力由平台决定；媒体输出依赖系统媒体会话（audioHandler）。
-  final lyricsDisplaySettings = LyricsDisplaySettings(
-    settings: catalog.settings.scope([kLyricsDisplaySettings]),
+  late final LyricsDisplaySettings lyricsDisplaySettings;
+  final lyricsSettingsScope = catalog.settings.mount(
+    SettingsModule(
+      keys: [kLyricsDisplaySettings],
+      reload: () => lyricsDisplaySettings.init(),
+    ),
   );
+  lyricsDisplaySettings = LyricsDisplaySettings(settings: lyricsSettingsScope);
   await lyricsDisplaySettings.init();
   // 桌面歌词是否可能展示 = 平台支持 ∩ 用户开启（未授予悬浮窗权限也算：
   // 最多多付一次 5Hz 采样，换授权后歌词 / 颜色不必等下一次切换）。

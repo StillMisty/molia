@@ -13,6 +13,7 @@ import '../../data/catalog/catalog_service.dart';
 import '../../data/catalog/comments_service.dart';
 import '../../data/catalog/source_registry_impl.dart';
 import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_module.dart';
 import '../../data/settings/settings_registry.dart';
 import '../../domain/ports/source_registry.dart';
 import '../../services/app_branding_service.dart';
@@ -43,51 +44,75 @@ CatalogStack buildCatalogStack() {
   // 设置注册表（登记键的唯一家）：读 / 写 / 同步往返 / 应用远端后的 reload
   // 钩子都走它；键的声明见 data/settings/settings_keys.dart。
   final settingsRegistry = SettingsRegistry(keys: kAllSettingsKeys);
+  // 每个模块一次 mount：作用域键 + 应用远端值后的 reload 同屋；漏绑 reload
+  // 会在 SettingsModule 构造时直接失败（见 data/settings/settings_module.dart）。
+  //
   // 全静态服务（语言 / 品牌名 / 快捷键）：attach 注入按键作用域，模块面
-  // 拿不到整表；reload 由组合根在完整注册表上代绑。
-  LanguageService.attachSettings(settingsRegistry.scope([kSelectedLanguage]));
-  AppBrandingService.attachSettings(settingsRegistry.scope([kAppDisplayTitle]));
+  // 拿不到整表。
+  final languageSettings = settingsRegistry.mount(
+    SettingsModule(
+      keys: [kSelectedLanguage],
+      reload: LanguageService.reloadFromPreferences,
+    ),
+  );
+  LanguageService.attachSettings(languageSettings);
+  final brandingSettings = settingsRegistry.mount(
+    SettingsModule(keys: [kAppDisplayTitle], reload: AppBrandingService.load),
+  );
+  AppBrandingService.attachSettings(brandingSettings);
   // 快捷键：attach 顺带触发一次异步载入；四个键任一被远端同步改写都整表重读
   // （reload 幂等，重复绑定同一钩子只执行一次）。
-  final shortcutSettingsScope = settingsRegistry.scope([
-    kShortcutsEnabled,
-    kGlobalShortcutsEnabled,
-    kShortcutBindings,
-    kGlobalShortcutBindings,
-  ]);
-  ShortcutSettings.attachSettings(shortcutSettingsScope);
-  settingsRegistry.bindReload(
-    kSelectedLanguage,
-    LanguageService.reloadFromPreferences,
+  final shortcutSettings = settingsRegistry.mount(
+    SettingsModule(
+      keys: [
+        kShortcutsEnabled,
+        kGlobalShortcutsEnabled,
+        kShortcutBindings,
+        kGlobalShortcutBindings,
+      ],
+      reload: ShortcutSettings.reload,
+    ),
   );
-  settingsRegistry.bindReload(kAppDisplayTitle, AppBrandingService.load);
-  settingsRegistry.bindReload(kShortcutsEnabled, ShortcutSettings.reload);
-  settingsRegistry.bindReload(kGlobalShortcutsEnabled, ShortcutSettings.reload);
-  settingsRegistry.bindReload(kShortcutBindings, ShortcutSettings.reload);
-  settingsRegistry.bindReload(kGlobalShortcutBindings, ShortcutSettings.reload);
+  ShortcutSettings.attachSettings(shortcutSettings);
 
   // B 站账号：凭据是凭证类别（默认随同步 / 备份），初始化放后台，取词链路
   // 会 await `BiliSession.ready`，不阻塞首帧。
-  final biliAccount = BiliAccountService(
-    settings: settingsRegistry.scope([kBiliAccountCookie]),
+  late final BiliAccountService biliAccount;
+  final biliSettings = settingsRegistry.mount(
+    SettingsModule(
+      keys: [kBiliAccountCookie],
+      reload: () => biliAccount.reloadFromSettings(),
+    ),
   );
-  settingsRegistry.bindReload(
-    kBiliAccountCookie,
-    biliAccount.reloadFromSettings,
-  );
+  biliAccount = BiliAccountService(settings: biliSettings);
   unawaited(biliAccount.init());
 
-  // 音源管理器的按键作用域：any-listen 连接 3 键 + 渠道偏好 3 键
-  // （SourcePreferences 在管理器的通知下自绑重载）。
-  final sourceSettings = settingsRegistry.scope([
-    kAnyListenServerUrl,
-    kAnyListenToken,
-    kAnyListenEnabled,
-    kLxDefaultQuality,
-    kLxSourceOrder,
-    kLxChannelDisabled,
-  ]);
-  final sourceManager = SourceManager(settings: sourceSettings);
+  // 音源管理器的按键作用域：any-listen 连接 3 键 + 渠道偏好 3 键。两组
+  // 重载路径不同（连接配置回读 / 渠道偏好整表重读），但同属一个挂载点。
+  late final SourceManager sourceManager;
+  final sourceSettings = settingsRegistry.mount(
+    SettingsModule.withReloads(
+      keys: [
+        kAnyListenServerUrl,
+        kAnyListenToken,
+        kAnyListenEnabled,
+        kLxDefaultQuality,
+        kLxSourceOrder,
+        kLxChannelDisabled,
+      ],
+      reloads: [
+        (
+          keys: [kAnyListenServerUrl, kAnyListenToken, kAnyListenEnabled],
+          reload: () => sourceManager.reloadAnyListenConfig(),
+        ),
+        (
+          keys: [kLxDefaultQuality, kLxSourceOrder, kLxChannelDisabled],
+          reload: () => sourceManager.reloadPreferences(),
+        ),
+      ],
+    ),
+  );
+  sourceManager = SourceManager(settings: sourceSettings);
 
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。

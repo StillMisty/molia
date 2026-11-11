@@ -4,41 +4,40 @@ import 'package:crypto/crypto.dart';
 
 import '../../../domain/models/device_sync.dart';
 import '../../settings/settings_key.dart';
-import '../../settings/settings_registry.dart';
+import '../../settings/settings_sync_surface.dart';
 import '../sync_adapter.dart';
 import '../sync_book.dart';
 import '../sync_journal.dart';
 import '../sync_stamp.dart';
 
-/// 设置 / 音源配置 / 凭证适配器（键规格与读写都在 [SettingsRegistry]）。
+/// 设置 / 音源配置 / 凭证适配器（键规格与读写都在 [SettingsSyncSurface]）。
 ///
 /// 变化检测用「登记哈希」：每次 collect 对比当前值与上轮登记的哈希，不同则视为
 /// 本地修改（向唯一发号器取版本戳）；应用远端后同步更新登记，保证重复应用
 /// 幂等。类别开关由引擎过滤，本适配器始终登记全部键（关闭期间也持续跟踪本地
 /// 变化，重新开启后可直接参与合并）。
+///
+/// 只依赖同步窄接口：整张登记表、本地写入钩子与本地写方法都不下放，单测可用
+/// fake surface 覆盖应用与重载时序。
 class PrefsSyncAdapter implements SyncAdapter {
   PrefsSyncAdapter({
     required this._state,
-    required SettingsRegistry settings,
+    required SettingsSyncSurface settings,
     this._journal,
-    this.onApplied,
   }) : _settings = settings,
-       _byName = {for (final key in settings.keys) key.name: key};
+       _byName = {for (final key in settings.entries) key.name: key};
 
   final SyncStampLedger _state;
-  final SettingsRegistry _settings;
+  final SettingsSyncSurface _settings;
 
   /// 增量日志（可选）：登记哈希发现本地修改时追加，对端按游标只拉变更。
   /// 首次登记（进程首次见到该键）不算变更——初始视图由全量快照覆盖。
   final SyncJournalAppender? _journal;
   final Map<String, SettingsKey<Object?>> _byName;
 
-  /// 应用远端设置后回调（组合根接线：注册表按键触发 reload 钩子）。
-  final Future<void> Function(Set<String> keys)? onApplied;
-
   @override
   Set<SyncCategory> get categories => {
-    for (final key in _settings.keys) key.category,
+    for (final key in _settings.entries) key.category,
   };
 
   @override
@@ -53,7 +52,7 @@ class PrefsSyncAdapter implements SyncAdapter {
     // 登记先暂存：日志追加失败时不能留下「已同步」的哈希，否则这次变更
     // 下一轮会被当成未变化而永久跳过（轮末提交会把旧登记落盘）。
     final registrations = <String, SyncStamp>{};
-    for (final key in _settings.keys) {
+    for (final key in _settings.entries) {
       final value = await _settings.readRaw(key);
       final resolved = _resolve(key, value);
       final stamp = resolved.stamp;
@@ -158,8 +157,9 @@ class PrefsSyncAdapter implements SyncAdapter {
             }
           }
         }
-        // 远端值：不触发本机写入钩子（不标记待发、不追加日志）。
-        await _settings.writeRaw(key, value, remote: true);
+        // 远端值：不触发本机写入钩子（不标记待发、不追加日志），由
+        // [SettingsSyncSurface] 登记待重载键。
+        await _settings.applyRemote(key, value);
         _state.putSettingStamp(
           record.key,
           SyncStamp(hash: _hash(value), version: record.version),
@@ -168,8 +168,8 @@ class PrefsSyncAdapter implements SyncAdapter {
         applied++;
       }
     }
-    if (changed.isNotEmpty && onApplied != null) {
-      await onApplied!(changed);
+    if (changed.isNotEmpty) {
+      await _settings.reloadApplied();
     }
     return SyncApplyOutcome(applied: applied, skipped: skipped);
   }

@@ -6,6 +6,7 @@
 library;
 
 import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_module.dart';
 import '../../providers/ai_dj_provider.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/playback_provider.dart';
@@ -32,15 +33,37 @@ AiStack buildAiStack({
   required PlaybackProvider playback,
   required LibraryProvider libraryProvider,
 }) {
-  final aiSettings = catalog.settings.scope([
-    kAiDjBaseUrl,
-    kAiDjApiKey,
-    kAiDjModel,
-    kAiDjConsent,
-    kAiDjEnabled,
-    kAiDjPreferences,
-    kAiDjFeedbackMemory,
-  ]);
+  // 一个挂载点覆盖 AI 的 7 个键，按键分三组重载：连接凭证回读 / 推荐偏好
+  // 与反馈记忆重读 / 开关与隐私确认回读。凭证属同步类别，远端应用后必须
+  // 立即回读，否则测试连接 / 生成仍用旧配置。
+  late final AiDjProvider aiDjProvider;
+  final aiSettings = catalog.settings.mount(
+    SettingsModule.withReloads(
+      keys: [
+        kAiDjBaseUrl,
+        kAiDjApiKey,
+        kAiDjModel,
+        kAiDjConsent,
+        kAiDjEnabled,
+        kAiDjPreferences,
+        kAiDjFeedbackMemory,
+      ],
+      reloads: [
+        (
+          keys: [kAiDjBaseUrl, kAiDjApiKey, kAiDjModel],
+          reload: () => aiDjProvider.reloadConfig(),
+        ),
+        (
+          keys: [kAiDjPreferences, kAiDjFeedbackMemory],
+          reload: () => aiDjProvider.reloadPreferences(),
+        ),
+        (
+          keys: [kAiDjEnabled, kAiDjConsent],
+          reload: () => aiDjProvider.reloadAccess(),
+        ),
+      ],
+    ),
+  );
   final aiSettingsStore = AiSettingsStore(settings: aiSettings);
   final tasteProfileBuilder = TasteProfileBuilder(
     repository: library.playStatisticsRepository,
@@ -54,20 +77,11 @@ AiStack buildAiStack({
     promptLanguage: () =>
         aiPromptLanguageFor(LanguageService.effectiveLocale.languageCode),
   );
-  final aiDjProvider = AiDjProvider(
+  aiDjProvider = AiDjProvider(
     playbackProvider: playback,
     libraryProvider: libraryProvider,
     recommendationService: aiRecommendationService,
     settingsStore: aiSettingsStore,
-  );
-  // AI 凭证属同步类别：远端应用后要立即回读，否则测试连接/生成仍用旧配置。
-  catalog.settings.bindReload(kAiDjBaseUrl, aiDjProvider.reloadConfig);
-  catalog.settings.bindReload(kAiDjApiKey, aiDjProvider.reloadConfig);
-  catalog.settings.bindReload(kAiDjModel, aiDjProvider.reloadConfig);
-  catalog.settings.bindReload(kAiDjPreferences, aiDjProvider.reloadPreferences);
-  catalog.settings.bindReload(
-    kAiDjFeedbackMemory,
-    aiDjProvider.reloadPreferences,
   );
   // init 读安全存储 / 历史批次，由首帧后的 `post_frame_init.dart` 触发：
   // AI 页与推荐流不在首帧内容里，不必和窗口 / 播放装配抢首帧前的平台通道。

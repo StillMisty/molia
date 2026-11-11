@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -71,9 +72,16 @@ void main() {
     );
     addTearDown(selection.dispose);
     await _waitForKey(selection, 'wy');
+    // 与生产组合根一致：键声明 + 远端应用后的 reload 在同一个挂载点。
+    settings.mount(
+      SettingsModule(
+        keys: [kDiscoverChannelKey],
+        reload: selection.reloadFromPreferences,
+      ),
+    );
 
-    await settings.write(kDiscoverChannelKey, 'kg');
-    final pendingReload = settings.reloadKeys([kDiscoverChannelKey.name]);
+    await settings.applyRemote(kDiscoverChannelKey, 'kg');
+    final pendingReload = settings.reloadApplied();
     selection.select('tx');
     await pendingReload;
     await Future<void>.delayed(const Duration(milliseconds: 20));

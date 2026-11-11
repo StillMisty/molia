@@ -347,6 +347,26 @@ class AiDjProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 重新读取功能开关 / 隐私确认（跨设备同步设置后由注册表重载钩子调用）。
+  ///
+  /// 与 [setEnabled] 的本地路径保持同一后果：远端关闭时同样收掉电台与自动
+  /// 补歌，否则界面显示「已关闭」但控制器还会继续推歌。
+  Future<void> reloadAccess() async {
+    final (enabled, consentGranted) = await (
+      _settingsStore.readEnabled(),
+      _settingsStore.hasConsent(),
+    ).wait;
+    if (_enabled == enabled && _consentGranted == consentGranted) return;
+    _enabled = enabled;
+    _consentGranted = consentGranted;
+    if (!enabled) {
+      _status = AiDjStatus.off;
+      _trackedUri = null;
+      _cancelAutoFeed();
+    }
+    notifyListeners();
+  }
+
   static bool _sameConfig(LlmConfig? a, LlmConfig? b) =>
       a?.baseUrl == b?.baseUrl &&
       a?.apiKey == b?.apiKey &&
