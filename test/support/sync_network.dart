@@ -267,7 +267,7 @@ class SyncDevice {
 
   /// 直接写设置键（模拟用户操作；变化由下一轮的登记哈希检测并追加日志）。
   Future<void> setSetting(String key, Object? value) =>
-      settings.writeRaw(_keyOf(key), value);
+      settings.write(_keyOf(key), value);
 
   SettingsKey<Object?> _keyOf(String name) =>
       _keys.firstWhere((key) => key.name == name);

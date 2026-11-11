@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -436,13 +437,19 @@ void main() {
     addTearDown(provider.dispose);
     await provider.preferencesReady;
     expect(provider.hasRestoredSession, isTrue);
+    settings.mount(
+      SettingsModule(
+        keys: [kRestoreSessionEnabled],
+        reload: provider.reloadRestoreSessionPreference,
+      ),
+    );
 
     var notifies = 0;
     provider.addListener(() => notifies++);
 
-    // 远端同步应用关闭值（组合根经 `settings.reloadKeys` 触发重载钩子）。
-    await settings.write(kRestoreSessionEnabled, false);
-    await settings.reloadKeys([kRestoreSessionEnabled.name]);
+    // 远端同步应用关闭值：组合根挂载的 reload 撤下恢复态。
+    await settings.applyRemote(kRestoreSessionEnabled, false);
+    await settings.reloadApplied();
 
     expect(provider.restoreSessionEnabled, isFalse);
     expect(provider.hasRestoredSession, isFalse);
@@ -471,13 +478,19 @@ void main() {
     await provider.preferencesReady;
     expect(provider.restoreSessionEnabled, isFalse);
     expect(provider.hasRestoredSession, isFalse);
+    settings.mount(
+      SettingsModule(
+        keys: [kRestoreSessionEnabled],
+        reload: provider.reloadRestoreSessionPreference,
+      ),
+    );
 
     var notifies = 0;
     provider.addListener(() => notifies++);
 
     // 远端同步应用开启值：重新装载恢复态（会话数据仍在）。
-    await settings.write(kRestoreSessionEnabled, true);
-    await settings.reloadKeys([kRestoreSessionEnabled.name]);
+    await settings.applyRemote(kRestoreSessionEnabled, true);
+    await settings.reloadApplied();
 
     expect(provider.restoreSessionEnabled, isTrue);
     expect(provider.hasRestoredSession, isTrue);

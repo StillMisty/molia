@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/sources/source_manager.dart';
 import 'package:molia/sources/source_preferences.dart';
@@ -162,17 +163,17 @@ void main() {
     final registry = testSettingsRegistry();
     final preferences = module(settings: registry);
     await preferences.load();
+    registry.mount(
+      SettingsModule(
+        keys: [kLxDefaultQuality, kLxSourceOrder, kLxChannelDisabled],
+        reload: preferences.reload,
+      ),
+    );
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(kLxDefaultQuality.name, '128k');
-    await prefs.setStringList(kLxSourceOrder.name, ['kw', 'tx']);
-    await prefs.setStringList(kLxChannelDisabled.name, ['mg']);
-
-    await registry.reloadKeys([
-      kLxDefaultQuality.name,
-      kLxSourceOrder.name,
-      kLxChannelDisabled.name,
-    ]);
+    await registry.applyRemote(kLxDefaultQuality, '128k');
+    await registry.applyRemote(kLxSourceOrder, ['kw', 'tx']);
+    await registry.applyRemote(kLxChannelDisabled, ['mg']);
+    await registry.reloadApplied();
     expect(preferences.preferredQuality, '128k');
     expect(preferences.sourceOrder, ['kw', 'tx']);
     expect(preferences.disabledChannels, {'mg'});

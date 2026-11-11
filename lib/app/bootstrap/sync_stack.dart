@@ -99,8 +99,6 @@ Future<SyncStack> buildSyncStack({
     state: syncState,
     settings: catalog.settings,
     journal: library.syncJournal,
-    // 应用远端设置后：注册表按键触发模块自绑的重载钩子。
-    onApplied: catalog.settings.reloadKeys,
   );
   final statisticsSyncAdapter = StatisticsSyncAdapter(
     store: library.statisticsSyncStore,

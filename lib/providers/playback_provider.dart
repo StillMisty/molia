@@ -157,13 +157,6 @@ class PlaybackProvider extends ChangeNotifier {
       autoSwapResolver: autoSwapResolver,
       onAutoSourceSwapped: onAutoSourceSwapped,
     );
-    _settings.bindReload(kDefaultPlayMode, reloadDefaultPlayMode);
-    // 启动恢复开关的重载钩子（跨设备同步应用远端值后由组合根触发）：钩子挂在
-    // provider 上——协调者只报告「恢复态是否变化」，UI 通知由这里发。
-    _settings.bindReload(
-      kRestoreSessionEnabled,
-      reloadRestoreSessionPreference,
-    );
     _notifyThrottler = CategorizedNotifyThrottler(
       notifyCallback: super.notifyListeners,
       categoryIntervals: {

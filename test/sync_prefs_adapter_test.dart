@@ -1,6 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
+import 'package:molia/data/settings/settings_module.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/settings/settings_sync_surface.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
@@ -236,15 +239,13 @@ void main() {
     });
   });
 
-  test('onApplied 回调只报告实际变化的键', () async {
-    final changedKeys = <String>{};
-    final notifying = PrefsSyncAdapter(
-      state: state,
-      settings: registry,
-      onApplied: (keys) async => changedKeys.addAll(keys),
+  test('远端应用只重载实际变化的键对应的模块', () async {
+    var reloads = 0;
+    registry.mount(
+      SettingsModule(keys: [kThemeMode], reload: () async => reloads++),
     );
-    await notifying.collect();
-    await notifying.apply({
+    await adapter.collect();
+    await adapter.apply({
       SyncCategory.settings: [
         SyncRecord(
           key: 'theme_mode',
@@ -258,7 +259,36 @@ void main() {
         ),
       ],
     });
-    expect(changedKeys, {'theme_mode'});
+    expect(reloads, 1, reason: '同值记录被跳过，不应触发模块重载');
+    expect(await registry.read(kThemeMode), 'dark');
+  });
+
+  test('fake surface：适配器只依赖窄接口，应用后统一重载', () async {
+    final surface = _FakeSettingsSurface(const [kThemeMode, kLxDefaultQuality]);
+    final fakeAdapter = PrefsSyncAdapter(state: state, settings: surface);
+
+    final collected = await fakeAdapter.collect();
+    expect(collected[SyncCategory.settings]!.single.key, kThemeMode.name);
+    expect(collected[SyncCategory.sources]!.single.key, kLxDefaultQuality.name);
+
+    await fakeAdapter.apply({
+      SyncCategory.settings: [
+        SyncRecord(
+          key: 'theme_mode',
+          version: const SyncVersion(physical: 200, deviceId: 'devB'),
+          data: {'v': 'light'},
+        ),
+        const SyncRecord(
+          key: 'unknown_key',
+          version: SyncVersion(physical: 300, deviceId: 'devB'),
+          data: {'v': 'x'},
+        ),
+      ],
+    });
+
+    expect(surface.applied, [(key: 'theme_mode', value: 'light')]);
+    expect(surface.reloads, 1, reason: '整批应用完只重载一次');
+    expect(surface.values[kThemeMode.name], 'light');
   });
 
   test('日志追加失败：登记不落盘，重启后仍检测到同一变更', () async {
@@ -370,4 +400,29 @@ class _FailingJournal implements SyncJournalAppender {
     this.changes.addAll(list);
     return [for (var i = 0; i < list.length; i++) i + 1];
   }
+}
+
+/// 只实现同步窄接口的假设置面：不构造注册表 / prefs，验证适配器可独立单测。
+class _FakeSettingsSurface implements SettingsSyncSurface {
+  _FakeSettingsSurface(this.entries);
+
+  @override
+  final List<SettingsKey<Object?>> entries;
+
+  final Map<String, Object?> values = {};
+  final List<({String key, Object? value})> applied = [];
+  var reloads = 0;
+
+  @override
+  Future<Object?> readRaw(SettingsKey<Object?> key) async =>
+      values[key.name] ?? key.defaultValue;
+
+  @override
+  Future<void> applyRemote(SettingsKey<Object?> key, Object? value) async {
+    values[key.name] = value;
+    applied.add((key: key.name, value: value));
+  }
+
+  @override
+  Future<void> reloadApplied() async => reloads++;
 }

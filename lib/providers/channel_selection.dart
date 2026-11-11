@@ -38,10 +38,8 @@ class ChannelSelection extends ChangeNotifier {
 
     final settings = _settings;
     if (settings != null) {
-      // 跨设备同步应用远端值后走同一条重载路径；代际守卫保证在途读取不会
-      // 覆盖用户刚做出的选择。
-      settings.bindReload(kDiscoverChannelKey, _loadPersistedKey);
-      unawaited(_loadPersistedKey());
+      // 首次恢复；跨设备同步应用远端值后的 reload 由组合根挂载时绑定。
+      unawaited(reloadFromPreferences());
     }
   }
 
@@ -93,7 +91,9 @@ class ChannelSelection extends ChangeNotifier {
   }
 
   /// 读取持久化值（首次恢复与跨设备 reload 共用）。
-  Future<void> _loadPersistedKey() async {
+  ///
+  /// 代际守卫保证在途读取不会覆盖用户刚做出的选择。
+  Future<void> reloadFromPreferences() async {
     final settings = _settings;
     if (settings == null) return;
     final generation = _generation;

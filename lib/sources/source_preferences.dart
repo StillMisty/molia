@@ -20,12 +20,7 @@ import '../data/settings/settings_keys.dart';
 import 'source_track.dart' show kLxQualityOrder;
 
 class SourcePreferences extends ChangeNotifier {
-  SourcePreferences(SettingsAccess settings) : _settings = settings {
-    // 应用远端设置后的定向重载：三个键共用一个幂等的整表重读。
-    _settings.bindReload(kLxDefaultQuality, reload);
-    _settings.bindReload(kLxSourceOrder, reload);
-    _settings.bindReload(kLxChannelDisabled, reload);
-  }
+  SourcePreferences(SettingsAccess settings) : _settings = settings;
 
   /// 音质偏好的默认值（`reload` 的先重置值，与键默认值一致）。
   static final String _defaultQuality = kLxDefaultQuality.defaultValue;
@@ -70,7 +65,7 @@ class SourcePreferences extends ChangeNotifier {
   }
 
   /// 重新读取偏好（顺序 / 停用 / 音质）。跨设备同步应用远端设置后由
-  /// 组合根经 [SettingsRegistry.bindReload] 触发；先重置为默认再加载，
+  /// 组合根挂载的 reload 触发；先重置为默认再加载，
   /// 保证远端「清空」也能生效。
   Future<void> reload() async {
     _preferredQuality = _defaultQuality;

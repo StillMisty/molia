@@ -85,7 +85,7 @@ class BiliAccountService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 同步应用远端凭据后的重载入口（`SettingsRegistry.bindReload`）。
+  /// 同步应用远端凭据后的重载入口（组合根 mount 时绑定的钩子）。
   Future<void> reloadFromSettings() async {
     await init();
     final cookie = await _readCookie();

@@ -17,6 +17,7 @@ import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/ui_messenger.dart';
 import '../../data/playback/default_playback_facade.dart';
 import '../../data/settings/settings_keys.dart';
+import '../../data/settings/settings_module.dart';
 import '../../data/settings/settings_registry.dart';
 import '../../playback/local_audio_handler.dart';
 import '../../playback/local_playback_service.dart';
@@ -90,9 +91,14 @@ Future<PlaybackStack> buildPlaybackStack({
 
   // 音频焦点偏好必须在建播放器之前读好：默认开（与其他应用同时播放），
   // 但用户可能已关闭；首次中断不应按错的策略处理。
-  final audioFocusSettings = AudioFocusSettings(
-    settings: catalog.settings.scope([kPlayWithOtherApps]),
+  late final AudioFocusSettings audioFocusSettings;
+  final audioFocusScope = catalog.settings.mount(
+    SettingsModule(
+      keys: [kPlayWithOtherApps],
+      reload: () => audioFocusSettings.init(),
+    ),
   );
+  audioFocusSettings = AudioFocusSettings(settings: audioFocusScope);
   await audioFocusSettings.init();
 
   final LocalPlaybackService? localPlaybackService;
@@ -142,18 +148,35 @@ Future<PlaybackStack> buildPlaybackStack({
   // 存储（同步栈也用同一实例标记「会话待外发」）并注入，恢复曲目的「最后
   // 播放」展示接观察者；同步栈拿到的是这个协调者（远端应用 / 删除同样走
   // 它持有的写队列），不再另建 store。
+  //
+  // 两个播放偏好共用一个挂载点，但重载路径不同：默认播放模式只重读模式，
+  // 恢复开关要联动恢复态交接（钩子挂在 provider 上——协调者只报告「恢复态
+  // 是否变化」，UI 通知由 provider 发）。
+  late final PlaybackProvider playbackProvider;
+  final playbackSettings = catalog.settings.mount(
+    SettingsModule.withReloads(
+      keys: [kDefaultPlayMode, kRestoreSessionEnabled],
+      reloads: [
+        (
+          keys: [kDefaultPlayMode],
+          reload: () => playbackProvider.reloadDefaultPlayMode(),
+        ),
+        (
+          keys: [kRestoreSessionEnabled],
+          reload: () => playbackProvider.reloadRestoreSessionPreference(),
+        ),
+      ],
+    ),
+  );
   final sessionCoordinator = PlaybackSessionCoordinator(
     facade: playbackFacade,
     store: sessionStore,
-    settings: catalog.settings.scope([kRestoreSessionEnabled]),
+    settings: playbackSettings,
     onRestoredTrack: playbackObserver.showRestoredTrack,
     powerPolicy: policy,
   );
-  final playbackProvider = PlaybackProvider(
-    settings: catalog.settings.scope([
-      kDefaultPlayMode,
-      kRestoreSessionEnabled,
-    ]),
+  playbackProvider = PlaybackProvider(
+    settings: playbackSettings,
     facade: playbackFacade,
     messenger: messenger,
     sourceManager: sourceManager,

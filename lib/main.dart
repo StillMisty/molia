@@ -26,6 +26,7 @@ import 'app/perf/data_path_scenario.dart';
 import 'app/perf/frame_stats.dart';
 import 'data/molia_database.dart';
 import 'data/settings/settings_keys.dart';
+import 'data/settings/settings_module.dart';
 import 'managers/app_memory_manager.dart';
 import 'playback/desktop_audio_init.dart';
 import 'playback/local_audio_handler.dart';
@@ -218,8 +219,15 @@ void main() async {
   );
   // 当前渠道的唯一所有者：发现内容与搜索共用，持久化 / 跨设备重载 /
   // 失效回退规则都在模块内（页面与 Ctrl+F 不再手工同步两份渠道）。
-  final channelSelection = ChannelSelection(
-    settings: catalog.settings.scope([kDiscoverChannelKey]),
+  late final ChannelSelection channelSelection;
+  final channelSettings = catalog.settings.mount(
+    SettingsModule(
+      keys: [kDiscoverChannelKey],
+      reload: () => channelSelection.reloadFromPreferences(),
+    ),
+  );
+  channelSelection = ChannelSelection(
+    settings: channelSettings,
     validKeys: () {
       final manager = catalog.sourceManager;
       // 音源未初始化 / 脚本激活中时有效集合为空：不允许回退，否则会覆盖
