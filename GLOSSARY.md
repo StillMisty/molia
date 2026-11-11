@@ -76,6 +76,11 @@
   播放顺序栈次近一首 → 「上一首」的队列前一位；`previous` 为空时恒为空。
   封面左槽向后拖动时提前渲染源侧新身份（与前进方向的 `upNext[1]` 对称），
   不按队列下标猜播放历史。
+- **Playback engine（播放引擎）** — `lib/data/playback/playback_engine.dart`：
+  `PlaybackFacade` 的唯一实现，直接把 `LocalPlaybackService` 的队列 / 播放态映射为
+  `PlaybackSnapshot`（低频，值变才发）与独立 `position` 通道（≥250ms 去重）；命令、
+  快照映射与进度拆分只在这里各实现一次。旧的 `PlaybackBackend` /
+  `DefaultPlaybackFacade` 两层纯转发与 `BackendSnapshot` 双形状已删除。
 - **Playback session coordinator（播放会话模块）** — `lib/playback/playback_session_coordinator.dart`：
   恢复态（冷启动未起播）与真实播放（live）之间的唯一交接点，也是
   `PlaybackSessionStore` 的唯一写者。三阶段状态机 `idle → restored → live`（装载进恢复态，
@@ -531,13 +536,20 @@
   `builtin/lyric_search_runner.dart`；kw 伪 JSON 容错与 wy ids → detail 保留自定义
   流程）。真实响应快照在 `test/fixtures/lyric_search/`
   （抓取脚本 `tool/gen_lyric_search_fixtures.mjs`）。命中片段作为结果行副标题。
-- **Single-channel search（单渠道搜索）** — `SearchProvider` 只搜当前渠道；
+- **Single-channel search（单渠道搜索）** — 只搜当前渠道；
   `activeSourceKey` / `activeSource` 直接读 **Channel selection module**（不再维护
-  第二份渠道状态），`hasActiveSearchSource` = `supportedSearchKinds.isNotEmpty`
-  （已注册但能力位全 false 的渠道仍算不可搜索）。渠道变化由模块通知 provider
+  第二份渠道状态），`hasActiveSearchSource` = `supportedKinds.isNotEmpty`
+  （已注册但能力位全 false 的渠道仍算不可搜索）。渠道变化由 **Search session**
   清空旧结果并按当前关键词重搜；脚本晚到后能力补齐也会主动补搜。
-  `updateSearchQuery` 仍 300ms 防抖，`submitSearch` 立即；当前渠道
-  不可搜索时清空结果、不发请求，由 UI 展示「当前渠道不支持搜索」空态（ADR-0019）。
+  当前渠道不可搜索时清空结果、不发请求，由 UI 展示「当前渠道不支持搜索」空态
+  （ADR-0019）。
+- **Search session（搜索会话）** — `lib/providers/search_session.dart`：关键词、
+  当前类型、三类结果控制器、防抖 / 提交 / 清空 / 切类型 / 渠道与来源变化的唯一
+  策略点；`SearchProvider` 只是薄委托 + 播放出口。`SearchInputBinding` 把会话
+  关键词绑到宿主的 `TextEditingController`（资料库 tab 与 Ctrl+F 共享同一会话，
+  不再各留文本镜像）；`SearchProjection` / `SearchPreviewSession` 一次取齐结果、
+  预览排序、空态与键盘高亮，不挂遮罩也能单测。能力位 → 搜索类型的唯一映射是
+  `SourceCapabilities.searchKinds`。
 - **Search results module（单渠道结果模块）** — `lib/providers/search_results.dart`：
   `SearchResults<T>` 是某一搜索类型（单曲 / 歌手 / 歌词）的不可变快照（keyword /
   items / failure / page / total / hasMore / isLoading / isLoadingMore /
@@ -565,7 +577,8 @@
   `TrackRowModel` 的行映射（歌词片段副标题 / 歌手链接 / 「未知歌手」兜底）、类型分段
   （按当前渠道能力位显隐）、失败重试 / 空态 / 加载态、曲目行操作菜单（触摸端 ⋮ /
   桌面右键）都只在这里维护；宿主只传 `SearchResultsVariant`（`page` / `docked`）、
-  滚动控制器、高亮 key 与导航回调（播放 / 打开歌手 / 查看全部）。结果面只呈现
+  滚动控制器、同一个 `SearchSession` 与导航回调（播放 / 打开歌手 / 查看全部）。
+  结果面只呈现
   当前类型的一份结果快照，保留表头与触底自动分页；`docked` 最多预览 8 行，以
   「查看全部结果」出口收尾；遮罩里的歌手行仍走「查看全部结果」而不是直接进歌手页。
 - **Builtin platform failure（内置平台失败助手）** — `builtin_search.dart::builtinPlatformFailure`：
@@ -657,6 +670,11 @@
   的 loading / ready / failed）并请求加载，不再探测 `cachedTracksOf` /
   `isPlaylistLoading` 之类的缓存内部。列表清单 / 历史同样暴露 `playlistsState` /
   `historyState`：首次读取失败是 failed（可重试），已有旧缓存则保持 ready 展示旧值。
+- **Library read projection（资料库读投影）** — `lib/providers/library_read_projection.dart`
+  的 `ReadReconciliation<T, W>`：一个视图「读快照 vs 写入 / 其它读」的唯一仲裁。
+  持有代际 / 在途 / 缓冲写回放 / quiet vs explicit / 失败阶段；值合并、写入重放与
+  失败形态由持有方注入策略。收藏键 / 播放历史 / 列表清单 / 列表曲目各持一份，
+  `LibraryProvider` 只做扇出与变更网关，不再各写一套 generation / pending 状态机。
 
 ## 换源
 
@@ -679,13 +697,14 @@
   默认「全部」并按来源分组展示，也可切单源；音频 tab 点候选即试听（单曲
   「换源试听」），确认后原位替换。**保留种子源**（种子曲目自身按 URI 排除；
   同一渠道可能有其它版本 / 投稿）；B 站曲目的 artists 是 UP 主、不当歌手关键词
-  （只搜标题）——每个源的候选口径由 **Swap strategy** 声明。入口：收藏页合集
+  （只搜标题）——关键词与候选来源由 **Swap query planner** 统一规划。入口：收藏页合集
   （收藏 / 历史 / 自建列表）行动作（移动端行尾 ⋮ / 桌面右键菜单）/ 播放页
   seek 行（队列入口）；本地歌曲不含换源（本地文件无在线音源可换）。
-- **Swap strategy（换源策略）** — `lib/services/source_swap/source_swap_strategy.dart`：
-  按音源 key 声明「种子 artists 是否为 UP 主」；未声明的渠道继承默认行为
-  （新渠道无需注册即可参与换源）。歌词侧的同名概念是 **Lyrics source strategy**
-  （渠道 → `LyricProvider`）。
+- **Swap query planner（换源查询规划）** — `lib/services/source_swap/swap_query_planner.dart`：
+  一次换源查询的关键词与候选音源（启用 + 有搜索能力，注册表顺序）的唯一入口。
+  默认关键词「标题 + 歌手」；B 站种子的 artists 是 UP 主，只搜标题。手动换源、
+  自动换源与封面补取共用同一份规划；自动换源额外把种子源与 provenance 放进排除
+  集合。歌词侧的同名概念是 **Lyrics source strategy**（渠道 → `LyricProvider`）。
 - **Swap placement（换源写回位置）** — `SourceSwapPlacement`：`playlist`
   （收藏/自建列表，仓库事务保 `sortOrder`/`addedAt`）、`history`（保 `playedAt`：
   行与同步日志都沿用旧值，`replacement.playedAt` 不参与）、
@@ -750,8 +769,9 @@
 ## AI 推歌
 
 - **AI DJ mode（AI 推歌模式）** — `lib/providers/ai_dj_provider.dart` 与
-  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责推歌会话
-  （电台）、通知与对外门面（生成编排在执行器，见下条）；
+  `lib/providers/ai_dj_history_controller.dart`：`AiDjProvider` 负责对外门面与
+  通知（生成编排在执行器、电台会话在 **AI radio session**、反馈账本在
+  **AI feedback book**，见下条）；
   `AiDjHistoryController` 独占**当前推荐（active batch）**、**历史推荐**及保留策略。
   `enabled` = 功能启用（持久化；退出队列不关功能）；`status` = 电台状态
   （off/preparing/playing/error：播放全部或点某首才接管队列）。只有显式
@@ -759,12 +779,24 @@
   跳过 = 切走时未达 `min(30s, 50%×时长)`（复用统计口径，**只做曲目级排除**）；
   喜欢 = 收藏；「不感兴趣」= 列表移除 + 长期记忆（可撤销）；显式生成有
   阶段进度与取消；退出保留队列。播放快照/进度由组合根接进控制器。
+- **AI generation request（生成请求）** — `lib/services/ai/ai_generation_request.dart`：
+  一次生成的全部输入（偏好 / 合并反馈 / 排除项 / 数量）的唯一值对象。预览、显式
+  生成、换一首、静默补歌与重找未解析都从同一组装点构造，调用点不再各自拼
+  `preferences` / skipped / liked / exclude*；列表在入口复制为不可变。
 - **AI generation executor（生成执行器）** —
   `lib/services/ai/ai_generation_executor.dart`：token / epoch / 取消 / 忙碌位 /
   可见进度的唯一持有者。三条 lane：显式（可见、可取消、互斥）、换一首（不可取消、
-  行内进度）、静默补歌（无可见进度、显式操作可抢占）；进度走独立
+  行内进度）、静默补歌（无可见进度、显式操作可抢占）；「空批次 = 失败」的提交
+  不变量也在这里统一（重找未解析可选保留空结果）。进度走独立
   `ValueListenable<AiGenerationState>`，provider 的聚合通知只转发忙碌位 /
   行内替换的离散变化（进度分片由 `generationState` 自己通知窄订阅者）。
+- **AI radio session（电台会话）** — `lib/providers/ai_radio_session.dart`：
+  `off / preparing / playing / error` 状态机、当前曲目跟踪、切歌跳过判定、退出 /
+  外部停止、低水位判定、队列操作互斥位与静默补歌失败计数的唯一持有者；只依赖
+  live 快照与播放 / 资料库 provider，不自己广播（provider 统一通知）。
+- **AI feedback book（反馈账本）** — `lib/providers/ai_feedback_book.dart`：
+  本轮跳过 / 喜欢、长期反馈记忆、待回流喜欢与撤销栈的唯一实现；
+  `mergedForPrompt` 一次给出提示词需要的合并反馈，持久化回调只递增偏好版本。
 - **AI radio queue（电台队列视图）** — `lib/services/ai/ai_radio_queue.dart`：
   每次从 live 快照派生 `upcoming` / `contains` / `missing` / `queuedAmong`，不持有
   计数器；`queuedCount` = 当前及之后仍在队的 AI 曲目数（页面「队列中还有 {count}
@@ -958,8 +990,33 @@
   串行化，停止先落盘再清空队列），冷启动恢复不自动起播。
 - **Backup（完整备份）** — `lib/data/sync/sync_backup.dart` 的
   `SyncBackup.exportBackupJson` / `importBackupJson`：与同步共用 envelope、
-  适配器与版本戳（本地记录的收集入口由引擎注入，`SyncEngine.collectRecords`），
-  但**不构造轮次、不经传输**；不需要启用同步；凭证类默认排除。
+  适配器、版本戳与 **Sync record pipeline**（经 `SyncEngine.recordPipeline`
+  拿到同一实例），但**不构造轮次、不经传输**；不需要启用同步；凭证类默认排除。
+- **Sync record pipeline（同步记录管道）** — `lib/data/sync/sync_record_pipeline.dart`：
+  「收集 → 合并 → 登记过滤 → 适配器落地 → 交付登记」的唯一实现。轮次与完整备份
+  共用同一实例；先 collect 后 apply 是硬约束，forced keys 让权威视图在合并时
+  剔除本地同版本记录并绕过登记重复交付。单项适配器失败不阻断其它类别。
+- **Change detecting adapter（变化检测装饰器）** — `lib/data/sync/adapters/change_detecting_adapter.dart`：
+  行表类适配器（歌单 / 历史 / 统计）的指纹缓存、`fresh` 绕过与落地后失效的
+  唯一实现；适配器本身只实现 `SyncRecordSource.exportRecords / apply`。版本戳与
+  增量日志仍留在数据写入事务内（ADR-0003）。
+- **Sync UI state / commands（同步 UI 投影与命令面）** — `lib/providers/sync_ui_state.dart` +
+  `lib/providers/sync_commands.dart`：页面只读一份不可变的 `SyncUiState`（传输用
+  `SyncTransportId` 枚举、名册 / 地址簿 / 日志 / 权限 / 附近可用性一次取齐），
+  用户动作只走 `SyncCommands`（配对 / 附近 / 备份 / 本机地址子组）。`SyncProvider`
+  仍是 Provider 树绑定，不再暴露六个协作者的接口并集。
+- **Manual peer service（手动对端服务）** — `lib/services/manual_peer_service.dart`：
+  手动地址「入簿 → 探测 → 立即接触」的唯一编排（地址归一、编辑态保留身份与已学
+  端口、探测成功只提示、接触报告解读），只依赖地址簿 / 探测 / `syncNow` 三个窄端口，
+  测试不再构造 `SyncEngine`。
+- **Sync trigger bridge（同步触发桥）** — `lib/services/sync_trigger_bridge.dart`：
+  「数据变更 → 调度器」订阅与回调钩子的唯一 owner（资料库 / 统计流、音源通知、
+  设置写入、脚本导入删除、会话落盘、本地封面），`dispose` 取消订阅并恢复绑前回调。
+  它只转发变更事实，何时跑轮次仍由 `SyncScheduler` 决定。
+- **App lifecycle coordinator（应用生命周期协调）** — `lib/app/app_lifecycle_coordinator.dart`：
+  resumed / paused / hidden 三个钩子的唯一扇出点；同步、更新、网络刷新、播放会话与
+  统计各自注册，`main.dart` 与 `app_shell.dart` 不再各持一份
+  `WidgetsBindingObserver`。
 - **Sync control plane（同步控制面）** — `lib/data/sync/sync_control_plane.dart`：
   UI 面的控制 / 身份 / 传输开关与运行状态（设备名与设备 id、类别开关、传输开关 +
   `transportStatus`、手动地址簿、`lanDiscoveryPorts`、口令生命周期、观测快照
@@ -1018,18 +1075,19 @@
   手势归属，普通返回先退子页再关弹层，所有权在 `settings_page.dart` 的弹层宿主。
 - **Settings registry（设置注册表）** — `lib/data/settings/settings_registry.dart`：
   登记键的唯一家（读 / 写 / 同步往返 / 重载钩子）；组合根只构造这一份实例，
-  再按模块分发按键作用域（`SettingsScope`），模块把 reload 钩子绑到自己的键，
-  应用远端值后按变化的键触发。快捷键开关与绑定四键（`kShortcutsEnabled` /
+  模块经 `SettingsRegistry.mount(SettingsModule)` 一次完成作用域与 reload 绑定
+  （声明了键却没有重载会在启动期失败），应用远端值后按变化的键触发。快捷键开关与绑定四键（`kShortcutsEnabled` /
   `kGlobalShortcutsEnabled` / `kShortcutBindings` / `kGlobalShortcutBindings`）
   同表登记为「跟人走」。键名字面量只有一份（`settings_keys.dart`），由
   `test/architecture/settings_keys_test.dart` 强制；私自
   `SettingsRegistry(keys: kAllSettingsKeys)` 由
   `test/architecture/settings_registry_usage_test.dart` 扫描拦住。
 - **Settings access（模块设置访问面）** — `lib/data/settings/settings_access.dart`：
-  `SettingsAccess` 只含模块需要的 `read` / `write` / `clear` / `bindReload`；
-  整表、`readRaw` / `writeRaw`（同步宽容转换）、`onWrite`（本地写入钩子）与
-  `reloadKeys` 都留在注册表，不下放给模块。
-- **Settings scope（按键作用域）** — `SettingsRegistry.scope([...])` 返回的
+  `SettingsAccess` 只含模块需要的 `read` / `write` / `clear`；reload 只能经
+  `SettingsRegistry.mount` 绑定，`SettingsSyncSurface`（entries / readRaw /
+  applyRemote / reloadApplied）是同步适配器唯一的窄接口。整表与 `onWrite`
+  留在注册表，不下放给模块。
+- **Settings scope（按键作用域）** — `SettingsRegistry.mount` / `scope([...])` 返回的
   `SettingsScope`：同一份注册表 / 同一份存储上的按键视图，只暴露声明过的键；
   越界访问在 debug 断言、release 抛错。组合根是唯一构造注册表的地方，模块
   构造参数是 `SettingsAccess` / `SettingsScope`，不再各建私有注册表；模块初始
@@ -1140,7 +1198,7 @@
   学习路径只更新身份与端口（不动地址集合）。地址簿可能累积多条地址（双栈 /
   多网卡 / 换过 IP），设备详情里可逐条更新（`moveManualPeer`，身份与已学端口
   保留）或删除；地址以 deviceId 关联。手动地址表单的保存唯一命令是
-   `SyncProvider.saveManualPeer`（地址归一 → 入簿 / 移动 → 附近设备探测 →
+   **Manual peer service** 的 `save`（地址归一 → 入簿 / 移动 → 附近设备探测 →
    立即接触，返回 `SyncManualPeerOutcome`）；弹层只把类型化结果映射成提示。
 - **Sync report / log（同步结果 / 日志）** — `SyncLogEntry`：触发原因 +
   五态结论 + 本轮变更量 + 失败数与错误；设置页只读展示，不拦截合并。
@@ -1182,6 +1240,11 @@
   展示；窗口基于状态存储保留的最近日志条目。
 
 ## 缓存
+- **Download intent（下载意图）** — `lib/services/download/download_intent.dart` 的
+  `DownloadLauncher`：单曲 / 批量下载的资格判定与类型化结果（`started` /
+  `alreadyDownloaded` / `active` / `unsupported`）的唯一入口；默认音质、已有记录 /
+  活动任务与失败文案都在这一层收口，曲目菜单 / 分享 / 本地数据页 / 管理页只表达
+  「下载这首歌」并渲染结果。下载队列、记录与文件布局仍是既有管道。
 - **Local data（本地数据）** — 单曲在本机的东西，分两档：**已缓存**（易失副本：边播边缓存 / 后台下载 / 取词 / 取图产生，可离线播放，会被 LRU / TTL / 清理回收）与**已下载**（持久副本：`downloads/` + drift 记录，可分享、清缓存不影响），两档都没有就是「未下载」。两档都不是的那首曲目在信息页与页内统一显示「未下载」。唯一读取口 `lib/services/track_local_data_service.dart`（单曲 `load`、列表批量 `loadMany`、只要「已缓存」音频档的批量 `cachedAudioTrackIds`，`TrackLocalData`），词表唯一出处 `LocalPartState`；**禁止** 页面或模块另写「算不算有」的判据（见 ADR-0008）。
 - **Track local data controller（本地数据刷新控制器）** — `lib/services/track_local_data_controller.dart`：单曲本地数据「什么时候读、读到的结果要不要采纳」的唯一实现。下载记录变化防抖 300ms（同批记录合并成一次目录扫描），`CacheService.revision` 变化立即重载并撤销待执行防抖；加载单飞 + 尾随一次（加载中再来的请求只补跑一次）；切歌 / 封面变化立即用 `TrackLocalDataService.downloadState` 同步播种（避免「已下载」闪成「未下载」），旧曲目的在途结果按代次丢弃。状态是不可变 `TrackLocalDataState`（`data` / `audioEnabled`），经 `ValueListenable` 发布；消费面：`TrackInfoView` 的本地数据行与 `TrackLocalDataPage`。页面音质选择顺序也在这里唯一实现（`selectLocalDataQuality`：显式选择 → 已下载音质 → 命中缓存 → 偏好 → 首个可用）。
 - **转存（Save a copy）** — 把已缓存的一档「固化」成持久下载：拷贝缓存内容到 `downloads/`（不触网）+ 落库，动作文案「转存到本地文件夹」。缓存命中时下载动作本身就是转存；转存后状态从「已缓存」变「已下载」。

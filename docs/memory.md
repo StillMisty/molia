@@ -201,7 +201,7 @@ SMTC 始终为 `Playing`，音频未中断。一首播完后未再触发 trim，
   避免托盘恢复播放重新取链。
 - `RequestCache` 增加 TTL 清理 / `clear()`；专辑 / 歌手上限 64→16、评论 96→32。
 - `PlaybackSessionCoordinator.stopPlayback()` 清 `_lastWrittenSession`；
-  `LocalPlaybackBackend` 在队列 revision 变化时裁剪 `_trackCache` 旧身份。
+  `PlaybackEngine` 在队列 revision 变化时裁剪 `_trackCache` 旧身份。
 - 组合根在 `main.dart` 注册这些 releaser；AppMemoryManager 不反向依赖 provider。
 
 验证：`test/managers/app_memory_manager_test.dart` 等 17 个新增用例覆盖
