@@ -378,25 +378,36 @@ void main() async {
   // 托盘内暂停后补一次 trim：播放中暂停会让音频 / 解码线程把页重新触回
   // 工作集，暂停稳定后再归还；播放恢复 / 窗口可见时取消。
   var lastPlaying = playback.playbackProvider.isPlaying;
-  void syncTrayPauseTrim() {
+  var lastTrackId = playback.playbackProvider.snapshot.current?.id.uri;
+  void syncTrayTrimTimers() {
     final playing = playback.playbackProvider.isPlaying;
-    if (playing == lastPlaying) return;
+    final trackId = playback.playbackProvider.snapshot.current?.id.uri;
+    final playingChanged = playing != lastPlaying;
+    final trackChanged = trackId != lastTrackId;
     lastPlaying = playing;
-    if (playing) {
-      AppMemoryManager.instance.cancelTrayPausedTrim();
-    } else if (AppPresence.instance.isTrayHidden) {
-      AppMemoryManager.instance.scheduleTrayPausedTrim();
+    lastTrackId = trackId;
+    if (playingChanged) {
+      if (playing) {
+        AppMemoryManager.instance.cancelTrayPausedTrim();
+      } else if (AppPresence.instance.isTrayHidden) {
+        AppMemoryManager.instance.scheduleTrayPausedTrim();
+      }
+    }
+    if (trackChanged && AppPresence.instance.isTrayHidden) {
+      AppMemoryManager.instance.scheduleTrayTrackChangeTrim();
     }
   }
 
-  playback.playbackProvider.addListener(syncTrayPauseTrim);
+  playback.playbackProvider.addListener(syncTrayTrimTimers);
   AppPresence.instance.addListener(() {
     if (AppPresence.instance.isTrayHidden) {
       if (!playback.playbackProvider.isPlaying) {
         AppMemoryManager.instance.scheduleTrayPausedTrim();
       }
     } else {
-      AppMemoryManager.instance.cancelTrayPausedTrim();
+      AppMemoryManager.instance
+        ..cancelTrayPausedTrim()
+        ..cancelTrayTrackChangeTrim();
     }
   });
 

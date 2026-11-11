@@ -386,6 +386,43 @@ void main() {
     expect(releases, 3, reason: '恢复后不留下补跑');
   });
 
+  testWidgets('托盘切歌补 trim：4s 后一次；重复切歌重置；可见取消', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    var releases = 0;
+    final manager = AppMemoryManager(
+      presence: presence,
+      imageCache: cache,
+      releaseToOs: () => releases++,
+    );
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(kTrayLateTrimDelay);
+    expect(releases, 2, reason: '隐藏帧 + 延迟 trim');
+
+    manager.scheduleTrayTrackChangeTrim();
+    await tester.pump(kTrayTrackChangeTrimDelay - const Duration(seconds: 1));
+    expect(releases, 2);
+    await tester.pump(const Duration(seconds: 1));
+    expect(releases, 3, reason: '切歌稳定后补一次');
+
+    // 重复切歌只保留最后一次计时。
+    manager.scheduleTrayTrackChangeTrim();
+    await tester.pump(const Duration(seconds: 3));
+    manager.scheduleTrayTrackChangeTrim();
+    await tester.pump(kTrayTrackChangeTrimDelay);
+    expect(releases, 4, reason: '旧的切歌计时被取消');
+
+    manager.scheduleTrayTrackChangeTrim();
+    presence.markVisible();
+    await tester.pump(kTrayTrackChangeTrimDelay);
+    expect(releases, 4, reason: '恢复可见后不补跑');
+  });
+
   testWidgets('非托盘状态不安排暂停补 trim', (tester) async {
     final presence = AppPresence();
     final cache = _FakeImageCache();
