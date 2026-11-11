@@ -25,16 +25,22 @@ import '../models/play_mode.dart';
 import '../sources/raw_track.dart';
 import '../sources/source_track.dart';
 import 'library_outcome.dart';
+import 'library_read_projection.dart';
 import 'playback_provider.dart';
 
 /// 资料库整表读取的意图：静默校准保持当前数据可见，显式读取可以翻 loading。
-enum _LoadMode { quiet, explicit }
+typedef _LoadMode = LibraryReadIntent;
 
-/// 读取期间记录的收藏切换：最终状态 + 新增行（仅收藏时有值）。
+/// 读取期间记录的收藏切换：键 + 最终状态 + 新增行（仅收藏时有值）。
 ///
 /// 行必须一起重放：旧列表快照落地后会删掉新增行，只补键会让收藏列表
-/// 少一首（键已收藏、列表里却没有）。
-typedef _PendingFavoriteState = ({bool favorite, PlaylistTrack? track});
+/// 少一首（键已收藏、列表里却没有）。同一 key 只保留最后一次状态，重放
+/// 时再按到达顺序折叠。
+typedef _PendingFavoriteState = ({
+  String key,
+  bool favorite,
+  PlaylistTrack? track,
+});
 
 /// 列表曲目读取视图：页面只读读取阶段，不探测缓存内部。
 class PlaylistTracksView {
@@ -64,6 +70,41 @@ class LibraryProvider extends ChangeNotifier {
     /// 不再采用，用户点「重试」即可重新读。
     this._readTimeout = const Duration(seconds: 10),
   }) : _playback = playbackProvider {
+    _historyRead = ReadReconciliation(
+      initialValue: const [],
+      mergeQuiet: (current, fresh) =>
+          LibraryHistoryOrder.merge(current: current, fresh: fresh),
+      replayWrites: (current, pending) {
+        var next = current;
+        for (final entry in pending) {
+          next = LibraryHistoryOrder.applyEntry(
+            next,
+            entry,
+            limit: kHistoryLimit,
+          );
+        }
+        return next;
+      },
+      failureState: (value, error) => value.isEmpty
+          ? LibraryReadState.failed(error)
+          : const LibraryReadState.ready(),
+    );
+    _playlistsRead = ReadReconciliation(
+      initialValue: const [],
+      mergeQuiet: (_, fresh) => fresh,
+      replayWrites: (current, _) => current,
+      failureState: (value, error) => value.isEmpty
+          ? LibraryReadState.failed(error)
+          : const LibraryReadState.ready(),
+    );
+    _favoritesRead = ReadReconciliation(
+      initialValue: const {},
+      mergeQuiet: (_, fresh) => fresh,
+      replayWrites: _replayFavoriteStates,
+      failureState: (_, _) => const LibraryReadState.ready(),
+      supersedeReads: true,
+      replayRequiresLoaded: false,
+    );
     _subscription = _repository.changes.listen(_onRepositoryChanged);
   }
 
@@ -78,71 +119,34 @@ class LibraryProvider extends ChangeNotifier {
   /// payload（脚本取链参数）常驻内存。超过上限按最近访问淘汰。
   static const int kPlaylistTracksCacheLimit = 5;
 
-  List<PlayHistoryEntry> _history = const [];
-  List<PlaylistInfo> _playlists = const [];
+  /// 播放历史 / 列表清单 / 收藏键的读投影。
+  ///
+  /// 三者都是「整表单值」视图：读取可能被写入或另一次读取竞争，策略分别
+  /// 由 merge / replay / supersede 参数表达，状态机本身只实现一次。
+  late final ReadReconciliation<List<PlayHistoryEntry>, PlayHistoryEntry>
+  _historyRead;
+  late final ReadReconciliation<List<PlaylistInfo>, Never> _playlistsRead;
+  late final ReadReconciliation<Set<String>, _PendingFavoriteState>
+  _favoritesRead;
 
   /// 列表曲目缓存（LRU）：尾部是最近访问，超出上限时从头部淘汰。
   ///
-  /// 必须是插入有序 Map：每次读取 `remove` 后重新插入来「触碰」条目。
-  final LinkedHashMap<int, List<PlaylistTrack>> _tracksByPlaylist =
-      LinkedHashMap<int, List<PlaylistTrack>>();
+  /// 每个列表各持一份读投影（值 + 阶段 + 在途 + 错误）；这里只保留 LRU
+  /// 顺序。必须是插入有序 Map：每次读取 `remove` 后重新插入来「触碰」条目。
+  final LinkedHashMap<int, ReadReconciliation<List<PlaylistTrack>?, Never>>
+  _playlistTracksReads =
+      LinkedHashMap<int, ReadReconciliation<List<PlaylistTrack>?, Never>>();
 
   /// 当前正在展示的列表 id：LRU 淘汰时跳过，避免后台写入把用户正看的
   /// 列表挤掉。`playlistTracksView` / `ensurePlaylistTracks` 会更新它。
   int? _activePlaylistId;
 
-  final Set<int> _loadingPlaylistIds = {};
-  Set<String> _favoriteKeys = const {};
-
-  bool _historyLoaded = false;
-  bool _playlistsLoaded = false;
-  bool _favoritesLoaded = false;
-
-  /// 合集读取阶段：页面据此区分空库与加载失败（failed 可重试）。
-  LibraryReadState _playlistsState = const LibraryReadState.loading();
-  LibraryReadState _historyState = const LibraryReadState.loading();
-
-  /// 各列表曲目最近一次读取失败（有旧缓存时视图仍按 ready 展示旧值）。
-  final Map<int, Object> _playlistTracksErrors = {};
-
   /// 浏览缓存代数：托盘释放后自增，使释放前发出的列表曲目读取结果作废。
   ///
-  /// provider 常驻托盘门之外：只清 `_tracksByPlaylist` 不够——在途查询落地
-  /// 后仍会把旧列表写回来，恢复窗口时页面拿到的又是释放前那份数据。读取
-  /// 发起时捕获代数、写回前比对；代数变了就只把结果交给显式等待方，不缓存。
+  /// provider 常驻托盘门之外：只清缓存不够——在途查询落地后仍会把旧列表
+  /// 写回来。读投影各自持有内部代际；这里额外保留一份给「收藏校准联动读
+  /// 收藏列表」判断释放是否发生在键读取与曲目读取之间。
   int _browseGeneration = 0;
-
-  /// `_favoriteKeys` 是否来自仓库整表（而非只有一次乐观 toggle）。
-  /// 只有整表可信时才能用它的长度校准收藏计数。
-  bool _favoriteKeysAuthoritative = false;
-
-  /// 历史查询进行中的数量（静默重载与显式刷新共用）。
-  ///
-  /// 查询期间到达的单条写入不能直接丢掉：快照可能取自写入之前。这里只记录
-  /// 进行中数量，等最后一个查询落地后再把缓冲条目补进去。
-  int _historyLoadsInFlight = 0;
-
-  /// 查询期间到达、尚未合并进内存的单条历史写入（按到达顺序）。
-  List<PlayHistoryEntry> _pendingHistoryEntries = const [];
-
-  /// 收藏键读取代际：每次整表读取自增，只有最新一代能写回缓存。
-  ///
-  /// 启动时的 [ensureFavoritesLoaded] 与变更后的静默校准可能重叠；旧读取的
-  /// 快照落地时可能早于一次收藏写入。直接覆盖会让 UI 回到旧状态（真机表现：
-  /// 收藏已入库、收藏列表也有，但播放页心形仍是空心，重启后才恢复）。
-  int _favoriteKeysReadGeneration = 0;
-
-  /// 收藏键整表读取进行中的数量。
-  ///
-  /// 读取期间的本地 toggle 必须记录，等最后一个读取落地后重放：旧快照可能
-  /// 早于这次写入。计数器归零前不能清空待重放状态。
-  int _favoritesCalibrationsInFlight = 0;
-
-  /// 读取期间发生的收藏切换（key → 最新状态与新增行）。
-  ///
-  /// 同一个 key 只保留最后一次状态：先收藏再取消时重放「取消」，不能把
-  /// 已被删除的 key 重新加回来；新增行跟着最终状态一起保留。
-  final Map<String, _PendingFavoriteState> _pendingFavoriteStates = {};
 
   bool _disposed = false;
   Future<void>? _pendingReload;
@@ -156,21 +160,21 @@ class LibraryProvider extends ChangeNotifier {
   int _playlistsRevision = 0;
   int get playlistsRevision => _playlistsRevision;
 
-  List<PlayHistoryEntry> get history => _history;
-  List<PlaylistInfo> get playlists => _playlists;
+  List<PlayHistoryEntry> get history => _historyRead.value;
+  List<PlaylistInfo> get playlists => _playlistsRead.value;
 
   /// 自建列表（不含默认收藏的内部保留行）。
   List<PlaylistInfo> get customPlaylists => [
-    for (final playlist in _playlists)
+    for (final playlist in _playlistsRead.value)
       if (!playlist.isFavorites) playlist,
   ];
 
   /// 历史 / 列表的读取阶段（含失败与重试）。
-  LibraryReadState get historyState => _historyState;
-  LibraryReadState get playlistsState => _playlistsState;
+  LibraryReadState get historyState => _historyRead.state;
+  LibraryReadState get playlistsState => _playlistsRead.state;
 
-  bool get isHistoryLoading => _historyState.isLoading;
-  bool get isPlaylistsLoading => _playlistsState.isLoading;
+  bool get isHistoryLoading => historyState.isLoading;
+  bool get isPlaylistsLoading => playlistsState.isLoading;
 
   /// 列表曲目读取视图（含 failed 阶段）。
   ///
@@ -178,103 +182,112 @@ class LibraryProvider extends ChangeNotifier {
   /// 当前列表因此始终保持为 LRU 最新，不会被别的列表写入挤掉。
   PlaylistTracksView playlistTracksView(int playlistId) {
     _activePlaylistId = playlistId;
+    final read = _playlistTracksReads[playlistId];
     final tracks = _touchPlaylistTracks(playlistId);
-    final error = _playlistTracksErrors[playlistId];
+    final error = read?.error;
     final state = error != null && tracks == null
         ? LibraryReadState.failed(error)
-        : _loadingPlaylistIds.contains(playlistId) ||
-              (tracks == null && error == null)
+        : (read?.explicitLoading ?? false) || (tracks == null && error == null)
         ? const LibraryReadState.loading()
         : const LibraryReadState.ready();
     return PlaylistTracksView(tracks: tracks, state: state);
   }
 
+  /// 列表曲目的读投影（每个列表一份，值与读取阶段都在投影里）。
+  ReadReconciliation<List<PlaylistTrack>?, Never> _playlistTracksRead(
+    int playlistId,
+  ) {
+    return _playlistTracksReads.putIfAbsent(
+      playlistId,
+      () => ReadReconciliation(
+        initialValue: null,
+        mergeQuiet: (_, fresh) => fresh,
+        replayWrites: (current, _) => current,
+        failureState: (value, error) => value == null
+            ? LibraryReadState.failed(error)
+            : const LibraryReadState.ready(),
+        canReadQuietly: (value) => value != null,
+      ),
+    );
+  }
+
   /// 读取并标记最近使用（未缓存返回 null）。
   List<PlaylistTrack>? _touchPlaylistTracks(int playlistId) {
-    final tracks = _tracksByPlaylist.remove(playlistId);
-    if (tracks != null) _tracksByPlaylist[playlistId] = tracks;
-    return tracks;
+    final read = _playlistTracksReads[playlistId];
+    if (read == null || read.value == null) return read?.value;
+    _playlistTracksReads
+      ..remove(playlistId)
+      ..[playlistId] = read;
+    return read.value;
   }
 
   /// 写入缓存并按 LRU 淘汰超限条目。
   void _storePlaylistTracks(int playlistId, List<PlaylistTrack> tracks) {
-    _tracksByPlaylist
+    final read = _playlistTracksRead(playlistId)..seed(tracks);
+    _playlistTracksReads
       ..remove(playlistId)
-      ..[playlistId] = tracks;
+      ..[playlistId] = read;
     _evictOverflowPlaylistTracks();
   }
 
   /// 超出上限时从最久未访问开始淘汰；当前展示列表跳过。
   ///
-  /// 跳过时把它移到队尾再继续，最多多转一圈（条目数 ≤ 上限 + 1），不会死循环。
+  /// 只统计已有值的条目：失败 / 在途的投影不占 LRU 名额（对应原来的
+  /// 错误表 / loading 集合）。跳过当前列表时把它移到队尾再继续，最多多转
+  /// 一圈（条目数 ≤ 上限 + 1），不会死循环。
   void _evictOverflowPlaylistTracks() {
-    while (_tracksByPlaylist.length > kPlaylistTracksCacheLimit) {
-      final oldest = _tracksByPlaylist.keys.first;
-      if (oldest == _activePlaylistId && _tracksByPlaylist.length > 1) {
-        final tracks = _tracksByPlaylist.remove(oldest)!;
-        _tracksByPlaylist[oldest] = tracks;
+    while (_cachedPlaylistTracksCount > kPlaylistTracksCacheLimit) {
+      int? oldest;
+      for (final entry in _playlistTracksReads.entries) {
+        if (entry.value.value != null) {
+          oldest = entry.key;
+          break;
+        }
+      }
+      if (oldest == null) return;
+      if (oldest == _activePlaylistId && _cachedPlaylistTracksCount > 1) {
+        final read = _playlistTracksReads.remove(oldest)!;
+        _playlistTracksReads[oldest] = read;
         continue;
       }
-      _tracksByPlaylist.remove(oldest);
-      _playlistTracksErrors.remove(oldest);
+      _playlistTracksReads.remove(oldest);
     }
   }
 
-  /// 列表曲目读取的唯一实现：代数守卫、缓存 / 错误写回与通知都在这里。
+  int get _cachedPlaylistTracksCount =>
+      _playlistTracksReads.values.where((read) => read.value != null).length;
+
+  /// 列表曲目读取的唯一实现：读投影负责代际、在途与失败阶段，这里只做
+  /// 缓存写入 / LRU / 通知。
   ///
-  /// [mode] 决定读取意图：
-  /// - quiet：只重载已缓存列表（仓库变更后的后台校准），不翻转 loading；
-  /// - explicit：显式读取（页面请求 / 可等待入口），占 loading 标记。
-  ///
-  /// [generation] 由 build 期内发起的读取传入发起时刻的代数：微任务真正开跑
-  /// 前托盘可能已释放，那时结果必须按旧代数作废。返回本次读到的曲目；失败时
-  /// 给旧缓存（没有则为空），错误留给视图展示 failed。
+  /// [mode] quiet 只重载已缓存列表、不翻转 loading；explicit 占 loading 并
+  /// 在失败时返回旧缓存（没有则为空）。返回本次读到的曲目；过期结果只交给
+  /// 显式等待方，不写回缓存。
   Future<List<PlaylistTrack>> _loadPlaylistTracks(
     int playlistId, {
     required _LoadMode mode,
-    int? generation,
+    ReadReconciliation<List<PlaylistTrack>?, Never>? read,
   }) async {
-    if (mode == _LoadMode.quiet && !_tracksByPlaylist.containsKey(playlistId)) {
-      return const [];
+    final projection = read ?? _playlistTracksRead(playlistId);
+    final result = await projection.load(
+      intent: mode,
+      fetch: () =>
+          _repository.listPlaylistTracks(playlistId).timeout(_readTimeout),
+    );
+    if (result.failed) {
+      debugPrint('[Library] 加载列表曲目失败: ${result.error}');
     }
-    final loadGeneration = generation ?? _browseGeneration;
-    // 已有请求在途时 add 返回 false：不重复通知（查询本身仍照常发起，
-    // 与可等待入口的并发语义一致）。
-    if (mode == _LoadMode.explicit &&
-        loadGeneration == _browseGeneration &&
-        _loadingPlaylistIds.add(playlistId)) {
+    if (result.accepted && result.succeeded) {
+      _storePlaylistTracks(playlistId, result.value!);
+    }
+    if (mode == _LoadMode.explicit || result.accepted) {
       _notify();
     }
-    try {
-      final tracks = await _repository
-          .listPlaylistTracks(playlistId)
-          .timeout(_readTimeout);
-      if (!_disposed && loadGeneration == _browseGeneration) {
-        _storePlaylistTracks(playlistId, tracks);
-        _playlistTracksErrors.remove(playlistId);
-      }
-      return tracks;
-    } catch (e) {
-      debugPrint('[Library] 加载列表曲目失败: $e');
-      if (!_disposed && loadGeneration == _browseGeneration) {
-        _playlistTracksErrors[playlistId] = e;
-      }
-      return mode == _LoadMode.explicit
-          ? _touchPlaylistTracks(playlistId) ?? const []
-          : const [];
-    } finally {
-      if (mode == _LoadMode.explicit) {
-        // 只回收自己那份 loading 标记：释放清空后可能已有新请求占位，
-        // 旧请求落地时不能把新请求的标记删掉（否则页面误判 ready）。
-        if (loadGeneration == _browseGeneration) {
-          _loadingPlaylistIds.remove(playlistId);
-        }
-        _notify();
-      } else if (loadGeneration == _browseGeneration) {
-        // 释放后的静默重载不通知：缓存已按设计清空，这次结果不写回。
-        _notify();
-      }
-    }
+    return result.succeeded
+        ? result.value!
+        : mode == _LoadMode.explicit
+        ? _touchPlaylistTracks(playlistId) ?? const []
+        : const [];
   }
 
   /// 请求加载列表曲目（未缓存且未在加载中时发起；可在 build 内调用）。
@@ -282,21 +295,18 @@ class LibraryProvider extends ChangeNotifier {
   /// [force] 由「加载失败后重试」使用：丢掉旧缓存重新查询。
   void ensurePlaylistTracks(int playlistId, {bool force = false}) {
     _activePlaylistId = playlistId;
-    if (!force && _tracksByPlaylist.containsKey(playlistId)) {
+    final read = _playlistTracksRead(playlistId);
+    if (!force && read.value != null) {
       _touchPlaylistTracks(playlistId);
       return;
     }
     // 读失败后不自动重试：收藏页每次 build 都会调用这里，如果清掉错误再重读，
     // 一次失败就会变成「失败 → 清错 → loading → 再失败」的每帧死循环（页面
     // 永远转圈）。错误保留到显式重试（force）或仓库变更事件重载。
-    if (!force && _playlistTracksErrors.containsKey(playlistId)) return;
-    // 已有请求在途：不并发；force 等它落地后由调用方再次重试。
-    if (!_loadingPlaylistIds.add(playlistId)) return;
-    if (force) {
-      _tracksByPlaylist.remove(playlistId);
-      _playlistTracksErrors.remove(playlistId);
-    }
-    final generation = _browseGeneration;
+    if (!force && read.state.isFailed) return;
+    // 已有显式请求在途：不并发；force 等它落地后由调用方再次重试。
+    if (!read.markExplicitLoading()) return;
+    if (force) read.invalidate(discardValue: true, discardPending: true);
     // build 期调用：同步标记 loading（本帧即可显示加载态），通知推迟到
     // 微任务，避免 setState during build。
     unawaited(
@@ -306,7 +316,7 @@ class LibraryProvider extends ChangeNotifier {
         await _loadPlaylistTracks(
           playlistId,
           mode: _LoadMode.explicit,
-          generation: generation,
+          read: read,
         );
       }),
     );
@@ -315,20 +325,25 @@ class LibraryProvider extends ChangeNotifier {
   /// 释放浏览缓存（托盘隐藏 / 系统低内存时由内存守卫调用）：清列表曲目与读取错误。
   ///
   /// 保留收藏键、列表清单与历史：恢复后收藏图标 / 合集入口立即有正确依据，
-  /// 页面重建时经 [ensurePlaylistTracks] 重新读列表曲目。代数自增 + 清
-  /// loading 标记，让释放前的在途读取（以及紧随其后的静默重载）落地后作废，
-  /// 不会把旧列表又塞回缓存；释放后新发起的读取则正常占位、正常写回。
+  /// 页面重建时经 [ensurePlaylistTracks] 重新读列表曲目。投影代际自增，让
+  /// 释放前的在途读取（以及紧随其后的静默重载）落地后作废，不会把旧列表
+  /// 又塞回缓存；释放后新发起的读取则正常占位、正常写回。
   void releaseBrowseCaches() {
     _browseGeneration++;
-    _tracksByPlaylist.clear();
+    for (final read in _playlistTracksReads.values) {
+      read.invalidate(
+        staleReads: true,
+        discardValue: true,
+        discardPending: true,
+      );
+    }
+    _playlistTracksReads.clear();
     _activePlaylistId = null;
-    _playlistTracksErrors.clear();
-    _loadingPlaylistIds.clear();
     _notify();
   }
 
   bool isFavorite(String sourceKey, String songId) =>
-      _favoriteKeys.contains('$sourceKey:$songId');
+      _favoritesRead.value.contains('$sourceKey:$songId');
 
   void _onRepositoryChanged(LibraryChange change) {
     if (_disposed) return;
@@ -339,7 +354,7 @@ class LibraryProvider extends ChangeNotifier {
           _applyHistoryEntry(entry);
         } else {
           // 删除 / 清空 / 同步等无法增量表达：保持现有整表重载。
-          _historyLoaded = false;
+          _historyRead.invalidate();
           _pendingReload = _loadHistory(_LoadMode.quiet);
           unawaited(_pendingReload!);
         }
@@ -355,9 +370,15 @@ class LibraryProvider extends ChangeNotifier {
       case LibraryPlaylistTracksChange(:final playlistId):
         // 列表刚被写过：之前的读取失败不再代表当前数据，允许页面下一次重读
         //（否则错误会一直挡住 ensure，数据恢复后仍停在失败态）。
-        _playlistTracksErrors.remove(playlistId);
+        final tracksRead = _playlistTracksReads[playlistId];
+        tracksRead?.clearFailure();
         _pendingReload = Future.wait([
-          _loadPlaylistTracks(playlistId, mode: _LoadMode.quiet),
+          if (tracksRead != null)
+            _loadPlaylistTracks(
+              playlistId,
+              mode: _LoadMode.quiet,
+              read: tracksRead,
+            ),
           _loadPlaylists(_LoadMode.quiet),
         ]);
         unawaited(_pendingReload!);
@@ -373,45 +394,15 @@ class LibraryProvider extends ChangeNotifier {
   /// （重播不打断浏览），新条目插到最前；超出上限时裁掉尾部最旧记录。
   void _applyHistoryEntry(PlayHistoryEntry entry) {
     // 查询进行中：结果可能还没包含这次写入，先缓冲，等查询落地后再合并。
-    if (_historyLoadsInFlight > 0) {
-      _pendingHistoryEntries = [..._pendingHistoryEntries, entry];
-      return;
-    }
+    if (_historyRead.bufferWrite(entry)) return;
     // 历史尚未加载过：缓存本来就没有可补的基线，保持 dirty 等首次
     // refreshHistory。这里刻意不回查——首屏可能根本没打开历史页。
-    if (!_historyLoaded) return;
-    _history = LibraryHistoryOrder.applyEntry(
-      _history,
-      entry,
-      limit: kHistoryLimit,
+    if (!_historyRead.loaded) return;
+    _historyRead.patch(
+      (current) =>
+          LibraryHistoryOrder.applyEntry(current, entry, limit: kHistoryLimit),
     );
     _notify();
-  }
-
-  /// 查询结束时补入期间缓冲的单条写入。
-  ///
-  /// 只有最后一个查询落地、且已有可合并的基线时才消费缓冲；失败且从未
-  /// 加载成功时保留缓冲，等下一次 refreshHistory 再合并（DB 也有这次写入，
-  /// 不会永久丢失）。
-  void _drainPendingHistoryEntries() {
-    if (_historyLoadsInFlight > 0 || _pendingHistoryEntries.isEmpty) return;
-    if (!_historyLoaded) return;
-    for (final entry in _pendingHistoryEntries) {
-      _history = LibraryHistoryOrder.applyEntry(
-        _history,
-        entry,
-        limit: kHistoryLimit,
-      );
-    }
-    _pendingHistoryEntries = const [];
-  }
-
-  /// 一个历史查询结束：递减进行中计数，最后一个查询负责补入缓冲。
-  void _finishHistoryLoad({required bool success}) {
-    if (_historyLoadsInFlight > 0) _historyLoadsInFlight--;
-    if (_historyLoadsInFlight > 0) return;
-    // 失败但旧缓存仍在：把缓冲合并进旧缓存；失败且从未加载成功则留到下次。
-    if (success || _historyLoaded) _drainPendingHistoryEntries();
   }
 
   /// 单曲收藏切换的内存补丁（不查库）。
@@ -431,12 +422,11 @@ class LibraryProvider extends ChangeNotifier {
   /// 就包含它。同一 key 已有记录时保留已有新增行：调用方先补键、变更事件
   /// 后到（带落库行）的路径不能把行丢掉。
   void _recordFavoriteState(String key, bool favorite, {PlaylistTrack? track}) {
-    if (_favoritesCalibrationsInFlight <= 0) return;
-    final previous = _pendingFavoriteStates[key];
-    _pendingFavoriteStates[key] = (
+    _favoritesRead.bufferWrite((
+      key: key,
       favorite: favorite,
-      track: favorite ? (track ?? previous?.track) : null,
-    );
+      track: favorite ? track : null,
+    ));
   }
 
   /// 单曲切换载荷 → 收藏补丁（立即应用与校准后重放共用）。
@@ -459,23 +449,54 @@ class LibraryProvider extends ChangeNotifier {
     Iterable<String> remove = const [],
     Iterable<PlaylistTrack> rows = const [],
   }) {
-    final keys = Set<String>.from(_favoriteKeys);
-    var addedCount = 0;
+    final mutation = _mutateFavoriteKeys(
+      _favoritesRead.value,
+      add: add,
+      remove: remove,
+    );
+    _favoritesRead.patch((_) => mutation.keys);
+    _applyFavoriteSideEffects(
+      keys: mutation.keys,
+      addedCount: mutation.added,
+      removedCount: mutation.removed,
+      dropped: mutation.dropped,
+      rows: rows,
+    );
+  }
+
+  /// 键集合的幂等增删；行缓存按「要求移除的全部键」删，不只看键集合里
+  /// 有没有：键集合可能只是部分快照，但缓存里的行是确定的。
+  ({Set<String> keys, int added, int removed, Set<String> dropped})
+  _mutateFavoriteKeys(
+    Set<String> current, {
+    Iterable<String> add = const [],
+    Iterable<String> remove = const [],
+  }) {
+    final keys = Set<String>.from(current);
+    var added = 0;
     for (final key in add) {
-      if (keys.add(key)) addedCount++;
+      if (keys.add(key)) added++;
     }
-    // 行缓存按「要求移除的全部键」删，不只看键集合里有没有：键集合可能只是
-    // 部分快照，但缓存里的行是确定的。
     final dropped = <String>{};
-    var removedCount = 0;
+    var removed = 0;
     for (final key in remove) {
       dropped.add(key);
-      if (keys.remove(key)) removedCount++;
+      if (keys.remove(key)) removed++;
     }
-    _favoriteKeys = keys;
-    // 只有全量键集合可信时才标记「已加载」；否则一次 toggle 会把部分集合
-    // 当成全量，后续 ensureFavoritesLoaded 不再补查其它曲目的收藏状态。
-    if (_favoriteKeysAuthoritative) _favoritesLoaded = true;
+    return (keys: keys, added: added, removed: removed, dropped: dropped);
+  }
+
+  /// 收藏键变化后的共享副作用：收藏列表行、默认收藏计数与版本。
+  ///
+  /// 立即补丁与校准后的缓冲重放共用；重放已包含的切换时键集合不再变化，
+  /// 因此不会重复递增 [favoritesRevision]。
+  void _applyFavoriteSideEffects({
+    required Set<String> keys,
+    required int addedCount,
+    required int removedCount,
+    required Set<String> dropped,
+    required Iterable<PlaylistTrack> rows,
+  }) {
     if (addedCount > 0 || removedCount > 0) _favoritesRevision++;
 
     final favoritesId = _favoritesPlaylistId;
@@ -505,7 +526,7 @@ class LibraryProvider extends ChangeNotifier {
     }
 
     PlaylistInfo? favorites;
-    for (final playlist in _playlists) {
+    for (final playlist in _playlistsRead.value) {
       if (playlist.id == favoritesId) {
         favorites = playlist;
         break;
@@ -514,44 +535,51 @@ class LibraryProvider extends ChangeNotifier {
     if (favorites == null) return;
     // 计数优先级：整表收藏键 > 已加载列表长度 > 净变化量。
     // 前两者都是权威快照，重放时不会把校准已包含的切换再算一次。
-    final favoriteTracks = _tracksByPlaylist[favoritesId];
+    final favoriteTracks = _playlistTracksReads[favoritesId]?.value;
     final trackCount = FavoriteCountPolicy.trackCount(
-      authoritative: _favoriteKeysAuthoritative,
-      favoriteKeyCount: _favoriteKeys.length,
+      authoritative: _favoritesRead.authoritative,
+      favoriteKeyCount: keys.length,
       loadedTrackCount: favoriteTracks?.length,
       currentCount: favorites.trackCount,
       delta: addedCount - removedCount,
     );
     if (trackCount == favorites.trackCount) return;
-    _playlists = [
-      for (final playlist in _playlists)
-        if (playlist.id == favoritesId)
-          PlaylistInfo(
-            id: playlist.id,
-            name: playlist.name,
-            createdAt: playlist.createdAt,
-            trackCount: trackCount,
-            isFavorites: playlist.isFavorites,
-          )
-        else
-          playlist,
-    ];
+    _playlistsRead.patch(
+      (current) => [
+        for (final playlist in current)
+          if (playlist.id == favoritesId)
+            PlaylistInfo(
+              id: playlist.id,
+              name: playlist.name,
+              createdAt: playlist.createdAt,
+              trackCount: trackCount,
+              isFavorites: playlist.isFavorites,
+            )
+          else
+            playlist,
+      ],
+    );
     _playlistsRevision++;
   }
 
-  /// 校准结束时重放期间记录的切换；只在最后一个读取落地后调用。
-  void _finishFavoritesCalibration() {
-    if (_favoritesCalibrationsInFlight > 0) _favoritesCalibrationsInFlight--;
-    if (_favoritesCalibrationsInFlight > 0) return;
-    if (_pendingFavoriteStates.isEmpty) return;
-    final states = Map<String, _PendingFavoriteState>.of(
-      _pendingFavoriteStates,
-    );
-    _pendingFavoriteStates.clear();
-    // 重放走补丁本体而不是 _applyFavoriteToggle：不会再次记录。
-    // 同一 key 只保留最后状态，先收藏再取消不会把 key 加回来；行跟着
-    // 最终状态一起重放，旧列表快照删掉的行要补回来。
-    _patchFavorites(
+  /// 校准结束时重放期间记录的切换（由读投影在最后一个读取落地后调用）。
+  ///
+  /// 同一 key 只保留最后状态，先收藏再取消不会把 key 加回来；行跟着
+  /// 最终状态一起重放，旧列表快照删掉的行要补回来。
+  Set<String> _replayFavoriteStates(
+    Set<String> current,
+    List<_PendingFavoriteState> pending,
+  ) {
+    final states = <String, ({bool favorite, PlaylistTrack? track})>{};
+    for (final state in pending) {
+      final previous = states[state.key];
+      states[state.key] = (
+        favorite: state.favorite,
+        track: state.favorite ? (state.track ?? previous?.track) : null,
+      );
+    }
+    final mutation = _mutateFavoriteKeys(
+      current,
       add: [
         for (final entry in states.entries)
           if (entry.value.favorite) entry.key,
@@ -560,50 +588,32 @@ class LibraryProvider extends ChangeNotifier {
         for (final entry in states.entries)
           if (!entry.value.favorite) entry.key,
       ],
+    );
+    _applyFavoriteSideEffects(
+      keys: mutation.keys,
+      addedCount: mutation.added,
+      removedCount: mutation.removed,
+      dropped: mutation.dropped,
       rows: [
         for (final entry in states.entries)
           if (entry.value.track != null) entry.value.track!,
       ],
     );
-  }
-
-  /// 收藏键整表读取的唯一实现：只允许最新一次读取写回缓存。
-  ///
-  /// 返回实际写回的读取代际；旧代际的结果直接丢弃（null）。为什么需要代际：
-  /// 启动 ensure 与变更后的静默校准会重叠，旧读取最后落地时数据库里可能已经
-  /// 有更新的收藏写入，覆盖会让播放页心形回到空心。
-  Future<int?> _readFavoriteKeys() async {
-    final generation = ++_favoriteKeysReadGeneration;
-    try {
-      final keys = await _repository.favoriteKeys();
-      if (_disposed || generation != _favoriteKeysReadGeneration) return null;
-      _favoriteKeys = keys;
-      _favoriteKeysAuthoritative = true;
-      _favoritesLoaded = true;
-      return generation;
-    } catch (e) {
-      debugPrint('[Library] 刷新收藏状态失败: $e');
-      return null;
-    }
+    return mutation.keys;
   }
 
   void _invalidateAll() {
     // 立即失效缓存并通知（同步），后台静默重载；不做事件去重——
     // 去重标志会在微任务未执行时吞掉后续变更，导致 UI 永久陈旧。
     // 静默重载不翻转 loading：后台校准不闪加载态（已有数据保持可见）。
-    _historyLoaded = false;
-    _playlistsLoaded = false;
-    _favoritesLoaded = false;
+    _historyRead.invalidate();
+    _playlistsRead.invalidate();
     // 导入等变化可能新增收藏，旧键集合不再是全量：校准完成前不能再用它
     // 反推计数，也不能让一次 toggle 把它重新标成「已加载」。
-    _favoriteKeysAuthoritative = false;
+    _favoritesRead.invalidate();
     _favoritesRevision++;
     _playlistsRevision++;
-    _tracksByPlaylist.clear();
-    _activePlaylistId = null;
-    // 全量失效后旧的读取错误也不再代表当前数据：清掉，页面下一次 ensure
-    // 才能重新读（失败会重新记录）。
-    _playlistTracksErrors.clear();
+    _invalidatePlaylistTracksReads();
     _notify();
     _pendingReload = Future.wait([
       _loadHistory(_LoadMode.quiet),
@@ -611,6 +621,20 @@ class LibraryProvider extends ChangeNotifier {
       _refreshFavoritesQuietly(),
     ]);
     unawaited(_pendingReload!);
+  }
+
+  /// 全量失效时清掉列表曲目值，但保留仍在途的投影。
+  ///
+  /// 原实现只清值 / 错误、不动 loading 集合：在途读取落地后仍会写回，新的
+  /// ensure 也不能绕过它重开。投影自己的代际不动，让这些读取继续完成；没有
+  /// 在途的条目直接丢掉（下一次页面访问重新读）。
+  void _invalidatePlaylistTracksReads() {
+    _playlistTracksReads.removeWhere((_, read) {
+      if (!read.reading && !read.explicitLoading) return true;
+      read.invalidate(discardValue: true, discardPending: true);
+      return false;
+    });
+    _activePlaylistId = null;
   }
 
   /// 历史读取的唯一实现。
@@ -629,7 +653,7 @@ class LibraryProvider extends ChangeNotifier {
     return DataPathTrace.async(
       'library.history.reload',
       () => _readHistory(mode),
-      fields: () => {'rows': _history.length},
+      fields: () => {'rows': _historyRead.value.length},
     );
   }
 
@@ -637,31 +661,15 @@ class LibraryProvider extends ChangeNotifier {
     final quiet = mode == _LoadMode.quiet;
     // 新一次整表查询覆盖此前的本地写入（它们都已落库）：丢弃旧缓冲，
     // 避免查询后又把随后被删除的条目“复活”。查询期间的新写入会重新入队。
-    _pendingHistoryEntries = const [];
-    _historyLoadsInFlight++;
-    if (!quiet) {
-      _historyState = const LibraryReadState.loading();
-      _notify();
+    final result = await _historyRead.load(
+      intent: mode,
+      fetch: () => _repository.listHistory().timeout(_readTimeout),
+      discardPendingOnStart: true,
+    );
+    if (result.failed) {
+      debugPrint('[Library] ${quiet ? '重载' : '加载'}播放历史失败: ${result.error}');
     }
-    var success = false;
-    try {
-      final fresh = await _repository.listHistory().timeout(_readTimeout);
-      _history = quiet
-          ? LibraryHistoryOrder.merge(current: _history, fresh: fresh)
-          : fresh;
-      _historyLoaded = true;
-      _historyState = const LibraryReadState.ready();
-      success = true;
-    } catch (e) {
-      debugPrint('[Library] ${quiet ? '重载' : '加载'}播放历史失败: $e');
-      // 有旧缓存就继续展示旧值；空历史才是 failed（可重试）。
-      _historyState = _history.isEmpty
-          ? LibraryReadState.failed(e)
-          : const LibraryReadState.ready();
-    } finally {
-      _finishHistoryLoad(success: success);
-      _notify();
-    }
+    _notify();
   }
 
   /// 按最近播放（`playedAt` 倒序）重排内存历史；顺序真变了才通知。
@@ -669,17 +677,18 @@ class LibraryProvider extends ChangeNotifier {
   /// 由收藏页在重新进入播放历史 / 本地歌曲合集、或页面重新可见时调用：
   /// 停留期间列表顺序冻结（见 [_loadHistory]），只在这一刻刷新。
   void resortHistoryByRecency() {
-    if (_history.length < 2) return;
-    final ordered = LibraryHistoryOrder.resortByRecency(_history);
+    final history = _historyRead.value;
+    if (history.length < 2) return;
+    final ordered = LibraryHistoryOrder.resortByRecency(history);
     var changed = false;
     for (var i = 0; i < ordered.length; i++) {
-      if (!identical(ordered[i], _history[i])) {
+      if (!identical(ordered[i], history[i])) {
         changed = true;
         break;
       }
     }
     if (!changed) return;
-    _history = ordered;
+    _historyRead.patch((_) => ordered);
     _notify();
   }
 
@@ -691,46 +700,48 @@ class LibraryProvider extends ChangeNotifier {
       // 这次校准由「无载荷的收藏变化」（批量 / 同步 / 导入）或列表结构变化
       // 触发：数据库已经是这些变化之后的状态，旧的在途 toggle 状态已被覆盖，
       // 清掉待重放状态，让本轮快照 + 之后的新 toggle 决定最终结果。
-      _pendingFavoriteStates.clear();
-      _favoritesCalibrationsInFlight++;
-      final generation = _browseGeneration;
-      try {
-        final keyGeneration = await _readFavoriteKeys();
-        final favoritesId = _favoritesPlaylistId;
-        // 收藏键照常校准（托盘释放保留它）；曲目缓存已在释放时清空，
-        // 这一轮结果不再写回，等页面重新 ensure 时读取。
-        if (keyGeneration != null &&
-            keyGeneration == _favoriteKeysReadGeneration &&
-            generation == _browseGeneration &&
-            favoritesId != null &&
-            _tracksByPlaylist.containsKey(favoritesId)) {
-          try {
-            final tracks = await _repository
-                .listPlaylistTracks(favoritesId)
-                .timeout(_readTimeout);
-            // 请求期间可能托盘释放或已有更新的收藏读取：这一份不再写回。
-            if (generation == _browseGeneration &&
-                keyGeneration == _favoriteKeysReadGeneration) {
-              _storePlaylistTracks(favoritesId, tracks);
+      final browseGeneration = _browseGeneration;
+      final result = await _favoritesRead.load(
+        intent: _LoadMode.quiet,
+        fetch: _repository.favoriteKeys,
+        discardPendingOnStart: true,
+        duringRead: (result) async {
+          final favoritesId = _favoritesPlaylistId;
+          // 收藏键照常校准（托盘释放保留它）；曲目缓存已在释放时清空，
+          // 这一轮结果不再写回，等页面重新 ensure 时读取。
+          if (result.accepted &&
+              browseGeneration == _browseGeneration &&
+              favoritesId != null &&
+              _playlistTracksReads[favoritesId]?.value != null) {
+            try {
+              final tracks = await _repository
+                  .listPlaylistTracks(favoritesId)
+                  .timeout(_readTimeout);
+              // 请求期间可能托盘释放或已有更新的收藏读取：这一份不再写回。
+              if (browseGeneration == _browseGeneration &&
+                  result.generation == _favoritesRead.generation) {
+                _storePlaylistTracks(favoritesId, tracks);
+              }
+            } catch (e) {
+              debugPrint('[Library] 刷新收藏列表失败: $e');
             }
-          } catch (e) {
-            debugPrint('[Library] 刷新收藏列表失败: $e');
           }
-        }
-        // 通知推迟到 finally：重放完校准期间的本地 toggle 后只通知一次。
-        await _loadPlaylists(_LoadMode.quiet, notify: false);
-      } finally {
-        _finishFavoritesCalibration();
-        _notify();
+          // 通知推迟到最后：重放完校准期间的本地 toggle 后只通知一次。
+          await _loadPlaylists(_LoadMode.quiet, notify: false);
+        },
+      );
+      if (result.failed) {
+        debugPrint('[Library] 刷新收藏状态失败: ${result.error}');
       }
+      _notify();
     },
     fields: () {
       final favoritesId = _favoritesPlaylistId;
       return {
-        'favorites': _favoriteKeys.length,
+        'favorites': _favoritesRead.value.length,
         'tracks': favoritesId == null
             ? 0
-            : (_tracksByPlaylist[favoritesId]?.length ?? 0),
+            : (_playlistTracksReads[favoritesId]?.value?.length ?? 0),
       };
     },
   );
@@ -741,27 +752,23 @@ class LibraryProvider extends ChangeNotifier {
   /// false 时由调用方在所有状态更新完后统一通知）；explicit 先显示 loading。
   Future<void> _loadPlaylists(_LoadMode mode, {bool notify = true}) async {
     _playlistsRevision++;
-    if (mode == _LoadMode.explicit) {
-      _playlistsState = const LibraryReadState.loading();
-      _notify();
+    final pending = _playlistsRead.load(
+      intent: mode,
+      fetch: () => _repository.listPlaylists().timeout(_readTimeout),
+    );
+    if (mode == _LoadMode.explicit) _notify();
+    final result = await pending;
+    if (result.failed) {
+      debugPrint('[Library] 加载列表失败: ${result.error}');
     }
-    try {
-      _playlists = await _repository.listPlaylists().timeout(_readTimeout);
-      _playlistsLoaded = true;
-      _playlistsState = const LibraryReadState.ready();
-    } catch (e) {
-      debugPrint('[Library] 加载列表失败: $e');
-      // 永远给终态：有旧列表就继续可用，没有数据才是失败。不能因为「曾经
-      // 成功过」留在 loading（空库导入后刷新失败会让收藏页永久转圈）。
-      _playlistsState = _playlists.isEmpty
-          ? LibraryReadState.failed(e)
-          : const LibraryReadState.ready();
-    }
+    // 永远给终态：读投影已按「有旧列表 ready / 空列表 failed」收口，
+    // 不能因为「曾经成功过」留在 loading（空库导入后刷新失败会让收藏页
+    // 永久转圈）。
     if (mode == _LoadMode.explicit || notify) _notify();
   }
 
   int? get _favoritesPlaylistId {
-    for (final playlist in _playlists) {
+    for (final playlist in _playlistsRead.value) {
       if (playlist.isFavorites) return playlist.id;
     }
     return null;
@@ -775,12 +782,12 @@ class LibraryProvider extends ChangeNotifier {
   /// 显式重载历史（首屏 / 导入后 / 失败重试）：直接采用仓库顺序（最近播放
   /// 倒序），不走停留期间的稳定合并。
   Future<void> refreshHistory({bool force = false}) async {
-    if (_historyLoaded && !force) return;
+    if (_historyRead.loaded && !force) return;
     await _loadHistory(_LoadMode.explicit);
   }
 
   Future<void> refreshPlaylists({bool force = false}) async {
-    if (_playlistsLoaded && !force) return;
+    if (_playlistsRead.loaded && !force) return;
     await _loadPlaylists(_LoadMode.explicit);
   }
 
@@ -789,15 +796,16 @@ class LibraryProvider extends ChangeNotifier {
   /// 与静默校准共用同一套读取代际与在途切换重放：读取期间用户点了收藏，
   /// 旧快照落地后不会被覆盖（否则数据库已收藏，播放页心形仍是空心）。
   Future<void> ensureFavoritesLoaded({bool force = false}) async {
-    if (_favoritesLoaded && !force) return;
+    if (_favoritesRead.loaded && !force) return;
     _favoritesRevision++;
-    _favoritesCalibrationsInFlight++;
-    try {
-      await _readFavoriteKeys();
-    } finally {
-      _finishFavoritesCalibration();
-      _notify();
+    final result = await _favoritesRead.load(
+      intent: _LoadMode.explicit,
+      fetch: _repository.favoriteKeys,
+    );
+    if (result.failed) {
+      debugPrint('[Library] 刷新收藏状态失败: ${result.error}');
     }
+    _notify();
   }
 
   /// 列表曲目：命中缓存直接返回，否则查询并缓存（可等待入口）。
@@ -811,7 +819,15 @@ class LibraryProvider extends ChangeNotifier {
       final cached = _touchPlaylistTracks(playlistId);
       if (cached != null) return Future.value(cached);
     }
-    return _loadPlaylistTracks(playlistId, mode: _LoadMode.explicit);
+    final read = _playlistTracksRead(playlistId);
+    final wasLoading = read.explicitLoading;
+    final pending = _loadPlaylistTracks(
+      playlistId,
+      mode: _LoadMode.explicit,
+      read: read,
+    );
+    if (!wasLoading) _notify();
+    return pending;
   }
 
   // 播放接线（raw 原样 → SourceTrack → PlaybackProvider；按需重新取链）
@@ -864,12 +880,15 @@ class LibraryProvider extends ChangeNotifier {
     PlayHistoryEntry entry,
   ) async {
     // 乐观更新本地缓存（列表即时移除，不等待变更流回载）；写失败回滚。
-    final previous = _history;
-    _history = [
-      for (final item in _history)
-        if (!(item.sourceKey == entry.sourceKey && item.songId == entry.songId))
-          item,
-    ];
+    final previous = _historyRead.value;
+    _historyRead.patch(
+      (current) => [
+        for (final item in current)
+          if (!(item.sourceKey == entry.sourceKey &&
+              item.songId == entry.songId))
+            item,
+      ],
+    );
     _notify();
     try {
       await _repository.deleteHistoryEntry(entry.sourceKey, entry.songId);
@@ -877,7 +896,7 @@ class LibraryProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[Library] 删除历史记录失败: $e');
       if (!_disposed) {
-        _history = previous;
+        _historyRead.patch((_) => previous);
         _notify();
       }
       return LibraryMutationOutcome.failed(e);
@@ -886,10 +905,9 @@ class LibraryProvider extends ChangeNotifier {
 
   Future<LibraryMutationOutcome> clearHistory() async {
     // 乐观清空本地缓存（UI 立即显示空态，不等待变更流回载）；写失败回滚。
-    final previous = _history;
-    final wasLoaded = _historyLoaded;
-    _history = const [];
-    _historyLoaded = true;
+    final previous = _historyRead.value;
+    final wasLoaded = _historyRead.loaded;
+    _historyRead.patch((_) => const [], loaded: true);
     _notify();
     try {
       await _repository.clearHistory();
@@ -897,8 +915,7 @@ class LibraryProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[Library] 清空历史失败: $e');
       if (!_disposed) {
-        _history = previous;
-        _historyLoaded = wasLoaded;
+        _historyRead.patch((_) => previous, loaded: wasLoaded);
         _notify();
       }
       return LibraryMutationOutcome.failed(e);
@@ -1040,43 +1057,47 @@ class LibraryProvider extends ChangeNotifier {
     String name,
     List<PlaylistTrack> rows,
   ) {
-    if (!_tracksByPlaylist.containsKey(playlistId)) {
+    if (_playlistTracksReads[playlistId]?.value == null) {
       _storePlaylistTracks(playlistId, rows);
-      _playlistTracksErrors.remove(playlistId);
     }
+    final playlists = _playlistsRead.value;
     var index = -1;
-    for (var i = 0; i < _playlists.length; i++) {
-      if (_playlists[i].id == playlistId) {
+    for (var i = 0; i < playlists.length; i++) {
+      if (playlists[i].id == playlistId) {
         index = i;
         break;
       }
     }
     if (index < 0) {
-      _playlists = [
-        PlaylistInfo(
-          id: playlistId,
-          name: name,
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-          trackCount: rows.length,
-        ),
-        ..._playlists,
-      ];
+      _playlistsRead.patch(
+        (current) => [
+          PlaylistInfo(
+            id: playlistId,
+            name: name,
+            createdAt: DateTime.now().millisecondsSinceEpoch,
+            trackCount: rows.length,
+          ),
+          ...current,
+        ],
+      );
       _playlistsRevision++;
-    } else if (_playlists[index].trackCount < rows.length) {
-      final playlist = _playlists[index];
-      _playlists = [
-        for (final item in _playlists)
-          if (item.id == playlistId)
-            PlaylistInfo(
-              id: playlist.id,
-              name: playlist.name,
-              createdAt: playlist.createdAt,
-              trackCount: rows.length,
-              isFavorites: playlist.isFavorites,
-            )
-          else
-            item,
-      ];
+    } else if (playlists[index].trackCount < rows.length) {
+      final playlist = playlists[index];
+      _playlistsRead.patch(
+        (current) => [
+          for (final item in current)
+            if (item.id == playlistId)
+              PlaylistInfo(
+                id: playlist.id,
+                name: playlist.name,
+                createdAt: playlist.createdAt,
+                trackCount: rows.length,
+                isFavorites: playlist.isFavorites,
+              )
+            else
+              item,
+        ],
+      );
       _playlistsRevision++;
     }
     _notify();
@@ -1178,14 +1199,16 @@ class LibraryProvider extends ChangeNotifier {
     List<PlayHistoryEntry> entries,
   ) async {
     if (entries.isEmpty) return const LibraryMutationOutcome.unchanged();
-    final previous = _history;
+    final previous = _historyRead.value;
     final keys = {
       for (final entry in entries) '${entry.sourceKey}:${entry.songId}',
     };
-    _history = [
-      for (final item in _history)
-        if (!keys.contains('${item.sourceKey}:${item.songId}')) item,
-    ];
+    _historyRead.patch(
+      (current) => [
+        for (final item in current)
+          if (!keys.contains('${item.sourceKey}:${item.songId}')) item,
+      ],
+    );
     _notify();
     final int removed;
     try {
@@ -1196,7 +1219,7 @@ class LibraryProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[Library] 批量删除历史失败: $e');
       if (!_disposed) {
-        _history = previous;
+        _historyRead.patch((_) => previous);
         _notify();
       }
       return LibraryMutationOutcome.failed(e);
@@ -1428,6 +1451,13 @@ class LibraryProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _historyRead.dispose();
+    _playlistsRead.dispose();
+    _favoritesRead.dispose();
+    for (final read in _playlistTracksReads.values) {
+      read.dispose();
+    }
+    _playlistTracksReads.clear();
     _subscription?.cancel();
     super.dispose();
   }
