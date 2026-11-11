@@ -17,6 +17,7 @@ public class MoliaMemWin32 {
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, int data, UIntPtr extra);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
 }
 "@
@@ -113,10 +114,22 @@ Sample 'browse'
 Start-Sleep -Seconds $PlaySeconds
 Sample 'playing'
 
+# 关闭到托盘：不能用 Process.CloseMainWindow()（它发 WM_CLOSE）。
+# nativeapi 把 WM_CLOSE 视为不可取消的系统关闭，会直接销毁窗口；自定义标题栏
+# 关闭键 / Alt+F4 走的是 WM_SYSCOMMAND + SC_CLOSE，应用才有机会拦截并隐藏。
+# 这里发 SC_CLOSE，等价用户点顶栏关闭键。
 $proc = Get-Process molia -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($null -ne $proc) { $proc.CloseMainWindow() | Out-Null }
+if ($null -ne $proc) {
+  $proc.Refresh()
+  [MoliaMemWin32]::PostMessage(
+    $proc.MainWindowHandle, 0x0112, [IntPtr]0xF060, [IntPtr]::Zero
+  ) | Out-Null
+}
 Start-Sleep -Seconds 3
-Sample 'tray'
+Sample 'tray+3s'
+# 2s 延迟 trim + 10s 暂停 trim 都落定后再采一次；播放中则只反映 2s 补 trim。
+Start-Sleep -Seconds 12
+Sample 'tray+15s'
 
 # 单实例唤起：再次启动 exe 会把已有实例的窗口显示出来。
 Start-Process -FilePath $Exe -WorkingDirectory (Split-Path $Exe) | Out-Null

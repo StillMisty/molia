@@ -290,6 +290,10 @@ pending / keepAlive，当前展示的封面不受影响。
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
 - `flutter test --no-pub`：**2595 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收）；
+- Windows release（2026-11-11，本机；顶栏关闭键走 `WM_SYSCOMMAND + SC_CLOSE`，不是 `Process.CloseMainWindow()` 的 `WM_CLOSE`）：
+  - `memory_windows.ps1` 一次完整场景：空闲专用工作集 170.0MB、浏览 234.5MB、关闭前 210.4MB；托盘 +3s **4.1MB**、+15s **3.1MB**（该轮日志出现 `托盘暂停延迟 trim`，是暂停/空闲托盘，不能当作播放态收益）。
+  - 另一次确认 `play.start result=ok`、播放中关到托盘：**133–143MB**，90s 内稳定（`cache_path=direct`）；原始反馈的 200MB 在同一构建未复现。
+  - 提交大小 373–490MB；暂停后仍有 audio source / player 保留，个别轮次专用工作集 116–132MB，要压到个位数需要额外释放播放器（未做）。
 - Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
   - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
   - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
@@ -299,7 +303,8 @@ pending / keepAlive，当前展示的封面不受影响。
 
 ### 9.3 未覆盖 / 下一步
 
-- **Windows 200MB 未复现 / 未复测**：本轮按用户要求在 Linux 验证清理逻辑；Windows release 的专用工作集与 `molia.memory` 仍需在真实 Windows 上跑 `tool/agent/memory.ps1` / `perf.sh memory windows`，不能把 Linux 的差额当成 Windows 收益。
+- **Windows 200MB 已复测但未复现**：当前构建播放中托盘 133–143MB；暂停/空闲托盘可到 3–6MB。真实用户库（更大队列 / 更多封面 / 长播）与旧构建同机 A/B 仍未做，不能把本轮数字外推成所有场景。
+- `tool/agent/memory_windows.ps1` 已改用 `SC_CLOSE` 触发真实关闭策略；原先 `Process.CloseMainWindow()` 的 `WM_CLOSE` 在 nativeapi 下不可取消，会把应用直接关掉，测不到托盘。
 - **最小化不省内存**：产品语义保持不变；只静音 ticker（动画不跑），页面 / 图片 / 浏览缓存仍保留。
 - **同步 journal 的 session 整队列 payload** 已做 cursor 增量；全量快照 / 备份仍会写一次整份 tracks（预期行为）。真正的大队列 A/B 仍需在真实库上测 journal 字节与同步轮次耗时。
 - `molia.memory` 仍只有 RSS + imageCache；Windows 专用工作集 / 提交大小日志未加。
