@@ -21,7 +21,7 @@ import '../domain/models/library.dart';
 import '../domain/models/source.dart';
 import '../domain/models/track.dart';
 import '../domain/ports/source_registry.dart';
-import '../services/source_swap/source_swap_strategy.dart';
+import '../services/source_swap/swap_query_planner.dart';
 import 'library_provider.dart';
 import 'playback_provider.dart';
 import 'source_fan_out.dart';
@@ -106,9 +106,9 @@ class SourceSwapProvider extends ChangeNotifier {
   SourceSwapProvider({
     required this._catalogService,
     required this._sourceRegistry,
+    required this._swapQueryPlanner,
     required this._libraryProvider,
     required this._playbackProvider,
-    this._strategies = SourceSwapStrategies.standard,
     this._onTrackSwapped,
   }) {
     // 查询代际 / 逐源状态 / 失败集合 / 选中项统一交给扇出会话；本类只保留
@@ -125,8 +125,8 @@ class SourceSwapProvider extends ChangeNotifier {
   final LibraryProvider _libraryProvider;
   final PlaybackProvider _playbackProvider;
 
-  /// 按音源覆盖换源关键词口径（B 站 artists 是 UP 主，只搜标题）。
-  final SourceSwapStrategies _strategies;
+  /// 换源查询的唯一规划入口（关键词口径与候选来源，与自动换源共用）。
+  final SwapQueryPlanner _swapQueryPlanner;
 
   /// 写回成功后的曲目级本地数据钩子（自定义封面跟随；失败不影响换源）。
   final SourceSwapTrackHook? _onTrackSwapped;
@@ -180,10 +180,8 @@ class SourceSwapProvider extends ChangeNotifier {
   ///
   /// 来源标签也只消费这份列表；停用 / 非搜索脚本不在其中时，
   /// `lyricsProviderLabel` 会回退源 key（已知下限）。
-  List<SourceDescriptor> get searchableSources => [
-    for (final descriptor in _sourceRegistry.descriptors)
-      if (descriptor.enabled && descriptor.capabilities.search) descriptor,
-  ];
+  List<SourceDescriptor> get searchableSources =>
+      _swapQueryPlanner.searchableSources;
 
   /// 失败音源的展示名（按注册表顺序；描述符已被移除时回退 key）。
   ///
@@ -233,10 +231,10 @@ class SourceSwapProvider extends ChangeNotifier {
     // 默认「全部」：视图自己按 groups 分组展示，不能自动落到第一个返回的源
     // （完成顺序不稳定，用户会看到筛选凭空跳走）。
     _activeSourceKey = '';
-    _noSources = searchableSources.isEmpty;
-    await _searchSession.search(
-      _strategies.of(request.seed.id.sourceKey).keywordFor(request.seed),
-    );
+    // 手动换源保留种子源（同渠道可能有其它版本），因此不传排除集合。
+    final plan = _swapQueryPlanner.plan(request.seed);
+    _noSources = plan.sources.isEmpty;
+    await _searchSession.search(plan.keyword);
   }
 
   /// 用新关键词重搜。
@@ -438,17 +436,23 @@ class SourceSwapProvider extends ChangeNotifier {
 
   /// 当前可搜索来源 → 扇出会话适配器。
   ///
-  /// 每次搜索都按注册表重新生成：渠道启停 / 脚本增减会在 provider 存活期间
-  /// 发生，适配器闭包拿到的是本轮查询对应的描述符。
-  List<FanOutSource<Track>> _buildSearchSources() => [
-    for (final descriptor in searchableSources)
-      FanOutSource<Track>(
-        key: descriptor.key,
-        search: (query) => _searchTrack(descriptor, query),
-        // 结果自己的来源 key 用于「来源结果被替换时失效选中项」。
-        sourceKeyOf: (track) => track.id.sourceKey,
-      ),
-  ];
+  /// 每次搜索都经 planner 重新求值：渠道启停 / 脚本增减会在 provider 存活
+  /// 期间发生，适配器闭包拿到的是本轮查询对应的描述符。
+  List<FanOutSource<Track>> _buildSearchSources() {
+    final seed = _request?.seed;
+    final descriptors = seed == null
+        ? _swapQueryPlanner.searchableSources
+        : _swapQueryPlanner.plan(seed).sources;
+    return [
+      for (final descriptor in descriptors)
+        FanOutSource<Track>(
+          key: descriptor.key,
+          search: (query) => _searchTrack(descriptor, query),
+          // 结果自己的来源 key 用于「来源结果被替换时失效选中项」。
+          sourceKeyOf: (track) => track.id.sourceKey,
+        ),
+    ];
+  }
 
   /// 单源搜索：种子自身按 URI 排除，同源重复结果只留一条。
   Future<List<Track>> _searchTrack(

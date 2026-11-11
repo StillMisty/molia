@@ -30,7 +30,6 @@ import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
 import '../../services/lyrics_cache.dart';
 import '../../services/lyrics_service.dart';
-import '../../services/source_swap/source_swap_strategy.dart';
 import '../../sources/builtin/builtin_search.dart';
 import 'catalog_stack.dart';
 import 'startup_trace.dart';
@@ -151,9 +150,9 @@ Future<LocalDataStack> buildLocalDataStack({
     },
     isChannelEnabled: (channelKey) =>
         catalog.sourceRegistry.enabledChannelKeys.contains(channelKey),
-    // 与手动换源共用同一关键词口径：B 站曲目的 artists 是 UP 主，只搜标题。
-    keywordOf: (track) =>
-        SourceSwapStrategies.standard.of(track.id.sourceKey).keywordFor(track),
+    // 与手动 / 自动换源共用同一查询规划：B 站曲目的 artists 是 UP 主，
+    // 只搜标题。
+    keywordOf: (track) => catalog.swapQueryPlanner.plan(track).keyword,
   );
 
   // 本地下载：持久副本 + 离线歌词/封面 + 音频标签嵌入。

@@ -9,6 +9,7 @@ import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/library_provider.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/source_swap_provider.dart';
+import 'package:molia/services/source_swap/swap_query_planner.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/fake_library_repository.dart';
@@ -58,14 +59,17 @@ void main() {
     repository.dispose();
   });
 
-  SourceSwapProvider buildProvider({SourceSwapTrackHook? onTrackSwapped}) =>
-      SourceSwapProvider(
-        catalogService: CatalogService(registry: FakeSourceRegistry(sources)),
-        sourceRegistry: FakeSourceRegistry(sources),
-        libraryProvider: library,
-        playbackProvider: playback,
-        onTrackSwapped: onTrackSwapped,
-      );
+  SourceSwapProvider buildProvider({SourceSwapTrackHook? onTrackSwapped}) {
+    final registry = FakeSourceRegistry(sources);
+    return SourceSwapProvider(
+      catalogService: CatalogService(registry: registry),
+      sourceRegistry: registry,
+      swapQueryPlanner: SwapQueryPlanner(registry: registry),
+      libraryProvider: library,
+      playbackProvider: playback,
+      onTrackSwapped: onTrackSwapped,
+    );
+  }
 
   test('begin：全部可搜索音源并行检索（含种子源）；空结果 / 失败隔离', () async {
     sources['wy'] = FakeMusicSource('wy'); // 种子源：保留，但种子自身要排除

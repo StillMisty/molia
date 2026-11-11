@@ -19,6 +19,7 @@ import '../../services/app_branding_service.dart';
 import '../../services/bili_account_service.dart';
 import '../../services/language_service.dart';
 import '../../services/shortcut_settings.dart';
+import '../../services/source_swap/swap_query_planner.dart';
 import '../../sources/source_manager.dart';
 
 /// 目录栈产物（字段即子系统的对外面；构造顺序见 [buildCatalogStack]）。
@@ -26,6 +27,7 @@ typedef CatalogStack = ({
   SettingsRegistry settings,
   SourceManager sourceManager,
   SourceRegistry sourceRegistry,
+  SwapQueryPlanner swapQueryPlanner,
   CatalogService catalogService,
   CommentsService commentsService,
   AlbumService albumService,
@@ -90,6 +92,9 @@ CatalogStack buildCatalogStack() {
   // 适配层：SourceManager → SourceRegistry → CatalogService。
   // SearchProvider 只依赖后两者（搜索缓存 single-flight + LRU + TTL 5min）。
   final sourceRegistry = SourceRegistryImpl(sourceManager);
+  // 换源查询规划：手动换源、自动换源与封面补取共用同一实例，关键词口径
+  // 与候选来源不再各拼一份。
+  final swapQueryPlanner = SwapQueryPlanner(registry: sourceRegistry);
   final catalogService = CatalogService(registry: sourceRegistry);
   // 评论：与目录服务同构的缓存层（single-flight + LRU + 5min TTL，
   // key = comments:{source}:{songId}:{kind}:{page}）。
@@ -117,6 +122,7 @@ CatalogStack buildCatalogStack() {
     settings: settingsRegistry,
     sourceManager: sourceManager,
     sourceRegistry: sourceRegistry,
+    swapQueryPlanner: swapQueryPlanner,
     catalogService: catalogService,
     commentsService: commentsService,
     albumService: albumService,

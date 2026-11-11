@@ -167,9 +167,12 @@ class FakeMusicSource implements MusicSource {
 
 /// 内存音源注册表：描述符按 map 插入顺序排列，能力取自各假音源。
 class FakeSourceRegistry implements SourceRegistry {
-  FakeSourceRegistry(this._sources);
+  FakeSourceRegistry(this._sources, {this.disabled = const {}});
 
   final Map<String, FakeMusicSource> _sources;
+
+  /// 用户停用的渠道 key（descriptor.enabled 为 false）。
+  final Set<String> disabled;
 
   @override
   List<SourceDescriptor> get descriptors => [
@@ -179,6 +182,7 @@ class FakeSourceRegistry implements SourceRegistry {
         displayName: _sources.values.elementAt(index).displayName,
         kind: SourceKind.builtin,
         capabilities: _sources.values.elementAt(index).capabilities,
+        enabled: !disabled.contains(_sources.keys.elementAt(index)),
         order: index,
       ),
   ];
