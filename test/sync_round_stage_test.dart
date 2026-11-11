@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
-import 'package:molia/data/sync/sync_known_store.dart';
 import 'package:molia/data/sync/sync_round.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/sync_transport_runtime.dart';
@@ -44,10 +43,9 @@ void main() {
     orderedTransport = _OrderedTransport(journal.events);
     runner = SyncRoundRunner(
       state: state,
-      adapters: [adapter],
+      pipeline: testRecordPipeline(adapters: [adapter]),
       transports: {'lan': orderedTransport},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       journal: journal,
       runtime: SyncTransportRuntime(
         state: state,
@@ -108,20 +106,22 @@ void main() {
     final scoped = _ScopedAdapter();
     final scopedRunner = SyncRoundRunner(
       state: state,
-      adapters: [scoped],
+      pipeline: testRecordPipeline(adapters: [scoped]),
       transports: const {},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(state: state, transports: const {}),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
     addTearDown(scopedRunner.dispose);
 
-    await scopedRunner.collect({SyncCategory.settings, SyncCategory.covers});
+    await scopedRunner.pipeline.collect({
+      SyncCategory.settings,
+      SyncCategory.covers,
+    });
     expect(scoped.lastCategories, {SyncCategory.settings, SyncCategory.covers});
 
     // 未请求封面时仍经过 scoped 方法（适配器据此立即返回空）。
-    await scopedRunner.collect({SyncCategory.settings});
+    await scopedRunner.pipeline.collect({SyncCategory.settings});
     expect(scoped.lastCategories, {SyncCategory.settings});
   });
 
@@ -267,10 +267,9 @@ void main() {
     final gapAdapter = _RecordingAdapter();
     final gapRunner = SyncRoundRunner(
       state: state,
-      adapters: [gapAdapter],
+      pipeline: testRecordPipeline(adapters: [gapAdapter]),
       transports: {'lan': gapTransport},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(
         state: state,
         transports: {'lan': gapTransport},
@@ -414,22 +413,21 @@ void main() {
     final caching = _CachingAdapter();
     final cachingRunner = SyncRoundRunner(
       state: state,
-      adapters: [caching],
+      pipeline: testRecordPipeline(adapters: [caching]),
       transports: const {},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(state: state, transports: const {}),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
     addTearDown(cachingRunner.dispose);
 
-    await cachingRunner.collect({SyncCategory.settings});
-    await cachingRunner.collect({SyncCategory.settings});
+    await cachingRunner.pipeline.collect({SyncCategory.settings});
+    await cachingRunner.pipeline.collect({SyncCategory.settings});
     expect(caching.collectCalls, 1, reason: '指纹未变复用适配器缓存');
 
     expect(cachingRunner.releaseIdleCaches(), isTrue);
     expect(caching.cached, isNull, reason: '适配器缓存一并释放');
-    await cachingRunner.collect({SyncCategory.settings});
+    await cachingRunner.pipeline.collect({SyncCategory.settings});
     expect(caching.collectCalls, 2, reason: '释放后重新导出');
   });
 
@@ -446,10 +444,9 @@ void main() {
     });
     probeRunner = SyncRoundRunner(
       state: state,
-      adapters: [probe],
+      pipeline: testRecordPipeline(adapters: [probe]),
       transports: const {},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(state: state, transports: const {}),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );

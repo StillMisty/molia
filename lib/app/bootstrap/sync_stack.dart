@@ -260,9 +260,10 @@ Future<SyncStack> buildSyncStack({
   // 备份只需要收集入口 + 适配器 / 状态 / 发号器：不构造轮次，也不经过传输。
   final syncBackup = SyncBackup(
     state: syncState,
-    adapters: syncAdapters,
+    // 与引擎共用同一记录管道：收集 / 合并 / 登记只有一份实现，备份导入不会
+    // 与线上同步的应用规则漂移。
+    pipeline: syncEngine.recordPipeline,
     stamps: syncState.stampIssuer,
-    collect: syncEngine.collectRecords,
     // 完整备份导出后放掉整库导出缓存：备份是低频动作，事件 / 各适配器的
     // 上轮记录没必要在导出后继续常驻；下一次同步按需重读。
     onExported: () {

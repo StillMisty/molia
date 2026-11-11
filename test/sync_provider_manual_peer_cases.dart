@@ -148,9 +148,8 @@ _buildHarness({bool enableTransport = true}) async {
   );
   final backup = SyncBackup(
     state: state,
-    adapters: const [],
+    pipeline: engine.recordPipeline,
     stamps: state.stampIssuer,
-    collect: engine.collectRecords,
   );
   final pairing = FakeSyncPairingPort();
   final provider = SyncProvider(
