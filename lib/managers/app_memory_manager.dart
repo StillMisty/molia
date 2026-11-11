@@ -287,11 +287,22 @@ class AppMemoryManager {
   /// 只在托盘隐藏时生效；播放中暂停会让音频 / 解码线程把页重新触回工作集，
   /// 等 [kTrayPausedTrimDelay] 再归还空闲页。播放继续 / 恢复窗口 / 再次
   /// 隐藏都会取消，避免在声音输出期间制造缺页。
-  void scheduleTrayPausedTrim() {
+  void scheduleTrayPausedTrim({Future<void> Function()? onIdle}) {
     if (!_presence.isTrayHidden) return;
     _trayPausedTrimTimer?.cancel();
-    _trayPausedTrimTimer = Timer(kTrayPausedTrimDelay, () {
+    _trayPausedTrimTimer = Timer(kTrayPausedTrimDelay, () async {
       _trayPausedTrimTimer = null;
+      if (!_presence.isTrayHidden) return;
+      // 先给暂停态的播放器 / source 一次释放机会，再归还空闲页；回调自身
+      // 负责幂等与失败隔离，避免把内存守卫拖进播放异常。
+      final idle = onIdle;
+      if (idle != null) {
+        try {
+          await idle();
+        } catch (e) {
+          _logger.warning('托盘暂停释放播放器失败', e);
+        }
+      }
       if (!_presence.isTrayHidden) return;
       _releaseToOs();
       _log('托盘暂停延迟 trim');

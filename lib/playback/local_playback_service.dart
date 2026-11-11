@@ -733,6 +733,24 @@ class LocalPlaybackService extends ChangeNotifier {
     _syncPositionSampling();
   }
 
+  /// 托盘内暂停稳定后释放播放器 / audio source（内存守卫在暂停托盘时调用）。
+  ///
+  /// 暂停态的 just_audio / media_kit 仍持有当前 source 与解码缓冲；释放
+  /// player 后由下一次播放按保存进度重新取链。只在已暂停、未加载且生产
+  /// factory 可用时执行；恢复播放走 [toggle] 的 `_sourceUnloaded` 分支。
+  Future<void> releasePlayerForIdle() async {
+    if (_playerDisposed ||
+        _isPlaying ||
+        _isLoading ||
+        _playerFactory == null ||
+        _sourceRegistrations == 0) {
+      return;
+    }
+    await _recyclePlayerForQueueChange();
+    if (_currentTrack != null) _sourceUnloaded = true;
+    notifyListeners();
+  }
+
   /// 装载新队列并从 [index] 起播。
   ///
   /// [shuffleIndices] 是恢复态展示过的本轮洗牌排列（[PlaybackRequest] 透传）：
@@ -1175,6 +1193,7 @@ class LocalPlaybackService extends ChangeNotifier {
       await _playIndex(
         _currentIndex,
         recordHistory: false,
+        resumeAt: _position,
         unloadCurrent: false,
       );
       return;
@@ -1197,6 +1216,16 @@ class LocalPlaybackService extends ChangeNotifier {
 
   Future<void> seek(Duration position) async {
     if (_currentTrack == null) return;
+    if (_sourceUnloaded) {
+      await _playIndex(
+        _currentIndex,
+        recordHistory: false,
+        resumeAt: position,
+        autoplay: false,
+        unloadCurrent: false,
+      );
+      return;
+    }
     await _seekPlayer(position);
   }
 

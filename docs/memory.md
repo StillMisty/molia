@@ -283,17 +283,18 @@ pending / keepAlive，当前展示的封面不受影响。
 | `lib/managers/artwork_cache.dart` | 封面元数据 `updateOrInsert` 跳过「只有 touched 变化」的整文件重写；淘汰仍按文件 mtime |
 | `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |
 | `lib/data/molia_database.dart` | `journal_size_limit = 4MB`、`wal_autocheckpoint = 1000`，限制 WAL 高水位 |
+| `lib/playback/desktop_audio_init_io.dart` | media_kit `bufferSize` 16MiB → 8MiB（demux + back 合计约 16MiB），按官方示例的音乐场景取值 |
 | `lib/data/sync/adapters/session_sync_adapter.dart`、`sync_backup.dart`、`sync_round.dart` | 会话 journal 增量化：队列未变时只写 `sessionCursor` 小记录（约 0.3KB），队列变化 / 首次 / 进程重启后首轮才写整份 tracks；`collect(fresh: true)`（全量快照、备份、anti-entropy）强制整份且不重复追加 journal；同批多条 session 记录按最大版本应用；本地下载曲目存在时把游标下标映射回原始队列 |
-| `lib/playback/local_playback_service.dart` | 队列整体替换 / 显式停止时重建 just_audio `AudioPlayer`：`_audioSources` 与代理 handler 原先只在 dispose 清空，长期复用同一 player 会随播放曲目累积；回收只发生在天然断点，暂停 / 单曲切歌不动播放器。单队列内仍受队列长度限制（just_audio 无单源释放 API） |
+| `lib/playback/local_playback_service.dart` | 队列整体替换 / 显式停止时重建 just_audio `AudioPlayer`：`_audioSources` 与代理 handler 原先只在 dispose 清空，长期复用同一 player 会随播放曲目累积；回收只发生在天然断点。托盘内暂停稳定 10s 后也会释放 player / source，恢复播放按保存进度重载（`_sourceUnloaded`） |
 
 ### 9.2 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：**2595 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收）；
+- `flutter test --no-pub`：**2597 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收）；
 - Windows release（2026-11-11，本机；顶栏关闭键走 `WM_SYSCOMMAND + SC_CLOSE`，不是 `Process.CloseMainWindow()` 的 `WM_CLOSE`）：
   - `memory_windows.ps1` 一次完整场景：空闲专用工作集 170.0MB、浏览 234.5MB、关闭前 210.4MB；托盘 +3s **4.1MB**、+15s **3.1MB**（该轮日志出现 `托盘暂停延迟 trim`，是暂停/空闲托盘，不能当作播放态收益）。
   - 另一次确认 `play.start result=ok`、播放中关到托盘：**133–143MB**，90s 内稳定（`cache_path=direct`）；原始反馈的 200MB 在同一构建未复现。
-  - 提交大小 373–490MB；暂停后仍有 audio source / player 保留，个别轮次专用工作集 116–132MB，要压到个位数需要额外释放播放器（未做）。
+  - 提交大小 373–490MB；本轮后续已补「托盘暂停 10s 释放 player / source」，恢复播放按进度重载，但该改动尚未做 Windows 实机 A/B。
 - Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
   - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
   - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
@@ -308,4 +309,6 @@ pending / keepAlive，当前展示的封面不受影响。
 - **最小化不省内存**：产品语义保持不变；只静音 ticker（动画不跑），页面 / 图片 / 浏览缓存仍保留。
 - **同步 journal 的 session 整队列 payload** 已做 cursor 增量；全量快照 / 备份仍会写一次整份 tracks（预期行为）。真正的大队列 A/B 仍需在真实库上测 journal 字节与同步轮次耗时。
 - `molia.memory` 仍只有 RSS + imageCache；Windows 专用工作集 / 提交大小日志未加。
+- media_kit 官方建议 Windows 链接 mimalloc；本机 GitHub 网络不可达，未改构建。
+- 备份 / 同步自定义封面的 base64 仍是整批进内存，尚未流式化。
 - `just_audio` 的 source 注册表只在换队列 / 显式停止时回收；单个超长队列连续播放仍会按曲目数增长，彻底解决需要 just_audio 提供单源释放 API 或改播放器模型。

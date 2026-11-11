@@ -377,6 +377,8 @@ void main() async {
 
   // 托盘内暂停后补一次 trim：播放中暂停会让音频 / 解码线程把页重新触回
   // 工作集，暂停稳定后再归还；播放恢复 / 窗口可见时取消。
+  Future<void> releaseIdlePlayer() =>
+      playback.localPlaybackService?.releasePlayerForIdle() ?? Future.value();
   var lastPlaying = playback.playbackProvider.isPlaying;
   var lastTrackId = playback.playbackProvider.snapshot.current?.id.uri;
   void syncTrayTrimTimers() {
@@ -390,7 +392,9 @@ void main() async {
       if (playing) {
         AppMemoryManager.instance.cancelTrayPausedTrim();
       } else if (AppPresence.instance.isTrayHidden) {
-        AppMemoryManager.instance.scheduleTrayPausedTrim();
+        AppMemoryManager.instance.scheduleTrayPausedTrim(
+          onIdle: releaseIdlePlayer,
+        );
       }
     }
     if (trackChanged && AppPresence.instance.isTrayHidden) {
@@ -402,7 +406,9 @@ void main() async {
   AppPresence.instance.addListener(() {
     if (AppPresence.instance.isTrayHidden) {
       if (!playback.playbackProvider.isPlaying) {
-        AppMemoryManager.instance.scheduleTrayPausedTrim();
+        AppMemoryManager.instance.scheduleTrayPausedTrim(
+          onIdle: releaseIdlePlayer,
+        );
       }
     } else {
       AppMemoryManager.instance

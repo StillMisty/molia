@@ -251,6 +251,39 @@ void main() {
     expect(players, hasLength(3));
   });
 
+  test('暂停托盘释放播放器，恢复播放按保存进度重载', () async {
+    final players = <_FakeAudioPlayer>[];
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+      playerFactory: () {
+        final player = _FakeAudioPlayer();
+        players.add(player);
+        return player;
+      },
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks([_track(index: 0)], 0);
+    await pumpEventQueue();
+    await service.seek(const Duration(seconds: 7));
+    await service.pause();
+    await pumpEventQueue();
+    expect(players, hasLength(1));
+
+    await service.releasePlayerForIdle();
+    expect(players, hasLength(2), reason: '暂停托盘回收旧 player / source');
+    expect(service.isPlaying, isFalse);
+    expect(service.currentSourceTrack, isNotNull);
+
+    await service.toggle();
+    await pumpEventQueue();
+    expect(service.isPlaying, isTrue);
+    expect(players, hasLength(2), reason: '恢复播放复用新 player');
+    expect(players.last.calls, contains('setAudioSource'));
+    expect(players.last.calls, contains('seek:7000'), reason: '按保存进度重载');
+  });
+
   test('顺序播放队尾自然播完后，底层播放器被显式暂停', () async {
     final (:service, :player) = await start(mode: PlayMode.sequential);
 
