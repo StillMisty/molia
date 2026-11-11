@@ -1,10 +1,14 @@
 /// AI 生成执行器：token / epoch / 取消 / 忙碌位 / 可见进度的唯一持有者。
 ///
 /// 四条生成路径（显式生成、静默补歌、换一首、重找未解析）只提供
-/// [AiGenerationIntent] 与两个闭包：调用生成器、提交结果。执行器按意图决定：
+/// [AiGenerationIntent]（内含统一的 [AiGenerationRequest]）与两个闭包：
+/// 调用生成器、提交结果。执行器按意图决定：
 /// - 显式：占用忙碌位与三阶段进度，可取消，晚到结果按 epoch 丢弃；
 /// - 静默：独立 token、不显示进度，显式操作开始时被抢占；
 /// - 换一首：不可取消、不占显式忙碌位，只标记行内 `replacingUri`。
+///
+/// 提交侧不变量也在这里收口：需要可播放结果的路径统一把「空批次」转成
+/// `aiDjNothingResolved` 失败，调用点不再各写一遍判空。
 ///
 /// 进度走独立 [state]（ValueListenable），provider 只把忙碌位 / 行内替换的
 /// 离散变化转发成聚合通知，页面可按块窄订阅而不跟着每个分片重建。
@@ -14,6 +18,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/models/ai_dj.dart';
 import '../../domain/models/failure.dart';
+import 'ai_generation_request.dart';
 
 /// 生成任务类别：决定取消、忙碌位、进度与失败策略。
 enum AiGenerationLane {
@@ -36,22 +41,24 @@ enum AiGenerationFailurePolicy {
   autoFeed,
 }
 
-/// 一次生成意图：来源、数量、是否可见、失败策略（后两者由 [lane] 派生）。
+/// 一次生成意图：来源、统一请求、是否可见、失败策略（后两者由 [lane] 派生）。
 @immutable
 class AiGenerationIntent {
   const AiGenerationIntent({
     required this.origin,
-    required this.count,
+    required this.request,
     required this.lane,
     this.initialProgress,
     this.replacingUri,
+    this.requirePlayableResult = true,
+    this.emptyBatchMessage = '本批没有可播放的曲目',
   });
 
   /// 写入历史 / 日志的来源；换一首与重找未解析不归档，只用于日志。
   final AiDjOrigin origin;
 
-  /// 本次生成的数量（日志 / 进度口径；真正请求数量由调用方闭包传）。
-  final int count;
+  /// 本次生成的全部输入（偏好 / 合并反馈 / 排除项 / 数量）。
+  final AiGenerationRequest request;
 
   final AiGenerationLane lane;
 
@@ -60,6 +67,18 @@ class AiGenerationIntent {
 
   /// 换一首时被替换曲目的 uri（行内进度标记）。
   final String? replacingUri;
+
+  /// 提交前是否要求至少有一首可播放曲目。
+  ///
+  /// 生成 / 换一首 / 静默补歌都为真；「重找未解析」可能仍全部未命中，
+  /// 但结果是合法的（保留未解析项），因此传 false。
+  final bool requirePlayableResult;
+
+  /// 空批次失败时的诊断消息（l10nKey 与重试策略不变，仅日志文案按路径区分）。
+  final String emptyBatchMessage;
+
+  /// 本次生成的数量（日志 / 进度口径）。
+  int get count => request.count;
 
   /// 是否占用可见忙碌位与进度卡。
   bool get visible => lane == AiGenerationLane.explicit;
@@ -96,9 +115,10 @@ class AiGenerationState {
       Object.hash(busy, replacingUri, identityHashCode(progress));
 }
 
-/// 生成器调用闭包：`onProgress` 只对显式 lane 非空。
+/// 生成器调用闭包：执行器把统一请求原样传入；`onProgress` 只对显式 lane 非空。
 typedef AiGenerationInvoke = Future<AiDjBatch> Function(
   AiGenerationCancelToken cancelToken,
+  AiGenerationRequest request,
   void Function(AiDjProgress progress)? onProgress,
 );
 
@@ -186,6 +206,7 @@ class AiGenerationExecutor {
     try {
       final batch = await invoke(
         token,
+        intent.request,
         intent.visible
             ? (progress) {
                 if (!_isCurrent(intent, token, epoch)) return;
@@ -200,6 +221,15 @@ class AiGenerationExecutor {
             : null,
       );
       if (!_isCurrent(intent, token, epoch)) return null;
+      // 空批次 = 失败：四条路径共用同一判断，避免各调用点漏判或文案漂移。
+      if (intent.requirePlayableResult && batch.items.isEmpty) {
+        throw SourceFailure(
+          kind: FailureKind.unknown,
+          message: intent.emptyBatchMessage,
+          l10nKey: 'aiDjNothingResolved',
+          retryable: true,
+        );
+      }
       return await commit(batch);
     } on SourceFailure catch (failure) {
       if (failure.kind == FailureKind.cancelled ||
