@@ -438,21 +438,15 @@ class SourceSwapProvider extends ChangeNotifier {
   ///
   /// 每次搜索都经 planner 重新求值：渠道启停 / 脚本增减会在 provider 存活
   /// 期间发生，适配器闭包拿到的是本轮查询对应的描述符。
-  List<FanOutSource<Track>> _buildSearchSources() {
-    final seed = _request?.seed;
-    final descriptors = seed == null
-        ? _swapQueryPlanner.searchableSources
-        : _swapQueryPlanner.plan(seed).sources;
-    return [
-      for (final descriptor in descriptors)
-        FanOutSource<Track>(
-          key: descriptor.key,
-          search: (query) => _searchTrack(descriptor, query),
-          // 结果自己的来源 key 用于「来源结果被替换时失效选中项」。
-          sourceKeyOf: (track) => track.id.sourceKey,
-        ),
-    ];
-  }
+  List<FanOutSource<Track>> _buildSearchSources() => [
+    for (final descriptor in _swapQueryPlanner.searchableSources)
+      FanOutSource<Track>(
+        key: descriptor.key,
+        search: (query) => _searchTrack(descriptor, query),
+        // 结果自己的来源 key 用于「来源结果被替换时失效选中项」。
+        sourceKeyOf: (track) => track.id.sourceKey,
+      ),
+  ];
 
   /// 单源搜索：种子自身按 URI 排除，同源重复结果只留一条。
   Future<List<Track>> _searchTrack(

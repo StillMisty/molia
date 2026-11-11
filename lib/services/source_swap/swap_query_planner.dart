@@ -44,14 +44,17 @@ class SwapQueryPlanner {
   /// 种子源）；手动换源不传，种子源因此仍参与候选。
   SwapQueryPlan plan(Track seed, {Set<String> excludedSourceKeys = const {}}) =>
       SwapQueryPlan(
-        keyword: _keywordFor(seed),
+        keyword: keywordFor(seed),
         sources: [
           for (final descriptor in searchableSources)
             if (!excludedSourceKeys.contains(descriptor.key)) descriptor,
         ],
       );
 
-  String _keywordFor(Track seed) =>
+  /// 单个种子的换源关键词。
+  ///
+  /// 只取关键词的消费面（封面补取）用它，避免为拼词枚举 / 构建候选源。
+  String keywordFor(Track seed) =>
       (_keywordPolicies[seed.id.sourceKey] ?? const _KeywordPolicy())
           .keywordFor(seed);
 }

@@ -20,6 +20,7 @@ void main() {
       },
       searchChannel: (channelKey, keyword) async => const [],
       isChannelEnabled: (_) => false,
+      keywordOf: (track) => track.title,
     );
     final song = track();
 

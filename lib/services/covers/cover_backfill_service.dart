@@ -35,11 +35,10 @@ class CoverBackfillService {
     required this.nativeLoader,
     required this.searchChannel,
     required this.isChannelEnabled,
-    String Function(Track track)? keywordOf,
+    required this._keywordOf,
     this.sameSourceTimeout = const Duration(seconds: 2),
     RequestCache? cache,
-  }) : _keywordOf = keywordOf ?? _defaultKeywordOf,
-       _cache =
+  }) : _cache =
            cache ??
            RequestCache(maxEntries: 128, ttl: const Duration(minutes: 10));
 
@@ -155,11 +154,6 @@ class CoverBackfillService {
     album: track.album,
     duration: track.duration,
   );
-
-  static String _defaultKeywordOf(Track track) => [
-    track.title,
-    ...track.artists.map((artist) => artist.name),
-  ].map((value) => value.trim()).where((value) => value.isNotEmpty).join(' ');
 
   /// 第一个非空结果；全部为空 / 失败时返回 null。
   static Future<String?> _firstNonNull(Iterable<Future<String?>> futures) {

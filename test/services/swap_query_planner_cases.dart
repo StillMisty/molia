@@ -42,6 +42,12 @@ void main() {
     expect(plan.keyword, '晴天');
   });
 
+  test('keywordFor：只拼关键词，不枚举音源', () {
+    final planner = SwapQueryPlanner(registry: _NoDescriptorRegistry());
+
+    expect(planner.keywordFor(track('bili', 'BV1', artists: ['某UP主'])), '晴天');
+  });
+
   test('候选源：只含启用且可搜索的源，种子源默认保留', () {
     final sources = {
       'wy': FakeMusicSource('wy'),
@@ -84,4 +90,14 @@ void main() {
     expect(plan.sources.map((descriptor) => descriptor.key), ['kg']);
     expect(plan.keyword, '晴天 周杰伦');
   });
+}
+
+/// 读取 descriptors 即失败的注册表：证明 [SwapQueryPlanner.keywordFor]
+/// 不依赖候选源枚举（封面补取只取关键词）。
+class _NoDescriptorRegistry extends FakeSourceRegistry {
+  _NoDescriptorRegistry() : super({});
+
+  @override
+  List<SourceDescriptor> get descriptors =>
+      throw StateError('keywordFor 不应枚举音源');
 }

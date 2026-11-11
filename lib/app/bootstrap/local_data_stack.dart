@@ -152,7 +152,7 @@ Future<LocalDataStack> buildLocalDataStack({
         catalog.sourceRegistry.enabledChannelKeys.contains(channelKey),
     // 与手动 / 自动换源共用同一查询规划：B 站曲目的 artists 是 UP 主，
     // 只搜标题。
-    keywordOf: (track) => catalog.swapQueryPlanner.plan(track).keyword,
+    keywordOf: (track) => catalog.swapQueryPlanner.keywordFor(track),
   );
 
   // 本地下载：持久副本 + 离线歌词/封面 + 音频标签嵌入。
