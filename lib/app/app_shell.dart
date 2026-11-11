@@ -29,10 +29,8 @@ import '../providers/playback_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/app_branding_service.dart';
-import '../services/data_saver_service.dart';
 import '../services/haptics.dart';
 import '../services/language_service.dart';
-import '../services/play_statistics_service.dart';
 import '../services/system_fonts_service.dart';
 import '../services/window/window_chrome.dart';
 import '../theme/animated_scheme.dart';
@@ -55,15 +53,6 @@ import 'app_presence_ticker_mode.dart';
 import 'desktop/desktop_shell.dart';
 import 'shell_chrome.dart';
 import 'tray_dormant_gate.dart';
-
-/// 移动端（Android / iOS）是否由组合根把生命周期喂给播放功耗策略。
-///
-/// 只有这两个平台接入了 `PlaybackPowerPolicy` 的 `markBackground`；同一次
-/// paused 里协调者会强制落盘，壳层因此不再重复提交。桌面（含 macOS）恒为
-/// 前台，需要壳层用挂起入口补一次。
-bool get _mobileLifecycleOwnsPlaybackCommit =>
-    defaultTargetPlatform == TargetPlatform.android ||
-    defaultTargetPlatform == TargetPlatform.iOS;
 
 /// 顶栏进度条槽高。
 ///
@@ -1219,7 +1208,7 @@ class MyThemedApp extends StatefulWidget {
   State<MyThemedApp> createState() => _MyThemedAppState();
 }
 
-class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
+class _MyThemedAppState extends State<MyThemedApp> {
   /// 「首次连通」通知订阅：与在哪个页面无关，双方各自弹一次底栏提示。
   StreamSubscription<SyncPeerState>? _peerConnected;
 
@@ -1239,7 +1228,6 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadSavedLocale();
     // 自定义应用名称（顶栏回退文案）需要重建 MaterialApp.title。
     AppBrandingService.titleNotifier.addListener(_onBrandingChanged);
@@ -1248,8 +1236,10 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
     HapticsService.load();
     final sync = context.read<SyncProvider>();
     _sync = sync;
-    _peerConnected = sync.peerConnectedNotices.listen(_onPeerConnected);
-    _incomingPairing = sync.incomingPairingRequests.listen(_onIncomingPairing);
+    _peerConnected = sync.state.peerConnectedNotices.listen(_onPeerConnected);
+    _incomingPairing = sync.state.incomingPairingRequests.listen(
+      _onIncomingPairing,
+    );
   }
 
   /// 首次与某台设备真正交换数据：提示一次（名称缺失时用短设备 id 兜底）。
@@ -1306,29 +1296,9 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
 
   Future<void> _rejectIncomingPairing(SyncPairingRequest request) async {
     try {
-      await _sync.respondPairing(request.requestId, accept: false);
+      await _sync.commands.pairing.respond(request.requestId, accept: false);
     } catch (_) {
       // 可选子系统：拒绝回执失败只影响对方等待，不打断应用壳。
-    }
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    // Android 后台不再广播网络变化（Android 8+）：回前台时主动刷新一次，
-    // 否则「离开 Wi-Fi 后仍按 Wi-Fi 判定」，省流模式不会按时生效。
-    if (state == AppLifecycleState.resumed && mounted) {
-      context.read<DataSaverService>().refreshConnectivity();
-    } else if (state == AppLifecycleState.paused) {
-      // 播放会话：移动端的「进后台」由 main 把生命周期喂给
-      // `PlaybackPowerPolicy`，协调者据此提交一次会话——这里再提交一次
-      // 只会把同一次 paused 写两遍。桌面不接生命周期策略（恒前台），
-      // 窗口隐藏 / 系统挂起时用与退出相同的入口提交一次。
-      if (!_mobileLifecycleOwnsPlaybackCommit) {
-        unawaited(context.read<PlaybackProvider>().suspendPlaybackSession());
-      }
-      // 听歌统计：退后台是动作，立即落盘进行中的播放事件；播放途中不写。
-      unawaited(context.read<PlayStatisticsService>().flush());
     }
   }
 
@@ -1338,7 +1308,6 @@ class _MyThemedAppState extends State<MyThemedApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     AppBrandingService.titleNotifier.removeListener(_onBrandingChanged);
     unawaited(_peerConnected?.cancel());
     unawaited(_incomingPairing?.cancel());

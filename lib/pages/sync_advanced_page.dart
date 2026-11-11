@@ -4,9 +4,9 @@ import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
 import '../domain/models/device_sync.dart';
-import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
+import '../providers/sync_ui_state.dart';
 import '../services/local_endpoints_service.dart';
 import '../utils/device_id.dart';
 import '../widgets/settings/settings_subpage.dart';
@@ -34,38 +34,39 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
   void initState() {
     super.initState();
     // 进入页 = 本机地址缓存的真实失效点：网络切换后重进即可看到新地址。
-    context.read<SyncProvider>().refreshLocalEndpoints();
+    context.read<SyncProvider>().commands.endpoints.refresh();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final provider = context.watch<SyncProvider>();
-    final ports = provider.lanDiscoveryPorts;
+    final state = context.watch<SyncProvider>().state;
+    final ports = state.lanDiscoveryPorts;
     final signature = Object.hash(
-      provider.enabledTransports.contains(SyncTransportKind.lan),
+      state.enabledTransports.contains(SyncTransportId.lan),
       ports.v4,
       ports.v6,
-      provider.lanHttpPort,
+      state.lanHttpPort,
     );
     if (_endpointsSignature == signature) return;
     _endpointsSignature = signature;
-    _endpoints = provider.localEndpoints();
+    _endpoints = context.read<SyncProvider>().commands.endpoints.list();
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
+    final state = provider.state;
     return SettingsSubPage.body(
       title: l10n.syncAdvancedTitle,
       body: FutureBuilder<List<LocalEndpoint>>(
         future: _endpoints,
         builder: (context, snapshot) => SettingsSubPageList(
           children: [
-            _localSection(context, provider, l10n, snapshot.data),
+            _localSection(context, provider, state, l10n, snapshot.data),
             const SizedBox(height: kSettingsSectionSpacing),
-            _peersSection(context, provider, l10n),
+            _peersSection(context, provider, state, l10n),
           ],
         ),
       ),
@@ -76,10 +77,11 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
   Widget _localSection(
     BuildContext context,
     SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
     List<LocalEndpoint>? endpoints,
   ) {
-    final passphrase = provider.passphrase;
+    final passphrase = state.passphrase;
     return SettingsSectionCard(
       title: l10n.syncLocalSection,
       footer: SettingsSectionHint(text: l10n.syncLocalSectionHint),
@@ -88,15 +90,15 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           key: const Key('settingsSyncDeviceNameItem'),
           icon: Icons.devices_rounded,
           title: l10n.syncDeviceNameTitle,
-          subtitle: provider.deviceName,
+          subtitle: state.deviceName,
           onTap: () => unawaited(showSyncRenameDialog(context, provider, l10n)),
         ),
         SettingsCopyTile(
           key: const Key('settingsSyncPeerSelfItem'),
           icon: Icons.phone_android_rounded,
           title: l10n.syncPeerThisDeviceTitle,
-          subtitle: l10n.syncPeerThisDevice(shortDeviceId(provider.deviceId)),
-          copyText: provider.deviceId,
+          subtitle: l10n.syncPeerThisDevice(shortDeviceId(state.deviceId)),
+          copyText: state.deviceId,
           copiedMessage: l10n.syncPeerDeviceIdCopied,
         ),
         SettingsNavTile(
@@ -105,7 +107,7 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           title: l10n.syncPassphraseTitle,
           subtitle: passphrase == null
               ? l10n.syncPassphraseNotSet
-              : provider.maskedPassphrase,
+              : state.maskedPassphrase,
           onTap: () =>
               unawaited(showSyncPassphraseDialog(context, provider, l10n)),
         ),
@@ -131,14 +133,14 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
           key: const Key('settingsSyncProbePortItem'),
           icon: Icons.settings_ethernet_rounded,
           title: l10n.syncLocalProbePort,
-          subtitle: _probePortSubtitle(l10n, provider.lanDiscoveryPorts),
+          subtitle: _probePortSubtitle(l10n, state.lanDiscoveryPorts),
         ),
         SettingsInfoTile(
           key: const Key('settingsSyncHttpPortItem'),
           icon: Icons.http_rounded,
           title: l10n.syncLocalHttpPort,
-          subtitle: provider.lanHttpPort > 0
-              ? '${provider.lanHttpPort}'
+          subtitle: state.lanHttpPort > 0
+              ? '${state.lanHttpPort}'
               : l10n.syncLocalHttpPortUnavailable,
         ),
       ],
@@ -153,11 +155,12 @@ class _SyncAdvancedPageState extends State<SyncAdvancedPage> {
   Widget _peersSection(
     BuildContext context,
     SyncProvider provider,
+    SyncUiState state,
     AppLocalizations l10n,
   ) {
-    final rosterIds = {for (final peer in provider.peers) peer.deviceId};
+    final rosterIds = {for (final peer in state.peers) peer.deviceId};
     final missing = [
-      for (final entry in provider.manualPeers)
+      for (final entry in state.manualPeers)
         if (!rosterIds.contains(entry.deviceId)) entry,
     ];
     final unclaimed = [

@@ -13,10 +13,10 @@ import 'package:material_ui/material_ui.dart';
 
 import '../domain/models/device_sync.dart';
 import '../domain/models/sync_peer_status.dart';
-import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_peer_view.dart';
 import '../providers/sync_provider.dart';
+import '../providers/sync_ui_state.dart';
 import '../theme/app_semantic_colors.dart';
 import '../theme/m3e_context.dart';
 import '../utils/device_id.dart';
@@ -36,7 +36,8 @@ String syncPeerSubtitle(AppLocalizations l10n, SyncPeerRow row) {
   final manual = row.manual;
   final status = row.connection;
   final lastSuccess = peer.lastSuccessAt;
-  final cloud = peer.transport == SyncTransportKind.webdav;
+  final cloud =
+      SyncTransportId.tryParse(peer.transport) == SyncTransportId.webdav;
   final lastSuccessText = lastSuccess > 0 ? syncTimeText(lastSuccess) : '';
   // 结论 + 上次成功合成一句：两段独立文案会重复「上次同步」。
   final statusText = switch (status) {
@@ -75,11 +76,12 @@ String syncPeerSubtitle(AppLocalizations l10n, SyncPeerRow row) {
 }
 
 /// 传输展示名（名册副标题用）。
-String syncTransportLabel(AppLocalizations l10n, String kind) => switch (kind) {
-  SyncTransportKind.lan => l10n.syncLanTitle,
-  SyncTransportKind.webdav => l10n.syncWebdavTitle,
-  _ => kind,
-};
+String syncTransportLabel(AppLocalizations l10n, String kind) =>
+    switch (SyncTransportId.tryParse(kind)) {
+      SyncTransportId.lan => l10n.syncLanTitle,
+      SyncTransportId.webdav => l10n.syncWebdavTitle,
+      null => kind,
+    };
 
 /// 手动地址条目副标题：探测端口（0 = 用标准端口）。
 String syncManualPeerSubtitle(AppLocalizations l10n, ManualPeer entry) {
@@ -105,7 +107,8 @@ Future<void> showSyncPeerDialog(
 }) async {
   final navigator = Navigator.of(context, rootNavigator: true);
   final deviceId = peer?.deviceId ?? '';
-  final lost = peer != null && peer.isLostAt(provider.nowMs);
+  final nowMs = provider.state.nowMs;
+  final lost = peer != null && peer.isLostAt(nowMs);
   final entries = _manualEntriesFor(provider, host: host, deviceId: deviceId);
   // 自动发现的设备没有地址簿条目，也必须能移除；未认领地址只移除地址本身。
   final removable = deviceId.isNotEmpty || entries.isNotEmpty;
@@ -198,11 +201,11 @@ Future<void> showSyncPeerDialog(
               navigator.pop();
               if (deviceId.isNotEmpty) {
                 // 已知身份：名册 + 该设备的全部地址簿条目一并移除。
-                await provider.removePeer(deviceId);
+                await provider.commands.removePeer(deviceId);
               } else {
                 // 尚未认领的地址：只移除这条地址，不碰名册。
                 for (final entry in entries) {
-                  await provider.removeManualPeer(entry.host);
+                  await provider.commands.removeManualPeer(entry.host);
                 }
               }
               if (!context.mounted) return;
@@ -232,13 +235,13 @@ List<ManualPeer> _manualEntriesFor(
 }) {
   if (host != null) {
     return [
-      for (final entry in provider.manualPeers)
+      for (final entry in provider.state.manualPeers)
         if (entry.host == host) entry,
     ];
   }
   if (deviceId.isEmpty) return const [];
   return [
-    for (final entry in provider.manualPeers)
+    for (final entry in provider.state.manualPeers)
       if (entry.deviceId == deviceId) entry,
   ];
 }
@@ -318,7 +321,7 @@ Future<void> _confirmCleanupRemote(
         M3EButton.text(
           onPressed: () async {
             navigator.pop();
-            final result = await provider.cleanupRemote(deviceId);
+            final result = await provider.commands.cleanupRemote(deviceId);
             if (!context.mounted) return;
             final message = result.error != null
                 ? l10n.syncPeerCleanupRemoteFailed(
@@ -477,8 +480,8 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
     // added / updated，这里提前记下同址条目，保持旧弹层的提示语义。
     final duplicate =
         editing == null &&
-        widget.provider.manualPeers.any((entry) => entry.host == host);
-    final outcome = await widget.provider.saveManualPeer(
+        widget.provider.state.manualPeers.any((entry) => entry.host == host);
+    final outcome = await widget.provider.commands.saveManualPeer(
       host: host,
       probePort: port,
       name: _name.text,
@@ -534,7 +537,7 @@ class _ManualPeerDialogState extends State<_ManualPeerDialog> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    await widget.provider.removeManualPeer(editing.host);
+    await widget.provider.commands.removeManualPeer(editing.host);
     if (!mounted) return;
     showSyncNoticeAndClose(context, l10n.syncPeerAddressRemoved);
   }

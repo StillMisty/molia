@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import '../domain/ports/sync_transport.dart';
 import 'sync_nearby_availability.dart';
 import 'sync_provider.dart';
+import 'sync_ui_state.dart';
 
 /// 附近设备扫描会话依赖的本机事实与命令。
 ///
@@ -36,18 +36,19 @@ class SyncProviderNearbyScanPort implements NearbyScanPort {
   final SyncProvider _provider;
 
   @override
-  SyncNearbyAvailability get availability => _provider.nearbyAvailability;
+  SyncNearbyAvailability get availability => _provider.state.nearbyAvailability;
 
   @override
-  bool get lanRunning =>
-      _provider.enabledTransports.contains(SyncTransportKind.lan) &&
-      (_provider.transportStatus(SyncTransportKind.lan)?.running ?? false);
+  bool get lanRunning {
+    final lan = _provider.state.transports[SyncTransportId.lan];
+    return lan != null && lan.enabled && lan.running;
+  }
 
   @override
-  Future<bool> startScan() => _provider.startNearbyScan();
+  Future<bool> startScan() => _provider.commands.nearby.start();
 
   @override
-  void stopScan() => _provider.stopNearbyScan();
+  void stopScan() => _provider.commands.nearby.stop();
 }
 
 /// 取消一次待触发的延时回调。

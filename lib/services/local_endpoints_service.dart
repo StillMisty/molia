@@ -26,7 +26,7 @@ class LocalEndpoint {
 /// 过滤判定与传输侧共用 [isRoutablePeerAddress]（非回环、非 link-local、
 /// 非 `%zone`、IP 字面量），本类只负责枚举与去重 / 排序：RFC1918 私网 IPv4
 /// → 其它 IPv4 → ULA IPv6 → 全局 IPv6。结果按进程缓存一次枚举，
-/// [invalidate] 在设置页进入时（`SyncProvider.refreshLocalEndpoints`）
+/// [invalidate] 在设置页进入时（`SyncProvider.commands.endpoints.refresh`）
 /// 失效，网络切换后重进设置页即可看到新地址。
 ///
 /// [enumerate] 供测试注入假接口数据（`dart:io` 的真实枚举在 widget 测试里

@@ -44,6 +44,7 @@ import '../../providers/sync_provider.dart';
 import '../../services/covers/custom_cover_store.dart';
 import '../../services/data_saver_service.dart';
 import '../../services/local_endpoints_service.dart';
+import '../../services/sync_trigger_bridge.dart';
 import 'catalog_stack.dart';
 import 'library_stack.dart';
 import 'playback_stack.dart';
@@ -314,6 +315,50 @@ Future<SyncStack> buildSyncStack({
     nowMs: syncState.nowMs,
   );
   lanSyncTransport.attachPairing(pairing);
+
+  // 同步触发的唯一 owner：资料库 / 统计流、音源通知、设置写入、脚本导入 /
+  // 删除、会话落盘与本地封面写入全部在这里注册；provider dispose 时统一
+  // 取消订阅并恢复回调钩子。scheduler 仍是「何时跑轮次」的唯一策略。
+  final triggerBridge = SyncTriggerBridge(
+    localChange: scheduler.notifyLocalChange,
+  );
+  triggerBridge
+    ..attach(
+      library.libraryRepository.changes.map(
+        (change) => SyncChange(categories: change.syncCategories),
+      ),
+    )
+    ..attach(
+      library.playStatisticsRepository.changes.map(
+        (_) => const SyncChange(categories: {SyncCategory.statistics}),
+      ),
+    )
+    ..bindSourceManager(sourceManager)
+    ..bindSettingsWrites(
+      catalog.settings,
+      // 设置 / 凭证写入（SettingsRegistry 是登记键的唯一写入口）：标记待发 +
+      // 写入点即时追加增量日志（不依赖下一轮的登记哈希检测）。
+      onKeyWritten: (key) => unawaited(prefsSyncAdapter.noteKeyWritten(key)),
+    )
+    ..bindScriptWrites(
+      sourceManager,
+      // 脚本写入（导入 / 更新 / 删除）：即时取版本并追加日志（新导入的脚本
+      // 没有历史登记，只靠下一轮检测会被当成「首次登记」而不外发）。
+      // 音源类别的待发标记由 bindSourceManager 的监听统一发出。
+      onScriptWritten: (id) =>
+          unawaited(scriptSyncAdapter.noteScriptWritten(id)),
+      onScriptRemoved: (id) =>
+          unawaited(scriptSyncAdapter.noteScriptRemoved(id)),
+    )
+    ..bindSessionSaves(
+      playback.sessionStore,
+      // 播放会话：高频进度落盘，只标记待发、不触发即时轮次（下次自然唤醒 /
+      // 回前台 / 退后台时外发）。
+      onSaved: () => unawaited(sessionSyncAdapter.noteLocalSave()),
+    )
+    // 仅本地封面写入标脏（远端应用到 store 时走 local=false，不会回环）。
+    ..bindLocalCoverChanges(covers);
+
   final syncProvider = SyncProvider(
     engine: syncEngine,
     controlPlane: syncControlPlane,
@@ -323,10 +368,8 @@ Future<SyncStack> buildSyncStack({
     localEndpoints: localEndpoints,
     codec: syncCodec,
     pairing: pairing,
+    triggers: triggerBridge,
   );
-  // 仅本地封面写入标脏（远端应用到 store 时走 local=false，不会回环）。
-  covers.onLocalChange = (_) =>
-      syncProvider.notifyLocalChange(categories: const {SyncCategory.covers});
 
   // 可选子系统（跨设备同步）初始化失败不允许阻断启动：runApp 之前任何
   // 未捕获异常都会让桌面端停在「窗口已显示但没有首帧」的黑窗状态。
@@ -337,44 +380,7 @@ Future<SyncStack> buildSyncStack({
   // （见 [startSync]）：两者都要碰安全存储 / 电量与网络探针
   // （sync_scheduler 的 refreshEnvironment），不参与首帧内容，
   // 留在 runApp 前只是让用户多等一次 IPC。
-
-  // 数据变更 → 调度器（活跃等级去抖 3–5s、空闲等级标记待外发）；所有启用
-  // 类别的本地写入都要置待发标记：资料库 / 统计 / 音源 / 设置与凭证 / 会话。
-  library.libraryRepository.changes.listen(
-    (change) =>
-        syncProvider.notifyLocalChange(categories: change.syncCategories),
-  );
-  library.playStatisticsRepository.changes.listen(
-    (_) => syncProvider.notifyLocalChange(
-      categories: const {SyncCategory.statistics},
-    ),
-  );
-  sourceManager.addListener(
-    () => syncProvider.notifyLocalChange(
-      categories: const {SyncCategory.sources},
-    ),
-  );
-  // 设置 / 凭证写入（SettingsRegistry 是登记键的唯一写入口）：标记待发 +
-  // 写入点即时追加增量日志（不依赖下一轮的登记哈希检测）。
-  catalog.settings.onWrite = (key) {
-    syncProvider.notifyLocalChange(categories: {key.category});
-    unawaited(prefsSyncAdapter.noteKeyWritten(key));
-  };
-  // 脚本写入（导入 / 更新 / 删除）：即时取版本并追加日志（新导入的脚本没有
-  // 历史登记，只靠下一轮检测会被当成「首次登记」而不外发）。
-  sourceManager.onScriptWritten = (id) =>
-      unawaited(scriptSyncAdapter.noteScriptWritten(id));
-  sourceManager.onScriptRemoved = (id) =>
-      unawaited(scriptSyncAdapter.noteScriptRemoved(id));
-  // 播放会话：高频进度落盘，只标记待发、不触发即时轮次（下次自然唤醒 /
-  // 回前台 / 退后台时外发）。
-  playback.sessionStore.onSaved = () {
-    syncProvider.notifyLocalChange(
-      categories: const {SyncCategory.session},
-      immediate: false,
-    );
-    unawaited(sessionSyncAdapter.noteLocalSave());
-  };
+  //
   // 网络变化统一由 SyncScheduler.onNetworkChanged 处理（它自己订阅
   // dataSaver.networkEvents）：这里不再挂 ChangeNotifier 监听，避免同一次
   // 网络切换触发两次环境重估 / 轮次。

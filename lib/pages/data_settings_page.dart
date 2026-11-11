@@ -132,7 +132,7 @@ class DataSettingsPage extends StatelessWidget {
 
     try {
       // 完整备份：默认导出全部类别与凭证，保证换机后的状态一致。
-      final json = await syncProvider.exportBackupJson();
+      final json = await syncProvider.commands.backup.exportJson();
       if (saveAs == null) throw StateError('SaveAs 未装配');
       final result = await saveAs.saveBytes(
         fileName: 'molia_backup_${_fileTimestamp()}.json',
@@ -183,7 +183,7 @@ class DataSettingsPage extends StatelessWidget {
                 if (syncProvider != null) {
                   final text = await pickJsonBackupText();
                   if (text == null) return; // 用户取消
-                  await syncProvider.importBackupJson(text);
+                  await syncProvider.commands.backup.importJson(text);
                   success = true;
                 }
                 if (!currentContext.mounted) return;

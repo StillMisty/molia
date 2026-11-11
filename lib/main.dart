@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
+import 'app/app_lifecycle_coordinator.dart';
 import 'app/app_shell.dart';
 import 'app/bootstrap/ai_stack.dart';
 import 'app/bootstrap/app_ui_messenger.dart';
@@ -354,6 +355,35 @@ void main() async {
   final update = buildUpdateStack(quitApp: desktop.quitApp);
   _markStartup('更新栈（装配完成）', startup);
 
+  // 应用生命周期扇出的唯一 owner：main 只把系统事件转进来，同步 / 会话 /
+  // 统计 / 网络 / 更新的反应由各子系统注册，不再由 main 与 app_shell
+  // 各持一份 WidgetsBindingObserver 分散触发。
+  final appLifecycle = AppLifecycleCoordinator()
+    ..register(
+      AppLifecycleParticipant(
+        onResumed: sync.provider.onAppResumed,
+        onHidden: sync.provider.onAppHidden,
+      ),
+    )
+    ..register(
+      AppLifecycleParticipant(onResumed: update.provider.handleAppResumed),
+    )
+    ..register(
+      AppLifecycleParticipant(onResumed: local.dataSaver.refreshConnectivity),
+    )
+    ..register(
+      AppLifecycleParticipant(
+        // 会话提交与统计落盘只认 paused：桌面 hide / 托盘隐藏不提交会话
+        // （移动端 paused 已由 PlaybackPowerPolicy 触发协调者落盘）。
+        onPaused: () async {
+          if (!mobilePowerPolicy) {
+            await playback.playbackProvider.suspendPlaybackSession();
+          }
+          await library.playStatisticsService.flush();
+        },
+      ),
+    );
+
   // 前台恢复：拉一次（有本地变更时一并推送）并复查更新安装权限——从
   // 「安装未知应用」系统授权页返回后要把按钮从「去授权」切回「立即安装」；
   // 退后台 / 锁屏：同步调度器取消全部定时器并尽力推一次。
@@ -365,8 +395,9 @@ void main() async {
   }
 
   // 移动端前后台同时喂 `PlaybackPowerPolicy`（桌面不接：托盘 / 最小化另有
-  // `AppPresence`，且桌面播放保持前台节拍）；`onPause` / `onHide` 是同一动作。
-  void onAppBackground() {
+  // `AppPresence`，且桌面播放保持前台节拍）；`onPause` / `onHide` 都先走
+  // 同一套「收后台工作」，只有 paused 额外触发会话提交 / 统计落盘。
+  void onAppBackground({bool paused = false}) {
     flushDeferredWrites();
     if (mobilePowerPolicy) {
       powerPolicy.markBackground();
@@ -374,7 +405,8 @@ void main() async {
       // 桌面托盘走 AppPresence，生命周期不触发这里。
       AppMemoryManager.instance.onAppBackground();
     }
-    sync.provider.onAppHidden();
+    unawaited(appLifecycle.hidden());
+    if (paused) unawaited(appLifecycle.paused());
   }
 
   // 桌面托盘 / 最小化不一定走 `AppLifecycleState`：窗口层置位 `AppPresence`
@@ -434,10 +466,9 @@ void main() async {
         powerPolicy.markForeground();
         AppMemoryManager.instance.onAppForeground();
       }
-      unawaited(sync.provider.onAppResumed());
-      unawaited(update.provider.handleAppResumed());
+      unawaited(appLifecycle.resumed());
     },
-    onPause: onAppBackground,
+    onPause: () => onAppBackground(paused: true),
     onHide: onAppBackground,
   );
 

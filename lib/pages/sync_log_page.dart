@@ -8,6 +8,7 @@ import '../data/sync/sync_state_store.dart';
 import '../domain/models/device_sync.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
+import '../providers/sync_ui_state.dart';
 import '../theme/app_semantic_colors.dart';
 import '../utils/sync_format.dart';
 import '../widgets/card_list_surface.dart';
@@ -27,7 +28,8 @@ class SyncLogPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final provider = context.watch<SyncProvider>();
-    final entries = provider.log;
+    final state = provider.state;
+    final entries = state.log;
     return SettingsSubPage(
       title: l10n.syncLogTitle,
       children: [
@@ -38,7 +40,7 @@ class SyncLogPage extends StatelessWidget {
               key: const Key('settingsSyncActivityItem'),
               icon: Icons.insights_rounded,
               title: l10n.syncActivityTitle,
-              subtitle: _activitySubtitle(provider, l10n),
+              subtitle: _activitySubtitle(state, l10n),
             ),
           ],
         ),
@@ -85,17 +87,17 @@ class SyncLogPage extends StatelessWidget {
 
 /// 近 24 小时活动（触发 / 有效传输 / 流量）+ 当前环境
 /// （同步等级 · 网络类型 · 是否省电）。
-String _activitySubtitle(SyncProvider provider, AppLocalizations l10n) {
-  final summary = provider.activity24h;
+String _activitySubtitle(SyncUiState state, AppLocalizations l10n) {
+  final summary = state.activity24h;
   final activity = l10n.syncActivityRounds(
     summary.rounds,
     summary.effectiveRounds,
     syncBytesText(summary.bytes),
   );
   final environment = l10n.syncActivityEnvironment(
-    syncLevelText(l10n, provider.syncLevel),
-    syncNetworkText(l10n, onCellular: provider.onCellular),
-    provider.powerSaveActive ? l10n.syncPowerSaveOn : l10n.syncPowerSaveOff,
+    syncLevelText(l10n, state.syncLevel),
+    syncNetworkText(l10n, onCellular: state.onCellular),
+    state.powerSaveActive ? l10n.syncPowerSaveOn : l10n.syncPowerSaveOff,
   );
   return '$activity\n$environment';
 }

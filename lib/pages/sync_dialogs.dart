@@ -6,9 +6,9 @@ import 'package:material_ui/material_ui.dart';
 
 import '../data/sync/sync_state_store.dart';
 import '../domain/models/device_sync.dart';
-import '../domain/ports/sync_transport.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/sync_provider.dart';
+import '../providers/sync_ui_state.dart';
 import '../services/local_endpoints_service.dart';
 import '../theme/m3e_context.dart';
 import '../widgets/settings/settings_tiles.dart';
@@ -22,9 +22,9 @@ Future<void> showWebdavConfigDialog(
   SyncProvider provider,
   AppLocalizations l10n,
 ) async {
-  final password = await provider.readWebdavPassword() ?? '';
+  final password = await provider.commands.readWebdavPassword() ?? '';
   if (!context.mounted) return;
-  final config = provider.webdav;
+  final config = provider.state.webdav;
   final server = TextEditingController(text: config.baseUrl);
   final username = TextEditingController(text: config.username);
   final passwordController = TextEditingController(text: password);
@@ -79,7 +79,7 @@ Future<void> showWebdavConfigDialog(
           onPressed: () async {
             // 配置与密码一次写入：分两步写会让已启用的 WebDAV 在中间跑到
             // 一轮「新地址 + 旧密码」的失败轮。
-            await provider.saveWebdavConfig(
+            await provider.commands.saveWebdavConfig(
               WebDavConfig(
                 baseUrl: server.text.trim(),
                 username: username.text.trim(),
@@ -156,7 +156,7 @@ List<SyncIssueAction> syncIssueActions(SyncIssue? issue) =>
 /// 全不可达的出路按传输分流：手动地址是局域网概念，WebDAV 全失败只给
 /// 配置与重试（传输由引擎写进 [SyncIssue.args]；缺失时按局域网处理）。
 List<SyncIssueAction> _allPeersUnreachableActions(SyncIssue? issue) =>
-    issue?.args['transport'] == SyncTransportKind.webdav
+    issue?.args['transport'] == SyncTransportId.webdav.kind
     ? const [SyncIssueAction.configureWebdav, SyncIssueAction.retry]
     : const [
         SyncIssueAction.addManualPeer,
@@ -246,10 +246,16 @@ Widget _actionButton(
   }
 
   final (String label, Future<void> Function() body) = switch (action) {
-    SyncIssueAction.retry => (l10n.syncRetry, () => provider.syncNow()),
+    SyncIssueAction.retry => (
+      l10n.syncRetry,
+      () => provider.commands.syncNow(),
+    ),
     SyncIssueAction.grantPermission =>
-      provider.lanPermissionPermanentlyDenied
-          ? (l10n.syncOpenSystemSettings, () => provider.openSystemSettings())
+      provider.state.lanPermissionPermanentlyDenied
+          ? (
+              l10n.syncOpenSystemSettings,
+              () => provider.commands.openSystemSettings(),
+            )
           : (
               l10n.syncActionGrantPermission,
               () => _grantLanPermission(context, provider, l10n),
@@ -285,9 +291,9 @@ Future<void> _grantLanPermission(
   SyncProvider provider,
   AppLocalizations l10n,
 ) async {
-  final granted = await provider.requestLanPermission();
+  final granted = await provider.commands.requestLanPermission();
   if (granted || !context.mounted) return;
-  final permanent = provider.lanPermissionPermanentlyDenied;
+  final permanent = provider.state.lanPermissionPermanentlyDenied;
   showSyncNotice(
     context,
     l10n.syncLanPermissionNeeded,
@@ -297,7 +303,7 @@ Future<void> _grantLanPermission(
         : l10n.syncLanPermissionGrant,
     onAction: () => unawaited(
       permanent
-          ? provider.openSystemSettings()
+          ? provider.commands.openSystemSettings()
           : _grantLanPermission(context, provider, l10n),
     ),
   );
@@ -309,9 +315,9 @@ Future<void> _useWebdav(
   SyncProvider provider,
   AppLocalizations l10n,
 ) async {
-  await provider.setTransportEnabled(SyncTransportKind.webdav, true);
+  await provider.commands.setTransportEnabled(SyncTransportId.webdav, true);
   if (!context.mounted) return;
-  if (provider.webdav.isConfigured) {
+  if (provider.state.webdav.isConfigured) {
     showSyncNotice(context, l10n.syncWebdavEnabled);
     return;
   }
@@ -332,7 +338,7 @@ Future<void> showSyncPassphraseDialog(
   AppLocalizations l10n,
 ) async {
   final navigator = Navigator.of(context, rootNavigator: true);
-  final passphrase = provider.passphrase ?? '';
+  final passphrase = provider.state.passphrase ?? '';
   await M3EDialog.show<void>(
     context,
     dialog: M3EDialog(
@@ -405,7 +411,7 @@ Future<void> _confirmPassphraseReset(
         M3EButton.filled(
           onPressed: () async {
             navigator.pop();
-            await provider.resetPassphrase();
+            await provider.commands.resetPassphrase();
             if (!context.mounted) return;
             await showSyncPassphraseDialog(context, provider, l10n);
           },
@@ -426,11 +432,11 @@ Future<void> showSyncRenameDialog(
     context,
     title: l10n.syncDeviceNameDialogTitle,
     hint: l10n.syncRenameHint,
-    initialValue: provider.deviceName,
+    initialValue: provider.state.deviceName,
     saveLabel: l10n.syncSave,
     onSave: (value) async {
       if (value.trim().isEmpty) return l10n.syncDeviceNameEmpty;
-      await provider.setDeviceName(value.trim());
+      await provider.commands.setDeviceName(value.trim());
       return null;
     },
   );
@@ -495,9 +501,9 @@ Future<void> showSyncLocalAddressesDialog(
   required SyncProvider provider,
   required AppLocalizations l10n,
 }) async {
-  final endpoints = await provider.localEndpoints();
+  final endpoints = await provider.commands.endpoints.list();
   if (!context.mounted) return;
-  final ports = provider.lanDiscoveryPorts;
+  final ports = provider.state.lanDiscoveryPorts;
   final navigator = Navigator.of(context, rootNavigator: true);
   await M3EDialog.show<void>(
     context,
