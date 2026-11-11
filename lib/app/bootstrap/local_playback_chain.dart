@@ -1,6 +1,6 @@
 /// 真实（just_audio）播放链路：把「取链」收成一条解析函数，
-/// `LocalPlaybackService`（解析直链）与 `LocalPlaybackBackend`（领域解析）
-/// 都只是它的消费者——服务与后端因此不再互相引用实例。
+/// `LocalPlaybackService`（解析直链）与 `PlaybackEngine`（领域快照 / 命令）
+/// 都只是它的消费者——服务与引擎因此不再互相引用实例。
 ///
 /// 为什么单独成文件：这段是**平台绑定的装配**（just_audio 插件），
 /// 与 provider/观察者的接线分开，便于单测只覆盖可注入部分
@@ -10,7 +10,7 @@ library;
 import 'package:flutter/foundation.dart' show ValueListenable;
 
 import '../../data/mapping/track_mapper.dart';
-import '../../data/playback/local_playback_backend.dart';
+import '../../data/playback/playback_engine.dart';
 import '../../domain/models/track.dart';
 import '../../domain/ports/music_source.dart' show PlayableStream;
 import '../../playback/local_playback_service.dart';
@@ -21,7 +21,7 @@ import '../../sources/source_track.dart';
 import 'catalog_stack.dart';
 import 'local_data_stack.dart';
 
-/// 取链装饰 + 服务 / 后端组装（原组合根的 `late final playbackBackend` 绕行
+/// 取链装饰 + 服务 / 引擎组装（原组合根的 `late final playbackBackend` 绕行
 /// 在这里变成「一个解析函数两个消费者」）。
 class LocalPlaybackChain {
   LocalPlaybackChain({
@@ -94,6 +94,6 @@ class LocalPlaybackChain {
     ),
   );
 
-  LocalPlaybackBackend buildBackend({required LocalPlaybackService service}) =>
-      LocalPlaybackBackend(service: service, resolver: resolveStream);
+  PlaybackEngine buildEngine({required LocalPlaybackService service}) =>
+      PlaybackEngine(service: service);
 }

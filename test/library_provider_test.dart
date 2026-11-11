@@ -186,7 +186,7 @@ void main() {
 
   late MoliaDatabase db;
   late _CountingLibraryRepository repository;
-  late FakePlaybackBackend backend;
+  late FakePlaybackFacade backend;
   late PlaybackProvider playback;
   late LibraryProvider provider;
 
@@ -244,9 +244,9 @@ void main() {
       databaseProvider: () => db,
       stamps: testStampIssuer(),
     );
-    backend = FakePlaybackBackend();
+    backend = FakePlaybackFacade();
     playback = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       libraryRepository: repository,
     );
     provider = LibraryProvider(

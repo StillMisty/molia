@@ -3,8 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../domain/models/failure.dart';
 import '../../domain/models/playback.dart';
 import '../../domain/models/track.dart';
-import '../../domain/ports/music_source.dart' show PlayableStream;
-import '../../domain/ports/playback_backend.dart';
+import '../../domain/ports/playback_facade.dart';
 import '../../domain/ports/state_listenable.dart';
 import '../../models/play_mode.dart';
 import '../../playback/local_playback_service.dart';
@@ -12,35 +11,40 @@ import '../../playback/queue_projection.dart';
 import '../../sources/source_track.dart';
 import '../mapping/track_mapper.dart';
 
-/// 领域解析器端口：把 [Track] 解析为本地可播流。
-///
-/// composition root（main.dart）注入 `LocalPlaybackChain.resolveStream` 的适配实现。
-typedef PlaybackStreamResolver = Future<PlayableStream> Function(
-  Track track,
-  AudioQuality? quality,
-);
-
 /// 领域端口的 ValueNotifier 实现：同一对象同时满足
 /// `StateListenable<T>`（domain）与 Flutter `ValueListenable<T>`。
-class _BackendStateNotifier extends ValueNotifier<BackendSnapshot>
-    implements StateListenable<BackendSnapshot> {
-  _BackendStateNotifier(super.value);
+class _SnapshotNotifier extends ValueNotifier<PlaybackSnapshot>
+    implements StateListenable<PlaybackSnapshot> {
+  _SnapshotNotifier(super.value);
 }
 
-/// 本地播放后端：组合 [LocalPlaybackService]，
-/// 把服务状态映射为领域 [BackendSnapshot]，并把控制委托给服务。
-class LocalPlaybackBackend implements PlaybackBackend {
-  LocalPlaybackBackend({required this._service, required this._resolver}) {
+class _PositionNotifier extends ValueNotifier<Duration>
+    implements StateListenable<Duration> {
+  _PositionNotifier(super.value);
+}
+
+/// 播放引擎：把 [LocalPlaybackService] 的队列 / 播放态映射为领域快照，
+/// 并直接实现 [PlaybackFacade] 的全部命令。
+///
+/// 为什么只剩这一层：服务已经拥有队列、播放顺序与投影，旧后端只是把服务
+/// 状态重新包一遍，facade 又把后端的快照再映射一遍。两层纯转发既让每个
+/// 命令改三处，也让 position 在两种快照里各走一遍。现在命令、快照映射与
+/// 高频进度通道只在这里实现一次；协调者与 provider 仍只依赖领域端口。
+class PlaybackEngine implements PlaybackFacade {
+  PlaybackEngine({required this._service}) {
     _service.addListener(_onServiceChanged);
-    _state.value = _buildSnapshot();
+    _publish(initial: true);
   }
 
   final LocalPlaybackService _service;
-  final PlaybackStreamResolver _resolver;
 
-  final _BackendStateNotifier _state = _BackendStateNotifier(
-    BackendSnapshot.empty,
-  );
+  final _SnapshotNotifier _snapshot = _SnapshotNotifier(PlaybackSnapshot.empty);
+  final _PositionNotifier _position = _PositionNotifier(Duration.zero);
+
+  /// position 通道最小变化阈值（≥250ms 才发，≤4Hz）。
+  static const Duration _positionThreshold = Duration(milliseconds: 250);
+
+  String? _lastPositionTrackUri;
 
   /// `SourceTrack` → `Track` 的身份缓存：队列内同一曲目对象复用同一 Track，
   /// 保证快照 `==` 去重稳定、避免每次通知重建领域对象。
@@ -72,24 +76,10 @@ class LocalPlaybackBackend implements PlaybackBackend {
   int get trackCacheLength => _trackCache.length;
 
   @override
-  PlaybackBackendKind get kind => PlaybackBackendKind.local;
+  StateListenable<PlaybackSnapshot> get snapshot => _snapshot;
 
   @override
-  PlaybackCapabilities get capabilities => const PlaybackCapabilities(
-    seek: true,
-    next: true,
-    previous: true,
-    queue: true,
-    setMode: true,
-    volume: true,
-  );
-
-  /// 本地是当前唯一后端：恒可处理。
-  @override
-  bool canHandle(Track track) => true;
-
-  @override
-  StateListenable<BackendSnapshot> get state => _state;
+  StateListenable<Duration> get position => _position;
 
   @override
   Stream<Track> get trackCompletions => _service.trackCompletions.map(_toTrack);
@@ -98,12 +88,8 @@ class LocalPlaybackBackend implements PlaybackBackend {
   void setStopAfterCurrentTrack(bool enabled) =>
       _service.setStopAfterCurrentTrack(enabled);
 
-  /// 领域解析：Track + 音质 → PlayableStream。
-  Future<PlayableStream> resolveStream(Track track, [AudioQuality? quality]) =>
-      _resolver(track, quality);
-
   @override
-  Future<void> load(PlaybackRequest request) async {
+  Future<void> playTracks(PlaybackRequest request) async {
     if (request.tracks.isEmpty) return;
     _trackCache.clear();
     final sourceTracks = [
@@ -116,7 +102,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
       contextName: request.context?.name,
       shuffleIndices: request.shuffleIndices,
     );
-    _emit();
+    _publish();
   }
 
   @override
@@ -126,14 +112,14 @@ class LocalPlaybackBackend implements PlaybackBackend {
       for (final track in tracks) sourceTrackFromTrack(track),
     ];
     await _service.enqueueTracks(sourceTracks);
-    _emit();
+    _publish();
   }
 
   /// 队列内移动一项：服务同步维护播放顺序 / 洗牌排列，返回值即是否变化。
   @override
   Future<bool> moveQueueIndex(int from, int to) async {
     final changed = _service.moveQueueIndex(from, to);
-    _emit();
+    _publish();
     return changed;
   }
 
@@ -141,7 +127,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   Future<bool> removeQueueIndex(int index) async {
     final changed = _service.removeQueueIndex(index);
-    _emit();
+    _publish();
     return changed;
   }
 
@@ -150,7 +136,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
     if (_service.hasTrack && !_service.isPlaying) {
       await _service.toggle();
     }
-    _emit();
+    _publish();
   }
 
   @override
@@ -158,61 +144,70 @@ class LocalPlaybackBackend implements PlaybackBackend {
     if (_service.isPlaying) {
       await _service.toggle();
     }
-    _emit();
+    _publish();
   }
 
   @override
   Future<void> seek(Duration position) async {
     await _service.seek(position);
-    _emit();
+    // 立即对齐进度通道（拖动结束不跳回）；不触碰低频快照。
+    _position.value = position;
+    _publish();
   }
 
   @override
   Future<void> next() async {
     await _service.skipToNext();
-    _emit();
+    _publish();
   }
 
   @override
   Future<void> previous() async {
     await _service.skipToPrevious();
-    _emit();
+    _publish();
   }
 
   @override
   Future<void> setMode(PlayMode mode) async {
     await _service.setMode(mode);
-    _emit();
+    _publish();
   }
 
   @override
   Future<void> stop() async {
     _trackCache.clear();
     await _service.stop();
-    _emit();
+    _publish();
   }
 
   @override
   Future<void> playQueueIndex(int index) async {
     await _service.playQueueIndex(index);
-    _emit();
+    _publish();
   }
 
   /// 切换当前曲目音质：服务重新取链并保持进度 / 播放态，快照带新音质。
   @override
   Future<void> setCurrentQuality(String quality) async {
     await _service.setCurrentQuality(quality);
-    _emit();
+    _publish();
   }
 
-  /// 可选能力：本地后端暂不支持。
   @override
-  Future<bool> toggleFavorite(Track track) async => throw const SourceFailure(
-    kind: FailureKind.unsupported,
-    message: '本地播放后端暂不支持收藏',
-  );
+  Future<void> toggle() async {
+    // 与 play / pause 同一判据，但只发布一次：toggle 是单个用户动作，
+    // 不应因为复用命令方法而多走一轮快照 / 进度对齐。
+    if (_snapshot.value.isPlaying) {
+      if (_service.isPlaying) await _service.toggle();
+    } else if (_service.hasTrack && !_service.isPlaying) {
+      await _service.toggle();
+    }
+    _publish();
+  }
 
   /// 应用内音量：委托 [LocalPlaybackService.setVolume]。
+  ///
+  /// 音量是设备本地状态，不属于播放快照：不发布快照、也不碰进度通道。
   @override
   Future<void> setVolume(double value) => _service.setVolume(value);
 
@@ -220,7 +215,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {
     _service.updateTrackArtwork(trackUri, artwork?.toString());
-    _emit();
+    _publish();
   }
 
   /// 换源：把队列中 [trackUri] 的曲目替换为 [newTrack]（服务重置当前曲目
@@ -228,25 +223,42 @@ class LocalPlaybackBackend implements PlaybackBackend {
   @override
   Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {
     await _service.replaceQueueTrack(trackUri, sourceTrackFromTrack(newTrack));
-    _emit();
+    _publish();
   }
 
   void dispose() {
     _service.removeListener(_onServiceChanged);
-    _state.dispose();
+    _snapshot.dispose();
+    _position.dispose();
   }
 
-  void _onServiceChanged() => _emit();
+  void _onServiceChanged() => _publish();
 
-  /// 值未变不发（`BackendSnapshot` 手写 ==）。
-  void _emit() {
+  /// 单次服务事件 / 命令结束的统一出口：先对齐高频进度，再发布低频快照。
+  ///
+  /// 两步互不影响：进度通道按阈值去重且不触发快照通知；快照不含 position，
+  /// 纯进度 tick 不会让订阅方重建 UI。
+  void _publish({bool initial = false}) {
+    _syncPosition(initial: initial);
     final next = _buildSnapshot();
-    if (next != _state.value) {
-      _state.value = next;
+    if (next != _snapshot.value) {
+      _snapshot.value = next;
     }
   }
 
-  BackendSnapshot _buildSnapshot() {
+  /// 换曲 / 首次直接对齐，其余 ≥250ms 才发（≤4Hz）。
+  void _syncPosition({bool initial = false}) {
+    final currentUri = _service.currentSourceTrack?.id;
+    if (initial || currentUri != _lastPositionTrackUri) {
+      _lastPositionTrackUri = currentUri;
+      _position.value = _service.position;
+    } else if ((_service.position - _position.value).abs() >=
+        _positionThreshold) {
+      _position.value = _service.position;
+    }
+  }
+
+  PlaybackSnapshot _buildSnapshot() {
     final currentSource = _service.currentSourceTrack;
     final index = _service.currentIndex;
 
@@ -281,7 +293,7 @@ class LocalPlaybackBackend implements PlaybackBackend {
               ? _service.duration
               : (current.duration ?? Duration.zero));
 
-    return BackendSnapshot(
+    return PlaybackSnapshot(
       current: current,
       queue: _queueTracks(),
       currentIndex: index,
@@ -292,7 +304,6 @@ class LocalPlaybackBackend implements PlaybackBackend {
       upNextIndices: projection.upNextIndices,
       isPlaying: _service.isPlaying,
       isLoading: _service.isLoading,
-      position: _service.position,
       duration: duration,
       mode: _service.mode,
       context: _readContext(),

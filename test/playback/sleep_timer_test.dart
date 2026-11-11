@@ -1,6 +1,5 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/providers/sleep_timer.dart';
@@ -42,27 +41,29 @@ Track _track(String id, {Duration duration = const Duration(seconds: 30)}) =>
       payload: {'id': id},
     );
 
-BackendSnapshot _snapshot({
+TestPlaybackFrame _snapshot({
   Track? current,
   List<Track> queue = const [],
   int currentIndex = 0,
   bool isPlaying = true,
   Duration position = Duration.zero,
   Duration duration = Duration.zero,
-}) => BackendSnapshot(
-  current: current,
-  queue: queue,
-  currentIndex: current == null ? -1 : currentIndex,
-  isPlaying: isPlaying,
+}) => (
+  snapshot: PlaybackSnapshot(
+    current: current,
+    queue: queue,
+    currentIndex: current == null ? -1 : currentIndex,
+    isPlaying: isPlaying,
+    duration: duration,
+  ),
   position: position,
-  duration: duration,
 );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late FakePlaybackBackend backend;
-  late DefaultPlaybackFacade facade;
+  late FakePlaybackFacade backend;
+  late FakePlaybackFacade facade;
   late SleepTimerController timer;
   late DateTime now;
   late int fired;
@@ -76,8 +77,8 @@ void main() {
     fired = 0;
     exited = 0;
     events = [];
-    backend = FakePlaybackBackend();
-    facade = DefaultPlaybackFacade(backend: backend);
+    backend = FakePlaybackFacade();
+    facade = backend;
     alarm = _FakeSleepTimerAlarm();
     timer = SleepTimerController(
       snapshot: facade.snapshot,
@@ -114,7 +115,7 @@ void main() {
 
   testWidgets('倒计时：仅播放时计时，暂停冻结、恢复继续、到点暂停并复位', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     expect(timer.value.mode, SleepTimerMode.countdown);
@@ -126,7 +127,7 @@ void main() {
     expect(timer.value.duration, const Duration(minutes: 1));
 
     // 暂停：倒计时冻结（走真实时间也不掉）。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -140,7 +141,7 @@ void main() {
     expect(fired, 0);
 
     // 恢复播放：继续走完剩余 50 秒。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -157,7 +158,7 @@ void main() {
 
   testWidgets('倒计时到点：勾选退出应用 → 先暂停再退出', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.setExitApp(true);
     expect(timer.exitApp.value, isTrue);
@@ -172,7 +173,7 @@ void main() {
 
   testWidgets('倒计时到点：未勾选退出应用 → 只暂停', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.setExitApp(false);
     timer.startCountdown(const Duration(minutes: 1));
@@ -185,7 +186,7 @@ void main() {
 
   testWidgets('倒计时：取消后不再触发', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     await advance(tester, const Duration(seconds: 10));
@@ -200,7 +201,7 @@ void main() {
 
   testWidgets('倒计时：勾选退出后取消 → 不到点退出', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.setExitApp(true);
     timer.startCountdown(const Duration(minutes: 1));
@@ -214,14 +215,16 @@ void main() {
   testWidgets('播完当前歌曲：自然播完（切歌前已在曲末）→ 暂停', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+    backend.emitFrame(
+      _snapshot(current: a, queue: [a, b], duration: a.duration!),
+    );
 
     timer.startAfterCurrentTrack();
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
     expect(timer.value.duration, isNull);
 
     // 播到曲末 → 后端装载下一首（进度通道先对齐到新曲目）。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a, b],
@@ -229,7 +232,7 @@ void main() {
         position: const Duration(seconds: 29),
       ),
     );
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -248,12 +251,14 @@ void main() {
   testWidgets('播完当前歌曲：勾选退出应用 → 暂停后退出', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+    backend.emitFrame(
+      _snapshot(current: a, queue: [a, b], duration: a.duration!),
+    );
 
     timer.setExitApp(true);
     timer.startAfterCurrentTrack();
     backend.emitTrackCompletion(a);
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -273,7 +278,7 @@ void main() {
 
   testWidgets('播完当前歌曲：队列末尾自然结束且勾选退出 → 退出', (tester) async {
     final a = _track('a');
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -285,7 +290,7 @@ void main() {
     timer.setExitApp(true);
     timer.startAfterCurrentTrack();
     // 没有完成事件（旧后端 / 位置回退路径）：曲末后播放停止。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -304,7 +309,7 @@ void main() {
   testWidgets('播完当前歌曲：熄屏后位置 tick 停在半途，仍按完成事件暂停', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a, b],
@@ -319,7 +324,7 @@ void main() {
     // 熄屏 / 后台：位置流没有继续 tick，_maxPosition 停在 10s；播放器原生
     // 完成当前曲目并准备自动切下一首。完成事件必须先于「曲目变了」判定。
     backend.emitTrackCompletion(a);
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -338,11 +343,13 @@ void main() {
   testWidgets('播完当前歌曲：手动切歌跟随新曲目继续等待', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+    backend.emitFrame(
+      _snapshot(current: a, queue: [a, b], duration: a.duration!),
+    );
 
     timer.startAfterCurrentTrack();
     // 中途手动切歌（远未到曲末）：不暂停，跟随新曲目。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -356,7 +363,7 @@ void main() {
     expect(backend.stopAfterCurrentTrack, isTrue, reason: '手动切歌应继续等待新曲目');
 
     // 新曲目自然播完（队列末尾：播放停止）→ 无下一首可暂停，撤销定时。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -372,7 +379,7 @@ void main() {
 
   testWidgets('播完当前歌曲：切到倒计时会撤销后端的停止标志', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startAfterCurrentTrack();
     expect(backend.stopAfterCurrentTrack, isTrue);
@@ -386,10 +393,10 @@ void main() {
 
   testWidgets('播完当前歌曲：手动暂停保持武装，恢复后照常到点', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startAfterCurrentTrack();
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -400,7 +407,7 @@ void main() {
     );
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
 
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -408,7 +415,7 @@ void main() {
         position: const Duration(seconds: 29),
       ),
     );
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -424,10 +431,10 @@ void main() {
 
   testWidgets('播完当前歌曲：单曲循环（曲目未换、位置回跳）→ 暂停', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startAfterCurrentTrack();
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -436,7 +443,7 @@ void main() {
       ),
     );
     // 单曲循环重播：曲目没变，位置从曲末回到 0。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -452,16 +459,16 @@ void main() {
 
   testWidgets('播完当前歌曲：队列被清空（停止播放）撤销定时', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startAfterCurrentTrack();
-    backend.emit(_snapshot(current: null, isPlaying: false));
+    backend.emitFrame(_snapshot(current: null, isPlaying: false));
     expect(timer.value.mode, SleepTimerMode.off);
     expect(fired, 0);
   });
 
   testWidgets('播完当前歌曲：无真实曲目时开启为无操作', (tester) async {
-    backend.emit(_snapshot(isPlaying: false));
+    backend.emitFrame(_snapshot(isPlaying: false));
     timer.startAfterCurrentTrack();
     expect(timer.value.mode, SleepTimerMode.off);
   });
@@ -469,7 +476,9 @@ void main() {
   testWidgets('倒计时到点：勾选本曲播完再停 → 曲目播完才暂停', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+    backend.emitFrame(
+      _snapshot(current: a, queue: [a, b], duration: a.duration!),
+    );
 
     timer.setWaitForTrackEnd(true);
     timer.startCountdown(const Duration(minutes: 1));
@@ -481,7 +490,7 @@ void main() {
     expect(backend.stopAfterCurrentTrack, isTrue);
 
     backend.emitTrackCompletion(a);
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -499,7 +508,9 @@ void main() {
   testWidgets('倒计时到点：等本曲播完 + 退出应用 → 曲末暂停后退出', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+    backend.emitFrame(
+      _snapshot(current: a, queue: [a, b], duration: a.duration!),
+    );
 
     timer.setWaitForTrackEnd(true);
     timer.setExitApp(true);
@@ -511,7 +522,7 @@ void main() {
     expect(timer.value.mode, SleepTimerMode.afterCurrentTrack);
 
     backend.emitTrackCompletion(a);
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -531,7 +542,7 @@ void main() {
 
   testWidgets('倒计时到点：未勾选等待 → 立即暂停', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.setWaitForTrackEnd(false);
     timer.startCountdown(const Duration(minutes: 1));
@@ -542,7 +553,7 @@ void main() {
   });
 
   testWidgets('倒计时到点：无真实曲目时等待勾选退化为立即暂停', (tester) async {
-    backend.emit(_snapshot(isPlaying: true));
+    backend.emitFrame(_snapshot(isPlaying: true));
 
     timer.setWaitForTrackEnd(true);
     timer.startCountdown(const Duration(minutes: 1));
@@ -554,7 +565,7 @@ void main() {
 
   testWidgets('等待阶段取消本曲播完再停 → 立即暂停', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.setWaitForTrackEnd(true);
     timer.startCountdown(const Duration(minutes: 1));
@@ -571,7 +582,7 @@ void main() {
 
   testWidgets('等待阶段取消定时 → 不再暂停', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.setWaitForTrackEnd(true);
     timer.startCountdown(const Duration(minutes: 1));
@@ -587,7 +598,7 @@ void main() {
   });
 
   test('生产 provider：退出应用 / 本曲播完再停默认勾选（仅本次运行）', () async {
-    final playback = buildTestPlaybackProvider(backend: FakePlaybackBackend());
+    final playback = buildTestPlaybackProvider(facade: FakePlaybackFacade());
     await playback.preferencesReady;
 
     expect(playback.sleepTimer.exitApp.value, isTrue);
@@ -601,7 +612,7 @@ void main() {
   });
 
   test('stopLocalPlayback 撤销定时（定时不跨会话保留）', () async {
-    final playback = buildTestPlaybackProvider(backend: FakePlaybackBackend());
+    final playback = buildTestPlaybackProvider(facade: FakePlaybackFacade());
     await playback.preferencesReady;
     playback.sleepTimer.startCountdown(const Duration(minutes: 30));
     expect(playback.sleepTimer.value.isActive, isTrue);
@@ -614,7 +625,7 @@ void main() {
 
   testWidgets('倒计时：tick 迟到（中途一个 tick 都没跑到）在首个 tick 立即到点', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     // 熄屏 / 后台：真实时间跨过 deadline，但定时器一个 tick 都没被调度到。
@@ -629,13 +640,15 @@ void main() {
   testWidgets('倒计时：整段冻结后，非 tick 信号（快照）也补触发', (tester) async {
     final a = _track('a');
     final b = _track('b');
-    backend.emit(_snapshot(current: a, queue: [a, b], duration: a.duration!));
+    backend.emitFrame(
+      _snapshot(current: a, queue: [a, b], duration: a.duration!),
+    );
 
     timer.startCountdown(const Duration(minutes: 1));
     // 进程被冻结：时钟越过 deadline，期间无 tick；解冻后的第一个快照事件
     // （如自动切歌）就要到点，不等下一次 tick。
     now = now.add(const Duration(minutes: 5));
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: b,
         queue: [a, b],
@@ -650,13 +663,13 @@ void main() {
 
   testWidgets('倒计时：暂停冻结精确到 now（半个 tick 也不漏计）', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     await advance(tester, const Duration(milliseconds: 500));
 
     // 暂停：剩余 = deadline - now（未到第一个 tick 也精确扣减）。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -679,7 +692,7 @@ void main() {
     expect(fired, 0);
 
     // 恢复播放：按冻结的剩余时长走完即到点。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -694,7 +707,7 @@ void main() {
 
   testWidgets('倒计时：熄屏跨过 deadline，回到前台（resumed）立即补触发', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     final recheck = SleepTimerLifecycleRecheck(timer);
     addTearDown(recheck.detach);
@@ -716,14 +729,14 @@ void main() {
 
   testWidgets('倒计时：播放中 deadline 越过而此刻已暂停 → 直接复位', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     now = now.add(const Duration(minutes: 2));
 
     // 解冻时已经是暂停态（如播放期间被来电打断）：播放时长已耗尽，
     // 定时结束并复位，不留下「恢复播放就立刻暂停」的残定时。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -740,7 +753,7 @@ void main() {
 
   testWidgets('倒计时：重新武装覆盖旧 deadline（不按旧时刻立刻到点）', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     await advance(tester, const Duration(seconds: 30));
@@ -759,7 +772,7 @@ void main() {
 
   testWidgets('倒计时：原生定时器随播放/暂停武装与撤销（恢复后按剩余重排）', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     expect(alarm.arms, isNotEmpty);
@@ -769,7 +782,7 @@ void main() {
     await advance(tester, const Duration(seconds: 10));
 
     // 暂停：撤销原生定时器（避免熄屏时原生到点误暂停）。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -782,7 +795,7 @@ void main() {
     expect(alarm.arms.length, armedBeforePause);
 
     // 恢复播放：按冻结后的剩余时长重排（token 变化，旧回调失效）。
-    backend.emit(
+    backend.emitFrame(
       _snapshot(
         current: a,
         queue: [a],
@@ -800,7 +813,7 @@ void main() {
 
   testWidgets('wake lock 只在后台持有：前台 arm 不持锁，退后台重排持锁', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     var foreground = true;
     final localAlarm = _FakeSleepTimerAlarm();
@@ -847,7 +860,7 @@ void main() {
 
   testWidgets('生命周期 onPause 立即按后台重排 wake lock（不等策略先更新）', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     // isForeground 默认恒 true，模拟「策略监听还没跑到」的同一事件栈。
     timer.startCountdown(const Duration(minutes: 30));
@@ -874,7 +887,7 @@ void main() {
 
   testWidgets('倒计时：原生回调到点暂停；过期 token 无效', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     final token = alarm.arms.last.$2;
@@ -894,7 +907,7 @@ void main() {
 
   testWidgets('倒计时：原生回调早到（deadline 未到）重新武装，不提前暂停', (tester) async {
     final a = _track('a');
-    backend.emit(_snapshot(current: a, queue: [a], duration: a.duration!));
+    backend.emitFrame(_snapshot(current: a, queue: [a], duration: a.duration!));
 
     timer.startCountdown(const Duration(minutes: 1));
     final token = alarm.arms.last.$2;

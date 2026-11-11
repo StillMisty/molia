@@ -32,14 +32,14 @@ void main() {
       );
 
   test('真实队列命中：facade 替换全部同 id 曲目并更新快照', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
 
     final old = track('a');
     final other = track('b');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: old,
         queue: [other, old],
         currentIndex: 1,
@@ -58,12 +58,12 @@ void main() {
   });
 
   test('未命中：返回 false 且不调用 facade', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
 
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track('b'),
         queue: [track('b')],
         currentIndex: 0,
@@ -95,8 +95,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
     expect(provider.hasRestoredSession, isTrue);
@@ -105,7 +105,7 @@ void main() {
     final hit = await provider.replaceQueueTrack(old, replacement);
 
     expect(hit, isTrue);
-    expect(backend.calls, isEmpty, reason: '恢复态不触碰真实后端');
+    expect(backend.calls, isEmpty, reason: '恢复态不触碰真实引擎');
     expect(provider.snapshot.current?.id, const TrackId('kg', 'a'));
     expect(provider.snapshot.current?.title, 'Title');
     expect(provider.snapshot.queue.map((t) => t.id.uri), ['kg:a', 'fake:b']);
@@ -128,9 +128,9 @@ void main() {
     );
 
     final store = _CountingSessionStore();
-    final backend = FakePlaybackBackend();
+    final backend = FakePlaybackFacade();
     final provider = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       sessionStore: store,
     );
     addTearDown(provider.dispose);
@@ -138,7 +138,7 @@ void main() {
     expect(provider.hasRestoredSession, isTrue);
 
     // 交接窗口：facade 已有队列但还没有当前曲目，恢复态仍然保留。
-    backend.emit(BackendSnapshot(queue: [old, other], currentIndex: -1));
+    backend.emit(PlaybackSnapshot(queue: [old, other], currentIndex: -1));
 
     final replacement = track('a', sourceKey: 'kg');
     final hit = await provider.replaceQueueTrack(old, replacement);

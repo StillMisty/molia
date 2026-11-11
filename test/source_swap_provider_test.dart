@@ -33,7 +33,7 @@ void main() {
   late FakeLibraryRepository repository;
   late LibraryProvider library;
   late PlaybackProvider playback;
-  late FakePlaybackBackend backend;
+  late FakePlaybackFacade backend;
 
   late FakeMusicSource kg;
   late FakeMusicSource tx;
@@ -41,8 +41,8 @@ void main() {
 
   setUp(() {
     repository = FakeLibraryRepository();
-    backend = FakePlaybackBackend();
-    playback = buildTestPlaybackProvider(backend: backend);
+    backend = FakePlaybackFacade();
+    playback = buildTestPlaybackProvider(facade: backend);
     library = LibraryProvider(
       repository: repository,
       playbackProvider: playback,
@@ -373,7 +373,7 @@ void main() {
     // 种子正在播放：队列跟随应命中。
     final seed = track('wy', '1');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: seed,
         queue: [seed],
         currentIndex: 0,
@@ -420,7 +420,7 @@ void main() {
     );
     final seed = track('wy', '1');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: seed,
         queue: [seed],
         currentIndex: 0,
@@ -464,7 +464,7 @@ void main() {
     );
     final seed = track('wy', '1');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: seed,
         queue: [seed],
         currentIndex: 0,
@@ -568,7 +568,7 @@ void main() {
   test('apply（仅队列）：命中替换；试听接管后确认视为已生效；未命中报 notFound', () async {
     final seed = track('wy', '1');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: seed,
         queue: [seed],
         currentIndex: 0,
@@ -590,7 +590,7 @@ void main() {
 
     // 试听接管（单曲队列已不含旧曲目）后确认：当前已是所选曲目 → 视为已生效。
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: kg.items.single,
         queue: [kg.items.single],
         currentIndex: 0,
@@ -603,7 +603,7 @@ void main() {
 
     // 目标已不在队列且当前不是所选曲目：换一个新会话验证 targetNotFound。
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track('wy', '999'),
         queue: [track('wy', '999')],
         currentIndex: 0,
@@ -621,7 +621,7 @@ void main() {
   test('apply 成功后回调种子与新曲目（本地封面跟随入口）', () async {
     final seed = track('wy', '1');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: seed,
         queue: [seed],
         currentIndex: 0,
@@ -670,7 +670,7 @@ void main() {
     );
     final seed = track('wy', '1');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: seed,
         queue: [seed],
         currentIndex: 0,

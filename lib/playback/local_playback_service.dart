@@ -185,7 +185,7 @@ class LocalPlaybackService extends ChangeNotifier {
 
   /// 队列内容版本号：任何队列变更（装载 / 追加 / 原地替换 / 补图 / 清空）
   /// 自增。O(1) 的「队列是否真的变了」判定（位置 tick 不算变更）；
-  /// `LocalPlaybackBackend` 用它判断能否复用队列的领域 `Track` 映射。
+  /// `PlaybackEngine` 用它判断能否复用队列的领域 `Track` 映射。
   int _queueRevision = 0;
 
   /// 队列内容版本号（每次队列内容变更自增；位置 / 播放态变化不变）。
@@ -543,7 +543,7 @@ class LocalPlaybackService extends ChangeNotifier {
   String? get lastError => _lastError;
   SourceTrack? get currentSourceTrack => _currentTrack;
 
-  /// 当前曲目本次播放选用的音质（`LocalPlaybackBackend` 快照用）。
+  /// 当前曲目本次播放选用的音质（`PlaybackEngine` 快照用）。
   String? get currentQuality => _currentQuality;
 
   /// 当前曲目自然播完的事件（自动切歌 / 单曲循环重播之前发出）。

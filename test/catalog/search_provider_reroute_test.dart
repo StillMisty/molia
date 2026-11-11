@@ -1,109 +1,22 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
 import 'package:molia/domain/models/artist.dart';
 import 'package:molia/domain/models/catalog.dart';
 import 'package:molia/domain/models/comment.dart';
 import 'package:molia/domain/models/failure.dart';
-import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/source.dart' as domain;
 import 'package:molia/domain/models/track.dart';
 import 'package:molia/domain/ports/music_source.dart';
-import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/source_registry.dart';
-import 'package:molia/domain/ports/state_listenable.dart';
-import 'package:molia/models/play_mode.dart';
 import 'package:molia/providers/channel_selection.dart';
 import 'package:molia/providers/playback_provider.dart';
 import 'package:molia/providers/search_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fakes.dart';
-
-class _TestListenable<T> extends ValueNotifier<T>
-    implements StateListenable<T> {
-  _TestListenable(super.value);
-}
-
-class _FakeBackend implements PlaybackBackend {
-  final _TestListenable<BackendSnapshot> _notifier = _TestListenable(
-    BackendSnapshot.empty,
-  );
-
-  PlaybackRequest? lastRequest;
-
-  @override
-  PlaybackBackendKind get kind => PlaybackBackendKind.local;
-
-  @override
-  PlaybackCapabilities get capabilities => const PlaybackCapabilities();
-
-  @override
-  bool canHandle(Track track) => true;
-
-  @override
-  StateListenable<BackendSnapshot> get state => _notifier;
-
-  @override
-  Stream<Track> get trackCompletions => const Stream.empty();
-
-  @override
-  void setStopAfterCurrentTrack(bool enabled) {}
-
-  @override
-  Future<void> enqueueTracks(List<Track> tracks) async {}
-
-  @override
-  Future<bool> moveQueueIndex(int from, int to) async => false;
-
-  @override
-  Future<bool> removeQueueIndex(int index) async => false;
-
-  @override
-  Future<void> load(PlaybackRequest request) async => lastRequest = request;
-
-  @override
-  Future<void> play() async {}
-
-  @override
-  Future<void> pause() async {}
-
-  @override
-  Future<void> seek(Duration position) async {}
-
-  @override
-  Future<void> next() async {}
-
-  @override
-  Future<void> previous() async {}
-
-  @override
-  Future<void> setMode(PlayMode mode) async {}
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> playQueueIndex(int index) async {}
-
-  @override
-  Future<void> setCurrentQuality(String quality) async {}
-
-  @override
-  Future<bool> toggleFavorite(Track track) async => false;
-
-  @override
-  Future<void> setVolume(double value) async {}
-
-  @override
-  Future<void> updateTrackArtwork(String trackUri, Uri? artwork) async {}
-
-  @override
-  Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {}
-}
 
 class _FakeMusicSource implements MusicSource {
   _FakeMusicSource(this.key, {this.capabilities = _searchOnly});
@@ -316,14 +229,14 @@ Future<void> _waitUntil(bool Function() predicate) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  late _FakeBackend backend;
+  late FakePlaybackFacade backend;
   late PlaybackProvider playbackProvider;
   late ChannelSelection selection;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    backend = _FakeBackend();
-    playbackProvider = buildTestPlaybackProvider(backend: backend);
+    backend = FakePlaybackFacade();
+    playbackProvider = buildTestPlaybackProvider(facade: backend);
   });
 
   tearDown(() {

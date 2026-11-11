@@ -37,28 +37,28 @@ class _RecordingSessionStore extends PlaybackSessionStore {
   }
 }
 
-/// 模拟真实后端的装载过程：load 时先推送「当前曲目 + 进度 0」的加载态，
+/// 模拟真实引擎的装载过程：load 时先推送「当前曲目 + 进度 0」的加载态，
 /// 用于复现「恢复播放时进度条先回 0 再跳回恢复进度」；
 /// [gate] 非空时停在取链阶段，模拟慢取链（装载期间的用户操作窗口）。
-class _LoadingBackend extends FakePlaybackBackend {
-  _LoadingBackend({this.gate});
+class _LoadingFacade extends FakePlaybackFacade {
+  _LoadingFacade({this.gate});
 
   final Completer<void>? gate;
 
   @override
-  Future<void> load(PlaybackRequest request) async {
-    await super.load(request);
+  Future<void> playTracks(PlaybackRequest request) async {
+    await super.playTracks(request);
     final track = request.tracks[request.startIndex];
     emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: track,
         queue: request.tracks,
         currentIndex: request.startIndex,
         isLoading: true,
-        position: Duration.zero,
         duration: track.duration ?? Duration.zero,
-        mode: state.value.mode,
+        mode: snapshot.value.mode,
       ),
+      position: Duration.zero,
     );
     final gate = this.gate;
     if (gate != null) await gate.future;
@@ -196,8 +196,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -239,8 +239,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
     expect(provider.hasRestoredSession, isTrue);
@@ -268,8 +268,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -291,8 +291,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -309,8 +309,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -330,7 +330,7 @@ void main() {
     expect(request.startIndex, isNot(0));
     expect(request.shuffleIndices, restoredOrder);
     expect(request.shuffleIndices, contains(request.startIndex));
-    expect(backend.state.value.mode, PlayMode.shuffle);
+    expect(backend.snapshot.value.mode, PlayMode.shuffle);
   });
 
   test('重启后恢复态仍可调整播放模式，恢复播放沿用所选模式', () async {
@@ -343,8 +343,8 @@ void main() {
       ),
     );
 
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -355,7 +355,7 @@ void main() {
     await provider.togglePlayMode();
     expect(provider.currentMode, PlayMode.listLoop);
     expect(provider.snapshot.mode, PlayMode.listLoop);
-    expect(backend.state.value.mode, PlayMode.listLoop);
+    expect(backend.snapshot.value.mode, PlayMode.listLoop);
 
     // 新模式写入恢复会话：重启后仍保留。
     await Future<void>.delayed(Duration.zero);
@@ -366,10 +366,10 @@ void main() {
     // 恢复时应把会话模式带给后端（shuffle 顺序依赖装载前的模式）。
     await provider.setPlayMode(PlayMode.shuffle);
     await provider.setDefaultPlayMode(PlayMode.sequential);
-    expect(backend.state.value.mode, PlayMode.sequential);
+    expect(backend.snapshot.value.mode, PlayMode.sequential);
 
     await provider.resumeRestoredSession();
-    expect(backend.state.value.mode, PlayMode.shuffle);
+    expect(backend.snapshot.value.mode, PlayMode.shuffle);
     expect(provider.currentMode, PlayMode.shuffle);
   });
 
@@ -496,8 +496,8 @@ void main() {
       ),
     );
 
-    final backend = _LoadingBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = _LoadingFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
     expect(provider.position.value, const Duration(seconds: 20));
@@ -533,8 +533,8 @@ void main() {
     );
 
     final gate = Completer<void>();
-    final backend = _LoadingBackend(gate: gate);
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = _LoadingFacade(gate: gate);
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
@@ -556,20 +556,20 @@ void main() {
   });
 
   test('suspendPlaybackSession：退后台 / 退出入口强制保存最新进度', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: _track('a'),
         queue: [_track('a')],
         currentIndex: 0,
         isPlaying: true,
-        position: const Duration(seconds: 7),
         duration: const Duration(seconds: 30),
       ),
+      position: const Duration(seconds: 7),
     );
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
@@ -581,14 +581,14 @@ void main() {
     // 先提交 7s；随后进度推进到 30s：没有周期写，存储仍是 7s。
     await provider.suspendPlaybackSession();
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: _track('a'),
         queue: [_track('a')],
         currentIndex: 0,
         isPlaying: true,
-        position: const Duration(seconds: 30),
         duration: const Duration(seconds: 30),
       ),
+      position: const Duration(seconds: 30),
     );
     await Future<void>.delayed(Duration.zero);
     expect(
@@ -605,20 +605,20 @@ void main() {
   });
 
   test('真实播放后保存会话：新实例可恢复（含 raw）', () async {
-    final backend = FakePlaybackBackend();
-    final provider = buildTestPlaybackProvider(backend: backend);
+    final backend = FakePlaybackFacade();
+    final provider = buildTestPlaybackProvider(facade: backend);
     addTearDown(provider.dispose);
     await provider.preferencesReady;
 
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: _track('a', artwork: 'https://img.example/a.jpg'),
         queue: [_track('a'), _track('b')],
         currentIndex: 0,
         isPlaying: true,
-        position: const Duration(seconds: 7),
         duration: const Duration(seconds: 30),
       ),
+      position: const Duration(seconds: 7),
     );
     // 保存是异步的：让微任务/SharedPreferences 写入完成。
     await Future<void>.delayed(Duration.zero);
@@ -632,10 +632,10 @@ void main() {
   });
 
   test('定时关闭到点：经命令面暂停并在返回前提交会话', () async {
-    final backend = FakePlaybackBackend();
+    final backend = FakePlaybackFacade();
     final store = _RecordingSessionStore();
     final provider = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       sessionStore: store,
     );
     addTearDown(provider.dispose);
@@ -644,28 +644,28 @@ void main() {
     // 起播一帧：切歌快照先提交一次（进度 7s），定时到点时应提交同一进度。
     final a = _track('a');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: a,
         queue: [a],
         currentIndex: 0,
         isPlaying: true,
-        position: const Duration(seconds: 7),
         duration: const Duration(seconds: 30),
       ),
+      position: const Duration(seconds: 7),
     );
     expect(store.saves, hasLength(1));
     expect(store.saves.single.position, const Duration(seconds: 7));
 
     // 播放推进到 8s：到点暂停必须提交最新进度，而不是停在切歌时的 7s。
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: a,
         queue: [a],
         currentIndex: 0,
         isPlaying: true,
-        position: const Duration(seconds: 8),
         duration: const Duration(seconds: 30),
       ),
+      position: const Duration(seconds: 8),
     );
     expect(store.saves, hasLength(1), reason: '进度 tick 不重写整份会话');
 

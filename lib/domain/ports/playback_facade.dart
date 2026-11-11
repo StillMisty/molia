@@ -5,11 +5,11 @@ import '../models/playback.dart';
 import '../models/track.dart';
 import 'state_listenable.dart';
 
-/// 对 UI 暴露的唯一播放入口：UI 不区分“本地/远程”。
+/// 播放引擎对外暴露的小接口：协调者、provider 与播放观察者只依赖它。
 ///
-/// 当前只有本地后端，[isLocal] 恒 true。
+/// 实现是唯一的 `PlaybackEngine`（本地 just_audio 链路）；UI 不直接持有它。
 abstract interface class PlaybackFacade {
-  /// 低频快照：曲目/队列/模式/后端/错误（值变才发）。
+  /// 低频快照：曲目/队列/模式/错误（值变才发）。
   StateListenable<PlaybackSnapshot> get snapshot;
 
   /// 高频进度（内部 ≥250ms 变化才发）：只让进度条/歌词订阅。
@@ -18,19 +18,13 @@ abstract interface class PlaybackFacade {
   /// 当前曲目自然播完的事件（自动切歌前发出）。
   ///
   /// 定时关闭的「播完当前歌曲」用：熄屏时进度通道可能停更，不能靠它判断
-  /// 曲末；见 `PlaybackBackend.trackCompletions`。
+  /// 曲末。
   Stream<Track> get trackCompletions;
 
   /// 当前曲目自然播完后停止，不自动切下一首（定时关闭用）。
   void setStopAfterCurrentTrack(bool enabled);
 
-  /// 是否处于“本地流”播放（当前恒 true）。
-  bool get isLocal;
-
   Future<void> playTracks(PlaybackRequest request);
-
-  /// 在上下文中播放单曲：队列内已存在则跳转，否则以单曲队列加载。
-  Future<void> playTrackInContext(Track track, {PlaybackContext? context});
 
   /// 在已加载队列内按下标跳转。
   Future<void> playQueueIndex(int index);

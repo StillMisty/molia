@@ -2,14 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:molia/data/catalog/catalog_service.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/domain/models/failure.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/ports/library_store.dart';
 import 'package:molia/domain/models/track.dart';
-import 'package:molia/domain/ports/playback_backend.dart';
 import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/ports/state_listenable.dart';
 import 'package:molia/domain/ports/ui_messenger.dart';
@@ -25,17 +23,30 @@ class TestListenable<T> extends ValueNotifier<T> implements StateListenable<T> {
   TestListenable(super.value);
 }
 
-/// 记录调用与最后一次 load 请求的假播放后端。
-class FakePlaybackBackend implements PlaybackBackend {
-  final TestListenable<BackendSnapshot> _notifier = TestListenable(
-    BackendSnapshot.empty,
+/// 测试用的一帧播放状态：低频快照 + 独立进度。
+///
+/// 只用于把「同一时刻的快照与进度」打包传给 [FakePlaybackFacade.emitFrame]，
+/// 不是生产快照类型；测试 helper 因此不必把 position 塞回快照。
+typedef TestPlaybackFrame = ({PlaybackSnapshot snapshot, Duration position});
+
+/// 记录调用与最后一次 load 请求的假播放引擎。
+///
+/// 实现 [PlaybackFacade]（单快照 + 独立 position 通道）而不是旧的双快照
+/// 后端：测试与生产走同一套接口，`emit` 只接受 [PlaybackSnapshot]，
+/// 进度通过独立参数推进，避免测试重新长出一套 position 快照。
+class FakePlaybackFacade implements PlaybackFacade {
+  final TestListenable<PlaybackSnapshot> _notifier = TestListenable(
+    PlaybackSnapshot.empty,
   );
+
+  /// 高频进度通道：由 [emit] 的可选 `position` 参数推进。
+  final TestListenable<Duration> _position = TestListenable(Duration.zero);
 
   final List<String> calls = [];
   PlaybackRequest? lastRequest;
   List<Track>? lastEnqueued;
 
-  /// 「播完当前歌曲后停止」标志的最近值（与真实后端一样由定时关闭下发）。
+  /// 「播完当前歌曲后停止」标志的最近值（与真实引擎一样由定时关闭下发）。
   bool? stopAfterCurrentTrack;
   final List<bool> stopAfterCurrentTrackCalls = [];
 
@@ -58,29 +69,25 @@ class FakePlaybackBackend implements PlaybackBackend {
   /// 音量下发记录（provider 音量链路测试用；有效音量含静音时的 0）。
   final List<double> volumes = [];
 
-  void emit(BackendSnapshot snapshot) => _notifier.value = snapshot;
+  /// 推一帧快照；`position` 同时推进独立进度通道（先于快照通知，与真实
+  /// 引擎的发布顺序一致：协调者处理快照时会读到同一时刻的进度）。
+  void emit(PlaybackSnapshot snapshot, {Duration? position}) {
+    if (position != null) _position.value = position;
+    _notifier.value = snapshot;
+  }
+
+  /// 推一帧「快照 + 进度」（helper 打包用）。
+  void emitFrame(TestPlaybackFrame frame) =>
+      emit(frame.snapshot, position: frame.position);
 
   @override
-  PlaybackBackendKind get kind => PlaybackBackendKind.local;
+  StateListenable<PlaybackSnapshot> get snapshot => _notifier;
 
   @override
-  PlaybackCapabilities get capabilities => const PlaybackCapabilities(
-    seek: true,
-    next: true,
-    previous: true,
-    queue: true,
-    setMode: true,
-    volume: true,
-  );
+  StateListenable<Duration> get position => _position;
 
   @override
-  bool canHandle(Track track) => true;
-
-  @override
-  StateListenable<BackendSnapshot> get state => _notifier;
-
-  @override
-  Future<void> load(PlaybackRequest request) async {
+  Future<void> playTracks(PlaybackRequest request) async {
     calls.add('load');
     lastRequest = request;
   }
@@ -89,9 +96,9 @@ class FakePlaybackBackend implements PlaybackBackend {
   Future<void> enqueueTracks(List<Track> tracks) async {
     calls.add('enqueueTracks');
     lastEnqueued = tracks;
-    // 与真实后端一致：追加后队列增长，推一帧状态让订阅方读到。
+    // 与真实引擎一致：追加后队列增长，推一帧状态让订阅方读到。
     final current = _notifier.value;
-    _notifier.value = BackendSnapshot(
+    _notifier.value = PlaybackSnapshot(
       current: current.current,
       queue: [...current.queue, ...tracks],
       currentIndex: current.currentIndex,
@@ -106,7 +113,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       ],
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
-      position: current.position,
       duration: current.duration,
       mode: current.mode,
       context: current.context,
@@ -136,7 +142,7 @@ class FakePlaybackBackend implements PlaybackBackend {
     var index = current.currentIndex;
     if (from < to && index > from && index <= to) index--;
     if (to < from && index >= to && index < from) index++;
-    _notifier.value = BackendSnapshot(
+    _notifier.value = PlaybackSnapshot(
       current: current.current,
       queue: List<Track>.unmodifiable(queue),
       currentIndex: index,
@@ -147,7 +153,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       upNextIndices: current.upNextIndices,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
-      position: current.position,
       duration: current.duration,
       mode: current.mode,
       context: current.context,
@@ -172,7 +177,7 @@ class FakePlaybackBackend implements PlaybackBackend {
     final currentIndex = index < current.currentIndex
         ? current.currentIndex - 1
         : current.currentIndex;
-    _notifier.value = BackendSnapshot(
+    _notifier.value = PlaybackSnapshot(
       current: current.current,
       queue: List<Track>.unmodifiable(queue),
       currentIndex: currentIndex,
@@ -186,7 +191,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       upNextIndices: const [],
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
-      position: current.position,
       duration: current.duration,
       mode: current.mode,
       context: current.context,
@@ -202,8 +206,21 @@ class FakePlaybackBackend implements PlaybackBackend {
   @override
   Future<void> pause() async => calls.add('pause');
 
+  /// 与真实引擎一致：按当前快照播放态选择 pause / play。
   @override
-  Future<void> seek(Duration position) async => calls.add('seek');
+  Future<void> toggle() async {
+    if (snapshot.value.isPlaying) {
+      await pause();
+    } else {
+      await play();
+    }
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    calls.add('seek');
+    _position.value = position;
+  }
 
   @override
   Future<void> next() async => calls.add('next');
@@ -214,9 +231,9 @@ class FakePlaybackBackend implements PlaybackBackend {
   @override
   Future<void> setMode(PlayMode mode) async {
     calls.add('setMode');
-    // 与真实后端一致：模式变化会推送状态，让 facade/provider 读到新值。
+    // 与真实引擎一致：模式变化会推送状态，让 facade/provider 读到新值。
     final current = _notifier.value;
-    _notifier.value = BackendSnapshot(
+    _notifier.value = PlaybackSnapshot(
       current: current.current,
       queue: current.queue,
       currentIndex: current.currentIndex,
@@ -226,7 +243,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       upNext: current.upNext,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
-      position: current.position,
       duration: current.duration,
       mode: mode,
       context: current.context,
@@ -242,12 +258,12 @@ class FakePlaybackBackend implements PlaybackBackend {
   Future<void> playQueueIndex(int index) async =>
       calls.add('playQueueIndex:$index');
 
-  /// 切换音质：记录调用并推一帧带新 quality 的快照（与真实后端一致）。
+  /// 切换音质：记录调用并推一帧带新 quality 的快照（与真实引擎一致）。
   @override
   Future<void> setCurrentQuality(String quality) async {
     calls.add('setCurrentQuality:$quality');
     final current = _notifier.value;
-    _notifier.value = BackendSnapshot(
+    _notifier.value = PlaybackSnapshot(
       current: current.current,
       queue: current.queue,
       currentIndex: current.currentIndex,
@@ -257,7 +273,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       upNext: current.upNext,
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
-      position: current.position,
       duration: current.duration,
       mode: current.mode,
       context: current.context,
@@ -265,9 +280,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       error: current.error,
     );
   }
-
-  @override
-  Future<bool> toggleFavorite(Track track) async => false;
 
   @override
   Future<void> setVolume(double value) async {
@@ -282,7 +294,7 @@ class FakePlaybackBackend implements PlaybackBackend {
     lastArtworkUri = artwork?.toString();
   }
 
-  /// 换源：记录调用并把快照中同 id 曲目替换为 [newTrack]（与真实后端一致，
+  /// 换源：记录调用并把快照中同 id 曲目替换为 [newTrack]（与真实引擎一致，
   /// 推一帧新队列让订阅方读到；替换当前曲目即重新加载，错误清空）。
   @override
   Future<void> replaceQueueTrack(String trackUri, Track newTrack) async {
@@ -291,7 +303,7 @@ class FakePlaybackBackend implements PlaybackBackend {
     lastReplacedTrack = newTrack;
     final current = _notifier.value;
     Track swap(Track track) => track.id.uri == trackUri ? newTrack : track;
-    _notifier.value = BackendSnapshot(
+    _notifier.value = PlaybackSnapshot(
       current: current.current == null ? null : swap(current.current!),
       queue: [for (final track in current.queue) swap(track)],
       currentIndex: current.currentIndex,
@@ -303,7 +315,6 @@ class FakePlaybackBackend implements PlaybackBackend {
       upNext: [for (final track in current.upNext) swap(track)],
       isPlaying: current.isPlaying,
       isLoading: current.isLoading,
-      position: current.position,
       duration: current.duration,
       mode: current.mode,
       context: current.context,
@@ -319,6 +330,12 @@ class FakePlaybackBackend implements PlaybackBackend {
   /// 最近一次换源的旧曲目 uri 与新曲目（换源测试用）。
   String? lastReplacedTrackUri;
   Track? lastReplacedTrack;
+
+  void dispose() {
+    _trackCompletions.close();
+    _position.dispose();
+    _notifier.dispose();
+  }
 }
 
 class FakeMessenger implements UiMessenger {
@@ -332,7 +349,7 @@ class FakeMessenger implements UiMessenger {
   void showFailure(SourceFailure failure) => failures.add(failure);
 }
 
-/// 用假后端组装 PlaybackProvider（不触碰真实播放服务/SharedPreferences）。
+/// 用假播放引擎组装 PlaybackProvider（不触碰真实播放服务/SharedPreferences）。
 ///
 /// 副作用观察者与组合根同构接线（先建观察者、provider 创建后挂接）；历史 /
 /// 封面补取等经它生效，会话落盘由注入的会话协调者承担（恢复曲目展示接观察者）。
@@ -359,7 +376,6 @@ PlaybackSessionCoordinator buildTestSessionCoordinator({
 }
 
 PlaybackProvider buildTestPlaybackProvider({
-  PlaybackBackend? backend,
   PlaybackFacade? facade,
   UiMessenger? messenger,
   CatalogService? catalogService,
@@ -368,10 +384,7 @@ PlaybackProvider buildTestPlaybackProvider({
   SettingsRegistry? settings,
   Future<String?> Function(Track track)? artworkResolver,
 }) {
-  // 已持有 facade（要直接观察快照 / 进度通道）时优先用它；否则按 backend 自建。
-  final playbackFacade =
-      facade ??
-      DefaultPlaybackFacade(backend: backend ?? FakePlaybackBackend());
+  final playbackFacade = facade ?? FakePlaybackFacade();
   // 设置注册表一处实例：provider 的重载钩子与协调者的读取同源（组合根口径）。
   final registry = settings ?? SettingsRegistry(keys: kAllSettingsKeys);
   final observer = PlaybackObserver(

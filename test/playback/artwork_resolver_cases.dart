@@ -23,10 +23,10 @@ void main() {
   );
 
   test('无封面曲目起播：resolver 命中后回写队列', () async {
-    final backend = FakePlaybackBackend();
+    final backend = FakePlaybackFacade();
     var resolverCalls = 0;
     final provider = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       artworkResolver: (t) async {
         resolverCalls++;
         return 'https://img.example/${t.id.id}.jpg';
@@ -36,7 +36,7 @@ void main() {
 
     final item = track('a');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: item,
         queue: [item],
         currentIndex: 0,
@@ -52,10 +52,10 @@ void main() {
   });
 
   test('已有封面不触发补取', () async {
-    final backend = FakePlaybackBackend();
+    final backend = FakePlaybackFacade();
     var resolverCalls = 0;
     final provider = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       artworkResolver: (t) async {
         resolverCalls++;
         return 'https://img.example/x.jpg';
@@ -68,7 +68,7 @@ void main() {
       artwork: Artwork(uri: Uri.parse('https://img.example/existing.jpg')),
     );
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: item,
         queue: [item],
         currentIndex: 0,
@@ -82,16 +82,16 @@ void main() {
   });
 
   test('resolver 返回空 / 抛错：静默不影响播放', () async {
-    final backend = FakePlaybackBackend();
+    final backend = FakePlaybackFacade();
     final provider = buildTestPlaybackProvider(
-      backend: backend,
+      facade: backend,
       artworkResolver: (t) async => throw StateError('boom'),
     );
     addTearDown(provider.dispose);
 
     final item = track('c');
     backend.emit(
-      BackendSnapshot(
+      PlaybackSnapshot(
         current: item,
         queue: [item],
         currentIndex: 0,

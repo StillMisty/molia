@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:molia/data/playback/default_playback_facade.dart';
+import 'package:molia/domain/ports/playback_facade.dart';
 import 'package:molia/domain/models/library.dart';
 import 'package:molia/domain/models/playback.dart';
 import 'package:molia/domain/models/track.dart';
@@ -24,7 +24,7 @@ import '../support/fakes.dart';
 /// 播放观察者：快照副作用扇出（最后播放 / 小组件 / 历史 /
 /// 预取 / 补封面 / 通知权限）。
 ///
-/// 假 facade（真实 facade + 假后端）+ 假副作用入口；断言只经观察者接口与
+/// 假播放引擎 + 假副作用入口；断言只经观察者接口与
 /// 注入的假入口，不读私有字段。会话落盘不在本文件的职责面内（单写者见
 /// `test/playback_session_coordinator_test.dart`）。
 void main() {
@@ -45,30 +45,34 @@ void main() {
     payload: {'songmid': id},
   );
 
-  BackendSnapshot snapshot(
+  TestPlaybackFrame snapshot(
     Track? current, {
     List<Track>? queue,
     bool playing = true,
     Duration position = Duration.zero,
     PlaybackContext? context,
   }) {
-    // 与真实后端一致：next / previous / previousOfPrevious / upNext 由队列与下标派生。
+    // 与真实引擎一致：next / previous / previousOfPrevious / upNext 由队列与下标派生。
     final tracks = queue ?? [?current];
     final index = current == null
         ? -1
         : tracks.indexWhere((item) => item.id.uri == current.id.uri);
-    return BackendSnapshot(
-      current: current,
-      queue: tracks,
-      currentIndex: index,
-      next: index >= 0 && index + 1 < tracks.length ? tracks[index + 1] : null,
-      previous: index > 0 ? tracks[index - 1] : null,
-      previousOfPrevious: index > 1 ? tracks[index - 2] : null,
-      upNext: index >= 0 ? tracks.sublist(index + 1) : const [],
-      isPlaying: playing,
+    return (
+      snapshot: PlaybackSnapshot(
+        current: current,
+        queue: tracks,
+        currentIndex: index,
+        next: index >= 0 && index + 1 < tracks.length
+            ? tracks[index + 1]
+            : null,
+        previous: index > 0 ? tracks[index - 1] : null,
+        previousOfPrevious: index > 1 ? tracks[index - 2] : null,
+        upNext: index >= 0 ? tracks.sublist(index + 1) : const [],
+        isPlaying: playing,
+        duration: current?.duration ?? Duration.zero,
+        context: context,
+      ),
       position: position,
-      duration: current?.duration ?? Duration.zero,
-      context: context,
     );
   }
 
@@ -78,8 +82,8 @@ void main() {
   late _RecordingPreloader preloader;
   late List<Map<String, Object?>> widgetPayloads;
   late int notificationRequests;
-  late FakePlaybackBackend backend;
-  late DefaultPlaybackFacade facade;
+  late FakePlaybackFacade backend;
+  late PlaybackFacade facade;
 
   PlaybackObserver buildObserver({
     Future<String?> Function(Track track)? artworkResolver,
@@ -116,8 +120,8 @@ void main() {
   }
 
   setUp(() {
-    backend = FakePlaybackBackend();
-    facade = DefaultPlaybackFacade(backend: backend);
+    backend = FakePlaybackFacade();
+    facade = backend;
   });
 
   testWidgets('切歌：各副作用发生且同步发起的顺序固定', (tester) async {
@@ -130,7 +134,7 @@ void main() {
 
     final item = track('a', artwork: 'https://img.example/a.jpg');
     final next = track('b', artwork: 'https://img.example/b.jpg');
-    backend.emit(
+    backend.emitFrame(
       snapshot(
         item,
         queue: [item, next],
@@ -189,7 +193,7 @@ void main() {
     await observer.ready;
 
     final a = track('a', artwork: 'https://img.example/a.jpg');
-    backend.emit(snapshot(a));
+    backend.emitFrame(snapshot(a));
     await pumpEventQueue();
     expect(store.writes, 1);
 
@@ -198,7 +202,7 @@ void main() {
     expect(store.writes, 1, reason: '同一曲目 / 同一封面不应重复写');
 
     final b = track('b', artwork: 'https://img.example/b.jpg');
-    backend.emit(snapshot(b));
+    backend.emitFrame(snapshot(b));
     await pumpEventQueue();
     expect(store.writes, 2, reason: '切歌只写一次单键 JSON');
   });
@@ -241,7 +245,7 @@ void main() {
     final a = track('a', artwork: 'https://img.example/a.jpg');
     final b = track('b', artwork: 'https://img.example/b.jpg');
     final c = track('c', artwork: 'https://img.example/c.jpg');
-    backend.emit(snapshot(c, queue: [a, b, c]));
+    backend.emitFrame(snapshot(c, queue: [a, b, c]));
     await tester.pump();
     await tester.pump();
 
@@ -306,7 +310,7 @@ void main() {
     addTearDown(observer.dispose);
 
     final local = track('a', artwork: 'https://img.example/a.jpg');
-    backend.emit(snapshot(local));
+    backend.emitFrame(snapshot(local));
     expect(
       widgetPayloads.single['albumArtUrl'],
       displayUrl,
@@ -315,7 +319,7 @@ void main() {
 
     displayUrl = 'https://img.example/b.jpg';
     final remote = track('b', artwork: displayUrl);
-    backend.emit(snapshot(remote));
+    backend.emitFrame(snapshot(remote));
     expect(widgetPayloads.last['albumArtUrl'], '', reason: '远程封面在省流时仍置空');
   });
 
@@ -326,7 +330,7 @@ void main() {
     addTearDown(observer.dispose);
 
     final item = track('a');
-    backend.emit(snapshot(item));
+    backend.emitFrame(snapshot(item));
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
@@ -341,9 +345,9 @@ void main() {
     addTearDown(observer.dispose);
 
     final item = track('a');
-    backend.emit(snapshot(item));
-    backend.emit(snapshot(item, position: const Duration(seconds: 2)));
-    backend.emit(
+    backend.emitFrame(snapshot(item));
+    backend.emitFrame(snapshot(item, position: const Duration(seconds: 2)));
+    backend.emitFrame(
       snapshot(item, playing: false, position: const Duration(seconds: 4)),
     );
 
@@ -358,10 +362,10 @@ void main() {
     addTearDown(observer.dispose);
 
     final item = track('a');
-    backend.emit(snapshot(item));
+    backend.emitFrame(snapshot(item));
     // 停止播放（曲目清空）：去重键重置。
-    backend.emit(snapshot(null));
-    backend.emit(snapshot(item));
+    backend.emitFrame(snapshot(null));
+    backend.emitFrame(snapshot(item));
 
     expect(libraryStore.history, hasLength(2));
     expect(widgetPayloads, hasLength(2));
@@ -383,7 +387,7 @@ void main() {
     // 托盘隐藏期间切歌：历史 / 小组件照常，封面预取被门控拦下。
     presence.markTrayHidden();
     final item = track('a', artwork: 'https://img.example/a.jpg');
-    backend.emit(snapshot(item));
+    backend.emitFrame(snapshot(item));
     await tester.pump();
     await tester.pump();
     expect(notificationRequests, 1);
@@ -414,7 +418,7 @@ void main() {
     // 息屏 / 切到其他应用：历史与小组件照常，封面预取没有展示面。
     policy.markBackground();
     final item = track('a', artwork: 'https://img.example/a.jpg');
-    backend.emit(snapshot(item));
+    backend.emitFrame(snapshot(item));
     await tester.pump();
     await tester.pump();
     expect(notificationRequests, 1);
