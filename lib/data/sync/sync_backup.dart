@@ -102,7 +102,7 @@ class SyncBackup {
     final categories = _backupCategories(includeCredentials);
     // 与一轮同步同一不变量：先收集本地现状播种登记，再合并应用；否则本地
     // 较新的改动会被旧备份按「先出现者胜」覆盖。
-    await _pipeline.collect(categories);
+    final local = await _pipeline.collect(categories);
     final filtered = _filterCategories(envelope, categories);
     // 备份不是「权威对端」：把载荷里的全部键作为强制交付，让合并跳过登记
     // 过滤、逐键交给适配器按 LWW 判定（与导入前的行为一致，陈旧记录由
@@ -112,7 +112,12 @@ class SyncBackup {
         for (final record in entry.value)
           (category: entry.key, key: record.key),
     };
-    final result = await _pipeline.apply(filtered, forcedKeys: forcedKeys);
+    final result = await _pipeline.apply(
+      filtered,
+      forcedKeys: forcedKeys,
+      local: local,
+      categories: categories,
+    );
     await _state.commit();
     return SyncApplyOutcome(applied: result.applied, skipped: result.skipped);
   }

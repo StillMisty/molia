@@ -177,6 +177,10 @@ class SyncRecordPipeline {
     Map<SyncCategory, List<SyncRecord>>? local,
     Set<SyncCategory>? categories,
   }) async {
+    assert(
+      (local == null) == (categories == null),
+      'local 与 categories 必须同时提供（或都不提供，使用最近一次 collect）',
+    );
     final explicit = local != null && categories != null;
     final collected = explicit
         ? _CollectedView(categories: {...categories}, records: local)

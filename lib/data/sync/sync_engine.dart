@@ -497,13 +497,6 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return existing;
   }
 
-  /// 完整备份模块的收集入口：按类别返回适配器聚合视图（与一轮同步同一份
-  /// 类别过滤与缓存语义）。备份不接触轮次状态，只需要这一个读动作。
-  Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(
-    Set<SyncCategory> categories, {
-    bool fresh = false,
-  }) => _runner.pipeline.collect(categories, fresh: fresh);
-
   /// 记录管道的共享实例：完整备份直接注入它，应用阶段与轮次同一份规则。
   SyncRecordPipeline get recordPipeline => _runner.pipeline;
 
