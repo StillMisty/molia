@@ -22,6 +22,10 @@ class FlutterWindow : public Win32Window {
   // WindowChrome.show()（含托盘休眠树重建与最大化恢复）。
   void RequestActivate();
 
+  // 真正退出：Dart 的 WindowChrome.quit() 走通道调用。原生投递销毁消息，
+  // 避免在平台通道回调里同步销毁引擎。
+  void RequestDestroy();
+
  protected:
   // Win32Window:
   bool OnCreate() override;
@@ -55,6 +59,10 @@ class FlutterWindow : public Win32Window {
   // 它必须早于 Flutter 窗口的托盘隐藏存在，否则第二实例找不到通知目标。
   void CreateInstanceHostWindow();
   HWND instance_host_window_ = nullptr;
+
+  // 已请求真正退出：之后的 WM_CLOSE 不再转发给 Dart 关闭策略，直接交给
+  // 默认窗口过程销毁，避免退出路径被「关闭到托盘」再次拦截。
+  bool destroy_pending_ = false;
 };
 
 #endif  // RUNNER_FLUTTER_WINDOW_H_

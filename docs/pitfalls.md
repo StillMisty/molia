@@ -812,16 +812,19 @@
     `frozen` + `pending` 并立即 `render`；`setFrozen(false)` 也先
     `finishPendingRoll()`。不要用「屏幕广播一定到达」作为解冻前提。
 76. **退出流程必须在关闭窗口前停音频并落盘**：
-    窗口 chrome 迁移到 nativeapi 后，关闭走 nativeapi 的 close request：确认关闭后
-    `Window.close()` 在 Windows 上触发 WM_CLOSE → DestroyWindow → WM_DESTROY
-    → `PostQuitMessage(0)`；窗口 / 引擎 / `FlutterWindow` 的析构仍发生在
-    `wWinMain` 返回时。因此退出流程不能只调 `WindowChrome.quit()`：必须先自己
-    停音频（暂停 + 释放播放器，留一点时间让设备缓冲排空）、把会话进度与统计
-    落盘，再关闭窗口；否则进程在 libmpv / WASAPI 还在出数据时结束，Windows
-    上会听到「突然断掉 / 爆一声」。任务栏「结束任务」是系统强杀、不执行应用
-    退出代码，所以那条路径反而听不到，不能拿它当「没问题」的对照。另外
-    `windows/runner/main.cpp` 的 `CoUninitialize()` 必须排在窗口析构之后（用
-    作用域包住 `FlutterWindow`），否则引擎 / 插件收尾时 COM 已不可用。
+    窗口 chrome 迁移到 nativeapi 后，关闭走 nativeapi 的 close request；Windows
+    的真正退出改走 runner 的 `destroy` 通道（Dart `WindowChrome.quit()` →
+    原生 `PostMessage(WM_APP+0x4D)` → 消息循环里 `DestroyWindow` →
+    WM_DESTROY → `PostQuitMessage(0)`）。不要改回 `Window.close()`：runner 会把
+    原生 `WM_CLOSE` 转回 Dart 关闭策略，退出会被「关闭到托盘」再次拦截。
+    窗口 / 引擎 / `FlutterWindow` 的析构仍发生在 `wWinMain` 返回时。因此退出
+    流程不能只调 `WindowChrome.quit()`：必须先自己停音频（暂停 + 释放播放器，
+    留一点时间让设备缓冲排空）、把会话进度与统计落盘，再关闭窗口；否则进程在
+    libmpv / WASAPI 还在出数据时结束，Windows 上会听到「突然断掉 / 爆一声」。
+    任务栏「结束任务」是系统强杀、不执行应用退出代码，所以那条路径反而听不到，
+    不能拿它当「没问题」的对照。另外 `windows/runner/main.cpp` 的
+    `CoUninitialize()` 必须排在窗口析构之后（用作用域包住 `FlutterWindow`），
+    否则引擎 / 插件收尾时 COM 已不可用。
 77. **Windows/Linux 的 media_kit 在「暂停于 EOF」时不会上报 completed，播放键
     必须先暂停再回零**：用户暂停在最后一秒、mpv 已经停在 EOF 时，media_kit 的
     `pause()` 会关闭播放态广播（`isPlayingStateChangeAllowed=false`），
@@ -1027,3 +1030,14 @@
     必须在 `AudioServicePlatform.configure` 前显式 `init(canControl: true, ...)`，
     否则 KDE / GNOME 的媒体控件会整组变灰（`lib/playback/mpris_media_session_backend_io.dart`
     已处理；升级该包时先确认默认值有没有变）。
+
+103. **Windows 原生 `WM_CLOSE` 不经过 nativeapi 的 `SC_CLOSE` 拦截**：任务栏
+    「关闭窗口」、`Process.CloseMainWindow()` 等路径发的是 `WM_CLOSE`，
+    nativeapi 0.5.10 的关闭 veto 只覆盖 `SC_CLOSE`（实测会直接退出，绕过
+    「关闭到托盘」）。`windows/runner/flutter_window.cpp` 在 Flutter 插件处理
+    之后把 `WM_CLOSE` 经窗口通道 `closeRequested` 转发给 Dart，与
+    `WindowCloseRequestedEvent` 共用 `WindowChrome` 的关闭策略；真正退出时
+    runner 的 `destroy_pending_` 放行默认窗口过程。关闭策略本身还要求托盘图标
+    已创建（`AppTray.isActive`）且有宿主，否则退回退出；异步等休眠帧期间用户
+    可能从托盘恢复，隐藏前要重新确认 `AppPresence.isTrayHidden`，`hide()` 也
+    只消费该状态，不能自己把窗口藏回去。

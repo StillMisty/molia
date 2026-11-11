@@ -27,6 +27,10 @@ constexpr char kWindowChannelName[] = "top.stillmisty.molia/window";
 constexpr UINT_PTR kShowFallbackTimerId = 0x4D4F4C49;  // 'MOLI'
 constexpr UINT kShowFallbackTimeoutMs = 300;
 
+// 平台通道里请求真正退出后，投递到消息循环再销毁窗口。不能在这个通道
+// 回调里直接 DestroyWindow：WM_DESTROY 会同步拆掉正在回调的引擎。
+constexpr UINT kDestroyWindowMessage = WM_APP + 0x4D;  // 'M'
+
 #ifndef DWMWA_CLOAK
 #define DWMWA_CLOAK 13
 #endif
@@ -155,6 +159,13 @@ bool FlutterWindow::OnCreate() {
                  result) {
         if (call.method_name() == "showAfterFirstFrame") {
           ShowAfterFirstFrame(std::move(result));
+        } else if (call.method_name() == "destroy") {
+          if (GetHandle() == nullptr) {
+            result->Error("window_unavailable", "窗口尚未就绪");
+          } else {
+            RequestDestroy();
+            result->Success();
+          }
         } else {
           result->NotImplemented();
         }
@@ -227,6 +238,15 @@ void FlutterWindow::RequestActivate() {
     return;
   }
   window_channel_->InvokeMethod("reopen", nullptr);
+}
+
+void FlutterWindow::RequestDestroy() {
+  HWND window = GetHandle();
+  if (window == nullptr) {
+    return;
+  }
+  destroy_pending_ = true;
+  ::PostMessageW(window, kDestroyWindowMessage, 0, 0);
 }
 
 void FlutterWindow::OnDestroy() {
@@ -384,6 +404,22 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     if (result) {
       return *result;
     }
+  }
+
+  // 原生 WM_CLOSE（任务栏「关闭窗口」、外部 CloseMainWindow 等）不经过
+  // nativeapi 的 SC_CLOSE 拦截。转发给 Dart 的关闭策略，否则「关闭到
+  // 托盘」会被系统直接退出绕过。真正退出时 destroy_pending_ 为真，放行
+  // 给默认窗口过程销毁。
+  if (message == WM_CLOSE && !destroy_pending_) {
+    if (window_channel_ != nullptr) {
+      window_channel_->InvokeMethod("closeRequested", nullptr);
+      return 0;
+    }
+  }
+
+  if (message == kDestroyWindowMessage) {
+    ::DestroyWindow(hwnd);
+    return 0;
   }
 
   switch (message) {

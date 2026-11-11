@@ -91,22 +91,47 @@ Future<DesktopStack> buildDesktopStack({
   // 统计落盘完成后才真正退出。provider 建好后回填（此时 quitApp 已可用）。
   playback.attachQuitApp(quitApp);
 
-  // 关闭请求（顶栏关闭键 / 系统关闭按钮）→ 按设置分流：隐藏到托盘或退出。
-  // 无托盘宿主（GNOME 未装 AppIndicator 扩展、无面板的裸 WM）时不做隐藏：
-  // 藏起来就没有找回入口，退回直接退出（设置页对 Linux 有同一提示）。
+  // 关闭请求（顶栏关闭键 / 系统关闭按钮 / 任务栏「关闭窗口」）→ 按设置
+  // 分流：隐藏到托盘或退出。
+  //
+  // 隐藏的三个前提缺一不可：用户勾选了关闭到托盘、托盘图标确实创建成功、
+  // 系统有托盘宿主。无托盘宿主（GNOME 未装 AppIndicator 扩展、无面板的裸
+  // WM）或图标创建失败时藏起来就没有找回入口，退回直接退出（设置页对
+  // Linux 有同一提示）。
+  //
+  // 关闭流程是异步的（等休眠帧），期间用户可能从托盘恢复，也可能连点关闭
+  // 触发第二次请求：用 [handlingClose] 串行化，并在隐藏前重新确认仍处于
+  // 托盘态，避免把刚恢复的窗口又藏回去。
+  var handlingClose = false;
   WindowChrome.setCloseHandler(() async {
-    if (traySettings.closeToTray && await AppTray.detectHost()) {
-      // 先置休眠态并等这一帧把界面卸下来（窗口还可见、帧还开着），再隐藏：
-      // 隐藏后平台会停帧，休眠树若没建成就要等恢复窗口才建，托盘期省不下来。
-      // endOfFrame 自带超时兜底，异常路径不把「点关闭」卡死。
-      AppPresence.instance.markTrayHidden();
-      await WidgetsBinding.instance.endOfFrame.timeout(
-        const Duration(seconds: 2),
-        onTimeout: () {},
-      );
-      await WindowChrome.hide();
-    } else {
+    if (handlingClose) return;
+    handlingClose = true;
+    try {
+      if (traySettings.closeToTray &&
+          AppTray.isActive &&
+          await AppTray.detectHost()) {
+        // 先置休眠态并等这一帧把界面卸下来（窗口还可见、帧还开着），再隐藏：
+        // 隐藏后平台会停帧，休眠树若没建成就要等恢复窗口才建，托盘期省不下来。
+        // endOfFrame 自带超时兜底，异常路径不把「点关闭」卡死。
+        AppPresence.instance.markTrayHidden();
+        await WidgetsBinding.instance.endOfFrame.timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {},
+        );
+        // 等帧期间用户可能已经点了托盘图标：恢复态下不能再隐藏。
+        if (!AppPresence.instance.isTrayHidden) return;
+        await WindowChrome.hide();
+      } else {
+        await quitApp();
+      }
+    } catch (error, stackTrace) {
+      // 隐藏失败时不能把界面留在「已休眠、窗口仍在」的半状态：恢复存在态
+      // 后走统一退出，至少不会让用户面对一棵没有交互的窗口。
+      _quitLog.warning('关闭到托盘失败，改为退出', error, stackTrace);
+      AppPresence.instance.markVisible();
       await quitApp();
+    } finally {
+      handlingClose = false;
     }
   });
 

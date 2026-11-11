@@ -143,7 +143,7 @@ class WindowChrome {
     }
     // 三个桌面平台都可能从原生收到「恢复窗口」请求：macOS 是 Dock 点击，
     // Linux 是 GApplication::activate，Windows 是单实例 mutex 的激活消息。
-    if (isSupported) _installReopenHandler();
+    if (isSupported) _installWindowChannelHandler();
     // 显示前先摆好位置：show() 后再设置 bounds 会肉眼可见地跳一下。
     await _restoreSavedGeometry();
     await _applyLinuxWindowIcon();
@@ -283,9 +283,9 @@ class WindowChrome {
   ///
   /// 置「托盘隐藏」存在态在原生调用**之前**：组合根在隐藏前还要抢一帧把
   /// 界面卸下来（帧只在窗口可见时开），先置位才能保证那一帧建的是休眠树。
+  /// 这里只消费该状态：等待休眠帧期间用户可能已恢复窗口，不能再把它藏回去。
   static Future<void> hide() async {
-    if (!isSupported) return;
-    AppPresence.instance.markTrayHidden();
+    if (!isSupported || !AppPresence.instance.isTrayHidden) return;
     _window?.hide();
   }
 
@@ -319,29 +319,40 @@ class WindowChrome {
     'top.stillmisty.molia/window',
   );
 
-  /// 是否已接管原生的「重新打开」回调（进程内只需一次）。
-  static bool _reopenHandlerInstalled = false;
+  /// 是否已接管原生的窗口通道回调（进程内只需一次）。
+  static bool _windowChannelHandlerInstalled = false;
 
-  /// 原生激活请求统一回到 Dart 的 [show]（markVisible + 重建界面 + 恢复
-  /// 最大化），不能只让平台直接显示原生窗口：托盘休眠期间界面树是占位，
-  /// 原生直接显示会是一扇空窗。
+  /// 原生窗口通道（原生 → Dart）：重新打开与关闭请求。
   ///
+  /// - `reopen`：统一回到 Dart 的 [show]（markVisible + 重建界面 + 恢复
+  ///   最大化），不能只让平台直接显示原生窗口：托盘休眠期间界面树是占位，
+  ///   原生直接显示会是一扇空窗。
+  /// - `closeRequested`：Windows runner 把原生 `WM_CLOSE`（任务栏「关闭
+  ///   窗口」、外部 `CloseMainWindow` 等不经过 nativeapi 的 SC_CLOSE 拦截的
+  ///   路径）转发进来，与 nativeapi 的 [WindowCloseRequestedEvent] 走同一条
+  ///   关闭策略，避免「关闭到托盘」被系统直接退出绕过。
+  ///
+  /// 平台来源：
   /// - macOS：`AppDelegate.applicationShouldHandleReopen`（Dock 点击）；
   /// - Linux：`my_application_activate`（GApplication 单实例重复激活）；
-  /// - Windows：隐藏宿主窗口收到单实例激活消息。
+  /// - Windows：隐藏宿主窗口的单实例激活，以及 runner 转发的 `WM_CLOSE`。
   ///
-  /// 与 Windows 的 Dart → 原生 `showAfterFirstFrame` 共用通道名，但方向相反
-  /// （这是原生 → Dart），互不冲突。
-  static void _installReopenHandler() {
-    if (_reopenHandlerInstalled) return;
-    _reopenHandlerInstalled = true;
+  /// 与 Windows 的 Dart → 原生 `showAfterFirstFrame` / `destroy` 共用通道名，
+  /// 方向相反（这是原生 → Dart），互不冲突。
+  static void _installWindowChannelHandler() {
+    if (_windowChannelHandlerInstalled) return;
+    _windowChannelHandlerInstalled = true;
     _windowChannel.setMethodCallHandler((call) async {
-      if (call.method != 'reopen') return null;
-      try {
-        await show();
-      } catch (error) {
-        // 恢复失败不影响进程：用户还能从菜单栏托盘再次恢复。
-        _logger.warning('Dock 恢复窗口失败：$error');
+      switch (call.method) {
+        case 'reopen':
+          try {
+            await show();
+          } catch (error) {
+            // 恢复失败不影响进程：用户还能从菜单栏托盘再次恢复。
+            _logger.warning('Dock 恢复窗口失败：$error');
+          }
+        case 'closeRequested':
+          await _handleCloseRequest();
       }
       return null;
     });
@@ -432,12 +443,32 @@ class WindowChrome {
   /// 无视关闭策略真正退出（托盘「退出」/ 更新安装后的重启替换）：
   /// 解除关闭拦截后关闭窗口；退出前的落盘由调用方负责。
   ///
+  /// Windows 必须走 runner 的 `destroy` 通道：runner 会转发原生 `WM_CLOSE`
+  /// 回 Dart，若这里再调 `window.close()` 会再次进入关闭策略。`destroy`
+  /// 由原生投递销毁消息，避开在平台通道回调里同步拆引擎。
+  ///
   /// 单实例锁不在这里释放：它由 OS 在进程退出时自动关闭。提前释放会让
   /// 第二实例在旧进程还在写播放会话 / 设置时抢锁启动。
   static Future<void> quit() async {
     if (!isSupported) return;
     _destroying = true;
     _preventClose = false;
+    if (Platform.isWindows) {
+      try {
+        await _windowChannel.invokeMethod<void>('destroy');
+        return;
+      } on MissingPluginException {
+        // runner 未挂通道（极早期 / 测试宿主）：退回应用级退出。
+      } on PlatformException catch (error) {
+        _logger.warning('销毁窗口失败，改为应用级退出：$error');
+      }
+      try {
+        Application.instance.quit(0);
+      } catch (error) {
+        _logger.warning('退出应用失败：$error');
+      }
+      return;
+    }
     final window = _window;
     if (window != null && Window.isCloseSupported() && window.close()) {
       return;
@@ -450,6 +481,18 @@ class WindowChrome {
     }
   }
 
+  /// 关闭请求统一入口：nativeapi 的关闭事件与 Windows runner 转发的原生
+  /// `WM_CLOSE` 都落到这里，保证「关闭到托盘 / 直接退出」只有一套策略。
+  static Future<void> _handleCloseRequest() async {
+    if (_destroying) return;
+    final handler = _onCloseRequested;
+    if (handler == null) {
+      await quit();
+      return;
+    }
+    await Future.sync(handler);
+  }
+
   /// 原生窗口事件 → 最大化标记 / 几何落盘 / 关闭策略。
   ///
   /// nativeapi 用同一个 [WindowRestoredEvent] 表示「退出最大化」和「从最小化
@@ -460,13 +503,7 @@ class WindowChrome {
         // 先同步 cancel，再交给异步策略：事件返回后 nativeapi 才会决定
         // 是否真正关闭窗口。
         if (_preventClose) event.request.cancel();
-        if (_destroying) return;
-        final handler = _onCloseRequested;
-        if (handler == null) {
-          unawaited(quit());
-        } else {
-          unawaited(Future.sync(handler));
-        }
+        unawaited(_handleCloseRequest());
       case WindowMaximizedEvent():
         _windowMaximized = true;
         _maximized.value = true;

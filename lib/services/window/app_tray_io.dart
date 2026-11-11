@@ -56,9 +56,15 @@ class AppTray {
   static bool _isFavorite = false;
   static String? _tooltip;
 
+  /// 托盘图标是否已成功创建。
+  ///
+  /// 「关闭到托盘」必须以它为前提：图标创建失败（资源缺失 / 原生初始化失败）
+  /// 时把窗口藏起来就没有找回入口，应退回直接退出。
+  static bool get isActive => _icon != null;
+
   /// 托盘图标当前是否已创建（集成测试 / 诊断用）。
   @visibleForTesting
-  static bool get debugIsActive => _icon != null;
+  static bool get debugIsActive => isActive;
 
   static Future<bool>? _hostProbe;
 

@@ -39,21 +39,26 @@ Linux / Windows 桌面端此前只有「关掉窗口 = 进程退出」一条路�
    libayatana-appindicator3-dev）。
 2. **托盘图标常驻**（Linux / Windows），移动端 / Web / macOS 走 stub
    （`isSupported=false`，全空操作）；设置页据此隐藏入口。
-3. **关闭请求拦截**：`WindowChrome.ensureInitialized()` 里
-   `windowManager.setPreventClose(true)`，`WindowListener.onWindowClose`
-   把控制权交回 Dart 策略（组合根注入）：设置开 **且有托盘宿主** → `hide()`；
-   否则 → 退出。未注入策略时（如集成测试直接调 ensureInitialized）保持历史
-   行为直接退出，避免「点了关闭没反应」。
+3. **关闭请求拦截**：`WindowChrome.ensureInitialized()` 监听 nativeapi 的
+   `WindowCloseRequestedEvent` 并 `request.cancel()`，把控制权交回 Dart 策略
+   （组合根注入）：设置开、**托盘图标已创建**（`AppTray.isActive`）且
+   **有托盘宿主** → 先渲染休眠帧再 `hide()`；否则 → 退出。未注入策略时
+   （如集成测试直接调 ensureInitialized）保持历史行为直接退出，避免
+   「点了关闭没反应」。
+   Windows runner 另把原生 `WM_CLOSE`（任务栏「关闭窗口」、
+   `Process.CloseMainWindow()` 等不经过 nativeapi `SC_CLOSE` 拦截的路径）经
+   窗口通道转回 Dart，共用同一策略。异步等休眠帧期间用户可能从托盘恢复，
+   隐藏前重新确认仍是托盘态。
    宿主判定见第 10 条：没有宿主（GNOME 未装扩展等）时隐藏窗口 = 藏进一个
    没有找回入口的状态，因此宁可退回直接退出。
-4. **真正退出统一 `WindowChrome.quit()`**（先 `setPreventClose(false)` 再
-   `destroy()`）：托盘「退出」与更新安装器的 `quitApp` 都走组合根的
-   `quitApp()`——真正退出前新增音频收尾：先 `flushSession` 保存进度（进度
-   快照依赖仍在播的播放器，顺序不能反），再暂停 + 释放播放器（让音频设备
-   停止出数据），最后统计落盘并 `destroy()`。原因：Windows 上进程结束时
-   libmpv / WASAPI 仍在出数据会听成「突然断掉 / 爆一声」；任务栏
-   「结束任务」是系统强杀、不执行应用退出代码，所以那条路径反而听不到。
-   `quitApp` 是唯一允许无视关闭策略的出口。
+4. **真正退出统一 `WindowChrome.quit()`**：托盘「退出」与更新安装器的
+   `quitApp` 都走组合根的 `quitApp()`——真正退出前新增音频收尾：先
+   `flushSession` 保存进度（进度快照依赖仍在播的播放器，顺序不能反），再
+   暂停 + 释放播放器（让音频设备停止出数据），最后统计落盘并退出。Windows
+   走 runner 的 `destroy` 通道（原生投递销毁消息），其他桌面走 nativeapi
+   的窗口 close。原因：Windows 上进程结束时 libmpv / WASAPI 仍在出数据会听成
+   「突然断掉 / 爆一声」；任务栏「结束任务」是系统强杀、不执行应用退出代码，
+   所以那条路径反而听不到。`quitApp` 是唯一允许无视关闭策略的出口。
 5. **菜单**：显示主窗口 ｜ 播放/暂停（按播放态切换文案，无曲目禁用）｜
    上一首 ｜ 下一首 ｜ 收藏/取消收藏（按收藏态切换文案，无曲目禁用）｜ 退出。
    tooltip = 品牌名（可自定义）＋ 有曲目时附「曲名 - 歌手」。
