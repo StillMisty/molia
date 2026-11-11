@@ -28,6 +28,7 @@ class SearchSection extends StatelessWidget {
     final search = context.read<SearchProvider>();
     return SearchResultsView(
       variant: SearchResultsVariant.page,
+      session: search.session,
       controller: controller,
       onPlay: search.playItem,
       onOpenArtist: (sourceKey, artistId, {fallbackName}) => showArtistPage(

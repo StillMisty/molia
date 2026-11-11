@@ -21,11 +21,10 @@ import '../widgets/shell_reselect.dart';
 
 /// 当前渠道是否具备任一搜索能力（单曲 / 歌手 / 按歌词搜歌）。
 ///
-/// 不能用 `capabilities.search` 单判：渠道可能只有歌手或歌词搜索能力。
-bool sourceSupportsAnySearch(SourceDescriptor source) {
-  final capabilities = source.capabilities;
-  return capabilities.search || capabilities.artist || capabilities.lyricSearch;
-}
+/// 能力位 → 搜索类型的映射在 `SourceCapabilities.searchKinds` 唯一实现；
+/// 这里只消费聚合事实，不再自己重复 search || artist || lyricSearch。
+bool sourceSupportsAnySearch(SourceDescriptor source) =>
+    source.capabilities.supportsAnySearch;
 
 /// 发现页 tab 标识（可见性随当前渠道能力变化，不用下标表示）。
 enum _LibraryTab { search, leaderboards, playlists }

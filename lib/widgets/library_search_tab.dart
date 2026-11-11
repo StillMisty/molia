@@ -29,6 +29,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
     with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
+  late final SearchInputBinding _searchInput;
 
   @override
   bool get wantKeepAlive => true;
@@ -37,24 +38,18 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
   void initState() {
     super.initState();
     final searchProvider = Provider.of<SearchProvider>(context, listen: false);
-    _searchController.text = searchProvider.searchQuery;
-    _searchController.addListener(_onSearchChanged);
+    _searchInput = SearchInputBinding(
+      session: searchProvider.session,
+      controller: _searchController,
+    );
   }
 
   @override
   void dispose() {
-    _searchController.removeListener(_onSearchChanged);
+    _searchInput.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
-  }
-
-  void _onSearchChanged() {
-    final searchProvider = Provider.of<SearchProvider>(context, listen: false);
-    // 仅在文本真正变化时回写，避免与 provider 形成回环
-    if (_searchController.text != searchProvider.searchQuery) {
-      searchProvider.updateSearchQuery(_searchController.text);
-    }
   }
 
   @override
@@ -63,7 +58,8 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
     // 拆分 Consumer 监听，提高性能
     return Consumer<SearchProvider>(
       builder: (context, searchProvider, child) {
-        final isSearchActive = searchProvider.isSearchActive;
+        final session = searchProvider.session;
+        final isSearchActive = session.isActive;
 
         // AI 推歌开启时，下方空占位让位给推荐流（推荐流自身有引导卡 / 骨架 /
         // 错误卡）；关闭时保留「输入关键词搜索歌曲」占位。
@@ -71,14 +67,6 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
           (provider) => provider?.enabled ?? false,
         );
         final gutter = discoverGutterOf(context);
-
-        // provider 清空搜索时同步清空输入框（须等构建结束再动控制器）
-        if (!isSearchActive && _searchController.text.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            _searchController.clear();
-          });
-        }
 
         return Column(
           children: [
@@ -98,7 +86,7 @@ class _LibrarySearchTabState extends State<LibrarySearchTab>
                 focusedMargin: gutter > 4 ? gutter - 4 : 0,
                 expandOnFocus: true,
                 onSubmitted: (value) {
-                  searchProvider.submitSearch(value);
+                  session.submit(value);
                   _searchFocusNode.unfocus();
                 },
               ),

@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:provider/provider.dart';
 
 import '../domain/models/artist.dart';
 import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
-import '../providers/search_provider.dart';
+import '../providers/search_row.dart';
+import '../providers/search_session.dart';
 import '../services/haptics.dart';
 import '../theme/m3e_context.dart';
 import '../theme/motion_policy.dart';
@@ -42,62 +42,24 @@ typedef OpenSearchArtist = Future<void> Function(
   String? fallbackName,
 });
 
-/// 遮罩预览里的一个可高亮条目（跳过分组标题）。
-sealed class SearchPreviewItem {
-  const SearchPreviewItem({required this.sourceKey});
-
-  final String sourceKey;
-
-  /// 行身份（跨刷新 / 分组插入时按它保留高亮）。
-  String get key;
-}
-
-final class SearchPreviewTrack extends SearchPreviewItem {
-  const SearchPreviewTrack({required this.row, required super.sourceKey});
-
-  final SearchRow row;
-
-  @override
-  String get key => 'track:${row.id.uri}';
-}
-
-final class SearchPreviewArtist extends SearchPreviewItem {
-  const SearchPreviewArtist({required this.artist, required super.sourceKey});
-
-  final ArtistSummary artist;
-
-  @override
-  String get key => 'artist:$sourceKey:${artist.id}';
-}
-
-/// 遮罩预览的唯一投影：遮罩高亮索引与渲染列表共用同一份顺序。
-class SearchPreview {
-  const SearchPreview({required this.items, required this.totalItems});
-
-  /// 扁平高亮顺序（单渠道最多 [SearchResultsView.maxDockedPreviewRows] 行）。
-  final List<SearchPreviewItem> items;
-
-  /// 当前渠道的完整结果数（不是预览截断后的数量）。
-  final int totalItems;
-}
-
 /// 搜索结果面：单曲 / 歌手 / 歌词三类结果在一个模块里完成映射与状态呈现。
 ///
 /// 全局只有一个搜索渠道，所以结果面最多一个来源分组：
 /// - 页面版：类型分段 + 宽屏表格列 + 触底自动分页；
-/// - 遮罩版：最多预览 8 行，以「查看全部结果」出口收尾；当前渠道不支持
-///   搜索时显示专用空态。
+/// - 遮罩版：最多预览 [SearchPreviewSession.defaultMaxItems] 行，以「查看全部
+///   结果」出口收尾；当前渠道不支持搜索时显示专用空态。
 ///
-/// 行映射、失败 / 空态与键盘高亮都在这里维护；宿主只传 [variant] 与导航回调。
+/// 结果集合 / 预览顺序 / 高亮都由 [SearchSession] 的投影提供；本模块只保留
+/// 行呈现与导航编排，宿主传入同一个会话即可。
 class SearchResultsView extends StatefulWidget {
   const SearchResultsView({
     super.key,
     required this.variant,
+    required this.session,
     required this.onPlay,
     this.onOpenArtist,
     this.onOpenAllResults,
     this.controller,
-    this.highlightedKey,
   }) : assert(
          variant != SearchResultsVariant.page || onOpenArtist != null,
          '页面版式需要 onOpenArtist（歌手行与行内歌手链接的导航出口）',
@@ -108,9 +70,12 @@ class SearchResultsView extends StatefulWidget {
        );
 
   /// 遮罩就地预览的最大行数：更长的列表交给「查看全部结果」后的资料库。
-  static const int maxDockedPreviewRows = 8;
+  static const int maxDockedPreviewRows = SearchPreviewSession.defaultMaxItems;
 
   final SearchResultsVariant variant;
+
+  /// 唯一的搜索会话：结果 / 预览 / 高亮 / 意图都从这里读或发。
+  final SearchSession session;
 
   /// 单曲 / 歌词行点击：播放语义归宿主。
   final void Function(SearchRow row) onPlay;
@@ -123,45 +88,6 @@ class SearchResultsView extends StatefulWidget {
 
   /// 页面版式的滚动控制器（宿主注入：底栏重复点击回顶）；为空时自建。
   final ScrollController? controller;
-
-  /// 遮罩高亮行身份（见 [SearchPreviewItem.key]）；页面版可不传。
-  final String? highlightedKey;
-
-  /// 当前渠道在当前搜索类型下的结果快照（三种行形状按 kind 类型化）。
-  static SearchResults<Object> resultsOf(SearchProvider search) =>
-      switch (search.searchKind) {
-        SearchKind.song => search.songResults,
-        SearchKind.artist => search.artistResults,
-        SearchKind.lyric => search.lyricResults,
-      };
-
-  /// 生成遮罩预览的唯一纯函数：遮罩控制高亮与渲染列表都读它，避免索引漂移。
-  static SearchPreview previewFor(SearchProvider search) {
-    final items = <SearchPreviewItem>[];
-    final sourceKey = search.activeSourceKey;
-    switch (search.searchKind) {
-      case SearchKind.song || SearchKind.lyric:
-        final results = search.searchKind == SearchKind.song
-            ? search.songResults
-            : search.lyricResults;
-        for (final row in results.items.take(maxDockedPreviewRows)) {
-          items.add(SearchPreviewTrack(row: row, sourceKey: sourceKey));
-        }
-        return SearchPreview(
-          items: List.unmodifiable(items),
-          totalItems: results.items.length,
-        );
-      case SearchKind.artist:
-        final results = search.artistResults;
-        for (final artist in results.items.take(maxDockedPreviewRows)) {
-          items.add(SearchPreviewArtist(artist: artist, sourceKey: sourceKey));
-        }
-        return SearchPreview(
-          items: List.unmodifiable(items),
-          totalItems: results.items.length,
-        );
-    }
-  }
 
   @override
   State<SearchResultsView> createState() => _SearchResultsViewState();
@@ -178,12 +104,30 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   final Map<String, GlobalKey> _highlightKeys = {};
   String? _lastEnsuredKey;
 
+  /// 会话通知（结果 / 关键词 / 类型）+ 预览通知（高亮移动）都重建结果面。
+  late Listenable _stateListenable;
+
+  @override
+  void initState() {
+    super.initState();
+    _bindSession();
+  }
+
   @override
   void didUpdateWidget(covariant SearchResultsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.highlightedKey != widget.highlightedKey) {
+    if (oldWidget.session != widget.session) {
+      _bindSession();
+      _highlightKeys.clear();
       _lastEnsuredKey = null;
     }
+  }
+
+  void _bindSession() {
+    _stateListenable = Listenable.merge([
+      widget.session,
+      widget.session.preview,
+    ]);
   }
 
   @override
@@ -196,9 +140,12 @@ class _SearchResultsViewState extends State<SearchResultsView> {
       _highlightKeys.putIfAbsent(key, GlobalKey.new);
 
   /// 高亮变化后把行滚入视野；减弱动效时直接跳转。
-  void _scheduleEnsureHighlighted() {
-    final key = widget.highlightedKey;
-    if (key == null || key == _lastEnsuredKey) return;
+  void _scheduleEnsureHighlighted(String? key) {
+    if (key == null) {
+      _lastEnsuredKey = null;
+      return;
+    }
+    if (key == _lastEnsuredKey) return;
     _lastEnsuredKey = key;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -214,32 +161,37 @@ class _SearchResultsViewState extends State<SearchResultsView> {
 
   @override
   Widget build(BuildContext context) {
-    final search = context.watch<SearchProvider>();
-    return switch (widget.variant) {
-      SearchResultsVariant.page => _buildPage(context, search),
-      SearchResultsVariant.docked =>
-        // 当前渠道不支持搜索时，即使还没输入关键词也要显示专用空态；
-        // 可搜索且无词时结果面留空（只留搜索条）。
-        !search.isSearchActive && search.hasActiveSearchSource
-            ? const SizedBox.shrink()
-            : _buildDocked(context, search),
-    };
+    return ListenableBuilder(
+      listenable: _stateListenable,
+      builder: (context, _) {
+        final projection = widget.session.projection;
+        return switch (widget.variant) {
+          SearchResultsVariant.page => _buildPage(context, projection),
+          SearchResultsVariant.docked =>
+            // 当前渠道不支持搜索时，即使还没输入关键词也要显示专用空态；
+            // 可搜索且无词时结果面留空（只留搜索条）。
+            !projection.isActive && projection.hasActiveSearchSource
+                ? const SizedBox.shrink()
+                : _buildDocked(context, projection),
+        };
+      },
+    );
   }
 
-  Widget _buildPage(BuildContext context, SearchProvider search) {
+  Widget _buildPage(BuildContext context, SearchProjection projection) {
     final l10n = _l10n(context);
     final layout = DesktopLayout.of(context);
     final horizontalPadding = context
         .layoutType(ResponsivePageType.browse)
         .horizontalPadding;
-    final results = SearchResultsView.resultsOf(search);
+    final results = projection.results;
     final itemCount = results.items.length;
     final failure = results.failure;
     final showEmptyState =
-        itemCount == 0 && !search.isSearchBusy && failure == null;
-    final kinds = search.supportedSearchKinds;
+        itemCount == 0 && !projection.isBusy && failure == null;
+    final kinds = projection.supportedKinds;
     final tableColumns =
-        search.searchKind == SearchKind.song &&
+        projection.kind == SearchKind.song &&
         layout.tableColumns &&
         itemCount > 0;
     final controller = _pageController;
@@ -249,12 +201,12 @@ class _SearchResultsViewState extends State<SearchResultsView> {
         if (showEmptyState)
           SliverFillRemaining(
             hasScrollBody: false,
-            child: _pageEmptyView(l10n, search),
+            child: _pageEmptyView(l10n, projection),
           )
         else
           ..._resultSlivers(
             l10n,
-            search,
+            projection,
             horizontalPadding: horizontalPadding,
             tableColumns: tableColumns,
           ),
@@ -264,7 +216,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     final content = Column(
       children: [
         const SizedBox(height: 8),
-        if (search.isSearchActive && kinds.length > 1)
+        if (projection.isActive && kinds.length > 1)
           Padding(
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
@@ -272,9 +224,9 @@ class _SearchResultsViewState extends State<SearchResultsView> {
               horizontalPadding,
               8,
             ),
-            child: _kindSwitch(l10n, search, kinds),
+            child: _kindSwitch(l10n, kinds, projection.kind),
           ),
-        if (search.isSearchBusy)
+        if (projection.isBusy)
           const Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: M3EProgressIndicator.linear(),
@@ -287,7 +239,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             compact: false,
             detail: failure.message,
             horizontalPadding: horizontalPadding,
-            onRetry: () => unawaited(search.retry()),
+            onRetry: () => unawaited(widget.session.retry()),
           ),
         if (tableColumns)
           Padding(
@@ -304,7 +256,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
               failed: failure != null && itemCount == 0,
               isLoadingMore: results.isLoadingMore,
               loadMoreFailed: results.loadMoreFailed,
-              onLoadMore: () => unawaited(search.loadMore()),
+              onLoadMore: () => unawaited(widget.session.loadMore()),
               child: scrollView,
             ),
           ),
@@ -319,48 +271,34 @@ class _SearchResultsViewState extends State<SearchResultsView> {
 
   List<Widget> _resultSlivers(
     AppLocalizations l10n,
-    SearchProvider search, {
+    SearchProjection projection, {
     required double horizontalPadding,
     required bool tableColumns,
   }) {
-    final results = SearchResultsView.resultsOf(search);
+    final results = projection.results;
     if (results.items.isEmpty) return const [];
-    final slivers = <Widget>[];
-    switch (search.searchKind) {
-      case SearchKind.song:
-        slivers.add(
-          _trackResultsSliver(
-            search,
-            search.songResults,
-            horizontalPadding: horizontalPadding,
-            tableColumns: tableColumns,
-          ),
-        );
-      case SearchKind.lyric:
-        slivers.add(
-          _trackResultsSliver(
-            search,
-            search.lyricResults,
-            horizontalPadding: horizontalPadding,
-            tableColumns: false,
-          ),
-        );
-      case SearchKind.artist:
-        slivers.add(
-          _artistResultsSliver(
-            search,
-            search.artistResults,
-            horizontalPadding: horizontalPadding,
-          ),
-        );
-    }
+    final slivers = <Widget>[
+      if (projection.kind == SearchKind.artist)
+        _artistResultsSliver(
+          projection.artistItems,
+          activeSourceKey: projection.activeSourceKey,
+          horizontalPadding: horizontalPadding,
+        )
+      else
+        _trackResultsSliver(
+          projection.trackItems,
+          artistLinksEnabled: projection.artistLinksEnabled,
+          horizontalPadding: horizontalPadding,
+          tableColumns: tableColumns,
+        ),
+    ];
     if (results.isLoadingMore || results.loadMoreFailed) {
       slivers.add(
         SliverToBoxAdapter(
           child: PagedListFooter(
             isLoadingMore: results.isLoadingMore,
             loadMoreFailed: results.loadMoreFailed,
-            onRetry: () => unawaited(search.retry()),
+            onRetry: () => unawaited(widget.session.retry()),
             failureLabel: l10n.searchLoadMoreFailed,
             padding: EdgeInsets.fromLTRB(
               horizontalPadding,
@@ -376,18 +314,18 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   }
 
   Widget _trackResultsSliver(
-    SearchProvider search,
-    SearchResults<SearchRow> results, {
+    List<SearchRow> items, {
+    required bool artistLinksEnabled,
     required double horizontalPadding,
     required bool tableColumns,
   }) {
     return SliverPadding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       sliver: _TrackResultsSliver(
-        items: results.items,
+        items: items,
         onPlay: widget.onPlay,
         onOpenArtist: widget.onOpenArtist,
-        artistLinksEnabled: search.activeSource?.capabilities.artist ?? false,
+        artistLinksEnabled: artistLinksEnabled,
         surface: TrackRowSurface(
           showFocusRing: true,
           showFocusFill: true,
@@ -398,46 +336,50 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   }
 
   Widget _artistResultsSliver(
-    SearchProvider search,
-    SearchResults<ArtistSummary> results, {
+    List<ArtistSummary> items, {
+    required String activeSourceKey,
     required double horizontalPadding,
   }) {
-    final sourceKey = search.activeSourceKey;
     return SliverPadding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       sliver: _ArtistResultsSliver(
-        items: results.items,
+        items: items,
         onTap: (artist) => unawaited(
-          widget.onOpenArtist!(sourceKey, artist.id, fallbackName: artist.name),
+          widget.onOpenArtist!(
+            activeSourceKey,
+            artist.id,
+            fallbackName: artist.name,
+          ),
         ),
       ),
     );
   }
 
   /// 空状态区分：无可用来源 / 当前渠道不支持搜索 / 未输入 / 当前渠道无结果。
-  Widget _pageEmptyView(AppLocalizations l10n, SearchProvider search) {
+  Widget _pageEmptyView(AppLocalizations l10n, SearchProjection projection) {
     final theme = Theme.of(context);
     final IconData icon;
     final String title;
     String? hint;
     final unsupported =
-        !search.hasActiveSearchSource && search.activeSourceKey.isNotEmpty;
+        !projection.hasActiveSearchSource &&
+        projection.activeSourceKey.isNotEmpty;
     if (unsupported) {
       icon = Icons.search_off_rounded;
       title = l10n.searchChannelUnsupported;
-    } else if (!search.hasSearchableSources) {
+    } else if (!projection.hasSearchableSources) {
       icon = Icons.source_rounded;
       title = l10n.searchNoSourcesTitle;
       hint = l10n.searchNoSourcesHint;
-    } else if (!search.hasActiveSearchSource) {
+    } else if (!projection.hasActiveSearchSource) {
       icon = Icons.search_off_rounded;
       title = l10n.searchChannelUnsupported;
-    } else if (!search.isSearchActive) {
+    } else if (!projection.isActive) {
       icon = Icons.search_rounded;
       title = l10n.searchIdleHint;
     } else {
       icon = Icons.search_off_rounded;
-      final sourceName = search.activeSource?.displayName;
+      final sourceName = projection.activeSourceName;
       title = l10n.noResultsFound;
       if (sourceName != null) hint = l10n.searchNoResultsInSource(sourceName);
     }
@@ -470,17 +412,17 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     );
   }
 
-  Widget _buildDocked(BuildContext context, SearchProvider search) {
+  Widget _buildDocked(BuildContext context, SearchProjection projection) {
     final l10n = _l10n(context);
-    final kinds = search.supportedSearchKinds;
-    final results = SearchResultsView.resultsOf(search);
-    final preview = SearchResultsView.previewFor(search);
+    final kinds = projection.supportedKinds;
+    final results = projection.results;
+    final preview = projection.preview;
     final anyFailure = results.failure != null;
     final showEmpty =
-        preview.totalItems == 0 && !search.isSearchBusy && !anyFailure;
+        preview.totalItems == 0 && !projection.isBusy && !anyFailure;
     final currentKeys = {for (final item in preview.items) item.key};
     _highlightKeys.removeWhere((key, _) => !currentKeys.contains(key));
-    _scheduleEnsureHighlighted();
+    _scheduleEnsureHighlighted(widget.session.preview.highlightedKey);
 
     return _panel(
       context,
@@ -493,9 +435,9 @@ class _SearchResultsViewState extends State<SearchResultsView> {
             if (kinds.length > 1)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                child: _kindSwitch(l10n, search, kinds),
+                child: _kindSwitch(l10n, kinds, projection.kind),
               ),
-            if (search.isSearchBusy && preview.items.isEmpty)
+            if (projection.isBusy && preview.items.isEmpty)
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 0),
                 child: M3EProgressIndicator.linear(),
@@ -506,7 +448,7 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                 l10n,
                 compact: true,
                 detail: results.failure!.message,
-                onRetry: () => unawaited(search.retry()),
+                onRetry: () => unawaited(widget.session.retry()),
               ),
             if (!showEmpty && preview.items.isNotEmpty)
               Padding(
@@ -522,11 +464,12 @@ class _SearchResultsViewState extends State<SearchResultsView> {
                         preview.items[index],
                         index,
                         preview.items.length,
+                        highlightedKey: widget.session.preview.highlightedKey,
                       ),
                   ],
                 ),
               ),
-            if (showEmpty) _dockedEmptyView(context, l10n, search),
+            if (showEmpty) _dockedEmptyView(context, l10n, projection),
             // 有结果才给「查看全部结果」：零结果时它无处可去。
             if (preview.totalItems > 0) _dockedFooter(l10n),
           ],
@@ -540,9 +483,10 @@ class _SearchResultsViewState extends State<SearchResultsView> {
     AppLocalizations l10n,
     SearchPreviewItem item,
     int index,
-    int count,
-  ) {
-    final selected = item.key == widget.highlightedKey;
+    int count, {
+    required String? highlightedKey,
+  }) {
+    final selected = item.key == highlightedKey;
     final key = _itemKey(item.key);
     return switch (item) {
       SearchPreviewTrack(:final row) => Padding(
@@ -602,13 +546,14 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   Widget _dockedEmptyView(
     BuildContext context,
     AppLocalizations l10n,
-    SearchProvider search,
+    SearchProjection projection,
   ) {
     final theme = Theme.of(context);
-    final sourceName = search.activeSource?.displayName;
+    final sourceName = projection.activeSourceName;
     final unsupported =
-        !search.hasActiveSearchSource && search.activeSourceKey.isNotEmpty;
-    final noSources = !search.hasSearchableSources && !unsupported;
+        !projection.hasActiveSearchSource &&
+        projection.activeSourceKey.isNotEmpty;
+    final noSources = !projection.hasSearchableSources && !unsupported;
     final title = unsupported
         ? l10n.searchChannelUnsupported
         : (noSources ? l10n.searchNoSourcesTitle : l10n.noResultsFound);
@@ -668,8 +613,8 @@ class _SearchResultsViewState extends State<SearchResultsView> {
   /// 类型分段（单曲 / 歌手 / 歌词）：M3E 分段按钮需要紧约束铺满。
   Widget _kindSwitch(
     AppLocalizations l10n,
-    SearchProvider search,
     List<SearchKind> kinds,
+    SearchKind selectedKind,
   ) {
     return SizedBox(
       width: double.infinity,
@@ -678,10 +623,10 @@ class _SearchResultsViewState extends State<SearchResultsView> {
           for (final kind in kinds)
             M3ESegment<SearchKind>(value: kind, label: _kindLabel(l10n, kind)),
         ],
-        selected: {search.searchKind},
+        selected: {selectedKind},
         onSelectionChanged: (selection) {
           if (selection.isNotEmpty) {
-            search.selectSearchKind(selection.first);
+            widget.session.selectKind(selection.first);
           }
         },
       ),
