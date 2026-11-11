@@ -118,4 +118,31 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('同一个键不能被两个模块重复挂载；不同键正常', () {
+    final registry = testSettingsRegistry(keys: const [kThemeMode, kColorBase]);
+    final first = registry.mount(
+      SettingsModule(keys: const [kThemeMode], reload: () async {}),
+    );
+
+    expect(
+      () => registry.mount(
+        SettingsModule(keys: const [kThemeMode], reload: () async {}),
+      ),
+      throwsA(
+        isA<ArgumentError>().having(
+          (error) => error.message,
+          'message',
+          contains('设置键已被其它模块挂载'),
+        ),
+      ),
+    );
+    // 只读视图不参与挂载校验：同一个键仍可用于 scope（测试 / 边缘装配）。
+    expect(registry.scope(const [kThemeMode]).keys, first.keys);
+
+    final second = registry.mount(
+      SettingsModule(keys: const [kColorBase], reload: () async {}),
+    );
+    expect(second.keys, [kColorBase]);
+  });
 }

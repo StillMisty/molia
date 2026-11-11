@@ -47,6 +47,10 @@ class SettingsRegistry implements SettingsAccess, SettingsSyncSurface {
   /// 返回的窄视图与 [scope] 等价，但模块的键与 reload 已由 [SettingsModule]
   /// 校验过覆盖关系，且这里再核对键确实登记在整表里：只声明键却没有 reload、
   /// 或模块拿着未登记的键（同步根本不会收集）都会在启动期直接失败。
+  ///
+  /// 同一个键只允许挂载一次：重复挂载会让一次远端应用执行多个 reload 钩子，
+  /// 违背「声明与重载单点绑定」。检查只发生在 [mount]，[scope] 只读视图不受
+  /// 影响。
   SettingsScope mount(SettingsModule module) {
     final registered = {for (final key in keys) key.name};
     for (final key in module.keys) {
@@ -56,6 +60,9 @@ class SettingsRegistry implements SettingsAccess, SettingsSyncSurface {
           'module',
           '设置键未登记进 SettingsRegistry，无法参与同步',
         );
+      }
+      if (_reloads.containsKey(key.name)) {
+        throw ArgumentError.value(key.name, 'module', '设置键已被其它模块挂载');
       }
     }
     for (final group in module.reloads) {
