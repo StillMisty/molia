@@ -1309,6 +1309,37 @@ void main() {
     expect(generator.calls, 1);
   });
 
+  test('显式生成空批次 = 失败：不写历史、不切换 active', () async {
+    await provider.grantConsent();
+    generator.batchFactory = () =>
+        AiDjBatch(items: const [], generatedAt: DateTime.now());
+
+    await provider.refreshRecommendations();
+
+    expect(provider.recommendations, isNull);
+    expect(provider.historyEntries, isEmpty);
+    expect(provider.lastError?.l10nKey, 'aiDjNothingResolved');
+  });
+
+  test('换一首空批次 = 失败：保留原列表并写 lastError', () async {
+    await enableWithList();
+    final before = provider.recommendations!.items
+        .map((item) => item.track.id.id)
+        .toList();
+    final uri = provider.recommendations!.items.first.track.id.uri;
+    generator.batchFactory = () =>
+        AiDjBatch(items: const [], generatedAt: DateTime.now());
+
+    await provider.replaceRecommendation(0);
+
+    expect(provider.lastError?.l10nKey, 'aiDjNothingResolved');
+    expect(
+      provider.recommendations!.items.map((item) => item.track.id.id).toList(),
+      before,
+    );
+    expect(provider.isReplacing(uri), isFalse);
+  });
+
   test('启动时恢复持久化的当前推荐与历史（raw 原样）', () async {
     await enableWithList();
     final activeId = provider.activeBatchId;
