@@ -44,7 +44,6 @@ import 'package:material_3_expressive/material_3_expressive.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:provider/provider.dart';
 
-import '../domain/models/catalog.dart' show SearchKind;
 import '../l10n/app_localizations.dart';
 import '../providers/channel_selection.dart';
 import '../providers/search_provider.dart';
@@ -306,26 +305,19 @@ class _GlobalSearchView extends StatefulWidget {
 }
 
 class _GlobalSearchViewState extends State<_GlobalSearchView> {
-  /// 遮罩与结果行共用的控制器（本视图独占；打开时用 provider 的词种上）。
+  /// 遮罩与结果行共用的控制器（本视图独占；绑定器负责与会话双向同步）。
   final TextEditingController _field = TextEditingController();
   final FocusNode _focusNode = FocusNode(debugLabel: 'globalSearchField');
   final FocusNode _channelFocusNode = FocusNode(
     debugLabel: 'globalSearchChannelDropdown',
   );
 
-  late final SearchProvider _search = context.read<SearchProvider>();
+  late final SearchProvider _search;
+  late final SearchSession _session;
+  late final SearchInputBinding _input;
 
   /// 上一次已播报的内容（关键词 + 文案）：同一条消息不重复播报。
   String? _lastAnnouncement;
-
-  /// 遮罩结果高亮（[SearchPreviewItem.key]）；输入框保持焦点，↑↓ 只改高亮。
-  String? _highlightedKey;
-
-  /// 用户手动移动过高亮后，按行身份保留；未移动时结果到达自动高亮第一条。
-  bool _userMovedHighlight = false;
-
-  /// 关键词换轮次时重置高亮策略（旧行身份已不属于新查询）。
-  String? _lastQuery;
 
   /// 关闭动作只执行一次：平台回车与祖先 Focus 可能同时到达。
   bool _closing = false;
@@ -333,13 +325,13 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   void initState() {
     super.initState();
-    // provider → 输入框单向同步（provider 是搜索状态的唯一源）：在资料库页
-    // 改词 / 清空后重新打开遮罩不能残留旧关键词，否则会出现「框里有词、
-    // 结果区却为空」的自相矛盾状态。
+    _search = context.read<SearchProvider>();
+    _session = _search.session;
+    // 会话是搜索状态的唯一源：遮罩打开时用绑定器种上当前关键词，
+    // 之后资料库改词 / 清空也会立即反映到输入框（不再逐帧补同步）。
+    _input = SearchInputBinding(session: _session, controller: _field);
     _search.addListener(_onSearchChanged);
-    _syncFromProvider();
-    _lastQuery = _search.searchQuery;
-    _refreshHighlight(notify: false);
+    _session.preview.addListener(_onPreviewChanged);
     // 打开 / 重新聚焦都全选已有文本：Ctrl+F 后直接输入即替换上次关键词。
     WidgetsBinding.instance.addPostFrameCallback((_) => focusField());
   }
@@ -347,6 +339,8 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   @override
   void dispose() {
     _search.removeListener(_onSearchChanged);
+    _session.preview.removeListener(_onPreviewChanged);
+    _input.dispose();
     _field.dispose();
     _focusNode.dispose();
     _channelFocusNode.dispose();
@@ -398,82 +392,29 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     });
   }
 
+  /// 会话通知：输入激活态 / 结果 / 播报都跟同一份投影走。
   void _onSearchChanged() {
-    final query = _search.searchQuery;
-    final queryChanged = query != _lastQuery;
-    _lastQuery = query;
-    _syncFromProvider();
-    _refreshHighlight(notify: true, resetUserMoved: queryChanged);
+    if (!mounted) return;
+    setState(() {});
     _announceResults();
   }
 
-  void _syncFromProvider() {
-    final query = _search.searchQuery;
-    if (_field.text == query) return;
-    _field.text = query;
+  /// 预览通知：↑↓ 只改高亮，不触发搜索状态（也不重算结果）。
+  void _onPreviewChanged() {
+    if (mounted) setState(() {});
   }
 
-  /// 当前遮罩预览的可高亮条目（渲染与键盘共用同一份纯函数投影）。
-  List<SearchPreviewItem> get _previewItems =>
-      SearchResultsView.previewFor(_search).items;
-
-  SearchPreviewItem? get _highlightedItem {
-    final items = _previewItems;
-    if (items.isEmpty) return null;
-    final key = _highlightedKey;
-    if (key != null) {
-      for (final item in items) {
-        if (item.key == key) return item;
-      }
-    }
-    return items.first;
-  }
-
-  /// 结果到达自动高亮第一条；用户手动移动后按行身份保留。
-  void _refreshHighlight({required bool notify, bool resetUserMoved = false}) {
-    if (resetUserMoved) _userMovedHighlight = false;
-    final items = _previewItems;
-    String? next = _highlightedKey;
-    if (items.isEmpty) {
-      next = null;
-    } else if (!_userMovedHighlight ||
-        next == null ||
-        !items.any((item) => item.key == next)) {
-      next = items.first.key;
-    }
-    if (next == _highlightedKey) return;
-    _highlightedKey = next;
-    if (notify && mounted) setState(() {});
-  }
-
-  /// ↑↓ / PageUp / PageDown：跨来源分组连续移动，组标题不在条目列表里。
-  void _moveHighlight(int delta) {
-    final items = _previewItems;
-    if (items.isEmpty) return;
-    var index = items.indexWhere((item) => item.key == _highlightedKey);
-    if (index < 0) index = delta > 0 ? -1 : items.length;
-    final next = math.min(math.max(index + delta, 0), items.length - 1);
-    _userMovedHighlight = true;
-    final key = items[next].key;
-    if (key == _highlightedKey) return;
-    setState(() => _highlightedKey = key);
-  }
-
-  /// 当前搜索类型已加载的结果条数（与面板列表同口径）。
-  int get _resultCount => switch (_search.searchKind) {
-    SearchKind.song => _search.songResults.items.length,
-    SearchKind.artist => _search.artistResults.items.length,
-    SearchKind.lyric => _search.lyricResults.items.length,
-  };
+  SearchPreviewItem? get _highlightedItem => _session.preview.highlightedItem;
 
   /// 结果数变化时给读屏播报（空词 / 加载中不播报；文案走 l10n）。
   ///
   /// 防抖 / 首屏在途时 [SearchProvider.isSearchBusy] 为真；单渠道首屏返回后
   /// 才转 false，因此总条数只播报一次。
   void _announceResults() {
-    if (!mounted || !_search.isSearchActive || _search.isSearchBusy) return;
-    final message = _l10n(context).searchResultsAnnouncement(_resultCount);
-    final key = '${_search.searchQuery}\u0000$message';
+    if (!mounted || !_session.isActive || _session.isBusy) return;
+    final message = _l10n(context)
+        .searchResultsAnnouncement(_session.resultCount);
+    final key = '${_session.query}\u0000$message';
     if (key == _lastAnnouncement) return;
     _lastAnnouncement = key;
     final view = View.maybeOf(context);
@@ -501,7 +442,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
   void _submitAndOpenAll() {
     if (_closing) return;
     _closing = true;
-    _search.submitSearch(_field.text);
+    _session.submit(_field.text);
     _close();
     widget.onViewAllResults();
   }
@@ -550,19 +491,19 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
     }
     if (!_focusNode.hasFocus) return KeyEventResult.ignored;
     if (key == LogicalKeyboardKey.arrowDown) {
-      _moveHighlight(1);
+      _session.preview.moveHighlight(1);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.arrowUp) {
-      _moveHighlight(-1);
+      _session.preview.moveHighlight(-1);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.pageDown) {
-      _moveHighlight(5);
+      _session.preview.moveHighlight(5);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.pageUp) {
-      _moveHighlight(-5);
+      _session.preview.moveHighlight(-5);
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -578,7 +519,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
         if (channel.enabled) channel,
     ];
     final rect = widget.restingRect;
-    final showHint = _search.isSearchActive;
+    final showHint = _session.isActive;
     // 面板限高：条下沿到窗口底部留出边距与底部键位提示，更长的列表交给资料库。
     final maxPanelHeight = math.max(
       0.0,
@@ -624,7 +565,6 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                         channels: enabledChannels,
                         selectedKey: selection.key,
                         onChannelSelected: _selectChannel,
-                        onChanged: _search.updateSearchQuery,
                         onSubmitted: (_) => _handleEnter(),
                         // Esc：焦点在输入框时由搜索栏自身就近分发（外层
                         // CallbackShortcuts 接不到——包内输入框会先消费 Esc 并
@@ -635,7 +575,7 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
                       ConstrainedBox(
                         constraints: BoxConstraints(maxHeight: maxPanelHeight),
                         child: _GlobalSearchResults(
-                          highlightedKey: _highlightedKey,
+                          session: _session,
                           onOpenAllResults: _openAllResults,
                           onPlayItem: _playItem,
                         ),
@@ -673,19 +613,19 @@ class _GlobalSearchViewState extends State<_GlobalSearchView> {
 /// 搜索结果页同一份实现。
 class _GlobalSearchResults extends StatelessWidget {
   const _GlobalSearchResults({
-    required this.highlightedKey,
+    required this.session,
     required this.onOpenAllResults,
     required this.onPlayItem,
   });
 
-  final String? highlightedKey;
+  final SearchSession session;
   final VoidCallback onOpenAllResults;
   final void Function(SearchRow row) onPlayItem;
 
   @override
   Widget build(BuildContext context) => SearchResultsView(
     variant: SearchResultsVariant.docked,
-    highlightedKey: highlightedKey,
+    session: session,
     onPlay: onPlayItem,
     onOpenAllResults: onOpenAllResults,
   );
