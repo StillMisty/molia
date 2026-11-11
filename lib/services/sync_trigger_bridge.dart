@@ -69,24 +69,32 @@ class SyncTriggerBridge {
     _restores.add(() => sourceManager.removeListener(onChange));
   }
 
-  /// 设置 / 凭证写入：标记类别后交给调用方追加增量日志。
+  /// 设置 / 凭证写入：先调用绑前钩子，再标记类别并交给调用方追加增量日志。
   ///
-  /// 钩子必须由桥绑定与释放：`SettingsRegistry.onWrite` 只允许绑定一次，
-  /// 散落赋值在重建时会静默覆盖前一个写者。
+  /// `SettingsRegistry.onWrite` 只允许绑定一次：链式绑定必须显式解绑旧钩子，
+  /// 再由 wrapper 调用 `previous`，否则 previous 非空时 setter 会 assert /
+  /// 抛错。恢复时同样先解绑 wrapper 再写回 previous（previous 为 null 或非空
+  /// 都沿用 setter 的既有语义），不会静默吞掉已有订阅者。
   void bindSettingsWrites(
     SettingsRegistry settings, {
     required void Function(SettingsKey<Object?> key) onKeyWritten,
   }) {
     final previous = settings.onWrite;
+    settings.onWrite = null;
     settings.onWrite = (key) {
+      previous?.call(key);
       localChange(categories: {key.category});
       onKeyWritten(key);
     };
-    _restores.add(() => settings.onWrite = previous);
+    _restores.add(() {
+      settings.onWrite = null;
+      settings.onWrite = previous;
+    });
   }
 
-  /// 脚本导入 / 删除回调：只负责即时追加增量日志；音源类别标记由
-  /// [bindSourceManager] 的监听统一发出（与旧接线保持同一次事件语义）。
+  /// 脚本导入 / 删除回调：先调用绑前回调，再交给调用方追加增量日志；
+  /// 音源类别标记由 [bindSourceManager] 的监听统一发出（与旧接线保持同一次
+  /// 事件语义）。
   void bindScriptWrites(
     SourceManager sourceManager, {
     required void Function(String id) onScriptWritten,
@@ -94,32 +102,43 @@ class SyncTriggerBridge {
   }) {
     final previousWritten = sourceManager.onScriptWritten;
     final previousRemoved = sourceManager.onScriptRemoved;
-    sourceManager.onScriptWritten = onScriptWritten;
-    sourceManager.onScriptRemoved = onScriptRemoved;
+    sourceManager.onScriptWritten = (id) {
+      previousWritten?.call(id);
+      onScriptWritten(id);
+    };
+    sourceManager.onScriptRemoved = (id) {
+      previousRemoved?.call(id);
+      onScriptRemoved(id);
+    };
     _restores.add(() {
       sourceManager.onScriptWritten = previousWritten;
       sourceManager.onScriptRemoved = previousRemoved;
     });
   }
 
-  /// 播放会话落盘：高频进度只标记、不排即时轮次；随后交给适配器记账。
+  /// 播放会话落盘：先调用绑前回调，再标记待发（高频进度只标记、不排即时
+  /// 轮次），最后交给适配器记账。
   void bindSessionSaves(
     PlaybackSessionStore store, {
     required void Function() onSaved,
   }) {
     final previous = store.onSaved;
     store.onSaved = () {
+      previous?.call();
       localChange(categories: const {SyncCategory.session}, immediate: false);
       onSaved();
     };
     _restores.add(() => store.onSaved = previous);
   }
 
-  /// 本地封面写入（远端应用不走 `onLocalChange`，不会回环）→ 封面类别。
+  /// 本地封面写入：先调用绑前回调，再标记封面类别（远端应用不走
+  /// `onLocalChange`，不会回环）。
   void bindLocalCoverChanges(CustomCoverStore covers) {
     final previous = covers.onLocalChange;
-    covers.onLocalChange = (_) =>
-        localChange(categories: const {SyncCategory.covers});
+    covers.onLocalChange = (change) {
+      previous?.call(change);
+      localChange(categories: const {SyncCategory.covers});
+    };
     _restores.add(() => covers.onLocalChange = previous);
   }
 
