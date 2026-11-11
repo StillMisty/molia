@@ -13,14 +13,10 @@ import '../sync_adapter.dart';
 ///
 /// 本地下载曲目（`sourceKey = local`）不同步：文件是设备本机的持久副本，
 /// 导出与应用两侧都过滤（含其墓碑）。
-class HistorySyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
+class HistorySyncAdapter implements SyncRecordSource {
   HistorySyncAdapter({required this._repository});
 
   final LibrarySyncStore _repository;
-
-  /// 上轮记录缓存：键 = 类别指纹（`COUNT(*) + MAX(versionPhysical)` 聚合）。
-  String? _cacheKey;
-  Map<SyncCategory, List<SyncRecord>>? _cached;
 
   @override
   Set<SyncCategory> get categories => const {SyncCategory.history};
@@ -29,21 +25,7 @@ class HistorySyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({
-    bool fresh = false,
-  }) async {
-    final key = syncFingerprintKey(
-      await _repository.syncFingerprints(categories),
-    );
-    final cached = _cached;
-    if (!fresh && cached != null && _cacheKey == key) return cached;
-    final records = await _readRecords();
-    _cacheKey = key;
-    _cached = records;
-    return records;
-  }
-
-  Future<Map<SyncCategory, List<SyncRecord>>> _readRecords() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> exportRecords() async {
     final records = <SyncRecord>[];
     for (final entry in await _repository.syncExportHistory()) {
       if (entry.sourceKey.isEmpty || entry.songId.isEmpty) continue;
@@ -72,13 +54,6 @@ class HistorySyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
       );
     }
     return {SyncCategory.history: records};
-  }
-
-  /// 释放上轮记录缓存：下一次 collect 按指纹重新导出（幂等）。
-  @override
-  void releaseCaches() {
-    _cacheKey = null;
-    _cached = null;
   }
 
   @override
@@ -114,11 +89,6 @@ class HistorySyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
       entries: entries,
       tombstones: tombstones,
     );
-    // 落地了远端记录：远端版本可能小于本机最大值，缓存显式失效。
-    if (result.applied > 0) {
-      _cacheKey = null;
-      _cached = null;
-    }
     return SyncApplyOutcome(applied: result.applied, skipped: result.skipped);
   }
 }

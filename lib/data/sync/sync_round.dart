@@ -8,15 +8,14 @@
 /// 现在 [SyncRoundRunner.runRound] 只顺序调用六个阶段并组装报告；每个阶段
 /// 返回一个结果值（[SyncRoundCollected] / [SyncRoundPulled] /
 /// [SyncRoundConsumed] / [SyncRoundApplied] / [SyncRoundPublished]），下一阶段
-/// 只读这些值，不读上一阶段写过的共享字段。阶段入口标了 `@visibleForTesting`，
-/// 测试可以逐段驱动，生产调用方仍只经 [SyncRoundRunner.runRound]。
+/// 只读这些值，不读上一阶段写过的共享字段。阶段入口私有：生产与测试都只经
+/// [SyncRoundRunner.runRound] 驱动，测试不能绕过「先 collect 后 apply」。
 /// 同步语义（应用成功才推进游标、forced delivery、缺口二次拉取、
 /// anti-entropy、入站轮、名册失败记账、报告五态）逐条保留。
 library;
 
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
@@ -24,11 +23,11 @@ import '../../domain/ports/sync_known_store.dart';
 import '../../domain/ports/sync_transport.dart';
 import 'peer_journal_protocol.dart';
 import 'publish_ledger.dart';
-import 'sync_adapter.dart';
 import 'sync_codec_port.dart';
 import 'sync_fingerprint.dart';
 import 'sync_journal.dart';
 import 'sync_pull_plan.dart';
+import 'sync_record_pipeline.dart';
 import 'sync_stamp.dart';
 import 'sync_book.dart';
 import 'sync_transport_runtime.dart';
@@ -151,18 +150,18 @@ class SyncRoundPeerFailures {
   }
 }
 
-/// 一轮的编排器：拥有名册观测、收集缓存、发布台账与 inbound 队列。
+/// 一轮的编排器：拥有名册观测、发布台账与 inbound 队列。
 ///
 /// 引擎（`SyncEngine`）只保留公共门面（调度器宿主 / 服务端语义 / 入站合流 /
-/// 公告过滤）；轮次内的阶段只通过显式输入 / 结果值传递数据，跨轮缓存
-/// （收集复用、快照指纹、发布台账）仍归这个长期对象。
+/// 公告过滤）；记录层的收集 / 合并 / 登记在 [SyncRecordPipeline]（备份也走
+/// 同一份实现），轮次只保留传输、游标、发布台账与报告。轮次内的阶段只通过
+/// 显式输入 / 结果值传递数据，跨轮缓存（快照指纹、发布台账）仍归这个长期对象。
 class SyncRoundRunner {
   SyncRoundRunner({
     required SyncRoundState state,
-    required this._adapters,
+    required this.pipeline,
     required Map<String, SyncTransport> transports,
     required this._stamps,
-    required this._known,
     this._journal,
     this._fingerprintPort,
     required this._runtime,
@@ -188,18 +187,17 @@ class SyncRoundRunner {
   static const int antiEntropyIntervalMs = 10 * 60 * 1000;
 
   final SyncRoundState _state;
-  final List<SyncAdapter> _adapters;
+
+  /// 记录层的唯一实现（收集 / 合并 / 登记 / 适配器分发）；完整备份共用。
+  final SyncRecordPipeline pipeline;
+
   final Map<String, SyncTransport> _transports;
   final SyncStampIssuer _stamps;
-  final SyncKnownStore _known;
   final SyncJournalStore? _journal;
   final SyncCodecPort? _fingerprintPort;
   final SyncTransportRuntime _runtime;
   final DateTime Function() _clock;
   final Logger _logger;
-
-  /// 登记的内存视图（首次使用时加载一次，之后只写变化项）。
-  Map<SyncKnownKey, SyncVersion>? _knownVersions;
 
   /// 上轮本地视图指纹（未注入日志时用于区分「本机没有变化」）。
   String? _localFingerprint;
@@ -210,12 +208,6 @@ class SyncRoundRunner {
 
   /// 上一轮开始时的日志头部：与本轮头部比较即「本机有没有变化」。
   int? _localJournalHead;
-
-  /// 上一轮各适配器的收集结果（身份）与聚合视图。
-  final Map<SyncAdapter, Map<SyncCategory, List<SyncRecord>>>
-  _lastAdapterCollect = {};
-  Map<SyncCategory, List<SyncRecord>>? _lastAggregate;
-  Set<SyncCategory>? _lastAggregateCategories;
 
   /// 每传输的发布台账。
   final Map<String, PublishLedger> _publishLedgers = {};
@@ -238,10 +230,9 @@ class SyncRoundRunner {
 
   /// 释放轮次之间可重建的收集 / 快照缓存（托盘隐藏 / 系统低内存）。
   ///
-  /// [_lastEnvelope] 是上一轮外发的整份本地快照（含全部记录），
-  /// [_lastAdapterCollect] / [_lastAggregate] 是下一轮 collect 的复用缓存；
-  /// 轮次结束后它们只影响「下次少算一遍」，置空不改变同步语义（下次
-  /// `serveSnapshot` / `collect` 会按需重建）。
+  /// [_lastEnvelope] 是上一轮外发的整份本地快照（含全部记录），记录管道的
+  /// 聚合视图与适配器缓存由 [pipeline] 释放；轮次结束后它们只影响「下次少算
+  /// 一遍」，置空不改变同步语义（下次 `serveSnapshot` / `collect` 会按需重建）。
   ///
   /// 在途轮次不释放：返回 false，交给下一次触发。轮内清掉会让本轮后续阶段
   /// 读不到已构建的快照 / 聚合结果，且 `serveSnapshot` 可能与本轮 collect
@@ -249,14 +240,9 @@ class SyncRoundRunner {
   bool releaseIdleCaches() {
     if (_activePeerFailures != null) return false;
     _lastEnvelope = null;
-    _lastAdapterCollect.clear();
-    _lastAggregate = null;
-    _lastAggregateCategories = null;
     // 适配器自己还持有上一轮记录缓存（列表 / 历史 / 统计 / 封面 base64）：
-    // 只清 runner 的聚合视图不会真正释放这些列表，必须让持有者一起放掉。
-    for (final adapter in _adapters) {
-      if (adapter is SyncAdapterCacheReleaser) adapter.releaseCaches();
-    }
+    // 只清 runner 的聚合视图不会真正释放这些列表，必须让管道统一转告持有者。
+    pipeline.releaseCaches();
     return true;
   }
 
@@ -330,7 +316,7 @@ class SyncRoundRunner {
     final base = journal == null ? 0 : await journal.baseSeq();
     // 全量快照必须拿适配器的整份视图：会话等类别在增量模式下可能返回
     // 不含 tracks 的游标记录，不能作为新 / 落后对端的 bootstrap。
-    final records = await collect(categories, fresh: true);
+    final records = await pipeline.collect(categories, fresh: true);
     final pruned = _envelopeFrom(records).pruneTombstones(
       now: _nowMs(),
       tombstoneRetentionMs: tombstoneRetentionMs,
@@ -351,8 +337,7 @@ class SyncRoundRunner {
   /// 派生状态（日志 / 已知版本登记）随新命名空间重建。
   Future<void> resetDerivedState() async {
     await _journal?.reset();
-    await _known.reset();
-    _knownVersions = null;
+    await pipeline.resetKnown();
   }
 
   void dispose() {
@@ -421,22 +406,22 @@ class SyncRoundRunner {
     final peerFailures = SyncRoundPeerFailures();
     _activePeerFailures = peerFailures;
     try {
-      final collected = await collectStage(request);
-      final pulled = await pullStage(request, collected, peerFailures);
-      final consumed = await consumeStage(
+      final collected = await _collectStage(request);
+      final pulled = await _pullStage(request, collected, peerFailures);
+      final consumed = await _consumeStage(
         request,
         collected,
         pulled,
         peerFailures,
       );
-      final applied = await applyStage(request, collected, pulled, consumed);
-      final published = await publishStage(
+      final applied = await _applyStage(request, collected, pulled, consumed);
+      final published = await _publishStage(
         request,
         collected,
         applied,
         peerFailures,
       );
-      final report = await reportStage(
+      final report = await _reportStage(
         request,
         collected,
         consumed,
@@ -470,8 +455,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 1：口令、传输、本地视图、变更判定、名册登记基线。
-  @visibleForTesting
-  Future<SyncRoundCollected> collectStage(SyncRoundRequest request) async {
+  Future<SyncRoundCollected> _collectStage(SyncRoundRequest request) async {
     final passphrase = await _state.readPassphrase();
     if (passphrase == null || passphrase.trim().isEmpty) {
       throw const _RoundAbort(SyncIssue(code: SyncIssueCode.noPassphrase));
@@ -483,23 +467,14 @@ class SyncRoundRunner {
     // 随后发生的写入（写入的 seq 必然大于它，走下一份增量）。
     final journalHead = journal == null ? 0 : await journal.headSeq();
     final categories = request.onlyCategories ?? _state.enabledCategories;
-    final local = await collect(categories, fresh: request.antiEntropy);
+    final local = await pipeline.collect(
+      categories,
+      fresh: request.antiEntropy,
+    );
     final localChanged = journal == null
         ? (_localFingerprint == null ||
               await _fingerprintOf(local) != _localFingerprint)
         : journalHead != _localJournalHead;
-
-    // 本地视图就是适配器当前状态：以本地版本播种登记（内存内，不落库），
-    // 空闲轮不向适配器交付任何记录；远端胜者版本更高时仍会交付。
-    final known = await _ensureKnown();
-    for (final entry in local.entries) {
-      for (final record in entry.value) {
-        known.putIfAbsent((
-          category: entry.key,
-          key: record.key,
-        ), () => record.version);
-      }
-    }
 
     // 传输运行状态先落进报告：入站轮不拉取，但「开关开着但没在工作」同样
     // 要可见，且「本轮有没有可用传输」的判定不依赖拉取动作。
@@ -533,8 +508,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 2：anti-entropy 名单 + 一次拉取（入站轮不主动拉）。
-  @visibleForTesting
-  Future<SyncRoundPulled> pullStage(
+  Future<SyncRoundPulled> _pullStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundPeerFailures peerFailures,
@@ -584,8 +558,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 3：消费载荷（游标 / ack / 缺口）+ 缺口二次拉取。
-  @visibleForTesting
-  Future<SyncRoundConsumed> consumeStage(
+  Future<SyncRoundConsumed> _consumeStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundPulled pulled,
@@ -642,82 +615,28 @@ class SyncRoundRunner {
     );
   }
 
-  /// 阶段 4：合并 + 只交付版本变化的胜者 + 应用成功才提交游标。
-  @visibleForTesting
-  Future<SyncRoundApplied> applyStage(
+  /// 阶段 4：记录管道应用 + 应用成功才提交游标。
+  Future<SyncRoundApplied> _applyStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundPulled pulled,
     SyncRoundConsumed consumed,
   ) async {
-    final known = await _ensureKnown();
     var applied = 0;
     var applyFailures = 0;
     try {
-      // 强制交付的键：合并时剔除本地同版本记录，让权威视图胜出
-      // （同版本但内容不一致 = 本地被直接改写，不能按「先出现者胜」保留）。
-      final localForMerge = <SyncCategory, List<SyncRecord>>{};
-      for (final entry in collected.local.entries) {
-        final kept = [
-          for (final record in entry.value)
-            if (!consumed.forcedDelivery.contains((
-              category: entry.key,
-              key: record.key,
-            )))
-              record,
-        ];
-        if (kept.isNotEmpty) localForMerge[entry.key] = kept;
-      }
-      final merged = mergeEnvelopesByCategory([
-        _envelopeFrom(localForMerge),
+      final result = await pipeline.apply(
         SyncEnvelope(
           deviceId: _state.deviceId,
           producedAt: request.startedAt,
           records: consumed.remoteRecords,
         ),
-      ], categories: collected.categories);
-
-      for (final adapter in _adapters) {
-        if (!adapter.ready) continue;
-        // 只交付版本变化的胜者：登记一致的键不进入适配器（变更集应用）。
-        final subset = <SyncCategory, List<SyncRecord>>{};
-        for (final category in adapter.categories) {
-          final winners = merged[category];
-          if (winners == null || winners.isEmpty) continue;
-          for (final record in winners.values) {
-            final key = (category: category, key: record.key);
-            if (!consumed.forcedDelivery.contains(key) &&
-                known[key] == record.version) {
-              continue;
-            }
-            subset.putIfAbsent(category, () => []).add(record);
-          }
-        }
-        if (subset.isEmpty) continue;
-        try {
-          final outcome = await adapter.apply(subset);
-          applied += outcome.applied;
-          // 交付成功才登记（含适配器跳过的项）：适配器对同一状态的判定
-          // 是确定的，重复交付只会重复消耗；登记落库后跨重启不再重放。
-          final delivered = <SyncKnownKey, SyncVersion>{};
-          for (final entry in subset.entries) {
-            for (final record in entry.value) {
-              final key = (category: entry.key, key: record.key);
-              if (known[key] == record.version) continue;
-              delivered[key] = record.version;
-            }
-          }
-          if (delivered.isNotEmpty) {
-            known.addAll(delivered);
-            await _known.putKnownVersions(delivered);
-          }
-        } catch (e) {
-          // 应用失败 = 对端推来的记录没有落地：计入本轮失败并把入站快照放回
-          // 队列（下轮重试），不静默丢数据。
-          applyFailures++;
-          _logger.warning('应用 ${adapter.runtimeType} 失败', e);
-        }
-      }
+        forcedKeys: consumed.forcedDelivery,
+        local: collected.local,
+        categories: collected.categories,
+      );
+      applied = result.applied;
+      applyFailures = result.applyFailures;
     } catch (e) {
       // 入站快照是对端花网络推过来的：本轮失败不能丢，放回队列下轮消费。
       _restoreInbound(pulled.inboundSnapshot);
@@ -745,8 +664,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 5：裁日志 + 构建本轮外发视图 + 推送。
-  @visibleForTesting
-  Future<SyncRoundPublished> publishStage(
+  Future<SyncRoundPublished> _publishStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundApplied applied,
@@ -776,7 +694,7 @@ class SyncRoundRunner {
     }
 
     // 推送合并后的本地视图（重新收集，包含刚应用的远端记录）。
-    final refreshed = await collect(collected.categories);
+    final refreshed = await pipeline.collect(collected.categories);
     final pruned = _envelopeFrom(refreshed).pruneTombstones(
       now: _nowMs(),
       tombstoneRetentionMs: tombstoneRetentionMs,
@@ -883,8 +801,7 @@ class SyncRoundRunner {
   }
 
   /// 阶段 6：五态判定与报告（不写状态；引擎在 `runRound` 返回后落报告 / 通知）。
-  @visibleForTesting
-  Future<SyncRoundReport> reportStage(
+  Future<SyncRoundReport> _reportStage(
     SyncRoundRequest request,
     SyncRoundCollected collected,
     SyncRoundConsumed consumed,
@@ -1379,74 +1296,6 @@ class SyncRoundRunner {
     );
   }
 
-  /// 完整备份模块的收集入口（与一轮同步同一份类别过滤与缓存语义）。
-  Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(
-    Set<SyncCategory> categories, {
-    bool fresh = false,
-  }) => collect(categories, fresh: fresh);
-
-  Future<Map<SyncCategory, List<SyncRecord>>> collect(
-    Set<SyncCategory> categories, {
-    bool fresh = false,
-  }) async {
-    // 适配器在指纹未变时返回同一份缓存对象（身份复用）；只要每个适配器的
-    // 返回值身份都没变、类别集合也没变，聚合结果与上一轮完全相同——直接
-    // 复用，省掉每轮 O(全库) 的按类别 addAll 拷贝（列表被当作不可变使用，
-    // 与适配器缓存同一约定）。
-    final results = <SyncAdapter, Map<SyncCategory, List<SyncRecord>>>{};
-    var identicalToLastRound =
-        !fresh &&
-        _lastAggregate != null &&
-        _lastAdapterCollect.length == _readyAdapterCount;
-    for (final adapter in _adapters) {
-      if (!adapter.ready) continue;
-      // 类别受限适配器（封面）只在类别被请求时读数据；其它适配器保持原
-      // 调用，聚合阶段仍按 [categories] 过滤。
-      final collected = adapter is CategoryScopedSyncAdapter
-          ? await adapter.collectForCategories(categories, fresh: fresh)
-          : await adapter.collect(fresh: fresh);
-      results[adapter] = collected;
-      if (identicalToLastRound &&
-          !identical(_lastAdapterCollect[adapter], collected)) {
-        identicalToLastRound = false;
-      }
-    }
-    if (identicalToLastRound &&
-        _sameCategorySet(_lastAggregateCategories, categories)) {
-      return _lastAggregate!;
-    }
-    final result = <SyncCategory, List<SyncRecord>>{};
-    for (final collected in results.values) {
-      for (final entry in collected.entries) {
-        if (!categories.contains(entry.key)) continue;
-        if (entry.value.isEmpty) continue;
-        result.putIfAbsent(entry.key, () => []).addAll(entry.value);
-      }
-    }
-    _lastAdapterCollect
-      ..clear()
-      ..addAll(results);
-    _lastAggregate = result;
-    _lastAggregateCategories = {...categories};
-    return result;
-  }
-
-  int get _readyAdapterCount {
-    var count = 0;
-    for (final adapter in _adapters) {
-      if (adapter.ready) count++;
-    }
-    return count;
-  }
-
-  static bool _sameCategorySet(Set<SyncCategory>? a, Set<SyncCategory> b) {
-    if (a == null || a.length != b.length) return false;
-    for (final category in b) {
-      if (!a.contains(category)) return false;
-    }
-    return true;
-  }
-
   static int _recordCount(Map<SyncCategory, List<SyncRecord>> records) {
     var total = 0;
     for (final list in records.values) {
@@ -1462,9 +1311,6 @@ class SyncRoundRunner {
         producedAt: _nowMs(),
         records: records,
       );
-
-  Future<Map<SyncKnownKey, SyncVersion>> _ensureKnown() async =>
-      _knownVersions ??= await _known.knownVersions();
 }
 
 /// 一轮内可变的传输累计器（构造报告时转成不可变的 [SyncTransportReport]）。

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
-import 'package:molia/data/sync/sync_known_store.dart';
 import 'package:molia/data/sync/sync_round.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/data/sync/sync_transport_runtime.dart';
@@ -12,9 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/sync_test_support.dart';
 
-/// 轮次测试：整轮经 `runRound` 驱动（假传输 / 假适配器 / 假日志），另用
-/// `@visibleForTesting` 的阶段入口逐段覆盖「应用成功才推进游标」、缺口二次
-/// 拉取与入站轮；整轮用例守住入站失败恢复与发布 / 裁剪顺序。
+/// 轮次测试：整轮经 `runRound` 驱动（假传输 / 假适配器 / 假日志）。
+///
+/// 阶段入口已收回私有：测试只能从公开入口驱动，生产路径与测试路径相同。
+/// 原「逐段直调」的断言改为在整轮结束后观察同一结果（游标只在应用成功后
+/// 推进、缺口在同一轮内二次拉取、入站失败把快照放回队列、发布顺序），
+/// 不再存在绕过 collect-before-apply 不变量调用的旁路。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -44,10 +46,9 @@ void main() {
     orderedTransport = _OrderedTransport(journal.events);
     runner = SyncRoundRunner(
       state: state,
-      adapters: [adapter],
+      pipeline: testRecordPipeline(adapters: [adapter]),
       transports: {'lan': orderedTransport},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       journal: journal,
       runtime: SyncTransportRuntime(
         state: state,
@@ -85,19 +86,6 @@ void main() {
     onlyCategories: onlyCategories,
   );
 
-  SyncRoundRequest request({
-    SyncTrigger trigger = SyncTrigger.manual,
-    bool push = true,
-    bool antiEntropy = false,
-    Set<SyncCategory>? onlyCategories,
-  }) => SyncRoundRequest(
-    trigger: trigger,
-    push: push,
-    antiEntropy: antiEntropy,
-    onlyCategories: onlyCategories,
-    startedAt: 7000,
-  );
-
   test('全量快照：收集强制 fresh，避免游标增量进入 bootstrap', () async {
     await runner.serveSnapshot();
     expect(adapter.collectFresh, isNotEmpty, reason: '快照必须实际触发一次收集');
@@ -108,20 +96,29 @@ void main() {
     final scoped = _ScopedAdapter();
     final scopedRunner = SyncRoundRunner(
       state: state,
-      adapters: [scoped],
+      pipeline: testRecordPipeline(adapters: [scoped]),
       transports: const {},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(state: state, transports: const {}),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
     addTearDown(scopedRunner.dispose);
 
-    await scopedRunner.collect({SyncCategory.settings, SyncCategory.covers});
+    await scopedRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+      onlyCategories: {SyncCategory.settings, SyncCategory.covers},
+    );
     expect(scoped.lastCategories, {SyncCategory.settings, SyncCategory.covers});
 
     // 未请求封面时仍经过 scoped 方法（适配器据此立即返回空）。
-    await scopedRunner.collect({SyncCategory.settings});
+    await scopedRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+      onlyCategories: {SyncCategory.settings},
+    );
     expect(scoped.lastCategories, {SyncCategory.settings});
   });
 
@@ -173,60 +170,7 @@ void main() {
     );
   });
 
-  test('阶段直调：apply 成功才提交待处理游标', () async {
-    orderedTransport.available.add(remote());
-    final peerFailures = SyncRoundPeerFailures();
-    final round = request(push: false);
-
-    final collected = await runner.collectStage(round);
-    final pulled = await runner.pullStage(round, collected, peerFailures);
-    final consumed = await runner.consumeStage(
-      round,
-      collected,
-      pulled,
-      peerFailures,
-    );
-
-    expect(consumed.pendingCursors['devB'], 3, reason: 'consume 只产出待提交游标');
-    expect(
-      runner.peerOf('devB').cursorSeq,
-      SyncPullRequest.noCursor,
-      reason: 'apply 之前游标仍在待提交状态',
-    );
-
-    final applied = await runner.applyStage(round, collected, pulled, consumed);
-
-    expect(applied.applied, 1);
-    expect(applied.applyFailures, 0);
-    expect(runner.peerOf('devB').cursorSeq, 3, reason: '应用成功后游标才落进名册');
-  });
-
-  test('阶段直调：apply 失败时不提交待处理游标', () async {
-    adapter.failNext = true;
-    orderedTransport.available.add(remote());
-    final peerFailures = SyncRoundPeerFailures();
-    final round = request(push: false);
-
-    final collected = await runner.collectStage(round);
-    final pulled = await runner.pullStage(round, collected, peerFailures);
-    final consumed = await runner.consumeStage(
-      round,
-      collected,
-      pulled,
-      peerFailures,
-    );
-    final applied = await runner.applyStage(round, collected, pulled, consumed);
-
-    expect(applied.applied, 0);
-    expect(applied.applyFailures, 1);
-    expect(
-      runner.peerOf('devB').cursorSeq,
-      SyncPullRequest.noCursor,
-      reason: '未落地的载荷不能推进游标',
-    );
-  });
-
-  test('阶段直调：增量缺口在同一轮内二次拉取全量快照', () async {
+  test('增量缺口：同一轮内二次拉取全量快照，缺口窗口不应用', () async {
     final gapTransport = _GapTransport(
       first: SyncEnvelope(
         deviceId: 'devB',
@@ -267,10 +211,9 @@ void main() {
     final gapAdapter = _RecordingAdapter();
     final gapRunner = SyncRoundRunner(
       state: state,
-      adapters: [gapAdapter],
+      pipeline: testRecordPipeline(adapters: [gapAdapter]),
       transports: {'lan': gapTransport},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(
         state: state,
         transports: {'lan': gapTransport},
@@ -278,26 +221,19 @@ void main() {
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
     addTearDown(gapRunner.dispose);
-    final peerFailures = SyncRoundPeerFailures();
-    final round = request(push: false);
 
-    final collected = await gapRunner.collectStage(round);
-    final pulled = await gapRunner.pullStage(round, collected, peerFailures);
-    expect(gapTransport.pullCount, 1);
+    final report = await gapRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+    );
+
+    expect(gapTransport.pullCount, 2, reason: '游标落后窗口起点时同一轮内补一次全量');
     expect(
       gapTransport.requests.first.plan.forcesFull('devB'),
       isFalse,
       reason: '首个请求是普通增量拉取',
     );
-
-    final consumed = await gapRunner.consumeStage(
-      round,
-      collected,
-      pulled,
-      peerFailures,
-    );
-
-    expect(gapTransport.pullCount, 2, reason: '游标落后窗口起点时同一轮内补一次全量');
     expect(
       gapTransport.requests.last.plan.forcesFull('devB'),
       isTrue,
@@ -307,43 +243,86 @@ void main() {
       gapTransport.requests.last.plan.cursorFor('devB'),
       SyncPullRequest.noCursor,
     );
-    expect(
-      consumed.remoteRecords[SyncCategory.settings],
-      hasLength(1),
-      reason: '缺口窗口内的条目不应用，只应用随后取回的全量快照',
-    );
-    expect(
-      consumed.forcedDelivery,
-      contains((category: SyncCategory.settings, key: 'theme_mode')),
-      reason: '请求全量拿到的记录要强制交付（修复静默分歧）',
-    );
-    expect(consumed.pendingCursors['devB'], 3);
+    expect(report.remoteRecords, 1, reason: '缺口窗口内的条目不应用');
+    expect(report.applied, 1, reason: '只应用随后取回的全量快照');
+    expect(gapAdapter.appliedKeys, ['theme_mode']);
   });
 
-  test('阶段直调：入站轮不拉取，只消费队列里的快照', () async {
-    runner.enqueueInbound(remote());
-    final peerFailures = SyncRoundPeerFailures();
-    final round = request(trigger: SyncTrigger.incoming, push: false);
+  test('请求全量拿到的同版本记录：强制交付让权威视图胜出', () async {
+    // 本地与远端同版本但内容不同（本地被直接改写）：没有 forced delivery
+    // 时本地先出现会赢下平局，登记一致又会被过滤，永远不会修回去。
+    final localVersion = const SyncVersion(physical: 1000, deviceId: 'devB');
+    final gapTransport = _GapTransport(
+      first: SyncEnvelope(
+        deviceId: 'devB',
+        producedAt: 6000,
+        journalHead: 3,
+        baseSeq: 0,
+        windowStart: 2,
+        windowEnd: 3,
+        journal: [
+          SyncJournalEntry(
+            seq: 2,
+            category: SyncCategory.settings,
+            record: SyncRecord(
+              key: 'ahead',
+              version: const SyncVersion(physical: 9000),
+            ),
+          ),
+        ],
+      ),
+      second: SyncEnvelope(
+        deviceId: 'devB',
+        producedAt: 6100,
+        journalHead: 2,
+        records: {
+          SyncCategory.settings: [
+            SyncRecord(
+              key: 'theme_mode',
+              version: localVersion,
+              data: const {'v': 'dark'},
+            ),
+          ],
+        },
+      ),
+    );
+    final forcedAdapter = _RecordingAdapter(version: localVersion);
+    final gapRunner = SyncRoundRunner(
+      state: state,
+      pipeline: testRecordPipeline(adapters: [forcedAdapter]),
+      transports: {'lan': gapTransport},
+      stamps: state.stampIssuer,
+      runtime: SyncTransportRuntime(
+        state: state,
+        transports: {'lan': gapTransport},
+      ),
+      clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
+    );
+    addTearDown(gapRunner.dispose);
 
-    final collected = await runner.collectStage(round);
-    final pulled = await runner.pullStage(round, collected, peerFailures);
+    final report = await gapRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+    );
+
+    expect(report.applied, 1);
+    expect(forcedAdapter.appliedKeys, ['theme_mode']);
+    expect(
+      forcedAdapter.appliedRecords.single.data!['v'],
+      'dark',
+      reason: '同版本平局时权威全量视图的远端内容必须落地',
+    );
+  });
+
+  test('入站轮不拉取，只消费队列里的快照', () async {
+    runner.enqueueInbound(remote());
+
+    await run(trigger: SyncTrigger.incoming, push: false);
 
     expect(orderedTransport.pullCount, 0, reason: '入站轮不联系任何对端');
-    expect(pulled.fullFor, isEmpty);
-    expect(pulled.entries, hasLength(1));
-    expect(pulled.inboundSnapshot, hasLength(1));
-    expect(runner.inbound, isEmpty, reason: 'pull 阶段已取走入站队列');
-
-    final consumed = await runner.consumeStage(
-      round,
-      collected,
-      pulled,
-      peerFailures,
-    );
-    final applied = await runner.applyStage(round, collected, pulled, consumed);
-
-    expect(applied.applied, 1);
-    expect(applied.applyFailures, 0);
+    expect(adapter.appliedKeys, ['theme_mode']);
+    expect(runner.inbound, isEmpty, reason: '本轮已消费');
   });
 
   test('入站轮应用失败：快照放回队列，游标不推进', () async {
@@ -360,16 +339,6 @@ void main() {
       reason: '未落地的入站载荷不能推进游标',
     );
     expect(runner.inbound, hasLength(1), reason: '对端推来的快照不能丢');
-  });
-
-  test('入站轮：不主动拉取，只消费队列里的快照', () async {
-    runner.enqueueInbound(remote());
-
-    await run(trigger: SyncTrigger.incoming, push: false);
-
-    expect(orderedTransport.pullCount, 0, reason: '入站轮不联系任何对端');
-    expect(adapter.appliedKeys, ['theme_mode']);
-    expect(runner.inbound, isEmpty, reason: '本轮已消费');
   });
 
   test('publish：先 compact + 记录快照覆盖，再推送快照与增量', () async {
@@ -414,22 +383,33 @@ void main() {
     final caching = _CachingAdapter();
     final cachingRunner = SyncRoundRunner(
       state: state,
-      adapters: [caching],
+      pipeline: testRecordPipeline(adapters: [caching]),
       transports: const {},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(state: state, transports: const {}),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
     addTearDown(cachingRunner.dispose);
 
-    await cachingRunner.collect({SyncCategory.settings});
-    await cachingRunner.collect({SyncCategory.settings});
+    await cachingRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+    );
+    await cachingRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+    );
     expect(caching.collectCalls, 1, reason: '指纹未变复用适配器缓存');
 
     expect(cachingRunner.releaseIdleCaches(), isTrue);
     expect(caching.cached, isNull, reason: '适配器缓存一并释放');
-    await cachingRunner.collect({SyncCategory.settings});
+    await cachingRunner.runRound(
+      trigger: SyncTrigger.manual,
+      push: false,
+      antiEntropy: false,
+    );
     expect(caching.collectCalls, 2, reason: '释放后重新导出');
   });
 
@@ -446,10 +426,9 @@ void main() {
     });
     probeRunner = SyncRoundRunner(
       state: state,
-      adapters: [probe],
+      pipeline: testRecordPipeline(adapters: [probe]),
       transports: const {},
       stamps: state.stampIssuer,
-      known: InMemorySyncKnownStore(),
       runtime: SyncTransportRuntime(state: state, transports: const {}),
       clock: () => DateTime.fromMillisecondsSinceEpoch(7000),
     );
@@ -700,8 +679,14 @@ class _ReleaseProbeAdapter extends _RecordingAdapter {
 }
 
 class _RecordingAdapter implements SyncAdapter {
+  _RecordingAdapter({
+    this.version = const SyncVersion(physical: 1000, deviceId: 'devA'),
+  });
+
+  final SyncVersion version;
   bool failNext = false;
   final List<String> appliedKeys = [];
+  final List<SyncRecord> appliedRecords = [];
   final List<bool> collectFresh = [];
 
   @override
@@ -715,12 +700,12 @@ class _RecordingAdapter implements SyncAdapter {
     bool fresh = false,
   }) async {
     collectFresh.add(fresh);
-    return const {
+    return {
       SyncCategory.settings: [
         SyncRecord(
           key: 'theme_mode',
-          version: SyncVersion(physical: 1000, deviceId: 'devA'),
-          data: {'v': 'light'},
+          version: version,
+          data: const {'v': 'light'},
         ),
       ],
     };
@@ -738,6 +723,7 @@ class _RecordingAdapter implements SyncAdapter {
     for (final record
         in records[SyncCategory.settings] ?? const <SyncRecord>[]) {
       appliedKeys.add(record.key);
+      appliedRecords.add(record);
       applied++;
     }
     return SyncApplyOutcome(applied: applied);

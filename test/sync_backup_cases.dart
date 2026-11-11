@@ -5,6 +5,7 @@ import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
+import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_backup.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -22,7 +23,7 @@ void main() {
   late MemorySyncSecretStore secrets;
   late SyncStateStore state;
   late SettingsRegistry registry;
-  late PrefsSyncAdapter adapter;
+  late _FreshRecordingAdapter adapter;
   late SyncBackup backup;
   var now = 7000;
   var exportReleaseCalls = 0;
@@ -47,23 +48,18 @@ void main() {
       preferences: prefs,
       secrets: secrets,
     );
-    adapter = PrefsSyncAdapter(state: state, settings: registry);
+    adapter = _FreshRecordingAdapter(
+      PrefsSyncAdapter(state: state, settings: registry),
+      collectFresh,
+    );
     // 备份只依赖「按类别收集」这一个读动作：测试不构造引擎、传输或轮次，
     // 收集语义仍与生产一致（同一适配器 + 同一类别过滤）。
     backup = SyncBackup(
       state: state,
-      adapters: [adapter],
+      pipeline: testRecordPipeline(adapters: [adapter]),
       stamps: state.stampIssuer,
       onExported: () => exportReleaseCalls++,
       clock: () => DateTime.fromMillisecondsSinceEpoch(now),
-      collect: (categories, {bool fresh = false}) async {
-        collectFresh.add(fresh);
-        final collected = await adapter.collect(fresh: fresh);
-        return {
-          for (final entry in collected.entries)
-            if (categories.contains(entry.key)) entry.key: entry.value,
-        };
-      },
     );
   });
 
@@ -260,4 +256,28 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+}
+
+/// 记录备份收集是否请求 fresh（备份必须绕过增量视图），其余转发给真实适配器。
+class _FreshRecordingAdapter implements SyncAdapter {
+  _FreshRecordingAdapter(this._inner, this._freshCalls);
+
+  final SyncAdapter _inner;
+  final List<bool> _freshCalls;
+
+  @override
+  Set<SyncCategory> get categories => _inner.categories;
+
+  @override
+  bool get ready => _inner.ready;
+
+  @override
+  Future<Map<SyncCategory, List<SyncRecord>>> collect({bool fresh = false}) {
+    _freshCalls.add(fresh);
+    return _inner.collect(fresh: fresh);
+  }
+
+  @override
+  Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records) =>
+      _inner.apply(records);
 }

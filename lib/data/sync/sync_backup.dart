@@ -3,33 +3,25 @@ import 'dart:convert';
 import 'package:logging/logging.dart';
 
 import '../../domain/models/device_sync.dart';
+import '../../domain/ports/sync_known_store.dart';
 import 'sync_adapter.dart';
 import 'sync_book.dart';
+import 'sync_record_pipeline.dart';
 import 'sync_stamp.dart';
 
-/// 收集函数：按类别返回适配器聚合后的本地视图。
-///
-/// 由引擎注入（`SyncEngine.collectRecords`）：备份必须与一轮同步使用**同一**
-/// 类别过滤与适配器缓存语义，否则「导出 / 导入」和线上同步对同一份数据给出
-/// 不同视图。只暴露这一个读动作，备份不接触引擎的轮次状态。
-typedef SyncRecordCollector =
-    Future<Map<SyncCategory, List<SyncRecord>>> Function(
-      Set<SyncCategory> categories, {
-      bool fresh,
-    });
-
-/// 完整备份（导出 / 导入）：与同步共用 envelope、适配器与版本戳，但不需要
+/// 完整备份（导出 / 导入）：与同步共用 envelope、记录管道与版本戳，但不需要
 /// 启用同步或轮次。
 ///
 /// 为什么独立于引擎：备份是「本地文件 ↔ 本地数据」的转换，和「跑一轮、拉
 /// 传输、写报告」没有共享的可变状态。拆开后导出 / 导入测试不必构造传输与
-/// 轮次；引擎的 interface 也不再为备份留两个方法。
+/// 轮次；引擎的 interface 也不再为备份留两个方法。记录层的收集 / 合并 /
+/// 登记仍走 [SyncRecordPipeline]（与一轮同步同一实例），两条应用路径不会
+/// 各自维护一套合并规则。
 class SyncBackup {
   SyncBackup({
     required this._state,
-    required this._adapters,
+    required this._pipeline,
     required this._stamps,
-    required this._collect,
     this.onExported,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
@@ -41,9 +33,8 @@ class SyncBackup {
   static const int backupVersion = 1;
 
   final SyncBackupState _state;
-  final List<SyncAdapter> _adapters;
+  final SyncRecordPipeline _pipeline;
   final SyncStampIssuer _stamps;
-  final SyncRecordCollector _collect;
   final DateTime Function() _clock;
 
   /// 导出完成后的释放钩子（组合根接统计导出缓存）。
@@ -65,7 +56,7 @@ class SyncBackup {
     final categories = _backupCategories(includeCredentials);
     // 备份是完整快照：必须绕过适配器的增量视图（会话的游标记录不含队列
     // tracks），否则导出文件无法在新设备上恢复完整会话。
-    final records = await _collect(categories, fresh: true);
+    final records = await _pipeline.collect(categories, fresh: true);
     final envelope = _envelopeFrom(records);
     final json = const JsonEncoder.withIndent('  ').convert({
       'kind': backupKind,
@@ -109,32 +100,52 @@ class SyncBackup {
     }
 
     final categories = _backupCategories(includeCredentials);
-    await _collect(categories);
-
-    var applied = 0;
-    var skipped = 0;
-    for (final adapter in _adapters) {
-      if (!adapter.ready) continue;
-      final subset = <SyncCategory, List<SyncRecord>>{};
-      for (final category in adapter.categories) {
-        if (!categories.contains(category)) continue;
-        final list = envelope.records[category];
-        if (list == null || list.isEmpty) continue;
-        subset[category] = list;
-      }
-      if (subset.isEmpty) continue;
-      try {
-        final outcome = await adapter.apply(subset);
-        applied += outcome.applied;
-        skipped += outcome.skipped;
-      } catch (e) {
-        // 单个适配器失败不阻断其余类别（与一轮同步的边界一致）；结果计数
-        // 只反映真正落地的项。
-        _logger.warning('导入 ${adapter.runtimeType} 失败', e);
-      }
-    }
+    // 与一轮同步同一不变量：先收集本地现状播种登记，再合并应用；否则本地
+    // 较新的改动会被旧备份按「先出现者胜」覆盖。
+    final local = await _pipeline.collect(categories);
+    final filtered = _filterCategories(envelope, categories);
+    // 备份不是「权威对端」：把载荷里的全部键作为强制交付，让合并跳过登记
+    // 过滤、逐键交给适配器按 LWW 判定（与导入前的行为一致，陈旧记录由
+    // 适配器 / 库内版本比较跳过）。
+    final forcedKeys = <SyncKnownKey>{
+      for (final entry in filtered.records.entries)
+        for (final record in entry.value)
+          (category: entry.key, key: record.key),
+    };
+    final result = await _pipeline.apply(
+      filtered,
+      forcedKeys: forcedKeys,
+      local: local,
+      categories: categories,
+    );
     await _state.commit();
-    return SyncApplyOutcome(applied: applied, skipped: skipped);
+    return SyncApplyOutcome(applied: result.applied, skipped: result.skipped);
+  }
+
+  /// 只保留本次备份允许的类别（凭证排除是备份层的策略，管道不认识）。
+  static SyncEnvelope _filterCategories(
+    SyncEnvelope envelope,
+    Set<SyncCategory> categories,
+  ) {
+    final records = <SyncCategory, List<SyncRecord>>{
+      for (final entry in envelope.records.entries)
+        if (categories.contains(entry.key)) entry.key: entry.value,
+    };
+    return SyncEnvelope(
+      deviceId: envelope.deviceId,
+      deviceName: envelope.deviceName,
+      producedAt: envelope.producedAt,
+      snapshotId: envelope.snapshotId,
+      version: envelope.version,
+      records: records,
+      journalHead: envelope.journalHead,
+      baseSeq: envelope.baseSeq,
+      windowStart: envelope.windowStart,
+      windowEnd: envelope.windowEnd,
+      journal: envelope.journal,
+      acks: envelope.acks,
+      categories: envelope.categories,
+    );
   }
 
   Set<SyncCategory> _backupCategories(bool includeCredentials) => {

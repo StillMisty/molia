@@ -46,9 +46,8 @@ void main() {
     );
     final backup = SyncBackup(
       state: state,
-      adapters: const [],
+      pipeline: engine.recordPipeline,
       stamps: state.stampIssuer,
-      collect: engine.collectRecords,
     );
     final scheduler = SyncScheduler(
       host: engine,
@@ -98,9 +97,8 @@ void main() {
     );
     final backup = SyncBackup(
       state: state,
-      adapters: const [],
+      pipeline: engine.recordPipeline,
       stamps: state.stampIssuer,
-      collect: engine.collectRecords,
     );
     var checked = 0;
     var requested = 0;
@@ -245,9 +243,8 @@ void main() {
     );
     final backup = SyncBackup(
       state: state,
-      adapters: const [],
+      pipeline: engine.recordPipeline,
       stamps: state.stampIssuer,
-      collect: engine.collectRecords,
     );
     var checked = 0;
     final permission = LocalNetworkPermission(
@@ -306,9 +303,8 @@ _buildProviderWithScheduler({
   final control = SyncControlPlane(state: state, transports: {kind: transport});
   final backup = SyncBackup(
     state: state,
-    adapters: const [],
+    pipeline: engine.recordPipeline,
     stamps: state.stampIssuer,
-    collect: engine.collectRecords,
   );
   final scheduler = SyncScheduler(
     host: engine,

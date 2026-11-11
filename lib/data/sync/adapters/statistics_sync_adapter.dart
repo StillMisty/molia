@@ -4,21 +4,17 @@ import '../sync_adapter.dart';
 
 /// 听歌统计适配器：类型化事件 ↔ `SyncRecord` 的薄映射。
 ///
-/// 导出缓存 / 指纹、本地下载曲目过滤与按 `syncKey` 合并都在
-/// [StatisticsSyncStore] 里；适配器不再认识 `play_events` 的列，也不再直接
-/// 依赖统计仓库。
+/// 导出 / 合并语义与导出变更计数都在 [StatisticsSyncStore] 里；指纹缓存 /
+/// fresh 绕过由 `ChangeDetectingAdapter` 装饰器统一拥有；适配器不再认识
+/// `play_events` 的列，也不再直接依赖统计仓库。
 ///
 /// append-only 语义：记录键 = `syncKey`（跨设备去重的唯一键），版本 =
 /// 发号器给的三元组（收尾时取号）；`endedAt`（何时结束）是内容时间、
 /// **不参与胜负判定**。删除不参与同步。
-class StatisticsSyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
+class StatisticsSyncAdapter implements SyncRecordSource {
   StatisticsSyncAdapter({required this._store});
 
   final StatisticsSyncStore _store;
-
-  /// 上轮记录缓存：键 = 导出变更的廉价指纹。
-  String? _cacheKey;
-  Map<SyncCategory, List<SyncRecord>>? _cached;
 
   @override
   Set<SyncCategory> get categories => const {SyncCategory.statistics};
@@ -27,19 +23,7 @@ class StatisticsSyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
   bool get ready => true;
 
   @override
-  Future<Map<SyncCategory, List<SyncRecord>>> collect({
-    bool fresh = false,
-  }) async {
-    final key = await _store.syncFingerprint();
-    final cached = _cached;
-    if (!fresh && cached != null && _cacheKey == key) return cached;
-    final records = await _readRecords();
-    _cacheKey = key;
-    _cached = records;
-    return records;
-  }
-
-  Future<Map<SyncCategory, List<SyncRecord>>> _readRecords() async {
+  Future<Map<SyncCategory, List<SyncRecord>>> exportRecords() async {
     final events = await _store.syncExportEvents();
     return {
       SyncCategory.statistics: [
@@ -51,13 +35,6 @@ class StatisticsSyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
           ),
       ],
     };
-  }
-
-  /// 释放上轮记录缓存：下一次 collect 按指纹重新导出（幂等）。
-  @override
-  void releaseCaches() {
-    _cacheKey = null;
-    _cached = null;
   }
 
   @override
@@ -85,11 +62,6 @@ class StatisticsSyncAdapter implements SyncAdapter, SyncAdapterCacheReleaser {
       events.add(event);
     }
     final result = await _store.syncApplyEvents(events);
-    // 落地了远端事件：远端版本可能小于本机最大值，缓存显式失效。
-    if (result.applied > 0) {
-      _cacheKey = null;
-      _cached = null;
-    }
     return SyncApplyOutcome(
       applied: result.applied,
       skipped: result.skipped + skipped,

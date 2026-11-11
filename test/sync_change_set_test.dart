@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
@@ -217,7 +218,12 @@ void main() {
     );
     addTearDown(repository.dispose);
     final recorder = RecordingAdapter(
-      HistorySyncAdapter(repository: repository),
+      ChangeDetectingAdapter(
+        source: HistorySyncAdapter(repository: repository),
+        fingerprint: () async => syncFingerprintKey(
+          await repository.syncFingerprints(const {SyncCategory.history}),
+        ),
+      ),
     );
     final sync = SyncEngine(
       state: state,
@@ -338,6 +344,59 @@ void main() {
     });
   });
 
+  test('记录管道：apply 必须先 collect；同版本平局只在强制交付时改判', () async {
+    final localVersion = const SyncVersion(physical: 1000, deviceId: 'devA');
+    final localRecord = SyncRecord(
+      key: 'theme_mode',
+      version: localVersion,
+      data: const {'v': 'light'},
+    );
+    final pipeAdapter = RecordingSyncAdapter(
+      localRecords: {
+        SyncCategory.settings: [localRecord],
+      },
+    );
+    final pipeline = testRecordPipeline(adapters: [pipeAdapter]);
+    final remote = remoteEnvelope([
+      SyncRecord(
+        key: 'theme_mode',
+        version: localVersion,
+        data: const {'v': 'dark'},
+      ),
+    ]);
+
+    await expectLater(pipeline.apply(remote), throwsStateError);
+
+    final collected = await pipeline.collect({SyncCategory.settings});
+    expect(collected[SyncCategory.settings], [localRecord]);
+
+    final normal = await pipeline.apply(remote);
+    expect(normal.applied, 0, reason: '同版本本地先出现且登记一致：不交付');
+    expect(pipeAdapter.lastKeys, isEmpty);
+
+    final forced = await pipeline.apply(
+      remote,
+      forcedKeys: {(category: SyncCategory.settings, key: 'theme_mode')},
+    );
+    expect(forced.applied, 1, reason: '请求全量的权威视图要修回被直改的本地值');
+    expect(pipeAdapter.lastKeys, ['theme_mode']);
+  });
+
+  test('记录管道：交付成功才登记，同一远端记录不重复应用', () async {
+    final pipeline = testRecordPipeline(adapters: [adapter]);
+    await pipeline.collect({SyncCategory.settings});
+    final remote = remoteEnvelope([setting('key-1', 1000)]);
+
+    final first = await pipeline.apply(remote);
+    expect(first.applied, 1);
+    expect(adapter.lastKeys, ['key-1']);
+
+    adapter.reset();
+    final again = await pipeline.apply(remote);
+    expect(again.applied, 0);
+    expect(adapter.applyCalls, 0, reason: '登记一致后不再进入适配器');
+  });
+
   test('登记 reset：清空后同一版本重新交付（派生状态可重建）', () async {
     final db = openMemoryDatabase();
     addTearDown(db.close);
@@ -398,6 +457,11 @@ void main() {
 
 /// 记录 apply 交付内容的假适配器（按记录数返回 applied）。
 class RecordingSyncAdapter implements SyncAdapter {
+  RecordingSyncAdapter({this.localRecords = const {}});
+
+  /// 本地视图：默认空（多数用例只关心远端交付）；记录管道用例可注入。
+  final Map<SyncCategory, List<SyncRecord>> localRecords;
+
   int applyCalls = 0;
   int lastRecordCount = 0;
   List<String> lastKeys = [];
@@ -418,7 +482,7 @@ class RecordingSyncAdapter implements SyncAdapter {
   @override
   Future<Map<SyncCategory, List<SyncRecord>>> collect({
     bool fresh = false,
-  }) async => const {};
+  }) async => localRecords;
 
   @override
   Future<SyncApplyOutcome> apply(

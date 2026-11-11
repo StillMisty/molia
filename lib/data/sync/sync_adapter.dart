@@ -1,11 +1,29 @@
 import '../../domain/models/device_sync.dart';
 
+/// 纯记录源：只负责把本地存储导出为同步记录、把远端记录写回本地。
+///
+/// 行表类适配器（歌单 / 历史 / 统计）只实现这一层；指纹缓存、fresh 绕过与
+/// 「落地后缓存失效」由 `ChangeDetectingAdapter` 装饰器统一拥有。版本戳与
+/// 增量日志仍留在各自的数据写入事务里（ADR-0003 要求与数据写入同事务），
+/// 不在这一层重复实现。
+abstract interface class SyncRecordSource {
+  Set<SyncCategory> get categories;
+
+  /// 本轮是否可工作（如音源仓库尚未初始化时跳过，避免误判删除）。
+  bool get ready;
+
+  /// 读取并导出本机视图（每次调用都读存储；缓存由装饰器负责）。
+  Future<Map<SyncCategory, List<SyncRecord>>> exportRecords();
+
+  Future<SyncApplyOutcome> apply(Map<SyncCategory, List<SyncRecord>> records);
+}
+
 /// 数据类别适配器：把本地存储导出为同步记录，或把合并结果写回本地。
 ///
 /// 约定：
 /// - [collect] 允许做「变化检测」副作用（登记设置键哈希、补脚本墓碑），
-///   同一轮内先 collect 后 apply；行表类适配器按端口提供的廉价指纹缓存
-///   上轮记录（指纹未变不读行），并在自己落地了远端记录时让缓存失效；
+///   同一轮内先 collect 后 apply；行表类适配器的廉价指纹缓存与 fresh 绕过
+///   由 `ChangeDetectingAdapter` 装饰器统一拥有，适配器不再各写一份；
 /// - [apply] 只处理自己认识的键，遇到未知记录计入 skipped，不抛异常；
 /// - 写入必须幂等：重复应用同一份合并结果不得产生新的本地变更；
 /// - 引擎只把启用类别的记录交给适配器；普通适配器在关闭期间仍可持续登记

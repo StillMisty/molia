@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_secret_store.dart';
 import 'package:molia/data/sync/statistics_sync_store.dart';
+import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_journal.dart';
+import 'package:molia/data/sync/sync_known_store.dart';
+import 'package:molia/data/sync/sync_record_pipeline.dart';
 import 'package:molia/data/sync/sync_stamp.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/sync_nearby_pairing.dart';
 import 'package:molia/domain/ports/library_sync_store.dart';
+import 'package:molia/domain/ports/sync_known_store.dart' show SyncKnownStore;
 import 'package:molia/domain/ports/sync_pairing.dart';
 import 'package:molia/domain/ports/sync_transport.dart';
 
@@ -30,6 +34,17 @@ SqliteStatisticsSyncStore testStatisticsSyncStore(
   databaseProvider: databaseProvider,
   stamps: testStampIssuer(clock: clock, deviceId: deviceId),
   journal: journal,
+);
+
+/// 测试用记录管道：轮次与完整备份共用同一份收集 / 合并 / 登记实现。
+SyncRecordPipeline testRecordPipeline({
+  required List<SyncAdapter> adapters,
+  SyncKnownStore? known,
+  String deviceId = 'devA',
+}) => SyncRecordPipeline(
+  adapters: adapters,
+  known: known ?? InMemorySyncKnownStore(),
+  deviceId: () => deviceId,
 );
 
 /// 测试用内存密钥存储（替代 flutter_secure_storage）。

@@ -311,19 +311,12 @@ void main() {
           secrets: secrets,
         ),
       );
-      // 备份模块独立于引擎：导出 / 导入不需要传输或轮次；收集动作由测试
-      // 注入（与生产同一适配器 + 类别过滤）。
+      // 备份模块独立于引擎：导出 / 导入不需要传输或轮次；记录管道与生产
+      // 使用同一份收集 / 合并 / 登记实现。
       final backupReader = SyncBackup(
         state: state,
-        adapters: [adapter],
+        pipeline: testRecordPipeline(adapters: [adapter]),
         stamps: state.stampIssuer,
-        collect: (categories, {bool fresh = false}) async {
-          final collected = await adapter.collect(fresh: fresh);
-          return {
-            for (final entry in collected.entries)
-              if (categories.contains(entry.key)) entry.key: entry.value,
-          };
-        },
       );
 
       const backupVersion = SyncVersion(

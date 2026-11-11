@@ -11,6 +11,7 @@ import 'sync_book.dart';
 import 'sync_codec_port.dart';
 import 'sync_journal.dart';
 import 'sync_known_store.dart';
+import 'sync_record_pipeline.dart';
 import 'sync_round.dart';
 import 'sync_scheduler.dart';
 import 'sync_stamp.dart';
@@ -55,12 +56,18 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     final resolvedClock = clock ?? DateTime.now;
     final resolvedRuntime =
         runtime ?? SyncTransportRuntime(state: state, transports: transports);
+    // 记录管道由引擎持有：备份经 [SyncEngine.recordPipeline] 拿到同一实例，
+    // 两条应用路径共用同一份合并 / 登记实现。
+    final pipeline = SyncRecordPipeline(
+      adapters: adapters,
+      known: known ?? InMemorySyncKnownStore(),
+      deviceId: () => state.deviceId,
+    );
     final runner = SyncRoundRunner(
       state: state,
-      adapters: adapters,
+      pipeline: pipeline,
       transports: transports,
       stamps: stamps,
-      known: known ?? InMemorySyncKnownStore(),
       journal: journal,
       fingerprintPort: fingerprintPort,
       runtime: resolvedRuntime,
@@ -490,12 +497,8 @@ class SyncEngine extends ChangeNotifier implements SyncSchedulerHost {
     return existing;
   }
 
-  /// 完整备份模块的收集入口：按类别返回适配器聚合视图（与一轮同步同一份
-  /// 类别过滤与缓存语义）。备份不接触轮次状态，只需要这一个读动作。
-  Future<Map<SyncCategory, List<SyncRecord>>> collectRecords(
-    Set<SyncCategory> categories, {
-    bool fresh = false,
-  }) => _runner.collectRecords(categories, fresh: fresh);
+  /// 记录管道的共享实例：完整备份直接注入它，应用阶段与轮次同一份规则。
+  SyncRecordPipeline get recordPipeline => _runner.pipeline;
 
   /// 首次连通通知流（UI 消费：应用壳弹一次底栏提示）。
   Stream<SyncPeerState> get peerConnectedNotices => _peerConnected.stream;
