@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
+import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_engine.dart';
 import 'package:molia/data/sync/sync_state_store.dart';
 import 'package:molia/domain/models/device_sync.dart';
@@ -90,14 +92,14 @@ void main() {
     transportB = FakeSyncTransport();
     engineA = SyncEngine(
       state: stateA,
-      adapters: [PlaylistSyncAdapter(repository: repoA)],
+      adapters: [_playlistAdapter(repoA)],
       transports: {'lan': transportA},
       clock: () => DateTime.fromMillisecondsSinceEpoch(stateA.nowMs()),
       stamps: stateA.stampIssuer,
     );
     engineB = SyncEngine(
       state: stateB,
-      adapters: [PlaylistSyncAdapter(repository: repoB)],
+      adapters: [_playlistAdapter(repoB)],
       transports: {'lan': transportB},
       clock: () => DateTime.fromMillisecondsSinceEpoch(stateB.nowMs()),
       stamps: stateB.stampIssuer,
@@ -214,3 +216,15 @@ void main() {
     );
   });
 }
+
+/// 行表适配器只做导出 / 应用；缓存由同一装饰器拥有（与生产接线一致）。
+ChangeDetectingAdapter _playlistAdapter(LibraryRepository repository) =>
+    ChangeDetectingAdapter(
+      source: PlaylistSyncAdapter(repository: repository),
+      fingerprint: () async => syncFingerprintKey(
+        await repository.syncFingerprints(const {
+          SyncCategory.playlists,
+          SyncCategory.playlistTracks,
+        }),
+      ),
+    );

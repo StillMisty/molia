@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/playlist_sync_adapter.dart';
+import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
 
@@ -67,7 +69,7 @@ void main() {
     await repoA.addTrackToPlaylist(playlistId, track('t1'));
     await repoA.addTrackToPlaylist(playlistId, track('t2'));
 
-    final collected = await adapterA.collect();
+    final collected = await adapterA.exportRecords();
     final result = await adapterB.apply(collected);
     expect(result.applied, 5); // 2 列表（收藏 + 歌单）+ 3 曲目（收藏 1 + 歌单 2）
 
@@ -80,7 +82,7 @@ void main() {
     expect(tracksB.map((t) => t.songId), ['t1', 't2']);
 
     // 再应用一次：全部跳过（幂等）。
-    final again = await adapterB.apply(await adapterA.collect());
+    final again = await adapterB.apply(await adapterA.exportRecords());
     expect(again.applied, 0);
   });
 
@@ -90,14 +92,15 @@ void main() {
       songId: 'fav-1',
       title: 'Favorite',
     );
-    final first = await adapterA.collect();
-    final cached = await adapterA.collect();
+    final adapter = _detectingAdapter(repoA);
+    final first = await adapter.collect();
+    final cached = await adapter.collect();
     expect(identical(cached, first), isTrue, reason: '指纹未变复用缓存');
 
-    adapterA
+    adapter
       ..releaseCaches()
       ..releaseCaches();
-    final rebuilt = await adapterA.collect();
+    final rebuilt = await adapter.collect();
     expect(identical(rebuilt, first), isFalse, reason: '释放后重新读取');
     expect(
       rebuilt[SyncCategory.playlists]!.map((record) => record.key),
@@ -116,14 +119,14 @@ void main() {
   test('B 修改后 A 应用：远端更新者胜出（LWW）', () async {
     final playlistId = await repoA.createPlaylist('歌单');
     await repoA.addTrackToPlaylist(playlistId, track('t1'));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     clock = 2000;
     await repoB.renamePlaylist(
       (await repoB.findPlaylistByName('歌单'))!.id,
       '改名歌单',
     );
-    final result = await adapterA.apply(await adapterB.collect());
+    final result = await adapterA.apply(await adapterB.exportRecords());
     expect(result.applied, 1);
     expect((await repoA.findPlaylistByName('改名歌单')), isNotNull);
 
@@ -159,20 +162,20 @@ void main() {
     final playlistId = await repoA.createPlaylist('歌单');
     await repoA.addTrackToPlaylist(playlistId, track('t1'));
     await repoA.addTrackToPlaylist(playlistId, track('t2'));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     // B 删除一条曲目 → A 应用后曲目消失。
     clock = 2000;
     final playlistB = await repoB.findPlaylistByName('歌单');
     await repoB.removeTrackFromPlaylist(playlistB!.id, 'wy', 't1');
-    await adapterA.apply(await adapterB.collect());
+    await adapterA.apply(await adapterB.exportRecords());
     final tracksA = await repoA.listPlaylistTracks(playlistId);
     expect(tracksA.map((t) => t.songId), ['t2']);
 
     // A 删除整个列表 → B 应用后列表消失。
     clock = 3000;
     await repoA.deletePlaylist(playlistId);
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
     expect(await repoB.findPlaylistByName('歌单'), isNull);
     expect(await repoB.listPlaylists(), isEmpty);
   });
@@ -180,12 +183,12 @@ void main() {
   test('远端新列表落地后可在本地继续编辑', () async {
     final playlistId = await repoA.createPlaylist('来源列表');
     await repoA.addTrackToPlaylist(playlistId, track('remote-1'));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     clock = 4000;
     final remoteInB = await repoB.findPlaylistByName('来源列表');
     await repoB.addTrackToPlaylist(remoteInB!.id, track('local-added'));
-    await adapterA.apply(await adapterB.collect());
+    await adapterA.apply(await adapterB.exportRecords());
 
     final tracksA = await repoA.listPlaylistTracks(playlistId);
     expect(
@@ -207,7 +210,7 @@ void main() {
     final after = (await repoA.syncExportPlaylistTracks()).single.version;
     expect(after.isNewerThan(before), isTrue, reason: '换源是本地修改：版本必须前进（否则永不传播）');
 
-    final result = await adapterB.apply(await adapterA.collect());
+    final result = await adapterB.apply(await adapterA.exportRecords());
     expect(result.applied, greaterThanOrEqualTo(1));
     final inB = await repoB.findPlaylistByName('歌单');
     final tracksB = await repoB.listPlaylistTracks(inB!.id);
@@ -222,7 +225,7 @@ void main() {
     await repoA.addTrackToPlaylist(playlistId, track('wy:8', source: 'local'));
     await repoA.removeTrackFromPlaylist(playlistId, 'local', 'wy:8');
 
-    final collected = await adapterA.collect();
+    final collected = await adapterA.exportRecords();
     final trackRecords = collected[SyncCategory.playlistTracks]!;
     expect(
       trackRecords
@@ -253,7 +256,15 @@ void main() {
 
   test('collect 门控：指纹未变复用上轮记录，不读行', () async {
     final counting = CountingLibrarySyncStore(repoA);
-    final adapter = PlaylistSyncAdapter(repository: counting);
+    final adapter = ChangeDetectingAdapter(
+      source: PlaylistSyncAdapter(repository: counting),
+      fingerprint: () async => syncFingerprintKey(
+        await counting.syncFingerprints(const {
+          SyncCategory.playlists,
+          SyncCategory.playlistTracks,
+        }),
+      ),
+    );
     await repoA.toggleFavorite(sourceKey: 'wy', songId: 'fav-1', title: 'F');
 
     final first = await adapter.collect();
@@ -278,3 +289,15 @@ void main() {
     );
   });
 }
+
+/// 生产接线：行表适配器只导出 / 应用，缓存与 fresh 在装饰器里。
+ChangeDetectingAdapter _detectingAdapter(LibraryRepository repository) =>
+    ChangeDetectingAdapter(
+      source: PlaylistSyncAdapter(repository: repository),
+      fingerprint: () async => syncFingerprintKey(
+        await repository.syncFingerprints(const {
+          SyncCategory.playlists,
+          SyncCategory.playlistTracks,
+        }),
+      ),
+    );

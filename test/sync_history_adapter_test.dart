@@ -2,7 +2,9 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/molia_database.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
+import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/models/library.dart';
 
@@ -69,26 +71,27 @@ void main() {
     nowA = 1100;
     await repoA.addHistoryEntry(entry('s2', playedAt: 2000));
 
-    final result = await adapterB.apply(await adapterA.collect());
+    final result = await adapterB.apply(await adapterA.exportRecords());
     expect(result.applied, 2);
     final listB = await repoB.listHistory();
     expect(listB.map((e) => e.songId), ['s2', 's1']);
 
-    final again = await adapterB.apply(await adapterA.collect());
+    final again = await adapterB.apply(await adapterA.exportRecords());
     expect(again.applied, 0);
     expect(again.skipped, 2);
   });
 
   test('releaseCaches：清空记录缓存，下一次 collect 重新导出', () async {
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
-    final first = await adapterA.collect();
-    final cached = await adapterA.collect();
+    final adapter = _detectingAdapter(repoA);
+    final first = await adapter.collect();
+    final cached = await adapter.collect();
     expect(identical(cached, first), isTrue, reason: '指纹未变复用缓存');
 
-    adapterA
+    adapter
       ..releaseCaches()
       ..releaseCaches();
-    final rebuilt = await adapterA.collect();
+    final rebuilt = await adapter.collect();
     expect(identical(rebuilt, first), isFalse, reason: '释放后重新读取');
     expect(
       rebuilt[SyncCategory.history]!.map((record) => record.key),
@@ -98,11 +101,11 @@ void main() {
 
   test('版本取新：B 的同曲目更新记录回流 A', () async {
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000, title: '旧标题'));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     nowB = 5000;
     await repoB.addHistoryEntry(entry('s1', playedAt: 5000, title: '新标题'));
-    final result = await adapterA.apply(await adapterB.collect());
+    final result = await adapterA.apply(await adapterB.exportRecords());
     expect(result.applied, 1);
     final listA = await repoA.listHistory();
     expect(listA.single.title, '新标题');
@@ -112,18 +115,18 @@ void main() {
   test('删除经墓碑传播；晚于删除的播放复活条目', () async {
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
     await repoA.addHistoryEntry(entry('s2', playedAt: 2000));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     // B 删除 s1（真实删除时间 2000）→ A 删除。
     nowB = 2000;
     await repoB.deleteHistoryEntry('wy', 's1');
-    await adapterA.apply(await adapterB.collect());
+    await adapterA.apply(await adapterB.exportRecords());
     expect((await repoA.listHistory()).map((e) => e.songId), ['s2']);
 
     // A 重新播放 s1（真实时间 20000，晚于删除）→ 墓碑被清除并回流 B。
     nowA = 20000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 20000));
-    final result = await adapterB.apply(await adapterA.collect());
+    final result = await adapterB.apply(await adapterA.exportRecords());
     expect(result.applied, greaterThanOrEqualTo(1));
     expect((await repoB.listHistory()).map((e) => e.songId), contains('s1'));
   });
@@ -132,7 +135,7 @@ void main() {
     // A 的时钟快 1 年：A 的版本戳（100000）远大于 B 的删除版本（5000）。
     nowA = 100000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     // B 在真实时间 5000 删除（版本戳更小），但删除时刻晚于 A 的最后播放。
     nowB = 5000;
@@ -140,7 +143,7 @@ void main() {
 
     // A 应用墓碑：playedAt(1000) <= deletedAt(5000) → 删除生效
     // （若拿版本戳比较，B 的 5000 < A 的 100000，会错误地保留条目）。
-    final result = await adapterA.apply(await adapterB.collect());
+    final result = await adapterA.apply(await adapterB.exportRecords());
     expect(result.applied, 1);
     expect(await repoA.listHistory(), isEmpty);
   });
@@ -148,17 +151,17 @@ void main() {
   test('时钟偏移（播放）：晚于删除的播放按真实时间复活', () async {
     nowA = 100000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     nowB = 5000;
     await repoB.deleteHistoryEntry('wy', 's1');
-    await adapterA.apply(await adapterB.collect());
+    await adapterA.apply(await adapterB.exportRecords());
     expect(await repoA.listHistory(), isEmpty);
 
     // A 在真实时间 20000（playedAt）重新播放：晚于 B 的删除时间 5000 → 复活。
     nowA = 200000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 20000));
-    final result = await adapterB.apply(await adapterA.collect());
+    final result = await adapterB.apply(await adapterA.exportRecords());
     expect(result.applied, greaterThanOrEqualTo(1));
     expect((await repoB.listHistory()).map((e) => e.songId), contains('s1'));
   });
@@ -168,12 +171,12 @@ void main() {
     // A 随后的播放（真实时间）仍被压制——删除 vs 播放只看内容时间。
     nowB = 100000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
     await repoB.deleteHistoryEntry('wy', 's1');
 
     nowA = 10000;
     await repoA.addHistoryEntry(entry('s1', playedAt: 10000));
-    final result = await adapterA.apply(await adapterB.collect());
+    final result = await adapterA.apply(await adapterB.exportRecords());
     // 删除生效（playedAt 10000 <= deletedAt 100000），播放被压制。
     expect(result.applied, 1);
     expect(await repoA.listHistory(), isEmpty);
@@ -181,11 +184,11 @@ void main() {
 
   test('清空历史传播删除', () async {
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
-    await adapterB.apply(await adapterA.collect());
+    await adapterB.apply(await adapterA.exportRecords());
 
     nowA = 2000;
     await repoA.clearHistory();
-    final result = await adapterB.apply(await adapterA.collect());
+    final result = await adapterB.apply(await adapterA.exportRecords());
     expect(result.applied, 1);
     expect(await repoB.listHistory(), isEmpty);
   });
@@ -210,7 +213,7 @@ void main() {
     final after = (await repoA.syncExportHistory()).single.version;
     expect(after.isNewerThan(before), isTrue, reason: '换源是本地修改：版本必须前进（否则永不传播）');
 
-    final result = await adapterB.apply(await adapterA.collect());
+    final result = await adapterB.apply(await adapterA.exportRecords());
     expect(result.applied, 1);
     final listB = await repoB.listHistory();
     expect(listB.single.sourceKey, 'kw');
@@ -237,7 +240,7 @@ void main() {
     );
     await repoA.deleteHistoryEntry('local', 'wy:8'); // 无对应行 → 不产生墓碑
 
-    final collected = await adapterA.collect();
+    final collected = await adapterA.exportRecords();
     expect(collected[SyncCategory.history]!.map((record) => record.key), [
       SyncRecordKeys.history('wy', 's1'),
     ]);
@@ -397,7 +400,12 @@ void main() {
 
   test('collect 门控：指纹未变复用上轮记录，不读行', () async {
     final counting = CountingLibrarySyncStore(repoA);
-    final adapter = HistorySyncAdapter(repository: counting);
+    final adapter = ChangeDetectingAdapter(
+      source: HistorySyncAdapter(repository: counting),
+      fingerprint: () async => syncFingerprintKey(
+        await counting.syncFingerprints({SyncCategory.history}),
+      ),
+    );
     await repoA.addHistoryEntry(entry('s1', playedAt: 1000));
 
     final first = await adapter.collect();
@@ -417,3 +425,12 @@ void main() {
     expect(third[SyncCategory.history], hasLength(2));
   });
 }
+
+/// 生产接线：行表适配器只导出 / 应用，缓存与 fresh 在装饰器里。
+ChangeDetectingAdapter _detectingAdapter(LibraryRepository repository) =>
+    ChangeDetectingAdapter(
+      source: HistorySyncAdapter(repository: repository),
+      fingerprint: () async => syncFingerprintKey(
+        await repository.syncFingerprints({SyncCategory.history}),
+      ),
+    );

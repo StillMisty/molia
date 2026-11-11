@@ -1,17 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/statistics_sync_adapter.dart';
 import 'package:molia/domain/models/device_sync.dart';
 import 'package:molia/domain/ports/statistics_sync_store.dart';
 
 /// 听歌统计适配器测试：只验证「类型化记录 ↔ SyncRecord」的薄映射与
-/// 指纹缓存；导出 / 合并语义由 test/statistics_sync_store_test.dart 覆盖。
+/// 装饰器的指纹缓存；导出 / 合并语义由 test/statistics_sync_store_test.dart
+/// 覆盖。
 void main() {
   late _FakeStatisticsSyncStore store;
   late StatisticsSyncAdapter adapter;
+  late ChangeDetectingAdapter detecting;
 
   setUp(() {
     store = _FakeStatisticsSyncStore();
     adapter = StatisticsSyncAdapter(store: store);
+    detecting = ChangeDetectingAdapter(
+      source: adapter,
+      fingerprint: store.syncFingerprint,
+    );
   });
 
   test('collect：类型化事件 → 同步记录（键 / 版本 / 线上载荷）', () async {
@@ -20,7 +27,7 @@ void main() {
       _event(syncKey: 'k2', songId: 's2'),
     ];
 
-    final collected = await adapter.collect();
+    final collected = await adapter.exportRecords();
     final records = collected[SyncCategory.statistics]!;
     expect(records, hasLength(2));
     expect(records.first.key, 'k1');
@@ -40,36 +47,36 @@ void main() {
 
   test('collect：指纹未变复用缓存，fresh 强制重读', () async {
     store.events = [_event(syncKey: 'k1')];
-    await adapter.collect();
+    await detecting.collect();
     expect(store.exportCalls, 1);
 
-    await adapter.collect();
+    await detecting.collect();
     expect(store.exportCalls, 1, reason: '指纹未变不读行');
 
-    await adapter.collect(fresh: true);
+    await detecting.collect(fresh: true);
     expect(store.exportCalls, 2);
 
     store.fingerprint = 'r1';
-    await adapter.collect();
+    await detecting.collect();
     expect(store.exportCalls, 3, reason: '指纹变化重新导出');
   });
 
   test('releaseCaches：清空记录缓存，下一次 collect 重新导出', () async {
     store.events = [_event(syncKey: 'k1')];
-    await adapter.collect();
-    await adapter.collect();
+    await detecting.collect();
+    await detecting.collect();
     expect(store.exportCalls, 1, reason: '指纹未变复用缓存');
 
-    adapter
+    detecting
       ..releaseCaches()
       ..releaseCaches();
-    await adapter.collect();
+    await detecting.collect();
     expect(store.exportCalls, 2, reason: '释放后重新导出');
   });
 
   test('collect → apply 往返：类型化事件字段不丢失', () async {
     store.events = [_event(syncKey: 'k1', songId: 's1', raw: '{"a":1}')];
-    final collected = await adapter.collect();
+    final collected = await adapter.exportRecords();
 
     final target = _FakeStatisticsSyncStore();
     final targetAdapter = StatisticsSyncAdapter(store: target);
@@ -136,11 +143,11 @@ void main() {
 
   test('apply：落地后让 collect 缓存失效', () async {
     store.events = [_event(syncKey: 'k1')];
-    await adapter.collect();
+    await detecting.collect();
     expect(store.exportCalls, 1);
 
     store.applyResult = (applied: 1, skipped: 0);
-    await adapter.apply({
+    await detecting.apply({
       SyncCategory.statistics: [
         SyncRecord(
           key: 'remote-1',
@@ -154,7 +161,7 @@ void main() {
         ),
       ],
     });
-    await adapter.collect();
+    await detecting.collect();
     expect(store.exportCalls, 2, reason: '远端落地后下一轮必须重新导出');
   });
 

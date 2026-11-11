@@ -6,9 +6,11 @@ import 'package:molia/data/molia_database.dart';
 import 'package:molia/data/settings/settings_key.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/peer_journal_protocol.dart';
+import 'package:molia/data/sync/sync_adapter.dart';
 import 'package:molia/data/sync/sync_codec_port.dart';
 import 'package:molia/data/sync/sync_control_plane.dart';
 import 'package:molia/data/sync/sync_crypto.dart';
@@ -184,7 +186,7 @@ class SyncDevice {
   late final SettingsRegistry settings;
   late final PrefsSyncAdapter settingsAdapter;
   late final LibraryRepository library;
-  late final HistorySyncAdapter historyAdapter;
+  late final ChangeDetectingAdapter historyAdapter;
   late final SyncTransport transport;
   late final SyncEngine engine;
   late final SyncControlPlane control;
@@ -227,7 +229,12 @@ class SyncDevice {
       stamps: state.stampIssuer,
       journal: journal,
     );
-    historyAdapter = HistorySyncAdapter(repository: library);
+    historyAdapter = ChangeDetectingAdapter(
+      source: HistorySyncAdapter(repository: library),
+      fingerprint: () async => syncFingerprintKey(
+        await library.syncFingerprints({SyncCategory.history}),
+      ),
+    );
     final webdavBaseUrl = network.webdavBaseUrl;
     transport = webdavBaseUrl == null
         ? NetworkTransport(

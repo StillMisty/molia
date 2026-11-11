@@ -16,6 +16,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/molia_database.dart';
+import '../../data/sync/adapters/change_detecting_adapter.dart';
 import '../../data/sync/adapters/cover_sync_adapter.dart';
 import '../../data/sync/adapters/history_sync_adapter.dart';
 import '../../data/sync/adapters/playlist_sync_adapter.dart';
@@ -84,8 +85,17 @@ Future<SyncStack> buildSyncStack({
     for (final key in catalog.settings.keys)
       if (key.category == SyncCategory.sources) key.name,
   };
-  final playlistSyncAdapter = PlaylistSyncAdapter(
+  // 行表适配器只导出 / 应用记录；指纹缓存与 fresh 绕过由同一装饰器拥有。
+  final playlistRecords = PlaylistSyncAdapter(
     repository: library.libraryRepository,
+  );
+  final playlistSyncAdapter = ChangeDetectingAdapter(
+    source: playlistRecords,
+    fingerprint: () async => syncFingerprintKey(
+      await library.libraryRepository.syncFingerprints(
+        playlistRecords.categories,
+      ),
+    ),
   );
   final scriptSyncAdapter = ScriptSyncAdapter(
     repository: sourceManager.repository,
@@ -102,11 +112,23 @@ Future<SyncStack> buildSyncStack({
     // 应用远端设置后：注册表按键触发模块自绑的重载钩子。
     onApplied: catalog.settings.reloadKeys,
   );
-  final statisticsSyncAdapter = StatisticsSyncAdapter(
+  final statisticsRecords = StatisticsSyncAdapter(
     store: library.statisticsSyncStore,
   );
-  final historySyncAdapter = HistorySyncAdapter(
+  final statisticsSyncAdapter = ChangeDetectingAdapter(
+    source: statisticsRecords,
+    fingerprint: library.statisticsSyncStore.syncFingerprint,
+  );
+  final historyRecords = HistorySyncAdapter(
     repository: library.libraryRepository,
+  );
+  final historySyncAdapter = ChangeDetectingAdapter(
+    source: historyRecords,
+    fingerprint: () async => syncFingerprintKey(
+      await library.libraryRepository.syncFingerprints(
+        historyRecords.categories,
+      ),
+    ),
   );
   final sessionSyncAdapter = SessionSyncAdapter(
     // 远端会话写入必须经过播放会话模块：与本地保存 / 清除共用同一个 store

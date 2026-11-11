@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:molia/data/library_repository.dart';
 import 'package:molia/data/settings/settings_keys.dart';
 import 'package:molia/data/settings/settings_registry.dart';
+import 'package:molia/data/sync/adapters/change_detecting_adapter.dart';
 import 'package:molia/data/sync/adapters/history_sync_adapter.dart';
 import 'package:molia/data/sync/adapters/prefs_sync_adapter.dart';
 import 'package:molia/data/sync/sync_adapter.dart';
@@ -217,7 +218,12 @@ void main() {
     );
     addTearDown(repository.dispose);
     final recorder = RecordingAdapter(
-      HistorySyncAdapter(repository: repository),
+      ChangeDetectingAdapter(
+        source: HistorySyncAdapter(repository: repository),
+        fingerprint: () async => syncFingerprintKey(
+          await repository.syncFingerprints(const {SyncCategory.history}),
+        ),
+      ),
     );
     final sync = SyncEngine(
       state: state,
