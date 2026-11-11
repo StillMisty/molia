@@ -352,4 +352,58 @@ void main() {
     await tester.pump(kTrayLateTrimDelay);
     expect(releases, 3, reason: '快速往返不留下补跑的 trim');
   });
+
+  testWidgets('托盘暂停补 trim：延迟一次；播放恢复 / 可见取消', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    var releases = 0;
+    final manager = AppMemoryManager(
+      presence: presence,
+      imageCache: cache,
+      releaseToOs: () => releases++,
+    );
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    presence.markTrayHidden();
+    await tester.pump();
+    await tester.pump();
+    expect(releases, 1, reason: '隐藏帧后第一次 trim');
+    await tester.pump(kTrayLateTrimDelay);
+    expect(releases, 2, reason: '隐藏后第二次 trim');
+
+    manager.scheduleTrayPausedTrim();
+    await tester.pump(kTrayPausedTrimDelay - const Duration(seconds: 1));
+    expect(releases, 2, reason: '暂停后先等稳定，不立即制造缺页');
+    await tester.pump(const Duration(seconds: 1));
+    expect(releases, 3, reason: '暂停稳定后补一次 trim');
+
+    // 重复调度只保留一个；恢复可见会取消。
+    manager.scheduleTrayPausedTrim();
+    manager.scheduleTrayPausedTrim();
+    presence.markVisible();
+    await tester.pump(kTrayPausedTrimDelay);
+    expect(releases, 3, reason: '恢复后不留下补跑');
+  });
+
+  testWidgets('非托盘状态不安排暂停补 trim', (tester) async {
+    final presence = AppPresence();
+    final cache = _FakeImageCache();
+    var releases = 0;
+    final manager = AppMemoryManager(
+      presence: presence,
+      imageCache: cache,
+      releaseToOs: () => releases++,
+    );
+    addTearDown(manager.dispose);
+    manager.attach();
+
+    manager.scheduleTrayPausedTrim();
+    presence.markMinimized();
+    manager.scheduleTrayPausedTrim();
+    await tester.pump(kTrayPausedTrimDelay);
+
+    expect(releases, 0);
+    presence.markVisible();
+  });
 }

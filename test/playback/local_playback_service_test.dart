@@ -224,6 +224,33 @@ void main() {
     return (service: service, player: player);
   }
 
+  test('换队列 / 显式停止时回收播放器，清空 just_audio source 注册表', () async {
+    final players = <_FakeAudioPlayer>[];
+    final service = LocalPlaybackService(
+      resolver: (track, {String? quality}) async =>
+          PlayableStream(Uri.parse('file:///tmp/molia-test.mp3')),
+      playerFactory: () {
+        final player = _FakeAudioPlayer();
+        players.add(player);
+        return player;
+      },
+    );
+    addTearDown(service.dispose);
+
+    await service.playTracks([_track(index: 0)], 0);
+    await pumpEventQueue();
+    expect(players, hasLength(1));
+
+    await service.playTracks([_track(index: 1)], 0);
+    await pumpEventQueue();
+    expect(players, hasLength(2), reason: '旧队列的 source 注册表应随播放器回收');
+    expect(service.isPlaying, isTrue);
+
+    // 显式 stop(clear) 再换一次；暂停语义的 stop(clear:false) 不换。
+    await service.stop();
+    expect(players, hasLength(3));
+  });
+
   test('顺序播放队尾自然播完后，底层播放器被显式暂停', () async {
     final (:service, :player) = await start(mode: PlayMode.sequential);
 

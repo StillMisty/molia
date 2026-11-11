@@ -273,7 +273,7 @@ pending / keepAlive，当前展示的封面不受影响。
 
 | 位置 | 行为 |
 | --- | --- |
-| `lib/managers/app_memory_manager.dart` | 托盘隐藏完成后再延迟 `kTrayLateTrimDelay = 2s` 调一次平台 trim：第一次发生在原生窗口 hide 之前，窗口 / 引擎收尾 touch 的页需要再归还一次；恢复或再次隐藏用 token 取消。`releaseToOs` 可注入，便于测试计数 |
+| `lib/managers/app_memory_manager.dart` | 托盘隐藏完成后再延迟 `kTrayLateTrimDelay = 2s` 调一次平台 trim：第一次发生在原生窗口 hide 之前，窗口 / 引擎收尾 touch 的页需要再归还一次；恢复或再次隐藏用 token 取消。`releaseToOs` 可注入，便于测试计数。托盘内暂停稳定 10s 后再补一次 trim（`scheduleTrayPausedTrim`），播放恢复 / 窗口可见时取消 |
 | `lib/main.dart` + `lib/data/sync/**` | 托盘 / 低内存 releaser 增加：统计导出缓存、同步轮次 `_lastEnvelope` / 收集 / 聚合缓存、统计 / 播放列表 / 历史 / 封面适配器的上轮记录缓存、内置平台响应 / 原生取词 / 取图缓存、封面补取缓存。完整备份导出后也立即释放这些缓存；在途轮次不释放，下一次 collect 按需重建 |
 | `lib/sources/builtin/**`、`lib/services/covers/cover_backfill_service.dart` | 新增幂等 `clearCache()`：只清已完成结果，不动平台 / 脚本注册表；在途请求的 identity 校验阻止旧结果写回 |
 | `lib/widgets/ai_dj_carousel.dart` | AI 推荐卡封面按 `256 × DPR` 解码，不再按原图；布局仍由 carousel 槽位决定 |
@@ -284,11 +284,12 @@ pending / keepAlive，当前展示的封面不受影响。
 | `lib/services/window/window_bounds_store.dart`、`playback_volume_store.dart`、`nav_provider.dart` | 窗口几何 / 音量 + 静音 / 导航布局各合并成单键 JSON：一次动作的整份 prefs 重写从 4 / 2 / 3 次降为 1 次；旧键保留只读兜底 |
 | `lib/data/molia_database.dart` | `journal_size_limit = 4MB`、`wal_autocheckpoint = 1000`，限制 WAL 高水位 |
 | `lib/data/sync/adapters/session_sync_adapter.dart`、`sync_backup.dart`、`sync_round.dart` | 会话 journal 增量化：队列未变时只写 `sessionCursor` 小记录（约 0.3KB），队列变化 / 首次 / 进程重启后首轮才写整份 tracks；`collect(fresh: true)`（全量快照、备份、anti-entropy）强制整份且不重复追加 journal；同批多条 session 记录按最大版本应用；本地下载曲目存在时把游标下标映射回原始队列 |
+| `lib/playback/local_playback_service.dart` | 队列整体替换 / 显式停止时重建 just_audio `AudioPlayer`：`_audioSources` 与代理 handler 原先只在 dispose 清空，长期复用同一 player 会随播放曲目累积；回收只发生在天然断点，暂停 / 单曲切歌不动播放器。单队列内仍受队列长度限制（just_audio 无单源释放 API） |
 
 ### 9.2 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：**2592 passed / 11 skipped**（新增：延迟 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射）；
+- `flutter test --no-pub`：**2595 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收）；
 - Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
   - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
   - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
@@ -302,3 +303,4 @@ pending / keepAlive，当前展示的封面不受影响。
 - **最小化不省内存**：产品语义保持不变；只静音 ticker（动画不跑），页面 / 图片 / 浏览缓存仍保留。
 - **同步 journal 的 session 整队列 payload** 已做 cursor 增量；全量快照 / 备份仍会写一次整份 tracks（预期行为）。真正的大队列 A/B 仍需在真实库上测 journal 字节与同步轮次耗时。
 - `molia.memory` 仍只有 RSS + imageCache；Windows 专用工作集 / 提交大小日志未加。
+- `just_audio` 的 source 注册表只在换队列 / 显式停止时回收；单个超长队列连续播放仍会按曲目数增长，彻底解决需要 just_audio 提供单源释放 API 或改播放器模型。

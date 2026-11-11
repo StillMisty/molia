@@ -90,6 +90,12 @@ const int kTrayImageCacheLimitBytes = 16 * 1024 * 1024;
 /// 隐藏后补一次只处理「可换出的空闲页」，不重复清业务缓存。
 const Duration kTrayLateTrimDelay = Duration(seconds: 2);
 
+/// 托盘里播放暂停后再补一次 trim 的延迟。
+///
+/// 播放中暂停会让解码 / 音频线程把需要的页重新触回工作集；暂停稳定后
+/// 再归还空闲页，避免暂停/恢复瞬间反复缺页。播放继续时取消。
+const Duration kTrayPausedTrimDelay = Duration(seconds: 10);
+
 /// 移动端退后台多久后清理：给短暂切走 / 快速切回留出跟手恢复的窗口。
 const Duration kMobileBackgroundTrimDelay = Duration(seconds: 30);
 
@@ -209,6 +215,9 @@ class AppMemoryManager {
   /// 再归还一次。恢复 / 再次隐藏时取消。
   Timer? _trayLateTrimTimer;
 
+  /// 托盘内暂停稳定后的补充 trim；播放继续时取消。
+  Timer? _trayPausedTrimTimer;
+
   /// 移动端后台清理计时与代数：`onAppBackground` 起 30s 计时，
   /// `onAppForeground` 取消并让在途回调作废。
   Timer? _mobileTrimTimer;
@@ -263,6 +272,28 @@ class AppMemoryManager {
   /// 取消注册低内存回调。
   void removeLowMemoryReleaser(void Function() releaser) =>
       _lowMemoryReleasers.remove(releaser);
+
+  /// 托盘内暂停稳定后补一次 trim（由组合根在播放态翻转时调用）。
+  ///
+  /// 只在托盘隐藏时生效；播放中暂停会让音频 / 解码线程把页重新触回工作集，
+  /// 等 [kTrayPausedTrimDelay] 再归还空闲页。播放继续 / 恢复窗口 / 再次
+  /// 隐藏都会取消，避免在声音输出期间制造缺页。
+  void scheduleTrayPausedTrim() {
+    if (!_presence.isTrayHidden) return;
+    _trayPausedTrimTimer?.cancel();
+    _trayPausedTrimTimer = Timer(kTrayPausedTrimDelay, () {
+      _trayPausedTrimTimer = null;
+      if (!_presence.isTrayHidden) return;
+      _releaseToOs();
+      _log('托盘暂停延迟 trim');
+    });
+  }
+
+  /// 取消待执行的暂停补 trim（播放恢复 / 窗口可见 / 再次隐藏）。
+  void cancelTrayPausedTrim() {
+    _trayPausedTrimTimer?.cancel();
+    _trayPausedTrimTimer = null;
+  }
 
   /// 移动端退后台（组合根在 `mobilePowerPolicy` 为 true 时调用）。
   ///
@@ -347,6 +378,8 @@ class AppMemoryManager {
   void dispose() {
     _trayLateTrimTimer?.cancel();
     _trayLateTrimTimer = null;
+    _trayPausedTrimTimer?.cancel();
+    _trayPausedTrimTimer = null;
     _mobileTrimToken++;
     _mobileTrimTimer?.cancel();
     _mobileTrimTimer = null;
@@ -378,6 +411,8 @@ class AppMemoryManager {
     _trimToken++;
     _trayLateTrimTimer?.cancel();
     _trayLateTrimTimer = null;
+    _trayPausedTrimTimer?.cancel();
+    _trayPausedTrimTimer = null;
     if (_cache.maximumSizeBytes != _fullLimitBytes) {
       _cache.maximumSizeBytes = _fullLimitBytes;
     }
@@ -386,6 +421,8 @@ class AppMemoryManager {
 
   Future<void> _trimForTray() async {
     final token = ++_trimToken;
+    _trayPausedTrimTimer?.cancel();
+    _trayPausedTrimTimer = null;
     _log('托盘隐藏（等休眠帧）');
     // 休眠树在下一次 build 换上：等这一帧结束，页面里的 live 图片引用先释放，
     // 再清缓存才能真正把像素交还。

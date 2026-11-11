@@ -81,7 +81,20 @@ typedef SourceStreamResolver = Future<PlayableStream> Function(
 /// 无需感知播放后端差异。
 class LocalPlaybackService extends ChangeNotifier {
   final SourceStreamResolver _resolver;
-  final AudioPlayer _player;
+
+  /// just_audio 播放器。队列替换 / 显式停止时可换新实例，回收旧实例里
+  /// 按 source 累积的注册表（`_audioSources` / 代理 handler 只在 dispose
+  /// 时清空，见 just_audio 0.10.x）。
+  AudioPlayer _player;
+
+  /// 生产环境创建新播放器的入口；测试注入固定 [player] 时为 null，不回收。
+  final AudioPlayer Function()? _playerFactory;
+
+  /// 当前播放器已创建过多少个 audio source（近似 just_audio 注册表大小）。
+  int _sourceRegistrations = 0;
+
+  /// 播放器回收进行中的 Future：双击换队列 / 换队列同时 stop 时只回收一次。
+  Future<void>? _playerRecycleFuture;
 
   /// 播放器是否已在退出收尾里释放。
   ///
@@ -248,6 +261,9 @@ class LocalPlaybackService extends ChangeNotifier {
   /// 「当前曲目播完即停止」的一次性标志（定时关闭用）。
   bool _stopAfterCurrentTrack = false;
 
+  static AudioPlayer _newAudioPlayer() =>
+      AudioPlayer(handleInterruptions: false);
+
   LocalPlaybackService({
     required this._resolver,
     CacheService? cacheService,
@@ -262,7 +278,12 @@ class LocalPlaybackService extends ChangeNotifier {
     PlaybackPowerPolicy? powerPolicy,
     // 单测注入假播放器（生产不传，内部创建 just_audio 播放器）。
     @visibleForTesting AudioPlayer? player,
-  }) : _player = player ?? AudioPlayer(handleInterruptions: false),
+    // 单测注入「换队列时创建新播放器」的工厂；生产缺省为真实播放器。
+    AudioPlayer Function()? playerFactory,
+  }) : _player = player ?? (playerFactory ?? _newAudioPlayer)(),
+       _playerFactory = player == null
+           ? (playerFactory ?? _newAudioPlayer)
+           : null,
        _cacheService = cacheService ?? CacheService.instance,
        _cacheWriter = audioCacheWriter,
        _interruptionsOverride = audioInterruptions,
@@ -657,6 +678,61 @@ class LocalPlaybackService extends ChangeNotifier {
     }
   }
 
+  /// 换队列 / 显式停止时回收 just_audio 播放器。
+  ///
+  /// just_audio 0.10.x 把每个 `setAudioSource` 创建的 source 保存在
+  /// `AudioPlayer._audioSources`，代理 server 的 handler 也只在 dispose
+  /// 时清空；我们长期复用同一个 player，所以播放过的曲目会随队列累积。
+  /// 在「队列整体替换 / 停止播放」这种天然断点重建 player，把旧注册表
+  /// 一次交还；正在播放的曲目会被新队列重新加载，暂停态不会被重建。
+  ///
+  /// 单测注入固定 player 时 [_playerFactory] 为 null，不执行（保持测试
+  /// 对同一 fake 的断言）。
+  Future<void> _recyclePlayerForQueueChange() {
+    final existing = _playerRecycleFuture;
+    if (existing != null) return existing;
+    late final Future<void> future;
+    future = _recyclePlayerNow().whenComplete(() {
+      if (identical(_playerRecycleFuture, future)) {
+        _playerRecycleFuture = null;
+      }
+    });
+    _playerRecycleFuture = future;
+    return future;
+  }
+
+  Future<void> _recyclePlayerNow() async {
+    final factory = _playerFactory;
+    if (factory == null || _playerDisposed || _sourceRegistrations == 0) {
+      return;
+    }
+    final old = _player;
+    final volume = old.volume;
+    _playerStateSubscription?.cancel();
+    _playerStateSubscription = null;
+    _errorSubscription?.cancel();
+    _errorSubscription = null;
+    _cancelPositionSubscription();
+    _stopPositionSampleTimer();
+    try {
+      await old.pause();
+    } catch (_) {}
+    try {
+      await old.dispose();
+    } catch (_) {}
+    // 回收期间应用退出：不要给已 dispose 的 service 再挂一个新播放器。
+    if (_playerDisposed) return;
+    _player = factory();
+    _playerStateSubscription = _player.playerStateStream.listen(_onPlayerState);
+    _errorSubscription = _player.errorStream.listen(_onPlayerError);
+    try {
+      await _player.setVolume(volume);
+    } catch (_) {}
+    _lastProcessingState = ProcessingState.idle;
+    _sourceRegistrations = 0;
+    _syncPositionSampling();
+  }
+
   /// 装载新队列并从 [index] 起播。
   ///
   /// [shuffleIndices] 是恢复态展示过的本轮洗牌排列（[PlaybackRequest] 透传）：
@@ -670,6 +746,9 @@ class LocalPlaybackService extends ChangeNotifier {
     List<int>? shuffleIndices,
   }) async {
     if (tracks.isEmpty) return;
+    // 旧队列的 source 不再需要：先回收播放器，避免 just_audio 的 source
+    // 注册表随「换专辑 / 换歌单」线性累积。必须在装载新源前完成。
+    await _recyclePlayerForQueueChange();
     _queue
       ..clear()
       ..addAll(tracks);
@@ -1028,6 +1107,7 @@ class LocalPlaybackService extends ChangeNotifier {
             );
             if (source != null) {
               try {
+                _sourceRegistrations++;
                 await _player
                     .setAudioSource(source)
                     .timeout(const Duration(seconds: 30));
@@ -1049,6 +1129,7 @@ class LocalPlaybackService extends ChangeNotifier {
       }
     }
 
+    _sourceRegistrations++;
     await _player
         .setAudioSource(
           AudioSource.uri(uri, headers: headers.isEmpty ? null : headers),
@@ -1231,6 +1312,9 @@ class LocalPlaybackService extends ChangeNotifier {
       _contextName = null;
       _order.clear();
       _shuffleOrder.clear();
+      // 显式停止：下一次播放会重新装载，旧播放器里的 source 注册表可以
+      // 整体回收；不清队列的 stop（暂停语义）不换播放器。
+      await _recyclePlayerForQueueChange();
     }
     notifyListeners();
   }

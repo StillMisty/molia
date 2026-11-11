@@ -375,6 +375,31 @@ void main() async {
     if (!AppPresence.instance.isVisible) flushDeferredWrites();
   });
 
+  // 托盘内暂停后补一次 trim：播放中暂停会让音频 / 解码线程把页重新触回
+  // 工作集，暂停稳定后再归还；播放恢复 / 窗口可见时取消。
+  var lastPlaying = playback.playbackProvider.isPlaying;
+  void syncTrayPauseTrim() {
+    final playing = playback.playbackProvider.isPlaying;
+    if (playing == lastPlaying) return;
+    lastPlaying = playing;
+    if (playing) {
+      AppMemoryManager.instance.cancelTrayPausedTrim();
+    } else if (AppPresence.instance.isTrayHidden) {
+      AppMemoryManager.instance.scheduleTrayPausedTrim();
+    }
+  }
+
+  playback.playbackProvider.addListener(syncTrayPauseTrim);
+  AppPresence.instance.addListener(() {
+    if (AppPresence.instance.isTrayHidden) {
+      if (!playback.playbackProvider.isPlaying) {
+        AppMemoryManager.instance.scheduleTrayPausedTrim();
+      }
+    } else {
+      AppMemoryManager.instance.cancelTrayPausedTrim();
+    }
+  });
+
   AppLifecycleListener(
     onResume: () {
       if (mobilePowerPolicy) {
