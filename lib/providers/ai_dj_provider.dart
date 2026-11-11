@@ -250,8 +250,8 @@ class AiDjProvider extends ChangeNotifier {
     _enabled = enabled;
     _consentGranted = consentGranted;
     if (!enabled) {
-      _status = AiDjStatus.off;
-      _trackedUri = null;
+      _radio.markOff();
+      _radio.clearTracked();
       _cancelAutoFeed();
     }
     notifyListeners();
