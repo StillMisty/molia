@@ -418,6 +418,9 @@ void main() async {
   });
 
   AppLifecycleListener(
+    // macOS Cmd+Q / Linux 应用级 quit 与托盘「退出」走同一条落盘路径：
+    // 空闲时先取消系统终止、启动 quitApp；进入销毁阶段后放行原生终止。
+    onExitRequested: () async => desktop.handleExitRequest(),
     onResume: () {
       if (mobilePowerPolicy) {
         powerPolicy.markForeground();

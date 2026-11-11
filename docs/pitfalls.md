@@ -1039,5 +1039,14 @@
     `WindowCloseRequestedEvent` 共用 `WindowChrome` 的关闭策略；真正退出时
     runner 的 `destroy_pending_` 放行默认窗口过程。关闭策略本身还要求托盘图标
     已创建（`AppTray.isActive`）且有宿主，否则退回退出；异步等休眠帧期间用户
-    可能从托盘恢复，隐藏前要重新确认 `AppPresence.isTrayHidden`，`hide()` 也
-    只消费该状态，不能自己把窗口藏回去。
+    可能从托盘恢复，隐藏前要重新确认 `AppPresence.isTrayHidden`，关闭流程用
+    `hideIfTrayHidden()` 只消费该状态，不能自己把窗口藏回去。
+
+104. **系统退出请求不能在落盘前放行，也不能在销毁窗口时全部取消**：
+    macOS Cmd+Q / Linux 应用 quit 走 `AppLifecycleListener.onExitRequested`。
+    落盘期间必须返回 `AppExitResponse.cancel`，否则进程会在会话 / 统计写完前
+    退出；但 `WindowChrome.quit()` 关闭窗口会再触发一次原生终止请求，此时
+    必须返回 `exit`，否则退出流程会被自己取消，留下无窗口进程。实现用
+    `AppQuitController` 的 saving / exiting / done 三段 + 单一 in-flight
+    future；提交失败复位到 idle 允许重试。回归见
+    `test/app/bootstrap/desktop_stack_test.dart`。

@@ -283,8 +283,19 @@ class WindowChrome {
   ///
   /// 置「托盘隐藏」存在态在原生调用**之前**：组合根在隐藏前还要抢一帧把
   /// 界面卸下来（帧只在窗口可见时开），先置位才能保证那一帧建的是休眠树。
-  /// 这里只消费该状态：等待休眠帧期间用户可能已恢复窗口，不能再把它藏回去。
+  /// 关闭流程在等帧后改用 [hideIfTrayHidden]，避免把期间已恢复的窗口又藏回去；
+  /// 集成测试 / 直接调用仍可用本方法完成「置位 + 隐藏」。
   static Future<void> hide() async {
+    if (!isSupported) return;
+    AppPresence.instance.markTrayHidden();
+    _window?.hide();
+  }
+
+  /// 仅在仍处于托盘隐藏态时隐藏窗口（关闭流程等休眠帧后调用）。
+  ///
+  /// 等待期间用户可能已经点托盘图标恢复：这时不能再把窗口藏回去，否则
+  /// 用户会看到窗口闪一下又消失。状态判断与原生隐藏在同一同步段内完成。
+  static Future<void> hideIfTrayHidden() async {
     if (!isSupported || !AppPresence.instance.isTrayHidden) return;
     _window?.hide();
   }

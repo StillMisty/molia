@@ -291,16 +291,18 @@ pending / keepAlive，当前展示的封面不受影响。
 ### 9.2 验证
 
 - `flutter analyze --no-pub`：0 error / 0 warning；
-- `flutter test --no-pub`：**2597 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收）；
+- `flutter test --no-pub`：**2601 passed / 11 skipped**（新增：延迟 trim / 暂停 trim、适配器缓存释放、内置缓存 clear、AI 封面解码、prefs 单键写、wavy / TickerMode / TrayDormantGate、会话 cursor 增量 / fresh 快照 / 最大版本应用 / 本地曲目下标映射、换队列播放器回收、系统退出请求门闩）；
 - Windows release（2026-11-11，本机；顶栏关闭键 / 任务栏关闭走同一策略，`SC_CLOSE` 与 runner 转发的 `WM_CLOSE` 都覆盖）：
   - `memory_windows.ps1` 一次完整场景：空闲专用工作集 170.0MB、浏览 234.5MB、关闭前 210.4MB；托盘 +3s **4.1MB**、+15s **3.1MB**（该轮日志出现 `托盘暂停延迟 trim`，是暂停/空闲托盘，不能当作播放态收益）。
   - 另一次确认 `play.start result=ok`、播放中关到托盘：**133–143MB**，90s 内稳定（`cache_path=direct`）；原始反馈的 200MB 在同一构建未复现。
   - 提交大小 373–490MB；本轮后续已补「托盘暂停 10s 释放 player / source」，恢复播放按进度重载，但该改动尚未做 Windows 实机 A/B。
   - `WM_CLOSE` 回归（runner 转发到 Dart 关闭策略后）：`Process.CloseMainWindow()` 在 `tray_close_to_tray=true` 时只隐藏窗口、进程存活（专用工作集约 109–114MB）；同一构建把偏好设为 `false` 后同一路径退出码 0。
+  - 系统退出请求：macOS Cmd+Q / Linux 应用 quit 现在先走 `quitApp` 落盘，再进入销毁窗口阶段；单测覆盖 cancel → exit 切换、并发去重与失败重试。
 - Linux 集成（Xvfb，debug）`integration_test/lx_engine_integration_test.dart`：**5 passed / 1 skipped**；新增用例 `桌面托盘内存：隐藏后清理图片缓存并压低上限，恢复后还原` 单独运行通过；
   - 单跑 `[tray-memory-test] rss_before=544.3MB rss_after=519.8MB`；
   - 全套 `[tray-memory-test] rss_before=651.4MB rss_after=621.3MB`；
   - 这是 debug + Xvfb 的进程 RSS，绝对值不代表 release；断言的是 `imageCache` 归零、上限 16MiB、`liveImageCount == 0`、恢复 64MiB 与窗口 hide/show 往返。
+  - Linux release 无托盘宿主的应用级退出：对窗口发 `WM_DELETE_WINDOW` → `AppLifecycleListener.onExitRequested` → `退出收尾（会话 0ms / 音频 102ms / 统计 0ms）` → 进程退出码 0。
 - 写次数由单测断言：窗口几何 4→1、音量 + 静音 2→1、导航 3→1；封面元数据 touch-only 0 次写；会话 cursor 记录 <1KB（测试用每首 4KB payload 的队列），同队列保存不再追加整份队列。按本地 journal 8 行 / 278KB（平均约 33KB/行）估算，同队列保存的 journal 字节约降 99%；2MB 大队列的降幅更大，但绝对字节仍以真实 Windows 库复测为准。
   `tool/agent/io.sh` 已增加 `molia_artwork_cache.json` 的写入计数与 artwork 目录大小，后续可直接按「滚动 / 切歌前后元数据 mtime 是否变化」复测。
 

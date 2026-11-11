@@ -9,6 +9,7 @@ library;
 
 import 'dart:async';
 import 'dart:io' show exit;
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, defaultTargetPlatform, kIsWeb;
@@ -31,12 +32,96 @@ import '../../services/window/window_chrome.dart';
 
 final Logger _quitLog = Logger('molia.quit');
 
+/// 统一退出流程的阶段（系统级退出请求据此决定取消还是放行）。
+enum _DesktopQuitPhase {
+  /// 尚未开始退出，或上一次退出失败已复位。
+  idle,
+
+  /// 正在提交会话 / 收尾音频 / 落盘统计；系统终止请求必须继续取消。
+  saving,
+
+  /// 落盘完成，正在销毁窗口；此时原生 close 触发的终止请求应放行。
+  exiting,
+
+  /// 销毁动作已返回，等待进程结束；重复终止请求直接放行。
+  done,
+}
+
+/// 退出提交动作：先落盘，再在销毁窗口前调用 [onBeforeQuitWindow]。
+typedef QuitCommit = Future<void> Function(void Function() onBeforeQuitWindow);
+
+/// 统一退出门闩：托盘退出 / 更新重启 / 系统退出请求共用。
+///
+/// 关键点是把「保存中」和「销毁中」分开。macOS Cmd+Q / Linux 应用 quit 在
+/// 保存中必须返回 `cancel`，否则进程会在会话 / 统计落盘前退出；但销毁窗口
+/// 本身又会触发一次原生终止请求，这时必须返回 `exit`，否则会把我们自己的
+/// 退出流程取消掉。并发调用复用同一个 future，避免重复落盘。
+class AppQuitController {
+  AppQuitController(this._commit);
+
+  final QuitCommit _commit;
+
+  _DesktopQuitPhase _phase = _DesktopQuitPhase.idle;
+  Future<void>? _future;
+
+  /// 是否已有退出流程在跑（关闭窗口不应再走「隐藏到托盘」）。
+  bool get isActive => _phase != _DesktopQuitPhase.idle;
+
+  Future<void> quit() {
+    final inFlight = _future;
+    if (inFlight != null) return inFlight;
+    final future = _run();
+    _future = future;
+    return future;
+  }
+
+  Future<void> _run() async {
+    _phase = _DesktopQuitPhase.saving;
+    try {
+      await _commit(() {
+        _phase = _DesktopQuitPhase.exiting;
+      });
+      _phase = _DesktopQuitPhase.done;
+    } catch (error, stackTrace) {
+      // 窗口销毁失败时进程还在：复位门闩，下一次退出请求可以重试，
+      // 同时把错误留在日志里，不能让托盘「退出」静默失效。
+      _phase = _DesktopQuitPhase.idle;
+      _future = null;
+      _quitLog.warning('退出流程失败，应用继续运行', error, stackTrace);
+    }
+  }
+
+  AppExitResponse handleExitRequest() {
+    switch (_phase) {
+      case _DesktopQuitPhase.idle:
+        // 先把门闩置为 saving 再返回 cancel：系统会取消这次终止，等
+        // quit 完成落盘后由销毁窗口动作触发的新请求放行。
+        unawaited(quit());
+        return AppExitResponse.cancel;
+      case _DesktopQuitPhase.saving:
+        // 落盘还没结束：继续取消，不能提前退出。
+        return AppExitResponse.cancel;
+      case _DesktopQuitPhase.exiting:
+      case _DesktopQuitPhase.done:
+        // 已经进入销毁窗口 / 已完成：放行原生终止，避免把 close 再拦一次。
+        return AppExitResponse.exit;
+    }
+  }
+}
+
 /// 桌面壳栈产物。
 typedef DesktopStack = ({
   TraySettings traySettings,
 
   /// 统一退出路径（托盘「退出」/ 更新安装后的重启替换）。
   Future<void> Function() quitApp,
+
+  /// 系统级退出请求（macOS Cmd+Q / Linux 应用 quit）的唯一入口。
+  ///
+  /// 空闲时启动 [quitApp] 并返回 `cancel`，让落盘先完成；进入销毁窗口阶段
+  /// 后返回 `exit`，让原生终止请求继续。保存期间重复请求继续返回 `cancel`，
+  /// 不会提前杀掉进程。
+  AppExitResponse Function() handleExitRequest,
 
   /// 首帧后创建桌面外壳入口：托盘（含宿主探测预热）与 Windows 任务栏
   /// 缩略图按钮；其余平台都是空操作。
@@ -73,19 +158,27 @@ Future<DesktopStack> buildDesktopStack({
     }
   }
 
-  // 统一退出路径（托盘「退出」/ 更新安装后的重启替换）：先 await 播放会话
-  // 提交（与壳层 paused 同一个挂起入口，最多等 2s），再收尾音频设备，然后
-  // 触发统计落盘，最后销毁窗口。会话提交不 await 就销毁窗口，进程会在写请求
-  // 落盘前退出——恢复态丢掉最后一段进度；平台通道挂起则超时继续退出（见
-  // commitBeforeQuit）。
-  Future<void> quitApp() async {
-    await commitBeforeQuit(
+  // 统一退出路径（托盘「退出」/ 更新安装后的重启替换 / 系统退出请求）：
+  // 先 await 播放会话提交（与壳层 paused 同一个挂起入口，最多等 2s），再
+  // 收尾音频设备，然后触发统计落盘，最后销毁窗口。会话提交不 await 就销毁
+  // 窗口，进程会在写请求落盘前退出——恢复态丢掉最后一段进度；平台通道挂起
+  // 则超时继续退出（见 commitBeforeQuit）。
+  //
+  // 退出分成「保存中 / 销毁中 / 已完成」三段：系统级退出请求（macOS Cmd+Q、
+  // Linux 应用 quit）在保存中返回 cancel，等到真正销毁窗口前再切到「销毁中」。
+  // 这样 `WindowChrome.quit()` 关闭窗口时触发的第二次系统退出请求会返回
+  // exit，而不是把已经开始的退出又取消掉。并发调用复用同一个 future，避免
+  // 托盘退出 / 更新重启 / Cmd+Q 同时落盘两遍。
+  final quitController = AppQuitController(
+    (onBeforeQuitWindow) => commitBeforeQuit(
       commitSession: playback.suspendPlaybackSession,
       shutdownAudio: shutdownAudio,
       flushStatistics: playStatisticsService.flush,
+      onBeforeQuitWindow: onBeforeQuitWindow,
       quitWindow: _quitPlatformApp,
-    );
-  }
+    ),
+  );
+  final quitApp = quitController.quit;
 
   // 定时关闭勾选「退出应用」时也走同一条退出路径：会话提交、音频收尾、
   // 统计落盘完成后才真正退出。provider 建好后回填（此时 quitApp 已可用）。
@@ -104,7 +197,8 @@ Future<DesktopStack> buildDesktopStack({
   // 托盘态，避免把刚恢复的窗口又藏回去。
   var handlingClose = false;
   WindowChrome.setCloseHandler(() async {
-    if (handlingClose) return;
+    // 退出流程已经接管窗口：销毁阶段的 close 请求不能再走「隐藏到托盘」。
+    if (handlingClose || quitController.isActive) return;
     handlingClose = true;
     try {
       if (traySettings.closeToTray &&
@@ -120,7 +214,7 @@ Future<DesktopStack> buildDesktopStack({
         );
         // 等帧期间用户可能已经点了托盘图标：恢复态下不能再隐藏。
         if (!AppPresence.instance.isTrayHidden) return;
-        await WindowChrome.hide();
+        await WindowChrome.hideIfTrayHidden();
       } else {
         await quitApp();
       }
@@ -190,6 +284,7 @@ Future<DesktopStack> buildDesktopStack({
   return (
     traySettings: traySettings,
     quitApp: quitApp,
+    handleExitRequest: quitController.handleExitRequest,
     // 托盘在首帧后创建：此时图标资源可读，且不占启动关键路径。
     // 宿主探测预热：关闭策略首次触发时直接读缓存结果（并留下启动日志）。
     initDesktopSurfaces: () {
@@ -259,6 +354,9 @@ Future<void> commitBeforeQuit({
   required FutureOr<void> Function() flushStatistics,
   required Future<void> Function() quitWindow,
   Future<void> Function()? shutdownAudio,
+
+  /// 真正销毁窗口前的同步钩子（退出状态机切到「销毁中」）。
+  void Function()? onBeforeQuitWindow,
   Duration sessionTimeout = const Duration(seconds: 2),
   Duration audioTimeout = const Duration(milliseconds: 500),
   Duration statisticsTimeout = const Duration(milliseconds: 500),
@@ -306,6 +404,7 @@ Future<void> commitBeforeQuit({
     '音频 ${audioWatch.elapsedMilliseconds}ms，'
     '统计 ${statsWatch.elapsedMilliseconds}ms',
   );
+  onBeforeQuitWindow?.call();
   await quitWindow();
 }
 
